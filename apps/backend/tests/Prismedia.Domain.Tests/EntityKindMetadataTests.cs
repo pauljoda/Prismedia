@@ -32,6 +32,30 @@ public sealed class EntityKindMetadataTests {
         Assert.Equal(expected, EntityKindRegistry.EnumeratesIdentifyChildren(code));
     }
 
+    [Theory]
+    [InlineData(EntityKind.Audio, true)]
+    [InlineData(EntityKind.AudioLibrary, true)]
+    [InlineData(EntityKind.AudioTrack, true)]
+    [InlineData(EntityKind.Book, true)]
+    [InlineData(EntityKind.BookAuthor, true)]
+    [InlineData(EntityKind.BookChapter, false)]
+    [InlineData(EntityKind.BookVolume, true)]
+    [InlineData(EntityKind.Gallery, true)]
+    [InlineData(EntityKind.Image, true)]
+    [InlineData(EntityKind.Movie, true)]
+    [InlineData(EntityKind.MusicArtist, true)]
+    [InlineData(EntityKind.Video, true)]
+    [InlineData(EntityKind.VideoSeason, true)]
+    [InlineData(EntityKind.VideoSeries, true)]
+    [InlineData(EntityKind.BookPage, false)]
+    [InlineData(EntityKind.Collection, false)]
+    [InlineData(EntityKind.Person, false)]
+    [InlineData(EntityKind.Studio, false)]
+    [InlineData(EntityKind.Tag, false)]
+    public void SupportsFileDeletionMatchesManagedTreeRoots(EntityKind kind, bool expected) {
+        Assert.Equal(expected, EntityKindRegistry.Describe(kind).SupportsFileDeletion);
+    }
+
     [Fact]
     public void RegistryRoundTripsEveryKindByCodeAndType() {
         foreach (var kind in Enum.GetValues<EntityKind>()) {

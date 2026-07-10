@@ -51,6 +51,9 @@ public abstract record EntityDetail : IEntityCard {
     public required int? SortOrder { get; init; }
 
     /// <inheritdoc />
+    public bool HasSourceMedia { get; init; }
+
+    /// <inheritdoc />
     public required IReadOnlyList<EntityCapability> Capabilities { get; init; }
 
     /// <inheritdoc />

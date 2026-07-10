@@ -3,6 +3,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Prismedia.Application.Acquisition;
 using Prismedia.Application.Jobs;
+using Prismedia.Application.Jobs.Handlers;
 using Prismedia.Application.Settings;
 using Prismedia.Contracts.Acquisition;
 using Prismedia.Contracts.Settings;
@@ -199,15 +200,100 @@ public sealed class JobSchedulerTests {
         Assert.Empty(queue.Enqueued);
     }
 
+    [Fact]
+    public async Task RecoverDownloadedCompletionJobsRoutesOrdinaryAndUpgradeWorkIdempotently() {
+        var ordinaryId = Guid.NewGuid();
+        var upgradeId = Guid.NewGuid();
+        var queue = new SchedulerJobQueue();
+        var acquisitions = new SchedulerAcquisitionLifecycleStore([
+            new DownloadedAcquisitionCompletion(ordinaryId, EntityKind.Movie, IsUpgrade: false),
+            new DownloadedAcquisitionCompletion(upgradeId, EntityKind.Book, IsUpgrade: true),
+        ]);
+        await using var provider = CreateProvider(
+            new SchedulerSettingsPersistence([]),
+            queue,
+            acquisitions: acquisitions,
+            importEngines: new SchedulerImportEngineFactory([EntityKind.Movie]));
+        var scheduler = CreateScheduler(provider, DateTimeOffset.UtcNow);
+
+        await scheduler.RecoverDownloadedCompletionJobsAsync(CancellationToken.None);
+        await scheduler.RecoverDownloadedCompletionJobsAsync(CancellationToken.None);
+
+        Assert.Equal(2, queue.Enqueued.Count);
+        AssertCompletionRequest(
+            Assert.Single(queue.Enqueued, request => request.TargetEntityId == ordinaryId.ToString()),
+            ordinaryId,
+            JobType.AcquisitionImport);
+        AssertCompletionRequest(
+            Assert.Single(queue.Enqueued, request => request.TargetEntityId == upgradeId.ToString()),
+            upgradeId,
+            JobType.AcquisitionUpgradeReplace);
+    }
+
+    [Fact]
+    public async Task RecoverDownloadedCompletionJobsSkipsOrdinaryKindsWithoutAnImportEngine() {
+        var unsupportedId = Guid.NewGuid();
+        var queue = new SchedulerJobQueue();
+        var acquisitions = new SchedulerAcquisitionLifecycleStore([
+            new DownloadedAcquisitionCompletion(unsupportedId, EntityKind.Image, IsUpgrade: false),
+        ]);
+        await using var provider = CreateProvider(
+            new SchedulerSettingsPersistence([]),
+            queue,
+            acquisitions: acquisitions,
+            importEngines: new SchedulerImportEngineFactory([]));
+        var scheduler = CreateScheduler(provider, DateTimeOffset.UtcNow);
+
+        await scheduler.RecoverDownloadedCompletionJobsAsync(CancellationToken.None);
+
+        Assert.Empty(queue.Enqueued);
+    }
+
+    [Fact]
+    public async Task RecoverDownloadedCompletionJobsRetriesAfterAQueueFailure() {
+        var acquisitionId = Guid.NewGuid();
+        var queue = new SchedulerJobQueue { EnqueueFailuresRemaining = 1 };
+        var acquisitions = new SchedulerAcquisitionLifecycleStore([
+            new DownloadedAcquisitionCompletion(acquisitionId, EntityKind.Movie, IsUpgrade: false),
+        ]);
+        await using var provider = CreateProvider(
+            new SchedulerSettingsPersistence([]),
+            queue,
+            acquisitions: acquisitions,
+            importEngines: new SchedulerImportEngineFactory([EntityKind.Movie]));
+        var scheduler = CreateScheduler(provider, DateTimeOffset.UtcNow);
+
+        await Assert.ThrowsAsync<IOException>(() =>
+            scheduler.RecoverDownloadedCompletionJobsAsync(CancellationToken.None));
+        Assert.Empty(queue.Enqueued);
+
+        await scheduler.RecoverDownloadedCompletionJobsAsync(CancellationToken.None);
+
+        Assert.Equal(JobType.AcquisitionImport, Assert.Single(queue.Enqueued).Type);
+    }
+
+    private static void AssertCompletionRequest(
+        EnqueueJobRequest request,
+        Guid acquisitionId,
+        JobType expectedType) {
+        Assert.Equal(expectedType, request.Type);
+        Assert.Equal(acquisitionId.ToString(), request.TargetEntityId);
+        Assert.Equal(acquisitionId, AcquisitionJobPayload.Parse(request.PayloadJson!).AcquisitionId);
+    }
+
     private static ServiceProvider CreateProvider(
         ISettingsPersistence settings,
         IJobQueueService queue,
-        IMonitorStore? monitors = null) {
+        IMonitorStore? monitors = null,
+        IAcquisitionLifecycleStore? acquisitions = null,
+        IAcquisitionImportEngineFactory? importEngines = null) {
         var services = new ServiceCollection();
         services.AddSingleton(settings);
         services.AddScoped<SettingsService>();
         services.AddSingleton(queue);
         services.AddSingleton(monitors ?? new SchedulerMonitorStore(hasActive: false));
+        services.AddSingleton(acquisitions ?? new SchedulerAcquisitionLifecycleStore([]));
+        services.AddSingleton(importEngines ?? new SchedulerImportEngineFactory([]));
         return services.BuildServiceProvider();
     }
 
@@ -290,14 +376,25 @@ public sealed class JobSchedulerTests {
     }
 
     private sealed class SchedulerJobQueue(bool hasPendingRefresh = false, bool hasPendingMonitoredSearch = false) : IJobQueueService {
+        private readonly HashSet<(JobType Type, string? TargetEntityId)> _pending = [];
+
         public List<EnqueueJobRequest> Enqueued { get; } = [];
+        public int EnqueueFailuresRemaining { get; set; }
 
         public Task<bool> HasPendingAsync(JobType type, string? targetEntityId, CancellationToken cancellationToken) =>
             Task.FromResult((type == JobType.RefreshCollection && hasPendingRefresh)
-                || (type == JobType.MonitoredSearch && hasPendingMonitoredSearch));
+                || (type == JobType.MonitoredSearch && hasPendingMonitoredSearch)
+                || _pending.Contains((type, targetEntityId)));
 
         public Task<JobRunSnapshot> EnqueueAsync(EnqueueJobRequest request, CancellationToken cancellationToken) {
-            Enqueued.Add(request);
+            if (EnqueueFailuresRemaining > 0) {
+                EnqueueFailuresRemaining--;
+                throw new IOException("queue unavailable");
+            }
+
+            if (_pending.Add((request.Type, request.TargetEntityId))) {
+                Enqueued.Add(request);
+            }
             return Task.FromResult(NewSnapshot(request.Type));
         }
 
@@ -376,6 +473,51 @@ public sealed class JobSchedulerTests {
         public Task MarkSearchedAsync(Guid monitorId, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<Guid?> CreateUpgradeChildAsync(Guid monitorId, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task ResolveUpgradeChildAsync(Guid childId, bool succeeded, CancellationToken cancellationToken) => throw new NotSupportedException();
+    }
+
+    private sealed class SchedulerAcquisitionLifecycleStore(
+        IReadOnlyList<DownloadedAcquisitionCompletion> downloaded) : IAcquisitionLifecycleStore {
+        public Task<IReadOnlyList<DownloadedAcquisitionCompletion>> ListDownloadedCompletionWorkAsync(
+            CancellationToken cancellationToken) =>
+            Task.FromResult(downloaded);
+
+        public Task<AcquisitionStatus?> GetStatusAsync(Guid id, CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
+        public Task<bool> TryTransitionStatusAsync(
+            Guid id,
+            IReadOnlyCollection<AcquisitionStatus> expectedStatuses,
+            AcquisitionStatus status,
+            string? message,
+            CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
+        public Task<bool> TryClaimFailedRecoveryAsync(
+            Guid id,
+            IReadOnlyCollection<AcquisitionStatus> expectedStatuses,
+            SelectedRelease? expectedSelectedRelease,
+            string message,
+            CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+    }
+
+    private sealed class SchedulerImportEngineFactory(
+        IReadOnlyCollection<EntityKind> supportedKinds) : IAcquisitionImportEngineFactory {
+        private readonly IReadOnlyDictionary<EntityKind, IAcquisitionImportEngine> _engines = supportedKinds
+            .Distinct()
+            .ToDictionary(kind => kind, kind => (IAcquisitionImportEngine)new SchedulerImportEngine(kind));
+
+        public IAcquisitionImportEngine? Find(EntityKind kind) => _engines.GetValueOrDefault(kind);
+    }
+
+    private sealed class SchedulerImportEngine(EntityKind kind) : IAcquisitionImportEngine {
+        public EntityKind Kind { get; } = kind;
+
+        public Task ImportAsync(
+            JobContext context,
+            AcquisitionImportContext import,
+            CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
     }
 
     private sealed class FixedTimeProvider(DateTimeOffset now) : TimeProvider {

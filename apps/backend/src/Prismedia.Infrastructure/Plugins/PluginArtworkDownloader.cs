@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using Microsoft.EntityFrameworkCore;
+using Prismedia.Application.Files;
 using Prismedia.Contracts.Entities;
 using Prismedia.Contracts.Media;
 using Prismedia.Contracts.Plugins;
@@ -20,6 +21,8 @@ public sealed class PluginArtworkDownloader {
     private readonly PluginArtworkServiceOptions _options;
     private readonly HttpClient _http;
     private readonly HashSet<Guid> _artworkEntityIds = [];
+    private readonly Dictionary<string, byte[]?> _stagedDownloads = new(StringComparer.Ordinal);
+    private readonly HashSet<string> _newArtworkPaths = new(FileSystemPathComparison.Comparer);
 
     public PluginArtworkDownloader(
         PrismediaDbContext db,
@@ -31,6 +34,49 @@ public sealed class PluginArtworkDownloader {
         if (!_http.DefaultRequestHeaders.UserAgent.Any()) {
             _http.DefaultRequestHeaders.UserAgent.ParseAdd(UserAgent);
         }
+    }
+
+    /// <summary>
+    /// Fetches remote artwork before an Entity lifecycle lease is acquired. Apply then consumes these
+    /// in-memory bytes while holding only the short database/filesystem publication boundary.
+    /// </summary>
+    public async Task StageAsync(
+        IEnumerable<string?> urls,
+        CancellationToken cancellationToken) {
+        _stagedDownloads.Clear();
+        foreach (var url in urls
+                     .Where(url => !string.IsNullOrWhiteSpace(url))
+                     .Select(url => url!)
+                     .Distinct(StringComparer.Ordinal)) {
+            _stagedDownloads[url] = await TryDownloadRemoteAsync(url, cancellationToken);
+        }
+    }
+
+    /// <summary>Marks staged artwork publication committed and releases its temporary bookkeeping.</summary>
+    public void CommitStagedWrites() {
+        _stagedDownloads.Clear();
+        _newArtworkPaths.Clear();
+    }
+
+    /// <summary>
+    /// Removes only files created by an apply whose database transaction failed. Pre-existing deterministic
+    /// cache paths are never deleted, so rollback cannot break artwork already referenced by another apply.
+    /// </summary>
+    public void RollbackStagedWrites() {
+        foreach (var path in _newArtworkPaths) {
+            try {
+                if (File.Exists(path)) {
+                    File.Delete(path);
+                }
+            } catch (IOException) {
+                // Best effort: an unreferenced deterministic cache file is safe for later cleanup/reuse.
+            } catch (UnauthorizedAccessException) {
+                // Best effort for read-only cache mounts; the database transaction still remained atomic.
+            }
+        }
+        _newArtworkPaths.Clear();
+        _stagedDownloads.Clear();
+        _artworkEntityIds.Clear();
     }
 
     /// <summary>
@@ -97,6 +143,14 @@ public sealed class PluginArtworkDownloader {
     /// out so callers can skip it without aborting the surrounding metadata apply.
     /// </summary>
     private async Task<byte[]?> TryDownloadAsync(string url, CancellationToken cancellationToken) {
+        if (_stagedDownloads.TryGetValue(url, out var staged)) {
+            return staged;
+        }
+
+        return await TryDownloadRemoteAsync(url, cancellationToken);
+    }
+
+    private async Task<byte[]?> TryDownloadRemoteAsync(string url, CancellationToken cancellationToken) {
         try {
             return await _http.GetByteArrayAsync(url, cancellationToken);
         } catch (HttpRequestException) {
@@ -122,7 +176,11 @@ public sealed class PluginArtworkDownloader {
         var relativePath = Path.Combine("plugins", "artwork", entityId.ToString(), $"{roleCode}-{ShortHash(url)}{ext}");
         var physicalPath = Path.Combine(_options.CacheRoot, relativePath);
         Directory.CreateDirectory(Path.GetDirectoryName(physicalPath)!);
+        var createdByThisApply = !File.Exists(physicalPath);
         await File.WriteAllBytesAsync(physicalPath, bytes, cancellationToken);
+        if (createdByThisApply) {
+            _newArtworkPaths.Add(physicalPath);
+        }
 
         var publicPath = $"/assets/{relativePath.Replace(Path.DirectorySeparatorChar, '/')}";
         _artworkEntityIds.Add(entityId);

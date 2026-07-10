@@ -1,4 +1,5 @@
 using Prismedia.Application.Acquisition;
+using Prismedia.Application.Files;
 
 namespace Prismedia.Infrastructure.Acquisition;
 
@@ -57,6 +58,6 @@ public sealed class AcquisitionImportPlanner : IAcquisitionImportPlanner {
 
     private static bool IsUnderRoot(string candidate, string root) {
         var normalizedRoot = root.EndsWith(Path.DirectorySeparatorChar) ? root : root + Path.DirectorySeparatorChar;
-        return candidate.StartsWith(normalizedRoot, StringComparison.Ordinal);
+        return candidate.StartsWith(normalizedRoot, FileSystemPathComparison.Comparison);
     }
 }

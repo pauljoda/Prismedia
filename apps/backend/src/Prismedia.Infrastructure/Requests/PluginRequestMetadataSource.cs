@@ -9,8 +9,8 @@ using Prismedia.Infrastructure.Plugins;
 namespace Prismedia.Infrastructure.Requests;
 
 /// <summary>
-/// Runs request-time searches and lookups against enabled plugin metadata providers for every
-/// requestable kind, with no library entity involved. Behavior is driven entirely by
+/// Runs selected-plugin request searches and persistent-identity lookups against enabled metadata
+/// providers for every requestable kind, with no library entity involved. Behavior is driven entirely by
 /// <see cref="RequestKindDescriptor"/>s: the descriptor says which plugin kind to query and how
 /// children behave, so adding a media kind never adds another source class. Identity-only background
 /// reads use the central router; interactive review keeps the exact plugin selected during search.
@@ -19,66 +19,21 @@ public sealed class PluginRequestMetadataSource(
     PluginCatalogService catalog,
     IPluginIdentityRouter identityRouter,
     IdentifyRunnerSelector runners)
-    : IRequestMetadataSearchSource, IPluginRequestSearchSource, IRequestMetadataEnricher, IPluginRequestDetailSource,
-      IPluginRequestReviewSource, IPluginRequestProposalSource {
+    : IPluginRequestSearchSource, IRequestMetadataEnricher, IPluginRequestReviewSource,
+      IPluginRequestProposalSource {
     private static readonly string SearchAction = IdentifyAction.Search.ToCode();
     private static readonly string LookupIdAction = IdentifyAction.LookupId.ToCode();
 
     // Resolved proposals are stable on the minutes scale, but every surface that reads one — request
-    // detail pages, the series page's Season Pass options, a commit right after review, container
+    // review, shared child-monitoring controls, a commit right after review, container
     // sync — used to pay a fresh plugin round-trip each time. A short process-wide TTL cache makes
     // repeat reads instant without holding provider data long enough to go stale. The source is
     // scoped, hence the static cache; the cap bounds memory (proposals with children can be large).
     private static readonly TimeSpan ProposalTtl = TimeSpan.FromMinutes(15);
     private const int ProposalCacheCap = 128;
-    private static readonly System.Collections.Concurrent.ConcurrentDictionary<ProposalCacheKey, (DateTimeOffset At, EntityMetadataProposal Proposal)> ProposalCache = new();
-
-    public async Task<IReadOnlyList<RequestSearchResult>> SearchAsync(
-        RequestKindDescriptor descriptor, string query, bool hideNsfw, CancellationToken cancellationToken) {
-        if (string.IsNullOrWhiteSpace(query)) {
-            return [];
-        }
-
-        // A committable container (an author, an artist) only makes sense from a provider that can also
-        // resolve its children by id — otherwise the per-child acquisition fan-out can't resolve anything.
-        var child = RequestKindRegistry.ChildOf(descriptor);
-        var requiredChildLookupKind = descriptor.IsContainer && child is { Committable: true } ? child.PluginKindCode : null;
-
-        var providers = (await catalog.ListInstalledProvidersAsync(cancellationToken))
-            .Where(provider => provider.Enabled && (!provider.IsNsfw || !hideNsfw))
-            .Where(provider => provider.Supports.Any(support =>
-                PluginEntityKindCompatibility.SupportsKind(support, descriptor.PluginKindCode) && support.Actions.Contains(SearchAction)))
-            // Every result must be reviewable: its detail page resolves the item by id, so a provider
-            // that can search a kind but not look it up would only produce dead-end results.
-            .Where(provider => provider.Supports.Any(support =>
-                PluginEntityKindCompatibility.SupportsKind(support, descriptor.PluginKindCode) && support.Actions.Contains(LookupIdAction)))
-            .Where(provider => requiredChildLookupKind is null || provider.Supports.Any(support =>
-                PluginEntityKindCompatibility.SupportsKind(support, requiredChildLookupKind) && support.Actions.Contains(LookupIdAction)))
-            .ToArray();
-        if (providers.Length == 0) {
-            return [];
-        }
-
-        var results = new List<RequestSearchResult>();
-        foreach (var provider in providers) {
-            cancellationToken.ThrowIfCancellationRequested();
-            var descriptorForProvider = await catalog.FindProviderAsync(provider.Id, descriptor.PluginKindCode, cancellationToken);
-            if (descriptorForProvider is null) {
-                continue;
-            }
-
-            results.AddRange(await RunSearchAsync(
-                descriptor,
-                provider,
-                descriptorForProvider,
-                query,
-                fields: null,
-                hideNsfw,
-                cancellationToken));
-        }
-
-        return results;
-    }
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<
+        ProposalCacheKey,
+        (DateTimeOffset At, RoutedRequestProposal Resolved)> ProposalCache = new();
 
     /// <inheritdoc />
     public async Task<IReadOnlyList<RequestSearchResult>> SearchAsync(
@@ -230,7 +185,12 @@ public sealed class PluginRequestMetadataSource(
 
     public async Task<RequestMetadataEnrichment?> LookupByIdAsync(
         EntityKind kind, ExternalIdentity identity, bool hideNsfw, CancellationToken cancellationToken) {
-        var proposal = await ResolveProposalCoreAsync(kind, identity, hideNsfw, includeChildren: false, cancellationToken);
+        var proposal = (await ResolveProposalCoreAsync(
+            kind,
+            identity,
+            hideNsfw,
+            includeChildren: false,
+            cancellationToken))?.Proposal;
         if (proposal?.Patch is not { } patch) {
             return null;
         }
@@ -239,68 +199,6 @@ public sealed class PluginRequestMetadataSource(
             patch.Description,
             RequestProposalReading.BestImage(proposal),
             RequestProposalReading.YearFromDates(patch.Dates));
-    }
-
-    public async Task<RequestDetailResponse?> GetDetailAsync(
-        RequestKindDescriptor descriptor, string externalId, bool hideNsfw, CancellationToken cancellationToken) {
-        var identity = RequestProposalReading.ParseQualifiedIdentity(externalId);
-        if (identity is null) {
-            return null;
-        }
-
-        // Resolve WITH structural children when the kind offers child options, so a container surfaces
-        // its works (an author's books, an artist's albums) — and a series-member book its sibling
-        // volumes — as toggleable child options the request fans out into acquisitions.
-        var proposal = await ResolveProposalAsync(descriptor, identity, hideNsfw,
-            includeChildren: descriptor.ChildKind is not null, cancellationToken);
-        if (proposal?.Patch is not { } patch) {
-            return null;
-        }
-
-        var child = RequestKindRegistry.ChildOf(descriptor);
-        var children = child is null
-            ? []
-            : proposal.Children
-                .Where(node => !node.TargetKind.IsRelationship())
-                .Select(node => MapChild(identity.Namespace, node, child))
-                .Where(option => option is not null)
-                .Select(option => option!)
-                .ToArray();
-
-        var subtitle = descriptor.IsContainer
-            ? children.Length > 0 ? $"{children.Length} {ChildNoun(child!, children.Length)}" : null
-            : RequestProposalReading.AuthorFromCredits(patch) ?? RequestProposalReading.PrimaryCredit(patch);
-
-        // Surface everything the proposal carries — this is the same data identify would apply to a
-        // library entity, so the review page reads like the entity will once it exists.
-        var tracks = RequestProposalReading.TracksOf(proposal);
-        return new RequestDetailResponse(
-            Source: RequestProviderKind.Plugin,
-            Kind: descriptor.Kind,
-            ExternalId: externalId,
-            Title: string.IsNullOrWhiteSpace(patch.Title) ? identity.Value : patch.Title,
-            Subtitle: subtitle,
-            Year: RequestProposalReading.YearFromDates(patch.Dates),
-            Dates: patch.Dates,
-            Overview: patch.Description,
-            PosterUrl: RequestProposalReading.BestImageOfKind(proposal, EntityFileRole.Poster.ToCode())
-                ?? RequestProposalReading.BestImage(proposal),
-            BackdropUrl: RequestProposalReading.BestImageOfKind(proposal, EntityFileRole.Backdrop.ToCode()),
-            Rating: null,
-            RuntimeMinutes: RequestProposalReading.RuntimeMinutesOf(patch),
-            Certification: null,
-            TrackCount: tracks.Count > 0 ? tracks.Count : null,
-            Tags: patch.Tags.Where(tag => !string.IsNullOrWhiteSpace(tag)).ToArray(),
-            Studios: string.IsNullOrWhiteSpace(patch.Studio) ? [] : [patch.Studio],
-            Credits: [],
-            Cast: RequestProposalReading.CastOf(proposal),
-            Ratings: [],
-            Children: children,
-            Tracks: tracks,
-            Tracked: false,
-            UpstreamId: null,
-            Monitored: null,
-            ServiceOptions: new RequestServiceOptionsResponse([], [], [], []));
     }
 
     /// <inheritdoc />
@@ -369,7 +267,7 @@ public sealed class PluginRequestMetadataSource(
             Targets: targets);
     }
 
-    public Task<EntityMetadataProposal?> ResolveProposalAsync(
+    public Task<RoutedRequestProposal?> ResolveProposalAsync(
         RequestKindDescriptor descriptor, ExternalIdentity identity, bool hideNsfw, bool includeChildren, CancellationToken cancellationToken) =>
         ResolveProposalCoreAsync(descriptor.PluginEntityKind, identity, hideNsfw, includeChildren, cancellationToken);
 
@@ -397,22 +295,22 @@ public sealed class PluginRequestMetadataSource(
     /// Routes a persistent identity to every capable LookupId plugin for the given media kind, gating
     /// on the same enabled/NSFW rules as search. Shared-namespace routes are tried deterministically.
     /// </summary>
-    private async Task<EntityMetadataProposal?> ResolveProposalCoreAsync(
+    private async Task<RoutedRequestProposal?> ResolveProposalCoreAsync(
         EntityKind entityKind, ExternalIdentity identity, bool hideNsfw, bool includeChildren, CancellationToken cancellationToken) {
         var cacheKey = new ProposalCacheKey(entityKind, PluginId: null, identity, hideNsfw, includeChildren);
         if (ProposalCache.TryGetValue(cacheKey, out var hit) && DateTimeOffset.UtcNow - hit.At < ProposalTtl) {
-            return hit.Proposal;
+            return hit.Resolved;
         }
 
-        var proposal = await ResolveProposalUncachedAsync(entityKind, identity, hideNsfw, includeChildren, cancellationToken);
+        var resolved = await ResolveProposalUncachedAsync(entityKind, identity, hideNsfw, includeChildren, cancellationToken);
         // Only successful resolutions are cached: a transient provider failure should retry, and a
         // gated/unknown id is cheap to re-answer.
-        if (proposal is not null) {
+        if (resolved is not null) {
             EvictForCapacity();
-            ProposalCache[cacheKey] = (DateTimeOffset.UtcNow, proposal);
+            ProposalCache[cacheKey] = (DateTimeOffset.UtcNow, resolved);
         }
 
-        return proposal;
+        return resolved;
     }
 
     private async Task<EntityMetadataProposal?> ResolveExplicitProposalAsync(
@@ -428,8 +326,8 @@ public sealed class PluginRequestMetadataSource(
             hideNsfw,
             includeChildren);
         if (ProposalCache.TryGetValue(cacheKey, out var hit) && DateTimeOffset.UtcNow - hit.At < ProposalTtl) {
-            if (MatchesExplicitRoute(hit.Proposal, route)) {
-                return hit.Proposal;
+            if (MatchesExplicitRoute(hit.Resolved.Proposal, route)) {
+                return hit.Resolved.Proposal;
             }
 
             ProposalCache.TryRemove(cacheKey, out _);
@@ -441,7 +339,9 @@ public sealed class PluginRequestMetadataSource(
         }
 
         EvictForCapacity();
-        ProposalCache[cacheKey] = (DateTimeOffset.UtcNow, proposal);
+        ProposalCache[cacheKey] = (
+            DateTimeOffset.UtcNow,
+            new RoutedRequestProposal(route, proposal));
         return proposal;
     }
 
@@ -473,7 +373,7 @@ public sealed class PluginRequestMetadataSource(
         }
     }
 
-    private async Task<EntityMetadataProposal?> ResolveProposalUncachedAsync(
+    private async Task<RoutedRequestProposal?> ResolveProposalUncachedAsync(
         EntityKind entityKind, ExternalIdentity identity, bool hideNsfw, bool includeChildren, CancellationToken cancellationToken) {
         var kindCode = entityKind.ToCode();
         var routes = await identityRouter.ResolveAsync(
@@ -494,7 +394,7 @@ public sealed class PluginRequestMetadataSource(
             }
 
             if (await RunRouteAsync(entityKind, route, hideNsfw, includeChildren, cancellationToken) is { } proposal) {
-                return proposal;
+                return new RoutedRequestProposal(route, proposal);
             }
         }
 
@@ -675,33 +575,6 @@ public sealed class PluginRequestMetadataSource(
             .Distinct(StringComparer.Ordinal)
             .ToArray();
 
-    /// <summary>Maps a child proposal to a toggleable option with its persistent identity.</summary>
-    private static RequestChildOption? MapChild(string identityNamespace, EntityMetadataProposal child, RequestKindDescriptor childDescriptor) {
-        if (RequestProposalReading.IdentityValueFor(identityNamespace, child) is not { } workId) {
-            return null;
-        }
-
-        var itemCount = child.Children.Count(node => !node.TargetKind.IsRelationship());
-        return new RequestChildOption(
-            Id: RequestProposalReading.FormatQualifiedIdentity(new ExternalIdentity(identityNamespace, workId)),
-            Title: child.Patch.Title ?? workId,
-            Kind: childDescriptor.Kind,
-            Requestable: childDescriptor.Committable,
-            // Ordering position when the provider reports one. prism-vocab: external (provider positions vocabulary)
-            Number: RequestProposalReading.ChildNumberOf(childDescriptor.Kind, child.Patch),
-            Year: RequestProposalReading.YearFromDates(child.Patch.Dates),
-            ItemCount: itemCount > 0 ? itemCount : null,
-            Overview: child.Patch.Description,
-            PosterUrl: RequestProposalReading.BestImage(child),
-            Monitored: null);
-    }
-
-    /// <summary>Display noun for a container's children, derived from the child kind's wire code ("2 books", "5 albums").</summary>
-    private static string ChildNoun(RequestKindDescriptor child, int count) {
-        var noun = child.Kind.ToCode();
-        return count == 1 ? noun : $"{noun}s";
-    }
-
     private static RequestSearchResult? MapCandidate(
         PluginProvider provider,
         EntitySearchCandidate candidate,
@@ -715,7 +588,7 @@ public sealed class PluginRequestMetadataSource(
             ServiceId: Guid.Empty,
             Source: RequestProviderKind.Plugin,
             Kind: descriptor.Kind,
-            // Retained for legacy detail/commit clients; canonical callers use PluginId + ExternalIdentity.
+            // Retained for the older commit contract; canonical callers use PluginId + ExternalIdentity.
             ExternalId: RequestProposalReading.FormatQualifiedIdentity(identity),
             Title: candidate.Title,
             Subtitle: candidate.Source,
@@ -760,7 +633,7 @@ public sealed class PluginRequestMetadataSource(
                 return new ExternalIdentity(identityNamespace, value);
             } catch (ArgumentException) {
                 // Search candidates may carry transient URLs; only persistent identities can enter
-                // the request/detail/monitor route.
+                // the request/review/monitor route.
             }
         }
 

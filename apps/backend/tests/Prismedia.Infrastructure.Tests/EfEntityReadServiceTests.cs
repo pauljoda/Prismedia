@@ -1842,6 +1842,126 @@ public sealed class EfEntityReadServiceTests {
     }
 
     [Fact]
+    public async Task AcquisitionAvailabilityIncludesStructuralChildrenAndUpgradeWorkAcrossMediaKinds() {
+        await using var db = CreateContext();
+        var now = DateTimeOffset.UtcNow;
+        var seriesId = Guid.Parse("a1100000-0000-0000-0000-000000000001");
+        var seasonId = Guid.Parse("a1100000-0000-0000-0000-000000000002");
+        var episodeId = Guid.Parse("a1100000-0000-0000-0000-000000000003");
+        var unrelatedSeriesId = Guid.Parse("a1100000-0000-0000-0000-000000000004");
+        var artistId = Guid.Parse("a1100000-0000-0000-0000-000000000005");
+        var albumId = Guid.Parse("a1100000-0000-0000-0000-000000000006");
+        var unrelatedArtistId = Guid.Parse("a1100000-0000-0000-0000-000000000007");
+        db.Entities.AddRange(
+            Entity(seriesId, EntityKind.VideoSeries, "Series", parentId: null),
+            Entity(seasonId, EntityKind.VideoSeason, "Season", seriesId),
+            Entity(episodeId, EntityKind.Video, "Episode", seasonId),
+            Entity(unrelatedSeriesId, EntityKind.VideoSeries, "Unrelated series", parentId: null),
+            Entity(artistId, EntityKind.MusicArtist, "Artist", parentId: null),
+            Entity(albumId, EntityKind.AudioLibrary, "Album", artistId),
+            Entity(unrelatedArtistId, EntityKind.MusicArtist, "Unrelated artist", parentId: null));
+
+        var seriesAcquisitionId = Guid.Parse("a1200000-0000-0000-0000-000000000001");
+        var oldSeasonAcquisitionId = Guid.Parse("a1200000-0000-0000-0000-000000000002");
+        var seasonAcquisitionId = Guid.Parse("a1200000-0000-0000-0000-000000000003");
+        var episodeAcquisitionId = Guid.Parse("a1200000-0000-0000-0000-000000000004");
+        db.Acquisitions.AddRange(
+            Acquisition(seriesAcquisitionId, EntityKind.VideoSeries, AcquisitionStatus.Imported, seriesId, now.AddMinutes(-8)),
+            Acquisition(oldSeasonAcquisitionId, EntityKind.VideoSeason, AcquisitionStatus.Pending, seasonId, now.AddMinutes(-7)),
+            Acquisition(seasonAcquisitionId, EntityKind.VideoSeason, AcquisitionStatus.Failed, seasonId, now.AddMinutes(-6)),
+            Acquisition(episodeAcquisitionId, EntityKind.Video, AcquisitionStatus.Imported, episodeId, now.AddMinutes(-5)),
+            Acquisition(Guid.Parse("a1200000-0000-0000-0000-000000000005"), EntityKind.Video, AcquisitionStatus.Downloading, entityId: null, now.AddMinutes(-4), episodeAcquisitionId),
+            Acquisition(Guid.Parse("a1200000-0000-0000-0000-000000000006"), EntityKind.Video, AcquisitionStatus.Cancelled, entityId: null, now.AddMinutes(-3), episodeAcquisitionId),
+            Acquisition(Guid.Parse("a1200000-0000-0000-0000-000000000007"), EntityKind.AudioLibrary, AcquisitionStatus.Downloaded, albumId, now.AddMinutes(-2)));
+        await db.SaveChangesAsync();
+
+        var service = CreateService(db);
+        var thumbnails = await service.GetThumbnailsAsync(
+            [seriesId, artistId],
+            hideNsfw: false,
+            CancellationToken.None);
+        var series = Assert.Single(thumbnails.Items, item => item.Id == seriesId);
+        var artist = Assert.Single(thumbnails.Items, item => item.Id == artistId);
+
+        Assert.Equal(AcquisitionStatus.Imported, series.LatestAcquisitionStatus);
+        Assert.Equal(
+            [AcquisitionStatus.Downloading, AcquisitionStatus.Imported, AcquisitionStatus.Failed, AcquisitionStatus.Cancelled],
+            series.AcquisitionStatuses.OrderBy(status => status));
+        Assert.Null(artist.LatestAcquisitionStatus);
+        Assert.Equal([AcquisitionStatus.Downloaded], artist.AcquisitionStatuses);
+
+        var downloadingSeries = await service.ListAsync(
+            EntityKindRegistry.VideoSeries.Code,
+            null,
+            null,
+            false,
+            limit: 1,
+            CancellationToken.None,
+            acquisitionStatus: AcquisitionStatus.Downloading);
+        Assert.Equal(1, downloadingSeries.TotalCount);
+        Assert.Equal(seriesId, Assert.Single(downloadingSeries.Items).Id);
+
+        var failedSeries = await service.ListAsync(
+            EntityKindRegistry.VideoSeries.Code,
+            null,
+            null,
+            false,
+            limit: 1,
+            CancellationToken.None,
+            acquisitionStatus: AcquisitionStatus.Failed);
+        Assert.Equal(seriesId, Assert.Single(failedSeries.Items).Id);
+
+        var obsoleteSeasonState = await service.ListAsync(
+            EntityKindRegistry.VideoSeries.Code,
+            null,
+            null,
+            false,
+            limit: 1,
+            CancellationToken.None,
+            acquisitionStatus: AcquisitionStatus.Pending);
+        Assert.Empty(obsoleteSeasonState.Items);
+
+        var downloadedArtist = await service.ListAsync(
+            EntityKindRegistry.MusicArtist.Code,
+            null,
+            null,
+            false,
+            limit: 1,
+            CancellationToken.None,
+            acquisitionStatus: AcquisitionStatus.Downloaded);
+        Assert.Equal(1, downloadedArtist.TotalCount);
+        Assert.Equal(artistId, Assert.Single(downloadedArtist.Items).Id);
+
+        EntityRow Entity(Guid id, EntityKind kind, string title, Guid? parentId) => new() {
+            Id = id,
+            KindCode = kind.ToCode(),
+            Title = title,
+            ParentEntityId = parentId,
+            CreatedAt = now,
+            UpdatedAt = now,
+        };
+
+        static AcquisitionRow Acquisition(
+            Guid id,
+            EntityKind kind,
+            AcquisitionStatus status,
+            Guid? entityId,
+            DateTimeOffset createdAt,
+            Guid? upgradeOfAcquisitionId = null) => new() {
+                Id = id,
+                Kind = kind,
+                Status = status,
+                EntityId = entityId,
+                UpgradeOfAcquisitionId = upgradeOfAcquisitionId,
+                Title = kind.ToCode(),
+                ExternalIdsJson = "{}",
+                SourceUrlsJson = "[]",
+                CreatedAt = createdAt,
+                UpdatedAt = createdAt,
+            };
+    }
+
+    [Fact]
     public async Task ListAsyncFiltersOrphanedTaxonomyAcrossTheWholeSet() {
         await using var db = CreateContext();
         var now = DateTimeOffset.UtcNow;

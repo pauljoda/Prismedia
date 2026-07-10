@@ -313,6 +313,10 @@ namespace Prismedia.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(256)")
                         .HasColumnName("identity_value");
 
+                    b.Property<string>("ImportCheckpointJson")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("tv_import_checkpoint_json");
+
                     b.Property<Guid?>("ImportClaimJobId")
                         .HasColumnType("uuid")
                         .HasColumnName("import_claim_job_id");
@@ -386,6 +390,7 @@ namespace Prismedia.Infrastructure.Persistence.Migrations
                         .HasColumnName("source_urls_json");
 
                     b.Property<string>("Status")
+                        .IsConcurrencyToken()
                         .IsRequired()
                         .ValueGeneratedOnAdd()
                         .HasMaxLength(32)
@@ -402,15 +407,26 @@ namespace Prismedia.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("target_library_root_id");
 
+                    b.Property<string>("TeardownIntent")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("teardown_intent");
+
+                    b.Property<string>("TeardownOriginalStatus")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("teardown_original_status");
+
+                    b.Property<Guid?>("TeardownReplacementAcquisitionId")
+                        .IsConcurrencyToken()
+                        .HasColumnType("uuid")
+                        .HasColumnName("teardown_replacement_acquisition_id");
+
                     b.Property<string>("Title")
                         .IsRequired()
                         .HasMaxLength(1024)
                         .HasColumnType("character varying(1024)")
                         .HasColumnName("title");
-
-                    b.Property<string>("TvImportCheckpointJson")
-                        .HasColumnType("jsonb")
-                        .HasColumnName("tv_import_checkpoint_json");
 
                     b.Property<DateTimeOffset>("UpdatedAt")
                         .HasColumnType("timestamp with time zone")
@@ -1857,6 +1873,19 @@ namespace Prismedia.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(64)")
                         .HasColumnName("kind_code");
 
+                    b.Property<Guid?>("LifecycleClaimId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("lifecycle_claim_id");
+
+                    b.Property<string>("LifecycleClaimKind")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("lifecycle_claim_kind");
+
+                    b.Property<DateTimeOffset?>("LifecycleClaimedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("lifecycle_claimed_at");
+
                     b.Property<Guid?>("ParentEntityId")
                         .HasColumnType("uuid")
                         .HasColumnName("parent_entity_id");
@@ -1892,6 +1921,8 @@ namespace Prismedia.Infrastructure.Persistence.Migrations
 
                     b.ToTable("entities", null, t =>
                         {
+                            t.HasCheckConstraint("ck_entities_lifecycle_claim", "(lifecycle_claim_kind IS NULL AND lifecycle_claim_id IS NULL AND lifecycle_claimed_at IS NULL) OR (lifecycle_claim_kind IS NOT NULL AND lifecycle_claim_id IS NOT NULL AND lifecycle_claimed_at IS NOT NULL)");
+
                             t.HasCheckConstraint("ck_entities_rating", "rating_value IS NULL OR (rating_value >= 0 AND rating_value <= 5)");
                         });
                 });
@@ -2934,10 +2965,6 @@ namespace Prismedia.Infrastructure.Persistence.Migrations
                         .HasDefaultValue(0)
                         .HasColumnName("barren_searches");
 
-                    b.Property<Guid?>("BookEntityId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("book_entity_id");
-
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
@@ -2971,6 +2998,7 @@ namespace Prismedia.Infrastructure.Persistence.Migrations
                         .HasColumnName("profile_id");
 
                     b.Property<string>("Status")
+                        .IsConcurrencyToken()
                         .IsRequired()
                         .ValueGeneratedOnAdd()
                         .HasMaxLength(32)
@@ -3006,8 +3034,6 @@ namespace Prismedia.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("AcquisitionId")
                         .IsUnique();
-
-                    b.HasIndex("BookEntityId");
 
                     b.HasIndex("EntityId")
                         .IsUnique();

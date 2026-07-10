@@ -18,6 +18,18 @@ public sealed class PluginRuntimeServiceTests : IDisposable {
     private readonly string _tempRoot = Path.Combine(Path.GetTempPath(), $"prismedia-plugin-tests-{Guid.NewGuid():N}");
 
     [Fact]
+    public void CatalogExtractionRejectsCaseVariantSiblingOnUnix() {
+        if (OperatingSystem.IsWindows()) {
+            return;
+        }
+
+        var destination = Path.Combine(_tempRoot, "plugins", "community", "tmdb", "1.2.0");
+        var caseVariantSibling = Path.Combine(_tempRoot, "plugins", "community", "TMDB", "1.2.0", "payload.dll");
+
+        Assert.False(PluginCatalogService.IsSafeExtractionPath(destination, caseVariantSibling));
+    }
+
+    [Fact]
     public async Task CatalogDiscoversOnlyCompatibleDotnetManifests() {
         var pluginDir = Path.Combine(_tempRoot, "tmdb");
         Directory.CreateDirectory(pluginDir);

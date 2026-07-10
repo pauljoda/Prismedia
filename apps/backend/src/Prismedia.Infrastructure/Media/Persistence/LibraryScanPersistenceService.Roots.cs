@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Prismedia.Application.Files;
 using Prismedia.Application.Jobs.Ports;
 using Prismedia.Application.Settings;
 using Prismedia.Domain.Entities;
@@ -54,7 +55,7 @@ public sealed partial class LibraryScanPersistenceService {
         if (row is not null) {
             row.LastScannedAt = DateTimeOffset.UtcNow;
             row.UpdatedAt = DateTimeOffset.UtcNow;
-            await _db.SaveChangesAsync(cancellationToken);
+            await SaveChangesWithLifecycleAsync(cancellationToken);
         }
     }
 
@@ -64,7 +65,7 @@ public sealed partial class LibraryScanPersistenceService {
             .Select(root => root.Path)
             .FirstOrDefaultAsync(cancellationToken);
         if (string.IsNullOrWhiteSpace(rootPath)) {
-            return new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            return new HashSet<string>(FileSystemPathComparison.Comparer);
         }
 
         var exclusions = await _db.MediaFileIgnores.AsNoTracking()
@@ -74,7 +75,7 @@ public sealed partial class LibraryScanPersistenceService {
 
         return exclusions
             .Select(path => Path.GetFullPath(Path.Combine(rootPath, path)))
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            .ToHashSet(FileSystemPathComparison.Comparer);
     }
 
     public async Task<int> RemoveEntitiesInExcludedPathsAsync(Guid rootId, CancellationToken cancellationToken) {
@@ -100,7 +101,7 @@ public sealed partial class LibraryScanPersistenceService {
             .Where(entity => excludedEntityIds.Contains(entity.Id))
             .ToArrayAsync(cancellationToken);
         _db.Entities.RemoveRange(entities);
-        await _db.SaveChangesAsync(cancellationToken);
+        await SaveChangesWithLifecycleAsync(cancellationToken);
         return entities.Length;
     }
 

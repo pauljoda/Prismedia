@@ -85,6 +85,30 @@ public sealed class OwnedFileReplacerTests : IDisposable {
     }
 
     [Fact]
+    public async Task WindowsExtensionCaseChangeDoesNotDeleteTheInstalledUpgrade() {
+        if (!OperatingSystem.IsWindows()) {
+            return;
+        }
+
+        var library = Dir("library-case");
+        var download = Dir("download-case");
+        WriteFile(library, "Movie (2020).MKV", "old copy");
+        WriteFile(download, "Movie.2020.1080p.mkv", "new copy");
+
+        var result = await _replacer.ReplaceAsync(
+            library,
+            download,
+            BookFormatTier.Unknown,
+            CancellationToken.None,
+            EntityKind.Movie);
+
+        Assert.True(result.Succeeded);
+        Assert.NotNull(result.SwappedPath);
+        Assert.True(File.Exists(result.SwappedPath));
+        Assert.Equal("new copy", File.ReadAllText(result.SwappedPath));
+    }
+
+    [Fact]
     public async Task VideoFormatChangeIsRefusedAndOwnedFileUntouched() {
         var library = Dir("library");
         var download = Dir("download");

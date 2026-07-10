@@ -1,23 +1,22 @@
 namespace Prismedia.Domain.Entities;
 
 /// <summary>
-/// Closed set of monitoring presets chosen when a container is requested (a series, an author, an
-/// artist), adapting Sonarr's <c>MonitorTypes</c> to Prismedia's phantom-acquisition model. A preset
+/// Closed set of generic monitoring policies chosen when a container is requested (a series, an author,
+/// an artist, or any future Entity grouping). A policy
 /// decides two things:
 /// <list type="number">
 /// <item>Which works that already exist on the provider get requested/monitored at commit time — see
 /// <c>MonitorPresetSelection.Resolve</c>, the single source of truth for that mapping.</item>
 /// <item>Whether the container sync auto-monitors works discovered <em>later</em>. Only
-/// <see cref="All"/> and <see cref="Future"/> materialize newly-discovered works as monitored wanted
-/// phantoms; every other preset keeps monitoring the works committed up front but ignores new arrivals.</item>
+/// <see cref="All"/> and <see cref="Future"/> send newly-discovered works through the same monitored
+/// acquisition path as a direct child toggle; every other preset keeps monitoring the works committed up
+/// front but ignores new arrivals.</item>
 /// </list>
 /// The preset is persisted on the container monitor so the second rule survives across syncs.
 /// <para>
-/// DIVERGENCE FROM SONARR (deliberate): Sonarr's <c>Existing</c>, <c>Recent</c>, <c>MonitorSpecials</c>,
-/// and <c>UnmonitorSpecials</c> variants are intentionally omitted. Prismedia acquires works it does not
-/// yet own, so "monitor only what already exists on disk" (<c>Existing</c>) has no acquisition meaning;
-/// specials handling and the 90-day <c>Recent</c> window are TV-metadata concerns that the phantom model
-/// does not expose at commit time. These may be added if a concrete need appears.
+/// Medium-specific shortcuts do not belong here. The review's explicit child selection represents which
+/// current works the user wants, while this policy only supplies generic current/future defaults and the
+/// durable future-discovery choice.
 /// </para>
 /// </summary>
 public enum MonitorPreset {
@@ -42,27 +41,6 @@ public enum MonitorPreset {
     /// </summary>
     [Code("missing")]
     Missing,
-
-    /// <summary>
-    /// Request and monitor only the first season/work (the lowest season number, or the earliest work),
-    /// and do NOT auto-monitor works discovered later. Sonarr's "first season".
-    /// </summary>
-    [Code("first-season")]
-    FirstSeason,
-
-    /// <summary>
-    /// Request and monitor only the latest season/work (the highest season number, or the most recent
-    /// work), and do NOT auto-monitor works discovered later. Sonarr's "latest season".
-    /// </summary>
-    [Code("latest-season")]
-    LatestSeason,
-
-    /// <summary>
-    /// Request and monitor only the pilot — the first episode of the first season (S01E01) — and do NOT
-    /// auto-monitor works discovered later. Sonarr's "pilot".
-    /// </summary>
-    [Code("pilot")]
-    Pilot,
 
     /// <summary>
     /// Request and monitor nothing, and do NOT auto-monitor works discovered later. The container monitor

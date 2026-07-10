@@ -1,22 +1,51 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 using Prismedia.Application.Acquisition;
+using Prismedia.Application.Entities;
+using Prismedia.Application.Requests;
 using Prismedia.Contracts.Acquisition;
 using Prismedia.Domain.Entities;
+using Prismedia.Infrastructure.Entities;
 using Prismedia.Infrastructure.Persistence;
 using Prismedia.Infrastructure.Persistence.Entities;
 
 namespace Prismedia.Infrastructure.Acquisition;
 
 /// <summary>EF-backed store for monitors, including the reconcile + due logic the scheduled sweep relies on.</summary>
-public sealed class EfMonitorStore(PrismediaDbContext db) : IMonitorStore {
+public sealed class EfMonitorStore(
+    PrismediaDbContext db,
+    IEntityHierarchyReader? entityHierarchy = null,
+    IEntityLifecycleMutationLease? lifecycleLease = null) : IMonitorStore {
+    private readonly IEntityHierarchyReader hierarchy =
+        entityHierarchy ?? new EfEntityHierarchyReader(db);
+    private readonly IEntityLifecycleMutationLease lifecycle =
+        lifecycleLease ?? new EfEntityLifecycleMutationLease(
+            db,
+            entityHierarchy ?? new EfEntityHierarchyReader(db));
+
     public async Task<MonitorView> StartAsync(Guid acquisitionId, EntityKind kind, string title, string? author, CancellationToken cancellationToken) {
         var now = DateTimeOffset.UtcNow;
-        var row = await db.Monitors.FirstOrDefaultAsync(monitor => monitor.AcquisitionId == acquisitionId, cancellationToken);
+        var entityId = await db.Acquisitions.AsNoTracking()
+            .Where(acquisition => acquisition.Id == acquisitionId)
+            .Select(acquisition => acquisition.EntityId)
+            .FirstOrDefaultAsync(cancellationToken);
+        var rows = await db.Monitors
+            .Where(monitor => monitor.AcquisitionId == acquisitionId
+                || (entityId != null && monitor.EntityId == entityId))
+            .ToArrayAsync(cancellationToken);
+        var row = rows.FirstOrDefault(monitor => entityId != null && monitor.EntityId == entityId)
+            ?? rows.FirstOrDefault();
+        if (row?.Status is MonitorStatus.Stopping or MonitorStatus.DeletingFiles) {
+            // Destructive lifecycle rows are durable operation claims. Refuse before changing title/ids
+            // or deleting duplicates so a stale request cannot mutate either operation's immutable scope.
+            throw LifecycleClaimConflict();
+        }
         if (row is null) {
             row = new MonitorRow {
                 Id = Guid.NewGuid(),
                 Kind = kind,
                 AcquisitionId = acquisitionId,
+                EntityId = entityId,
                 Status = MonitorStatus.Active,
                 Title = title,
                 Author = author,
@@ -25,14 +54,26 @@ public sealed class EfMonitorStore(PrismediaDbContext db) : IMonitorStore {
             };
             db.Monitors.Add(row);
         } else {
-            // Idempotent: re-activate an existing (possibly paused/fulfilled) monitor and refresh its label.
+            // Idempotent: re-activate an existing paused/fulfilled monitor.
             row.Status = MonitorStatus.Active;
             row.Title = title;
             row.Author = author;
+            row.AcquisitionId = acquisitionId;
+            row.EntityId = entityId;
             row.UpdatedAt = now;
         }
 
-        await db.SaveChangesAsync(cancellationToken);
+        var duplicates = rows.Where(monitor => monitor.Id != row.Id).ToArray();
+        if (duplicates.Length > 0) {
+            db.Monitors.RemoveRange(duplicates);
+        }
+
+        try {
+            await db.SaveChangesAsync(cancellationToken);
+        } catch (DbUpdateConcurrencyException) {
+            db.ChangeTracker.Clear();
+            throw LifecycleClaimConflict();
+        }
         var acquisitionStatus = await db.Acquisitions.AsNoTracking()
             .Where(acquisition => acquisition.Id == acquisitionId)
             .Select(acquisition => (AcquisitionStatus?)acquisition.Status)
@@ -41,8 +82,16 @@ public sealed class EfMonitorStore(PrismediaDbContext db) : IMonitorStore {
     }
 
     public async Task<bool> DeleteAsync(Guid monitorId, CancellationToken cancellationToken) {
+        if (db.Database.IsRelational()) {
+            return await db.Monitors
+                .Where(monitor => monitor.Id == monitorId
+                    && monitor.Status != MonitorStatus.Stopping
+                    && monitor.Status != MonitorStatus.DeletingFiles)
+                .ExecuteDeleteAsync(cancellationToken) > 0;
+        }
+
         var row = await db.Monitors.FirstOrDefaultAsync(monitor => monitor.Id == monitorId, cancellationToken);
-        if (row is null) {
+        if (row is null || row.Status is MonitorStatus.Stopping or MonitorStatus.DeletingFiles) {
             return false;
         }
 
@@ -52,8 +101,22 @@ public sealed class EfMonitorStore(PrismediaDbContext db) : IMonitorStore {
     }
 
     public async Task<bool> SetStatusAsync(Guid monitorId, MonitorStatus status, CancellationToken cancellationToken) {
+        if (db.Database.IsRelational()) {
+            return await db.Monitors
+                .Where(monitor => monitor.Id == monitorId
+                    && monitor.Status != MonitorStatus.Stopping
+                    && monitor.Status != MonitorStatus.DeletingFiles)
+                .ExecuteUpdateAsync(setters => setters
+                    .SetProperty(monitor => monitor.Status, status)
+                    .SetProperty(monitor => monitor.UpdatedAt, DateTimeOffset.UtcNow), cancellationToken) > 0;
+        }
+
         var row = await db.Monitors.FirstOrDefaultAsync(monitor => monitor.Id == monitorId, cancellationToken);
         if (row is null) {
+            return false;
+        }
+
+        if (row.Status is MonitorStatus.Stopping or MonitorStatus.DeletingFiles) {
             return false;
         }
 
@@ -64,25 +127,105 @@ public sealed class EfMonitorStore(PrismediaDbContext db) : IMonitorStore {
     }
 
     public async Task<bool> RetargetAsync(Guid fromAcquisitionId, Guid toAcquisitionId, CancellationToken cancellationToken) {
+        var now = DateTimeOffset.UtcNow;
+        var entityId = await db.Acquisitions.AsNoTracking()
+            .Where(acquisition => acquisition.Id == toAcquisitionId)
+            .Select(acquisition => acquisition.EntityId)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        // PostgreSQL performs the status predicate and retarget in one statement. If destructive cleanup
+        // claimed the row first (or while this operation waited on its lock), zero rows update and that
+        // operation's claim remains untouched. The in-memory branch mirrors the predicate for tests.
+        if (db.Database.IsRelational()) {
+            var eligible = db.Monitors.Where(monitor =>
+                monitor.AcquisitionId == fromAcquisitionId
+                && monitor.Status != MonitorStatus.Stopping
+                && monitor.Status != MonitorStatus.DeletingFiles);
+            var updated = entityId is { } stableEntityId
+                ? await eligible.ExecuteUpdateAsync(setters => setters
+                    .SetProperty(monitor => monitor.AcquisitionId, toAcquisitionId)
+                    .SetProperty(monitor => monitor.EntityId, stableEntityId)
+                    .SetProperty(monitor => monitor.Status, MonitorStatus.Active)
+                    .SetProperty(monitor => monitor.UpdatedAt, now), cancellationToken)
+                : await eligible.ExecuteUpdateAsync(setters => setters
+                    .SetProperty(monitor => monitor.AcquisitionId, toAcquisitionId)
+                    .SetProperty(monitor => monitor.Status, MonitorStatus.Active)
+                    .SetProperty(monitor => monitor.UpdatedAt, now), cancellationToken);
+            return updated > 0
+                || await db.Monitors.AsNoTracking().AnyAsync(monitor =>
+                    monitor.AcquisitionId == toAcquisitionId
+                    && monitor.Status == MonitorStatus.Active,
+                    cancellationToken);
+        }
+
         var rows = await db.Monitors
             .Where(monitor => monitor.AcquisitionId == fromAcquisitionId)
             .ToArrayAsync(cancellationToken);
-        if (rows.Length == 0) {
-            return false;
+        var eligibleRows = rows.Where(monitor =>
+            monitor.Status is not MonitorStatus.Stopping and not MonitorStatus.DeletingFiles).ToArray();
+        foreach (var row in eligibleRows) {
+            row.AcquisitionId = toAcquisitionId;
+            row.EntityId = entityId ?? row.EntityId;
+            row.Status = MonitorStatus.Active;
+            row.UpdatedAt = now;
+        }
+        await db.SaveChangesAsync(cancellationToken);
+        return eligibleRows.Length > 0
+            || await db.Monitors.AsNoTracking().AnyAsync(monitor =>
+                monitor.AcquisitionId == toAcquisitionId
+                && monitor.Status == MonitorStatus.Active,
+                cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public async Task<bool> RetargetAfterFileDeletionAsync(
+        Guid fromAcquisitionId,
+        Guid toAcquisitionId,
+        CancellationToken cancellationToken) {
+        var now = DateTimeOffset.UtcNow;
+        var entityId = await db.Acquisitions.AsNoTracking()
+            .Where(acquisition => acquisition.Id == toAcquisitionId)
+            .Select(acquisition => acquisition.EntityId)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (db.Database.IsRelational()) {
+            var claimed = db.Monitors.Where(monitor =>
+                monitor.AcquisitionId == fromAcquisitionId
+                && monitor.Status == MonitorStatus.DeletingFiles);
+            var updated = entityId is { } stableEntityId
+                ? await claimed.ExecuteUpdateAsync(setters => setters
+                    .SetProperty(monitor => monitor.AcquisitionId, toAcquisitionId)
+                    .SetProperty(monitor => monitor.EntityId, stableEntityId)
+                    .SetProperty(monitor => monitor.Status, MonitorStatus.Active)
+                    .SetProperty(monitor => monitor.UpdatedAt, now), cancellationToken)
+                : await claimed.ExecuteUpdateAsync(setters => setters
+                    .SetProperty(monitor => monitor.AcquisitionId, toAcquisitionId)
+                    .SetProperty(monitor => monitor.Status, MonitorStatus.Active)
+                    .SetProperty(monitor => monitor.UpdatedAt, now), cancellationToken);
+            return updated > 0
+                || await db.Monitors.AsNoTracking().AnyAsync(monitor =>
+                    monitor.AcquisitionId == toAcquisitionId
+                    && monitor.Status == MonitorStatus.Active,
+                    cancellationToken);
         }
 
-        var now = DateTimeOffset.UtcNow;
+        var rows = await db.Monitors
+            .Where(monitor => monitor.AcquisitionId == fromAcquisitionId
+                && monitor.Status == MonitorStatus.DeletingFiles)
+            .ToArrayAsync(cancellationToken);
         foreach (var row in rows) {
             row.AcquisitionId = toAcquisitionId;
-            // Re-activate a paused watch (a prior orphan-pause must not survive the retarget), but keep
-            // the search cadence: LastSearchedAt is untouched so the retargeted monitor re-searches on
-            // its normal interval rather than instantly re-grabbing what the user just removed.
+            row.EntityId = entityId ?? row.EntityId;
             row.Status = MonitorStatus.Active;
             row.UpdatedAt = now;
         }
 
         await db.SaveChangesAsync(cancellationToken);
-        return true;
+        return rows.Length > 0
+            || await db.Monitors.AsNoTracking().AnyAsync(monitor =>
+                monitor.AcquisitionId == toAcquisitionId
+                && monitor.Status == MonitorStatus.Active,
+                cancellationToken);
     }
 
     public async Task<IReadOnlyList<MonitorView>> ListAsync(CancellationToken cancellationToken) {
@@ -94,8 +237,8 @@ public sealed class EfMonitorStore(PrismediaDbContext db) : IMonitorStore {
             select new {
                 Monitor = monitor,
                 AcquisitionStatus = acquisition == null ? (AcquisitionStatus?)null : acquisition.Status,
-                // A per-item monitor carries no EntityId of its own, but its acquisition targets the wanted
-                // entity — surfacing it lets clients (the Season Pass editor) index monitors by entity id.
+                // A legacy per-item monitor may carry no stable EntityId, but its acquisition targets the
+                // wanted Entity — surfacing it keeps shared controls compatible while the row is backfilled.
                 AcquisitionEntityId = acquisition == null ? (Guid?)null : acquisition.EntityId
             })
             .ToArrayAsync(cancellationToken);
@@ -258,12 +401,10 @@ public sealed class EfMonitorStore(PrismediaDbContext db) : IMonitorStore {
                 Monitor = monitor,
                 AcquisitionStatus = acquisition == null ? (AcquisitionStatus?)null : acquisition.Status,
                 AcquisitionEntityId = acquisition == null ? null : acquisition.EntityId,
-                // Only an imported season pack ever inspects this, so the subquery is gated to that shape:
-                // an unconsumed import hint means the library scan hasn't bound the pack's files yet, and
-                // episode completeness can't be judged until it has.
+                // An unconsumed import hint means the library scan has not bound the imported unit's files
+                // yet, so structural child completeness cannot be judged until it has.
                 AwaitingImportReconcile = acquisition != null
                     && acquisition.Status == AcquisitionStatus.Imported
-                    && monitor.Kind == EntityKind.VideoSeason
                     && db.AcquisitionImportHints.Any(hint => hint.AcquisitionId == acquisition.Id && !hint.Consumed),
                 OwnedQuality = acquisition == null ? (BookQualityRank?)null : new BookQualityRank(acquisition.OwnedSourceTier, acquisition.OwnedFormatTier),
                 OwnedMediaQuality = acquisition == null ? null : acquisition.OwnedMediaQuality,
@@ -281,11 +422,12 @@ public sealed class EfMonitorStore(PrismediaDbContext db) : IMonitorStore {
         var now = DateTimeOffset.UtcNow;
         var due = new List<DueMonitor>();
         var changed = false;
+        var statusTransitions = new List<(Guid MonitorId, MonitorStatus Status)>();
 
         foreach (var row in rows) {
             var monitor = row.Monitor;
-            // A container monitor (an author/artist watched for new works) has no acquisition of its
-            // own: it is due for a discovery sync on the plain interval.
+            // Entity-only intent has no current acquisition. Groupings run discovery; source-backed leaves
+            // remain satisfied; fileless leaves re-enter the request pipeline in the handler.
             if (monitor.AcquisitionId is null && monitor.EntityId is { } watchedEntityId) {
                 if (monitor.LastSearchedAt is null || now - monitor.LastSearchedAt >= interval) {
                     due.Add(new DueMonitor(monitor.Id, null, monitor.Title, IsUpgrade: false, EntityId: watchedEntityId));
@@ -296,9 +438,7 @@ public sealed class EfMonitorStore(PrismediaDbContext db) : IMonitorStore {
 
             // The acquisition was hard-deleted (FK set null) — auto-pause; nothing to re-search.
             if (monitor.AcquisitionId is not { } acquisitionId) {
-                monitor.Status = MonitorStatus.Paused;
-                monitor.UpdatedAt = now;
-                changed = true;
+                statusTransitions.Add((monitor.Id, MonitorStatus.Paused));
                 continue;
             }
 
@@ -332,27 +472,28 @@ public sealed class EfMonitorStore(PrismediaDbContext db) : IMonitorStore {
 
             switch (row.AcquisitionStatus) {
                 case AcquisitionStatus.Imported:
-                    // A season pack is only truly "in hand" when the season is complete. Once the import
-                    // scan has reconciled the pack (its hint is consumed), any episode phantom still wanted
-                    // under the season is a gap the pack didn't cover — surface it as per-episode fallback
-                    // work (the handler requests each missing episode individually, Sonarr-style) instead
-                    // of fulfilling a monitor whose season has holes.
-                    if (monitor.Kind == EntityKind.VideoSeason && row.AcquisitionEntityId is { } packEntityId) {
+                    // A child-materializing unit is only complete when its imported payload covered the
+                    // structural children it promised. The registry supplies the direct child kind, keeping
+                    // the same completeness/fallback path reusable by seasons, albums, volumes, and future
+                    // Entity hierarchies without media-specific branches here.
+                    var structuralUnit = RequestKindRegistry.FindChildMaterializingUnit(monitor.Kind);
+                    var structuralChild = structuralUnit is null ? null : RequestKindRegistry.ChildOf(structuralUnit);
+                    if (structuralChild is not null && row.AcquisitionEntityId is { } parentEntityId) {
                         if (row.AwaitingImportReconcile) {
                             continue; // judge completeness on a later sweep, after the import scan binds files
                         }
 
-                        var episodeKindCode = EntityKind.Video.ToCode();
-                        var hasMissingEpisodes = await db.Entities.AnyAsync(
-                            entity => entity.ParentEntityId == packEntityId
-                                && entity.KindCode == episodeKindCode
+                        var childKindCode = structuralChild.WantedEntityKind.ToCode();
+                        var hasMissingChildren = await db.Entities.AnyAsync(
+                            entity => entity.ParentEntityId == parentEntityId
+                                && entity.KindCode == childKindCode
                                 && entity.IsWanted,
                             cancellationToken);
-                        if (hasMissingEpisodes) {
+                        if (hasMissingChildren) {
                             if (monitor.LastSearchedAt is null || now - monitor.LastSearchedAt >= interval) {
                                 due.Add(new DueMonitor(
                                     monitor.Id, acquisitionId, monitor.Title,
-                                    IsUpgrade: false, EntityId: packEntityId, EpisodeFallback: true));
+                                    IsUpgrade: false, EntityId: parentEntityId, MissingChildFallback: true));
                             }
 
                             continue;
@@ -374,10 +515,14 @@ public sealed class EfMonitorStore(PrismediaDbContext db) : IMonitorStore {
                     var verdict = EvaluateCutoff(
                         monitor.Kind, policy, row.Captured, row.OwnedQuality ?? BookQualityRank.Floor, row.OwnedMediaQuality, row.OwnedFormatScore);
                     if (!verdict.KindUpgrades) {
-                        // Upgrades off for this kind — fulfill immediately (the original on-import behavior).
-                        monitor.Status = MonitorStatus.Fulfilled;
-                        monitor.UpdatedAt = now;
-                        changed = true;
+                        // The acquisition is complete, but the Entity intent remains active. New monitors
+                        // carry EntityId, so detach transient acquisition bookkeeping; legacy rows without an
+                        // Entity target retain their historical Fulfilled terminal state.
+                        if (CompleteEntityAcquisition(monitor, now) is { } terminalStatus) {
+                            statusTransitions.Add((monitor.Id, terminalStatus));
+                        } else {
+                            changed = true;
+                        }
                         continue;
                     }
 
@@ -389,9 +534,11 @@ public sealed class EfMonitorStore(PrismediaDbContext db) : IMonitorStore {
 
                     var capsHit = monitor.UpgradeAttempts >= MaxUpgradeAttempts || monitor.BarrenSearches >= MaxBarrenSearches;
                     if (verdict.CutoffMet || capsHit) {
-                        monitor.Status = MonitorStatus.Fulfilled; // best quality reached, or best-effort exhausted
-                        monitor.UpdatedAt = now;
-                        changed = true;
+                        if (CompleteEntityAcquisition(monitor, now) is { } terminalStatus) {
+                            statusTransitions.Add((monitor.Id, terminalStatus));
+                        } else {
+                            changed = true;
+                        }
                         continue;
                     }
 
@@ -399,7 +546,9 @@ public sealed class EfMonitorStore(PrismediaDbContext db) : IMonitorStore {
                     // gets a better release does not hammer indexers.
                     var backoff = BackoffFor(interval, monitor.BarrenSearches);
                     if (monitor.LastSearchedAt is null || now - monitor.LastSearchedAt >= backoff) {
-                        due.Add(new DueMonitor(monitor.Id, acquisitionId, monitor.Title, IsUpgrade: true));
+                        due.Add(new DueMonitor(
+                            monitor.Id, acquisitionId, monitor.Title,
+                            IsUpgrade: true, EntityId: monitor.EntityId));
                     }
 
                     continue;
@@ -421,12 +570,28 @@ public sealed class EfMonitorStore(PrismediaDbContext db) : IMonitorStore {
             }
 
             if (monitor.LastSearchedAt is null || now - monitor.LastSearchedAt >= interval) {
-                due.Add(new DueMonitor(monitor.Id, acquisitionId, monitor.Title));
+                due.Add(new DueMonitor(
+                    monitor.Id, acquisitionId, monitor.Title,
+                    EntityId: monitor.EntityId));
             }
         }
 
         if (changed) {
-            await db.SaveChangesAsync(cancellationToken);
+            try {
+                await db.SaveChangesAsync(cancellationToken);
+            } catch (DbUpdateConcurrencyException) {
+                // A Stopping claim changed at least one Active row after this sweep loaded it. The whole
+                // SaveChanges transaction rolled back; discard the stale due snapshot and let cleanup win.
+                db.ChangeTracker.Clear();
+                return [];
+            }
+        }
+        foreach (var transition in statusTransitions) {
+            await TransitionActiveStatusAsync(
+                transition.MonitorId,
+                transition.Status,
+                now,
+                cancellationToken);
         }
 
         return due;
@@ -436,9 +601,9 @@ public sealed class EfMonitorStore(PrismediaDbContext db) : IMonitorStore {
         var take = Math.Clamp(pageSize <= 0 ? DefaultWantedPageSize : pageSize, 1, MaxWantedPageSize);
         var skip = Math.Max(0, page - 1) * take;
 
-        // A "missing" row is an ACTIVE, per-item monitor whose acquisition is present but NOT Imported. The
-        // AcquisitionId != null gate excludes both container discovery follows (EntityId set, no acquisition)
-        // and orphans (the SetNull FK nulls AcquisitionId when the acquisition is hard-deleted, and the sweep
+        // A "missing" row is an ACTIVE monitor whose acquisition is present but NOT Imported. The
+        // AcquisitionId != null gate excludes Entity-only stable intent and legacy orphans (the SetNull FK
+        // nulls AcquisitionId when the acquisition is hard-deleted, and the sweep
         // then pauses them). The left join's null-acquisition branch is defensive only — with the SetNull FK
         // an Active monitor always has a live acquisition — so it costs nothing yet never surprises. The
         // filter, the count, and the page slice all run in SQL so the query stays cheap at ~5k scale.
@@ -565,20 +730,26 @@ public sealed class EfMonitorStore(PrismediaDbContext db) : IMonitorStore {
     }
 
     public async Task<Guid?> CreateUpgradeChildAsync(Guid monitorId, CancellationToken cancellationToken) {
-        // Serialized by the MonitoredSearch singleton job, so the null-interlock check is a safe claim.
-        var monitor = await db.Monitors.FirstOrDefaultAsync(m => m.Id == monitorId, cancellationToken);
-        if (monitor is null || monitor.UpgradeChildAcquisitionId is not null || monitor.AcquisitionId is not { } parentId) {
+        var parentId = await db.Monitors.AsNoTracking()
+            .Where(monitor => monitor.Id == monitorId
+                && monitor.Status == MonitorStatus.Active
+                && monitor.UpgradeChildAcquisitionId == null)
+            .Select(monitor => monitor.AcquisitionId)
+            .FirstOrDefaultAsync(cancellationToken);
+        if (parentId is not { } acquisitionId) {
             return null;
         }
 
-        var parent = await db.Acquisitions.AsNoTracking().FirstOrDefaultAsync(a => a.Id == parentId, cancellationToken);
+        var parent = await db.Acquisitions.AsNoTracking().FirstOrDefaultAsync(
+            acquisition => acquisition.Id == acquisitionId,
+            cancellationToken);
         if (parent is null) {
             return null;
         }
 
         var now = DateTimeOffset.UtcNow;
         var childId = Guid.NewGuid();
-        db.Acquisitions.Add(new AcquisitionRow {
+        var child = new AcquisitionRow {
             Id = childId,
             // The child must inherit the parent's kind so its search runs the parent's decision engine and
             // category range, and the replace/import paths speak the right vocabulary. (Books happened to work
@@ -598,10 +769,50 @@ public sealed class EfMonitorStore(PrismediaDbContext db) : IMonitorStore {
             IdentityValue = parent.IdentityValue,
             ExternalIdsJson = parent.ExternalIdsJson,
             SourceUrlsJson = parent.SourceUrlsJson,
-            UpgradeOfAcquisitionId = parentId,
+            UpgradeOfAcquisitionId = acquisitionId,
             CreatedAt = now,
             UpdatedAt = now
-        });
+        };
+
+        if (db.Database.IsRelational()) {
+            var ownsTransaction = db.Database.CurrentTransaction is null;
+            await using var transaction = ownsTransaction
+                ? await db.Database.BeginTransactionAsync(cancellationToken)
+                : null;
+            var claimed = await db.Monitors
+                .Where(monitor => monitor.Id == monitorId
+                    && monitor.Status == MonitorStatus.Active
+                    && monitor.AcquisitionId == acquisitionId
+                    && monitor.UpgradeChildAcquisitionId == null)
+                .ExecuteUpdateAsync(setters => setters
+                    .SetProperty(monitor => monitor.UpgradeChildAcquisitionId, childId)
+                    .SetProperty(monitor => monitor.UpdatedAt, now), cancellationToken);
+            if (claimed == 0) {
+                if (transaction is not null) {
+                    await transaction.RollbackAsync(cancellationToken);
+                }
+                return null;
+            }
+
+            db.Acquisitions.Add(child);
+            await db.SaveChangesAsync(cancellationToken);
+            if (transaction is not null) {
+                await transaction.CommitAsync(cancellationToken);
+            }
+            return childId;
+        }
+
+        var monitor = await db.Monitors.FirstOrDefaultAsync(
+            row => row.Id == monitorId
+                && row.Status == MonitorStatus.Active
+                && row.AcquisitionId == acquisitionId
+                && row.UpgradeChildAcquisitionId == null,
+            cancellationToken);
+        if (monitor is null) {
+            return null;
+        }
+
+        db.Acquisitions.Add(child);
         monitor.UpgradeChildAcquisitionId = childId;
         monitor.UpdatedAt = now;
         await db.SaveChangesAsync(cancellationToken);
@@ -609,7 +820,11 @@ public sealed class EfMonitorStore(PrismediaDbContext db) : IMonitorStore {
     }
 
     public async Task ResolveUpgradeChildAsync(Guid childId, bool succeeded, CancellationToken cancellationToken) {
-        var monitor = await db.Monitors.FirstOrDefaultAsync(m => m.UpgradeChildAcquisitionId == childId, cancellationToken);
+        var monitor = await db.Monitors.FirstOrDefaultAsync(
+            row => row.UpgradeChildAcquisitionId == childId
+                && row.Status != MonitorStatus.Stopping
+                && row.Status != MonitorStatus.DeletingFiles,
+            cancellationToken);
         if (monitor is null) {
             return;
         }
@@ -623,16 +838,36 @@ public sealed class EfMonitorStore(PrismediaDbContext db) : IMonitorStore {
         }
 
         monitor.UpdatedAt = DateTimeOffset.UtcNow;
-        await db.SaveChangesAsync(cancellationToken);
+        try {
+            await db.SaveChangesAsync(cancellationToken);
+        } catch (DbUpdateConcurrencyException) {
+            db.ChangeTracker.Clear();
+            // Destructive cleanup claimed the monitor; resolution is now owned by teardown.
+        }
     }
 
     public async Task MarkSearchedAsync(Guid monitorId, CancellationToken cancellationToken) {
-        var row = await db.Monitors.FirstOrDefaultAsync(monitor => monitor.Id == monitorId, cancellationToken);
+        var now = DateTimeOffset.UtcNow;
+        if (db.Database.IsRelational()) {
+            await db.Monitors
+                .Where(monitor => monitor.Id == monitorId
+                    && monitor.Status != MonitorStatus.Stopping
+                    && monitor.Status != MonitorStatus.DeletingFiles)
+                .ExecuteUpdateAsync(setters => setters
+                    .SetProperty(monitor => monitor.LastSearchedAt, now)
+                    .SetProperty(monitor => monitor.UpdatedAt, now), cancellationToken);
+            return;
+        }
+
+        var row = await db.Monitors.FirstOrDefaultAsync(
+            monitor => monitor.Id == monitorId
+                && monitor.Status != MonitorStatus.Stopping
+                && monitor.Status != MonitorStatus.DeletingFiles,
+            cancellationToken);
         if (row is null) {
             return;
         }
 
-        var now = DateTimeOffset.UtcNow;
         row.LastSearchedAt = now;
         row.UpdatedAt = now;
         await db.SaveChangesAsync(cancellationToken);
@@ -640,7 +875,18 @@ public sealed class EfMonitorStore(PrismediaDbContext db) : IMonitorStore {
 
     public async Task<MonitorView> StartForEntityAsync(Guid entityId, EntityKind kind, string title, AcquisitionTargeting? targeting, MonitorPreset? preset, CancellationToken cancellationToken) {
         var now = DateTimeOffset.UtcNow;
-        var row = await db.Monitors.FirstOrDefaultAsync(monitor => monitor.EntityId == entityId, cancellationToken);
+        var acquisitionIds = await db.Acquisitions.AsNoTracking()
+            .Where(acquisition => acquisition.EntityId == entityId)
+            .Select(acquisition => acquisition.Id)
+            .ToArrayAsync(cancellationToken);
+        var rows = await db.Monitors
+            .Where(monitor => monitor.EntityId == entityId
+                || (monitor.AcquisitionId != null && acquisitionIds.Contains(monitor.AcquisitionId.Value)))
+            .ToArrayAsync(cancellationToken);
+        var row = rows.FirstOrDefault(monitor => monitor.EntityId == entityId) ?? rows.FirstOrDefault();
+        if (row?.Status is MonitorStatus.Stopping or MonitorStatus.DeletingFiles) {
+            throw LifecycleClaimConflict();
+        }
         if (row is null) {
             row = new MonitorRow {
                 Id = Guid.NewGuid(),
@@ -653,10 +899,15 @@ public sealed class EfMonitorStore(PrismediaDbContext db) : IMonitorStore {
             };
             db.Monitors.Add(row);
         } else {
-            // Idempotent: re-activate an existing (possibly paused) container monitor and refresh its label.
             row.Status = MonitorStatus.Active;
             row.Title = title;
+            row.EntityId = entityId;
             row.UpdatedAt = now;
+        }
+
+        var duplicates = rows.Where(monitor => monitor.Id != row.Id).ToArray();
+        if (duplicates.Length > 0) {
+            db.Monitors.RemoveRange(duplicates);
         }
 
         // An explicit request's library/profile choices stick to the monitor so later phantom requests
@@ -672,13 +923,202 @@ public sealed class EfMonitorStore(PrismediaDbContext db) : IMonitorStore {
             row.Preset = chosenPreset;
         }
 
-        await db.SaveChangesAsync(cancellationToken);
+        try {
+            await db.SaveChangesAsync(cancellationToken);
+        } catch (DbUpdateConcurrencyException) {
+            db.ChangeTracker.Clear();
+            throw LifecycleClaimConflict();
+        }
         return ToView(row, null);
     }
 
     public async Task<MonitorView?> GetByEntityAsync(Guid entityId, CancellationToken cancellationToken) {
-        var row = await db.Monitors.AsNoTracking().FirstOrDefaultAsync(monitor => monitor.EntityId == entityId, cancellationToken);
-        return row is null ? null : ToView(row, null);
+        var result = await (
+            from monitor in db.Monitors.AsNoTracking()
+            join acquisition in db.Acquisitions.AsNoTracking() on monitor.AcquisitionId equals acquisition.Id into joined
+            from acquisition in joined.DefaultIfEmpty()
+            where monitor.EntityId == entityId || (acquisition != null && acquisition.EntityId == entityId)
+            orderby monitor.EntityId == entityId descending, monitor.CreatedAt
+            select new {
+                Monitor = monitor,
+                Status = acquisition == null ? (AcquisitionStatus?)null : acquisition.Status,
+                AcquisitionEntityId = acquisition == null ? null : acquisition.EntityId
+            })
+            .FirstOrDefaultAsync(cancellationToken);
+        return result is null ? null : ToView(result.Monitor, result.Status, result.AcquisitionEntityId);
+    }
+
+    public Task<bool> IsActiveAsync(Guid monitorId, CancellationToken cancellationToken) =>
+        db.Monitors.AsNoTracking().AnyAsync(
+            monitor => monitor.Id == monitorId && monitor.Status == MonitorStatus.Active,
+            cancellationToken);
+
+    public async Task<bool> ExecuteIfActiveEntityMutationAsync(
+        Guid entityId,
+        Func<CancellationToken, Task> mutation,
+        CancellationToken cancellationToken) {
+        var candidate = await (
+            from monitor in db.Monitors.AsNoTracking()
+            join acquisition in db.Acquisitions.AsNoTracking()
+                on monitor.AcquisitionId equals acquisition.Id into linkedAcquisitions
+            from acquisition in linkedAcquisitions.DefaultIfEmpty()
+            where monitor.EntityId == entityId || (acquisition != null && acquisition.EntityId == entityId)
+            orderby monitor.EntityId == entityId descending, monitor.CreatedAt
+            select new { monitor.Id })
+            .FirstOrDefaultAsync(cancellationToken);
+        if (candidate is null) {
+            return false;
+        }
+
+        IDbContextTransaction? transaction = null;
+        var ownsTransaction = db.Database.IsRelational() && db.Database.CurrentTransaction is null;
+        if (ownsTransaction) {
+            transaction = await db.Database.BeginTransactionAsync(cancellationToken);
+        }
+
+        try {
+            MonitorRow? monitor;
+            if (db.Database.IsRelational()
+                && db.Database.ProviderName?.Contains("Npgsql", StringComparison.OrdinalIgnoreCase) == true) {
+                monitor = await db.Monitors
+                    .FromSqlInterpolated($"SELECT * FROM monitors WHERE id = {candidate.Id} FOR UPDATE")
+                    .SingleOrDefaultAsync(cancellationToken);
+            } else {
+                monitor = await db.Monitors.FirstOrDefaultAsync(
+                    row => row.Id == candidate.Id,
+                    cancellationToken);
+            }
+
+            if (monitor?.Status != MonitorStatus.Active) {
+                if (transaction is not null) {
+                    await transaction.RollbackAsync(cancellationToken);
+                }
+                return false;
+            }
+
+            var effectiveEntityId = monitor.EntityId;
+            if (effectiveEntityId is null && monitor.AcquisitionId is { } acquisitionId) {
+                effectiveEntityId = await db.Acquisitions.AsNoTracking()
+                    .Where(acquisition => acquisition.Id == acquisitionId)
+                    .Select(acquisition => acquisition.EntityId)
+                    .FirstOrDefaultAsync(cancellationToken);
+            }
+            if (effectiveEntityId != entityId) {
+                if (transaction is not null) {
+                    await transaction.RollbackAsync(cancellationToken);
+                }
+                return false;
+            }
+
+            // A child lifecycle claim is a barrier for its active discovery ancestors. Claim publishers
+            // lock those ancestor monitor rows first, so a waiting sync rechecks both monitor claims and
+            // the stable Entity claim before it can materialize into a destructive subtree.
+            if (await HasDestructiveDescendantClaimAsync(entityId, monitor.Id, cancellationToken)) {
+                if (transaction is not null) {
+                    await transaction.RollbackAsync(cancellationToken);
+                }
+                return false;
+            }
+
+            await mutation(cancellationToken);
+            if (transaction is not null) {
+                await transaction.CommitAsync(cancellationToken);
+            }
+            return true;
+        } finally {
+            if (transaction is not null) {
+                await transaction.DisposeAsync();
+            }
+        }
+    }
+
+    /// <summary>
+    /// Whether this Entity subtree owns an in-progress destructive lifecycle. The stable Entity claim
+    /// covers source-backed and monitorless roots; monitor claims preserve unmonitor compatibility. The
+    /// hierarchy is canonical Entity.ParentEntityId, so no media kind participates in this decision.
+    /// </summary>
+    private async Task<bool> HasDestructiveDescendantClaimAsync(
+        Guid rootEntityId,
+        Guid leasedMonitorId,
+        CancellationToken cancellationToken) {
+        var subtreeIds = (await hierarchy.ListSubtreeIdsAsync(rootEntityId, cancellationToken)).ToArray();
+        if (subtreeIds.Length == 0) {
+            return true;
+        }
+
+        if (await db.Entities.AsNoTracking().AnyAsync(
+            row => subtreeIds.Contains(row.Id) && row.LifecycleClaimKind != null,
+            cancellationToken)) {
+            return true;
+        }
+
+        var descendantIds = subtreeIds.Where(id => id != rootEntityId).ToArray();
+        if (descendantIds.Length == 0) {
+            return false;
+        }
+
+        return await (
+            from candidate in db.Monitors.AsNoTracking()
+            join acquisition in db.Acquisitions.AsNoTracking()
+                on candidate.AcquisitionId equals acquisition.Id into linkedAcquisitions
+            from acquisition in linkedAcquisitions.DefaultIfEmpty()
+            let targetEntityId = candidate.EntityId
+                ?? (acquisition == null ? null : acquisition.EntityId)
+            where candidate.Id != leasedMonitorId
+                && (candidate.Status == MonitorStatus.Stopping
+                    || candidate.Status == MonitorStatus.DeletingFiles)
+                && targetEntityId != null
+                && descendantIds.Contains(targetEntityId.Value)
+            select candidate.Id)
+            .AnyAsync(cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public Task<bool> ExecuteIfEntityLifecycleMutableAsync(
+        Guid entityId,
+        Func<CancellationToken, Task> mutation,
+        CancellationToken cancellationToken) =>
+        lifecycle.ExecuteAsync(entityId, mutation, cancellationToken);
+
+    public async Task<IReadOnlyDictionary<Guid, MonitorView>> ListByEntityIdsAsync(
+        IReadOnlyCollection<Guid> entityIds,
+        CancellationToken cancellationToken) {
+        var requestedIds = entityIds.Distinct().ToArray();
+        if (requestedIds.Length == 0) {
+            return new Dictionary<Guid, MonitorView>();
+        }
+
+        var rows = await (
+            from monitor in db.Monitors.AsNoTracking()
+            join acquisition in db.Acquisitions.AsNoTracking()
+                on monitor.AcquisitionId equals acquisition.Id into joined
+            from acquisition in joined.DefaultIfEmpty()
+            let acquisitionEntityId = acquisition == null ? null : acquisition.EntityId
+            where (monitor.EntityId != null && requestedIds.Contains(monitor.EntityId.Value))
+                || (acquisitionEntityId != null && requestedIds.Contains(acquisitionEntityId.Value))
+            select new {
+                Monitor = monitor,
+                AcquisitionStatus = acquisition == null ? (AcquisitionStatus?)null : acquisition.Status,
+                AcquisitionEntityId = acquisitionEntityId,
+                EffectiveEntityId = monitor.EntityId ?? acquisitionEntityId
+            })
+            .ToArrayAsync(cancellationToken);
+
+        return rows
+            .Where(row => row.EffectiveEntityId is not null)
+            .GroupBy(row => row.EffectiveEntityId!.Value)
+            .ToDictionary(
+                group => group.Key,
+                group => {
+                    var selected = group
+                        .OrderByDescending(row => row.Monitor.EntityId == group.Key)
+                        .ThenBy(row => row.Monitor.CreatedAt)
+                        .First();
+                    return ToView(
+                        selected.Monitor,
+                        selected.AcquisitionStatus,
+                        selected.AcquisitionEntityId);
+                });
     }
 
     public async Task<AcquisitionTargeting?> GetTargetingByEntityAsync(Guid entityId, CancellationToken cancellationToken) {
@@ -699,10 +1139,55 @@ public sealed class EfMonitorStore(PrismediaDbContext db) : IMonitorStore {
 
     /// <summary>
     /// Projects a monitor row to its view. <paramref name="acquisitionEntityId"/> is the wanted entity the
-    /// monitor's acquisition targets (a per-item monitor has none of its own): the view's EntityId prefers
-    /// the container monitor's own EntityId, then the acquisition's, so both container and per-item monitors
-    /// surface an entity id clients can index by.
+    /// monitor's acquisition targets (legacy rows may have none of their own): the view prefers the stable
+    /// EntityId, then the acquisition target, so every row surfaces one canonical Entity id.
     /// </summary>
     private static MonitorView ToView(MonitorRow row, AcquisitionStatus? acquisitionStatus, Guid? acquisitionEntityId = null) =>
         new(row.Id, row.Kind, row.AcquisitionId, row.Status, row.Title, row.Author, acquisitionStatus, row.CreatedAt, row.UpdatedAt, row.EntityId ?? acquisitionEntityId, row.Preset);
+
+    private static AcquisitionConfigurationException LifecycleClaimConflict() =>
+        new(
+            Prismedia.Contracts.System.ApiProblemCodes.AcquisitionInvalid,
+            "This Entity is being changed by another cleanup operation and cannot be reactivated until it finishes.");
+
+    /// <summary>Detaches completed acquisition bookkeeping while retaining stable Entity monitoring.</summary>
+    private static MonitorStatus? CompleteEntityAcquisition(MonitorRow monitor, DateTimeOffset now) {
+        if (monitor.EntityId is null) {
+            return MonitorStatus.Fulfilled;
+        }
+
+        monitor.AcquisitionId = null;
+        monitor.UpdatedAt = now;
+        return null;
+    }
+
+    /// <summary>
+    /// Compare-and-set for sweep reconciliation. A destructive claim wins even when the sweep loaded an
+    /// older Active snapshot before cleanup claimed the row.
+    /// </summary>
+    private async Task<bool> TransitionActiveStatusAsync(
+        Guid monitorId,
+        MonitorStatus status,
+        DateTimeOffset now,
+        CancellationToken cancellationToken) {
+        if (db.Database.IsRelational()) {
+            return await db.Monitors
+                .Where(monitor => monitor.Id == monitorId && monitor.Status == MonitorStatus.Active)
+                .ExecuteUpdateAsync(setters => setters
+                    .SetProperty(monitor => monitor.Status, status)
+                    .SetProperty(monitor => monitor.UpdatedAt, now), cancellationToken) > 0;
+        }
+
+        var monitor = await db.Monitors.FirstOrDefaultAsync(
+            row => row.Id == monitorId && row.Status == MonitorStatus.Active,
+            cancellationToken);
+        if (monitor is null) {
+            return false;
+        }
+
+        monitor.Status = status;
+        monitor.UpdatedAt = now;
+        await db.SaveChangesAsync(cancellationToken);
+        return true;
+    }
 }

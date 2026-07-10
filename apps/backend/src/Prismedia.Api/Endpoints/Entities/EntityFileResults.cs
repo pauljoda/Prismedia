@@ -1,5 +1,6 @@
 using System.IO.Compression;
 using Microsoft.Net.Http.Headers;
+using Prismedia.Application.Files;
 
 namespace Prismedia.Api.Endpoints;
 
@@ -83,14 +84,8 @@ internal static class EntityFileResults {
     private static bool TrySplitArchiveEntry(
         string path,
         out string archivePath,
-        out string memberPath) {
-        var parts = path.Split("::", 2, StringSplitOptions.None);
-        archivePath = parts.Length == 2 ? parts[0] : string.Empty;
-        memberPath = parts.Length == 2 ? parts[1] : string.Empty;
-        return parts.Length == 2 &&
-               !string.IsNullOrWhiteSpace(archivePath) &&
-               !string.IsNullOrWhiteSpace(memberPath);
-    }
+        out string memberPath) =>
+        EntitySourcePath.TrySplitArchiveMember(path, out archivePath, out memberPath);
 
     private static async Task<Stream?> OpenArchiveEntryAsync(
         string archivePath,

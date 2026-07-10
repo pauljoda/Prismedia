@@ -3,14 +3,6 @@ using Prismedia.Domain.Entities;
 
 namespace Prismedia.Contracts.Requests;
 
-/// <summary>Search query for requestable external media.</summary>
-/// <param name="HideNsfw">When true, adults-only results (NC-17/X style certifications) are filtered out.</param>
-public sealed record RequestSearchRequest(
-    string Query,
-    IReadOnlyList<RequestMediaKind> Kinds,
-    IReadOnlyList<RequestProviderKind> Sources,
-    bool HideNsfw);
-
 /// <summary>Schema-driven search against one explicitly selected metadata plugin and media kind.</summary>
 /// <param name="Kind">The single discoverable request kind being searched.</param>
 /// <param name="PluginId">Stable manifest id of the plugin selected by the user.</param>
@@ -118,68 +110,6 @@ public sealed record RequestReviewTarget(
     int? Year = null,
     bool? Monitored = null);
 
-/// <summary>Normalized external detail record for a requestable item.</summary>
-/// <param name="Subtitle">Short secondary line for review context (e.g. the author for a book, the book count for an author).</param>
-/// <param name="Dates">Provider date entries (code → ISO-ish value: release, firstAir, …) — the same dates identify would apply.</param>
-/// <param name="Children">Selectable child works — an author's books, or a series' volumes — fanned out into one acquisition each.</param>
-public sealed record RequestDetailResponse(
-    RequestProviderKind Source,
-    RequestMediaKind Kind,
-    string ExternalId,
-    string Title,
-    string? Subtitle,
-    int? Year,
-    IReadOnlyDictionary<string, string> Dates,
-    string? Overview,
-    string? PosterUrl,
-    string? BackdropUrl,
-    decimal? Rating,
-    int? RuntimeMinutes,
-    string? Certification,
-    int? TrackCount,
-    IReadOnlyList<string> Tags,
-    IReadOnlyList<string> Studios,
-    IReadOnlyList<string> Credits,
-    IReadOnlyList<RequestCastMember> Cast,
-    IReadOnlyList<RequestRatingValue> Ratings,
-    IReadOnlyList<RequestChildOption> Children,
-    IReadOnlyList<RequestTrack> Tracks,
-    bool Tracked,
-    string? UpstreamId,
-    bool? Monitored,
-    RequestServiceOptionsResponse ServiceOptions);
-
-/// <summary>One cast credit on a request detail, hydrated from the metadata provider.</summary>
-/// <param name="Role">Character or role name when known.</param>
-/// <param name="ImageUrl">Absolute profile/headshot URL when available.</param>
-public sealed record RequestCastMember(string Name, string? Role, string? ImageUrl);
-
-/// <summary>A rating from one source on a request detail.</summary>
-/// <param name="Value">Score in the source's native scale.</param>
-/// <param name="Scale">Maximum of the source's scale (10 for TMDB/IMDb, 100 for percent scores).</param>
-/// <param name="Votes">Vote count when the source reports one.</param>
-public sealed record RequestRatingValue(RequestRatingSource Source, decimal Value, decimal Scale, int? Votes);
-
-/// <summary>Selectable or informational child option, such as a book in an author's bibliography or a series volume.</summary>
-/// <param name="Number">Ordering number where the provider has one (volume number).</param>
-/// <param name="Year">Release year when known.</param>
-/// <param name="ItemCount">Child count for a container; null elsewhere.</param>
-/// <param name="Monitored">Upstream monitored flag when the parent is tracked; null otherwise.</param>
-public sealed record RequestChildOption(
-    string Id,
-    string Title,
-    RequestMediaKind Kind,
-    bool Requestable,
-    int? Number,
-    int? Year,
-    int? ItemCount,
-    string? Overview,
-    string? PosterUrl,
-    bool? Monitored);
-
-/// <summary>One track on an album detail, for review before requesting.</summary>
-public sealed record RequestTrack(int Number, string Title, int? DurationSeconds);
-
 /// <summary>
 /// Commits a request: creates the wanted library entity/entities for the reviewed item up front —
 /// populated from the plugin proposal but with no file — and starts one acquisition per requested book.
@@ -279,16 +209,12 @@ public sealed record MissingChildrenCommitResponse(int Covered, int Missing);
 /// </summary>
 public sealed record WantedRemovalRequest(IReadOnlyList<Guid> EntityIds);
 
+/// <summary>One wanted placeholder that could not be removed, with retryable user-facing detail.</summary>
+/// <param name="EntityId">The Entity that remains wanted.</param>
+/// <param name="Message">Why the durable give-up operation did not complete.</param>
+public sealed record WantedRemovalFailure(Guid EntityId, string Message);
+
 /// <summary>Result of a wanted removal.</summary>
-/// <param name="Removed">How many placeholders were removed (on-disk items are skipped).</param>
-public sealed record WantedRemovalResponse(int Removed);
-
-/// <summary>Root folder/profile option exposed by a request service instance.</summary>
-public sealed record RequestServiceOption(string Id, string Name, string? Path);
-
-/// <summary>Grouped selectable options exposed by a request service instance.</summary>
-public sealed record RequestServiceOptionsResponse(
-    IReadOnlyList<RequestServiceOption> QualityProfiles,
-    IReadOnlyList<RequestServiceOption> RootFolders,
-    IReadOnlyList<RequestServiceOption> MetadataProfiles,
-    IReadOnlyList<RequestServiceOption> Tags);
+/// <param name="Removed">How many placeholders are now absent.</param>
+/// <param name="Failures">Entities that remain visible and selected because removal did not complete.</param>
+public sealed record WantedRemovalResponse(int Removed, IReadOnlyList<WantedRemovalFailure> Failures);

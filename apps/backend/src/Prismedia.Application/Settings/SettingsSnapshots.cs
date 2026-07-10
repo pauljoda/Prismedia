@@ -15,7 +15,7 @@ public sealed record ScanSettings(bool AutoScanEnabled, int IntervalMinutes);
 /// </summary>
 public sealed record CollectionRefreshSettings(bool AutoRefreshEnabled);
 
-/// <summary>Cadence for re-searching monitored items so a wanted book is fetched once a release appears.</summary>
+/// <summary>Cadence for re-searching monitored Entities until wanted media is acquired.</summary>
 public sealed record MonitoredSearchSettings(bool Enabled, int IntervalMinutes);
 
 /// <summary>Recycle-bin settings: a null path means the bin is off (replaced files stay beside the upgrade).</summary>

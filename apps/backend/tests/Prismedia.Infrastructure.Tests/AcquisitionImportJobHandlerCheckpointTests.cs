@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using System.Reflection;
 using Prismedia.Application.Acquisition;
+using Prismedia.Application.Entities;
 using Prismedia.Application.Jobs;
 using Prismedia.Application.Jobs.Handlers;
 using Prismedia.Domain.Entities;
@@ -27,11 +28,13 @@ public sealed class AcquisitionImportJobHandlerCheckpointTests : IDisposable {
     public async Task ResumeSkipsWrongSeasonValidationAgainstTheRemainingPayloadSubset() {
         await using var db = CreateContext();
         var acquisitionId = Guid.NewGuid();
+        var entityId = Guid.NewGuid();
         var now = DateTimeOffset.UtcNow;
         var contentRoot = Directory.CreateDirectory(Path.Combine(_root, "download")).FullName;
         await File.WriteAllTextAsync(Path.Combine(contentRoot, "Show.S01E01.mkv"), "remaining-file");
         db.Acquisitions.Add(new AcquisitionRow {
             Id = acquisitionId,
+            EntityId = entityId,
             Status = AcquisitionStatus.Failed,
             Kind = EntityKind.VideoSeason,
             Title = "Season 03",
@@ -74,12 +77,14 @@ public sealed class AcquisitionImportJobHandlerCheckpointTests : IDisposable {
                 ClaimJobId: claimJobId),
             CancellationToken.None);
         var engine = new RecordingEngine();
+        var lifecycle = new RecordingLifecycleLease();
         var handler = new AcquisitionImportJobHandler(
             store,
             new SingleEngineFactory(engine),
             new DownloadPayloadReader(),
             new EfAcquisitionHistoryStore(db),
-            NullLogger<AcquisitionImportJobHandler>.Instance);
+            NullLogger<AcquisitionImportJobHandler>.Instance,
+            lifecycle);
         var job = new JobRunSnapshot(
             claimJobId,
             JobType.AcquisitionImport,
@@ -99,6 +104,127 @@ public sealed class AcquisitionImportJobHandlerCheckpointTests : IDisposable {
             CancellationToken.None);
 
         Assert.True(engine.Called);
+        Assert.Equal([entityId], lifecycle.ExecutedFor);
+        Assert.Equal(AcquisitionStatus.Importing, await store.GetStatusAsync(acquisitionId, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task EntityDeletionClaimRejectsInitialImportBeforeEngineOrStatusMutation() {
+        await using var db = CreateContext();
+        var acquisitionId = Guid.NewGuid();
+        var entityId = Guid.NewGuid();
+        var now = DateTimeOffset.UtcNow;
+        var contentRoot = Directory.CreateDirectory(Path.Combine(_root, "claimed-download")).FullName;
+        db.Acquisitions.Add(new AcquisitionRow {
+            Id = acquisitionId,
+            EntityId = entityId,
+            Status = AcquisitionStatus.Downloaded,
+            Kind = EntityKind.Book,
+            Title = "Dune",
+            ExternalIdsJson = "{}",
+            SourceUrlsJson = "[]",
+            CreatedAt = now,
+            UpdatedAt = now
+        });
+        db.DownloadTransfers.Add(new DownloadTransferRow {
+            Id = Guid.NewGuid(),
+            AcquisitionId = acquisitionId,
+            ClientItemId = "transfer-1",
+            ContentPath = contentRoot,
+            CreatedAt = now,
+            UpdatedAt = now
+        });
+        await db.SaveChangesAsync();
+        var engine = new RecordingEngine(EntityKind.Book);
+        var handler = new AcquisitionImportJobHandler(
+            AcquisitionTestFactory.Store(db),
+            new SingleEngineFactory(engine),
+            new DownloadPayloadReader(),
+            new EfAcquisitionHistoryStore(db),
+            NullLogger<AcquisitionImportJobHandler>.Instance,
+            new RecordingLifecycleLease(allow: false));
+
+        var exception = await Assert.ThrowsAsync<EntityLifecycleMutationConflictException>(() =>
+            handler.HandleAsync(
+                ContextFor(acquisitionId, Guid.NewGuid(), now),
+                CancellationToken.None));
+
+        Assert.Equal(entityId, exception.EntityId);
+        Assert.False(engine.Called);
+        Assert.Equal(
+            AcquisitionStatus.Downloaded,
+            await AcquisitionTestFactory.Store(db).GetStatusAsync(acquisitionId, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task BookPlacementCheckpointIsClaimedAndDispatchedWithoutReplanningConsumedPayload() {
+        await using var db = CreateContext();
+        var acquisitionId = Guid.NewGuid();
+        var oldClaimJobId = Guid.NewGuid();
+        var retryJobId = Guid.NewGuid();
+        var now = DateTimeOffset.UtcNow;
+        var payloadRoot = Directory.CreateDirectory(Path.Combine(_root, "book-download")).FullName;
+        var libraryRoot = Directory.CreateDirectory(Path.Combine(_root, "book-library")).FullName;
+        var source = Path.Combine(payloadRoot, "Novel.epub");
+        var target = Path.Combine(libraryRoot, "Author", "Novel.epub");
+        // Move already consumed the payload, but the exact target survived the crash.
+        Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+        await File.WriteAllTextAsync(target, "placed-book");
+        var checkpoint = new ImportPlacementCheckpoint(
+            EntityKind.Book,
+            Guid.NewGuid(),
+            libraryRoot,
+            payloadRoot,
+            ImportMode.Move,
+            Path.GetDirectoryName(target)!,
+            Path.GetDirectoryName(target)!,
+            "Imported into the library.",
+            [new ImportPlacementCheckpointUnit(
+                "Novel.epub",
+                source,
+                target,
+                IsMedia: true)],
+            TransferClientItemId: "book-transfer",
+            AttemptId: Guid.NewGuid(),
+            ClaimJobId: oldClaimJobId);
+        db.Acquisitions.Add(new AcquisitionRow {
+            Id = acquisitionId,
+            Status = AcquisitionStatus.Failed,
+            Kind = EntityKind.Book,
+            Title = "Novel",
+            Author = "Author",
+            ExternalIdsJson = "{}",
+            SourceUrlsJson = "[]",
+            ImportCheckpointJson = ImportPlacementCheckpointJson.Serialize(checkpoint),
+            ImportClaimJobId = oldClaimJobId,
+            CreatedAt = now,
+            UpdatedAt = now,
+        });
+        db.DownloadTransfers.Add(new DownloadTransferRow {
+            Id = Guid.NewGuid(),
+            AcquisitionId = acquisitionId,
+            ClientItemId = "book-transfer",
+            ContentPath = payloadRoot,
+            CreatedAt = now,
+            UpdatedAt = now,
+        });
+        await db.SaveChangesAsync();
+
+        var store = AcquisitionTestFactory.Store(db);
+        var engine = new RecordingEngine(EntityKind.Book);
+        var handler = new AcquisitionImportJobHandler(
+            store,
+            new SingleEngineFactory(engine),
+            new DownloadPayloadReader(),
+            new EfAcquisitionHistoryStore(db),
+            NullLogger<AcquisitionImportJobHandler>.Instance);
+
+        await handler.HandleAsync(
+            ContextFor(acquisitionId, retryJobId, now),
+            CancellationToken.None);
+
+        Assert.True(engine.Called);
+        Assert.Equal(retryJobId, engine.LastImport?.ImportPlacementCheckpoint?.ClaimJobId);
         Assert.Equal(AcquisitionStatus.Importing, await store.GetStatusAsync(acquisitionId, CancellationToken.None));
     }
 
@@ -268,7 +394,7 @@ public sealed class AcquisitionImportJobHandlerCheckpointTests : IDisposable {
             SeasonNumber = 3,
             ExternalIdsJson = "{}",
             SourceUrlsJson = "[]",
-            TvImportCheckpointJson = "{ damaged checkpoint",
+            ImportCheckpointJson = "{ damaged checkpoint",
             CreatedAt = now,
             UpdatedAt = now,
         };
@@ -309,7 +435,7 @@ public sealed class AcquisitionImportJobHandlerCheckpointTests : IDisposable {
             SeasonNumber = 3,
             ExternalIdsJson = "{}",
             SourceUrlsJson = "[]",
-            TvImportCheckpointJson = "{ damaged checkpoint",
+            ImportCheckpointJson = "{ damaged checkpoint",
             CreatedAt = now,
             UpdatedAt = now,
         });
@@ -356,7 +482,7 @@ public sealed class AcquisitionImportJobHandlerCheckpointTests : IDisposable {
             SeasonNumber = 3,
             ExternalIdsJson = "{}",
             SourceUrlsJson = "[]",
-            TvImportCheckpointJson = "{ damaged checkpoint",
+            ImportCheckpointJson = "{ damaged checkpoint",
             ImportClaimJobId = sameJobOwnsImport ? jobId : Guid.NewGuid(),
             CreatedAt = now,
             UpdatedAt = now,
@@ -375,7 +501,7 @@ public sealed class AcquisitionImportJobHandlerCheckpointTests : IDisposable {
 
         Assert.Equal(expectedStatus, row.Status);
         if (expectedStatus == AcquisitionStatus.ManualImportRequired) {
-            Assert.Equal(TvImportCheckpointLifecycle.CorruptCheckpointMessage, row.StatusMessage);
+            Assert.Equal(ImportCheckpointLifecycle.CorruptCheckpointMessage, row.StatusMessage);
             Assert.Null(row.ImportClaimJobId);
         } else {
             Assert.Equal("Existing lifecycle state.", row.StatusMessage);
@@ -405,21 +531,54 @@ public sealed class AcquisitionImportJobHandlerCheckpointTests : IDisposable {
             .UseInMemoryDatabase(Guid.NewGuid().ToString())
             .Options);
 
-    private sealed class RecordingEngine : IAcquisitionImportEngine {
-        public EntityKind Kind => EntityKind.VideoSeason;
+    private sealed class RecordingEngine(EntityKind kind = EntityKind.VideoSeason) : IAcquisitionImportEngine {
+        public EntityKind Kind => kind;
         public bool Called { get; private set; }
+        public AcquisitionImportContext? LastImport { get; private set; }
 
         public Task ImportAsync(
             JobContext context,
             AcquisitionImportContext import,
             CancellationToken cancellationToken) {
             Called = true;
+            LastImport = import;
             return Task.CompletedTask;
         }
     }
 
     private sealed class SingleEngineFactory(IAcquisitionImportEngine? engine) : IAcquisitionImportEngineFactory {
         public IAcquisitionImportEngine? Find(EntityKind kind) => engine is not null && kind == engine.Kind ? engine : null;
+    }
+
+    private sealed class RecordingLifecycleLease(bool allow = true)
+        : IEntityLifecycleMutationLease {
+        public List<Guid> ExecutedFor { get; } = [];
+
+        public async Task<bool> ExecuteAsync(
+            Guid entityId,
+            Func<CancellationToken, Task> mutation,
+            CancellationToken cancellationToken) {
+            ExecutedFor.Add(entityId);
+            if (!allow) {
+                return false;
+            }
+
+            await mutation(cancellationToken);
+            return true;
+        }
+
+        public async Task<bool> ExecuteManyAsync(
+            IReadOnlyCollection<Guid> entityIds,
+            Func<CancellationToken, Task> mutation,
+            CancellationToken cancellationToken) {
+            ExecutedFor.AddRange(entityIds);
+            if (!allow) {
+                return false;
+            }
+
+            await mutation(cancellationToken);
+            return true;
+        }
     }
 
     /// <summary>

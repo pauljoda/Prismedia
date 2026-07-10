@@ -34,15 +34,27 @@ public static class EntityCardProjector {
         EntityFileRole.Logo
     ];
 
-    /// <summary>Projects a hydrated domain entity to the shared entity card contract.</summary>
-    public static EntityCard ToCard(Entity entity) =>
+    /// <summary>
+    /// Projects an entity using canonical source-ownership truth supplied by its read boundary. Requiring
+    /// that fact prevents shallow incidental hydration from silently dropping descendant file management.
+    /// </summary>
+    public static EntityCard ToCard(Entity entity, bool hasSourceBackedSubtree) =>
+        ToCard(entity, new EntityFileManagementState(hasSourceBackedSubtree, HasRecoverableDeletion: false));
+
+    /// <summary>
+    /// Projects an Entity using canonical managed-file state supplied by its read boundary. Recoverable
+    /// deletion state keeps the action available after source rows are gone without reporting those rows
+    /// as source media or enabling deletion for an ordinary fileless Wanted Entity.
+    /// </summary>
+    public static EntityCard ToCard(Entity entity, EntityFileManagementState fileManagementState) =>
         new() {
             Id = entity.Id,
             Kind = entity.Kind,
             Title = entity.Title,
             ParentEntityId = entity.ParentEntityId,
             SortOrder = entity.SortOrder,
-            Capabilities = MapCapabilities(entity),
+            HasSourceMedia = fileManagementState.HasSourceBackedSubtree,
+            Capabilities = MapCapabilities(entity, fileManagementState),
             ChildrenByKind = ToGroups(entity.ChildrenByKind),
             Relationships = ToGroups(entity.RelationshipsByKind),
         };
@@ -58,11 +70,17 @@ public static class EntityCardProjector {
                 credit.Label is null ? [] : [credit.Label]))
             .ToArray() ?? [];
 
-    private static IReadOnlyList<ContractCapability> MapCapabilities(Entity entity) {
+    private static IReadOnlyList<ContractCapability> MapCapabilities(
+        Entity entity,
+        EntityFileManagementState fileManagementState) {
         var capabilities = new List<ContractCapability>();
 
         capabilities.Add(new RatingCapability(entity.RatingValue));
         capabilities.Add(new FlagsCapability(entity.IsFavorite, entity.IsNsfw, entity.IsOrganized, entity.IsWanted));
+
+        if (EntityKindRegistry.Describe(entity.Kind).SupportsFileDeletion && fileManagementState.CanDeleteFiles) {
+            capabilities.Add(new FileManagementCapability(CanDeleteFiles: true));
+        }
 
         if (entity.ProviderIdentity is { } providerIdentity) {
             capabilities.Add(new ProviderIdentityCapability(

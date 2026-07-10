@@ -17,6 +17,8 @@ namespace Prismedia.Application.Entities;
 /// </summary>
 public sealed class EntityCapabilityService {
     private readonly IEntityWriteRepository _entities;
+    private readonly IEntitySourceOwnershipReader _sourceOwnership;
+    private readonly IEntityFileDeletionRecoveryReader? _deletionRecovery;
     private readonly IEntityVisibilityChecker? _visibility;
     private readonly IPlaybackEventStore _playbackEvents;
     private readonly TimeProvider _timeProvider;
@@ -27,10 +29,14 @@ public sealed class EntityCapabilityService {
     /// <param name="entities">Entity write repository implemented by Infrastructure.</param>
     public EntityCapabilityService(
         IEntityWriteRepository entities,
+        IEntitySourceOwnershipReader sourceOwnership,
         IEntityVisibilityChecker? visibility = null,
         IPlaybackEventStore? playbackEvents = null,
-        TimeProvider? timeProvider = null) {
+        TimeProvider? timeProvider = null,
+        IEntityFileDeletionRecoveryReader? deletionRecovery = null) {
         _entities = entities;
+        _sourceOwnership = sourceOwnership;
+        _deletionRecovery = deletionRecovery;
         _visibility = visibility;
         _playbackEvents = playbackEvents ?? NullPlaybackEventStore.Instance;
         _timeProvider = timeProvider ?? TimeProvider.System;
@@ -261,7 +267,7 @@ public sealed class EntityCapabilityService {
         if (!reset && completed == false) {
             progress.MarkIncomplete(now);
             await _entities.SaveAsync(entity, cancellationToken);
-            return EntityCardProjector.ToCard(entity);
+            return await ProjectCardAsync(entity, cancellationToken);
         }
 
         var normalizedTotal = Math.Max(0, total);
@@ -285,7 +291,7 @@ public sealed class EntityCapabilityService {
         if (reset) {
             progress.MoveTo(targetChapterId, unit, normalizedIndex, normalizedTotal, mode, now, normalizedLocation);
             await _entities.SaveAsync(entity, cancellationToken);
-            return EntityCardProjector.ToCard(entity);
+            return await ProjectCardAsync(entity, cancellationToken);
         }
 
         var existingPosition = progress.CurrentEntityId is { } existingCurrentId && entity.Kind == EntityKind.Book
@@ -300,14 +306,14 @@ public sealed class EntityCapabilityService {
         if (proposedPosition is not null &&
             existingPosition is not null &&
             proposedPosition.Index < existingPosition.Index) {
-            return EntityCardProjector.ToCard(entity);
+            return await ProjectCardAsync(entity, cancellationToken);
         }
 
         if (progress.CompletedAt is not null &&
             (proposedPosition is null ||
              existingPosition is null ||
              proposedPosition.Index <= existingPosition.Index)) {
-            return EntityCardProjector.ToCard(entity);
+            return await ProjectCardAsync(entity, cancellationToken);
         }
 
         progress.MoveTo(targetChapterId, unit, normalizedIndex, normalizedTotal, mode, now, normalizedLocation);
@@ -325,7 +331,7 @@ public sealed class EntityCapabilityService {
         }
         await _entities.SaveAsync(entity, cancellationToken);
 
-        return EntityCardProjector.ToCard(entity);
+        return await ProjectCardAsync(entity, cancellationToken);
     }
 
     /// <summary>
@@ -392,7 +398,7 @@ public sealed class EntityCapabilityService {
 
             try {
                 await _entities.SaveAsync(entity, cancellationToken);
-                return EntityCardProjector.ToCard(entity);
+                return await ProjectCardAsync(entity, cancellationToken);
             } catch (EntityConcurrencyConflictException) when (attempt < MaxConcurrencyRetries) {
                 // Re-read the current row and apply the mutation again on the next loop iteration.
             }
@@ -423,7 +429,7 @@ public sealed class EntityCapabilityService {
                 }
 
                 await _entities.SaveAsync(entity, cancellationToken);
-                return EntityCardProjector.ToCard(entity);
+                return await ProjectCardAsync(entity, cancellationToken);
             } catch (EntityConcurrencyConflictException) when (attempt < MaxConcurrencyRetries) {
                 // Re-read the current row and apply the mutation again on the next loop iteration.
             }
@@ -441,6 +447,20 @@ public sealed class EntityCapabilityService {
             occurredAt,
             positionSeconds,
             durationSeconds ?? entity.Technical?.Duration?.TotalSeconds);
+
+    private async Task<EntityCard> ProjectCardAsync(
+        Entity entity,
+        CancellationToken cancellationToken) {
+        var sourceBackedIds = await _sourceOwnership.ResolveAsync([entity.Id], cancellationToken);
+        var recoverableDeletionIds = _deletionRecovery is null
+            ? new HashSet<Guid>()
+            : await _deletionRecovery.ResolveAsync([entity.Id], cancellationToken);
+        return EntityCardProjector.ToCard(
+            entity,
+            new EntityFileManagementState(
+                sourceBackedIds.Contains(entity.Id),
+                recoverableDeletionIds.Contains(entity.Id)));
+    }
 
     private static bool CanDeriveVideoCompletion(Entity entity) =>
         entity.Kind is EntityKind.Video or EntityKind.Movie;

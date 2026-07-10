@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Json;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Prismedia.Application.Files;
 using Prismedia.Application.Jobs;
 using Prismedia.Contracts.Files;
@@ -99,6 +100,8 @@ public sealed class FilesEndpointTests : IDisposable {
             .WithWebHostBuilder(builder => {
                 builder.ConfigureServices(services => {
                     services.AddScoped<IFilesPersistence>(_ => new FakeFilesPersistence(_tempRoot.FullName));
+                    services.RemoveAll<IEntitySourcePathOwnerReader>();
+                    services.AddSingleton<IEntitySourcePathOwnerReader, NoSourceOwners>();
                     services.AddScoped<IJobQueueService, FakeJobQueue>();
                 });
             })
@@ -150,6 +153,13 @@ public sealed class FilesEndpointTests : IDisposable {
 
         private FileLibraryRoot Root() =>
             new(RootId, rootPath, "API Root", true, true, false, false, false, false);
+    }
+
+    private sealed class NoSourceOwners : IEntitySourcePathOwnerReader {
+        public Task<IReadOnlySet<Guid>> ListDirectOwnerIdsAsync(
+            string physicalPath,
+            CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlySet<Guid>>(new HashSet<Guid>());
     }
 
     private sealed class FakeJobQueue : IJobQueueService {

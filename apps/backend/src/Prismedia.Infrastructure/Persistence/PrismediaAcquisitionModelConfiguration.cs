@@ -191,8 +191,24 @@ internal static partial class PrismediaModelConfiguration {
                 .HasMaxLength(32)
                 .HasConversion(value => value.ToCode(), value => value.DecodeAs<AcquisitionStatus>())
                 .HasDefaultValue(AcquisitionStatus.Pending)
+                .IsConcurrencyToken()
                 .IsRequired();
             entity.Property(row => row.StatusMessage).HasColumnName("status_message").HasMaxLength(2048);
+            entity.Property(row => row.TeardownIntent)
+                .HasColumnName("teardown_intent")
+                .HasMaxLength(32)
+                .HasConversion(
+                    value => value == null ? null : value.Value.ToCode(),
+                    value => value == null ? null : value.DecodeAs<AcquisitionTeardownIntent>());
+            entity.Property(row => row.TeardownOriginalStatus)
+                .HasColumnName("teardown_original_status")
+                .HasMaxLength(32)
+                .HasConversion(
+                    value => value == null ? null : value.Value.ToCode(),
+                    value => value == null ? null : value.DecodeAs<AcquisitionStatus>());
+            entity.Property(row => row.TeardownReplacementAcquisitionId)
+                .HasColumnName("teardown_replacement_acquisition_id")
+                .IsConcurrencyToken();
             entity.Property(row => row.Title).HasColumnName("title").HasMaxLength(1024).IsRequired();
             entity.Property(row => row.Author).HasColumnName("author").HasMaxLength(512);
             entity.Property(row => row.Series).HasColumnName("series").HasMaxLength(512);
@@ -208,7 +224,9 @@ internal static partial class PrismediaModelConfiguration {
             entity.Property(row => row.SourceUrlsJson).HasColumnName("source_urls_json").HasColumnType("jsonb");
             entity.Property(row => row.SelectedReleaseJson).HasColumnName("selected_release_json").HasColumnType("jsonb");
             entity.Property(row => row.FinalSourcePath).HasColumnName("final_source_path").HasMaxLength(2048);
-            entity.Property(row => row.TvImportCheckpointJson).HasColumnName("tv_import_checkpoint_json").HasColumnType("jsonb");
+            // Keep the established SQL column name for an additive, data-preserving rollout; the CLR
+            // surface is kind-neutral because books, movies, TV, and albums all persist recovery plans.
+            entity.Property(row => row.ImportCheckpointJson).HasColumnName("tv_import_checkpoint_json").HasColumnType("jsonb");
             entity.Property(row => row.ImportClaimJobId).HasColumnName("import_claim_job_id");
             entity.Property(row => row.OwnedSourceTier)
                 .HasColumnName("owned_source_tier")
@@ -232,8 +250,8 @@ internal static partial class PrismediaModelConfiguration {
             entity.HasIndex(row => row.CreatedAt);
             entity.HasIndex(row => row.Status);
             entity.HasIndex(row => row.UpgradeOfAcquisitionId);
-            // Loose link into the entity graph (same rule as MonitorRow.BookEntityId): no FK, so
-            // deleting the wanted entity never cascades into (or is blocked by) the acquisition.
+            // Loose link into the entity graph: deleting the wanted entity never cascades into (or is
+            // blocked by) a transient acquisition attempt.
             entity.HasIndex(row => row.EntityId);
             entity.HasOne<BookAcquisitionProfileRow>().WithMany().HasForeignKey(row => row.ProfileId).OnDelete(DeleteBehavior.SetNull);
             entity.HasOne<AcquisitionRow>().WithMany().HasForeignKey(row => row.UpgradeOfAcquisitionId).OnDelete(DeleteBehavior.SetNull);
@@ -426,11 +444,11 @@ internal static partial class PrismediaModelConfiguration {
                 .HasMaxLength(32)
                 .HasConversion(value => value.ToCode(), value => value.DecodeAs<MonitorStatus>())
                 .HasDefaultValue(MonitorStatus.Active)
+                .IsConcurrencyToken()
                 .IsRequired();
             entity.Property(row => row.Title).HasColumnName("title").HasMaxLength(1024).IsRequired();
             entity.Property(row => row.Author).HasColumnName("author").HasMaxLength(512);
             entity.Property(row => row.LastSearchedAt).HasColumnName("last_searched_at");
-            entity.Property(row => row.BookEntityId).HasColumnName("book_entity_id");
             entity.Property(row => row.UpgradeAttempts).HasColumnName("upgrade_attempts").HasDefaultValue(0);
             entity.Property(row => row.BarrenSearches).HasColumnName("barren_searches").HasDefaultValue(0);
             entity.Property(row => row.UpgradeChildAcquisitionId).HasColumnName("upgrade_child_acquisition_id");
@@ -438,14 +456,12 @@ internal static partial class PrismediaModelConfiguration {
             entity.Property(row => row.UpdatedAt).HasColumnName("updated_at");
             entity.HasIndex(row => new { row.Status, row.LastSearchedAt });
             entity.HasIndex(row => row.AcquisitionId).IsUnique();
-            // Loose link like BookEntityId: one container monitor per watched entity.
+            // One stable monitoring intent per Entity across acquisition attempts.
             entity.HasIndex(row => row.EntityId).IsUnique();
-            entity.HasIndex(row => row.BookEntityId);
             // SetNull (not Cascade): hard-deleting the linked acquisition must auto-pause the monitor, not delete it.
             entity.HasOne<AcquisitionRow>().WithMany().HasForeignKey(row => row.AcquisitionId).OnDelete(DeleteBehavior.SetNull);
-            // The watched book and the in-flight upgrade child are loose links (no FK): the book lives in the
-            // entity graph (a different bounded slice) and the child link is cleared explicitly, so deleting
-            // either must not cascade into the monitor.
+            // The in-flight upgrade child is a loose link (no FK), cleared explicitly so deleting it does
+            // not cascade into the stable monitor intent.
         });
     }
 }

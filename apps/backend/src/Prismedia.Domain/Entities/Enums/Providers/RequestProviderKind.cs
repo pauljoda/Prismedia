@@ -11,27 +11,6 @@ public enum RequestProviderKind {
 }
 
 /// <summary>
-/// Closed set of rating sources surfaced on request detail pages.
-/// </summary>
-public enum RequestRatingSource {
-    /// <summary>The Movie Database community score (0–10).</summary>
-    [Code("tmdb")]
-    Tmdb,
-
-    /// <summary>IMDb user rating (0–10).</summary>
-    [Code("imdb")]
-    Imdb,
-
-    /// <summary>Rotten Tomatoes critics score (0–100).</summary>
-    [Code("rotten-tomatoes")]
-    RottenTomatoes,
-
-    /// <summary>Metacritic metascore (0–100).</summary>
-    [Code("metacritic")]
-    Metacritic
-}
-
-/// <summary>
 /// Closed set of media categories exposed by the request workflow. Prismedia fulfils requests through
 /// its own acquisition pipeline. Leaf kinds (book, movie, album) are acquired directly; container kinds
 /// (author, series, artist) surface their works as toggleable children and are created as wanted library

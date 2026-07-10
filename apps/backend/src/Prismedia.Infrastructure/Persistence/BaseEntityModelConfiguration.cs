@@ -22,9 +22,15 @@ internal static class BaseEntityModelConfiguration {
         });
 
         modelBuilder.Entity<EntityRow>(entity => {
-            entity.ToTable("entities", table => table.HasCheckConstraint(
-                "ck_entities_rating",
-                "rating_value IS NULL OR (rating_value >= 0 AND rating_value <= 5)"));
+            entity.ToTable("entities", table => {
+                table.HasCheckConstraint(
+                    "ck_entities_rating",
+                    "rating_value IS NULL OR (rating_value >= 0 AND rating_value <= 5)");
+                table.HasCheckConstraint(
+                    "ck_entities_lifecycle_claim",
+                    "(lifecycle_claim_kind IS NULL AND lifecycle_claim_id IS NULL AND lifecycle_claimed_at IS NULL) OR "
+                    + "(lifecycle_claim_kind IS NOT NULL AND lifecycle_claim_id IS NOT NULL AND lifecycle_claimed_at IS NOT NULL)");
+            });
             entity.HasKey(row => row.Id);
             entity.Property(row => row.Id).HasColumnName("id").ValueGeneratedNever();
             entity.Property(row => row.KindCode).HasColumnName("kind_code").HasMaxLength(64).IsRequired();
@@ -46,6 +52,14 @@ internal static class BaseEntityModelConfiguration {
             entity.Property(row => row.IsNsfw).HasColumnName("is_nsfw").HasDefaultValue(false);
             entity.Property(row => row.IsOrganized).HasColumnName("is_organized").HasDefaultValue(false);
             entity.Property(row => row.IsWanted).HasColumnName("is_wanted").HasDefaultValue(false);
+            entity.Property(row => row.LifecycleClaimKind)
+                .HasColumnName("lifecycle_claim_kind")
+                .HasMaxLength(64)
+                .HasConversion(
+                    value => value == null ? null : value.Value.ToCode(),
+                    value => value == null ? null : value.DecodeAs<EntityLifecycleClaimKind>());
+            entity.Property(row => row.LifecycleClaimId).HasColumnName("lifecycle_claim_id");
+            entity.Property(row => row.LifecycleClaimedAt).HasColumnName("lifecycle_claimed_at");
             entity.Property(row => row.AutoIdentifyAttempts).HasColumnName("auto_identify_attempts").HasDefaultValue(0);
             entity.Property(row => row.CreatedAt).HasColumnName("created_at");
             entity.Property(row => row.UpdatedAt).HasColumnName("updated_at");

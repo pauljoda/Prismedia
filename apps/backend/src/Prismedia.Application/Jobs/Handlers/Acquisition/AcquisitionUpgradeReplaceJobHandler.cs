@@ -34,6 +34,52 @@ public sealed class AcquisitionUpgradeReplaceJobHandler(
             return;
         }
 
+        if (target.ParentEntityId is not { } parentEntityId) {
+            logger.LogWarning(
+                "AcquisitionUpgradeReplace: {Child} has no stable parent Entity lifecycle; refusing to mutate owned files.",
+                childId);
+            return;
+        }
+
+        // Revalidate and execute the complete swap while holding the direct Active Entity monitor. Managed
+        // Delete files and unmonitor contend on the same monitor/Entity boundary, so a stale queued replace
+        // job either completes before their preflight is revalidated or performs no filesystem mutation.
+        var accepted = await monitors.ExecuteIfActiveEntityMutationAsync(
+            parentEntityId,
+            async leaseCancellationToken => {
+                var current = await acquisitions.GetUpgradeReplaceTargetAsync(
+                    childId,
+                    leaseCancellationToken);
+                if (current is null
+                    || current.ParentId != target.ParentId
+                    || current.ParentEntityId != parentEntityId) {
+                    return;
+                }
+                if (!await acquisitions.TryTransitionStatusAsync(
+                        childId,
+                        [AcquisitionStatus.Downloaded, AcquisitionStatus.Importing],
+                        AcquisitionStatus.Importing,
+                        "Applying downloaded upgrade.",
+                        leaseCancellationToken)) {
+                    return;
+                }
+                await HandleClaimedAsync(context, current, childId, leaseCancellationToken);
+            },
+            cancellationToken);
+        if (!accepted) {
+            logger.LogInformation(
+                "AcquisitionUpgradeReplace: {Child} lost its active Entity lifecycle lease; skipping.",
+                childId);
+        }
+    }
+
+    /// <summary>Validates and applies an upgrade after the stable Entity lifecycle has been leased.</summary>
+    private async Task HandleClaimedAsync(
+        JobContext context,
+        UpgradeReplaceTarget target,
+        Guid childId,
+        CancellationToken cancellationToken) {
+
         if (string.IsNullOrWhiteSpace(target.ParentFinalSourcePath) || string.IsNullOrWhiteSpace(target.ChildContentPath)) {
             await AbortAsync(childId, "The owned book location or the upgrade download path is unknown.", cancellationToken);
             return;
@@ -144,7 +190,14 @@ public sealed class AcquisitionUpgradeReplaceJobHandler(
     /// <summary>Records the upgrade attempt as failed: marks the child failed (so it stays visible) and releases the monitor's slot, counting it as barren.</summary>
     private async Task AbortAsync(Guid childId, string reason, CancellationToken cancellationToken) {
         logger.LogInformation("AcquisitionUpgradeReplace: not applying child {Child}: {Reason}", childId, reason);
-        await acquisitions.SetStatusAsync(childId, AcquisitionStatus.Failed, reason, cancellationToken);
+        if (!await acquisitions.TryTransitionStatusAsync(
+                childId,
+                [AcquisitionStatus.Importing],
+                AcquisitionStatus.Failed,
+                reason,
+                cancellationToken)) {
+            return;
+        }
         await monitors.ResolveUpgradeChildAsync(childId, succeeded: false, cancellationToken);
     }
 

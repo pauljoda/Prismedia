@@ -2,6 +2,7 @@ using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Prismedia.Application.Acquisition;
 using Prismedia.Application.Entities;
+using Prismedia.Application.Files;
 using Prismedia.Contracts.Media;
 using Prismedia.Domain.Entities;
 using Prismedia.Infrastructure.Entities;
@@ -27,9 +28,12 @@ namespace Prismedia.Infrastructure.Acquisition;
 /// </param>
 public sealed class AcquisitionHintApplier(
     PrismediaDbContext db,
-    IEntityExternalIdentityStore? externalIdentities = null) : IAcquisitionHintApplier {
+    IEntityExternalIdentityStore? externalIdentities = null,
+    IEntityLifecycleMutationLease? lifecycle = null) : IAcquisitionHintApplier {
     private readonly IEntityExternalIdentityStore _externalIdentities =
         externalIdentities ?? new EfEntityExternalIdentityStore(db, TimeProvider.System);
+    private readonly IEntityLifecycleMutationLease _lifecycle =
+        lifecycle ?? new EfEntityLifecycleMutationLease(db, new EfEntityHierarchyReader(db));
 
     public async Task<bool> ApplyAsync(Guid entityId, string sourcePath, CancellationToken cancellationToken) {
         if (string.IsNullOrWhiteSpace(sourcePath)) {
@@ -50,6 +54,22 @@ public sealed class AcquisitionHintApplier(
             return false;
         }
 
+        if (!await _lifecycle.ExecuteAsync(
+                entityId,
+                leaseCancellationToken => ApplyHintWithinLifecycleAsync(
+                    entityId,
+                    match,
+                    leaseCancellationToken),
+                cancellationToken)) {
+            throw new EntityLifecycleMutationConflictException(entityId);
+        }
+        return true;
+    }
+
+    private async Task ApplyHintWithinLifecycleAsync(
+        Guid entityId,
+        AcquisitionImportHintRow match,
+        CancellationToken cancellationToken) {
         await StampExternalIdsAsync(entityId, match, cancellationToken);
 
         // Record the owned source tier on the book's detail row (the format tier is derived from the row's
@@ -69,7 +89,6 @@ public sealed class AcquisitionHintApplier(
         match.Consumed = true;
         match.UpdatedAt = DateTimeOffset.UtcNow;
         await db.SaveChangesAsync(cancellationToken);
-        return true;
     }
 
     public async Task<bool> BindWantedEntityAsync(
@@ -90,31 +109,55 @@ public sealed class AcquisitionHintApplier(
             return false;
         }
 
-        // Tolerate a dangling link (the wanted entity was deleted): the scan just creates a fresh entity
-        // and the ordinary hint apply still stamps its ids. Never bind an entity that already has a source.
-        var kindCode = kind.ToCode();
-        var entity = await db.Entities.FirstOrDefaultAsync(
-            row => row.Id == entityId && row.KindCode == kindCode, cancellationToken);
-        if (entity is null || await HasSourceFileAsync(entity.Id, cancellationToken)) {
+        // ExecuteAsync deliberately returns false for both a destructive lifecycle owner and a missing
+        // Entity. A dangling hint is an ordinary scan race (the scanner should create a fresh Entity),
+        // while a still-existing claimed target must retry after cleanup. Preserve that distinction.
+        if (!await db.Entities.AsNoTracking().AnyAsync(
+                row => row.Id == entityId.Value,
+                cancellationToken)) {
             return false;
         }
 
-        var now = DateTimeOffset.UtcNow;
-        // The path is written exactly as the scan keys it, so the following upsert finds this entity.
-        db.EntityFiles.Add(new EntityFileRow {
-            Id = Guid.NewGuid(),
-            EntityId = entity.Id,
-            Role = EntityFileRole.Source,
-            Path = sourcePath,
-            MimeType = ContentTypeForPath(sourcePath),
-            SizeBytes = TryGetFileSize(sourcePath),
-            CreatedAt = now,
-            UpdatedAt = now
-        });
-        entity.IsWanted = false;
-        entity.UpdatedAt = now;
-        await db.SaveChangesAsync(cancellationToken);
-        return true;
+        var kindCode = kind.ToCode();
+        var bound = false;
+        if (!await _lifecycle.ExecuteAsync(
+                entityId.Value,
+                async leaseCancellationToken => {
+                    // Tolerate a dangling link (the wanted entity was deleted): the scan creates fresh.
+                    // Never bind an Entity that already has a source.
+                    var entity = await db.Entities.FirstOrDefaultAsync(
+                        row => row.Id == entityId && row.KindCode == kindCode,
+                        leaseCancellationToken);
+                    if (entity is null || await HasSourceFileAsync(entity.Id, leaseCancellationToken)) {
+                        return;
+                    }
+
+                    var now = DateTimeOffset.UtcNow;
+                    db.EntityFiles.Add(new EntityFileRow {
+                        Id = Guid.NewGuid(),
+                        EntityId = entity.Id,
+                        Role = EntityFileRole.Source,
+                        Path = sourcePath,
+                        MimeType = ContentTypeForPath(sourcePath),
+                        SizeBytes = TryGetFileSize(sourcePath),
+                        CreatedAt = now,
+                        UpdatedAt = now
+                    });
+                    entity.IsWanted = false;
+                    entity.UpdatedAt = now;
+                    await db.SaveChangesAsync(leaseCancellationToken);
+                    bound = true;
+                },
+                cancellationToken)) {
+            if (!await db.Entities.AsNoTracking().AnyAsync(
+                    row => row.Id == entityId.Value,
+                    cancellationToken)) {
+                return false;
+            }
+
+            throw new EntityLifecycleMutationConflictException(entityId.Value);
+        }
+        return bound;
     }
 
     public async Task<bool> BindWantedParentAsync(
@@ -136,8 +179,9 @@ public sealed class AcquisitionHintApplier(
         // a fileless entity of that kind.
         var parentKindCode = parentKind.ToCode();
         var currentId = entityId;
+        var visited = new HashSet<Guid>();
         EntityRow? container = null;
-        for (var depth = 0; currentId is { } id && depth < 4 && container is null; depth++) {
+        while (currentId is { } id && visited.Add(id) && container is null) {
             var current = await db.Entities.AsNoTracking()
                 .Where(row => row.Id == id)
                 .Select(row => new { row.ParentEntityId })
@@ -146,28 +190,51 @@ public sealed class AcquisitionHintApplier(
                 return false;
             }
 
-            container = await db.Entities.FirstOrDefaultAsync(
-                row => row.Id == ancestorId && row.KindCode == parentKindCode, cancellationToken);
+            var ancestor = await db.Entities.FirstOrDefaultAsync(
+                row => row.Id == ancestorId,
+                cancellationToken);
+            if (ancestor is null) {
+                return false;
+            }
+
+            if (ancestor.KindCode == parentKindCode) {
+                container = ancestor;
+            }
             currentId = ancestorId;
         }
 
-        if (container is null || await HasSourceFileAsync(container.Id, cancellationToken)) {
+        if (container is null) {
             return false;
         }
+        var bound = false;
+        if (!await _lifecycle.ExecuteAsync(
+                container.Id,
+                async leaseCancellationToken => {
+                    var current = await db.Entities.FirstOrDefaultAsync(
+                        row => row.Id == container.Id && row.KindCode == parentKindCode,
+                        leaseCancellationToken);
+                    if (current is null || await HasSourceFileAsync(current.Id, leaseCancellationToken)) {
+                        return;
+                    }
 
-        var now = DateTimeOffset.UtcNow;
-        db.EntityFiles.Add(new EntityFileRow {
-            Id = Guid.NewGuid(),
-            EntityId = container.Id,
-            Role = EntityFileRole.Source,
-            Path = folderPath,
-            CreatedAt = now,
-            UpdatedAt = now
-        });
-        container.IsWanted = false;
-        container.UpdatedAt = now;
-        await db.SaveChangesAsync(cancellationToken);
-        return true;
+                    var now = DateTimeOffset.UtcNow;
+                    db.EntityFiles.Add(new EntityFileRow {
+                        Id = Guid.NewGuid(),
+                        EntityId = current.Id,
+                        Role = EntityFileRole.Source,
+                        Path = folderPath,
+                        CreatedAt = now,
+                        UpdatedAt = now
+                    });
+                    current.IsWanted = false;
+                    current.UpdatedAt = now;
+                    await db.SaveChangesAsync(leaseCancellationToken);
+                    bound = true;
+                },
+                cancellationToken)) {
+            throw new EntityLifecycleMutationConflictException(container.Id);
+        }
+        return bound;
     }
 
     public async Task<Guid?> BindWantedChildBySortOrderAsync(
@@ -190,26 +257,44 @@ public sealed class AcquisitionHintApplier(
         var child = await db.Entities.FirstOrDefaultAsync(
             row => row.ParentEntityId == parentId && row.KindCode == childKindCode && row.IsWanted && row.SortOrder == sortOrder,
             cancellationToken);
-        if (child is null || await HasSourceFileAsync(child.Id, cancellationToken)) {
+        if (child is null) {
             return null;
         }
+        Guid? boundId = null;
+        if (!await _lifecycle.ExecuteAsync(
+                child.Id,
+                async leaseCancellationToken => {
+                    var current = await db.Entities.FirstOrDefaultAsync(
+                        row => row.Id == child.Id
+                            && row.ParentEntityId == parentId
+                            && row.KindCode == childKindCode
+                            && row.IsWanted
+                            && row.SortOrder == sortOrder,
+                        leaseCancellationToken);
+                    if (current is null || await HasSourceFileAsync(current.Id, leaseCancellationToken)) {
+                        return;
+                    }
 
-        var now = DateTimeOffset.UtcNow;
-        // The path is written exactly as the scan keys it, so the following upsert finds this entity.
-        db.EntityFiles.Add(new EntityFileRow {
-            Id = Guid.NewGuid(),
-            EntityId = child.Id,
-            Role = EntityFileRole.Source,
-            Path = childPath,
-            MimeType = ContentTypeForPath(childPath),
-            SizeBytes = TryGetFileSize(childPath),
-            CreatedAt = now,
-            UpdatedAt = now
-        });
-        child.IsWanted = false;
-        child.UpdatedAt = now;
-        await db.SaveChangesAsync(cancellationToken);
-        return child.Id;
+                    var now = DateTimeOffset.UtcNow;
+                    db.EntityFiles.Add(new EntityFileRow {
+                        Id = Guid.NewGuid(),
+                        EntityId = current.Id,
+                        Role = EntityFileRole.Source,
+                        Path = childPath,
+                        MimeType = ContentTypeForPath(childPath),
+                        SizeBytes = TryGetFileSize(childPath),
+                        CreatedAt = now,
+                        UpdatedAt = now
+                    });
+                    current.IsWanted = false;
+                    current.UpdatedAt = now;
+                    await db.SaveChangesAsync(leaseCancellationToken);
+                    boundId = current.Id;
+                },
+                cancellationToken)) {
+            throw new EntityLifecycleMutationConflictException(child.Id);
+        }
+        return boundId;
     }
 
     /// <summary>The wanted-entity link of the unconsumed hint whose import path overlaps <paramref name="path"/>, or null.</summary>
@@ -233,7 +318,7 @@ public sealed class AcquisitionHintApplier(
         var hints = await hintsQuery.ToArrayAsync(cancellationToken);
         return hints
             .Where(hint => exactPath
-                ? normalized.Equals(Normalize(hint.SourcePath), StringComparison.OrdinalIgnoreCase)
+                ? FileSystemPathComparison.Equals(normalized, Normalize(hint.SourcePath))
                 : PathsOverlap(normalized, Normalize(hint.SourcePath)))
             .OrderByDescending(hint => hint.SourcePath.Length)
             .Select(hint => hint.EntityId)
@@ -258,7 +343,6 @@ public sealed class AcquisitionHintApplier(
         }
 
         var owners = new Dictionary<Guid, StampedHintOwner>();
-        var changed = false;
         foreach (var hint in hints) {
             // The entity owning the imported path: exact Source match first (the season/album folder or
             // the episode/movie file the scan keyed), else the nearest ancestor folder that owns one —
@@ -304,26 +388,32 @@ public sealed class AcquisitionHintApplier(
                 }
             }
 
-            await StampExternalIdsAsync(identityOwnerId, hint, cancellationToken);
-            hint.Consumed = true;
-            hint.UpdatedAt = DateTimeOffset.UtcNow;
-            changed = true;
-
-            var top = await ResolveTopLevelAsync(identityOwnerId, cancellationToken);
-            owners.TryAdd(top.TopLevelEntityId, top);
-        }
-
-        if (changed) {
-            await db.SaveChangesAsync(cancellationToken);
+            StampedHintOwner? top = null;
+            if (!await _lifecycle.ExecuteAsync(
+                    identityOwnerId,
+                    async leaseCancellationToken => {
+                        await StampExternalIdsAsync(identityOwnerId, hint, leaseCancellationToken);
+                        hint.Consumed = true;
+                        hint.UpdatedAt = DateTimeOffset.UtcNow;
+                        await db.SaveChangesAsync(leaseCancellationToken);
+                        top = await ResolveTopLevelAsync(identityOwnerId, leaseCancellationToken);
+                    },
+                    cancellationToken)) {
+                throw new EntityLifecycleMutationConflictException(identityOwnerId);
+            }
+            if (top is not null) {
+                owners.TryAdd(top.TopLevelEntityId, top);
+            }
         }
 
         return owners.Values.ToArray();
     }
 
-    /// <summary>The entity owning the exact path, else the nearest ancestor folder with a Source row (bounded walk).</summary>
+    /// <summary>The entity owning the exact path, else the nearest ancestor folder with a Source row.</summary>
     private async Task<Guid?> FindOwnerBySourcePathAsync(string sourcePath, CancellationToken cancellationToken) {
         var probe = sourcePath;
-        for (var depth = 0; !string.IsNullOrEmpty(probe) && depth < 4; depth++) {
+        var visited = new HashSet<string>(FileSystemPathComparison.Comparer);
+        while (!string.IsNullOrEmpty(probe) && visited.Add(probe)) {
             var owner = await db.EntityFiles.AsNoTracking()
                 .Where(file => file.Role == EntityFileRole.Source && file.Path == probe)
                 .Select(file => (Guid?)file.EntityId)
@@ -355,9 +445,11 @@ public sealed class AcquisitionHintApplier(
     /// <summary>The stamped entity's top-level ancestor (a series, an artist, the movie itself) for the identify kick.</summary>
     private async Task<StampedHintOwner> ResolveTopLevelAsync(Guid entityId, CancellationToken cancellationToken) {
         var currentId = entityId;
+        var topLevelId = entityId;
         var kindCode = string.Empty;
         var title = string.Empty;
-        for (var depth = 0; depth < 6; depth++) {
+        var visited = new HashSet<Guid>();
+        while (visited.Add(currentId)) {
             var current = await db.Entities.AsNoTracking()
                 .Where(row => row.Id == currentId)
                 .Select(row => new { row.KindCode, row.Title, row.ParentEntityId })
@@ -366,16 +458,17 @@ public sealed class AcquisitionHintApplier(
                 break;
             }
 
+            topLevelId = currentId;
             kindCode = current.KindCode;
             title = current.Title;
-            if (current.ParentEntityId is not { } parentId) {
+            if (current.ParentEntityId is not { } parentId || visited.Contains(parentId)) {
                 break;
             }
 
             currentId = parentId;
         }
 
-        return new StampedHintOwner(currentId, kindCode, title);
+        return new StampedHintOwner(topLevelId, kindCode, title);
     }
 
     /// <summary>Content type for a bound single-file book, mirroring what the scan stamps on creation. Null for folders/archives.</summary>
@@ -424,9 +517,9 @@ public sealed class AcquisitionHintApplier(
     }
 
     private static bool PathsOverlap(string a, string b) =>
-        a.Equals(b, StringComparison.OrdinalIgnoreCase)
-        || a.StartsWith(b + "/", StringComparison.OrdinalIgnoreCase)
-        || b.StartsWith(a + "/", StringComparison.OrdinalIgnoreCase);
+        FileSystemPathComparison.Equals(a, b)
+        || a.StartsWith(b + "/", FileSystemPathComparison.Comparison)
+        || b.StartsWith(a + "/", FileSystemPathComparison.Comparison);
 
     private static string Normalize(string path) =>
         path.Replace('\\', '/').TrimEnd('/');

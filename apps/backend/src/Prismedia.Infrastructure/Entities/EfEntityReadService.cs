@@ -30,6 +30,10 @@ public sealed partial class EfEntityReadService : IEntityReadService {
     private readonly EfEntityRepository _repository;
     private readonly IReadOnlyDictionary<EntityKind, IEntityKindMapper> _kindMappers;
     private readonly IReadOnlyList<Thumbnails.IThumbnailContributor> _thumbnailContributors;
+    private readonly IEntitySourceOwnershipReader _sourceOwnership;
+    private readonly IEntityFileDeletionRecoveryReader _deletionRecovery;
+    private readonly EfEntitySourceOwnershipProjection _sourceOwnershipFilter;
+    private readonly EfEntityAcquisitionStatusProjection _acquisitionStatuses;
     private readonly AssetPathService? _assets;
 
     // Memoized per request: library roots hidden from the caller (disabled roots plus,
@@ -43,12 +47,19 @@ public sealed partial class EfEntityReadService : IEntityReadService {
         EfEntityRepository repository,
         IEnumerable<IEntityKindMapper> kindMappers,
         IEnumerable<Thumbnails.IThumbnailContributor> thumbnailContributors,
-        AssetPathService? assets = null) {
+        AssetPathService? assets = null,
+        IEntitySourceOwnershipReader? sourceOwnership = null,
+        IEntityFileDeletionRecoveryReader? deletionRecovery = null) {
         _db = db;
         _currentUser = currentUser;
         _repository = repository;
         _kindMappers = kindMappers.ToDictionary(mapper => mapper.Kind);
         _thumbnailContributors = thumbnailContributors.ToArray();
+        _sourceOwnershipFilter = sourceOwnership as EfEntitySourceOwnershipProjection
+            ?? new EfEntitySourceOwnershipProjection(db);
+        _sourceOwnership = sourceOwnership ?? _sourceOwnershipFilter;
+        _deletionRecovery = deletionRecovery ?? new EfEntityFileDeletionRecoveryProjection(db);
+        _acquisitionStatuses = new EfEntityAcquisitionStatusProjection(db);
         _assets = assets;
     }
 
@@ -114,7 +125,9 @@ public sealed partial class EfEntityReadService : IEntityReadService {
             entityQuery = ApplyEnabledLibraryVisibility(entityQuery, kind);
         }
         entityQuery = ApplyNsfwVisibility(entityQuery, hideNsfw == true);
-        entityQuery = ApplyListFilters(entityQuery, favorite, organized, ratingMin, ratingMax, unrated, status, bookType, bookFormat, nsfw, hasFile, played, orphaned, wanted, acquisitionStatus);
+        entityQuery = ApplyListFilters(entityQuery, favorite, organized, ratingMin, ratingMax, unrated, status, bookType, bookFormat, nsfw, played, orphaned, wanted);
+        entityQuery = await _acquisitionStatuses.ApplyFilterAsync(entityQuery, acquisitionStatus, cancellationToken);
+        entityQuery = await _sourceOwnershipFilter.ApplyFilterAsync(entityQuery, hasFile, cancellationToken);
 
         // Snapshot the unbounded filtered total before applying the cursor; this is what
         // drives the client's page-of-pages and seek-to-end behaviour and must stay
@@ -331,11 +344,9 @@ public sealed partial class EfEntityReadService : IEntityReadService {
         string? bookType = null,
         string? bookFormat = null,
         bool? nsfw = null,
-        bool? hasFile = null,
         bool? played = null,
         bool? orphaned = null,
-        bool? wanted = null,
-        AcquisitionStatus? acquisitionStatus = null) {
+        bool? wanted = null) {
         var userId = CurrentUserId;
         var states = _db.UserEntityStates;
         if (favorite == true) {
@@ -347,16 +358,6 @@ public sealed partial class EfEntityReadService : IEntityReadService {
             query = wantsWanted
                 ? query.Where(entity => entity.IsWanted)
                 : query.Where(entity => !entity.IsWanted);
-        }
-
-        if (acquisitionStatus is { } latestStatus) {
-            var acquisitions = _db.Acquisitions;
-            query = query.Where(entity => acquisitions
-                .Where(acquisition => acquisition.EntityId == entity.Id)
-                .OrderByDescending(acquisition => acquisition.CreatedAt)
-                .ThenByDescending(acquisition => acquisition.Id)
-                .Select(acquisition => (AcquisitionStatus?)acquisition.Status)
-                .FirstOrDefault() == latestStatus);
         }
 
         if (orphaned is { } wantsOrphaned) {
@@ -371,15 +372,6 @@ public sealed partial class EfEntityReadService : IEntityReadService {
             query = wantsNsfw
                 ? query.Where(entity => entity.IsNsfw)
                 : query.Where(entity => !entity.IsNsfw);
-        }
-
-        if (hasFile is { } wantsFile) {
-            var files = _db.EntityFiles;
-            // "Has file" means a content (source) file. Generated/downloaded artwork rows (covers,
-            // thumbnails) don't count — wanted placeholders carry request-time cover art but no content.
-            query = wantsFile
-                ? query.Where(entity => files.Any(file => file.EntityId == entity.Id && file.Role == EntityFileRole.Source))
-                : query.Where(entity => !files.Any(file => file.EntityId == entity.Id && file.Role == EntityFileRole.Source));
         }
 
         if (played is { } wantsPlayed) {
@@ -520,8 +512,12 @@ public sealed partial class EfEntityReadService : IEntityReadService {
             return null;
         }
 
+        var fileManagementState = await ResolveFileManagementStateAsync(id, cancellationToken);
         var projected = SanitizeLocalAssets(
-            await EnrichAudioTrackAlbumCoverAsync(EntityCardProjector.ToCard(entity), hideNsfw, cancellationToken));
+            await EnrichAudioTrackAlbumCoverAsync(
+                EntityCardProjector.ToCard(entity, fileManagementState),
+                hideNsfw,
+                cancellationToken));
         var card = projected with {
             ChildrenByKind = await ProjectDirectChildGroupsAsync(id, hideNsfw, enforceLibraryVisibility, cancellationToken),
             Relationships = await ProjectRelationshipGroupsAsync(id, hideNsfw, enforceLibraryVisibility, cancellationToken)
@@ -591,8 +587,12 @@ public sealed partial class EfEntityReadService : IEntityReadService {
             return null;
         }
 
+        var fileManagementState = await ResolveFileManagementStateAsync(id, cancellationToken);
         var projected = SanitizeLocalAssets(
-            await EnrichAudioTrackAlbumCoverAsync(EntityCardProjector.ToCard(entity), hideNsfw, cancellationToken));
+            await EnrichAudioTrackAlbumCoverAsync(
+                EntityCardProjector.ToCard(entity, fileManagementState),
+                hideNsfw,
+                cancellationToken));
         var card = await EnrichBookProgressAsync(projected with {
             ChildrenByKind = await ProjectDirectChildGroupsAsync(id, hideNsfw, enforceLibraryVisibility, cancellationToken),
             Relationships = await ProjectRelationshipGroupsAsync(id, hideNsfw, enforceLibraryVisibility, cancellationToken)
@@ -605,6 +605,16 @@ public sealed partial class EfEntityReadService : IEntityReadService {
         return _kindMappers.TryGetValue(entity.Kind, out var mapper)
             ? mapper.ProjectDetail(entity, card, creditMetadata)
             : card;
+    }
+
+    private async Task<EntityFileManagementState> ResolveFileManagementStateAsync(
+        Guid entityId,
+        CancellationToken cancellationToken) {
+        var sourceBackedIds = await _sourceOwnership.ResolveAsync([entityId], cancellationToken);
+        var recoverableDeletionIds = await _deletionRecovery.ResolveAsync([entityId], cancellationToken);
+        return new EntityFileManagementState(
+            sourceBackedIds.Contains(entityId),
+            recoverableDeletionIds.Contains(entityId));
     }
 
     public async Task<IReadOnlyDictionary<Guid, EntityFolderListContext>> GetFolderListContextsAsync(

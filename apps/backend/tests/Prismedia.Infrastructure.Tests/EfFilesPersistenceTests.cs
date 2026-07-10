@@ -102,6 +102,102 @@ public sealed class EfFilesPersistenceTests {
         Assert.Equal(otherRootId, remaining.LibraryRootId);
     }
 
+    [Fact]
+    public async Task UnixExclusionsKeepCaseDistinctFilesystemPathsIndependent() {
+        if (OperatingSystem.IsWindows()) {
+            return;
+        }
+
+        await using var db = CreateContext();
+        SeedLibraryRoot(db, RootId, "/media/root");
+        var persistence = new EfFilesPersistence(db);
+
+        await persistence.UpsertExclusionAsync(
+            RootId,
+            "Skip",
+            FileEntryKind.Directory,
+            CancellationToken.None);
+        await persistence.UpsertExclusionAsync(
+            RootId,
+            "skip",
+            FileEntryKind.Directory,
+            CancellationToken.None);
+
+        var excluded = await persistence.ListExcludedRelativePathsAsync(
+            RootId,
+            ["Skip/one.mkv", "skip/two.mkv", "SKIP/three.mkv"],
+            CancellationToken.None);
+
+        Assert.Equal(2, db.MediaFileIgnores.Count());
+        Assert.Contains("Skip/one.mkv", excluded);
+        Assert.Contains("skip/two.mkv", excluded);
+        Assert.DoesNotContain("SKIP/three.mkv", excluded);
+    }
+
+    [Fact]
+    public async Task WindowsExclusionUpsertReusesCaseVariantPath() {
+        if (!OperatingSystem.IsWindows()) {
+            return;
+        }
+
+        await using var db = CreateContext();
+        SeedLibraryRoot(db, RootId, "C:\\Media\\Root");
+        var persistence = new EfFilesPersistence(db);
+
+        await persistence.UpsertExclusionAsync(
+            RootId,
+            "Skip",
+            FileEntryKind.Directory,
+            CancellationToken.None);
+        await persistence.UpsertExclusionAsync(
+            RootId,
+            "skip",
+            FileEntryKind.Directory,
+            CancellationToken.None);
+
+        Assert.Single(db.MediaFileIgnores);
+    }
+
+    [Fact]
+    public async Task PathRewriteUpdatesEntityFileAndCapabilitySourceTogether() {
+        await using var db = CreateContext();
+        var entityId = Guid.Parse("cccccccc-cccc-cccc-cccc-cccccccccccc");
+        var now = DateTimeOffset.UtcNow;
+        var sourceFolder = Path.Combine(Path.GetTempPath(), "prismedia-files-rewrite", "Incoming");
+        var targetFolder = Path.Combine(Path.GetTempPath(), "prismedia-files-rewrite", "Organized");
+        var sourceFile = Path.Combine(sourceFolder, "Movie.mkv");
+        db.Entities.Add(new EntityRow {
+            Id = entityId,
+            KindCode = EntityKindRegistry.Video.Code,
+            Title = "Movie",
+            CreatedAt = now,
+            UpdatedAt = now,
+        });
+        db.EntityFiles.Add(new EntityFileRow {
+            Id = Guid.NewGuid(),
+            EntityId = entityId,
+            Role = EntityFileRole.Source,
+            Path = sourceFile,
+            CreatedAt = now,
+            UpdatedAt = now,
+        });
+        db.EntitySources.Add(new EntitySourceRow {
+            EntityId = entityId,
+            Code = EntityStorageShape.Folder.ToCode(),
+            Value = sourceFolder,
+            UpdatedAt = now,
+        });
+        await db.SaveChangesAsync();
+
+        await new EfFilesPersistence(db).ApplyPathPrefixRewriteAsync(
+            sourceFolder,
+            targetFolder,
+            CancellationToken.None);
+
+        Assert.Equal(Path.Combine(targetFolder, "Movie.mkv"), Assert.Single(db.EntityFiles).Path);
+        Assert.Equal(targetFolder, Assert.Single(db.EntitySources).Value);
+    }
+
     private static async Task AddSourceEntityAsync(
         PrismediaDbContext db,
         string kindCode,

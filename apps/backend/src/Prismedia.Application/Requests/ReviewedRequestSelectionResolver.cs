@@ -73,7 +73,7 @@ internal static class ReviewedRequestSelectionResolver {
                     preset.Value,
                     direct.Select(node => {
                         var target = TargetFor(node, childDescriptor, targets);
-                        return new MonitorPresetCandidate(target.ProposalId, target.Position, Owned: false);
+                        return new MonitorPresetCandidate(target.ProposalId, Owned: false);
                     }).ToArray());
             }
 

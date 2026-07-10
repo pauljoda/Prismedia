@@ -42,8 +42,11 @@ internal sealed class CodecEnumSchemaTransformer : IOpenApiSchemaTransformer {
 
         // Arrays / lists of a codec enum: patch the item schema instead.
         var element = ElementType(type);
-        if (element is not null && TryCodes(element, out var itemCodes) && schema.Items is OpenApiSchema itemSchema) {
+        if (element is not null && TryCodes(element, out var itemCodes)) {
+            var itemSchema = schema.Items as OpenApiSchema ?? new OpenApiSchema();
+            itemSchema.Type = JsonSchemaType.String;
             itemSchema.Enum = itemCodes;
+            schema.Items = itemSchema;
         }
     }
 

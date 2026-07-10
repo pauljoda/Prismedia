@@ -50,17 +50,20 @@ public sealed class EfFilesPersistence(PrismediaDbContext db) : IFilesPersistenc
         bool hideNsfw,
         CancellationToken cancellationToken) {
         var normalized = Path.GetFullPath(absolutePath);
-        // Project only the columns the Files page renders (id, kind, title) plus the NSFW flag used
-        // to filter, rather than hydrating full entity rows for every linked source.
-        var entityQuery = db.EntityFiles.AsNoTracking()
-            .Where(file => file.Role == EntityFileRole.Source &&
-                           (file.Path == normalized || EF.Functions.Like(file.Path, normalized + Path.DirectorySeparatorChar + "%")))
-            .Join(
-                db.Entities.AsNoTracking(),
-                file => file.EntityId,
-                entity => entity.Id,
-                (_, entity) => new { entity.Id, entity.KindCode, entity.Title, entity.IsNsfw })
-            .Distinct();
+        // Database collations cannot express the media host's path semantics (notably PostgreSQL on a
+        // Windows mount). Project the narrow source identity columns and decide containment in memory.
+        var sourceCandidates = await db.EntityFiles.AsNoTracking()
+            .Where(file => file.Role == EntityFileRole.Source)
+            .Select(file => new { file.EntityId, file.Path })
+            .ToArrayAsync(cancellationToken);
+        var linkedIds = sourceCandidates
+            .Where(file => FileSystemPathComparison.IsSameOrDescendant(normalized, file.Path))
+            .Select(file => file.EntityId)
+            .Distinct()
+            .ToArray();
+        var entityQuery = db.Entities.AsNoTracking()
+            .Where(entity => linkedIds.Contains(entity.Id))
+            .Select(entity => new { entity.Id, entity.KindCode, entity.Title, entity.IsNsfw });
         if (hideNsfw) {
             entityQuery = entityQuery.Where(entity => !entity.IsNsfw);
         }
@@ -96,20 +99,17 @@ public sealed class EfFilesPersistence(PrismediaDbContext db) : IFilesPersistenc
         IReadOnlyList<string> absolutePaths,
         CancellationToken cancellationToken) {
         if (absolutePaths.Count == 0) {
-            return new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            return new HashSet<string>(FileSystemPathComparison.Comparer);
         }
 
         var candidates = absolutePaths
             .Select(path => Path.TrimEndingDirectorySeparator(Path.GetFullPath(path)))
             .ToArray();
-        // Every candidate lives at or under the scope directory, so only source files in that
-        // subtree can own or contain one. Bounding the query here keeps the Files tab responsive on
-        // large libraries instead of loading every source path in the catalog on each folder open.
+        // PostgreSQL string prefix semantics do not match a Windows media host. Keep the database
+        // projection narrow, then bound the source set by the requested scope with the host comparer.
         var scope = Path.TrimEndingDirectorySeparator(Path.GetFullPath(scopeDirectory));
-        var scopePrefix = scope + Path.DirectorySeparatorChar;
-        var sourceVisibilities = await db.EntityFiles.AsNoTracking()
-            .Where(file => file.Role == EntityFileRole.Source &&
-                           (file.Path == scope || EF.Functions.Like(file.Path, scopePrefix + "%")))
+        var sourceVisibilities = (await db.EntityFiles.AsNoTracking()
+            .Where(file => file.Role == EntityFileRole.Source)
             .Join(
                 db.Entities.AsNoTracking(),
                 file => file.EntityId,
@@ -118,12 +118,14 @@ public sealed class EfFilesPersistence(PrismediaDbContext db) : IFilesPersistenc
                     file.Path,
                     entity.IsNsfw
                 })
-            .ToArrayAsync(cancellationToken);
+            .ToArrayAsync(cancellationToken))
+            .Where(source => PathsOverlap(scope, source.Path))
+            .ToArray();
         if (sourceVisibilities.Length == 0) {
-            return new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            return new HashSet<string>(FileSystemPathComparison.Comparer);
         }
 
-        var hidden = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var hidden = new HashSet<string>(FileSystemPathComparison.Comparer);
         foreach (var candidate in candidates) {
             var associatedSources = sourceVisibilities
                 .Where(source => PathsOverlap(candidate, source.Path))
@@ -142,7 +144,7 @@ public sealed class EfFilesPersistence(PrismediaDbContext db) : IFilesPersistenc
         IReadOnlyList<string> relativePaths,
         CancellationToken cancellationToken) {
         if (relativePaths.Count == 0) {
-            return new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            return new HashSet<string>(FileSystemPathComparison.Comparer);
         }
 
         var exclusions = await db.MediaFileIgnores.AsNoTracking()
@@ -150,13 +152,13 @@ public sealed class EfFilesPersistence(PrismediaDbContext db) : IFilesPersistenc
             .Select(row => row.Path)
             .ToArrayAsync(cancellationToken);
         if (exclusions.Length == 0) {
-            return new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            return new HashSet<string>(FileSystemPathComparison.Comparer);
         }
 
         return relativePaths
             .Select(NormalizeRelativePath)
             .Where(relativePath => exclusions.Any(excluded => IsSameOrDescendant(relativePath, excluded)))
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            .ToHashSet(FileSystemPathComparison.Comparer);
     }
 
     /// <inheritdoc />
@@ -167,7 +169,10 @@ public sealed class EfFilesPersistence(PrismediaDbContext db) : IFilesPersistenc
         CancellationToken cancellationToken) {
         var path = NormalizeRelativePath(relativePath);
         var now = DateTimeOffset.UtcNow;
-        var row = await db.MediaFileIgnores.FindAsync([rootId, path], cancellationToken);
+        var row = (await db.MediaFileIgnores
+                .Where(candidate => candidate.LibraryRootId == rootId)
+                .ToArrayAsync(cancellationToken))
+            .FirstOrDefault(candidate => FileSystemPathComparison.Equals(candidate.Path, path));
         if (row is null) {
             db.MediaFileIgnores.Add(new MediaFileIgnoreRow {
                 LibraryRootId = rootId,
@@ -192,7 +197,10 @@ public sealed class EfFilesPersistence(PrismediaDbContext db) : IFilesPersistenc
         string relativePath,
         CancellationToken cancellationToken) {
         var path = NormalizeRelativePath(relativePath);
-        var row = await db.MediaFileIgnores.FindAsync([rootId, path], cancellationToken);
+        var row = (await db.MediaFileIgnores
+                .Where(candidate => candidate.LibraryRootId == rootId)
+                .ToArrayAsync(cancellationToken))
+            .FirstOrDefault(candidate => FileSystemPathComparison.Equals(candidate.Path, path));
         if (row is null) {
             return;
         }
@@ -214,12 +222,26 @@ public sealed class EfFilesPersistence(PrismediaDbContext db) : IFilesPersistenc
             .ToArrayAsync(cancellationToken);
 
         foreach (var file in files) {
-            if (!TryMapMovedPath(file.Path, source, target, out var nextPath)) {
+            if (!EntitySourcePath.TryMapPhysicalPrefix(file.Path, source, target, out var nextPath)) {
                 continue;
             }
 
             file.Path = nextPath;
             file.UpdatedAt = now;
+        }
+
+        var capabilitySources = await db.EntitySources.ToArrayAsync(cancellationToken);
+        foreach (var capabilitySource in capabilitySources) {
+            if (!EntitySourcePath.TryMapPhysicalPrefix(
+                    capabilitySource.Value,
+                    source,
+                    target,
+                    out var nextPath)) {
+                continue;
+            }
+
+            capabilitySource.Value = nextPath;
+            capabilitySource.UpdatedAt = now;
         }
 
         var root = (await db.LibraryRoots.AsNoTracking().ToArrayAsync(cancellationToken))
@@ -232,7 +254,7 @@ public sealed class EfFilesPersistence(PrismediaDbContext db) : IFilesPersistenc
                 .ToArrayAsync(cancellationToken);
             foreach (var exclusion in exclusions) {
                 var absolute = Path.GetFullPath(Path.Combine(root.Path, exclusion.Path));
-                if (TryMapMovedPath(absolute, source, target, out var nextPath)) {
+                if (EntitySourcePath.TryMapPhysicalPrefix(absolute, source, target, out var nextPath)) {
                     exclusion.Path = NormalizeRelativePath(Path.GetRelativePath(root.Path, nextPath));
                     exclusion.UpdatedAt = now;
                 }
@@ -242,32 +264,12 @@ public sealed class EfFilesPersistence(PrismediaDbContext db) : IFilesPersistenc
         await db.SaveChangesAsync(cancellationToken);
     }
 
-    private static bool TryMapMovedPath(
-        string currentPath,
-        string sourcePath,
-        string targetPath,
-        out string nextPath) {
-        var current = Path.GetFullPath(currentPath);
-        if (string.Equals(current, sourcePath, StringComparison.OrdinalIgnoreCase)) {
-            nextPath = targetPath;
-            return true;
-        }
-
-        if (current.StartsWith(sourcePath + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)) {
-            nextPath = targetPath + current[sourcePath.Length..];
-            return true;
-        }
-
-        nextPath = currentPath;
-        return false;
-    }
-
     private static bool PathsOverlap(string candidatePath, string sourcePath) {
         var candidate = Path.TrimEndingDirectorySeparator(Path.GetFullPath(candidatePath));
         var source = Path.TrimEndingDirectorySeparator(Path.GetFullPath(sourcePath));
-        return string.Equals(candidate, source, StringComparison.OrdinalIgnoreCase) ||
-            candidate.StartsWith(source + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase) ||
-            source.StartsWith(candidate + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);
+        return FileSystemPathComparison.Equals(candidate, source) ||
+            candidate.StartsWith(source + Path.DirectorySeparatorChar, FileSystemPathComparison.Comparison) ||
+            source.StartsWith(candidate + Path.DirectorySeparatorChar, FileSystemPathComparison.Comparison);
     }
 
     private static string NormalizeRelativePath(string path) =>
@@ -276,7 +278,7 @@ public sealed class EfFilesPersistence(PrismediaDbContext db) : IFilesPersistenc
     private static bool IsSameOrDescendant(string relativePath, string excludedPath) {
         var path = NormalizeRelativePath(relativePath);
         var excluded = NormalizeRelativePath(excludedPath);
-        return string.Equals(path, excluded, StringComparison.OrdinalIgnoreCase) ||
-            path.StartsWith(excluded + "/", StringComparison.OrdinalIgnoreCase);
+        return FileSystemPathComparison.Equals(path, excluded) ||
+            path.StartsWith(excluded + "/", FileSystemPathComparison.Comparison);
     }
 }

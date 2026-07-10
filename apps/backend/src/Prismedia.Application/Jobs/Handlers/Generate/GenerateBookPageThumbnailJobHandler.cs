@@ -1,4 +1,5 @@
 using Prismedia.Application.Jobs.Handlers;
+using Prismedia.Application.Files;
 using System.IO.Compression;
 using Microsoft.Extensions.Logging;
 using Prismedia.Application.Jobs.Ports;
@@ -20,17 +21,17 @@ public sealed class GenerateBookPageThumbnailJobHandler(
     public override JobType Type => JobType.GenerateBookPageThumbnail;
 
     protected override bool ValidateFilePath(string filePath) {
-        var parts = filePath.Split("::", 2, StringSplitOptions.None);
-        return parts.Length == 2 && File.Exists(parts[0]);
+        return EntitySourcePath.TrySplitArchiveMember(filePath, out var archivePath, out _)
+            && File.Exists(archivePath);
     }
 
     protected override async Task ExecuteAsync(
         JobContext context, Guid entityId, string filePath, CancellationToken cancellationToken) {
         await context.ReportProgressAsync(20, "Extracting page", cancellationToken);
 
-        var parts = filePath.Split("::", 2, StringSplitOptions.None);
-        var archivePath = parts[0];
-        var memberPath = parts[1];
+        if (!EntitySourcePath.TrySplitArchiveMember(filePath, out var archivePath, out var memberPath)) {
+            return;
+        }
 
         var tempPath = Path.Combine(Path.GetTempPath(), $"prismedia-page-{entityId}{Path.GetExtension(memberPath)}");
         try {

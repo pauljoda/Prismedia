@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using System.Text.Json.Nodes;
 using Prismedia.Application.Acquisition;
+using Prismedia.Application.Entities;
 using Prismedia.Domain.Entities;
 using Prismedia.Infrastructure.Acquisition;
 using Prismedia.Infrastructure.Persistence;
@@ -9,6 +10,277 @@ using Prismedia.Infrastructure.Persistence.Entities;
 namespace Prismedia.Infrastructure.Tests;
 
 public sealed class EfAcquisitionStoreTests {
+    [Fact]
+    public async Task DownloadedCompletionWorkProjectsKindAndUpgradeRoutingOnlyForDownloadedRows() {
+        await using var db = CreateContext();
+        var now = DateTimeOffset.UtcNow;
+        var ordinaryId = Guid.NewGuid();
+        var parentId = Guid.NewGuid();
+        var upgradeId = Guid.NewGuid();
+        var importingId = Guid.NewGuid();
+        db.Acquisitions.AddRange(
+            CompletionRow(ordinaryId, EntityKind.Movie, AcquisitionStatus.Downloaded),
+            CompletionRow(parentId, EntityKind.Book, AcquisitionStatus.Imported),
+            CompletionRow(upgradeId, EntityKind.Video, AcquisitionStatus.Downloaded, parentId),
+            CompletionRow(importingId, EntityKind.AudioLibrary, AcquisitionStatus.Importing));
+        await db.SaveChangesAsync();
+
+        var work = await AcquisitionTestFactory.Store(db)
+            .ListDownloadedCompletionWorkAsync(CancellationToken.None);
+
+        Assert.Equal(2, work.Count);
+        AssertCompletion(
+            Assert.Single(work, item => item.AcquisitionId == ordinaryId),
+            ordinaryId,
+            EntityKind.Movie,
+            isUpgrade: false);
+        AssertCompletion(
+            Assert.Single(work, item => item.AcquisitionId == upgradeId),
+            upgradeId,
+            EntityKind.Video,
+            isUpgrade: true);
+
+        AcquisitionRow CompletionRow(
+            Guid id,
+            EntityKind kind,
+            AcquisitionStatus status,
+            Guid? upgradeOfAcquisitionId = null) => new() {
+                Id = id,
+                Kind = kind,
+                Status = status,
+                UpgradeOfAcquisitionId = upgradeOfAcquisitionId,
+                Title = kind.ToCode(),
+                ExternalIdsJson = "{}",
+                SourceUrlsJson = "[]",
+                CreatedAt = now,
+                UpdatedAt = now,
+            };
+
+        static void AssertCompletion(
+            DownloadedAcquisitionCompletion item,
+            Guid id,
+            EntityKind kind,
+            bool isUpgrade) {
+            Assert.Equal(id, item.AcquisitionId);
+            Assert.Equal(kind, item.Kind);
+            Assert.Equal(isUpgrade, item.IsUpgrade);
+        }
+    }
+
+    [Fact]
+    public async Task UnsupportedDownloadedWorkDoesNotKeepTransferPollingAlive() {
+        await using var db = CreateContext();
+        var now = DateTimeOffset.UtcNow;
+        var acquisitionId = Guid.NewGuid();
+        db.Acquisitions.Add(new AcquisitionRow {
+            Id = acquisitionId,
+            Kind = EntityKind.Image,
+            Status = AcquisitionStatus.Downloaded,
+            Title = "Unsupported image payload",
+            ExternalIdsJson = "{}",
+            SourceUrlsJson = "[]",
+            CreatedAt = now,
+            UpdatedAt = now,
+        });
+        db.DownloadTransfers.Add(new DownloadTransferRow {
+            Id = Guid.NewGuid(),
+            AcquisitionId = acquisitionId,
+            ClientItemId = "completed-image",
+            Progress = 1,
+            CreatedAt = now,
+            UpdatedAt = now,
+        });
+        await db.SaveChangesAsync();
+        var store = AcquisitionTestFactory.Store(db);
+
+        Assert.Empty(await store.ListActiveTransfersAsync(CancellationToken.None));
+        Assert.False(await store.HasActiveTransfersAsync(CancellationToken.None));
+        Assert.Equal(
+            acquisitionId,
+            Assert.Single(await store.ListDownloadedCompletionWorkAsync(CancellationToken.None)).AcquisitionId);
+    }
+
+    [Fact]
+    public async Task EntityLifecycleIdsIncludeEveryUpgradeDescendant() {
+        await using var db = CreateContext();
+        var now = DateTimeOffset.UtcNow;
+        var entityId = Guid.NewGuid();
+        var directNewest = Guid.NewGuid();
+        var directOlder = Guid.NewGuid();
+        var upgradeChild = Guid.NewGuid();
+        var nestedUpgrade = Guid.NewGuid();
+        db.Acquisitions.AddRange(
+            Row(directOlder, now.AddHours(-2), entityId: entityId),
+            Row(directNewest, now.AddHours(-1), entityId: entityId),
+            Row(upgradeChild, now, upgradeOf: directOlder),
+            Row(nestedUpgrade, now.AddMinutes(1), upgradeOf: upgradeChild));
+        await db.SaveChangesAsync();
+
+        var ids = await AcquisitionTestFactory.Store(db)
+            .ListIdsForEntityAsync(entityId, CancellationToken.None);
+
+        Assert.Equal([directNewest, directOlder, upgradeChild, nestedUpgrade], ids);
+
+        static AcquisitionRow Row(
+            Guid id,
+            DateTimeOffset createdAt,
+            Guid? entityId = null,
+            Guid? upgradeOf = null) => new() {
+                Id = id,
+                EntityId = entityId,
+                UpgradeOfAcquisitionId = upgradeOf,
+                Kind = EntityKind.Movie,
+                Status = AcquisitionStatus.Imported,
+                Title = "Movie",
+                ExternalIdsJson = "{}",
+                SourceUrlsJson = "[]",
+                CreatedAt = createdAt,
+                UpdatedAt = createdAt
+            };
+    }
+
+    [Fact]
+    public async Task FailedRecoveryClaimRequiresTheActiveReleaseAndLifecycle() {
+        await using var db = CreateContext();
+        var now = DateTimeOffset.UtcNow;
+        var acquisitionId = Guid.NewGuid();
+        var selected = new SelectedRelease("Dune release", "Indexer", "hash-1");
+        db.Acquisitions.Add(new AcquisitionRow {
+            Id = acquisitionId,
+            Status = AcquisitionStatus.Downloading,
+            Title = "Dune",
+            SelectedReleaseJson = System.Text.Json.JsonSerializer.Serialize(selected),
+            ExternalIdsJson = "{}",
+            SourceUrlsJson = "[]",
+            CreatedAt = now,
+            UpdatedAt = now
+        });
+        await db.SaveChangesAsync();
+        var store = AcquisitionTestFactory.Store(db);
+
+        Assert.False(await store.TryClaimFailedRecoveryAsync(
+            acquisitionId,
+            [AcquisitionStatus.Queued, AcquisitionStatus.Downloading],
+            selected with { Title = "Different release" },
+            "Failed.",
+            CancellationToken.None));
+        Assert.Equal(AcquisitionStatus.Downloading, await store.GetStatusAsync(acquisitionId, CancellationToken.None));
+
+        Assert.True(await store.TryClaimFailedRecoveryAsync(
+            acquisitionId,
+            [AcquisitionStatus.Queued, AcquisitionStatus.Downloading],
+            selected,
+            "Failed.",
+            CancellationToken.None));
+        Assert.Equal(AcquisitionStatus.Failed, await store.GetStatusAsync(acquisitionId, CancellationToken.None));
+
+        Assert.True(await store.TryTransitionStatusAsync(
+            acquisitionId,
+            [AcquisitionStatus.Failed],
+            AcquisitionStatus.Cancelled,
+            "Cancelled.",
+            CancellationToken.None));
+        Assert.False(await store.TryClaimFailedRecoveryAsync(
+            acquisitionId,
+            [AcquisitionStatus.Queued, AcquisitionStatus.Downloading, AcquisitionStatus.Failed],
+            selected,
+            "Failed again.",
+            CancellationToken.None));
+        Assert.Equal(AcquisitionStatus.Cancelled, await store.GetStatusAsync(acquisitionId, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task SearchCompletionCannotReplaceCandidatesAfterCancellation() {
+        await using var db = CreateContext();
+        var now = DateTimeOffset.UtcNow;
+        var acquisitionId = Guid.NewGuid();
+        db.Acquisitions.Add(new AcquisitionRow {
+            Id = acquisitionId,
+            Status = AcquisitionStatus.Cancelled,
+            Title = "Dune",
+            ExternalIdsJson = "{}",
+            SourceUrlsJson = "[]",
+            CreatedAt = now,
+            UpdatedAt = now
+        });
+        AddCandidate(db, acquisitionId, "old-hash", "Old indexer", "Old release", 1);
+        await db.SaveChangesAsync();
+        var store = AcquisitionTestFactory.Store(db);
+
+        var completed = await store.TryCompleteSearchAsync(
+            acquisitionId,
+            [Scored("New release", "new-hash")],
+            "1 acceptable release.",
+            CancellationToken.None);
+
+        Assert.False(completed);
+        Assert.Equal(AcquisitionStatus.Cancelled, await store.GetStatusAsync(acquisitionId, CancellationToken.None));
+        var candidate = Assert.Single((await store.GetAsync(acquisitionId, CancellationToken.None))!.Candidates);
+        Assert.Equal("Old release", candidate.Title);
+    }
+
+    [Fact]
+    public async Task SearchCompletionReplacesCandidatesAndStatusAsOneLifecycleCommit() {
+        await using var db = CreateContext();
+        var now = DateTimeOffset.UtcNow;
+        var acquisitionId = Guid.NewGuid();
+        db.Acquisitions.Add(new AcquisitionRow {
+            Id = acquisitionId,
+            Status = AcquisitionStatus.Searching,
+            Title = "Dune",
+            ExternalIdsJson = "{}",
+            SourceUrlsJson = "[]",
+            CreatedAt = now,
+            UpdatedAt = now
+        });
+        AddCandidate(db, acquisitionId, "old-hash", "Old indexer", "Old release", 1);
+        await db.SaveChangesAsync();
+        var store = AcquisitionTestFactory.Store(db);
+
+        var completed = await store.TryCompleteSearchAsync(
+            acquisitionId,
+            [Scored("New release", "new-hash")],
+            "1 acceptable release.",
+            CancellationToken.None);
+
+        Assert.True(completed);
+        var detail = (await store.GetAsync(acquisitionId, CancellationToken.None))!;
+        Assert.Equal(AcquisitionStatus.AwaitingSelection, detail.Summary.Status);
+        Assert.Equal("1 acceptable release.", detail.Summary.StatusMessage);
+        var candidate = Assert.Single(detail.Candidates);
+        Assert.Equal("New release", candidate.Title);
+    }
+
+    [Fact]
+    public async Task OpenWorkPredicateIgnoresTerminalHistoryButFindsAnActionableAttempt() {
+        await using var db = CreateContext();
+        var entityId = Guid.NewGuid();
+        var now = DateTimeOffset.UtcNow;
+        db.Acquisitions.Add(new AcquisitionRow {
+            Id = Guid.NewGuid(), EntityId = entityId, Status = AcquisitionStatus.Imported,
+            Title = "Imported history", ExternalIdsJson = "{}", SourceUrlsJson = "[]",
+            CreatedAt = now, UpdatedAt = now
+        });
+        db.Acquisitions.Add(new AcquisitionRow {
+            Id = Guid.NewGuid(), EntityId = entityId, Status = AcquisitionStatus.Cancelled,
+            Title = "Cancelled history", ExternalIdsJson = "{}", SourceUrlsJson = "[]",
+            CreatedAt = now.AddSeconds(1), UpdatedAt = now.AddSeconds(1)
+        });
+        await db.SaveChangesAsync();
+        var store = AcquisitionTestFactory.Store(db);
+
+        Assert.False(await store.AnyOpenForEntityAsync(entityId, CancellationToken.None));
+
+        db.Acquisitions.Add(new AcquisitionRow {
+            Id = Guid.NewGuid(), EntityId = entityId, Status = AcquisitionStatus.Failed,
+            Title = "Open retry", ExternalIdsJson = "{}", SourceUrlsJson = "[]",
+            CreatedAt = now.AddMinutes(1), UpdatedAt = now.AddMinutes(1)
+        });
+        await db.SaveChangesAsync();
+
+        Assert.True(await store.AnyOpenForEntityAsync(entityId, CancellationToken.None));
+    }
+
     [Fact]
     public async Task MarkCandidatesBlocklistedRejectsTheMatchingCandidate() {
         await using var db = CreateContext();
@@ -182,6 +454,131 @@ public sealed class EfAcquisitionStoreTests {
     }
 
     [Fact]
+    public async Task ReacquireTeardownCreatesAndReturnsOneDurablyLinkedReplacement() {
+        await using var db = CreateContext();
+        var now = DateTimeOffset.UtcNow;
+        var entityId = AddWantedEntity(db, EntityKindRegistry.Movie.Code, "Arrival");
+        var acquisitionId = Guid.NewGuid();
+        db.Acquisitions.Add(new AcquisitionRow {
+            Id = acquisitionId,
+            EntityId = entityId,
+            Kind = EntityKind.Movie,
+            Status = AcquisitionStatus.Stopping,
+            TeardownIntent = AcquisitionTeardownIntent.Reacquire,
+            TeardownOriginalStatus = AcquisitionStatus.Imported,
+            Title = "Arrival",
+            IdentityNamespace = "tmdb",
+            IdentityValue = "329865",
+            CreatedAt = now,
+            UpdatedAt = now
+        });
+        await db.SaveChangesAsync();
+        var store = AcquisitionTestFactory.Store(db);
+
+        var first = await store.GetOrCreateTeardownReplacementAsync(acquisitionId, CancellationToken.None);
+        var second = await store.GetOrCreateTeardownReplacementAsync(acquisitionId, CancellationToken.None);
+
+        Assert.NotNull(first);
+        Assert.Equal(first, second);
+        var owner = await db.Acquisitions.AsNoTracking().SingleAsync(row => row.Id == acquisitionId);
+        Assert.Equal(first, owner.TeardownReplacementAcquisitionId);
+        Assert.Equal(2, await db.Acquisitions.CountAsync());
+        Assert.Equal(
+            AcquisitionStatus.Pending,
+            (await db.Acquisitions.AsNoTracking().SingleAsync(row => row.Id == first)).Status);
+        Assert.True(db.Model.FindEntityType(typeof(AcquisitionRow))!
+            .FindProperty(nameof(AcquisitionRow.TeardownReplacementAcquisitionId))!
+            .IsConcurrencyToken);
+    }
+
+    [Fact]
+    public async Task TransferPersistenceCannotReplaceATeardownOwnedPointer() {
+        await using var db = CreateContext();
+        var now = DateTimeOffset.UtcNow;
+        var acquisitionId = Guid.NewGuid();
+        var clientId = Guid.NewGuid();
+        db.Acquisitions.Add(new AcquisitionRow {
+            Id = acquisitionId,
+            Status = AcquisitionStatus.Stopping,
+            TeardownIntent = AcquisitionTeardownIntent.Remove,
+            TeardownOriginalStatus = AcquisitionStatus.Queued,
+            Title = "Arrival",
+            ExternalIdsJson = "{}",
+            SourceUrlsJson = "[]",
+            CreatedAt = now,
+            UpdatedAt = now
+        });
+        db.DownloadTransfers.Add(new DownloadTransferRow {
+            Id = Guid.NewGuid(),
+            AcquisitionId = acquisitionId,
+            ClientItemId = "superseded-item",
+            CreatedAt = now,
+            UpdatedAt = now
+        });
+        await db.SaveChangesAsync();
+        var store = AcquisitionTestFactory.Store(db);
+
+        var queued = await store.CreateTransferAsync(
+            acquisitionId,
+            clientId,
+            "accepted-after-claim",
+            "prismedia",
+            CancellationToken.None);
+
+        Assert.False(queued);
+        var pointer = await db.DownloadTransfers.AsNoTracking().SingleAsync();
+        Assert.Equal(acquisitionId, pointer.AcquisitionId);
+        Assert.Null(pointer.DownloadClientConfigId);
+        Assert.Equal("superseded-item", pointer.ClientItemId);
+        Assert.Equal(AcquisitionStatus.Stopping, await store.GetStatusAsync(acquisitionId, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task DurableAddPlaceholderIsIdempotentAndExcludedFromNormalTransferPolling() {
+        await using var db = CreateContext();
+        var now = DateTimeOffset.UtcNow;
+        var acquisitionId = Guid.NewGuid();
+        var clientId = Guid.NewGuid();
+        db.Acquisitions.Add(new AcquisitionRow {
+            Id = acquisitionId,
+            Status = AcquisitionStatus.Queued,
+            Title = "Dune",
+            ExternalIdsJson = "{}",
+            SourceUrlsJson = "[]",
+            CreatedAt = now,
+            UpdatedAt = now
+        });
+        await db.SaveChangesAsync();
+        var store = AcquisitionTestFactory.Store(db);
+
+        Assert.True(await store.BeginTransferAddAsync(
+            acquisitionId, clientId, "abc123", "prismedia", null, CancellationToken.None));
+        Assert.True(await store.BeginTransferAddAsync(
+            acquisitionId, clientId, "abc123", "prismedia", null, CancellationToken.None));
+
+        var placeholder = await db.DownloadTransfers.AsNoTracking().SingleAsync();
+        Assert.Equal(TransferOwnershipState.Adding.ToCode(), placeholder.State);
+        Assert.Equal("abc123", placeholder.ClientItemId);
+        Assert.Empty(await store.ListActiveTransfersAsync(CancellationToken.None));
+        Assert.False(await store.HasActiveTransfersAsync(CancellationToken.None));
+
+        Assert.True(await store.CompleteTransferAddAsync(
+            acquisitionId,
+            clientId,
+            "abc123",
+            "native-id",
+            new SelectedRelease("Dune release", "Indexer", "abc123"),
+            "Sent to download client.",
+            CancellationToken.None));
+        Assert.Equal("native-id", (await store.ListActiveTransfersAsync(CancellationToken.None)).Single().ClientItemId);
+        Assert.True(await store.HasActiveTransfersAsync(CancellationToken.None));
+        Assert.Equal("Dune release", (await store.GetSelectedReleaseAsync(acquisitionId, CancellationToken.None))?.Title);
+        var detail = (await store.GetAsync(acquisitionId, CancellationToken.None))!;
+        Assert.Equal(AcquisitionStatus.Queued, detail.Summary.Status);
+        Assert.Equal("Sent to download client.", detail.Summary.StatusMessage);
+    }
+
+    [Fact]
     public async Task EnrichMetadataFillsGapsWithoutClobbering() {
         await using var db = CreateContext();
         var now = DateTimeOffset.UtcNow;
@@ -215,6 +612,13 @@ public sealed class EfAcquisitionStoreTests {
         var now = DateTimeOffset.UtcNow;
         var acquisitionId = Guid.NewGuid();
         var entityId = Guid.NewGuid();
+        db.Entities.Add(new EntityRow {
+            Id = entityId,
+            KindCode = EntityKindRegistry.Book.Code,
+            Title = "Book",
+            CreatedAt = now,
+            UpdatedAt = now
+        });
         db.Acquisitions.Add(new AcquisitionRow { Id = acquisitionId, Status = AcquisitionStatus.Imported, Title = "B", ExternalIdsJson = "{}", SourceUrlsJson = "[]", CreatedAt = now, UpdatedAt = now });
         db.BookDetails.Add(new BookDetailRow { EntityId = entityId, Format = BookFormat.Epub });
         db.AcquisitionImportHints.Add(new AcquisitionImportHintRow {
@@ -235,6 +639,13 @@ public sealed class EfAcquisitionStoreTests {
         var now = DateTimeOffset.UtcNow;
         var acquisitionId = Guid.NewGuid();
         var entityId = Guid.NewGuid();
+        db.Entities.Add(new EntityRow {
+            Id = entityId,
+            KindCode = EntityKindRegistry.Book.Code,
+            Title = "Book",
+            CreatedAt = now,
+            UpdatedAt = now
+        });
         db.Acquisitions.Add(new AcquisitionRow { Id = acquisitionId, Status = AcquisitionStatus.Imported, Title = "B", ExternalIdsJson = "{}", SourceUrlsJson = "[]", CreatedAt = now, UpdatedAt = now });
         db.BookDetails.Add(new BookDetailRow { EntityId = entityId, Format = BookFormat.Epub, SourceTier = BookSourceTier.Unknown });
         db.AcquisitionImportHints.Add(new AcquisitionImportHintRow {
@@ -283,6 +694,24 @@ public sealed class EfAcquisitionStoreTests {
     }
 
     [Fact]
+    public async Task BindWantedBookRetriesWhenAnExistingEntityIsLifecycleClaimed() {
+        await using var db = CreateContext();
+        var entityId = AddWantedEntity(db, EntityKindRegistry.Book.Code, "Elantris");
+        AddHintWithEntity(db, entityId, "/media/books/Author/Title/Title.epub");
+        await db.SaveChangesAsync();
+
+        var exception = await Assert.ThrowsAsync<EntityLifecycleMutationConflictException>(() =>
+            new AcquisitionHintApplier(db, lifecycle: new RejectingLifecycleLease())
+                .BindWantedEntityAsync(
+                    EntityKind.Book,
+                    "/media/books/Author/Title/Title.epub",
+                    CancellationToken.None));
+
+        Assert.Equal(entityId, exception.EntityId);
+        Assert.Empty(await db.EntityFiles.AsNoTracking().ToArrayAsync());
+    }
+
+    [Fact]
     public async Task BindWantedBookNeverRebindsAnEntityThatAlreadyHasASource() {
         await using var db = CreateContext();
         var entityId = AddWantedEntity(db, EntityKindRegistry.Book.Code, "Elantris");
@@ -317,6 +746,30 @@ public sealed class EfAcquisitionStoreTests {
         Assert.Equal("/media/books/Brandon Sanderson", file.Path);
         // The book itself stays wanted until its own path binds.
         Assert.True((await db.Entities.AsNoTracking().FirstAsync(row => row.Id == bookId)).IsWanted);
+    }
+
+    [Fact]
+    public async Task BindWantedParentWalksAnArbitrarilyDeepEntityHierarchy() {
+        await using var db = CreateContext();
+        var authorId = AddWantedEntity(db, EntityKindRegistry.BookAuthor.Code, "Author");
+        var levelOne = AddWantedEntity(db, EntityKindRegistry.Book.Code, "Level 1", authorId);
+        var levelTwo = AddWantedEntity(db, EntityKindRegistry.Book.Code, "Level 2", levelOne);
+        var levelThree = AddWantedEntity(db, EntityKindRegistry.Book.Code, "Level 3", levelTwo);
+        var levelFour = AddWantedEntity(db, EntityKindRegistry.Book.Code, "Level 4", levelThree);
+        var leafId = AddWantedEntity(db, EntityKindRegistry.Book.Code, "Leaf", levelFour);
+        AddHintWithEntity(db, leafId, "/media/books/Author/Leaf.epub");
+        await db.SaveChangesAsync();
+
+        var bound = await new AcquisitionHintApplier(db).BindWantedParentAsync(
+            EntityKind.BookAuthor,
+            "/media/books/Author",
+            CancellationToken.None);
+
+        Assert.True(bound);
+        Assert.False((await db.Entities.AsNoTracking().SingleAsync(row => row.Id == authorId)).IsWanted);
+        Assert.Equal(
+            "/media/books/Author",
+            (await db.EntityFiles.AsNoTracking().SingleAsync(row => row.EntityId == authorId)).Path);
     }
 
     [Fact]
@@ -401,7 +854,7 @@ public sealed class EfAcquisitionStoreTests {
             Title = "Show",
             Kind = EntityKind.VideoSeason,
             FinalSourcePath = "/media/tv/Show",
-            TvImportCheckpointJson = "{not-valid-json",
+            ImportCheckpointJson = "{not-valid-json",
             ExternalIdsJson = "{}",
             SourceUrlsJson = "[]",
             CreatedAt = now,
@@ -599,7 +1052,7 @@ public sealed class EfAcquisitionStoreTests {
         var acquisitionId = AddCheckpointAcquisition(db);
         await db.SaveChangesAsync();
         var row = await db.Acquisitions.SingleAsync(value => value.Id == acquisitionId);
-        row.TvImportCheckpointJson = InvalidTvCheckpointJson(invalidCase);
+        row.ImportCheckpointJson = InvalidTvCheckpointJson(invalidCase);
         await db.SaveChangesAsync();
 
         var exception = await Assert.ThrowsAsync<InvalidDataException>(() =>
@@ -722,6 +1175,34 @@ public sealed class EfAcquisitionStoreTests {
             Id = Guid.NewGuid(), AcquisitionId = acquisitionId, IndexerName = indexer, Title = title,
             InfoHash = infoHash, Accepted = true, Score = score, Protocol = DownloadProtocol.Torrent, RejectionsJson = "[]", CreatedAt = now
         });
+    }
+
+    private static ScoredRelease Scored(string title, string infoHash) =>
+        new(
+            new IndexerRelease(
+                title,
+                1_000,
+                10,
+                2,
+                DownloadProtocol.Torrent,
+                "https://indexer.test/download",
+                null,
+                infoHash,
+                null,
+                null,
+                DateTimeOffset.UtcNow),
+            Guid.NewGuid(),
+            "Indexer",
+            Accepted: true,
+            Score: 100,
+            Rejections: []);
+
+    private sealed class RejectingLifecycleLease : IEntityLifecycleMutationLease {
+        public Task<bool> ExecuteAsync(
+            Guid entityId,
+            Func<CancellationToken, Task> mutation,
+            CancellationToken cancellationToken) =>
+            Task.FromResult(false);
     }
 
     private static PrismediaDbContext CreateContext() =>

@@ -32,6 +32,7 @@ public sealed partial class EntityMetadataApplyService : IEntityMetadataPatchSer
     private readonly IEntityExternalIdentityStore _externalIdentities;
     private readonly IEntityProviderIdentityStore? _providerIdentities;
     private readonly IPluginIdentityRouter? _identityRouter;
+    private readonly IEntityLifecycleMutationLease _lifecycle;
     private readonly PluginArtworkDownloader _artwork;
     private readonly IGridThumbnailService? _gridThumbnails;
 
@@ -56,11 +57,15 @@ public sealed partial class EntityMetadataApplyService : IEntityMetadataPatchSer
         IGridThumbnailService? gridThumbnails = null,
         IEntityExternalIdentityStore? externalIdentities = null,
         IEntityProviderIdentityStore? providerIdentities = null,
-        IPluginIdentityRouter? identityRouter = null) {
+        IPluginIdentityRouter? identityRouter = null,
+        IEntityLifecycleMutationLease? lifecycle = null) {
         _db = db;
         _externalIdentities = externalIdentities ?? new EfEntityExternalIdentityStore(db, TimeProvider.System);
         _providerIdentities = providerIdentities;
         _identityRouter = identityRouter;
+        _lifecycle = lifecycle ?? new EfEntityLifecycleMutationLease(
+            db,
+            new EfEntityHierarchyReader(db));
         _artwork = new PluginArtworkDownloader(db, options, http);
         _gridThumbnails = gridThumbnails;
     }
@@ -108,6 +113,44 @@ public sealed partial class EntityMetadataApplyService : IEntityMetadataPatchSer
         var fields = EntityMetadataPatchValidator.NormalizeFieldSet(request.Fields);
         EntityMetadataPatchValidator.Validate(fields, request.Patch);
 
+        await _artwork.StageAsync(
+            (request.SelectedImages?.Values ?? [])
+                .Concat(ProposalArtworkUrls(request.Children ?? []))
+                .Concat(ProposalArtworkUrls(request.Relationships ?? [])),
+            cancellationToken);
+
+        var result = EntityMetadataPatchResult.NotFound;
+        bool accepted;
+        try {
+            accepted = await _lifecycle.ExecuteAsync(
+                entityId,
+                async leaseCancellationToken => result = await ApplyPatchWithinLifecycleAsync(
+                    entityId,
+                    request,
+                    expectedKind,
+                    fields,
+                    leaseCancellationToken),
+                cancellationToken);
+        } catch {
+            _artwork.RollbackStagedWrites();
+            throw;
+        }
+        if (accepted && result == EntityMetadataPatchResult.Applied) {
+            _artwork.CommitStagedWrites();
+            await RefreshGridThumbnailsForDownloadedArtworkAsync(cancellationToken);
+        } else {
+            _artwork.RollbackStagedWrites();
+        }
+        return accepted ? result : EntityMetadataPatchResult.NotFound;
+    }
+
+    private async Task<EntityMetadataPatchResult> ApplyPatchWithinLifecycleAsync(
+        Guid entityId,
+        EntityMetadataUpdateRequest request,
+        string? expectedKind,
+        ISet<string> fields,
+        CancellationToken cancellationToken) {
+
         var entity = await _db.Entities
             .FirstOrDefaultAsync(row => row.Id == entityId, cancellationToken);
         if (entity is null) {
@@ -144,7 +187,6 @@ public sealed partial class EntityMetadataApplyService : IEntityMetadataPatchSer
 
         entity.UpdatedAt = now;
         await _db.SaveChangesAsync(cancellationToken);
-        await RefreshGridThumbnailsForDownloadedArtworkAsync(cancellationToken);
         return EntityMetadataPatchResult.Applied;
     }
 
@@ -268,6 +310,47 @@ public sealed partial class EntityMetadataApplyService : IEntityMetadataPatchSer
         ArgumentNullException.ThrowIfNull(proposal);
         ArgumentNullException.ThrowIfNull(selectedFields);
 
+        await _artwork.StageAsync(
+            (selectedImages?.Values ?? [])
+                .Concat(ProposalArtworkUrls([proposal])),
+            cancellationToken);
+
+        var applied = false;
+        bool accepted;
+        try {
+            accepted = await _lifecycle.ExecuteAsync(
+                entityId,
+                async leaseCancellationToken => applied = await ApplyWithinLifecycleAsync(
+                    entityId,
+                    proposal,
+                    selectedFields,
+                    selectedImages,
+                    progress,
+                    identifyEligibility,
+                    leaseCancellationToken),
+                cancellationToken);
+        } catch {
+            _artwork.RollbackStagedWrites();
+            throw;
+        }
+        if (accepted && applied) {
+            _artwork.CommitStagedWrites();
+            await RefreshGridThumbnailsForDownloadedArtworkAsync(cancellationToken);
+        } else {
+            _artwork.RollbackStagedWrites();
+        }
+        return accepted && applied;
+    }
+
+    private async Task<bool> ApplyWithinLifecycleAsync(
+        Guid entityId,
+        EntityMetadataProposal proposal,
+        IReadOnlyCollection<string> selectedFields,
+        IReadOnlyDictionary<string, string?>? selectedImages,
+        IIdentifyApplyProgressReporter? progress,
+        IIdentifyTargetEligibilityService? identifyEligibility,
+        CancellationToken cancellationToken) {
+
         var entity = await _db.Entities
             .FirstOrDefaultAsync(row => row.Id == entityId, cancellationToken);
         if (entity is null) {
@@ -351,8 +434,23 @@ public sealed partial class EntityMetadataApplyService : IEntityMetadataPatchSer
 
         entity.UpdatedAt = now;
         await _db.SaveChangesAsync(cancellationToken);
-        await RefreshGridThumbnailsForDownloadedArtworkAsync(cancellationToken);
         return true;
+    }
+
+    private static IEnumerable<string?> ProposalArtworkUrls(
+        IEnumerable<EntityMetadataProposal> proposals) {
+        var pending = new Stack<EntityMetadataProposal>(proposals.Reverse());
+        while (pending.TryPop(out var proposal)) {
+            foreach (var image in proposal.Images) {
+                yield return image.Url;
+            }
+            foreach (var child in EntityMetadataProposalTraversal.StructuralChildren(proposal).Reverse()) {
+                pending.Push(child);
+            }
+            foreach (var relationship in EntityMetadataProposalTraversal.Relationships(proposal).Reverse()) {
+                pending.Push(relationship);
+            }
+        }
     }
 
 }

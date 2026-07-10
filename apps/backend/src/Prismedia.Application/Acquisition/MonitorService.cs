@@ -5,11 +5,17 @@ using Prismedia.Domain.Entities;
 namespace Prismedia.Application.Acquisition;
 
 /// <summary>
-/// Application use case for monitors: start/stop/pause/resume monitoring of a wanted acquisition or a
-/// library container entity, and list the monitored items. Starting a monitor denormalizes the target's
-/// title onto the monitor so the monitored list and re-search labels stand alone.
+/// Application use case for stable Entity monitoring: start/stop/pause/resume the durable intent, attach
+/// transient acquisition work when needed, and list monitored items. Starting a monitor denormalizes the
+/// target's title so the monitored list and re-search labels stand alone.
 /// </summary>
-public sealed class MonitorService(IMonitorStore monitors, IAcquisitionStore acquisitions, IWantedEntityWriter entities, IProviderTrackingCatalog tracking) {
+public sealed class MonitorService(
+    IMonitorStore monitors,
+    IAcquisitionStore acquisitions,
+    IWantedEntityWriter entities,
+    IProviderTrackingCatalog tracking,
+    EntityUnmonitorService unmonitoring,
+    IWantedSuppressionStore suppressions) {
     public Task<IReadOnlyList<MonitorView>> ListAsync(CancellationToken cancellationToken) =>
         monitors.ListAsync(cancellationToken);
 
@@ -54,71 +60,194 @@ public sealed class MonitorService(IMonitorStore monitors, IAcquisitionStore acq
         }
 
         var summary = detail.Summary;
-        return await monitors.StartAsync(acquisitionId, summary.Kind, summary.Title, summary.Author, cancellationToken);
+        if (summary.EntityId is not { } entityId) {
+            return await monitors.StartAsync(
+                acquisitionId,
+                summary.Kind,
+                summary.Title,
+                summary.Author,
+                cancellationToken);
+        }
+
+        MonitorView? monitor = null;
+        var accepted = await monitors.ExecuteIfEntityLifecycleMutableAsync(
+            entityId,
+            async leaseCancellationToken => monitor = await monitors.StartAsync(
+                acquisitionId,
+                summary.Kind,
+                summary.Title,
+                summary.Author,
+                leaseCancellationToken),
+            cancellationToken);
+        if (!accepted) {
+            throw LifecycleConflict();
+        }
+        return monitor;
     }
 
     /// <summary>
-    /// Starts (or re-activates) a container monitor watching a library entity (an author, an artist) for
-    /// new works. Works for wanted placeholders and real scanned-in entities alike, as long as the
-    /// entity carries a provider identity an enabled metadata plugin can track — re-resolve by id on the
-    /// daily sync (a scanned-in author gains one the moment Identify runs). Returns null when the entity
-    /// is missing, isn't a monitorable container kind, or no plugin can track its provider identities.
+    /// Starts (or re-activates) the stable monitor for a library Entity. Grouping Entities discover
+    /// children; leaves retain on/off intent and attach acquisition work when required by their registry
+    /// descriptor. Wanted placeholders and source-backed Entities use the same path. Returns null when the
+    /// Entity is missing, its kind is not committable, or no enabled plugin can track its provider route.
     /// </summary>
     public async Task<MonitorView?> StartForEntityAsync(Guid entityId, MonitorPreset? preset, CancellationToken cancellationToken) {
-        var (container, trackable) = await ResolveEligibilityAsync(entityId, cancellationToken);
-        if (container is null || trackable.Count == 0) {
+        var (entity, trackable) = await ResolveEligibilityAsync(entityId, cancellationToken);
+        if (entity is null || trackable.Count == 0) {
             return null;
         }
-
         // A null preset (the bare monitor toggle) keeps whatever preset a prior request recorded, or the All
         // default for a fresh container — so a hand toggle never narrows an author's discovery scope. A
         // caller that passes a preset (choosing one on the series page) records it.
-        return await monitors.StartForEntityAsync(entityId, container.Kind, container.Title, targeting: null, preset, cancellationToken);
+        MonitorView? monitor = null;
+        var accepted = await monitors.ExecuteIfEntityLifecycleMutableAsync(
+            entityId,
+            async leaseCancellationToken => {
+                // Re-read the authoritative provider binding inside the stable Entity lease. A stale
+                // preflight must not publish intent for a route that changed while deletion was claiming.
+                var (currentEntity, currentTrackable) = await ResolveEligibilityAsync(
+                    entityId,
+                    leaseCancellationToken);
+                if (currentEntity is null || currentTrackable.Count == 0) {
+                    return;
+                }
+
+                monitor = await monitors.StartForEntityAsync(
+                    entityId,
+                    currentEntity.Kind,
+                    currentEntity.Title,
+                    targeting: null,
+                    preset,
+                    leaseCancellationToken);
+                if (monitor.Status == MonitorStatus.Active) {
+                    // Explicitly monitoring the root again removes its child-off override. Descendants
+                    // were never suppressed, so a parent monitor can rediscover them on its next sync.
+                    await suppressions.ClearAsync(
+                        currentEntity.ExternalIdentities,
+                        leaseCancellationToken);
+                }
+            },
+            cancellationToken);
+        if (!accepted) {
+            throw LifecycleConflict();
+        }
+
+        return monitor;
     }
 
     /// <summary>
-    /// Whether the entity can carry a standing container monitor: it must be a monitorable container kind
-    /// and hold a provider identity some enabled plugin can track (lookup by id). An authoritative
-    /// binding surfaces the actual plugin id so the UI can say which plugin the watch would ride on.
+    /// Whether the Entity can carry a stable monitor: its registry kind must be committable and its
+    /// authoritative provider identity must be trackable by an enabled plugin. The provider list lets the
+    /// UI explain which plugin owns the durable identity route.
     /// </summary>
     public async Task<MonitorEligibilityView> GetEligibilityAsync(Guid entityId, CancellationToken cancellationToken) {
-        var (_, trackable) = await ResolveEligibilityAsync(entityId, cancellationToken);
-        return new MonitorEligibilityView(trackable.Count > 0, trackable);
+        var (entity, trackable) = await ResolveEligibilityAsync(entityId, cancellationToken);
+        var descriptor = entity is null
+            ? null
+            : RequestKindRegistry.All.FirstOrDefault(candidate =>
+                candidate.Committable && candidate.WantedEntityKind == entity.Kind);
+        var childDescriptor = descriptor is null ? null : RequestKindRegistry.ChildOf(descriptor);
+        var canSearchMissingChildren = descriptor is not null
+            && RequestKindRegistry.CanSearchMissingChildren(descriptor);
+        return new MonitorEligibilityView(
+            descriptor is not null && trackable.Count > 0,
+            trackable,
+            descriptor?.IsContainer ?? false,
+            canSearchMissingChildren,
+            canSearchMissingChildren ? childDescriptor!.WantedEntityKind : null);
     }
 
     /// <summary>
-    /// Loads the entity as a monitorable container and validates its authoritative provider route when
-    /// present. Unbound legacy Entities retain namespace-based route discovery. The container is null
-    /// (and the list empty) when the entity is missing or isn't a monitorable container kind.
+    /// Returns the bounded direct monitoring snapshot for the requested Entity ids. Entity/identity,
+    /// monitor, and latest-acquisition persistence are each batch-loaded; plugin route validation is
+    /// delegated as one catalog batch. Input order is preserved after de-duplication, including missing ids.
     /// </summary>
-    private async Task<(MonitorableContainer? Container, IReadOnlyList<string> Trackable)> ResolveEligibilityAsync(
+    public async Task<IReadOnlyList<EntityMonitorStateView>> GetStatesAsync(
+        IReadOnlyCollection<Guid> entityIds,
+        CancellationToken cancellationToken) {
+        var requestedIds = entityIds.Distinct().ToArray();
+        if (requestedIds.Length == 0) {
+            return [];
+        }
+
+        // All three production adapters share this scoped unit of work. Keep the bounded queries sequential:
+        // EF Core forbids concurrent operations on one DbContext, while this remains three SQL reads rather
+        // than an Entity-count-dependent N+1.
+        var eligibilityEntities = await entities.ListMonitorEligibilityEntitiesAsync(
+            requestedIds,
+            cancellationToken);
+        var monitorByEntity = await monitors.ListByEntityIdsAsync(requestedIds, cancellationToken);
+        var acquisitionByEntity = await acquisitions.ListLatestSummariesForEntityIdsAsync(
+            requestedIds,
+            cancellationToken);
+        var descriptors = eligibilityEntities.Values.ToDictionary(
+            entity => entity.EntityId,
+            entity => RequestKindRegistry.All.FirstOrDefault(candidate =>
+                candidate.Committable && candidate.WantedEntityKind == entity.Kind));
+        var trackingQueries = eligibilityEntities.Values
+            .Where(entity => descriptors.GetValueOrDefault(entity.EntityId) is not null)
+            .Select(entity => new ProviderTrackingQuery(
+                entity.EntityId,
+                descriptors[entity.EntityId]!.PluginKindCode,
+                entity.ExternalIdentities,
+                entity.ProviderIdentity))
+            .ToArray();
+        var trackableByEntity = await tracking.TrackableProvidersBatchAsync(
+            trackingQueries,
+            cancellationToken);
+        return requestedIds.Select(entityId => {
+            var descriptor = descriptors.GetValueOrDefault(entityId);
+            var childDescriptor = descriptor is null ? null : RequestKindRegistry.ChildOf(descriptor);
+            var canSearchMissingChildren = descriptor is not null
+                && RequestKindRegistry.CanSearchMissingChildren(descriptor);
+            var eligibilityEntity = eligibilityEntities.GetValueOrDefault(entityId);
+            var trackable = trackableByEntity.GetValueOrDefault(entityId) ?? [];
+            return new EntityMonitorStateView(
+                entityId,
+                descriptor is not null && trackable.Count > 0,
+                eligibilityEntity?.IsWanted == true && descriptor?.Committable == true,
+                trackable,
+                descriptor?.IsContainer ?? false,
+                canSearchMissingChildren,
+                canSearchMissingChildren ? childDescriptor!.WantedEntityKind : null,
+                monitorByEntity.GetValueOrDefault(entityId),
+                acquisitionByEntity.GetValueOrDefault(entityId));
+        }).ToArray();
+    }
+
+    /// <summary>
+    /// Loads the monitorable Entity and validates its authoritative provider route. Monitoring fails
+    /// closed when the stable plugin + identity binding is absent; the Entity is also ineligible when it
+    /// is missing or its registry kind is not committable.
+    /// </summary>
+    private async Task<(MonitorableEntity? Entity, IReadOnlyList<string> Trackable)> ResolveEligibilityAsync(
         Guid entityId, CancellationToken cancellationToken) {
-        var container = await entities.GetContainerAsync(entityId, cancellationToken);
-        if (container is null || container.ProviderIdentity is null) {
+        var entity = await entities.GetEntityAsync(entityId, cancellationToken);
+        if (entity is null) {
             return (null, []);
         }
 
         var descriptor = RequestKindRegistry.All.FirstOrDefault(candidate =>
-            candidate is { IsContainer: true, Committable: true } && candidate.WantedEntityKind == container.Kind);
-        if (descriptor is null) {
-            return (null, []);
+            candidate.Committable && candidate.WantedEntityKind == entity.Kind);
+        if (descriptor is null || entity.ProviderIdentity is null) {
+            return (entity, []);
         }
 
         var trackable = await tracking.TrackableProvidersAsync(
             descriptor.PluginKindCode,
-            container.ExternalIdentities,
-            container.ProviderIdentity,
+            entity.ExternalIdentities,
+            entity.ProviderIdentity,
             cancellationToken);
-        return (container, trackable);
+        return (entity, trackable);
     }
 
-    /// <summary>The container monitor watching an entity, or null when it is not monitored.</summary>
+    /// <summary>The stable monitor targeting an Entity, or null when it is not monitored.</summary>
     public Task<MonitorView?> GetForEntityAsync(Guid entityId, CancellationToken cancellationToken) =>
         monitors.GetByEntityAsync(entityId, cancellationToken);
 
     /// <summary>
-    /// Stamps the entity's container monitor as just-searched after a manual sync, so the daily sweep's
-    /// clock restarts from now instead of double-syncing. A no-op when the entity isn't monitored.
+    /// Stamps the Entity monitor as just-searched after manual work, so the sweep's clock restarts from
+    /// now instead of immediately repeating it. A no-op when the Entity is not monitored.
     /// </summary>
     public async Task MarkEntitySearchedAsync(Guid entityId, CancellationToken cancellationToken) {
         var monitor = await monitors.GetByEntityAsync(entityId, cancellationToken);
@@ -127,12 +256,46 @@ public sealed class MonitorService(IMonitorStore monitors, IAcquisitionStore acq
         }
     }
 
-    public Task<bool> StopAsync(Guid monitorId, CancellationToken cancellationToken) =>
-        monitors.DeleteAsync(monitorId, cancellationToken);
+    /// <summary>
+    /// Stops monitoring the target Entity subtree and removes all acquisition-only state it governed.
+    /// Source-backed Entities/files remain; an unsafe active import rejects the whole operation before
+    /// anything is claimed or deleted.
+    /// </summary>
+    public Task<MonitorStopResult> StopAsync(Guid monitorId, CancellationToken cancellationToken) =>
+        unmonitoring.StopAsync(monitorId, cancellationToken);
 
     public Task<bool> PauseAsync(Guid monitorId, CancellationToken cancellationToken) =>
-        monitors.SetStatusAsync(monitorId, MonitorStatus.Paused, cancellationToken);
+        SetExplicitStatusAsync(monitorId, MonitorStatus.Paused, cancellationToken);
 
     public Task<bool> ResumeAsync(Guid monitorId, CancellationToken cancellationToken) =>
-        monitors.SetStatusAsync(monitorId, MonitorStatus.Active, cancellationToken);
+        SetExplicitStatusAsync(monitorId, MonitorStatus.Active, cancellationToken);
+
+    private async Task<bool> SetExplicitStatusAsync(
+        Guid monitorId,
+        MonitorStatus status,
+        CancellationToken cancellationToken) {
+        var monitor = (await monitors.ListAsync(cancellationToken))
+            .FirstOrDefault(candidate => candidate.Id == monitorId);
+        if (monitor is null) {
+            return false;
+        }
+        if (monitor.EntityId is not { } entityId) {
+            return await monitors.SetStatusAsync(monitorId, status, cancellationToken);
+        }
+
+        var changed = false;
+        var accepted = await monitors.ExecuteIfEntityLifecycleMutableAsync(
+            entityId,
+            async leaseCancellationToken => changed = await monitors.SetStatusAsync(
+                monitorId,
+                status,
+                leaseCancellationToken),
+            cancellationToken);
+        return accepted && changed;
+    }
+
+    private static AcquisitionConfigurationException LifecycleConflict() =>
+        new(
+            Prismedia.Contracts.System.ApiProblemCodes.AcquisitionInvalid,
+            "This Entity is being cleaned up. Wait for that operation to finish, then try again.");
 }

@@ -29,6 +29,19 @@ public sealed class EntityRow {
     public bool IsWanted { get; set; }
 
     /// <summary>
+    /// Durable destructive operation that currently owns this Entity subtree. Explicit monitoring,
+    /// request, and provider-materialization mutations must reject the target and its descendants while
+    /// this value is present.
+    /// </summary>
+    public Prismedia.Domain.Entities.EntityLifecycleClaimKind? LifecycleClaimKind { get; set; }
+
+    /// <summary>Stable id of the operation that published <see cref="LifecycleClaimKind"/>.</summary>
+    public Guid? LifecycleClaimId { get; set; }
+
+    /// <summary>When the current lifecycle claim was first published.</summary>
+    public DateTimeOffset? LifecycleClaimedAt { get; set; }
+
+    /// <summary>
     /// Count of completed auto-identify runs that ended without a confident match. Once this
     /// reaches the policy maximum the entity is skipped by auto identify and must be identified
     /// manually.

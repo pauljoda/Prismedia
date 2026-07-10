@@ -7,21 +7,21 @@ using Prismedia.Infrastructure.Persistence.Entities;
 namespace Prismedia.Infrastructure.Tests;
 
 /// <summary>
-/// Covers the season-pack completeness gate in the due sweep: an imported VideoSeason monitor only
-/// fulfills once the import scan has reconciled the pack AND no episode phantom under the season is
-/// still wanted. Gaps surface as <see cref="Prismedia.Application.Acquisition.DueMonitor.EpisodeFallback"/>
-/// dues (the handler then requests each missing episode individually) instead of fulfilling with holes.
+/// Covers the season-pack completeness gate in the due sweep. Gaps surface as
+/// <see cref="Prismedia.Application.Acquisition.DueMonitor.MissingChildFallback"/> dues (the handler then
+/// requests each missing episode individually). Once complete, transient acquisition bookkeeping is
+/// detached while the stable Entity monitor remains active until the user explicitly turns it off.
 /// </summary>
 public sealed class EfMonitorStoreSeasonFallbackTests {
     [Fact]
-    public async Task ImportedSeasonWithWantedEpisodesIsDueForEpisodeFallback() {
+    public async Task ImportedSeasonWithWantedEpisodesIsDueForMissingChildFallback() {
         await using var db = CreateContext();
         var (store, seasonEntityId, _) = await SeedImportedSeasonAsync(db, wantedEpisodes: 2, hintConsumed: true);
 
         var due = await store.ListDueMonitorsAsync(360, CancellationToken.None);
 
         var fallback = Assert.Single(due);
-        Assert.True(fallback.EpisodeFallback);
+        Assert.True(fallback.MissingChildFallback);
         Assert.Equal(seasonEntityId, fallback.EntityId);
         // The monitor must NOT fulfill while the season has holes — the handler fulfills after covering them.
         Assert.Equal(MonitorStatus.Active, (await store.ListAsync(CancellationToken.None))[0].Status);
@@ -39,16 +39,18 @@ public sealed class EfMonitorStoreSeasonFallbackTests {
     }
 
     [Fact]
-    public async Task ImportedSeasonWithNoWantedEpisodesFulfills() {
+    public async Task ImportedSeasonWithNoWantedEpisodesDetachesAcquisitionButKeepsEntityIntentActive() {
         await using var db = CreateContext();
         var (store, _, _) = await SeedImportedSeasonAsync(db, wantedEpisodes: 0, hintConsumed: true);
 
         Assert.Empty(await store.ListDueMonitorsAsync(360, CancellationToken.None));
-        Assert.Equal(MonitorStatus.Fulfilled, (await store.ListAsync(CancellationToken.None))[0].Status);
+        var monitor = Assert.Single(await store.ListAsync(CancellationToken.None));
+        Assert.Equal(MonitorStatus.Active, monitor.Status);
+        Assert.Null(monitor.AcquisitionId);
     }
 
     [Fact]
-    public async Task EpisodeFallbackHonorsTheSearchInterval() {
+    public async Task MissingChildFallbackHonorsTheSearchInterval() {
         await using var db = CreateContext();
         var (store, _, monitorId) = await SeedImportedSeasonAsync(db, wantedEpisodes: 1, hintConsumed: true);
         await store.MarkSearchedAsync(monitorId, CancellationToken.None);

@@ -52,6 +52,32 @@ public sealed class WantedEntityWriterTests {
     }
 
     [Fact]
+    public async Task MovieRootReportsOnDiskWhenItsSourceFileBelongsToADescendant() {
+        await using var db = CreateContext();
+        var movieId = AddEntity(db, EntityKindRegistry.Movie.Code, "Dune", isWanted: false);
+        var videoId = AddEntity(db, EntityKindRegistry.Video.Code, "Dune", isWanted: false, parentEntityId: movieId);
+        AddExternalId(db, movieId, "tmdb", "M1");
+        AddSourceFile(db, videoId, "/media/movies/Dune/Dune.mkv");
+        await db.SaveChangesAsync();
+        var writer = Writer(db);
+
+        var result = await writer.EnsureAsync(
+            EntityKind.Movie,
+            new ExternalIdentity("tmdb", "M1"),
+            "Dune",
+            parentEntityId: null,
+            matchTitleKindWide: false,
+            CancellationToken.None);
+        var monitorable = await writer.GetEntityAsync(movieId, CancellationToken.None);
+
+        Assert.False(result.Created);
+        Assert.Equal(movieId, result.EntityId);
+        Assert.True(result.HasFile);
+        Assert.True(monitorable?.HasSourceFile);
+        Assert.Equal(2, await db.Entities.AsNoTracking().CountAsync());
+    }
+
+    [Fact]
     public async Task EnsureNormalizesTheExternalIdentityBeforeResolvingAndStamping() {
         await using var db = CreateContext();
         var entityId = AddEntity(db, EntityKindRegistry.Book.Code, "Stored title", isWanted: false);
@@ -178,7 +204,7 @@ public sealed class WantedEntityWriterTests {
         AddExternalId(db, authorId, "OpenLibraryWork", " W1 ");
         await db.SaveChangesAsync();
 
-        var container = await Writer(db).GetContainerAsync(authorId, CancellationToken.None);
+        var container = await Writer(db).GetEntityAsync(authorId, CancellationToken.None);
 
         var identity = Assert.Single(container!.ExternalIdentities);
         Assert.Equal(("openlibrarywork", "W1"), (identity.Namespace, identity.Value));
@@ -236,7 +262,55 @@ public sealed class WantedEntityWriterTests {
     }
 
     [Fact]
-    public async Task GetContainerDoesNotRetargetAStalePersistedProviderBinding() {
+    public async Task BindProviderIdentitySelectsTheExactPluginWhenTwoPluginsShareANamespace() {
+        await using var db = CreateContext();
+        var entityId = AddEntity(db, EntityKindRegistry.Book.Code, "Owned title", isWanted: false);
+        var identity = new ExternalIdentity("shared-books", "W1");
+        AddExternalId(db, entityId, identity.Namespace, identity.Value);
+        await db.SaveChangesAsync();
+        var router = new ConfiguredIdentityRouter(
+            new PluginIdentityRoute("alpha-books", identity),
+            new PluginIdentityRoute("zeta-books", identity));
+
+        var bound = await Writer(db, router).BindProviderIdentityAsync(
+            entityId,
+            new PluginIdentityRoute("zeta-books", identity),
+            CancellationToken.None);
+
+        Assert.True(bound);
+        var persisted = Assert.Single(await db.EntityProviderIdentities.AsNoTracking().ToArrayAsync());
+        Assert.Equal(("zeta-books", identity.Namespace, identity.Value),
+            (persisted.PluginId, persisted.IdentityNamespace, persisted.IdentityValue));
+        var entity = await db.Entities.AsNoTracking().SingleAsync(row => row.Id == entityId);
+        Assert.Equal("Owned title", entity.Title);
+        Assert.False(entity.IsWanted);
+    }
+
+    [Fact]
+    public async Task BindProviderIdentityRejectsUnroutableOrUnownedIdentityWithoutPersisting() {
+        await using var db = CreateContext();
+        var entityId = AddEntity(db, EntityKindRegistry.Book.Code, "Owned title", isWanted: false);
+        var ownedIdentity = new ExternalIdentity("shared-books", "W1");
+        var foreignIdentity = new ExternalIdentity("shared-books", "W2");
+        AddExternalId(db, entityId, ownedIdentity.Namespace, ownedIdentity.Value);
+        await db.SaveChangesAsync();
+        var writer = Writer(
+            db,
+            new ConfiguredIdentityRouter(new PluginIdentityRoute("alpha-books", ownedIdentity)));
+
+        Assert.False(await writer.BindProviderIdentityAsync(
+            entityId,
+            new PluginIdentityRoute("untrusted-books", ownedIdentity),
+            CancellationToken.None));
+        Assert.False(await writer.BindProviderIdentityAsync(
+            entityId,
+            new PluginIdentityRoute("alpha-books", foreignIdentity),
+            CancellationToken.None));
+        Assert.Empty(await db.EntityProviderIdentities.AsNoTracking().ToArrayAsync());
+    }
+
+    [Fact]
+    public async Task GetContainerCarriesAStalePersistedProviderBindingWithoutRetargeting() {
         await using var db = CreateContext();
         var entityId = AddEntity(db, EntityKindRegistry.VideoSeries.Code, "Series", isWanted: false);
         AddExternalId(db, entityId, "tmdb", "82728");
@@ -255,10 +329,12 @@ public sealed class WantedEntityWriterTests {
         var router = new ConfiguredIdentityRouter(
             new PluginIdentityRoute("replacement-plugin", new ExternalIdentity("tmdb", "99999")));
 
-        var container = await Writer(db, router).GetContainerAsync(entityId, CancellationToken.None);
+        var container = await Writer(db, router).GetEntityAsync(entityId, CancellationToken.None);
 
         Assert.NotNull(container);
-        Assert.Null(container.ProviderIdentity);
+        Assert.Equal(
+            new PluginIdentityRoute("tmdb", new ExternalIdentity("tmdb", "82728")),
+            container.ProviderIdentity);
         Assert.Equal([new ExternalIdentity("tmdb", "99999")], container.ExternalIdentities);
         Assert.Equal(0, router.CallCount);
     }
@@ -271,7 +347,8 @@ public sealed class WantedEntityWriterTests {
             new EntityMetadataApplyService(db, new PluginArtworkServiceOptions(Path.GetTempPath())),
             new EfEntityExternalIdentityStore(db, TimeProvider.System),
             new EfEntityProviderIdentityStore(db, TimeProvider.System),
-            identityRouter ?? new EmptyIdentityRouter());
+            identityRouter ?? new EmptyIdentityRouter(),
+            new EfEntityHierarchyReader(db));
 
     private sealed class EmptyIdentityRouter : IPluginIdentityRouter {
         public Task<IReadOnlyList<PluginIdentityRoute>> ResolveAsync(

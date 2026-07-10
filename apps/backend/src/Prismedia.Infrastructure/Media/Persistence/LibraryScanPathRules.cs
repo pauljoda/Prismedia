@@ -1,3 +1,5 @@
+using Prismedia.Application.Files;
+
 namespace Prismedia.Infrastructure.Media.Persistence;
 
 internal static class LibraryScanPathRules {
@@ -10,7 +12,7 @@ internal static class LibraryScanPathRules {
         }
 
         var directory = Path.GetDirectoryName(normalizedPath)?.Replace('\\', '/').TrimEnd('/');
-        return string.Equals(directory, normalizedParent, StringComparison.OrdinalIgnoreCase);
+        return string.Equals(directory, normalizedParent, FileSystemPathComparison.Comparison);
     }
 
     public static bool IsPathUnderRoot(string path, string rootPath) {
@@ -21,17 +23,19 @@ internal static class LibraryScanPathRules {
             return false;
         }
 
-        return normalizedPath.Equals(normalizedRoot, StringComparison.OrdinalIgnoreCase) ||
-            normalizedPath.StartsWith(normalizedRoot + "/", StringComparison.OrdinalIgnoreCase);
+        return normalizedPath.Equals(normalizedRoot, FileSystemPathComparison.Comparison) ||
+            normalizedPath.StartsWith(normalizedRoot + "/", FileSystemPathComparison.Comparison);
     }
 
     public static bool IsPathCoveredByExclusion(string path, string excludedPath) {
         var normalizedPath = NormalizePath(path);
         var normalizedExcluded = NormalizePath(excludedPath);
 
-        return normalizedPath.Equals(normalizedExcluded, StringComparison.OrdinalIgnoreCase) ||
-            normalizedPath.StartsWith(normalizedExcluded + "/", StringComparison.OrdinalIgnoreCase) ||
-            normalizedPath.StartsWith(normalizedExcluded + "::", StringComparison.OrdinalIgnoreCase);
+        return normalizedPath.Equals(normalizedExcluded, FileSystemPathComparison.Comparison) ||
+            normalizedPath.StartsWith(normalizedExcluded + "/", FileSystemPathComparison.Comparison) ||
+            normalizedPath.StartsWith(
+                normalizedExcluded + EntitySourcePath.ArchiveMemberSeparator,
+                FileSystemPathComparison.Comparison);
     }
 
     private static string NormalizePath(string path) =>

@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging;
+using Prismedia.Application.Files;
 using Prismedia.Application.Jobs.Ports;
 using Prismedia.Application.Jobs.Scanning;
 using Prismedia.Domain.Entities;
@@ -163,7 +164,7 @@ public abstract class ScanJobHandler(
     private static ScanDelta WithoutFailedPaths(ScanDelta delta, ScanRootOutcome outcome) {
         if (outcome.FailedPaths.Count == 0) return delta;
 
-        var failed = new HashSet<string>(outcome.FailedPaths, StringComparer.OrdinalIgnoreCase);
+        var failed = new HashSet<string>(outcome.FailedPaths, FileSystemPathComparison.Comparer);
         return delta with {
             Added = delta.Added.Where(signature => !failed.Contains(signature.Path)).ToArray(),
             Changed = delta.Changed.Where(signature => !failed.Contains(signature.Path)).ToArray()
@@ -191,7 +192,7 @@ public abstract class ScanJobHandler(
                 root.Path, categories[0], root.Recursive, excluded, cancellationToken);
         }
 
-        var byPath = new Dictionary<string, FileSignature>(StringComparer.OrdinalIgnoreCase);
+        var byPath = new Dictionary<string, FileSignature>(FileSystemPathComparison.Comparer);
         foreach (var category in categories) {
             var signatures = await fileDiscovery.DiscoverFileSignaturesAsync(
                 root.Path, category, root.Recursive, excluded, cancellationToken);

@@ -355,9 +355,8 @@ public sealed record CustomFormatSaveRequest(
 
 /// <summary>A monitored wanted item: the standing intent plus the current state of the acquisition it keeps alive.</summary>
 /// <param name="Preset">
-/// The monitoring preset on a container monitor (an author/artist/series watch): it governs whether the
-/// discovery sync auto-monitors newly discovered works. Meaningful only for container monitors
-/// (<see cref="EntityId"/> set); per-item monitors carry the default <see cref="MonitorPreset.All"/>.
+/// For a grouping Entity (author/artist/series), governs which discovered children are automatically
+/// monitored. Leaf Entity monitors retain the default <see cref="MonitorPreset.All"/> and ignore it.
 /// </param>
 public sealed record MonitorView(
     Guid Id,
@@ -371,6 +370,13 @@ public sealed record MonitorView(
     DateTimeOffset UpdatedAt,
     Guid? EntityId = null,
     MonitorPreset Preset = MonitorPreset.All);
+
+/// <summary>Outcome of a completed recursive unmonitor operation.</summary>
+/// <param name="EntityPruned">
+/// True when the monitor's root Entity was a fileless Wanted placeholder and was removed; false when its
+/// source-backed library Entity remains and the current detail route may refresh in place.
+/// </param>
+public sealed record MonitorStopResponse(bool EntityPruned);
 
 /// <summary>
 /// One row of a Wanted list (Missing or Cutoff Unmet): a monitored item that is not yet in hand, or is in
@@ -415,26 +421,51 @@ public sealed record WantedListItemView(
 public sealed record WantedPageView(IReadOnlyList<WantedListItemView> Items, int Total);
 
 /// <summary>
-/// Whether a library entity can carry a standing container monitor. Monitoring rides on plugin
-/// trackability: the entity must be a monitorable container kind AND hold a provider identity some
-/// enabled metadata plugin can re-resolve by id (the lookup-id action) — otherwise the daily discovery
-/// sweep could never notice new works. <see cref="TrackableProviders"/> lists the provider ids the
-/// watch would ride on, so the UI can name them.
+/// Whether a library Entity can carry stable monitoring intent. Its registry kind must be requestable and
+/// its provider identity must be re-resolvable by an enabled metadata plugin. Groupings then discover
+/// children while leaves attach transient acquisition work to this same Entity intent.
+/// <see cref="DiscoversChildren"/> means provider sync; <see cref="CanSearchMissingChildren"/> means the
+/// request registry exposes the committable direct <see cref="MissingChildEntityKind"/>. They are
+/// deliberately independent.
+/// <see cref="TrackableProviders"/> names the provider routes available to the UI.
 /// </summary>
-public sealed record MonitorEligibilityView(bool CanMonitor, IReadOnlyList<string> TrackableProviders);
+public sealed record MonitorEligibilityView(
+    bool CanMonitor,
+    IReadOnlyList<string> TrackableProviders,
+    bool DiscoversChildren,
+    bool CanSearchMissingChildren,
+    EntityKind? MissingChildEntityKind);
+
+/// <summary>Bounded batch request for direct Entity monitoring state.</summary>
+public sealed record EntityMonitorStateRequest(IReadOnlyList<Guid> EntityIds);
+
+/// <summary>
+/// One Entity's complete child-monitoring read model: registry/plugin eligibility, provider-discovery and
+/// missing-child-search capability, direct stable monitor, and newest acquisition state. Missing Entity ids
+/// remain present with empty/null state.
+/// </summary>
+public sealed record EntityMonitorStateView(
+    Guid EntityId,
+    bool CanMonitor,
+    bool CanRequest,
+    IReadOnlyList<string> TrackableProviders,
+    bool DiscoversChildren,
+    bool CanSearchMissingChildren,
+    EntityKind? MissingChildEntityKind,
+    MonitorView? Monitor,
+    AcquisitionSummary? LatestAcquisition);
 
 /// <summary>Request to start monitoring (keep re-searching) an existing acquisition until it is acquired.</summary>
 public sealed record MonitorCreateRequest(Guid AcquisitionId);
 
 /// <summary>
-/// Request to monitor a library container entity (an author, an artist, a series) for new works: the
-/// daily sweep re-resolves the container from its provider and requests any works the library doesn't
-/// have yet, which appear as clearly-badged Wanted placeholders under the container.
+/// Request to start stable monitoring for a library Entity. Grouping kinds re-resolve provider children;
+/// leaf kinds retain acquisition intent across import and managed file deletion.
 /// </summary>
 /// <param name="Preset">
 /// The monitoring preset governing whether future syncs auto-monitor newly discovered works. Null leaves
 /// any preset a prior request recorded untouched (and defaults to <see cref="MonitorPreset.All"/> for a
-/// fresh container), so a plain monitor toggle never narrows the discovery scope.
+/// fresh grouping), so a plain monitor toggle never narrows child discovery.
 /// </param>
 public sealed record EntityMonitorCreateRequest(Guid EntityId, MonitorPreset? Preset = null);
 

@@ -8,27 +8,27 @@ namespace Prismedia.Domain.Entities;
 public enum EntityKind {
     /// <summary>Generic audio media root.</summary>
     [Code("audio")]
-    [EntityKindMeta(EntityKindCategory.Media, EntityStorageShape.File, "Audio")]
+    [EntityKindMeta(EntityKindCategory.Media, EntityStorageShape.File, "Audio", supportsFileDeletion: true)]
     Audio,
 
     /// <summary>Audio library, album, audiobook, or podcast grouping.</summary>
     [Code("audio-library")]
-    [EntityKindMeta(EntityKindCategory.Media, EntityStorageShape.Folder, "Audio Libraries", typeof(Prismedia.Domain.Media.AudioLibrary), enumeratesIdentifyChildren: true)]
+    [EntityKindMeta(EntityKindCategory.Media, EntityStorageShape.Folder, "Audio Libraries", typeof(Prismedia.Domain.Media.AudioLibrary), enumeratesIdentifyChildren: true, supportsFileDeletion: true)]
     AudioLibrary,
 
     /// <summary>Playable audio track.</summary>
     [Code("audio-track")]
-    [EntityKindMeta(EntityKindCategory.Media, EntityStorageShape.File, "Audio Tracks", typeof(Prismedia.Domain.Media.AudioTrack))]
+    [EntityKindMeta(EntityKindCategory.Media, EntityStorageShape.File, "Audio Tracks", typeof(Prismedia.Domain.Media.AudioTrack), supportsFileDeletion: true)]
     AudioTrack,
 
     /// <summary>Book, comic, manga, or other page-based media item.</summary>
     [Code("book")]
-    [EntityKindMeta(EntityKindCategory.Media, EntityStorageShape.Archive, "Books", typeof(Prismedia.Domain.Media.Book), enumeratesIdentifyChildren: true)]
+    [EntityKindMeta(EntityKindCategory.Media, EntityStorageShape.Archive, "Books", typeof(Prismedia.Domain.Media.Book), enumeratesIdentifyChildren: true, supportsFileDeletion: true)]
     Book,
 
     /// <summary>Structural book volume.</summary>
     [Code("book-volume")]
-    [EntityKindMeta(EntityKindCategory.Media, EntityStorageShape.None, "Volumes", typeof(Prismedia.Domain.Media.BookVolume), enumeratesIdentifyChildren: true)]
+    [EntityKindMeta(EntityKindCategory.Media, EntityStorageShape.None, "Volumes", typeof(Prismedia.Domain.Media.BookVolume), enumeratesIdentifyChildren: true, supportsFileDeletion: true)]
     BookVolume,
 
     /// <summary>Structural book chapter.</summary>
@@ -48,12 +48,12 @@ public enum EntityKind {
 
     /// <summary>Image gallery.</summary>
     [Code("gallery")]
-    [EntityKindMeta(EntityKindCategory.Media, EntityStorageShape.Folder, "Galleries", typeof(Prismedia.Domain.Media.Gallery))]
+    [EntityKindMeta(EntityKindCategory.Media, EntityStorageShape.Folder, "Galleries", typeof(Prismedia.Domain.Media.Gallery), supportsFileDeletion: true)]
     Gallery,
 
     /// <summary>Single image.</summary>
     [Code("image")]
-    [EntityKindMeta(EntityKindCategory.Media, EntityStorageShape.File, "Images", typeof(Prismedia.Domain.Media.Image))]
+    [EntityKindMeta(EntityKindCategory.Media, EntityStorageShape.File, "Images", typeof(Prismedia.Domain.Media.Image), supportsFileDeletion: true)]
     Image,
 
     /// <summary>
@@ -62,7 +62,7 @@ public enum EntityKind {
     /// groups images.
     /// </summary>
     [Code("music-artist")]
-    [EntityKindMeta(EntityKindCategory.Media, EntityStorageShape.Folder, "Artists", typeof(Prismedia.Domain.Media.MusicArtist), enumeratesIdentifyChildren: true)]
+    [EntityKindMeta(EntityKindCategory.Media, EntityStorageShape.Folder, "Artists", typeof(Prismedia.Domain.Media.MusicArtist), enumeratesIdentifyChildren: true, supportsFileDeletion: true)]
     MusicArtist,
 
     /// <summary>
@@ -71,7 +71,7 @@ public enum EntityKind {
     /// <see cref="EntityKind.MusicArtist"/> groups albums.
     /// </summary>
     [Code("book-author")]
-    [EntityKindMeta(EntityKindCategory.Media, EntityStorageShape.Folder, "Authors", typeof(Prismedia.Domain.Media.BookAuthor), enumeratesIdentifyChildren: true)]
+    [EntityKindMeta(EntityKindCategory.Media, EntityStorageShape.Folder, "Authors", typeof(Prismedia.Domain.Media.BookAuthor), enumeratesIdentifyChildren: true, supportsFileDeletion: true)]
     BookAuthor,
 
     /// <summary>Person taxonomy entity.</summary>
@@ -81,7 +81,7 @@ public enum EntityKind {
 
     /// <summary>Single-film video release grouping with one playable video child.</summary>
     [Code("movie")]
-    [EntityKindMeta(EntityKindCategory.Media, EntityStorageShape.Folder, "Movies", typeof(Prismedia.Domain.Media.Movie))]
+    [EntityKindMeta(EntityKindCategory.Media, EntityStorageShape.Folder, "Movies", typeof(Prismedia.Domain.Media.Movie), supportsFileDeletion: true)]
     Movie,
 
     /// <summary>Studio, publisher, label, or production group.</summary>
@@ -96,16 +96,16 @@ public enum EntityKind {
 
     /// <summary>Playable video media item.</summary>
     [Code("video")]
-    [EntityKindMeta(EntityKindCategory.Media, EntityStorageShape.File, "Videos", typeof(Prismedia.Domain.Media.Video))]
+    [EntityKindMeta(EntityKindCategory.Media, EntityStorageShape.File, "Videos", typeof(Prismedia.Domain.Media.Video), supportsFileDeletion: true)]
     Video,
 
     /// <summary>Video series grouping.</summary>
     [Code("video-series")]
-    [EntityKindMeta(EntityKindCategory.Media, EntityStorageShape.Folder, "Series", typeof(Prismedia.Domain.Media.VideoSeries), enumeratesIdentifyChildren: true)]
+    [EntityKindMeta(EntityKindCategory.Media, EntityStorageShape.Folder, "Series", typeof(Prismedia.Domain.Media.VideoSeries), enumeratesIdentifyChildren: true, supportsFileDeletion: true)]
     VideoSeries,
 
     /// <summary>Structural video season.</summary>
     [Code("video-season")]
-    [EntityKindMeta(EntityKindCategory.Media, EntityStorageShape.Folder, "Seasons", typeof(Prismedia.Domain.Media.VideoSeason), enumeratesIdentifyChildren: true)]
+    [EntityKindMeta(EntityKindCategory.Media, EntityStorageShape.Folder, "Seasons", typeof(Prismedia.Domain.Media.VideoSeason), enumeratesIdentifyChildren: true, supportsFileDeletion: true)]
     VideoSeason
 }

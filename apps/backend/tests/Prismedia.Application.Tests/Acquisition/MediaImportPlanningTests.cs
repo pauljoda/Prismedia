@@ -119,6 +119,25 @@ public sealed class MusicImportPlanBuilderTests {
     }
 
     [Fact]
+    public void UnixCaseDistinctWrapperFoldersAreNotCollapsedTogether() {
+        if (OperatingSystem.IsWindows()) {
+            return;
+        }
+
+        var plan = MusicImportPlanBuilder.Plan([
+            File("Release/CD1/01.flac"),
+            File("release/CD2/02.flac")
+        ], "Artist", "Album");
+
+        Assert.Equal(
+            [
+                "Artist/Album/Release/CD1/01.flac",
+                "Artist/Album/release/CD2/02.flac"
+            ],
+            plan.Items.Select(item => item.TargetRelativePath).ToArray());
+    }
+
+    [Fact]
     public void CoverArtIsCarriedFlattenedIntoTheAlbumFolder() {
         var plan = MusicImportPlanBuilder.Plan([
             File("Release/01.mp3"),
@@ -566,6 +585,35 @@ public sealed class MediaImportMergeTests {
         var item = Assert.Single(merged);
         Assert.Equal(MergeFileAction.ReplaceUpgrade, item.Action);
         Assert.Equal(ownedEpisodeOne, item.OwnedFilePath);
+    }
+
+    [Fact]
+    public void UnixCaseDistinctOwnedFilesRemainSeparateStructuralOwners() {
+        if (OperatingSystem.IsWindows()) {
+            return;
+        }
+
+        var layout = Layout(new Dictionary<int, string> {
+            [1] = "/media/tv/Andor (2022)/S01/Episode.mkv",
+            [2] = "/media/tv/Andor (2022)/S01/episode.mkv",
+        });
+        var unit = new TvPlanUnit(
+            "pack/e01-e02.mkv",
+            1,
+            1,
+            "Andor/Season 01/Andor - S01E01.mkv") {
+            ExtraEpisodes = [2],
+        };
+
+        var merged = TvExistingTargetMerge.Plan(
+            [unit],
+            layout,
+            SeasonSegment,
+            incomingQualityPosition: (int)VideoQuality.Bluray1080p,
+            incomingRevision: 1,
+            ProperDownloadPolicy.PreferAndUpgrade);
+
+        Assert.Equal(MergeFileAction.HoldStructuralConflict, Assert.Single(merged).Action);
     }
 
     [Fact]

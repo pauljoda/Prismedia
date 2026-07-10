@@ -2,6 +2,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Prismedia.Application.Backups;
+using Prismedia.Application.Jobs.Handlers;
 using Prismedia.Application.Settings;
 using Prismedia.Domain.Entities;
 
@@ -27,6 +28,7 @@ public sealed class JobScheduler(
                 await ScheduleRecurringBackupsAsync(stoppingToken);
                 await ScheduleAcquisitionMonitorAsync(stoppingToken);
                 await ScheduleMonitoredSearchAsync(stoppingToken);
+                await RecoverDownloadedCompletionJobsAsync(stoppingToken);
                 await RecoverStuckSearchesAsync(stoppingToken);
                 await ScheduleRecycleBinCleanupAsync(stoppingToken);
                 await ScheduleGridThumbnailSweepAsync(stoppingToken);
@@ -206,6 +208,49 @@ public sealed class JobScheduler(
     }
 
     /// <summary>
+    /// Recreates completion jobs for Downloaded acquisitions when a process stopped after publishing the
+    /// durable status but before the queue insert committed. The queue's type+target guard makes every tick
+    /// idempotent, including concurrent schedulers; unsupported ordinary kinds remain Downloaded for honest
+    /// manual handling instead of generating a job that can never import them.
+    /// </summary>
+    internal async Task RecoverDownloadedCompletionJobsAsync(CancellationToken cancellationToken) {
+        await using var scope = scopeFactory.CreateAsyncScope();
+        var acquisitions = scope.ServiceProvider.GetRequiredService<Acquisition.IAcquisitionLifecycleStore>();
+        var work = await acquisitions.ListDownloadedCompletionWorkAsync(cancellationToken);
+        if (work.Count == 0) {
+            return;
+        }
+
+        var queue = scope.ServiceProvider.GetRequiredService<IJobQueueService>();
+        var importEngines = scope.ServiceProvider.GetRequiredService<IAcquisitionImportEngineFactory>();
+        foreach (var completion in work) {
+            if (!completion.IsUpgrade && importEngines.Find(completion.Kind) is null) {
+                continue;
+            }
+
+            var jobType = completion.IsUpgrade
+                ? JobType.AcquisitionUpgradeReplace
+                : JobType.AcquisitionImport;
+            var targetId = completion.AcquisitionId.ToString();
+            if (await queue.HasPendingAsync(jobType, targetId, cancellationToken)) {
+                continue;
+            }
+
+            await queue.EnqueueAsync(
+                new EnqueueJobRequest(
+                    jobType,
+                    PayloadJson: Acquisition.AcquisitionJobPayload.Serialize(completion.AcquisitionId),
+                    TargetEntityId: targetId,
+                    TargetLabel: completion.IsUpgrade ? "Replace with upgrade" : "Import completed download"),
+                cancellationToken);
+            logger.LogWarning(
+                "Recovered missing {JobType} handoff for downloaded acquisition {AcquisitionId}.",
+                jobType,
+                completion.AcquisitionId);
+        }
+    }
+
+    /// <summary>
     /// How long an acquisition may sit in Searching before it is treated as stuck. Generous enough for a
     /// slow multi-indexer pass, short enough that a search killed mid-flight (worker restart, cancelled
     /// job) doesn't read as searching forever.
@@ -233,12 +278,14 @@ public sealed class JobScheduler(
                 continue;
             }
 
-            await acquisitions.SetStatusAsync(
-                acquisitionId,
-                AcquisitionStatus.Failed,
-                "The search was interrupted or timed out; run the search again.",
-                cancellationToken);
-            logger.LogWarning("Recovered acquisition {AcquisitionId} stuck in Searching with no live search job.", acquisitionId);
+            if (await acquisitions.TryTransitionStatusAsync(
+                    acquisitionId,
+                    [AcquisitionStatus.Searching],
+                    AcquisitionStatus.Failed,
+                    "The search was interrupted or timed out; run the search again.",
+                    cancellationToken)) {
+                logger.LogWarning("Recovered acquisition {AcquisitionId} stuck in Searching with no live search job.", acquisitionId);
+            }
         }
     }
 

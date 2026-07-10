@@ -1,3 +1,4 @@
+using Prismedia.Application.Files;
 using Prismedia.Domain.Entities;
 
 namespace Prismedia.Application.Acquisition;
@@ -57,7 +58,7 @@ public static class TvExistingTargetMerge {
         ProperDownloadPolicy properPolicy,
         bool allowFormatChange = false) {
         var ownedPathBySlot = new Dictionary<(int Season, int Episode), string>();
-        var ownedSlotsByPath = new Dictionary<string, HashSet<(int Season, int Episode)>>(StringComparer.OrdinalIgnoreCase);
+        var ownedSlotsByPath = new Dictionary<string, HashSet<(int Season, int Episode)>>(FileSystemPathComparison.Comparer);
         foreach (var (seasonNumber, season) in layout.Seasons) {
             foreach (var (episodeNumber, path) in season.EpisodeFileByNumber) {
                 var slot = (seasonNumber, episodeNumber);
@@ -82,14 +83,14 @@ public static class TvExistingTargetMerge {
             .Select(slots => slots
                 .Where(ownedPathBySlot.ContainsKey)
                 .Select(slot => ownedPathBySlot[slot])
-                .ToHashSet(StringComparer.OrdinalIgnoreCase))
+                .ToHashSet(FileSystemPathComparison.Comparer))
             .ToArray();
 
         // One automatic replacement can reconcile exactly one incoming physical file with exactly one
         // existing physical file. The forward check catches a bundled incoming file spanning separate
         // owned files; this reverse count catches separate incoming files trying to replace one shared
         // multi-episode file.
-        var incomingCountByOwnedPath = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        var incomingCountByOwnedPath = new Dictionary<string, int>(FileSystemPathComparison.Comparer);
         foreach (var occupiedPaths in occupiedPathsByUnit) {
             foreach (var path in occupiedPaths) {
                 incomingCountByOwnedPath[path] = incomingCountByOwnedPath.GetValueOrDefault(path) + 1;

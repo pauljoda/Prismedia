@@ -21,6 +21,20 @@ public sealed class RequestEndpointTests {
         new(JsonSerializerDefaults.Web) { Converters = { new CodecJsonConverterFactory() } };
 
     [Fact]
+    public async Task OpenApiExposesExactPluginSearchWithoutLegacyAggregateOrDetailGets() {
+        using var factory = CreateFactory();
+        using var client = factory.CreateAuthenticatedClient();
+        using var document = JsonDocument.Parse(await client.GetStringAsync("/openapi/v1.json"));
+        var paths = document.RootElement.GetProperty("paths");
+        var search = paths.GetProperty("/api/requests/search");
+
+        Assert.True(search.TryGetProperty("post", out _));
+        Assert.False(search.TryGetProperty("get", out _));
+        Assert.DoesNotContain(paths.EnumerateObject(), path =>
+            path.Name.StartsWith("/api/requests/details/", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public async Task CommitReturnsConflictWhenAnExternalIdentityMatchesMultipleEntities() {
         using var factory = CreateFactory();
         using var client = factory.CreateAuthenticatedClient();
@@ -455,15 +469,20 @@ public sealed class RequestEndpointTests {
             bool hideNsfw,
             bool includeChildren,
             CancellationToken cancellationToken) =>
-            ResolveProposalAsync(descriptor, route.Identity, hideNsfw, includeChildren, cancellationToken);
+            Task.FromResult<EntityMetadataProposal?>(Proposal(route.Identity));
 
-        public Task<EntityMetadataProposal?> ResolveProposalAsync(
+        public Task<RoutedRequestProposal?> ResolveProposalAsync(
             RequestKindDescriptor descriptor,
             ExternalIdentity identity,
             bool hideNsfw,
             bool includeChildren,
             CancellationToken cancellationToken) =>
-            Task.FromResult<EntityMetadataProposal?>(new EntityMetadataProposal(
+            Task.FromResult<RoutedRequestProposal?>(new RoutedRequestProposal(
+                new PluginIdentityRoute("movie-plugin", identity),
+                Proposal(identity)));
+
+        private static EntityMetadataProposal Proposal(ExternalIdentity identity) =>
+            new(
                 ProposalId: "movie-603",
                 Provider: "movie-plugin",
                 TargetKind: ProposalKind.Movie,
@@ -485,7 +504,7 @@ public sealed class RequestEndpointTests {
                 Children: [],
                 Candidates: [],
                 TargetEntityId: null,
-                Relationships: []));
+                Relationships: []);
     }
 
     private sealed class AmbiguousWantedEntityWriter : IWantedEntityWriter {
@@ -503,6 +522,12 @@ public sealed class RequestEndpointTests {
             throw new ExternalIdentityAmbiguityException(kind, resolution);
         }
 
+        public Task<bool> BindProviderIdentityAsync(
+            Guid entityId,
+            PluginIdentityRoute route,
+            CancellationToken cancellationToken) =>
+            Task.FromResult(false);
+
         public Task ApplyProposalAsync(
             Guid entityId,
             EntityMetadataProposal proposal,
@@ -512,7 +537,7 @@ public sealed class RequestEndpointTests {
         public Task<bool> DeleteIfWantedAsync(Guid entityId, CancellationToken cancellationToken) =>
             throw new NotSupportedException();
 
-        public Task<MonitorableContainer?> GetContainerAsync(Guid entityId, CancellationToken cancellationToken) =>
+        public Task<MonitorableEntity?> GetEntityAsync(Guid entityId, CancellationToken cancellationToken) =>
             throw new NotSupportedException();
 
         public Task<IReadOnlyList<Guid>> ListWantedChildIdsAsync(

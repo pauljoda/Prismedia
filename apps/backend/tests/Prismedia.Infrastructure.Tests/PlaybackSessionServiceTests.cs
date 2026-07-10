@@ -191,7 +191,10 @@ public sealed class PlaybackSessionServiceTests {
         await db.SaveChangesAsync();
 
         var repository = new EfEntityRepository(db, TestUserContext.Admin(), EntityMappers.Kinds(db), EntityMappers.Capabilities(db, TestUserContext.Admin()));
-        var capabilities = new EntityCapabilityService(repository, playbackEvents: new EfPlaybackEventStore(db, TestUserContext.Admin()));
+        var capabilities = new EntityCapabilityService(
+            repository,
+            new EfEntitySourceOwnershipProjection(db),
+            playbackEvents: new EfPlaybackEventStore(db, TestUserContext.Admin()));
 
         await capabilities.RecordPlaybackEventAsync(
             AudioTrackId,
@@ -300,7 +303,10 @@ public sealed class PlaybackSessionServiceTests {
 
         var repository = new EfEntityRepository(db, TestUserContext.Admin(), EntityMappers.Kinds(db), EntityMappers.Capabilities(db, TestUserContext.Admin()));
         var events = new RecordingPlaybackEventStore();
-        var capabilities = new EntityCapabilityService(repository, playbackEvents: events);
+        var capabilities = new EntityCapabilityService(
+            repository,
+            new EfEntitySourceOwnershipProjection(db),
+            playbackEvents: events);
         var sessions = new PlaybackSessionService(capabilities, new NoOpTranscodeSessionService());
 
         await act(sessions, capabilities);

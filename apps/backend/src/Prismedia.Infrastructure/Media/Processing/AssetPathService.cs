@@ -40,7 +40,13 @@ public sealed class AssetPathService {
         }
 
         var relative = assetUrl[prefix.Length..].Replace('/', Path.DirectorySeparatorChar);
-        return Path.Combine(_cacheRoot, relative);
+        var candidate = Path.GetFullPath(Path.Combine(_cacheRoot, relative));
+        var rootPrefix = _cacheRoot.EndsWith(Path.DirectorySeparatorChar)
+            ? _cacheRoot
+            : _cacheRoot + Path.DirectorySeparatorChar;
+        return candidate.StartsWith(rootPrefix, StringComparison.Ordinal)
+            ? candidate
+            : null;
     }
 
     public string VideoPreviewPath(Guid entityId) =>

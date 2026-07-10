@@ -1,3 +1,5 @@
+using Prismedia.Application.Files;
+
 namespace Prismedia.Application.Jobs.Scanning;
 
 /// <summary>
@@ -15,8 +17,9 @@ namespace Prismedia.Application.Jobs.Scanning;
 public static class ScanSnapshotDiff {
     /// <summary>
     /// Classifies every path across the previous and current enumerations into added, removed,
-    /// changed, and unchanged. Path comparison is case-insensitive to match the rest of the scan
-    /// pipeline; the last signature seen for a given path on each side wins.
+    /// changed, and unchanged. Path comparison follows the host filesystem so case-distinct Unix
+    /// entries remain separate while Windows paths retain case-insensitive identity; the last
+    /// signature seen for a given path on each side wins.
     /// </summary>
     /// <param name="previous">Signatures recorded by the previous scan.</param>
     /// <param name="current">Signatures from the current enumeration.</param>
@@ -28,7 +31,7 @@ public static class ScanSnapshotDiff {
         // values classifies every path with no second lookup — the map analogue of "count membership
         // in each set" but carrying the signatures needed to also detect in-place modifications.
         var byPath = new Dictionary<string, SignaturePair>(
-            previous.Count, StringComparer.OrdinalIgnoreCase);
+            previous.Count, FileSystemPathComparison.Comparer);
 
         foreach (var entry in previous) {
             byPath[entry.Path] = new SignaturePair(entry, null);

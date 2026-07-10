@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Prismedia.Application.Acquisition;
 using Prismedia.Application.Jobs;
 using Prismedia.Application.Jobs.Handlers;
+using Prismedia.Application.Jobs.Handlers.Scan;
 using Prismedia.Domain.Entities;
 using Prismedia.Infrastructure.Acquisition;
 using Prismedia.Infrastructure.Persistence;
@@ -28,15 +29,15 @@ public sealed class MovieMusicMergedImportTests : IDisposable {
     }
 
     [Fact]
-    public async Task MovieUpgradeReplacesTheOwnedFileInPlace() {
+    public async Task MovieUpgradeIsHeldBeforeMutationUntilReplacementHasCrashSafeRecovery() {
         await using var db = CreateContext();
         var world = await MovieWorldAsync(db, ownedFileName: "Film (2020) 720p WEB.mkv", payloadFile: "Film.2020.1080p.BluRay.mkv", releaseTitle: "Film 2020 1080p BluRay");
 
         await world.Engine.ImportAsync(world.Context, world.Import, CancellationToken.None);
 
-        Assert.Equal(AcquisitionStatus.Imported, await StatusOf(db, world.Import.Id));
-        Assert.Equal("payload-bytes", await File.ReadAllTextAsync(world.OwnedFilePath));
-        Assert.True(File.Exists(world.OwnedFilePath + ".prismedia-bak"));
+        Assert.Equal(AcquisitionStatus.ManualImportRequired, await StatusOf(db, world.Import.Id));
+        Assert.Equal("owned-bytes", await File.ReadAllTextAsync(world.OwnedFilePath));
+        Assert.False(File.Exists(world.OwnedFilePath + ".prismedia-bak"));
         // No template-derived duplicate folder appeared beside the existing one.
         Assert.Single(Directory.GetDirectories(world.LibraryRoot));
     }
@@ -77,6 +78,22 @@ public sealed class MovieMusicMergedImportTests : IDisposable {
         Assert.Equal(BlocklistReason.NoImportableFiles, Assert.Single(await db.AcquisitionBlocklist.AsNoTracking().ToArrayAsync()).Reason);
     }
 
+    [Fact]
+    public async Task AlbumWithOnlyNewCoverDoesNotMutateArtworkBeforeNothingUsableFailure() {
+        await using var db = CreateContext();
+        var world = await MusicWorldAsync(
+            db,
+            ownedTracks: ["01 - One.flac"],
+            payloadTracks: ["01 - One.flac"],
+            payloadCompanions: ["cover.jpg"]);
+
+        await world.Engine.ImportAsync(world.Context, world.Import, CancellationToken.None);
+
+        Assert.Equal(AcquisitionStatus.Failed, await StatusOf(db, world.Import.Id));
+        Assert.False(File.Exists(Path.Combine(world.AlbumFolder, "cover.jpg")));
+        Assert.Equal(BlocklistReason.NoImportableFiles, Assert.Single(await db.AcquisitionBlocklist.AsNoTracking().ToArrayAsync()).Reason);
+    }
+
     private sealed record MovieWorld(MovieAcquisitionImportEngine Engine, JobContext Context, AcquisitionImportContext Import, string LibraryRoot, string OwnedFilePath);
 
     private sealed record MusicWorld(MusicAcquisitionImportEngine Engine, JobContext Context, AcquisitionImportContext Import, string LibraryRoot, string AlbumFolder);
@@ -103,9 +120,9 @@ public sealed class MovieMusicMergedImportTests : IDisposable {
             new ImportFileMover(),
             new ImportedTorrentRemover(store, new MergedImportTestSupport.ThrowingClientConfigStore(), new MergedImportTestSupport.ThrowingClientFactory(), NullLogger<ImportedTorrentRemover>.Instance),
             new EfImportTargetIndex(db),
-            new OwnedFileReplacer(new MergedImportTestSupport.NoRecycleBin(), NullLogger<OwnedFileReplacer>.Instance),
             new EfAcquisitionBlocklistStore(db),
             new EfAcquisitionHistoryStore(db),
+            new ExistingReadyMaterializer(),
             NullLogger<MovieAcquisitionImportEngine>.Instance);
 
         var import = new AcquisitionImportContext(
@@ -113,10 +130,14 @@ public sealed class MovieMusicMergedImportTests : IDisposable {
             ExternalIdentity: null, ProfileId: null, ContentPath: payloadRoot,
             ClientItemId: null, DownloadClientConfigId: null, Kind: EntityKind.Movie, EntityId: movieId);
 
-        return new MovieWorld(engine, JobContextFor(JobType.AcquisitionImport), import, libraryRoot, ownedFilePath);
+        return new MovieWorld(engine, JobContextFor(db, acquisitionId, JobType.AcquisitionImport), import, libraryRoot, ownedFilePath);
     }
 
-    private async Task<MusicWorld> MusicWorldAsync(PrismediaDbContext db, string[] ownedTracks, string[] payloadTracks) {
+    private async Task<MusicWorld> MusicWorldAsync(
+        PrismediaDbContext db,
+        string[] ownedTracks,
+        string[] payloadTracks,
+        string[]? payloadCompanions = null) {
         var libraryRoot = Directory.CreateDirectory(Path.Combine(_workRoot, "music")).FullName;
         var artistFolder = Directory.CreateDirectory(Path.Combine(libraryRoot, "The Artist [existing]")).FullName;
         var albumFolder = Directory.CreateDirectory(Path.Combine(artistFolder, "Album [existing]")).FullName;
@@ -134,6 +155,9 @@ public sealed class MovieMusicMergedImportTests : IDisposable {
         foreach (var track in payloadTracks) {
             await File.WriteAllTextAsync(Path.Combine(payloadRoot, track), "payload-bytes");
         }
+        foreach (var companion in payloadCompanions ?? []) {
+            await File.WriteAllTextAsync(Path.Combine(payloadRoot, companion), "companion-bytes");
+        }
 
         var acquisitionId = await AddAcquisitionAsync(db, EntityKind.AudioLibrary, albumId, "Album", "Artist - Album FLAC");
 
@@ -148,6 +172,7 @@ public sealed class MovieMusicMergedImportTests : IDisposable {
             new EfImportTargetIndex(db),
             new EfAcquisitionBlocklistStore(db),
             new EfAcquisitionHistoryStore(db),
+            new ExistingReadyMaterializer(),
             NullLogger<MusicAcquisitionImportEngine>.Instance);
 
         var import = new AcquisitionImportContext(
@@ -155,7 +180,7 @@ public sealed class MovieMusicMergedImportTests : IDisposable {
             ExternalIdentity: null, ProfileId: null, ContentPath: payloadRoot,
             ClientItemId: null, DownloadClientConfigId: null, Kind: EntityKind.AudioLibrary, EntityId: albumId);
 
-        return new MusicWorld(engine, JobContextFor(JobType.AcquisitionImport), import, libraryRoot, albumFolder);
+        return new MusicWorld(engine, JobContextFor(db, acquisitionId, JobType.AcquisitionImport), import, libraryRoot, albumFolder);
     }
 
     private static async Task<Guid> AddAcquisitionAsync(PrismediaDbContext db, EntityKind kind, Guid entityId, string title, string releaseTitle) {
@@ -185,9 +210,12 @@ public sealed class MovieMusicMergedImportTests : IDisposable {
         return id;
     }
 
-    private static JobContext JobContextFor(JobType type) {
+    private static JobContext JobContextFor(PrismediaDbContext db, Guid acquisitionId, JobType type) {
         var now = DateTimeOffset.UtcNow;
-        var job = new JobRunSnapshot(Guid.NewGuid(), type, JobRunStatus.Running, 0, null, "{}", null, null, null, now, now, null);
+        var jobId = Guid.NewGuid();
+        db.Acquisitions.Local.Single(row => row.Id == acquisitionId).ImportClaimJobId = jobId;
+        db.SaveChanges();
+        var job = new JobRunSnapshot(jobId, type, JobRunStatus.Running, 0, null, "{}", null, null, null, now, now, null);
         return new JobContext(job, new MergedImportTestSupport.RecordingJobQueue());
     }
 
@@ -196,4 +224,12 @@ public sealed class MovieMusicMergedImportTests : IDisposable {
 
     private static PrismediaDbContext CreateContext() =>
         new(new DbContextOptionsBuilder<PrismediaDbContext>().UseInMemoryDatabase(Guid.NewGuid().ToString()).Options);
+
+    private sealed class ExistingReadyMaterializer : IImportedEntityMaterializer {
+        public Task MaterializeAsync(
+            EntityKind kind,
+            JobContext context,
+            ImportedEntityMaterializationRequest request,
+            CancellationToken cancellationToken) => Task.CompletedTask;
+    }
 }

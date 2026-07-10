@@ -12,7 +12,7 @@ internal static class MergedImportTestSupport {
         bool autoGenerateMetadata = false) : ILibraryScanRootPersistence {
         private readonly LibraryRootData _root = new(
             Guid.NewGuid(), path, "Videos", Enabled: true, Recursive: true,
-            ScanVideos: true, ScanImages: false, ScanAudio: false, ScanBooks: false, IsNsfw: false);
+            ScanVideos: true, ScanImages: false, ScanAudio: true, ScanBooks: false, IsNsfw: false);
 
         public Task<LibraryRootData?> GetLibraryRootAsync(Guid rootId, CancellationToken cancellationToken) =>
             Task.FromResult<LibraryRootData?>(rootId == _root.Id ? _root : null);

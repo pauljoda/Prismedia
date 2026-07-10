@@ -1,6 +1,7 @@
 using Prismedia.Application.Jobs.Handlers;
 using System.IO.Compression;
 using Microsoft.Extensions.Logging;
+using Prismedia.Application.Files;
 using Prismedia.Application.Jobs.Ports;
 using Prismedia.Application.Jobs.Scanning;
 using Prismedia.Domain.Entities;
@@ -44,8 +45,63 @@ public sealed class ScanBookJobHandler(
 
         var archiveFiles = await FileDiscovery.DiscoverFilesAsync(
             root.Path, MediaCategory.ComicArchive, root.Recursive, excludedPaths, cancellationToken);
+        var bookFiles = await FileDiscovery.DiscoverFilesAsync(
+            root.Path, MediaCategory.Book, root.Recursive, excludedPaths, cancellationToken);
 
         logger.LogInformation("ScanBook: found {Count} archive files in {Label}", archiveFiles.Count, root.Label);
+
+        return await MaterializeBookPathsAsync(
+            context,
+            root,
+            archiveFiles,
+            bookFiles,
+            reconcile: true,
+            acquisitionId: null,
+            bestEffortHousekeeping: false,
+            cancellationToken);
+    }
+
+    /// <summary>
+    /// Materializes only one import's exact book files through the scanner's canonical upserts and
+    /// wanted binding. It deliberately skips stale cleanup so unrelated books in the same root cannot
+    /// be removed by a narrow import pass.
+    /// </summary>
+    public async Task MaterializeImportedPathsAsync(
+        JobContext context,
+        Guid acquisitionId,
+        LibraryRootData root,
+        IReadOnlyList<string> placedPaths,
+        CancellationToken cancellationToken) {
+        if (!root.Enabled || !root.ScanBooks) {
+            throw new InvalidOperationException("The imported books no longer belong to an enabled book library root.");
+        }
+
+        var archiveFiles = placedPaths.Where(IsArchivePath).ToArray();
+        var bookFiles = placedPaths.Where(path => BookFormatFor(path) is not null).ToArray();
+        if (archiveFiles.Length + bookFiles.Length != placedPaths.Count) {
+            throw new InvalidOperationException("The book import contains a file the book scanner does not support.");
+        }
+
+        await MaterializeBookPathsAsync(
+            context,
+            root,
+            archiveFiles,
+            bookFiles,
+            reconcile: false,
+            acquisitionId,
+            bestEffortHousekeeping: true,
+            cancellationToken);
+    }
+
+    private async Task<ScanRootOutcome> MaterializeBookPathsAsync(
+        JobContext context,
+        LibraryRootData root,
+        IReadOnlyList<string> archiveFiles,
+        IReadOnlyList<string> bookFiles,
+        bool reconcile,
+        Guid? acquisitionId,
+        bool bestEffortHousekeeping,
+        CancellationToken cancellationToken) {
 
         var settings = await Roots.GetSettingsAsync(cancellationToken);
         if (!root.AutoIdentify) {
@@ -67,12 +123,12 @@ public sealed class ScanBookJobHandler(
             archiveItems.Add(BookArchiveItem.From(root.Path, archivePath, pageMembers, comicInfo));
         }
 
-        var validBookPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var archiveBookPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var validBookPaths = new HashSet<string>(FileSystemPathComparison.Comparer);
+        var archiveBookPaths = new HashSet<string>(FileSystemPathComparison.Comparer);
         var processedArchiveCount = 0;
 
         foreach (var bookGroup in archiveItems
-            .GroupBy(item => item.BookPath, StringComparer.OrdinalIgnoreCase)
+            .GroupBy(item => item.BookPath, FileSystemPathComparison.Comparer)
             .OrderBy(group => group.Key, NaturalPathComparer.Instance)) {
             var first = bookGroup.First();
             var bookMetadata = BestBookMetadata(bookGroup);
@@ -80,7 +136,8 @@ public sealed class ScanBookJobHandler(
             // Bind a request-created wanted entity to this path first, so the path-keyed upsert finds it
             // (attaching the imported file to the wanted entity) instead of creating a duplicate.
             if (acquisitionHints is not null) {
-                await acquisitionHints.BindWantedEntityAsync(EntityKind.Book, first.BookPath, cancellationToken);
+                await acquisitionHints.BindWantedEntityAsync(
+                    EntityKind.Book, first.BookPath, cancellationToken, acquisitionId);
             }
             var bookId = await books.UpsertBookAsync(first.BookPath, first.BookTitle, root.Id, bookIsNsfw, cancellationToken);
             if (bookMetadata is not null && scanMetadata is not null) {
@@ -99,16 +156,18 @@ public sealed class ScanBookJobHandler(
             }
 
             // A book is the top-level root of its volumes/chapters/pages, so identify it directly.
-            var bookAutoIdentify = AutoIdentifyScanEnqueue.RequestFor(
-                settings,
-                EntityKind.Book,
-                bookId.ToString(),
-                first.BookTitle,
-                await downstreamNeeds.IsEntityOrganizedAsync(bookId, cancellationToken));
-            if (bookAutoIdentify is not null)
-                await context.EnqueueIfNeededAsync(bookAutoIdentify, cancellationToken);
+            if (bestEffortHousekeeping) {
+                await ImportedMaterializationHousekeeping.TryAsync(
+                    logger,
+                    "Imported book is ready but its auto-identify job could not be queued.",
+                    () => QueueBookAutoIdentifyAsync(
+                        context, settings, bookId, first.BookTitle, cancellationToken));
+            } else {
+                await QueueBookAutoIdentifyAsync(
+                    context, settings, bookId, first.BookTitle, cancellationToken);
+            }
 
-            var directChapterPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var directChapterPaths = new HashSet<string>(FileSystemPathComparison.Comparer);
             var directChapters = bookGroup
                 .Where(item => item.VolumePath is null)
                 .OrderBy(item => item.ArchivePath, NaturalPathComparer.Instance)
@@ -124,15 +183,21 @@ public sealed class ScanBookJobHandler(
                     bookId,
                     chapterIndex,
                     directChapterPaths,
+                    bestEffortHousekeeping,
                     cancellationToken);
                 processedArchiveCount++;
-                await ReportArchiveProgressAsync(context, processedArchiveCount, archiveItems.Count, cancellationToken);
+                await ReportArchiveProgressAsync(
+                    context,
+                    processedArchiveCount,
+                    archiveItems.Count,
+                    bestEffortHousekeeping,
+                    cancellationToken);
             }
 
-            var validVolumePaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var validVolumePaths = new HashSet<string>(FileSystemPathComparison.Comparer);
             var volumeGroups = bookGroup
                 .Where(item => item.VolumePath is not null)
-                .GroupBy(item => item.VolumePath!, StringComparer.OrdinalIgnoreCase)
+                .GroupBy(item => item.VolumePath!, FileSystemPathComparison.Comparer)
                 .OrderBy(group => group.Key, NaturalPathComparer.Instance)
                 .ToArray();
 
@@ -149,7 +214,7 @@ public sealed class ScanBookJobHandler(
                     cancellationToken);
                 validVolumePaths.Add(volumePath);
 
-                var validChapterPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                var validChapterPaths = new HashSet<string>(FileSystemPathComparison.Comparer);
                 var chapters = volumeGroup
                     .OrderBy(item => item.ArchivePath, NaturalPathComparer.Instance)
                     .ToArray();
@@ -163,24 +228,45 @@ public sealed class ScanBookJobHandler(
                         volumeId,
                         chapterIndex,
                         validChapterPaths,
+                        bestEffortHousekeeping,
                         cancellationToken);
                     processedArchiveCount++;
-                    await ReportArchiveProgressAsync(context, processedArchiveCount, archiveItems.Count, cancellationToken);
+                    await ReportArchiveProgressAsync(
+                        context,
+                        processedArchiveCount,
+                        archiveItems.Count,
+                        bestEffortHousekeeping,
+                        cancellationToken);
                 }
 
-                await books.RemoveStaleBookChaptersAsync(volumeId, validChapterPaths, cancellationToken);
+                if (reconcile) {
+                    await books.RemoveStaleBookChaptersAsync(volumeId, validChapterPaths, cancellationToken);
+                }
             }
 
-            await books.RemoveStaleBookChaptersAsync(bookId, directChapterPaths, cancellationToken);
-            await books.RemoveStaleBookVolumesAsync(bookId, validVolumePaths, cancellationToken);
+            if (reconcile) {
+                await books.RemoveStaleBookChaptersAsync(bookId, directChapterPaths, cancellationToken);
+                await books.RemoveStaleBookVolumesAsync(bookId, validVolumePaths, cancellationToken);
+            }
         }
 
-        await ScanSingleFileBooksAsync(context, root, settings, excludedPaths, validBookPaths, archiveBookPaths, cancellationToken);
+        await ScanSingleFileBooksAsync(
+            context,
+            root,
+            settings,
+            bookFiles,
+            validBookPaths,
+            archiveBookPaths,
+            acquisitionId,
+            bestEffortHousekeeping,
+            cancellationToken);
 
-        await books.RemoveStaleBooksInRootAsync(root.Id, validBookPaths, cancellationToken);
-        // Author groupings whose books were all removed (or that used to be the old "series" parents) are pruned.
-        await books.RemoveEmptyBookAuthorsAsync(cancellationToken);
-        await Roots.RemoveEntitiesInExcludedPathsAsync(root.Id, cancellationToken);
+        if (reconcile) {
+            await books.RemoveStaleBooksInRootAsync(root.Id, validBookPaths, cancellationToken);
+            // Author groupings whose books were all removed (or that used to be the old "series" parents) are pruned.
+            await books.RemoveEmptyBookAuthorsAsync(cancellationToken);
+            await Roots.RemoveEntitiesInExcludedPathsAsync(root.Id, cancellationToken);
+        }
 
         return ScanRootOutcome.Success;
     }
@@ -194,12 +280,12 @@ public sealed class ScanBookJobHandler(
         JobContext context,
         LibraryRootData root,
         LibrarySettingsData settings,
-        IReadOnlySet<string> excludedPaths,
+        IReadOnlyList<string> bookFiles,
         ISet<string> validBookPaths,
         IReadOnlySet<string> archiveBookPaths,
+        Guid? acquisitionId,
+        bool bestEffortHousekeeping,
         CancellationToken cancellationToken) {
-        var bookFiles = await FileDiscovery.DiscoverFilesAsync(
-            root.Path, MediaCategory.Book, root.Recursive, excludedPaths, cancellationToken);
         if (bookFiles.Count == 0) {
             return;
         }
@@ -233,6 +319,8 @@ public sealed class ScanBookJobHandler(
                 validBookPaths,
                 parentBookEntityId: null,
                 sortOrder: null,
+                acquisitionId,
+                bestEffortHousekeeping,
                 cancellationToken);
         }
 
@@ -240,7 +328,7 @@ public sealed class ScanBookJobHandler(
         // Artist/Album for music). Each book is parented to its author; empty authors are pruned later.
         foreach (var authorGroup in items
             .Where(item => item.AuthorPath is not null)
-            .GroupBy(item => item.AuthorPath!, StringComparer.OrdinalIgnoreCase)
+            .GroupBy(item => item.AuthorPath!, FileSystemPathComparison.Comparer)
             .OrderBy(group => group.Key, NaturalPathComparer.Instance)) {
             var first = authorGroup.First();
             var authorIsNsfw = root.IsNsfw || authorGroup.Any(item => item.IsNsfw);
@@ -253,7 +341,8 @@ public sealed class ScanBookJobHandler(
                 ?? folderName;
             // Bind a request-created wanted author to this folder first, so the upsert reuses that entity.
             if (acquisitionHints is not null) {
-                await acquisitionHints.BindWantedParentAsync(EntityKind.BookAuthor, first.AuthorPath!, cancellationToken);
+                await acquisitionHints.BindWantedParentAsync(
+                    EntityKind.BookAuthor, first.AuthorPath!, cancellationToken, acquisitionId);
             }
             var authorId = await books.UpsertBookAuthorAsync(
                 first.AuthorPath!,
@@ -274,6 +363,8 @@ public sealed class ScanBookJobHandler(
                     validBookPaths,
                     authorId,
                     index,
+                    acquisitionId,
+                    bestEffortHousekeeping,
                     cancellationToken);
             }
         }
@@ -287,11 +378,14 @@ public sealed class ScanBookJobHandler(
         ISet<string> validBookPaths,
         Guid? parentBookEntityId,
         int? sortOrder,
+        Guid? acquisitionId,
+        bool bestEffortHousekeeping,
         CancellationToken cancellationToken) {
         // Bind a request-created wanted entity to this path first, so the path-keyed upsert finds it
         // (attaching the imported file to the wanted entity) instead of creating a duplicate.
         if (acquisitionHints is not null) {
-            await acquisitionHints.BindWantedEntityAsync(EntityKind.Book, item.SourcePath, cancellationToken);
+            await acquisitionHints.BindWantedEntityAsync(
+                EntityKind.Book, item.SourcePath, cancellationToken, acquisitionId);
         }
         var bookId = await books.UpsertSingleFileBookAsync(
             item.SourcePath,
@@ -315,6 +409,41 @@ public sealed class ScanBookJobHandler(
             await scanMetadata.ApplyComicInfoMetadataAsync(bookId, item.Metadata, item.IsNsfw, cancellationToken);
         }
 
+        if (bestEffortHousekeeping) {
+            await ImportedMaterializationHousekeeping.TryAsync(
+                logger,
+                "Imported book is ready but its downstream jobs could not be queued.",
+                () => QueueSingleFileBookJobsAsync(
+                    context, settings, bookId, item.Title, cancellationToken));
+        } else {
+            await QueueSingleFileBookJobsAsync(
+                context, settings, bookId, item.Title, cancellationToken);
+        }
+    }
+
+    private async Task QueueBookAutoIdentifyAsync(
+        JobContext context,
+        LibrarySettingsData settings,
+        Guid bookId,
+        string title,
+        CancellationToken cancellationToken) {
+        var request = AutoIdentifyScanEnqueue.RequestFor(
+            settings,
+            EntityKind.Book,
+            bookId.ToString(),
+            title,
+            await downstreamNeeds.IsEntityOrganizedAsync(bookId, cancellationToken));
+        if (request is not null) {
+            await context.EnqueueIfNeededAsync(request, cancellationToken);
+        }
+    }
+
+    private async Task QueueSingleFileBookJobsAsync(
+        JobContext context,
+        LibrarySettingsData settings,
+        Guid bookId,
+        string title,
+        CancellationToken cancellationToken) {
         if (settings.AutoGeneratePreview &&
             !await downstreamNeeds.HasEntityFileAsync(bookId, EntityFileRole.Thumbnail, cancellationToken)) {
             await context.EnqueueIfNeededAsync(
@@ -322,19 +451,35 @@ public sealed class ScanBookJobHandler(
                     JobType.GenerateBookCoverThumbnail,
                     EntityKind.Book,
                     bookId.ToString(),
-                    item.Title,
+                    title,
                     JobPriorities.Thumbnail),
                 cancellationToken);
         }
 
-        var autoIdentify = AutoIdentifyScanEnqueue.RequestFor(
-            settings,
-            EntityKind.Book,
-            bookId.ToString(),
-            item.Title,
-            await downstreamNeeds.IsEntityOrganizedAsync(bookId, cancellationToken));
-        if (autoIdentify is not null) {
-            await context.EnqueueIfNeededAsync(autoIdentify, cancellationToken);
+        await QueueBookAutoIdentifyAsync(context, settings, bookId, title, cancellationToken);
+    }
+
+    private async Task QueueBookPageJobsAsync(
+        JobContext context,
+        LibrarySettingsData settings,
+        IReadOnlyList<BookPageUpsertItem> pageItems,
+        IReadOnlyList<Guid> pageIds,
+        CancellationToken cancellationToken) {
+        for (var index = 0; index < pageItems.Count && index < pageIds.Count; index++) {
+            if (!settings.AutoGeneratePreview ||
+                await downstreamNeeds.HasEntityFileAsync(
+                    pageIds[index], EntityFileRole.Thumbnail, cancellationToken)) {
+                continue;
+            }
+
+            await context.EnqueueIfNeededAsync(
+                EnqueueJobRequest.ForEntity(
+                    JobType.GenerateBookPageThumbnail,
+                    EntityKind.BookPage,
+                    pageIds[index].ToString(),
+                    pageItems[index].Title,
+                    JobPriorities.Thumbnail),
+                cancellationToken);
         }
     }
 
@@ -344,6 +489,10 @@ public sealed class ScanBookJobHandler(
             ".pdf" => BookFormat.Pdf,
             _ => null
         };
+
+    private static bool IsArchivePath(string sourcePath) =>
+        Path.GetExtension(sourcePath).Equals(".cbz", StringComparison.OrdinalIgnoreCase)
+        || Path.GetExtension(sourcePath).Equals(".zip", StringComparison.OrdinalIgnoreCase);
 
     private static BookType DefaultBookTypeFor(BookFormat format) =>
         format == BookFormat.Epub ? BookType.Novel : BookType.Book;
@@ -362,6 +511,7 @@ public sealed class ScanBookJobHandler(
         Guid parentEntityId,
         int chapterIndex,
         ISet<string> validChapterPaths,
+        bool bestEffortHousekeeping,
         CancellationToken cancellationToken) {
         validChapterPaths.Add(item.ArchivePath);
         var chapterId = await books.UpsertBookChapterAsync(
@@ -376,7 +526,7 @@ public sealed class ScanBookJobHandler(
         var pageItems = new List<BookPageUpsertItem>(item.PageMembers.Count);
         for (var i = 0; i < item.PageMembers.Count; i++) {
             var memberPath = item.PageMembers[i];
-            var pagePath = $"{item.ArchivePath}::{memberPath}";
+            var pagePath = EntitySourcePath.ArchiveMember(item.ArchivePath, memberPath);
             var pageTitle = Path.GetFileNameWithoutExtension(memberPath);
 
             pageItems.Add(new BookPageUpsertItem(
@@ -389,34 +539,38 @@ public sealed class ScanBookJobHandler(
         }
 
         var pageIds = await books.UpsertBookPagesBatchAsync(pageItems, cancellationToken);
-        for (var i = 0; i < pageItems.Count && i < pageIds.Count; i++) {
-            var pageItem = pageItems[i];
-            var pageId = pageIds[i];
-
-            if (settings.AutoGeneratePreview && !await downstreamNeeds.HasEntityFileAsync(pageId, EntityFileRole.Thumbnail, cancellationToken)) {
-                await context.EnqueueIfNeededAsync(
-                    EnqueueJobRequest.ForEntity(
-                        JobType.GenerateBookPageThumbnail,
-                        EntityKind.BookPage,
-                        pageId.ToString(),
-                        pageItem.Title,
-                        JobPriorities.Thumbnail),
-                    cancellationToken);
-            }
+        if (bestEffortHousekeeping) {
+            await ImportedMaterializationHousekeeping.TryAsync(
+                logger,
+                "Imported book pages are ready but their thumbnail jobs could not be queued.",
+                () => QueueBookPageJobsAsync(
+                    context, settings, pageItems, pageIds, cancellationToken));
+        } else {
+            await QueueBookPageJobsAsync(
+                context, settings, pageItems, pageIds, cancellationToken);
         }
     }
 
-    private static Task ReportArchiveProgressAsync(
+    private Task ReportArchiveProgressAsync(
         JobContext context,
         int processedArchiveCount,
         int archiveCount,
+        bool bestEffortHousekeeping,
         CancellationToken cancellationToken) {
         if (archiveCount == 0 || processedArchiveCount % 10 != 0) {
             return Task.CompletedTask;
         }
 
-        return context.ReportProgressAsync(processedArchiveCount * 80 / archiveCount,
-            $"Processing {processedArchiveCount}/{archiveCount}", cancellationToken);
+        Task ReportAsync() => context.ReportProgressAsync(
+            processedArchiveCount * 80 / archiveCount,
+            $"Processing {processedArchiveCount}/{archiveCount}",
+            cancellationToken);
+        return bestEffortHousekeeping
+            ? ImportedMaterializationHousekeeping.TryAsync(
+                logger,
+                "Imported book progress could not be reported.",
+                ReportAsync)
+            : ReportAsync();
     }
 
     private static List<string> ListImageMembersInZip(string archivePath) {

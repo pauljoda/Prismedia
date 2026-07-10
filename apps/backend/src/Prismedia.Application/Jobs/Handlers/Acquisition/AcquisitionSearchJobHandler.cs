@@ -9,6 +9,8 @@ namespace Prismedia.Application.Jobs.Handlers;
 /// Prowlarr routinely take tens of seconds, so this work is durable and off the request path: it moves
 /// the acquisition to <see cref="AcquisitionStatus.Searching"/>, queries indexers, persists scored
 /// candidates, and leaves it <see cref="AcquisitionStatus.AwaitingSelection"/> for review.
+/// The enqueuer publishes Searching first; that durable state distinguishes intentional work from an
+/// at-least-once redelivery of an old job.
 /// </summary>
 public sealed class AcquisitionSearchJobHandler(
     IAcquisitionStore store,
@@ -19,20 +21,16 @@ public sealed class AcquisitionSearchJobHandler(
     public JobType Type => JobType.AcquisitionSearch;
 
     /// <summary>
-    /// A search may only mutate an acquisition that is genuinely still seeking a release. A queued or
-    /// in-flight grab, an imported book, or a cancelled request must be left alone — otherwise a stale
-    /// monitor-enqueued search that ran after the state changed would reset the status, replace candidates,
-    /// and (with auto-pick) delete and re-grab the live torrent. This is the execution-time counterpart to
-    /// the monitor's enqueue-time gate, closing the queue-latency window between them.
+    /// States from which an explicit API or monitor action may publish a fresh Searching intent. This is a
+    /// scheduling policy only; the job handler itself consumes Searching exclusively.
     /// </summary>
-    // Cancelled IS searchable: cancelling stops that download, not the want — an active monitor (or a
-    // manual re-search) revives the acquisition with a fresh search instead of finding a dead end.
-    public static bool IsSearchable(AcquisitionStatus status) => status is not (
+    public static bool CanScheduleSearch(AcquisitionStatus status) => status is not (
         AcquisitionStatus.Queued
         or AcquisitionStatus.Downloading
         or AcquisitionStatus.Downloaded
         or AcquisitionStatus.Importing
-        or AcquisitionStatus.Imported);
+        or AcquisitionStatus.Imported
+        or AcquisitionStatus.Stopping);
 
     public async Task HandleAsync(JobContext context, CancellationToken cancellationToken) {
         var payload = AcquisitionJobPayload.Parse(context.Job.PayloadJson);
@@ -43,15 +41,16 @@ public sealed class AcquisitionSearchJobHandler(
             return;
         }
 
-        // Re-check at execution time: the acquisition may have been queued/imported/cancelled since this
-        // search was enqueued (e.g. a monitor sweep that then waited behind other work).
+        // Searching is the durable job ticket. Pending means creation never published intent; review/manual
+        // states mean this is an old redelivery after a prior search completed; Cancelled is user authority.
         var currentStatus = await store.GetStatusAsync(payload.AcquisitionId, cancellationToken);
-        if (currentStatus is { } status && !IsSearchable(status)) {
-            logger.LogInformation("AcquisitionSearch: acquisition {Id} is {Status}; skipping a now-stale search.", payload.AcquisitionId, status.ToCode());
+        if (currentStatus != AcquisitionStatus.Searching) {
+            logger.LogInformation(
+                "AcquisitionSearch: acquisition {Id} has no Searching intent ({Status}); skipping stale work.",
+                payload.AcquisitionId,
+                currentStatus?.ToCode() ?? "missing");
             return;
         }
-
-        await store.SetStatusAsync(payload.AcquisitionId, AcquisitionStatus.Searching, null, cancellationToken);
         await context.ReportProgressAsync(10, "Searching indexers", cancellationToken);
 
         try {
@@ -59,10 +58,17 @@ public sealed class AcquisitionSearchJobHandler(
             // so only strictly-better releases are accepted.
             var upgradeOwned = await store.GetUpgradeOwnedQualityAsync(payload.AcquisitionId, cancellationToken);
             var outcome = await runner.RunAsync(input, cancellationToken, upgradeOwned);
-            await store.ReplaceCandidatesAsync(payload.AcquisitionId, outcome.Candidates, cancellationToken);
-
             var message = BuildMessage(outcome);
-            await store.SetStatusAsync(payload.AcquisitionId, AcquisitionStatus.AwaitingSelection, message, cancellationToken);
+            if (!await store.TryCompleteSearchAsync(
+                    payload.AcquisitionId,
+                    outcome.Candidates,
+                    message,
+                    cancellationToken)) {
+                logger.LogInformation(
+                    "AcquisitionSearch: acquisition {Id} changed before search results completed; discarding stale results.",
+                    payload.AcquisitionId);
+                return;
+            }
             await context.ReportProgressAsync(100, "Search finished", cancellationToken);
 
             // A wanted-linked acquisition (created by a request commit) always auto-grabs its best
@@ -75,7 +81,17 @@ public sealed class AcquisitionSearchJobHandler(
             }
         } catch (Exception ex) when (ex is not OperationCanceledException) {
             logger.LogWarning(ex, "AcquisitionSearch: failed for acquisition {Id}", payload.AcquisitionId);
-            await store.SetStatusAsync(payload.AcquisitionId, AcquisitionStatus.Failed, ex.Message, CancellationToken.None);
+            if (!await store.TryTransitionStatusAsync(
+                    payload.AcquisitionId,
+                    [AcquisitionStatus.Searching],
+                    AcquisitionStatus.Failed,
+                    ex.Message,
+                    CancellationToken.None)) {
+                logger.LogInformation(
+                    "AcquisitionSearch: acquisition {Id} changed while its search failed; preserving the newer lifecycle.",
+                    payload.AcquisitionId);
+                return;
+            }
             throw;
         }
     }
@@ -103,7 +119,11 @@ public sealed class AcquisitionSearchJobHandler(
 
         foreach (var candidate in accepted) {
             try {
-                await queue.QueueAsync(acquisitionId, candidate.Id, cancellationToken);
+                await queue.QueueAsync(
+                    acquisitionId,
+                    candidate.Id,
+                    cancellationToken,
+                    requiredStatus: AcquisitionStatus.AwaitingSelection);
                 logger.LogInformation("AcquisitionSearch: auto-picked release {Candidate} for acquisition {Id}.", candidate.Id, acquisitionId);
                 return;
             } catch (OperationCanceledException) {
@@ -114,9 +134,12 @@ public sealed class AcquisitionSearchJobHandler(
         }
 
         if (accepted.Length > 0) {
-            await store.SetStatusAsync(
-                acquisitionId, AcquisitionStatus.AwaitingSelection,
-                "Automatic download failed for the best releases; pick one manually.", cancellationToken);
+            await store.TryTransitionStatusAsync(
+                acquisitionId,
+                [AcquisitionStatus.AwaitingSelection, AcquisitionStatus.Failed],
+                AcquisitionStatus.AwaitingSelection,
+                "Automatic download failed for the best releases; pick one manually.",
+                cancellationToken);
         }
     }
 

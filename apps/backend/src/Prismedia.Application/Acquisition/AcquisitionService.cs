@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging;
+using Prismedia.Application.Entities;
 using Prismedia.Application.Jobs;
 using Prismedia.Application.Jobs.Handlers;
 using Prismedia.Application.Jobs.Scanning;
@@ -18,11 +19,38 @@ public interface IAcquisitionRequestService {
     /// <summary>Persists a new acquisition and enqueues the background search job that fills in candidates.</summary>
     Task<AcquisitionSummary> CreateAndSearchAsync(AcquisitionCreateRequest request, CancellationToken cancellationToken);
 
-    /// <summary>True when any acquisition targets this wanted library entity.</summary>
-    Task<bool> AnyForEntityAsync(Guid entityId, CancellationToken cancellationToken);
+    /// <summary>
+    /// Persists and schedules an acquisition while the caller already holds the target Entity lifecycle
+    /// lease. Request commit uses this seam inside its wider suppression/monitor intent transaction so it
+    /// does not recursively reacquire the same locks. Other callers must use <see cref="CreateAndSearchAsync"/>.
+    /// The default keeps narrow test adapters source-compatible.
+    /// </summary>
+    Task<AcquisitionSummary> CreateAndSearchWithinEntityLifecycleAsync(
+        AcquisitionCreateRequest request,
+        CancellationToken cancellationToken) =>
+        CreateAndSearchAsync(request, cancellationToken);
 
-    /// <summary>Every acquisition targeting this wanted library entity, for teardown when the want is removed.</summary>
+    /// <summary>
+    /// True when actionable acquisition work already targets the Entity. Imported and Cancelled rows are
+    /// terminal history, not open requests: a fileless monitored Entity must be able to start fresh work.
+    /// </summary>
+    Task<bool> AnyOpenForEntityAsync(Guid entityId, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Every acquisition owned by this library Entity, including upgrade descendants whose stable
+    /// ownership is inherited through <c>UpgradeOfAcquisitionId</c>. Destructive Entity lifecycles must
+    /// close this complete graph so an in-flight replacement transfer cannot leak.
+    /// </summary>
     Task<IReadOnlyList<Guid>> ListIdsForEntityAsync(Guid entityId, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Read-only preflight for destructive removal. An active or partially applied import rejects the
+    /// operation; every other lifecycle state can be cancelled and removed. Missing rows are already
+    /// removed and therefore eligible.
+    /// </summary>
+    Task<AcquisitionRemovalEligibility> GetRemovalEligibilityAsync(
+        Guid id,
+        CancellationToken cancellationToken);
 
     /// <summary>
     /// Reads whether an imported acquisition can be replaced after its owned files are deleted. This check
@@ -34,12 +62,46 @@ public interface IAcquisitionRequestService {
         CancellationToken cancellationToken);
 
     /// <summary>
+    /// Durably claims an acquisition for the given destructive completion intent and cancels every exact
+    /// queued/running acquisition job. An existing matching claim is an idempotent success; a competing
+    /// intent or lifecycle change is an actionable conflict. False means the acquisition is already gone.
+    /// </summary>
+    Task<bool> ClaimTeardownAsync(
+        Guid id,
+        AcquisitionTeardownIntent intent,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Strictly removes the recorded remote transfer and its data, or confirms it is already absent,
+    /// without changing local acquisition, monitor, job, or history state. Missing/unreachable client
+    /// configuration and client failures are actionable conflicts. Destructive Entity workflows call this
+    /// for their complete operation set before touching local files or database state.
+    /// </summary>
+    Task ConfirmTransferRemovedAsync(Guid id, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Hard-deletes a durably claimed acquisition after external/file work completed. The persisted intent
+    /// must match, preventing a retry or competing workflow from changing reacquisition into removal.
+    /// </summary>
+    Task<bool> CompleteTeardownAsync(
+        Guid id,
+        AcquisitionTeardownIntent intent,
+        CancellationToken cancellationToken);
+
+    /// <summary>
     /// Removes an acquisition entirely: best-effort deletes its torrent (and data) from the client, then
     /// hard-deletes the record. <paramref name="preserveWantedLoop"/> (the user-facing Downloads remove)
     /// keeps a monitor watching the acquisition alive by re-pointing it at a fresh pending clone; internal
     /// teardown paths leave it off — they are dismantling the loop on purpose.
     /// </summary>
     Task<bool> DeleteAsync(Guid id, CancellationToken cancellationToken, bool preserveWantedLoop = false);
+
+    /// <summary>
+    /// Strict teardown used by explicit unmonitoring. A recorded client item must be confirmed absent or
+    /// removed with its data before the acquisition row is hard-deleted; client/config failures leave the
+    /// acquisition durable for a retry.
+    /// </summary>
+    Task<bool> DeleteForUnmonitorAsync(Guid id, CancellationToken cancellationToken);
 
     /// <summary>
     /// Replaces an imported acquisition whose owned files were deliberately deleted with a clean retry,
@@ -60,6 +122,20 @@ public interface IAcquisitionRequestService {
 /// <param name="Message">Actionable reason when reacquisition is not currently safe.</param>
 public sealed record AcquisitionReacquireEligibility(bool CanReacquire, string? Message = null);
 
+/// <summary>Read-only verdict for safely cancelling and hard-deleting one acquisition.</summary>
+/// <param name="CanRemove">Whether removal can proceed without crossing an active/partial import.</param>
+/// <param name="Message">Actionable reason when the acquisition must finish recovery first.</param>
+public sealed record AcquisitionRemovalEligibility(bool CanRemove, string? Message = null);
+
+/// <summary>
+/// Cancels durable acquisition jobs by their exact acquisition target before the acquisition row is
+/// removed. This keeps queued/running work from remaining visible or acting on a deleted lifecycle.
+/// </summary>
+public interface IAcquisitionJobCleanup {
+    /// <summary>Cancels queued and running jobs whose target is exactly <paramref name="acquisitionId"/>.</summary>
+    Task<int> CancelAsync(Guid acquisitionId, CancellationToken cancellationToken);
+}
+
 /// <summary>
 /// Application use case for the acquisition lifecycle from the API's perspective: create an acquisition
 /// from request metadata and kick off a background release search, then list and read acquisition state.
@@ -74,6 +150,8 @@ public sealed class AcquisitionService(
     IAcquisitionHistoryStore history,
     ILogger<AcquisitionService> logger,
     IMonitorStore monitors,
+    IAcquisitionJobCleanup acquisitionJobs,
+    IEntityLifecycleMutationLease entityLifecycle,
     VideoScanConcurrencyGate? scanGate = null) : IAcquisitionRequestService {
     public Task<IReadOnlyList<AcquisitionSummary>> ListAsync(CancellationToken cancellationToken) =>
         store.ListAsync(cancellationToken);
@@ -84,6 +162,50 @@ public sealed class AcquisitionService(
     /// <summary>The latest acquisition backing a library entity (wanted or imported), or null when it has none.</summary>
     public Task<AcquisitionDetail?> GetForEntityAsync(Guid entityId, CancellationToken cancellationToken) =>
         store.GetLatestForEntityAsync(entityId, cancellationToken);
+
+    /// <inheritdoc />
+    public async Task<AcquisitionRemovalEligibility> GetRemovalEligibilityAsync(
+        Guid id,
+        CancellationToken cancellationToken) {
+        var detail = await store.GetAsync(id, cancellationToken);
+        if (detail is null) {
+            return new AcquisitionRemovalEligibility(true);
+        }
+
+        if (detail.Summary.Status == AcquisitionStatus.Stopping) {
+            var claim = await store.GetTeardownClaimAsync(id, cancellationToken);
+            return claim?.Intent == AcquisitionTeardownIntent.Remove
+                ? new AcquisitionRemovalEligibility(true)
+                : new AcquisitionRemovalEligibility(
+                    false,
+                    "This acquisition is already stopping for a different cleanup operation.");
+        }
+
+        if (detail.Summary.Status == AcquisitionStatus.Importing) {
+            return new AcquisitionRemovalEligibility(false, ActiveImportConflict(detail.Summary.Status).Message);
+        }
+
+        if (detail.Summary.Status == AcquisitionStatus.Queued
+            && (await store.GetTransferInfoAsync(id, cancellationToken))?.ClientItemId is not { Length: > 0 }) {
+            return new AcquisitionRemovalEligibility(
+                false,
+                "This acquisition is still being handed to its download client. Wait for queueing to finish and retry.");
+        }
+
+        AcquisitionImportContext? import;
+        try {
+            import = await store.GetImportContextAsync(id, cancellationToken);
+        } catch (InvalidDataException) {
+            return new AcquisitionRemovalEligibility(false, ImportCheckpointLifecycle.CorruptCheckpointMessage);
+        }
+
+        if (import is not ({ TvImportCheckpoint: not null } or { ImportPlacementCheckpoint: not null })
+            || await ImportCheckpointLifecycle.CanAbandonAsync(import, cancellationToken, scanGate)) {
+            return new AcquisitionRemovalEligibility(true);
+        }
+
+        return new AcquisitionRemovalEligibility(false, ImportCheckpointLifecycle.CheckpointMustFinishMessage);
+    }
 
     /// <inheritdoc />
     public async Task<AcquisitionReacquireEligibility> GetReacquireEligibilityAsync(
@@ -290,7 +412,7 @@ public sealed class AcquisitionService(
             throw ActiveImportConflict(detail.Summary.Status);
         }
 
-        await EnsureTvCheckpointCanBeSupersededAsync(detail, cancellationToken);
+        await EnsureImportCheckpointCanBeSupersededAsync(detail, cancellationToken);
         if (!await store.TryTransitionStatusAsync(
                 id,
                 [detail.Summary.Status],
@@ -322,43 +444,190 @@ public sealed class AcquisitionService(
     /// cadence instead of orphan-pausing. Internal teardown paths (remove-wanted, entity deletion) leave
     /// the flag off — they are dismantling the loop on purpose.
     /// </summary>
-    public async Task<bool> DeleteAsync(Guid id, CancellationToken cancellationToken, bool preserveWantedLoop = false) {
+    public Task<bool> DeleteAsync(Guid id, CancellationToken cancellationToken, bool preserveWantedLoop = false) =>
+        DeleteCoreAsync(id, preserveWantedLoop, cancellationToken);
+
+    /// <inheritdoc />
+    public async Task<bool> DeleteForUnmonitorAsync(Guid id, CancellationToken cancellationToken) {
+        if (!await ClaimTeardownAsync(id, AcquisitionTeardownIntent.Remove, cancellationToken)) {
+            return false;
+        }
+
+        await ConfirmTransferRemovedAsync(id, cancellationToken);
+        return await CompleteTeardownAsync(id, AcquisitionTeardownIntent.Remove, cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public async Task<bool> ClaimTeardownAsync(
+        Guid id,
+        AcquisitionTeardownIntent intent,
+        CancellationToken cancellationToken) {
+        var detail = await store.GetAsync(id, cancellationToken);
+        if (detail is null) {
+            return false;
+        }
+
+        if (detail.Summary.Status == AcquisitionStatus.Stopping) {
+            var existing = await store.GetTeardownClaimAsync(id, cancellationToken);
+            if (existing?.Intent != intent) {
+                throw new AcquisitionConfigurationException(
+                    ApiProblemCodes.AcquisitionInvalid,
+                    "This acquisition is already stopping for a different cleanup operation.");
+            }
+
+            await acquisitionJobs.CancelAsync(id, cancellationToken);
+            return true;
+        }
+
+        if (intent == AcquisitionTeardownIntent.Reacquire) {
+            var eligibility = await EvaluateReacquireEligibilityAsync(detail, cancellationToken);
+            if (!eligibility.CanReacquire) {
+                throw new AcquisitionConfigurationException(
+                    ApiProblemCodes.AcquisitionInvalid,
+                    eligibility.Message ?? "This acquisition cannot be reacquired right now.");
+            }
+        } else {
+            var eligibility = await GetRemovalEligibilityAsync(id, cancellationToken);
+            if (!eligibility.CanRemove) {
+                throw new AcquisitionConfigurationException(
+                    ApiProblemCodes.AcquisitionInvalid,
+                    eligibility.Message ?? "This acquisition cannot be removed right now.");
+            }
+        }
+
+        await EnsureImportCheckpointCanBeSupersededAsync(detail, cancellationToken);
+        if (!await store.TryClaimTeardownAsync(
+                id,
+                detail.Summary.Status,
+                intent,
+                intent == AcquisitionTeardownIntent.Reacquire
+                    ? "Removing files before reacquisition."
+                    : "Removing acquisition.",
+                cancellationToken)) {
+            throw LifecycleChangedConflict();
+        }
+
+        // Job cancellation is part of the durable local claim and precedes the first remote/filesystem
+        // effect. A failure leaves Stopping durable; retry repeats exact cancellation idempotently.
+        await acquisitionJobs.CancelAsync(id, cancellationToken);
+        return true;
+    }
+
+    /// <inheritdoc />
+    public Task ConfirmTransferRemovedAsync(Guid id, CancellationToken cancellationToken) =>
+        RemoveTransferDataStrictAsync(id, cancellationToken);
+
+    /// <inheritdoc />
+    public async Task<bool> CompleteTeardownAsync(
+        Guid id,
+        AcquisitionTeardownIntent intent,
+        CancellationToken cancellationToken) {
+        var detail = await store.GetAsync(id, cancellationToken);
+        if (detail is null) {
+            return false;
+        }
+
+        var claim = await store.GetTeardownClaimAsync(id, cancellationToken);
+        if (claim?.Intent != intent) {
+            throw new AcquisitionConfigurationException(
+                ApiProblemCodes.AcquisitionInvalid,
+                "The acquisition no longer carries the expected cleanup claim. Refresh and retry.");
+        }
+
+        await RecordRemovedAsync(detail.Summary, "Removed by user.", cancellationToken);
+        return await store.DeleteAsync(id, cancellationToken);
+    }
+
+    private async Task<bool> DeleteCoreAsync(
+        Guid id,
+        bool preserveWantedLoop,
+        CancellationToken cancellationToken) {
         var detail = await store.GetAsync(id, cancellationToken);
         var summary = detail?.Summary;
         if (detail is null) {
             return false;
         }
 
-        await EnsureTvCheckpointCanBeSupersededAsync(detail, cancellationToken);
-        if (!await store.TryTransitionStatusAsync(
-                id,
-                [detail.Summary.Status],
-                AcquisitionStatus.Cancelled,
-                "Removing acquisition.",
-                cancellationToken)) {
-            throw LifecycleChangedConflict();
+        if (detail.Summary.Status == AcquisitionStatus.Stopping) {
+            var claim = await store.GetTeardownClaimAsync(id, cancellationToken);
+            var expectedIntent = preserveWantedLoop
+                ? AcquisitionTeardownIntent.Reacquire
+                : AcquisitionTeardownIntent.Remove;
+            if (claim?.Intent != expectedIntent) {
+                throw new AcquisitionConfigurationException(
+                    ApiProblemCodes.AcquisitionInvalid,
+                    "This acquisition is already stopping. Retry the operation that started its cleanup.");
+            }
+        } else if (preserveWantedLoop) {
+            await EnsureImportCheckpointCanBeSupersededAsync(detail, cancellationToken);
+            if (!await store.TryClaimTeardownAsync(
+                    id,
+                    detail.Summary.Status,
+                    AcquisitionTeardownIntent.Reacquire,
+                    "Removing download and restarting its wanted search.",
+                    cancellationToken)) {
+                throw LifecycleChangedConflict();
+            }
+        } else {
+            await ClaimTeardownAsync(id, AcquisitionTeardownIntent.Remove, cancellationToken);
         }
 
-        // Record the Removed event BEFORE the hard delete so the entry still carries a live acquisition id;
-        // the acquisition_history FK is SetNull, so once the row is deleted the entry's acquisition id nulls
-        // out but the entry (and its denormalized title/kind/entity) survives — the durable audit trail.
-        if (summary is not null) {
-            await RecordRemovedAsync(summary, "Removed by user.", cancellationToken);
+        if (preserveWantedLoop || detail.Summary.Status == AcquisitionStatus.Stopping) {
+            await acquisitionJobs.CancelAsync(id, cancellationToken);
         }
-
-        await RemoveTransferDataAsync(id, cancellationToken);
+        // Every path below hard-deletes or supersedes the only durable transfer pointer. Prove the remote
+        // item absent first; an outage leaves this Stopping row and its pointer retryable instead of
+        // orphaning client data.
+        await RemoveTransferDataStrictAsync(id, cancellationToken);
 
         if (preserveWantedLoop) {
-            // Clone-then-retarget keeps the monitor loop alive across the hard delete. The clone only
-            // materializes for an entity-linked acquisition whose entity is still a wanted placeholder;
-            // otherwise (ad-hoc acquisitions, already-imported items) nothing is preserved to chase.
-            var replacementId = await store.CloneForRetryAsync(id, cancellationToken);
+            // The replacement is durably elected and linked from the Stopping owner before retargeting.
+            // A crash anywhere after this point resumes the same clone instead of manufacturing duplicate
+            // Pending rows on each retry of Downloads → Remove.
+            var replacementId = await store.GetOrCreateTeardownReplacementAsync(id, cancellationToken);
             if (replacementId is { } freshId) {
-                await monitors.RetargetAsync(id, freshId, cancellationToken);
+                if (!await monitors.RetargetAsync(id, freshId, cancellationToken)) {
+                    // A recursive unmonitor claim won the race after the clone was created. The clone has
+                    // no job or transfer yet, so remove it immediately.
+                    await store.DeleteAsync(freshId, cancellationToken);
+                } else {
+                    var replacementStatus = await store.GetStatusAsync(freshId, cancellationToken);
+                    if (replacementStatus == AcquisitionStatus.Pending
+                        && await store.TryTransitionStatusAsync(
+                            freshId,
+                            [AcquisitionStatus.Pending],
+                            AcquisitionStatus.Searching,
+                            null,
+                            cancellationToken)) {
+                        replacementStatus = AcquisitionStatus.Searching;
+                    } else if (replacementStatus == AcquisitionStatus.Pending) {
+                        replacementStatus = await store.GetStatusAsync(freshId, cancellationToken);
+                    }
+
+                    if (replacementStatus == AcquisitionStatus.Searching
+                        && !await queue.HasPendingAsync(
+                            JobType.AcquisitionSearch,
+                            freshId.ToString(),
+                            cancellationToken)) {
+                        await queue.EnqueueAsync(
+                            new EnqueueJobRequest(
+                                JobType.AcquisitionSearch,
+                                PayloadJson: AcquisitionJobPayload.Serialize(freshId),
+                                TargetEntityId: freshId.ToString(),
+                                TargetLabel: detail.Summary.Title),
+                            cancellationToken);
+                    }
+                }
+            }
+
+            if (summary is not null) {
+                await RecordRemovedAsync(summary, "Removed by user.", cancellationToken);
             }
         }
 
-        return await store.DeleteAsync(id, cancellationToken);
+        return preserveWantedLoop
+            ? await store.DeleteAsync(id, cancellationToken)
+            : await CompleteTeardownAsync(id, AcquisitionTeardownIntent.Remove, cancellationToken);
     }
 
     /// <inheritdoc />
@@ -368,29 +637,15 @@ public sealed class AcquisitionService(
             return null;
         }
 
-        var eligibility = await EvaluateReacquireEligibilityAsync(detail, cancellationToken);
-        if (!eligibility.CanReacquire) {
-            throw new AcquisitionConfigurationException(
-                ApiProblemCodes.AcquisitionInvalid,
-                eligibility.Message ?? "This acquisition cannot be reacquired right now.");
-        }
+        await ClaimTeardownAsync(id, AcquisitionTeardownIntent.Reacquire, cancellationToken);
+        // A direct call claims before remote work; managed Entity deletion reaches this method with the same
+        // durable claim after disk succeeds. Confirming absence again is intentionally idempotent on retry.
+        await ConfirmTransferRemovedAsync(id, cancellationToken);
 
-        await EnsureTvCheckpointCanBeSupersededAsync(detail, cancellationToken);
-        if (!await store.TryTransitionStatusAsync(
-                id,
-                [AcquisitionStatus.Imported],
-                AcquisitionStatus.Cancelled,
-                "Files removed; preparing reacquisition.",
-                cancellationToken)) {
-            throw LifecycleChangedConflict();
-        }
-
-        await RemoveTransferDataAsync(id, cancellationToken);
-
-        // CloneForRetry is the clean transition out of Imported: it deliberately carries only the search
-        // identity/targeting metadata, leaving the old release, transfer, import hint, final path, and owned
-        // quality behind on the row that is about to be removed.
-        var replacementId = await store.CloneForRetryAsync(id, cancellationToken);
+        // The replacement and its pointer from the teardown owner are committed together. A retry therefore
+        // resumes this exact clean lifecycle instead of creating a second acquisition after a crash between
+        // monitor retargeting, search initialization, and removal of the old Imported row.
+        var replacementId = await store.GetOrCreateTeardownReplacementAsync(id, cancellationToken);
         if (replacementId is not { } freshId) {
             // The entity is already fileless + Wanted, so preserving an Imported acquisition here would be
             // actively false and every action against it would target a dead lifecycle. Remove its helper
@@ -405,15 +660,46 @@ public sealed class AcquisitionService(
             return null;
         }
 
-        await monitors.RetargetAsync(id, freshId, cancellationToken);
-        await store.SetStatusAsync(freshId, AcquisitionStatus.Searching, null, cancellationToken);
-        await queue.EnqueueAsync(
-            new EnqueueJobRequest(
+        if (!await monitors.RetargetAfterFileDeletionAsync(id, freshId, cancellationToken)
+            && !await monitors.RetargetAsync(id, freshId, cancellationToken)) {
+            // Claim-first race: never leave the pending clone outside the immutable unmonitor scope.
+            // Remote data was already confirmed absent before any local lifecycle transition.
+            await store.DeleteAsync(freshId, cancellationToken);
+            await RecordRemovedAsync(
+                detail.Summary, "Files deleted while monitoring was being stopped.", cancellationToken);
+            await store.DeleteAsync(id, cancellationToken);
+            return null;
+        }
+
+        var replacementStatus = await store.GetStatusAsync(freshId, cancellationToken);
+        if (replacementStatus == AcquisitionStatus.Pending) {
+            if (await store.TryTransitionStatusAsync(
+                    freshId,
+                    [AcquisitionStatus.Pending],
+                    AcquisitionStatus.Searching,
+                    null,
+                    cancellationToken)) {
+                replacementStatus = AcquisitionStatus.Searching;
+            } else {
+                replacementStatus = await store.GetStatusAsync(freshId, cancellationToken);
+            }
+        }
+
+        // Searching is the durable intent. A retry closes either side of the status/enqueue crash window,
+        // while the queue lookup prevents a second search job after retarget or history work is retried.
+        if (replacementStatus == AcquisitionStatus.Searching
+            && !await queue.HasPendingAsync(
                 JobType.AcquisitionSearch,
-                PayloadJson: AcquisitionJobPayload.Serialize(freshId),
-                TargetEntityId: freshId.ToString(),
-                TargetLabel: detail.Summary.Title),
-            cancellationToken);
+                freshId.ToString(),
+                cancellationToken)) {
+            await queue.EnqueueAsync(
+                new EnqueueJobRequest(
+                    JobType.AcquisitionSearch,
+                    PayloadJson: AcquisitionJobPayload.Serialize(freshId),
+                    TargetEntityId: freshId.ToString(),
+                    TargetLabel: detail.Summary.Title),
+                cancellationToken);
+        }
 
         // Record while the old FK target still exists; the history row survives its deletion via SetNull.
         await RecordRemovedAsync(detail.Summary, "Files deleted; searching again.", cancellationToken);
@@ -424,32 +710,40 @@ public sealed class AcquisitionService(
     private async Task<AcquisitionReacquireEligibility> EvaluateReacquireEligibilityAsync(
         AcquisitionDetail detail,
         CancellationToken cancellationToken) {
+        if (detail.Summary.Status == AcquisitionStatus.Stopping) {
+            var claim = await store.GetTeardownClaimAsync(detail.Summary.Id, cancellationToken);
+            return claim is {
+                Intent: AcquisitionTeardownIntent.Reacquire,
+                OriginalStatus: AcquisitionStatus.Imported
+            }
+                ? new AcquisitionReacquireEligibility(true)
+                : new AcquisitionReacquireEligibility(
+                    false,
+                    "This acquisition is already stopping for a different cleanup operation.");
+        }
+
         if (detail.Summary.Status != AcquisitionStatus.Imported) {
             return new AcquisitionReacquireEligibility(
                 false,
                 ActiveImportConflict(detail.Summary.Status).Message);
         }
 
-        if (detail.Summary.Kind is not (EntityKind.Video or EntityKind.VideoSeason or EntityKind.VideoSeries)) {
-            return new AcquisitionReacquireEligibility(true);
-        }
-
         AcquisitionImportContext? import;
         try {
             import = await store.GetImportContextAsync(detail.Summary.Id, cancellationToken);
         } catch (InvalidDataException) {
-            return new AcquisitionReacquireEligibility(false, TvImportCheckpointLifecycle.CorruptCheckpointMessage);
+            return new AcquisitionReacquireEligibility(false, ImportCheckpointLifecycle.CorruptCheckpointMessage);
         }
 
-        if (import?.TvImportCheckpoint is null
-            || await TvImportCheckpointLifecycle.CanAbandonAsync(
+        if (import is not ({ TvImportCheckpoint: not null } or { ImportPlacementCheckpoint: not null })
+            || await ImportCheckpointLifecycle.CanAbandonAsync(
                 import,
                 cancellationToken,
                 scanGate)) {
             return new AcquisitionReacquireEligibility(true);
         }
 
-        return new AcquisitionReacquireEligibility(false, TvImportCheckpointLifecycle.CheckpointMustFinishMessage);
+        return new AcquisitionReacquireEligibility(false, ImportCheckpointLifecycle.CheckpointMustFinishMessage);
     }
 
     /// <summary>
@@ -478,6 +772,68 @@ public sealed class AcquisitionService(
     }
 
     /// <summary>
+    /// Strict counterpart used when unmonitoring promises no orphan download. A missing completed item is
+    /// already success; an unresolved pre-Add handoff or unavailable client fails closed with its pointer intact.
+    /// </summary>
+    private async Task RemoveTransferDataStrictAsync(Guid id, CancellationToken cancellationToken) {
+        var transfer = await store.GetTransferInfoAsync(id, cancellationToken);
+        if (string.IsNullOrWhiteSpace(transfer?.ClientItemId)) {
+            return;
+        }
+
+        var client = await ResolveRemovalClientAsync(transfer, cancellationToken);
+        if (client is null) {
+            throw new AcquisitionConfigurationException(
+                ApiProblemCodes.AcquisitionInvalid,
+                "The recorded download client is unavailable, so its transfer could not be removed. Restore the client configuration and retry.");
+        }
+
+        try {
+            var download = clients.Get(client.Kind);
+            var connection = ConnectionFor(client) with {
+                Category = transfer.Category ?? client.Category
+            };
+            var clientItemId = transfer.ClientItemId;
+            var item = await download.GetItemAsync(connection, clientItemId, cancellationToken);
+            if (item is null && transfer.State == TransferOwnershipState.Adding.ToCode()) {
+                var matches = (await download.ListItemsAsync(connection, cancellationToken))
+                    .Where(candidate => DownloadAddCorrelation.MatchesName(clientItemId, candidate.Name))
+                    .GroupBy(candidate => candidate.ClientItemId, StringComparer.OrdinalIgnoreCase)
+                    .Select(group => group.First())
+                    .ToArray();
+                if (matches.Length > 1) {
+                    throw new AcquisitionConfigurationException(
+                        ApiProblemCodes.AcquisitionInvalid,
+                        "The unfinished download handoff matches multiple client items in its category. Prismedia will not guess which data to delete; remove the duplicate manually and retry cleanup.");
+                }
+
+                item = matches.SingleOrDefault();
+                if (item is null) {
+                    throw new AcquisitionConfigurationException(
+                        ApiProblemCodes.AcquisitionInvalid,
+                        "The unfinished download handoff could not be resolved in its recorded client category. Retry the same queue action or remove the client item manually; Prismedia will keep its ownership pointer until cleanup can be proven complete.");
+                }
+                clientItemId = item.ClientItemId;
+            } else if (item is null) {
+                return;
+            }
+
+            await download.RemoveAsync(connection, clientItemId, deleteData: true, cancellationToken);
+            if (await download.GetItemAsync(connection, clientItemId, cancellationToken) is not null) {
+                throw new IOException("The transfer is still present after the client acknowledged removal.");
+            }
+        } catch (OperationCanceledException) {
+            throw;
+        } catch (AcquisitionConfigurationException) {
+            throw;
+        } catch (Exception exception) {
+            throw new AcquisitionConfigurationException(
+                ApiProblemCodes.AcquisitionInvalid,
+                $"The download client could not remove the active transfer: {exception.Message}");
+        }
+    }
+
+    /// <summary>
     /// Manually blocklists one of an acquisition's release candidates so it is never grabbed (here or on a
     /// future search) and marks that candidate rejected so the picker reflects it immediately. Returns the
     /// refreshed acquisition, or null when the candidate no longer exists.
@@ -499,8 +855,9 @@ public sealed class AcquisitionService(
     /// <summary>
     /// Re-runs the release search for an existing acquisition on demand (the manual counterpart to monitoring).
     /// Enqueues the standard <see cref="JobType.AcquisitionSearch"/> — deduped per acquisition, and the handler
-    /// re-checks that the acquisition is still searchable — so it can't disturb an in-flight grab. Returns the
-    /// acquisition, or null when it no longer exists.
+    /// re-checks that the acquisition is still searchable — so it can't disturb an in-flight grab. An explicit
+    /// user action may revive Cancelled by claiming Searching before enqueue; stale queued jobs cannot. Returns
+    /// the acquisition, or null when it no longer exists.
     /// </summary>
     public async Task<AcquisitionDetail?> ReSearchAsync(Guid id, CancellationToken cancellationToken) {
         var detail = await store.GetAsync(id, cancellationToken);
@@ -508,11 +865,12 @@ public sealed class AcquisitionService(
             return null;
         }
 
-        if (!AcquisitionSearchJobHandler.IsSearchable(detail.Summary.Status)) {
+        var explicitRevival = detail.Summary.Status == AcquisitionStatus.Cancelled;
+        if (!explicitRevival && !AcquisitionSearchJobHandler.CanScheduleSearch(detail.Summary.Status)) {
             return detail;
         }
 
-        await EnsureTvCheckpointCanBeSupersededAsync(detail, cancellationToken);
+        await EnsureImportCheckpointCanBeSupersededAsync(detail, cancellationToken);
         if (!await store.TryTransitionStatusAsync(
                 id,
                 [detail.Summary.Status],
@@ -529,18 +887,14 @@ public sealed class AcquisitionService(
                 TargetEntityId: id.ToString(),
                 TargetLabel: detail.Summary.Title),
             cancellationToken);
-        return detail;
+        return await store.GetAsync(id, cancellationToken);
     }
 
-    private async Task EnsureTvCheckpointCanBeSupersededAsync(
+    private async Task EnsureImportCheckpointCanBeSupersededAsync(
         AcquisitionDetail detail,
         CancellationToken cancellationToken) {
         if (detail.Summary.Status == AcquisitionStatus.Importing) {
             throw ActiveImportConflict(detail.Summary.Status);
-        }
-
-        if (detail.Summary.Kind is not (EntityKind.Video or EntityKind.VideoSeason or EntityKind.VideoSeries)) {
-            return;
         }
 
         AcquisitionImportContext? import;
@@ -549,18 +903,18 @@ public sealed class AcquisitionService(
         } catch (InvalidDataException) {
             throw new AcquisitionConfigurationException(
                 ApiProblemCodes.AcquisitionInvalid,
-                TvImportCheckpointLifecycle.CorruptCheckpointMessage);
+                ImportCheckpointLifecycle.CorruptCheckpointMessage);
         }
 
-        if (import?.TvImportCheckpoint is not null
-            && !await TvImportCheckpointLifecycle.TryAbandonAsync(
+        if (import is { TvImportCheckpoint: not null } or { ImportPlacementCheckpoint: not null }
+            && !await ImportCheckpointLifecycle.TryAbandonAsync(
                 store,
                 import,
                 cancellationToken,
                 scanGate)) {
             throw new AcquisitionConfigurationException(
                 ApiProblemCodes.AcquisitionInvalid,
-                TvImportCheckpointLifecycle.CheckpointMustFinishMessage);
+                ImportCheckpointLifecycle.CheckpointMustFinishMessage);
         }
     }
 
@@ -603,14 +957,44 @@ public sealed class AcquisitionService(
         return detail;
     }
 
-    /// <summary>Persists a new acquisition and enqueues the background search job that fills in candidates.</summary>
+    /// <summary>
+    /// Persists a new acquisition and schedules its search. Entity-bound work holds the authoritative
+    /// Entity/monitor lifecycle lease across persistence, Searching provenance, and queue publication.
+    /// Unbound work preserves the ordinary acquisition-only path.
+    /// </summary>
     public async Task<AcquisitionSummary> CreateAndSearchAsync(AcquisitionCreateRequest request, CancellationToken cancellationToken) {
+        var metadata = CreateMetadata(request);
+        if (metadata.EntityId is not { } entityId) {
+            return await CreateAndSearchCoreAsync(metadata, cancellationToken);
+        }
+
+        AcquisitionSummary? summary = null;
+        var accepted = await entityLifecycle.ExecuteAsync(
+            entityId,
+            async leaseCancellationToken => summary = await CreateAndSearchCoreAsync(
+                metadata,
+                leaseCancellationToken),
+            cancellationToken);
+        if (!accepted || summary is null) {
+            throw EntityLifecycleConflict();
+        }
+
+        return summary;
+    }
+
+    /// <inheritdoc />
+    public Task<AcquisitionSummary> CreateAndSearchWithinEntityLifecycleAsync(
+        AcquisitionCreateRequest request,
+        CancellationToken cancellationToken) =>
+        CreateAndSearchCoreAsync(CreateMetadata(request), cancellationToken);
+
+    private static AcquisitionMetadata CreateMetadata(AcquisitionCreateRequest request) {
         if (string.IsNullOrWhiteSpace(request.Title)) {
             throw new AcquisitionConfigurationException(ApiProblemCodes.AcquisitionInvalid, "A title is required to start an acquisition.");
         }
 
         var externalIdentity = CreateExternalIdentity(request);
-        var metadata = new AcquisitionMetadata(
+        return new AcquisitionMetadata(
             request.Title.Trim(),
             string.IsNullOrWhiteSpace(request.Author) ? null : request.Author.Trim(),
             string.IsNullOrWhiteSpace(request.Series) ? null : request.Series.Trim(),
@@ -625,8 +1009,25 @@ public sealed class AcquisitionService(
             request.SeasonNumber,
             request.EpisodeNumber,
             request.VolumeNumber);
+    }
 
+    private async Task<AcquisitionSummary> CreateAndSearchCoreAsync(
+        AcquisitionMetadata metadata,
+        CancellationToken cancellationToken) {
         var summary = await store.CreateAsync(metadata, cancellationToken);
+        if (!await store.TryTransitionStatusAsync(
+                summary.Id,
+                [AcquisitionStatus.Pending],
+                AcquisitionStatus.Searching,
+                null,
+                cancellationToken)) {
+            throw LifecycleChangedConflict();
+        }
+        summary = summary with {
+            Status = AcquisitionStatus.Searching,
+            StatusMessage = null,
+            UpdatedAt = DateTimeOffset.UtcNow
+        };
         await queue.EnqueueAsync(
             new EnqueueJobRequest(
                 JobType.AcquisitionSearch,
@@ -652,6 +1053,11 @@ public sealed class AcquisitionService(
         return summary;
     }
 
+    private static AcquisitionConfigurationException EntityLifecycleConflict() =>
+        new(
+            ApiProblemCodes.AcquisitionInvalid,
+            "This Entity is missing or still being changed by another cleanup operation. Refresh and retry the request.");
+
     private static ExternalIdentity? CreateExternalIdentity(AcquisitionCreateRequest request) {
         var hasNamespace = !string.IsNullOrWhiteSpace(request.IdentityNamespace);
         var hasValue = !string.IsNullOrWhiteSpace(request.IdentityValue);
@@ -673,8 +1079,8 @@ public sealed class AcquisitionService(
     }
 
     /// <inheritdoc />
-    public Task<bool> AnyForEntityAsync(Guid entityId, CancellationToken cancellationToken) =>
-        store.AnyForEntityAsync(entityId, cancellationToken);
+    public Task<bool> AnyOpenForEntityAsync(Guid entityId, CancellationToken cancellationToken) =>
+        store.AnyOpenForEntityAsync(entityId, cancellationToken);
 
     /// <inheritdoc />
     public Task<IReadOnlyList<Guid>> ListIdsForEntityAsync(Guid entityId, CancellationToken cancellationToken) =>

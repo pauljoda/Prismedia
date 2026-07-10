@@ -32,6 +32,9 @@ public enum EntityKindCategory {
 /// <param name="EnumeratesIdentifyChildren">Whether this kind is an identify container whose local
 /// structural children are separately identifiable works (e.g. a series' seasons, an album's tracks);
 /// leaf-content kinds such as a movie leave this false.</param>
+/// <param name="SupportsFileDeletion">
+/// Whether the kind can safely root managed file deletion for itself and its structural descendants.
+/// </param>
 public sealed record EntityKindDescriptor(
     EntityKind Value,
     string Code,
@@ -40,7 +43,8 @@ public sealed record EntityKindDescriptor(
     EntityKindCategory Category,
     EntityStorageShape StorageShape,
     Type? ClrType,
-    bool EnumeratesIdentifyChildren) {
+    bool EnumeratesIdentifyChildren,
+    bool SupportsFileDeletion) {
     /// <summary>Allows descriptors to flow into domain-only metadata APIs.</summary>
     public static implicit operator EntityKind(EntityKindDescriptor descriptor) => descriptor.Value;
 }
@@ -143,6 +147,7 @@ public static class EntityKindRegistry {
             meta.Category,
             meta.StorageShape,
             meta.ClrType,
-            meta.EnumeratesIdentifyChildren);
+            meta.EnumeratesIdentifyChildren,
+            meta.SupportsFileDeletion);
     }
 }

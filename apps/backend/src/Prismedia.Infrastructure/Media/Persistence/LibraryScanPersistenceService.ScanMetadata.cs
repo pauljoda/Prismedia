@@ -27,7 +27,7 @@ public sealed partial class LibraryScanPersistenceService {
         await AddCreditsAsync(entityId, metadata.Performers, "performer", now, markNsfw, cancellationToken);
 
         entity.UpdatedAt = now;
-        await _db.SaveChangesAsync(cancellationToken);
+        await SaveChangesWithLifecycleAsync(cancellationToken);
     }
 
     public async Task ApplyComicInfoMetadataAsync(
@@ -53,7 +53,7 @@ public sealed partial class LibraryScanPersistenceService {
         }
 
         entity.UpdatedAt = now;
-        await _db.SaveChangesAsync(cancellationToken);
+        await SaveChangesWithLifecycleAsync(cancellationToken);
     }
 
     private static void ApplyTitleIfScannedFallback(

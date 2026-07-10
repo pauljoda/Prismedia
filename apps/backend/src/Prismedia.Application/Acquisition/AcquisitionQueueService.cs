@@ -8,9 +8,9 @@ namespace Prismedia.Application.Acquisition;
 
 /// <summary>
 /// Sends a chosen release to a download client. Resolves the candidate's server-side download URL,
-/// picks the client by the release's protocol in priority order (falling back to the next client of
-/// that protocol when an add fails), hands it over under the profile's download category (else the
-/// client's), records the transfer, and moves the acquisition to
+/// picks the highest-priority client for the release protocol, durably records cleanup ownership before
+/// contacting it, hands the release over under the profile's download category (else the client's), fills
+/// the client-native transfer id under a row lease, and moves the acquisition to
 /// <see cref="AcquisitionStatus.Queued"/> for the monitor to track.
 /// </summary>
 public sealed class AcquisitionQueueService(
@@ -21,11 +21,17 @@ public sealed class AcquisitionQueueService(
     IBookAcquisitionProfileStore profiles,
     IIndexerConfigStore indexers,
     IReleaseLinkResolver linkResolver,
+    IAcquisitionTransferAddCoordinator transferAdds,
     IAcquisitionHistoryStore history,
     ILogger<AcquisitionQueueService> logger,
     VideoScanConcurrencyGate? scanGate = null) : IAcquisitionQueueService {
     /// <summary>Queues a chosen candidate: resolves a usable link (direct, magnet, or scraped from the info page) and hands it to a download client.</summary>
-    public async Task<AcquisitionDetail?> QueueAsync(Guid acquisitionId, Guid candidateId, CancellationToken cancellationToken, bool manualPick = false) {
+    public async Task<AcquisitionDetail?> QueueAsync(
+        Guid acquisitionId,
+        Guid candidateId,
+        CancellationToken cancellationToken,
+        bool manualPick = false,
+        AcquisitionStatus? requiredStatus = null) {
         var candidate = await acquisitions.GetQueueCandidateAsync(acquisitionId, candidateId, cancellationToken);
         if (candidate is null) {
             throw new AcquisitionConfigurationException(ApiProblemCodes.AcquisitionReleaseNotFound, "The selected release was not found for this acquisition.");
@@ -53,29 +59,113 @@ public sealed class AcquisitionQueueService(
         }
 
         var category = await ResolveCategoryAsync(acquisitionId, cancellationToken);
-        await ClaimQueueLifecycleAsync(acquisitionId, cancellationToken);
-        // Re-queueing (after a failed/cancelled attempt) supersedes any prior download — drop the old
-        // one from its client first so it doesn't linger as an orphan or collide on re-add.
-        await RemovePriorDownloadAsync(acquisitionId, eligible[0], cancellationToken);
-        try {
-            var (client, clientItemId) = await AddWithFallbackAsync(
-                eligible,
-                (downloadClient, connection) => downloadClient.AddAsync(
-                    connection, new DownloadAddRequest(url, candidate.InfoHash, category ?? connection.Category, candidate.Title), cancellationToken));
-            var seedGoal = await ResolveSeedGoalAsync(candidate, client, cancellationToken);
-            await acquisitions.CreateTransferAsync(acquisitionId, client.Id, clientItemId, category ?? client.Category, cancellationToken, seedGoal);
-            // Snapshot the chosen release so a later failure can blocklist exactly it (and pick the next-best).
-            await acquisitions.SetSelectedReleaseAsync(
-                acquisitionId,
-                new SelectedRelease(candidate.Title, candidate.IndexerName, candidate.InfoHash, manualPick),
+        var indexerSeedGoal = await ResolveIndexerSeedGoalAsync(candidate, cancellationToken);
+        var correlation = DownloadAddCorrelation.Create(candidate.InfoHash, candidate.Title);
+        var existingAttempt = await acquisitions.GetTransferInfoAsync(acquisitionId, cancellationToken);
+        DownloadClientDetail client;
+        string attemptCategory;
+        string? recoveredClientItemId = null;
+        var createdPlaceholder = false;
+        if (IsAdding(existingAttempt)) {
+            if (!string.Equals(existingAttempt!.ClientItemId, correlation, StringComparison.Ordinal)) {
+                throw new AcquisitionConfigurationException(
+                    ApiProblemCodes.AcquisitionInvalid,
+                    "A different download-client handoff is awaiting recovery. Retry that exact release or finish its cleanup before queueing another.");
+            }
+            client = await ResolveAttemptOwnerAsync(existingAttempt, cancellationToken);
+            attemptCategory = existingAttempt.Category ?? client.Category;
+            recoveredClientItemId = await ResolveExistingAttemptItemAsync(
+                client,
+                attemptCategory,
+                correlation,
                 cancellationToken);
-            await acquisitions.SetStatusAsync(acquisitionId, AcquisitionStatus.Queued, "Sent to download client.", cancellationToken);
+        } else {
+            var priorStatus = await ClaimQueueLifecycleAsync(
+                acquisitionId,
+                requiredStatus,
+                cancellationToken);
+            // Re-queueing supersedes any prior download. Its exact pointer stays intact unless strict
+            // removal succeeds; only then is it replaced by the durable pre-Add ownership placeholder.
+            await RemovePriorDownloadOrRestoreQueueStateAsync(
+                acquisitionId,
+                priorStatus,
+                eligible[0],
+                cancellationToken);
+            client = eligible[0];
+            attemptCategory = category ?? client.Category;
+            var seedGoal = ResolveSeedGoal(candidate, client, indexerSeedGoal);
+            if (!await acquisitions.BeginTransferAddAsync(
+                    acquisitionId,
+                    client.Id,
+                    correlation,
+                    attemptCategory,
+                    seedGoal,
+                    CancellationToken.None)) {
+                throw new AcquisitionConfigurationException(
+                    ApiProblemCodes.AcquisitionInvalid,
+                    "The acquisition began cleanup before the download-client handoff. No release was queued; retry cleanup.");
+            }
+            createdPlaceholder = true;
+        }
+
+        var acquiredLease = await transferAdds.AcquireAsync(acquisitionId, cancellationToken);
+        if (acquiredLease is null) {
+            if (createdPlaceholder) {
+                await acquisitions.AbandonTransferAddAsync(
+                    acquisitionId,
+                    client.Id,
+                    correlation,
+                    CancellationToken.None);
+            }
+            throw new AcquisitionConfigurationException(
+                ApiProblemCodes.AcquisitionInvalid,
+                "The acquisition began cleanup before the download-client handoff. No release was queued; retry the cleanup operation.");
+        }
+        await using var addLease = acquiredLease;
+        try {
+            var connection = ConnectionFor(client) with { Category = attemptCategory };
+            var downloadClient = clients.Get(client.Kind);
+            var addedNow = recoveredClientItemId is null;
+            var clientItemId = recoveredClientItemId
+                ?? await downloadClient.AddAsync(
+                    connection,
+                    new DownloadAddRequest(url, candidate.InfoHash, attemptCategory, candidate.Title),
+                    cancellationToken);
+            var selectedRelease = new SelectedRelease(
+                candidate.Title,
+                candidate.IndexerName,
+                candidate.InfoHash,
+                manualPick);
+            if (!await acquisitions.CompleteTransferAddAsync(
+                    acquisitionId,
+                    client.Id,
+                    correlation,
+                    clientItemId,
+                    selectedRelease,
+                    "Sent to download client.",
+                    CancellationToken.None)) {
+                await CompensateSupersededAddAsync(
+                    acquisitionId,
+                    client,
+                    connection,
+                    downloadClient,
+                    correlation,
+                    clientItemId,
+                    addedNow);
+                throw new AcquisitionConfigurationException(
+                    ApiProblemCodes.AcquisitionInvalid,
+                    "The acquisition changed while the download-client handoff was finalizing. Any newly accepted client item was removed; refresh before retrying.");
+            }
+            await addLease.CommitAsync(CancellationToken.None);
             await RecordGrabbedAsync(acquisitionId, candidate.Title, candidate.IndexerName, client.DisplayName, cancellationToken);
         } catch (AcquisitionConfigurationException) {
             throw;
         } catch (Exception ex) when (ex is not OperationCanceledException) {
-            await acquisitions.SetStatusAsync(acquisitionId, AcquisitionStatus.Failed, $"Failed to queue download: {ex.Message}", cancellationToken);
-            throw new AcquisitionConfigurationException(ApiProblemCodes.DownloadClientUnreachable, $"Failed to queue download: {ex.Message}");
+            // The pre-Add ownership placeholder remains Queued + adding. A recovered queue job retries the
+            // same correlation; teardown claims the row lock, then resolves/removes a remotely accepted item.
+            throw new AcquisitionConfigurationException(
+                ApiProblemCodes.DownloadClientUnreachable,
+                $"The download-client handoff did not finish: {ex.Message}. Retry the same release; cleanup remains safely blocked until it is reconciled.");
         }
 
         return await acquisitions.GetAsync(acquisitionId, cancellationToken);
@@ -89,31 +179,167 @@ public sealed class AcquisitionQueueService(
 
         var eligible = await ResolveClientsAsync(DownloadProtocol.Torrent, cancellationToken);
         var category = await ResolveCategoryAsync(acquisitionId, cancellationToken);
-        await ClaimQueueLifecycleAsync(acquisitionId, cancellationToken);
-        await RemovePriorDownloadAsync(acquisitionId, eligible[0], cancellationToken);
-        try {
-            var (client, clientItemId) = await AddWithFallbackAsync(
-                eligible,
-                (downloadClient, connection) => downloadClient.AddTorrentFileAsync(
-                    connection with { Category = category ?? connection.Category }, fileName, torrent, cancellationToken));
-            // A manual .torrent has no grab indexer; the client's default seed goal still applies.
-            var seedGoal = new TransferSeedGoal(client.SeedRatio, client.SeedTimeMinutes);
-            await acquisitions.CreateTransferAsync(acquisitionId, client.Id, clientItemId, category ?? client.Category, cancellationToken, seedGoal.IsEmpty ? null : seedGoal);
-            // Supersede any prior auto-grab snapshot: the uploaded file is now what is downloading, and
-            // it is a manual pick (never payload-validated, never wrongly blocklisted for the old release).
-            await acquisitions.SetSelectedReleaseAsync(
-                acquisitionId,
-                new SelectedRelease(fileName, IndexerName: null, InfoHash: null, ManualPick: true),
+        var correlation = TorrentInfoHash.TryComputeV1(torrent)
+            ?? DownloadAddCorrelation.Create(infoHash: null, fileName);
+        var existingAttempt = await acquisitions.GetTransferInfoAsync(acquisitionId, cancellationToken);
+        DownloadClientDetail client;
+        string attemptCategory;
+        string? recoveredClientItemId = null;
+        var createdPlaceholder = false;
+        if (IsAdding(existingAttempt)) {
+            if (!string.Equals(existingAttempt!.ClientItemId, correlation, StringComparison.Ordinal)) {
+                throw new AcquisitionConfigurationException(
+                    ApiProblemCodes.AcquisitionInvalid,
+                    "A different manual download handoff is awaiting recovery. Retry that exact file or finish its cleanup first.");
+            }
+            client = await ResolveAttemptOwnerAsync(existingAttempt, cancellationToken);
+            attemptCategory = existingAttempt.Category ?? client.Category;
+            recoveredClientItemId = await ResolveExistingAttemptItemAsync(
+                client,
+                attemptCategory,
+                correlation,
                 cancellationToken);
-            await acquisitions.SetStatusAsync(acquisitionId, AcquisitionStatus.Queued, "Uploaded torrent sent to download client.", cancellationToken);
+        } else {
+            var priorStatus = await ClaimQueueLifecycleAsync(
+                acquisitionId,
+                requiredStatus: null,
+                cancellationToken);
+            await RemovePriorDownloadOrRestoreQueueStateAsync(
+                acquisitionId,
+                priorStatus,
+                eligible[0],
+                cancellationToken);
+            client = eligible[0];
+            attemptCategory = category ?? client.Category;
+            var seedGoal = new TransferSeedGoal(client.SeedRatio, client.SeedTimeMinutes);
+            if (!await acquisitions.BeginTransferAddAsync(
+                    acquisitionId,
+                    client.Id,
+                    correlation,
+                    attemptCategory,
+                    seedGoal.IsEmpty ? null : seedGoal,
+                    CancellationToken.None)) {
+                throw new AcquisitionConfigurationException(
+                    ApiProblemCodes.AcquisitionInvalid,
+                    "The acquisition began cleanup before the manual download handoff. No file was queued; retry cleanup.");
+            }
+            createdPlaceholder = true;
+        }
+
+        var acquiredLease = await transferAdds.AcquireAsync(acquisitionId, cancellationToken);
+        if (acquiredLease is null) {
+            if (createdPlaceholder) {
+                await acquisitions.AbandonTransferAddAsync(
+                    acquisitionId,
+                    client.Id,
+                    correlation,
+                    CancellationToken.None);
+            }
+            throw new AcquisitionConfigurationException(
+                ApiProblemCodes.AcquisitionInvalid,
+                "The acquisition began cleanup before the download-client handoff. No torrent was queued; retry the cleanup operation.");
+        }
+        await using var addLease = acquiredLease;
+        try {
+            var connection = ConnectionFor(client) with { Category = attemptCategory };
+            var downloadClient = clients.Get(client.Kind);
+            var addedNow = recoveredClientItemId is null;
+            var clientItemId = recoveredClientItemId
+                ?? await downloadClient.AddTorrentFileAsync(
+                    connection,
+                    fileName,
+                    torrent,
+                    cancellationToken);
+            var selectedRelease = new SelectedRelease(
+                fileName,
+                IndexerName: null,
+                InfoHash: null,
+                ManualPick: true);
+            if (!await acquisitions.CompleteTransferAddAsync(
+                    acquisitionId,
+                    client.Id,
+                    correlation,
+                    clientItemId,
+                    selectedRelease,
+                    "Uploaded torrent sent to download client.",
+                    CancellationToken.None)) {
+                await CompensateSupersededAddAsync(
+                    acquisitionId,
+                    client,
+                    connection,
+                    downloadClient,
+                    correlation,
+                    clientItemId,
+                    addedNow);
+                throw new AcquisitionConfigurationException(
+                    ApiProblemCodes.AcquisitionInvalid,
+                    "The acquisition changed while the manual download handoff was finalizing. Any newly accepted client item was removed; refresh before retrying.");
+            }
+            await addLease.CommitAsync(CancellationToken.None);
             // A manual .torrent has no grab indexer; the uploaded file name stands in for the release title.
             await RecordGrabbedAsync(acquisitionId, fileName, indexerName: null, client.DisplayName, cancellationToken);
+        } catch (AcquisitionConfigurationException) {
+            throw;
         } catch (Exception ex) when (ex is not OperationCanceledException) {
-            await acquisitions.SetStatusAsync(acquisitionId, AcquisitionStatus.Failed, $"Failed to queue uploaded torrent: {ex.Message}", cancellationToken);
-            throw new AcquisitionConfigurationException(ApiProblemCodes.DownloadClientUnreachable, $"Failed to queue uploaded torrent: {ex.Message}");
+            throw new AcquisitionConfigurationException(
+                ApiProblemCodes.DownloadClientUnreachable,
+                $"The manual download handoff did not finish: {ex.Message}. Retry the same file; cleanup remains safely blocked until it is reconciled.");
         }
 
         return await acquisitions.GetAsync(acquisitionId, cancellationToken);
+    }
+
+    /// <summary>
+    /// A relational Add lease makes a mid-Add lifecycle win impossible: cancellation waits for the durable
+    /// native pointer, then removes it. The in-memory adapter and defensive failure paths still compensate a
+    /// newly accepted item when they observe that cancellation/teardown won before finalization. If the row
+    /// remains Queued, the durable correlation is intentionally retained for crash recovery instead.
+    /// </summary>
+    private async Task CompensateSupersededAddAsync(
+        Guid acquisitionId,
+        DownloadClientDetail client,
+        DownloadClientConnection connection,
+        IDownloadClient downloadClient,
+        string correlation,
+        string clientItemId,
+        bool addedNow) {
+        if (!addedNow) {
+            return;
+        }
+
+        var status = await acquisitions.GetStatusAsync(acquisitionId, CancellationToken.None);
+        if (status == AcquisitionStatus.Queued) {
+            return;
+        }
+
+        try {
+            await downloadClient.RemoveAsync(
+                connection,
+                clientItemId,
+                deleteData: true,
+                CancellationToken.None);
+            if (await downloadClient.GetItemAsync(
+                    connection,
+                    clientItemId,
+                    CancellationToken.None) is not null) {
+                throw new IOException(
+                    "The download client still reports the newly accepted item after removal.");
+            }
+            await acquisitions.AbandonTransferAddAsync(
+                acquisitionId,
+                client.Id,
+                correlation,
+                CancellationToken.None);
+        } catch (Exception ex) when (ex is not OperationCanceledException) {
+            logger.LogWarning(
+                ex,
+                "AcquisitionQueue: could not compensate remote item {ClientItemId} after acquisition {AcquisitionId} changed; retaining its durable correlation for teardown.",
+                clientItemId,
+                acquisitionId);
+            throw new AcquisitionConfigurationException(
+                ApiProblemCodes.DownloadClientUnreachable,
+                $"The acquisition changed after the download client accepted the item, and immediate removal failed: {ex.Message}. Its durable ownership marker was retained for cleanup.");
+        }
     }
 
     private static readonly AcquisitionStatus[] QueueableStatuses = [
@@ -123,16 +349,23 @@ public sealed class AcquisitionQueueService(
         AcquisitionStatus.ManualImportRequired,
     ];
 
-    private async Task ClaimQueueLifecycleAsync(
+    private async Task<AcquisitionStatus> ClaimQueueLifecycleAsync(
         Guid acquisitionId,
+        AcquisitionStatus? requiredStatus,
         CancellationToken cancellationToken) {
         var status = await acquisitions.GetStatusAsync(acquisitionId, cancellationToken);
-        if (status is null || !QueueableStatuses.Contains(status.Value)) {
+        var isExpected = status is { } current
+            && (requiredStatus is { } required
+                ? current == required
+                : QueueableStatuses.Contains(current));
+        if (!isExpected) {
             throw new AcquisitionConfigurationException(
                 ApiProblemCodes.AcquisitionInvalid,
                 status is null
                     ? "The acquisition no longer exists."
-                    : $"A release cannot be changed while this acquisition is {status.Value.ToCode()}.");
+                    : requiredStatus is not null
+                        ? "The acquisition changed before its automatic release could be queued."
+                        : $"A release cannot be changed while this acquisition is {status.Value.ToCode()}.");
         }
 
         AcquisitionImportContext? import;
@@ -141,22 +374,22 @@ public sealed class AcquisitionQueueService(
         } catch (InvalidDataException) {
             throw new AcquisitionConfigurationException(
                 ApiProblemCodes.AcquisitionInvalid,
-                TvImportCheckpointLifecycle.CorruptCheckpointMessage);
+                ImportCheckpointLifecycle.CorruptCheckpointMessage);
         }
-        if (import?.TvImportCheckpoint is not null
-            && !await TvImportCheckpointLifecycle.TryAbandonAsync(
+        if (import is { TvImportCheckpoint: not null } or { ImportPlacementCheckpoint: not null }
+            && !await ImportCheckpointLifecycle.TryAbandonAsync(
                 acquisitions,
                 import,
                 cancellationToken,
                 scanGate)) {
             throw new AcquisitionConfigurationException(
                 ApiProblemCodes.AcquisitionInvalid,
-                TvImportCheckpointLifecycle.CheckpointMustFinishMessage);
+                ImportCheckpointLifecycle.CheckpointMustFinishMessage);
         }
 
         if (!await acquisitions.TryTransitionStatusAsync(
                 acquisitionId,
-                [status.Value],
+                [status!.Value],
                 AcquisitionStatus.Queued,
                 "Preparing the selected release for the download client.",
                 cancellationToken)) {
@@ -164,35 +397,85 @@ public sealed class AcquisitionQueueService(
                 ApiProblemCodes.AcquisitionInvalid,
                 "The acquisition changed while this release was being prepared. Refresh and try again.");
         }
+
+        return status.Value;
     }
 
     /// <summary>
-    /// Tries each eligible client in priority order until one accepts the release. Only when every
-    /// client fails does the queue attempt fail, carrying the last client's error.
+    /// Removes an old remote transfer only after the queue lifecycle is claimed. If strict removal fails,
+    /// restores the exact prior queueable state with a non-cancellable compare-and-set; a concurrent
+    /// teardown that already moved to Stopping wins and keeps its durable claim instead.
     /// </summary>
-    private async Task<(DownloadClientDetail Client, string ClientItemId)> AddWithFallbackAsync(
-        IReadOnlyList<DownloadClientDetail> eligible,
-        Func<IDownloadClient, DownloadClientConnection, Task<string>> add) {
-        Exception? lastFailure = null;
-        foreach (var client in eligible) {
-            try {
-                var clientItemId = await add(clients.Get(client.Kind), ConnectionFor(client));
-                return (client, clientItemId);
-            } catch (OperationCanceledException) {
-                throw;
-            } catch (Exception ex) {
-                lastFailure = ex;
-            }
+    private async Task RemovePriorDownloadOrRestoreQueueStateAsync(
+        Guid acquisitionId,
+        AcquisitionStatus priorStatus,
+        DownloadClientDetail fallbackClient,
+        CancellationToken cancellationToken) {
+        try {
+            await RemovePriorDownloadAsync(acquisitionId, fallbackClient, cancellationToken);
+        } catch {
+            await acquisitions.TryTransitionStatusAsync(
+                acquisitionId,
+                [AcquisitionStatus.Queued],
+                priorStatus,
+                "The prior download could not be removed; no replacement was queued.",
+                CancellationToken.None);
+            throw;
+        }
+    }
+
+    private static bool IsAdding(AcquisitionTransferInfo? transfer) =>
+        transfer?.State == TransferOwnershipState.Adding.ToCode()
+        && !string.IsNullOrWhiteSpace(transfer.ClientItemId);
+
+    private async Task<DownloadClientDetail> ResolveAttemptOwnerAsync(
+        AcquisitionTransferInfo attempt,
+        CancellationToken cancellationToken) {
+        if (attempt.DownloadClientConfigId is not { } clientId
+            || await downloadClients.GetAsync(clientId, cancellationToken) is not { } owner) {
+            throw new AcquisitionConfigurationException(
+                ApiProblemCodes.AcquisitionInvalid,
+                "The download client that owns the unfinished handoff is unavailable. Restore it before retrying or cleaning up.");
         }
 
-        throw lastFailure ?? new InvalidOperationException("No download client accepted the release.");
+        return owner;
     }
 
     /// <summary>
-    /// Best-effort removal of an acquisition's prior download before a re-queue. The prior transfer may
+    /// Recovers a remotely accepted Add before retrying it. Direct hash/id lookup wins; otherwise exactly
+    /// one normalized title match inside the recorded category is accepted. Ambiguity fails closed.
+    /// </summary>
+    private async Task<string?> ResolveExistingAttemptItemAsync(
+        DownloadClientDetail client,
+        string category,
+        string correlation,
+        CancellationToken cancellationToken) {
+        var download = clients.Get(client.Kind);
+        var connection = ConnectionFor(client) with { Category = category };
+        if (await download.GetItemAsync(connection, correlation, cancellationToken) is { } direct) {
+            return direct.ClientItemId;
+        }
+
+        var matches = (await download.ListItemsAsync(connection, cancellationToken))
+            .Where(item => DownloadAddCorrelation.MatchesName(correlation, item.Name))
+            .GroupBy(item => item.ClientItemId, StringComparer.OrdinalIgnoreCase)
+            .Select(group => group.First())
+            .ToArray();
+        if (matches.Length > 1) {
+            throw new AcquisitionConfigurationException(
+                ApiProblemCodes.AcquisitionInvalid,
+                "The unfinished download handoff matches multiple client items in its category. Prismedia will not queue or remove another item until the duplicate is resolved.");
+        }
+
+        return matches.SingleOrDefault()?.ClientItemId;
+    }
+
+    /// <summary>
+    /// Strict removal of an acquisition's prior download before a re-queue. The prior transfer may
     /// live in a different client than the new grab (e.g. a usenet retry after a torrent failure), so it
     /// is removed through its own recorded client, falling back to the new grab's first candidate for
-    /// legacy transfers that recorded none. Never blocks the new download.
+    /// legacy transfers that recorded none. Re-queue must stop while this pointer is still live: replacing
+    /// it with the new transfer would make the old client item unreachable to later teardown.
     /// </summary>
     private async Task RemovePriorDownloadAsync(Guid acquisitionId, DownloadClientDetail fallbackClient, CancellationToken cancellationToken) {
         var prior = await acquisitions.GetTransferInfoAsync(acquisitionId, cancellationToken);
@@ -200,15 +483,32 @@ public sealed class AcquisitionQueueService(
             return;
         }
 
+        var owner = prior.DownloadClientConfigId is { } priorClientId
+            ? await downloadClients.GetAsync(priorClientId, cancellationToken)
+            : fallbackClient;
+        if (owner is null) {
+            throw new AcquisitionConfigurationException(
+                ApiProblemCodes.AcquisitionInvalid,
+                "The download client that owns the prior transfer is unavailable. Restore it before re-queueing so the old download is not orphaned.");
+        }
+
         try {
-            var owner = prior.DownloadClientConfigId is { } priorClientId
-                ? await downloadClients.GetAsync(priorClientId, cancellationToken) ?? fallbackClient
-                : fallbackClient;
-            await clients.Get(owner.Kind).RemoveAsync(ConnectionFor(owner), prior.ClientItemId, deleteData: true, cancellationToken);
+            var download = clients.Get(owner.Kind);
+            var connection = ConnectionFor(owner);
+            if (await download.GetItemAsync(connection, prior.ClientItemId, cancellationToken) is null) {
+                return;
+            }
+
+            await download.RemoveAsync(connection, prior.ClientItemId, deleteData: true, cancellationToken);
+            if (await download.GetItemAsync(connection, prior.ClientItemId, cancellationToken) is not null) {
+                throw new IOException("The prior transfer is still present after the client acknowledged removal.");
+            }
         } catch (OperationCanceledException) {
             throw;
-        } catch (Exception) {
-            // The prior download may already be gone; the re-queue should still proceed.
+        } catch (Exception exception) {
+            throw new AcquisitionConfigurationException(
+                ApiProblemCodes.DownloadClientUnreachable,
+                $"The prior download could not be removed, so the replacement was not queued: {exception.Message}");
         }
     }
 
@@ -251,7 +551,9 @@ public sealed class AcquisitionQueueService(
     /// The seed goal captured for the grab: the release indexer's ratio/time settings win, the
     /// client's defaults fill the gaps. Usenet transfers never seed, so they carry no goal.
     /// </summary>
-    private async Task<TransferSeedGoal?> ResolveSeedGoalAsync(AcquisitionQueueCandidate candidate, DownloadClientDetail client, CancellationToken cancellationToken) {
+    private async Task<TransferSeedGoal?> ResolveIndexerSeedGoalAsync(
+        AcquisitionQueueCandidate candidate,
+        CancellationToken cancellationToken) {
         if (candidate.Protocol != DownloadProtocol.Torrent) {
             return null;
         }
@@ -259,9 +561,22 @@ public sealed class AcquisitionQueueService(
         var indexer = candidate.IndexerConfigId is { } indexerId
             ? await indexers.GetAsync(indexerId, cancellationToken)
             : null;
+        return indexer is null
+            ? null
+            : new TransferSeedGoal(indexer.SeedRatio, indexer.SeedTimeMinutes);
+    }
+
+    private static TransferSeedGoal? ResolveSeedGoal(
+        AcquisitionQueueCandidate candidate,
+        DownloadClientDetail client,
+        TransferSeedGoal? indexerGoal) {
+        if (candidate.Protocol != DownloadProtocol.Torrent) {
+            return null;
+        }
+
         var goal = new TransferSeedGoal(
-            indexer?.SeedRatio ?? client.SeedRatio,
-            indexer?.SeedTimeMinutes ?? client.SeedTimeMinutes);
+            indexerGoal?.Ratio ?? client.SeedRatio,
+            indexerGoal?.TimeMinutes ?? client.SeedTimeMinutes);
         return goal.IsEmpty ? null : goal;
     }
 

@@ -1,5 +1,6 @@
 using Prismedia.Contracts.Organize;
 using Prismedia.Domain.Entities;
+using Prismedia.Application.Files;
 
 namespace Prismedia.Application.Organization;
 
@@ -17,12 +18,16 @@ public sealed class OrganizeService {
     private const string Failed = "failed";
 
     private readonly IOrganizePersistence _persistence;
+    private readonly EntitySourcePathMutationCoordinator _sourcePathMutations;
 
     /// <summary>
     /// Creates the service over the organize persistence port.
     /// </summary>
-    public OrganizeService(IOrganizePersistence persistence) {
+    public OrganizeService(
+        IOrganizePersistence persistence,
+        EntitySourcePathMutationCoordinator sourcePathMutations) {
         _persistence = persistence;
+        _sourcePathMutations = sourcePathMutations;
     }
 
     /// <summary>
@@ -71,8 +76,22 @@ public sealed class OrganizeService {
             }
 
             try {
-                MoveSource(item.SourcePath, item.TargetPath);
-                await _persistence.ApplyPathPrefixRewriteAsync(item.SourcePath, item.TargetPath, cancellationToken);
+                var executed = await _sourcePathMutations.ExecuteAsync(
+                    item.SourcePath,
+                    [item.EntityId],
+                    async token => {
+                        MoveSource(item.SourcePath, item.TargetPath);
+                        await _persistence.ApplyPathPrefixRewriteAsync(item.SourcePath, item.TargetPath, token);
+                    },
+                    cancellationToken);
+                if (!executed) {
+                    results.Add(item with {
+                        Status = Failed,
+                        Reason = "The linked Entity changed while the organization plan was being applied.",
+                    });
+                    continue;
+                }
+
                 results.Add(item with { Status = Applied });
                 applied++;
             } catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) {
@@ -103,7 +122,7 @@ public sealed class OrganizeService {
         return entities
             .Select(entity => BuildItem(entity.Id, entityById, sourceByEntityId, rootPaths, memo))
             .OfType<OrganizePlanItem>()
-            .OrderBy(item => item.SourcePath, StringComparer.OrdinalIgnoreCase)
+            .OrderBy(item => item.SourcePath, FileSystemPathComparison.Comparer)
             .ToArray();
     }
 
@@ -243,14 +262,15 @@ public sealed class OrganizeService {
     private static string Normalize(string path) => Path.GetFullPath(path);
 
     private static bool SamePath(string left, string right) =>
-        string.Equals(
+        FileSystemPathComparison.Equals(
             Path.TrimEndingDirectorySeparator(Normalize(left)),
-            Path.TrimEndingDirectorySeparator(Normalize(right)),
-            StringComparison.OrdinalIgnoreCase);
+            Path.TrimEndingDirectorySeparator(Normalize(right)));
 
     private static bool IsSubPathOf(string path, string parent) {
         var fullPath = Path.TrimEndingDirectorySeparator(Normalize(path));
         var fullParent = Path.TrimEndingDirectorySeparator(Normalize(parent));
-        return fullPath.StartsWith(fullParent + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);
+        return fullPath.StartsWith(
+            fullParent + Path.DirectorySeparatorChar,
+            FileSystemPathComparison.Comparison);
     }
 }

@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging;
+using Prismedia.Application.Files;
 using Prismedia.Application.Jobs;
 using Prismedia.Application.Jobs.Handlers;
 using Prismedia.Application.Jobs.Ports;
@@ -52,11 +53,11 @@ public sealed class ScanGalleryJobHandler(
         // previously persisted single-image gallery on re-scan because the dropped folder is removed
         // by stale cleanup after its image has been reparented.
         var collapsedTargets = ComputeCollapsedGalleries(root.Path, dirGroups, allContainerPaths);
-        var collapsedFolders = collapsedTargets.Keys.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var collapsedFolders = collapsedTargets.Keys.ToHashSet(FileSystemPathComparison.Comparer);
         var validGalleryPaths = allContainerPaths
             .Where(path => !collapsedFolders.Contains(path))
             .ToArray();
-        var galleryIdsByPath = new Dictionary<string, Guid>(StringComparer.OrdinalIgnoreCase);
+        var galleryIdsByPath = new Dictionary<string, Guid>(FileSystemPathComparison.Comparer);
         var siblingSortOrders = SiblingSortOrders(validGalleryPaths);
         // Galleries and loose images are auto-identify candidates; resolution collapses nested
         // galleries to their top gallery so only the top-level container is queued.
@@ -87,11 +88,11 @@ public sealed class ScanGalleryJobHandler(
             }
         }
 
-        var validLooseImagePaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var validLooseImagePaths = new HashSet<string>(FileSystemPathComparison.Comparer);
         var validImagePathsByGalleryPath = validGalleryPaths.ToDictionary(
             path => path,
-            _ => new HashSet<string>(StringComparer.OrdinalIgnoreCase),
-            StringComparer.OrdinalIgnoreCase);
+            _ => new HashSet<string>(FileSystemPathComparison.Comparer),
+            FileSystemPathComparison.Comparer);
         var orderedDirGroups = dirGroups
             .OrderBy(group => PathDepth(root.Path, group.Key))
             .ThenBy(group => group.Key, StringComparer.OrdinalIgnoreCase)
@@ -99,7 +100,7 @@ public sealed class ScanGalleryJobHandler(
         var processedDirs = 0;
         // Tracks the next sort order per surviving gallery so a lone image merged in from a collapsed
         // child folder appends after the gallery's own images instead of colliding at index 0.
-        var nextSortOrderByGalleryPath = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        var nextSortOrderByGalleryPath = new Dictionary<string, int>(FileSystemPathComparison.Comparer);
         var imageItems = new List<ImageUpsertItem>();
 
         foreach (var (dirPath, imageFiles) in orderedDirGroups) {
@@ -181,7 +182,10 @@ public sealed class ScanGalleryJobHandler(
                 cancellationToken);
         }
 
-        await images.RemoveStaleGalleriesInRootAsync(root.Id, validGalleryPaths.ToHashSet(StringComparer.OrdinalIgnoreCase), cancellationToken);
+        await images.RemoveStaleGalleriesInRootAsync(
+            root.Id,
+            validGalleryPaths.ToHashSet(FileSystemPathComparison.Comparer),
+            cancellationToken);
 
         await AutoIdentifyScanEnqueue.EnqueueRootsAsync(context, settings, downstreamNeeds, autoIdentifyIds, cancellationToken);
 
@@ -189,7 +193,7 @@ public sealed class ScanGalleryJobHandler(
     }
 
     private static bool SamePath(string left, string right) =>
-        string.Equals(NormalizePath(left), NormalizePath(right), StringComparison.OrdinalIgnoreCase);
+        FileSystemPathComparison.Equals(NormalizePath(left), NormalizePath(right));
 
     private static string NormalizePath(string path) =>
         Path.GetFullPath(path).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
@@ -213,7 +217,7 @@ public sealed class ScanGalleryJobHandler(
         string rootPath,
         IReadOnlyDictionary<string, IReadOnlyList<string>> dirGroups,
         IReadOnlyList<string> containerPaths) {
-        var collapsed = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var collapsed = new HashSet<string>(FileSystemPathComparison.Comparer);
 
         foreach (var (dirPath, imageFiles) in dirGroups) {
             if (SamePath(dirPath, rootPath) || imageFiles.Count != 1) {
@@ -227,7 +231,7 @@ public sealed class ScanGalleryJobHandler(
             collapsed.Add(dirPath);
         }
 
-        var targets = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
+        var targets = new Dictionary<string, string?>(FileSystemPathComparison.Comparer);
         foreach (var folder in collapsed) {
             targets[folder] = NearestSurvivingAncestor(folder, rootPath, collapsed);
         }
@@ -269,7 +273,7 @@ public sealed class ScanGalleryJobHandler(
     }
 
     private static IReadOnlyList<string> ContainerPathsFor(string rootPath, IEnumerable<string> directoryPaths) {
-        var containers = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var containers = new HashSet<string>(FileSystemPathComparison.Comparer);
 
         foreach (var directoryPath in directoryPaths) {
             if (!IsBelowRoot(rootPath, directoryPath)) {
@@ -314,9 +318,11 @@ public sealed class ScanGalleryJobHandler(
     }
 
     private static Dictionary<string, int> SiblingSortOrders(IReadOnlyList<string> folderPaths) {
-        var sortOrders = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        var sortOrders = new Dictionary<string, int>(FileSystemPathComparison.Comparer);
 
-        foreach (var siblings in folderPaths.GroupBy(path => Path.GetDirectoryName(path) ?? string.Empty, StringComparer.OrdinalIgnoreCase)) {
+        foreach (var siblings in folderPaths.GroupBy(
+                     path => Path.GetDirectoryName(path) ?? string.Empty,
+                     FileSystemPathComparison.Comparer)) {
             var ordered = siblings
                 .OrderBy(path => Path.GetFileName(path), StringComparer.OrdinalIgnoreCase)
                 .ThenBy(path => path, StringComparer.OrdinalIgnoreCase)

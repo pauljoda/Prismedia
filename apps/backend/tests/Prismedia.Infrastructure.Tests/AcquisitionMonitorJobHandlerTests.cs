@@ -90,6 +90,36 @@ public sealed class AcquisitionMonitorJobHandlerTests {
     }
 
     [Fact]
+    public async Task QueuedSnapshotCannotRestoreDownloadingAfterUserCancellation() {
+        await using var db = CreateContext();
+        var acquisitionId = await SeedDownloadingAsync(
+            db,
+            lastSeen: DateTimeOffset.UtcNow,
+            status: AcquisitionStatus.Queued);
+        var queue = new RecordingJobQueue();
+        var healthy = new DownloadItemStatus(
+            "hashX", "Book", 0.7, "downloading", IsComplete: false, "/save", "/save/book");
+
+        await RunAsync(
+            db,
+            queue,
+            listing: [healthy],
+            directLookup: null,
+            acquisitionId,
+            beforePayloadInspection: async () => {
+                Assert.True(await AcquisitionTestFactory.Store(db).TryTransitionStatusAsync(
+                    acquisitionId,
+                    [AcquisitionStatus.Queued],
+                    AcquisitionStatus.Cancelled,
+                    "Cancelled.",
+                    CancellationToken.None));
+            });
+
+        Assert.Empty(queue.Enqueued);
+        Assert.Equal(AcquisitionStatus.Cancelled, await StatusOf(db, acquisitionId));
+    }
+
+    [Fact]
     public async Task StalledStateButProgressingIsNotAbandoned() {
         await using var db = CreateContext();
         // Anchored well past the grace window, yet the torrent is still inching along.
@@ -173,11 +203,16 @@ public sealed class AcquisitionMonitorJobHandlerTests {
     }
 
     private static async Task RunAsync(
-        PrismediaDbContext db, RecordingJobQueue queue, IReadOnlyList<DownloadItemStatus> listing, DownloadItemStatus? directLookup, Guid acquisitionId) {
+        PrismediaDbContext db,
+        RecordingJobQueue queue,
+        IReadOnlyList<DownloadItemStatus> listing,
+        DownloadItemStatus? directLookup,
+        Guid acquisitionId,
+        Func<Task>? beforePayloadInspection = null) {
         var handler = new AcquisitionMonitorJobHandler(
             AcquisitionTestFactory.Store(db),
             new FakeDownloadClientConfigStore(),
-            new FakeDownloadClientFactory(new FakeDownloadClient(listing, directLookup)),
+            new FakeDownloadClientFactory(new FakeDownloadClient(listing, directLookup, beforePayloadInspection)),
             new RemotePathMapper(new NoRemotePathMappings()),
             new EfAcquisitionHistoryStore(db),
             NullLogger<AcquisitionMonitorJobHandler>.Instance);
@@ -187,10 +222,14 @@ public sealed class AcquisitionMonitorJobHandlerTests {
         await handler.HandleAsync(new JobContext(job, queue), CancellationToken.None);
     }
 
-    private static async Task<Guid> SeedDownloadingAsync(PrismediaDbContext db, DateTimeOffset lastSeen, DateTimeOffset? stalledSince = null) {
+    private static async Task<Guid> SeedDownloadingAsync(
+        PrismediaDbContext db,
+        DateTimeOffset lastSeen,
+        DateTimeOffset? stalledSince = null,
+        AcquisitionStatus status = AcquisitionStatus.Downloading) {
         var acquisitionId = Guid.NewGuid();
         db.Acquisitions.Add(new AcquisitionRow {
-            Id = acquisitionId, Status = AcquisitionStatus.Downloading, Title = "Book",
+            Id = acquisitionId, Status = status, Title = "Book",
             ExternalIdsJson = "{}", SourceUrlsJson = "[]", CreatedAt = lastSeen, UpdatedAt = lastSeen
         });
         db.DownloadTransfers.Add(new DownloadTransferRow {
@@ -212,7 +251,10 @@ public sealed class AcquisitionMonitorJobHandlerTests {
     private static PrismediaDbContext CreateContext() =>
         new(new DbContextOptionsBuilder<PrismediaDbContext>().UseInMemoryDatabase(Guid.NewGuid().ToString()).Options);
 
-    private sealed class FakeDownloadClient(IReadOnlyList<DownloadItemStatus> listing, DownloadItemStatus? directLookup) : IDownloadClient {
+    private sealed class FakeDownloadClient(
+        IReadOnlyList<DownloadItemStatus> listing,
+        DownloadItemStatus? directLookup,
+        Func<Task>? beforePayloadInspection = null) : IDownloadClient {
         public DownloadClientKind Kind => DownloadClientKind.QBittorrent;
         public Task<IReadOnlyList<DownloadItemStatus>> ListItemsAsync(DownloadClientConnection connection, CancellationToken cancellationToken) =>
             Task.FromResult(listing);
@@ -220,7 +262,16 @@ public sealed class AcquisitionMonitorJobHandlerTests {
             Task.FromResult(directLookup);
         public Task<string> AddAsync(DownloadClientConnection connection, DownloadAddRequest request, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<string> AddTorrentFileAsync(DownloadClientConnection connection, string fileName, byte[] torrent, CancellationToken cancellationToken) => throw new NotSupportedException();
-        public Task<IReadOnlyList<DownloadItemFile>> GetFilesAsync(DownloadClientConnection connection, string clientItemId, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public async Task<IReadOnlyList<DownloadItemFile>> GetFilesAsync(
+            DownloadClientConnection connection,
+            string clientItemId,
+            CancellationToken cancellationToken) {
+            if (beforePayloadInspection is not null) {
+                await beforePayloadInspection();
+            }
+
+            return [];
+        }
         public Task<DownloadItemProperties?> GetPropertiesAsync(DownloadClientConnection connection, string clientItemId, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<byte[]> GetPieceStatesAsync(DownloadClientConnection connection, string clientItemId, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task RemoveAsync(DownloadClientConnection connection, string clientItemId, bool deleteData, CancellationToken cancellationToken) => throw new NotSupportedException();

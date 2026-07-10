@@ -3,6 +3,7 @@ using System.Formats.Tar;
 using System.IO.Compression;
 using System.Security.Cryptography;
 using Microsoft.EntityFrameworkCore;
+using Prismedia.Application.Files;
 using Prismedia.Application.Plugins;
 using Prismedia.Contracts.Plugins;
 using Prismedia.Domain.Entities;
@@ -264,10 +265,8 @@ public sealed partial class PluginCatalogService {
         return new string(chars).Trim('-', '.');
     }
 
-    private static bool IsSafeExtractionPath(string destination, string target) {
-        var root = Path.GetFullPath(destination).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-        return target.Equals(root, StringComparison.OrdinalIgnoreCase) ||
-            target.StartsWith(root + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);
+    internal static bool IsSafeExtractionPath(string destination, string target) {
+        return FileSystemPathComparison.IsSameOrDescendant(destination, target);
     }
 
     private static string ArtifactExtension(string urlPath) {

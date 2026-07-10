@@ -136,8 +136,15 @@ public interface IAcquisitionQueueService {
     /// Queues the given candidate of an acquisition for download. Returns the refreshed acquisition, or
     /// null when it no longer exists. <paramref name="manualPick"/> marks a user-chosen release (the
     /// release picker's queue action), exempting the download from automatic payload validation.
+    /// <paramref name="requiredStatus"/> lets background automation require the exact lifecycle it just
+    /// produced, so a user cancellation between search completion and auto-queue cannot be revived.
     /// </summary>
-    Task<Contracts.Acquisition.AcquisitionDetail?> QueueAsync(Guid acquisitionId, Guid candidateId, CancellationToken cancellationToken, bool manualPick = false);
+    Task<Contracts.Acquisition.AcquisitionDetail?> QueueAsync(
+        Guid acquisitionId,
+        Guid candidateId,
+        CancellationToken cancellationToken,
+        bool manualPick = false,
+        AcquisitionStatus? requiredStatus = null);
 }
 
 /// <summary>Plans how a completed download's files map into the target library root.</summary>
@@ -300,8 +307,53 @@ public interface IImportTargetIndex {
     Task<AlbumDiskTarget?> GetAlbumTargetAsync(Guid entityId, CancellationToken cancellationToken);
 }
 
+/// <summary>
+/// Durable ownership of an acquisition by destructive cleanup. The original status lets retries validate
+/// the same lifecycle decision after the public status has moved to <see cref="AcquisitionStatus.Stopping"/>.
+/// </summary>
+public sealed record AcquisitionTeardownClaim(
+    AcquisitionTeardownIntent Intent,
+    AcquisitionStatus OriginalStatus);
+
+/// <summary>
+/// Narrow lifecycle boundary used by background orchestration that must establish durable provenance
+/// before enqueueing or executing acquisition work.
+/// </summary>
+public interface IAcquisitionLifecycleStore {
+    /// <summary>
+    /// Lists durable Downloaded completion tickets that still need an ordinary import or upgrade-replace
+    /// job. Queue reconciliation uses this projection to close the status-before-enqueue crash window.
+    /// </summary>
+    Task<IReadOnlyList<DownloadedAcquisitionCompletion>> ListDownloadedCompletionWorkAsync(
+        CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<DownloadedAcquisitionCompletion>>([]);
+
+    /// <summary>Returns an acquisition's current status, or null when it no longer exists.</summary>
+    Task<AcquisitionStatus?> GetStatusAsync(Guid id, CancellationToken cancellationToken);
+
+    /// <summary>Atomically changes status only while the row remains in one of the expected states.</summary>
+    Task<bool> TryTransitionStatusAsync(
+        Guid id,
+        IReadOnlyCollection<AcquisitionStatus> expectedStatuses,
+        AcquisitionStatus status,
+        string? message,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Atomically claims failed-download recovery only while both lifecycle and selected-release snapshot
+    /// still match the failure payload. This prevents a stale job from taking over a cancelled or newly
+    /// queued release.
+    /// </summary>
+    Task<bool> TryClaimFailedRecoveryAsync(
+        Guid id,
+        IReadOnlyCollection<AcquisitionStatus> expectedStatuses,
+        SelectedRelease? expectedSelectedRelease,
+        string message,
+        CancellationToken cancellationToken);
+}
+
 /// <summary>Persistence port for acquisition records and their scored release candidates.</summary>
-public interface IAcquisitionStore {
+public interface IAcquisitionStore : IAcquisitionLifecycleStore {
     Task<AcquisitionSummary> CreateAsync(AcquisitionMetadata metadata, CancellationToken cancellationToken);
     Task<IReadOnlyList<AcquisitionSummary>> ListAsync(CancellationToken cancellationToken);
     Task<AcquisitionDetail?> GetAsync(Guid id, CancellationToken cancellationToken);
@@ -317,11 +369,28 @@ public interface IAcquisitionStore {
     /// </summary>
     Task<Guid?> CloneForRetryAsync(Guid id, CancellationToken cancellationToken);
 
+    /// <summary>
+    /// Returns the replacement already linked to a Reacquire teardown, or atomically creates and links one
+    /// clean Pending replacement. The durable link makes the multi-step handoff idempotent after a crash.
+    /// </summary>
+    Task<Guid?> GetOrCreateTeardownReplacementAsync(Guid id, CancellationToken cancellationToken);
+
     /// <summary>Returns the search input (title/author) for an acquisition, or null when it no longer exists.</summary>
     Task<AcquisitionSearchInput?> GetSearchInputAsync(Guid id, CancellationToken cancellationToken);
 
-    /// <summary>Returns an acquisition's current status, or null when it no longer exists.</summary>
-    Task<AcquisitionStatus?> GetStatusAsync(Guid id, CancellationToken cancellationToken);
+    /// <summary>The durable destructive claim currently owning this acquisition, or null when unclaimed.</summary>
+    Task<AcquisitionTeardownClaim?> GetTeardownClaimAsync(Guid id, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Atomically changes one expected lifecycle into <see cref="AcquisitionStatus.Stopping"/> while
+    /// preserving its original status and completion intent. Returns false on a competing lifecycle change.
+    /// </summary>
+    Task<bool> TryClaimTeardownAsync(
+        Guid id,
+        AcquisitionStatus expectedStatus,
+        AcquisitionTeardownIntent intent,
+        string message,
+        CancellationToken cancellationToken);
 
     /// <summary>
     /// When the given acquisition is an upgrade child (its <c>UpgradeOfAcquisitionId</c> is set), returns the
@@ -357,19 +426,7 @@ public interface IAcquisitionStore {
     Task SetStatusAsync(Guid id, AcquisitionStatus status, string? message, CancellationToken cancellationToken);
 
     /// <summary>
-    /// Atomically changes status only when the row is still in one of the expected states. Lifecycle
-    /// commands use this as their ownership claim before external effects, so an import and a competing
-    /// cancel/requeue cannot both proceed from the same snapshot.
-    /// </summary>
-    Task<bool> TryTransitionStatusAsync(
-        Guid id,
-        IReadOnlyCollection<AcquisitionStatus> expectedStatuses,
-        AcquisitionStatus status,
-        string? message,
-        CancellationToken cancellationToken);
-
-    /// <summary>
-    /// Atomically claims a fresh TV import, or lets the same queue job recover the narrow
+    /// Atomically claims a fresh import, or lets the same queue job recover the narrow
     /// Importing-without-checkpoint crash window. A different job can never steal that active claim.
     /// </summary>
     Task<bool> TryClaimInitialImportAsync(
@@ -379,12 +436,12 @@ public interface IAcquisitionStore {
         CancellationToken cancellationToken);
 
     /// <summary>
-    /// Atomically moves an acquisition with a corrupt TV checkpoint to manual review. Downloaded,
+    /// Atomically moves an acquisition with a corrupt durable import checkpoint to manual review. Downloaded,
     /// Failed, and already-held rows are safe to hold; an active Importing row is touched only when its
     /// persisted import claim belongs to <paramref name="claimJobId"/>. Terminal or superseding states and
     /// a different job's active claim are never overwritten.
     /// </summary>
-    Task<bool> TryHoldCorruptTvImportCheckpointAsync(
+    Task<bool> TryHoldCorruptImportCheckpointAsync(
         Guid id,
         Guid claimJobId,
         string message,
@@ -404,8 +461,16 @@ public interface IAcquisitionStore {
     /// </summary>
     Task MarkImportedWithQualityAsync(Guid id, BookQualityRank ownedQuality, string? message, CancellationToken cancellationToken, string? ownedMediaQuality = null, int ownedMediaRevision = 1, int ownedFormatScore = 0);
 
-    /// <summary>Replaces an acquisition's candidate set with a freshly scored search result.</summary>
-    Task ReplaceCandidatesAsync(Guid id, IReadOnlyList<ScoredRelease> candidates, CancellationToken cancellationToken);
+    /// <summary>
+    /// Replaces the candidate set and publishes <see cref="AcquisitionStatus.AwaitingSelection"/> in one
+    /// transaction, but only while the acquisition is still <see cref="AcquisitionStatus.Searching"/>.
+    /// A cancellation or destructive lifecycle that wins first leaves both status and candidates untouched.
+    /// </summary>
+    Task<bool> TryCompleteSearchAsync(
+        Guid id,
+        IReadOnlyList<ScoredRelease> candidates,
+        string? message,
+        CancellationToken cancellationToken);
 
     /// <summary>Loads the server-side download details for a candidate belonging to an acquisition, or null when absent.</summary>
     Task<AcquisitionQueueCandidate?> GetQueueCandidateAsync(Guid acquisitionId, Guid candidateId, CancellationToken cancellationToken);
@@ -426,8 +491,48 @@ public interface IAcquisitionStore {
     /// <summary>Reads the last release an acquisition was sent to download, or null when none was recorded.</summary>
     Task<SelectedRelease?> GetSelectedReleaseAsync(Guid acquisitionId, CancellationToken cancellationToken);
 
-    /// <summary>Records a started transfer linking an acquisition to its download-client item.</summary>
-    Task CreateTransferAsync(Guid acquisitionId, Guid? downloadClientConfigId, string clientItemId, string? category, CancellationToken cancellationToken, TransferSeedGoal? seedGoal = null);
+    /// <summary>
+    /// Durably records download-client ownership BEFORE the remote Add. The correlation is either the
+    /// known torrent hash or release name used to resolve an accepted Add after a process crash. Idempotent
+    /// for the same in-progress attempt; false when teardown changed the lifecycle first.
+    /// </summary>
+    Task<bool> BeginTransferAddAsync(
+        Guid acquisitionId,
+        Guid downloadClientConfigId,
+        string correlation,
+        string? category,
+        TransferSeedGoal? seedGoal,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Replaces the durable pre-Add correlation with the client-native item id and atomically publishes the
+    /// selected release plus final Queued message while the row lock is held. False means the Queued
+    /// lifecycle or expected ownership placeholder changed and the caller must not commit its Add lease.
+    /// </summary>
+    Task<bool> CompleteTransferAddAsync(
+        Guid acquisitionId,
+        Guid downloadClientConfigId,
+        string correlation,
+        string clientItemId,
+        SelectedRelease selectedRelease,
+        string queuedMessage,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Removes a matching pre-Add placeholder only when the row lease was refused before any remote Add
+    /// began. This is safe even if teardown already owns the acquisition; no external item can exist.
+    /// </summary>
+    Task AbandonTransferAddAsync(
+        Guid acquisitionId,
+        Guid downloadClientConfigId,
+        string correlation,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Persists a newly-created remote transfer only while its acquisition is not durably stopping.
+    /// False means a teardown claim won the add race and the caller must immediately remove the remote item.
+    /// </summary>
+    Task<bool> CreateTransferAsync(Guid acquisitionId, Guid? downloadClientConfigId, string clientItemId, string? category, CancellationToken cancellationToken, TransferSeedGoal? seedGoal = null);
 
     /// <summary>Transfers under seeding watch (imported by hardlink/copy, waiting for their seed goal).</summary>
     Task<IReadOnlyList<SeedingTransfer>> ListSeedingTransfersAsync(CancellationToken cancellationToken);
@@ -512,31 +617,95 @@ public interface IAcquisitionStore {
         TvImportCheckpoint checkpoint,
         CancellationToken cancellationToken);
 
+    /// <summary>
+    /// Atomically creates a kind-neutral book/movie/album placement checkpoint for the exclusively
+    /// claimed Importing row and matching transfer. False means lifecycle ownership changed before
+    /// the first filesystem mutation.
+    /// </summary>
+    Task<bool> TryCreateImportPlacementCheckpointAsync(
+        Guid acquisitionId,
+        ImportPlacementCheckpoint checkpoint,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Atomically advances one exact placement unit only while <paramref name="expected"/> is still the
+    /// currently claimed checkpoint. This compare-and-swap makes a crash after filesystem publication
+    /// but before persistence safely discoverable on retry.
+    /// </summary>
+    Task<bool> TryAdvanceImportPlacementCheckpointAsync(
+        Guid acquisitionId,
+        ImportPlacementCheckpoint expected,
+        ImportPlacementCheckpoint advanced,
+        CancellationToken cancellationToken);
+
+    /// <summary>Atomically claims an exact durable book/movie/album checkpoint for a retry job.</summary>
+    Task<bool> TryClaimImportPlacementCheckpointAsync(
+        Guid acquisitionId,
+        ImportPlacementCheckpoint checkpoint,
+        Guid claimJobId,
+        CancellationToken cancellationToken);
+
+    /// <summary>Clears an untouched kind-neutral checkpoint while its acquisition is supersedable.</summary>
+    Task<bool> TryClearImportPlacementCheckpointAsync(
+        Guid acquisitionId,
+        ImportPlacementCheckpoint checkpoint,
+        CancellationToken cancellationToken);
+
+    /// <summary>True when the exact kind-neutral checkpoint is the currently claimed Importing attempt.</summary>
+    Task<bool> IsCurrentImportPlacementCheckpointAsync(
+        Guid acquisitionId,
+        ImportPlacementCheckpoint checkpoint,
+        CancellationToken cancellationToken);
+
     /// <summary>Writes the path-keyed identity hint the book scan consumes to stamp the new entity.</summary>
     Task WriteImportHintAsync(Guid acquisitionId, string sourcePath, AcquisitionImportContext context, BookQualityRank ownedQuality, CancellationToken cancellationToken);
 
-    /// <summary>True when any acquisition targets this wanted library entity; a request commit uses it to avoid double-requesting.</summary>
-    Task<bool> AnyForEntityAsync(Guid entityId, CancellationToken cancellationToken);
+    /// <summary>
+    /// True when actionable acquisition work targets this Entity; request commits use it to avoid
+    /// duplicates without letting historical Imported/Cancelled rows strand a now-fileless Entity.
+    /// </summary>
+    Task<bool> AnyOpenForEntityAsync(Guid entityId, CancellationToken cancellationToken);
 
     /// <summary>The newest acquisition targeting this library entity with its candidates, or null when it has none.</summary>
     Task<AcquisitionDetail?> GetLatestForEntityAsync(Guid entityId, CancellationToken cancellationToken);
 
-    /// <summary>Every acquisition id targeting this library entity, newest first.</summary>
+    /// <summary>Newest acquisition summary per requested Entity id, loaded as one bounded read.</summary>
+    async Task<IReadOnlyDictionary<Guid, Contracts.Acquisition.AcquisitionSummary>> ListLatestSummariesForEntityIdsAsync(
+        IReadOnlyCollection<Guid> entityIds,
+        CancellationToken cancellationToken) {
+        var result = new Dictionary<Guid, Contracts.Acquisition.AcquisitionSummary>();
+        foreach (var entityId in entityIds.Distinct()) {
+            if (await GetLatestForEntityAsync(entityId, cancellationToken) is { } detail) {
+                result[entityId] = detail.Summary;
+            }
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Every acquisition id owned by this library Entity, newest direct rows first followed by all
+    /// upgrade descendants. Upgrade children inherit ownership through their parent even though they do
+    /// not duplicate EntityId.
+    /// </summary>
     Task<IReadOnlyList<Guid>> ListIdsForEntityAsync(Guid entityId, CancellationToken cancellationToken);
 }
 
 /// <summary>
-/// Persistence port for monitors — standing intents that keep an acquisition's release search alive until
-/// the wanted item is acquired. The "due" and reconciliation logic (fulfilling a monitor whose acquisition
-/// imported, pausing one whose acquisition was deleted/cancelled) lives here so the sweep handler stays thin.
+/// Persistence port for monitors — stable Entity intents that may attach transient acquisitions. The due
+/// and reconciliation logic detaches completed work while keeping Entity-linked intent Active; legacy rows
+/// without EntityId retain terminal compatibility behavior.
 /// </summary>
 public interface IMonitorStore {
-    /// <summary>Starts (or re-activates) monitoring for an acquisition. Idempotent on the acquisition — returns the existing monitor if one exists.</summary>
+    /// <summary>
+    /// Starts acquisition work on its stable Entity monitor. Resolves Acquisition.EntityId, reuses and
+    /// backfills an existing Entity/legacy acquisition monitor, and returns the merged row.
+    /// </summary>
     Task<Contracts.Acquisition.MonitorView> StartAsync(Guid acquisitionId, Domain.Entities.EntityKind kind, string title, string? author, CancellationToken cancellationToken);
 
     /// <summary>
-    /// Starts (or re-activates) a container monitor watching a library entity (an author, an artist) for
-    /// new works. Idempotent on the entity — returns the existing monitor if one exists. A non-null
+    /// Starts (or re-activates) an Entity monitor. Containers discover children; leaves retain a durable
+    /// acquisition intent. Idempotent on the Entity, including legacy acquisition-linked rows. A non-null
     /// <paramref name="targeting"/> stores the request-time library/profile choices on the monitor
     /// (phantom requests inherit them later); null leaves any stored choices untouched. A non-null
     /// <paramref name="preset"/> records the monitoring preset that governs whether future syncs
@@ -545,21 +714,81 @@ public interface IMonitorStore {
     /// </summary>
     Task<Contracts.Acquisition.MonitorView> StartForEntityAsync(Guid entityId, Domain.Entities.EntityKind kind, string title, AcquisitionTargeting? targeting, Domain.Entities.MonitorPreset? preset, CancellationToken cancellationToken);
 
-    /// <summary>Returns the container monitor watching an entity, or null when the entity is not monitored.</summary>
+    /// <summary>Returns the stable monitor targeting an Entity, including legacy acquisition-linked rows.</summary>
     Task<Contracts.Acquisition.MonitorView?> GetByEntityAsync(Guid entityId, CancellationToken cancellationToken);
 
-    /// <summary>The request-time library/profile choices stored on an entity's container monitor, or null when it has none.</summary>
+    /// <summary>Whether the exact monitor row is currently Active.</summary>
+    async Task<bool> IsActiveAsync(Guid monitorId, CancellationToken cancellationToken) =>
+        (await ListAsync(cancellationToken)).Any(monitor =>
+            monitor.Id == monitorId && monitor.Status == Domain.Entities.MonitorStatus.Active);
+
+    /// <summary>
+    /// Runs Entity materialization only while holding the direct Active monitor's mutation lease. The
+    /// production adapter and unmonitor claim contend on the same row lock; the default supports fakes.
+    /// </summary>
+    async Task<bool> ExecuteIfActiveEntityMutationAsync(
+        Guid entityId,
+        Func<CancellationToken, Task> mutation,
+        CancellationToken cancellationToken) {
+        if (await GetByEntityAsync(entityId, cancellationToken) is not { Status: Domain.Entities.MonitorStatus.Active }) {
+            return false;
+        }
+
+        await mutation(cancellationToken);
+        return true;
+    }
+
+    /// <summary>
+    /// Runs one explicit user-intent mutation only when neither the target Entity nor a monitored ancestor
+    /// is owned by destructive lifecycle cleanup. Production holds those monitor-row locks across the full
+    /// boundary (suppression clear, acquisition/job creation, and monitor attachment); the default supports
+    /// narrow fakes. Returns false without invoking <paramref name="mutation"/> when cleanup won.
+    /// </summary>
+    async Task<bool> ExecuteIfEntityLifecycleMutableAsync(
+        Guid entityId,
+        Func<CancellationToken, Task> mutation,
+        CancellationToken cancellationToken) {
+        if (await GetByEntityAsync(entityId, cancellationToken) is {
+                Status: Domain.Entities.MonitorStatus.Stopping
+                    or Domain.Entities.MonitorStatus.DeletingFiles
+            }) {
+            return false;
+        }
+
+        await mutation(cancellationToken);
+        return true;
+    }
+
+    /// <summary>Direct/legacy monitor per requested Entity id, loaded as one bounded read.</summary>
+    async Task<IReadOnlyDictionary<Guid, Contracts.Acquisition.MonitorView>> ListByEntityIdsAsync(
+        IReadOnlyCollection<Guid> entityIds,
+        CancellationToken cancellationToken) {
+        var result = new Dictionary<Guid, Contracts.Acquisition.MonitorView>();
+        foreach (var entityId in entityIds.Distinct()) {
+            if (await GetByEntityAsync(entityId, cancellationToken) is { } monitor) {
+                result[entityId] = monitor;
+            }
+        }
+
+        return result;
+    }
+
+    /// <summary>The request-time library/profile choices stored on an Entity monitor, or null when absent.</summary>
     Task<AcquisitionTargeting?> GetTargetingByEntityAsync(Guid entityId, CancellationToken cancellationToken);
 
     /// <summary>
-    /// The monitoring preset stored on an entity's container monitor, or null when the entity is not
-    /// monitored. The discovery sync consults it to decide whether newly discovered works are
+    /// The grouping preset stored on an Entity monitor, or null when the Entity is not monitored. A
+    /// grouping discovery sync consults it to decide whether newly discovered works are
     /// auto-monitored (only <see cref="Domain.Entities.MonitorPreset.All"/> and
     /// <see cref="Domain.Entities.MonitorPreset.Future"/> materialize them).
     /// </summary>
     Task<Domain.Entities.MonitorPreset?> GetPresetByEntityAsync(Guid entityId, CancellationToken cancellationToken);
 
-    /// <summary>Stops monitoring by hard-deleting the monitor row (the acquisition is left untouched). Returns false when it no longer exists.</summary>
+    /// <summary>
+    /// Low-level monitor-row removal for internal lifecycle maintenance. User-facing unmonitoring uses
+    /// <see cref="EntityUnmonitorService"/> so its full Entity/acquisition subtree is cleaned together.
+    /// Returns false when the row no longer exists.
+    /// </summary>
     Task<bool> DeleteAsync(Guid monitorId, CancellationToken cancellationToken);
 
     /// <summary>
@@ -568,6 +797,18 @@ public interface IMonitorStore {
     /// orphan-pause the monitoring loop. Returns false when no monitor watched the acquisition.
     /// </summary>
     Task<bool> RetargetAsync(Guid fromAcquisitionId, Guid toAcquisitionId, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Completes managed file-deletion reacquisition by atomically moving only the monitor that owns the
+    /// <see cref="Domain.Entities.MonitorStatus.DeletingFiles"/> claim to the replacement acquisition and
+    /// restoring it Active. Production implementations must compare-and-swap that exact status; the default
+    /// delegation keeps narrow test adapters source-compatible.
+    /// </summary>
+    Task<bool> RetargetAfterFileDeletionAsync(
+        Guid fromAcquisitionId,
+        Guid toAcquisitionId,
+        CancellationToken cancellationToken) =>
+        RetargetAsync(fromAcquisitionId, toAcquisitionId, cancellationToken);
 
     /// <summary>Sets a monitor's status (pause/resume). Returns false when it no longer exists.</summary>
     Task<bool> SetStatusAsync(Guid monitorId, Domain.Entities.MonitorStatus status, CancellationToken cancellationToken);

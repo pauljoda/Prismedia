@@ -1,8 +1,10 @@
 using System.Security.Cryptography;
 using Microsoft.Extensions.Logging;
 using Prismedia.Application.Acquisition;
+using Prismedia.Application.Files;
 using Prismedia.Application.Jobs.Ports;
 using Prismedia.Application.Jobs.Scanning;
+using Prismedia.Application.Jobs.Handlers.Scan;
 using Prismedia.Domain.Entities;
 
 namespace Prismedia.Application.Jobs.Handlers;
@@ -36,6 +38,152 @@ public sealed class AcquisitionImportEngineFactory(IEnumerable<IAcquisitionImpor
         engines.ToDictionary(engine => engine.Kind);
 
     public IAcquisitionImportEngine? Find(EntityKind kind) => _byKind.GetValueOrDefault(kind);
+}
+
+/// <summary>
+/// Shared crash-safe placement protocol for non-TV imports. Every exact target is collision-resolved
+/// and persisted before mutation. Each completed unit is then compare-and-swapped independently, so a
+/// retry can adopt a target published just before a crash without replanning or suffixing it.
+/// </summary>
+internal static class ImportPlacementExecution {
+    public static string PayloadRootPath(string contentPath) =>
+        Directory.Exists(contentPath)
+            ? Path.GetFullPath(contentPath)
+            : Path.GetDirectoryName(Path.GetFullPath(contentPath))
+                ?? throw new InvalidDataException("The download payload has no parent directory.");
+
+    public static IReadOnlyList<ImportPlacementCheckpointUnit> ReserveUnits(
+        string contentPath,
+        IReadOnlyList<(ResolvedImportItem Item, bool IsMedia)> items,
+        IImportFileMover mover) {
+        var contentRoot = PayloadRootPath(contentPath);
+        var reservedTargets = new List<string>(items.Count);
+        var units = new List<ImportPlacementCheckpointUnit>(items.Count);
+        foreach (var (item, isMedia) in items) {
+            var source = Path.GetFullPath(item.SourceAbsolutePath);
+            var relative = Path.GetRelativePath(contentRoot, source);
+            if (Path.IsPathFullyQualified(relative)
+                || relative.Split(
+                    [Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar],
+                    StringSplitOptions.RemoveEmptyEntries).Any(segment => segment == "..")) {
+                throw new InvalidDataException("An import source escaped the completed download boundary.");
+            }
+
+            var target = mover.ResolveExactTargetPath(
+                Path.GetFullPath(item.TargetAbsolutePath),
+                reservedTargets);
+            reservedTargets.Add(target);
+            units.Add(new ImportPlacementCheckpointUnit(
+                relative,
+                source,
+                target,
+                isMedia));
+        }
+
+        return units;
+    }
+
+    public static bool MatchesTransfer(
+        ImportPlacementCheckpoint checkpoint,
+        AcquisitionImportContext import) =>
+        string.Equals(
+            NormalizeClientItemId(checkpoint.TransferClientItemId),
+            NormalizeClientItemId(import.ClientItemId),
+            StringComparison.Ordinal);
+
+    /// <summary>
+    /// Completes pending units. Null means a concurrent lifecycle action superseded the attempt; callers
+    /// must exit without writing any further acquisition state.
+    /// </summary>
+    public static async Task<ImportPlacementCheckpoint?> ExecuteAsync(
+        IAcquisitionStore acquisitions,
+        IImportFileMover mover,
+        Guid acquisitionId,
+        ImportPlacementCheckpoint checkpoint,
+        CancellationToken cancellationToken) {
+        if (!await acquisitions.IsCurrentImportPlacementCheckpointAsync(
+                acquisitionId,
+                checkpoint,
+                cancellationToken)) {
+            return null;
+        }
+
+        var current = checkpoint;
+        for (var index = 0; index < current.Units.Count; index++) {
+            var unit = current.Units[index];
+            if (unit.FinalPath is not null) {
+                if (!File.Exists(unit.TargetAbsolutePath)) {
+                    throw new IOException(
+                        $"The checkpointed import target '{unit.TargetAbsolutePath}' is missing; recovery stopped without replanning.");
+                }
+                continue;
+            }
+
+            var sourceExists = File.Exists(unit.SourceAbsolutePath);
+            var targetExists = File.Exists(unit.TargetAbsolutePath);
+            if (!sourceExists && !targetExists) {
+                throw new FileNotFoundException(
+                    "Neither the original payload file nor its reserved import target exists.",
+                    unit.SourceAbsolutePath);
+            }
+
+            if (sourceExists && targetExists && !FilesHaveSameContent(unit.SourceAbsolutePath, unit.TargetAbsolutePath)) {
+                throw new IOException(
+                    $"The reserved import target '{unit.TargetAbsolutePath}' contains different bytes; recovery refused to overwrite or suffix it.");
+            }
+
+            if (sourceExists && !targetExists) {
+                var placed = await mover.PlaceExactAsync(
+                    new ResolvedImportItem(unit.SourceAbsolutePath, unit.TargetAbsolutePath),
+                    current.ImportMode,
+                    cancellationToken);
+                if (!PathEquals(placed, unit.TargetAbsolutePath)) {
+                    throw new IOException("The import mover did not publish the exact checkpointed target.");
+                }
+            }
+
+            // target-only is the Move crash window; source+same-target is the Copy/Hardlink window.
+            // Both represent the exact reserved bytes and are safe to adopt without a second placement.
+            var advancedUnits = current.Units.ToArray();
+            advancedUnits[index] = unit with { FinalPath = unit.TargetAbsolutePath };
+            var advanced = current with { Units = advancedUnits };
+            if (!await acquisitions.TryAdvanceImportPlacementCheckpointAsync(
+                    acquisitionId,
+                    current,
+                    advanced,
+                    cancellationToken)) {
+                return null;
+            }
+            current = advanced;
+        }
+
+        return current;
+    }
+
+    public static IReadOnlyList<string> MediaPaths(ImportPlacementCheckpoint checkpoint) =>
+        checkpoint.Units
+            .Where(unit => unit.IsMedia)
+            .Select(unit => unit.FinalPath
+                ?? throw new InvalidOperationException("A pending placement cannot be materialized."))
+            .ToArray();
+
+    private static bool FilesHaveSameContent(string firstPath, string secondPath) {
+        var first = new FileInfo(firstPath);
+        var second = new FileInfo(secondPath);
+        if (!first.Exists || !second.Exists || first.Length != second.Length) {
+            return false;
+        }
+
+        using var firstStream = first.OpenRead();
+        using var secondStream = second.OpenRead();
+        return SHA256.HashData(firstStream).AsSpan().SequenceEqual(SHA256.HashData(secondStream));
+    }
+
+    private static string? NormalizeClientItemId(string? clientItemId) =>
+        string.IsNullOrWhiteSpace(clientItemId) ? null : clientItemId;
+
+    private static bool PathEquals(string first, string second) =>
+        FileSystemPathComparison.Equals(Path.GetFullPath(first), Path.GetFullPath(second));
 }
 
 /// <summary>
@@ -103,11 +251,50 @@ public sealed class BookAcquisitionImportEngine(
     ILibraryScanRootPersistence roots,
     IAcquisitionImportPlanner planner,
     IImportFileMover mover,
-    ImportedTorrentRemover torrents) : IAcquisitionImportEngine {
+    IImportedEntityMaterializer materializer,
+    ImportedTorrentRemover torrents,
+    ILogger<BookAcquisitionImportEngine> logger) : IAcquisitionImportEngine {
     public EntityKind Kind => EntityKind.Book;
 
     public async Task ImportAsync(JobContext context, AcquisitionImportContext import, CancellationToken cancellationToken) {
         var profile = await profiles.GetImportProfileAsync(import.ProfileId, EntityKind.Book, cancellationToken);
+
+        if (import.ImportPlacementCheckpoint is { } durableCheckpoint) {
+            var checkpointRoot = await ResolveCheckpointRootAsync(durableCheckpoint, cancellationToken);
+            if (checkpointRoot is null) {
+                await acquisitions.SetStatusAsync(
+                    import.Id,
+                    AcquisitionStatus.ManualImportRequired,
+                    "The saved book import targets a library root that moved, was disabled, or no longer accepts books. Review the partial import before retrying.",
+                    cancellationToken);
+                return;
+            }
+            if (!ImportPlacementExecution.MatchesTransfer(durableCheckpoint, import)) {
+                await acquisitions.SetStatusAsync(
+                    import.Id,
+                    AcquisitionStatus.ManualImportRequired,
+                    "This book import checkpoint belongs to a different download attempt and was not reused. Review the partial files before retrying.",
+                    cancellationToken);
+                return;
+            }
+
+            var resumed = await ImportPlacementExecution.ExecuteAsync(
+                acquisitions,
+                mover,
+                import.Id,
+                durableCheckpoint,
+                cancellationToken);
+            if (resumed is null) {
+                return;
+            }
+
+            profile ??= new BookImportProfile(
+                checkpointRoot.Id,
+                MediaNamingTemplates.BookDefault,
+                durableCheckpoint.ImportMode);
+            await FinalizeAsync(context, import, profile, checkpointRoot, resumed, cancellationToken);
+            return;
+        }
 
         // A request-time library choice overrides the profile's target; an unsuitable choice falls back.
         var root = await ImportRootResolution.ResolveAsync(
@@ -134,11 +321,53 @@ public sealed class BookAcquisitionImportEngine(
             return;
         }
 
-        await context.ReportProgressAsync(40, "Moving files", cancellationToken);
-        var finalPaths = new List<string>(plan.Items.Count);
-        foreach (var item in plan.Items) {
-            finalPaths.Add(await mover.PlaceAsync(item, profile.ImportMode, cancellationToken));
+        var units = ImportPlacementExecution.ReserveUnits(
+            import.ContentPath,
+            plan.Items.Select(item => (item, IsMedia: true)).ToArray(),
+            mover);
+        var hintFolder = Path.GetDirectoryName(units[0].TargetAbsolutePath) ?? Path.GetFullPath(root.Path);
+        var checkpoint = new ImportPlacementCheckpoint(
+            import.Kind,
+            root.Id,
+            Path.GetFullPath(root.Path),
+            ImportPlacementExecution.PayloadRootPath(import.ContentPath),
+            profile.ImportMode,
+            hintFolder,
+            hintFolder,
+            "Imported into the library.",
+            units,
+            string.IsNullOrWhiteSpace(import.ClientItemId) ? null : import.ClientItemId,
+            Guid.NewGuid(),
+            context.Job.Id);
+        if (!await acquisitions.TryCreateImportPlacementCheckpointAsync(import.Id, checkpoint, cancellationToken)) {
+            logger.LogInformation(
+                "Book import checkpoint for {Id} was superseded before placement; skipping stale work.",
+                import.Id);
+            return;
         }
+
+        await context.ReportProgressAsync(40, "Moving files", cancellationToken);
+        var completed = await ImportPlacementExecution.ExecuteAsync(
+            acquisitions,
+            mover,
+            import.Id,
+            checkpoint,
+            cancellationToken);
+        if (completed is null) {
+            return;
+        }
+
+        await FinalizeAsync(context, import, profile, root, completed, cancellationToken);
+    }
+
+    private async Task FinalizeAsync(
+        JobContext context,
+        AcquisitionImportContext import,
+        BookImportProfile profile,
+        LibraryRootData root,
+        ImportPlacementCheckpoint checkpoint,
+        CancellationToken cancellationToken) {
+        var finalPaths = ImportPlacementExecution.MediaPaths(checkpoint);
 
         // Capture the owned quality: format from the actual placed file (file truth, so a release that
         // claimed retail-EPUB but delivered a PDF is recorded honestly), source from the selected release
@@ -152,17 +381,33 @@ public sealed class BookAcquisitionImportEngine(
         // upgrade loop's same-quality format-score cutoff has a baseline. Null-safe: no selected release → 0.
         var ownedFormatScore = await OwnedFormatScore.ComputeAsync(profiles, import.ProfileId, EntityKind.Book, selected, cancellationToken);
 
-        var hintFolder = Path.GetDirectoryName(finalPaths[0]) ?? root.Path;
-        await acquisitions.WriteImportHintAsync(import.Id, hintFolder, import, ownedQuality, cancellationToken);
-        await acquisitions.SetFinalSourcePathAsync(import.Id, hintFolder, cancellationToken);
+        await acquisitions.WriteImportHintAsync(import.Id, checkpoint.HintPath, import, ownedQuality, cancellationToken);
+        await acquisitions.SetFinalSourcePathAsync(import.Id, checkpoint.FinalSourcePath, cancellationToken);
 
-        await context.ReportProgressAsync(80, "Scanning library", cancellationToken);
-        await context.EnqueueIfNeededAsync(new EnqueueJobRequest(JobType.ScanBook, TargetLabel: "Imported book scan"), cancellationToken);
+        await context.ReportProgressAsync(80, "Cataloging imported book", cancellationToken);
+        await materializer.MaterializeAsync(
+            import.Kind,
+            context,
+            new ImportedEntityMaterializationRequest(import.Id, import.EntityId, root, finalPaths),
+            cancellationToken);
+        await ImportRootResolution.EnqueueReconciliationAsync(
+            context, JobType.ScanBook, root, "Imported book scan", logger, cancellationToken);
 
-        await torrents.HandleImportedAsync(import, profile.ImportMode, cancellationToken);
+        await torrents.HandleImportedAsync(import, checkpoint.ImportMode, cancellationToken);
 
-        await context.ReportProgressAsync(100, "Finalizing import", cancellationToken);
-        await acquisitions.MarkImportedWithQualityAsync(import.Id, ownedQuality, "Imported into the library.", cancellationToken, ownedFormatScore: ownedFormatScore);
+        await acquisitions.MarkImportedWithQualityAsync(import.Id, ownedQuality, checkpoint.SuccessMessage, cancellationToken, ownedFormatScore: ownedFormatScore);
+    }
+
+    private async Task<LibraryRootData?> ResolveCheckpointRootAsync(
+        ImportPlacementCheckpoint checkpoint,
+        CancellationToken cancellationToken) {
+        var root = await roots.GetLibraryRootAsync(checkpoint.LibraryRootId, cancellationToken);
+        return root is { Enabled: true, ScanBooks: true }
+            && FileSystemPathComparison.Equals(
+                Path.GetFullPath(root.Path),
+                checkpoint.LibraryRootPath)
+                ? root
+                : null;
     }
 
     private Task Fail(Guid acquisitionId, string message, CancellationToken cancellationToken) =>
@@ -332,6 +577,47 @@ internal static class ImportRootResolution {
             .ThenBy(candidate => candidate.Label, StringComparer.OrdinalIgnoreCase)
             .FirstOrDefault();
     }
+
+    public static async Task<LibraryRootData?> ResolveOwningAsync(
+        ILibraryScanRootPersistence roots,
+        string path,
+        Func<LibraryRootData, bool> supportsKind,
+        CancellationToken cancellationToken) {
+        var candidate = Path.GetFullPath(path);
+        return (await roots.GetEnabledRootsAsync(cancellationToken))
+            .Where(supportsKind)
+            .Where(root => IsAtOrUnder(candidate, Path.GetFullPath(root.Path)))
+            .OrderByDescending(root => Path.GetFullPath(root.Path).Length)
+            .FirstOrDefault();
+    }
+
+    public static Task EnqueueReconciliationAsync(
+        JobContext context,
+        JobType type,
+        LibraryRootData root,
+        string label,
+        ILogger logger,
+        CancellationToken cancellationToken) =>
+        ImportedMaterializationHousekeeping.TryAsync(
+            logger,
+            "Imported Entity is ready but optional library reconciliation could not be queued.",
+            () => context.EnqueueIfNeededAsync(new EnqueueJobRequest(
+                type,
+                PayloadJson: new ScanRootPayload(root.Id).ToJson(),
+                TargetEntityKind: JobTargetKinds.LibraryRoot,
+                TargetEntityId: root.Id.ToString(),
+                TargetLabel: label), cancellationToken));
+
+    private static bool IsAtOrUnder(string candidate, string root) {
+        if (FileSystemPathComparison.Equals(candidate, root)) {
+            return true;
+        }
+
+        var normalizedRoot = Path.EndsInDirectorySeparator(root)
+            ? root
+            : root + Path.DirectorySeparatorChar;
+        return candidate.StartsWith(normalizedRoot, FileSystemPathComparison.Comparison);
+    }
 }
 
 /// <summary>
@@ -349,33 +635,96 @@ public sealed class MovieAcquisitionImportEngine(
     IImportFileMover mover,
     ImportedTorrentRemover torrents,
     IImportTargetIndex targets,
-    IOwnedFileReplacer replacer,
     IAcquisitionBlocklistStore blocklist,
     IAcquisitionHistoryStore history,
+    IImportedEntityMaterializer materializer,
     ILogger<MovieAcquisitionImportEngine> logger) : IAcquisitionImportEngine {
     public EntityKind Kind => EntityKind.Movie;
 
     public async Task ImportAsync(JobContext context, AcquisitionImportContext import, CancellationToken cancellationToken) {
         var profile = await profiles.GetImportProfileAsync(import.ProfileId, EntityKind.Movie, cancellationToken);
 
+        // Quality is a release fact and remains available even when Move already consumed the payload.
+        var selected = await acquisitions.GetSelectedReleaseAsync(import.Id, cancellationToken);
+        var ownedMediaQuality = selected is null ? null : MediaQualityLadder.Detect(EntityKind.Movie, selected.Title).Code;
+
+        if (import.ImportPlacementCheckpoint is { } durableCheckpoint) {
+            var checkpointRoot = await ResolveCheckpointRootAsync(durableCheckpoint, cancellationToken);
+            if (checkpointRoot is null) {
+                await acquisitions.SetStatusAsync(
+                    import.Id,
+                    AcquisitionStatus.ManualImportRequired,
+                    "The saved movie import targets a library root that moved, was disabled, or no longer accepts video. Review the partial import before retrying.",
+                    cancellationToken);
+                return;
+            }
+            if (!ImportPlacementExecution.MatchesTransfer(durableCheckpoint, import)) {
+                await acquisitions.SetStatusAsync(
+                    import.Id,
+                    AcquisitionStatus.ManualImportRequired,
+                    "This movie import checkpoint belongs to a different download attempt and was not reused. Review the partial files before retrying.",
+                    cancellationToken);
+                return;
+            }
+
+            var resumed = await ImportPlacementExecution.ExecuteAsync(
+                acquisitions,
+                mover,
+                import.Id,
+                durableCheckpoint,
+                cancellationToken);
+            if (resumed is null) {
+                return;
+            }
+
+            await FinalizeImportAsync(
+                context,
+                import,
+                selected,
+                ownedMediaQuality,
+                checkpointRoot,
+                resumed.HintPath,
+                resumed.FinalSourcePath,
+                ImportPlacementExecution.MediaPaths(resumed),
+                resumed.ImportMode,
+                resumed.SuccessMessage,
+                cancellationToken);
+            return;
+        }
+
         if (string.IsNullOrWhiteSpace(import.ContentPath) || payloads.Read(import.ContentPath) is not { } payload) {
             await Fail(import.Id, "The completed download reported no content path.", cancellationToken);
             return;
         }
 
-        // The owned quality (and the {Quality} naming token) is the video-ladder code detected from the
-        // selected release title. Detected before planning so the template can render it into the path.
-        var selected = await acquisitions.GetSelectedReleaseAsync(import.Id, cancellationToken);
-        var ownedMediaQuality = selected is null ? null : MediaQualityLadder.Detect(EntityKind.Movie, selected.Title).Code;
-
         var templateContext = new ImportTemplateContext(import.Title, import.Author, import.Year);
 
-        // A movie that already lives on disk merges into its existing folder (replace-if-better for an
-        // owned file), never a template-derived parallel folder — that would mint a duplicate movie.
+        // A movie that already lives on disk merges into its existing folder (or safely holds an owned-file
+        // upgrade for review), never a template-derived parallel folder — that would mint a duplicate movie.
         if (import.EntityId is { } linkedEntityId
             && await targets.GetMovieTargetAsync(linkedEntityId, cancellationToken) is { } target
             && Directory.Exists(target.FolderPath)) {
-            await ImportIntoExistingMovieAsync(context, import, payload, target, profile, templateContext, selected, ownedMediaQuality, cancellationToken);
+            var existingRoot = await ImportRootResolution.ResolveOwningAsync(
+                roots,
+                target.FolderPath,
+                static candidate => candidate.ScanVideos,
+                cancellationToken);
+            if (existingRoot is null) {
+                await Fail(import.Id, "The existing movie is outside every enabled video library root.", cancellationToken);
+                return;
+            }
+
+            await ImportIntoExistingMovieAsync(
+                context,
+                import,
+                payload,
+                target,
+                existingRoot,
+                profile,
+                templateContext,
+                selected,
+                ownedMediaQuality,
+                cancellationToken);
             return;
         }
 
@@ -394,27 +743,64 @@ public sealed class MovieAcquisitionImportEngine(
             return;
         }
 
-        await context.ReportProgressAsync(40, "Moving files", cancellationToken);
         var importMode = profile?.ImportMode ?? ImportMode.Move;
-        var finalPaths = new List<string>(plan.Items.Count);
-        foreach (var item in plan.Items) {
-            finalPaths.Add(await mover.PlaceAsync(item, importMode, cancellationToken));
+        var units = ImportPlacementExecution.ReserveUnits(
+            payload.ContentRoot,
+            plan.Items.Select(item => (item, IsMedia: true)).ToArray(),
+            mover);
+        var hintFolder = Path.GetDirectoryName(units[0].TargetAbsolutePath) ?? Path.GetFullPath(root.Path);
+        var checkpoint = CreateCheckpoint(
+            import,
+            context,
+            root,
+            importMode,
+            hintFolder,
+            hintFolder,
+            "Imported into the library.",
+            units);
+        if (!await acquisitions.TryCreateImportPlacementCheckpointAsync(import.Id, checkpoint, cancellationToken)) {
+            logger.LogInformation(
+                "Movie import checkpoint for {Id} was superseded before placement; skipping stale work.",
+                import.Id);
+            return;
         }
 
-        var hintFolder = Path.GetDirectoryName(finalPaths[0]) ?? root.Path;
-        await FinalizeImportAsync(context, import, selected, ownedMediaQuality, hintFolder, hintFolder, importMode, "Imported into the library.", cancellationToken);
+        await context.ReportProgressAsync(40, "Moving files", cancellationToken);
+        var completed = await ImportPlacementExecution.ExecuteAsync(
+            acquisitions,
+            mover,
+            import.Id,
+            checkpoint,
+            cancellationToken);
+        if (completed is null) {
+            return;
+        }
+
+        await FinalizeImportAsync(
+            context,
+            import,
+            selected,
+            ownedMediaQuality,
+            root,
+            completed.HintPath,
+            completed.FinalSourcePath,
+            ImportPlacementExecution.MediaPaths(completed),
+            completed.ImportMode,
+            completed.SuccessMessage,
+            cancellationToken);
     }
 
     /// <summary>
     /// The merged path for an existing movie: the release's primary video either fills a folder that has
-    /// no video yet, or gates against the owned file (replace strictly-better in place; a non-upgrade
-    /// fails with the release blocklisted; a format-change upgrade holds for manual import).
+    /// no video yet, or gates against the owned file. Non-upgrades are blocklisted; valid upgrades are
+    /// held before mutation until the replacement protocol has the same crash-safe checkpoint semantics.
     /// </summary>
     private async Task ImportIntoExistingMovieAsync(
         JobContext context,
         AcquisitionImportContext import,
         DownloadPayload payload,
         MovieDiskTarget target,
+        LibraryRootData root,
         BookImportProfile? profile,
         ImportTemplateContext templateContext,
         SelectedRelease? selected,
@@ -431,41 +817,114 @@ public sealed class MovieAcquisitionImportEngine(
         var fileName = item.TargetRelativePath.Split('/')[^1];
         var importMode = profile?.ImportMode ?? ImportMode.Move;
 
-        string? placedPath;
         if (target.OwnedVideoFilePath is not { } owned || !File.Exists(owned)) {
             // The folder exists (covers, sidecars) but owns no video yet — fill it with the template-named file.
-            placedPath = await mover.PlaceAsync(
-                new ResolvedImportItem(sourceAbsolute, Path.GetFullPath(Path.Combine(target.FolderPath, fileName))), importMode, cancellationToken);
-        } else {
-            var incomingPosition = selected is null ? 0 : MediaQualityLadder.Detect(EntityKind.Movie, selected.Title).Position;
-            if (incomingPosition <= 0) {
-                incomingPosition = (int)VideoQualityDetection.Detect(Path.GetFileNameWithoutExtension(item.SourceRelativePath));
-            }
-
-            var incomingRevision = selected is null ? 1 : ReleaseRevisionDetection.Detect(selected.Title);
-            var rules = await profiles.GetRulesAsync(import.ProfileId, EntityKind.Movie, cancellationToken);
-            var action = TvExistingTargetMerge.DecideAgainstOwned(
-                fileName, owned, incomingPosition, incomingRevision, rules.ProperPolicy, import.AllowFormatChange);
-            if (action != MergeFileAction.ReplaceUpgrade) {
-                await MergedImportExecution.FailNothingUsableAsync(
-                    acquisitions, blocklist, history, torrents, logger, import, selected,
-                    hasFormatChange: action == MergeFileAction.DropFormatChange,
-                    "The release upgrades the movie but changes the file format; import it manually.",
-                    cancellationToken);
+            var units = ImportPlacementExecution.ReserveUnits(
+                payload.ContentRoot,
+                [(new ResolvedImportItem(
+                    sourceAbsolute,
+                    Path.GetFullPath(Path.Combine(target.FolderPath, fileName))), IsMedia: true)],
+                mover);
+            var checkpoint = CreateCheckpoint(
+                import,
+                context,
+                root,
+                importMode,
+                Path.GetFullPath(target.FolderPath),
+                units[0].TargetAbsolutePath,
+                "Imported into the existing movie.",
+                units);
+            if (!await acquisitions.TryCreateImportPlacementCheckpointAsync(import.Id, checkpoint, cancellationToken)) {
+                logger.LogInformation(
+                    "Existing-movie import checkpoint for {Id} was superseded before placement; skipping stale work.",
+                    import.Id);
                 return;
             }
 
-            placedPath = await MergedImportExecution.ReplaceOwnedAsync(
-                replacer, logger, owned, sourceAbsolute, importMode, cancellationToken, import.AllowFormatChange);
-            if (placedPath is null) {
-                await Fail(import.Id, "The in-place upgrade of the owned movie file failed; the original was kept.", cancellationToken);
+            var completed = await ImportPlacementExecution.ExecuteAsync(
+                acquisitions,
+                mover,
+                import.Id,
+                checkpoint,
+                cancellationToken);
+            if (completed is null) {
                 return;
             }
+
+            await FinalizeImportAsync(
+                context,
+                import,
+                selected,
+                qualityCode,
+                root,
+                completed.HintPath,
+                completed.FinalSourcePath,
+                ImportPlacementExecution.MediaPaths(completed),
+                completed.ImportMode,
+                completed.SuccessMessage,
+                cancellationToken);
+            return;
         }
 
-        await FinalizeImportAsync(
-            context, import, selected, qualityCode, target.FolderPath, placedPath, importMode,
-            "Imported into the existing movie.", cancellationToken);
+        var incomingPosition = selected is null ? 0 : MediaQualityLadder.Detect(EntityKind.Movie, selected.Title).Position;
+        if (incomingPosition <= 0) {
+            incomingPosition = (int)VideoQualityDetection.Detect(Path.GetFileNameWithoutExtension(item.SourceRelativePath));
+        }
+
+        var incomingRevision = selected is null ? 1 : ReleaseRevisionDetection.Detect(selected.Title);
+        var rules = await profiles.GetRulesAsync(import.ProfileId, EntityKind.Movie, cancellationToken);
+        var action = TvExistingTargetMerge.DecideAgainstOwned(
+            fileName, owned, incomingPosition, incomingRevision, rules.ProperPolicy, import.AllowFormatChange);
+        if (action != MergeFileAction.ReplaceUpgrade) {
+            await MergedImportExecution.FailNothingUsableAsync(
+                acquisitions, blocklist, history, torrents, logger, import, selected,
+                hasFormatChange: action == MergeFileAction.DropFormatChange,
+                "The release upgrades the movie but changes the file format; import it manually.",
+                cancellationToken);
+            return;
+        }
+
+        await acquisitions.SetStatusAsync(
+            import.Id,
+            AcquisitionStatus.ManualImportRequired,
+            "This release upgrades the existing movie, but automatic in-place replacement is paused because it cannot yet guarantee crash-safe recovery. The owned file was left untouched; import the upgrade manually.",
+            cancellationToken);
+    }
+
+    private static ImportPlacementCheckpoint CreateCheckpoint(
+        AcquisitionImportContext import,
+        JobContext context,
+        LibraryRootData root,
+        ImportMode importMode,
+        string hintPath,
+        string finalSourcePath,
+        string successMessage,
+        IReadOnlyList<ImportPlacementCheckpointUnit> units) =>
+        new(
+            import.Kind,
+            root.Id,
+            Path.GetFullPath(root.Path),
+            ImportPlacementExecution.PayloadRootPath(import.ContentPath
+                ?? throw new InvalidOperationException("A fresh movie import requires its payload path.")),
+            importMode,
+            Path.GetFullPath(hintPath),
+            Path.GetFullPath(finalSourcePath),
+            successMessage,
+            units,
+            string.IsNullOrWhiteSpace(import.ClientItemId) ? null : import.ClientItemId,
+            Guid.NewGuid(),
+            context.Job.Id);
+
+    private async Task<LibraryRootData?> ResolveCheckpointRootAsync(
+        ImportPlacementCheckpoint checkpoint,
+        CancellationToken cancellationToken) {
+        var root = await roots.GetLibraryRootAsync(checkpoint.LibraryRootId, cancellationToken);
+        return root is { Enabled: true, ScanVideos: true }
+            && FileSystemPathComparison.Equals(
+                Path.GetFullPath(root.Path),
+                checkpoint.LibraryRootPath)
+                ? root
+                : null;
     }
 
     /// <summary>The shared success tail: hint, final source path, scan chain, torrent handling, and the imported mark.</summary>
@@ -474,8 +933,10 @@ public sealed class MovieAcquisitionImportEngine(
         AcquisitionImportContext import,
         SelectedRelease? selected,
         string? qualityCode,
+        LibraryRootData root,
         string hintFolder,
         string finalSourcePath,
+        IReadOnlyList<string> placedMediaPaths,
         ImportMode importMode,
         string message,
         CancellationToken cancellationToken) {
@@ -486,12 +947,17 @@ public sealed class MovieAcquisitionImportEngine(
         await acquisitions.WriteImportHintAsync(import.Id, hintFolder, import, BookQualityRank.Floor, cancellationToken);
         await acquisitions.SetFinalSourcePathAsync(import.Id, finalSourcePath, cancellationToken);
 
-        await context.ReportProgressAsync(80, "Scanning library", cancellationToken);
-        await context.EnqueueIfNeededAsync(new EnqueueJobRequest(JobType.ScanLibrary, TargetLabel: "Imported movie scan"), cancellationToken);
+        await context.ReportProgressAsync(80, "Cataloging imported movie", cancellationToken);
+        await materializer.MaterializeAsync(
+            import.Kind,
+            context,
+            new ImportedEntityMaterializationRequest(import.Id, import.EntityId, root, placedMediaPaths),
+            cancellationToken);
+        await ImportRootResolution.EnqueueReconciliationAsync(
+            context, JobType.ScanLibrary, root, "Imported movie scan", logger, cancellationToken);
 
         await torrents.HandleImportedAsync(import, importMode, cancellationToken);
 
-        await context.ReportProgressAsync(100, "Finalizing import", cancellationToken);
         await acquisitions.MarkImportedWithQualityAsync(import.Id, BookQualityRank.Floor, message, cancellationToken, qualityCode, ownedMediaRevision, ownedFormatScore);
     }
 
@@ -750,7 +1216,9 @@ public sealed class TvAcquisitionImportEngine(
         var message = skipped == 0
             ? "Imported into the existing series."
             : $"Imported {executable.Length} of {merged.Count} file(s) into the existing series; {skipped} were not upgrades over the files you already have.";
-        var unitsBySource = unitsPlan.Units.ToDictionary(unit => unit.SourceRelativePath, StringComparer.OrdinalIgnoreCase);
+        var unitsBySource = unitsPlan.Units.ToDictionary(
+            unit => unit.SourceRelativePath,
+            FileSystemPathComparison.Comparer);
         var checkpoint = new TvImportCheckpoint(
             owningRoot.Id,
             layout.SeriesFolderPath,
@@ -802,7 +1270,7 @@ public sealed class TvAcquisitionImportEngine(
                 exactTarget = Path.ChangeExtension(
                     Path.GetFullPath(previousFilePath),
                     Path.GetExtension(unit.SourceRelativePath));
-                if (!string.Equals(exactTarget, Path.GetFullPath(previousFilePath), StringComparison.OrdinalIgnoreCase)
+                if (!FileSystemPathComparison.Equals(exactTarget, Path.GetFullPath(previousFilePath))
                     && (File.Exists(exactTarget) || Directory.Exists(exactTarget))) {
                     await acquisitions.SetStatusAsync(
                         import.Id,
@@ -811,13 +1279,13 @@ public sealed class TvAcquisitionImportEngine(
                         cancellationToken);
                     return null;
                 }
-                if (reservedTargets.Contains(exactTarget, StringComparer.OrdinalIgnoreCase)) {
+                if (reservedTargets.Contains(exactTarget, FileSystemPathComparison.Comparer)) {
                     throw new InvalidOperationException("The TV import plan assigns multiple files to one upgrade target.");
                 }
             } else {
                 var desiredTarget = Path.GetFullPath(unit.TargetAbsolutePath);
                 exactTarget = mover.ResolveExactTargetPath(desiredTarget, reservedTargets);
-                if (!string.Equals(exactTarget, desiredTarget, StringComparison.OrdinalIgnoreCase)) {
+                if (!FileSystemPathComparison.Equals(exactTarget, desiredTarget)) {
                     await acquisitions.SetStatusAsync(
                         import.Id,
                         AcquisitionStatus.ManualImportRequired,
@@ -977,7 +1445,7 @@ public sealed class TvAcquisitionImportEngine(
                     }
 
                     if (previousPath is not null
-                        && !string.Equals(expectedPath, previousPath, StringComparison.OrdinalIgnoreCase)
+                        && !FileSystemPathComparison.Equals(expectedPath, previousPath)
                         && (File.Exists(expectedPath) || Directory.Exists(expectedPath))) {
                         await acquisitions.SetStatusAsync(
                             import.Id,
@@ -1027,7 +1495,7 @@ public sealed class TvAcquisitionImportEngine(
             unit.PreviousFilePath)).ToArray();
         var seasonFolders = importedEpisodes
             .Select(episode => Path.GetDirectoryName(episode.FilePath) ?? seriesFolder)
-            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Distinct(FileSystemPathComparison.Comparer)
             .ToArray();
         var hintFolder = seasonFolders.Length == 1 ? seasonFolders[0] : seriesFolder;
         var finalSourcePath = checkpoint.PreferSingleFileFinalSource && importedEpisodes.Length == 1
@@ -1077,7 +1545,7 @@ public sealed class TvAcquisitionImportEngine(
             .Select(path => Path.GetDirectoryName(Path.GetDirectoryName(path) ?? string.Empty))
             .Where(path => !string.IsNullOrWhiteSpace(path))
             .Select(path => Path.GetFullPath(path!))
-            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Distinct(FileSystemPathComparison.Comparer)
             .ToArray();
         var seriesFolder = layout?.SeriesFolderPath
             ?? (seriesFolders.Length == 1 ? seriesFolders[0] : null);
@@ -1105,7 +1573,7 @@ public sealed class TvAcquisitionImportEngine(
 
         var seasonFolders = importedEpisodes
             .Select(episode => Path.GetDirectoryName(episode.FilePath)!)
-            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Distinct(FileSystemPathComparison.Comparer)
             .ToArray();
         var hintFolder = seasonFolders.Length == 1 ? seasonFolders[0] : seriesFolder;
         await FinalizeImportAsync(
@@ -1269,7 +1737,7 @@ public sealed class TvAcquisitionImportEngine(
 
         var previous = Path.GetFullPath(previousFilePath);
         var replacement = Path.GetFullPath(replacementPath);
-        if (string.Equals(previous, replacement, StringComparison.OrdinalIgnoreCase) || !File.Exists(previous)) {
+        if (FileSystemPathComparison.Equals(previous, replacement) || !File.Exists(previous)) {
             return;
         }
 
@@ -1307,11 +1775,11 @@ public sealed class TvAcquisitionImportEngine(
     }
 
     private static bool IsAtOrUnderFolder(string candidate, string folder) =>
-        string.Equals(candidate, folder, StringComparison.Ordinal) || IsUnderFolder(candidate, folder);
+        FileSystemPathComparison.Equals(candidate, folder) || IsUnderFolder(candidate, folder);
 
     private static bool IsUnderFolder(string candidate, string folder) {
         var normalized = folder.EndsWith(Path.DirectorySeparatorChar) ? folder : folder + Path.DirectorySeparatorChar;
-        return candidate.StartsWith(normalized, StringComparison.Ordinal);
+        return candidate.StartsWith(normalized, FileSystemPathComparison.Comparison);
     }
 
     private static string BlockMessage(ImportBlockReason? reason) => reason == ImportBlockReason.NoSupportedPayload
@@ -1339,11 +1807,53 @@ public sealed class MusicAcquisitionImportEngine(
     IImportTargetIndex targets,
     IAcquisitionBlocklistStore blocklist,
     IAcquisitionHistoryStore history,
+    IImportedEntityMaterializer materializer,
     ILogger<MusicAcquisitionImportEngine> logger) : IAcquisitionImportEngine {
     public EntityKind Kind => EntityKind.AudioLibrary;
 
     public async Task ImportAsync(JobContext context, AcquisitionImportContext import, CancellationToken cancellationToken) {
         var profile = await profiles.GetImportProfileAsync(import.ProfileId, EntityKind.AudioLibrary, cancellationToken);
+
+        if (import.ImportPlacementCheckpoint is { } durableCheckpoint) {
+            var checkpointRoot = await ResolveCheckpointRootAsync(durableCheckpoint, cancellationToken);
+            if (checkpointRoot is null) {
+                await acquisitions.SetStatusAsync(
+                    import.Id,
+                    AcquisitionStatus.ManualImportRequired,
+                    "The saved album import targets a library root that moved, was disabled, or no longer accepts audio. Review the partial import before retrying.",
+                    cancellationToken);
+                return;
+            }
+            if (!ImportPlacementExecution.MatchesTransfer(durableCheckpoint, import)) {
+                await acquisitions.SetStatusAsync(
+                    import.Id,
+                    AcquisitionStatus.ManualImportRequired,
+                    "This album import checkpoint belongs to a different download attempt and was not reused. Review the partial files before retrying.",
+                    cancellationToken);
+                return;
+            }
+
+            var resumed = await ImportPlacementExecution.ExecuteAsync(
+                acquisitions,
+                mover,
+                import.Id,
+                durableCheckpoint,
+                cancellationToken);
+            if (resumed is null) {
+                return;
+            }
+
+            await FinalizeImportAsync(
+                context,
+                import,
+                checkpointRoot,
+                resumed.HintPath,
+                ImportPlacementExecution.MediaPaths(resumed),
+                resumed.ImportMode,
+                resumed.SuccessMessage,
+                cancellationToken);
+            return;
+        }
 
         if (string.IsNullOrWhiteSpace(import.ContentPath) || payloads.Read(import.ContentPath) is not { } payload) {
             await Fail(import.Id, "The completed download reported no content path.", cancellationToken);
@@ -1364,7 +1874,26 @@ public sealed class MusicAcquisitionImportEngine(
         if (import.EntityId is { } linkedEntityId
             && await targets.GetAlbumTargetAsync(linkedEntityId, cancellationToken) is { } target
             && ExistingAlbumFolderOf(target, artist, import, profile) is { } albumTarget) {
-            await ImportIntoExistingAlbumAsync(context, import, payload, rawPlan, albumTarget, target, profile, cancellationToken);
+            var existingRoot = await ImportRootResolution.ResolveOwningAsync(
+                roots,
+                albumTarget,
+                static candidate => candidate.ScanAudio,
+                cancellationToken);
+            if (existingRoot is null) {
+                await Fail(import.Id, "The existing album is outside every enabled audio library root.", cancellationToken);
+                return;
+            }
+
+            await ImportIntoExistingAlbumAsync(
+                context,
+                import,
+                payload,
+                rawPlan,
+                albumTarget,
+                target,
+                existingRoot,
+                profile,
+                cancellationToken);
             return;
         }
 
@@ -1383,16 +1912,51 @@ public sealed class MusicAcquisitionImportEngine(
             return;
         }
 
-        await context.ReportProgressAsync(40, "Moving files", cancellationToken);
         var importMode = profile?.ImportMode ?? ImportMode.Move;
-        foreach (var item in plan.Items) {
-            await mover.PlaceAsync(item, importMode, cancellationToken);
-        }
-
         // The hint and final path key on the ALBUM folder (not a disc subfolder a track landed in), so
         // the audio scan's album upsert path matches the bind exactly.
         var albumFolder = Path.GetFullPath(Path.Combine(root.Path, MusicImportPlanBuilder.AlbumFolderRelative(artist, import.Title, profile?.PathTemplate, import.Year)));
-        await FinalizeImportAsync(context, import, albumFolder, importMode, "Imported into the library.", cancellationToken);
+        var units = ImportPlacementExecution.ReserveUnits(
+            payload.ContentRoot,
+            plan.Items
+                .Select(item => (item, IsMedia: MusicImportPlanBuilder.IsAudioFile(item.SourceAbsolutePath)))
+                .ToArray(),
+            mover);
+        var checkpoint = CreateCheckpoint(
+            import,
+            context,
+            root,
+            importMode,
+            albumFolder,
+            "Imported into the library.",
+            units);
+        if (!await acquisitions.TryCreateImportPlacementCheckpointAsync(import.Id, checkpoint, cancellationToken)) {
+            logger.LogInformation(
+                "Album import checkpoint for {Id} was superseded before placement; skipping stale work.",
+                import.Id);
+            return;
+        }
+
+        await context.ReportProgressAsync(40, "Moving files", cancellationToken);
+        var completed = await ImportPlacementExecution.ExecuteAsync(
+            acquisitions,
+            mover,
+            import.Id,
+            checkpoint,
+            cancellationToken);
+        if (completed is null) {
+            return;
+        }
+
+        await FinalizeImportAsync(
+            context,
+            import,
+            root,
+            completed.HintPath,
+            ImportPlacementExecution.MediaPaths(completed),
+            completed.ImportMode,
+            completed.SuccessMessage,
+            cancellationToken);
     }
 
     /// <summary>
@@ -1427,20 +1991,16 @@ public sealed class MusicAcquisitionImportEngine(
         ImportPlan rawPlan,
         string albumFolder,
         AlbumDiskTarget target,
+        LibraryRootData root,
         BookImportProfile? profile,
         CancellationToken cancellationToken) {
         var merged = MusicExistingTargetMerge.Plan(rawPlan.Items, albumFolder, target.ExistingRelativeFiles);
 
-        await context.ReportProgressAsync(40, "Merging into the existing album", cancellationToken);
-        var importMode = profile?.ImportMode ?? ImportMode.Move;
-        var placed = 0;
-        foreach (var item in merged.Where(item => item.Action == MergeFileAction.PlaceNew)) {
-            var sourceAbsolute = Path.GetFullPath(Path.Combine(payload.ContentRoot, item.SourceRelativePath));
-            await mover.PlaceAsync(new ResolvedImportItem(sourceAbsolute, Path.GetFullPath(item.TargetAbsolutePath)), importMode, cancellationToken);
-            placed++;
-        }
-
-        if (placed == 0) {
+        var placeNew = merged.Where(item => item.Action == MergeFileAction.PlaceNew).ToArray();
+        // Cover art alone is not an acquisition result. Gate on new audio before ANY companion file is
+        // placed, otherwise a release containing only already-owned tracks can mutate artwork and then
+        // fail materialization with an empty media set.
+        if (!placeNew.Any(item => MusicImportPlanBuilder.IsAudioFile(item.SourceRelativePath))) {
             var selected = await acquisitions.GetSelectedReleaseAsync(import.Id, cancellationToken);
             await MergedImportExecution.FailNothingUsableAsync(
                 acquisitions, blocklist, history, torrents, logger, import, selected,
@@ -1448,18 +2008,100 @@ public sealed class MusicAcquisitionImportEngine(
             return;
         }
 
+        var importMode = profile?.ImportMode ?? ImportMode.Move;
+        var units = ImportPlacementExecution.ReserveUnits(
+            payload.ContentRoot,
+            placeNew.Select(item => {
+                var sourceAbsolute = Path.GetFullPath(Path.Combine(payload.ContentRoot, item.SourceRelativePath));
+                return (
+                    new ResolvedImportItem(sourceAbsolute, Path.GetFullPath(item.TargetAbsolutePath)),
+                    IsMedia: MusicImportPlanBuilder.IsAudioFile(item.SourceRelativePath));
+            }).ToArray(),
+            mover);
+        var placed = placeNew.Length;
         var skipped = merged.Count - placed;
         var message = skipped == 0
             ? "Imported into the existing album."
             : $"Imported {placed} of {merged.Count} file(s) into the existing album; {skipped} already existed.";
-        await FinalizeImportAsync(context, import, albumFolder, importMode, message, cancellationToken);
+        var checkpoint = CreateCheckpoint(
+            import,
+            context,
+            root,
+            importMode,
+            Path.GetFullPath(albumFolder),
+            message,
+            units);
+        if (!await acquisitions.TryCreateImportPlacementCheckpointAsync(import.Id, checkpoint, cancellationToken)) {
+            logger.LogInformation(
+                "Existing-album import checkpoint for {Id} was superseded before placement; skipping stale work.",
+                import.Id);
+            return;
+        }
+
+        await context.ReportProgressAsync(40, "Merging into the existing album", cancellationToken);
+        var completed = await ImportPlacementExecution.ExecuteAsync(
+            acquisitions,
+            mover,
+            import.Id,
+            checkpoint,
+            cancellationToken);
+        if (completed is null) {
+            return;
+        }
+
+        await FinalizeImportAsync(
+            context,
+            import,
+            root,
+            completed.HintPath,
+            ImportPlacementExecution.MediaPaths(completed),
+            completed.ImportMode,
+            completed.SuccessMessage,
+            cancellationToken);
+    }
+
+    private static ImportPlacementCheckpoint CreateCheckpoint(
+        AcquisitionImportContext import,
+        JobContext context,
+        LibraryRootData root,
+        ImportMode importMode,
+        string albumFolder,
+        string successMessage,
+        IReadOnlyList<ImportPlacementCheckpointUnit> units) =>
+        new(
+            import.Kind,
+            root.Id,
+            Path.GetFullPath(root.Path),
+            ImportPlacementExecution.PayloadRootPath(import.ContentPath
+                ?? throw new InvalidOperationException("A fresh album import requires its payload path.")),
+            importMode,
+            Path.GetFullPath(albumFolder),
+            Path.GetFullPath(albumFolder),
+            successMessage,
+            units,
+            string.IsNullOrWhiteSpace(import.ClientItemId) ? null : import.ClientItemId,
+            Guid.NewGuid(),
+            context.Job.Id);
+
+    private async Task<LibraryRootData?> ResolveCheckpointRootAsync(
+        ImportPlacementCheckpoint checkpoint,
+        CancellationToken cancellationToken) {
+        var root = await roots.GetLibraryRootAsync(checkpoint.LibraryRootId, cancellationToken);
+        return root is { Enabled: true, ScanAudio: true }
+            && FileSystemPathComparison.Equals(
+                Path.GetFullPath(root.Path),
+                checkpoint.LibraryRootPath)
+                ? root
+                : null;
     }
 
     /// <summary>The shared success tail: hint, final source path, scan chain, torrent handling, and the imported mark.</summary>
     private async Task FinalizeImportAsync(
         JobContext context,
         AcquisitionImportContext import,
+        LibraryRootData root,
         string albumFolder,
+        IReadOnlyList<string> placedMediaPaths,
         ImportMode importMode,
         string message,
         CancellationToken cancellationToken) {
@@ -1474,11 +2116,16 @@ public sealed class MusicAcquisitionImportEngine(
         await acquisitions.WriteImportHintAsync(import.Id, albumFolder, import, BookQualityRank.Floor, cancellationToken);
         await acquisitions.SetFinalSourcePathAsync(import.Id, albumFolder, cancellationToken);
 
-        await context.ReportProgressAsync(80, "Scanning library", cancellationToken);
-        await context.EnqueueIfNeededAsync(new EnqueueJobRequest(JobType.ScanAudio, TargetLabel: "Imported album scan"), cancellationToken);
+        await context.ReportProgressAsync(80, "Cataloging imported album", cancellationToken);
+        await materializer.MaterializeAsync(
+            import.Kind,
+            context,
+            new ImportedEntityMaterializationRequest(import.Id, import.EntityId, root, placedMediaPaths),
+            cancellationToken);
+        await ImportRootResolution.EnqueueReconciliationAsync(
+            context, JobType.ScanAudio, root, "Imported album scan", logger, cancellationToken);
 
         await torrents.HandleImportedAsync(import, importMode, cancellationToken);
-        await context.ReportProgressAsync(100, "Finalizing import", cancellationToken);
         await acquisitions.MarkImportedWithQualityAsync(import.Id, BookQualityRank.Floor, message, cancellationToken, ownedMediaQuality, ownedMediaRevision, ownedFormatScore);
     }
 

@@ -72,6 +72,30 @@ public sealed class FileDiscoveryServiceTests : IDisposable {
             groups[galleryPath]);
     }
 
+    [Fact]
+    public async Task LinuxCaseDistinctDirectoriesRemainSeparateGroups() {
+        if (!OperatingSystem.IsLinux()) {
+            return;
+        }
+
+        var upper = Directory.CreateDirectory(Path.Combine(_root.FullName, "Album"));
+        var lower = Directory.CreateDirectory(Path.Combine(_root.FullName, "album"));
+        await File.WriteAllTextAsync(Path.Combine(upper.FullName, "one.flac"), "one");
+        await File.WriteAllTextAsync(Path.Combine(lower.FullName, "two.flac"), "two");
+        var service = new FileDiscoveryService();
+
+        var groups = await service.DiscoverFilesByDirectoryAsync(
+            _root.FullName,
+            new HashSet<string>(StringComparer.OrdinalIgnoreCase) { ".flac" },
+            recursive: true,
+            excludedPaths: null,
+            CancellationToken.None);
+
+        Assert.Equal(2, groups.Count);
+        Assert.Contains(upper.FullName, groups.Keys);
+        Assert.Contains(lower.FullName, groups.Keys);
+    }
+
     public void Dispose() {
         if (_root.Exists) {
             _root.Delete(recursive: true);

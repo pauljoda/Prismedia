@@ -1,4 +1,5 @@
 using Prismedia.Application.Files;
+using Prismedia.Application.Entities;
 using Prismedia.Application.Jobs;
 using Prismedia.Contracts.Files;
 using Prismedia.Domain.Entities;
@@ -60,7 +61,8 @@ public sealed class FilesVisibilityTests {
         new(
             new FakeFilesPersistence(hiddenPaths ?? new HashSet<string>(StringComparer.OrdinalIgnoreCase)),
             new FakeStorage(),
-            new FakeJobQueue());
+            new FakeJobQueue(),
+            new EntitySourcePathMutationCoordinator(new NoSourceOwners(), new UnreachableLifecycleLease()));
 
     private sealed class FakeFilesPersistence(IReadOnlySet<string> hiddenPaths) : IFilesPersistence {
         public Task<IReadOnlyList<FileLibraryRoot>> ListRootsAsync(CancellationToken cancellationToken) =>
@@ -149,6 +151,21 @@ public sealed class FilesVisibilityTests {
         public Task MoveAsync(ResolvedFilePath source, ResolvedFilePath target, CancellationToken cancellationToken) => Task.CompletedTask;
 
         public Task DeleteAsync(ResolvedFilePath path, CancellationToken cancellationToken) => Task.CompletedTask;
+    }
+
+    private sealed class NoSourceOwners : IEntitySourcePathOwnerReader {
+        public Task<IReadOnlySet<Guid>> ListDirectOwnerIdsAsync(
+            string physicalPath,
+            CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlySet<Guid>>(new HashSet<Guid>());
+    }
+
+    private sealed class UnreachableLifecycleLease : IEntityLifecycleMutationLease {
+        public Task<bool> ExecuteAsync(
+            Guid entityId,
+            Func<CancellationToken, Task> mutation,
+            CancellationToken cancellationToken) =>
+            throw new InvalidOperationException("Unlinked visibility tests must not acquire an Entity lifecycle lease.");
     }
 
     private sealed class FakeJobQueue : IJobQueueService {

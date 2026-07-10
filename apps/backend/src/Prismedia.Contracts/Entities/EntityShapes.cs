@@ -27,6 +27,9 @@ public interface IEntitySummary : IEntityRef {
 
     /// <summary>Optional structural order under the parent entity.</summary>
     int? SortOrder { get; }
+
+    /// <summary>Whether this Entity or any structural descendant owns source media on disk.</summary>
+    bool HasSourceMedia { get; }
 }
 
 /// <summary>

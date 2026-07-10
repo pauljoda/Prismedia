@@ -1,6 +1,7 @@
 using Prismedia.Application.Jobs.Handlers;
 using Microsoft.Extensions.Logging;
 using Prismedia.Application.Acquisition;
+using Prismedia.Application.Files;
 using Prismedia.Application.Jobs.Ports;
 using Prismedia.Application.Jobs.Scanning;
 using Prismedia.Domain.Entities;
@@ -49,6 +50,181 @@ public sealed class ScanAudioJobHandler(
             cancellationToken);
     }
 
+    /// <summary>
+    /// Materializes only the album folders touched by one import through the audio scanner's canonical
+    /// classifier, wanted binding, upserts, and downstream jobs. Existing tracks in those albums are
+    /// included so ordering remains stable; no root-wide stale cleanup is performed.
+    /// </summary>
+    public async Task MaterializeImportedPathsAsync(
+        JobContext context,
+        Guid acquisitionId,
+        LibraryRootData root,
+        IReadOnlyList<string> placedPaths,
+        CancellationToken cancellationToken) {
+        if (!root.Enabled || !root.ScanAudio) {
+            throw new InvalidOperationException("The imported album no longer belongs to an enabled audio library root.");
+        }
+
+        var normalizedPaths = placedPaths.Select(Path.GetFullPath).ToArray();
+        var importedDirectories = normalizedPaths
+            .Select(Path.GetDirectoryName)
+            .Where(path => !string.IsNullOrWhiteSpace(path))
+            .Select(path => NormalizePath(path!))
+            .Distinct(FileSystemPathComparison.Comparer)
+            .ToArray();
+        var importedLayout = AudioLibraryClassifier.Classify(root.Path, importedDirectories);
+        if (importedLayout.Albums.Count == 0) {
+            throw new InvalidOperationException("The imported audio files do not resolve to an album folder.");
+        }
+
+        var excludedPaths = await Roots.GetExcludedPathsForRootAsync(root.Id, cancellationToken);
+        var filesByDirectory = new Dictionary<string, IReadOnlyList<string>>(FileSystemPathComparison.Comparer);
+        foreach (var album in importedLayout.Albums) {
+            var groups = await FileDiscovery.DiscoverFilesByDirectoryAsync(
+                album.Path,
+                MediaCategory.Audio,
+                recursive: true,
+                excludedPaths,
+                cancellationToken);
+            foreach (var group in groups) {
+                filesByDirectory[NormalizePath(group.Key)] = group.Value;
+            }
+        }
+
+        var layout = AudioLibraryClassifier.Classify(root.Path, filesByDirectory.Keys);
+        var settings = await Roots.GetSettingsAsync(cancellationToken);
+        if (!root.AutoIdentify) {
+            settings = settings with { AutoIdentifyEnabled = false };
+        }
+
+        if (acquisitionHints is not null) {
+            foreach (var artist in layout.Artists) {
+                await acquisitionHints.BindWantedParentAsync(
+                    EntityKind.MusicArtist,
+                    artist.Path,
+                    cancellationToken,
+                    acquisitionId);
+            }
+
+            foreach (var album in layout.Albums) {
+                await acquisitionHints.BindWantedEntityAsync(
+                    EntityKind.AudioLibrary,
+                    album.Path,
+                    cancellationToken,
+                    acquisitionId);
+            }
+        }
+
+        var artistSortOrders = SiblingSortOrders(layout.Artists.Select(artist => artist.Path).ToList());
+        var artistItems = layout.Artists.Select(artist => new MusicArtistUpsertItem(
+            artist.Path,
+            artist.Title,
+            root.Id,
+            artistSortOrders[artist.Path],
+            root.IsNsfw)).ToArray();
+        var artistIds = await audio.UpsertMusicArtistsBatchAsync(artistItems, cancellationToken);
+        if (artistIds.Count != artistItems.Length) {
+            throw new InvalidOperationException("The imported album's artist could not be persisted.");
+        }
+
+        var artistIdsByPath = artistItems
+            .Select((item, index) => new { item.FolderPath, Id = artistIds[index] })
+            .ToDictionary(item => item.FolderPath, item => item.Id, FileSystemPathComparison.Comparer);
+        var albumSortOrders = SiblingSortOrders(layout.Albums.Select(album => album.Path).ToList());
+        var albumItems = layout.Albums.Select(album => new AudioLibraryUpsertItem(
+            album.Path,
+            album.Title,
+            root.Id,
+            album.ArtistPath is null ? null : artistIdsByPath[album.ArtistPath],
+            albumSortOrders[album.Path],
+            root.IsNsfw)).ToArray();
+        var albumIds = await audio.UpsertAudioLibrariesBatchAsync(albumItems, cancellationToken);
+        if (albumIds.Count != albumItems.Length) {
+            throw new InvalidOperationException("The imported album could not be persisted.");
+        }
+
+        var albumIdsByPath = albumItems
+            .Select((item, index) => new { item.FolderPath, Id = albumIds[index] })
+            .ToDictionary(item => item.FolderPath, item => item.Id, FileSystemPathComparison.Comparer);
+        var trackItems = new List<AudioTrackUpsertItem>();
+        foreach (var album in layout.Albums) {
+            var globalIndex = 0;
+            foreach (var section in album.Sections) {
+                if (!filesByDirectory.TryGetValue(section.DirectoryPath, out var sectionFiles)) {
+                    continue;
+                }
+
+                foreach (var filePath in sectionFiles.OrderBy(path => path, StringComparer.OrdinalIgnoreCase)) {
+                    trackItems.Add(new AudioTrackUpsertItem(
+                        filePath,
+                        Path.GetFileNameWithoutExtension(filePath),
+                        albumIdsByPath[album.Path],
+                        globalIndex++,
+                        section.Label,
+                        section.Order,
+                        root.IsNsfw));
+                }
+            }
+        }
+
+        var trackIds = await audio.UpsertAudioTracksBatchAsync(trackItems, cancellationToken);
+        if (trackIds.Count != trackItems.Count) {
+            throw new InvalidOperationException("One or more imported album tracks could not be persisted.");
+        }
+
+        for (var index = 0; index < trackIds.Count; index++) {
+            var trackIndex = index;
+            await ImportedMaterializationHousekeeping.TryAsync(
+                logger,
+                "Imported album tracks are ready but their downstream jobs could not be queued.",
+                () => ChainTrackJobsAsync(
+                    context,
+                    settings,
+                    trackIds[trackIndex],
+                    trackItems[trackIndex].Title,
+                    cancellationToken));
+        }
+
+        var materializedIds = artistIds.Concat(albumIds).Concat(trackIds).ToArray();
+        await ImportedMaterializationHousekeeping.TryAsync(
+            logger,
+            "Imported album is ready but automatic identification housekeeping could not be queued.",
+            () => AutoIdentifyScanEnqueue.EnqueueRootsAsync(
+                context,
+                settings,
+                downstreamNeeds,
+                materializedIds,
+                cancellationToken));
+
+        var containerTargets = artistItems
+            .Select((item, index) => new EntityRefreshTarget(
+                artistIds[index], EntityKind.MusicArtist.ToCode(), item.Title))
+            .Concat(albumItems.Select((item, index) => new EntityRefreshTarget(
+                albumIds[index], EntityKind.AudioLibrary.ToCode(), item.Title)))
+            .ToArray();
+        await ImportedMaterializationHousekeeping.TryAsync(
+            logger,
+            "Imported album is ready but container thumbnail jobs could not be queued.",
+            () => EnqueueContainerGridThumbnailsAsync(context, containerTargets, cancellationToken));
+
+        if (acquisitionHints is not null) {
+            var owners = await acquisitionHints.ApplyToFolderOwnersAsync(
+                cancellationToken,
+                acquisitionId);
+            foreach (var owner in owners) {
+                await ImportedMaterializationHousekeeping.TryAsync(
+                    logger,
+                    "Imported album is ready but its identify job could not be queued.",
+                    () => context.EnqueueIfNeededAsync(new EnqueueJobRequest(
+                        JobType.AutoIdentify,
+                        TargetEntityKind: owner.TopLevelKindCode,
+                        TargetEntityId: owner.TopLevelEntityId.ToString(),
+                        TargetLabel: owner.TopLevelTitle,
+                        Priority: JobPriorities.AutoIdentify), cancellationToken));
+            }
+        }
+    }
+
     protected override async Task<ScanRootOutcome> ScanRootCoreAsync(JobContext context, LibraryRootData root, CancellationToken cancellationToken) {
         logger.LogInformation("ScanAudio: discovering audio files in {Path}", root.Path);
         var excludedPaths = await Roots.GetExcludedPathsForRootAsync(root.Id, cancellationToken);
@@ -64,7 +240,7 @@ public sealed class ScanAudioJobHandler(
 
         // Normalize discovery keys so they line up with the classifier's normalized paths.
         var filesByDirectory = dirGroups.ToDictionary(
-            group => NormalizePath(group.Key), group => group.Value, StringComparer.OrdinalIgnoreCase);
+            group => NormalizePath(group.Key), group => group.Value, FileSystemPathComparison.Comparer);
 
         // Resolve the directory tree into artists, albums, and album sections (discs).
         var trackDirectories = filesByDirectory.Keys.Where(path => !SamePath(path, root.Path));
@@ -92,7 +268,7 @@ public sealed class ScanAudioJobHandler(
 
         // 1. Artist groupings.
         var artistSortOrders = SiblingSortOrders(layout.Artists.Select(artist => artist.Path).ToList());
-        var artistIdsByPath = new Dictionary<string, Guid>(StringComparer.OrdinalIgnoreCase);
+        var artistIdsByPath = new Dictionary<string, Guid>(FileSystemPathComparison.Comparer);
         var artistItems = layout.Artists
             .Select(artist => new MusicArtistUpsertItem(
                 artist.Path,
@@ -109,7 +285,7 @@ public sealed class ScanAudioJobHandler(
 
         // 2. Albums, parented to their artist when one exists.
         var albumSortOrders = SiblingSortOrders(layout.Albums.Select(album => album.Path).ToList());
-        var albumIdsByPath = new Dictionary<string, Guid>(StringComparer.OrdinalIgnoreCase);
+        var albumIdsByPath = new Dictionary<string, Guid>(FileSystemPathComparison.Comparer);
         var albumItems = layout.Albums
             .Select(album => {
                 Guid? parentArtistId = album.ArtistPath is not null ? artistIdsByPath[album.ArtistPath] : null;
@@ -131,8 +307,8 @@ public sealed class ScanAudioJobHandler(
         // 3. Tracks, ordered album-global across sections, carrying their section label/order.
         var validTrackPathsByAlbum = layout.Albums.ToDictionary(
             album => album.Path,
-            _ => new HashSet<string>(StringComparer.OrdinalIgnoreCase),
-            StringComparer.OrdinalIgnoreCase);
+            _ => new HashSet<string>(FileSystemPathComparison.Comparer),
+            FileSystemPathComparison.Comparer);
         var processed = 0;
         var total = Math.Max(1, layout.Albums.Count + 1);
         var trackItems = new List<PreparedAudioTrack>();
@@ -172,7 +348,7 @@ public sealed class ScanAudioJobHandler(
         }
 
         // 4. Loose tracks sitting directly under the root (no album folder).
-        var validLooseTrackPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var validLooseTrackPaths = new HashSet<string>(FileSystemPathComparison.Comparer);
         if (filesByDirectory.TryGetValue(NormalizePath(root.Path), out var looseFiles)) {
             var index = 0;
             foreach (var filePath in looseFiles.OrderBy(path => path, StringComparer.OrdinalIgnoreCase)) {
@@ -215,9 +391,9 @@ public sealed class ScanAudioJobHandler(
         }
 
         await audio.RemoveStaleAudioLibrariesInRootAsync(
-            root.Id, layout.Albums.Select(album => album.Path).ToHashSet(StringComparer.OrdinalIgnoreCase), cancellationToken);
+            root.Id, layout.Albums.Select(album => album.Path).ToHashSet(FileSystemPathComparison.Comparer), cancellationToken);
         await audio.RemoveStaleMusicArtistsInRootAsync(
-            root.Id, layout.Artists.Select(artist => artist.Path).ToHashSet(StringComparer.OrdinalIgnoreCase), cancellationToken);
+            root.Id, layout.Artists.Select(artist => artist.Path).ToHashSet(FileSystemPathComparison.Comparer), cancellationToken);
 
         await AutoIdentifyScanEnqueue.EnqueueRootsAsync(context, settings, downstreamNeeds, autoIdentifyIds, cancellationToken);
 
@@ -374,15 +550,17 @@ public sealed class ScanAudioJobHandler(
     }
 
     private static bool SamePath(string left, string right) =>
-        string.Equals(NormalizePath(left), NormalizePath(right), StringComparison.OrdinalIgnoreCase);
+        FileSystemPathComparison.Equals(NormalizePath(left), NormalizePath(right));
 
     private static string NormalizePath(string path) =>
         Path.GetFullPath(path).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
 
     private static Dictionary<string, int> SiblingSortOrders(IReadOnlyList<string> folderPaths) {
-        var sortOrders = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        var sortOrders = new Dictionary<string, int>(FileSystemPathComparison.Comparer);
 
-        foreach (var siblings in folderPaths.GroupBy(path => Path.GetDirectoryName(path) ?? string.Empty, StringComparer.OrdinalIgnoreCase)) {
+        foreach (var siblings in folderPaths.GroupBy(
+                     path => Path.GetDirectoryName(path) ?? string.Empty,
+                     FileSystemPathComparison.Comparer)) {
             var ordered = siblings
                 .OrderBy(path => Path.GetFileName(path), StringComparer.OrdinalIgnoreCase)
                 .ThenBy(path => path, StringComparer.OrdinalIgnoreCase)

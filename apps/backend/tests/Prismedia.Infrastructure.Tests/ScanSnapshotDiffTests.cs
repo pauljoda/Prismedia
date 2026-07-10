@@ -75,7 +75,11 @@ public sealed class ScanSnapshotDiffTests {
     }
 
     [Fact]
-    public void PathComparisonIsCaseInsensitive() {
+    public void WindowsPathComparisonIsCaseInsensitive() {
+        if (!OperatingSystem.IsWindows()) {
+            return;
+        }
+
         var previous = new[] { Sig("/Movies/Film.mkv") };
         var current = new[] { Sig("/movies/film.mkv") };
 
@@ -83,6 +87,23 @@ public sealed class ScanSnapshotDiffTests {
 
         Assert.False(delta.HasChanges);
         Assert.Equal(1, delta.UnchangedCount);
+    }
+
+    [Fact]
+    public void UnixCaseDistinctPathsAreAddedAndRemoved() {
+        if (OperatingSystem.IsWindows()) {
+            return;
+        }
+
+        var previous = new[] { Sig("/Movies/Film.mkv") };
+        var current = new[] { Sig("/movies/film.mkv") };
+
+        var delta = ScanSnapshotDiff.Compute(previous, current);
+
+        Assert.Equal("/movies/film.mkv", Assert.Single(delta.Added).Path);
+        Assert.Equal("/Movies/Film.mkv", Assert.Single(delta.Removed).Path);
+        Assert.Empty(delta.Changed);
+        Assert.Equal(0, delta.UnchangedCount);
     }
 
     [Fact]

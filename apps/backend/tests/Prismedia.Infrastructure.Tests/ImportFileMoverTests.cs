@@ -7,6 +7,23 @@ namespace Prismedia.Infrastructure.Tests;
 /// <summary>Pins collision handling for ordinary and checkpoint-driven import placement.</summary>
 public sealed class ImportFileMoverTests {
     [Fact]
+    public void UnixCaseDistinctReservedTargetDoesNotForceASuffix() {
+        if (OperatingSystem.IsWindows()) {
+            return;
+        }
+
+        var directory = Path.Combine(Path.GetTempPath(), $"prismedia-case-{Guid.NewGuid():N}");
+        var desired = Path.Combine(directory, "Episode.mkv");
+        var caseDistinctReservation = Path.Combine(directory, "episode.mkv");
+
+        var resolved = new ImportFileMover().ResolveExactTargetPath(
+            desired,
+            [caseDistinctReservation]);
+
+        Assert.Equal(desired, resolved);
+    }
+
+    [Fact]
     public async Task ResolveExactTargetPathSkipsFilesAndTargetsReservedByTheSameBatch() {
         var root = Directory.CreateTempSubdirectory("prismedia-import-resolver-test");
         try {

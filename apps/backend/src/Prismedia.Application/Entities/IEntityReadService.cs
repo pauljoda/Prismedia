@@ -46,7 +46,9 @@ public interface IEntityReadService {
     /// <paramref name="hideNsfw"/>, which enforces the viewer's privacy setting; this is the
     /// explicit "Is NSFW" / "Not NSFW" library filter and only ever narrows what privacy allows.
     /// </param>
-    /// <param name="hasFile">When set, keeps only entities that have (true) or lack (false) a source file.</param>
+    /// <param name="hasFile">
+    /// When set, keeps only entities whose structural subtree has (true) or lacks (false) a source file.
+    /// </param>
     /// <param name="played">
     /// When set, keeps only entities that have been played/read (true) or never engaged (false),
     /// resolved against the playback (videos/audio) and progress (books/comics) records.

@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Prismedia.Application.Files;
 using Prismedia.Application.Organization;
 using Prismedia.Domain.Entities;
 using Prismedia.Infrastructure.Persistence;
@@ -55,7 +56,7 @@ public sealed class EfOrganizePersistence : IOrganizePersistence {
             .Where(file => file.Role == EntityFileRole.Source)
             .ToArrayAsync(cancellationToken);
         foreach (var sourceFile in sourceFiles) {
-            if (TryMapMovedPath(sourceFile.Path, sourcePath, targetPath, out var nextPath)) {
+            if (EntitySourcePath.TryMapPhysicalPrefix(sourceFile.Path, sourcePath, targetPath, out var nextPath)) {
                 sourceFile.Path = nextPath;
                 sourceFile.UpdatedAt = now;
             }
@@ -63,7 +64,7 @@ public sealed class EfOrganizePersistence : IOrganizePersistence {
 
         var folderSources = await _db.EntitySources.ToArrayAsync(cancellationToken);
         foreach (var source in folderSources) {
-            if (TryMapMovedPath(source.Value, sourcePath, targetPath, out var nextPath)) {
+            if (EntitySourcePath.TryMapPhysicalPrefix(source.Value, sourcePath, targetPath, out var nextPath)) {
                 source.Value = nextPath;
                 source.UpdatedAt = now;
             }
@@ -72,39 +73,4 @@ public sealed class EfOrganizePersistence : IOrganizePersistence {
         await _db.SaveChangesAsync(cancellationToken);
     }
 
-    private static bool TryMapMovedPath(
-        string currentPath,
-        string sourcePath,
-        string targetPath,
-        out string mappedPath) {
-        var normalizedCurrent = Normalize(currentPath);
-        var normalizedSource = Normalize(sourcePath);
-        if (SamePath(normalizedCurrent, normalizedSource)) {
-            mappedPath = Normalize(targetPath);
-            return true;
-        }
-
-        if (IsSubPathOf(normalizedCurrent, normalizedSource)) {
-            var relativePath = Path.GetRelativePath(normalizedSource, normalizedCurrent);
-            mappedPath = Normalize(Path.Combine(targetPath, relativePath));
-            return true;
-        }
-
-        mappedPath = currentPath;
-        return false;
-    }
-
-    private static string Normalize(string path) => Path.GetFullPath(path);
-
-    private static bool SamePath(string left, string right) =>
-        string.Equals(
-            Path.TrimEndingDirectorySeparator(Normalize(left)),
-            Path.TrimEndingDirectorySeparator(Normalize(right)),
-            StringComparison.OrdinalIgnoreCase);
-
-    private static bool IsSubPathOf(string path, string parent) {
-        var fullPath = Path.TrimEndingDirectorySeparator(Normalize(path));
-        var fullParent = Path.TrimEndingDirectorySeparator(Normalize(parent));
-        return fullPath.StartsWith(fullParent + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);
-    }
 }

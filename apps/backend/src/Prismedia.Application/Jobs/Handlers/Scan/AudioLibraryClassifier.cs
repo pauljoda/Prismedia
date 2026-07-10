@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using Prismedia.Application.Files;
 
 namespace Prismedia.Application.Jobs.Handlers.Scan;
 
@@ -48,7 +49,8 @@ public sealed record AudioLibraryLayout(IReadOnlyList<AudioArtist> Artists, IRea
 /// the layout never chains arbitrarily.
 /// </summary>
 public static class AudioLibraryClassifier {
-    private static readonly StringComparer Comparer = StringComparer.OrdinalIgnoreCase;
+    private static readonly StringComparer PathComparer = FileSystemPathComparison.Comparer;
+    private static readonly StringComparer DisplayComparer = StringComparer.OrdinalIgnoreCase;
 
     // Matches disc/section folder names: "Disc 1", "CD2", "Side A", "Vol. 3", "Part II",
     // "Disc One", etc. Used to tell a multi-disc album apart from an artist-of-albums.
@@ -67,11 +69,11 @@ public static class AudioLibraryClassifier {
         var trackDirs = trackDirectories
             .Select(Normalize)
             .Where(dir => IsStrictDescendant(root, dir))
-            .ToHashSet(Comparer);
+            .ToHashSet(PathComparer);
 
         // Group every track directory by the immediate child of the root on its path (its
         // depth-1 ancestor). Each such top folder is classified independently as artist or album.
-        var byTopFolder = new Dictionary<string, List<string>>(Comparer);
+        var byTopFolder = new Dictionary<string, List<string>>(PathComparer);
         foreach (var dir in trackDirs) {
             var top = AncestorAtDepth(root, dir, 1);
             if (top is null) {
@@ -114,17 +116,17 @@ public static class AudioLibraryClassifier {
                 .Select(dir => AncestorAtDepth(root, dir, 2))
                 .Where(dir => dir is not null)
                 .Select(dir => dir!)
-                .Distinct(Comparer);
+                .Distinct(PathComparer);
             foreach (var albumDir in albumDirs) {
                 albums.Add(BuildAlbum(root, albumDir, artistPath: topFolder, trackDirs));
             }
         }
 
         return new AudioLibraryLayout(
-            artists.OrderBy(artist => FolderName(artist.Path), Comparer).ToList(),
+            artists.OrderBy(artist => FolderName(artist.Path), DisplayComparer).ToList(),
             albums
-                .OrderBy(album => album.ArtistPath ?? string.Empty, Comparer)
-                .ThenBy(album => FolderName(album.Path), Comparer)
+                .OrderBy(album => album.ArtistPath ?? string.Empty, DisplayComparer)
+                .ThenBy(album => FolderName(album.Path), DisplayComparer)
                 .ToList());
     }
 
@@ -143,7 +145,7 @@ public static class AudioLibraryClassifier {
         var discDirs = trackDirs
             .Where(dir => IsStrictDescendant(albumPath, dir))
             .OrderBy(dir => Depth(root, dir))
-            .ThenBy(FolderName, Comparer);
+            .ThenBy(FolderName, DisplayComparer);
         foreach (var discDir in discDirs) {
             sections.Add(new AudioSection(discDir, FolderName(discDir), order++));
         }
@@ -155,7 +157,7 @@ public static class AudioLibraryClassifier {
         Path.GetFullPath(path).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
 
     private static bool SamePath(string? left, string? right) =>
-        left is not null && right is not null && Comparer.Equals(left, right);
+        left is not null && right is not null && FileSystemPathComparison.Equals(left, right);
 
     private static string FolderName(string path) => Path.GetFileName(path);
 

@@ -1,6 +1,7 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Text.Json;
 using Prismedia.Application.Acquisition;
+using Prismedia.Application.Files;
 using Prismedia.Infrastructure.Serialization;
 
 namespace Prismedia.Infrastructure.Acquisition;
@@ -174,14 +175,11 @@ internal static class TvImportCheckpointJson {
         var prefix = folder.EndsWith(Path.DirectorySeparatorChar)
             ? folder
             : folder + Path.DirectorySeparatorChar;
-        return candidate.StartsWith(prefix, PathComparison);
+        return candidate.StartsWith(prefix, FileSystemPathComparison.Comparison);
     }
 
     private static bool PathEquals(string first, string second) =>
-        string.Equals(first, second, PathComparison);
-
-    private static StringComparison PathComparison =>
-        OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+        FileSystemPathComparison.Equals(first, second);
 
     [DoesNotReturn]
     private static void Invalid(string reason) =>

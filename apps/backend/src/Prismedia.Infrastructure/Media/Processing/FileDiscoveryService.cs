@@ -1,3 +1,4 @@
+using Prismedia.Application.Files;
 using Prismedia.Application.Jobs.Scanning;
 
 namespace Prismedia.Infrastructure.Media.Processing;
@@ -77,14 +78,16 @@ public sealed class FileDiscoveryService {
 
         if (!Directory.Exists(rootPath)) {
             return Task.FromResult<IReadOnlyDictionary<string, IReadOnlyList<string>>>(
-                new Dictionary<string, IReadOnlyList<string>>());
+                new Dictionary<string, IReadOnlyList<string>>(FileSystemPathComparison.Comparer));
         }
 
         WalkDirectory(rootPath, extensions, recursive, NormalizeExcludedPaths(excludedPaths), allFiles.Add, cancellationToken);
 
-        var grouped = new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase);
+        var grouped = new Dictionary<string, IReadOnlyList<string>>(FileSystemPathComparison.Comparer);
 
-        foreach (var group in allFiles.GroupBy(f => Path.GetDirectoryName(f)!, StringComparer.OrdinalIgnoreCase)) {
+        foreach (var group in allFiles.GroupBy(
+                     f => Path.GetDirectoryName(f)!,
+                     FileSystemPathComparison.Comparer)) {
             var sorted = group.OrderBy(f => f, StringComparer.OrdinalIgnoreCase).ToList();
             grouped[group.Key] = sorted;
         }
@@ -144,10 +147,10 @@ public sealed class FileDiscoveryService {
 
     private static IReadOnlySet<string> NormalizeExcludedPaths(IReadOnlySet<string>? excludedPaths) =>
         excludedPaths is null || excludedPaths.Count == 0
-            ? new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+            ? new HashSet<string>(FileSystemPathComparison.Comparer)
             : excludedPaths
                 .Select(path => Path.TrimEndingDirectorySeparator(Path.GetFullPath(path)))
-                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+                .ToHashSet(FileSystemPathComparison.Comparer);
 
     private static bool IsExcluded(string path, IReadOnlySet<string> excludedPaths) {
         if (excludedPaths.Count == 0) {
@@ -156,7 +159,9 @@ public sealed class FileDiscoveryService {
 
         var normalized = Path.TrimEndingDirectorySeparator(Path.GetFullPath(path));
         return excludedPaths.Any(excluded =>
-            string.Equals(normalized, excluded, StringComparison.OrdinalIgnoreCase) ||
-            normalized.StartsWith(excluded + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase));
+            FileSystemPathComparison.Equals(normalized, excluded) ||
+            normalized.StartsWith(
+                excluded + Path.DirectorySeparatorChar,
+                FileSystemPathComparison.Comparison));
     }
 }

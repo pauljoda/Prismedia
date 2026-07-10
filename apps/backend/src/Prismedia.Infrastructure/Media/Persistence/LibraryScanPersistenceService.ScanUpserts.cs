@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Prismedia.Application.Files;
 using Prismedia.Application.Jobs.Ports;
 using Prismedia.Application.Settings;
 using Prismedia.Domain.Entities;
@@ -19,7 +20,7 @@ public sealed partial class LibraryScanPersistenceService {
         var existing = await FindEntityBySourcePath(EntityKindRegistry.Video.Code, filePath, cancellationToken);
         if (existing is not null) {
             existing.UpdatedAt = DateTimeOffset.UtcNow;
-            await _db.SaveChangesAsync(cancellationToken);
+            await SaveChangesWithLifecycleAsync(cancellationToken);
             return existing.Id;
         }
 
@@ -38,7 +39,7 @@ public sealed partial class LibraryScanPersistenceService {
             UpdatedAt = now
         });
 
-        await _db.SaveChangesAsync(cancellationToken);
+        await SaveChangesWithLifecycleAsync(cancellationToken);
         return id;
     }
 
@@ -46,7 +47,7 @@ public sealed partial class LibraryScanPersistenceService {
         var id = await UpsertImageCoreAsync(
             new ImageUpsertItem(filePath, title, galleryEntityId, sizeBytes, sortOrder, isNsfw),
             cancellationToken);
-        await _db.SaveChangesAsync(cancellationToken);
+        await SaveChangesWithLifecycleAsync(cancellationToken);
         return id;
     }
 
@@ -59,7 +60,7 @@ public sealed partial class LibraryScanPersistenceService {
             ids.Add(await UpsertImageCoreAsync(item, cancellationToken));
         }
 
-        await _db.SaveChangesAsync(cancellationToken);
+        await SaveChangesWithLifecycleAsync(cancellationToken);
         return ids;
     }
 
@@ -82,7 +83,7 @@ public sealed partial class LibraryScanPersistenceService {
                 }
             }
 
-            await _db.SaveChangesAsync(cancellationToken);
+            await SaveChangesWithLifecycleAsync(cancellationToken);
             return existing.Id;
         }
 
@@ -123,7 +124,7 @@ public sealed partial class LibraryScanPersistenceService {
         var id = await UpsertGalleryCoreAsync(
             new GalleryUpsertItem(folderPath, title, libraryRootId, parentGalleryEntityId, sortOrder, isNsfw),
             cancellationToken);
-        await _db.SaveChangesAsync(cancellationToken);
+        await SaveChangesWithLifecycleAsync(cancellationToken);
         return id;
     }
 
@@ -136,7 +137,7 @@ public sealed partial class LibraryScanPersistenceService {
             ids.Add(await UpsertGalleryCoreAsync(item, cancellationToken));
         }
 
-        await _db.SaveChangesAsync(cancellationToken);
+        await SaveChangesWithLifecycleAsync(cancellationToken);
         return ids;
     }
 
@@ -187,7 +188,7 @@ public sealed partial class LibraryScanPersistenceService {
         var id = await UpsertAudioTrackCoreAsync(
             new AudioTrackUpsertItem(filePath, title, audioLibraryId, sortOrder, sectionLabel, sectionOrder, isNsfw),
             cancellationToken);
-        await _db.SaveChangesAsync(cancellationToken);
+        await SaveChangesWithLifecycleAsync(cancellationToken);
         return id;
     }
 
@@ -200,7 +201,7 @@ public sealed partial class LibraryScanPersistenceService {
             ids.Add(await UpsertAudioTrackCoreAsync(item, cancellationToken));
         }
 
-        await _db.SaveChangesAsync(cancellationToken);
+        await SaveChangesWithLifecycleAsync(cancellationToken);
         return ids;
     }
 
@@ -259,7 +260,7 @@ public sealed partial class LibraryScanPersistenceService {
         var id = await UpsertAudioLibraryCoreAsync(
             new AudioLibraryUpsertItem(folderPath, title, libraryRootId, parentEntityId, sortOrder, isNsfw),
             cancellationToken);
-        await _db.SaveChangesAsync(cancellationToken);
+        await SaveChangesWithLifecycleAsync(cancellationToken);
         return id;
     }
 
@@ -272,7 +273,7 @@ public sealed partial class LibraryScanPersistenceService {
             ids.Add(await UpsertAudioLibraryCoreAsync(item, cancellationToken));
         }
 
-        await _db.SaveChangesAsync(cancellationToken);
+        await SaveChangesWithLifecycleAsync(cancellationToken);
         return ids;
     }
 
@@ -331,7 +332,7 @@ public sealed partial class LibraryScanPersistenceService {
         var id = await UpsertMusicArtistCoreAsync(
             new MusicArtistUpsertItem(folderPath, title, libraryRootId, sortOrder, isNsfw),
             cancellationToken);
-        await _db.SaveChangesAsync(cancellationToken);
+        await SaveChangesWithLifecycleAsync(cancellationToken);
         return id;
     }
 
@@ -344,7 +345,7 @@ public sealed partial class LibraryScanPersistenceService {
             ids.Add(await UpsertMusicArtistCoreAsync(item, cancellationToken));
         }
 
-        await _db.SaveChangesAsync(cancellationToken);
+        await SaveChangesWithLifecycleAsync(cancellationToken);
         return ids;
     }
 
@@ -398,7 +399,7 @@ public sealed partial class LibraryScanPersistenceService {
                 if (isNsfw) tracked.IsNsfw = true;
             }
 
-            await _db.SaveChangesAsync(cancellationToken);
+            await SaveChangesWithLifecycleAsync(cancellationToken);
             return existing.Id;
         }
 
@@ -413,7 +414,7 @@ public sealed partial class LibraryScanPersistenceService {
             CreatedAt = now,
             UpdatedAt = now
         });
-        await _db.SaveChangesAsync(cancellationToken);
+        await SaveChangesWithLifecycleAsync(cancellationToken);
         return id;
     }
 
@@ -430,7 +431,7 @@ public sealed partial class LibraryScanPersistenceService {
 
         var rows = await _db.Entities.Where(entity => emptyAuthorIds.Contains(entity.Id)).ToListAsync(cancellationToken);
         _db.Entities.RemoveRange(rows);
-        await _db.SaveChangesAsync(cancellationToken);
+        await SaveChangesWithLifecycleAsync(cancellationToken);
         return rows.Count;
     }
 
@@ -453,7 +454,7 @@ public sealed partial class LibraryScanPersistenceService {
             } else {
                 _db.BookDetails.Add(new BookDetailRow { EntityId = existing.Id, BookType = BookType.Comic, Format = BookFormat.ImageArchive, LibraryRootId = libraryRootId });
             }
-            await _db.SaveChangesAsync(cancellationToken);
+            await SaveChangesWithLifecycleAsync(cancellationToken);
             return existing.Id;
         }
 
@@ -472,7 +473,7 @@ public sealed partial class LibraryScanPersistenceService {
             UpdatedAt = now
         });
 
-        await _db.SaveChangesAsync(cancellationToken);
+        await SaveChangesWithLifecycleAsync(cancellationToken);
         return id;
     }
 
@@ -503,7 +504,7 @@ public sealed partial class LibraryScanPersistenceService {
                 _db.BookDetails.Add(new BookDetailRow { EntityId = existing.Id, BookType = bookType, Format = format, LibraryRootId = libraryRootId });
             }
             await ReparentSingleFileBooksUnderSeriesAsync(existing.Id, folderPath, libraryRootId, DateTimeOffset.UtcNow, cancellationToken);
-            await _db.SaveChangesAsync(cancellationToken);
+            await SaveChangesWithLifecycleAsync(cancellationToken);
             return existing.Id;
         }
 
@@ -522,7 +523,7 @@ public sealed partial class LibraryScanPersistenceService {
         });
         await ReparentSingleFileBooksUnderSeriesAsync(id, folderPath, libraryRootId, now, cancellationToken);
 
-        await _db.SaveChangesAsync(cancellationToken);
+        await SaveChangesWithLifecycleAsync(cancellationToken);
         return id;
     }
 
@@ -577,8 +578,8 @@ public sealed partial class LibraryScanPersistenceService {
     }
 
     private static bool IsDescendantSourcePath(string sourcePath, string folderPath, string folderPrefix) =>
-        !sourcePath.Equals(folderPath, StringComparison.OrdinalIgnoreCase) &&
-        sourcePath.StartsWith(folderPrefix, StringComparison.OrdinalIgnoreCase);
+        !FileSystemPathComparison.Equals(sourcePath, folderPath) &&
+        sourcePath.StartsWith(folderPrefix, FileSystemPathComparison.Comparison);
 
     public async Task<Guid> UpsertSingleFileBookAsync(
         string sourcePath,
@@ -612,7 +613,7 @@ public sealed partial class LibraryScanPersistenceService {
                 detail.BookType = bookType;
                 detail.Format = format;
             }
-            await _db.SaveChangesAsync(cancellationToken);
+            await SaveChangesWithLifecycleAsync(cancellationToken);
             return existing.Id;
         }
 
@@ -633,7 +634,7 @@ public sealed partial class LibraryScanPersistenceService {
         });
         await MarkAutoIdentifyAncestorsUnorganizedAsync(parentBookEntityId, now, cancellationToken);
 
-        await _db.SaveChangesAsync(cancellationToken);
+        await SaveChangesWithLifecycleAsync(cancellationToken);
         return id;
     }
 
@@ -648,7 +649,7 @@ public sealed partial class LibraryScanPersistenceService {
                 sortOrder,
                 DateTimeOffset.UtcNow,
                 cancellationToken);
-            await _db.SaveChangesAsync(cancellationToken);
+            await SaveChangesWithLifecycleAsync(cancellationToken);
             return existing.Id;
         }
 
@@ -671,7 +672,7 @@ public sealed partial class LibraryScanPersistenceService {
             now,
             cancellationToken);
 
-        await _db.SaveChangesAsync(cancellationToken);
+        await SaveChangesWithLifecycleAsync(cancellationToken);
         return id;
     }
 
@@ -686,7 +687,7 @@ public sealed partial class LibraryScanPersistenceService {
                 sortOrder,
                 DateTimeOffset.UtcNow,
                 cancellationToken);
-            await _db.SaveChangesAsync(cancellationToken);
+            await SaveChangesWithLifecycleAsync(cancellationToken);
             return existing.Id;
         }
 
@@ -710,7 +711,7 @@ public sealed partial class LibraryScanPersistenceService {
             now,
             cancellationToken);
 
-        await _db.SaveChangesAsync(cancellationToken);
+        await SaveChangesWithLifecycleAsync(cancellationToken);
         return id;
     }
 
@@ -718,7 +719,7 @@ public sealed partial class LibraryScanPersistenceService {
         var id = await UpsertBookPageCoreAsync(
             new BookPageUpsertItem(filePath, title, bookEntityId, chapterEntityId, sortOrder, isNsfw),
             cancellationToken);
-        await _db.SaveChangesAsync(cancellationToken);
+        await SaveChangesWithLifecycleAsync(cancellationToken);
         return id;
     }
 
@@ -731,7 +732,7 @@ public sealed partial class LibraryScanPersistenceService {
             ids.Add(await UpsertBookPageCoreAsync(item, cancellationToken));
         }
 
-        await _db.SaveChangesAsync(cancellationToken);
+        await SaveChangesWithLifecycleAsync(cancellationToken);
         return ids;
     }
 

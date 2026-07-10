@@ -28,6 +28,19 @@ public interface ILibraryScanRootPersistence {
     Task<int> RemoveOrphanTagsAsync(CancellationToken cancellationToken);
 }
 
+/// <summary>
+/// Verifies the shared import readiness invariant after scan persistence: every placed media file
+/// has a Source owner, and for a linked request every expected owner belongs to that exact Entity's
+/// canonical <c>ParentEntityId</c> subtree after the target leaves Wanted.
+/// </summary>
+public interface IImportedEntityReadinessPersistence {
+    /// <summary>Returns whether the imported Entity graph is immediately usable.</summary>
+    Task<bool> IsReadyAsync(
+        Guid? entityId,
+        IReadOnlyCollection<string> placedMediaPaths,
+        CancellationToken cancellationToken);
+}
+
 /// <summary>Video scan persistence operations for discovered files and stale cleanup.</summary>
 public interface IVideoScanPersistence {
     Task<Guid> UpsertVideoAsync(string filePath, string title, Guid libraryRootId, bool isNsfw, CancellationToken cancellationToken);

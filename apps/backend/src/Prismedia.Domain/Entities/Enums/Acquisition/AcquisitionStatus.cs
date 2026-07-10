@@ -38,6 +38,13 @@ public enum AcquisitionStatus {
     [Code("imported")]
     Imported,
 
+    /// <summary>
+    /// A destructive workflow has durably claimed this acquisition and cancelled its background work.
+    /// The persisted teardown intent determines whether completion removes it or replaces it with a retry.
+    /// </summary>
+    [Code("stopping")]
+    Stopping,
+
     /// <summary>The acquisition failed; the status message carries the reason and it can be retried.</summary>
     [Code("failed")]
     Failed,
@@ -49,6 +56,27 @@ public enum AcquisitionStatus {
     /// <summary>The completed payload could not be imported automatically and needs manual resolution.</summary>
     [Code("manual-import-required")]
     ManualImportRequired
+}
+
+/// <summary>Durable completion intent captured when destructive acquisition cleanup begins.</summary>
+public enum AcquisitionTeardownIntent {
+    /// <summary>Remove the acquisition after its remote transfer and owned library files are gone.</summary>
+    [Code("remove")]
+    Remove,
+
+    /// <summary>Replace the acquisition with a clean pending search after owned library files are gone.</summary>
+    [Code("reacquire")]
+    Reacquire
+}
+
+/// <summary>Prismedia-owned sentinel states stored on a transfer before client-native telemetry exists.</summary>
+public enum TransferOwnershipState {
+    /// <summary>
+    /// A durable ownership placeholder exists and the remote Add is either in flight or awaiting crash
+    /// recovery. Teardown must resolve it by correlation before deleting the acquisition owner.
+    /// </summary>
+    [Code("adding")]
+    Adding
 }
 
 /// <summary>

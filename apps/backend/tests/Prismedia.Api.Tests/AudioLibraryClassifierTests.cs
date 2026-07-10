@@ -114,6 +114,22 @@ public sealed class AudioLibraryClassifierTests {
         Assert.Empty(layout.Albums);
     }
 
+    [Fact]
+    public void UnixCaseDistinctAlbumFoldersRemainDistinct() {
+        if (OperatingSystem.IsWindows()) {
+            return;
+        }
+
+        var layout = AudioLibraryClassifier.Classify(
+            Root,
+            [$"{Root}/Live", $"{Root}/live"]);
+
+        Assert.Empty(layout.Artists);
+        Assert.Equal(2, layout.Albums.Count);
+        Assert.Contains(layout.Albums, album => album.Path == $"{Root}/Live");
+        Assert.Contains(layout.Albums, album => album.Path == $"{Root}/live");
+    }
+
     [Theory]
     [InlineData("Disc 1", true)]
     [InlineData("Disc One", true)]

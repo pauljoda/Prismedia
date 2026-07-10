@@ -12,7 +12,8 @@ namespace Prismedia.Application.Files;
 public sealed class FilesService(
     IFilesPersistence persistence,
     IManagedFileStorage storage,
-    IJobQueueService jobs) {
+    IJobQueueService jobs,
+    EntitySourcePathMutationCoordinator sourcePathMutations) {
     /// <summary>Lists watched roots available to the Files page.</summary>
     public async Task<FileRootsResponse> ListRootsAsync(bool hideNsfw, CancellationToken cancellationToken) {
         var roots = await persistence.ListRootsAsync(cancellationToken);
@@ -155,7 +156,13 @@ public sealed class FilesService(
 
         var target = await ResolveAsync(request.RootId, request.Path, hideNsfw, cancellationToken);
         await EnsureVisiblePathAsync(target, hideNsfw, cancellationToken);
-        await storage.DeleteAsync(target, cancellationToken);
+        var executed = await sourcePathMutations.ExecuteAsync(
+            target.AbsolutePath,
+            token => storage.DeleteAsync(target, token),
+            cancellationToken);
+        if (!executed) {
+            throw SourceLifecycleConflict(target.RelativePath);
+        }
         return new FileOperationResponse(await QueueScansAsync([target.Root], cancellationToken));
     }
 
@@ -207,12 +214,23 @@ public sealed class FilesService(
         ResolvedFilePath source,
         ResolvedFilePath target,
         CancellationToken cancellationToken) {
-        await storage.MoveAsync(source, target, cancellationToken);
-        await persistence.ApplyPathPrefixRewriteAsync(
+        var executed = await sourcePathMutations.ExecuteAsync(
             source.AbsolutePath,
-            target.AbsolutePath,
+            async token => {
+                await storage.MoveAsync(source, target, token);
+                await persistence.ApplyPathPrefixRewriteAsync(
+                    source.AbsolutePath,
+                    target.AbsolutePath,
+                    token);
+            },
             cancellationToken);
+        if (!executed) {
+            throw SourceLifecycleConflict(source.RelativePath);
+        }
     }
+
+    private static FileConflictException SourceLifecycleConflict(string relativePath) =>
+        new($"The Entity linked to '{relativePath}' is currently being changed. Try again when that operation finishes.");
 
     private async Task<ResolvedFilePath> ResolveAsync(
         Guid rootId,
@@ -231,8 +249,7 @@ public sealed class FilesService(
             : Path.GetFullPath(Path.Combine(normalizedRoot, normalizedRelative));
         var trimmedRoot = Path.TrimEndingDirectorySeparator(normalizedRoot);
         var trimmedAbsolute = Path.TrimEndingDirectorySeparator(absolute);
-        var inside = string.Equals(trimmedRoot, trimmedAbsolute, StringComparison.OrdinalIgnoreCase) ||
-            trimmedAbsolute.StartsWith(trimmedRoot + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);
+        var inside = FileSystemPathComparison.IsSameOrDescendant(trimmedRoot, trimmedAbsolute);
         if (!inside) {
             throw new FileOperationException(ApiProblemCodes.InvalidPath, "Files paths cannot escape the selected library root.");
         }

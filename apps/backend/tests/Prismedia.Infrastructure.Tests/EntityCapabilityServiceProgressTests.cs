@@ -21,7 +21,7 @@ public sealed class EntityCapabilityServiceProgressTests {
             mode: ReaderMode.Paged,
             completedAt: completedAt,
             updatedAt: completedAt));
-        var service = new EntityCapabilityService(repository);
+        var service = new EntityCapabilityService(repository, new NoSourceOwnershipReader());
 
         await service.UpdateProgressAsync(
             BookId,
@@ -53,7 +53,7 @@ public sealed class EntityCapabilityServiceProgressTests {
             mode: ReaderMode.Paged,
             completedAt: completedAt,
             updatedAt: completedAt));
-        var service = new EntityCapabilityService(repository);
+        var service = new EntityCapabilityService(repository, new NoSourceOwnershipReader());
 
         await service.UpdateProgressAsync(
             BookId,
@@ -117,5 +117,12 @@ public sealed class EntityCapabilityServiceProgressTests {
 
         private Entity? Find(Guid id) =>
             id == BookId ? Book : id == ChapterOneId ? _chapterOne : id == ChapterTwoId ? _chapterTwo : null;
+    }
+
+    private sealed class NoSourceOwnershipReader : IEntitySourceOwnershipReader {
+        public Task<IReadOnlySet<Guid>> ResolveAsync(
+            IReadOnlyCollection<Guid> entityIds,
+            CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlySet<Guid>>(new HashSet<Guid>());
     }
 }

@@ -38,7 +38,7 @@ public sealed class PluginRequestMetadataSourceRoutingTests : IDisposable {
     }
 
     [Fact]
-    public async Task SearchUsesDeclaredNamespaceOrderInsteadOfPluginIdOrDictionaryOrder() {
+    public async Task SelectedSearchUsesDeclaredNamespaceOrderInsteadOfPluginIdOrDictionaryOrder() {
         await using var db = await CreateInstalledPluginAsync("cinema-metadata");
         var catalog = Catalog(db);
         var runner = new CapturingRunner();
@@ -49,14 +49,15 @@ public sealed class PluginRequestMetadataSourceRoutingTests : IDisposable {
 
         var results = await source.SearchAsync(
             RequestKindRegistry.Find(RequestMediaKind.Movie)!,
-            "Example",
+            "cinema-metadata",
+            new Dictionary<string, string> { ["workName"] = "Example" },
             hideNsfw: false,
             CancellationToken.None);
 
         var result = Assert.Single(results);
-        Assert.Equal("tmdb:123", result.ExternalId);
+        Assert.Equal("tmdb:Movie:CaseSensitive", result.ExternalId);
         Assert.Equal("cinema-metadata", result.PluginId);
-        Assert.Equal(new ExternalIdentity("tmdb", "123"), result.ExternalIdentity);
+        Assert.Equal(new ExternalIdentity("tmdb", "Movie:CaseSensitive"), result.ExternalIdentity);
         Assert.Equal("cinema-metadata", Assert.Single(runner.Calls).Descriptor.Manifest.Id);
     }
 
@@ -385,15 +386,17 @@ public sealed class PluginRequestMetadataSourceRoutingTests : IDisposable {
             catalog,
             new PluginIdentityRouter(catalog),
             new IdentifyRunnerSelector([runner]));
+        var identity = new ExternalIdentity("tmdb", $"ambiguous-{Guid.NewGuid():N}");
 
-        var proposal = await source.ResolveProposalAsync(
+        var resolved = await source.ResolveProposalAsync(
             RequestKindRegistry.Find(RequestMediaKind.Movie)!,
-            new ExternalIdentity("tmdb", $"ambiguous-{Guid.NewGuid():N}"),
+            identity,
             hideNsfw: false,
             includeChildren: false,
             CancellationToken.None);
 
-        Assert.NotNull(proposal);
+        Assert.NotNull(resolved);
+        Assert.Equal(new PluginIdentityRoute("zeta-metadata", identity), resolved.Route);
         Assert.Equal(
             ["alpha-metadata", "zeta-metadata"],
             runner.Calls.Select(call => call.Descriptor.Manifest.Id).ToArray());

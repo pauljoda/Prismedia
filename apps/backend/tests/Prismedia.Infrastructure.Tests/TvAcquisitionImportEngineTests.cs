@@ -142,7 +142,7 @@ public sealed class TvAcquisitionImportEngineTests : IDisposable {
             CancellationToken.None);
 
         Assert.Equal(AcquisitionStatus.Imported, await StatusOf(db, harness.Import.Id));
-        Assert.Null((await db.Acquisitions.AsNoTracking().SingleAsync(row => row.Id == harness.Import.Id)).TvImportCheckpointJson);
+        Assert.Null((await db.Acquisitions.AsNoTracking().SingleAsync(row => row.Id == harness.Import.Id)).ImportCheckpointJson);
         Assert.True(await db.EntityFiles.AsNoTracking().AnyAsync(row =>
             row.EntityId == harness.WantedEpisodeId && row.Role == EntityFileRole.Source));
     }
@@ -172,7 +172,7 @@ public sealed class TvAcquisitionImportEngineTests : IDisposable {
         Assert.Single(resumeImport.TvImportCheckpoint.Units, unit => unit.FinalPath is null);
         var checkpointJson = await db.Acquisitions.AsNoTracking()
             .Where(row => row.Id == harness.Import.Id)
-            .Select(row => row.TvImportCheckpointJson)
+            .Select(row => row.ImportCheckpointJson)
             .SingleAsync();
         Assert.Contains("\"ImportMode\":\"move\"", checkpointJson);
 
@@ -190,7 +190,7 @@ public sealed class TvAcquisitionImportEngineTests : IDisposable {
         Assert.All(readyEpisodes, episode => Assert.True(db.EntityFiles.AsNoTracking().Any(row =>
             row.EntityId == episode.Id && row.Role == EntityFileRole.Source)));
         Assert.Equal(AcquisitionStatus.Imported, await StatusOf(db, harness.Import.Id));
-        Assert.Null((await db.Acquisitions.AsNoTracking().SingleAsync(row => row.Id == harness.Import.Id)).TvImportCheckpointJson);
+        Assert.Null((await db.Acquisitions.AsNoTracking().SingleAsync(row => row.Id == harness.Import.Id)).ImportCheckpointJson);
     }
 
     [Fact]
@@ -221,7 +221,7 @@ public sealed class TvAcquisitionImportEngineTests : IDisposable {
         Assert.False(abandoned);
         Assert.True(File.Exists(placed));
         var row = await db.Acquisitions.AsNoTracking().SingleAsync(value => value.Id == harness.Import.Id);
-        Assert.NotNull(row.TvImportCheckpointJson);
+        Assert.NotNull(row.ImportCheckpointJson);
         Assert.Null(row.FinalSourcePath);
         Assert.NotEmpty(await db.AcquisitionImportHints.AsNoTracking()
             .Where(hint => hint.AcquisitionId == harness.Import.Id)
@@ -254,7 +254,7 @@ public sealed class TvAcquisitionImportEngineTests : IDisposable {
 
         Assert.True(abandoned);
         Assert.Null((await db.Acquisitions.AsNoTracking()
-            .SingleAsync(value => value.Id == harness.Import.Id)).TvImportCheckpointJson);
+            .SingleAsync(value => value.Id == harness.Import.Id)).ImportCheckpointJson);
         Assert.True(File.Exists(Path.Combine(
             harness.Import.ContentPath!,
             "Show.S01E02.1080p.WEB-DL.mkv")));
@@ -281,7 +281,7 @@ public sealed class TvAcquisitionImportEngineTests : IDisposable {
 
         Assert.False(abandoned);
         Assert.NotNull((await db.Acquisitions.AsNoTracking()
-            .SingleAsync(value => value.Id == harness.Import.Id)).TvImportCheckpointJson);
+            .SingleAsync(value => value.Id == harness.Import.Id)).ImportCheckpointJson);
         Assert.True(File.Exists(OwnedFileReplacementArtifacts.StagedPath(harness.OwnedEpisodePath)));
     }
 
@@ -306,7 +306,7 @@ public sealed class TvAcquisitionImportEngineTests : IDisposable {
 
         Assert.Equal(AcquisitionStatus.ManualImportRequired, await StatusOf(db, harness.Import.Id));
         Assert.NotNull((await db.Acquisitions.AsNoTracking()
-            .SingleAsync(row => row.Id == harness.Import.Id)).TvImportCheckpointJson);
+            .SingleAsync(row => row.Id == harness.Import.Id)).ImportCheckpointJson);
     }
 
     [Fact]
@@ -521,7 +521,7 @@ public sealed class TvAcquisitionImportEngineTests : IDisposable {
         Assert.Equal(
             "incoming-upgrade",
             await File.ReadAllTextAsync(Path.Combine(harness.Import.ContentPath!, "Show.S01E01.2160p.BluRay.mkv")));
-        Assert.Null((await db.Acquisitions.AsNoTracking().SingleAsync(row => row.Id == harness.Import.Id)).TvImportCheckpointJson);
+        Assert.Null((await db.Acquisitions.AsNoTracking().SingleAsync(row => row.Id == harness.Import.Id)).ImportCheckpointJson);
     }
 
     [Fact]

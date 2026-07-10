@@ -1,3 +1,4 @@
+using Prismedia.Application.Files;
 using Prismedia.Application.Jobs.Scanning;
 
 namespace Prismedia.Application.Acquisition;
@@ -95,7 +96,7 @@ public static class TvImportCheckpointLifecycle {
 
         var target = Path.GetFullPath(unit.TargetAbsolutePath);
         return File.Exists(target)
-            && !string.Equals(target, previous, StringComparison.OrdinalIgnoreCase)
+            && !FileSystemPathComparison.Equals(target, previous)
             && FilesHaveSameContent(target, source);
     }
 

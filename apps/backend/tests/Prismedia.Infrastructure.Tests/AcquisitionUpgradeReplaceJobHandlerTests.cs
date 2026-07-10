@@ -98,12 +98,67 @@ public sealed class AcquisitionUpgradeReplaceJobHandlerTests {
         Assert.False(replacer.Called); // bailed before invoking the destructive swap
     }
 
+    [Fact]
+    public async Task EntityDeletionClaimMakesAStaleReplaceJobNoOpBeforeFilesystemMutation() {
+        await using var db = CreateContext();
+        var (parentId, childId, monitorId) = await SeedAsync(
+            db,
+            childSelectedTitle: "Some Book (retail) (epub)");
+        var entityId = (await db.Acquisitions.FindAsync(parentId))!.EntityId!.Value;
+        var entity = (await db.Entities.FindAsync(entityId))!;
+        entity.LifecycleClaimKind = EntityLifecycleClaimKind.DeletingFiles;
+        entity.LifecycleClaimId = Guid.NewGuid();
+        entity.LifecycleClaimedAt = DateTimeOffset.UtcNow;
+        await db.SaveChangesAsync();
+        var replacer = new FakeReplacer(OwnedFileReplaceResult.Ok("x", BookFormatTier.Reflowable));
+
+        await RunAsync(db, new RecordingJobQueue(), replacer, childId);
+
+        Assert.False(replacer.Called);
+        Assert.Equal(
+            AcquisitionStatus.Downloaded,
+            (await db.Acquisitions.AsNoTracking().SingleAsync(row => row.Id == childId)).Status);
+        Assert.Equal(
+            childId,
+            (await db.Monitors.AsNoTracking().SingleAsync(row => row.Id == monitorId)).UpgradeChildAcquisitionId);
+    }
+
+    [Fact]
+    public async Task CancelledUpgradeChildMakesAStaleReplaceJobNoOp() {
+        await using var db = CreateContext();
+        var (_, childId, monitorId) = await SeedAsync(
+            db,
+            childSelectedTitle: "Some Book (retail) (epub)");
+        var child = (await db.Acquisitions.FindAsync(childId))!;
+        child.Status = AcquisitionStatus.Cancelled;
+        await db.SaveChangesAsync();
+        var replacer = new FakeReplacer(OwnedFileReplaceResult.Ok("x", BookFormatTier.Reflowable));
+
+        await RunAsync(db, new RecordingJobQueue(), replacer, childId);
+
+        Assert.False(replacer.Called);
+        Assert.Equal(
+            AcquisitionStatus.Cancelled,
+            (await db.Acquisitions.AsNoTracking().SingleAsync(row => row.Id == childId)).Status);
+        Assert.Equal(
+            childId,
+            (await db.Monitors.AsNoTracking().SingleAsync(row => row.Id == monitorId)).UpgradeChildAcquisitionId);
+    }
+
     private static async Task<(Guid ParentId, Guid ChildId, Guid MonitorId)> SeedMediaAsync(PrismediaDbContext db, EntityKind kind, string ownedCode, string childSelectedTitle) {
         var now = DateTimeOffset.UtcNow;
+        var entityId = Guid.NewGuid();
         var parentId = Guid.NewGuid();
         var childId = Guid.NewGuid();
+        db.Entities.Add(new EntityRow {
+            Id = entityId,
+            KindCode = kind.ToCode(),
+            Title = "Some Movie",
+            CreatedAt = now,
+            UpdatedAt = now
+        });
         db.Acquisitions.Add(new AcquisitionRow {
-            Id = parentId, Kind = kind, Status = AcquisitionStatus.Imported, Title = "Some Movie", ExternalIdsJson = "{}", SourceUrlsJson = "[]",
+            Id = parentId, EntityId = entityId, Kind = kind, Status = AcquisitionStatus.Imported, Title = "Some Movie", ExternalIdsJson = "{}", SourceUrlsJson = "[]",
             FinalSourcePath = "/library/Movie (2020)", OwnedMediaQuality = ownedCode, UpgradeQualityCaptured = true, CreatedAt = now, UpdatedAt = now
         });
         db.Acquisitions.Add(new AcquisitionRow {
@@ -116,7 +171,7 @@ public sealed class AcquisitionUpgradeReplaceJobHandlerTests {
         });
         var monitorId = Guid.NewGuid();
         db.Monitors.Add(new MonitorRow {
-            Id = monitorId, Kind = kind, AcquisitionId = parentId, Status = MonitorStatus.Active, Title = "Some Movie",
+            Id = monitorId, Kind = kind, EntityId = entityId, AcquisitionId = parentId, Status = MonitorStatus.Active, Title = "Some Movie",
             UpgradeChildAcquisitionId = childId, CreatedAt = now, UpdatedAt = now
         });
         await db.SaveChangesAsync();
@@ -137,10 +192,18 @@ public sealed class AcquisitionUpgradeReplaceJobHandlerTests {
 
     private static async Task<(Guid ParentId, Guid ChildId, Guid MonitorId)> SeedAsync(PrismediaDbContext db, string childSelectedTitle) {
         var now = DateTimeOffset.UtcNow;
+        var entityId = Guid.NewGuid();
         var parentId = Guid.NewGuid();
         var childId = Guid.NewGuid();
+        db.Entities.Add(new EntityRow {
+            Id = entityId,
+            KindCode = EntityKind.Book.ToCode(),
+            Title = "Some Book",
+            CreatedAt = now,
+            UpdatedAt = now
+        });
         db.Acquisitions.Add(new AcquisitionRow {
-            Id = parentId, Status = AcquisitionStatus.Imported, Title = "Some Book", ExternalIdsJson = "{}", SourceUrlsJson = "[]",
+            Id = parentId, EntityId = entityId, Status = AcquisitionStatus.Imported, Title = "Some Book", ExternalIdsJson = "{}", SourceUrlsJson = "[]",
             FinalSourcePath = "/library/Some Book", OwnedSourceTier = BookSourceTier.Web, OwnedFormatTier = BookFormatTier.Reflowable,
             UpgradeQualityCaptured = true, CreatedAt = now, UpdatedAt = now
         });
@@ -154,7 +217,7 @@ public sealed class AcquisitionUpgradeReplaceJobHandlerTests {
         });
         var monitorId = Guid.NewGuid();
         db.Monitors.Add(new MonitorRow {
-            Id = monitorId, Kind = EntityKind.Book, AcquisitionId = parentId, Status = MonitorStatus.Active, Title = "Some Book",
+            Id = monitorId, Kind = EntityKind.Book, EntityId = entityId, AcquisitionId = parentId, Status = MonitorStatus.Active, Title = "Some Book",
             UpgradeChildAcquisitionId = childId, CreatedAt = now, UpdatedAt = now
         });
         await db.SaveChangesAsync();

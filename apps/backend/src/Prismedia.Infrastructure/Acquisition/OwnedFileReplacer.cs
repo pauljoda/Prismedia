@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging;
 using Prismedia.Application.Acquisition;
+using Prismedia.Application.Files;
 using Prismedia.Domain.Entities;
 
 namespace Prismedia.Infrastructure.Acquisition;
@@ -150,7 +151,7 @@ public sealed class OwnedFileReplacer(IRecycleBin recycleBin, ILogger<OwnedFileR
             // A consented format change installs beside the old file (different extension) — retire the
             // old file so the library never carries both. The backup copy already preserves it, so a
             // failed delete only leaves a redundant original for the scan to re-find.
-            if (!string.Equals(installPath, owned, StringComparison.Ordinal)) {
+            if (!FileSystemPathComparison.Equals(installPath, owned)) {
                 TryDelete(owned);
             }
 

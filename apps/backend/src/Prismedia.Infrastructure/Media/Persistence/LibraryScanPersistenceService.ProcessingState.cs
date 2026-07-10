@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Prismedia.Application.Files;
 using Prismedia.Application.Jobs.Ports;
 using Prismedia.Application.Settings;
 using Prismedia.Domain.Entities;
@@ -52,7 +53,7 @@ public sealed partial class LibraryScanPersistenceService {
             });
         }
 
-        await _db.SaveChangesAsync(cancellationToken);
+        await SaveChangesWithLifecycleAsync(cancellationToken);
     }
 
     public async Task UpsertMediaSourceAsync(
@@ -130,7 +131,7 @@ public sealed partial class LibraryScanPersistenceService {
             });
         }
 
-        await _db.SaveChangesAsync(cancellationToken);
+        await SaveChangesWithLifecycleAsync(cancellationToken);
     }
 
     public async Task UpsertTrickplayInfoAsync(
@@ -155,7 +156,7 @@ public sealed partial class LibraryScanPersistenceService {
         existing.IntervalSeconds = info.IntervalSeconds;
         existing.Bandwidth = info.Bandwidth;
         existing.UpdatedAt = now;
-        await _db.SaveChangesAsync(cancellationToken);
+        await SaveChangesWithLifecycleAsync(cancellationToken);
     }
 
     public async Task UpsertEntityFileAsync(Guid entityId, EntityFileRole role, string path, string? mimeType, long? sizeBytes, CancellationToken cancellationToken) {
@@ -186,7 +187,7 @@ public sealed partial class LibraryScanPersistenceService {
             });
         }
 
-        await _db.SaveChangesAsync(cancellationToken);
+        await SaveChangesWithLifecycleAsync(cancellationToken);
     }
 
     public async Task UpsertEntityFingerprintAsync(Guid entityId, FingerprintAlgorithm algorithm, string value, Guid? entityFileId, CancellationToken cancellationToken) {
@@ -207,7 +208,7 @@ public sealed partial class LibraryScanPersistenceService {
             });
         }
 
-        await _db.SaveChangesAsync(cancellationToken);
+        await SaveChangesWithLifecycleAsync(cancellationToken);
     }
 
     public async Task<Guid?> GetSourceFileIdAsync(Guid entityId, CancellationToken cancellationToken) {
@@ -228,7 +229,7 @@ public sealed partial class LibraryScanPersistenceService {
         var detail = await _db.VideoDetails.FindAsync([entityId], cancellationToken);
         if (detail is not null) {
             detail.SubtitlesExtractedAt = DateTimeOffset.UtcNow;
-            await _db.SaveChangesAsync(cancellationToken);
+            await SaveChangesWithLifecycleAsync(cancellationToken);
         }
     }
 
@@ -256,7 +257,7 @@ public sealed partial class LibraryScanPersistenceService {
             streamMatch.Format = format;
             streamMatch.StoragePath = storagePath;
             streamMatch.SourceFormat = sourceFormat;
-            await _db.SaveChangesAsync(cancellationToken);
+            await SaveChangesWithLifecycleAsync(cancellationToken);
             return;
         }
 
@@ -286,7 +287,7 @@ public sealed partial class LibraryScanPersistenceService {
             CreatedAt = DateTimeOffset.UtcNow
         });
 
-        await _db.SaveChangesAsync(cancellationToken);
+        await SaveChangesWithLifecycleAsync(cancellationToken);
     }
 
     public async Task UpsertAudioTrackTagsAsync(Guid entityId, string? artist, string? album, int? trackNumber, CancellationToken cancellationToken) {
@@ -314,7 +315,7 @@ public sealed partial class LibraryScanPersistenceService {
             }
         }
 
-        await _db.SaveChangesAsync(cancellationToken);
+        await SaveChangesWithLifecycleAsync(cancellationToken);
     }
 
     public async Task<EntityTechnicalData?> GetEntityTechnicalAsync(Guid entityId, CancellationToken cancellationToken) {
@@ -340,17 +341,32 @@ public sealed partial class LibraryScanPersistenceService {
             });
         }
 
-        await _db.SaveChangesAsync(cancellationToken);
+        await SaveChangesWithLifecycleAsync(cancellationToken);
     }
 
     public async Task ClearProbeFailuresForPathsAsync(
         IReadOnlyCollection<string> sourcePaths, CancellationToken cancellationToken) {
         if (sourcePaths.Count == 0) return;
 
-        var paths = sourcePaths.ToList();
+        var paths = sourcePaths
+            .Distinct(FileSystemPathComparison.Comparer)
+            .ToHashSet(FileSystemPathComparison.Comparer);
+        var pathLengths = paths.Select(path => path.Length).Distinct().ToArray();
+        var sourceCandidates = await _db.EntityFiles.AsNoTracking()
+            .Where(file => file.Role == EntityFileRole.Source
+                && pathLengths.Contains(file.Path.Length))
+            .Select(file => new { file.EntityId, file.Path })
+            .ToArrayAsync(cancellationToken);
+        var sourceEntityIds = sourceCandidates
+            .Where(file => paths.Contains(file.Path))
+            .Select(file => file.EntityId)
+            .Distinct()
+            .ToArray();
+        if (sourceEntityIds.Length == 0) return;
+
         var rows = await _db.EntityTechnical
-            .Where(t => t.ProbeFailedAt != null && _db.EntityFiles.Any(f =>
-                f.EntityId == t.EntityId && f.Role == EntityFileRole.Source && paths.Contains(f.Path)))
+            .Where(technical => technical.ProbeFailedAt != null
+                && sourceEntityIds.Contains(technical.EntityId))
             .ToListAsync(cancellationToken);
         if (rows.Count == 0) return;
 
@@ -360,7 +376,7 @@ public sealed partial class LibraryScanPersistenceService {
             row.UpdatedAt = now;
         }
 
-        await _db.SaveChangesAsync(cancellationToken);
+        await SaveChangesWithLifecycleAsync(cancellationToken);
     }
 
 }

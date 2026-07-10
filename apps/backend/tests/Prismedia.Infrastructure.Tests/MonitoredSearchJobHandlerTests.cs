@@ -18,8 +18,9 @@ public sealed class MonitoredSearchJobHandlerTests {
             new DueMonitor(Guid.NewGuid(), a, "Book A"),
             new DueMonitor(Guid.NewGuid(), b, "Book B"),
         ]);
+        var acquisitions = new FakeAcquisitionLifecycleStore(a, b);
         var queue = new RecordingJobQueue();
-        var handler = new MonitoredSearchJobHandler(monitors, new SettingsService(new EmptySettingsPersistence()), CommitService(monitors), NullLogger<MonitoredSearchJobHandler>.Instance);
+        var handler = Handler(monitors, acquisitions);
 
         await handler.HandleAsync(new JobContext(Job(), queue), CancellationToken.None);
 
@@ -40,9 +41,10 @@ public sealed class MonitoredSearchJobHandlerTests {
             new DueMonitor(Guid.NewGuid(), a, "Book A"),
             new DueMonitor(Guid.NewGuid(), b, "Book B"),
         ]);
+        var acquisitions = new FakeAcquisitionLifecycleStore(a, b);
         var queue = new RecordingJobQueue();
         queue.AlreadyPending.Add(a.ToString()); // a search is already in flight for A
-        var handler = new MonitoredSearchJobHandler(monitors, new SettingsService(new EmptySettingsPersistence()), CommitService(monitors), NullLogger<MonitoredSearchJobHandler>.Instance);
+        var handler = Handler(monitors, acquisitions);
 
         await handler.HandleAsync(new JobContext(Job(), queue), CancellationToken.None);
 
@@ -54,16 +56,93 @@ public sealed class MonitoredSearchJobHandlerTests {
     }
 
     [Fact]
+    public async Task AcquisitionLinkedEntityMonitorUsesAcquisitionLifecycleNotEntityMaintenance() {
+        var acquisitionId = Guid.NewGuid();
+        var monitors = new FakeMonitorStore([
+            new DueMonitor(Guid.NewGuid(), acquisitionId, "Book", EntityId: Guid.NewGuid())
+        ]);
+        var acquisitions = new FakeAcquisitionLifecycleStore(acquisitionId);
+        var queue = new RecordingJobQueue();
+        var handler = Handler(monitors, acquisitions);
+
+        await handler.HandleAsync(new JobContext(Job(), queue), CancellationToken.None);
+
+        Assert.Equal(acquisitionId.ToString(), Assert.Single(queue.Enqueued).TargetEntityId);
+    }
+
+    [Fact]
     public async Task NoDueMonitorsEnqueuesNothing() {
         var monitors = new FakeMonitorStore([]);
+        var acquisitions = new FakeAcquisitionLifecycleStore();
         var queue = new RecordingJobQueue();
-        var handler = new MonitoredSearchJobHandler(monitors, new SettingsService(new EmptySettingsPersistence()), CommitService(monitors), NullLogger<MonitoredSearchJobHandler>.Instance);
+        var handler = Handler(monitors, acquisitions);
 
         await handler.HandleAsync(new JobContext(Job(), queue), CancellationToken.None);
 
         Assert.Empty(queue.Enqueued);
         Assert.Empty(monitors.Searched);
     }
+
+    [Fact]
+    public async Task ActiveMonitorExplicitlyRevivesCancelledBeforeEnqueueingSearch() {
+        var acquisitionId = Guid.NewGuid();
+        var monitors = new FakeMonitorStore([
+            new DueMonitor(Guid.NewGuid(), acquisitionId, "Book")
+        ]);
+        var acquisitions = new FakeAcquisitionLifecycleStore(acquisitionId);
+        acquisitions.Statuses[acquisitionId] = AcquisitionStatus.Cancelled;
+        var queue = new RecordingJobQueue();
+
+        await Handler(monitors, acquisitions)
+            .HandleAsync(new JobContext(Job(), queue), CancellationToken.None);
+
+        Assert.Equal(AcquisitionStatus.Searching, acquisitions.Statuses[acquisitionId]);
+        Assert.Equal(
+            (acquisitionId, AcquisitionStatus.Cancelled, AcquisitionStatus.Searching),
+            Assert.Single(acquisitions.Transitions));
+        Assert.Equal(acquisitionId.ToString(), Assert.Single(queue.Enqueued).TargetEntityId);
+    }
+
+    [Fact]
+    public async Task MonitorPublishesSearchingBeforeAnEnqueueFailure() {
+        var acquisitionId = Guid.NewGuid();
+        var monitors = new FakeMonitorStore([
+            new DueMonitor(Guid.NewGuid(), acquisitionId, "Book")
+        ]);
+        var acquisitions = new FakeAcquisitionLifecycleStore(acquisitionId);
+        acquisitions.Statuses[acquisitionId] = AcquisitionStatus.Failed;
+        var queue = new RecordingJobQueue { EnqueueFailure = new IOException("queue unavailable") };
+
+        await Assert.ThrowsAsync<IOException>(() =>
+            Handler(monitors, acquisitions)
+                .HandleAsync(new JobContext(Job(), queue), CancellationToken.None));
+
+        Assert.Equal(AcquisitionStatus.Searching, acquisitions.Statuses[acquisitionId]);
+        Assert.Empty(queue.Enqueued);
+    }
+
+    [Fact]
+    public async Task EntityMaintenanceContentionNeverPausesDurableParentIntent() {
+        var monitorId = Guid.NewGuid();
+        var monitors = new FakeMonitorStore([
+            new DueMonitor(monitorId, null, "Artist", EntityId: Guid.NewGuid())
+        ]);
+
+        await Handler(monitors, new FakeAcquisitionLifecycleStore())
+            .HandleAsync(new JobContext(Job(), new RecordingJobQueue()), CancellationToken.None);
+
+        Assert.Equal([monitorId], monitors.Searched);
+    }
+
+    private static MonitoredSearchJobHandler Handler(
+        IMonitorStore monitors,
+        IAcquisitionLifecycleStore acquisitions) =>
+        new(
+            monitors,
+            acquisitions,
+            new SettingsService(new EmptySettingsPersistence()),
+            CommitService(monitors),
+            NullLogger<MonitoredSearchJobHandler>.Instance);
 
     private static JobRunSnapshot Job() {
         var now = DateTimeOffset.UtcNow;
@@ -78,7 +157,13 @@ public sealed class MonitoredSearchJobHandlerTests {
             new NullWantedWriter(),
             new NullAcquisitionRequestService(),
             monitors,
-            new NullSuppressionStore());
+            new NullSuppressionStore(),
+            new NullEntityGiveUpService());
+
+    private sealed class NullEntityGiveUpService : IEntityGiveUpService {
+        public Task<MonitorStopResult> GiveUpEntityAsync(Guid entityId, CancellationToken cancellationToken) =>
+            Task.FromResult(new MonitorStopResult(Found: false, Stopped: false));
+    }
 
     private sealed class NullReviewSource : Prismedia.Application.Requests.IPluginRequestReviewSource {
         public Task<Prismedia.Contracts.Requests.RequestReviewResponse?> ReviewAsync(
@@ -110,17 +195,18 @@ public sealed class MonitoredSearchJobHandlerTests {
             CancellationToken cancellationToken) =>
             Task.FromResult<Prismedia.Contracts.Plugins.EntityMetadataProposal?>(null);
 
-        public Task<Prismedia.Contracts.Plugins.EntityMetadataProposal?> ResolveProposalAsync(
+        public Task<Prismedia.Application.Requests.RoutedRequestProposal?> ResolveProposalAsync(
             Prismedia.Application.Requests.RequestKindDescriptor descriptor, ExternalIdentity identity, bool hideNsfw, bool includeChildren, CancellationToken cancellationToken) =>
-            Task.FromResult<Prismedia.Contracts.Plugins.EntityMetadataProposal?>(null);
+            Task.FromResult<Prismedia.Application.Requests.RoutedRequestProposal?>(null);
     }
 
     private sealed class NullWantedWriter : Prismedia.Application.Requests.IWantedEntityWriter {
         public Task<Prismedia.Application.Requests.WantedEntityResult> EnsureAsync(EntityKind kind, ExternalIdentity identity, string title, Guid? parentEntityId, bool matchTitleKindWide, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<bool> BindProviderIdentityAsync(Guid entityId, Prismedia.Application.Plugins.PluginIdentityRoute route, CancellationToken cancellationToken) => Task.FromResult(false);
         public Task ApplyProposalAsync(Guid entityId, Prismedia.Contracts.Plugins.EntityMetadataProposal proposal, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<bool> DeleteIfWantedAsync(Guid entityId, CancellationToken cancellationToken) => Task.FromResult(false);
-        public Task<Prismedia.Application.Requests.MonitorableContainer?> GetContainerAsync(Guid entityId, CancellationToken cancellationToken) =>
-            Task.FromResult<Prismedia.Application.Requests.MonitorableContainer?>(null);
+        public Task<Prismedia.Application.Requests.MonitorableEntity?> GetEntityAsync(Guid entityId, CancellationToken cancellationToken) =>
+            Task.FromResult<Prismedia.Application.Requests.MonitorableEntity?>(null);
         public Task<IReadOnlyList<Guid>> ListWantedChildIdsAsync(Guid parentEntityId, EntityKind childKind, CancellationToken cancellationToken) =>
             Task.FromResult<IReadOnlyList<Guid>>([]);
 
@@ -130,11 +216,17 @@ public sealed class MonitoredSearchJobHandlerTests {
 
     private sealed class NullAcquisitionRequestService : IAcquisitionRequestService {
         public Task<AcquisitionSummary> CreateAndSearchAsync(AcquisitionCreateRequest request, CancellationToken cancellationToken) => throw new NotSupportedException();
-        public Task<bool> AnyForEntityAsync(Guid entityId, CancellationToken cancellationToken) => Task.FromResult(false);
+        public Task<bool> AnyOpenForEntityAsync(Guid entityId, CancellationToken cancellationToken) => Task.FromResult(false);
         public Task<IReadOnlyList<Guid>> ListIdsForEntityAsync(Guid entityId, CancellationToken cancellationToken) => Task.FromResult<IReadOnlyList<Guid>>([]);
         public Task<AcquisitionReacquireEligibility> GetReacquireEligibilityAsync(Guid id, CancellationToken cancellationToken) =>
             Task.FromResult(new AcquisitionReacquireEligibility(false, "The acquisition no longer exists."));
+        public Task<AcquisitionRemovalEligibility> GetRemovalEligibilityAsync(Guid id, CancellationToken cancellationToken) =>
+            Task.FromResult(new AcquisitionRemovalEligibility(true));
+        public Task<bool> ClaimTeardownAsync(Guid id, AcquisitionTeardownIntent intent, CancellationToken cancellationToken) => Task.FromResult(true);
+        public Task ConfirmTransferRemovedAsync(Guid id, CancellationToken cancellationToken) => Task.CompletedTask;
+        public Task<bool> CompleteTeardownAsync(Guid id, AcquisitionTeardownIntent intent, CancellationToken cancellationToken) => Task.FromResult(true);
         public Task<bool> DeleteAsync(Guid id, CancellationToken cancellationToken, bool preserveWantedLoop = false) => Task.FromResult(false);
+        public Task<bool> DeleteForUnmonitorAsync(Guid id, CancellationToken cancellationToken) => Task.FromResult(false);
         public Task<Guid?> ReacquireAsync(Guid id, CancellationToken cancellationToken) => Task.FromResult<Guid?>(null);
     }
 
@@ -143,6 +235,8 @@ public sealed class MonitoredSearchJobHandlerTests {
         public List<Guid> CreatedChildFor { get; } = [];
         public Guid? ChildId { get; set; }
         public Task<IReadOnlyList<DueMonitor>> ListDueMonitorsAsync(int defaultIntervalMinutes, CancellationToken cancellationToken) => Task.FromResult(due);
+        public Task<bool> IsActiveAsync(Guid monitorId, CancellationToken cancellationToken) =>
+            Task.FromResult(due.Any(monitor => monitor.MonitorId == monitorId));
         public Task MarkSearchedAsync(Guid monitorId, CancellationToken cancellationToken) { Searched.Add(monitorId); return Task.CompletedTask; }
         public Task<Guid?> CreateUpgradeChildAsync(Guid monitorId, CancellationToken cancellationToken) { CreatedChildFor.Add(monitorId); return Task.FromResult(ChildId); }
         public Task ResolveUpgradeChildAsync(Guid childId, bool succeeded, CancellationToken cancellationToken) => Task.CompletedTask;
@@ -161,6 +255,40 @@ public sealed class MonitoredSearchJobHandlerTests {
         public Task<bool> HasActiveMonitorsAsync(CancellationToken cancellationToken) => throw new NotSupportedException();
     }
 
+    private sealed class FakeAcquisitionLifecycleStore(params Guid[] acquisitionIds)
+        : IAcquisitionLifecycleStore {
+        public Dictionary<Guid, AcquisitionStatus> Statuses { get; } =
+            acquisitionIds.ToDictionary(id => id, _ => AcquisitionStatus.Pending);
+        public List<(Guid Id, AcquisitionStatus Expected, AcquisitionStatus Status)> Transitions { get; } = [];
+
+        public Task<AcquisitionStatus?> GetStatusAsync(Guid id, CancellationToken cancellationToken) =>
+            Task.FromResult(Statuses.TryGetValue(id, out var status)
+                ? (AcquisitionStatus?)status
+                : null);
+
+        public Task<bool> TryTransitionStatusAsync(
+            Guid id,
+            IReadOnlyCollection<AcquisitionStatus> expectedStatuses,
+            AcquisitionStatus status,
+            string? message,
+            CancellationToken cancellationToken) {
+            if (!Statuses.TryGetValue(id, out var current) || !expectedStatuses.Contains(current)) {
+                return Task.FromResult(false);
+            }
+
+            Statuses[id] = status;
+            Transitions.Add((id, current, status));
+            return Task.FromResult(true);
+        }
+
+        public Task<bool> TryClaimFailedRecoveryAsync(
+            Guid id,
+            IReadOnlyCollection<AcquisitionStatus> expectedStatuses,
+            SelectedRelease? expectedSelectedRelease,
+            string message,
+            CancellationToken cancellationToken) => throw new NotSupportedException();
+    }
+
     private sealed class EmptySettingsPersistence : ISettingsPersistence {
         public Task<IReadOnlyDictionary<string, string>> LoadSettingOverridesAsync(CancellationToken cancellationToken) =>
             Task.FromResult<IReadOnlyDictionary<string, string>>(new Dictionary<string, string>());
@@ -177,7 +305,12 @@ public sealed class MonitoredSearchJobHandlerTests {
 
     private sealed class RecordingJobQueue : IJobQueueService {
         public List<EnqueueJobRequest> Enqueued { get; } = [];
+        public Exception? EnqueueFailure { get; init; }
         public Task<JobRunSnapshot> EnqueueAsync(EnqueueJobRequest request, CancellationToken cancellationToken) {
+            if (EnqueueFailure is not null) {
+                throw EnqueueFailure;
+            }
+
             Enqueued.Add(request);
             var now = DateTimeOffset.UtcNow;
             return Task.FromResult(new JobRunSnapshot(Guid.NewGuid(), request.Type, JobRunStatus.Queued, 0, null, request.PayloadJson ?? "{}", request.TargetEntityKind, request.TargetEntityId, request.TargetLabel, now, null, null));

@@ -1,8 +1,10 @@
 using Microsoft.EntityFrameworkCore;
+using Prismedia.Application.Acquisition;
 using Prismedia.Application.Entities;
 using Prismedia.Application.Plugins;
 using Prismedia.Application.Requests;
 using Prismedia.Domain.Entities;
+using Prismedia.Infrastructure.Entities;
 using Prismedia.Infrastructure.Persistence;
 using Prismedia.Infrastructure.Persistence.Entities;
 using Prismedia.Infrastructure.Plugins;
@@ -22,12 +24,17 @@ namespace Prismedia.Infrastructure.Requests;
 /// <param name="externalIdentities">Canonical external-identity resolver and writer.</param>
 /// <param name="providerIdentities">Persisted exact plugin route selected for the Entity.</param>
 /// <param name="identityRouter">Manifest-driven fallback for Entities created before bindings existed.</param>
+/// <param name="hierarchy">Canonical kind-agnostic Entity hierarchy reader used for source ownership.</param>
 public sealed class WantedEntityWriter(
     PrismediaDbContext db,
     EntityMetadataApplyService apply,
     IEntityExternalIdentityStore externalIdentities,
     IEntityProviderIdentityStore providerIdentities,
-    IPluginIdentityRouter identityRouter) : IWantedEntityWriter {
+    IPluginIdentityRouter identityRouter,
+    IEntityHierarchyReader hierarchy,
+    IEntityLifecycleMutationLease? lifecycle = null) : IWantedEntityWriter {
+    private readonly IEntityLifecycleMutationLease lifecycleLease =
+        lifecycle ?? new EfEntityLifecycleMutationLease(db, hierarchy);
     /// <summary>Wanted container kinds whose empty placeholders are pruned with their last child (from the request registry).</summary>
     private static readonly HashSet<string> ContainerKindCodes = RequestKindRegistry.All
         .Where(descriptor => descriptor.IsContainer)
@@ -48,37 +55,120 @@ public sealed class WantedEntityWriter(
 
         var now = DateTimeOffset.UtcNow;
         if (entity is not null) {
-            var hasFile = await HasSourceFileAsync(entity.Id, cancellationToken);
+            WantedEntityResult? result = null;
+            await ExecuteIfLifecycleMutableAsync(
+                entity.Id,
+                async leaseCancellationToken => {
+                    var current = await db.Entities.FirstOrDefaultAsync(
+                        row => row.Id == entity.Id,
+                        leaseCancellationToken);
+                    if (current is null) {
+                        return;
+                    }
+                    var hasFile = await HasSourceFileAsync(current.Id, leaseCancellationToken);
 
-            // A title-matched entity (e.g. a scanned author/artist folder with no provider ids yet) gains
-            // the provider id so every later lookup — including the import bind — resolves it id-first.
-            await StampExternalIdAsync(entity.Id, identity, cancellationToken);
+                    // A title-matched entity (e.g. a scanned author/artist folder with no provider ids yet)
+                    // gains the provider id so every later lookup resolves it id-first.
+                    await StampExternalIdAsync(current.Id, identity, leaseCancellationToken);
 
-            // Re-requesting a still-parentless wanted leaf through its container adopts it under the container.
-            if (parentEntityId is { } parent && entity.ParentEntityId is null && entity.IsWanted && !hasFile) {
-                entity.ParentEntityId = parent;
-                entity.UpdatedAt = now;
-            }
+                    // Re-requesting a still-parentless wanted leaf through its container adopts it under
+                    // the container, but never while a lifecycle owner controls either ancestry.
+                    if (parentEntityId is { } parent
+                        && current.ParentEntityId is null
+                        && current.IsWanted
+                        && !hasFile) {
+                        await ThrowIfLifecycleClaimedAsync(parent, leaseCancellationToken);
+                        current.ParentEntityId = parent;
+                        current.UpdatedAt = now;
+                    }
 
-            await db.SaveChangesAsync(cancellationToken);
-            return new WantedEntityResult(entity.Id, Created: false, hasFile);
+                    await db.SaveChangesAsync(leaseCancellationToken);
+                    result = new WantedEntityResult(current.Id, Created: false, hasFile);
+                },
+                cancellationToken);
+            return result ?? throw LifecycleConflict();
         }
 
-        entity = new EntityRow {
-            Id = Guid.NewGuid(),
-            KindCode = kindCode,
-            Title = title.Trim(),
-            ParentEntityId = parentEntityId,
-            IsWanted = true,
-            CreatedAt = now,
-            UpdatedAt = now
-        };
-        db.Entities.Add(entity);
-        AddDetailRowFor(kind, entity.Id);
+        WantedEntityResult? created = null;
+        async Task CreateAsync(CancellationToken leaseCancellationToken) {
+            entity = new EntityRow {
+                Id = Guid.NewGuid(),
+                KindCode = kindCode,
+                Title = title.Trim(),
+                ParentEntityId = parentEntityId,
+                IsWanted = true,
+                CreatedAt = now,
+                UpdatedAt = now
+            };
+            db.Entities.Add(entity);
+            AddDetailRowFor(kind, entity.Id);
 
-        await StampExternalIdAsync(entity.Id, identity, cancellationToken);
-        await db.SaveChangesAsync(cancellationToken);
-        return new WantedEntityResult(entity.Id, Created: true, HasFile: false);
+            await StampExternalIdAsync(entity.Id, identity, leaseCancellationToken);
+            await db.SaveChangesAsync(leaseCancellationToken);
+            created = new WantedEntityResult(entity.Id, Created: true, HasFile: false);
+        }
+
+        if (parentEntityId is { } parentId) {
+            await ExecuteIfLifecycleMutableAsync(parentId, CreateAsync, cancellationToken);
+        } else {
+            await CreateAsync(cancellationToken);
+        }
+        return created ?? throw LifecycleConflict();
+    }
+
+    /// <inheritdoc />
+    public async Task<bool> BindProviderIdentityAsync(
+        Guid entityId,
+        PluginIdentityRoute route,
+        CancellationToken cancellationToken) {
+        if (string.IsNullOrWhiteSpace(route.PluginId)) {
+            return false;
+        }
+
+        var bound = false;
+        await ExecuteIfLifecycleMutableAsync(
+            entityId,
+            async leaseCancellationToken => {
+                var kindCode = await db.Entities.AsNoTracking()
+                    .Where(row => row.Id == entityId)
+                    .Select(row => row.KindCode)
+                    .FirstOrDefaultAsync(leaseCancellationToken);
+                if (kindCode is null) {
+                    return;
+                }
+
+                var persistedIdentities = (await externalIdentities.ListAsync(entityId, leaseCancellationToken))
+                    .Select(value => value.Identity)
+                    .ToHashSet();
+                if (!persistedIdentities.Contains(route.Identity)) {
+                    return;
+                }
+
+                var exactRoutes = (await identityRouter.ResolveAsync(
+                        kindCode,
+                        IdentifyAction.LookupId,
+                        [route.Identity],
+                        leaseCancellationToken))
+                    .Where(candidate =>
+                        candidate.Identity == route.Identity
+                        && string.Equals(candidate.PluginId, route.PluginId, StringComparison.OrdinalIgnoreCase))
+                    .Take(2)
+                    .ToArray();
+                if (exactRoutes.Length != 1) {
+                    return;
+                }
+
+                var exactRoute = exactRoutes[0];
+                await providerIdentities.SetAsync(
+                    entityId,
+                    exactRoute.PluginId,
+                    exactRoute.Identity,
+                    leaseCancellationToken);
+                await db.SaveChangesAsync(leaseCancellationToken);
+                bound = true;
+            },
+            cancellationToken);
+        return bound;
     }
 
     /// <summary>
@@ -110,10 +200,54 @@ public sealed class WantedEntityWriter(
     }
 
     public async Task ApplyProposalAsync(Guid entityId, Contracts.Plugins.EntityMetadataProposal proposal, CancellationToken cancellationToken) {
-        var fields = ProposalApplySelection.SelectAllPresentFields(proposal);
-        var images = ProposalApplySelection.SelectDefaultImages(proposal);
-        await apply.ApplyAsync(entityId, proposal, fields, images, cancellationToken);
+        await ExecuteIfLifecycleMutableAsync(
+            entityId,
+            async leaseCancellationToken => {
+                var fields = ProposalApplySelection.SelectAllPresentFields(proposal);
+                var images = ProposalApplySelection.SelectDefaultImages(proposal);
+                await apply.ApplyAsync(
+                    entityId,
+                    proposal,
+                    fields,
+                    images,
+                    leaseCancellationToken);
+            },
+            cancellationToken);
     }
+
+    /// <summary>
+    /// Runs one request/metadata mutation while holding the target + ancestor Entity rows. Managed file
+    /// deletion publishes its durable claim under the same row locks, so either this mutation commits
+    /// first and deletion revalidates it, or the mutation fails before touching the Entity.
+    /// </summary>
+    private async Task ExecuteIfLifecycleMutableAsync(
+        Guid entityId,
+        Func<CancellationToken, Task> mutation,
+        CancellationToken cancellationToken) {
+        if (!await lifecycleLease.ExecuteAsync(entityId, mutation, cancellationToken)) {
+            throw LifecycleConflict();
+        }
+    }
+
+    /// <summary>Rejects a secondary parent adoption when that ancestry is under destructive ownership.</summary>
+    private async Task ThrowIfLifecycleClaimedAsync(
+        Guid entityId,
+        CancellationToken cancellationToken) {
+        var ids = new[] { entityId }
+            .Concat(await hierarchy.ListAncestorIdsAsync(entityId, cancellationToken))
+            .Distinct()
+            .ToArray();
+        if (await db.Entities.AsNoTracking().AnyAsync(
+            row => ids.Contains(row.Id) && row.LifecycleClaimKind != null,
+            cancellationToken)) {
+            throw LifecycleConflict();
+        }
+    }
+
+    private static AcquisitionConfigurationException LifecycleConflict() =>
+        new(
+            Prismedia.Contracts.System.ApiProblemCodes.AcquisitionInvalid,
+            "This Entity is being cleaned up. Wait for that operation to finish, then request it again.");
 
     public async Task<bool> DeleteIfWantedAsync(Guid entityId, CancellationToken cancellationToken) {
         var entity = await db.Entities.FirstOrDefaultAsync(row => row.Id == entityId, cancellationToken);
@@ -142,7 +276,8 @@ public sealed class WantedEntityWriter(
         return true;
     }
 
-    public async Task<MonitorableContainer?> GetContainerAsync(Guid entityId, CancellationToken cancellationToken) {
+    /// <inheritdoc />
+    public async Task<MonitorableEntity?> GetEntityAsync(Guid entityId, CancellationToken cancellationToken) {
         var entity = await db.Entities.AsNoTracking()
             .Where(row => row.Id == entityId)
             .Select(row => new { row.Id, row.KindCode, row.Title, row.ParentEntityId })
@@ -155,9 +290,12 @@ public sealed class WantedEntityWriter(
             .Select(association => association.Identity)
             .ToArray();
         var binding = await providerIdentities.GetAsync(entityId, cancellationToken);
-        PluginIdentityRoute? providerIdentity = binding is not null && identities.Contains(binding.Identity)
-            ? new PluginIdentityRoute(binding.PluginId, binding.Identity)
-            : null;
+        // Carry an authoritative binding even when its identity is stale. The tracking catalog validates
+        // exact membership and fails it closed; collapsing stale to null would make it look like an unbound
+        // legacy Entity and could silently substitute another plugin/identity.
+        PluginIdentityRoute? providerIdentity = binding is null
+            ? null
+            : new PluginIdentityRoute(binding.PluginId, binding.Identity);
         // A persisted binding whose exact value no longer belongs to the Entity is stale, not legacy.
         // Fail closed instead of silently retargeting it through the remaining raw IDs.
         if (binding is null && identities.Length > 0) {
@@ -172,9 +310,67 @@ public sealed class WantedEntityWriter(
             .Where(row => row.EntityId == entityId)
             .ToDictionaryAsync(row => row.Code, row => row.Value, cancellationToken);
         var hasSource = await HasSourceFileAsync(entityId, cancellationToken);
-        return new MonitorableContainer(
+        return new MonitorableEntity(
             entity.Id, entity.KindCode.DecodeAs<EntityKind>(), entity.Title, identities, hasSource,
             entity.ParentEntityId, positions, providerIdentity);
+    }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyDictionary<Guid, MonitorEligibilityEntity>> ListMonitorEligibilityEntitiesAsync(
+        IReadOnlyCollection<Guid> entityIds,
+        CancellationToken cancellationToken) {
+        var requestedIds = entityIds.Distinct().ToArray();
+        if (requestedIds.Length == 0) {
+            return new Dictionary<Guid, MonitorEligibilityEntity>();
+        }
+
+        var entities = await db.Entities.AsNoTracking()
+            .Where(row => requestedIds.Contains(row.Id))
+            .Select(row => new { row.Id, row.KindCode, row.IsWanted })
+            .ToArrayAsync(cancellationToken);
+        var identityRows = await db.EntityExternalIds.AsNoTracking()
+            .Where(row => requestedIds.Contains(row.EntityId))
+            .Select(row => new { row.EntityId, row.Provider, row.Value })
+            .ToArrayAsync(cancellationToken);
+        var bindingRows = await db.EntityProviderIdentities.AsNoTracking()
+            .Where(row => requestedIds.Contains(row.EntityId))
+            .ToArrayAsync(cancellationToken);
+
+        var identitiesByEntity = identityRows
+            .GroupBy(row => row.EntityId)
+            .ToDictionary(
+                group => group.Key,
+                group => group.Select(row => TryIdentity(row.Provider, row.Value))
+                    .Where(identity => identity is not null)
+                    .Select(identity => identity!)
+                    .Distinct()
+                    .ToArray());
+        var bindingsByEntity = bindingRows.ToDictionary(row => row.EntityId);
+        var result = new Dictionary<Guid, MonitorEligibilityEntity>();
+        foreach (var entity in entities) {
+            if (!EntityKindRegistry.TryGet(entity.KindCode, out var kind)) {
+                continue;
+            }
+
+            var identities = identitiesByEntity.GetValueOrDefault(entity.Id) ?? [];
+            var binding = bindingsByEntity.GetValueOrDefault(entity.Id);
+            PluginIdentityRoute? providerIdentity = null;
+            if (binding is not null) {
+                var boundIdentity = TryIdentity(binding.IdentityNamespace, binding.IdentityValue);
+                if (boundIdentity is not null) {
+                    providerIdentity = new PluginIdentityRoute(binding.PluginId, boundIdentity);
+                }
+            }
+
+            result[entity.Id] = new MonitorEligibilityEntity(
+                entity.Id,
+                kind,
+                entity.IsWanted,
+                identities,
+                providerIdentity);
+        }
+
+        return result;
     }
 
     public async Task<IReadOnlyList<Guid>> ListWantedChildIdsAsync(
@@ -200,9 +396,24 @@ public sealed class WantedEntityWriter(
             .ToArrayAsync(cancellationToken);
     }
 
-    private Task<bool> HasSourceFileAsync(Guid entityId, CancellationToken cancellationToken) =>
-        db.EntityFiles.AsNoTracking()
-            .AnyAsync(file => file.EntityId == entityId && file.Role == EntityFileRole.Source, cancellationToken);
+    /// <summary>
+    /// Whether this Entity's canonical subtree owns source media. Containers and root wrappers often own
+    /// files only through descendants (Movie → Video, Series → Season → Episode), so a direct-row check
+    /// would falsely mark an on-disk item as requestable and create duplicate acquisition work.
+    /// </summary>
+    private async Task<bool> HasSourceFileAsync(Guid entityId, CancellationToken cancellationToken) {
+        var subtreeIds = await hierarchy.ListSubtreeIdsAsync(entityId, cancellationToken);
+        return subtreeIds.Count > 0 && await db.EntityFiles.AsNoTracking()
+            .AnyAsync(file => subtreeIds.Contains(file.EntityId) && file.Role == EntityFileRole.Source, cancellationToken);
+    }
+
+    private static ExternalIdentity? TryIdentity(string? identityNamespace, string? identityValue) {
+        try {
+            return new ExternalIdentity(identityNamespace ?? string.Empty, identityValue ?? string.Empty);
+        } catch (ArgumentException) {
+            return null;
+        }
+    }
 
     /// <summary>
     /// Title fallback, mirroring the apply cascade's scoping rules: a container grouping matches

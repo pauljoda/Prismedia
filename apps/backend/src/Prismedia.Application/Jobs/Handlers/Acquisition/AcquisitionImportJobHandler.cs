@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging;
 using Prismedia.Application.Acquisition;
+using Prismedia.Application.Entities;
 using Prismedia.Application.Jobs.Ports;
 using Prismedia.Domain.Entities;
 
@@ -17,7 +18,8 @@ public sealed class AcquisitionImportJobHandler(
     IAcquisitionImportEngineFactory engines,
     IDownloadPayloadReader payloads,
     IAcquisitionHistoryStore history,
-    ILogger<AcquisitionImportJobHandler> logger) : IJobHandler {
+    ILogger<AcquisitionImportJobHandler> logger,
+    IEntityLifecycleMutationLease? lifecycle = null) : IJobHandler {
     public JobType Type => JobType.AcquisitionImport;
 
     public async Task HandleAsync(JobContext context, CancellationToken cancellationToken) {
@@ -26,11 +28,11 @@ public sealed class AcquisitionImportJobHandler(
         try {
             import = await acquisitions.GetImportContextAsync(payload.AcquisitionId, cancellationToken);
         } catch (InvalidDataException ex) {
-            logger.LogError(ex, "AcquisitionImport: corrupt TV checkpoint held for acquisition {Id}", payload.AcquisitionId);
-            await acquisitions.TryHoldCorruptTvImportCheckpointAsync(
+            logger.LogError(ex, "AcquisitionImport: corrupt placement checkpoint held for acquisition {Id}", payload.AcquisitionId);
+            await acquisitions.TryHoldCorruptImportCheckpointAsync(
                 payload.AcquisitionId,
                 context.Job.Id,
-                TvImportCheckpointLifecycle.CorruptCheckpointMessage,
+                ImportCheckpointLifecycle.CorruptCheckpointMessage,
                 CancellationToken.None);
             return;
         }
@@ -39,29 +41,63 @@ public sealed class AcquisitionImportJobHandler(
         }
 
         var tvCheckpoint = import.TvImportCheckpoint;
-        if (tvCheckpoint is not null
-            && !await acquisitions.TryClaimTvImportCheckpointAsync(
+        var placementCheckpoint = import.ImportPlacementCheckpoint;
+        var claimed = false;
+        async Task ClaimImportAsync(CancellationToken leaseCancellationToken) {
+            if (tvCheckpoint is not null) {
+                claimed = await acquisitions.TryClaimTvImportCheckpointAsync(
+                    payload.AcquisitionId,
+                    tvCheckpoint,
+                    context.Job.Id,
+                    leaseCancellationToken);
+                return;
+            }
+
+            if (placementCheckpoint is not null) {
+                claimed = await acquisitions.TryClaimImportPlacementCheckpointAsync(
+                    payload.AcquisitionId,
+                    placementCheckpoint,
+                    context.Job.Id,
+                    leaseCancellationToken);
+                return;
+            }
+
+            claimed = await acquisitions.TryClaimInitialImportAsync(
                 payload.AcquisitionId,
-                tvCheckpoint,
                 context.Job.Id,
-                cancellationToken)) {
-            logger.LogInformation(
-                "AcquisitionImport: TV checkpoint for {Id} was superseded before resume; skipping stale work.",
-                payload.AcquisitionId);
-            return;
+                payload.ManualRetry,
+                leaseCancellationToken);
         }
-        if (tvCheckpoint is not null) {
-            tvCheckpoint = tvCheckpoint with { ClaimJobId = context.Job.Id };
-            import = import with { TvImportCheckpoint = tvCheckpoint };
-        } else if (!await acquisitions.TryClaimInitialImportAsync(
-                       payload.AcquisitionId,
-                       context.Job.Id,
-                       payload.ManualRetry,
-                       cancellationToken)) {
+
+        if (import.EntityId is { } entityId) {
+            if (lifecycle is null) {
+                throw new InvalidOperationException(
+                    "Entity-linked import requires the Entity lifecycle mutation lease.");
+            }
+
+            if (!await lifecycle.ExecuteAsync(
+                    entityId,
+                    ClaimImportAsync,
+                    cancellationToken)) {
+                throw new EntityLifecycleMutationConflictException(entityId);
+            }
+        } else {
+            await ClaimImportAsync(cancellationToken);
+        }
+
+        if (!claimed) {
             logger.LogInformation(
                 "AcquisitionImport: acquisition {Id} left its claimable state before this job could claim it; skipping stale work.",
                 payload.AcquisitionId);
             return;
+        }
+
+        if (tvCheckpoint is not null) {
+            tvCheckpoint = tvCheckpoint with { ClaimJobId = context.Job.Id };
+            import = import with { TvImportCheckpoint = tvCheckpoint };
+        } else if (placementCheckpoint is not null) {
+            placementCheckpoint = placementCheckpoint with { ClaimJobId = context.Job.Id };
+            import = import with { ImportPlacementCheckpoint = placementCheckpoint };
         }
 
         if (payload.AllowFormatChange) {
@@ -91,10 +127,11 @@ public sealed class AcquisitionImportJobHandler(
         // for — otherwise a mislabeled release would be renamed into the expected work's folder, masking
         // the mismatch forever. Skipped for the user's own picks (manual release queue, uploaded torrent)
         // and for a manual retry-import — reviewing and clicking "import anyway" is the override.
-        // A durable TV checkpoint was created only after the ORIGINAL complete payload passed this
+        // A durable placement checkpoint was created only after the ORIGINAL complete payload passed this
         // validation. Move-mode resumes intentionally see a partial download directory, so re-validating
         // that remainder can manufacture a false wrong-season conflict and strand a valid checkpoint.
         if (import.TvImportCheckpoint is null
+            && import.ImportPlacementCheckpoint is null
             && !payload.ManualRetry
             && await FindPayloadConflictAsync(payload.AcquisitionId, import, payloadFiles, cancellationToken) is { } conflict) {
             logger.LogWarning("AcquisitionImport: wrong content held for acquisition {Id}: {Conflict}", payload.AcquisitionId, conflict);

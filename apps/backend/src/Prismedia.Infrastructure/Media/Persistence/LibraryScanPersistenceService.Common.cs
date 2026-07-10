@@ -268,12 +268,29 @@ public sealed partial class LibraryScanPersistenceService {
             .GroupBy(entity => entity.ParentEntityId!.Value)
             .ToDictionary(group => group.Key, group => group.Select(entity => entity.Id).ToArray());
 
-        var validSourceEntityIds = await _db.EntityFiles.AsNoTracking()
-            .Where(file => file.Role == EntityFileRole.Source && validPaths.Contains(file.Path))
-            .Select(file => file.EntityId)
-            .Distinct()
+        // Bound the candidate rows by this structural closure, then apply host filesystem equality in
+        // memory. A database collation cannot decide whether case-only paths are the same on the host.
+        var descendantIds = staleContainerIds.ToHashSet();
+        var descendantsPending = new Queue<Guid>(staleContainerIds);
+        while (descendantsPending.TryDequeue(out var parentId)) {
+            if (!childrenByParentId.TryGetValue(parentId, out var childIds)) {
+                continue;
+            }
+            foreach (var childId in childIds.Where(descendantIds.Add)) {
+                descendantsPending.Enqueue(childId);
+            }
+        }
+
+        var descendantIdArray = descendantIds.ToArray();
+        var sourceCandidates = await _db.EntityFiles.AsNoTracking()
+            .Where(file => file.Role == EntityFileRole.Source
+                && descendantIdArray.Contains(file.EntityId))
+            .Select(file => new { file.EntityId, file.Path })
             .ToListAsync(cancellationToken);
-        var validSourceIds = validSourceEntityIds.ToHashSet();
+        var validSourceIds = sourceCandidates
+            .Where(file => validPaths.Contains(file.Path))
+            .Select(file => file.EntityId)
+            .ToHashSet();
 
         var idsToRemove = staleContainerIds.ToHashSet();
         var pending = new Queue<Guid>(staleContainerIds);
@@ -305,7 +322,7 @@ public sealed partial class LibraryScanPersistenceService {
             .ToListAsync(cancellationToken);
 
         _db.Entities.RemoveRange(entitiesToRemove);
-        await _db.SaveChangesAsync(cancellationToken);
+        await SaveChangesWithLifecycleAsync(cancellationToken);
 
         return entitiesToRemove.Count;
     }

@@ -3,6 +3,23 @@ using Prismedia.Infrastructure.Media.Persistence;
 namespace Prismedia.Infrastructure.Tests;
 
 public sealed class LibraryScanPathRulesTests {
+    [Fact]
+    public void UnixPathsPreserveCaseDistinctLibraryEntries() {
+        if (OperatingSystem.IsWindows()) {
+            return;
+        }
+
+        Assert.False(LibraryScanPathRules.IsDirectChildPath(
+            "/media/Bluey/episode.mp4",
+            "/media/bluey"));
+        Assert.False(LibraryScanPathRules.IsPathUnderRoot(
+            "/media/Bluey/episode.mp4",
+            "/media/bluey"));
+        Assert.False(LibraryScanPathRules.IsPathCoveredByExclusion(
+            "/media/Bluey/episode.mp4",
+            "/media/bluey"));
+    }
+
     [Theory]
     [InlineData("/media/root/movie.mp4", "/media/root", true)]
     [InlineData("/media/root/season/movie.mp4", "/media/root", false)]

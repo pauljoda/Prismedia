@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Prismedia.Application.Files;
 using Prismedia.Application.Jobs.Ports;
 using Prismedia.Application.Jobs.Scanning;
 using Prismedia.Infrastructure.Persistence;
@@ -28,6 +29,11 @@ public sealed class EfScanSnapshotStore(PrismediaDbContext db) : IScanSnapshotSt
         }
 
         var now = DateTimeOffset.UtcNow;
+        var existingRows = delta.Changed.Count > 0 || delta.Removed.Count > 0
+            ? await db.ScannedFiles
+                .Where(row => row.LibraryRootId == rootId && row.ScanKind == scanKind)
+                .ToArrayAsync(cancellationToken)
+            : [];
 
         foreach (var added in delta.Added) {
             db.ScannedFiles.Add(new ScannedFileRow {
@@ -42,12 +48,8 @@ public sealed class EfScanSnapshotStore(PrismediaDbContext db) : IScanSnapshotSt
 
         if (delta.Changed.Count > 0) {
             var changedByPath = delta.Changed.ToDictionary(
-                signature => signature.Path, StringComparer.OrdinalIgnoreCase);
-            var changedPaths = changedByPath.Keys.ToArray();
-            var existing = await db.ScannedFiles
-                .Where(row => row.LibraryRootId == rootId && row.ScanKind == scanKind && changedPaths.Contains(row.Path))
-                .ToArrayAsync(cancellationToken);
-            foreach (var row in existing) {
+                signature => signature.Path, FileSystemPathComparison.Comparer);
+            foreach (var row in existingRows) {
                 if (!changedByPath.TryGetValue(row.Path, out var signature)) {
                     continue;
                 }
@@ -59,10 +61,12 @@ public sealed class EfScanSnapshotStore(PrismediaDbContext db) : IScanSnapshotSt
         }
 
         if (delta.Removed.Count > 0) {
-            var removedPaths = delta.Removed.Select(signature => signature.Path).ToArray();
-            var toRemove = await db.ScannedFiles
-                .Where(row => row.LibraryRootId == rootId && row.ScanKind == scanKind && removedPaths.Contains(row.Path))
-                .ToArrayAsync(cancellationToken);
+            var removedPaths = delta.Removed
+                .Select(signature => signature.Path)
+                .ToHashSet(FileSystemPathComparison.Comparer);
+            var toRemove = existingRows
+                .Where(row => removedPaths.Contains(row.Path))
+                .ToArray();
             db.ScannedFiles.RemoveRange(toRemove);
         }
 

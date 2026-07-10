@@ -265,8 +265,7 @@ public sealed class LocalManagedFileStorage : IManagedFileStorage {
 
         while (!string.IsNullOrWhiteSpace(probe)) {
             var trimmed = Path.TrimEndingDirectorySeparator(probe);
-            if (trimmed.Length < root.Length ||
-                !trimmed.StartsWith(root, StringComparison.OrdinalIgnoreCase)) {
+            if (!FileSystemPathComparison.IsSameOrDescendant(root, trimmed)) {
                 break;
             }
 
@@ -275,7 +274,7 @@ public sealed class LocalManagedFileStorage : IManagedFileStorage {
                 throw new FileOperationException(ApiProblemCodes.InvalidPath, "Filesystem operations cannot traverse symlinks.");
             }
 
-            if (string.Equals(trimmed, root, StringComparison.OrdinalIgnoreCase)) {
+            if (FileSystemPathComparison.Equals(trimmed, root)) {
                 break;
             }
 

@@ -37,6 +37,7 @@ internal sealed class VideoSeriesKindMapper(PrismediaDbContext db) : IEntityKind
             Title = card.Title,
             ParentEntityId = card.ParentEntityId,
             SortOrder = card.SortOrder,
+            HasSourceMedia = card.HasSourceMedia,
             Capabilities = card.Capabilities,
             ChildrenByKind = card.ChildrenByKind,
             Relationships = card.Relationships,

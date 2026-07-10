@@ -18,13 +18,20 @@ namespace Prismedia.Domain.Entities;
 /// identify flow treats them as a single work and never walks into their own media file. The gate keys
 /// off the <em>parent</em> kind: an episode is a <c>video</c> (false) but is still identified because
 /// its parent season is a container.</param>
+/// <param name="supportsFileDeletion">
+/// Whether this kind is a safe root for the managed delete-files workflow. This is explicit rather
+/// than inferred from <paramref name="storageShape"/>: a structural volume may own a safe folder or
+/// archive path despite its <c>none</c> shape, while chapters and archive-entry pages must never delete
+/// the archive that contains their virtual member path.
+/// </param>
 [AttributeUsage(AttributeTargets.Field, AllowMultiple = false, Inherited = false)]
 public sealed class EntityKindMetaAttribute(
     EntityKindCategory category,
     EntityStorageShape storageShape,
     string groupLabel,
     Type? clrType = null,
-    bool enumeratesIdentifyChildren = false) : Attribute {
+    bool enumeratesIdentifyChildren = false,
+    bool supportsFileDeletion = false) : Attribute {
     /// <summary>Broad category for this kind.</summary>
     public EntityKindCategory Category { get; } = category;
 
@@ -42,4 +49,7 @@ public sealed class EntityKindMetaAttribute(
     /// identifiable. See the constructor parameter for the full rule.
     /// </summary>
     public bool EnumeratesIdentifyChildren { get; } = enumeratesIdentifyChildren;
+
+    /// <summary>Whether this kind can safely root the shared managed delete-files workflow.</summary>
+    public bool SupportsFileDeletion { get; } = supportsFileDeletion;
 }

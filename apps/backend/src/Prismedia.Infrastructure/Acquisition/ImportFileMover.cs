@@ -1,4 +1,5 @@
 using Prismedia.Application.Acquisition;
+using Prismedia.Application.Files;
 using Prismedia.Domain.Entities;
 
 namespace Prismedia.Infrastructure.Acquisition;
@@ -15,7 +16,7 @@ public sealed class ImportFileMover : IImportFileMover {
     public string ResolveExactTargetPath(string desiredTargetPath, IReadOnlyCollection<string> reservedTargetPaths) {
         var reserved = reservedTargetPaths
             .Select(Path.GetFullPath)
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            .ToHashSet(FileSystemPathComparison.Comparer);
         return ResolveCollision(desiredTargetPath, reserved);
     }
 

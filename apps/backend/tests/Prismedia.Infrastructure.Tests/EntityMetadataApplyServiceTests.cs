@@ -829,6 +829,52 @@ public sealed class EntityMetadataApplyServiceTests {
     }
 
     [Fact]
+    public async Task ApplyStagesRemoteArtworkBeforeEnteringEntityLifecycleLease() {
+        await using var db = CreateContext();
+        var entityId = Guid.NewGuid();
+        SeedEntity(db, entityId, "book", "Staged artwork");
+        await db.SaveChangesAsync();
+        var lease = new ObservingLifecycleLease();
+        var imageHandler = new LeaseObservingImageHandler(() => lease.InsideLease);
+        var cacheRoot = Path.Combine(Path.GetTempPath(), $"prismedia-staged-artwork-{Guid.NewGuid():N}");
+        var imageUrl = "https://example.test/staged-cover.jpg";
+        var proposal = new EntityMetadataProposal(
+            "provider:book:staged",
+            "provider",
+            ProposalKind.Book,
+            1,
+            "external-id",
+            EmptyPatch(),
+            [new ImageCandidate("cover", imageUrl, "provider", null, null, null, null)],
+            [],
+            [],
+            TargetEntityId: entityId);
+
+        try {
+            var service = new EntityMetadataApplyService(
+                db,
+                new PluginArtworkServiceOptions(cacheRoot),
+                new HttpClient(imageHandler),
+                lifecycle: lease);
+
+            Assert.True(await service.ApplyAsync(
+                entityId,
+                proposal,
+                ["images"],
+                new Dictionary<string, string?> { ["cover"] = imageUrl },
+                CancellationToken.None));
+
+            Assert.True(imageHandler.WasCalled);
+            Assert.False(imageHandler.ObservedInsideLease);
+            Assert.False(lease.InsideLease);
+        } finally {
+            if (Directory.Exists(cacheRoot)) {
+                Directory.Delete(cacheRoot, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
     public async Task ApplySeriesCascadeReplacesExistingSeasonPosterArtwork() {
         await using var db = CreateContext();
         var seriesId = Guid.Parse("39393939-3939-3939-3939-393939393939");
@@ -2100,6 +2146,38 @@ public sealed class EntityMetadataApplyServiceTests {
             return Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.OK) {
                 Content = new ByteArrayContent([1, 2, 3])
             });
+        }
+    }
+
+    private sealed class LeaseObservingImageHandler(Func<bool> insideLease) : HttpMessageHandler {
+        public bool WasCalled { get; private set; }
+        public bool ObservedInsideLease { get; private set; }
+
+        protected override Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken) {
+            WasCalled = true;
+            ObservedInsideLease |= insideLease();
+            return Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.OK) {
+                Content = new ByteArrayContent([1, 2, 3])
+            });
+        }
+    }
+
+    private sealed class ObservingLifecycleLease : IEntityLifecycleMutationLease {
+        public bool InsideLease { get; private set; }
+
+        public async Task<bool> ExecuteAsync(
+            Guid entityId,
+            Func<CancellationToken, Task> mutation,
+            CancellationToken cancellationToken) {
+            InsideLease = true;
+            try {
+                await mutation(cancellationToken);
+                return true;
+            } finally {
+                InsideLease = false;
+            }
         }
     }
 }

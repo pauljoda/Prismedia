@@ -1,4 +1,5 @@
 using Prismedia.Application.Plugins;
+using Prismedia.Application.Requests;
 using Prismedia.Contracts.Plugins;
 using Prismedia.Domain.Entities;
 using Prismedia.Infrastructure.Plugins;
@@ -50,7 +51,7 @@ public sealed class PluginIdentityRouterTests {
     }
 
     [Fact]
-    public async Task MonitorTrackingProjectsTheIdentityNamespaceNotThePluginId() {
+    public async Task MonitorTrackingReturnsTheSingleStablePluginIdForALegacyEntity() {
         var router = Router(Provider(
             "cinema-metadata",
             enabled: true,
@@ -60,13 +61,41 @@ public sealed class PluginIdentityRouterTests {
                 ["tmdb"])));
         var tracking = new PluginProviderTrackingCatalog(router);
 
-        var namespaces = await tracking.TrackableProvidersAsync(
+        var providers = await tracking.TrackableProvidersAsync(
             EntityKindRegistry.VideoSeries.Code,
             [new ExternalIdentity("tmdb", "123")],
             providerIdentity: null,
             CancellationToken.None);
 
-        Assert.Equal(["tmdb"], namespaces);
+        Assert.Equal(["cinema-metadata"], providers);
+    }
+
+    [Fact]
+    public async Task MonitorTrackingRejectsAnAmbiguousLegacyEntityWithoutAStablePluginBinding() {
+        var identity = new ExternalIdentity("tmdb", "123");
+        var tracking = new PluginProviderTrackingCatalog(Router(
+            Provider(
+                "alpha-provider",
+                enabled: true,
+                new PluginEntitySupport(
+                    EntityKindRegistry.VideoSeries.Code,
+                    [IdentifyAction.LookupId.ToCode()],
+                    [identity.Namespace])),
+            Provider(
+                "zeta-provider",
+                enabled: true,
+                new PluginEntitySupport(
+                    EntityKindRegistry.VideoSeries.Code,
+                    [IdentifyAction.LookupId.ToCode()],
+                    [identity.Namespace]))));
+
+        var providers = await tracking.TrackableProvidersAsync(
+            EntityKindRegistry.VideoSeries.Code,
+            [identity],
+            providerIdentity: null,
+            CancellationToken.None);
+
+        Assert.Empty(providers);
     }
 
     [Fact]
@@ -116,6 +145,41 @@ public sealed class PluginIdentityRouterTests {
             CancellationToken.None);
 
         Assert.Empty(unavailableBinding);
+    }
+
+    [Fact]
+    public async Task BatchMonitorTrackingResolvesOncePerEntityKindAndKeepsBindingsExact() {
+        var tmdbOne = new ExternalIdentity("tmdb", "1");
+        var tmdbTwo = new ExternalIdentity("tmdb", "2");
+        var counting = new CountingIdentityRouter(Router(Provider(
+            "cinema-metadata",
+            enabled: true,
+            new PluginEntitySupport(
+                EntityKindRegistry.VideoSeries.Code,
+                [IdentifyAction.LookupId.ToCode()],
+                ["tmdb"]))));
+        var tracking = new PluginProviderTrackingCatalog(counting);
+        var firstId = Guid.NewGuid();
+        var secondId = Guid.NewGuid();
+
+        var result = await tracking.TrackableProvidersBatchAsync(
+            [
+                new ProviderTrackingQuery(
+                    firstId,
+                    EntityKindRegistry.VideoSeries.Code,
+                    [tmdbOne],
+                    new PluginIdentityRoute("cinema-metadata", tmdbOne)),
+                new ProviderTrackingQuery(
+                    secondId,
+                    EntityKindRegistry.VideoSeries.Code,
+                    [tmdbTwo],
+                    ProviderIdentity: null)
+            ],
+            CancellationToken.None);
+
+        Assert.Equal(1, counting.CallCount);
+        Assert.Equal(["cinema-metadata"], result[firstId]);
+        Assert.Equal(["cinema-metadata"], result[secondId]);
     }
 
     [Fact]
@@ -239,5 +303,18 @@ public sealed class PluginIdentityRouterTests {
 
         public Task<IReadOnlyList<StashScraperListing>> ListStashScrapersAsync(CancellationToken cancellationToken) =>
             throw new NotSupportedException();
+    }
+
+    private sealed class CountingIdentityRouter(IPluginIdentityRouter inner) : IPluginIdentityRouter {
+        public int CallCount { get; private set; }
+
+        public Task<IReadOnlyList<PluginIdentityRoute>> ResolveAsync(
+            string entityKindCode,
+            IdentifyAction action,
+            IReadOnlyList<ExternalIdentity> identities,
+            CancellationToken cancellationToken) {
+            CallCount++;
+            return inner.ResolveAsync(entityKindCode, action, identities, cancellationToken);
+        }
     }
 }

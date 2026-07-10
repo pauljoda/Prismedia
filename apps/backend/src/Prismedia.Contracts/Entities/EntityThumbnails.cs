@@ -59,9 +59,10 @@ public sealed record EntityThumbnail(
     public bool IsWanted { get; init; }
 
     /// <summary>
-    /// True when the entity owns a source-media row. Artwork, thumbnails, and generated cache assets
-    /// do not count. This compact fact lets local EntityGrids apply the same availability filter as
-    /// the server-backed library index without hydrating the full files capability.
+    /// True when the entity or any structural descendant owns a source-media row. Artwork,
+    /// thumbnails, and generated cache assets do not count. This compact fact lets local EntityGrids
+    /// apply the same availability filter as the server-backed library index without hydrating the
+    /// full files capability.
     /// </summary>
     public bool HasSourceMedia { get; init; }
 
@@ -71,6 +72,14 @@ public sealed record EntityThumbnail(
     /// invariant violations visible to availability filters.
     /// </summary>
     public AcquisitionStatus? LatestAcquisitionStatus { get; init; }
+
+    /// <summary>
+    /// Distinct availability states across this Entity's structural subtree: the latest direct
+    /// acquisition per Entity plus active/latest upgrade-descendant work. Clients should use membership
+    /// in this set for availability filters while retaining <see cref="LatestAcquisitionStatus"/> for the
+    /// existing single-status badge.
+    /// </summary>
+    public IReadOnlyList<AcquisitionStatus> AcquisitionStatuses { get; init; } = [];
 
     /// <summary>
     /// For a wanted placeholder, the status of its latest acquisition — so a grid can show what the

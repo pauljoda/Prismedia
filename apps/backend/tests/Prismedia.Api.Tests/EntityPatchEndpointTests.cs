@@ -4,6 +4,7 @@ using System.Text.Json;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Prismedia.Infrastructure.Serialization;
 using Prismedia.Application.Entities;
 using Prismedia.Application.Playback;
@@ -253,6 +254,10 @@ public sealed class EntityPatchEndpointTests {
                         provider.GetRequiredService<FakeEntityWriteRepository>());
                     services.AddScoped<IPlaybackEventStore>(provider =>
                         provider.GetRequiredService<RecordingPlaybackEventStore>());
+                    services.RemoveAll<IEntitySourceOwnershipReader>();
+                    services.AddSingleton<IEntitySourceOwnershipReader>(new NoEntityOwnershipReader());
+                    services.RemoveAll<IEntityFileDeletionRecoveryReader>();
+                    services.AddSingleton<IEntityFileDeletionRecoveryReader>(new NoEntityOwnershipReader());
                 });
             })
             .WithTestAuth();
@@ -324,6 +329,15 @@ public sealed class EntityPatchEndpointTests {
                 ChildrenByKind = [],
                 Relationships = []
             };
+    }
+
+    private sealed class NoEntityOwnershipReader :
+        IEntitySourceOwnershipReader,
+        IEntityFileDeletionRecoveryReader {
+        public Task<IReadOnlySet<Guid>> ResolveAsync(
+            IReadOnlyCollection<Guid> entityIds,
+            CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlySet<Guid>>(new HashSet<Guid>());
     }
 
     private sealed class FakeEntityWriteRepository : IEntityWriteRepository {

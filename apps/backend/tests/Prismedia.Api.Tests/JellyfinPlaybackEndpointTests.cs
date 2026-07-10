@@ -391,6 +391,11 @@ public sealed class JellyfinPlaybackEndpointTests : IDisposable {
                         services.AddSingleton(writeRepository);
                     }
 
+                    services.RemoveAll<IEntitySourceOwnershipReader>();
+                    services.AddSingleton<IEntitySourceOwnershipReader>(new NoEntityOwnershipReader());
+                    services.RemoveAll<IEntityFileDeletionRecoveryReader>();
+                    services.AddSingleton<IEntityFileDeletionRecoveryReader>(new NoEntityOwnershipReader());
+
                     services.AddSingleton(playback ?? new FakePlaybackInfoService(null));
                     services.AddSingleton(hls ?? new RecordingHlsAssetService(null));
                     services.AddSingleton(trickplay ?? new FakeTrickplayService(null, null));
@@ -565,6 +570,15 @@ public sealed class JellyfinPlaybackEndpointTests : IDisposable {
 
         public Task AppendAsync(PlaybackEventAppend entry, CancellationToken cancellationToken) =>
             StageAsync(entry, cancellationToken);
+    }
+
+    private sealed class NoEntityOwnershipReader :
+        IEntitySourceOwnershipReader,
+        IEntityFileDeletionRecoveryReader {
+        public Task<IReadOnlySet<Guid>> ResolveAsync(
+            IReadOnlyCollection<Guid> entityIds,
+            CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlySet<Guid>>(new HashSet<Guid>());
     }
 
     private sealed class PlaybackEntityWriteRepository : IEntityWriteRepository {

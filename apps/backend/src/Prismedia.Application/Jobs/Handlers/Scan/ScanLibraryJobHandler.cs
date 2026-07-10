@@ -1,6 +1,7 @@
 using Prismedia.Application.Jobs.Handlers;
 using Microsoft.Extensions.Logging;
 using Prismedia.Application.Acquisition;
+using Prismedia.Application.Files;
 using Prismedia.Application.Jobs.Ports;
 using Prismedia.Application.Jobs.Scanning;
 using Prismedia.Domain.Entities;
@@ -52,6 +53,113 @@ public sealed class ScanLibraryJobHandler(
         AutoIdentifyScanEnqueue.EnqueueExistingRootsForUnchangedScanAsync(
             context, Roots, downstreamNeeds, root, ScanCategories, cancellationToken);
 
+    /// <summary>
+    /// Materializes only one movie import's exact files through the video scanner's canonical
+    /// classification, wanted binding, batch upsert, and downstream planning. No root-wide stale
+    /// cleanup runs, so the import cannot remove unrelated videos while proving its own readiness.
+    /// </summary>
+    public async Task MaterializeImportedPathsAsync(
+        JobContext context,
+        Guid acquisitionId,
+        LibraryRootData root,
+        IReadOnlyList<string> placedPaths,
+        CancellationToken cancellationToken) {
+        if (!root.Enabled || !root.ScanVideos) {
+            throw new InvalidOperationException("The imported movie no longer belongs to an enabled video library root.");
+        }
+
+        await using var scanLease = scanGate is null ? null : await scanGate.EnterAsync(cancellationToken);
+        var files = placedPaths.Select(Path.GetFullPath).ToArray();
+        var settings = await Roots.GetSettingsAsync(cancellationToken);
+        if (!root.AutoIdentify) {
+            settings = settings with { AutoIdentifyEnabled = false };
+        }
+
+        var items = new List<VideoUpsertItem>(files.Length);
+        foreach (var filePath in files) {
+            var sidecar = sidecars is null
+                ? null
+                : await sidecars.ReadAsync(filePath, cancellationToken);
+            var item = BuildVideoUpsertItem(filePath, root, files, sidecar);
+            await VideoWantedBinding.BindAsync(
+                acquisitionHints,
+                item,
+                cancellationToken,
+                acquisitionId);
+            items.Add(item);
+        }
+
+        var failedPaths = new List<string>();
+        var (entityIds, persistedItems) = await UpsertBatchWithIsolationAsync(
+            items,
+            failedPaths,
+            cancellationToken);
+        if (failedPaths.Count > 0 || entityIds.Count != items.Count) {
+            throw new InvalidOperationException("One or more imported movie files could not be persisted.");
+        }
+
+        if (scanMetadata is not null) {
+            for (var index = 0; index < persistedItems.Count; index++) {
+                if (persistedItems[index].Metadata is not { } metadata) {
+                    continue;
+                }
+
+                await scanMetadata.ApplyVideoSidecarMetadataAsync(
+                    entityIds[index],
+                    metadata,
+                    Path.GetFileNameWithoutExtension(persistedItems[index].FilePath),
+                    persistedItems[index].IsNsfw,
+                    cancellationToken);
+            }
+        }
+
+        var needs = await downstreamNeeds.CheckDownstreamNeedsBatchAsync(entityIds, cancellationToken);
+        var downstreamJobs = new List<EnqueueJobRequest>();
+        for (var index = 0; index < entityIds.Count; index++) {
+            if (needs.TryGetValue(entityIds[index], out var entityNeeds)) {
+                downstreamJobs.AddRange(VideoDownstreamJobPlanner.Build(
+                    settings,
+                    entityIds[index],
+                    persistedItems[index].FilePath,
+                    entityNeeds));
+            }
+        }
+
+        if (downstreamJobs.Count > 0) {
+            await ImportedMaterializationHousekeeping.TryAsync(
+                logger,
+                "Imported movie is ready but its downstream jobs could not be queued.",
+                () => context.EnqueueBatchAsync(downstreamJobs, cancellationToken));
+        }
+
+        if (acquisitionHints is not null) {
+            var owners = await acquisitionHints.ApplyToFolderOwnersAsync(
+                cancellationToken,
+                acquisitionId);
+            foreach (var owner in owners) {
+                await ImportedMaterializationHousekeeping.TryAsync(
+                    logger,
+                    "Imported movie is ready but its identify job could not be queued.",
+                    () => context.EnqueueIfNeededAsync(new EnqueueJobRequest(
+                        JobType.AutoIdentify,
+                        TargetEntityKind: owner.TopLevelKindCode,
+                        TargetEntityId: owner.TopLevelEntityId.ToString(),
+                        TargetLabel: owner.TopLevelTitle,
+                        Priority: JobPriorities.AutoIdentify), cancellationToken));
+            }
+        }
+
+        await ImportedMaterializationHousekeeping.TryAsync(
+            logger,
+            "Imported movie is ready but automatic identification housekeeping could not be queued.",
+            () => AutoIdentifyScanEnqueue.EnqueueRootsAsync(
+                context,
+                settings,
+                downstreamNeeds,
+                entityIds,
+                cancellationToken));
+    }
+
     protected override async Task<ScanRootOutcome> ScanRootCoreAsync(
         JobContext context, LibraryRootData root, CancellationToken cancellationToken) {
         var timer = new JobPhaseTimer();
@@ -75,8 +183,8 @@ public sealed class ScanLibraryJobHandler(
         // persistence failed are skipped, so downstream label lookups cannot index `files` directly.
         var scannedPaths = new List<string>(files.Count);
         var failedPaths = new List<string>();
-        var validPaths = new HashSet<string>(files.Count, StringComparer.OrdinalIgnoreCase);
-        var validMovieFolders = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var validPaths = new HashSet<string>(files.Count, FileSystemPathComparison.Comparer);
+        var validMovieFolders = new HashSet<string>(FileSystemPathComparison.Comparer);
 
         using (timer.Phase("upsert")) {
             for (var batchStart = 0; batchStart < files.Count; batchStart += BatchSize) {
@@ -458,10 +566,9 @@ public sealed class ScanLibraryJobHandler(
     }
 
     private static bool SamePath(string left, string right) =>
-        string.Equals(
+        FileSystemPathComparison.Equals(
             Path.TrimEndingDirectorySeparator(left),
-            Path.TrimEndingDirectorySeparator(right),
-            StringComparison.OrdinalIgnoreCase);
+            Path.TrimEndingDirectorySeparator(right));
 
     private static bool IsPathUnderRoot(string path, string rootPath) {
         var relative = Path.GetRelativePath(

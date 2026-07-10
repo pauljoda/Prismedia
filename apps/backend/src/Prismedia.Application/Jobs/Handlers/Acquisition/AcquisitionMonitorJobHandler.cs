@@ -178,7 +178,19 @@ public sealed class AcquisitionMonitorJobHandler(
                 // verifies the new file and atomically swaps it in. An ordinary acquisition imports normally.
                 var isUpgrade = await acquisitions.GetUpgradeOwnedQualityAsync(transfer.AcquisitionId, cancellationToken) is not null;
                 var completionJob = isUpgrade ? JobType.AcquisitionUpgradeReplace : JobType.AcquisitionImport;
-                await acquisitions.SetStatusAsync(transfer.AcquisitionId, AcquisitionStatus.Downloaded, "Download complete; importing.", cancellationToken);
+                if (transfer.AcquisitionStatus != AcquisitionStatus.Downloaded) {
+                    if (!await acquisitions.TryTransitionStatusAsync(
+                            transfer.AcquisitionId,
+                            [transfer.AcquisitionStatus],
+                            AcquisitionStatus.Downloaded,
+                            "Download complete; importing.",
+                            cancellationToken)) {
+                        return;
+                    }
+                }
+                // Downloaded is the durable handoff ticket. If enqueue fails or the process dies here, the
+                // scheduler reconciles this status into the same ordinary-import or upgrade-replace job
+                // through target deduplication; transfer polling does not need to remain active.
                 await context.EnqueueIfNeededAsync(
                     new EnqueueJobRequest(
                         completionJob,
@@ -225,7 +237,12 @@ public sealed class AcquisitionMonitorJobHandler(
             }
 
             if (transfer.AcquisitionStatus != AcquisitionStatus.Downloading) {
-                await acquisitions.SetStatusAsync(transfer.AcquisitionId, AcquisitionStatus.Downloading, null, cancellationToken);
+                await acquisitions.TryTransitionStatusAsync(
+                    transfer.AcquisitionId,
+                    [transfer.AcquisitionStatus],
+                    AcquisitionStatus.Downloading,
+                    null,
+                    cancellationToken);
             }
 
             return;
@@ -255,7 +272,12 @@ public sealed class AcquisitionMonitorJobHandler(
         // Still within the grace window: keep waiting, but make sure it reads as actively downloading (a fresh
         // transfer can stall straight out of Queued) rather than silently sitting.
         if (transfer.AcquisitionStatus != AcquisitionStatus.Downloading) {
-            await acquisitions.SetStatusAsync(transfer.AcquisitionId, AcquisitionStatus.Downloading, null, cancellationToken);
+            await acquisitions.TryTransitionStatusAsync(
+                transfer.AcquisitionId,
+                [transfer.AcquisitionStatus],
+                AcquisitionStatus.Downloading,
+                null,
+                cancellationToken);
         }
     }
 
@@ -315,6 +337,15 @@ public sealed class AcquisitionMonitorJobHandler(
     /// </summary>
     private async Task FallBackToSearchAsync(JobContext context, Guid acquisitionId, CancellationToken cancellationToken) {
         const string message = "The download was removed from the client; searching for a release again.";
+        if (!await acquisitions.TryTransitionStatusAsync(
+                acquisitionId,
+                [AcquisitionStatus.Queued, AcquisitionStatus.Downloading],
+                AcquisitionStatus.Searching,
+                message,
+                cancellationToken)) {
+            return;
+        }
+
         var input = await acquisitions.GetSearchInputAsync(acquisitionId, cancellationToken);
         var selected = await acquisitions.GetSelectedReleaseAsync(acquisitionId, cancellationToken);
         await history.SafeAddAsync(logger, new AcquisitionHistoryEntry(
@@ -328,9 +359,8 @@ public sealed class AcquisitionMonitorJobHandler(
             Message: message),
             cancellationToken);
 
-        // The status change must precede the enqueue: the search handler skips non-searchable statuses
-        // (Queued/Downloading among them), exactly to protect live grabs from stale monitor searches.
-        await acquisitions.SetStatusAsync(acquisitionId, AcquisitionStatus.Searching, message, cancellationToken);
+        // The compare-and-swap above must precede the enqueue: a Stopping claim wins atomically and leaves
+        // no stale search job behind after exact job cancellation.
         await context.EnqueueIfNeededAsync(
             new EnqueueJobRequest(
                 JobType.AcquisitionSearch,
@@ -349,6 +379,10 @@ public sealed class AcquisitionMonitorJobHandler(
     /// most once.
     /// </summary>
     private async Task EnqueueFailedHandleAsync(JobContext context, Guid acquisitionId, BlocklistReason reason, string message, CancellationToken cancellationToken) {
+        if (await acquisitions.GetStatusAsync(acquisitionId, cancellationToken) == AcquisitionStatus.Stopping) {
+            return;
+        }
+
         var selected = await acquisitions.GetSelectedReleaseAsync(acquisitionId, cancellationToken);
         await context.EnqueueIfNeededAsync(
             new EnqueueJobRequest(

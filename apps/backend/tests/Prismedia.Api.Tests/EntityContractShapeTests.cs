@@ -1,16 +1,19 @@
 using System.Reflection;
+using System.Text.Json;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.Metadata;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
 using Prismedia.Contracts.Collections;
+using Prismedia.Contracts.Acquisition;
 using Prismedia.Contracts.Entities;
 using Prismedia.Contracts.Media;
 using Prismedia.Contracts.Movies;
 using Prismedia.Contracts.Series;
 using Prismedia.Contracts.Taxonomy;
 using Prismedia.Contracts.Videos;
+using Prismedia.Domain.Entities;
 
 namespace Prismedia.Api.Tests;
 
@@ -29,6 +32,7 @@ public sealed class EntityContractShapeTests {
             (nameof(IEntityRef.Kind), typeof(Prismedia.Domain.Entities.EntityKind)));
         AssertDeclaredProperties(
             typeof(IEntitySummary),
+            (nameof(IEntitySummary.HasSourceMedia), typeof(bool)),
             (nameof(IEntitySummary.ParentEntityId), typeof(Guid?)),
             (nameof(IEntitySummary.SortOrder), typeof(int?)),
             (nameof(IEntitySummary.Title), typeof(string)));
@@ -75,6 +79,7 @@ public sealed class EntityContractShapeTests {
             ["GetAudioLibrary"] = typeof(AudioLibraryDetail),
             ["GetMusicArtist"] = typeof(MusicArtistDetail),
             ["GetBookAuthor"] = typeof(BookAuthorDetail),
+            ["GetEntityMonitorStates"] = typeof(EntityMonitorStateView[]),
         };
 
         foreach (var (endpointName, responseType) in expectedResponses) {
@@ -90,6 +95,31 @@ public sealed class EntityContractShapeTests {
         Assert.Equal(
             typeof(IReadOnlyList<EntityThumbnail>),
             typeof(EntityListResponse).GetProperty(nameof(EntityListResponse.Items))!.PropertyType);
+    }
+
+    [Fact]
+    public async Task OpenApiKeepsCodecEnumCollectionsTyped() {
+        using var factory = new WebApplicationFactory<Program>();
+        using var client = factory.CreateClient();
+        using var document = JsonDocument.Parse(await client.GetStringAsync("/openapi/v1.json"));
+
+        var items = document.RootElement
+            .GetProperty("components")
+            .GetProperty("schemas")
+            .GetProperty(nameof(EntityThumbnail))
+            .GetProperty("properties")
+            .GetProperty("acquisitionStatuses")
+            .GetProperty("items");
+
+        Assert.Equal("string", items.GetProperty("type").GetString());
+        Assert.Equal(
+            Enum.GetValues<Prismedia.Domain.Entities.AcquisitionStatus>()
+                .Select(status => status.ToCode())
+                .Order(StringComparer.Ordinal),
+            items.GetProperty("enum")
+                .EnumerateArray()
+                .Select(value => value.GetString())
+                .Order(StringComparer.Ordinal));
     }
 
     private static Type[] DirectEntityContractInterfaces(Type type) {

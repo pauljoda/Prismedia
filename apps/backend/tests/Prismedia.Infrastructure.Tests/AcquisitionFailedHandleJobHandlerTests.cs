@@ -28,6 +28,7 @@ public sealed class AcquisitionFailedHandleJobHandlerTests {
         var blocklisted = await new EfAcquisitionBlocklistStore(db).GetIdentitiesAsync(CancellationToken.None);
         Assert.Contains(candidateA.Identity, blocklisted);
         Assert.Equal((acquisitionId, candidateB.CandidateId), Assert.Single(queue.Calls));
+        Assert.Equal(AcquisitionStatus.Failed, Assert.Single(queue.RequiredStatuses));
     }
 
     [Fact]
@@ -134,6 +135,51 @@ public sealed class AcquisitionFailedHandleJobHandlerTests {
     }
 
     [Fact]
+    public async Task StaleFailedHandlerCannotOverwriteCancellationOrBlocklist() {
+        await using var db = CreateContext();
+        var (acquisitionId, candidateA, _) = await SeedTwoCandidatesAsync(db, autoRedownload: true);
+        Assert.True(await AcquisitionTestFactory.Store(db).TryTransitionStatusAsync(
+            acquisitionId,
+            [AcquisitionStatus.Downloading],
+            AcquisitionStatus.Cancelled,
+            "Cancelled.",
+            CancellationToken.None));
+        var queue = new RecordingQueueService();
+
+        await RunAsync(db, queue, acquisitionId, Selected(candidateA));
+
+        Assert.Equal(AcquisitionStatus.Cancelled, await StatusOf(db, acquisitionId));
+        Assert.Empty(await new EfAcquisitionBlocklistStore(db).GetIdentitiesAsync(CancellationToken.None));
+        Assert.Empty(queue.Calls);
+        Assert.Empty(await new EfAcquisitionHistoryStore(db).ListAsync(
+            200,
+            entityId: null,
+            CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task CancellationDuringRecoveryWinsOverTheFallbackFailedFinish() {
+        await using var db = CreateContext();
+        var (acquisitionId, candidateA, _) = await SeedTwoCandidatesAsync(db, autoRedownload: true);
+        var queue = new RecordingQueueService {
+            BeforeQueue = async () => {
+                Assert.True(await AcquisitionTestFactory.Store(db).TryTransitionStatusAsync(
+                    acquisitionId,
+                    [AcquisitionStatus.Failed],
+                    AcquisitionStatus.Cancelled,
+                    "Cancelled.",
+                    CancellationToken.None));
+            },
+            Failure = new IOException("queue interrupted")
+        };
+
+        await RunAsync(db, queue, acquisitionId, Selected(candidateA));
+
+        Assert.Equal(AcquisitionStatus.Cancelled, await StatusOf(db, acquisitionId));
+        Assert.Equal(AcquisitionStatus.Failed, Assert.Single(queue.RequiredStatuses));
+    }
+
+    [Fact]
     public async Task ListAcceptedCandidatesReturnsAcceptedOnlyBestFirst() {
         await using var db = CreateContext();
         var now = DateTimeOffset.UtcNow;
@@ -158,6 +204,13 @@ public sealed class AcquisitionFailedHandleJobHandlerTests {
         await db.Acquisitions.AsNoTracking().Where(row => row.Id == acquisitionId).Select(row => row.Status).FirstAsync();
 
     private static async Task RunAsync(PrismediaDbContext db, IAcquisitionQueueService queue, Guid acquisitionId, SelectedRelease? selected) {
+        if (selected is not null) {
+            await AcquisitionTestFactory.Store(db).SetSelectedReleaseAsync(
+                acquisitionId,
+                selected,
+                CancellationToken.None);
+        }
+
         var handler = new AcquisitionFailedHandleJobHandler(
             AcquisitionTestFactory.Store(db),
             new EfAcquisitionBlocklistStore(db),
@@ -224,10 +277,26 @@ public sealed class AcquisitionFailedHandleJobHandlerTests {
 
     private sealed class RecordingQueueService : IAcquisitionQueueService {
         public List<(Guid AcquisitionId, Guid CandidateId)> Calls { get; } = [];
+        public List<AcquisitionStatus?> RequiredStatuses { get; } = [];
+        public Func<Task>? BeforeQueue { get; init; }
+        public Exception? Failure { get; init; }
 
-        public Task<AcquisitionDetail?> QueueAsync(Guid acquisitionId, Guid candidateId, CancellationToken cancellationToken, bool manualPick = false) {
+        public async Task<AcquisitionDetail?> QueueAsync(
+            Guid acquisitionId,
+            Guid candidateId,
+            CancellationToken cancellationToken,
+            bool manualPick = false,
+            AcquisitionStatus? requiredStatus = null) {
             Calls.Add((acquisitionId, candidateId));
-            return Task.FromResult<AcquisitionDetail?>(null);
+            RequiredStatuses.Add(requiredStatus);
+            if (BeforeQueue is not null) {
+                await BeforeQueue();
+            }
+            if (Failure is not null) {
+                throw Failure;
+            }
+
+            return null;
         }
     }
 

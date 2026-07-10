@@ -3,16 +3,6 @@ using Prismedia.Domain.Entities;
 
 namespace Prismedia.Application.Requests;
 
-/// <summary>
-/// Searches plugin-backed metadata providers for one requestable kind at request time, returning
-/// results carrying a persistent external identity so a Prismedia-direct acquisition can capture it.
-/// Kind behavior (which plugin kind to query, container gating) comes from the descriptor.
-/// </summary>
-public interface IRequestMetadataSearchSource {
-    /// <summary>Search results for one request kind across enabled capable plugin providers. Empty when none are configured.</summary>
-    Task<IReadOnlyList<RequestSearchResult>> SearchAsync(RequestKindDescriptor descriptor, string query, bool hideNsfw, CancellationToken cancellationToken);
-}
-
 /// <summary>Runs one schema-driven request search through an explicitly selected plugin.</summary>
 public interface IPluginRequestSearchSource {
     /// <summary>Searches one plugin without falling through to other providers.</summary>
@@ -46,19 +36,6 @@ public interface IRequestMetadataEnricher {
 }
 
 /// <summary>
-/// Produces a provider-detail view for a plugin-sourced request, so discovery routes through a single
-/// detail → select → request page. The detail reuses the plugin LookupId path with structural children,
-/// so a container surfaces its works (an author's books, an artist's albums) as selectable child options.
-/// </summary>
-public interface IPluginRequestDetailSource {
-    /// <summary>
-    /// Builds the request detail for an identity-qualified id (<c>"namespace:value"</c>) of the given
-    /// kind, or null when the provider can't resolve it.
-    /// </summary>
-    Task<RequestDetailResponse?> GetDetailAsync(RequestKindDescriptor descriptor, string externalId, bool hideNsfw, CancellationToken cancellationToken);
-}
-
-/// <summary>
 /// Resolves a complete request-review proposal through the exact plugin selected during search.
 /// </summary>
 public interface IPluginRequestReviewSource {
@@ -87,39 +64,6 @@ public sealed class RequestCommitValidationException(string message) : ArgumentE
 /// <summary>Raised when the proposal changed after the user reviewed it and before commit.</summary>
 public sealed class RequestProposalChangedException()
     : InvalidOperationException("The request details changed after review. Review the updated proposal before requesting it.");
-
-/// <summary>
-/// Aggregates request searches across the requestable kinds. Prismedia fulfils all requests itself
-/// through its plugin-backed acquisition pipeline, so results come from plugin metadata providers.
-/// </summary>
-public sealed class RequestSearchService(IRequestMetadataSearchSource source) {
-    public async Task<RequestSearchResponse> SearchAsync(RequestSearchRequest request, CancellationToken cancellationToken) {
-        if (string.IsNullOrWhiteSpace(request.Query)) {
-            return new RequestSearchResponse([], []);
-        }
-
-        // Unit kinds (seasons, episodes) exist only inside their parent's flow — an "all kinds"
-        // search never queries them, and asking for one explicitly is refused the same way.
-        var kinds = (request.Kinds.Count == 0
-            ? RequestKindRegistry.All
-            : request.Kinds.Select(RequestKindRegistry.Find).Where(d => d is not null).Select(d => d!).ToArray())
-            .Where(descriptor => descriptor.Discoverable)
-            .ToArray();
-
-        var results = new List<RequestSearchResult>();
-        var errors = new List<RequestProviderHealth>();
-        foreach (var descriptor in kinds) {
-            try {
-                results.AddRange(await source.SearchAsync(descriptor, request.Query, request.HideNsfw, cancellationToken));
-            } catch (Exception ex) when (ex is not OperationCanceledException) {
-                errors.Add(new RequestProviderHealth(
-                    Guid.Empty, RequestProviderKind.Plugin, $"{descriptor.Kind.ToCode()} providers", ex.Message));
-            }
-        }
-
-        return new RequestSearchResponse(results, errors);
-    }
-}
 
 /// <summary>Coordinates one canonical schema-driven Discover search.</summary>
 public sealed class RequestPluginSearchService(IPluginRequestSearchSource source) {
@@ -154,20 +98,5 @@ public sealed class RequestPluginSearchService(IPluginRequestSearchSource source
                 [],
                 [new RequestProviderHealth(Guid.Empty, RequestProviderKind.Plugin, request.PluginId, ex.Message)]);
         }
-    }
-}
-
-/// <summary>Loads normalized detail metadata for a plugin-sourced request result of any requestable kind.</summary>
-public sealed class RequestDetailService(IPluginRequestDetailSource pluginDetail) {
-    public async Task<RequestDetailResponse?> GetAsync(RequestProviderKind source, RequestMediaKind kind, string externalId, Guid? serviceId, bool hideNsfw, CancellationToken cancellationToken) {
-        // All requests resolve through the plugin acquisition path; per-kind behavior comes from the
-        // registry. The caller's NSFW visibility is honored so a direct/bookmarked detail URL can't
-        // surface an NSFW-flagged provider's item.
-        _ = source;
-        _ = serviceId;
-        var descriptor = RequestKindRegistry.Find(kind);
-        return descriptor is null
-            ? null
-            : await pluginDetail.GetDetailAsync(descriptor, externalId, hideNsfw, cancellationToken);
     }
 }

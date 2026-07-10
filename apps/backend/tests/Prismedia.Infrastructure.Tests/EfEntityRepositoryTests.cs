@@ -244,7 +244,7 @@ public sealed class EfEntityRepositoryTests {
             new PluginIdentityRoute("cinema-metadata", new ExternalIdentity("tmdb", "603")),
             urlCall.Route);
         var capability = Assert.Single(
-            EntityCardProjector.ToCard(loaded).Capabilities.OfType<ProviderIdentityCapability>());
+            EntityCardProjector.ToCard(loaded, hasSourceBackedSubtree: false).Capabilities.OfType<ProviderIdentityCapability>());
         Assert.Equal("cinema-metadata", capability.PluginId);
         Assert.Equal("tmdb", capability.IdentityNamespace);
         Assert.Equal("603", capability.IdentityValue);
@@ -315,7 +315,7 @@ public sealed class EfEntityRepositoryTests {
         var call = Assert.Single(identityUrls.Calls);
         Assert.Equal(EntityKindRegistry.Video.Code, call.EntityKindCode);
         Assert.Equal(new PluginIdentityRoute("tmdb", identity), call.Route);
-        Assert.Single(EntityCardProjector.ToCard(loaded).Capabilities.OfType<ProviderIdentityCapability>());
+        Assert.Single(EntityCardProjector.ToCard(loaded, hasSourceBackedSubtree: false).Capabilities.OfType<ProviderIdentityCapability>());
     }
 
     [Fact]
@@ -343,7 +343,7 @@ public sealed class EfEntityRepositoryTests {
 
         Assert.Null(loaded.ProviderIdentity);
         Assert.Empty(identityUrls.Calls);
-        Assert.Empty(EntityCardProjector.ToCard(loaded).Capabilities.OfType<ProviderIdentityCapability>());
+        Assert.Empty(EntityCardProjector.ToCard(loaded, hasSourceBackedSubtree: false).Capabilities.OfType<ProviderIdentityCapability>());
     }
 
     [Fact]
@@ -378,7 +378,7 @@ public sealed class EfEntityRepositoryTests {
 
         Assert.Null(loaded.ProviderIdentity);
         Assert.Equal(0, router.CallCount);
-        Assert.Empty(EntityCardProjector.ToCard(loaded).Capabilities.OfType<ProviderIdentityCapability>());
+        Assert.Empty(EntityCardProjector.ToCard(loaded, hasSourceBackedSubtree: false).Capabilities.OfType<ProviderIdentityCapability>());
     }
 
     [Fact]

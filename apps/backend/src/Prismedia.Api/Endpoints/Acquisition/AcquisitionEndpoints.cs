@@ -520,29 +520,39 @@ public static class AcquisitionEndpoints {
             MonitorCreateRequest request,
             MonitorService monitors,
             CancellationToken cancellationToken) => {
-                var monitor = await monitors.StartAsync(request.AcquisitionId, cancellationToken);
-                return monitor is null
-                    ? Results.NotFound(new ApiProblem(ApiProblemCodes.AcquisitionNotFound, "Acquisition was not found."))
-                    : Results.Ok(monitor);
+                try {
+                    var monitor = await monitors.StartAsync(request.AcquisitionId, cancellationToken);
+                    return monitor is null
+                        ? Results.NotFound(new ApiProblem(ApiProblemCodes.AcquisitionNotFound, "Acquisition was not found."))
+                        : Results.Ok(monitor);
+                } catch (AcquisitionConfigurationException exception) {
+                    return Results.Conflict(new ApiProblem(exception.Code, exception.Message));
+                }
             })
             .WithName("StartMonitor")
             .WithSummary("Starts monitoring an acquisition so its release search is re-run until the item is acquired.")
             .Produces<MonitorView>()
-            .Produces<ApiProblem>(StatusCodes.Status404NotFound);
+            .Produces<ApiProblem>(StatusCodes.Status404NotFound)
+            .Produces<ApiProblem>(StatusCodes.Status409Conflict);
 
         group.MapPost("/entity", async (
             EntityMonitorCreateRequest request,
             MonitorService monitors,
             CancellationToken cancellationToken) => {
-                var monitor = await monitors.StartForEntityAsync(request.EntityId, request.Preset, cancellationToken);
-                return monitor is null
-                    ? Results.BadRequest(new ApiProblem(ApiProblemCodes.RequestInvalid, "The entity can't be monitored: it must be an author/artist-style container with a provider identity (run Identify first for scanned-in items)."))
-                    : Results.Ok(monitor);
+                try {
+                    var monitor = await monitors.StartForEntityAsync(request.EntityId, request.Preset, cancellationToken);
+                    return monitor is null
+                        ? Results.BadRequest(new ApiProblem(ApiProblemCodes.RequestInvalid, "The Entity can't be monitored: its kind must support requests and it must have a provider identity an enabled plugin can track (run Identify first for scanned-in items)."))
+                        : Results.Ok(monitor);
+                } catch (AcquisitionConfigurationException exception) {
+                    return Results.Conflict(new ApiProblem(exception.Code, exception.Message));
+                }
             })
             .WithName("StartEntityMonitor")
-            .WithSummary("Monitors a library container entity (author, artist) for new works; the daily sweep surfaces missing works as wanted placeholders.")
+            .WithSummary("Starts stable monitoring for any requestable Entity. Groupings discover children; leaves keep acquisition intent attached to the Entity id.")
             .Produces<MonitorView>()
-            .Produces<ApiProblem>(StatusCodes.Status400BadRequest);
+            .Produces<ApiProblem>(StatusCodes.Status400BadRequest)
+            .Produces<ApiProblem>(StatusCodes.Status409Conflict);
 
         group.MapGet("/for-entity/{entityId:guid}", async (
             Guid entityId,
@@ -554,7 +564,7 @@ public static class AcquisitionEndpoints {
                     : Results.Ok(monitor);
             })
             .WithName("GetEntityMonitor")
-            .WithSummary("Gets the container monitor watching a library entity, when one exists.")
+            .WithSummary("Gets the stable monitor targeting a library Entity, when one exists.")
             .Produces<MonitorView>()
             .Produces<ApiProblem>(StatusCodes.Status404NotFound);
 
@@ -564,20 +574,51 @@ public static class AcquisitionEndpoints {
             CancellationToken cancellationToken) =>
             monitors.GetEligibilityAsync(entityId, cancellationToken))
             .WithName("GetEntityMonitorEligibility")
-            .WithSummary("Whether the entity can carry a standing container monitor: it must be a monitorable container kind holding a provider identity an enabled metadata plugin can track (re-resolve by id).")
+            .WithSummary("Whether the Entity can be monitored: its kind must support requests and its provider identity must be trackable by an enabled metadata plugin.")
             .Produces<MonitorEligibilityView>();
+
+        group.MapPost("/states", async (
+            EntityMonitorStateRequest request,
+            MonitorService monitors,
+            CancellationToken cancellationToken) => {
+                if (request.EntityIds is null || request.EntityIds.Count == 0) {
+                    return Results.BadRequest(new ApiProblem(
+                        ApiProblemCodes.RequestInvalid,
+                        "Provide at least one Entity id."));
+                }
+                if (request.EntityIds.Count > 500) {
+                    return Results.BadRequest(new ApiProblem(
+                        ApiProblemCodes.RequestInvalid,
+                        "At most 500 Entity ids can be loaded at once."));
+                }
+
+                return Results.Ok(await monitors.GetStatesAsync(request.EntityIds, cancellationToken));
+            })
+            .WithName("GetEntityMonitorStates")
+            .WithSummary("Returns bounded monitoring eligibility, direct monitor, and latest acquisition state for the requested Entities.")
+            .Produces<EntityMonitorStateView[]>()
+            .Produces<ApiProblem>(StatusCodes.Status400BadRequest);
 
         group.MapDelete("/{id:guid}", async (
             Guid id,
             MonitorService monitors,
-            CancellationToken cancellationToken) =>
-            await monitors.StopAsync(id, cancellationToken)
-                ? Results.NoContent()
-                : Results.NotFound(new ApiProblem(ApiProblemCodes.NotFound, "Monitor was not found.")))
+            CancellationToken cancellationToken) => {
+                var result = await monitors.StopAsync(id, cancellationToken);
+                if (!result.Found) {
+                    return Results.NotFound(new ApiProblem(ApiProblemCodes.NotFound, "Monitor was not found."));
+                }
+
+                return result.Stopped
+                    ? Results.Ok(new MonitorStopResponse(result.RootEntityPruned))
+                    : Results.Conflict(new ApiProblem(
+                        ApiProblemCodes.AcquisitionInvalid,
+                        result.Message ?? "The monitor could not be safely stopped."));
+            })
             .WithName("StopMonitor")
-            .WithSummary("Stops monitoring (the acquisition is left untouched).")
-            .Produces(StatusCodes.Status204NoContent)
-            .Produces<ApiProblem>(StatusCodes.Status404NotFound);
+            .WithSummary("Stops monitoring an Entity subtree, removes its acquisitions/downloads and fileless Wanted placeholders, and preserves source-backed Entities/files.")
+            .Produces<MonitorStopResponse>()
+            .Produces<ApiProblem>(StatusCodes.Status404NotFound)
+            .Produces<ApiProblem>(StatusCodes.Status409Conflict);
 
         group.MapPost("/{id:guid}/pause", async (
             Guid id,

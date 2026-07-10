@@ -122,24 +122,11 @@ public sealed partial class EfEntityReadService {
             ? new Dictionary<Guid, UserEntityStateRow>()
             : await LoadMovieChildStateAsync(movieIds, cancellationToken);
 
-        // Compact availability facts for this page: physical source-media truth plus the latest linked
-        // acquisition state. The latter remains visible after Wanted clears so Imported/Cancelled rows and
-        // stale-state invariant failures can still be filtered and diagnosed from any EntityGrid.
-        var sourceMediaIds = await _db.EntityFiles.AsNoTracking()
-            .Where(file => ids.Contains(file.EntityId) && file.Role == EntityFileRole.Source)
-            .Select(file => file.EntityId)
-            .ToHashSetAsync(cancellationToken);
-        var latestAcquisitionStatusByEntity = (await _db.Acquisitions.AsNoTracking()
-                    .Where(acquisition => acquisition.EntityId != null && ids.Contains(acquisition.EntityId.Value))
-                    .Select(acquisition => new { acquisition.Id, acquisition.EntityId, acquisition.Status, acquisition.CreatedAt })
-                    .ToArrayAsync(cancellationToken))
-                .GroupBy(acquisition => acquisition.EntityId!.Value)
-                .ToDictionary(
-                    group => group.Key,
-                    group => group
-                        .OrderByDescending(acquisition => acquisition.CreatedAt)
-                        .ThenByDescending(acquisition => acquisition.Id)
-                        .First().Status);
+        // Compact availability facts for this page: physical source-media truth plus acquisition state
+        // projected through every structural subtree. The singular direct status remains for the existing
+        // badge while filters use plural membership, including child and upgrade work.
+        var sourceMediaIds = await _sourceOwnership.ResolveAsync(ids, cancellationToken);
+        var acquisitionStatusesByEntity = await _acquisitionStatuses.ResolveAsync(ids, cancellationToken);
 
         // Tag names per entity, resolved through the tag relationship links and their target titles,
         // so list rows can surface tags (used as genres on the Jellyfin surface) without a detail load.
@@ -230,8 +217,10 @@ public sealed partial class EfEntityReadService {
                         : null,
                 IsWanted = row.IsWanted,
                 HasSourceMedia = sourceMediaIds.Contains(row.Id),
-                LatestAcquisitionStatus = latestAcquisitionStatusByEntity.GetValueOrDefault(row.Id),
-                WantedStatus = row.IsWanted && latestAcquisitionStatusByEntity.TryGetValue(row.Id, out var wantedStatus)
+                LatestAcquisitionStatus = acquisitionStatusesByEntity.GetValueOrDefault(row.Id)?.LatestDirectStatus,
+                AcquisitionStatuses = acquisitionStatusesByEntity.GetValueOrDefault(row.Id)?.Statuses ?? [],
+                WantedStatus = row.IsWanted
+                    && acquisitionStatusesByEntity.GetValueOrDefault(row.Id)?.LatestDirectStatus is { } wantedStatus
                     ? wantedStatus
                     : null,
                 CreatedAt = row.CreatedAt,

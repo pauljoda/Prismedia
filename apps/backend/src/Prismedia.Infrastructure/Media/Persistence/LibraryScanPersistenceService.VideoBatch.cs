@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Prismedia.Application.Files;
 using Prismedia.Application.Jobs.Ports;
 using Prismedia.Application.Settings;
 using Prismedia.Domain.Entities;
@@ -29,30 +30,41 @@ public sealed partial class LibraryScanPersistenceService {
             return [];
         }
 
-        var paths = filePaths.Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
-        return await _db.EntityFiles.AsNoTracking()
-            .Where(file => file.Role == EntityFileRole.Source && paths.Contains(file.Path))
+        var paths = filePaths.Distinct(FileSystemPathComparison.Comparer).ToArray();
+        var pathLengths = paths.Select(path => path.Length).Distinct().ToArray();
+        var candidates = await _db.EntityFiles.AsNoTracking()
+            .Where(file => file.Role == EntityFileRole.Source
+                && pathLengths.Contains(file.Path.Length))
             .Select(file => new VideoSourceOwner(file.EntityId, file.Path))
             .ToArrayAsync(cancellationToken);
+        return candidates.Where(owner => paths.Contains(owner.FilePath, FileSystemPathComparison.Comparer)).ToArray();
     }
 
     public async Task<IReadOnlyList<Guid>> RebindVideoSourceAsync(
         string previousPath,
         string replacementPath,
         CancellationToken cancellationToken) {
-        var previousOwners = await _db.EntityFiles
-            .Where(file => file.Role == EntityFileRole.Source && file.Path == previousPath)
+        var previousOwnerCandidates = await _db.EntityFiles
+            .Where(file => file.Role == EntityFileRole.Source
+                && file.Path.Length == previousPath.Length)
             .ToArrayAsync(cancellationToken);
+        var previousOwners = previousOwnerCandidates
+            .Where(file => FileSystemPathComparison.Equals(file.Path, previousPath))
+            .ToArray();
         if (previousOwners.Length == 0) {
             return [];
         }
 
         var ownerIds = previousOwners.Select(file => file.EntityId).Distinct().ToArray();
-        if (!string.Equals(previousPath, replacementPath, StringComparison.OrdinalIgnoreCase)) {
-            var conflictingOwner = await _db.EntityFiles.AsNoTracking().AnyAsync(file =>
-                file.Role == EntityFileRole.Source &&
-                file.Path == replacementPath &&
-                !ownerIds.Contains(file.EntityId), cancellationToken);
+        if (!FileSystemPathComparison.Equals(previousPath, replacementPath)) {
+            var replacementCandidates = await _db.EntityFiles.AsNoTracking()
+                .Where(file => file.Role == EntityFileRole.Source
+                    && file.Path.Length == replacementPath.Length
+                    && !ownerIds.Contains(file.EntityId))
+                .Select(file => file.Path)
+                .ToArrayAsync(cancellationToken);
+            var conflictingOwner = replacementCandidates.Any(path =>
+                FileSystemPathComparison.Equals(path, replacementPath));
             if (conflictingOwner) {
                 throw new InvalidOperationException(
                     $"The replacement video path is already owned by another Entity: {replacementPath}");
@@ -110,7 +122,7 @@ public sealed partial class LibraryScanPersistenceService {
             .Where(info => ownerIds.Contains(info.EntityId))
             .ToArrayAsync(cancellationToken));
 
-        await _db.SaveChangesAsync(cancellationToken);
+        await SaveChangesWithLifecycleAsync(cancellationToken);
         return ownerIds;
     }
 
@@ -118,9 +130,12 @@ public sealed partial class LibraryScanPersistenceService {
         IReadOnlyList<VideoUpsertItem> items, CancellationToken cancellationToken) {
         if (items.Count == 0) return [];
 
-        var filePaths = items.Select(i => i.FilePath).ToList();
-        var movieCache = new Dictionary<string, Guid>(StringComparer.OrdinalIgnoreCase);
-        var seriesCache = new Dictionary<string, Guid>(StringComparer.OrdinalIgnoreCase);
+        var filePaths = items.Select(i => i.FilePath)
+            .Distinct(FileSystemPathComparison.Comparer)
+            .ToArray();
+        var filePathLengths = filePaths.Select(path => path.Length).Distinct().ToArray();
+        var movieCache = new Dictionary<string, Guid>(FileSystemPathComparison.Comparer);
+        var seriesCache = new Dictionary<string, Guid>(FileSystemPathComparison.Comparer);
         var seasonCache = new Dictionary<(Guid SeriesId, int SeasonNumber), Guid>();
 
         // One source path can legitimately belong to SEVERAL video entities: a multi-episode file
@@ -128,12 +143,17 @@ public sealed partial class LibraryScanPersistenceService {
         // key a dictionary on the path — a unique-key dictionary here crashed every scan of a
         // library containing such a file.
         var existingEntities = (await _db.EntityFiles.AsNoTracking()
-            .Where(f => f.Role == EntityFileRole.Source && filePaths.Contains(f.Path))
+            .Where(f => f.Role == EntityFileRole.Source
+                && filePathLengths.Contains(f.Path.Length))
             .Join(_db.Entities, f => f.EntityId, e => e.Id,
                 (f, e) => new { f.Path, e.Id, Entity = e })
             .ToListAsync(cancellationToken))
-            .GroupBy(x => x.Path)
-            .ToDictionary(g => g.Key, g => g.OrderBy(x => x.Entity.CreatedAt).ThenBy(x => x.Id).ToList());
+            .Where(row => filePaths.Contains(row.Path, FileSystemPathComparison.Comparer))
+            .GroupBy(x => x.Path, FileSystemPathComparison.Comparer)
+            .ToDictionary(
+                g => g.Key,
+                g => g.OrderBy(x => x.Entity.CreatedAt).ThenBy(x => x.Id).ToList(),
+                FileSystemPathComparison.Comparer);
 
         var now = DateTimeOffset.UtcNow;
         var results = new List<Guid>(items.Count);
@@ -190,7 +210,7 @@ public sealed partial class LibraryScanPersistenceService {
             results.Add(id);
         }
 
-        await _db.SaveChangesAsync(cancellationToken);
+        await SaveChangesWithLifecycleAsync(cancellationToken);
         return results;
     }
 

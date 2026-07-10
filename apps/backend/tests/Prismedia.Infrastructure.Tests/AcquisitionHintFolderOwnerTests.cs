@@ -200,6 +200,45 @@ public sealed class AcquisitionHintFolderOwnerTests {
     }
 
     [Fact]
+    public async Task DeepFileAndEntityHierarchiesResolveWithoutArbitraryDepthCaps() {
+        await using var db = CreateContext();
+        var now = DateTimeOffset.UtcNow;
+        var ids = Enumerable.Range(0, 7).Select(_ => Guid.NewGuid()).ToArray();
+        for (var index = 0; index < ids.Length; index++) {
+            db.Entities.Add(new EntityRow {
+                Id = ids[index],
+                ParentEntityId = index == 0 ? null : ids[index - 1],
+                KindCode = index == 0
+                    ? EntityKindRegistry.VideoSeries.Code
+                    : EntityKindRegistry.Video.Code,
+                Title = index == 0 ? "Deep series" : $"Level {index}",
+                CreatedAt = now,
+                UpdatedAt = now
+            });
+        }
+        db.EntityFiles.Add(new EntityFileRow {
+            Id = Guid.NewGuid(),
+            EntityId = ids[^1],
+            Role = EntityFileRole.Source,
+            Path = "/media/deep",
+            CreatedAt = now,
+            UpdatedAt = now
+        });
+        AddHint(db, "/media/deep/a/b/c/d/e/episode.mkv", """{"tmdb":"deep-1"}""");
+        await db.SaveChangesAsync();
+
+        var owners = await new AcquisitionHintApplier(db)
+            .ApplyToFolderOwnersAsync(CancellationToken.None);
+
+        var owner = Assert.Single(owners);
+        Assert.Equal(ids[0], owner.TopLevelEntityId);
+        Assert.Equal("Deep series", owner.TopLevelTitle);
+        Assert.Equal(
+            ids[^1],
+            (await db.EntityExternalIds.AsNoTracking().SingleAsync()).EntityId);
+    }
+
+    [Fact]
     public async Task BookOwnersAndUnownedPathsAreLeftForTheirOwnPasses() {
         await using var db = CreateContext();
         AddEntity(db, EntityKindRegistry.Book.Code, null, "/media/books/Novel.epub");

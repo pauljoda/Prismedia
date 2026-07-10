@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging;
 using Prismedia.Application.Acquisition;
+using Prismedia.Application.Files;
 using Prismedia.Application.Jobs.Ports;
 using Prismedia.Domain.Entities;
 
@@ -30,7 +31,7 @@ public sealed class ImportedVideoMaterializer(
 
         var items = new List<VideoUpsertItem>(request.Episodes.Count);
         var replacementOwnerIds = new HashSet<Guid>();
-        var replacementPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var replacementPaths = new HashSet<string>(FileSystemPathComparison.Comparer);
         var readyOwnerSources = new Dictionary<Guid, string>();
         foreach (var episode in request.Episodes) {
             var filePath = Path.GetFullPath(episode.FilePath);
@@ -167,7 +168,7 @@ public sealed class ImportedVideoMaterializer(
     private static void EnsureInsideRoot(string candidate, string rootPath) {
         var root = Path.GetFullPath(rootPath);
         var normalizedRoot = root.EndsWith(Path.DirectorySeparatorChar) ? root : root + Path.DirectorySeparatorChar;
-        if (!candidate.StartsWith(normalizedRoot, StringComparison.Ordinal)) {
+        if (!candidate.StartsWith(normalizedRoot, FileSystemPathComparison.Comparison)) {
             throw new InvalidOperationException($"The imported path is outside its video library root: {candidate}");
         }
     }

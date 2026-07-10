@@ -12,10 +12,10 @@ public enum IdentifyTargetEligibilityStatus {
     /// <summary>The entity is a request-created placeholder awaiting source media.</summary>
     Wanted,
 
-    /// <summary>The entity exists but owns no source-media file binding.</summary>
+    /// <summary>The entity's structural subtree owns no source-media file binding.</summary>
     NoSourceMedia,
 
-    /// <summary>The entity owns source media and may enter Identify.</summary>
+    /// <summary>The entity or one of its structural descendants owns source media and may enter Identify.</summary>
     Eligible
 }
 
@@ -71,9 +71,8 @@ public sealed class IdentifyTargetNotEligibleException : InvalidOperationExcepti
 }
 
 /// <summary>
-/// Reads Identify eligibility from the persistence boundary. Source-media ownership is direct: a
-/// scanned container owns its folder Source binding and a leaf owns its file Source binding; files
-/// belonging to descendants or related entities never make a target eligible.
+/// Reads Identify eligibility from the persistence boundary using the canonical source-backed Entity
+/// subtree projection. Related entities never make a target eligible; structural descendants do.
 /// </summary>
 public interface IIdentifyTargetEligibilityService {
     /// <summary>Evaluates one persisted entity.</summary>

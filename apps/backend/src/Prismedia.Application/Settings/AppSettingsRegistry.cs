@@ -99,7 +99,7 @@ public static class AppSettingsRegistry {
                 "Keep searching for monitored items until they are acquired.",
                 22,
                 "Re-search monitored items",
-                "When on, Prismedia periodically re-runs the release search for monitored items so a wanted book is fetched once a release appears.",
+                "When on, Prismedia periodically re-runs the release search for monitored items so wanted media is fetched once a release appears.",
                 true,
                 10),
             Integer(

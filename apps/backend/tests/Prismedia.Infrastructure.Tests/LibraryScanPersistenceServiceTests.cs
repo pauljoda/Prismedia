@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Prismedia.Application.Entities;
 using Prismedia.Application.Jobs.Ports;
 using Prismedia.Domain.Entities;
 using Prismedia.Infrastructure.Media.Processing;
@@ -91,6 +92,60 @@ public sealed class LibraryScanPersistenceServiceTests {
         Assert.NotNull(technical);
         Assert.Null(technical.ProbeFailedAt);
         Assert.Equal(120, technical.DurationSeconds);
+    }
+
+    [Fact]
+    public async Task TechnicalUpsertRejectsEntityOwnedByDestructiveLifecycle() {
+        await using var db = CreateContext();
+        var videoId = Guid.NewGuid();
+        SeedVideo(db, videoId);
+        var video = db.Entities.Local.Single(row => row.Id == videoId);
+        video.LifecycleClaimKind = EntityLifecycleClaimKind.DeletingFiles;
+        video.LifecycleClaimId = Guid.NewGuid();
+        video.LifecycleClaimedAt = DateTimeOffset.UtcNow;
+        await db.SaveChangesAsync();
+
+        var service = new LibraryScanPersistenceService(db);
+
+        await Assert.ThrowsAsync<EntityLifecycleMutationConflictException>(() =>
+            service.UpsertEntityTechnicalAsync(
+                videoId, 120, 1920, 1080, null, null, null, null, "h264", "mp4", null,
+                CancellationToken.None));
+
+        db.ChangeTracker.Clear();
+        Assert.False(await db.EntityTechnical.AnyAsync(row => row.EntityId == videoId));
+    }
+
+    [Fact]
+    public async Task NewScannerChildRejectsClaimedExistingParentAcrossEntityKinds() {
+        await using var db = CreateContext();
+        var galleryId = Guid.NewGuid();
+        db.Entities.Add(new EntityRow {
+            Id = galleryId,
+            KindCode = EntityKindRegistry.Gallery.Code,
+            Title = "Deleting gallery",
+            LifecycleClaimKind = EntityLifecycleClaimKind.DeletingFiles,
+            LifecycleClaimId = Guid.NewGuid(),
+            LifecycleClaimedAt = DateTimeOffset.UtcNow,
+            CreatedAt = DateTimeOffset.UtcNow,
+            UpdatedAt = DateTimeOffset.UtcNow
+        });
+        await db.SaveChangesAsync();
+
+        var service = new LibraryScanPersistenceService(db);
+
+        await Assert.ThrowsAsync<EntityLifecycleMutationConflictException>(() =>
+            service.UpsertImageAsync(
+                "/media/deleting-gallery/new-image.jpg",
+                "New image",
+                galleryId,
+                42,
+                1,
+                false,
+                CancellationToken.None));
+
+        db.ChangeTracker.Clear();
+        Assert.False(await db.Entities.AnyAsync(row => row.ParentEntityId == galleryId));
     }
 
     [Fact]
@@ -584,6 +639,34 @@ public sealed class LibraryScanPersistenceServiceTests {
         // Both owners were backfilled with their library-root association.
         Assert.NotNull(await db.VideoDetails.FindAsync([firstEpisodeId]));
         Assert.NotNull(await db.VideoDetails.FindAsync([secondEpisodeId]));
+    }
+
+    [Fact]
+    public async Task UpsertVideosBatchReusesCaseVariantSourceOwnerOnWindows() {
+        if (!OperatingSystem.IsWindows()) {
+            return;
+        }
+
+        await using var db = CreateContext();
+        var videoId = Guid.NewGuid();
+        var rootId = Guid.NewGuid();
+        const string persistedPath = "C:\\Media\\Movies\\Arrival.mkv";
+        const string discoveredPath = "C:\\MEDIA\\MOVIES\\ARRIVAL.MKV";
+        SeedVideo(db, videoId, persistedPath);
+        await db.SaveChangesAsync();
+
+        var service = new LibraryScanPersistenceService(db);
+        var ids = await service.UpsertVideosBatchAsync([
+            new VideoUpsertItem(
+                discoveredPath,
+                "Arrival",
+                rootId,
+                IsNsfw: false)
+        ], CancellationToken.None);
+
+        Assert.Equal(videoId, Assert.Single(ids));
+        Assert.Single(db.Entities.Where(entity => entity.KindCode == EntityKindRegistry.Video.Code));
+        Assert.Single(db.EntityFiles.Where(file => file.Role == EntityFileRole.Source));
     }
 
     [Fact]

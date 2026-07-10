@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Prismedia.Application.Acquisition;
+using Prismedia.Application.Files;
 using Prismedia.Domain.Entities;
 using Prismedia.Infrastructure.Persistence;
 
@@ -129,7 +130,7 @@ public sealed class EfImportTargetIndex(PrismediaDbContext db) : IImportTargetIn
             return null;
         }
 
-        var existing = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var existing = new HashSet<string>(FileSystemPathComparison.Comparer);
         if (albumFolder is not null) {
             var trackCode = EntityKindRegistry.AudioTrack.Code;
             var trackPaths = await (
@@ -149,11 +150,12 @@ public sealed class EfImportTargetIndex(PrismediaDbContext db) : IImportTargetIn
 
     /// <summary>
     /// The entity itself when it already is <paramref name="kindCode"/>, else the nearest ancestor of
-    /// that kind within a small bounded walk (an episode's series is two hops up). Null when absent.
+    /// that kind within a cycle-safe structural walk (an episode's series is two hops up). Null when absent.
     /// </summary>
     private async Task<Guid?> ResolveAncestorOfKindAsync(Guid entityId, string kindCode, CancellationToken cancellationToken) {
         var currentId = (Guid?)entityId;
-        for (var depth = 0; currentId is { } id && depth < 4; depth++) {
+        var visited = new HashSet<Guid>();
+        while (currentId is { } id && visited.Add(id)) {
             var current = await db.Entities.AsNoTracking()
                 .Where(row => row.Id == id)
                 .Select(row => new { row.KindCode, row.ParentEntityId })

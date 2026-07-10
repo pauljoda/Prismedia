@@ -236,7 +236,7 @@ public sealed partial class LibraryScanPersistenceService {
         _db.Entities.RemoveRange(orphanMovies);
 
         if (orphanMovies.Count > 0)
-            await _db.SaveChangesAsync(cancellationToken);
+            await SaveChangesWithLifecycleAsync(cancellationToken);
 
         var orphanSeasons = await _db.Entities
             .Where(e => e.KindCode == seasonCode
@@ -245,7 +245,7 @@ public sealed partial class LibraryScanPersistenceService {
         _db.Entities.RemoveRange(orphanSeasons);
 
         if (orphanSeasons.Count > 0)
-            await _db.SaveChangesAsync(cancellationToken);
+            await SaveChangesWithLifecycleAsync(cancellationToken);
 
         var orphanSeries = await _db.Entities
             .Where(e => e.KindCode == seriesCode
@@ -254,7 +254,7 @@ public sealed partial class LibraryScanPersistenceService {
         _db.Entities.RemoveRange(orphanSeries);
 
         if (orphanSeries.Count > 0)
-            await _db.SaveChangesAsync(cancellationToken);
+            await SaveChangesWithLifecycleAsync(cancellationToken);
 
         return orphanMovies.Count + orphanSeasons.Count + orphanSeries.Count;
     }
@@ -271,7 +271,7 @@ public sealed partial class LibraryScanPersistenceService {
             .ToListAsync(cancellationToken);
         if (orphanTags.Count > 0) {
             _db.Entities.RemoveRange(orphanTags);
-            await _db.SaveChangesAsync(cancellationToken);
+            await SaveChangesWithLifecycleAsync(cancellationToken);
         }
 
         return orphanTags.Count;
