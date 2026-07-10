@@ -90,6 +90,22 @@ describe("VideoPlayer", () => {
     vi.unstubAllGlobals();
   });
 
+  it("anchors the full seek bar to the same inline bounds as the player controls", async () => {
+    const [playerSource, timelineSource] = await Promise.all([
+      readFile("src/lib/components/VideoPlayer.svelte", "utf8"),
+      readFile("src/lib/components/VideoTimeline.svelte", "utf8"),
+    ]);
+
+    expect(playerSource).toContain("--player-chrome-inline-padding: 0.75rem;");
+    expect(playerSource).toContain("container-type: inline-size;");
+    expect(playerSource).toContain(
+      "padding-inline: var(--player-chrome-inline-padding);",
+    );
+    expect(timelineSource).toContain(
+      ".video-time-slider:not(.is-minimal-progress) {\n    left: 50%;\n    right: auto;\n    transform: translateX(-50%);\n    width: calc(100cqw - var(--player-chrome-inline-padding) - var(--player-chrome-inline-padding));",
+    );
+  });
+
   it("auto-selects the preferred subtitle track when unlocked", async () => {
     const onActiveSubtitleTrackIdChange = vi.fn();
 

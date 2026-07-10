@@ -141,12 +141,17 @@
     bottom: 0.75rem;
     cursor: pointer;
     display: block;
-    left: 1rem;
     position: absolute;
-    right: 1rem;
     touch-action: none;
     transition: height var(--duration-fast) var(--ease-default);
     z-index: 45;
+  }
+
+  .video-time-slider:not(.is-minimal-progress) {
+    left: 50%;
+    right: auto;
+    transform: translateX(-50%);
+    width: calc(100cqw - var(--player-chrome-inline-padding) - var(--player-chrome-inline-padding));
   }
 
   .video-time-slider.is-minimal-progress {

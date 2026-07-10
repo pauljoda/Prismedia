@@ -1704,7 +1704,7 @@
 
       <div
         class={cn(
-          "player-control-bar pointer-events-none absolute inset-x-0 bottom-0 z-20 px-3 pb-5 pt-8 transition-opacity duration-normal sm:px-4 sm:pb-4 sm:pt-20",
+          "player-control-bar pointer-events-none absolute inset-x-0 bottom-0 z-20 pb-5 pt-8 transition-opacity duration-normal sm:pb-4 sm:pt-20",
           showControls ? "opacity-100" : "opacity-0",
         )}
       >
@@ -1881,6 +1881,11 @@
 </div>
 
 <style>
+  .prismedia-player-surface {
+    --player-chrome-inline-padding: 0.75rem;
+    container-type: inline-size;
+  }
+
   .prismedia-media-engine {
     -webkit-tap-highlight-color: transparent;
     aspect-ratio: 16 / 9;
@@ -1894,6 +1899,7 @@
   }
 
   .player-control-bar {
+    padding-inline: var(--player-chrome-inline-padding);
     background:
       linear-gradient(
         to top,
@@ -1901,6 +1907,12 @@
         rgba(7, 8, 11, 0.60) 50%,
         transparent 100%
       );
+  }
+
+  @media (min-width: 640px) {
+    .prismedia-player-surface {
+      --player-chrome-inline-padding: 1rem;
+    }
   }
 
   .prismedia-player-surface,
