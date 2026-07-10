@@ -840,7 +840,6 @@
       tabs={detailTabs}
       sections={detailSections}
       actionButtons={heroActions}
-      {fileManagement}
       defaultCreditRole={CREDIT_ROLE.actor}
     >
       {#snippet heroMeta()}
@@ -855,6 +854,8 @@
         {#if section.id === "acquisition"}
           <EntityAcquisitionCard
             {acq}
+            entity={video}
+            {fileManagement}
             onCancelled={() => void loadVideo({ showLoading: false })}
             onImported={() => loadVideo({ showLoading: false })}
           />
@@ -892,7 +893,6 @@
       {card}
       posterSize="medium"
       actionButtons={heroActions}
-      {fileManagement}
       tabs={wantedDetailTabs}
       sections={detailSections}
     >
@@ -904,6 +904,8 @@
         {#if section.id === "acquisition"}
           <EntityAcquisitionCard
             {acq}
+            entity={video}
+            {fileManagement}
             onCancelled={() => void loadVideo({ showLoading: false })}
             onImported={() => loadVideo({ showLoading: false })}
           />

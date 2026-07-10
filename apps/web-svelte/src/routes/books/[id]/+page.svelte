@@ -578,7 +578,6 @@
       tabs={detailTabs}
       sections={detailSections}
       actionButtons={heroActions}
-      {fileManagement}
       {defaultCreditRole}
     >
       {#snippet heroMeta()}
@@ -612,6 +611,8 @@
         {#if section.id === "acquisition"}
           <EntityAcquisitionCard
             {acq}
+            entity={book}
+            {fileManagement}
             onCancelled={handleAcquisitionCancelled}
             onImported={() => loadBook(bookId, { showLoading: false })}
           />

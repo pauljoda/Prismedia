@@ -3,13 +3,14 @@
   import { onMount } from "svelte";
   import { goto } from "$app/navigation";
   import { page } from "$app/state";
-  import { BookOpen, Check, Info, Play, RotateCcw, SlidersHorizontal } from "@lucide/svelte";
+  import { BookOpen, Check, CloudDownload, Info, Play, RotateCcw, SlidersHorizontal } from "@lucide/svelte";
   import EntityDetailSkeleton from "$lib/components/entities/EntityDetailSkeleton.svelte";
   import { fetchBook, type BookDetail } from "$lib/api/media";
   import { fetchEntity, type EntityCardFull } from "$lib/api/entities";
   import { updateEntityMetadata } from "$lib/api/entity-mutations";
   import { updateEntityProgress } from "$lib/api/playback";
   import { entityCardToDetailCard, type EntityDetailCardFull } from "$lib/entities/entity-detail";
+  import { refreshAfterManagedFileRevert } from "$lib/entities/entity-file-management";
   import {
     bookEntityProgressDisplay,
     entityPageToReaderImage,
@@ -22,10 +23,13 @@
   import type { EntityThumbnailCard } from "$lib/entities/entity-thumbnail";
   import EntityDetail, {
     type EntityDetailActionButton,
+    type EntityDetailSection,
     type EntityDetailTab,
     type EntityMetadataUpdateRequest,
   } from "$lib/components/entities/EntityDetail.svelte";
   import EntityGrid from "$lib/components/entities/EntityGrid.svelte";
+  import EntityAcquisitionCard from "$lib/components/acquisitions/EntityAcquisitionCard.svelte";
+  import { useEntityAcquisition } from "$lib/components/acquisitions/use-entity-acquisition.svelte";
   import { redirectHiddenEntityNotFound } from "$lib/nsfw/hidden-entity";
   import { useNsfw } from "$lib/nsfw/store.svelte";
   import { useAppChrome } from "$lib/stores/app-chrome.svelte";
@@ -92,10 +96,19 @@
       },
     ];
   });
+  const acq = useEntityAcquisition({
+    entityId: () => volume?.id,
+    capabilities: () => volume?.capabilities,
+    onChanged: loadVolume,
+    onPruned: () => goto(`/books/${bookId}`),
+  });
   const fileManagement = {
     onDeleted: () => goto(`/books/${bookId}`),
-    onReverted: loadVolume,
+    onReverted: () => refreshAfterManagedFileRevert(acq, loadVolume),
   };
+  const detailSections = $derived.by((): EntityDetailSection[] => [
+    { id: "acquisition" },
+  ]);
   const detailTabs = $derived.by((): EntityDetailTab[] => {
     if (!card) return [];
     const tabs: EntityDetailTab[] = [
@@ -112,6 +125,9 @@
         sections: ["dates", "links"],
         layout: "grid",
       },
+      ...(acq.visible
+        ? [{ id: "acquisition", label: "Acquisition", icon: CloudDownload, sections: ["acquisition"] }]
+        : []),
     ];
 
     return tabs;
@@ -242,8 +258,8 @@
       onMetadataSave={handleMetadataSave}
       posterSize="large"
       tabs={detailTabs}
+      sections={detailSections}
       actionButtons={heroActions}
-      {fileManagement}
     >
       {#snippet heroMeta()}
         <span class="meta-item">{bookTitle}</span>
@@ -253,6 +269,11 @@
         <span class="meta-item">{readerPages.length} pages</span>
       {/snippet}
 
+      {#snippet sectionContent(section)}
+        {#if section.id === "acquisition"}
+          <EntityAcquisitionCard {acq} entity={volume} {fileManagement} />
+        {/if}
+      {/snippet}
     </EntityDetail>
 
     <section class="content-section">

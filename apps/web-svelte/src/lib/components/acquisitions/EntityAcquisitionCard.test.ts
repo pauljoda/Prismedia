@@ -15,6 +15,17 @@ vi.mock("$lib/components/entities/ConfirmDialog.svelte", async () => ({
 describe("EntityAcquisitionCard", () => {
   afterEach(cleanup);
 
+  it("keeps managed file deletion in the Entity acquisition toolbar without an acquisition row", () => {
+    render(Harness, {
+      initialAcquisition: null,
+      refresh: vi.fn(async () => {}),
+      showFileManagement: true,
+    });
+
+    expect(screen.getByRole("button", { name: "Delete files" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Notify imported" })).not.toBeInTheDocument();
+  });
+
   it("forwards an imported transition to the owning entity page", async () => {
     const onImported = vi.fn();
 

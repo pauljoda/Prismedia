@@ -1,20 +1,23 @@
 <script lang="ts">
-  import type { AcquisitionDetail } from "$lib/api/generated/model";
+  import { CAPABILITY_KIND } from "$lib/api/generated/codes";
+  import type { AcquisitionDetail, EntityCapability } from "$lib/api/generated/model";
   import type { EntityAcquisition } from "$lib/components/acquisitions/use-entity-acquisition.svelte";
   import EntityAcquisitionCard from "$lib/components/acquisitions/EntityAcquisitionCard.svelte";
 
   let {
-    initialAcquisition,
+    initialAcquisition = null,
     refresh,
     onImported,
+    showFileManagement = false,
     monitorStopping = false,
     monitorDeletingFiles = false,
     monitorUnknownStatus = false,
     onToggleMonitor,
   }: {
-    initialAcquisition: AcquisitionDetail;
+    initialAcquisition?: AcquisitionDetail | null;
     refresh: () => Promise<void>;
     onImported?: () => void | Promise<void>;
+    showFileManagement?: boolean;
     monitorStopping?: boolean;
     monitorDeletingFiles?: boolean;
     monitorUnknownStatus?: boolean;
@@ -44,6 +47,9 @@
       return monitorUnknownStatus;
     },
     trackedVia: "",
+    get showFileManagement() {
+      return showFileManagement;
+    },
     showSync: false,
     get showMonitor() {
       return monitorStopping || monitorDeletingFiles || monitorUnknownStatus;
@@ -71,10 +77,20 @@
     async searchForRelease() {},
     async childMonitoringChanged() {},
   };
+
+  const entity = $derived({
+    id: "entity-1",
+    title: "Managed Entity",
+    capabilities: showFileManagement
+      ? [{ kind: CAPABILITY_KIND.fileManagement, canDeleteFiles: true } as EntityCapability]
+      : [],
+  });
 </script>
 
 <span data-testid="bound-acquisition-id">{acquisition?.summary.id ?? "none"}</span>
 <EntityAcquisitionCard
   {acq}
+  {entity}
+  fileManagement={{ onDeleted: async () => {}, onReverted: async () => {} }}
   {onImported}
 />

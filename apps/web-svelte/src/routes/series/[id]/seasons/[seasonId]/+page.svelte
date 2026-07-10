@@ -250,7 +250,6 @@
       tabs={detailTabs}
       sections={detailSections}
       actionButtons={heroActions}
-      {fileManagement}
     >
       {#snippet heroMeta()}
         {#if parentSeries}
@@ -276,6 +275,8 @@
         {#if section.id === "acquisition"}
           <EntityAcquisitionCard
             {acq}
+            entity={season}
+            {fileManagement}
             onCancelled={() => void loadSeason({ showLoading: false })}
             onImported={() => loadSeason({ showLoading: false })}
           />

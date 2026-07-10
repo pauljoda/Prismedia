@@ -2,7 +2,6 @@
   export type {
     EntityDetailActionButton,
     EntityDetailActionVariant,
-    EntityDetailFileManagement,
     EntityDetailPosterSize,
     EntityDetailProps,
     EntityDetailSection,
@@ -61,7 +60,6 @@
   import EntityTagChips from "./EntityTagChips.svelte";
   import EntityCastAndCrewSection from "./EntityCastAndCrewSection.svelte";
   import EntityActionButton from "./EntityActionButton.svelte";
-  import EntityFileManagementAction from "./EntityFileManagementAction.svelte";
   import MarkdownEditor from "$lib/components/forms/MarkdownEditor.svelte";
   import EntityPicker from "$lib/components/forms/EntityPicker.svelte";
   import CreditsEditor from "$lib/components/forms/CreditsEditor.svelte";
@@ -71,7 +69,6 @@
   import ToggleChip from "$lib/components/forms/ToggleChip.svelte";
   import TextField from "$lib/components/forms/TextField.svelte";
   import {
-    canDeleteEntityFiles,
     getImagesCapability,
     isNsfw as hasNsfwCapability,
   } from "$lib/api/capabilities";
@@ -117,7 +114,6 @@
     heroMeta,
     heroBadges,
     actionButtons = [],
-    fileManagement,
     afterBody,
     extraSections,
     sectionContent,
@@ -230,9 +226,6 @@
     return `Metadata and monitoring source: ${identity.pluginId}, ${identity.identityNamespace} ID ${identity.identityValue}`;
   });
   const visibleActionButtons = $derived.by(() => actionButtons.filter((action) => !action.hidden));
-  const canManageFiles = $derived(
-    Boolean(fileManagement) && canDeleteEntityFiles(card.entity.capabilities),
-  );
   const visibleTabs = $derived.by(() => tabs.filter(tabHasContent));
   const hasTabs = $derived(visibleTabs.length > 0);
   const activeTab = $derived(visibleTabs.find((tab) => tab.id === activeTabId) ?? visibleTabs[0] ?? null);
@@ -1240,7 +1233,7 @@
             </div>
           {/if}
 
-          {#if showFlagActions || canEdit || visibleActionButtons.length > 0 || canManageFiles}
+          {#if showFlagActions || canEdit || visibleActionButtons.length > 0}
           <div class="action-row">
             <div class="action-badges">
               {#if showFlagActions}
@@ -1276,7 +1269,7 @@
               {/if}
             </div>
 
-            {#if canEdit || visibleActionButtons.length > 0 || canManageFiles}
+            {#if canEdit || visibleActionButtons.length > 0}
               <div class="action-group">
                 {#if canEdit}
                   {#if isEditingActiveTab}
@@ -1339,15 +1332,6 @@
                     />
                   {/if}
                 {/each}
-
-                {#if canManageFiles && fileManagement}
-                  <EntityFileManagementAction
-                    entity={card.entity}
-                    onDeleted={fileManagement.onDeleted}
-                    onReverted={fileManagement.onReverted}
-                  />
-                {/if}
-
               </div>
             {/if}
           </div>
@@ -1886,7 +1870,8 @@
 
   .action-row {
     display: flex;
-    align-items: center;
+    flex-wrap: wrap;
+    align-items: flex-start;
     justify-content: space-between;
     gap: 0.5rem;
     width: 100%;
@@ -1900,8 +1885,13 @@
 
   .action-group {
     display: flex;
+    flex: 1 1 auto;
+    flex-wrap: wrap;
+    min-width: 0;
     align-items: center;
+    justify-content: flex-end;
     gap: 0.35rem;
+    margin-left: auto;
   }
 
   @media (max-width: 480px) {

@@ -69,6 +69,18 @@ describe("EntityDetail", () => {
     expect(onClick).toHaveBeenCalledOnce();
   });
 
+  it("keeps the shared hero action cluster wrappable at every width", () => {
+    const source = readFileSync("src/lib/components/entities/EntityDetail.svelte", "utf8");
+
+    expect(source).toContain(
+      ".action-row {\n    display: flex;\n    flex-wrap: wrap;",
+    );
+    expect(source).toContain(
+      ".action-group {\n    display: flex;\n    flex: 1 1 auto;\n    flex-wrap: wrap;",
+    );
+    expect(source).not.toContain("EntityFileManagementAction");
+  });
+
   it("renders the explicit provider identity as an external hero chip beside route badges", () => {
     const card = buildCard();
     card.providerIdentity = {

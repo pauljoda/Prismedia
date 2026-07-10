@@ -2,6 +2,7 @@
   import { onMount } from "svelte";
   import { goto } from "$app/navigation";
   import { page } from "$app/state";
+  import { CloudDownload, Info, SlidersHorizontal } from "@lucide/svelte";
   import EntityDetailSkeleton from "$lib/components/entities/EntityDetailSkeleton.svelte";
   import EntityDetailHeroDates from "$lib/components/entities/EntityDetailHeroDates.svelte";
   import { fetchImage, type ImageDetail } from "$lib/api/media";
@@ -20,13 +21,18 @@
     toggleOptimisticEntityFlag,
     updateOptimisticEntityRating,
   } from "$lib/entities/entity-detail-state";
+  import { refreshAfterManagedFileRevert } from "$lib/entities/entity-file-management";
   import { entityCardToDetailCard, type EntityDetailCardFull, type EntityDetailCredit, type EntityDetailTag } from "$lib/entities/entity-detail";
   import { hydrateStandardRelationshipCards } from "$lib/entities/entity-relationship-thumbnails";
   import { resolveEntityHref } from "$lib/entities/entity-routes";
   import type { EntityKindCode } from "$lib/entities/entity-codes";
   import EntityDetail, {
+    type EntityDetailSection,
+    type EntityDetailTab,
     type EntityMetadataUpdateRequest,
   } from "$lib/components/entities/EntityDetail.svelte";
+  import EntityAcquisitionCard from "$lib/components/acquisitions/EntityAcquisitionCard.svelte";
+  import { useEntityAcquisition } from "$lib/components/acquisitions/use-entity-acquisition.svelte";
   import UniversalLightbox from "$lib/components/UniversalLightbox.svelte";
   import type { UniversalLightboxEntity } from "$lib/components/universal-lightbox-media";
   import { redirectHiddenEntityNotFound } from "$lib/nsfw/hidden-entity";
@@ -73,10 +79,37 @@
   const studio = $derived(relationshipStudio);
 
   const dates = $derived(card?.dates ?? []);
+  const acq = useEntityAcquisition({
+    entityId: () => image?.id,
+    capabilities: () => image?.capabilities,
+    onChanged: loadImage,
+    onPruned: () => goto("/images"),
+  });
   const fileManagement = {
     onDeleted: () => goto("/images"),
-    onReverted: loadImage,
+    onReverted: () => refreshAfterManagedFileRevert(acq, loadImage),
   };
+  const detailSections = $derived.by((): EntityDetailSection[] => [
+    { id: "acquisition" },
+  ]);
+  const detailTabs = $derived.by((): EntityDetailTab[] => [
+    {
+      id: "details",
+      label: "Details",
+      icon: Info,
+      sections: ["description", "tags", "studio", "credits"],
+    },
+    {
+      id: "metadata",
+      label: "Metadata",
+      icon: SlidersHorizontal,
+      sections: ["stats", "dates", "classification", "technical", "source", "links"],
+      layout: "grid",
+    },
+    ...(acq.visible
+      ? [{ id: "acquisition", label: "Acquisition", icon: CloudDownload, sections: ["acquisition"] }]
+      : []),
+  ]);
 
   onMount(() => {
     void loadImage();
@@ -169,7 +202,8 @@
           onOrganizedToggle={handleOrganizedToggle}
           onMetadataSave={handleMetadataSave}
           {ratingBusy}
-          {fileManagement}
+          tabs={detailTabs}
+          sections={detailSections}
         >
           {#snippet heroMeta()}
             {#if studio}
@@ -178,6 +212,11 @@
             <EntityDetailHeroDates {dates} leadingSeparator={Boolean(studio)} />
           {/snippet}
 
+          {#snippet sectionContent(section)}
+            {#if section.id === "acquisition"}
+              <EntityAcquisitionCard {acq} entity={image} {fileManagement} />
+            {/if}
+          {/snippet}
         </EntityDetail>
       </div>
     {/snippet}

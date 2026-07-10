@@ -5,7 +5,7 @@ import type {
   MonitorEligibilityView,
   MonitorView,
 } from "$lib/api/generated/model";
-import { firstExternalIdentity, isWanted } from "$lib/api/capabilities";
+import { canDeleteEntityFiles, firstExternalIdentity, isWanted } from "$lib/api/capabilities";
 import { fetchAcquisitionForEntity } from "$lib/api/acquisitions";
 import {
   fetchEntityMonitor,
@@ -63,6 +63,8 @@ export interface EntityAcquisition {
   readonly showSync: boolean;
   readonly showSearch: boolean;
   readonly showSearchMissing: boolean;
+  /** The Entity owns managed on-disk files that can be removed from this Acquisition surface. */
+  readonly showFileManagement: boolean;
   /** True when the entity has any acquisition story to show (drives the Acquisition tab). */
   readonly visible: boolean;
   /** Every direct child Entity supplied by the page, used by the shared child-monitoring editor. */
@@ -156,8 +158,11 @@ export function useEntityAcquisition(options: UseEntityAcquisitionOptions): Enti
       && eligibility?.canSearchMissingChildren === true
       && (missingChildCount > 0 || monitorActive),
   );
+  const showFileManagement = $derived(
+    Boolean(capabilities && canDeleteEntityFiles(capabilities)),
+  );
   const visible = $derived(
-    (loadedId !== null && (showMonitor || showSearch || acquisition !== null)) ||
+    (loadedId !== null && (showMonitor || showSearch || showFileManagement || acquisition !== null)) ||
       childCards.length > 0,
   );
 
@@ -362,6 +367,9 @@ export function useEntityAcquisition(options: UseEntityAcquisitionOptions): Enti
     },
     get showSearchMissing() {
       return showSearchMissing;
+    },
+    get showFileManagement() {
+      return showFileManagement;
     },
     get visible() {
       return visible;

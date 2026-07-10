@@ -1,7 +1,7 @@
 <script lang="ts">
   import { goto } from "$app/navigation";
   import { page } from "$app/state";
-  import { Layers } from "@lucide/svelte";
+  import { CloudDownload, Info, Layers, SlidersHorizontal } from "@lucide/svelte";
   import EntityDetailSkeleton from "$lib/components/entities/EntityDetailSkeleton.svelte";
   import EntityDetailHeroDates from "$lib/components/entities/EntityDetailHeroDates.svelte";
   import { fetchImage, fetchGallery, type GalleryDetail, type ImageDetail } from "$lib/api/media";
@@ -21,6 +21,7 @@
     toggleOptimisticEntityFlag,
     updateOptimisticEntityRating,
   } from "$lib/entities/entity-detail-state";
+  import { refreshAfterManagedFileRevert } from "$lib/entities/entity-file-management";
   import { getAllChildIds } from "$lib/entities/entity-children";
   import type { EntityDetailCredit, EntityDetailTag } from "$lib/entities/entity-detail";
   import type { EntityKindCode } from "$lib/entities/entity-codes";
@@ -36,8 +37,12 @@
   } from "$lib/entities/entity-relationship-thumbnails";
   import type { EntityThumbnailCard } from "$lib/entities/entity-thumbnail";
   import EntityDetail, {
+    type EntityDetailSection,
+    type EntityDetailTab,
     type EntityMetadataUpdateRequest,
   } from "$lib/components/entities/EntityDetail.svelte";
+  import EntityAcquisitionCard from "$lib/components/acquisitions/EntityAcquisitionCard.svelte";
+  import { useEntityAcquisition } from "$lib/components/acquisitions/use-entity-acquisition.svelte";
   import EntityGrid from "$lib/components/entities/EntityGrid.svelte";
   import EntityGridSection from "$lib/components/entities/EntityGridSection.svelte";
   import ImageLightboxDetails from "$lib/components/ImageLightboxDetails.svelte";
@@ -81,10 +86,37 @@
   const primaryStudio = $derived(relationshipStudio);
 
   const dates = $derived(card?.dates ?? []);
+  const acq = useEntityAcquisition({
+    entityId: () => gallery?.id,
+    capabilities: () => gallery?.capabilities,
+    onChanged: () => loadGallery(),
+    onPruned: () => goto("/galleries"),
+  });
   const fileManagement = {
     onDeleted: () => goto("/galleries"),
-    onReverted: () => loadGallery(),
+    onReverted: () => refreshAfterManagedFileRevert(acq, () => loadGallery()),
   };
+  const detailSections = $derived.by((): EntityDetailSection[] => [
+    { id: "acquisition" },
+  ]);
+  const detailTabs = $derived.by((): EntityDetailTab[] => [
+    {
+      id: "details",
+      label: "Details",
+      icon: Info,
+      sections: ["description", "tags", "studio", "credits"],
+    },
+    {
+      id: "metadata",
+      label: "Metadata",
+      icon: SlidersHorizontal,
+      sections: ["stats", "dates", "classification", "technical", "source", "links"],
+      layout: "grid",
+    },
+    ...(acq.visible
+      ? [{ id: "acquisition", label: "Acquisition", icon: CloudDownload, sections: ["acquisition"] }]
+      : []),
+  ]);
 
   const imageChildren = $derived(childCards.filter((c) => c.entity.kind === "image"));
   const galleryChildren = $derived(childCards.filter((c) => c.entity.kind === "gallery"));
@@ -280,7 +312,8 @@
       {ratingBusy}
       peopleLabel="People"
       posterSize="large"
-      {fileManagement}
+      tabs={detailTabs}
+      sections={detailSections}
     >
       {#snippet heroMeta()}
         {#if primaryStudio}
@@ -303,6 +336,11 @@
         {/if}
       {/snippet}
 
+      {#snippet sectionContent(section)}
+        {#if section.id === "acquisition"}
+          <EntityAcquisitionCard {acq} entity={gallery} {fileManagement} />
+        {/if}
+      {/snippet}
     </EntityDetail>
 
     {#if galleryChildren.length > 0}

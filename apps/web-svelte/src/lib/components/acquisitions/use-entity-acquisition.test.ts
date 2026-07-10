@@ -63,6 +63,23 @@ describe("useEntityAcquisition", () => {
     cleanup();
   });
 
+  it("keeps the Acquisition surface available for managed on-disk files", async () => {
+    mocks.fetchAcquisitionForEntity.mockResolvedValue(null);
+
+    render(Harness, {
+      entityId: "book-1",
+      capabilities: [{
+        kind: CAPABILITY_KIND.fileManagement,
+        canDeleteFiles: true,
+      }],
+    });
+
+    await waitFor(() => {
+      expect(mocks.fetchAcquisitionForEntity).toHaveBeenCalledOnce();
+      expect(screen.getByTestId("visible")).toHaveTextContent("yes");
+    });
+  });
+
   it("refreshes only acquisition state after searching an existing entity", async () => {
     const onChanged = vi.fn(async () => {});
     mocks.fetchAcquisitionForEntity

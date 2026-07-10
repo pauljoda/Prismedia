@@ -2,7 +2,7 @@
   import { onMount } from "svelte";
   import { goto } from "$app/navigation";
   import { page } from "$app/state";
-  import { Play } from "@lucide/svelte";
+  import { CloudDownload, Info, Play, SlidersHorizontal } from "@lucide/svelte";
   import EntityDetailSkeleton from "$lib/components/entities/EntityDetailSkeleton.svelte";
   import EntityDetailHeroDates from "$lib/components/entities/EntityDetailHeroDates.svelte";
   import { fetchAudioTrack, type AudioTrackDetail } from "$lib/api/media";
@@ -16,10 +16,15 @@
     toggleOptimisticEntityFlag,
     updateOptimisticEntityRating,
   } from "$lib/entities/entity-detail-state";
+  import { refreshAfterManagedFileRevert } from "$lib/entities/entity-file-management";
   import EntityDetail, {
     type EntityDetailActionButton,
+    type EntityDetailSection,
+    type EntityDetailTab,
     type EntityMetadataUpdateRequest,
   } from "$lib/components/entities/EntityDetail.svelte";
+  import EntityAcquisitionCard from "$lib/components/acquisitions/EntityAcquisitionCard.svelte";
+  import { useEntityAcquisition } from "$lib/components/acquisitions/use-entity-acquisition.svelte";
   import { entityCardToDetailCard, type EntityDetailCardFull, type EntityDetailCredit, type EntityDetailTag } from "$lib/entities/entity-detail";
   import { CREDIT_ROLE } from "$lib/entities/entity-codes";
   import { resolveEntityHref } from "$lib/entities/entity-routes";
@@ -74,10 +79,37 @@
       onClick: playTrack,
     }];
   });
+  const acq = useEntityAcquisition({
+    entityId: () => track?.id,
+    capabilities: () => track?.capabilities,
+    onChanged: loadTrack,
+    onPruned: () => goto("/audio"),
+  });
   const fileManagement = {
     onDeleted: () => goto("/audio"),
-    onReverted: loadTrack,
+    onReverted: () => refreshAfterManagedFileRevert(acq, loadTrack),
   };
+  const detailSections = $derived.by((): EntityDetailSection[] => [
+    { id: "acquisition" },
+  ]);
+  const detailTabs = $derived.by((): EntityDetailTab[] => [
+    {
+      id: "details",
+      label: "Details",
+      icon: Info,
+      sections: ["description", "tags", "studio", "credits"],
+    },
+    {
+      id: "metadata",
+      label: "Metadata",
+      icon: SlidersHorizontal,
+      sections: ["stats", "dates", "classification", "technical", "source", "links"],
+      layout: "grid",
+    },
+    ...(acq.visible
+      ? [{ id: "acquisition", label: "Acquisition", icon: CloudDownload, sections: ["acquisition"] }]
+      : []),
+  ]);
 
   function playTrack() {
     if (!trackItem) return;
@@ -180,7 +212,8 @@
       defaultCreditRole={CREDIT_ROLE.artist}
       posterSize="large"
       actionButtons={heroActions}
-      {fileManagement}
+      tabs={detailTabs}
+      sections={detailSections}
     >
       {#snippet heroMeta()}
         {#if studio}
@@ -189,6 +222,11 @@
         <EntityDetailHeroDates {dates} leadingSeparator={Boolean(studio)} />
       {/snippet}
 
+      {#snippet sectionContent(section)}
+        {#if section.id === "acquisition"}
+          <EntityAcquisitionCard {acq} entity={track} {fileManagement} />
+        {/if}
+      {/snippet}
     </EntityDetail>
   {/if}
 </div>

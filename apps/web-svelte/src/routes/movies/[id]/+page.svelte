@@ -793,7 +793,6 @@
       tabs={detailTabs}
       sections={detailSections}
       actionButtons={heroActions}
-      {fileManagement}
       defaultCreditRole={CREDIT_ROLE.actor}
     >
       {#snippet heroMeta()}
@@ -808,6 +807,8 @@
         {#if section.id === "acquisition"}
           <EntityAcquisitionCard
             {acq}
+            entity={movie}
+            {fileManagement}
             onCancelled={handleAcquisitionCancelled}
             onImported={refreshMovie}
           />
@@ -850,7 +851,6 @@
       showHero
       posterSize="large"
       actionButtons={heroActions}
-      {fileManagement}
       tabs={wantedDetailTabs}
       sections={detailSections}
       defaultCreditRole={CREDIT_ROLE.actor}
@@ -872,6 +872,8 @@
         {#if section.id === "acquisition"}
           <EntityAcquisitionCard
             {acq}
+            entity={movie}
+            {fileManagement}
             onCancelled={handleAcquisitionCancelled}
             onImported={refreshMovie}
           />

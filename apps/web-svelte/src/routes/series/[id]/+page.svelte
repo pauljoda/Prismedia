@@ -267,7 +267,6 @@
       tabs={detailTabs}
       sections={detailSections}
       actionButtons={heroActions}
-      {fileManagement}
       defaultCreditRole={CREDIT_ROLE.actor}
     >
       {#snippet heroMeta()}
@@ -295,6 +294,8 @@
         {#if section.id === "acquisition"}
           <EntityAcquisitionCard
             {acq}
+            entity={series}
+            {fileManagement}
             onImported={refreshSeries}
           />
         {/if}

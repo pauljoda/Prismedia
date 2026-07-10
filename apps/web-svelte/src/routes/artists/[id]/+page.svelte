@@ -259,7 +259,6 @@
       defaultCreditRole={CREDIT_ROLE.artist}
       posterSize="large"
       actionButtons={heroActions}
-      {fileManagement}
       tabs={detailTabs}
       sections={detailSections}
     >
@@ -273,6 +272,8 @@
         {#if section.id === "acquisition"}
           <EntityAcquisitionCard
             {acq}
+            entity={artist}
+            {fileManagement}
             onImported={() => loadArtist({ showLoading: false })}
           />
         {/if}

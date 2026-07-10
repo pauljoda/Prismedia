@@ -50,14 +50,6 @@ export interface EntityDetailSection {
   hidden?: boolean;
 }
 
-/** Route-specific follow-up after the shared managed delete-files action settles. */
-export interface EntityDetailFileManagement {
-  /** Navigate away after the Entity and its subtree were fully removed. */
-  onDeleted: () => void | Promise<void>;
-  /** Refresh in place after monitoring kept the Entity as a Wanted placeholder. */
-  onReverted: () => void | Promise<void>;
-}
-
 export interface EntityDetailProps {
   card: EntityDetailCard;
   onRatingChange?: (value: number | null) => void;
@@ -89,8 +81,6 @@ export interface EntityDetailProps {
   heroBadges?: Snippet;
   /** Action buttons rendered in the right-aligned actions group. */
   actionButtons?: EntityDetailActionButton[];
-  /** Enables the capability-gated shared managed delete-files action. */
-  fileManagement?: EntityDetailFileManagement;
   /** Content rendered between the detail body and the metadata sections (e.g. studio, credits). */
   afterBody?: Snippet;
   /** Extra metadata sections appended inside the lower metadata area. */

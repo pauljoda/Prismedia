@@ -195,7 +195,6 @@
       defaultCreditRole={CREDIT_ROLE.writer}
       posterSize="large"
       actionButtons={heroActions}
-      {fileManagement}
       tabs={detailTabs}
       sections={detailSections}
     >
@@ -209,6 +208,8 @@
         {#if section.id === "acquisition"}
           <EntityAcquisitionCard
             {acq}
+            entity={author}
+            {fileManagement}
             onImported={() => loadAuthor({ showLoading: false })}
           />
         {/if}

@@ -9,17 +9,26 @@
    */
   import { Bell, BellRing, RefreshCw, Search, Trash2 } from "@lucide/svelte";
   import { Button } from "@prismedia/ui-svelte";
+  import type { EntityCapability } from "$lib/api/generated/model";
   import AcquisitionPanel from "$lib/components/acquisitions/AcquisitionPanel.svelte";
   import EntityChildMonitoring from "$lib/components/acquisitions/EntityChildMonitoring.svelte";
   import type { EntityAcquisition } from "$lib/components/acquisitions/use-entity-acquisition.svelte";
+  import EntityFileManagementAction from "$lib/components/entities/EntityFileManagementAction.svelte";
+  import type { EntityFileManagementCallbacks } from "$lib/entities/entity-file-management";
 
   let {
     acq,
+    entity,
+    fileManagement,
     onCancelled,
     onImported,
   }: {
     /** The page-owned acquisition state (from {@link useEntityAcquisition}). */
     acq: EntityAcquisition;
+    /** Entity core projected into the shared managed-file action. */
+    entity?: { id: string; title: string; capabilities: EntityCapability[] } | null;
+    /** Route follow-ups after managed deletion either removes or reverts the Entity. */
+    fileManagement?: EntityFileManagementCallbacks;
     /**
      * Called after the acquisition is cancelled, so the page can refresh. Cancel stops the download
      * only — the wanted placeholder and any monitoring stay, and the page keeps existing.
@@ -30,7 +39,11 @@
   } = $props();
 
   const hasActions = $derived(
-    acq.showSync || acq.showMonitor || acq.showSearch || acq.showSearchMissing,
+    acq.showSync ||
+      acq.showMonitor ||
+      acq.showSearch ||
+      acq.showSearchMissing ||
+      (acq.showFileManagement && Boolean(entity && fileManagement)),
   );
 </script>
 
@@ -118,6 +131,14 @@
                 ? `Search ${acq.missingChildCount} missing`
                 : "Search missing content"}
           </Button>
+        {/if}
+        {#if acq.showFileManagement && entity && fileManagement}
+          <EntityFileManagementAction
+            {entity}
+            onDeleted={fileManagement.onDeleted}
+            onReverted={fileManagement.onReverted}
+            compact
+          />
         {/if}
       </div>
     {/if}
