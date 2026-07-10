@@ -28,5 +28,6 @@ export const ACTIVE_ACQUISITION_STATUSES: readonly AcquisitionStatusCode[] = [
   ACQUISITION_STATUS.searching,
   ACQUISITION_STATUS.queued,
   ACQUISITION_STATUS.downloading,
+  ACQUISITION_STATUS.downloaded,
   ACQUISITION_STATUS.importing,
 ];

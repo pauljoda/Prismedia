@@ -1531,6 +1531,11 @@ public sealed class RequestCommitServiceTests {
         public Task<IReadOnlyList<Guid>> ListIdsForEntityAsync(Guid entityId, CancellationToken cancellationToken) =>
             Task.FromResult<IReadOnlyList<Guid>>(AcquisitionIdsByEntity.GetValueOrDefault(entityId) ?? []);
 
+        public Task<AcquisitionReacquireEligibility> GetReacquireEligibilityAsync(
+            Guid id,
+            CancellationToken cancellationToken) =>
+            Task.FromResult(new AcquisitionReacquireEligibility(true));
+
         public Task<bool> DeleteAsync(Guid id, CancellationToken cancellationToken, bool preserveWantedLoop = false) {
             Deleted.Add(id);
             return Task.FromResult(true);

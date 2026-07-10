@@ -22,6 +22,98 @@ public sealed partial class LibraryScanPersistenceService {
         return Task.CompletedTask;
     }
 
+    public async Task<IReadOnlyList<VideoSourceOwner>> ListVideoSourceOwnersAsync(
+        IReadOnlyCollection<string> filePaths,
+        CancellationToken cancellationToken) {
+        if (filePaths.Count == 0) {
+            return [];
+        }
+
+        var paths = filePaths.Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+        return await _db.EntityFiles.AsNoTracking()
+            .Where(file => file.Role == EntityFileRole.Source && paths.Contains(file.Path))
+            .Select(file => new VideoSourceOwner(file.EntityId, file.Path))
+            .ToArrayAsync(cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<Guid>> RebindVideoSourceAsync(
+        string previousPath,
+        string replacementPath,
+        CancellationToken cancellationToken) {
+        var previousOwners = await _db.EntityFiles
+            .Where(file => file.Role == EntityFileRole.Source && file.Path == previousPath)
+            .ToArrayAsync(cancellationToken);
+        if (previousOwners.Length == 0) {
+            return [];
+        }
+
+        var ownerIds = previousOwners.Select(file => file.EntityId).Distinct().ToArray();
+        if (!string.Equals(previousPath, replacementPath, StringComparison.OrdinalIgnoreCase)) {
+            var conflictingOwner = await _db.EntityFiles.AsNoTracking().AnyAsync(file =>
+                file.Role == EntityFileRole.Source &&
+                file.Path == replacementPath &&
+                !ownerIds.Contains(file.EntityId), cancellationToken);
+            if (conflictingOwner) {
+                throw new InvalidOperationException(
+                    $"The replacement video path is already owned by another Entity: {replacementPath}");
+            }
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        var replacementSize = LibraryScanFileSystem.TryGetFileSize(replacementPath);
+        foreach (var source in previousOwners) {
+            source.Path = replacementPath;
+            source.SizeBytes = replacementSize;
+            source.UpdatedAt = now;
+        }
+
+        var entities = await _db.Entities.Where(entity => ownerIds.Contains(entity.Id)).ToArrayAsync(cancellationToken);
+        foreach (var entity in entities) {
+            entity.UpdatedAt = now;
+        }
+
+        // Technical, fingerprint, and subtitle data describes the retired file. Clearing it makes the
+        // shared downstream planner probe/extract the replacement immediately while user state stays on
+        // the same Entity id.
+        _db.MediaSources.RemoveRange(await _db.MediaSources
+            .Where(source => ownerIds.Contains(source.EntityId))
+            .ToArrayAsync(cancellationToken));
+        _db.EntityTechnical.RemoveRange(await _db.EntityTechnical
+            .Where(technical => ownerIds.Contains(technical.EntityId))
+            .ToArrayAsync(cancellationToken));
+        _db.EntityFileFingerprints.RemoveRange(await _db.EntityFileFingerprints
+            .Where(fingerprint => ownerIds.Contains(fingerprint.EntityId))
+            .ToArrayAsync(cancellationToken));
+        _db.EntitySubtitles.RemoveRange(await _db.EntitySubtitles
+            .Where(subtitle => ownerIds.Contains(subtitle.EntityId))
+            .ToArrayAsync(cancellationToken));
+        var videoDetails = await _db.VideoDetails
+            .Where(detail => ownerIds.Contains(detail.EntityId))
+            .ToArrayAsync(cancellationToken);
+        foreach (var detail in videoDetails) {
+            detail.SubtitlesExtractedAt = null;
+        }
+
+        var generatedRoles = new[] {
+            EntityFileRole.Thumbnail,
+            EntityFileRole.GridThumbnail,
+            EntityFileRole.GridThumbnail2x,
+            EntityFileRole.Preview,
+            EntityFileRole.Sprite,
+            EntityFileRole.Trickplay,
+            EntityFileRole.Hls,
+        };
+        _db.EntityFiles.RemoveRange(await _db.EntityFiles
+            .Where(file => ownerIds.Contains(file.EntityId) && generatedRoles.Contains(file.Role))
+            .ToArrayAsync(cancellationToken));
+        _db.TrickplayInfos.RemoveRange(await _db.TrickplayInfos
+            .Where(info => ownerIds.Contains(info.EntityId))
+            .ToArrayAsync(cancellationToken));
+
+        await _db.SaveChangesAsync(cancellationToken);
+        return ownerIds;
+    }
+
     public async Task<IReadOnlyList<Guid>> UpsertVideosBatchAsync(
         IReadOnlyList<VideoUpsertItem> items, CancellationToken cancellationToken) {
         if (items.Count == 0) return [];

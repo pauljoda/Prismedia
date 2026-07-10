@@ -72,8 +72,20 @@ public sealed class AcquisitionHintApplier(
         return true;
     }
 
-    public async Task<bool> BindWantedEntityAsync(EntityKind kind, string sourcePath, CancellationToken cancellationToken) {
-        var entityId = await FindWantedEntityIdForPathAsync(sourcePath, cancellationToken);
+    public async Task<bool> BindWantedEntityAsync(
+        EntityKind kind,
+        string sourcePath,
+        CancellationToken cancellationToken,
+        Guid? acquisitionId = null,
+        bool requireExactPath = false) {
+        // TV callers require an exact hint path: broad checkpoint hints exist to protect structural
+        // parent/position binding and must never attach S03 to the first S01 file. Other media retain
+        // their established folder-overlap binding semantics.
+        var entityId = await FindWantedEntityIdForPathAsync(
+            sourcePath,
+            cancellationToken,
+            acquisitionId,
+            exactPath: requireExactPath);
         if (entityId is null) {
             return false;
         }
@@ -105,8 +117,16 @@ public sealed class AcquisitionHintApplier(
         return true;
     }
 
-    public async Task<bool> BindWantedParentAsync(EntityKind parentKind, string folderPath, CancellationToken cancellationToken) {
-        var entityId = await FindWantedEntityIdForPathAsync(folderPath, cancellationToken);
+    public async Task<bool> BindWantedParentAsync(
+        EntityKind parentKind,
+        string folderPath,
+        CancellationToken cancellationToken,
+        Guid? acquisitionId = null) {
+        var entityId = await FindWantedEntityIdForPathAsync(
+            folderPath,
+            cancellationToken,
+            acquisitionId,
+            exactPath: false);
         if (entityId is null) {
             return false;
         }
@@ -150,10 +170,10 @@ public sealed class AcquisitionHintApplier(
         return true;
     }
 
-    public async Task<bool> BindWantedChildBySortOrderAsync(
+    public async Task<Guid?> BindWantedChildBySortOrderAsync(
         EntityKind childKind, string parentPath, int sortOrder, string childPath, CancellationToken cancellationToken) {
         if (string.IsNullOrWhiteSpace(parentPath) || string.IsNullOrWhiteSpace(childPath)) {
-            return false;
+            return null;
         }
 
         // The parent is whichever entity owns the scanned parent folder — a wanted series bound moments
@@ -163,7 +183,7 @@ public sealed class AcquisitionHintApplier(
             .Select(file => (Guid?)file.EntityId)
             .FirstOrDefaultAsync(cancellationToken);
         if (parentId is null) {
-            return false;
+            return null;
         }
 
         var childKindCode = childKind.ToCode();
@@ -171,7 +191,7 @@ public sealed class AcquisitionHintApplier(
             row => row.ParentEntityId == parentId && row.KindCode == childKindCode && row.IsWanted && row.SortOrder == sortOrder,
             cancellationToken);
         if (child is null || await HasSourceFileAsync(child.Id, cancellationToken)) {
-            return false;
+            return null;
         }
 
         var now = DateTimeOffset.UtcNow;
@@ -189,22 +209,32 @@ public sealed class AcquisitionHintApplier(
         child.IsWanted = false;
         child.UpdatedAt = now;
         await db.SaveChangesAsync(cancellationToken);
-        return true;
+        return child.Id;
     }
 
     /// <summary>The wanted-entity link of the unconsumed hint whose import path overlaps <paramref name="path"/>, or null.</summary>
-    private async Task<Guid?> FindWantedEntityIdForPathAsync(string path, CancellationToken cancellationToken) {
+    private async Task<Guid?> FindWantedEntityIdForPathAsync(
+        string path,
+        CancellationToken cancellationToken,
+        Guid? acquisitionId,
+        bool exactPath) {
         if (string.IsNullOrWhiteSpace(path)) {
             return null;
         }
 
         var normalized = Normalize(path);
-        var hints = await db.AcquisitionImportHints
+        var hintsQuery = db.AcquisitionImportHints
             .AsNoTracking()
-            .Where(hint => !hint.Consumed && hint.EntityId != null)
-            .ToArrayAsync(cancellationToken);
+            .Where(hint => !hint.Consumed && hint.EntityId != null);
+        if (acquisitionId is { } scopedAcquisitionId) {
+            hintsQuery = hintsQuery.Where(hint => hint.AcquisitionId == scopedAcquisitionId);
+        }
+
+        var hints = await hintsQuery.ToArrayAsync(cancellationToken);
         return hints
-            .Where(hint => PathsOverlap(normalized, Normalize(hint.SourcePath)))
+            .Where(hint => exactPath
+                ? normalized.Equals(Normalize(hint.SourcePath), StringComparison.OrdinalIgnoreCase)
+                : PathsOverlap(normalized, Normalize(hint.SourcePath)))
             .OrderByDescending(hint => hint.SourcePath.Length)
             .Select(hint => hint.EntityId)
             .FirstOrDefault();
@@ -214,10 +244,15 @@ public sealed class AcquisitionHintApplier(
         db.EntityFiles.AsNoTracking()
             .AnyAsync(file => file.EntityId == entityId && file.Role == EntityFileRole.Source, cancellationToken);
 
-    public async Task<IReadOnlyList<StampedHintOwner>> ApplyToFolderOwnersAsync(CancellationToken cancellationToken) {
-        var hints = await db.AcquisitionImportHints
-            .Where(hint => !hint.Consumed)
-            .ToArrayAsync(cancellationToken);
+    public async Task<IReadOnlyList<StampedHintOwner>> ApplyToFolderOwnersAsync(
+        CancellationToken cancellationToken,
+        Guid? acquisitionId = null) {
+        var hintsQuery = db.AcquisitionImportHints.Where(hint => !hint.Consumed);
+        if (acquisitionId is { } scopedAcquisitionId) {
+            hintsQuery = hintsQuery.Where(hint => hint.AcquisitionId == scopedAcquisitionId);
+        }
+
+        var hints = await hintsQuery.ToArrayAsync(cancellationToken);
         if (hints.Length == 0) {
             return [];
         }
@@ -247,12 +282,34 @@ public sealed class AcquisitionHintApplier(
                 continue;
             }
 
-            await StampExternalIdsAsync(owner.Id, hint, cancellationToken);
+            // A path can deliberately be broader than the acquired Entity while an import is
+            // checkpointed (for example a series folder protecting a season-pack move). When the hint
+            // links a real Entity, stamp THAT Entity after its Source binding succeeds instead of
+            // leaking a season/episode identity onto the broad folder owner. A dangling link falls back
+            // to the path owner; an existing-but-still-fileless link leaves the hint for a later pass.
+            var identityOwnerId = owner.Id;
+            if (hint.EntityId is { } linkedEntityId) {
+                var linkedExists = await db.Entities.AsNoTracking()
+                    .AnyAsync(row => row.Id == linkedEntityId, cancellationToken);
+                if (linkedExists) {
+                    var linkedPaths = await db.EntityFiles.AsNoTracking()
+                        .Where(file => file.EntityId == linkedEntityId && file.Role == EntityFileRole.Source)
+                        .Select(file => file.Path)
+                        .ToArrayAsync(cancellationToken);
+                    if (!linkedPaths.Any(path => PathsOverlap(Normalize(path), Normalize(hint.SourcePath)))) {
+                        continue;
+                    }
+
+                    identityOwnerId = linkedEntityId;
+                }
+            }
+
+            await StampExternalIdsAsync(identityOwnerId, hint, cancellationToken);
             hint.Consumed = true;
             hint.UpdatedAt = DateTimeOffset.UtcNow;
             changed = true;
 
-            var top = await ResolveTopLevelAsync(owner.Id, cancellationToken);
+            var top = await ResolveTopLevelAsync(identityOwnerId, cancellationToken);
             owners.TryAdd(top.TopLevelEntityId, top);
         }
 

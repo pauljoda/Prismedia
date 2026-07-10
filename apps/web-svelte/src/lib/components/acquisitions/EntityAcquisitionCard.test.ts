@@ -61,6 +61,22 @@ describe("EntityAcquisitionCard", () => {
     await waitFor(() => expect(onReverted).toHaveBeenCalledOnce());
     expect(onDeleted).not.toHaveBeenCalled();
   });
+
+  it("forwards an imported transition to the owning entity page", async () => {
+    const onImported = vi.fn();
+
+    render(Harness, {
+      initialAcquisition: acquisition("acquisition-1"),
+      refresh: vi.fn(async () => {}),
+      onReverted: vi.fn(),
+      onDeleted: vi.fn(),
+      onImported,
+    });
+
+    await fireEvent.click(screen.getByRole("button", { name: "Notify imported" }));
+
+    expect(onImported).toHaveBeenCalledOnce();
+  });
 });
 
 function acquisition(id: string): AcquisitionDetail {

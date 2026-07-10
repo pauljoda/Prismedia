@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using System.Text.Json.Nodes;
 using Prismedia.Application.Acquisition;
 using Prismedia.Domain.Entities;
 using Prismedia.Infrastructure.Acquisition;
@@ -75,6 +76,36 @@ public sealed class EfAcquisitionStoreTests {
         Assert.Equal(BookSourceTier.Retail, row.OwnedSourceTier);
         Assert.Equal(BookFormatTier.Reflowable, row.OwnedFormatTier);
         Assert.True(row.UpgradeQualityCaptured);
+    }
+
+    [Fact]
+    public async Task MalformedSelectedReleaseMetadataCannotDowngradeATerminalImport() {
+        await using var db = CreateContext();
+        var now = DateTimeOffset.UtcNow;
+        var id = Guid.NewGuid();
+        db.Acquisitions.Add(new AcquisitionRow {
+            Id = id,
+            Status = AcquisitionStatus.Importing,
+            Title = "Show",
+            SelectedReleaseJson = "{not-valid-json",
+            ExternalIdsJson = "{}",
+            SourceUrlsJson = "[]",
+            CreatedAt = now,
+            UpdatedAt = now,
+        });
+        await db.SaveChangesAsync();
+        var store = AcquisitionTestFactory.Store(db);
+
+        await store.MarkImportedWithQualityAsync(
+            id,
+            BookQualityRank.Floor,
+            "Imported.",
+            CancellationToken.None,
+            VideoQuality.Webdl1080p.ToCode());
+
+        Assert.Equal(AcquisitionStatus.Imported, await store.GetStatusAsync(id, CancellationToken.None));
+        Assert.Contains(await db.AcquisitionHistory.AsNoTracking().ToArrayAsync(), entry =>
+            entry.Event == AcquisitionHistoryEvent.Imported && entry.AcquisitionId == id);
     }
 
     [Fact]
@@ -323,6 +354,7 @@ public sealed class EfAcquisitionStoreTests {
         db.Acquisitions.Add(new AcquisitionRow {
             Id = acquisitionId, Status = AcquisitionStatus.Downloaded, Title = "Show", EntityId = entityId,
             Kind = EntityKind.VideoSeason, SeasonNumber = 2,
+            FinalSourcePath = "/media/Show/Season 02",
             ExternalIdsJson = "{}", SourceUrlsJson = "[]", CreatedAt = now, UpdatedAt = now
         });
         await db.SaveChangesAsync();
@@ -332,6 +364,7 @@ public sealed class EfAcquisitionStoreTests {
         Assert.NotNull(context);
         Assert.Equal(entityId, context!.EntityId);
         Assert.Equal(2, context.SeasonNumber);
+        Assert.Equal("/media/Show/Season 02", context.FinalSourcePath);
     }
 
     [Fact]
@@ -355,6 +388,315 @@ public sealed class EfAcquisitionStoreTests {
         var hint = await db.AcquisitionImportHints.AsNoTracking().SingleAsync();
         Assert.Equal("tmdb", hint.IdentityNamespace);
         Assert.Equal("Series:Episode:AbC", hint.IdentityValue);
+    }
+
+    [Fact]
+    public async Task CorruptTvCheckpointFailsClosedInsteadOfFallingBackToTheBroadFinalPath() {
+        await using var db = CreateContext();
+        var now = DateTimeOffset.UtcNow;
+        var acquisitionId = Guid.NewGuid();
+        db.Acquisitions.Add(new AcquisitionRow {
+            Id = acquisitionId,
+            Status = AcquisitionStatus.Importing,
+            Title = "Show",
+            Kind = EntityKind.VideoSeason,
+            FinalSourcePath = "/media/tv/Show",
+            TvImportCheckpointJson = "{not-valid-json",
+            ExternalIdsJson = "{}",
+            SourceUrlsJson = "[]",
+            CreatedAt = now,
+            UpdatedAt = now,
+        });
+        await db.SaveChangesAsync();
+
+        var exception = await Assert.ThrowsAsync<InvalidDataException>(() =>
+            AcquisitionTestFactory.Store(db).GetImportContextAsync(acquisitionId, CancellationToken.None));
+
+        Assert.Contains("cannot be resumed safely", exception.Message);
+    }
+
+    [Fact]
+    public async Task StrictTvCheckpointRecoveryShapeRoundTripsThroughTheStore() {
+        await using var db = CreateContext();
+        var acquisitionId = AddCheckpointAcquisition(db);
+        await db.SaveChangesAsync();
+        var checkpoint = ValidTvCheckpoint();
+        var store = AcquisitionTestFactory.Store(db);
+
+        await store.SetTvImportCheckpointAsync(acquisitionId, checkpoint, CancellationToken.None);
+        var context = await store.GetImportContextAsync(acquisitionId, CancellationToken.None);
+
+        var decoded = Assert.IsType<TvImportCheckpoint>(context?.TvImportCheckpoint);
+        Assert.Equal(checkpoint.LibraryRootId, decoded.LibraryRootId);
+        Assert.Equal(checkpoint.AttemptId, decoded.AttemptId);
+        Assert.Equal(checkpoint.ClaimJobId, decoded.ClaimJobId);
+        var unit = Assert.Single(decoded.Units);
+        Assert.Equal(checkpoint.Units[0].TargetAbsolutePath, unit.TargetAbsolutePath);
+        Assert.Equal(checkpoint.Units[0].ReplacementBackupPath, unit.ReplacementBackupPath);
+        Assert.Equal(checkpoint.Units[0].ReplacementEvidencePath, unit.ReplacementEvidencePath);
+    }
+
+    [Fact]
+    public async Task StatusTransitionClaimsOnlyTheExpectedLifecycleState() {
+        await using var db = CreateContext();
+        var acquisitionId = AddCheckpointAcquisition(db);
+        var row = db.Acquisitions.Local.Single(value => value.Id == acquisitionId);
+        row.Status = AcquisitionStatus.Downloaded;
+        await db.SaveChangesAsync();
+        var store = AcquisitionTestFactory.Store(db);
+
+        Assert.False(await store.TryTransitionStatusAsync(
+            acquisitionId,
+            [AcquisitionStatus.AwaitingSelection],
+            AcquisitionStatus.Importing,
+            null,
+            CancellationToken.None));
+        Assert.Equal(AcquisitionStatus.Downloaded, await store.GetStatusAsync(acquisitionId, CancellationToken.None));
+
+        Assert.True(await store.TryTransitionStatusAsync(
+            acquisitionId,
+            [AcquisitionStatus.Downloaded],
+            AcquisitionStatus.Importing,
+            null,
+            CancellationToken.None));
+        Assert.Equal(AcquisitionStatus.Importing, await store.GetStatusAsync(acquisitionId, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task InitialCheckpointCreationRequiresImportingAndTheCurrentTransfer() {
+        await using var db = CreateContext();
+        var acquisitionId = AddCheckpointAcquisition(db);
+        db.Acquisitions.Local.Single(row => row.Id == acquisitionId).Status = AcquisitionStatus.Downloaded;
+        db.DownloadTransfers.Add(new DownloadTransferRow {
+            Id = Guid.NewGuid(),
+            AcquisitionId = acquisitionId,
+            ClientItemId = "transfer-1",
+            CreatedAt = DateTimeOffset.UtcNow,
+            UpdatedAt = DateTimeOffset.UtcNow,
+        });
+        await db.SaveChangesAsync();
+        var store = AcquisitionTestFactory.Store(db);
+        var checkpoint = ValidTvCheckpoint();
+
+        Assert.True(await store.TryClaimInitialImportAsync(
+            acquisitionId,
+            checkpoint.ClaimJobId,
+            allowManualRetry: false,
+            CancellationToken.None));
+        Assert.True(await store.TryCreateTvImportCheckpointAsync(acquisitionId, checkpoint, CancellationToken.None));
+        Assert.False(await store.TryCreateTvImportCheckpointAsync(
+            acquisitionId,
+            checkpoint with { AttemptId = Guid.NewGuid() },
+            CancellationToken.None));
+        Assert.Equal(
+            checkpoint.AttemptId,
+            (await store.GetImportContextAsync(acquisitionId, CancellationToken.None))!.TvImportCheckpoint!.AttemptId);
+    }
+
+    [Fact]
+    public async Task ImportClaimLetsOnlyTheOwningJobRecoverImportingOrFailedWork() {
+        await using var db = CreateContext();
+        var acquisitionId = AddCheckpointAcquisition(db);
+        db.Acquisitions.Local.Single(row => row.Id == acquisitionId).Status = AcquisitionStatus.Downloaded;
+        await db.SaveChangesAsync();
+        var store = AcquisitionTestFactory.Store(db);
+        var ownerJobId = Guid.NewGuid();
+
+        Assert.True(await store.TryClaimInitialImportAsync(
+            acquisitionId, ownerJobId, allowManualRetry: false, CancellationToken.None));
+        Assert.True(await store.TryClaimInitialImportAsync(
+            acquisitionId, ownerJobId, allowManualRetry: false, CancellationToken.None));
+        Assert.False(await store.TryClaimInitialImportAsync(
+            acquisitionId, Guid.NewGuid(), allowManualRetry: false, CancellationToken.None));
+
+        await store.SetStatusAsync(acquisitionId, AcquisitionStatus.Failed, "retry", CancellationToken.None);
+        Assert.True(await store.TryClaimInitialImportAsync(
+            acquisitionId, ownerJobId, allowManualRetry: false, CancellationToken.None));
+        Assert.False(await store.TryClaimInitialImportAsync(
+            acquisitionId, Guid.NewGuid(), allowManualRetry: false, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task ExplicitManualRetryMayClaimAHeldImportWithANewJob() {
+        await using var db = CreateContext();
+        var acquisitionId = AddCheckpointAcquisition(db);
+        db.Acquisitions.Local.Single(row => row.Id == acquisitionId).Status = AcquisitionStatus.ManualImportRequired;
+        await db.SaveChangesAsync();
+        var store = AcquisitionTestFactory.Store(db);
+
+        Assert.False(await store.TryClaimInitialImportAsync(
+            acquisitionId, Guid.NewGuid(), allowManualRetry: false, CancellationToken.None));
+        Assert.True(await store.TryClaimInitialImportAsync(
+            acquisitionId, Guid.NewGuid(), allowManualRetry: true, CancellationToken.None));
+        Assert.Equal(AcquisitionStatus.Importing, await store.GetStatusAsync(acquisitionId, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task CheckpointClaimIsExclusiveWhileImportingButMayMoveToANewRetryJobAfterFailure() {
+        await using var db = CreateContext();
+        var acquisitionId = AddCheckpointAcquisition(db);
+        await db.SaveChangesAsync();
+        var store = AcquisitionTestFactory.Store(db);
+        var checkpoint = ValidTvCheckpoint();
+        await store.SetTvImportCheckpointAsync(acquisitionId, checkpoint, CancellationToken.None);
+
+        Assert.False(await store.TryClaimTvImportCheckpointAsync(
+            acquisitionId,
+            checkpoint,
+            Guid.NewGuid(),
+            CancellationToken.None));
+        Assert.True(await store.TryClaimTvImportCheckpointAsync(
+            acquisitionId,
+            checkpoint,
+            checkpoint.ClaimJobId,
+            CancellationToken.None));
+
+        await store.SetStatusAsync(acquisitionId, AcquisitionStatus.Failed, "retry", CancellationToken.None);
+        var retryJobId = Guid.NewGuid();
+        Assert.True(await store.TryClaimTvImportCheckpointAsync(
+            acquisitionId,
+            checkpoint,
+            retryJobId,
+            CancellationToken.None));
+        Assert.Equal(
+            retryJobId,
+            (await store.GetImportContextAsync(acquisitionId, CancellationToken.None))!.TvImportCheckpoint!.ClaimJobId);
+    }
+
+    [Theory]
+    [InlineData("unknown-import-mode")]
+    [InlineData("empty-library-id")]
+    [InlineData("empty-attempt-id")]
+    [InlineData("empty-claim-job-id")]
+    [InlineData("blank-series-path")]
+    [InlineData("relative-series-path")]
+    [InlineData("blank-transfer-id")]
+    [InlineData("empty-units")]
+    [InlineData("null-units")]
+    [InlineData("null-unit")]
+    [InlineData("blank-source-relative-path")]
+    [InlineData("absolute-source-relative-path")]
+    [InlineData("blank-target-path")]
+    [InlineData("relative-target-path")]
+    [InlineData("blank-source-absolute-path")]
+    [InlineData("relative-source-absolute-path")]
+    [InlineData("zero-season")]
+    [InlineData("zero-episode")]
+    [InlineData("null-covered-episodes")]
+    [InlineData("invalid-covered-episode")]
+    [InlineData("missing-previous-path")]
+    [InlineData("relative-previous-path")]
+    [InlineData("previous-outside-series")]
+    [InlineData("missing-backup-path")]
+    [InlineData("wrong-backup-path")]
+    [InlineData("missing-evidence-path")]
+    [InlineData("wrong-evidence-path")]
+    [InlineData("wrong-replacement-target")]
+    [InlineData("format-change-without-consent")]
+    [InlineData("mismatched-final-path")]
+    public async Task InvalidTvCheckpointRecoveryShapeFailsClosed(string invalidCase) {
+        await using var db = CreateContext();
+        var acquisitionId = AddCheckpointAcquisition(db);
+        await db.SaveChangesAsync();
+        var row = await db.Acquisitions.SingleAsync(value => value.Id == acquisitionId);
+        row.TvImportCheckpointJson = InvalidTvCheckpointJson(invalidCase);
+        await db.SaveChangesAsync();
+
+        var exception = await Assert.ThrowsAsync<InvalidDataException>(() =>
+            AcquisitionTestFactory.Store(db).GetImportContextAsync(acquisitionId, CancellationToken.None));
+
+        Assert.Contains("cannot be resumed safely", exception.Message);
+    }
+
+    private static Guid AddCheckpointAcquisition(PrismediaDbContext db) {
+        var id = Guid.NewGuid();
+        var now = DateTimeOffset.UtcNow;
+        db.Acquisitions.Add(new AcquisitionRow {
+            Id = id,
+            Status = AcquisitionStatus.Importing,
+            Title = "Show",
+            Kind = EntityKind.VideoSeason,
+            ExternalIdsJson = "{}",
+            SourceUrlsJson = "[]",
+            CreatedAt = now,
+            UpdatedAt = now,
+        });
+        return id;
+    }
+
+    private static TvImportCheckpoint ValidTvCheckpoint() {
+        var attemptId = Guid.NewGuid();
+        var seriesFolder = Path.GetFullPath(Path.Combine(Path.GetTempPath(), "prismedia-checkpoint", "Show"));
+        var previousPath = Path.Combine(seriesFolder, "Season 01", "Show - S01E01.mkv");
+        var sourcePath = Path.GetFullPath(Path.Combine(Path.GetTempPath(), "prismedia-download", "Show.S01E01.mkv"));
+        return new TvImportCheckpoint(
+            Guid.NewGuid(),
+            seriesFolder,
+            ImportMode.Move,
+            AllowFormatChange: false,
+            SuccessMessage: "Imported into the existing series.",
+            PreferSingleFileFinalSource: true,
+            Units: [new TvImportCheckpointUnit(
+                "Show.S01E01.mkv",
+                previousPath,
+                1,
+                1,
+                [],
+                PreviousFilePath: previousPath,
+                SourceAbsolutePath: sourcePath,
+                ReplacementBackupPath: OwnedFileReplacementArtifacts.CheckpointBackupPath(previousPath, attemptId),
+                ReplacementEvidencePath: OwnedFileReplacementArtifacts.CheckpointEvidencePath(previousPath, attemptId))],
+            TransferClientItemId: "transfer-1",
+            AttemptId: attemptId,
+            ClaimJobId: Guid.NewGuid());
+    }
+
+    private static string InvalidTvCheckpointJson(string invalidCase) {
+        var checkpoint = ValidTvCheckpoint();
+        var root = JsonNode.Parse(TvImportCheckpointJson.Serialize(checkpoint))!.AsObject();
+        var unit = root["Units"]!.AsArray()[0]!.AsObject();
+        var otherPath = Path.GetFullPath(Path.Combine(Path.GetTempPath(), "prismedia-checkpoint", "other.mkv"));
+        var otherSeriesPath = Path.Combine(checkpoint.SeriesFolderPath, "Season 01", "other.mkv");
+
+        switch (invalidCase) {
+            case "unknown-import-mode": root["ImportMode"] = "unknown-mode"; break;
+            case "empty-library-id": root["LibraryRootId"] = Guid.Empty; break;
+            case "empty-attempt-id": root["AttemptId"] = Guid.Empty; break;
+            case "empty-claim-job-id": root["ClaimJobId"] = Guid.Empty; break;
+            case "blank-series-path": root["SeriesFolderPath"] = " "; break;
+            case "relative-series-path": root["SeriesFolderPath"] = "Show"; break;
+            case "blank-transfer-id": root["TransferClientItemId"] = " "; break;
+            case "empty-units": root["Units"] = new JsonArray(); break;
+            case "null-units": root["Units"] = null; break;
+            case "null-unit": root["Units"] = new JsonArray((JsonNode?)null); break;
+            case "blank-source-relative-path": unit["SourceRelativePath"] = " "; break;
+            case "absolute-source-relative-path": unit["SourceRelativePath"] = otherPath; break;
+            case "blank-target-path": unit["TargetAbsolutePath"] = " "; break;
+            case "relative-target-path": unit["TargetAbsolutePath"] = "Show.S01E01.mkv"; break;
+            case "blank-source-absolute-path": unit["SourceAbsolutePath"] = " "; break;
+            case "relative-source-absolute-path": unit["SourceAbsolutePath"] = "Show.S01E01.mkv"; break;
+            case "zero-season": unit["SeasonNumber"] = 0; break;
+            case "zero-episode": unit["EpisodeNumber"] = 0; break;
+            case "null-covered-episodes": unit["CoveredEpisodeNumbers"] = null; break;
+            case "invalid-covered-episode": unit["CoveredEpisodeNumbers"] = new JsonArray(0); break;
+            case "missing-previous-path": unit["PreviousFilePath"] = null; break;
+            case "relative-previous-path": unit["PreviousFilePath"] = "Show - S01E01.mkv"; break;
+            case "previous-outside-series": unit["PreviousFilePath"] = otherPath; break;
+            case "missing-backup-path": unit["ReplacementBackupPath"] = null; break;
+            case "wrong-backup-path": unit["ReplacementBackupPath"] = otherPath; break;
+            case "missing-evidence-path": unit["ReplacementEvidencePath"] = null; break;
+            case "wrong-evidence-path": unit["ReplacementEvidencePath"] = otherPath; break;
+            case "wrong-replacement-target": unit["TargetAbsolutePath"] = otherSeriesPath; break;
+            case "format-change-without-consent":
+                unit["SourceRelativePath"] = "Show.S01E01.mp4";
+                unit["SourceAbsolutePath"] = Path.ChangeExtension(unit["SourceAbsolutePath"]!.GetValue<string>(), ".mp4");
+                unit["TargetAbsolutePath"] = Path.ChangeExtension(unit["PreviousFilePath"]!.GetValue<string>(), ".mp4");
+                break;
+            case "mismatched-final-path": unit["FinalPath"] = otherSeriesPath; break;
+            default: throw new ArgumentOutOfRangeException(nameof(invalidCase), invalidCase, null);
+        }
+
+        return root.ToJsonString();
     }
 
     private static void AddHintWithEntity(PrismediaDbContext db, Guid entityId, string sourcePath) {

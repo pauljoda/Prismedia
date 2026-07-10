@@ -7,18 +7,41 @@ namespace Prismedia.Infrastructure.Acquisition;
 /// Places imported files on disk. A move is a cheap rename when the download dir and library root
 /// share a filesystem and transparently falls back to copy+delete across volumes; hardlink mode links
 /// the file (instant, no space, the download keeps seeding) and falls back to copy across volumes.
-/// Colliding targets get a stable numeric suffix so an import never overwrites existing library files.
+/// Ordinary placements give colliding targets a stable numeric suffix; checkpoint-driven placements
+/// can instead require the pre-resolved exact path and fail safely if it is no longer available.
 /// </summary>
 public sealed class ImportFileMover : IImportFileMover {
-    public async Task<string> PlaceAsync(ResolvedImportItem item, ImportMode mode, CancellationToken cancellationToken) {
+    /// <inheritdoc />
+    public string ResolveExactTargetPath(string desiredTargetPath, IReadOnlyCollection<string> reservedTargetPaths) {
+        var reserved = reservedTargetPaths
+            .Select(Path.GetFullPath)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        return ResolveCollision(desiredTargetPath, reserved);
+    }
+
+    /// <inheritdoc />
+    public Task<string> PlaceAsync(ResolvedImportItem item, ImportMode mode, CancellationToken cancellationToken) =>
+        PlaceAtAsync(item, mode, resolveCollision: true, cancellationToken);
+
+    /// <inheritdoc />
+    public Task<string> PlaceExactAsync(ResolvedImportItem item, ImportMode mode, CancellationToken cancellationToken) =>
+        PlaceAtAsync(item, mode, resolveCollision: false, cancellationToken);
+
+    private async Task<string> PlaceAtAsync(
+        ResolvedImportItem item,
+        ImportMode mode,
+        bool resolveCollision,
+        CancellationToken cancellationToken) {
         var directory = Path.GetDirectoryName(item.TargetAbsolutePath);
         if (!string.IsNullOrEmpty(directory)) {
             Directory.CreateDirectory(directory);
         }
 
-        var target = ResolveCollision(item.TargetAbsolutePath);
+        var target = resolveCollision
+            ? ResolveExactTargetPath(item.TargetAbsolutePath, Array.Empty<string>())
+            : item.TargetAbsolutePath;
         if (mode == ImportMode.Copy) {
-            await CopyAsync(item.SourceAbsolutePath, target, cancellationToken);
+            await CopyAndPublishAsync(item.SourceAbsolutePath, target, cancellationToken);
             return target;
         }
 
@@ -26,7 +49,7 @@ public sealed class ImportFileMover : IImportFileMover {
             // A hardlink only works within one filesystem; across volumes the copy fallback preserves
             // the same observable behavior (source stays seeding, target lands in the library).
             if (!HardLink.TryCreate(item.SourceAbsolutePath, target)) {
-                await CopyAsync(item.SourceAbsolutePath, target, cancellationToken);
+                await CopyAndPublishAsync(item.SourceAbsolutePath, target, cancellationToken);
             }
 
             return target;
@@ -35,12 +58,34 @@ public sealed class ImportFileMover : IImportFileMover {
         try {
             File.Move(item.SourceAbsolutePath, target);
         } catch (IOException) {
-            // Cross-device move: fall back to copy then delete the source.
-            await CopyAsync(item.SourceAbsolutePath, target, cancellationToken);
+            // Cross-device move: stage a complete copy beside the target, atomically publish it, then
+            // delete the source. A cancellation or failed copy can never expose a truncated media file
+            // at the durable checkpoint path.
+            await CopyAndPublishAsync(item.SourceAbsolutePath, target, cancellationToken);
             File.Delete(item.SourceAbsolutePath);
         }
 
         return target;
+    }
+
+    private static async Task CopyAndPublishAsync(
+        string source,
+        string target,
+        CancellationToken cancellationToken) {
+        var directory = Path.GetDirectoryName(target) ?? string.Empty;
+        var staged = Path.Combine(
+            directory,
+            $".{Path.GetFileName(target)}.{Guid.NewGuid():N}.prismedia-import");
+
+        try {
+            await CopyAsync(source, staged, cancellationToken);
+            cancellationToken.ThrowIfCancellationRequested();
+            // Same-directory rename publishes the complete file atomically and never overwrites a path
+            // another import claimed after collision resolution.
+            File.Move(staged, target);
+        } finally {
+            TryDelete(staged);
+        }
     }
 
     private static async Task CopyAsync(string source, string target, CancellationToken cancellationToken) {
@@ -49,8 +94,16 @@ public sealed class ImportFileMover : IImportFileMover {
         await input.CopyToAsync(output, cancellationToken);
     }
 
-    private static string ResolveCollision(string target) {
-        if (!File.Exists(target)) {
+    private static void TryDelete(string path) {
+        try {
+            File.Delete(path);
+        } catch {
+            // Best-effort cleanup. The staging extension is intentionally not discoverable media.
+        }
+    }
+
+    private static string ResolveCollision(string target, IReadOnlySet<string> reservedTargetPaths) {
+        if (IsAvailable(target, reservedTargetPaths)) {
             return target;
         }
 
@@ -59,9 +112,14 @@ public sealed class ImportFileMover : IImportFileMover {
         var extension = Path.GetExtension(target);
         for (var index = 2; ; index++) {
             var candidate = Path.Combine(directory, $"{name} ({index}){extension}");
-            if (!File.Exists(candidate)) {
+            if (IsAvailable(candidate, reservedTargetPaths)) {
                 return candidate;
             }
         }
     }
+
+    private static bool IsAvailable(string target, IReadOnlySet<string> reservedTargetPaths) =>
+        !File.Exists(target)
+        && !Directory.Exists(target)
+        && !reservedTargetPaths.Contains(Path.GetFullPath(target));
 }

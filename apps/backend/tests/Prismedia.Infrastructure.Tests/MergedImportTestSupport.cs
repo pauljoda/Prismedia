@@ -7,7 +7,9 @@ namespace Prismedia.Infrastructure.Tests;
 
 /// <summary>Shared fakes for the merged-import engine tests (TV, movie, music).</summary>
 internal static class MergedImportTestSupport {
-    internal sealed class SingleRootPersistence(string path) : ILibraryScanRootPersistence {
+    internal sealed class SingleRootPersistence(
+        string path,
+        bool autoGenerateMetadata = false) : ILibraryScanRootPersistence {
         private readonly LibraryRootData _root = new(
             Guid.NewGuid(), path, "Videos", Enabled: true, Recursive: true,
             ScanVideos: true, ScanImages: false, ScanAudio: false, ScanBooks: false, IsNsfw: false);
@@ -16,7 +18,17 @@ internal static class MergedImportTestSupport {
             Task.FromResult<LibraryRootData?>(rootId == _root.Id ? _root : null);
         public Task<IReadOnlyList<LibraryRootData>> GetEnabledRootsAsync(CancellationToken cancellationToken) =>
             Task.FromResult<IReadOnlyList<LibraryRootData>>([_root]);
-        public Task<LibrarySettingsData> GetSettingsAsync(CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<LibrarySettingsData> GetSettingsAsync(CancellationToken cancellationToken) =>
+            Task.FromResult(new LibrarySettingsData(
+                AutoGenerateMetadata: autoGenerateMetadata,
+                AutoGenerateOshash: false,
+                AutoGenerateMd5: false,
+                AutoGeneratePreview: false,
+                GenerateTrickplay: false,
+                TrickplayIntervalSeconds: 10,
+                PreviewClipDurationSeconds: 10,
+                ThumbnailQuality: 80,
+                TrickplayQuality: 80));
         public Task UpdateRootLastScannedAsync(Guid rootId, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<IReadOnlySet<string>> GetExcludedPathsForRootAsync(Guid rootId, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<int> RemoveEntitiesInExcludedPathsAsync(Guid rootId, CancellationToken cancellationToken) => throw new NotSupportedException();
@@ -62,7 +74,10 @@ internal static class MergedImportTestSupport {
 
         public Task<IReadOnlyList<JobRunSnapshot>> ListAsync(bool hideNsfw, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<JobRunSnapshot> EnqueueAsync(JobType type, CancellationToken cancellationToken) => throw new NotSupportedException();
-        public Task<int> EnqueueBatchAsync(IReadOnlyList<EnqueueJobRequest> requests, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<int> EnqueueBatchAsync(IReadOnlyList<EnqueueJobRequest> requests, CancellationToken cancellationToken) {
+            Enqueued.AddRange(requests);
+            return Task.FromResult(requests.Count);
+        }
         public Task<int> CancelAsync(JobType? type, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<bool> CancelRunAsync(Guid id, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<int> ClearFailuresAsync(JobType? type, CancellationToken cancellationToken) => throw new NotSupportedException();

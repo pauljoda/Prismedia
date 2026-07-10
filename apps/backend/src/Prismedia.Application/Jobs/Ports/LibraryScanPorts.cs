@@ -1,3 +1,4 @@
+using Prismedia.Application.Jobs;
 using Prismedia.Domain.Entities;
 
 namespace Prismedia.Application.Jobs.Ports;
@@ -46,7 +47,29 @@ public interface IVideoScanPersistence {
     /// operations in the same scan start from a clean slate instead of re-attempting the failure.
     /// </summary>
     Task DiscardPendingScanChangesAsync(CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Moves every Source owner of <paramref name="previousPath"/> to <paramref name="replacementPath"/>
+    /// before an upsert. Used by consented cross-format upgrades to preserve the episode Entity and its
+    /// user state even though the file extension—and therefore its stable source path—changed.
+    /// Returns every existing owner whose byte-derived state was invalidated.
+    /// </summary>
+    Task<IReadOnlyList<Guid>> RebindVideoSourceAsync(
+        string previousPath,
+        string replacementPath,
+        CancellationToken cancellationToken) => Task.FromResult<IReadOnlyList<Guid>>([]);
+
+    /// <summary>
+    /// Returns every Entity owning each requested Source path. Unlike the positional batch-upsert
+    /// result, this preserves all co-owners of a multi-episode physical file.
+    /// </summary>
+    Task<IReadOnlyList<VideoSourceOwner>> ListVideoSourceOwnersAsync(
+        IReadOnlyCollection<string> filePaths,
+        CancellationToken cancellationToken) => Task.FromResult<IReadOnlyList<VideoSourceOwner>>([]);
 }
+
+/// <summary>One video Entity and the exact shared-or-exclusive Source path it owns.</summary>
+public sealed record VideoSourceOwner(Guid EntityId, string FilePath);
 
 /// <summary>Image and gallery scan persistence operations for discovered files and stale cleanup.</summary>
 public interface IImageGalleryScanPersistence {
@@ -429,6 +452,41 @@ public sealed record VideoUpsertItem(
     VideoSidecarMetadata? Metadata = null,
     MovieScanInfo? Movie = null,
     int? FolderSortOrder = null);
+
+/// <summary>One TV file placed by an acquisition, with the structural episode identity used by scanning.</summary>
+/// <param name="FilePath">Final absolute library path of the playable file.</param>
+/// <param name="SeasonNumber">Season number represented by the file.</param>
+/// <param name="EpisodeNumber">Primary episode number represented by the file.</param>
+/// <param name="CoveredEpisodeNumbers">Additional episode entities satisfied by the same multi-episode file.</param>
+/// <param name="PreviousFilePath">Prior source path for an in-place upgrade whose extension changed.</param>
+public sealed record ImportedTvEpisode(
+    string FilePath,
+    int SeasonNumber,
+    int EpisodeNumber,
+    IReadOnlyList<int> CoveredEpisodeNumbers,
+    string? PreviousFilePath = null);
+
+/// <summary>The exact, already-placed TV files that must be cataloged before an acquisition is Imported.</summary>
+/// <param name="AcquisitionId">Acquisition whose hint/binding scope owns this materialization.</param>
+/// <param name="Root">Video library root that owns the placed files.</param>
+/// <param name="SeriesFolderPath">Final absolute path of the owning series folder.</param>
+/// <param name="Episodes">Placed episode files and their decoded positions.</param>
+public sealed record ImportedTvMaterializationRequest(
+    Guid AcquisitionId,
+    LibraryRootData Root,
+    string SeriesFolderPath,
+    IReadOnlyList<ImportedTvEpisode> Episodes);
+
+/// <summary>
+/// Materializes exact TV import output through the same wanted binding, Entity upsert, hint, and
+/// downstream-job semantics as a video scan. Completion guarantees every file is Source-backed.
+/// </summary>
+public interface IImportedVideoMaterializer {
+    Task MaterializeAsync(
+        JobContext context,
+        ImportedTvMaterializationRequest request,
+        CancellationToken cancellationToken);
+}
 
 /// <summary>
 /// Image file discovered during a gallery scan.

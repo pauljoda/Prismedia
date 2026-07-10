@@ -435,6 +435,140 @@ public sealed class MediaImportMergeTests {
     }
 
     [Fact]
+    public void MultiEpisodeFileIsHeldWhenCoveredSlotsOwnDifferentFiles() {
+        var layout = Layout(new Dictionary<int, string> {
+            [1] = "/media/tv/Andor (2022)/S01/e01.720p.WEB.mkv",
+            [2] = "/media/tv/Andor (2022)/S01/e02.720p.WEB.mkv",
+        });
+        var unit = new TvPlanUnit(
+            "pack/e01-e02.mkv",
+            1,
+            1,
+            "Andor/Season 01/Andor - S01E01.mkv") {
+            ExtraEpisodes = [2],
+        };
+
+        var merged = TvExistingTargetMerge.Plan(
+            [unit],
+            layout,
+            SeasonSegment,
+            incomingQualityPosition: (int)VideoQuality.Bluray1080p,
+            incomingRevision: 1,
+            ProperDownloadPolicy.PreferAndUpgrade);
+
+        Assert.Equal(MergeFileAction.HoldStructuralConflict, Assert.Single(merged).Action);
+    }
+
+    [Fact]
+    public void MultiEpisodeFileCanUpgradeWhenEveryCoveredSlotSharesOneOwnedFile() {
+        const string shared = "/media/tv/Andor (2022)/S01/e01-e02.720p.WEB.mkv";
+        var layout = Layout(new Dictionary<int, string> { [1] = shared, [2] = shared });
+        var unit = new TvPlanUnit(
+            "pack/e01-e02.mkv",
+            1,
+            1,
+            "Andor/Season 01/Andor - S01E01.mkv") {
+            ExtraEpisodes = [2],
+        };
+
+        var merged = TvExistingTargetMerge.Plan(
+            [unit],
+            layout,
+            SeasonSegment,
+            incomingQualityPosition: (int)VideoQuality.Bluray1080p,
+            incomingRevision: 1,
+            ProperDownloadPolicy.PreferAndUpgrade);
+
+        var item = Assert.Single(merged);
+        Assert.Equal(MergeFileAction.ReplaceUpgrade, item.Action);
+        Assert.Equal(shared, item.OwnedFilePath);
+    }
+
+    [Fact]
+    public void SeparateIncomingFilesAreHeldWhenTheyOverlapOneSharedOwnedFile() {
+        const string shared = "/media/tv/Andor (2022)/S01/e01-e02.720p.WEB.mkv";
+        var layout = Layout(new Dictionary<int, string> { [1] = shared, [2] = shared });
+
+        var merged = TvExistingTargetMerge.Plan(
+            Units((1, 1), (1, 2)),
+            layout,
+            SeasonSegment,
+            incomingQualityPosition: (int)VideoQuality.Bluray1080p,
+            incomingRevision: 1,
+            ProperDownloadPolicy.PreferAndUpgrade);
+
+        Assert.All(merged, item => Assert.Equal(MergeFileAction.HoldStructuralConflict, item.Action));
+    }
+
+    [Fact]
+    public void MissingAndOwnedClaimsAreHeldWhenTheCombinedFileIsNotAnUpgrade() {
+        const string ownedEpisodeTwo = "/media/tv/Andor (2022)/S01/e02.1080p.BluRay.mkv";
+        var layout = Layout(new Dictionary<int, string> { [2] = ownedEpisodeTwo });
+        var unit = new TvPlanUnit(
+            "pack/e01-e02.mkv",
+            1,
+            1,
+            "Andor/Season 01/Andor - S01E01.mkv") {
+            ExtraEpisodes = [2],
+        };
+
+        var merged = TvExistingTargetMerge.Plan(
+            [unit],
+            layout,
+            SeasonSegment,
+            incomingQualityPosition: (int)VideoQuality.Webdl1080p,
+            incomingRevision: 1,
+            ProperDownloadPolicy.PreferAndUpgrade);
+
+        var item = Assert.Single(merged);
+        Assert.Equal(MergeFileAction.HoldStructuralConflict, item.Action);
+        Assert.Equal(ownedEpisodeTwo, item.OwnedFilePath);
+    }
+
+    [Fact]
+    public void NarrowerUpgradeIsHeldWhenTheOwnedFileAlsoSatisfiesAnotherEpisode() {
+        const string shared = "/media/tv/Andor (2022)/S01/e01-e02.720p.WEB.mkv";
+        var layout = Layout(new Dictionary<int, string> { [1] = shared, [2] = shared });
+
+        var merged = TvExistingTargetMerge.Plan(
+            Units((1, 1)),
+            layout,
+            SeasonSegment,
+            incomingQualityPosition: (int)VideoQuality.Bluray1080p,
+            incomingRevision: 1,
+            ProperDownloadPolicy.PreferAndUpgrade);
+
+        var item = Assert.Single(merged);
+        Assert.Equal(MergeFileAction.HoldStructuralConflict, item.Action);
+        Assert.Equal(shared, item.OwnedFilePath);
+    }
+
+    [Fact]
+    public void CombinedFileMayUpgradeOneOwnedSlotWhileAddingAMissingCoveredSlot() {
+        const string ownedEpisodeOne = "/media/tv/Andor (2022)/S01/e01.720p.WEB.mkv";
+        var layout = Layout(new Dictionary<int, string> { [1] = ownedEpisodeOne });
+        var unit = new TvPlanUnit(
+            "pack/e01-e02.mkv",
+            1,
+            1,
+            "Andor/Season 01/Andor - S01E01.mkv") {
+            ExtraEpisodes = [2],
+        };
+
+        var merged = TvExistingTargetMerge.Plan(
+            [unit],
+            layout,
+            SeasonSegment,
+            incomingQualityPosition: (int)VideoQuality.Bluray1080p,
+            incomingRevision: 1,
+            ProperDownloadPolicy.PreferAndUpgrade);
+
+        var item = Assert.Single(merged);
+        Assert.Equal(MergeFileAction.ReplaceUpgrade, item.Action);
+        Assert.Equal(ownedEpisodeOne, item.OwnedFilePath);
+    }
+
+    [Fact]
     public void MultiSeasonPacksRoutePerFileToTheirOwnSeasons() {
         var layout = Layout(new Dictionary<int, string> { [1] = "/media/tv/Andor (2022)/S01/e01.720p.WEB.mkv" });
 
@@ -531,5 +665,41 @@ public sealed class TvEpisodeTitleAlignmentTests {
         ], "Show", seasonNumber: 1, episodeNumber: null);
 
         Assert.Equal(2, Assert.Single(plan.Units).Episode);
+    }
+
+    [Fact]
+    public void DuplicateNumericEpisodeSlotsAreHeldForManualResolution() {
+        var plan = TvImportPlanBuilder.PlanUnits([
+            File("Pack/Show.S01E02.WEB.mkv"),
+            File("Pack/Show.1x02.BluRay.mp4"),
+        ], "Show", seasonNumber: 1, episodeNumber: null);
+
+        Assert.True(plan.Blocked);
+        Assert.Equal(ImportBlockReason.AmbiguousMultiplePrimaries, plan.BlockReason);
+    }
+
+    [Fact]
+    public void CoveredEpisodeCannotAlsoBeClaimedByASecondPrimaryFile() {
+        var plan = TvImportPlanBuilder.PlanUnits([
+            File("Pack/Show_S01E01_MY BEST FRIEND_CLEO'S FAIR SHARE.mkv"),
+            File("Pack/Show.S01E02.720p.WEB-DL.mkv"),
+        ], "Show", seasonNumber: 1, episodeNumber: null, episodeTitles: CliffordTitles);
+
+        Assert.True(plan.Blocked);
+        Assert.Equal(ImportBlockReason.AmbiguousMultiplePrimaries, plan.BlockReason);
+    }
+
+    [Fact]
+    public void RequestedSeasonTitlesNeverRealignOtherSeasonsInACompleteSeriesPack() {
+        var plan = TvImportPlanBuilder.PlanUnits([
+            File("Pack/Show_S01E05_SPECIAL DELIVERY.mkv"),
+            File("Pack/Show_S03E01_SPECIAL DELIVERY.mkv"),
+        ], "Show", seasonNumber: 3, episodeNumber: null, episodeTitles: CliffordTitles);
+
+        Assert.False(plan.Blocked);
+        var seasonOne = Assert.Single(plan.Units, unit => unit.Season == 1);
+        var seasonThree = Assert.Single(plan.Units, unit => unit.Season == 3);
+        Assert.Equal(5, seasonOne.Episode);
+        Assert.Equal(3, seasonThree.Episode);
     }
 }

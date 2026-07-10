@@ -14,7 +14,10 @@ public enum MergeFileAction {
     DropNotUpgrade,
 
     /// <summary>A genuine upgrade that changes the file extension — never auto-swapped; surfaced for manual import.</summary>
-    DropFormatChange
+    DropFormatChange,
+
+    /// <summary>The physical-file coverage cannot be reconciled without splitting, merging, or losing episode owners.</summary>
+    HoldStructuralConflict,
 }
 
 /// <summary>
@@ -53,22 +56,91 @@ public static class TvExistingTargetMerge {
         int incomingRevision,
         ProperDownloadPolicy properPolicy,
         bool allowFormatChange = false) {
+        var ownedPathBySlot = new Dictionary<(int Season, int Episode), string>();
+        var ownedSlotsByPath = new Dictionary<string, HashSet<(int Season, int Episode)>>(StringComparer.OrdinalIgnoreCase);
+        foreach (var (seasonNumber, season) in layout.Seasons) {
+            foreach (var (episodeNumber, path) in season.EpisodeFileByNumber) {
+                var slot = (seasonNumber, episodeNumber);
+                var fullPath = Path.GetFullPath(path);
+                ownedPathBySlot[slot] = fullPath;
+                if (!ownedSlotsByPath.TryGetValue(fullPath, out var slots)) {
+                    slots = [];
+                    ownedSlotsByPath.Add(fullPath, slots);
+                }
+
+                slots.Add(slot);
+            }
+        }
+
+        var claimedSlotsByUnit = units
+            .Select(unit => unit.ExtraEpisodes
+                .Prepend(unit.Episode)
+                .Select(episode => (unit.Season, Episode: episode))
+                .ToHashSet())
+            .ToArray();
+        var occupiedPathsByUnit = claimedSlotsByUnit
+            .Select(slots => slots
+                .Where(ownedPathBySlot.ContainsKey)
+                .Select(slot => ownedPathBySlot[slot])
+                .ToHashSet(StringComparer.OrdinalIgnoreCase))
+            .ToArray();
+
+        // One automatic replacement can reconcile exactly one incoming physical file with exactly one
+        // existing physical file. The forward check catches a bundled incoming file spanning separate
+        // owned files; this reverse count catches separate incoming files trying to replace one shared
+        // multi-episode file.
+        var incomingCountByOwnedPath = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        foreach (var occupiedPaths in occupiedPathsByUnit) {
+            foreach (var path in occupiedPaths) {
+                incomingCountByOwnedPath[path] = incomingCountByOwnedPath.GetValueOrDefault(path) + 1;
+            }
+        }
+
         var items = new List<MergedImportItem>(units.Count);
-        foreach (var unit in units) {
+        for (var index = 0; index < units.Count; index++) {
+            var unit = units[index];
+            var claimedSlots = claimedSlotsByUnit[index];
+            var occupiedPaths = occupiedPathsByUnit[index];
             var season = layout.Seasons.GetValueOrDefault(unit.Season);
             var seasonFolder = season?.FolderPath
                 ?? Path.Combine(layout.SeriesFolderPath, seasonSegment(unit.Season));
+            var desiredTarget = Path.Combine(seasonFolder, unit.FileName);
 
-            var owned = season?.EpisodeFileByNumber.GetValueOrDefault(unit.Episode);
+            if (occupiedPaths.Count > 1
+                || occupiedPaths.Any(path => incomingCountByOwnedPath[path] > 1)) {
+                items.Add(new MergedImportItem(
+                    unit.SourceRelativePath,
+                    desiredTarget,
+                    MergeFileAction.HoldStructuralConflict));
+                continue;
+            }
+
+            var owned = occupiedPaths.SingleOrDefault();
             if (owned is null) {
                 items.Add(new MergedImportItem(
-                    unit.SourceRelativePath, Path.Combine(seasonFolder, unit.FileName), MergeFileAction.PlaceNew));
+                    unit.SourceRelativePath, desiredTarget, MergeFileAction.PlaceNew));
                 continue;
+            }
+
+            var action = DecideAgainstOwned(
+                unit.FileName,
+                owned,
+                incomingQualityPosition,
+                incomingRevision,
+                properPolicy,
+                allowFormatChange);
+            var hasMissingClaims = claimedSlots.Any(slot => !ownedPathBySlot.ContainsKey(slot));
+            var cannotDropMissingClaims = hasMissingClaims
+                && action is MergeFileAction.DropNotUpgrade or MergeFileAction.DropFormatChange;
+            var narrowsSharedOwner = action == MergeFileAction.ReplaceUpgrade
+                && ownedSlotsByPath[owned].Any(slot => !claimedSlots.Contains(slot));
+            if (cannotDropMissingClaims || narrowsSharedOwner) {
+                action = MergeFileAction.HoldStructuralConflict;
             }
 
             items.Add(new MergedImportItem(
                 unit.SourceRelativePath, owned,
-                DecideAgainstOwned(unit.FileName, owned, incomingQualityPosition, incomingRevision, properPolicy, allowFormatChange),
+                action,
                 owned));
         }
 

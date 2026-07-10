@@ -13,6 +13,8 @@ public sealed class MaintenancePersistenceService(PrismediaDbContext db, string 
     private static readonly EntityFileRole[] GeneratedVideoPreviewRoles =
     [
         EntityFileRole.Thumbnail,
+        EntityFileRole.GridThumbnail,
+        EntityFileRole.GridThumbnail2x,
         EntityFileRole.Preview,
         EntityFileRole.Sprite,
         EntityFileRole.Trickplay,
@@ -70,6 +72,8 @@ public sealed class MaintenancePersistenceService(PrismediaDbContext db, string 
                 DeleteFileIfExists(Path.Combine(cacheBase, "videos", id, "thumb.jpg"));
                 DeleteFileIfExists(Path.Combine(cacheBase, "videos", id, "preview.mp4"));
                 DeleteFileIfExists(Path.Combine(cacheBase, "videos", id, "sprite.jpg"));
+                DeleteFileIfExists(Path.Combine(cacheBase, "grid-thumbs", id + ".jpg"));
+                DeleteFileIfExists(Path.Combine(cacheBase, "grid-thumbs", id + "@2x.jpg"));
                 DeleteFileIfExists(Path.Combine(cacheBase, "videos", id, "trickplay.vtt"));
                 DeleteDirectoryIfExists(Path.Combine(cacheBase, "videos", id, "trickplay-frames"));
                 DeleteDirectoryIfExists(Path.Combine(cacheBase, "trickplay", id));

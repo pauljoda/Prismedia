@@ -211,8 +211,132 @@ public sealed class EfAcquisitionStore(PrismediaDbContext db, IAcquisitionHistor
 
         row.Status = status;
         row.StatusMessage = message;
+        if (status is not (AcquisitionStatus.Importing or AcquisitionStatus.Failed)) {
+            row.ImportClaimJobId = null;
+        }
         row.UpdatedAt = DateTimeOffset.UtcNow;
         await db.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task<bool> TryTransitionStatusAsync(
+        Guid id,
+        IReadOnlyCollection<AcquisitionStatus> expectedStatuses,
+        AcquisitionStatus status,
+        string? message,
+        CancellationToken cancellationToken) {
+        if (expectedStatuses.Count == 0) {
+            return false;
+        }
+
+        var expected = expectedStatuses.Distinct().ToArray();
+        var now = DateTimeOffset.UtcNow;
+        if (db.Database.IsRelational()) {
+            return await db.Acquisitions
+                .Where(row => row.Id == id && expected.Contains(row.Status))
+                .ExecuteUpdateAsync(setters => setters
+                    .SetProperty(row => row.Status, status)
+                    .SetProperty(row => row.StatusMessage, message)
+                    .SetProperty(
+                        row => row.ImportClaimJobId,
+                        status is AcquisitionStatus.Importing or AcquisitionStatus.Failed
+                            ? row => row.ImportClaimJobId
+                            : row => null)
+                    .SetProperty(row => row.UpdatedAt, now), cancellationToken) == 1;
+        }
+
+        var row = await db.Acquisitions.FirstOrDefaultAsync(value => value.Id == id, cancellationToken);
+        if (row is null || !expected.Contains(row.Status)) {
+            return false;
+        }
+
+        row.Status = status;
+        row.StatusMessage = message;
+        if (status is not (AcquisitionStatus.Importing or AcquisitionStatus.Failed)) {
+            row.ImportClaimJobId = null;
+        }
+        row.UpdatedAt = now;
+        await db.SaveChangesAsync(cancellationToken);
+        return true;
+    }
+
+    public async Task<bool> TryClaimInitialImportAsync(
+        Guid id,
+        Guid claimJobId,
+        bool allowManualRetry,
+        CancellationToken cancellationToken) {
+        var now = DateTimeOffset.UtcNow;
+        if (db.Database.IsRelational()) {
+            return await db.Acquisitions
+                .Where(row => row.Id == id
+                    && (row.Status == AcquisitionStatus.Downloaded
+                        || (allowManualRetry && row.Status == AcquisitionStatus.ManualImportRequired)
+                        || ((row.Status == AcquisitionStatus.Importing || row.Status == AcquisitionStatus.Failed)
+                            && row.TvImportCheckpointJson == null
+                            && row.ImportClaimJobId == claimJobId)))
+                .ExecuteUpdateAsync(setters => setters
+                    .SetProperty(row => row.Status, AcquisitionStatus.Importing)
+                    .SetProperty(row => row.StatusMessage, (string?)null)
+                    .SetProperty(row => row.ImportClaimJobId, claimJobId)
+                    .SetProperty(row => row.UpdatedAt, now), cancellationToken) == 1;
+        }
+
+        var row = await db.Acquisitions.FirstOrDefaultAsync(value => value.Id == id, cancellationToken);
+        if (row is null
+            || (row.Status != AcquisitionStatus.Downloaded
+                && !(allowManualRetry && row.Status == AcquisitionStatus.ManualImportRequired)
+                && !((row.Status == AcquisitionStatus.Importing || row.Status == AcquisitionStatus.Failed)
+                    && row.TvImportCheckpointJson is null
+                    && row.ImportClaimJobId == claimJobId))) {
+            return false;
+        }
+
+        row.Status = AcquisitionStatus.Importing;
+        row.StatusMessage = null;
+        row.ImportClaimJobId = claimJobId;
+        row.UpdatedAt = now;
+        await db.SaveChangesAsync(cancellationToken);
+        return true;
+    }
+
+    public async Task<bool> TryHoldCorruptTvImportCheckpointAsync(
+        Guid id,
+        Guid claimJobId,
+        string message,
+        CancellationToken cancellationToken) {
+        var holdable = new[] {
+            AcquisitionStatus.Downloaded,
+            AcquisitionStatus.Failed,
+            AcquisitionStatus.ManualImportRequired,
+        };
+        var now = DateTimeOffset.UtcNow;
+        if (db.Database.IsRelational()) {
+            return await db.Acquisitions
+                .Where(row => row.Id == id
+                    && row.TvImportCheckpointJson != null
+                    && (holdable.Contains(row.Status)
+                        || (row.Status == AcquisitionStatus.Importing
+                            && row.ImportClaimJobId == claimJobId)))
+                .ExecuteUpdateAsync(setters => setters
+                    .SetProperty(row => row.Status, AcquisitionStatus.ManualImportRequired)
+                    .SetProperty(row => row.StatusMessage, message)
+                    .SetProperty(row => row.ImportClaimJobId, (Guid?)null)
+                    .SetProperty(row => row.UpdatedAt, now), cancellationToken) == 1;
+        }
+
+        var row = await db.Acquisitions.FirstOrDefaultAsync(value => value.Id == id, cancellationToken);
+        if (row?.TvImportCheckpointJson is null
+            || (!holdable.Contains(row.Status)
+                && !(row.Status == AcquisitionStatus.Importing
+                    && row.ImportClaimJobId == claimJobId))) {
+            return false;
+        }
+
+        row.Status = AcquisitionStatus.ManualImportRequired;
+        row.StatusMessage = message;
+        row.ImportClaimJobId = null;
+        row.UpdatedAt = now;
+        await db.SaveChangesAsync(cancellationToken);
+        return true;
     }
 
     public async Task<UpgradeOwnedQuality?> GetUpgradeOwnedQualityAsync(Guid acquisitionId, CancellationToken cancellationToken) {
@@ -336,6 +460,29 @@ public sealed class EfAcquisitionStore(PrismediaDbContext db, IAcquisitionHistor
             return;
         }
 
+        // Prepare every potentially fallible value before the terminal commit. Imported is the final
+        // source of truth; malformed optional history metadata must not make the handler overwrite it
+        // with Failed after the checkpoint has already been cleared.
+        string? selectedTitle = null;
+        if (row.SelectedReleaseJson is { Length: > 0 } selectedJson) {
+            try {
+                selectedTitle = JsonSerializer.Deserialize<SelectedRelease>(selectedJson)?.Title;
+            } catch (JsonException ex) {
+                logger.LogWarning(ex, "Ignoring malformed selected-release history metadata for acquisition {Id}.", id);
+            }
+        }
+        var qualityCode = ownedMediaQuality ?? $"{ownedQuality.Source.ToCode()}/{ownedQuality.Format.ToCode()}";
+        var importedHistory = new AcquisitionHistoryEntry(
+            row.Id,
+            row.EntityId,
+            row.Kind,
+            AcquisitionHistoryEvent.Imported,
+            row.Title,
+            selectedTitle,
+            QualityCode: qualityCode,
+            FormatScore: ownedFormatScore,
+            Message: message);
+
         row.Status = AcquisitionStatus.Imported;
         row.StatusMessage = message;
         row.OwnedSourceTier = ownedQuality.Source;
@@ -350,27 +497,14 @@ public sealed class EfAcquisitionStore(PrismediaDbContext db, IAcquisitionHistor
 
         row.OwnedFormatScore = ownedFormatScore;
         row.UpgradeQualityCaptured = true;
+        row.TvImportCheckpointJson = null;
+        row.ImportClaimJobId = null;
         row.UpdatedAt = DateTimeOffset.UtcNow;
         await db.SaveChangesAsync(cancellationToken);
 
-        // Durable Imported event: the single choke point for all four import engines. Record the quality in
-        // the kind's vocabulary (the media ladder code for movies/TV/music, the source/format rank for books)
-        // and the release that landed. Best-effort — a history hiccup must never fail the import.
-        var selectedTitle = row.SelectedReleaseJson is { Length: > 0 } json
-            ? JsonSerializer.Deserialize<SelectedRelease>(json)?.Title
-            : null;
-        var qualityCode = ownedMediaQuality ?? $"{ownedQuality.Source.ToCode()}/{ownedQuality.Format.ToCode()}";
-        await history.SafeAddAsync(logger, new AcquisitionHistoryEntry(
-            row.Id,
-            row.EntityId,
-            row.Kind,
-            AcquisitionHistoryEvent.Imported,
-            row.Title,
-            selectedTitle,
-            QualityCode: qualityCode,
-            FormatScore: ownedFormatScore,
-            Message: message),
-            cancellationToken);
+        // Durable Imported event: the single choke point for all four import engines. History is
+        // deliberately best-effort and non-cancellable after the terminal state is committed.
+        await history.SafeAddAsync(logger, importedHistory, CancellationToken.None);
     }
 
     public async Task ReplaceCandidatesAsync(Guid id, IReadOnlyList<ScoredRelease> candidates, CancellationToken cancellationToken) {
@@ -603,10 +737,13 @@ public sealed class EfAcquisitionStore(PrismediaDbContext db, IAcquisitionHistor
             .FirstOrDefaultAsync(cancellationToken);
 
         var externalIdentity = ToExternalIdentity(row.IdentityNamespace, row.IdentityValue);
+        var tvImportCheckpoint = TvImportCheckpointJson.Deserialize(row.TvImportCheckpointJson);
+
         return new AcquisitionImportContext(
             row.Id, row.Title, row.Author, row.Series, row.Year, row.PosterUrl, externalIdentity,
             row.ProfileId, transfer?.ContentPath, transfer?.ClientItemId, transfer?.DownloadClientConfigId, row.Description,
-            row.Kind, row.TargetLibraryRootId, row.SeasonNumber, row.EpisodeNumber, row.EntityId);
+            row.Kind, row.TargetLibraryRootId, row.SeasonNumber, row.EpisodeNumber, row.EntityId, row.FinalSourcePath,
+            tvImportCheckpoint);
     }
 
     public async Task<AcquisitionTransferInfo?> GetTransferInfoAsync(Guid acquisitionId, CancellationToken cancellationToken) {
@@ -638,6 +775,178 @@ public sealed class EfAcquisitionStore(PrismediaDbContext db, IAcquisitionHistor
         row.FinalSourcePath = finalSourcePath;
         row.UpdatedAt = DateTimeOffset.UtcNow;
         await db.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task SetTvImportCheckpointAsync(
+        Guid acquisitionId,
+        TvImportCheckpoint? checkpoint,
+        CancellationToken cancellationToken) {
+        var row = await db.Acquisitions.FirstOrDefaultAsync(row => row.Id == acquisitionId, cancellationToken);
+        if (row is null) {
+            return;
+        }
+
+        row.TvImportCheckpointJson = checkpoint is null ? null : TvImportCheckpointJson.Serialize(checkpoint);
+        row.ImportClaimJobId = checkpoint?.ClaimJobId;
+        if (checkpoint is null) {
+            // Abandoning a superseded partial import clears any legacy final-path anchor and its hint,
+            // so neither can masquerade as successful content or bind the next release.
+            row.FinalSourcePath = null;
+            var staleHints = await db.AcquisitionImportHints
+                .Where(hint => hint.AcquisitionId == acquisitionId)
+                .ToArrayAsync(cancellationToken);
+            db.AcquisitionImportHints.RemoveRange(staleHints);
+        }
+        row.UpdatedAt = DateTimeOffset.UtcNow;
+        await db.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task<bool> TryCreateTvImportCheckpointAsync(
+        Guid acquisitionId,
+        TvImportCheckpoint checkpoint,
+        CancellationToken cancellationToken) {
+        var checkpointJson = TvImportCheckpointJson.Serialize(checkpoint);
+        var transferClientItemId = checkpoint.TransferClientItemId;
+        var now = DateTimeOffset.UtcNow;
+        if (db.Database.IsRelational()) {
+            return await db.Acquisitions
+                .Where(row => row.Id == acquisitionId
+                    && row.Status == AcquisitionStatus.Importing
+                    && row.TvImportCheckpointJson == null
+                    && row.ImportClaimJobId == checkpoint.ClaimJobId
+                    && (transferClientItemId == null || db.DownloadTransfers.Any(transfer =>
+                        transfer.AcquisitionId == acquisitionId
+                        && transfer.ClientItemId == transferClientItemId)))
+                .ExecuteUpdateAsync(setters => setters
+                    .SetProperty(row => row.TvImportCheckpointJson, checkpointJson)
+                    .SetProperty(row => row.UpdatedAt, now), cancellationToken) == 1;
+        }
+
+        var row = await db.Acquisitions.FirstOrDefaultAsync(value => value.Id == acquisitionId, cancellationToken);
+        if (row is null
+            || row.Status != AcquisitionStatus.Importing
+            || row.TvImportCheckpointJson is not null
+            || row.ImportClaimJobId != checkpoint.ClaimJobId
+            || (transferClientItemId is not null && !await db.DownloadTransfers.AnyAsync(transfer =>
+                transfer.AcquisitionId == acquisitionId
+                && transfer.ClientItemId == transferClientItemId, cancellationToken))) {
+            return false;
+        }
+
+        row.TvImportCheckpointJson = checkpointJson;
+        row.UpdatedAt = now;
+        await db.SaveChangesAsync(cancellationToken);
+        return true;
+    }
+
+    public async Task<bool> TryClaimTvImportCheckpointAsync(
+        Guid acquisitionId,
+        TvImportCheckpoint checkpoint,
+        Guid claimJobId,
+        CancellationToken cancellationToken) {
+        var expectedJson = TvImportCheckpointJson.Serialize(checkpoint);
+        var claimedCheckpoint = checkpoint with { ClaimJobId = claimJobId };
+        var claimedJson = TvImportCheckpointJson.Serialize(claimedCheckpoint);
+        var canResumeImporting = checkpoint.ClaimJobId == Guid.Empty || checkpoint.ClaimJobId == claimJobId;
+        var claimable = new[] {
+            AcquisitionStatus.Downloaded,
+            AcquisitionStatus.Failed,
+            AcquisitionStatus.ManualImportRequired,
+        };
+        var now = DateTimeOffset.UtcNow;
+
+        if (db.Database.IsRelational()) {
+            return await db.Acquisitions
+                .Where(row => row.Id == acquisitionId
+                    && row.TvImportCheckpointJson == expectedJson
+                    && (claimable.Contains(row.Status)
+                        || (canResumeImporting
+                            && row.Status == AcquisitionStatus.Importing
+                            && row.ImportClaimJobId == claimJobId)))
+                .ExecuteUpdateAsync(setters => setters
+                    .SetProperty(row => row.Status, AcquisitionStatus.Importing)
+                    .SetProperty(row => row.StatusMessage, (string?)null)
+                    .SetProperty(row => row.TvImportCheckpointJson, claimedJson)
+                    .SetProperty(row => row.ImportClaimJobId, claimJobId)
+                    .SetProperty(row => row.UpdatedAt, now), cancellationToken) == 1;
+        }
+
+        var row = await db.Acquisitions.FirstOrDefaultAsync(value => value.Id == acquisitionId, cancellationToken);
+        if (row?.TvImportCheckpointJson != expectedJson
+            || (!claimable.Contains(row.Status)
+                && !(canResumeImporting
+                    && row.Status == AcquisitionStatus.Importing
+                    && row.ImportClaimJobId == claimJobId))) {
+            return false;
+        }
+
+        row.Status = AcquisitionStatus.Importing;
+        row.StatusMessage = null;
+        row.TvImportCheckpointJson = claimedJson;
+        row.ImportClaimJobId = claimJobId;
+        row.UpdatedAt = now;
+        await db.SaveChangesAsync(cancellationToken);
+        return true;
+    }
+
+    public async Task<bool> TryClearTvImportCheckpointAsync(
+        Guid acquisitionId,
+        TvImportCheckpoint checkpoint,
+        CancellationToken cancellationToken) {
+        var expectedJson = TvImportCheckpointJson.Serialize(checkpoint);
+        var supersedable = new[] {
+            AcquisitionStatus.AwaitingSelection,
+            AcquisitionStatus.Failed,
+            AcquisitionStatus.Cancelled,
+            AcquisitionStatus.ManualImportRequired,
+        };
+        var now = DateTimeOffset.UtcNow;
+        int affected;
+        if (db.Database.IsRelational()) {
+            affected = await db.Acquisitions
+                .Where(row => row.Id == acquisitionId
+                    && row.TvImportCheckpointJson == expectedJson
+                    && supersedable.Contains(row.Status))
+                .ExecuteUpdateAsync(setters => setters
+                    .SetProperty(row => row.TvImportCheckpointJson, (string?)null)
+                    .SetProperty(row => row.FinalSourcePath, (string?)null)
+                    .SetProperty(row => row.ImportClaimJobId, (Guid?)null)
+                    .SetProperty(row => row.UpdatedAt, now), cancellationToken);
+            if (affected == 1) {
+                await db.AcquisitionImportHints
+                    .Where(hint => hint.AcquisitionId == acquisitionId)
+                    .ExecuteDeleteAsync(cancellationToken);
+            }
+            return affected == 1;
+        }
+
+        var row = await db.Acquisitions.FirstOrDefaultAsync(value => value.Id == acquisitionId, cancellationToken);
+        if (row?.TvImportCheckpointJson != expectedJson || !supersedable.Contains(row.Status)) {
+            return false;
+        }
+
+        row.TvImportCheckpointJson = null;
+        row.FinalSourcePath = null;
+        row.ImportClaimJobId = null;
+        row.UpdatedAt = now;
+        db.AcquisitionImportHints.RemoveRange(await db.AcquisitionImportHints
+            .Where(hint => hint.AcquisitionId == acquisitionId)
+            .ToArrayAsync(cancellationToken));
+        await db.SaveChangesAsync(cancellationToken);
+        return true;
+    }
+
+    public async Task<bool> IsCurrentTvImportCheckpointAsync(
+        Guid acquisitionId,
+        TvImportCheckpoint checkpoint,
+        CancellationToken cancellationToken) {
+        var expectedJson = TvImportCheckpointJson.Serialize(checkpoint);
+        return await db.Acquisitions.AsNoTracking().AnyAsync(row =>
+            row.Id == acquisitionId
+            && row.Status == AcquisitionStatus.Importing
+            && row.ImportClaimJobId == checkpoint.ClaimJobId
+            && row.TvImportCheckpointJson == expectedJson,
+            cancellationToken);
     }
 
     public async Task WriteImportHintAsync(Guid acquisitionId, string sourcePath, AcquisitionImportContext context, BookQualityRank ownedQuality, CancellationToken cancellationToken) {
@@ -735,7 +1044,8 @@ public sealed class EfAcquisitionStore(PrismediaDbContext db, IAcquisitionHistor
 
     private static AcquisitionSummary ToSummary(AcquisitionRow row, double? progress) =>
         new(row.Id, row.Status, row.StatusMessage, row.Title, row.Author, row.Series, row.Year, row.PosterUrl,
-            progress, row.CreatedAt, row.UpdatedAt, row.Description, row.Kind, row.EntityId);
+            progress, row.CreatedAt, row.UpdatedAt, row.Description, row.Kind, row.EntityId,
+            HasResumableImport: row.TvImportCheckpointJson is not null);
 
     private static ReleaseCandidateView ToView(ReleaseCandidateRow row) =>
         new(row.Id, row.IndexerName, row.Title, row.SizeBytes, row.Seeders, row.Peers, row.Protocol, row.Accepted,

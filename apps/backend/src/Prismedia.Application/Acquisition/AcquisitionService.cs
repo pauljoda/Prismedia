@@ -1,5 +1,7 @@
 using Microsoft.Extensions.Logging;
 using Prismedia.Application.Jobs;
+using Prismedia.Application.Jobs.Handlers;
+using Prismedia.Application.Jobs.Scanning;
 using Prismedia.Contracts.Acquisition;
 using Prismedia.Contracts.System;
 using Prismedia.Domain.Entities;
@@ -23,6 +25,15 @@ public interface IAcquisitionRequestService {
     Task<IReadOnlyList<Guid>> ListIdsForEntityAsync(Guid entityId, CancellationToken cancellationToken);
 
     /// <summary>
+    /// Reads whether an imported acquisition can be replaced after its owned files are deleted. This check
+    /// has no persistence, queue, monitor, download-client, or filesystem side effects, so destructive entity
+    /// workflows can validate their complete replacement set before mutating anything.
+    /// </summary>
+    Task<AcquisitionReacquireEligibility> GetReacquireEligibilityAsync(
+        Guid id,
+        CancellationToken cancellationToken);
+
+    /// <summary>
     /// Removes an acquisition entirely: best-effort deletes its torrent (and data) from the client, then
     /// hard-deletes the record. <paramref name="preserveWantedLoop"/> (the user-facing Downloads remove)
     /// keeps a monitor watching the acquisition alive by re-pointing it at a fresh pending clone; internal
@@ -43,6 +54,13 @@ public interface IAcquisitionRequestService {
 }
 
 /// <summary>
+/// Read-only verdict for replacing one imported acquisition with a clean search after its files are deleted.
+/// </summary>
+/// <param name="CanReacquire">True only when the acquisition is currently safe to supersede.</param>
+/// <param name="Message">Actionable reason when reacquisition is not currently safe.</param>
+public sealed record AcquisitionReacquireEligibility(bool CanReacquire, string? Message = null);
+
+/// <summary>
 /// Application use case for the acquisition lifecycle from the API's perspective: create an acquisition
 /// from request metadata and kick off a background release search, then list and read acquisition state.
 /// </summary>
@@ -55,7 +73,8 @@ public sealed class AcquisitionService(
     IImportedFilesReader importedFiles,
     IAcquisitionHistoryStore history,
     ILogger<AcquisitionService> logger,
-    IMonitorStore monitors) : IAcquisitionRequestService {
+    IMonitorStore monitors,
+    VideoScanConcurrencyGate? scanGate = null) : IAcquisitionRequestService {
     public Task<IReadOnlyList<AcquisitionSummary>> ListAsync(CancellationToken cancellationToken) =>
         store.ListAsync(cancellationToken);
 
@@ -65,6 +84,16 @@ public sealed class AcquisitionService(
     /// <summary>The latest acquisition backing a library entity (wanted or imported), or null when it has none.</summary>
     public Task<AcquisitionDetail?> GetForEntityAsync(Guid entityId, CancellationToken cancellationToken) =>
         store.GetLatestForEntityAsync(entityId, cancellationToken);
+
+    /// <inheritdoc />
+    public async Task<AcquisitionReacquireEligibility> GetReacquireEligibilityAsync(
+        Guid id,
+        CancellationToken cancellationToken) {
+        var detail = await store.GetAsync(id, cancellationToken);
+        return detail is null
+            ? new AcquisitionReacquireEligibility(false, "The acquisition no longer exists.")
+            : await EvaluateReacquireEligibilityAsync(detail, cancellationToken);
+    }
 
     /// <summary>Live transfer telemetry (progress, speed, ETA, peers, per-piece state) for an in-flight acquisition, or null when there is no live transfer.</summary>
     public async Task<AcquisitionTransferView?> GetTransferAsync(Guid id, CancellationToken cancellationToken) {
@@ -257,9 +286,22 @@ public sealed class AcquisitionService(
             return null;
         }
 
+        if (detail.Summary.Status is AcquisitionStatus.Importing or AcquisitionStatus.Imported) {
+            throw ActiveImportConflict(detail.Summary.Status);
+        }
+
+        await EnsureTvCheckpointCanBeSupersededAsync(detail, cancellationToken);
+        if (!await store.TryTransitionStatusAsync(
+                id,
+                [detail.Summary.Status],
+                AcquisitionStatus.Cancelled,
+                "Cancelled.",
+                cancellationToken)) {
+            throw LifecycleChangedConflict();
+        }
+
         await RemoveTransferDataAsync(id, cancellationToken);
 
-        await store.SetStatusAsync(id, AcquisitionStatus.Cancelled, "Cancelled.", cancellationToken);
         await RecordRemovedAsync(detail.Summary, "Cancelled by user.", cancellationToken);
 
         // Cancel stops THIS download only — the wanted placeholder and any monitor stay exactly as they
@@ -281,7 +323,22 @@ public sealed class AcquisitionService(
     /// the flag off — they are dismantling the loop on purpose.
     /// </summary>
     public async Task<bool> DeleteAsync(Guid id, CancellationToken cancellationToken, bool preserveWantedLoop = false) {
-        var summary = (await store.GetAsync(id, cancellationToken))?.Summary;
+        var detail = await store.GetAsync(id, cancellationToken);
+        var summary = detail?.Summary;
+        if (detail is null) {
+            return false;
+        }
+
+        await EnsureTvCheckpointCanBeSupersededAsync(detail, cancellationToken);
+        if (!await store.TryTransitionStatusAsync(
+                id,
+                [detail.Summary.Status],
+                AcquisitionStatus.Cancelled,
+                "Removing acquisition.",
+                cancellationToken)) {
+            throw LifecycleChangedConflict();
+        }
+
         // Record the Removed event BEFORE the hard delete so the entry still carries a live acquisition id;
         // the acquisition_history FK is SetNull, so once the row is deleted the entry's acquisition id nulls
         // out but the entry (and its denormalized title/kind/entity) survives — the durable audit trail.
@@ -309,6 +366,23 @@ public sealed class AcquisitionService(
         var detail = await store.GetAsync(id, cancellationToken);
         if (detail is null) {
             return null;
+        }
+
+        var eligibility = await EvaluateReacquireEligibilityAsync(detail, cancellationToken);
+        if (!eligibility.CanReacquire) {
+            throw new AcquisitionConfigurationException(
+                ApiProblemCodes.AcquisitionInvalid,
+                eligibility.Message ?? "This acquisition cannot be reacquired right now.");
+        }
+
+        await EnsureTvCheckpointCanBeSupersededAsync(detail, cancellationToken);
+        if (!await store.TryTransitionStatusAsync(
+                id,
+                [AcquisitionStatus.Imported],
+                AcquisitionStatus.Cancelled,
+                "Files removed; preparing reacquisition.",
+                cancellationToken)) {
+            throw LifecycleChangedConflict();
         }
 
         await RemoveTransferDataAsync(id, cancellationToken);
@@ -345,6 +419,37 @@ public sealed class AcquisitionService(
         await RecordRemovedAsync(detail.Summary, "Files deleted; searching again.", cancellationToken);
         await store.DeleteAsync(id, cancellationToken);
         return freshId;
+    }
+
+    private async Task<AcquisitionReacquireEligibility> EvaluateReacquireEligibilityAsync(
+        AcquisitionDetail detail,
+        CancellationToken cancellationToken) {
+        if (detail.Summary.Status != AcquisitionStatus.Imported) {
+            return new AcquisitionReacquireEligibility(
+                false,
+                ActiveImportConflict(detail.Summary.Status).Message);
+        }
+
+        if (detail.Summary.Kind is not (EntityKind.Video or EntityKind.VideoSeason or EntityKind.VideoSeries)) {
+            return new AcquisitionReacquireEligibility(true);
+        }
+
+        AcquisitionImportContext? import;
+        try {
+            import = await store.GetImportContextAsync(detail.Summary.Id, cancellationToken);
+        } catch (InvalidDataException) {
+            return new AcquisitionReacquireEligibility(false, TvImportCheckpointLifecycle.CorruptCheckpointMessage);
+        }
+
+        if (import?.TvImportCheckpoint is null
+            || await TvImportCheckpointLifecycle.CanAbandonAsync(
+                import,
+                cancellationToken,
+                scanGate)) {
+            return new AcquisitionReacquireEligibility(true);
+        }
+
+        return new AcquisitionReacquireEligibility(false, TvImportCheckpointLifecycle.CheckpointMustFinishMessage);
     }
 
     /// <summary>
@@ -403,6 +508,20 @@ public sealed class AcquisitionService(
             return null;
         }
 
+        if (!AcquisitionSearchJobHandler.IsSearchable(detail.Summary.Status)) {
+            return detail;
+        }
+
+        await EnsureTvCheckpointCanBeSupersededAsync(detail, cancellationToken);
+        if (!await store.TryTransitionStatusAsync(
+                id,
+                [detail.Summary.Status],
+                AcquisitionStatus.Searching,
+                null,
+                cancellationToken)) {
+            return await store.GetAsync(id, cancellationToken);
+        }
+
         await queue.EnqueueAsync(
             new EnqueueJobRequest(
                 JobType.AcquisitionSearch,
@@ -412,6 +531,48 @@ public sealed class AcquisitionService(
             cancellationToken);
         return detail;
     }
+
+    private async Task EnsureTvCheckpointCanBeSupersededAsync(
+        AcquisitionDetail detail,
+        CancellationToken cancellationToken) {
+        if (detail.Summary.Status == AcquisitionStatus.Importing) {
+            throw ActiveImportConflict(detail.Summary.Status);
+        }
+
+        if (detail.Summary.Kind is not (EntityKind.Video or EntityKind.VideoSeason or EntityKind.VideoSeries)) {
+            return;
+        }
+
+        AcquisitionImportContext? import;
+        try {
+            import = await store.GetImportContextAsync(detail.Summary.Id, cancellationToken);
+        } catch (InvalidDataException) {
+            throw new AcquisitionConfigurationException(
+                ApiProblemCodes.AcquisitionInvalid,
+                TvImportCheckpointLifecycle.CorruptCheckpointMessage);
+        }
+
+        if (import?.TvImportCheckpoint is not null
+            && !await TvImportCheckpointLifecycle.TryAbandonAsync(
+                store,
+                import,
+                cancellationToken,
+                scanGate)) {
+            throw new AcquisitionConfigurationException(
+                ApiProblemCodes.AcquisitionInvalid,
+                TvImportCheckpointLifecycle.CheckpointMustFinishMessage);
+        }
+    }
+
+    private static AcquisitionConfigurationException ActiveImportConflict(AcquisitionStatus status) =>
+        new(
+            ApiProblemCodes.AcquisitionInvalid,
+            $"This acquisition cannot be changed while it is {status.ToCode()}. Refresh after the current operation finishes.");
+
+    private static AcquisitionConfigurationException LifecycleChangedConflict() =>
+        new(
+            ApiProblemCodes.AcquisitionInvalid,
+            "The acquisition changed while this action was being prepared. Refresh and try again.");
 
     /// <summary>
     /// Re-runs the import for a downloaded or manual-import-held acquisition on demand — the hold's
@@ -427,7 +588,8 @@ public sealed class AcquisitionService(
             return null;
         }
 
-        if (detail.Summary.Status is not (AcquisitionStatus.Downloaded or AcquisitionStatus.ManualImportRequired)) {
+        if (detail.Summary.Status is not (AcquisitionStatus.Downloaded or AcquisitionStatus.ManualImportRequired)
+            && !(detail.Summary.Status == AcquisitionStatus.Failed && detail.Summary.HasResumableImport)) {
             return detail;
         }
 

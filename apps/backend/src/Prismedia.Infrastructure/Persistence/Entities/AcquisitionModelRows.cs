@@ -300,6 +300,15 @@ public sealed class AcquisitionRow {
     /// <summary>Final on-disk path of the imported payload, used as the identify-hint key.</summary>
     public string? FinalSourcePath { get; set; }
 
+    /// <summary>Durable TV file-placement plan/checkpoint (jsonb), cleared after Imported.</summary>
+    public string? TvImportCheckpointJson { get; set; }
+
+    /// <summary>
+    /// Queue job that exclusively owns the active TV import, including the short pre-checkpoint planning
+    /// window. Retained across retry scheduling for the same job and replaced by an explicit checkpoint retry.
+    /// </summary>
+    public Guid? ImportClaimJobId { get; set; }
+
     /// <summary>Detected source tier of the release this acquisition imported (the owned quality, source axis).</summary>
     public BookSourceTier OwnedSourceTier { get; set; } = BookSourceTier.Unknown;
 

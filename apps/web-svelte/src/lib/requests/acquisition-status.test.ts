@@ -23,6 +23,7 @@ describe("acquisition status", () => {
       ACQUISITION_STATUS.searching,
       ACQUISITION_STATUS.queued,
       ACQUISITION_STATUS.downloading,
+      ACQUISITION_STATUS.downloaded,
       ACQUISITION_STATUS.importing,
     ]);
     expect(ACTIVE_ACQUISITION_STATUSES).not.toContain(ACQUISITION_STATUS.awaitingSelection);

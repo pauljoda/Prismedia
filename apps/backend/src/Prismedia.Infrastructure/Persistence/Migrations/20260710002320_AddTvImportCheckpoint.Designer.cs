@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using Prismedia.Infrastructure.Persistence;
@@ -11,9 +12,11 @@ using Prismedia.Infrastructure.Persistence;
 namespace Prismedia.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(PrismediaDbContext))]
-    partial class PrismediaDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260710002320_AddTvImportCheckpoint")]
+    partial class AddTvImportCheckpoint
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -312,10 +315,6 @@ namespace Prismedia.Infrastructure.Persistence.Migrations
                         .HasMaxLength(256)
                         .HasColumnType("character varying(256)")
                         .HasColumnName("identity_value");
-
-                    b.Property<Guid?>("ImportClaimJobId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("import_claim_job_id");
 
                     b.Property<string>("Kind")
                         .IsRequired()

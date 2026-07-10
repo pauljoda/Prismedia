@@ -208,6 +208,8 @@ internal static partial class PrismediaModelConfiguration {
             entity.Property(row => row.SourceUrlsJson).HasColumnName("source_urls_json").HasColumnType("jsonb");
             entity.Property(row => row.SelectedReleaseJson).HasColumnName("selected_release_json").HasColumnType("jsonb");
             entity.Property(row => row.FinalSourcePath).HasColumnName("final_source_path").HasMaxLength(2048);
+            entity.Property(row => row.TvImportCheckpointJson).HasColumnName("tv_import_checkpoint_json").HasColumnType("jsonb");
+            entity.Property(row => row.ImportClaimJobId).HasColumnName("import_claim_job_id");
             entity.Property(row => row.OwnedSourceTier)
                 .HasColumnName("owned_source_tier")
                 .HasMaxLength(32)

@@ -134,6 +134,61 @@ public sealed class MediaEntityDeletionServiceTests {
     }
 
     [Fact]
+    public async Task ActiveDescendantAcquisitionBlocksMonitoredDeleteBeforeAnyMutation() {
+        await using var db = CreateContext();
+        var root = new FileLibraryRoot(Guid.NewGuid(), "/media/tv", "TV", true, true, false, false, false, false);
+        var (_, seasonId, episodeId) = await SeedSeriesTreeAsync(db, root.Path, MonitorStatus.Active);
+        var sourceFileIds = await db.EntityFiles
+            .Where(file => file.EntityId == seasonId || file.EntityId == episodeId)
+            .Select(file => file.Id)
+            .OrderBy(value => value)
+            .ToArrayAsync();
+        var monitorIds = await db.Monitors.Select(monitor => monitor.Id).ToArrayAsync();
+
+        var storage = new RecordingStorage();
+        var acquisitions = new RecordingAcquisitions([seasonId, episodeId]);
+        acquisitions.AcquisitionIdsByEntity[seasonId] = [RecordingAcquisitions.AcquisitionId];
+        acquisitions.AcquisitionIdsByEntity[episodeId] = [RecordingAcquisitions.ActiveAcquisitionId];
+        acquisitions.IneligibleReacquireIds.Add(RecordingAcquisitions.ActiveAcquisitionId);
+        var jobs = new NullJobQueue(hasPending: false);
+        var cacheRoot = Path.Combine(Path.GetTempPath(), "prismedia-delete-tests", Guid.NewGuid().ToString());
+        var cacheDirectory = Path.Combine(cacheRoot, "videos", seasonId.ToString());
+        var cacheFile = Path.Combine(cacheDirectory, "preview.m3u8");
+        Directory.CreateDirectory(cacheDirectory);
+        await File.WriteAllTextAsync(cacheFile, "still owned by the imported entity");
+        try {
+            var service = new MediaEntityDeletionService(
+                db, new FakeRoots(root), storage, new RecordingSuppressions(), acquisitions,
+                jobs,
+                new Prismedia.Infrastructure.Media.Processing.AssetPathService(cacheRoot),
+                NullLogger<MediaEntityDeletionService>.Instance);
+
+            var result = await service.DeleteAsync(seasonId, deleteFiles: true, CancellationToken.None);
+
+            Assert.False(result.Deleted);
+            Assert.Contains("downloading", result.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Empty(storage.DeletedPaths);
+            Assert.True(File.Exists(cacheFile));
+            Assert.Equal(
+                sourceFileIds,
+                await db.EntityFiles
+                    .Where(file => file.EntityId == seasonId || file.EntityId == episodeId)
+                    .Select(file => file.Id)
+                    .OrderBy(value => value)
+                    .ToArrayAsync());
+            Assert.All(
+                await db.Entities.Where(entity => entity.Id == seasonId || entity.Id == episodeId).ToArrayAsync(),
+                entity => Assert.False(entity.IsWanted));
+            Assert.Equal(monitorIds, await db.Monitors.Select(monitor => monitor.Id).ToArrayAsync());
+            Assert.Empty(acquisitions.Deleted);
+            Assert.Empty(acquisitions.Reacquired);
+            Assert.Empty(jobs.Enqueued);
+        } finally {
+            Directory.Delete(cacheRoot, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task RefusesUnknownAndNonMediaKinds() {
         await using var db = CreateContext();
         var tagId = Guid.NewGuid();
@@ -241,15 +296,26 @@ public sealed class MediaEntityDeletionServiceTests {
         PrismediaDbContext? db = null) : IAcquisitionRequestService {
         public static readonly Guid AcquisitionId = Guid.Parse("aaaaaaaa-0000-0000-0000-000000000001");
         public static readonly Guid OlderAcquisitionId = Guid.Parse("aaaaaaaa-0000-0000-0000-000000000002");
+        public static readonly Guid ActiveAcquisitionId = Guid.Parse("aaaaaaaa-0000-0000-0000-000000000003");
         public Dictionary<Guid, IReadOnlyList<Guid>> AcquisitionIdsByEntity { get; } =
             entityIdsWithAcquisition.ToDictionary(
                 entityId => entityId,
                 _ => (IReadOnlyList<Guid>)[AcquisitionId]);
         public List<Guid> Deleted { get; } = [];
         public List<Guid> Reacquired { get; } = [];
+        public HashSet<Guid> IneligibleReacquireIds { get; } = [];
         public bool ReacquireSawWantedFileless { get; private set; }
         public Task<IReadOnlyList<Guid>> ListIdsForEntityAsync(Guid entityId, CancellationToken cancellationToken) =>
             Task.FromResult(AcquisitionIdsByEntity.GetValueOrDefault(entityId) ?? []);
+
+        public Task<AcquisitionReacquireEligibility> GetReacquireEligibilityAsync(
+            Guid id,
+            CancellationToken cancellationToken) =>
+            Task.FromResult(IneligibleReacquireIds.Contains(id)
+                ? new AcquisitionReacquireEligibility(
+                    false,
+                    "This acquisition cannot be changed while it is downloading.")
+                : new AcquisitionReacquireEligibility(true));
 
         public Task<bool> DeleteAsync(Guid id, CancellationToken cancellationToken, bool preserveWantedLoop = false) {
             Deleted.Add(id);
@@ -257,6 +323,10 @@ public sealed class MediaEntityDeletionServiceTests {
         }
 
         public async Task<Guid?> ReacquireAsync(Guid id, CancellationToken cancellationToken) {
+            if (IneligibleReacquireIds.Contains(id)) {
+                throw new InvalidOperationException("This acquisition cannot be changed while it is downloading.");
+            }
+
             Reacquired.Add(id);
             if (db is not null) {
                 var entityId = entityIdsWithAcquisition.Single();
@@ -273,11 +343,18 @@ public sealed class MediaEntityDeletionServiceTests {
         public Task<bool> AnyForEntityAsync(Guid entityId, CancellationToken cancellationToken) => Task.FromResult(false);
     }
 
-    private sealed class NullJobQueue : IJobQueueService {
+    private sealed class NullJobQueue(bool hasPending = true) : IJobQueueService {
+        public List<EnqueueJobRequest> Enqueued { get; } = [];
         public Task<IReadOnlyList<JobRunSnapshot>> ListAsync(bool hideNsfw, CancellationToken cancellationToken) => Task.FromResult<IReadOnlyList<JobRunSnapshot>>([]);
         public Task<JobRunSnapshot> EnqueueAsync(JobType type, CancellationToken cancellationToken) => throw new NotSupportedException();
-        public Task<JobRunSnapshot> EnqueueAsync(EnqueueJobRequest request, CancellationToken cancellationToken) => throw new NotSupportedException();
-        public Task<bool> HasPendingAsync(JobType type, string? targetEntityId, CancellationToken cancellationToken) => Task.FromResult(true);
+        public Task<JobRunSnapshot> EnqueueAsync(EnqueueJobRequest request, CancellationToken cancellationToken) {
+            Enqueued.Add(request);
+            return Task.FromResult(new JobRunSnapshot(
+                Guid.NewGuid(), request.Type, JobRunStatus.Queued, 0, null,
+                request.PayloadJson ?? "{}", null, request.TargetEntityId, request.TargetLabel,
+                DateTimeOffset.UtcNow, null, null));
+        }
+        public Task<bool> HasPendingAsync(JobType type, string? targetEntityId, CancellationToken cancellationToken) => Task.FromResult(hasPending);
         public Task<int> EnqueueBatchAsync(IReadOnlyList<EnqueueJobRequest> requests, CancellationToken cancellationToken) => Task.FromResult(0);
         public Task<int> CancelAsync(JobType? type, CancellationToken cancellationToken) => Task.FromResult(0);
         public Task<bool> CancelRunAsync(Guid id, CancellationToken cancellationToken) => Task.FromResult(false);

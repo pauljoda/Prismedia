@@ -1,6 +1,8 @@
+using System.Security.Cryptography;
 using Microsoft.Extensions.Logging;
 using Prismedia.Application.Acquisition;
 using Prismedia.Application.Jobs.Ports;
+using Prismedia.Application.Jobs.Scanning;
 using Prismedia.Domain.Entities;
 
 namespace Prismedia.Application.Jobs.Handlers;
@@ -159,8 +161,8 @@ public sealed class BookAcquisitionImportEngine(
 
         await torrents.HandleImportedAsync(import, profile.ImportMode, cancellationToken);
 
+        await context.ReportProgressAsync(100, "Finalizing import", cancellationToken);
         await acquisitions.MarkImportedWithQualityAsync(import.Id, ownedQuality, "Imported into the library.", cancellationToken, ownedFormatScore: ownedFormatScore);
-        await context.ReportProgressAsync(100, "Imported", cancellationToken);
     }
 
     private Task Fail(Guid acquisitionId, string message, CancellationToken cancellationToken) =>
@@ -219,7 +221,10 @@ internal static class MergedImportExecution {
         string sourceAbsolute,
         ImportMode importMode,
         CancellationToken cancellationToken,
-        bool allowFormatChange = false) {
+        bool allowFormatChange = false,
+        bool retainBackup = false,
+        string? retainedBackupPath = null,
+        string? incomingEvidencePath = null) {
         var incoming = sourceAbsolute;
         string? scratchDir = null;
         if (importMode != ImportMode.Move) {
@@ -230,8 +235,18 @@ internal static class MergedImportExecution {
         }
 
         try {
-            var result = await replacer.ReplaceAsync(
-                ownedFilePath, incoming, BookFormatTier.Unknown, cancellationToken, EntityKind.Video, allowFormatChange);
+            var result = retainBackup
+                ? await replacer.ReplaceRetainingBackupAsync(
+                    ownedFilePath,
+                    incoming,
+                    BookFormatTier.Unknown,
+                    cancellationToken,
+                    EntityKind.Video,
+                    allowFormatChange,
+                    retainedBackupPath,
+                    incomingEvidencePath)
+                : await replacer.ReplaceAsync(
+                    ownedFilePath, incoming, BookFormatTier.Unknown, cancellationToken, EntityKind.Video, allowFormatChange);
             if (!result.Succeeded) {
                 logger.LogWarning("MergedImport: in-place replace of {Owned} failed: {Reason}", ownedFilePath, result.FailureReason);
             }
@@ -476,8 +491,8 @@ public sealed class MovieAcquisitionImportEngine(
 
         await torrents.HandleImportedAsync(import, importMode, cancellationToken);
 
+        await context.ReportProgressAsync(100, "Finalizing import", cancellationToken);
         await acquisitions.MarkImportedWithQualityAsync(import.Id, BookQualityRank.Floor, message, cancellationToken, qualityCode, ownedMediaRevision, ownedFormatScore);
-        await context.ReportProgressAsync(100, "Imported", cancellationToken);
     }
 
     private Task Fail(Guid acquisitionId, string message, CancellationToken cancellationToken) =>
@@ -493,8 +508,9 @@ public sealed class MovieAcquisitionImportEngine(
 /// <summary>
 /// TV import engine: places a release's episode files as
 /// <c>{Series}/Season NN/{Series} - SxxEyy.{ext}</c> in the first video-enabled library root — the
-/// exact layout the video scan materializes a series hierarchy from, so the scan that follows binds
-/// the wanted series, season, and episodes by folder path and position. One engine class serves both
+/// exact layout the video catalog materializes a series hierarchy from. The engine synchronously binds
+/// the wanted series, season, and episodes by folder path and position before it reports Imported, so
+/// playback never waits for a later aggregate scan. One engine class serves both
 /// TV acquisition units — season packs (<see cref="EntityKind.VideoSeason"/>) and single episodes
 /// (<see cref="EntityKind.Video"/>) — since placement rules are identical at either granularity.
 /// An acquisition linked to a series that already lives on disk MERGES into the existing folder tree
@@ -514,17 +530,14 @@ public sealed class TvAcquisitionImportEngine(
     IOwnedFileReplacer replacer,
     IAcquisitionBlocklistStore blocklist,
     IAcquisitionHistoryStore history,
-    ILogger<TvAcquisitionImportEngine> logger,
-    IAcquisitionHintApplier? acquisitionHints = null) : IAcquisitionImportEngine {
+    IImportedVideoMaterializer materializer,
+    VideoScanConcurrencyGate scanGate,
+    ILogger<TvAcquisitionImportEngine> logger) : IAcquisitionImportEngine {
     public EntityKind Kind => kind;
 
     public async Task ImportAsync(JobContext context, AcquisitionImportContext import, CancellationToken cancellationToken) {
         var profile = await profiles.GetImportProfileAsync(import.ProfileId, import.Kind, cancellationToken);
-
-        if (string.IsNullOrWhiteSpace(import.ContentPath) || payloads.Read(import.ContentPath) is not { } payload) {
-            await Fail(import.Id, "The completed download reported no content path.", cancellationToken);
-            return;
-        }
+        var payload = string.IsNullOrWhiteSpace(import.ContentPath) ? null : payloads.Read(import.ContentPath);
 
         // The owned quality (and the {Quality} naming token) is the video-ladder code from the selected
         // release; both TV units detect on the video ladder. Detected before planning so the template can
@@ -533,6 +546,57 @@ public sealed class TvAcquisitionImportEngine(
         // drives an upgrade.
         var selected = await acquisitions.GetSelectedReleaseAsync(import.Id, cancellationToken);
         var ownedMediaQuality = selected is null ? null : MediaQualityLadder.Detect(import.Kind, selected.Title).Code;
+
+        // Keep a full video scan from observing moved files before the acquisition hint and wanted
+        // bindings exist. The same singleton gate wraps scan snapshots and reconciliation.
+        await using var scanLease = await scanGate.EnterAsync(cancellationToken);
+
+        if (import.TvImportCheckpoint is { } durableCheckpoint) {
+            if (!await acquisitions.IsCurrentTvImportCheckpointAsync(
+                    import.Id,
+                    durableCheckpoint,
+                    cancellationToken)) {
+                logger.LogInformation(
+                    "TV import checkpoint for {Id} was superseded while waiting for the video scan gate; skipping stale work.",
+                    import.Id);
+                return;
+            }
+
+            if (!string.Equals(
+                    NormalizeClientItemId(durableCheckpoint.TransferClientItemId),
+                    NormalizeClientItemId(import.ClientItemId),
+                    StringComparison.Ordinal)) {
+                await acquisitions.SetStatusAsync(
+                    import.Id,
+                    AcquisitionStatus.ManualImportRequired,
+                    "This TV import checkpoint belongs to a different download attempt and was not reused. Review the partial files before retrying.",
+                    cancellationToken);
+                return;
+            }
+
+            await ExecuteTvCheckpointAsync(
+                context,
+                import,
+                payload,
+                durableCheckpoint,
+                selected,
+                ownedMediaQuality,
+                cancellationToken);
+            return;
+        }
+
+        // File placement is intentionally checkpointed before catalog persistence. If a transient
+        // database failure interrupted that second step (especially after a Move consumed the download
+        // payload), retry the exact final path instead of trying to move the release a second time.
+        if (await TryResumePlacedImportAsync(
+                context, import, profile, selected, ownedMediaQuality, cancellationToken)) {
+            return;
+        }
+
+        if (payload is null) {
+            await Fail(import.Id, "The completed download reported no content path.", cancellationToken);
+            return;
+        }
 
         // An acquisition linked to a series already on disk merges into its existing tree — placing a
         // template-derived parallel folder would mint a duplicate series (the scan's binds refuse
@@ -552,35 +616,61 @@ public sealed class TvAcquisitionImportEngine(
         }
 
         var series = SeriesOf(import);
-        var plan = ImportTargetResolver.Resolve(
-            payload.ContentRoot, root.Path,
-            TvImportPlanBuilder.Plan(
-                payload.Files, series, import.SeasonNumber, import.EpisodeNumber, profile?.PathTemplate, ownedMediaQuality,
-                await EpisodeTitlesForAsync(import, cancellationToken)));
+        var unitsPlan = TvImportPlanBuilder.PlanUnits(
+            payload.Files,
+            series,
+            import.SeasonNumber,
+            import.EpisodeNumber,
+            profile?.PathTemplate,
+            ownedMediaQuality,
+            await EpisodeTitlesForAsync(import, cancellationToken));
+        var plan = unitsPlan.Blocked
+            ? ResolvedImportPlan.Block(unitsPlan.BlockReason!.Value)
+            : ImportTargetResolver.Resolve(
+                payload.ContentRoot,
+                root.Path,
+                ImportPlan.For(unitsPlan.Units
+                    .Select(unit => new ImportPlanItem(unit.SourceRelativePath, unit.TargetRelativePath))
+                    .ToArray()));
         if (plan.Blocked) {
             await acquisitions.SetStatusAsync(import.Id, AcquisitionStatus.ManualImportRequired, BlockMessage(plan.BlockReason), cancellationToken);
             return;
         }
 
-        await context.ReportProgressAsync(40, "Moving files", cancellationToken);
         var importMode = profile?.ImportMode ?? ImportMode.Move;
-        var finalPaths = new List<string>(plan.Items.Count);
-        foreach (var item in plan.Items) {
-            finalPaths.Add(await mover.PlaceAsync(item, importMode, cancellationToken));
+        var seriesFolder = Path.GetFullPath(Path.Combine(
+            root.Path,
+            TvImportPlanBuilder.SeriesFolderRelative(series, profile?.PathTemplate)));
+        var checkpoint = new TvImportCheckpoint(
+            root.Id,
+            seriesFolder,
+            importMode,
+            import.AllowFormatChange,
+            "Imported into the library.",
+            PreferSingleFileFinalSource: import.Kind == EntityKind.Video,
+            unitsPlan.Units
+                .Zip(plan.Items, static (unit, item) => new TvImportCheckpointUnit(
+                    unit.SourceRelativePath,
+                    item.TargetAbsolutePath,
+                    unit.Season,
+                    unit.Episode,
+                    unit.ExtraEpisodes))
+                .ToArray(),
+            TransferClientItemId: NormalizeClientItemId(import.ClientItemId),
+            AttemptId: Guid.NewGuid(),
+            ClaimJobId: context.Job.Id);
+        if (await PrepareTvCheckpointAsync(import, payload, checkpoint, cancellationToken) is not { } preparedCheckpoint) {
+            return;
         }
-
-        // The hint keys on the most specific folder that covers every placed file: the season folder
-        // for a single-season payload, the series folder when a pack spans seasons — so the scan's
-        // wanted binds (series by ancestor, season and episodes by position) all fall under it.
-        var seasonFolders = finalPaths
-            .Select(path => Path.GetDirectoryName(path) ?? root.Path)
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToArray();
-        var hintFolder = seasonFolders.Length == 1
-            ? seasonFolders[0]
-            : Path.GetFullPath(Path.Combine(root.Path, TvImportPlanBuilder.SeriesFolderRelative(series, profile?.PathTemplate)));
-
-        await FinalizeImportAsync(context, import, selected, ownedMediaQuality, hintFolder, hintFolder, importMode, "Imported into the library.", cancellationToken);
+        checkpoint = preparedCheckpoint;
+        await ExecuteTvCheckpointAsync(
+            context,
+            import,
+            payload,
+            checkpoint,
+            selected,
+            ownedMediaQuality,
+            cancellationToken);
     }
 
     /// <summary>
@@ -607,6 +697,12 @@ public sealed class TvAcquisitionImportEngine(
             return;
         }
 
+        var owningRoot = await ResolveOwningVideoRootAsync(layout.SeriesFolderPath, cancellationToken);
+        if (owningRoot is null) {
+            await Fail(import.Id, "The existing series is not inside an enabled video library root.", cancellationToken);
+            return;
+        }
+
         // Incoming quality from the release title; a title that ranks Unknown falls back to the
         // payload's own file tokens so a well-named pack under a bare title still gates honestly.
         var incomingPosition = selected is null ? 0 : MediaQualityLadder.Detect(import.Kind, selected.Title).Position;
@@ -624,6 +720,15 @@ public sealed class TvAcquisitionImportEngine(
             season => TvImportPlanBuilder.SeasonFolderSegment(series, season, profile?.PathTemplate),
             incomingPosition, incomingRevision, rules.ProperPolicy, import.AllowFormatChange);
 
+        if (merged.Any(item => item.Action == MergeFileAction.HoldStructuralConflict)) {
+            await acquisitions.SetStatusAsync(
+                import.Id,
+                AcquisitionStatus.ManualImportRequired,
+                "A multi-episode file overlaps episode slots that already belong to different files. Review the files manually; Prismedia did not merge conflicting episode owners.",
+                cancellationToken);
+            return;
+        }
+
         // Safety net: a merged import never writes outside the existing series folder.
         var seriesRoot = Path.GetFullPath(layout.SeriesFolderPath);
         if (merged.Any(item => !IsUnderFolder(Path.GetFullPath(item.TargetAbsolutePath), seriesRoot))) {
@@ -631,60 +736,457 @@ public sealed class TvAcquisitionImportEngine(
             return;
         }
 
-        await context.ReportProgressAsync(40, "Merging into the existing series", cancellationToken);
         var importMode = profile?.ImportMode ?? ImportMode.Move;
-        var placed = new List<string>(merged.Count);
-        var placedBySource = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        var dropped = 0;
-        var formatChanges = 0;
-        foreach (var item in merged) {
-            var sourceAbsolute = Path.GetFullPath(Path.Combine(payload.ContentRoot, item.SourceRelativePath));
-            switch (item.Action) {
-                case MergeFileAction.PlaceNew:
-                    var placedPath = await mover.PlaceAsync(
-                        new ResolvedImportItem(sourceAbsolute, Path.GetFullPath(item.TargetAbsolutePath)), importMode, cancellationToken);
-                    placed.Add(placedPath);
-                    placedBySource[item.SourceRelativePath] = placedPath;
-                    break;
-                case MergeFileAction.ReplaceUpgrade:
-                    if (await ReplaceOwnedAsync(item.OwnedFilePath!, sourceAbsolute, importMode, import.AllowFormatChange, cancellationToken) is { } swapped) {
-                        placed.Add(swapped);
-                        placedBySource[item.SourceRelativePath] = swapped;
-                    } else {
-                        dropped++;
-                    }
-
-                    break;
-                case MergeFileAction.DropFormatChange:
-                    formatChanges++;
-                    break;
-                default:
-                    dropped++;
-                    break;
-            }
-        }
-
-        if (placed.Count == 0) {
+        var executable = merged
+            .Where(item => item.Action is MergeFileAction.PlaceNew or MergeFileAction.ReplaceUpgrade)
+            .ToArray();
+        var formatChanges = merged.Count(item => item.Action == MergeFileAction.DropFormatChange);
+        if (executable.Length == 0) {
             await HandleNothingUsableAsync(import, selected, formatChanges > 0, cancellationToken);
             return;
         }
 
-        await BindCoveredExtrasAsync(unitsPlan.Units, placedBySource, cancellationToken);
-
-        var placedFolders = placed
-            .Select(path => Path.GetDirectoryName(path) ?? layout.SeriesFolderPath)
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToArray();
-        var hintFolder = placedFolders.Length == 1 ? placedFolders[0] : layout.SeriesFolderPath;
-        // A single placed file records the FILE as the final source so a later upgrade replace has an
-        // unambiguous target; multi-file packs record the covering folder.
-        var finalSourcePath = placed.Count == 1 ? placed[0] : hintFolder;
-
-        var skipped = dropped + formatChanges;
+        var skipped = merged.Count - executable.Length;
         var message = skipped == 0
             ? "Imported into the existing series."
-            : $"Imported {placed.Count} of {merged.Count} file(s) into the existing series; {skipped} were not upgrades over the files you already have.";
-        await FinalizeImportAsync(context, import, selected, qualityCode, hintFolder, finalSourcePath, importMode, message, cancellationToken);
+            : $"Imported {executable.Length} of {merged.Count} file(s) into the existing series; {skipped} were not upgrades over the files you already have.";
+        var unitsBySource = unitsPlan.Units.ToDictionary(unit => unit.SourceRelativePath, StringComparer.OrdinalIgnoreCase);
+        var checkpoint = new TvImportCheckpoint(
+            owningRoot.Id,
+            layout.SeriesFolderPath,
+            importMode,
+            import.AllowFormatChange,
+            message,
+            PreferSingleFileFinalSource: true,
+            executable.Select(item => {
+                var unit = unitsBySource[item.SourceRelativePath];
+                return new TvImportCheckpointUnit(
+                    item.SourceRelativePath,
+                    Path.GetFullPath(item.TargetAbsolutePath),
+                    unit.Season,
+                    unit.Episode,
+                    unit.ExtraEpisodes,
+                    item.Action == MergeFileAction.ReplaceUpgrade ? item.OwnedFilePath : null);
+            }).ToArray(),
+            TransferClientItemId: NormalizeClientItemId(import.ClientItemId),
+            AttemptId: Guid.NewGuid(),
+            ClaimJobId: context.Job.Id);
+        if (await PrepareTvCheckpointAsync(import, payload, checkpoint, cancellationToken) is not { } preparedCheckpoint) {
+            return;
+        }
+        checkpoint = preparedCheckpoint;
+        await ExecuteTvCheckpointAsync(
+            context,
+            import,
+            payload,
+            checkpoint,
+            selected,
+            qualityCode,
+            cancellationToken);
+    }
+
+    private async Task<TvImportCheckpoint?> PrepareTvCheckpointAsync(
+        AcquisitionImportContext import,
+        DownloadPayload payload,
+        TvImportCheckpoint checkpoint,
+        CancellationToken cancellationToken) {
+        // Resolve every new-file collision before the plan is persisted. Execute then uses the exact
+        // checkpoint path without choosing another suffix after a crash. Upgrade targets are already
+        // exact by definition; reserve them so another unit cannot silently claim the same destination.
+        var reservedTargets = new List<string>(checkpoint.Units.Count);
+        var units = new TvImportCheckpointUnit[checkpoint.Units.Count];
+        for (var index = 0; index < checkpoint.Units.Count; index++) {
+            var unit = checkpoint.Units[index];
+            string exactTarget;
+            if (unit.PreviousFilePath is { } previousFilePath) {
+                exactTarget = Path.ChangeExtension(
+                    Path.GetFullPath(previousFilePath),
+                    Path.GetExtension(unit.SourceRelativePath));
+                if (!string.Equals(exactTarget, Path.GetFullPath(previousFilePath), StringComparison.OrdinalIgnoreCase)
+                    && (File.Exists(exactTarget) || Directory.Exists(exactTarget))) {
+                    await acquisitions.SetStatusAsync(
+                        import.Id,
+                        AcquisitionStatus.ManualImportRequired,
+                        CrossFormatTargetConflictMessage(exactTarget),
+                        cancellationToken);
+                    return null;
+                }
+                if (reservedTargets.Contains(exactTarget, StringComparer.OrdinalIgnoreCase)) {
+                    throw new InvalidOperationException("The TV import plan assigns multiple files to one upgrade target.");
+                }
+            } else {
+                var desiredTarget = Path.GetFullPath(unit.TargetAbsolutePath);
+                exactTarget = mover.ResolveExactTargetPath(desiredTarget, reservedTargets);
+                if (!string.Equals(exactTarget, desiredTarget, StringComparison.OrdinalIgnoreCase)) {
+                    await acquisitions.SetStatusAsync(
+                        import.Id,
+                        AcquisitionStatus.ManualImportRequired,
+                        $"The episode slot target already exists in the library ({Path.GetFileName(desiredTarget)}). " +
+                        "Review the conflicting file before retrying; Prismedia will not create a duplicate episode variant implicitly.",
+                        cancellationToken);
+                    return null;
+                }
+            }
+
+            reservedTargets.Add(exactTarget);
+            units[index] = unit with {
+                TargetAbsolutePath = exactTarget,
+                SourceAbsolutePath = Path.GetFullPath(Path.Combine(payload.ContentRoot, unit.SourceRelativePath)),
+                ReplacementBackupPath = unit.PreviousFilePath is null
+                    ? null
+                    : OwnedFileReplacementArtifacts.CheckpointBackupPath(unit.PreviousFilePath, checkpoint.AttemptId),
+                ReplacementEvidencePath = unit.PreviousFilePath is null
+                    ? null
+                    : OwnedFileReplacementArtifacts.CheckpointEvidencePath(unit.PreviousFilePath, checkpoint.AttemptId),
+            };
+
+            if ((!string.IsNullOrWhiteSpace(units[index].ReplacementBackupPath)
+                    && File.Exists(units[index].ReplacementBackupPath))
+                || (!string.IsNullOrWhiteSpace(units[index].ReplacementEvidencePath)
+                    && File.Exists(units[index].ReplacementEvidencePath))) {
+                await acquisitions.SetStatusAsync(
+                    import.Id,
+                    AcquisitionStatus.ManualImportRequired,
+                    "Recovery files already exist for this exact TV import attempt. Review the files before retrying.",
+                    cancellationToken);
+                return null;
+            }
+        }
+
+        checkpoint = checkpoint with { Units = units };
+        // Persist the complete plan before ExecuteTvCheckpointAsync performs its first filesystem mutation.
+        // The executor refreshes the binding hint on every run, including durable resumes.
+        if (await acquisitions.TryCreateTvImportCheckpointAsync(import.Id, checkpoint, cancellationToken)) {
+            return checkpoint;
+        }
+
+        logger.LogInformation(
+            "TV import {Id} lost its initial lifecycle claim before checkpoint creation; no files were touched.",
+            import.Id);
+        return null;
+    }
+
+    /// <summary>
+    /// Executes or resumes the exact durable TV plan. Each successful file mutation is persisted before the
+    /// next begins, then the complete batch is materialized together from the checkpoint. A retry therefore
+    /// never guesses from a partially consumed download payload, consumes the binding hint only once, and
+    /// never reports Imported for a partial pack.
+    /// </summary>
+    private async Task ExecuteTvCheckpointAsync(
+        JobContext context,
+        AcquisitionImportContext import,
+        DownloadPayload? payload,
+        TvImportCheckpoint checkpoint,
+        SelectedRelease? selected,
+        string? qualityCode,
+        CancellationToken cancellationToken) {
+        var root = await roots.GetLibraryRootAsync(checkpoint.LibraryRootId, cancellationToken);
+        if (root is not { Enabled: true, ScanVideos: true }) {
+            throw new InvalidOperationException("The TV import checkpoint's video library root is no longer enabled.");
+        }
+
+        var seriesFolder = Path.GetFullPath(checkpoint.SeriesFolderPath);
+        if (!IsAtOrUnderFolder(seriesFolder, Path.GetFullPath(root.Path)) || checkpoint.Units.Count == 0) {
+            throw new InvalidOperationException("The TV import checkpoint is invalid for its library root.");
+        }
+
+        // Recreate the broad, unconsumed identity/binding hint before EVERY run. A prior process may have
+        // died after placing only part of the pack, allowing a waiting scan to consume the old hint. Keeping
+        // this refresh ahead of the next mutation makes a second interruption safe as well.
+        await acquisitions.WriteImportHintAsync(
+            import.Id,
+            seriesFolder,
+            import,
+            BookQualityRank.Floor,
+            cancellationToken);
+
+        var units = checkpoint.Units.ToArray();
+        await context.ReportProgressAsync(40, "Placing episodes", cancellationToken);
+        for (var index = 0; index < units.Length; index++) {
+            var unit = units[index];
+            var checkpointTarget = Path.GetFullPath(unit.TargetAbsolutePath);
+            if (!IsAtOrUnderFolder(checkpointTarget, Path.GetFullPath(root.Path))
+                || (unit.PreviousFilePath is { } previousFilePath
+                    && !IsAtOrUnderFolder(Path.GetFullPath(previousFilePath), Path.GetFullPath(root.Path)))) {
+                throw new InvalidOperationException("A TV import checkpoint file is outside its library root.");
+            }
+
+            var finalPath = !string.IsNullOrWhiteSpace(unit.FinalPath) && File.Exists(unit.FinalPath)
+                ? Path.GetFullPath(unit.FinalPath)
+                : null;
+
+            if (finalPath is null) {
+                var sourceAbsolute = !string.IsNullOrWhiteSpace(unit.SourceAbsolutePath)
+                    ? Path.GetFullPath(unit.SourceAbsolutePath)
+                    : payload is null
+                        ? null
+                        : Path.GetFullPath(Path.Combine(payload.ContentRoot, unit.SourceRelativePath));
+
+                var expectedPath = checkpointTarget;
+                var previousPath = unit.PreviousFilePath is null
+                    ? null
+                    : Path.GetFullPath(unit.PreviousFilePath);
+                var evidencePath = string.IsNullOrWhiteSpace(unit.ReplacementEvidencePath)
+                    ? null
+                    : Path.GetFullPath(unit.ReplacementEvidencePath);
+                var evidenceMatchesTarget = evidencePath is not null
+                    && File.Exists(evidencePath)
+                    && File.Exists(expectedPath)
+                    && FilesHaveSameContent(evidencePath, expectedPath);
+                if (previousPath is not null
+                    && (sourceAbsolute is null || !File.Exists(sourceAbsolute))
+                    && File.Exists(OwnedFileReplacementArtifacts.StagedPath(previousPath))) {
+                    sourceAbsolute = RestoreReplacementArtifactSource(
+                        OwnedFileReplacementArtifacts.StagedPath(previousPath),
+                        sourceAbsolute,
+                        unit.SourceRelativePath);
+                } else if (previousPath is not null
+                    && (sourceAbsolute is null || !File.Exists(sourceAbsolute))
+                    && evidencePath is not null
+                    && File.Exists(evidencePath)
+                    && !evidenceMatchesTarget) {
+                    sourceAbsolute = RestoreReplacementArtifactSource(
+                        evidencePath,
+                        sourceAbsolute,
+                        unit.SourceRelativePath);
+                }
+
+                var sourceExists = sourceAbsolute is not null && File.Exists(sourceAbsolute);
+                var targetExists = File.Exists(expectedPath);
+                var isReplacement = previousPath is not null;
+                var targetMatchesAvailableSource = targetExists
+                    && sourceExists
+                    && FilesHaveSameContent(expectedPath, sourceAbsolute!);
+
+                // New exact-path placements publish atomically into a target that was absent when the
+                // checkpoint was written. Replacements need stronger evidence because their same-path
+                // target existed before the mutation: the retained backup proves the atomic install ran.
+                var replacementInstallCompleted = isReplacement
+                    && !sourceExists
+                    && targetExists
+                    && evidenceMatchesTarget;
+                if ((!isReplacement && targetExists && !sourceExists)
+                    || targetMatchesAvailableSource
+                    || replacementInstallCompleted) {
+                    finalPath = expectedPath;
+                } else {
+                    if (!sourceExists) {
+                        throw new FileNotFoundException(
+                            "A pending TV import file is missing from the download, exact target, and replacement staging checkpoint.",
+                            sourceAbsolute ?? unit.SourceRelativePath);
+                    }
+
+                    if (previousPath is not null
+                        && !string.Equals(expectedPath, previousPath, StringComparison.OrdinalIgnoreCase)
+                        && (File.Exists(expectedPath) || Directory.Exists(expectedPath))) {
+                        await acquisitions.SetStatusAsync(
+                            import.Id,
+                            AcquisitionStatus.ManualImportRequired,
+                            CrossFormatTargetConflictMessage(expectedPath),
+                            cancellationToken);
+                        return;
+                    }
+
+                    finalPath = previousPath is not null
+                        ? await ReplaceOwnedAsync(
+                            previousPath,
+                            sourceAbsolute!,
+                            checkpoint.ImportMode,
+                            checkpoint.AllowFormatChange,
+                            unit.ReplacementBackupPath,
+                            unit.ReplacementEvidencePath,
+                            cancellationToken)
+                        : await mover.PlaceExactAsync(
+                            new ResolvedImportItem(sourceAbsolute!, checkpointTarget),
+                            checkpoint.ImportMode,
+                            cancellationToken);
+                    if (finalPath is null) {
+                        throw new InvalidOperationException("A planned TV upgrade could not replace its existing episode file.");
+                    }
+                }
+
+                RetirePreviousFormatPath(unit.PreviousFilePath, finalPath);
+
+                units[index] = unit = unit with { FinalPath = finalPath };
+                checkpoint = checkpoint with { Units = units };
+                await acquisitions.SetTvImportCheckpointAsync(import.Id, checkpoint, cancellationToken);
+                TryDeleteFile(unit.ReplacementEvidencePath);
+            }
+
+            await context.ReportProgressAsync(
+                40 + ((index + 1) * 30 / units.Length),
+                $"Placed {index + 1}/{units.Length} episode files",
+                cancellationToken);
+        }
+
+        var importedEpisodes = units.Select(unit => new ImportedTvEpisode(
+            unit.FinalPath!,
+            unit.SeasonNumber,
+            unit.EpisodeNumber,
+            unit.CoveredEpisodeNumbers,
+            unit.PreviousFilePath)).ToArray();
+        var seasonFolders = importedEpisodes
+            .Select(episode => Path.GetDirectoryName(episode.FilePath) ?? seriesFolder)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        var hintFolder = seasonFolders.Length == 1 ? seasonFolders[0] : seriesFolder;
+        var finalSourcePath = checkpoint.PreferSingleFileFinalSource && importedEpisodes.Length == 1
+            ? importedEpisodes[0].FilePath
+            : hintFolder;
+        await FinalizeImportAsync(
+            context,
+            import,
+            selected,
+            qualityCode,
+            hintFolder,
+            finalSourcePath,
+            checkpoint.ImportMode,
+            new ImportedTvMaterializationRequest(import.Id, root, seriesFolder, importedEpisodes),
+            checkpoint.SuccessMessage,
+            cancellationToken);
+    }
+
+    /// <summary>
+    /// Resumes the catalog half of an import whose files were already placed. The checkpoint can name
+    /// one file, one season folder, or the series folder for a multi-season pack; cataloging the other
+    /// already-owned files beneath that boundary is harmless because video upserts are path-idempotent.
+    /// </summary>
+    private async Task<bool> TryResumePlacedImportAsync(
+        JobContext context,
+        AcquisitionImportContext import,
+        BookImportProfile? profile,
+        SelectedRelease? selected,
+        string? qualityCode,
+        CancellationToken cancellationToken) {
+        if (string.IsNullOrWhiteSpace(import.FinalSourcePath)) {
+            return false;
+        }
+
+        var checkpoint = Path.GetFullPath(import.FinalSourcePath);
+        var files = EnumerateCheckpointVideos(checkpoint);
+        if (files.Count == 0) {
+            return false;
+        }
+
+        TvSeriesDiskLayout? layout = null;
+        if (import.EntityId is { } linkedEntityId) {
+            layout = await targets.GetTvLayoutAsync(linkedEntityId, cancellationToken);
+        }
+
+        var seriesFolders = files
+            .Select(path => Path.GetDirectoryName(Path.GetDirectoryName(path) ?? string.Empty))
+            .Where(path => !string.IsNullOrWhiteSpace(path))
+            .Select(path => Path.GetFullPath(path!))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        var seriesFolder = layout?.SeriesFolderPath
+            ?? (seriesFolders.Length == 1 ? seriesFolders[0] : null);
+        if (seriesFolder is null) {
+            throw new InvalidOperationException("The placed TV files do not resolve to one series folder.");
+        }
+
+        var root = await ResolveOwningVideoRootAsync(seriesFolder, cancellationToken)
+            ?? throw new InvalidOperationException("The placed TV files are no longer inside an enabled video library root.");
+        var importedEpisodes = new List<ImportedTvEpisode>(files.Count);
+        foreach (var file in files) {
+            var parsed = TvReleaseTokens.ParseEpisode(Path.GetFileNameWithoutExtension(file));
+            if (parsed is null && files.Count == 1 && import.SeasonNumber is { } season && import.EpisodeNumber is { } episode) {
+                parsed = (season, episode);
+            }
+
+            if (parsed is { } unit) {
+                importedEpisodes.Add(new ImportedTvEpisode(file, unit.Season, unit.Episode, []));
+            }
+        }
+
+        if (importedEpisodes.Count == 0) {
+            throw new InvalidOperationException("The placed TV files no longer carry recognizable episode numbers.");
+        }
+
+        var seasonFolders = importedEpisodes
+            .Select(episode => Path.GetDirectoryName(episode.FilePath)!)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        var hintFolder = seasonFolders.Length == 1 ? seasonFolders[0] : seriesFolder;
+        await FinalizeImportAsync(
+            context,
+            import,
+            selected,
+            qualityCode,
+            hintFolder,
+            checkpoint,
+            profile?.ImportMode ?? ImportMode.Move,
+            new ImportedTvMaterializationRequest(import.Id, root, seriesFolder, importedEpisodes),
+            "Finished cataloging files already placed in the library.",
+            cancellationToken);
+        return true;
+    }
+
+    private static IReadOnlyList<string> EnumerateCheckpointVideos(string checkpoint) {
+        if (File.Exists(checkpoint)) {
+            return MovieImportPlanBuilder.VideoExtensions.Contains(Path.GetExtension(checkpoint))
+                ? [checkpoint]
+                : [];
+        }
+
+        if (!Directory.Exists(checkpoint)) {
+            return [];
+        }
+
+        return Directory
+            .EnumerateFiles(checkpoint, "*", SearchOption.AllDirectories)
+            .Where(path => MovieImportPlanBuilder.VideoExtensions.Contains(Path.GetExtension(path)))
+            .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
+    private static bool FilesHaveSameContent(string firstPath, string secondPath) {
+        try {
+            var first = new FileInfo(firstPath);
+            var second = new FileInfo(secondPath);
+            if (!first.Exists || !second.Exists || first.Length != second.Length) {
+                return false;
+            }
+
+            using var firstStream = first.OpenRead();
+            using var secondStream = second.OpenRead();
+            return SHA256.HashData(firstStream).AsSpan().SequenceEqual(SHA256.HashData(secondStream));
+        } catch (IOException) {
+            return false;
+        } catch (UnauthorizedAccessException) {
+            return false;
+        }
+    }
+
+    private static string RestoreReplacementArtifactSource(
+        string artifactPath,
+        string? originalSourcePath,
+        string sourceRelativePath) {
+        var source = !string.IsNullOrWhiteSpace(originalSourcePath)
+            ? Path.GetFullPath(originalSourcePath)
+            : Path.Combine(
+                Path.GetTempPath(),
+                "prismedia-import-recovery",
+                $"{Guid.NewGuid():N}{Path.GetExtension(sourceRelativePath)}");
+        Directory.CreateDirectory(Path.GetDirectoryName(source)!);
+        if (File.Exists(source)) {
+            throw new IOException($"The replacement recovery source already exists: {source}");
+        }
+
+        File.Move(artifactPath, source);
+        return source;
+    }
+
+    private static void TryDeleteFile(string? path) {
+        if (string.IsNullOrWhiteSpace(path)) {
+            return;
+        }
+
+        try {
+            File.Delete(path);
+        } catch {
+            // Non-media crash evidence is safe to leave behind; a later maintenance pass can remove it.
+        }
     }
 
     /// <summary>
@@ -699,45 +1201,9 @@ public sealed class TvAcquisitionImportEngine(
             : [];
 
     /// <summary>
-    /// Binds the wanted episode phantoms a title-aligned multi-episode file COVERS beyond its primary
-    /// number to the same placed file ("as aired" double episodes: the file placed as E01 also carries
-    /// provider episode 2's content) — so the covered episode plays the shared file instead of staying
-    /// wanted and being re-searched forever. Best-effort: an unbound phantom just stays wanted.
+    /// The shared success tail: persist the hint/path checkpoint, synchronously materialize the exact
+    /// files, queue aggregate scan housekeeping, handle the torrent, and only then record Imported.
     /// </summary>
-    private async Task BindCoveredExtrasAsync(
-        IReadOnlyList<TvPlanUnit> units,
-        IReadOnlyDictionary<string, string> placedBySource,
-        CancellationToken cancellationToken) {
-        if (acquisitionHints is null) {
-            return;
-        }
-
-        foreach (var unit in units) {
-            if (unit.ExtraEpisodes.Count == 0 ||
-                !placedBySource.TryGetValue(unit.SourceRelativePath, out var placedPath) ||
-                Path.GetDirectoryName(placedPath) is not { } seasonFolder) {
-                continue;
-            }
-
-            foreach (var extra in unit.ExtraEpisodes) {
-                try {
-                    var bound = await acquisitionHints.BindWantedChildBySortOrderAsync(
-                        EntityKind.Video, seasonFolder, extra, placedPath, cancellationToken);
-                    if (bound) {
-                        logger.LogInformation(
-                            "TvImport: bound covered episode {Episode} to the shared multi-episode file \"{File}\".",
-                            extra, Path.GetFileName(placedPath));
-                    }
-                } catch (OperationCanceledException) {
-                    throw;
-                } catch (Exception ex) {
-                    logger.LogWarning(ex, "TvImport: failed to bind covered episode {Episode} to \"{File}\".", extra, placedPath);
-                }
-            }
-        }
-    }
-
-    /// <summary>The shared success tail: hint, final source path, scan chain, torrent handling, and the imported mark.</summary>
     private async Task FinalizeImportAsync(
         JobContext context,
         AcquisitionImportContext import,
@@ -746,6 +1212,7 @@ public sealed class TvAcquisitionImportEngine(
         string hintFolder,
         string finalSourcePath,
         ImportMode importMode,
+        ImportedTvMaterializationRequest materialization,
         string message,
         CancellationToken cancellationToken) {
         var ownedMediaRevision = selected is null ? 1 : ReleaseRevisionDetection.Detect(selected.Title);
@@ -754,16 +1221,67 @@ public sealed class TvAcquisitionImportEngine(
         await acquisitions.WriteImportHintAsync(import.Id, hintFolder, import, BookQualityRank.Floor, cancellationToken);
         await acquisitions.SetFinalSourcePathAsync(import.Id, finalSourcePath, cancellationToken);
 
-        await context.ReportProgressAsync(80, "Scanning library", cancellationToken);
-        await context.EnqueueIfNeededAsync(new EnqueueJobRequest(JobType.ScanLibrary, TargetLabel: "Imported episode scan"), cancellationToken);
+        await context.ReportProgressAsync(75, "Cataloging imported episodes", cancellationToken);
+        await materializer.MaterializeAsync(context, materialization, cancellationToken);
+
+        // Keep the aggregate scan for snapshot/stale cleanup and sidecars. Readiness no longer depends
+        // on this singleton job being accepted or finishing before the acquisition status changes.
+        await context.ReportProgressAsync(90, "Scheduling library housekeeping", cancellationToken);
+        try {
+            await context.EnqueueIfNeededAsync(
+                new EnqueueJobRequest(JobType.ScanLibrary, TargetLabel: "Imported episode scan"),
+                cancellationToken);
+        } catch (Exception ex) when (ex is not OperationCanceledException) {
+            logger.LogWarning(ex, "TV import completed readiness but could not queue optional library housekeeping.");
+        }
 
         await torrents.HandleImportedAsync(import, importMode, cancellationToken);
+        // No fallible work follows the terminal commit. Otherwise a progress-store outage could make the
+        // job handler downgrade an already-ready, checkpoint-cleared acquisition from Imported to Failed.
+        await context.ReportProgressAsync(100, "Finalizing import", cancellationToken);
         await acquisitions.MarkImportedWithQualityAsync(import.Id, BookQualityRank.Floor, message, cancellationToken, qualityCode, ownedMediaRevision, ownedFormatScore);
-        await context.ReportProgressAsync(100, "Imported", cancellationToken);
     }
 
-    private Task<string?> ReplaceOwnedAsync(string ownedFilePath, string sourceAbsolute, ImportMode importMode, bool allowFormatChange, CancellationToken cancellationToken) =>
-        MergedImportExecution.ReplaceOwnedAsync(replacer, logger, ownedFilePath, sourceAbsolute, importMode, cancellationToken, allowFormatChange);
+    private Task<string?> ReplaceOwnedAsync(
+        string ownedFilePath,
+        string sourceAbsolute,
+        ImportMode importMode,
+        bool allowFormatChange,
+        string? retainedBackupPath,
+        string? incomingEvidencePath,
+        CancellationToken cancellationToken) =>
+        MergedImportExecution.ReplaceOwnedAsync(
+            replacer,
+            logger,
+            ownedFilePath,
+            sourceAbsolute,
+            importMode,
+            cancellationToken,
+            allowFormatChange,
+            retainBackup: true,
+            retainedBackupPath,
+            incomingEvidencePath);
+
+    private static void RetirePreviousFormatPath(string? previousFilePath, string replacementPath) {
+        if (string.IsNullOrWhiteSpace(previousFilePath)) {
+            return;
+        }
+
+        var previous = Path.GetFullPath(previousFilePath);
+        var replacement = Path.GetFullPath(replacementPath);
+        if (string.Equals(previous, replacement, StringComparison.OrdinalIgnoreCase) || !File.Exists(previous)) {
+            return;
+        }
+
+        File.Delete(previous);
+        if (File.Exists(previous)) {
+            throw new IOException($"The previous video format could not be retired after installing {replacement}.");
+        }
+    }
+
+    private static string CrossFormatTargetConflictMessage(string targetPath) =>
+        $"The format-change target already exists in the library ({Path.GetFileName(targetPath)}). " +
+        "Review the conflicting file before retrying this import; Prismedia did not overwrite it.";
 
     private Task HandleNothingUsableAsync(
         AcquisitionImportContext import, SelectedRelease? selected, bool hasFormatChange, CancellationToken cancellationToken) =>
@@ -774,6 +1292,22 @@ public sealed class TvAcquisitionImportEngine(
 
     private static string SeriesOf(AcquisitionImportContext import) =>
         string.IsNullOrWhiteSpace(import.Series) ? import.Title : import.Series;
+
+    private static string? NormalizeClientItemId(string? clientItemId) =>
+        string.IsNullOrWhiteSpace(clientItemId) ? null : clientItemId;
+
+    private async Task<LibraryRootData?> ResolveOwningVideoRootAsync(
+        string seriesFolderPath,
+        CancellationToken cancellationToken) {
+        var seriesFolder = Path.GetFullPath(seriesFolderPath);
+        return (await roots.GetEnabledRootsAsync(cancellationToken))
+            .Where(root => root.ScanVideos && IsAtOrUnderFolder(seriesFolder, Path.GetFullPath(root.Path)))
+            .OrderByDescending(root => Path.GetFullPath(root.Path).Length)
+            .FirstOrDefault();
+    }
+
+    private static bool IsAtOrUnderFolder(string candidate, string folder) =>
+        string.Equals(candidate, folder, StringComparison.Ordinal) || IsUnderFolder(candidate, folder);
 
     private static bool IsUnderFolder(string candidate, string folder) {
         var normalized = folder.EndsWith(Path.DirectorySeparatorChar) ? folder : folder + Path.DirectorySeparatorChar;
@@ -944,8 +1478,8 @@ public sealed class MusicAcquisitionImportEngine(
         await context.EnqueueIfNeededAsync(new EnqueueJobRequest(JobType.ScanAudio, TargetLabel: "Imported album scan"), cancellationToken);
 
         await torrents.HandleImportedAsync(import, importMode, cancellationToken);
+        await context.ReportProgressAsync(100, "Finalizing import", cancellationToken);
         await acquisitions.MarkImportedWithQualityAsync(import.Id, BookQualityRank.Floor, message, cancellationToken, ownedMediaQuality, ownedMediaRevision, ownedFormatScore);
-        await context.ReportProgressAsync(100, "Imported", cancellationToken);
     }
 
     private Task Fail(Guid acquisitionId, string message, CancellationToken cancellationToken) =>

@@ -42,6 +42,7 @@
     acquisitionId,
     detail = $bindable(null),
     onCancelled,
+    onImported,
   }: {
     acquisitionId: string;
     /** The loaded acquisition, bound up so a host page can drive its own hero/badges from it. */
@@ -51,6 +52,8 @@
      * a request deletes its wanted placeholder, so the page it sat on no longer exists.
      */
     onCancelled?: () => void;
+    /** Called once when live status observes this acquisition cross into Imported. */
+    onImported?: () => void | Promise<void>;
   } = $props();
 
   let transfer = $state<AcquisitionTransferView | null>(null);
@@ -63,14 +66,19 @@
   let reSearchPolls = $state(0);
 
   const status = $derived(detail?.summary.status ?? null);
+  const hasResumableImport = $derived(detail?.summary.hasResumableImport === true);
+  const canRetryImport = $derived(
+    status === ACQUISITION_STATUS.manualImportRequired ||
+      (status === ACQUISITION_STATUS.failed && hasResumableImport),
+  );
   const isActive = $derived(status ? ACTIVE_ACQUISITION_STATUSES.includes(status) : false);
   const canChoose = $derived(status === ACQUISITION_STATUS.awaitingSelection);
   // A release can still be (re)selected after a failed or cancelled attempt — picking one re-queues it.
   // A manual-import hold (ambiguous payload or a dangerous file) also reopens the picker so the user
   // can block the bad release and grab a different one.
   const canPickRelease = $derived(
-    status === ACQUISITION_STATUS.awaitingSelection ||
-      status === ACQUISITION_STATUS.failed ||
+      status === ACQUISITION_STATUS.awaitingSelection ||
+      (status === ACQUISITION_STATUS.failed && !hasResumableImport) ||
       status === ACQUISITION_STATUS.cancelled ||
       status === ACQUISITION_STATUS.manualImportRequired,
   );
@@ -100,6 +108,29 @@
   let loading = false;
   /** Consecutive background-refresh failures; transient blips stay silent, a persistent outage surfaces. */
   let pollFailures = 0;
+  /** Guards the owner refresh when a late interval tick or manual load observes Imported again. */
+  let importedNotificationSent = false;
+  let lastObservedStatus: AcquisitionDetail["summary"]["status"] | null = detail?.summary.status ?? null;
+
+  async function notifyOwnerWhenImported(
+    previousStatus: AcquisitionDetail["summary"]["status"] | null,
+    nextStatus: AcquisitionDetail["summary"]["status"],
+  ) {
+    if (importedNotificationSent || nextStatus !== ACQUISITION_STATUS.imported) return;
+    if (!previousStatus || !ACTIVE_ACQUISITION_STATUSES.includes(previousStatus)) return;
+    importedNotificationSent = true;
+    await onImported?.();
+  }
+
+  // `detail` is bindable: either this panel's 3-second poll or the owning Entity's shared poll can
+  // advance it. Observe the bound value itself so an external Importing/Downloaded → Imported update
+  // cannot bypass the in-place page refresh.
+  $effect(() => {
+    const nextStatus = detail?.summary.status ?? null;
+    const previousStatus = lastObservedStatus;
+    lastObservedStatus = nextStatus;
+    if (nextStatus) void notifyOwnerWhenImported(previousStatus, nextStatus);
+  });
 
   /**
    * Loads the panel state. A background refresh (the 3s poll) must never flash an error banner for a
@@ -111,7 +142,8 @@
     if (!acquisitionId || loading) return;
     loading = true;
     try {
-      detail = await fetchAcquisition(acquisitionId);
+      const nextDetail = await fetchAcquisition(acquisitionId);
+      detail = nextDetail;
       // Secondary surface: a monitor lookup failure must not break the acquisition view.
       monitor = (await fetchMonitors().catch(() => [])).find((m) => m.acquisitionId === acquisitionId) ?? null;
       // Pull the status-appropriate detail.
@@ -200,13 +232,13 @@
     }
   }
 
-  // The manual-import hold's way out: re-run the import with the user's consent to replace the owned
-  // file across formats. Genuine-upgrade gating and the dangerous-file hold still apply server-side.
-  async function importAnyway() {
+  // Re-run a held import. A manual hold carries explicit format-change consent; a failed durable
+  // checkpoint simply resumes its already-persisted plan without broadening that consent.
+  async function retryImport(allowFormatChange: boolean) {
     if (busy) return;
     busy = true;
     try {
-      detail = await retryAcquisitionImport(acquisitionId, true);
+      detail = await retryAcquisitionImport(acquisitionId, allowFormatChange);
       reSearchPolls = 8; // bridge-poll so the importing → imported transition lands without a refresh
     } catch (err) {
       error = err instanceof Error ? err.message : "Failed to import";
@@ -261,7 +293,7 @@
   // imported/cancelled items are left alone (the server enforces the same gate).
   const canReSearch = $derived(
     status === ACQUISITION_STATUS.awaitingSelection ||
-      status === ACQUISITION_STATUS.failed ||
+      (status === ACQUISITION_STATUS.failed && !hasResumableImport) ||
       status === ACQUISITION_STATUS.manualImportRequired,
   );
 
@@ -319,17 +351,19 @@
         {/if}
       </div>
       <div class="flex shrink-0 flex-wrap items-center gap-2">
-        {#if status === ACQUISITION_STATUS.manualImportRequired}
+        {#if canRetryImport}
           <Button
             type="button"
             variant="primary"
             class="gap-1.5"
             disabled={busy}
-            onclick={() => void importAnyway()}
-            title="Import the downloaded files now. A genuine upgrade may replace the existing file even when the format differs; the previous file is kept recoverable (recycle bin when configured)."
+            onclick={() => void retryImport(status === ACQUISITION_STATUS.manualImportRequired)}
+            title={status === ACQUISITION_STATUS.manualImportRequired
+              ? "Import the downloaded files now. A genuine upgrade may replace the existing file even when the format differs; the previous file is kept recoverable."
+              : "Resume the exact durable import plan from its last completed file."}
           >
             <CloudDownload class="h-3.5 w-3.5" />
-            Import anyway
+            {status === ACQUISITION_STATUS.manualImportRequired ? "Import anyway" : "Retry import"}
           </Button>
         {/if}
         {#if canReSearch}

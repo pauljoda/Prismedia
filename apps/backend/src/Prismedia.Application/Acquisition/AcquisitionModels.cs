@@ -408,6 +408,22 @@ public interface IOwnedFileReplacer {
         CancellationToken cancellationToken,
         Domain.Entities.EntityKind kind = Domain.Entities.EntityKind.Book,
         bool allowFormatChange = false);
+
+    /// <summary>
+    /// Performs the same swap while retaining the recoverable backup sidecar after success. Durable TV
+    /// checkpoints use this form with attempt-specific incoming-byte evidence so a process restart can
+    /// distinguish an installed same-path upgrade from the untouched old file before FinalPath is durable.
+    /// </summary>
+    Task<OwnedFileReplaceResult> ReplaceRetainingBackupAsync(
+        string ownedFolder,
+        string newContentPath,
+        Domain.Entities.BookFormatTier ownedFormatTier,
+        CancellationToken cancellationToken,
+        Domain.Entities.EntityKind kind = Domain.Entities.EntityKind.Book,
+        bool allowFormatChange = false,
+        string? recoveryBackupPath = null,
+        string? incomingEvidencePath = null) =>
+        ReplaceAsync(ownedFolder, newContentPath, ownedFormatTier, cancellationToken, kind, allowFormatChange);
 }
 
 /// <summary>Input for adding a release identity to the acquisition blocklist (idempotent on the identity).</summary>
@@ -475,6 +491,7 @@ public sealed record ActiveTransfer(
 /// <param name="EpisodeNumber">Episode number for a single-episode acquisition; names files that carry no episode token.</param>
 /// <param name="EntityId">The wanted/monitored library entity this acquisition fulfills; an entity that already lives on disk redirects the import into its existing folder.</param>
 /// <param name="ExternalIdentity">Optional persistent identity carried from request through enrichment and import.</param>
+/// <param name="FinalSourcePath">Final imported source boundary, or a legacy placed-file recovery path from before typed TV checkpoints.</param>
 public sealed record AcquisitionImportContext(
     Guid Id,
     string Title,
@@ -492,11 +509,79 @@ public sealed record AcquisitionImportContext(
     Guid? TargetLibraryRootId = null,
     int? SeasonNumber = null,
     int? EpisodeNumber = null,
-    Guid? EntityId = null) {
+    Guid? EntityId = null,
+    string? FinalSourcePath = null,
+    TvImportCheckpoint? TvImportCheckpoint = null) {
     /// <summary>
     /// The user's explicit "import anyway": an upgrade that changes the file extension — normally held
     /// for manual import — replaces the owned file across formats. Carried by the manual retry-import
     /// job payload only; automatic imports never set it.
     /// </summary>
     public bool AllowFormatChange { get; init; }
+}
+
+/// <summary>
+/// Durable execution plan for a TV import. It is written before the first filesystem mutation and
+/// updated after every placed file, so a retry can finish the original plan without guessing from
+/// whatever files remain in the download directory.
+/// </summary>
+/// <param name="LibraryRootId">Video root that owns every target.</param>
+/// <param name="SeriesFolderPath">Absolute series folder used by Entity hierarchy materialization.</param>
+/// <param name="ImportMode">Move/copy/hardlink behavior selected when the plan was created.</param>
+/// <param name="AllowFormatChange">The user's explicit cross-format replacement consent, retained for retries.</param>
+/// <param name="SuccessMessage">Terminal user-facing import summary retained across retries.</param>
+/// <param name="PreferSingleFileFinalSource">Whether a one-file result should checkpoint the file rather than its season folder.</param>
+/// <param name="Units">Every file mutation required for the successful import.</param>
+/// <param name="TransferClientItemId">Download-client item this plan was built from; a later transfer may never reuse it.</param>
+/// <param name="AttemptId">Opaque token that scopes recovery artifacts to this exact placement plan.</param>
+/// <param name="ClaimJobId">Queue job exclusively allowed to execute this attempt; reassigned only by an atomic retry claim.</param>
+public sealed record TvImportCheckpoint(
+    Guid LibraryRootId,
+    string SeriesFolderPath,
+    ImportMode ImportMode,
+    bool AllowFormatChange,
+    string SuccessMessage,
+    bool PreferSingleFileFinalSource,
+    IReadOnlyList<TvImportCheckpointUnit> Units,
+    string? TransferClientItemId = null,
+    Guid AttemptId = default,
+    Guid ClaimJobId = default);
+
+/// <summary>One durable TV file placement and its exact Entity position.</summary>
+/// <param name="SourceRelativePath">Download-payload-relative source path.</param>
+/// <param name="SourceAbsolutePath">Exact original payload path retained for replacement-stage recovery.</param>
+/// <param name="TargetAbsolutePath">Exact absolute library target, collision-resolved before any mutation.</param>
+/// <param name="SeasonNumber">Season position represented by the file.</param>
+/// <param name="EpisodeNumber">Primary episode position represented by the file.</param>
+/// <param name="CoveredEpisodeNumbers">Additional episode positions satisfied by the same file.</param>
+/// <param name="PreviousFilePath">Owned source replaced by an upgrade, or null for a new placement.</param>
+/// <param name="FinalPath">Actual placed path once the mutation completes; null while still pending.</param>
+/// <param name="ReplacementBackupPath">Attempt-specific retained copy of the pre-upgrade bytes.</param>
+/// <param name="ReplacementEvidencePath">Attempt-specific incoming-byte evidence retained until FinalPath is durable.</param>
+public sealed record TvImportCheckpointUnit(
+    string SourceRelativePath,
+    string TargetAbsolutePath,
+    int SeasonNumber,
+    int EpisodeNumber,
+    IReadOnlyList<int> CoveredEpisodeNumbers,
+    string? PreviousFilePath = null,
+    string? FinalPath = null,
+    string? SourceAbsolutePath = null,
+    string? ReplacementBackupPath = null,
+    string? ReplacementEvidencePath = null);
+
+/// <summary>
+/// Stable sidecar paths used by the crash-safe owned-file replacement protocol. They deliberately use
+/// non-media suffixes so scans never import an in-progress or recoverable copy as another Entity.
+/// </summary>
+public static class OwnedFileReplacementArtifacts {
+    public const string BackupSuffix = ".prismedia-bak";
+    public const string StagedSuffix = ".prismedia-new";
+
+    public static string BackupPath(string ownedPath) => Path.GetFullPath(ownedPath) + BackupSuffix;
+    public static string StagedPath(string ownedPath) => Path.GetFullPath(ownedPath) + StagedSuffix;
+    public static string CheckpointBackupPath(string ownedPath, Guid attemptId) =>
+        Path.GetFullPath(ownedPath) + $".prismedia-bak-{attemptId:N}";
+    public static string CheckpointEvidencePath(string ownedPath, Guid attemptId) =>
+        Path.GetFullPath(ownedPath) + $".prismedia-incoming-{attemptId:N}";
 }

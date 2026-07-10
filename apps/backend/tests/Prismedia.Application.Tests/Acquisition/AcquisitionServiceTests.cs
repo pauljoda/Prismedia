@@ -67,6 +67,22 @@ public sealed class AcquisitionServiceTests {
     }
 
     [Fact]
+    public async Task ImportingAcquisitionRejectsCancelDeleteAndResearchWithoutExternalEffects() {
+        var harness = Harness(TransferInfo(RecordedClientId, AcquisitionStatus.Importing));
+
+        await Assert.ThrowsAsync<AcquisitionConfigurationException>(() =>
+            harness.Service.CancelAsync(AcquisitionId, CancellationToken.None));
+        await Assert.ThrowsAsync<AcquisitionConfigurationException>(() =>
+            harness.Service.DeleteAsync(AcquisitionId, CancellationToken.None));
+        var research = await harness.Service.ReSearchAsync(AcquisitionId, CancellationToken.None);
+
+        Assert.Equal(AcquisitionStatus.Importing, research?.Summary.Status);
+        Assert.Empty(harness.Downloads.Removals);
+        Assert.Empty(harness.Queue.Requests);
+        Assert.False(harness.Store.Deleted);
+    }
+
+    [Fact]
     public async Task DeleteAsyncRemovesTransferFromTheRecordedClient() {
         var harness = Harness(TransferInfo(RecordedClientId));
 
@@ -131,6 +147,36 @@ public sealed class AcquisitionServiceTests {
     }
 
     [Fact]
+    public async Task ReacquireEligibilityRejectsAnActiveAcquisitionWithoutSideEffects() {
+        var harness = Harness(TransferInfo(RecordedClientId, AcquisitionStatus.Downloading));
+
+        var result = await harness.Service.GetReacquireEligibilityAsync(AcquisitionId, CancellationToken.None);
+
+        Assert.False(result.CanReacquire);
+        Assert.Contains("downloading", result.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Empty(harness.Downloads.Removals);
+        Assert.Empty(harness.Store.StatusChanges);
+        Assert.Empty(harness.Queue.Requests);
+        Assert.Empty(harness.Monitors.Retargets);
+        Assert.False(harness.Store.Deleted);
+    }
+
+    [Fact]
+    public async Task ReacquireEligibilityAllowsAnImportedAcquisitionWithoutSideEffects() {
+        var harness = Harness(TransferInfo(RecordedClientId, AcquisitionStatus.Imported));
+
+        var result = await harness.Service.GetReacquireEligibilityAsync(AcquisitionId, CancellationToken.None);
+
+        Assert.True(result.CanReacquire);
+        Assert.Null(result.Message);
+        Assert.Empty(harness.Downloads.Removals);
+        Assert.Empty(harness.Store.StatusChanges);
+        Assert.Empty(harness.Queue.Requests);
+        Assert.Empty(harness.Monitors.Retargets);
+        Assert.False(harness.Store.Deleted);
+    }
+
+    [Fact]
     public async Task ReacquireAsyncReplacesImportedStateAndImmediatelySearchesTheClone() {
         var harness = Harness(TransferInfo(RecordedClientId, AcquisitionStatus.Imported));
         var replacementId = Guid.NewGuid();
@@ -169,6 +215,24 @@ public sealed class AcquisitionServiceTests {
         var history = Assert.Single(harness.History.Entries);
         Assert.Equal(AcquisitionHistoryEvent.Removed, history.Event);
         Assert.Equal("Files deleted; retry could not be initialized.", history.Message);
+    }
+
+    [Fact]
+    public async Task FailedDurableImportCanEnqueueAnExplicitResume() {
+        var harness = Harness(TransferInfo(RecordedClientId, AcquisitionStatus.Failed));
+        harness.Store.HasResumableImport = true;
+
+        var detail = await harness.Service.RetryImportAsync(
+            AcquisitionId,
+            allowFormatChange: false,
+            CancellationToken.None);
+
+        Assert.True(detail?.Summary.HasResumableImport);
+        var retry = Assert.Single(harness.Queue.Requests);
+        Assert.Equal(JobType.AcquisitionImport, retry.Type);
+        var payload = AcquisitionJobPayload.Parse(retry.PayloadJson!);
+        Assert.Equal(AcquisitionId, payload.AcquisitionId);
+        Assert.True(payload.ManualRetry);
     }
 
     [Fact]
@@ -234,11 +298,15 @@ public sealed class AcquisitionServiceTests {
         public AcquisitionStatus? Status { get; private set; } = transfer.Status;
         public List<(Guid Id, AcquisitionStatus Status, string? Message)> StatusChanges { get; } = [];
         public bool Deleted { get; private set; }
+        public bool HasResumableImport { get; set; }
         public AcquisitionMetadata? CreatedMetadata { get; private set; }
 
         public Task<AcquisitionDetail?> GetAsync(Guid id, CancellationToken cancellationToken) =>
             Task.FromResult<AcquisitionDetail?>(id == AcquisitionId
-                ? new AcquisitionDetail(_summary with { Status = Status ?? _summary.Status }, [])
+                ? new AcquisitionDetail(_summary with {
+                    Status = Status ?? _summary.Status,
+                    HasResumableImport = HasResumableImport,
+                }, [])
                 : null);
 
         public Task SetStatusAsync(Guid id, AcquisitionStatus status, string? message, CancellationToken cancellationToken) {
@@ -247,6 +315,20 @@ public sealed class AcquisitionServiceTests {
                 Status = status;
             }
             return Task.CompletedTask;
+        }
+
+        public async Task<bool> TryTransitionStatusAsync(
+            Guid id,
+            IReadOnlyCollection<AcquisitionStatus> expectedStatuses,
+            AcquisitionStatus status,
+            string? message,
+            CancellationToken cancellationToken) {
+            if (id != AcquisitionId || Status is not { } current || !expectedStatuses.Contains(current)) {
+                return false;
+            }
+
+            await SetStatusAsync(id, status, message, cancellationToken);
+            return true;
         }
 
         public Task<bool> DeleteAsync(Guid id, CancellationToken cancellationToken) {
@@ -300,7 +382,14 @@ public sealed class AcquisitionServiceTests {
         public Task UpdateTransferAsync(Guid transferId, double progress, string? state, string? contentPath, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task MarkTransferStalledAsync(Guid transferId, DateTimeOffset? stalledSince, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<AcquisitionImportContext?> GetImportContextAsync(Guid acquisitionId, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<bool> TryClaimInitialImportAsync(Guid id, Guid claimJobId, bool allowManualRetry, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<bool> TryHoldCorruptTvImportCheckpointAsync(Guid id, Guid claimJobId, string message, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task SetFinalSourcePathAsync(Guid acquisitionId, string finalSourcePath, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task SetTvImportCheckpointAsync(Guid acquisitionId, TvImportCheckpoint? checkpoint, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<bool> TryCreateTvImportCheckpointAsync(Guid acquisitionId, TvImportCheckpoint checkpoint, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<bool> TryClaimTvImportCheckpointAsync(Guid acquisitionId, TvImportCheckpoint checkpoint, Guid claimJobId, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<bool> TryClearTvImportCheckpointAsync(Guid acquisitionId, TvImportCheckpoint checkpoint, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<bool> IsCurrentTvImportCheckpointAsync(Guid acquisitionId, TvImportCheckpoint checkpoint, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task WriteImportHintAsync(Guid acquisitionId, string sourcePath, AcquisitionImportContext context, BookQualityRank ownedQuality, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<bool> AnyForEntityAsync(Guid entityId, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<AcquisitionDetail?> GetLatestForEntityAsync(Guid entityId, CancellationToken cancellationToken) => throw new NotSupportedException();

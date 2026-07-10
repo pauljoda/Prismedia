@@ -8,11 +8,13 @@
     refresh,
     onReverted,
     onDeleted,
+    onImported,
   }: {
     initialAcquisition: AcquisitionDetail;
     refresh: () => Promise<void>;
     onReverted: () => void | Promise<void>;
     onDeleted: () => void;
+    onImported?: () => void | Promise<void>;
   } = $props();
 
   let acquisition = $derived<AcquisitionDetail | null>(initialAcquisition);
@@ -56,4 +58,5 @@
   entity={{ id: "season-1", kind: "video-season", title: "Season 1" }}
   {onDeleted}
   {onReverted}
+  {onImported}
 />

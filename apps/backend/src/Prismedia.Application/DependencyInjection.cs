@@ -18,6 +18,7 @@ using Prismedia.Application.Jobs.Handlers.Maintenance;
 using Prismedia.Application.Jobs.Handlers.Probe;
 using Prismedia.Application.Jobs.Handlers.Scan;
 using Prismedia.Application.Jobs.Ports;
+using Prismedia.Application.Jobs.Scanning;
 using Prismedia.Domain.Entities;
 using Prismedia.Application.Plugins;
 using Prismedia.Application.Playback;
@@ -68,6 +69,8 @@ public static class DependencyInjection {
         services.AddSingleton<Acquisition.IAcquisitionPolicyModule, Acquisition.MusicAcquisitionPolicyModule>();
         services.AddSingleton<Acquisition.IAcquisitionPolicyModule, Acquisition.TvAcquisitionPolicyModule>();
         services.AddSingleton<Acquisition.IAcquisitionPolicyRegistry, Acquisition.AcquisitionPolicyRegistry>();
+        services.AddSingleton<VideoScanConcurrencyGate>();
+        services.AddScoped<IImportedVideoMaterializer, ImportedVideoMaterializer>();
         services.AddScoped<ImportedTorrentRemover>();
         services.AddScoped<IAcquisitionImportEngine, BookAcquisitionImportEngine>();
         services.AddScoped<IAcquisitionImportEngine, MovieAcquisitionImportEngine>();

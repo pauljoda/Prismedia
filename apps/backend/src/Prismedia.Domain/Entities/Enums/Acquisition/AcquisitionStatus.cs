@@ -3,8 +3,7 @@ namespace Prismedia.Domain.Entities;
 /// <summary>
 /// Closed set of lifecycle states for a first-party acquisition. An acquisition captures the
 /// intent to obtain a book, searches indexers for releases, downloads the chosen release through
-/// a download client, then imports the completed payload into a library root for the normal scan
-/// and auto-identify pipeline to finish.
+/// a download client, then runs the media kind's import workflow against a library root.
 /// </summary>
 public enum AcquisitionStatus {
     /// <summary>Created from a request but no release search has run yet.</summary>
@@ -35,7 +34,7 @@ public enum AcquisitionStatus {
     [Code("importing")]
     Importing,
 
-    /// <summary>The payload was imported and a book scan was enqueued.</summary>
+    /// <summary>The payload was placed in the library and its media-specific import workflow completed.</summary>
     [Code("imported")]
     Imported,
 

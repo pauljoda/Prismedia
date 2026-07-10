@@ -101,6 +101,21 @@ public sealed class MediaEntityDeletionService(
             .Distinct()
             .ToArray();
 
+        if (reverting) {
+            // Validate the complete replacement set before removing stale monitors, deleting source paths,
+            // clearing file rows, or marking any entity wanted. A missing-child/upgrade acquisition can be
+            // newer than the imported parent acquisition; it must block the whole delete rather than fail
+            // after the on-disk state has already been destroyed.
+            foreach (var acquisitionId in reacquireIds) {
+                var eligibility = await acquisitions.GetReacquireEligibilityAsync(acquisitionId, cancellationToken);
+                if (!eligibility.CanReacquire) {
+                    return new MediaEntityDeleteResult(
+                        false,
+                        eligibility.Message ?? "A linked acquisition cannot be safely replaced right now.");
+                }
+            }
+        }
+
         if (!reverting) {
             var doomedMonitors = await db.Monitors
                 .Where(monitor =>

@@ -20,6 +20,7 @@
     entity,
     onDeleted,
     onReverted,
+    onImported,
   }: {
     /** The page-owned acquisition state (from {@link useEntityAcquisition}). */
     acq: EntityAcquisition;
@@ -39,6 +40,8 @@
     onDeleted?: () => void;
     /** Called after the entity reverted to Wanted instead (still exists) — the page should refresh. */
     onReverted?: () => void | Promise<void>;
+    /** Called once when the acquisition becomes Imported so the page can refresh its Entity in place. */
+    onImported?: () => void | Promise<void>;
   } = $props();
 
   let confirmDeleteOpen = $state(false);
@@ -191,7 +194,12 @@
 
     {#if acq.acquisition}
       {#key acq.acquisition.summary.id}
-        <AcquisitionPanel acquisitionId={acq.acquisition.summary.id} bind:detail={acq.acquisition} {onCancelled} />
+        <AcquisitionPanel
+          acquisitionId={acq.acquisition.summary.id}
+          bind:detail={acq.acquisition}
+          {onCancelled}
+          {onImported}
+        />
       {/key}
     {/if}
   </section>

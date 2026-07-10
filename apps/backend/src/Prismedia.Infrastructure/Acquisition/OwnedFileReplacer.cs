@@ -19,10 +19,52 @@ namespace Prismedia.Infrastructure.Acquisition;
 /// </para>
 /// </summary>
 public sealed class OwnedFileReplacer(IRecycleBin recycleBin, ILogger<OwnedFileReplacer> logger) : IOwnedFileReplacer {
-    private const string BackupSuffix = ".prismedia-bak";
-    private const string StagedSuffix = ".prismedia-new";
+    public Task<OwnedFileReplaceResult> ReplaceAsync(
+        string ownedFolder,
+        string newContentPath,
+        BookFormatTier ownedFormatTier,
+        CancellationToken cancellationToken,
+        EntityKind kind = EntityKind.Book,
+        bool allowFormatChange = false) =>
+        ReplaceCoreAsync(
+            ownedFolder,
+            newContentPath,
+            ownedFormatTier,
+            cancellationToken,
+            kind,
+            allowFormatChange,
+            retainBackup: false);
 
-    public async Task<OwnedFileReplaceResult> ReplaceAsync(string ownedFolder, string newContentPath, BookFormatTier ownedFormatTier, CancellationToken cancellationToken, EntityKind kind = EntityKind.Book, bool allowFormatChange = false) {
+    public Task<OwnedFileReplaceResult> ReplaceRetainingBackupAsync(
+        string ownedFolder,
+        string newContentPath,
+        BookFormatTier ownedFormatTier,
+        CancellationToken cancellationToken,
+        EntityKind kind = EntityKind.Book,
+        bool allowFormatChange = false,
+        string? recoveryBackupPath = null,
+        string? incomingEvidencePath = null) =>
+        ReplaceCoreAsync(
+            ownedFolder,
+            newContentPath,
+            ownedFormatTier,
+            cancellationToken,
+            kind,
+            allowFormatChange,
+            retainBackup: true,
+            recoveryBackupPath,
+            incomingEvidencePath);
+
+    private async Task<OwnedFileReplaceResult> ReplaceCoreAsync(
+        string ownedFolder,
+        string newContentPath,
+        BookFormatTier ownedFormatTier,
+        CancellationToken cancellationToken,
+        EntityKind kind,
+        bool allowFormatChange,
+        bool retainBackup,
+        string? recoveryBackupPath = null,
+        string? incomingEvidencePath = null) {
         var isVideo = MediaQualityLadder.IsUpgradeCapableKind(kind);
         var extensions = isVideo ? MovieImportPlanBuilder.VideoExtensions : ImportPlanBuilder.SupportedExtensions;
         var fileNoun = isVideo ? "video" : "book";
@@ -66,8 +108,13 @@ public sealed class OwnedFileReplacer(IRecycleBin recycleBin, ILogger<OwnedFileR
             return (OwnedFileReplaceResult.Failed("The upgrade file's format is lower than the owned file's."));
         }
 
-        var backup = owned + BackupSuffix;
-        var staged = owned + StagedSuffix;
+        var backup = !string.IsNullOrWhiteSpace(recoveryBackupPath)
+            ? Path.GetFullPath(recoveryBackupPath)
+            : OwnedFileReplacementArtifacts.BackupPath(owned);
+        var staged = OwnedFileReplacementArtifacts.StagedPath(owned);
+        var evidence = !string.IsNullOrWhiteSpace(incomingEvidencePath)
+            ? Path.GetFullPath(incomingEvidencePath)
+            : null;
         try {
             // Stage the new file beside the owned file FIRST (this is the only possibly-cross-device move, and
             // it never touches the owned file), then preserve the original as a backup COPY, then atomically
@@ -78,10 +125,18 @@ public sealed class OwnedFileReplacer(IRecycleBin recycleBin, ILogger<OwnedFileR
             }
 
             File.Move(incoming, staged);
+            if (retainBackup && evidence is not null) {
+                TryDelete(evidence);
+                if (!HardLink.TryCreate(staged, evidence)) {
+                    File.Copy(staged, evidence, overwrite: false);
+                }
+            }
             File.Copy(owned, backup, overwrite: true); // keep the previous file as a recoverable backup
         } catch (Exception ex) when (ex is not OperationCanceledException) {
             logger.LogWarning(ex, "OwnedFileReplacer: could not stage the upgrade for {Path}.", owned);
-            TryDelete(staged);
+            if (!retainBackup) {
+                TryDelete(staged);
+            }
             return (OwnedFileReplaceResult.Failed($"Could not stage the upgrade: {ex.Message}"));
         }
 
@@ -101,7 +156,7 @@ public sealed class OwnedFileReplacer(IRecycleBin recycleBin, ILogger<OwnedFileR
 
             // With a recycle bin configured the previous file moves there (purged after the cleanup window);
             // otherwise it stays beside the new one as the recoverable .prismedia-bak sidecar.
-            if (await recycleBin.TryMoveToBinAsync(backup, cancellationToken) is { } binned) {
+            if (!retainBackup && await recycleBin.TryMoveToBinAsync(backup, cancellationToken) is { } binned) {
                 logger.LogDebug("OwnedFileReplacer: previous file recycled to {Binned}.", binned);
             }
 
@@ -118,7 +173,9 @@ public sealed class OwnedFileReplacer(IRecycleBin recycleBin, ILogger<OwnedFileR
                 logger.LogError(restoreEx, "OwnedFileReplacer: failed to restore the backup at {Backup}; it remains on disk.", backup);
             }
 
-            TryDelete(staged);
+            if (!retainBackup) {
+                TryDelete(staged);
+            }
             return (OwnedFileReplaceResult.Failed($"The swap failed and the original was kept: {ex.Message}"));
         }
     }

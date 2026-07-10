@@ -34,6 +34,94 @@ public sealed class AcquisitionHintFolderOwnerTests {
     }
 
     [Fact]
+    public async Task BroadCheckpointHintStampsTheLinkedEpisodeInsteadOfTheSeriesFolderOwner() {
+        await using var db = CreateContext();
+        var seriesId = AddEntity(db, EntityKindRegistry.VideoSeries.Code, null, "/media/tv/Show", title: "Show");
+        var seasonId = AddEntity(db, EntityKindRegistry.VideoSeason.Code, seriesId, "/media/tv/Show/S01");
+        var episodeId = AddEntity(db, EntityKindRegistry.Video.Code, seasonId, "/media/tv/Show/S01/E01.mkv");
+        AddHint(db, "/media/tv/Show", """{"tmdb":"episode-4242"}""", episodeId);
+        await db.SaveChangesAsync();
+
+        var owners = await new AcquisitionHintApplier(db).ApplyToFolderOwnersAsync(CancellationToken.None);
+
+        Assert.Equal(seriesId, Assert.Single(owners).TopLevelEntityId);
+        var stamped = Assert.Single(await db.EntityExternalIds.AsNoTracking().ToArrayAsync());
+        Assert.Equal(episodeId, stamped.EntityId);
+        Assert.Equal("tmdb", stamped.Provider);
+        Assert.Equal("episode-4242", stamped.Value);
+        Assert.Empty(await db.EntityExternalIds.AsNoTracking()
+            .Where(row => row.EntityId == seriesId || row.EntityId == seasonId)
+            .ToArrayAsync());
+    }
+
+    [Fact]
+    public async Task ScopedApplyIgnoresAStaleHintForAnotherEpisodeInTheSameSeries() {
+        await using var db = CreateContext();
+        var seriesId = AddEntity(db, EntityKindRegistry.VideoSeries.Code, null, "/media/tv/Show", title: "Show");
+        var seasonId = AddEntity(db, EntityKindRegistry.VideoSeason.Code, seriesId, "/media/tv/Show/S01");
+        var episodeOneId = AddEntity(db, EntityKindRegistry.Video.Code, seasonId, "/media/tv/Show/S01/E01.mkv");
+        var episodeTwoId = AddEntity(db, EntityKindRegistry.Video.Code, seasonId, "/media/tv/Show/S01/E02.mkv");
+        var staleAcquisitionId = AddHint(db, "/media/tv/Show", """{"tmdb":"episode-1"}""", episodeOneId);
+        var activeAcquisitionId = AddHint(db, "/media/tv/Show", """{"tmdb":"episode-2"}""", episodeTwoId);
+        await db.SaveChangesAsync();
+
+        await new AcquisitionHintApplier(db).ApplyToFolderOwnersAsync(
+            CancellationToken.None,
+            activeAcquisitionId);
+
+        var stamped = Assert.Single(await db.EntityExternalIds.AsNoTracking().ToArrayAsync());
+        Assert.Equal(episodeTwoId, stamped.EntityId);
+        Assert.Equal("episode-2", stamped.Value);
+        var hints = await db.AcquisitionImportHints.AsNoTracking().ToArrayAsync();
+        Assert.False(Assert.Single(hints, hint => hint.AcquisitionId == staleAcquisitionId).Consumed);
+        Assert.True(Assert.Single(hints, hint => hint.AcquisitionId == activeAcquisitionId).Consumed);
+    }
+
+    [Fact]
+    public async Task BroadCompleteSeriesHintBindsTheRequestedSeasonOnlyByItsPosition() {
+        await using var db = CreateContext();
+        var seriesId = AddEntity(db, EntityKindRegistry.VideoSeries.Code, null, "/media/tv/Show", title: "Show");
+        var wantedSeasonThreeId = AddWantedEntity(
+            db,
+            EntityKindRegistry.VideoSeason.Code,
+            seriesId,
+            sortOrder: 3);
+        var acquisitionId = AddHint(
+            db,
+            "/media/tv/Show",
+            """{"tmdb":"season-3"}""",
+            wantedSeasonThreeId);
+        await db.SaveChangesAsync();
+        var hints = new AcquisitionHintApplier(db);
+
+        var directWrongSeason = await hints.BindWantedEntityAsync(
+            EntityKind.VideoSeason,
+            "/media/tv/Show/S01",
+            CancellationToken.None,
+            acquisitionId,
+            requireExactPath: true);
+        var wrongPosition = await hints.BindWantedChildBySortOrderAsync(
+            EntityKind.VideoSeason,
+            "/media/tv/Show",
+            1,
+            "/media/tv/Show/S01",
+            CancellationToken.None);
+        var requestedPosition = await hints.BindWantedChildBySortOrderAsync(
+            EntityKind.VideoSeason,
+            "/media/tv/Show",
+            3,
+            "/media/tv/Show/S03",
+            CancellationToken.None);
+
+        Assert.False(directWrongSeason);
+        Assert.Null(wrongPosition);
+        Assert.Equal(wantedSeasonThreeId, requestedPosition);
+        var source = await db.EntityFiles.AsNoTracking()
+            .SingleAsync(row => row.EntityId == wantedSeasonThreeId && row.Role == EntityFileRole.Source);
+        Assert.Equal("/media/tv/Show/S03", source.Path);
+    }
+
+    [Fact]
     public async Task StampingDelegatesOneCanonicalIdentitySetAndSkipsTransientLocators() {
         await using var db = CreateContext();
         var seasonId = AddEntity(db, EntityKindRegistry.VideoSeason.Code, null, "/media/tv/Show/S01");
@@ -138,17 +226,42 @@ public sealed class AcquisitionHintFolderOwnerTests {
         return id;
     }
 
-    private static void AddHint(PrismediaDbContext db, string sourcePath, string externalIdsJson) {
+    private static Guid AddWantedEntity(
+        PrismediaDbContext db,
+        string kindCode,
+        Guid? parent,
+        int sortOrder) {
+        var id = Guid.NewGuid();
+        var now = DateTimeOffset.UtcNow;
+        db.Entities.Add(new EntityRow {
+            Id = id,
+            KindCode = kindCode,
+            Title = kindCode,
+            ParentEntityId = parent,
+            SortOrder = sortOrder,
+            IsWanted = true,
+            CreatedAt = now,
+            UpdatedAt = now,
+        });
+        return id;
+    }
+
+    private static Guid AddHint(
+        PrismediaDbContext db,
+        string sourcePath,
+        string externalIdsJson,
+        Guid? linkedEntityId = null) {
         var now = DateTimeOffset.UtcNow;
         var acquisitionId = Guid.NewGuid();
         db.Acquisitions.Add(new AcquisitionRow {
-            Id = acquisitionId, Status = AcquisitionStatus.Imported, Title = "T",
+            Id = acquisitionId, Status = AcquisitionStatus.Imported, Title = "T", EntityId = linkedEntityId,
             ExternalIdsJson = "{}", SourceUrlsJson = "[]", CreatedAt = now, UpdatedAt = now
         });
         db.AcquisitionImportHints.Add(new AcquisitionImportHintRow {
-            Id = Guid.NewGuid(), AcquisitionId = acquisitionId, SourcePath = sourcePath,
+            Id = Guid.NewGuid(), AcquisitionId = acquisitionId, EntityId = linkedEntityId, SourcePath = sourcePath,
             ExternalIdsJson = externalIdsJson, SourceUrlsJson = "[]", Consumed = false, CreatedAt = now, UpdatedAt = now
         });
+        return acquisitionId;
     }
 
     private static PrismediaDbContext CreateContext() =>

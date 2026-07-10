@@ -276,6 +276,7 @@
             entity={season ? { id: season.id, kind: season.kind, title: season.title } : undefined}
             onDeleted={() => void goto(`/series/${seriesId}`)}
             onReverted={() => loadSeason({ showLoading: false })}
+            onImported={() => loadSeason({ showLoading: false })}
           />
         {/if}
       {/snippet}

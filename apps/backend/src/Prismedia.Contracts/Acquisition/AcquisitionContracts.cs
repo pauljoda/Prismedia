@@ -118,7 +118,8 @@ public sealed record AcquisitionSummary(
     DateTimeOffset UpdatedAt,
     string? Description = null,
     EntityKind Kind = EntityKind.Book,
-    Guid? EntityId = null);
+    Guid? EntityId = null,
+    bool HasResumableImport = false);
 
 /// <summary>An acquisition with its scored candidates for the review screen.</summary>
 public sealed record AcquisitionDetail(

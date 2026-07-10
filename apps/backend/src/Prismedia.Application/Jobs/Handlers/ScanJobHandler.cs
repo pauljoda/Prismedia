@@ -108,6 +108,11 @@ public abstract class ScanJobHandler(
     /// </summary>
     private async Task ScanRootWithSnapshotAsync(
         JobContext context, LibraryRootData root, CancellationToken cancellationToken) {
+        // Media-specific handlers can use this scope to serialize the signature snapshot and detailed
+        // reconciliation with import-time filesystem changes. It deliberately covers the fast path too:
+        // taking a pre-import snapshot and then scanning post-import files would advance inconsistent state.
+        await using var scanScope = await EnterScanScopeAsync(root, cancellationToken);
+
         if (snapshots is null) {
             // No snapshot store wired (e.g. in unit tests): always run the full scan.
             ThrowIfFilesFailed(await ScanRootCoreAsync(context, root, cancellationToken));
@@ -207,6 +212,14 @@ public abstract class ScanJobHandler(
     /// and single-file books for the book scan).
     /// </summary>
     protected abstract IReadOnlyList<MediaCategory> ScanCategories { get; }
+
+    /// <summary>
+    /// Optionally enters a media-specific concurrency scope around one root's snapshot and detailed scan.
+    /// Most scan kinds need no coordination; video overrides this to avoid racing TV import placement.
+    /// </summary>
+    protected virtual ValueTask<IAsyncDisposable?> EnterScanScopeAsync(
+        LibraryRootData root, CancellationToken cancellationToken) =>
+        ValueTask.FromResult<IAsyncDisposable?>(null);
 
     /// <summary>
     /// Discovers files, creates/updates entities, and enqueues downstream jobs for one root.

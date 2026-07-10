@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging;
+using Prismedia.Application.Jobs.Scanning;
 using Prismedia.Contracts.Acquisition;
 using Prismedia.Contracts.System;
 using Prismedia.Domain.Entities;
@@ -21,7 +22,8 @@ public sealed class AcquisitionQueueService(
     IIndexerConfigStore indexers,
     IReleaseLinkResolver linkResolver,
     IAcquisitionHistoryStore history,
-    ILogger<AcquisitionQueueService> logger) : IAcquisitionQueueService {
+    ILogger<AcquisitionQueueService> logger,
+    VideoScanConcurrencyGate? scanGate = null) : IAcquisitionQueueService {
     /// <summary>Queues a chosen candidate: resolves a usable link (direct, magnet, or scraped from the info page) and hands it to a download client.</summary>
     public async Task<AcquisitionDetail?> QueueAsync(Guid acquisitionId, Guid candidateId, CancellationToken cancellationToken, bool manualPick = false) {
         var candidate = await acquisitions.GetQueueCandidateAsync(acquisitionId, candidateId, cancellationToken);
@@ -51,6 +53,7 @@ public sealed class AcquisitionQueueService(
         }
 
         var category = await ResolveCategoryAsync(acquisitionId, cancellationToken);
+        await ClaimQueueLifecycleAsync(acquisitionId, cancellationToken);
         // Re-queueing (after a failed/cancelled attempt) supersedes any prior download — drop the old
         // one from its client first so it doesn't linger as an orphan or collide on re-add.
         await RemovePriorDownloadAsync(acquisitionId, eligible[0], cancellationToken);
@@ -86,6 +89,7 @@ public sealed class AcquisitionQueueService(
 
         var eligible = await ResolveClientsAsync(DownloadProtocol.Torrent, cancellationToken);
         var category = await ResolveCategoryAsync(acquisitionId, cancellationToken);
+        await ClaimQueueLifecycleAsync(acquisitionId, cancellationToken);
         await RemovePriorDownloadAsync(acquisitionId, eligible[0], cancellationToken);
         try {
             var (client, clientItemId) = await AddWithFallbackAsync(
@@ -110,6 +114,56 @@ public sealed class AcquisitionQueueService(
         }
 
         return await acquisitions.GetAsync(acquisitionId, cancellationToken);
+    }
+
+    private static readonly AcquisitionStatus[] QueueableStatuses = [
+        AcquisitionStatus.AwaitingSelection,
+        AcquisitionStatus.Failed,
+        AcquisitionStatus.Cancelled,
+        AcquisitionStatus.ManualImportRequired,
+    ];
+
+    private async Task ClaimQueueLifecycleAsync(
+        Guid acquisitionId,
+        CancellationToken cancellationToken) {
+        var status = await acquisitions.GetStatusAsync(acquisitionId, cancellationToken);
+        if (status is null || !QueueableStatuses.Contains(status.Value)) {
+            throw new AcquisitionConfigurationException(
+                ApiProblemCodes.AcquisitionInvalid,
+                status is null
+                    ? "The acquisition no longer exists."
+                    : $"A release cannot be changed while this acquisition is {status.Value.ToCode()}.");
+        }
+
+        AcquisitionImportContext? import;
+        try {
+            import = await acquisitions.GetImportContextAsync(acquisitionId, cancellationToken);
+        } catch (InvalidDataException) {
+            throw new AcquisitionConfigurationException(
+                ApiProblemCodes.AcquisitionInvalid,
+                TvImportCheckpointLifecycle.CorruptCheckpointMessage);
+        }
+        if (import?.TvImportCheckpoint is not null
+            && !await TvImportCheckpointLifecycle.TryAbandonAsync(
+                acquisitions,
+                import,
+                cancellationToken,
+                scanGate)) {
+            throw new AcquisitionConfigurationException(
+                ApiProblemCodes.AcquisitionInvalid,
+                TvImportCheckpointLifecycle.CheckpointMustFinishMessage);
+        }
+
+        if (!await acquisitions.TryTransitionStatusAsync(
+                acquisitionId,
+                [status.Value],
+                AcquisitionStatus.Queued,
+                "Preparing the selected release for the download client.",
+                cancellationToken)) {
+            throw new AcquisitionConfigurationException(
+                ApiProblemCodes.AcquisitionInvalid,
+                "The acquisition changed while this release was being prepared. Refresh and try again.");
+        }
     }
 
     /// <summary>

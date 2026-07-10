@@ -22,8 +22,45 @@ public sealed class AcquisitionImportJobHandler(
 
     public async Task HandleAsync(JobContext context, CancellationToken cancellationToken) {
         var payload = AcquisitionJobPayload.Parse(context.Job.PayloadJson);
-        var import = await acquisitions.GetImportContextAsync(payload.AcquisitionId, cancellationToken);
+        AcquisitionImportContext? import;
+        try {
+            import = await acquisitions.GetImportContextAsync(payload.AcquisitionId, cancellationToken);
+        } catch (InvalidDataException ex) {
+            logger.LogError(ex, "AcquisitionImport: corrupt TV checkpoint held for acquisition {Id}", payload.AcquisitionId);
+            await acquisitions.TryHoldCorruptTvImportCheckpointAsync(
+                payload.AcquisitionId,
+                context.Job.Id,
+                TvImportCheckpointLifecycle.CorruptCheckpointMessage,
+                CancellationToken.None);
+            return;
+        }
         if (import is null) {
+            return;
+        }
+
+        var tvCheckpoint = import.TvImportCheckpoint;
+        if (tvCheckpoint is not null
+            && !await acquisitions.TryClaimTvImportCheckpointAsync(
+                payload.AcquisitionId,
+                tvCheckpoint,
+                context.Job.Id,
+                cancellationToken)) {
+            logger.LogInformation(
+                "AcquisitionImport: TV checkpoint for {Id} was superseded before resume; skipping stale work.",
+                payload.AcquisitionId);
+            return;
+        }
+        if (tvCheckpoint is not null) {
+            tvCheckpoint = tvCheckpoint with { ClaimJobId = context.Job.Id };
+            import = import with { TvImportCheckpoint = tvCheckpoint };
+        } else if (!await acquisitions.TryClaimInitialImportAsync(
+                       payload.AcquisitionId,
+                       context.Job.Id,
+                       payload.ManualRetry,
+                       cancellationToken)) {
+            logger.LogInformation(
+                "AcquisitionImport: acquisition {Id} left its claimable state before this job could claim it; skipping stale work.",
+                payload.AcquisitionId);
             return;
         }
 
@@ -54,7 +91,12 @@ public sealed class AcquisitionImportJobHandler(
         // for — otherwise a mislabeled release would be renamed into the expected work's folder, masking
         // the mismatch forever. Skipped for the user's own picks (manual release queue, uploaded torrent)
         // and for a manual retry-import — reviewing and clicking "import anyway" is the override.
-        if (!payload.ManualRetry && await FindPayloadConflictAsync(payload.AcquisitionId, import, payloadFiles, cancellationToken) is { } conflict) {
+        // A durable TV checkpoint was created only after the ORIGINAL complete payload passed this
+        // validation. Move-mode resumes intentionally see a partial download directory, so re-validating
+        // that remainder can manufacture a false wrong-season conflict and strand a valid checkpoint.
+        if (import.TvImportCheckpoint is null
+            && !payload.ManualRetry
+            && await FindPayloadConflictAsync(payload.AcquisitionId, import, payloadFiles, cancellationToken) is { } conflict) {
             logger.LogWarning("AcquisitionImport: wrong content held for acquisition {Id}: {Conflict}", payload.AcquisitionId, conflict);
             var holdMessage = $"The download does not look like the expected content: {conflict} Review the files, import anyway, or block this release and search again.";
             await acquisitions.SetStatusAsync(payload.AcquisitionId, AcquisitionStatus.ManualImportRequired, holdMessage, cancellationToken);
@@ -71,8 +113,6 @@ public sealed class AcquisitionImportJobHandler(
                 cancellationToken);
             return;
         }
-
-        await acquisitions.SetStatusAsync(payload.AcquisitionId, AcquisitionStatus.Importing, null, cancellationToken);
 
         try {
             await engine.ImportAsync(context, import, cancellationToken);

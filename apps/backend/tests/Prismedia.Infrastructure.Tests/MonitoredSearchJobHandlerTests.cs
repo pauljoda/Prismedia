@@ -132,6 +132,8 @@ public sealed class MonitoredSearchJobHandlerTests {
         public Task<AcquisitionSummary> CreateAndSearchAsync(AcquisitionCreateRequest request, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<bool> AnyForEntityAsync(Guid entityId, CancellationToken cancellationToken) => Task.FromResult(false);
         public Task<IReadOnlyList<Guid>> ListIdsForEntityAsync(Guid entityId, CancellationToken cancellationToken) => Task.FromResult<IReadOnlyList<Guid>>([]);
+        public Task<AcquisitionReacquireEligibility> GetReacquireEligibilityAsync(Guid id, CancellationToken cancellationToken) =>
+            Task.FromResult(new AcquisitionReacquireEligibility(false, "The acquisition no longer exists."));
         public Task<bool> DeleteAsync(Guid id, CancellationToken cancellationToken, bool preserveWantedLoop = false) => Task.FromResult(false);
         public Task<Guid?> ReacquireAsync(Guid id, CancellationToken cancellationToken) => Task.FromResult<Guid?>(null);
     }

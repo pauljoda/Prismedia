@@ -160,10 +160,24 @@ public sealed record ResolvedImportItem(string SourceAbsolutePath, string Target
 /// <summary>Executes the file moves of a resolved import plan, returning the final on-disk paths.</summary>
 public interface IImportFileMover {
     /// <summary>
+    /// Resolves the exact target that a durable import plan should persist. The first path that is absent
+    /// from both the filesystem and <paramref name="reservedTargetPaths"/> is chosen using the same stable
+    /// numeric suffix rule as <see cref="PlaceAsync"/>. This method does not mutate the filesystem.
+    /// </summary>
+    string ResolveExactTargetPath(string desiredTargetPath, IReadOnlyCollection<string> reservedTargetPaths);
+
+    /// <summary>
     /// Places one planned file at its target (move for <see cref="ImportMode.Move"/>, copy otherwise),
     /// creating parent directories and giving colliding targets a stable numeric suffix. Returns the final path.
     /// </summary>
     Task<string> PlaceAsync(ResolvedImportItem item, ImportMode mode, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Places one planned file at its exact target without overwriting an existing file or choosing a
+    /// collision suffix. Intended for durable import plans whose destination was persisted before placement.
+    /// Returns the supplied target path when placement succeeds.
+    /// </summary>
+    Task<string> PlaceExactAsync(ResolvedImportItem item, ImportMode mode, CancellationToken cancellationToken);
 }
 
 /// <summary>Stamps acquisition-supplied identity onto a freshly scanned book so auto-identify resolves it ID-first.</summary>
@@ -182,7 +196,12 @@ public interface IAcquisitionHintApplier {
     /// wanted entity instead of creating a duplicate. Call BEFORE the kind's upsert for the path.
     /// Returns true when a wanted entity was bound.
     /// </summary>
-    Task<bool> BindWantedEntityAsync(EntityKind kind, string sourcePath, CancellationToken cancellationToken);
+    Task<bool> BindWantedEntityAsync(
+        EntityKind kind,
+        string sourcePath,
+        CancellationToken cancellationToken,
+        Guid? acquisitionId = null,
+        bool requireExactPath = false);
 
     /// <summary>
     /// Binds a request-created wanted ancestor grouping of <paramref name="parentKind"/> (an author, an
@@ -192,7 +211,11 @@ public interface IAcquisitionHintApplier {
     /// wanted grouping instead of creating a second one. Call BEFORE the grouping's upsert.
     /// Returns true when a wanted ancestor was bound.
     /// </summary>
-    Task<bool> BindWantedParentAsync(EntityKind parentKind, string folderPath, CancellationToken cancellationToken);
+    Task<bool> BindWantedParentAsync(
+        EntityKind parentKind,
+        string folderPath,
+        CancellationToken cancellationToken,
+        Guid? acquisitionId = null);
 
     /// <summary>
     /// Binds a wanted positioned child (a phantom season under its series, a phantom episode under its
@@ -202,19 +225,25 @@ public interface IAcquisitionHintApplier {
     /// child's source path and its Wanted state clears — so the scan's upsert finds the phantom instead
     /// of creating a duplicate. Works with or without an import hint: a monitored on-disk series
     /// gaining new episode files binds its phantoms the same way. Call BEFORE the child's upsert.
-    /// Returns true when a phantom was bound.
+    /// Returns the bound phantom's Entity id, or null when no matching child was available.
     /// </summary>
-    Task<bool> BindWantedChildBySortOrderAsync(EntityKind childKind, string parentPath, int sortOrder, string childPath, CancellationToken cancellationToken);
+    Task<Guid?> BindWantedChildBySortOrderAsync(
+        EntityKind childKind,
+        string parentPath,
+        int sortOrder,
+        string childPath,
+        CancellationToken cancellationToken);
 
     /// <summary>
-    /// Applies every unconsumed hint to the entity that owns its imported path (video/audio kinds; book
-    /// hints keep <see cref="ApplyAsync"/>): stamps the acquisition's external/plugin ids onto the owning
-    /// entity so identify resolves it ID-first, consumes the hint, and reports each owner's TOP-LEVEL
-    /// ancestor — the scan enqueues one identify job per reported root for imported content. Hints whose
-    /// path is not yet owned by any entity are left unconsumed for a later pass. Call AFTER the scan's
-    /// upserts, when the imported paths have owners.
+    /// Applies every unconsumed video/audio hint after Source binding (book hints keep
+    /// <see cref="ApplyAsync"/>). A hint linked to an acquisition Entity stamps that exact Entity, even
+    /// when its crash-safe path is a broader ancestor folder; an unlinked hint stamps the path owner.
+    /// Reports each stamped Entity's TOP-LEVEL ancestor so the scan enqueues one identify job per root.
+    /// Hints whose path or linked Entity is not ready stay unconsumed for a later pass.
     /// </summary>
-    Task<IReadOnlyList<StampedHintOwner>> ApplyToFolderOwnersAsync(CancellationToken cancellationToken);
+    Task<IReadOnlyList<StampedHintOwner>> ApplyToFolderOwnersAsync(
+        CancellationToken cancellationToken,
+        Guid? acquisitionId = null);
 }
 
 /// <summary>A stamped import hint's top-level owner (a series, an artist, the movie itself), for the post-import identify kick.</summary>
@@ -328,6 +357,40 @@ public interface IAcquisitionStore {
     Task SetStatusAsync(Guid id, AcquisitionStatus status, string? message, CancellationToken cancellationToken);
 
     /// <summary>
+    /// Atomically changes status only when the row is still in one of the expected states. Lifecycle
+    /// commands use this as their ownership claim before external effects, so an import and a competing
+    /// cancel/requeue cannot both proceed from the same snapshot.
+    /// </summary>
+    Task<bool> TryTransitionStatusAsync(
+        Guid id,
+        IReadOnlyCollection<AcquisitionStatus> expectedStatuses,
+        AcquisitionStatus status,
+        string? message,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Atomically claims a fresh TV import, or lets the same queue job recover the narrow
+    /// Importing-without-checkpoint crash window. A different job can never steal that active claim.
+    /// </summary>
+    Task<bool> TryClaimInitialImportAsync(
+        Guid id,
+        Guid claimJobId,
+        bool allowManualRetry,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Atomically moves an acquisition with a corrupt TV checkpoint to manual review. Downloaded,
+    /// Failed, and already-held rows are safe to hold; an active Importing row is touched only when its
+    /// persisted import claim belongs to <paramref name="claimJobId"/>. Terminal or superseding states and
+    /// a different job's active claim are never overwritten.
+    /// </summary>
+    Task<bool> TryHoldCorruptTvImportCheckpointAsync(
+        Guid id,
+        Guid claimJobId,
+        string message,
+        CancellationToken cancellationToken);
+
+    /// <summary>
     /// Atomically marks an acquisition <see cref="AcquisitionStatus.Imported"/>, records the owned quality it
     /// imported, and flags the quality as captured — all in one commit, so the upgrade due-policy never sees a
     /// half-imported acquisition with a floor owned quality and mistakes it for "owns nothing".
@@ -404,6 +467,50 @@ public interface IAcquisitionStore {
 
     /// <summary>Records the final on-disk location of the imported payload.</summary>
     Task SetFinalSourcePathAsync(Guid acquisitionId, string finalSourcePath, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Persists or advances the exact TV placement checkpoint before/after each filesystem mutation.
+    /// Null clears the checkpoint after a successful terminal import.
+    /// </summary>
+    Task SetTvImportCheckpointAsync(
+        Guid acquisitionId,
+        TvImportCheckpoint? checkpoint,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Atomically creates the first checkpoint only for the exclusively claimed Importing row whose
+    /// current transfer still matches the plan. False means a competing lifecycle action won; callers
+    /// must exit without touching the filesystem.
+    /// </summary>
+    Task<bool> TryCreateTvImportCheckpointAsync(
+        Guid acquisitionId,
+        TvImportCheckpoint checkpoint,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Atomically claims the exact durable TV attempt for resume by moving it to Importing. Returns
+    /// false when another request already cleared/replaced the checkpoint or its lifecycle is not claimable.
+    /// </summary>
+    Task<bool> TryClaimTvImportCheckpointAsync(
+        Guid acquisitionId,
+        TvImportCheckpoint checkpoint,
+        Guid claimJobId,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Atomically clears an untouched checkpoint only while its acquisition is in a supersedable state.
+    /// The expected serialized checkpoint prevents deleting a concurrently advanced attempt.
+    /// </summary>
+    Task<bool> TryClearTvImportCheckpointAsync(
+        Guid acquisitionId,
+        TvImportCheckpoint checkpoint,
+        CancellationToken cancellationToken);
+
+    /// <summary>True when the exact checkpoint is still the currently claimed Importing attempt.</summary>
+    Task<bool> IsCurrentTvImportCheckpointAsync(
+        Guid acquisitionId,
+        TvImportCheckpoint checkpoint,
+        CancellationToken cancellationToken);
 
     /// <summary>Writes the path-keyed identity hint the book scan consumes to stamp the new entity.</summary>
     Task WriteImportHintAsync(Guid acquisitionId, string sourcePath, AcquisitionImportContext context, BookQualityRank ownedQuality, CancellationToken cancellationToken);

@@ -36,4 +36,5 @@ export interface AcquisitionSummary {
   kind?: AcquisitionSummaryKind;
   /** @nullable */
   entityId?: string | null;
+  hasResumableImport?: boolean;
 }
