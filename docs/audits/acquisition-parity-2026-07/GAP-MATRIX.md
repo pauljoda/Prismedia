@@ -111,8 +111,8 @@ mappers found.
 
 | Capability | Sonarr behavior | Prismedia status | Sev |
 |---|---|---|---|
-| Monitored flags (series/season/episode) | Three independent flags rolling up; `MonitorTypes` dropdown (All/Future/Missing/Existing/Pilot/FirstSeason/LastSeason/…); Season Pass bulk editor. | **PARTIAL** — container monitor (author/artist/series) + per-leaf wanted; no All/Future/Pilot/FirstSeason monitor-type presets, no Season Pass bulk monitor editor. `EfMonitorStore`, `useEntityMonitorAction`. | P1 |
-| Container "watch for new works" | `MonitorNewItems` + refresh discovers new seasons/episodes and auto-monitors. | **DONE** — container monitors re-resolve provider and materialize missing works as wanted phantoms via `SyncContainerAsync` (daily); manual "Check for new works". `parity/prismedia-acquisition-backend.md` §7.2; `prismedia-frontend.md` §7.2. | P1 |
+| Monitored flags (parent/child Entity hierarchies) | Sonarr has three TV-specific flags rolling up plus a monitor-type dropdown and bulk season editor. | **DONE (generalized)** — stable monitors target Entity ids; the shared Acquisition surface exposes direct-child toggles and Monitor all / Unmonitor all for series→seasons, seasons→episodes, authors→books, and artists→albums. Presets still shape initial Request selection and future grouping discovery without defining a TV-only persistence or UI path. `EfMonitorStore`, `EntityChildMonitoring`. | P1 |
+| Container "watch for new works" | `MonitorNewItems` + refresh discovers new seasons/episodes and auto-monitors. | **DONE** — All/Future container monitors re-resolve the provider and send new direct children through the same monitored acquisition path as a manual child toggle. Per-child off suppression remains authoritative. `SyncContainerAsync`; manual "Check for new works". | P1 |
 | "Keep searching until acquired" loop | RSS sync + event-driven targeted searches + optional user-added recurring Missing/Cutoff search tasks. | **DONE** — `MonitoredSearchJobHandler` sweep over due monitors; re-search only genuinely-missing (`Failed`/`AwaitingSelection`-zero); exponential backoff on barren searches. `parity/prismedia-download-import.md` §9. | P0 |
 | Wanted: Missing view | Query of aired episodes with no file; `/wanted/missing` — **4,945 tracked on the live box**; `lastSearchTime` throttle. | **PARTIAL** — wanted entities appear in the normal library grid (real entities, `IsWanted=true`), and in `/request` Requests tab grouped by status. **No dedicated Missing list**, no `lastSearchTime` per-item column. `prismedia-frontend.md` §3, §8. | P1 |
 | Wanted: Cutoff Unmet view | Episodes with a file below profile cutoff; dedicated list. | **MISSING** — book upgrade loop is the only "below cutoff" concept and it has no list view; no cutoff-unmet surface for any kind. `prismedia-frontend.md` §8. | P2 |
@@ -234,9 +234,10 @@ Each item names the existing Prismedia code it extends.
 12. **Second download client (Transmission) + basic client selection.** **[M]**
     Implement the declared `Transmission` enum; add protocol-filter + first-fallback client selection. Extends
     `DownloadClientFactory`, new `TransmissionDownloadClient`.
-13. **Monitor-type presets + Season Pass bulk editor.** **[M]**
-    Add All/Future/Missing/Pilot/FirstSeason/LastSeason presets and a bulk per-season monitor editor. Extends
-    `MonitorService`/`EfMonitorStore`, series detail frontend.
+13. **Generic monitor policy + shared child-monitoring editor.** **[DONE]**
+    All/Missing/Future/Manual policies provide medium-neutral current/future defaults, while the exact
+    children are selected explicitly through one Entity-hierarchy editor. TV-only first/latest/pilot and
+    Season Pass semantics were removed from the shared core.
 
 ### P2 — should-have
 
@@ -279,9 +280,10 @@ Where Prismedia matches or exceeds Sonarr/Prowlarr today:
   normal library grid with real metadata/artwork immediately, hidden from the Jellyfin projection until it
   has a file. Sonarr's "monitored but missing" is a separate list, not a first-class library object.
   `parity/prismedia-acquisition-backend.md` §3.1.
-- **Container→child phantom materialization.** Requesting a series/author/artist fans out into
-  season/book/album phantoms with metadata but no download until each is explicitly acquired — a cleaner
-  model than Sonarr's flat episode monitoring. `parity/prismedia-acquisition-backend.md` §3.3.
+- **Container→child Entity materialization.** Requesting a series/author/artist fans out into real
+  season/book/album Entities. Explicit picks and All/Future discoveries use the same direct-child monitor
+  and acquisition path, while nested metadata children can remain phantoms until their aggregate import or
+  a direct request needs them. `RequestCommitService`, `EntityChildMonitoring`.
 - **Genuine metadata plugin SDK with a community registry.** Manifest schema, semver compat gates, install
   flow, credential handling, cascade proposals, NSFW propagation — Sonarr's metadata agents are built-in and
   not community-extensible in this way. `prismedia-plugins-indexers.md` §1–2.

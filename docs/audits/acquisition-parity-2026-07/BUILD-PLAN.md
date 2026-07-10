@@ -51,7 +51,7 @@ frontend surface, and changelog entry.
 **Phase 4 — monitoring & surfaces**
 15. Durable acquisition history / activity log
 16. Missing + Cutoff-Unmet list views (live scale: ~4,900 missing episodes)
-17. Monitor-type presets + season-pass bulk editor
+17. Monitor-type presets + shared Entity child-monitoring editor
 
 **Final gate**
 18. E2E verification: replicate the live Prowlarr/Sonarr search results and decision outcomes
@@ -60,6 +60,6 @@ frontend surface, and changelog entry.
 ## Already at or beyond parity (do not regress)
 
 Multi-kind acquisition through one loop; wanted items as real library entities hidden from
-Jellyfin until fulfilled; container→phantom materialization; three-point blocklist enforcement
+Jellyfin until fulfilled; container→child Entity materialization with shared monitoring; three-point blocklist enforcement
 with content-addressed identity; crash-safe upgrade swap; per-piece torrent progress; entity-page
 interactive release picker; careful stall heuristics. See GAP-MATRIX.md §4.

@@ -95,11 +95,19 @@ core asks the plugin registry which enabled plugin declares that kind, action,
 and namespace; plugin installation ids are never assumed to equal upstream
 identity namespaces.
 
-Existing-Entity request tools use that route too. For example, Season Pass sends
-the local series Entity id; the server resolves its stored identities through the
-plugin registry and returns the same canonical proposal review used by Discover.
-Opaque identity values remain structured values throughout and may safely contain
-colons or mixed case.
+Existing-Entity monitoring tools use that route too. A parent page sends the
+local child Entity id; the server resolves its authoritative identity through
+the plugin registry and keeps monitoring attached to that Entity even as
+individual acquisition rows are created or removed. The same flow handles a
+season, book, album, or future child kind. Opaque identity values remain
+structured values throughout and may safely contain colons or mixed case.
+
+Metadata plugins own upstream concerns: identity namespaces, search fields,
+candidate ordering, exact-id lookup, and the metadata proposal Prismedia may
+apply. Download-client calls and filesystem placement stay behind trusted
+server-side acquisition/import modules. This keeps community metadata plugins
+portable without granting them arbitrary access to library paths or transfer
+credentials.
 
 ## First-party plugins
 

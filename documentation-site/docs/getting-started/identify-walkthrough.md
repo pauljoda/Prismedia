@@ -31,7 +31,10 @@ Some providers need an API key. Expand the installed plugin in **Plugins → Ins
 
 ## 3. Identify an item
 
-Open a movie, series, artist, or book and use its **Identify** action — or add several items at once from a browse page's selection toolbar (this runs as a durable background **Bulk Identify** job). Items land in the **Identify** queue.
+Open an on-disk movie, series, artist, or book and use its **Identify** action — or add several on-disk
+items at once from a browse page's selection toolbar (this runs as a durable background **Bulk Identify**
+job). Wanted and other fileless Entities already carry their request metadata and become eligible only
+after real source files are imported. Items land in the **Identify** queue.
 
 ![Identify queue](/img/screenshots/identify.png)
 

@@ -105,8 +105,8 @@ lines ~132-169):
   monitor types; it is otherwise driven purely by whether any of its episodes
   ended up monitored by the chosen mode.
 
-Config surface: this dropdown is exposed at series-add time and via the
-**Season Pass** bulk editor (`Sonarr.Api.V5/SeasonPass/SeasonPassController.cs`),
+Config surface: this dropdown is exposed at series-add time and via Sonarr's
+TV-specific bulk season editor,
 which lets a user set `series.Monitored`, arbitrary per-season monitored flags,
 and/or re-run `MonitoringOptions` against the whole selection in one POST.
 

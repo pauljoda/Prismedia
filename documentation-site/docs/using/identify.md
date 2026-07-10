@@ -26,6 +26,11 @@ Plugins are installed and configured in **Plugins**. The deeper model is in the 
 
 Add items from the Identify page, from a detail page's **Identify** action, or in bulk from a browse page's selection toolbar. Queue state survives navigation and backend restarts.
 
+Identify is offered only for Entities backed by real source media on disk (directly or through their
+structural children). Wanted and other fileless Entities already carry the metadata chosen when they were
+requested, so they do not show an Identify action and cannot enter manual or automatic Identify queues.
+Once imported files are bound to the Entity, Identify becomes available normally.
+
 Each item moves through:
 
 | State | Meaning |

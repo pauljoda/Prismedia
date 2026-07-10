@@ -6,13 +6,15 @@ checks; this document is the north star and the phase order.
 
 ## North star
 
-**Requesting media is the Identify flow, run on an entity that does not exist on disk yet.**
+**Requesting media reuses Identify's provider search and proposal review to create an Entity that does not
+exist on disk yet.**
 
 Identify takes a real, scanned library entity and fills in its metadata from a plugin. Discover/Request does
 the *same thing in reverse*: it starts from a plugin result, builds the library entity from it, and treats the
-file as something that *will* arrive. It is a simulation of Identify — near-identical search, review, and
-commit behavior — where "Apply" becomes "Request," and the download later attaches the real file to the entity
-that was already created.
+file as something that *will* arrive. It shares Identify's search, review, and proposal building blocks,
+where "Apply" becomes "Request," and the download later attaches the real file to the Entity that was already
+created. It does not make the resulting fileless Wanted Entity eligible for Identify; Identify actions remain
+reserved for source-backed Entities.
 
 The user should experience one consistent pattern across the whole app: **search a provider → review what you
 found → commit.** Identify commits metadata to a file you have; Request commits a wanted entity you don't have
@@ -86,19 +88,19 @@ entity/entities (Phase A) and starts the acquisition + monitoring.
 **Done when:** the bespoke request page is retired; requesting a book or an author goes through the shared
 review surface and produces wanted entities, acquisitions, and monitors.
 
-### Phase D — Containers request and monitor with their children ✅ (books/music)
+### Phase D — Containers request and monitor with their children ✅
 **Goal:** Requesting a container creates and monitors the parent entity with its children tracked underneath,
 rather than a flat pile of independent item requests.
 **Done when:** requesting an author yields a monitored author with its wanted books beneath it; the monitor
 keeps the children's searches going and can pick up newly discovered children over time.
 **Status:** Landed for authors and artists. A container commit auto-monitors the container entity; the
-daily sweep re-resolves it from its provider and materializes newly discovered works as wanted
-*phantoms* (metadata + artwork, no acquisition — discovery never downloads on its own). A phantom's own
-page carries "Search for release", which flows into the ordinary auto-grabbing commit. Real scanned-in
-authors/artists are monitorable from their pages once Identify supplies a provider id — on-disk and
-requested items share the flow, differing only in how they entered the library. Requested leaves are
-hands-off: auto-search → auto-grab best accepted → monitored daily until acquired. TV series will reuse
-exactly this shape (phantom seasons/episodes) once the per-episode engine lands.
+daily sweep re-resolves it from its provider and sends newly discovered works through the same monitored
+child-acquisition path as a direct toggle. Turning an individual child off stores a provider-identity
+suppression, so an All/Future parent never silently revives it. Real scanned-in
+containers are monitorable from their pages once Identify supplies a persistent plugin identity — on-disk
+and requested items share the flow, differing only in how they entered the library. Requested leaves are
+hands-off: auto-search → auto-grab best accepted → monitored daily until acquired. TV series, authors, and
+artists all use this same parent/child shape.
 
 ### Phase E — Prove it and harden it
 **Goal:** The unified book vertical is trustworthy end-to-end and the Identify path is provably unregressed.
@@ -108,20 +110,20 @@ second reviewer) is clean. **Stop here and evaluate before adding new media kind
 
 ## After books prove out (status: multi-kind expansion underway)
 
-The request layer is now registry-driven (`RequestKindRegistry`): search, detail, commit, wanted-entity
-creation, per-kind Torznab category routing, and release-engine dispatch are all one descriptor table.
+The request layer is now registry-driven (`RequestKindRegistry`): frontend labels and flow hints, selected-
+plugin search, proposal review, commit, wanted-entity creation, per-kind Torznab category routing, and
+release-engine dispatch are all one descriptor table. The generated frontend request-kind manifest is a
+projection of that registry; there is no parallel handwritten table or flattened request-detail contract.
 Adding a kind = a registry row + its acquisition-side engine. Current per-kind status:
 
-- **Movies:** ✅ discover → request → wanted Movie entity (full TMDB metadata/cast/artwork) → release
-  search graded by resolution/source. ⏳ Remaining: the movie import (lay the video file into a video
-  root, bind the wanted movie at scan — the book bind pattern, applied to the video scan).
-- **Music:** ✅ artist container → album fan-out (MusicBrainz discography via release-groups; the plugin
-  gained artist→album children), release search graded by codec (lossless first). ⏳ Remaining: album
-  import + audio scan bind.
-- **TV:** discover/detail only (registry `Committable: false`); series → season → episode per-episode
-  tracking is the richest container case and lands last, as planned.
-- Non-book downloads complete and hold at Downloaded with an honest status until their import engine
-  lands — never pushed through the book import planner.
+- **Movies:** ✅ discover → proposal review → wanted Movie → graded release search → import and immediate
+  Entity materialization.
+- **Music:** ✅ artist container → selected album fan-out → codec-aware release search → album import and
+  immediate audio Entity materialization.
+- **TV:** ✅ series → selected seasons → episode metadata children and season/episode acquisition, with imported
+  files materialized immediately instead of waiting for a later scan.
+- **Books:** ✅ standalone books and author/container fan-out use the same proposal, wanted Entity,
+  acquisition, monitoring, import, and file-management lifecycle.
 
 The measure of success held: movies and music reused the whole flow; each needed only a registry row,
 an engine, and (for music) a plugin children capability.

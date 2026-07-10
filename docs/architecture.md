@@ -92,6 +92,33 @@ The .NET contracts are the server source of truth. The generated frontend
 client carries these shapes into Svelte; route-local copies and hand-maintained
 wire unions are not allowed.
 
+### Entity lifecycle truth
+
+`ParentEntityId` is the one structural hierarchy used by source ownership,
+child monitoring, managed file deletion, import materialization, and cleanup.
+An Entity is **source-backed** when it or any structural descendant owns an
+`EntityFileRole.Source` file. That projection is shared by detail capabilities,
+thumbnails, Identify eligibility, Availability filters, and destructive-action
+preflight; a route must not infer on-disk state from kind-specific detail rows.
+
+Source ownership, Wanted state, monitoring intent, and an acquisition attempt
+are deliberately independent facts:
+
+- a stable monitor targets the Entity and may outlive many acquisition rows;
+- an acquisition is transient work and may be replaced, retried, or removed;
+- turning monitoring off recursively tears down transfers, queued work, and
+  off-disk acquisition state, removes fileless descendants, and clears Wanted
+  and monitor state from the source-backed Entity closure it retains;
+- an explicitly unmonitored child records an identity suppression, so an active
+  parent monitor cannot silently recreate that child;
+- managed **Delete files** is exposed through one Entity capability. A directly
+  monitored Entity returns to Wanted and starts a fresh acquisition; an
+  unmonitored branch disappears after its managed source paths are removed.
+
+These rules apply to every registered kind. Series/seasons, authors/books, and
+artists/albums are examples of the same Entity lifecycle, not separate product
+models.
+
 ## Plugin Identity and Discovery
 
 Plugin installation identity and upstream content identity are separate:
@@ -131,10 +158,13 @@ deterministic proposal revision and opaque proposal ids; commit re-runs the exac
 plugin without cache, compares the revision, validates selection depth, derives
 each identity from the fresh proposal, and only then begins writes.
 
-Existing-Entity actions such as Season Pass enter the same review path by local
-Entity id. The server loads that Entity's identity set and selects a capable
-plugin route centrally; the frontend never chooses a plugin by convention or
-flattens an identity into a delimiter-sensitive string.
+Existing-Entity monitoring actions enter through the local Entity id. The
+server loads that Entity's authoritative plugin identity and selects a capable
+route centrally; the frontend never chooses a plugin by convention or flattens
+an identity into a delimiter-sensitive string. Parent pages compose the same
+child-monitoring control over their direct Entity children (series to seasons,
+authors to books, artists to albums) rather than inventing medium-specific
+passes or provider-only pseudo-Entities.
 
 ## Acquisition Policy Modules
 
@@ -144,13 +174,22 @@ clients. Media-specific behavior lives behind `IAcquisitionPolicyModule`:
 - supported Entity kinds;
 - contextual query ladders;
 - Torznab/Newznab category routing;
-- release acceptance, ranking, and import decisions.
+- release acceptance and ranking.
 
-Book, movie, music, and TV policies register independently. Adding a new media
-kind extends the registry rather than adding conditionals to the acquisition
-service. External identities flow through acquisition/import as
-`ExternalIdentity`; the persistence columns are `identity_namespace` and
-`identity_value`, not misleading plugin-id fields.
+Filesystem placement is a separate trusted boundary: each acquisition kind
+registers an `IAcquisitionImportEngine`, and immediate Entity/file binding is
+selected through `IImportedEntityMaterializationPolicy`. Import engines reserve
+an exact placement plan before touching disk and checkpoint each unit so a
+worker restart resumes the same move, copy, or hardlink instead of inventing a
+second target.
+
+Book, movie, music, and TV policies and import engines register independently.
+Adding a new media kind extends those registries rather than adding conditionals
+to the acquisition service. Metadata plugins remain responsible for upstream
+identity, search fields, provider ordering, and metadata proposals; they do not
+receive arbitrary filesystem or download-client access. External identities
+flow through acquisition/import as `ExternalIdentity`; the persistence columns
+are `identity_namespace` and `identity_value`, not misleading plugin-id fields.
 
 ## Queue Direction
 

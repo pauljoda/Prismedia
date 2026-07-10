@@ -78,12 +78,24 @@ From Files you can:
 
 Files opens with folders collapsed. Use Browse for media metadata; use Files for source-folder control.
 
+## Managing source media
+
+The shared **Delete files** action on an Entity's Acquisition tab works across movies, series, seasons,
+videos, galleries, images, books, volumes, authors, albums, tracks, and artists whenever Prismedia can
+safely own the underlying source paths. A monitored Entity returns to Wanted and starts a clean replacement
+search after deletion; an unmonitored Entity is removed once its managed files are gone. Generated previews,
+waveforms, and trickplay are cleaned up with the source operation; full Entity removal also clears its grid
+thumbnails and downloaded artwork.
+
 ## Library views, sort, and filters
 
 Grids sort and filter across the **entire** collection, not just the loaded page:
 
 - **Sort:** Date added (newest, the default), Title (ignoring leading "The/A/An"), Rating, and Random (a stable shuffle across pages, with a reshuffle button).
-- **Filter:** an adaptive status filter (Watched/Unwatched/In progress for video and audio; Read/Unread/Reading for books), Favorites, Organized, NSFW, Has file, rating thresholds, and Unrated.
+- **Filter:** adaptive playback/reading state (Watched/Unwatched/In progress or Read/Unread/Reading),
+  Favorites, Organized, NSFW, ratings, and shared **Availability** states. Availability distinguishes real
+  **On disk** source ownership from **Wanted**, Pending, Searching, Downloading, Imported, Failed,
+  Cancelled, and Needs attention acquisition states; it does not treat artwork as a media file.
 - **Views:** Grid, List, Feed (images/galleries), and a media-wall toggle.
 
 Each grid remembers its search, sort, view, card size, and toolbar state per page and per device.
