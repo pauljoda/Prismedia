@@ -28,6 +28,8 @@ public sealed class PrismediaDbContext : DbContext {
 
     public DbSet<EntityExternalIdRow> EntityExternalIds => Set<EntityExternalIdRow>();
 
+    public DbSet<EntityProviderIdentityRow> EntityProviderIdentities => Set<EntityProviderIdentityRow>();
+
     public DbSet<EntityMarkerRow> EntityMarkers => Set<EntityMarkerRow>();
 
     public DbSet<EntitySubtitleRow> EntitySubtitles => Set<EntitySubtitleRow>();

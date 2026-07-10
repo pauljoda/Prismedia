@@ -140,6 +140,14 @@ export interface EntityDetailLink {
   provider?: string;
 }
 
+/** The explicit plugin and persistent identity selected to drive metadata and monitoring. */
+export interface EntityDetailProviderIdentity {
+  pluginId: string;
+  identityNamespace: string;
+  identityValue: string;
+  url: string | null;
+}
+
 /** A file entry. */
 export interface EntityDetailFile {
   role: string;
@@ -202,6 +210,7 @@ export interface EntityDetailCard {
   flags: EntityDetailFlag[];
   tags: EntityDetailTag[];
   links: EntityDetailLink[];
+  providerIdentity: EntityDetailProviderIdentity | null;
   files: EntityDetailFile[];
   presentCapabilities: EntityCapabilityKind[];
 }
@@ -403,6 +412,17 @@ function resolveLinks(capabilities: EntityCapability[]): EntityDetailLink[] {
   return result;
 }
 
+function resolveProviderIdentity(capabilities: EntityCapability[]): EntityDetailProviderIdentity | null {
+  const identity = getCapability(capabilities, CAPABILITY_KIND.providerIdentity);
+  if (!identity) return null;
+  return {
+    pluginId: identity.pluginId,
+    identityNamespace: identity.identityNamespace,
+    identityValue: identity.identityValue,
+    url: identity.url,
+  };
+}
+
 function resolveMarkers(capabilities: EntityCapability[]): EntityDetailMarker[] {
   const markersCap = getCapability(capabilities, CAPABILITY_KIND.markers);
   if (!markersCap) return [];
@@ -512,6 +532,7 @@ export function entityCardToDetailCard(entity: EntityCard): EntityDetailCardFull
     })),
     technical: resolveTechnical(capabilities),
     links: resolveLinks(capabilities),
+    providerIdentity: resolveProviderIdentity(capabilities),
     files: (filesCap?.items ?? []).map((item) => ({
       role: String(item.role),
       path: item.path,

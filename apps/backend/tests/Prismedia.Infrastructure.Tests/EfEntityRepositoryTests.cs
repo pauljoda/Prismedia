@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Prismedia.Application.Entities;
+using Prismedia.Application.Plugins;
 using Prismedia.Domain.Capabilities;
 using Prismedia.Domain.Entities;
 using Prismedia.Domain.Media;
@@ -8,6 +9,7 @@ using Prismedia.Infrastructure.Entities;
 using Prismedia.Infrastructure.Entities.Mappers;
 using Prismedia.Infrastructure.Persistence;
 using Prismedia.Infrastructure.Persistence.Entities;
+using ProviderIdentityCapability = Prismedia.Contracts.Entities.ProviderIdentityCapability;
 
 namespace Prismedia.Infrastructure.Tests;
 
@@ -196,6 +198,187 @@ public sealed class EfEntityRepositoryTests {
         var externalId = Assert.Single(loaded.ExternalIds);
         Assert.Equal(new ExternalIdentity("tmdb", "603"), externalId.Identity);
         Assert.Equal("https://www.themoviedb.org/movie/603", externalId.Url);
+    }
+
+    [Fact]
+    public async Task FindAsyncProjectsPersistedProviderIdentityAndPrefersExactPluginUrl() {
+        await using var db = CreateContext();
+        var id = Guid.NewGuid();
+        SeedEntity(db, id, EntityKind.Video, "Persisted provider identity");
+        AddExternalIdentity(
+            db,
+            id,
+            "tmdb",
+            "603",
+            "https://www.themoviedb.org/movie/603",
+            IdentityCreatedAt);
+        await db.SaveChangesAsync();
+        var externalIdentities = new EfEntityExternalIdentityStore(db, TimeProvider.System);
+        var providerIdentities = new EfEntityProviderIdentityStore(db, TimeProvider.System);
+        await providerIdentities.SetAsync(
+            id,
+            "cinema-metadata",
+            new ExternalIdentity("tmdb", "603"),
+            CancellationToken.None);
+        await db.SaveChangesAsync();
+        var identityUrls = new RecordingIdentityUrlResolver("https://cinema-metadata.example/movie/603");
+        var repository = new EfEntityRepository(
+            db,
+            TestUserContext.Admin(),
+            EntityMappers.Kinds(db),
+            EntityMappers.Capabilities(db, TestUserContext.Admin()),
+            externalIdentities,
+            providerIdentities,
+            new ConfiguredIdentityRouter(),
+            identityUrls);
+
+        var loaded = await repository.RequireAsync<Video>(id, CancellationToken.None);
+
+        Assert.NotNull(loaded.ProviderIdentity);
+        Assert.Equal("cinema-metadata", loaded.ProviderIdentity.PluginId);
+        Assert.Equal(new ExternalIdentity("tmdb", "603"), loaded.ProviderIdentity.Identity);
+        Assert.Equal("https://cinema-metadata.example/movie/603", loaded.ProviderIdentity.Url);
+        var urlCall = Assert.Single(identityUrls.Calls);
+        Assert.Equal(EntityKindRegistry.Video.Code, urlCall.EntityKindCode);
+        Assert.Equal(
+            new PluginIdentityRoute("cinema-metadata", new ExternalIdentity("tmdb", "603")),
+            urlCall.Route);
+        var capability = Assert.Single(
+            EntityCardProjector.ToCard(loaded).Capabilities.OfType<ProviderIdentityCapability>());
+        Assert.Equal("cinema-metadata", capability.PluginId);
+        Assert.Equal("tmdb", capability.IdentityNamespace);
+        Assert.Equal("603", capability.IdentityValue);
+        Assert.Equal("https://cinema-metadata.example/movie/603", capability.Url);
+    }
+
+    [Fact]
+    public async Task FindAsyncFallsBackToExternalIdentityUrlWhenPluginDeclaresNoUrlFormat() {
+        await using var db = CreateContext();
+        var id = Guid.NewGuid();
+        SeedEntity(db, id, EntityKind.Video, "Provider identity URL fallback");
+        AddExternalIdentity(
+            db,
+            id,
+            "tmdb",
+            "603",
+            "https://www.themoviedb.org/movie/603",
+            IdentityCreatedAt);
+        await db.SaveChangesAsync();
+        var providerIdentities = new EfEntityProviderIdentityStore(db, TimeProvider.System);
+        await providerIdentities.SetAsync(
+            id,
+            "cinema-metadata",
+            new ExternalIdentity("tmdb", "603"),
+            CancellationToken.None);
+        await db.SaveChangesAsync();
+        var identityUrls = new RecordingIdentityUrlResolver(url: null);
+        var repository = new EfEntityRepository(
+            db,
+            TestUserContext.Admin(),
+            EntityMappers.Kinds(db),
+            EntityMappers.Capabilities(db, TestUserContext.Admin()),
+            new EfEntityExternalIdentityStore(db, TimeProvider.System),
+            providerIdentities,
+            new ConfiguredIdentityRouter(),
+            identityUrls);
+
+        var loaded = await repository.RequireAsync<Video>(id, CancellationToken.None);
+
+        Assert.Equal("https://www.themoviedb.org/movie/603", loaded.ProviderIdentity?.Url);
+        Assert.Single(identityUrls.Calls);
+    }
+
+    [Fact]
+    public async Task FindAsyncInfersLegacyProviderIdentityWhenExactlyOneManifestRouteExists() {
+        await using var db = CreateContext();
+        var id = Guid.NewGuid();
+        SeedEntity(db, id, EntityKind.Video, "Legacy provider identity");
+        AddExternalIdentity(db, id, "tmdb", "603", url: null, IdentityCreatedAt);
+        await db.SaveChangesAsync();
+        var identity = new ExternalIdentity("tmdb", "603");
+        var identityUrls = new RecordingIdentityUrlResolver("https://www.themoviedb.org/movie/603");
+        var repository = new EfEntityRepository(
+            db,
+            TestUserContext.Admin(),
+            EntityMappers.Kinds(db),
+            EntityMappers.Capabilities(db, TestUserContext.Admin()),
+            new EfEntityExternalIdentityStore(db, TimeProvider.System),
+            new EfEntityProviderIdentityStore(db, TimeProvider.System),
+            new ConfiguredIdentityRouter(new PluginIdentityRoute("tmdb", identity)),
+            identityUrls);
+
+        var loaded = await repository.RequireAsync<Video>(id, CancellationToken.None);
+
+        Assert.Equal("tmdb", loaded.ProviderIdentity?.PluginId);
+        Assert.Equal(identity, loaded.ProviderIdentity?.Identity);
+        Assert.Equal("https://www.themoviedb.org/movie/603", loaded.ProviderIdentity?.Url);
+        var call = Assert.Single(identityUrls.Calls);
+        Assert.Equal(EntityKindRegistry.Video.Code, call.EntityKindCode);
+        Assert.Equal(new PluginIdentityRoute("tmdb", identity), call.Route);
+        Assert.Single(EntityCardProjector.ToCard(loaded).Capabilities.OfType<ProviderIdentityCapability>());
+    }
+
+    [Fact]
+    public async Task FindAsyncDoesNotInferLegacyProviderIdentityWhenManifestRoutesAreAmbiguous() {
+        await using var db = CreateContext();
+        var id = Guid.NewGuid();
+        SeedEntity(db, id, EntityKind.Video, "Ambiguous provider identity");
+        AddExternalIdentity(db, id, "tmdb", "603", url: null, IdentityCreatedAt);
+        await db.SaveChangesAsync();
+        var identity = new ExternalIdentity("tmdb", "603");
+        var identityUrls = new RecordingIdentityUrlResolver("https://www.themoviedb.org/movie/603");
+        var repository = new EfEntityRepository(
+            db,
+            TestUserContext.Admin(),
+            EntityMappers.Kinds(db),
+            EntityMappers.Capabilities(db, TestUserContext.Admin()),
+            new EfEntityExternalIdentityStore(db, TimeProvider.System),
+            new EfEntityProviderIdentityStore(db, TimeProvider.System),
+            new ConfiguredIdentityRouter(
+                new PluginIdentityRoute("alpha-provider", identity),
+                new PluginIdentityRoute("zeta-provider", identity)),
+            identityUrls);
+
+        var loaded = await repository.RequireAsync<Video>(id, CancellationToken.None);
+
+        Assert.Null(loaded.ProviderIdentity);
+        Assert.Empty(identityUrls.Calls);
+        Assert.Empty(EntityCardProjector.ToCard(loaded).Capabilities.OfType<ProviderIdentityCapability>());
+    }
+
+    [Fact]
+    public async Task FindAsyncDoesNotReplaceStalePersistedRouteWithLegacyInference() {
+        await using var db = CreateContext();
+        var id = Guid.NewGuid();
+        SeedEntity(db, id, EntityKind.Video, "Stale provider identity");
+        var rawIdentity = AddExternalIdentity(db, id, "tmdb", "603", url: null, IdentityCreatedAt);
+        await db.SaveChangesAsync();
+        var providerIdentities = new EfEntityProviderIdentityStore(db, TimeProvider.System);
+        await providerIdentities.SetAsync(
+            id,
+            "tmdb",
+            new ExternalIdentity("tmdb", "603"),
+            CancellationToken.None);
+        await db.SaveChangesAsync();
+        rawIdentity.Value = "604";
+        await db.SaveChangesAsync();
+        var router = new ConfiguredIdentityRouter(
+            new PluginIdentityRoute("tmdb", new ExternalIdentity("tmdb", "604")));
+        var repository = new EfEntityRepository(
+            db,
+            TestUserContext.Admin(),
+            EntityMappers.Kinds(db),
+            EntityMappers.Capabilities(db, TestUserContext.Admin()),
+            new EfEntityExternalIdentityStore(db, TimeProvider.System),
+            providerIdentities,
+            router,
+            new RecordingIdentityUrlResolver("https://www.themoviedb.org/movie/604"));
+
+        var loaded = await repository.RequireAsync<Video>(id, CancellationToken.None);
+
+        Assert.Null(loaded.ProviderIdentity);
+        Assert.Equal(0, router.CallCount);
+        Assert.Empty(EntityCardProjector.ToCard(loaded).Capabilities.OfType<ProviderIdentityCapability>());
     }
 
     [Fact]
@@ -441,4 +624,35 @@ public sealed class EfEntityRepositoryTests {
     private sealed class FixedTimeProvider(DateTimeOffset utcNow) : TimeProvider {
         public override DateTimeOffset GetUtcNow() => utcNow;
     }
+
+    private sealed class ConfiguredIdentityRouter(params PluginIdentityRoute[] routes) : IPluginIdentityRouter {
+        public int CallCount { get; private set; }
+
+        public Task<IReadOnlyList<PluginIdentityRoute>> ResolveAsync(
+            string entityKindCode,
+            IdentifyAction action,
+            IReadOnlyList<ExternalIdentity> identities,
+            CancellationToken cancellationToken) {
+            CallCount++;
+            var requested = identities.ToHashSet();
+            return Task.FromResult<IReadOnlyList<PluginIdentityRoute>>(
+                routes.Where(route => requested.Contains(route.Identity)).ToArray());
+        }
+    }
+
+    private sealed class RecordingIdentityUrlResolver(string? url) : IPluginIdentityUrlResolver {
+        public List<IdentityUrlResolveCall> Calls { get; } = [];
+
+        public Task<string?> ResolveAsync(
+            string entityKindCode,
+            PluginIdentityRoute route,
+            CancellationToken cancellationToken) {
+            Calls.Add(new IdentityUrlResolveCall(entityKindCode, route));
+            return Task.FromResult(url);
+        }
+    }
+
+    private sealed record IdentityUrlResolveCall(
+        string EntityKindCode,
+        PluginIdentityRoute Route);
 }

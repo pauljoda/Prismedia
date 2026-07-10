@@ -78,8 +78,8 @@ public sealed class MonitorService(IMonitorStore monitors, IAcquisitionStore acq
 
     /// <summary>
     /// Whether the entity can carry a standing container monitor: it must be a monitorable container kind
-    /// and hold a provider identity some enabled plugin can track (lookup by id). The trackable provider
-    /// ids are surfaced so the UI can say which plugin identity the watch would ride on.
+    /// and hold a provider identity some enabled plugin can track (lookup by id). An authoritative
+    /// binding surfaces the actual plugin id so the UI can say which plugin the watch would ride on.
     /// </summary>
     public async Task<MonitorEligibilityView> GetEligibilityAsync(Guid entityId, CancellationToken cancellationToken) {
         var (_, trackable) = await ResolveEligibilityAsync(entityId, cancellationToken);
@@ -87,14 +87,14 @@ public sealed class MonitorService(IMonitorStore monitors, IAcquisitionStore acq
     }
 
     /// <summary>
-    /// Loads the entity as a monitorable container and the subset of its provider identities an enabled
-    /// plugin can track. The container is null (and the list empty) when the entity is missing or isn't
-    /// a monitorable container kind.
+    /// Loads the entity as a monitorable container and validates its authoritative provider route when
+    /// present. Unbound legacy Entities retain namespace-based route discovery. The container is null
+    /// (and the list empty) when the entity is missing or isn't a monitorable container kind.
     /// </summary>
     private async Task<(MonitorableContainer? Container, IReadOnlyList<string> Trackable)> ResolveEligibilityAsync(
         Guid entityId, CancellationToken cancellationToken) {
         var container = await entities.GetContainerAsync(entityId, cancellationToken);
-        if (container is null || container.ExternalIdentities.Count == 0) {
+        if (container is null || container.ProviderIdentity is null) {
             return (null, []);
         }
 
@@ -107,6 +107,7 @@ public sealed class MonitorService(IMonitorStore monitors, IAcquisitionStore acq
         var trackable = await tracking.TrackableProvidersAsync(
             descriptor.PluginKindCode,
             container.ExternalIdentities,
+            container.ProviderIdentity,
             cancellationToken);
         return (container, trackable);
     }

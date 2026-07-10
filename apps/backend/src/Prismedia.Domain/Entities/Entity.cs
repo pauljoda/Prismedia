@@ -125,6 +125,9 @@ public abstract class Entity {
     /// <summary>Provider identities in insertion order.</summary>
     public IReadOnlyList<EntityExternalId> ExternalIds => _externalIds;
 
+    /// <summary>Exact plugin + persistent identity selected for metadata refresh and monitoring.</summary>
+    public EntityProviderIdentity? ProviderIdentity { get; private set; }
+
     /// <summary>Adds a user-visible URL.</summary>
     public void AddUrl(string value, string? label = null) => _urls.Add(new EntityUrl(value, label));
 
@@ -169,7 +172,8 @@ public abstract class Entity {
         IEnumerable<EntityUrl>? urls,
         IEnumerable<EntityExternalId>? externalIds,
         IEnumerable<EntityFile>? files,
-        bool? isWanted = null) {
+        bool? isWanted = null,
+        EntityProviderIdentity? providerIdentity = null) {
         RatingValue = ratingValue;
         IsFavorite = isFavorite;
         IsNsfw = isNsfw;
@@ -181,6 +185,7 @@ public abstract class Entity {
         if (externalIds is not null) _externalIds.AddRange(externalIds);
         _entityFiles.Clear();
         if (files is not null) _entityFiles.AddRange(files);
+        ProviderIdentity = providerIdentity;
     }
 
     /// <summary>

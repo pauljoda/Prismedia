@@ -170,6 +170,11 @@ public sealed partial class EntityMetadataApplyService {
         await ReportApplyProgressAsync(progress, entity.KindCode.DecodeAs<EntityKind>(), title, path, cancellationToken);
 
         await ApplyPatchToEntityAsync(entity, node.Patch, isRelationship ? [] : node.Images, now, cancellationToken);
+        await BindProviderIdentityAsync(
+            entity,
+            node.Provider,
+            node.Patch.ExternalIds,
+            cancellationToken);
         if (isRelationship) {
             await ApplyRelationshipArtworkAsync(entity, node, now, cancellationToken);
         }

@@ -78,5 +78,30 @@ internal static class EntityRelationshipModelConfiguration {
                 .HasForeignKey(row => row.EntityId)
                 .OnDelete(DeleteBehavior.Cascade);
         });
+
+        modelBuilder.Entity<EntityProviderIdentityRow>(entity => {
+            entity.ToTable("entity_provider_identities", table => {
+                table.HasCheckConstraint(
+                    "ck_entity_provider_identities_plugin_canonical",
+                    "plugin_id = lower(btrim(plugin_id)) AND plugin_id <> ''");
+                table.HasCheckConstraint(
+                    "ck_entity_provider_identities_namespace_canonical",
+                    "identity_namespace = lower(btrim(identity_namespace)) AND identity_namespace <> ''");
+                table.HasCheckConstraint(
+                    "ck_entity_provider_identities_value_canonical",
+                    "identity_value = btrim(identity_value) AND identity_value <> ''");
+            });
+            entity.HasKey(row => row.EntityId);
+            entity.Property(row => row.EntityId).HasColumnName("entity_id");
+            entity.Property(row => row.PluginId).HasColumnName("plugin_id").HasMaxLength(128).IsRequired();
+            entity.Property(row => row.IdentityNamespace).HasColumnName("identity_namespace").HasMaxLength(128).IsRequired();
+            entity.Property(row => row.IdentityValue).HasColumnName("identity_value").IsRequired();
+            entity.Property(row => row.CreatedAt).HasColumnName("created_at");
+            entity.Property(row => row.UpdatedAt).HasColumnName("updated_at");
+            entity.HasOne<EntityRow>()
+                .WithOne()
+                .HasForeignKey<EntityProviderIdentityRow>(row => row.EntityId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
     }
 }

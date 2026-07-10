@@ -50,7 +50,22 @@ public sealed record PluginSearchField(
 public sealed record PluginSearchDefinition(IReadOnlyList<PluginSearchField> Fields);
 
 /// <summary>
-/// Entity kind, identify actions, external identity namespaces, and optional search schema
+/// Declarative mapping from one plugin-owned external identity shape to its canonical web page.
+/// </summary>
+/// <param name="IdentityNamespace">External identity namespace handled by the containing support declaration.</param>
+/// <param name="ValuePattern">
+/// Whole-value pattern whose named tokens capture components of the opaque identity value.
+/// </param>
+/// <param name="UrlTemplate">
+/// Absolute HTTP(S) URL template whose named tokens are percent-escaped before substitution.
+/// </param>
+public sealed record PluginIdentityUrlFormat(
+    string IdentityNamespace,
+    string ValuePattern,
+    string UrlTemplate);
+
+/// <summary>
+/// Entity kind, identify actions, external identity namespaces, optional search schema, and identity links
 /// supported by a plugin artifact.
 /// </summary>
 /// <param name="EntityKind">Stable Prismedia entity kind code.</param>
@@ -60,11 +75,15 @@ public sealed record PluginSearchDefinition(IReadOnlyList<PluginSearchField> Fie
 /// intentionally independent from the plugin's own installation id.
 /// </param>
 /// <param name="Search">Plugin-defined search form when <paramref name="Actions"/> includes search.</param>
+/// <param name="IdentityUrls">
+/// Optional kind-scoped formats for linking declared identity namespaces to provider web pages.
+/// </param>
 public sealed record PluginEntitySupport(
     string EntityKind,
     IReadOnlyList<string> Actions,
     IReadOnlyList<string>? IdentityNamespaces = null,
-    PluginSearchDefinition? Search = null);
+    PluginSearchDefinition? Search = null,
+    IReadOnlyList<PluginIdentityUrlFormat>? IdentityUrls = null);
 
 /// <summary>
 /// Manifest embedded in a community plugin artifact.

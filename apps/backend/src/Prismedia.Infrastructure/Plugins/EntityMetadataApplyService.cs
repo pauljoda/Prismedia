@@ -30,6 +30,8 @@ public sealed partial class EntityMetadataApplyService : IEntityMetadataPatchSer
 
     private readonly PrismediaDbContext _db;
     private readonly IEntityExternalIdentityStore _externalIdentities;
+    private readonly IEntityProviderIdentityStore? _providerIdentities;
+    private readonly IPluginIdentityRouter? _identityRouter;
     private readonly PluginArtworkDownloader _artwork;
     private readonly IGridThumbnailService? _gridThumbnails;
 
@@ -52,9 +54,13 @@ public sealed partial class EntityMetadataApplyService : IEntityMetadataPatchSer
         PluginArtworkServiceOptions options,
         HttpClient? http = null,
         IGridThumbnailService? gridThumbnails = null,
-        IEntityExternalIdentityStore? externalIdentities = null) {
+        IEntityExternalIdentityStore? externalIdentities = null,
+        IEntityProviderIdentityStore? providerIdentities = null,
+        IPluginIdentityRouter? identityRouter = null) {
         _db = db;
         _externalIdentities = externalIdentities ?? new EfEntityExternalIdentityStore(db, TimeProvider.System);
+        _providerIdentities = providerIdentities;
+        _identityRouter = identityRouter;
         _artwork = new PluginArtworkDownloader(db, options, http);
         _gridThumbnails = gridThumbnails;
     }
@@ -286,6 +292,11 @@ public sealed partial class EntityMetadataApplyService : IEntityMetadataPatchSer
         if (selected.Contains("externalIds")) {
             await UpsertExternalIdsAsync(entityId, patch.ExternalIds, patch.Urls, cancellationToken);
         }
+        await BindProviderIdentityAsync(
+            entity,
+            proposal.Provider,
+            patch.ExternalIds,
+            cancellationToken);
 
         if (selected.Contains("urls")) {
             await UpsertUrlsAsync(entityId, patch.Urls, now, cancellationToken);

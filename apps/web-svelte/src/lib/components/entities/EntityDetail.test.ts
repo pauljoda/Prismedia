@@ -32,6 +32,7 @@ function buildCard(): EntityDetailCard {
     ],
     tags: [],
     links: [],
+    providerIdentity: null,
     files: [],
     presentCapabilities: [],
   } as EntityDetailCard;
@@ -66,6 +67,74 @@ describe("EntityDetail", () => {
     await fireEvent.click(action);
 
     expect(onClick).toHaveBeenCalledOnce();
+  });
+
+  it("renders the explicit provider identity as an external hero chip beside route badges", () => {
+    const card = buildCard();
+    card.providerIdentity = {
+      pluginId: "metadata-router",
+      identityNamespace: "CaseSensitive",
+      identityValue: "Show:AbC:01:5",
+      url: "https://provider.test/items/Show%3AAbC%3A01%3A5",
+    };
+
+    const { container } = render(EntityDetail, {
+      props: {
+        card,
+        heroBadges: createRawSnippet(() => ({
+          render: () => '<span class="hero-badge wanted">Wanted</span>',
+        })),
+      },
+    });
+
+    const chip = screen.getByRole("link", {
+      name: "Metadata and monitoring source: metadata-router, CaseSensitive ID Show:AbC:01:5. Opens provider in a new tab.",
+    });
+    expect(chip).toHaveAttribute("href", "https://provider.test/items/Show%3AAbC%3A01%3A5");
+    expect(chip).toHaveAttribute("target", "_blank");
+    expect(chip).toHaveAttribute("rel", "noopener noreferrer");
+    expect(chip).toHaveAttribute(
+      "title",
+      "Metadata and monitoring source: metadata-router, CaseSensitive ID Show:AbC:01:5",
+    );
+    expect(chip).toHaveTextContent("metadata-router · CaseSensitive:Show:AbC:01:5");
+    expect(chip).toHaveClass("provider-identity-chip");
+    expect(readFileSync("src/lib/components/entities/EntityDetail.svelte", "utf8")).toContain(
+      ".provider-identity-chip {\n    gap: 0.35rem;\n    min-width: 0;\n    max-width: 100%;\n    text-decoration: none;\n    text-transform: none;",
+    );
+    expect(readFileSync("src/lib/components/entities/EntityDetail.svelte", "utf8")).toContain(
+      '"rating rating"\n        "badges badges"',
+    );
+    expect(readFileSync("src/lib/components/entities/EntityDetail.svelte", "utf8")).toContain(
+      ".position-badges {\n      grid-area: badges;\n      justify-self: stretch;\n      justify-content: flex-start;\n      width: 100%;",
+    );
+    expect(screen.getByText("Wanted")).toBeInTheDocument();
+    expect(container.querySelector(".position-badges")?.children).toHaveLength(2);
+  });
+
+  it("renders an inert provider identity chip without promoting ordinary external IDs", () => {
+    const card = buildCard();
+    card.links = [{ label: "fallback: arbitrary", url: "https://fallback.test", provider: "fallback" }];
+    card.providerIdentity = {
+      pluginId: "source-plugin",
+      identityNamespace: "opaque",
+      identityValue: "Value:Keeps:Case",
+      url: null,
+    };
+
+    const { unmount } = render(EntityDetail, { props: { card } });
+
+    const chip = screen.getByLabelText(
+      "Metadata and monitoring source: source-plugin, opaque ID Value:Keeps:Case",
+    );
+    expect(chip.tagName).toBe("SPAN");
+    expect(chip).toHaveTextContent("source-plugin · opaque:Value:Keeps:Case");
+
+    unmount();
+
+    card.providerIdentity = null;
+    render(EntityDetail, { props: { card } });
+    expect(screen.queryByLabelText(/Metadata and monitoring source:/)).not.toBeInTheDocument();
   });
 
   it("renders detail poster artwork through the shared thumbnail component", () => {

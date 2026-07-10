@@ -64,6 +64,14 @@ public static class EntityCardProjector {
         capabilities.Add(new RatingCapability(entity.RatingValue));
         capabilities.Add(new FlagsCapability(entity.IsFavorite, entity.IsNsfw, entity.IsOrganized, entity.IsWanted));
 
+        if (entity.ProviderIdentity is { } providerIdentity) {
+            capabilities.Add(new ProviderIdentityCapability(
+                providerIdentity.PluginId,
+                providerIdentity.Identity.Namespace,
+                providerIdentity.Identity.Value,
+                providerIdentity.Url));
+        }
+
         if (entity.Description is { } description) {
             capabilities.Add(new DescriptionCapability(description.Value));
         }

@@ -82,6 +82,14 @@ internal static class PluginManifestContract {
             }
         }
 
+        var identityUrlNamespaces = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var identityUrl in support.IdentityUrls ?? []) {
+            if (!PluginIdentityUrlFormatContract.IsValid(identityUrl, namespaces) ||
+                !identityUrlNamespaces.Add(identityUrl.IdentityNamespace)) {
+                return false;
+            }
+        }
+
         var declaresSearch = actions.Contains(SearchAction);
         if (declaresSearch != (support.Search is not null)) {
             return false;
@@ -149,11 +157,15 @@ internal static class PluginManifestContract {
             var search = declaresSearch
                 ? IsUsableSearch(support.Search) ? support.Search : DefaultTitleSearch()
                 : support.Search is not null && IsUsableSearch(support.Search) ? support.Search : null;
+            var identityUrls = manifestVersion == 1
+                ? []
+                : (support.IdentityUrls ?? []).ToArray();
 
             return support with {
                 Actions = actions.ToArray(),
                 IdentityNamespaces = namespaces,
-                Search = search
+                Search = search,
+                IdentityUrls = identityUrls
             };
         }).ToArray();
     }

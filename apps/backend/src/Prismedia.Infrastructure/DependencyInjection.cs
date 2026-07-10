@@ -152,14 +152,17 @@ public static class DependencyInjection {
             provider.GetRequiredService<PluginCatalogOptions>(),
             indexCache: provider.GetRequiredService<PluginIndexCache>()));
         services.AddScoped<IPluginCatalogService>(provider =>
-            provider.GetRequiredService<PluginCatalogService>());
+            new ScopedPluginCatalogCache(provider.GetRequiredService<PluginCatalogService>()));
         services.AddScoped<IPluginIdentityRouter, PluginIdentityRouter>();
+        services.AddScoped<IPluginIdentityUrlResolver, PluginIdentityUrlResolver>();
         services.AddScoped<IdentifyMatchHintResolver>();
         services.AddScoped(provider => new EntityMetadataApplyService(
             provider.GetRequiredService<PrismediaDbContext>(),
             new PluginArtworkServiceOptions(cacheDir),
             gridThumbnails: provider.GetRequiredService<IGridThumbnailService>(),
-            externalIdentities: provider.GetRequiredService<IEntityExternalIdentityStore>()));
+            externalIdentities: provider.GetRequiredService<IEntityExternalIdentityStore>(),
+            providerIdentities: provider.GetRequiredService<IEntityProviderIdentityStore>(),
+            identityRouter: provider.GetRequiredService<IPluginIdentityRouter>()));
         services.AddScoped<IEntityMetadataPatchService>(provider =>
             provider.GetRequiredService<EntityMetadataApplyService>());
         services.AddScoped<IEntityManagementService, EntityManagementService>();
@@ -223,6 +226,7 @@ public static class DependencyInjection {
         RegisterEntityMappers(services);
         RegisterThumbnailContributors(services);
         services.AddScoped<IEntityExternalIdentityStore, EfEntityExternalIdentityStore>();
+        services.AddScoped<IEntityProviderIdentityStore, EfEntityProviderIdentityStore>();
         services.AddScoped<EfEntityRepository>();
         services.AddScoped<IEntityWriteRepository>(provider => provider.GetRequiredService<EfEntityRepository>());
         // Concrete registration shared by the interface alias and the visibility checker so all

@@ -17,10 +17,11 @@ import type { EntityCapabilityMarkersCapability } from './entityCapabilityMarker
 import type { EntityCapabilityPlaybackCapability } from './entityCapabilityPlaybackCapability';
 import type { EntityCapabilityPositionCapability } from './entityCapabilityPositionCapability';
 import type { EntityCapabilityProgressCapability } from './entityCapabilityProgressCapability';
+import type { EntityCapabilityProviderIdentityCapability } from './entityCapabilityProviderIdentityCapability';
 import type { EntityCapabilityRatingCapability } from './entityCapabilityRatingCapability';
 import type { EntityCapabilitySourceCapability } from './entityCapabilitySourceCapability';
 import type { EntityCapabilityStatsCapability } from './entityCapabilityStatsCapability';
 import type { EntityCapabilitySubtitlesCapability } from './entityCapabilitySubtitlesCapability';
 import type { EntityCapabilityTechnicalCapability } from './entityCapabilityTechnicalCapability';
 
-export type EntityCapability = EntityCapabilityClassificationCapability | EntityCapabilityDatesCapability | EntityCapabilityDescriptionCapability | EntityCapabilityFilesCapability | EntityCapabilityFingerprintsCapability | EntityCapabilityFlagsCapability | EntityCapabilityImagesCapability | EntityCapabilityLifetimeCapability | EntityCapabilityLinksCapability | EntityCapabilityMarkersCapability | EntityCapabilityPlaybackCapability | EntityCapabilityPositionCapability | EntityCapabilityProgressCapability | EntityCapabilityRatingCapability | EntityCapabilitySourceCapability | EntityCapabilityStatsCapability | EntityCapabilitySubtitlesCapability | EntityCapabilityTechnicalCapability;
+export type EntityCapability = EntityCapabilityClassificationCapability | EntityCapabilityDatesCapability | EntityCapabilityDescriptionCapability | EntityCapabilityFilesCapability | EntityCapabilityFingerprintsCapability | EntityCapabilityFlagsCapability | EntityCapabilityImagesCapability | EntityCapabilityLifetimeCapability | EntityCapabilityLinksCapability | EntityCapabilityMarkersCapability | EntityCapabilityPlaybackCapability | EntityCapabilityPositionCapability | EntityCapabilityProgressCapability | EntityCapabilityProviderIdentityCapability | EntityCapabilityRatingCapability | EntityCapabilitySourceCapability | EntityCapabilityStatsCapability | EntityCapabilitySubtitlesCapability | EntityCapabilityTechnicalCapability;

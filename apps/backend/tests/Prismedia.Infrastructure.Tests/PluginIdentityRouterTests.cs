@@ -63,9 +63,59 @@ public sealed class PluginIdentityRouterTests {
         var namespaces = await tracking.TrackableProvidersAsync(
             EntityKindRegistry.VideoSeries.Code,
             [new ExternalIdentity("tmdb", "123")],
+            providerIdentity: null,
             CancellationToken.None);
 
         Assert.Equal(["tmdb"], namespaces);
+    }
+
+    [Fact]
+    public async Task MonitorTrackingAcceptsOnlyTheAuthoritativeRouteWhenPluginsShareANamespace() {
+        var identity = new ExternalIdentity("tmdb", "123");
+        var router = Router(
+            Provider(
+                "alpha-provider",
+                enabled: true,
+                new PluginEntitySupport(
+                    EntityKindRegistry.VideoSeries.Code,
+                    [IdentifyAction.LookupId.ToCode()],
+                    [identity.Namespace])),
+            Provider(
+                "zeta-provider",
+                enabled: true,
+                new PluginEntitySupport(
+                    EntityKindRegistry.VideoSeries.Code,
+                    [IdentifyAction.LookupId.ToCode()],
+                    [identity.Namespace])));
+        var tracking = new PluginProviderTrackingCatalog(router);
+
+        var providers = await tracking.TrackableProvidersAsync(
+            EntityKindRegistry.VideoSeries.Code,
+            [identity],
+            new PluginIdentityRoute("zeta-provider", identity),
+            CancellationToken.None);
+
+        Assert.Equal(["zeta-provider"], providers);
+    }
+
+    [Fact]
+    public async Task MonitorTrackingDoesNotSubstituteAPluginThatSharesTheBoundNamespace() {
+        var identity = new ExternalIdentity("tmdb", "123");
+        var tracking = new PluginProviderTrackingCatalog(Router(Provider(
+            "available-provider",
+            enabled: true,
+            new PluginEntitySupport(
+                EntityKindRegistry.VideoSeries.Code,
+                [IdentifyAction.LookupId.ToCode()],
+                [identity.Namespace]))));
+
+        var unavailableBinding = await tracking.TrackableProvidersAsync(
+            EntityKindRegistry.VideoSeries.Code,
+            [identity],
+            new PluginIdentityRoute("removed-provider", identity),
+            CancellationToken.None);
+
+        Assert.Empty(unavailableBinding);
     }
 
     [Fact]

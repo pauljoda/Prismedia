@@ -1,4 +1,5 @@
 using Prismedia.Application.Acquisition;
+using Prismedia.Application.Plugins;
 using Prismedia.Application.Requests;
 using Prismedia.Contracts.Acquisition;
 using Prismedia.Contracts.Plugins;
@@ -392,8 +393,8 @@ public sealed class RequestCommitServiceTests {
             Leaf(ProposalKind.Book, "Known", "W1"), Leaf(ProposalKind.Book, "Brand New", "W2"));
         var (service, writer, acquisitions, monitors) = ServiceWithMonitors(proposal);
         var authorEntityId = FakeWantedEntityWriter.EntityIdFor("A1");
-        writer.Container = new MonitorableContainer(
-            authorEntityId, EntityKind.BookAuthor, "Author", [new ExternalIdentity(Provider, "A1")]);
+        writer.Container = MonitoredContainer(
+            authorEntityId, EntityKind.BookAuthor, "Author", new ExternalIdentity(Provider, "A1"));
         writer.ExistingWanted.Add("W1"); // already tracked from an earlier request
         acquisitions.EntitiesWithAcquisitions.Add(FakeWantedEntityWriter.EntityIdFor("W1"));
 
@@ -414,16 +415,66 @@ public sealed class RequestCommitServiceTests {
             pluginId: "metadata-aggregator");
         var (service, writer, acquisitions, _) = ServiceWithMonitors(proposal);
         var authorEntityId = FakeWantedEntityWriter.EntityIdFor("A1");
-        writer.Container = new MonitorableContainer(
+        writer.Container = MonitoredContainer(
             authorEntityId,
             EntityKind.BookAuthor,
             "Author",
-            [new ExternalIdentity("tmdb", "A1")]);
+            new ExternalIdentity("tmdb", "A1"),
+            pluginId: "metadata-aggregator");
 
         var synced = await service.SyncContainerAsync(authorEntityId, CancellationToken.None);
 
         Assert.True(synced);
         Assert.Contains(writer.Ensured, call => call.ItemId == "W2");
+        Assert.Empty(acquisitions.Created);
+    }
+
+    [Fact]
+    public async Task BoundContainerSyncKeepsTheExactPluginForDescendantLookups() {
+        var proposal = Rekey(
+            Container(
+                ProposalKind.VideoSeries,
+                "Series",
+                "TV1",
+                Container(
+                    ProposalKind.VideoSeason,
+                    "Season 1",
+                    "S1",
+                    Leaf(ProposalKind.Video, "Episode 1", "E1"))),
+            identityNamespace: "tmdb",
+            pluginId: "series-metadata");
+        var source = new FakeProposalSource(proposal);
+        var writer = new FakeWantedEntityWriter();
+        var acquisitions = new FakeAcquisitionRequestService();
+        var monitors = new FakeMonitorStore();
+        var service = new RequestCommitService(
+            source,
+            new NullReviewSource(),
+            writer,
+            acquisitions,
+            monitors,
+            new FakeSuppressionStore());
+        var rootIdentity = new ExternalIdentity("tmdb", "TV1");
+        var seriesEntityId = FakeWantedEntityWriter.EntityIdFor(rootIdentity.Value);
+        writer.Container = new MonitorableContainer(
+            seriesEntityId,
+            EntityKind.VideoSeries,
+            "Series",
+            [rootIdentity],
+            ProviderIdentity: new PluginIdentityRoute("series-metadata", rootIdentity));
+
+        var synced = await service.SyncContainerAsync(seriesEntityId, CancellationToken.None);
+
+        Assert.True(synced);
+        Assert.Equal(
+            [
+                new PluginIdentityRoute("series-metadata", rootIdentity),
+                new PluginIdentityRoute("series-metadata", new ExternalIdentity("tmdb", "S1"))
+            ],
+            source.ExactRoutes);
+        Assert.Empty(source.IdentityOnlyLookups);
+        Assert.Contains(writer.Ensured, call =>
+            call.Kind == EntityKind.Video && call.ItemId == "E1");
         Assert.Empty(acquisitions.Created);
     }
 
@@ -434,7 +485,8 @@ public sealed class RequestCommitServiceTests {
         var proposal = Container(ProposalKind.Person, "Author", "A1", Leaf(ProposalKind.Book, "Brand New", "W2"));
         var (service, writer, acquisitions, monitors) = ServiceWithMonitors(proposal);
         var authorEntityId = FakeWantedEntityWriter.EntityIdFor("A1");
-        writer.Container = new MonitorableContainer(authorEntityId, EntityKind.BookAuthor, "Author", [new ExternalIdentity(Provider, "A1")]);
+        writer.Container = MonitoredContainer(
+            authorEntityId, EntityKind.BookAuthor, "Author", new ExternalIdentity(Provider, "A1"));
         monitors.StoredPreset = preset;
 
         var synced = await service.SyncContainerAsync(authorEntityId, CancellationToken.None);
@@ -454,7 +506,8 @@ public sealed class RequestCommitServiceTests {
         var proposal = Container(ProposalKind.Person, "Author", "A1", Leaf(ProposalKind.Book, "Brand New", "W2"));
         var (service, writer, acquisitions, monitors) = ServiceWithMonitors(proposal);
         var authorEntityId = FakeWantedEntityWriter.EntityIdFor("A1");
-        writer.Container = new MonitorableContainer(authorEntityId, EntityKind.BookAuthor, "Author", [new ExternalIdentity(Provider, "A1")]);
+        writer.Container = MonitoredContainer(
+            authorEntityId, EntityKind.BookAuthor, "Author", new ExternalIdentity(Provider, "A1"));
         monitors.StoredPreset = preset;
 
         var synced = await service.SyncContainerAsync(authorEntityId, CancellationToken.None);
@@ -471,7 +524,8 @@ public sealed class RequestCommitServiceTests {
         var proposal = Container(ProposalKind.Person, "Author", "A1", Leaf(ProposalKind.Book, "Brand New", "W2"));
         var (service, writer, _, monitors) = ServiceWithMonitors(proposal);
         var authorEntityId = FakeWantedEntityWriter.EntityIdFor("A1");
-        writer.Container = new MonitorableContainer(authorEntityId, EntityKind.BookAuthor, "Author", [new ExternalIdentity(Provider, "A1")]);
+        writer.Container = MonitoredContainer(
+            authorEntityId, EntityKind.BookAuthor, "Author", new ExternalIdentity(Provider, "A1"));
         monitors.StoredPreset = MonitorPreset.All;
 
         await service.SyncContainerAsync(authorEntityId, CancellationToken.None);
@@ -607,8 +661,8 @@ public sealed class RequestCommitServiceTests {
         var proposal = Container(ProposalKind.Person, "Author", "A1", Leaf(ProposalKind.Book, "Brand New", "W2"));
         var (service, writer, _, monitors) = ServiceWithMonitors(proposal);
         var authorEntityId = FakeWantedEntityWriter.EntityIdFor("A1");
-        writer.Container = new MonitorableContainer(
-            authorEntityId, EntityKind.BookAuthor, "Author", [new ExternalIdentity(Provider, "A1")]);
+        writer.Container = MonitoredContainer(
+            authorEntityId, EntityKind.BookAuthor, "Author", new ExternalIdentity(Provider, "A1"));
 
         await service.SyncContainerAsync(authorEntityId, CancellationToken.None);
 
@@ -638,7 +692,11 @@ public sealed class RequestCommitServiceTests {
 
         // Entity exists but carries no provider identity to re-resolve from.
         var entityId = Guid.NewGuid();
-        writer.Container = new MonitorableContainer(entityId, EntityKind.BookAuthor, "Author", []);
+        writer.Container = new MonitorableContainer(
+            entityId,
+            EntityKind.BookAuthor,
+            "Author",
+            [new ExternalIdentity(Provider, "A1")]);
         Assert.False(await service.SyncContainerAsync(entityId, CancellationToken.None));
     }
 
@@ -678,7 +736,8 @@ public sealed class RequestCommitServiceTests {
             Leaf(ProposalKind.Book, "Removed", "W1"), Leaf(ProposalKind.Book, "Kept", "W2"));
         var (service, writer, _, _, suppressions) = ServiceWithSuppressions(proposal);
         var authorEntityId = FakeWantedEntityWriter.EntityIdFor("A1");
-        writer.Container = new MonitorableContainer(authorEntityId, EntityKind.BookAuthor, "Author", [new ExternalIdentity(Provider, "A1")]);
+        writer.Container = MonitoredContainer(
+            authorEntityId, EntityKind.BookAuthor, "Author", new ExternalIdentity(Provider, "A1"));
         suppressions.Suppressed.Add($"{Provider}:W1"); // the user removed this work earlier
 
         Assert.True(await service.SyncContainerAsync(authorEntityId, CancellationToken.None));
@@ -1248,6 +1307,19 @@ public sealed class RequestCommitServiceTests {
         return (service, writer, acquisitions);
     }
 
+    private static MonitorableContainer MonitoredContainer(
+        Guid entityId,
+        EntityKind kind,
+        string title,
+        ExternalIdentity identity,
+        string? pluginId = null) =>
+        new(
+            entityId,
+            kind,
+            title,
+            [identity],
+            ProviderIdentity: new PluginIdentityRoute(pluginId ?? Provider, identity));
+
     private static EntityMetadataProposal Container(ProposalKind kind, string title, string itemId, params EntityMetadataProposal[] works) =>
         new($"p-{itemId}", Provider, kind, null, null, Patch(title, itemId), [], works, [], null, []);
 
@@ -1344,17 +1416,28 @@ public sealed class RequestCommitServiceTests {
 
     /// <summary>Resolves any node of the proposal tree by its provider item id — the shape of a plugin's per-item lookups.</summary>
     private sealed class FakeProposalSource(EntityMetadataProposal proposal) : IPluginRequestProposalSource {
-        public Task<EntityMetadataProposal?> ResolveProposalAsync(
-            RequestKindDescriptor descriptor,
-            Prismedia.Application.Plugins.PluginIdentityRoute route,
-            bool hideNsfw,
-            bool includeChildren,
-            CancellationToken cancellationToken) =>
-            ResolveProposalAsync(descriptor, route.Identity, hideNsfw, includeChildren, cancellationToken);
+        public List<PluginIdentityRoute> ExactRoutes { get; } = [];
+        public List<ExternalIdentity> IdentityOnlyLookups { get; } = [];
 
         public Task<EntityMetadataProposal?> ResolveProposalAsync(
-            RequestKindDescriptor descriptor, ExternalIdentity identity, bool hideNsfw, bool includeChildren, CancellationToken cancellationToken) =>
-            Task.FromResult(FindByItemId(proposal, identity.Namespace, identity.Value));
+            RequestKindDescriptor descriptor,
+            PluginIdentityRoute route,
+            bool hideNsfw,
+            bool includeChildren,
+            CancellationToken cancellationToken) {
+            ExactRoutes.Add(route);
+            return Task.FromResult(FindByItemId(proposal, route.Identity.Namespace, route.Identity.Value));
+        }
+
+        public Task<EntityMetadataProposal?> ResolveProposalAsync(
+            RequestKindDescriptor descriptor,
+            ExternalIdentity identity,
+            bool hideNsfw,
+            bool includeChildren,
+            CancellationToken cancellationToken) {
+            IdentityOnlyLookups.Add(identity);
+            return Task.FromResult(FindByItemId(proposal, identity.Namespace, identity.Value));
+        }
 
         private static EntityMetadataProposal? FindByItemId(EntityMetadataProposal node, string providerId, string itemId) {
             if (node.Patch?.ExternalIds.GetValueOrDefault(providerId) == itemId) {

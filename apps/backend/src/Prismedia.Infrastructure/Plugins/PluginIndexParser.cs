@@ -69,7 +69,8 @@ internal static class PluginIndexParser {
                         ? GetDeclaredStringArray(support, "actions") ?? []
                         : GetStringArray(support, "actions"),
                     GetDeclaredStringArray(support, "identityNamespaces"),
-                    ParseJsonSearch(support))
+                    ParseJsonSearch(support),
+                    ParseJsonIdentityUrls(support))
                 : new PluginEntitySupport(string.Empty, []))
             .ToArray();
         return manifestVersion == 2
@@ -104,11 +105,32 @@ internal static class PluginIndexParser {
             .ToArray());
     }
 
+    private static IReadOnlyList<PluginIdentityUrlFormat>? ParseJsonIdentityUrls(JsonElement support) {
+        if (!support.TryGetProperty("identityUrls", out var formats)) {
+            return null;
+        }
+
+        if (formats.ValueKind != JsonValueKind.Array) {
+            return [new PluginIdentityUrlFormat(string.Empty, string.Empty, string.Empty)];
+        }
+
+        return formats
+            .EnumerateArray()
+            .Select(format => format.ValueKind == JsonValueKind.Object
+                ? new PluginIdentityUrlFormat(
+                    GetString(format, "identityNamespace"),
+                    GetString(format, "valuePattern"),
+                    GetString(format, "urlTemplate"))
+                : new PluginIdentityUrlFormat(string.Empty, string.Empty, string.Empty))
+            .ToArray();
+    }
+
     private static IReadOnlyList<PluginIndexEntry> ParseYaml(string yaml) {
         var entries = new List<YamlEntry>();
         YamlEntry? entry = null;
         PluginEntitySupportBuilder? support = null;
         PluginSearchFieldBuilder? searchField = null;
+        PluginIdentityUrlFormatBuilder? identityUrl = null;
         string? section = null;
         string? supportSection = null;
 
@@ -129,6 +151,7 @@ internal static class PluginIndexParser {
                 entry = new YamlEntry();
                 support = null;
                 searchField = null;
+                identityUrl = null;
                 section = null;
                 supportSection = null;
                 SetYamlScalar(entry, trimmed[2..]);
@@ -142,6 +165,7 @@ internal static class PluginIndexParser {
             if (indent == 2) {
                 support = null;
                 searchField = null;
+                identityUrl = null;
                 supportSection = null;
                 if (trimmed.EndsWith(':') && !trimmed.Contains(": ", StringComparison.Ordinal)) {
                     section = trimmed.TrimEnd(':');
@@ -170,6 +194,7 @@ internal static class PluginIndexParser {
             if (indent == 4 && trimmed.StartsWith("- ", StringComparison.Ordinal)) {
                 support = new PluginEntitySupportBuilder();
                 searchField = null;
+                identityUrl = null;
                 supportSection = null;
                 entry.Supports.Add(support);
                 SetYamlSupportScalar(support, trimmed[2..]);
@@ -183,6 +208,7 @@ internal static class PluginIndexParser {
             if (indent == 6 && trimmed.EndsWith(':')) {
                 supportSection = trimmed.TrimEnd(':');
                 searchField = null;
+                identityUrl = null;
                 continue;
             }
 
@@ -191,6 +217,10 @@ internal static class PluginIndexParser {
                     support.Actions.Add(Unquote(trimmed[2..]));
                 } else if (supportSection == "identityNamespaces") {
                     support.IdentityNamespaces.Add(Unquote(trimmed[2..]));
+                } else if (supportSection == "identityUrls") {
+                    identityUrl = new PluginIdentityUrlFormatBuilder();
+                    support.IdentityUrls.Add(identityUrl);
+                    SetYamlIdentityUrlScalar(identityUrl, trimmed[2..]);
                 }
 
                 continue;
@@ -208,6 +238,11 @@ internal static class PluginIndexParser {
                 continue;
             }
 
+            if (indent == 10 && supportSection == "identityUrls" && identityUrl is not null) {
+                SetYamlIdentityUrlScalar(identityUrl, trimmed);
+                continue;
+            }
+
             if (indent == 12 && supportSection == "searchFields" && searchField is not null) {
                 SetYamlSearchFieldScalar(searchField, trimmed);
                 continue;
@@ -216,6 +251,7 @@ internal static class PluginIndexParser {
             if (indent == 6) {
                 supportSection = null;
                 searchField = null;
+                identityUrl = null;
                 SetYamlSupportScalar(support, trimmed);
             }
         }
@@ -309,6 +345,21 @@ internal static class PluginIndexParser {
                 break;
             case "help":
                 field.Help = NullIfYamlNull(value);
+                break;
+        }
+    }
+
+    private static void SetYamlIdentityUrlScalar(PluginIdentityUrlFormatBuilder format, string line) {
+        var (key, value) = SplitYamlPair(line);
+        switch (key) {
+            case "identityNamespace":
+                format.IdentityNamespace = value;
+                break;
+            case "valuePattern":
+                format.ValuePattern = value;
+                break;
+            case "urlTemplate":
+                format.UrlTemplate = value;
                 break;
         }
     }
@@ -437,6 +488,9 @@ internal static class PluginIndexParser {
                         support.IdentityNamespaces.Count > 0 ? support.IdentityNamespaces : null,
                         support.SearchFields.Count > 0
                             ? new PluginSearchDefinition(support.SearchFields.Select(field => field.ToContract()).ToArray())
+                            : null,
+                        support.IdentityUrls.Count > 0
+                            ? support.IdentityUrls.Select(format => format.ToContract()).ToArray()
                             : null))
                     .ToArray());
     }
@@ -446,6 +500,7 @@ internal static class PluginIndexParser {
         public List<string> Actions { get; } = [];
         public List<string> IdentityNamespaces { get; } = [];
         public List<PluginSearchFieldBuilder> SearchFields { get; } = [];
+        public List<PluginIdentityUrlFormatBuilder> IdentityUrls { get; } = [];
     }
 
     private sealed class PluginSearchFieldBuilder {
@@ -458,5 +513,14 @@ internal static class PluginIndexParser {
 
         public PluginSearchField ToContract() =>
             new(Key, Label, Type, Required, Placeholder, Help);
+    }
+
+    private sealed class PluginIdentityUrlFormatBuilder {
+        public string IdentityNamespace { get; set; } = string.Empty;
+        public string ValuePattern { get; set; } = string.Empty;
+        public string UrlTemplate { get; set; } = string.Empty;
+
+        public PluginIdentityUrlFormat ToContract() =>
+            new(IdentityNamespace, ValuePattern, UrlTemplate);
     }
 }

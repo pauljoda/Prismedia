@@ -65,10 +65,18 @@ const ENUM_EXPORTS = [
   ["UserRole", "USER_ROLE", "UserRoleCode"],
 ];
 
-const camel = (name) => (name.length === 0 ? name : name[0].toLowerCase() + name.slice(1));
+const camel = (name) => {
+  const joined = name.replace(/[^A-Za-z0-9_$]+([A-Za-z0-9_$])/g, (_, next) => next.toUpperCase());
+  const key = joined.length === 0 ? joined : joined[0].toLowerCase() + joined.slice(1);
+  return /^[A-Za-z_$]/.test(key) ? key : `_${key}`;
+};
 const lit = (value) => JSON.stringify(value);
 
 function constBlock(constName, typeName, entries) {
+  const keys = entries.map(([key]) => key);
+  if (new Set(keys).size !== keys.length || keys.some((key) => !/^[A-Za-z_$][A-Za-z0-9_$]*$/.test(key))) {
+    throw new Error(`${constName} contains duplicate or invalid generated property names`);
+  }
   const body = entries.map(([key, value]) => `  ${key}: ${lit(value)},`).join("\n");
   return (
     `export const ${constName} = {\n${body}\n} as const;\n\n` +

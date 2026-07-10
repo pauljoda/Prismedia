@@ -42,7 +42,8 @@ public sealed record WantedEntityResult(Guid EntityId, bool Created, bool HasFil
 public sealed record MonitorableContainer(
     Guid EntityId, EntityKind Kind, string Title, IReadOnlyList<ExternalIdentity> ExternalIdentities,
     bool HasSourceFile = false, Guid? ParentEntityId = null,
-    IReadOnlyDictionary<string, int>? Positions = null);
+    IReadOnlyDictionary<string, int>? Positions = null,
+    PluginIdentityRoute? ProviderIdentity = null);
 
 /// <summary>
 /// The discovery blacklist: provider work identities the user removed from Wanted. Container sweeps
@@ -602,7 +603,7 @@ public sealed class RequestCommitService(
     /// </summary>
     public async Task<bool> SyncContainerAsync(Guid entityId, CancellationToken cancellationToken) {
         var container = await wanted.GetContainerAsync(entityId, cancellationToken);
-        if (container is null || container.ExternalIdentities.Count == 0) {
+        if (container is null || container.ProviderIdentity is null) {
             return false;
         }
 
@@ -620,10 +621,11 @@ public sealed class RequestCommitService(
         var preset = await monitors.GetPresetByEntityAsync(entityId, cancellationToken) ?? MonitorPreset.All;
         var autoMonitorsNewWorks = preset is MonitorPreset.All or MonitorPreset.Future;
 
-        foreach (var identity in container.ExternalIdentities) {
+        foreach (var route in new[] { container.ProviderIdentity }) {
+            var identity = route.Identity;
             // Conservative SFW default: the sweep has no user session (mirrors background enrichment).
             var proposal = await proposals.ResolveProposalAsync(
-                descriptor, identity, hideNsfw: true, includeChildren: true, cancellationToken);
+                descriptor, route, hideNsfw: true, includeChildren: true, cancellationToken);
             if (proposal?.Patch is null) {
                 continue;
             }
@@ -643,7 +645,9 @@ public sealed class RequestCommitService(
                 descriptor, identity, proposal, selectedChildren,
                 requestOwnedChildren: false,
                 startAcquisitions: false, AcquisitionTargeting.None, preset: null, hideNsfw: true,
-                exactPluginId: null, preparedDescendants: null, cancellationToken);
+                exactPluginId: route.PluginId,
+                preparedDescendants: null,
+                cancellationToken);
             return true;
         }
 
@@ -805,7 +809,20 @@ public sealed class RequestCommitService(
         // their deterministic identity-router fallback.
         EntityMetadataProposal? proposal;
         IReadOnlyList<ResolvedRequestProposalNode> childProposals;
-        if (exactPluginId is null) {
+        if (prepared is not null) {
+            proposal = prepared.Proposal;
+            childProposals = prepared.Children;
+        } else if (exactPluginId is not null) {
+            proposal = await proposals.ResolveProposalAsync(
+                pickDescriptor,
+                new PluginIdentityRoute(exactPluginId, identity),
+                hideNsfw,
+                includeChildren: true,
+                cancellationToken);
+            childProposals = proposal?.Patch is null
+                ? []
+                : ResolveLegacyStructuralChildren(identity.Namespace, proposal);
+        } else {
             proposal = await proposals.ResolveProposalAsync(
                 pickDescriptor,
                 identity,
@@ -815,9 +832,6 @@ public sealed class RequestCommitService(
             childProposals = proposal?.Patch is null
                 ? []
                 : ResolveLegacyStructuralChildren(identity.Namespace, proposal);
-        } else {
-            proposal = prepared?.Proposal;
-            childProposals = prepared?.Children ?? [];
         }
         if (proposal?.Patch is null) {
             return;

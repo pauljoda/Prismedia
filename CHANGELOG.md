@@ -97,6 +97,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - External identity lookup now returns every matching local Entity and reports ambiguity explicitly; identity writes use named add, update, or replace policies without silently committing another operation's transaction.
 - Plugin protocol compatibility is now enforced for both registry and installed manifests, and every plugin request uses one canonical protocol version instead of scattered literals.
 - Plugins can now declare the external identity namespaces and schema-driven search fields they support, while legacy manifests receive a compatible title search and plugin-id identity namespace automatically.
+- Entity details now show the authoritative metadata and monitoring plugin with its persistent provider ID; when that plugin declares a provider-page URL format, the shared chip opens the exact movie, series, season, episode, person, or studio in a new tab.
 - Identify search forms now come from the selected plugin's declared field schema, so context such as year or series title is sent instead of being displayed and silently ignored.
 - Season Pass now discovers provider-only seasons through the same canonical, revision-checked plugin proposal used by Request, so existing series no longer depend on encoded provider-id strings or a separate detail path.
 - Monitoring, request lookup, and metadata enrichment now route Entity identities through plugin-declared namespaces, so a plugin's installation ID no longer has to match the upstream ID namespace it handles.

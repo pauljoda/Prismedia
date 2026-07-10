@@ -334,6 +334,48 @@ public sealed class PluginRequestMetadataSourceRoutingTests : IDisposable {
         Assert.Single(runner.Calls);
     }
 
+    [Theory]
+    [InlineData("provider")]
+    [InlineData("identity")]
+    public async Task ExplicitRouteResolutionRejectsProposalThatDoesNotMatchRequestedRoute(string invalidPart) {
+        await using var db = await CreateInstalledPluginAsync("cinema-metadata");
+        var catalog = Catalog(db);
+        var runner = new ProposalFactoryRunner((descriptor, request, _) => {
+            var identity = Assert.Single(request.Query.ExternalIds!);
+            return MovieProposal(
+                invalidPart == "provider" ? "different-plugin" : descriptor.Manifest.Id,
+                invalidPart == "identity"
+                    ? new KeyValuePair<string, string>(identity.Key, $"different:{identity.Value}")
+                    : identity,
+                "Example");
+        });
+        var source = new PluginRequestMetadataSource(
+            catalog,
+            new PluginIdentityRouter(catalog),
+            new IdentifyRunnerSelector([runner]));
+        var descriptor = RequestKindRegistry.Find(RequestMediaKind.Movie)!;
+        var route = new PluginIdentityRoute(
+            "cinema-metadata",
+            new ExternalIdentity("tmdb", $"monitored:{Guid.NewGuid():N}"));
+
+        var first = await source.ResolveProposalAsync(
+            descriptor,
+            route,
+            hideNsfw: false,
+            includeChildren: true,
+            CancellationToken.None);
+        var second = await source.ResolveProposalAsync(
+            descriptor,
+            route,
+            hideNsfw: false,
+            includeChildren: true,
+            CancellationToken.None);
+
+        Assert.Null(first);
+        Assert.Null(second);
+        Assert.Equal(2, runner.Calls.Count);
+    }
+
     [Fact]
     public async Task SharedNamespaceRoutesAreTriedInDeterministicOrderUntilOneResolves() {
         await using var db = await CreateInstalledPluginAsync("zeta-metadata", "alpha-metadata");

@@ -125,6 +125,99 @@ public sealed class PluginManifestCompatibilityTests {
         Assert.True(PluginCompatibilityResolver.IsCompatible(entry, new Version(1, 0, 0)));
     }
 
+    [Fact]
+    public void AcceptsSafeKindScopedIdentityUrlFormats() {
+        var manifest = Manifest(
+            new PluginCompatibility("2.0.0", null, "1.0.0", null),
+            manifestVersion: 2,
+            supports:
+            [
+                new PluginEntitySupport(
+                    "video-season",
+                    [IdentifyAction.LookupId.ToCode()],
+                    ["tmdbseason"],
+                    IdentityUrls:
+                    [
+                        new PluginIdentityUrlFormat(
+                            "tmdbseason",
+                            "{seriesId}:{seasonNumber}",
+                            "https://www.themoviedb.org/tv/{seriesId}/season/{seasonNumber}")
+                    ])
+            ]);
+
+        Assert.True(PluginCompatibilityResolver.IsCompatible(manifest, new Version(1, 0, 0)));
+    }
+
+    [Fact]
+    public void AcceptsIdentityUrlFormatThatUsesCapturedTokenMoreThanOnce() {
+        var manifest = Manifest(
+            new PluginCompatibility("2.0.0", null, "1.0.0", null),
+            manifestVersion: 2,
+            supports:
+            [
+                new PluginEntitySupport(
+                    "video",
+                    [IdentifyAction.LookupId.ToCode()],
+                    ["provider"],
+                    IdentityUrls:
+                    [
+                        new PluginIdentityUrlFormat(
+                            "provider",
+                            "{id}",
+                            "https://provider.example/items/{id}?selected={id}")
+                    ])
+            ]);
+
+        Assert.True(PluginCompatibilityResolver.IsCompatible(manifest, new Version(1, 0, 0)));
+    }
+
+    [Theory]
+    [InlineData("imdb", "{id}", "https://www.imdb.com/title/{id}")]
+    [InlineData("tmdb", "{id}{other}", "https://www.themoviedb.org/tv/{id}")]
+    [InlineData("tmdb", "{seriesId}:{seasonNumber}", "https://www.themoviedb.org/tv/{seriesId}")]
+    [InlineData("tmdb", "{id}", "https://user@www.themoviedb.org/tv/{id}")]
+    [InlineData("tmdb", "{id}", "javascript:alert({id})")]
+    [InlineData("tmdb", "{id}", "https://www.themoviedb.org/tv/{missing}")]
+    public void RejectsUnsafeOrUnusableIdentityUrlFormats(
+        string identityNamespace,
+        string valuePattern,
+        string urlTemplate) {
+        var manifest = Manifest(
+            new PluginCompatibility("2.0.0", null, "1.0.0", null),
+            manifestVersion: 2,
+            supports:
+            [
+                new PluginEntitySupport(
+                    "video",
+                    [IdentifyAction.LookupId.ToCode()],
+                    ["tmdb"],
+                    IdentityUrls:
+                    [
+                        new PluginIdentityUrlFormat(identityNamespace, valuePattern, urlTemplate)
+                    ])
+            ]);
+
+        Assert.False(PluginCompatibilityResolver.IsCompatible(manifest, new Version(1, 0, 0)));
+    }
+
+    [Fact]
+    public void RejectsDuplicateIdentityUrlFormatsForOneNamespace() {
+        var format = new PluginIdentityUrlFormat("tmdb", "{id}", "https://www.themoviedb.org/tv/{id}");
+        var manifest = Manifest(
+            new PluginCompatibility("2.0.0", null, "1.0.0", null),
+            manifestVersion: 2,
+            supports:
+            [
+                new PluginEntitySupport(
+                    "video-series",
+                    [IdentifyAction.LookupId.ToCode()],
+                    ["tmdb"],
+                    IdentityUrls: [format, format])
+            ]);
+
+        Assert.False(PluginCompatibilityResolver.IsCompatible(manifest, new Version(1, 0, 0)));
+    }
+
     [Theory]
     [InlineData(0)]
     [InlineData(3)]

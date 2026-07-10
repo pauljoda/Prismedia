@@ -12,6 +12,7 @@
     "lint": "turbo run lint",
     "typecheck": "turbo run typecheck",
     "check": "pnpm --filter @prismedia/web-svelte sync && turbo run lint typecheck",
+    "api:generate": "pnpm --filter @prismedia/web-svelte api:generate",
     "api:check": "pnpm --filter @prismedia/web-svelte api:check",
     "test": "pnpm test:unit",
     "test:backend": "dotnet test apps/backend/Prismedia.slnx",

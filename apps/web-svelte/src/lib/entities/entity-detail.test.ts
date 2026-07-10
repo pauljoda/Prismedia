@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { EntityCard, EntityKind } from "$lib/api/generated/model";
+import { CAPABILITY_KIND } from "$lib/entities/entity-codes";
 import { entityCardToDetailCard, formatDetailDateValue } from "./entity-detail";
 
 describe("formatDetailDateValue", () => {
@@ -27,6 +28,62 @@ describe("formatDetailDateValue", () => {
 });
 
 describe("entity detail view model", () => {
+  it("maps only the explicit provider identity capability and preserves opaque identity values", () => {
+    const detail = entityCardToDetailCard({
+      id: "series-1",
+      kind: "video-series",
+      title: "The Series",
+      parentEntityId: null,
+      sortOrder: null,
+      capabilities: [
+        {
+          kind: "links",
+          urls: [],
+          externalIds: [
+            { provider: "first-created", value: "wrong", url: "https://wrong.test" },
+          ],
+        },
+        {
+          kind: CAPABILITY_KIND.providerIdentity,
+          pluginId: "metadata-router",
+          identityNamespace: "CaseSensitive",
+          identityValue: "Show:AbC:01:5",
+          url: "https://provider.test/items/Show%3AAbC%3A01%3A5",
+        },
+      ],
+      childrenByKind: [],
+      relationships: [],
+    } satisfies EntityCard);
+
+    expect(detail.providerIdentity).toEqual({
+      pluginId: "metadata-router",
+      identityNamespace: "CaseSensitive",
+      identityValue: "Show:AbC:01:5",
+      url: "https://provider.test/items/Show%3AAbC%3A01%3A5",
+    });
+  });
+
+  it("does not infer a provider identity from ordinary external IDs", () => {
+    const detail = entityCardToDetailCard({
+      id: "series-1",
+      kind: "video-series",
+      title: "The Series",
+      parentEntityId: null,
+      sortOrder: null,
+      capabilities: [
+        {
+          kind: "links",
+          urls: [],
+          externalIds: [{ provider: "tmdb", value: "82728", url: null }],
+        },
+      ],
+      childrenByKind: [],
+      relationships: [],
+    } satisfies EntityCard);
+
+    expect(detail.providerIdentity).toBeNull();
+  });
+
   it("uses backdrop artwork for the hero while keeping poster artwork for the poster slot", () => {
     const detail = entityCardToDetailCard({
       id: "series-1",

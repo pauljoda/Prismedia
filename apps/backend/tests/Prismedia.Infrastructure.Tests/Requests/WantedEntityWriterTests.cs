@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Prismedia.Application.Entities;
+using Prismedia.Application.Plugins;
 using Prismedia.Domain.Entities;
 using Prismedia.Infrastructure.Entities;
 using Prismedia.Infrastructure.Persistence;
@@ -234,11 +235,67 @@ public sealed class WantedEntityWriterTests {
         Assert.Equal(2, await db.Entities.AsNoTracking().CountAsync());
     }
 
-    private static WantedEntityWriter Writer(PrismediaDbContext db) =>
+    [Fact]
+    public async Task GetContainerDoesNotRetargetAStalePersistedProviderBinding() {
+        await using var db = CreateContext();
+        var entityId = AddEntity(db, EntityKindRegistry.VideoSeries.Code, "Series", isWanted: false);
+        AddExternalId(db, entityId, "tmdb", "82728");
+        await db.SaveChangesAsync();
+        var bindings = new EfEntityProviderIdentityStore(db, TimeProvider.System);
+        await bindings.SetAsync(
+            entityId,
+            "tmdb",
+            new ExternalIdentity("tmdb", "82728"),
+            CancellationToken.None);
+        await db.SaveChangesAsync();
+
+        var rawIdentity = await db.EntityExternalIds.SingleAsync(row => row.EntityId == entityId);
+        rawIdentity.Value = "99999";
+        await db.SaveChangesAsync();
+        var router = new ConfiguredIdentityRouter(
+            new PluginIdentityRoute("replacement-plugin", new ExternalIdentity("tmdb", "99999")));
+
+        var container = await Writer(db, router).GetContainerAsync(entityId, CancellationToken.None);
+
+        Assert.NotNull(container);
+        Assert.Null(container.ProviderIdentity);
+        Assert.Equal([new ExternalIdentity("tmdb", "99999")], container.ExternalIdentities);
+        Assert.Equal(0, router.CallCount);
+    }
+
+    private static WantedEntityWriter Writer(
+        PrismediaDbContext db,
+        IPluginIdentityRouter? identityRouter = null) =>
         new(
             db,
             new EntityMetadataApplyService(db, new PluginArtworkServiceOptions(Path.GetTempPath())),
-            new EfEntityExternalIdentityStore(db, TimeProvider.System));
+            new EfEntityExternalIdentityStore(db, TimeProvider.System),
+            new EfEntityProviderIdentityStore(db, TimeProvider.System),
+            identityRouter ?? new EmptyIdentityRouter());
+
+    private sealed class EmptyIdentityRouter : IPluginIdentityRouter {
+        public Task<IReadOnlyList<PluginIdentityRoute>> ResolveAsync(
+            string entityKindCode,
+            IdentifyAction action,
+            IReadOnlyList<ExternalIdentity> identities,
+            CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<PluginIdentityRoute>>([]);
+    }
+
+    private sealed class ConfiguredIdentityRouter(params PluginIdentityRoute[] routes) : IPluginIdentityRouter {
+        public int CallCount { get; private set; }
+
+        public Task<IReadOnlyList<PluginIdentityRoute>> ResolveAsync(
+            string entityKindCode,
+            IdentifyAction action,
+            IReadOnlyList<ExternalIdentity> identities,
+            CancellationToken cancellationToken) {
+            CallCount++;
+            var requested = identities.ToHashSet();
+            return Task.FromResult<IReadOnlyList<PluginIdentityRoute>>(
+                routes.Where(route => requested.Contains(route.Identity)).ToArray());
+        }
+    }
 
     private static Guid AddEntity(PrismediaDbContext db, string kindCode, string title, bool isWanted, Guid? parentEntityId = null) {
         var now = DateTimeOffset.UtcNow;

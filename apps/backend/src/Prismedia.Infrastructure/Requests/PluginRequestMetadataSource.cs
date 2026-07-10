@@ -348,12 +348,8 @@ public sealed class PluginRequestMetadataSource(
                 cancellationToken);
         if (proposal?.Patch is null
             || !IsCompatibleTarget(descriptor, proposal.TargetKind)
-            || !string.Equals(proposal.Provider, provider.Id, StringComparison.OrdinalIgnoreCase)
+            || !MatchesExplicitRoute(proposal, route)
             || !DeclaresLookupIdentity(provider, proposal.TargetKind.ToEntityKind().ToCode(), route.Identity.Namespace)
-            || !string.Equals(
-                RequestProposalReading.IdentityValueFor(route.Identity.Namespace, proposal),
-                route.Identity.Value,
-                StringComparison.Ordinal)
             || !HasUniqueStructuralProposalIds(proposal)) {
             return null;
         }
@@ -432,17 +428,32 @@ public sealed class PluginRequestMetadataSource(
             hideNsfw,
             includeChildren);
         if (ProposalCache.TryGetValue(cacheKey, out var hit) && DateTimeOffset.UtcNow - hit.At < ProposalTtl) {
-            return hit.Proposal;
+            if (MatchesExplicitRoute(hit.Proposal, route)) {
+                return hit.Proposal;
+            }
+
+            ProposalCache.TryRemove(cacheKey, out _);
         }
 
         var proposal = await RunRouteAsync(entityKind, route, hideNsfw, includeChildren, cancellationToken);
-        if (proposal is not null) {
-            EvictForCapacity();
-            ProposalCache[cacheKey] = (DateTimeOffset.UtcNow, proposal);
+        if (proposal is null || !MatchesExplicitRoute(proposal, route)) {
+            return null;
         }
 
+        EvictForCapacity();
+        ProposalCache[cacheKey] = (DateTimeOffset.UtcNow, proposal);
         return proposal;
     }
+
+    private static bool MatchesExplicitRoute(
+        EntityMetadataProposal? proposal,
+        PluginIdentityRoute route) =>
+        proposal?.Patch is not null
+        && string.Equals(proposal.Provider, route.PluginId, StringComparison.OrdinalIgnoreCase)
+        && string.Equals(
+            RequestProposalReading.IdentityValueFor(route.Identity.Namespace, proposal),
+            route.Identity.Value,
+            StringComparison.Ordinal);
 
     private static void EvictForCapacity() {
         if (ProposalCache.Count < ProposalCacheCap) {

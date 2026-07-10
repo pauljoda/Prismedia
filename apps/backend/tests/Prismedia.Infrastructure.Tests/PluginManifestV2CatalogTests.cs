@@ -73,6 +73,13 @@ public sealed class PluginManifestV2CatalogTests : IDisposable {
                   "entityKind": "video-series",
                   "actions": ["lookup-id", "search"],
                   "identityNamespaces": ["tmdb", "imdb"],
+                  "identityUrls": [
+                    {
+                      "identityNamespace": "tmdb",
+                      "valuePattern": "{id}",
+                      "urlTemplate": "https://www.themoviedb.org/tv/{id}"
+                    }
+                  ],
                   "search": {
                     "fields": [
                       { "key": "seriesTitle", "label": "Series title", "type": "text", "required": true, "placeholder": "Title" },
@@ -91,6 +98,10 @@ public sealed class PluginManifestV2CatalogTests : IDisposable {
 
         Assert.Equal("media-db-plugin", provider.Id);
         Assert.Equal(["tmdb", "imdb"], support.IdentityNamespaces);
+        var identityUrl = Assert.Single(support.IdentityUrls!);
+        Assert.Equal("tmdb", identityUrl.IdentityNamespace);
+        Assert.Equal("{id}", identityUrl.ValuePattern);
+        Assert.Equal("https://www.themoviedb.org/tv/{id}", identityUrl.UrlTemplate);
         Assert.Collection(
             support.Search!.Fields,
             title => {
@@ -213,6 +224,13 @@ public sealed class PluginManifestV2CatalogTests : IDisposable {
             "compat": { "pluginApiMin": "2.0.0", "prismediaMin": "1.0.0" },
             "supports": [{
               "entityKind": "book", "actions": ["search"], "identityNamespaces": ["openlibrary", "isbn"],
+              "identityUrls": [
+                {
+                  "identityNamespace": "openlibrary",
+                  "valuePattern": "{workId}",
+                  "urlTemplate": "https://openlibrary.org/works/{workId}"
+                }
+              ],
               "search": { "fields": [
                 { "key": "title", "label": "Title", "type": "text", "required": true },
                 { "key": "author", "label": "Author", "type": "text", "required": false, "help": "Optional author context" }
@@ -242,6 +260,10 @@ public sealed class PluginManifestV2CatalogTests : IDisposable {
               identityNamespaces:
                 - openlibrary
                 - isbn
+              identityUrls:
+                - identityNamespace: openlibrary
+                  valuePattern: '{workId}'
+                  urlTemplate: 'https://openlibrary.org/works/{workId}'
               search:
                 fields:
                   - key: title
@@ -261,6 +283,7 @@ public sealed class PluginManifestV2CatalogTests : IDisposable {
         Assert.Equal(jsonSupport.EntityKind, yamlSupport.EntityKind);
         Assert.Equal(jsonSupport.Actions, yamlSupport.Actions);
         Assert.Equal(jsonSupport.IdentityNamespaces, yamlSupport.IdentityNamespaces);
+        Assert.Equal(jsonSupport.IdentityUrls, yamlSupport.IdentityUrls);
         Assert.Equal(
             jsonSupport.Search!.Fields.Select(field => (field.Key, field.Label, field.Type, field.Required, field.Placeholder, field.Help)),
             yamlSupport.Search!.Fields.Select(field => (field.Key, field.Label, field.Type, field.Required, field.Placeholder, field.Help)));

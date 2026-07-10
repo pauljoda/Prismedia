@@ -1,5 +1,7 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Prismedia.Application.Entities;
+using Prismedia.Application.Plugins;
 using Prismedia.Domain.Capabilities;
 using Prismedia.Domain.Entities;
 using Prismedia.Infrastructure.Entities.Mappers;
@@ -24,6 +26,9 @@ public sealed class EfEntityRepository : IEntityWriteRepository {
     private readonly PrismediaDbContext _db;
     private readonly Prismedia.Application.Security.ICurrentUserContext _currentUser;
     private readonly IEntityExternalIdentityStore _externalIdentities;
+    private readonly IEntityProviderIdentityStore? _providerIdentities;
+    private readonly IPluginIdentityRouter? _identityRouter;
+    private readonly IPluginIdentityUrlResolver? _identityUrls;
     private readonly IReadOnlyDictionary<EntityKind, IEntityKindMapper> _kindMappers;
     private readonly IReadOnlyList<IEntityCapabilityMapper> _capabilityMappers;
 
@@ -32,11 +37,35 @@ public sealed class EfEntityRepository : IEntityWriteRepository {
         Prismedia.Application.Security.ICurrentUserContext currentUser,
         IEnumerable<IEntityKindMapper> kindMappers,
         IEnumerable<IEntityCapabilityMapper> capabilityMappers,
-        IEntityExternalIdentityStore externalIdentities) {
+        IEntityExternalIdentityStore externalIdentities)
+        : this(
+            db,
+            currentUser,
+            kindMappers,
+            capabilityMappers,
+            externalIdentities,
+            providerIdentities: null,
+            identityRouter: null,
+            identityUrls: null) { }
+
+    /// <summary>Production constructor with plugin identity binding and URL enrichment.</summary>
+    [ActivatorUtilitiesConstructor]
+    public EfEntityRepository(
+        PrismediaDbContext db,
+        Prismedia.Application.Security.ICurrentUserContext currentUser,
+        IEnumerable<IEntityKindMapper> kindMappers,
+        IEnumerable<IEntityCapabilityMapper> capabilityMappers,
+        IEntityExternalIdentityStore externalIdentities,
+        IEntityProviderIdentityStore? providerIdentities,
+        IPluginIdentityRouter? identityRouter,
+        IPluginIdentityUrlResolver? identityUrls) {
         _db = db;
         _currentUser = currentUser;
         _externalIdentities = externalIdentities
             ?? throw new ArgumentNullException(nameof(externalIdentities));
+        _providerIdentities = providerIdentities;
+        _identityRouter = identityRouter;
+        _identityUrls = identityUrls;
         _kindMappers = kindMappers.ToDictionary(mapper => mapper.Kind);
         _capabilityMappers = capabilityMappers.ToArray();
     }
@@ -463,6 +492,10 @@ public sealed class EfEntityRepository : IEntityWriteRepository {
             .Select(r => new EntityUrl(r.Url, r.Label))
             .ToArrayAsync(cancellationToken);
         var externalIds = await _externalIdentities.ListAsync(entity.Id, cancellationToken);
+        var providerIdentity = await ResolveProviderIdentityAsync(
+            entity,
+            externalIds,
+            cancellationToken);
         var files = await _db.EntityFiles.AsNoTracking()
             .Where(r => r.EntityId == entity.Id)
             .OrderBy(r => r.CreatedAt)
@@ -484,7 +517,53 @@ public sealed class EfEntityRepository : IEntityWriteRepository {
             urls,
             externalIds,
             files,
-            row.IsWanted);
+            row.IsWanted,
+            providerIdentity);
+    }
+
+    private async Task<EntityProviderIdentity?> ResolveProviderIdentityAsync(
+        Entity entity,
+        IReadOnlyList<EntityExternalId> externalIds,
+        CancellationToken cancellationToken) {
+        if (_providerIdentities is null || externalIds.Count == 0) {
+            return null;
+        }
+
+        var binding = await _providerIdentities.GetAsync(entity.Id, cancellationToken);
+        PluginIdentityRoute? route = binding is null
+            ? null
+            : new PluginIdentityRoute(binding.PluginId, binding.Identity);
+
+        // Compatibility/backfill path: older Entities predate persisted bindings. Only infer when the
+        // current manifest set yields exactly one route, which is also the route monitoring uses.
+        if (route is null && _identityRouter is not null) {
+            var routes = await _identityRouter.ResolveAsync(
+                entity.Kind.ToCode(),
+                IdentifyAction.LookupId,
+                externalIds.Select(value => value.Identity).ToArray(),
+                cancellationToken);
+            route = routes.Count == 1 ? routes[0] : null;
+        }
+
+        if (route is null) {
+            return null;
+        }
+
+        var association = externalIds.FirstOrDefault(value => value.Identity == route.Identity);
+        if (association is null) {
+            return null;
+        }
+
+        string? url = null;
+        if (_identityUrls is not null) {
+            url = await _identityUrls.ResolveAsync(
+                entity.Kind.ToCode(),
+                route,
+                cancellationToken);
+        }
+        url ??= association.Url;
+
+        return new EntityProviderIdentity(route.PluginId, route.Identity, url);
     }
 
     private async Task PersistUniversalCollectionsAsync(Entity entity, CancellationToken cancellationToken) {

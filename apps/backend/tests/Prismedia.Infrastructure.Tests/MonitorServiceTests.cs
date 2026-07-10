@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Prismedia.Application.Acquisition;
+using Prismedia.Application.Plugins;
 using Prismedia.Application.Requests;
 using Prismedia.Domain.Entities;
 using Prismedia.Infrastructure.Acquisition;
@@ -85,6 +86,52 @@ public sealed class MonitorServiceTests {
     }
 
     [Fact]
+    public async Task EligibilitySurfacesTheAuthoritativePluginId() {
+        await using var db = CreateContext();
+        var entityId = SeedContainerEntity(db, "Bluey", provider: "tmdb");
+        var now = DateTimeOffset.UtcNow;
+        db.EntityProviderIdentities.Add(new EntityProviderIdentityRow {
+            EntityId = entityId,
+            PluginId = "cinema-metadata",
+            IdentityNamespace = "tmdb",
+            IdentityValue = "id-1",
+            CreatedAt = now,
+            UpdatedAt = now
+        });
+        await db.SaveChangesAsync();
+        var service = Service(db, trackableProviders: ["cinema-metadata"]);
+
+        var eligibility = await service.GetEligibilityAsync(entityId, CancellationToken.None);
+
+        Assert.True(eligibility.CanMonitor);
+        Assert.Equal(["cinema-metadata"], eligibility.TrackableProviders);
+    }
+
+    [Fact]
+    public async Task EligibilityDoesNotTreatAStaleBindingAsAnUnboundLegacyEntity() {
+        await using var db = CreateContext();
+        var entityId = SeedContainerEntity(db, "Bluey", provider: "tmdb");
+        var now = DateTimeOffset.UtcNow;
+        db.EntityProviderIdentities.Add(new EntityProviderIdentityRow {
+            EntityId = entityId,
+            PluginId = "tmdb",
+            IdentityNamespace = "tmdb",
+            IdentityValue = "id-1",
+            CreatedAt = now,
+            UpdatedAt = now
+        });
+        await db.SaveChangesAsync();
+        (await db.EntityExternalIds.SingleAsync(row => row.EntityId == entityId)).Value = "id-2";
+        await db.SaveChangesAsync();
+        var service = Service(db, trackableProviders: ["tmdb"]);
+
+        var eligibility = await service.GetEligibilityAsync(entityId, CancellationToken.None);
+
+        Assert.False(eligibility.CanMonitor);
+        Assert.Empty(eligibility.TrackableProviders);
+    }
+
+    [Fact]
     public async Task EligibilityIsFalseForNonContainerKindsAndMissingEntities() {
         await using var db = CreateContext();
         var bookId = Guid.NewGuid();
@@ -122,8 +169,9 @@ public sealed class MonitorServiceTests {
         Assert.Equal(MonitorStatus.Active, monitor.Status);
     }
 
-    private static MonitorService Service(PrismediaDbContext db, string[]? trackableProviders = null) =>
-        new(
+    private static MonitorService Service(PrismediaDbContext db, string[]? trackableProviders = null) {
+        var trackable = trackableProviders ?? [];
+        return new(
             new EfMonitorStore(db),
             AcquisitionTestFactory.Store(db),
             new Prismedia.Infrastructure.Requests.WantedEntityWriter(
@@ -131,16 +179,36 @@ public sealed class MonitorServiceTests {
                 new Prismedia.Infrastructure.Plugins.EntityMetadataApplyService(
                     db,
                     new Prismedia.Infrastructure.Plugins.PluginArtworkServiceOptions(Path.GetTempPath())),
-                new EfEntityExternalIdentityStore(db, TimeProvider.System)),
-            new FakeTrackingCatalog(trackableProviders ?? []));
+                new EfEntityExternalIdentityStore(db, TimeProvider.System),
+                new EfEntityProviderIdentityStore(db, TimeProvider.System),
+                new TrackingIdentityRouter(trackable)),
+            new FakeTrackingCatalog(trackable));
+    }
+
+    private sealed class TrackingIdentityRouter(string[] trackable) : IPluginIdentityRouter {
+        public Task<IReadOnlyList<PluginIdentityRoute>> ResolveAsync(
+            string entityKindCode,
+            IdentifyAction action,
+            IReadOnlyList<ExternalIdentity> identities,
+            CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<PluginIdentityRoute>>(identities
+                .Where(identity => trackable.Contains(identity.Namespace, StringComparer.OrdinalIgnoreCase))
+                .Select(identity => new PluginIdentityRoute(identity.Namespace, identity))
+                .ToArray());
+    }
 
     /// <summary>Stands in for the plugin catalog: only the given provider ids count as trackable.</summary>
     private sealed class FakeTrackingCatalog(string[] trackable) : IProviderTrackingCatalog {
         public Task<IReadOnlyList<string>> TrackableProvidersAsync(
             string pluginKindCode,
             IReadOnlyList<ExternalIdentity> identities,
+            PluginIdentityRoute? providerIdentity,
             CancellationToken cancellationToken) =>
-            Task.FromResult<IReadOnlyList<string>>(identities
+            Task.FromResult<IReadOnlyList<string>>(providerIdentity is not null
+                ? trackable.Contains(providerIdentity.PluginId, StringComparer.OrdinalIgnoreCase)
+                    ? [providerIdentity.PluginId]
+                    : []
+                : identities
                 .Select(identity => identity.Namespace)
                 .Distinct(StringComparer.Ordinal)
                 .Where(identityNamespace => trackable.Contains(identityNamespace, StringComparer.OrdinalIgnoreCase))

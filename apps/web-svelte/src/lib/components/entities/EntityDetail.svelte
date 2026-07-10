@@ -212,6 +212,16 @@
   const studioThumbnailCards = $derived(cardFull.studio ? [creditToThumbnailCard(cardFull.studio)] : []);
   const urlLinks = $derived(card.links.filter((link) => !hasProvider(link)));
   const providerIdLinks = $derived(card.links.filter(hasProvider));
+  const providerIdentityLabel = $derived.by(() => {
+    const identity = card.providerIdentity;
+    if (!identity) return "";
+    return `${identity.pluginId} · ${identity.identityNamespace}:${identity.identityValue}`;
+  });
+  const providerIdentityTitle = $derived.by(() => {
+    const identity = card.providerIdentity;
+    if (!identity) return "";
+    return `Metadata and monitoring source: ${identity.pluginId}, ${identity.identityNamespace} ID ${identity.identityValue}`;
+  });
   const visibleActionButtons = $derived.by(() => actionButtons.filter((action) => !action.hidden));
   const visibleTabs = $derived.by(() => tabs.filter(tabHasContent));
   const hasTabs = $derived(visibleTabs.length > 0);
@@ -1189,9 +1199,34 @@
             </div>
           {/if}
 
-          {#if heroBadges}
+          {#if card.providerIdentity || heroBadges}
             <div class="position-badges">
-              {@render heroBadges()}
+              {#if card.providerIdentity}
+                {#if card.providerIdentity.url}
+                  <a
+                    href={card.providerIdentity.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    class="hero-badge provider-identity-chip"
+                    title={providerIdentityTitle}
+                    aria-label={`${providerIdentityTitle}. Opens provider in a new tab.`}
+                  >
+                    <span class="provider-identity-label">{providerIdentityLabel}</span>
+                    <ExternalLink class="provider-identity-link-icon h-3 w-3" aria-hidden="true" />
+                  </a>
+                {:else}
+                  <span
+                    class="hero-badge provider-identity-chip"
+                    title={providerIdentityTitle}
+                    aria-label={providerIdentityTitle}
+                  >
+                    <span class="provider-identity-label">{providerIdentityLabel}</span>
+                  </span>
+                {/if}
+              {/if}
+              {#if heroBadges}
+                {@render heroBadges()}
+              {/if}
             </div>
           {/if}
 
@@ -1878,7 +1913,8 @@
       grid-template-areas:
         "title title"
         "meta meta"
-        "rating badges"
+        "rating rating"
+        "badges badges"
         "actions actions";
       align-items: center;
       column-gap: 0.75rem;
@@ -1900,7 +1936,9 @@
 
     .position-badges {
       grid-area: badges;
-      justify-self: end;
+      justify-self: stretch;
+      justify-content: flex-start;
+      width: 100%;
     }
 
     .action-row {
@@ -2169,6 +2207,39 @@
     line-height: 1;
     text-transform: uppercase;
     text-shadow: 0 0 6px rgba(242, 194, 106, 0.16);
+  }
+
+  .provider-identity-chip {
+    gap: 0.35rem;
+    min-width: 0;
+    max-width: 100%;
+    text-decoration: none;
+    text-transform: none;
+  }
+
+  a.provider-identity-chip {
+    transition: border-color 0.15s, box-shadow 0.15s, color 0.15s;
+  }
+
+  a.provider-identity-chip:hover,
+  a.provider-identity-chip:focus-visible {
+    border-color: color-mix(in srgb, var(--detail-accent) 68%, transparent);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.08),
+      0 0 12px var(--detail-accent-glow);
+    color: var(--detail-accent);
+    outline: none;
+  }
+
+  .provider-identity-label {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  :global(.provider-identity-link-icon) {
+    flex: 0 0 auto;
   }
 
   /* ── Detail Body ────────────────────────────────────────── */

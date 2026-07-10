@@ -4,6 +4,7 @@
  * Prismedia.Api | v1
  * OpenAPI spec version: 1.0.0
  */
+import type { PluginIdentityUrlFormat } from './pluginIdentityUrlFormat';
 import type { PluginSearchDefinition } from './pluginSearchDefinition';
 
 export interface PluginEntitySupport {
@@ -12,4 +13,6 @@ export interface PluginEntitySupport {
   /** @nullable */
   identityNamespaces?: string[] | null;
   search?: null | PluginSearchDefinition;
+  /** @nullable */
+  identityUrls?: PluginIdentityUrlFormat[] | null;
 }

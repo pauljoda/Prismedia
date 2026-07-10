@@ -521,6 +521,7 @@ export const CAPABILITY_KIND = {
   playback: "playback",
   position: "position",
   progress: "progress",
+  providerIdentity: "provider-identity",
   rating: "rating",
   source: "source",
   stats: "stats",

@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Prismedia.Application.Entities;
+using Prismedia.Application.Plugins;
 using Prismedia.Application.Requests;
 using Prismedia.Domain.Entities;
 using Prismedia.Infrastructure.Persistence;
@@ -19,10 +20,14 @@ namespace Prismedia.Infrastructure.Requests;
 /// <param name="db">Scoped Prismedia unit of work.</param>
 /// <param name="apply">Shared metadata proposal application service.</param>
 /// <param name="externalIdentities">Canonical external-identity resolver and writer.</param>
+/// <param name="providerIdentities">Persisted exact plugin route selected for the Entity.</param>
+/// <param name="identityRouter">Manifest-driven fallback for Entities created before bindings existed.</param>
 public sealed class WantedEntityWriter(
     PrismediaDbContext db,
     EntityMetadataApplyService apply,
-    IEntityExternalIdentityStore externalIdentities) : IWantedEntityWriter {
+    IEntityExternalIdentityStore externalIdentities,
+    IEntityProviderIdentityStore providerIdentities,
+    IPluginIdentityRouter identityRouter) : IWantedEntityWriter {
     /// <summary>Wanted container kinds whose empty placeholders are pruned with their last child (from the request registry).</summary>
     private static readonly HashSet<string> ContainerKindCodes = RequestKindRegistry.All
         .Where(descriptor => descriptor.IsContainer)
@@ -149,13 +154,27 @@ public sealed class WantedEntityWriter(
         var identities = (await externalIdentities.ListAsync(entityId, cancellationToken))
             .Select(association => association.Identity)
             .ToArray();
+        var binding = await providerIdentities.GetAsync(entityId, cancellationToken);
+        PluginIdentityRoute? providerIdentity = binding is not null && identities.Contains(binding.Identity)
+            ? new PluginIdentityRoute(binding.PluginId, binding.Identity)
+            : null;
+        // A persisted binding whose exact value no longer belongs to the Entity is stale, not legacy.
+        // Fail closed instead of silently retargeting it through the remaining raw IDs.
+        if (binding is null && identities.Length > 0) {
+            var routes = await identityRouter.ResolveAsync(
+                entity.KindCode,
+                IdentifyAction.LookupId,
+                identities,
+                cancellationToken);
+            providerIdentity = routes.Count == 1 ? routes[0] : null;
+        }
         var positions = await db.EntityPositions.AsNoTracking()
             .Where(row => row.EntityId == entityId)
             .ToDictionaryAsync(row => row.Code, row => row.Value, cancellationToken);
         var hasSource = await HasSourceFileAsync(entityId, cancellationToken);
         return new MonitorableContainer(
             entity.Id, entity.KindCode.DecodeAs<EntityKind>(), entity.Title, identities, hasSource,
-            entity.ParentEntityId, positions);
+            entity.ParentEntityId, positions, providerIdentity);
     }
 
     public async Task<IReadOnlyList<Guid>> ListWantedChildIdsAsync(
