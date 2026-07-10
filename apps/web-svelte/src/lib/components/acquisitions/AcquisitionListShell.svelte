@@ -93,17 +93,21 @@
     return matched; // "recent" keeps the server's order
   });
 
-  // Prune selection to ids that still exist as the list refreshes (polling, pagination).
+  // Prune selection to rows that still exist and remain safe to mutate as polling advances them.
   $effect(() => {
-    const ids = new Set(items.map((item) => item.id));
+    const ids = new Set(items.filter((item) => item.selectable !== false).map((item) => item.id));
     if ([...selected].some((id) => !ids.has(id))) {
       selected = new Set([...selected].filter((id) => ids.has(id)));
     }
   });
 
-  const allFilteredSelected = $derived(filtered.length > 0 && filtered.every((item) => selected.has(item.id)));
+  const filteredSelectable = $derived(filtered.filter((item) => item.selectable !== false));
+  const allFilteredSelected = $derived(
+    filteredSelectable.length > 0 && filteredSelectable.every((item) => selected.has(item.id)),
+  );
 
   function toggle(id: string) {
+    if (items.find((item) => item.id === id)?.selectable === false) return;
     const next = new Set(selected);
     if (next.has(id)) next.delete(id);
     else next.add(id);
@@ -111,11 +115,14 @@
   }
 
   function toggleAll() {
-    selected = allFilteredSelected ? new Set() : new Set(filtered.map((item) => item.id));
+    selected = allFilteredSelected ? new Set() : new Set(filteredSelectable.map((item) => item.id));
   }
 
   function runBulk(action: AcquisitionBulkAction) {
-    action.run([...selected]);
+    const safeIds = [...selected].filter(
+      (id) => items.find((item) => item.id === id)?.selectable !== false,
+    );
+    if (safeIds.length > 0) action.run(safeIds);
   }
 </script>
 
@@ -191,7 +198,7 @@
   {/if}
 
   <!-- ── Selection / bulk bar ── -->
-  {#if selectable && filtered.length > 0}
+  {#if selectable && filteredSelectable.length > 0}
     <div class="bulk-bar" class:has-selection={selected.size > 0}>
       <label class="bulk-all">
         <Checkbox
@@ -201,7 +208,7 @@
           onchange={toggleAll}
           aria-label="Select all shown"
         />
-        <span>{selected.size > 0 ? `${selected.size} selected` : `Select all (${filtered.length})`}</span>
+        <span>{selected.size > 0 ? `${selected.size} selected` : `Select all (${filteredSelectable.length})`}</span>
       </label>
       {#if selected.size > 0}
         <div class="bulk-actions">
@@ -224,7 +231,7 @@
   {#if filtered.length > 0}
     <div class="cards">
       {#each filtered as item (item.id)}
-        <AcquisitionCard {item} {selectable} selected={selected.has(item.id)} onToggleSelected={toggle} />
+        <AcquisitionCard {item} selectable={selectable && item.selectable !== false} selected={selected.has(item.id)} onToggleSelected={toggle} />
       {/each}
     </div>
     {#if footer}{@render footer()}{/if}

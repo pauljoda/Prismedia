@@ -17,6 +17,7 @@ export const AcquisitionStatus = {
   downloaded: 'downloaded',
   importing: 'importing',
   imported: 'imported',
+  stopping: 'stopping',
   failed: 'failed',
   cancelled: 'cancelled',
   'manual-import-required': 'manual-import-required',

@@ -15,33 +15,29 @@ import {
   stopMonitor,
 } from "$lib/api/monitors";
 import { commitEntityRequest, requestMissingChildren, syncContainerRequest } from "$lib/api/requests";
-import { labelForEntityKind } from "$lib/entities/entity-codes";
-import { resolveEntityThumbnailHref, type EntityThumbnailCard } from "$lib/entities/entity-thumbnail";
+import type { EntityThumbnailCard } from "$lib/entities/entity-thumbnail";
+import { acquisitionStatusShouldPoll } from "$lib/requests/acquisition-status";
+import { acquisitionStatusDisplay } from "$lib/requests/acquisition-status-display";
 import {
-  acquisitionStatusDisplay,
-  type AcquisitionStatusDisplay,
-} from "$lib/requests/acquisition-status-display";
-
-/** One wanted/in-acquisition child of a container, mapped to a compact status row. */
-export interface EntityAcquisitionChildStatus {
-  id: string;
-  title: string;
-  kind: EntityThumbnailCard["entity"]["kind"];
-  href: ReturnType<typeof resolveEntityThumbnailHref>;
-  display: AcquisitionStatusDisplay;
-}
+  monitorHasUnknownStatus,
+  monitorIsActive,
+  monitorIsDeletingFiles,
+  monitorIsStopping,
+  monitorTransitionIsLocked,
+} from "$lib/requests/monitor-status";
 
 export interface UseEntityAcquisitionOptions {
   entityId: () => string | null | undefined;
   capabilities?: () => EntityCapability[] | undefined;
   /**
-   * The container's child thumbnails (seasons, books, albums). Any that are wanted/in-acquisition
-   * are rolled up as a per-child status list, so a series' season states read from the top level
-   * without opening each one. Owned children are ignored here (they show in the page's own grid).
+   * The Entity's direct child cards (seasons, books, albums). The shared acquisition
+   * surface uses the same cards for per-child monitoring and missing-child search state.
    */
   childCards?: () => EntityThumbnailCard[] | undefined;
   /** Called after a state change (request started, monitor toggled, sync run) so the page can reload. */
   onChanged?: () => void | Promise<void>;
+  /** Called instead of refreshing when unmonitoring pruned the fileless Entity backing this detail route. */
+  onPruned?: () => void | Promise<void>;
 }
 
 /**
@@ -54,18 +50,27 @@ export interface EntityAcquisition {
   acquisition: AcquisitionDetail | null;
   readonly monitor: MonitorView | null;
   readonly monitorActive: boolean;
-  /** Comma-joined provider ids the container monitor rides on (empty until eligibility loads). */
+  /** Durable server-side cleanup is in progress; it may only retry stop, never resume. */
+  readonly monitorStopping: boolean;
+  /** Managed file deletion owns the monitor; intent stays on but every monitor action is locked. */
+  readonly monitorDeletingFiles: boolean;
+  /** The browser does not understand the status yet, so every monitor action fails closed. */
+  readonly monitorUnknownStatus: boolean;
+  /** Comma-joined plugin ids the stable monitor rides on (empty until eligibility loads). */
   readonly trackedVia: string;
   readonly showMonitor: boolean;
+  /** Provider discovery is meaningful only for grouping entities, never a monitored leaf. */
+  readonly showSync: boolean;
   readonly showSearch: boolean;
   readonly showSearchMissing: boolean;
   /** True when the entity has any acquisition story to show (drives the Acquisition tab). */
   readonly visible: boolean;
-  readonly childStatuses: EntityAcquisitionChildStatus[];
-  /** Plural kind label for the child roll-up heading (Seasons, Books, …). */
-  readonly childKindLabel: string;
-  readonly missingChildren: EntityAcquisitionChildStatus[];
+  /** Every direct child Entity supplied by the page, used by the shared child-monitoring editor. */
+  readonly childCards: EntityThumbnailCard[];
+  readonly missingChildCount: number;
   readonly monitorBusy: boolean;
+  /** Actionable failure from the most recent monitor start/resume/stop attempt. */
+  readonly monitorError: string | null;
   readonly syncBusy: boolean;
   readonly searchBusy: boolean;
   readonly missingBusy: boolean;
@@ -79,11 +84,13 @@ export interface EntityAcquisition {
   syncNow(): Promise<void>;
   searchMissing(): Promise<void>;
   searchForRelease(): Promise<void>;
+  /** Refreshes the owning page after a child monitor creates or removes wanted descendants. */
+  childMonitoringChanged(): Promise<void>;
 }
 
 /**
- * Creates the headless acquisition/monitoring state for an entity page: the standing container
- * monitor (offered only when a metadata plugin can track one of the entity's provider identities),
+ * Creates the headless acquisition/monitoring state for an entity page: the stable Entity monitor
+ * (offered only when a metadata plugin can track the authoritative provider identity),
  * the wanted placeholder's release search, the wanted-children roll-up, and the loaded acquisition.
  * Must be called during component init — it registers `$effect`s for loading and polling.
  */
@@ -92,6 +99,7 @@ export function useEntityAcquisition(options: UseEntityAcquisitionOptions): Enti
   let monitor = $state<MonitorView | null>(null);
   let eligibility = $state<MonitorEligibilityView | null>(null);
   let monitorBusy = $state(false);
+  let monitorError = $state<string | null>(null);
   let syncBusy = $state(false);
   let searchBusy = $state(false);
   let missingBusy = $state(false);
@@ -99,49 +107,58 @@ export function useEntityAcquisition(options: UseEntityAcquisitionOptions): Enti
   let loadedId = $state<string | null>(null);
   let lastRequestedId = "";
 
-  // Child status roll-up: the wanted/in-acquisition children, each mapped to a compact status row.
-  const childStatuses = $derived.by((): EntityAcquisitionChildStatus[] =>
-    (options.childCards?.() ?? [])
-      .filter((card) => isWanted(card.entity.capabilities))
-      .map((card) => ({
-        id: card.entity.id,
-        title: card.entity.title,
-        kind: card.entity.kind,
-        href: resolveEntityThumbnailHref(card),
-        display: acquisitionStatusDisplay(card.wantedStatus),
-      })),
+  const childCards = $derived(options.childCards?.() ?? []);
+  const hasActiveChildAcquisition = $derived(
+    childCards.some((card) =>
+      acquisitionStatusShouldPoll(card.wantedStatus)
+      || acquisitionStatusShouldPoll(card.latestAcquisitionStatus),
+    ),
   );
-  // The kind label is already plural (Seasons, Books, Audio Libraries), so it is used as-is.
-  const childKindLabel = $derived(
-    childStatuses.length > 0 ? labelForEntityKind(childStatuses[0].kind) : "",
+  // Only the server-declared request child kind contributes to the visible gap count. Mixed direct
+  // children remain independently monitorable, but a series' loose videos/sub-series cannot inflate its
+  // season count and an album with child discs cannot invent a missing-search capability.
+  const missingChildCount = $derived(
+    childCards.filter(
+      (card) => card.entity.kind === eligibility?.missingChildEntityKind
+        && isWanted(card.entity.capabilities) &&
+        acquisitionStatusDisplay(card.wantedStatus).tone === "wanted",
+    ).length,
   );
-  // Children that are plain wanted phantoms with no acquisition — a season's missing episodes after a
-  // pack import, or a series' unrequested seasons. These are what "Search missing" chases.
-  const missingChildren = $derived(childStatuses.filter((child) => child.display.tone === "wanted"));
 
   const capabilities = $derived(options.capabilities?.());
   const wanted = $derived(!!capabilities && isWanted(capabilities));
-  const monitorActive = $derived(monitor?.status === MONITOR_STATUS.active);
+  const monitorActive = $derived(monitorIsActive(monitor));
+  const monitorStopping = $derived(monitorIsStopping(monitor));
+  const monitorDeletingFiles = $derived(monitorIsDeletingFiles(monitor));
+  const monitorUnknownStatus = $derived(monitorHasUnknownStatus(monitor));
+  const monitorTransitionLocked = $derived(monitorTransitionIsLocked(monitor));
   const trackedVia = $derived(eligibility?.trackableProviders?.join(", ") ?? "");
 
-  // The three blocks the card collapses. Container monitoring is offered only when the server says a
-  // plugin can track the entity (or a monitor already exists and needs managing); the release search
+  // The three blocks the card collapses. Monitoring is offered only when the server says a plugin can
+  // track the Entity (or a monitor already exists and needs managing); the release search
   // only for a wanted phantom whose provider identity the server can resolve or degrade from.
   const showMonitor = $derived(monitor !== null || !!eligibility?.canMonitor);
+  const showSync = $derived(monitorActive && eligibility?.discoversChildren === true);
   const showSearch = $derived(
-    wanted && acquisition === null && !!capabilities && !!firstExternalIdentity(capabilities),
+    !monitorTransitionLocked
+      && wanted
+      && acquisition === null
+      && !!capabilities
+      && !!firstExternalIdentity(capabilities),
   );
-  // "Search missing" requests each unrequested wanted descendant individually. Hidden while the
-  // entity itself is a plain phantom — "Search for release" (the whole unit) is the primary action
-  // there. Beyond the visible wanted-children roll-up, a MONITORED container always offers the
-  // action: gaps can hide below the immediate children (a partially-owned season's missing episodes
-  // under a series), which the server-side sweep reaches but the child cards cannot see.
+  // "Search missing" is a request-registry capability authored by the server, not inferred from whether
+  // a route happened to supply cards. Hidden while the entity itself is a plain phantom — "Search for
+  // release" is primary there. A monitored capable parent keeps the action even with no visible direct
+  // gaps because deeper owned children can still contain missing descendants.
   const showSearchMissing = $derived(
-    !showSearch && (missingChildren.length > 0 || (monitorActive && options.childCards !== undefined)),
+    !monitorTransitionLocked
+      && !showSearch
+      && eligibility?.canSearchMissingChildren === true
+      && (missingChildCount > 0 || monitorActive),
   );
   const visible = $derived(
     (loadedId !== null && (showMonitor || showSearch || acquisition !== null)) ||
-      childStatuses.length > 0,
+      childCards.length > 0,
   );
 
   /**
@@ -175,6 +192,7 @@ export function useEntityAcquisition(options: UseEntityAcquisitionOptions): Enti
       acquisition = null;
       monitor = null;
       eligibility = null;
+      monitorError = null;
       loadedId = null;
       lastRequestedId = "";
       return;
@@ -193,30 +211,64 @@ export function useEntityAcquisition(options: UseEntityAcquisitionOptions): Enti
     const shouldPoll =
       !!options.entityId() &&
       loadedId !== null &&
-      (wanted || monitor !== null || !!eligibility?.canMonitor || acquisition !== null);
+      (wanted || monitor !== null || !!eligibility?.canMonitor || acquisition !== null || hasActiveChildAcquisition);
     if (!shouldPoll) return;
-    const timer = setInterval(() => void refresh(), 5000);
+    let pollBusy = false;
+    const poll = async () => {
+      if (pollBusy) return;
+      pollBusy = true;
+      try {
+        await refresh();
+        // Child monitor/acquisition state lives in the owning page's Entity cards. Refresh that
+        // read model even when the child editor is collapsed so Imported becomes ready immediately.
+        if (hasActiveChildAcquisition) await options.onChanged?.();
+      } catch {
+        // Polling is best-effort; the next interval retries both slices.
+      } finally {
+        pollBusy = false;
+      }
+    };
+    const timer = setInterval(() => void poll(), 5000);
     return () => clearInterval(timer);
   });
 
-  /** Toggle semantics mirror the acquisition panel: not monitored → start; paused → resume; active → stop. */
+  /** The shared Entity-level monitor control: not monitored → start; paused → resume; active → stop. */
   async function toggleMonitor(): Promise<void> {
     const id = options.entityId();
-    if (!id || monitorBusy) return;
+    if (!id || monitorBusy || monitorDeletingFiles || monitorUnknownStatus) return;
     monitorBusy = true;
+    monitorError = null;
+    let ownerFollowUp = options.onChanged;
     try {
-      if (monitor && monitorActive) {
-        await stopMonitor(monitor.id);
+      if (monitor && (monitorActive || monitorStopping)) {
+        const outcome = await stopMonitor(monitor.id);
         monitor = null;
+        // Stop tears down pending acquisition state. Unmount its panel in this same SPA tick before
+        // any owner reload can leave a deleted acquisition id interactive.
+        acquisition = null;
+        if (outcome.entityPruned) {
+          ownerFollowUp = options.onPruned;
+        } else {
+          await refresh();
+        }
       } else if (monitor) {
         await resumeMonitor(monitor.id);
         monitor = { ...monitor, status: MONITOR_STATUS.active };
       } else {
         monitor = await startEntityMonitor(id);
       }
-      await options.onChanged?.();
-    } catch {
-      // best-effort; the card reflects the last known state
+    } catch (reason) {
+      // Preserve the last confirmed state and tell the user why the requested transition did not land.
+      monitorError = reason instanceof Error ? reason.message : "Failed to update monitoring";
+      monitorBusy = false;
+      return;
+    }
+
+    try {
+      await ownerFollowUp?.();
+    } catch (reason) {
+      const detail = reason instanceof Error ? reason.message : "Unknown refresh error";
+      monitorError = `Monitoring was updated, but this page could not refresh: ${detail}`;
     } finally {
       monitorBusy = false;
     }
@@ -225,7 +277,7 @@ export function useEntityAcquisition(options: UseEntityAcquisitionOptions): Enti
   /** Run the discovery sync now instead of waiting for the daily sweep. */
   async function syncNow(): Promise<void> {
     const id = options.entityId();
-    if (!id || syncBusy) return;
+    if (!id || !showSync || syncBusy) return;
     syncBusy = true;
     try {
       await syncContainerRequest(id);
@@ -287,11 +339,23 @@ export function useEntityAcquisition(options: UseEntityAcquisitionOptions): Enti
     get monitorActive() {
       return monitorActive;
     },
+    get monitorStopping() {
+      return monitorStopping;
+    },
+    get monitorDeletingFiles() {
+      return monitorDeletingFiles;
+    },
+    get monitorUnknownStatus() {
+      return monitorUnknownStatus;
+    },
     get trackedVia() {
       return trackedVia;
     },
     get showMonitor() {
       return showMonitor;
+    },
+    get showSync() {
+      return showSync;
     },
     get showSearch() {
       return showSearch;
@@ -302,17 +366,17 @@ export function useEntityAcquisition(options: UseEntityAcquisitionOptions): Enti
     get visible() {
       return visible;
     },
-    get childStatuses() {
-      return childStatuses;
+    get childCards() {
+      return childCards;
     },
-    get childKindLabel() {
-      return childKindLabel;
-    },
-    get missingChildren() {
-      return missingChildren;
+    get missingChildCount() {
+      return missingChildCount;
     },
     get monitorBusy() {
       return monitorBusy;
+    },
+    get monitorError() {
+      return monitorError;
     },
     get syncBusy() {
       return syncBusy;
@@ -334,5 +398,8 @@ export function useEntityAcquisition(options: UseEntityAcquisitionOptions): Enti
     syncNow,
     searchMissing,
     searchForRelease,
+    childMonitoringChanged: async () => {
+      await options.onChanged?.();
+    },
   };
 }

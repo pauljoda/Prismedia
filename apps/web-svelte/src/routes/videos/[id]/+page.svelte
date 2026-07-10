@@ -39,6 +39,7 @@
     toggleOptimisticEntityFlag,
     updateOptimisticEntityRating,
   } from "$lib/entities/entity-detail-state";
+  import { refreshAfterManagedFileRevert } from "$lib/entities/entity-file-management";
   import { useIdentifyDetailAction } from "$lib/components/identify/use-identify-detail-action.svelte";
   import type { EntityDetailCredit, EntityDetailTag } from "$lib/entities/entity-detail";
   import { entityCardToDetailCard, type EntityDetailCardFull } from "$lib/entities/entity-detail";
@@ -128,11 +129,7 @@
       studio: relationshipStudio,
     };
   });
-  const identifyAction = useIdentifyDetailAction(
-    () => card?.entity.id,
-    () => card?.entity.kind,
-    () => video?.capabilities,
-  );
+  const identifyAction = useIdentifyDetailAction(() => video);
   // A phantom episode has no file to play — the Acquisition detail tab offers "Search for release"
   // and the acquisition management surface instead of the player.
   const entityWanted = $derived(!!video && isWanted(video.capabilities));
@@ -146,7 +143,12 @@
     entityId: () => video?.id,
     capabilities: () => video?.capabilities,
     onChanged: () => loadVideo({ showLoading: false }),
+    onPruned: () => goto(seriesRef ? `/series/${seriesRef.id}` : "/videos"),
   });
+  const fileManagement = {
+    onDeleted: () => goto(seriesRef ? `/series/${seriesRef.id}` : "/videos"),
+    onReverted: () => refreshAfterManagedFileRevert(acq, () => loadVideo({ showLoading: false })),
+  };
 
   const playerProps = $derived.by(() => {
     if (!video || entityWanted) return null;
@@ -838,6 +840,7 @@
       tabs={detailTabs}
       sections={detailSections}
       actionButtons={heroActions}
+      {fileManagement}
       defaultCreditRole={CREDIT_ROLE.actor}
     >
       {#snippet heroMeta()}
@@ -853,9 +856,7 @@
           <EntityAcquisitionCard
             {acq}
             onCancelled={() => void loadVideo({ showLoading: false })}
-            entity={video ? { id: video.id, kind: video.kind, title: video.title } : undefined}
-            onDeleted={() => void goto(seriesRef ? `/series/${seriesRef.id}` : "/videos")}
-            onReverted={() => void loadVideo({ showLoading: false })}
+            onImported={() => loadVideo({ showLoading: false })}
           />
         {:else}
           <VideoDetailSectionContent
@@ -891,6 +892,7 @@
       {card}
       posterSize="medium"
       actionButtons={heroActions}
+      {fileManagement}
       tabs={wantedDetailTabs}
       sections={detailSections}
     >
@@ -903,9 +905,7 @@
           <EntityAcquisitionCard
             {acq}
             onCancelled={() => void loadVideo({ showLoading: false })}
-            entity={video ? { id: video.id, kind: video.kind, title: video.title } : undefined}
-            onDeleted={() => void goto(seriesRef ? `/series/${seriesRef.id}` : "/videos")}
-            onReverted={() => void loadVideo({ showLoading: false })}
+            onImported={() => loadVideo({ showLoading: false })}
           />
         {/if}
       {/snippet}

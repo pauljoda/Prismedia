@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from "svelte";
+  import { goto } from "$app/navigation";
   import { page } from "$app/state";
   import { Play } from "@lucide/svelte";
   import EntityDetailSkeleton from "$lib/components/entities/EntityDetailSkeleton.svelte";
@@ -73,6 +74,10 @@
       onClick: playTrack,
     }];
   });
+  const fileManagement = {
+    onDeleted: () => goto("/audio"),
+    onReverted: loadTrack,
+  };
 
   function playTrack() {
     if (!trackItem) return;
@@ -175,6 +180,7 @@
       defaultCreditRole={CREDIT_ROLE.artist}
       posterSize="large"
       actionButtons={heroActions}
+      {fileManagement}
     >
       {#snippet heroMeta()}
         {#if studio}

@@ -54,6 +54,9 @@
 
   const canToggleNsfw = $derived(showNsfwAction && typeof onToggleNsfwFlag === "function");
   const canRemoveWanted = $derived(allSelectedWanted && typeof onRemoveWanted === "function");
+  const availableBulkActions = $derived(
+    bulkActions.filter((action) => action.isAvailable?.(selectedIds) ?? true),
+  );
 </script>
 
 <div
@@ -142,7 +145,7 @@
           <AddToCollectionMenu items={collectionItems} />
         {/if}
 
-        {#if bulkActions.length > 0}
+        {#if availableBulkActions.length > 0}
           <span class="bulk-divider" aria-hidden="true"></span>
           <div class="bulk-actions-menu">
             <button
@@ -165,7 +168,7 @@
                 onclick={() => (actionsMenuOpen = false)}
               ></button>
               <div class="bulk-flyout" use:keepFlyoutOnScreen>
-                {#each bulkActions as action (action.id)}
+                {#each availableBulkActions as action (action.id)}
                   <button
                     type="button"
                     class="bulk-flyout-item"

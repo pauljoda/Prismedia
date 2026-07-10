@@ -2,6 +2,7 @@
   export type {
     EntityDetailActionButton,
     EntityDetailActionVariant,
+    EntityDetailFileManagement,
     EntityDetailPosterSize,
     EntityDetailProps,
     EntityDetailSection,
@@ -60,6 +61,7 @@
   import EntityTagChips from "./EntityTagChips.svelte";
   import EntityCastAndCrewSection from "./EntityCastAndCrewSection.svelte";
   import EntityActionButton from "./EntityActionButton.svelte";
+  import EntityFileManagementAction from "./EntityFileManagementAction.svelte";
   import MarkdownEditor from "$lib/components/forms/MarkdownEditor.svelte";
   import EntityPicker from "$lib/components/forms/EntityPicker.svelte";
   import CreditsEditor from "$lib/components/forms/CreditsEditor.svelte";
@@ -68,7 +70,11 @@
   import FormField from "$lib/components/forms/FormField.svelte";
   import ToggleChip from "$lib/components/forms/ToggleChip.svelte";
   import TextField from "$lib/components/forms/TextField.svelte";
-  import { getImagesCapability, isNsfw as hasNsfwCapability } from "$lib/api/capabilities";
+  import {
+    canDeleteEntityFiles,
+    getImagesCapability,
+    isNsfw as hasNsfwCapability,
+  } from "$lib/api/capabilities";
   import { clearEntityImageAsset, uploadEntityImageAsset } from "$lib/api/entity-mutations";
   import { useNsfw } from "$lib/nsfw/store.svelte";
   import { CREDIT_ROLE, ENTITY_FILE_ROLE, type EntityFileRoleCode } from "$lib/entities/entity-codes";
@@ -111,6 +117,7 @@
     heroMeta,
     heroBadges,
     actionButtons = [],
+    fileManagement,
     afterBody,
     extraSections,
     sectionContent,
@@ -223,6 +230,9 @@
     return `Metadata and monitoring source: ${identity.pluginId}, ${identity.identityNamespace} ID ${identity.identityValue}`;
   });
   const visibleActionButtons = $derived.by(() => actionButtons.filter((action) => !action.hidden));
+  const canManageFiles = $derived(
+    Boolean(fileManagement) && canDeleteEntityFiles(card.entity.capabilities),
+  );
   const visibleTabs = $derived.by(() => tabs.filter(tabHasContent));
   const hasTabs = $derived(visibleTabs.length > 0);
   const activeTab = $derived(visibleTabs.find((tab) => tab.id === activeTabId) ?? visibleTabs[0] ?? null);
@@ -1230,7 +1240,7 @@
             </div>
           {/if}
 
-          {#if showFlagActions || canEdit || visibleActionButtons.length > 0}
+          {#if showFlagActions || canEdit || visibleActionButtons.length > 0 || canManageFiles}
           <div class="action-row">
             <div class="action-badges">
               {#if showFlagActions}
@@ -1266,7 +1276,7 @@
               {/if}
             </div>
 
-            {#if canEdit || visibleActionButtons.length > 0}
+            {#if canEdit || visibleActionButtons.length > 0 || canManageFiles}
               <div class="action-group">
                 {#if canEdit}
                   {#if isEditingActiveTab}
@@ -1329,6 +1339,14 @@
                     />
                   {/if}
                 {/each}
+
+                {#if canManageFiles && fileManagement}
+                  <EntityFileManagementAction
+                    entity={card.entity}
+                    onDeleted={fileManagement.onDeleted}
+                    onReverted={fileManagement.onReverted}
+                  />
+                {/if}
 
               </div>
             {/if}

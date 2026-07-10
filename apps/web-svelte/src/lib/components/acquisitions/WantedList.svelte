@@ -126,13 +126,18 @@
     if (targets.length === 0) return;
     acting = true;
     error = null;
+    const failures: string[] = [];
     try {
       for (const row of targets) {
-        await stopMonitor(row.monitorId);
+        try {
+          await stopMonitor(row.monitorId);
+        } catch (reason) {
+          failures.push(reason instanceof Error ? reason.message : `Failed to unmonitor ${row.title}`);
+        }
       }
       await load();
-    } catch (err) {
-      error = err instanceof Error ? err.message : "Failed to unmonitor";
+      const loadFailure = error;
+      error = [...new Set([...failures, ...(loadFailure ? [loadFailure] : [])])].join(" · ") || null;
     } finally {
       acting = false;
     }

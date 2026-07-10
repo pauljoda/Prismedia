@@ -50,11 +50,7 @@
     return entityCardToDetailCard(person);
   });
 
-  const identifyAction = useIdentifyDetailAction(
-    () => card?.entity.id,
-    () => card?.entity.kind,
-    () => person?.capabilities,
-  );
+  const identifyAction = useIdentifyDetailAction(() => person);
   const heroActions = $derived.by((): EntityDetailActionButton[] => identifyAction.action ? [identifyAction.action] : []);
 
   const dates = $derived(card?.dates ?? []);

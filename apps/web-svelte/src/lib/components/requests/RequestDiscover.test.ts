@@ -9,7 +9,7 @@ import {
 } from "$lib/api/generated/codes";
 import type { RequestSearchResult } from "$lib/api/generated/model";
 import type { PluginProvider } from "$lib/api/identify-types";
-import RequestDiscover from "./RequestDiscover.svelte";
+import RequestDiscoverHarness from "./RequestDiscover.test-harness.svelte";
 
 const fetchPluginProviders = vi.fn();
 const searchRequestsByPlugin = vi.fn();
@@ -23,12 +23,9 @@ vi.mock("$lib/api/requests", () => ({
   searchRequestsByPlugin: (...args: unknown[]) => searchRequestsByPlugin(...args),
 }));
 
-vi.mock("$lib/nsfw/store.svelte", () => ({
-  useNsfw: () => ({ mode: "off" }),
-}));
-
 vi.mock("$app/navigation", () => ({
   goto: (...args: unknown[]) => goto(...args),
+  invalidateAll: vi.fn(),
 }));
 
 describe("RequestDiscover", () => {
@@ -41,7 +38,7 @@ describe("RequestDiscover", () => {
   });
 
   it("requires a kind, filters its providers, and swaps to the selected provider's schema", async () => {
-    render(RequestDiscover);
+    render(RequestDiscoverHarness);
 
     expect(screen.queryByRole("button", { name: /Source:/ })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "All" })).not.toBeInTheDocument();
@@ -65,7 +62,7 @@ describe("RequestDiscover", () => {
   });
 
   it("submits exactly the selected plugin's trimmed schema fields with the NSFW boundary", async () => {
-    render(RequestDiscover);
+    render(RequestDiscoverHarness);
     await waitFor(() => expect(fetchPluginProviders).toHaveBeenCalledOnce());
     await fireEvent.click(screen.getByRole("button", { name: "Series" }));
 
@@ -95,7 +92,7 @@ describe("RequestDiscover", () => {
       providerErrors: [],
     });
 
-    render(RequestDiscover, { back: "q=andor&kind=series" });
+    render(RequestDiscoverHarness, { back: "q=andor&kind=series" });
     await waitFor(() => expect(fetchPluginProviders).toHaveBeenCalledOnce());
     await fireEvent.click(screen.getByRole("button", { name: "Series" }));
     await fireEvent.input(await screen.findByLabelText("Series title"), { target: { value: "Andor" } });
@@ -118,7 +115,7 @@ describe("RequestDiscover", () => {
 
   it("shows a direct no-provider state for a selected kind", async () => {
     fetchPluginProviders.mockResolvedValue([tmdb()]);
-    render(RequestDiscover);
+    render(RequestDiscoverHarness);
     await waitFor(() => expect(fetchPluginProviders).toHaveBeenCalledOnce());
 
     await fireEvent.click(screen.getByRole("button", { name: "Book" }));
@@ -126,6 +123,28 @@ describe("RequestDiscover", () => {
     expect(await screen.findByText(/No installed provider can search and review books/i)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Source:/ })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Search" })).not.toBeInTheDocument();
+  });
+
+  it("invalidates candidates and reselects an eligible provider when the NSFW boundary changes", async () => {
+    fetchPluginProviders.mockResolvedValue([adultTvdb(), tmdb()]);
+    searchRequestsByPlugin.mockResolvedValue({
+      results: [result("Old boundary result", "old-result", "cinema-metadata", "tmdb")],
+      providerErrors: [],
+    });
+
+    render(RequestDiscoverHarness);
+    await waitFor(() => expect(fetchPluginProviders).toHaveBeenCalledOnce());
+    await fireEvent.click(screen.getByRole("button", { name: "Series" }));
+    await fireEvent.input(await screen.findByLabelText("Series title"), { target: { value: "Andor" } });
+    await fireEvent.click(screen.getByRole("button", { name: "Search" }));
+    expect(await screen.findByText("Old boundary result")).toBeInTheDocument();
+
+    await fireEvent.click(screen.getByRole("button", { name: "Show NSFW" }));
+
+    expect(await screen.findByRole("button", { name: "Source: Adult TV Metadata" })).toBeInTheDocument();
+    expect(screen.queryByText("Old boundary result")).not.toBeInTheDocument();
+    expect(screen.queryByText("1 found")).not.toBeInTheDocument();
+    expect(await screen.findByLabelText("Adult series title")).toHaveValue("");
   });
 });
 
@@ -141,6 +160,15 @@ function tvdb(): PluginProvider {
     { key: "showName", label: "Show name", type: PLUGIN_SEARCH_FIELD_TYPE.text, required: true },
     { key: "episodeTitle", label: "Episode title", type: PLUGIN_SEARCH_FIELD_TYPE.text, required: false },
   ], ["tvdb"]);
+}
+
+function adultTvdb(): PluginProvider {
+  return {
+    ...provider("adult-tv", "Adult TV Metadata", ENTITY_KIND.videoSeries, [
+      { key: "adultTitle", label: "Adult series title", type: PLUGIN_SEARCH_FIELD_TYPE.text, required: true },
+    ], ["adult-tv"]),
+    isNsfw: true,
+  };
 }
 
 function openLibrary(): PluginProvider {

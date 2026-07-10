@@ -1,7 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { CAPABILITY_KIND, ENTITY_FILE_ROLE } from "$lib/api/generated/codes";
 import type { EntityCapability } from "$lib/api/generated/model";
-import { externalIdentities, firstExternalIdentity, hasSourceMedia } from "./capabilities";
+import {
+  externalIdentities,
+  firstExternalIdentity,
+  getProviderIdentityCapability,
+  hasSourceMedia,
+} from "./capabilities";
 
 describe("entity capability identities", () => {
   it("keeps every namespace/value pair structured and opaque", () => {
@@ -27,6 +32,27 @@ describe("entity capability identities", () => {
   it("returns no identity when the Entity has no links capability", () => {
     expect(externalIdentities([])).toEqual([]);
     expect(firstExternalIdentity([])).toBeNull();
+  });
+
+  it("returns only the authoritative plugin identity capability", () => {
+    const authoritative = {
+      kind: CAPABILITY_KIND.providerIdentity,
+      pluginId: "metadata-plugin",
+      identityNamespace: "opaque-provider",
+      identityValue: "Case:Sensitive:Value",
+      url: null,
+    } as const;
+    const capabilities: EntityCapability[] = [
+      {
+        kind: CAPABILITY_KIND.links,
+        externalIds: [{ provider: "legacy", value: "not-authoritative", url: null }],
+        urls: [],
+      },
+      authoritative,
+    ];
+
+    expect(getProviderIdentityCapability(capabilities)).toEqual(authoritative);
+    expect(getProviderIdentityCapability(capabilities.slice(0, 1))).toBeUndefined();
   });
 });
 
@@ -54,4 +80,5 @@ describe("entity source media", () => {
   it("returns false when the Entity has no files capability", () => {
     expect(hasSourceMedia([])).toBe(false);
   });
+
 });

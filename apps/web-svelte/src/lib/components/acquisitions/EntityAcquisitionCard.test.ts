@@ -1,17 +1,8 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/svelte";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, render, screen } from "@testing-library/svelte";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { ACQUISITION_STATUS, ENTITY_KIND } from "$lib/api/generated/codes";
 import type { AcquisitionDetail } from "$lib/api/generated/model";
 import Harness from "./EntityAcquisitionCard.test-harness.svelte";
-
-const mocks = vi.hoisted(() => ({
-  deleteMediaEntity: vi.fn(),
-}));
-
-vi.mock("$lib/api/entity-deletion", () => ({
-  deleteMediaEntity: mocks.deleteMediaEntity,
-  isDeletableMediaKind: () => true,
-}));
 
 vi.mock("$lib/components/acquisitions/AcquisitionPanel.svelte", async () => ({
   default: (await import("./AcquisitionPanel.test-stub.svelte")).default,
@@ -22,45 +13,7 @@ vi.mock("$lib/components/entities/ConfirmDialog.svelte", async () => ({
 }));
 
 describe("EntityAcquisitionCard", () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    mocks.deleteMediaEntity.mockResolvedValue({
-      deleted: 1,
-      filesDeleted: 1,
-      failures: [],
-      reverted: 1,
-    });
-  });
-
   afterEach(cleanup);
-
-  it("clears a reverted entity's stale acquisition before waiting for its targeted refresh", async () => {
-    let finishRefresh!: () => void;
-    const refresh = vi.fn(() => new Promise<void>((resolve) => (finishRefresh = resolve)));
-    const onReverted = vi.fn(async () => {});
-    const onDeleted = vi.fn();
-
-    render(Harness, {
-      initialAcquisition: acquisition("acquisition-1"),
-      refresh,
-      onReverted,
-      onDeleted,
-    });
-
-    expect(screen.getByTestId("acquisition-panel")).toHaveTextContent("acquisition-1");
-    await fireEvent.click(screen.getByRole("button", { name: "Delete files" }));
-    await fireEvent.click(screen.getByRole("button", { name: "Confirm Delete files" }));
-
-    await waitFor(() => expect(refresh).toHaveBeenCalledOnce());
-    expect(screen.getByTestId("bound-acquisition-id")).toHaveTextContent("none");
-    expect(screen.queryByTestId("acquisition-panel")).not.toBeInTheDocument();
-    expect(onReverted).not.toHaveBeenCalled();
-    expect(onDeleted).not.toHaveBeenCalled();
-
-    finishRefresh();
-    await waitFor(() => expect(onReverted).toHaveBeenCalledOnce());
-    expect(onDeleted).not.toHaveBeenCalled();
-  });
 
   it("forwards an imported transition to the owning entity page", async () => {
     const onImported = vi.fn();
@@ -68,14 +21,54 @@ describe("EntityAcquisitionCard", () => {
     render(Harness, {
       initialAcquisition: acquisition("acquisition-1"),
       refresh: vi.fn(async () => {}),
-      onReverted: vi.fn(),
-      onDeleted: vi.fn(),
       onImported,
     });
 
     await fireEvent.click(screen.getByRole("button", { name: "Notify imported" }));
 
     expect(onImported).toHaveBeenCalledOnce();
+  });
+
+  it("offers a stop retry for durable unmonitor cleanup without exposing Resume", async () => {
+    const onToggleMonitor = vi.fn(async () => {});
+    render(Harness, {
+      initialAcquisition: acquisition("acquisition-1"),
+      refresh: vi.fn(async () => {}),
+      monitorStopping: true,
+      onToggleMonitor,
+    });
+
+    expect(screen.queryByRole("button", { name: "Resume monitoring" })).toBeNull();
+    await fireEvent.click(screen.getByRole("button", { name: "Finish unmonitoring" }));
+    expect(onToggleMonitor).toHaveBeenCalledOnce();
+  });
+
+  it("renders Delete-files as a locked checked state without exposing unmonitor retry", async () => {
+    const onToggleMonitor = vi.fn(async () => {});
+    render(Harness, {
+      initialAcquisition: acquisition("acquisition-1"),
+      refresh: vi.fn(async () => {}),
+      monitorDeletingFiles: true,
+      onToggleMonitor,
+    });
+
+    const button = screen.getByRole("button", { name: "Deleting files…" });
+    expect(button).toBeDisabled();
+    expect(screen.queryByRole("button", { name: "Finish unmonitoring" })).toBeNull();
+    expect(onToggleMonitor).not.toHaveBeenCalled();
+  });
+
+  it("fails closed when the monitor status is unknown", async () => {
+    render(Harness, {
+      initialAcquisition: acquisition("acquisition-1"),
+      refresh: vi.fn(async () => {}),
+      monitorUnknownStatus: true,
+    });
+
+    const button = screen.getByRole("button", { name: "Updating…" });
+    expect(button).toBeDisabled();
+    expect(screen.queryByRole("button", { name: "Finish unmonitoring" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Resume monitoring" })).toBeNull();
   });
 });
 

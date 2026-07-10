@@ -16,6 +16,7 @@
     toggleOptimisticEntityFlag,
     updateOptimisticEntityRating,
   } from "$lib/entities/entity-detail-state";
+  import { refreshAfterManagedFileRevert } from "$lib/entities/entity-file-management";
   import { getChildIds } from "$lib/entities/entity-children";
   import type { EntityDetailCredit, EntityDetailTag } from "$lib/entities/entity-detail";
   import { entityCardToDetailCard, type EntityDetailCardFull } from "$lib/entities/entity-detail";
@@ -28,6 +29,7 @@
   import { CAPABILITY_KIND, ENTITY_KIND } from "$lib/entities/entity-codes";
   import EntityAcquisitionCard from "$lib/components/acquisitions/EntityAcquisitionCard.svelte";
   import { useEntityAcquisition } from "$lib/components/acquisitions/use-entity-acquisition.svelte";
+  import { requestableDirectChildCards } from "$lib/requests/requestable-entity-children";
   import { useIdentifyDetailAction } from "$lib/components/identify/use-identify-detail-action.svelte";
   import EntityDetail, {
     type EntityDetailActionButton,
@@ -77,11 +79,7 @@
   });
 
   const dates = $derived(card?.dates ?? []);
-  const identifyAction = useIdentifyDetailAction(
-    () => season?.id,
-    () => season?.kind,
-    () => season?.capabilities,
-  );
+  const identifyAction = useIdentifyDetailAction(() => season);
   const heroActions = $derived.by((): EntityDetailActionButton[] =>
     identifyAction.action ? [identifyAction.action] : []);
 
@@ -92,9 +90,14 @@
   const acq = useEntityAcquisition({
     entityId: () => season?.id,
     capabilities: () => season?.capabilities,
-    childCards: () => episodeCards,
+    childCards: () => requestableDirectChildCards(season?.id, episodeCards),
     onChanged: () => loadSeason({ showLoading: false }),
+    onPruned: () => goto(`/series/${seriesId}`),
   });
+  const fileManagement = {
+    onDeleted: () => goto(`/series/${seriesId}`),
+    onReverted: () => refreshAfterManagedFileRevert(acq, () => loadSeason({ showLoading: false })),
+  };
 
   // Seasons are not relationship owners: tags, studio, and cast belong to the series and
   // are shown here as inherited context only. Editing them on a season would write through
@@ -247,6 +250,7 @@
       tabs={detailTabs}
       sections={detailSections}
       actionButtons={heroActions}
+      {fileManagement}
     >
       {#snippet heroMeta()}
         {#if parentSeries}
@@ -273,9 +277,6 @@
           <EntityAcquisitionCard
             {acq}
             onCancelled={() => void loadSeason({ showLoading: false })}
-            entity={season ? { id: season.id, kind: season.kind, title: season.title } : undefined}
-            onDeleted={() => void goto(`/series/${seriesId}`)}
-            onReverted={() => loadSeason({ showLoading: false })}
             onImported={() => loadSeason({ showLoading: false })}
           />
         {/if}

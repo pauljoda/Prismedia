@@ -5,7 +5,6 @@
  * OpenAPI spec version: 1.0.0
  */
 
-export type GetRequestDetailParams = {
-serviceId?: string;
-hideNsfw?: boolean;
-};
+export interface MonitorStopResponse {
+  entityPruned: boolean;
+}

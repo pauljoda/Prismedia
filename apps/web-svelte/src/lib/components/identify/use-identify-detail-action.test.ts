@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/svelte";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { CAPABILITY_KIND, ENTITY_FILE_ROLE } from "$lib/api/generated/codes";
+import { CAPABILITY_KIND, ENTITY_FILE_ROLE, ENTITY_KIND } from "$lib/api/generated/codes";
 import type { EntityCapability } from "$lib/api/generated/model";
 import type { IdentifyQueueItem, PluginProvider } from "$lib/api/identify-types";
 import UseIdentifyDetailActionHarness from "./use-identify-detail-action.test-harness.svelte";
@@ -43,6 +43,7 @@ describe("useIdentifyDetailAction", () => {
         entityId: "person-1",
         entityKind: "person",
         capabilities: eligibleCapabilities(),
+        hasSourceMedia: true,
       },
     });
 
@@ -54,7 +55,7 @@ describe("useIdentifyDetailAction", () => {
     expect(goto).toHaveBeenCalledWith("/identify/person-1?returnId=person-1");
   });
 
-  it("keeps the action visible but unavailable when no ready provider supports the entity kind", async () => {
+  it("links to Plugins when no ready provider supports the entity kind", async () => {
     fetchIdentifyProviders.mockResolvedValue([provider("video")]);
 
     render(UseIdentifyDetailActionHarness, {
@@ -62,12 +63,14 @@ describe("useIdentifyDetailAction", () => {
         entityId: "person-1",
         entityKind: "person",
         capabilities: eligibleCapabilities(),
+        hasSourceMedia: true,
       },
     });
 
     const button = await screen.findByRole("button", {
       name: "Identify (no compatible plugin installed)",
     });
+    expect(button).not.toBeDisabled();
     await fireEvent.click(button);
 
     expect(goto).toHaveBeenCalledWith("/plugins");
@@ -79,6 +82,7 @@ describe("useIdentifyDetailAction", () => {
         entityId: "person-1",
         entityKind: "person",
         capabilities: eligibleCapabilities(),
+        hasSourceMedia: true,
       },
     });
 
@@ -96,8 +100,9 @@ describe("useIdentifyDetailAction", () => {
     const { rerender } = render(UseIdentifyDetailActionHarness, {
       props: {
         entityId: "",
-        entityKind: "",
+        entityKind: ENTITY_KIND.video,
         capabilities: [],
+        hasSourceMedia: false,
       },
     });
 
@@ -105,6 +110,7 @@ describe("useIdentifyDetailAction", () => {
       entityId: "video-1",
       entityKind: "video",
       capabilities: eligibleCapabilities(),
+      hasSourceMedia: true,
     });
 
     await waitFor(() => expect(fetchIdentifyProviders).toHaveBeenCalledWith("video"));
@@ -121,6 +127,7 @@ describe("useIdentifyDetailAction", () => {
         entityId: "video-1",
         entityKind: "video",
         capabilities: eligibleCapabilities(),
+        hasSourceMedia: true,
       },
     });
 
@@ -143,6 +150,7 @@ describe("useIdentifyDetailAction", () => {
           kind: CAPABILITY_KIND.files,
           items: [{ role: ENTITY_FILE_ROLE.thumbnail, path: "/cache/thumb.webp", mimeType: "image/webp" }],
         }],
+        hasSourceMedia: false,
       },
     });
 
@@ -150,6 +158,24 @@ describe("useIdentifyDetailAction", () => {
     expect(fetchOptionalIdentifyQueueItem).not.toHaveBeenCalled();
     expect(fetchIdentifyProviders).not.toHaveBeenCalled();
     expect(requestIdentifySearch).not.toHaveBeenCalled();
+  });
+
+  it("offers Identify for a non-Wanted wrapper with source-backed descendants", async () => {
+    fetchIdentifyProviders.mockResolvedValue([provider("video-series")]);
+    render(UseIdentifyDetailActionHarness, {
+      props: {
+        entityId: "series-1",
+        entityKind: "video-series",
+        capabilities: [{
+          kind: CAPABILITY_KIND.fileManagement,
+          canDeleteFiles: true,
+        }],
+        hasSourceMedia: true,
+      },
+    });
+
+    expect(await screen.findByRole("button", { name: "Identify" })).toBeInTheDocument();
+    expect(fetchIdentifyProviders).toHaveBeenCalledWith("video-series");
   });
 
   it("returns no action and makes no identify calls for a Wanted Entity", async () => {
@@ -167,6 +193,7 @@ describe("useIdentifyDetailAction", () => {
             isWanted: true,
           },
         ],
+        hasSourceMedia: true,
       },
     });
 

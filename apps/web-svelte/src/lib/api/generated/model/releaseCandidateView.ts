@@ -5,6 +5,7 @@
  * OpenAPI spec version: 1.0.0
  */
 import type { DownloadProtocol } from './downloadProtocol';
+import type { ReleaseCandidateViewRejectionsItem } from './releaseCandidateViewRejectionsItem';
 
 export interface ReleaseCandidateView {
   id: string;
@@ -26,7 +27,7 @@ export interface ReleaseCandidateView {
   accepted: boolean;
   /** @pattern ^-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?$ */
   score: number | string;
-  rejections: unknown[];
+  rejections: ReleaseCandidateViewRejectionsItem[];
   /** @nullable */
   infoUrl: string | null;
   /** @nullable */

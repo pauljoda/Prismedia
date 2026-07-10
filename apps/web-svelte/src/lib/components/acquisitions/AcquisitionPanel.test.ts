@@ -1,6 +1,9 @@
 import { cleanup, fireEvent, render, waitFor } from "@testing-library/svelte";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { ACQUISITION_STATUS, ENTITY_KIND } from "$lib/api/generated/codes";
+import {
+  ACQUISITION_STATUS,
+  ENTITY_KIND,
+} from "$lib/api/generated/codes";
 import type { AcquisitionDetail } from "$lib/api/generated/model";
 import AcquisitionPanel from "./AcquisitionPanel.svelte";
 
@@ -8,7 +11,6 @@ const mocks = vi.hoisted(() => ({
   fetchAcquisition: vi.fn(),
   fetchAcquisitionFiles: vi.fn(),
   fetchAcquisitionHistory: vi.fn(),
-  fetchMonitors: vi.fn(),
   retryAcquisitionImport: vi.fn(),
 }));
 
@@ -25,13 +27,6 @@ vi.mock("$lib/api/acquisitions", () => ({
   uploadManualTorrent: vi.fn(),
 }));
 
-vi.mock("$lib/api/monitors", () => ({
-  fetchMonitors: mocks.fetchMonitors,
-  resumeMonitor: vi.fn(),
-  startMonitor: vi.fn(),
-  stopMonitor: vi.fn(),
-}));
-
 describe("AcquisitionPanel", () => {
   let poll: (() => void | Promise<void>) | null;
 
@@ -40,7 +35,6 @@ describe("AcquisitionPanel", () => {
     poll = null;
     mocks.fetchAcquisitionFiles.mockResolvedValue({ imported: false, files: [] });
     mocks.fetchAcquisitionHistory.mockResolvedValue([]);
-    mocks.fetchMonitors.mockResolvedValue([]);
     const originalSetInterval = globalThis.setInterval;
     vi.spyOn(globalThis, "setInterval").mockImplementation((handler, timeout) => {
       if (timeout === 3000) {
@@ -162,6 +156,39 @@ describe("AcquisitionPanel", () => {
     expect(view.queryByRole("button", { name: "Retry import" })).toBeNull();
     expect(view.queryByRole("button", { name: "Search again" })).toBeNull();
   });
+
+  it("polls cleanup without exposing cancel, search, selection, or import actions", async () => {
+    const stopping = acquisition(ACQUISITION_STATUS.stopping, true);
+    mocks.fetchAcquisition.mockResolvedValue(stopping);
+
+    const view = render(AcquisitionPanel, {
+      acquisitionId: "acquisition-1",
+      detail: stopping,
+    });
+
+    await waitFor(() => expect(mocks.fetchAcquisition).toHaveBeenCalledOnce());
+    expect(poll).not.toBeNull();
+    expect(view.getByText("Cleaning up acquisition")).toBeInTheDocument();
+    expect(view.queryByRole("button", { name: "Cancel" })).toBeNull();
+    expect(view.queryByRole("button", { name: "Search again" })).toBeNull();
+    expect(view.queryByRole("button", { name: "Retry import" })).toBeNull();
+    expect(view.queryByRole("button", { name: "Import anyway" })).toBeNull();
+    expect(view.queryByText("Releases")).toBeNull();
+  });
+
+  it("leaves stable Entity monitoring to the owning acquisition card", async () => {
+    const pending = acquisition(ACQUISITION_STATUS.pending);
+    mocks.fetchAcquisition.mockResolvedValue(pending);
+
+    const view = render(AcquisitionPanel, {
+      acquisitionId: "acquisition-1",
+      detail: pending,
+    });
+
+    await waitFor(() => expect(mocks.fetchAcquisition).toHaveBeenCalledOnce());
+    expect(view.queryByRole("button", { name: /monitor/i })).toBeNull();
+  });
+
 });
 
 function acquisition(

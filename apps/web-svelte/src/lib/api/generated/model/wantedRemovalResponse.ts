@@ -4,8 +4,10 @@
  * Prismedia.Api | v1
  * OpenAPI spec version: 1.0.0
  */
+import type { WantedRemovalFailure } from './wantedRemovalFailure';
 
 export interface WantedRemovalResponse {
   /** @pattern ^-?(?:0|[1-9]\d*)$ */
   removed: number | string;
+  failures: WantedRemovalFailure[];
 }

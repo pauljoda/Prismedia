@@ -46,12 +46,15 @@ const ENUM_EXPORTS = [
   ["ReaderMode", "READER_MODE", "ReaderModeCode"],
   ["RequestProviderKind", "REQUEST_PROVIDER_KIND", "RequestProviderKindCode"],
   ["RequestMediaKind", "REQUEST_MEDIA_KIND", "RequestMediaKindCode"],
-  ["RequestRatingSource", "REQUEST_RATING_SOURCE", "RequestRatingSourceCode"],
+  ["RequestReviewSelection", "REQUEST_REVIEW_SELECTION", "RequestReviewSelectionCode"],
+  ["LibraryRootMediaCapability", "LIBRARY_ROOT_MEDIA_CAPABILITY", "LibraryRootMediaCapabilityCode"],
   ["RequestCommitOutcome", "REQUEST_COMMIT_OUTCOME", "RequestCommitOutcomeCode"],
   ["IndexerKind", "INDEXER_KIND", "IndexerKindCode"],
   ["DownloadClientKind", "DOWNLOAD_CLIENT_KIND", "DownloadClientKindCode"],
   ["DownloadProtocol", "DOWNLOAD_PROTOCOL", "DownloadProtocolCode"],
   ["AcquisitionStatus", "ACQUISITION_STATUS", "AcquisitionStatusCode"],
+  ["AcquisitionTeardownIntent", "ACQUISITION_TEARDOWN_INTENT", "AcquisitionTeardownIntentCode"],
+  ["EntityLifecycleClaimKind", "ENTITY_LIFECYCLE_CLAIM_KIND", "EntityLifecycleClaimKindCode"],
   ["AcquisitionHistoryEvent", "ACQUISITION_HISTORY_EVENT", "AcquisitionHistoryEventCode"],
   ["ReleaseRejectionReason", "RELEASE_REJECTION_REASON", "ReleaseRejectionReasonCode"],
   ["CustomFormatConditionType", "CUSTOM_FORMAT_CONDITION_TYPE", "CustomFormatConditionTypeCode"],
@@ -141,6 +144,69 @@ async function main() {
   const labelEntries = (manifest.entityKinds ?? []).map((k) => `  ${lit(k.code)}: ${lit(k.groupLabel)},`).join("\n");
   sections.push(
     `export const ENTITY_KIND_LABELS: Record<EntityKindCode, string> = {\n${labelEntries}\n};\n`,
+  );
+
+  // Complete frontend request-kind behavior, projected directly from RequestKindRegistry. Discover,
+  // review, and target selectors consume this instead of maintaining a parallel handwritten table.
+  if (!Array.isArray(manifest.requestKinds) || manifest.requestKinds.length === 0) {
+    throw new Error("Manifest is missing RequestKindRegistry metadata. Is the backend up to date?");
+  }
+  const requestKindFields = [
+    "kind", "label", "plural", "committable", "childNoun", "entityKind", "pluginEntityKind",
+    "acquisitionKind", "profileKind", "rootFlag", "discoverable", "reviewSelection",
+  ];
+  for (const kind of manifest.requestKinds) {
+    const missing = requestKindFields.filter((field) => !Object.hasOwn(kind, field));
+    if (missing.length > 0) {
+      throw new Error(`Request kind '${kind.kind ?? "unknown"}' is missing: ${missing.join(", ")}`);
+    }
+  }
+  const requestKindEntries = manifest.requestKinds.map((kind) =>
+    `  { kind: ${lit(kind.kind)}, label: ${lit(kind.label)}, plural: ${lit(kind.plural)}, ` +
+    `committable: ${lit(kind.committable)}, childNoun: ${lit(kind.childNoun)}, ` +
+    `entityKind: ${lit(kind.entityKind)}, pluginEntityKind: ${lit(kind.pluginEntityKind)}, ` +
+    `acquisitionKind: ${lit(kind.acquisitionKind)}, ` +
+    `profileKind: ${lit(kind.profileKind)}, rootFlag: ${lit(kind.rootFlag)}, ` +
+    `discoverable: ${lit(kind.discoverable)}, reviewSelection: ${lit(kind.reviewSelection)} },`
+  ).join("\n");
+  sections.push(
+    `export interface RequestKindManifestEntry {\n` +
+      `  kind: RequestMediaKindCode;\n` +
+      `  label: string;\n` +
+      `  plural: string;\n` +
+      `  committable: boolean;\n` +
+      `  childNoun: string | null;\n` +
+      `  entityKind: EntityKindCode;\n` +
+      `  pluginEntityKind: EntityKindCode;\n` +
+      `  acquisitionKind: EntityKindCode;\n` +
+      `  profileKind: EntityKindCode | null;\n` +
+      `  rootFlag: LibraryRootMediaCapabilityCode | null;\n` +
+      `  discoverable: boolean;\n` +
+      `  reviewSelection: RequestReviewSelectionCode;\n` +
+      `}\n\n` +
+      `export const REQUEST_KIND_MANIFEST = [\n${requestKindEntries}\n] as const satisfies readonly RequestKindManifestEntry[];\n`,
+  );
+
+  // Safe roots for the managed delete-files workflow. This list comes from EntityKindRegistry;
+  // frontend browse/grid surfaces must not duplicate the backend kind policy by hand.
+  const fileDeletionKinds = (manifest.entityKinds ?? [])
+    .filter((kind) => kind.supportsFileDeletion === true)
+    .map((kind) => `  ${lit(kind.code)},`)
+    .join("\n");
+  sections.push(
+    `export const ENTITY_KINDS_SUPPORTING_FILE_DELETION = [\n${fileDeletionKinds}\n] as const;\n\n` +
+      `export type FileDeletableEntityKindCode = (typeof ENTITY_KINDS_SUPPORTING_FILE_DELETION)[number];\n`,
+  );
+
+  // Entity kinds materialized by a committable RequestKindRegistry descriptor. Shared acquisition
+  // surfaces consume this generated policy instead of maintaining a second frontend request registry.
+  const requestableEntityKinds = (manifest.entityKinds ?? [])
+    .filter((kind) => kind.supportsRequests === true)
+    .map((kind) => `  ${lit(kind.code)},`)
+    .join("\n");
+  sections.push(
+    `export const ENTITY_KINDS_SUPPORTING_REQUESTS = [\n${requestableEntityKinds}\n] as const;\n\n` +
+      `export type RequestableEntityKindCode = (typeof ENTITY_KINDS_SUPPORTING_REQUESTS)[number];\n`,
   );
 
   const header =

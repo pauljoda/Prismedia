@@ -5,9 +5,7 @@
  * OpenAPI spec version: 1.0.0
  */
 
-export type SearchRequestsParams = {
-query: string;
-kinds?: string[];
-sources?: string[];
-hideNsfw?: boolean;
-};
+export interface WantedRemovalFailure {
+  entityId: string;
+  message: string;
+}

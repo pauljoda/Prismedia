@@ -82,6 +82,8 @@ export interface EntityGridBulkAction {
   id: string;
   label: string;
   tone?: "default" | "danger";
+  /** Keeps an action out of the menu when the current selection cannot safely use it. */
+  isAvailable?: (selectedIds: string[]) => boolean;
   onRun: (selectedIds: string[]) => void;
 }
 
@@ -130,6 +132,7 @@ export const AVAILABILITY_FILTER_DEFS = [
   { id: `${AVAILABILITY_PREFIX}${ACQUISITION_STATUS.downloaded}`, label: "Downloaded", capabilityKind: CAPABILITY_KIND.flags, value: ACQUISITION_STATUS.downloaded },
   { id: `${AVAILABILITY_PREFIX}${ACQUISITION_STATUS.importing}`, label: "Importing", capabilityKind: CAPABILITY_KIND.flags, value: ACQUISITION_STATUS.importing },
   { id: `${AVAILABILITY_PREFIX}${ACQUISITION_STATUS.imported}`, label: "Imported", capabilityKind: CAPABILITY_KIND.flags, value: ACQUISITION_STATUS.imported },
+  { id: `${AVAILABILITY_PREFIX}${ACQUISITION_STATUS.stopping}`, label: "Cleaning up", capabilityKind: CAPABILITY_KIND.flags, value: ACQUISITION_STATUS.stopping },
   { id: `${AVAILABILITY_PREFIX}${ACQUISITION_STATUS.failed}`, label: "Failed", capabilityKind: CAPABILITY_KIND.flags, value: ACQUISITION_STATUS.failed },
   { id: `${AVAILABILITY_PREFIX}${ACQUISITION_STATUS.cancelled}`, label: "Cancelled", capabilityKind: CAPABILITY_KIND.flags, value: ACQUISITION_STATUS.cancelled },
   { id: `${AVAILABILITY_PREFIX}${ACQUISITION_STATUS.manualImportRequired}`, label: "Needs attention", capabilityKind: CAPABILITY_KIND.flags, value: ACQUISITION_STATUS.manualImportRequired },
@@ -181,6 +184,9 @@ function formatResolutionLabelFull(width: number, height: number): string {
 }
 
 type EntityGridSourceEntity = EntityCard | EntityThumbnail;
+type EntityThumbnailWithAcquisitionStatuses = EntityThumbnail & {
+  acquisitionStatuses?: string[] | null;
+};
 
 function isFullEntityCard(entity: EntityGridSourceEntity): entity is EntityCard {
   return "capabilities" in entity;
@@ -467,6 +473,17 @@ export function entityCardToThumbnailCard(
   const spriteHover = findSpriteHover(entity);
   const imageSequence = previewAssets(entity, [ENTITY_FILE_ROLE.trickplay, ENTITY_FILE_ROLE.sprite]);
   const childSequence = imageSequence.length > 0 ? [] : childPreviewAssets(entity);
+  const latestAcquisitionStatus = isFullEntityCard(entity)
+    ? null
+    : entity.latestAcquisitionStatus ?? null;
+  const projectedAcquisitionStatuses = isFullEntityCard(entity)
+    ? []
+    : (entity as EntityThumbnailWithAcquisitionStatuses).acquisitionStatuses ?? [];
+  const acquisitionStatuses = projectedAcquisitionStatuses.length > 0
+    ? [...new Set(projectedAcquisitionStatuses)]
+    : latestAcquisitionStatus
+      ? [latestAcquisitionStatus]
+      : [];
   const hover: EntityThumbnailCard["hover"] = spriteHover
     ? { kind: THUMBNAIL_HOVER_KIND.sprite, spriteUrl: spriteHover.spriteUrl, vttUrl: spriteHover.vttUrl }
     : imageSequence.length > 0
@@ -494,15 +511,19 @@ export function entityCardToThumbnailCard(
     href,
     meta: metaForEntity(entity),
     progress: progressForEntity(entity),
-    hasSourceMedia: isFullEntityCard(entity)
-      ? Boolean(getCapability(capabilities, CAPABILITY_KIND.files)?.items.some((file) => file.role === ENTITY_FILE_ROLE.source))
-      : Boolean(entity.hasSourceMedia),
+    hasSourceMedia: Boolean(entity.hasSourceMedia),
     // Only the thumbnail read model carries the wanted acquisition status; detail cards don't.
     wantedStatus: isFullEntityCard(entity) ? null : entity.wantedStatus ?? null,
-    latestAcquisitionStatus: isFullEntityCard(entity)
-      ? null
-      : entity.latestAcquisitionStatus ?? null,
+    latestAcquisitionStatus,
+    acquisitionStatuses,
   };
+}
+
+/** Every subtree status available for filtering, with compatibility fallback for older API rows. */
+function acquisitionStatusesForCard(card: EntityThumbnailCard): string[] {
+  const statuses = card.acquisitionStatuses?.filter((status) => status.length > 0) ?? [];
+  if (statuses.length > 0) return [...new Set(statuses)];
+  return card.latestAcquisitionStatus ? [card.latestAcquisitionStatus] : [];
 }
 
 /**
@@ -685,7 +706,7 @@ export function buildCapabilityFilterOptions(
   const options = new Map<string, EntityGridFilterOption>();
   const hasDates = true;
   const hasAvailability = kind == null
-    ? cards.some((card) => card.hasSourceMedia || isWanted(card.entity.capabilities) || Boolean(card.latestAcquisitionStatus))
+    ? cards.some((card) => card.hasSourceMedia || isWanted(card.entity.capabilities) || acquisitionStatusesForCard(card).length > 0)
     : isDeletableMediaKind(kind);
   const hasFlags = cards.some((card) => Boolean(getCapability(card.entity.capabilities, CAPABILITY_KIND.flags)));
   const hasProgress = true;
@@ -884,16 +905,10 @@ export function buildCapabilityFilterOptions(
             });
           }
           break;
-        case CAPABILITY_KIND.files: {
-          const hasEntityFile = capability.items.length > 0;
-          addOption(options, {
-            id: `files:has:${hasEntityFile ? "true" : "false"}`,
-            label: hasEntityFile ? "Has file" : "No file",
-            capabilityKind: CAPABILITY_KIND.files,
-            value: `has:${hasEntityFile ? "true" : "false"}`,
-          });
+        // File availability is projected once from source-backed Entity ownership below. FilesCapability
+        // remains a detail payload, not a second Has file / No file filter vocabulary.
+        case CAPABILITY_KIND.files:
           break;
-        }
         case CAPABILITY_KIND.progress:
           addOption(options, {
             id: `progress:played:${capability.completedAt ? "true" : "false"}`,
@@ -909,9 +924,10 @@ export function buildCapabilityFilterOptions(
   for (const card of cards) {
     if (card.hasSourceMedia) addOption(options, AVAILABILITY_FILTER_DEFS[0]);
     if (isWanted(card.entity.capabilities)) addOption(options, AVAILABILITY_FILTER_DEFS[1]);
-    const status = card.latestAcquisitionStatus;
-    const statusDefinition = status ? AVAILABILITY_BY_ID.get(`${AVAILABILITY_PREFIX}${status}`) : undefined;
-    if (statusDefinition) addOption(options, statusDefinition);
+    for (const status of acquisitionStatusesForCard(card)) {
+      const statusDefinition = AVAILABILITY_BY_ID.get(`${AVAILABILITY_PREFIX}${status}`);
+      if (statusDefinition) addOption(options, statusDefinition);
+    }
   }
 
   return [...options.values()].sort((left, right) => left.label.localeCompare(right.label));
@@ -1102,7 +1118,9 @@ export function applyEntityGridState(
     return filters.every((filter) => {
       if (filter.id === `${AVAILABILITY_PREFIX}on-disk`) return card.hasSourceMedia;
       if (filter.id === `${AVAILABILITY_PREFIX}wanted`) return isWanted(card.entity.capabilities);
-      if (filter.id.startsWith(AVAILABILITY_PREFIX)) return card.latestAcquisitionStatus === filter.value;
+      if (filter.id.startsWith(AVAILABILITY_PREFIX)) {
+        return acquisitionStatusesForCard(card).includes(filter.value ?? "");
+      }
       return entityMatchesFilter(card.entity.capabilities, filter);
     });
   });

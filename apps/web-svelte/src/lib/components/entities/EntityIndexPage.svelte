@@ -107,8 +107,12 @@
       ? [
           {
             id: "delete",
-            label: canManage ? `Delete ${noun}` : "Delete from library",
+            label: canManage ? `Delete ${noun}` : "Delete files",
             tone: "danger",
+            isAvailable: canDeleteMedia
+              ? (selectedIds) => selectedIds.length > 0 && selectedIds.every((id) =>
+                  page.cards.some((card) => card.entity.id === id && card.hasSourceMedia))
+              : undefined,
             onRun: (selectedIds) => {
               pendingDeleteIds = selectedIds;
               confirmDeleteOpen = true;
@@ -131,18 +135,22 @@
 
   async function handleConfirmDelete() {
     const ids = pendingDeleteIds;
+    let failureMessage: string | null = null;
     if (isManageableTaxonomyKind(kind)) {
       await Promise.all(ids.map((id) => deleteTaxonomyEntity(kind, id)));
     } else if (isDeletableMediaKind(kind)) {
       const result = await bulkDeleteMediaEntities(ids, true);
       if (result.failures.length > 0) {
-        throw new Error(result.failures[0].message);
+        failureMessage = result.failures.map((failure) => failure.message).join(" · ");
       }
     } else {
       return;
     }
     pendingDeleteIds = [];
     await page.loadInitial();
+    if (failureMessage) {
+      throw new Error(failureMessage);
+    }
   }
   const page = new EntityIndexPageState({
     getKind: () => kind,
@@ -389,7 +397,7 @@
   <ConfirmDialog
     open={confirmDeleteOpen}
     title={`Delete the files for ${pendingDeleteIds.length === 1 ? "this item" : `${pendingDeleteIds.length} items`}?`}
-    message={`This permanently deletes ${pendingDeleteIds.length === 1 ? "its" : "their"} files from disk — including seasons, episodes, or other contents — and cannot be undone. Anything under active monitoring goes back to Wanted and will be re-downloaded automatically; everything else is removed from the library. Monitoring itself is never changed by a delete.`}
+    message={`This permanently deletes ${pendingDeleteIds.length === 1 ? "its" : "their"} files from disk — including structural children — and cannot be undone. Directly monitored Entities go back to Wanted and are searched again; unmonitored branches are removed. Parent monitoring alone never overrides a child you turned off.`}
     confirmLabel="Delete files"
     danger
     onConfirm={handleConfirmDelete}

@@ -73,6 +73,10 @@
   const studio = $derived(relationshipStudio);
 
   const dates = $derived(card?.dates ?? []);
+  const fileManagement = {
+    onDeleted: () => goto("/images"),
+    onReverted: loadImage,
+  };
 
   onMount(() => {
     void loadImage();
@@ -165,6 +169,7 @@
           onOrganizedToggle={handleOrganizedToggle}
           onMetadataSave={handleMetadataSave}
           {ratingBusy}
+          {fileManagement}
         >
           {#snippet heroMeta()}
             {#if studio}

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { goto } from "$app/navigation";
   import { page } from "$app/state";
   import { Layers } from "@lucide/svelte";
   import EntityDetailSkeleton from "$lib/components/entities/EntityDetailSkeleton.svelte";
@@ -80,6 +81,10 @@
   const primaryStudio = $derived(relationshipStudio);
 
   const dates = $derived(card?.dates ?? []);
+  const fileManagement = {
+    onDeleted: () => goto("/galleries"),
+    onReverted: () => loadGallery(),
+  };
 
   const imageChildren = $derived(childCards.filter((c) => c.entity.kind === "image"));
   const galleryChildren = $derived(childCards.filter((c) => c.entity.kind === "gallery"));
@@ -275,6 +280,7 @@
       {ratingBusy}
       peopleLabel="People"
       posterSize="large"
+      {fileManagement}
     >
       {#snippet heroMeta()}
         {#if primaryStudio}

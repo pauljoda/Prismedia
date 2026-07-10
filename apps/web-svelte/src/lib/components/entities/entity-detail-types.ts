@@ -50,6 +50,14 @@ export interface EntityDetailSection {
   hidden?: boolean;
 }
 
+/** Route-specific follow-up after the shared managed delete-files action settles. */
+export interface EntityDetailFileManagement {
+  /** Navigate away after the Entity and its subtree were fully removed. */
+  onDeleted: () => void | Promise<void>;
+  /** Refresh in place after monitoring kept the Entity as a Wanted placeholder. */
+  onReverted: () => void | Promise<void>;
+}
+
 export interface EntityDetailProps {
   card: EntityDetailCard;
   onRatingChange?: (value: number | null) => void;
@@ -64,7 +72,7 @@ export interface EntityDetailProps {
   /**
    * Renders the favorite/NSFW/organized badge cluster in the hero. Off for
    * surfaces presenting external (non-library) items where those library
-   * flags have no meaning, e.g. request details.
+   * flags have no meaning, such as a read-only external preview.
    */
   showFlagActions?: boolean;
   tabs?: EntityDetailTab[];
@@ -81,6 +89,8 @@ export interface EntityDetailProps {
   heroBadges?: Snippet;
   /** Action buttons rendered in the right-aligned actions group. */
   actionButtons?: EntityDetailActionButton[];
+  /** Enables the capability-gated shared managed delete-files action. */
+  fileManagement?: EntityDetailFileManagement;
   /** Content rendered between the detail body and the metadata sections (e.g. studio, credits). */
   afterBody?: Snippet;
   /** Extra metadata sections appended inside the lower metadata area. */

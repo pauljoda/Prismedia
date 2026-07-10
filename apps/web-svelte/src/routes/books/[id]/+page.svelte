@@ -8,6 +8,7 @@
   import MediaProgressPanel from "$lib/components/MediaProgressPanel.svelte";
   import EntityAcquisitionCard from "$lib/components/acquisitions/EntityAcquisitionCard.svelte";
   import { useEntityAcquisition } from "$lib/components/acquisitions/use-entity-acquisition.svelte";
+  import { requestableDirectChildCards } from "$lib/requests/requestable-entity-children";
   import { getCapability, isWanted } from "$lib/api/capabilities";
   import { updateEntityProgress } from "$lib/api/playback";
   import { fetchBook, type BookDetail } from "$lib/api/media";
@@ -21,6 +22,7 @@
     toggleOptimisticEntityFlag,
     updateOptimisticEntityRating,
   } from "$lib/entities/entity-detail-state";
+  import { refreshAfterManagedFileRevert } from "$lib/entities/entity-file-management";
   import { entityCardToDetailCard, type EntityDetailCardFull, type EntityDetailCredit, type EntityDetailTag } from "$lib/entities/entity-detail";
   import {
     bookEntityProgressDisplay,
@@ -138,19 +140,24 @@
     };
   });
 
-  const identifyAction = useIdentifyDetailAction(
-    () => card?.entity.id,
-    () => card?.entity.kind,
-    () => book?.capabilities,
-  );
+  const identifyAction = useIdentifyDetailAction(() => book);
 
   // Wanted/tracking state lives on the entity itself: search, releases, live download, monitoring,
   // cancel — one Acquisition detail tab, absent entirely for an ordinary owned book.
   const acq = useEntityAcquisition({
     entityId: () => book?.id,
     capabilities: () => book?.capabilities,
+    childCards: () => requestableDirectChildCards(book?.id, childBookCards),
     onChanged: () => loadBook(bookId, { showLoading: false }),
+    onPruned: () => goto("/books"),
   });
+  const fileManagement = {
+    onDeleted: () => goto("/books"),
+    onReverted: () => refreshAfterManagedFileRevert(
+      acq,
+      () => loadBook(bookId, { showLoading: false }),
+    ),
+  };
 
   const heroActions = $derived.by((): EntityDetailActionButton[] => {
     const actions: EntityDetailActionButton[] = [];
@@ -571,6 +578,7 @@
       tabs={detailTabs}
       sections={detailSections}
       actionButtons={heroActions}
+      {fileManagement}
       {defaultCreditRole}
     >
       {#snippet heroMeta()}
@@ -602,7 +610,11 @@
 
       {#snippet sectionContent(section)}
         {#if section.id === "acquisition"}
-          <EntityAcquisitionCard {acq} onCancelled={handleAcquisitionCancelled} />
+          <EntityAcquisitionCard
+            {acq}
+            onCancelled={handleAcquisitionCancelled}
+            onImported={() => loadBook(bookId, { showLoading: false })}
+          />
         {/if}
       {/snippet}
     </EntityDetail>

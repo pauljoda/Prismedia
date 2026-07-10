@@ -4,6 +4,7 @@
  * Prismedia.Api | v1
  * OpenAPI spec version: 1.0.0
  */
+import type { BookAcquisitionProfileViewAllowedFormatsItem } from './bookAcquisitionProfileViewAllowedFormatsItem';
 import type { BookAcquisitionProfileViewFormatScores } from './bookAcquisitionProfileViewFormatScores';
 import type { BookFormatTier } from './bookFormatTier';
 import type { BookSourceTier } from './bookSourceTier';
@@ -19,7 +20,7 @@ export interface BookAcquisitionProfileView {
   targetLibraryRootId: string;
   pathTemplate: string;
   importMode: ImportMode;
-  allowedFormats: unknown[];
+  allowedFormats: BookAcquisitionProfileViewAllowedFormatsItem[];
   preferredLanguages: string[];
   /** @pattern ^-?(?:0|[1-9]\d*)$ */
   minSeeders: number | string;

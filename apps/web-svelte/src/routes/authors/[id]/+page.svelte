@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from "svelte";
+  import { goto } from "$app/navigation";
   import { page } from "$app/state";
   import { BookOpen, CloudDownload, Info, SlidersHorizontal, Users } from "@lucide/svelte";
   import EntityDetailSkeleton from "$lib/components/entities/EntityDetailSkeleton.svelte";
@@ -13,6 +14,7 @@
     toggleOptimisticEntityFlag,
     updateOptimisticEntityRating,
   } from "$lib/entities/entity-detail-state";
+  import { refreshAfterManagedFileRevert } from "$lib/entities/entity-file-management";
   import { entityCardToDetailCard, type EntityDetailCardFull, type EntityDetailCredit, type EntityDetailTag } from "$lib/entities/entity-detail";
   import { CREDIT_ROLE } from "$lib/entities/entity-codes";
   import { resolveEntityHref } from "$lib/entities/entity-routes";
@@ -31,6 +33,7 @@
   import EntityGrid from "$lib/components/entities/EntityGrid.svelte";
   import EntityAcquisitionCard from "$lib/components/acquisitions/EntityAcquisitionCard.svelte";
   import { useEntityAcquisition } from "$lib/components/acquisitions/use-entity-acquisition.svelte";
+  import { requestableDirectChildCards } from "$lib/requests/requestable-entity-children";
   import { useIdentifyDetailAction } from "$lib/components/identify/use-identify-detail-action.svelte";
   import { redirectHiddenEntityNotFound } from "$lib/nsfw/hidden-entity";
   import { useNsfw } from "$lib/nsfw/store.svelte";
@@ -59,24 +62,26 @@
     };
   });
 
-  const identifyAction = useIdentifyDetailAction(
-    () => author?.id,
-    () => author?.kind,
-    () => author?.capabilities,
-  );
+  const identifyAction = useIdentifyDetailAction(() => author);
   const heroActions = $derived.by((): EntityDetailActionButton[] =>
     identifyAction.action ? [identifyAction.action] : []);
 
   // Monitoring lives in the Acquisition detail tab ("Check for new works" runs the discovery sync
   // now; the page reloads to show any new phantoms). It works for scanned-in and requested authors
   // alike; it needs a provider identity a plugin can track, which Identify supplies for on-disk
-  // authors and a request commit supplies for wanted ones. The tab hides when no plugin can track.
+  // authors and a request commit supplies for wanted ones. The same tab owns the shared per-child
+  // controls for books, so parent monitoring stays independent of medium-specific route code.
   const acq = useEntityAcquisition({
     entityId: () => author?.id,
     capabilities: () => author?.capabilities,
-    childCards: () => bookCards,
-    onChanged: () => void loadAuthor(),
+    childCards: () => requestableDirectChildCards(author?.id, bookCards),
+    onChanged: () => loadAuthor({ showLoading: false }),
+    onPruned: () => goto("/authors"),
   });
+  const fileManagement = {
+    onDeleted: () => goto("/authors"),
+    onReverted: () => refreshAfterManagedFileRevert(acq, () => loadAuthor({ showLoading: false })),
+  };
 
   const detailSections = $derived.by((): EntityDetailSection[] => [
     { id: "credits", label: "People", icon: Users },
@@ -108,9 +113,11 @@
     ]);
   });
 
-  async function loadAuthor() {
-    loadState = "loading";
-    errorMessage = null;
+  async function loadAuthor(options = { showLoading: true }) {
+    if (options.showLoading) {
+      loadState = "loading";
+      errorMessage = null;
+    }
     try {
       const nextAuthor = await fetchBookAuthor(page.params.id ?? "");
 
@@ -133,7 +140,7 @@
     } catch (err) {
       if (redirectHiddenEntityNotFound(err, nsfw.mode)) return;
       errorMessage = err instanceof Error ? err.message : String(err);
-      loadState = "error";
+      if (options.showLoading) loadState = "error";
     }
   }
 
@@ -188,6 +195,7 @@
       defaultCreditRole={CREDIT_ROLE.writer}
       posterSize="large"
       actionButtons={heroActions}
+      {fileManagement}
       tabs={detailTabs}
       sections={detailSections}
     >
@@ -199,7 +207,10 @@
 
       {#snippet sectionContent(section)}
         {#if section.id === "acquisition"}
-          <EntityAcquisitionCard {acq} />
+          <EntityAcquisitionCard
+            {acq}
+            onImported={() => loadAuthor({ showLoading: false })}
+          />
         {/if}
       {/snippet}
     </EntityDetail>

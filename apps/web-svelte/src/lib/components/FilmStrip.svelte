@@ -222,7 +222,7 @@
     <!-- svelte-ignore a11y_no_static_element_interactions -->
     <div
       bind:this={containerEl}
-      class="relative flex-1 overflow-hidden select-none touch-none"
+      class="relative flex-1 overflow-hidden select-none touch-pan-y"
       style:height="{STRIP_HEIGHT}px"
       onpointerdown={handlePointerDown}
       onpointermove={handlePointerMove}

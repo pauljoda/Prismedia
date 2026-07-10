@@ -3,7 +3,7 @@
   import { page } from "$app/state";
   import { ChevronLeft, Loader2, RefreshCw, Send } from "@lucide/svelte";
   import { Button, Select } from "@prismedia/ui-svelte";
-  import { REQUEST_COMMIT_OUTCOME } from "$lib/api/generated/codes";
+  import { REQUEST_COMMIT_OUTCOME, REQUEST_REVIEW_SELECTION } from "$lib/api/generated/codes";
   import type {
     MonitorPresetCode,
     RequestMediaKindCode,
@@ -52,6 +52,7 @@
   let targetLibraryRootId = $state<string | null>(null);
   let profileId = $state<string | null>(null);
   let chosenPreset = $state<MonitorPresetCode>(DEFAULT_MONITOR_PRESET);
+  let selectionCustomized = $state(false);
   let loading = $state(true);
   let submitting = $state(false);
   let error = $state<string | null>(null);
@@ -62,13 +63,16 @@
   const kindInfo = $derived(review ? requestKindInfo(review.kind) : null);
   const childNoun = $derived(kindInfo?.childNoun ?? "item");
   const childrenTitle = $derived(`${capitalize(childNoun)}s`);
-  const selectsChildren = $derived(selection?.mode === "direct-children");
+  const selectsChildren = $derived(selection?.mode === REQUEST_REVIEW_SELECTION.directChildren);
   const requestableSelection = $derived(
     selectsChildren ? selectedProposalIds : (selection?.initialRootSelection ?? []),
   );
+  const hasRequestIntent = $derived(
+    requestableSelection.length > 0 || (selectsChildren && !selectionCustomized),
+  );
   const presetDisplay = $derived<MonitorPresetSelectValue>(
-    selectsChildren && selection
-      ? presetForSelection(selection.presetChildren, selectedProposalIds)
+    selectsChildren && selectionCustomized
+      ? MONITOR_PRESET_CUSTOM
       : chosenPreset,
   );
   const presetOptions = $derived([
@@ -125,7 +129,8 @@
 
       const nextSelection = deriveRequestReviewSelection(response);
       review = response;
-      selectedProposalIds = nextSelection.mode === "direct-children"
+      selectionCustomized = false;
+      selectedProposalIds = nextSelection.mode === REQUEST_REVIEW_SELECTION.directChildren
         ? resolvePresetSelection(chosenPreset, nextSelection.presetChildren)
         : nextSelection.initialRootSelection;
     } catch (err) {
@@ -139,11 +144,13 @@
   function applyPreset(value: string) {
     if (value === MONITOR_PRESET_CUSTOM || !selection) return;
     chosenPreset = value as MonitorPresetCode;
+    selectionCustomized = false;
     selectedProposalIds = resolvePresetSelection(chosenPreset, selection.presetChildren);
   }
 
   function toggleProposal(proposalId: string, selected: boolean) {
     if (!selection?.selectableIds.includes(proposalId)) return;
+    selectionCustomized = true;
     selectedProposalIds = selected
       ? Array.from(new Set([...selectedProposalIds, proposalId]))
       : selectedProposalIds.filter((id) => id !== proposalId);
@@ -151,11 +158,11 @@
 
   async function requestSelection() {
     if (!review || !selection || !kindInfo?.committable) return;
-    const selectedIds = selection.mode === "direct-children"
+    const selectedIds = selection.mode === REQUEST_REVIEW_SELECTION.directChildren
       ? selectedProposalIds.filter((id) => selection.selectableIds.includes(id))
       : selection.initialRootSelection;
-    if (selectedIds.length === 0) {
-      error = selection.mode === "direct-children"
+    if (selectedIds.length === 0 && (!selectsChildren || selectionCustomized)) {
+      error = selection.mode === REQUEST_REVIEW_SELECTION.directChildren
         ? `Select at least one ${childNoun} to request.`
         : "This proposal is not requestable.";
       return;
@@ -174,13 +181,17 @@
           selectedProposalIds: selectedIds,
           targetLibraryRootId,
           profileId,
-          ...(selection.mode === "direct-children" ? { preset: chosenPreset } : {}),
+          ...(selection.mode === REQUEST_REVIEW_SELECTION.directChildren ? { preset: chosenPreset } : {}),
         },
         nsfw.mode !== "show",
       );
 
       const requested = response.items.filter((item) => item.outcome === REQUEST_COMMIT_OUTCOME.requested);
       if (requested.length === 0) {
+        if (response.containerEntityId) {
+          await goto(resolveEntityHref(review.entityKind, response.containerEntityId) ?? "/request");
+          return;
+        }
         const alreadyOwned = response.items.filter(
           (item) => item.outcome === REQUEST_COMMIT_OUTCOME.alreadyOwned,
         ).length;
@@ -280,8 +291,8 @@
               type="button"
               variant="primary"
               class="shrink-0 gap-2"
-              disabled={submitting || requestableSelection.length === 0}
-              title={requestableSelection.length === 0
+              disabled={submitting || !hasRequestIntent}
+              title={!hasRequestIntent
                 ? selectsChildren
                   ? `Select ${childNoun}s to request`
                   : "This proposal is not requestable"

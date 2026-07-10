@@ -1,19 +1,18 @@
 <script lang="ts">
   import { onDestroy } from "svelte";
-  import { Bell, BellRing, CloudDownload, FileText, History, Loader2, RefreshCw, Search, SearchX, Upload, X } from "@lucide/svelte";
+  import { CloudDownload, FileText, History, Loader2, RefreshCw, Search, SearchX, Upload, X } from "@lucide/svelte";
   import { Badge, Button } from "@prismedia/ui-svelte";
   import AcquisitionHistoryList from "$lib/components/acquisitions/AcquisitionHistoryList.svelte";
   import PieceStateBar from "$lib/components/acquisitions/PieceStateBar.svelte";
   import ReleaseTable from "$lib/components/acquisitions/ReleaseTable.svelte";
   import StatePlaceholder from "$lib/components/StatePlaceholder.svelte";
   import { isTransferActive, transferStageLabel } from "$lib/requests/acquisition-transfer";
-  import { ACQUISITION_STATUS, MONITOR_STATUS } from "$lib/api/generated/codes";
+  import { ACQUISITION_STATUS } from "$lib/api/generated/codes";
   import type {
     AcquisitionDetail,
     AcquisitionFilesView,
     AcquisitionHistoryView,
     AcquisitionTransferView,
-    MonitorView,
     ReleaseCandidateView,
   } from "$lib/api/generated/model";
   import {
@@ -28,15 +27,18 @@
     queueAcquisitionCandidate,
     uploadManualTorrent,
   } from "$lib/api/acquisitions";
-  import { fetchMonitors, resumeMonitor, startMonitor, stopMonitor } from "$lib/api/monitors";
-  import { ACTIVE_ACQUISITION_STATUSES, acquisitionStatusLabel } from "$lib/requests/acquisition-status";
+  import {
+    ACTIVE_ACQUISITION_STATUSES,
+    acquisitionStatusIsKnown,
+    acquisitionStatusLabel,
+    acquisitionStatusShouldPoll,
+  } from "$lib/requests/acquisition-status";
   import { formatBytes, formatEta, formatSpeed } from "$lib/utils/format";
 
   /**
-   * The one acquisition management surface: status, live transfer, imported files, release review,
-   * search-again / monitor / cancel. Mounted by the acquisition route AND inline on entity detail
-   * pages, so wanted/tracking state is managed wherever the entity lives — the goal is that on-disk
-   * and in-progress items share one home, with /request trending toward history only.
+   * The acquisition-specific management surface: status, live transfer, imported files, release
+   * review, search-again, and cancel. Entity monitoring stays in the owning EntityAcquisitionCard so
+   * a stable Entity monitor is never duplicated by an acquisition-scoped control.
    */
   let {
     acquisitionId,
@@ -58,12 +60,11 @@
 
   let transfer = $state<AcquisitionTransferView | null>(null);
   let files = $state<AcquisitionFilesView | null>(null);
-  let monitor = $state<MonitorView | null>(null);
   let history = $state<AcquisitionHistoryView[]>([]);
   let error = $state<string | null>(null);
   let busy = $state(false);
   let pollTimer: ReturnType<typeof setInterval> | null = null;
-  let reSearchPolls = $state(0);
+  let bridgePolls = $state(0);
 
   const status = $derived(detail?.summary.status ?? null);
   const hasResumableImport = $derived(detail?.summary.hasResumableImport === true);
@@ -72,6 +73,13 @@
       (status === ACQUISITION_STATUS.failed && hasResumableImport),
   );
   const isActive = $derived(status ? ACTIVE_ACQUISITION_STATUSES.includes(status) : false);
+  const transitionLocked = $derived(
+    status !== null && (
+      status === ACQUISITION_STATUS.stopping ||
+      !acquisitionStatusIsKnown(status)
+    ),
+  );
+  const canCancel = $derived(isActive && !transitionLocked);
   const canChoose = $derived(status === ACQUISITION_STATUS.awaitingSelection);
   // A release can still be (re)selected after a failed or cancelled attempt — picking one re-queues it.
   // A manual-import hold (ambiguous payload or a dangerous file) also reopens the picker so the user
@@ -144,8 +152,6 @@
     try {
       const nextDetail = await fetchAcquisition(acquisitionId);
       detail = nextDetail;
-      // Secondary surface: a monitor lookup failure must not break the acquisition view.
-      monitor = (await fetchMonitors().catch(() => [])).find((m) => m.acquisitionId === acquisitionId) ?? null;
       // Pull the status-appropriate detail.
       if (isDownloading) {
         transfer = await fetchAcquisitionTransfer(acquisitionId);
@@ -224,7 +230,6 @@
     busy = true;
     try {
       detail = await reSearchAcquisition(acquisitionId);
-      reSearchPolls = 8; // ~24s of bridge polling to catch the search start/finish
     } catch (err) {
       error = err instanceof Error ? err.message : "Failed to re-search";
     } finally {
@@ -239,32 +244,9 @@
     busy = true;
     try {
       detail = await retryAcquisitionImport(acquisitionId, allowFormatChange);
-      reSearchPolls = 8; // bridge-poll so the importing → imported transition lands without a refresh
+      bridgePolls = 8; // bridge-poll so the importing → imported transition lands without a refresh
     } catch (err) {
       error = err instanceof Error ? err.message : "Failed to import";
-    } finally {
-      busy = false;
-    }
-  }
-
-  // Toggle monitoring across its three states: actively monitoring → stop; auto-paused (e.g. after the
-  // acquisition was cancelled) → resume; not monitored → start. When on, Prismedia keeps re-running the
-  // release search until the book is acquired.
-  async function toggleMonitor() {
-    if (busy) return;
-    busy = true;
-    try {
-      if (monitor && monitor.status === MONITOR_STATUS.active) {
-        await stopMonitor(monitor.id);
-        monitor = null;
-      } else if (monitor) {
-        await resumeMonitor(monitor.id);
-        monitor = { ...monitor, status: MONITOR_STATUS.active };
-      } else {
-        monitor = await startMonitor(acquisitionId);
-      }
-    } catch (err) {
-      error = err instanceof Error ? err.message : "Failed to update monitoring";
     } finally {
       busy = false;
     }
@@ -285,9 +267,6 @@
     }
   }
 
-  // Monitoring is offered for any not-yet-acquired book; an imported book has nothing left to search for.
-  const showMonitorToggle = $derived(status !== null && status !== ACQUISITION_STATUS.imported);
-  const monitorActive = $derived(monitor?.status === MONITOR_STATUS.active);
   // Re-search is offered whenever the item is still seeking a release — including a manual-import
   // hold, where searching for a different release is a legitimate way out. In-flight grabs and
   // imported/cancelled items are left alone (the server enforces the same gate).
@@ -297,13 +276,12 @@
       status === ACQUISITION_STATUS.manualImportRequired,
   );
 
-  // After a manual "Search again" the status is still failed/awaiting until the worker picks the job up, so
-  // bridge-poll for a bounded window to catch the search starting (and finishing) even if it completes
-  // between ticks; once the acquisition is active the normal poll below drives it.
-  const shouldPoll = $derived(isActive || reSearchPolls > 0);
+  // Search again now returns Searching immediately and uses the ordinary active-status poll. Manual import
+  // keeps a short bridge window because the import may finish between the request and the first active tick.
+  const shouldPoll = $derived(acquisitionStatusShouldPoll(status) || bridgePolls > 0);
 
   async function pollTick() {
-    if (reSearchPolls > 0) reSearchPolls -= 1;
+    if (bridgePolls > 0) bridgePolls -= 1;
     await load(true);
   }
 
@@ -372,19 +350,7 @@
             Search again
           </Button>
         {/if}
-        {#if showMonitorToggle}
-          <Button
-            type="button"
-            variant={monitorActive ? "primary" : "ghost"}
-            class="gap-1.5"
-            disabled={busy}
-            onclick={() => void toggleMonitor()}
-          >
-            {#if monitorActive}<BellRing class="h-3.5 w-3.5" />{:else}<Bell class="h-3.5 w-3.5" />{/if}
-            {monitorActive ? "Monitoring" : monitor ? "Resume monitoring" : "Monitor"}
-          </Button>
-        {/if}
-        {#if isActive || canChoose}
+        {#if canCancel || canChoose}
           <Button type="button" variant="danger" class="gap-1.5" disabled={busy} onclick={() => void cancel()}>
             <X class="h-3.5 w-3.5" />
             Cancel
@@ -393,7 +359,17 @@
       </div>
     </div>
 
-    {#if status === ACQUISITION_STATUS.searching}
+    {#if transitionLocked}
+      <StatePlaceholder
+        icon={Loader2}
+        title={status === ACQUISITION_STATUS.stopping ? "Cleaning up acquisition" : "Updating acquisition"}
+        description={status === ACQUISITION_STATUS.stopping
+          ? "Removing the download and managed files. Actions will return when cleanup finishes."
+          : "Prismedia is finishing a newer lifecycle transition. Actions are temporarily unavailable."}
+        busy
+      />
+
+    {:else if status === ACQUISITION_STATUS.searching}
       <StatePlaceholder
         icon={Search}
         title="Searching indexers"

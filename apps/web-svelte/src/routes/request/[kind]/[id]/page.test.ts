@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/svelte";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/svelte";
 import { readFileSync } from "node:fs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { page } from "$app/state";
@@ -9,6 +9,7 @@ import {
   PROPOSAL_KIND,
   REQUEST_COMMIT_OUTCOME,
   REQUEST_MEDIA_KIND,
+  REQUEST_REVIEW_SELECTION,
 } from "$lib/api/generated/codes";
 import type {
   BookAcquisitionProfileView,
@@ -135,6 +136,61 @@ describe("reviewed request route", () => {
     expect(mocks.goto).toHaveBeenCalledWith("/request");
   });
 
+  it("allows a future-only container monitor with no current child selection", async () => {
+    const review = seriesReview();
+    setRoute(
+      REQUEST_MEDIA_KIND.series,
+      review.externalIdentity.value,
+      `plugin=${review.pluginId}&namespace=${review.externalIdentity.namespace}`,
+    );
+    mocks.reviewRequest.mockResolvedValue(review);
+    mocks.commitReviewedRequest.mockResolvedValue({
+      containerEntityId: "series-entity",
+      items: [],
+    });
+
+    render(Page);
+
+    await screen.findByText("TV Default");
+    await fireEvent.click(screen.getByRole("button", { name: "Monitor" }));
+    await fireEvent.click(
+      within(screen.getByRole("listbox")).getByRole("option", { name: /future only/i }),
+    );
+    const requestButton = await screen.findByRole("button", { name: "Request" });
+    expect(requestButton).toBeEnabled();
+    await fireEvent.click(requestButton);
+
+    await waitFor(() => {
+      expect(mocks.commitReviewedRequest).toHaveBeenCalledWith(
+        expect.objectContaining({
+          selectedProposalIds: [],
+          preset: MONITOR_PRESET.future,
+        }),
+        true,
+      );
+    });
+    expect(mocks.goto).toHaveBeenCalledWith("/series/series-entity");
+  });
+
+  it("keeps a manually emptied custom selection invalid", async () => {
+    const review = seriesReview();
+    setRoute(
+      REQUEST_MEDIA_KIND.series,
+      review.externalIdentity.value,
+      `plugin=${review.pluginId}&namespace=${review.externalIdentity.namespace}`,
+    );
+    mocks.reviewRequest.mockResolvedValue(review);
+
+    render(Page);
+
+    await screen.findByText("TV Default");
+    await fireEvent.click(screen.getByRole("checkbox", { name: "Deselect Season 1" }));
+    await fireEvent.click(screen.getByRole("checkbox", { name: "Deselect Season 2" }));
+
+    expect(screen.getByRole("button", { name: "Request" })).toBeDisabled();
+    expect(mocks.commitReviewedRequest).not.toHaveBeenCalled();
+  });
+
   it("selects the root proposal for a leaf even when it carries non-target structural metadata", async () => {
     const review = movieReview();
     setRoute(
@@ -180,7 +236,7 @@ describe("reviewed request route", () => {
   it("treats sibling volumes as direct selections even though a book is not a container kind", () => {
     const selection = deriveRequestReviewSelection(bookSiblingReview());
 
-    expect(selection.mode).toBe("direct-children");
+    expect(selection.mode).toBe(REQUEST_REVIEW_SELECTION.directChildren);
     expect(selection.selectableIds).toEqual(["book-volume-1", "book-volume-2"]);
     expect(selection.initialRootSelection).toEqual([]);
   });
@@ -191,7 +247,7 @@ describe("reviewed request route", () => {
 
     const selection = deriveRequestReviewSelection(review);
 
-    expect(selection.mode).toBe("direct-children");
+    expect(selection.mode).toBe(REQUEST_REVIEW_SELECTION.directChildren);
     expect(selection.selectableIds).toEqual([]);
     expect(selection.initialRootSelection).toEqual([]);
   });

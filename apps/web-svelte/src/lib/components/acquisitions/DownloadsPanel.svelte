@@ -2,7 +2,6 @@
   import { onDestroy, onMount } from "svelte";
   import { HardDriveDownload } from "@lucide/svelte";
   import type { DownloadQueueItemView, EntityThumbnail } from "$lib/api/generated/model";
-  import type { AcquisitionStatusCode } from "$lib/api/generated/codes";
   import { deleteAcquisition, fetchDownloadQueue, reSearchAcquisition } from "$lib/api/acquisitions";
   import { fetchEntityThumbnails } from "$lib/api/entities";
   import ConfirmDialog from "$lib/components/entities/ConfirmDialog.svelte";
@@ -15,7 +14,7 @@
     type AcquisitionBulkAction,
     type AcquisitionListItem,
   } from "$lib/requests/acquisition-list-item";
-  import { ACTIVE_ACQUISITION_STATUSES } from "$lib/requests/acquisition-status";
+  import { acquisitionStatusShouldPoll } from "$lib/requests/acquisition-status";
 
   /**
    * The global Downloads view: every active acquisition across all kinds as a shared card list, with
@@ -49,6 +48,7 @@
   const statusFilters: AcquisitionStatusFilter[] = [
     { value: "downloading", label: "Downloading", match: (item) => item.tone === "downloading" },
     { value: "searching", label: "Searching", match: (item) => item.tone === "searching" },
+    { value: "cleanup", label: "Cleaning up", match: (item) => item.tone === "cleanup" },
     { value: "attention", label: "Needs attention", match: (item) => item.tone === "attention" },
   ];
 
@@ -94,12 +94,21 @@
 
   async function removeSelected() {
     acting = true;
+    const failures: string[] = [];
     try {
       // Sequentially: each removal best-effort deletes the client transfer, so don't flood the client.
       for (const id of pendingRemoveIds) {
-        await deleteAcquisition(id);
+        try {
+          await deleteAcquisition(id);
+        } catch (reason) {
+          const message = reason instanceof Error ? reason.message : "Failed to remove download";
+          failures.push(`${id}: ${message}`);
+        }
       }
       await load();
+      if (failures.length > 0) {
+        error = `Removed ${pendingRemoveIds.length - failures.length} of ${pendingRemoveIds.length} downloads. ${failures.join("; ")}`;
+      }
     } catch (err) {
       error = err instanceof Error ? err.message : "Failed to remove downloads";
     } finally {
@@ -110,7 +119,7 @@
 
   // Poll while anything is mid-flight so progress/speed stay live.
   $effect(() => {
-    const active = rows.some((row) => ACTIVE_ACQUISITION_STATUSES.includes(row.status as AcquisitionStatusCode));
+    const active = rows.some((row) => acquisitionStatusShouldPoll(row.status));
     if (active && !pollTimer) {
       pollTimer = setInterval(load, 4000);
     } else if (!active && pollTimer) {
@@ -146,7 +155,7 @@
 <ConfirmDialog
   open={confirmOpen}
   title={`Remove ${removeCount} download${removeCount === 1 ? "" : "s"}?`}
-  message={`This removes the selected ${removeCount === 1 ? "download" : "downloads"}, deletes any associated transfer and downloaded data from the download client, and removes the wanted placeholder. This can't be undone.`}
+  message={`This removes the selected ${removeCount === 1 ? "download" : "downloads"} and deletes any associated transfer data from the download client. Monitored items stay Wanted and can search again; use Unmonitor or Remove wanted when you mean to stop tracking them.`}
   confirmLabel="Remove"
   danger
   onConfirm={removeSelected}

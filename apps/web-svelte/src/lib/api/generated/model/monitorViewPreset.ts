@@ -12,8 +12,5 @@ export const MonitorViewPreset = {
   all: 'all',
   future: 'future',
   missing: 'missing',
-  'first-season': 'first-season',
-  'latest-season': 'latest-season',
-  pilot: 'pilot',
   none: 'none',
 } as const;

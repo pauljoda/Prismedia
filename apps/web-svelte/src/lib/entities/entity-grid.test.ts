@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { ACQUISITION_STATUS } from "$lib/api/generated/codes";
 import type { EntityCapability, EntityCard, EntityThumbnail, EntityKind } from "$lib/api/generated/model";
 import {
   AVAILABILITY_FILTER_DEFS,
@@ -395,6 +396,9 @@ describe("server-resolved filters and sorting", () => {
     expect(buildServerQueryFromFilters(["availability:wanted"])).toEqual({ wanted: true });
     expect(buildServerQueryFromFilters(["availability:downloaded"])).toEqual({ acquisitionStatus: "downloaded" });
     expect(buildServerQueryFromFilters(["availability:failed"])).toEqual({ acquisitionStatus: "failed" });
+    expect(buildServerQueryFromFilters([`availability:${ACQUISITION_STATUS.stopping}`])).toEqual({
+      acquisitionStatus: ACQUISITION_STATUS.stopping,
+    });
   });
 
   it("migrates legacy file filters to availability filters", () => {
@@ -408,10 +412,20 @@ describe("server-resolved filters and sorting", () => {
       entityCardToThumbnailCard(flaggedThumb({ id: "failed", title: "Failed", isWanted: true, wantedStatus: "failed", latestAcquisitionStatus: "failed" })),
       entityCardToThumbnailCard(flaggedThumb({ id: "searching", title: "Searching", isWanted: true, wantedStatus: "searching", latestAcquisitionStatus: "searching" })),
       entityCardToThumbnailCard(flaggedThumb({ id: "imported", title: "Imported", isWanted: false, latestAcquisitionStatus: "imported" })),
+      entityCardToThumbnailCard(flaggedThumb({
+        id: "stopping",
+        title: "Cleaning up",
+        isWanted: true,
+        wantedStatus: ACQUISITION_STATUS.stopping,
+        latestAcquisitionStatus: ACQUISITION_STATUS.stopping,
+      })),
     ];
 
     const options = buildCapabilityFilterOptions(localCards, "video");
     expect(AVAILABILITY_FILTER_DEFS.map((definition) => definition.id)).toContain("availability:failed");
+    expect(AVAILABILITY_FILTER_DEFS.map((definition) => definition.id)).toContain(
+      `availability:${ACQUISITION_STATUS.stopping}`,
+    );
     expect(applyEntityGridState(
       localCards,
       gridState({ filterIds: ["availability:on-disk"] }),
@@ -430,6 +444,47 @@ describe("server-resolved filters and sorting", () => {
       options,
       { serverResolvedFilters: false },
     ).map((card) => card.entity.id)).toEqual(["imported"]);
+    expect(applyEntityGridState(
+      localCards,
+      gridState({ filterIds: [`availability:${ACQUISITION_STATUS.stopping}`] }),
+      options,
+      { serverResolvedFilters: false },
+    ).map((card) => card.entity.id)).toEqual(["stopping"]);
+  });
+
+  it("counts and matches every subtree acquisition status with singular fallback", () => {
+    const subtree = entityCardToThumbnailCard(flaggedThumb({
+      id: "series",
+      title: "Series",
+      latestAcquisitionStatus: ACQUISITION_STATUS.imported,
+      acquisitionStatuses: [
+        ACQUISITION_STATUS.imported,
+        ACQUISITION_STATUS.downloading,
+        ACQUISITION_STATUS.failed,
+      ],
+    } as Partial<EntityThumbnail> & { acquisitionStatuses: string[]; id: string; title: string }));
+    const legacy = entityCardToThumbnailCard(flaggedThumb({
+      id: "legacy",
+      title: "Legacy",
+      latestAcquisitionStatus: ACQUISITION_STATUS.failed,
+    }));
+    const cardsWithStatuses = [subtree, legacy];
+    const options = buildCapabilityFilterOptions(cardsWithStatuses, "video-series");
+
+    expect(options.find((option) => option.id === "availability:failed")?.count).toBe(2);
+    expect(options.find((option) => option.id === "availability:downloading")?.count).toBe(1);
+    expect(applyEntityGridState(
+      cardsWithStatuses,
+      gridState({ filterIds: ["availability:downloading"] }),
+      options,
+      { serverResolvedFilters: false },
+    ).map((card) => card.entity.id)).toEqual(["series"]);
+    expect(applyEntityGridState(
+      cardsWithStatuses,
+      gridState({ filterIds: ["availability:failed"] }),
+      options,
+      { serverResolvedFilters: false },
+    ).map((card) => card.entity.id)).toEqual(["legacy", "series"]);
   });
 
   it("maps the taxonomy reference filters to the orphaned server flag in both directions", () => {

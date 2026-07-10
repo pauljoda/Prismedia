@@ -1243,7 +1243,10 @@
   .wb-searching { color: #e7d3af; border-color: rgb(211 176 106 / 0.4); background: rgb(40 33 18 / 0.85); }
   .wb-attention { color: #f2c26a; border-color: rgb(242 194 106 / 0.48); background: rgb(52 36 12 / 0.85); }
   .wb-queued { color: rgb(224 228 236 / 0.9); border-color: rgb(255 255 255 / 0.22); background: rgb(18 20 24 / 0.85); }
+  .wb-cleanup { color: #e7d3af; border-color: rgb(211 176 106 / 0.34); background: rgb(33 29 20 / 0.85); }
   .wb-failed { color: #ff9a86; border-color: rgb(255 122 92 / 0.46); background: rgb(44 16 12 / 0.85); box-shadow: 0 0 14px rgb(255 92 67 / 0.14); }
+  .wb-done { color: #6fd39a; border-color: rgb(87 201 138 / 0.34); background: rgb(20 46 32 / 0.82); }
+  .wb-muted { color: rgb(196 201 212 / 0.72); border-color: rgb(255 255 255 / 0.14); background: rgb(18 20 24 / 0.82); }
   .wb-wanted { color: rgb(242 194 106 / 0.96); border-color: rgb(242 194 106 / 0.42); background: rgb(39 29 12 / 0.82); }
 
   .rating-badge :global(svg) {

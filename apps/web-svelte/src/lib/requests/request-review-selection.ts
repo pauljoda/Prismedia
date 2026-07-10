@@ -2,12 +2,15 @@ import type {
   RequestReviewResponse,
   RequestReviewTarget,
 } from "$lib/api/generated/model";
+import { REQUEST_REVIEW_SELECTION } from "$lib/api/generated/codes";
 import { isRelationshipKind } from "$lib/components/identify-review";
 import type { MonitorPresetChild } from "$lib/requests/monitor-presets";
 import { requestKindInfo } from "$lib/requests/request-helpers";
 
 /** The only two legal commit shapes exposed by the reviewed-request API. */
-export type RequestReviewSelectionMode = "root" | "direct-children";
+export type RequestReviewSelectionMode =
+  | typeof REQUEST_REVIEW_SELECTION.root
+  | typeof REQUEST_REVIEW_SELECTION.directChildren;
 
 /**
  * Selection data derived exclusively from the canonical proposal and server-owned target map.
@@ -36,11 +39,11 @@ export function deriveRequestReviewSelection(review: RequestReviewResponse): Req
   const directTargets = directChildren
     .map((child) => targetsByProposalId.get(child.proposalId))
     .filter((target): target is RequestReviewTarget => target !== undefined);
-  const strategy = requestKindInfo(review.kind)?.reviewSelection ?? "root";
-  const mode: RequestReviewSelectionMode = strategy === "direct-children"
-    || strategy === "direct-children-when-present" && directChildren.length > 0
-    ? "direct-children"
-    : "root";
+  const strategy = requestKindInfo(review.kind)?.reviewSelection ?? REQUEST_REVIEW_SELECTION.root;
+  const mode: RequestReviewSelectionMode = strategy === REQUEST_REVIEW_SELECTION.directChildren
+    || strategy === REQUEST_REVIEW_SELECTION.directChildrenWhenPresent && directChildren.length > 0
+    ? REQUEST_REVIEW_SELECTION.directChildren
+    : REQUEST_REVIEW_SELECTION.root;
   const selectableIds = directTargets
     .filter((target) => target.requestable)
     .map((target) => target.proposalId);
@@ -50,10 +53,9 @@ export function deriveRequestReviewSelection(review: RequestReviewResponse): Req
     mode,
     selectableIds,
     initialRootSelection:
-      mode === "root" && rootTarget?.requestable ? [review.proposal.proposalId] : [],
+      mode === REQUEST_REVIEW_SELECTION.root && rootTarget?.requestable ? [review.proposal.proposalId] : [],
     presetChildren: directTargets.map((target) => ({
       id: target.proposalId,
-      number: numericValue(target.position),
       requestable: target.requestable,
     })),
   };
@@ -71,9 +73,4 @@ export function requestReviewTargetForExternalId(
 
 function qualifiedIdentity(target: RequestReviewTarget): string {
   return `${target.externalIdentity.namespace}:${target.externalIdentity.value}`;
-}
-
-function numericValue(value: number | string | null | undefined): number | null {
-  const parsed = typeof value === "string" ? Number(value) : value;
-  return typeof parsed === "number" && Number.isFinite(parsed) ? parsed : null;
 }

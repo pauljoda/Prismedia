@@ -5,4 +5,6 @@
  * OpenAPI spec version: 1.0.0
  */
 
-export type RequestDetailResponseDates = {[key: string]: string};
+export interface EntityMonitorStateRequest {
+  entityIds: string[];
+}

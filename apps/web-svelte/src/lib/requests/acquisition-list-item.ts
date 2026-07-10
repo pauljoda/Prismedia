@@ -3,10 +3,12 @@ import {
   BellOff,
   CircleAlert,
   CircleCheck,
+  CircleX,
   CloudDownload,
   ExternalLink,
   Eye,
   Hourglass,
+  LoaderCircle,
   RotateCw,
   Search,
   Trash2,
@@ -29,7 +31,13 @@ import {
   entityReferenceToThumbnailCard,
   type EntityThumbnailCard,
 } from "$lib/entities/entity-thumbnail";
-import { acquisitionStatusLabel } from "$lib/requests/acquisition-status";
+import { acquisitionStatusIsKnown, acquisitionStatusLabel } from "$lib/requests/acquisition-status";
+import {
+  monitorHasUnknownStatus,
+  monitorIsDeletingFiles,
+  monitorIsStopping,
+  monitorTransitionIsLocked,
+} from "$lib/requests/monitor-status";
 import { assetUrl } from "$lib/api/orval-fetch";
 import { formatBytes, formatEta, formatRelativeTime, formatSpeed } from "$lib/utils/format";
 
@@ -37,7 +45,7 @@ import { formatBytes, formatEta, formatRelativeTime, formatSpeed } from "$lib/ut
  * The presentation tone of an acquisition row, driving its status chip colour, progress treatment, and
  * left accent rail. Kept small and semantic so the shared card never branches on raw status codes.
  */
-export type AcquisitionItemTone = "downloading" | "searching" | "queued" | "attention" | "failed" | "done" | "muted";
+export type AcquisitionItemTone = "downloading" | "searching" | "queued" | "cleanup" | "attention" | "failed" | "done" | "muted";
 
 /**
  * One action on a card. Rendered as a `<button>` when it carries {@link run}, or an `<a>` when it
@@ -86,6 +94,8 @@ export interface AcquisitionListItem {
   qualityGap?: string | null;
   /** Bullet-separated plain meta after the client badge (speed, size, ETA, cadence). */
   metaParts: string[];
+  /** False while a durable transition owns the row and bulk mutation must fail closed. */
+  selectable?: boolean;
   primaryAction?: AcquisitionItemAction | null;
   removeAction?: AcquisitionItemAction | null;
   menuActions: AcquisitionItemAction[];
@@ -110,8 +120,12 @@ function toneForStatus(status: AcquisitionStatusCode): AcquisitionItemTone {
       return "attention";
     case ACQUISITION_STATUS.imported:
       return "done";
-    default:
+    case ACQUISITION_STATUS.stopping:
+      return "cleanup";
+    case ACQUISITION_STATUS.cancelled:
       return "muted";
+    default:
+      return "cleanup";
   }
 }
 
@@ -126,6 +140,7 @@ function iconForStatus(status: AcquisitionStatusCode): Component {
       return Hourglass;
     case ACQUISITION_STATUS.pending:
     case ACQUISITION_STATUS.searching:
+    case ACQUISITION_STATUS.awaitingSelection:
       return Search;
     case ACQUISITION_STATUS.failed:
       return CircleAlert;
@@ -133,8 +148,12 @@ function iconForStatus(status: AcquisitionStatusCode): Component {
       return TriangleAlert;
     case ACQUISITION_STATUS.imported:
       return CircleCheck;
+    case ACQUISITION_STATUS.stopping:
+      return LoaderCircle;
+    case ACQUISITION_STATUS.cancelled:
+      return CircleX;
     default:
-      return Search;
+      return LoaderCircle;
   }
 }
 
@@ -157,6 +176,8 @@ function downloadDescription(status: AcquisitionStatusCode, statusMessage: strin
       return "Importing into your library…";
     case ACQUISITION_STATUS.manualImportRequired:
       return statusMessage ?? "Manual import required.";
+    case ACQUISITION_STATUS.stopping:
+      return "Removing download and managed files…";
     default:
       return null;
   }
@@ -167,7 +188,9 @@ function isIndeterminate(status: AcquisitionStatusCode): boolean {
   return (
     status === ACQUISITION_STATUS.pending ||
     status === ACQUISITION_STATUS.searching ||
-    status === ACQUISITION_STATUS.queued
+    status === ACQUISITION_STATUS.queued ||
+    status === ACQUISITION_STATUS.stopping ||
+    !acquisitionStatusIsKnown(status)
   );
 }
 
@@ -234,6 +257,7 @@ export function downloadToListItem(
   const status = row.status as AcquisitionStatusCode;
   const kind = row.kind as EntityKindCode;
   const href = hrefFor(kind, row.entityId, thumbnail);
+  const transitionLocked = status === ACQUISITION_STATUS.stopping || !acquisitionStatusIsKnown(status);
 
   // A determinate bar belongs only to an actively-transferring item; searching/queued get the sweep.
   const showsProgress =
@@ -267,7 +291,9 @@ export function downloadToListItem(
 
   // Primary CTA: pick a release / re-search when acted on, otherwise open the entity to manage it.
   let primaryAction: AcquisitionItemAction | null;
-  if (status === ACQUISITION_STATUS.awaitingSelection && href) {
+  if (transitionLocked) {
+    primaryAction = null;
+  } else if (status === ACQUISITION_STATUS.awaitingSelection && href) {
     primaryAction = { id: "choose", label: "Choose release", icon: Search, tone: "primary", href };
   } else if (status === ACQUISITION_STATUS.failed || status === ACQUISITION_STATUS.searching || status === ACQUISITION_STATUS.pending) {
     primaryAction = { id: "search", label: "Search again", icon: RotateCw, tone: "primary", disabled: acting, run: () => callbacks.onReSearch(row) };
@@ -279,10 +305,10 @@ export function downloadToListItem(
 
   // The overflow menu holds the entity link when it isn't already the primary, plus a re-search fallback.
   const menuActions: AcquisitionItemAction[] = [];
-  if (href && primaryAction?.href !== href) {
+  if (!transitionLocked && href && primaryAction?.href !== href) {
     menuActions.push({ id: "open", label: "Open in library", icon: ExternalLink, href });
   }
-  if (searchable && primaryAction?.id !== "search") {
+  if (!transitionLocked && searchable && primaryAction?.id !== "search") {
     menuActions.push({ id: "research", label: "Search again", icon: RotateCw, disabled: acting, run: () => callbacks.onReSearch(row) });
   }
 
@@ -299,12 +325,17 @@ export function downloadToListItem(
     tone: toneForStatus(status),
     progress,
     indeterminate: isIndeterminate(status),
-    description: downloadDescription(status, row.statusMessage),
+    description: transitionLocked && status !== ACQUISITION_STATUS.stopping
+      ? "Waiting for Prismedia to finish this transition…"
+      : downloadDescription(status, row.statusMessage),
     clientLabel: row.clientName ?? null,
     qualityGap: null,
     metaParts,
+    selectable: !transitionLocked,
     primaryAction,
-    removeAction: { id: "remove", label: "Remove", icon: Trash2, tone: "danger", disabled: acting, run: () => callbacks.onRemove(row) },
+    removeAction: transitionLocked
+      ? null
+      : { id: "remove", label: "Remove", icon: Trash2, tone: "danger", disabled: acting, run: () => callbacks.onRemove(row) },
     menuActions,
   };
 }
@@ -313,6 +344,38 @@ export function downloadToListItem(
 export interface WantedItemCallbacks {
   onSearchNow: (item: WantedListItemView) => void;
   onUnmonitor: (item: WantedListItemView) => void;
+}
+
+interface WantedTransitionState {
+  deletingFiles: boolean;
+  stopping: boolean;
+  unknown: boolean;
+}
+
+function wantedStatusLabel(
+  acquisitionStatus: AcquisitionStatusCode | null,
+  variant: "missing" | "cutoffUnmet",
+  transition: WantedTransitionState,
+): string {
+  if (acquisitionStatus) return acquisitionStatusLabel(acquisitionStatus);
+  if (transition.deletingFiles) return "Deleting files";
+  if (transition.stopping) return "Stopping";
+  if (transition.unknown) return "Updating";
+  return variant === "missing" ? "Missing" : "Cutoff unmet";
+}
+
+function wantedDescription(
+  variant: "missing" | "cutoffUnmet",
+  transition: WantedTransitionState | null,
+): string {
+  if (!transition) {
+    return variant === "missing"
+      ? "Watching for a release…"
+      : "Owned copy is below the quality cutoff — upgrading.";
+  }
+  if (transition.deletingFiles) return "Removing managed files before monitoring resumes…";
+  if (transition.stopping) return "Removing pending work and wanted state…";
+  return "Waiting for Prismedia to finish this transition…";
 }
 
 /** A compact future ETA ("in 3h", "due now") for a wanted item's next scheduled search. */
@@ -330,7 +393,7 @@ function nextSearchLabel(value: string | null | undefined): string {
 /**
  * Maps a Wanted row (Missing or Cutoff Unmet) into the shared item. Missing rows read as actively hunting
  * (indeterminate sweep); cutoff rows surface the owned → cutoff quality gap. Both carry Search-now and
- * Unmonitor, and Open-in-library in the overflow.
+ * Unmonitor, and Open-in-library in the overflow, except while a durable transition locks the row.
  */
 export function wantedToListItem(
   row: WantedListItemView,
@@ -342,6 +405,20 @@ export function wantedToListItem(
   const kind = row.kind as EntityKindCode;
   const href = hrefFor(kind, row.entityId, thumbnail);
   const acqStatus = row.acquisitionStatus as AcquisitionStatusCode | null;
+  const monitorState = { status: row.monitorStatus };
+  const monitorDeletingFiles = monitorIsDeletingFiles(monitorState);
+  const monitorStopping = monitorIsStopping(monitorState);
+  const monitorUnknown = monitorHasUnknownStatus(monitorState);
+  const acquisitionLocked = acqStatus !== null && (
+    acqStatus === ACQUISITION_STATUS.stopping ||
+    !acquisitionStatusIsKnown(acqStatus)
+  );
+  const transitionLocked = monitorTransitionIsLocked(monitorState) || acquisitionLocked;
+  const transition = {
+    deletingFiles: monitorDeletingFiles,
+    stopping: monitorStopping || acqStatus === ACQUISITION_STATUS.stopping,
+    unknown: monitorUnknown || (acqStatus !== null && !acquisitionStatusIsKnown(acqStatus)),
+  };
 
   const metaParts: string[] = [
     `last ${formatRelativeTime(row.lastSearchedAt ?? null, true)}`,
@@ -351,7 +428,7 @@ export function wantedToListItem(
     metaParts.push(`${row.barrenSearches} barren`);
   }
 
-  const statusLabel = acqStatus ? acquisitionStatusLabel(acqStatus) : variant === "missing" ? "Missing" : "Cutoff unmet";
+  const statusLabel = wantedStatusLabel(acqStatus, variant, transition);
   const status = acqStatus ?? ACQUISITION_STATUS.searching;
 
   return {
@@ -363,19 +440,17 @@ export function wantedToListItem(
     thumbnail: thumbnailFor(row.entityId ?? row.monitorId, kind, row.title, row.posterUrl, href, thumbnail),
     href,
     statusLabel,
-    statusIcon: iconForStatus(status),
+    statusIcon: transitionLocked ? LoaderCircle : iconForStatus(status),
     // Missing items are actively re-searched; cutoff items own a copy and upgrade quietly.
-    tone: variant === "missing" ? "searching" : "attention",
+    tone: transitionLocked ? "cleanup" : variant === "missing" ? "searching" : "attention",
     progress: null,
-    indeterminate: variant === "missing",
-    description:
-      variant === "missing"
-        ? "Watching for a release…"
-        : "Owned copy is below the quality cutoff — upgrading.",
+    indeterminate: transitionLocked || variant === "missing",
+    description: wantedDescription(variant, transitionLocked ? transition : null),
     clientLabel: null,
     qualityGap: variant === "cutoffUnmet" ? `${row.ownedQuality ?? "—"} → ${row.cutoffQuality ?? "—"}` : null,
     metaParts,
-    primaryAction: {
+    selectable: !transitionLocked,
+    primaryAction: transitionLocked ? null : {
       id: "search",
       label: "Search now",
       icon: RotateCw,
@@ -383,7 +458,7 @@ export function wantedToListItem(
       disabled: acting || !row.acquisitionId,
       run: () => callbacks.onSearchNow(row),
     },
-    removeAction: {
+    removeAction: transitionLocked ? null : {
       id: "unmonitor",
       label: "Unmonitor",
       icon: BellOff,
@@ -391,7 +466,7 @@ export function wantedToListItem(
       disabled: acting,
       run: () => callbacks.onUnmonitor(row),
     },
-    menuActions: href ? [{ id: "open", label: "Open in library", icon: ExternalLink, href }] : [],
+    menuActions: !transitionLocked && href ? [{ id: "open", label: "Open in library", icon: ExternalLink, href }] : [],
   };
 }
 

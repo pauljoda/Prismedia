@@ -3,7 +3,7 @@
   import { AlertTriangle, Loader2, PackageSearch, PlugZap } from "@lucide/svelte";
   import { Button } from "@prismedia/ui-svelte";
   import { goto } from "$app/navigation";
-  import type { RequestMediaKindCode } from "$lib/api/generated/codes";
+  import { ENTITY_KIND, type RequestMediaKindCode } from "$lib/api/generated/codes";
   import type { ExternalIdentity, RequestSearchResult } from "$lib/api/generated/model";
   import type { EntitySearchCandidate, PluginProvider } from "$lib/api/identify-types";
   import { fetchPluginProviders } from "$lib/api/plugins";
@@ -81,6 +81,7 @@
     }),
   );
   const candidates = $derived(candidateEntries.map((entry) => entry.candidate));
+  let lastHideNsfw: boolean | null = null;
 
   onMount(() => {
     let mounted = true;
@@ -102,6 +103,34 @@
       mounted = false;
       searchRevision += 1;
     };
+  });
+
+  // Provider eligibility is part of the NSFW boundary. A mode change invalidates both the
+  // selected provider and every result returned under the previous boundary, including an
+  // in-flight response. Re-seed the first newly eligible provider just like a fresh kind choice.
+  $effect(() => {
+    const nextHideNsfw = hideNsfw;
+    if (lastHideNsfw === null) {
+      lastHideNsfw = nextHideNsfw;
+      return;
+    }
+    if (nextHideNsfw === lastHideNsfw) return;
+    lastHideNsfw = nextHideNsfw;
+    resetSearch();
+
+    const kind = selectedKind;
+    if (!kind) {
+      selectedProviderId = "";
+      searchValues = {};
+      return;
+    }
+
+    const nextProvider = discoverSearchProviders(providers, kind, nextHideNsfw)[0] ?? null;
+    selectedProviderId = nextProvider?.id ?? "";
+    const fields = nextProvider
+      ? discoverSearchSupport(nextProvider, kind, nextHideNsfw)?.search?.fields ?? []
+      : [];
+    searchValues = seedPluginSearchFields(fields, {}, "");
   });
 
   function isNavigableResult(result: RequestSearchResult): result is NavigableRequestResult {
@@ -315,7 +344,7 @@
         {#if candidates.length > 0}
           <PluginCandidateList
             {candidates}
-            entityKind={selectedKindInfo?.entityKind ?? "book"}
+            entityKind={selectedKindInfo?.entityKind ?? ENTITY_KIND.book}
             {activeCandidateKey}
             disabled={searching}
             onActivate={activateCandidate}

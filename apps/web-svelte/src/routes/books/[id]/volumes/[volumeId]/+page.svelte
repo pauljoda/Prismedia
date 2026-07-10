@@ -92,6 +92,10 @@
       },
     ];
   });
+  const fileManagement = {
+    onDeleted: () => goto(`/books/${bookId}`),
+    onReverted: loadVolume,
+  };
   const detailTabs = $derived.by((): EntityDetailTab[] => {
     if (!card) return [];
     const tabs: EntityDetailTab[] = [
@@ -239,6 +243,7 @@
       posterSize="large"
       tabs={detailTabs}
       actionButtons={heroActions}
+      {fileManagement}
     >
       {#snippet heroMeta()}
         <span class="meta-item">{bookTitle}</span>

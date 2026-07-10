@@ -124,8 +124,8 @@
     const mq = window.matchMedia(DESKTOP_WHEEL_SCRUB_MQ);
     const handleWheel = (event: WheelEvent) => {
       if (!mq.matches) return;
-      const rawDelta =
-        Math.abs(event.deltaX) > Math.abs(event.deltaY) ? event.deltaX : event.deltaY;
+      if (Math.abs(event.deltaX) <= Math.abs(event.deltaY)) return;
+      const rawDelta = event.deltaX;
       if (rawDelta === 0 || trackWidth <= 0) return;
       event.preventDefault();
       event.stopPropagation();
@@ -182,7 +182,7 @@
     <div
       bind:this={containerEl}
       use:containerSize.attach
-      class="relative flex-1 overflow-hidden select-none touch-none"
+      class="relative flex-1 overflow-hidden select-none touch-pan-y"
       style={`height: ${STRIP_HEIGHT}px`}
       onpointerdown={(event) => {
         if (safeDuration <= 0 || trackWidth <= 0) return;

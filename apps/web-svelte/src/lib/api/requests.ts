@@ -16,6 +16,7 @@ import type {
   RequestReviewResponse,
   RequestSearchResponse,
   ReviewedRequestCommitRequest,
+  WantedRemovalResponse,
 } from "$lib/api/generated/model";
 import { unwrapGenerated } from "$lib/api/generated-response";
 
@@ -99,8 +100,11 @@ export async function requestMissingChildren(entityId: string): Promise<MissingC
  * container discovery so a followed author/artist sweep never resurrects it. Explicitly requesting the
  * same work again clears its blacklist entry.
  */
-export async function removeWantedEntities(entityIds: string[]): Promise<void> {
-  unwrapGenerated(await removeWantedRequest({ entityIds }), "Failed to remove wanted items");
+export async function removeWantedEntities(entityIds: string[]): Promise<WantedRemovalResponse> {
+  return unwrapGenerated<WantedRemovalResponse>(
+    await removeWantedRequest({ entityIds }),
+    "Failed to remove wanted items",
+  );
 }
 
 /** Immediately re-syncs a followed author/artist from its provider — the manual counterpart to the daily sweep. */

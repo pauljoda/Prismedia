@@ -37,7 +37,7 @@
 </script>
 
 <article class="acq-card" class:is-selected={selected}>
-  {#if selectable}
+  {#if selectable && item.selectable !== false}
     <div class="select">
       <Checkbox size="md" checked={selected} onchange={() => onToggleSelected?.(item.id)} aria-label={`Select ${item.title}`} />
     </div>
@@ -257,6 +257,7 @@
   .status-downloading { color: #f2c26a; background: rgb(60 44 16 / 0.5); border: 1px solid rgb(242 194 106 / 0.32); }
   .status-searching { color: #e7d3af; background: rgb(48 40 22 / 0.5); border: 1px solid rgb(211 176 106 / 0.3); }
   .status-queued { color: rgb(214 219 228 / 0.85); background: rgb(255 255 255 / 0.05); border: 1px solid rgb(255 255 255 / 0.14); }
+  .status-cleanup { color: #e7d3af; background: rgb(40 33 18 / 0.5); border: 1px solid rgb(211 176 106 / 0.28); }
   .status-attention { color: #f2c26a; background: rgb(58 38 12 / 0.55); border: 1px solid rgb(242 194 106 / 0.4); }
   .status-failed { color: #ff9a86; background: rgb(48 18 14 / 0.5); border: 1px solid rgb(255 122 92 / 0.38); }
   .status-done { color: #6fd39a; background: rgb(20 46 32 / 0.5); border: 1px solid rgb(87 201 138 / 0.3); }

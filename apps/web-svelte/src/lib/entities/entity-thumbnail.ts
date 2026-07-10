@@ -111,7 +111,7 @@ export interface EntityThumbnailCard {
   custom?: EntityThumbnailCustomOverlay;
   fit?: "contain" | "cover";
   hover: EntityThumbnailHoverPreview;
-  /** True when this entity owns source media rather than only artwork/cache files. */
+  /** True when this Entity or its structural descendants own source media. */
   hasSourceMedia?: boolean;
   href?: string;
   meta?: EntityThumbnailMetaItem[];
@@ -124,6 +124,11 @@ export interface EntityThumbnailCard {
   wantedStatus?: string | null;
   /** Latest linked acquisition state, retained after an entity leaves Wanted. */
   latestAcquisitionStatus?: string | null;
+  /**
+   * Distinct acquisition states across the Entity's structural subtree. Availability filters use
+   * membership here; older servers may omit it, in which case callers fall back to the singular status.
+   */
+  acquisitionStatuses?: string[] | null;
   routeContext?: EntityRouteContext;
   subtitle?: string;
 }

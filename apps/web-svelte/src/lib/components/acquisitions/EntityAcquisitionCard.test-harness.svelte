@@ -6,15 +6,19 @@
   let {
     initialAcquisition,
     refresh,
-    onReverted,
-    onDeleted,
     onImported,
+    monitorStopping = false,
+    monitorDeletingFiles = false,
+    monitorUnknownStatus = false,
+    onToggleMonitor,
   }: {
     initialAcquisition: AcquisitionDetail;
     refresh: () => Promise<void>;
-    onReverted: () => void | Promise<void>;
-    onDeleted: () => void;
     onImported?: () => void | Promise<void>;
+    monitorStopping?: boolean;
+    monitorDeletingFiles?: boolean;
+    monitorUnknownStatus?: boolean;
+    onToggleMonitor?: () => void | Promise<void>;
   } = $props();
 
   let acquisition = $derived<AcquisitionDetail | null>(initialAcquisition);
@@ -26,17 +30,31 @@
     set acquisition(value) {
       acquisition = value;
     },
-    monitor: null,
+    get monitor() {
+      return monitorStopping || monitorDeletingFiles || monitorUnknownStatus ? ({} as never) : null;
+    },
     monitorActive: false,
+    get monitorStopping() {
+      return monitorStopping;
+    },
+    get monitorDeletingFiles() {
+      return monitorDeletingFiles;
+    },
+    get monitorUnknownStatus() {
+      return monitorUnknownStatus;
+    },
     trackedVia: "",
-    showMonitor: false,
+    showSync: false,
+    get showMonitor() {
+      return monitorStopping || monitorDeletingFiles || monitorUnknownStatus;
+    },
     showSearch: false,
     showSearchMissing: false,
     visible: true,
-    childStatuses: [],
-    childKindLabel: "",
-    missingChildren: [],
+    childCards: [],
+    missingChildCount: 0,
     monitorBusy: false,
+    monitorError: null,
     syncBusy: false,
     searchBusy: false,
     missingBusy: false,
@@ -45,18 +63,18 @@
       acquisition = null;
     },
     refresh: () => refresh(),
-    async toggleMonitor() {},
+    async toggleMonitor() {
+      await onToggleMonitor?.();
+    },
     async syncNow() {},
     async searchMissing() {},
     async searchForRelease() {},
+    async childMonitoringChanged() {},
   };
 </script>
 
 <span data-testid="bound-acquisition-id">{acquisition?.summary.id ?? "none"}</span>
 <EntityAcquisitionCard
   {acq}
-  entity={{ id: "season-1", kind: "video-season", title: "Season 1" }}
-  {onDeleted}
-  {onReverted}
   {onImported}
 />

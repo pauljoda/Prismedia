@@ -40,6 +40,7 @@
     toggleOptimisticEntityFlag,
     updateOptimisticEntityRating,
   } from "$lib/entities/entity-detail-state";
+  import { refreshAfterManagedFileRevert } from "$lib/entities/entity-file-management";
   import { useIdentifyDetailAction } from "$lib/components/identify/use-identify-detail-action.svelte";
   import type { EntityDetailCredit, EntityDetailTag } from "$lib/entities/entity-detail";
   import { entityCardToDetailCard, type EntityDetailCardFull } from "$lib/entities/entity-detail";
@@ -125,11 +126,7 @@
   const videoCard = $derived.by((): EntityDetailCardFull | null => (
     video ? entityCardToDetailCard(video) : null
   ));
-  const identifyAction = useIdentifyDetailAction(
-    () => card?.entity.id,
-    () => card?.entity.kind,
-    () => movie?.capabilities,
-  );
+  const identifyAction = useIdentifyDetailAction(() => movie);
   const heroActions = $derived.by((): EntityDetailActionButton[] =>
     identifyAction.action ? [identifyAction.action] : []);
 
@@ -138,8 +135,13 @@
   const acq = useEntityAcquisition({
     entityId: () => movie?.id,
     capabilities: () => movie?.capabilities,
-    onChanged: loadMovie,
+    onChanged: refreshMovie,
+    onPruned: () => goto("/movies"),
   });
+  const fileManagement = {
+    onDeleted: () => goto("/movies"),
+    onReverted: () => refreshAfterManagedFileRevert(acq, refreshMovie),
+  };
   const videoId = $derived(video?.id ?? "");
 
   const playerProps = $derived.by(() => {
@@ -462,8 +464,14 @@
   async function refreshMovie() {
     try {
       const nextMovie = await fetchMovie(movie?.id ?? page.params.id ?? "");
-      const childVideoId = getChildIds(nextMovie, ENTITY_KIND.video)[0] ?? video?.id;
-      if (!childVideoId) return;
+      const childVideoId = getChildIds(nextMovie, ENTITY_KIND.video)[0];
+      if (!childVideoId) {
+        movie = nextMovie;
+        video = null;
+        playbackInfo = null;
+        await hydrateMovieRelationships(nextMovie);
+        return;
+      }
       const nextVideo = await fetchVideo(childVideoId);
       movie = nextMovie;
       video = nextVideo;
@@ -785,6 +793,7 @@
       tabs={detailTabs}
       sections={detailSections}
       actionButtons={heroActions}
+      {fileManagement}
       defaultCreditRole={CREDIT_ROLE.actor}
     >
       {#snippet heroMeta()}
@@ -800,9 +809,7 @@
           <EntityAcquisitionCard
             {acq}
             onCancelled={handleAcquisitionCancelled}
-            entity={movie ? { id: movie.id, kind: movie.kind, title: movie.title } : undefined}
-            onDeleted={() => void goto("/movies")}
-            onReverted={() => void refreshMovie()}
+            onImported={refreshMovie}
           />
         {:else}
           <VideoDetailSectionContent
@@ -843,6 +850,7 @@
       showHero
       posterSize="large"
       actionButtons={heroActions}
+      {fileManagement}
       tabs={wantedDetailTabs}
       sections={detailSections}
       defaultCreditRole={CREDIT_ROLE.actor}
@@ -865,9 +873,7 @@
           <EntityAcquisitionCard
             {acq}
             onCancelled={handleAcquisitionCancelled}
-            entity={movie ? { id: movie.id, kind: movie.kind, title: movie.title } : undefined}
-            onDeleted={() => void goto("/movies")}
-            onReverted={() => void refreshMovie()}
+            onImported={refreshMovie}
           />
         {/if}
       {/snippet}

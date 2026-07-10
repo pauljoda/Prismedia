@@ -59,7 +59,7 @@ describe("FilmStrip", () => {
     });
 
     await screen.findByRole("button", { name: "Previous frame" });
-    const scrubber = container.querySelector(".touch-none") as HTMLElement;
+    const scrubber = container.querySelector(".touch-pan-y") as HTMLElement;
     expect(scrubber).toBeTruthy();
 
     await fireEvent(scrubber, pointerEvent("pointerdown", 200));
@@ -89,7 +89,7 @@ describe("FilmStrip", () => {
     });
 
     await screen.findByRole("button", { name: "Previous frame" });
-    const scrubber = container.querySelector(".touch-none") as HTMLElement;
+    const scrubber = container.querySelector(".touch-pan-y") as HTMLElement;
 
     await fireEvent.wheel(scrubber, { deltaX: 92 });
 
@@ -117,7 +117,7 @@ describe("FilmStrip", () => {
     });
 
     await screen.findByRole("button", { name: "Previous frame" });
-    const scrubber = container.querySelector(".touch-none") as HTMLElement;
+    const scrubber = container.querySelector(".touch-pan-y") as HTMLElement;
     const verticalWheel = new WheelEvent("wheel", {
       bubbles: true,
       cancelable: true,

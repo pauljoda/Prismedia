@@ -1,11 +1,19 @@
 import { describe, expect, it } from "vitest";
-import { ENTITY_KIND, REQUEST_MEDIA_KIND, REQUEST_PROVIDER_KIND } from "$lib/api/generated/codes";
-import { entityKindForRequest, inferRequestSourceForKind, numericValue, requestKindForEntityKind } from "./request-helpers";
+import {
+  ENTITY_KIND,
+  REQUEST_KIND_MANIFEST,
+  REQUEST_MEDIA_KIND,
+} from "$lib/api/generated/codes";
+import {
+  entityKindForRequest,
+  numericValue,
+  REQUEST_KINDS,
+  requestKindForEntityKind,
+} from "./request-helpers";
 
 describe("request helpers", () => {
-  it("infers the plugin source for book and author detail routes", () => {
-    expect(inferRequestSourceForKind(REQUEST_MEDIA_KIND.book)).toBe(REQUEST_PROVIDER_KIND.plugin);
-    expect(inferRequestSourceForKind(REQUEST_MEDIA_KIND.author)).toBe(REQUEST_PROVIDER_KIND.plugin);
+  it("uses the generated backend request-kind manifest without a parallel table", () => {
+    expect(REQUEST_KINDS).toBe(REQUEST_KIND_MANIFEST);
   });
 
   it("maps every request kind to the library entity kind it becomes (virtual entities)", () => {

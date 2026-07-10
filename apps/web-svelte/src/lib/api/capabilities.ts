@@ -3,6 +3,7 @@ import type {
   EntityCapabilityDescriptionCapability,
   EntityCapabilityFlagsCapability,
   EntityCapabilityImagesCapability,
+  EntityCapabilityProviderIdentityCapability,
   EntityCapabilityRatingCapability,
   EntityCapabilityTechnicalCapability,
   ExternalIdentity,
@@ -51,6 +52,23 @@ export function getFlagsCapability(
   capabilities: EntityCapability[],
 ): EntityCapabilityFlagsCapability | undefined {
   return getCapability(capabilities, CAPABILITY_KIND.flags);
+}
+
+/** The authoritative plugin + persistent identity binding chosen for this Entity, when present. */
+export function getProviderIdentityCapability(
+  capabilities: EntityCapability[],
+): EntityCapabilityProviderIdentityCapability | undefined {
+  return getCapability(capabilities, CAPABILITY_KIND.providerIdentity);
+}
+
+/** Managed file actions explicitly supported by the Entity's backend kind descriptor. */
+export function getFileManagementCapability(capabilities: EntityCapability[]) {
+  return getCapability(capabilities, CAPABILITY_KIND.fileManagement);
+}
+
+/** True only when the backend projected the shared managed delete-files capability. */
+export function canDeleteEntityFiles(capabilities: EntityCapability[]): boolean {
+  return getFileManagementCapability(capabilities)?.canDeleteFiles === true;
 }
 
 export function getRatingValue(capabilities: EntityCapability[]): number {

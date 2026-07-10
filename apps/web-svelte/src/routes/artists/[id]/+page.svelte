@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from "svelte";
+  import { goto } from "$app/navigation";
   import { page } from "$app/state";
   import { CloudDownload, Disc3, Info, Play, Shuffle, SlidersHorizontal, Users } from "@lucide/svelte";
   import EntityDetailSkeleton from "$lib/components/entities/EntityDetailSkeleton.svelte";
@@ -15,6 +16,7 @@
     toggleOptimisticEntityFlag,
     updateOptimisticEntityRating,
   } from "$lib/entities/entity-detail-state";
+  import { refreshAfterManagedFileRevert } from "$lib/entities/entity-file-management";
   import { entityCardToDetailCard, type EntityDetailCardFull, type EntityDetailCredit, type EntityDetailTag } from "$lib/entities/entity-detail";
   import { CAPABILITY_KIND, CREDIT_ROLE } from "$lib/entities/entity-codes";
   import { resolveEntityHref } from "$lib/entities/entity-routes";
@@ -35,6 +37,7 @@
   import EntityGrid from "$lib/components/entities/EntityGrid.svelte";
   import EntityAcquisitionCard from "$lib/components/acquisitions/EntityAcquisitionCard.svelte";
   import { useEntityAcquisition } from "$lib/components/acquisitions/use-entity-acquisition.svelte";
+  import { requestableDirectChildCards } from "$lib/requests/requestable-entity-children";
   import { useIdentifyDetailAction } from "$lib/components/identify/use-identify-detail-action.svelte";
   import { redirectHiddenEntityNotFound } from "$lib/nsfw/hidden-entity";
   import { useNsfw } from "$lib/nsfw/store.svelte";
@@ -71,21 +74,23 @@
     };
   });
 
-  const identifyAction = useIdentifyDetailAction(
-    () => artist?.id,
-    () => artist?.kind,
-    () => artist?.capabilities,
-  );
+  const identifyAction = useIdentifyDetailAction(() => artist);
 
   // Monitoring lives in the Acquisition detail tab ("Check for new works" runs the discovery sync
   // now; the page reloads to show any new phantoms). It works for scanned-in and requested artists
-  // alike; it needs a provider identity a plugin can track. The tab hides when no plugin can.
+  // alike; it needs a provider identity a plugin can track. The same tab also owns the shared
+  // per-child controls for albums, so parents do not need a medium-specific monitoring editor.
   const acq = useEntityAcquisition({
     entityId: () => artist?.id,
     capabilities: () => artist?.capabilities,
-    childCards: () => albumCards,
-    onChanged: () => void loadArtist(),
+    childCards: () => requestableDirectChildCards(artist?.id, albumCards),
+    onChanged: () => loadArtist({ showLoading: false }),
+    onPruned: () => goto("/artists"),
   });
+  const fileManagement = {
+    onDeleted: () => goto("/artists"),
+    onReverted: () => refreshAfterManagedFileRevert(acq, () => loadArtist({ showLoading: false })),
+  };
 
   const heroActions = $derived.by((): EntityDetailActionButton[] => {
     const actions: EntityDetailActionButton[] = [];
@@ -172,9 +177,11 @@
     ]);
   });
 
-  async function loadArtist() {
-    loadState = "loading";
-    errorMessage = null;
+  async function loadArtist(options = { showLoading: true }) {
+    if (options.showLoading) {
+      loadState = "loading";
+      errorMessage = null;
+    }
     try {
       const nextArtist = await fetchMusicArtist(page.params.id ?? "");
 
@@ -197,7 +204,7 @@
     } catch (err) {
       if (redirectHiddenEntityNotFound(err, nsfw.mode)) return;
       errorMessage = err instanceof Error ? err.message : String(err);
-      loadState = "error";
+      if (options.showLoading) loadState = "error";
     }
   }
 
@@ -252,6 +259,7 @@
       defaultCreditRole={CREDIT_ROLE.artist}
       posterSize="large"
       actionButtons={heroActions}
+      {fileManagement}
       tabs={detailTabs}
       sections={detailSections}
     >
@@ -263,7 +271,10 @@
 
       {#snippet sectionContent(section)}
         {#if section.id === "acquisition"}
-          <EntityAcquisitionCard {acq} />
+          <EntityAcquisitionCard
+            {acq}
+            onImported={() => loadArtist({ showLoading: false })}
+          />
         {/if}
       {/snippet}
     </EntityDetail>

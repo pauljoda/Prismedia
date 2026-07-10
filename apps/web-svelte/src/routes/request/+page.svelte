@@ -13,7 +13,7 @@
   import { Button, cn } from "@prismedia/ui-svelte";
   import type { SelectOption } from "@prismedia/ui-svelte";
   import { goto } from "$app/navigation";
-  import { ENTITY_KIND } from "$lib/api/generated/codes";
+  import { REQUEST_KIND_MANIFEST } from "$lib/api/generated/codes";
   import type { AcquisitionHistoryView } from "$lib/api/generated/model";
   import { fetchAcquisitionHistory } from "$lib/api/acquisitions";
   import { labelForEntityKind } from "$lib/entities/entity-codes";
@@ -33,10 +33,15 @@
   type RequestTab = (typeof tabs)[number]["id"];
   let activeTab = $state<RequestTab>("discover");
 
-  // Kind filter options for the Wanted lists — the acquisition-capable library kinds plus "All".
+  // Wanted filters are concrete acquisition units from the backend registry, not container kinds.
+  const wantedKinds = [...new Set(
+    REQUEST_KIND_MANIFEST
+      .filter((descriptor) => descriptor.committable)
+      .map((descriptor) => descriptor.acquisitionKind),
+  )];
   const wantedKindOptions: SelectOption[] = [
     { value: "all", label: "All kinds" },
-    ...[ENTITY_KIND.book, ENTITY_KIND.movie, ENTITY_KIND.videoSeries, ENTITY_KIND.audioLibrary].map(
+    ...wantedKinds.map(
       (kind) => ({ value: kind, label: labelForEntityKind(kind) }),
     ),
   ];
@@ -65,7 +70,7 @@
     if (activeTab === "history") void loadHistory();
   });
 
-  // Preserve the active tab across navigation so returning from a detail page lands back on Requests
+  // Preserve the active tab across navigation so returning from proposal review lands back on Requests
   // rather than resetting to Discover.
   const pageSnapshots = usePageSnapshots();
   onMount(() =>

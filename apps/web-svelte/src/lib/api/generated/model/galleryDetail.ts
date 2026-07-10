@@ -24,6 +24,7 @@ export interface GalleryDetail {
      * @pattern ^-?(?:0|[1-9]\d*)$
      */
   sortOrder: number | string | null;
+  hasSourceMedia?: boolean;
   capabilities: EntityCapability[];
   childrenByKind: EntityGroup[];
   relationships: EntityGroup[];

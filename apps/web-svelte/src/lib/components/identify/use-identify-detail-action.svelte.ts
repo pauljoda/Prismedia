@@ -6,8 +6,8 @@ import {
   providerCanIdentifyKind,
   requestIdentifySearch,
 } from "$lib/api/identify-client";
-import { hasSourceMedia, isWanted } from "$lib/api/capabilities";
-import type { EntityCapability } from "$lib/api/generated/model";
+import { isWanted } from "$lib/api/capabilities";
+import type { EntityCard } from "$lib/api/generated/model";
 import type { IdentifyQueueItem } from "$lib/api/identify-types";
 import type { EntityDetailActionButton } from "$lib/components/entities/EntityDetail.svelte";
 
@@ -16,9 +16,7 @@ import type { EntityDetailActionButton } from "$lib/components/entities/EntityDe
  * EntityDetail owns rendering/styling; this helper only owns async provider and queue state.
  */
 export function useIdentifyDetailAction(
-  entityId: () => string | null | undefined,
-  entityKind: () => string | null | undefined,
-  capabilities: () => EntityCapability[] | null | undefined,
+  entity: () => Pick<EntityCard, "id" | "kind" | "capabilities" | "hasSourceMedia"> | null | undefined,
 ): { readonly action: EntityDetailActionButton | null } {
   let queuedItem: IdentifyQueueItem | null = $state(null);
   let hasReadyProvider = $state(false);
@@ -27,8 +25,8 @@ export function useIdentifyDetailAction(
   let loadVersion = 0;
 
   const eligible = $derived.by(() => {
-    const current = capabilities();
-    return current !== null && current !== undefined && hasSourceMedia(current) && !isWanted(current);
+    const current = entity();
+    return current?.hasSourceMedia === true && !isWanted(current.capabilities);
   });
 
   const isQueued = $derived.by(() => queuedItem !== null && isActiveQueueState(queuedItem.state));
@@ -40,9 +38,8 @@ export function useIdentifyDetailAction(
   );
 
   $effect(() => {
-    const id = entityId();
-    const kind = entityKind();
-    if (!id || !eligible) {
+    const current = entity();
+    if (!current?.id || !eligible) {
       queuedItem = null;
       hasReadyProvider = false;
       loading = false;
@@ -51,22 +48,22 @@ export function useIdentifyDetailAction(
       return;
     }
 
-    const loadKey = `${id}:${kind ?? ""}`;
+    const loadKey = `${current.id}:${current.kind}`;
     if (loadKey === lastLoadKey) return;
     lastLoadKey = loadKey;
-    void loadStatus(id, kind, true);
+    void loadStatus(current.id, current.kind, true);
 
     return () => undefined;
   });
 
   $effect(() => {
-    const id = entityId();
-    if (!id || !eligible || typeof window === "undefined") return;
+    const current = entity();
+    if (!current?.id || !eligible || typeof window === "undefined") return;
 
     const refresh = () => {
-      const currentId = entityId();
-      if (!currentId || !eligible) return;
-      void loadStatus(currentId, entityKind(), false);
+      const latest = entity();
+      if (!latest?.id || !eligible) return;
+      void loadStatus(latest.id, latest.kind, false);
     };
     const refreshWhenVisible = () => {
       if (document.visibilityState === "visible") refresh();
@@ -81,8 +78,8 @@ export function useIdentifyDetailAction(
   });
 
   const action = $derived.by((): EntityDetailActionButton | null => {
-    const id = entityId();
-    if (!id || !eligible) return null;
+    const current = entity();
+    if (!current?.id || !eligible) return null;
 
     // The button always renders so the hero action row never reflows.
     if (loading) {
@@ -104,8 +101,7 @@ export function useIdentifyDetailAction(
         icon: ScanSearch,
         iconClass: "h-3.5 w-3.5",
         ariaLabel: "Identify (no compatible plugin installed)",
-        disabled: true,
-        disabledHint: "No compatible Identify plugin for this media type. Click to open Plugins and install one.",
+        title: "No compatible Identify plugin for this media type. Open Plugins to install one.",
         onClick: () => void goto("/plugins"),
       };
     }
@@ -118,7 +114,7 @@ export function useIdentifyDetailAction(
       title,
       ariaLabel: label,
       active: isQueued,
-      onClick: () => void navigate(id),
+      onClick: () => void navigate(current.id),
     };
   });
 

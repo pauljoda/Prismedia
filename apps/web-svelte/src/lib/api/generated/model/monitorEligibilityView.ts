@@ -4,8 +4,12 @@
  * Prismedia.Api | v1
  * OpenAPI spec version: 1.0.0
  */
+import type { EntityKind } from './entityKind';
 
 export interface MonitorEligibilityView {
   canMonitor: boolean;
   trackableProviders: string[];
+  discoversChildren: boolean;
+  canSearchMissingChildren: boolean;
+  missingChildEntityKind: null | EntityKind;
 }

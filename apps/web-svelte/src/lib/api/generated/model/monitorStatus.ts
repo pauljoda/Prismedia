@@ -11,5 +11,7 @@ export type MonitorStatus = typeof MonitorStatus[keyof typeof MonitorStatus];
 export const MonitorStatus = {
   active: 'active',
   paused: 'paused',
+  'deleting-files': 'deleting-files',
+  stopping: 'stopping',
   fulfilled: 'fulfilled',
 } as const;
