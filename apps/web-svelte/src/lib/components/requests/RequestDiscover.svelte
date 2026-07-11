@@ -8,14 +8,12 @@
   import type { EntitySearchCandidate, PluginProvider } from "$lib/api/identify-types";
   import { fetchPluginProviders } from "$lib/api/plugins";
   import { searchRequestsByPlugin } from "$lib/api/requests";
-  import IdentifyProviderSelect from "$lib/components/identify/IdentifyProviderSelect.svelte";
-  import PluginSearchForm from "$lib/components/plugins/PluginSearchForm.svelte";
+  import PluginSearchSurface from "$lib/components/plugins/PluginSearchSurface.svelte";
   import {
     hasRequiredPluginSearchFields,
     seedPluginSearchFields,
     submittedPluginSearchFields,
   } from "$lib/components/plugins/plugin-search-fields";
-  import PluginCandidateList from "$lib/components/review/PluginCandidateList.svelte";
   import { useNsfw } from "$lib/nsfw/store.svelte";
   import { discoverSearchProviders, discoverSearchSupport } from "$lib/requests/discovery-plugins";
   import { DISCOVERABLE_REQUEST_KINDS, numericValue } from "$lib/requests/request-helpers";
@@ -291,27 +289,6 @@
               Enable a compatible provider in Plugins first.
             </p>
           </div>
-        {:else if activeProvider}
-          <div class="request-discover-provider flex max-w-md flex-col gap-1.5">
-            <span class="font-mono text-[0.72rem] text-text-muted">Source</span>
-            <IdentifyProviderSelect
-              providers={eligibleProviders}
-              selectedId={activeProvider.id}
-              onChange={chooseProvider}
-              label="Source"
-              compact
-            />
-          </div>
-
-          <PluginSearchForm
-            fields={activeSearchFields}
-            values={searchValues}
-            onValuesChange={(values) => (searchValues = values)}
-            onSubmit={() => void runSearch()}
-            onClear={clearSearch}
-            loading={searching}
-            submitDisabled={!canSubmitSearch}
-          />
         {/if}
       {:else}
         <div class="empty-rack-slot p-4 text-[0.78rem] text-text-muted">
@@ -333,43 +310,23 @@
   {/each}
 
   {#if selectedKind && activeProvider}
-    <section class="surface-panel overflow-hidden">
-      <header class="flex items-center gap-2.5 border-b border-border-subtle bg-surface-2 px-3.5 py-2.5">
-        <span class="text-kicker text-text-accent">Candidates</span>
-        {#if hasSearched}
-          <span class="font-mono text-[0.7rem] text-text-muted">{candidateEntries.length} found</span>
-        {/if}
-      </header>
-      <div class="p-3.5">
-        {#if candidates.length > 0}
-          <PluginCandidateList
-            {candidates}
-            entityKind={selectedKindInfo?.entityKind ?? ENTITY_KIND.book}
-            {activeCandidateKey}
-            disabled={searching}
-            onActivate={activateCandidate}
-          />
-        {:else if searching}
-          <div class="flex items-center justify-center gap-2.5 p-7 text-text-muted" role="status">
-            <Loader2 class="h-4 w-4 animate-spin" />
-            <span class="text-sm">Searching {activeProvider.name}…</span>
-          </div>
-        {:else if hasSearched}
-          <div class="empty-rack-slot p-6 text-center">
-            <p class="text-sm text-text-muted">No usable candidates found. Try a different search.</p>
-          </div>
-        {:else}
-          <div class="empty-rack-slot p-6 text-center">
-            <p class="text-sm text-text-muted">Enter the provider-specific details above to find candidates.</p>
-          </div>
-        {/if}
-      </div>
-    </section>
+    <PluginSearchSurface
+      providers={eligibleProviders}
+      selectedProviderId={activeProvider.id}
+      fields={activeSearchFields}
+      values={searchValues}
+      onProviderChange={chooseProvider}
+      onValuesChange={(values) => (searchValues = values)}
+      onSubmit={() => void runSearch()}
+      onClear={clearSearch}
+      providerLabel="Source"
+      {searching}
+      submitDisabled={!canSubmitSearch}
+      {candidates}
+      entityKind={selectedKindInfo?.entityKind ?? ENTITY_KIND.book}
+      {hasSearched}
+      {activeCandidateKey}
+      onActivate={activateCandidate}
+    />
   {/if}
 </div>
-
-<style>
-  .request-discover-provider :global(.provider-select) {
-    width: 100%;
-  }
-</style>

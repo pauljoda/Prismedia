@@ -91,6 +91,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Monitored series, seasons, and other containers now offer "Search missing content" on their Acquisition tab: one click sweeps the whole item at any depth — including episode gaps hiding inside partially-downloaded seasons — and starts a monitored search for every gap, reporting how many it covered. The existing "Search N missing" action remains when gaps are already visible.
 
 ### Changed
+- Identify and Request now use the same provider search surface, so a fresh Identify search exposes every field declared by the selected plugin instead of falling back to a title-only query.
 - Desktop EntityGrids now default to a balanced mid-range thumbnail size, while preserving any saved per-grid preference.
 - Library grids now filter by shared Availability states instead of the ambiguous Has file toggle: On disk uses real source-media ownership, Wanted uses request state, and every acquisition stage from Pending through Imported, Failed, Cancelled, and Needs attention is available consistently on library and detail-page grids.
 - Stored external identity namespaces are normalized during upgrade and protected by database constraints and a provider/value lookup index, while intentionally allowing the same upstream item to represent more than one local copy.

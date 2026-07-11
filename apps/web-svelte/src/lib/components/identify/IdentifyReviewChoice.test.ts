@@ -67,6 +67,20 @@ describe("IdentifyReviewChoice", () => {
     vi.unstubAllGlobals();
   });
 
+  it("renders the selected plugin's complete search schema before any candidates exist", () => {
+    render(IdentifyReviewChoice, {
+      props: {
+        entity: entity(),
+        candidates: [],
+        hasSearched: false,
+      },
+    });
+
+    expect(screen.getByRole("textbox", { name: "Series title" })).toHaveValue("The Chair Company");
+    expect(screen.getByRole("spinbutton", { name: "Year" })).toBeInTheDocument();
+    expect(screen.getByText("Enter the provider-specific details above to find candidates.")).toBeInTheDocument();
+  });
+
   it("selects a candidate from the combined thumbnail and description card", async () => {
     const candidate = searchCandidate();
     const { container } = render(IdentifyReviewChoice, {
@@ -232,6 +246,41 @@ describe("IdentifyReviewChoice", () => {
       fields: { seriesTitle: "The Chair Company", year: "2025" },
       requireChoice: true,
     });
+  });
+
+  it("hides stale candidates until queued search results arrive with their producing provider", async () => {
+    const tmdb = provider("tmdb", "The Movie Database");
+    const anilist = provider("anilist", "AniList");
+    store.providers = [tmdb, anilist];
+    store.providersForKind.mockReturnValue(store.providers);
+    const oldCandidate = searchCandidate({ title: "Old Match" });
+    const updatedEntity = entity();
+    const view = render(IdentifyReviewChoice, {
+      props: {
+        entity: updatedEntity,
+        candidates: [oldCandidate],
+        providerId: "tmdb",
+        resultRevision: "before-search",
+      },
+    });
+
+    await fireEvent.click(screen.getByRole("button", { name: "Search" }));
+    await waitFor(() => expect(store.identifyEntity).toHaveBeenCalled());
+    expect(screen.queryByText("Old Match")).not.toBeInTheDocument();
+
+    const newCandidate = searchCandidate({
+      externalIds: { anilist: "new-result" },
+      title: "New Match",
+    });
+    await view.rerender({
+      entity: updatedEntity,
+      candidates: [newCandidate],
+      providerId: "anilist",
+      resultRevision: "after-search",
+    });
+
+    await fireEvent.click(screen.getByRole("button", { name: "Use New Match (2025)" }));
+    expect(store.identifyWithCandidate).toHaveBeenCalledWith(updatedEntity, "anilist", newCandidate);
   });
 
   it("seeks through review query providers until candidates are found", async () => {

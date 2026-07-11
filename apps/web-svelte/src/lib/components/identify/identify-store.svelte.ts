@@ -84,6 +84,7 @@ export interface IdentifyQueueItem {
   entity: EntityCard;
   detail?: EntityDetailCard | null;
   completedAt?: string | null;
+  updatedAt?: string | null;
 }
 
 export interface IdentifyKindInfo {
@@ -962,6 +963,7 @@ function queueItemFromApi(
     entity: card,
     detail: detail ?? null,
     completedAt: item.completedAt ?? null,
+    updatedAt: item.updatedAt ?? null,
   };
 }
 

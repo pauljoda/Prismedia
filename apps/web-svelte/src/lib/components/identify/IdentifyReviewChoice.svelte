@@ -1,11 +1,8 @@
 <script lang="ts">
-  import { Layers, Loader2, RefreshCw, ScanSearch, Search } from "@lucide/svelte";
-  import { cn } from "@prismedia/ui-svelte";
-  import IdentifyProviderSelect from "./IdentifyProviderSelect.svelte";
+  import { Layers } from "@lucide/svelte";
   import IdentifyTargetPreview from "./IdentifyTargetPreview.svelte";
   import IdentifyRejectQueueActions from "./IdentifyRejectQueueActions.svelte";
-  import PluginSearchForm from "$lib/components/plugins/PluginSearchForm.svelte";
-  import PluginCandidateList from "$lib/components/review/PluginCandidateList.svelte";
+  import PluginSearchSurface from "$lib/components/plugins/PluginSearchSurface.svelte";
   import UniversalLightbox from "$lib/components/UniversalLightbox.svelte";
   import { IDENTIFY_QUEUE_STATE } from "$lib/api/generated/codes";
   import type { EntitySearchCandidate } from "$lib/api/identify-types";
@@ -25,9 +22,17 @@
     entity: EntityCard;
     candidates: EntitySearchCandidate[];
     providerId?: string | null;
+    hasSearched?: boolean;
+    resultRevision?: string | null;
   }
 
-  let { entity, candidates, providerId = null }: Props = $props();
+  let {
+    entity,
+    candidates,
+    providerId = null,
+    hasSearched = candidates.length > 0,
+    resultRevision = null,
+  }: Props = $props();
 
   const store = useIdentifyStore();
   const entityTypeLabel = $derived(
@@ -43,6 +48,8 @@
   let checkingCandidateTitle = $state<string | null>(null);
   let previewCandidate = $state<UniversalLightboxEntity | null>(null);
   let searchedCandidates = $state<EntitySearchCandidate[] | null>(null);
+  let invalidatedResultRevision = $state<string | null>(null);
+  let candidatesInvalidated = $state(false);
 
   const providerOptions = $derived(store.providersForKind(entity.kind));
   const activeProviderId = $derived(supportedProviderId(providerOptions, selectedProviderId, providerId));
@@ -68,10 +75,18 @@
       (providerId ? store.providers.find((provider) => provider.id === providerId) : null) ??
       activeProvider,
   );
-  const localCandidates = $derived(searchedCandidates ?? candidates);
+  const queryInFlight = $derived(searching || seeking || rescanning || store.isItemBusy(entity.id));
+  const localCandidates = $derived(
+    queryInFlight
+      ? []
+      : searchedCandidates ??
+        (candidatesInvalidated && resultRevision === invalidatedResultRevision ? [] : candidates),
+  );
   const nextQueueItem = $derived(store.nextQueueItem(entity.id));
   const previewEntities = $derived(previewCandidate ? [previewCandidate] : []);
   const seekDisabled = $derived(searching || seeking || rescanning || store.isItemBusy(entity.id) || providerOptions.length === 0);
+  const searchStatus = $derived(store.itemSearchStatus(entity.id));
+  const surfaceSearching = $derived(searching || store.isItemBusy(entity.id));
 
   // Navigating between items reuses this component instance, so local search state must be cleared
   // when the entity changes — otherwise a previous item's searched candidates and query stick around.
@@ -85,6 +100,8 @@
     checkingCandidateKey = null;
     checkingCandidateTitle = null;
     previewCandidate = null;
+    invalidatedResultRevision = null;
+    candidatesInvalidated = false;
   });
 
   function setSearchValues(values: Record<string, string>) {
@@ -95,6 +112,10 @@
     if (!activeProvider || rescanning) return;
     rescanning = true;
     store.error = null;
+    searchedCandidates = null;
+    searchedProviderId = null;
+    invalidatedResultRevision = resultRevision;
+    candidatesInvalidated = true;
     try {
       const result = await store.identifyEntity(entity, activeProvider.id);
       if (result?.state === IDENTIFY_QUEUE_STATE.search) {
@@ -112,6 +133,10 @@
     if (!activeProvider || !canSubmitSearch) return;
     searching = true;
     store.error = null;
+    searchedCandidates = null;
+    searchedProviderId = null;
+    invalidatedResultRevision = resultRevision;
+    candidatesInvalidated = true;
     try {
       // Manual searches always come back as candidates: a stored external id must not
       // re-lock the entity onto the match the user is here to change.
@@ -142,6 +167,10 @@
 
     seeking = true;
     store.error = null;
+    searchedCandidates = null;
+    searchedProviderId = null;
+    invalidatedResultRevision = resultRevision;
+    candidatesInvalidated = true;
     try {
       for (const seekProviderId of orderedProviderIds) {
         selectedProviderId = seekProviderId;
@@ -260,85 +289,38 @@
     {/if}
   </div>
 
-  <!-- Manual search panel -->
-  <section class="surface-panel relative z-20 overflow-visible">
-    <header class="flex items-center gap-2.5 border-b border-border-subtle bg-surface-2 px-3.5 py-2.5">
-      <Search class="h-3.5 w-3.5 text-text-accent" />
-      <span class="text-kicker text-text-accent">Query</span>
-      <span class="font-mono text-[0.7rem] text-text-muted">refine and re-search</span>
-      <div class="flex-1"></div>
-      <button
-        type="button"
-        class="inline-flex h-7 items-center gap-1.5 rounded-xs border border-border-default bg-surface-2 px-2.5 text-[0.72rem] text-text-muted transition-colors hover:bg-surface-3 hover:text-text-primary disabled:opacity-40"
-        disabled={rescanning}
-        onclick={handleRescan}
-      >
-        <RefreshCw class={cn("h-3 w-3", rescanning && "animate-spin")} />
-        Rescan
-      </button>
-    </header>
-    <div class="identify-query-form flex flex-col gap-3 p-3.5">
-      {#if providerOptions.length > 0}
-        <div class="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-[minmax(12rem,32rem)_auto] sm:items-end">
-          <div class="identify-query-field identify-query-provider flex min-w-0 flex-col gap-1.5">
-            <span class="font-mono text-[0.72rem] text-text-muted">Provider</span>
-            <IdentifyProviderSelect
-              providers={providerOptions}
-              selectedId={activeProviderId}
-              onChange={(providerId) => (selectedProviderId = providerId)}
-              compact
-            />
-          </div>
-          <button
-            type="button"
-            class="inline-flex h-9 w-full items-center justify-center gap-1.5 rounded-xs border border-border-default bg-surface-2 px-3 text-[0.78rem] text-text-muted transition-colors hover:border-border-accent hover:text-text-accent disabled:cursor-not-allowed disabled:opacity-40 sm:w-24"
-            disabled={seekDisabled}
-            onclick={handleSeek}
-          >
-            {#if seeking}
-              <Loader2 class="h-3.5 w-3.5 animate-spin" />
-            {:else}
-              <ScanSearch class="h-3.5 w-3.5" />
-            {/if}
-            Seek
-          </button>
-        </div>
-      {/if}
-      <PluginSearchForm
-        fields={activeSearchFields}
-        values={searchValues}
-        onValuesChange={setSearchValues}
-        onSubmit={() => void handleSearch()}
-        onClear={() => setSearchValues(Object.fromEntries(activeSearchFields.map((field) => [field.key, ""])))}
-        loading={searching}
-        disabled={seeking}
-        submitDisabled={!canSubmitSearch}
-      />
-    </div>
-  </section>
-
-  <!-- Candidates list -->
-  <section class="surface-panel relative z-0 overflow-hidden">
-    <header class="flex items-center gap-2.5 border-b border-border-subtle bg-surface-2 px-3.5 py-2.5">
-      <span class="text-kicker text-text-accent">Candidates</span>
-      <span class="font-mono text-[0.7rem] text-text-muted">{localCandidates.length} found</span>
-      {#if checkingCandidateTitle}
-        <span class="hidden font-mono text-[0.7rem] text-text-muted md:inline">
-          Match found. Identifying related items; this may take a while.
-        </span>
-      {/if}
-    </header>
-    <div class="p-3.5">
-      <PluginCandidateList
-        candidates={localCandidates}
-        entityKind={entity.kind}
-        activeCandidateKey={checkingCandidateKey}
-        disabled={store.isItemBusy(entity.id)}
-        onActivate={(candidate, candidateKey) => void pickCandidate(candidate, candidateKey)}
-        onPreview={openCandidatePreview}
-      />
-    </div>
-  </section>
+  <PluginSearchSurface
+    providers={providerOptions}
+    selectedProviderId={activeProviderId}
+    fields={activeSearchFields}
+    values={searchValues}
+    onProviderChange={(nextProviderId) => (selectedProviderId = nextProviderId)}
+    onValuesChange={setSearchValues}
+    onSubmit={() => void handleSearch()}
+    onClear={() => setSearchValues(Object.fromEntries(activeSearchFields.map((field) => [field.key, ""])))}
+    title="Query"
+    description="refine and re-search"
+    searching={surfaceSearching}
+    disabled={seeking}
+    submitDisabled={!canSubmitSearch}
+    candidates={localCandidates}
+    entityKind={entity.kind}
+    {hasSearched}
+    activeCandidateKey={checkingCandidateKey}
+    candidateDisabled={store.isItemBusy(entity.id)}
+    candidateStatus={checkingCandidateTitle
+      ? "Match found. Identifying related items; this may take a while."
+      : null}
+    {searchStatus}
+    onActivate={(candidate, candidateKey) => void pickCandidate(candidate, candidateKey)}
+    onPreview={openCandidatePreview}
+    onSeek={() => void handleSeek()}
+    {seeking}
+    {seekDisabled}
+    onRescan={() => void handleRescan()}
+    {rescanning}
+    noProvidersMessage={`No enabled provider supports ${entity.kind}.`}
+  />
 
   <div class="flex flex-col gap-2 py-2 md:flex-row md:justify-end">
     <IdentifyRejectQueueActions
@@ -358,9 +340,3 @@
     />
   {/if}
 </div>
-
-<style>
-  .identify-query-provider :global(.provider-select) {
-    width: 100%;
-  }
-</style>
