@@ -2,6 +2,7 @@
   import { ArrowDown, ArrowUp, Ban, BookOpen, ChevronsUpDown, Download, ExternalLink, FileText, Film, Headphones, Tag } from "@lucide/svelte";
   import { Button, Select, Toggle, cn } from "@prismedia/ui-svelte";
   import type { Component } from "svelte";
+  import { RELEASE_REJECTION_REASON } from "$lib/api/generated/codes";
   import type { ReleaseCandidateView } from "$lib/api/generated/model";
 
   interface Props {
@@ -117,6 +118,19 @@
   function rejectionText(candidate: ReleaseCandidateView): string {
     return candidate.rejections.map((reason) => String(reason).replace(/-/g, " ")).join(", ");
   }
+
+  const nonQueueableRejections: ReadonlySet<ReleaseCandidateView["rejections"][number]> = new Set([
+    RELEASE_REJECTION_REASON.unsupportedFormat,
+    RELEASE_REJECTION_REASON.wrongProtocol,
+    RELEASE_REJECTION_REASON.noDownloadLink,
+    RELEASE_REJECTION_REASON.blocklisted,
+    RELEASE_REJECTION_REASON.dangerousContent,
+  ]);
+
+  /** Manual picks may override profile and identity scoring, but never a release Prismedia cannot safely queue. */
+  function canManuallyQueue(candidate: ReleaseCandidateView): boolean {
+    return !candidate.rejections.some((reason) => nonQueueableRejections.has(reason));
+  }
 </script>
 
 <!-- The table/cards split queries this container's width (not the viewport): the picker mounts inside
@@ -195,7 +209,7 @@
       {#each sorted as row (row.candidate.id)}
         {@const c = row.candidate}
         {@const CatIcon = categoryIcon(row.category)}
-        <tr class={cn("border-t border-border-subtle", !c.accepted && "opacity-55")}>
+        <tr class={cn("border-t border-border-subtle", !c.accepted && !canManuallyQueue(c) && "opacity-55")}>
           <td class="px-3 py-2 align-middle">
             <span class="inline-flex text-text-muted" title={row.category ?? "Unknown type"} aria-label={row.category ?? "Unknown type"}>
               <CatIcon class="h-4 w-4" />
@@ -218,10 +232,10 @@
                   <ExternalLink class="h-3.5 w-3.5" />
                 </a>
               {/if}
-              {#if c.accepted && canChoose}
-                <Button size="sm" onclick={() => onQueue(c)} disabled={busy} class="gap-1.5">
+              {#if canChoose && canManuallyQueue(c)}
+                <Button size="sm" variant={c.accepted ? "primary" : "secondary"} onclick={() => onQueue(c)} disabled={busy} class="gap-1.5">
                   <Download class="h-3.5 w-3.5" />
-                  Download
+                  {c.accepted ? "Download" : "Download anyway"}
                 </Button>
               {/if}
               {#if onBlocklist && c.accepted}
@@ -242,7 +256,7 @@
   {#each sorted as row (row.candidate.id)}
     {@const c = row.candidate}
     {@const CatIcon = categoryIcon(row.category)}
-    <div class={cn("rounded-sm border border-border-subtle bg-surface-1 p-3", !c.accepted && "opacity-55")}>
+    <div class={cn("rounded-sm border border-border-subtle bg-surface-1 p-3", !c.accepted && !canManuallyQueue(c) && "opacity-55")}>
       <div class="flex items-start gap-2">
         <span class="mt-0.5 inline-flex shrink-0 text-text-muted" title={row.category ?? "Unknown type"} aria-label={row.category ?? "Unknown type"}>
           <CatIcon class="h-4 w-4" />
@@ -261,7 +275,7 @@
         <span>{c.seeders ?? "—"} seeders</span>
         <span>score {Number(c.score).toFixed(0)}</span>
       </div>
-      {#if c.infoUrl || c.accepted}
+      {#if c.infoUrl || (canChoose && canManuallyQueue(c)) || (onBlocklist && c.accepted)}
         <div class="mt-2.5 flex items-center justify-end gap-2">
           {#if c.infoUrl}
             <a href={c.infoUrl} target="_blank" rel="noopener" class="inline-flex items-center gap-1.5 text-[0.75rem] text-text-muted transition-colors hover:text-text-accent">
@@ -275,10 +289,10 @@
               Block
             </Button>
           {/if}
-          {#if c.accepted && canChoose}
-            <Button size="sm" onclick={() => onQueue(c)} disabled={busy} class="gap-1.5">
+          {#if canChoose && canManuallyQueue(c)}
+            <Button size="sm" variant={c.accepted ? "primary" : "secondary"} onclick={() => onQueue(c)} disabled={busy} class="gap-1.5">
               <Download class="h-3.5 w-3.5" />
-              Download
+              {c.accepted ? "Download" : "Download anyway"}
             </Button>
           {/if}
         </div>
