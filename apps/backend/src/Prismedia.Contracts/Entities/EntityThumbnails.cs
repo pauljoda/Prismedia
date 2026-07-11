@@ -102,6 +102,12 @@ public sealed record EntityThumbnail(
     public double? Progress { get; init; }
 
     /// <summary>
+    /// Exact saved playback position in seconds for resumable video thumbnails. Movie
+    /// thumbnails project the position of their playable child video.
+    /// </summary>
+    public double? ResumeSeconds { get; init; }
+
+    /// <summary>
     /// Number of completed plays recorded for the entity, when it tracks playback (e.g. audio tracks
     /// and videos). Lets list rows show a play-count stat without fetching the full detail graph.
     /// </summary>

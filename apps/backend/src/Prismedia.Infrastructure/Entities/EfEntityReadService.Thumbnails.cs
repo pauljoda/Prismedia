@@ -121,6 +121,15 @@ public sealed partial class EfEntityReadService {
         var childStateByMovie = movieIds.Length == 0 || currentUserId == Guid.Empty
             ? new Dictionary<Guid, UserEntityStateRow>()
             : await LoadMovieChildStateAsync(movieIds, cancellationToken);
+        var movieChildStateIds = childStateByMovie.Values
+            .Select(state => state.EntityId)
+            .Distinct()
+            .ToArray();
+        var technicalByMovieChild = movieChildStateIds.Length == 0
+            ? new Dictionary<Guid, EntityTechnicalRow>()
+            : await _db.EntityTechnical.AsNoTracking()
+                .Where(technical => movieChildStateIds.Contains(technical.EntityId))
+                .ToDictionaryAsync(technical => technical.EntityId, cancellationToken);
 
         // Compact availability facts for this page: physical source-media truth plus acquisition state
         // projected through every structural subtree. The singular direct status remains for the existing
@@ -156,6 +165,9 @@ public sealed partial class EfEntityReadService {
             var playbackState = ownState is not null && Mappers.Capabilities.UserEntityStateColumns.HasPlayback(ownState)
                 ? ownState
                 : childState ?? ownState;
+            var playbackDurationSeconds = playbackState is not null && playbackState.EntityId != row.Id
+                ? technicalByMovieChild.GetValueOrDefault(playbackState.EntityId)?.DurationSeconds
+                : technicalByEntity.GetValueOrDefault(row.Id)?.DurationSeconds;
             var hoverUrl = hoverByEntity.GetValueOrDefault(row.Id);
             var hoverImages = hoverImagesByEntity.GetValueOrDefault(row.Id) ?? [];
             var coverUrl = coverByEntity.GetValueOrDefault(row.Id);
@@ -225,10 +237,13 @@ public sealed partial class EfEntityReadService {
                     : null,
                 CreatedAt = row.CreatedAt,
                 PlayCount = playbackState?.PlayCount,
+                ResumeSeconds = playbackState is { ResumeSeconds: > 0 }
+                    ? playbackState.ResumeSeconds
+                    : null,
                 Genres = tagsByEntity.GetValueOrDefault(row.Id),
                 Progress = ResolveThumbnailProgress(
                     playbackState,
-                    technicalByEntity.GetValueOrDefault(row.Id)?.DurationSeconds)
+                    playbackDurationSeconds)
             };
         }).ToArray();
 

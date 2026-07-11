@@ -1712,6 +1712,36 @@ public sealed class EfEntityReadServiceTests {
     }
 
     [Fact]
+    public async Task ListAsyncProjectsMovieChildResumePositionAndProgress() {
+        await using var db = CreateContext();
+        var now = DateTimeOffset.UtcNow;
+        var movieId = Guid.Parse("55555555-5555-5555-5555-555555555555");
+        var videoId = Guid.Parse("66666666-6666-6666-6666-666666666666");
+        db.Entities.AddRange(
+            new EntityRow { Id = movieId, KindCode = EntityKindRegistry.Movie.Code, Title = "Movie", CreatedAt = now, UpdatedAt = now },
+            new EntityRow { Id = videoId, KindCode = EntityKindRegistry.Video.Code, Title = "Movie", ParentEntityId = movieId, CreatedAt = now, UpdatedAt = now });
+        db.EntityTechnical.Add(new EntityTechnicalRow {
+            EntityId = videoId,
+            DurationSeconds = 200,
+            UpdatedAt = now
+        });
+        db.UserEntityStates.Add(new UserEntityStateRow {
+            UserId = TestUserContext.UserId,
+            EntityId = videoId,
+            ResumeSeconds = 50,
+            UpdatedAt = now
+        });
+        await db.SaveChangesAsync();
+
+        var result = await CreateService(db).ListAsync(
+            EntityKindRegistry.Movie.Code, null, null, null, null, CancellationToken.None);
+
+        var thumbnail = Assert.Single(result.Items);
+        Assert.Equal(50, thumbnail.ResumeSeconds);
+        Assert.Equal(0.25, thumbnail.Progress);
+    }
+
+    [Fact]
     public async Task ListAsyncSortsByMostRecentEngagementForLastPlayed() {
         await using var db = CreateContext();
         var now = DateTimeOffset.UtcNow;
