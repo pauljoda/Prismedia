@@ -139,6 +139,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Updated documentation, README screenshots, branding assets, install metadata, and app copy to match the current Prismedia v1 surface.
 
 ### Fixed
+- Native clients now correctly hide NSFW libraries and file directories when their content-visibility setting is disabled.
 - Download profile settings now respect the viewer's library access and current SFW/NSFW mode; profiles targeting an NSFW library are hidden whenever NSFW content is hidden.
 - Library scans no longer remove wanted or actively monitored movies, seasons, and series while they are waiting for files.
 - Adding or updating a library with a folder that is already watched now returns a clear conflict instead of failing with an internal server error.

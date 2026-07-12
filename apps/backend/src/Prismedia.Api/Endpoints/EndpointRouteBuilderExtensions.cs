@@ -68,12 +68,12 @@ internal static class NsfwVisibility {
             return true;
         }
 
-        if (auth is { ViaCookie: false }) {
-            return false;
-        }
-
         if (explicitHide is { } hide) {
             return hide;
+        }
+
+        if (auth is { ViaCookie: false }) {
+            return false;
         }
 
         return !httpContext.Request.Cookies.TryGetValue(CookieName, out var mode) ||

@@ -47,6 +47,13 @@ public sealed class NsfwVisibilityTests {
         Assert.True(NsfwVisibility.JellyfinContent(context).AllowNsfw);
     }
 
+    [Fact]
+    public void ProtocolClientsHonorAnExplicitRequestToHideNsfw() {
+        var context = WebContext(AuthedUser(allowNsfw: true), viaCookie: false);
+
+        Assert.True(NsfwVisibility.ShouldHide(true, context));
+    }
+
     private static DefaultHttpContext WebContext(User user, bool viaCookie = true) {
         var context = new DefaultHttpContext();
         context.Items["PrismediaAuth"] = new PrismediaAuthContext("token", user, null, viaCookie);

@@ -12,7 +12,19 @@ namespace Prismedia.Api.Tests;
 
 public sealed class FilesEndpointTests : IDisposable {
     private static readonly Guid RootId = Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb");
+    private static readonly Guid NsfwRootId = Guid.Parse("cccccccc-cccc-cccc-cccc-cccccccccccc");
     private readonly DirectoryInfo _tempRoot = Directory.CreateTempSubdirectory("prismedia-files-api-");
+
+    [Fact]
+    public async Task RootsEndpointHonorsExplicitNsfwHidingForTokenClients() {
+        using var factory = CreateFactory(allowNsfw: true);
+        using var client = factory.CreateAuthenticatedClient();
+
+        var response = await client.GetFromJsonAsync<FileRootsResponse>("/api/files/roots?hideNsfw=true");
+
+        var root = Assert.Single(Assert.IsType<FileRootsResponse>(response).Roots);
+        Assert.Equal(RootId, root.Id);
+    }
 
     [Fact]
     public async Task ContentEndpointSupportsByteRangeRequests() {
@@ -95,7 +107,7 @@ public sealed class FilesEndpointTests : IDisposable {
         }
     }
 
-    private WebApplicationFactory<Program> CreateFactory() =>
+    private WebApplicationFactory<Program> CreateFactory(bool allowNsfw = false) =>
         new WebApplicationFactory<Program>()
             .WithWebHostBuilder(builder => {
                 builder.ConfigureServices(services => {
@@ -105,14 +117,19 @@ public sealed class FilesEndpointTests : IDisposable {
                     services.AddScoped<IJobQueueService, FakeJobQueue>();
                 });
             })
-            .WithTestAuth();
+            .WithTestAuth(allowNsfw: allowNsfw);
 
     private sealed class FakeFilesPersistence(string rootPath) : IFilesPersistence {
         public Task<IReadOnlyList<FileLibraryRoot>> ListRootsAsync(CancellationToken cancellationToken) =>
-            Task.FromResult<IReadOnlyList<FileLibraryRoot>>([Root()]);
+            Task.FromResult<IReadOnlyList<FileLibraryRoot>>([Root(), Root(NsfwRootId, isNsfw: true)]);
 
         public Task<FileLibraryRoot?> GetRootAsync(Guid rootId, CancellationToken cancellationToken) =>
-            Task.FromResult<FileLibraryRoot?>(rootId == RootId ? Root() : null);
+            Task.FromResult<FileLibraryRoot?>(
+                rootId == RootId
+                    ? Root()
+                    : rootId == NsfwRootId
+                        ? Root(NsfwRootId, isNsfw: true)
+                        : null);
 
         public Task<IReadOnlyList<FileLinkedEntity>> ListLinkedEntitiesAsync(
             string absolutePath,
@@ -151,8 +168,8 @@ public sealed class FilesEndpointTests : IDisposable {
             CancellationToken cancellationToken) =>
             Task.CompletedTask;
 
-        private FileLibraryRoot Root() =>
-            new(RootId, rootPath, "API Root", true, true, false, false, false, false);
+        private FileLibraryRoot Root(Guid? id = null, bool isNsfw = false) =>
+            new(id ?? RootId, rootPath, isNsfw ? "NSFW API Root" : "API Root", true, true, false, false, false, isNsfw);
     }
 
     private sealed class NoSourceOwners : IEntitySourcePathOwnerReader {
