@@ -1,9 +1,11 @@
 <script lang="ts">
-  import { Play, RotateCcw, Glasses } from "@lucide/svelte";
+  import { Play, RotateCcw, Glasses, Headphones } from "@lucide/svelte";
+
+  type ProgressKind = "watch" | "read" | "listen";
 
   interface Props {
-    /** Whether this panel tracks watching (video/movie) or reading (books). Drives labels only. */
-    kind: "watch" | "read";
+    /** Whether this panel tracks watching, reading, or listening. Drives labels only. */
+    kind: ProgressKind;
     /** Whether the item is marked watched/read. */
     completed: boolean;
     /** Progress through the item, 0..100. */
@@ -43,26 +45,17 @@
   let animating = $state(false);
 
   const clampedPercent = $derived(Math.min(100, Math.max(0, percent)));
-  const statusLabel = $derived(
-    completed
-      ? kind === "watch"
-        ? "Watched"
-        : "Read"
-      : clampedPercent > 0
-        ? kind === "watch"
-          ? "In progress"
-          : "Reading"
-        : "Not started",
-  );
-  const toggleTitle = $derived(
-    completed
-      ? kind === "watch"
-        ? "Mark unwatched"
-        : "Mark unread"
-      : kind === "watch"
-        ? "Mark watched"
-        : "Mark read",
-  );
+  const copy = $derived.by(() => {
+    if (kind === "watch") {
+      return { kicker: "Playback", active: "In progress", complete: "Watched", mark: "Mark watched", unmark: "Mark unwatched" };
+    }
+    if (kind === "listen") {
+      return { kicker: "Listening", active: "Listening", complete: "Listened", mark: "Mark listened", unmark: "Mark unlistened" };
+    }
+    return { kicker: "Reading", active: "Reading", complete: "Read", mark: "Mark read", unmark: "Mark unread" };
+  });
+  const statusLabel = $derived(completed ? copy.complete : clampedPercent > 0 ? copy.active : "Not started");
+  const toggleTitle = $derived(completed ? copy.unmark : copy.mark);
   const showMeter = $derived(!completed && clampedPercent > 0);
 
   function toggle() {
@@ -74,7 +67,7 @@
 
 <section class="progress-panel">
   <div class="head">
-    <span class="kicker">{kind === "watch" ? "Playback" : "Reading"}</span>
+    <span class="kicker">{copy.kicker}</span>
     <span class="status" class:complete={completed}>{statusLabel}</span>
   </div>
 
@@ -130,7 +123,11 @@
       onclick={toggle}
       disabled={busy}
     >
-      <Glasses class="h-4 w-4" />
+      {#if kind === "listen"}
+        <Headphones class="h-4 w-4" />
+      {:else}
+        <Glasses class="h-4 w-4" />
+      {/if}
     </button>
   </div>
 </section>

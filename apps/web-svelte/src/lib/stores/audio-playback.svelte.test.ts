@@ -161,6 +161,36 @@ describe("AudioPlaybackStore", () => {
     expect(store.collapsedSide).toBe(MUSIC_PLAYER_MINI_SIDE.right);
   });
 
+  it("restores audiobook parts in source order while keeping the current concrete part", () => {
+    const store = new AudioPlaybackStore();
+    store.restore({
+      queue: tracks(3),
+      order: [2, 0, 1],
+      position: 0,
+      currentTime: 27,
+      playing: true,
+      shuffle: true,
+      repeat: MUSIC_PLAYER_REPEAT_MODE.off,
+      context: {
+        playbackOwnerEntityId: "book-1",
+        playbackOwnerTitle: "Book",
+        playbackOwnerEntityKind: "book",
+      },
+      volume: 1,
+      muted: false,
+      collapsed: false,
+      collapsedSide: MUSIC_PLAYER_MINI_SIDE.left,
+    });
+
+    expect(ids(store)).toEqual(["t1", "t2", "t3"]);
+    expect(store.currentTrack?.id).toBe("t3");
+    expect(store.position).toBe(2);
+    expect(store.shuffle).toBe(false);
+
+    store.toggleShuffle();
+    expect(store.shuffle).toBe(false);
+  });
+
   it("records play intent immediately when starting a queue", () => {
     const store = new AudioPlaybackStore();
 
@@ -168,6 +198,15 @@ describe("AudioPlaybackStore", () => {
 
     expect(store.playIntent).toBe(true);
     expect(store.playing).toBe(false);
+  });
+
+  it("starts a selected concrete part at a supplied local resume offset", () => {
+    const store = new AudioPlaybackStore();
+
+    store.play(tracks(3), "t2", null, { startSeconds: 37 });
+
+    expect(store.currentTrack?.id).toBe("t2");
+    expect(store.currentTime).toBe(37);
   });
 
   it("clears the queue without resetting browser audio output preferences", () => {

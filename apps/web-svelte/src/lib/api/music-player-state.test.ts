@@ -72,6 +72,66 @@ describe("music player state API", () => {
     expect(clearMusicPlayerState).not.toHaveBeenCalled();
   });
 
+  it("round-trips the logical playback owner for an audiobook queue", async () => {
+    getMusicPlayerState.mockResolvedValue({
+      data: {
+        tracks: [{ id: "part-2", title: "Part 2" }],
+        order: [0],
+        position: 0,
+        currentTime: 42,
+        playing: false,
+        shuffle: false,
+        repeat: MUSIC_PLAYER_REPEAT_MODE.off,
+        volume: 0.7,
+        muted: false,
+        collapsed: false,
+        collapsedSide: MUSIC_PLAYER_MINI_SIDE.left,
+        context: {
+          albumId: null,
+          albumTitle: null,
+          artistId: null,
+          artistName: "Andy Weir",
+          coverUrl: "/project-hail-mary.jpg",
+          albumCoverUrls: null,
+          playbackOwnerEntityId: "book-1",
+          playbackOwnerTitle: "Project Hail Mary",
+          playbackOwnerEntityKind: "book",
+        },
+      },
+    });
+
+    const restored = await fetchMusicPlayerState();
+
+    expect(restored.context).toMatchObject({
+      playbackOwnerEntityId: "book-1",
+      playbackOwnerTitle: "Project Hail Mary",
+      playbackOwnerEntityKind: "book",
+    });
+
+    await saveMusicPlayerState({
+      queueTrackIds: ["part-2"],
+      order: [0],
+      position: 0,
+      currentTime: 42,
+      playing: false,
+      shuffle: false,
+      repeat: MUSIC_PLAYER_REPEAT_MODE.off,
+      volume: 0.7,
+      muted: false,
+      collapsed: false,
+      collapsedSide: MUSIC_PLAYER_MINI_SIDE.left,
+      context: restored.context,
+    });
+
+    expect(updateMusicPlayerState).toHaveBeenCalledWith(expect.objectContaining({
+      context: expect.objectContaining({
+        playbackOwnerEntityId: "book-1",
+        playbackOwnerTitle: "Project Hail Mary",
+        playbackOwnerEntityKind: "book",
+      }),
+    }));
+  });
+
   it("clears the playback queue document for an empty queue", async () => {
     await saveMusicPlayerState({
       queueTrackIds: [],

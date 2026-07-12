@@ -3,15 +3,17 @@
   import { onMount } from "svelte";
   import { afterNavigate, goto } from "$app/navigation";
   import { page } from "$app/state";
-  import { BookOpen, CloudDownload, Info, Play, SlidersHorizontal, Users } from "@lucide/svelte";
+  import { BookOpen, CloudDownload, Headphones, Info, Play, SlidersHorizontal, Users } from "@lucide/svelte";
+  import { formatDuration } from "@prismedia/contracts";
   import EntityDetailSkeleton from "$lib/components/entities/EntityDetailSkeleton.svelte";
   import MediaProgressPanel from "$lib/components/MediaProgressPanel.svelte";
   import EntityAcquisitionCard from "$lib/components/acquisitions/EntityAcquisitionCard.svelte";
   import { useEntityAcquisition } from "$lib/components/acquisitions/use-entity-acquisition.svelte";
   import { requestableDirectChildCards } from "$lib/requests/requestable-entity-children";
   import { getCapability, isWanted } from "$lib/api/capabilities";
-  import { updateEntityProgress } from "$lib/api/playback";
+  import { updateEntityPlayback, updateEntityProgress } from "$lib/api/playback";
   import { fetchBook, type BookDetail } from "$lib/api/media";
+  import { BookFormat } from "$lib/api/generated/model";
   import { fetchEntity, type EntityCardFull } from "$lib/api/entities";
   import {
     updateEntityFlags,
@@ -32,6 +34,12 @@
     type BookReaderChapter,
   } from "$lib/entities/book-entity-reader";
   import { bookReaderHref } from "$lib/entities/book-reader-route";
+  import {
+    audiobookAbsoluteTime,
+    audiobookDuration,
+    audiobookTrackItems,
+    resolveAudiobookResume,
+  } from "$lib/entities/audiobook-playback";
   import {
     fetchOrderedEntityThumbnails,
     hydrateStandardRelationshipCards,
@@ -55,11 +63,14 @@
   } from "$lib/nsfw/hidden-entity";
   import { useNsfw } from "$lib/nsfw/store.svelte";
   import { useAppChrome, type AppBreadcrumb } from "$lib/stores/app-chrome.svelte";
+  import { useAudioPlayback } from "$lib/stores/audio-playback.svelte";
+  import { numberValue } from "$lib/utils/format";
 
   type LoadState = "loading" | "ready" | "error";
 
   const nsfw = useNsfw();
   const appChrome = useAppChrome();
+  const playback = useAudioPlayback()!;
 
   interface ChapterDetail {
     detail: EntityCardFull;
@@ -78,6 +89,7 @@
   let lastNsfwMode = $state(nsfw.mode);
   let ratingBusy = $state(false);
   let progressBusy = $state(false);
+  let listeningBusy = $state(false);
   let chapterDetails = $state.raw<ChapterDetail[]>([]);
   let progressChapterSummary = $state.raw<BookReaderChapter | null>(null);
   let childBookCards = $state<EntityThumbnailCard[]>([]);
@@ -95,7 +107,9 @@
   // Its acquisition/monitoring surface is the Acquisition detail tab.
   const entityWanted = $derived(!!book && isWanted(book.capabilities));
   // Single-file books (EPUB/PDF) are read straight from the source file with no chapter entities.
-  const isSingleFileBook = $derived(!!book && book.format !== "image-archive");
+  const isSingleFileBook = $derived(
+    !!book && (book.format === BookFormat.epub || book.format === BookFormat.pdf),
+  );
   const singleFileProgress = $derived(book && isSingleFileBook ? getCapability(book.capabilities, CAPABILITY_KIND.progress) : null);
   // Started once a position has been saved (EPUB and PDF both set currentEntityId to the book id).
   const singleFileInProgress = $derived(!!singleFileProgress?.currentEntityId && !singleFileProgress?.completedAt);
@@ -116,11 +130,6 @@
     progressDisplay?.chapterId === selectedChapter?.detail.id ? progressDisplay : null,
   );
   const readerPageCount = $derived(selectedChapter?.pages.length ?? 0);
-  // Comics may be organized as volumes with no direct chapters; they are still readable
-  // (the reader resolves the first chapter), so the Read button must appear for them too.
-  const hasReadableContent = $derived(
-    !isSingleFileBook && (readerPageCount > 0 || chapterDetails.length > 0 || volumeCards.length > 0),
-  );
   // Started/completed come straight from the progress capability (same source the grid card uses),
   // so the label is correct even for volume-only comics whose in-progress chapter isn't a direct child.
   const comicProgress = $derived(book && !isSingleFileBook ? getCapability(book.capabilities, CAPABILITY_KIND.progress) : undefined);
@@ -128,6 +137,41 @@
   const comicCompleted = $derived(!!comicProgress?.completedAt);
   const primaryReadLabel = $derived(
     comicCompleted ? "Re-read" : comicStarted ? "Resume" : "Read",
+  );
+  const audiobookTracks = $derived(book ? audiobookTrackItems(book) : []);
+  const audiobookTotalSeconds = $derived(audiobookDuration(audiobookTracks));
+  const audiobookPlayback = $derived(
+    book ? getCapability(book.capabilities, CAPABILITY_KIND.playback) : undefined,
+  );
+  const isCurrentAudiobook = $derived(
+    playback.context?.playbackOwnerEntityId === book?.id &&
+      playback.context?.playbackOwnerEntityKind === ENTITY_KIND.book,
+  );
+  const audiobookResumeSeconds = $derived.by(() => {
+    const savedSeconds = numberValue(audiobookPlayback?.resumeSeconds) ?? 0;
+    const currentTrack = playback.currentTrack;
+    const seconds = isCurrentAudiobook && currentTrack
+      ? audiobookAbsoluteTime(audiobookTracks, currentTrack.id, playback.currentTime)
+      : savedSeconds;
+    return Math.max(0, Math.min(seconds, audiobookTotalSeconds));
+  });
+  const audiobookCompleted = $derived(Boolean(audiobookPlayback?.completedAt));
+  const audiobookPercent = $derived(
+    audiobookCompleted
+      ? 100
+      : audiobookTotalSeconds > 0
+        ? Math.round((audiobookResumeSeconds / audiobookTotalSeconds) * 100)
+        : 0,
+  );
+  const audiobookPositionLabel = $derived(
+    audiobookResumeSeconds > 0 && audiobookTotalSeconds > 0
+      ? `${formatDuration(audiobookResumeSeconds) ?? "0:00"} / ${formatDuration(audiobookTotalSeconds) ?? "0:00"}`
+      : null,
+  );
+  const hasReadableContent = $derived(
+    isSingleFileBook ||
+      (book?.format === BookFormat["image-archive"] &&
+        (readerPageCount > 0 || chapterDetails.length > 0 || volumeCards.length > 0)),
   );
 
   const card = $derived.by((): EntityDetailCardFull | null => {
@@ -184,6 +228,21 @@
         iconFill: "currentColor",
         variant: "primary",
         onClick: openSelectedReader,
+      });
+    }
+    if (audiobookTracks.length > 0) {
+      actions.push({
+        id: "listen-book",
+        label: isCurrentAudiobook && playback.playing
+          ? "Pause"
+          : audiobookResumeSeconds > 0 && !audiobookCompleted
+            ? "Continue listening"
+            : audiobookCompleted
+              ? "Listen again"
+              : "Listen",
+        icon: Headphones,
+        variant: hasReadableContent ? "default" : "primary",
+        onClick: listenToBook,
       });
     }
     return actions;
@@ -442,6 +501,61 @@
     }));
   }
 
+  function listenToBook(options: { startOver?: boolean } = {}) {
+    if (!book || audiobookTracks.length === 0) return;
+    if (!options.startOver && isCurrentAudiobook && !audiobookCompleted) {
+      playback.toggle();
+      return;
+    }
+
+    const resume = resolveAudiobookResume(
+      audiobookTracks,
+      options.startOver || audiobookCompleted ? 0 : audiobookResumeSeconds,
+    );
+    if (!resume) return;
+    playback.play(
+      audiobookTracks,
+      resume.trackId,
+      {
+        artistName: authorLink?.title ?? null,
+        coverUrl: card?.posterCard?.cover?.src ?? card?.poster?.src ?? null,
+        playbackOwnerEntityId: book.id,
+        playbackOwnerTitle: book.title,
+        playbackOwnerEntityKind: ENTITY_KIND.book,
+      },
+      { shuffle: false, startSeconds: resume.trackOffsetSeconds },
+    );
+  }
+
+  async function handleToggleListened(listened: boolean) {
+    if (!book || audiobookTotalSeconds <= 0 || listeningBusy) return;
+    listeningBusy = true;
+    try {
+      await updateEntityPlayback(book.id, {
+        resumeSeconds: audiobookResumeSeconds,
+        completed: listened,
+      });
+      await loadBook();
+    } finally {
+      listeningBusy = false;
+    }
+  }
+
+  async function startListeningOver() {
+    if (!book || audiobookTotalSeconds <= 0 || listeningBusy) return;
+    listeningBusy = true;
+    try {
+      await updateEntityPlayback(book.id, {
+        resumeSeconds: 0,
+        completed: false,
+      });
+      listenToBook({ startOver: true });
+      await loadBook();
+    } finally {
+      listeningBusy = false;
+    }
+  }
+
   function resumeProgress() {
     if (!book || !progressDisplay) return;
     void goto(bookReaderHref({
@@ -601,9 +715,12 @@
           <span class="hero-badge wanted">Wanted</span>
         {/if}
         {#if progressDisplay}
-          <span class="hero-badge">{progressDisplay.percent}%</span>
+          <span class="hero-badge">Read {progressDisplay.percent}%</span>
         {:else if singleFileProgressDisplay}
-          <span class="hero-badge">{singleFileProgressDisplay.percent}%</span>
+          <span class="hero-badge">Read {singleFileProgressDisplay.percent}%</span>
+        {/if}
+        {#if audiobookTracks.length > 0 && audiobookPercent > 0}
+          <span class="hero-badge">Listened {audiobookPercent}%</span>
         {/if}
       {/snippet}
 
@@ -649,6 +766,24 @@
           onToggleCompleted={handleToggleSingleFileRead}
           onResume={resumeSingleFile}
           onStartOver={startSingleFileOver}
+        />
+      </section>
+    {/if}
+
+    {#if audiobookTracks.length > 0}
+      <section class="progress-section">
+        <MediaProgressPanel
+          kind="listen"
+          completed={audiobookCompleted}
+          percent={audiobookPercent}
+          positionLabel={audiobookPositionLabel}
+          countLabel={`${audiobookTracks.length} part${audiobookTracks.length === 1 ? "" : "s"}`}
+          canResume={!audiobookCompleted && audiobookResumeSeconds > 0}
+          canStartOver={audiobookCompleted || audiobookResumeSeconds > 0}
+          busy={listeningBusy}
+          onToggleCompleted={handleToggleListened}
+          onResume={() => listenToBook()}
+          onStartOver={startListeningOver}
         />
       </section>
     {/if}

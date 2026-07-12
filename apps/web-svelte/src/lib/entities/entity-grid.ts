@@ -404,6 +404,17 @@ function progressForEntity(entity: EntityGridSourceEntity): number | null {
   }
 
   const capabilities = entity.capabilities;
+  const progress = getCapability(capabilities, CAPABILITY_KIND.progress);
+  // A Book can carry page/CFI reading progress and independent audiobook playback progress.
+  // Its single thumbnail meter remains the established reading meter; listening detail stays on
+  // the Book page so adding an audiobook never silently replaces the reader's saved position.
+  if (entity.kind === ENTITY_KIND.book && progress) {
+    if (progress.completedAt) return 1;
+    const total = numberValue(progress.total) ?? 0;
+    const index = numberValue(progress.index) ?? 0;
+    return total > 0 && index > 0 ? clamp01(index / total) : null;
+  }
+
   const playback = getCapability(capabilities, CAPABILITY_KIND.playback);
   if (playback) {
     if (playback.completedAt) return 1;
@@ -412,7 +423,6 @@ function progressForEntity(entity: EntityGridSourceEntity): number | null {
     return resumeSeconds > 0 && durationSeconds > 0 ? clamp01(resumeSeconds / durationSeconds) : null;
   }
 
-  const progress = getCapability(capabilities, CAPABILITY_KIND.progress);
   if (progress) {
     if (progress.completedAt) return 1;
     const total = numberValue(progress.total) ?? 0;

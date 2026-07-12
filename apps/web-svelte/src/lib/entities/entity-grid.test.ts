@@ -225,11 +225,17 @@ describe("entity grid helpers", () => {
     const reading = entityCardToThumbnailCard(card("c-book", "book", "Reading", [
       { kind: "progress", currentEntityId: null, unit: "page", index: 5, total: 10, mode: null, completedAt: null, updatedAt: null },
     ]));
+    const readingAndListening = entityCardToThumbnailCard(card("c-book-both", "book", "Reading and listening", [
+      { kind: "playback", playCount: 0, skipCount: 0, playDurationSeconds: 0, resumeSeconds: 75, lastPlayedAt: null, completedAt: null },
+      { kind: "progress", currentEntityId: null, unit: "page", index: 2, total: 10, mode: null, completedAt: null, updatedAt: null },
+      technical(),
+    ]));
     const noProgress = entityCardToThumbnailCard(card("c-none", "video", "Fresh", [flags(false)]));
 
     expect(completed.progress).toBe(1);
     expect(resuming.progress).toBeCloseTo(0.5);
     expect(reading.progress).toBeCloseTo(0.5);
+    expect(readingAndListening.progress).toBeCloseTo(0.2);
     expect(noProgress.progress).toBeNull();
   });
 

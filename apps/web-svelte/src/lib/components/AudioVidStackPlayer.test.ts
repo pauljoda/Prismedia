@@ -20,7 +20,7 @@ describe("AudioVidStackPlayer playback continuity", () => {
   });
 
   it("records a skipped playback event before local next advances away from a quick-abandoned track", () => {
-    expect(source).toContain("import { recordEntityPlaybackEvent } from \"$lib/api/playback\";");
+    expect(source).toContain("recordEntityPlaybackEvent");
     expect(source).toContain("const QUICK_SKIP_THRESHOLD_SECONDS = 10;");
     expect(source).toContain("PLAYBACK_EVENT_KIND.skipped");
     expect(source).toContain("function recordCurrentTrackSkip");
@@ -42,7 +42,26 @@ describe("AudioVidStackPlayer playback continuity", () => {
     const endedEnd = source.indexOf("function handleVolumeInput", endedStart);
     const endedSource = source.slice(endedStart, endedEnd);
 
-    expect(source).toContain("if (playback.currentTrack) recordTrackPlay(playback.currentTrack.id);");
+    expect(source).toContain("recordTrackPlay(playback.currentTrack.id);");
     expect(endedSource).not.toContain("recordCurrentTrackSkip");
+  });
+
+  it("persists audiobook progress on its Book owner across transport boundaries", () => {
+    expect(source).toContain("function saveAudiobookProgress");
+    expect(source).toContain("updateEntityPlayback(ownerId");
+    expect(source).toContain("saveAudiobookProgress({ completed: false })");
+    expect(source).toContain("saveAudiobookProgress({ completed: isFinalAudiobookPart() })");
+    expect(source).toContain("const absoluteSeconds = options.completed\n      ? 0");
+    expect(source).toContain("const AUDIOBOOK_PROGRESS_SAVE_INTERVAL_SECONDS = 5;");
+    const saveStart = source.indexOf("function saveAudiobookProgress");
+    const saveEnd = source.indexOf("// Switch audio source", saveStart);
+    expect(source.slice(saveStart, saveEnd)).not.toContain("durationSeconds");
+    expect(source.slice(saveStart, saveEnd)).toContain("audiobookProgressSave = audiobookProgressSave");
+  });
+
+  it("keeps audiobook parts ordered and out of music skip counting", () => {
+    expect(source).toContain("const isAudiobook = $derived");
+    expect(source).toContain("if (isAudiobook) return;");
+    expect(source).toContain("disabled={isAudiobook}");
   });
 });

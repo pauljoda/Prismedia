@@ -75,6 +75,9 @@ function fromResponse(response: MusicPlayerStateResponse): RestoredMusicPlayerSt
           artistName: response.context.artistName,
           coverUrl: response.context.coverUrl,
           albumCoverUrls: response.context.albumCoverUrls,
+          playbackOwnerEntityId: response.context.playbackOwnerEntityId,
+          playbackOwnerTitle: response.context.playbackOwnerTitle,
+          playbackOwnerEntityKind: response.context.playbackOwnerEntityKind,
         }
       : null,
   };
@@ -101,6 +104,9 @@ function toRequest(state: PersistMusicPlayerState): UpdateMusicPlayerStateReques
           artistName: state.context.artistName ?? null,
           coverUrl: state.context.coverUrl ?? null,
           albumCoverUrls: albumCoverUrlsForWire(state.context.albumCoverUrls),
+          playbackOwnerEntityId: state.context.playbackOwnerEntityId ?? null,
+          playbackOwnerTitle: state.context.playbackOwnerTitle ?? null,
+          playbackOwnerEntityKind: state.context.playbackOwnerEntityKind ?? undefined,
         }
       : null,
   };

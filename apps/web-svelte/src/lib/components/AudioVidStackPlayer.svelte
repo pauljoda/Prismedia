@@ -20,7 +20,7 @@
   } from "@lucide/svelte";
   import { cn } from "@prismedia/ui-svelte";
   import { formatDuration } from "@prismedia/contracts";
-  import { recordEntityPlaybackEvent } from "$lib/api/playback";
+  import { recordEntityPlaybackEvent, updateEntityPlayback } from "$lib/api/playback";
   import { apiAssetUrl, assetUrl } from "$lib/api/orval-fetch";
   import { resolveEntityHref } from "$lib/entities/entity-codes";
   import type { AudioTrackListItemDto } from "$lib/entities/media-view-models";
@@ -28,12 +28,16 @@
   import PlaybackQueueFlyout from "./PlaybackQueueFlyout.svelte";
   import { waveformForDisplay } from "./audio-waveform";
   import {
+    audiobookAbsoluteTime,
+    audiobookDuration,
+  } from "$lib/entities/audiobook-playback";
+  import {
     AUDIO_PLAYBACK_SAVE_EVENT,
     resolveAudioArtwork,
     useAudioPlayback,
   } from "$lib/stores/audio-playback.svelte";
   import { useAppChrome } from "$lib/stores/app-chrome.svelte";
-  import { MUSIC_PLAYER_MINI_SIDE, MUSIC_PLAYER_REPEAT_MODE, PLAYBACK_EVENT_KIND } from "$lib/api/generated/codes";
+  import { ENTITY_KIND, MUSIC_PLAYER_MINI_SIDE, MUSIC_PLAYER_REPEAT_MODE, PLAYBACK_EVENT_KIND } from "$lib/api/generated/codes";
   import { createAudioTabCoordinator, type AudioTabCoordinator } from "$lib/player/audio-tab-coordinator";
   import {
     setMediaSessionHandlers,
@@ -45,6 +49,7 @@
   const playback = useAudioPlayback()!;
   const chrome = useAppChrome();
   const QUICK_SKIP_THRESHOLD_SECONDS = 10;
+  const AUDIOBOOK_PROGRESS_SAVE_INTERVAL_SECONDS = 5;
 
   let audioEl: HTMLAudioElement | null = $state(null);
   let rootEl: HTMLElement | null = $state(null);
@@ -59,6 +64,9 @@
   let pendingAutoplay: { trackId: string; deferWhenHidden: boolean } | null = null;
   let tabCoordinator: AudioTabCoordinator | null = null;
   let currentTrackRequestedAtMs: number | null = null;
+  let lastAudiobookProgressSeconds: number | null = null;
+  let lastAudiobookOwnerId: string | null = null;
+  let audiobookProgressSave = Promise.resolve();
 
   const activeTrack = $derived(playback.currentTrack);
   const ctx = $derived(playback.context);
@@ -68,6 +76,14 @@
   const volume = $derived(playback.volume);
   const muted = $derived(playback.muted);
   const collapsed = $derived(playback.collapsed);
+  const isAudiobook = $derived(
+    ctx?.playbackOwnerEntityKind === ENTITY_KIND.book && Boolean(ctx.playbackOwnerEntityId),
+  );
+  const playbackOwnerHref = $derived(
+    ctx?.playbackOwnerEntityId && ctx.playbackOwnerEntityKind
+      ? resolveEntityHref(ctx.playbackOwnerEntityKind, ctx.playbackOwnerEntityId)
+      : undefined,
+  );
   const progress = $derived(
     duration > 0 ? Math.max(0, Math.min(100, (currentTime / duration) * 100)) : 0,
   );
@@ -79,7 +95,10 @@
   const coverUrl = $derived(resolveAudioArtwork(activeTrack, ctx));
   // Album label: a single-album context wins; otherwise fall back to the track's own album
   // so mixed-album queues (e.g. an artist Play All) still show the right album per track.
-  const albumLabel = $derived(ctx?.albumTitle ?? activeTrack?.embeddedAlbum ?? null);
+  const displayTitle = $derived(ctx?.playbackOwnerTitle ?? activeTrack?.title ?? null);
+  const albumLabel = $derived(
+    isAudiobook ? activeTrack?.title ?? null : ctx?.albumTitle ?? activeTrack?.embeddedAlbum ?? null,
+  );
 
   // Publish now-playing metadata to the OS media controls (lock screen, media keys, Bluetooth).
   $effect(() => {
@@ -89,7 +108,7 @@
       return;
     }
     setMediaSessionMetadata({
-      title: track.title,
+      title: displayTitle ?? track.title,
       artist: artistName,
       album: albumLabel,
       artwork: coverUrl,
@@ -107,6 +126,7 @@
   }
 
   function dismiss() {
+    saveAudiobookProgress({ completed: false });
     if (audioEl) audioEl.pause();
     tabCoordinator?.releasePlayback();
     playback.clear();
@@ -286,6 +306,7 @@
     if (!audioEl) return;
     audioEl.currentTime = time;
     playback.currentTime = time;
+    if (!timelineDraggingRef) saveAudiobookProgress({ completed: false });
     window.dispatchEvent(new Event(AUDIO_PLAYBACK_SAVE_EVENT));
   }
 
@@ -305,6 +326,7 @@
   }
 
   function recordCurrentTrackSkip(track: AudioTrackListItemDto | null = activeTrack) {
+    if (isAudiobook) return;
     if (!track || !isQuickSkipCandidate()) return;
     void recordEntityPlaybackEvent(track.id, {
       kind: PLAYBACK_EVENT_KIND.skipped,
@@ -326,6 +348,7 @@
   function jumpToQueuedTrack(orderIndex: number) {
     const skippedTrack = activeTrack;
     if (orderIndex === playback.position) return;
+    saveAudiobookProgress({ completed: false });
     playback.jumpTo(orderIndex);
     if (playback.position !== orderIndex) return;
     recordCurrentTrackSkip(skippedTrack);
@@ -336,6 +359,7 @@
   function handleNext() {
     // The Next button advances even in repeat-one; the play position effect loads the new track.
     const skippedTrack = activeTrack;
+    saveAudiobookProgress({ completed: false });
     if (playback.next()) {
       recordCurrentTrackSkip(skippedTrack);
       resetPlaybackPosition(playback.currentTrack?.duration ?? 0);
@@ -344,6 +368,7 @@
   }
 
   function handlePrev() {
+    saveAudiobookProgress({ completed: false });
     if (audioEl && audioEl.currentTime > 3) {
       resetPlaybackPosition(duration);
       window.dispatchEvent(new Event(AUDIO_PLAYBACK_SAVE_EVENT));
@@ -386,6 +411,46 @@
     const url = apiAssetUrl(`/audio-tracks/${trackId}/play`);
     if (!url) return;
     void fetch(url, { method: "POST" }).catch(() => {});
+  }
+
+  function isFinalAudiobookPart(): boolean {
+    return isAudiobook && playback.position === playback.order.length - 1;
+  }
+
+  function saveAudiobookProgress(options: { completed: boolean; periodic?: boolean }) {
+    const ownerId = ctx?.playbackOwnerEntityId;
+    const track = activeTrack;
+    if (!isAudiobook || !ownerId || !track) return;
+    if (ownerId !== lastAudiobookOwnerId) {
+      lastAudiobookOwnerId = ownerId;
+      lastAudiobookProgressSeconds = null;
+    }
+
+    const totalSeconds = audiobookDuration(playback.queue);
+    if (totalSeconds <= 0) return;
+    // Completion is explicit state; reset the resume cursor so Listen again starts at the beginning.
+    const absoluteSeconds = options.completed
+      ? 0
+      : audiobookAbsoluteTime(playback.queue, track.id, playback.currentTime);
+    if (
+      options.periodic &&
+      lastAudiobookProgressSeconds !== null &&
+      Math.abs(absoluteSeconds - lastAudiobookProgressSeconds) < AUDIOBOOK_PROGRESS_SAVE_INTERVAL_SECONDS
+    ) {
+      return;
+    }
+
+    lastAudiobookProgressSeconds = absoluteSeconds;
+    // Preserve seek/pause/part-transition ordering. Parallel writes can resolve backwards and move
+    // the Book cursor to an older position even though the browser emitted events in the right order.
+    audiobookProgressSave = audiobookProgressSave
+      .catch(() => undefined)
+      .then(() => updateEntityPlayback(ownerId, {
+        resumeSeconds: absoluteSeconds,
+        completed: options.completed,
+      }))
+      .then(() => undefined)
+      .catch(() => undefined);
   }
 
   // Switch audio source when the current track changes.
@@ -515,6 +580,7 @@
 
     const handleTimeUpdate = () => {
       if (!timelineDraggingRef) playback.currentTime = audio.currentTime;
+      saveAudiobookProgress({ completed: false, periodic: true });
       setMediaSessionPosition(audio.duration, audio.currentTime);
     };
     const handleDurationChange = () => {
@@ -529,12 +595,17 @@
       playback.playing = true;
     };
     const handlePause = () => {
+      saveAudiobookProgress({ completed: audio.ended && isFinalAudiobookPart() });
       playback.playing = false;
       coordinator.releasePlayback();
       window.dispatchEvent(new Event(AUDIO_PLAYBACK_SAVE_EVENT));
     };
     const handleEnded = () => {
-      if (playback.currentTrack) recordTrackPlay(playback.currentTrack.id);
+      if (isAudiobook) {
+        saveAudiobookProgress({ completed: isFinalAudiobookPart() });
+      } else if (playback.currentTrack) {
+        recordTrackPlay(playback.currentTrack.id);
+      }
       handleTrackEnd();
       window.dispatchEvent(new Event(AUDIO_PLAYBACK_SAVE_EVENT));
     };
@@ -718,7 +789,13 @@
 
     <div class="min-w-0 flex-1">
       {#if activeTrack}
-        <p class="truncate text-[0.8rem] font-medium leading-tight text-text-primary">{activeTrack.title}</p>
+        <p class="truncate text-[0.8rem] font-medium leading-tight text-text-primary">
+          {#if playbackOwnerHref}
+            <a href={playbackOwnerHref} class="transition-colors hover:text-text-accent">{displayTitle}</a>
+          {:else}
+            {displayTitle}
+          {/if}
+        </p>
         <p class="truncate text-[0.68rem] leading-tight text-text-muted">
           {#if artistName && artistHref}
             <a href={artistHref} class="transition-colors hover:text-text-accent">{artistName}</a>
@@ -781,6 +858,7 @@
           (event.currentTarget as HTMLDivElement).releasePointerCapture(event.pointerId);
           timelineDraggingRef = false;
           timelineDragging = false;
+          saveAudiobookProgress({ completed: false });
         }}
         onpointercancel={() => {
           timelineDraggingRef = false;
@@ -822,7 +900,8 @@
       <button
         type="button"
         onclick={() => playback.toggleShuffle()}
-        title={playback.shuffle ? "Shuffle: on" : "Shuffle: off"}
+        disabled={isAudiobook}
+        title={isAudiobook ? "Audiobook parts play in order" : playback.shuffle ? "Shuffle: on" : "Shuffle: off"}
         class={cn("p-1.5 transition-colors", playback.shuffle ? "text-accent-500" : "text-text-disabled hover:text-text-muted")}
       >
         <Shuffle class="h-3 w-3" />
