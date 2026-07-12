@@ -8,6 +8,39 @@ namespace Prismedia.Infrastructure.Tests;
 
 public sealed class EfMonitorStoreTests {
     [Fact]
+    public async Task EntityMonitorListIncludesBothBookRenditionsInStableCreationOrder() {
+        await using var db = CreateContext();
+        var entityId = Guid.NewGuid();
+        var createdAt = DateTimeOffset.UtcNow;
+        var ebookId = Guid.Parse("11111111-1111-1111-1111-111111111111");
+        var audiobookId = Guid.Parse("22222222-2222-2222-2222-222222222222");
+        db.Monitors.AddRange(
+            Monitor(audiobookId, BookRendition.Audiobook),
+            Monitor(ebookId, BookRendition.Ebook),
+            Monitor(Guid.NewGuid(), BookRendition.Ebook, Guid.NewGuid()));
+        await db.SaveChangesAsync();
+
+        var monitors = await new EfMonitorStore(db)
+            .ListForEntityAsync(entityId, CancellationToken.None);
+
+        Assert.Equal([ebookId, audiobookId], monitors.Select(monitor => monitor.Id).ToArray());
+        Assert.Equal(
+            [BookRendition.Ebook, BookRendition.Audiobook],
+            monitors.Select(monitor => monitor.BookRendition).ToArray());
+
+        MonitorRow Monitor(Guid id, BookRendition rendition, Guid? targetEntityId = null) => new() {
+            Id = id,
+            EntityId = targetEntityId ?? entityId,
+            Kind = EntityKind.Book,
+            BookRendition = rendition,
+            Status = MonitorStatus.Active,
+            Title = "A Game of Thrones",
+            CreatedAt = createdAt,
+            UpdatedAt = createdAt,
+        };
+    }
+
+    [Fact]
     public async Task ParentDiscoveryLeaseRefusesMutationWhileADescendantIsBeingUnmonitored() {
         await using var db = CreateContext();
         var now = DateTimeOffset.UtcNow;

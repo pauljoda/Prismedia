@@ -128,6 +128,15 @@ public static class AcquisitionEndpoints {
             .Produces<AcquisitionDetail>()
             .Produces<ApiProblem>(StatusCodes.Status404NotFound);
 
+        group.MapGet("/for-entity/{entityId:guid}/all", (
+            Guid entityId,
+            AcquisitionService acquisitions,
+            CancellationToken cancellationToken) =>
+            acquisitions.ListForEntityAsync(entityId, cancellationToken))
+            .WithName("ListAcquisitionsForEntity")
+            .WithSummary("Lists every direct acquisition backing a library Entity, including independent ebook and audiobook rows.")
+            .Produces<IReadOnlyList<AcquisitionDetail>>();
+
         group.MapPost("/{id:guid}/queue", async (
             Guid id,
             AcquisitionQueueRequest request,
@@ -568,6 +577,15 @@ public static class AcquisitionEndpoints {
             .WithSummary("Gets the stable monitor targeting a library Entity, when one exists.")
             .Produces<MonitorView>()
             .Produces<ApiProblem>(StatusCodes.Status404NotFound);
+
+        group.MapGet("/for-entity/{entityId:guid}/all", (
+            Guid entityId,
+            MonitorService monitors,
+            CancellationToken cancellationToken) =>
+            monitors.ListForEntityAsync(entityId, cancellationToken))
+            .WithName("ListEntityMonitors")
+            .WithSummary("Lists every direct monitor targeting an Entity, including independent ebook and audiobook intent.")
+            .Produces<IReadOnlyList<MonitorView>>();
 
         group.MapGet("/for-entity/{entityId:guid}/eligibility", (
             Guid entityId,

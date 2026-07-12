@@ -191,7 +191,12 @@ public sealed record RequestCommitResponse(
 /// </summary>
 /// <param name="TargetLibraryRootId">Optional import target override; null inherits the followed container's choice, else the kind default.</param>
 /// <param name="ProfileId">Optional profile override; null inherits the followed container's choice, else the kind default.</param>
-public sealed record RequestEntityCommitRequest(Guid EntityId, Guid? TargetLibraryRootId = null, Guid? ProfileId = null);
+/// <param name="BookRendition">Exact Book rendition to acquire; null preserves the ebook default.</param>
+public sealed record RequestEntityCommitRequest(
+    Guid EntityId,
+    Guid? TargetLibraryRootId = null,
+    Guid? ProfileId = null,
+    BookRendition? BookRendition = null);
 
 /// <summary>
 /// Requests every still-wanted child phantom under an entity as its own monitored acquisition — a

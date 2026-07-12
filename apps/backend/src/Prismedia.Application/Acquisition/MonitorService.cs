@@ -245,6 +245,12 @@ public sealed class MonitorService(
     public Task<MonitorView?> GetForEntityAsync(Guid entityId, CancellationToken cancellationToken) =>
         monitors.GetByEntityAsync(entityId, cancellationToken);
 
+    /// <summary>Every direct monitor targeting an Entity, including parallel Book rendition intent.</summary>
+    public Task<IReadOnlyList<MonitorView>> ListForEntityAsync(
+        Guid entityId,
+        CancellationToken cancellationToken) =>
+        monitors.ListForEntityAsync(entityId, cancellationToken);
+
     /// <summary>
     /// Stamps the Entity monitor as just-searched after manual work, so the sweep's clock restarts from
     /// now instead of immediately repeating it. A no-op when the Entity is not monitored.

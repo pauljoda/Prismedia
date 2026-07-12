@@ -13,8 +13,9 @@ using Prismedia.Infrastructure.Requests;
 namespace Prismedia.Infrastructure.Acquisition;
 
 /// <summary>
-/// EF implementation of generalized Entity unmonitor cleanup. Scope follows only ParentEntityId and
-/// acquisition EntityId links; it contains no movie/season/album/book branches.
+/// EF implementation of generalized Entity unmonitor cleanup. Scope follows ParentEntityId and
+/// acquisition EntityId links; Book rendition intent is the one orthogonal ownership axis because two
+/// independently removable monitor lifecycles can target the same Entity root.
 /// </summary>
 public sealed class EfEntityUnmonitorPersistence(
     PrismediaDbContext db,
@@ -25,8 +26,14 @@ public sealed class EfEntityUnmonitorPersistence(
         suppressionStore ?? new EfWantedSuppressionStore(db);
 
     /// <inheritdoc />
-    public async Task<EntityUnmonitorScope?> ResolveAsync(
+    public Task<EntityUnmonitorScope?> ResolveAsync(
         Guid monitorId,
+        CancellationToken cancellationToken) =>
+        ResolveMonitorAsync(monitorId, scopeBookRendition: true, cancellationToken);
+
+    private async Task<EntityUnmonitorScope?> ResolveMonitorAsync(
+        Guid monitorId,
+        bool scopeBookRendition,
         CancellationToken cancellationToken) {
         var monitor = await db.Monitors.AsNoTracking()
             .FirstOrDefaultAsync(row => row.Id == monitorId, cancellationToken);
@@ -42,13 +49,19 @@ public sealed class EfEntityUnmonitorPersistence(
                 .FirstOrDefaultAsync(cancellationToken);
         }
 
+        var bookRendition = scopeBookRendition && monitor.Kind == EntityKind.Book
+            ? monitor.BookRendition
+            : null;
+        var renditionScoped = bookRendition is not null;
         var entityIds = rootEntityId is { } root
             ? await hierarchy.ListSubtreeIdsAsync(root, cancellationToken)
             : [];
         var acquisitionIds = entityIds.Count == 0
             ? new List<Guid>()
             : await db.Acquisitions.AsNoTracking()
-                .Where(row => row.EntityId != null && entityIds.Contains(row.EntityId.Value))
+                .Where(row => row.EntityId != null
+                    && entityIds.Contains(row.EntityId.Value)
+                    && (!renditionScoped || row.BookRendition == bookRendition))
                 .OrderBy(row => row.CreatedAt)
                 .Select(row => row.Id)
                 .ToListAsync(cancellationToken);
@@ -65,13 +78,31 @@ public sealed class EfEntityUnmonitorPersistence(
         var monitorIds = await db.Monitors.AsNoTracking()
             .Where(row =>
                 row.Id == monitorId
-                || (row.EntityId != null && entityIds.Contains(row.EntityId.Value))
+                || (row.EntityId != null
+                    && entityIds.Contains(row.EntityId.Value)
+                    && (!renditionScoped || row.BookRendition == bookRendition))
                 || (row.AcquisitionId != null && acquisitionIds.Contains(row.AcquisitionId.Value))
                 || (row.UpgradeChildAcquisitionId != null && acquisitionIds.Contains(row.UpgradeChildAcquisitionId.Value)))
             .Select(row => row.Id)
             .ToArrayAsync(cancellationToken);
 
-        var rootSuppression = rootEntityId is { } rootId
+        var parallelBookIntent = false;
+        if (renditionScoped && rootEntityId is { } bookId) {
+            var parallelAcquisitionIds = await db.Acquisitions.AsNoTracking()
+                .Where(row => row.EntityId == bookId
+                    && row.BookRendition != null
+                    && row.BookRendition != bookRendition)
+                .Select(row => row.Id)
+                .ToArrayAsync(cancellationToken);
+            parallelBookIntent = await db.Monitors.AsNoTracking().AnyAsync(row =>
+                row.BookRendition != null
+                && row.BookRendition != bookRendition
+                && (row.EntityId == bookId
+                    || row.AcquisitionId != null
+                        && parallelAcquisitionIds.Contains(row.AcquisitionId.Value)),
+                cancellationToken);
+        }
+        var rootSuppression = (!renditionScoped || !parallelBookIntent) && rootEntityId is { } rootId
             ? await ResolveRootSuppressionAsync(rootId, cancellationToken)
             : null;
         var acquisitionStatuses = await ResolveAcquisitionStatusesAsync(
@@ -84,7 +115,8 @@ public sealed class EfEntityUnmonitorPersistence(
             acquisitionIds,
             monitorIds,
             rootSuppression,
-            AcquisitionStatuses: acquisitionStatuses);
+            AcquisitionStatuses: acquisitionStatuses,
+            BookRendition: bookRendition);
     }
 
     /// <inheritdoc />
@@ -102,7 +134,9 @@ public sealed class EfEntityUnmonitorPersistence(
             select (Guid?)monitor.Id)
             .FirstOrDefaultAsync(cancellationToken);
         if (existingMonitorId is { } monitorId) {
-            return await ResolveAsync(monitorId, cancellationToken);
+            // Entity give-up owns the complete lifecycle. Only the explicit monitor endpoint is scoped
+            // to one Book rendition.
+            return await ResolveMonitorAsync(monitorId, scopeBookRendition: false, cancellationToken);
         }
 
         return await ResolveSyntheticEntityScopeAsync(entityId, Guid.NewGuid(), cancellationToken);
@@ -182,7 +216,10 @@ public sealed class EfEntityUnmonitorPersistence(
                     syntheticRootEntityId,
                     scope.MonitorId,
                     cancellationToken)
-                : await ResolveAsync(scope.MonitorId, cancellationToken);
+                : await ResolveMonitorAsync(
+                    scope.MonitorId,
+                    scopeBookRendition: scope.BookRendition is not null,
+                    cancellationToken);
             if (current is null || !await IsSafeClaimScopeAsync(scope, current, cancellationToken)) {
                 return false;
             }
@@ -390,6 +427,7 @@ public sealed class EfEntityUnmonitorPersistence(
         EntityUnmonitorScope current,
         CancellationToken cancellationToken) {
         if (current.RootEntityId != initial.RootEntityId
+            || current.BookRendition != initial.BookRendition
             || !current.AcquisitionIds.ToHashSet().SetEquals(initial.AcquisitionIds)
             || !current.MonitorIds.ToHashSet().SetEquals(initial.MonitorIds)) {
             return false;

@@ -31,6 +31,31 @@ public sealed class RequestProposalRevisionTests {
         Assert.NotEqual(RequestProposalRevision.Compute(original), RequestProposalRevision.Compute(changed));
     }
 
+    [Fact]
+    public void SyntheticEntityIdsDoNotChangeTheReviewedProposalRevision() {
+        var first = Proposal(
+            new Dictionary<string, string> { ["openlibrarywork"] = "OL257943W" },
+            new Dictionary<string, string> { ["published"] = "1996" }) with {
+            TargetEntityId = Guid.NewGuid()
+        };
+        var second = first with {
+            TargetEntityId = Guid.NewGuid(),
+            Children = [first.Children[0] with { TargetEntityId = Guid.NewGuid() }]
+        };
+
+        Assert.Equal(RequestProposalRevision.Compute(first), RequestProposalRevision.Compute(second));
+    }
+
+    [Fact]
+    public void NullPluginProposalCollectionsAreEquivalentToEmptyCollections() {
+        var populated = Proposal(
+            new Dictionary<string, string> { ["openlibrarywork"] = "OL257943W" },
+            new Dictionary<string, string>()) with { Children = [], Relationships = [] };
+        var sparse = populated with { Children = null!, Relationships = null! };
+
+        Assert.Equal(RequestProposalRevision.Compute(populated), RequestProposalRevision.Compute(sparse));
+    }
+
     private static EntityMetadataProposal Proposal(
         IReadOnlyDictionary<string, string> externalIds,
         IReadOnlyDictionary<string, string> dates) =>

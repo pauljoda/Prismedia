@@ -171,7 +171,8 @@ public static class RequestEndpoints {
                         request.EntityId,
                         NsfwVisibility.ShouldHide(hideNsfw, httpContext),
                         cancellationToken,
-                        new Prismedia.Application.Acquisition.AcquisitionTargeting(request.TargetLibraryRootId, request.ProfileId));
+                        new Prismedia.Application.Acquisition.AcquisitionTargeting(request.TargetLibraryRootId, request.ProfileId),
+                        request.BookRendition);
                     return response is null
                         ? Results.NotFound(new ApiProblem(ApiProblemCodes.NotFound, "The entity could not be requested — it may be gone, not a requestable kind, or unresolvable from its providers."))
                         : Results.Ok(response);

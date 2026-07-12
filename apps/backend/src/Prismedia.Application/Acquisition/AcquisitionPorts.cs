@@ -702,6 +702,16 @@ public interface IAcquisitionStore : IAcquisitionLifecycleStore {
     /// <summary>The newest acquisition targeting this library entity with its candidates, or null when it has none.</summary>
     Task<AcquisitionDetail?> GetLatestForEntityAsync(Guid entityId, CancellationToken cancellationToken);
 
+    /// <summary>
+    /// Every direct acquisition targeting this library Entity, newest first with id as the stable tie-breaker.
+    /// Book ebook and audiobook rows remain independent; upgrade descendants stay attached to their direct
+    /// acquisition lifecycle and are not duplicated as Entity-level entries.
+    /// </summary>
+    async Task<IReadOnlyList<AcquisitionDetail>> ListForEntityAsync(
+        Guid entityId,
+        CancellationToken cancellationToken) =>
+        await GetLatestForEntityAsync(entityId, cancellationToken) is { } detail ? [detail] : [];
+
     /// <summary>Newest acquisition summary per requested Entity id, loaded as one bounded read.</summary>
     async Task<IReadOnlyDictionary<Guid, Contracts.Acquisition.AcquisitionSummary>> ListLatestSummariesForEntityIdsAsync(
         IReadOnlyCollection<Guid> entityIds,

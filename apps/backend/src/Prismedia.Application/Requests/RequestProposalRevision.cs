@@ -18,7 +18,7 @@ public static class RequestProposalRevision {
     public static string Compute(EntityMetadataProposal proposal) {
         ArgumentNullException.ThrowIfNull(proposal);
 
-        using var document = JsonSerializer.SerializeToDocument(proposal, JsonOptions);
+        using var document = JsonSerializer.SerializeToDocument(WithoutSyntheticEntityIds(proposal), JsonOptions);
         using var stream = new MemoryStream();
         using (var writer = new Utf8JsonWriter(stream)) {
             WriteCanonical(writer, document.RootElement);
@@ -26,6 +26,13 @@ public static class RequestProposalRevision {
 
         return Convert.ToHexStringLower(SHA256.HashData(stream.GetBuffer().AsSpan(0, checked((int)stream.Length))));
     }
+
+    private static EntityMetadataProposal WithoutSyntheticEntityIds(EntityMetadataProposal proposal) =>
+        proposal with {
+            TargetEntityId = null,
+            Children = (proposal.Children ?? []).Select(WithoutSyntheticEntityIds).ToArray(),
+            Relationships = (proposal.Relationships ?? []).Select(WithoutSyntheticEntityIds).ToArray()
+        };
 
     private static void WriteCanonical(Utf8JsonWriter writer, JsonElement element) {
         switch (element.ValueKind) {

@@ -769,6 +769,38 @@ public sealed class RequestCommitServiceTests {
         Assert.Single(acquisitions.Created);
     }
 
+    [Theory]
+    [InlineData(BookRendition.Ebook, BookRendition.Audiobook)]
+    [InlineData(BookRendition.Audiobook, BookRendition.Ebook)]
+    public async Task RequestEntityTargetsTheMissingBookRenditionOnTheExistingEntity(
+        BookRendition ownedRendition,
+        BookRendition requestedRendition) {
+        var proposal = Leaf(ProposalKind.Book, "A Game of Thrones", "W1");
+        var (service, writer, acquisitions, _) = ServiceWithMonitors(proposal);
+        var entityId = FakeWantedEntityWriter.EntityIdFor("W1");
+        writer.Container = new MonitorableEntity(
+            entityId,
+            EntityKind.Book,
+            "A Game of Thrones",
+            [new ExternalIdentity(Provider, "W1")],
+            HasSourceFile: true,
+            HasEbookSource: ownedRendition == BookRendition.Ebook,
+            HasAudiobookSource: ownedRendition == BookRendition.Audiobook);
+
+        var response = await service.RequestEntityAsync(
+            entityId,
+            hideNsfw: true,
+            CancellationToken.None,
+            bookRendition: requestedRendition);
+
+        var item = Assert.Single(response!.Items);
+        Assert.Equal(RequestCommitOutcome.Requested, item.Outcome);
+        Assert.Equal(entityId, item.EntityId);
+        var created = Assert.Single(acquisitions.Created);
+        Assert.Equal(entityId, created.EntityId);
+        Assert.Equal(requestedRendition, created.BookRendition);
+    }
+
     [Fact]
     public async Task RequestEntityUsesThePersistedPluginIdentityRouteWithoutSubstitution() {
         var identity = new ExternalIdentity(Provider, "W1");
@@ -1194,6 +1226,57 @@ public sealed class RequestCommitServiceTests {
         Assert.Equal("Movie:603", wantedMovie.ItemId);
         Assert.Equal("tmdb", Assert.Single(acquisitions.Created).IdentityNamespace);
         Assert.Equal("tmdb:Movie:603", Assert.Single(response!.Items).ExternalId);
+    }
+
+    [Theory]
+    [InlineData(RequestMediaKind.Audiobook, BookRendition.Ebook, BookRendition.Audiobook)]
+    [InlineData(RequestMediaKind.Book, BookRendition.Audiobook, BookRendition.Ebook)]
+    public async Task ReviewedBookCommitsTheMissingRenditionWhenTheOtherIsOwned(
+        RequestMediaKind requestKind,
+        BookRendition ownedRendition,
+        BookRendition requestedRendition) {
+        var identity = new ExternalIdentity("openlibrarywork", "OL257943W");
+        var reviewedProposal = Node(
+            "openlibrary:work:OL257943W:book",
+            "openlibrary",
+            ProposalKind.Book,
+            "A Game of Thrones",
+            identity) with { TargetEntityId = Guid.NewGuid() };
+        var refreshedProposal = reviewedProposal with { TargetEntityId = Guid.NewGuid() };
+        var reviewed = Review(
+            "openlibrary",
+            requestKind,
+            identity,
+            reviewedProposal,
+            [Target(reviewedProposal, requestKind, identity)]);
+        var refreshed = Review(
+            "openlibrary",
+            requestKind,
+            identity,
+            refreshedProposal,
+            [Target(refreshedProposal, requestKind, identity)]);
+        var reviews = new FakeReviewSource(_ => refreshed);
+        var (service, writer, acquisitions, _, _) = ReviewedService(refreshedProposal, reviews);
+        writer.ExistingWithFile.Add(identity.Value);
+        writer.OwnedRenditions.Add((identity.Value, ownedRendition));
+
+        var response = await service.CommitReviewedAsync(
+            new ReviewedRequestCommitRequest(
+                requestKind,
+                "openlibrary",
+                identity,
+                reviewed.Revision,
+                [reviewedProposal.ProposalId]),
+            hideNsfw: false,
+            CancellationToken.None);
+
+        var item = Assert.Single(response!.Items);
+        Assert.Equal(RequestCommitOutcome.Requested, item.Outcome);
+        Assert.Equal(FakeWantedEntityWriter.EntityIdFor(identity.Value), item.EntityId);
+        var created = Assert.Single(acquisitions.Created);
+        Assert.Equal(requestedRendition, created.BookRendition);
+        Assert.Equal(item.EntityId, created.EntityId);
+        Assert.Empty(writer.Applied);
     }
 
     [Fact]

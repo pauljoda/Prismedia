@@ -1631,6 +1631,33 @@ public sealed class EfAcquisitionStore(PrismediaDbContext db, IAcquisitionHistor
         return id is { } acquisitionId ? await GetAsync(acquisitionId, cancellationToken) : null;
     }
 
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<AcquisitionDetail>> ListForEntityAsync(
+        Guid entityId,
+        CancellationToken cancellationToken) {
+        var rows = await db.Acquisitions.AsNoTracking()
+            .Where(row => row.EntityId == entityId)
+            .OrderByDescending(row => row.CreatedAt)
+            .ThenByDescending(row => row.Id)
+            .ToArrayAsync(cancellationToken);
+        if (rows.Length == 0) {
+            return [];
+        }
+
+        var ids = rows.Select(row => row.Id).ToArray();
+        var candidates = await db.ReleaseCandidates.AsNoTracking()
+            .Where(candidate => ids.Contains(candidate.AcquisitionId))
+            .OrderByDescending(candidate => candidate.Accepted)
+            .ThenByDescending(candidate => candidate.Score)
+            .ThenBy(candidate => candidate.Id)
+            .ToArrayAsync(cancellationToken);
+        var candidatesByAcquisition = candidates.ToLookup(candidate => candidate.AcquisitionId);
+        var progress = await LatestProgressAsync(ids, cancellationToken);
+        return rows.Select(row => new AcquisitionDetail(
+            ToSummary(row, progress.GetValueOrDefault(row.Id)),
+            candidatesByAcquisition[row.Id].Select(ToView).ToArray())).ToArray();
+    }
+
     public async Task<IReadOnlyDictionary<Guid, AcquisitionSummary>> ListLatestSummariesForEntityIdsAsync(
         IReadOnlyCollection<Guid> entityIds,
         CancellationToken cancellationToken) {

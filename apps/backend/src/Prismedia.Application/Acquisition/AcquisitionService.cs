@@ -170,6 +170,12 @@ public sealed class AcquisitionService(
     public Task<AcquisitionDetail?> GetForEntityAsync(Guid entityId, CancellationToken cancellationToken) =>
         store.GetLatestForEntityAsync(entityId, cancellationToken);
 
+    /// <summary>Every direct acquisition backing a library Entity, including parallel Book renditions.</summary>
+    public Task<IReadOnlyList<AcquisitionDetail>> ListForEntityAsync(
+        Guid entityId,
+        CancellationToken cancellationToken) =>
+        store.ListForEntityAsync(entityId, cancellationToken);
+
     /// <inheritdoc />
     public async Task<AcquisitionRemovalEligibility> GetRemovalEligibilityAsync(
         Guid id,

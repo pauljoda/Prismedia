@@ -88,6 +88,46 @@ public sealed class EfEntityUnmonitorPersistenceTests {
         Assert.Equal([new ExternalIdentity("tmdbseason", "series-1:1")], scope.RootSuppression?.ExternalIdentities);
     }
 
+    [Theory]
+    [InlineData(BookRendition.Ebook, BookRendition.Audiobook)]
+    [InlineData(BookRendition.Audiobook, BookRendition.Ebook)]
+    public async Task StoppingOneBookRenditionPreservesTheOtherRenditionIntent(
+        BookRendition stoppedRendition,
+        BookRendition retainedRendition) {
+        await using var db = CreateContext();
+        var book = AddEntity(db, EntityKind.Book, "A Game of Thrones", wanted: true);
+        AddIdentity(db, book, "openlibrarywork", "OL257943W");
+        var stoppedAcquisition = AddAcquisition(
+            db, book, AcquisitionStatus.AwaitingSelection, stoppedRendition);
+        var retainedAcquisition = AddAcquisition(
+            db, book, AcquisitionStatus.AwaitingSelection, retainedRendition);
+        var stoppedMonitor = AddAcquisitionMonitor(
+            db, stoppedAcquisition, EntityKind.Book, stoppedRendition);
+        var retainedMonitor = AddAcquisitionMonitor(
+            db, retainedAcquisition, EntityKind.Book, retainedRendition);
+        await db.SaveChangesAsync();
+        var persistence = new EfEntityUnmonitorPersistence(db, new EfEntityHierarchyReader(db));
+
+        var scope = (await persistence.ResolveAsync(stoppedMonitor, CancellationToken.None))!;
+
+        Assert.Equal(stoppedRendition, scope.BookRendition);
+        Assert.Equal([stoppedAcquisition], scope.AcquisitionIds);
+        Assert.Equal([stoppedMonitor], scope.MonitorIds);
+        Assert.Null(scope.RootSuppression);
+        Assert.True(await persistence.ClaimAsync(scope, CancellationToken.None));
+
+        db.Acquisitions.Remove((await db.Acquisitions.FindAsync(stoppedAcquisition))!);
+        await db.SaveChangesAsync();
+        await persistence.CompleteAsync(scope, CancellationToken.None);
+
+        Assert.NotNull(await db.Entities.FindAsync(book));
+        Assert.NotNull(await db.Acquisitions.FindAsync(retainedAcquisition));
+        var remainingMonitor = await db.Monitors.AsNoTracking().SingleAsync();
+        Assert.Equal(retainedMonitor, remainingMonitor.Id);
+        Assert.Equal(retainedRendition, remainingMonitor.BookRendition);
+        Assert.Empty(await db.WantedSuppressions.ToArrayAsync());
+    }
+
     [Fact]
     public async Task ClaimPublishesTheChildSuppressionBeforeReturning() {
         await using var db = CreateContext();
@@ -464,11 +504,13 @@ public sealed class EfEntityUnmonitorPersistenceTests {
     private static Guid AddAcquisition(
         PrismediaDbContext db,
         Guid entityId,
-        AcquisitionStatus status) {
+        AcquisitionStatus status,
+        BookRendition? bookRendition = null) {
         var id = Guid.NewGuid();
         db.Acquisitions.Add(new AcquisitionRow {
             Id = id,
             Kind = EntityKind.Book,
+            BookRendition = bookRendition,
             EntityId = entityId,
             Status = status,
             Title = id.ToString(),
@@ -493,12 +535,17 @@ public sealed class EfEntityUnmonitorPersistenceTests {
         return id;
     }
 
-    private static Guid AddAcquisitionMonitor(PrismediaDbContext db, Guid acquisitionId, EntityKind kind) {
+    private static Guid AddAcquisitionMonitor(
+        PrismediaDbContext db,
+        Guid acquisitionId,
+        EntityKind kind,
+        BookRendition? bookRendition = null) {
         var id = Guid.NewGuid();
         db.Monitors.Add(new MonitorRow {
             Id = id,
             AcquisitionId = acquisitionId,
             Kind = kind,
+            BookRendition = bookRendition,
             Status = MonitorStatus.Active,
             CreatedAt = DateTimeOffset.UtcNow,
             UpdatedAt = DateTimeOffset.UtcNow

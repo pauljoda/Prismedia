@@ -24,7 +24,8 @@ public sealed record EntityUnmonitorScope(
     IReadOnlyList<Guid> MonitorIds,
     UnmonitorSuppressionTarget? RootSuppression,
     bool SyntheticMonitorAnchor = false,
-    IReadOnlyDictionary<Guid, AcquisitionStatus>? AcquisitionStatuses = null);
+    IReadOnlyDictionary<Guid, AcquisitionStatus>? AcquisitionStatuses = null,
+    BookRendition? BookRendition = null);
 
 /// <summary>
 /// Persistence boundary for generalized Entity unmonitoring. Resolution is read-only; claiming is the

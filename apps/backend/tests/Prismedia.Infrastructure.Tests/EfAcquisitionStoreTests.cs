@@ -11,6 +11,51 @@ namespace Prismedia.Infrastructure.Tests;
 
 public sealed class EfAcquisitionStoreTests {
     [Fact]
+    public async Task EntityAcquisitionListIncludesEveryBookRenditionInDeterministicNewestFirstOrder() {
+        await using var db = CreateContext();
+        var entityId = AddWantedEntity(db, EntityKindRegistry.Book.Code, "A Game of Thrones");
+        var otherEntityId = AddWantedEntity(db, EntityKindRegistry.Book.Code, "A Clash of Kings");
+        var createdAt = DateTimeOffset.UtcNow;
+        var olderEbookId = Guid.Parse("11111111-1111-1111-1111-111111111111");
+        var audiobookId = Guid.Parse("22222222-2222-2222-2222-222222222222");
+        var newerEbookId = Guid.Parse("33333333-3333-3333-3333-333333333333");
+        db.Acquisitions.AddRange(
+            Row(olderEbookId, entityId, BookRendition.Ebook, createdAt.AddMinutes(-1)),
+            Row(audiobookId, entityId, BookRendition.Audiobook, createdAt),
+            Row(newerEbookId, entityId, BookRendition.Ebook, createdAt),
+            Row(Guid.NewGuid(), otherEntityId, BookRendition.Audiobook, createdAt.AddMinutes(1)));
+        AddCandidate(db, audiobookId, "audio-hash", "Indexer", "Audiobook release", 10);
+        await db.SaveChangesAsync();
+
+        var details = await AcquisitionTestFactory.Store(db)
+            .ListForEntityAsync(entityId, CancellationToken.None);
+
+        Assert.Equal([newerEbookId, audiobookId, olderEbookId],
+            details.Select(detail => detail.Summary.Id).ToArray());
+        Assert.Equal(
+            [BookRendition.Ebook, BookRendition.Audiobook, BookRendition.Ebook],
+            details.Select(detail => detail.Summary.BookRendition).ToArray());
+        Assert.Equal("Audiobook release", Assert.Single(details[1].Candidates).Title);
+
+        static AcquisitionRow Row(
+            Guid id,
+            Guid entityId,
+            BookRendition rendition,
+            DateTimeOffset createdAt) => new() {
+                Id = id,
+                EntityId = entityId,
+                Kind = EntityKind.Book,
+                BookRendition = rendition,
+                Status = AcquisitionStatus.AwaitingSelection,
+                Title = "A Game of Thrones",
+                ExternalIdsJson = "{}",
+                SourceUrlsJson = "[]",
+                CreatedAt = createdAt,
+                UpdatedAt = createdAt,
+            };
+    }
+
+    [Fact]
     public async Task AudiobookRenditionRoundTripsThroughViewsSearchImportAndRetry() {
         await using var db = CreateContext();
         var entityId = AddWantedEntity(db, EntityKindRegistry.Book.Code, "Elantris");

@@ -35,6 +35,19 @@ public sealed class RequestEndpointTests {
     }
 
     [Fact]
+    public async Task OpenApiExposesAdditiveEntityAcquisitionAndMonitorCollections() {
+        using var factory = CreateFactory();
+        using var client = factory.CreateAuthenticatedClient();
+        using var document = JsonDocument.Parse(await client.GetStringAsync("/openapi/v1.json"));
+        var paths = document.RootElement.GetProperty("paths");
+
+        Assert.True(paths.GetProperty("/api/acquisitions/for-entity/{entityId}/all")
+            .TryGetProperty("get", out _));
+        Assert.True(paths.GetProperty("/api/monitors/for-entity/{entityId}/all")
+            .TryGetProperty("get", out _));
+    }
+
+    [Fact]
     public async Task CommitReturnsConflictWhenAnExternalIdentityMatchesMultipleEntities() {
         using var factory = CreateFactory();
         using var client = factory.CreateAuthenticatedClient();
