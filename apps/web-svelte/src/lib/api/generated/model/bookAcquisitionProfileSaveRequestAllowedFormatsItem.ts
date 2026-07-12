@@ -12,4 +12,5 @@ export const BookAcquisitionProfileSaveRequestAllowedFormatsItem = {
   'image-archive': 'image-archive',
   epub: 'epub',
   pdf: 'pdf',
+  audio: 'audio',
 } as const;

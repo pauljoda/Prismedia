@@ -7,6 +7,7 @@
 import type { AcquisitionStatus } from './acquisitionStatus';
 import type { EntityKind } from './entityKind';
 import type { MonitorStatus } from './monitorStatus';
+import type { WantedListItemViewBookRendition } from './wantedListItemViewBookRendition';
 
 export interface WantedListItemView {
   monitorId: string;
@@ -32,4 +33,5 @@ export interface WantedListItemView {
   posterUrl?: string | null;
   /** @nullable */
   author?: string | null;
+  bookRendition?: WantedListItemViewBookRendition;
 }

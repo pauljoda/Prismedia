@@ -62,6 +62,7 @@ const ENUM_EXPORTS = [
   ["BlocklistReason", "BLOCKLIST_REASON", "BlocklistReasonCode"],
   ["MonitorStatus", "MONITOR_STATUS", "MonitorStatusCode"],
   ["MonitorPreset", "MONITOR_PRESET", "MonitorPresetCode"],
+  ["BookRendition", "BOOK_RENDITION", "BookRenditionCode"],
   ["BookFormatTier", "BOOK_FORMAT_TIER", "BookFormatTierCode"],
   ["BookSourceTier", "BOOK_SOURCE_TIER", "BookSourceTierCode"],
   ["ProperDownloadPolicy", "PROPER_DOWNLOAD_POLICY", "ProperDownloadPolicyCode"],

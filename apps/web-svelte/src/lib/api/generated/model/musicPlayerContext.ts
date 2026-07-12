@@ -5,6 +5,7 @@
  * OpenAPI spec version: 1.0.0
  */
 import type { MusicPlayerContextAlbumCoverUrls } from './musicPlayerContextAlbumCoverUrls';
+import type { MusicPlayerContextPlaybackOwnerEntityKind } from './musicPlayerContextPlaybackOwnerEntityKind';
 
 export interface MusicPlayerContext {
   /** @nullable */
@@ -19,4 +20,9 @@ export interface MusicPlayerContext {
   coverUrl: string | null;
   /** @nullable */
   albumCoverUrls: MusicPlayerContextAlbumCoverUrls;
+  /** @nullable */
+  playbackOwnerEntityId?: string | null;
+  /** @nullable */
+  playbackOwnerTitle?: string | null;
+  playbackOwnerEntityKind?: MusicPlayerContextPlaybackOwnerEntityKind;
 }

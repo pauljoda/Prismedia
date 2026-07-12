@@ -5,6 +5,7 @@
  * OpenAPI spec version: 1.0.0
  */
 import type { AcquisitionStatus } from './acquisitionStatus';
+import type { AcquisitionSummaryBookRendition } from './acquisitionSummaryBookRendition';
 import type { AcquisitionSummaryKind } from './acquisitionSummaryKind';
 
 export interface AcquisitionSummary {
@@ -37,4 +38,5 @@ export interface AcquisitionSummary {
   /** @nullable */
   entityId?: string | null;
   hasResumableImport?: boolean;
+  bookRendition?: AcquisitionSummaryBookRendition;
 }

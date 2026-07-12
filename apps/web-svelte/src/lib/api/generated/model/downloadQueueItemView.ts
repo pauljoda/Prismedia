@@ -5,6 +5,7 @@
  * OpenAPI spec version: 1.0.0
  */
 import type { AcquisitionStatus } from './acquisitionStatus';
+import type { DownloadQueueItemViewBookRendition } from './downloadQueueItemViewBookRendition';
 import type { EntityKind } from './entityKind';
 
 export interface DownloadQueueItemView {
@@ -62,4 +63,5 @@ export interface DownloadQueueItemView {
      * @pattern ^-?(?:0|[1-9]\d*)$
      */
   year?: number | string | null;
+  bookRendition?: DownloadQueueItemViewBookRendition;
 }

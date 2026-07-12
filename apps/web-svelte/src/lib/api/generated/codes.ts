@@ -324,6 +324,7 @@ export type RequestProviderKindCode = (typeof REQUEST_PROVIDER_KIND)[keyof typeo
 
 export const REQUEST_MEDIA_KIND = {
   book: "book",
+  audiobook: "audiobook",
   author: "author",
   movie: "movie",
   series: "series",
@@ -494,6 +495,13 @@ export const MONITOR_PRESET = {
 } as const;
 
 export type MonitorPresetCode = (typeof MONITOR_PRESET)[keyof typeof MONITOR_PRESET];
+
+export const BOOK_RENDITION = {
+  ebook: "ebook",
+  audiobook: "audiobook",
+} as const;
+
+export type BookRenditionCode = (typeof BOOK_RENDITION)[keyof typeof BOOK_RENDITION];
 
 export const BOOK_FORMAT_TIER = {
   unknown: "unknown",
@@ -732,6 +740,7 @@ export interface RequestKindManifestEntry {
 
 export const REQUEST_KIND_MANIFEST = [
   { kind: "book", label: "Book", plural: "Books", committable: true, childNoun: "volume", entityKind: "book", pluginEntityKind: "book", acquisitionKind: "book", profileKind: "book", rootFlag: "scanBooks", discoverable: true, reviewSelection: "direct-children-when-present" },
+  { kind: "audiobook", label: "Audiobook", plural: "Audiobooks", committable: true, childNoun: null, entityKind: "book", pluginEntityKind: "book", acquisitionKind: "book", profileKind: "book", rootFlag: "scanBooks", discoverable: true, reviewSelection: "root" },
   { kind: "author", label: "Author", plural: "Authors", committable: true, childNoun: "book", entityKind: "book-author", pluginEntityKind: "person", acquisitionKind: "book", profileKind: "book", rootFlag: "scanBooks", discoverable: true, reviewSelection: "direct-children" },
   { kind: "movie", label: "Movie", plural: "Movies", committable: true, childNoun: null, entityKind: "movie", pluginEntityKind: "movie", acquisitionKind: "movie", profileKind: "movie", rootFlag: "scanVideos", discoverable: true, reviewSelection: "root" },
   { kind: "series", label: "Series", plural: "Series", committable: true, childNoun: "season", entityKind: "video-series", pluginEntityKind: "video-series", acquisitionKind: "video-season", profileKind: "video-series", rootFlag: "scanVideos", discoverable: true, reviewSelection: "direct-children" },

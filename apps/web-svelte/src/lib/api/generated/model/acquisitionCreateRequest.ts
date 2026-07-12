@@ -4,6 +4,7 @@
  * Prismedia.Api | v1
  * OpenAPI spec version: 1.0.0
  */
+import type { AcquisitionCreateRequestBookRendition } from './acquisitionCreateRequestBookRendition';
 import type { AcquisitionCreateRequestKind } from './acquisitionCreateRequestKind';
 
 export interface AcquisitionCreateRequest {
@@ -47,4 +48,5 @@ export interface AcquisitionCreateRequest {
      * @pattern ^-?(?:0|[1-9]\d*)$
      */
   volumeNumber?: number | string | null;
+  bookRendition?: AcquisitionCreateRequestBookRendition;
 }
