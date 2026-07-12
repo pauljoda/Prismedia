@@ -6,6 +6,7 @@
   import AcquisitionPanel from "$lib/components/acquisitions/AcquisitionPanel.svelte";
   import { acquisitionStatusDisplay } from "$lib/requests/acquisition-status-display";
   import {
+    bookRenditionCanRequest,
     bookRenditionRows,
     type BookRenditionOwnership,
   } from "$lib/requests/book-rendition-acquisition";
@@ -116,6 +117,8 @@
             </Badge>
           {:else}
             <Badge>Missing</Badge>
+          {/if}
+          {#if bookRenditionCanRequest(row)}
             <Button
               type="button"
               size="sm"

@@ -1,4 +1,5 @@
 import {
+  ACQUISITION_STATUS,
   BOOK_RENDITION,
   type BookRenditionCode,
 } from "$lib/api/generated/codes";
@@ -33,6 +34,18 @@ export function bookRenditionRows(
     acquisition: newestByRendition(acquisitions, rendition, (item) => item.summary.updatedAt),
     monitor: newestByRendition(monitors, rendition, (item) => item.updatedAt),
   }));
+}
+
+/**
+ * A missing rendition can start a fresh request when it has no request story, or when its newest
+ * story is terminal history. Active, reviewable, and failed acquisitions stay owned by their
+ * existing AcquisitionPanel actions.
+ */
+export function bookRenditionCanRequest(row: BookRenditionRow): boolean {
+  if (row.owned) return false;
+  if (!row.acquisition) return row.monitor === null;
+  return row.acquisition.summary.status === ACQUISITION_STATUS.cancelled
+    || row.acquisition.summary.status === ACQUISITION_STATUS.imported;
 }
 
 function newestByRendition<T extends AcquisitionDetail | MonitorView>(

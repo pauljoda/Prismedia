@@ -7,6 +7,7 @@ import {
 } from "$lib/api/generated/codes";
 import type { AcquisitionDetail, MonitorView } from "$lib/api/generated/model";
 import {
+  bookRenditionCanRequest,
   bookRenditionRows,
 } from "$lib/requests/book-rendition-acquisition";
 
@@ -40,6 +41,33 @@ describe("Book rendition acquisition", () => {
 
     expect(bookRenditionRows([legacy], [], { ebook: true, audiobook: false })[0].acquisition?.summary.id)
       .toBe("legacy");
+  });
+
+  it("reopens only terminal missing rendition history for a new request", () => {
+    const cancelled = acquisition("cancelled", BOOK_RENDITION.audiobook);
+    cancelled.summary.status = ACQUISITION_STATUS.cancelled;
+    const importedWithoutFile = acquisition("imported", BOOK_RENDITION.audiobook);
+    const failed = acquisition("failed", BOOK_RENDITION.audiobook);
+    failed.summary.status = ACQUISITION_STATUS.failed;
+
+    expect(bookRenditionCanRequest({
+      rendition: BOOK_RENDITION.audiobook,
+      owned: false,
+      acquisition: cancelled,
+      monitor: null,
+    })).toBe(true);
+    expect(bookRenditionCanRequest({
+      rendition: BOOK_RENDITION.audiobook,
+      owned: false,
+      acquisition: importedWithoutFile,
+      monitor: null,
+    })).toBe(true);
+    expect(bookRenditionCanRequest({
+      rendition: BOOK_RENDITION.audiobook,
+      owned: false,
+      acquisition: failed,
+      monitor: null,
+    })).toBe(false);
   });
 
 });

@@ -81,6 +81,23 @@ describe("BookRenditionAcquisitionCard", () => {
     expect(onToggleMonitor).toHaveBeenCalledOnce();
     expect(onToggleMonitor).toHaveBeenCalledWith(audiobookMonitor);
   });
+
+  it("keeps cancelled acquisition history visible while allowing the missing rendition to be requested again", async () => {
+    const cancelled = acquisition("cancelled-audio", BOOK_RENDITION.audiobook);
+    cancelled.summary.status = ACQUISITION_STATUS.cancelled;
+    const onRequest = vi.fn(async () => {});
+    render(BookRenditionAcquisitionCard, {
+      ownership: { ebook: true, audiobook: false },
+      acquisitions: [cancelled],
+      monitors: [],
+      onRequest,
+    });
+
+    expect(screen.getByTestId("acquisition-panel")).toHaveTextContent("cancelled-audio");
+    await fireEvent.click(screen.getByRole("button", { name: "Request audiobook" }));
+
+    expect(onRequest).toHaveBeenCalledWith(BOOK_RENDITION.audiobook);
+  });
 });
 
 function acquisition(
