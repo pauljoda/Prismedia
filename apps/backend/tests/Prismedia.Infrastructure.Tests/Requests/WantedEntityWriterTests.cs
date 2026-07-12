@@ -52,6 +52,56 @@ public sealed class WantedEntityWriterTests {
     }
 
     [Fact]
+    public async Task EnsureTreatsBookTextAndAudioAsIndependentOwnedRenditions() {
+        await using var db = CreateContext();
+        var bookId = AddEntity(db, EntityKindRegistry.Book.Code, "Elantris", isWanted: false);
+        var trackId = AddEntity(db, EntityKindRegistry.AudioTrack.Code, "Chapter 1", isWanted: false, parentEntityId: bookId);
+        AddExternalId(db, bookId, "openlibrary", "W1");
+        AddSourceFile(db, bookId, "/media/books/Elantris.epub");
+        AddSourceFile(db, trackId, "/media/books/Elantris/01.m4b");
+        await db.SaveChangesAsync();
+
+        var ebook = await Writer(db).EnsureAsync(
+            EntityKind.Book, new ExternalIdentity("openlibrary", "W1"), "Elantris", null, false,
+            CancellationToken.None, BookRendition.Ebook);
+        var audiobook = await Writer(db).EnsureAsync(
+            EntityKind.Book, new ExternalIdentity("openlibrary", "W1"), "Elantris", null, false,
+            CancellationToken.None, BookRendition.Audiobook);
+
+        Assert.True(ebook.HasRequestedRendition);
+        Assert.True(audiobook.HasRequestedRendition);
+        Assert.True(ebook.HasFile);
+        Assert.True(audiobook.HasFile);
+    }
+
+    [Fact]
+    public async Task AudioOnlyBookDoesNotSatisfyAnEbookRequest() {
+        await using var db = CreateContext();
+        var bookId = AddEntity(db, EntityKindRegistry.Book.Code, "Elantris", isWanted: false);
+        var trackId = AddEntity(db, EntityKindRegistry.AudioTrack.Code, "Chapter 1", isWanted: false, parentEntityId: bookId);
+        AddExternalId(db, bookId, "openlibrary", "W1");
+        db.BookDetails.Add(new BookDetailRow {
+            EntityId = bookId,
+            BookType = BookType.Novel,
+            Format = BookFormat.Audio
+        });
+        AddSourceFile(db, bookId, "/media/books/Elantris");
+        AddSourceFile(db, trackId, "/media/books/Elantris/01.m4b");
+        await db.SaveChangesAsync();
+
+        var ebook = await Writer(db).EnsureAsync(
+            EntityKind.Book, new ExternalIdentity("openlibrary", "W1"), "Elantris", null, false,
+            CancellationToken.None, BookRendition.Ebook);
+        var audiobook = await Writer(db).EnsureAsync(
+            EntityKind.Book, new ExternalIdentity("openlibrary", "W1"), "Elantris", null, false,
+            CancellationToken.None, BookRendition.Audiobook);
+
+        Assert.False(ebook.HasRequestedRendition);
+        Assert.True(audiobook.HasRequestedRendition);
+        Assert.True(ebook.HasFile);
+    }
+
+    [Fact]
     public async Task MovieRootReportsOnDiskWhenItsSourceFileBelongsToADescendant() {
         await using var db = CreateContext();
         var movieId = AddEntity(db, EntityKindRegistry.Movie.Code, "Dune", isWanted: false);

@@ -183,6 +183,12 @@ internal static partial class PrismediaModelConfiguration {
                 .HasConversion(value => value.ToCode(), value => value.DecodeAs<EntityKind>())
                 .HasDefaultValue(EntityKind.Book)
                 .IsRequired();
+            entity.Property(row => row.BookRendition)
+                .HasColumnName("book_rendition")
+                .HasMaxLength(32)
+                .HasConversion(
+                    value => value == null ? null : value.Value.ToCode(),
+                    value => value == null ? null : value.DecodeAs<BookRendition>());
             entity.Property(row => row.EntityId).HasColumnName("entity_id");
             entity.Property(row => row.ProfileId).HasColumnName("profile_id");
             entity.Property(row => row.TargetLibraryRootId).HasColumnName("target_library_root_id");
@@ -429,6 +435,12 @@ internal static partial class PrismediaModelConfiguration {
                 .HasConversion(value => value.ToCode(), value => value.DecodeAs<EntityKind>())
                 .HasDefaultValue(EntityKind.Book)
                 .IsRequired();
+            entity.Property(row => row.BookRendition)
+                .HasColumnName("book_rendition")
+                .HasMaxLength(32)
+                .HasConversion(
+                    value => value == null ? null : value.Value.ToCode(),
+                    value => value == null ? null : value.DecodeAs<BookRendition>());
             entity.Property(row => row.AcquisitionId).HasColumnName("acquisition_id");
             entity.Property(row => row.EntityId).HasColumnName("entity_id");
             entity.Property(row => row.TargetLibraryRootId).HasColumnName("target_library_root_id");
@@ -456,8 +468,14 @@ internal static partial class PrismediaModelConfiguration {
             entity.Property(row => row.UpdatedAt).HasColumnName("updated_at");
             entity.HasIndex(row => new { row.Status, row.LastSearchedAt });
             entity.HasIndex(row => row.AcquisitionId).IsUnique();
-            // One stable monitoring intent per Entity across acquisition attempts.
-            entity.HasIndex(row => row.EntityId).IsUnique();
+            // Book renditions are parallel durable intents. PostgreSQL treats nulls as distinct, so keep
+            // separate filtered unique indexes for ordinary media and rendition-scoped books.
+            entity.HasIndex(row => new { row.EntityId, row.BookRendition })
+                .IsUnique()
+                .HasFilter("book_rendition IS NOT NULL");
+            entity.HasIndex(row => row.EntityId)
+                .IsUnique()
+                .HasFilter("book_rendition IS NULL");
             // SetNull (not Cascade): hard-deleting the linked acquisition must auto-pause the monitor, not delete it.
             entity.HasOne<AcquisitionRow>().WithMany().HasForeignKey(row => row.AcquisitionId).OnDelete(DeleteBehavior.SetNull);
             // The in-flight upgrade child is a loose link (no FK), cleared explicitly so deleting it does

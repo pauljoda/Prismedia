@@ -243,6 +243,9 @@ public sealed class AcquisitionRow {
     /// <summary>Media kind being acquired; drives per-kind release scoring, import, and monitoring.</summary>
     public EntityKind Kind { get; set; } = EntityKind.Book;
 
+    /// <summary>Independently acquired book rendition; null for non-book media.</summary>
+    public BookRendition? BookRendition { get; set; }
+
     /// <summary>
     /// The wanted library entity this acquisition fulfils, created up front by a request commit. The
     /// import attaches the downloaded file to exactly this entity (no duplicate is scanned in) and
@@ -603,6 +606,9 @@ public sealed class MonitorRow {
 
     /// <summary>The canonical Entity kind of the item or container this monitor watches.</summary>
     public EntityKind Kind { get; set; } = EntityKind.Book;
+
+    /// <summary>Book rendition owned by this durable monitor; null for non-book media and containers.</summary>
+    public BookRendition? BookRendition { get; set; }
 
     /// <summary>
     /// Transient acquisition work currently serving this monitor. Entity-linked monitors detach it after

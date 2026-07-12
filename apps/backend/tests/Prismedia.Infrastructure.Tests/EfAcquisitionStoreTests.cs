@@ -11,6 +11,29 @@ namespace Prismedia.Infrastructure.Tests;
 
 public sealed class EfAcquisitionStoreTests {
     [Fact]
+    public async Task AudiobookRenditionRoundTripsThroughViewsSearchImportAndRetry() {
+        await using var db = CreateContext();
+        var entityId = AddWantedEntity(db, EntityKindRegistry.Book.Code, "Elantris");
+        await db.SaveChangesAsync();
+        var store = AcquisitionTestFactory.Store(db);
+
+        var created = await store.CreateAsync(
+            new AcquisitionMetadata(
+                "Elantris", "Brandon Sanderson", null, 2005, null, null,
+                Kind: EntityKind.Book, EntityId: entityId, BookRendition: BookRendition.Audiobook),
+            CancellationToken.None);
+        var search = await store.GetSearchInputAsync(created.Id, CancellationToken.None);
+        var import = await store.GetImportContextAsync(created.Id, CancellationToken.None);
+        var retryId = await store.CloneForRetryAsync(created.Id, CancellationToken.None);
+        var retry = await db.Acquisitions.AsNoTracking().SingleAsync(row => row.Id == retryId);
+
+        Assert.Equal(BookRendition.Audiobook, created.BookRendition);
+        Assert.Equal(BookRendition.Audiobook, search?.BookRendition);
+        Assert.Equal(BookRendition.Audiobook, import?.BookRendition);
+        Assert.Equal(BookRendition.Audiobook, retry.BookRendition);
+    }
+
+    [Fact]
     public async Task DownloadedCompletionWorkProjectsKindAndUpgradeRoutingOnlyForDownloadedRows() {
         await using var db = CreateContext();
         var now = DateTimeOffset.UtcNow;

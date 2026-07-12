@@ -25,15 +25,19 @@ public sealed class EfMonitorStore(
 
     public async Task<MonitorView> StartAsync(Guid acquisitionId, EntityKind kind, string title, string? author, CancellationToken cancellationToken) {
         var now = DateTimeOffset.UtcNow;
-        var entityId = await db.Acquisitions.AsNoTracking()
+        var acquisitionTarget = await db.Acquisitions.AsNoTracking()
             .Where(acquisition => acquisition.Id == acquisitionId)
-            .Select(acquisition => acquisition.EntityId)
+            .Select(acquisition => new { acquisition.EntityId, acquisition.BookRendition })
             .FirstOrDefaultAsync(cancellationToken);
+        var entityId = acquisitionTarget?.EntityId;
+        var bookRendition = acquisitionTarget?.BookRendition;
         var rows = await db.Monitors
             .Where(monitor => monitor.AcquisitionId == acquisitionId
-                || (entityId != null && monitor.EntityId == entityId))
+                || (entityId != null && monitor.EntityId == entityId && monitor.BookRendition == bookRendition))
             .ToArrayAsync(cancellationToken);
-        var row = rows.FirstOrDefault(monitor => entityId != null && monitor.EntityId == entityId)
+        var row = rows.FirstOrDefault(monitor => entityId != null
+                && monitor.EntityId == entityId
+                && monitor.BookRendition == bookRendition)
             ?? rows.FirstOrDefault();
         if (row?.Status is MonitorStatus.Stopping or MonitorStatus.DeletingFiles) {
             // Destructive lifecycle rows are durable operation claims. Refuse before changing title/ids
@@ -44,6 +48,7 @@ public sealed class EfMonitorStore(
             row = new MonitorRow {
                 Id = Guid.NewGuid(),
                 Kind = kind,
+                BookRendition = bookRendition,
                 AcquisitionId = acquisitionId,
                 EntityId = entityId,
                 Status = MonitorStatus.Active,
@@ -60,6 +65,7 @@ public sealed class EfMonitorStore(
             row.Author = author;
             row.AcquisitionId = acquisitionId;
             row.EntityId = entityId;
+            row.BookRendition = bookRendition;
             row.UpdatedAt = now;
         }
 
@@ -430,7 +436,9 @@ public sealed class EfMonitorStore(
             // remain satisfied; fileless leaves re-enter the request pipeline in the handler.
             if (monitor.AcquisitionId is null && monitor.EntityId is { } watchedEntityId) {
                 if (monitor.LastSearchedAt is null || now - monitor.LastSearchedAt >= interval) {
-                    due.Add(new DueMonitor(monitor.Id, null, monitor.Title, IsUpgrade: false, EntityId: watchedEntityId));
+                    due.Add(new DueMonitor(
+                        monitor.Id, null, monitor.Title, IsUpgrade: false, EntityId: watchedEntityId,
+                        BookRendition: monitor.BookRendition));
                 }
 
                 continue;
@@ -493,7 +501,8 @@ public sealed class EfMonitorStore(
                             if (monitor.LastSearchedAt is null || now - monitor.LastSearchedAt >= interval) {
                                 due.Add(new DueMonitor(
                                     monitor.Id, acquisitionId, monitor.Title,
-                                    IsUpgrade: false, EntityId: parentEntityId, MissingChildFallback: true));
+                                    IsUpgrade: false, EntityId: parentEntityId, MissingChildFallback: true,
+                                    BookRendition: monitor.BookRendition));
                             }
 
                             continue;
@@ -511,6 +520,15 @@ public sealed class EfMonitorStore(
                     // chasing propers even past cutoff (its cutoff gates quality, not revision); Prismedia does
                     // not re-open a fulfilled monitor purely to acquire a better revision, keeping the loop
                     // bounded and avoiding late re-grabs of content the user has likely already consumed.
+                    if (monitor.BookRendition == BookRendition.Audiobook) {
+                        if (CompleteEntityAcquisition(monitor, now) is { } terminalStatus) {
+                            statusTransitions.Add((monitor.Id, terminalStatus));
+                        } else {
+                            changed = true;
+                        }
+                        continue;
+                    }
+
                     var policy = policyByKind.GetValueOrDefault(AcquisitionProfileKinds.For(monitor.Kind));
                     var verdict = EvaluateCutoff(
                         monitor.Kind, policy, row.Captured, row.OwnedQuality ?? BookQualityRank.Floor, row.OwnedMediaQuality, row.OwnedFormatScore);
@@ -548,7 +566,8 @@ public sealed class EfMonitorStore(
                     if (monitor.LastSearchedAt is null || now - monitor.LastSearchedAt >= backoff) {
                         due.Add(new DueMonitor(
                             monitor.Id, acquisitionId, monitor.Title,
-                            IsUpgrade: true, EntityId: monitor.EntityId));
+                            IsUpgrade: true, EntityId: monitor.EntityId,
+                            BookRendition: monitor.BookRendition));
                     }
 
                     continue;
@@ -572,7 +591,8 @@ public sealed class EfMonitorStore(
             if (monitor.LastSearchedAt is null || now - monitor.LastSearchedAt >= interval) {
                 due.Add(new DueMonitor(
                     monitor.Id, acquisitionId, monitor.Title,
-                    EntityId: monitor.EntityId));
+                    EntityId: monitor.EntityId,
+                    BookRendition: monitor.BookRendition));
             }
         }
 
@@ -875,15 +895,26 @@ public sealed class EfMonitorStore(
 
     public async Task<MonitorView> StartForEntityAsync(Guid entityId, EntityKind kind, string title, AcquisitionTargeting? targeting, MonitorPreset? preset, CancellationToken cancellationToken) {
         var now = DateTimeOffset.UtcNow;
+        BookRendition? bookRendition = kind == EntityKind.Book ? BookRendition.Ebook : null;
         var acquisitionIds = await db.Acquisitions.AsNoTracking()
+            .Where(acquisition => acquisition.EntityId == entityId
+                && acquisition.BookRendition == bookRendition)
+            .Select(acquisition => acquisition.Id)
+            .ToArrayAsync(cancellationToken);
+        var allAcquisitionIds = await db.Acquisitions.AsNoTracking()
             .Where(acquisition => acquisition.EntityId == entityId)
             .Select(acquisition => acquisition.Id)
             .ToArrayAsync(cancellationToken);
         var rows = await db.Monitors
-            .Where(monitor => monitor.EntityId == entityId
-                || (monitor.AcquisitionId != null && acquisitionIds.Contains(monitor.AcquisitionId.Value)))
+            .Where(monitor => (monitor.EntityId == entityId && monitor.BookRendition == bookRendition)
+                || (monitor.AcquisitionId != null && acquisitionIds.Contains(monitor.AcquisitionId.Value))
+                || (monitor.Status == MonitorStatus.Stopping || monitor.Status == MonitorStatus.DeletingFiles)
+                    && (monitor.EntityId == entityId
+                        || monitor.AcquisitionId != null && allAcquisitionIds.Contains(monitor.AcquisitionId.Value)))
             .ToArrayAsync(cancellationToken);
-        var row = rows.FirstOrDefault(monitor => monitor.EntityId == entityId) ?? rows.FirstOrDefault();
+        var row = rows.FirstOrDefault(monitor => monitor.EntityId == entityId
+                && monitor.BookRendition == bookRendition)
+            ?? rows.FirstOrDefault();
         if (row?.Status is MonitorStatus.Stopping or MonitorStatus.DeletingFiles) {
             throw LifecycleClaimConflict();
         }
@@ -891,6 +922,7 @@ public sealed class EfMonitorStore(
             row = new MonitorRow {
                 Id = Guid.NewGuid(),
                 Kind = kind,
+                BookRendition = bookRendition,
                 EntityId = entityId,
                 Status = MonitorStatus.Active,
                 Title = title,
@@ -902,6 +934,7 @@ public sealed class EfMonitorStore(
             row.Status = MonitorStatus.Active;
             row.Title = title;
             row.EntityId = entityId;
+            row.BookRendition = bookRendition;
             row.UpdatedAt = now;
         }
 
@@ -938,6 +971,44 @@ public sealed class EfMonitorStore(
             join acquisition in db.Acquisitions.AsNoTracking() on monitor.AcquisitionId equals acquisition.Id into joined
             from acquisition in joined.DefaultIfEmpty()
             where monitor.EntityId == entityId || (acquisition != null && acquisition.EntityId == entityId)
+            orderby monitor.EntityId == entityId descending, monitor.CreatedAt
+            select new {
+                Monitor = monitor,
+                Status = acquisition == null ? (AcquisitionStatus?)null : acquisition.Status,
+                AcquisitionEntityId = acquisition == null ? null : acquisition.EntityId
+            })
+            .FirstOrDefaultAsync(cancellationToken);
+        return result is null ? null : ToView(result.Monitor, result.Status, result.AcquisitionEntityId);
+    }
+
+    public async Task<IReadOnlyList<MonitorView>> ListForEntityAsync(
+        Guid entityId,
+        CancellationToken cancellationToken) {
+        var rows = await (
+            from monitor in db.Monitors.AsNoTracking()
+            join acquisition in db.Acquisitions.AsNoTracking() on monitor.AcquisitionId equals acquisition.Id into joined
+            from acquisition in joined.DefaultIfEmpty()
+            where monitor.EntityId == entityId || (acquisition != null && acquisition.EntityId == entityId)
+            orderby monitor.CreatedAt, monitor.Id
+            select new {
+                Monitor = monitor,
+                Status = acquisition == null ? (AcquisitionStatus?)null : acquisition.Status,
+                AcquisitionEntityId = acquisition == null ? null : acquisition.EntityId
+            })
+            .ToArrayAsync(cancellationToken);
+        return rows.Select(row => ToView(row.Monitor, row.Status, row.AcquisitionEntityId)).ToArray();
+    }
+
+    public async Task<MonitorView?> GetByEntityAsync(
+        Guid entityId,
+        BookRendition? bookRendition,
+        CancellationToken cancellationToken) {
+        var result = await (
+            from monitor in db.Monitors.AsNoTracking()
+            join acquisition in db.Acquisitions.AsNoTracking() on monitor.AcquisitionId equals acquisition.Id into joined
+            from acquisition in joined.DefaultIfEmpty()
+            where (monitor.EntityId == entityId || (acquisition != null && acquisition.EntityId == entityId))
+                && monitor.BookRendition == bookRendition
             orderby monitor.EntityId == entityId descending, monitor.CreatedAt
             select new {
                 Monitor = monitor,
@@ -1143,7 +1214,8 @@ public sealed class EfMonitorStore(
     /// EntityId, then the acquisition target, so every row surfaces one canonical Entity id.
     /// </summary>
     private static MonitorView ToView(MonitorRow row, AcquisitionStatus? acquisitionStatus, Guid? acquisitionEntityId = null) =>
-        new(row.Id, row.Kind, row.AcquisitionId, row.Status, row.Title, row.Author, acquisitionStatus, row.CreatedAt, row.UpdatedAt, row.EntityId ?? acquisitionEntityId, row.Preset);
+        new(row.Id, row.Kind, row.AcquisitionId, row.Status, row.Title, row.Author, acquisitionStatus,
+            row.CreatedAt, row.UpdatedAt, row.EntityId ?? acquisitionEntityId, row.Preset, row.BookRendition);
 
     private static AcquisitionConfigurationException LifecycleClaimConflict() =>
         new(

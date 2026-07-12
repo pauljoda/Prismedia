@@ -51,7 +51,8 @@ public sealed class AcquisitionSearchRunner(
         var rules = (await profiles.GetRulesAsync(input.ProfileId, input.Kind, cancellationToken)) with {
             TargetTitle = input.WorkTitle,
             TargetYear = input.Year,
-            TargetAuthor = input.Author
+            TargetAuthor = input.Author,
+            BookRendition = input.BookRendition
         };
 
         // The proper/repack policy is an app-global fact set per search (never by a profile), the same way
@@ -107,7 +108,7 @@ public sealed class AcquisitionSearchRunner(
         AcquisitionSearchOutcome outcome = new([], []);
         AcquisitionSearchOutcome? fallbackOutcome = null;
         foreach (var text in queries) {
-            var searches = await Task.WhenAll(configs.Select(config => SearchIndexerAsync(config, text, policy, cancellationToken)));
+            var searches = await Task.WhenAll(configs.Select(config => SearchIndexerAsync(config, text, input, policy, cancellationToken)));
             await RecordHealthAsync(searches, cancellationToken);
 
             var releases = new List<(IndexerRelease Release, Guid? IndexerConfigId, string IndexerName)>();
@@ -182,6 +183,7 @@ public sealed class AcquisitionSearchRunner(
     private async Task<IndexerSearchResult> SearchIndexerAsync(
         Contracts.Acquisition.IndexerConfigDetail config,
         string text,
+        AcquisitionSearchInput input,
         IAcquisitionPolicyModule policy,
         CancellationToken cancellationToken) {
         // A rate-limited skip is surfaced (so a thin result set is explainable) but is NOT a failure —
@@ -193,7 +195,7 @@ public sealed class AcquisitionSearchRunner(
         try {
             // Narrow the indexer's configured categories to the acquisition kind's Torznab range, so a
             // movie or album search never queries the book categories the indexer was set up with.
-            var categories = policy.RouteCategories(config.Categories);
+            var categories = policy.RouteCategories(input, config.Categories);
             var connection = new IndexerConnection(config.Id, config.Kind, config.BaseUrl, config.ApiKey, categories);
             var found = await clients.Get(config.Kind).SearchAsync(connection, new IndexerQuery(text, categories), cancellationToken);
             return new IndexerSearchResult(config, found, null);

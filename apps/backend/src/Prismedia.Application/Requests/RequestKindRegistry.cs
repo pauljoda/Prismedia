@@ -51,6 +51,7 @@ namespace Prismedia.Application.Requests;
 /// True when acquiring this unit should hydrate its structural children as wanted phantoms. This is an
 /// explicit structural rule, distinct from sibling-option children such as a book series' other volumes.
 /// </param>
+/// <param name="BookRendition">Requested book rendition; null for non-book kinds and book containers.</param>
 public sealed record RequestKindDescriptor(
     RequestMediaKind Kind,
     string Label,
@@ -67,7 +68,8 @@ public sealed record RequestKindDescriptor(
     EntityKind AcquisitionKind,
     bool Discoverable = true,
     bool AcquireFromEntity = false,
-    bool MaterializeChildPhantoms = false) {
+    bool MaterializeChildPhantoms = false,
+    BookRendition? BookRendition = null) {
     /// <summary>The plugin-protocol kind code for <see cref="PluginEntityKind"/>.</summary>
     public string PluginKindCode => PluginEntityKind.ToCode();
 }
@@ -83,7 +85,15 @@ public static class RequestKindRegistry {
         new(RequestMediaKind.Book, "Book", "Books", "volume", EntityKind.Book, EntityKind.Book,
             ProfileEntityKind: EntityKind.Book, LibraryRootMediaCapability: LibraryRootMediaCapability.ScanBooks,
             ReviewSelection: RequestReviewSelection.DirectChildrenWhenPresent,
-            IsContainer: false, ChildKind: RequestMediaKind.Book, Committable: true, AcquisitionKind: EntityKind.Book),
+            IsContainer: false, ChildKind: RequestMediaKind.Book, Committable: true, AcquisitionKind: EntityKind.Book,
+            BookRendition: BookRendition.Ebook),
+        // Audiobooks resolve through the same book metadata proposal and materialize onto the same Book
+        // Entity; only the independently-owned acquisition/import rendition differs.
+        new(RequestMediaKind.Audiobook, "Audiobook", "Audiobooks", null, EntityKind.Book, EntityKind.Book,
+            ProfileEntityKind: EntityKind.Book, LibraryRootMediaCapability: LibraryRootMediaCapability.ScanBooks,
+            ReviewSelection: RequestReviewSelection.Root,
+            IsContainer: false, ChildKind: null, Committable: true, AcquisitionKind: EntityKind.Book,
+            BookRendition: BookRendition.Audiobook),
         // An author is a person to plugins but a BookAuthor grouping in the library.
         new(RequestMediaKind.Author, "Author", "Authors", "book", EntityKind.Person, EntityKind.BookAuthor,
             ProfileEntityKind: EntityKind.Book, LibraryRootMediaCapability: LibraryRootMediaCapability.ScanBooks,

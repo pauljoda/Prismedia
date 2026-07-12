@@ -15,7 +15,7 @@ public interface IAcquisitionPolicyModule {
     IReadOnlyList<string> BuildQueries(AcquisitionSearchInput input);
 
     /// <summary>Narrows an indexer's configured Torznab categories to this module's media range.</summary>
-    IReadOnlyList<int> RouteCategories(IReadOnlyList<int> configuredCategories);
+    IReadOnlyList<int> RouteCategories(AcquisitionSearchInput input, IReadOnlyList<int> configuredCategories);
 
     /// <summary>Returns the release decision engine bound to the requested supported kind.</summary>
     IAcquisitionDecisionEngine DecisionEngineFor(EntityKind kind);
@@ -73,6 +73,16 @@ public sealed class BookAcquisitionPolicyModule : AcquisitionPolicyModule {
             AcquisitionPolicyQueries.Join(input.Title, input.Author),
             input.Title
         ]);
+
+    /// <inheritdoc />
+    public override IReadOnlyList<int> RouteCategories(
+        AcquisitionSearchInput input,
+        IReadOnlyList<int> configuredCategories) {
+        var category = input.BookRendition == BookRendition.Audiobook
+            ? TorznabCategory.AudioAudiobook
+            : TorznabCategory.BooksEbook;
+        return [category, .. TorznabCategoryRange.OtherCategories(configuredCategories)];
+    }
 }
 
 /// <summary>Release-search policy for movies.</summary>
@@ -171,7 +181,9 @@ public abstract class AcquisitionPolicyModule : IAcquisitionPolicyModule {
     public abstract IReadOnlyList<string> BuildQueries(AcquisitionSearchInput input);
 
     /// <inheritdoc />
-    public IReadOnlyList<int> RouteCategories(IReadOnlyList<int> configuredCategories) =>
+    public virtual IReadOnlyList<int> RouteCategories(
+        AcquisitionSearchInput input,
+        IReadOnlyList<int> configuredCategories) =>
         _categoryRange.Route(configuredCategories);
 
     /// <inheritdoc />
@@ -193,6 +205,9 @@ internal sealed class TorznabCategoryRange(int start) {
     private const int Other = 8000;
     private const int RangeSize = 1000;
 
+    internal static IEnumerable<int> OtherCategories(IReadOnlyList<int> configuredCategories) =>
+        configuredCategories.Where(category => category >= Other && category < Other + RangeSize);
+
     /// <summary>
     /// Preserves configured categories in this media range, falling back to its top-level category, and
     /// always carries configured kind-neutral Other-range categories through.
@@ -201,10 +216,16 @@ internal sealed class TorznabCategoryRange(int start) {
         var kindPicks = configuredCategories
             .Where(category => category >= start && category < start + RangeSize)
             .ToArray();
-        var otherPicks = configuredCategories
-            .Where(category => category >= Other && category < Other + RangeSize);
+        var otherPicks = OtherCategories(configuredCategories);
         return (kindPicks.Length > 0 ? kindPicks : [start]).Concat(otherPicks).ToArray();
     }
+}
+
+/// <summary>External Torznab leaf categories used as book-rendition routing boundaries.</summary>
+internal static class TorznabCategory {
+    // prism-vocab: external (Torznab/Newznab category standard).
+    public const int AudioAudiobook = 3030;
+    public const int BooksEbook = 7020;
 }
 
 /// <summary>Formatting and duplicate-collapse mechanics shared by per-kind query builders.</summary>

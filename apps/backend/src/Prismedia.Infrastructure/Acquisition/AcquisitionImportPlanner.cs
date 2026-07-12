@@ -1,5 +1,6 @@
 using Prismedia.Application.Acquisition;
 using Prismedia.Application.Files;
+using Prismedia.Domain.Entities;
 
 namespace Prismedia.Infrastructure.Acquisition;
 
@@ -15,6 +16,15 @@ public sealed class AcquisitionImportPlanner : IAcquisitionImportPlanner {
         string libraryRootPath,
         BookImportProfile profile,
         ImportTemplateContext context,
+        CancellationToken cancellationToken) =>
+        PlanAsync(contentPath, libraryRootPath, profile, context, BookRendition.Ebook, cancellationToken);
+
+    public Task<ResolvedImportPlan> PlanAsync(
+        string contentPath,
+        string libraryRootPath,
+        BookImportProfile profile,
+        ImportTemplateContext context,
+        BookRendition rendition,
         CancellationToken cancellationToken) {
         if (string.IsNullOrWhiteSpace(contentPath) || (!File.Exists(contentPath) && !Directory.Exists(contentPath))) {
             return Task.FromResult(ResolvedImportPlan.Block(ImportBlockReason.NoSupportedPayload));
@@ -34,7 +44,7 @@ public sealed class AcquisitionImportPlanner : IAcquisitionImportPlanner {
                 .ToArray();
         }
 
-        var plan = ImportPlanBuilder.Plan(relativeFiles, context, profile.PathTemplate);
+        var plan = ImportPlanBuilder.Plan(relativeFiles, context, profile.PathTemplate, rendition);
         if (plan.Blocked) {
             return Task.FromResult(new ResolvedImportPlan(true, plan.BlockReason, []));
         }

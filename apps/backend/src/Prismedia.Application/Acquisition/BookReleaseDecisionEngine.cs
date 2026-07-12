@@ -107,6 +107,21 @@ public sealed class FormatSpecification : IReleaseSpecification {
             return BookFormatDetection.NamesUnsupportedFormat(release.Title) ? Reason : null;
         }
 
+        if (rules.BookRendition == BookRendition.Audiobook) {
+            return detected.Contains(BookFormat.Audio) ? null : Reason;
+        }
+
+        if (rules.BookRendition == BookRendition.Ebook) {
+            var ebookFormats = detected.Where(format => format != BookFormat.Audio).ToHashSet();
+            if (ebookFormats.Count == 0) {
+                return Reason;
+            }
+
+            return rules.AllowedFormats.Count == 0 || ebookFormats.Overlaps(rules.AllowedFormats)
+                ? null
+                : Reason;
+        }
+
         if (rules.AllowedFormats.Count == 0) {
             return null;
         }

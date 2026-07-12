@@ -12,7 +12,7 @@ namespace Prismedia.Application.Acquisition;
 /// </summary>
 public static class BookFormatDetection {
     // prism-vocab: external — release-title vocabulary, matched only here.
-    private static readonly string[] ImportableFormatTokens = ["cbz", "zip", "epub", "pdf"];
+    private static readonly string[] ImportableFormatTokens = ["cbz", "zip", "epub", "pdf", "m4b", "m4a", "mp3"];
     private static readonly string[] UnsupportedFormatTokens = ["cbr", "rar", "mobi", "azw", "azw3"];
     private static readonly string[] RetailSourceTokens = ["retail", "official"];
     private static readonly string[] WebSourceTokens = ["web", "webrip", "webdl", "digital", "converted", "calibre"];
@@ -38,6 +38,11 @@ public static class BookFormatDetection {
                     break;
                 case "pdf":
                     formats.Add(BookFormat.Pdf);
+                    break;
+                case "m4b":
+                case "m4a":
+                case "mp3":
+                    formats.Add(BookFormat.Audio);
                     break;
             }
         }
@@ -93,6 +98,7 @@ public static class BookFormatDetection {
         ".epub" => BookFormatTier.Reflowable,
         ".pdf" => BookFormatTier.Fixed,
         ".cbz" or ".zip" => BookFormatTier.Archive,
+        ".m4b" or ".m4a" or ".mp3" => BookFormatTier.Unknown,
         _ => BookFormatTier.Unknown
     };
 }

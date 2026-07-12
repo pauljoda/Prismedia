@@ -41,8 +41,19 @@ public sealed class WantedEntityWriter(
         .Select(descriptor => descriptor.WantedEntityKind.ToCode())
         .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
+    public Task<WantedEntityResult> EnsureAsync(
+        EntityKind kind,
+        ExternalIdentity identity,
+        string title,
+        Guid? parentEntityId,
+        bool matchTitleKindWide,
+        CancellationToken cancellationToken) =>
+        EnsureAsync(kind, identity, title, parentEntityId, matchTitleKindWide, cancellationToken,
+            kind == EntityKind.Book ? BookRendition.Ebook : null);
+
     public async Task<WantedEntityResult> EnsureAsync(
-        EntityKind kind, ExternalIdentity identity, string title, Guid? parentEntityId, bool matchTitleKindWide, CancellationToken cancellationToken) {
+        EntityKind kind, ExternalIdentity identity, string title, Guid? parentEntityId, bool matchTitleKindWide,
+        CancellationToken cancellationToken, BookRendition? bookRendition) {
         var kindCode = kind.ToCode();
         var resolution = await externalIdentities.ResolveAsync(kind, [identity], parentEntityId, cancellationToken);
         if (resolution.Status == ExternalIdentityResolutionStatus.Ambiguous) {
@@ -66,6 +77,8 @@ public sealed class WantedEntityWriter(
                         return;
                     }
                     var hasFile = await HasSourceFileAsync(current.Id, leaseCancellationToken);
+                    var hasRequestedRendition = await HasRequestedRenditionAsync(
+                        current.Id, kind, bookRendition, leaseCancellationToken);
 
                     // A title-matched entity (e.g. a scanned author/artist folder with no provider ids yet)
                     // gains the provider id so every later lookup resolves it id-first.
@@ -83,7 +96,8 @@ public sealed class WantedEntityWriter(
                     }
 
                     await db.SaveChangesAsync(leaseCancellationToken);
-                    result = new WantedEntityResult(current.Id, Created: false, hasFile);
+                    result = new WantedEntityResult(
+                        current.Id, Created: false, hasFile, hasRequestedRendition);
                 },
                 cancellationToken);
             return result ?? throw LifecycleConflict();
@@ -105,7 +119,8 @@ public sealed class WantedEntityWriter(
 
             await StampExternalIdAsync(entity.Id, identity, leaseCancellationToken);
             await db.SaveChangesAsync(leaseCancellationToken);
-            created = new WantedEntityResult(entity.Id, Created: true, HasFile: false);
+            created = new WantedEntityResult(
+                entity.Id, Created: true, HasFile: false, RequestedRenditionOwned: false);
         }
 
         if (parentEntityId is { } parentId) {
@@ -310,9 +325,17 @@ public sealed class WantedEntityWriter(
             .Where(row => row.EntityId == entityId)
             .ToDictionaryAsync(row => row.Code, row => row.Value, cancellationToken);
         var hasSource = await HasSourceFileAsync(entityId, cancellationToken);
+        bool? hasEbookSource = null;
+        bool? hasAudiobookSource = null;
+        if (entity.KindCode == EntityKindRegistry.Book.Code) {
+            hasEbookSource = await HasRequestedRenditionAsync(
+                entityId, EntityKind.Book, BookRendition.Ebook, cancellationToken);
+            hasAudiobookSource = await HasRequestedRenditionAsync(
+                entityId, EntityKind.Book, BookRendition.Audiobook, cancellationToken);
+        }
         return new MonitorableEntity(
             entity.Id, entity.KindCode.DecodeAs<EntityKind>(), entity.Title, identities, hasSource,
-            entity.ParentEntityId, positions, providerIdentity);
+            entity.ParentEntityId, positions, providerIdentity, hasEbookSource, hasAudiobookSource);
     }
 
     /// <inheritdoc />
@@ -405,6 +428,41 @@ public sealed class WantedEntityWriter(
         var subtreeIds = await hierarchy.ListSubtreeIdsAsync(entityId, cancellationToken);
         return subtreeIds.Count > 0 && await db.EntityFiles.AsNoTracking()
             .AnyAsync(file => subtreeIds.Contains(file.EntityId) && file.Role == EntityFileRole.Source, cancellationToken);
+    }
+
+    /// <summary>
+    /// Book text and spoken audio are independent ownership axes. Audio ownership is represented by a
+    /// source-backed AudioTrack descendant; every other source-backed node in the Book subtree is text/page
+    /// ownership. Non-book kinds retain the established generic subtree ownership rule.
+    /// </summary>
+    private async Task<bool> HasRequestedRenditionAsync(
+        Guid entityId,
+        EntityKind kind,
+        BookRendition? bookRendition,
+        CancellationToken cancellationToken) {
+        if (kind != EntityKind.Book) {
+            return await HasSourceFileAsync(entityId, cancellationToken);
+        }
+
+        var subtreeIds = await hierarchy.ListSubtreeIdsAsync(entityId, cancellationToken);
+        if (subtreeIds.Count == 0) {
+            return false;
+        }
+
+        var audioTrackCode = EntityKindRegistry.AudioTrack.Code;
+        var bookCode = EntityKindRegistry.Book.Code;
+        var ownsAudio = bookRendition == BookRendition.Audiobook;
+        return await (
+            from file in db.EntityFiles.AsNoTracking()
+            join entity in db.Entities.AsNoTracking() on file.EntityId equals entity.Id
+            join bookDetail in db.BookDetails.AsNoTracking() on entity.Id equals bookDetail.EntityId into bookDetails
+            from bookDetail in bookDetails.DefaultIfEmpty()
+            where subtreeIds.Contains(file.EntityId) && file.Role == EntityFileRole.Source
+            where ownsAudio
+                ? entity.KindCode == audioTrackCode
+                : entity.KindCode != audioTrackCode
+                    && (entity.KindCode != bookCode || bookDetail == null || bookDetail.Format != BookFormat.Audio)
+            select file.Id).AnyAsync(cancellationToken);
     }
 
     private static ExternalIdentity? TryIdentity(string? identityNamespace, string? identityValue) {

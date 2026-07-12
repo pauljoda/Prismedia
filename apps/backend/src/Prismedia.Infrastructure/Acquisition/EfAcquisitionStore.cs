@@ -35,6 +35,7 @@ public sealed class EfAcquisitionStore(PrismediaDbContext db, IAcquisitionHistor
         var row = new AcquisitionRow {
             Id = Guid.NewGuid(),
             Kind = metadata.Kind,
+            BookRendition = metadata.BookRendition,
             EntityId = metadata.EntityId,
             ProfileId = metadata.ProfileId,
             TargetLibraryRootId = metadata.TargetLibraryRootId,
@@ -91,7 +92,7 @@ public sealed class EfAcquisitionStore(PrismediaDbContext db, IAcquisitionHistor
         var row = await db.Acquisitions
             .AsNoTracking()
             .Where(row => row.Id == id)
-            .Select(row => new { row.Id, row.Title, row.Author, row.Kind, row.EntityId, row.Year, row.ProfileId, row.Series, row.SeasonNumber, row.EpisodeNumber, row.VolumeNumber })
+            .Select(row => new { row.Id, row.Title, row.Author, row.Kind, row.EntityId, row.Year, row.ProfileId, row.Series, row.SeasonNumber, row.EpisodeNumber, row.VolumeNumber, row.BookRendition })
             .FirstOrDefaultAsync(cancellationToken);
         if (row is null) {
             return null;
@@ -108,7 +109,7 @@ public sealed class EfAcquisitionStore(PrismediaDbContext db, IAcquisitionHistor
 
         return new AcquisitionSearchInput(
             row.Id, row.Title, row.Author, row.Kind, row.EntityId, year, row.ProfileId,
-            row.Series, row.SeasonNumber, row.EpisodeNumber, row.VolumeNumber);
+            row.Series, row.SeasonNumber, row.EpisodeNumber, row.VolumeNumber, row.BookRendition);
     }
 
     private static bool IsVideoKind(EntityKind kind) =>
@@ -293,6 +294,7 @@ public sealed class EfAcquisitionStore(PrismediaDbContext db, IAcquisitionHistor
     private static AcquisitionRow CreateRetryClone(AcquisitionRow source, DateTimeOffset now) => new() {
         Id = Guid.NewGuid(),
         Kind = source.Kind,
+        BookRendition = source.BookRendition,
         EntityId = source.EntityId,
         ProfileId = source.ProfileId,
         TargetLibraryRootId = source.TargetLibraryRootId,
@@ -1098,7 +1100,7 @@ public sealed class EfAcquisitionStore(PrismediaDbContext db, IAcquisitionHistor
             row.Id, row.Title, row.Author, row.Series, row.Year, row.PosterUrl, externalIdentity,
             row.ProfileId, transfer?.ContentPath, transfer?.ClientItemId, transfer?.DownloadClientConfigId, row.Description,
             row.Kind, row.TargetLibraryRootId, row.SeasonNumber, row.EpisodeNumber, row.EntityId, row.FinalSourcePath,
-            tvImportCheckpoint, importPlacementCheckpoint);
+            tvImportCheckpoint, importPlacementCheckpoint, row.BookRendition);
     }
 
     public async Task<AcquisitionTransferInfo?> GetTransferInfoAsync(Guid acquisitionId, CancellationToken cancellationToken) {
@@ -1575,6 +1577,18 @@ public sealed class EfAcquisitionStore(PrismediaDbContext db, IAcquisitionHistor
                 && row.Status != AcquisitionStatus.Cancelled,
             cancellationToken);
 
+    /// <inheritdoc />
+    public async Task<bool> AnyOpenForEntityAsync(
+        Guid entityId,
+        BookRendition? bookRendition,
+        CancellationToken cancellationToken) =>
+        await db.Acquisitions.AsNoTracking().AnyAsync(
+            row => row.EntityId == entityId
+                && row.BookRendition == bookRendition
+                && row.Status != AcquisitionStatus.Imported
+                && row.Status != AcquisitionStatus.Cancelled,
+            cancellationToken);
+
     public async Task<IReadOnlyList<Guid>> ListIdsForEntityAsync(
         Guid entityId,
         CancellationToken cancellationToken) {
@@ -1657,7 +1671,7 @@ public sealed class EfAcquisitionStore(PrismediaDbContext db, IAcquisitionHistor
     private static AcquisitionSummary ToSummary(AcquisitionRow row, double? progress) =>
         new(row.Id, row.Status, row.StatusMessage, row.Title, row.Author, row.Series, row.Year, row.PosterUrl,
             progress, row.CreatedAt, row.UpdatedAt, row.Description, row.Kind, row.EntityId,
-            HasResumableImport: row.ImportCheckpointJson is not null);
+            HasResumableImport: row.ImportCheckpointJson is not null, row.BookRendition);
 
     private static ReleaseCandidateView ToView(ReleaseCandidateRow row) =>
         new(row.Id, row.IndexerName, row.Title, row.SizeBytes, row.Seeders, row.Peers, row.Protocol, row.Accepted,

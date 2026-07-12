@@ -36,6 +36,13 @@ public interface IAcquisitionRequestService {
     /// </summary>
     Task<bool> AnyOpenForEntityAsync(Guid entityId, CancellationToken cancellationToken);
 
+    /// <summary>True when actionable work already targets the same Entity rendition.</summary>
+    Task<bool> AnyOpenForEntityAsync(
+        Guid entityId,
+        BookRendition? bookRendition,
+        CancellationToken cancellationToken) =>
+        AnyOpenForEntityAsync(entityId, cancellationToken);
+
     /// <summary>
     /// Every acquisition owned by this library Entity, including upgrade descendants whose stable
     /// ownership is inherited through <c>UpgradeOfAcquisitionId</c>. Destructive Entity lifecycles must
@@ -292,7 +299,8 @@ public sealed class AcquisitionService(
                     live?.ClientName,
                     summary.Author,
                     summary.Series,
-                    summary.Year);
+                    summary.Year,
+                    summary.BookRendition);
             })
             .ToArray();
     }
@@ -1008,7 +1016,10 @@ public sealed class AcquisitionService(
             request.TargetLibraryRootId,
             request.SeasonNumber,
             request.EpisodeNumber,
-            request.VolumeNumber);
+            request.VolumeNumber,
+            request.Kind == EntityKind.Book
+                ? request.BookRendition ?? BookRendition.Ebook
+                : null);
     }
 
     private async Task<AcquisitionSummary> CreateAndSearchCoreAsync(
@@ -1081,6 +1092,13 @@ public sealed class AcquisitionService(
     /// <inheritdoc />
     public Task<bool> AnyOpenForEntityAsync(Guid entityId, CancellationToken cancellationToken) =>
         store.AnyOpenForEntityAsync(entityId, cancellationToken);
+
+    /// <inheritdoc />
+    public Task<bool> AnyOpenForEntityAsync(
+        Guid entityId,
+        BookRendition? bookRendition,
+        CancellationToken cancellationToken) =>
+        store.AnyOpenForEntityAsync(entityId, bookRendition, cancellationToken);
 
     /// <inheritdoc />
     public Task<IReadOnlyList<Guid>> ListIdsForEntityAsync(Guid entityId, CancellationToken cancellationToken) =>

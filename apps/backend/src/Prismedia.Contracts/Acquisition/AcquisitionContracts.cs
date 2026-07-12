@@ -86,7 +86,8 @@ public sealed record AcquisitionCreateRequest(
     Guid? TargetLibraryRootId = null,
     int? SeasonNumber = null,
     int? EpisodeNumber = null,
-    int? VolumeNumber = null);
+    int? VolumeNumber = null,
+    BookRendition? BookRendition = null);
 
 /// <summary>A scored release candidate surfaced for review. Download links stay server-side; the id selects one to queue.</summary>
 public sealed record ReleaseCandidateView(
@@ -119,7 +120,8 @@ public sealed record AcquisitionSummary(
     string? Description = null,
     EntityKind Kind = EntityKind.Book,
     Guid? EntityId = null,
-    bool HasResumableImport = false);
+    bool HasResumableImport = false,
+    BookRendition? BookRendition = null);
 
 /// <summary>An acquisition with its scored candidates for the review screen.</summary>
 public sealed record AcquisitionDetail(
@@ -186,7 +188,8 @@ public sealed record DownloadQueueItemView(
     string? ClientName = null,
     string? Author = null,
     string? Series = null,
-    int? Year = null);
+    int? Year = null,
+    BookRendition? BookRendition = null);
 
 /// <summary>Configured download client safe for list displays (no secret material).</summary>
 public sealed record DownloadClientSummary(
@@ -369,7 +372,8 @@ public sealed record MonitorView(
     DateTimeOffset CreatedAt,
     DateTimeOffset UpdatedAt,
     Guid? EntityId = null,
-    MonitorPreset Preset = MonitorPreset.All);
+    MonitorPreset Preset = MonitorPreset.All,
+    BookRendition? BookRendition = null);
 
 /// <summary>Outcome of a completed recursive unmonitor operation.</summary>
 /// <param name="EntityPruned">
@@ -411,7 +415,8 @@ public sealed record WantedListItemView(
     string? CutoffQuality,
     int BarrenSearches,
     string? PosterUrl = null,
-    string? Author = null);
+    string? Author = null,
+    BookRendition? BookRendition = null);
 
 /// <summary>
 /// One page of a Wanted list: the page's rows plus the total count of matching rows for the pagination

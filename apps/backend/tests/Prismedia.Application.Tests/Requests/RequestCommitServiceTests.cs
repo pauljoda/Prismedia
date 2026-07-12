@@ -345,6 +345,24 @@ public sealed class RequestCommitServiceTests {
     }
 
     [Fact]
+    public async Task AudiobookRequestStartsParallelAcquisitionForAnOwnedEbook() {
+        var (service, writer, acquisitions) = Service(Leaf(ProposalKind.Book, "Elantris", "W1"));
+        writer.ExistingWithFile.Add("W1");
+        writer.OwnedRenditions.Add(("W1", BookRendition.Ebook));
+
+        var response = await service.CommitAsync(
+            new RequestCommitRequest(RequestMediaKind.Audiobook, $"{Provider}:W1", []),
+            hideNsfw: false,
+            CancellationToken.None);
+
+        Assert.Equal(RequestCommitOutcome.Requested, Assert.Single(response!.Items).Outcome);
+        var created = Assert.Single(acquisitions.Created);
+        Assert.Equal(EntityKind.Book, created.Kind);
+        Assert.Equal(BookRendition.Audiobook, created.BookRendition);
+        Assert.Empty(writer.Applied); // Existing canonical Book metadata is not overwritten.
+    }
+
+    [Fact]
     public async Task AllPresetRecordsDirectMonitorIntentForAnOwnedChildWithoutAcquiringIt() {
         var proposal = Container(
             ProposalKind.Person,
@@ -1933,6 +1951,7 @@ public sealed class RequestCommitServiceTests {
 
         /// <summary>Item ids that resolve to an existing entity owning a real file.</summary>
         public HashSet<string> ExistingWithFile { get; } = [];
+        public HashSet<(string ItemId, BookRendition Rendition)> OwnedRenditions { get; } = [];
 
         /// <summary>Item ids that resolve to an existing (fileless) wanted entity.</summary>
         public HashSet<string> ExistingWanted { get; } = [];
@@ -1946,6 +1965,25 @@ public sealed class RequestCommitServiceTests {
             var hasFile = ExistingWithFile.Contains(identity.Value);
             var created = !hasFile && !ExistingWanted.Contains(identity.Value);
             return Task.FromResult(new WantedEntityResult(EntityIdFor(identity.Value), created, hasFile));
+        }
+
+        public Task<WantedEntityResult> EnsureAsync(
+            EntityKind kind,
+            ExternalIdentity identity,
+            string title,
+            Guid? parentEntityId,
+            bool matchTitleKindWide,
+            CancellationToken cancellationToken,
+            BookRendition? bookRendition) {
+            Ensured.Add(new EnsureCall(kind, identity.Namespace, identity.Value, title, parentEntityId, matchTitleKindWide));
+            var hasFile = ExistingWithFile.Contains(identity.Value);
+            var created = !hasFile && !ExistingWanted.Contains(identity.Value);
+            var hasExplicitRenditions = OwnedRenditions.Any(owned => owned.ItemId == identity.Value);
+            var ownsRequested = bookRendition is null || !hasExplicitRenditions
+                ? hasFile
+                : OwnedRenditions.Contains((identity.Value, bookRendition.Value));
+            return Task.FromResult(new WantedEntityResult(
+                EntityIdFor(identity.Value), created, hasFile, ownsRequested));
         }
 
         public Task ApplyProposalAsync(Guid entityId, EntityMetadataProposal proposal, CancellationToken cancellationToken) {
@@ -2112,7 +2150,8 @@ public sealed class RequestCommitServiceTests {
             CreatedIds.Add(id);
             return Task.FromResult(new AcquisitionSummary(
                 id, AcquisitionStatus.Pending, null, request.Title, request.Author, request.Series,
-                request.Year, request.PosterUrl, null, now, now, request.Description, request.Kind, request.EntityId));
+                request.Year, request.PosterUrl, null, now, now, request.Description, request.Kind, request.EntityId,
+                BookRendition: request.BookRendition));
         }
 
         public Task<bool> AnyOpenForEntityAsync(Guid entityId, CancellationToken cancellationToken) =>

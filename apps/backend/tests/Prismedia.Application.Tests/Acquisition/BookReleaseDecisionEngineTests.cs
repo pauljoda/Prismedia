@@ -136,6 +136,31 @@ public sealed class BookReleaseDecisionEngineTests {
     }
 
     [Fact]
+    public void EbookIntentAcceptsBundleThatAlsoContainsAudiobook() {
+        var rules = BookAcquisitionRules.Default with {
+            BookRendition = BookRendition.Ebook,
+            AllowedFormats = [BookFormat.Epub]
+        };
+
+        var result = Engine.Evaluate(One(Release(title: "Some Book EPUB + M4B")), rules);
+
+        Assert.DoesNotContain(ReleaseRejectionReason.UnsupportedFormat, result[0].Rejections);
+    }
+
+    [Fact]
+    public void EbookAndAudiobookIntentsRejectTheOppositeOnlyPayload() {
+        var ebook = Engine.Evaluate(
+            One(Release(title: "Some Book M4B")),
+            BookAcquisitionRules.Default with { BookRendition = BookRendition.Ebook });
+        var audio = Engine.Evaluate(
+            One(Release(title: "Some Book EPUB")),
+            BookAcquisitionRules.Default with { BookRendition = BookRendition.Audiobook });
+
+        Assert.Contains(ReleaseRejectionReason.UnsupportedFormat, ebook[0].Rejections);
+        Assert.Contains(ReleaseRejectionReason.UnsupportedFormat, audio[0].Rejections);
+    }
+
+    [Fact]
     public void RejectsSizeOutOfRange() {
         var rules = BookAcquisitionRules.Default with { MaxSizeBytes = 1_000_000 };
 

@@ -22,6 +22,10 @@ public enum RequestMediaKind {
     [Code("book")]
     Book,
 
+    /// <summary>Audiobook rendition request target, fulfilled onto the same Book Entity as its ebook.</summary>
+    [Code("audiobook")]
+    Audiobook,
+
     /// <summary>
     /// Author request target: a container kind that surfaces an author's books as toggleable children.
     /// Committing an author request creates the author as a wanted library entity and fans each selected

@@ -11,6 +11,18 @@ namespace Prismedia.Application.Tests.Requests;
 /// </summary>
 public sealed class RequestServicesTests {
     [Fact]
+    public void EbookAndAudiobookAreParallelBookRenditions() {
+        var ebook = RequestKindRegistry.Find(RequestMediaKind.Book);
+        var audiobook = RequestKindRegistry.Find(RequestMediaKind.Audiobook);
+
+        Assert.Equal(BookRendition.Ebook, ebook?.BookRendition);
+        Assert.Equal(BookRendition.Audiobook, audiobook?.BookRendition);
+        Assert.Equal(EntityKind.Book, audiobook?.WantedEntityKind);
+        Assert.Equal(EntityKind.Book, audiobook?.AcquisitionKind);
+        Assert.True(audiobook?.Discoverable);
+    }
+
+    [Fact]
     public void InteractivePluginSearchDefaultsBeyondTheHistoricalTenResultCap() {
         var query = new IdentifyQuery("Dune", null, null);
 

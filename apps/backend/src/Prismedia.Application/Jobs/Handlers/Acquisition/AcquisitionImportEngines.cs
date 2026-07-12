@@ -315,7 +315,13 @@ public sealed class BookAcquisitionImportEngine(
         }
 
         var templateContext = new ImportTemplateContext(import.Title, import.Author, import.Year);
-        var plan = await planner.PlanAsync(import.ContentPath, root.Path, profile, templateContext, cancellationToken);
+        var plan = await planner.PlanAsync(
+            import.ContentPath,
+            root.Path,
+            profile,
+            templateContext,
+            import.BookRendition ?? BookRendition.Ebook,
+            cancellationToken);
         if (plan.Blocked) {
             await acquisitions.SetStatusAsync(import.Id, AcquisitionStatus.ManualImportRequired, BlockMessage(plan.BlockReason), cancellationToken);
             return;
@@ -414,7 +420,7 @@ public sealed class BookAcquisitionImportEngine(
         acquisitions.SetStatusAsync(acquisitionId, AcquisitionStatus.Failed, message, cancellationToken);
 
     private static string BlockMessage(ImportBlockReason? reason) => reason switch {
-        ImportBlockReason.NoSupportedPayload => "The download contains no supported book files (CBZ, ZIP, EPUB, PDF).",
+        ImportBlockReason.NoSupportedPayload => "The download contains no supported files for the requested book rendition.",
         ImportBlockReason.AmbiguousMultiplePrimaries => "The download contains multiple books; import the right one manually.",
         ImportBlockReason.MixedPayload => "The download mixes a book file with comic archives; import manually.",
         _ => "The download could not be imported automatically."

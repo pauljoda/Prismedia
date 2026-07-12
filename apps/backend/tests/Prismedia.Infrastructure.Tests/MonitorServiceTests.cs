@@ -43,6 +43,28 @@ public sealed class MonitorServiceTests {
     }
 
     [Fact]
+    public async Task EbookAndAudiobookCreateParallelMonitorsForOneBookEntity() {
+        await using var db = CreateContext();
+        var entityId = Guid.NewGuid();
+        var ebookId = SeedAcquisition(db, "Book", "Author");
+        var audiobookId = SeedAcquisition(db, "Book", "Author");
+        db.Acquisitions.Local.Single(row => row.Id == ebookId).EntityId = entityId;
+        db.Acquisitions.Local.Single(row => row.Id == ebookId).BookRendition = BookRendition.Ebook;
+        db.Acquisitions.Local.Single(row => row.Id == audiobookId).EntityId = entityId;
+        db.Acquisitions.Local.Single(row => row.Id == audiobookId).BookRendition = BookRendition.Audiobook;
+        await db.SaveChangesAsync();
+        var store = new EfMonitorStore(db);
+
+        var ebook = await store.StartAsync(ebookId, EntityKind.Book, "Book", "Author", CancellationToken.None);
+        var audiobook = await store.StartAsync(audiobookId, EntityKind.Book, "Book", "Author", CancellationToken.None);
+
+        Assert.NotEqual(ebook.Id, audiobook.Id);
+        Assert.Equal(BookRendition.Ebook, ebook.BookRendition);
+        Assert.Equal(BookRendition.Audiobook, audiobook.BookRendition);
+        Assert.Equal(2, await db.Monitors.CountAsync());
+    }
+
+    [Fact]
     public async Task PauseResumeStopReturnFalseForUnknownMonitor() {
         await using var db = CreateContext();
         var service = Service(db);

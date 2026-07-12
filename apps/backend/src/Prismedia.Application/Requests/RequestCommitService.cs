@@ -41,7 +41,14 @@ public interface IPluginRequestProposalSource {
 }
 
 /// <summary>Result of ensuring a wanted entity: the entity, whether this call created it, and whether it already owns a real file.</summary>
-public sealed record WantedEntityResult(Guid EntityId, bool Created, bool HasFile);
+public sealed record WantedEntityResult(
+    Guid EntityId,
+    bool Created,
+    bool HasFile,
+    bool? RequestedRenditionOwned = null) {
+    /// <summary>Whether the exact requested rendition is already owned; defaults to generic source ownership.</summary>
+    public bool HasRequestedRendition => RequestedRenditionOwned ?? HasFile;
+}
 
 /// <summary>
 /// A library entity read for monitoring/removal: its kind, display title, the external identities a
@@ -51,7 +58,16 @@ public sealed record MonitorableEntity(
     Guid EntityId, EntityKind Kind, string Title, IReadOnlyList<ExternalIdentity> ExternalIdentities,
     bool HasSourceFile = false, Guid? ParentEntityId = null,
     IReadOnlyDictionary<string, int>? Positions = null,
-    PluginIdentityRoute? ProviderIdentity = null);
+    PluginIdentityRoute? ProviderIdentity = null,
+    bool? HasEbookSource = null,
+    bool? HasAudiobookSource = null) {
+    /// <summary>Whether the exact requested rendition is already present on this Entity.</summary>
+    public bool HasRendition(BookRendition? bookRendition) => Kind != EntityKind.Book
+        ? HasSourceFile
+        : bookRendition == BookRendition.Audiobook
+            ? HasAudiobookSource ?? HasSourceFile
+            : HasEbookSource ?? HasSourceFile;
+}
 
 /// <summary>Minimal batched Entity projection needed to decide plugin-backed monitoring eligibility.</summary>
 public sealed record MonitorEligibilityEntity(
@@ -97,6 +113,17 @@ public interface IWantedEntityWriter {
         Guid? parentEntityId,
         bool matchTitleKindWide,
         CancellationToken cancellationToken);
+
+    /// <summary>Rendition-aware Book ownership; the default preserves generic source ownership adapters.</summary>
+    Task<WantedEntityResult> EnsureAsync(
+        EntityKind kind,
+        ExternalIdentity identity,
+        string title,
+        Guid? parentEntityId,
+        bool matchTitleKindWide,
+        CancellationToken cancellationToken,
+        BookRendition? bookRendition) =>
+        EnsureAsync(kind, identity, title, parentEntityId, matchTitleKindWide, cancellationToken);
 
     /// <summary>
     /// Persists one exact, enabled plugin route as the Entity's monitoring/metadata identity without
@@ -169,6 +196,13 @@ public interface IMonitoredEntityRecovery {
     /// fileless leaf request, or a source-backed leaf no-op.
     /// </summary>
     Task<bool> MaintainAsync(Guid entityId, CancellationToken cancellationToken);
+
+    /// <summary>Maintains one independently monitored Book rendition.</summary>
+    Task<bool> MaintainAsync(
+        Guid entityId,
+        BookRendition? bookRendition,
+        CancellationToken cancellationToken) =>
+        MaintainAsync(entityId, cancellationToken);
 
     /// <summary>Requests the Entity only when it has a direct Active monitor and no source file.</summary>
     Task<bool> RequestIfMonitoredAndFilelessAsync(Guid entityId, CancellationToken cancellationToken);
@@ -437,14 +471,18 @@ public sealed class RequestCommitService(
     /// graph remains the fallback; another plugin is never silently substituted for the persisted route.
     /// </summary>
     public async Task<RequestCommitResponse?> RequestEntityAsync(
-        Guid entityId, bool hideNsfw, CancellationToken cancellationToken, AcquisitionTargeting? targeting = null) {
+        Guid entityId, bool hideNsfw, CancellationToken cancellationToken, AcquisitionTargeting? targeting = null,
+        BookRendition? bookRendition = null) {
         var entity = await wanted.GetEntityAsync(entityId, cancellationToken);
         if (entity is null) {
             return null;
         }
 
         var descriptor = RequestKindRegistry.All.FirstOrDefault(candidate =>
-            candidate is { IsContainer: false, Committable: true } && candidate.WantedEntityKind == entity.Kind);
+            candidate is { IsContainer: false, Committable: true }
+            && candidate.WantedEntityKind == entity.Kind
+            && (entity.Kind != EntityKind.Book
+                || candidate.BookRendition == (bookRendition ?? BookRendition.Ebook)));
         if (descriptor is null) {
             // A container phantom (a wanted series) has no acquirable unit of its own — requesting it
             // means requesting each of its still-wanted children (the series' unrequested seasons).
@@ -516,7 +554,15 @@ public sealed class RequestCommitService(
     /// acquisition reattaches to this same Entity monitor.
     /// </summary>
     public async Task<bool> MaintainAsync(Guid entityId, CancellationToken cancellationToken) {
-        var monitor = await monitors.GetByEntityAsync(entityId, cancellationToken);
+        return await MaintainAsync(entityId, bookRendition: null, cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public async Task<bool> MaintainAsync(
+        Guid entityId,
+        BookRendition? bookRendition,
+        CancellationToken cancellationToken) {
+        var monitor = await monitors.GetByEntityAsync(entityId, bookRendition, cancellationToken);
         if (monitor?.Status != MonitorStatus.Active) {
             return false;
         }
@@ -536,32 +582,51 @@ public sealed class RequestCommitService(
             return await SyncContainerAsync(entityId, cancellationToken);
         }
 
-        if (entity.HasSourceFile) {
+        if (entity.HasRendition(bookRendition)) {
             return true;
         }
 
-        return await RequestEntityAsync(entityId, hideNsfw: true, cancellationToken) is not null;
+        return await RequestEntityAsync(
+            entityId, hideNsfw: true, cancellationToken, bookRendition: bookRendition) is not null;
     }
 
     /// <inheritdoc />
     public async Task<bool> RequestIfMonitoredAndFilelessAsync(
         Guid entityId,
         CancellationToken cancellationToken) {
-        var monitor = await monitors.GetByEntityAsync(entityId, cancellationToken);
-        if (monitor?.Status != MonitorStatus.Active) {
+        var activeMonitors = (await monitors.ListForEntityAsync(entityId, cancellationToken))
+            .Where(monitor => monitor.Status == MonitorStatus.Active)
+            .ToArray();
+        if (activeMonitors.Length == 0) {
             return false;
         }
 
         var entity = await wanted.GetEntityAsync(entityId, cancellationToken);
-        if (entity is null || entity.HasSourceFile) {
+        if (entity is null) {
             return false;
         }
 
-        var descriptor = RequestKindRegistry.All.FirstOrDefault(candidate =>
-            candidate is { Committable: true, IsContainer: false }
-            && candidate.WantedEntityKind == entity.Kind);
-        return descriptor is not null
-            && await RequestEntityAsync(entityId, hideNsfw: true, cancellationToken) is not null;
+        var requested = false;
+        foreach (var bookRendition in activeMonitors
+            .Select(monitor => monitor.BookRendition)
+            .Distinct()) {
+            if (entity.HasRendition(bookRendition)) {
+                continue;
+            }
+
+            var descriptor = RequestKindRegistry.All.FirstOrDefault(candidate =>
+                candidate is { Committable: true, IsContainer: false }
+                && candidate.WantedEntityKind == entity.Kind
+                && (entity.Kind != EntityKind.Book
+                    || candidate.BookRendition == (bookRendition ?? BookRendition.Ebook)));
+            if (descriptor is not null
+                && await RequestEntityAsync(
+                    entityId, hideNsfw: true, cancellationToken, bookRendition: bookRendition) is not null) {
+                requested = true;
+            }
+        }
+
+        return requested;
     }
 
     /// <summary>
@@ -676,11 +741,11 @@ public sealed class RequestCommitService(
         // child can still be explicitly monitored so the same acquisition loop searches for missing files
         // or cutoff upgrades (season/episode and future album/track-style hierarchies share this path).
         var requestOwnedEntity = descriptor.AcquireFromEntity;
-        if (entity.HasSourceFile && !requestOwnedEntity) {
+        if (entity.HasRendition(descriptor.BookRendition) && !requestOwnedEntity) {
             return new RequestCommitResponse(null, [Item(RequestCommitOutcome.AlreadyOwned, null)]);
         }
 
-        if (await acquisitions.AnyOpenForEntityAsync(entity.EntityId, cancellationToken)) {
+        if (await acquisitions.AnyOpenForEntityAsync(entity.EntityId, descriptor.BookRendition, cancellationToken)) {
             if (primaryIdentity is not null) {
                 await EnsurePhantomDescendantsAsync(
                     descriptor,
@@ -734,7 +799,8 @@ public sealed class RequestCommitService(
                 targeting.TargetLibraryRootId,
                 positions.TryGetValue(EntityPositionCodes.Season, out var season) ? season : null,
                 positions.TryGetValue(EntityPositionCodes.Episode, out var episode) ? episode : null,
-                positions.TryGetValue(EntityPositionCodes.Volume, out var volume) ? volume : null),
+                positions.TryGetValue(EntityPositionCodes.Volume, out var volume) ? volume : null,
+                descriptor.BookRendition),
             cancellationToken);
         await StartMonitorOrRollbackAcquisitionAsync(
             summary.Id,
@@ -977,6 +1043,7 @@ public sealed class RequestCommitService(
                 ? await StartAcquisitionAsync(
                     pick,
                     child.AcquisitionKind,
+                    child.BookRendition,
                     creatorContext,
                     seriesContext,
                     targeting,
@@ -1193,6 +1260,7 @@ public sealed class RequestCommitService(
                     var item = await StartAcquisitionAsync(
                         pick,
                         descriptor.AcquisitionKind,
+                        descriptor.BookRendition,
                         creator,
                         series: null,
                         targeting,
@@ -1236,6 +1304,7 @@ public sealed class RequestCommitService(
                     item = await StartAcquisitionAsync(
                         pick,
                         child.AcquisitionKind,
+                        child.BookRendition,
                         creator,
                         series: TitleOr(proposal.Patch.Title, rootIdentity.Value),
                         targeting,
@@ -1268,10 +1337,11 @@ public sealed class RequestCommitService(
         var title = TitleOr(node.Proposal.Patch?.Title, node.Identity.Value);
         var entity = await wanted.EnsureAsync(
             descriptor.WantedEntityKind, node.Identity, title, parentEntityId,
-            matchTitleKindWide: descriptor.IsContainer, cancellationToken);
-        var outcome = entity.HasFile && !requestOwnedEntity
+            matchTitleKindWide: descriptor.IsContainer, cancellationToken, descriptor.BookRendition);
+        var outcome = entity.HasRequestedRendition && !requestOwnedEntity
             ? RequestCommitOutcome.AlreadyOwned
-            : !entity.Created && await acquisitions.AnyOpenForEntityAsync(entity.EntityId, cancellationToken)
+            : !entity.Created && await acquisitions.AnyOpenForEntityAsync(
+                entity.EntityId, descriptor.BookRendition, cancellationToken)
                 ? RequestCommitOutcome.AlreadyRequested
                 : RequestCommitOutcome.Requested;
         return new CommitPick(node.Proposal, node.Identity, title, entity, outcome);
@@ -1284,7 +1354,7 @@ public sealed class RequestCommitService(
     /// children while child-off suppression remains authoritative.
     /// </summary>
     private async Task<RequestCommitItem> StartAcquisitionAsync(
-        CommitPick pick, EntityKind acquisitionKind, string? author, string? series,
+        CommitPick pick, EntityKind acquisitionKind, BookRendition? bookRendition, string? author, string? series,
         AcquisitionTargeting targeting, CancellationToken cancellationToken,
         bool attachOwnedEntityMonitor = false,
         PluginIdentityRoute? ownedEntityProviderRoute = null) {
@@ -1342,7 +1412,8 @@ public sealed class RequestCommitService(
                         targeting.TargetLibraryRootId,
                         patch is null ? null : RequestProposalReading.SeasonNumberOf(patch),
                         patch is null ? null : RequestProposalReading.EpisodeNumberOf(patch),
-                        patch is null ? null : RequestProposalReading.VolumeNumberOf(patch)),
+                        patch is null ? null : RequestProposalReading.VolumeNumberOf(patch),
+                        bookRendition),
                     leaseCancellationToken);
                 acquisitionId = summary.Id;
                 await StartMonitorOrRollbackAcquisitionAsync(

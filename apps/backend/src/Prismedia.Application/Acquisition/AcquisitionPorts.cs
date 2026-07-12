@@ -161,6 +161,16 @@ public interface IAcquisitionImportPlanner {
     /// absolute source → absolute target moves into the library root, or a block when the payload is ambiguous.
     /// </summary>
     Task<ResolvedImportPlan> PlanAsync(string contentPath, string libraryRootPath, BookImportProfile profile, ImportTemplateContext context, CancellationToken cancellationToken);
+
+    /// <summary>Rendition-aware book planning; the default preserves legacy ebook-only adapters.</summary>
+    Task<ResolvedImportPlan> PlanAsync(
+        string contentPath,
+        string libraryRootPath,
+        BookImportProfile profile,
+        ImportTemplateContext context,
+        BookRendition rendition,
+        CancellationToken cancellationToken) =>
+        PlanAsync(contentPath, libraryRootPath, profile, context, cancellationToken);
 }
 
 /// <summary>An import plan resolved to absolute paths, ready to execute.</summary>
@@ -682,6 +692,13 @@ public interface IAcquisitionStore : IAcquisitionLifecycleStore {
     /// </summary>
     Task<bool> AnyOpenForEntityAsync(Guid entityId, CancellationToken cancellationToken);
 
+    /// <summary>Rendition-scoped duplicate check for parallel ebook/audiobook acquisitions.</summary>
+    Task<bool> AnyOpenForEntityAsync(
+        Guid entityId,
+        BookRendition? bookRendition,
+        CancellationToken cancellationToken) =>
+        AnyOpenForEntityAsync(entityId, cancellationToken);
+
     /// <summary>The newest acquisition targeting this library entity with its candidates, or null when it has none.</summary>
     Task<AcquisitionDetail?> GetLatestForEntityAsync(Guid entityId, CancellationToken cancellationToken);
 
@@ -732,6 +749,19 @@ public interface IMonitorStore {
 
     /// <summary>Returns the stable monitor targeting an Entity, including legacy acquisition-linked rows.</summary>
     Task<Contracts.Acquisition.MonitorView?> GetByEntityAsync(Guid entityId, CancellationToken cancellationToken);
+
+    /// <summary>Every parallel monitor targeting an Entity; defaults to the legacy single-monitor read.</summary>
+    async Task<IReadOnlyList<Contracts.Acquisition.MonitorView>> ListForEntityAsync(
+        Guid entityId,
+        CancellationToken cancellationToken) =>
+        await GetByEntityAsync(entityId, cancellationToken) is { } monitor ? [monitor] : [];
+
+    /// <summary>Returns the stable monitor for one independently monitored Book rendition.</summary>
+    Task<Contracts.Acquisition.MonitorView?> GetByEntityAsync(
+        Guid entityId,
+        BookRendition? bookRendition,
+        CancellationToken cancellationToken) =>
+        GetByEntityAsync(entityId, cancellationToken);
 
     /// <summary>Whether the exact monitor row is currently Active.</summary>
     async Task<bool> IsActiveAsync(Guid monitorId, CancellationToken cancellationToken) =>

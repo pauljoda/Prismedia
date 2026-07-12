@@ -14,6 +14,21 @@ namespace Prismedia.Infrastructure.Tests;
 /// </summary>
 public sealed class EfMonitorStoreUpgradeTests {
     [Fact]
+    public async Task ImportedAudiobookFulfillsWithoutEnteringEbookUpgradeLoop() {
+        await using var db = CreateContext();
+        var store = await SeedUpgradeMonitorAsync(
+            db,
+            new BookQualityRank(BookSourceTier.Unknown, BookFormatTier.Unknown),
+            new BookQualityRank(BookSourceTier.Retail, BookFormatTier.Reflowable),
+            bookRendition: BookRendition.Audiobook);
+
+        Assert.Empty(await store.ListDueMonitorsAsync(360, CancellationToken.None));
+        var monitor = Assert.Single(await store.ListAsync(CancellationToken.None));
+        Assert.Equal(MonitorStatus.Fulfilled, monitor.Status);
+        Assert.Equal(BookRendition.Audiobook, monitor.BookRendition);
+    }
+
+    [Fact]
     public async Task ImportedBelowCutoffWithUpgradeOnIsDueAsUpgrade() {
         await using var db = CreateContext();
         var store = await SeedUpgradeMonitorAsync(db, owned: new(BookSourceTier.Web, BookFormatTier.Reflowable), cutoff: new(BookSourceTier.Retail, BookFormatTier.Reflowable));
@@ -279,7 +294,8 @@ public sealed class EfMonitorStoreUpgradeTests {
         bool upgradeOn = true,
         bool captured = true,
         int upgradeAttempts = 0,
-        int barrenSearches = 0) {
+        int barrenSearches = 0,
+        BookRendition? bookRendition = null) {
         var now = DateTimeOffset.UtcNow;
         db.BookAcquisitionProfiles.Add(new BookAcquisitionProfileRow {
             Id = Guid.NewGuid(), DisplayName = "Default", IsDefault = true, TargetLibraryRootId = Guid.NewGuid(),
@@ -289,6 +305,7 @@ public sealed class EfMonitorStoreUpgradeTests {
         var acquisitionId = Guid.NewGuid();
         db.Acquisitions.Add(new AcquisitionRow {
             Id = acquisitionId, Status = AcquisitionStatus.Imported, Title = "Some Book", ExternalIdsJson = "{}", SourceUrlsJson = "[]",
+            BookRendition = bookRendition,
             OwnedSourceTier = owned.Source, OwnedFormatTier = owned.Format, UpgradeQualityCaptured = captured, CreatedAt = now, UpdatedAt = now
         });
         await db.SaveChangesAsync();

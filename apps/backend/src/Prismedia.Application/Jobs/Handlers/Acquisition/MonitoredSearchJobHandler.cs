@@ -59,7 +59,8 @@ public sealed class MonitoredSearchJobHandler(
             // Entity-only intent: containers sync provider children, source-backed leaves remain active,
             // and fileless leaves request themselves. Acquisition-linked dues always take the branch below.
             if (monitor.AcquisitionId is null && monitor.EntityId is { } watchedEntityId) {
-                var maintained = await requests.MaintainAsync(watchedEntityId, cancellationToken);
+                var maintained = await requests.MaintainAsync(
+                    watchedEntityId, monitor.BookRendition, cancellationToken);
                 if (!maintained) {
                     // False also means lifecycle contention (a child is being unmonitored or this Entity
                     // is deleting files). That is transient and must never rewrite durable parent intent.

@@ -83,18 +83,20 @@ public sealed class AcquisitionPolicyModuleTests {
         var music = new MusicAcquisitionPolicyModule();
         var tv = new TvAcquisitionPolicyModule();
 
-        Assert.Equal([7000, 7030], book.RouteCategories([7000, 7030, 2000]));
-        Assert.Equal([2000], movie.RouteCategories([7000, 7030]));
-        Assert.Equal([3000], music.RouteCategories([]));
-        Assert.Equal([5000], tv.RouteCategories([7000]));
+        Assert.Equal([7020], book.RouteCategories(new AcquisitionSearchInput(Guid.NewGuid(), "Book", null, BookRendition: BookRendition.Ebook), [7000, 7020, 7030, 3030]));
+        Assert.Equal([3030], book.RouteCategories(new AcquisitionSearchInput(Guid.NewGuid(), "Book", null, BookRendition: BookRendition.Audiobook), [3000, 3030, 7020]));
+        Assert.Equal([2000], movie.RouteCategories(new AcquisitionSearchInput(Guid.NewGuid(), "Movie", null, EntityKind.Movie), [7000, 7030]));
+        Assert.Equal([3000], music.RouteCategories(new AcquisitionSearchInput(Guid.NewGuid(), "Album", null, EntityKind.AudioLibrary), []));
+        Assert.Equal([5000], tv.RouteCategories(new AcquisitionSearchInput(Guid.NewGuid(), "Series", null, EntityKind.VideoSeries), [7000]));
     }
 
     [Fact]
     public void ModulesPreserveConfiguredOtherRangeCategories() {
-        Assert.Equal([7000, 8000], new BookAcquisitionPolicyModule().RouteCategories([7000, 8000]));
-        Assert.Equal([2000, 8010], new MovieAcquisitionPolicyModule().RouteCategories([2000, 7000, 8010]));
-        Assert.Equal([7000, 8000], new BookAcquisitionPolicyModule().RouteCategories([8000]));
-        Assert.Equal([5000, 5040], new TvAcquisitionPolicyModule().RouteCategories([5000, 5040]));
+        var ebook = new AcquisitionSearchInput(Guid.NewGuid(), "Book", null, BookRendition: BookRendition.Ebook);
+        Assert.Equal([7020, 8000], new BookAcquisitionPolicyModule().RouteCategories(ebook, [7000, 7020, 8000]));
+        Assert.Equal([2000, 8010], new MovieAcquisitionPolicyModule().RouteCategories(new AcquisitionSearchInput(Guid.NewGuid(), "Movie", null, EntityKind.Movie), [2000, 7000, 8010]));
+        Assert.Equal([7020, 8000], new BookAcquisitionPolicyModule().RouteCategories(ebook, [8000]));
+        Assert.Equal([5000, 5040], new TvAcquisitionPolicyModule().RouteCategories(new AcquisitionSearchInput(Guid.NewGuid(), "Series", null, EntityKind.VideoSeries), [5000, 5040]));
     }
 
     [Fact]
@@ -120,7 +122,7 @@ public sealed class AcquisitionPolicyModuleTests {
 
         public IReadOnlyList<string> BuildQueries(AcquisitionSearchInput input) => [input.Title];
 
-        public IReadOnlyList<int> RouteCategories(IReadOnlyList<int> configuredCategories) =>
+        public IReadOnlyList<int> RouteCategories(AcquisitionSearchInput input, IReadOnlyList<int> configuredCategories) =>
             configuredCategories;
 
         public IAcquisitionDecisionEngine DecisionEngineFor(EntityKind kind) =>

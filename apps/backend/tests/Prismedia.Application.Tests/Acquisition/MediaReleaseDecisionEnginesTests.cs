@@ -17,11 +17,11 @@ public sealed class MediaReleaseDecisionEnginesTests {
         var tv = new TvAcquisitionPolicyModule();
 
         // A book-configured indexer (7000s) searching movies falls back to the movie top-level category…
-        Assert.Equal([2000], movie.RouteCategories([7000, 7030]));
+        Assert.Equal([2000], movie.RouteCategories(Input(EntityKind.Movie), [7000, 7030]));
         // …while the user's narrower in-range picks are preserved for the matching kind.
-        Assert.Equal([7000, 7030], book.RouteCategories([7000, 7030, 2000]));
-        Assert.Equal([3000], music.RouteCategories([]));
-        Assert.Equal([5000], tv.RouteCategories([7000]));
+        Assert.Equal([7020], book.RouteCategories(Input(EntityKind.Book, BookRendition.Ebook), [7000, 7020, 7030, 2000]));
+        Assert.Equal([3000], music.RouteCategories(Input(EntityKind.AudioLibrary), []));
+        Assert.Equal([5000], tv.RouteCategories(Input(EntityKind.VideoSeries), [7000]));
     }
 
     [Fact]
@@ -31,13 +31,13 @@ public sealed class MediaReleaseDecisionEnginesTests {
         var tv = new TvAcquisitionPolicyModule();
 
         // The default book config (7000,8000) keeps its Other pick — this was silently dropped before.
-        Assert.Equal([7000, 8000], book.RouteCategories([7000, 8000]));
+        Assert.Equal([7020, 8000], book.RouteCategories(Input(EntityKind.Book, BookRendition.Ebook), [7000, 8000]));
         // Other-range picks ride along with the kind narrowing for any kind…
-        Assert.Equal([2000, 8010], movie.RouteCategories([2000, 7000, 8010]));
+        Assert.Equal([2000, 8010], movie.RouteCategories(Input(EntityKind.Movie), [2000, 7000, 8010]));
         // …and with the top-level fallback when nothing kind-specific is configured.
-        Assert.Equal([7000, 8000], book.RouteCategories([8000]));
+        Assert.Equal([7020, 8000], book.RouteCategories(Input(EntityKind.Book, BookRendition.Ebook), [8000]));
         // No Other picks configured → behavior unchanged.
-        Assert.Equal([5000, 5040], tv.RouteCategories([5000, 5040]));
+        Assert.Equal([5000, 5040], tv.RouteCategories(Input(EntityKind.VideoSeries), [5000, 5040]));
     }
 
     [Fact]
@@ -316,4 +316,7 @@ public sealed class MediaReleaseDecisionEnginesTests {
     private static IndexerRelease Release(string title, int seeders) =>
         new(title, SizeBytes: 1_000_000_000, Seeders: seeders, Peers: seeders, DownloadProtocol.Torrent,
             DownloadUrl: "http://dl", MagnetUrl: null, InfoHash: null, InfoUrl: null, Language: null, PublishedAt: null);
+
+    private static AcquisitionSearchInput Input(EntityKind kind, BookRendition? rendition = null) =>
+        new(Guid.NewGuid(), "Title", null, kind, BookRendition: rendition);
 }

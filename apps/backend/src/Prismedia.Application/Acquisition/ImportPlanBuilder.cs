@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using Prismedia.Domain.Entities;
 
 namespace Prismedia.Application.Acquisition;
 
@@ -38,6 +39,9 @@ public static partial class ImportPlanBuilder {
     private static readonly IReadOnlySet<string> ComicArchiveExtensions =
         new HashSet<string>(StringComparer.OrdinalIgnoreCase) { ".cbz", ".zip" };
 
+    private static readonly IReadOnlySet<string> AudiobookExtensions =
+        new HashSet<string>(StringComparer.OrdinalIgnoreCase) { ".m4b", ".m4a", ".mp3" };
+
     [GeneratedRegex(@"[<>:""/\\|?*\x00-\x1f]")]
     private static partial Regex IllegalPathCharsRegex();
 
@@ -51,7 +55,7 @@ public static partial class ImportPlanBuilder {
 
     /// <summary>The book file extensions the importer recognizes.</summary>
     public static IReadOnlySet<string> SupportedExtensions { get; } =
-        new HashSet<string>(PrimaryBookExtensions.Concat(ComicArchiveExtensions), StringComparer.OrdinalIgnoreCase);
+        new HashSet<string>(PrimaryBookExtensions.Concat(ComicArchiveExtensions).Concat(AudiobookExtensions), StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
     /// Plans the import for a set of files (paths relative to the download content root) given the book
@@ -60,9 +64,28 @@ public static partial class ImportPlanBuilder {
     public static ImportPlan Plan(
         IReadOnlyList<string> relativeFilePaths,
         ImportTemplateContext context,
-        string pathTemplate) {
+        string pathTemplate,
+        BookRendition rendition = BookRendition.Ebook) {
+        if (rendition == BookRendition.Audiobook) {
+            var audio = relativeFilePaths
+                .Where(path => AudiobookExtensions.Contains(Path.GetExtension(path)))
+                .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+            if (audio.Length == 0) {
+                return ImportPlan.Block(ImportBlockReason.NoSupportedPayload);
+            }
+
+            var audioFolder = RenderFolder(pathTemplate, context);
+            return ImportPlan.For(audio
+                .Select(path => new ImportPlanItem(
+                    path,
+                    CombineRelative(audioFolder, SanitizeSegment(Path.GetFileName(path)))))
+                .ToArray());
+        }
+
         var supported = relativeFilePaths
-            .Where(path => SupportedExtensions.Contains(Path.GetExtension(path)))
+            .Where(path => PrimaryBookExtensions.Contains(Path.GetExtension(path))
+                || ComicArchiveExtensions.Contains(Path.GetExtension(path)))
             .ToArray();
         var primaries = supported.Where(path => PrimaryBookExtensions.Contains(Path.GetExtension(path))).ToArray();
         var archives = supported.Where(path => ComicArchiveExtensions.Contains(Path.GetExtension(path))).ToArray();

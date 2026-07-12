@@ -1,8 +1,30 @@
 using Prismedia.Application.Acquisition;
+using Prismedia.Domain.Entities;
 
 namespace Prismedia.Application.Tests.Acquisition;
 
 public sealed class ImportPlanBuilderTests {
+    [Fact]
+    public void AudiobookRenditionImportsAllOrderedAudioParts() {
+        var plan = ImportPlanBuilder.Plan(
+            ["Disc 02.mp3", "Book.epub", "Disc 01.m4b"],
+            Context(),
+            Template,
+            BookRendition.Audiobook);
+
+        Assert.False(plan.Blocked);
+        Assert.Equal(["Disc 01.m4b", "Disc 02.mp3"], plan.Items.Select(item => item.SourceRelativePath).ToArray());
+        Assert.All(plan.Items, item => Assert.Contains("Andy Weir/Project Hail Mary (2021)", item.TargetRelativePath));
+    }
+
+    [Fact]
+    public void EbookRenditionIgnoresAudioPayloads() {
+        var plan = ImportPlanBuilder.Plan(["Book.m4b"], Context(), Template, BookRendition.Ebook);
+
+        Assert.True(plan.Blocked);
+        Assert.Equal(ImportBlockReason.NoSupportedPayload, plan.BlockReason);
+    }
+
     private const string Template = "{Author}/{Title} ({Year})/{Title}{ - Volume}.{ext}";
 
     private static ImportTemplateContext Context(string title = "Project Hail Mary", string? author = "Andy Weir", int? year = 2021) =>

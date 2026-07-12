@@ -91,6 +91,9 @@ public sealed record BookAcquisitionRules(
     /// </summary>
     public EntityKind Kind { get; init; } = EntityKind.Book;
 
+    /// <summary>The independently acquired book rendition; null outside books and for legacy ad-hoc rules.</summary>
+    public BookRendition? BookRendition { get; init; }
+
     /// <summary>
     /// The profile's scored custom formats (Sonarr-style named release classifiers). Each matching format
     /// adds its score to a release's preference points (see <see cref="MediaReleaseEvaluation.PreferenceScore"/>).
@@ -209,7 +212,8 @@ public sealed record AcquisitionMetadata(
     Guid? TargetLibraryRootId = null,
     int? SeasonNumber = null,
     int? EpisodeNumber = null,
-    int? VolumeNumber = null);
+    int? VolumeNumber = null,
+    BookRendition? BookRendition = null);
 
 /// <summary>The minimal input the background search job needs to query indexers for an acquisition.</summary>
 /// <param name="Kind">The media kind being acquired; selects its query, category, and decision policy module.</param>
@@ -223,7 +227,8 @@ public sealed record AcquisitionMetadata(
 public sealed record AcquisitionSearchInput(
     Guid Id, string Title, string? Author, EntityKind Kind = EntityKind.Book, Guid? EntityId = null,
     int? Year = null, Guid? ProfileId = null, string? Series = null, int? SeasonNumber = null, int? EpisodeNumber = null,
-    int? VolumeNumber = null) {
+    int? VolumeNumber = null,
+    BookRendition? BookRendition = null) {
     /// <summary>
     /// The title of the WORK this acquisition belongs to — the series for TV units (a season or episode
     /// acquisition's own Title is "Season 1" or the episode name), the author-qualified title for music,
@@ -325,7 +330,8 @@ public sealed record AcquisitionCandidateRef(Guid CandidateId, string Title, str
 /// then carries the parent Entity and the handler requests each missing child through the shared flow.
 /// </summary>
 public sealed record DueMonitor(
-    Guid MonitorId, Guid? AcquisitionId, string Title, bool IsUpgrade = false, Guid? EntityId = null, bool MissingChildFallback = false);
+    Guid MonitorId, Guid? AcquisitionId, string Title, bool IsUpgrade = false, Guid? EntityId = null,
+    bool MissingChildFallback = false, BookRendition? BookRendition = null);
 
 /// <summary>
 /// The owned quality an upgrade child must beat, expressed in the vocabulary of the child's kind. A book
@@ -546,7 +552,8 @@ public sealed record AcquisitionImportContext(
     Guid? EntityId = null,
     string? FinalSourcePath = null,
     TvImportCheckpoint? TvImportCheckpoint = null,
-    ImportPlacementCheckpoint? ImportPlacementCheckpoint = null) {
+    ImportPlacementCheckpoint? ImportPlacementCheckpoint = null,
+    BookRendition? BookRendition = null) {
     /// <summary>
     /// The user's explicit "import anyway": an upgrade that changes the file extension — normally held
     /// for manual import — replaces the owned file across formats. Carried by the manual retry-import
