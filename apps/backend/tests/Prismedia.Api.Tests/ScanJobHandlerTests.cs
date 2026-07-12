@@ -2245,6 +2245,184 @@ public sealed class ScanJobHandlerTests {
     }
 
     [Fact]
+    public async Task BookScanAttachesOrderedAudiobookTracksBesideReadableBook() {
+        var tempRoot = Directory.CreateTempSubdirectory("prismedia-audiobook-mixed-");
+        try {
+            var rootPath = tempRoot.FullName;
+            var bookPath = Path.Combine(rootPath, "Frank Herbert", "Dune");
+            Directory.CreateDirectory(bookPath);
+            var epubPath = Path.Combine(bookPath, "Dune.epub");
+            var secondTrack = Path.Combine(bookPath, "02 - Muad'Dib.mp3");
+            var firstTrack = Path.Combine(bookPath, "01 - Arrakis.m4b");
+            await File.WriteAllTextAsync(epubPath, "epub");
+            await File.WriteAllTextAsync(firstTrack, "audio");
+            await File.WriteAllTextAsync(secondTrack, "audio");
+            var root = new LibraryRootData(
+                Guid.NewGuid(), rootPath, "Books", true, true,
+                ScanVideos: false, ScanImages: false, ScanAudio: false, ScanBooks: true, IsNsfw: false);
+            var persistence = new FakeScanPersistence([root]) { Settings = DisabledGeneratedWorkSettings };
+            var handler = new ScanBookJobHandler(
+                NullLogger<ScanBookJobHandler>.Instance,
+                new RecordingFileDiscovery([secondTrack, epubPath, firstTrack]),
+                persistence,
+                persistence,
+                persistence,
+                audio: persistence);
+
+            await handler.HandleAsync(
+                new JobContext(SingleRootScanJob(root), new RecordingJobQueue()),
+                CancellationToken.None);
+
+            var book = Assert.Single(persistence.UpsertedBooks);
+            Assert.Equal(epubPath, book.SourcePath);
+            Assert.Collection(
+                persistence.UpsertedAudioTracks.OrderBy(track => track.SortOrder),
+                track => {
+                    Assert.Equal(firstTrack, track.FilePath);
+                    Assert.Equal(book.Id, track.AudioLibraryEntityId);
+                },
+                track => {
+                    Assert.Equal(secondTrack, track.FilePath);
+                    Assert.Equal(book.Id, track.AudioLibraryEntityId);
+                });
+        } finally {
+            tempRoot.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task BookScanCreatesAudioOnlyBookForStandaloneM4b() {
+        var tempRoot = Directory.CreateTempSubdirectory("prismedia-audiobook-only-");
+        try {
+            var rootPath = tempRoot.FullName;
+            var sourcePath = Path.Combine(rootPath, "Project Hail Mary.m4b");
+            await File.WriteAllTextAsync(sourcePath, "audio");
+            var root = new LibraryRootData(
+                Guid.NewGuid(), rootPath, "Books", true, true,
+                ScanVideos: false, ScanImages: false, ScanAudio: false, ScanBooks: true, IsNsfw: false);
+            var persistence = new FakeScanPersistence([root]) { Settings = DisabledGeneratedWorkSettings };
+            var handler = new ScanBookJobHandler(
+                NullLogger<ScanBookJobHandler>.Instance,
+                new RecordingFileDiscovery([sourcePath]),
+                persistence,
+                persistence,
+                persistence,
+                audio: persistence);
+
+            await handler.HandleAsync(
+                new JobContext(SingleRootScanJob(root), new RecordingJobQueue()),
+                CancellationToken.None);
+
+            var book = Assert.Single(persistence.UpsertedBookSeries);
+            Assert.Equal(sourcePath, book.SourcePath);
+            Assert.Equal(BookFormat.Audio, book.Format);
+            var track = Assert.Single(persistence.UpsertedAudioTracks);
+            Assert.Equal(book.Id, track.AudioLibraryEntityId);
+            Assert.Equal(sourcePath, track.FilePath);
+        } finally {
+            tempRoot.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task BookScanMatchesRootAudiobooksToReadableBookByBasename() {
+        var tempRoot = Directory.CreateTempSubdirectory("prismedia-audiobook-pairs-");
+        try {
+            var rootPath = tempRoot.FullName;
+            var duneEpub = Path.Combine(rootPath, "Dune.epub");
+            var duneAudio = Path.Combine(rootPath, "Dune.m4b");
+            var messiahEpub = Path.Combine(rootPath, "Dune Messiah.epub");
+            var messiahAudio = Path.Combine(rootPath, "Dune Messiah.mp3");
+            foreach (var path in new[] { duneEpub, duneAudio, messiahEpub, messiahAudio }) {
+                await File.WriteAllTextAsync(path, "media");
+            }
+            var root = new LibraryRootData(
+                Guid.NewGuid(), rootPath, "Books", true, true,
+                ScanVideos: false, ScanImages: false, ScanAudio: false, ScanBooks: true, IsNsfw: false);
+            var persistence = new FakeScanPersistence([root]) { Settings = DisabledGeneratedWorkSettings };
+            var handler = new ScanBookJobHandler(
+                NullLogger<ScanBookJobHandler>.Instance,
+                new RecordingFileDiscovery([messiahAudio, duneEpub, duneAudio, messiahEpub]),
+                persistence, persistence, persistence, audio: persistence);
+
+            await handler.HandleAsync(
+                new JobContext(SingleRootScanJob(root), new RecordingJobQueue()),
+                CancellationToken.None);
+
+            var dune = persistence.UpsertedBooks.Single(book => book.SourcePath == duneEpub);
+            var messiah = persistence.UpsertedBooks.Single(book => book.SourcePath == messiahEpub);
+            Assert.Equal(dune.Id, persistence.UpsertedAudioTracks.Single(track => track.FilePath == duneAudio).AudioLibraryEntityId);
+            Assert.Equal(messiah.Id, persistence.UpsertedAudioTracks.Single(track => track.FilePath == messiahAudio).AudioLibraryEntityId);
+        } finally {
+            tempRoot.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task BookScanRemovesLastAudiobookTrackWhileKeepingReadableBook() {
+        var tempRoot = Directory.CreateTempSubdirectory("prismedia-audiobook-stale-");
+        try {
+            var rootPath = tempRoot.FullName;
+            var epubPath = Path.Combine(rootPath, "Dune.epub");
+            await File.WriteAllTextAsync(epubPath, "epub");
+            var root = new LibraryRootData(
+                Guid.NewGuid(), rootPath, "Books", true, true,
+                ScanVideos: false, ScanImages: false, ScanAudio: false, ScanBooks: true, IsNsfw: false);
+            var persistence = new FakeScanPersistence([root]) { Settings = DisabledGeneratedWorkSettings };
+            var handler = new ScanBookJobHandler(
+                NullLogger<ScanBookJobHandler>.Instance,
+                new RecordingFileDiscovery([epubPath]),
+                persistence, persistence, persistence, audio: persistence);
+
+            await handler.HandleAsync(
+                new JobContext(SingleRootScanJob(root), new RecordingJobQueue()),
+                CancellationToken.None);
+
+            var book = Assert.Single(persistence.UpsertedBooks);
+            Assert.True(persistence.ValidAudioTrackPathsByLibraryId.TryGetValue(book.Id, out var validPaths));
+            Assert.Empty(validPaths!);
+        } finally {
+            tempRoot.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task ImportedAudiobookAttachesToExistingReadableBookWithoutReplacingItsSource() {
+        var tempRoot = Directory.CreateTempSubdirectory("prismedia-audiobook-import-");
+        try {
+            var rootPath = tempRoot.FullName;
+            var audioPath = Path.Combine(rootPath, "Dune.m4b");
+            await File.WriteAllTextAsync(audioPath, "audio");
+            var root = new LibraryRootData(
+                Guid.NewGuid(), rootPath, "Books", true, true,
+                ScanVideos: false, ScanImages: false, ScanAudio: false, ScanBooks: true, IsNsfw: false);
+            var existingBookId = Guid.NewGuid();
+            var persistence = new FakeScanPersistence([root]) { Settings = DisabledGeneratedWorkSettings };
+            var handler = new ScanBookJobHandler(
+                NullLogger<ScanBookJobHandler>.Instance,
+                new RecordingFileDiscovery([audioPath]),
+                persistence,
+                persistence,
+                persistence,
+                acquisitionHints: new FixedAcquisitionHintApplier(existingBookId),
+                audio: persistence);
+
+            await handler.MaterializeImportedPathsAsync(
+                new JobContext(SingleRootScanJob(root), new RecordingJobQueue()),
+                Guid.NewGuid(),
+                root,
+                [audioPath],
+                CancellationToken.None);
+
+            Assert.Empty(persistence.UpsertedBookSeries);
+            var track = Assert.Single(persistence.UpsertedAudioTracks);
+            Assert.Equal(existingBookId, track.AudioLibraryEntityId);
+        } finally {
+            tempRoot.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task SingleFileBookScanNamesAuthorFromEmbeddedCreatorNotFolder() {
         var tempRoot = Directory.CreateTempSubdirectory("prismedia-book-author-metadata-");
         try {
@@ -3344,6 +3522,42 @@ public sealed class ScanJobHandlerTests {
 
         public Task<IReadOnlyList<FileSignature>> DiscoverFileSignaturesAsync(string rootPath, MediaCategory category, bool recursive, IReadOnlySet<string> excludedPaths, CancellationToken cancellationToken) =>
             Task.FromResult<IReadOnlyList<FileSignature>>([]);
+    }
+
+    private sealed class FixedAcquisitionHintApplier(Guid targetEntityId)
+        : Prismedia.Application.Acquisition.IAcquisitionHintApplier {
+        public Task<Guid?> ResolveTargetEntityIdAsync(
+            EntityKind kind,
+            Guid acquisitionId,
+            CancellationToken cancellationToken) => Task.FromResult<Guid?>(targetEntityId);
+
+        public Task<bool> ApplyAsync(Guid entityId, string sourcePath, CancellationToken cancellationToken) =>
+            Task.FromResult(true);
+
+        public Task<bool> BindWantedEntityAsync(
+            EntityKind kind,
+            string sourcePath,
+            CancellationToken cancellationToken,
+            Guid? acquisitionId = null,
+            bool requireExactPath = false) => Task.FromResult(false);
+
+        public Task<bool> BindWantedParentAsync(
+            EntityKind parentKind,
+            string folderPath,
+            CancellationToken cancellationToken,
+            Guid? acquisitionId = null) => Task.FromResult(false);
+
+        public Task<Guid?> BindWantedChildBySortOrderAsync(
+            EntityKind childKind,
+            string parentPath,
+            int sortOrder,
+            string childPath,
+            CancellationToken cancellationToken) => Task.FromResult<Guid?>(null);
+
+        public Task<IReadOnlyList<Prismedia.Application.Acquisition.StampedHintOwner>> ApplyToFolderOwnersAsync(
+            CancellationToken cancellationToken,
+            Guid? acquisitionId = null) =>
+            Task.FromResult<IReadOnlyList<Prismedia.Application.Acquisition.StampedHintOwner>>([]);
     }
 
     private sealed class CategoryFileDiscovery(

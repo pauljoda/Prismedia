@@ -24,7 +24,7 @@ public static class SupportedExtensions {
 
     public static readonly IReadOnlySet<string> Audio = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
     {
-        ".mp3", ".flac", ".wav", ".ogg", ".aac", ".m4a", ".wma", ".opus",
+        ".mp3", ".flac", ".wav", ".ogg", ".aac", ".m4a", ".m4b", ".wma", ".opus",
         ".aiff", ".aif", ".alac", ".ape", ".dsf", ".dff", ".wv"
     };
 
@@ -40,6 +40,12 @@ public static class SupportedExtensions {
     public static readonly IReadOnlySet<string> Book = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
     {
         ".epub", ".pdf"
+    };
+
+    /// <summary>Common audiobook containers discovered by a book-library scan.</summary>
+    public static readonly IReadOnlySet<string> Audiobook = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+    {
+        ".m4b", ".m4a", ".mp3"
     };
 
     /// <summary>

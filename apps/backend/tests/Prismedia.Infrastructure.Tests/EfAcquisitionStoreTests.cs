@@ -684,6 +684,33 @@ public sealed class EfAcquisitionStoreTests {
     }
 
     [Fact]
+    public async Task ResolveTargetBookReturnsOwnedEntityForEditionImport() {
+        await using var db = CreateContext();
+        var entityId = AddWantedEntity(db, EntityKindRegistry.Book.Code, "Dune");
+        var acquisitionId = Guid.NewGuid();
+        var now = DateTimeOffset.UtcNow;
+        db.Acquisitions.Add(new AcquisitionRow {
+            Id = acquisitionId,
+            EntityId = entityId,
+            Kind = EntityKind.Book,
+            Status = AcquisitionStatus.Downloaded,
+            Title = "Dune",
+            ExternalIdsJson = "{}",
+            SourceUrlsJson = "[]",
+            CreatedAt = now,
+            UpdatedAt = now
+        });
+        await db.SaveChangesAsync();
+
+        var resolved = await new AcquisitionHintApplier(db).ResolveTargetEntityIdAsync(
+            EntityKind.Book,
+            acquisitionId,
+            CancellationToken.None);
+
+        Assert.Equal(entityId, resolved);
+    }
+
+    [Fact]
     public async Task BindWantedBookToleratesADanglingEntityLink() {
         await using var db = CreateContext();
         AddHintWithEntity(db, Guid.NewGuid(), "/media/books/Author/Title/Title.epub");

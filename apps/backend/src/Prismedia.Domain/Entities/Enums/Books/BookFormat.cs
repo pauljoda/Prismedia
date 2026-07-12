@@ -17,5 +17,9 @@ public enum BookFormat {
 
     /// <summary>A single fixed-layout PDF file, read with a paged canvas reader.</summary>
     [Code("pdf")]
-    Pdf
+    Pdf,
+
+    /// <summary>An audio-only book whose playable payload is exposed through ordered audio-track children.</summary>
+    [Code("audio")]
+    Audio
 }

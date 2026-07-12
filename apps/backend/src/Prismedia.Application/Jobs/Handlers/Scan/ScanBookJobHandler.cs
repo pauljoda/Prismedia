@@ -22,7 +22,8 @@ public sealed class ScanBookJobHandler(
     IComicInfoMetadataReader? comicInfoReader = null,
     IScanMetadataPersistence? scanMetadata = null,
     IBookFileMetadataReader? bookFileMetadata = null,
-    Acquisition.IAcquisitionHintApplier? acquisitionHints = null) : ScanJobHandler(logger, fileDiscovery, roots, snapshots) {
+    Acquisition.IAcquisitionHintApplier? acquisitionHints = null,
+    IAudioScanPersistence? audio = null) : ScanJobHandler(logger, fileDiscovery, roots, snapshots) {
     private static readonly HashSet<string> ImageExtensions = new(StringComparer.OrdinalIgnoreCase)
     {
         ".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".tiff", ".tif"
@@ -32,7 +33,8 @@ public sealed class ScanBookJobHandler(
 
     protected override bool IsEligibleRoot(LibraryRootData root) => root.ScanBooks;
 
-    protected override IReadOnlyList<MediaCategory> ScanCategories => [MediaCategory.ComicArchive, MediaCategory.Book];
+    protected override IReadOnlyList<MediaCategory> ScanCategories =>
+        [MediaCategory.ComicArchive, MediaCategory.Book, MediaCategory.Audiobook];
 
     protected override Task OnNoFileChangesAsync(
         JobContext context, LibraryRootData root, CancellationToken cancellationToken) =>
@@ -47,6 +49,8 @@ public sealed class ScanBookJobHandler(
             root.Path, MediaCategory.ComicArchive, root.Recursive, excludedPaths, cancellationToken);
         var bookFiles = await FileDiscovery.DiscoverFilesAsync(
             root.Path, MediaCategory.Book, root.Recursive, excludedPaths, cancellationToken);
+        var audiobookFiles = await FileDiscovery.DiscoverFilesAsync(
+            root.Path, MediaCategory.Audiobook, root.Recursive, excludedPaths, cancellationToken);
 
         logger.LogInformation("ScanBook: found {Count} archive files in {Label}", archiveFiles.Count, root.Label);
 
@@ -55,8 +59,10 @@ public sealed class ScanBookJobHandler(
             root,
             archiveFiles,
             bookFiles,
+            audiobookFiles,
             reconcile: true,
             acquisitionId: null,
+            acquisitionTargetBookId: null,
             bestEffortHousekeeping: false,
             cancellationToken);
     }
@@ -78,17 +84,24 @@ public sealed class ScanBookJobHandler(
 
         var archiveFiles = placedPaths.Where(IsArchivePath).ToArray();
         var bookFiles = placedPaths.Where(path => BookFormatFor(path) is not null).ToArray();
-        if (archiveFiles.Length + bookFiles.Length != placedPaths.Count) {
+        var audiobookFiles = placedPaths.Where(IsAudiobookPath).ToArray();
+        if (archiveFiles.Length + bookFiles.Length + audiobookFiles.Length != placedPaths.Count) {
             throw new InvalidOperationException("The book import contains a file the book scanner does not support.");
         }
 
+        var acquisitionTargetBookId = acquisitionHints is null
+            ? null
+            : await acquisitionHints.ResolveTargetEntityIdAsync(
+                EntityKind.Book, acquisitionId, cancellationToken);
         await MaterializeBookPathsAsync(
             context,
             root,
             archiveFiles,
             bookFiles,
+            audiobookFiles,
             reconcile: false,
             acquisitionId,
+            acquisitionTargetBookId,
             bestEffortHousekeeping: true,
             cancellationToken);
     }
@@ -98,8 +111,10 @@ public sealed class ScanBookJobHandler(
         LibraryRootData root,
         IReadOnlyList<string> archiveFiles,
         IReadOnlyList<string> bookFiles,
+        IReadOnlyList<string> audiobookFiles,
         bool reconcile,
         Guid? acquisitionId,
+        Guid? acquisitionTargetBookId,
         bool bestEffortHousekeeping,
         CancellationToken cancellationToken) {
 
@@ -250,7 +265,7 @@ public sealed class ScanBookJobHandler(
             }
         }
 
-        await ScanSingleFileBooksAsync(
+        var readableBooksByDirectory = await ScanSingleFileBooksAsync(
             context,
             root,
             settings,
@@ -258,6 +273,19 @@ public sealed class ScanBookJobHandler(
             validBookPaths,
             archiveBookPaths,
             acquisitionId,
+            bestEffortHousekeeping,
+            cancellationToken);
+
+        await ScanAudiobooksAsync(
+            context,
+            root,
+            settings,
+            audiobookFiles,
+            readableBooksByDirectory,
+            validBookPaths,
+            reconcile,
+            acquisitionId,
+            acquisitionTargetBookId,
             bestEffortHousekeeping,
             cancellationToken);
 
@@ -276,7 +304,7 @@ public sealed class ScanBookJobHandler(
     /// for root-level files or a folder-backed book parent with child book entities.
     /// Records every source path so stale cleanup keeps the current hierarchy.
     /// </summary>
-    private async Task ScanSingleFileBooksAsync(
+    private async Task<IReadOnlyList<ReadableBookSource>> ScanSingleFileBooksAsync(
         JobContext context,
         LibraryRootData root,
         LibrarySettingsData settings,
@@ -287,8 +315,10 @@ public sealed class ScanBookJobHandler(
         bool bestEffortHousekeeping,
         CancellationToken cancellationToken) {
         if (bookFiles.Count == 0) {
-            return;
+            return [];
         }
+
+        var readableBooks = new List<ReadableBookSource>();
 
         logger.LogInformation("ScanBook: found {Count} single-file books in {Label}", bookFiles.Count, root.Label);
 
@@ -311,7 +341,7 @@ public sealed class ScanBookJobHandler(
         foreach (var looseItem in items
             .Where(item => item.AuthorPath is null)
             .OrderBy(item => item.SourcePath, NaturalPathComparer.Instance)) {
-            await UpsertSingleFileBookAsync(
+            var bookId = await UpsertSingleFileBookAsync(
                 context,
                 settings,
                 root,
@@ -322,6 +352,7 @@ public sealed class ScanBookJobHandler(
                 acquisitionId,
                 bestEffortHousekeeping,
                 cancellationToken);
+            readableBooks.Add(new ReadableBookSource(looseItem.SourcePath, bookId));
         }
 
         // Books under an `Author/` folder are grouped under a folder-backed author entity (like
@@ -355,7 +386,7 @@ public sealed class ScanBookJobHandler(
                 .OrderBy(item => item.SourcePath, NaturalPathComparer.Instance)
                 .ToArray();
             for (var index = 0; index < booksByAuthor.Length; index++) {
-                await UpsertSingleFileBookAsync(
+                var bookId = await UpsertSingleFileBookAsync(
                     context,
                     settings,
                     root,
@@ -366,11 +397,14 @@ public sealed class ScanBookJobHandler(
                     acquisitionId,
                     bestEffortHousekeeping,
                     cancellationToken);
+                readableBooks.Add(new ReadableBookSource(booksByAuthor[index].SourcePath, bookId));
             }
         }
+
+        return readableBooks;
     }
 
-    private async Task UpsertSingleFileBookAsync(
+    private async Task<Guid> UpsertSingleFileBookAsync(
         JobContext context,
         LibrarySettingsData settings,
         LibraryRootData root,
@@ -419,7 +453,173 @@ public sealed class ScanBookJobHandler(
             await QueueSingleFileBookJobsAsync(
                 context, settings, bookId, item.Title, cancellationToken);
         }
+
+        return bookId;
     }
+
+    private async Task ScanAudiobooksAsync(
+        JobContext context,
+        LibraryRootData root,
+        LibrarySettingsData settings,
+        IReadOnlyList<string> audiobookFiles,
+        IReadOnlyList<ReadableBookSource> readableBooks,
+        ISet<string> validBookPaths,
+        bool reconcile,
+        Guid? acquisitionId,
+        Guid? acquisitionTargetBookId,
+        bool bestEffortHousekeeping,
+        CancellationToken cancellationToken) {
+        if (audio is null) {
+            return;
+        }
+
+        var validAudioPathsByBook = new Dictionary<Guid, HashSet<string>>();
+        var groups = audiobookFiles
+            .Where(IsAudiobookPath)
+            .OrderBy(path => path, NaturalPathComparer.Instance)
+            .Select(path => new {
+                Path = path,
+                ReadableBookId = acquisitionTargetBookId ?? ResolveReadableBookId(path, readableBooks)
+            })
+            .GroupBy(
+                item => item.ReadableBookId is { } readableBookId
+                    ? $"book:{readableBookId}"
+                    : $"path:{AudiobookGroupKey(root.Path, item.Path)}",
+                StringComparer.Ordinal);
+        foreach (var group in groups.OrderBy(group => group.Key, NaturalPathComparer.Instance)) {
+            var first = group.First();
+            var hasReadableBook = first.ReadableBookId is { };
+            var bookId = first.ReadableBookId ?? Guid.Empty;
+            var sourcePath = AudiobookGroupKey(root.Path, first.Path);
+            var title = hasReadableBook
+                ? string.Empty
+                : AudiobookTitle(root.Path, sourcePath, first.Path);
+
+            if (!hasReadableBook) {
+                if (acquisitionHints is not null) {
+                    await acquisitionHints.BindWantedEntityAsync(
+                        EntityKind.Book, sourcePath, cancellationToken, acquisitionId);
+                }
+                bookId = await books.UpsertBookSeriesAsync(
+                    sourcePath,
+                    title,
+                    root.Id,
+                    root.IsNsfw,
+                    BookType.Novel,
+                    BookFormat.Audio,
+                    cancellationToken);
+                validBookPaths.Add(sourcePath);
+                await QueueBookAutoIdentifyAsync(context, settings, bookId, title, cancellationToken);
+            } else if (acquisitionId is not null && acquisitionHints is not null) {
+                await acquisitionHints.ApplyAsync(bookId, sourcePath, cancellationToken);
+            }
+
+            var tracks = group
+                .Select(item => item.Path)
+                .OrderBy(path => path, NaturalPathComparer.Instance)
+                .Select((path, index) => new AudioTrackUpsertItem(
+                    path,
+                    Path.GetFileNameWithoutExtension(path),
+                    bookId,
+                    index,
+                    SectionLabel: null,
+                    SectionOrder: 0,
+                    root.IsNsfw))
+                .ToArray();
+            var trackIds = await audio.UpsertAudioTracksBatchAsync(tracks, cancellationToken);
+            validAudioPathsByBook[bookId] = tracks
+                .Select(track => track.FilePath)
+                .ToHashSet(FileSystemPathComparison.Comparer);
+            for (var index = 0; index < trackIds.Count && index < tracks.Length; index++) {
+                if (bestEffortHousekeeping) {
+                    var trackIndex = index;
+                    await ImportedMaterializationHousekeeping.TryAsync(
+                        logger,
+                        "Imported audiobook is ready but its audio processing jobs could not be queued.",
+                        () => QueueAudiobookTrackJobsAsync(
+                            context, settings, trackIds[trackIndex], tracks[trackIndex].Title, cancellationToken));
+                } else {
+                    await QueueAudiobookTrackJobsAsync(
+                        context, settings, trackIds[index], tracks[index].Title, cancellationToken);
+                }
+            }
+
+            if (reconcile && !hasReadableBook) {
+                await audio.RemoveStaleAudioTracksInLibraryAsync(
+                    bookId,
+                    validAudioPathsByBook[bookId],
+                    cancellationToken);
+            }
+        }
+
+        if (reconcile) {
+            foreach (var readableBook in readableBooks) {
+                await audio.RemoveStaleAudioTracksInLibraryAsync(
+                    readableBook.EntityId,
+                    validAudioPathsByBook.GetValueOrDefault(readableBook.EntityId) ??
+                        new HashSet<string>(FileSystemPathComparison.Comparer),
+                    cancellationToken);
+            }
+        }
+    }
+
+    private async Task QueueAudiobookTrackJobsAsync(
+        JobContext context,
+        LibrarySettingsData settings,
+        Guid trackId,
+        string title,
+        CancellationToken cancellationToken) {
+        var hasTechnical = await downstreamNeeds.HasEntityTechnicalAsync(trackId, cancellationToken);
+        if (settings.AutoGenerateMetadata && !hasTechnical) {
+            await context.EnqueueIfNeededAsync(
+                EnqueueJobRequest.ForEntity(
+                    JobType.ProbeAudio, EntityKind.AudioTrack, trackId.ToString(), title, JobPriorities.Probe),
+                cancellationToken);
+        }
+
+        if (await FingerprintGating.ShouldFingerprintAsync(
+                downstreamNeeds, settings, trackId, cancellationToken)) {
+            await context.EnqueueIfNeededAsync(
+                EnqueueJobRequest.ForEntity(
+                    JobType.FingerprintAudio, EntityKind.AudioTrack, trackId.ToString(), title, JobPriorities.Fingerprint),
+                cancellationToken);
+        }
+
+        if (settings.AutoGeneratePreview && hasTechnical &&
+            !await downstreamNeeds.HasEntityFileAsync(trackId, EntityFileRole.Waveform, cancellationToken)) {
+            await context.EnqueueIfNeededAsync(
+                EnqueueJobRequest.ForEntity(
+                    JobType.GenerateAudioWaveform, EntityKind.AudioTrack, trackId.ToString(), title, JobPriorities.Waveform),
+                cancellationToken);
+        }
+    }
+
+    private static string AudiobookGroupKey(string rootPath, string sourcePath) {
+        var directory = Path.GetDirectoryName(sourcePath) ?? rootPath;
+        return FileSystemPathComparison.Equals(directory, rootPath) ? sourcePath : directory;
+    }
+
+    private static Guid? ResolveReadableBookId(
+        string audiobookPath,
+        IReadOnlyList<ReadableBookSource> readableBooks) {
+        var directory = Path.GetDirectoryName(audiobookPath) ?? string.Empty;
+        var candidates = readableBooks
+            .Where(book => FileSystemPathComparison.Equals(
+                Path.GetDirectoryName(book.SourcePath) ?? string.Empty,
+                directory))
+            .ToArray();
+        var audiobookStem = Path.GetFileNameWithoutExtension(audiobookPath);
+        var exact = candidates.FirstOrDefault(book => string.Equals(
+            Path.GetFileNameWithoutExtension(book.SourcePath),
+            audiobookStem,
+            StringComparison.OrdinalIgnoreCase));
+        return exact is not null ? exact.EntityId : candidates.Length == 1 ? candidates[0].EntityId : null;
+    }
+
+    private static string AudiobookTitle(string rootPath, string groupKey, string firstSourcePath) =>
+        FileSystemPathComparison.Equals(Path.GetDirectoryName(firstSourcePath) ?? rootPath, rootPath)
+            ? Path.GetFileNameWithoutExtension(firstSourcePath)
+            : Path.GetFileName(groupKey);
 
     private async Task QueueBookAutoIdentifyAsync(
         JobContext context,
@@ -493,6 +693,12 @@ public sealed class ScanBookJobHandler(
     private static bool IsArchivePath(string sourcePath) =>
         Path.GetExtension(sourcePath).Equals(".cbz", StringComparison.OrdinalIgnoreCase)
         || Path.GetExtension(sourcePath).Equals(".zip", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsAudiobookPath(string sourcePath) =>
+        Path.GetExtension(sourcePath) is var extension &&
+        (extension.Equals(".m4b", StringComparison.OrdinalIgnoreCase) ||
+         extension.Equals(".m4a", StringComparison.OrdinalIgnoreCase) ||
+         extension.Equals(".mp3", StringComparison.OrdinalIgnoreCase));
 
     private static BookType DefaultBookTypeFor(BookFormat format) =>
         format == BookFormat.Epub ? BookType.Novel : BookType.Book;
@@ -668,6 +874,8 @@ public sealed class ScanBookJobHandler(
 
     private static string? FirstNonEmpty(params string?[] values) =>
         values.Select(value => value?.Trim()).FirstOrDefault(value => !string.IsNullOrWhiteSpace(value));
+
+    private sealed record ReadableBookSource(string SourcePath, Guid EntityId);
 
     private sealed class NaturalPathComparer : IComparer<string> {
         public static readonly NaturalPathComparer Instance = new();

@@ -7,6 +7,14 @@ namespace Prismedia.Domain.Tests;
 
 public sealed class EntityCapabilityTests {
     [Fact]
+    public void BookTracksReadingAndListeningProgressIndependently() {
+        var book = new Book(Guid.NewGuid(), "Dune", BookType.Novel, null, BookFormat.Epub);
+
+        Assert.NotNull(book.GetCapability<CapabilityProgress>());
+        Assert.NotNull(book.GetCapability<CapabilityPlayback>());
+    }
+
+    [Fact]
     public void GetCapabilityReturnsAttachedReference() {
         var playback = new CapabilityPlayback();
         var video = new Video(

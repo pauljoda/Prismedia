@@ -197,6 +197,15 @@ public interface IImportFileMover {
 /// <summary>Stamps acquisition-supplied identity onto a freshly scanned book so auto-identify resolves it ID-first.</summary>
 public interface IAcquisitionHintApplier {
     /// <summary>
+    /// Resolves the existing Entity explicitly targeted by an acquisition, including an Entity that
+    /// already owns another source edition.
+    /// </summary>
+    Task<Guid?> ResolveTargetEntityIdAsync(
+        EntityKind kind,
+        Guid acquisitionId,
+        CancellationToken cancellationToken) => Task.FromResult<Guid?>(null);
+
+    /// <summary>
     /// Looks up an unconsumed import hint whose source path matches <paramref name="sourcePath"/> and, if found,
     /// writes its external/plugin ids onto the entity and marks the hint consumed. Returns true when applied.
     /// </summary>

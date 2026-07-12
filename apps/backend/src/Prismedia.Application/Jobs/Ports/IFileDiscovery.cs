@@ -44,5 +44,8 @@ public enum MediaCategory {
     ComicArchive,
 
     /// <summary>Single-file books (EPUB, PDF) discovered alongside comic archives in book roots.</summary>
-    Book
+    Book,
+
+    /// <summary>Audio editions discovered inside book roots.</summary>
+    Audiobook
 }

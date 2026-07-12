@@ -96,6 +96,34 @@ public sealed class MusicPlayerStateServiceTests {
         Assert.Equal(0.8, loaded2.Volume);
     }
 
+    [Fact]
+    public async Task AudiobookPlaybackOwnerSurvivesQueueRestore() {
+        var browserSessionId = Guid.NewGuid();
+        var bookId = Guid.NewGuid();
+        var trackId = Guid.NewGuid();
+        var settings = new InMemoryBrowserSessionPersistence();
+        var service = new MusicPlayerStateService(settings, new FakeEntityReadService(trackId));
+        var request = Request(trackId, 1) with {
+            Context = new MusicPlayerContext(
+                AlbumId: null,
+                AlbumTitle: null,
+                ArtistId: null,
+                ArtistName: null,
+                CoverUrl: null,
+                AlbumCoverUrls: null,
+                PlaybackOwnerEntityId: bookId,
+                PlaybackOwnerTitle: "Dune",
+                PlaybackOwnerEntityKind: EntityKind.Book)
+        };
+
+        await service.SaveAsync(browserSessionId, request, CancellationToken.None);
+        var loaded = await service.GetAsync(browserSessionId, CancellationToken.None);
+
+        Assert.Equal(bookId, loaded.Context?.PlaybackOwnerEntityId);
+        Assert.Equal("Dune", loaded.Context?.PlaybackOwnerTitle);
+        Assert.Equal(EntityKind.Book, loaded.Context?.PlaybackOwnerEntityKind);
+    }
+
     private static UpdateMusicPlayerStateRequest Request(Guid trackId, double volume) =>
         new(
             QueueTrackIds: [trackId],

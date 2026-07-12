@@ -58,6 +58,7 @@ public sealed class Book : Entity {
 
     protected override IEnumerable<EntityCapability> CreateDefaultCapabilities() =>
     [
-        new CapabilityProgress()
+        new CapabilityProgress(),
+        new CapabilityPlayback()
     ];
 }

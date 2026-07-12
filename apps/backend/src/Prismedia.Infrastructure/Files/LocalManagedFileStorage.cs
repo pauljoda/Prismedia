@@ -237,7 +237,7 @@ public sealed class LocalManagedFileStorage : IManagedFileStorage {
             ".mp4" or ".m4v" => MediaContentTypes.VideoMp4,
             ".webm" => MediaContentTypes.VideoWebm,
             ".mp3" => MediaContentTypes.AudioMpeg,
-            ".m4a" => MediaContentTypes.AudioMp4,
+            ".m4a" or ".m4b" => MediaContentTypes.AudioMp4,
             ".flac" => MediaContentTypes.AudioFlac,
             ".wav" => MediaContentTypes.AudioWav,
             ".txt" or ".log" or ".md" => "text/plain",

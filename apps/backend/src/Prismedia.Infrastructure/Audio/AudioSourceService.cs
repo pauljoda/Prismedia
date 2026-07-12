@@ -67,7 +67,7 @@ public sealed class AudioSourceService : IAudioSourceService {
     private static string MimeForExtension(string extension) {
         return extension.ToLowerInvariant() switch {
             ".mp3" => MediaContentTypes.AudioMpeg,
-            ".m4a" or ".aac" => MediaContentTypes.AudioMp4,
+            ".m4a" or ".m4b" or ".aac" => MediaContentTypes.AudioMp4,
             ".ogg" or ".oga" => MediaContentTypes.AudioOgg,
             ".opus" => MediaContentTypes.AudioOpus,
             ".flac" => MediaContentTypes.AudioFlac,

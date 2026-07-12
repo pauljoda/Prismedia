@@ -12,13 +12,22 @@ namespace Prismedia.Contracts.Playback;
 /// <param name="ArtistName">Artist name currently represented by the queue, when known.</param>
 /// <param name="CoverUrl">Fallback artwork URL for the current queue.</param>
 /// <param name="AlbumCoverUrls">Per-album artwork fallbacks for mixed-album queues.</param>
+/// <param name="PlaybackOwnerEntityId">
+/// Optional aggregate whose time-based resume state owns this queue. Audiobook queues set this to the
+/// parent Book while their individual files remain ordinary AudioTrack items.
+/// </param>
+/// <param name="PlaybackOwnerTitle">Display title for <paramref name="PlaybackOwnerEntityId"/>.</param>
+/// <param name="PlaybackOwnerEntityKind">Typed kind of the playback owner; never inferred from the id.</param>
 public sealed record MusicPlayerContext(
     Guid? AlbumId,
     string? AlbumTitle,
     Guid? ArtistId,
     string? ArtistName,
     string? CoverUrl,
-    IReadOnlyDictionary<Guid, string?>? AlbumCoverUrls);
+    IReadOnlyDictionary<Guid, string?>? AlbumCoverUrls,
+    Guid? PlaybackOwnerEntityId = null,
+    string? PlaybackOwnerTitle = null,
+    EntityKind? PlaybackOwnerEntityKind = null);
 
 /// <summary>
 /// Persisted browser-scoped music player state returned to the web client.

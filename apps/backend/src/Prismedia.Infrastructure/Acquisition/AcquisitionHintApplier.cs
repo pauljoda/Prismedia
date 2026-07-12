@@ -35,6 +35,22 @@ public sealed class AcquisitionHintApplier(
     private readonly IEntityLifecycleMutationLease _lifecycle =
         lifecycle ?? new EfEntityLifecycleMutationLease(db, new EfEntityHierarchyReader(db));
 
+    /// <inheritdoc />
+    public async Task<Guid?> ResolveTargetEntityIdAsync(
+        EntityKind kind,
+        Guid acquisitionId,
+        CancellationToken cancellationToken) {
+        var kindCode = kind.ToCode();
+        return await db.Acquisitions.AsNoTracking()
+            .Where(acquisition => acquisition.Id == acquisitionId && acquisition.EntityId != null)
+            .Join(
+                db.Entities.AsNoTracking().Where(entity => entity.KindCode == kindCode),
+                acquisition => acquisition.EntityId,
+                entity => entity.Id,
+                (_, entity) => (Guid?)entity.Id)
+            .FirstOrDefaultAsync(cancellationToken);
+    }
+
     public async Task<bool> ApplyAsync(Guid entityId, string sourcePath, CancellationToken cancellationToken) {
         if (string.IsNullOrWhiteSpace(sourcePath)) {
             return false;
