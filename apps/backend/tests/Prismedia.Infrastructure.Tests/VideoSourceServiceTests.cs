@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Prismedia.Contracts.Media;
 using Prismedia.Domain.Entities;
 using Prismedia.Infrastructure.Media.Processing;
 using Prismedia.Infrastructure.Persistence;
@@ -279,6 +280,191 @@ public sealed class VideoSourceServiceTests : IDisposable {
         Assert.True(video.RpuPresentFlag);
     }
 
+    [Fact]
+    public async Task ResolvesMovieContainerToItsChildVideo() {
+        await using var db = CreateContext();
+        var movieId = Guid.Parse("88888888-8888-8888-8888-888888888888");
+        var videoId = Guid.Parse("88888888-8888-8888-8888-888888888889");
+        var filePath = Path.Combine(_tempDir, "video.mp4");
+        await File.WriteAllTextAsync(filePath, "video-bytes");
+        db.Entities.Add(new EntityRow {
+            Id = movieId,
+            KindCode = EntityKindRegistry.Movie.Code,
+            Title = "Movie folder",
+            CreatedAt = DateTimeOffset.UtcNow,
+            UpdatedAt = DateTimeOffset.UtcNow
+        });
+        db.EntityFiles.Add(new EntityFileRow {
+            Id = Guid.NewGuid(),
+            EntityId = movieId,
+            Role = EntityFileRole.Source,
+            Path = _tempDir,
+            CreatedAt = DateTimeOffset.UtcNow,
+            UpdatedAt = DateTimeOffset.UtcNow
+        });
+        SeedVideoSource(db, videoId, filePath, MediaContentTypes.VideoMp4, parentId: movieId);
+        await db.SaveChangesAsync();
+
+        var service = new VideoSourceService(db);
+        var source = await service.GetSourceAsync(movieId, CancellationToken.None);
+
+        Assert.NotNull(source);
+        Assert.Equal(filePath, source.Path);
+    }
+
+    [Fact]
+    public async Task ResolvesFlatSeriesContainerToItsFirstChildVideo() {
+        await using var db = CreateContext();
+        var seriesId = Guid.Parse("11122233-1112-2223-3334-444555566677");
+        var videoId = Guid.Parse("11122233-1112-2223-3334-444555566678");
+        var filePath = Path.Combine(_tempDir, "clip-01.mp4");
+        await File.WriteAllTextAsync(filePath, "video-bytes");
+        db.Entities.Add(new EntityRow {
+            Id = seriesId,
+            KindCode = EntityKindRegistry.VideoSeries.Code,
+            Title = "Series folder",
+            CreatedAt = DateTimeOffset.UtcNow,
+            UpdatedAt = DateTimeOffset.UtcNow
+        });
+        db.EntityFiles.Add(new EntityFileRow {
+            Id = Guid.NewGuid(),
+            EntityId = seriesId,
+            Role = EntityFileRole.Source,
+            Path = _tempDir,
+            CreatedAt = DateTimeOffset.UtcNow,
+            UpdatedAt = DateTimeOffset.UtcNow
+        });
+        SeedVideoSource(db, videoId, filePath, MediaContentTypes.VideoMp4, parentId: seriesId, sortOrder: 0);
+        await db.SaveChangesAsync();
+
+        var service = new VideoSourceService(db);
+        var source = await service.GetSourceAsync(seriesId, CancellationToken.None);
+
+        Assert.NotNull(source);
+        Assert.Equal(filePath, source.Path);
+    }
+
+    [Fact]
+    public async Task ResolvesSeasonStructuredSeriesContainerThroughItsFirstSeason() {
+        await using var db = CreateContext();
+        var seriesId = Guid.Parse("22233344-2223-3334-4445-555666677788");
+        var seasonId = Guid.Parse("22233344-2223-3334-4445-555666677789");
+        var videoId = Guid.Parse("22233344-2223-3334-4445-555666677790");
+        var filePath = Path.Combine(_tempDir, "s01e01.mp4");
+        await File.WriteAllTextAsync(filePath, "video-bytes");
+        db.Entities.Add(new EntityRow {
+            Id = seriesId,
+            KindCode = EntityKindRegistry.VideoSeries.Code,
+            Title = "Series folder",
+            CreatedAt = DateTimeOffset.UtcNow,
+            UpdatedAt = DateTimeOffset.UtcNow
+        });
+        db.Entities.Add(new EntityRow {
+            Id = seasonId,
+            KindCode = EntityKindRegistry.VideoSeason.Code,
+            Title = "Season 1",
+            ParentEntityId = seriesId,
+            SortOrder = 0,
+            CreatedAt = DateTimeOffset.UtcNow,
+            UpdatedAt = DateTimeOffset.UtcNow
+        });
+        SeedVideoSource(db, videoId, filePath, MediaContentTypes.VideoMp4, parentId: seasonId, sortOrder: 0);
+        await db.SaveChangesAsync();
+
+        var service = new VideoSourceService(db);
+        var source = await service.GetSourceAsync(seriesId, CancellationToken.None);
+
+        Assert.NotNull(source);
+        Assert.Equal(filePath, source.Path);
+    }
+
+    [Fact]
+    public async Task ResolvesSeasonContainerToItsChildVideo() {
+        await using var db = CreateContext();
+        var seasonId = Guid.Parse("33344455-3334-4445-5556-666777889900");
+        var videoId = Guid.Parse("33344455-3334-4445-5556-666777889901");
+        var filePath = Path.Combine(_tempDir, "s02e01.mp4");
+        await File.WriteAllTextAsync(filePath, "video-bytes");
+        db.Entities.Add(new EntityRow {
+            Id = seasonId,
+            KindCode = EntityKindRegistry.VideoSeason.Code,
+            Title = "Season 2",
+            CreatedAt = DateTimeOffset.UtcNow,
+            UpdatedAt = DateTimeOffset.UtcNow
+        });
+        SeedVideoSource(db, videoId, filePath, MediaContentTypes.VideoMp4, parentId: seasonId, sortOrder: 0);
+        await db.SaveChangesAsync();
+
+        var service = new VideoSourceService(db);
+        var source = await service.GetSourceAsync(seasonId, CancellationToken.None);
+
+        Assert.NotNull(source);
+        Assert.Equal(filePath, source.Path);
+    }
+
+    [Fact]
+    public async Task ReturnsNullForEmptySeriesContainer() {
+        await using var db = CreateContext();
+        var seriesId = Guid.Parse("44455566-4445-5556-6667-778889900112");
+        db.Entities.Add(new EntityRow {
+            Id = seriesId,
+            KindCode = EntityKindRegistry.VideoSeries.Code,
+            Title = "Empty series",
+            CreatedAt = DateTimeOffset.UtcNow,
+            UpdatedAt = DateTimeOffset.UtcNow
+        });
+        await db.SaveChangesAsync();
+
+        var service = new VideoSourceService(db);
+        var source = await service.GetSourceAsync(seriesId, CancellationToken.None);
+
+        Assert.Null(source);
+    }
+
+    [Fact]
+    public async Task SkipsEmptySeasonToResolveALaterPlayableSeason() {
+        await using var db = CreateContext();
+        var seriesId = Guid.Parse("55566677-5556-6667-7778-889990011223");
+        var emptySeasonId = Guid.Parse("55566677-5556-6667-7778-889990011224");
+        var playableSeasonId = Guid.Parse("55566677-5556-6667-7778-889990011225");
+        var videoId = Guid.Parse("55566677-5556-6667-7778-889990011226");
+        var filePath = Path.Combine(_tempDir, "s02e01.mp4");
+        await File.WriteAllTextAsync(filePath, "video-bytes");
+        db.Entities.Add(new EntityRow {
+            Id = seriesId,
+            KindCode = EntityKindRegistry.VideoSeries.Code,
+            Title = "Series folder",
+            CreatedAt = DateTimeOffset.UtcNow,
+            UpdatedAt = DateTimeOffset.UtcNow
+        });
+        db.Entities.Add(new EntityRow {
+            Id = emptySeasonId,
+            KindCode = EntityKindRegistry.VideoSeason.Code,
+            Title = "Season 1 (not yet scanned)",
+            ParentEntityId = seriesId,
+            SortOrder = 0,
+            CreatedAt = DateTimeOffset.UtcNow,
+            UpdatedAt = DateTimeOffset.UtcNow
+        });
+        db.Entities.Add(new EntityRow {
+            Id = playableSeasonId,
+            KindCode = EntityKindRegistry.VideoSeason.Code,
+            Title = "Season 2",
+            ParentEntityId = seriesId,
+            SortOrder = 1,
+            CreatedAt = DateTimeOffset.UtcNow,
+            UpdatedAt = DateTimeOffset.UtcNow
+        });
+        SeedVideoSource(db, videoId, filePath, MediaContentTypes.VideoMp4, parentId: playableSeasonId, sortOrder: 0);
+        await db.SaveChangesAsync();
+
+        var service = new VideoSourceService(db);
+        var source = await service.GetSourceAsync(seriesId, CancellationToken.None);
+
+        Assert.NotNull(source);
+        Assert.Equal(filePath, source.Path);
+    }
+
     public void Dispose() {
         if (Directory.Exists(_tempDir)) {
             Directory.Delete(_tempDir, recursive: true);
@@ -297,11 +483,15 @@ public sealed class VideoSourceServiceTests : IDisposable {
         PrismediaDbContext db,
         Guid videoId,
         string path,
-        string? mimeType) {
+        string? mimeType,
+        Guid? parentId = null,
+        int? sortOrder = null) {
         db.Entities.Add(new EntityRow {
             Id = videoId,
             KindCode = EntityKindRegistry.Video.Code,
             Title = "Source",
+            ParentEntityId = parentId,
+            SortOrder = sortOrder,
             CreatedAt = DateTimeOffset.UtcNow,
             UpdatedAt = DateTimeOffset.UtcNow
         });
