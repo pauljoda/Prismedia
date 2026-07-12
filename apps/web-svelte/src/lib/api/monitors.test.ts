@@ -5,6 +5,7 @@ const generated = vi.hoisted(() => ({
   getEntityMonitorEligibility: vi.fn(),
   getEntityMonitorStates: vi.fn(),
   listCutoffUnmetWanted: vi.fn(),
+  listEntityMonitors: vi.fn(),
   listMissingWanted: vi.fn(),
   listMonitors: vi.fn(),
   pauseMonitor: vi.fn(),
@@ -16,7 +17,7 @@ const generated = vi.hoisted(() => ({
 
 vi.mock("$lib/api/generated/prismedia", () => generated);
 
-import { fetchEntityMonitorStates } from "./monitors";
+import { fetchEntityMonitors, fetchEntityMonitorStates } from "./monitors";
 
 describe("monitor API", () => {
   beforeEach(() => {
@@ -26,6 +27,19 @@ describe("monitor API", () => {
   it("does not call the server for an empty child collection", async () => {
     await expect(fetchEntityMonitorStates([])).resolves.toEqual([]);
     expect(generated.getEntityMonitorStates).not.toHaveBeenCalled();
+  });
+
+  it("loads every parallel monitor for one Book entity", async () => {
+    generated.listEntityMonitors.mockResolvedValue({
+      status: 200,
+      data: [{ id: "ebook-monitor" }, { id: "audiobook-monitor" }],
+    });
+
+    await expect(fetchEntityMonitors("book-1")).resolves.toEqual([
+      { id: "ebook-monitor" },
+      { id: "audiobook-monitor" },
+    ]);
+    expect(generated.listEntityMonitors).toHaveBeenCalledWith("book-1");
   });
 
   it("keeps large child collections within the server batch limit and preserves order", async () => {

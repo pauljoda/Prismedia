@@ -20,6 +20,8 @@
     acq,
     entity,
     fileManagement,
+    showEntityRequestControls = true,
+    showAcquisitionPanel = true,
     onCancelled,
     onImported,
   }: {
@@ -29,6 +31,10 @@
     entity?: { id: string; title: string; capabilities: EntityCapability[] } | null;
     /** Route follow-ups after managed deletion either removes or reverts the Entity. */
     fileManagement?: EntityFileManagementCallbacks;
+    /** False when an owner-specific surface provides its own monitor and request controls. */
+    showEntityRequestControls?: boolean;
+    /** False when a richer owner-specific surface renders the acquisition rows itself. */
+    showAcquisitionPanel?: boolean;
     /**
      * Called after the acquisition is cancelled, so the page can refresh. Cancel stops the download
      * only — the wanted placeholder and any monitoring stay, and the page keeps existing.
@@ -40,8 +46,8 @@
 
   const hasActions = $derived(
     acq.showSync ||
-      acq.showMonitor ||
-      acq.showSearch ||
+      (showEntityRequestControls && acq.showMonitor) ||
+      (showEntityRequestControls && acq.showSearch) ||
       acq.showSearchMissing ||
       (acq.showFileManagement && Boolean(entity && fileManagement)),
   );
@@ -65,7 +71,7 @@
             {acq.syncBusy ? "Checking…" : "Check for new works"}
           </Button>
         {/if}
-        {#if acq.showMonitor}
+        {#if showEntityRequestControls && acq.showMonitor}
           <Button
             type="button"
             variant={acq.monitorActive || acq.monitorDeletingFiles ? "primary" : "secondary"}
@@ -101,7 +107,7 @@
             {/if}
           </Button>
         {/if}
-        {#if acq.showSearch}
+        {#if showEntityRequestControls && acq.showSearch}
           <Button
             type="button"
             variant="primary"
@@ -151,7 +157,7 @@
       <p role="alert" class="text-[0.72rem] text-error-text">{acq.monitorError}</p>
     {/if}
 
-    {#if acq.showMonitor && acq.trackedVia}
+    {#if showEntityRequestControls && acq.showMonitor && acq.trackedVia}
       <p class="text-[0.72rem] text-text-muted">
         {acq.monitorActive && acq.showSync
           ? `Watching for new works daily via ${acq.trackedVia}.`
@@ -163,7 +169,7 @@
       </p>
     {/if}
 
-    {#if acq.showSearch}
+    {#if showEntityRequestControls && acq.showSearch}
       <p class="text-[0.72rem] text-text-muted">
         No file yet. Searching starts an auto-grabbing, monitored acquisition for this item.
       </p>
@@ -176,7 +182,7 @@
       />
     {/if}
 
-    {#if acq.acquisition}
+    {#if showAcquisitionPanel && acq.acquisition}
       {#key acq.acquisition.summary.id}
         <AcquisitionPanel
           acquisitionId={acq.acquisition.summary.id}

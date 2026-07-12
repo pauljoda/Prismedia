@@ -29,4 +29,14 @@ describe("Book detail audiobook experience", () => {
     expect(mutationSource).toContain("updateEntityPlayback(book.id");
     expect(mutationSource).not.toContain("durationSeconds");
   });
+
+  it("always exposes first-class ebook and audiobook management on the Book acquisition tab", () => {
+    expect(source).toContain("<BookRenditionAcquisitionCard");
+    expect(source).toContain("ebook: hasReadableContent");
+    expect(source).toContain("audiobook: audiobookTracks.length > 0");
+    expect(source).toContain("fetchAcquisitionsForEntity(targetBookId)");
+    expect(source).toContain("fetchEntityMonitors(targetBookId)");
+    expect(source).toContain("commitEntityRequest(book.id, rendition)");
+    expect(source).not.toContain('...(acq.visible\n        ? [{ id: "acquisition"');
+  });
 });

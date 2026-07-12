@@ -8,6 +8,8 @@ export class ApiError extends Error {
   constructor(
     message: string,
     public readonly status: number,
+    /** Stable generated problem code when the API returned Prismedia's typed problem shape. */
+    public readonly problemCode?: string,
   ) {
     super(message);
     this.name = "ApiError";
@@ -102,7 +104,8 @@ export async function fetchApi<T>(path: string, init?: AppRequestInit): Promise<
       handleUnauthorized();
     }
 
-    throw new ApiError(await responseErrorMessage(response), response.status);
+    const problem = await responseError(response);
+    throw new ApiError(problem.message, response.status, problem.code);
   }
 
   const text = await response.text();
@@ -153,7 +156,8 @@ export async function orvalFetch<TData>(
       handleUnauthorized();
     }
 
-    throw new ApiError(await responseErrorMessage(response), response.status);
+    const problem = await responseError(response);
+    throw new ApiError(problem.message, response.status, problem.code);
   }
 
   const text = await response.text();
@@ -172,15 +176,23 @@ export async function orvalFetch<TData>(
   } as TData;
 }
 
-async function responseErrorMessage(response: Response): Promise<string> {
+async function responseError(response: Response): Promise<{ message: string; code?: string }> {
   const text = await response.text();
   if (!text) {
-    return `API ${response.status}: ${response.statusText}`;
+    return { message: `API ${response.status}: ${response.statusText}` };
   }
 
   try {
-    return problemMessage(JSON.parse(text)) ?? text;
+    const data: unknown = JSON.parse(text);
+    const code = problemCode(data);
+    return { message: problemMessage(data) ?? text, ...(code ? { code } : {}) };
   } catch {
-    return problemMessage(text) ?? `API ${response.status}: ${response.statusText}`;
+    return { message: problemMessage(text) ?? `API ${response.status}: ${response.statusText}` };
   }
+}
+
+function problemCode(data: unknown): string | undefined {
+  if (!data || typeof data !== "object") return undefined;
+  const value = (data as Record<string, unknown>).code;
+  return typeof value === "string" && value.trim() ? value : undefined;
 }

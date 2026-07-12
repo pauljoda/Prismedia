@@ -3,7 +3,7 @@
   import { page } from "$app/state";
   import { ChevronLeft, Loader2, RefreshCw, Send } from "@lucide/svelte";
   import { Button, Select } from "@prismedia/ui-svelte";
-  import { REQUEST_COMMIT_OUTCOME, REQUEST_REVIEW_SELECTION } from "$lib/api/generated/codes";
+  import { PROBLEM_CODE, REQUEST_COMMIT_OUTCOME, REQUEST_REVIEW_SELECTION } from "$lib/api/generated/codes";
   import type {
     MonitorPresetCode,
     RequestMediaKindCode,
@@ -208,7 +208,7 @@
         : null;
       await goto(singleHref ?? "/request");
     } catch (err) {
-      if (err instanceof ApiError && err.status === 409) {
+      if (err instanceof ApiError && err.problemCode === PROBLEM_CODE.requestProposalChanged) {
         reviewChanged = true;
         error = "This proposal changed after you reviewed it. Reload the review and confirm your selection again.";
       } else {

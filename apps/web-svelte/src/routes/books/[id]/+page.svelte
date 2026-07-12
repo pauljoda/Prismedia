@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { CAPABILITY_KIND, PROGRESS_UNIT } from "$lib/api/generated/codes";
+  import { CAPABILITY_KIND, PROGRESS_UNIT, type BookRenditionCode } from "$lib/api/generated/codes";
   import { onMount } from "svelte";
   import { afterNavigate, goto } from "$app/navigation";
   import { page } from "$app/state";
@@ -7,13 +7,17 @@
   import { formatDuration } from "@prismedia/contracts";
   import EntityDetailSkeleton from "$lib/components/entities/EntityDetailSkeleton.svelte";
   import MediaProgressPanel from "$lib/components/MediaProgressPanel.svelte";
+  import BookRenditionAcquisitionCard from "$lib/components/acquisitions/BookRenditionAcquisitionCard.svelte";
   import EntityAcquisitionCard from "$lib/components/acquisitions/EntityAcquisitionCard.svelte";
   import { useEntityAcquisition } from "$lib/components/acquisitions/use-entity-acquisition.svelte";
   import { requestableDirectChildCards } from "$lib/requests/requestable-entity-children";
   import { getCapability, isWanted } from "$lib/api/capabilities";
+  import { fetchAcquisitionsForEntity } from "$lib/api/acquisitions";
+  import { fetchEntityMonitors, resumeMonitor, stopMonitor } from "$lib/api/monitors";
+  import { commitEntityRequest } from "$lib/api/requests";
   import { updateEntityPlayback, updateEntityProgress } from "$lib/api/playback";
   import { fetchBook, type BookDetail } from "$lib/api/media";
-  import { BookFormat } from "$lib/api/generated/model";
+  import { BookFormat, type AcquisitionDetail, type MonitorView } from "$lib/api/generated/model";
   import { fetchEntity, type EntityCardFull } from "$lib/api/entities";
   import {
     updateEntityFlags,
@@ -65,6 +69,8 @@
   import { useAppChrome, type AppBreadcrumb } from "$lib/stores/app-chrome.svelte";
   import { useAudioPlayback } from "$lib/stores/audio-playback.svelte";
   import { numberValue } from "$lib/utils/format";
+  import { acquisitionStatusShouldPoll } from "$lib/requests/acquisition-status";
+  import { monitorIsActive } from "$lib/requests/monitor-status";
 
   type LoadState = "loading" | "ready" | "error";
 
@@ -97,6 +103,8 @@
   let relationshipCredits = $state<EntityDetailCredit[]>([]);
   let relationshipStudio = $state<EntityDetailCredit | null>(null);
   let relationshipTags = $state<EntityDetailTag[]>([]);
+  let bookRenditionAcquisitions = $state.raw<AcquisitionDetail[]>([]);
+  let bookRenditionMonitors = $state.raw<MonitorView[]>([]);
   let selectedChapterId: string | null = $state(null);
   let loadedBookId: string | null = null;
   let loadToken = 0;
@@ -173,7 +181,6 @@
       (book?.format === BookFormat["image-archive"] &&
         (readerPageCount > 0 || chapterDetails.length > 0 || volumeCards.length > 0)),
   );
-
   const card = $derived.by((): EntityDetailCardFull | null => {
     if (!book) return null;
     return {
@@ -192,7 +199,7 @@
     entityId: () => book?.id,
     capabilities: () => book?.capabilities,
     childCards: () => requestableDirectChildCards(book?.id, childBookCards),
-    onChanged: () => loadBook(bookId, { showLoading: false }),
+    onChanged: handleBookAcquisitionChanged,
     onPruned: () => goto("/books"),
   });
   const fileManagement = {
@@ -275,9 +282,7 @@
         sections: ["stats", "dates", "classification", "source", "links"],
         layout: "grid",
       },
-      ...(acq.visible
-        ? [{ id: "acquisition", label: "Acquisition", icon: CloudDownload, sections: ["acquisition"] }]
-        : []),
+      { id: "acquisition", label: "Acquisition", icon: CloudDownload, sections: ["acquisition"] },
     ];
   });
 
@@ -302,6 +307,12 @@
   });
 
   $effect(() => {
+    if (!bookRenditionAcquisitions.some((item) => acquisitionStatusShouldPoll(item.summary.status))) return;
+    const timer = setInterval(() => void refreshBookAcquisitionState().catch(() => {}), 5000);
+    return () => clearInterval(timer);
+  });
+
+  $effect(() => {
     if (!book) return;
     const crumbs: AppBreadcrumb[] = [{ label: "Books", href: "/books" }];
     // When the book sits under an author, surface it ("Books / Andy Weir / Project Hail Mary").
@@ -318,7 +329,11 @@
     if (options.showLoading || !book) loadState = "loading";
     errorMessage = null;
     try {
-      const nextBook = await fetchBook(targetBookId);
+      const [nextBook, nextAcquisitions, nextMonitors] = await Promise.all([
+        fetchBook(targetBookId),
+        fetchAcquisitionsForEntity(targetBookId).catch(() => []),
+        fetchEntityMonitors(targetBookId).catch(() => []),
+      ]);
       const parentId = nextBook.parentEntityId;
       const [relationships, chapters, parentThumbs] = await Promise.all([
         hydrateStandardRelationshipCards(nextBook),
@@ -344,6 +359,8 @@
       relationshipCredits = relationships.credits;
       relationshipStudio = relationships.studio;
       relationshipTags = relationships.relationshipTags;
+      bookRenditionAcquisitions = nextAcquisitions;
+      bookRenditionMonitors = nextMonitors;
 
       const nextProgress = bookEntityProgressDisplay(nextBook, combineChapterSummaries(chapters, progressSummary));
       selectedChapterId = nextProgress?.chapterId ?? chapters[0]?.detail.id ?? null;
@@ -354,6 +371,45 @@
       errorMessage = err instanceof Error ? err.message : String(err);
       loadState = "error";
     }
+  }
+
+  async function refreshBookAcquisitionState(): Promise<void> {
+    const targetBookId = bookId;
+    if (!targetBookId) return;
+    const [nextAcquisitions, nextMonitors] = await Promise.all([
+      fetchAcquisitionsForEntity(targetBookId),
+      fetchEntityMonitors(targetBookId),
+    ]);
+    if (bookId !== targetBookId) return;
+    bookRenditionAcquisitions = nextAcquisitions;
+    bookRenditionMonitors = nextMonitors;
+    await acq.refresh();
+  }
+
+  async function handleBookAcquisitionChanged(): Promise<void> {
+    await Promise.all([
+      loadBook(bookId, { showLoading: false }),
+      refreshBookAcquisitionState(),
+    ]);
+  }
+
+  async function requestBookRendition(rendition: BookRenditionCode): Promise<void> {
+    if (!book) return;
+    await commitEntityRequest(book.id, rendition);
+    await refreshBookAcquisitionState().catch(() => {});
+  }
+
+  async function toggleBookRenditionMonitor(monitor: MonitorView): Promise<void> {
+    if (monitorIsActive(monitor)) {
+      const outcome = await stopMonitor(monitor.id);
+      if (outcome.entityPruned) {
+        await goto("/books");
+        return;
+      }
+    } else {
+      await resumeMonitor(monitor.id);
+    }
+    await refreshBookAcquisitionState().catch(() => {});
   }
 
   async function hydrateChapters(nextBook: BookDetail): Promise<ChapterDetail[]> {
@@ -730,8 +786,21 @@
             {acq}
             entity={book}
             {fileManagement}
+            showEntityRequestControls={false}
+            showAcquisitionPanel={false}
             onCancelled={handleAcquisitionCancelled}
             onImported={() => loadBook(bookId, { showLoading: false })}
+          />
+          <BookRenditionAcquisitionCard
+            ownership={{
+              ebook: hasReadableContent,
+              audiobook: audiobookTracks.length > 0,
+            }}
+            acquisitions={bookRenditionAcquisitions}
+            monitors={bookRenditionMonitors}
+            onRequest={requestBookRendition}
+            onToggleMonitor={toggleBookRenditionMonitor}
+            onChanged={handleBookAcquisitionChanged}
           />
         {/if}
       {/snippet}

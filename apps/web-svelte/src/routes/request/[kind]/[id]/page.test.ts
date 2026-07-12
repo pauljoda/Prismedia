@@ -6,6 +6,7 @@ import {
   ENTITY_KIND,
   EXTERNAL_ID_PROVIDER,
   MONITOR_PRESET,
+  PROBLEM_CODE,
   PROPOSAL_KIND,
   REQUEST_COMMIT_OUTCOME,
   REQUEST_MEDIA_KIND,
@@ -306,7 +307,9 @@ describe("reviewed request route", () => {
       `plugin=${review.pluginId}&namespace=${review.externalIdentity.namespace}`,
     );
     mocks.reviewRequest.mockResolvedValue(review);
-    mocks.commitReviewedRequest.mockRejectedValue(new ApiError("Proposal changed", 409));
+    mocks.commitReviewedRequest.mockRejectedValue(
+      new ApiError("Proposal changed", 409, PROBLEM_CODE.requestProposalChanged),
+    );
 
     render(Page);
 
@@ -316,6 +319,26 @@ describe("reviewed request route", () => {
     expect(await screen.findByText(/proposal changed after you reviewed it/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Reload review" })).toBeInTheDocument();
     expect(mocks.goto).not.toHaveBeenCalled();
+  });
+
+  it("surfaces a non-revision request conflict without falsely claiming the proposal changed", async () => {
+    const review = movieReview();
+    setRoute(
+      REQUEST_MEDIA_KIND.movie,
+      review.externalIdentity.value,
+      `plugin=${review.pluginId}&namespace=${review.externalIdentity.namespace}`,
+    );
+    mocks.reviewRequest.mockResolvedValue(review);
+    mocks.commitReviewedRequest.mockRejectedValue(new ApiError("This rendition is already requested.", 409));
+
+    render(Page);
+
+    await screen.findByText("Movie Default");
+    await fireEvent.click(screen.getByRole("button", { name: "Request" }));
+
+    expect(await screen.findByText("This rendition is already requested.")).toBeInTheDocument();
+    expect(screen.queryByText(/proposal changed after you reviewed it/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Reload review" })).not.toBeInTheDocument();
   });
 
   it("requires the plugin and namespace query contract", async () => {

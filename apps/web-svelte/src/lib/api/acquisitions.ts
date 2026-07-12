@@ -19,6 +19,7 @@ import {
   getAcquisitionForEntity,
   getAcquisitionTransfer,
   listAcquisitionHistory,
+  listAcquisitionsForEntity,
   listAcquisitionProfiles,
   listAcquisitions,
   listDownloadQueue,
@@ -136,6 +137,14 @@ export async function fetchAcquisitionForEntity(entityId: string): Promise<Acqui
   const response = await getAcquisitionForEntity(entityId);
   if (response.status === 404) return null;
   return unwrapGenerated(response, "Failed to load the entity's acquisition");
+}
+
+/** Every direct acquisition for an Entity, including parallel ebook and audiobook Book rows. */
+export async function fetchAcquisitionsForEntity(entityId: string): Promise<AcquisitionDetail[]> {
+  return unwrapGenerated(
+    await listAcquisitionsForEntity(entityId),
+    "Failed to load the entity's acquisitions",
+  );
 }
 
 export async function createAcquisition(payload: AcquisitionCreateRequest): Promise<AcquisitionSummary> {

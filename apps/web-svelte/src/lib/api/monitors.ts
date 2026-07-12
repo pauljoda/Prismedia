@@ -5,6 +5,7 @@ import {
   listCutoffUnmetWanted,
   listMissingWanted,
   listMonitors,
+  listEntityMonitors,
   pauseMonitor as pauseMonitorRequest,
   resumeMonitor as resumeMonitorRequest,
   startEntityMonitor as startEntityMonitorRequest,
@@ -98,6 +99,11 @@ export async function fetchEntityMonitor(entityId: string): Promise<MonitorView 
   const response = await getEntityMonitor(entityId);
   if (response.status === 404) return null;
   return unwrapGenerated(response, "Failed to load monitoring state");
+}
+
+/** Every direct monitor for an Entity, including independent Book rendition intent. */
+export async function fetchEntityMonitors(entityId: string): Promise<MonitorView[]> {
+  return unwrapGenerated(await listEntityMonitors(entityId), "Failed to load monitoring states");
 }
 
 export async function stopMonitor(monitorId: string): Promise<MonitorStopResponse> {
