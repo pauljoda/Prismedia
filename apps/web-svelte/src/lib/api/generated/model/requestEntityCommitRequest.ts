@@ -4,6 +4,7 @@
  * Prismedia.Api | v1
  * OpenAPI spec version: 1.0.0
  */
+import type { RequestEntityCommitRequestBookRendition } from './requestEntityCommitRequestBookRendition';
 
 export interface RequestEntityCommitRequest {
   entityId: string;
@@ -11,4 +12,5 @@ export interface RequestEntityCommitRequest {
   targetLibraryRootId?: string | null;
   /** @nullable */
   profileId?: string | null;
+  bookRendition?: RequestEntityCommitRequestBookRendition;
 }

@@ -12527,6 +12527,42 @@ export const getAcquisitionForEntity = async (entityId: string, options?: Reques
 
 
 
+export type listAcquisitionsForEntityResponse200 = {
+  data: AcquisitionDetail[]
+  status: 200
+}
+
+export type listAcquisitionsForEntityResponseSuccess = (listAcquisitionsForEntityResponse200) & {
+  headers: Headers;
+};
+;
+
+export type listAcquisitionsForEntityResponse = (listAcquisitionsForEntityResponseSuccess)
+
+export const getListAcquisitionsForEntityUrl = (entityId: string,) => {
+
+
+
+
+  return `/api/acquisitions/for-entity/${entityId}/all`
+}
+
+/**
+ * @summary Lists every direct acquisition backing a library Entity, including independent ebook and audiobook rows.
+ */
+export const listAcquisitionsForEntity = async (entityId: string, options?: RequestInit): Promise<listAcquisitionsForEntityResponse> => {
+
+  return orvalFetch<listAcquisitionsForEntityResponse>(getListAcquisitionsForEntityUrl(entityId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
 export type queueAcquisitionResponse200 = {
   data: AcquisitionDetail
   status: 200
@@ -13897,6 +13933,42 @@ export const getGetEntityMonitorUrl = (entityId: string,) => {
 export const getEntityMonitor = async (entityId: string, options?: RequestInit): Promise<getEntityMonitorResponse> => {
 
   return orvalFetch<getEntityMonitorResponse>(getGetEntityMonitorUrl(entityId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type listEntityMonitorsResponse200 = {
+  data: MonitorView[]
+  status: 200
+}
+
+export type listEntityMonitorsResponseSuccess = (listEntityMonitorsResponse200) & {
+  headers: Headers;
+};
+;
+
+export type listEntityMonitorsResponse = (listEntityMonitorsResponseSuccess)
+
+export const getListEntityMonitorsUrl = (entityId: string,) => {
+
+
+
+
+  return `/api/monitors/for-entity/${entityId}/all`
+}
+
+/**
+ * @summary Lists every direct monitor targeting an Entity, including independent ebook and audiobook intent.
+ */
+export const listEntityMonitors = async (entityId: string, options?: RequestInit): Promise<listEntityMonitorsResponse> => {
+
+  return orvalFetch<listEntityMonitorsResponse>(getListEntityMonitorsUrl(entityId),
   {
     ...options,
     method: 'GET'

@@ -407,6 +407,7 @@ export * from './requestCommitRequest';
 export * from './requestCommitRequestPreset';
 export * from './requestCommitResponse';
 export * from './requestEntityCommitRequest';
+export * from './requestEntityCommitRequestBookRendition';
 export * from './requestEntityReviewRequest';
 export * from './requestMediaKind';
 export * from './requestPluginSearchRequest';
