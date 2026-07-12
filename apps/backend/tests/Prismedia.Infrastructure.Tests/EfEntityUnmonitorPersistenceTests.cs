@@ -129,6 +129,27 @@ public sealed class EfEntityUnmonitorPersistenceTests {
     }
 
     [Fact]
+    public async Task StoppingAudiobookDoesNotSuppressAnOwnedEbookWithoutItsOwnMonitor() {
+        await using var db = CreateContext();
+        var book = AddEntity(db, EntityKind.Book, "A Game of Thrones", wanted: false);
+        AddSource(db, book);
+        AddIdentity(db, book, "openlibrarywork", "OL257943W");
+        var audiobookAcquisition = AddAcquisition(
+            db, book, AcquisitionStatus.AwaitingSelection, BookRendition.Audiobook);
+        var audiobookMonitor = AddAcquisitionMonitor(
+            db, audiobookAcquisition, EntityKind.Book, BookRendition.Audiobook);
+        await db.SaveChangesAsync();
+        var persistence = new EfEntityUnmonitorPersistence(db, new EfEntityHierarchyReader(db));
+
+        var scope = (await persistence.ResolveAsync(audiobookMonitor, CancellationToken.None))!;
+
+        Assert.Equal(BookRendition.Audiobook, scope.BookRendition);
+        Assert.Null(scope.RootSuppression);
+        Assert.True(await persistence.ClaimAsync(scope, CancellationToken.None));
+        Assert.Empty(await db.WantedSuppressions.ToArrayAsync());
+    }
+
+    [Fact]
     public async Task ClaimPublishesTheChildSuppressionBeforeReturning() {
         await using var db = CreateContext();
         var artist = AddEntity(db, EntityKind.MusicArtist, "Artist", wanted: false);

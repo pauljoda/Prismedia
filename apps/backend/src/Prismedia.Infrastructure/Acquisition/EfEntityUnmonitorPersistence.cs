@@ -86,23 +86,9 @@ public sealed class EfEntityUnmonitorPersistence(
             .Select(row => row.Id)
             .ToArrayAsync(cancellationToken);
 
-        var parallelBookIntent = false;
-        if (renditionScoped && rootEntityId is { } bookId) {
-            var parallelAcquisitionIds = await db.Acquisitions.AsNoTracking()
-                .Where(row => row.EntityId == bookId
-                    && row.BookRendition != null
-                    && row.BookRendition != bookRendition)
-                .Select(row => row.Id)
-                .ToArrayAsync(cancellationToken);
-            parallelBookIntent = await db.Monitors.AsNoTracking().AnyAsync(row =>
-                row.BookRendition != null
-                && row.BookRendition != bookRendition
-                && (row.EntityId == bookId
-                    || row.AcquisitionId != null
-                        && parallelAcquisitionIds.Contains(row.AcquisitionId.Value)),
-                cancellationToken);
-        }
-        var rootSuppression = (!renditionScoped || !parallelBookIntent) && rootEntityId is { } rootId
+        // Suppressions are currently identity-wide. A rendition-scoped stop must therefore never publish
+        // one: doing so would also suppress the independently owned/requestable opposite Book rendition.
+        var rootSuppression = !renditionScoped && rootEntityId is { } rootId
             ? await ResolveRootSuppressionAsync(rootId, cancellationToken)
             : null;
         var acquisitionStatuses = await ResolveAcquisitionStatusesAsync(
