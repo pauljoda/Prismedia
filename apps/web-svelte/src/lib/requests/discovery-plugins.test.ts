@@ -11,6 +11,12 @@ describe("Discover plugin capabilities", () => {
     expect(discoverSearchSupport(openLibrary, REQUEST_MEDIA_KIND.book, false)).toBeNull();
   });
 
+  it("reuses Book provider capabilities for audiobook discovery", () => {
+    const openLibrary = provider("openlibrary", ENTITY_KIND.book);
+
+    expect(discoverSearchSupport(openLibrary, REQUEST_MEDIA_KIND.audiobook, false)).not.toBeNull();
+  });
+
   it("requires installed, enabled, authenticated Search plus LookupId with a schema", () => {
     const valid = provider("valid", ENTITY_KIND.movie);
     const searchOnly = provider("search-only", ENTITY_KIND.movie, [IDENTIFY_ACTION.search]);

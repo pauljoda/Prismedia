@@ -227,7 +227,7 @@
 
   function activateCandidate(candidate: EntitySearchCandidate, candidateKey: string) {
     const entry = candidateEntries.find((item) => item.candidate === candidate);
-    if (!entry) return;
+    if (!entry || !selectedKind) return;
 
     activeCandidateKey = candidateKey;
     const { result } = entry;
@@ -238,7 +238,7 @@
     if (back?.trim()) query.set("back", back.trim());
 
     void goto(
-      `/request/${encodeURIComponent(result.kind)}/${encodeURIComponent(result.externalIdentity.value)}?${query.toString()}`,
+      `/request/${encodeURIComponent(selectedKind)}/${encodeURIComponent(result.externalIdentity.value)}?${query.toString()}`,
     );
   }
 </script>

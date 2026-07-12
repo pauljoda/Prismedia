@@ -233,6 +233,52 @@ describe("reviewed request route", () => {
     expect(mocks.goto).toHaveBeenCalledWith("/movies/movie-entity");
   });
 
+  it("commits audiobook intent with Book targets and lands on the Book entity", async () => {
+    const review = audiobookReview();
+    setRoute(
+      REQUEST_MEDIA_KIND.audiobook,
+      review.externalIdentity.value,
+      `plugin=${review.pluginId}&namespace=${review.externalIdentity.namespace}`,
+    );
+    mocks.reviewRequest.mockResolvedValue(review);
+    mocks.fetchLibraryRoots.mockResolvedValue([bookRoot()]);
+    mocks.fetchAcquisitionProfiles.mockResolvedValue([bookProfile()]);
+    mocks.commitReviewedRequest.mockResolvedValue({
+      containerEntityId: null,
+      items: [{
+        externalId: review.externalIdentity.value,
+        title: "Project Hail Mary",
+        outcome: REQUEST_COMMIT_OUTCOME.requested,
+        entityId: "book-entity",
+        acquisitionId: "acquisition-audiobook",
+      }],
+    });
+
+    render(Page);
+
+    await screen.findByText("Book Default");
+    expect(mocks.reviewRequest).toHaveBeenCalledWith({
+      kind: REQUEST_MEDIA_KIND.audiobook,
+      pluginId: "open-library",
+      externalIdentity: review.externalIdentity,
+      hideNsfw: true,
+    });
+    await fireEvent.click(screen.getByRole("button", { name: "Request" }));
+
+    await waitFor(() => {
+      expect(mocks.commitReviewedRequest).toHaveBeenCalledWith({
+        kind: REQUEST_MEDIA_KIND.audiobook,
+        pluginId: "open-library",
+        rootExternalIdentity: review.externalIdentity,
+        proposalRevision: "audiobook-revision",
+        selectedProposalIds: ["audiobook-root"],
+        targetLibraryRootId: "root-books",
+        profileId: "profile-book",
+      }, true);
+    });
+    expect(mocks.goto).toHaveBeenCalledWith("/books/book-entity");
+  });
+
   it("treats sibling volumes as direct selections even though a book is not a container kind", () => {
     const selection = deriveRequestReviewSelection(bookSiblingReview());
 
@@ -373,6 +419,26 @@ function movieReview(): RequestReviewResponse {
   };
 }
 
+function audiobookReview(): RequestReviewResponse {
+  const root = proposal("audiobook-root", PROPOSAL_KIND.book, "Project Hail Mary");
+  const externalIdentity = { namespace: "openlibrary", value: "works/OL:Project:Hail:Mary" };
+  return {
+    pluginId: "open-library",
+    externalIdentity,
+    entityKind: ENTITY_KIND.book,
+    kind: REQUEST_MEDIA_KIND.audiobook,
+    proposal: root,
+    revision: "audiobook-revision",
+    targets: [{
+      proposalId: root.proposalId,
+      kind: REQUEST_MEDIA_KIND.audiobook,
+      entityKind: ENTITY_KIND.book,
+      externalIdentity,
+      requestable: true,
+    }],
+  };
+}
+
 function bookSiblingReview(): RequestReviewResponse {
   const volumeOne = proposal("book-volume-1", PROPOSAL_KIND.book, "Volume 1");
   const volumeTwo = proposal("book-volume-2", PROPOSAL_KIND.book, "Volume 2");
@@ -462,6 +528,34 @@ function videoRoot(): LibraryRoot {
     createdAt: "2026-07-09T00:00:00Z",
     updatedAt: "2026-07-09T00:00:00Z",
   };
+}
+
+function bookRoot(): LibraryRoot {
+  return {
+    id: "root-books",
+    path: "/media/books",
+    label: "Book Library",
+    enabled: true,
+    recursive: true,
+    scanVideos: false,
+    scanImages: false,
+    scanAudio: false,
+    scanBooks: true,
+    isNsfw: false,
+    lastScannedAt: null,
+    createdAt: "2026-07-09T00:00:00Z",
+    updatedAt: "2026-07-09T00:00:00Z",
+  };
+}
+
+function bookProfile(): BookAcquisitionProfileView {
+  return {
+    id: "profile-book",
+    kind: ENTITY_KIND.book,
+    displayName: "Book Default",
+    isDefault: true,
+    targetLibraryRootId: "root-books",
+  } as BookAcquisitionProfileView;
 }
 
 function tvProfile(): BookAcquisitionProfileView {

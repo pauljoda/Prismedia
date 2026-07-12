@@ -113,6 +113,43 @@ describe("RequestDiscover", () => {
     );
   });
 
+  it("preserves audiobook intent when a Book provider returns a Book-shaped result", async () => {
+    searchRequestsByPlugin.mockResolvedValue({
+      results: [result(
+        "Project Hail Mary",
+        "works/OL:Project:Hail:Mary",
+        "openlibrary",
+        "openlibrary",
+        REQUEST_MEDIA_KIND.book,
+      )],
+      providerErrors: [],
+    });
+
+    render(RequestDiscoverHarness);
+    await waitFor(() => expect(fetchPluginProviders).toHaveBeenCalledOnce());
+    await fireEvent.click(screen.getByRole("button", { name: "Audiobook" }));
+
+    expect(await screen.findByRole("button", { name: "Source: Open Library" })).toBeInTheDocument();
+    await fireEvent.input(screen.getByLabelText("Book title"), {
+      target: { value: "  Project Hail Mary  " },
+    });
+    await fireEvent.click(screen.getByRole("button", { name: "Search" }));
+
+    await waitFor(() => {
+      expect(searchRequestsByPlugin).toHaveBeenCalledWith({
+        kind: REQUEST_MEDIA_KIND.audiobook,
+        pluginId: "openlibrary",
+        fields: { title: "Project Hail Mary" },
+        hideNsfw: true,
+      });
+    });
+    await fireEvent.click(await screen.findByRole("button", { name: "Use Project Hail Mary (2022)" }));
+
+    expect(goto).toHaveBeenCalledWith(
+      "/request/audiobook/works%2FOL%3AProject%3AHail%3AMary?plugin=openlibrary&namespace=openlibrary",
+    );
+  });
+
   it("shows a direct no-provider state for a selected kind", async () => {
     fetchPluginProviders.mockResolvedValue([tmdb()]);
     render(RequestDiscoverHarness);
@@ -207,11 +244,12 @@ function result(
   value: string,
   pluginId: string,
   namespace: string,
+  kind: RequestSearchResult["kind"] = REQUEST_MEDIA_KIND.series,
 ): RequestSearchResult {
   return {
     serviceId: pluginId,
     source: REQUEST_PROVIDER_KIND.plugin,
-    kind: REQUEST_MEDIA_KIND.series,
+    kind,
     externalId: value,
     title,
     subtitle: null,

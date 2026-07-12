@@ -18,6 +18,7 @@ describe("request helpers", () => {
 
   it("maps every request kind to the library entity kind it becomes (virtual entities)", () => {
     expect(entityKindForRequest(REQUEST_MEDIA_KIND.book)).toBe(ENTITY_KIND.book);
+    expect(entityKindForRequest(REQUEST_MEDIA_KIND.audiobook)).toBe(ENTITY_KIND.book);
     expect(entityKindForRequest(REQUEST_MEDIA_KIND.author)).toBe(ENTITY_KIND.bookAuthor);
     expect(entityKindForRequest(REQUEST_MEDIA_KIND.movie)).toBe(ENTITY_KIND.movie);
     expect(entityKindForRequest(REQUEST_MEDIA_KIND.series)).toBe(ENTITY_KIND.videoSeries);
