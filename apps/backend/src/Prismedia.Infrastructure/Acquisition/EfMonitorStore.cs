@@ -898,7 +898,8 @@ public sealed class EfMonitorStore(
         BookRendition? bookRendition = kind == EntityKind.Book ? BookRendition.Ebook : null;
         var acquisitionIds = await db.Acquisitions.AsNoTracking()
             .Where(acquisition => acquisition.EntityId == entityId
-                && acquisition.BookRendition == bookRendition)
+                && (acquisition.BookRendition == bookRendition
+                    || bookRendition == BookRendition.Ebook && acquisition.BookRendition == null))
             .Select(acquisition => acquisition.Id)
             .ToArrayAsync(cancellationToken);
         var allAcquisitionIds = await db.Acquisitions.AsNoTracking()
@@ -906,18 +907,23 @@ public sealed class EfMonitorStore(
             .Select(acquisition => acquisition.Id)
             .ToArrayAsync(cancellationToken);
         var rows = await db.Monitors
-            .Where(monitor => (monitor.EntityId == entityId && monitor.BookRendition == bookRendition)
+            .Where(monitor => (monitor.EntityId == entityId
+                    && (monitor.BookRendition == bookRendition
+                        || bookRendition == BookRendition.Ebook && monitor.BookRendition == null))
                 || (monitor.AcquisitionId != null && acquisitionIds.Contains(monitor.AcquisitionId.Value))
                 || (monitor.Status == MonitorStatus.Stopping || monitor.Status == MonitorStatus.DeletingFiles)
                     && (monitor.EntityId == entityId
                         || monitor.AcquisitionId != null && allAcquisitionIds.Contains(monitor.AcquisitionId.Value)))
             .ToArrayAsync(cancellationToken);
-        var row = rows.FirstOrDefault(monitor => monitor.EntityId == entityId
-                && monitor.BookRendition == bookRendition)
-            ?? rows.FirstOrDefault();
-        if (row?.Status is MonitorStatus.Stopping or MonitorStatus.DeletingFiles) {
+        if (rows.Any(monitor => monitor.Status is MonitorStatus.Stopping or MonitorStatus.DeletingFiles)) {
             throw LifecycleClaimConflict();
         }
+        var row = rows.FirstOrDefault(monitor => monitor.EntityId == entityId
+                && monitor.BookRendition == bookRendition)
+            ?? rows.FirstOrDefault(monitor => bookRendition == BookRendition.Ebook
+                && monitor.EntityId == entityId
+                && monitor.BookRendition == null)
+            ?? rows.FirstOrDefault();
         if (row is null) {
             row = new MonitorRow {
                 Id = Guid.NewGuid(),
@@ -1008,8 +1014,12 @@ public sealed class EfMonitorStore(
             join acquisition in db.Acquisitions.AsNoTracking() on monitor.AcquisitionId equals acquisition.Id into joined
             from acquisition in joined.DefaultIfEmpty()
             where (monitor.EntityId == entityId || (acquisition != null && acquisition.EntityId == entityId))
-                && monitor.BookRendition == bookRendition
-            orderby monitor.EntityId == entityId descending, monitor.CreatedAt
+                && (monitor.BookRendition == bookRendition
+                    || bookRendition == BookRendition.Ebook && monitor.BookRendition == null)
+            orderby monitor.BookRendition == bookRendition descending,
+                monitor.EntityId == entityId descending,
+                monitor.CreatedAt,
+                monitor.Id
             select new {
                 Monitor = monitor,
                 Status = acquisition == null ? (AcquisitionStatus?)null : acquisition.Status,

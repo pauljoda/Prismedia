@@ -319,6 +319,58 @@ public sealed class EfMonitorStoreTests {
         Assert.Equal(claimedStatus, monitor.Status);
     }
 
+    [Theory]
+    [InlineData(MonitorStatus.DeletingFiles)]
+    [InlineData(MonitorStatus.Stopping)]
+    public async Task OppositeAudiobookCleanupBlocksLegacyEbookBackfillWithoutRemovingEitherIntent(
+        MonitorStatus claimedStatus) {
+        await using var db = CreateContext();
+        var entityId = Guid.NewGuid();
+        var legacyEbookId = Guid.NewGuid();
+        var audiobookId = Guid.NewGuid();
+        var now = DateTimeOffset.UtcNow;
+        db.Monitors.AddRange(
+            new MonitorRow {
+                Id = legacyEbookId,
+                EntityId = entityId,
+                Kind = EntityKind.Book,
+                Status = MonitorStatus.Active,
+                Title = "Book",
+                CreatedAt = now,
+                UpdatedAt = now
+            },
+            new MonitorRow {
+                Id = audiobookId,
+                EntityId = entityId,
+                Kind = EntityKind.Book,
+                BookRendition = BookRendition.Audiobook,
+                Status = claimedStatus,
+                Title = "Book",
+                CreatedAt = now,
+                UpdatedAt = now
+            });
+        await db.SaveChangesAsync();
+        var store = new EfMonitorStore(db);
+
+        await Assert.ThrowsAsync<Prismedia.Application.Acquisition.AcquisitionConfigurationException>(() =>
+            store.StartForEntityAsync(
+                entityId,
+                EntityKind.Book,
+                "Book",
+                targeting: null,
+                preset: null,
+                CancellationToken.None));
+
+        var monitors = await db.Monitors.AsNoTracking().ToArrayAsync();
+        Assert.Equal(2, monitors.Length);
+        Assert.Contains(monitors, row => row.Id == legacyEbookId
+            && row.BookRendition == null
+            && row.Status == MonitorStatus.Active);
+        Assert.Contains(monitors, row => row.Id == audiobookId
+            && row.BookRendition == BookRendition.Audiobook
+            && row.Status == claimedStatus);
+    }
+
     [Fact]
     public async Task StaleUpgradeDueCannotCreateWorkAfterMonitorIsClaimedStopping() {
         await using var db = CreateContext();
@@ -348,22 +400,41 @@ public sealed class EfMonitorStoreTests {
         await using var db = CreateContext();
         var entityId = Guid.NewGuid();
         var acquisitionId = SeedAcquisition(db, AcquisitionStatus.Imported, entityId);
+        var audiobookAcquisitionId = SeedAcquisition(db, AcquisitionStatus.Searching, entityId);
+        (await db.Acquisitions.FindAsync(audiobookAcquisitionId))!.BookRendition = BookRendition.Audiobook;
         var legacy = new MonitorRow {
             Id = Guid.NewGuid(), AcquisitionId = acquisitionId, EntityId = null, Kind = EntityKind.Book,
             Status = MonitorStatus.Fulfilled, Title = "Book", CreatedAt = DateTimeOffset.UtcNow, UpdatedAt = DateTimeOffset.UtcNow
         };
-        db.Monitors.Add(legacy);
+        var audiobook = new MonitorRow {
+            Id = Guid.NewGuid(),
+            AcquisitionId = audiobookAcquisitionId,
+            EntityId = entityId,
+            Kind = EntityKind.Book,
+            BookRendition = BookRendition.Audiobook,
+            Status = MonitorStatus.Active,
+            Title = "Book",
+            CreatedAt = DateTimeOffset.UtcNow,
+            UpdatedAt = DateTimeOffset.UtcNow
+        };
+        db.Monitors.AddRange(legacy, audiobook);
         await db.SaveChangesAsync();
         var store = new EfMonitorStore(db);
 
-        Assert.Equal(legacy.Id, (await store.GetByEntityAsync(entityId, CancellationToken.None))?.Id);
+        Assert.Equal(legacy.Id, (await store.GetByEntityAsync(
+            entityId, BookRendition.Ebook, CancellationToken.None))?.Id);
         var restarted = await store.StartForEntityAsync(entityId, EntityKind.Book, "Book", null, null, CancellationToken.None);
 
         Assert.Equal(legacy.Id, restarted.Id);
         Assert.Equal(entityId, restarted.EntityId);
         Assert.Equal(acquisitionId, restarted.AcquisitionId);
+        Assert.Equal(BookRendition.Ebook, restarted.BookRendition);
         Assert.Equal(MonitorStatus.Active, restarted.Status);
-        Assert.Single(await db.Monitors.ToArrayAsync());
+        var monitors = await db.Monitors.AsNoTracking().OrderBy(row => row.Id).ToArrayAsync();
+        Assert.Equal(2, monitors.Length);
+        Assert.Contains(monitors, row => row.Id == audiobook.Id
+            && row.AcquisitionId == audiobookAcquisitionId
+            && row.BookRendition == BookRendition.Audiobook);
     }
 
     [Fact]
