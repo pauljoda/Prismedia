@@ -2319,6 +2319,7 @@ public sealed class ScanJobHandlerTests {
             var track = Assert.Single(persistence.UpsertedAudioTracks);
             Assert.Equal(book.Id, track.AudioLibraryEntityId);
             Assert.Equal(sourcePath, track.FilePath);
+            Assert.Equal([sourcePath], persistence.ValidAudioTrackPathsByLibraryId[book.Id]);
         } finally {
             tempRoot.Delete(recursive: true);
         }
@@ -2417,6 +2418,79 @@ public sealed class ScanJobHandlerTests {
             Assert.Empty(persistence.UpsertedBookSeries);
             var track = Assert.Single(persistence.UpsertedAudioTracks);
             Assert.Equal(existingBookId, track.AudioLibraryEntityId);
+        } finally {
+            tempRoot.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task ImportedMultipartAudiobookKeepsRequestedBookAfterFullReconciliation() {
+        var tempRoot = Directory.CreateTempSubdirectory("prismedia-audiobook-import-reconcile-");
+        try {
+            var rootPath = tempRoot.FullName;
+            var readableFolder = Directory.CreateDirectory(Path.Combine(rootPath, "Legacy Library")).FullName;
+            var epubPath = Path.Combine(readableFolder, "A Game of Thrones.epub");
+            await File.WriteAllTextAsync(epubPath, "epub");
+            var audioFolder = Directory.CreateDirectory(
+                Path.Combine(rootPath, "George R. R. Martin", "A Game of Thrones (1996)")).FullName;
+            var audioPaths = Enumerable.Range(1, 76)
+                .Select(index => Path.Combine(audioFolder, $"Chapter {index:00}.mp3"))
+                .ToArray();
+            foreach (var path in audioPaths) {
+                await File.WriteAllTextAsync(path, "audio");
+            }
+
+            var root = new LibraryRootData(
+                Guid.NewGuid(), rootPath, "Books", true, true,
+                ScanVideos: false, ScanImages: false, ScanAudio: false, ScanBooks: true, IsNsfw: false);
+            var persistence = new FakeScanPersistence([root]) { Settings = DisabledGeneratedWorkSettings };
+
+            var initialScan = new ScanBookJobHandler(
+                NullLogger<ScanBookJobHandler>.Instance,
+                new RecordingFileDiscovery([epubPath]),
+                persistence, persistence, persistence, audio: persistence);
+            await initialScan.HandleAsync(
+                new JobContext(SingleRootScanJob(root), new RecordingJobQueue()),
+                CancellationToken.None);
+            var requestedBookId = Assert.Single(persistence.UpsertedBooks).Id;
+
+            var acquisitionHints = new FixedAcquisitionHintApplier(requestedBookId);
+            var importMaterializer = new ScanBookJobHandler(
+                NullLogger<ScanBookJobHandler>.Instance,
+                new RecordingFileDiscovery(audioPaths),
+                persistence,
+                persistence,
+                persistence,
+                acquisitionHints: acquisitionHints,
+                audio: persistence);
+            await importMaterializer.MaterializeImportedPathsAsync(
+                new JobContext(SingleRootScanJob(root), new RecordingJobQueue()),
+                Guid.NewGuid(),
+                root,
+                audioPaths,
+                CancellationToken.None);
+            Assert.All(
+                persistence.UpsertedAudioTracks.TakeLast(audioPaths.Length),
+                track => Assert.Equal(requestedBookId, track.AudioLibraryEntityId));
+
+            var fullScan = new ScanBookJobHandler(
+                NullLogger<ScanBookJobHandler>.Instance,
+                new RecordingFileDiscovery([epubPath, .. audioPaths]),
+                persistence,
+                persistence,
+                persistence,
+                acquisitionHints: acquisitionHints,
+                audio: persistence);
+            await fullScan.HandleAsync(
+                new JobContext(SingleRootScanJob(root), new RecordingJobQueue()),
+                CancellationToken.None);
+
+            Assert.All(
+                persistence.UpsertedAudioTracks.TakeLast(audioPaths.Length),
+                track => Assert.Equal(requestedBookId, track.AudioLibraryEntityId));
+            Assert.DoesNotContain(
+                persistence.UpsertedBookSeries,
+                book => string.Equals(book.SourcePath, audioFolder, StringComparison.OrdinalIgnoreCase));
         } finally {
             tempRoot.Delete(recursive: true);
         }
@@ -3530,6 +3604,13 @@ public sealed class ScanJobHandlerTests {
             EntityKind kind,
             Guid acquisitionId,
             CancellationToken cancellationToken) => Task.FromResult<Guid?>(targetEntityId);
+
+        public Task<IReadOnlyList<Prismedia.Application.Acquisition.ImportedBookPathOwner>> ResolveImportedBookOwnersAsync(
+            IReadOnlyCollection<string> sourcePaths,
+            CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<Prismedia.Application.Acquisition.ImportedBookPathOwner>>(
+                sourcePaths.Select(path =>
+                    new Prismedia.Application.Acquisition.ImportedBookPathOwner(path, targetEntityId)).ToArray());
 
         public Task<bool> ApplyAsync(Guid entityId, string sourcePath, CancellationToken cancellationToken) =>
             Task.FromResult(true);

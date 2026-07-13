@@ -473,29 +473,48 @@ public sealed class ScanBookJobHandler(
             return;
         }
 
+        var groupPaths = audiobookFiles
+            .Where(IsAudiobookPath)
+            .Select(path => AudiobookGroupKey(root.Path, path))
+            .Distinct(FileSystemPathComparison.Comparer)
+            .ToArray();
+        var importedOwners = acquisitionHints is null
+            ? []
+            : await acquisitionHints.ResolveImportedBookOwnersAsync(groupPaths, cancellationToken);
+        var importedOwnerByPath = importedOwners.ToDictionary(
+            owner => owner.SourcePath,
+            owner => owner.BookEntityId,
+            FileSystemPathComparison.Comparer);
+        var readableBookIds = readableBooks.Select(book => book.EntityId).ToHashSet();
         var validAudioPathsByBook = new Dictionary<Guid, HashSet<string>>();
         var groups = audiobookFiles
             .Where(IsAudiobookPath)
             .OrderBy(path => path, NaturalPathComparer.Instance)
             .Select(path => new {
                 Path = path,
-                ReadableBookId = acquisitionTargetBookId ?? ResolveReadableBookId(path, readableBooks)
+                BookId = acquisitionTargetBookId
+                    ?? (importedOwnerByPath.TryGetValue(
+                        AudiobookGroupKey(root.Path, path), out var importedBookId)
+                            ? importedBookId
+                            : (Guid?)null)
+                    ?? ResolveReadableBookId(path, readableBooks)
             })
             .GroupBy(
-                item => item.ReadableBookId is { } readableBookId
-                    ? $"book:{readableBookId}"
+                item => item.BookId is { } bookId
+                    ? $"book:{bookId}"
                     : $"path:{AudiobookGroupKey(root.Path, item.Path)}",
                 StringComparer.Ordinal);
         foreach (var group in groups.OrderBy(group => group.Key, NaturalPathComparer.Instance)) {
             var first = group.First();
-            var hasReadableBook = first.ReadableBookId is { };
-            var bookId = first.ReadableBookId ?? Guid.Empty;
+            var hasExistingBook = first.BookId is { };
+            var bookId = first.BookId ?? Guid.Empty;
+            var hasReadableBook = first.BookId is { } existingBookId && readableBookIds.Contains(existingBookId);
             var sourcePath = AudiobookGroupKey(root.Path, first.Path);
-            var title = hasReadableBook
+            var title = hasExistingBook
                 ? string.Empty
                 : AudiobookTitle(root.Path, sourcePath, first.Path);
 
-            if (!hasReadableBook) {
+            if (!hasExistingBook) {
                 if (acquisitionHints is not null) {
                     await acquisitionHints.BindWantedEntityAsync(
                         EntityKind.Book, sourcePath, cancellationToken, acquisitionId);

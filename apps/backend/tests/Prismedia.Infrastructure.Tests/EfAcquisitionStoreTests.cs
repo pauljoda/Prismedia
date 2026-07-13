@@ -779,6 +779,29 @@ public sealed class EfAcquisitionStoreTests {
     }
 
     [Fact]
+    public async Task ResolveImportedBookOwnersUsesConsumedHintsAndReturnsOnlyRequestedBookPaths() {
+        await using var db = CreateContext();
+        var bookId = AddWantedEntity(db, EntityKindRegistry.Book.Code, "A Game of Thrones");
+        var audioFolder = "/media/books/George R. R. Martin/A Game of Thrones (1996)";
+        AddHintWithEntity(db, bookId, audioFolder);
+        db.AcquisitionImportHints.Local.Single().Consumed = true;
+
+        var audioLibraryId = AddWantedEntity(db, EntityKindRegistry.AudioLibrary.Code, "Unrelated audio");
+        AddHintWithEntity(db, audioLibraryId, "/media/books/Unrelated");
+        var broadBookId = AddWantedEntity(db, EntityKindRegistry.Book.Code, "Broad root hint");
+        AddHintWithEntity(db, broadBookId, "/media/flat");
+        await db.SaveChangesAsync();
+
+        var owners = await new AcquisitionHintApplier(db).ResolveImportedBookOwnersAsync(
+            [audioFolder, "/media/books/No Hint", "/media/flat/Root Book.m4b"],
+            CancellationToken.None);
+
+        var owner = Assert.Single(owners);
+        Assert.Equal(audioFolder, owner.SourcePath);
+        Assert.Equal(bookId, owner.BookEntityId);
+    }
+
+    [Fact]
     public async Task BindWantedBookToleratesADanglingEntityLink() {
         await using var db = CreateContext();
         AddHintWithEntity(db, Guid.NewGuid(), "/media/books/Author/Title/Title.epub");

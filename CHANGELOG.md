@@ -139,6 +139,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Updated documentation, README screenshots, branding assets, install metadata, and app copy to match the current Prismedia v1 surface.
 
 ### Fixed
+- Full book-library reconciliation now preserves audiobook chapters on the Book explicitly targeted by an acquisition, even when its readable edition lives elsewhere, instead of splitting the audio into a duplicate Book after import.
 - Books now manage ebook and audiobook renditions independently: requesting the missing counterpart reuses the same Book, the Acquisition tab shows both states, and stopping one rendition leaves the other untouched. Open Library requests also no longer fail with a false "proposal changed" conflict.
 - Native clients now correctly hide NSFW libraries and file directories when their content-visibility setting is disabled.
 - Download profile settings now respect the viewer's library access and current SFW/NSFW mode; profiles targeting an NSFW library are hidden whenever NSFW content is hidden.

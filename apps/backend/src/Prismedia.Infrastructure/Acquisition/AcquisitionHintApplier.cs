@@ -51,6 +51,53 @@ public sealed class AcquisitionHintApplier(
             .FirstOrDefaultAsync(cancellationToken);
     }
 
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<ImportedBookPathOwner>> ResolveImportedBookOwnersAsync(
+        IReadOnlyCollection<string> sourcePaths,
+        CancellationToken cancellationToken) {
+        var requestedPaths = sourcePaths
+            .Where(path => !string.IsNullOrWhiteSpace(path))
+            .Select(Normalize)
+            .Distinct(FileSystemPathComparison.Comparer)
+            .ToArray();
+        if (requestedPaths.Length == 0) {
+            return [];
+        }
+
+        // Multipart audiobook hints name the exact import folder. Match that durable key exactly:
+        // ancestor overlap would let a flat custom template's root-folder hint claim every root-level
+        // audiobook. Path lengths bound the database projection while host-filesystem equality stays
+        // in memory where the database collation cannot change its meaning.
+        var requestedPathLengths = requestedPaths.Select(path => path.Length).Distinct().ToArray();
+        var bookCode = EntityKindRegistry.Book.Code;
+        var candidates = await db.AcquisitionImportHints.AsNoTracking()
+            .Where(hint => hint.EntityId != null && requestedPathLengths.Contains(hint.SourcePath.Length))
+            .Join(
+                db.Entities.AsNoTracking().Where(entity => entity.KindCode == bookCode),
+                hint => hint.EntityId,
+                entity => entity.Id,
+                (hint, entity) => new {
+                    HintPath = hint.SourcePath,
+                    BookEntityId = entity.Id,
+                    hint.UpdatedAt
+                })
+            .ToArrayAsync(cancellationToken);
+
+        return requestedPaths
+            .Select(path => new {
+                Path = path,
+                Match = candidates
+                    .Where(candidate => FileSystemPathComparison.Equals(
+                        path,
+                        Normalize(candidate.HintPath)))
+                    .OrderByDescending(candidate => candidate.UpdatedAt)
+                    .FirstOrDefault()
+            })
+            .Where(result => result.Match is not null)
+            .Select(result => new ImportedBookPathOwner(result.Path, result.Match!.BookEntityId))
+            .ToArray();
+    }
+
     public async Task<bool> ApplyAsync(Guid entityId, string sourcePath, CancellationToken cancellationToken) {
         if (string.IsNullOrWhiteSpace(sourcePath)) {
             return false;

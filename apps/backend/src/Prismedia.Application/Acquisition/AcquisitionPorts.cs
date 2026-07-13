@@ -216,6 +216,16 @@ public interface IAcquisitionHintApplier {
         CancellationToken cancellationToken) => Task.FromResult<Guid?>(null);
 
     /// <summary>
+    /// Resolves durable request-to-Book bindings that exactly match the supplied audiobook group paths. Consumed hints
+    /// remain eligible because a later full scan must preserve the ownership established by the narrow
+    /// import pass. Results are limited to existing Book entities and the requested paths.
+    /// </summary>
+    Task<IReadOnlyList<ImportedBookPathOwner>> ResolveImportedBookOwnersAsync(
+        IReadOnlyCollection<string> sourcePaths,
+        CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<ImportedBookPathOwner>>([]);
+
+    /// <summary>
     /// Looks up an unconsumed import hint whose source path matches <paramref name="sourcePath"/> and, if found,
     /// writes its external/plugin ids onto the entity and marks the hint consumed. Returns true when applied.
     /// </summary>
@@ -278,6 +288,9 @@ public interface IAcquisitionHintApplier {
         CancellationToken cancellationToken,
         Guid? acquisitionId = null);
 }
+
+/// <summary>A scanned audiobook group path and the Book explicitly targeted by its acquisition import.</summary>
+public sealed record ImportedBookPathOwner(string SourcePath, Guid BookEntityId);
 
 /// <summary>A stamped import hint's top-level owner (a series, an artist, the movie itself), for the post-import identify kick.</summary>
 public sealed record StampedHintOwner(Guid TopLevelEntityId, string TopLevelKindCode, string TopLevelTitle);
