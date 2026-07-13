@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from "svelte";
+  import { SvelteMap } from "svelte/reactivity";
   import {
     ListMusic,
     Minimize2,
@@ -67,6 +68,7 @@
   let lastAudiobookProgressSeconds: number | null = null;
   let lastAudiobookOwnerId: string | null = null;
   let audiobookProgressSave = Promise.resolve();
+  const audiobookRuntimeDurations = new SvelteMap<string, number>();
 
   const activeTrack = $derived(playback.currentTrack);
   const ctx = $derived(playback.context);
@@ -426,12 +428,12 @@
       lastAudiobookProgressSeconds = null;
     }
 
-    const totalSeconds = audiobookDuration(playback.queue);
-    if (totalSeconds <= 0) return;
+    const totalSeconds = audiobookDuration(playback.queue, audiobookRuntimeDurations);
+    if (totalSeconds <= 0 && !options.completed) return;
     // Completion is explicit state; reset the resume cursor so Listen again starts at the beginning.
     const absoluteSeconds = options.completed
       ? 0
-      : audiobookAbsoluteTime(playback.queue, track.id, playback.currentTime);
+      : audiobookAbsoluteTime(playback.queue, track.id, playback.currentTime, audiobookRuntimeDurations);
     if (
       options.periodic &&
       lastAudiobookProgressSeconds !== null &&
@@ -584,7 +586,13 @@
       setMediaSessionPosition(audio.duration, audio.currentTime);
     };
     const handleDurationChange = () => {
-      if (Number.isFinite(audio.duration)) playback.duration = audio.duration;
+      if (Number.isFinite(audio.duration)) {
+        playback.duration = audio.duration;
+        const track = activeTrack;
+        if (isAudiobook && track && audio.duration > 0) {
+          audiobookRuntimeDurations.set(track.id, audio.duration);
+        }
+      }
       applyPendingInitialSeek(audio);
       setMediaSessionPosition(audio.duration, audio.currentTime);
       resumePendingAutoplay();

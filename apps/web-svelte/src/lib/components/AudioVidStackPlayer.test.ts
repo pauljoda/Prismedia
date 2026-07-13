@@ -59,6 +59,16 @@ describe("AudioVidStackPlayer playback continuity", () => {
     expect(source.slice(saveStart, saveEnd)).toContain("audiobookProgressSave = audiobookProgressSave");
   });
 
+  it("uses runtime media durations for unprobed audiobook parts and still persists completion", () => {
+    expect(source).toContain("const audiobookRuntimeDurations = new SvelteMap<string, number>();");
+    expect(source).toContain("audiobookRuntimeDurations.set(track.id, audio.duration);");
+    expect(source).toContain("audiobookDuration(playback.queue, audiobookRuntimeDurations)");
+    expect(source).toContain(
+      "audiobookAbsoluteTime(playback.queue, track.id, playback.currentTime, audiobookRuntimeDurations)",
+    );
+    expect(source).toContain("if (totalSeconds <= 0 && !options.completed) return;");
+  });
+
   it("keeps audiobook parts ordered and out of music skip counting", () => {
     expect(source).toContain("const isAudiobook = $derived");
     expect(source).toContain("if (isAudiobook) return;");

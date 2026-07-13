@@ -21,6 +21,19 @@ describe("audiobook playback positions", () => {
     expect(audiobookDuration([part("unknown", null), part("known", 40)])).toBe(40);
   });
 
+  it("uses browser-learned durations for parts that have not been probed yet", () => {
+    const unprobedParts = [part("part-1", null), part("part-2", null), part("part-3", 120)];
+    const runtimeDurations = new Map([
+      ["part-1", 100],
+      ["part-2", 80],
+      // Probed metadata remains authoritative when both values are present.
+      ["part-3", 999],
+    ]);
+
+    expect(audiobookDuration(unprobedParts, runtimeDurations)).toBe(300);
+    expect(audiobookAbsoluteTime(unprobedParts, "part-2", 45, runtimeDurations)).toBe(145);
+  });
+
   it("resolves an absolute resume time to the concrete part and local offset", () => {
     expect(resolveAudiobookResume(parts, 145)).toEqual({
       trackId: "part-2",

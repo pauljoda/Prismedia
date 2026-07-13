@@ -9,9 +9,15 @@ export interface AudiobookResumePoint {
   trackOffsetSeconds: number;
 }
 
-function trackDuration(track: AudioTrackListItemDto): number {
+function trackDuration(
+  track: AudioTrackListItemDto,
+  runtimeDurations?: ReadonlyMap<string, number>,
+): number {
   const duration = Number(track.duration ?? 0);
-  return Number.isFinite(duration) && duration > 0 ? duration : 0;
+  if (Number.isFinite(duration) && duration > 0) return duration;
+
+  const runtimeDuration = Number(runtimeDurations?.get(track.id) ?? 0);
+  return Number.isFinite(runtimeDuration) && runtimeDuration > 0 ? runtimeDuration : 0;
 }
 
 /** Maps a Book's ordered audio-track children through the same adapter used by album queues. */
@@ -23,9 +29,12 @@ export function audiobookTrackItems(
   );
 }
 
-/** Total known runtime for an ordered audiobook part list. */
-export function audiobookDuration(tracks: readonly AudioTrackListItemDto[]): number {
-  return tracks.reduce((total, track) => total + trackDuration(track), 0);
+/** Total known runtime, including browser-learned durations for parts awaiting a probe. */
+export function audiobookDuration(
+  tracks: readonly AudioTrackListItemDto[],
+  runtimeDurations?: ReadonlyMap<string, number>,
+): number {
+  return tracks.reduce((total, track) => total + trackDuration(track, runtimeDurations), 0);
 }
 
 /**
@@ -63,14 +72,15 @@ export function audiobookAbsoluteTime(
   tracks: readonly AudioTrackListItemDto[],
   trackId: string,
   trackOffsetSeconds: number,
+  runtimeDurations?: ReadonlyMap<string, number>,
 ): number {
   const trackIndex = tracks.findIndex((track) => track.id === trackId);
   if (trackIndex < 0) return 0;
 
   const elapsedBeforeTrack = tracks
     .slice(0, trackIndex)
-    .reduce((total, track) => total + trackDuration(track), 0);
-  const duration = trackDuration(tracks[trackIndex]!);
+    .reduce((total, track) => total + trackDuration(track, runtimeDurations), 0);
+  const duration = trackDuration(tracks[trackIndex]!, runtimeDurations);
   const localOffset = Math.max(0, Math.min(trackOffsetSeconds, duration || trackOffsetSeconds));
   return elapsedBeforeTrack + localOffset;
 }
