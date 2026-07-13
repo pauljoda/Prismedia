@@ -222,6 +222,28 @@ public sealed class CollectionRuleEngineSqlTests {
     }
 
     [Fact]
+    public void AudioTrackRulesExcludeTracksOwnedByBooks() {
+        var group = new CollectionRuleGroup {
+            Operator = "and",
+            Children = [
+                new CollectionRuleCondition {
+                    Field = "title",
+                    Operator = "contains",
+                    Value = JsonSerializer.SerializeToElement("Chapter")
+                }
+            ]
+        };
+
+        var query = new CollectionRuleEngine(null!).BuildQuery(group, EntityKindRegistry.AudioTrack.Code);
+
+        Assert.NotNull(query);
+        Assert.Contains("parent.id = e.parent_entity_id", query.Value.Sql, StringComparison.Ordinal);
+        Assert.Contains(query.Value.Parameters, parameter =>
+            parameter.NpgsqlDbType == NpgsqlDbType.Text &&
+            Equals(parameter.Value, EntityKindRegistry.Book.Code));
+    }
+
+    [Fact]
     public void RestrictedFieldsOnlyBuildSqlForSupportedKindsWhenEntityTypesAreEmpty() {
         var group = new CollectionRuleGroup {
             Operator = "and",

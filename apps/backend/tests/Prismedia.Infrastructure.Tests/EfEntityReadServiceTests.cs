@@ -824,6 +824,84 @@ public sealed class EfEntityReadServiceTests {
     }
 
     [Fact]
+    public async Task ListAsyncKeepsAudiobookTracksInsideTheirBookInsteadOfMusicLists() {
+        await using var db = CreateContext();
+        var bookId = Guid.Parse("11111111-aaaa-4444-8888-111111111111");
+        var audiobookTrackId = Guid.Parse("22222222-aaaa-4444-8888-222222222222");
+        var albumId = Guid.Parse("33333333-aaaa-4444-8888-333333333333");
+        var musicTrackId = Guid.Parse("44444444-aaaa-4444-8888-444444444444");
+        var now = DateTimeOffset.UtcNow;
+        db.Entities.AddRange(
+            new EntityRow {
+                Id = bookId,
+                KindCode = EntityKindRegistry.Book.Code,
+                Title = "Spoken Story",
+                CreatedAt = now,
+                UpdatedAt = now
+            },
+            new EntityRow {
+                Id = audiobookTrackId,
+                KindCode = EntityKindRegistry.AudioTrack.Code,
+                Title = "Book Chapter",
+                ParentEntityId = bookId,
+                SortOrder = 0,
+                CreatedAt = now,
+                UpdatedAt = now
+            },
+            new EntityRow {
+                Id = albumId,
+                KindCode = EntityKindRegistry.AudioLibrary.Code,
+                Title = "Music Album",
+                CreatedAt = now,
+                UpdatedAt = now
+            },
+            new EntityRow {
+                Id = musicTrackId,
+                KindCode = EntityKindRegistry.AudioTrack.Code,
+                Title = "Music Chapter",
+                ParentEntityId = albumId,
+                SortOrder = 0,
+                CreatedAt = now,
+                UpdatedAt = now
+            });
+        db.BookDetails.Add(new BookDetailRow { EntityId = bookId, BookType = BookType.Book });
+        db.AudioLibraryDetails.Add(new AudioLibraryDetailRow { EntityId = albumId });
+        db.AudioTrackDetails.AddRange(
+            new AudioTrackDetailRow { EntityId = audiobookTrackId },
+            new AudioTrackDetailRow { EntityId = musicTrackId });
+        await db.SaveChangesAsync();
+
+        var service = CreateService(db);
+
+        var tracks = await service.ListAsync(
+            EntityKindRegistry.AudioTrack.Code,
+            query: null,
+            cursor: null,
+            hideNsfw: false,
+            limit: null,
+            CancellationToken.None);
+        var search = await service.ListAsync(
+            kind: null,
+            query: "Chapter",
+            cursor: null,
+            hideNsfw: false,
+            limit: null,
+            CancellationToken.None);
+        var book = Assert.IsType<BookDetail>(await service.GetDetailAsync(
+            bookId,
+            EntityKindRegistry.Book.Code,
+            hideNsfw: false,
+            CancellationToken.None));
+
+        Assert.Equal(musicTrackId, Assert.Single(tracks.Items).Id);
+        Assert.Equal(1, tracks.TotalCount);
+        Assert.Equal(musicTrackId, Assert.Single(search.Items).Id);
+        Assert.Equal(1, search.TotalCount);
+        var audiobookTracks = Assert.Single(book.ChildrenByKind, group => group.Kind == EntityKind.AudioTrack);
+        Assert.Equal(audiobookTrackId, Assert.Single(audiobookTracks.Entities).Id);
+    }
+
+    [Fact]
     public async Task ListAsyncProjectsRepresentativeChildHoverImages() {
         await using var db = CreateContext();
         var bookId = Guid.Parse("11111111-1111-1111-1111-111111111111");

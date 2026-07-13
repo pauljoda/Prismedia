@@ -96,7 +96,11 @@ public sealed partial class EfEntityReadService : IEntityReadService {
         var normalizedRelationshipCode = string.IsNullOrWhiteSpace(relationshipCode)
             ? null
             : relationshipCode.Trim();
-        var entityQuery = _db.Entities.AsNoTracking();
+        var allEntities = _db.Entities.AsNoTracking();
+        var entityQuery = kindCodes.Length == 0 ||
+            kindCodes.Contains(EntityKindRegistry.AudioTrack.Code, StringComparer.OrdinalIgnoreCase)
+                ? allEntities.ExcludeBookOwnedAudioTracks(allEntities)
+                : allEntities;
 
         if (kindCodes.Length > 0) {
             entityQuery = entityQuery.Where(entity => kindCodes.Contains(entity.KindCode));

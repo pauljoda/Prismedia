@@ -3,6 +3,7 @@ using Prismedia.Application.Collections;
 using Prismedia.Application.Jobs.Ports;
 using Prismedia.Domain.Entities;
 using Prismedia.Domain.Media;
+using Prismedia.Infrastructure.Entities;
 using Prismedia.Infrastructure.Persistence;
 using Prismedia.Infrastructure.Persistence.Entities;
 
@@ -110,7 +111,9 @@ public sealed class CollectionCommandPersistence(PrismediaDbContext db) : IColle
     public async Task<IReadOnlyDictionary<Guid, CollectionItemCandidate>> GetActiveItemsAsync(
         IReadOnlyList<Guid> entityIds,
         CancellationToken cancellationToken) {
-        var rows = await db.Entities.AsNoTracking()
+        var allEntities = db.Entities.AsNoTracking();
+        var rows = await allEntities
+            .ExcludeBookOwnedAudioTracks(allEntities)
             .Where(row => entityIds.Contains(row.Id))
             .Select(row => new { row.Id, row.KindCode })
             .ToArrayAsync(cancellationToken);
@@ -208,8 +211,16 @@ public sealed class CollectionCommandPersistence(PrismediaDbContext db) : IColle
             cancellationToken);
 
     /// <inheritdoc />
-    public async Task<int> CountItemsAsync(Guid collectionId, CancellationToken cancellationToken) =>
-        await db.CollectionItemDetails.CountAsync(row => row.CollectionEntityId == collectionId, cancellationToken);
+    public async Task<int> CountItemsAsync(Guid collectionId, CancellationToken cancellationToken) {
+        var allEntities = db.Entities.AsNoTracking();
+        var catalogEntities = allEntities.ExcludeBookOwnedAudioTracks(allEntities);
+        return await (
+            from item in db.CollectionItemDetails.AsNoTracking()
+            join entity in catalogEntities on item.ItemEntityId equals entity.Id
+            where item.CollectionEntityId == collectionId
+            select item.Id)
+            .CountAsync(cancellationToken);
+    }
 
     /// <inheritdoc />
     public async Task<IReadOnlyList<CollectionVisibleRuleMatch>> FilterVisibleRuleMatchesAsync(
@@ -221,7 +232,9 @@ public sealed class CollectionCommandPersistence(PrismediaDbContext db) : IColle
             return [];
         }
 
-        var query = db.Entities.AsNoTracking()
+        var allEntities = db.Entities.AsNoTracking();
+        var query = allEntities
+            .ExcludeBookOwnedAudioTracks(allEntities)
             .Where(row => ids.Contains(row.Id));
         if (hideNsfw) {
             query = query.Where(row => !row.IsNsfw);

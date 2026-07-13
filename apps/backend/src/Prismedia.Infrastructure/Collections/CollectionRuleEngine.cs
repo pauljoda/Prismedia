@@ -103,6 +103,13 @@ public sealed class CollectionRuleEngine(PrismediaDbContext db) : ICollectionRul
         sb.Append("WHERE e.kind_code = ");
         var kindParam = ctx.AddParam(kindCode, NpgsqlDbType.Text);
         sb.AppendLine(kindParam);
+        if (KindEquals(kindCode, EntityKindRegistry.AudioTrack.Code)) {
+            // Book-owned tracks are audiobook parts, not music collection candidates.
+            var bookKindParam = ctx.AddParam(EntityKindRegistry.Book.Code, NpgsqlDbType.Text);
+            sb.Append("AND NOT EXISTS (SELECT 1 FROM entities parent WHERE parent.id = e.parent_entity_id AND parent.kind_code = ");
+            sb.Append(bookKindParam);
+            sb.AppendLine(")");
+        }
         sb.Append("AND (");
         sb.Append(whereFragment);
         sb.AppendLine(")");

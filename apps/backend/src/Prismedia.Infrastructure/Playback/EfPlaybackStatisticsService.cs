@@ -118,9 +118,11 @@ public sealed class EfPlaybackStatisticsService(PrismediaDbContext db, ICurrentU
             events = events.Where(evt => evt.Kind == eventKind);
         }
 
+        var allEntities = db.Entities.AsNoTracking();
+        var catalogEntities = allEntities.ExcludeBookOwnedAudioTracks(allEntities);
         var rows =
             from evt in events
-            join entity in db.Entities.AsNoTracking() on evt.EntityId equals entity.Id
+            join entity in catalogEntities on evt.EntityId equals entity.Id
             where !query.HideNsfw || !entity.IsNsfw
             select new {
                 EventId = evt.Id,

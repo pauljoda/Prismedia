@@ -16,12 +16,17 @@ public sealed class CollectionItemReadServiceTests {
         var firstId = Guid.NewGuid();
         var hiddenId = Guid.NewGuid();
         var secondId = Guid.NewGuid();
+        var bookId = Guid.NewGuid();
+        var audiobookTrackId = Guid.NewGuid();
 
         SeedEntity(db, collectionId, EntityKindRegistry.Collection.Code, "Favorites");
         SeedEntity(db, firstId, EntityKindRegistry.Video.Code, "First");
         SeedEntity(db, hiddenId, EntityKindRegistry.Image.Code, "Hidden", isNsfw: true);
         SeedEntity(db, secondId, EntityKindRegistry.AudioTrack.Code, "Second");
+        SeedEntity(db, bookId, EntityKindRegistry.Book.Code, "Spoken Story");
+        SeedEntity(db, audiobookTrackId, EntityKindRegistry.AudioTrack.Code, "Book Chapter", parentEntityId: bookId);
         db.CollectionItemDetails.AddRange(
+            Item(collectionId, audiobookTrackId, 30),
             Item(collectionId, secondId, 20),
             Item(collectionId, hiddenId, 10),
             Item(collectionId, firstId, 0));
@@ -60,11 +65,13 @@ public sealed class CollectionItemReadServiceTests {
         Guid id,
         string kind,
         string title,
-        bool isNsfw = false) {
+        bool isNsfw = false,
+        Guid? parentEntityId = null) {
         db.Entities.Add(new EntityRow {
             Id = id,
             KindCode = kind,
             Title = title,
+            ParentEntityId = parentEntityId,
             IsNsfw = isNsfw,
             CreatedAt = DateTimeOffset.UtcNow,
             UpdatedAt = DateTimeOffset.UtcNow

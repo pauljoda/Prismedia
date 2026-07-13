@@ -235,6 +235,30 @@ public sealed class CollectionCommandServiceTests {
     }
 
     [Fact]
+    public async Task AddItemsAsyncRejectsAudiobookTracksOwnedByBooks() {
+        await using var db = CreateContext();
+        var collectionId = SeedCollection(db, "Manual");
+        var bookId = SeedEntity(db, EntityKindRegistry.Book.Code, "Spoken Story");
+        var audiobookTrackId = SeedEntity(
+            db,
+            EntityKindRegistry.AudioTrack.Code,
+            "Book Chapter",
+            parentEntityId: bookId);
+        await db.SaveChangesAsync();
+        var service = CreateService(db);
+
+        var result = await service.AddItemsAsync(
+            collectionId,
+            new CollectionAddItemsRequest([
+                new CollectionItemReference(EntityKind.AudioTrack, audiobookTrackId),
+            ]),
+            CancellationToken.None);
+
+        Assert.Equal(CollectionCommandStatus.Invalid, result.Status);
+        Assert.Empty(db.CollectionItemDetails);
+    }
+
+    [Fact]
     public async Task AddItemsAsyncRejectsPureDynamicCollections() {
         await using var db = CreateContext();
         var collectionId = SeedCollection(db, "Rules", CollectionMode.Dynamic);
@@ -299,6 +323,32 @@ public sealed class CollectionCommandServiceTests {
         Assert.Equal(seriesId, item.EntityId);
     }
 
+    [Fact]
+    public async Task PreviewRulesExcludesAudiobookTracksOwnedByBooks() {
+        await using var db = CreateContext();
+        var bookId = SeedEntity(db, EntityKindRegistry.Book.Code, "Spoken Story");
+        var audiobookTrackId = SeedEntity(
+            db,
+            EntityKindRegistry.AudioTrack.Code,
+            "Book Chapter",
+            parentEntityId: bookId);
+        await db.SaveChangesAsync();
+        var service = CreateService(
+            db,
+            new FakeCollectionRuleEngine([
+                new CollectionRuleMatch(EntityKind.AudioTrack, audiobookTrackId),
+            ]));
+
+        var preview = await service.PreviewRulesAsync(
+            new CollectionRulePreviewRequest(EmptyRuleJson),
+            hideNsfw: false,
+            CancellationToken.None);
+
+        Assert.NotNull(preview);
+        Assert.Equal(0, preview.Total);
+        Assert.Empty(preview.Sample);
+    }
+
     private const string EmptyRuleJson = """{"type":"group","operator":"and","children":[]}""";
 
     private static Prismedia.Application.Collections.CollectionCommandService CreateService(
@@ -328,12 +378,14 @@ public sealed class CollectionCommandServiceTests {
         PrismediaDbContext db,
         string kind,
         string title,
-        bool isNsfw = false) {
+        bool isNsfw = false,
+        Guid? parentEntityId = null) {
         var id = Guid.NewGuid();
         db.Entities.Add(new EntityRow {
             Id = id,
             KindCode = kind,
             Title = title,
+            ParentEntityId = parentEntityId,
             IsNsfw = isNsfw,
             CreatedAt = DateTimeOffset.UtcNow,
             UpdatedAt = DateTimeOffset.UtcNow

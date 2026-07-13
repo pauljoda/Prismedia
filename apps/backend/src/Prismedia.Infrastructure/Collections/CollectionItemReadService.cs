@@ -3,6 +3,7 @@ using Prismedia.Application.Collections;
 using Prismedia.Application.Entities;
 using Prismedia.Contracts.Collections;
 using Prismedia.Domain.Entities;
+using Prismedia.Infrastructure.Entities;
 using Prismedia.Infrastructure.Persistence;
 
 namespace Prismedia.Infrastructure.Collections;
@@ -27,9 +28,11 @@ public sealed class CollectionItemReadService(
             return new CollectionItemsResponse([]);
         }
 
+        var allEntities = db.Entities.AsNoTracking();
+        var catalogEntities = allEntities.ExcludeBookOwnedAudioTracks(allEntities);
         var rows = await (
             from item in db.CollectionItemDetails.AsNoTracking()
-            join entity in db.Entities.AsNoTracking() on item.ItemEntityId equals entity.Id
+            join entity in catalogEntities on item.ItemEntityId equals entity.Id
             where item.CollectionEntityId == collectionId &&
                   (!hideNsfw || !entity.IsNsfw)
             orderby item.SortOrder, entity.Title, item.Id
@@ -87,9 +90,11 @@ public sealed class CollectionItemReadService(
             EntityKindRegistry.AudioLibrary.Code,
             EntityKindRegistry.MusicArtist.Code,
         };
+        var allEntities = db.Entities.AsNoTracking();
+        var catalogEntities = allEntities.ExcludeBookOwnedAudioTracks(allEntities);
         var rows = await (
             from item in db.CollectionItemDetails.AsNoTracking()
-            join entity in db.Entities.AsNoTracking() on item.ItemEntityId equals entity.Id
+            join entity in catalogEntities on item.ItemEntityId equals entity.Id
             where collectionIds.Contains(item.CollectionEntityId) &&
                   (!hideNsfw || !entity.IsNsfw)
             group entity.KindCode by item.CollectionEntityId into members
@@ -121,9 +126,11 @@ public sealed class CollectionItemReadService(
             .ToDictionaryAsync(detail => detail.EntityId, detail => detail.CoverItemEntityId!.Value, cancellationToken);
 
         // First visible member per collection, in collection sort order, as the fallback cover.
+        var allEntities = db.Entities.AsNoTracking();
+        var catalogEntities = allEntities.ExcludeBookOwnedAudioTracks(allEntities);
         var memberRows = await (
             from item in db.CollectionItemDetails.AsNoTracking()
-            join entity in db.Entities.AsNoTracking() on item.ItemEntityId equals entity.Id
+            join entity in catalogEntities on item.ItemEntityId equals entity.Id
             where ids.Contains(item.CollectionEntityId) &&
                   (!hideNsfw || !entity.IsNsfw)
             orderby item.SortOrder, entity.Title, item.Id
