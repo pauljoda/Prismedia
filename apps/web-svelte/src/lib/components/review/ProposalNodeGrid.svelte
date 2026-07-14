@@ -126,12 +126,12 @@
   .proposal-node:hover,
   .proposal-node:focus-within {
     border-color: var(--color-border-accent);
-    box-shadow: 0 0 18px rgb(242 194 106 / 0.08);
+    box-shadow: 0 0 18px rgb(199 201 204 / 0.08);
   }
 
   .proposal-node.is-selected {
     border-color: var(--color-border-accent-strong);
-    box-shadow: 0 0 18px rgb(242 194 106 / 0.16);
+    box-shadow: 0 0 18px rgb(199 201 204 / 0.16);
   }
 
   .proposal-node.is-disabled {

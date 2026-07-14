@@ -30,6 +30,18 @@ describe("NavCustomizationStore", () => {
     expect(saveNavLayout.mock.calls[0][0].hidden).toContain("/images");
   });
 
+  it("persists validated section accent colors", async () => {
+    const store = new NavCustomizationStore();
+    store.setSectionAccent("books", "#0AB3E6");
+    store.setSectionAccent("video", "not-a-color");
+
+    expect(store.prefs.sections.find((section) => section.id === "books")?.accent).toBe("#0ab3e6");
+    expect(store.prefs.sections.find((section) => section.id === "video")?.accent).not.toBe("not-a-color");
+
+    await vi.runAllTimersAsync();
+    expect(saveNavLayout).toHaveBeenCalledTimes(1);
+  });
+
   it("hydrates from the server without re-persisting", async () => {
     const serverPrefs: NavPrefs = {
       v: 1,

@@ -35,6 +35,7 @@
   import { computeContainedScrollHeight } from "./entity-grid-viewport.svelte";
   import { useNsfw } from "$lib/nsfw/store.svelte";
   import type { NsfwMode } from "$lib/nsfw/cookie";
+  import PrismediaLoadingMark from "$lib/components/PrismediaLoadingMark.svelte";
 
   const DEFAULT_PAGE_SIZE = 250;
   const DEFAULT_PAGE_SIZE_OPTIONS = [100, 250, 500, 1000];
@@ -974,18 +975,9 @@
     style:--entity-grid-scroll-max-height={effectiveScrollMaxHeight ?? undefined}
     onwheel={markScrolling}
   >
-    {#if loading}
-      <div class="loading-grid" aria-label="Loading entities" aria-busy="true">
-        {#each Array.from({ length: 12 }) as _, index (index)}
-          <div class="skeleton-card">
-            <div class="skeleton-media"></div>
-            <div class="skeleton-body">
-              <span></span>
-              <small></small>
-              <em></em>
-            </div>
-          </div>
-        {/each}
+    {#if loading && visibleCards.length === 0}
+      <div class="grid-loading">
+        <PrismediaLoadingMark label="Loading entities" showLabel />
       </div>
     {:else if visibleCards.length > 0 && viewMode === "feed" && FeedComponent}
       <FeedComponent cards={pagedCards} onActivate={onCardActivate} {mediaWall} />
@@ -1108,8 +1100,7 @@
     min-height: 0;
   }
 
-  .cards,
-  .loading-grid {
+  .cards {
     display: grid;
     grid-template-columns: repeat(
       max(1, min(calc(var(--col-count, 5) - 1), 4)),
@@ -1143,61 +1134,11 @@
     display: none;
   }
 
-  .skeleton-card {
+  .grid-loading {
     display: grid;
-    grid-template-rows: auto 1fr;
+    min-height: clamp(16rem, 42vh, 28rem);
+    place-items: center;
     overflow: hidden;
-    background: var(--color-surface-1, #0c0f15);
-    border: 1px solid var(--color-border-subtle, rgba(148, 158, 178, 0.07));
-    border-radius: var(--radius-sm, 6px);
-    box-shadow: inset 0 2px 8px rgba(0,0,0,0.30);
-  }
-
-  .skeleton-media {
-    aspect-ratio: 16 / 9;
-    background:
-      linear-gradient(90deg, transparent, rgb(255 255 255 / 0.08), transparent),
-      var(--color-surface-2);
-    background-size: 200% 100%;
-    animation: shimmer 1.15s linear infinite;
-  }
-
-  .skeleton-body {
-    display: grid;
-    gap: 0.55rem;
-    padding: 0.75rem;
-  }
-
-  .skeleton-body span,
-  .skeleton-body small,
-  .skeleton-body em {
-    display: block;
-    height: 0.72rem;
-    background: var(--color-surface-3);
-    opacity: 0.72;
-  }
-
-  .skeleton-body span {
-    width: 76%;
-    height: 1rem;
-  }
-
-  .skeleton-body small {
-    width: 54%;
-  }
-
-  .skeleton-body em {
-    width: 38%;
-  }
-
-  @keyframes shimmer {
-    from {
-      background-position: 100% 0;
-    }
-
-    to {
-      background-position: -100% 0;
-    }
   }
 
   .empty {
@@ -1245,22 +1186,19 @@
   }
 
   @media (min-width: 640px) {
-    .cards,
-    .loading-grid {
+    .cards {
       grid-template-columns: repeat(max(1, min(var(--col-count, 5), 4)), minmax(0, 1fr));
     }
   }
 
   @media (min-width: 1024px) {
-    .cards,
-    .loading-grid {
+    .cards {
       grid-template-columns: repeat(var(--col-count, 5), minmax(0, 1fr));
     }
   }
 
   @media (prefers-reduced-motion: reduce) {
-    .cards,
-    .loading-grid {
+    .cards {
       transition: none;
     }
   }

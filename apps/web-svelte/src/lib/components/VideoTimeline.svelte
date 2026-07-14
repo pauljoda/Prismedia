@@ -130,7 +130,7 @@
     /*
      * VidStack's own track-fill is positioned from the media element's raw duration. For a still-
      * growing on-demand HLS playlist (e.g. the SDR-direct adaptive path) that duration is only the
-     * produced-so-far length, so VidStack paints its fill to ~100% and the brass overruns the real
+     * produced-so-far length, so VidStack paints its fill to ~100% and the neutral accent overruns the real
      * playhead. We drive the visible fill ourselves from `playbackProgressPercent` (computed against
      * the authoritative max(video.duration, propDuration)), so keep VidStack's duration-driven fill
      * transparent and let `.is-played` be the single source of truth.
@@ -236,7 +236,7 @@
 
   .video-slider-native-progress.is-played {
     background: var(--prismedia-fill-gradient);
-    box-shadow: 0 0 12px rgba(196, 154, 90, 0.40);
+    box-shadow: 0 0 12px rgba(199, 201, 204, 0.40);
     width: var(--prismedia-slider-fill, 0%);
     z-index: 3;
   }
@@ -245,8 +245,8 @@
     background: var(--color-accent-400);
     border-radius: 50%;
     box-shadow:
-      0 0 0 1px rgba(196, 154, 90, 0.35),
-      0 0 14px rgba(196, 154, 90, 0.55);
+      0 0 0 1px rgba(199, 201, 204, 0.35),
+      0 0 14px rgba(199, 201, 204, 0.55);
     height: 0.75rem;
     left: var(--prismedia-slider-fill, var(--slider-fill, 0%));
     pointer-events: none;

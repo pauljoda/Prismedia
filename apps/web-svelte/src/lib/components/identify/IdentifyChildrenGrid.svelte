@@ -133,11 +133,11 @@
   .child-cover.is-nomatch img { filter: grayscale(1); opacity: 0.4; }
   .child-cover img { width: 100%; height: 100%; object-fit: cover; }
   .child-cover-empty { width: 100%; height: 100%; background: linear-gradient(135deg, #141925, #0d1119); }
-  .is-selected .child-cover { border-color: var(--color-border-accent-strong, #d59a2a); box-shadow: 0 0 0 1px var(--color-border-accent-strong, #d59a2a); }
-  .child-overlay { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.3rem; background: color-mix(in srgb, #060810 60%, transparent); color: var(--color-text-accent, #f2c26a); font-size: 0.66rem; text-align: center; padding: 0 0.4rem; }
+  .is-selected .child-cover { border-color: var(--color-border-accent-strong, #9699a1); box-shadow: 0 0 0 1px var(--color-border-accent-strong, #9699a1); }
+  .child-overlay { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.3rem; background: color-mix(in srgb, #060810 60%, transparent); color: var(--color-text-accent, #c7c9cc); font-size: 0.66rem; text-align: center; padding: 0 0.4rem; }
   .child-overlay-muted { color: var(--color-text-muted, #8a93a6); }
-  .child-select { position: absolute; right: 0.3rem; top: 0.3rem; width: 1.15rem; height: 1.15rem; display: flex; align-items: center; justify-content: center; border-radius: 4px; border: 1px solid var(--color-border, #1c2235); background: color-mix(in srgb, #060810 55%, transparent); color: var(--color-text-accent, #f2c26a); cursor: pointer; }
-  .child-select.is-on { background: var(--color-border-accent-strong, #d59a2a); border-color: var(--color-border-accent-strong, #d59a2a); color: #0c0f15; }
+  .child-select { position: absolute; right: 0.3rem; top: 0.3rem; width: 1.15rem; height: 1.15rem; display: flex; align-items: center; justify-content: center; border-radius: 4px; border: 1px solid var(--color-border, #1c2235); background: color-mix(in srgb, #060810 55%, transparent); color: var(--color-text-accent, #c7c9cc); cursor: pointer; }
+  .child-select.is-on { background: var(--color-border-accent-strong, #9699a1); border-color: var(--color-border-accent-strong, #9699a1); color: #0c0f15; }
   .child-title { font-size: 0.72rem; line-height: 1.2; color: var(--color-text-primary, #f2eed8); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .child-title.is-muted { color: var(--color-text-muted, #8a93a6); }
 </style>

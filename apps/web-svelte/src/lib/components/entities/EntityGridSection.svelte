@@ -119,7 +119,7 @@
   }
 
   .content-heading:focus-visible {
-    outline: 1px solid rgb(242 194 106 / 0.72);
+    outline: 1px solid rgb(199 201 204 / 0.72);
     outline-offset: 2px;
   }
 
@@ -169,7 +169,7 @@
 
   .content-heading:hover .section-chevron,
   .is-collapsed .section-chevron {
-    color: var(--color-text-accent, #f2c26a);
+    color: var(--color-text-accent, #c7c9cc);
   }
 
   .section-body {

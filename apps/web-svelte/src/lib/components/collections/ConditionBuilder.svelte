@@ -209,7 +209,7 @@
     "min-w-0 w-full appearance-none rounded-xs border border-border-subtle bg-surface-2",
     "h-8 px-2 pr-6 text-[0.75rem] text-text-primary",
     "shadow-[inset_0_1px_4px_rgba(0,0,0,0.25)] outline-none transition-colors",
-    "focus:border-border-accent focus:shadow-[inset_0_1px_4px_rgba(0,0,0,0.25),0_0_0_1px_rgba(242,194,106,0.2)]",
+    "focus:border-border-accent focus:shadow-[inset_0_1px_4px_rgba(0,0,0,0.25),0_0_0_1px_rgba(199, 201, 204,0.2)]",
     "disabled:cursor-not-allowed disabled:opacity-50",
   );
 
@@ -217,7 +217,7 @@
     "min-w-0 w-full rounded-xs border border-border-subtle bg-surface-2",
     "h-8 px-2 text-[0.75rem] text-text-primary",
     "shadow-[inset_0_1px_4px_rgba(0,0,0,0.25)] outline-none transition-colors placeholder:text-text-disabled",
-    "focus:border-border-accent focus:shadow-[inset_0_1px_4px_rgba(0,0,0,0.25),0_0_0_1px_rgba(242,194,106,0.2)]",
+    "focus:border-border-accent focus:shadow-[inset_0_1px_4px_rgba(0,0,0,0.25),0_0_0_1px_rgba(199, 201, 204,0.2)]",
     "disabled:cursor-not-allowed disabled:opacity-50",
   );
 </script>
@@ -243,7 +243,7 @@
             "rounded-xs px-3 py-1 text-[0.7rem] font-semibold uppercase tracking-[0.12em] transition-all",
             "disabled:cursor-not-allowed disabled:opacity-50",
             active
-              ? "bg-gradient-to-b from-accent-900/60 to-accent-950/60 text-text-accent shadow-[inset_0_0_0_1px_rgba(242,194,106,0.45),0_0_12px_rgba(242,194,106,0.18)]"
+              ? "bg-gradient-to-b from-accent-900/60 to-accent-950/60 text-text-accent shadow-[inset_0_0_0_1px_rgba(199, 201, 204,0.45),0_0_12px_rgba(199, 201, 204,0.18)]"
               : "text-text-disabled hover:text-text-muted",
           )}
         >

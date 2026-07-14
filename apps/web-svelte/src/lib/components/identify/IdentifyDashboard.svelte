@@ -141,7 +141,7 @@
             <button
               type="button"
               class="inline-flex h-8 w-full items-center justify-center gap-1.5 rounded-xs border border-border-accent-strong px-2.5 text-[0.72rem] font-medium text-text-primary transition-all disabled:cursor-not-allowed disabled:opacity-40 sm:h-7 sm:w-auto"
-              style="background: linear-gradient(135deg, rgba(242,194,106,0.24), rgba(242,194,106,0.1)); box-shadow: 0 0 18px rgba(242,194,106,0.16);"
+              style="background: linear-gradient(135deg, rgba(199, 201, 204,0.24), rgba(199, 201, 204,0.1)); box-shadow: 0 0 18px rgba(199, 201, 204,0.16);"
               disabled={store.bulkAccepting}
               onclick={acceptSelected}
             >

@@ -930,7 +930,7 @@
   }
 
   :global(.pdf-text-layer ::selection) {
-    background: rgba(242, 194, 106, 0.35);
+    background: rgba(199, 201, 204, 0.35);
   }
 
   /* Transparent clickable link overlay (internal page jumps + external URLs). */
@@ -947,8 +947,8 @@
   }
 
   :global(.pdf-link-layer .pdf-link:hover) {
-    background: rgba(242, 194, 106, 0.18);
-    box-shadow: 0 0 0 1px rgba(242, 194, 106, 0.4);
+    background: rgba(199, 201, 204, 0.18);
+    box-shadow: 0 0 0 1px rgba(199, 201, 204, 0.4);
   }
 
   .pdf-message {

@@ -197,8 +197,8 @@
     background: var(--color-surface-3, #181d27);
     box-shadow:
       inset 0 2px 8px rgba(0, 0, 0, 0.3),
-      0 0 0 1px rgba(242, 194, 106, 0.28),
-      0 0 8px rgba(242, 194, 106, 0.13);
+      0 0 0 1px rgba(199, 201, 204, 0.28),
+      0 0 8px rgba(199, 201, 204, 0.13);
   }
 
   .provider-trigger-copy {

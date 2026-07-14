@@ -78,7 +78,7 @@
   const inputBase = cn(
     "min-w-0 border border-border-subtle bg-surface-2 px-2.5 py-1.5 text-sm text-text-primary shadow-[inset_0_2px_8px_rgba(0,0,0,0.30)]",
     "font-mono placeholder:text-text-disabled",
-    "focus:border-border-accent focus:outline-none focus:shadow-[inset_0_2px_8px_rgba(0,0,0,0.30),0_0_0_1px_rgba(242,194,106,0.35),0_0_8px_rgba(242,194,106,0.15)]",
+    "focus:border-border-accent focus:outline-none focus:shadow-[inset_0_2px_8px_rgba(0,0,0,0.30),0_0_0_1px_rgba(199, 201, 204,0.35),0_0_8px_rgba(199, 201, 204,0.15)]",
   );
 </script>
 

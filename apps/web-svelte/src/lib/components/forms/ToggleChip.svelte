@@ -25,7 +25,7 @@
   const onClasses = $derived(
     variant === "warning"
       ? "border border-error/40 bg-error-muted/60 text-error-text shadow-[0_0_12px_rgba(220,80,80,0.18)]"
-      : "border border-border-accent bg-accent-950 text-accent-300 shadow-[0_0_12px_rgba(242,194,106,0.22)]",
+      : "border border-border-accent bg-accent-950 text-accent-300 shadow-[0_0_12px_rgba(199, 201, 204,0.22)]",
   );
 </script>
 

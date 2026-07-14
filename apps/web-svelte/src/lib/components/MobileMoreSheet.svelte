@@ -19,7 +19,7 @@
   } from "@lucide/svelte";
   import { resolve } from "$app/paths";
   import { page } from "$app/state";
-  import { cn } from "@prismedia/ui-svelte";
+  import { cn, ColorInput } from "@prismedia/ui-svelte";
   import { useNavCustomization } from "$lib/stores/nav-customization.svelte";
   import { useSession } from "$lib/stores/session.svelte";
   import { navItemVisible } from "$lib/nav/nav-visibility";
@@ -169,7 +169,7 @@
     aria-modal="true"
     aria-label="Navigation"
     class={cn(
-      "sheet glass-2 fixed inset-x-0 bottom-0 z-[60] flex max-h-[82dvh] flex-col border border-border-subtle md:hidden",
+      "sheet app-glass fixed inset-x-0 bottom-0 z-[60] flex max-h-[82dvh] flex-col border md:hidden",
       useTransition && "animate",
     )}
     style:transform="translateY({translateY})"
@@ -270,12 +270,17 @@
       {#each sections as section, sectionIndex (section.id)}
         {@const visibleItems = editing ? section.items : section.items.filter((i) => !i.hidden && navItemVisible(i.href, session))}
         {#if editing || visibleItems.length > 0}
-          <div class="mb-3 last:mb-0">
+          <div class="nav-section mb-3 last:mb-0" style:--section-accent={section.accent}>
             <!-- Section header -->
             <div class="flex items-center justify-between gap-2 px-1.5 pb-1">
-              <span class="text-kicker truncate">{section.label}</span>
+              <span class="section-label text-kicker truncate">{section.label}</span>
               {#if editing}
                 <div class="flex shrink-0 items-center gap-0.5">
+                  <ColorInput
+                    value={section.accent}
+                    aria-label={`Color for ${section.label}`}
+                    onValueChange={(accent) => nav.setSectionAccent(section.id, accent)}
+                  />
                   <button
                     type="button"
                     class="icon-btn"
@@ -393,19 +398,19 @@
                       aria-current={active ? "page" : undefined}
                       class={cn(
                         "group relative flex items-center gap-3 rounded-sm px-2.5 py-2.5 text-sm transition-colors",
-                        active ? "bg-accent-950 text-glow-accent" : "text-text-muted active:bg-surface-2",
+                        active ? "nav-item-active text-text-primary" : "text-text-muted active:bg-surface-2",
                       )}
                       onclick={onClose}
                     >
                       {#if active}
-                        <span class="absolute bottom-1.5 left-0 top-1.5 w-[3px] rounded-l-full bg-accent-500 shadow-[var(--shadow-glow-accent)]"></span>
+                        <span class="active-rail absolute bottom-1.5 left-0 top-1.5 w-[3px] rounded-l-full"></span>
                       {/if}
                       {#if Icon}
                         <Icon
                           class={cn(
                             "h-4 w-4 shrink-0",
                             active
-                              ? "text-accent-300 drop-shadow-[0_0_8px_rgba(199,155,92,0.5)]"
+                              ? "nav-item-icon-active"
                               : "text-text-muted group-hover:text-text-primary",
                           )}
                         />
@@ -520,6 +525,23 @@
       0 -12px 40px rgba(0, 0, 0, 0.5),
       var(--shadow-panel);
     will-change: transform;
+  }
+
+  .section-label {
+    color: var(--section-accent);
+  }
+
+  .nav-item-active {
+    background: linear-gradient(90deg, color-mix(in srgb, var(--section-accent) 15%, transparent), transparent 92%);
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--section-accent) 14%, transparent);
+  }
+
+  .active-rail {
+    background: var(--section-accent);
+  }
+
+  .nav-item-icon-active {
+    color: var(--section-accent);
   }
   .sheet.animate {
     transition: transform 280ms var(--ease-mechanical);

@@ -118,7 +118,7 @@
     );
     box-shadow:
       0 0 8px var(--color-accent-overlay-light),
-      0 0 16px rgba(196, 154, 90, 0.1);
+      0 0 16px rgba(199, 201, 204, 0.1);
   }
 
   .tab strong {

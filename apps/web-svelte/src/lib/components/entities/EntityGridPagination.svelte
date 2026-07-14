@@ -250,12 +250,12 @@
     background:
       linear-gradient(
         to right,
-        rgb(242 194 106 / 0.85) 0%,
-        rgb(242 194 106 / 0.95) calc(var(--progress, 0%) - 0.5%),
-        rgb(242 194 106 / 0.15) var(--progress, 0%),
-        rgb(242 194 106 / 0.05) 100%
+        rgb(199 201 204 / 0.85) 0%,
+        rgb(199 201 204 / 0.95) calc(var(--progress, 0%) - 0.5%),
+        rgb(199 201 204 / 0.15) var(--progress, 0%),
+        rgb(199 201 204 / 0.05) 100%
       );
-    box-shadow: 0 0 12px rgb(242 194 106 / 0.35);
+    box-shadow: 0 0 12px rgb(199 201 204 / 0.35);
     pointer-events: none;
     transition: background var(--duration-normal) var(--ease-default);
   }
@@ -334,7 +334,7 @@
 
   .transport-btn:focus-visible {
     outline: none;
-    box-shadow: 0 0 0 1px rgba(242,194,106,0.35), 0 0 8px rgba(242,194,106,0.15);
+    box-shadow: 0 0 0 1px rgba(199, 201, 204,0.35), 0 0 8px rgba(199, 201, 204,0.15);
   }
 
   .transport-btn:disabled {
@@ -369,7 +369,7 @@
     color: var(--color-text-accent-bright);
     font-size: 0.84rem;
     font-weight: 600;
-    text-shadow: 0 0 14px rgb(242 194 106 / 0.5);
+    text-shadow: 0 0 14px rgb(199 201 204 / 0.5);
   }
 
   .page-count-sep {
@@ -420,9 +420,9 @@
   .page-size-btn:hover,
   .page-size-btn:focus-visible {
     outline: none;
-    border-color: var(--color-border-accent, rgba(196, 154, 90, 0.25));
+    border-color: var(--color-border-accent, rgba(199, 201, 204, 0.25));
     background: var(--color-surface-2, #101420);
-    box-shadow: 0 0 0 1px rgba(242,194,106,0.35), 0 0 8px rgba(242,194,106,0.15);
+    box-shadow: 0 0 0 1px rgba(199, 201, 204,0.35), 0 0 8px rgba(199, 201, 204,0.15);
   }
 
   .page-size-menu {
@@ -465,7 +465,7 @@
 
   .page-size-menu-item.is-active {
     background: linear-gradient(90deg, var(--color-accent-overlay-subtle), transparent);
-    color: var(--color-text-accent, #f2c26a);
+    color: var(--color-text-accent, #c7c9cc);
   }
 
   .retry-load {

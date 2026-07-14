@@ -218,17 +218,17 @@
   }
 
   .preset-btn:hover {
-    border-color: var(--color-border-accent, rgba(242, 194, 106, 0.25));
+    border-color: var(--color-border-accent, rgba(199, 201, 204, 0.25));
     background: var(--color-surface-3, #151a28);
     color: var(--color-text-primary);
-    box-shadow: 0 0 0 1px rgba(242,194,106,0.35), 0 0 8px rgba(242,194,106,0.15);
+    box-shadow: 0 0 0 1px rgba(199, 201, 204,0.35), 0 0 8px rgba(199, 201, 204,0.15);
   }
 
   .preset-btn.is-active {
-    border-color: var(--color-border-accent, rgba(242, 194, 106, 0.25));
+    border-color: var(--color-border-accent, rgba(199, 201, 204, 0.25));
     background: var(--color-surface-4, #1c2235);
-    color: var(--color-text-accent, #f2c26a);
-    box-shadow: 0 0 0 1px rgba(242,194,106,0.35), 0 0 8px rgba(242,194,106,0.15);
+    color: var(--color-text-accent, #c7c9cc);
+    box-shadow: 0 0 0 1px rgba(199, 201, 204,0.35), 0 0 8px rgba(199, 201, 204,0.15);
   }
 
   .preset-label {
@@ -277,8 +277,8 @@
   }
 
   .preset-item.is-active {
-    background: linear-gradient(90deg, rgb(242 194 106 / 0.12), transparent);
-    border-color: rgb(242 194 106 / 0.18);
+    background: linear-gradient(90deg, rgb(199 201 204 / 0.12), transparent);
+    border-color: rgb(199 201 204 / 0.18);
     color: var(--color-text-accent, #c49a5a);
   }
 
@@ -373,8 +373,8 @@
   }
 
   .preset-input:focus {
-    border-color: var(--color-border-accent, rgba(242, 194, 106, 0.25));
-    box-shadow: inset 0 2px 8px rgba(0,0,0,0.30), 0 0 0 1px rgba(242,194,106,0.35), 0 0 8px rgba(242,194,106,0.15);
+    border-color: var(--color-border-accent, rgba(199, 201, 204, 0.25));
+    box-shadow: inset 0 2px 8px rgba(0,0,0,0.30), 0 0 0 1px rgba(199, 201, 204,0.35), 0 0 8px rgba(199, 201, 204,0.15);
   }
 
   .preset-form-row {
@@ -407,14 +407,14 @@
   }
 
   .preset-form-btn-primary {
-    border-color: rgb(242 194 106 / 0.25);
+    border-color: rgb(199 201 204 / 0.25);
     background: rgb(38 31 15 / 0.5);
     color: var(--color-accent-200, #ebdaaf);
   }
 
   .preset-form-btn-primary:hover {
     background: rgb(61 48 22 / 0.5);
-    box-shadow: 0 0 8px rgb(242 194 106 / 0.15);
+    box-shadow: 0 0 8px rgb(199 201 204 / 0.15);
   }
 
   .preset-form-btn.is-disabled {

@@ -239,13 +239,13 @@
   }
 
   .primary-tab:focus-visible {
-    outline: 1px solid rgb(242 194 106 / 0.72);
+    outline: 1px solid rgb(199 201 204 / 0.72);
     outline-offset: 2px;
     border-radius: var(--radius-xs, 4px);
   }
 
   .primary-tab.is-active {
-    color: var(--color-text-accent-bright, #f2c26a);
+    color: var(--color-text-accent-bright, #c7c9cc);
   }
 
   .primary-tab.is-active::before {
@@ -257,6 +257,6 @@
     );
     box-shadow:
       0 0 8px var(--color-accent-overlay-light),
-      0 0 16px rgba(196, 154, 90, 0.1);
+      0 0 16px rgba(199, 201, 204, 0.1);
   }
 </style>

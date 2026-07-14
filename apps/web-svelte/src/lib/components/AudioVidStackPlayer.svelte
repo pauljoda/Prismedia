@@ -930,8 +930,8 @@
         class={cn(
           "mx-0.5 rounded-full p-2 transition-all",
           playing
-            ? "bg-accent-500 text-bg shadow-[0_0_10px_rgba(196,154,90,0.3)]"
-            : "bg-accent-500/15 text-accent-300 ring-1 ring-accent-500/45 shadow-[0_0_12px_rgba(196,154,90,0.18)] hover:bg-accent-500 hover:text-bg",
+            ? "bg-accent-500 text-bg shadow-[0_0_10px_rgba(199, 201, 204,0.3)]"
+            : "bg-accent-500/15 text-accent-300 ring-1 ring-accent-500/45 shadow-[0_0_12px_rgba(199, 201, 204,0.18)] hover:bg-accent-500 hover:text-bg",
         )}
       >
         {#if playing}
@@ -1006,9 +1006,9 @@
   .audio-notes :global(.audio-note) {
     position: absolute;
     left: 0;
-    color: #f2c26a;
+    color: #c7c9cc;
     opacity: 0;
-    filter: drop-shadow(0 0 4px rgba(242, 194, 106, 0.55));
+    filter: drop-shadow(0 0 4px rgba(199, 201, 204, 0.55));
   }
   /* Three notes fan out evenly: one drifts left, one rises center, one drifts right. */
   .audio-notes :global(.audio-note-1) { animation: audio-note-left 2.4s ease-out infinite; animation-delay: 0s; }

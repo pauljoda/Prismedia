@@ -22,7 +22,7 @@
         state: {
           unchecked: "border-border-subtle bg-surface-3",
           checked:
-            "border-border-accent bg-accent-500 shadow-[0_0_6px_rgba(242,194,106,0.35)]",
+            "border-border-accent bg-accent-500 shadow-[0_0_6px_rgba(199, 201, 204,0.35)]",
         },
         disabled: { true: "cursor-not-allowed opacity-40", false: "" },
       },

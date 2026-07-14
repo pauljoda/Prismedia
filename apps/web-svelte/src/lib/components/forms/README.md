@@ -3,7 +3,7 @@
 Domain-specific form controls used across the Svelte app. **These are
 not generic primitives** — they wrap `@prismedia/ui-svelte` (or HTML
 elements directly) with Prismedia conventions baked in: NSFW awareness,
-the Dark Room visual rules (sharp corners, brass accents, glow on
+the prism-system visual rules (sharp corners, neutral accent accents, glow on
 focus), and the entity-edit data model used by the rest of the app.
 
 ## What lives here
@@ -13,7 +13,7 @@ focus), and the entity-edit data model used by the rest of the app.
 | [`FormField.svelte`](./FormField.svelte) | Label + helper-text wrapper used by every other field component |
 | [`TextField.svelte`](./TextField.svelte) | Single-line text input |
 | [`TextAreaField.svelte`](./TextAreaField.svelte) | Multi-line text input |
-| [`DateField.svelte`](./DateField.svelte) | Date input with the Dark Room calendar styling |
+| [`DateField.svelte`](./DateField.svelte) | Date input with the prism-system calendar styling |
 | [`SearchSelect.svelte`](./SearchSelect.svelte) | Async-search dropdown for picking a single related entity (studio, performer, etc.) |
 | [`TagSelect.svelte`](./TagSelect.svelte) | Multi-select for tags, with NSFW-aware filtering |
 | [`ToggleChip.svelte`](./ToggleChip.svelte) | On/off chip used in field-mask UIs (e.g. "include this field when accepting a scrape") |

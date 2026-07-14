@@ -278,7 +278,7 @@
     color: rgb(196 201 212 / 0.7);
     transition: border-color 120ms ease;
   }
-  .search:focus-within { border-color: rgb(242 194 106 / 0.4); }
+  .search:focus-within { border-color: rgb(199 201 204 / 0.4); }
   .search input {
     flex: 1 1 auto;
     min-width: 0;
@@ -318,10 +318,10 @@
   }
   .pill:hover { color: rgb(244 239 230 / 0.92); border-color: rgb(255 255 255 / 0.18); }
   .pill.is-active {
-    color: #f2c26a;
-    border-color: rgb(242 194 106 / 0.5);
+    color: #c7c9cc;
+    border-color: rgb(199 201 204 / 0.5);
     background: rgb(50 38 14 / 0.5);
-    box-shadow: 0 0 10px rgb(242 194 106 / 0.12);
+    box-shadow: 0 0 10px rgb(199 201 204 / 0.12);
   }
   .pill-count {
     font-family: var(--font-mono, "JetBrains Mono", monospace);
@@ -350,7 +350,7 @@
     transition: border-color 120ms ease, background 120ms ease;
   }
   .bulk-bar.has-selection {
-    border-color: rgb(242 194 106 / 0.3);
+    border-color: rgb(199 201 204 / 0.3);
     background: rgb(40 30 12 / 0.35);
   }
   .bulk-all {

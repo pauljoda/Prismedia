@@ -12,6 +12,7 @@ import {
   type ResolvedNavSection,
 } from "$lib/nav/nav-catalog";
 import { fetchNavLayout, saveNavLayout } from "$lib/api/nav-layout";
+import { colors } from "@prismedia/ui-svelte";
 
 const ctx = createContext<NavCustomizationStore>("NavCustomization");
 
@@ -104,6 +105,14 @@ export class NavCustomizationStore {
     this.mapSections((s) => (s.id === id ? { ...s, label } : s));
   }
 
+  /** Set the user-selected spectrum color for a navigation section. */
+  setSectionAccent(id: string, accent: string) {
+    if (!/^#[0-9a-f]{6}$/i.test(accent)) return;
+    this.mapSections((section) =>
+      section.id === id ? { ...section, accent: accent.toLowerCase() } : section,
+    );
+  }
+
   /** Toggle whether a section is collapsed (items hidden) in the expanded sidebar; persists. */
   toggleSectionCollapsed(id: string) {
     this.mapSections((s) => (s.id === id ? { ...s, collapsed: !s.collapsed } : s));
@@ -115,7 +124,7 @@ export class NavCustomizationStore {
     const id = uniqueSectionId(this.prefs.sections, trimmed);
     this.commit({
       ...this.prefs,
-      sections: [...this.prefs.sections, { id, label: trimmed, items: [] }],
+      sections: [...this.prefs.sections, { id, label: trimmed, accent: colors.accent[500], items: [] }],
     });
     return id;
   }

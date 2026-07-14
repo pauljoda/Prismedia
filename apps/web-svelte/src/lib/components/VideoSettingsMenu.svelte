@@ -382,8 +382,8 @@
 
   .player-settings-option.is-active {
     background: var(--color-accent-overlay-subtle);
-    border-color: var(--color-border-accent-strong, rgba(196, 154, 90, 0.50));
-    box-shadow: 0 0 0 1px rgba(196, 154, 90, 0.20), 0 0 8px rgba(196, 154, 90, 0.10);
+    border-color: var(--color-border-accent-strong, rgba(199, 201, 204, 0.50));
+    box-shadow: 0 0 0 1px rgba(199, 201, 204, 0.20), 0 0 8px rgba(199, 201, 204, 0.10);
     color: var(--color-accent-100);
   }
 
@@ -440,8 +440,8 @@
     border: 1px solid rgba(0, 0, 0, 0.45);
     border-radius: 50%;
     box-shadow:
-      0 0 0 1px rgba(196, 154, 90, 0.30),
-      0 0 14px rgba(196, 154, 90, 0.40);
+      0 0 0 1px rgba(199, 201, 204, 0.30),
+      0 0 14px rgba(199, 201, 204, 0.40);
     height: 0.85rem;
     width: 0.85rem;
   }
@@ -451,8 +451,8 @@
     border: 1px solid rgba(0, 0, 0, 0.45);
     border-radius: 50%;
     box-shadow:
-      0 0 0 1px rgba(196, 154, 90, 0.30),
-      0 0 14px rgba(196, 154, 90, 0.40);
+      0 0 0 1px rgba(199, 201, 204, 0.30),
+      0 0 14px rgba(199, 201, 204, 0.40);
     height: 0.85rem;
     width: 0.85rem;
   }

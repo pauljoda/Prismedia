@@ -13,7 +13,7 @@
   const STRIP_HEIGHT = 52;
   const DESKTOP_WHEEL_SCRUB_MQ = "(pointer: fine) and (hover: hover)";
   const BAR_COLOR = "rgba(255, 255, 255, 0.18)";
-  const BAR_ACCENT = "rgba(196, 154, 90, 0.35)";
+  const BAR_ACCENT = "rgba(199, 201, 204, 0.35)";
 
   let { peaks, duration, audioEl, onSeek }: Props = $props();
 
@@ -213,7 +213,7 @@
 
       <div class="pointer-events-none absolute inset-y-0 left-1/2 z-20 -translate-x-1/2">
         <div class="absolute -top-px left-1/2 -translate-x-1/2 border-x-[5px] border-t-[5px] border-x-transparent border-t-accent-500"></div>
-        <div class="h-full w-[2px] bg-accent-500 shadow-[0_0_8px_rgba(196,154,90,0.55)]"></div>
+        <div class="h-full w-[2px] bg-accent-500 shadow-[0_0_8px_rgba(199, 201, 204,0.55)]"></div>
         <div class="absolute -bottom-px left-1/2 -translate-x-1/2 border-x-[5px] border-b-[5px] border-x-transparent border-b-accent-500"></div>
       </div>
 

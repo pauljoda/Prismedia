@@ -91,6 +91,8 @@
     EntityDetailSection,
     EntityDetailTab,
   } from "./entity-detail-types";
+  import { entityAccentForKind } from "$lib/entities/entity-accent";
+  import { paletteFromImage, type ArtworkPalette } from "$lib/entities/artwork-palette";
 
   type Props = EntityDetailProps;
 
@@ -152,6 +154,7 @@
     isNsfw: false,
     isOrganized: false,
   });
+  let paletteState = $state<{ entityId: string; palette: ArtworkPalette } | null>(null);
 
   const isFavorite = $derived(card.flags.find((f) => f.code === "favorite")?.active ?? false);
   const isNsfw = $derived(
@@ -160,6 +163,22 @@
   );
   const isOrganized = $derived(card.flags.find((f) => f.code === "organized")?.active ?? false);
   const nsfw = useNsfw();
+  const entityAccent = $derived(entityAccentForKind(card.entity.kind));
+  const artworkPalette = $derived(
+    paletteState?.entityId === card.entity.id ? paletteState.palette : null,
+  );
+  const activePalette = $derived(
+    artworkPalette ?? {
+      primary: entityAccent.primary,
+      secondary: entityAccent.secondary,
+      background: "#000000",
+    },
+  );
+
+  function captureArtworkPalette(image: HTMLImageElement) {
+    const palette = paletteFromImage(image);
+    if (palette) paletteState = { entityId: card.entity.id, palette };
+  }
 
   $effect(() => {
     if (nsfw.mode === "off" && isNsfw) {
@@ -1131,7 +1150,14 @@
   onchange={(event) => void handleAssetInput(ENTITY_FILE_ROLE.backdrop, event)}
 />
 
-<article class="entity-detail" data-poster-size={effectivePosterSize} data-hero-mode={heroMode}>
+<article
+  class="entity-detail"
+  data-poster-size={effectivePosterSize}
+  data-hero-mode={heroMode}
+  style:--detail-accent={activePalette.primary}
+  style:--detail-secondary={activePalette.secondary}
+  style:--detail-background={activePalette.background}
+>
   <!-- Hero -->
   <div
     class="hero"
@@ -1360,7 +1386,14 @@
     {#if heroMode === "image"}
       <!-- Sharp banner, mask fades bottom 10%; the page's LCP image, loaded at high priority. -->
       <div class="hero-banner">
-        <img src={displayHero!.src} alt="Banner" decoding="async" fetchpriority="high" referrerpolicy="no-referrer" />
+        <img
+          src={displayHero!.src}
+          alt="Banner"
+          decoding="async"
+          fetchpriority="high"
+          referrerpolicy="no-referrer"
+          onload={(event) => captureArtworkPalette(event.currentTarget as HTMLImageElement)}
+        />
       </div>
       <!-- Lower zone: reflection bg + content on top (same URL as the banner, so it reuses the fetch) -->
       <div class="hero-lower">
@@ -1374,14 +1407,20 @@
       <div class="hero-backdrop poster-mode">
         <div class="hero-backdrop-thumbnail">
           {#if posterCard}
-            <EntityThumbnail card={posterCard} linkable={false} mediaOnly={true} interactive={false} />
+            <EntityThumbnail
+              card={posterCard}
+              linkable={false}
+              mediaOnly={true}
+              interactive={false}
+              onArtworkLoad={captureArtworkPalette}
+            />
           {/if}
         </div>
         <div class="hero-backdrop-blur"></div>
       </div>
       {@render heroContent()}
     {:else}
-      <div class="hero-gradient-bg" style:background-image={placeholderGradient(card.entity.title)}></div>
+      <div class="hero-gradient-bg"></div>
       {@render heroContent()}
     {/if}
   </div>
@@ -1492,9 +1531,8 @@
   /* ── Layout ─────────────────────────────────────────────── */
 
   .entity-detail {
-    --detail-accent: #c49a5a;
-    --detail-accent-muted: var(--color-accent-overlay-medium);
-    --detail-accent-glow: var(--color-accent-overlay-subtle);
+    --detail-accent-muted: color-mix(in srgb, var(--detail-accent) 34%, transparent);
+    --detail-accent-glow: color-mix(in srgb, var(--detail-accent) 18%, transparent);
     --detail-surface: var(--color-surface-2, #101420);
     --detail-surface-raised: var(--color-surface-3, #151a28);
     --detail-border: var(--color-border, #1c2235);
@@ -1512,6 +1550,12 @@
     gap: 0;
     min-width: 0;
     overflow: hidden;
+    border-radius: var(--radius-lg);
+    background:
+      radial-gradient(circle at 8% 2%, color-mix(in srgb, var(--detail-accent) 24%, transparent), transparent 38rem),
+      radial-gradient(circle at 96% 32%, color-mix(in srgb, var(--detail-secondary) 18%, transparent), transparent 34rem),
+      linear-gradient(180deg, color-mix(in srgb, var(--detail-background) 88%, #000 12%), #000 45rem);
+    transition: background 180ms var(--ease-default);
   }
 
   .entity-detail > * {
@@ -1577,7 +1621,7 @@
     height: 100%;
     object-fit: cover;
     transform: scaleY(-1) scale(1.25);
-    filter: blur(15px) saturate(1.3) brightness(0.5);
+    filter: blur(15px) saturate(0.82) brightness(0.42);
     will-change: transform;
   }
 
@@ -1585,7 +1629,10 @@
     position: absolute;
     inset: 0;
     z-index: 1;
-    background: rgba(7, 8, 11, 0.45);
+    background:
+      radial-gradient(circle at 16% 10%, color-mix(in srgb, var(--detail-accent) 18%, transparent), transparent 52%),
+      radial-gradient(circle at 88% 40%, color-mix(in srgb, var(--detail-secondary) 12%, transparent), transparent 48%),
+      linear-gradient(180deg, rgb(0 0 0 / 0.2), rgb(0 0 0 / 0.72));
   }
 
 
@@ -1601,8 +1648,9 @@
   .hero-backdrop-thumbnail {
     position: absolute;
     inset: -40px;
-    transform: scale(1.3);
-    filter: blur(15px) saturate(1.3) brightness(0.5);
+    transform: scale(1.42);
+    filter: blur(36px) saturate(0.78) brightness(0.4);
+    opacity: 0.48;
     will-change: transform;
   }
 
@@ -1629,7 +1677,10 @@
   .hero-backdrop-blur {
     position: absolute;
     inset: 0;
-    background: rgba(7, 8, 11, 0.45);
+    background:
+      radial-gradient(circle at top left, color-mix(in srgb, var(--detail-accent) 18%, transparent), transparent 58%),
+      radial-gradient(circle at right, color-mix(in srgb, var(--detail-secondary) 12%, transparent), transparent 54%),
+      linear-gradient(180deg, rgb(0 0 0 / 0.3), rgb(0 0 0 / 0.82));
   }
 
 
@@ -1638,6 +1689,10 @@
     position: absolute;
     inset: 0;
     z-index: 0;
+    background:
+      radial-gradient(circle at 14% 18%, color-mix(in srgb, var(--detail-accent) 16%, transparent), transparent 46%),
+      radial-gradient(circle at 90% 42%, color-mix(in srgb, var(--detail-secondary) 10%, transparent), transparent 48%),
+      #000;
     background-size: cover;
   }
 
@@ -1669,14 +1724,14 @@
     background: #050505;
     box-shadow:
       0 8px 32px rgba(0, 0, 0, 0.6),
-      0 0 0 1px rgba(196, 154, 90, 0.2);
+      0 0 0 1px rgba(199, 201, 204, 0.2);
     overflow: hidden;
   }
 
   .poster-frame.is-empty {
     display: grid;
     place-items: center;
-    background-image: linear-gradient(135deg, rgba(196, 154, 90, 0.12), rgba(255, 255, 255, 0.04));
+    background-image: linear-gradient(135deg, rgba(199, 201, 204, 0.12), rgba(255, 255, 255, 0.04));
   }
 
   [data-poster-size="small"] .poster-frame { --poster-width: 5rem; }
@@ -1717,7 +1772,7 @@
     position: absolute;
     inset: 0;
     background:
-      radial-gradient(circle at 50% 40%, rgba(242, 194, 106, 0.16), transparent 24%),
+      radial-gradient(circle at 50% 40%, rgba(199, 201, 204, 0.16), transparent 24%),
       linear-gradient(180deg, rgba(7, 8, 11, 0.18), rgba(7, 8, 11, 0.58));
   }
 
@@ -1725,7 +1780,6 @@
     position: relative;
     z-index: 1;
     opacity: 0.48;
-    filter: drop-shadow(0 0 20px var(--detail-accent-glow));
   }
 
   .header-asset-panel {
@@ -1794,8 +1848,7 @@
   }
 
   .asset-busy-overlay :global(.asset-busy-spinner) {
-    color: var(--detail-accent, #f2c26a);
-    filter: drop-shadow(0 0 8px var(--detail-accent-glow, rgb(242 194 106 / 0.4)));
+    color: var(--detail-accent, #c7c9cc);
     animation: asset-busy-spin 0.8s linear infinite;
   }
 
@@ -1844,7 +1897,7 @@
   .image-asset-btn:hover:not(:disabled) {
     color: var(--detail-accent);
     border-color: color-mix(in srgb, var(--detail-accent) 62%, var(--detail-border));
-    box-shadow: 0 0 16px var(--detail-accent-glow);
+    box-shadow: 0 2px 10px rgb(0 0 0 / 0.4);
   }
 
   .image-asset-btn:disabled {
@@ -2132,7 +2185,6 @@
 
   .rating-star.active {
     color: var(--detail-accent);
-    filter: drop-shadow(0 0 6px var(--detail-accent-glow));
   }
 
   .rating-star:focus {
@@ -2186,7 +2238,7 @@
     flex-wrap: wrap;
   }
 
-  /* A wanted placeholder's badge: brass accent, shared by every entity page. */
+  /* A wanted placeholder's badge: neutral accent accent, shared by every entity page. */
   :global(.hero-badge.wanted) {
     color: var(--color-text-accent, #c49a5a);
     border-color: color-mix(in srgb, var(--color-text-accent, #c49a5a) 45%, transparent);
@@ -2199,14 +2251,14 @@
     align-items: center;
     min-height: 1.45rem;
     padding: 0.2rem 0.62rem;
-    border: 1px solid rgba(242, 194, 106, 0.38);
+    border: 1px solid rgba(199, 201, 204, 0.38);
     border-radius: var(--radius-xs);
     background:
-      linear-gradient(135deg, rgba(242, 194, 106, 0.11), rgba(255, 255, 255, 0.03)),
+      linear-gradient(135deg, rgba(199, 201, 204, 0.11), rgba(255, 255, 255, 0.03)),
       color-mix(in srgb, var(--color-surface-2) 82%, var(--color-accent-900) 18%);
     box-shadow:
       inset 0 1px 0 rgba(255, 255, 255, 0.06),
-      0 0 8px rgba(242, 194, 106, 0.08);
+      0 0 8px rgba(199, 201, 204, 0.08);
     color: var(--color-accent-100);
     font-family: var(--font-mono, "JetBrains Mono", monospace);
     font-size: 0.68rem;
@@ -2214,7 +2266,7 @@
     letter-spacing: 0.08em;
     line-height: 1;
     text-transform: uppercase;
-    text-shadow: 0 0 6px rgba(242, 194, 106, 0.16);
+    text-shadow: 0 0 6px rgba(199, 201, 204, 0.16);
   }
 
   .provider-identity-chip {
@@ -2232,9 +2284,7 @@
   a.provider-identity-chip:hover,
   a.provider-identity-chip:focus-visible {
     border-color: color-mix(in srgb, var(--detail-accent) 68%, transparent);
-    box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.08),
-      0 0 12px var(--detail-accent-glow);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
     color: var(--detail-accent);
     outline: none;
   }
@@ -2303,7 +2353,7 @@
     color: var(--detail-accent);
     border-color: var(--detail-accent-muted);
     background: color-mix(in srgb, var(--detail-accent) 8%, var(--detail-surface-raised));
-    box-shadow: 0 0 14px var(--detail-accent-glow);
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--detail-accent) 18%, transparent);
   }
 
   .detail-tab-list strong {
@@ -2386,7 +2436,7 @@
     color: var(--detail-accent);
     border-color: var(--detail-accent-muted);
     background: color-mix(in srgb, var(--detail-accent) 8%, var(--detail-surface-raised));
-    box-shadow: 0 0 14px var(--detail-accent-glow);
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--detail-accent) 18%, transparent);
   }
 
   .edit-action.secondary {
@@ -2724,9 +2774,9 @@
     place-items: center;
     width: 1.55rem;
     height: 1.55rem;
-    border: 1px solid rgba(242, 194, 106, 0.18);
+    border: 1px solid rgba(199, 201, 204, 0.18);
     border-radius: var(--radius-xs, 4px);
-    background: rgba(242, 194, 106, 0.07);
+    background: rgba(199, 201, 204, 0.07);
     color: var(--detail-accent);
   }
 

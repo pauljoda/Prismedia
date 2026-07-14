@@ -14,7 +14,7 @@
 </script>
 
 <!--
-  Full-screen entrance chrome shared by /login and /setup: dark ground, brass radial
+  Full-screen entrance chrome shared by /login and /setup: dark ground, neutral accent radial
   glow, and a single glass panel. Uses the plain logo image (never the NSFW-aware
   LogoMark) because nothing NSFW may render before authentication.
 -->
@@ -55,12 +55,12 @@
     inset: 0;
     background:
       radial-gradient(ellipse 60% 45% at 50% 36%, rgb(244 204 134 / 0.11), transparent 70%),
-      radial-gradient(ellipse 90% 55% at 50% 112%, rgb(196 154 90 / 0.07), transparent 70%);
+      radial-gradient(ellipse 90% 55% at 50% 112%, rgb(199 201 204 / 0.07), transparent 70%);
     pointer-events: none;
   }
 
   /* Material base + glass overlay per the design language: a solid-leaning glass plate
-     with a vertical sheen, a brass hairline along the top edge, and a faint outer bloom
+     with a vertical sheen, a neutral accent hairline along the top edge, and a faint outer bloom
      so the panel reads like the dashboard hero rather than a bare form. */
   .auth-panel {
     background:
@@ -69,14 +69,14 @@
     backdrop-filter: blur(24px);
     -webkit-backdrop-filter: blur(24px);
     border: 1px solid rgb(255 255 255 / 0.08);
-    border-top-color: rgb(242 194 106 / 0.28);
+    border-top-color: rgb(199 201 204 / 0.28);
     box-shadow:
       inset 0 1px 0 rgb(244 204 134 / 0.1),
       0 24px 80px rgb(0 0 0 / 0.6),
-      0 0 90px rgb(196 154 90 / 0.05);
+      0 0 90px rgb(199 201 204 / 0.05);
   }
 
-  /* Hairline brass divider between the brand moment and the step content. */
+  /* Hairline neutral accent divider between the brand moment and the step content. */
   .auth-divider {
     width: 7rem;
     height: 1px;
@@ -84,11 +84,11 @@
     background: linear-gradient(
       to right,
       transparent,
-      rgb(242 194 106 / 0.45) 30%,
-      rgb(242 194 106 / 0.45) 70%,
+      rgb(199 201 204 / 0.45) 30%,
+      rgb(199 201 204 / 0.45) 70%,
       transparent
     );
-    box-shadow: 0 0 8px rgb(242 194 106 / 0.25);
+    box-shadow: 0 0 8px rgb(199 201 204 / 0.25);
   }
 
   .auth-brand-mark {
@@ -103,12 +103,12 @@
     z-index: -1;
     background:
       radial-gradient(circle at 50% 47%, rgb(244 204 134 / 0.24), transparent 44%),
-      radial-gradient(circle at 50% 52%, rgb(196 154 90 / 0.2), transparent 72%);
+      radial-gradient(circle at 50% 52%, rgb(199 201 204 / 0.2), transparent 72%);
     filter: blur(0.25rem);
   }
 
   .auth-brand-mark img {
     filter:
-      drop-shadow(0 0 10px rgb(244 204 134 / 0.4)) drop-shadow(0 0 26px rgb(196 154 90 / 0.22));
+      drop-shadow(0 0 10px rgb(244 204 134 / 0.4)) drop-shadow(0 0 26px rgb(199 201 204 / 0.22));
   }
 </style>

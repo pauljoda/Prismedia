@@ -555,9 +555,9 @@
   .collection-tabs button:hover,
   .collection-tabs button:focus-visible,
   .collection-tabs button.active {
-    border-color: var(--color-border-accent, rgba(196, 154, 90, 0.25));
+    border-color: var(--color-border-accent, rgba(199, 201, 204, 0.25));
     background: var(--color-surface-3, #151a28);
-    color: var(--color-text-accent, #f2c26a);
+    color: var(--color-text-accent, #c7c9cc);
     outline: none;
   }
 

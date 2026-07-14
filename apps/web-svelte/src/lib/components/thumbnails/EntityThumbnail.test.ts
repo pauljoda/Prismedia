@@ -13,9 +13,13 @@ function touchEvent(type: string, touches: Array<{ clientX: number; clientY: num
 
 const loadTrickplayFrames = vi.fn();
 
-vi.mock("@prismedia/ui-svelte", () => ({
-  loadTrickplayFrames: (...args: unknown[]) => loadTrickplayFrames(...args),
-}));
+vi.mock("@prismedia/ui-svelte", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@prismedia/ui-svelte")>();
+  return {
+    ...actual,
+    loadTrickplayFrames: (...args: unknown[]) => loadTrickplayFrames(...args),
+  };
+});
 
 describe("EntityThumbnail", () => {
   beforeEach(() => {
@@ -516,6 +520,36 @@ describe("EntityThumbnail", () => {
 
     expect(container.querySelector(".glass-info")).not.toBeNull();
     expect(container.querySelector(".chips")?.textContent).toContain("Page 12");
+  });
+
+  it("replaces the entity-family fallback with an artwork-derived accent after the cover decodes", async () => {
+    const pixels = new Uint8ClampedArray(12 * 12 * 4);
+    for (let y = 0; y < 12; y += 1) {
+      for (let x = 0; x < 12; x += 1) {
+        const offset = (y * 12 + x) * 4;
+        const color = x < 2 || y < 2 || x >= 10 || y >= 10
+          ? [224, 216, 190]
+          : x < 8
+            ? [176, 28, 43]
+            : [30, 82, 160];
+        pixels.set([...color, 255], offset);
+      }
+    }
+    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({
+      drawImage: vi.fn(),
+      getImageData: vi.fn(() => ({ data: pixels })),
+    } as unknown as CanvasRenderingContext2D);
+
+    const { container } = render(EntityThumbnail, { props: { card: bookPageCard() } });
+    const image = container.querySelector("img") as HTMLImageElement;
+    Object.defineProperty(image, "naturalWidth", { configurable: true, value: 12 });
+    Object.defineProperty(image, "naturalHeight", { configurable: true, value: 12 });
+    await fireEvent.load(image);
+    await tick();
+
+    const thumbnail = container.querySelector(".entity-thumbnail") as HTMLElement;
+    expect(thumbnail.style.getPropertyValue("--entity-accent")).not.toBe("#0ab3e6");
+    expect(thumbnail.style.getPropertyValue("--entity-accent")).toMatch(/^#[0-9a-f]{6}$/);
   });
 });
 

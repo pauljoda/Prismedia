@@ -666,10 +666,10 @@
   .worker-status-badge.is-online {
     border-color: var(--color-border-accent);
     background:
-      linear-gradient(135deg, rgba(242, 194, 106, 0.14), rgba(242, 194, 106, 0.035) 44%, transparent 100%),
+      linear-gradient(135deg, rgba(199, 201, 204, 0.14), rgba(199, 201, 204, 0.035) 44%, transparent 100%),
       color-mix(in srgb, var(--color-surface-2) 82%, var(--color-accent-900) 18%);
     box-shadow:
-      inset 0 1px 0 rgba(242, 194, 106, 0.13),
+      inset 0 1px 0 rgba(199, 201, 204, 0.13),
       var(--shadow-glow-accent);
     color: var(--color-text-accent);
   }

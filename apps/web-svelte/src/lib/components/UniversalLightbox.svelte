@@ -769,9 +769,9 @@
 
   .lightbox-button:hover,
   .lightbox-button.is-active {
-    border-color: rgb(196 154 90 / 0.45);
+    border-color: rgb(199 201 204 / 0.45);
     color: var(--color-text-accent, #c49a5a);
-    box-shadow: 0 0 18px rgb(196 154 90 / 0.22);
+    box-shadow: 0 0 18px rgb(199 201 204 / 0.22);
   }
 
   :global(.is-filled) {
@@ -791,7 +791,7 @@
     flex: 1;
     overflow-y: auto;
     background:
-      radial-gradient(circle at top left, rgb(196 154 90 / 0.1), transparent 34rem),
+      radial-gradient(circle at top left, rgb(199 201 204 / 0.1), transparent 34rem),
       var(--color-bg, #050508);
   }
 
@@ -955,9 +955,9 @@
 
   .thumb-button:hover,
   .thumb-button.is-active {
-    border-color: rgb(196 154 90 / 0.45);
+    border-color: rgb(199 201 204 / 0.45);
     opacity: 1;
-    box-shadow: 0 0 16px rgb(196 154 90 / 0.2);
+    box-shadow: 0 0 16px rgb(199 201 204 / 0.2);
   }
 
   .thumb-button img {

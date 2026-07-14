@@ -325,8 +325,8 @@
 
   .error-notice button:hover {
     color: var(--color-text-accent, #c49a5a);
-    border-color: rgba(196, 154, 90, 0.45);
-    box-shadow: 0 0 16px rgb(196 154 90 / 0.16);
+    border-color: rgba(199, 201, 204, 0.45);
+    box-shadow: 0 0 16px rgb(199 201 204 / 0.16);
   }
 
   :global(.meta-item) {

@@ -955,7 +955,7 @@
 
   .error-notice button:hover {
     color: var(--color-text-accent, #c49a5a);
-    border-color: var(--color-border-accent-strong, rgba(242, 194, 106, 0.52));
+    border-color: var(--color-border-accent-strong, rgba(199, 201, 204, 0.52));
     box-shadow: var(--shadow-card-hover, 0 8px 24px rgba(0, 0, 0, 0.4));
   }
 

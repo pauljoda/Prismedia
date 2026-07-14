@@ -34,6 +34,7 @@
   import { bulkDeleteMediaEntities, isDeletableMediaKind } from "$lib/api/entity-deletion";
   import { fetchImage, fetchVideo, type ImageDetail, type VideoDetail } from "$lib/api/media";
   import type { EntityCard } from "$lib/api/entities";
+  import { entityAccentForKind } from "$lib/entities/entity-accent";
 
   interface Props {
     actionHref?: string;
@@ -97,6 +98,7 @@
   // File-backed media kinds get a permanent delete-with-files bulk action instead.
   const canDeleteMedia = $derived(!canManage && isDeletableMediaKind(kind));
   const noun = $derived(itemNoun ?? "item");
+  const pageAccent = $derived(entityAccentForKind(kind));
 
   let createOpen = $state(false);
   let confirmDeleteOpen = $state(false);
@@ -310,11 +312,15 @@
   <title>{title} · Prismedia</title>
 </svelte:head>
 
-<section class="space-y-5">
+<section
+  class="space-y-5"
+  style:--entity-accent={pageAccent.primary}
+  style:--entity-accent-secondary={pageAccent.secondary}
+>
   <header class="page-head">
     <div class="page-head-meta">
       <h1 class="page-head-title">
-        <Icon class="h-5 w-5 text-text-accent page-head-icon" />
+        <Icon class="h-5 w-5 page-head-icon" />
         {title}
       </h1>
     </div>
@@ -440,11 +446,10 @@
     height: 1px;
     background: linear-gradient(
       to right,
-      rgb(221 180 119) 0%,
-      rgb(196 154 90 / 0.4) 70%,
+      var(--entity-accent) 0%,
+      color-mix(in srgb, var(--entity-accent-secondary) 42%, transparent) 70%,
       transparent
     );
-    box-shadow: 0 0 8px rgb(196 154 90 / 0.45);
   }
 
   .page-head-meta {
@@ -466,7 +471,7 @@
   }
 
   .page-head-title :global(.page-head-icon) {
-    filter: drop-shadow(0 0 10px rgb(196 154 90 / 0.4));
+    color: var(--entity-accent);
   }
 
   .page-head-action {
@@ -476,9 +481,13 @@
     height: 2.4rem;
     padding: 0 1rem;
     border-radius: var(--radius-sm);
-    border: 1px solid rgb(244 220 170 / 0.5);
-    background: linear-gradient(180deg, #ddb477, #a07a3e);
-    color: #1a1408;
+    border: 1px solid color-mix(in srgb, var(--entity-accent) 54%, white 12%);
+    background: linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--entity-accent) 78%, #111),
+      color-mix(in srgb, var(--entity-accent-secondary) 72%, #111)
+    );
+    color: white;
     font-family: var(--font-mono, "JetBrains Mono", monospace);
     font-size: 0.72rem;
     font-weight: 700;
@@ -486,9 +495,8 @@
     text-transform: uppercase;
     text-decoration: none;
     box-shadow:
-      inset 0 1px 0 rgb(255 255 255 / 0.35),
+      inset 0 1px 0 rgb(255 255 255 / 0.18),
       inset 0 -1px 0 rgb(0 0 0 / 0.25),
-      0 0 18px rgb(196 154 90 / 0.18),
       0 2px 6px rgb(0 0 0 / 0.4);
     transition:
       background var(--duration-fast) var(--ease-default),
@@ -497,12 +505,15 @@
   }
 
   .page-head-action:hover {
-    background: linear-gradient(180deg, #e8c189, #b48a47);
-    color: #1a1408;
+    background: linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--entity-accent) 88%, white 8%),
+      color-mix(in srgb, var(--entity-accent-secondary) 82%, white 6%)
+    );
+    color: white;
     box-shadow:
-      inset 0 1px 0 rgb(255 255 255 / 0.4),
+      inset 0 1px 0 rgb(255 255 255 / 0.22),
       inset 0 -1px 0 rgb(0 0 0 / 0.25),
-      0 0 28px rgb(196 154 90 / 0.32),
       0 2px 8px rgb(0 0 0 / 0.45);
   }
 

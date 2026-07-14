@@ -24,6 +24,7 @@
   import { useNsfw } from "$lib/nsfw/store.svelte";
   import EntityShelf from "$lib/components/entities/EntityShelf.svelte";
   import LogoMark from "$lib/components/LogoMark.svelte";
+  import PrismediaLoadingMark from "$lib/components/PrismediaLoadingMark.svelte";
 
   type SectionStatus = "pending" | "loading" | "ready";
   type SectionDisplay = "shelf" | "chips";
@@ -273,19 +274,8 @@
 </svelte:head>
 
 {#if !activityReady}
-  <div class="min-h-[80vh] flex items-center justify-center">
-    <div class="flex flex-col items-center gap-6">
-      <div class="relative flex items-center justify-center">
-        <div class="route-loader-core-field"></div>
-        <div class="route-loader-ripples">
-          <div class="route-loader-ripple-ring"></div>
-          <div class="route-loader-ripple-ring"></div>
-          <div class="route-loader-ripple-ring"></div>
-        </div>
-        <LogoMark size={40} alt="" />
-      </div>
-      <p class="text-sm text-text-muted">Loading your library…</p>
-    </div>
+  <div class="min-h-[80vh] grid place-items-center">
+    <PrismediaLoadingMark label="Loading your library" showLabel />
   </div>
 {:else if showEmptySplash}
   <div class="min-h-[80vh] flex flex-col items-center justify-center text-center p-8">
@@ -364,8 +354,8 @@
                   <div
                     class="h-full rounded-xs"
                     style:width="{heroProgressPercent(heroCard)}%"
-                    style:background="linear-gradient(135deg, #d59a2a 0%, #f2c26a 100%)"
-                    style:box-shadow="0 0 8px rgba(242,194,106,0.45)"
+                    style:background="linear-gradient(135deg, #9699a1 0%, #c7c9cc 100%)"
+                    style:box-shadow="0 0 8px rgba(199, 201, 204,0.45)"
                   ></div>
                 </div>
                 <span class="font-mono text-[11px] text-text-muted">
@@ -378,7 +368,7 @@
               <span
                 class={cn(
                   buttonVariants({ variant: "primary", size: "md" }),
-                  "pointer-events-none gap-2 px-5 transition-shadow group-hover:shadow-[0_0_30px_rgba(242,194,106,0.18),0_0_10px_rgba(242,194,106,0.25)]",
+                  "pointer-events-none gap-2 px-5 transition-shadow group-hover:shadow-[0_0_30px_rgba(199, 201, 204,0.18),0_0_10px_rgba(199, 201, 204,0.25)]",
                 )}
               >
                 <Play class="h-4 w-4" />

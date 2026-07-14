@@ -16,7 +16,7 @@
   import { dragHandle, dragHandleZone, SHADOW_ITEM_MARKER_PROPERTY_NAME } from "svelte-dnd-action";
   import { resolve } from "$app/paths";
   import { page } from "$app/state";
-  import { cn, prefersReducedMotion } from "@prismedia/ui-svelte";
+  import { cn, ColorInput, prefersReducedMotion } from "@prismedia/ui-svelte";
   import { useNavCustomization } from "$lib/stores/nav-customization.svelte";
   import { appShellNavIconMap } from "./app-shell-nav-icon-map";
   import LogoMark from "./LogoMark.svelte";
@@ -77,6 +77,7 @@
   interface DndSection {
     id: string;
     label: string;
+    accent: string;
     items: DndItem[];
   }
 
@@ -97,6 +98,7 @@
     dndSections = sections.map((s) => ({
       id: s.id,
       label: s.label,
+      accent: s.accent,
       items: s.items.map((i) => ({
         id: i.href,
         href: i.href,
@@ -108,14 +110,19 @@
   });
 
   // svelte-dnd-action injects a placeholder clone (the "shadow" item) at the
-  // hovered drop position; we render it as a brass-tinted slot.
+  // hovered drop position; we render it as a neutral accent-tinted slot.
   function isShadow(item: unknown): boolean {
     return !!(item as Record<string, unknown>)[SHADOW_ITEM_MARKER_PROPERTY_NAME];
   }
 
   function commitLayout() {
     nav.setLayout(
-      dndSections.map((s) => ({ id: s.id, label: s.label, items: s.items.map((i) => i.href) })),
+      dndSections.map((s) => ({
+        id: s.id,
+        label: s.label,
+        accent: s.accent,
+        items: s.items.map((i) => i.href),
+      })),
     );
   }
 
@@ -157,7 +164,7 @@
   onmouseenter={() => (hovered = true)}
   onmouseleave={() => (hovered = false)}
   class={cn(
-    "fixed left-0 top-0 z-[1200] flex h-dvh flex-col bg-surface-1 border-r border-border-subtle transition-[width] duration-moderate overflow-hidden",
+    "app-glass fixed left-0 top-0 z-[1200] flex h-dvh flex-col border-r transition-[width] duration-moderate overflow-hidden",
     isExpanded ? "w-60" : "w-14",
   )}
   style:transition-timing-function="var(--ease-mechanical)"
@@ -235,6 +242,7 @@
       >
         {#each dndSections as section (section.id)}
           <div
+            style:--section-accent={section.accent}
             class={cn(
               "rounded-md border border-border-subtle bg-surface-2/40",
               isShadow(section) && "dnd-shadow",
@@ -257,6 +265,14 @@
                 aria-label="Section name"
                 maxlength={40}
                 class="section-input allow-compact-input-text text-kicker min-w-0 flex-1 bg-transparent outline-none"
+              />
+              <ColorInput
+                value={section.accent}
+                aria-label={`Color for ${section.label}`}
+                onValueChange={(accent) => {
+                  section.accent = accent;
+                  nav.setSectionAccent(section.id, accent);
+                }}
               />
               <button
                 type="button"
@@ -332,7 +348,7 @@
     <!-- Normal mode -->
     <nav class="flex-1 overflow-y-auto overflow-x-hidden py-3 scrollbar-hidden">
       {#each visibleSections as section (section.id)}
-        <div class="mb-4">
+        <div class="nav-section mb-4" style:--section-accent={section.accent}>
           <button
             type="button"
             onclick={() => nav.toggleSectionCollapsed(section.id)}
@@ -349,7 +365,7 @@
                 section.collapsed ? "" : "rotate-90",
               )}
             />
-            <span>{section.label}</span>
+            <span class="section-label">{section.label}</span>
           </button>
           <div
             class={cn(
@@ -368,13 +384,13 @@
                   class={cn(
                     "group relative flex items-center rounded-sm px-2.5 py-2 text-sm transition-colors duration-fast whitespace-nowrap",
                     active
-                      ? "bg-accent-950 text-glow-accent"
+                      ? "nav-item-active text-text-primary"
                       : "text-text-muted hover:text-text-primary hover:bg-surface-2",
                   )}
                   title={!isExpanded ? item.label : undefined}
                 >
                   {#if active}
-                    <span class="absolute left-0 top-1.5 bottom-1.5 w-[3px] rounded-l-full bg-accent-500 shadow-[var(--shadow-glow-accent)]"></span>
+                    <span class="active-rail absolute left-0 top-1.5 bottom-1.5 w-[3px] rounded-l-full"></span>
                   {/if}
                   <div class="w-5 flex items-center justify-center shrink-0">
                     {#if Icon}
@@ -382,7 +398,7 @@
                         class={cn(
                           "h-4 w-4",
                           active
-                            ? "text-accent-300 drop-shadow-[0_0_8px_rgba(199,155,92,0.5)]"
+                            ? "nav-item-icon-active"
                             : "text-text-muted group-hover:text-text-primary",
                         )}
                       />
@@ -508,22 +524,11 @@
   }
 
   .brand-mark-backdrop::before {
-    content: "";
-    position: absolute;
-    inset: -0.25rem;
-    z-index: 0;
-    background:
-      radial-gradient(circle at 50% 47%, rgb(244 204 134 / 0.22), transparent 38%),
-      radial-gradient(circle at 50% 52%, rgb(196 154 90 / 0.18), transparent 68%);
-    filter: blur(0.18rem);
-    opacity: 0.95;
-    pointer-events: none;
+    content: none;
   }
 
   .brand-mark-backdrop :global(img) {
-    filter:
-      drop-shadow(0 0 8px rgb(244 204 134 / 0.42))
-      drop-shadow(0 0 22px rgb(196 154 90 / 0.28));
+    filter: none;
   }
 
   .brand-mark-backdrop-nsfw::before {
@@ -533,9 +538,7 @@
   }
 
   .brand-mark-backdrop-nsfw :global(img) {
-    filter:
-      drop-shadow(0 0 8px rgb(255 90 82 / 0.42))
-      drop-shadow(0 0 22px rgb(190 35 35 / 0.3));
+    filter: none;
   }
 
   /* Matches the .text-kicker token used by normal-mode section labels. The
@@ -555,17 +558,34 @@
     box-shadow: var(--shadow-focus-accent);
   }
 
+  .section-label {
+    color: var(--section-accent);
+  }
+
+  .nav-item-active {
+    background: linear-gradient(90deg, color-mix(in srgb, var(--section-accent) 15%, transparent), transparent 92%);
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--section-accent) 14%, transparent);
+  }
+
+  .active-rail {
+    background: var(--section-accent);
+  }
+
+  .nav-item-icon-active {
+    color: var(--section-accent);
+  }
+
   /* Drag-and-drop: replace the library default outline with a rounded,
-     brass-tinted drop zone and an empty placeholder slot. */
+     neutral accent-tinted drop zone and an empty placeholder slot. */
   :global(.dnd-drop-target) {
     outline: none !important;
     border-radius: var(--radius-md);
     box-shadow: inset 0 0 0 1px var(--color-border-accent-strong);
-    background: rgba(242, 194, 106, 0.04);
+    background: rgba(199, 201, 204, 0.04);
   }
   :global(.dnd-shadow) {
     border-radius: var(--radius-sm) !important;
-    background: rgba(242, 194, 106, 0.1) !important;
+    background: rgba(199, 201, 204, 0.1) !important;
     box-shadow: inset 0 0 0 1px var(--color-border-accent);
   }
   :global(.dnd-shadow *) {

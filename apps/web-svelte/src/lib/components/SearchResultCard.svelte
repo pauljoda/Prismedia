@@ -79,7 +79,7 @@
     {href}
     class={cn(
       "surface-card-sharp flex items-center gap-3 p-2 transition-colors duration-fast hover:border-border-accent group/card",
-      highlighted && "border-border-accent bg-accent-950/30 shadow-[0_0_24px_rgba(242,194,106,0.12)]",
+      highlighted && "border-border-accent bg-accent-950/30 shadow-[0_0_24px_rgba(199, 201, 204,0.12)]",
     )}
   >
     <div class="h-16 w-16 shrink-0">
@@ -98,7 +98,7 @@
     class={cn(
       "surface-card-sharp overflow-hidden transition-colors duration-fast hover:border-border-accent block",
       isTallGrid && "flex flex-col",
-      highlighted && "border-border-accent bg-accent-950/30 shadow-[0_0_24px_rgba(242,194,106,0.12)]",
+      highlighted && "border-border-accent bg-accent-950/30 shadow-[0_0_24px_rgba(199, 201, 204,0.12)]",
     )}
   >
     {@render Thumbnail(cn("w-full", item.kind === "video" ? "aspect-video" : isTallGrid ? "aspect-[2/3]" : "aspect-square"))}

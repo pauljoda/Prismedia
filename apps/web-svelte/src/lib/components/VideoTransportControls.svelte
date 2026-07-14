@@ -83,9 +83,9 @@
     border: 1px solid rgba(255, 255, 255, 0.20);
     box-shadow:
       inset 0 1px 0 rgba(255, 255, 255, 0.25),
-      0 0 0 2px rgba(196, 154, 90, 0.25),
-      0 0 24px rgba(196, 154, 90, 0.40),
-      0 0 48px rgba(196, 154, 90, 0.15);
+      0 0 0 2px rgba(199, 201, 204, 0.25),
+      0 0 24px rgba(199, 201, 204, 0.40),
+      0 0 48px rgba(199, 201, 204, 0.15);
   }
 
   .player-play-button:hover {
@@ -93,9 +93,9 @@
     border-color: rgba(255, 255, 255, 0.30);
     box-shadow:
       inset 0 1px 0 rgba(255, 255, 255, 0.30),
-      0 0 0 2px rgba(196, 154, 90, 0.40),
-      0 0 32px rgba(196, 154, 90, 0.55),
-      0 0 64px rgba(196, 154, 90, 0.20);
+      0 0 0 2px rgba(199, 201, 204, 0.40),
+      0 0 32px rgba(199, 201, 204, 0.55),
+      0 0 64px rgba(199, 201, 204, 0.20);
   }
 
   .player-skip-button {

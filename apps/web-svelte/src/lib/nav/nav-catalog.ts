@@ -1,5 +1,6 @@
 import { appShellSections } from "$lib/components/app-shell-sections";
 import type { AppRouteId } from "$lib/app-routes";
+import { colors } from "@prismedia/ui-svelte";
 
 /**
  * A single navigable destination known to the app. The catalog is the static,
@@ -18,6 +19,8 @@ export interface NavCatalogItem {
   defaultSectionId: string;
   /** Seeded label for {@link defaultSectionId}, used when recreating sections. */
   defaultSectionLabel: string;
+  /** Seeded spectrum color for the section label and active navigation state. */
+  defaultSectionAccent: string;
 }
 
 /**
@@ -27,7 +30,7 @@ export interface NavCatalogItem {
 export interface NavPrefs {
   v: 1;
   /** User-defined sections in display order; `items` are ordered hrefs. */
-  sections: { id: string; label: string; items: string[]; collapsed?: boolean }[];
+  sections: { id: string; label: string; items: string[]; collapsed?: boolean; accent?: string }[];
   /** Hrefs hidden from normal (non-edit) rendering. */
   hidden: string[];
   /** Ordered hrefs shown in the mobile bottom bar (max 4). Mobile-only. */
@@ -40,12 +43,14 @@ export interface ResolvedNavItem {
   label: string;
   icon: string;
   hidden: boolean;
+  accent: string;
 }
 
 /** One section as resolved for rendering. */
 export interface ResolvedNavSection {
   id: string;
   label: string;
+  accent: string;
   items: ResolvedNavItem[];
   /** Whether the section is collapsed (items hidden) in the expanded sidebar. */
   collapsed: boolean;
@@ -68,6 +73,7 @@ export function buildNavCatalog(): NavCatalogItem[] {
         icon: item.icon,
         defaultSectionId: section.id,
         defaultSectionLabel: section.kicker,
+        defaultSectionAccent: section.accent,
       });
     }
   }
@@ -80,7 +86,12 @@ export function defaultNavPrefs(catalog: NavCatalogItem[] = buildNavCatalog()): 
   for (const item of catalog) {
     let section = sections.find((s) => s.id === item.defaultSectionId);
     if (!section) {
-      section = { id: item.defaultSectionId, label: item.defaultSectionLabel, items: [] };
+      section = {
+        id: item.defaultSectionId,
+        label: item.defaultSectionLabel,
+        accent: item.defaultSectionAccent,
+        items: [],
+      };
       sections.push(section);
     }
     section.items.push(item.href);
@@ -97,6 +108,10 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function asStringArray(value: unknown): string[] {
   return Array.isArray(value) ? value.filter((v): v is string => typeof v === "string") : [];
+}
+
+function asHexColor(value: unknown): string | undefined {
+  return typeof value === "string" && /^#[0-9a-f]{6}$/i.test(value) ? value.toLowerCase() : undefined;
 }
 
 /**
@@ -120,6 +135,7 @@ export function normalizeNavPrefs(parsed: unknown): NavPrefs | null {
       label: raw.label,
       items: asStringArray(raw.items),
       collapsed: raw.collapsed === true,
+      accent: asHexColor(raw.accent),
     });
   }
   if (sections.length === 0) return null;
@@ -148,14 +164,28 @@ export function resolveNav(catalog: NavCatalogItem[], prefs: NavPrefs): Resolved
   const referenced = new Set<string>();
 
   const sections: ResolvedNavSection[] = prefs.sections.map((section) => {
+    const seededAccent = catalog.find((item) => item.defaultSectionId === section.id)?.defaultSectionAccent;
+    const accent = section.accent ?? seededAccent ?? colors.accent[500];
     const items: ResolvedNavItem[] = [];
     for (const href of section.items) {
       const item = byHref.get(href as AppRouteId);
       if (!item || referenced.has(href)) continue;
       referenced.add(href);
-      items.push({ href: item.href, label: item.label, icon: item.icon, hidden: hidden.has(href) });
+      items.push({
+        href: item.href,
+        label: item.label,
+        icon: item.icon,
+        hidden: hidden.has(href),
+        accent,
+      });
     }
-    return { id: section.id, label: section.label, items, collapsed: section.collapsed === true };
+    return {
+      id: section.id,
+      label: section.label,
+      accent,
+      items,
+      collapsed: section.collapsed === true,
+    };
   });
 
   // Append any catalog item not placed by the saved layout.
@@ -164,7 +194,13 @@ export function resolveNav(catalog: NavCatalogItem[], prefs: NavPrefs): Resolved
     referenced.add(item.href);
     let section = sections.find((s) => s.id === item.defaultSectionId);
     if (!section) {
-      section = { id: item.defaultSectionId, label: item.defaultSectionLabel, items: [], collapsed: false };
+      section = {
+        id: item.defaultSectionId,
+        label: item.defaultSectionLabel,
+        accent: item.defaultSectionAccent,
+        items: [],
+        collapsed: false,
+      };
       sections.push(section);
     }
     section.items.push({
@@ -172,6 +208,7 @@ export function resolveNav(catalog: NavCatalogItem[], prefs: NavPrefs): Resolved
       label: item.label,
       icon: item.icon,
       hidden: hidden.has(item.href),
+      accent: section.accent,
     });
   }
 

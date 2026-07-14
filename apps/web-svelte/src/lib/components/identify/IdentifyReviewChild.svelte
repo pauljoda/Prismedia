@@ -389,7 +389,7 @@
             class={cn(
               "identify-artwork-tile relative overflow-hidden rounded-xs border bg-surface-3 transition-all",
               selectedImages[group.kind] === image.url
-                ? "border-border-accent-strong shadow-[0_0_16px_rgba(242,194,106,0.2)]"
+                ? "border-border-accent-strong shadow-[0_0_16px_rgba(199, 201, 204,0.2)]"
                 : "border-border-default hover:border-border-accent",
             )}
             style="aspect-ratio: {group.kind === 'poster' || group.kind === 'cover' ? (coverIsSquare ? '1/1' : '2/3') : group.kind === 'backdrop' ? '16/9' : '2/1'};"
@@ -533,7 +533,7 @@
     content: "";
     pointer-events: none;
     background:
-      linear-gradient(110deg, transparent 0%, rgb(242 194 106 / 0.12) 42%, transparent 68%),
+      linear-gradient(110deg, transparent 0%, rgb(199 201 204 / 0.12) 42%, transparent 68%),
       radial-gradient(circle at 50% 45%, rgb(255 255 255 / 0.07), transparent 36%),
       linear-gradient(135deg, rgb(13 14 16), rgb(27 24 19));
     background-size: 220% 100%, auto, auto;

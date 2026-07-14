@@ -323,8 +323,8 @@
     outline: none;
     box-shadow:
       inset 0 2px 8px rgba(0, 0, 0, 0.3),
-      0 0 0 1px rgba(242, 194, 106, 0.35),
-      0 0 8px rgba(242, 194, 106, 0.15);
+      0 0 0 1px rgba(199, 201, 204, 0.35),
+      0 0 8px rgba(199, 201, 204, 0.15);
   }
 
   @media (min-width: 640px) {

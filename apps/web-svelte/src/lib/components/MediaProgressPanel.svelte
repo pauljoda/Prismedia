@@ -166,7 +166,7 @@
   }
 
   .status.complete {
-    color: var(--color-text-accent, #f2c26a);
+    color: var(--color-text-accent, #c7c9cc);
   }
 
   .lines {
@@ -180,7 +180,7 @@
   }
 
   .percent {
-    color: var(--color-text-accent, #f2c26a);
+    color: var(--color-text-accent, #c7c9cc);
   }
 
   .count {
@@ -218,13 +218,13 @@
 
   .status-toggle:hover:not(:disabled) {
     color: var(--color-text-secondary, #c4c9d4);
-    border-color: var(--color-border-accent-strong, rgba(242, 194, 106, 0.52));
+    border-color: var(--color-border-accent-strong, rgba(199, 201, 204, 0.52));
   }
 
   .status-toggle.active {
-    color: var(--color-text-accent, #f2c26a);
-    border-color: rgba(242, 194, 106, 0.5);
-    box-shadow: 0 0 10px rgba(242, 194, 106, 0.2);
+    color: var(--color-text-accent, #c7c9cc);
+    border-color: rgba(199, 201, 204, 0.5);
+    box-shadow: 0 0 10px rgba(199, 201, 204, 0.2);
   }
 
   .status-toggle.animating {

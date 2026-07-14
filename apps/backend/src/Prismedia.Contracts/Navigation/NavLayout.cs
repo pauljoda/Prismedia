@@ -7,11 +7,13 @@ namespace Prismedia.Contracts.Navigation;
 /// <param name="Label">User-facing section label.</param>
 /// <param name="Items">Ordered route hrefs that belong to this section.</param>
 /// <param name="Collapsed">Whether the section renders collapsed in the expanded sidebar.</param>
+/// <param name="Accent">Optional user-selected CSS hex color for the section's visual identity.</param>
 public sealed record NavLayoutSection(
     string Id,
     string Label,
     IReadOnlyList<string> Items,
-    bool Collapsed);
+    bool Collapsed,
+    string? Accent = null);
 
 /// <summary>
 /// The complete, server-persisted navigation layout shared across a user's devices.

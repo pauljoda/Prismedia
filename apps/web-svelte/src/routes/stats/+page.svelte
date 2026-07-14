@@ -492,7 +492,7 @@
                   class={cn(
                     "w-full rounded-xs border px-3 py-2 text-left transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500/25 focus-visible:ring-offset-1 focus-visible:ring-offset-bg",
                     selectedChartBucket?.date === bucket.date
-                      ? "border-accent-300/70 bg-accent-950/20 shadow-[0_0_18px_rgba(242,194,106,0.16),inset_0_1px_0_rgba(255,255,255,0.06)]"
+                      ? "border-accent-300/70 bg-accent-950/20 shadow-[0_0_18px_rgba(199, 201, 204,0.16),inset_0_1px_0_rgba(255,255,255,0.06)]"
                       : "border-border-subtle bg-surface-2/60 hover:border-border-accent hover:bg-surface-3/70",
                   )}
                   title={`${formatShortDate(bucket.date)}: ${total} events`}
@@ -513,7 +513,7 @@
                   <span class="mt-2 flex h-2 overflow-hidden rounded-xs border border-border-subtle bg-surface-1/80" aria-hidden="true">
                     {#if completed > 0}
                       <span
-                        class="h-full bg-accent-300/90 shadow-[0_0_12px_rgba(242,194,106,0.24)]"
+                        class="h-full bg-accent-300/90 shadow-[0_0_12px_rgba(199, 201, 204,0.24)]"
                         style:width={chartBucketShareWidth(completed)}
                       ></span>
                     {/if}

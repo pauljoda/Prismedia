@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { Component } from "svelte";
+  import PrismediaLoadingMark from "./PrismediaLoadingMark.svelte";
 
   interface Props {
     /** Contextual icon (lucide component) shown centered in the badge. */
@@ -14,11 +15,14 @@
   const Icon = $derived(icon);
 </script>
 
-<div class="state-placeholder" role="status" aria-busy={busy}>
-  <span class="badge" class:is-busy={busy}>
-    {#if busy}<span class="ring" aria-hidden="true"></span>{/if}
-    <Icon class="badge-icon" aria-hidden="true" />
-  </span>
+<div class="state-placeholder" role={busy ? undefined : "status"} aria-busy={busy || undefined}>
+  {#if busy}
+    <PrismediaLoadingMark label={title} compact />
+  {:else}
+    <span class="badge">
+      <Icon class="badge-icon" aria-hidden="true" />
+    </span>
+  {/if}
   <strong>{title}</strong>
   {#if description}<span class="desc">{description}</span>{/if}
 </div>
@@ -51,25 +55,9 @@
     color: var(--color-text-disabled, #6b7486);
   }
 
-  .badge.is-busy {
-    color: var(--color-text-accent, #f2c26a);
-    box-shadow: 0 0 18px rgba(242, 194, 106, 0.12);
-  }
-
   .badge :global(.badge-icon) {
     width: 1.4rem;
     height: 1.4rem;
-  }
-
-  /* Spinning accent ring = the activity indicator. */
-  .ring {
-    position: absolute;
-    inset: -3px;
-    border-radius: var(--radius-full, 999px);
-    border: 2px solid transparent;
-    border-top-color: var(--color-text-accent, #f2c26a);
-    border-right-color: color-mix(in srgb, var(--color-text-accent, #f2c26a) 45%, transparent);
-    animation: state-placeholder-spin 0.9s linear infinite;
   }
 
   strong {
@@ -86,16 +74,4 @@
     color: var(--color-text-muted, #8a93a6);
   }
 
-  @keyframes state-placeholder-spin {
-    to {
-      transform: rotate(360deg);
-    }
-  }
-
-  @media (prefers-reduced-motion: reduce) {
-    .ring {
-      animation: none;
-      border-right-color: var(--color-text-accent, #f2c26a);
-    }
-  }
 </style>

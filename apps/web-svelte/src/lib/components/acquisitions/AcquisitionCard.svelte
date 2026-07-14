@@ -3,7 +3,7 @@
    * The shared acquisition row card: a long horizontal card on desktop, stacking gracefully on mobile.
    * Renders one normalized {@link AcquisitionListItem} — real cover artwork (via EntityThumbnail, kind
    * shape preserved), a title block (kind badge · title · creator subtitle), a status block (status chip
-   * with icon · description · a brass progress bar or an animated searching shimmer · a client badge with
+   * with icon · description · a neutral accent progress bar or an animated searching shimmer · a client badge with
    * bullet-separated meta), and the actions (primary CTA · Remove · an overflow menu). Downloads, Missing,
    * and Cutoff Unmet all render through this, so the design lives in one place.
    */
@@ -187,8 +187,8 @@
     box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.05), 0 4px 14px rgb(0 0 0 / 0.34);
   }
   .acq-card.is-selected {
-    border-color: rgb(242 194 106 / 0.6);
-    box-shadow: var(--shadow-glow-accent, 0 0 16px rgb(242 194 106 / 0.18));
+    border-color: rgb(199 201 204 / 0.6);
+    box-shadow: var(--shadow-glow-accent, 0 0 16px rgb(199 201 204 / 0.18));
   }
 
   .select { grid-area: select; display: flex; align-items: center; padding-left: 0.25rem; }
@@ -231,7 +231,7 @@
     white-space: nowrap;
     transition: color 120ms ease;
   }
-  a.title:hover { color: #f2c26a; }
+  a.title:hover { color: #c7c9cc; }
   .title.is-static { color: rgb(244 239 230 / 0.9); }
   .subtitle {
     font-size: 0.74rem;
@@ -254,11 +254,11 @@
     padding: 0.24rem 0.5rem;
   }
   .status :global(svg) { flex: 0 0 auto; }
-  .status-downloading { color: #f2c26a; background: rgb(60 44 16 / 0.5); border: 1px solid rgb(242 194 106 / 0.32); }
-  .status-searching { color: #e7d3af; background: rgb(48 40 22 / 0.5); border: 1px solid rgb(211 176 106 / 0.3); }
+  .status-downloading { color: #c7c9cc; background: rgb(60 44 16 / 0.5); border: 1px solid rgb(199 201 204 / 0.32); }
+  .status-searching { color: #c8c9cc; background: rgb(48 40 22 / 0.5); border: 1px solid rgb(211 176 106 / 0.3); }
   .status-queued { color: rgb(214 219 228 / 0.85); background: rgb(255 255 255 / 0.05); border: 1px solid rgb(255 255 255 / 0.14); }
-  .status-cleanup { color: #e7d3af; background: rgb(40 33 18 / 0.5); border: 1px solid rgb(211 176 106 / 0.28); }
-  .status-attention { color: #f2c26a; background: rgb(58 38 12 / 0.55); border: 1px solid rgb(242 194 106 / 0.4); }
+  .status-cleanup { color: #c8c9cc; background: rgb(40 33 18 / 0.5); border: 1px solid rgb(211 176 106 / 0.28); }
+  .status-attention { color: #c7c9cc; background: rgb(58 38 12 / 0.55); border: 1px solid rgb(199 201 204 / 0.4); }
   .status-failed { color: #ff9a86; background: rgb(48 18 14 / 0.5); border: 1px solid rgb(255 122 92 / 0.38); }
   .status-done { color: #6fd39a; background: rgb(20 46 32 / 0.5); border: 1px solid rgb(87 201 138 / 0.3); }
   .status-muted { color: rgb(196 201 212 / 0.7); background: rgb(255 255 255 / 0.05); border: 1px solid rgb(255 255 255 / 0.1); }
@@ -277,15 +277,15 @@
   .progress-fill {
     height: 100%;
     border-radius: 3px;
-    background: linear-gradient(90deg, #7a5e20 0%, #d59a2a 55%, #f2c26a 100%);
-    box-shadow: 0 0 8px rgb(242 194 106 / 0.5);
+    background: linear-gradient(90deg, #4a4d55 0%, #9699a1 55%, #c7c9cc 100%);
+    box-shadow: 0 0 8px rgb(199 201 204 / 0.5);
     transition: width 600ms var(--ease-default, ease);
   }
   .progress-value {
     font-family: var(--font-mono, "JetBrains Mono", monospace);
     font-size: 0.72rem;
     font-weight: 600;
-    color: #f2c26a;
+    color: #c7c9cc;
     min-width: 2.6rem;
     text-align: right;
   }
@@ -323,9 +323,9 @@
   .quality {
     padding: 0.1rem 0.34rem;
     border-radius: var(--radius-xs, 4px);
-    border: 1px solid rgb(242 194 106 / 0.3);
+    border: 1px solid rgb(199 201 204 / 0.3);
     background: rgb(40 30 12 / 0.5);
-    color: rgb(242 194 106 / 0.92);
+    color: rgb(199 201 204 / 0.92);
   }
   .dot { opacity: 0.5; }
 
@@ -349,8 +349,8 @@
   }
   .action:hover:not(:disabled) { background: rgb(255 255 255 / 0.09); border-color: rgb(255 255 255 / 0.2); }
   .action:disabled, .action[aria-disabled="true"] { opacity: 0.4; cursor: not-allowed; pointer-events: none; }
-  .action-primary { border-color: rgb(242 194 106 / 0.42); background: rgb(50 38 14 / 0.6); color: #f2c26a; }
-  .action-primary:hover:not(:disabled) { background: rgb(66 50 18 / 0.72); box-shadow: 0 0 12px rgb(242 194 106 / 0.2); }
+  .action-primary { border-color: rgb(199 201 204 / 0.42); background: rgb(50 38 14 / 0.6); color: #c7c9cc; }
+  .action-primary:hover:not(:disabled) { background: rgb(66 50 18 / 0.72); box-shadow: 0 0 12px rgb(199 201 204 / 0.2); }
   .action-danger { color: #ff9a86; border-color: rgb(255 122 92 / 0.3); }
   .action-danger:hover:not(:disabled) { background: rgb(48 18 14 / 0.6); border-color: rgb(255 122 92 / 0.5); }
 
@@ -400,7 +400,7 @@
     background: transparent;
   }
   .menu-item:hover { background: rgb(255 255 255 / 0.06); color: rgb(244 239 230 / 0.95); }
-  .menu-item :global(svg) { color: rgb(242 194 106 / 0.75); flex: 0 0 auto; }
+  .menu-item :global(svg) { color: rgb(199 201 204 / 0.75); flex: 0 0 auto; }
 
   /* ── Mobile / narrow container: title + status stack under the poster, actions drop to a full row ── */
   @container (max-width: 40rem) {

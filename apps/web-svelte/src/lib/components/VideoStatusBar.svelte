@@ -44,7 +44,7 @@
   const MethodIcon = $derived(
     playbackMethod === "transcode" ? Cpu : playbackMethod === "remux" ? Radio : MonitorPlay,
   );
-  // Premium dynamic range earns the brass accent the design system reserves for "special" state.
+  // Premium dynamic range earns the neutral accent accent the design system reserves for "special" state.
   const isPremiumRange = $derived(
     dynamicRangeLabel === "Dolby Vision" ||
       dynamicRangeLabel === "HDR10+" ||
@@ -172,14 +172,14 @@
       0 2px 8px rgba(0, 0, 0, 0.32);
   }
 
-  /* Transcoding: the server is doing work — warm brass "active" tint. */
+  /* Transcoding: the server is doing work — warm neutral accent "active" tint. */
   .player-method-chip.is-working {
     background: rgba(36, 30, 22, 0.80);
-    border: 1px solid rgba(196, 154, 90, 0.34);
-    color: rgb(242, 194, 106);
+    border: 1px solid rgba(199, 201, 204, 0.34);
+    color: rgb(199, 201, 204);
     box-shadow:
-      inset 0 1px 0 rgba(196, 154, 90, 0.12),
-      0 0 14px rgba(196, 154, 90, 0.16),
+      inset 0 1px 0 rgba(199, 201, 204, 0.12),
+      0 0 14px rgba(199, 201, 204, 0.16),
       0 2px 8px rgba(0, 0, 0, 0.32);
   }
 
@@ -194,14 +194,14 @@
       0 2px 8px rgba(0, 0, 0, 0.32);
   }
 
-  /* Premium video/audio (Dolby Vision, HDR10, Atmos, DTS:X): brass glow per the design language. */
+  /* Premium video/audio (Dolby Vision, HDR10, Atmos, DTS:X): neutral accent glow per the design language. */
   .player-spec-chip.is-premium {
     background: rgba(36, 30, 22, 0.72);
-    border-color: rgba(196, 154, 90, 0.36);
+    border-color: rgba(199, 201, 204, 0.36);
     color: rgb(242, 206, 142);
     box-shadow:
-      inset 0 1px 0 rgba(196, 154, 90, 0.10),
-      0 0 12px rgba(196, 154, 90, 0.14),
+      inset 0 1px 0 rgba(199, 201, 204, 0.10),
+      0 0 12px rgba(199, 201, 204, 0.14),
       0 2px 8px rgba(0, 0, 0, 0.32);
   }
 

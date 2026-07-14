@@ -66,7 +66,7 @@
     {@const active = activeCandidateKey === candidateKey}
     <div
       class={cn(
-        "plugin-candidate-card relative grid items-center gap-3 rounded-sm border border-border-subtle bg-surface-1 p-2.5 text-left shadow-well transition-all hover:border-border-accent hover:bg-surface-2 hover:shadow-[0_0_20px_rgba(242,194,106,0.08)] focus-visible:border-border-accent focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent-500/60",
+        "plugin-candidate-card relative grid items-center gap-3 rounded-sm border border-border-subtle bg-surface-1 p-2.5 text-left shadow-well transition-all hover:border-border-accent hover:bg-surface-2 hover:shadow-[0_0_20px_rgba(199, 201, 204,0.08)] focus-visible:border-border-accent focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent-500/60",
         "grid-cols-[3.5rem_minmax(0,1fr)_auto] sm:grid-cols-[4rem_minmax(0,1fr)_auto]",
         disabled ? "cursor-not-allowed opacity-60" : "cursor-pointer",
       )}

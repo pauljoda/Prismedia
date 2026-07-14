@@ -211,14 +211,14 @@
     background: var(--color-surface-2, #141924);
     border: 1px solid var(--color-border-accent, #c49a5a);
     border-radius: var(--radius-full);
-    box-shadow: 0 0 8px rgba(242, 194, 106, 0.25);
+    box-shadow: 0 0 8px rgba(199, 201, 204, 0.25);
     height: 1rem;
     margin-top: -0.36rem;
     width: 1rem;
   }
 
   .setting-range::-webkit-slider-thumb:hover {
-    box-shadow: 0 0 12px rgba(242, 194, 106, 0.45);
+    box-shadow: 0 0 12px rgba(199, 201, 204, 0.45);
   }
 
   @media (min-width: 48rem) {

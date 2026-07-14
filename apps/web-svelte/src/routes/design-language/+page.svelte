@@ -13,6 +13,7 @@
     type SelectOption,
   } from "@prismedia/ui-svelte";
   import LogoMark from "$lib/components/LogoMark.svelte";
+  import PrismediaLoadingMark from "$lib/components/PrismediaLoadingMark.svelte";
 
   const ledStatuses: LedStatus[] = [
     "active",
@@ -38,39 +39,42 @@
   ];
 
   const corePalette = [
-    { label: "Noir", hex: "#07080b", token: "bg" },
-    { label: "Obsidian", hex: "#0b0e12", token: "surface-1" },
-    { label: "Graphite", hex: "#11161d", token: "surface-2" },
-    { label: "Slate Glass", hex: "#202734", token: "surface-3" },
-    { label: "Carbon", hex: "#2a3038", token: "surface-4" },
+    { label: "Black", hex: "#000000", token: "bg" },
+    { label: "Surface 1", hex: "#111214", token: "surface-1" },
+    { label: "Surface 2", hex: "#191a1e", token: "surface-2" },
+    { label: "Surface 3", hex: "#24262b", token: "surface-3" },
+    { label: "Surface 4", hex: "#303238", token: "surface-4" },
   ];
 
   const accentPalette = [
-    { label: "Amber", hex: "#d59a2a", token: "600" },
-    { label: "Brass", hex: "#f2c26a", token: "500" },
-    { label: "Ivory", hex: "#f0ede3", token: "50" },
-    { label: "Mist", hex: "#bbb0a2", token: "phosphor" },
-    { label: "Muted Blue", hex: "#3b475c", token: "muted-blue" },
+    { label: "Red", hex: "#ff141f", token: "red" },
+    { label: "Orange", hex: "#ff570a", token: "orange" },
+    { label: "Yellow", hex: "#ffc71f", token: "yellow" },
+    { label: "Green", hex: "#1fc247", token: "green" },
+    { label: "Cyan", hex: "#0ab3e6", token: "cyan" },
+    { label: "Blue", hex: "#0d47ff", token: "blue" },
+    { label: "Violet", hex: "#7a14f5", token: "violet" },
+    { label: "Magenta", hex: "#d60de0", token: "magenta" },
   ];
 
   const accentScale = [
-    { label: "950", hex: "#1a1408" },
-    { label: "900", hex: "#2d2210" },
-    { label: "800", hex: "#4a3818" },
-    { label: "700", hex: "#7a5e20" },
-    { label: "600", hex: "#d59a2a" },
-    { label: "500", hex: "#f2c26a" },
-    { label: "400", hex: "#f5d48a" },
-    { label: "300", hex: "#f7dfa0" },
-    { label: "200", hex: "#faecc0" },
-    { label: "100", hex: "#fdf5e0" },
-    { label: "50", hex: "#fefaf0" },
+    { label: "950", hex: "#101113" },
+    { label: "900", hex: "#1b1c20" },
+    { label: "800", hex: "#2a2c31" },
+    { label: "700", hex: "#4a4d55" },
+    { label: "600", hex: "#9699a1" },
+    { label: "500", hex: "#c7c9cc" },
+    { label: "400", hex: "#d8d9dc" },
+    { label: "300", hex: "#e5e6e8" },
+    { label: "200", hex: "#eff0f1" },
+    { label: "100", hex: "#f7f7f8" },
+    { label: "50", hex: "#ffffff" },
   ];
 
   const signalColors = [
     { label: "Success", hex: "#63c889", text: "#8ee0aa", token: "success" },
     { label: "Info", hex: "#6fa8dc", text: "#92c0e8", token: "info" },
-    { label: "Warning", hex: "#f2c26a", text: "#f5d48a", token: "warning" },
+    { label: "Warning", hex: "#ffc71f", text: "#ffe27a", token: "warning" },
     { label: "Danger", hex: "#ff806f", text: "#ff9f92", token: "error" },
   ];
 
@@ -79,7 +83,7 @@
     { label: "Secondary", css: "text-text-secondary", hex: "#c8ccd4" },
     { label: "Muted", css: "text-text-muted", hex: "#a4acb9" },
     { label: "Disabled", css: "text-text-disabled", hex: "#5a6070" },
-    { label: "Accent", css: "text-text-accent", hex: "#f2c26a" },
+    { label: "Accent", css: "text-text-accent", hex: "#c7c9cc" },
   ];
 
   const surfaceLayers = [
@@ -112,8 +116,8 @@
       name: "Signal Glass",
       desc: "Active / Selected / Focus. Premium emphasis.",
       css: "var(--color-surface-3)",
-      border: "rgba(242,194,106,0.24)",
-      shadow: "glow 16px + 32px ambient",
+      border: "rgba(199, 201, 204,0.24)",
+      shadow: "flat paint + crisp border",
     },
   ];
 
@@ -162,17 +166,17 @@
         <LogoMark size={72} />
         <div>
           <h1 class="ds-hero-title font-display">PRISMEDIA</h1>
-          <p class="ds-hero-subtitle">PRISM NOIR LUXE</p>
-          <p class="ds-hero-version">Global Design System ·.0</p>
+          <p class="ds-hero-subtitle">ONE LIGHT · EVERY MEDIUM</p>
+          <p class="ds-hero-version">Prism Design System · 2.0</p>
         </div>
       </div>
 
       <div class="ds-hero-tagline">
         <p class="ds-hero-tagline-text">
-          Private. Self-Hosted. Cinematic control for your universe.
+          One private library, separated into a spectrum of media.
         </p>
         <p class="text-body-sm text-text-muted max-w-md">
-          A cohesive design language built for clarity, control, and confidence across Prismedia.
+          Neutral chrome holds the collection together; entity color and artwork give every part its identity.
         </p>
       </div>
 
@@ -226,8 +230,8 @@
 
         <!-- Accent -->
         <div class="space-y-3">
-          <h3 class="text-kicker">ACCENT</h3>
-          <div class="grid grid-cols-5 gap-2">
+          <h3 class="text-kicker">PRISM SPECTRUM</h3>
+          <div class="grid grid-cols-4 gap-2">
             {#each accentPalette as swatch (swatch.label)}
               <div class="flex flex-col items-center gap-2">
                 <div
@@ -263,7 +267,7 @@
 
       <!-- Full accent ramp -->
       <div class="mt-8 space-y-3">
-        <h3 class="text-kicker">BRASS ACCENT RAMP</h3>
+        <h3 class="text-kicker">NEUTRAL APP ACCENT RAMP</h3>
         <div class="flex">
           {#each accentScale as swatch (swatch.label)}
             <div
@@ -319,9 +323,9 @@
         <Panel>
           <div class="p-5 space-y-3">
             <p class="text-display">Display · Prismedia</p>
-            <p class="text-h1">H1 · Dark Room</p>
-            <p class="text-h2">H2 · Brass &amp; Glass</p>
-            <p class="text-h3">H3 · Sharp corners everywhere</p>
+            <p class="text-h1">H1 · One library</p>
+            <p class="text-h2">H2 · Prism &amp; spectrum</p>
+            <p class="text-h3">H3 · Dark content, material identity</p>
             <p class="text-body">Body · The quick brown fox jumps over the lazy dog.</p>
             <p class="text-body-sm text-text-secondary">Body sm · Secondary metadata and supplemental text.</p>
             <p class="text-label text-text-muted uppercase">Label · tracking 0.04em</p>
@@ -329,8 +333,8 @@
             <p class="text-mono text-text-accent">Mono · 0x2a4f00 // <span class="text-phosphor-500">phosphor</span></p>
             <p class="text-mono-sm text-text-muted">Mono sm · timestamps, file sizes, technical data</p>
             <div class="pt-2 border-t border-border-subtle">
-              <p class="text-glow-accent font-heading text-lg">Glow accent · active state text</p>
-              <p class="text-glow-phosphor font-heading text-lg mt-1">Glow phosphor · digital signal</p>
+              <p class="font-heading text-lg text-text-accent">Material accent · active state text</p>
+              <p class="font-heading text-lg mt-1 text-text-secondary">Neutral signal · supporting state</p>
             </div>
           </div>
         </Panel>
@@ -773,7 +777,7 @@
           </div>
           <div class="text-center">
             <span class="text-label text-text-accent block">Selected</span>
-            <span class="text-mono-sm text-text-disabled">Signal glow & persistent state.</span>
+            <span class="text-mono-sm text-text-disabled">Material color & persistent state.</span>
           </div>
         </div>
 
@@ -820,32 +824,32 @@
       </Panel>
     </section>
 
-    <!-- ═══════════════════════════════ GLOW & BORDERS ═══════════════════════════════ -->
+    <!-- ═══════════════════════════════ MATERIAL ACCENTS & BORDERS ═══════════════════════════════ -->
     <section>
       <div class="ds-section-header">
-        <h2 class="ds-section-title">GLOW &amp; BORDERS</h2>
+        <h2 class="ds-section-title">MATERIAL ACCENTS &amp; BORDERS</h2>
       </div>
 
       <div class="grid lg:grid-cols-2 gap-8">
         <div class="space-y-3">
-          <h3 class="text-kicker">GLOW EFFECTS</h3>
+          <h3 class="text-kicker">PAINTED STATES</h3>
           <Panel>
             <div class="p-6 flex flex-wrap items-center gap-8">
               <div class="flex flex-col items-center gap-3">
-                <div class="w-20 h-20 bg-surface-2 border border-border-accent rounded-sm" style="box-shadow: var(--shadow-glow-accent)"></div>
-                <span class="text-mono-sm text-text-muted">glow-subtle</span>
+                <div class="w-20 h-20 bg-surface-2 border border-border-accent rounded-sm"></div>
+                <span class="text-mono-sm text-text-muted">accent-border</span>
               </div>
               <div class="flex flex-col items-center gap-3">
-                <div class="w-20 h-20 bg-surface-2 border border-border-accent rounded-sm" style="box-shadow: var(--shadow-glow-accent-strong)"></div>
-                <span class="text-mono-sm text-text-muted">glow-strong</span>
+                <div class="w-20 h-20 border border-border-accent rounded-sm" style="background: color-mix(in srgb, var(--color-spectrum-blue) 22%, var(--color-surface-2))"></div>
+                <span class="text-mono-sm text-text-muted">paint-fill</span>
               </div>
               <div class="flex flex-col items-center gap-3">
-                <div class="w-20 h-20 bg-surface-2 glow-pulse rounded-sm"></div>
-                <span class="text-mono-sm text-text-muted">glow-pulse</span>
+                <div class="w-20 h-20 bg-surface-2 rounded-sm" style="border-left: 4px solid var(--color-spectrum-green)"></div>
+                <span class="text-mono-sm text-text-muted">active-rail</span>
               </div>
               <div class="flex flex-col items-center gap-3">
-                <div class="w-20 h-20 bg-surface-2 border border-border-subtle rounded-sm" style="box-shadow: var(--shadow-glow-phosphor)"></div>
-                <span class="text-mono-sm text-text-muted">glow-phosphor</span>
+                <div class="w-20 h-20 bg-surface-2 border border-border-subtle rounded-sm" style="box-shadow: var(--shadow-card)"></div>
+                <span class="text-mono-sm text-text-muted">neutral-depth</span>
               </div>
             </div>
           </Panel>
@@ -867,8 +871,8 @@
               <div class="w-24 h-16 bg-surface-2 flex items-center justify-center rounded-sm" style="border: 1px solid var(--color-border-accent-strong)">
                 <span class="text-mono-sm text-text-accent">strong</span>
               </div>
-              <div class="w-24 h-16 bg-surface-2 flex items-center justify-center rounded-sm" style="border: 1px solid var(--color-border-accent-strong); box-shadow: var(--shadow-glow-accent)">
-                <span class="text-mono-sm text-text-accent">glow</span>
+              <div class="w-24 h-16 bg-surface-2 flex items-center justify-center rounded-sm" style="border: 2px solid var(--color-border-accent-strong)">
+                <span class="text-mono-sm text-text-accent">selected</span>
               </div>
             </div>
           </Panel>
@@ -903,8 +907,8 @@
         <div class="space-y-3">
           <h3 class="text-kicker">LAYER STACK</h3>
           <div class="ds-depth-stack">
-            <div class="ds-depth-layer" style="background: var(--color-surface-3); border: 1px solid var(--color-border-accent); box-shadow: var(--shadow-glow-accent); z-index: 4; transform: translateY(-48px);">
-              <span class="text-mono-sm text-text-accent">Signal Glass (Layer 3)</span>
+            <div class="ds-depth-layer" style="background: var(--color-surface-3); border: 1px solid var(--color-border-accent); box-shadow: var(--shadow-card-hover); z-index: 4; transform: translateY(-48px);">
+              <span class="text-mono-sm text-text-accent">Floating Glass (Layer 3)</span>
             </div>
             <div class="ds-depth-layer" style="background: var(--color-surface-2); border: 1px solid var(--color-border-default); box-shadow: var(--shadow-card); z-index: 3; transform: translateY(-32px);">
               <span class="text-mono-sm text-text-secondary">Glass Card (Layer 2)</span>
@@ -927,43 +931,37 @@
       </div>
 
       <Panel>
-        <div class="p-6 flex flex-wrap items-start gap-12">
-          <div class="flex flex-col items-center gap-3">
-            <div class="relative flex items-center justify-center w-20 h-20">
-              <div class="route-loader-core-field"></div>
-              <div class="route-loader-ripples">
-                <div class="route-loader-ripple-ring"></div>
-                <div class="route-loader-ripple-ring"></div>
-                <div class="route-loader-ripple-ring"></div>
+        <div class="grid gap-8 p-6">
+          <div class="grid gap-3">
+            <PrismediaLoadingMark label="Prism loading animation" showLabel previewProgress={0.68} />
+            <span class="text-mono-sm text-text-muted text-center">blocking prism loader · responsive width · 2.8s cycle</span>
+          </div>
+          <div class="flex flex-wrap items-start gap-12">
+            <div class="flex flex-col items-center gap-3">
+              <div class="w-20 h-20 flex items-center justify-center">
+                <div class="spinner-inline w-8 h-8">
+                  <div class="spinner-inline-outer"></div>
+                  <div class="spinner-inline-inner"></div>
+                  <div class="spinner-inline-core"></div>
+                </div>
               </div>
-              <LogoMark size={32} alt="" />
+              <span class="text-mono-sm text-text-muted">retained-content spinner</span>
             </div>
-            <span class="text-mono-sm text-text-muted">route loader</span>
-          </div>
-          <div class="flex flex-col items-center gap-3">
-            <div class="w-20 h-20 flex items-center justify-center">
-              <div class="spinner-inline w-8 h-8">
-                <div class="spinner-inline-outer"></div>
-                <div class="spinner-inline-inner"></div>
-                <div class="spinner-inline-core"></div>
+            <div class="flex flex-col items-center gap-3">
+              <div class="w-20 h-20 flex items-center justify-end gap-[3px] pb-4 pl-3">
+                {#each [0, 0.15, 0.3, 0.45] as delay (delay)}
+                  <div
+                    class="w-[3px] h-5 bg-accent-500/70"
+                    style="animation: bar-bounce 0.85s {delay}s ease-in-out infinite"
+                  ></div>
+                {/each}
               </div>
+              <span class="text-mono-sm text-text-muted">activity visualizer</span>
             </div>
-            <span class="text-mono-sm text-text-muted">inline spinner</span>
-          </div>
-          <div class="flex flex-col items-center gap-3">
-            <div class="w-20 h-20 flex items-center justify-end gap-[3px] pb-4 pl-3">
-              {#each [0, 0.15, 0.3, 0.45] as delay (delay)}
-                <div
-                  class="w-[3px] h-5 bg-accent-500/70"
-                  style="animation: bar-bounce 0.85s {delay}s ease-in-out infinite"
-                ></div>
-              {/each}
+            <div class="flex flex-col items-center gap-3">
+              <div class="w-20 h-20 shimmer-demo"></div>
+              <span class="text-mono-sm text-text-muted">local shimmer</span>
             </div>
-            <span class="text-mono-sm text-text-muted">bar bounce</span>
-          </div>
-          <div class="flex flex-col items-center gap-3">
-            <div class="w-20 h-20 shimmer-demo"></div>
-            <span class="text-mono-sm text-text-muted">shimmer</span>
           </div>
         </div>
       </Panel>
@@ -1094,8 +1092,7 @@
           <div class="p-5 space-y-2">
             <h3 class="text-h3 text-text-accent">Glow expresses state</h3>
             <p class="text-body text-text-secondary">
-              Selection, focus, and activity use <code class="text-mono text-text-accent">glow-pulse</code> or
-              full glow <code class="text-mono text-text-accent">box-shadow</code>. No static color-only state changes.
+              Selection, focus, and activity use crisp borders, position, or motion cues. No static color-only state changes.
             </p>
           </div>
         </Panel>
@@ -1110,10 +1107,10 @@
         </Panel>
         <Panel>
           <div class="p-5 space-y-2">
-            <h3 class="text-h3 text-text-accent">Brass accent only on active</h3>
+            <h3 class="text-h3 text-text-accent">Entity color carries identity</h3>
             <p class="text-body text-text-secondary">
-              <span class="text-text-accent">#f2c26a</span> is reserved for active/selected states.
-              Always expressed with glow, never flat. Accent gradients for fills.
+              Prismedia chrome stays neutral while each media family inherits a spectrum pair.
+              Color reinforces active state with a border, icon, or motion cue.
             </p>
           </div>
         </Panel>
@@ -1250,7 +1247,7 @@
     border-left: 2px solid var(--color-accent-600);
     background: linear-gradient(
       90deg,
-      rgba(242, 194, 106, 0.04) 0%,
+      rgba(199, 201, 204, 0.04) 0%,
       transparent 40%
     );
   }
@@ -1339,8 +1336,8 @@
   }
 
   .ds-surface-signal {
-    border-color: rgba(242, 194, 106, 0.25);
-    box-shadow: 0 0 25px rgba(242, 194, 106, 0.06);
+    border-color: rgba(199, 201, 204, 0.25);
+    box-shadow: 0 0 25px rgba(199, 201, 204, 0.06);
   }
 
   .ds-surface-card-header {
@@ -1399,7 +1396,7 @@
       var(--color-accent-700),
       var(--color-accent-500)
     );
-    box-shadow: 0 0 6px rgba(242, 194, 106, 0.3);
+    box-shadow: 0 0 6px rgba(199, 201, 204, 0.3);
     animation: ds-bar-grow 2s ease-in-out infinite alternate;
   }
 

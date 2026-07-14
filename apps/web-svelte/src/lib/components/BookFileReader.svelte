@@ -76,7 +76,7 @@
 
   const hasToc = $derived(toc.length > 0);
 
-  // Brass accent so in-book links read as interactive without the default deep-blue.
+  // Neutral accent accent so in-book links read as interactive without the default deep-blue.
   function contentStyles(percent: number): string {
     // !important so the book's own stylesheet (which often colors links a hard blue) can't win.
     return `
@@ -84,7 +84,7 @@
       html, body { background: transparent !important; color: #e7e7ea !important; }
       a, a:link, a:visited, a *,
       a[href], a[href]:link, a[href]:visited, a[href] * {
-        color: #f2c26a !important;
+        color: #c7c9cc !important;
         text-decoration: underline;
         text-underline-offset: 2px;
       }

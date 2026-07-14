@@ -278,13 +278,13 @@
 
   .tab-row button:hover {
     color: var(--color-text-primary, #f2eed8);
-    border-color: rgba(196, 154, 90, 0.35);
+    border-color: rgba(199, 201, 204, 0.35);
   }
 
   .tab-row button.is-active {
     color: #c49a5a;
     border-color: #c49a5a;
-    box-shadow: 0 0 12px rgba(196, 154, 90, 0.2);
+    box-shadow: 0 0 12px rgba(199, 201, 204, 0.2);
   }
 
   /* ── Controls panel ─────────────────────────────────────── */
@@ -338,13 +338,13 @@
 
   .toggle-row button:hover {
     color: var(--color-text-primary, #f2eed8);
-    border-color: rgba(196, 154, 90, 0.35);
+    border-color: rgba(199, 201, 204, 0.35);
   }
 
   .toggle-row button.is-active {
     color: #c49a5a;
     border-color: #c49a5a;
-    box-shadow: 0 0 10px rgba(196, 154, 90, 0.15);
+    box-shadow: 0 0 10px rgba(199, 201, 204, 0.15);
   }
 
   /* ── Section toggles ────────────────────────────────────── */

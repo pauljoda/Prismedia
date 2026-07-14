@@ -439,7 +439,7 @@
     border-color: var(--color-border-accent);
     background: var(--color-overlay-glass-accent);
     color: var(--color-text-accent);
-    box-shadow: 0 0 16px rgb(242 194 106 / 0.08);
+    box-shadow: 0 0 16px rgb(199 201 204 / 0.08);
     outline: none;
   }
 

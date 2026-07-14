@@ -10,4 +10,6 @@ export interface NavLayoutSection {
   label: string;
   items: string[];
   collapsed: boolean;
+  /** @nullable */
+  accent?: string | null;
 }

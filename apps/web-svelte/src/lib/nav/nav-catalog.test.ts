@@ -25,6 +25,7 @@ describe("defaultNavPrefs", () => {
 
     const video = prefs.sections.find((s) => s.id === "video");
     expect(video?.items).toEqual(["/movies", "/series", "/videos"]);
+    expect(video?.accent).toBe("#b76337");
 
     const overview = prefs.sections.find((s) => s.id === "overview");
     expect(overview?.items).toEqual(["/", "/search", "/stats"]);
@@ -55,7 +56,15 @@ describe("normalizeNavPrefs", () => {
   it("accepts a server document using the `version` key", () => {
     const doc = {
       version: 1,
-      sections: [{ id: "books", label: "Books", items: ["/books"], collapsed: true }],
+      sections: [
+        {
+          id: "books",
+          label: "Books",
+          items: ["/books"],
+          collapsed: true,
+          accent: "#0ab3e6",
+        },
+      ],
       hidden: ["/images"],
       mobileFavorites: ["/files", "/videos", "/galleries", "/people", "/extra"],
     };
@@ -67,10 +76,26 @@ describe("normalizeNavPrefs", () => {
       label: "Books",
       items: ["/books"],
       collapsed: true,
+      accent: "#0ab3e6",
     });
     expect(prefs!.hidden).toEqual(["/images"]);
     // Mobile favorites are capped at four.
     expect(prefs!.mobileFavorites).toHaveLength(4);
+  });
+
+  it("drops unsafe persisted section accent values", () => {
+    const prefs = normalizeNavPrefs({
+      version: 1,
+      sections: [
+        { id: "safe", label: "Safe", items: ["/videos"], accent: "#ff571f" },
+        { id: "unsafe", label: "Unsafe", items: ["/images"], accent: "url(javascript:bad)" },
+      ],
+      hidden: [],
+      mobileFavorites: [],
+    });
+
+    expect(prefs?.sections[0]?.accent).toBe("#ff571f");
+    expect(prefs?.sections[1]?.accent).toBeUndefined();
   });
 
   it("returns null for unusable shapes so callers fall back to defaults", () => {

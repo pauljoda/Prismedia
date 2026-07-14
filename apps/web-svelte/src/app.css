@@ -21,13 +21,7 @@
   --font-jetbrains-mono: "JetBrains Mono Variable", "Menlo", monospace;
 }
 
-/*
- * Prismedia Design System — Dark Control Room
- *
- * Refined industrial aesthetic: Blackmagic DaVinci Resolve meets
- * high-end audio rack gear. Every surface feels like a machined
- * panel in a private console room.
- */
+/* Prismedia Prism System — black content, spectral identity, glass chrome. */
 
 @theme {
   /* ── Fonts ── */
@@ -36,76 +30,85 @@
   --font-body: var(--font-inter), "Helvetica Neue", sans-serif;
   --font-mono: var(--font-jetbrains-mono), "Menlo", monospace;
 
-  /* ── Surface Hierarchy (5 levels) ── */
-  --color-bg: #07080b;
-  --color-surface-1: #0b0e12;
-  --color-surface-2: #11161d;
-  --color-surface-3: #202734;
-  --color-surface-4: #2a3038;
+  /* ── Dark semantic surfaces ── */
+  --color-bg: #000000;
+  --color-surface-1: #111214;
+  --color-surface-2: #191a1e;
+  --color-surface-3: #24262b;
+  --color-surface-4: #303238;
 
   /* ── Text ── */
-  --color-text-primary: #f0ede3;
-  --color-text-secondary: #c8ccd4;
-  --color-text-muted: #a4acb9;
-  --color-text-disabled: #5a6070;
-  --color-text-accent: #f2c26a;
-  --color-text-accent-bright: #f5d48a;
+  --color-text-primary: #f5f5f6;
+  --color-text-secondary: #c8c9cc;
+  --color-text-muted: #92959d;
+  --color-text-disabled: #585b63;
+  --color-text-accent: #d8d9dc;
+  --color-text-accent-bright: #f1f1f2;
 
   /* ── Phosphor / Digital Accent (Silver/Platinum) ── */
   --color-phosphor-400: #ffffff;
   --color-phosphor-500: #e2e8f0;
   --color-phosphor-600: #94a3b8;
 
-  /* ── Brass / Accent Scale ── */
-  --color-accent-950: #1a1408;
-  --color-accent-900: #2d2210;
-  --color-accent-800: #4a3818;
-  --color-accent-700: #7a5e20;
-  --color-accent-600: #d59a2a;
-  --color-accent-500: #f2c26a;
-  --color-accent-400: #f5d48a;
-  --color-accent-300: #f7dfa0;
-  --color-accent-200: #faecc0;
-  --color-accent-100: #fdf5e0;
-  --color-accent-50: #fefaf0;
+  /* ── Neutral functional accent ── */
+  --color-accent-950: #101113;
+  --color-accent-900: #1b1c20;
+  --color-accent-800: #2a2c31;
+  --color-accent-700: #4a4d55;
+  --color-accent-600: #9699a1;
+  --color-accent-500: #c7c9cc;
+  --color-accent-400: #d8d9dc;
+  --color-accent-300: #e5e6e8;
+  --color-accent-200: #eff0f1;
+  --color-accent-100: #f7f7f8;
+  --color-accent-50: #ffffff;
+
+  /* ── Prism spectrum ── */
+  --color-spectrum-red: #ff141f;
+  --color-spectrum-orange: #ff570a;
+  --color-spectrum-yellow: #ffc71f;
+  --color-spectrum-green: #1fc247;
+  --color-spectrum-cyan: #0ab3e6;
+  --color-spectrum-blue: #0d47ff;
+  --color-spectrum-violet: #7a14f5;
+  --color-spectrum-magenta: #d60de0;
 
   /* ── Muted Blue (cool accent counterpoint) ── */
   --color-muted-blue: #3b475c;
 
   /* ── Status (vivid, confident — signal indicators) ── */
-  --color-success: #63c889;
-  --color-success-muted: #1a3d28;
-  --color-success-text: #8ee0aa;
-  --color-warning: #f2c26a;
-  --color-warning-muted: #3d3010;
-  --color-warning-text: #f5d48a;
-  --color-error: #ff806f;
-  --color-error-muted: #4a1c18;
-  --color-error-text: #ff9f92;
-  --color-info: #6fa8dc;
-  --color-info-muted: #1a2e44;
-  --color-info-text: #92c0e8;
+  --color-success: #1fc247;
+  --color-success-muted: #102c18;
+  --color-success-text: #72df89;
+  --color-warning: #ff570a;
+  --color-warning-muted: #35190e;
+  --color-warning-text: #ff9a6d;
+  --color-error: #ff141f;
+  --color-error-muted: #351014;
+  --color-error-text: #ff747b;
+  --color-info: #0ab3e6;
+  --color-info-muted: #0c2530;
+  --color-info-text: #75d9f5;
 
   /* ── Borders ── */
-  --color-border-subtle: rgba(164, 172, 185, 0.07);
-  --color-border-default: rgba(164, 172, 185, 0.12);
-  --color-border-accent: rgba(242, 194, 106, 0.24);
-  --color-border-accent-strong: rgba(242, 194, 106, 0.52);
+  --color-border-subtle: rgba(255, 255, 255, 0.07);
+  --color-border-default: rgba(255, 255, 255, 0.13);
+  --color-border-accent: rgba(216, 217, 220, 0.28);
+  --color-border-accent-strong: rgba(231, 232, 234, 0.58);
 
   /* ── Overlays ── */
-  --color-overlay-scrim: rgba(7, 8, 11, 0.75);
-  --color-overlay-heavy: rgba(7, 8, 11, 0.9);
-  --color-overlay-glass: rgba(17, 22, 29, 0.8);
-  --color-overlay-glass-light: rgba(17, 22, 29, 0.55);
-  --color-overlay-glass-accent: rgba(36, 30, 18, 0.6);
+  --color-overlay-scrim: rgba(0, 0, 0, 0.72);
+  --color-overlay-heavy: rgba(0, 0, 0, 0.9);
+  --color-overlay-glass: rgba(18, 19, 23, 0.76);
+  --color-overlay-glass-light: rgba(18, 19, 23, 0.54);
+  --color-overlay-glass-accent: rgba(29, 30, 35, 0.7);
   --color-white-overlay: rgba(255, 255, 255, 0.08);
 
-  /* ── Brass Accent Overlays ── */
-  --color-accent-overlay-faint: rgba(196, 154, 90, 0.08);
-  --color-accent-overlay-subtle: rgba(196, 154, 90, 0.15);
-  --color-accent-overlay-light: rgba(196, 154, 90, 0.25);
-  --color-accent-overlay-medium: rgba(196, 154, 90, 0.35);
-  --color-accent-overlay-strong: rgba(196, 154, 90, 0.50);
+  --color-accent-overlay-faint: rgba(199, 201, 204, 0.08);
+  --color-accent-overlay-subtle: rgba(199, 201, 204, 0.15);
+  --color-accent-overlay-light: rgba(199, 201, 204, 0.25);
+  --color-accent-overlay-medium: rgba(199, 201, 204, 0.35);
+  --color-accent-overlay-strong: rgba(199, 201, 204, 0.5);
 
   /* ── Glass Blur Scale ── */
   --glass-blur-xs: 4px;
@@ -131,18 +134,18 @@
   --shadow-card: inset 0 1px 0 rgba(255, 255, 255, 0.04),
     inset 1px 0 0 rgba(255, 255, 255, 0.01),
     0 2px 6px rgba(0, 0, 0, 0.3);
-  --shadow-card-hover: inset 0 1px 0 rgba(255, 255, 255, 0.06),
+  --shadow-card-hover: inset 0 1px 0 rgba(255, 255, 255, 0.07),
     inset 1px 0 0 rgba(255, 255, 255, 0.02),
-    0 8px 24px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(242, 194, 106, 0.25),
-    0 0 30px 5px rgba(242, 194, 106, 0.06);
+    0 8px 24px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(216, 217, 220, 0.24),
+    0 0 30px 5px rgba(199, 201, 204, 0.05);
   --shadow-elevated: inset 0 1px 0 rgba(255, 255, 255, 0.06),
     inset 1px 0 0 rgba(255, 255, 255, 0.02),
     0 12px 40px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(0, 0, 0, 0.3);
   --shadow-well: inset 0 0 8px rgba(0, 0, 0, 0.34), inset 0 0 0 1px rgba(0, 0, 0, 0.18);
   --shadow-media-well: inset 0 10px 30px rgba(0, 0, 0, 0.8), inset 0 1px 3px rgba(0, 0, 0, 0.5);
-  --shadow-focus-accent: 0 0 0 2px rgba(242, 194, 106, 0.20);
-  --shadow-glow-accent: 0 0 25px rgba(242, 194, 106, 0.10), 0 0 8px rgba(242, 194, 106, 0.16);
-  --shadow-glow-accent-strong: 0 0 30px rgba(242, 194, 106, 0.18), 0 0 10px rgba(242, 194, 106, 0.25);
+  --shadow-focus-accent: 0 0 0 2px rgba(216, 217, 220, 0.2);
+  --shadow-glow-accent: 0 0 25px rgba(199, 201, 204, 0.09), 0 0 8px rgba(199, 201, 204, 0.14);
+  --shadow-glow-accent-strong: 0 0 30px rgba(216, 217, 220, 0.16), 0 0 10px rgba(216, 217, 220, 0.22);
   --shadow-glow-phosphor: 0 0 20px rgba(255, 255, 255, 0.1), 0 0 6px rgba(255, 255, 255, 0.15);
 
   /* ── Transitions ── */
@@ -179,8 +182,13 @@
     margin: 0;
     min-height: 100vh;
     background-color: var(--color-bg);
-    /* Subtle SVG noise texture for materiality */
-    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)' opacity='0.025'/%3E%3C/svg%3E");
+    background-image:
+      radial-gradient(circle at -5% 4%, rgb(13 71 255 / 0.11), transparent 30rem),
+      radial-gradient(circle at 82% -8%, rgb(255 20 31 / 0.08), transparent 34rem),
+      radial-gradient(circle at 32% 108%, rgb(122 20 245 / 0.1), transparent 34rem),
+      radial-gradient(circle at 108% 76%, rgb(31 194 71 / 0.07), transparent 30rem),
+      linear-gradient(rgb(0 0 0 / 0.78), rgb(0 0 0 / 0.92));
+    background-attachment: fixed;
   }
 
   /*
@@ -312,11 +320,11 @@
   }
 }
 
-/* ── Industrial Surface Components ── */
+/* ── Prism surface components ── */
 @layer components {
   /* Panel: primary container */
   .surface-panel {
-    background: linear-gradient(160deg, var(--color-surface-2) 0%, var(--color-surface-1) 100%);
+    background: linear-gradient(160deg, rgb(29 30 34 / 0.98), rgb(15 16 18 / 0.98));
     border: 1px solid var(--color-border-subtle);
     border-radius: var(--radius-md);
     box-shadow: inset 0 1px 0 rgba(255,255,255,0.04), 0 4px 24px rgba(0,0,0,0.40);
@@ -325,8 +333,8 @@
   /* Card: material surface, hover transitions to accent */
   .surface-card {
     background:
-      linear-gradient(180deg, rgba(255, 255, 255, 0.032), rgba(255, 255, 255, 0.012) 42%, rgba(0, 0, 0, 0.18) 100%),
-      linear-gradient(160deg, color-mix(in srgb, var(--color-surface-2) 58%, var(--color-surface-1) 42%) 0%, var(--color-surface-1) 100%);
+      linear-gradient(180deg, rgba(255, 255, 255, 0.035), transparent 42%, rgba(0, 0, 0, 0.16) 100%),
+      var(--color-surface-1);
     border: 1px solid var(--color-border-default);
     border-radius: var(--radius-sm);
     box-shadow:
@@ -344,15 +352,23 @@
       inset 0 1px 0 rgba(255,255,255,0.055),
       inset 0 -1px 0 rgba(0,0,0,0.35),
       0 10px 28px rgba(0,0,0,0.48),
-      0 0 0 1px rgba(242,194,106,0.20);
+      0 0 0 1px color-mix(in srgb, var(--entity-accent, var(--color-accent-500)) 24%, transparent);
   }
 
   /* Selected / Active state for cards (can be added via class) */
   .surface-card.active {
     border-color: var(--color-border-accent-strong);
-    box-shadow: 0 0 0 1px rgba(242,194,106,0.60),
-                0 0 16px rgba(242,194,106,0.30),
-                0 0 32px rgba(242,194,106,0.10);
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--entity-accent, var(--color-accent-500)) 58%, transparent),
+                0 0 16px color-mix(in srgb, var(--entity-accent, var(--color-accent-500)) 26%, transparent),
+                0 0 32px color-mix(in srgb, var(--entity-accent, var(--color-accent-500)) 10%, transparent);
+  }
+
+  .app-glass {
+    background: linear-gradient(180deg, rgb(28 29 34 / 0.74), rgb(12 13 16 / 0.72));
+    border-color: var(--color-border-default);
+    box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.07), 0 12px 36px rgb(0 0 0 / 0.34);
+    backdrop-filter: blur(var(--glass-blur-md)) saturate(1.3);
+    -webkit-backdrop-filter: blur(var(--glass-blur-md)) saturate(1.3);
   }
 
   /* Media Well: deeply recessed container for video/images */
@@ -390,7 +406,7 @@
   /* Entity hero action buttons: shared by local edit controls and nested action components. */
   .entity-action-button {
     --entity-action-accent: var(--detail-accent, var(--color-accent-500));
-    --entity-action-accent-glow: var(--detail-accent-glow, rgba(242, 194, 106, 0.16));
+    --entity-action-accent-glow: var(--detail-accent-glow, rgba(199, 201, 204, 0.16));
     --entity-action-border: var(--detail-border, var(--color-border-default));
     --entity-action-text: var(--detail-text-secondary, var(--color-text-secondary));
 
@@ -498,8 +514,7 @@
     );
     box-shadow:
       inset 0 1px 0 rgba(255, 255, 255, 0.34),
-      inset 0 -1px 0 rgba(0, 0, 0, 0.22),
-      0 0 18px var(--entity-action-accent-glow);
+      inset 0 -1px 0 rgba(0, 0, 0, 0.22);
   }
 
   .entity-action-button-primary:hover:not(:disabled) {
@@ -512,8 +527,7 @@
     );
     box-shadow:
       inset 0 1px 0 rgba(255, 255, 255, 0.42),
-      inset 0 -1px 0 rgba(0, 0, 0, 0.2),
-      0 0 22px color-mix(in srgb, var(--entity-action-accent) 36%, transparent);
+      inset 0 -1px 0 rgba(0, 0, 0, 0.2);
   }
 
   .entity-action-button-danger {
@@ -609,31 +623,31 @@
       0 0 0 0.5px rgba(255, 255, 255, 0.04);
   }
 
-  /* Transcript: current cue gets a subtle brass text glow. */
+  /* Transcript: current cue gets a subtle neutral accent text glow. */
   .text-shadow-cue {
     text-shadow:
-      0 0 8px rgba(242, 194, 106, 0.35),
-      0 0 2px rgba(242, 194, 106, 0.45);
+      0 0 8px rgba(199, 201, 204, 0.35),
+      0 0 2px rgba(199, 201, 204, 0.45);
   }
 
   /* ── Subtitle caption overlays ──
      Three visual variants the user can switch between. All respect the
-     Dark Room sharp-corner rule — no border-radius anywhere. */
+     prism-system sharp-corner rule — no border-radius anywhere. */
 
-  /* Stylized: Prism Noir material plate with accent glow. */
+  /* Stylized: prism-system material plate with accent glow. */
   .video-caption-stylized {
     background: rgba(8, 9, 12, 0.78);
     padding: 0.4rem 1rem;
-    border: 1px solid rgba(242, 194, 106, 0.25);
+    border: 1px solid rgba(199, 201, 204, 0.25);
     border-radius: var(--radius-sm, 6px);
     box-shadow:
       0 0 16px rgba(0, 0, 0, 0.5),
-      0 0 24px rgba(242, 194, 106, 0.08),
+      0 0 24px rgba(199, 201, 204, 0.08),
       inset 0 1px 0 rgba(255, 255, 255, 0.06);
     color: #ffffff;
     text-shadow:
       0 1px 2px rgba(0, 0, 0, 0.85),
-      0 0 8px rgba(242, 194, 106, 0.12);
+      0 0 8px rgba(199, 201, 204, 0.12);
   }
 
   /* Classic: flat translucent-black box with plain white text — the
@@ -742,7 +756,7 @@
     50% { transform: scaleY(1); }
   }
 
-  /* Inline spinner: two concentric squares that counter-rotate with brass borders. */
+  /* Inline spinner for retained-content work; blocking states use the prism loader. */
   .spinner-inline {
     position: relative;
     display: inline-flex;
@@ -753,7 +767,7 @@
   .spinner-inline-outer {
     position: absolute;
     inset: 0;
-    border: 1.5px solid rgba(242, 194, 106, 0.35);
+    border: 1.5px solid rgba(199, 201, 204, 0.35);
     border-radius: var(--radius-xs);
     animation: spinner-cw 2.8s var(--ease-mechanical) infinite;
   }
@@ -761,18 +775,18 @@
   .spinner-inline-inner {
     position: absolute;
     inset: 20%;
-    border: 1px solid rgba(242, 194, 106, 0.55);
+    border: 1px solid rgba(199, 201, 204, 0.55);
     border-radius: var(--radius-xs);
     animation: spinner-ccw 1.8s var(--ease-mechanical) infinite;
-    box-shadow: inset 0 0 6px rgba(242, 194, 106, 0.08);
+    box-shadow: inset 0 0 6px rgba(199, 201, 204, 0.08);
   }
 
   .spinner-inline-core {
     width: 3px;
     height: 3px;
     border-radius: var(--radius-full);
-    background: rgba(242, 194, 106, 0.7);
-    box-shadow: 0 0 6px rgba(242, 194, 106, 0.4);
+    background: rgba(199, 201, 204, 0.7);
+    box-shadow: 0 0 6px rgba(199, 201, 204, 0.4);
     animation: led-pulse 1.6s ease-in-out infinite;
   }
 
@@ -788,104 +802,18 @@
 
   @keyframes glow-pulse {
     0%, 100% {
-      box-shadow: 0 0 0 1px rgba(242,194,106,0.50),
-                  0 0 10px rgba(242,194,106,0.20);
+      box-shadow: 0 0 0 1px rgba(199, 201, 204,0.50),
+                  0 0 10px rgba(199, 201, 204,0.20);
     }
     50% {
-      box-shadow: 0 0 0 1px rgba(242,194,106,0.80),
-                  0 0 20px rgba(242,194,106,0.40),
-                  0 0 40px rgba(242,194,106,0.15);
+      box-shadow: 0 0 0 1px rgba(199, 201, 204,0.80),
+                  0 0 20px rgba(199, 201, 204,0.40),
+                  0 0 40px rgba(199, 201, 204,0.15);
     }
   }
 
   .glow-pulse {
     animation: glow-pulse 2.4s ease-in-out infinite;
-  }
-
-  /* App route loader: brass energy radiates from center in circular ripples. */
-  @keyframes route-loader-ripple-circle {
-    0% {
-      transform: scale(0.28);
-      opacity: 0;
-      box-shadow:
-        0 0 0 0 rgba(242, 194, 106, 0.55),
-        inset 0 0 0 0 rgba(242, 194, 106, 0);
-    }
-    12% {
-      opacity: 0.7;
-    }
-    55% {
-      opacity: 0.22;
-    }
-    100% {
-      transform: scale(2.35);
-      opacity: 0;
-      box-shadow:
-        0 0 52px 14px rgba(242, 194, 106, 0.06),
-        inset 0 0 24px rgba(242, 194, 106, 0.04);
-    }
-  }
-
-  @keyframes route-loader-core-field {
-    0%,
-    100% {
-      transform: scale(0.92);
-      opacity: 0.35;
-      box-shadow:
-        0 0 18px rgba(242, 194, 106, 0.12),
-        inset 0 0 20px rgba(242, 194, 106, 0.06);
-    }
-    50% {
-      transform: scale(1);
-      opacity: 0.85;
-      box-shadow:
-        0 0 36px rgba(242, 194, 106, 0.22),
-        inset 0 0 28px rgba(242, 194, 106, 0.1);
-    }
-  }
-
-  .route-loader-ripples {
-    position: absolute;
-    inset: 0;
-    z-index: 2;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    pointer-events: none;
-  }
-
-  .route-loader-ripple-ring {
-    position: absolute;
-    width: 2.75rem;
-    height: 2.75rem;
-    border: 1px solid rgba(242, 194, 106, 0.42);
-    border-radius: 9999px;
-    animation: route-loader-ripple-circle 2.4s var(--ease-mechanical) infinite;
-    will-change: transform, opacity, box-shadow;
-  }
-
-  .route-loader-ripple-ring:nth-child(2) {
-    animation-delay: 0.8s;
-  }
-
-  .route-loader-ripple-ring:nth-child(3) {
-    animation-delay: 1.6s;
-  }
-
-  .route-loader-core-field {
-    position: absolute;
-    z-index: 1;
-    width: 3.25rem;
-    height: 3.25rem;
-    border: 1px solid rgba(242, 194, 106, 0.28);
-    border-radius: 9999px;
-    background: linear-gradient(
-      180deg,
-      rgba(242, 194, 106, 0.12) 0%,
-      rgba(8, 9, 12, 0.2) 100%
-    );
-    animation: route-loader-core-field 2.4s ease-in-out infinite;
-    pointer-events: none;
   }
 
   /* ── Typography Utilities ── */
@@ -925,7 +853,7 @@
 
   .text-glow-accent {
     color: var(--color-accent-300);
-    text-shadow: 0 0 12px rgba(242, 194, 106, 0.4), 0 0 2px rgba(242, 194, 106, 0.8);
+    text-shadow: 0 0 12px rgba(199, 201, 204, 0.4), 0 0 2px rgba(199, 201, 204, 0.8);
   }
 
   .text-glow-phosphor {
@@ -967,7 +895,7 @@
       var(--color-accent-500),
       var(--color-accent-400)
     );
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.2), 0 0 6px rgba(242, 194, 106, 0.25);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.2), 0 0 6px rgba(199, 201, 204, 0.25);
     transition: width var(--duration-moderate) var(--ease-default);
   }
 
@@ -1022,7 +950,7 @@
       var(--color-accent-500),
       var(--color-accent-400)
     );
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.4), 0 0 12px rgba(242, 194, 106, 0.5);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.4), 0 0 12px rgba(199, 201, 204, 0.5);
     transition: width 100ms linear;
   }
 
@@ -1036,7 +964,7 @@
     height: 12px;
     border-radius: var(--radius-full);
     background: var(--color-accent-200);
-    box-shadow: 0 0 10px rgba(242, 194, 106, 0.8), 0 2px 4px rgba(0,0,0,0.5);
+    box-shadow: 0 0 10px rgba(199, 201, 204, 0.8), 0 2px 4px rgba(0,0,0,0.5);
     opacity: 0;
     transition: opacity var(--duration-fast) var(--ease-default), transform var(--duration-fast) var(--ease-default);
   }
@@ -1047,7 +975,7 @@
     transform: translate(50%, -50%) scale(1.2);
   }
 
-  /* ── Focus Ring (brass glow) ── */
+  /* ── Focus Ring (neutral accent glow) ── */
   .focus-ring:focus-visible {
     outline: none;
     box-shadow: var(--shadow-focus-accent);
@@ -1077,7 +1005,7 @@
 
   .surface-card-sharp:hover {
     border-color: var(--color-border-accent);
-    border-top-color: rgba(242, 194, 106, 0.15);
+    border-top-color: rgba(199, 201, 204, 0.15);
     box-shadow: var(--shadow-card-hover);
     transform: translateY(-1px);
   }
@@ -1107,7 +1035,7 @@
       var(--color-surface-3) 100%
     );
     border: 1px solid var(--color-border-accent);
-    border-top: 1px solid rgba(242, 194, 106, 0.15);
+    border-top: 1px solid rgba(199, 201, 204, 0.15);
     border-radius: var(--radius-sm);
     box-shadow: var(--shadow-card), var(--shadow-glow-accent);
   }
@@ -1245,9 +1173,9 @@
   }
 
   .tag-chip-accent {
-    background: rgba(242, 194, 106, 0.1);
+    background: rgba(199, 201, 204, 0.1);
     color: var(--color-accent-400);
-    border: 1px solid rgba(242, 194, 106, 0.15);
+    border: 1px solid rgba(199, 201, 204, 0.15);
     border-radius: var(--radius-xs);
   }
 

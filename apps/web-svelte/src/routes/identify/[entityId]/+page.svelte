@@ -130,7 +130,7 @@
     {#if current && current.state === IDENTIFY_QUEUE_STATE.proposal && activeProvider}
       <button
         type="button"
-        class="inline-flex h-10 w-full items-center justify-center gap-1.5 rounded-xs border border-border-accent bg-accent-950/30 px-3 text-[0.8rem] font-medium text-text-accent shadow-[0_0_18px_rgba(242,194,106,0.10)] transition-colors hover:bg-accent-950/45 disabled:cursor-not-allowed disabled:opacity-40 md:hidden"
+        class="inline-flex h-10 w-full items-center justify-center gap-1.5 rounded-xs border border-border-accent bg-accent-950/30 px-3 text-[0.8rem] font-medium text-text-accent shadow-[0_0_18px_rgba(199, 201, 204,0.10)] transition-colors hover:bg-accent-950/45 disabled:cursor-not-allowed disabled:opacity-40 md:hidden"
         disabled={backToSearchDisabled}
         onclick={backToSearch}
       >

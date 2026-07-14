@@ -21,6 +21,8 @@
     Users,
   } from "@lucide/svelte";
   import { acquisitionStatusDisplay } from "$lib/requests/acquisition-status-display";
+  import { entityAccentForKind } from "$lib/entities/entity-accent";
+  import { paletteFromImage, type ArtworkPalette } from "$lib/entities/artwork-palette";
   import { getRatingValue, isNsfw, isWanted } from "$lib/api/capabilities";
   import OverflowTicker from "$lib/components/OverflowTicker.svelte";
   import {
@@ -53,6 +55,7 @@
     hoverPreviewSuppressed?: () => boolean;
     interactive?: boolean;
     onActivate?: (card: EntityThumbnailCard) => void;
+    onArtworkLoad?: (image: HTMLImageElement) => void;
     onSelectedChange?: (selected: boolean) => void;
     selectable?: boolean;
     selectMode?: boolean;
@@ -76,6 +79,7 @@
     hoverPreviewSuppressed,
     interactive = true,
     onActivate,
+    onArtworkLoad,
     onSelectedChange,
     selectable = false,
     selectMode = false,
@@ -89,6 +93,7 @@
   let pointerRatio = $state<number | null>(null);
   let imageFailed = $state(false);
   let imageLoaded = $state(false);
+  let artworkPaletteState = $state<{ entityId: string; palette: ArtworkPalette } | null>(null);
   let hoverBroken = $state(false);
   let lastSrc = $state<string | undefined>(undefined);
   let hoverIntentTimer: number | null = null;
@@ -132,6 +137,11 @@
     isSpriteHover ? !card.cover : sequenceRestCover ? false : !asset || imageFailed,
   );
   const gradient = $derived(placeholderGradient(card.entity.title));
+  const entityAccent = $derived(entityAccentForKind(card.entity.kind));
+  const artworkPalette = $derived(
+    artworkPaletteState?.entityId === card.entity.id ? artworkPaletteState.palette : null,
+  );
+  const activeAccent = $derived(artworkPalette ?? entityAccent);
 
   // Cards draw from the small grid variants whenever they exist: the srcset
   // carries only the 480w/960w pair (never the original), and the plain src
@@ -499,8 +509,14 @@
     event.stopPropagation();
   }
 
-  function markImageLoaded() {
+  function markImageLoaded(event: Event) {
     imageLoaded = true;
+    const image = event.currentTarget as HTMLImageElement;
+    if (pointerRatio === null && !artworkPalette) {
+      const palette = paletteFromImage(image);
+      if (palette) artworkPaletteState = { entityId: card.entity.id, palette };
+    }
+    onArtworkLoad?.(image);
   }
 
   function formatRating(value: number): string {
@@ -546,6 +562,8 @@
   class:is-select-mode={inSelectMode}
   class:is-static={!interactive}
   style:aspect-ratio={layout === "list" || !imageOnly ? undefined : aspectRatio}
+  style:--entity-accent={activeAccent.primary}
+  style:--entity-accent-secondary={activeAccent.secondary}
   aria-label={card.entity.title}
   aria-checked={interactive && !onActivate && (inSelectMode || (!href && selectable)) ? selected : undefined}
   onblur={clearHover}
@@ -839,16 +857,13 @@
 
   .entity-thumbnail:is(:hover, :focus-visible) {
     transform: translateY(-1px);
-    border-color: var(--color-border-accent, rgb(242 194 106 / 0.32));
-    box-shadow:
-      var(--shadow-card-hover),
-      0 0 12px rgb(242 194 106 / 0.07),
-      0 0 4px rgb(242 194 106 / 0.10);
+    border-color: color-mix(in srgb, var(--entity-accent) 52%, var(--color-border-default));
+    box-shadow: var(--shadow-card-hover);
   }
 
   .entity-thumbnail.is-selected {
-    border-color: var(--color-border-accent-strong, rgb(242 194 106 / 0.6));
-    box-shadow: var(--shadow-focus-accent), var(--shadow-glow-accent-strong);
+    border-color: color-mix(in srgb, var(--entity-accent) 72%, white 8%);
+    box-shadow: 0 0 0 1px var(--entity-accent), var(--shadow-card-hover);
   }
 
   .entity-thumbnail.is-static {
@@ -918,13 +933,12 @@
   .progress-meter-fill {
     display: block;
     height: 100%;
-    background: linear-gradient(135deg, #7a5e20 0%, #d59a2a 58%, #f2c26a 100%);
-    box-shadow: 0 0 6px rgb(242 194 106 / 0.55);
+    background: linear-gradient(90deg, var(--entity-accent), var(--entity-accent-secondary));
   }
 
   .media.is-image-loading {
     background:
-      linear-gradient(110deg, rgb(255 255 255 / 0.04) 8%, rgb(242 194 106 / 0.11) 18%, rgb(255 255 255 / 0.04) 33%),
+      linear-gradient(110deg, rgb(255 255 255 / 0.04) 8%, color-mix(in srgb, var(--entity-accent) 12%, transparent) 18%, rgb(255 255 255 / 0.04) 33%),
       radial-gradient(circle at 50% 45%, rgb(255 255 255 / 0.08), transparent 34%),
       linear-gradient(135deg, rgb(15 16 18 / 0.96), rgb(28 25 20 / 0.92)),
       #111;
@@ -981,7 +995,7 @@
     z-index: 2;
     pointer-events: none;
     background:
-      linear-gradient(110deg, transparent 0%, rgb(242 194 106 / 0.12) 42%, transparent 68%),
+      linear-gradient(110deg, transparent 0%, color-mix(in srgb, var(--entity-accent) 13%, transparent) 42%, transparent 68%),
       linear-gradient(180deg, rgb(255 255 255 / 0.05), rgb(0 0 0 / 0.08));
     background-size: 220% 100%, auto;
     animation: thumbnail-skeleton-shimmer 1.2s ease-in-out infinite;
@@ -1021,8 +1035,8 @@
   }
 
   .sequence-rail span.is-active {
-    background: rgb(242 194 106 / 0.95);
-    box-shadow: 0 0 10px rgb(242 194 106 / 0.55);
+    background: var(--entity-accent);
+    box-shadow: none;
     transform: scaleY(1.35);
   }
 
@@ -1056,7 +1070,7 @@
     justify-content: center;
     width: 3.5rem;
     height: 3.5rem;
-    border: 1px solid rgb(242 194 106 / 0.25);
+    border: 1px solid color-mix(in srgb, var(--entity-accent) 28%, transparent);
     background: linear-gradient(160deg, rgb(18 20 24 / 0.96), rgb(7 8 11 / 0.98));
     box-shadow:
       inset 0 1px 0 rgb(255 255 255 / 0.08),
@@ -1066,8 +1080,7 @@
   .placeholder :global(.placeholder-icon-framed) {
     width: 1.75rem;
     height: 1.75rem;
-    color: rgb(231 211 175 / 0.85);
-    filter: drop-shadow(0 0 14px rgb(242 194 106 / 0.24));
+    color: color-mix(in srgb, var(--entity-accent) 72%, white);
   }
 
   .placeholder :global(.placeholder-icon) {
@@ -1213,24 +1226,24 @@
 
   .position-badge {
     color: rgb(244 239 230 / 0.9);
-    border-color: rgb(242 194 106 / 0.34);
+    border-color: rgb(199 201 204 / 0.34);
     background: rgb(9 10 11 / 0.78);
     box-shadow: 0 0 14px rgb(0 0 0 / 0.18);
   }
 
   .rating-badge {
     gap: 0.18rem;
-    color: rgb(242 194 106 / 0.96);
-    border-color: rgb(242 194 106 / 0.38);
+    color: rgb(199 201 204 / 0.96);
+    border-color: rgb(199 201 204 / 0.38);
     background: rgb(39 29 12 / 0.76);
-    box-shadow: 0 0 16px rgb(242 194 106 / 0.18);
+    box-shadow: 0 0 16px rgb(199 201 204 / 0.18);
   }
 
   /* Wanted placeholder: icon + short status, tone-keyed to what the acquisition is doing. */
   .wanted-badge {
     gap: 0.28rem;
-    color: rgb(242 194 106 / 0.96);
-    border-color: rgb(242 194 106 / 0.42);
+    color: rgb(199 201 204 / 0.96);
+    border-color: rgb(199 201 204 / 0.42);
     background: rgb(39 29 12 / 0.82);
     box-shadow: 0 0 14px rgb(0 0 0 / 0.3);
     text-transform: uppercase;
@@ -1239,19 +1252,19 @@
     font-weight: 600;
   }
   .wanted-badge :global(svg) { flex: 0 0 auto; }
-  .wb-downloading { color: #f2c26a; border-color: rgb(242 194 106 / 0.5); background: rgb(52 38 14 / 0.85); box-shadow: 0 0 14px rgb(242 194 106 / 0.18); }
-  .wb-searching { color: #e7d3af; border-color: rgb(211 176 106 / 0.4); background: rgb(40 33 18 / 0.85); }
-  .wb-attention { color: #f2c26a; border-color: rgb(242 194 106 / 0.48); background: rgb(52 36 12 / 0.85); }
+  .wb-downloading { color: #c7c9cc; border-color: rgb(199 201 204 / 0.5); background: rgb(52 38 14 / 0.85); box-shadow: 0 0 14px rgb(199 201 204 / 0.18); }
+  .wb-searching { color: #c8c9cc; border-color: rgb(211 176 106 / 0.4); background: rgb(40 33 18 / 0.85); }
+  .wb-attention { color: #c7c9cc; border-color: rgb(199 201 204 / 0.48); background: rgb(52 36 12 / 0.85); }
   .wb-queued { color: rgb(224 228 236 / 0.9); border-color: rgb(255 255 255 / 0.22); background: rgb(18 20 24 / 0.85); }
-  .wb-cleanup { color: #e7d3af; border-color: rgb(211 176 106 / 0.34); background: rgb(33 29 20 / 0.85); }
+  .wb-cleanup { color: #c8c9cc; border-color: rgb(211 176 106 / 0.34); background: rgb(33 29 20 / 0.85); }
   .wb-failed { color: #ff9a86; border-color: rgb(255 122 92 / 0.46); background: rgb(44 16 12 / 0.85); box-shadow: 0 0 14px rgb(255 92 67 / 0.14); }
   .wb-done { color: #6fd39a; border-color: rgb(87 201 138 / 0.34); background: rgb(20 46 32 / 0.82); }
   .wb-muted { color: rgb(196 201 212 / 0.72); border-color: rgb(255 255 255 / 0.14); background: rgb(18 20 24 / 0.82); }
-  .wb-wanted { color: rgb(242 194 106 / 0.96); border-color: rgb(242 194 106 / 0.42); background: rgb(39 29 12 / 0.82); }
+  .wb-wanted { color: rgb(199 201 204 / 0.96); border-color: rgb(199 201 204 / 0.42); background: rgb(39 29 12 / 0.82); }
 
   .rating-badge :global(svg) {
     fill: currentColor;
-    filter: drop-shadow(0 0 4px rgb(242 194 106 / 0.35));
+    filter: drop-shadow(0 0 4px rgb(199 201 204 / 0.35));
   }
 
   .icon-only {
@@ -1313,14 +1326,14 @@
 
   .selection:checked,
   .selection.is-selected {
-    border-color: rgb(242 194 106 / 0.74);
-    box-shadow: 0 0 16px rgb(242 194 106 / 0.22);
+    border-color: color-mix(in srgb, var(--entity-accent) 74%, white 8%);
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--entity-accent) 64%, transparent);
   }
 
   .selection:checked::before,
   .selection.is-selected::before {
-    border-color: rgb(242 194 106 / 0.95);
-    background: linear-gradient(135deg, #f2c26a, #b8862e);
+    border-color: var(--entity-accent);
+    background: linear-gradient(135deg, var(--entity-accent), var(--entity-accent-secondary));
   }
 
   .selection:checked::after,
@@ -1460,14 +1473,13 @@
 
   .chip :global(svg) {
     flex: 0 0 auto;
-    color: rgb(242 194 106 / 0.82);
+    color: color-mix(in srgb, var(--entity-accent) 82%, white 8%);
   }
 
   .chip-accent {
-    border-color: rgb(242 194 106 / 0.38);
+    border-color: color-mix(in srgb, var(--entity-accent) 38%, transparent);
     background: rgb(13 13 14 / 0.78);
     color: rgb(244 239 230 / 0.92);
-    box-shadow: 0 0 8px rgb(242 194 106 / 0.08);
   }
 
   .chip-rating {

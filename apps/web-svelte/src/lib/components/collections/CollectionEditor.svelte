@@ -414,7 +414,7 @@
                   "inline-flex h-8 items-center justify-center gap-1.5 rounded-xs border px-3 text-[0.7rem] font-medium transition-all",
                   "disabled:cursor-not-allowed disabled:opacity-50",
                   active
-                    ? "border-border-accent-strong bg-accent-950/30 text-text-accent shadow-[0_0_10px_rgba(242,194,106,0.10)]"
+                    ? "border-border-accent-strong bg-accent-950/30 text-text-accent shadow-[0_0_10px_rgba(199, 201, 204,0.10)]"
                     : "border-border-subtle bg-surface-2 text-text-muted hover:border-border-default hover:text-text-primary",
                 )}
               >

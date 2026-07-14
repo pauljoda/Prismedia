@@ -58,7 +58,7 @@
     class={cn(
       "w-full rounded-xs border border-border-subtle bg-surface-2 px-3 py-2 text-sm text-text-primary shadow-[inset_0_2px_8px_rgba(0,0,0,0.30)] transition-colors",
       "placeholder:text-text-disabled",
-      "focus:border-border-accent focus:outline-none focus:shadow-[inset_0_2px_8px_rgba(0,0,0,0.30),0_0_0_1px_rgba(242,194,106,0.35),0_0_8px_rgba(242,194,106,0.15)]",
+      "focus:border-border-accent focus:outline-none focus:shadow-[inset_0_2px_8px_rgba(0,0,0,0.30),0_0_0_1px_rgba(199, 201, 204,0.35),0_0_8px_rgba(199, 201, 204,0.15)]",
       "disabled:cursor-not-allowed disabled:opacity-50",
       error && "border-error/60",
       inputClass,

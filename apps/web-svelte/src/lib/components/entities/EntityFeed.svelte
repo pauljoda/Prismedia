@@ -530,8 +530,8 @@
   .feed-progress-fill {
     height: 100%;
     width: 0;
-    background: var(--color-text-accent, #f2c26a);
-    box-shadow: 0 0 6px rgb(242 194 106 / 0.5);
+    background: var(--color-text-accent, #c7c9cc);
+    box-shadow: 0 0 6px rgb(199 201 204 / 0.5);
     transition: width 0.12s linear;
   }
 

@@ -2009,8 +2009,8 @@
     border-radius: 50%;
     background: var(--color-accent-300);
     box-shadow:
-      0 0 0 1px rgba(196, 154, 90, 0.35),
-      0 0 10px rgba(196, 154, 90, 0.65);
+      0 0 0 1px rgba(199, 201, 204, 0.35),
+      0 0 10px rgba(199, 201, 204, 0.65);
   }
 
   .prismedia-range::-moz-range-thumb {
@@ -2020,8 +2020,8 @@
     border-radius: 50%;
     background: var(--color-accent-300);
     box-shadow:
-      0 0 0 1px rgba(196, 154, 90, 0.35),
-      0 0 10px rgba(196, 154, 90, 0.65);
+      0 0 0 1px rgba(199, 201, 204, 0.35),
+      0 0 10px rgba(199, 201, 204, 0.65);
   }
 
   .player-control-button {
@@ -2050,27 +2050,27 @@
   .player-control-button:hover,
   .player-control-button:focus-visible {
     background: rgba(21, 26, 40, 0.88);
-    border-color: rgba(196, 154, 90, 0.45);
+    border-color: rgba(199, 201, 204, 0.45);
     box-shadow:
       inset 0 1px 0 rgba(255, 255, 255, 0.10),
-      0 0 0 1px rgba(196, 154, 90, 0.20),
-      0 0 20px rgba(196, 154, 90, 0.30),
+      0 0 0 1px rgba(199, 201, 204, 0.20),
+      0 0 20px rgba(199, 201, 204, 0.30),
       0 4px 16px rgba(0, 0, 0, 0.40);
     color: white;
   }
 
   .player-control-button:focus-visible {
-    outline: 1px solid rgba(196, 154, 90, 0.72);
+    outline: 1px solid rgba(199, 201, 204, 0.72);
     outline-offset: 2px;
   }
 
   .player-control-button:active,
   .player-control-button.is-pressed {
     background: rgba(33, 39, 51, 0.98);
-    border-color: rgba(196, 154, 90, 0.58);
+    border-color: rgba(199, 201, 204, 0.58);
     box-shadow:
-      inset 0 0 14px rgba(196, 154, 90, 0.18),
-      0 0 20px rgba(196, 154, 90, 0.34);
+      inset 0 0 14px rgba(199, 201, 204, 0.18),
+      0 0 20px rgba(199, 201, 204, 0.34);
     transform: translateY(1px) scale(0.94);
   }
 

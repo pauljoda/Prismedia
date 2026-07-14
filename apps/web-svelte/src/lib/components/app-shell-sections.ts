@@ -10,12 +10,14 @@ export interface AppShellNavItem {
 export interface AppShellNavSection {
   id: string;
   kicker: string;
+  accent: string;
   items: AppShellNavItem[];
 }
 
 const baseSections: AppShellNavSection[] = baseAppShellSections.map((section) => ({
   id: section.id,
   kicker: section.kicker,
+  accent: section.accent,
   items: section.items.map((item) => ({ ...item, href: item.href as AppRouteId })),
 }));
 

@@ -115,7 +115,7 @@
 
   .review-section-toggle:focus-visible,
   .review-section-collapse:focus-visible {
-    outline: 1px solid rgb(242 194 106 / 0.72);
+    outline: 1px solid rgb(199 201 204 / 0.72);
     outline-offset: 2px;
   }
 

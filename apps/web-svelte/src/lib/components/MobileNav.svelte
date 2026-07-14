@@ -194,7 +194,7 @@
 </script>
 
 <nav
-  class="mobile-nav fixed inset-x-0 bottom-0 z-50 flex items-stretch justify-around border-t border-border-subtle bg-surface-1 md:hidden"
+  class="mobile-nav app-glass fixed inset-x-0 bottom-0 z-50 flex items-stretch justify-around border-t md:hidden"
   onpointerdown={barPointerDown}
   onclickcapture={barClickCapture}
 >
@@ -206,8 +206,9 @@
       aria-current={active ? "page" : undefined}
       class={cn(
         "flex flex-1 flex-col items-center justify-center gap-1 px-2 py-2 text-[0.65rem] transition-colors duration-fast",
-        active ? "text-text-accent" : "text-text-disabled hover:text-text-muted",
+        active ? "mobile-item-active" : "text-text-disabled hover:text-text-muted",
       )}
+      style:--nav-accent={tab.accent}
     >
       {#if Icon}
         <Icon class="h-5 w-5" />
@@ -240,5 +241,9 @@
     padding-top: 0.4rem;
     padding-bottom: max(1.25rem, env(safe-area-inset-bottom, 0px));
     touch-action: none;
+  }
+
+  .mobile-item-active {
+    color: var(--nav-accent);
   }
 </style>

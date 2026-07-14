@@ -390,8 +390,8 @@
   }
 
   .date-row input:focus {
-    border-color: var(--color-border-accent, rgba(242, 194, 106, 0.25));
-    box-shadow: inset 0 2px 8px rgba(0,0,0,0.30), 0 0 0 1px rgba(242,194,106,0.35), 0 0 8px rgba(242,194,106,0.15);
+    border-color: var(--color-border-accent, rgba(199, 201, 204, 0.25));
+    box-shadow: inset 0 2px 8px rgba(0,0,0,0.30), 0 0 0 1px rgba(199, 201, 204,0.35), 0 0 8px rgba(199, 201, 204,0.15);
     outline: none;
   }
 

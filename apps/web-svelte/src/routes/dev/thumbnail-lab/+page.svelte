@@ -177,7 +177,7 @@
   .state-switch button.is-active {
     background: var(--color-accent-950);
     color: var(--color-text-accent);
-    box-shadow: inset 0 0 0 1px rgb(196 154 90 / 0.32);
+    box-shadow: inset 0 0 0 1px rgb(199 201 204 / 0.32);
   }
 
   .status-strip {

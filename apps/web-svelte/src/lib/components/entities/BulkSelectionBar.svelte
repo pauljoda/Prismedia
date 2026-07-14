@@ -283,23 +283,23 @@
   }
 
   .bulk-btn:hover {
-    border-color: var(--color-border-accent, rgba(196, 154, 90, 0.25));
+    border-color: var(--color-border-accent, rgba(199, 201, 204, 0.25));
     background: var(--color-surface-3, #151a28);
     color: var(--color-text-primary);
-    box-shadow: 0 0 0 1px rgba(242,194,106,0.35), 0 0 8px rgba(242,194,106,0.15);
+    box-shadow: 0 0 0 1px rgba(199, 201, 204,0.35), 0 0 8px rgba(199, 201, 204,0.15);
   }
 
   .bulk-btn:focus-visible {
     outline: none;
-    border-color: var(--color-border-accent, rgba(196, 154, 90, 0.25));
-    box-shadow: 0 0 0 1px rgba(242,194,106,0.35), 0 0 8px rgba(242,194,106,0.15);
+    border-color: var(--color-border-accent, rgba(199, 201, 204, 0.25));
+    box-shadow: 0 0 0 1px rgba(199, 201, 204,0.35), 0 0 8px rgba(199, 201, 204,0.15);
   }
 
   .bulk-btn.is-active {
-    border-color: var(--color-border-accent, rgba(196, 154, 90, 0.25));
+    border-color: var(--color-border-accent, rgba(199, 201, 204, 0.25));
     background: var(--color-surface-4, #1c2235);
-    color: var(--color-text-accent, #f2c26a);
-    box-shadow: 0 0 0 1px rgba(242,194,106,0.35), 0 0 8px rgba(242,194,106,0.15);
+    color: var(--color-text-accent, #c7c9cc);
+    box-shadow: 0 0 0 1px rgba(199, 201, 204,0.35), 0 0 8px rgba(199, 201, 204,0.15);
   }
 
   .bulk-btn:disabled {

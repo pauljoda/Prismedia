@@ -168,8 +168,8 @@
       --trees-muted-fg-override: var(--color-text-muted, #a4acb9);
       --trees-border-color-override: var(--color-border-subtle, rgba(164, 172, 185, 0.07));
       --trees-selected-bg-override: var(--color-surface-2, #11161d);
-      --trees-focus-ring-color-override: var(--color-border-accent-strong, rgba(242, 194, 106, 0.52));
-      --trees-selected-focused-border-color-override: var(--color-border-accent, rgba(242, 194, 106, 0.24));
+      --trees-focus-ring-color-override: var(--color-border-accent-strong, rgba(199, 201, 204, 0.52));
+      --trees-selected-focused-border-color-override: var(--color-border-accent, rgba(199, 201, 204, 0.24));
       background: var(--color-surface-1, #0b0e12) !important;
       color: var(--color-text-primary, #f0ede3);
       font-family: var(--font-body, Inter), sans-serif;
@@ -194,8 +194,8 @@
       padding: 0.45rem 0.6rem;
     }
     input[data-file-tree-search-input]:focus {
-      border-color: var(--color-border-accent-strong, rgba(242, 194, 106, 0.52));
-      box-shadow: 0 0 0 2px rgba(242, 194, 106, 0.20);
+      border-color: var(--color-border-accent-strong, rgba(199, 201, 204, 0.52));
+      box-shadow: 0 0 0 2px rgba(199, 201, 204, 0.20);
       outline: none;
     }
     input[data-file-tree-search-input]::placeholder {
@@ -218,13 +218,13 @@
       outline: none !important;
     }
     button[data-type='item'][data-item-selected] {
-      background: rgba(242, 194, 106, 0.06) !important;
-      box-shadow: inset 0 0 0 1px var(--color-border-accent, rgba(242, 194, 106, 0.24));
+      background: rgba(199, 201, 204, 0.06) !important;
+      box-shadow: inset 0 0 0 1px var(--color-border-accent, rgba(199, 201, 204, 0.24));
       color: var(--color-text-primary, #f0ede3);
     }
     button[data-type='item'][data-item-drag-target='true'] {
-      background: rgba(242, 194, 106, 0.08) !important;
-      box-shadow: inset 2px 0 0 var(--color-accent-500, #f2c26a);
+      background: rgba(199, 201, 204, 0.08) !important;
+      box-shadow: inset 2px 0 0 var(--color-accent-500, #c7c9cc);
       color: var(--color-text-primary, #f0ede3);
     }
     button[data-type='item'][data-item-dragging='true'] {
@@ -402,7 +402,7 @@
 
   .tree-toolbar input:focus {
     border-color: var(--color-border-accent-strong);
-    box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.25), 0 0 0 2px rgba(242, 194, 106, 0.20);
+    box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.25), 0 0 0 2px rgba(199, 201, 204, 0.20);
   }
 
   .tree-host {
