@@ -86,7 +86,10 @@
   }
 </script>
 
-<header class="app-glass sticky top-0 z-40 flex h-14 shrink-0 items-center justify-between gap-3 border-b px-5">
+<header
+  class="app-glass sticky top-0 z-40 flex shrink-0 items-center justify-between gap-3 border-b px-5"
+  style:height="var(--prismedia-canvas-header-height, 3.5rem)"
+>
   <div class="flex min-w-0 flex-1 items-center gap-3">
     <a
       href="/"

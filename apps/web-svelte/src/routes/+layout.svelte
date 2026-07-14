@@ -251,6 +251,7 @@
 {:else}
   <div
     class="flex min-h-dvh"
+    style:--prismedia-canvas-header-height="3.5rem"
     style:--prismedia-bottom-dock-padding={bottomDockPadding}
     style:--prismedia-mobile-nav-height="calc(3.65rem + max(1.25rem, env(safe-area-inset-bottom, 0px)))"
     style:--prismedia-mobile-bottom-clearance="calc(3.65rem + max(1.25rem, env(safe-area-inset-bottom, 0px)) + var(--prismedia-bottom-dock-padding))"

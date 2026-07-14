@@ -305,6 +305,25 @@ describe("EntityGrid pagination", () => {
     expect(source).not.toContain("const hoverPreviewsEnabled = $derived(!scrolling)");
     expect(source).toContain("hoverPreviewSuppressed={areHoverPreviewsSuppressed}");
   });
+
+  it("keeps the docked toolbar below the sticky canvas header", () => {
+    const layoutSource = readFileSync("src/routes/+layout.svelte", "utf8");
+    const headerSource = readFileSync("src/lib/components/CanvasHeader.svelte", "utf8");
+    const toolbarSource = readFileSync(
+      "src/lib/components/entities/EntityGridToolbar.svelte",
+      "utf8",
+    );
+
+    expect(layoutSource).toContain(
+      'style:--prismedia-canvas-header-height="3.5rem"',
+    );
+    expect(headerSource).toContain(
+      'style:height="var(--prismedia-canvas-header-height, 3.5rem)"',
+    );
+    expect(toolbarSource).toContain(
+      "top: var(--prismedia-canvas-header-height, 3.5rem);",
+    );
+  });
 });
 
 function card(index: number): EntityThumbnailCard {

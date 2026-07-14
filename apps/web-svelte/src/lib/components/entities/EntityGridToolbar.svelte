@@ -543,7 +543,7 @@
    */
   .toolbar-shell {
     position: sticky;
-    top: 0;
+    top: var(--prismedia-canvas-header-height, 3.5rem);
     z-index: 4;
     display: flex;
     flex-direction: column;

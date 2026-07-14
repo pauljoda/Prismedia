@@ -140,6 +140,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Updated documentation, README screenshots, branding assets, install metadata, and app copy to match the current Prismedia v1 surface.
 
 ### Fixed
+- Restored EntityGrid toolbar floating behavior so its search and controls remain fully visible beneath the sticky app header while scrolling.
 - Audiobook parts now stay scoped to their Books instead of appearing as music in track lists, global activity, smart or manual audio collections, Jellyfin music catalogs, and playback statistics.
 - Full book-library reconciliation now preserves audiobook chapters on the Book explicitly targeted by an acquisition, even when its readable edition lives elsewhere, instead of splitting the audio into a duplicate Book after import.
 - Audiobook listening progress now uses browser-learned chapter durations while audio probing is still pending, so multipart resume and completion save correctly from the first play.
