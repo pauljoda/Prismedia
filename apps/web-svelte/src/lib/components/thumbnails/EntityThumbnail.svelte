@@ -857,13 +857,13 @@
 
   .entity-thumbnail:is(:hover, :focus-visible) {
     transform: translateY(-1px);
-    border-color: color-mix(in srgb, var(--entity-accent) 52%, var(--color-border-default));
+    border-color: var(--color-border-default);
     box-shadow: var(--shadow-card-hover);
   }
 
   .entity-thumbnail.is-selected {
-    border-color: color-mix(in srgb, var(--entity-accent) 72%, white 8%);
-    box-shadow: 0 0 0 1px var(--entity-accent), var(--shadow-card-hover);
+    border-color: var(--color-border-default);
+    box-shadow: inset 2px 0 0 var(--entity-accent), var(--shadow-card-hover);
   }
 
   .entity-thumbnail.is-static {
@@ -933,12 +933,12 @@
   .progress-meter-fill {
     display: block;
     height: 100%;
-    background: linear-gradient(90deg, var(--entity-accent), var(--entity-accent-secondary));
+    background: color-mix(in srgb, var(--entity-accent) 80%, #c7c9cc);
   }
 
   .media.is-image-loading {
     background:
-      linear-gradient(110deg, rgb(255 255 255 / 0.04) 8%, color-mix(in srgb, var(--entity-accent) 12%, transparent) 18%, rgb(255 255 255 / 0.04) 33%),
+      linear-gradient(110deg, rgb(255 255 255 / 0.035) 8%, rgb(255 255 255 / 0.085) 18%, rgb(255 255 255 / 0.035) 33%),
       radial-gradient(circle at 50% 45%, rgb(255 255 255 / 0.08), transparent 34%),
       linear-gradient(135deg, rgb(15 16 18 / 0.96), rgb(28 25 20 / 0.92)),
       #111;
@@ -995,7 +995,7 @@
     z-index: 2;
     pointer-events: none;
     background:
-      linear-gradient(110deg, transparent 0%, color-mix(in srgb, var(--entity-accent) 13%, transparent) 42%, transparent 68%),
+      linear-gradient(110deg, transparent 0%, rgb(255 255 255 / 0.075) 42%, transparent 68%),
       linear-gradient(180deg, rgb(255 255 255 / 0.05), rgb(0 0 0 / 0.08));
     background-size: 220% 100%, auto;
     animation: thumbnail-skeleton-shimmer 1.2s ease-in-out infinite;
@@ -1003,7 +1003,7 @@
 
   .entity-thumbnail:is(:hover, :focus-visible) .media img,
   .entity-thumbnail.is-hovering .media img {
-    filter: saturate(1.06) contrast(1.04);
+    filter: brightness(0.98) contrast(1.02);
   }
 
   .media img.sprite-active,
@@ -1070,8 +1070,8 @@
     justify-content: center;
     width: 3.5rem;
     height: 3.5rem;
-    border: 1px solid color-mix(in srgb, var(--entity-accent) 28%, transparent);
-    background: linear-gradient(160deg, rgb(18 20 24 / 0.96), rgb(7 8 11 / 0.98));
+    border: 1px solid var(--color-border-default);
+    background: var(--color-surface-2);
     box-shadow:
       inset 0 1px 0 rgb(255 255 255 / 0.08),
       0 0 24px rgb(0 0 0 / 0.35);
@@ -1080,7 +1080,7 @@
   .placeholder :global(.placeholder-icon-framed) {
     width: 1.75rem;
     height: 1.75rem;
-    color: color-mix(in srgb, var(--entity-accent) 72%, white);
+    color: var(--color-text-muted);
   }
 
   .placeholder :global(.placeholder-icon) {
@@ -1130,12 +1130,7 @@
     min-width: 0;
     padding: 0.5rem 0.6rem;
     border-top: 1px solid rgb(255 255 255 / 0.05);
-    background:
-      linear-gradient(
-        180deg,
-        rgb(20 22 26 / 0.95) 0%,
-        rgb(13 14 17) 100%
-      );
+    background: rgb(16 16 18 / 0.98);
     overflow: hidden;
     pointer-events: none;
   }
@@ -1221,7 +1216,7 @@
     color: #ff806f;
     border-color: rgb(255 92 67 / 0.42);
     background: rgb(40 13 10 / 0.76);
-    box-shadow: 0 0 14px rgb(255 92 67 / 0.12);
+    box-shadow: none;
   }
 
   .position-badge {
@@ -1236,7 +1231,7 @@
     color: rgb(199 201 204 / 0.96);
     border-color: rgb(199 201 204 / 0.38);
     background: rgb(39 29 12 / 0.76);
-    box-shadow: 0 0 16px rgb(199 201 204 / 0.18);
+    box-shadow: none;
   }
 
   /* Wanted placeholder: icon + short status, tone-keyed to what the acquisition is doing. */
@@ -1252,19 +1247,19 @@
     font-weight: 600;
   }
   .wanted-badge :global(svg) { flex: 0 0 auto; }
-  .wb-downloading { color: #c7c9cc; border-color: rgb(199 201 204 / 0.5); background: rgb(52 38 14 / 0.85); box-shadow: 0 0 14px rgb(199 201 204 / 0.18); }
+  .wb-downloading { color: #c7c9cc; border-color: rgb(199 201 204 / 0.5); background: rgb(52 38 14 / 0.85); box-shadow: none; }
   .wb-searching { color: #c8c9cc; border-color: rgb(211 176 106 / 0.4); background: rgb(40 33 18 / 0.85); }
   .wb-attention { color: #c7c9cc; border-color: rgb(199 201 204 / 0.48); background: rgb(52 36 12 / 0.85); }
   .wb-queued { color: rgb(224 228 236 / 0.9); border-color: rgb(255 255 255 / 0.22); background: rgb(18 20 24 / 0.85); }
   .wb-cleanup { color: #c8c9cc; border-color: rgb(211 176 106 / 0.34); background: rgb(33 29 20 / 0.85); }
-  .wb-failed { color: #ff9a86; border-color: rgb(255 122 92 / 0.46); background: rgb(44 16 12 / 0.85); box-shadow: 0 0 14px rgb(255 92 67 / 0.14); }
+  .wb-failed { color: #ff9a86; border-color: rgb(255 122 92 / 0.46); background: rgb(44 16 12 / 0.85); box-shadow: none; }
   .wb-done { color: #6fd39a; border-color: rgb(87 201 138 / 0.34); background: rgb(20 46 32 / 0.82); }
   .wb-muted { color: rgb(196 201 212 / 0.72); border-color: rgb(255 255 255 / 0.14); background: rgb(18 20 24 / 0.82); }
   .wb-wanted { color: rgb(199 201 204 / 0.96); border-color: rgb(199 201 204 / 0.42); background: rgb(39 29 12 / 0.82); }
 
   .rating-badge :global(svg) {
     fill: currentColor;
-    filter: drop-shadow(0 0 4px rgb(199 201 204 / 0.35));
+    filter: none;
   }
 
   .icon-only {
@@ -1388,9 +1383,7 @@
     margin-top: 0;
     padding: 0.72rem 0.9rem;
     border-radius: 0;
-    background:
-      linear-gradient(180deg, rgb(10 12 15 / 0.94), rgb(9 10 12 / 0.98)),
-      #0a0b0d;
+    background: rgb(12 12 13 / 0.98);
     border: none;
     box-shadow: none;
   }
@@ -1473,26 +1466,26 @@
 
   .chip :global(svg) {
     flex: 0 0 auto;
-    color: color-mix(in srgb, var(--entity-accent) 82%, white 8%);
+    color: var(--color-text-muted);
   }
 
   .chip-accent {
-    border-color: color-mix(in srgb, var(--entity-accent) 38%, transparent);
+    border-color: rgb(255 255 255 / 0.12);
     background: rgb(13 13 14 / 0.78);
     color: rgb(244 239 230 / 0.92);
   }
 
   .chip-rating {
-    border-color: rgb(242 193 95 / 0.5);
-    background: linear-gradient(135deg, rgb(50 38 14 / 0.85), rgb(32 25 13 / 0.85));
+    border-color: rgb(242 193 95 / 0.28);
+    background: rgb(242 193 95 / 0.07);
     color: #f2c15f;
-    box-shadow: 0 0 10px rgb(242 193 95 / 0.18), inset 0 1px 0 rgb(255 255 255 / 0.06);
+    box-shadow: none;
     font-weight: 600;
   }
 
   .chip-rating :global(svg) {
     color: #f2c15f;
-    filter: drop-shadow(0 0 3px rgb(242 193 95 / 0.4));
+    filter: none;
   }
 
   @container (max-width: 220px) {

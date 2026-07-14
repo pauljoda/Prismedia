@@ -244,6 +244,16 @@
   }
 
   .mobile-item-active {
-    color: var(--nav-accent);
+    position: relative;
+    color: var(--color-text-primary);
+  }
+
+  .mobile-item-active::before {
+    position: absolute;
+    top: 0.15rem;
+    width: 1.25rem;
+    height: 2px;
+    background: color-mix(in srgb, var(--nav-accent) 76%, #c7c9cc);
+    content: "";
   }
 </style>

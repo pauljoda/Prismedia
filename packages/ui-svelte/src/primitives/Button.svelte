@@ -12,10 +12,10 @@
       variants: {
         variant: {
           primary: [
-            "border border-border-accent bg-gradient-to-r from-accent-900 via-accent-800 to-accent-900",
-            "text-accent-200 font-medium shadow-[var(--shadow-glow-accent)]",
-            "hover:from-accent-800 hover:via-accent-700 hover:to-accent-800 hover:shadow-[var(--shadow-glow-accent-strong)]",
-            "active:from-accent-950 active:via-accent-900 active:to-accent-950 active:shadow-[inset_0_2px_8px_rgba(0,0,0,0.45)]",
+            "border border-accent-200 bg-accent-200 text-accent-950",
+            "shadow-[0_1px_3px_rgba(0,0,0,0.32)]",
+            "hover:border-accent-50 hover:bg-accent-50 hover:shadow-[0_2px_7px_rgba(0,0,0,0.36)]",
+            "active:border-accent-400 active:bg-accent-400 active:shadow-[inset_0_1px_2px_rgba(0,0,0,0.18)]",
           ].join(" "),
           secondary: [
             "surface-card text-text-secondary",

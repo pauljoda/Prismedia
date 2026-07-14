@@ -584,6 +584,7 @@
     --toolbar-detail-glass: rgb(12 15 21);
     --toolbar-detail-slideout-inset: 5px;
     --toolbar-bar-overlap: 0.5rem;
+    --toolbar-page-accent: var(--page-accent, var(--entity-accent, #739b96));
   }
 
   .toolbar-hero {
@@ -603,17 +604,16 @@
     content: "";
     position: absolute;
     inset: 0 var(--radius-sm, 6px) auto var(--radius-sm, 6px);
-    height: 1px;
+    height: 2px;
     background:
       linear-gradient(
         to right,
-        rgb(199 201 204 / 0.16) 0%,
-        rgb(199 201 204 / 0.82) 14%,
-        rgb(199 201 204 / 0.95) 50%,
-        rgb(199 201 204 / 0.82) 86%,
-        rgb(199 201 204 / 0.16) 100%
+        transparent 0%,
+        color-mix(in srgb, var(--toolbar-page-accent) 46%, transparent) 12%,
+        color-mix(in srgb, var(--toolbar-page-accent) 78%, #c7c9cc) 50%,
+        color-mix(in srgb, var(--toolbar-page-accent) 46%, transparent) 88%,
+        transparent 100%
       );
-    box-shadow: 0 0 12px rgb(199 201 204 / 0.35);
     pointer-events: none;
   }
 

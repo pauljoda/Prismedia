@@ -296,11 +296,11 @@
     description="Ask an administrator to manage this settings section."
   />
 {:else}
-<div class="space-y-6">
+<div class="space-y-6" style:--settings-accent={section.accent}>
   <div>
     <BackLink fallback="/settings" label="Settings" variant="text" />
     <h1 class="mt-1 flex items-center gap-2.5">
-      <SectionIcon class="h-5 w-5 text-text-accent" />
+      <SectionIcon class="settings-page-icon h-5 w-5" />
       {section.title}
     </h1>
     <p class="mt-1 text-[0.78rem] text-text-muted">{section.description}</p>
@@ -333,7 +333,7 @@
     <Panel>
       <div class="p-5 space-y-5">
         <div class="flex items-center gap-2.5">
-          <Film class="h-4 w-4 text-text-accent" />
+          <Film class="settings-section-icon h-4 w-4" />
           <div>
             <h2 class="text-kicker text-text-primary">Playback</h2>
             <p class="text-[0.68rem] text-text-muted">
@@ -357,7 +357,7 @@
     <Panel>
       <div class="p-5 space-y-5">
         <div class="flex items-center gap-2.5">
-          <Captions class="h-4 w-4 text-text-accent" />
+          <Captions class="settings-section-icon h-4 w-4" />
           <div>
             <h2 class="text-kicker text-text-primary">Subtitles</h2>
             <p class="text-[0.68rem] text-text-muted">
@@ -443,7 +443,7 @@
     <Panel>
       <div class="p-5 space-y-5">
         <div class="flex items-center gap-2.5">
-          <ScanSearch class="h-4 w-4 text-text-accent" />
+          <ScanSearch class="settings-section-icon h-4 w-4" />
           <div>
             <h2 class="text-kicker text-text-primary">Generation Pipeline</h2>
             <p class="text-[0.68rem] text-text-muted">
@@ -473,6 +473,13 @@
     <DiagnosticsSection />
   {/if}
 </div>
+
+<style>
+  .settings-page-icon,
+  .settings-section-icon {
+    color: color-mix(in srgb, var(--settings-accent) 78%, #c7c9cc);
+  }
+</style>
 
 <!-- Metadata storage relocation dialog -->
 {#if metadataStorageDialogOpen}

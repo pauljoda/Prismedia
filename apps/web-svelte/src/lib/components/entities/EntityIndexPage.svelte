@@ -437,21 +437,6 @@
     position: relative;
   }
 
-  .page-head::after {
-    content: "";
-    position: absolute;
-    left: 0;
-    bottom: -1px;
-    width: 5rem;
-    height: 1px;
-    background: linear-gradient(
-      to right,
-      var(--entity-accent) 0%,
-      color-mix(in srgb, var(--entity-accent-secondary) 42%, transparent) 70%,
-      transparent
-    );
-  }
-
   .page-head-meta {
     min-width: 0;
     display: flex;
@@ -471,7 +456,7 @@
   }
 
   .page-head-title :global(.page-head-icon) {
-    color: var(--entity-accent);
+    color: var(--color-text-muted);
   }
 
   .page-head-action {
@@ -481,23 +466,16 @@
     height: 2.4rem;
     padding: 0 1rem;
     border-radius: var(--radius-sm);
-    border: 1px solid color-mix(in srgb, var(--entity-accent) 54%, white 12%);
-    background: linear-gradient(
-      135deg,
-      color-mix(in srgb, var(--entity-accent) 78%, #111),
-      color-mix(in srgb, var(--entity-accent-secondary) 72%, #111)
-    );
-    color: white;
+    border: 1px solid var(--color-border-default);
+    background: var(--color-surface-3);
+    color: var(--color-text-primary);
     font-family: var(--font-mono, "JetBrains Mono", monospace);
     font-size: 0.72rem;
     font-weight: 700;
     letter-spacing: 0.08em;
     text-transform: uppercase;
     text-decoration: none;
-    box-shadow:
-      inset 0 1px 0 rgb(255 255 255 / 0.18),
-      inset 0 -1px 0 rgb(0 0 0 / 0.25),
-      0 2px 6px rgb(0 0 0 / 0.4);
+    box-shadow: 0 1px 3px rgb(0 0 0 / 0.32);
     transition:
       background var(--duration-fast) var(--ease-default),
       box-shadow var(--duration-fast) var(--ease-default),
@@ -505,16 +483,9 @@
   }
 
   .page-head-action:hover {
-    background: linear-gradient(
-      135deg,
-      color-mix(in srgb, var(--entity-accent) 88%, white 8%),
-      color-mix(in srgb, var(--entity-accent-secondary) 82%, white 6%)
-    );
-    color: white;
-    box-shadow:
-      inset 0 1px 0 rgb(255 255 255 / 0.22),
-      inset 0 -1px 0 rgb(0 0 0 / 0.25),
-      0 2px 8px rgb(0 0 0 / 0.45);
+    background: var(--color-surface-4);
+    color: var(--color-text-primary);
+    box-shadow: 0 2px 7px rgb(0 0 0 / 0.36);
   }
 
   .page-head-action:active {

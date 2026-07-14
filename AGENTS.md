@@ -92,11 +92,12 @@ docs/                  Architecture and design language docs.
 - Follow the prism visual system in `docs/design-language.md`: neutral Prismedia chrome, spectrum identity for entity families, and artwork-reactive detail atmosphere.
 - Controlled radii from a unified scale (`radius-xs: 4px` through `radius-2xl: 24px`). Tight, subtle softening — never bubbly or pill-shaped containers.
 - Keep true black and opaque neutral content surfaces as the ground layer; reserve frosted glass for navigation, toolbars, menus, sheets, dialogs, and floating controls.
-- Use neutral silver for app-level state and the canonical entity spectrum for media state. Do not introduce route-local accent palettes.
+- Use neutral silver for app-level state and the canonical entity spectrum for sparse media markers and selected-state rails. Keep surrounding text, icons, cards, and controls neutral; do not introduce route-local accent palettes.
+- Give each page one muted accent moment that communicates its identity, such as an EntityGrid toolbar edge, a Settings section icon, or artwork atmosphere on detail pages. Do not repeat that accent across every element.
 - On detail pages, extract background/primary/secondary colors from already-loaded real artwork, preserve readable neutral text, and only render a hero when the API explicitly provides one.
 - Mobile first. Desktop expands the mobile layout.
 - Font voices: Cinzel for rare display/brand moments, Geist for product headings, Inter for body, JetBrains Mono for utility and metadata.
-- Shape, border, and animation express state. Entity color should read like flat material paint; reserve emitted-light glow for transient prism/loading energy.
+- Shape, border, and animation express state. Entity color should read like flat material paint and occupy a small visual budget; reserve emitted-light glow for transient prism/loading energy.
 - Avoid generic SaaS styling and unmodified shadcn defaults.
 - Core actions must not depend on hover-only affordances.
 

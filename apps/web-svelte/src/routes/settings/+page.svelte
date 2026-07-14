@@ -5,6 +5,7 @@
   import { useSession } from "$lib/stores/session.svelte";
   import {
     settingsDirectoryIcon,
+    settingsDirectoryAccent,
     visibleSettingsSections,
   } from "$lib/settings/settings-section-catalog";
 
@@ -24,10 +25,10 @@
     description="Ask an administrator for access to manage server settings or libraries."
   />
 {:else}
-  <div class="space-y-6">
+  <div class="space-y-6" style:--settings-accent={settingsDirectoryAccent}>
     <div>
       <h1 class="flex items-center gap-2.5">
-        <SettingsIcon class="h-5 w-5 text-text-accent" />
+        <SettingsIcon class="settings-page-icon h-5 w-5" />
         Settings
       </h1>
       <p class="mt-1 text-[0.78rem] text-text-muted">
@@ -41,13 +42,14 @@
           {@const SectionIcon = section.icon}
           <a
             href={section.href}
+            style:--settings-accent={section.accent}
             class={cn(
               "group flex items-center gap-4 px-5 py-4 transition-colors duration-fast",
               "hover:bg-surface-2/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500/30",
             )}
           >
             <span
-              class="flex size-10 shrink-0 items-center justify-center rounded-sm border border-border-subtle bg-surface-1 text-text-muted shadow-well transition-all duration-fast group-hover:border-border-accent/45 group-hover:text-text-accent group-hover:shadow-[var(--shadow-glow-accent)]"
+              class="settings-section-icon flex size-10 shrink-0 items-center justify-center rounded-sm border shadow-well transition-all duration-fast"
             >
               <SectionIcon class="h-4 w-4" />
             </span>
@@ -64,3 +66,20 @@
     </Panel>
   </div>
 {/if}
+
+<style>
+  .settings-page-icon {
+    color: color-mix(in srgb, var(--settings-accent) 78%, #c7c9cc);
+  }
+
+  .settings-section-icon {
+    border-color: color-mix(in srgb, var(--settings-accent) 22%, var(--color-border-subtle));
+    background: color-mix(in srgb, var(--settings-accent) 7%, var(--color-surface-1));
+    color: color-mix(in srgb, var(--settings-accent) 78%, #c7c9cc);
+  }
+
+  a:hover .settings-section-icon {
+    border-color: color-mix(in srgb, var(--settings-accent) 36%, var(--color-border-default));
+    background: color-mix(in srgb, var(--settings-accent) 10%, var(--color-surface-2));
+  }
+</style>

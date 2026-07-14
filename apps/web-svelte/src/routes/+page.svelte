@@ -354,8 +354,7 @@
                   <div
                     class="h-full rounded-xs"
                     style:width="{heroProgressPercent(heroCard)}%"
-                    style:background="linear-gradient(135deg, #9699a1 0%, #c7c9cc 100%)"
-                    style:box-shadow="0 0 8px rgba(199, 201, 204,0.45)"
+                    style:background="linear-gradient(90deg, #397f70 0 34%, #a1833b 34% 68%, #a24952 68% 100%)"
                   ></div>
                 </div>
                 <span class="font-mono text-[11px] text-text-muted">
@@ -368,7 +367,7 @@
               <span
                 class={cn(
                   buttonVariants({ variant: "primary", size: "md" }),
-                  "pointer-events-none gap-2 px-5 transition-shadow group-hover:shadow-[0_0_30px_rgba(199, 201, 204,0.18),0_0_10px_rgba(199, 201, 204,0.25)]",
+                  "pointer-events-none gap-2 px-5",
                 )}
               >
                 <Play class="h-4 w-4" />

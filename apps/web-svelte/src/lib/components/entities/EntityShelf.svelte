@@ -45,6 +45,7 @@
 >
   <div class="flex items-center justify-between mb-4 px-3">
     <h2 class="text-lg font-semibold flex items-center gap-2">
+      <span class="shelf-marker" aria-hidden="true"></span>
       {#if Icon}
         <span class="shelf-icon"><Icon class="w-4.5 h-4.5" /></span>
       {/if}
@@ -81,11 +82,18 @@
 </section>
 
 <style>
+  .shelf-marker {
+    width: 0.8rem;
+    height: 2px;
+    flex: 0 0 auto;
+    background: color-mix(in srgb, var(--entity-accent) 74%, #c7c9cc);
+  }
+
   .shelf-icon {
-    color: var(--entity-accent);
+    color: var(--color-text-muted);
   }
 
   .shelf-link:hover {
-    color: var(--entity-accent);
+    color: var(--color-text-primary);
   }
 </style>

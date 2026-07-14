@@ -12,6 +12,7 @@ import {
   UsersRound,
   Wrench,
 } from "@lucide/svelte";
+import { PRISM_MATERIAL_SPECTRUM } from "$lib/entities/entity-accent";
 
 export const SETTING_SECTION = {
   libraries: "libraries",
@@ -41,6 +42,7 @@ export type SettingsSection = {
   description: string;
   href: string;
   icon: Component<Record<string, unknown>>;
+  accent: string;
   access: SettingsSectionAccess;
 };
 
@@ -53,6 +55,7 @@ export const settingsSections: readonly SettingsSection[] = [
     description: "Add mounted folders, choose media types, and control per-library access.",
     href: "/settings/libraries",
     icon: icon(FolderOpen as unknown as Component<Record<string, unknown>>),
+    accent: PRISM_MATERIAL_SPECTRUM.cyan,
     access: SETTINGS_SECTION_ACCESS.manager,
   },
   {
@@ -61,6 +64,7 @@ export const settingsSections: readonly SettingsSection[] = [
     description: "Manage accounts, passwords, NSFW permissions, and library grants.",
     href: "/settings/users",
     icon: icon(UsersRound as unknown as Component<Record<string, unknown>>),
+    accent: PRISM_MATERIAL_SPECTRUM.violet,
     access: SETTINGS_SECTION_ACCESS.admin,
   },
   {
@@ -69,6 +73,7 @@ export const settingsSections: readonly SettingsSection[] = [
     description: "Configure indexers, download clients, profiles, custom formats, and blocklists.",
     href: "/settings/acquisition",
     icon: icon(Send as unknown as Component<Record<string, unknown>>),
+    accent: PRISM_MATERIAL_SPECTRUM.orange,
     access: SETTINGS_SECTION_ACCESS.admin,
   },
   {
@@ -77,6 +82,7 @@ export const settingsSections: readonly SettingsSection[] = [
     description: "Set player defaults and HLS behavior for video playback.",
     href: "/settings/playback",
     icon: icon(Film as unknown as Component<Record<string, unknown>>),
+    accent: PRISM_MATERIAL_SPECTRUM.red,
     access: SETTINGS_SECTION_ACCESS.admin,
   },
   {
@@ -85,6 +91,7 @@ export const settingsSections: readonly SettingsSection[] = [
     description: "Tune caption behavior, style, scale, opacity, and screen position.",
     href: "/settings/subtitles",
     icon: icon(Captions as unknown as Component<Record<string, unknown>>),
+    accent: PRISM_MATERIAL_SPECTRUM.yellow,
     access: SETTINGS_SECTION_ACCESS.admin,
   },
   {
@@ -93,6 +100,7 @@ export const settingsSections: readonly SettingsSection[] = [
     description: "Control scan cadence, collections, taxonomy, previews, and background jobs.",
     href: "/settings/generation",
     icon: icon(ScanSearch as unknown as Component<Record<string, unknown>>),
+    accent: PRISM_MATERIAL_SPECTRUM.green,
     access: SETTINGS_SECTION_ACCESS.admin,
   },
   {
@@ -101,6 +109,7 @@ export const settingsSections: readonly SettingsSection[] = [
     description: "Choose trusted plugins and matching rules for scan-time identification.",
     href: "/settings/auto-identify",
     icon: icon(Sparkles as unknown as Component<Record<string, unknown>>),
+    accent: PRISM_MATERIAL_SPECTRUM.magenta,
     access: SETTINGS_SECTION_ACCESS.admin,
   },
   {
@@ -109,6 +118,7 @@ export const settingsSections: readonly SettingsSection[] = [
     description: "Review prepared video cache usage and set the cache size limit.",
     href: "/settings/transcode-cache",
     icon: icon(HardDrive as unknown as Component<Record<string, unknown>>),
+    accent: PRISM_MATERIAL_SPECTRUM.blue,
     access: SETTINGS_SECTION_ACCESS.admin,
   },
   {
@@ -117,6 +127,7 @@ export const settingsSections: readonly SettingsSection[] = [
     description: "Create backups, inspect retention, and restore a known-good database snapshot.",
     href: "/settings/database-backups",
     icon: icon(Archive as unknown as Component<Record<string, unknown>>),
+    accent: PRISM_MATERIAL_SPECTRUM.cyan,
     access: SETTINGS_SECTION_ACCESS.admin,
   },
   {
@@ -125,6 +136,7 @@ export const settingsSections: readonly SettingsSection[] = [
     description: "Run focused maintenance actions for troubleshooting generated assets and fingerprints.",
     href: "/settings/diagnostics",
     icon: icon(Wrench as unknown as Component<Record<string, unknown>>),
+    accent: PRISM_MATERIAL_SPECTRUM.orange,
     access: SETTINGS_SECTION_ACCESS.admin,
   },
 ];
@@ -142,3 +154,4 @@ export function visibleSettingsSections(session: { canManageServer: boolean; isA
 }
 
 export const settingsDirectoryIcon = Settings2 as unknown as Component<Record<string, unknown>>;
+export const settingsDirectoryAccent = PRISM_MATERIAL_SPECTRUM.cyan;

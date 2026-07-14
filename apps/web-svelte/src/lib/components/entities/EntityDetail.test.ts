@@ -62,7 +62,8 @@ describe("EntityDetail", () => {
     expect(action.className).toContain("entity-action-button");
     expect(action.className).toContain("entity-action-button-primary");
     expect(appStyles).toContain(".entity-action-button-primary {");
-    expect(appStyles).toContain("color-mix(in srgb, var(--entity-action-accent) 92%, #fff 8%)");
+    expect(appStyles).toContain("background: var(--color-accent-200);");
+    expect(appStyles).not.toContain("color-mix(in srgb, var(--entity-action-accent) 92%, #fff 8%)");
 
     await fireEvent.click(action);
 

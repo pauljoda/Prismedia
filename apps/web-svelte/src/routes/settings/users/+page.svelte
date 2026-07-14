@@ -12,9 +12,11 @@
   import UserAvatar from "$lib/components/auth/UserAvatar.svelte";
   import UserEditDialog from "$lib/components/settings/users/UserEditDialog.svelte";
   import UserPasswordDialog from "$lib/components/settings/users/UserPasswordDialog.svelte";
+  import { SETTING_SECTION, settingsSectionById } from "$lib/settings/settings-section-catalog";
   import { useSession } from "$lib/stores/session.svelte";
 
   const session = useSession();
+  const sectionAccent = settingsSectionById(SETTING_SECTION.users)?.accent;
 
   let users = $state<UserResponse[]>([]);
   let libraries = $state<LibraryRoot[]>([]);
@@ -133,12 +135,12 @@
 {#if !session.isAdmin}
   <StatePlaceholder icon={ShieldUser} title="Administrator access required" description="Ask an administrator to manage user accounts." />
 {:else}
-  <div class="space-y-6">
+  <div class="space-y-6" style:--settings-accent={sectionAccent}>
     <div class="flex flex-wrap items-end justify-between gap-3">
       <div>
         <BackLink fallback="/settings" label="Settings" variant="text" />
         <h1 class="mt-1 flex items-center gap-2.5">
-          <UsersRound class="h-5 w-5 text-text-accent" />
+          <UsersRound class="settings-page-icon h-5 w-5" />
           Users
         </h1>
         <p class="mt-1 text-[0.78rem] text-text-muted">
@@ -246,3 +248,9 @@
     onClose={() => (passwordTarget = null)}
   />
 {/if}
+
+<style>
+  .settings-page-icon {
+    color: color-mix(in srgb, var(--settings-accent) 78%, #c7c9cc);
+  }
+</style>

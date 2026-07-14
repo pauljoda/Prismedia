@@ -273,7 +273,10 @@
           <div class="nav-section mb-3 last:mb-0" style:--section-accent={section.accent}>
             <!-- Section header -->
             <div class="flex items-center justify-between gap-2 px-1.5 pb-1">
-              <span class="section-label text-kicker truncate">{section.label}</span>
+              <span class="section-heading">
+                <span class="section-marker" aria-hidden="true"></span>
+                <span class="section-label text-kicker truncate">{section.label}</span>
+              </span>
               {#if editing}
                 <div class="flex shrink-0 items-center gap-0.5">
                   <ColorInput
@@ -528,20 +531,36 @@
   }
 
   .section-label {
-    color: var(--section-accent);
+    color: var(--color-text-muted);
+  }
+
+  .section-heading {
+    display: inline-flex;
+    min-width: 0;
+    align-items: center;
+    gap: 0.4rem;
+  }
+
+  .section-marker {
+    width: 0.7rem;
+    height: 2px;
+    flex: 0 0 auto;
+    background: color-mix(in srgb, var(--section-accent) 74%, #c7c9cc);
+    opacity: 0.82;
   }
 
   .nav-item-active {
-    background: linear-gradient(90deg, color-mix(in srgb, var(--section-accent) 15%, transparent), transparent 92%);
-    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--section-accent) 14%, transparent);
+    background: rgb(255 255 255 / 0.055);
+    box-shadow: inset 0 0 0 1px var(--color-border-subtle);
   }
 
   .active-rail {
-    background: var(--section-accent);
+    background: color-mix(in srgb, var(--section-accent) 76%, #c7c9cc);
+    opacity: 0.9;
   }
 
   .nav-item-icon-active {
-    color: var(--section-accent);
+    color: var(--color-text-primary);
   }
   .sheet.animate {
     transition: transform 280ms var(--ease-mechanical);

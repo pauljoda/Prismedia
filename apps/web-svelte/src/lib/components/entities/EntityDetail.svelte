@@ -1531,8 +1531,7 @@
   /* ── Layout ─────────────────────────────────────────────── */
 
   .entity-detail {
-    --detail-accent-muted: color-mix(in srgb, var(--detail-accent) 34%, transparent);
-    --detail-accent-glow: color-mix(in srgb, var(--detail-accent) 18%, transparent);
+    --detail-accent-muted: color-mix(in srgb, var(--detail-accent) 24%, transparent);
     --detail-surface: var(--color-surface-2, #101420);
     --detail-surface-raised: var(--color-surface-3, #151a28);
     --detail-border: var(--color-border, #1c2235);
@@ -1552,8 +1551,8 @@
     overflow: hidden;
     border-radius: var(--radius-lg);
     background:
-      radial-gradient(circle at 8% 2%, color-mix(in srgb, var(--detail-accent) 24%, transparent), transparent 38rem),
-      radial-gradient(circle at 96% 32%, color-mix(in srgb, var(--detail-secondary) 18%, transparent), transparent 34rem),
+      radial-gradient(circle at 8% 2%, color-mix(in srgb, var(--detail-accent) 10%, transparent), transparent 38rem),
+      radial-gradient(circle at 96% 32%, color-mix(in srgb, var(--detail-secondary) 7%, transparent), transparent 34rem),
       linear-gradient(180deg, color-mix(in srgb, var(--detail-background) 88%, #000 12%), #000 45rem);
     transition: background 180ms var(--ease-default);
   }
@@ -2350,10 +2349,10 @@
   }
 
   .detail-tab-list button.active {
-    color: var(--detail-accent);
-    border-color: var(--detail-accent-muted);
-    background: color-mix(in srgb, var(--detail-accent) 8%, var(--detail-surface-raised));
-    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--detail-accent) 18%, transparent);
+    color: var(--detail-text);
+    border-color: var(--color-border-default);
+    background: var(--detail-surface-raised);
+    box-shadow: inset 0 -2px 0 color-mix(in srgb, var(--detail-accent) 72%, #c7c9cc);
   }
 
   .detail-tab-list strong {
@@ -2371,12 +2370,8 @@
     border: 1px solid var(--detail-border);
     border-top: 0;
     border-radius: 0 0 var(--radius-md, 10px) var(--radius-md, 10px);
-    background:
-      linear-gradient(180deg, rgba(19, 23, 31, 0.88), rgba(12, 15, 21, 0.96)),
-      var(--detail-surface);
-    box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.035),
-      0 10px 30px rgba(0, 0, 0, 0.24);
+    background: var(--detail-surface);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.22);
     overflow: hidden;
   }
 
@@ -2433,10 +2428,10 @@
   }
 
   .edit-action.primary {
-    color: var(--detail-accent);
-    border-color: var(--detail-accent-muted);
-    background: color-mix(in srgb, var(--detail-accent) 8%, var(--detail-surface-raised));
-    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--detail-accent) 18%, transparent);
+    color: var(--detail-text);
+    border-color: var(--color-border-default);
+    background: var(--detail-surface-raised);
+    box-shadow: inset 2px 0 0 color-mix(in srgb, var(--detail-accent) 72%, #c7c9cc);
   }
 
   .edit-action.secondary {
