@@ -486,11 +486,16 @@
   <div class="fixed inset-0 z-50 flex items-center justify-center">
     <button
       type="button"
-      class="absolute inset-0 bg-black/80 backdrop-blur-sm"
+      class="app-overlay-backdrop absolute inset-0"
       onclick={metadataStorageBusy ? undefined : closeMetadataStorageDialogCancel}
       aria-label="Close dialog"
     ></button>
-    <div class="relative surface-elevated mx-4 w-full max-w-md space-y-4 border border-border-subtle p-6">
+    <div
+      class="app-dialog-surface relative mx-4 w-full max-w-md space-y-4 p-6"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Relocate existing video assets?"
+    >
       <h3 class="text-base font-heading font-semibold text-text-primary">
         Relocate existing video assets?
       </h3>
@@ -509,7 +514,7 @@
           {#if metadataStorageBusy}
             <StatusLed status="accent" size="sm" pulse />
             <Loader2
-              class="h-4 w-4 animate-spin text-accent-300 drop-shadow-[0_0_6px_rgba(199,155,92,0.35)]"
+              class="h-4 w-4 animate-spin text-accent-300"
             />
           {/if}
           Move existing files

@@ -5,6 +5,7 @@
   interface Props {
     open: boolean;
     title: string;
+    initialValue?: string;
     placeholder?: string;
     confirmLabel?: string;
     maxlength?: number;
@@ -16,6 +17,7 @@
   let {
     open,
     title,
+    initialValue = "",
     placeholder = "Name",
     confirmLabel = "Create",
     maxlength = 120,
@@ -32,7 +34,7 @@
   $effect(() => {
     if (!dialogRef) return;
     if (open) {
-      draft = "";
+      draft = initialValue;
       error = null;
       busy = false;
       dialogRef.showModal();
@@ -66,7 +68,7 @@
   onclick={handleBackdropClick}
   onclose={onClose}
   aria-label={title}
-  class="name-dialog fixed inset-0 m-auto h-fit w-[min(92vw,26rem)] border border-border-default p-0 text-text-primary open:block"
+  class="app-dialog-surface fixed inset-0 m-auto h-fit w-[min(92vw,26rem)] p-0 text-text-primary open:block"
 >
   <form
     method="dialog"
@@ -113,16 +115,3 @@
     </div>
   </form>
 </dialog>
-
-<style>
-  .name-dialog {
-    background: var(--color-surface-1);
-    border-radius: var(--radius-lg);
-    box-shadow: var(--shadow-panel);
-  }
-  .name-dialog::backdrop {
-    background: rgb(0 0 0 / 0.6);
-    backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
-  }
-</style>

@@ -38,7 +38,7 @@
   <div class="relative" bind:this={container}>
     {#if open}
       <div
-        class="absolute bottom-full left-0 z-30 mb-2 w-56 overflow-hidden rounded-lg border border-border-subtle bg-surface-4 shadow-[0_16px_40px_rgba(0,0,0,0.5)]"
+        class="floating-surface absolute bottom-full left-0 z-30 mb-2 w-56 overflow-hidden"
         use:keepFlyoutOnScreen
         transition:flyUp={{ duration: 160 }}
         role="menu"

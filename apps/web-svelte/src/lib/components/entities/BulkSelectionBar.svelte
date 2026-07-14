@@ -167,7 +167,7 @@
                 aria-label="Close actions menu"
                 onclick={() => (actionsMenuOpen = false)}
               ></button>
-              <div class="bulk-flyout" use:keepFlyoutOnScreen>
+              <div class="floating-surface bulk-flyout" use:keepFlyoutOnScreen>
                 {#each availableBulkActions as action (action.id)}
                   <button
                     type="button"
@@ -286,20 +286,20 @@
     border-color: var(--color-border-accent, rgba(199, 201, 204, 0.25));
     background: var(--color-surface-3, #151a28);
     color: var(--color-text-primary);
-    box-shadow: 0 0 0 1px rgba(199, 201, 204,0.35), 0 0 8px rgba(199, 201, 204,0.15);
+    box-shadow: inset 0 0 0 1px var(--color-border-default);
   }
 
   .bulk-btn:focus-visible {
     outline: none;
     border-color: var(--color-border-accent, rgba(199, 201, 204, 0.25));
-    box-shadow: 0 0 0 1px rgba(199, 201, 204,0.35), 0 0 8px rgba(199, 201, 204,0.15);
+    box-shadow: var(--shadow-focus-accent);
   }
 
   .bulk-btn.is-active {
     border-color: var(--color-border-accent, rgba(199, 201, 204, 0.25));
     background: var(--color-surface-4, #1c2235);
     color: var(--color-text-accent, #c7c9cc);
-    box-shadow: 0 0 0 1px rgba(199, 201, 204,0.35), 0 0 8px rgba(199, 201, 204,0.15);
+    box-shadow: inset 2px 0 0 var(--entity-accent, var(--color-accent-500));
   }
 
   .bulk-btn:disabled {
@@ -311,7 +311,7 @@
   .bulk-btn.is-danger:focus-visible {
     border-color: rgba(255, 92, 67, 0.42);
     color: var(--color-status-error-text, #ff806f);
-    box-shadow: 0 0 0 1px rgba(255, 92, 67, 0.3), 0 0 8px rgba(255, 92, 67, 0.12);
+    box-shadow: inset 2px 0 0 var(--color-error-text);
   }
 
   .bulk-btn-label {
@@ -334,10 +334,6 @@
     top: calc(100% + 0.3rem);
     z-index: 50;
     min-width: 10rem;
-    border: 1px solid var(--color-border-subtle, rgba(148, 158, 178, 0.07));
-    background: rgb(12, 15, 21);
-    border-radius: var(--radius-sm, 6px);
-    box-shadow: 0 8px 40px rgba(0,0,0,0.60);
     padding: 0.3rem 0;
     overflow: hidden;
   }

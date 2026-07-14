@@ -61,7 +61,7 @@
   onclick={handleBackdropClick}
   onclose={onClose}
   aria-label={title}
-  class="confirm-dialog fixed inset-0 m-auto h-fit w-[min(92vw,26rem)] border border-border-default p-0 text-text-primary open:block"
+  class="app-dialog-surface fixed inset-0 m-auto h-fit w-[min(92vw,26rem)] p-0 text-text-primary open:block"
 >
   <div class="flex flex-col gap-4 p-5">
     <div class="flex items-start justify-between gap-4">
@@ -105,16 +105,3 @@
     </div>
   </div>
 </dialog>
-
-<style>
-  .confirm-dialog {
-    background: var(--color-surface-1);
-    border-radius: var(--radius-lg);
-    box-shadow: var(--shadow-panel);
-  }
-  .confirm-dialog::backdrop {
-    background: rgb(0 0 0 / 0.6);
-    backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
-  }
-</style>

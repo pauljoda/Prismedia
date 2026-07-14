@@ -267,7 +267,7 @@
 
     <!-- Dropdown -->
     {#if open}
-      <div class="picker-dropdown" use:keepFlyoutOnScreen>
+      <div class="floating-surface picker-dropdown" use:keepFlyoutOnScreen>
         {#if searching && limited.length === 0}
           <p class="picker-empty">Searching…</p>
         {:else if limited.length === 0 && !showAddOption}
@@ -354,8 +354,8 @@
   }
 
   .picker-input-area.is-focused {
-    border-color: var(--color-border-accent, rgba(199, 155, 92, 0.24));
-    box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.30), 0 0 0 1px rgba(199, 201, 204, 0.35), 0 0 8px rgba(199, 201, 204, 0.15);
+    border-color: var(--color-border-accent, rgba(216, 217, 220, 0.28));
+    box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.30), var(--shadow-focus-accent);
   }
 
   .picker-input-area.is-disabled {
@@ -399,7 +399,7 @@
   }
 
   .picker-chip:hover {
-    border-color: var(--color-border-accent, rgba(199, 155, 92, 0.24));
+    border-color: var(--color-border-accent, rgba(216, 217, 220, 0.28));
   }
 
   .picker-chip.single {
@@ -441,12 +441,6 @@
     top: 100%;
     z-index: 50;
     margin-top: 0.25rem;
-    border: 1px solid var(--color-border-subtle, rgba(164, 172, 185, 0.06));
-    border-radius: var(--radius-sm, 6px);
-    background: rgba(12, 15, 21, 0.98);
-    backdrop-filter: blur(var(--glass-blur-lg));
-    -webkit-backdrop-filter: blur(var(--glass-blur-lg));
-    box-shadow: 0 8px 40px rgba(0, 0, 0, 0.6);
     overflow: hidden;
   }
 
@@ -495,7 +489,7 @@
   }
 
   .picker-option.picker-add.is-active {
-    background: rgba(199, 155, 92, 0.06);
+    background: var(--color-accent-overlay-faint);
   }
 
   /* ── Option avatar ────────────────────────────────────── */
@@ -528,7 +522,7 @@
   }
 
   .add-avatar {
-    border-color: rgba(199, 155, 92, 0.24);
+    border-color: var(--color-border-accent);
     color: var(--color-text-accent, #c79b5c);
     display: grid;
     place-items: center;

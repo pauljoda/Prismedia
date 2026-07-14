@@ -86,7 +86,7 @@
       aria-label="Close preset menu"
       onclick={close}
     ></button>
-    <div class="surface-glass absolute right-0 top-full z-50 mt-1.5 w-56 py-1" use:keepFlyoutOnScreen>
+    <div class="floating-surface surface-glass absolute right-0 top-full z-50 mt-1.5 w-56 py-1" use:keepFlyoutOnScreen>
       {#if presets.length > 0}
         <div class="tag-scroll-area max-h-48 overflow-y-auto">
           {#each presets as preset (preset.id)}
@@ -221,14 +221,14 @@
     border-color: var(--color-border-accent, rgba(199, 201, 204, 0.25));
     background: var(--color-surface-3, #151a28);
     color: var(--color-text-primary);
-    box-shadow: 0 0 0 1px rgba(199, 201, 204,0.35), 0 0 8px rgba(199, 201, 204,0.15);
+    box-shadow: inset 0 0 0 1px var(--color-border-default);
   }
 
   .preset-btn.is-active {
     border-color: var(--color-border-accent, rgba(199, 201, 204, 0.25));
     background: var(--color-surface-4, #1c2235);
     color: var(--color-text-accent, #c7c9cc);
-    box-shadow: 0 0 0 1px rgba(199, 201, 204,0.35), 0 0 8px rgba(199, 201, 204,0.15);
+    box-shadow: inset 2px 0 0 var(--entity-accent, var(--color-accent-500));
   }
 
   .preset-label {
@@ -242,12 +242,6 @@
   }
 
   .surface-glass {
-    border: 1px solid var(--color-border-subtle, rgba(148, 158, 178, 0.07));
-    background: rgba(12, 15, 21, 0.98);
-    backdrop-filter: blur(var(--glass-blur-lg));
-    -webkit-backdrop-filter: blur(var(--glass-blur-lg));
-    border-radius: var(--radius-sm, 6px);
-    box-shadow: 0 8px 40px rgba(0,0,0,0.60);
     overflow: hidden;
   }
 
@@ -277,9 +271,10 @@
   }
 
   .preset-item.is-active {
-    background: linear-gradient(90deg, rgb(199 201 204 / 0.12), transparent);
-    border-color: rgb(199 201 204 / 0.18);
-    color: var(--color-text-accent, #c49a5a);
+    background: var(--color-surface-2);
+    border-color: var(--color-border-default);
+    color: var(--color-text-primary);
+    box-shadow: inset 2px 0 0 var(--entity-accent, var(--color-accent-500));
   }
 
   .preset-delete {
@@ -374,7 +369,7 @@
 
   .preset-input:focus {
     border-color: var(--color-border-accent, rgba(199, 201, 204, 0.25));
-    box-shadow: inset 0 2px 8px rgba(0,0,0,0.30), 0 0 0 1px rgba(199, 201, 204,0.35), 0 0 8px rgba(199, 201, 204,0.15);
+    box-shadow: inset 0 2px 8px rgba(0,0,0,0.30), var(--shadow-focus-accent);
   }
 
   .preset-form-row {
@@ -407,14 +402,14 @@
   }
 
   .preset-form-btn-primary {
-    border-color: rgb(199 201 204 / 0.25);
-    background: rgb(38 31 15 / 0.5);
-    color: var(--color-accent-200, #ebdaaf);
+    border-color: var(--color-border-default);
+    background: var(--color-accent-200);
+    color: var(--color-accent-950);
   }
 
   .preset-form-btn-primary:hover {
-    background: rgb(61 48 22 / 0.5);
-    box-shadow: 0 0 8px rgb(199 201 204 / 0.15);
+    background: var(--color-accent-50);
+    box-shadow: 0 2px 6px rgb(0 0 0 / 0.3);
   }
 
   .preset-form-btn.is-disabled {
@@ -431,7 +426,7 @@
   }
 
   .preset-confirm-name {
-    color: var(--color-text-accent, #c49a5a);
+    color: var(--color-text-accent, #d8d9dc);
   }
 
   .preset-cancel {

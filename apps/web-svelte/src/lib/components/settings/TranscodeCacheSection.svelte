@@ -12,6 +12,7 @@
   import { findSetting } from "$lib/settings/app-settings";
   import SettingsControl from "$lib/components/settings/SettingsControl.svelte";
   import StorageStat from "$lib/components/settings/StorageStat.svelte";
+  import ConfirmDialog from "$lib/components/entities/ConfirmDialog.svelte";
 
   const MAX_CACHE_SETTING_KEY = "hls.maxCacheSizeGb";
   const BYTES_PER_GB = 1024 * 1024 * 1024;
@@ -28,6 +29,7 @@
   let clearing = $state(false);
   let localError = $state<string | null>(null);
   let localMessage = $state<string | null>(null);
+  let clearDialogOpen = $state(false);
 
   const maxSetting = $derived(findSetting(catalog, MAX_CACHE_SETTING_KEY));
   const usagePercent = $derived(
@@ -53,11 +55,11 @@
     }
   }
 
-  async function handleClear() {
-    if (!window.confirm("Clear the transcode cache now? Videos will re-prepare the next time they are played.")) {
-      return;
-    }
+  function handleClear() {
+    clearDialogOpen = true;
+  }
 
+  async function confirmClear() {
     clearing = true;
     localError = null;
     try {
@@ -177,3 +179,13 @@
     </div>
   </div>
 </Panel>
+
+<ConfirmDialog
+  open={clearDialogOpen}
+  title="Clear transcode cache?"
+  message="Videos will re-prepare the next time they are played. Your media and playback progress are not affected."
+  confirmLabel="Clear cache"
+  danger
+  onConfirm={confirmClear}
+  onClose={() => (clearDialogOpen = false)}
+/>

@@ -39,7 +39,7 @@
 
 <div
   bind:this={root}
-  class="absolute bottom-full right-0 z-30 mb-2 max-h-[70vh] w-80 max-w-[calc(100vw-1.5rem)] overflow-hidden rounded-lg border border-border-subtle bg-surface-1 shadow-[0_16px_40px_rgba(0,0,0,0.5)]"
+  class="floating-surface absolute bottom-full right-0 z-30 mb-2 max-h-[70vh] w-80 max-w-[calc(100vw-1.5rem)] overflow-hidden"
   use:keepFlyoutOnScreen
 >
   <div class="flex items-center justify-between border-b border-border-subtle px-3 py-2">

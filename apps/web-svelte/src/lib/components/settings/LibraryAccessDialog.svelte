@@ -75,7 +75,7 @@
   <div class="fixed inset-0 z-50 flex items-center justify-center p-4">
     <button
       type="button"
-      class="absolute inset-0 bg-black/80 backdrop-blur-sm"
+      class="app-overlay-backdrop absolute inset-0"
       aria-label="Close"
       onclick={onClose}
       transition:fadeIn
@@ -84,7 +84,7 @@
       role="dialog"
       aria-modal="true"
       aria-label={`Library access for ${rootLabel}`}
-      class="surface-elevated relative z-10 flex max-h-[80dvh] w-full max-w-sm flex-col rounded-lg border border-border-subtle"
+      class="app-dialog-surface relative z-10 flex max-h-[80dvh] w-full max-w-sm flex-col overflow-hidden"
       transition:flyUp
     >
       <div class="border-b border-border-subtle px-5 py-4">

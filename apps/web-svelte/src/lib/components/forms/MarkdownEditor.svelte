@@ -19,6 +19,7 @@
     Undo2,
   } from "@lucide/svelte";
   import { cn } from "@prismedia/ui-svelte";
+  import NameInputDialog from "$lib/components/entities/NameInputDialog.svelte";
   import FormField from "./FormField.svelte";
 
   interface Props {
@@ -48,6 +49,7 @@
   let editorElement: HTMLDivElement | null = $state(null);
   let editor: Editor | null = $state(null);
   let focused = $state(false);
+  let linkDialogOpen = $state(false);
 
   const id = `md-${Math.random().toString(36).slice(2, 9)}`;
 
@@ -104,6 +106,19 @@
     active: () => boolean;
   }
 
+  function toggleLink() {
+    if (!editor) return;
+    if (editor.isActive("link")) {
+      editor.chain().focus().unsetLink().run();
+      return;
+    }
+    linkDialogOpen = true;
+  }
+
+  function applyLink(url: string) {
+    editor?.chain().focus().setLink({ href: url }).run();
+  }
+
   function toolbarActions(): ToolbarAction[] {
     if (!editor) return [];
     return [
@@ -158,14 +173,7 @@
       {
         Icon: LinkIcon,
         label: "Link",
-        command: () => {
-          if (editor!.isActive("link")) {
-            editor!.chain().focus().unsetLink().run();
-          } else {
-            const url = prompt("URL");
-            if (url) editor!.chain().focus().setLink({ href: url }).run();
-          }
-        },
+        command: toggleLink,
         active: () => editor!.isActive("link"),
       },
     ];
@@ -236,6 +244,15 @@
     <div {id} class="editor-content" bind:this={editorElement} style:min-height={minHeight}></div>
   </div>
 </FormField>
+
+<NameInputDialog
+  open={linkDialogOpen}
+  title="Add link"
+  placeholder="https://example.com"
+  confirmLabel="Add link"
+  onConfirm={applyLink}
+  onClose={() => (linkDialogOpen = false)}
+/>
 
 <style>
   .markdown-editor {

@@ -14,6 +14,7 @@
     X,
   } from "@lucide/svelte";
   import EntityDetailSkeleton from "$lib/components/entities/EntityDetailSkeleton.svelte";
+  import ConfirmDialog from "$lib/components/entities/ConfirmDialog.svelte";
   import {
     updateEntityRating,
     updateEntityFlags,
@@ -72,6 +73,7 @@
   let itemCards = $state<EntityThumbnailCard[]>([]);
   let refreshBusy = $state(false);
   let deleteBusy = $state(false);
+  let deleteDialogOpen = $state(false);
   let removingItems = $state(false);
   let itemMutationError = $state<string | null>(null);
   let activeBodyTab = $state<CollectionBodyTab>("items");
@@ -344,9 +346,13 @@
     }
   }
 
-  async function handleDeleteCollection() {
+  function handleDeleteCollection() {
     if (!collection || deleteBusy) return;
-    if (!confirm(`Delete ${collection.title}?`)) return;
+    deleteDialogOpen = true;
+  }
+
+  async function confirmDeleteCollection() {
+    if (!collection || deleteBusy) return;
     deleteBusy = true;
     try {
       await deleteCollection(collection.id);
@@ -515,6 +521,16 @@
     {/if}
   {/if}
 </div>
+
+<ConfirmDialog
+  open={deleteDialogOpen}
+  title={`Delete ${collection?.title ?? "collection"}?`}
+  message="This permanently removes the collection. Its media remains in your libraries."
+  confirmLabel="Delete collection"
+  danger
+  onConfirm={confirmDeleteCollection}
+  onClose={() => (deleteDialogOpen = false)}
+/>
 
 <style>
   .collection-tabs {

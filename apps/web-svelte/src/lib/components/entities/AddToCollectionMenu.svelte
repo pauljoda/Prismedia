@@ -96,7 +96,7 @@
       aria-label="Close add to collection menu"
       onclick={close}
     ></button>
-    <div class="atc-flyout" use:keepFlyoutOnScreen>
+    <div class="floating-surface atc-flyout" use:keepFlyoutOnScreen>
       <div class="atc-kicker">
         Add {items.length} {items.length === 1 ? "item" : "items"} to…
       </div>
@@ -197,20 +197,20 @@
     border-color: var(--color-border-accent, rgba(199, 201, 204, 0.25));
     background: var(--color-surface-3, #151a28);
     color: var(--color-text-primary);
-    box-shadow: 0 0 0 1px rgba(199, 201, 204, 0.35), 0 0 8px rgba(199, 201, 204, 0.15);
+    box-shadow: inset 0 0 0 1px var(--color-border-default);
   }
 
   .bulk-btn:focus-visible {
     outline: none;
     border-color: var(--color-border-accent, rgba(199, 201, 204, 0.25));
-    box-shadow: 0 0 0 1px rgba(199, 201, 204, 0.35), 0 0 8px rgba(199, 201, 204, 0.15);
+    box-shadow: var(--shadow-focus-accent);
   }
 
   .bulk-btn.is-active {
     border-color: var(--color-border-accent, rgba(199, 201, 204, 0.25));
     background: var(--color-surface-4, #1c2235);
     color: var(--color-text-accent, #c7c9cc);
-    box-shadow: 0 0 0 1px rgba(199, 201, 204, 0.35), 0 0 8px rgba(199, 201, 204, 0.15);
+    box-shadow: inset 2px 0 0 var(--entity-accent, var(--color-accent-500));
   }
 
   .bulk-btn-label {
@@ -232,12 +232,6 @@
     flex-direction: column;
     gap: 0.35rem;
     width: min(15rem, calc(100vw - 4rem));
-    border: 1px solid var(--color-border-subtle, rgba(148, 158, 178, 0.07));
-    background: rgba(12, 15, 21, 0.98);
-    backdrop-filter: blur(var(--glass-blur-lg));
-    -webkit-backdrop-filter: blur(var(--glass-blur-lg));
-    border-radius: var(--radius-sm, 6px);
-    box-shadow: 0 8px 40px rgba(0, 0, 0, 0.60);
     padding: 0.5rem;
   }
 
@@ -375,7 +369,7 @@
     border-radius: var(--radius-xs, 4px);
     background: linear-gradient(90deg, rgb(199 201 204 / 0.12), transparent);
     border: 1px solid rgb(199 201 204 / 0.18);
-    color: var(--color-text-accent, #c49a5a);
+    color: var(--color-text-accent, #d8d9dc);
     font-family: var(--font-mono, "JetBrains Mono", monospace);
     font-size: 0.7rem;
   }

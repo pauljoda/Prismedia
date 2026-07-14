@@ -8,6 +8,8 @@
   import { unwrapGenerated } from "$lib/api/generated-response";
   import { deleteUser, fetchUsers, updateUser } from "$lib/api/users";
   import BackLink from "$lib/components/BackLink.svelte";
+  import ConfirmDialog from "$lib/components/entities/ConfirmDialog.svelte";
+  import NameInputDialog from "$lib/components/entities/NameInputDialog.svelte";
   import StatePlaceholder from "$lib/components/StatePlaceholder.svelte";
   import UserAvatar from "$lib/components/auth/UserAvatar.svelte";
   import UserEditDialog from "$lib/components/settings/users/UserEditDialog.svelte";
@@ -28,6 +30,7 @@
   let editDialogOpen = $state(false);
   let editTarget = $state<UserResponse | null>(null);
   let passwordTarget = $state<UserResponse | null>(null);
+  let deleteTarget = $state<UserResponse | null>(null);
 
   onMount(() => {
     void load();
@@ -95,22 +98,22 @@
     }
   }
 
-  async function removeUser(user: UserResponse) {
-    const isAdminTarget = user.role === USER_ROLE.admin;
-    if (isAdminTarget) {
-      const typed = window.prompt(
-        `Deleting the administrator "${user.username}" removes their watch history and access. Type the username to confirm:`,
-      );
-      if (typed !== user.username) return;
-    } else if (!window.confirm(`Delete "${user.username}"? Their watch history and favorites are removed.`)) {
-      return;
-    }
+  function removeUser(user: UserResponse) {
+    deleteTarget = user;
+  }
 
+  async function confirmRemoveUser(typedUsername?: string) {
+    const user = deleteTarget;
+    if (!user) return;
+    if (user.role === USER_ROLE.admin && typedUsername !== user.username) {
+      throw new Error(`Type ${user.username} exactly to confirm.`);
+    }
     busy = true;
     error = null;
     try {
       await deleteUser(user.id);
       users = users.filter((item) => item.id !== user.id);
+      deleteTarget = null;
       flash("User deleted.");
     } catch (err) {
       error = err instanceof Error ? err.message : "Failed to delete the user";
@@ -247,6 +250,26 @@
     }}
     onClose={() => (passwordTarget = null)}
   />
+  {#if deleteTarget?.role === USER_ROLE.admin}
+    <NameInputDialog
+      open
+      title={`Delete administrator ${deleteTarget.username}?`}
+      placeholder={`Type ${deleteTarget.username} to confirm`}
+      confirmLabel="Delete administrator"
+      onConfirm={confirmRemoveUser}
+      onClose={() => (deleteTarget = null)}
+    />
+  {:else}
+    <ConfirmDialog
+      open={deleteTarget !== null}
+      title={`Delete ${deleteTarget?.username ?? "user"}?`}
+      message="Their watch history, favorites, sessions, and library access will be removed."
+      confirmLabel="Delete user"
+      danger
+      onConfirm={() => confirmRemoveUser()}
+      onClose={() => (deleteTarget = null)}
+    />
+  {/if}
 {/if}
 
 <style>

@@ -213,8 +213,7 @@
       onkeydown={onKeydown}
       class={cn(
         "absolute left-0 right-0 z-50 overflow-y-auto",
-        "bg-surface-3 border border-border-default rounded-sm",
-        "shadow-[0_8px_40px_rgba(0,0,0,0.6),inset_0_1px_0_rgba(255,255,255,0.05)]",
+        "floating-surface",
         "py-1",
         dropUp ? "bottom-full mb-1" : "top-full mt-1",
       )}

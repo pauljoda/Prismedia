@@ -157,7 +157,7 @@
 {#if mounted}
   <button
     type="button"
-    class={cn("sheet-backdrop fixed inset-0 z-[60] bg-black/60 backdrop-blur-sm md:hidden", useTransition && "animate")}
+    class={cn("app-overlay-backdrop sheet-backdrop fixed inset-0 z-[60] md:hidden", useTransition && "animate")}
     style:opacity={progress}
     style:pointer-events={interactive ? "auto" : "none"}
     aria-label="Close navigation"

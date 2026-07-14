@@ -1,4 +1,5 @@
 import { render } from "@testing-library/svelte";
+import { readFileSync } from "node:fs";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import Sidebar from "./Sidebar.svelte";
 
@@ -96,5 +97,13 @@ describe("Sidebar", () => {
     expect(container).not.toHaveTextContent("Dev Tools");
     expect(container.querySelector('a[href="/dev"]')).toBeNull();
     expect(container.querySelector('a[href="/design-language"]')).toBeNull();
+  });
+
+  it("uses section color on the collapse affordance instead of a decorative line", () => {
+    const source = readFileSync("src/lib/components/Sidebar.svelte", "utf8");
+
+    expect(source).toContain('class="section-collapse-icon');
+    expect(source).not.toContain('class="section-marker"');
+    expect(source).not.toContain(".section-marker {");
   });
 });

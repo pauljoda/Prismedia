@@ -164,7 +164,7 @@
   onmouseenter={() => (hovered = true)}
   onmouseleave={() => (hovered = false)}
   class={cn(
-    "app-glass fixed left-0 top-0 z-[1200] flex h-dvh flex-col border-r transition-[width] duration-moderate overflow-hidden",
+    "app-glass fixed left-0 top-0 z-50 flex h-dvh flex-col border-r transition-[width] duration-moderate overflow-hidden",
     isExpanded ? "w-60" : "w-14",
   )}
   style:transition-timing-function="var(--ease-mechanical)"
@@ -355,17 +355,18 @@
             tabindex={isExpanded ? 0 : -1}
             aria-expanded={!section.collapsed}
             class={cn(
-              "group/sec flex w-full items-center gap-1 px-4 pb-1.5 text-left text-kicker whitespace-nowrap transition-[max-height,opacity] duration-moderate overflow-hidden hover:text-text-muted",
+              "section-toggle group/sec flex w-full items-center gap-1 px-4 pb-1.5 text-left text-kicker whitespace-nowrap transition-[max-height,opacity] duration-moderate overflow-hidden hover:text-text-muted",
               isExpanded ? "max-h-8 opacity-100" : "max-h-0 opacity-0",
             )}
           >
-            <ChevronRight
-              class={cn(
-                "h-3 w-3 shrink-0 text-text-disabled transition-transform duration-fast group-hover/sec:text-text-muted",
-                section.collapsed ? "" : "rotate-90",
-              )}
-            />
-            <span class="section-marker" aria-hidden="true"></span>
+            <span class="section-collapse-icon flex h-3 w-3 shrink-0 items-center justify-center" aria-hidden="true">
+              <ChevronRight
+                class={cn(
+                  "h-3 w-3 transition-transform duration-fast",
+                  section.collapsed ? "" : "rotate-90",
+                )}
+              />
+            </span>
             <span class="section-label">{section.label}</span>
           </button>
           <div
@@ -563,12 +564,15 @@
     color: var(--color-text-muted);
   }
 
-  .section-marker {
-    width: 0.7rem;
-    height: 2px;
-    flex: 0 0 auto;
-    background: color-mix(in srgb, var(--section-accent) 74%, #c7c9cc);
-    opacity: 0.82;
+  .section-collapse-icon {
+    color: color-mix(in srgb, var(--section-accent) 72%, #c7c9cc);
+    opacity: 0.9;
+    transition: color var(--duration-fast) var(--ease-default), opacity var(--duration-fast) var(--ease-default);
+  }
+
+  .section-toggle:hover .section-collapse-icon {
+    color: color-mix(in srgb, var(--section-accent) 84%, #f5f5f6);
+    opacity: 1;
   }
 
   .nav-item-active {

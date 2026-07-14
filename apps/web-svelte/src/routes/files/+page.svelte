@@ -4,6 +4,8 @@
   import { page } from "$app/state";
   import FileDetailPane from "$lib/components/files/FileDetailPane.svelte";
   import FileTreePane from "$lib/components/files/FileTreePane.svelte";
+  import ConfirmDialog from "$lib/components/entities/ConfirmDialog.svelte";
+  import NameInputDialog from "$lib/components/entities/NameInputDialog.svelte";
   import {
     createFileFolder as apiCreateFileFolder,
     deleteFile as apiDeleteFile,
@@ -31,6 +33,21 @@
   } from "$lib/files/file-tree-state";
   import { useNsfw } from "$lib/nsfw/store.svelte";
 
+  interface PendingNameDialog {
+    title: string;
+    initialValue?: string;
+    confirmLabel: string;
+    onConfirm: (value: string) => Promise<void>;
+  }
+
+  interface PendingConfirmation {
+    title: string;
+    message: string;
+    confirmLabel: string;
+    danger?: boolean;
+    onConfirm: () => Promise<void>;
+  }
+
   let roots = $state<FileRoot[]>([]);
   let registry = $state(new Map<string, FileTreeNodeMeta>());
   let treePaths = $state<string[]>([]);
@@ -46,6 +63,8 @@
   let resizing = $state(false);
   let syncedQueryKey = "";
   let lastNsfwMode = $state<string | null>(null);
+  let pendingNameDialog = $state<PendingNameDialog | null>(null);
+  let pendingConfirmation = $state<PendingConfirmation | null>(null);
   const nsfw = useNsfw();
 
   const selectedMeta = $derived(selectedTreePath ? registry.get(selectedTreePath) ?? null : null);
@@ -163,64 +182,101 @@
     await loadDetail(selectedMeta);
   }
 
-  async function createFolder(meta: FileTreeNodeMeta): Promise<void> {
-    const name = prompt("Folder name");
-    if (!name?.trim()) return;
-    await apiCreateFileFolder({ rootId: meta.rootId, parentPath: meta.path, name: name.trim() });
-    await refreshSelected();
+  function createFolder(meta: FileTreeNodeMeta): void {
+    pendingNameDialog = {
+      title: "New folder",
+      confirmLabel: "Create folder",
+      onConfirm: async (name) => {
+        await apiCreateFileFolder({ rootId: meta.rootId, parentPath: meta.path, name });
+        await refreshSelected();
+      },
+    };
   }
 
   async function renameFile(meta: FileTreeNodeMeta, proposedName?: string): Promise<void> {
     if (!meta.path) {
-      alert("Library roots cannot be renamed here.");
+      error = "Library roots cannot be renamed here.";
       return;
     }
-    const name = proposedName ?? prompt("New name", meta.name);
-    if (!name?.trim() || name.trim() === meta.name) return;
-    await apiRenameFile({ rootId: meta.rootId, path: meta.path, name: name.trim() });
-    const parent = directoryTarget({ ...meta, kind: "file" });
-    if (parent) loadedKeys = new Set([...loadedKeys].filter((key) => key !== loadedKey(parent)));
-    selectedTreePath = null;
-    await loadRoots();
+
+    const applyRename = async (name: string) => {
+      if (name === meta.name) return;
+      await apiRenameFile({ rootId: meta.rootId, path: meta.path, name });
+      const parent = directoryTarget({ ...meta, kind: "file" });
+      if (parent) loadedKeys = new Set([...loadedKeys].filter((key) => key !== loadedKey(parent)));
+      selectedTreePath = null;
+      await loadRoots();
+    };
+
+    if (proposedName != null) {
+      const trimmed = proposedName.trim();
+      if (trimmed) await applyRename(trimmed);
+      return;
+    }
+
+    pendingNameDialog = {
+      title: `Rename ${meta.name}`,
+      initialValue: meta.name,
+      confirmLabel: "Rename",
+      onConfirm: applyRename,
+    };
   }
 
   async function moveFile(meta: FileTreeNodeMeta, targetDirectoryTreePath?: string | null): Promise<void> {
     if (!meta.path) {
-      alert("Library roots cannot be moved here.");
+      error = "Library roots cannot be moved here.";
       return;
     }
     const targetDirectory = targetDirectoryTreePath ? registry.get(targetDirectoryTreePath) : null;
     const defaultPath = targetDirectory
       ? [targetDirectory.path, basename(meta.path)].filter(Boolean).join("/")
       : meta.path;
-    const targetPath = targetDirectory
-      ? defaultPath
-      : prompt("Target relative path", defaultPath);
-    if (!targetPath?.trim() || targetPath.trim() === meta.path) return;
-    await apiMoveFile({
-      sourceRootId: meta.rootId,
-      sourcePath: meta.path,
-      targetRootId: targetDirectory?.rootId ?? meta.rootId,
-      targetPath: targetPath.trim(),
-    });
-    selectedTreePath = null;
-    await loadRoots();
+    const applyMove = async (targetPath: string) => {
+      if (targetPath === meta.path) return;
+      await apiMoveFile({
+        sourceRootId: meta.rootId,
+        sourcePath: meta.path,
+        targetRootId: targetDirectory?.rootId ?? meta.rootId,
+        targetPath,
+      });
+      selectedTreePath = null;
+      await loadRoots();
+    };
+
+    if (targetDirectory) {
+      await applyMove(defaultPath);
+      return;
+    }
+
+    pendingNameDialog = {
+      title: `Move ${meta.name}`,
+      initialValue: defaultPath,
+      confirmLabel: "Move",
+      onConfirm: applyMove,
+    };
   }
 
   async function deleteFile(meta: FileTreeNodeMeta): Promise<void> {
     if (!meta.path) {
-      alert("Library roots cannot be deleted here.");
+      error = "Library roots cannot be deleted here.";
       return;
     }
     const message =
       meta.kind === "directory"
         ? `Permanently delete ${meta.name} and everything inside it?`
         : `Permanently delete ${meta.name}?`;
-    if (!confirm(message)) return;
-    await apiDeleteFile(meta.rootId, meta.path);
-    selectedTreePath = null;
-    detail = null;
-    await loadRoots();
+    pendingConfirmation = {
+      title: `Delete ${meta.name}?`,
+      message,
+      confirmLabel: "Delete permanently",
+      danger: true,
+      onConfirm: async () => {
+        await apiDeleteFile(meta.rootId, meta.path);
+        selectedTreePath = null;
+        detail = null;
+        await loadRoots();
+      },
+    };
   }
 
   async function rescan(meta: FileTreeNodeMeta): Promise<void> {
@@ -235,7 +291,7 @@
 
   async function excludePath(meta: FileTreeNodeMeta): Promise<void> {
     if (!meta.path) {
-      alert("Library roots cannot be excluded here.");
+      error = "Library roots cannot be excluded here.";
       return;
     }
     await apiExcludeFile({ rootId: meta.rootId, path: meta.path });
@@ -487,6 +543,29 @@
     onchange={(event) => onFolderUploadPicked(event.currentTarget)}
   />
 </main>
+
+<NameInputDialog
+  open={pendingNameDialog !== null}
+  title={pendingNameDialog?.title ?? "Name"}
+  initialValue={pendingNameDialog?.initialValue ?? ""}
+  confirmLabel={pendingNameDialog?.confirmLabel ?? "Save"}
+  onConfirm={async (value) => {
+    await pendingNameDialog?.onConfirm(value);
+  }}
+  onClose={() => (pendingNameDialog = null)}
+/>
+
+<ConfirmDialog
+  open={pendingConfirmation !== null}
+  title={pendingConfirmation?.title ?? "Confirm"}
+  message={pendingConfirmation?.message ?? ""}
+  confirmLabel={pendingConfirmation?.confirmLabel ?? "Confirm"}
+  danger={pendingConfirmation?.danger ?? false}
+  onConfirm={async () => {
+    await pendingConfirmation?.onConfirm();
+  }}
+  onClose={() => (pendingConfirmation = null)}
+/>
 
 <style>
   .hidden-input {

@@ -532,15 +532,28 @@
     }
   }
 
-  /* Elevated: shell-level overlays and floating panels with glass blur */
-  .surface-elevated {
-    background: rgba(16, 20, 32, 0.82);
-    backdrop-filter: blur(var(--glass-blur-md));
-    -webkit-backdrop-filter: blur(var(--glass-blur-md));
+  /* Floating functional layers stay neutral so page/entity accents remain deliberate. */
+  .surface-elevated,
+  .floating-surface,
+  .app-dialog-surface {
+    background: var(--color-overlay-glass);
     border: 1px solid var(--color-border-default);
     border-radius: var(--radius-md);
-    box-shadow: 0 8px 40px rgba(0,0,0,0.60),
-                inset 0 1px 0 rgba(255,255,255,0.05);
+    box-shadow: var(--shadow-elevated);
+    backdrop-filter: blur(var(--glass-blur-md)) saturate(1.04);
+    -webkit-backdrop-filter: blur(var(--glass-blur-md)) saturate(1.04);
+  }
+
+  .app-overlay-backdrop {
+    background: var(--color-overlay-scrim);
+    backdrop-filter: blur(var(--glass-blur-sm));
+    -webkit-backdrop-filter: blur(var(--glass-blur-sm));
+  }
+
+  .app-dialog-surface::backdrop {
+    background: var(--color-overlay-scrim);
+    backdrop-filter: blur(var(--glass-blur-sm));
+    -webkit-backdrop-filter: blur(var(--glass-blur-sm));
   }
 
   /*
@@ -548,19 +561,19 @@
    * and high-level chrome with content moving behind it.
    */
   .glass-1 {
-    background: rgba(11, 14, 18, 0.72);
+    background: var(--color-overlay-glass-light);
     backdrop-filter: blur(var(--glass-blur-sm));
     -webkit-backdrop-filter: blur(var(--glass-blur-sm));
     border-radius: var(--radius-sm);
   }
   .glass-2 {
-    background: rgba(16, 20, 32, 0.82);
+    background: var(--color-overlay-glass);
     backdrop-filter: blur(var(--glass-blur-md));
     -webkit-backdrop-filter: blur(var(--glass-blur-md));
     border-radius: var(--radius-sm);
   }
   .glass-3 {
-    background: rgba(21, 26, 40, 0.92);
+    background: color-mix(in srgb, var(--color-surface-2) 92%, transparent);
     backdrop-filter: blur(var(--glass-blur-lg));
     -webkit-backdrop-filter: blur(var(--glass-blur-lg));
     border-radius: var(--radius-md);
@@ -578,7 +591,7 @@
   }
 
   .player-dropdown {
-    background: rgba(12, 14, 20, 0.96);
+    background: color-mix(in srgb, var(--color-overlay-glass) 94%, var(--color-surface-1));
     border: 1px solid rgba(255, 255, 255, 0.1);
     border-radius: var(--radius-sm);
     box-shadow:

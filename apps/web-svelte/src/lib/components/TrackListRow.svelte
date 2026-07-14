@@ -113,7 +113,7 @@
     "before:pointer-events-none before:absolute before:inset-y-0 before:left-0 before:w-[2px] before:transition-all before:duration-normal",
     selectable && "has-selection",
     isActive
-      ? "bg-gradient-to-r from-accent-900/40 via-accent-950/30 to-transparent before:bg-[var(--color-accent-500)] before:shadow-[0_0_12px_rgba(199,155,92,0.55)]"
+      ? "bg-surface-2 before:bg-[var(--entity-accent,var(--color-accent-500))]"
       : "hover:bg-surface-2 before:bg-transparent",
   )}
   onclick={(e) => {
@@ -277,7 +277,7 @@
     {#if menuOpen}
       <div
         role="menu"
-        class="absolute right-0 top-8 z-20 min-w-36 overflow-hidden rounded-xs border border-border-default bg-surface-1 py-1 shadow-[0_12px_30px_rgba(0,0,0,0.45)]"
+        class="floating-surface absolute right-0 top-8 z-20 min-w-36 overflow-hidden py-1"
         use:keepFlyoutOnScreen
       >
         {#if onRename}

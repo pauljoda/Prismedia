@@ -29,7 +29,7 @@
   <div class="fixed inset-0 z-50 flex items-center justify-center p-4">
     <button
       type="button"
-      class="absolute inset-0 bg-black/80 backdrop-blur-sm"
+      class="app-overlay-backdrop absolute inset-0"
       onclick={onCancel}
       aria-label="Cancel destination selection"
     ></button>
@@ -37,7 +37,7 @@
       role="dialog"
       aria-modal="true"
       aria-label={title}
-      class="relative z-10 w-full max-w-lg surface-elevated p-6"
+      class="app-dialog-surface relative z-10 w-full max-w-lg p-6"
     >
       <div class="space-y-1.5">
         <h2 class="text-base font-heading font-semibold text-text-primary">{title}</h2>

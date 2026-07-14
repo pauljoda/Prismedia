@@ -278,7 +278,7 @@
               aria-label="Close sort menu"
               onclick={() => (sortOpen = false)}
             ></button>
-            <div class="sort-menu sort-menu-end" use:keepFlyoutOnScreen>
+            <div class="floating-surface sort-menu sort-menu-end" use:keepFlyoutOnScreen>
               {#each SORT_OPTIONS as opt (opt.value)}
                 <button
                   type="button"
@@ -403,7 +403,7 @@
               aria-label="Close thumbnail size menu"
               onclick={() => (thumbSizeOpen = false)}
             ></button>
-            <div class="thumb-size-popover" use:keepFlyoutOnScreen>
+            <div class="floating-surface thumb-size-popover" use:keepFlyoutOnScreen>
               <Grid2x2 class="thumb-size-icon thumb-size-icon-min" aria-hidden="true" />
               <span class="sr-only">Thumbnail columns</span>
               <input
@@ -788,20 +788,20 @@
     border-color: var(--color-border-accent, rgba(199, 201, 204, 0.25));
     background: var(--color-surface-3, #151a28);
     color: var(--color-text-primary);
-    box-shadow: 0 0 0 1px rgba(199, 201, 204,0.35), 0 0 8px rgba(199, 201, 204,0.15);
+    box-shadow: inset 0 0 0 1px var(--color-border-default);
   }
 
   .ctrl-btn:focus-visible {
     outline: none;
     border-color: var(--color-border-accent, rgba(199, 201, 204, 0.25));
-    box-shadow: 0 0 0 1px rgba(199, 201, 204,0.35), 0 0 8px rgba(199, 201, 204,0.15);
+    box-shadow: var(--shadow-focus-accent);
   }
 
   .ctrl-btn.is-active {
     border-color: var(--color-border-accent, rgba(199, 201, 204, 0.25));
     background: var(--color-surface-4, #1c2235);
     color: var(--color-text-accent, #c7c9cc);
-    box-shadow: 0 0 0 1px rgba(199, 201, 204,0.35), 0 0 8px rgba(199, 201, 204,0.15);
+    box-shadow: inset 2px 0 0 var(--entity-accent, var(--color-accent-500));
   }
 
   .ctrl-label {
@@ -834,12 +834,6 @@
     top: calc(100% + 0.3rem);
     z-index: 50;
     min-width: 10rem;
-    border: 1px solid var(--color-border-subtle, rgba(148, 158, 178, 0.07));
-    background: rgba(12, 15, 21, 0.98);
-    backdrop-filter: blur(var(--glass-blur-lg));
-    -webkit-backdrop-filter: blur(var(--glass-blur-lg));
-    border-radius: var(--radius-sm, 6px);
-    box-shadow: 0 8px 40px rgba(0,0,0,0.60);
     padding: 0.3rem 0;
     overflow: hidden;
   }
@@ -872,9 +866,10 @@
   }
 
   .sort-menu-item.is-active {
-    background: linear-gradient(90deg, rgb(199 201 204 / 0.12), transparent);
-    border-color: rgb(199 201 204 / 0.18);
-    color: var(--color-text-accent, #c49a5a);
+    background: var(--color-surface-2);
+    border-color: var(--color-border-default);
+    color: var(--color-text-primary);
+    box-shadow: inset 2px 0 0 var(--entity-accent, var(--color-accent-500));
   }
 
   .filter-count {
@@ -883,24 +878,18 @@
     justify-content: center;
     height: 1.05rem;
     min-width: 1.05rem;
-    border: 1px solid rgb(199 201 204 / 0.48);
+    border: 1px solid var(--color-border-default);
     border-radius: var(--radius-xs, 4px);
-    background:
-      linear-gradient(180deg, rgb(255 255 255 / 0.08), transparent 48%),
-      linear-gradient(180deg, rgb(45 34 16 / 0.96), rgb(18 15 10 / 0.92));
+    background: var(--color-surface-3);
     color: var(--color-text-accent-bright, #d8d9dc);
     font-family: var(--font-mono, "JetBrains Mono", monospace);
     font-size: 0.58rem;
     font-weight: 700;
     letter-spacing: 0;
     line-height: 1;
-    box-shadow:
-      inset 0 1px 0 rgb(255 255 255 / 0.10),
-      inset 0 -1px 0 rgb(0 0 0 / 0.55),
-      0 0 0 1px rgb(199 201 204 / 0.12),
-      0 0 14px rgb(199 201 204 / 0.24);
+    box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.05);
     padding: 0 0.25rem;
-    text-shadow: 0 0 8px rgb(199 201 204 / 0.55);
+    text-shadow: none;
   }
 
   .thumb-size-inline {
@@ -981,24 +970,19 @@
     margin-top: -4.5px;
     appearance: none;
     -webkit-appearance: none;
-    border: 1px solid rgb(244 220 170);
+    border: 1px solid var(--color-border-default);
     border-radius: 50%;
-    background: radial-gradient(circle at 30% 30%, #f3e6cc, #777a82 65%);
-    box-shadow:
-      0 0 6px rgb(199 201 204 / 0.55),
-      0 0 12px rgb(199 201 204 / 0.25),
-      inset 0 1px 0 rgb(255 255 255 / 0.3);
+    background: var(--color-accent-500);
+    box-shadow: 0 1px 3px rgb(0 0 0 / 0.45);
   }
 
   .thumb-size-inline input::-moz-range-thumb {
     width: 11px;
     height: 11px;
-    border: 1px solid rgb(244 220 170);
+    border: 1px solid var(--color-border-default);
     border-radius: 50%;
-    background: radial-gradient(circle at 30% 30%, #f3e6cc, #777a82 65%);
-    box-shadow:
-      0 0 6px rgb(199 201 204 / 0.55),
-      0 0 12px rgb(199 201 204 / 0.25);
+    background: var(--color-accent-500);
+    box-shadow: 0 1px 3px rgb(0 0 0 / 0.45);
   }
 
   .thumb-size-inline input:focus-visible {
@@ -1006,9 +990,7 @@
   }
 
   .thumb-size-inline input:focus-visible::-webkit-slider-thumb {
-    box-shadow:
-      0 0 0 3px rgb(199 201 204 / 0.25),
-      0 0 12px rgb(199 201 204 / 0.4);
+    box-shadow: 0 0 0 3px rgb(199 201 204 / 0.25);
   }
 
   .thumb-size-popover {
@@ -1020,12 +1002,6 @@
     align-items: center;
     gap: 0.55rem;
     width: min(13rem, calc(100vw - 4rem));
-    border: 1px solid var(--color-border-subtle, rgba(148, 158, 178, 0.07));
-    background: rgba(12, 15, 21, 0.98);
-    backdrop-filter: blur(var(--glass-blur-lg));
-    -webkit-backdrop-filter: blur(var(--glass-blur-lg));
-    border-radius: var(--radius-sm, 6px);
-    box-shadow: 0 8px 40px rgba(0,0,0,0.60);
     padding: 0.7rem 0.8rem;
   }
 
@@ -1080,24 +1056,19 @@
     margin-top: -7.5px;
     appearance: none;
     -webkit-appearance: none;
-    border: 1px solid rgb(244 220 170);
+    border: 1px solid var(--color-border-default);
     border-radius: 50%;
-    background: radial-gradient(circle at 30% 30%, #f3e6cc, #777a82 65%);
-    box-shadow:
-      0 0 6px rgb(199 201 204 / 0.55),
-      0 0 12px rgb(199 201 204 / 0.25),
-      inset 0 1px 0 rgb(255 255 255 / 0.3);
+    background: var(--color-accent-500);
+    box-shadow: 0 1px 3px rgb(0 0 0 / 0.45);
   }
 
   .thumb-size-popover input::-moz-range-thumb {
     width: 18px;
     height: 18px;
-    border: 1px solid rgb(244 220 170);
+    border: 1px solid var(--color-border-default);
     border-radius: 50%;
-    background: radial-gradient(circle at 30% 30%, #f3e6cc, #777a82 65%);
-    box-shadow:
-      0 0 6px rgb(199 201 204 / 0.55),
-      0 0 12px rgb(199 201 204 / 0.25);
+    background: var(--color-accent-500);
+    box-shadow: 0 1px 3px rgb(0 0 0 / 0.45);
   }
 
   .thumb-size-popover input:focus-visible {
@@ -1105,9 +1076,7 @@
   }
 
   .thumb-size-popover input:focus-visible::-webkit-slider-thumb {
-    box-shadow:
-      0 0 0 3px rgb(199 201 204 / 0.25),
-      0 0 12px rgb(199 201 204 / 0.4);
+    box-shadow: 0 0 0 3px rgb(199 201 204 / 0.25);
   }
 
   .view-toggle {

@@ -211,13 +211,13 @@
   onclick={handleBackdropClick}
   onclose={() => (open = false)}
   aria-label="Prismedia changelog"
-  class="changelog-dialog fixed inset-0 m-auto h-[min(86dvh,44rem)] w-[min(94vw,56rem)] flex-col overflow-hidden border border-border-default p-0 text-text-primary open:flex"
+  class="app-dialog-surface changelog-dialog fixed inset-0 m-auto h-[min(86dvh,44rem)] w-[min(94vw,56rem)] flex-col overflow-hidden p-0 text-text-primary open:flex"
 >
   <header class="changelog-header relative border-b border-border-subtle px-4 py-3.5 sm:px-5">
     <div class="flex items-start justify-between gap-4">
       <div class="min-w-0 space-y-3">
         <div>
-          <p class="text-kicker mb-1 text-text-accent">Release console</p>
+          <p class="text-kicker mb-1 text-text-accent">Release notes</p>
           <h2 class="font-heading text-[1.35rem] font-bold uppercase leading-none tracking-[0.18em] text-text-primary sm:text-[1.55rem]">
             Changelog
           </h2>
@@ -271,7 +271,7 @@
         href={releaseStatus?.latestUrl ?? undefined}
         target="_blank"
         rel="noopener noreferrer"
-        class="update-banner mb-4 grid gap-1 px-3.5 py-3 text-sm transition hover:border-border-accent-strong hover:shadow-[var(--shadow-glow-accent-strong)] sm:grid-cols-[1fr_auto] sm:items-center"
+        class="update-banner mb-4 grid gap-1 px-3.5 py-3 text-sm transition hover:border-border-accent-strong sm:grid-cols-[1fr_auto] sm:items-center"
       >
         <span class="font-heading font-semibold text-text-primary">
           Update available: {updateLabel}
@@ -365,25 +365,11 @@
 
 <style>
   .changelog-dialog {
-    border-radius: var(--radius-md);
-    background:
-      radial-gradient(circle at 92% 8%, rgb(255 255 255 / 0.045), transparent 24%),
-      linear-gradient(145deg, rgb(17 22 29 / 0.97), rgb(7 8 11 / 0.99));
-    box-shadow:
-      0 20px 60px rgb(0 0 0 / 0.58),
-      inset 0 1px 0 rgb(255 255 255 / 0.055);
-    backdrop-filter: blur(22px);
-    -webkit-backdrop-filter: blur(22px);
-  }
-
-  .changelog-dialog::backdrop {
-    background: rgb(7 8 11 / 0.82);
-    backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
+    color-scheme: dark;
   }
 
   .changelog-header {
-    background: linear-gradient(180deg, rgb(42 48 56 / 0.36), rgb(11 14 18 / 0.22));
+    background: rgb(255 255 255 / 0.018);
   }
 
   .status-chip,
@@ -399,7 +385,7 @@
     min-height: 1.55rem;
     align-items: center;
     border: 1px solid var(--color-border-subtle);
-    background: rgb(11 14 18 / 0.5);
+    background: rgb(255 255 255 / 0.025);
     padding: 0.2rem 0.5rem;
     font-family: var(--font-mono);
     font-size: 0.62rem;
@@ -420,7 +406,7 @@
     justify-content: center;
     gap: 0.4rem;
     border: 1px solid var(--color-border-subtle);
-    background: rgb(11 14 18 / 0.52);
+    background: rgb(255 255 255 / 0.025);
     color: var(--color-text-muted);
     font-family: var(--font-heading);
     font-size: 0.64rem;
@@ -439,7 +425,7 @@
     border-color: var(--color-border-accent);
     background: var(--color-overlay-glass-accent);
     color: var(--color-text-accent);
-    box-shadow: 0 0 16px rgb(199 201 204 / 0.08);
+    box-shadow: none;
     outline: none;
   }
 
@@ -453,10 +439,8 @@
 
   .update-banner {
     border: 1px solid var(--color-border-accent);
-    background:
-      linear-gradient(135deg, rgb(122 94 32 / 0.24), rgb(17 22 29 / 0.84)),
-      var(--color-overlay-glass);
-    box-shadow: var(--shadow-glow-accent);
+    background: var(--color-surface-2);
+    box-shadow: inset 2px 0 0 var(--color-accent-500);
   }
 
   .release-stream {

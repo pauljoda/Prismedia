@@ -101,7 +101,7 @@
   }}
 ></button>
 <div
-  class={cn("player-settings-menu player-dropdown", closing && "is-closing")}
+  class={cn("floating-surface player-settings-menu", closing && "is-closing")}
   role="menu"
   aria-label="Player settings menu"
 >
@@ -284,15 +284,7 @@
 <style>
   .player-settings-menu {
     animation: player-settings-sheet-in var(--duration-moderate) var(--ease-enter);
-    backdrop-filter: blur(var(--glass-blur-lg));
-    -webkit-backdrop-filter: blur(var(--glass-blur-lg));
-    background: rgba(21, 26, 40, 0.92);
-    border: 1px solid var(--color-border-default, rgba(148, 158, 178, 0.13));
-    border-radius: var(--radius-lg);
     bottom: max(0.75rem, env(safe-area-inset-bottom, 0px));
-    box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.05),
-      0 8px 40px rgba(0, 0, 0, 0.60);
     display: flex;
     flex-direction: column;
     gap: 0.25rem;
@@ -381,9 +373,9 @@
   }
 
   .player-settings-option.is-active {
-    background: var(--color-accent-overlay-subtle);
-    border-color: var(--color-border-accent-strong, rgba(199, 201, 204, 0.50));
-    box-shadow: 0 0 0 1px rgba(199, 201, 204, 0.20), 0 0 8px rgba(199, 201, 204, 0.10);
+    background: var(--color-surface-2);
+    border-color: var(--color-border-default);
+    box-shadow: inset 2px 0 0 var(--color-accent-500);
     color: var(--color-accent-100);
   }
 
@@ -439,9 +431,7 @@
     background: var(--color-accent-400);
     border: 1px solid rgba(0, 0, 0, 0.45);
     border-radius: 50%;
-    box-shadow:
-      0 0 0 1px rgba(199, 201, 204, 0.30),
-      0 0 14px rgba(199, 201, 204, 0.40);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.45);
     height: 0.85rem;
     width: 0.85rem;
   }
@@ -450,9 +440,7 @@
     background: var(--color-accent-400);
     border: 1px solid rgba(0, 0, 0, 0.45);
     border-radius: 50%;
-    box-shadow:
-      0 0 0 1px rgba(199, 201, 204, 0.30),
-      0 0 14px rgba(199, 201, 204, 0.40);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.45);
     height: 0.85rem;
     width: 0.85rem;
   }
@@ -528,15 +516,7 @@
   @media (min-width: 640px) {
     .player-settings-menu {
       animation: player-settings-flyout-in var(--duration-moderate) var(--ease-enter);
-      backdrop-filter: blur(var(--glass-blur-md));
-      -webkit-backdrop-filter: blur(var(--glass-blur-md));
-      background: rgba(16, 20, 32, 0.82);
-      border: 1px solid var(--color-border-default, rgba(148, 158, 178, 0.13));
-      border-radius: var(--radius-lg);
       bottom: 7.25rem;
-      box-shadow:
-        inset 0 1px 0 rgba(255, 255, 255, 0.05),
-        0 8px 40px rgba(0, 0, 0, 0.60);
       height: auto;
       left: auto;
       max-height: none;

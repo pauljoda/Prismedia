@@ -119,7 +119,7 @@
   </button>
 
   {#if open}
-    <div class="provider-menu" use:keepFlyoutOnScreen>
+    <div class="floating-surface provider-menu" use:keepFlyoutOnScreen>
       <div class="provider-search-row">
         <Search class="h-3.5 w-3.5 shrink-0 text-text-disabled" />
         <input
@@ -193,12 +193,11 @@
 
   .provider-trigger:hover,
   .provider-trigger.is-open {
-    border-color: var(--color-border-accent, rgba(199, 155, 92, 0.24));
+    border-color: var(--color-border-accent, rgba(216, 217, 220, 0.28));
     background: var(--color-surface-3, #181d27);
     box-shadow:
       inset 0 2px 8px rgba(0, 0, 0, 0.3),
-      0 0 0 1px rgba(199, 201, 204, 0.28),
-      0 0 8px rgba(199, 201, 204, 0.13);
+      var(--shadow-focus-accent);
   }
 
   .provider-trigger-copy {
@@ -243,12 +242,6 @@
     top: calc(100% + 0.25rem);
     z-index: 60;
     overflow: hidden;
-    border: 1px solid var(--color-border-subtle, rgba(164, 172, 185, 0.06));
-    border-radius: var(--radius-sm, 6px);
-    background: rgba(12, 15, 21, 0.98);
-    box-shadow: 0 8px 40px rgba(0, 0, 0, 0.6);
-    backdrop-filter: blur(var(--glass-blur-lg));
-    -webkit-backdrop-filter: blur(var(--glass-blur-lg));
   }
 
   .provider-search-row {

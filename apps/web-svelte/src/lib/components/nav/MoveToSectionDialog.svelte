@@ -42,7 +42,7 @@
   onclick={handleBackdropClick}
   onclose={onClose}
   aria-label="Move to section"
-  class="move-dialog fixed inset-0 m-auto h-fit w-[min(92vw,24rem)] border border-border-default p-0 text-text-primary open:block"
+  class="app-dialog-surface fixed inset-0 m-auto h-fit w-[min(92vw,24rem)] p-0 text-text-primary open:block"
 >
   <div class="flex flex-col gap-3 p-4">
     <div class="flex items-start justify-between gap-4">
@@ -87,16 +87,3 @@
     </ul>
   </div>
 </dialog>
-
-<style>
-  .move-dialog {
-    background: var(--color-surface-1);
-    border-radius: var(--radius-lg);
-    box-shadow: var(--shadow-panel);
-  }
-  .move-dialog::backdrop {
-    background: rgb(0 0 0 / 0.6);
-    backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
-  }
-</style>

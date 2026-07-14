@@ -192,7 +192,7 @@
   <div class="fixed inset-0 z-[70] flex items-start justify-center pt-[12vh] sm:pt-[10vh]">
     <button
       type="button"
-      class="absolute inset-0 bg-black/60 backdrop-blur-sm"
+      class="app-overlay-backdrop absolute inset-0"
       aria-label="Close search"
       onclick={closePalette}
       transition:fade={{ duration: dur.normal, easing: ease.enter }}
@@ -204,7 +204,7 @@
       aria-label="Search"
       class={cn(
         "relative mx-4 flex max-h-[70vh] w-full max-w-2xl flex-col",
-        "surface-elevated border border-border-subtle shadow-2xl",
+        "app-dialog-surface overflow-hidden",
       )}
       transition:flyDown
     >

@@ -11,6 +11,7 @@
     type DatabaseBackup,
     type DatabaseBackupList,
   } from "$lib/api/settings";
+  import ConfirmDialog from "$lib/components/entities/ConfirmDialog.svelte";
 
   let backupState = $state<DatabaseBackupList | null>(null);
   let loading = $state(true);
@@ -20,6 +21,7 @@
   let confirmationText = $state("");
   let localError = $state<string | null>(null);
   let localMessage = $state<string | null>(null);
+  let restoreDialogOpen = $state(false);
 
   const completedBackups = $derived(
     backupState?.backups.filter((backup) => backup.status === DATABASE_BACKUP_STATUS.completed) ?? [],
@@ -90,10 +92,11 @@
       return;
     }
 
-    if (!window.confirm("Restore this backup? This will destroy all current data and restart Prismedia.")) {
-      return;
-    }
+    restoreDialogOpen = true;
+  }
 
+  async function confirmRestore() {
+    if (!selectedBackup) return;
     restoring = true;
     localError = null;
     try {
@@ -315,3 +318,13 @@
     </div>
   </div>
 </Panel>
+
+<ConfirmDialog
+  open={restoreDialogOpen}
+  title="Restore this backup?"
+  message="This will destroy all current data, replace it with the selected backup, and restart Prismedia."
+  confirmLabel="Restore and restart"
+  danger
+  onConfirm={confirmRestore}
+  onClose={() => (restoreDialogOpen = false)}
+/>

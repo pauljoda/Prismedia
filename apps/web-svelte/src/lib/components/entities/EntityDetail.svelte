@@ -1515,8 +1515,8 @@
 </article>
 
 {#if pendingTabId}
-  <div class="edit-confirm-backdrop">
-    <div class="edit-confirm" role="dialog" aria-modal="true" aria-label="Discard unsaved edits?">
+  <div class="app-overlay-backdrop edit-confirm-backdrop">
+    <div class="app-dialog-surface edit-confirm" role="dialog" aria-modal="true" aria-label="Discard unsaved edits?">
       <h2>Discard unsaved edits?</h2>
       <p>Changing tabs will leave the current edit session.</p>
       <div class="edit-confirm-actions">
@@ -2666,20 +2666,12 @@
     display: grid;
     place-items: center;
     padding: 1rem;
-    background: rgba(0, 0, 0, 0.58);
-    backdrop-filter: blur(8px);
   }
 
   .edit-confirm {
     width: min(100%, 24rem);
-    border: 1px solid var(--detail-border, #1c2235);
-    border-radius: var(--radius-sm, 6px);
-    background: rgba(12, 15, 21, 0.98);
-    backdrop-filter: blur(var(--glass-blur-lg));
-    -webkit-backdrop-filter: blur(var(--glass-blur-lg));
     color: var(--detail-text-secondary, #c4c9d4);
     padding: 1rem;
-    box-shadow: 0 8px 40px rgba(0, 0, 0, 0.6);
   }
 
   .edit-confirm h2 {

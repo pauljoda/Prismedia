@@ -226,7 +226,7 @@
       onclick={closeBreadcrumbMenu}
     ></button>
     <div
-      class="fixed z-[120] w-[min(14rem,calc(100vw-2rem))] rounded-sm border border-border-default bg-glass-2 p-1 shadow-glass backdrop-blur-xl"
+      class="floating-surface fixed z-[120] w-[min(14rem,calc(100vw-2rem))] p-1"
       style="left: {breadcrumbMenuPos.left}px; top: {breadcrumbMenuPos.top}px;"
       role="menu"
       use:keepFlyoutOnScreen
