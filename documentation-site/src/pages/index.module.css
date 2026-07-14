@@ -1,5 +1,5 @@
 /* =============================================================================
- * Prismedia homepage - Prism Noir Luxe composition
+ * Prismedia homepage - prism visual system composition
  * ============================================================================= */
 
 /* -----------------------------------------------------------------------------
@@ -24,18 +24,18 @@
   height: 6px;
   border-radius: var(--prismedia-radius-xs);
   background: var(--prismedia-brass);
-  box-shadow: 0 0 10px rgba(196, 154, 90, 0.7), 0 0 22px rgba(196, 154, 90, 0.35);
+  box-shadow: 0 0 10px rgba(122, 20, 245, 0.7), 0 0 22px rgba(122, 20, 245, 0.35);
   animation: led-pulse 2.4s ease-in-out infinite;
 }
 
 @keyframes led-pulse {
   0%, 100% {
     opacity: 0.7;
-    box-shadow: 0 0 8px rgba(196, 154, 90, 0.55), 0 0 18px rgba(196, 154, 90, 0.25);
+    box-shadow: 0 0 8px rgba(122, 20, 245, 0.55), 0 0 18px rgba(122, 20, 245, 0.25);
   }
   50% {
     opacity: 1;
-    box-shadow: 0 0 14px rgba(196, 154, 90, 0.85), 0 0 30px rgba(196, 154, 90, 0.4);
+    box-shadow: 0 0 14px rgba(122, 20, 245, 0.85), 0 0 30px rgba(122, 20, 245, 0.4);
   }
 }
 
@@ -58,16 +58,16 @@
   font-size: 0.92rem;
   letter-spacing: 0.01em;
   text-decoration: none;
-  border: 1px solid rgba(196, 154, 90, 0.55);
+  border: 1px solid rgba(122, 20, 245, 0.55);
   border-radius: var(--prismedia-radius-sm);
   transition: box-shadow 200ms ease, transform 160ms ease, background 200ms ease,
     color 160ms ease;
 }
 
 .primaryAction {
-  background: linear-gradient(135deg, #7c5826 0%, #c49a5a 55%, #f1d7a4 100%);
-  color: #120d08;
-  box-shadow: 0 0 28px rgba(196, 154, 90, 0.22), inset 0 1px 0 rgba(255, 255, 255, 0.18);
+  background: linear-gradient(135deg, #0d47ff 0%, #7a14f5 55%, #d60de0 100%);
+  color: #ffffff;
+  box-shadow: 0 0 28px rgba(122, 20, 245, 0.24), inset 0 1px 0 rgba(255, 255, 255, 0.18);
 }
 
 .secondaryAction {
@@ -79,9 +79,9 @@
 }
 
 .primaryAction:hover {
-  color: #120d08;
+  color: #ffffff;
   text-decoration: none;
-  box-shadow: 0 0 38px rgba(196, 154, 90, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.22);
+  box-shadow: 0 0 38px rgba(122, 20, 245, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.22);
   transform: translateY(-1px);
 }
 
@@ -89,7 +89,7 @@
   color: var(--prismedia-brass-300);
   text-decoration: none;
   border-color: var(--prismedia-border-accent-strong);
-  box-shadow: 0 0 0 1px rgba(196, 154, 90, 0.4), 0 0 22px rgba(196, 154, 90, 0.18);
+  box-shadow: 0 0 0 1px rgba(122, 20, 245, 0.4), 0 0 22px rgba(122, 20, 245, 0.18);
 }
 
 .actionArrow {
@@ -116,8 +116,8 @@
 .heroGrid {
   position: absolute;
   inset: 0;
-  background-image: linear-gradient(rgba(196, 154, 90, 0.04) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(196, 154, 90, 0.04) 1px, transparent 1px);
+  background-image: linear-gradient(rgba(122, 20, 245, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(122, 20, 245, 0.04) 1px, transparent 1px);
   background-size: 64px 64px;
   mask-image: radial-gradient(ellipse 70% 70% at 30% 40%, black, transparent 70%);
   -webkit-mask-image: radial-gradient(ellipse 70% 70% at 30% 40%, black, transparent 70%);
@@ -128,7 +128,7 @@
   position: absolute;
   inset: 0;
   background:
-    radial-gradient(800px 500px at 10% 30%, rgba(196, 154, 90, 0.14), transparent 65%),
+    radial-gradient(800px 500px at 10% 30%, rgba(122, 20, 245, 0.14), transparent 65%),
     radial-gradient(600px 400px at 80% 20%, rgba(68, 120, 168, 0.06), transparent 65%),
     linear-gradient(180deg, transparent 70%, var(--prismedia-bg));
   pointer-events: none;
@@ -157,7 +157,7 @@
 .heroLogo {
   width: 96px;
   height: 96px;
-  filter: drop-shadow(0 0 24px rgba(196, 154, 90, 0.35));
+  filter: drop-shadow(0 0 24px rgba(122, 20, 245, 0.35));
 }
 
 .heroWordmark {
@@ -202,8 +202,8 @@
   border-radius: var(--prismedia-radius-lg);
   box-shadow:
     0 32px 80px rgba(0, 0, 0, 0.6),
-    0 0 0 1px rgba(196, 154, 90, 0.1),
-    0 0 60px rgba(196, 154, 90, 0.06);
+    0 0 0 1px rgba(122, 20, 245, 0.1),
+    0 0 60px rgba(122, 20, 245, 0.06);
   overflow: hidden;
   transform: perspective(1200px) rotateY(-2deg) rotateX(1deg);
 }
@@ -308,9 +308,9 @@
 
 .stripList li:hover {
   color: var(--prismedia-brass-300);
-  border-color: rgba(196, 154, 90, 0.35);
-  background: rgba(196, 154, 90, 0.06);
-  box-shadow: 0 0 12px rgba(196, 154, 90, 0.12);
+  border-color: rgba(122, 20, 245, 0.35);
+  background: rgba(122, 20, 245, 0.06);
+  box-shadow: 0 0 12px rgba(122, 20, 245, 0.12);
 }
 
 /* -----------------------------------------------------------------------------
@@ -394,7 +394,7 @@
   content: '';
   position: absolute;
   inset: 0;
-  background: radial-gradient(closest-side at 0% 0%, rgba(196, 154, 90, 0.18), transparent 60%);
+  background: radial-gradient(closest-side at 0% 0%, rgba(122, 20, 245, 0.18), transparent 60%);
   opacity: 0;
   transition: opacity 280ms ease;
   pointer-events: none;
@@ -403,8 +403,8 @@
 .pathItem:hover {
   color: var(--prismedia-text-primary);
   text-decoration: none;
-  border-color: rgba(196, 154, 90, 0.3);
-  box-shadow: 0 0 0 1px rgba(196, 154, 90, 0.15), 0 8px 32px rgba(0, 0, 0, 0.3);
+  border-color: rgba(122, 20, 245, 0.3);
+  box-shadow: 0 0 0 1px rgba(122, 20, 245, 0.15), 0 8px 32px rgba(0, 0, 0, 0.3);
   transform: translateY(-2px);
 }
 
@@ -505,7 +505,7 @@
 
 .featureCard:hover {
   border-left-color: var(--prismedia-brass-600);
-  box-shadow: inset 2px 0 0 0 rgba(196, 154, 90, 0.3), 0 4px 20px rgba(0, 0, 0, 0.25);
+  box-shadow: inset 2px 0 0 0 rgba(122, 20, 245, 0.3), 0 4px 20px rgba(0, 0, 0, 0.25);
   transform: translateY(-1px);
 }
 
@@ -593,14 +593,14 @@
   background: var(--prismedia-surface-2);
   border: 1px solid var(--prismedia-border-accent);
   border-radius: var(--prismedia-radius-lg);
-  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(196, 154, 90, 0.12);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(122, 20, 245, 0.12);
   overflow: hidden;
   transition: box-shadow 300ms ease, transform 300ms ease;
 }
 
 .showcaseFrame:hover {
-  box-shadow: 0 32px 72px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(196, 154, 90, 0.2),
-    0 0 40px rgba(196, 154, 90, 0.08);
+  box-shadow: 0 32px 72px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(122, 20, 245, 0.2),
+    0 0 40px rgba(122, 20, 245, 0.08);
   transform: translateY(-3px);
 }
 
@@ -620,7 +620,7 @@
   content: '';
   position: absolute;
   inset: -20%;
-  background: radial-gradient(closest-side, rgba(196, 154, 90, 0.18), transparent 70%);
+  background: radial-gradient(closest-side, rgba(122, 20, 245, 0.18), transparent 70%);
   filter: blur(40px);
   z-index: -1;
 }
@@ -704,7 +704,7 @@
   height: 5px;
   border-radius: 50%;
   background: var(--prismedia-brass-600);
-  box-shadow: 0 0 8px rgba(196, 154, 90, 0.4);
+  box-shadow: 0 0 8px rgba(122, 20, 245, 0.4);
 }
 
 /* -----------------------------------------------------------------------------
@@ -723,7 +723,7 @@
   position: absolute;
   inset: 0;
   background:
-    radial-gradient(900px 380px at 50% 100%, rgba(196, 154, 90, 0.16), transparent 70%);
+    radial-gradient(900px 380px at 50% 100%, rgba(122, 20, 245, 0.16), transparent 70%);
   pointer-events: none;
 }
 

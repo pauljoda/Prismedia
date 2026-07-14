@@ -40,7 +40,7 @@ The sidebar is yours to rearrange — rename, reorder, group, hide, and collapse
 
 ## Design direction
 
-Prismedia follows **Prism Noir Luxe**: dark material layers, glass for floating and interactive surfaces, controlled radii, brass glow for active state, and dense layouts that remain touch-friendly.
+Prismedia's visual system turns its name into the interface: a neutral, dark app shell separates into spectrum identities for each media family, real artwork colors detail-page atmosphere, and frosted glass is reserved for floating chrome and controls.
 
 The design language is documented in [Design Language](./developers/design-language.md).
 

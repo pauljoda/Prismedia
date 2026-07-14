@@ -89,13 +89,14 @@ docs/                  Architecture and design language docs.
 
 ## Design System Rules
 
-- Follow the `Prism Noir Luxe` visual direction in `docs/design-language.md`.
+- Follow the prism visual system in `docs/design-language.md`: neutral Prismedia chrome, spectrum identity for entity families, and artwork-reactive detail atmosphere.
 - Controlled radii from a unified scale (`radius-xs: 4px` through `radius-2xl: 24px`). Tight, subtle softening — never bubbly or pill-shaped containers.
-- Material base plus glass overlay: solid dark surfaces as the ground layer; glass for floating and interactive elements.
-- Brass accent (`#f2c26a` / `#d59a2a`) is for active and selected states and should glow rather than appear as flat color.
+- Keep true black and opaque neutral content surfaces as the ground layer; reserve frosted glass for navigation, toolbars, menus, sheets, dialogs, and floating controls.
+- Use neutral silver for app-level state and the canonical entity spectrum for media state. Do not introduce route-local accent palettes.
+- On detail pages, extract background/primary/secondary colors from already-loaded real artwork, preserve readable neutral text, and only render a hero when the API explicitly provides one.
 - Mobile first. Desktop expands the mobile layout.
-- Font voices: Cinzel for display/brand, Geist for product headings, Inter for body, JetBrains Mono for utility and metadata.
-- Glow and animation express state. Do not rely on color-only state changes.
+- Font voices: Cinzel for rare display/brand moments, Geist for product headings, Inter for body, JetBrains Mono for utility and metadata.
+- Shape, border, and animation express state. Entity color should read like flat material paint; reserve emitted-light glow for transient prism/loading energy.
 - Avoid generic SaaS styling and unmodified shadcn defaults.
 - Core actions must not depend on hover-only affordances.
 

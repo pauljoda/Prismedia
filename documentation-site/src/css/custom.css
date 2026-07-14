@@ -1,5 +1,5 @@
 /* =============================================================================
- * Prismedia Documentation - Prism Noir Luxe theme
+ * Prismedia Documentation - prism visual system
  * Implements the design language at docs/design-language.md against Docusaurus.
  * ============================================================================= */
 
@@ -16,36 +16,36 @@
 
 :root {
   /* Surfaces */
-  --prismedia-bg: #07080b;
-  --prismedia-surface-1: #0c0f15;
-  --prismedia-surface-2: #101420;
-  --prismedia-surface-3: #151a28;
-  --prismedia-surface-4: #1c2235;
+  --prismedia-bg: #000000;
+  --prismedia-surface-1: #111214;
+  --prismedia-surface-2: #191a1e;
+  --prismedia-surface-3: #24262b;
+  --prismedia-surface-4: #303238;
 
   /* Glass */
   --prismedia-glass-1: rgba(12, 15, 21, 0.72);
   --prismedia-glass-2: rgba(16, 20, 32, 0.82);
   --prismedia-glass-3: rgba(21, 26, 40, 0.92);
 
-  /* Brass accent */
-  --prismedia-brass: #f2c26a;
-  --prismedia-brass-300: #f7dfa0;
-  --prismedia-brass-400: #f5d48a;
-  --prismedia-brass-600: #d59a2a;
-  --prismedia-brass-700: #7a5e20;
+  /* Legacy variable names now point at the prism system. */
+  --prismedia-brass: #7a14f5;
+  --prismedia-brass-300: #0ab3e6;
+  --prismedia-brass-400: #c7c9cc;
+  --prismedia-brass-600: #0d47ff;
+  --prismedia-brass-700: #35105f;
 
   /* Text */
-  --prismedia-text-primary: #f2eed8;
-  --prismedia-text-secondary: #c4c9d4;
-  --prismedia-text-muted: #8a93a6;
-  --prismedia-text-disabled: #4a5260;
+  --prismedia-text-primary: #f5f5f6;
+  --prismedia-text-secondary: #c8c9cc;
+  --prismedia-text-muted: #92959d;
+  --prismedia-text-disabled: #585b63;
 
   /* Borders */
   --prismedia-border-subtle: rgba(148, 158, 178, 0.07);
   --prismedia-border-default: rgba(148, 158, 178, 0.13);
-  --prismedia-border-accent: rgba(196, 154, 90, 0.25);
-  --prismedia-border-accent-strong: rgba(196, 154, 90, 0.5);
-  --prismedia-border-glow: rgba(196, 154, 90, 0.8);
+  --prismedia-border-accent: rgba(122, 20, 245, 0.25);
+  --prismedia-border-accent-strong: rgba(122, 20, 245, 0.5);
+  --prismedia-border-glow: rgba(122, 20, 245, 0.8);
 
   /* Status (LED) */
   --prismedia-success: #4e8a62;
@@ -62,9 +62,9 @@
   --prismedia-info-text: #70a4cc;
 
   /* Glow */
-  --prismedia-glow-subtle: 0 0 0 1px rgba(196, 154, 90, 0.35), 0 0 8px rgba(196, 154, 90, 0.15);
-  --prismedia-glow-full: 0 0 0 1px rgba(196, 154, 90, 0.6), 0 0 16px rgba(196, 154, 90, 0.3),
-    0 0 32px rgba(196, 154, 90, 0.1);
+  --prismedia-glow-subtle: 0 0 0 1px rgba(122, 20, 245, 0.35), 0 0 8px rgba(13, 71, 255, 0.15);
+  --prismedia-glow-full: 0 0 0 1px rgba(122, 20, 245, 0.6), 0 0 16px rgba(13, 71, 255, 0.3),
+    0 0 32px rgba(10, 179, 230, 0.1);
 
   /* Geometry */
   --prismedia-radius-xs: 4px;
@@ -75,13 +75,13 @@
   --prismedia-radius-2xl: 24px;
 
   /* Infima primary scale (drives links, sidebar active, etc.) */
-  --ifm-color-primary: #f2c26a;
-  --ifm-color-primary-dark: #d59a2a;
-  --ifm-color-primary-darker: #7a5e20;
-  --ifm-color-primary-darkest: #4a3818;
-  --ifm-color-primary-light: #f5d48a;
-  --ifm-color-primary-lighter: #f7dfa0;
-  --ifm-color-primary-lightest: #faecc0;
+  --ifm-color-primary: #7a14f5;
+  --ifm-color-primary-dark: #6210c4;
+  --ifm-color-primary-darker: #4b0c96;
+  --ifm-color-primary-darkest: #350869;
+  --ifm-color-primary-light: #9140f7;
+  --ifm-color-primary-lighter: #aa6ff9;
+  --ifm-color-primary-lightest: #d7bafa;
 
   /* Infima base */
   --ifm-background-color: var(--prismedia-bg);
@@ -106,7 +106,7 @@
   --ifm-heading-font-weight: 700;
   --ifm-code-font-size: 92%;
 
-  /* Geometry - controlled Prism Noir Luxe radii */
+  /* Geometry - controlled prism-system radii */
   --ifm-global-radius: var(--prismedia-radius-md);
   --ifm-button-border-radius: var(--prismedia-radius-sm);
   --ifm-pagination-nav-border-radius: var(--prismedia-radius-md);
@@ -122,16 +122,16 @@
   --ifm-toc-link-color: var(--prismedia-text-muted);
   --ifm-menu-color: var(--prismedia-text-secondary);
   --ifm-menu-color-active: var(--prismedia-brass-300);
-  --ifm-menu-color-background-active: rgba(196, 154, 90, 0.08);
-  --ifm-menu-color-background-hover: rgba(196, 154, 90, 0.05);
+  --ifm-menu-color-background-active: rgba(122, 20, 245, 0.08);
+  --ifm-menu-color-background-hover: rgba(122, 20, 245, 0.05);
   --ifm-hr-background-color: var(--prismedia-border-default);
-  --ifm-table-stripe-background: rgba(196, 154, 90, 0.03);
+  --ifm-table-stripe-background: rgba(122, 20, 245, 0.03);
   --ifm-table-border-color: var(--prismedia-border-subtle);
   --ifm-blockquote-color: var(--prismedia-text-muted);
   --ifm-blockquote-border-color: var(--prismedia-brass-600);
 
   /* Code highlighting */
-  --docusaurus-highlighted-code-line-bg: rgba(196, 154, 90, 0.12);
+  --docusaurus-highlighted-code-line-bg: rgba(122, 20, 245, 0.12);
 }
 
 [data-theme='dark'] {
@@ -150,8 +150,9 @@ html {
 
 body {
   background:
-    radial-gradient(1200px 600px at 12% -10%, rgba(196, 154, 90, 0.08), transparent 60%),
-    radial-gradient(900px 500px at 100% 0%, rgba(68, 120, 168, 0.05), transparent 60%),
+    radial-gradient(1200px 600px at 8% -12%, rgba(255, 20, 31, 0.07), transparent 58%),
+    radial-gradient(900px 500px at 55% -8%, rgba(13, 71, 255, 0.07), transparent 60%),
+    radial-gradient(900px 520px at 100% 4%, rgba(122, 20, 245, 0.08), transparent 62%),
     var(--prismedia-bg);
   color: var(--prismedia-text-secondary);
   -webkit-font-smoothing: antialiased;
@@ -160,7 +161,7 @@ body {
 
 /* Scrollbars */
 * {
-  scrollbar-color: rgba(196, 154, 90, 0.25) transparent;
+  scrollbar-color: rgba(122, 20, 245, 0.25) transparent;
   scrollbar-width: thin;
 }
 *::-webkit-scrollbar {
@@ -171,18 +172,18 @@ body {
   background: transparent;
 }
 *::-webkit-scrollbar-thumb {
-  background: rgba(196, 154, 90, 0.18);
+  background: rgba(122, 20, 245, 0.18);
   border: 2px solid transparent;
   background-clip: padding-box;
 }
 *::-webkit-scrollbar-thumb:hover {
-  background: rgba(196, 154, 90, 0.35);
+  background: rgba(122, 20, 245, 0.35);
   background-clip: padding-box;
 }
 
 /* Selection */
 ::selection {
-  background: rgba(196, 154, 90, 0.35);
+  background: rgba(122, 20, 245, 0.35);
   color: var(--prismedia-text-primary);
 }
 
@@ -214,14 +215,14 @@ body {
 }
 
 .dropdown__link:hover {
-  background: rgba(196, 154, 90, 0.08);
+  background: rgba(122, 20, 245, 0.08);
   color: var(--prismedia-brass-300);
 }
 
 .navbar__items .clean-btn:hover,
 .navbar__toggle:hover,
 .navbar-sidebar__close:hover {
-  background: rgba(196, 154, 90, 0.08);
+  background: rgba(122, 20, 245, 0.08);
 }
 
 .tabs {
@@ -236,7 +237,7 @@ body {
 .tabs__item--active,
 .tabs__item:hover {
   color: var(--prismedia-brass-300);
-  background: rgba(196, 154, 90, 0.08);
+  background: rgba(122, 20, 245, 0.08);
   box-shadow: inset 0 -2px 0 var(--prismedia-brass);
 }
 
@@ -263,7 +264,7 @@ details[class*='details_'] {
   backdrop-filter: blur(18px) saturate(140%);
   -webkit-backdrop-filter: blur(18px) saturate(140%);
   border-bottom: 1px solid var(--prismedia-border-accent);
-  box-shadow: 0 1px 0 rgba(196, 154, 90, 0.05);
+  box-shadow: 0 1px 0 rgba(122, 20, 245, 0.05);
 }
 
 /* Mobile sidebar — backdrop-filter on .navbar creates a containing block in
@@ -281,7 +282,7 @@ details[class*='details_'] {
 .navbar-sidebar__brand {
   background: rgba(7, 8, 11, 0.85);
   border-bottom: 1px solid var(--prismedia-border-subtle);
-  box-shadow: inset 0 -1px 0 rgba(196, 154, 90, 0.08);
+  box-shadow: inset 0 -1px 0 rgba(122, 20, 245, 0.08);
 }
 
 .navbar-sidebar__items {
@@ -289,7 +290,7 @@ details[class*='details_'] {
 }
 
 .navbar-sidebar__back {
-  background: rgba(196, 154, 90, 0.06);
+  background: rgba(122, 20, 245, 0.06);
   color: var(--prismedia-brass-300);
   font-family: var(--ifm-font-family-monospace);
   font-size: 0.78rem;
@@ -341,7 +342,7 @@ details[class*='details_'] {
   bottom: -2px;
   height: 1px;
   background: linear-gradient(90deg, transparent, var(--prismedia-brass), transparent);
-  box-shadow: 0 0 8px rgba(196, 154, 90, 0.4);
+  box-shadow: 0 0 8px rgba(122, 20, 245, 0.4);
 }
 
 /* -----------------------------------------------------------------------------
@@ -374,12 +375,12 @@ details[class*='details_'] {
   transition: color 140ms ease, background-color 140ms ease;
 }
 .menu__link:hover {
-  background: rgba(196, 154, 90, 0.05);
+  background: rgba(122, 20, 245, 0.05);
   color: var(--prismedia-brass-300);
 }
 .menu__link--active {
   color: var(--prismedia-brass-300);
-  background: rgba(196, 154, 90, 0.08);
+  background: rgba(122, 20, 245, 0.08);
   font-weight: 600;
 }
 .menu__link--active::before {
@@ -391,7 +392,7 @@ details[class*='details_'] {
   width: 2px;
   border-radius: var(--prismedia-radius-xs);
   background: var(--prismedia-brass);
-  box-shadow: 0 0 10px rgba(196, 154, 90, 0.55), 0 0 22px rgba(196, 154, 90, 0.25);
+  box-shadow: 0 0 10px rgba(122, 20, 245, 0.55), 0 0 22px rgba(122, 20, 245, 0.25);
 }
 
 .menu__caret {
@@ -399,7 +400,7 @@ details[class*='details_'] {
   border-radius: var(--prismedia-radius-sm);
 }
 .menu__caret:hover {
-  background: rgba(196, 154, 90, 0.05);
+  background: rgba(122, 20, 245, 0.05);
 }
 
 /* Category labels — kicker treatment */
@@ -481,7 +482,7 @@ details[class*='details_'] {
 }
 .hash-link:hover {
   opacity: 1;
-  text-shadow: 0 0 8px rgba(196, 154, 90, 0.5);
+  text-shadow: 0 0 8px rgba(122, 20, 245, 0.5);
 }
 
 /* Lists */
@@ -531,7 +532,7 @@ details[class*='details_'] {
 }
 .theme-doc-markdown a:not(.hash-link):not(.card):hover {
   color: var(--prismedia-brass-300);
-  text-shadow: 0 0 10px rgba(196, 154, 90, 0.4);
+  text-shadow: 0 0 10px rgba(122, 20, 245, 0.4);
 }
 
 /* Horizontal rule */
@@ -547,8 +548,8 @@ details[class*='details_'] {
  * ---------------------------------------------------------------------------*/
 
 code {
-  background: rgba(196, 154, 90, 0.08);
-  border: 1px solid rgba(196, 154, 90, 0.18);
+  background: rgba(122, 20, 245, 0.08);
+  border: 1px solid rgba(122, 20, 245, 0.18);
   border-radius: var(--prismedia-radius-xs);
   color: var(--prismedia-brass-300);
   font-family: var(--ifm-font-family-monospace);
@@ -559,7 +560,7 @@ code {
 
 a code {
   color: var(--prismedia-brass-300);
-  background: rgba(196, 154, 90, 0.12);
+  background: rgba(122, 20, 245, 0.12);
 }
 
 /* -----------------------------------------------------------------------------
@@ -592,20 +593,20 @@ pre {
 
 /* Highlighted lines */
 .theme-code-block-highlighted-line {
-  background-color: rgba(196, 154, 90, 0.1) !important;
+  background-color: rgba(122, 20, 245, 0.1) !important;
   box-shadow: inset 3px 0 0 0 var(--prismedia-brass);
 }
 
 /* Copy button */
 button[class*='copyButton_'] {
-  background: rgba(196, 154, 90, 0.12) !important;
+  background: rgba(122, 20, 245, 0.12) !important;
   color: var(--prismedia-brass-300) !important;
-  border: 1px solid rgba(196, 154, 90, 0.2) !important;
+  border: 1px solid rgba(122, 20, 245, 0.2) !important;
   border-radius: var(--prismedia-radius-sm) !important;
   transition: background 140ms ease, box-shadow 140ms ease;
 }
 button[class*='copyButton_']:hover {
-  background: rgba(196, 154, 90, 0.2) !important;
+  background: rgba(122, 20, 245, 0.2) !important;
   box-shadow: var(--prismedia-glow-subtle);
 }
 
@@ -741,7 +742,7 @@ button[class*='copyButton_']:hover {
 }
 
 .theme-doc-markdown tr:nth-child(2n) td {
-  background: rgba(196, 154, 90, 0.025);
+  background: rgba(122, 20, 245, 0.025);
 }
 
 /* -----------------------------------------------------------------------------
@@ -749,7 +750,7 @@ button[class*='copyButton_']:hover {
  * ---------------------------------------------------------------------------*/
 
 .theme-doc-markdown blockquote {
-  background: linear-gradient(180deg, rgba(196, 154, 90, 0.06), transparent);
+  background: linear-gradient(180deg, rgba(122, 20, 245, 0.06), transparent);
   border-left: 3px solid var(--prismedia-brass-600);
   border-radius: var(--prismedia-radius-md);
   padding: 0.9rem 1.1rem;
@@ -770,7 +771,7 @@ button[class*='copyButton_']:hover {
   max-width: 100%;
   border: 1px solid var(--prismedia-border-accent);
   border-radius: var(--prismedia-radius-lg);
-  box-shadow: 0 12px 50px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(196, 154, 90, 0.1);
+  box-shadow: 0 12px 50px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(122, 20, 245, 0.1);
   display: block;
   margin: 1.5rem auto;
 }
@@ -812,7 +813,7 @@ button[class*='copyButton_']:hover {
   height: 1.1rem;
   border-radius: var(--prismedia-radius-xs);
   background: var(--prismedia-brass);
-  box-shadow: 0 0 10px rgba(196, 154, 90, 0.7), 0 0 18px rgba(196, 154, 90, 0.3);
+  box-shadow: 0 0 10px rgba(122, 20, 245, 0.7), 0 0 18px rgba(122, 20, 245, 0.3);
 }
 
 /* -----------------------------------------------------------------------------
@@ -920,7 +921,7 @@ button[class*='copyButton_']:hover {
   right: 0;
   height: 200px;
   background:
-    radial-gradient(600px 200px at 50% 0%, rgba(196, 154, 90, 0.06), transparent 70%);
+    radial-gradient(600px 200px at 50% 0%, rgba(122, 20, 245, 0.06), transparent 70%);
   pointer-events: none;
 }
 
@@ -952,7 +953,7 @@ button[class*='copyButton_']:hover {
 }
 .footer__link-item:hover {
   color: var(--prismedia-brass-300);
-  text-shadow: 0 0 12px rgba(196, 154, 90, 0.25);
+  text-shadow: 0 0 12px rgba(122, 20, 245, 0.25);
 }
 
 .footer__copyright {
@@ -1042,11 +1043,11 @@ button[class*='copyButton_']:hover {
 }
 
 .theme-doc-toc-mobile .table-of-contents__link:hover {
-  background: rgba(196, 154, 90, 0.06);
+  background: rgba(122, 20, 245, 0.06);
 }
 
 .theme-doc-toc-mobile .table-of-contents__link--active {
-  background: rgba(196, 154, 90, 0.08);
+  background: rgba(122, 20, 245, 0.08);
 }
 
 /* -----------------------------------------------------------------------------
@@ -1056,9 +1057,9 @@ button[class*='copyButton_']:hover {
 @keyframes prismedia-glow-pulse {
   0%,
   100% {
-    box-shadow: 0 0 6px rgba(196, 154, 90, 0.35), 0 0 14px rgba(196, 154, 90, 0.15);
+    box-shadow: 0 0 6px rgba(122, 20, 245, 0.35), 0 0 14px rgba(122, 20, 245, 0.15);
   }
   50% {
-    box-shadow: 0 0 12px rgba(196, 154, 90, 0.55), 0 0 28px rgba(196, 154, 90, 0.25);
+    box-shadow: 0 0 12px rgba(122, 20, 245, 0.55), 0 0 28px rgba(122, 20, 245, 0.25);
   }
 }

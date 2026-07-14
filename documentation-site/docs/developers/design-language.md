@@ -1,88 +1,47 @@
 ---
 sidebar_position: 6
 title: Design Language
-description: Prism Noir Luxe visual direction for Prismedia.
+description: The prism visual system used across Prismedia.
 ---
 
 # Design Language
 
-Prismedia follows **Prism Noir Luxe**: a dark, refined media-console interface for a private library. The app should feel like high-end editing software and audio rack gear, not a generic SaaS dashboard.
+Prismedia uses a literal prism as its visual model: one place for a whole media collection, expressed as white light entering a prism and separating into the spectrum. The app remains dark and content-led; neutral silver represents Prismedia itself, while color identifies each kind of media.
 
 ## Principles
 
-- **Controlled radii.** Use the shared radius scale from `radius-xs: 4px` through `radius-2xl: 24px`. Sharp default corners are never intentional; bubbly pills are not.
-- **Material base, glass overlay.** Solid dark surfaces are the page structure. Glass is reserved for floating, interactive, or transient layers.
-- **Brass is state.** Brass (`#f2c26a` / `#d59a2a`) marks active, selected, focused, and important state. It should glow, not sit as flat decoration.
-- **Mobile first.** Touch layouts come first; desktop expands them.
-- **Type has voices.** Cinzel for brand/display, Geist for product headings, Inter for body, JetBrains Mono for utility metadata.
-- **Glow and motion carry feedback.** Do not rely on color alone for state.
-- **Density is welcome.** Media libraries need scanning, comparison, and repeated action. Keep information dense but organized.
+- **Black canvas, restrained atmosphere.** True black stays dominant behind a soft, blurred spectrum.
+- **Entity color has meaning.** Video is red/orange, movies orange/yellow, series yellow/green, galleries green/cyan, books cyan/blue, images blue/violet, audio violet/magenta, and collections magenta/red.
+- **Artwork leads on details.** Real artwork can supply a dark background plus primary and secondary accents. Poster art may shape atmosphere without being promoted into a hero; only an explicit backdrop is a hero.
+- **Glass is chrome.** Navigation, sticky toolbars, menus, sheets, dialogs, and floating controls may be frosted. Cards, grids, rows, and content panels stay opaque.
+- **Motion explains state.** Glow and motion reinforce selection and loading, with visible non-color cues and reduced-motion alternatives.
+- **Shared components first.** Tokens and shared building blocks own the design language.
 
-## Palette
+## Spectrum
 
-| Token | Value | Use |
-| --- | --- | --- |
-| `bg` | `#07080b` | Page root. |
-| `surface-1` | `#0b0e12` | Sidebar, wells, recessed areas. |
-| `surface-2` | `#11161d` | Panels and primary containers. |
-| `surface-3` | `#202734` | Elevated panels and drawers. |
-| `surface-4` | `#2a3038` | Tooltips and contextual overlays. |
-| `accent-600` | `#d59a2a` | Accent gradients and deeper active state. |
-| `accent-500` | `#f2c26a` | Active labels, focus rings, glow source. |
-| `text-primary` | `#f0ede3` | Headings and primary labels. |
-| `text-secondary` | `#c8ccd4` | Body text. |
-| `text-muted` | `#a4acb9` | Metadata and secondary labels. |
+| Token | Value |
+| --- | --- |
+| Neutral | `#c7c9cc` |
+| Red | `#ff141f` |
+| Orange | `#ff570a` |
+| Yellow | `#ffc71f` |
+| Green | `#1fc247` |
+| Cyan | `#0ab3e6` |
+| Blue | `#0d47ff` |
+| Violet | `#7a14f5` |
+| Magenta | `#d60de0` |
 
-## Geometry
+Use these exact tokens for literal prism light. Persistent entity chrome uses the corresponding muted `materialSpectrum` tokens so color reads like flat paint. Derive transparent borders and material fills with opacity or `color-mix()` rather than inventing similar colors. Reserve emitted-light effects for the prism loading animation, not persistent entity chrome.
 
-| Token | Value | Use |
-| --- | --- | --- |
-| `radius-xs` | `4px` | Small chips and inline badges. |
-| `radius-sm` | `6px` | Items, buttons, inputs. |
-| `radius-md` | `10px` | Panels and modals. |
-| `radius-lg` | `14px` | Large panels and drawers. |
-| `radius-xl` | `18px` | Hero sections and large feature panels. |
-| `radius-2xl` | `24px` | Full-bleed media containers. |
+## Loading
 
-Do not use unmodified component-library defaults. Match the Prismedia token scale.
+Blocking states use the responsive prism animation: white light enters from outside the component, hits the neutral mark, and fans into seven bands that expand across the available width and height. The cycle lasts 2.8 seconds. Reduced-motion mode displays a static colored prism and spectrum. Small retained-content operations continue to use compact progress indicators.
 
-## Surface recipes
+## Implementation rules
 
-### Material panel
-
-```css
-background: linear-gradient(160deg, var(--color-surface-2), var(--color-surface-1));
-border: 1px solid var(--border-subtle);
-border-radius: var(--radius-md);
-box-shadow: var(--shadow-panel);
-```
-
-### Glass panel
-
-```css
-background: var(--color-overlay-glass);
-backdrop-filter: blur(12px);
-border: 1px solid var(--border-default);
-border-radius: var(--radius-sm);
-box-shadow: var(--shadow-panel);
-```
-
-### Active state
-
-```css
-border-color: var(--border-accent-strong);
-box-shadow: var(--shadow-glow-accent-strong);
-color: var(--color-accent-500);
-```
-
-## UI checklist
-
-Before shipping a UI change:
-
-1. Check the smallest supported mobile viewport.
-2. Check desktop density and scanability.
-3. Confirm primary actions work without hover.
-4. Confirm text fits inside controls and panels.
-5. Confirm active/focus state is not color-only.
-6. Confirm radii come from the shared scale.
-7. Confirm the page does not read as generic SaaS or unmodified shadcn defaults.
+1. Use entity-family colors on browse and navigation surfaces.
+2. Sample an already-loaded image for detail palettes; do not fetch artwork a second time.
+3. Keep body text neutral and readable over artwork.
+4. Only apply backdrop blur to chrome or floating functional layers.
+5. Use the shared radii and controls; avoid generic component-library defaults and decorative pills.
+6. Verify mobile, desktop, keyboard focus, contrast, and reduced motion before shipping.

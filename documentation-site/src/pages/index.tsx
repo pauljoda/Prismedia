@@ -285,7 +285,7 @@ function Showcase() {
         <div className={styles.sectionHeader}>
           <p className={styles.kicker}>The interface</p>
           <Heading as="h2" className={styles.sectionTitle}>
-            Prism Noir Luxe: controlled radii, brass on signal, glass when it floats.
+            One light, every medium: neutral chrome, entity spectrum, and glass only when it floats.
           </Heading>
           <p className={styles.sectionLead}>
             The whole UI follows one design language. Read the{' '}
