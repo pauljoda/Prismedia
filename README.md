@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/logo-nsfw.png" width="128" height="128" alt="Prismedia" />
+  <img src="docs/logo.png" width="128" alt="Prismedia colored prism mark" />
 </p>
 
 <h1 align="center">Prismedia</h1>
@@ -12,7 +12,7 @@
 
 <p align="center">
   <a href="https://pauljoda.github.io/Prismedia/">
-    <img alt="Read the docs" src="https://img.shields.io/badge/Docs-Prismedia-d59a2a?style=for-the-badge&logo=gitbook&logoColor=111111" />
+    <img alt="Read the docs" src="https://img.shields.io/badge/Docs-Prismedia-c7c9cc?style=for-the-badge&logo=gitbook&logoColor=111214" />
   </a>
   <a href="https://pauljoda.github.io/Prismedia/docs/getting-started/install">
     <img alt="Quick start guide" src="https://img.shields.io/badge/Get_Started-Docker-202734?style=for-the-badge&logo=docker&logoColor=white" />
@@ -191,7 +191,7 @@ Long-running work runs in the .NET worker and is visible in **Jobs**: scans, pro
 
 ## Design Language
 
-Prismedia follows **Prism Noir Luxe**: dark material surfaces, glass only for floating or interactive layers, controlled radii, brass glow for active state, Cinzel/Geist/Inter/JetBrains Mono type voices, and dense layouts that stay usable on touch screens.
+Prismedia's visual system makes the name literal: neutral white-light chrome holds the whole collection together, then each media family takes a muted color from the prism spectrum. True black and opaque material surfaces keep artwork dominant; a page gets one restrained accent moment, while frosted glass is reserved for navigation, toolbars, menus, dialogs, and other layers that actually float.
 
 The design language lives in [docs/design-language.md](docs/design-language.md) and is mirrored in the [documentation site](https://pauljoda.github.io/Prismedia/docs/developers/design-language).
 
@@ -226,7 +226,7 @@ dotnet run --project apps/backend/src/Prismedia.Api/Prismedia.Api.csproj
 dotnet run --project apps/backend/src/Prismedia.Worker/Prismedia.Worker.csproj
 ```
 
-Vite runs at [http://localhost:5173](http://localhost:5173) and proxies API calls to the .NET API at [http://localhost:8008](http://localhost:8008).
+Open the running application through the .NET host at [http://localhost:8008](http://localhost:8008). Vite provides frontend hot reload behind the development stack, but port `8008` is the canonical app surface and same-origin API entry point.
 
 ### Useful Commands
 

@@ -18,7 +18,7 @@ The interface remains permanently dark so artwork stays dominant. Neutral silver
 
 ## Brand marks
 
-Use the colored prism mark for app identity in the sidebar, mobile shell, and sign-in surfaces. Use the neutral prism only inside the loading animation. The full light-in/light-out logo is reserved for marketing and icon contexts; it is not a routine chrome mark.
+Use the colored prism mark for app identity in the sidebar, mobile shell, sign-in surfaces, favicons, and product documentation. Use the neutral prism only inside the loading animation. The full light-in/light-out logo is reserved for marketing and icon contexts; it is not a routine chrome mark. The red-tinted prism is reserved for the NSFW visibility control and its active state; it is never the default brand mark or a general error icon.
 
 Do not recolor, crop, or place the prism in a generic badge. Preserve its aspect ratio and transparent padding.
 
@@ -50,6 +50,17 @@ Do not recolor, crop, or place the prism in a generic badge. Preserve its aspect
 | Magenta | `#d60de0` |
 
 The spectrum values are exact brand tokens for the logo, prism beam, and other literal emitted-light moments. Persistent entity chrome uses the paired `materialSpectrum` tokens: the same hues with controlled lightness and chroma so they read as flat paint. Use opacity and `color-mix()` to create borders and material fills; broad colored glow is not part of the default UI language.
+
+| Material token | Value |
+| --- | --- |
+| Red | `#b3484d` |
+| Orange | `#b76337` |
+| Yellow | `#9e873b` |
+| Green | `#4d925d` |
+| Cyan | `#3b869c` |
+| Blue | `#536fb0` |
+| Violet | `#775ca5` |
+| Magenta | `#9a4f9d` |
 
 ### Color budget
 

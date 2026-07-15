@@ -240,7 +240,7 @@
 
   header p {
     margin: 0;
-    color: var(--color-text-accent, #c49a5a);
+    color: var(--color-text-accent, #c7c9cc);
     font-family: var(--font-mono, "JetBrains Mono", monospace);
     font-size: 0.72rem;
     letter-spacing: 0;
@@ -282,8 +282,8 @@
   }
 
   .tab-row button.is-active {
-    color: #c49a5a;
-    border-color: #c49a5a;
+    color: #c7c9cc;
+    border-color: #c7c9cc;
     box-shadow: 0 0 12px rgba(199, 201, 204, 0.2);
   }
 
@@ -342,8 +342,8 @@
   }
 
   .toggle-row button.is-active {
-    color: #c49a5a;
-    border-color: #c49a5a;
+    color: #c7c9cc;
+    border-color: #c7c9cc;
     box-shadow: 0 0 10px rgba(199, 201, 204, 0.15);
   }
 

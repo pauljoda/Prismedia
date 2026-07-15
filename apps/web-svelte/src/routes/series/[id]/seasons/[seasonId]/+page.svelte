@@ -346,7 +346,7 @@
   }
 
   :global(.meta-item.is-studio) {
-    color: var(--color-text-accent, #c49a5a);
+    color: var(--color-text-accent, #c7c9cc);
   }
 
   :global(.meta-sep) {

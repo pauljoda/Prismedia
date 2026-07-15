@@ -324,7 +324,7 @@
   }
 
   .error-notice button:hover {
-    color: var(--color-text-accent, #c49a5a);
+    color: var(--color-text-accent, #c7c9cc);
     border-color: rgba(199, 201, 204, 0.45);
     box-shadow: 0 0 16px rgb(199 201 204 / 0.16);
   }

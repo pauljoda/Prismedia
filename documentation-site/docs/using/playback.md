@@ -47,7 +47,7 @@ Subtitle view options control auto-enable behavior, preferred languages, caption
 
 ## Transcripts
 
-The transcript tab shows cues for a selected subtitle track. Clicking a cue seeks the player. On desktop the transcript can dock beside the video so playback and reading stay visible together.
+The transcript tab is also the subtitle workspace: upload a track, extract one from the media file, or search configured providers. When a track is selected it shows timed cues; clicking a cue seeks the player. On desktop the transcript can dock beside the video so playback and reading stay visible together.
 
 ![Transcript](/img/screenshots/transcript.png)
 

@@ -10,7 +10,7 @@ export interface EntityDetailLabRow {
   cards: EntityDetailCardFull[];
 }
 
-const brass = "#c49a5a";
+const neutralSilver = "#c7c9cc";
 const forest = "#293f32";
 const burgundy = "#522b34";
 const indigo = "#26344f";
@@ -164,8 +164,8 @@ export const baseDetailCard: EntityDetailCardFull = detailCard({
   title: "Big Buck Bunny",
   capabilities: [
     images(
-      svgArt("Big Buck Bunny", forest, indigo, brass, "wide"),
-      svgArt("BBB Poster", forest, graphite, brass, "poster"),
+      svgArt("Big Buck Bunny", forest, indigo, neutralSilver, "wide"),
+      svgArt("BBB Poster", forest, graphite, neutralSilver, "poster"),
     ),
     description(
       "A large and lovable rabbit deals with three tiny bullies, led by a flying squirrel, who are determined to ruin his perfect day.\n\nThis is a **test fixture** exercising the universal capability set — the sections that appear on *every* entity kind regardless of type.\n\n> The shared foundation before kind-specific customization.",
@@ -261,17 +261,17 @@ export const detailLabRows: EntityDetailLabRow[] = [
           ],
         });
         const creditThumbs: Record<string, string> = {
-          "person-sacha": svgArt("SG", burgundy, indigo, brass, "portrait"),
-          "person-nathan": svgArt("NV", indigo, forest, brass, "portrait"),
-          "person-jan": svgArt("JM", ember, graphite, brass, "portrait"),
-          "person-emma": svgArt("ES", forest, burgundy, brass, "portrait"),
-          "person-kira": svgArt("KV", graphite, ember, brass, "portrait"),
+          "person-sacha": svgArt("SG", burgundy, indigo, neutralSilver, "portrait"),
+          "person-nathan": svgArt("NV", indigo, forest, neutralSilver, "portrait"),
+          "person-jan": svgArt("JM", ember, graphite, neutralSilver, "portrait"),
+          "person-emma": svgArt("ES", forest, burgundy, neutralSilver, "portrait"),
+          "person-kira": svgArt("KV", graphite, ember, neutralSilver, "portrait"),
         };
         card.studio = {
           id: "studio-blender",
           kind: "studio",
           title: "Blender Foundation",
-          thumbnail: svgArt("BF", forest, brass, graphite, "square"),
+          thumbnail: svgArt("BF", forest, neutralSilver, graphite, "square"),
           roles: [],
           characters: [],
         };
@@ -296,8 +296,8 @@ export const detailLabRows: EntityDetailLabRow[] = [
         title: "Demo Shorts Collection",
         capabilities: [
           images(
-            svgArt("Demo Shorts", burgundy, graphite, brass, "wide"),
-            svgArt("Demo Poster", burgundy, ember, brass, "poster"),
+            svgArt("Demo Shorts", burgundy, graphite, neutralSilver, "wide"),
+            svgArt("Demo Poster", burgundy, ember, neutralSilver, "poster"),
           ),
           description(
             "A curated collection of short animation demos from various open-source projects. Includes Blender Foundation shorts, procedural animation experiments, and community showcase reels.",
@@ -330,8 +330,8 @@ export const detailLabRows: EntityDetailLabRow[] = [
         title: "Fixture Landscapes — Alpine Series",
         capabilities: [
           images(
-            svgArt("Alpine Gallery", ember, forest, brass, "wide"),
-            svgArt("Alpine Thumb", ember, graphite, brass, "square"),
+            svgArt("Alpine Gallery", ember, forest, neutralSilver, "wide"),
+            svgArt("Alpine Thumb", ember, graphite, neutralSilver, "square"),
           ),
           description(
             "High-resolution landscape photography from the Swiss Alps and Austrian Tyrol. Shot across three seasons, this collection captures the dramatic light and weather patterns of the central European alpine range.",
@@ -359,7 +359,7 @@ export const detailLabRows: EntityDetailLabRow[] = [
         title: "Sacha Goedegebure",
         capabilities: [
           images(
-            svgArt("Sacha G", burgundy, indigo, brass, "portrait"),
+            svgArt("Sacha G", burgundy, indigo, neutralSilver, "portrait"),
           ),
           description(
             "Dutch animator and director known for work on Blender Foundation open-movie projects. Lead animator on Big Buck Bunny and contributor to Sintel.",
@@ -392,8 +392,8 @@ export const detailLabRows: EntityDetailLabRow[] = [
         title: "Public Domain Reader — Volume I",
         capabilities: [
           images(
-            svgArt("PD Reader", burgundy, ember, brass, "wide"),
-            svgArt("PD Cover", burgundy, graphite, brass, "poster"),
+            svgArt("PD Reader", burgundy, ember, neutralSilver, "wide"),
+            svgArt("PD Cover", burgundy, graphite, neutralSilver, "poster"),
           ),
           description(
             "A curated anthology of public domain literature, including works by Poe, Shelley, and Lovecraft. Newly typeset with restored illustrations from original printings.",
@@ -426,7 +426,7 @@ export const detailLabRows: EntityDetailLabRow[] = [
         title: "Royalty Free Ambient — Field Recordings",
         capabilities: [
           images(
-            svgArt("Ambient Album", graphite, indigo, brass, "square"),
+            svgArt("Ambient Album", graphite, indigo, neutralSilver, "square"),
           ),
           description(
             "A collection of field recordings from forests, coastlines, and urban environments. Captured in binaural stereo for spatial audio experiences.",
@@ -460,7 +460,7 @@ export const detailLabRows: EntityDetailLabRow[] = [
         title: "Blender Foundation",
         capabilities: [
           images(
-            svgArt("Blender Studio", graphite, forest, brass, "wide"),
+            svgArt("Blender Studio", graphite, forest, neutralSilver, "wide"),
           ),
           description(
             "The Blender Foundation is a Dutch public benefit organization for public support of the Blender 3D creation suite. Known for producing open-source animated films.",
@@ -495,7 +495,7 @@ export const detailLabRows: EntityDetailLabRow[] = [
         title: "Editor's Picks — Spring 2026",
         capabilities: [
           images(
-            svgArt("Editors Picks", forest, ember, brass, "wide"),
+            svgArt("Editors Picks", forest, ember, neutralSilver, "wide"),
           ),
           description(
             "A hand-picked selection of the best content added this spring. Includes standout videos, galleries, and albums from across the library.",

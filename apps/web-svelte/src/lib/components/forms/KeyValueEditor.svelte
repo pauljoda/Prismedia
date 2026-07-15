@@ -256,7 +256,7 @@
   }
 
   .kv-add-btn:hover:not(:disabled) {
-    color: var(--color-accent, #c49a5a);
+    color: var(--color-accent, #c7c9cc);
     border-color: var(--color-border-accent, rgba(199, 155, 92, 0.24));
     background: color-mix(in srgb, var(--color-surface-2) 92%, var(--color-accent));
   }

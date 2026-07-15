@@ -2145,7 +2145,7 @@
   }
 
   .meta-row :global(.meta-item.is-studio) {
-    color: var(--color-text-accent, #c49a5a);
+    color: var(--color-text-accent, #c7c9cc);
     text-decoration: none;
     transition: opacity 0.15s;
   }
@@ -2242,8 +2242,8 @@
 
   /* A wanted placeholder's badge: neutral accent accent, shared by every entity page. */
   :global(.hero-badge.wanted) {
-    color: var(--color-text-accent, #c49a5a);
-    border-color: color-mix(in srgb, var(--color-text-accent, #c49a5a) 45%, transparent);
+    color: var(--color-text-accent, #c7c9cc);
+    border-color: color-mix(in srgb, var(--color-text-accent, #c7c9cc) 45%, transparent);
     text-transform: uppercase;
     letter-spacing: 0.06em;
   }

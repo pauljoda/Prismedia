@@ -151,7 +151,7 @@
   .tab-inline-notice button {
     border: 0;
     background: transparent;
-    color: var(--color-text-accent, #c49a5a);
+    color: var(--color-text-accent, #c7c9cc);
     cursor: pointer;
     font-family: var(--font-mono, "JetBrains Mono", monospace);
     font-size: 0.72rem;

@@ -44,10 +44,10 @@ describe("VideoTimeline", () => {
     expect(screen.getByText("Opening")).toBeInTheDocument();
   });
 
-  it("suppresses VidStack's duration-driven fill so the brass cannot overrun the playhead", async () => {
+  it("suppresses VidStack's duration-driven fill so the progress paint cannot overrun the playhead", async () => {
     // VidStack positions its own track-fill (and per-chapter fill) from the media element's raw
     // duration, which for a still-growing on-demand HLS playlist is only the produced-so-far length
-    // — so it paints the fill to ~100% and the brass runs ahead of the real playhead. The visible
+    // — so it paints the fill to ~100% and the progress paint runs ahead of the real playhead. The visible
     // fill must come solely from `.is-played`, driven by our authoritative playbackProgressPercent.
     const source = await readFile("src/lib/components/VideoTimeline.svelte", "utf8");
 

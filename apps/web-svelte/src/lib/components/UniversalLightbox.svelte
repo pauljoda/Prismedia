@@ -770,13 +770,13 @@
   .lightbox-button:hover,
   .lightbox-button.is-active {
     border-color: rgb(199 201 204 / 0.45);
-    color: var(--color-text-accent, #c49a5a);
+    color: var(--color-text-accent, #c7c9cc);
     box-shadow: 0 0 18px rgb(199 201 204 / 0.22);
   }
 
   :global(.is-filled) {
     fill: currentColor;
-    color: var(--color-text-accent, #c49a5a);
+    color: var(--color-text-accent, #c7c9cc);
   }
 
   .stage-row {

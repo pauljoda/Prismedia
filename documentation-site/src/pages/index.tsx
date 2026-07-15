@@ -1,4 +1,4 @@
-import type {CSSProperties, ReactNode} from 'react';
+import type {ReactNode} from 'react';
 import Link from '@docusaurus/Link';
 import useDocusaurusContext from '@docusaurus/useDocusaurusContext';
 import useBaseUrl from '@docusaurus/useBaseUrl';
@@ -84,9 +84,9 @@ const FEATURES = [
 
 const SHOWCASE = [
   {
-    title: 'A dashboard built like an instrument panel.',
+    title: 'Everything together, without visual noise.',
     body:
-      'Every media type at a glance — recent activity, library totals, scan state, and job status. Dense, dark, and purposeful.',
+      'Continue across media types from one calm, content-first dashboard. Neutral chrome keeps the collection together while each shelf gets one quiet identity cue.',
     image: '/img/screenshots/dashboard.png',
     alt: 'Prismedia dashboard',
   },
@@ -134,13 +134,13 @@ function Hero() {
             <span className={styles.heroWordmark}>Prismedia</span>
           </div>
           <Heading as="h1" className={styles.heroTitle}>
-            A private home for your{' '}
-            <span className={styles.heroAccent}>entire</span> collection.
+            One library.{' '}
+            <span className={styles.heroAccent}>Every medium.</span>
           </Heading>
           <p className={styles.heroSubtitle}>
-            Videos, comics, books, audio, galleries, and files — organized,
-            searchable, and playable from any device on your network. One Docker
-            image. No cloud. No configuration.
+            Prismedia brings videos, comics, books, audio, galleries, and files
+            into one private library. Like white light through a prism, each medium
+            keeps its identity while the whole collection stays coherent.
           </p>
           <div className={styles.actions}>
             <Link className={styles.primaryAction} to="/docs/getting-started/install">

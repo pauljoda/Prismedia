@@ -209,7 +209,7 @@
   .setting-range::-webkit-slider-thumb {
     appearance: none;
     background: var(--color-surface-2, #141924);
-    border: 1px solid var(--color-border-accent, #c49a5a);
+    border: 1px solid var(--color-border-accent, #c7c9cc);
     border-radius: var(--radius-full);
     box-shadow: 0 0 8px rgba(199, 201, 204, 0.25);
     height: 1rem;

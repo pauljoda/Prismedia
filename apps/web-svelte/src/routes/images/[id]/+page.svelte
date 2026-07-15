@@ -231,7 +231,7 @@
   .image-detail-back-page { display: contents; }
 
   :global(.meta-item) { white-space: nowrap; font-size: 0.82rem; }
-  :global(.meta-item.is-studio) { color: var(--color-text-accent, #c49a5a); text-decoration: none; transition: opacity 0.15s; }
+  :global(.meta-item.is-studio) { color: var(--color-text-accent, #c7c9cc); text-decoration: none; transition: opacity 0.15s; }
   :global(.meta-item.is-studio:hover) { opacity: 0.8; }
   :global(.meta-sep) { display: inline-block; width: 3px; height: 3px; margin: 0 0.5rem; background: var(--color-text-muted, #8a93a6); opacity: 0.5; }
 

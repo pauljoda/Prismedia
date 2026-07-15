@@ -78,7 +78,7 @@ public static class SpaDevProxy {
                     """
                     <!DOCTYPE html>
                     <html><head><meta charset="utf-8"><title>Waiting for Vite…</title>
-                    <style>body{background:#0a0a0a;color:#888;font-family:system-ui,sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0}h1{color:#c49a5a}</style>
+                    <style>body{background:#0a0a0a;color:#888;font-family:system-ui,sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0}h1{color:#c7c9cc}</style>
                     </head><body><div style="text-align:center">
                     <h1>Waiting for Vite dev server…</h1>
                     <p>The Svelte dev server is still starting. This page will auto-refresh.</p>

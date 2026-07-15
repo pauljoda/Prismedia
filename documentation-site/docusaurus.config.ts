@@ -3,7 +3,7 @@ import type {Config} from '@docusaurus/types';
 import type * as Preset from '@docusaurus/preset-classic';
 import type {PrismTheme} from 'prism-react-renderer';
 
-const prismNoirLuxe: PrismTheme = {
+const prismediaPrismTheme: PrismTheme = {
   plain: {
     color: '#c4c9d4',
     backgroundColor: 'transparent',
@@ -11,13 +11,13 @@ const prismNoirLuxe: PrismTheme = {
   styles: [
     {types: ['comment', 'prolog', 'doctype', 'cdata'], style: {color: '#5a6378', fontStyle: 'italic' as const}},
     {types: ['punctuation'], style: {color: '#8a93a6'}},
-    {types: ['property', 'tag', 'constant', 'symbol', 'deleted'], style: {color: '#f2c26a'}},
-    {types: ['boolean', 'number'], style: {color: '#d4a85c'}},
-    {types: ['selector', 'attr-name', 'string', 'char', 'builtin', 'inserted'], style: {color: '#80b898'}},
+    {types: ['property', 'tag', 'constant', 'symbol', 'deleted'], style: {color: '#b3484d'}},
+    {types: ['boolean', 'number'], style: {color: '#b76337'}},
+    {types: ['selector', 'attr-name', 'string', 'char', 'builtin', 'inserted'], style: {color: '#4d925d'}},
     {types: ['operator', 'entity', 'url', 'variable'], style: {color: '#c4c9d4'}},
-    {types: ['atrule', 'attr-value', 'function', 'class-name'], style: {color: '#f5d48a'}},
-    {types: ['keyword'], style: {color: '#cc7880'}},
-    {types: ['regex', 'important'], style: {color: '#d59a2a'}},
+    {types: ['atrule', 'attr-value', 'function', 'class-name'], style: {color: '#3b869c'}},
+    {types: ['keyword'], style: {color: '#775ca5'}},
+    {types: ['regex', 'important'], style: {color: '#9e873b'}},
   ],
 };
 
@@ -26,7 +26,7 @@ const prismNoirLuxe: PrismTheme = {
 const config: Config = {
   title: 'Prismedia',
   tagline: 'A private, self-hosted home for your entire media collection.',
-  favicon: 'img/logo.png',
+  favicon: 'img/favicon-32.png',
 
   // Future flags, see https://docusaurus.io/docs/api/docusaurus-config#future
   future: {
@@ -163,7 +163,7 @@ const config: Config = {
     },
     prism: {
       theme: prismThemes.github,
-      darkTheme: prismNoirLuxe,
+      darkTheme: prismediaPrismTheme,
       additionalLanguages: ['bash', 'json', 'yaml', 'sql', 'python', 'css'],
     },
     mermaid: {
