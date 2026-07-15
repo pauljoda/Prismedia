@@ -9,14 +9,22 @@
     duration: number;
     audioEl: HTMLAudioElement | null;
     onSeek: (time: number) => void;
+    accentPrimary?: string;
+    accentSecondary?: string;
+    accentBackground?: string;
   }
 
   const STRIP_HEIGHT = 52;
   const DESKTOP_WHEEL_SCRUB_MQ = "(pointer: fine) and (hover: hover)";
-  const BAR_COLOR = "rgba(255, 255, 255, 0.18)";
-  const BAR_ACCENT = "rgba(199, 201, 204, 0.35)";
-
-  let { peaks, duration, audioEl, onSeek }: Props = $props();
+  let {
+    peaks,
+    duration,
+    audioEl,
+    onSeek,
+    accentPrimary = "#c7c9cc",
+    accentSecondary = "#8b8f96",
+    accentBackground = "#090a0c",
+  }: Props = $props();
 
   let containerEl: HTMLDivElement | null = $state(null);
   let trackEl: HTMLDivElement | null = $state(null);
@@ -34,6 +42,15 @@
   const safeDuration = $derived(duration > 0 ? duration : 0.001);
   const pairCount = $derived(Math.floor(peaks.length / 2));
   const trackWidth = $derived(waveformStripWidth(pairCount, safeDuration, containerWidth));
+
+  function colorWithAlpha(color: string, alpha: number): string {
+    const hex = color.match(/^#([0-9a-f]{6})$/i)?.[1];
+    if (!hex) return color;
+    const alphaHex = Math.round(Math.max(0, Math.min(1, alpha)) * 255)
+      .toString(16)
+      .padStart(2, "0");
+    return `#${hex}${alphaHex}`;
+  }
 
   function drawWaveformStrip(
     canvas: HTMLCanvasElement,
@@ -67,7 +84,10 @@
       const barBottom = centerY - min * (height / 2) * 0.88;
       const barHeight = Math.max(1, barBottom - barTop);
       const intensity = (Math.abs(min) + Math.abs(max)) / 2;
-      ctx.fillStyle = intensity > 0.35 ? BAR_ACCENT : BAR_COLOR;
+      ctx.fillStyle =
+        intensity > 0.35
+          ? colorWithAlpha(accentSecondary, 0.52)
+          : colorWithAlpha(accentPrimary, 0.22);
       ctx.fillRect(x, barTop, Math.max(1, barWidth - 0.5), barHeight);
     }
   }
@@ -164,11 +184,17 @@
 </script>
 
 {#if pairCount > 0}
-  <div class="relative flex items-center bg-black" style={`height: ${STRIP_HEIGHT}px`}>
+  <div
+    class="waveform-strip relative flex items-center"
+    style={`height: ${STRIP_HEIGHT}px`}
+    style:--waveform-accent={accentPrimary}
+    style:--waveform-secondary={accentSecondary}
+    style:--waveform-background={accentBackground}
+  >
     <button
       type="button"
       onclick={() => jump(-1)}
-      class="relative z-30 flex h-full w-8 shrink-0 items-center justify-center bg-black/80 text-white/50 transition-colors hover:text-white"
+      class="waveform-jump relative z-30 flex h-full w-8 shrink-0 items-center justify-center transition-colors"
       aria-label="Scrub back"
     >
       <ChevronLeft class="h-4 w-4" />
@@ -204,13 +230,13 @@
       }}
       onpointercancel={endPointer}
     >
-      <div class="pointer-events-none absolute inset-y-0 left-0 z-10 w-12 bg-gradient-to-r from-black/70 to-transparent"></div>
-      <div class="pointer-events-none absolute inset-y-0 right-0 z-10 w-12 bg-gradient-to-l from-black/70 to-transparent"></div>
+      <div class="waveform-fade waveform-fade--left pointer-events-none absolute inset-y-0 left-0 z-10 w-12"></div>
+      <div class="waveform-fade waveform-fade--right pointer-events-none absolute inset-y-0 right-0 z-10 w-12"></div>
 
       <div class="pointer-events-none absolute inset-y-0 left-1/2 z-20 -translate-x-1/2">
-        <div class="absolute -top-px left-1/2 -translate-x-1/2 border-x-[5px] border-t-[5px] border-x-transparent border-t-accent-500"></div>
-        <div class="h-full w-[2px] bg-accent-500 shadow-[0_0_8px_rgba(199, 201, 204,0.55)]"></div>
-        <div class="absolute -bottom-px left-1/2 -translate-x-1/2 border-x-[5px] border-b-[5px] border-x-transparent border-b-accent-500"></div>
+        <div class="waveform-playhead-tip waveform-playhead-tip--top absolute -top-px left-1/2 -translate-x-1/2 border-x-[5px] border-t-[5px] border-x-transparent"></div>
+        <div class="waveform-playhead h-full w-[2px]"></div>
+        <div class="waveform-playhead-tip waveform-playhead-tip--bottom absolute -bottom-px left-1/2 -translate-x-1/2 border-x-[5px] border-b-[5px] border-x-transparent"></div>
       </div>
 
       {#if trackWidth > 0}
@@ -227,10 +253,46 @@
     <button
       type="button"
       onclick={() => jump(1)}
-      class="relative z-30 flex h-full w-8 shrink-0 items-center justify-center bg-black/80 text-white/50 transition-colors hover:text-white"
+      class="waveform-jump relative z-30 flex h-full w-8 shrink-0 items-center justify-center transition-colors"
       aria-label="Scrub forward"
     >
       <ChevronRight class="h-4 w-4" />
     </button>
-  </div>
+</div>
 {/if}
+
+<style>
+  .waveform-strip {
+    background: color-mix(in srgb, var(--waveform-background) 82%, black 18%);
+  }
+
+  .waveform-jump {
+    color: color-mix(in srgb, var(--waveform-secondary) 54%, white 18%);
+    background: color-mix(in srgb, var(--waveform-background) 84%, black 16%);
+  }
+
+  .waveform-jump:hover {
+    color: color-mix(in srgb, var(--waveform-accent) 78%, white 18%);
+  }
+
+  .waveform-fade--left {
+    background: linear-gradient(90deg, color-mix(in srgb, var(--waveform-background) 80%, black 20%), transparent);
+  }
+
+  .waveform-fade--right {
+    background: linear-gradient(270deg, color-mix(in srgb, var(--waveform-background) 80%, black 20%), transparent);
+  }
+
+  .waveform-playhead {
+    background: var(--waveform-accent);
+    box-shadow: 0 0 8px color-mix(in srgb, var(--waveform-accent) 62%, transparent);
+  }
+
+  .waveform-playhead-tip--top {
+    border-top-color: var(--waveform-accent);
+  }
+
+  .waveform-playhead-tip--bottom {
+    border-bottom-color: var(--waveform-accent);
+  }
+</style>

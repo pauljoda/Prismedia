@@ -84,6 +84,15 @@ describe("AudioVidStackPlayer playback continuity", () => {
     expect(source).toContain("{#if activeTrack && !isAudiobook && waveformData && duration > 0}");
   });
 
+  it("derives the player chrome and waveform palette from the decoded cover artwork", () => {
+    expect(source).toContain("paletteFromImage");
+    expect(source).toContain("onload={handleArtworkLoad}");
+    expect(source).toContain("style:--player-accent={playerPalette.primary}");
+    expect(source).toContain("accentPrimary={playerPalette.primary}");
+    expect(source).toContain("accentSecondary={playerPalette.secondary}");
+    expect(source).toContain("accentBackground={playerPalette.background}");
+  });
+
   it("leaves reader keyboard navigation to the active reader overlay", () => {
     expect(source).toContain('document.querySelector("[data-reader-overlay]")');
   });

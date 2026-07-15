@@ -23,6 +23,7 @@
   import { formatDuration } from "@prismedia/contracts";
   import { recordEntityPlaybackEvent, updateEntityPlayback } from "$lib/api/playback";
   import { apiAssetUrl, assetUrl } from "$lib/api/orval-fetch";
+  import { paletteFromImage, type ArtworkPalette } from "$lib/entities/artwork-palette";
   import { resolveEntityHref } from "$lib/entities/entity-codes";
   import type { AudioTrackListItemDto } from "$lib/entities/media-view-models";
   import AudioWaveformFilmstrip from "./AudioWaveformFilmstrip.svelte";
@@ -51,12 +52,18 @@
   const chrome = useAppChrome();
   const QUICK_SKIP_THRESHOLD_SECONDS = 10;
   const AUDIOBOOK_PROGRESS_SAVE_INTERVAL_SECONDS = 5;
+  const FALLBACK_PLAYER_PALETTE: ArtworkPalette = {
+    primary: "#c7c9cc",
+    secondary: "#8b8f96",
+    background: "#090a0c",
+  };
 
   let audioEl: HTMLAudioElement | null = $state(null);
   let rootEl: HTMLElement | null = $state(null);
   let waveformData = $state<number[] | null>(null);
   let timelineDragging = $state(false);
   let queueOpen = $state(false);
+  let artworkPaletteState = $state<{ coverUrl: string; palette: ArtworkPalette } | null>(null);
 
   let timelineDraggingRef = false;
   let currentSrcTrackId: string | null = null;
@@ -95,6 +102,11 @@
   );
   const artistHref = $derived(ctx?.artistId ? resolveEntityHref("music-artist", ctx.artistId) : undefined);
   const coverUrl = $derived(resolveAudioArtwork(activeTrack, ctx));
+  const playerPalette = $derived(
+    artworkPaletteState?.coverUrl === coverUrl
+      ? artworkPaletteState.palette
+      : FALLBACK_PLAYER_PALETTE,
+  );
   // Album label: a single-album context wins; otherwise fall back to the track's own album
   // so mixed-album queues (e.g. an artist Play All) still show the right album per track.
   const displayTitle = $derived(ctx?.playbackOwnerTitle ?? activeTrack?.title ?? null);
@@ -125,6 +137,13 @@
   function collapse() {
     playback.collapsed = true;
     queueOpen = false;
+  }
+
+  function handleArtworkLoad(event: Event) {
+    const loadedCoverUrl = coverUrl;
+    if (!loadedCoverUrl || artworkPaletteState?.coverUrl === loadedCoverUrl) return;
+    const palette = paletteFromImage(event.currentTarget as HTMLImageElement);
+    if (palette) artworkPaletteState = { coverUrl: loadedCoverUrl, palette };
   }
 
   function dismiss() {
@@ -753,6 +772,9 @@
     style:transform={`translateX(${appliedTranslate}px) scale(${dragging ? 1.08 : 1})`}
     style:transition={dragging ? "none" : `transform ${snapDuration}s cubic-bezier(0.22, 1, 0.36, 1)`}
     style:cursor={dragging ? "grabbing" : "grab"}
+    style:--player-accent={playerPalette.primary}
+    style:--player-secondary={playerPalette.secondary}
+    style:--player-background={playerPalette.background}
   >
     {#if playing}
       <span class="audio-notes" aria-hidden="true">
@@ -763,7 +785,7 @@
     {/if}
     <span class="block h-full w-full overflow-hidden rounded-xl">
       {#if coverUrl}
-        <img src={coverUrl} alt="" class="h-full w-full object-cover" decoding="async" />
+        <img src={coverUrl} alt="" class="h-full w-full object-cover" decoding="async" onload={handleArtworkLoad} />
       {:else}
         <span class="flex h-full w-full items-center justify-center bg-black/20 text-accent-500/80">
           <Music class="h-5 w-5" />
@@ -775,8 +797,11 @@
 <div
   bind:this={rootEl}
   class={cn(
-    "fixed bottom-[calc(3.65rem+max(1.25rem,env(safe-area-inset-bottom,0px))+1.1rem)] left-3 right-3 z-[55] mx-auto max-w-3xl rounded-xl border border-white/10 bg-surface-1/70 shadow-[0_18px_56px_rgba(0,0,0,0.6),inset_0_1px_0_rgba(255,255,255,0.07)] backdrop-blur-2xl md:bottom-4 md:left-64 md:right-4",
+    "audio-player fixed bottom-[calc(3.65rem+max(1.25rem,env(safe-area-inset-bottom,0px))+1.1rem)] left-3 right-3 z-[55] mx-auto max-w-3xl rounded-xl border shadow-[0_18px_56px_rgba(0,0,0,0.6),inset_0_1px_0_rgba(255,255,255,0.07)] backdrop-blur-2xl md:bottom-4 md:left-64 md:right-4",
   )}
+  style:--player-accent={playerPalette.primary}
+  style:--player-secondary={playerPalette.secondary}
+  style:--player-background={playerPalette.background}
 >
   <!-- Now-playing + progress -->
   <div class="flex items-center gap-2.5 px-3 pt-2.5 pb-1">
@@ -788,7 +813,7 @@
       class="player-artwork relative h-9 w-9 shrink-0 overflow-hidden rounded-md transition-opacity hover:opacity-80"
     >
       {#if coverUrl}
-        <img src={coverUrl} alt="" class="h-full w-full object-cover" decoding="async" />
+        <img src={coverUrl} alt="" class="h-full w-full object-cover" decoding="async" onload={handleArtworkLoad} />
       {:else}
         <div class="flex h-full w-full items-center justify-center bg-black/20 text-accent-500/80">
           <Music class="h-4 w-4" />
@@ -800,14 +825,14 @@
       {#if activeTrack}
         <p class="truncate text-[0.8rem] font-medium leading-tight text-text-primary">
           {#if playbackOwnerHref}
-            <a href={playbackOwnerHref} class="transition-colors hover:text-text-accent">{displayTitle}</a>
+            <a href={playbackOwnerHref} class="player-link transition-colors">{displayTitle}</a>
           {:else}
             {displayTitle}
           {/if}
         </p>
         <p class="truncate text-[0.68rem] leading-tight text-text-muted">
           {#if artistName && artistHref}
-            <a href={artistHref} class="transition-colors hover:text-text-accent">{artistName}</a>
+            <a href={artistHref} class="player-link transition-colors">{artistName}</a>
           {:else if artistName}
             {artistName}
           {:else}
@@ -835,7 +860,7 @@
       onclick={dismiss}
       title="Close player"
       aria-label="Close player and clear queue"
-      class="-mr-1 shrink-0 rounded-full p-1 text-text-disabled transition-colors hover:bg-white/5 hover:text-text-primary"
+      class="player-icon-control -mr-1 shrink-0 rounded-full p-1 transition-colors hover:bg-white/5"
     >
       <X class="h-3.5 w-3.5" />
     </button>
@@ -874,22 +899,30 @@
           timelineDragging = false;
         }}
       >
-        <div class="video-progress-fill" style={`width: ${progress}%`}></div>
+        <div class="video-progress-fill audio-progress-fill" style={`width: ${progress}%`}></div>
       </div>
     </div>
   {/if}
 
   <!-- Waveform (only when data available) -->
   {#if activeTrack && !isAudiobook && waveformData && duration > 0}
-    <div class="overflow-hidden border-t border-border-subtle/50 bg-black/30">
-      <AudioWaveformFilmstrip peaks={waveformData} {duration} {audioEl} onSeek={handleSeek} />
+    <div class="waveform-shell overflow-hidden border-t">
+      <AudioWaveformFilmstrip
+        peaks={waveformData}
+        {duration}
+        {audioEl}
+        onSeek={handleSeek}
+        accentPrimary={playerPalette.primary}
+        accentSecondary={playerPalette.secondary}
+        accentBackground={playerPalette.background}
+      />
     </div>
   {/if}
 
   <!-- Transport controls -->
   <div class="grid grid-cols-[1fr_auto_1fr] items-center gap-x-2 px-2 py-1.5">
     <div class="group/vol flex min-w-0 items-center gap-1">
-      <button type="button" onclick={toggleMute} class="p-1 text-text-disabled transition-colors hover:text-text-muted">
+      <button type="button" onclick={toggleMute} class="player-icon-control p-1 transition-colors">
         <VolumeIcon class="h-3 w-3" />
       </button>
       <div class="w-0 overflow-hidden transition-all duration-200 group-hover/vol:w-16">
@@ -900,7 +933,8 @@
           step="0.01"
           value={muted ? 0 : volume}
           oninput={handleVolumeInput}
-          class="h-1 w-full cursor-pointer accent-accent-500"
+          class="h-1 w-full cursor-pointer"
+          style:accent-color={playerPalette.primary}
         />
       </div>
     </div>
@@ -911,7 +945,7 @@
         onclick={() => playback.toggleShuffle()}
         disabled={isAudiobook}
         title={isAudiobook ? "Audiobook parts play in order" : playback.shuffle ? "Shuffle: on" : "Shuffle: off"}
-        class={cn("p-1.5 transition-colors", playback.shuffle ? "text-accent-500" : "text-text-disabled hover:text-text-muted")}
+        class={cn("player-icon-control p-1.5 transition-colors", playback.shuffle && "player-icon-control--active")}
       >
         <Shuffle class="h-3 w-3" />
       </button>
@@ -920,7 +954,7 @@
         type="button"
         onclick={handlePrev}
         disabled={!activeTrack}
-        class="p-1.5 text-text-muted transition-colors hover:text-text-primary disabled:text-text-disabled"
+        class="player-icon-control p-1.5 transition-colors disabled:text-text-disabled"
       >
         <SkipBack class="h-3.5 w-3.5" />
       </button>
@@ -928,12 +962,8 @@
       <button
         type="button"
         onclick={togglePlay}
-        class={cn(
-          "mx-0.5 rounded-full p-2 transition-all",
-          playing
-            ? "bg-accent-500 text-bg shadow-[0_0_10px_rgba(199, 201, 204,0.3)]"
-            : "bg-accent-500/15 text-accent-300 ring-1 ring-accent-500/45 shadow-[0_0_12px_rgba(199, 201, 204,0.18)] hover:bg-accent-500 hover:text-bg",
-        )}
+        class="player-play-button mx-0.5 rounded-full p-2 transition-all"
+        data-playing={playing}
       >
         {#if playing}
           <Pause class="h-4 w-4" />
@@ -946,7 +976,7 @@
         type="button"
         onclick={handleNext}
         disabled={!activeTrack || !playback.hasNext}
-        class="p-1.5 text-text-muted transition-colors hover:text-text-primary disabled:text-text-disabled"
+        class="player-icon-control p-1.5 transition-colors disabled:text-text-disabled"
       >
         <SkipForward class="h-3.5 w-3.5" />
       </button>
@@ -955,7 +985,7 @@
         type="button"
         onclick={() => playback.cycleRepeat()}
         title={playback.repeat === MUSIC_PLAYER_REPEAT_MODE.off ? "Repeat: off" : playback.repeat === MUSIC_PLAYER_REPEAT_MODE.all ? "Repeat: all" : "Repeat: one"}
-        class={cn("p-1.5 transition-colors", playback.repeat !== MUSIC_PLAYER_REPEAT_MODE.off ? "text-accent-500" : "text-text-disabled hover:text-text-muted")}
+        class={cn("player-icon-control p-1.5 transition-colors", playback.repeat !== MUSIC_PLAYER_REPEAT_MODE.off && "player-icon-control--active")}
       >
         {#if playback.repeat === MUSIC_PLAYER_REPEAT_MODE.one}
           <Repeat1 class="h-3 w-3" />
@@ -971,7 +1001,7 @@
         onclick={collapse}
         title="Minimize player"
         aria-label="Minimize player"
-        class="p-1.5 text-text-disabled transition-colors hover:text-text-muted"
+        class="player-icon-control p-1.5 transition-colors"
       >
         <Minimize2 class="h-3.5 w-3.5" />
       </button>
@@ -980,7 +1010,7 @@
           type="button"
           onclick={() => (queueOpen = !queueOpen)}
           title="Queue"
-          class={cn("p-1.5 transition-colors", queueOpen ? "text-accent-500" : "text-text-disabled hover:text-text-muted")}
+          class={cn("player-icon-control p-1.5 transition-colors", queueOpen && "player-icon-control--active")}
         >
           <ListMusic class="h-3.5 w-3.5" />
         </button>
@@ -995,6 +1025,79 @@
 {/if}
 
 <style>
+  .audio-mini {
+    border-color: color-mix(in srgb, var(--player-accent) 34%, rgba(255, 255, 255, 0.08));
+  }
+
+  .audio-player {
+    border-color: color-mix(in srgb, var(--player-accent) 26%, rgba(255, 255, 255, 0.08));
+    background:
+      radial-gradient(circle at 7% 0%, color-mix(in srgb, var(--player-accent) 15%, transparent), transparent 38%),
+      radial-gradient(circle at 94% 115%, color-mix(in srgb, var(--player-secondary) 11%, transparent), transparent 42%),
+      color-mix(in srgb, var(--player-background) 72%, rgba(12, 15, 20, 0.78));
+    transition: border-color 180ms var(--ease-default), background 180ms var(--ease-default);
+  }
+
+  .player-link:hover,
+  .player-icon-control.player-icon-control--active {
+    color: color-mix(in srgb, var(--player-accent) 84%, white 12%);
+  }
+
+  .player-icon-control {
+    color: color-mix(in srgb, var(--player-secondary) 42%, var(--color-text-disabled));
+  }
+
+  .player-icon-control:hover:not(:disabled) {
+    color: color-mix(in srgb, var(--player-accent) 72%, white 16%);
+  }
+
+  .player-icon-control--active:hover:not(:disabled) {
+    color: color-mix(in srgb, var(--player-accent) 92%, white 8%);
+  }
+
+  .player-play-button {
+    color: color-mix(in srgb, var(--player-accent) 84%, white 12%);
+    background: color-mix(in srgb, var(--player-accent) 16%, transparent);
+    box-shadow:
+      0 0 0 1px color-mix(in srgb, var(--player-accent) 46%, transparent),
+      0 0 14px color-mix(in srgb, var(--player-accent) 22%, transparent);
+  }
+
+  .player-play-button:hover,
+  .player-play-button[data-playing="true"] {
+    color: color-mix(in srgb, var(--player-background) 76%, black 24%);
+    background: color-mix(in srgb, var(--player-accent) 88%, white 8%);
+    box-shadow: 0 0 16px color-mix(in srgb, var(--player-accent) 34%, transparent);
+  }
+
+  .audio-progress-fill {
+    background: linear-gradient(
+      90deg,
+      color-mix(in srgb, var(--player-secondary) 72%, var(--player-accent)),
+      var(--player-accent),
+      color-mix(in srgb, var(--player-accent) 76%, white 20%)
+    );
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.34),
+      0 0 12px color-mix(in srgb, var(--player-accent) 50%, transparent);
+  }
+
+  .audio-player .video-progress-track {
+    background: color-mix(in srgb, var(--player-secondary) 16%, rgba(255, 255, 255, 0.08));
+  }
+
+  .audio-progress-fill::after {
+    background: color-mix(in srgb, var(--player-accent) 78%, white 18%);
+    box-shadow:
+      0 0 10px color-mix(in srgb, var(--player-accent) 72%, transparent),
+      0 2px 4px rgba(0, 0, 0, 0.5);
+  }
+
+  .waveform-shell {
+    border-color: color-mix(in srgb, var(--player-accent) 16%, transparent);
+    background: color-mix(in srgb, var(--player-background) 72%, black 28%);
+  }
+
   /* Animated notes drifting out of the collapsed artwork while playing. */
   .audio-notes {
     position: absolute;
@@ -1007,9 +1110,9 @@
   .audio-notes :global(.audio-note) {
     position: absolute;
     left: 0;
-    color: #c7c9cc;
+    color: var(--player-accent, #c7c9cc);
     opacity: 0;
-    filter: drop-shadow(0 0 4px rgba(199, 201, 204, 0.55));
+    filter: drop-shadow(0 0 4px color-mix(in srgb, var(--player-accent, #c7c9cc) 55%, transparent));
   }
   /* Three notes fan out evenly: one drifts left, one rises center, one drifts right. */
   .audio-notes :global(.audio-note-1) { animation: audio-note-left 2.4s ease-out infinite; animation-delay: 0s; }
