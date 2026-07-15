@@ -75,6 +75,15 @@ describe("AudioVidStackPlayer playback continuity", () => {
     expect(source).toContain("disabled={isAudiobook}");
   });
 
+  it("uses the compact progress timeline instead of a waveform for audiobooks", () => {
+    const waveformLoadStart = source.indexOf("// Load waveform data for the current track.");
+    const waveformLoadEnd = source.indexOf("// Reserve layout space", waveformLoadStart);
+    const waveformLoadSource = source.slice(waveformLoadStart, waveformLoadEnd);
+
+    expect(waveformLoadSource).toContain("if (!track || isAudiobook)");
+    expect(source).toContain("{#if activeTrack && !isAudiobook && waveformData && duration > 0}");
+  });
+
   it("leaves reader keyboard navigation to the active reader overlay", () => {
     expect(source).toContain('document.querySelector("[data-reader-overlay]")');
   });

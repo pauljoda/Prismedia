@@ -2,6 +2,7 @@
   import { onMount } from "svelte";
   import { ChevronLeft, ChevronRight } from "@lucide/svelte";
   import { elementSize } from "$lib/hooks/element-size.svelte";
+  import { waveformStripWidth } from "./audio-waveform";
 
   interface Props {
     peaks: number[];
@@ -32,12 +33,7 @@
 
   const safeDuration = $derived(duration > 0 ? duration : 0.001);
   const pairCount = $derived(Math.floor(peaks.length / 2));
-  const naturalWidth = $derived(Math.max(1, pairCount * 2));
-  const trackWidth = $derived(
-    containerWidth > 0
-      ? Math.max(naturalWidth, containerWidth * 6, safeDuration * 10)
-      : 0,
-  );
+  const trackWidth = $derived(waveformStripWidth(pairCount, safeDuration, containerWidth));
 
   function drawWaveformStrip(
     canvas: HTMLCanvasElement,
@@ -48,7 +44,7 @@
     const count = Math.floor(waveform.length / 2);
     if (count <= 0 || width <= 0) return;
 
-    const dpr = window.devicePixelRatio || 1;
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
     canvas.width = Math.floor(width * dpr);
     canvas.height = Math.floor(height * dpr);
     canvas.style.width = `${width}px`;

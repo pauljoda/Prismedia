@@ -496,7 +496,7 @@
   // Load waveform data for the current track.
   $effect(() => {
     const track = activeTrack;
-    if (!track) {
+    if (!track || isAudiobook) {
       waveformData = null;
       return;
     }
@@ -880,7 +880,7 @@
   {/if}
 
   <!-- Waveform (only when data available) -->
-  {#if activeTrack && waveformData && duration > 0}
+  {#if activeTrack && !isAudiobook && waveformData && duration > 0}
     <div class="overflow-hidden border-t border-border-subtle/50 bg-black/30">
       <AudioWaveformFilmstrip peaks={waveformData} {duration} {audioEl} onSeek={handleSeek} />
     </div>
