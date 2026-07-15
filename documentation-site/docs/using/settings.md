@@ -51,7 +51,19 @@ Subtitle settings control:
 
 - Auto-enable on playback.
 - Preferred language order.
+- OpenSubtitles.com connection and credential testing.
+- Automatic acquisition languages and the minimum identity confidence required for unattended downloads.
 - Caption style, text size, vertical position, and transparency.
+
+To connect OpenSubtitles, sign in at [OpenSubtitles.com](https://www.opensubtitles.com), create an
+application key under **Profile → API Consumers**, then enter that key plus the same account username
+and password in **Settings → Subtitles**. Prismedia stores credentials server-side and only returns
+configured/not-configured flags to the browser.
+
+Automatic acquisition runs after embedded and adjacent subtitles have been reconciled. It skips any
+configured language already present and only downloads an exact file-hash match or other
+high-confidence, non-conflicting identity match. The OpenSubtitles hash is generated on demand for a
+search even when the general fingerprint toggle is off.
 
 Video pages can apply local per-browser overrides from the player.
 

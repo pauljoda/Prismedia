@@ -24,6 +24,7 @@ using Prismedia.Application.Plugins;
 using Prismedia.Application.Playback;
 using Prismedia.Application.Requests;
 using Prismedia.Application.Security;
+using Prismedia.Application.Subtitles;
 
 namespace Prismedia.Application;
 
@@ -39,6 +40,7 @@ public static class DependencyInjection {
         services.AddScoped<EntityCapabilityService>();
         services.AddSingleton(TimeProvider.System);
         services.AddScoped<SettingsService>();
+        services.AddScoped<IAutomaticSubtitleAcquisitionScheduler, AutomaticSubtitleAcquisitionScheduler>();
         services.AddScoped<NavLayoutService>();
         services.AddScoped<UserAuthService>();
         services.AddScoped<UserAdminService>();
@@ -147,6 +149,7 @@ public static class DependencyInjection {
         services.AddTransient<IJobHandler, GenerateBookCoverThumbnailJobHandler>();
         services.AddTransient<IJobHandler, GenerateAudioWaveformJobHandler>();
         services.AddTransient<IJobHandler, ExtractSubtitlesJobHandler>();
+        services.AddTransient<IJobHandler, AutoAcquireSubtitlesJobHandler>();
 
         // Metadata / collections / maintenance
         services.AddTransient<IJobHandler, ImportMetadataJobHandler>();

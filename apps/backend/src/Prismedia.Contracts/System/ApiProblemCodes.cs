@@ -7,6 +7,18 @@ namespace Prismedia.Contracts.System;
 /// constants instead of bare string literals.
 /// </summary>
 public static class ApiProblemCodes {
+    /// <summary>Problem code <c>subtitle_provider_unavailable</c>.</summary>
+    public const string SubtitleProviderUnavailable = "subtitle_provider_unavailable";
+
+    /// <summary>Problem code <c>subtitle_search_failed</c>.</summary>
+    public const string SubtitleSearchFailed = "subtitle_search_failed";
+
+    /// <summary>Problem code <c>subtitle_candidate_unavailable</c>.</summary>
+    public const string SubtitleCandidateUnavailable = "subtitle_candidate_unavailable";
+
+    /// <summary>Problem code <c>subtitle_import_failed</c>.</summary>
+    public const string SubtitleImportFailed = "subtitle_import_failed";
+
     /// <summary>Problem code <c>acquisition_import_blocked</c>.</summary>
     public const string AcquisitionImportBlocked = "acquisition_import_blocked";
 

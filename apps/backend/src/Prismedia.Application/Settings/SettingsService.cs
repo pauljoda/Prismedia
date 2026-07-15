@@ -318,6 +318,9 @@ public sealed partial class SettingsService {
         var values = await GetValueMapAsync([
             AppSettingKeys.SubtitlesAutoEnable,
             AppSettingKeys.SubtitlesPreferredLanguages,
+            AppSettingKeys.SubtitlesAutoDownloadEnabled,
+            AppSettingKeys.SubtitlesAutoDownloadLanguages,
+            AppSettingKeys.SubtitlesAutoDownloadMinimumConfidence,
             AppSettingKeys.SubtitlesStyle,
             AppSettingKeys.SubtitlesFontScale,
             AppSettingKeys.SubtitlesPositionPercent,
@@ -327,6 +330,9 @@ public sealed partial class SettingsService {
         return new SubtitleSettings(
             GetBoolean(values, AppSettingKeys.SubtitlesAutoEnable),
             GetStringList(values, AppSettingKeys.SubtitlesPreferredLanguages),
+            GetBoolean(values, AppSettingKeys.SubtitlesAutoDownloadEnabled),
+            GetStringList(values, AppSettingKeys.SubtitlesAutoDownloadLanguages),
+            GetInt(values, AppSettingKeys.SubtitlesAutoDownloadMinimumConfidence),
             GetString(values, AppSettingKeys.SubtitlesStyle),
             GetFloat(values, AppSettingKeys.SubtitlesFontScale),
             GetFloat(values, AppSettingKeys.SubtitlesPositionPercent),

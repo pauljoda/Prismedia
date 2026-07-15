@@ -72,4 +72,8 @@ public static class SubtitleSourceKeys {
 
     /// <summary>Identity used when persisting a capability-provided track by its stable id.</summary>
     public static string Capability(Guid subtitleId) => $"capability:{subtitleId:N}";
+
+    /// <summary>Stable identity for one provider-owned subtitle file.</summary>
+    public static string Provider(string providerCode, string remoteId) =>
+        $"provider:{providerCode}:{remoteId}";
 }

@@ -28,10 +28,18 @@ Video detail pages include:
 ## Subtitles
 
 Subtitle tracks can come from the video's embedded streams, same-name SRT/VTT/ASS/SSA files beside
-the video, or tracks added in the app. Supported text tracks are copied into Prismedia's generated
+the video, or tracks acquired from OpenSubtitles in the app. Supported text tracks are copied into Prismedia's generated
 storage and converted to WebVTT for browser playback; embedded and adjacent ASS/SSA tracks retain an
 app-owned styled source so the ASS renderer can display them. A library scan reconciles sidecar
 additions, edits, renames, and removals.
+
+Open the transcript's track manager and choose **Find subtitles** to search by the video's
+OpenSubtitles hash, known provider IDs, filename, and episode metadata. Results show identity
+confidence separately from subtitle quality and explain whether a candidate matched by exact hash,
+episode identity, year, or release name. Downloading imports a Prismedia-owned track and refreshes
+the transcript immediately. OpenSubtitles currently delivers SRT to third-party clients; ASS/SSA
+styling remains first-class for embedded, adjacent, uploaded, and future provider sources that
+actually supply those formats.
 
 ![Subtitle view options](/img/screenshots/settings-subtitles.png)
 

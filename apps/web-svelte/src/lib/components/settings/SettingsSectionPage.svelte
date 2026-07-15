@@ -29,6 +29,7 @@
   import AutoIdentifySection from "$lib/components/settings/AutoIdentifySection.svelte";
   import DatabaseBackupsSection from "$lib/components/settings/DatabaseBackupsSection.svelte";
   import DiagnosticsSection from "$lib/components/settings/DiagnosticsSection.svelte";
+  import SubtitleAcquisitionSection from "$lib/components/settings/SubtitleAcquisitionSection.svelte";
   import TranscodeCacheSection from "$lib/components/settings/TranscodeCacheSection.svelte";
   import WatchedLibrariesSection from "$lib/components/settings/WatchedLibrariesSection.svelte";
   import SubtitleCaptionOverlay from "$lib/components/SubtitleCaptionOverlay.svelte";
@@ -354,6 +355,12 @@
     </Panel>
   {:else if section.id === SETTING_SECTION.subtitles}
     <!-- ── Subtitles ── -->
+    <SubtitleAcquisitionSection
+      {catalog}
+      onCommit={handleSettingCommit}
+      onError={(subtitleError) => setError(subtitleError)}
+      onMessage={flashMessage}
+    />
     <Panel>
       <div class="p-5 space-y-5">
         <div class="flex items-center gap-2.5">

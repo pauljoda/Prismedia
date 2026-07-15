@@ -21,6 +21,7 @@ using Prismedia.Application.Acquisition;
 using Prismedia.Application.Requests;
 using Prismedia.Application.Security;
 using Prismedia.Application.Videos;
+using Prismedia.Application.Subtitles;
 using Prismedia.Infrastructure.Audio;
 using Prismedia.Infrastructure.Collections;
 using Prismedia.Infrastructure.Database;
@@ -47,6 +48,7 @@ using Prismedia.Infrastructure.StashCompat;
 using Prismedia.Infrastructure.Health;
 using Prismedia.Infrastructure.Jellyfin;
 using Prismedia.Infrastructure.Videos;
+using Prismedia.Infrastructure.Subtitles;
 
 namespace Prismedia.Infrastructure;
 
@@ -308,6 +310,13 @@ public static class DependencyInjection {
                 provider.GetRequiredService<ProcessExecutor>(),
                 provider.GetRequiredService<MediaToolOptions>(),
                 provider.GetRequiredService<AssetPathService>()));
+        services.AddSingleton(_ => new OpenSubtitlesClient(new HttpClient(new SocketsHttpHandler {
+            AllowAutoRedirect = true,
+            MaxAutomaticRedirections = 3,
+        }) {
+            Timeout = TimeSpan.FromSeconds(30),
+        }));
+        services.AddScoped<ISubtitleAcquisitionService, SubtitleAcquisitionService>();
     }
 
     private static void RegisterJobsSettingsAndState(

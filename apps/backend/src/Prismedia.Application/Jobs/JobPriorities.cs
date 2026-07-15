@@ -34,4 +34,7 @@ public static class JobPriorities {
 
     /// <summary>Auto Identify — provider metadata lookups run last, after scan/import/generation work drains.</summary>
     public const int AutoIdentify = 5;
+
+    /// <summary>Automatic subtitle provider lookups after local reconciliation and available identity work.</summary>
+    public const int SubtitleAcquisition = 4;
 }

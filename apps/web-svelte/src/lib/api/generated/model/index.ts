@@ -5,6 +5,8 @@
  * OpenAPI spec version: 1.0.0
  */
 
+export * from './acquireVideoSubtitleRequest';
+export * from './acquireVideoSubtitleResponse';
 export * from './acquisitionBlocklistEntry';
 export * from './acquisitionCreateRequest';
 export * from './acquisitionCreateRequestBookRendition';
@@ -364,6 +366,7 @@ export * from './musicPlayerStateResponse';
 export * from './navLayoutDocument';
 export * from './navLayoutResponse';
 export * from './navLayoutSection';
+export * from './openSubtitlesConfigurationResponse';
 export * from './organizeApplyResponse';
 export * from './organizePlanItem';
 export * from './organizePlanRequest';
@@ -429,6 +432,8 @@ export * from './saveIdentifyQueueProposalRequest';
 export * from './searchIdentifyQueueItemParams';
 export * from './searchOpdsBooksParams';
 export * from './searchRequestsByPluginParams';
+export * from './searchVideoSubtitlesRequest';
+export * from './searchVideoSubtitlesResponse';
 export * from './settingConstraints';
 export * from './settingDescriptor';
 export * from './settingOption';
@@ -443,12 +448,15 @@ export * from './setupStatusResponse';
 export * from './startBulkIdentifyParams';
 export * from './stashScraperListing';
 export * from './studioDetail';
+export * from './subtitleCandidateResponse';
+export * from './subtitleProviderTestResponse';
 export * from './tagDetail';
 export * from './thumbnailHoverKind';
 export * from './transcodeCacheStatusResponse';
 export * from './transcodingInfo';
 export * from './updateCheckResponse';
 export * from './updateMusicPlayerStateRequest';
+export * from './updateOpenSubtitlesConfigurationRequest';
 export * from './updateOwnProfileRequest';
 export * from './uploadAcquisitionTorrentBody';
 export * from './userCreateRequest';

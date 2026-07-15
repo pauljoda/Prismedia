@@ -129,6 +129,12 @@ const _JOB_DEFINITIONS = [
     label: "Subtitle Extraction",
     description: "Extracts embedded subtitle tracks from video files as WebVTT.",
   },
+  {
+    type: JOB_TYPE.acquireSubtitles,
+    queueName: "acquire-subtitles",
+    label: "Subtitle Acquisition",
+    description: "Finds and imports trusted provider subtitles for missing preferred languages.",
+  },
   // Metadata / identify
   {
     type: JOB_TYPE.importMetadata,

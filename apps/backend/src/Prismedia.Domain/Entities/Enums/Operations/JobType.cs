@@ -81,6 +81,10 @@ public enum JobType {
     [Code("extract-subtitles")]
     ExtractSubtitles,
 
+    /// <summary>Acquires missing preferred-language subtitles from configured providers.</summary>
+    [Code("acquire-subtitles")]
+    AcquireSubtitles,
+
     // ── Metadata / collections ──────────────────────────────────
     /// <summary>Coordinates provider imports and metadata application.</summary>
     [Code("import-metadata")]

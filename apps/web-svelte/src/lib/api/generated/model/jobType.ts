@@ -27,6 +27,7 @@ export const JobType = {
   'generate-book-cover-thumbnail': 'generate-book-cover-thumbnail',
   'generate-audio-waveform': 'generate-audio-waveform',
   'extract-subtitles': 'extract-subtitles',
+  'acquire-subtitles': 'acquire-subtitles',
   'import-metadata': 'import-metadata',
   'refresh-collection': 'refresh-collection',
   'library-maintenance': 'library-maintenance',

@@ -46,6 +46,9 @@ public static class AppSettingKeys {
 
     public const string SubtitlesAutoEnable = "subtitles.autoEnable";
     public const string SubtitlesPreferredLanguages = "subtitles.preferredLanguages";
+    public const string SubtitlesAutoDownloadEnabled = "subtitles.autoDownloadEnabled";
+    public const string SubtitlesAutoDownloadLanguages = "subtitles.autoDownloadLanguages";
+    public const string SubtitlesAutoDownloadMinimumConfidence = "subtitles.autoDownloadMinimumConfidence";
     public const string SubtitlesStyle = "subtitles.style";
     public const string SubtitlesFontScale = "subtitles.fontScale";
     public const string SubtitlesPositionPercent = "subtitles.positionPercent";

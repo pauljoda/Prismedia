@@ -17,6 +17,10 @@ vi.mock("$lib/player/video-subtitles", () => ({
   }),
 }));
 
+vi.mock("$lib/stores/session.svelte", () => ({
+  useSession: () => ({ isAdmin: true }),
+}));
+
 const track: VideoSubtitleTrack = {
   id: "track-1",
   videoId: "video-1",

@@ -15,8 +15,10 @@
     X,
   } from "@lucide/svelte";
   import { cn } from "@prismedia/ui-svelte";
+  import SubtitleSearchSurface from "$lib/components/SubtitleSearchSurface.svelte";
   import type { SubtitleCue, VideoSubtitleTrack } from "$lib/player/subtitle-types";
   import { fetchVideoSubtitleCues } from "$lib/player/video-subtitles";
+  import { useSession } from "$lib/stores/session.svelte";
 
   interface Props {
     videoId: string;
@@ -25,22 +27,26 @@
     onActiveTrackIdChange: (id: string | null) => void;
     currentTime: number;
     onSeek: (time: number) => void;
-    onTracksChanged: () => void;
+    onTracksChanged: () => void | Promise<void>;
     variant?: TranscriptPanelVariant;
     isDocked?: boolean;
     onDockToggle?: () => void;
   }
 
   let {
+    videoId,
     tracks,
     activeTrackId,
     onActiveTrackIdChange,
     currentTime,
     onSeek,
+    onTracksChanged,
     variant = "full",
     isDocked = false,
     onDockToggle,
   }: Props = $props();
+
+  const session = useSession();
 
   const showTrackManagement = $derived(variant !== "list-only" && variant !== "compact");
   const showTranscriptList = $derived(variant !== "tracks-only");
@@ -443,6 +449,14 @@
         </button>
       </div>
     </div>
+
+    {#if session.isAdmin}
+      <SubtitleSearchSurface
+        {videoId}
+        {onTracksChanged}
+        {onActiveTrackIdChange}
+      />
+    {/if}
   {/if}
 
   {#if showTranscriptList}

@@ -87,6 +87,9 @@ export interface LibrarySettings {
   audioPreferredLanguages: string;
   subtitlesAutoEnable: boolean;
   subtitlesPreferredLanguages: string;
+  subtitlesAutoDownloadEnabled: boolean;
+  subtitlesAutoDownloadLanguages: string;
+  subtitlesAutoDownloadMinimumConfidence: number;
   subtitleStyle: string;
   subtitleFontScale: number;
   subtitlePositionPercent: number;

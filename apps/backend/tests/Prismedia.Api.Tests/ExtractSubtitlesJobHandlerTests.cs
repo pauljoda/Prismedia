@@ -2,6 +2,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Prismedia.Application.Jobs;
 using Prismedia.Application.Jobs.Handlers.Identity;
 using Prismedia.Application.Jobs.Ports;
+using Prismedia.Application.Subtitles;
 using Prismedia.Contracts.Media;
 using Prismedia.Domain.Entities;
 
@@ -168,6 +169,28 @@ public sealed class ExtractSubtitlesJobHandlerTests : IDisposable {
     }
 
     [Fact]
+    public async Task CompleteReconciliationSchedulesAutomaticAcquisitionAfterCommit() {
+        var videoPath = CreateFile("Movie.mkv");
+        var discovery = new RecordingSidecarDiscovery(
+            new VideoSubtitleSidecarDiscovery(videoPath, [], "complete-signature", IsComplete: true));
+        var persistence = new RecordingSubtitlePersistence(videoPath);
+        var scheduler = new RecordingAcquisitionScheduler();
+        var handler = CreateHandler(
+            new RecordingMediaProbe([]),
+            new RecordingSubtitleAssets(),
+            persistence,
+            discovery,
+            scheduler);
+
+        await handler.HandleAsync(Context(), CancellationToken.None);
+
+        var scheduled = Assert.Single(scheduler.Requests);
+        Assert.Equal(_entityId, scheduled.VideoId);
+        Assert.Equal("Movie", scheduled.Label);
+        Assert.Single(persistence.Reconciliations);
+    }
+
+    [Fact]
     public async Task PostCommitCleanupFailureNeverDeletesNewlyCommittedAssets() {
         var videoPath = CreateFile("Movie.mkv");
         var candidate = Candidate("Movie.en.srt", "sidecar:english", "en", null);
@@ -265,13 +288,15 @@ public sealed class ExtractSubtitlesJobHandlerTests : IDisposable {
         IMediaProbe mediaProbe,
         ISubtitleAssetService assets,
         IMediaProcessingStatePersistence persistence,
-        ISubtitleSidecarDiscovery discovery) =>
+        ISubtitleSidecarDiscovery discovery,
+        IAutomaticSubtitleAcquisitionScheduler? acquisitionScheduler = null) =>
         new(
             NullLogger<ExtractSubtitlesJobHandler>.Instance,
             mediaProbe,
             assets,
             persistence,
-            discovery);
+            discovery,
+            acquisitionScheduler);
 
     private JobContext Context() => new(
         new JobRunSnapshot(
@@ -316,6 +341,15 @@ public sealed class ExtractSubtitlesJobHandlerTests : IDisposable {
             IReadOnlyCollection<string> videoPaths,
             CancellationToken cancellationToken) =>
             Task.FromResult<IReadOnlyList<VideoSubtitleSidecarDiscovery>>([result]);
+    }
+
+    private sealed class RecordingAcquisitionScheduler : IAutomaticSubtitleAcquisitionScheduler {
+        public List<(Guid VideoId, string Label)> Requests { get; } = [];
+
+        public Task ScheduleAsync(Guid videoId, string label, CancellationToken cancellationToken) {
+            Requests.Add((videoId, label));
+            return Task.CompletedTask;
+        }
     }
 
     private sealed class RecordingMediaProbe(IReadOnlyList<SubtitleStreamData> streams) : IMediaProbe {

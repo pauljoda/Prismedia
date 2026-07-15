@@ -5,6 +5,8 @@
  * OpenAPI spec version: 1.0.0
  */
 import type {
+  AcquireVideoSubtitleRequest,
+  AcquireVideoSubtitleResponse,
   AcquisitionBlocklistEntry,
   AcquisitionCreateRequest,
   AcquisitionDetail,
@@ -210,6 +212,7 @@ import type {
   MusicPlayerStateResponse,
   NavLayoutDocument,
   NavLayoutResponse,
+  OpenSubtitlesConfigurationResponse,
   OrganizeApplyResponse,
   OrganizePlanRequest,
   OrganizePlanResponse,
@@ -246,6 +249,8 @@ import type {
   SearchIdentifyQueueItemParams,
   SearchOpdsBooksParams,
   SearchRequestsByPluginParams,
+  SearchVideoSubtitlesRequest,
+  SearchVideoSubtitlesResponse,
   SettingDescriptor,
   SettingUpdateRequest,
   SettingsBatchUpdateRequest,
@@ -255,10 +260,12 @@ import type {
   StartBulkIdentifyParams,
   StashScraperListing,
   StudioDetail,
+  SubtitleProviderTestResponse,
   TagDetail,
   TranscodeCacheStatusResponse,
   UpdateCheckResponse,
   UpdateMusicPlayerStateRequest,
+  UpdateOpenSubtitlesConfigurationRequest,
   UpdateOwnProfileRequest,
   UploadAcquisitionTorrentBody,
   UserCreateRequest,
@@ -6082,6 +6089,216 @@ export const getVideoSubtitleSource = async (id: string,
   {
     ...options,
     method: 'GET'
+
+
+  }
+);}
+
+
+
+export type searchVideoSubtitlesResponse200 = {
+  data: SearchVideoSubtitlesResponse
+  status: 200
+}
+
+export type searchVideoSubtitlesResponse404 = {
+  data: ApiProblem
+  status: 404
+}
+
+export type searchVideoSubtitlesResponse502 = {
+  data: ApiProblem
+  status: 502
+}
+
+export type searchVideoSubtitlesResponseSuccess = (searchVideoSubtitlesResponse200) & {
+  headers: Headers;
+};
+export type searchVideoSubtitlesResponseError = (searchVideoSubtitlesResponse404 | searchVideoSubtitlesResponse502) & {
+  headers: Headers;
+};
+
+export type searchVideoSubtitlesResponse = (searchVideoSubtitlesResponseSuccess | searchVideoSubtitlesResponseError)
+
+export const getSearchVideoSubtitlesUrl = (id: string,) => {
+
+
+
+
+  return `/api/videos/${id}/subtitles/search`
+}
+
+/**
+ * @summary Searches configured subtitle providers for one video.
+ */
+export const searchVideoSubtitles = async (id: string,
+    searchVideoSubtitlesRequest: SearchVideoSubtitlesRequest, options?: RequestInit): Promise<searchVideoSubtitlesResponse> => {
+
+  return orvalFetch<searchVideoSubtitlesResponse>(getSearchVideoSubtitlesUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      searchVideoSubtitlesRequest,)
+  }
+);}
+
+
+
+export type acquireVideoSubtitleResponse200 = {
+  data: AcquireVideoSubtitleResponse
+  status: 200
+}
+
+export type acquireVideoSubtitleResponse404 = {
+  data: ApiProblem
+  status: 404
+}
+
+export type acquireVideoSubtitleResponse410 = {
+  data: ApiProblem
+  status: 410
+}
+
+export type acquireVideoSubtitleResponse422 = {
+  data: ApiProblem
+  status: 422
+}
+
+export type acquireVideoSubtitleResponse502 = {
+  data: ApiProblem
+  status: 502
+}
+
+export type acquireVideoSubtitleResponseSuccess = (acquireVideoSubtitleResponse200) & {
+  headers: Headers;
+};
+export type acquireVideoSubtitleResponseError = (acquireVideoSubtitleResponse404 | acquireVideoSubtitleResponse410 | acquireVideoSubtitleResponse422 | acquireVideoSubtitleResponse502) & {
+  headers: Headers;
+};
+
+export type acquireVideoSubtitleResponse = (acquireVideoSubtitleResponseSuccess | acquireVideoSubtitleResponseError)
+
+export const getAcquireVideoSubtitleUrl = (id: string,) => {
+
+
+
+
+  return `/api/videos/${id}/subtitles/download`
+}
+
+/**
+ * @summary Downloads and safely imports one provider subtitle candidate.
+ */
+export const acquireVideoSubtitle = async (id: string,
+    acquireVideoSubtitleRequest: AcquireVideoSubtitleRequest, options?: RequestInit): Promise<acquireVideoSubtitleResponse> => {
+
+  return orvalFetch<acquireVideoSubtitleResponse>(getAcquireVideoSubtitleUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      acquireVideoSubtitleRequest,)
+  }
+);}
+
+
+
+export type getOpenSubtitlesConfigurationResponse200 = {
+  data: OpenSubtitlesConfigurationResponse
+  status: 200
+}
+
+export type getOpenSubtitlesConfigurationResponseSuccess = (getOpenSubtitlesConfigurationResponse200) & {
+  headers: Headers;
+};
+;
+
+export type getOpenSubtitlesConfigurationResponse = (getOpenSubtitlesConfigurationResponseSuccess)
+
+export const getGetOpenSubtitlesConfigurationUrl = () => {
+
+
+
+
+  return `/api/subtitle-providers/opensubtitles`
+}
+
+export const getOpenSubtitlesConfiguration = async ( options?: RequestInit): Promise<getOpenSubtitlesConfigurationResponse> => {
+
+  return orvalFetch<getOpenSubtitlesConfigurationResponse>(getGetOpenSubtitlesConfigurationUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type updateOpenSubtitlesConfigurationResponse200 = {
+  data: OpenSubtitlesConfigurationResponse
+  status: 200
+}
+
+export type updateOpenSubtitlesConfigurationResponseSuccess = (updateOpenSubtitlesConfigurationResponse200) & {
+  headers: Headers;
+};
+;
+
+export type updateOpenSubtitlesConfigurationResponse = (updateOpenSubtitlesConfigurationResponseSuccess)
+
+export const getUpdateOpenSubtitlesConfigurationUrl = () => {
+
+
+
+
+  return `/api/subtitle-providers/opensubtitles`
+}
+
+export const updateOpenSubtitlesConfiguration = async (updateOpenSubtitlesConfigurationRequest: UpdateOpenSubtitlesConfigurationRequest, options?: RequestInit): Promise<updateOpenSubtitlesConfigurationResponse> => {
+
+  return orvalFetch<updateOpenSubtitlesConfigurationResponse>(getUpdateOpenSubtitlesConfigurationUrl(),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      updateOpenSubtitlesConfigurationRequest,)
+  }
+);}
+
+
+
+export type testOpenSubtitlesConnectionResponse200 = {
+  data: SubtitleProviderTestResponse
+  status: 200
+}
+
+export type testOpenSubtitlesConnectionResponseSuccess = (testOpenSubtitlesConnectionResponse200) & {
+  headers: Headers;
+};
+;
+
+export type testOpenSubtitlesConnectionResponse = (testOpenSubtitlesConnectionResponseSuccess)
+
+export const getTestOpenSubtitlesConnectionUrl = () => {
+
+
+
+
+  return `/api/subtitle-providers/opensubtitles/test`
+}
+
+export const testOpenSubtitlesConnection = async ( options?: RequestInit): Promise<testOpenSubtitlesConnectionResponse> => {
+
+  return orvalFetch<testOpenSubtitlesConnectionResponse>(getTestOpenSubtitlesConnectionUrl(),
+  {
+    ...options,
+    method: 'POST'
 
 
   }

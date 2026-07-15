@@ -1,4 +1,10 @@
-export type SubtitleSource = "sidecar" | "upload" | "embedded";
+export type SubtitleSource =
+  | "manual"
+  | "embedded"
+  | "generated"
+  | "provider"
+  | "upload"
+  | "sidecar";
 
 /**
  * The original on-disk format. `vtt` means the server only has a WebVTT

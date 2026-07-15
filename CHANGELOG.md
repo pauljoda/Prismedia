@@ -22,6 +22,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Release operations are now ready for channel publishing: the root package version is the source of truth, Docker builds validate the release metadata, pushes to `main` publish only the dev image, and alpha/beta/release images are published manually.
 
 ### Added
+- Added first-class OpenSubtitles acquisition: configure and test an account in Settings, find explainable hash/identity-ranked matches from a video's Transcript tab, import a selected subtitle into app-owned playback assets, or automatically fill missing configured languages using a strict confidence threshold.
 - Acquisition searches now label Usenet and torrent releases, prefer the configured download type before falling back, filter results to enabled download-client capabilities, and let Identify, Request, and release review reveal more than ten matches.
 - Entity library queries can now request several kinds at once, allowing native clients to load one server-filtered movie and TV activity feed without duplicate movie file rows.
 - Video libraries now discover subtitle files beside their videos automatically. Same-name SRT, VTT, ASS, and SSA files — including language or descriptive filename tags — are normalized into app-owned playback assets, and rescans reconcile additions, edits, renames, and removals.

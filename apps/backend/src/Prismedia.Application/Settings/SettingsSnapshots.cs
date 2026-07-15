@@ -83,6 +83,9 @@ public sealed record PlaybackSettings(
 public sealed record SubtitleSettings(
     bool AutoEnable,
     IReadOnlyList<string> PreferredLanguages,
+    bool AutoDownloadEnabled,
+    IReadOnlyList<string> AutoDownloadLanguages,
+    int AutoDownloadMinimumConfidence,
     string Style,
     float FontScale,
     float PositionPercent,

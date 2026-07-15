@@ -37,6 +37,9 @@ export const defaultLibrarySettings: LibrarySettings = {
   audioPreferredLanguages: "en,eng,en-US",
   subtitlesAutoEnable: false,
   subtitlesPreferredLanguages: "en,eng",
+  subtitlesAutoDownloadEnabled: false,
+  subtitlesAutoDownloadLanguages: "en",
+  subtitlesAutoDownloadMinimumConfidence: 90,
   subtitleStyle: "stylized",
   subtitleFontScale: 1,
   subtitlePositionPercent: 88,
@@ -236,6 +239,18 @@ export function valuesToLibrarySettings(
     subtitlesPreferredLanguages: valueAsStringListText(
       values[settingKeys.subtitlesPreferredLanguages],
       fallback.subtitlesPreferredLanguages,
+    ),
+    subtitlesAutoDownloadEnabled: valueAsBoolean(
+      values[settingKeys.subtitlesAutoDownloadEnabled],
+      fallback.subtitlesAutoDownloadEnabled,
+    ),
+    subtitlesAutoDownloadLanguages: valueAsStringListText(
+      values[settingKeys.subtitlesAutoDownloadLanguages],
+      fallback.subtitlesAutoDownloadLanguages,
+    ),
+    subtitlesAutoDownloadMinimumConfidence: valueAsNumber(
+      values[settingKeys.subtitlesAutoDownloadMinimumConfidence],
+      fallback.subtitlesAutoDownloadMinimumConfidence,
     ),
     subtitleStyle: valueAsString(values[settingKeys.subtitlesStyle], fallback.subtitleStyle),
     subtitleFontScale: valueAsNumber(

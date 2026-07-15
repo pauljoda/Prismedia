@@ -114,6 +114,12 @@ asset storage; the player never streams the live library sidecar. Incremental sc
 sidecars, so adding, editing, renaming, or removing one reconciles the video's tracks on the next
 scan. Multiple tracks may share a language.
 
+The Transcript tab can also search OpenSubtitles manually. Prismedia sends its standard
+OpenSubtitles file hash together with known IMDb/TMDB identity, filename, year, and episode numbers,
+then imports the selected result into generated storage rather than writing into the media folder.
+Optional automatic acquisition uses the same path after local subtitle reconciliation and only
+accepts candidates that meet the configured identity-confidence threshold.
+
 This discovery applies to sidecars already present beside media in a watched library. Acquisition
 imports do not yet move subtitle companion files from a download into the library. See
 [Playback & Reading](../using/playback.md#subtitles).

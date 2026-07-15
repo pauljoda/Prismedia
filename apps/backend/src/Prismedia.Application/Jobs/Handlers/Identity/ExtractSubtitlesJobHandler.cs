@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using Prismedia.Application.Jobs.Ports;
 using Prismedia.Contracts.Media;
 using Prismedia.Domain.Entities;
+using Prismedia.Application.Subtitles;
 
 namespace Prismedia.Application.Jobs.Handlers.Identity;
 
@@ -14,7 +15,8 @@ public sealed class ExtractSubtitlesJobHandler(
     IMediaProbe mediaProbe,
     ISubtitleAssetService assets,
     IMediaProcessingStatePersistence persistence,
-    ISubtitleSidecarDiscovery sidecars) : EntityFileJobHandler(logger, persistence) {
+    ISubtitleSidecarDiscovery sidecars,
+    IAutomaticSubtitleAcquisitionScheduler? acquisitionScheduler = null) : EntityFileJobHandler(logger, persistence) {
     public override JobType Type => JobType.ExtractSubtitles;
 
     protected override async Task ExecuteAsync(
@@ -111,6 +113,13 @@ public sealed class ExtractSubtitlesJobHandler(
             tracks.Count(track => track.Source == EntitySubtitleSource.Sidecar),
             context.Job.TargetLabel,
             failedCandidateCount);
+
+        if (failedCandidateCount == 0 && acquisitionScheduler is not null) {
+            await acquisitionScheduler.ScheduleAsync(
+                entityId,
+                context.Job.TargetLabel ?? entityId.ToString(),
+                cancellationToken);
+        }
 
         var completionMessage = failedCandidateCount == 0
             ? $"Reconciled {tracks.Count} subtitles"

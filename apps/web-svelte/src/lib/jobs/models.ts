@@ -96,6 +96,12 @@ export const queueDefinitions = [
     concurrency: 1,
   },
   {
+    name: "acquire-subtitles",
+    label: "Acquire Subtitles",
+    description: "Finds and imports trusted provider subtitles for missing preferred languages",
+    concurrency: 1,
+  },
+  {
     name: "collection-refresh",
     label: "Collection Refresh",
     description: "Re-evaluates dynamic collection rules and updates membership",
