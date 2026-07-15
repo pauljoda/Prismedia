@@ -3,6 +3,7 @@
   import { goto } from "$app/navigation";
   import { page } from "$app/state";
   import FileDetailPane from "$lib/components/files/FileDetailPane.svelte";
+  import FileDownloadStatus from "$lib/components/files/FileDownloadStatus.svelte";
   import FileTreePane from "$lib/components/files/FileTreePane.svelte";
   import ConfirmDialog from "$lib/components/entities/ConfirmDialog.svelte";
   import NameInputDialog from "$lib/components/entities/NameInputDialog.svelte";
@@ -13,7 +14,10 @@
     fetchFileChildren,
     fetchFileDetail,
     fetchFileRoots,
+    fileArchiveDownloadUrl,
+    fileDownloadUrl,
     moveFile as apiMoveFile,
+    prepareFolderArchiveDownload,
     renameFile as apiRenameFile,
     removeFileExclusion as apiRemoveFileExclusion,
     rescanFileRoot as apiRescanFileRoot,
@@ -22,6 +26,7 @@
     type FileRoot,
     type FileUploadItem,
   } from "$lib/api/files";
+  import { FILE_ENTRY_KIND } from "$lib/api/generated/codes";
   import { refreshEntity } from "$lib/api/entities";
   import type { FileActionId } from "$lib/files/file-actions";
   import {
@@ -48,6 +53,13 @@
     onConfirm: () => Promise<void>;
   }
 
+  interface DownloadActivity {
+    fileName: string;
+    message: string;
+    detail: string;
+    progressPercent: number | null;
+  }
+
   let roots = $state<FileRoot[]>([]);
   let registry = $state(new Map<string, FileTreeNodeMeta>());
   let treePaths = $state<string[]>([]);
@@ -65,6 +77,7 @@
   let lastNsfwMode = $state<string | null>(null);
   let pendingNameDialog = $state<PendingNameDialog | null>(null);
   let pendingConfirmation = $state<PendingConfirmation | null>(null);
+  let downloadActivity = $state<DownloadActivity | null>(null);
   const nsfw = useNsfw();
 
   const selectedMeta = $derived(selectedTreePath ? registry.get(selectedTreePath) ?? null : null);
@@ -304,11 +317,55 @@
     await refreshSelected();
   }
 
+  async function downloadEntry(meta: FileTreeNodeMeta): Promise<void> {
+    if (meta.kind === FILE_ENTRY_KIND.file) {
+      startBrowserDownload(fileDownloadUrl(meta.rootId, meta.path));
+      return;
+    }
+    if (downloadActivity) return;
+
+    downloadActivity = {
+      fileName: `${meta.name}.zip`,
+      message: "Collecting visible files…",
+      detail: "The download will begin automatically when the archive is ready.",
+      progressPercent: null,
+    };
+
+    try {
+      const ready = await prepareFolderArchiveDownload(meta.rootId, meta.path, {
+        onProgress: (preparation) => {
+          const fileLabel = preparation.totalFiles === 1 ? "file" : "files";
+          downloadActivity = {
+            fileName: preparation.fileName,
+            message: preparation.ready ? "Archive ready. Starting download…" : "Compressing folder…",
+            detail: `${preparation.processedFiles.toLocaleString()} of ${preparation.totalFiles.toLocaleString()} ${fileLabel}`,
+            progressPercent: preparation.progressPercent,
+          };
+        },
+      });
+      startBrowserDownload(fileArchiveDownloadUrl(ready.id));
+      await new Promise((resolve) => window.setTimeout(resolve, 1_000));
+    } finally {
+      downloadActivity = null;
+    }
+  }
+
+  function startBrowserDownload(url: string): void {
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "";
+    link.hidden = true;
+    document.body.append(link);
+    link.click();
+    link.remove();
+  }
+
   async function handleAction(action: FileActionId, treePath = selectedTreePath): Promise<void> {
     const meta = treePath ? registry.get(treePath) : null;
     if (!meta) return;
     try {
       if (action === "open") await selectTreePath(meta.treePath);
+      if (action === "download") await downloadEntry(meta);
       if (action === "new-folder") await createFolder(meta.kind === "directory" ? meta : directoryTarget(meta)!);
       if (action === "upload") requestFolderUpload(meta);
       if (action === "rename") await renameFile(meta);
@@ -525,6 +582,7 @@
     loading={loadingDetail}
     {error}
     mobile={mobileDetail}
+    downloadBusy={downloadActivity !== null}
     onBack={() => (mobileDetail = false)}
     onRefresh={() => void refreshSelected()}
     onAction={(action) => void handleAction(action)}
@@ -543,6 +601,15 @@
     onchange={(event) => onFolderUploadPicked(event.currentTarget)}
   />
 </main>
+
+{#if downloadActivity}
+  <FileDownloadStatus
+    fileName={downloadActivity.fileName}
+    message={downloadActivity.message}
+    detail={downloadActivity.detail}
+    progressPercent={downloadActivity.progressPercent}
+  />
+{/if}
 
 <NameInputDialog
   open={pendingNameDialog !== null}

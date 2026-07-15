@@ -1,5 +1,6 @@
-import { render, screen, within } from "@testing-library/svelte";
+import { fireEvent, render, screen, within } from "@testing-library/svelte";
 import { describe, expect, it } from "vitest";
+import { vi } from "vitest";
 import type { FileDetail } from "$lib/api/files";
 import FileDetailPane from "./FileDetailPane.svelte";
 
@@ -48,6 +49,15 @@ describe("FileDetailPane", () => {
     expect(screen.getByText("Library scans skip this path")).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "A Feature Film" })).not.toBeInTheDocument();
     expect(screen.queryByText("Linked entities")).not.toBeInTheDocument();
+  });
+
+  it("offers download for files and reports the action", async () => {
+    const onAction = vi.fn();
+    render(FileDetailPane, { props: { detail: fileDetail(), onAction } });
+
+    await fireEvent.click(screen.getByRole("button", { name: "Download" }));
+
+    expect(onAction).toHaveBeenCalledWith("download");
   });
 });
 

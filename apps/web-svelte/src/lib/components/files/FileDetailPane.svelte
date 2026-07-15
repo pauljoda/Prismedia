@@ -1,6 +1,7 @@
 <script lang="ts">
   import {
     FileArchive,
+    Download,
     FolderPlus,
     Image as ImageIcon,
     Pencil,
@@ -26,6 +27,7 @@
     loading?: boolean;
     error?: string | null;
     mobile?: boolean;
+    downloadBusy?: boolean;
     onBack?: () => void;
     onRefresh?: () => void;
     onAction?: (action: FileActionId) => void;
@@ -39,6 +41,7 @@
     loading = false,
     error = null,
     mobile = false,
+    downloadBusy = false,
     onBack,
     onRefresh,
     onAction,
@@ -203,6 +206,14 @@
     </div>
   {:else}
     <div class="detail-toolbar">
+      <button
+        type="button"
+        onclick={() => onAction?.("download")}
+        disabled={downloadBusy}
+        aria-label="Download"
+      >
+        <Download class="h-3.5 w-3.5" />Download
+      </button>
       {#if isDirectory}
         <button type="button" onclick={() => fileInput?.click()}><Upload class="h-3.5 w-3.5" />Upload</button>
         <button type="button" onclick={() => onAction?.("new-folder")}><FolderPlus class="h-3.5 w-3.5" />New folder</button>

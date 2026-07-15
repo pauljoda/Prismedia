@@ -57,10 +57,30 @@ public sealed class FilesVisibilityTests {
         Assert.Equal("not_found", error.Code);
     }
 
-    private static FilesService CreateService(IReadOnlySet<string>? hiddenPaths = null) =>
+    [Fact]
+    public async Task PrepareArchiveAsyncOmitsNsfwAssociatedDescendantsWhenHidden() {
+        var archives = new RecordingArchivePreparationService();
+        var service = CreateService(
+            new HashSet<string>(["/media/safe/hidden"], StringComparer.OrdinalIgnoreCase),
+            archives);
+
+        await service.PrepareArchiveAsync(
+            new FileArchiveRequest(SafeRootId, ""),
+            hideNsfw: true,
+            CancellationToken.None);
+
+        Assert.Equal(
+            ["visible", "visible/file.txt"],
+            Assert.IsType<FileArchivePlan>(archives.Plan).Entries.Select(entry => entry.ArchivePath).ToArray());
+    }
+
+    private static FilesService CreateService(
+        IReadOnlySet<string>? hiddenPaths = null,
+        IFileArchivePreparationService? archives = null) =>
         new(
             new FakeFilesPersistence(hiddenPaths ?? new HashSet<string>(StringComparer.OrdinalIgnoreCase)),
             new FakeStorage(),
+            archives ?? new RecordingArchivePreparationService(),
             new FakeJobQueue(),
             new EntitySourcePathMutationCoordinator(new NoSourceOwners(), new UnreachableLifecycleLease()));
 
@@ -122,22 +142,42 @@ public sealed class FilesVisibilityTests {
     private sealed class FakeStorage : IManagedFileStorage {
         public Task<IReadOnlyList<FileEntry>> ListChildrenAsync(
             ResolvedFilePath directory,
-            CancellationToken cancellationToken) =>
-            Task.FromResult<IReadOnlyList<FileEntry>>([
+            CancellationToken cancellationToken) {
+            if (directory.RelativePath == "visible") {
+                return Task.FromResult<IReadOnlyList<FileEntry>>([
+                    new(directory.Root.Id, "visible/file.txt", "file.txt", FileEntryKind.File, 4, "text/plain", null),
+                ]);
+            }
+
+            if (directory.RelativePath.Length > 0) {
+                return Task.FromResult<IReadOnlyList<FileEntry>>([]);
+            }
+
+            return Task.FromResult<IReadOnlyList<FileEntry>>([
                 new(directory.Root.Id, "visible", "visible", FileEntryKind.Directory, null, null, null),
                 new(directory.Root.Id, "hidden", "hidden", FileEntryKind.Directory, null, null, null),
             ]);
+        }
 
         public Task<FileDetail> GetDetailAsync(
             ResolvedFilePath path,
             IReadOnlyList<FileLinkedEntity> linkedEntities,
-            CancellationToken cancellationToken) =>
-            Task.FromResult(new FileDetail(
-                new FileEntry(path.Root.Id, path.RelativePath, Path.GetFileName(path.RelativePath), FileEntryKind.File, null, "video/mp4", null),
+            CancellationToken cancellationToken) {
+            var isRoot = path.RelativePath.Length == 0;
+            return Task.FromResult(new FileDetail(
+                new FileEntry(
+                    path.Root.Id,
+                    path.RelativePath,
+                    isRoot ? path.Root.Label : Path.GetFileName(path.RelativePath),
+                    isRoot ? FileEntryKind.Directory : FileEntryKind.File,
+                    null,
+                    isRoot ? null : "video/mp4",
+                    null),
                 path.AbsolutePath,
                 null,
                 linkedEntities,
-                true));
+                !isRoot));
+        }
 
         public Task<FileContentInfo> GetContentInfoAsync(
             ResolvedFilePath path,
@@ -151,6 +191,21 @@ public sealed class FilesVisibilityTests {
         public Task MoveAsync(ResolvedFilePath source, ResolvedFilePath target, CancellationToken cancellationToken) => Task.CompletedTask;
 
         public Task DeleteAsync(ResolvedFilePath path, CancellationToken cancellationToken) => Task.CompletedTask;
+    }
+
+    private sealed class RecordingArchivePreparationService : IFileArchivePreparationService {
+        public FileArchivePlan? Plan { get; private set; }
+
+        public FileArchivePreparation Start(FileArchivePlan plan) {
+            Plan = plan;
+            return new FileArchivePreparation(Guid.NewGuid(), plan.FileName, false, 0, 0, 0, null);
+        }
+
+        public FileArchivePreparation? Get(Guid id) => throw new NotSupportedException();
+
+        public PreparedFileArchive? Claim(Guid id) => throw new NotSupportedException();
+
+        public void Release(PreparedFileArchive archive) => throw new NotSupportedException();
     }
 
     private sealed class NoSourceOwners : IEntitySourcePathOwnerReader {

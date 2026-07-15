@@ -5,6 +5,7 @@ describe("file actions", () => {
   it("exposes core context actions for directories and files", () => {
     expect(fileContextActions("directory").map((action) => action.id)).toEqual([
       "open",
+      "download",
       "new-folder",
       "upload",
       "rename",
@@ -15,10 +16,21 @@ describe("file actions", () => {
     ]);
     expect(fileContextActions("file").map((action) => action.id)).toEqual([
       "open",
+      "download",
       "rename",
       "move",
       "exclude",
       "delete",
+    ]);
+  });
+
+  it("allows watched roots to be downloaded as archives", () => {
+    expect(fileContextActions("directory", true).map((action) => action.id)).toEqual([
+      "open",
+      "download",
+      "new-folder",
+      "upload",
+      "rescan",
     ]);
   });
 

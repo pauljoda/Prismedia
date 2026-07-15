@@ -16,6 +16,7 @@ public static class FilesEndpoints {
         group.MapFilesMutationEndpoints();
         group.MapFilesUploadEndpoint();
         group.MapFilesRescanEndpoint();
+        group.MapFilesDownloadEndpoints();
 
         group.MapGet("/detail", async (
             Guid rootId,

@@ -32,6 +32,39 @@ public sealed record FileContentInfo(
     DateTimeOffset? LastModified,
     long SizeBytes);
 
+/// <summary>One visible filesystem entry scheduled for a prepared ZIP archive.</summary>
+public sealed record FileArchiveEntry(
+    string AbsolutePath,
+    string ArchivePath,
+    bool IsDirectory,
+    long SizeBytes);
+
+/// <summary>Immutable input needed by the archive adapter after the request scope ends.</summary>
+public sealed record FileArchivePlan(
+    string FileName,
+    IReadOnlyList<FileArchiveEntry> Entries);
+
+/// <summary>A completed temporary ZIP claimed for one HTTP download response.</summary>
+public sealed record PreparedFileArchive(Guid Id, string AbsolutePath, string FileName);
+
+/// <summary>
+/// Ephemeral archive preparation port. Implementations perform compression outside the request
+/// scope, report progress, and clean up temporary files after download or expiry.
+/// </summary>
+public interface IFileArchivePreparationService {
+    /// <summary>Starts preparing an archive and immediately returns its initial progress snapshot.</summary>
+    FileArchivePreparation Start(FileArchivePlan plan);
+
+    /// <summary>Gets the latest preparation snapshot, or null when it has expired or never existed.</summary>
+    FileArchivePreparation? Get(Guid id);
+
+    /// <summary>Claims a ready archive for a single HTTP response.</summary>
+    PreparedFileArchive? Claim(Guid id);
+
+    /// <summary>Releases a claimed archive and deletes its temporary content.</summary>
+    void Release(PreparedFileArchive archive);
+}
+
 /// <summary>
 /// Persistence port for root metadata and catalog path rewrites used by the Files page.
 /// </summary>

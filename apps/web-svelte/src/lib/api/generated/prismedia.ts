@@ -61,6 +61,7 @@ import type {
   DownloadClientSummary,
   DownloadClientTestRequest,
   DownloadClientTestResponse,
+  DownloadFileParams,
   DownloadQueueItemView,
   EntityBulkDeleteRequest,
   EntityCard,
@@ -79,6 +80,8 @@ import type {
   EntityThumbnailBatchRequest,
   EntityThumbnailBatchResponse,
   ExcludeFileParams,
+  FileArchivePreparation,
+  FileArchiveRequest,
   FileChildrenResponse,
   FileCreateFolderRequest,
   FileDetail,
@@ -225,6 +228,7 @@ import type {
   PlaybackUpdateRequest,
   PluginAuthUpdateRequest,
   PluginProvider,
+  PrepareFileArchiveParams,
   PreviewCollectionRulesParams,
   ProblemDetails,
   RatingUpdateRequest,
@@ -10674,6 +10678,166 @@ export const rescanFileRoot = async (fileRescanRequest: FileRescanRequest,
     headers: { 'Content-Type': 'application/json', ...options?.headers },
     body: JSON.stringify(
       fileRescanRequest,)
+  }
+);}
+
+
+
+export type downloadFileResponse200 = {
+  data: void
+  status: 200
+}
+
+export type downloadFileResponseSuccess = (downloadFileResponse200) & {
+  headers: Headers;
+};
+;
+
+export type downloadFileResponse = (downloadFileResponseSuccess)
+
+export const getDownloadFileUrl = (params: DownloadFileParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/files/download?${stringifiedParams}` : `/api/files/download`
+}
+
+/**
+ * @summary Downloads one watched-root file as an attachment.
+ */
+export const downloadFile = async (params: DownloadFileParams, options?: RequestInit): Promise<downloadFileResponse> => {
+
+  return orvalFetch<downloadFileResponse>(getDownloadFileUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type prepareFileArchiveResponse202 = {
+  data: FileArchivePreparation
+  status: 202
+}
+
+export type prepareFileArchiveResponseSuccess = (prepareFileArchiveResponse202) & {
+  headers: Headers;
+};
+;
+
+export type prepareFileArchiveResponse = (prepareFileArchiveResponseSuccess)
+
+export const getPrepareFileArchiveUrl = (params?: PrepareFileArchiveParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/files/archives?${stringifiedParams}` : `/api/files/archives`
+}
+
+/**
+ * @summary Starts preparing a watched-root folder as a ZIP archive.
+ */
+export const prepareFileArchive = async (fileArchiveRequest: FileArchiveRequest,
+    params?: PrepareFileArchiveParams, options?: RequestInit): Promise<prepareFileArchiveResponse> => {
+
+  return orvalFetch<prepareFileArchiveResponse>(getPrepareFileArchiveUrl(params),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      fileArchiveRequest,)
+  }
+);}
+
+
+
+export type getFileArchiveStatusResponse200 = {
+  data: FileArchivePreparation
+  status: 200
+}
+
+export type getFileArchiveStatusResponseSuccess = (getFileArchiveStatusResponse200) & {
+  headers: Headers;
+};
+;
+
+export type getFileArchiveStatusResponse = (getFileArchiveStatusResponseSuccess)
+
+export const getGetFileArchiveStatusUrl = (id: string,) => {
+
+
+
+
+  return `/api/files/archives/${id}`
+}
+
+/**
+ * @summary Gets folder archive preparation progress.
+ */
+export const getFileArchiveStatus = async (id: string, options?: RequestInit): Promise<getFileArchiveStatusResponse> => {
+
+  return orvalFetch<getFileArchiveStatusResponse>(getGetFileArchiveStatusUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type downloadFileArchiveResponse200 = {
+  data: void
+  status: 200
+}
+
+export type downloadFileArchiveResponseSuccess = (downloadFileArchiveResponse200) & {
+  headers: Headers;
+};
+;
+
+export type downloadFileArchiveResponse = (downloadFileArchiveResponseSuccess)
+
+export const getDownloadFileArchiveUrl = (id: string,) => {
+
+
+
+
+  return `/api/files/archives/${id}/content`
+}
+
+/**
+ * @summary Downloads a prepared folder ZIP archive.
+ */
+export const downloadFileArchive = async (id: string, options?: RequestInit): Promise<downloadFileArchiveResponse> => {
+
+  return orvalFetch<downloadFileArchiveResponse>(getDownloadFileArchiveUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
   }
 );}
 

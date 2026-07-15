@@ -150,6 +150,32 @@ public sealed record FileExclusionRequest(Guid RootId, string Path);
 public sealed record FileRescanRequest(Guid RootId, string? Path);
 
 /// <summary>
+/// Request to prepare one watched-root directory as a downloadable ZIP archive.
+/// </summary>
+/// <param name="RootId">Library root identifier.</param>
+/// <param name="Path">Root-relative directory path. Empty string represents the root.</param>
+public sealed record FileArchiveRequest(Guid RootId, string? Path);
+
+/// <summary>
+/// Progress snapshot for an asynchronously prepared folder archive.
+/// </summary>
+/// <param name="Id">Ephemeral archive preparation identifier.</param>
+/// <param name="FileName">Download filename that will be used once ready.</param>
+/// <param name="Ready">Whether the archive is ready to download.</param>
+/// <param name="ProgressPercent">Compression progress from zero through one hundred.</param>
+/// <param name="ProcessedFiles">Number of files already added to the archive.</param>
+/// <param name="TotalFiles">Total number of visible files scheduled for the archive.</param>
+/// <param name="Error">Preparation failure message, or null while preparing or ready.</param>
+public sealed record FileArchivePreparation(
+    Guid Id,
+    string FileName,
+    bool Ready,
+    int ProgressPercent,
+    int ProcessedFiles,
+    int TotalFiles,
+    string? Error);
+
+/// <summary>
 /// Result returned after a successful filesystem mutation.
 /// </summary>
 /// <param name="ScansQueued">Number of scan jobs queued for the affected root or roots.</param>

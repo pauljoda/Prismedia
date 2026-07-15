@@ -1,6 +1,6 @@
 import { FILE_ENTRY_KIND, type FileEntryKindCode } from "$lib/api/generated/codes";
 
-export type FileActionId = "open" | "new-folder" | "upload" | "rename" | "move" | "rescan" | "exclude" | "remove-exclusion" | "delete";
+export type FileActionId = "open" | "download" | "new-folder" | "upload" | "rename" | "move" | "rescan" | "exclude" | "remove-exclusion" | "delete";
 
 export interface FileAction {
   id: FileActionId;
@@ -10,6 +10,7 @@ export interface FileAction {
 
 const rootActions: FileAction[] = [
   { id: "open", label: "Open" },
+  { id: "download", label: "Download" },
   { id: "new-folder", label: "New folder" },
   { id: "upload", label: "Upload files" },
   { id: "rescan", label: "Rescan" },
@@ -17,6 +18,7 @@ const rootActions: FileAction[] = [
 
 const directoryActions: FileAction[] = [
   { id: "open", label: "Open" },
+  { id: "download", label: "Download" },
   { id: "new-folder", label: "New folder" },
   { id: "upload", label: "Upload files" },
   { id: "rename", label: "Rename" },
@@ -28,6 +30,7 @@ const directoryActions: FileAction[] = [
 
 const fileActions: FileAction[] = [
   { id: "open", label: "Open" },
+  { id: "download", label: "Download" },
   { id: "rename", label: "Rename" },
   { id: "move", label: "Move" },
   { id: "exclude", label: "Exclude" },

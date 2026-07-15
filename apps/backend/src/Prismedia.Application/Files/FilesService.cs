@@ -1,6 +1,7 @@
 using Prismedia.Application.Jobs;
 using Prismedia.Contracts.Files;
 using Prismedia.Contracts.System;
+using Prismedia.Domain.Entities;
 
 namespace Prismedia.Application.Files;
 
@@ -12,6 +13,7 @@ namespace Prismedia.Application.Files;
 public sealed class FilesService(
     IFilesPersistence persistence,
     IManagedFileStorage storage,
+    IFileArchivePreparationService archives,
     IJobQueueService jobs,
     EntitySourcePathMutationCoordinator sourcePathMutations) {
     /// <summary>Lists watched roots available to the Files page.</summary>
@@ -69,6 +71,29 @@ public sealed class FilesService(
         var path = await ResolveAsync(request.RootId, request.Path, hideNsfw, cancellationToken);
         await EnsureVisiblePathAsync(path, hideNsfw, cancellationToken);
         return await storage.GetContentInfoAsync(path, cancellationToken);
+    }
+
+    /// <summary>
+    /// Collects the directory's visible entries and starts preparing an ephemeral ZIP archive.
+    /// Compression continues outside the request scope and is observed through the returned id.
+    /// </summary>
+    public async Task<FileArchivePreparation> PrepareArchiveAsync(
+        FileArchiveRequest request,
+        bool hideNsfw,
+        CancellationToken cancellationToken) {
+        var directory = await ResolveAsync(request.RootId, request.Path, hideNsfw, cancellationToken);
+        await EnsureVisiblePathAsync(directory, hideNsfw, cancellationToken);
+        var detail = await storage.GetDetailAsync(directory, [], cancellationToken);
+        if (detail.Entry.Kind != FileEntryKind.Directory) {
+            throw new FileOperationException(ApiProblemCodes.InvalidPath, "Only folders can be prepared as ZIP archives.");
+        }
+
+        var entries = new List<FileArchiveEntry>();
+        await CollectArchiveEntriesAsync(directory, directory, hideNsfw, entries, cancellationToken);
+        var folderName = string.IsNullOrWhiteSpace(directory.RelativePath)
+            ? directory.Root.Label
+            : Path.GetFileName(directory.RelativePath);
+        return archives.Start(new FileArchivePlan($"{SafeDownloadName(folderName)}.zip", entries));
     }
 
     /// <summary>Creates a folder and queues scans for the affected root.</summary>
@@ -227,6 +252,40 @@ public sealed class FilesService(
         if (!executed) {
             throw SourceLifecycleConflict(source.RelativePath);
         }
+    }
+
+    private async Task CollectArchiveEntriesAsync(
+        ResolvedFilePath archiveRoot,
+        ResolvedFilePath directory,
+        bool hideNsfw,
+        List<FileArchiveEntry> collected,
+        CancellationToken cancellationToken) {
+        var children = await storage.ListChildrenAsync(directory, cancellationToken);
+        if (hideNsfw) {
+            children = await FilterVisibleEntriesAsync(directory, children, cancellationToken);
+        }
+
+        foreach (var entry in children) {
+            cancellationToken.ThrowIfCancellationRequested();
+            var absolutePath = AbsolutePathForEntry(directory.Root.Path, entry.Path);
+            var archivePath = Path.GetRelativePath(archiveRoot.AbsolutePath, absolutePath).Replace('\\', '/');
+            var isDirectory = entry.Kind == FileEntryKind.Directory;
+            collected.Add(new FileArchiveEntry(absolutePath, archivePath, isDirectory, entry.SizeBytes ?? 0));
+            if (isDirectory) {
+                await CollectArchiveEntriesAsync(
+                    archiveRoot,
+                    new ResolvedFilePath(directory.Root, entry.Path, absolutePath),
+                    hideNsfw,
+                    collected,
+                    cancellationToken);
+            }
+        }
+    }
+
+    private static string SafeDownloadName(string value) {
+        var cleaned = string.Concat(value.Select(character =>
+            Path.GetInvalidFileNameChars().Contains(character) ? '_' : character)).Trim();
+        return string.IsNullOrWhiteSpace(cleaned) ? "files" : cleaned;
     }
 
     private static FileConflictException SourceLifecycleConflict(string relativePath) =>

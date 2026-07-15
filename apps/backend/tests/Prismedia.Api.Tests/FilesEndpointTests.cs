@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
+using System.IO.Compression;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -59,6 +60,62 @@ public sealed class FilesEndpointTests : IDisposable {
         Assert.Equal(10, response.Content.Headers.ContentLength);
         Assert.Equal("video/mp4", response.Content.Headers.ContentType?.MediaType);
         Assert.Equal("bytes", response.Headers.AcceptRanges.Single());
+    }
+
+    [Fact]
+    public async Task DownloadEndpointStreamsFilesAsAttachments() {
+        await File.WriteAllTextAsync(Path.Combine(_tempRoot.FullName, "notes.txt"), "download me");
+        using var factory = CreateFactory();
+        using var client = factory.CreateAuthenticatedClient();
+
+        using var response = await client.GetAsync(
+            $"/api/files/download?rootId={RootId}&path=notes.txt");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal("attachment", response.Content.Headers.ContentDisposition?.DispositionType);
+        Assert.Contains("notes.txt", response.Content.Headers.ContentDisposition?.FileNameStar);
+        Assert.Equal("download me", await response.Content.ReadAsStringAsync());
+    }
+
+    [Fact]
+    public async Task FolderArchivePreparationReportsProgressAndDownloadsNestedZip() {
+        var folder = Directory.CreateDirectory(Path.Combine(_tempRoot.FullName, "Season 1"));
+        Directory.CreateDirectory(Path.Combine(folder.FullName, "Extras"));
+        await File.WriteAllTextAsync(Path.Combine(folder.FullName, "episode 1.txt"), "episode");
+        await File.WriteAllTextAsync(Path.Combine(folder.FullName, "Extras", "notes.txt"), "notes");
+        using var factory = CreateFactory();
+        using var client = factory.CreateAuthenticatedClient();
+
+        using var startResponse = await client.PostAsJsonAsync(
+            "/api/files/archives",
+            new FileArchiveRequest(RootId, "Season 1"));
+        var preparation = Assert.IsType<FileArchivePreparation>(
+            await startResponse.Content.ReadFromJsonAsync<FileArchivePreparation>());
+
+        Assert.Equal(HttpStatusCode.Accepted, startResponse.StatusCode);
+        Assert.Equal("Season 1.zip", preparation.FileName);
+        Assert.Equal(2, preparation.TotalFiles);
+
+        for (var attempt = 0; attempt < 100 && !preparation.Ready && preparation.Error is null; attempt++) {
+            await Task.Delay(20);
+            preparation = Assert.IsType<FileArchivePreparation>(
+                await client.GetFromJsonAsync<FileArchivePreparation>($"/api/files/archives/{preparation.Id}"));
+        }
+
+        Assert.True(preparation.Ready, preparation.Error ?? "Archive did not become ready.");
+        Assert.Equal(100, preparation.ProgressPercent);
+        Assert.Equal(2, preparation.ProcessedFiles);
+
+        using var archiveResponse = await client.GetAsync($"/api/files/archives/{preparation.Id}/content");
+        await using var archiveStream = await archiveResponse.Content.ReadAsStreamAsync();
+        using var archive = new ZipArchive(archiveStream, ZipArchiveMode.Read);
+
+        Assert.Equal(HttpStatusCode.OK, archiveResponse.StatusCode);
+        Assert.Equal("attachment", archiveResponse.Content.Headers.ContentDisposition?.DispositionType);
+        Assert.Contains("Season 1.zip", archiveResponse.Content.Headers.ContentDisposition?.FileNameStar);
+        Assert.Equal(
+            ["episode 1.txt", "Extras/notes.txt"],
+            archive.Entries.Where(entry => entry.Name.Length > 0).Select(entry => entry.FullName).Order().ToArray());
     }
 
     [Fact]

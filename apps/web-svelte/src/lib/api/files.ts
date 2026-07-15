@@ -1,12 +1,16 @@
 import {
   createFileFolder as createFileFolderRequest,
   deleteFile as deleteFileRequest,
+  getDownloadFileArchiveUrl,
+  getDownloadFileUrl,
   excludeFile as excludeFileRequest,
+  getFileArchiveStatus,
   getFileDetail,
   getGetFileContentUrl,
   listFileChildren,
   listFileRoots,
   moveFile as moveFileRequest,
+  prepareFileArchive,
   removeFileExclusion as removeFileExclusionRequest,
   renameFile as renameFileRequest,
   rescanFileRoot as rescanFileRootRequest,
@@ -14,6 +18,7 @@ import {
 } from "$lib/api/generated/prismedia";
 import type {
   FileChildrenResponse,
+  FileArchivePreparation as GeneratedFileArchivePreparation,
   FileCreateFolderRequest,
   FileDetail as GeneratedFileDetail,
   FileEntry,
@@ -45,6 +50,21 @@ export interface FileOperationResponse {
 export interface FileUploadItem {
   file: File;
   relativePath: string;
+}
+
+export interface FileArchivePreparation {
+  id: string;
+  fileName: string;
+  ready: boolean;
+  progressPercent: number;
+  processedFiles: number;
+  totalFiles: number;
+  error: string | null;
+}
+
+export interface FileArchivePreparationOptions extends RequestOptions {
+  pollIntervalMs?: number;
+  onProgress?: (preparation: FileArchivePreparation) => void;
 }
 
 export async function fetchFileRoots(options?: RequestOptions): Promise<FileRootsResponse> {
@@ -80,6 +100,47 @@ export async function fetchFileDetail(
 
 export function fileContentUrl(rootId: string, path = ""): string {
   return apiPath(getGetFileContentUrl({ rootId, path }));
+}
+
+export function fileDownloadUrl(rootId: string, path = ""): string {
+  return apiPath(getDownloadFileUrl({ rootId, path }));
+}
+
+export function fileArchiveDownloadUrl(id: string): string {
+  return apiPath(getDownloadFileArchiveUrl(id));
+}
+
+export async function prepareFolderArchiveDownload(
+  rootId: string,
+  path = "",
+  options: FileArchivePreparationOptions = {},
+): Promise<FileArchivePreparation> {
+  let preparation = normalizeArchivePreparation(
+    unwrapGenerated(
+      await prepareFileArchive(
+        { rootId, path },
+        undefined,
+        requestInit(options),
+      ),
+      "Failed to start folder archive",
+      [202],
+    ),
+  );
+  options.onProgress?.(preparation);
+
+  while (!preparation.ready && preparation.error === null) {
+    await waitForPoll(options.pollIntervalMs ?? 500, options.signal);
+    preparation = normalizeArchivePreparation(
+      unwrapGenerated(
+        await getFileArchiveStatus(preparation.id, requestInit(options)),
+        "Failed to check folder archive",
+      ),
+    );
+    options.onProgress?.(preparation);
+  }
+
+  if (preparation.error) throw new Error(preparation.error);
+  return preparation;
 }
 
 export function entityFileUrl(entityId: string, role: EntityFileRoleCode): string {
@@ -207,6 +268,33 @@ function normalizeFileOperation(
   return {
     scansQueued: Number(response.scansQueued),
   };
+}
+
+function normalizeArchivePreparation(
+  preparation: GeneratedFileArchivePreparation,
+): FileArchivePreparation {
+  return {
+    ...preparation,
+    progressPercent: Number(preparation.progressPercent),
+    processedFiles: Number(preparation.processedFiles),
+    totalFiles: Number(preparation.totalFiles),
+  };
+}
+
+function waitForPoll(delayMs: number, signal?: AbortSignal): Promise<void> {
+  if (signal?.aborted) return Promise.reject(signal.reason);
+  return new Promise((resolve, reject) => {
+    const onElapsed = () => {
+      signal?.removeEventListener("abort", onAbort);
+      resolve();
+    };
+    const onAbort = () => {
+      window.clearTimeout(timeout);
+      reject(signal?.reason ?? new DOMException("Archive preparation was cancelled.", "AbortError"));
+    };
+    const timeout = window.setTimeout(onElapsed, delayMs);
+    signal?.addEventListener("abort", onAbort, { once: true });
+  });
 }
 
 function normalizeOptionalNumber(value: number | string | null | undefined): number | null {

@@ -280,6 +280,7 @@ public static class DependencyInjection {
         services.AddScoped<IFilesPersistence, EfFilesPersistence>();
         services.AddScoped<IEntitySourcePathOwnerReader, EfEntitySourcePathOwnerReader>();
         services.AddSingleton<IManagedFileStorage, LocalManagedFileStorage>();
+        services.AddSingleton<IFileArchivePreparationService, FileArchivePreparationService>();
     }
 
     private static void RegisterPlayback(
