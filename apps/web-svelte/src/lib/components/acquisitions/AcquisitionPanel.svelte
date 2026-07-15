@@ -1,8 +1,9 @@
 <script lang="ts">
   import { onDestroy } from "svelte";
-  import { CloudDownload, FileText, History, Loader2, RefreshCw, Search, SearchX, Upload, X } from "@lucide/svelte";
+  import { CloudDownload, FileText, History, Loader2, RefreshCw, RotateCcw, Search, SearchX, Upload, X } from "@lucide/svelte";
   import { Badge, Button } from "@prismedia/ui-svelte";
   import AcquisitionHistoryList from "$lib/components/acquisitions/AcquisitionHistoryList.svelte";
+  import ConfirmDialog from "$lib/components/entities/ConfirmDialog.svelte";
   import PieceStateBar from "$lib/components/acquisitions/PieceStateBar.svelte";
   import ReleaseTable from "$lib/components/acquisitions/ReleaseTable.svelte";
   import StatePlaceholder from "$lib/components/StatePlaceholder.svelte";
@@ -18,6 +19,7 @@
   import {
     blocklistAcquisitionCandidate,
     cancelAcquisition,
+    deleteAcquisition,
     reSearchAcquisition,
     retryAcquisitionImport,
     fetchAcquisition,
@@ -45,6 +47,7 @@
     detail = $bindable(null),
     onCancelled,
     onImported,
+    onReset,
   }: {
     acquisitionId: string;
     /** The loaded acquisition, bound up so a host page can drive its own hero/badges from it. */
@@ -56,6 +59,8 @@
     onCancelled?: () => void;
     /** Called once when live status observes this acquisition cross into Imported. */
     onImported?: () => void | Promise<void>;
+    /** Reloads the owning Entity after the old acquisition is replaced with a clean search. */
+    onReset?: () => void | Promise<void>;
   } = $props();
 
   let transfer = $state<AcquisitionTransferView | null>(null);
@@ -65,6 +70,7 @@
   let busy = $state(false);
   let pollTimer: ReturnType<typeof setInterval> | null = null;
   let bridgePolls = $state(0);
+  let resetConfirmOpen = $state(false);
 
   const status = $derived(detail?.summary.status ?? null);
   const hasResumableImport = $derived(detail?.summary.hasResumableImport === true);
@@ -72,6 +78,7 @@
     status === ACQUISITION_STATUS.manualImportRequired ||
       (status === ACQUISITION_STATUS.failed && hasResumableImport),
   );
+  const canStartOver = $derived(hasResumableImport && status !== ACQUISITION_STATUS.stopping);
   const isActive = $derived(status ? ACTIVE_ACQUISITION_STATUSES.includes(status) : false);
   const transitionLocked = $derived(
     status !== null && (
@@ -252,6 +259,21 @@
     }
   }
 
+  async function startOver() {
+    if (busy) return;
+    busy = true;
+    try {
+      await deleteAcquisition(acquisitionId);
+      detail = null;
+      await onReset?.();
+    } catch (err) {
+      error = err instanceof Error ? err.message : "Failed to start acquisition over";
+      throw err;
+    } finally {
+      busy = false;
+    }
+  }
+
   async function onUpload(event: Event) {
     const input = event.currentTarget as HTMLInputElement;
     const file = input.files?.[0];
@@ -342,6 +364,19 @@
           >
             <CloudDownload class="h-3.5 w-3.5" />
             {status === ACQUISITION_STATUS.manualImportRequired ? "Import anyway" : "Retry import"}
+          </Button>
+        {/if}
+        {#if canStartOver}
+          <Button
+            type="button"
+            variant="danger"
+            class="gap-1.5"
+            disabled={busy}
+            onclick={() => (resetConfirmOpen = true)}
+            title="Discard the interrupted import, its partial files, and the current download, then begin a clean search."
+          >
+            <RotateCcw class="h-3.5 w-3.5" />
+            Start over
           </Button>
         {/if}
         {#if canReSearch}
@@ -506,6 +541,16 @@
     {/if}
   </div>
 {/if}
+
+<ConfirmDialog
+  open={resetConfirmOpen}
+  title="Start this acquisition over?"
+  message="This permanently deletes every file owned by the interrupted import, removes any remaining download data it can reach, clears the partial state, and starts a clean search for the still-Wanted item. Existing library files from before an upgrade are restored when a recovery copy exists."
+  confirmLabel="Start over"
+  danger
+  onConfirm={startOver}
+  onClose={() => (resetConfirmOpen = false)}
+/>
 
 {#snippet stat(label: string, value: string)}
   <div class="flex flex-col gap-0.5">

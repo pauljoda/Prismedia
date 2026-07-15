@@ -168,6 +168,7 @@
               detail={row.acquisition}
               onCancelled={onChanged}
               onImported={onChanged}
+              onReset={onChanged}
             />
           </div>
         {/key}

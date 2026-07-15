@@ -1133,7 +1133,11 @@ public sealed class MediaEntityDeletionServiceTests {
             NullLogger<AcquisitionService>.Instance,
             monitorStore,
             new AcquisitionJobCleanup(db),
-            new EfEntityLifecycleMutationLease(db, new EfEntityHierarchyReader(db)));
+            new EfEntityLifecycleMutationLease(db, new EfEntityHierarchyReader(db)),
+            new AcquisitionImportResetCleanup(
+                db,
+                new Prismedia.Application.Jobs.Scanning.VideoScanConcurrencyGate(),
+                NullLogger<AcquisitionImportResetCleanup>.Instance));
         var service = new MediaEntityDeletionService(
             db,
             new FakeRoots(root),

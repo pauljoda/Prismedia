@@ -155,7 +155,7 @@
 <ConfirmDialog
   open={confirmOpen}
   title={`Remove ${removeCount} download${removeCount === 1 ? "" : "s"}?`}
-  message={`This removes the selected ${removeCount === 1 ? "download" : "downloads"} and deletes any associated transfer data from the download client. Monitored items stay Wanted and can search again; use Unmonitor or Remove wanted when you mean to stop tracking them.`}
+  message={`This removes the selected ${removeCount === 1 ? "download" : "downloads"}, deletes associated transfer data when reachable, and clears any interrupted import state and partial files. Monitored items stay Wanted and start again with a clean search; use Unmonitor or Remove wanted when you mean to stop tracking them.`}
   confirmLabel="Remove"
   danger
   onConfirm={removeSelected}

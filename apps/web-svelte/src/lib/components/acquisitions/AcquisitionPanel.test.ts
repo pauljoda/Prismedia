@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, waitFor } from "@testing-library/svelte";
+import { cleanup, fireEvent, render, waitFor, within } from "@testing-library/svelte";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   ACQUISITION_STATUS,
@@ -12,11 +12,13 @@ const mocks = vi.hoisted(() => ({
   fetchAcquisitionFiles: vi.fn(),
   fetchAcquisitionHistory: vi.fn(),
   retryAcquisitionImport: vi.fn(),
+  deleteAcquisition: vi.fn(),
 }));
 
 vi.mock("$lib/api/acquisitions", () => ({
   blocklistAcquisitionCandidate: vi.fn(),
   cancelAcquisition: vi.fn(),
+  deleteAcquisition: mocks.deleteAcquisition,
   fetchAcquisition: mocks.fetchAcquisition,
   fetchAcquisitionFiles: mocks.fetchAcquisitionFiles,
   fetchAcquisitionHistory: mocks.fetchAcquisitionHistory,
@@ -25,6 +27,10 @@ vi.mock("$lib/api/acquisitions", () => ({
   reSearchAcquisition: vi.fn(),
   retryAcquisitionImport: mocks.retryAcquisitionImport,
   uploadManualTorrent: vi.fn(),
+}));
+
+vi.mock("$lib/components/entities/ConfirmDialog.svelte", async () => ({
+  default: (await import("./ConfirmDialog.test-stub.svelte")).default,
 }));
 
 describe("AcquisitionPanel", () => {
@@ -141,6 +147,27 @@ describe("AcquisitionPanel", () => {
     expect(view.queryByRole("button", { name: "Search again" })).toBeNull();
     await fireEvent.click(retry);
     expect(mocks.retryAcquisitionImport).toHaveBeenCalledWith("acquisition-1", false);
+  });
+
+  it("offers a confirmed destructive start-over for a failed durable checkpoint", async () => {
+    const failed = acquisition(ACQUISITION_STATUS.failed, true);
+    const onReset = vi.fn();
+    mocks.fetchAcquisition.mockResolvedValue(failed);
+    mocks.deleteAcquisition.mockResolvedValue(undefined);
+
+    const view = render(AcquisitionPanel, {
+      acquisitionId: "acquisition-1",
+      detail: failed,
+      onReset,
+    });
+
+    await fireEvent.click(await view.findByRole("button", { name: "Start over" }));
+    const dialog = view.getByRole("dialog", { name: "Start this acquisition over?" });
+    expect(within(dialog).getByText(/deletes every file owned by the interrupted import/i)).toBeInTheDocument();
+    await fireEvent.click(within(dialog).getByRole("button", { name: "Confirm Start over" }));
+
+    await waitFor(() => expect(mocks.deleteAcquisition).toHaveBeenCalledWith("acquisition-1"));
+    expect(onReset).toHaveBeenCalledOnce();
   });
 
   it("does not offer retry while a durable import is already running", async () => {

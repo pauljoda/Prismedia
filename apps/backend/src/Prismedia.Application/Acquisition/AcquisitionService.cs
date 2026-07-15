@@ -144,6 +144,18 @@ public interface IAcquisitionJobCleanup {
 }
 
 /// <summary>
+/// Removes filesystem and catalog artifacts owned by an interrupted import checkpoint. This is the
+/// explicit destructive escape hatch used only when the user chooses to discard the attempt and start over.
+/// </summary>
+public interface IAcquisitionImportResetCleanup {
+    /// <summary>
+    /// Best-effort deletes newly placed payload files, restores a retained pre-upgrade file when possible,
+    /// and clears catalog rows that point at discarded paths. Missing artifacts are already clean.
+    /// </summary>
+    Task CleanupAsync(AcquisitionImportContext import, CancellationToken cancellationToken);
+}
+
+/// <summary>
 /// Application use case for the acquisition lifecycle from the API's perspective: create an acquisition
 /// from request metadata and kick off a background release search, then list and read acquisition state.
 /// </summary>
@@ -159,6 +171,7 @@ public sealed class AcquisitionService(
     IMonitorStore monitors,
     IAcquisitionJobCleanup acquisitionJobs,
     IEntityLifecycleMutationLease entityLifecycle,
+    IAcquisitionImportResetCleanup importResetCleanup,
     VideoScanConcurrencyGate? scanGate = null) : IAcquisitionRequestService {
     public Task<IReadOnlyList<AcquisitionSummary>> ListAsync(CancellationToken cancellationToken) =>
         store.ListAsync(cancellationToken);
@@ -573,7 +586,11 @@ public sealed class AcquisitionService(
                     "This acquisition is already stopping. Retry the operation that started its cleanup.");
             }
         } else if (preserveWantedLoop) {
-            await EnsureImportCheckpointCanBeSupersededAsync(detail, cancellationToken);
+            if (detail.Summary.Status == AcquisitionStatus.Imported) {
+                throw new AcquisitionConfigurationException(
+                    ApiProblemCodes.AcquisitionInvalid,
+                    "This acquisition already owns library files. Use Delete files when you want to remove them and reacquire.");
+            }
             if (!await store.TryClaimTeardownAsync(
                     id,
                     detail.Summary.Status,
@@ -589,10 +606,18 @@ public sealed class AcquisitionService(
         if (preserveWantedLoop || detail.Summary.Status == AcquisitionStatus.Stopping) {
             await acquisitionJobs.CancelAsync(id, cancellationToken);
         }
-        // Every path below hard-deletes or supersedes the only durable transfer pointer. Prove the remote
-        // item absent first; an outage leaves this Stopping row and its pointer retryable instead of
-        // orphaning client data.
-        await RemoveTransferDataStrictAsync(id, cancellationToken);
+
+        if (preserveWantedLoop) {
+            await CleanupInterruptedImportAsync(id, cancellationToken);
+            // Downloads -> Remove is explicitly destructive and already warns that transfer data is being
+            // discarded. A missing client, missing item, or client outage must not strand local state in
+            // Stopping forever; remove remotely when possible, then finish the local reset regardless.
+            await RemoveTransferDataAsync(id, cancellationToken);
+        } else {
+            // Entity deletion and unmonitoring promise that no owned remote transfer is orphaned, so those
+            // stricter workflows still fail closed until absence is proven.
+            await RemoveTransferDataStrictAsync(id, cancellationToken);
+        }
 
         if (preserveWantedLoop) {
             // The replacement is durably elected and linked from the Stopping owner before retargeting.
@@ -642,6 +667,38 @@ public sealed class AcquisitionService(
         return preserveWantedLoop
             ? await store.DeleteAsync(id, cancellationToken)
             : await CompleteTeardownAsync(id, AcquisitionTeardownIntent.Remove, cancellationToken);
+    }
+
+    private async Task CleanupInterruptedImportAsync(Guid id, CancellationToken cancellationToken) {
+        AcquisitionImportContext? import;
+        try {
+            import = await store.GetImportContextAsync(id, cancellationToken);
+        } catch (InvalidDataException exception) {
+            // A corrupt checkpoint cannot be interpreted safely, but it also must not make the acquisition
+            // row undeletable. The exact download transfer is still removed best-effort below.
+            logger.LogWarning(
+                exception,
+                "Acquisition {Id} has a corrupt import checkpoint; clearing its lifecycle without guessing filesystem paths.",
+                id);
+            return;
+        }
+
+        if (import is not ({ TvImportCheckpoint: not null } or { ImportPlacementCheckpoint: not null })) {
+            return;
+        }
+
+        try {
+            await importResetCleanup.CleanupAsync(import, cancellationToken);
+        } catch (OperationCanceledException) {
+            throw;
+        } catch (Exception exception) {
+            // This action is the explicit force-clear escape hatch. Preserve diagnostics, but do not turn a
+            // missing/locked leftover into the same permanent 500 loop the user is trying to escape.
+            logger.LogWarning(
+                exception,
+                "Acquisition {Id} could not remove every partial import artifact while starting over.",
+                id);
+        }
     }
 
     /// <inheritdoc />

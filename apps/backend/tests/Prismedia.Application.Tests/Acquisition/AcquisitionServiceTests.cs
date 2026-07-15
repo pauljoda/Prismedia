@@ -250,29 +250,12 @@ public sealed class AcquisitionServiceTests {
     }
 
     [Fact]
-    public async Task PreserveWantedDeleteRetainsItsPointerAndReplacementElectionAcrossRemoteOutageRetry() {
+    public async Task PreserveWantedDeleteClearsLocalStateWhenTheRemoteClientIsOffline() {
         var harness = Harness(TransferInfo(RecordedClientId));
         var replacementId = Guid.NewGuid();
         harness.Store.CloneResult = replacementId;
         harness.Downloads.RemoveFailure = new IOException("client offline");
 
-        var exception = await Assert.ThrowsAsync<AcquisitionConfigurationException>(() =>
-            harness.Service.DeleteAsync(
-                AcquisitionId,
-                CancellationToken.None,
-                preserveWantedLoop: true));
-
-        Assert.Contains("client offline", exception.Message, StringComparison.OrdinalIgnoreCase);
-        Assert.False(harness.Store.Deleted);
-        Assert.NotNull(harness.Store.TransferPointer);
-        Assert.Equal(AcquisitionStatus.Stopping, harness.Store.Status);
-        Assert.Equal(
-            AcquisitionTeardownIntent.Reacquire,
-            harness.Store.TeardownClaim?.Intent);
-        Assert.Null(harness.Store.TeardownReplacementId);
-        Assert.Empty(harness.Monitors.Retargets);
-
-        harness.Downloads.RemoveFailure = null;
         Assert.True(await harness.Service.DeleteAsync(
             AcquisitionId,
             CancellationToken.None,
@@ -282,6 +265,45 @@ public sealed class AcquisitionServiceTests {
         Assert.Equal(replacementId, harness.Store.TeardownReplacementId);
         Assert.Equal([(AcquisitionId, replacementId)], harness.Monitors.Retargets);
         Assert.Equal(0, harness.Store.CloneCalls);
+    }
+
+    [Fact]
+    public async Task PreserveWantedDeleteDestructivelyClearsAPartialImportBeforeStartingOver() {
+        var harness = Harness(TransferInfo(RecordedClientId, AcquisitionStatus.Failed));
+        var import = PartialBookImportContext();
+        var replacementId = Guid.NewGuid();
+        harness.Store.ImportContext = import;
+        harness.Store.HasResumableImport = true;
+        harness.Store.CloneResult = replacementId;
+
+        Assert.True(await harness.Service.DeleteAsync(
+            AcquisitionId,
+            CancellationToken.None,
+            preserveWantedLoop: true));
+
+        Assert.Equal([import], harness.ImportCleanup.Cleaned);
+        Assert.Equal([AcquisitionId], harness.JobCleanup.Cancelled);
+        Assert.Equal([(AcquisitionId, replacementId)], harness.Monitors.Retargets);
+        Assert.True(harness.Store.Deleted);
+    }
+
+    [Fact]
+    public async Task PreserveWantedDeleteCanStopAndClearAStuckImportingAttempt() {
+        var harness = Harness(TransferInfo(RecordedClientId, AcquisitionStatus.Importing));
+        var import = PartialBookImportContext();
+        var replacementId = Guid.NewGuid();
+        harness.Store.ImportContext = import;
+        harness.Store.HasResumableImport = true;
+        harness.Store.CloneResult = replacementId;
+
+        Assert.True(await harness.Service.DeleteAsync(
+            AcquisitionId,
+            CancellationToken.None,
+            preserveWantedLoop: true));
+
+        Assert.Equal([import], harness.ImportCleanup.Cleaned);
+        Assert.Equal(AcquisitionStatus.Stopping, harness.Store.Status);
+        Assert.True(harness.Store.Deleted);
     }
 
     [Fact]
@@ -876,6 +898,7 @@ public sealed class AcquisitionServiceTests {
         var queue = new RecordingJobQueue();
         var jobCleanup = new RecordingAcquisitionJobCleanup();
         var lifecycle = new RecordingEntityLifecycleLease();
+        var importCleanup = new RecordingImportResetCleanup();
         var service = new AcquisitionService(
             store,
             new ThrowingBlocklistStore(),
@@ -887,9 +910,10 @@ public sealed class AcquisitionServiceTests {
             NullLogger<AcquisitionService>.Instance,
             monitors,
             jobCleanup,
-            lifecycle);
+            lifecycle,
+            importCleanup);
 
-        return new TestHarness(service, store, downloads, history, monitors, queue, jobCleanup, lifecycle);
+        return new TestHarness(service, store, downloads, history, monitors, queue, jobCleanup, lifecycle, importCleanup);
     }
 
     private static void PrepareQueueCandidate(FakeAcquisitionStore store) {
@@ -933,7 +957,8 @@ public sealed class AcquisitionServiceTests {
         RecordingMonitorStore Monitors,
         RecordingJobQueue Queue,
         RecordingAcquisitionJobCleanup JobCleanup,
-        RecordingEntityLifecycleLease Lifecycle);
+        RecordingEntityLifecycleLease Lifecycle,
+        RecordingImportResetCleanup ImportCleanup);
 
     private sealed class RecordingEntityLifecycleLease : IEntityLifecycleMutationLease {
         public bool Allow { get; set; } = true;
@@ -995,6 +1020,15 @@ public sealed class AcquisitionServiceTests {
         public Task<int> CancelAsync(Guid acquisitionId, CancellationToken cancellationToken) {
             Cancelled.Add(acquisitionId);
             return Task.FromResult(1);
+        }
+    }
+
+    private sealed class RecordingImportResetCleanup : IAcquisitionImportResetCleanup {
+        public List<AcquisitionImportContext> Cleaned { get; } = [];
+
+        public Task CleanupAsync(AcquisitionImportContext import, CancellationToken cancellationToken) {
+            Cleaned.Add(import);
+            return Task.CompletedTask;
         }
     }
 

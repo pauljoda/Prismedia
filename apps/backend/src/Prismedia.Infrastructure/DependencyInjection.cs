@@ -401,6 +401,7 @@ public static class DependencyInjection {
         services.AddScoped<IAcquisitionHistoryStore, EfAcquisitionHistoryStore>();
         services.AddScoped<IMonitorStore, EfMonitorStore>();
         services.AddScoped<IAcquisitionJobCleanup, AcquisitionJobCleanup>();
+        services.AddScoped<IAcquisitionImportResetCleanup, AcquisitionImportResetCleanup>();
         services.AddScoped<IEntityUnmonitorPersistence, EfEntityUnmonitorPersistence>();
         // Explicit indexer timeouts: a hung indexer must fail the search (which surfaces per-indexer in
         // the outcome) rather than pin the whole search job. Prowlarr gets longer because one call fans

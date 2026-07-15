@@ -849,7 +849,11 @@ public sealed class EntityLifecycleConcurrencyPostgresTests {
             NullLogger<AcquisitionService>.Instance,
             new EfMonitorStore(db, hierarchy, lifecycle),
             new AcquisitionJobCleanup(db),
-            lifecycle);
+            lifecycle,
+            new AcquisitionImportResetCleanup(
+                db,
+                new Prismedia.Application.Jobs.Scanning.VideoScanConcurrencyGate(),
+                NullLogger<AcquisitionImportResetCleanup>.Instance));
     }
 
     private sealed class ThrowingBlocklistStore : IAcquisitionBlocklistStore {

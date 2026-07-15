@@ -189,6 +189,7 @@
           bind:detail={acq.acquisition}
           {onCancelled}
           {onImported}
+          onReset={acq.refresh}
         />
       {/key}
     {/if}
