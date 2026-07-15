@@ -140,9 +140,14 @@
   }
 
   function handleArtworkLoad(event: Event) {
-    const loadedCoverUrl = coverUrl;
-    if (!loadedCoverUrl || artworkPaletteState?.coverUrl === loadedCoverUrl) return;
-    const palette = paletteFromImage(event.currentTarget as HTMLImageElement);
+    const image = event.currentTarget as HTMLImageElement;
+    const loadedCoverUrl = image.dataset.artworkUrl;
+    if (
+      !loadedCoverUrl ||
+      loadedCoverUrl !== coverUrl ||
+      artworkPaletteState?.coverUrl === loadedCoverUrl
+    ) return;
+    const palette = paletteFromImage(image);
     if (palette) artworkPaletteState = { coverUrl: loadedCoverUrl, palette };
   }
 
@@ -774,7 +779,6 @@
     style:cursor={dragging ? "grabbing" : "grab"}
     style:--player-accent={playerPalette.primary}
     style:--player-secondary={playerPalette.secondary}
-    style:--player-background={playerPalette.background}
   >
     {#if playing}
       <span class="audio-notes" aria-hidden="true">
@@ -785,7 +789,16 @@
     {/if}
     <span class="block h-full w-full overflow-hidden rounded-xl">
       {#if coverUrl}
-        <img src={coverUrl} alt="" class="h-full w-full object-cover" decoding="async" onload={handleArtworkLoad} />
+        {#key coverUrl}
+          <img
+            src={coverUrl}
+            data-artwork-url={coverUrl}
+            alt=""
+            class="h-full w-full object-cover"
+            decoding="async"
+            onload={handleArtworkLoad}
+          />
+        {/key}
       {:else}
         <span class="flex h-full w-full items-center justify-center bg-black/20 text-accent-500/80">
           <Music class="h-5 w-5" />
@@ -797,11 +810,10 @@
 <div
   bind:this={rootEl}
   class={cn(
-    "audio-player fixed bottom-[calc(3.65rem+max(1.25rem,env(safe-area-inset-bottom,0px))+1.1rem)] left-3 right-3 z-[55] mx-auto max-w-3xl rounded-xl border shadow-[0_18px_56px_rgba(0,0,0,0.6),inset_0_1px_0_rgba(255,255,255,0.07)] backdrop-blur-2xl md:bottom-4 md:left-64 md:right-4",
+    "audio-player fixed bottom-[calc(3.65rem+max(1.25rem,env(safe-area-inset-bottom,0px))+1.1rem)] left-3 right-3 z-[55] mx-auto max-w-3xl rounded-xl border shadow-[0_18px_56px_rgba(0,0,0,0.6),inset_0_1px_0_rgba(255,255,255,0.07)] md:bottom-4 md:left-64 md:right-4",
   )}
   style:--player-accent={playerPalette.primary}
   style:--player-secondary={playerPalette.secondary}
-  style:--player-background={playerPalette.background}
 >
   <!-- Now-playing + progress -->
   <div class="flex items-center gap-2.5 px-3 pt-2.5 pb-1">
@@ -813,7 +825,16 @@
       class="player-artwork relative h-9 w-9 shrink-0 overflow-hidden rounded-md transition-opacity hover:opacity-80"
     >
       {#if coverUrl}
-        <img src={coverUrl} alt="" class="h-full w-full object-cover" decoding="async" onload={handleArtworkLoad} />
+        {#key coverUrl}
+          <img
+            src={coverUrl}
+            data-artwork-url={coverUrl}
+            alt=""
+            class="h-full w-full object-cover"
+            decoding="async"
+            onload={handleArtworkLoad}
+          />
+        {/key}
       {:else}
         <div class="flex h-full w-full items-center justify-center bg-black/20 text-accent-500/80">
           <Music class="h-4 w-4" />
@@ -914,7 +935,6 @@
         onSeek={handleSeek}
         accentPrimary={playerPalette.primary}
         accentSecondary={playerPalette.secondary}
-        accentBackground={playerPalette.background}
       />
     </div>
   {/if}
@@ -1031,11 +1051,8 @@
 
   .audio-player {
     border-color: color-mix(in srgb, var(--player-accent) 26%, rgba(255, 255, 255, 0.08));
-    background:
-      radial-gradient(circle at 7% 0%, color-mix(in srgb, var(--player-accent) 15%, transparent), transparent 38%),
-      radial-gradient(circle at 94% 115%, color-mix(in srgb, var(--player-secondary) 11%, transparent), transparent 42%),
-      color-mix(in srgb, var(--player-background) 72%, rgba(12, 15, 20, 0.78));
-    transition: border-color 180ms var(--ease-default), background 180ms var(--ease-default);
+    background: var(--color-surface-1);
+    transition: border-color 180ms var(--ease-default);
   }
 
   .player-link:hover,
@@ -1044,11 +1061,11 @@
   }
 
   .player-icon-control {
-    color: color-mix(in srgb, var(--player-secondary) 42%, var(--color-text-disabled));
+    color: var(--color-text-disabled);
   }
 
   .player-icon-control:hover:not(:disabled) {
-    color: color-mix(in srgb, var(--player-accent) 72%, white 16%);
+    color: var(--color-text-muted);
   }
 
   .player-icon-control--active:hover:not(:disabled) {
@@ -1065,7 +1082,7 @@
 
   .player-play-button:hover,
   .player-play-button[data-playing="true"] {
-    color: color-mix(in srgb, var(--player-background) 76%, black 24%);
+    color: var(--color-bg);
     background: color-mix(in srgb, var(--player-accent) 88%, white 8%);
     box-shadow: 0 0 16px color-mix(in srgb, var(--player-accent) 34%, transparent);
   }
@@ -1083,7 +1100,7 @@
   }
 
   .audio-player .video-progress-track {
-    background: color-mix(in srgb, var(--player-secondary) 16%, rgba(255, 255, 255, 0.08));
+    background: rgba(255, 255, 255, 0.15);
   }
 
   .audio-progress-fill::after {
@@ -1095,7 +1112,7 @@
 
   .waveform-shell {
     border-color: color-mix(in srgb, var(--player-accent) 16%, transparent);
-    background: color-mix(in srgb, var(--player-background) 72%, black 28%);
+    background: var(--color-bg);
   }
 
   /* Animated notes drifting out of the collapsed artwork while playing. */

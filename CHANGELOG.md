@@ -98,7 +98,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Monitored series, seasons, and other containers now offer "Search missing content" on their Acquisition tab: one click sweeps the whole item at any depth — including episode gaps hiding inside partially-downloaded seasons — and starts a monitored search for every gap, reporting how many it covered. The existing "Search N missing" action remains when gaps are already visible.
 
 ### Changed
-- The web now-playing chrome now derives its surface, transport controls, progress rail, and waveform colors from the current album artwork, matching the native player's artwork-reactive treatment.
+- The web now-playing chrome now derives its outline, active transport controls, progress rail, and waveform accents from each current track's album artwork while keeping its ground surface opaque and neutral.
 - Popovers, menus, command search, confirmation prompts, and other transient controls now share a restrained neutral-glass treatment, with page color reserved for compact accents such as the sidebar section chevrons.
 - Rejected acquisition releases can now be selected manually when the rejection is an overridable match or profile rule; unsafe, blocklisted, and otherwise unqueueable releases remain protected.
 - Identify and Request now use the same provider search surface, so a fresh Identify search exposes every field declared by the selected plugin instead of falling back to a title-only query.

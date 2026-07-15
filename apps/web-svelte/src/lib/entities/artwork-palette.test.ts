@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest";
-import { paletteFromPixels } from "./artwork-palette";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { paletteFromImage, paletteFromPixels } from "./artwork-palette";
 
 type Rgb = [number, number, number];
 
@@ -59,5 +59,39 @@ describe("paletteFromPixels", () => {
 
   it("returns null when artwork contains no useful opaque color", () => {
     expect(paletteFromPixels(new Uint8ClampedArray([0, 0, 0, 0]), 1, 1)).toBeNull();
+  });
+});
+
+describe("paletteFromImage", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("extracts a new palette when a reused image element changes source", () => {
+    const redPixels = image(12, 12, () => [176, 28, 43]);
+    const bluePixels = image(12, 12, () => [30, 82, 160]);
+    const getImageData = vi
+      .fn()
+      .mockReturnValueOnce({ data: redPixels })
+      .mockReturnValueOnce({ data: bluePixels });
+    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({
+      drawImage: vi.fn(),
+      getImageData,
+    } as unknown as CanvasRenderingContext2D);
+
+    const artwork = document.createElement("img");
+    Object.defineProperty(artwork, "naturalWidth", { configurable: true, value: 12 });
+    Object.defineProperty(artwork, "naturalHeight", { configurable: true, value: 12 });
+    artwork.src = "/covers/first.jpg";
+
+    const first = paletteFromImage(artwork);
+    expect(paletteFromImage(artwork)).toEqual(first);
+    expect(getImageData).toHaveBeenCalledTimes(1);
+
+    artwork.src = "/covers/second.jpg";
+    const second = paletteFromImage(artwork);
+
+    expect(getImageData).toHaveBeenCalledTimes(2);
+    expect(second).not.toEqual(first);
   });
 });

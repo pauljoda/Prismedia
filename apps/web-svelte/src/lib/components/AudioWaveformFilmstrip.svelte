@@ -11,7 +11,6 @@
     onSeek: (time: number) => void;
     accentPrimary?: string;
     accentSecondary?: string;
-    accentBackground?: string;
   }
 
   const STRIP_HEIGHT = 52;
@@ -23,7 +22,6 @@
     onSeek,
     accentPrimary = "#c7c9cc",
     accentSecondary = "#8b8f96",
-    accentBackground = "#090a0c",
   }: Props = $props();
 
   let containerEl: HTMLDivElement | null = $state(null);
@@ -189,7 +187,6 @@
     style={`height: ${STRIP_HEIGHT}px`}
     style:--waveform-accent={accentPrimary}
     style:--waveform-secondary={accentSecondary}
-    style:--waveform-background={accentBackground}
   >
     <button
       type="button"
@@ -263,24 +260,24 @@
 
 <style>
   .waveform-strip {
-    background: color-mix(in srgb, var(--waveform-background) 82%, black 18%);
+    background: var(--color-bg);
   }
 
   .waveform-jump {
-    color: color-mix(in srgb, var(--waveform-secondary) 54%, white 18%);
-    background: color-mix(in srgb, var(--waveform-background) 84%, black 16%);
+    color: var(--color-text-muted);
+    background: var(--color-bg);
   }
 
   .waveform-jump:hover {
-    color: color-mix(in srgb, var(--waveform-accent) 78%, white 18%);
+    color: var(--color-text-primary);
   }
 
   .waveform-fade--left {
-    background: linear-gradient(90deg, color-mix(in srgb, var(--waveform-background) 80%, black 20%), transparent);
+    background: linear-gradient(90deg, var(--color-bg), transparent);
   }
 
   .waveform-fade--right {
-    background: linear-gradient(270deg, color-mix(in srgb, var(--waveform-background) 80%, black 20%), transparent);
+    background: linear-gradient(270deg, var(--color-bg), transparent);
   }
 
   .waveform-playhead {

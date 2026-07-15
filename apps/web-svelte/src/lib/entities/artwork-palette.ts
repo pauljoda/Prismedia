@@ -24,7 +24,12 @@ interface ColorSamples {
 const MAX_SAMPLE_DIMENSION = 96;
 const CLUSTER_LIMIT = 8;
 const ITERATION_LIMIT = 8;
-const paletteCache = new WeakMap<HTMLImageElement, ArtworkPalette | null>();
+interface CachedImagePalette {
+  source: string;
+  palette: ArtworkPalette | null;
+}
+
+const paletteCache = new WeakMap<HTMLImageElement, CachedImagePalette>();
 
 function clamp(value: number, minimum = 0, maximum = 1): number {
   return Math.min(Math.max(value, minimum), maximum);
@@ -296,8 +301,9 @@ export function paletteFromPixels(pixels: Uint8ClampedArray, width: number, heig
 /** Samples an image element the UI has already decoded, without another network request. */
 export function paletteFromImage(image: HTMLImageElement): ArtworkPalette | null {
   if (typeof document === "undefined" || image.naturalWidth <= 0 || image.naturalHeight <= 0) return null;
+  const source = image.currentSrc || image.src;
   const cached = paletteCache.get(image);
-  if (cached !== undefined) return cached;
+  if (cached?.source === source) return cached.palette;
   const scale = Math.min(1, MAX_SAMPLE_DIMENSION / Math.max(image.naturalWidth, image.naturalHeight));
   const width = Math.max(1, Math.round(image.naturalWidth * scale));
   const height = Math.max(1, Math.round(image.naturalHeight * scale));
@@ -309,10 +315,10 @@ export function paletteFromImage(image: HTMLImageElement): ArtworkPalette | null
   try {
     context.drawImage(image, 0, 0, width, height);
     const palette = paletteFromPixels(context.getImageData(0, 0, width, height).data, width, height);
-    paletteCache.set(image, palette);
+    paletteCache.set(image, { source, palette });
     return palette;
   } catch {
-    paletteCache.set(image, null);
+    paletteCache.set(image, { source, palette: null });
     return null;
   }
 }

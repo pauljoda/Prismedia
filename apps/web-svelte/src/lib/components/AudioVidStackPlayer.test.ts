@@ -7,6 +7,7 @@ function readLocalSource(path: string) {
 
 describe("AudioVidStackPlayer playback continuity", () => {
   const source = readLocalSource("./AudioVidStackPlayer.svelte");
+  const waveformSource = readLocalSource("./AudioWaveformFilmstrip.svelte");
 
   it("only defers hidden-tab autoplay for restored sessions, not already-started queues", () => {
     expect(source).toContain("let audioStartedInThisSession = false;");
@@ -84,13 +85,18 @@ describe("AudioVidStackPlayer playback continuity", () => {
     expect(source).toContain("{#if activeTrack && !isAudiobook && waveformData && duration > 0}");
   });
 
-  it("derives the player chrome and waveform palette from the decoded cover artwork", () => {
+  it("uses the decoded cover palette for accents without tinting the player surfaces", () => {
     expect(source).toContain("paletteFromImage");
     expect(source).toContain("onload={handleArtworkLoad}");
+    expect(source).toContain("{#key coverUrl}");
+    expect(source).toContain("loadedCoverUrl !== coverUrl");
     expect(source).toContain("style:--player-accent={playerPalette.primary}");
     expect(source).toContain("accentPrimary={playerPalette.primary}");
     expect(source).toContain("accentSecondary={playerPalette.secondary}");
-    expect(source).toContain("accentBackground={playerPalette.background}");
+    expect(source).toContain("background: var(--color-surface-1);");
+    expect(source).not.toContain("--player-background");
+    expect(waveformSource).toContain("background: var(--color-bg);");
+    expect(waveformSource).not.toContain("accentBackground");
   });
 
   it("leaves reader keyboard navigation to the active reader overlay", () => {
