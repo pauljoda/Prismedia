@@ -10,6 +10,10 @@ export interface BookReaderRouteContext {
   command?: BookReaderCommand;
   mode?: BookReaderMode;
   pageIndex?: number;
+  /** One-launch EPUB href/CFI override. Does not replace the saved reading cursor. */
+  location?: string;
+  /** Whether this launch should expose the active audiobook transport inside the reader. */
+  combined?: boolean;
 }
 
 export interface BookReaderHrefOptions extends BookReaderRouteContext {
@@ -41,6 +45,8 @@ export function bookReaderContextFromUrl(url: URL): BookReaderRouteContext | nul
   const command = readerCommand(url.searchParams.get("command"));
   const mode = readerMode(url.searchParams.get("mode"));
   const pageIndex = pageIndexValue(url.searchParams.get("page"));
+  const location = cleanId(url.searchParams.get("location"));
+  const combined = url.searchParams.get("combined") === "1";
 
   return {
     kind,
@@ -50,6 +56,8 @@ export function bookReaderContextFromUrl(url: URL): BookReaderRouteContext | nul
     ...(command ? { command } : {}),
     ...(mode ? { mode } : {}),
     ...(pageIndex !== null ? { pageIndex } : {}),
+    ...(location ? { location } : {}),
+    ...(combined ? { combined: true } : {}),
   };
 }
 
@@ -65,6 +73,8 @@ export function bookReaderHref(options: BookReaderHrefOptions): string {
   if (typeof options.pageIndex === "number") {
     params.set("page", String(Math.max(0, Math.floor(options.pageIndex))));
   }
+  if (options.location) params.set("location", options.location);
+  if (options.combined) params.set("combined", "1");
 
   return `/books/${encodeURIComponent(options.bookId)}/reader?${params.toString()}`;
 }

@@ -33,7 +33,7 @@ describe("book reader route helpers", () => {
     expect(
       bookReaderContextFromUrl(
         new URL(
-          "http://localhost/books/book-1/reader?kind=volume&id=volume-1&returnId=book-1&command=resume&mode=webtoon&page=12",
+          "http://localhost/books/book-1/reader?kind=volume&id=volume-1&returnId=book-1&command=resume&mode=webtoon&page=12&location=Text%2Fchapter.xhtml%23start&combined=1",
         ),
       ),
     ).toEqual({
@@ -43,6 +43,8 @@ describe("book reader route helpers", () => {
       command: "resume",
       mode: "webtoon",
       pageIndex: 12,
+      location: "Text/chapter.xhtml#start",
+      combined: true,
     });
   });
 
@@ -66,9 +68,11 @@ describe("book reader route helpers", () => {
         command: "start-over",
         mode: "paged",
         pageIndex: 4,
+        location: "Text/chapter 1.xhtml#start",
+        combined: true,
       }),
     ).toBe(
-      "/books/book%201/reader?kind=chapter&id=chapter%2F1&returnId=volume+1&command=start-over&mode=paged&page=4",
+      "/books/book%201/reader?kind=chapter&id=chapter%2F1&returnId=volume+1&command=start-over&mode=paged&page=4&location=Text%2Fchapter+1.xhtml%23start&combined=1",
     );
   });
 

@@ -226,6 +226,7 @@
   });
 
   function isKeyboardShortcutSuppressed(target: EventTarget | null): boolean {
+    if (document.querySelector("[data-reader-overlay]")) return true;
     if (!(target instanceof HTMLElement)) return false;
     if (target.isContentEditable) return true;
     return Boolean(target.closest("input, textarea, select"));

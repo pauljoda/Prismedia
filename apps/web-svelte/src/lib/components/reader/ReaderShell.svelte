@@ -92,6 +92,7 @@
 
 <div
   use:portal
+  data-reader-overlay
   class={`reader-overlay fixed inset-0 flex flex-col bg-black backdrop-blur-sm ${presentation === "page" ? "reader-page-presentation" : ""}`}
   role="dialog"
   aria-modal="true"

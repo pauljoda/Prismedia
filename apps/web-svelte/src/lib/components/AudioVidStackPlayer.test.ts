@@ -74,4 +74,8 @@ describe("AudioVidStackPlayer playback continuity", () => {
     expect(source).toContain("if (isAudiobook) return;");
     expect(source).toContain("disabled={isAudiobook}");
   });
+
+  it("leaves reader keyboard navigation to the active reader overlay", () => {
+    expect(source).toContain('document.querySelector("[data-reader-overlay]")');
+  });
 });

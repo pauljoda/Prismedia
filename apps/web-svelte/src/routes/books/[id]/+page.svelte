@@ -60,6 +60,7 @@
   } from "$lib/components/entities/EntityDetail.svelte";
   import EntityGrid from "$lib/components/entities/EntityGrid.svelte";
   import EntityGridSection from "$lib/components/entities/EntityGridSection.svelte";
+  import BookChapterList from "$lib/components/books/BookChapterList.svelte";
   import { useIdentifyDetailAction } from "$lib/components/identify/use-identify-detail-action.svelte";
   import {
     isHiddenEntityNotFoundError,
@@ -69,6 +70,17 @@
   import { useAppChrome, type AppBreadcrumb } from "$lib/stores/app-chrome.svelte";
   import { useAudioPlayback } from "$lib/stores/audio-playback.svelte";
   import { numberValue } from "$lib/utils/format";
+  import { entityAccentForKind } from "$lib/entities/entity-accent";
+  import type { ArtworkPalette } from "$lib/entities/artwork-palette";
+  import {
+    buildBookChapterRows,
+    type BookChapterRow,
+    type ReadableBookChapter,
+  } from "$lib/entities/book-chapter-list";
+  import {
+    loadEpubContents,
+    type EpubContentsEntry,
+  } from "$lib/entities/epub-contents";
   import { acquisitionStatusShouldPoll } from "$lib/requests/acquisition-status";
   import { monitorIsActive } from "$lib/requests/monitor-status";
 
@@ -80,7 +92,6 @@
 
   interface ChapterDetail {
     detail: EntityCardFull;
-    card: EntityThumbnailCard;
     pages: ReturnType<typeof orderedBookChildren>;
     summary: BookReaderChapter;
   }
@@ -106,7 +117,13 @@
   let bookRenditionAcquisitions = $state.raw<AcquisitionDetail[]>([]);
   let bookRenditionMonitors = $state.raw<MonitorView[]>([]);
   let selectedChapterId: string | null = $state(null);
+  let epubContents = $state.raw<EpubContentsEntry[]>([]);
+  let currentEpubChapterId = $state<string | null>(null);
+  let epubContentsLoading = $state(false);
+  let artworkPalette = $state.raw<ArtworkPalette | null>(null);
   let loadedBookId: string | null = null;
+  let loadedEpubKey: string | null = null;
+  let epubContentsAbort: AbortController | null = null;
   let loadToken = 0;
 
   const bookId = $derived(page.params.id ?? "");
@@ -129,7 +146,6 @@
   );
   const bookTitle = $derived(book?.title ?? "Book");
   const chapterSummaries = $derived(combineChapterSummaries(chapterDetails, progressChapterSummary));
-  const chapterCards = $derived(chapterDetails.map((chapter) => chapter.card));
   const progressDisplay = $derived(bookEntityProgressDisplay(book, chapterSummaries));
   const selectedChapter = $derived(
     chapterDetails.find((chapter) => chapter.detail.id === selectedChapterId) ?? chapterDetails[0] ?? null,
@@ -175,6 +191,56 @@
     audiobookResumeSeconds > 0 && audiobookTotalSeconds > 0
       ? `${formatDuration(audiobookResumeSeconds) ?? "0:00"} / ${formatDuration(audiobookTotalSeconds) ?? "0:00"}`
       : null,
+  );
+  const savedAudiobookResume = $derived(
+    audiobookCompleted || audiobookResumeSeconds <= 0 || audiobookTotalSeconds <= 0
+      ? null
+      : resolveAudiobookResume(audiobookTracks, audiobookResumeSeconds),
+  );
+  const currentAudiobookTrackId = $derived(
+    isCurrentAudiobook ? playback.currentTrack?.id ?? savedAudiobookResume?.trackId ?? null : savedAudiobookResume?.trackId ?? null,
+  );
+  const readableChapters = $derived.by((): ReadableBookChapter[] => {
+    if (book?.format === BookFormat.epub) {
+      return epubContents.map((entry) => ({
+        id: entry.id,
+        title: entry.title,
+        order: entry.order,
+        depth: entry.depth,
+        target: { kind: "epub", location: entry.location },
+      }));
+    }
+    return chapterDetails.map((chapter, index) => ({
+      id: chapter.detail.id,
+      title: chapter.detail.title,
+      order: index,
+      depth: 0,
+      target: { kind: "entity-chapter", chapterId: chapter.detail.id },
+    }));
+  });
+  const chapterRows = $derived(buildBookChapterRows({
+    readableChapters,
+    audioTracks: audiobookTracks,
+    currentReadableId: book?.format === BookFormat.epub
+      ? currentEpubChapterId
+      : progressDisplay?.isComplete
+        ? null
+        : progressDisplay?.chapterId ?? null,
+    currentAudioTrackId: currentAudiobookTrackId,
+  }));
+  const fallbackBookPalette = entityAccentForKind(ENTITY_KIND.book);
+  const chapterPalette = $derived(artworkPalette ?? {
+    primary: fallbackBookPalette.primary,
+    secondary: fallbackBookPalette.secondary,
+    background: "#000000",
+  });
+  const chapterReadingProgressLabel = $derived(
+    singleFileProgressDisplay
+      ? `${singleFileProgressDisplay.percent}% of book`
+      : progressDisplay?.chapterPageLabel ?? progressDisplay?.pageLabel ?? null,
+  );
+  const chapterListeningProgressLabel = $derived(
+    audiobookPositionLabel ?? (currentAudiobookTrackId ? "Current part" : null),
   );
   const hasReadableContent = $derived(
     isSingleFileBook ||
@@ -288,6 +354,7 @@
 
   onMount(() => {
     loadCurrentBookIfNeeded();
+    return () => epubContentsAbort?.abort();
   });
 
   afterNavigate(() => {
@@ -343,6 +410,13 @@
       const progressSummary = await hydrateProgressChapterSummary(nextBook, chapters);
       if (token !== loadToken) return;
 
+      if (book?.id !== nextBook.id) {
+        epubContents = [];
+        currentEpubChapterId = null;
+        loadedEpubKey = null;
+        artworkPalette = null;
+      }
+
       // A book scanned under an Author/ folder is parented to a book-author; surface it as a back-link.
       const authorThumb = parentThumbs.find((thumbnail) => thumbnail.kind === ENTITY_KIND.bookAuthor);
       authorLink = authorThumb ? { id: authorThumb.id, title: authorThumb.title } : null;
@@ -365,11 +439,51 @@
       const nextProgress = bookEntityProgressDisplay(nextBook, combineChapterSummaries(chapters, progressSummary));
       selectedChapterId = nextProgress?.chapterId ?? chapters[0]?.detail.id ?? null;
       loadState = "ready";
+      void hydrateEpubContents(nextBook, token);
     } catch (err) {
       if (token !== loadToken) return;
       if (redirectHiddenEntityNotFound(err, nsfw.mode)) return;
       errorMessage = err instanceof Error ? err.message : String(err);
       loadState = "error";
+    }
+  }
+
+  async function hydrateEpubContents(nextBook: BookDetail, token: number): Promise<void> {
+    epubContentsAbort?.abort();
+    if (nextBook.format !== BookFormat.epub) {
+      epubContents = [];
+      currentEpubChapterId = null;
+      epubContentsLoading = false;
+      loadedEpubKey = null;
+      return;
+    }
+
+    const progress = getCapability(nextBook.capabilities, CAPABILITY_KIND.progress);
+    const currentLocation = progress?.completedAt ? null : progress?.location;
+    const key = `${nextBook.id}:${currentLocation ?? ""}`;
+    if (key === loadedEpubKey && epubContents.length > 0) return;
+
+    const controller = new AbortController();
+    epubContentsAbort = controller;
+    epubContentsLoading = true;
+    try {
+      const contents = await loadEpubContents(
+        `/entities/${nextBook.id}/files/source`,
+        currentLocation,
+        controller.signal,
+      );
+      if (controller.signal.aborted || token !== loadToken || bookId !== nextBook.id) return;
+      epubContents = contents.entries;
+      currentEpubChapterId = contents.currentChapterId;
+      loadedEpubKey = key;
+    } catch (error) {
+      if (controller.signal.aborted || (error instanceof DOMException && error.name === "AbortError")) return;
+      if (token !== loadToken || bookId !== nextBook.id) return;
+      epubContents = [];
+      currentEpubChapterId = null;
+    } finally {
+      if (epubContentsAbort === controller) epubContentsAbort = null;
+      if (token === loadToken) epubContentsLoading = false;
     }
   }
 
@@ -422,14 +536,9 @@
     );
     const details = await Promise.all(chapterItems.map((item) => fetchEntity(item.thumbnail.id)));
     return details.map((detail, index) => {
-      const item = chapterItems[index];
-      const thumbnail = item.thumbnail;
       const pages = orderedBookChildren(detail, ENTITY_KIND.bookPage);
       return {
         detail,
-        card: thumbnailsToCards([thumbnail], {
-          hrefFor: (item) => `/books/${nextBook.id}/chapters/${item.id}`,
-        })[0],
         pages,
         summary: {
           id: detail.id,
@@ -557,6 +666,70 @@
     }));
   }
 
+  function audiobookPlaybackContext() {
+    if (!book) return null;
+    return {
+      artistName: authorLink?.title ?? null,
+      coverUrl: card?.posterCard?.cover?.src ?? card?.poster?.src ?? null,
+      playbackOwnerEntityId: book.id,
+      playbackOwnerTitle: book.title,
+      playbackOwnerEntityKind: ENTITY_KIND.book,
+    };
+  }
+
+  function playAudiobookTrack(trackId: string, startSeconds: number) {
+    const context = audiobookPlaybackContext();
+    if (!context) return;
+    playback.play(audiobookTracks, trackId, context, { shuffle: false, startSeconds });
+  }
+
+  function openChapterRow(row: BookChapterRow, combined = false) {
+    if (!book || !row.readTarget) return;
+    const target = row.readTarget;
+    if (target.kind === "epub") {
+      void goto(bookReaderHref({
+        bookId: book.id,
+        kind: "book",
+        id: book.id,
+        returnId: book.id,
+        location: target.location,
+        combined,
+      }));
+      return;
+    }
+    void goto(bookReaderHref({
+      bookId: book.id,
+      kind: "chapter",
+      id: target.chapterId,
+      returnId: book.id,
+      combined,
+    }));
+  }
+
+  function listenToChapter(row: BookChapterRow) {
+    const track = row.audioTrack;
+    if (!track) return;
+    if (isCurrentAudiobook && playback.currentTrack?.id === track.id) {
+      playback.toggle();
+      return;
+    }
+    const startSeconds = savedAudiobookResume?.trackId === track.id
+      ? savedAudiobookResume.trackOffsetSeconds
+      : 0;
+    playAudiobookTrack(track.id, startSeconds);
+  }
+
+  function openCombinedChapter(row: BookChapterRow) {
+    const track = row.audioTrack;
+    if (!row.readTarget || !track) return;
+    if (isCurrentAudiobook && playback.currentTrack?.id === track.id) {
+      if (!playback.playing) playback.toggle();
+    } else {
+      playAudiobookTrack(track.id, 0);
+    }
+    openChapterRow(row, true);
+  }
+
   function listenToBook(options: { startOver?: boolean } = {}) {
     if (!book || audiobookTracks.length === 0) return;
     if (!options.startOver && isCurrentAudiobook && !audiobookCompleted) {
@@ -569,18 +742,7 @@
       options.startOver || audiobookCompleted ? 0 : audiobookResumeSeconds,
     );
     if (!resume) return;
-    playback.play(
-      audiobookTracks,
-      resume.trackId,
-      {
-        artistName: authorLink?.title ?? null,
-        coverUrl: card?.posterCard?.cover?.src ?? card?.poster?.src ?? null,
-        playbackOwnerEntityId: book.id,
-        playbackOwnerTitle: book.title,
-        playbackOwnerEntityKind: ENTITY_KIND.book,
-      },
-      { shuffle: false, startSeconds: resume.trackOffsetSeconds },
-    );
+    playAudiobookTrack(resume.trackId, resume.trackOffsetSeconds);
   }
 
   async function handleToggleListened(listened: boolean) {
@@ -748,6 +910,7 @@
       tabs={detailTabs}
       sections={detailSections}
       actionButtons={heroActions}
+      onArtworkPaletteChange={(palette) => (artworkPalette = palette)}
       {defaultCreditRole}
     >
       {#snippet heroMeta()}
@@ -857,6 +1020,21 @@
       </section>
     {/if}
 
+    {#if chapterRows.length > 0}
+      <BookChapterList
+        rows={chapterRows}
+        primaryColor={chapterPalette.primary}
+        secondaryColor={chapterPalette.secondary}
+        readingProgressLabel={chapterReadingProgressLabel}
+        listeningProgressLabel={chapterListeningProgressLabel}
+        onRead={openChapterRow}
+        onListen={listenToChapter}
+        onCombined={openCombinedChapter}
+      />
+    {:else if epubContentsLoading}
+      <section class="chapter-loading" aria-live="polite">Reading the EPUB contents…</section>
+    {/if}
+
     {#if childBookCards.length > 0}
       <EntityGridSection
         title="Books"
@@ -891,22 +1069,6 @@
       </EntityGridSection>
     {/if}
 
-    {#if chapterDetails.length > 0}
-      <EntityGridSection
-        title="Chapters"
-        count={chapterDetails.length}
-        icon={BookOpen}
-        prefsKey={`book-${book.id}-chapters-section`}
-      >
-        <EntityGrid
-          cards={chapterCards}
-          prefsKey={`book-${book.id}-chapters`}
-          initialSortBy="position"
-          emptyTitle="No chapters"
-          emptyMessage="No chapters found for this book."
-        />
-      </EntityGridSection>
-    {/if}
   {/if}
 </div>
 
@@ -978,6 +1140,16 @@
   .progress-section {
     display: block;
     min-width: 0;
+  }
+
+  .chapter-loading {
+    border: 1px solid var(--color-border-subtle);
+    background: var(--color-surface-1);
+    padding: 1rem;
+    color: var(--color-text-muted);
+    font-family: var(--font-mono, "JetBrains Mono", monospace);
+    font-size: 0.68rem;
+    letter-spacing: 0.04em;
   }
 
 </style>

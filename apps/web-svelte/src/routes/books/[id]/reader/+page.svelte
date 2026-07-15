@@ -3,7 +3,8 @@
   import { onMount } from "svelte";
   import { goto } from "$app/navigation";
   import { page } from "$app/state";
-  import { AlertTriangle } from "@lucide/svelte";
+  import { AlertTriangle, Headphones, Pause, Play } from "@lucide/svelte";
+  import { Button } from "@prismedia/ui-svelte";
   import { getCapability } from "$lib/api/capabilities";
   import { fetchBook, type BookDetail } from "$lib/api/media";
   import { fetchEntity, type EntityCardFull } from "$lib/api/entities";
@@ -28,6 +29,7 @@
   import PdfReader from "$lib/components/PdfReader.svelte";
   import { redirectHiddenEntityNotFound } from "$lib/nsfw/hidden-entity";
   import { useNsfw } from "$lib/nsfw/store.svelte";
+  import { useAudioPlayback } from "$lib/stores/audio-playback.svelte";
 
   type ReaderFlow = "paginated" | "scrolled";
 
@@ -41,6 +43,7 @@
   }
 
   const nsfw = useNsfw();
+  const playback = useAudioPlayback()!;
 
   let loadState: LoadState = $state("loading");
   let book = $state<BookDetail | null>(null);
@@ -74,6 +77,15 @@
   const bookId = $derived(page.params.id ?? "");
   const readerPages = $derived(
     readerChapters.flatMap((chapter) => chapter.pages.map(entityPageToReaderImage)),
+  );
+  const combinedAudiobookActive = $derived(
+    Boolean(
+      context?.combined &&
+      book &&
+      playback.context?.playbackOwnerEntityId === book.id &&
+      playback.context?.playbackOwnerEntityKind === ENTITY_KIND.book &&
+      playback.currentTrack,
+    ),
   );
 
   onMount(() => {
@@ -122,14 +134,15 @@
   async function loadSingleFileReader(nextBook: BookDetail, nextContext: BookReaderRouteContext) {
     const progress = getCapability(nextBook.capabilities, CAPABILITY_KIND.progress);
     const resume = nextContext.command !== "start-over" && !progress?.completedAt;
+    const launchLocation = nextContext.location ?? null;
     singleFileBook = true;
     singleFileSource = `/entities/${nextBook.id}/files/source`;
     singleFileContentType = nextBook.format === "pdf" ? "application/pdf" : "application/epub+zip";
-    singleFileLocation = resume ? progress?.location ?? null : null;
+    singleFileLocation = launchLocation ?? (resume ? progress?.location ?? null : null);
     singleFileFlow = progress?.mode === READER_MODE.scrolled ? "scrolled" : "paginated";
     singleFileFlowMode = singleFileFlow;
     singleFileSaveLocation = singleFileLocation;
-    singleFileSaveFraction = resume ? Number(progress?.index ?? 0) / 10000 : 0;
+    singleFileSaveFraction = launchLocation ? 0 : resume ? Number(progress?.index ?? 0) / 10000 : 0;
     book = nextBook;
     context = nextContext;
     readerTitle = nextBook.title;
@@ -507,6 +520,27 @@
   <title>{readerTitle} · Prismedia</title>
 </svelte:head>
 
+{#snippet combinedAudioControls()}
+  <div class="combined-audio-controls" aria-label="Companion audiobook controls">
+    <Headphones class="h-3.5 w-3.5 shrink-0" />
+    <span class="combined-track-title">{playback.currentTrack?.title ?? "Audiobook"}</span>
+    <Button
+      variant="ghost"
+      size="icon"
+      class="combined-toggle"
+      aria-label={playback.playing ? "Pause companion audiobook" : "Play companion audiobook"}
+      title={playback.playing ? "Pause audiobook" : "Play audiobook"}
+      onclick={() => playback.toggle()}
+    >
+      {#if playback.playing}
+        <Pause class="h-3.5 w-3.5" fill="currentColor" />
+      {:else}
+        <Play class="h-3.5 w-3.5" fill="currentColor" />
+      {/if}
+    </Button>
+  </div>
+{/snippet}
+
 {#if loadState === "ready" && pdfBook}
   <PdfReader
     sourceUrl={pdfSource}
@@ -528,6 +562,7 @@
     initialFlow={singleFileFlow}
     onLocationChange={handleSingleFileLocation}
     onFlowChange={handleSingleFileFlow}
+    companionControls={combinedAudiobookActive ? combinedAudioControls : undefined}
     onClose={() => void closeSingleFileReader()}
   />
 {:else if loadState === "ready"}
@@ -583,5 +618,44 @@
     background: var(--color-overlay-heavy);
     padding: 0.55rem 0.85rem;
     color: var(--color-text-primary);
+  }
+
+  .combined-audio-controls {
+    display: flex;
+    min-width: 0;
+    max-width: min(15rem, 34vw);
+    align-items: center;
+    gap: 0.35rem;
+    border: 1px solid color-mix(in srgb, var(--color-border-accent-strong) 72%, transparent);
+    border-radius: var(--radius-sm);
+    background: var(--color-overlay-heavy);
+    padding-left: 0.48rem;
+    color: var(--color-text-accent-bright);
+    backdrop-filter: blur(var(--glass-blur-sm));
+  }
+
+  .combined-track-title {
+    overflow: hidden;
+    color: var(--color-text-secondary);
+    font-size: 0.65rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  :global(.combined-toggle) {
+    width: 1.9rem;
+    height: 1.9rem;
+    flex: 0 0 auto;
+    color: var(--color-text-accent-bright);
+  }
+
+  @media (max-width: 540px) {
+    .combined-track-title {
+      display: none;
+    }
+
+    .combined-audio-controls {
+      padding-left: 0.4rem;
+    }
   }
 </style>

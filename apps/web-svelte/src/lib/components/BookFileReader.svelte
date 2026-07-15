@@ -1,4 +1,5 @@
 <script lang="ts">
+  import type { Snippet } from "svelte";
   import { onMount, untrack } from "svelte";
   import {
     AlertTriangle,
@@ -40,6 +41,8 @@
     onClose: () => void;
     onLocationChange?: (location: ReaderLocation) => void;
     onFlowChange?: (flow: ReaderFlow) => void;
+    /** Optional transport from a companion rendition, such as the matched audiobook. */
+    companionControls?: Snippet;
   }
 
   let {
@@ -53,6 +56,7 @@
     onClose,
     onLocationChange,
     onFlowChange,
+    companionControls,
   }: Props = $props();
 
   const MIN_FONT = 80;
@@ -329,6 +333,9 @@
   {#snippet counter()}{counterLabel}{/snippet}
 
   {#snippet controls()}
+    {#if companionControls}
+      {@render companionControls()}
+    {/if}
     {#if hasToc}
       <button
         type="button"

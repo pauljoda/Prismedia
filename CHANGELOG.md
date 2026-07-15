@@ -22,6 +22,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Release operations are now ready for channel publishing: the root package version is the source of truth, Docker builds validate the release metadata, pushes to `main` publish only the dev image, and alpha/beta/release images are published manually.
 
 ### Added
+- Book detail pages now turn EPUB contents and multipart audiobooks into one chapter list with artwork-colored reading and listening markers, per-chapter Read and Listen actions, and a combined mode that opens the matching text and audio together.
 - Added first-class OpenSubtitles acquisition: configure and test an account in Settings, find explainable hash/identity-ranked matches from a video's Transcript tab, import a selected subtitle into app-owned playback assets, or automatically fill missing configured languages using a strict confidence threshold.
 - Acquisition searches now label Usenet and torrent releases, prefer the configured download type before falling back, filter results to enabled download-client capabilities, and let Identify, Request, and release review reveal more than ten matches.
 - Entity library queries can now request several kinds at once, allowing native clients to load one server-filtered movie and TV activity feed without duplicate movie file rows.

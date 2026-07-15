@@ -17,7 +17,7 @@ describe("Book detail audiobook experience", () => {
     expect(source).toContain("resolveAudiobookResume(");
     expect(source).toContain("playbackOwnerEntityId: book.id");
     expect(source).toContain("playbackOwnerEntityKind: ENTITY_KIND.book");
-    expect(source).toContain("startSeconds: resume.trackOffsetSeconds");
+    expect(source).toContain("playAudiobookTrack(resume.trackId, resume.trackOffsetSeconds)");
   });
 
   it("updates listening completion without reporting total runtime as watched-duration delta", () => {

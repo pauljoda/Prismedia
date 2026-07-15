@@ -2,6 +2,7 @@ import type { LucideIcon } from "@lucide/svelte";
 import type { Snippet } from "svelte";
 import type { CreditRoleCode, EntityFileRoleCode } from "$lib/entities/entity-codes";
 import type { EntityDetailCard } from "$lib/entities/entity-detail";
+import type { ArtworkPalette } from "$lib/entities/artwork-palette";
 import type {
   EntityMetadataPatch,
   EntityMetadataUpdateRequest,
@@ -73,6 +74,8 @@ export interface EntityDetailProps {
   onMetadataSave?: (request: EntityMetadataUpdateRequest) => void | Promise<void>;
   onImageAssetUpload?: (role: EntityFileRoleCode, file: File) => void | Promise<void>;
   onImageAssetClear?: (role: EntityFileRoleCode) => void | Promise<void>;
+  /** Receives the same extracted artwork colors used by the detail atmosphere. */
+  onArtworkPaletteChange?: (palette: ArtworkPalette) => void;
   /** Route-provided sections that can be assigned to any tab. */
   sections?: EntityDetailSection[];
   /** Inline metadata rendered below the title (e.g. studio link, date, count). */

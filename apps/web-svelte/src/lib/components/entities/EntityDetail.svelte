@@ -112,6 +112,7 @@
     onMetadataSave,
     onImageAssetUpload,
     onImageAssetClear,
+    onArtworkPaletteChange,
     sections = [],
     heroMeta,
     heroBadges,
@@ -177,7 +178,9 @@
 
   function captureArtworkPalette(image: HTMLImageElement) {
     const palette = paletteFromImage(image);
-    if (palette) paletteState = { entityId: card.entity.id, palette };
+    if (!palette) return;
+    paletteState = { entityId: card.entity.id, palette };
+    onArtworkPaletteChange?.(palette);
   }
 
   $effect(() => {
