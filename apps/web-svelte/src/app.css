@@ -532,16 +532,14 @@
     }
   }
 
-  /* Floating functional layers stay neutral so page/entity accents remain deliberate. */
+  /* Transient functional layers are opaque so underlying content never competes with controls. */
   .surface-elevated,
   .floating-surface,
   .app-dialog-surface {
-    background: var(--color-overlay-glass);
+    background: var(--color-surface-2);
     border: 1px solid var(--color-border-default);
     border-radius: var(--radius-md);
     box-shadow: var(--shadow-elevated);
-    backdrop-filter: blur(var(--glass-blur-md)) saturate(1.04);
-    -webkit-backdrop-filter: blur(var(--glass-blur-md)) saturate(1.04);
   }
 
   .app-overlay-backdrop {
@@ -591,7 +589,7 @@
   }
 
   .player-dropdown {
-    background: color-mix(in srgb, var(--color-overlay-glass) 94%, var(--color-surface-1));
+    background: var(--color-surface-2);
     border: 1px solid rgba(255, 255, 255, 0.1);
     border-radius: var(--radius-sm);
     box-shadow:

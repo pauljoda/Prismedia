@@ -122,9 +122,9 @@
   ];
 
   const glassLevels = [
-    { label: "glass-1", opacity: "72%", blur: "12px", use: "toolbar chrome" },
-    { label: "glass-2", opacity: "82%", blur: "16px", use: "menus and palettes" },
-    { label: "glass-3", opacity: "92%", blur: "24px", use: "sheets and overlays" },
+    { label: "glass-1", opacity: "72%", blur: "12px", use: "subtle toolbar chrome" },
+    { label: "glass-2", opacity: "82%", blur: "16px", use: "navigation and sticky chrome" },
+    { label: "glass-3", opacity: "92%", blur: "24px", use: "media overlay controls" },
   ];
 
   const statusBadges = [

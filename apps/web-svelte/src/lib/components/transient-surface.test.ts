@@ -4,15 +4,27 @@ import { describe, expect, it } from "vitest";
 const read = (path: string) => readFileSync(path, "utf8");
 
 describe("transient surface design contract", () => {
-  it("defines neutral shared floating and modal surfaces", () => {
+  it("defines opaque neutral floating and modal surfaces", () => {
     const styles = read("src/app.css");
+    const transientSurfaceRule = styles.match(
+      /\.surface-elevated,\s*\.floating-surface,\s*\.app-dialog-surface\s*\{(?<body>[^}]+)\}/,
+    )?.groups?.body;
 
     expect(styles).toContain(".floating-surface");
     expect(styles).toContain(".app-overlay-backdrop");
     expect(styles).toContain(".app-dialog-surface");
-    expect(styles).toContain("background: var(--color-overlay-glass);");
+    expect(transientSurfaceRule).toContain("background: var(--color-surface-2);");
+    expect(transientSurfaceRule).not.toContain("backdrop-filter");
     expect(styles).not.toContain("background: rgba(16, 20, 32, 0.82);");
     expect(styles).not.toContain("background: rgba(21, 26, 40, 0.92);");
+  });
+
+  it("keeps the player settings flyout opaque", () => {
+    const styles = read("src/app.css");
+    const playerDropdownRule = styles.match(/\.player-dropdown\s*\{(?<body>[^}]+)\}/)?.groups?.body;
+
+    expect(playerDropdownRule).toContain("background: var(--color-surface-2);");
+    expect(playerDropdownRule).not.toContain("--color-overlay-glass");
   });
 
   it("uses the shared modal contract for app dialogs", () => {

@@ -11,7 +11,7 @@ The interface remains permanently dark so artwork stays dominant. Neutral silver
 - **One source, many colors.** The neutral Prismedia shell is the white-light source; entity families inherit stable spectrum pairs.
 - **Black is the canvas.** The root and structural surfaces are neutral. Spectrum atmosphere belongs to artwork-reactive detail contexts and literal prism moments, not the global shell.
 - **Artwork leads on detail pages.** When real entity artwork is available, derive background, primary, and secondary colors from it. Otherwise use the entity-family pair.
-- **Glass belongs to chrome.** Navigation, sticky toolbars, menus, sheets, dialogs, search, players, and floating controls can be frosted. Cards, lists, grids, and content panels remain opaque.
+- **Glass belongs to persistent chrome.** Navigation, sticky toolbars, and controls floating directly over media can be frosted. Menus, flyouts, sheets, dialogs, search palettes, cards, lists, grids, and content panels remain opaque.
 - **Shared components own the language.** Change tokens and shared building blocks before writing route-specific styling.
 - **Motion explains state.** Movement can reinforce focus, selection, loading, and hierarchy, but every state also has a non-color cue and a reduced-motion treatment. Persistent controls do not glow.
 - **Mobile first, desktop first-class.** Touch interactions come first; desktop expands density and navigation without becoming a different product.
@@ -121,7 +121,7 @@ box-shadow: var(--shadow-card);
 
 ### Frosted chrome
 
-Glass communicates that a control floats above content. Use it for the sidebar, top bar, bottom navigation, sticky toolbars, menus, sheets, dialogs, and player controls.
+Glass communicates persistent chrome above moving content. Use it for the sidebar, top bar, bottom navigation, sticky toolbars, and player controls. Transient menus, flyouts, sheets, dialogs, and search palettes use opaque neutral surfaces so content behind them cannot reduce readability.
 
 ```css
 background: var(--color-overlay-glass);
