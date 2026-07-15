@@ -5,7 +5,11 @@
   import { page } from "$app/state";
   import { Users, Building2, Calendar, CloudDownload, Info, SlidersHorizontal } from "@lucide/svelte";
   import EntityDetailSkeleton from "$lib/components/entities/EntityDetailSkeleton.svelte";
+  import MediaProgressPanel from "$lib/components/MediaProgressPanel.svelte";
+  import { PROGRESS_UNIT } from "$lib/api/generated/codes";
   import { fetchSeason, fetchSeries, type VideoSeasonDetail, type VideoSeriesDetail } from "$lib/api/media";
+  import { updateEntityProgress } from "$lib/api/playback";
+  import { getCapability } from "$lib/api/capabilities";
   import {
     updateEntityRating,
     updateEntityFlags,
@@ -29,7 +33,11 @@
     thumbnailsToCards,
   } from "$lib/entities/entity-relationship-thumbnails";
   import type { EntityThumbnailCard } from "$lib/entities/entity-thumbnail";
-  import { CREDIT_ROLE, ENTITY_KIND } from "$lib/entities/entity-codes";
+  import { CAPABILITY_KIND, CREDIT_ROLE, ENTITY_KIND } from "$lib/entities/entity-codes";
+  import {
+    videoContainerProgressDisplay,
+    videoProgressEpisodeFromCard,
+  } from "$lib/entities/video-container-progress";
   import EntityDetail, {
     type EntityDetailActionButton,
     type EntityMetadataUpdateRequest,
@@ -56,9 +64,12 @@
   let seasonCards = $state<EntityThumbnailCard[]>([]);
   let childSeriesCards = $state<EntityThumbnailCard[]>([]);
   let videoCards = $state<EntityThumbnailCard[]>([]);
+  let orderedSeriesEpisodeIds = $state<string[]>([]);
+  let seriesProgressEpisodeCard = $state<EntityThumbnailCard | null>(null);
   let relationshipCredits = $state<EntityDetailCredit[]>([]);
   let relationshipStudio = $state<EntityDetailCredit | null>(null);
   let relationshipTags = $state<EntityDetailTag[]>([]);
+  let progressBusy = $state(false);
 
   const card = $derived.by((): EntityDetailCardFull | null => {
     if (!series) return null;
@@ -103,6 +114,14 @@
   const totalEpisodeCount = $derived(
     videoCards.length + Object.values(seasonEpisodeCounts).reduce((total, count) => total + count, 0),
   );
+  const seriesProgress = $derived(
+    series ? getCapability(series.capabilities, CAPABILITY_KIND.progress) : undefined,
+  );
+  const progressDisplay = $derived(videoContainerProgressDisplay(
+    seriesProgress,
+    videoProgressEpisodeFromCard(seriesProgressEpisodeCard),
+  ));
+  const firstEpisodeId = $derived(orderedSeriesEpisodeIds[0] ?? null);
   // Built-in sections come from EntityDetail's core catalog; only label overrides
   // are declared here.
   const detailSections = $derived.by((): EntityDetailSection[] => [
@@ -160,7 +179,10 @@
     try {
       const nextSeries = await fetchSeries(page.params.id ?? "");
       await hydrateSeriesThumbnails(nextSeries);
-      seasonEpisodeCounts = await loadSeasonEpisodeCounts(nextSeries);
+      const episodeState = await loadSeriesEpisodes(nextSeries);
+      seasonEpisodeCounts = episodeState.counts;
+      orderedSeriesEpisodeIds = episodeState.ids;
+      seriesProgressEpisodeCard = episodeState.progressCard;
       series = nextSeries;
       loadState = "ready";
     } catch (err) {
@@ -200,18 +222,77 @@
     await loadSeries();
   }
 
-  async function loadSeasonEpisodeCounts(nextSeries: VideoSeriesDetail): Promise<Record<string, number>> {
+  async function loadSeriesEpisodes(nextSeries: VideoSeriesDetail): Promise<{
+    counts: Record<string, number>;
+    ids: string[];
+    progressCard: EntityThumbnailCard | null;
+  }> {
     const seasonIds = getChildIds(nextSeries, ENTITY_KIND.videoSeason);
-    if (seasonIds.length === 0) return {};
+    if (seasonIds.length === 0) {
+      const progress = getCapability(nextSeries.capabilities, CAPABILITY_KIND.progress);
+      return {
+        counts: {},
+        ids: videoCards.map((card) => card.entity.id),
+        progressCard: videoCards.find((card) => card.entity.id === progress?.currentEntityId) ?? null,
+      };
+    }
 
     const details = await Promise.all(
       seasonIds.map((id) => fetchSeason(nextSeries.id, id)),
     );
+    const episodeIds = details.flatMap((detail) => getChildIds(detail, ENTITY_KIND.video));
+    const progress = getCapability(nextSeries.capabilities, CAPABILITY_KIND.progress);
+    const progressCards = progress?.currentEntityId && episodeIds.includes(progress.currentEntityId)
+      ? thumbnailsToCards(await fetchOrderedEntityThumbnails([progress.currentEntityId]))
+      : [];
 
-    return Object.fromEntries(details.map((detail: VideoSeasonDetail) => [
-      detail.id,
-      getChildIds(detail, ENTITY_KIND.video).length,
-    ]));
+    return {
+      counts: Object.fromEntries(details.map((detail: VideoSeasonDetail) => [
+        detail.id,
+        getChildIds(detail, ENTITY_KIND.video).length,
+      ])),
+      ids: episodeIds,
+      progressCard: progressCards[0] ?? null,
+    };
+  }
+
+  function continueSeries() {
+    if (!progressDisplay) return;
+    void goto(`/videos/${progressDisplay.episodeId}`);
+  }
+
+  async function handleToggleSeriesWatched(watched: boolean) {
+    if (!series || !progressDisplay || progressBusy) return;
+    progressBusy = true;
+    try {
+      await updateEntityProgress(series.id, {
+        currentEntityId: progressDisplay.episodeId,
+        unit: PROGRESS_UNIT.item,
+        index: progressDisplay.index,
+        total: progressDisplay.total,
+        completed: watched,
+      });
+      await loadSeries({ showLoading: false });
+    } finally {
+      progressBusy = false;
+    }
+  }
+
+  async function startSeriesOver() {
+    if (!series || !firstEpisodeId || !progressDisplay || progressBusy) return;
+    progressBusy = true;
+    try {
+      await updateEntityProgress(series.id, {
+        currentEntityId: firstEpisodeId,
+        unit: PROGRESS_UNIT.item,
+        index: 0,
+        total: progressDisplay.total,
+        reset: true,
+      });
+      await loadSeries({ showLoading: false });
+    } finally {
+      progressBusy = false;
+    }
   }
 
   async function hydrateSeriesThumbnails(nextSeries: VideoSeriesDetail) {
@@ -301,6 +382,25 @@
         {/if}
       {/snippet}
     </EntityDetail>
+
+    {#if progressDisplay}
+      <section class="progress-section">
+        <MediaProgressPanel
+          kind="watch"
+          completed={progressDisplay.completed}
+          percent={progressDisplay.percent}
+          positionLabel={progressDisplay.positionLabel}
+          countLabel={progressDisplay.episodeLabel}
+          canResume={progressDisplay.canContinue}
+          canStartOver
+          busy={progressBusy}
+          resumeLabel="Continue"
+          onToggleCompleted={handleToggleSeriesWatched}
+          onResume={continueSeries}
+          onStartOver={startSeriesOver}
+        />
+      </section>
+    {/if}
 
     {#if hasSeasons}
       <EntityGridSection

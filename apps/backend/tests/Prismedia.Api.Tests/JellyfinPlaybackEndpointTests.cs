@@ -610,6 +610,11 @@ public sealed class JellyfinPlaybackEndpointTests : IDisposable {
             CancellationToken cancellationToken) =>
             Task.FromResult<BookProgressPosition?>(null);
 
+        public Task<IReadOnlyList<VideoProgressScopePosition>> ResolveVideoProgressScopesAsync(
+            Guid videoId,
+            CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<VideoProgressScopePosition>>([]);
+
         public Task SaveAsync(Entity entity, CancellationToken cancellationToken) {
             _entities[entity.Id] = entity;
             return Task.CompletedTask;

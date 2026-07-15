@@ -114,6 +114,22 @@ public sealed partial class EfEntityReadService {
             : await _db.UserEntityStates.AsNoTracking()
                 .Where(state => state.UserId == currentUserId && ids.Contains(state.EntityId))
                 .ToDictionaryAsync(state => state.EntityId, cancellationToken);
+        var progressCurrentIds = stateByEntity.Values
+            .Select(state => state.ProgressCurrentEntityId)
+            .Where(id => id is not null)
+            .Select(id => id!.Value)
+            .Distinct()
+            .ToArray();
+        var progressStateByEntity = progressCurrentIds.Length == 0 || currentUserId == Guid.Empty
+            ? new Dictionary<Guid, UserEntityStateRow>()
+            : await _db.UserEntityStates.AsNoTracking()
+                .Where(state => state.UserId == currentUserId && progressCurrentIds.Contains(state.EntityId))
+                .ToDictionaryAsync(state => state.EntityId, cancellationToken);
+        var technicalByProgressEntity = progressCurrentIds.Length == 0
+            ? new Dictionary<Guid, EntityTechnicalRow>()
+            : await _db.EntityTechnical.AsNoTracking()
+                .Where(technical => progressCurrentIds.Contains(technical.EntityId))
+                .ToDictionaryAsync(technical => technical.EntityId, cancellationToken);
         var movieIds = rows
             .Where(row => row.KindCode == EntityKindRegistry.Movie.Code)
             .Select(row => row.Id)
@@ -168,6 +184,12 @@ public sealed partial class EfEntityReadService {
             var playbackDurationSeconds = playbackState is not null && playbackState.EntityId != row.Id
                 ? technicalByMovieChild.GetValueOrDefault(playbackState.EntityId)?.DurationSeconds
                 : technicalByEntity.GetValueOrDefault(row.Id)?.DurationSeconds;
+            var progressState = ownState?.ProgressCurrentEntityId is { } progressEntityId
+                ? progressStateByEntity.GetValueOrDefault(progressEntityId)
+                : null;
+            var progressDurationSeconds = progressState is null
+                ? null
+                : technicalByProgressEntity.GetValueOrDefault(progressState.EntityId)?.DurationSeconds;
             var hoverUrl = hoverByEntity.GetValueOrDefault(row.Id);
             var hoverImages = hoverImagesByEntity.GetValueOrDefault(row.Id) ?? [];
             var coverUrl = coverByEntity.GetValueOrDefault(row.Id);
@@ -243,7 +265,9 @@ public sealed partial class EfEntityReadService {
                 Genres = tagsByEntity.GetValueOrDefault(row.Id),
                 Progress = ResolveThumbnailProgress(
                     playbackState,
-                    playbackDurationSeconds)
+                    playbackDurationSeconds,
+                    progressState,
+                    progressDurationSeconds)
             };
         }).ToArray();
 
@@ -459,11 +483,14 @@ public sealed partial class EfEntityReadService {
     /// Playback (video/audio) takes precedence: a completed item reads 1.0, an item with a
     /// stored resume position reads its fraction of the known runtime, and anything else
     /// reads <c>null</c>. Reading progress (books) falls back to completed → 1.0 or the
-    /// current index over the total. Returns <c>null</c> when there is nothing meaningful to show.
+    /// current index over the total. A container cursor also blends the current episode's playback
+    /// fraction into that index. Returns <c>null</c> when there is nothing meaningful to show.
     /// </summary>
     private static double? ResolveThumbnailProgress(
         UserEntityStateRow? state,
-        double? durationSeconds) {
+        double? durationSeconds,
+        UserEntityStateRow? progressEntityState,
+        double? progressEntityDurationSeconds) {
         if (state is null) {
             return null;
         }
@@ -484,8 +511,18 @@ public sealed partial class EfEntityReadService {
             return 1.0;
         }
 
-        if (state.ProgressTotal > 0 && state.ProgressIndex > 0) {
-            return Math.Clamp((double)state.ProgressIndex / state.ProgressTotal, 0, 1);
+        if (state.ProgressTotal > 0 && (state.ProgressCurrentEntityId is not null || state.ProgressIndex > 0)) {
+            var currentFraction = progressEntityState switch {
+                { CompletedAt: not null } => 1,
+                { ResumeSeconds: > 0 } when progressEntityDurationSeconds is > 0 =>
+                    Math.Clamp(progressEntityState.ResumeSeconds / progressEntityDurationSeconds.Value, 0, 1),
+                _ => 0
+            };
+            var fraction = Math.Clamp(
+                (state.ProgressIndex + currentFraction) / state.ProgressTotal,
+                0,
+                1);
+            return fraction > 0 ? fraction : null;
         }
 
         return null;

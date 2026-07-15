@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Play, RotateCcw, Glasses, Headphones } from "@lucide/svelte";
+  import { Play, RotateCcw, Eye, Glasses, Headphones } from "@lucide/svelte";
 
   type ProgressKind = "watch" | "read" | "listen";
 
@@ -24,6 +24,8 @@
     onToggleCompleted: (next: boolean) => void;
     /** Resumes from the saved position. */
     onResume?: () => void;
+    /** Action copy for the saved target. Containers use Continue; time/page media use Resume. */
+    resumeLabel?: string;
     /** Resets to the beginning. */
     onStartOver?: () => void;
   }
@@ -39,6 +41,7 @@
     busy = false,
     onToggleCompleted,
     onResume,
+    resumeLabel = "Resume",
     onStartOver,
   }: Props = $props();
 
@@ -101,7 +104,7 @@
           disabled={busy}
         >
           <Play class="h-3.5 w-3.5" />
-          <span class="entity-action-button-label">Resume</span>
+          <span class="entity-action-button-label">{resumeLabel}</span>
         </button>
       {/if}
       {#if canStartOver && onStartOver}
@@ -125,6 +128,8 @@
     >
       {#if kind === "listen"}
         <Headphones class="h-4 w-4" />
+      {:else if kind === "watch"}
+        <Eye class="h-4 w-4" />
       {:else}
         <Glasses class="h-4 w-4" />
       {/if}

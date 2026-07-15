@@ -289,7 +289,7 @@ public sealed partial class EfEntityReadService : IEntityReadService {
             recency = states
                 .Where(state => state.UserId == userId && state.EntityId == entity.Id)
                 .Select(state => state.LastPlayedAt ??
-                    (state.ProgressIndex > 0 || state.ProgressCompletedAt != null
+                    (state.ProgressCurrentEntityId != null || state.ProgressIndex > 0 || state.ProgressCompletedAt != null
                         ? (DateTimeOffset?)state.UpdatedAt
                         : null))
                 .FirstOrDefault()
@@ -401,7 +401,7 @@ public sealed partial class EfEntityReadService : IEntityReadService {
                             states.Any(state => state.UserId == userId && state.EntityId == child.Id &&
                                 (state.CompletedAt != null || state.PlayCount > 0 || state.ResumeSeconds > 0)))) ||
                     states.Any(state => state.UserId == userId && state.EntityId == entity.Id &&
-                        (state.ProgressCompletedAt != null || state.ProgressIndex > 0)))
+                        (state.ProgressCompletedAt != null || state.ProgressCurrentEntityId != null || state.ProgressIndex > 0)))
                 : query.Where(entity =>
                     !states.Any(state => state.UserId == userId && state.EntityId == entity.Id &&
                         (state.CompletedAt != null || state.PlayCount > 0 || state.ResumeSeconds > 0)) &&
@@ -410,7 +410,7 @@ public sealed partial class EfEntityReadService : IEntityReadService {
                             states.Any(state => state.UserId == userId && state.EntityId == child.Id &&
                                 (state.CompletedAt != null || state.PlayCount > 0 || state.ResumeSeconds > 0)))) &&
                     !states.Any(state => state.UserId == userId && state.EntityId == entity.Id &&
-                        (state.ProgressCompletedAt != null || state.ProgressIndex > 0)));
+                        (state.ProgressCompletedAt != null || state.ProgressCurrentEntityId != null || state.ProgressIndex > 0)));
         }
 
         var bookTypes = ParseCodeList<BookType>(bookType);
@@ -471,7 +471,7 @@ public sealed partial class EfEntityReadService : IEntityReadService {
                             states.Any(state => state.UserId == userId && state.EntityId == child.Id &&
                                 (state.CompletedAt != null || state.PlayCount > 0 || state.ResumeSeconds > 0)))) &&
                     !states.Any(state => state.UserId == userId && state.EntityId == entity.Id &&
-                        (state.ProgressCompletedAt != null || state.ProgressIndex > 0))),
+                        (state.ProgressCompletedAt != null || state.ProgressCurrentEntityId != null || state.ProgressIndex > 0))),
             "in-progress" or "inprogress" or "in_progress" or "reading" or "watching" =>
                 query.Where(entity =>
                     states.Any(state => state.UserId == userId && state.EntityId == entity.Id &&
@@ -481,7 +481,9 @@ public sealed partial class EfEntityReadService : IEntityReadService {
                             states.Any(state => state.UserId == userId && state.EntityId == child.Id &&
                                 state.CompletedAt == null && state.ResumeSeconds > 0))) ||
                     states.Any(state => state.UserId == userId && state.EntityId == entity.Id &&
-                        state.ProgressCompletedAt == null && state.ProgressIndex > 0 && state.ProgressIndex < state.ProgressTotal)),
+                        state.ProgressCompletedAt == null &&
+                        (state.ProgressCurrentEntityId != null || state.ProgressIndex > 0) &&
+                        state.ProgressIndex < state.ProgressTotal)),
             _ => query,
         };
     }

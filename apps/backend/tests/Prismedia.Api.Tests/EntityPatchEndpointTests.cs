@@ -388,6 +388,11 @@ public sealed class EntityPatchEndpointTests {
                     ? new BookProgressPosition(ChapterId, index, total)
                     : null);
 
+        public Task<IReadOnlyList<VideoProgressScopePosition>> ResolveVideoProgressScopesAsync(
+            Guid videoId,
+            CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<VideoProgressScopePosition>>([]);
+
         public Task SaveAsync(Entity entity, CancellationToken cancellationToken) {
             SavedEntity = entity;
             return Task.CompletedTask;

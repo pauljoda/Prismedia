@@ -49,6 +49,16 @@ public interface IEntityWriteRepository {
         CancellationToken cancellationToken);
 
     /// <summary>
+    /// Resolves a playable episode into its independently tracked season and series positions.
+    /// Positions follow persisted structural ordering and include the next episode in each scope.
+    /// </summary>
+    /// <param name="videoId">Playable video identifier.</param>
+    /// <param name="cancellationToken">Token used to cancel the operation.</param>
+    Task<IReadOnlyList<VideoProgressScopePosition>> ResolveVideoProgressScopesAsync(
+        Guid videoId,
+        CancellationToken cancellationToken);
+
+    /// <summary>
     /// Persists one hydrated domain entity slice, including structural links, relationships,
     /// and mutable capabilities. Commits as a single unit of work.
     /// </summary>
@@ -64,6 +74,21 @@ public interface IEntityWriteRepository {
 /// <param name="Index">Zero-based page index across the whole book.</param>
 /// <param name="Total">Total page count across the whole book.</param>
 public sealed record BookProgressPosition(Guid ChapterId, int Index, int Total);
+
+/// <summary>
+/// Ordered position of one episode inside a season or series progress scope.
+/// </summary>
+/// <param name="OwnerId">Season or series whose user-scoped cursor is updated.</param>
+/// <param name="CurrentEpisodeId">Episode that produced the playback update.</param>
+/// <param name="Index">Zero-based position of the current episode in this scope.</param>
+/// <param name="Total">Total ordered episodes in this scope.</param>
+/// <param name="NextEpisodeId">Next episode to offer after completion, or null at the end.</param>
+public sealed record VideoProgressScopePosition(
+    Guid OwnerId,
+    Guid CurrentEpisodeId,
+    int Index,
+    int Total,
+    Guid? NextEpisodeId);
 
 /// <summary>
 /// Raised by <see cref="IEntityWriteRepository.SaveAsync"/> when a concurrent writer modified the

@@ -22,6 +22,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Release operations are now ready for channel publishing: the root package version is the source of truth, Docker builds validate the release metadata, pushes to `main` publish only the dev image, and alpha/beta/release images are published manually.
 
 ### Added
+- Series and seasons now track their own episode progress: partially watched episodes resume in place, completed episodes offer the next one as Continue, and starting in a later season advances the series without marking earlier seasons watched. Both detail pages use the shared progress card with independent watched and start-over controls.
 - Files can now be downloaded directly from the file browser. Downloading a folder prepares a ZIP in the background, shows live file-count and compression progress, and starts the browser download automatically when the archive is ready.
 - Books with both readable and audio editions now have one combined progress card for continuing either rendition or opening both together. Combined resume follows whichever edition is farther ahead, estimates the matching page or timestamp within the chapter, and starts audio five seconds early for easier manual alignment.
 - Book detail pages now turn EPUB contents and multipart audiobooks into one chapter list with artwork-colored reading and listening markers, per-chapter Read and Listen actions, and a combined mode that opens the matching text and audio together.

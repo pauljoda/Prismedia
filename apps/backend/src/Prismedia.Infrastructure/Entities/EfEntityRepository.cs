@@ -174,6 +174,47 @@ public sealed class EfEntityRepository : IEntityWriteRepository {
     }
 
     /// <summary>
+    /// Resolves independent season and series cursors for an episode. A season-backed series is
+    /// flattened in season order and then episode order; loose series videos form their own flat
+    /// series sequence so specials never distort normal season progression.
+    /// </summary>
+    public async Task<IReadOnlyList<VideoProgressScopePosition>> ResolveVideoProgressScopesAsync(
+        Guid videoId,
+        CancellationToken cancellationToken) {
+        var episode = await _db.Entities.AsNoTracking()
+            .Where(row => row.Id == videoId && row.KindCode == EntityKindRegistry.Video.Code)
+            .Select(row => new { row.Id, row.ParentEntityId })
+            .SingleOrDefaultAsync(cancellationToken);
+        if (episode?.ParentEntityId is not { } parentId) {
+            return [];
+        }
+
+        var parent = await _db.Entities.AsNoTracking()
+            .Where(row => row.Id == parentId)
+            .Select(row => new { row.Id, row.KindCode, row.ParentEntityId })
+            .SingleOrDefaultAsync(cancellationToken);
+        if (parent is null) {
+            return [];
+        }
+
+        var scopes = new List<VideoProgressScopePosition>(capacity: 2);
+        if (parent.KindCode == EntityKindRegistry.VideoSeason.Code) {
+            var seasonEpisodeIds = await LoadOrderedVideoIdsAsync(parent.Id, cancellationToken);
+            AddVideoProgressScope(scopes, parent.Id, videoId, seasonEpisodeIds);
+
+            if (parent.ParentEntityId is { } seriesId) {
+                var seriesEpisodeIds = await LoadOrderedSeriesEpisodeIdsAsync(seriesId, cancellationToken);
+                AddVideoProgressScope(scopes, seriesId, videoId, seriesEpisodeIds);
+            }
+        } else if (parent.KindCode == EntityKindRegistry.VideoSeries.Code) {
+            var seriesEpisodeIds = await LoadOrderedVideoIdsAsync(parent.Id, cancellationToken);
+            AddVideoProgressScope(scopes, parent.Id, videoId, seriesEpisodeIds);
+        }
+
+        return scopes;
+    }
+
+    /// <summary>
     /// Finds an active entity and returns it only when it matches the requested concrete domain type.
     /// </summary>
     public async Task<TEntity?> FindAsync<TEntity>(Guid id, CancellationToken cancellationToken)
@@ -319,6 +360,75 @@ public sealed class EfEntityRepository : IEntityWriteRepository {
         }
 
         return chapters;
+    }
+
+    private async Task<IReadOnlyList<Guid>> LoadOrderedVideoIdsAsync(
+        Guid parentId,
+        CancellationToken cancellationToken) =>
+        await _db.Entities.AsNoTracking()
+            .Where(row => row.ParentEntityId == parentId && row.KindCode == EntityKindRegistry.Video.Code)
+            .OrderBy(row => row.SortOrder)
+            .ThenBy(row => row.CreatedAt)
+            .ThenBy(row => row.Id)
+            .Select(row => row.Id)
+            .ToArrayAsync(cancellationToken);
+
+    private async Task<IReadOnlyList<Guid>> LoadOrderedSeriesEpisodeIdsAsync(
+        Guid seriesId,
+        CancellationToken cancellationToken) {
+        var seasonIds = await _db.Entities.AsNoTracking()
+            .Where(row => row.ParentEntityId == seriesId && row.KindCode == EntityKindRegistry.VideoSeason.Code)
+            .OrderBy(row => row.SortOrder)
+            .ThenBy(row => row.CreatedAt)
+            .ThenBy(row => row.Id)
+            .Select(row => row.Id)
+            .ToArrayAsync(cancellationToken);
+        if (seasonIds.Length == 0) {
+            return await LoadOrderedVideoIdsAsync(seriesId, cancellationToken);
+        }
+
+        var episodes = await _db.Entities.AsNoTracking()
+            .Where(row => row.ParentEntityId != null &&
+                          seasonIds.Contains(row.ParentEntityId.Value) &&
+                          row.KindCode == EntityKindRegistry.Video.Code)
+            .OrderBy(row => row.SortOrder)
+            .ThenBy(row => row.CreatedAt)
+            .ThenBy(row => row.Id)
+            .Select(row => new { SeasonId = row.ParentEntityId!.Value, row.Id })
+            .ToArrayAsync(cancellationToken);
+        var episodesBySeason = episodes
+            .GroupBy(row => row.SeasonId)
+            .ToDictionary(group => group.Key, group => group.Select(row => row.Id).ToArray());
+
+        return seasonIds
+            .SelectMany(seasonId => episodesBySeason.GetValueOrDefault(seasonId) ?? [])
+            .ToArray();
+    }
+
+    private static void AddVideoProgressScope(
+        ICollection<VideoProgressScopePosition> scopes,
+        Guid ownerId,
+        Guid videoId,
+        IReadOnlyList<Guid> orderedEpisodeIds) {
+        var index = -1;
+        for (var candidateIndex = 0; candidateIndex < orderedEpisodeIds.Count; candidateIndex++) {
+            if (orderedEpisodeIds[candidateIndex] != videoId) {
+                continue;
+            }
+
+            index = candidateIndex;
+            break;
+        }
+        if (index < 0) {
+            return;
+        }
+
+        scopes.Add(new VideoProgressScopePosition(
+            ownerId,
+            videoId,
+            index,
+            orderedEpisodeIds.Count,
+            index + 1 < orderedEpisodeIds.Count ? orderedEpisodeIds[index + 1] : null));
     }
 
     private async Task HydrateChildrenAsync(

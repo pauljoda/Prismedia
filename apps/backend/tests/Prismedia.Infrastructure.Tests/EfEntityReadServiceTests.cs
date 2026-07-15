@@ -1755,6 +1755,54 @@ public sealed class EfEntityReadServiceTests {
     }
 
     [Fact]
+    public async Task ListAsyncIncludesPartialFirstEpisodeAsSeriesProgress() {
+        await using var db = CreateContext();
+        var now = DateTimeOffset.UtcNow;
+        var seriesId = Guid.Parse("aaaaaaaa-1111-1111-1111-111111111111");
+        var seasonId = Guid.Parse("aaaaaaaa-2222-2222-2222-222222222222");
+        var episodeId = Guid.Parse("aaaaaaaa-3333-3333-3333-333333333333");
+        db.Entities.AddRange(
+            new EntityRow { Id = seriesId, KindCode = EntityKindRegistry.VideoSeries.Code, Title = "Series", CreatedAt = now, UpdatedAt = now },
+            new EntityRow { Id = seasonId, KindCode = EntityKindRegistry.VideoSeason.Code, Title = "Season", ParentEntityId = seriesId, CreatedAt = now, UpdatedAt = now },
+            new EntityRow { Id = episodeId, KindCode = EntityKindRegistry.Video.Code, Title = "Episode", ParentEntityId = seasonId, CreatedAt = now, UpdatedAt = now });
+        db.EntityTechnical.Add(new EntityTechnicalRow {
+            EntityId = episodeId,
+            DurationSeconds = 100,
+            UpdatedAt = now
+        });
+        db.UserEntityStates.AddRange(
+            new UserEntityStateRow {
+                UserId = TestUserContext.UserId,
+                EntityId = seriesId,
+                ProgressCurrentEntityId = episodeId,
+                ProgressUnit = ProgressUnit.Item.ToCode(),
+                ProgressIndex = 0,
+                ProgressTotal = 4,
+                UpdatedAt = now
+            },
+            new UserEntityStateRow {
+                UserId = TestUserContext.UserId,
+                EntityId = episodeId,
+                ResumeSeconds = 50,
+                UpdatedAt = now
+            });
+        await db.SaveChangesAsync();
+
+        var result = await CreateService(db).ListAsync(
+            EntityKindRegistry.VideoSeries.Code,
+            null,
+            null,
+            null,
+            null,
+            CancellationToken.None,
+            status: "in-progress");
+
+        var thumbnail = Assert.Single(result.Items);
+        Assert.Equal(seriesId, thumbnail.Id);
+        Assert.Equal(0.125, thumbnail.Progress);
+    }
+
+    [Fact]
     public async Task ListAsyncTreatsMovieChildPlaybackAsMovieEngagement() {
         await using var db = CreateContext();
         var now = DateTimeOffset.UtcNow;

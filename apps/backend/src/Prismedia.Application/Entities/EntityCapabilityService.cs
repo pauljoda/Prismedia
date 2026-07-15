@@ -152,6 +152,10 @@ public sealed class EntityCapabilityService {
             return completedEvent;
         }, cancellationToken);
 
+        if (card is not null) {
+            await RollUpVideoProgressAsync(id, card, cancellationToken);
+        }
+
         return card;
     }
 
@@ -460,6 +464,71 @@ public sealed class EntityCapabilityService {
             new EntityFileManagementState(
                 sourceBackedIds.Contains(entity.Id),
                 recoverableDeletionIds.Contains(entity.Id)));
+    }
+
+    private async Task RollUpVideoProgressAsync(
+        Guid videoId,
+        EntityCard videoCard,
+        CancellationToken cancellationToken) {
+        if (videoCard.Kind != EntityKind.Video) {
+            return;
+        }
+
+        var playback = videoCard.Capabilities.OfType<PlaybackCapability>().SingleOrDefault();
+        if (playback is null || playback.ResumeSeconds <= 0 && playback.CompletedAt is null) {
+            return;
+        }
+
+        var scopes = await _entities.ResolveVideoProgressScopesAsync(videoId, cancellationToken);
+        foreach (var scope in scopes) {
+            await UpdateVideoProgressScopeAsync(scope, playback.CompletedAt is not null, cancellationToken);
+        }
+    }
+
+    private async Task UpdateVideoProgressScopeAsync(
+        VideoProgressScopePosition scope,
+        bool episodeCompleted,
+        CancellationToken cancellationToken) {
+        var targetEpisodeId = episodeCompleted && scope.NextEpisodeId is { } nextEpisodeId
+            ? nextEpisodeId
+            : scope.CurrentEpisodeId;
+        var targetIndex = episodeCompleted && scope.NextEpisodeId is not null
+            ? scope.Index + 1
+            : scope.Index;
+        var scopeCompleted = episodeCompleted && scope.NextEpisodeId is null;
+
+        for (var attempt = 0; ; attempt++) {
+            var owner = await _entities.FindShallowAsync(scope.OwnerId, cancellationToken);
+            if (owner is null) {
+                return;
+            }
+
+            var progress = owner.GetOrAddCapability(() => new CapabilityProgress());
+            if (progress.CurrentEntityId is not null &&
+                (progress.Index > targetIndex ||
+                 progress.CompletedAt is not null && !scopeCompleted && progress.Index >= targetIndex)) {
+                return;
+            }
+
+            var now = _timeProvider.GetUtcNow();
+            progress.MoveTo(
+                targetEpisodeId,
+                ProgressUnit.Item,
+                targetIndex,
+                scope.Total,
+                mode: null,
+                now);
+            if (scopeCompleted) {
+                progress.MarkCompleted(now);
+            }
+
+            try {
+                await _entities.SaveAsync(owner, cancellationToken);
+                return;
+            } catch (EntityConcurrencyConflictException) when (attempt < MaxConcurrencyRetries) {
+                // Re-read the container cursor and preserve the farther position on retry.
+            }
+        }
     }
 
     private static bool CanDeriveVideoCompletion(Entity entity) =>
