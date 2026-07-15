@@ -236,6 +236,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Removed development-only route shells and redundant prerelease UI panels so the app surface and release notes focus on the production Prismedia experience.
 
 ### Docs
+- Documented audiobook scanning and manual placement, including supported formats, Books-root configuration, folder grouping, ebook matching, multipart ordering, and rescan behavior.
 - Replaced the README, documentation-site theme, brand assets, and product screenshots with the restrained prism design language across current desktop and mobile surfaces.
 - Overhauled the README and documentation site around the current Prismedia app, including setup, browsing, scanning, playback, requests, identify, collections, settings, operations, plugins, and screenshots.
 - Added Library & Scanning references with supported folder layouts and file extensions for videos, movies, series, images, galleries, comics, ebooks, and audio.

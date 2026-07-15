@@ -67,6 +67,8 @@ Books open in a focused, full-page reader route. The reader adapts to the format
 
 Every book shows a reading-progress panel — status, percentage, position, **Resume**/**Start Over**, and a read/unread toggle — and a progress bar along its cover in grids. The reader toolbar stays out of the way while you turn pages or scroll; a centre tap toggles it.
 
+When a Book also has an audiobook rendition, its detail page shows **Listen** or **Resume listening** and queues every audio part in filename order. Listening progress is saved independently from EPUB/PDF reading progress, so switching between reading and listening never replaces the other position.
+
 ## Audio playback
 
 Audio plays through a single **persistent player bar** that keeps playing as you browse.

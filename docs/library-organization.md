@@ -9,8 +9,8 @@ Scanning**, so there is a single source of truth that ships with the docs:
 - [Videos, Movies & Series](https://pauljoda.github.io/Prismedia/docs/library/videos) —
   movie/standalone/episode classification, season folders, filename tokens, sidecars.
 - [Images & Galleries](https://pauljoda.github.io/Prismedia/docs/library/images-galleries)
-- [Books, Comics & eBooks](https://pauljoda.github.io/Prismedia/docs/library/books) —
-  `.cbz`/`.zip` comics and `.epub`/`.pdf` single-file books.
+- [Books, Comics, eBooks & Audiobooks](https://pauljoda.github.io/Prismedia/docs/library/books) —
+  `.cbz`/`.zip` comics, `.epub`/`.pdf` single-file books, and `.m4b`/`.m4a`/`.mp3` audiobooks.
 - [Audio & Music](https://pauljoda.github.io/Prismedia/docs/library/audio) —
   `Album/Songs` and `Artist/Album/Songs` layouts, disc sections, artists.
 

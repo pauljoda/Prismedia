@@ -12,7 +12,7 @@ This page covers the mechanics shared by every media type. The per-type rules �
 
 - [Videos, Movies & Series](./videos.md)
 - [Images & Galleries](./images-galleries.md)
-- [Books, Comics & eBooks](./books.md)
+- [Books, Comics, eBooks & Audiobooks](./books.md)
 - [Audio & Music](./audio.md)
 
 ## Watched roots and scan types
@@ -23,7 +23,7 @@ A watched root is a container path plus per-type scan toggles. A scan walks the 
 | --- | --- |
 | **Videos** | Video files → movies, series, seasons, episodes. |
 | **Images** | Image files → loose images and galleries. |
-| **Books** | Comic archives (`.cbz`/`.zip`) and single-file books (`.epub`/`.pdf`). |
+| **Books** | Comic archives (`.cbz`/`.zip`), single-file books (`.epub`/`.pdf`), and audiobooks (`.m4b`/`.m4a`/`.mp3`). |
 | **Audio** | Audio files → artists, albums, tracks. |
 
 Keep folders that need different behavior (different media types, or NSFW vs not) as separate roots.

@@ -28,7 +28,7 @@ Choose the scan toggles that match the folder:
 | --- | --- |
 | **Videos** | Video files → movies, series, seasons, and episodes. |
 | **Images** | Loose image files and folders of images (galleries). |
-| **Books** | `.cbz`/`.zip` comics and `.epub`/`.pdf` eBooks. |
+| **Books** | `.cbz`/`.zip` comics, `.epub`/`.pdf` eBooks, and `.m4b`/`.m4a`/`.mp3` audiobooks. |
 | **Audio** | Music folders → artists, albums, and tracks. |
 
 Other per-root settings:

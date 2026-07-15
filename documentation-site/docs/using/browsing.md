@@ -35,13 +35,13 @@ All three support grid, list, and media-wall browsing, library-wide search, sort
 
 Browse images and galleries as **Grid**, **List**, or **Feed** (a full-width column at each item's real shape, with animated items playing inline). Clicking an item opens the universal lightbox.
 
-## Comics and eBooks
+## Comics, eBooks, and audiobooks
 
-The **Comics** section narrows the Books library to comics and manga; **eBooks** narrows it to EPUB/PDF books and novels; **Books** lists everything. See [Books, Comics & eBooks](../library/books.md).
+The **Comics** section narrows the Books library to comics and manga; **eBooks** narrows it to EPUB/PDF books and novels; **Books** lists everything, including audio-only books and Books with both reading and listening renditions. See [Books, Comics, eBooks & Audiobooks](../library/books.md).
 
 ![Book detail with reading progress](/img/screenshots/books.png)
 
-Books open in a focused reader with paged/vertical (and PDF scroll) modes, resume state, and chapter/volume navigation.
+Books open in a focused reader with paged/vertical (and PDF scroll) modes, resume state, and chapter/volume navigation. Audiobooks expose ordered listening parts and independent listening progress from the same Book detail page.
 
 ## Audio
 
