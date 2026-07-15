@@ -62,6 +62,7 @@
   let singleFileSource = $state("");
   let singleFileContentType = $state("application/epub+zip");
   let singleFileLocation = $state.raw<string | null>(null);
+  let singleFileInitialFraction = $state.raw<number | null>(null);
   let singleFileFlow = $state.raw<ReaderFlow>("paginated");
   let singleFileSaveLocation: string | null = null;
   let singleFileSaveFraction = 0;
@@ -135,14 +136,16 @@
     const progress = getCapability(nextBook.capabilities, CAPABILITY_KIND.progress);
     const resume = nextContext.command !== "start-over" && !progress?.completedAt;
     const launchLocation = nextContext.location ?? null;
+    const launchFraction = launchLocation ? null : nextContext.fraction ?? null;
     singleFileBook = true;
     singleFileSource = `/entities/${nextBook.id}/files/source`;
     singleFileContentType = nextBook.format === "pdf" ? "application/pdf" : "application/epub+zip";
-    singleFileLocation = launchLocation ?? (resume ? progress?.location ?? null : null);
+    singleFileLocation = launchLocation ?? (launchFraction === null && resume ? progress?.location ?? null : null);
+    singleFileInitialFraction = launchFraction;
     singleFileFlow = progress?.mode === READER_MODE.scrolled ? "scrolled" : "paginated";
     singleFileFlowMode = singleFileFlow;
     singleFileSaveLocation = singleFileLocation;
-    singleFileSaveFraction = launchLocation ? 0 : resume ? Number(progress?.index ?? 0) / 10000 : 0;
+    singleFileSaveFraction = launchFraction ?? (launchLocation ? 0 : resume ? Number(progress?.index ?? 0) / 10000 : 0);
     book = nextBook;
     context = nextContext;
     readerTitle = nextBook.title;
@@ -559,6 +562,7 @@
     presentation="page"
     closeIcon="back"
     initialLocation={singleFileLocation}
+    initialFraction={singleFileInitialFraction}
     initialFlow={singleFileFlow}
     onLocationChange={handleSingleFileLocation}
     onFlowChange={handleSingleFileFlow}
@@ -577,6 +581,7 @@
     onIndexChange={handleIndexChange}
     onModeChange={handleModeChange}
     onNextChapter={nextChapter ? handleNextChapter : undefined}
+    companionControls={combinedAudiobookActive ? combinedAudioControls : undefined}
     onClose={() => void closeReader()}
   />
 {:else}

@@ -60,6 +60,7 @@
   } from "$lib/components/entities/EntityDetail.svelte";
   import EntityGrid from "$lib/components/entities/EntityGrid.svelte";
   import EntityGridSection from "$lib/components/entities/EntityGridSection.svelte";
+  import BookCombinedProgressCard from "$lib/components/books/BookCombinedProgressCard.svelte";
   import BookChapterList from "$lib/components/books/BookChapterList.svelte";
   import { useIdentifyDetailAction } from "$lib/components/identify/use-identify-detail-action.svelte";
   import {
@@ -77,6 +78,14 @@
     type BookChapterRow,
     type ReadableBookChapter,
   } from "$lib/entities/book-chapter-list";
+  import {
+    epubChapterFraction,
+    resolveBookCombinedResume,
+    resolveChapterCombinedLaunch,
+    type BookCombinedLaunch,
+    type BookListeningPosition,
+    type BookReadingPosition,
+  } from "$lib/entities/book-combined-progress";
   import {
     loadEpubContents,
     type EpubContentsEntry,
@@ -207,7 +216,13 @@
         title: entry.title,
         order: entry.order,
         depth: entry.depth,
-        target: { kind: "epub", location: entry.location },
+        target: {
+          kind: "epub",
+          location: entry.location,
+          startFraction: entry.startFraction,
+          endFraction: entry.endFraction,
+        },
+        pageCount: null,
       }));
     }
     return chapterDetails.map((chapter, index) => ({
@@ -216,6 +231,7 @@
       order: index,
       depth: 0,
       target: { kind: "entity-chapter", chapterId: chapter.detail.id },
+      pageCount: chapter.pages.length,
     }));
   });
   const chapterRows = $derived(buildBookChapterRows({
@@ -228,6 +244,57 @@
         : progressDisplay?.chapterId ?? null,
     currentAudioTrackId: currentAudiobookTrackId,
   }));
+  const readingPercent = $derived(
+    singleFileProgressDisplay?.percent ?? progressDisplay?.percent ?? 0,
+  );
+  const bookReadingPosition = $derived.by((): BookReadingPosition | null => {
+    if (singleFileProgressDisplay && !singleFileProgressDisplay.isComplete && currentEpubChapterId) {
+      const row = chapterRows.find((candidate) => candidate.isCurrentReading);
+      if (!row) return null;
+      const overallFraction = singleFileProgressDisplay.total > 0
+        ? singleFileProgressDisplay.index / singleFileProgressDisplay.total
+        : 0;
+      return {
+        rowId: row.id,
+        overallFraction,
+        chapterFraction: epubChapterFraction(row, overallFraction),
+        location: singleFileProgressDisplay.location,
+        pageIndex: null,
+      };
+    }
+    if (!progressDisplay || progressDisplay.isComplete) return null;
+    const row = chapterRows.find((candidate) => candidate.isCurrentReading);
+    if (!row) return null;
+    return {
+      rowId: row.id,
+      overallFraction: progressDisplay.workTotal > 0
+        ? progressDisplay.workPage / progressDisplay.workTotal
+        : progressDisplay.percent / 100,
+      chapterFraction: progressDisplay.pageCount > 0
+        ? progressDisplay.currentPage / progressDisplay.pageCount
+        : 0,
+      location: null,
+      pageIndex: Math.max(0, progressDisplay.currentPage - 1),
+    };
+  });
+  const bookListeningPosition = $derived.by((): BookListeningPosition | null => {
+    if (audiobookCompleted || !savedAudiobookResume || audiobookTotalSeconds <= 0) return null;
+    const row = chapterRows.find((candidate) => candidate.isCurrentAudio);
+    if (!row?.audioTrack) return null;
+    const duration = Math.max(0, Number(row.audioTrack.duration ?? 0));
+    return {
+      rowId: row.id,
+      overallFraction: audiobookResumeSeconds / audiobookTotalSeconds,
+      chapterFraction: duration > 0 ? savedAudiobookResume.trackOffsetSeconds / duration : 0,
+      trackOffsetSeconds: savedAudiobookResume.trackOffsetSeconds,
+    };
+  });
+  const combinedResumePlan = $derived(
+    resolveBookCombinedResume(chapterRows, bookReadingPosition, bookListeningPosition),
+  );
+  const hasCombinedContent = $derived(
+    chapterRows.some((row) => row.readTarget && row.audioTrack),
+  );
   const fallbackBookPalette = entityAccentForKind(ENTITY_KIND.book);
   const chapterPalette = $derived(artworkPalette ?? {
     primary: fallbackBookPalette.primary,
@@ -683,7 +750,7 @@
     playback.play(audiobookTracks, trackId, context, { shuffle: false, startSeconds });
   }
 
-  function openChapterRow(row: BookChapterRow, combined = false) {
+  function openChapterRow(row: BookChapterRow) {
     if (!book || !row.readTarget) return;
     const target = row.readTarget;
     if (target.kind === "epub") {
@@ -693,7 +760,6 @@
         id: book.id,
         returnId: book.id,
         location: target.location,
-        combined,
       }));
       return;
     }
@@ -702,7 +768,36 @@
       kind: "chapter",
       id: target.chapterId,
       returnId: book.id,
-      combined,
+    }));
+  }
+
+  function openCombinedLaunch(plan: BookCombinedLaunch) {
+    if (!book) return;
+    const row = chapterRows.find((candidate) => candidate.id === plan.rowId);
+    const target = row?.readTarget;
+    const track = row?.audioTrack;
+    if (!row || !target || !track) return;
+
+    playAudiobookTrack(track.id, plan.audioStartSeconds);
+    if (target.kind === "epub") {
+      void goto(bookReaderHref({
+        bookId: book.id,
+        kind: "book",
+        id: book.id,
+        returnId: book.id,
+        location: plan.readerLocation ?? (plan.readerFraction === null ? target.location : undefined),
+        fraction: plan.readerFraction ?? undefined,
+        combined: true,
+      }));
+      return;
+    }
+    void goto(bookReaderHref({
+      bookId: book.id,
+      kind: "chapter",
+      id: target.chapterId,
+      returnId: book.id,
+      pageIndex: plan.readerPageIndex ?? undefined,
+      combined: true,
     }));
   }
 
@@ -720,14 +815,24 @@
   }
 
   function openCombinedChapter(row: BookChapterRow) {
-    const track = row.audioTrack;
-    if (!row.readTarget || !track) return;
-    if (isCurrentAudiobook && playback.currentTrack?.id === track.id) {
-      if (!playback.playing) playback.toggle();
-    } else {
-      playAudiobookTrack(track.id, 0);
+    const plan = resolveChapterCombinedLaunch(
+      row,
+      bookReadingPosition,
+      bookListeningPosition,
+    );
+    if (plan) openCombinedLaunch(plan);
+  }
+
+  function continueReading() {
+    if (isSingleFileBook) {
+      openSingleFileReader();
+      return;
     }
-    openChapterRow(row, true);
+    openSelectedReader();
+  }
+
+  function continueCombined() {
+    if (combinedResumePlan) openCombinedLaunch(combinedResumePlan);
   }
 
   function listenToBook(options: { startOver?: boolean } = {}) {
@@ -968,6 +1073,22 @@
         {/if}
       {/snippet}
     </EntityDetail>
+
+    {#if hasCombinedContent}
+      <BookCombinedProgressCard
+        readingPercent={readingPercent}
+        listeningPercent={audiobookPercent}
+        readingLabel={chapterReadingProgressLabel}
+        listeningLabel={audiobookPositionLabel}
+        readingCompleted={singleFileProgressDisplay?.isComplete ?? progressDisplay?.isComplete ?? false}
+        listeningCompleted={audiobookCompleted}
+        primaryColor={chapterPalette.primary}
+        secondaryColor={chapterPalette.secondary}
+        onRead={continueReading}
+        onListen={() => listenToBook()}
+        onCombined={continueCombined}
+      />
+    {/if}
 
     {#if progressDisplay}
       <section class="progress-section">

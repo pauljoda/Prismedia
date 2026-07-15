@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  addEpubChapterRanges,
   flattenEpubToc,
   resolveCurrentEpubChapter,
   type EpubBookNavigation,
@@ -69,5 +70,26 @@ describe("EPUB contents", () => {
 
     expect(entries).toHaveLength(1);
     expect(entries[0]).toMatchObject({ title: "Chapter One", depth: 1, order: 0 });
+  });
+
+  it("adds global reading ranges from the EPUB section sizes", () => {
+    const navigation: EpubBookNavigation = {
+      resolveHref: (href) => ({ index: href.includes("one") ? 1 : 2 }),
+      resolveCFI: () => null,
+    };
+    const entries = flattenEpubToc([
+      { label: "One", href: "one.xhtml", subitems: [] },
+      { label: "Two", href: "two.xhtml", subitems: [] },
+    ], navigation);
+
+    expect(addEpubChapterRanges(entries, [
+      { size: 10 },
+      { size: 20 },
+      { size: 30 },
+      { size: 40 },
+    ])).toEqual([
+      expect.objectContaining({ id: "one.xhtml", startFraction: 0.1, endFraction: 0.3 }),
+      expect.objectContaining({ id: "two.xhtml", startFraction: 0.3, endFraction: 1 }),
+    ]);
   });
 });

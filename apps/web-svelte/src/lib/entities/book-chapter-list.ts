@@ -1,7 +1,12 @@
 import type { AudioTrackListItemDto } from "$lib/entities/media-view-models";
 
 export type BookReadTarget =
-  | { kind: "epub"; location: string }
+  | {
+      kind: "epub";
+      location: string;
+      startFraction?: number | null;
+      endFraction?: number | null;
+    }
   | { kind: "entity-chapter"; chapterId: string };
 
 export interface ReadableBookChapter {
@@ -10,6 +15,7 @@ export interface ReadableBookChapter {
   order: number;
   depth: number;
   target: BookReadTarget;
+  pageCount?: number | null;
 }
 
 export interface BookChapterRow {
@@ -18,6 +24,7 @@ export interface BookChapterRow {
   order: number;
   depth: number;
   readTarget: BookReadTarget | null;
+  readPageCount?: number | null;
   audioTrack: AudioTrackListItemDto | null;
   isCurrentReading: boolean;
   isCurrentAudio: boolean;
@@ -119,6 +126,7 @@ export function buildBookChapterRows(options: BuildBookChapterRowsOptions): Book
       order: chapter.order,
       depth: chapter.depth,
       readTarget: chapter.target,
+      readPageCount: chapter.pageCount ?? null,
       audioTrack,
       isCurrentReading: chapter.id === options.currentReadableId,
       isCurrentAudio: audioTrack?.id === options.currentAudioTrackId,
@@ -133,6 +141,7 @@ export function buildBookChapterRows(options: BuildBookChapterRowsOptions): Book
       order: readable.length + index,
       depth: 0,
       readTarget: null,
+      readPageCount: null,
       audioTrack: track,
       isCurrentReading: false,
       isCurrentAudio: track.id === options.currentAudioTrackId,

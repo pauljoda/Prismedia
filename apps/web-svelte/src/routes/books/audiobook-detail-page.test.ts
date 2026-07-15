@@ -20,6 +20,15 @@ describe("Book detail audiobook experience", () => {
     expect(source).toContain("playAudiobookTrack(resume.trackId, resume.trackOffsetSeconds)");
   });
 
+  it("uses one interpolation policy for the combined progress card and chapter actions", () => {
+    expect(source).toContain("<BookCombinedProgressCard");
+    expect(source).toContain("resolveBookCombinedResume(");
+    expect(source).toContain("resolveChapterCombinedLaunch(");
+    expect(source).toContain("playAudiobookTrack(track.id, plan.audioStartSeconds)");
+    expect(source).toContain("fraction: plan.readerFraction ?? undefined");
+    expect(source).toContain("pageIndex: plan.readerPageIndex ?? undefined");
+  });
+
   it("updates listening completion without reporting total runtime as watched-duration delta", () => {
     const toggleStart = source.indexOf("async function handleToggleListened");
     const toggleEnd = source.indexOf("async function startListeningOver", toggleStart);

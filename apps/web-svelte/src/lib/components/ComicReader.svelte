@@ -1,7 +1,7 @@
 <script lang="ts">
   import { READER_MODE } from "$lib/api/generated/codes";
   import { browser } from "$app/environment";
-  import { tick, untrack } from "svelte";
+  import { tick, untrack, type Snippet } from "svelte";
   import {
     BookOpen,
     Columns2,
@@ -44,6 +44,8 @@
     onIndexChange?: (index: number) => void;
     onModeChange?: (mode: ReaderMode) => void;
     onNextChapter?: () => void | Promise<void>;
+    /** Optional transport from a companion rendition, such as the matched audiobook. */
+    companionControls?: Snippet;
   }
 
   let {
@@ -58,6 +60,7 @@
     onIndexChange,
     onModeChange,
     onNextChapter,
+    companionControls,
   }: Props = $props();
 
   let shell = $state<ReturnType<typeof ReaderShell>>();
@@ -366,6 +369,9 @@
   {#snippet counter()}{counterText}{/snippet}
 
   {#snippet controls()}
+    {#if companionControls}
+      {@render companionControls()}
+    {/if}
     <div class="flex items-center gap-1">
       <button
         type="button"

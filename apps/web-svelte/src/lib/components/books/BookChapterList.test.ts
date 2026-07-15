@@ -92,4 +92,19 @@ describe("BookChapterList", () => {
     expect(screen.queryByRole("button", { name: "Read and listen to Chapter One" })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Listen to Chapter One" })).toBeInTheDocument();
   });
+
+  it("offers combined mode for a matched page-based chapter", () => {
+    render(BookChapterList, {
+      rows: [{
+        ...row,
+        readTarget: { kind: "entity-chapter", chapterId: "chapter-1" },
+        readPageCount: 20,
+      }],
+      onRead: vi.fn(),
+      onListen: vi.fn(),
+      onCombined: vi.fn(),
+    });
+
+    expect(screen.getByRole("button", { name: "Read and listen to Chapter One" })).toBeInTheDocument();
+  });
 });

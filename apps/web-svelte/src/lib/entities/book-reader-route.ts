@@ -12,6 +12,8 @@ export interface BookReaderRouteContext {
   pageIndex?: number;
   /** One-launch EPUB href/CFI override. Does not replace the saved reading cursor. */
   location?: string;
+  /** One-launch whole-book EPUB fraction, used when listening is ahead of reading. */
+  fraction?: number;
   /** Whether this launch should expose the active audiobook transport inside the reader. */
   combined?: boolean;
 }
@@ -46,6 +48,7 @@ export function bookReaderContextFromUrl(url: URL): BookReaderRouteContext | nul
   const mode = readerMode(url.searchParams.get("mode"));
   const pageIndex = pageIndexValue(url.searchParams.get("page"));
   const location = cleanId(url.searchParams.get("location"));
+  const fraction = fractionValue(url.searchParams.get("fraction"));
   const combined = url.searchParams.get("combined") === "1";
 
   return {
@@ -57,6 +60,7 @@ export function bookReaderContextFromUrl(url: URL): BookReaderRouteContext | nul
     ...(mode ? { mode } : {}),
     ...(pageIndex !== null ? { pageIndex } : {}),
     ...(location ? { location } : {}),
+    ...(fraction !== null ? { fraction } : {}),
     ...(combined ? { combined: true } : {}),
   };
 }
@@ -74,6 +78,9 @@ export function bookReaderHref(options: BookReaderHrefOptions): string {
     params.set("page", String(Math.max(0, Math.floor(options.pageIndex))));
   }
   if (options.location) params.set("location", options.location);
+  if (typeof options.fraction === "number" && Number.isFinite(options.fraction)) {
+    params.set("fraction", String(Math.max(0, Math.min(1, options.fraction))));
+  }
   if (options.combined) params.set("combined", "1");
 
   return `/books/${encodeURIComponent(options.bookId)}/reader?${params.toString()}`;
@@ -118,4 +125,11 @@ function pageIndexValue(value: string | null): number | null {
   const parsed = Number(value);
   if (!Number.isFinite(parsed) || parsed < 0) return null;
   return Math.floor(parsed);
+}
+
+function fractionValue(value: string | null): number | null {
+  if (value === null) return null;
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed < 0 || parsed > 1) return null;
+  return parsed;
 }

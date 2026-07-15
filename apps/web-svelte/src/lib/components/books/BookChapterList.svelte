@@ -104,7 +104,7 @@
                 <Headphones class="h-4 w-4" />
               </Button>
             {/if}
-            {#if row.readTarget?.kind === "epub" && row.audioTrack}
+            {#if row.readTarget && row.audioTrack}
               <Button
                 variant="ghost"
                 size="icon"

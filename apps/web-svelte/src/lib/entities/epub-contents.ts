@@ -13,6 +13,13 @@ export interface EpubContentsEntry {
   depth: number;
   order: number;
   sectionIndex: number | null;
+  startFraction?: number | null;
+  endFraction?: number | null;
+}
+
+export interface EpubSectionSource {
+  size?: unknown;
+  linear?: unknown;
 }
 
 export interface EpubBookNavigation {
@@ -22,7 +29,44 @@ export interface EpubBookNavigation {
 
 interface EpubBook extends EpubBookNavigation {
   toc?: unknown;
+  sections?: EpubSectionSource[];
   destroy?: () => void;
+}
+
+/** Adds whole-book fraction bounds to each TOC row using Foliate's section-size model. */
+export function addEpubChapterRanges(
+  entries: readonly EpubContentsEntry[],
+  sections: readonly EpubSectionSource[],
+): EpubContentsEntry[] {
+  const sizes = sections.map((section) => {
+    const size = Number(section.size);
+    return section.linear !== "no" && Number.isFinite(size) && size > 0 ? size : 0;
+  });
+  const total = sizes.reduce((sum, size) => sum + size, 0);
+  if (total <= 0) return entries.map((entry) => ({ ...entry }));
+
+  const sectionFractions = [0];
+  let accumulatedSize = 0;
+  for (const size of sizes) {
+    accumulatedSize += size;
+    sectionFractions.push(accumulatedSize / total);
+  }
+
+  return entries.map((entry, index) => {
+    const sectionIndex = entry.sectionIndex;
+    if (sectionIndex === null || sectionIndex < 0 || sectionIndex >= sizes.length) return { ...entry };
+    const nextSectionIndex = entries
+      .slice(index + 1)
+      .map((candidate) => candidate.sectionIndex)
+      .find((candidate): candidate is number => candidate !== null && candidate > sectionIndex);
+    const startFraction = sectionFractions[sectionIndex] ?? 0;
+    const endFraction = nextSectionIndex === undefined
+      ? 1
+      : sectionFractions[nextSectionIndex] ?? 1;
+    return endFraction > startFraction
+      ? { ...entry, startFraction, endFraction }
+      : { ...entry };
+  });
 }
 
 export interface LoadedEpubContents {
@@ -106,7 +150,7 @@ export async function loadEpubContents(
   const { makeBook } = await import("$lib/vendor/foliate-js/view.js");
   const book = await makeBook(file) as EpubBook;
   try {
-    const entries = flattenEpubToc(book.toc, book);
+    const entries = addEpubChapterRanges(flattenEpubToc(book.toc, book), book.sections ?? []);
     const current = resolveCurrentEpubChapter(entries, currentLocation, book);
     return { entries, currentChapterId: current?.id ?? null };
   } finally {

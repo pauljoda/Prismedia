@@ -37,6 +37,7 @@
     presentation?: "overlay" | "page";
     closeIcon?: "close" | "back";
     initialLocation?: string | null;
+    initialFraction?: number | null;
     initialFlow?: ReaderFlow;
     onClose: () => void;
     onLocationChange?: (location: ReaderLocation) => void;
@@ -52,6 +53,7 @@
     presentation = "overlay",
     closeIcon = "close",
     initialLocation = null,
+    initialFraction = null,
     initialFlow = "paginated",
     onClose,
     onLocationChange,
@@ -294,9 +296,15 @@
         view.addEventListener("relocate", handleRelocate);
         applyFlow(flow);
         applyStyles();
+        const boundedInitialFraction = typeof initialFraction === "number" && Number.isFinite(initialFraction)
+          ? Math.max(0, Math.min(1, initialFraction))
+          : null;
+        const initialTarget = initialLocation ?? (boundedInitialFraction !== null
+          ? { fraction: boundedInitialFraction }
+          : undefined);
         await view.init({
-          lastLocation: initialLocation ?? undefined,
-          showTextStart: !initialLocation,
+          lastLocation: initialTarget,
+          showTextStart: !initialTarget,
         });
         ready = true;
       } catch (err) {
