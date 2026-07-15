@@ -7,6 +7,8 @@ export interface EntityThumbnailTrackItemOptions {
   sectionLabel?: string | null;
   sectionKey?: string | null;
   libraryId?: string | null;
+  embeddedArtist?: string | null;
+  embeddedAlbum?: string | null;
 }
 
 function parseDurationString(value: string | null | undefined): number | null {
@@ -62,8 +64,8 @@ export function entityThumbnailToTrackItem(
     channels: null,
     codec: codecMeta?.label ?? null,
     fileSize: null,
-    embeddedArtist: null,
-    embeddedAlbum: null,
+    embeddedArtist: options.embeddedArtist ?? null,
+    embeddedAlbum: options.embeddedAlbum ?? null,
     trackNumber: toNumber(thumb.sortOrder) ?? null,
     sectionLabel: options.sectionLabel ?? sectionMeta?.label ?? null,
     sectionKey: options.sectionKey ?? null,

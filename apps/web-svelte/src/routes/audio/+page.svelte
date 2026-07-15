@@ -5,10 +5,10 @@
 
 <EntityIndexPage
   kind="audio-library"
-  title="Audio"
+  title="Albums"
   icon={Music}
   prefsKey="audio"
-  emptyTitle="No audio"
-  emptyMessage="No audio libraries in your collection yet. Add a library root and scan to get started."
-  errorMessage="Failed to load audio."
+  emptyTitle="No albums"
+  emptyMessage="No albums in your collection yet. Add a library root and scan to get started."
+  errorMessage="Failed to load albums."
 />

@@ -18,6 +18,7 @@
     onRename?: (track: AudioTrackListItemDto, title: string) => void | Promise<void>;
     onDelete?: (track: AudioTrackListItemDto) => void;
     onSelectionChange?: (selectedIds: string[]) => void;
+    artworkUrls?: Record<string, string | null | undefined>;
     selectable?: boolean;
     class?: string;
   }
@@ -32,6 +33,7 @@
     onRename,
     onDelete,
     onSelectionChange,
+    artworkUrls = {},
     selectable = true,
     class: className = "",
   }: Props = $props();
@@ -47,6 +49,9 @@
 
   const totalDuration = $derived(
     tracks.reduce((sum, t) => sum + (t.duration ?? 0), 0),
+  );
+  const hasArtwork = $derived(
+    tracks.some((track) => track.libraryId && artworkUrls[track.libraryId]),
   );
   const visibleTrackIds = $derived(new Set(tracks.map((track) => track.id)));
   const visibleSelectedIds = $derived(selectedIds.filter((id) => visibleTrackIds.has(id)));
@@ -122,12 +127,17 @@
 
 <div class={cn("surface-panel border border-border-subtle overflow-hidden", className)}>
   <div
-    class={cn("track-header hidden items-center gap-3 border-b border-border-subtle px-4 py-2 sm:grid", selectable && "has-selection")}
+    class={cn(
+      "track-header hidden items-center gap-3 border-b border-border-subtle px-4 py-2 sm:grid",
+      selectable && "has-selection",
+      hasArtwork && "has-artwork",
+    )}
   >
     {#if selectable}
       <span></span>
     {/if}
     <span class="text-center font-mono text-[0.65rem] font-semibold uppercase tracking-widest text-text-disabled">#</span>
+    {#if hasArtwork}<span aria-hidden="true"></span>{/if}
     <span class="text-[0.65rem] font-semibold uppercase tracking-widest text-text-disabled">Title</span>
     <span class="justify-self-end text-[0.65rem] font-semibold uppercase tracking-widest text-text-disabled">Rating</span>
     <span class="justify-self-end text-[0.65rem] font-semibold uppercase tracking-widest text-text-disabled">Time</span>
@@ -178,6 +188,8 @@
     {#each section.rows as row (row.track.id)}
       <TrackListRow
         track={row.track}
+        artworkUrl={row.track.libraryId ? artworkUrls[row.track.libraryId] : null}
+        showArtwork={hasArtwork}
         index={row.globalIndex}
         displayNumber={hasSections ? row.numberInSection : undefined}
         isActive={row.track.id === activeTrackId}
@@ -215,6 +227,14 @@
 
   .track-header.has-selection {
     grid-template-columns: 1.35rem 2rem minmax(0, 1fr) auto 3rem 2rem;
+  }
+
+  .track-header.has-artwork {
+    grid-template-columns: 2rem 2.75rem minmax(0, 1fr) auto 3rem 2rem;
+  }
+
+  .track-header.has-selection.has-artwork {
+    grid-template-columns: 1.35rem 2rem 2.75rem minmax(0, 1fr) auto 3rem 2rem;
   }
 
   .track-select-row {

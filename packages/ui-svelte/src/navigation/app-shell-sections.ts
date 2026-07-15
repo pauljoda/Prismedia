@@ -35,8 +35,9 @@ export const appShellSections = [
     kicker: "Audio",
     accent: colors.materialSpectrum.violet,
     items: [
+      { label: "Albums", href: "/audio", icon: "music" },
       { label: "Artists", href: "/artists", icon: "mic-vocal" },
-      { label: "Audio", href: "/audio", icon: "music" },
+      { label: "Tracks", href: "/tracks", icon: "layout-list" },
     ],
   },
   {

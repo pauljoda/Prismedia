@@ -2,6 +2,7 @@
   import {
     Check,
     EllipsisVertical,
+    Music2,
     Pencil,
     Play,
     Trash2,
@@ -14,6 +15,8 @@
 
   interface Props {
     track: AudioTrackListItemDto;
+    artworkUrl?: string | null;
+    showArtwork?: boolean;
     index: number;
     isActive: boolean;
     isPlaying: boolean;
@@ -32,6 +35,8 @@
 
   let {
     track,
+    artworkUrl = null,
+    showArtwork = false,
     index,
     isActive,
     isPlaying,
@@ -112,6 +117,7 @@
     "track-row group/row relative cursor-pointer transition-colors duration-fast",
     "before:pointer-events-none before:absolute before:inset-y-0 before:left-0 before:w-[2px] before:transition-all before:duration-normal",
     selectable && "has-selection",
+    showArtwork && "has-artwork",
     isActive
       ? "bg-surface-2 before:bg-[var(--entity-accent,var(--color-accent-500))]"
       : "hover:bg-surface-2 before:bg-transparent",
@@ -130,6 +136,18 @@
         aria-label={`Select ${track.title}`}
         onchange={handleSelectedChange}
       />
+    </div>
+  {/if}
+
+  {#if showArtwork}
+    <div class="artwork-cell">
+      {#if artworkUrl}
+        <img src={artworkUrl} alt="" loading="lazy" />
+      {:else}
+        <span class="artwork-placeholder" aria-hidden="true">
+          <Music2 class="h-4 w-4" />
+        </span>
+      {/if}
     </div>
   {/if}
 
@@ -342,12 +360,52 @@
       "select index rating time   actions";
   }
 
+  .track-row.has-artwork {
+    grid-template-columns: auto 2.75rem minmax(0, 1fr) auto auto;
+    grid-template-areas:
+      "index artwork title  title  actions"
+      "index artwork rating time   actions";
+  }
+
+  .track-row.has-selection.has-artwork {
+    grid-template-columns: auto auto 2.75rem minmax(0, 1fr) auto auto;
+    grid-template-areas:
+      "select index artwork title  title  actions"
+      "select index artwork rating time   actions";
+  }
+
   .selection-cell { grid-area: select; justify-self: start; align-self: start; padding-top: 0.35rem; }
   .index-cell { grid-area: index; justify-self: start; align-self: start; }
+  .artwork-cell { grid-area: artwork; }
   .title-cell { grid-area: title; }
   .rating-cell { grid-area: rating; justify-self: start; }
   .time-cell { grid-area: time; justify-self: end; }
   .actions-cell { grid-area: actions; justify-self: end; }
+
+  .artwork-cell,
+  .artwork-cell img,
+  .artwork-placeholder {
+    width: 2.5rem;
+    height: 2.5rem;
+  }
+
+  .artwork-cell img,
+  .artwork-placeholder {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--color-border-subtle);
+    border-radius: var(--radius-xs);
+    background: var(--color-surface-2);
+  }
+
+  .artwork-cell img {
+    object-fit: cover;
+  }
+
+  .artwork-placeholder {
+    color: var(--color-text-disabled);
+  }
 
   .track-title {
     white-space: normal;
@@ -377,6 +435,17 @@
     .track-row.has-selection {
       grid-template-columns: 1.35rem 2rem minmax(0, 1fr) auto 3rem 2rem;
       grid-template-areas: "select index title rating time actions";
+    }
+
+    .track-row.has-artwork {
+      grid-template-columns: 2rem 2.75rem minmax(0, 1fr) auto 3rem 2rem;
+      grid-template-areas: "index artwork title rating time actions";
+      min-height: 3.5rem;
+    }
+
+    .track-row.has-selection.has-artwork {
+      grid-template-columns: 1.35rem 2rem 2.75rem minmax(0, 1fr) auto 3rem 2rem;
+      grid-template-areas: "select index artwork title rating time actions";
     }
 
     .selection-cell,

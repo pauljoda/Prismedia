@@ -30,6 +30,9 @@ describe("defaultNavPrefs", () => {
     const overview = prefs.sections.find((s) => s.id === "overview");
     expect(overview?.items).toEqual(["/", "/search", "/stats"]);
 
+    const audio = prefs.sections.find((s) => s.id === "audio");
+    expect(audio?.items).toEqual(["/audio", "/artists", "/tracks"]);
+
     expect(prefs.mobileFavorites).toEqual(["/files", "/videos", "/galleries", "/people"]);
   });
 });
@@ -81,6 +84,19 @@ describe("normalizeNavPrefs", () => {
     expect(prefs!.hidden).toEqual(["/images"]);
     // Mobile favorites are capped at four.
     expect(prefs!.mobileFavorites).toHaveLength(4);
+  });
+
+  it("migrates the former default audio order to Albums, Artists, Tracks", () => {
+    const prefs = normalizeNavPrefs({
+      version: 1,
+      sections: [
+        { id: "audio", label: "Audio", items: ["/artists", "/audio", "/tracks"] },
+      ],
+      hidden: [],
+      mobileFavorites: [],
+    });
+
+    expect(prefs?.sections[0]?.items).toEqual(["/audio", "/artists", "/tracks"]);
   });
 
   it("drops unsafe persisted section accent values", () => {

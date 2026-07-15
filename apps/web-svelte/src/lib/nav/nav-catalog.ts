@@ -114,6 +114,15 @@ function asHexColor(value: unknown): string | undefined {
   return typeof value === "string" && /^#[0-9a-f]{6}$/i.test(value) ? value.toLowerCase() : undefined;
 }
 
+function migrateLegacyAudioOrder(sectionId: string, items: string[]): string[] {
+  if (sectionId !== "audio") return items;
+  const isLegacyDefault = items.length >= 2 &&
+    items[0] === "/artists" &&
+    items[1] === "/audio" &&
+    items.slice(2).every((item) => item === "/tracks");
+  return isLegacyDefault ? ["/audio", "/artists", ...items.slice(2)] : items;
+}
+
 /**
  * Permissively validate an arbitrary value (the server layout document) into
  * {@link NavPrefs}. Returns `null` when the shape is unusable so callers fall back
@@ -133,7 +142,7 @@ export function normalizeNavPrefs(parsed: unknown): NavPrefs | null {
     sections.push({
       id: raw.id,
       label: raw.label,
-      items: asStringArray(raw.items),
+      items: migrateLegacyAudioOrder(raw.id, asStringArray(raw.items)),
       collapsed: raw.collapsed === true,
       accent: asHexColor(raw.accent),
     });
