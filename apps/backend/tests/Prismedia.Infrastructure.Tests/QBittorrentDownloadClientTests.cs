@@ -54,7 +54,7 @@ public sealed class QBittorrentDownloadClientTests {
         handler.CategoryListings.Enqueue("""[{"hash":"aaa","name":"Something Unrelated"}]""");
         var client = NewClient(handler);
 
-        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => client.AddAsync(
+        var ex = await Assert.ThrowsAsync<DownloadClientAddUnresolvedException>(() => client.AddAsync(
             Connection, new DownloadAddRequest("http://indexer/dl", InfoHash: null, "prismedia", "Wanted Release"), CancellationToken.None));
 
         Assert.Contains("already present", ex.Message, StringComparison.OrdinalIgnoreCase);

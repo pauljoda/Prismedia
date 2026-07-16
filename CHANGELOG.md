@@ -149,7 +149,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 - Season Acquisition tabs now open active episode work automatically and show each episode’s search/download state independently from its future-monitoring switch.
-- Download-client handoffs now recover automatically after a lost response or interrupted add instead of leaving acquisitions stuck on “Preparing download.”
+- Download-client handoffs now recover automatically after a lost response or interrupted add instead of leaving acquisitions stuck on “Preparing download”; qBittorrent adds that conclusively create no identifiable torrent now release the failed attempt so the next candidate or episode fallback can proceed.
 - Monitored season requests now fall back to exact per-episode searches when no acceptable season pack exists, every attempted pack download fails, or a downloaded pack cannot be imported; selectable and in-flight season packs still finish without duplicate episode work.
 - Acquisition imports now re-identify the source-backed entity after its real files and children are cataloged, so organized Wanted placeholders keep their stable provider identity while gaining episode titles, track names, and other child metadata.
 - Interrupted acquisition imports can now be explicitly started over: Prismedia removes their partial files and stale catalog state, restores recoverable pre-upgrade files, and creates a clean search. Removing a download uses the same graceful cleanup even when its download client or payload is already missing.

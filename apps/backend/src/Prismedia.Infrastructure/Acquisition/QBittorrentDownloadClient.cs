@@ -57,7 +57,7 @@ public sealed class QBittorrentDownloadClient(HttpClient http) : IDownloadClient
             return duplicate;
         }
 
-        throw new InvalidOperationException(
+        throw new DownloadClientAddUnresolvedException(
             "qBittorrent accepted the add but created no new torrent — the release is likely already present in the client (duplicate add).");
     }
 
@@ -202,7 +202,7 @@ public sealed class QBittorrentDownloadClient(HttpClient http) : IDownloadClient
             return duplicate;
         }
 
-        throw new InvalidOperationException(
+        throw new DownloadClientAddUnresolvedException(
             "qBittorrent accepted the upload but created no new torrent — the torrent is likely already present in the client (duplicate add).");
     }
 

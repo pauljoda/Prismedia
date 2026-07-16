@@ -66,6 +66,7 @@ public sealed class AcquisitionQueueService(
         string attemptCategory;
         string? recoveredClientItemId = null;
         var createdPlaceholder = false;
+        AcquisitionStatus? queueOrigin = null;
         var recoveringAttempt = IsAdding(existingAttempt);
         if (recoveringAttempt) {
             if (!string.Equals(existingAttempt!.ClientItemId, correlation, StringComparison.Ordinal)) {
@@ -76,7 +77,7 @@ public sealed class AcquisitionQueueService(
             client = await ResolveAttemptOwnerAsync(existingAttempt, cancellationToken);
             attemptCategory = existingAttempt.Category ?? client.Category;
         } else {
-            var priorStatus = await ClaimQueueLifecycleAsync(
+            queueOrigin = await ClaimQueueLifecycleAsync(
                 acquisitionId,
                 requiredStatus,
                 cancellationToken);
@@ -84,7 +85,7 @@ public sealed class AcquisitionQueueService(
             // removal succeeds; only then is it replaced by the durable pre-Add ownership placeholder.
             await RemovePriorDownloadOrRestoreQueueStateAsync(
                 acquisitionId,
-                priorStatus,
+                queueOrigin.Value,
                 eligible[0],
                 cancellationToken);
             client = eligible[0];
@@ -180,6 +181,24 @@ public sealed class AcquisitionQueueService(
             }
             await addLease.CommitAsync(CancellationToken.None);
             await RecordGrabbedAsync(acquisitionId, candidate.Title, candidate.IndexerName, client.DisplayName, cancellationToken);
+        } catch (DownloadClientAddUnresolvedException ex) {
+            // qBittorrent proved this call created no new torrent and could not correlate a pre-existing
+            // one. Keeping the Adding placeholder would turn a rejected candidate into permanent
+            // "Preparing" limbo. Release it under the same row lease and restore manual/auto selection;
+            // a background recovery with no origin becomes Failed so monitor fallback can chase episodes.
+            await acquisitions.AbandonTransferAddAsync(
+                acquisitionId,
+                client.Id,
+                correlation,
+                CancellationToken.None);
+            await acquisitions.TryTransitionStatusAsync(
+                acquisitionId,
+                [AcquisitionStatus.Queued],
+                queueOrigin ?? AcquisitionStatus.Failed,
+                ex.Message,
+                CancellationToken.None);
+            await addLease.CommitAsync(CancellationToken.None);
+            throw new AcquisitionConfigurationException(ApiProblemCodes.AcquisitionInvalid, ex.Message);
         } catch (AcquisitionConfigurationException) {
             throw;
         } catch (Exception ex) when (ex is not OperationCanceledException) {
@@ -208,6 +227,7 @@ public sealed class AcquisitionQueueService(
         string attemptCategory;
         string? recoveredClientItemId = null;
         var createdPlaceholder = false;
+        AcquisitionStatus? queueOrigin = null;
         var recoveringAttempt = IsAdding(existingAttempt);
         if (recoveringAttempt) {
             if (!string.Equals(existingAttempt!.ClientItemId, correlation, StringComparison.Ordinal)) {
@@ -218,13 +238,13 @@ public sealed class AcquisitionQueueService(
             client = await ResolveAttemptOwnerAsync(existingAttempt, cancellationToken);
             attemptCategory = existingAttempt.Category ?? client.Category;
         } else {
-            var priorStatus = await ClaimQueueLifecycleAsync(
+            queueOrigin = await ClaimQueueLifecycleAsync(
                 acquisitionId,
                 requiredStatus: null,
                 cancellationToken);
             await RemovePriorDownloadOrRestoreQueueStateAsync(
                 acquisitionId,
-                priorStatus,
+                queueOrigin.Value,
                 eligible[0],
                 cancellationToken);
             client = eligible[0];
@@ -320,6 +340,20 @@ public sealed class AcquisitionQueueService(
             await addLease.CommitAsync(CancellationToken.None);
             // A manual .torrent has no grab indexer; the uploaded file name stands in for the release title.
             await RecordGrabbedAsync(acquisitionId, fileName, indexerName: null, client.DisplayName, cancellationToken);
+        } catch (DownloadClientAddUnresolvedException ex) {
+            await acquisitions.AbandonTransferAddAsync(
+                acquisitionId,
+                client.Id,
+                correlation,
+                CancellationToken.None);
+            await acquisitions.TryTransitionStatusAsync(
+                acquisitionId,
+                [AcquisitionStatus.Queued],
+                queueOrigin ?? AcquisitionStatus.Failed,
+                ex.Message,
+                CancellationToken.None);
+            await addLease.CommitAsync(CancellationToken.None);
+            throw new AcquisitionConfigurationException(ApiProblemCodes.AcquisitionInvalid, ex.Message);
         } catch (AcquisitionConfigurationException) {
             throw;
         } catch (Exception ex) when (ex is not OperationCanceledException) {

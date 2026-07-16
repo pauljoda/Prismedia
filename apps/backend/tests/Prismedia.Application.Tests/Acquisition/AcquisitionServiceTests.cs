@@ -536,6 +536,49 @@ public sealed class AcquisitionServiceTests {
     }
 
     [Fact]
+    public async Task UnresolvedInitialAddReleasesThePlaceholderAndRestoresSelection() {
+        var harness = Harness(new AcquisitionTransferInfo(
+            AcquisitionStatus.AwaitingSelection, null, null, null));
+        PrepareQueueCandidate(harness.Store);
+        harness.Downloads.AddFailure = new DownloadClientAddUnresolvedException("Duplicate add could not be identified.");
+        var transferAdds = new RecordingTransferAddCoordinator();
+
+        var exception = await Assert.ThrowsAsync<AcquisitionConfigurationException>(() =>
+            QueueService(harness, transferAdds)
+                .QueueAsync(AcquisitionId, CandidateId, CancellationToken.None));
+
+        Assert.Equal(ApiProblemCodes.AcquisitionInvalid, exception.Code);
+        Assert.Equal(AcquisitionStatus.AwaitingSelection, harness.Store.Status);
+        Assert.Null(harness.Store.TransferPointer?.ClientItemId);
+        Assert.Null(harness.Store.TransferPointer?.State);
+        Assert.True(transferAdds.Lease.Committed);
+    }
+
+    [Fact]
+    public async Task UnresolvedRecoveredAddReleasesThePlaceholderAndFailsForMonitorFallback() {
+        var harness = Harness(new AcquisitionTransferInfo(
+            AcquisitionStatus.Queued,
+            null,
+            "abc123",
+            RecordedClientId,
+            "prismedia",
+            TransferOwnershipState.Adding.ToCode()));
+        PrepareQueueCandidate(harness.Store);
+        harness.Downloads.ItemExists = false;
+        harness.Downloads.AddFailure = new DownloadClientAddUnresolvedException("Duplicate add could not be identified.");
+        var transferAdds = new RecordingTransferAddCoordinator();
+
+        await Assert.ThrowsAsync<AcquisitionConfigurationException>(() =>
+            QueueService(harness, transferAdds)
+                .QueueAsync(AcquisitionId, CandidateId, CancellationToken.None));
+
+        Assert.Equal(AcquisitionStatus.Failed, harness.Store.Status);
+        Assert.Null(harness.Store.TransferPointer?.ClientItemId);
+        Assert.Null(harness.Store.TransferPointer?.State);
+        Assert.True(transferAdds.Lease.Committed);
+    }
+
+    [Fact]
     public async Task TeardownRecoversOneTitleCorrelatedAddButFailsClosedOnAmbiguity() {
         var unique = Harness(new AcquisitionTransferInfo(
             AcquisitionStatus.Queued,
@@ -1376,6 +1419,7 @@ public sealed class AcquisitionServiceTests {
         public Exception? GetFailure { set => _client.GetFailure = value; }
         public Exception? RemoveFailure { get => _client.RemoveFailure; set => _client.RemoveFailure = value; }
         public bool ItemExists { set => _client.ItemExists = value; }
+        public Exception? AddFailure { set => _client.AddFailure = value; }
         public Action? OnAdd { get => _client.OnAdd; set => _client.OnAdd = value; }
         public List<DownloadItemStatus> Items => _client.Items;
         public IDownloadClient Get(DownloadClientKind kind) => _client;
@@ -1389,6 +1433,7 @@ public sealed class AcquisitionServiceTests {
         public Exception? RemoveFailure { get; set; }
         public bool ItemExists { get; set; } = true;
         public Action? OnAdd { get; set; }
+        public Exception? AddFailure { get; set; }
         public int AddCount { get; private set; }
         public List<DownloadItemStatus> Items { get; } = [];
 
@@ -1409,6 +1454,9 @@ public sealed class AcquisitionServiceTests {
         public Task<string> AddAsync(DownloadClientConnection connection, DownloadAddRequest request, CancellationToken cancellationToken) {
             AddCount++;
             OnAdd?.Invoke();
+            if (AddFailure is not null) {
+                throw AddFailure;
+            }
             ItemExists = true;
             return Task.FromResult("new-client-item");
         }

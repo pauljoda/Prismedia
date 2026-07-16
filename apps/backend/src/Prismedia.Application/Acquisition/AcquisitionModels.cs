@@ -278,6 +278,13 @@ public sealed record AcquisitionQueueCandidate(
     Guid? IndexerConfigId = null);
 
 /// <summary>
+/// The download client accepted an Add request but proved that it created no new item and could not
+/// identify an existing item as that release. Unlike a connection failure, this attempt is conclusively
+/// unusable and its durable pre-Add placeholder can be released so another candidate or fallback may run.
+/// </summary>
+public sealed class DownloadClientAddUnresolvedException(string message) : Exception(message);
+
+/// <summary>
 /// The seed goal captured at grab time: the grab indexer's ratio/time settings, falling back to the
 /// download client's defaults. A torrent imported by hardlink/copy keeps seeding until EITHER goal is
 /// met (Sonarr semantics); a goal-less transfer is left to the client's own rules.
