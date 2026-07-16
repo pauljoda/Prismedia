@@ -208,10 +208,10 @@ export function useEntityAcquisition(options: UseEntityAcquisitionOptions): Enti
   });
 
   // Acquisition state changes outside this page too — the Downloads table re-searches, a monitor
-  // sweep starts a grab for a phantom, a request commits from Discover. Poll while the entity has an
-  // acquisition story (wanted, monitored, monitorable, or an acquisition in hand) so the card stays
-  // lock-step with the global Downloads view; an ordinary owned entity never polls. AcquisitionPanel
-  // separately polls the fine-grained transfer state while a download is live.
+  // sweep starts a grab for a phantom, a request commits from Discover. Poll only the compact
+  // acquisition/monitor slice here. EntityChildMonitoring owns child-state polling (including while
+  // collapsed if work is active) and refreshes the Entity graph only on an imported transition; doing
+  // that full owner reload on every tick visibly flashes detail pages and duplicates the same reads.
   $effect(() => {
     const shouldPoll =
       !!options.entityId() &&
@@ -224,9 +224,6 @@ export function useEntityAcquisition(options: UseEntityAcquisitionOptions): Enti
       pollBusy = true;
       try {
         await refresh();
-        // Child monitor/acquisition state lives in the owning page's Entity cards. Refresh that
-        // read model even when the child editor is collapsed so Imported becomes ready immediately.
-        if (hasActiveChildAcquisition) await options.onChanged?.();
       } catch {
         // Polling is best-effort; the next interval retries both slices.
       } finally {

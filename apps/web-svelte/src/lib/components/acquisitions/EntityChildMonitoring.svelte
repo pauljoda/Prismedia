@@ -91,6 +91,35 @@
   });
   const actionableRows = $derived(rows.filter(canSetMonitoring));
   const activeAcquisitionCount = $derived(rows.filter(hasActiveAcquisition).length);
+  const activityCounts = $derived.by(() => {
+    let downloading = 0;
+    let preparing = 0;
+    let searching = 0;
+    let importing = 0;
+    for (const row of rows) {
+      switch (row.acquisition?.status) {
+        case ACQUISITION_STATUS.downloading:
+          downloading += 1;
+          break;
+        case ACQUISITION_STATUS.queued:
+          preparing += 1;
+          break;
+        case ACQUISITION_STATUS.pending:
+        case ACQUISITION_STATUS.searching:
+          searching += 1;
+          break;
+        case ACQUISITION_STATUS.downloaded:
+        case ACQUISITION_STATUS.importing:
+          importing += 1;
+          break;
+      }
+    }
+    return { downloading, preparing, searching, importing };
+  });
+  const hasCardActivity = $derived(cards.some((card) =>
+    acquisitionStatusShouldPoll(card.wantedStatus)
+    || acquisitionStatusShouldPoll(card.latestAcquisitionStatus),
+  ));
   const acting = $derived(bulkBusy || busyIds.length > 0);
 
   // The open panel is a live read surface: loading on every expansion prevents a same-id cache from
@@ -98,9 +127,15 @@
   // alter the owning Entity graph. Teardown stops all background reads while collapsed.
   $effect(() => {
     const key = cardsKey;
-    if (!open || !key) return;
+    if ((!open && !hasCardActivity) || !key) return;
 
-    void loadRows(key, { showLoading: true, waitForCurrent: true, reportErrors: true });
+    // A same-id owner refresh can re-run this effect while rows are already visible. Preserve the
+    // last good snapshot instead of swapping the whole list for a loading line on every poll.
+    void loadRows(key, {
+      showLoading: open && untrack(() => rows.length === 0),
+      waitForCurrent: true,
+      reportErrors: true,
+    });
     const timer = setInterval(() => {
       void loadRows(key);
     }, POLL_INTERVAL_MS);
@@ -364,7 +399,11 @@
         <Layers class="h-4 w-4 text-text-accent" />
         {sectionTitle}
         <span class="header-count">{cards.length}</span>
-        {#if activeAcquisitionCount > 0}
+        {#if activityCounts.downloading > 0}<span class="active-count downloading">{activityCounts.downloading} downloading</span>{/if}
+        {#if activityCounts.preparing > 0}<span class="active-count">{activityCounts.preparing} preparing</span>{/if}
+        {#if activityCounts.searching > 0}<span class="active-count">{activityCounts.searching} searching</span>{/if}
+        {#if activityCounts.importing > 0}<span class="active-count">{activityCounts.importing} importing</span>{/if}
+        {#if activeAcquisitionCount > 0 && Object.values(activityCounts).every((count) => count === 0)}
           <span class="active-count">{activeAcquisitionCount} active</span>
         {/if}
       </span>
@@ -485,6 +524,10 @@
     font-weight: 600;
     letter-spacing: 0.03em;
     text-transform: uppercase;
+  }
+  .active-count.downloading {
+    border-color: color-mix(in srgb, var(--color-success, #22c55e) 38%, transparent);
+    color: var(--color-success-text, #86efac);
   }
   .body {
     display: grid;

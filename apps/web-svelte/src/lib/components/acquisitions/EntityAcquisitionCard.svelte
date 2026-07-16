@@ -9,10 +9,12 @@
    */
   import { Bell, BellRing, RefreshCw, Search, Trash2 } from "@lucide/svelte";
   import { Button } from "@prismedia/ui-svelte";
+  import { ACQUISITION_STATUS, ENTITY_KIND } from "$lib/api/generated/codes";
   import type { EntityCapability } from "$lib/api/generated/model";
   import AcquisitionPanel from "$lib/components/acquisitions/AcquisitionPanel.svelte";
   import EntityChildMonitoring from "$lib/components/acquisitions/EntityChildMonitoring.svelte";
   import type { EntityAcquisition } from "$lib/components/acquisitions/use-entity-acquisition.svelte";
+  import { acquisitionStatusShouldPoll } from "$lib/requests/acquisition-status";
   import EntityFileManagementAction from "$lib/components/entities/EntityFileManagementAction.svelte";
   import type { EntityFileManagementCallbacks } from "$lib/entities/entity-file-management";
 
@@ -50,6 +52,19 @@
       (showEntityRequestControls && acq.showSearch) ||
       acq.showSearchMissing ||
       (acq.showFileManagement && Boolean(entity && fileManagement)),
+  );
+  const activeChildAcquisitionCount = $derived(acq.childCards.filter((card) =>
+    acquisitionStatusShouldPoll(card.wantedStatus)
+    || acquisitionStatusShouldPoll(card.latestAcquisitionStatus),
+  ).length);
+  const failedParentWithChildActivity = $derived(
+    acq.acquisition?.summary.status === ACQUISITION_STATUS.failed
+      && activeChildAcquisitionCount > 0,
+  );
+  const activeChildLabel = $derived(
+    acq.childCards.every((card) => card.entity.kind === ENTITY_KIND.video)
+      ? activeChildAcquisitionCount === 1 ? "episode" : "episodes"
+      : activeChildAcquisitionCount === 1 ? "child item" : "child items",
   );
 </script>
 
@@ -183,15 +198,35 @@
     {/if}
 
     {#if showAcquisitionPanel && acq.acquisition}
-      {#key acq.acquisition.summary.id}
-        <AcquisitionPanel
-          acquisitionId={acq.acquisition.summary.id}
-          bind:detail={acq.acquisition}
-          {onCancelled}
-          {onImported}
-          onReset={acq.refresh}
-        />
-      {/key}
+      {#if failedParentWithChildActivity}
+        <details class="parent-attempt">
+          <summary>
+            Parent release attempt failed
+            <span>{activeChildAcquisitionCount} {activeChildLabel} active instead</span>
+          </summary>
+          <div class="parent-attempt-body">
+            {#key acq.acquisition.summary.id}
+              <AcquisitionPanel
+                acquisitionId={acq.acquisition.summary.id}
+                bind:detail={acq.acquisition}
+                {onCancelled}
+                {onImported}
+                onReset={acq.refresh}
+              />
+            {/key}
+          </div>
+        </details>
+      {:else}
+        {#key acq.acquisition.summary.id}
+          <AcquisitionPanel
+            acquisitionId={acq.acquisition.summary.id}
+            bind:detail={acq.acquisition}
+            {onCancelled}
+            {onImported}
+            onReset={acq.refresh}
+          />
+        {/key}
+      {/if}
     {/if}
   </section>
 
@@ -203,6 +238,33 @@
     display: grid;
     gap: 0.9rem;
     min-width: 0;
+  }
+  .parent-attempt {
+    overflow: hidden;
+    border: 1px solid var(--color-border-subtle);
+    border-radius: var(--radius-sm);
+    background: var(--color-surface-1);
+  }
+  .parent-attempt summary {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem 1rem;
+    padding: 0.7rem 0.8rem;
+    color: var(--color-text-secondary);
+    font-size: 0.76rem;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .parent-attempt summary span {
+    color: var(--color-text-accent);
+    font-family: var(--font-mono);
+    font-size: 0.66rem;
+    font-weight: 500;
+  }
+  .parent-attempt-body {
+    padding: 0 0.8rem 0.8rem;
   }
 
 </style>

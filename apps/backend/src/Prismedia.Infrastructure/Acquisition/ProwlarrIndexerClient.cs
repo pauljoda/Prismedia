@@ -10,10 +10,19 @@ namespace Prismedia.Infrastructure.Acquisition;
 /// indexer into a single JSON release feed, so this client maps that feed to <see cref="IndexerRelease"/>
 /// without per-indexer Torznab parsing. The Jackett adapter (Torznab XML) shares the same port.
 /// </summary>
-public sealed class ProwlarrIndexerClient(HttpClient http) : IIndexerSearchClient {
+public sealed class ProwlarrIndexerClient(
+    HttpClient http,
+    ProwlarrSearchConcurrencyGate? concurrency = null) : IIndexerSearchClient {
     public IndexerKind Kind => IndexerKind.Prowlarr;
 
     public async Task<IReadOnlyList<IndexerRelease>> SearchAsync(IndexerConnection connection, IndexerQuery query, CancellationToken cancellationToken) {
+        // One Prowlarr request fans out across every configured indexer. Large season-to-episode
+        // fallback batches can otherwise put a dozen aggregate calls in flight, making Prowlarr queue
+        // them until Prismedia's HTTP timeout expires. Two concurrent aggregates kept the live batch
+        // responsive while still allowing overlap between a slow Usenet and torrent provider.
+        using var searchLease = concurrency is null
+            ? null
+            : await concurrency.EnterAsync(cancellationToken);
         var path = BuildSearchPath(query);
         using var request = BuildRequest(connection, HttpMethod.Get, path);
         using var response = await http.SendAsync(request, cancellationToken);
@@ -121,6 +130,31 @@ public sealed class ProwlarrIndexerClient(HttpClient http) : IIndexerSearchClien
         element.TryGetProperty(property, out var value) && value.ValueKind == JsonValueKind.Number && value.TryGetInt64(out var number)
             ? number
             : null;
+}
+
+/// <summary>
+/// Process-wide cap for Prowlarr aggregate searches. The global worker concurrency may remain high for
+/// scans, probes, and imports while release-search fan-out stays within the indexer manager's capacity.
+/// </summary>
+public sealed class ProwlarrSearchConcurrencyGate {
+    private const int MaxConcurrentSearches = 2;
+    private readonly SemaphoreSlim _semaphore = new(MaxConcurrentSearches, MaxConcurrentSearches);
+
+    /// <summary>Waits for one aggregate-search slot and returns a lease that releases it.</summary>
+    public async ValueTask<IDisposable> EnterAsync(CancellationToken cancellationToken) {
+        await _semaphore.WaitAsync(cancellationToken);
+        return new Lease(_semaphore);
+    }
+
+    private sealed class Lease(SemaphoreSlim semaphore) : IDisposable {
+        private int _disposed;
+
+        public void Dispose() {
+            if (Interlocked.Exchange(ref _disposed, 1) == 0) {
+                semaphore.Release();
+            }
+        }
+    }
 }
 
 /// <summary>Resolves the configured <see cref="IIndexerSearchClient"/> for an indexer family.</summary>

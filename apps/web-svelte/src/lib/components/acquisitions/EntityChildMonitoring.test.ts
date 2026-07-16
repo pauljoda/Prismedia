@@ -47,14 +47,14 @@ describe("EntityChildMonitoring", () => {
 
   it("opens episode activity and shows an active download even when monitoring is off", async () => {
     const episode = childCard("episode-1", ENTITY_KIND.video, "Jet-Assisted Chevy", true);
-    episode.latestAcquisitionStatus = ACQUISITION_STATUS.queued;
+    episode.latestAcquisitionStatus = ACQUISITION_STATUS.downloading;
     mocks.fetchEntityMonitorStates.mockResolvedValue([
       entityState("episode-1", {
         canRequest: true,
         latestAcquisition: {
           ...acquisition("acq-episode", "episode-1"),
-          status: ACQUISITION_STATUS.queued,
-          progress: 0,
+          status: ACQUISITION_STATUS.downloading,
+          progress: 42,
         },
       }),
     ]);
@@ -63,7 +63,8 @@ describe("EntityChildMonitoring", () => {
 
     const disclosure = screen.getByRole("button", { name: /Episode activity/ });
     expect(disclosure).toHaveAttribute("aria-expanded", "true");
-    expect(await screen.findByText("Queued · Not monitored")).toBeInTheDocument();
+    expect(await screen.findByText("Downloading · Not monitored")).toBeInTheDocument();
+    expect(screen.getByText("1 downloading")).toBeInTheDocument();
     expect(screen.getByText(/downloads and search progress appear here/i)).toBeInTheDocument();
     expect(screen.getByRole("switch", { name: "Monitor Jet-Assisted Chevy" }))
       .toHaveAttribute("aria-checked", "false");

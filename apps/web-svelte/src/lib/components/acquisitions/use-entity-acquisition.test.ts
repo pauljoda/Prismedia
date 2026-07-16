@@ -338,7 +338,7 @@ describe("useEntityAcquisition", () => {
     expect(screen.getByTestId("missing-count")).toHaveTextContent("0");
   });
 
-  it("refreshes active child acquisition cards while their editor is collapsed", async () => {
+  it("does not reload the owning entity graph on every active-child poll", async () => {
     vi.useFakeTimers();
     const onChanged = vi.fn(async () => {});
     mocks.fetchAcquisitionForEntity.mockResolvedValue(null);
@@ -356,7 +356,7 @@ describe("useEntityAcquisition", () => {
     await Promise.resolve();
     await vi.advanceTimersByTimeAsync(5000);
 
-    expect(onChanged).toHaveBeenCalled();
+    expect(onChanged).not.toHaveBeenCalled();
   });
 });
 
