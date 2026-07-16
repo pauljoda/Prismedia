@@ -1024,18 +1024,63 @@ public sealed class EfAcquisitionStore(PrismediaDbContext db, IAcquisitionHistor
             .ToArray();
     }
 
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<PendingTransferAdd>> ListPendingTransferAddsAsync(CancellationToken cancellationToken) {
+        var adding = TransferOwnershipState.Adding.ToCode();
+        var placeholders = await (
+            from transfer in db.DownloadTransfers.AsNoTracking()
+            join acquisition in db.Acquisitions.AsNoTracking() on transfer.AcquisitionId equals acquisition.Id
+            where acquisition.Status == AcquisitionStatus.Queued && transfer.State == adding
+            select new {
+                transfer.AcquisitionId,
+                Correlation = transfer.ClientItemId,
+                transfer.UpdatedAt,
+            })
+            .ToArrayAsync(cancellationToken);
+        if (placeholders.Length == 0) {
+            return [];
+        }
+
+        var acquisitionIds = placeholders.Select(row => row.AcquisitionId).Distinct().ToArray();
+        var candidates = await db.ReleaseCandidates.AsNoTracking()
+            .Where(row => acquisitionIds.Contains(row.AcquisitionId) && row.Accepted)
+            .OrderByDescending(row => row.Score)
+            .Select(row => new {
+                row.Id,
+                row.AcquisitionId,
+                row.InfoHash,
+                row.Title,
+            })
+            .ToArrayAsync(cancellationToken);
+
+        return placeholders
+            .Select(placeholder => {
+                var candidate = candidates.FirstOrDefault(row =>
+                    row.AcquisitionId == placeholder.AcquisitionId
+                    && string.Equals(
+                        DownloadAddCorrelation.Create(row.InfoHash, row.Title),
+                        placeholder.Correlation,
+                        StringComparison.Ordinal));
+                return candidate is null
+                    ? null
+                    : new PendingTransferAdd(placeholder.AcquisitionId, candidate.Id, placeholder.UpdatedAt);
+            })
+            .Where(row => row is not null)
+            .Cast<PendingTransferAdd>()
+            .ToArray();
+    }
+
     public async Task<bool> HasActiveTransfersAsync(CancellationToken cancellationToken) {
         var active = new[] {
             AcquisitionStatus.Queued,
             AcquisitionStatus.Downloading,
         };
-        var adding = TransferOwnershipState.Adding.ToCode();
         // Seeding watches keep the monitor scheduled after import, so seed goals are actually enforced.
+        // Pre-Add placeholders also count: the monitor owns their safe, idempotent reconciliation.
         return await (
             from transfer in db.DownloadTransfers.AsNoTracking()
             join acquisition in db.Acquisitions.AsNoTracking() on transfer.AcquisitionId equals acquisition.Id
-            where (transfer.State == null || transfer.State != adding)
-                && (active.Contains(acquisition.Status) || transfer.SeedingSince != null)
+            where active.Contains(acquisition.Status) || transfer.SeedingSince != null
             select transfer.Id).AnyAsync(cancellationToken);
     }
 

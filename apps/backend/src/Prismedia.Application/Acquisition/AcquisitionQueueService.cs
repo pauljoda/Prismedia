@@ -66,7 +66,8 @@ public sealed class AcquisitionQueueService(
         string attemptCategory;
         string? recoveredClientItemId = null;
         var createdPlaceholder = false;
-        if (IsAdding(existingAttempt)) {
+        var recoveringAttempt = IsAdding(existingAttempt);
+        if (recoveringAttempt) {
             if (!string.Equals(existingAttempt!.ClientItemId, correlation, StringComparison.Ordinal)) {
                 throw new AcquisitionConfigurationException(
                     ApiProblemCodes.AcquisitionInvalid,
@@ -74,11 +75,6 @@ public sealed class AcquisitionQueueService(
             }
             client = await ResolveAttemptOwnerAsync(existingAttempt, cancellationToken);
             attemptCategory = existingAttempt.Category ?? client.Category;
-            recoveredClientItemId = await ResolveExistingAttemptItemAsync(
-                client,
-                attemptCategory,
-                correlation,
-                cancellationToken);
         } else {
             var priorStatus = await ClaimQueueLifecycleAsync(
                 acquisitionId,
@@ -123,6 +119,32 @@ public sealed class AcquisitionQueueService(
         }
         await using var addLease = acquiredLease;
         try {
+            if (recoveringAttempt) {
+                var currentAttempt = await acquisitions.GetTransferInfoAsync(acquisitionId, cancellationToken);
+                if (!IsAdding(currentAttempt)) {
+                    if (currentAttempt is null) {
+                        throw new AcquisitionConfigurationException(
+                            ApiProblemCodes.AcquisitionInvalid,
+                            "The unfinished download-client handoff no longer has a durable transfer pointer. Refresh before retrying.");
+                    }
+
+                    // The original caller finalized while this retry waited for the row lock. Its native
+                    // pointer is now authoritative; committing the read-only lease avoids a duplicate Add.
+                    await addLease.CommitAsync(CancellationToken.None);
+                    return await acquisitions.GetAsync(acquisitionId, cancellationToken);
+                }
+                if (!string.Equals(currentAttempt!.ClientItemId, correlation, StringComparison.Ordinal)) {
+                    throw new AcquisitionConfigurationException(
+                        ApiProblemCodes.AcquisitionInvalid,
+                        "A different download-client handoff took ownership while recovery was waiting. Refresh before retrying.");
+                }
+                recoveredClientItemId = await ResolveExistingAttemptItemAsync(
+                    client,
+                    attemptCategory,
+                    correlation,
+                    cancellationToken);
+            }
+
             var connection = ConnectionFor(client) with { Category = attemptCategory };
             var downloadClient = clients.Get(client.Kind);
             var addedNow = recoveredClientItemId is null;
@@ -186,7 +208,8 @@ public sealed class AcquisitionQueueService(
         string attemptCategory;
         string? recoveredClientItemId = null;
         var createdPlaceholder = false;
-        if (IsAdding(existingAttempt)) {
+        var recoveringAttempt = IsAdding(existingAttempt);
+        if (recoveringAttempt) {
             if (!string.Equals(existingAttempt!.ClientItemId, correlation, StringComparison.Ordinal)) {
                 throw new AcquisitionConfigurationException(
                     ApiProblemCodes.AcquisitionInvalid,
@@ -194,11 +217,6 @@ public sealed class AcquisitionQueueService(
             }
             client = await ResolveAttemptOwnerAsync(existingAttempt, cancellationToken);
             attemptCategory = existingAttempt.Category ?? client.Category;
-            recoveredClientItemId = await ResolveExistingAttemptItemAsync(
-                client,
-                attemptCategory,
-                correlation,
-                cancellationToken);
         } else {
             var priorStatus = await ClaimQueueLifecycleAsync(
                 acquisitionId,
@@ -241,6 +259,30 @@ public sealed class AcquisitionQueueService(
         }
         await using var addLease = acquiredLease;
         try {
+            if (recoveringAttempt) {
+                var currentAttempt = await acquisitions.GetTransferInfoAsync(acquisitionId, cancellationToken);
+                if (!IsAdding(currentAttempt)) {
+                    if (currentAttempt is null) {
+                        throw new AcquisitionConfigurationException(
+                            ApiProblemCodes.AcquisitionInvalid,
+                            "The unfinished manual download handoff no longer has a durable transfer pointer. Refresh before retrying.");
+                    }
+
+                    await addLease.CommitAsync(CancellationToken.None);
+                    return await acquisitions.GetAsync(acquisitionId, cancellationToken);
+                }
+                if (!string.Equals(currentAttempt!.ClientItemId, correlation, StringComparison.Ordinal)) {
+                    throw new AcquisitionConfigurationException(
+                        ApiProblemCodes.AcquisitionInvalid,
+                        "A different manual download handoff took ownership while recovery was waiting. Refresh before retrying.");
+                }
+                recoveredClientItemId = await ResolveExistingAttemptItemAsync(
+                    client,
+                    attemptCategory,
+                    correlation,
+                    cancellationToken);
+            }
+
             var connection = ConnectionFor(client) with { Category = attemptCategory };
             var downloadClient = clients.Get(client.Kind);
             var addedNow = recoveredClientItemId is null;

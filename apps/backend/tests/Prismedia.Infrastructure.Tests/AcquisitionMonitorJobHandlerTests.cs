@@ -22,6 +22,36 @@ public sealed class AcquisitionMonitorJobHandlerTests {
     private static readonly Guid ClientId = Guid.NewGuid();
 
     [Fact]
+    public async Task PendingAddIsRequeuedThroughTheSameCandidateBeforePolling() {
+        await using var db = CreateContext();
+        var now = DateTimeOffset.UtcNow.AddMinutes(-10);
+        var acquisitionId = Guid.NewGuid();
+        var candidateId = Guid.NewGuid();
+        db.Acquisitions.Add(new AcquisitionRow {
+            Id = acquisitionId, Status = AcquisitionStatus.Queued, Title = "Book",
+            ExternalIdsJson = "{}", SourceUrlsJson = "[]", CreatedAt = now, UpdatedAt = now
+        });
+        db.ReleaseCandidates.Add(new ReleaseCandidateRow {
+            Id = candidateId, AcquisitionId = acquisitionId, IndexerName = "Indexer", Title = "Book release",
+            InfoHash = "hash-pending", Accepted = true, Score = 100, Protocol = DownloadProtocol.Torrent,
+            RejectionsJson = "[]", CreatedAt = now
+        });
+        await db.SaveChangesAsync();
+        Assert.True(await AcquisitionTestFactory.Store(db).BeginTransferAddAsync(
+            acquisitionId,
+            ClientId,
+            "hash-pending",
+            "prismedia-books",
+            null,
+            CancellationToken.None));
+        var recovery = new RecordingAcquisitionQueueService();
+
+        await RunAsync(db, new RecordingJobQueue(), listing: [], directLookup: null, acquisitionId, recovery: recovery);
+
+        Assert.Equal((acquisitionId, candidateId), Assert.Single(recovery.Calls));
+    }
+
+    [Fact]
     public async Task StalledPastGraceEnqueuesFailedHandleWithStalledReason() {
         await using var db = CreateContext();
         var acquisitionId = await SeedDownloadingAsync(db, lastSeen: DateTimeOffset.UtcNow, stalledSince: DateTimeOffset.UtcNow.AddMinutes(-90));
@@ -208,9 +238,11 @@ public sealed class AcquisitionMonitorJobHandlerTests {
         IReadOnlyList<DownloadItemStatus> listing,
         DownloadItemStatus? directLookup,
         Guid acquisitionId,
-        Func<Task>? beforePayloadInspection = null) {
+        Func<Task>? beforePayloadInspection = null,
+        IAcquisitionQueueService? recovery = null) {
         var handler = new AcquisitionMonitorJobHandler(
             AcquisitionTestFactory.Store(db),
+            recovery ?? new RecordingAcquisitionQueueService(),
             new FakeDownloadClientConfigStore(),
             new FakeDownloadClientFactory(new FakeDownloadClient(listing, directLookup, beforePayloadInspection)),
             new RemotePathMapper(new NoRemotePathMappings()),
@@ -220,6 +252,20 @@ public sealed class AcquisitionMonitorJobHandlerTests {
             Guid.NewGuid(), JobType.AcquisitionMonitor, JobRunStatus.Running, 0, null, "{}",
             null, null, null, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow, null);
         await handler.HandleAsync(new JobContext(job, queue), CancellationToken.None);
+    }
+
+    private sealed class RecordingAcquisitionQueueService : IAcquisitionQueueService {
+        public List<(Guid AcquisitionId, Guid CandidateId)> Calls { get; } = [];
+
+        public Task<AcquisitionDetail?> QueueAsync(
+            Guid acquisitionId,
+            Guid candidateId,
+            CancellationToken cancellationToken,
+            bool manualPick = false,
+            AcquisitionStatus? requiredStatus = null) {
+            Calls.Add((acquisitionId, candidateId));
+            return Task.FromResult<AcquisitionDetail?>(null);
+        }
     }
 
     private static async Task<Guid> SeedDownloadingAsync(

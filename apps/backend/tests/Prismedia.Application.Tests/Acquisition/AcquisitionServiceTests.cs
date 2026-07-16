@@ -506,6 +506,36 @@ public sealed class AcquisitionServiceTests {
     }
 
     [Fact]
+    public async Task QueueRecoveryDoesNotAddAgainWhenTheOriginalHandoffFinishesWhileItWaitsForTheLease() {
+        var harness = Harness(new AcquisitionTransferInfo(
+            AcquisitionStatus.Queued,
+            null,
+            "abc123",
+            RecordedClientId,
+            "prismedia",
+            TransferOwnershipState.Adding.ToCode()));
+        PrepareQueueCandidate(harness.Store);
+        harness.Downloads.ItemExists = false;
+        var transferAdds = new RecordingTransferAddCoordinator {
+            OnAcquire = () => harness.Store.CompleteTransferAddAsync(
+                AcquisitionId,
+                RecordedClientId,
+                "abc123",
+                "original-client-item",
+                new SelectedRelease("Dune", "Indexer", "abc123"),
+                "Sent to download client.",
+                CancellationToken.None).GetAwaiter().GetResult()
+        };
+
+        await QueueService(harness, transferAdds)
+            .QueueAsync(AcquisitionId, CandidateId, CancellationToken.None);
+
+        Assert.Equal(0, harness.Downloads.AddCount);
+        Assert.Equal("original-client-item", harness.Store.TransferPointer?.ClientItemId);
+        Assert.True(transferAdds.Lease.Committed);
+    }
+
+    [Fact]
     public async Task TeardownRecoversOneTitleCorrelatedAddButFailsClosedOnAmbiguity() {
         var unique = Harness(new AcquisitionTransferInfo(
             AcquisitionStatus.Queued,

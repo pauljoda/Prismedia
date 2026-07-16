@@ -515,6 +515,17 @@ public sealed record ActiveTransfer(
     DateTimeOffset? StalledSince = null);
 
 /// <summary>
+/// A durable download-client handoff that was recorded before the remote Add but never finalized with
+/// the client's native item id. <see cref="CandidateId"/> is the best accepted candidate whose stable
+/// hash-or-title correlation matches the placeholder, allowing the ordinary idempotent queue path to
+/// reconcile the same release after a lost response or process interruption.
+/// </summary>
+public sealed record PendingTransferAdd(
+    Guid AcquisitionId,
+    Guid CandidateId,
+    DateTimeOffset UpdatedAt);
+
+/// <summary>
 /// Durable completion ticket for an acquisition whose download finished before its import or replacement
 /// job was safely queued. <see cref="Kind"/> determines whether an ordinary acquisition has a registered
 /// import engine; <see cref="IsUpgrade"/> routes upgrade children to the in-place replacement workflow.

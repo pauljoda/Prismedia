@@ -587,7 +587,17 @@ public interface IAcquisitionStore : IAcquisitionLifecycleStore {
     /// <summary>Lists transfers whose acquisitions are still queued or downloading, for the monitor to advance.</summary>
     Task<IReadOnlyList<ActiveTransfer>> ListActiveTransfersAsync(CancellationToken cancellationToken);
 
-    /// <summary>True when any acquisition still has an in-flight transfer; gates scheduling the monitor job.</summary>
+    /// <summary>
+    /// Lists durable pre-Add placeholders that can be reconciled through the exact accepted release whose
+    /// hash-or-title correlation they carry. Manual file handoffs without a release candidate are omitted.
+    /// </summary>
+    Task<IReadOnlyList<PendingTransferAdd>> ListPendingTransferAddsAsync(CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<PendingTransferAdd>>([]);
+
+    /// <summary>
+    /// True when any acquisition still has an in-flight transfer, including a durable pre-Add placeholder;
+    /// gates scheduling the monitor job.
+    /// </summary>
     Task<bool> HasActiveTransfersAsync(CancellationToken cancellationToken);
 
     /// <summary>

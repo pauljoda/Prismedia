@@ -602,7 +602,7 @@ public sealed class EfAcquisitionStoreTests {
     }
 
     [Fact]
-    public async Task DurableAddPlaceholderIsIdempotentAndExcludedFromNormalTransferPolling() {
+    public async Task DurableAddPlaceholderIsIdempotentRecoverableAndExcludedFromNormalTransferPolling() {
         await using var db = CreateContext();
         var now = DateTimeOffset.UtcNow;
         var acquisitionId = Guid.NewGuid();
@@ -616,6 +616,7 @@ public sealed class EfAcquisitionStoreTests {
             CreatedAt = now,
             UpdatedAt = now
         });
+        AddCandidate(db, acquisitionId, "abc123", "Indexer", "Dune release", 100);
         await db.SaveChangesAsync();
         var store = AcquisitionTestFactory.Store(db);
 
@@ -628,7 +629,12 @@ public sealed class EfAcquisitionStoreTests {
         Assert.Equal(TransferOwnershipState.Adding.ToCode(), placeholder.State);
         Assert.Equal("abc123", placeholder.ClientItemId);
         Assert.Empty(await store.ListActiveTransfersAsync(CancellationToken.None));
-        Assert.False(await store.HasActiveTransfersAsync(CancellationToken.None));
+        Assert.True(await store.HasActiveTransfersAsync(CancellationToken.None));
+        var pending = Assert.Single(await store.ListPendingTransferAddsAsync(CancellationToken.None));
+        Assert.Equal(acquisitionId, pending.AcquisitionId);
+        Assert.Equal(
+            await db.ReleaseCandidates.AsNoTracking().Where(row => row.AcquisitionId == acquisitionId).Select(row => row.Id).SingleAsync(),
+            pending.CandidateId);
 
         Assert.True(await store.CompleteTransferAddAsync(
             acquisitionId,

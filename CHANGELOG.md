@@ -148,6 +148,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Updated documentation, README screenshots, branding assets, install metadata, and app copy to match the current Prismedia v1 surface.
 
 ### Fixed
+- Download-client handoffs now recover automatically after a lost response or interrupted add instead of leaving acquisitions stuck on “Preparing download.”
 - Monitored season requests now fall back to exact per-episode searches when no acceptable season pack exists, every attempted pack download fails, or a downloaded pack cannot be imported; selectable and in-flight season packs still finish without duplicate episode work.
 - Acquisition imports now re-identify the source-backed entity after its real files and children are cataloged, so organized Wanted placeholders keep their stable provider identity while gaining episode titles, track names, and other child metadata.
 - Interrupted acquisition imports can now be explicitly started over: Prismedia removes their partial files and stale catalog state, restores recoverable pre-upgrade files, and creates a clean search. Removing a download uses the same graceful cleanup even when its download client or payload is already missing.

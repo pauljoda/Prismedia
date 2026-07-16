@@ -7,11 +7,13 @@ namespace Prismedia.Application.Jobs.Handlers;
 /// <summary>
 /// Polls the download client for every in-flight transfer and advances its acquisition: reports
 /// progress while downloading and marks the acquisition <see cref="AcquisitionStatus.Downloaded"/>
-/// once the client reports completion. Enqueued as a singleton by the scheduler whenever active
-/// transfers exist, so a single pass covers all of them.
+/// once the client reports completion. Before polling, reconciles durable pre-Add placeholders through
+/// the exact same release so a lost client response cannot strand an acquisition in Preparing. Enqueued
+/// as a singleton by the scheduler whenever active transfers exist, so a single pass covers all of them.
 /// </summary>
 public sealed class AcquisitionMonitorJobHandler(
     IAcquisitionStore acquisitions,
+    IAcquisitionQueueService queueService,
     IDownloadClientConfigStore downloadClients,
     IDownloadClientFactory clients,
     RemotePathMapper remotePaths,
@@ -38,6 +40,28 @@ public sealed class AcquisitionMonitorJobHandler(
     private static readonly TimeSpan StallGrace = TimeSpan.FromMinutes(60);
 
     public async Task HandleAsync(JobContext context, CancellationToken cancellationToken) {
+        var pendingAdds = await acquisitions.ListPendingTransferAddsAsync(cancellationToken);
+        foreach (var pending in pendingAdds) {
+            cancellationToken.ThrowIfCancellationRequested();
+            try {
+                await queueService.QueueAsync(
+                    pending.AcquisitionId,
+                    pending.CandidateId,
+                    cancellationToken,
+                    requiredStatus: AcquisitionStatus.Queued);
+            } catch (AcquisitionConfigurationException ex) {
+                logger.LogWarning(
+                    ex,
+                    "Download-client handoff for acquisition {AcquisitionId} is still awaiting reconciliation",
+                    pending.AcquisitionId);
+            } catch (Exception ex) when (ex is not OperationCanceledException) {
+                logger.LogError(
+                    ex,
+                    "Unexpected failure reconciling download-client handoff for acquisition {AcquisitionId}",
+                    pending.AcquisitionId);
+            }
+        }
+
         var transfers = await acquisitions.ListActiveTransfersAsync(cancellationToken);
         var seeding = await acquisitions.ListSeedingTransfersAsync(cancellationToken);
         if (transfers.Count == 0 && seeding.Count == 0) {
