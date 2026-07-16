@@ -478,37 +478,41 @@ public sealed class EfMonitorStore(
                 continue; // upgrade attempt in flight (or just reconciled) — never re-search the same book concurrently
             }
 
-            switch (row.AcquisitionStatus) {
-                case AcquisitionStatus.Imported:
-                    // A child-materializing unit is only complete when its imported payload covered the
-                    // structural children it promised. The registry supplies the direct child kind, keeping
-                    // the same completeness/fallback path reusable by seasons, albums, volumes, and future
-                    // Entity hierarchies without media-specific branches here.
-                    var structuralUnit = RequestKindRegistry.FindChildMaterializingUnit(monitor.Kind);
-                    var structuralChild = structuralUnit is null ? null : RequestKindRegistry.ChildOf(structuralUnit);
-                    if (structuralChild is not null && row.AcquisitionEntityId is { } parentEntityId) {
-                        if (row.AwaitingImportReconcile) {
-                            continue; // judge completeness on a later sweep, after the import scan binds files
-                        }
+            // A child-materializing acquisition prefers one complete unit, but a barren, failed, or
+            // unimportable attempt must not keep retrying that coarse unit forever while its direct children
+            // are independently available. Once the unit is exhausted, surface the same missing-child due
+            // used after a partial import; the handler then requests each still-wanted child through the
+            // ordinary acquisition pipeline. A search with an acceptable unit is deliberately left alone so
+            // review or auto-grab can finish before any child work starts.
+            var structuralUnit = RequestKindRegistry.FindChildMaterializingUnit(monitor.Kind);
+            var structuralChild = structuralUnit is null ? null : RequestKindRegistry.ChildOf(structuralUnit);
+            if (structuralChild is not null
+                && row.AcquisitionEntityId is { } structuralParentEntityId
+                && CanFallBackToMissingChildren(row.AcquisitionStatus, row.AcceptedCount)) {
+                if (row.AwaitingImportReconcile) {
+                    continue; // judge an imported unit only after the scan binds every delivered child
+                }
 
-                        var childKindCode = structuralChild.WantedEntityKind.ToCode();
-                        var hasMissingChildren = await db.Entities.AnyAsync(
-                            entity => entity.ParentEntityId == parentEntityId
-                                && entity.KindCode == childKindCode
-                                && entity.IsWanted,
-                            cancellationToken);
-                        if (hasMissingChildren) {
-                            if (monitor.LastSearchedAt is null || now - monitor.LastSearchedAt >= interval) {
-                                due.Add(new DueMonitor(
-                                    monitor.Id, acquisitionId, monitor.Title,
-                                    IsUpgrade: false, EntityId: parentEntityId, MissingChildFallback: true,
-                                    BookRendition: monitor.BookRendition));
-                            }
-
-                            continue;
-                        }
+                var childKindCode = structuralChild.WantedEntityKind.ToCode();
+                var hasMissingChildren = await db.Entities.AnyAsync(
+                    entity => entity.ParentEntityId == structuralParentEntityId
+                        && entity.KindCode == childKindCode
+                        && entity.IsWanted,
+                    cancellationToken);
+                if (hasMissingChildren) {
+                    if (monitor.LastSearchedAt is null || now - monitor.LastSearchedAt >= interval) {
+                        due.Add(new DueMonitor(
+                            monitor.Id, acquisitionId, monitor.Title,
+                            IsUpgrade: false, EntityId: structuralParentEntityId, MissingChildFallback: true,
+                            BookRendition: monitor.BookRendition));
                     }
 
+                    continue;
+                }
+            }
+
+            switch (row.AcquisitionStatus) {
+                case AcquisitionStatus.Imported:
                     // The wanted item is in hand. An upgrade-capable kind (a book, or a single-file movie/
                     // episode) with its profile's upgrade loop on keeps seeking a higher-quality release; every
                     // other kind — a season pack, an album, or any kind whose profile has upgrades off —
@@ -616,6 +620,15 @@ public sealed class EfMonitorStore(
 
         return due;
     }
+
+    /// <summary>
+    /// Whether a whole-unit acquisition has reached a state where direct child searches are a better path.
+    /// Imported units use this to fill gaps; failed and unimportable units have exhausted their chosen pack;
+    /// a barren review state proves the pack search found nothing actionable.
+    /// </summary>
+    private static bool CanFallBackToMissingChildren(AcquisitionStatus? status, int acceptedCount) =>
+        status is AcquisitionStatus.Imported or AcquisitionStatus.Failed or AcquisitionStatus.ManualImportRequired
+        || (status == AcquisitionStatus.AwaitingSelection && acceptedCount == 0);
 
     public async Task<WantedPage> ListMissingAsync(int page, int pageSize, EntityKind? kind, CancellationToken cancellationToken) {
         var take = Math.Clamp(pageSize <= 0 ? DefaultWantedPageSize : pageSize, 1, MaxWantedPageSize);

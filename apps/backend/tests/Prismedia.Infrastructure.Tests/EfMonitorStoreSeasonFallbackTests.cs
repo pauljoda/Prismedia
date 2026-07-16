@@ -59,8 +59,69 @@ public sealed class EfMonitorStoreSeasonFallbackTests {
         Assert.Equal(MonitorStatus.Active, (await store.ListAsync(CancellationToken.None))[0].Status);
     }
 
+    [Fact]
+    public async Task FailedSeasonWithWantedEpisodesFallsBackToEpisodeSearches() {
+        await using var db = CreateContext();
+        var (store, seasonEntityId, _) = await SeedSeasonAsync(
+            db, AcquisitionStatus.Failed, wantedEpisodes: 2);
+
+        var due = await store.ListDueMonitorsAsync(360, CancellationToken.None);
+
+        var fallback = Assert.Single(due);
+        Assert.True(fallback.MissingChildFallback);
+        Assert.Equal(seasonEntityId, fallback.EntityId);
+    }
+
+    [Fact]
+    public async Task SeasonSearchWithoutAnAcceptablePackFallsBackToEpisodeSearches() {
+        await using var db = CreateContext();
+        var (store, seasonEntityId, _) = await SeedSeasonAsync(
+            db, AcquisitionStatus.AwaitingSelection, wantedEpisodes: 2);
+
+        var due = await store.ListDueMonitorsAsync(360, CancellationToken.None);
+
+        var fallback = Assert.Single(due);
+        Assert.True(fallback.MissingChildFallback);
+        Assert.Equal(seasonEntityId, fallback.EntityId);
+    }
+
+    [Fact]
+    public async Task UnimportableSeasonWithWantedEpisodesFallsBackToEpisodeSearches() {
+        await using var db = CreateContext();
+        var (store, seasonEntityId, _) = await SeedSeasonAsync(
+            db, AcquisitionStatus.ManualImportRequired, wantedEpisodes: 2);
+
+        var due = await store.ListDueMonitorsAsync(360, CancellationToken.None);
+
+        var fallback = Assert.Single(due);
+        Assert.True(fallback.MissingChildFallback);
+        Assert.Equal(seasonEntityId, fallback.EntityId);
+    }
+
+    [Fact]
+    public async Task SeasonWithAnAcceptablePackDoesNotStartEpisodeSearches() {
+        await using var db = CreateContext();
+        var (store, _, _) = await SeedSeasonAsync(
+            db, AcquisitionStatus.AwaitingSelection, wantedEpisodes: 2, acceptedCandidates: 1);
+
+        Assert.Empty(await store.ListDueMonitorsAsync(360, CancellationToken.None));
+    }
+
     private static async Task<(EfMonitorStore Store, Guid SeasonEntityId, Guid MonitorId)> SeedImportedSeasonAsync(
         PrismediaDbContext db, int wantedEpisodes, bool hintConsumed) {
+        return await SeedSeasonAsync(
+            db,
+            AcquisitionStatus.Imported,
+            wantedEpisodes,
+            hintConsumed);
+    }
+
+    private static async Task<(EfMonitorStore Store, Guid SeasonEntityId, Guid MonitorId)> SeedSeasonAsync(
+        PrismediaDbContext db,
+        AcquisitionStatus status,
+        int wantedEpisodes,
+        bool hintConsumed = true,
+        int acceptedCandidates = 0) {
         var now = DateTimeOffset.UtcNow;
         var seasonEntityId = Guid.NewGuid();
         db.Entities.Add(new EntityRow {
@@ -77,13 +138,28 @@ public sealed class EfMonitorStoreSeasonFallbackTests {
 
         var acquisitionId = Guid.NewGuid();
         db.Acquisitions.Add(new AcquisitionRow {
-            Id = acquisitionId, Status = AcquisitionStatus.Imported, Title = "Show S01",
+            Id = acquisitionId, Kind = EntityKind.VideoSeason, Status = status, Title = "Show S01",
             EntityId = seasonEntityId, ExternalIdsJson = "{}", SourceUrlsJson = "[]", CreatedAt = now, UpdatedAt = now
         });
-        db.AcquisitionImportHints.Add(new AcquisitionImportHintRow {
-            Id = Guid.NewGuid(), AcquisitionId = acquisitionId, EntityId = seasonEntityId,
-            SourcePath = "/downloads/show-s01", Consumed = hintConsumed, CreatedAt = now, UpdatedAt = now
-        });
+        if (status == AcquisitionStatus.Imported) {
+            db.AcquisitionImportHints.Add(new AcquisitionImportHintRow {
+                Id = Guid.NewGuid(), AcquisitionId = acquisitionId, EntityId = seasonEntityId,
+                SourcePath = "/downloads/show-s01", Consumed = hintConsumed, CreatedAt = now, UpdatedAt = now
+            });
+        }
+        for (var candidate = 0; candidate < acceptedCandidates; candidate++) {
+            db.ReleaseCandidates.Add(new ReleaseCandidateRow {
+                Id = Guid.NewGuid(),
+                AcquisitionId = acquisitionId,
+                IndexerName = "Indexer",
+                Title = $"Show S01 pack {candidate}",
+                Protocol = DownloadProtocol.Usenet,
+                Score = 100 - candidate,
+                Accepted = true,
+                RejectionsJson = "[]",
+                CreatedAt = now
+            });
+        }
         await db.SaveChangesAsync();
 
         var store = new EfMonitorStore(db);
