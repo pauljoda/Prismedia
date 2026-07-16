@@ -45,6 +45,30 @@ describe("EntityChildMonitoring", () => {
     vi.restoreAllMocks();
   });
 
+  it("opens episode activity and shows an active download even when monitoring is off", async () => {
+    const episode = childCard("episode-1", ENTITY_KIND.video, "Jet-Assisted Chevy", true);
+    episode.latestAcquisitionStatus = ACQUISITION_STATUS.queued;
+    mocks.fetchEntityMonitorStates.mockResolvedValue([
+      entityState("episode-1", {
+        canRequest: true,
+        latestAcquisition: {
+          ...acquisition("acq-episode", "episode-1"),
+          status: ACQUISITION_STATUS.queued,
+          progress: 0,
+        },
+      }),
+    ]);
+
+    render(EntityChildMonitoring, { cards: [episode] });
+
+    const disclosure = screen.getByRole("button", { name: /Episode activity/ });
+    expect(disclosure).toHaveAttribute("aria-expanded", "true");
+    expect(await screen.findByText("Queued · Not monitored")).toBeInTheDocument();
+    expect(screen.getByText(/downloads and search progress appear here/i)).toBeInTheDocument();
+    expect(screen.getByRole("switch", { name: "Monitor Jet-Assisted Chevy" }))
+      .toHaveAttribute("aria-checked", "false");
+  });
+
   it("uses stable Entity monitoring instead of a historical acquisition row", async () => {
     mocks.fetchEntityMonitorStates.mockResolvedValue([
       entityState("season-1", {
@@ -96,6 +120,7 @@ describe("EntityChildMonitoring", () => {
     render(EntityChildMonitoring, { cards: [wanted] });
 
     await expand();
+    expect(screen.getByText("Wanted · Not monitored")).toBeInTheDocument();
     await fireEvent.click(await screen.findByRole("switch", { name: "Monitor Wanted Book" }));
 
     await waitFor(() => expect(mocks.commitEntityRequest).toHaveBeenCalledWith("book-1"));
@@ -218,7 +243,7 @@ describe("EntityChildMonitoring", () => {
     });
 
     await expand();
-    const section = screen.getByRole("region", { name: "Child monitoring" });
+    const section = screen.getByRole("region", { name: "Child activity" });
     await fireEvent.click(within(section).getByRole("button", { name: "Monitor all" }));
 
     await waitFor(() => expect(mocks.startEntityMonitor).toHaveBeenCalledTimes(2));
@@ -387,7 +412,7 @@ describe("EntityChildMonitoring", () => {
       cards: [childCard("book-1", ENTITY_KIND.book, "First Book")],
     });
 
-    const disclosure = screen.getByRole("button", { name: /Child monitoring/ });
+    const disclosure = screen.getByRole("button", { name: /Child activity/ });
     expect(disclosure).toHaveAttribute("aria-expanded", "false");
     await expand();
     expect(disclosure).toHaveAttribute("aria-expanded", "true");
@@ -429,7 +454,7 @@ describe("EntityChildMonitoring", () => {
     expect(toggle).toHaveAttribute("aria-checked", "true");
     expect(screen.getByText("Monitoring")).toBeInTheDocument();
 
-    await fireEvent.click(screen.getByRole("button", { name: /Child monitoring/ }));
+    await fireEvent.click(screen.getByRole("button", { name: /Child activity/ }));
     expect(clearIntervalSpy).toHaveBeenCalledWith(1);
   });
 
@@ -466,7 +491,7 @@ describe("EntityChildMonitoring", () => {
 });
 
 async function expand(): Promise<void> {
-  await fireEvent.click(screen.getByRole("button", { name: /Child monitoring/ }));
+  await fireEvent.click(screen.getByRole("button", { name: /activity/ }));
   await waitFor(() => expect(mocks.fetchEntityMonitorStates).toHaveBeenCalledOnce());
 }
 

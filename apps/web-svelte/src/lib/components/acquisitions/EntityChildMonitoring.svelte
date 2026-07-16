@@ -1,7 +1,8 @@
 <script lang="ts">
+  import { untrack } from "svelte";
   import { ChevronDown, Layers, Loader2 } from "@lucide/svelte";
   import { Button, Toggle, cn } from "@prismedia/ui-svelte";
-  import { ACQUISITION_STATUS } from "$lib/api/generated/codes";
+  import { ACQUISITION_STATUS, ENTITY_KIND } from "$lib/api/generated/codes";
   import type {
     AcquisitionSummary,
     MonitorView,
@@ -20,7 +21,10 @@
     type EntityThumbnailCard,
   } from "$lib/entities/entity-thumbnail";
   import { acquisitionStatusDisplay } from "$lib/requests/acquisition-status-display";
-  import { ACTIVE_ACQUISITION_STATUSES } from "$lib/requests/acquisition-status";
+  import {
+    ACTIVE_ACQUISITION_STATUSES,
+    acquisitionStatusShouldPoll,
+  } from "$lib/requests/acquisition-status";
   import {
     monitorHasUnknownStatus,
     monitorIsActive,
@@ -54,7 +58,10 @@
     onChanged?: () => void | Promise<void>;
   } = $props();
 
-  let open = $state(false);
+  let open = $state(untrack(() => cards.some((card) =>
+    acquisitionStatusShouldPoll(card.wantedStatus)
+    || acquisitionStatusShouldPoll(card.latestAcquisitionStatus),
+  )));
   let loading = $state(false);
   let bulkBusy = $state(false);
   let busyIds = $state.raw<string[]>([]);
@@ -64,13 +71,26 @@
   let refreshInFlight: Promise<void> | null = null;
 
   const cardsKey = $derived(cards.map((card) => card.entity.id).join("|"));
-  const childLabel = $derived.by(() => {
+  const childKind = $derived.by(() => {
     const kinds = new Set(cards.map((card) => card.entity.kind));
-    return kinds.size === 1 && cards[0]
-      ? labelForEntityKind(cards[0].entity.kind)
+    return kinds.size === 1 && cards[0] ? cards[0].entity.kind : null;
+  });
+  const sectionTitle = $derived(
+    childKind === ENTITY_KIND.video
+      ? "Episode activity"
+      : childKind === ENTITY_KIND.videoSeason
+        ? "Season activity"
+        : "Child activity",
+  );
+  const childLabel = $derived.by(() => {
+    return childKind === ENTITY_KIND.video
+      ? "Episodes"
+      : childKind
+      ? labelForEntityKind(childKind)
       : "Items";
   });
   const actionableRows = $derived(rows.filter(canSetMonitoring));
+  const activeAcquisitionCount = $derived(rows.filter(hasActiveAcquisition).length);
   const acting = $derived(bulkBusy || busyIds.length > 0);
 
   // The open panel is a live read surface: loading on every expansion prevents a same-id cache from
@@ -166,6 +186,11 @@
     return monitorIsActive(row.monitor);
   }
 
+  function hasActiveAcquisition(row: ChildMonitoringRow): boolean {
+    return row.acquisition !== null
+      && acquisitionStatusShouldPoll(row.acquisition.status);
+  }
+
   function isDeletingFiles(row: ChildMonitoringRow): boolean {
     return monitorIsDeletingFiles(row.monitor);
   }
@@ -201,7 +226,12 @@
     if (hasUnknownMonitorStatus(row)) return "Updating…";
     if (isActive(row)) return acquisitionLabel ? `${acquisitionLabel} · Monitoring` : "Monitoring";
     if (row.monitor) return acquisitionLabel ? `${acquisitionLabel} · Paused` : "Paused";
-    if (isWanted(row.card.entity.capabilities)) return "Wanted";
+    if (row.acquisition && row.acquisition.status !== ACQUISITION_STATUS.imported) {
+      return `${acquisitionLabel} · Not monitored`;
+    }
+    if (isWanted(row.card.entity.capabilities)) {
+      return canSetMonitoring(row) ? "Wanted · Not monitored" : "Wanted";
+    }
     if (canSetMonitoring(row)) return acquisitionLabel ? `${acquisitionLabel} · Not monitored` : "Not monitored";
     return "On disk";
   }
@@ -321,7 +351,7 @@
 </script>
 
 {#if cards.length > 0}
-  <section class="child-monitoring" aria-label="Child monitoring">
+  <section class="child-monitoring" aria-label={sectionTitle}>
     <Button
       type="button"
       variant="ghost"
@@ -332,14 +362,21 @@
     >
       <span class="header-title">
         <Layers class="h-4 w-4 text-text-accent" />
-        Child monitoring
+        {sectionTitle}
         <span class="header-count">{cards.length}</span>
+        {#if activeAcquisitionCount > 0}
+          <span class="active-count">{activeAcquisitionCount} active</span>
+        {/if}
       </span>
       <ChevronDown class={cn("h-4 w-4 text-text-muted transition-transform", open && "rotate-180")} />
     </Button>
 
     {#if open}
       <div class="body">
+        <p class="activity-help">
+          Downloads and search progress appear here. Monitoring controls future searches and retries,
+          so activity can continue while a switch is off.
+        </p>
         <div class="toolbar">
           <span class="toolbar-label">{childLabel}</span>
           <Button
@@ -371,7 +408,7 @@
           <ul class="rows">
             {#each rows as row (row.card.entity.id)}
               {@const href = resolveEntityThumbnailHref(row.card)}
-              {@const active = isActive(row)}
+              {@const active = isActive(row) || hasActiveAcquisition(row)}
               {@const checked = isChecked(row)}
               {@const busy = busyIds.includes(row.card.entity.id)}
               <li class="row">
@@ -429,6 +466,7 @@
     font-weight: 600;
   }
   .header-count,
+  .active-count,
   .toolbar-label,
   .row-status {
     font-family: var(--font-mono);
@@ -437,6 +475,16 @@
   .header-count,
   .row-status {
     color: var(--color-text-muted);
+  }
+  .active-count {
+    padding: 0.15rem 0.35rem;
+    border: 1px solid color-mix(in srgb, var(--color-text-accent) 28%, transparent);
+    border-radius: var(--radius-xs);
+    color: var(--color-text-accent);
+    font-size: 0.6rem;
+    font-weight: 600;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
   }
   .body {
     display: grid;
@@ -448,6 +496,13 @@
     flex-wrap: wrap;
     align-items: center;
     gap: 0.35rem;
+  }
+  .activity-help {
+    margin: 0;
+    max-width: 68rem;
+    color: var(--color-text-muted);
+    font-size: 0.72rem;
+    line-height: 1.45;
   }
   .toolbar-label {
     margin-right: auto;
