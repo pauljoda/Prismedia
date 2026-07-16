@@ -75,6 +75,7 @@ public sealed class JobQueueService : IJobQueueService {
     ];
 
     private static readonly string AutoIdentifyJobTypeCode = JobType.AutoIdentify.ToCode();
+    private static readonly string AcquisitionImportJobTypeCode = JobType.AcquisitionImport.ToCode();
     private static readonly string MusicArtistKindCode = EntityKindRegistry.MusicArtist.Code;
     private static readonly string AudioLibraryKindCode = EntityKindRegistry.AudioLibrary.Code;
 
@@ -305,6 +306,14 @@ public sealed class JobQueueService : IJobQueueService {
         var now = DateTimeOffset.UtcNow;
         var autoIdentifyBlocked = await HasPendingAutoIdentifyPrerequisiteAsync(cancellationToken);
         var audioLibraryAutoIdentifyBlocked = await HasPendingMusicArtistAutoIdentifyAsync(cancellationToken);
+        // Imports combine filesystem placement, catalog materialization, and follow-up scheduling. Keep
+        // exactly one claimed as Running so the durable queue—not a handler-internal semaphore—owns the
+        // wait. This preserves worker capacity and reports the remaining imports honestly as Queued.
+        var acquisitionImportRunning = await _db.JobRuns
+            .AsNoTracking()
+            .AnyAsync(
+                job => job.Type == JobType.AcquisitionImport && job.Status == JobRunStatus.Running,
+                cancellationToken);
 
         if (_db.Database.IsRelational()) {
             var claimed = lane is null
@@ -321,6 +330,7 @@ public sealed class JobQueueService : IJobQueueService {
                         WHERE status = 'queued' AND available_at <= {0}
                           AND ({3} = FALSE OR type <> {4})
                           AND ({5} = FALSE OR type <> {4} OR COALESCE(target_entity_kind, '') <> {6})
+                          AND ({7} = FALSE OR type <> {8})
                         ORDER BY priority DESC, CASE WHEN lane = {2} THEN 1 ELSE 0 END DESC, available_at, created_at
                         LIMIT 1
                         FOR UPDATE SKIP LOCKED
@@ -333,7 +343,9 @@ public sealed class JobQueueService : IJobQueueService {
                     autoIdentifyBlocked,
                     AutoIdentifyJobTypeCode,
                     audioLibraryAutoIdentifyBlocked,
-                    AudioLibraryKindCode).ToListAsync(cancellationToken)
+                    AudioLibraryKindCode,
+                    acquisitionImportRunning,
+                    AcquisitionImportJobTypeCode).ToListAsync(cancellationToken)
                 : await _db.Database.SqlQueryRaw<Guid>(
                     """
                     UPDATE job_runs
@@ -347,6 +359,7 @@ public sealed class JobQueueService : IJobQueueService {
                         WHERE status = 'queued' AND available_at <= {0} AND lane = {2}
                           AND ({3} = FALSE OR type <> {4})
                           AND ({5} = FALSE OR type <> {4} OR COALESCE(target_entity_kind, '') <> {6})
+                          AND ({7} = FALSE OR type <> {8})
                         ORDER BY priority DESC, available_at, created_at
                         LIMIT 1
                         FOR UPDATE SKIP LOCKED
@@ -359,7 +372,9 @@ public sealed class JobQueueService : IJobQueueService {
                     autoIdentifyBlocked,
                     AutoIdentifyJobTypeCode,
                     audioLibraryAutoIdentifyBlocked,
-                    AudioLibraryKindCode).ToListAsync(cancellationToken);
+                    AudioLibraryKindCode,
+                    acquisitionImportRunning,
+                    AcquisitionImportJobTypeCode).ToListAsync(cancellationToken);
 
             if (claimed.Count == 0) {
                 return null;
@@ -377,6 +392,10 @@ public sealed class JobQueueService : IJobQueueService {
 
         if (audioLibraryAutoIdentifyBlocked) {
             query = query.Where(job => job.Type != JobType.AutoIdentify || job.TargetEntityKind != AudioLibraryKindCode);
+        }
+
+        if (acquisitionImportRunning) {
+            query = query.Where(job => job.Type != JobType.AcquisitionImport);
         }
 
         if (lane is not null) {

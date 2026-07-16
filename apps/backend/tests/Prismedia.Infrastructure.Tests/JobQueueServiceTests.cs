@@ -261,6 +261,41 @@ public sealed class JobQueueServiceTests {
     }
 
     [Fact]
+    public async Task ClaimNextKeepsAdditionalAcquisitionImportsQueuedWhileOneRuns() {
+        await using var db = CreateContext();
+        var service = new JobQueueService(db);
+        var now = DateTimeOffset.UtcNow.AddMinutes(-3);
+        var firstImport = NewJobRun(
+            JobType.AcquisitionImport,
+            JobRunStatus.Queued,
+            now,
+            targetEntityId: Guid.NewGuid().ToString());
+        var secondImport = NewJobRun(
+            JobType.AcquisitionImport,
+            JobRunStatus.Queued,
+            now.AddSeconds(1),
+            targetEntityId: Guid.NewGuid().ToString());
+        var unrelated = NewJobRun(
+            JobType.Noop,
+            JobRunStatus.Queued,
+            now.AddSeconds(2));
+        db.JobRuns.AddRange(firstImport, secondImport, unrelated);
+        await db.SaveChangesAsync();
+
+        var firstClaim = await service.ClaimNextAsync("worker-1", CancellationToken.None);
+        var unrelatedClaim = await service.ClaimNextAsync("worker-1", CancellationToken.None);
+
+        Assert.Equal(firstImport.Id, firstClaim?.Id);
+        Assert.Equal(unrelated.Id, unrelatedClaim?.Id);
+        Assert.Equal(JobRunStatus.Queued, (await db.JobRuns.FindAsync(secondImport.Id))?.Status);
+
+        await service.CompleteAsync(firstImport.Id, "Imported", CancellationToken.None);
+        var nextImport = await service.ClaimNextAsync("worker-1", CancellationToken.None);
+
+        Assert.Equal(secondImport.Id, nextImport?.Id);
+    }
+
+    [Fact]
     public async Task ClaimNextPrefersForegroundIdentifyOverSamePriorityBacklog() {
         await using var db = CreateContext();
         var service = new JobQueueService(db);
