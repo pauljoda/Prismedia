@@ -4,6 +4,7 @@ using Prismedia.Application.Acquisition;
 using Prismedia.Application.Jobs;
 using Prismedia.Application.Jobs.Handlers;
 using Prismedia.Contracts.Acquisition;
+using Prismedia.Contracts.System;
 using Prismedia.Domain.Entities;
 using Prismedia.Infrastructure.Acquisition;
 using Prismedia.Infrastructure.Persistence;
@@ -49,6 +50,48 @@ public sealed class AcquisitionMonitorJobHandlerTests {
         await RunAsync(db, new RecordingJobQueue(), listing: [], directLookup: null, acquisitionId, recovery: recovery);
 
         Assert.Equal((acquisitionId, candidateId), Assert.Single(recovery.Calls));
+    }
+
+    [Fact]
+    public async Task TerminalPendingAddFailureMakesMonitorDueAndQueuesFallbackSweep() {
+        await using var db = CreateContext();
+        var now = DateTimeOffset.UtcNow;
+        var acquisitionId = Guid.NewGuid();
+        var candidateId = Guid.NewGuid();
+        db.Acquisitions.Add(new AcquisitionRow {
+            Id = acquisitionId, Kind = EntityKind.VideoSeason, Status = AcquisitionStatus.Queued,
+            Title = "Season 1", ExternalIdsJson = "{}", SourceUrlsJson = "[]",
+            CreatedAt = now, UpdatedAt = now
+        });
+        db.ReleaseCandidates.Add(new ReleaseCandidateRow {
+            Id = candidateId, AcquisitionId = acquisitionId, IndexerName = "Indexer", Title = "Season pack",
+            InfoHash = "hash-terminal", Accepted = true, Score = 100, Protocol = DownloadProtocol.Torrent,
+            RejectionsJson = "[]", CreatedAt = now
+        });
+        db.Monitors.Add(new MonitorRow {
+            Id = Guid.NewGuid(), Kind = EntityKind.VideoSeason, AcquisitionId = acquisitionId,
+            Status = MonitorStatus.Active, Title = "Season 1", LastSearchedAt = now,
+            CreatedAt = now, UpdatedAt = now
+        });
+        await db.SaveChangesAsync();
+        var acquisitionStore = AcquisitionTestFactory.Store(db);
+        Assert.True(await acquisitionStore.BeginTransferAddAsync(
+            acquisitionId, ClientId, "hash-terminal", "prismedia", null, CancellationToken.None));
+        var monitorStore = new EfMonitorStore(db);
+        var jobs = new RecordingJobQueue();
+
+        await RunAsync(
+            db,
+            jobs,
+            listing: [],
+            directLookup: null,
+            acquisitionId,
+            recovery: new TerminalRecoveryQueueService(acquisitionStore),
+            monitors: monitorStore);
+
+        Assert.Equal(AcquisitionStatus.Failed, await StatusOf(db, acquisitionId));
+        Assert.Null(await db.Monitors.Where(row => row.AcquisitionId == acquisitionId).Select(row => row.LastSearchedAt).SingleAsync());
+        Assert.Equal(JobType.MonitoredSearch, Assert.Single(jobs.Enqueued).Type);
     }
 
     [Fact]
@@ -239,10 +282,12 @@ public sealed class AcquisitionMonitorJobHandlerTests {
         DownloadItemStatus? directLookup,
         Guid acquisitionId,
         Func<Task>? beforePayloadInspection = null,
-        IAcquisitionQueueService? recovery = null) {
+        IAcquisitionQueueService? recovery = null,
+        IMonitorStore? monitors = null) {
         var handler = new AcquisitionMonitorJobHandler(
             AcquisitionTestFactory.Store(db),
             recovery ?? new RecordingAcquisitionQueueService(),
+            monitors ?? new EfMonitorStore(db),
             new FakeDownloadClientConfigStore(),
             new FakeDownloadClientFactory(new FakeDownloadClient(listing, directLookup, beforePayloadInspection)),
             new RemotePathMapper(new NoRemotePathMappings()),
@@ -265,6 +310,30 @@ public sealed class AcquisitionMonitorJobHandlerTests {
             AcquisitionStatus? requiredStatus = null) {
             Calls.Add((acquisitionId, candidateId));
             return Task.FromResult<AcquisitionDetail?>(null);
+        }
+    }
+
+    private sealed class TerminalRecoveryQueueService(IAcquisitionStore store) : IAcquisitionQueueService {
+        public async Task<AcquisitionDetail?> QueueAsync(
+            Guid acquisitionId,
+            Guid candidateId,
+            CancellationToken cancellationToken,
+            bool manualPick = false,
+            AcquisitionStatus? requiredStatus = null) {
+            await store.AbandonTransferAddAsync(
+                acquisitionId,
+                ClientId,
+                "hash-terminal",
+                cancellationToken);
+            await store.TryTransitionStatusAsync(
+                acquisitionId,
+                [AcquisitionStatus.Queued],
+                AcquisitionStatus.Failed,
+                "No identifiable torrent was added.",
+                cancellationToken);
+            throw new AcquisitionConfigurationException(
+                ApiProblemCodes.AcquisitionInvalid,
+                "No identifiable torrent was added.");
         }
     }
 

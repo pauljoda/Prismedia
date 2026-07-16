@@ -937,6 +937,14 @@ public interface IMonitorStore {
     Task MarkSearchedAsync(Guid monitorId, CancellationToken cancellationToken);
 
     /// <summary>
+    /// Makes the active monitor attached to an acquisition immediately eligible for a monitored-search
+    /// sweep. Used when an asynchronous handoff conclusively fails after the monitor's ordinary search
+    /// timestamp was already recorded, so structural-unit fallback does not wait for the retry interval.
+    /// </summary>
+    Task MarkSearchDueByAcquisitionAsync(Guid acquisitionId, CancellationToken cancellationToken) =>
+        Task.CompletedTask;
+
+    /// <summary>
     /// Atomically claims the monitor's one upgrade slot and creates a child acquisition (copied from the
     /// parent, linked via <c>UpgradeOfAcquisitionId</c>) to search for a better release. Returns the child id,
     /// or null when the slot is already taken (an upgrade is in flight) or the parent is gone. Serialized by

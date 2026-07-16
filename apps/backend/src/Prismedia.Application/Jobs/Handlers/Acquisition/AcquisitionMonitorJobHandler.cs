@@ -14,6 +14,7 @@ namespace Prismedia.Application.Jobs.Handlers;
 public sealed class AcquisitionMonitorJobHandler(
     IAcquisitionStore acquisitions,
     IAcquisitionQueueService queueService,
+    IMonitorStore monitors,
     IDownloadClientConfigStore downloadClients,
     IDownloadClientFactory clients,
     RemotePathMapper remotePaths,
@@ -50,10 +51,24 @@ public sealed class AcquisitionMonitorJobHandler(
                     cancellationToken,
                     requiredStatus: AcquisitionStatus.Queued);
             } catch (AcquisitionConfigurationException ex) {
-                logger.LogWarning(
-                    ex,
-                    "Download-client handoff for acquisition {AcquisitionId} is still awaiting reconciliation",
-                    pending.AcquisitionId);
+                if (await acquisitions.GetStatusAsync(pending.AcquisitionId, cancellationToken)
+                    == AcquisitionStatus.Failed) {
+                    await monitors.MarkSearchDueByAcquisitionAsync(pending.AcquisitionId, cancellationToken);
+                    await context.EnqueueIfNeededAsync(
+                        new EnqueueJobRequest(
+                            JobType.MonitoredSearch,
+                            TargetLabel: "Fall back failed structural downloads to child searches"),
+                        cancellationToken);
+                    logger.LogWarning(
+                        ex,
+                        "Download-client handoff for acquisition {AcquisitionId} failed; its monitor was queued for immediate fallback",
+                        pending.AcquisitionId);
+                } else {
+                    logger.LogWarning(
+                        ex,
+                        "Download-client handoff for acquisition {AcquisitionId} is still awaiting reconciliation",
+                        pending.AcquisitionId);
+                }
             } catch (Exception ex) when (ex is not OperationCanceledException) {
                 logger.LogError(
                     ex,

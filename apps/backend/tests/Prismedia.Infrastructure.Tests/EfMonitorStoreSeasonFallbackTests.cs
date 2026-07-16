@@ -73,6 +73,25 @@ public sealed class EfMonitorStoreSeasonFallbackTests {
     }
 
     [Fact]
+    public async Task TerminalHandoffMakesSeasonFallbackDueImmediately() {
+        await using var db = CreateContext();
+        var (store, seasonEntityId, monitorId) = await SeedSeasonAsync(
+            db, AcquisitionStatus.Failed, wantedEpisodes: 2);
+        await store.MarkSearchedAsync(monitorId, CancellationToken.None);
+        Assert.Empty(await store.ListDueMonitorsAsync(360, CancellationToken.None));
+        var acquisitionId = await db.Monitors
+            .Where(row => row.Id == monitorId)
+            .Select(row => row.AcquisitionId!.Value)
+            .SingleAsync();
+
+        await store.MarkSearchDueByAcquisitionAsync(acquisitionId, CancellationToken.None);
+
+        var fallback = Assert.Single(await store.ListDueMonitorsAsync(360, CancellationToken.None));
+        Assert.True(fallback.MissingChildFallback);
+        Assert.Equal(seasonEntityId, fallback.EntityId);
+    }
+
+    [Fact]
     public async Task SeasonSearchWithoutAnAcceptablePackFallsBackToEpisodeSearches() {
         await using var db = CreateContext();
         var (store, seasonEntityId, _) = await SeedSeasonAsync(
