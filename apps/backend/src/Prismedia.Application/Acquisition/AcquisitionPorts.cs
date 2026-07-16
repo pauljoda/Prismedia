@@ -281,8 +281,10 @@ public interface IAcquisitionHintApplier {
     /// Applies every unconsumed video/audio hint after Source binding (book hints keep
     /// <see cref="ApplyAsync"/>). A hint linked to an acquisition Entity stamps that exact Entity, even
     /// when its crash-safe path is a broader ancestor folder; an unlinked hint stamps the path owner.
-    /// Reports each stamped Entity's TOP-LEVEL ancestor so the scan enqueues one identify job per root.
-    /// Hints whose path or linked Entity is not ready stay unconsumed for a later pass.
+    /// Clears the identify root's Organized state because its real scanned children now supersede the
+    /// Wanted placeholder's metadata-complete state, then reports that root so the scan enqueues one
+    /// identify job. Albums are their own identify roots below artist groupings. Hints whose path or
+    /// linked Entity is not ready stay unconsumed for a later pass.
     /// </summary>
     Task<IReadOnlyList<StampedHintOwner>> ApplyToFolderOwnersAsync(
         CancellationToken cancellationToken,
@@ -292,7 +294,7 @@ public interface IAcquisitionHintApplier {
 /// <summary>A scanned audiobook group path and the Book explicitly targeted by its acquisition import.</summary>
 public sealed record ImportedBookPathOwner(string SourcePath, Guid BookEntityId);
 
-/// <summary>A stamped import hint's top-level owner (a series, an artist, the movie itself), for the post-import identify kick.</summary>
+/// <summary>A stamped import hint's identify root (a series, album, or movie), for the post-import identify kick.</summary>
 public sealed record StampedHintOwner(Guid TopLevelEntityId, string TopLevelKindCode, string TopLevelTitle);
 
 /// <summary>One season of an existing on-disk series: its folder and the episode files it already owns, keyed by episode number.</summary>

@@ -9,10 +9,79 @@ namespace Prismedia.Infrastructure.Tests;
 
 /// <summary>
 /// Covers the post-scan hint pass for video/audio imports: external ids stamp onto the entity owning
-/// the imported path, the hint is consumed, and the owner's TOP-LEVEL ancestor is reported for the
-/// identify kick. Book hints and not-yet-owned paths are left alone.
+/// the imported path, the hint is consumed, and the owner's identify root is made eligible and reported
+/// for the identify kick. Book hints and not-yet-owned paths are left alone.
 /// </summary>
 public sealed class AcquisitionHintFolderOwnerTests {
+    [Fact]
+    public async Task ImportedEpisodeMakesItsOrganizedSeriesEligibleForIdentifyAgain() {
+        await using var db = CreateContext();
+        var seriesId = AddEntity(db, EntityKindRegistry.VideoSeries.Code, null, "/media/tv/Show", title: "Show");
+        db.Entities.Local.Single(entity => entity.Id == seriesId).IsOrganized = true;
+        var seasonId = AddEntity(db, EntityKindRegistry.VideoSeason.Code, seriesId, "/media/tv/Show/S01");
+        var episodeId = AddEntity(db, EntityKindRegistry.Video.Code, seasonId, "/media/tv/Show/S01/E01.mkv");
+        AddHint(db, "/media/tv/Show", """{"tmdb":"episode-4242"}""", episodeId);
+        await db.SaveChangesAsync();
+
+        var owners = await new AcquisitionHintApplier(db).ApplyToFolderOwnersAsync(CancellationToken.None);
+
+        Assert.Equal(seriesId, Assert.Single(owners).TopLevelEntityId);
+        Assert.False(await db.Entities.AsNoTracking()
+            .Where(entity => entity.Id == seriesId)
+            .Select(entity => entity.IsOrganized)
+            .SingleAsync());
+    }
+
+    [Fact]
+    public async Task ImportedTrackMakesItsOrganizedAlbumTheIdentifyRootInsteadOfTheArtist() {
+        await using var db = CreateContext();
+        var artistId = AddEntity(db, EntityKindRegistry.MusicArtist.Code, null, "/media/music/Artist", title: "Artist");
+        var albumId = AddEntity(db, EntityKindRegistry.AudioLibrary.Code, artistId, "/media/music/Artist/Album", title: "Album");
+        db.Entities.Local.Single(entity => entity.Id == artistId).IsOrganized = true;
+        db.Entities.Local.Single(entity => entity.Id == albumId).IsOrganized = true;
+        AddEntity(db, EntityKindRegistry.AudioTrack.Code, albumId, "/media/music/Artist/Album/01 - Track.flac");
+        AddHint(db, "/media/music/Artist/Album", """{"musicbrainz":"album-4242"}""", albumId);
+        await db.SaveChangesAsync();
+
+        var owners = await new AcquisitionHintApplier(db).ApplyToFolderOwnersAsync(CancellationToken.None);
+
+        var owner = Assert.Single(owners);
+        Assert.Equal(albumId, owner.TopLevelEntityId);
+        Assert.Equal(EntityKindRegistry.AudioLibrary.Code, owner.TopLevelKindCode);
+        Assert.False(await db.Entities.AsNoTracking()
+            .Where(entity => entity.Id == albumId)
+            .Select(entity => entity.IsOrganized)
+            .SingleAsync());
+        Assert.True(await db.Entities.AsNoTracking()
+            .Where(entity => entity.Id == artistId)
+            .Select(entity => entity.IsOrganized)
+            .SingleAsync());
+    }
+
+    [Fact]
+    public async Task ImportedBookBecomesEligibleForIdentifyAfterItsStableIdIsStamped() {
+        await using var db = CreateContext();
+        var bookId = AddEntity(db, EntityKindRegistry.Book.Code, null, "/media/books/Novel.epub", title: "Novel");
+        db.Entities.Local.Single(entity => entity.Id == bookId).IsOrganized = true;
+        AddHint(db, "/media/books/Novel.epub", """{"openlibrary":"OL4242W"}""", bookId);
+        await db.SaveChangesAsync();
+
+        Assert.True(await new AcquisitionHintApplier(db).ApplyAsync(
+            bookId,
+            "/media/books/Novel.epub",
+            CancellationToken.None));
+
+        Assert.False(await db.Entities.AsNoTracking()
+            .Where(entity => entity.Id == bookId)
+            .Select(entity => entity.IsOrganized)
+            .SingleAsync());
+        var identity = Assert.Single(await db.EntityExternalIds.AsNoTracking()
+            .Where(externalId => externalId.EntityId == bookId)
+            .ToArrayAsync());
+        Assert.Equal("openlibrary", identity.Provider);
+        Assert.Equal("OL4242W", identity.Value);
+    }
+
     [Fact]
     public async Task StampsIdsOnTheSeasonOwnerAndReportsTheSeries() {
         await using var db = CreateContext();

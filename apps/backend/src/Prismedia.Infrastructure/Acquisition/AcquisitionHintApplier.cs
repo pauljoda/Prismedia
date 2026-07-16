@@ -134,6 +134,7 @@ public sealed class AcquisitionHintApplier(
         AcquisitionImportHintRow match,
         CancellationToken cancellationToken) {
         await StampExternalIdsAsync(entityId, match, cancellationToken);
+        await MarkReadyForPostImportIdentifyAsync(entityId, cancellationToken);
 
         // Record the owned source tier on the book's detail row (the format tier is derived from the row's
         // Format, never stored). This is the provenance half of the owned quality the upgrade loop compares
@@ -451,21 +452,26 @@ public sealed class AcquisitionHintApplier(
                 }
             }
 
-            StampedHintOwner? top = null;
+            StampedHintOwner? identifyRoot = null;
             if (!await _lifecycle.ExecuteAsync(
                     identityOwnerId,
                     async leaseCancellationToken => {
                         await StampExternalIdsAsync(identityOwnerId, hint, leaseCancellationToken);
+                        identifyRoot = await ResolveAutoIdentifyRootAsync(
+                            identityOwnerId,
+                            leaseCancellationToken);
+                        await MarkReadyForPostImportIdentifyAsync(
+                            identifyRoot.TopLevelEntityId,
+                            leaseCancellationToken);
                         hint.Consumed = true;
                         hint.UpdatedAt = DateTimeOffset.UtcNow;
                         await db.SaveChangesAsync(leaseCancellationToken);
-                        top = await ResolveTopLevelAsync(identityOwnerId, leaseCancellationToken);
                     },
                     cancellationToken)) {
                 throw new EntityLifecycleMutationConflictException(identityOwnerId);
             }
-            if (top is not null) {
-                owners.TryAdd(top.TopLevelEntityId, top);
+            if (identifyRoot is not null) {
+                owners.TryAdd(identifyRoot.TopLevelEntityId, identifyRoot);
             }
         }
 
@@ -505,8 +511,13 @@ public sealed class AcquisitionHintApplier(
             cancellationToken);
     }
 
-    /// <summary>The stamped entity's top-level ancestor (a series, an artist, the movie itself) for the identify kick.</summary>
-    private async Task<StampedHintOwner> ResolveTopLevelAsync(Guid entityId, CancellationToken cancellationToken) {
+    /// <summary>
+    /// The stamped entity's auto-identify root. Albums stop below their artist grouping because album
+    /// identify owns track metadata; other entities walk to their top-level ancestor.
+    /// </summary>
+    private async Task<StampedHintOwner> ResolveAutoIdentifyRootAsync(
+        Guid entityId,
+        CancellationToken cancellationToken) {
         var currentId = entityId;
         var topLevelId = entityId;
         var kindCode = string.Empty;
@@ -528,10 +539,39 @@ public sealed class AcquisitionHintApplier(
                 break;
             }
 
+            var parentKindCode = await db.Entities.AsNoTracking()
+                .Where(row => row.Id == parentId)
+                .Select(row => row.KindCode)
+                .FirstOrDefaultAsync(cancellationToken);
+            if (string.Equals(
+                    parentKindCode,
+                    EntityKindRegistry.MusicArtist.Code,
+                    StringComparison.Ordinal)) {
+                break;
+            }
+
             currentId = parentId;
         }
 
         return new StampedHintOwner(topLevelId, kindCode, title);
+    }
+
+    /// <summary>
+    /// Real source files and their scanned children supersede the metadata-complete state of a Wanted
+    /// placeholder. Clearing Organized lets the already-queued identify job hydrate episode titles,
+    /// track names, and other child metadata from the stable identity stamped by the import hint.
+    /// </summary>
+    private async Task MarkReadyForPostImportIdentifyAsync(
+        Guid entityId,
+        CancellationToken cancellationToken) {
+        var entity = db.Entities.Local.FirstOrDefault(row => row.Id == entityId)
+            ?? await db.Entities.FirstOrDefaultAsync(row => row.Id == entityId, cancellationToken);
+        if (entity is null || !entity.IsOrganized) {
+            return;
+        }
+
+        entity.IsOrganized = false;
+        entity.UpdatedAt = DateTimeOffset.UtcNow;
     }
 
     /// <summary>Content type for a bound single-file book, mirroring what the scan stamps on creation. Null for folders/archives.</summary>
