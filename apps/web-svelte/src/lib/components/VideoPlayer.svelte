@@ -46,6 +46,7 @@
     type VideoSubtitleTrack,
   } from "$lib/player/subtitle-types";
   import { fetchVideoSubtitleCues } from "$lib/player/video-subtitles";
+  import type { PlaybackModeCode } from "$lib/api/generated/codes";
   import {
     enterMediaFullscreen,
     exitDocumentFullscreen,
@@ -149,7 +150,7 @@
     };
     isTranscriptSidecarOpen?: boolean;
     onTranscriptSidecarToggle?: () => void;
-    defaultPlaybackMode?: "direct" | "hls";
+    defaultPlaybackMode?: PlaybackModeCode;
     /**
      * Last-resort recovery for a fatal decode/MSE error. Invoked after direct↔HLS
      * fallback is exhausted (e.g. the server remuxed a stream the browser cannot

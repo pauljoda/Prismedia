@@ -1,10 +1,11 @@
 <script lang="ts">
+  import { ENTITY_KIND } from "$lib/entities/entity-codes";
   import { MicVocal } from "@lucide/svelte";
   import EntityIndexPage from "$lib/components/entities/EntityIndexPage.svelte";
 </script>
 
 <EntityIndexPage
-  kind="music-artist"
+  kind={ENTITY_KIND.musicArtist}
   title="Artists"
   icon={MicVocal}
   prefsKey="artists"

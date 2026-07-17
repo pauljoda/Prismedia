@@ -23,7 +23,7 @@ import type {
   SettingsGroup as GeneratedSettingsGroup,
   SettingsValuesResponse as GeneratedSettingsValuesResponse,
 } from "$lib/api/generated/model";
-import { DATABASE_BACKUP_STATUS, type DatabaseBackupStatusCode } from "$lib/api/generated/codes";
+import { DATABASE_BACKUP_STATUS, type DatabaseBackupStatusCode, type PlaybackModeCode } from "$lib/api/generated/codes";
 import { requestInit, unwrapGenerated, type RequestOptions } from "$lib/api/generated-response";
 import { fetchApi } from "$lib/api/orval-fetch";
 
@@ -82,7 +82,7 @@ export interface LibrarySettings {
   thumbnailQuality: string;
   trickplayQuality: string;
   backgroundWorkerConcurrency: number;
-  defaultPlaybackMode: "direct" | "hls";
+  defaultPlaybackMode: PlaybackModeCode;
   showCastControls: boolean;
   audioPreferredLanguages: string;
   subtitlesAutoEnable: boolean;

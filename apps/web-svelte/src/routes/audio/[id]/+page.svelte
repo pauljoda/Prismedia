@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { ENTITY_KIND } from "$lib/entities/entity-codes";
   import { onMount } from "svelte";
   import { goto } from "$app/navigation";
   import { page } from "$app/state";
@@ -163,7 +164,7 @@
     // ("Audio / Imagine Dragons / Evolve") when the music-artist parent resolved.
     const crumbs: AppBreadcrumb[] = [{ label: "Audio", href: "/audio" }];
     if (artistLink) {
-      crumbs.push({ label: artistLink.title, href: resolveEntityHref("music-artist", artistLink.id) });
+      crumbs.push({ label: artistLink.title, href: resolveEntityHref(ENTITY_KIND.musicArtist, artistLink.id) });
     }
     crumbs.push({ label: library.title });
     return appChrome.setBreadcrumbs(crumbs);
@@ -177,8 +178,8 @@
       const nextLibrary = await fetchAudioLibrary(page.params.id ?? "");
 
       // Separate track children from non-track children using the entity groups
-      const trackGroup = nextLibrary.childrenByKind.find((g) => g.kind === "audio-track");
-      const nonTrackGroups = nextLibrary.childrenByKind.filter((g) => g.kind !== "audio-track");
+      const trackGroup = nextLibrary.childrenByKind.find((g) => g.kind === ENTITY_KIND.audioTrack);
+      const nonTrackGroups = nextLibrary.childrenByKind.filter((g) => g.kind !== ENTITY_KIND.audioTrack);
       const nonTrackIds = nonTrackGroups.flatMap((g) => g.entities.map((e) => e.id));
 
       // The album's parent (when set) is its artist grouping; resolve its title for a back-link.
@@ -189,13 +190,13 @@
         parentId ? fetchOrderedEntityThumbnails([parentId]) : Promise.resolve([]),
       ]);
 
-      const parentThumb = parentThumbs.find((t) => t.kind === "music-artist");
+      const parentThumb = parentThumbs.find((t) => t.kind === ENTITY_KIND.musicArtist);
       const resolvedArtist = parentThumb ? { id: parentThumb.id, title: parentThumb.title } : null;
       artistLink = resolvedArtist;
 
       library = nextLibrary;
       childCards = thumbnailsToCards(children, {
-        hrefFor: (thumbnail) => resolveEntityHref("audio-library", thumbnail.id),
+        hrefFor: (thumbnail) => resolveEntityHref(ENTITY_KIND.audioLibrary, thumbnail.id),
       });
       relationshipStudio = relationships.studio;
       // An album is always scanned under its artist, so surface that music-artist as the lead
@@ -203,7 +204,7 @@
       // unfiltered: it feeds the edit draft, and a hidden credit would be deleted on save.
       artistCards = parentThumb
         ? thumbnailsToCards([parentThumb], {
-            hrefFor: (thumbnail) => resolveEntityHref("music-artist", thumbnail.id),
+            hrefFor: (thumbnail) => resolveEntityHref(ENTITY_KIND.musicArtist, thumbnail.id),
           })
         : [];
       relationshipCredits = relationships.credits;
@@ -268,7 +269,7 @@
           positions: {},
           classification: null,
         },
-      }, { kind: "audio-track" });
+      }, { kind: ENTITY_KIND.audioTrack });
     } catch (err) {
       trackItems = previousTrackItems;
       throw err;
@@ -348,7 +349,7 @@
     >
       {#snippet heroMeta()}
         {#if artistLink}
-          <a href={resolveEntityHref("music-artist", artistLink.id)} class="meta-item is-studio">{artistLink.title}</a>
+          <a href={resolveEntityHref(ENTITY_KIND.musicArtist, artistLink.id)} class="meta-item is-studio">{artistLink.title}</a>
         {/if}
         {#if studio}
           {#if artistLink}<span class="meta-sep"></span>{/if}

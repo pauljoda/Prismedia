@@ -49,19 +49,13 @@ const ALWAYS_GUARDED_FAMILIES = new Set(["EXTERNAL_ID_PROVIDER", "PLAYBACK_MODE"
  * `$lib/entities/entity-codes`) and delete its entry. Never add entries for new code.
  */
 const MAGIC_CODE_ALLOWLIST: Record<string, string[]> = {
-  "lib/api/settings.ts": ["direct", "hls"],
-  "lib/components/AudioTrackList.svelte": ["audio-track"],
-  "lib/components/AudioVidStackPlayer.svelte": ["music-artist"],
-  "lib/components/UniversalLightbox.svelte": ["direct"],
   "lib/components/VideoPlayer.svelte": ["direct", "hls"],
-  "lib/components/collections/collection-item-helpers.ts": ["audio-track", "video-series"],
   "lib/components/entities/EntityGridFilterDrawer.svelte": [
     "audio-library", "audio-track", "book-chapter", "book-volume", "video-season", "video-series",
   ],
   "lib/components/files/FileDetailPane.svelte": [
     "audio-library", "audio-track", "book-chapter", "book-page", "video-season", "video-series",
   ],
-  "lib/components/identify/identify-review-helpers.ts": ["audio-track"],
   "lib/components/identify/identify-store.svelte.ts": [
     "audio-library", "audio-track", "book-chapter", "book-volume", "music-artist", "video-season", "video-series",
   ],
@@ -88,15 +82,8 @@ const MAGIC_CODE_ALLOWLIST: Record<string, string[]> = {
   "lib/search/models.ts": ["direct"],
   "lib/settings/app-settings.ts": ["direct", "hls"],
   "lib/settings/settings-section-catalog.ts": ["auto-identify"],
-  "routes/+page.svelte": ["audio-library", "video-series"],
-  "routes/artists/+page.svelte": ["music-artist"],
-  "routes/artists/[id]/+page.svelte": ["audio-library"],
-  "routes/audio/+page.svelte": ["audio-library"],
-  "routes/audio/[id]/+page.svelte": ["audio-library", "audio-track", "music-artist"],
-  "routes/authors/+page.svelte": ["book-author"],
-  "routes/books/[id]/+page.svelte": ["book-author", "book-page"],
+  "routes/books/[id]/+page.svelte": ["book-page"],
   "routes/movies/[id]/+page.svelte": ["direct", "hls"],
-  "routes/series/+page.svelte": ["video-series"],
   "routes/videos/[id]/+page.svelte": ["direct", "hls"],
 };
 

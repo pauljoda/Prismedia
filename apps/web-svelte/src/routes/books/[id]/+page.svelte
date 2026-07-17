@@ -451,7 +451,7 @@
     const crumbs: AppBreadcrumb[] = [{ label: "Books", href: "/books" }];
     // When the book sits under an author, surface it ("Books / Andy Weir / Project Hail Mary").
     if (authorLink) {
-      crumbs.push({ label: authorLink.title, href: resolveEntityHref("book-author", authorLink.id) });
+      crumbs.push({ label: authorLink.title, href: resolveEntityHref(ENTITY_KIND.bookAuthor, authorLink.id) });
     }
     crumbs.push({ label: book.title });
     return appChrome.setBreadcrumbs(crumbs);

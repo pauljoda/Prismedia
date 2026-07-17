@@ -1,10 +1,11 @@
 <script lang="ts">
+  import { ENTITY_KIND } from "$lib/entities/entity-codes";
   import { Feather } from "@lucide/svelte";
   import EntityIndexPage from "$lib/components/entities/EntityIndexPage.svelte";
 </script>
 
 <EntityIndexPage
-  kind="book-author"
+  kind={ENTITY_KIND.bookAuthor}
   title="Authors"
   icon={Feather}
   prefsKey="authors"

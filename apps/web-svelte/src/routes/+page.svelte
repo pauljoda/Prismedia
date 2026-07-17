@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { ENTITY_KIND } from "$lib/entities/entity-codes";
   import { onDestroy, onMount } from "svelte";
   import {
     Film,
@@ -45,11 +46,11 @@
   const SECTION_DEFS: SectionDef[] = [
     { kind: "video", label: "Videos", icon: Film, href: "/videos", display: "shelf" },
     { kind: "movie", label: "Movies", icon: Clapperboard, href: "/movies", display: "shelf" },
-    { kind: "video-series", label: "Series", icon: FolderOpen, href: "/series", display: "shelf" },
+    { kind: ENTITY_KIND.videoSeries, label: "Series", icon: FolderOpen, href: "/series", display: "shelf" },
     { kind: "gallery", label: "Galleries", icon: Layers, href: "/galleries", display: "shelf" },
     { kind: "book", label: "Books", icon: BookOpen, href: "/books", display: "shelf" },
     { kind: "image", label: "Images", icon: ImageIcon, href: "/images", display: "shelf" },
-    { kind: "audio-library", label: "Audio", icon: Music, href: "/audio", display: "shelf" },
+    { kind: ENTITY_KIND.audioLibrary, label: "Audio", icon: Music, href: "/audio", display: "shelf" },
     { kind: "person", label: "People", icon: Users, href: "/people", display: "shelf" },
     { kind: "studio", label: "Studios", icon: Building2, href: "/studios", display: "shelf" },
     { kind: "tag", label: "Tags", icon: Tag, href: "/tags", display: "chips" },

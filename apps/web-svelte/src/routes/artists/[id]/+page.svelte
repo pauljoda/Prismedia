@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { ENTITY_KIND } from "$lib/entities/entity-codes";
   import { onMount } from "svelte";
   import { goto } from "$app/navigation";
   import { page } from "$app/state";
@@ -185,7 +186,7 @@
     try {
       const nextArtist = await fetchMusicArtist(page.params.id ?? "");
 
-      const albumGroup = nextArtist.childrenByKind.find((g) => g.kind === "audio-library");
+      const albumGroup = nextArtist.childrenByKind.find((g) => g.kind === ENTITY_KIND.audioLibrary);
       const albumIds = albumGroup?.entities.map((e) => e.id) ?? [];
 
       const [albums, relationships] = await Promise.all([
@@ -195,7 +196,7 @@
 
       artist = nextArtist;
       albumCards = thumbnailsToCards(albums, {
-        hrefFor: (thumbnail) => resolveEntityHref("audio-library", thumbnail.id),
+        hrefFor: (thumbnail) => resolveEntityHref(ENTITY_KIND.audioLibrary, thumbnail.id),
       });
       relationshipCredits = relationships.credits;
       relationshipTags = relationships.relationshipTags;

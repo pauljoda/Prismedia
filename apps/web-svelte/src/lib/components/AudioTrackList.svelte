@@ -201,7 +201,7 @@
         selectable={selectable}
         selected={selectedIdSet.has(row.track.id)}
         onSelectedChange={(selected) => updateSelection(row.track.id, selected)}
-        trackHref={resolveEntityHref("audio-track", row.track.id)}
+        trackHref={resolveEntityHref(ENTITY_KIND.audioTrack, row.track.id)}
       />
     {/each}
   {/each}

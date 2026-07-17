@@ -100,7 +100,7 @@
   const artistName = $derived(
     ctx?.artistName ?? activeTrack?.embeddedArtist ?? activeTrack?.performers?.[0]?.name ?? null,
   );
-  const artistHref = $derived(ctx?.artistId ? resolveEntityHref("music-artist", ctx.artistId) : undefined);
+  const artistHref = $derived(ctx?.artistId ? resolveEntityHref(ENTITY_KIND.musicArtist, ctx.artistId) : undefined);
   const coverUrl = $derived(resolveAudioArtwork(activeTrack, ctx));
   const playerPalette = $derived(
     artworkPaletteState?.coverUrl === coverUrl

@@ -1,28 +1,29 @@
 import { buildHrefWithFrom } from "$lib/back-navigation";
+import { ENTITY_KIND } from "$lib/entities/entity-codes";
 import type { CollectionItem } from "$lib/collections/models";
 
 export function getEntityHref(item: CollectionItem, from?: string): string {
   let base: string;
   switch (item.entityType) {
-    case "movie":
+    case ENTITY_KIND.movie:
       base = `/movies/${item.entityId}`;
       break;
-    case "video":
+    case ENTITY_KIND.video:
       base = `/videos/${item.entityId}`;
       break;
-    case "video-series":
+    case ENTITY_KIND.videoSeries:
       base = `/series/${item.entityId}`;
       break;
-    case "gallery":
+    case ENTITY_KIND.gallery:
       base = `/galleries/${item.entityId}`;
       break;
-    case "book":
+    case ENTITY_KIND.book:
       base = `/books/${item.entityId}`;
       break;
-    case "image":
+    case ENTITY_KIND.image:
       base = `/images/${item.entityId}`;
       break;
-    case "audio-track":
+    case ENTITY_KIND.audioTrack:
       base = `/audio/tracks/${item.entityId}`;
       break;
     default:

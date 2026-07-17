@@ -1,4 +1,4 @@
-import { THUMBNAIL_HOVER_KIND } from "$lib/api/generated/codes";
+import { ENTITY_KIND, THUMBNAIL_HOVER_KIND } from "$lib/api/generated/codes";
 import type {
   CreditPatch,
   EntityMetadataProposal,
@@ -168,7 +168,7 @@ export function childMeta(child: EntityMetadataProposal): EntityThumbnailCard["m
   const track = positions.track ?? positions.trackNumber ?? (sortOrder != null ? sortOrder + 1 : undefined);
   if (episode) {
     meta.push({ icon: "count", label: `E${String(episode).padStart(2, "0")}` });
-  } else if (child.targetKind === "audio-track" && track) {
+  } else if (child.targetKind === ENTITY_KIND.audioTrack && track) {
     meta.push({ icon: "count", label: String(track).padStart(2, "0") });
   } else if (season) {
     meta.push({ icon: "count", label: `S${String(season).padStart(2, "0")}` });

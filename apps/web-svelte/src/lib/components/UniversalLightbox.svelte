@@ -21,6 +21,7 @@
   import { createNavigationKeyHandler } from "$lib/keyboard/navigation-keyboard";
   import { portal } from "$lib/actions/portal";
   import { CAPABILITY_KIND } from "$lib/entities/entity-codes";
+  import { PLAYBACK_MODE } from "$lib/api/generated/codes";
   import NsfwBlur from "./nsfw/NsfwBlur.svelte";
   import VideoPlayer, { type VideoPlayerHandle } from "./VideoPlayer.svelte";
   import {
@@ -589,7 +590,7 @@
                     sourceWidth={positiveNumberValue(currentTechnical?.width)}
                     sourceHeight={positiveNumberValue(currentTechnical?.height)}
                     poster={fallbackPoster}
-                    defaultPlaybackMode="direct"
+                    defaultPlaybackMode={PLAYBACK_MODE.direct}
                     showCastControls={false}
                     chrome="minimal"
                     enableKeyboardShortcuts={false}

@@ -1,5 +1,7 @@
+import type { PlaybackModeCode } from "$lib/api/generated/codes";
+
 export type QualityMode = "auto" | "direct" | number | `seed:${string}`;
-export type VideoPlaybackMode = "direct" | "hls";
+export type VideoPlaybackMode = PlaybackModeCode;
 
 type CanPlayType = (mime: string) => CanPlayTypeResult | string;
 
