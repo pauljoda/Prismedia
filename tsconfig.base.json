@@ -12,7 +12,6 @@
     "noEmit": true,
     "baseUrl": ".",
     "paths": {
-      "@prismedia/contracts": ["packages/contracts/src/index.ts"],
       "@prismedia/ui-svelte": ["packages/ui-svelte/src/index.ts"],
       "@prismedia/ui-svelte/*": ["packages/ui-svelte/src/*"]
     }

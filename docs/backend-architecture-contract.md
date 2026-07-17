@@ -100,7 +100,7 @@ Repositories are for loading and saving write models. Read-heavy screens can que
 - Do not return EF row types or domain entities from HTTP endpoints.
 - DTOs are shaped for the client and may flatten, group, omit, or rename data.
 - Generated OpenAPI TypeScript types are the frontend source of truth.
-- `@prismedia/contracts` owns frontend-only helpers and plugin protocol types; it must not shadow API DTOs that are available through generated OpenAPI clients.
+- Frontend-only helpers live in `apps/web-svelte/src/lib` (or `@prismedia/ui-svelte` for presentational primitives); nothing may shadow API DTOs that are available through generated OpenAPI clients.
 
 ## Frontend Rules
 

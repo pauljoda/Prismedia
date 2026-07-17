@@ -4,7 +4,7 @@
   import { afterNavigate, goto } from "$app/navigation";
   import { page } from "$app/state";
   import { BookOpen, CloudDownload, Headphones, Info, Play, SlidersHorizontal, Users } from "@lucide/svelte";
-  import { formatDuration } from "@prismedia/contracts";
+  import { formatDuration } from "$lib/utils/format";
   import EntityDetailSkeleton from "$lib/components/entities/EntityDetailSkeleton.svelte";
   import MediaProgressPanel from "$lib/components/MediaProgressPanel.svelte";
   import BookRenditionAcquisitionCard from "$lib/components/acquisitions/BookRenditionAcquisitionCard.svelte";

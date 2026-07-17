@@ -37,6 +37,23 @@ export function formatDurationString(
   return `${hours.padStart(2, "0")}:${minutes.padStart(2, "0")}`;
 }
 
+/** Format a duration in seconds as a clock string ("M:SS" or "H:MM:SS"). */
+export function formatDuration(seconds: number | null | undefined): string | null {
+  if (!seconds) {
+    return null;
+  }
+
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  const s = Math.floor(seconds % 60);
+
+  if (h > 0) {
+    return `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+  }
+
+  return `${m}:${String(s).padStart(2, "0")}`;
+}
+
 /** Parse an "HH:MM:SS" duration string to total seconds. */
 export function durationToSeconds(value: string | null | undefined): number | null {
   if (!value) return null;

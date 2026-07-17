@@ -8,7 +8,6 @@ WORKDIR /app
 COPY pnpm-lock.yaml pnpm-workspace.yaml package.json turbo.json ./
 COPY apps/web-svelte/package.json apps/web-svelte/package.json
 COPY packages/ui-svelte/package.json packages/ui-svelte/package.json
-COPY packages/contracts/package.json packages/contracts/package.json
 
 RUN pnpm install --frozen-lockfile
 

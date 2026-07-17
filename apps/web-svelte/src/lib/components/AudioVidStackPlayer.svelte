@@ -20,7 +20,7 @@
     X,
   } from "@lucide/svelte";
   import { cn } from "@prismedia/ui-svelte";
-  import { formatDuration } from "@prismedia/contracts";
+  import { formatDuration } from "$lib/utils/format";
   import { recordEntityPlaybackEvent, updateEntityPlayback } from "$lib/api/playback";
   import { apiAssetUrl, assetUrl } from "$lib/api/orval-fetch";
   import { paletteFromImage, type ArtworkPalette } from "$lib/entities/artwork-palette";

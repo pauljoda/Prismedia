@@ -48,7 +48,6 @@ Stash compatibility exists for plugin and metadata workflows. Prismedia should n
 apps/web-svelte/       Svelte frontend only. Built as static assets and served by the .NET API.
 apps/backend/          .NET API, application/domain/infrastructure layers, EF Core persistence, and .NET worker.
 
-packages/contracts/    Frontend TypeScript constants, media helpers, and plugin protocol types.
 packages/ui-svelte/    Shared Svelte design tokens and UI primitives.
 
 infra/docker/          Dockerfiles and dev compose stack.

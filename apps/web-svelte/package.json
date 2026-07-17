@@ -22,7 +22,6 @@
   "dependencies": {
     "@fontsource/cinzel": "^5.2.8",
     "@pierre/trees": "1.0.0-beta.4",
-    "@prismedia/contracts": "workspace:*",
     "@prismedia/ui-svelte": "workspace:*",
     "@tiptap/core": "^3.23.6",
     "@tiptap/extension-link": "^3.23.6",
