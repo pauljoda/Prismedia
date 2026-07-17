@@ -148,6 +148,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Updated documentation, README screenshots, branding assets, install metadata, and app copy to match the current Prismedia v1 surface.
 
 ### Fixed
+- Identify now matches child titles through filename-style separators, punctuation, apostrophes, and accents, so multi-disc albums and similarly structured seasons can map their local children even when per-disc or per-season positions repeat.
 - tvOS compatibility players can now request malformed HDR sources for local tone mapping and direct playback instead of forcing a server video transcode.
 - HDR video with contradictory sub-10-bit samples is now normalized through the SDR tone-mapping path instead of being copied with HDR signaling that makes standards-compliant TVs render it severely dim.
 - Acquisition imports now remain in the durable queue and enter the CPU/disk-intensive import pipeline one at a time, rather than claiming many completed episodes as simultaneously running while they wait for the same media-placement coordinator.

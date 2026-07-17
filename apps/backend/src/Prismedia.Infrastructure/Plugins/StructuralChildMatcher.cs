@@ -1,3 +1,5 @@
+using System.Globalization;
+using System.Text;
 using Prismedia.Contracts.Plugins;
 using Prismedia.Domain.Entities;
 
@@ -163,16 +165,44 @@ internal static class StructuralChildMatcher {
         return tokens.Length > 0 && !IsGenericStructuralTitle(tokens);
     }
 
-    private static string[] NormalizeTitleTokens(string? value) =>
-        string.IsNullOrWhiteSpace(value)
-            ? []
-            : value
-                .Replace("&", " and ", StringComparison.Ordinal)
-                .Trim()
-                .Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries)
-                .Select(CleanTitleToken)
-                .Where(token => token.Length > 0)
-                .ToArray();
+    private static string[] NormalizeTitleTokens(string? value) {
+        if (string.IsNullOrWhiteSpace(value)) {
+            return [];
+        }
+
+        var decomposed = value.Normalize(NormalizationForm.FormD);
+        var normalized = new StringBuilder(decomposed.Length);
+        for (var index = 0; index < decomposed.Length; index++) {
+            var character = decomposed[index];
+            if (char.IsLetterOrDigit(character)) {
+                normalized.Append(character);
+                continue;
+            }
+
+            if (IsDiacritic(character) || IsIntraWordApostrophe(decomposed, index)) {
+                continue;
+            }
+
+            normalized.Append(character == '&' ? " and " : " ");
+        }
+
+        return normalized
+            .ToString()
+            .Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
+    }
+
+    private static bool IsDiacritic(char character) =>
+        char.GetUnicodeCategory(character) is
+            UnicodeCategory.NonSpacingMark or
+            UnicodeCategory.SpacingCombiningMark or
+            UnicodeCategory.EnclosingMark;
+
+    private static bool IsIntraWordApostrophe(string value, int index) =>
+        value[index] is '\'' or '’' or 'ʼ' or '＇' &&
+        index > 0 &&
+        index < value.Length - 1 &&
+        char.IsLetterOrDigit(value[index - 1]) &&
+        char.IsLetterOrDigit(value[index + 1]);
 
     private static bool ContainsTokenSequence(string[] haystack, string[] needle) {
         if (needle.Length == 0 || needle.Length > haystack.Length) {

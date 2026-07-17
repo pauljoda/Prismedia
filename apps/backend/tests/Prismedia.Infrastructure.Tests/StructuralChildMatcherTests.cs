@@ -148,6 +148,164 @@ public sealed class StructuralChildMatcherTests {
         Assert.Same(providerTrack, match);
     }
 
+    [Fact]
+    public void FilenameStyleEpisodeTitleCanOverrideAMisleadingEpisodeNumber() {
+        var localEpisode = Local(EntityKindRegistry.Video.Code, "Show.Name.S03E49.The_Sign.1080p", 49);
+        var providerEpisode = Proposal(ProposalKind.VideoEpisode, "The Sign", ("episodeNumber", 50));
+
+        var match = StructuralChildMatcher.FindProviderChild(
+            localEpisode,
+            [providerEpisode],
+            new HashSet<int>(),
+            cautious: true);
+
+        Assert.Same(providerEpisode, match);
+    }
+
+    [Fact]
+    public void FilenameStyleTrackTitleMatchesProviderDiacritics() {
+        var localTrack = Local(EntityKindRegistry.AudioTrack.Code, "01-beyonce-deja_vu", 1);
+        var providerTrack = Proposal(ProposalKind.AudioTrack, "Déjà Vu", ("trackNumber", 8));
+
+        var match = StructuralChildMatcher.FindProviderChild(
+            localTrack,
+            [providerTrack],
+            new HashSet<int>(),
+            cautious: true);
+
+        Assert.Same(providerTrack, match);
+    }
+
+    [Fact]
+    public void TwoDiscFilenameTitlesBindEveryProviderTrackWhenSortOrdersRepeatPerDisc() {
+        var localTitlesByDisc = new[] {
+            new[] {
+                "101-billy_joel-piano_man",
+                "102-billy_joel-youre_my_home",
+                "103-billy_joel-captain_jack",
+                "104-billy_joel-the_entertainer",
+                "105-billy_joel-say_goodbye_to_hollywood",
+                "106-billy_joel-miami_2017_(seen_the_lights_go_out_on_broadway)",
+                "107-billy_joel-new_york_state_of_mind",
+                "108-billy_joel-shes_always_a_woman",
+                "109-billy_joel-movin_out_(anthonys_song)",
+                "110-billy_joel-only_the_good_die_young",
+                "111-billy_joel-just_the_way_you_are",
+                "112-billy_joel-honesty",
+                "113-billy_joel-my_life",
+                "114-billy_joel-its_still_rock_and_roll_to_me",
+                "115-billy_joel-you_may_be_right",
+                "116-billy_joel-dont_ask_me_why",
+                "117-billy_joel-shes_got_a_way_(live)",
+                "118-billy_joel-allentown"
+            },
+            new[] {
+                "201-billy_joel-goodnight_saigon",
+                "202-billy_joel-an_innocent_man",
+                "203-billy_joel-uptown_girl",
+                "204-billy_joel-the_longest_time",
+                "205-billy_joel-tell_her_about_it",
+                "206-billy_joel-leave_a_tender_moment_alone",
+                "207-billy_joel-a_matter_of_trust",
+                "208-billy_joel-baby_grand_(duet_with_ray_charles)",
+                "209-billy_joel-i_go_to_extremes",
+                "210-billy_joel-we_didnt_start_the_fire",
+                "211-billy_joel-leningrad",
+                "212-billy_joel-the_downeaster_alexa",
+                "213-billy_joel-and_so_it_goes",
+                "214-billy_joel-the_river_of_dreams",
+                "215-billy_joel-all_about_soul_(remix)",
+                "216-billy_joel-lullabye_(goodnight_my_angel)",
+                "217-billy_joel-waltz_1_(nunleys_carousel)",
+                "218-billy_joel-invention_in_c_minor"
+            }
+        };
+        var providerTitlesByDisc = new[] {
+            new[] {
+                "Piano Man",
+                "You’re My Home",
+                "Captain Jack",
+                "The Entertainer",
+                "Say Goodbye to Hollywood",
+                "Miami 2017 (Seen the Lights Go Out on Broadway)",
+                "New York State of Mind",
+                "She’s Always a Woman",
+                "Movin’ Out (Anthony’s Song)",
+                "Only the Good Die Young",
+                "Just the Way You Are",
+                "Honesty",
+                "My Life",
+                "It’s Still Rock and Roll to Me",
+                "You May Be Right",
+                "Don’t Ask Me Why",
+                "She’s Got a Way",
+                "Allentown"
+            },
+            new[] {
+                "Goodnight Saigon",
+                "An Innocent Man",
+                "Uptown Girl",
+                "The Longest Time",
+                "Tell Her About It",
+                "Leave a Tender Moment Alone",
+                "A Matter of Trust",
+                "Baby Grand",
+                "I Go to Extremes",
+                "We Didn’t Start the Fire",
+                "Leningrad",
+                "The Downeaster “Alexa”",
+                "And So It Goes",
+                "The River of Dreams",
+                "All About Soul (remix)",
+                "Lullabye (Goodnight, My Angel)",
+                "Waltz #1 (Nunley’s Carousel)",
+                "Invention in C Minor"
+            }
+        };
+        var localsByDisc = localTitlesByDisc
+            .Select(disc => disc.Select((title, track) => Local(EntityKindRegistry.AudioTrack.Code, title, track)).ToArray())
+            .ToArray();
+        var providers = providerTitlesByDisc
+            .SelectMany(disc => disc)
+            .Select((title, globalIndex) => Proposal(ProposalKind.AudioTrack, title, ("sortOrder", globalIndex)))
+            .ToArray();
+        var localsInPersistedOrder = Enumerable.Range(0, 18)
+            .SelectMany(track => localsByDisc.Select(disc => disc[track]))
+            .ToArray();
+        var expectedProviderByLocalId = localsByDisc
+            .SelectMany((disc, discIndex) => disc.Select((local, track) => new {
+                local.EntityId,
+                Provider = providers[(discIndex * 18) + track]
+            }))
+            .ToDictionary(pair => pair.EntityId, pair => pair.Provider);
+        var usedProviderIndexes = new HashSet<int>();
+
+        var matches = localsInPersistedOrder.Select(local => new {
+            Local = local,
+            Provider = StructuralChildMatcher.FindProviderChild(
+                local,
+                providers,
+                usedProviderIndexes,
+                cautious: false)
+        }).ToArray();
+
+        Assert.Equal(36, matches.Length);
+        Assert.All(matches, match => Assert.Same(expectedProviderByLocalId[match.Local.EntityId], match.Provider));
+
+        var usedLocalEntityIds = new HashSet<Guid>();
+        var localsMatchedFromProvider = providers
+            .Select(provider => StructuralChildMatcher.FindLocalChild(
+                provider,
+                localsInPersistedOrder,
+                usedLocalEntityIds,
+                cautious: false))
+            .ToArray();
+        var localsInProviderOrder = localsByDisc.SelectMany(disc => disc).ToArray();
+        Assert.All(
+            localsMatchedFromProvider.Select((local, index) => new { Local = local, Expected = localsInProviderOrder[index] }),
+            match => Assert.Same(match.Expected, match.Local));
+    }
+
     private static StructuralLocalChild Local(string kindCode, string title, int? sortOrder) =>
         new(Guid.NewGuid(), kindCode, title, sortOrder);
 
