@@ -39,7 +39,7 @@ public sealed class EntityPlaybackEventRow {
     public Guid Id { get; set; }
     public Guid EntityId { get; set; }
 
-    /// <summary>Null marks pre-multi-user household history (counted for every user's stats).</summary>
+    /// <summary>Null marks pre-multi-user household history without a known owner.</summary>
     public Guid? UserId { get; set; }
 
     public PlaybackEventKind Kind { get; set; }

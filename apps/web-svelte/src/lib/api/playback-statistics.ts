@@ -9,6 +9,8 @@ export interface PlaybackStatisticsParams {
   kind?: EntityKindCode;
   eventKind?: PlaybackEventKindCode;
   hideNsfw?: boolean;
+  userId?: string;
+  allUsers?: boolean;
 }
 
 export function fetchPlaybackStatistics(
@@ -21,6 +23,8 @@ export function fetchPlaybackStatistics(
   if (params.kind) query.set("kind", params.kind);
   if (params.eventKind) query.set("eventKind", params.eventKind);
   if (params.hideNsfw != null) query.set("hideNsfw", String(params.hideNsfw));
+  if (params.userId) query.set("userId", params.userId);
+  if (params.allUsers != null) query.set("allUsers", String(params.allUsers));
 
   const suffix = query.size > 0 ? `?${query.toString()}` : "";
   return fetchApi<PlaybackStatisticsResponse>(`/playback/statistics${suffix}`, {

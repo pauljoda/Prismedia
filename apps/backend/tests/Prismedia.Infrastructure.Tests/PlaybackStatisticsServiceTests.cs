@@ -61,6 +61,63 @@ public sealed class PlaybackStatisticsServiceTests {
         });
     }
 
+    [Fact]
+    public async Task StatisticsIncludeOnlyTheCurrentUsersEventsByDefault() {
+        await using var db = CreateContext();
+        var now = DateTimeOffset.Parse("2026-06-18T12:00:00Z");
+        var otherUserId = Guid.Parse("faceb00c-0000-4000-8000-000000000002");
+        db.Entities.Add(Entity(VideoId, EntityKind.Video, "Visible Video", isNsfw: false, now));
+        db.EntityPlaybackEvents.AddRange(
+            Event(VideoId, PlaybackEventKind.Completed, now.AddHours(-3), 120, TestUserContext.UserId),
+            Event(VideoId, PlaybackEventKind.Skipped, now.AddHours(-2), 4, otherUserId),
+            Event(VideoId, PlaybackEventKind.Skipped, now.AddHours(-1), 3, userId: null));
+        await db.SaveChangesAsync();
+        var service = new EfPlaybackStatisticsService(db, TestUserContext.Admin());
+
+        var statistics = await service.GetAsync(
+            new PlaybackStatisticsQuery(
+                now.AddDays(-1),
+                now.AddSeconds(1),
+                Kind: null,
+                EventKind: null,
+                HideNsfw: true),
+            CancellationToken.None);
+
+        Assert.Equal(1, statistics.TotalEvents);
+        Assert.Equal(1, statistics.CompletedCount);
+        Assert.Equal(0, statistics.SkippedCount);
+        Assert.Equal(1, statistics.DistinctEntityCount);
+        Assert.Equal(PlaybackEventKind.Completed, Assert.Single(statistics.RecentEvents).Kind);
+        Assert.Equal(1, Assert.Single(statistics.TopEntities).CompletedCount);
+        Assert.Equal(1, Assert.Single(statistics.DailyEvents).CompletedCount);
+
+        var selectedUserStatistics = await service.GetAsync(
+            new PlaybackStatisticsQuery(
+                now.AddDays(-1),
+                now.AddSeconds(1),
+                Kind: null,
+                EventKind: null,
+                HideNsfw: true,
+                UserId: otherUserId),
+            CancellationToken.None);
+
+        Assert.Equal(1, selectedUserStatistics.TotalEvents);
+        Assert.Equal(0, selectedUserStatistics.CompletedCount);
+        Assert.Equal(1, selectedUserStatistics.SkippedCount);
+
+        var allUsersStatistics = await service.GetAsync(
+            new PlaybackStatisticsQuery(
+                now.AddDays(-1),
+                now.AddSeconds(1),
+                Kind: null,
+                EventKind: null,
+                HideNsfw: true,
+                AllUsers: true),
+            CancellationToken.None);
+
+        Assert.Equal(3, allUsersStatistics.TotalEvents);
+    }
+
     private static void Seed(PrismediaDbContext db, DateTimeOffset now) {
         db.Entities.AddRange(
             Entity(VideoId, EntityKind.Video, "Visible Video", isNsfw: false, now),
@@ -77,12 +134,12 @@ public sealed class PlaybackStatisticsServiceTests {
             CreatedAt = now
         });
         db.EntityPlaybackEvents.AddRange(
-            Event(VideoId, PlaybackEventKind.Completed, now.AddDays(-1), positionSeconds: 120),
-            Event(VideoId, PlaybackEventKind.Skipped, now.AddHours(-3), positionSeconds: 4),
-            Event(AudioId, PlaybackEventKind.Skipped, now.AddHours(-1), positionSeconds: 3),
-            Event(AudiobookTrackId, PlaybackEventKind.Completed, now.AddMinutes(-30), positionSeconds: 600),
-            Event(NsfwId, PlaybackEventKind.Completed, now.AddHours(-2), positionSeconds: 300),
-            Event(AudioId, PlaybackEventKind.Completed, now.AddDays(-30), positionSeconds: 90));
+            Event(VideoId, PlaybackEventKind.Completed, now.AddDays(-1), 120, TestUserContext.UserId),
+            Event(VideoId, PlaybackEventKind.Skipped, now.AddHours(-3), 4, TestUserContext.UserId),
+            Event(AudioId, PlaybackEventKind.Skipped, now.AddHours(-1), 3, TestUserContext.UserId),
+            Event(AudiobookTrackId, PlaybackEventKind.Completed, now.AddMinutes(-30), 600, TestUserContext.UserId),
+            Event(NsfwId, PlaybackEventKind.Completed, now.AddHours(-2), 300, TestUserContext.UserId),
+            Event(AudioId, PlaybackEventKind.Completed, now.AddDays(-30), 90, TestUserContext.UserId));
         db.SaveChanges();
     }
 
@@ -107,10 +164,12 @@ public sealed class PlaybackStatisticsServiceTests {
         Guid entityId,
         PlaybackEventKind kind,
         DateTimeOffset occurredAt,
-        double? positionSeconds) =>
+        double? positionSeconds,
+        Guid? userId) =>
         new() {
             Id = Guid.NewGuid(),
             EntityId = entityId,
+            UserId = userId,
             Kind = kind,
             OccurredAt = occurredAt,
             PositionSeconds = positionSeconds,

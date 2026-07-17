@@ -14,6 +14,7 @@ internal static class PlaybackStatisticsEndpoints {
             string? kind,
             string? eventKind,
             bool? hideNsfw,
+            Guid? userId,
             bool? allUsers,
             HttpContext httpContext,
             IPlaybackStatisticsService statistics,
@@ -33,6 +34,14 @@ internal static class PlaybackStatisticsEndpoints {
                     return Results.BadRequest(new ApiProblem(ApiProblemCodes.InvalidPlaybackStatisticsWindow, "The statistics start time must be before the end time."));
                 }
 
+                var caller = httpContext.GetCurrentUser()!;
+                var includeAllUsers = allUsers == true && caller.Role == UserRole.Admin;
+                Guid? statisticsUserId = includeAllUsers
+                    ? null
+                    : caller.Role == UserRole.Admin
+                        ? userId ?? caller.Id
+                        : caller.Id;
+
                 var response = await statistics.GetAsync(
                     new PlaybackStatisticsQuery(
                         lower,
@@ -40,8 +49,8 @@ internal static class PlaybackStatisticsEndpoints {
                         decodedKind,
                         decodedEventKind,
                         NsfwVisibility.ShouldHide(hideNsfw, httpContext),
-                        AllUsers: allUsers == true &&
-                            httpContext.GetCurrentUser() is { Role: UserRole.Admin }),
+                        UserId: statisticsUserId,
+                        AllUsers: includeAllUsers),
                     cancellationToken);
 
                 return Results.Ok(response);

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { onMount } from "svelte";
   import {
     Activity,
     ChartNoAxesCombined,
@@ -8,11 +9,16 @@
     Loader2,
     SkipForward,
     Trophy,
+    UsersRound,
   } from "@lucide/svelte";
-  import { Button, cn } from "@prismedia/ui-svelte";
+  import { Button, Select, cn, type SelectOption } from "@prismedia/ui-svelte";
   import EntityThumbnail from "$lib/components/thumbnails/EntityThumbnail.svelte";
   import { fetchEntityThumbnails } from "$lib/api/entities";
-  import { fetchPlaybackStatistics } from "$lib/api/playback-statistics";
+  import {
+    fetchPlaybackStatistics,
+    type PlaybackStatisticsParams,
+  } from "$lib/api/playback-statistics";
+  import { fetchUsers } from "$lib/api/users";
   import { entityCardToThumbnailCard } from "$lib/entities/entity-grid";
   import {
     entityReferenceToThumbnailCard,
@@ -33,9 +39,12 @@
     PlaybackStatisticsEntity,
     PlaybackStatisticsEvent,
     PlaybackStatisticsResponse,
+    UserResponse,
   } from "$lib/api/generated/model";
+  import { useSession } from "$lib/stores/session.svelte";
 
   const ALL_FILTER = "all" as const;
+  const ALL_USERS_SCOPE = "all-users" as const;
 
   type TimeframeKey = "30d" | "90d" | "year" | "all";
   type KindFilter = typeof ALL_FILTER | EntityKindCode;
@@ -80,10 +89,14 @@
     (DAILY_ACTIVITY_VISIBLE_ROW_LIMIT - 1) * DAILY_ACTIVITY_ROW_GAP_REM;
 
   const nsfw = useNsfw();
+  const session = useSession();
 
   let timeframe = $state<TimeframeKey>("year");
   let kindFilter = $state<KindFilter>(ALL_FILTER);
   let eventFilter = $state<EventFilter>(PLAYBACK_EVENT_KIND.completed);
+  let selectedScope = $state(session.user?.id ?? "");
+  let users = $state.raw<UserResponse[]>([]);
+  let scopeError = $state<string | null>(null);
   let stats = $state<PlaybackStatisticsResponse | null>(null);
   let thumbnailCardsById = $state.raw<Map<string, EntityThumbnailCard>>(new Map());
   let loading = $state(true);
@@ -120,9 +133,43 @@
   const summaryFrom = $derived(stats ? formatDate(stats.from) : "");
   const summaryTo = $derived(stats ? formatDate(stats.to) : "");
   const showEmpty = $derived(!loading && !error && (stats?.totalEvents ?? 0) === 0);
+  const scopeOptions = $derived.by<SelectOption[]>(() => {
+    if (!session.isAdmin) return [];
+    const availableUsers = users.length > 0
+      ? users
+      : session.user
+        ? [session.user]
+        : [];
+    return [
+      { value: ALL_USERS_SCOPE, label: "All users" },
+      ...availableUsers.map((user) => ({
+        value: user.id,
+        label: `${user.displayName}${user.id === session.user?.id ? " (you)" : ""}`,
+      })),
+    ];
+  });
+
+  onMount(() => {
+    if (!session.isAdmin) return;
+    void fetchUsers()
+      .then((items) => {
+        users = items;
+        scopeError = null;
+      })
+      .catch((err) => {
+        scopeError = err instanceof Error ? err.message : "Failed to load playback scopes";
+      });
+  });
 
   $effect(() => {
-    const params = buildQuery(timeframe, kindFilter, eventFilter, nsfw.mode === "off");
+    const params = buildQuery(
+      timeframe,
+      kindFilter,
+      eventFilter,
+      nsfw.mode === "off",
+      selectedScope,
+      session.isAdmin,
+    );
     const requestId = ++activeRequest;
     const controller = new AbortController();
 
@@ -171,16 +218,24 @@
     selectedKind: KindFilter,
     selectedEvent: EventFilter,
     hideNsfw: boolean,
-  ) {
+    scope: string,
+    isAdmin: boolean,
+  ): PlaybackStatisticsParams {
     const to = new Date();
     const from = fromForTimeframe(selectedTimeframe, to);
-    return {
+    const query: PlaybackStatisticsParams = {
       from: from.toISOString(),
       to: to.toISOString(),
       kind: selectedKind === ALL_FILTER ? undefined : selectedKind,
       eventKind: selectedEvent === ALL_FILTER ? undefined : selectedEvent,
       hideNsfw,
     };
+    if (isAdmin && scope === ALL_USERS_SCOPE) {
+      query.allUsers = true;
+    } else if (isAdmin && scope) {
+      query.userId = scope;
+    }
+    return query;
   }
 
   function fromForTimeframe(selectedTimeframe: TimeframeKey, to: Date): Date {
@@ -326,6 +381,11 @@
     selectedChartDate = null;
   }
 
+  function selectScope(value: string) {
+    selectedScope = value;
+    selectedChartDate = null;
+  }
+
   function selectChartBucket(date: string) {
     selectedChartDate = date;
   }
@@ -355,6 +415,20 @@
         </div>
 
         <div class="flex max-w-full flex-wrap gap-1.5 lg:justify-end">
+          {#if session.isAdmin}
+            <div class="surface-well flex min-w-44 items-center gap-1 p-0.5 pl-2">
+              <UsersRound class="h-3.5 w-3.5 shrink-0 text-text-muted" />
+              <Select
+                size="sm"
+                class="min-w-36 border-0 bg-transparent shadow-none"
+                value={selectedScope}
+                options={scopeOptions}
+                ariaLabel="Playback statistics user scope"
+                onchange={selectScope}
+              />
+            </div>
+          {/if}
+
           <div class="surface-well flex w-fit max-w-full flex-wrap gap-1 p-0.5">
             {#each TIMEFRAMES as option (option.key)}
               <Button
@@ -401,6 +475,12 @@
   {#if error}
     <div class="surface-panel border-l-2 border-error px-3 py-2 text-sm text-error-text" role="alert">
       {error}
+    </div>
+  {/if}
+
+  {#if scopeError}
+    <div class="surface-panel border-l-2 border-warning px-3 py-2 text-sm text-warning-text" role="status">
+      {scopeError} — showing your activity.
     </div>
   {/if}
 

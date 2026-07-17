@@ -11,5 +11,6 @@ to?: string;
 kind?: string;
 eventKind?: string;
 hideNsfw?: boolean;
+userId?: string;
 allUsers?: boolean;
 };
