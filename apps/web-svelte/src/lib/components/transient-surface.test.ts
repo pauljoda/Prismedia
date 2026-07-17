@@ -28,6 +28,7 @@ describe("transient surface design contract", () => {
   });
 
   it("uses the shared modal contract for app dialogs", () => {
+    const dialogPrimitive = read("../../packages/ui-svelte/src/primitives/Dialog.svelte");
     const commandPalette = read("src/lib/components/CommandPalette.svelte");
     const confirmDialog = read("src/lib/components/entities/ConfirmDialog.svelte");
     const nameDialog = read("src/lib/components/entities/NameInputDialog.svelte");
@@ -39,8 +40,14 @@ describe("transient surface design contract", () => {
     expect(commandPalette).not.toContain("bg-black/60");
     expect(commandPalette).not.toContain("shadow-2xl");
 
+    expect(dialogPrimitive).toContain("<dialog");
+    expect(dialogPrimitive).toContain("showModal()");
+    expect(dialogPrimitive).toContain("oncancel");
+    expect(dialogPrimitive).toContain("app-dialog-surface");
+
     for (const source of [confirmDialog, nameDialog, moveDialog, renameDialog]) {
-      expect(source).toContain("app-dialog-surface");
+      expect(source).toContain("<Dialog");
+      expect(source).not.toContain("<dialog");
       expect(source).not.toContain("::backdrop");
     }
   });

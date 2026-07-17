@@ -1,6 +1,6 @@
 <script lang="ts">
   import { Loader2, X } from "@lucide/svelte";
-  import { Button, textInputVariants } from "@prismedia/ui-svelte";
+  import { Button, Dialog, textInputVariants } from "@prismedia/ui-svelte";
 
   interface Props {
     open: boolean;
@@ -25,22 +25,17 @@
     onClose,
   }: Props = $props();
 
-  let dialogRef = $state<HTMLDialogElement | null>(null);
   let inputRef = $state<HTMLInputElement | null>(null);
   let draft = $state("");
   let busy = $state(false);
   let error = $state<string | null>(null);
 
   $effect(() => {
-    if (!dialogRef) return;
     if (open) {
       draft = initialValue;
       error = null;
       busy = false;
-      dialogRef.showModal();
       queueMicrotask(() => inputRef?.focus());
-    } else if (dialogRef.open) {
-      dialogRef.close();
     }
   });
 
@@ -57,19 +52,9 @@
       busy = false;
     }
   }
-
-  function handleBackdropClick(event: MouseEvent) {
-    if (event.target === dialogRef && !busy) onClose();
-  }
 </script>
 
-<dialog
-  bind:this={dialogRef}
-  onclick={handleBackdropClick}
-  onclose={onClose}
-  aria-label={title}
-  class="app-dialog-surface fixed inset-0 m-auto h-fit w-[min(92vw,26rem)] p-0 text-text-primary open:block"
->
+<Dialog {open} {onClose} ariaLabel={title} dismissible={!busy} class="w-[min(92vw,26rem)]">
   <form
     method="dialog"
     class="flex flex-col gap-4 p-5"
@@ -80,15 +65,16 @@
   >
     <div class="flex items-start justify-between gap-4">
       <h2 class="font-heading text-base font-semibold tracking-wide text-text-primary">{title}</h2>
-      <button
-        type="button"
+      <Button
+        variant="ghost"
+        size="icon"
         onclick={onClose}
         disabled={busy}
-        class="flex h-8 w-8 shrink-0 items-center justify-center rounded-sm text-text-muted transition-colors hover:bg-surface-2 hover:text-text-primary disabled:opacity-50"
+        class="shrink-0"
         aria-label="Cancel"
       >
         <X class="h-4 w-4" />
-      </button>
+      </Button>
     </div>
 
     <input
@@ -114,4 +100,4 @@
       </Button>
     </div>
   </form>
-</dialog>
+</Dialog>

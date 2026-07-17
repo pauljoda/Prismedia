@@ -1,6 +1,6 @@
 <script lang="ts">
   import { Check, X } from "@lucide/svelte";
-  import { cn } from "@prismedia/ui-svelte";
+  import { Button, Dialog, cn } from "@prismedia/ui-svelte";
 
   interface SectionOption {
     id: string;
@@ -19,31 +19,13 @@
 
   let { open, itemLabel, sections, currentSectionId, onMove, onClose }: Props = $props();
 
-  let dialogRef = $state<HTMLDialogElement | null>(null);
-
-  $effect(() => {
-    if (!dialogRef) return;
-    if (open) dialogRef.showModal();
-    else if (dialogRef.open) dialogRef.close();
-  });
-
   function choose(id: string) {
     if (id !== currentSectionId) onMove(id);
     onClose();
   }
-
-  function handleBackdropClick(event: MouseEvent) {
-    if (event.target === dialogRef) onClose();
-  }
 </script>
 
-<dialog
-  bind:this={dialogRef}
-  onclick={handleBackdropClick}
-  onclose={onClose}
-  aria-label="Move to section"
-  class="app-dialog-surface fixed inset-0 m-auto h-fit w-[min(92vw,24rem)] p-0 text-text-primary open:block"
->
+<Dialog {open} {onClose} ariaLabel="Move to section" class="w-[min(92vw,24rem)]">
   <div class="flex flex-col gap-3 p-4">
     <div class="flex items-start justify-between gap-4">
       <div class="min-w-0">
@@ -52,14 +34,15 @@
           {itemLabel}
         </h2>
       </div>
-      <button
-        type="button"
+      <Button
+        variant="ghost"
+        size="icon"
         onclick={onClose}
-        class="flex h-8 w-8 shrink-0 items-center justify-center rounded-sm text-text-muted transition-colors hover:bg-surface-2 hover:text-text-primary"
+        class="shrink-0"
         aria-label="Cancel"
       >
         <X class="h-4 w-4" />
-      </button>
+      </Button>
     </div>
 
     <ul class="flex flex-col gap-1">
@@ -86,4 +69,4 @@
       {/each}
     </ul>
   </div>
-</dialog>
+</Dialog>
