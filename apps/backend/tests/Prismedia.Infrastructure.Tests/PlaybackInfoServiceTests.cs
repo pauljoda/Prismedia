@@ -235,6 +235,50 @@ public sealed class PlaybackInfoServiceTests {
         Assert.Null(source.TranscodingInfo);
     }
 
+    [Fact]
+    public async Task PlaybackInfoDirectPlaysMalformedHdrForClientToneMappingRenderer() {
+        var videoId = Guid.Parse("68686868-6868-6868-6868-686868686868");
+        var service = new PlaybackInfoService(
+            new FakeVideoSourceService(new VideoSourceFile(
+                videoId,
+                "/media/malformed-hdr.mkv",
+                "video/x-matroska",
+                DirectPlayable: false,
+                DurationSeconds: 60,
+                Width: 1920,
+                Height: 1080,
+                Container: "matroska",
+                VideoCodec: "hevc",
+                AudioCodec: "eac3",
+                Streams:
+                [
+                    new(0, "Video", "hevc", null, "Video", 1920, 1080, 24, null, null, null, true, false) {
+                        BitDepth = 8,
+                        ColorTransfer = "smpte2084",
+                        ColorPrimaries = "bt2020"
+                    },
+                    new(1, "Audio", "eac3", "eng", "English", null, null, null, null, 48000, 6, true, false)
+                ])),
+            new TranscodeSessionService());
+
+        var info = await service.GetPlaybackInfoAsync(videoId, new PlaybackInfoQuery {
+            EnableDirectPlay = true,
+            EnableDirectStream = true,
+            EnableTranscoding = true,
+            EnableClientToneMapping = true,
+            SupportedVideoRangeTypes = ["HDR10"],
+            Profile = new ClientPlaybackProfile(
+                200_000_000,
+                [new ClientDirectPlayProfile("Video", "mp4", "hevc", "eac3,ac3,aac")])
+        }, CancellationToken.None);
+
+        Assert.NotNull(info);
+        var source = Assert.Single(info.MediaSources);
+        Assert.True(source.SupportsDirectPlay);
+        Assert.Null(source.TranscodingUrl);
+        Assert.Null(source.TranscodingInfo);
+    }
+
     private sealed class FakeVideoSourceService : IVideoSourceService {
         private readonly VideoSourceFile _source;
 

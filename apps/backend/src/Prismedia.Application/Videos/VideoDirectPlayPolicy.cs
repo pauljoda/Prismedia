@@ -53,6 +53,7 @@ public static class VideoDirectPlayPolicy {
     /// <param name="directPlayAllowed">Whether the client permits DirectPlay for this request.</param>
     /// <param name="directStreamAllowed">Whether the client permits DirectStream (remux) for this request.</param>
     /// <param name="transcodingAllowed">Whether the client permits transcoding for this request.</param>
+    /// <param name="clientToneMappingAllowed">Whether the client can locally normalize malformed HDR samples.</param>
     /// <returns>The negotiated delivery decision.</returns>
     public static VideoPlaybackDecision Decide(
         VideoSourceFile source,
@@ -62,16 +63,20 @@ public static class VideoDirectPlayPolicy {
         IReadOnlyCollection<string>? supportedVideoRangeTypes,
         bool directPlayAllowed,
         bool directStreamAllowed,
-        bool transcodingAllowed) {
+        bool transcodingAllowed,
+        bool clientToneMappingAllowed = false) {
         var rangeAllowed = VideoPlaybackRangePolicy.AllowsDirectPlayback(range, supportedVideoRangeTypes);
         var primaryVideoStream = PrimaryVideoStream(source);
 
         // HDR10, HLG, HDR10+, and Dolby Vision all require at least 10-bit samples. A stream with
         // HDR signaling over 8/9-bit video is internally contradictory; preserving that signaling
         // through DirectPlay or Remux causes standards-compliant displays to render it incorrectly.
-        // Normalize it through the existing HDR-to-SDR transcode path for every client.
+        // A client with an explicit local tone-mapping renderer may consume the original file;
+        // native clients must normalize it through the existing HDR-to-SDR transcode path.
         if (VideoPlaybackRangePolicy.RequiresToneMappingForInvalidBitDepth(range, primaryVideoStream?.BitDepth)) {
-            return new VideoPlaybackDecision(VideoPlaybackMethod.Transcode);
+            return clientToneMappingAllowed && directPlayAllowed
+                ? new VideoPlaybackDecision(VideoPlaybackMethod.DirectPlay)
+                : new VideoPlaybackDecision(VideoPlaybackMethod.Transcode);
         }
 
         // Without a device profile we cannot reason about the client's codec support, so fall back

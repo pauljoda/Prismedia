@@ -145,6 +145,24 @@ public sealed class VideoDirectPlayPolicyTests {
     }
 
     [Fact]
+    public void SubTenBitHdrDirectPlaysWhenClientExplicitlySupportsLocalToneMapping() {
+        var source = Hdr10Source("/media/malformed-hdr.mkv", bitDepth: 8);
+
+        var decision = VideoDirectPlayPolicy.Decide(
+            source,
+            selectedAudioCodec: "eac3",
+            range: VideoPlaybackRange.Hdr10,
+            profile: CapableClient,
+            supportedVideoRangeTypes: ["HDR10"],
+            directPlayAllowed: true,
+            directStreamAllowed: true,
+            transcodingAllowed: true,
+            clientToneMappingAllowed: true);
+
+        Assert.Equal(VideoPlaybackMethod.DirectPlay, decision.Method);
+    }
+
+    [Fact]
     public void TenBitHdrRemainsEligibleForStreamCopy() {
         var source = Hdr10Source("/media/valid-hdr.mkv", bitDepth: 10);
 

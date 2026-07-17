@@ -76,7 +76,8 @@ public sealed class PlaybackInfoService : IPlaybackInfoService {
             request?.SupportedVideoRangeTypes,
             directPlayAllowed: request?.EnableDirectPlay != false,
             directStreamAllowed: request?.EnableDirectStream != false,
-            transcodingAllowed: supportsTranscoding);
+            transcodingAllowed: supportsTranscoding,
+            clientToneMappingAllowed: request?.EnableClientToneMapping == true);
 
         // A DirectPlay verdict serves the raw file; a Remux verdict serves a stream-copy fMP4 HLS
         // (video copied, audio to AAC) so a client that can decode the codec but not the container

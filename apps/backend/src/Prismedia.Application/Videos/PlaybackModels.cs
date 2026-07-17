@@ -14,6 +14,7 @@ public sealed record PlaybackInfoQuery {
     public bool? EnableDirectPlay { get; init; }
     public bool? EnableDirectStream { get; init; }
     public bool? EnableTranscoding { get; init; }
+    public bool? EnableClientToneMapping { get; init; }
     public string? MediaSourceId { get; init; }
     public string? PlaySessionId { get; init; }
     public IReadOnlyList<string>? SupportedVideoRangeTypes { get; init; }

@@ -32,6 +32,13 @@ public sealed record PlaybackInfoRequest {
     [JsonPropertyName("EnableTranscoding")]
     public bool? EnableTranscoding { get; init; }
 
+    /// <summary>
+    /// Prismedia extension indicating that the client can locally tone-map source video that is
+    /// unsafe to copy into the platform-native HDR renderer.
+    /// </summary>
+    [JsonPropertyName("EnableClientToneMapping")]
+    public bool? EnableClientToneMapping { get; init; }
+
     [JsonPropertyName("MediaSourceId")]
     public string? MediaSourceId { get; init; }
 

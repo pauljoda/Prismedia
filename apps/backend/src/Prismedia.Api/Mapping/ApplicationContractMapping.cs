@@ -14,6 +14,7 @@ internal static class ApplicationContractMapping {
             EnableDirectPlay = request.EnableDirectPlay,
             EnableDirectStream = request.EnableDirectStream,
             EnableTranscoding = request.EnableTranscoding,
+            EnableClientToneMapping = request.EnableClientToneMapping,
             MediaSourceId = request.MediaSourceId,
             PlaySessionId = request.PlaySessionId,
             SupportedVideoRangeTypes = request.SupportedVideoRangeTypes,
