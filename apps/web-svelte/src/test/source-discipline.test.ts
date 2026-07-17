@@ -65,9 +65,6 @@ const MAGIC_CODE_ALLOWLIST: Record<string, string[]> = {
   "lib/components/identify/identify-store.svelte.ts": [
     "audio-library", "audio-track", "book-chapter", "book-volume", "music-artist", "video-season", "video-series",
   ],
-  "lib/components/identify-review.ts": [
-    "audio-library", "book-volume", "music-artist", "video-season", "video-series",
-  ],
   "lib/components/settings/SettingsSectionPage.svelte": ["hls"],
   "lib/components/video-player-types.ts": ["direct"],
   "lib/entities/detail-lab-data.ts": ["audio-library", "video-series"],

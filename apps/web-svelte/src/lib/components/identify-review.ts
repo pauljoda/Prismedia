@@ -10,30 +10,37 @@ import type {
   EntityMetadataProposal,
   ImageCandidate,
 } from "$lib/api/identify-types";
-import { CAPABILITY_KIND } from "$lib/entities/entity-codes";
+import {
+  CAPABILITY_KIND,
+  ENTITY_KIND,
+  ENTITY_KINDS_ENUMERATING_IDENTIFY_CHILDREN,
+  MEDIA_IMAGE_KIND,
+  METADATA_PATCH_FIELD,
+} from "$lib/entities/entity-codes";
 
+/** Reviewable patch fields in display order ("flags" is applied, never reviewed). */
 export const reviewFieldKeys = [
-  "title",
-  "description",
-  "externalIds",
-  "urls",
-  "tags",
-  "studio",
-  "credits",
-  "dates",
-  "stats",
-  "positions",
-  "classification",
-  "images",
+  METADATA_PATCH_FIELD.title,
+  METADATA_PATCH_FIELD.description,
+  METADATA_PATCH_FIELD.externalIds,
+  METADATA_PATCH_FIELD.urls,
+  METADATA_PATCH_FIELD.tags,
+  METADATA_PATCH_FIELD.studio,
+  METADATA_PATCH_FIELD.credits,
+  METADATA_PATCH_FIELD.dates,
+  METADATA_PATCH_FIELD.stats,
+  METADATA_PATCH_FIELD.positions,
+  METADATA_PATCH_FIELD.classification,
+  METADATA_PATCH_FIELD.images,
 ] as const;
 
 const fieldKeys = reviewFieldKeys;
 
 export const reviewDetailedFieldKeys = [
-  "tags",
-  "studio",
-  "credits",
-  "images",
+  METADATA_PATCH_FIELD.tags,
+  METADATA_PATCH_FIELD.studio,
+  METADATA_PATCH_FIELD.credits,
+  METADATA_PATCH_FIELD.images,
 ] as const;
 
 export const reviewDiffFieldKeys = reviewFieldKeys.filter(
@@ -196,8 +203,8 @@ export function findRelationshipImage(
       (candidate.patch.title ?? "").localeCompare(name, undefined, { sensitivity: "accent" }) === 0,
   );
   if (!child?.images.length) return null;
-  const preferred = child.images.find((img) => img.kind === "poster") ??
-    child.images.find((img) => img.kind === "logo") ??
+  const preferred = child.images.find((img) => img.kind === MEDIA_IMAGE_KIND.poster) ??
+    child.images.find((img) => img.kind === MEDIA_IMAGE_KIND.logo) ??
     child.images[0];
   return preferred?.url ?? null;
 }
@@ -208,8 +215,8 @@ export function relationshipTitlesFromEntityThumbnails(
 ): IdentifyRelationshipTitles {
   const byId = new Map(thumbnails.map((thumbnail) => [thumbnail.id, thumbnail.title]));
   return {
-    tags: titlesForRelationship(entity, byId, "tag"),
-    credits: titlesForRelationship(entity, byId, "person"),
+    tags: titlesForRelationship(entity, byId, ENTITY_KIND.tag),
+    credits: titlesForRelationship(entity, byId, ENTITY_KIND.person),
   };
 }
 
@@ -218,8 +225,8 @@ export function isNewRelationshipTitle(title: string, existingTitles: string[]):
 }
 
 export function reviewableImages(images: ImageCandidate[], targetKind?: string | null): ImageCandidate[] {
-  const allowsLogo = targetKind?.toLowerCase() === "studio";
-  return images.filter((image) => allowsLogo || image.kind.toLowerCase() !== "logo");
+  const allowsLogo = targetKind?.toLowerCase() === ENTITY_KIND.studio;
+  return images.filter((image) => allowsLogo || image.kind.toLowerCase() !== MEDIA_IMAGE_KIND.logo);
 }
 
 export function reviewImagePreviewUrl(image: ImageCandidate, targetKind?: string | null): string {
@@ -261,20 +268,20 @@ export function proposalHasField(result: EntityMetadataProposal, field: string):
 
 export function proposalFieldValue(result: EntityMetadataProposal, field: string): string {
   const patch = result.patch;
-  if (field === "title") return patch.title ?? "";
-  if (field === "description") return patch.description ?? "";
-  if (field === "externalIds") return entries(patch.externalIds).join(", ");
-  if (field === "urls") return patch.urls.join(", ");
-  if (field === "tags") return patch.tags.join(", ");
-  if (field === "studio") return patch.studio ?? "";
-  if (field === "credits") return patch.credits.map((credit) =>
+  if (field === METADATA_PATCH_FIELD.title) return patch.title ?? "";
+  if (field === METADATA_PATCH_FIELD.description) return patch.description ?? "";
+  if (field === METADATA_PATCH_FIELD.externalIds) return entries(patch.externalIds).join(", ");
+  if (field === METADATA_PATCH_FIELD.urls) return patch.urls.join(", ");
+  if (field === METADATA_PATCH_FIELD.tags) return patch.tags.join(", ");
+  if (field === METADATA_PATCH_FIELD.studio) return patch.studio ?? "";
+  if (field === METADATA_PATCH_FIELD.credits) return patch.credits.map((credit) =>
     credit.character ? `${credit.name} as ${credit.character}` : credit.name,
   ).join(", ");
-  if (field === "dates") return entries(patch.dates).join(", ");
-  if (field === "stats") return entries(patch.stats).join(", ");
-  if (field === "positions") return reviewPositionValue(patch.positions, result.targetKind);
-  if (field === "classification") return patch.classification ?? "";
-  if (field === "images") return groupReviewImages(result).map((group) => `${group.kind} (${group.images.length})`).join(", ");
+  if (field === METADATA_PATCH_FIELD.dates) return entries(patch.dates).join(", ");
+  if (field === METADATA_PATCH_FIELD.stats) return entries(patch.stats).join(", ");
+  if (field === METADATA_PATCH_FIELD.positions) return reviewPositionValue(patch.positions, result.targetKind);
+  if (field === METADATA_PATCH_FIELD.classification) return patch.classification ?? "";
+  if (field === METADATA_PATCH_FIELD.images) return groupReviewImages(result).map((group) => `${group.kind} (${group.images.length})`).join(", ");
   return "";
 }
 
@@ -283,42 +290,42 @@ export function currentFieldValueForReview(
   detail: EntityCard | null | undefined,
   field: string,
 ): string {
-  if (field === "title") return detail?.title ?? entity.title ?? "";
+  if (field === METADATA_PATCH_FIELD.title) return detail?.title ?? entity.title ?? "";
   if (!detail) return "";
 
   const capabilities = detail.capabilities ?? [];
-  if (field === "description") return getDescription(capabilities) ?? "";
-  if (field === "externalIds") {
+  if (field === METADATA_PATCH_FIELD.description) return getDescription(capabilities) ?? "";
+  if (field === METADATA_PATCH_FIELD.externalIds) {
     const links = getCapability(capabilities, CAPABILITY_KIND.links);
     return (links?.externalIds ?? []).map((externalId) => `${externalId.provider}: ${externalId.value}`).join(", ");
   }
-  if (field === "urls") {
+  if (field === METADATA_PATCH_FIELD.urls) {
     const links = getCapability(capabilities, CAPABILITY_KIND.links);
     return (links?.urls ?? []).map((url) => url.value).join(", ");
   }
-  if (field === "tags") return relationshipTitlesForDetail(detail, "tag").join(", ");
-  if (field === "studio") return relationshipTitlesForDetail(detail, "studio")[0] ?? "";
-  if (field === "credits") return relationshipTitlesForDetail(detail, "person").join(", ");
-  if (field === "dates") {
+  if (field === METADATA_PATCH_FIELD.tags) return relationshipTitlesForDetail(detail, ENTITY_KIND.tag).join(", ");
+  if (field === METADATA_PATCH_FIELD.studio) return relationshipTitlesForDetail(detail, ENTITY_KIND.studio)[0] ?? "";
+  if (field === METADATA_PATCH_FIELD.credits) return relationshipTitlesForDetail(detail, ENTITY_KIND.person).join(", ");
+  if (field === METADATA_PATCH_FIELD.dates) {
     const dates = getCapability(capabilities, CAPABILITY_KIND.dates);
     return (dates?.items ?? []).map((item) => `${item.code}: ${item.value}`).join(", ");
   }
-  if (field === "stats") {
+  if (field === METADATA_PATCH_FIELD.stats) {
     const stats = getCapability(capabilities, CAPABILITY_KIND.stats);
     return (stats?.items ?? []).map((item) => `${item.code}: ${item.value}`).join(", ");
   }
-  if (field === "positions") {
+  if (field === METADATA_PATCH_FIELD.positions) {
     const positions = getCapability(capabilities, CAPABILITY_KIND.position);
     return reviewPositionValue(
       Object.fromEntries((positions?.items ?? []).map((item) => [item.code, item.value])),
       detail.kind ?? entity.kind,
     );
   }
-  if (field === "classification") {
+  if (field === METADATA_PATCH_FIELD.classification) {
     const classification = getCapability(capabilities, CAPABILITY_KIND.classification);
     return classification?.value ?? "";
   }
-  if (field === "images") {
+  if (field === METADATA_PATCH_FIELD.images) {
     const images = getImagesCapability(capabilities);
     return (images?.items ?? [])
       .filter((image) => image.kind !== "source")
@@ -407,10 +414,10 @@ export function buildProposalForApply(
   const selectedResultTags = selections.selectedTagsByProposal[result.proposalId] ?? {};
   const credits = result.patch.credits
     .filter((credit, index) => selectedResultCredits[creditKey(credit, index)] !== false)
-    .filter((credit) => !isDeselectedRelationshipTitle(result, "person", credit.name, selections.selectedCascade));
+    .filter((credit) => !isDeselectedRelationshipTitle(result, ENTITY_KIND.person, credit.name, selections.selectedCascade));
   const tags = result.patch.tags
     .filter((tag) => selectedResultTags[tag] !== false)
-    .filter((tag) => !isDeselectedRelationshipTitle(result, "tag", tag, selections.selectedCascade));
+    .filter((tag) => !isDeselectedRelationshipTitle(result, ENTITY_KIND.tag, tag, selections.selectedCascade));
   const patch = patchForSelectedFields(result, fields, credits, tags, selections.selectedCascade);
 
   return {
@@ -437,18 +444,18 @@ function shouldKeepRelationship(
   patch: EntityMetadataPatch,
   fields: Record<string, boolean>,
 ): boolean {
-  if (child.targetKind === "person") {
+  if (child.targetKind === ENTITY_KIND.person) {
     if (!fields.credits) return false;
     const title = child.patch.title ?? "";
     return patch.credits.some((credit) => credit.name.localeCompare(title, undefined, { sensitivity: "accent" }) === 0);
   }
 
-  if (child.targetKind === "studio") {
+  if (child.targetKind === ENTITY_KIND.studio) {
     if (!fields.studio || !patch.studio) return false;
     return (child.patch.title ?? "").localeCompare(patch.studio, undefined, { sensitivity: "accent" }) === 0;
   }
 
-  if (child.targetKind === "tag") {
+  if (child.targetKind === ENTITY_KIND.tag) {
     return fields.tags !== false;
   }
 
@@ -463,7 +470,7 @@ function patchForSelectedFields(
   selectedCascade: Record<string, boolean>,
 ): EntityMetadataPatch {
   const patch = result.patch;
-  const studio = isDeselectedRelationshipTitle(result, "studio", patch.studio, selectedCascade) ? null : patch.studio;
+  const studio = isDeselectedRelationshipTitle(result, ENTITY_KIND.studio, patch.studio, selectedCascade) ? null : patch.studio;
   return {
     title: fields.title ? patch.title : null,
     description: fields.description ? patch.description : null,
@@ -508,7 +515,7 @@ function imagesForSelectedProposal(
 function selectedReviewImages(selectedImages: Record<string, string | null>): Record<string, string> {
   const selected: Record<string, string> = {};
   for (const [kind, url] of Object.entries(selectedImages)) {
-    if (!url || kind.toLowerCase() === "logo") continue;
+    if (!url || kind.toLowerCase() === MEDIA_IMAGE_KIND.logo) continue;
     selected[kind] = url;
   }
   return selected;
@@ -551,7 +558,7 @@ function googlePreviewUrl(url: string, kind: string): string | null {
 
   if (!parsed.hostname.endsWith(".googleusercontent.com")) return null;
 
-  const size = kind.toLowerCase() === "backdrop" ? 720 : 360;
+  const size = kind.toLowerCase() === MEDIA_IMAGE_KIND.backdrop ? 720 : 360;
   // Size hints live in the last path segment as `=wW-hH(-flags)` or `=sN(-flags)`; preserve any flags.
   if (/=w\d+-h\d+/.test(url)) return url.replace(/=w\d+-h\d+/, `=w${size}-h${size}`);
   if (/=s\d+/.test(url)) return url.replace(/=s\d+/, `=s${size}`);
@@ -560,10 +567,10 @@ function googlePreviewUrl(url: string, kind: string): string | null {
 
 function tmdbPreviewSize(kind: string, targetKind?: string | null): string {
   const normalized = kind.toLowerCase();
-  if (targetKind?.toLowerCase() === "person" && normalized !== "backdrop" && normalized !== "logo") return "w185";
-  if (normalized === "backdrop") return "w780";
-  if (normalized === "logo") return "w300";
-  if (normalized === "profile") return "w185";
+  if (targetKind?.toLowerCase() === ENTITY_KIND.person && normalized !== MEDIA_IMAGE_KIND.backdrop && normalized !== MEDIA_IMAGE_KIND.logo) return "w185";
+  if (normalized === MEDIA_IMAGE_KIND.backdrop) return "w780";
+  if (normalized === MEDIA_IMAGE_KIND.logo) return "w300";
+  if (normalized === MEDIA_IMAGE_KIND.profile) return "w185";
   return "w342";
 }
 
@@ -600,7 +607,7 @@ function normalizePositionCodeForReview(code: string): string {
 function structuralPositionScope(targetKind?: string | null): "season" | "episode" | null {
   const normalized = targetKind?.toLowerCase() ?? "";
   if (normalized.includes("season")) return "season";
-  if (normalized.includes("episode") || normalized === "video") return "episode";
+  if (normalized.includes("episode") || normalized === ENTITY_KIND.video) return "episode";
   return null;
 }
 
@@ -659,7 +666,7 @@ function titlesForRelationship(
 
 export function isRelationshipKind(kind: string): boolean {
   const normalized = kind.toLowerCase();
-  return normalized === "person" || normalized === "studio" || normalized === "tag";
+  return normalized === ENTITY_KIND.person || normalized === ENTITY_KIND.studio || normalized === ENTITY_KIND.tag;
 }
 
 /** A local structural child of an entity that can be identified on its own (album, episode, track). */
@@ -672,18 +679,10 @@ export interface StructuralChildEntity {
 
 /**
  * Entity kinds that are identify <em>containers</em>: their local structural children are themselves
- * separately identifiable works, so the cascade walks into them. Mirrors the backend
- * `EntityKindRegistry.EnumeratesIdentifyChildren` flag. Leaf-content kinds (a movie, a standalone
- * video, an image) are absent, so a movie never lists its own playable video as an identify child.
+ * separately identifiable works, so the cascade walks into them. Projected from the backend
+ * `EntityKindRegistry.EnumeratesIdentifyChildren` flag via codegen — never hand-mirrored.
  */
-const IDENTIFY_CONTAINER_KINDS = new Set([
-  "video-series",
-  "video-season",
-  "book",
-  "book-volume",
-  "audio-library",
-  "music-artist",
-]);
+const IDENTIFY_CONTAINER_KINDS = new Set<string>(ENTITY_KINDS_ENUMERATING_IDENTIFY_CHILDREN);
 
 /** Whether an entity of this kind enumerates separately-identifiable structural children. */
 export function kindEnumeratesIdentifyChildren(kind: string | null | undefined): boolean {
