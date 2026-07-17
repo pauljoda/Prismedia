@@ -1,4 +1,4 @@
-import type { JobQueueCountDto, JobRun as ApiJobRun } from "$lib/api/generated/model";
+import { JobRunStatus, type JobQueueCountDto, type JobRun as ApiJobRun } from "$lib/api/generated/model";
 import { JOB_TYPE, type JobTypeCode } from "$lib/api/generated/codes";
 import {
   queueDefinitions,
@@ -302,15 +302,15 @@ function queueSummaryBase(definition: ResolvedJobDefinition): QueueSummary {
 
 export function mapJobStatus(status: string): JobStatus {
   switch (status) {
-    case "running":
+    case JobRunStatus.running:
       return "active";
-    case "completed":
+    case JobRunStatus.completed:
       return "completed";
-    case "failed":
+    case JobRunStatus.failed:
       return "failed";
-    case "cancelled":
+    case JobRunStatus.cancelled:
       return "dismissed";
-    case "queued":
+    case JobRunStatus.queued:
     default:
       return "waiting";
   }

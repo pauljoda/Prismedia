@@ -1,3 +1,5 @@
+import type { SubtitleSourceCode } from "$lib/api/generated/codes";
+
 export const subtitleDisplayStyles = ["stylized", "classic", "outline"] as const;
 
 export type SubtitleDisplayStyle = (typeof subtitleDisplayStyles)[number];
@@ -16,13 +18,7 @@ export const defaultSubtitleAppearance: SubtitleAppearance = {
   opacity: 1,
 };
 
-export type SubtitleSource =
-  | "manual"
-  | "embedded"
-  | "generated"
-  | "provider"
-  | "upload"
-  | "sidecar";
+export type SubtitleSource = SubtitleSourceCode;
 
 export type SubtitleSourceFormat = "vtt" | "srt" | "ass" | "ssa";
 

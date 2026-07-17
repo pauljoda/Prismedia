@@ -1,8 +1,14 @@
-import { THUMBNAIL_HOVER_KIND } from "$lib/api/generated/codes";
+import { EXTERNAL_ID_PROVIDER, THUMBNAIL_HOVER_KIND } from "$lib/api/generated/codes";
 import type { EntityThumbnailCard, EntityThumbnailMetaItem } from "$lib/entities/entity-thumbnail";
 import type { EntityKind } from "$lib/api/generated/model";
 
-const PROVIDER_PRIORITY = ["tmdb", "imdb", "tvdb", "musicbrainz", "stash"] as const;
+const PROVIDER_PRIORITY = [
+  EXTERNAL_ID_PROVIDER.tmdb,
+  EXTERNAL_ID_PROVIDER.imdb,
+  EXTERNAL_ID_PROVIDER.tvdb,
+  EXTERNAL_ID_PROVIDER.musicBrainz,
+  EXTERNAL_ID_PROVIDER.stash,
+] as const;
 
 export interface IdentifySearchCandidateView {
   externalIds?: Record<string, string> | null;

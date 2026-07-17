@@ -7,7 +7,7 @@ import type {
 } from "$lib/api/settings";
 
 // Setting keys are generated from the backend AppSettingKeys (see scripts/gen-codes.mjs).
-import { SETTING_KEYS as settingKeys, type SettingKey } from "$lib/api/generated/codes";
+import { ENTITY_KIND, SETTING_KEYS as settingKeys, type SettingKey } from "$lib/api/generated/codes";
 
 export { settingKeys };
 export type { SettingKey };
@@ -18,7 +18,7 @@ export const defaultLibrarySettings: LibrarySettings = {
   scanIntervalMinutes: 60,
   autoIdentifyEnabled: false,
   autoIdentifyProviders: [],
-  autoIdentifyEntityKinds: ["video", "gallery", "image", "audio", "book"],
+  autoIdentifyEntityKinds: [ENTITY_KIND.video, ENTITY_KIND.gallery, ENTITY_KIND.image, ENTITY_KIND.audio, ENTITY_KIND.book],
   autoIdentifyConfidenceThreshold: 90,
   autoIdentifyUnorganizedOnly: true,
   autoGenerateMetadata: true,

@@ -1,3 +1,5 @@
+import { PLAYBACK_MODE, type PlaybackModeCode } from "$lib/api/generated/codes";
+
 export {
   defaultSubtitleAppearance,
   subtitleDisplayStyles,
@@ -8,13 +10,13 @@ export {
 export const BACKGROUND_WORKER_CONCURRENCY_MIN = 1;
 export const BACKGROUND_WORKER_CONCURRENCY_MAX = 32;
 
-export const playbackModes = ["direct", "hls"] as const;
-export type PlaybackMode = (typeof playbackModes)[number];
+export const playbackModes = Object.values(PLAYBACK_MODE) as readonly PlaybackModeCode[];
+export type PlaybackMode = PlaybackModeCode;
 
 export function normalizePlaybackMode(value: unknown): PlaybackMode {
   return typeof value === "string" && (playbackModes as readonly string[]).includes(value)
     ? (value as PlaybackMode)
-    : "direct";
+    : PLAYBACK_MODE.direct;
 }
 
 export const hlsTranscoderProfiles = [

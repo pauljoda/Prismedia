@@ -7,10 +7,12 @@ import {
   Search,
   type LucideIcon,
 } from "@lucide/svelte";
+import { JOB_TYPE, type JobTypeCode } from "$lib/api/generated/codes";
+import type { QueueName } from "./models";
 
 export interface RunCatalogEntry {
-  jobType: string;
-  queueName: string;
+  jobType: JobTypeCode;
+  queueName: QueueName;
   label: string;
   description: string;
   icon: LucideIcon;
@@ -28,28 +30,28 @@ export const RUN_CATALOG: readonly RunCatalogGroup[] = [
     title: "Scans",
     entries: [
       {
-        jobType: "scan-library",
+        jobType: JOB_TYPE.scanLibrary,
         queueName: "library-scan",
         label: "Videos",
         description: "Walk library roots for new video files.",
         icon: FolderSearch,
       },
       {
-        jobType: "scan-gallery",
+        jobType: JOB_TYPE.scanGallery,
         queueName: "gallery-scan",
         label: "Images",
         description: "Walk library roots for image galleries.",
         icon: Image,
       },
       {
-        jobType: "scan-book",
+        jobType: JOB_TYPE.scanBook,
         queueName: "book-scan",
         label: "Books",
         description: "Walk library roots for comic archives.",
         icon: BookOpen,
       },
       {
-        jobType: "scan-audio",
+        jobType: JOB_TYPE.scanAudio,
         queueName: "audio-scan",
         label: "Audio",
         description: "Walk library roots for audio tracks.",
@@ -62,14 +64,14 @@ export const RUN_CATALOG: readonly RunCatalogGroup[] = [
     title: "Maintenance",
     entries: [
       {
-        jobType: "refresh-collection",
+        jobType: JOB_TYPE.refreshCollection,
         queueName: "collection-refresh",
         label: "Refresh collections",
         description: "Re-evaluate dynamic collection rules.",
         icon: RefreshCw,
       },
       {
-        jobType: "monitored-search",
+        jobType: JOB_TYPE.monitoredSearch,
         queueName: "monitored-search",
         label: "Check monitored items",
         description: "Re-search wanted items and sync followed authors/artists now.",

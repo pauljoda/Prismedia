@@ -4,6 +4,7 @@
   import { Film } from "@lucide/svelte";
   import EntityDetailSkeleton from "$lib/components/entities/EntityDetailSkeleton.svelte";
   import { fetchEntities } from "$lib/api/entities";
+  import { RELATIONSHIP_CODE } from "$lib/api/generated/codes";
   import {
     updateEntityRating,
     updateEntityFlags,
@@ -79,7 +80,7 @@
 
   async function loadRelated(tagId: string) {
     try {
-      const response = await fetchEntities({ referencedBy: tagId, relationshipCode: "tags", limit: 1000 });
+      const response = await fetchEntities({ referencedBy: tagId, relationshipCode: RELATIONSHIP_CODE.tags, limit: 1000 });
       relatedCards = response.items.map((item) => entityCardToThumbnailCard(item, resolveEntityHref(item.kind, item.id)));
     } catch {
       relatedCards = [];

@@ -5,6 +5,7 @@
   import EntityDetailSkeleton from "$lib/components/entities/EntityDetailSkeleton.svelte";
   import EntityDetailHeroDates from "$lib/components/entities/EntityDetailHeroDates.svelte";
   import { fetchEntities } from "$lib/api/entities";
+  import { RELATIONSHIP_CODE } from "$lib/api/generated/codes";
   import {
     updateEntityRating,
     updateEntityFlags,
@@ -108,7 +109,7 @@
 
   async function loadRelated(personId: string) {
     try {
-      const response = await fetchEntities({ referencedBy: personId, relationshipCode: "cast", limit: 1000 });
+      const response = await fetchEntities({ referencedBy: personId, relationshipCode: RELATIONSHIP_CODE.cast, limit: 1000 });
       relatedCards = response.items.map((item) => entityCardToThumbnailCard(item, resolveEntityHref(item.kind, item.id)));
     } catch {
       relatedCards = [];

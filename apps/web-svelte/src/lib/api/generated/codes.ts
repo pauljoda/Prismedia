@@ -795,6 +795,7 @@ export type CapabilityKindCode = (typeof CAPABILITY_KIND)[keyof typeof CAPABILIT
 export const EXTERNAL_ID_PROVIDER = {
   aniDb: "anidb",
   imdb: "imdb",
+  musicBrainz: "musicbrainz",
   stash: "stash",
   tmdb: "tmdb",
   tvdb: "tvdb",

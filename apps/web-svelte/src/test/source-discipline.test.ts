@@ -61,7 +61,6 @@ const MAGIC_CODE_ALLOWLIST: Record<string, string[]> = {
   "lib/components/files/FileDetailPane.svelte": [
     "audio-library", "audio-track", "book-chapter", "book-page", "video-season", "video-series",
   ],
-  "lib/components/identify/identify-candidate-card.ts": ["imdb", "stash", "tmdb", "tvdb"],
   "lib/components/identify/identify-review-helpers.ts": ["audio-track"],
   "lib/components/identify/identify-store.svelte.ts": [
     "audio-library", "audio-track", "book-chapter", "book-volume", "music-artist", "video-season", "video-series",
@@ -70,8 +69,7 @@ const MAGIC_CODE_ALLOWLIST: Record<string, string[]> = {
     "audio-library", "book-volume", "music-artist", "video-season", "video-series",
   ],
   "lib/components/settings/SettingsSectionPage.svelte": ["hls"],
-  "lib/components/settings/WatchedLibrariesSection.svelte": ["scan-library"],
-  "lib/components/video-player-types.ts": ["direct", "hls"],
+  "lib/components/video-player-types.ts": ["direct"],
   "lib/entities/detail-lab-data.ts": ["audio-library", "video-series"],
   "lib/entities/thumbnail-lab-data.ts": [
     "audio-library", "audio-track", "book-chapter", "book-page", "book-volume", "video-season", "video-series",
@@ -84,10 +82,7 @@ const MAGIC_CODE_ALLOWLIST: Record<string, string[]> = {
   "lib/jobs/models.ts": [
     "acquire-subtitles", "database-backup", "extract-subtitles", "library-maintenance", "monitored-search",
   ],
-  "lib/jobs/run-catalog.ts": [
-    "monitored-search", "refresh-collection", "scan-audio", "scan-book", "scan-gallery", "scan-library",
-  ],
-  "lib/nsfw/hidden-entity.ts": ["entity_not_found"],
+  "lib/jobs/run-catalog.ts": ["monitored-search"],
   "lib/player/media-badges.ts": ["direct"],
   "lib/player/quality-preference.ts": ["direct"],
   "lib/player/video-player-load.ts": ["direct", "hls"],
@@ -95,7 +90,6 @@ const MAGIC_CODE_ALLOWLIST: Record<string, string[]> = {
   "lib/search/entity-search.ts": ["direct"],
   "lib/search/models.ts": ["direct"],
   "lib/settings/app-settings.ts": ["direct", "hls"],
-  "lib/settings/library-settings.ts": ["direct", "hls"],
   "lib/settings/settings-section-catalog.ts": ["auto-identify"],
   "routes/+page.svelte": ["audio-library", "video-series"],
   "routes/artists/+page.svelte": ["music-artist"],

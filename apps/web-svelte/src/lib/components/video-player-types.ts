@@ -1,3 +1,5 @@
+import type { PlaybackModeCode } from "$lib/api/generated/codes";
+
 export interface VideoPlayerHandle {
   seekTo: (time: number) => void;
   seekBy: (delta: number) => void;
@@ -27,7 +29,7 @@ export interface VideoPlayerAudioTrack {
   formatLabel?: string | null;
 }
 
-export type PlaybackMode = "direct" | "hls";
+export type PlaybackMode = PlaybackModeCode;
 
 // "direct" plays the original file, "auto" lets the server pick, and any other string is a quality-rung
 // name (e.g. "8mbps") the viewer pinned. (string & {}) keeps editor autocomplete for the literals.

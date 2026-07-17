@@ -1,12 +1,20 @@
 import { goto } from "$app/navigation";
+import { PROBLEM_CODE } from "$lib/api/generated/codes";
+import { ApiError } from "$lib/api/orval-fetch";
 import type { NsfwMode } from "./cookie";
 
-const ENTITY_NOT_FOUND_CODE = "entity_not_found";
-
+/**
+ * Whether an error is the API's entity-not-found problem, matched by the generated
+ * problem code — never by message text. Non-ApiError values fall back to looking for
+ * the code token inside wrapped/stringified errors.
+ */
 export function isHiddenEntityNotFoundError(error: unknown): boolean {
+  if (error instanceof ApiError) {
+    return error.problemCode === PROBLEM_CODE.entityNotFound;
+  }
+
   const message = error instanceof Error ? error.message : String(error ?? "");
-  return message.includes(ENTITY_NOT_FOUND_CODE) ||
-    /^Entity '[^']+' was not found\.$/.test(message.trim());
+  return message.includes(PROBLEM_CODE.entityNotFound);
 }
 
 export function redirectHiddenEntityNotFound(error: unknown, mode: NsfwMode): boolean {

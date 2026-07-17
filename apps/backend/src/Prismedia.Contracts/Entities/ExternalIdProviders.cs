@@ -22,4 +22,7 @@ public static class ExternalIdProviders {
 
     /// <summary>Stash / StashBox.</summary>
     public const string Stash = "stash";
+
+    /// <summary>MusicBrainz music database.</summary>
+    public const string MusicBrainz = "musicbrainz";
 }

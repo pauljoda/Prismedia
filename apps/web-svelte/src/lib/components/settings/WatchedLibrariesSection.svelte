@@ -27,6 +27,7 @@
     type LibraryRoot,
   } from "$lib/api/settings";
   import { createJob } from "$lib/api/jobs";
+  import { JOB_TYPE } from "$lib/api/generated/codes";
   import { useNsfw } from "$lib/nsfw/store.svelte";
   import { useSession } from "$lib/stores/session.svelte";
   import LibraryAccessDialog from "./LibraryAccessDialog.svelte";
@@ -108,7 +109,7 @@
       browserVisible = false;
       await onRootsChanged();
       await invalidateAll();
-      await createJob("scan-library");
+      await createJob(JOB_TYPE.scanLibrary);
     } catch (err) {
       onError(err instanceof Error ? err.message : "Failed to add library root");
     } finally {
