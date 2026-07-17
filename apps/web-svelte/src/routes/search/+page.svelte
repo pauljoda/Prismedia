@@ -9,7 +9,7 @@
     SlidersHorizontal,
     Star,
   } from "@lucide/svelte";
-  import { cn } from "@prismedia/ui-svelte";
+  import { SearchInput, cn } from "@prismedia/ui-svelte";
   import SearchResultCard from "$lib/components/SearchResultCard.svelte";
   import { buildHrefWithFrom } from "$lib/back-navigation";
   import { useNsfw } from "$lib/nsfw/store.svelte";
@@ -216,38 +216,19 @@
 <div class="space-y-4">
   <!-- Search header -->
   <div class="space-y-3">
-    <div class="surface-well flex items-center gap-2 px-3 py-2">
-      <SearchIcon class="h-4 w-4 shrink-0 text-text-disabled" />
-      <input
-        bind:this={inputRef}
-        bind:value={query}
-        type="text"
-        placeholder="Search everything..."
-        class="flex-1 bg-transparent text-sm text-text-primary placeholder:text-text-disabled focus:outline-none"
-        onkeydown={(e) => {
+    <SearchInput
+      bind:element={inputRef}
+      bind:value={query}
+      ariaLabel="Search everything"
+      placeholder="Search everything..."
+      {loading}
+      onkeydown={(e) => {
           if (e.key === "Enter" && topResult) {
             e.preventDefault();
             navigateToTopResult();
           }
-        }}
-      />
-      {#if query}
-        <button
-          type="button"
-          class="text-text-disabled transition-colors duration-fast hover:text-text-muted"
-          onclick={() => {
-            query = "";
-            inputRef?.focus();
-          }}
-          aria-label="Clear search"
-        >
-          <X class="h-3.5 w-3.5" />
-        </button>
-      {/if}
-      {#if loading}
-        <Loader2 class="h-3.5 w-3.5 animate-spin text-text-disabled" />
-      {/if}
-    </div>
+      }}
+    />
 
     <!-- Entity kind toggles + filters button -->
     <div class="flex flex-wrap items-center gap-2">

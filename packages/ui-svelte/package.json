@@ -17,6 +17,7 @@
     "./primitives/Badge.svelte": "./src/primitives/Badge.svelte",
     "./primitives/Checkbox.svelte": "./src/primitives/Checkbox.svelte",
     "./primitives/Dialog.svelte": "./src/primitives/Dialog.svelte",
+    "./primitives/SearchInput.svelte": "./src/primitives/SearchInput.svelte",
     "./composed/Meter.svelte": "./src/composed/Meter.svelte",
     "./composed/StatusLed.svelte": "./src/composed/StatusLed.svelte",
     "./composed/Panel.svelte": "./src/composed/Panel.svelte",

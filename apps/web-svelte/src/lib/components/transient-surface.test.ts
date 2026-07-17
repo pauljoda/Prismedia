@@ -70,6 +70,16 @@ describe("transient surface design contract", () => {
     }
   });
 
+  it("composes the global search page from the shared search input", () => {
+    const searchInput = read("../../packages/ui-svelte/src/primitives/SearchInput.svelte");
+    const searchPage = read("src/routes/search/+page.svelte");
+
+    expect(searchInput).toContain('type="search"');
+    expect(searchInput).toContain('aria-label={clearLabel}');
+    expect(searchInput).toContain("bind:value");
+    expect(searchPage).toContain("<SearchInput");
+  });
+
   it("keeps the changelog neutral and material", () => {
     const source = read("src/lib/components/ChangelogDialog.svelte");
 

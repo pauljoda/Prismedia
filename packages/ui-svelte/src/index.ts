@@ -29,6 +29,7 @@ export { badgeVariants, type BadgeVariant } from "./primitives/Badge.svelte";
 export { default as Checkbox } from "./primitives/Checkbox.svelte";
 export { default as ColorInput } from "./primitives/ColorInput.svelte";
 export { default as Dialog } from "./primitives/Dialog.svelte";
+export { default as SearchInput } from "./primitives/SearchInput.svelte";
 export { default as TextInput } from "./primitives/TextInput.svelte";
 export { textInputVariants, type TextInputSize, type TextInputVariant } from "./primitives/TextInput.svelte";
 export { default as Select } from "./primitives/Select.svelte";
