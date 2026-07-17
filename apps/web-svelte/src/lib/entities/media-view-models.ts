@@ -1,3 +1,5 @@
+import type { GalleryTypeCode } from "$lib/api/generated/codes";
+
 export interface TagEmbedDto {
   id: string;
   name: string;
@@ -14,7 +16,7 @@ export interface LibraryRootSummaryDto {
   scanBooks: boolean;
 }
 
-export type GalleryType = "folder" | "zip" | "virtual";
+export type GalleryType = GalleryTypeCode;
 
 export interface GalleryListItemDto {
   id: string;
