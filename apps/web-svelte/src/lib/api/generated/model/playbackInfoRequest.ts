@@ -35,6 +35,8 @@ export interface PlaybackInfoRequest {
   /** @nullable */
   EnableTranscoding?: boolean | null;
   /** @nullable */
+  EnableClientToneMapping?: boolean | null;
+  /** @nullable */
   MediaSourceId?: string | null;
   /** @nullable */
   PlaySessionId?: string | null;
