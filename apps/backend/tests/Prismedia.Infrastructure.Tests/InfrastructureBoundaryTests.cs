@@ -217,6 +217,92 @@ public sealed class InfrastructureBoundaryTests {
         Assert.Contains(typeof(Prismedia.Application.Jobs.Ports.IDownstreamNeedsPersistence), constructorTypes);
     }
 
+    [Fact]
+    public void DomainProjectReferencesNothing() {
+        // The Domain core is the innermost layer: no project references (not even
+        // Contracts, which references Domain) and no NuGet packages. Everything it
+        // needs comes from the base class library.
+        var projectFile = ReadRepoFile("apps/backend/src/Prismedia.Domain/Prismedia.Domain.csproj");
+
+        Assert.DoesNotContain("<ProjectReference", projectFile, StringComparison.Ordinal);
+        Assert.DoesNotContain("<PackageReference", projectFile, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void DomainSourceStaysDependencyFree() {
+        // Belt-and-braces with DomainProjectReferencesNothing: even with no project
+        // references, a stray global using or fully-qualified name would signal a
+        // layering leak the compiler cannot express.
+        string[] forbidden =
+        [
+            "using Prismedia.Application",
+            "using Prismedia.Infrastructure",
+            "using Prismedia.Api",
+            "using Prismedia.Contracts",
+            "using Microsoft.EntityFrameworkCore",
+            "using Microsoft.AspNetCore"
+        ];
+
+        Assert.All(forbidden, namespacePrefix =>
+            Assert.Empty(FilesContaining("apps/backend/src/Prismedia.Domain", namespacePrefix)));
+    }
+
+    [Fact]
+    public void ApiAndWorkerNeverTouchThePersistenceContextDirectly() {
+        // Broader than the endpoint-only gate above: nothing anywhere in the Api or
+        // Worker hosts may reach for the EF context or EF Core itself. Persistence is
+        // reached exclusively through Application ports implemented in Infrastructure.
+        string[] forbidden = ["PrismediaDbContext", "using Microsoft.EntityFrameworkCore"];
+        string[] hosts = ["apps/backend/src/Prismedia.Api", "apps/backend/src/Prismedia.Worker"];
+
+        foreach (var host in hosts) {
+            Assert.All(forbidden, text => Assert.Empty(FilesContaining(host, text)));
+        }
+    }
+
+    /// <summary>
+    /// Grandfathered oversized files mapped to a hard line ceiling (current size rounded
+    /// up to the next 50). Entries may only shrink or disappear: splitting a file removes
+    /// its entry, and growing one past its ceiling fails this guard. New files are capped
+    /// at <see cref="MaxSourceFileLines"/>.
+    /// </summary>
+    private static readonly IReadOnlyDictionary<string, int> OversizedFileCeilings = new Dictionary<string, int> {
+        ["apps/backend/src/Prismedia.Application/Jobs/Handlers/Acquisition/AcquisitionImportEngines.cs"] = 2150,
+        ["apps/backend/src/Prismedia.Infrastructure/Acquisition/EfAcquisitionStore.cs"] = 1800,
+        ["apps/backend/src/Prismedia.Application/Requests/RequestCommitService.cs"] = 1600,
+        ["apps/backend/src/Prismedia.Application/Jellyfin/JellyfinCatalogService.cs"] = 1500,
+        ["apps/backend/src/Prismedia.Infrastructure/Entities/EfEntityReadService.cs"] = 1400,
+        ["apps/backend/src/Prismedia.Infrastructure/Plugins/IdentifyQueueService.cs"] = 1350,
+        ["apps/backend/src/Prismedia.Infrastructure/Acquisition/EfMonitorStore.cs"] = 1350,
+        ["apps/backend/src/Prismedia.Application/Acquisition/AcquisitionService.cs"] = 1200,
+        ["apps/backend/src/Prismedia.Infrastructure/Entities/MediaEntityDeletionService.cs"] = 1200,
+    };
+
+    private const int MaxSourceFileLines = 1000;
+
+    [Fact]
+    public void BackendSourceFilesStayUnderTheModularityCeiling() {
+        // The 2026-07 audit found god files regrowing after earlier splits because no
+        // guard capped them. Generated EF migrations are exempt; everything else stays
+        // under the ceiling or carries an explicit, shrink-only grandfather entry.
+        var root = Path.GetDirectoryName(RepoPath("package.json"))!;
+        var offenders = Directory.GetFiles(RepoPath("apps/backend/src"), "*.cs", SearchOption.AllDirectories)
+            .Where(file => !file.Contains($"{Path.DirectorySeparatorChar}Migrations{Path.DirectorySeparatorChar}") &&
+                !file.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}") &&
+                !file.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}"))
+            .Select(file => (
+                Path: Path.GetRelativePath(root, file).Replace('\\', '/'),
+                Lines: File.ReadLines(file).Count()))
+            .Where(entry => entry.Lines > OversizedFileCeilings.GetValueOrDefault(entry.Path, MaxSourceFileLines))
+            .OrderByDescending(entry => entry.Lines)
+            .Select(entry => $"{entry.Path}: {entry.Lines} lines (ceiling {OversizedFileCeilings.GetValueOrDefault(entry.Path, MaxSourceFileLines)})")
+            .ToArray();
+
+        Assert.True(offenders.Length == 0,
+            "Source files exceed the modularity ceiling — split them instead of growing them:\n" +
+            string.Join("\n", offenders));
+    }
+
     private static IEnumerable<string> FilesContaining(string relativeDirectory, string text) {
         var root = Path.GetDirectoryName(RepoPath("package.json")) ??
             throw new DirectoryNotFoundException("Could not resolve repository root.");
