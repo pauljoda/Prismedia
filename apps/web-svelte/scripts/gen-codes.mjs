@@ -16,7 +16,10 @@ const OUTPUT = resolve(__dirname, "../src/lib/api/generated/codes.ts");
 const openApiUrl = process.env.PRISMEDIA_OPENAPI_URL ?? "http://127.0.0.1:8008/openapi/v1.json";
 const codesUrl = process.env.PRISMEDIA_CODES_URL ?? new URL("/api/_codegen/codes.json", openApiUrl).toString();
 
-// Backend enum type name -> [exported const name, exported type name].
+// Backend enum type name -> [exported const name, exported type name] for families whose
+// exported names predate the mechanical derivation below. Every OTHER manifest enum is
+// exported automatically as SCREAMING_SNAKE(name) / `${name}Code`, so a new backend
+// [Code] enum can never be silently unsurfaced.
 const ENUM_EXPORTS = [
   ["EntityKind", "ENTITY_KIND", "EntityKindCode"],
   ["ProposalKind", "PROPOSAL_KIND", "ProposalKindCode"],
@@ -69,6 +72,12 @@ const ENUM_EXPORTS = [
   ["UserRole", "USER_ROLE", "UserRoleCode"],
 ];
 
+const screamingSnake = (name) =>
+  name
+    .replace(/([a-z0-9])([A-Z])/g, "$1_$2")
+    .replace(/([A-Z]+)([A-Z][a-z])/g, "$1_$2")
+    .toUpperCase();
+
 const camel = (name) => {
   const joined = name.replace(/[^A-Za-z0-9_$]+([A-Za-z0-9_$])/g, (_, next) => next.toUpperCase());
   const key = joined.length === 0 ? joined : joined[0].toLowerCase() + joined.slice(1);
@@ -76,13 +85,16 @@ const camel = (name) => {
 };
 const lit = (value) => JSON.stringify(value);
 
-function constBlock(constName, typeName, entries) {
+// `source` names the backend registry the const is projected from. The annotation is
+// machine-read by GeneratedCodesParityTests to verify the committed file offline.
+function constBlock(constName, typeName, entries, source) {
   const keys = entries.map(([key]) => key);
   if (new Set(keys).size !== keys.length || keys.some((key) => !/^[A-Za-z_$][A-Za-z0-9_$]*$/.test(key))) {
     throw new Error(`${constName} contains duplicate or invalid generated property names`);
   }
   const body = entries.map(([key, value]) => `  ${key}: ${lit(value)},`).join("\n");
   return (
+    `// source: ${source}\n` +
     `export const ${constName} = {\n${body}\n} as const;\n\n` +
     `export type ${typeName} = (typeof ${constName})[keyof typeof ${constName}];\n`
   );
@@ -97,12 +109,26 @@ async function main() {
 
   const sections = [];
 
-  for (const [enumName, constName, typeName] of ENUM_EXPORTS) {
-    const members = manifest.enums?.[enumName];
-    if (!members) {
+  const explicitNames = new Map(ENUM_EXPORTS.map(([enumName, constName, typeName]) => [enumName, [constName, typeName]]));
+  const usedConstNames = new Set(ENUM_EXPORTS.map(([, constName]) => constName));
+  for (const [enumName] of ENUM_EXPORTS) {
+    if (!manifest.enums?.[enumName]) {
       throw new Error(`Manifest is missing enum '${enumName}'. Is the backend up to date?`);
     }
-    sections.push(constBlock(constName, typeName, members.map((m) => [camel(m.name), m.code])));
+  }
+
+  // Every manifest enum is exported: explicitly-named families first, then the rest with
+  // mechanically derived names. Nothing in the backend code registry can stay unsurfaced.
+  for (const enumName of Object.keys(manifest.enums ?? {}).sort()) {
+    const [constName, typeName] = explicitNames.get(enumName) ?? [screamingSnake(enumName), `${enumName}Code`];
+    if (!explicitNames.has(enumName)) {
+      if (usedConstNames.has(constName)) {
+        throw new Error(`Derived const name '${constName}' for enum '${enumName}' collides with an explicit export`);
+      }
+      usedConstNames.add(constName);
+    }
+    const members = manifest.enums[enumName];
+    sections.push(constBlock(constName, typeName, members.map((m) => [camel(m.name), m.code]), `enum ${enumName}`));
   }
 
   // Capability discriminators (keyed by the code itself).
@@ -111,6 +137,7 @@ async function main() {
       "CAPABILITY_KIND",
       "CapabilityKindCode",
       (manifest.capabilityKinds ?? []).map((code) => [camel(code), code]),
+      "registry CapabilityKinds",
     ),
   );
 
@@ -120,6 +147,7 @@ async function main() {
       "EXTERNAL_ID_PROVIDER",
       "ExternalIdProviderCode",
       (manifest.externalIdProviders ?? []).map((c) => [camel(c.name), c.value]),
+      "registry ExternalIdProviders",
     ),
   );
 
@@ -129,6 +157,7 @@ async function main() {
       "SETTING_KEYS",
       "SettingKey",
       (manifest.settingKeys ?? []).map((c) => [camel(c.name), c.value]),
+      "registry AppSettingKeys",
     ),
   );
 
@@ -138,6 +167,7 @@ async function main() {
       "PROBLEM_CODE",
       "ProblemCode",
       (manifest.problemCodes ?? []).map((c) => [camel(c.name), c.value]),
+      "registry ApiProblemCodes",
     ),
   );
 
@@ -208,6 +238,17 @@ async function main() {
   sections.push(
     `export const ENTITY_KINDS_SUPPORTING_REQUESTS = [\n${requestableEntityKinds}\n] as const;\n\n` +
       `export type RequestableEntityKindCode = (typeof ENTITY_KINDS_SUPPORTING_REQUESTS)[number];\n`,
+  );
+
+  // Identify containers whose local children are enumerated for cascade identify. The
+  // identify review flow consumes this instead of hand-mirroring EntityKindRegistry flags.
+  const identifyContainerKinds = (manifest.entityKinds ?? [])
+    .filter((kind) => kind.enumeratesIdentifyChildren === true)
+    .map((kind) => `  ${lit(kind.code)},`)
+    .join("\n");
+  sections.push(
+    `export const ENTITY_KINDS_ENUMERATING_IDENTIFY_CHILDREN = [\n${identifyContainerKinds}\n] as const;\n\n` +
+      `export type IdentifyContainerEntityKindCode = (typeof ENTITY_KINDS_ENUMERATING_IDENTIFY_CHILDREN)[number];\n`,
   );
 
   const header =

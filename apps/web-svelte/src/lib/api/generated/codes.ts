@@ -2,6 +2,220 @@
 // Do not edit by hand. Run `pnpm api:generate` (with the dev API running) to refresh.
 /* eslint-disable */
 
+// source: enum AcquisitionHistoryEvent
+export const ACQUISITION_HISTORY_EVENT = {
+  grabbed: "grabbed",
+  imported: "imported",
+  importFailed: "import-failed",
+  downloadFailed: "download-failed",
+  blocklisted: "blocklisted",
+  upgraded: "upgraded",
+  removed: "removed",
+} as const;
+
+export type AcquisitionHistoryEventCode = (typeof ACQUISITION_HISTORY_EVENT)[keyof typeof ACQUISITION_HISTORY_EVENT];
+
+// source: enum AcquisitionStatus
+export const ACQUISITION_STATUS = {
+  pending: "pending",
+  searching: "searching",
+  awaitingSelection: "awaiting-selection",
+  queued: "queued",
+  downloading: "downloading",
+  downloaded: "downloaded",
+  importing: "importing",
+  imported: "imported",
+  stopping: "stopping",
+  failed: "failed",
+  cancelled: "cancelled",
+  manualImportRequired: "manual-import-required",
+} as const;
+
+export type AcquisitionStatusCode = (typeof ACQUISITION_STATUS)[keyof typeof ACQUISITION_STATUS];
+
+// source: enum AcquisitionTeardownIntent
+export const ACQUISITION_TEARDOWN_INTENT = {
+  remove: "remove",
+  reacquire: "reacquire",
+} as const;
+
+export type AcquisitionTeardownIntentCode = (typeof ACQUISITION_TEARDOWN_INTENT)[keyof typeof ACQUISITION_TEARDOWN_INTENT];
+
+// source: enum AudioQuality
+export const AUDIO_QUALITY = {
+  unknown: "unknown",
+  lossy: "lossy",
+  lossyHigh: "lossy-high",
+  lossless: "lossless",
+  losslessHiRes: "lossless-hires",
+} as const;
+
+export type AudioQualityCode = (typeof AUDIO_QUALITY)[keyof typeof AUDIO_QUALITY];
+
+// source: enum BlocklistReason
+export const BLOCKLIST_REASON = {
+  failed: "failed",
+  stalled: "stalled",
+  noImportableFiles: "no-importable-files",
+  manual: "manual",
+  wrongContent: "wrong-content",
+} as const;
+
+export type BlocklistReasonCode = (typeof BLOCKLIST_REASON)[keyof typeof BLOCKLIST_REASON];
+
+// source: enum BookFormat
+export const BOOK_FORMAT = {
+  imageArchive: "image-archive",
+  epub: "epub",
+  pdf: "pdf",
+  audio: "audio",
+} as const;
+
+export type BookFormatCode = (typeof BOOK_FORMAT)[keyof typeof BOOK_FORMAT];
+
+// source: enum BookFormatTier
+export const BOOK_FORMAT_TIER = {
+  unknown: "unknown",
+  fixed: "fixed",
+  reflowable: "reflowable",
+  archive: "archive",
+} as const;
+
+export type BookFormatTierCode = (typeof BOOK_FORMAT_TIER)[keyof typeof BOOK_FORMAT_TIER];
+
+// source: enum BookRendition
+export const BOOK_RENDITION = {
+  ebook: "ebook",
+  audiobook: "audiobook",
+} as const;
+
+export type BookRenditionCode = (typeof BOOK_RENDITION)[keyof typeof BOOK_RENDITION];
+
+// source: enum BookSourceTier
+export const BOOK_SOURCE_TIER = {
+  unknown: "unknown",
+  web: "web",
+  retail: "retail",
+} as const;
+
+export type BookSourceTierCode = (typeof BOOK_SOURCE_TIER)[keyof typeof BOOK_SOURCE_TIER];
+
+// source: enum BookType
+export const BOOK_TYPE = {
+  book: "book",
+  comic: "comic",
+  manga: "manga",
+  novel: "novel",
+} as const;
+
+export type BookTypeCode = (typeof BOOK_TYPE)[keyof typeof BOOK_TYPE];
+
+// source: enum CollectionCoverMode
+export const COLLECTION_COVER_MODE = {
+  mosaic: "mosaic",
+  custom: "custom",
+  item: "item",
+} as const;
+
+export type CollectionCoverModeCode = (typeof COLLECTION_COVER_MODE)[keyof typeof COLLECTION_COVER_MODE];
+
+// source: enum CollectionItemSource
+export const COLLECTION_ITEM_SOURCE = {
+  manual: "manual",
+  dynamic: "dynamic",
+} as const;
+
+export type CollectionItemSourceCode = (typeof COLLECTION_ITEM_SOURCE)[keyof typeof COLLECTION_ITEM_SOURCE];
+
+// source: enum CollectionMode
+export const COLLECTION_MODE = {
+  manual: "manual",
+  dynamic: "dynamic",
+  hybrid: "hybrid",
+} as const;
+
+export type CollectionModeCode = (typeof COLLECTION_MODE)[keyof typeof COLLECTION_MODE];
+
+// source: enum CreditRole
+export const CREDIT_ROLE = {
+  person: "person",
+  actor: "actor",
+  director: "director",
+  writer: "writer",
+  producer: "producer",
+  creator: "creator",
+  artist: "artist",
+  narrator: "narrator",
+  composer: "composer",
+} as const;
+
+export type CreditRoleCode = (typeof CREDIT_ROLE)[keyof typeof CREDIT_ROLE];
+
+// source: enum CustomFormatConditionType
+export const CUSTOM_FORMAT_CONDITION_TYPE = {
+  releaseTitle: "release-title",
+  releaseGroup: "release-group",
+  language: "language",
+  quality: "quality",
+} as const;
+
+export type CustomFormatConditionTypeCode = (typeof CUSTOM_FORMAT_CONDITION_TYPE)[keyof typeof CUSTOM_FORMAT_CONDITION_TYPE];
+
+// source: enum DatabaseBackupStatus
+export const DATABASE_BACKUP_STATUS = {
+  running: "running",
+  completed: "completed",
+  failed: "failed",
+} as const;
+
+export type DatabaseBackupStatusCode = (typeof DATABASE_BACKUP_STATUS)[keyof typeof DATABASE_BACKUP_STATUS];
+
+// source: enum DatePrecision
+export const DATE_PRECISION = {
+  day: "day",
+  month: "month",
+  year: "year",
+} as const;
+
+export type DatePrecisionCode = (typeof DATE_PRECISION)[keyof typeof DATE_PRECISION];
+
+// source: enum DownloadClientKind
+export const DOWNLOAD_CLIENT_KIND = {
+  qBittorrent: "qbittorrent",
+  transmission: "transmission",
+  sabnzbd: "sabnzbd",
+} as const;
+
+export type DownloadClientKindCode = (typeof DOWNLOAD_CLIENT_KIND)[keyof typeof DOWNLOAD_CLIENT_KIND];
+
+// source: enum DownloadProtocol
+export const DOWNLOAD_PROTOCOL = {
+  torrent: "torrent",
+  usenet: "usenet",
+} as const;
+
+export type DownloadProtocolCode = (typeof DOWNLOAD_PROTOCOL)[keyof typeof DOWNLOAD_PROTOCOL];
+
+// source: enum EntityFileRole
+export const ENTITY_FILE_ROLE = {
+  source: "source",
+  thumbnail: "thumbnail",
+  gridThumbnail: "grid-thumbnail",
+  gridThumbnail2x: "grid-thumbnail-2x",
+  poster: "poster",
+  backdrop: "backdrop",
+  logo: "logo",
+  preview: "preview",
+  sprite: "sprite",
+  trickplay: "trickplay",
+  waveform: "waveform",
+  cover: "cover",
+  hls: "hls",
+} as const;
+
+export type EntityFileRoleCode = (typeof ENTITY_FILE_ROLE)[keyof typeof ENTITY_FILE_ROLE];
+
+// source: enum EntityKind
 export const ENTITY_KIND = {
   audio: "audio",
   audioLibrary: "audio-library",
@@ -26,73 +240,164 @@ export const ENTITY_KIND = {
 
 export type EntityKindCode = (typeof ENTITY_KIND)[keyof typeof ENTITY_KIND];
 
-export const PROPOSAL_KIND = {
-  audio: "audio",
-  audioLibrary: "audio-library",
-  audioTrack: "audio-track",
-  book: "book",
-  bookVolume: "book-volume",
-  bookChapter: "book-chapter",
-  bookPage: "book-page",
-  bookAuthor: "book-author",
-  collection: "collection",
-  gallery: "gallery",
-  image: "image",
-  musicArtist: "music-artist",
-  person: "person",
-  movie: "movie",
-  studio: "studio",
-  tag: "tag",
-  video: "video",
-  videoSeries: "video-series",
-  videoSeason: "video-season",
-  videoEpisode: "video-episode",
+// source: enum EntityLifecycleClaimKind
+export const ENTITY_LIFECYCLE_CLAIM_KIND = {
+  deletingFiles: "deleting-files",
 } as const;
 
-export type ProposalKindCode = (typeof PROPOSAL_KIND)[keyof typeof PROPOSAL_KIND];
+export type EntityLifecycleClaimKindCode = (typeof ENTITY_LIFECYCLE_CLAIM_KIND)[keyof typeof ENTITY_LIFECYCLE_CLAIM_KIND];
 
-export const RELATIONSHIP_CODE = {
-  cast: "cast",
-  credits: "credits",
-  studio: "studio",
-  tags: "tags",
-  related: "related",
+// source: enum EntityStorageShape
+export const ENTITY_STORAGE_SHAPE = {
+  none: "none",
+  folder: "folder",
+  file: "file",
+  archive: "archive",
+  archiveEntry: "archive-entry",
 } as const;
 
-export type RelationshipCode = (typeof RELATIONSHIP_CODE)[keyof typeof RELATIONSHIP_CODE];
+export type EntityStorageShapeCode = (typeof ENTITY_STORAGE_SHAPE)[keyof typeof ENTITY_STORAGE_SHAPE];
 
-export const ENTITY_FILE_ROLE = {
-  source: "source",
-  thumbnail: "thumbnail",
-  gridThumbnail: "grid-thumbnail",
-  gridThumbnail2x: "grid-thumbnail-2x",
-  poster: "poster",
-  backdrop: "backdrop",
-  logo: "logo",
-  preview: "preview",
-  sprite: "sprite",
-  trickplay: "trickplay",
-  waveform: "waveform",
-  cover: "cover",
-  hls: "hls",
+// source: enum EntitySubtitleSource
+export const SUBTITLE_SOURCE = {
+  manual: "manual",
+  embedded: "embedded",
+  generated: "generated",
+  provider: "provider",
+  upload: "upload",
+  sidecar: "sidecar",
 } as const;
 
-export type EntityFileRoleCode = (typeof ENTITY_FILE_ROLE)[keyof typeof ENTITY_FILE_ROLE];
+export type SubtitleSourceCode = (typeof SUBTITLE_SOURCE)[keyof typeof SUBTITLE_SOURCE];
 
-export const CREDIT_ROLE = {
-  person: "person",
-  actor: "actor",
-  director: "director",
-  writer: "writer",
-  producer: "producer",
-  creator: "creator",
-  artist: "artist",
-  narrator: "narrator",
-  composer: "composer",
+// source: enum FileEntryKind
+export const FILE_ENTRY_KIND = {
+  directory: "directory",
+  file: "file",
 } as const;
 
-export type CreditRoleCode = (typeof CREDIT_ROLE)[keyof typeof CREDIT_ROLE];
+export type FileEntryKindCode = (typeof FILE_ENTRY_KIND)[keyof typeof FILE_ENTRY_KIND];
 
+// source: enum FileSourceKind
+export const FILE_SOURCE_KIND = {
+  scan: "scan",
+  custom: "custom",
+} as const;
+
+export type FileSourceKindCode = (typeof FILE_SOURCE_KIND)[keyof typeof FILE_SOURCE_KIND];
+
+// source: enum FingerprintAlgorithm
+export const FINGERPRINT_ALGORITHM = {
+  md5: "md5",
+  oshash: "oshash",
+} as const;
+
+export type FingerprintAlgorithmCode = (typeof FINGERPRINT_ALGORITHM)[keyof typeof FINGERPRINT_ALGORITHM];
+
+// source: enum FingerprintSubmissionStatus
+export const FINGERPRINT_SUBMISSION_STATUS = {
+  success: "success",
+  error: "error",
+} as const;
+
+export type FingerprintSubmissionStatusCode = (typeof FINGERPRINT_SUBMISSION_STATUS)[keyof typeof FINGERPRINT_SUBMISSION_STATUS];
+
+// source: enum GalleryType
+export const GALLERY_TYPE = {
+  virtual: "virtual",
+  folder: "folder",
+  zip: "zip",
+} as const;
+
+export type GalleryTypeCode = (typeof GALLERY_TYPE)[keyof typeof GALLERY_TYPE];
+
+// source: enum IdentifyAction
+export const IDENTIFY_ACTION = {
+  search: "search",
+  lookupId: "lookup-id",
+  lookupUrl: "lookup-url",
+} as const;
+
+export type IdentifyActionCode = (typeof IDENTIFY_ACTION)[keyof typeof IDENTIFY_ACTION];
+
+// source: enum IdentifyApplyState
+export const IDENTIFY_APPLY_STATE = {
+  running: "running",
+  succeeded: "succeeded",
+  failed: "failed",
+} as const;
+
+export type IdentifyApplyStateCode = (typeof IDENTIFY_APPLY_STATE)[keyof typeof IDENTIFY_APPLY_STATE];
+
+// source: enum IdentifyQueueState
+export const IDENTIFY_QUEUE_STATE = {
+  search: "search",
+  queued: "queued",
+  searching: "searching",
+  proposal: "proposal",
+  done: "done",
+  deleted: "deleted",
+  error: "error",
+} as const;
+
+export type IdentifyQueueStateCode = (typeof IDENTIFY_QUEUE_STATE)[keyof typeof IDENTIFY_QUEUE_STATE];
+
+// source: enum IdentifyResultKind
+export const IDENTIFY_RESULT_KIND = {
+  proposal: "proposal",
+  candidates: "candidates",
+} as const;
+
+export type IdentifyResultKindCode = (typeof IDENTIFY_RESULT_KIND)[keyof typeof IDENTIFY_RESULT_KIND];
+
+// source: enum IdentifyResultStatus
+export const IDENTIFY_RESULT_STATUS = {
+  pending: "pending",
+  applied: "applied",
+  rejected: "rejected",
+  failed: "failed",
+} as const;
+
+export type IdentifyResultStatusCode = (typeof IDENTIFY_RESULT_STATUS)[keyof typeof IDENTIFY_RESULT_STATUS];
+
+// source: enum ImportMode
+export const IMPORT_MODE = {
+  move: "move",
+  copy: "copy",
+  hardlink: "hardlink",
+} as const;
+
+export type ImportModeCode = (typeof IMPORT_MODE)[keyof typeof IMPORT_MODE];
+
+// source: enum IndexerKind
+export const INDEXER_KIND = {
+  prowlarr: "prowlarr",
+  jackett: "jackett",
+  torznab: "torznab",
+  newznab: "newznab",
+} as const;
+
+export type IndexerKindCode = (typeof INDEXER_KIND)[keyof typeof INDEXER_KIND];
+
+// source: enum JobRunLane
+export const JOB_RUN_LANE = {
+  foregroundIdentify: "foreground-identify",
+} as const;
+
+export type JobRunLaneCode = (typeof JOB_RUN_LANE)[keyof typeof JOB_RUN_LANE];
+
+// source: enum JobRunStatus
+export const JOB_RUN_STATUS = {
+  queued: "queued",
+  running: "running",
+  completed: "completed",
+  failed: "failed",
+  cancelled: "cancelled",
+} as const;
+
+export type JobRunStatusCode = (typeof JOB_RUN_STATUS)[keyof typeof JOB_RUN_STATUS];
+
+// source: enum JobType
 export const JOB_TYPE = {
   noop: "noop",
   scanLibrary: "scan-library",
@@ -134,70 +439,68 @@ export const JOB_TYPE = {
 
 export type JobTypeCode = (typeof JOB_TYPE)[keyof typeof JOB_TYPE];
 
-export const VIDEO_QUALITY = {
-  unknown: "unknown",
-  sdtv: "sdtv",
-  dvd: "dvd",
-  hdtv720p: "hdtv-720p",
-  webrip720p: "webrip-720p",
-  webdl720p: "webdl-720p",
-  bluray720p: "bluray-720p",
-  hdtv1080p: "hdtv-1080p",
-  webrip1080p: "webrip-1080p",
-  webdl1080p: "webdl-1080p",
-  bluray1080p: "bluray-1080p",
-  remux1080p: "remux-1080p",
-  hdtv2160p: "hdtv-2160p",
-  webrip2160p: "webrip-2160p",
-  webdl2160p: "webdl-2160p",
-  bluray2160p: "bluray-2160p",
-  remux2160p: "remux-2160p",
+// source: enum LibraryRootMediaCapability
+export const LIBRARY_ROOT_MEDIA_CAPABILITY = {
+  scanBooks: "scanBooks",
+  scanVideos: "scanVideos",
+  scanAudio: "scanAudio",
 } as const;
 
-export type VideoQualityCode = (typeof VIDEO_QUALITY)[keyof typeof VIDEO_QUALITY];
+export type LibraryRootMediaCapabilityCode = (typeof LIBRARY_ROOT_MEDIA_CAPABILITY)[keyof typeof LIBRARY_ROOT_MEDIA_CAPABILITY];
 
-export const AUDIO_QUALITY = {
-  unknown: "unknown",
-  lossy: "lossy",
-  lossyHigh: "lossy-high",
-  lossless: "lossless",
-  losslessHiRes: "lossless-hires",
+// source: enum MediaFileIgnoreReason
+export const MEDIA_FILE_IGNORE_REASON = {
+  deletedFromLibrary: "deleted-from-library",
+  excludedFromLibrary: "excluded-from-library",
 } as const;
 
-export type AudioQualityCode = (typeof AUDIO_QUALITY)[keyof typeof AUDIO_QUALITY];
+export type MediaFileIgnoreReasonCode = (typeof MEDIA_FILE_IGNORE_REASON)[keyof typeof MEDIA_FILE_IGNORE_REASON];
 
-export const JOB_RUN_STATUS = {
-  queued: "queued",
-  running: "running",
-  completed: "completed",
-  failed: "failed",
-  cancelled: "cancelled",
+// source: enum MediaImageKind
+export const MEDIA_IMAGE_KIND = {
+  poster: "poster",
+  still: "still",
+  cover: "cover",
+  backdrop: "backdrop",
+  logo: "logo",
+  banner: "banner",
+  hero: "hero",
+  thumbnail: "thumbnail",
+  profile: "profile",
 } as const;
 
-export type JobRunStatusCode = (typeof JOB_RUN_STATUS)[keyof typeof JOB_RUN_STATUS];
+export type MediaImageKindCode = (typeof MEDIA_IMAGE_KIND)[keyof typeof MEDIA_IMAGE_KIND];
 
-export const DATABASE_BACKUP_STATUS = {
-  running: "running",
-  completed: "completed",
-  failed: "failed",
+// source: enum MonitorPreset
+export const MONITOR_PRESET = {
+  all: "all",
+  future: "future",
+  missing: "missing",
+  none: "none",
 } as const;
 
-export type DatabaseBackupStatusCode = (typeof DATABASE_BACKUP_STATUS)[keyof typeof DATABASE_BACKUP_STATUS];
+export type MonitorPresetCode = (typeof MONITOR_PRESET)[keyof typeof MONITOR_PRESET];
 
-export const PLAYBACK_MODE = {
-  direct: "direct",
-  hls: "hls",
+// source: enum MonitorStatus
+export const MONITOR_STATUS = {
+  active: "active",
+  paused: "paused",
+  deletingFiles: "deleting-files",
+  stopping: "stopping",
+  fulfilled: "fulfilled",
 } as const;
 
-export type PlaybackModeCode = (typeof PLAYBACK_MODE)[keyof typeof PLAYBACK_MODE];
+export type MonitorStatusCode = (typeof MONITOR_STATUS)[keyof typeof MONITOR_STATUS];
 
-export const PLAYBACK_EVENT_KIND = {
-  completed: "completed",
-  skipped: "skipped",
+// source: enum MusicPlayerMiniSide
+export const MUSIC_PLAYER_MINI_SIDE = {
+  left: "left",
+  right: "right",
 } as const;
 
-export type PlaybackEventKindCode = (typeof PLAYBACK_EVENT_KIND)[keyof typeof PLAYBACK_EVENT_KIND];
+export type MusicPlayerMiniSideCode = (typeof MUSIC_PLAYER_MINI_SIDE)[keyof typeof MUSIC_PLAYER_MINI_SIDE];
 
+// source: enum MusicPlayerRepeatMode
 export const MUSIC_PLAYER_REPEAT_MODE = {
   off: "off",
   all: "all",
@@ -206,68 +509,23 @@ export const MUSIC_PLAYER_REPEAT_MODE = {
 
 export type MusicPlayerRepeatModeCode = (typeof MUSIC_PLAYER_REPEAT_MODE)[keyof typeof MUSIC_PLAYER_REPEAT_MODE];
 
-export const MUSIC_PLAYER_MINI_SIDE = {
-  left: "left",
-  right: "right",
+// source: enum PlaybackEventKind
+export const PLAYBACK_EVENT_KIND = {
+  completed: "completed",
+  skipped: "skipped",
 } as const;
 
-export type MusicPlayerMiniSideCode = (typeof MUSIC_PLAYER_MINI_SIDE)[keyof typeof MUSIC_PLAYER_MINI_SIDE];
+export type PlaybackEventKindCode = (typeof PLAYBACK_EVENT_KIND)[keyof typeof PLAYBACK_EVENT_KIND];
 
-export const SUBTITLE_SOURCE = {
-  manual: "manual",
-  embedded: "embedded",
-  generated: "generated",
-  provider: "provider",
-  upload: "upload",
-  sidecar: "sidecar",
+// source: enum PlaybackMode
+export const PLAYBACK_MODE = {
+  direct: "direct",
+  hls: "hls",
 } as const;
 
-export type SubtitleSourceCode = (typeof SUBTITLE_SOURCE)[keyof typeof SUBTITLE_SOURCE];
+export type PlaybackModeCode = (typeof PLAYBACK_MODE)[keyof typeof PLAYBACK_MODE];
 
-export const SUBTITLE_STYLE = {
-  stylized: "stylized",
-  plain: "plain",
-} as const;
-
-export type SubtitleStyleCode = (typeof SUBTITLE_STYLE)[keyof typeof SUBTITLE_STYLE];
-
-export const IDENTIFY_ACTION = {
-  search: "search",
-  lookupId: "lookup-id",
-  lookupUrl: "lookup-url",
-} as const;
-
-export type IdentifyActionCode = (typeof IDENTIFY_ACTION)[keyof typeof IDENTIFY_ACTION];
-
-export const IDENTIFY_QUEUE_STATE = {
-  search: "search",
-  queued: "queued",
-  searching: "searching",
-  proposal: "proposal",
-  done: "done",
-  deleted: "deleted",
-  error: "error",
-} as const;
-
-export type IdentifyQueueStateCode = (typeof IDENTIFY_QUEUE_STATE)[keyof typeof IDENTIFY_QUEUE_STATE];
-
-export const IDENTIFY_RESULT_STATUS = {
-  pending: "pending",
-  applied: "applied",
-  rejected: "rejected",
-  failed: "failed",
-} as const;
-
-export type IdentifyResultStatusCode = (typeof IDENTIFY_RESULT_STATUS)[keyof typeof IDENTIFY_RESULT_STATUS];
-
-export const IDENTIFY_APPLY_STATE = {
-  running: "running",
-  succeeded: "succeeded",
-  failed: "failed",
-} as const;
-
-export type IdentifyApplyStateCode = (typeof IDENTIFY_APPLY_STATE)[keyof typeof IDENTIFY_APPLY_STATE];
-
+// source: enum PluginSearchFieldType
 export const PLUGIN_SEARCH_FIELD_TYPE = {
   text: "text",
   number: "number",
@@ -276,29 +534,7 @@ export const PLUGIN_SEARCH_FIELD_TYPE = {
 
 export type PluginSearchFieldTypeCode = (typeof PLUGIN_SEARCH_FIELD_TYPE)[keyof typeof PLUGIN_SEARCH_FIELD_TYPE];
 
-export const FILE_SOURCE_KIND = {
-  scan: "scan",
-  custom: "custom",
-} as const;
-
-export type FileSourceKindCode = (typeof FILE_SOURCE_KIND)[keyof typeof FILE_SOURCE_KIND];
-
-export const FILE_ENTRY_KIND = {
-  directory: "directory",
-  file: "file",
-} as const;
-
-export type FileEntryKindCode = (typeof FILE_ENTRY_KIND)[keyof typeof FILE_ENTRY_KIND];
-
-export const THUMBNAIL_HOVER_KIND = {
-  none: "none",
-  sprite: "sprite",
-  imageSequence: "image-sequence",
-  trickplay: "trickplay",
-} as const;
-
-export type ThumbnailHoverKindCode = (typeof THUMBNAIL_HOVER_KIND)[keyof typeof THUMBNAIL_HOVER_KIND];
-
+// source: enum ProgressUnit
 export const PROGRESS_UNIT = {
   item: "item",
   page: "page",
@@ -309,6 +545,51 @@ export const PROGRESS_UNIT = {
 
 export type ProgressUnitCode = (typeof PROGRESS_UNIT)[keyof typeof PROGRESS_UNIT];
 
+// source: enum ProperDownloadPolicy
+export const PROPER_DOWNLOAD_POLICY = {
+  preferAndUpgrade: "prefer-and-upgrade",
+  doNotUpgrade: "do-not-upgrade",
+  doNotPrefer: "do-not-prefer",
+} as const;
+
+export type ProperDownloadPolicyCode = (typeof PROPER_DOWNLOAD_POLICY)[keyof typeof PROPER_DOWNLOAD_POLICY];
+
+// source: enum ProposalKind
+export const PROPOSAL_KIND = {
+  audio: "audio",
+  audioLibrary: "audio-library",
+  audioTrack: "audio-track",
+  book: "book",
+  bookVolume: "book-volume",
+  bookChapter: "book-chapter",
+  bookPage: "book-page",
+  bookAuthor: "book-author",
+  collection: "collection",
+  gallery: "gallery",
+  image: "image",
+  musicArtist: "music-artist",
+  person: "person",
+  movie: "movie",
+  studio: "studio",
+  tag: "tag",
+  video: "video",
+  videoSeries: "video-series",
+  videoSeason: "video-season",
+  videoEpisode: "video-episode",
+} as const;
+
+export type ProposalKindCode = (typeof PROPOSAL_KIND)[keyof typeof PROPOSAL_KIND];
+
+// source: enum ProviderType
+export const PROVIDER_TYPE = {
+  native: "native",
+  externalProcess: "external-process",
+  stashCompat: "stash-compat",
+} as const;
+
+export type ProviderTypeCode = (typeof PROVIDER_TYPE)[keyof typeof PROVIDER_TYPE];
+
+// source: enum ReaderMode
 export const READER_MODE = {
   paged: "paged",
   webtoon: "webtoon",
@@ -317,117 +598,18 @@ export const READER_MODE = {
 
 export type ReaderModeCode = (typeof READER_MODE)[keyof typeof READER_MODE];
 
-export const REQUEST_PROVIDER_KIND = {
-  plugin: "plugin",
+// source: enum RelationshipKind
+export const RELATIONSHIP_CODE = {
+  cast: "cast",
+  credits: "credits",
+  studio: "studio",
+  tags: "tags",
+  related: "related",
 } as const;
 
-export type RequestProviderKindCode = (typeof REQUEST_PROVIDER_KIND)[keyof typeof REQUEST_PROVIDER_KIND];
+export type RelationshipCode = (typeof RELATIONSHIP_CODE)[keyof typeof RELATIONSHIP_CODE];
 
-export const REQUEST_MEDIA_KIND = {
-  book: "book",
-  audiobook: "audiobook",
-  author: "author",
-  movie: "movie",
-  series: "series",
-  season: "season",
-  episode: "episode",
-  artist: "artist",
-  album: "album",
-  plugin: "plugin",
-} as const;
-
-export type RequestMediaKindCode = (typeof REQUEST_MEDIA_KIND)[keyof typeof REQUEST_MEDIA_KIND];
-
-export const REQUEST_REVIEW_SELECTION = {
-  root: "root",
-  directChildren: "direct-children",
-  directChildrenWhenPresent: "direct-children-when-present",
-} as const;
-
-export type RequestReviewSelectionCode = (typeof REQUEST_REVIEW_SELECTION)[keyof typeof REQUEST_REVIEW_SELECTION];
-
-export const LIBRARY_ROOT_MEDIA_CAPABILITY = {
-  scanBooks: "scanBooks",
-  scanVideos: "scanVideos",
-  scanAudio: "scanAudio",
-} as const;
-
-export type LibraryRootMediaCapabilityCode = (typeof LIBRARY_ROOT_MEDIA_CAPABILITY)[keyof typeof LIBRARY_ROOT_MEDIA_CAPABILITY];
-
-export const REQUEST_COMMIT_OUTCOME = {
-  requested: "requested",
-  alreadyOwned: "already-owned",
-  alreadyRequested: "already-requested",
-} as const;
-
-export type RequestCommitOutcomeCode = (typeof REQUEST_COMMIT_OUTCOME)[keyof typeof REQUEST_COMMIT_OUTCOME];
-
-export const INDEXER_KIND = {
-  prowlarr: "prowlarr",
-  jackett: "jackett",
-  torznab: "torznab",
-  newznab: "newznab",
-} as const;
-
-export type IndexerKindCode = (typeof INDEXER_KIND)[keyof typeof INDEXER_KIND];
-
-export const DOWNLOAD_CLIENT_KIND = {
-  qBittorrent: "qbittorrent",
-  transmission: "transmission",
-  sabnzbd: "sabnzbd",
-} as const;
-
-export type DownloadClientKindCode = (typeof DOWNLOAD_CLIENT_KIND)[keyof typeof DOWNLOAD_CLIENT_KIND];
-
-export const DOWNLOAD_PROTOCOL = {
-  torrent: "torrent",
-  usenet: "usenet",
-} as const;
-
-export type DownloadProtocolCode = (typeof DOWNLOAD_PROTOCOL)[keyof typeof DOWNLOAD_PROTOCOL];
-
-export const ACQUISITION_STATUS = {
-  pending: "pending",
-  searching: "searching",
-  awaitingSelection: "awaiting-selection",
-  queued: "queued",
-  downloading: "downloading",
-  downloaded: "downloaded",
-  importing: "importing",
-  imported: "imported",
-  stopping: "stopping",
-  failed: "failed",
-  cancelled: "cancelled",
-  manualImportRequired: "manual-import-required",
-} as const;
-
-export type AcquisitionStatusCode = (typeof ACQUISITION_STATUS)[keyof typeof ACQUISITION_STATUS];
-
-export const ACQUISITION_TEARDOWN_INTENT = {
-  remove: "remove",
-  reacquire: "reacquire",
-} as const;
-
-export type AcquisitionTeardownIntentCode = (typeof ACQUISITION_TEARDOWN_INTENT)[keyof typeof ACQUISITION_TEARDOWN_INTENT];
-
-export const ENTITY_LIFECYCLE_CLAIM_KIND = {
-  deletingFiles: "deleting-files",
-} as const;
-
-export type EntityLifecycleClaimKindCode = (typeof ENTITY_LIFECYCLE_CLAIM_KIND)[keyof typeof ENTITY_LIFECYCLE_CLAIM_KIND];
-
-export const ACQUISITION_HISTORY_EVENT = {
-  grabbed: "grabbed",
-  imported: "imported",
-  importFailed: "import-failed",
-  downloadFailed: "download-failed",
-  blocklisted: "blocklisted",
-  upgraded: "upgraded",
-  removed: "removed",
-} as const;
-
-export type AcquisitionHistoryEventCode = (typeof ACQUISITION_HISTORY_EVENT)[keyof typeof ACQUISITION_HISTORY_EVENT];
-
+// source: enum ReleaseRejectionReason
 export const RELEASE_REJECTION_REASON = {
   unsupportedFormat: "unsupported-format",
   belowMinSeeders: "below-min-seeders",
@@ -451,84 +633,73 @@ export const RELEASE_REJECTION_REASON = {
 
 export type ReleaseRejectionReasonCode = (typeof RELEASE_REJECTION_REASON)[keyof typeof RELEASE_REJECTION_REASON];
 
-export const CUSTOM_FORMAT_CONDITION_TYPE = {
-  releaseTitle: "release-title",
-  releaseGroup: "release-group",
-  language: "language",
-  quality: "quality",
+// source: enum RequestCommitOutcome
+export const REQUEST_COMMIT_OUTCOME = {
+  requested: "requested",
+  alreadyOwned: "already-owned",
+  alreadyRequested: "already-requested",
 } as const;
 
-export type CustomFormatConditionTypeCode = (typeof CUSTOM_FORMAT_CONDITION_TYPE)[keyof typeof CUSTOM_FORMAT_CONDITION_TYPE];
+export type RequestCommitOutcomeCode = (typeof REQUEST_COMMIT_OUTCOME)[keyof typeof REQUEST_COMMIT_OUTCOME];
 
-export const IMPORT_MODE = {
-  move: "move",
-  copy: "copy",
-  hardlink: "hardlink",
-} as const;
-
-export type ImportModeCode = (typeof IMPORT_MODE)[keyof typeof IMPORT_MODE];
-
-export const BLOCKLIST_REASON = {
-  failed: "failed",
-  stalled: "stalled",
-  noImportableFiles: "no-importable-files",
-  manual: "manual",
-  wrongContent: "wrong-content",
-} as const;
-
-export type BlocklistReasonCode = (typeof BLOCKLIST_REASON)[keyof typeof BLOCKLIST_REASON];
-
-export const MONITOR_STATUS = {
-  active: "active",
-  paused: "paused",
-  deletingFiles: "deleting-files",
-  stopping: "stopping",
-  fulfilled: "fulfilled",
-} as const;
-
-export type MonitorStatusCode = (typeof MONITOR_STATUS)[keyof typeof MONITOR_STATUS];
-
-export const MONITOR_PRESET = {
-  all: "all",
-  future: "future",
-  missing: "missing",
-  none: "none",
-} as const;
-
-export type MonitorPresetCode = (typeof MONITOR_PRESET)[keyof typeof MONITOR_PRESET];
-
-export const BOOK_RENDITION = {
-  ebook: "ebook",
+// source: enum RequestMediaKind
+export const REQUEST_MEDIA_KIND = {
+  book: "book",
   audiobook: "audiobook",
+  author: "author",
+  movie: "movie",
+  series: "series",
+  season: "season",
+  episode: "episode",
+  artist: "artist",
+  album: "album",
+  plugin: "plugin",
 } as const;
 
-export type BookRenditionCode = (typeof BOOK_RENDITION)[keyof typeof BOOK_RENDITION];
+export type RequestMediaKindCode = (typeof REQUEST_MEDIA_KIND)[keyof typeof REQUEST_MEDIA_KIND];
 
-export const BOOK_FORMAT_TIER = {
-  unknown: "unknown",
-  fixed: "fixed",
-  reflowable: "reflowable",
-  archive: "archive",
+// source: enum RequestProviderKind
+export const REQUEST_PROVIDER_KIND = {
+  plugin: "plugin",
 } as const;
 
-export type BookFormatTierCode = (typeof BOOK_FORMAT_TIER)[keyof typeof BOOK_FORMAT_TIER];
+export type RequestProviderKindCode = (typeof REQUEST_PROVIDER_KIND)[keyof typeof REQUEST_PROVIDER_KIND];
 
-export const BOOK_SOURCE_TIER = {
-  unknown: "unknown",
-  web: "web",
-  retail: "retail",
+// source: enum RequestReviewSelection
+export const REQUEST_REVIEW_SELECTION = {
+  root: "root",
+  directChildren: "direct-children",
+  directChildrenWhenPresent: "direct-children-when-present",
 } as const;
 
-export type BookSourceTierCode = (typeof BOOK_SOURCE_TIER)[keyof typeof BOOK_SOURCE_TIER];
+export type RequestReviewSelectionCode = (typeof REQUEST_REVIEW_SELECTION)[keyof typeof REQUEST_REVIEW_SELECTION];
 
-export const PROPER_DOWNLOAD_POLICY = {
-  preferAndUpgrade: "prefer-and-upgrade",
-  doNotUpgrade: "do-not-upgrade",
-  doNotPrefer: "do-not-prefer",
+// source: enum SubtitleStyle
+export const SUBTITLE_STYLE = {
+  stylized: "stylized",
+  plain: "plain",
 } as const;
 
-export type ProperDownloadPolicyCode = (typeof PROPER_DOWNLOAD_POLICY)[keyof typeof PROPER_DOWNLOAD_POLICY];
+export type SubtitleStyleCode = (typeof SUBTITLE_STYLE)[keyof typeof SUBTITLE_STYLE];
 
+// source: enum ThumbnailHoverKind
+export const THUMBNAIL_HOVER_KIND = {
+  none: "none",
+  sprite: "sprite",
+  imageSequence: "image-sequence",
+  trickplay: "trickplay",
+} as const;
+
+export type ThumbnailHoverKindCode = (typeof THUMBNAIL_HOVER_KIND)[keyof typeof THUMBNAIL_HOVER_KIND];
+
+// source: enum TransferOwnershipState
+export const TRANSFER_OWNERSHIP_STATE = {
+  adding: "adding",
+} as const;
+
+export type TransferOwnershipStateCode = (typeof TRANSFER_OWNERSHIP_STATE)[keyof typeof TRANSFER_OWNERSHIP_STATE];
+
+// source: enum UserRole
 export const USER_ROLE = {
   admin: "admin",
   member: "member",
@@ -536,6 +707,38 @@ export const USER_ROLE = {
 
 export type UserRoleCode = (typeof USER_ROLE)[keyof typeof USER_ROLE];
 
+// source: enum VideoQuality
+export const VIDEO_QUALITY = {
+  unknown: "unknown",
+  sdtv: "sdtv",
+  dvd: "dvd",
+  hdtv720p: "hdtv-720p",
+  webrip720p: "webrip-720p",
+  webdl720p: "webdl-720p",
+  bluray720p: "bluray-720p",
+  hdtv1080p: "hdtv-1080p",
+  webrip1080p: "webrip-1080p",
+  webdl1080p: "webdl-1080p",
+  bluray1080p: "bluray-1080p",
+  remux1080p: "remux-1080p",
+  hdtv2160p: "hdtv-2160p",
+  webrip2160p: "webrip-2160p",
+  webdl2160p: "webdl-2160p",
+  bluray2160p: "bluray-2160p",
+  remux2160p: "remux-2160p",
+} as const;
+
+export type VideoQualityCode = (typeof VIDEO_QUALITY)[keyof typeof VIDEO_QUALITY];
+
+// source: enum VideoSeriesRenderingMode
+export const VIDEO_SERIES_RENDERING_MODE = {
+  flat: "flat",
+  seasons: "seasons",
+} as const;
+
+export type VideoSeriesRenderingModeCode = (typeof VIDEO_SERIES_RENDERING_MODE)[keyof typeof VIDEO_SERIES_RENDERING_MODE];
+
+// source: registry CapabilityKinds
 export const CAPABILITY_KIND = {
   classification: "classification",
   dates: "dates",
@@ -561,6 +764,7 @@ export const CAPABILITY_KIND = {
 
 export type CapabilityKindCode = (typeof CAPABILITY_KIND)[keyof typeof CAPABILITY_KIND];
 
+// source: registry ExternalIdProviders
 export const EXTERNAL_ID_PROVIDER = {
   aniDb: "anidb",
   imdb: "imdb",
@@ -571,6 +775,7 @@ export const EXTERNAL_ID_PROVIDER = {
 
 export type ExternalIdProviderCode = (typeof EXTERNAL_ID_PROVIDER)[keyof typeof EXTERNAL_ID_PROVIDER];
 
+// source: registry AppSettingKeys
 export const SETTING_KEYS = {
   acquisitionDownloadPropers: "acquisition.downloadPropers",
   acquisitionPreferredProtocol: "acquisition.preferredProtocol",
@@ -621,6 +826,7 @@ export const SETTING_KEYS = {
 
 export type SettingKey = (typeof SETTING_KEYS)[keyof typeof SETTING_KEYS];
 
+// source: registry ApiProblemCodes
 export const PROBLEM_CODE = {
   acquisitionImportBlocked: "acquisition_import_blocked",
   acquisitionInvalid: "acquisition_invalid",
@@ -788,3 +994,15 @@ export const ENTITY_KINDS_SUPPORTING_REQUESTS = [
 ] as const;
 
 export type RequestableEntityKindCode = (typeof ENTITY_KINDS_SUPPORTING_REQUESTS)[number];
+
+export const ENTITY_KINDS_ENUMERATING_IDENTIFY_CHILDREN = [
+  "audio-library",
+  "book",
+  "book-volume",
+  "music-artist",
+  "book-author",
+  "video-series",
+  "video-season",
+] as const;
+
+export type IdentifyContainerEntityKindCode = (typeof ENTITY_KINDS_ENUMERATING_IDENTIFY_CHILDREN)[number];

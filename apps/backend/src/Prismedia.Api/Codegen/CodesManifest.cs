@@ -24,6 +24,7 @@ public sealed record ConstantEntry(string Name, string Value);
 /// <param name="StorageShape">Filesystem storage shape name.</param>
 /// <param name="SupportsFileDeletion">Whether this kind may root the managed delete-files workflow.</param>
 /// <param name="SupportsRequests">Whether a committable request descriptor materializes this Entity kind.</param>
+/// <param name="EnumeratesIdentifyChildren">Whether this kind is an identify container whose local children are enumerated for cascade identify.</param>
 public sealed record EntityKindManifestEntry(
     string Code,
     string DisplayName,
@@ -31,7 +32,8 @@ public sealed record EntityKindManifestEntry(
     string Category,
     string StorageShape,
     bool SupportsFileDeletion,
-    bool SupportsRequests);
+    bool SupportsRequests,
+    bool EnumeratesIdentifyChildren);
 
 /// <summary>Frontend-facing request-flow metadata projected from one canonical request descriptor.</summary>
 /// <param name="Kind">Stable request-media kind code.</param>
@@ -126,7 +128,8 @@ public sealed record CodesManifest(
                 descriptor.Category.ToString(),
                 descriptor.StorageShape.ToString(),
                 descriptor.SupportsFileDeletion,
-                requestableKinds.Contains(descriptor.Value)))
+                requestableKinds.Contains(descriptor.Value),
+                descriptor.EnumeratesIdentifyChildren))
             .ToArray();
     }
 
