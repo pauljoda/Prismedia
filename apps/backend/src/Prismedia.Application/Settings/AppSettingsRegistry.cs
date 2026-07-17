@@ -366,11 +366,11 @@ public static class AppSettingsRegistry {
                 50,
                 "Default playback mode",
                 "Direct streams the source file. Adaptive HLS uses the on-demand ffmpeg pipeline.",
-                "direct",
+                PlaybackMode.Direct.ToCode(),
                 10,
                 [
-                    new SettingOption("direct", "Direct", "Fastest seek, no transcode."),
-                    new SettingOption("hls", "Adaptive HLS", "Adaptive bitrate via ffmpeg.")
+                    new SettingOption(PlaybackMode.Direct.ToCode(), "Direct", "Fastest seek, no transcode."),
+                    new SettingOption(PlaybackMode.Hls.ToCode(), "Adaptive HLS", "Adaptive bitrate via ffmpeg.")
                 ]),
             Boolean(
                 AppSettingKeys.PlaybackShowCastControls,

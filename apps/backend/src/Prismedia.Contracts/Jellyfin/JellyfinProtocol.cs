@@ -174,6 +174,9 @@ public static class JellyfinProtocol {
 
         /// <summary>Box image.</summary>
         public const string Box = "Box";
+
+        /// <summary>Screenshot / still image.</summary>
+        public const string Screenshot = "Screenshot";
     }
 
     /// <summary>Jellyfin library collection type codes.</summary>

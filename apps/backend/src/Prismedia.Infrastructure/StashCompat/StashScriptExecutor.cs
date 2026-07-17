@@ -320,6 +320,7 @@ public sealed class StashScriptExecutor {
             Details = StringField(element, "details"),
             Director = StringField(element, "director"),
             Date = StringField(element, "date"),
+            // prism-vocab: external — Stash script output field names decoded at this boundary only.
             Image = StringField(element, "image"),
             Url = StringField(element, "url") ?? FirstString(element, "urls"),
             Performers = PerformerArray(element, "performers"),

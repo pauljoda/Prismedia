@@ -56,7 +56,7 @@ public sealed class StashJsonEngine {
                     case "tags":
                         scene.Tags = EvaluateTagArray(document.RootElement, selectorDef, common);
                         break;
-                    case "performers":
+                    case "performers": // prism-vocab: external — Stash scraper mapping key.
                         scene.Performers = EvaluateArray(document.RootElement, selectorDef, common)
                             .Select(name => new StashScrapedPerformer { Name = name })
                             .ToArray();

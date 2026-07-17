@@ -62,7 +62,7 @@ public sealed class StashXPathEngine {
                 case "tags":
                     scene.Tags = EvaluateTagArray(document, selectorDef, common);
                     break;
-                case "performers":
+                case "performers": // prism-vocab: external — Stash scraper mapping key.
                     scene.Performers = EvaluatePerformerArray(document, selectorDef, common);
                     break;
                 case "studio":

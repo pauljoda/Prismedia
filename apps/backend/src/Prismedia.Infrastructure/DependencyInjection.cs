@@ -290,6 +290,7 @@ public static class DependencyInjection {
         MediaToolOptions mediaToolOptions) {
         services.AddScoped<IVideoSourceService, VideoSourceService>();
         services.AddScoped<IAudioSourceService, AudioSourceService>();
+        services.AddSingleton<IAudioTranscodeStreamer, FfmpegAudioTranscodeStreamer>();
         services.AddSingleton<IAudioTranscodeOptions, MediaToolAudioTranscodeOptions>();
         services.AddSingleton(new HlsAssetServiceOptions(
             cacheDir,

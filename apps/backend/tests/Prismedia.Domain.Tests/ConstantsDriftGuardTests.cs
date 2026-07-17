@@ -31,6 +31,7 @@ public sealed class ConstantsDriftGuardTests {
         ["\"Art\""] = "JellyfinProtocol.cs",
         ["\"Disc\""] = "JellyfinProtocol.cs",
         ["\"Box\""] = "JellyfinProtocol.cs",
+        ["\"Screenshot\""] = "JellyfinProtocol.cs",
         // MIME types — owned by MediaContentTypes.
         ["\"application/vnd.apple.mpegurl\""] = "MediaContentTypes.cs",
         ["\"video/mp2t\""] = "MediaContentTypes.cs",

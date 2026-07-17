@@ -65,9 +65,10 @@ public sealed partial class JellyfinCatalogService {
         IReadOnlyList<EntityImageAsset> images,
         ImagesCapability? imageCapability) {
         var primary = images.FirstOrDefault(image =>
-            image.Kind.Equals("poster", StringComparison.OrdinalIgnoreCase) ||
-            image.Kind.Equals("cover", StringComparison.OrdinalIgnoreCase) ||
-            image.Kind.Equals("thumbnail", StringComparison.OrdinalIgnoreCase) ||
+            image.Kind.Equals(EntityFileRole.Poster.ToCode(), StringComparison.OrdinalIgnoreCase) ||
+            image.Kind.Equals(EntityFileRole.Cover.ToCode(), StringComparison.OrdinalIgnoreCase) ||
+            image.Kind.Equals(EntityFileRole.Thumbnail.ToCode(), StringComparison.OrdinalIgnoreCase) ||
+            // prism-vocab: external — legacy "primary" kind retained for historical rows.
             image.Kind.Equals("primary", StringComparison.OrdinalIgnoreCase)) ?? images.FirstOrDefault(image =>
             !JellyfinImageType(image.Kind).Equals(JellyfinProtocol.ImageTypes.Backdrop, StringComparison.OrdinalIgnoreCase));
         if (primary is not null) {
@@ -75,18 +76,22 @@ public sealed partial class JellyfinCatalogService {
         }
 
         if (!string.IsNullOrWhiteSpace(imageCapability?.CoverUrl)) {
-            return new EntityImageAsset("cover", imageCapability.CoverUrl, null);
+            return new EntityImageAsset(EntityFileRole.Cover.ToCode(), imageCapability.CoverUrl, null);
         }
 
         return string.IsNullOrWhiteSpace(imageCapability?.ThumbnailUrl)
             ? null
-            : new EntityImageAsset("thumbnail", imageCapability.ThumbnailUrl, null);
+            : new EntityImageAsset(EntityFileRole.Thumbnail.ToCode(), imageCapability.ThumbnailUrl, null);
     }
 
     private static (string? Primary, string? Backdrop) ImageTags(Guid id, string? primary, string? backdrop) =>
         (primary is null ? null : EtagFor(id, primary), backdrop is null ? null : EtagFor(id, backdrop));
 
     private static string JellyfinImageType(string prismediaKind) =>
+        // prism-vocab: external — single decode boundary for stored image-kind tokens. The
+        // left-side spellings mix EntityFileRole codes with legacy provider vocabulary
+        // (fanart/clearlogo/disc-art/…) still present on historical rows, so the arms stay
+        // literal here rather than pretending one enum owns them.
         prismediaKind.Trim().ToLowerInvariant() switch {
             "art" => JellyfinProtocol.ImageTypes.Art,
             "backdrop" or "background" or "fanart" => JellyfinProtocol.ImageTypes.Backdrop,
@@ -94,7 +99,7 @@ public sealed partial class JellyfinCatalogService {
             "box" => JellyfinProtocol.ImageTypes.Box,
             "disc" or "disc-art" => JellyfinProtocol.ImageTypes.Disc,
             "logo" or "clearlogo" => JellyfinProtocol.ImageTypes.Logo,
-            "screenshot" => "Screenshot",
+            "screenshot" => JellyfinProtocol.ImageTypes.Screenshot,
             "thumb" => JellyfinProtocol.ImageTypes.Thumb,
             _ => JellyfinProtocol.ImageTypes.Primary
         };

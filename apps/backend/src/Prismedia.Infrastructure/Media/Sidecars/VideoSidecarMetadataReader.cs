@@ -114,6 +114,7 @@ public sealed class VideoSidecarMetadataReader : IVideoSidecarMetadataReader {
         AddStringOrArray(tags, json, "genre");
 
         var performers = new List<string>();
+        // prism-vocab: external — sidecar JSON field names decoded at this boundary only.
         AddStringOrArray(performers, json, "performers");
         AddStringOrArray(performers, json, "actors");
         AddStringOrArray(performers, json, "cast");

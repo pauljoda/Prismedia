@@ -176,6 +176,56 @@ public class ProcessExecutor {
     }
 
     /// <summary>
+    /// Starts a process and streams standard output directly to a caller-owned stream,
+    /// e.g. an HTTP response body for live transcode delivery.
+    /// </summary>
+    /// <param name="fileName">Executable name or absolute path.</param>
+    /// <param name="arguments">Arguments passed without shell interpolation.</param>
+    /// <param name="environment">Optional environment variables to set for the process.</param>
+    /// <param name="output">Destination stream that receives standard output; not disposed.</param>
+    /// <param name="cancellationToken">Token used to cancel process execution.</param>
+    /// <returns>Exit code plus captured standard error.</returns>
+    public virtual async Task<ProcessExecutionResult> RunToStreamAsync(
+        string fileName,
+        IReadOnlyList<string> arguments,
+        IReadOnlyDictionary<string, string>? environment,
+        Stream output,
+        CancellationToken cancellationToken) {
+        var startInfo = new ProcessStartInfo(fileName) {
+            RedirectStandardError = true,
+            RedirectStandardOutput = true,
+            UseShellExecute = false
+        };
+
+        foreach (var argument in arguments) {
+            startInfo.ArgumentList.Add(argument);
+        }
+
+        foreach (var (key, value) in environment ?? new Dictionary<string, string>()) {
+            startInfo.Environment[key] = value;
+        }
+
+        using var process = Process.Start(startInfo) ??
+            throw new InvalidOperationException($"Failed to start '{fileName}'.");
+
+        try {
+            var copyTask = process.StandardOutput.BaseStream.CopyToAsync(output, cancellationToken);
+            var stderrTask = process.StandardError.ReadToEndAsync(cancellationToken);
+            await process.WaitForExitAsync(cancellationToken);
+            await copyTask;
+
+            return new ProcessExecutionResult(
+                ExitCode: process.ExitCode,
+                StandardOutput: string.Empty,
+                StandardError: await stderrTask);
+        } catch (OperationCanceledException) when (!process.HasExited) {
+            process.Kill(entireProcessTree: true);
+            await process.WaitForExitAsync(CancellationToken.None);
+            throw;
+        }
+    }
+
+    /// <summary>
     /// Best-effort downgrade of a freshly started process to below-normal scheduling
     /// priority. On Linux this maps to a positive nice value. Failures are ignored:
     /// the process may have already exited or the platform may forbid the change, in
