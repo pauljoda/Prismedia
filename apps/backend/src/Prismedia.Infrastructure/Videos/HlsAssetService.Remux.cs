@@ -406,7 +406,7 @@ public sealed partial class HlsAssetService {
     internal static IReadOnlyList<string> RemuxAudioArguments(VideoSourceFile source, int? audioStreamIndex) =>
         IsAacCodec(SelectedAudioStreamCodec(source, audioStreamIndex))
             ? ["-c:a", "copy"]
-            : ["-c:a", "aac", "-ac", "2", "-b:a", "192k", "-ar", "48000"];
+            : ["-c:a", MediaCodecs.Aac, "-ac", "2", "-b:a", "192k", "-ar", "48000"];
 
     // Resolves the codec of the audio stream the remux maps, mirroring the -map expression: a null index
     // maps "0:a:0?" (the first audio stream); an explicit index maps "0:{index}?" (that absolute stream).
@@ -427,7 +427,7 @@ public sealed partial class HlsAssetService {
     }
 
     private static bool IsAacCodec(string? codec) =>
-        codec is not null && codec.Equals("aac", StringComparison.OrdinalIgnoreCase);
+        codec is not null && codec.Equals(MediaCodecs.Aac, StringComparison.OrdinalIgnoreCase);
 
     private async Task<bool> WaitForRemuxFileAsync(
         Guid id,
@@ -727,9 +727,7 @@ public sealed partial class HlsAssetService {
     }
 
     private static bool IsHevcCodec(string? codec) =>
-        codec is not null &&
-        (codec.Equals("hevc", StringComparison.OrdinalIgnoreCase) ||
-            codec.Equals("h265", StringComparison.OrdinalIgnoreCase));
+        MediaCodecs.IsHevc(codec);
 
     /// <summary>
     /// Chooses the HEVC sample-entry codec tag for a stream copy. HEVC is always tagged <c>hvc1</c>;
@@ -754,5 +752,5 @@ public sealed partial class HlsAssetService {
     /// </para>
     /// </remarks>
     internal static IReadOnlyList<string> HevcSampleEntryTagArguments(VideoSourceFile source) =>
-        IsHevcCodec(source.VideoCodec) ? ["-tag:v", "hvc1"] : [];
+        IsHevcCodec(source.VideoCodec) ? ["-tag:v", MediaCodecs.Hvc1Tag] : [];
 }

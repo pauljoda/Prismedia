@@ -1,3 +1,6 @@
+using Prismedia.Contracts.Media;
+using Prismedia.Domain.Entities;
+
 namespace Prismedia.Application.Videos;
 
 /// <summary>
@@ -40,7 +43,7 @@ public static class VideoDirectPlayPolicy {
     private static readonly StringComparer Comparer = StringComparer.OrdinalIgnoreCase;
 
     // HLS containers the remux pipeline can package a copied video stream into, in preference order.
-    private static readonly string[] RemuxContainerPreference = ["mp4", "ts"];
+    private static readonly string[] RemuxContainerPreference = [MediaContainers.Mp4, MediaContainers.Ts];
 
     /// <summary>
     /// Selects the cheapest delivery method a client can accept for the given source.
@@ -141,12 +144,12 @@ public static class VideoDirectPlayPolicy {
 
     private static VideoSourceStream? PrimaryVideoStream(VideoSourceFile source) =>
         source.Streams?
-            .Where(candidate => candidate.Type.Equals("Video", StringComparison.OrdinalIgnoreCase))
+            .Where(candidate => candidate.Type.Equals(StreamKind.Video.ToCode(), StringComparison.OrdinalIgnoreCase))
             .OrderBy(candidate => candidate.StreamIndex)
             .FirstOrDefault();
 
     private static bool ContainerMatches(string? profileContainers, string sourceContainer) =>
-        Tokens(profileContainers).Any(token => Comparer.Equals(NormalizeContainerToken(token), sourceContainer));
+        Tokens(profileContainers).Any(token => Comparer.Equals(MediaContainers.Normalize(token), sourceContainer));
 
     private static bool CodecMatches(string? profileCodecs, string? sourceCodec) {
         if (string.IsNullOrWhiteSpace(sourceCodec)) {
@@ -160,7 +163,7 @@ public static class VideoDirectPlayPolicy {
         }
 
         var aliases = CodecAliases(sourceCodec);
-        return tokens.Any(token => aliases.Contains(NormalizeCodecToken(token)));
+        return tokens.Any(token => aliases.Contains(MediaCodecs.Normalize(token)));
     }
 
     private static bool AudioMatches(string? profileCodecs, string? selectedAudioCodec) =>
@@ -177,35 +180,14 @@ public static class VideoDirectPlayPolicy {
             var first = container.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
                 .FirstOrDefault();
             if (!string.IsNullOrWhiteSpace(first)) {
-                return NormalizeContainerToken(first);
+                return MediaContainers.Normalize(first);
             }
         }
 
         var extension = System.IO.Path.GetExtension(path).TrimStart('.');
-        return NormalizeContainerToken(extension);
-    }
-
-    private static string NormalizeContainerToken(string token) {
-        var value = token.Trim().ToLowerInvariant();
-        return value switch {
-            "matroska" or "mkv" or "x-matroska" => "mkv",
-            "mp4" or "m4v" or "mov" or "m4a" or "qt" => "mp4",
-            "ts" or "mpegts" or "m2ts" or "mts" => "ts",
-            _ => value,
-        };
-    }
-
-    private static string NormalizeCodecToken(string token) {
-        var value = token.Trim().ToLowerInvariant();
-        return value switch {
-            "h265" or "hevc" or "h.265" => "hevc",
-            "h264" or "avc" or "h.264" => "h264",
-            "ec-3" or "eac3" or "e-ac-3" => "eac3",
-            "ac-3" or "ac3" => "ac3",
-            _ => value,
-        };
+        return MediaContainers.Normalize(extension);
     }
 
     private static HashSet<string> CodecAliases(string codec) =>
-        new(StringComparer.OrdinalIgnoreCase) { NormalizeCodecToken(codec) };
+        new(StringComparer.OrdinalIgnoreCase) { MediaCodecs.Normalize(codec) };
 }

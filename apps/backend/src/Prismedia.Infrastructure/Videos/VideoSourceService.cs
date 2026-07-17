@@ -242,10 +242,8 @@ public sealed class VideoSourceService : IVideoSourceService {
             !primaryVideo.Hdr10PlusPresentFlag;
     }
 
+    // HDR-prone and bandwidth-efficient are the same modern-codec set today; the shared
+    // predicate owns the membership while this name keeps the local domain meaning.
     private static bool IsHdrProneCodec(string? codec) =>
-        codec is not null && (
-            codec.Equals("hevc", StringComparison.OrdinalIgnoreCase) ||
-            codec.Equals("h265", StringComparison.OrdinalIgnoreCase) ||
-            codec.Equals("av1", StringComparison.OrdinalIgnoreCase) ||
-            codec.Equals("vp9", StringComparison.OrdinalIgnoreCase));
+        MediaCodecs.IsEfficientVideoCodec(codec);
 }

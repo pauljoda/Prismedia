@@ -92,24 +92,24 @@ public sealed class PlaybackInfoService : IPlaybackInfoService {
         string? transcodingContainer = null;
         TranscodingInfoResult? transcodingInfo = null;
         if (serveTranscode) {
-            transcodingSubProtocol = "hls";
+            transcodingSubProtocol = PlaybackMode.Hls.ToCode();
             if (isRemux) {
                 transcodingUrl = BuildRemuxUrl(itemId, mediaSourceId, playSessionId, selectedAudioStream?.StreamIndex, request?.AccessToken);
-                transcodingContainer = "mp4";
+                transcodingContainer = MediaContainers.Mp4;
                 // The remux copies AAC audio (preserving its channel layout) and transcodes anything else
                 // to stereo AAC, so advertise direct audio only when the selected track is AAC.
-                var audioCopied = string.Equals(selectedAudioStream?.Codec, "aac", StringComparison.OrdinalIgnoreCase);
+                var audioCopied = string.Equals(selectedAudioStream?.Codec, MediaCodecs.Aac, StringComparison.OrdinalIgnoreCase);
                 transcodingInfo = new TranscodingInfoResult(
-                    "mp4",
-                    source.VideoCodec ?? videoStream?.Codec ?? "hevc",
-                    "aac",
-                    "hls",
+                    MediaContainers.Mp4,
+                    source.VideoCodec ?? videoStream?.Codec ?? MediaCodecs.Hevc,
+                    MediaCodecs.Aac,
+                    PlaybackMode.Hls.ToCode(),
                     IsVideoDirect: true,
                     IsAudioDirect: audioCopied);
             } else {
                 transcodingUrl = BuildTranscodingUrl(itemId, mediaSourceId, playSessionId, selectedAudioStream?.StreamIndex, request?.AccessToken);
-                transcodingContainer = "ts";
-                transcodingInfo = new TranscodingInfoResult("ts", "h264", "aac", "hls", IsVideoDirect: false, IsAudioDirect: false);
+                transcodingContainer = MediaContainers.Ts;
+                transcodingInfo = new TranscodingInfoResult(MediaContainers.Ts, MediaCodecs.H264, MediaCodecs.Aac, PlaybackMode.Hls.ToCode(), IsVideoDirect: false, IsAudioDirect: false);
             }
         }
 
@@ -366,7 +366,7 @@ public sealed class PlaybackInfoService : IPlaybackInfoService {
     }
 
     private static string? CodecFromContentType(string contentType) =>
-        contentType.Equals(MediaContentTypes.VideoMp4, StringComparison.OrdinalIgnoreCase) ? "h264" : null;
+        contentType.Equals(MediaContentTypes.VideoMp4, StringComparison.OrdinalIgnoreCase) ? MediaCodecs.H264 : null;
 
     private static string? ContainerFromPath(string path) {
         var extension = Path.GetExtension(path).TrimStart('.').ToLowerInvariant();

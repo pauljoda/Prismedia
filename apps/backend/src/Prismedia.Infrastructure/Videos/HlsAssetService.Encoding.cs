@@ -85,7 +85,7 @@ public sealed partial class HlsAssetService {
             "-sc_threshold",
             "0",
             "-c:a",
-            "aac",
+            MediaCodecs.Aac,
             "-b:a",
             rendition.AudioBitrate,
             "-ac",
@@ -261,7 +261,7 @@ public sealed partial class HlsAssetService {
         }
 
         var comparableBitrate = sourceVideoBitrate;
-        if (IsEfficientVideoCodec(videoCodec) && comparableBitrate <= 20_000_000) {
+        if (MediaCodecs.IsEfficientVideoCodec(videoCodec) && comparableBitrate <= 20_000_000) {
             comparableBitrate = (int)Math.Round(comparableBitrate * 1.5);
         }
 
@@ -320,13 +320,6 @@ public sealed partial class HlsAssetService {
             .FirstOrDefault(bitRate => bitRate is > 0) ??
         source.BitRate ??
         0;
-
-    private static bool IsEfficientVideoCodec(string? codec) =>
-        codec is not null &&
-        (codec.Equals("hevc", StringComparison.OrdinalIgnoreCase) ||
-            codec.Equals("h265", StringComparison.OrdinalIgnoreCase) ||
-            codec.Equals("av1", StringComparison.OrdinalIgnoreCase) ||
-            codec.Equals("vp9", StringComparison.OrdinalIgnoreCase));
 
     private static HlsTranscoderProfile ResolveEffectiveTranscoderProfile(
         VideoSourceFile source,

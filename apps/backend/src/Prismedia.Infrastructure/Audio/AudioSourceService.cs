@@ -11,13 +11,13 @@ namespace Prismedia.Infrastructure.Audio;
 /// </summary>
 public sealed class AudioSourceService : IAudioSourceService {
     private static readonly HashSet<string> BrowserNativeCodecs = new(StringComparer.OrdinalIgnoreCase) {
-        "aac",
-        "flac",
-        "mp3",
-        "opus",
-        "pcm_s16le",
-        "pcm_s24le",
-        "vorbis"
+        MediaCodecs.Aac,
+        MediaCodecs.Flac,
+        MediaCodecs.Mp3,
+        MediaCodecs.Opus,
+        MediaCodecs.PcmS16Le,
+        MediaCodecs.PcmS24Le,
+        MediaCodecs.Vorbis
     };
 
     private readonly PrismediaDbContext _db;
