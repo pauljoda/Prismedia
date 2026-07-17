@@ -148,6 +148,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Updated documentation, README screenshots, branding assets, install metadata, and app copy to match the current Prismedia v1 surface.
 
 ### Fixed
+- Stream-copy video playback now preserves delayed audio-track timestamps instead of rebasing audio to the start of the video and causing visible lip-sync errors in web and native clients.
 - Playback Stats now show only the signed-in user's activity by default, so legacy household history and other members' plays no longer appear in personal totals, charts, top items, or recent events. Administrators can switch the page between any one account and an explicit All users view; members remain locked to their own activity.
 - Wanted entities now follow the library access of their request target, including legacy placeholders that fall back to the media kind's default profile, so household members cannot browse or open requests destined for libraries they cannot access.
 - Identify now matches child titles through filename-style separators, punctuation, apostrophes, and accents, so multi-disc albums and similarly structured seasons can map their local children even when per-disc or per-season positions repeat.

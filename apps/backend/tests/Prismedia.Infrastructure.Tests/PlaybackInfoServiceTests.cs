@@ -80,6 +80,42 @@ public sealed class PlaybackInfoServiceTests {
     }
 
     [Fact]
+    public async Task PlaybackInfoReportsRemuxAudioAsEncodedWhenTimestampCorrectionIsApplied() {
+        var videoId = Guid.Parse("23232323-2323-2323-2323-232323232323");
+        var service = new PlaybackInfoService(
+            new FakeVideoSourceService(new VideoSourceFile(
+                videoId,
+                "/media/movie.mkv",
+                "video/x-matroska",
+                false,
+                DurationSeconds: 60,
+                Container: "matroska",
+                VideoCodec: "h264",
+                AudioCodec: "aac",
+                Streams:
+                [
+                    new(0, "Video", "h264", null, "Video", 1920, 1080, 24, null, null, null, true, false),
+                    new(1, "Audio", "aac", "eng", "English", null, null, null, null, 48000, 6, true, false)
+                ])),
+            new TranscodeSessionService());
+
+        var info = await service.GetPlaybackInfoAsync(videoId, new PlaybackInfoQuery {
+            EnableDirectPlay = true,
+            EnableDirectStream = true,
+            EnableTranscoding = true,
+            Profile = new ClientPlaybackProfile(
+                200_000_000,
+                [new ClientDirectPlayProfile("Video", "mp4", "h264", "aac")])
+        }, CancellationToken.None);
+
+        Assert.NotNull(info);
+        var source = Assert.Single(info.MediaSources);
+        Assert.Contains("/hls/remux/", source.TranscodingUrl);
+        Assert.True(source.TranscodingInfo?.IsVideoDirect);
+        Assert.False(source.TranscodingInfo?.IsAudioDirect);
+    }
+
+    [Fact]
     public async Task PlaybackInfoDisablesDirectPlayForHdrUnlessClientAdvertisesRangeSupport() {
         var videoId = Guid.Parse("45454545-4545-4545-4545-454545454545");
         var service = new PlaybackInfoService(

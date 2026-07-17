@@ -29,6 +29,7 @@ public sealed partial class HlsAssetService {
     // RemuxInitialBurstSeconds are read flat out so the player gets an immediate buffer at startup.
     private const int RemuxReadRate = 60;
     private const int RemuxInitialBurstSeconds = 30;
+    private const string RemuxAudioTimestampFilter = "aresample=async=1:first_pts=0";
 
     // One whole-file remux generation per (item, audio track); the ffmpeg job runs to completion in
     // the background and the served files (init.mp4, seg_*.m4s, index.m3u8) appear as it progresses.
@@ -395,18 +396,20 @@ public sealed partial class HlsAssetService {
     /// Builds the audio output arguments for a stream-copy remux.
     /// </summary>
     /// <remarks>
-    /// AAC source audio is copied (<c>-c:a copy</c>): re-encoding AAC to AAC is pointless work, and a copy
-    /// preserves the original channel layout (5.1/7.1) instead of downmixing to stereo. Every
-    /// fMP4-HLS-capable client decodes AAC, so this is universally safe without inspecting the client's
-    /// audio capabilities. Any other codec is transcoded to stereo AAC — the safe universal baseline —
-    /// because we cannot assume the client can decode it. Honoring the full per-client copy decision for
-    /// AC3/EAC3/etc. is gated on the device-profile audio capability and should only be expanded
-    /// when the playback negotiation path can prove the client accepts the source codec.
+    /// Every audio stream is encoded through <c>aresample=async=1:first_pts=0</c>. ffmpeg's fMP4 HLS
+    /// muxer otherwise rebases a delayed audio track independently from copied video, removing leading
+    /// silence and making audio play early. AAC input keeps its source channel layout; other codecs are
+    /// downmixed to stereo AAC as the safe universal baseline because the client may not decode them.
     /// </remarks>
-    internal static IReadOnlyList<string> RemuxAudioArguments(VideoSourceFile source, int? audioStreamIndex) =>
-        IsAacCodec(SelectedAudioStreamCodec(source, audioStreamIndex))
-            ? ["-c:a", "copy"]
-            : ["-c:a", MediaCodecs.Aac, "-ac", "2", "-b:a", "192k", "-ar", "48000"];
+    internal static IReadOnlyList<string> RemuxAudioArguments(VideoSourceFile source, int? audioStreamIndex) {
+        var arguments = new List<string> { "-c:a", MediaCodecs.Aac };
+        if (!IsAacCodec(SelectedAudioStreamCodec(source, audioStreamIndex))) {
+            arguments.AddRange(["-ac", "2"]);
+        }
+
+        arguments.AddRange(["-b:a", "192k", "-ar", "48000", "-af", RemuxAudioTimestampFilter]);
+        return arguments;
+    }
 
     // Resolves the codec of the audio stream the remux maps, mirroring the -map expression: a null index
     // maps "0:a:0?" (the first audio stream); an explicit index maps "0:{index}?" (that absolute stream).

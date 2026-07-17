@@ -153,19 +153,19 @@ public sealed class HlsAssetServiceTests : IDisposable {
     }
 
     [Fact]
-    public void RemuxCopiesAacAudioPreservingChannelsAndTranscodesOthersToStereoAac() {
-        // AAC audio is copied (no pointless AAC->AAC re-encode; 5.1/7.1 is preserved instead of downmixed),
-        // which every fMP4-HLS client can decode. Any other codec is transcoded to the safe stereo-AAC
-        // baseline because we cannot assume the client decodes it.
+    public void RemuxEncodesAudioWithTimestampCorrectionAndOnlyDownmixesNonAacSources() {
+        // Every audio stream passes through aresample so a source track that begins after video keeps
+        // that delay as leading silence in fMP4 HLS. AAC retains its source channel layout; codecs the
+        // client may not decode are converted to the safe stereo-AAC baseline.
         Assert.Equal(
-            ["-c:a", "copy"],
+            ["-c:a", "aac", "-b:a", "192k", "-ar", "48000", "-af", "aresample=async=1:first_pts=0"],
             HlsAssetService.RemuxAudioArguments(RemuxAudioSource("aac"), audioStreamIndex: null));
         Assert.Equal(
-            ["-c:a", "aac", "-ac", "2", "-b:a", "192k", "-ar", "48000"],
+            ["-c:a", "aac", "-ac", "2", "-b:a", "192k", "-ar", "48000", "-af", "aresample=async=1:first_pts=0"],
             HlsAssetService.RemuxAudioArguments(RemuxAudioSource("eac3"), audioStreamIndex: null));
         // An explicit absolute stream index resolves the codec of that stream.
         Assert.Equal(
-            ["-c:a", "copy"],
+            ["-c:a", "aac", "-b:a", "192k", "-ar", "48000", "-af", "aresample=async=1:first_pts=0"],
             HlsAssetService.RemuxAudioArguments(RemuxAudioSource("aac"), audioStreamIndex: 1));
     }
 
