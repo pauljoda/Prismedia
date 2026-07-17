@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { ALL_SEARCH_KINDS, SEARCH_KIND_CONFIG } from "./search-kind-config";
+import { ENTITY_KIND } from "$lib/entities/entity-codes";
+import { ALL_SEARCH_KINDS } from "$lib/search/models";
+import { SEARCH_KIND_CONFIG } from "./search-kind-config";
 
 describe("search-kind-config", () => {
   it("covers every exported search kind with a label and href", () => {
@@ -13,11 +15,11 @@ describe("search-kind-config", () => {
   });
 
   it("preserves Prismedia terminology for people search results", () => {
-    expect(SEARCH_KIND_CONFIG.performer.label).toBe("People");
-    expect(SEARCH_KIND_CONFIG.performer.href).toBe("/people");
+    expect(SEARCH_KIND_CONFIG[ENTITY_KIND.person].label).toBe("People");
+    expect(SEARCH_KIND_CONFIG[ENTITY_KIND.person].href).toBe("/people");
   });
 
   it("sends series search results to the dedicated series route", () => {
-    expect(SEARCH_KIND_CONFIG["video-series"].href).toBe("/series");
+    expect(SEARCH_KIND_CONFIG[ENTITY_KIND.videoSeries].href).toBe("/series");
   });
 });

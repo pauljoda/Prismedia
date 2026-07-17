@@ -52,7 +52,6 @@ const MAGIC_CODE_ALLOWLIST: Record<string, string[]> = {
   "lib/api/settings.ts": ["direct", "hls"],
   "lib/components/AudioTrackList.svelte": ["audio-track"],
   "lib/components/AudioVidStackPlayer.svelte": ["music-artist"],
-  "lib/components/SearchResultCard.svelte": ["audio-library", "audio-track", "video-series"],
   "lib/components/UniversalLightbox.svelte": ["direct"],
   "lib/components/VideoPlayer.svelte": ["direct", "hls"],
   "lib/components/collections/collection-item-helpers.ts": ["audio-track", "video-series"],
@@ -70,7 +69,6 @@ const MAGIC_CODE_ALLOWLIST: Record<string, string[]> = {
   "lib/components/identify-review.ts": [
     "audio-library", "book-volume", "music-artist", "video-season", "video-series",
   ],
-  "lib/components/search-kind-config.ts": ["audio-library", "audio-track", "video-series"],
   "lib/components/settings/SettingsSectionPage.svelte": ["hls"],
   "lib/components/settings/WatchedLibrariesSection.svelte": ["scan-library"],
   "lib/components/video-player-types.ts": ["direct", "hls"],
@@ -95,7 +93,7 @@ const MAGIC_CODE_ALLOWLIST: Record<string, string[]> = {
   "lib/player/video-player-load.ts": ["direct", "hls"],
   "lib/player/video-player-source-policy.ts": ["direct", "hls"],
   "lib/search/entity-search.ts": ["direct"],
-  "lib/search/models.ts": ["audio-library", "audio-track", "direct", "video-series"],
+  "lib/search/models.ts": ["direct"],
   "lib/settings/app-settings.ts": ["direct", "hls"],
   "lib/settings/library-settings.ts": ["direct", "hls"],
   "lib/settings/settings-section-catalog.ts": ["auto-identify"],
@@ -107,7 +105,6 @@ const MAGIC_CODE_ALLOWLIST: Record<string, string[]> = {
   "routes/authors/+page.svelte": ["book-author"],
   "routes/books/[id]/+page.svelte": ["book-author", "book-page"],
   "routes/movies/[id]/+page.svelte": ["direct", "hls"],
-  "routes/search/+page.svelte": ["video-series"],
   "routes/series/+page.svelte": ["video-series"],
   "routes/videos/[id]/+page.svelte": ["direct", "hls"],
 };

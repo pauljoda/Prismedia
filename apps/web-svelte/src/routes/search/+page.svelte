@@ -13,13 +13,11 @@
   import SearchResultCard from "$lib/components/SearchResultCard.svelte";
   import { buildHrefWithFrom } from "$lib/back-navigation";
   import { useNsfw } from "$lib/nsfw/store.svelte";
-  import type { SearchEntityKind, SearchResponse, SearchResultItem } from "$lib/search/models";
+  import { ALL_SEARCH_KINDS, type SearchEntityKind, type SearchResponse, type SearchResultItem } from "$lib/search/models";
   import { firstSearchResult, searchEntities } from "$lib/search/entity-search";
   import { entityTerms } from "$lib/terminology";
-  import {
-    ALL_SEARCH_KINDS,
-    SEARCH_KIND_CONFIG,
-  } from "$lib/components/search-kind-config";
+  import { ENTITY_KIND } from "$lib/entities/entity-codes";
+  import { SEARCH_KIND_CONFIG } from "$lib/components/search-kind-config";
 
   const PAGE_SIZE = 20;
   const nsfw = useNsfw();
@@ -46,7 +44,7 @@
     if (!raw) return new Set(ALL_SEARCH_KINDS);
     const parsed = raw
       .split(",")
-      .filter((k): k is SearchEntityKind => (ALL_SEARCH_KINDS as string[]).includes(k));
+      .filter((k): k is SearchEntityKind => (ALL_SEARCH_KINDS as readonly string[]).includes(k));
     return parsed.length > 0 ? new Set(parsed) : new Set(ALL_SEARCH_KINDS);
   }
 
@@ -135,11 +133,11 @@
   });
 
   function kindLabel(kind: SearchEntityKind): string {
-    if (kind === "movie") return entityTerms.movies;
-    if (kind === "video") return entityTerms.videos;
-    if (kind === "performer") return entityTerms.performers;
-    if (kind === "studio") return entityTerms.studios;
-    if (kind === "tag") return entityTerms.tags;
+    if (kind === ENTITY_KIND.movie) return entityTerms.movies;
+    if (kind === ENTITY_KIND.video) return entityTerms.videos;
+    if (kind === ENTITY_KIND.person) return entityTerms.performers;
+    if (kind === ENTITY_KIND.studio) return entityTerms.studios;
+    if (kind === ENTITY_KIND.tag) return entityTerms.tags;
     return SEARCH_KIND_CONFIG[kind].label;
   }
 
@@ -183,21 +181,21 @@
 
   function gridClassFor(kind: SearchEntityKind): string {
     switch (kind) {
-      case "movie":
+      case ENTITY_KIND.movie:
         return "grid gap-2 grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5";
-      case "video":
+      case ENTITY_KIND.video:
         return "grid gap-2 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4";
-      case "video-series":
+      case ENTITY_KIND.videoSeries:
         return "grid gap-2 grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5";
-      case "gallery":
+      case ENTITY_KIND.gallery:
         return "grid gap-2 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4";
-      case "image":
+      case ENTITY_KIND.image:
         return "grid gap-2 grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5";
-      case "performer":
+      case ENTITY_KIND.person:
         return "grid gap-2 grid-cols-2 sm:grid-cols-3 xl:grid-cols-5";
-      case "studio":
+      case ENTITY_KIND.studio:
         return "grid gap-2 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3";
-      case "tag":
+      case ENTITY_KIND.tag:
         return "grid gap-2 grid-cols-2 sm:grid-cols-3 lg:grid-cols-4";
       default:
         return "grid gap-2 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3";

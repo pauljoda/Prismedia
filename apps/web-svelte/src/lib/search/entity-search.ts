@@ -1,14 +1,14 @@
 import { fetchEntities, type EntityCard, type EntityListResponse } from "$lib/api/entities";
 import type { ListEntitiesParams } from "$lib/api/generated/model";
-import { labelForEntityKind } from "$lib/entities/entity-codes";
+import { ENTITY_KIND, labelForEntityKind } from "$lib/entities/entity-codes";
 import { resolveEntityHref } from "$lib/entities/entity-routes";
-import { ALL_SEARCH_KINDS } from "$lib/components/search-kind-config";
-import type {
-  SearchEntityKind,
-  SearchRelatedEntity,
-  SearchResponse,
-  SearchResultGroup,
-  SearchResultItem,
+import {
+  ALL_SEARCH_KINDS,
+  type SearchEntityKind,
+  type SearchRelatedEntity,
+  type SearchResponse,
+  type SearchResultGroup,
+  type SearchResultItem,
 } from "./models";
 
 const DEFAULT_DIRECT_LIMIT = 80;
@@ -16,9 +16,9 @@ const DEFAULT_RELATED_SOURCE_LIMIT = 4;
 const DEFAULT_RELATED_LIMIT_PER_SOURCE = 30;
 
 const RELATIONSHIP_SOURCE_KINDS = new Set<SearchEntityKind>([
-  "performer",
-  "studio",
-  "tag",
+  ENTITY_KIND.person,
+  ENTITY_KIND.studio,
+  ENTITY_KIND.tag,
 ]);
 
 export type EntitySearchFetcher = (params?: ListEntitiesParams) => Promise<EntityListResponse>;
@@ -119,7 +119,7 @@ function toResultGroup(kind: SearchEntityKind, items: SearchResultItem[]): Searc
     hasMore: false,
     items,
     kind,
-    label: labelForEntityKind(kind === "performer" ? "person" : kind),
+    label: labelForEntityKind(kind),
     total: items.length,
   };
 }
@@ -166,7 +166,5 @@ async function fetchRelatedItems(
 }
 
 function toSearchKind(kind: string): SearchEntityKind | null {
-  if (kind === "person") return "performer";
-  if ((ALL_SEARCH_KINDS as string[]).includes(kind)) return kind as SearchEntityKind;
-  return null;
+  return (ALL_SEARCH_KINDS as readonly string[]).includes(kind) ? (kind as SearchEntityKind) : null;
 }
