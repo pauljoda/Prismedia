@@ -10,7 +10,9 @@ test-results/
 .tmp/
 *.log
 .claude/
-videos/
+# Local sample media at the repo root only — unanchored `videos/` would also swallow
+# C# source under */Videos/ on case-insensitive filesystems.
+/videos/
 
 apps/web-svelte/.svelte-kit/
 apps/web-svelte/build/
