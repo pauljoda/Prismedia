@@ -1,0 +1,67 @@
+name: CI
+
+# Light validation on every push and PR: version/changelog checks, frontend typecheck,
+# unit tests (including the source-discipline guards), and the backend architecture/
+# identifier-discipline test classes, which run without a database.
+#
+# The full gate (`pnpm validate`) additionally regenerates the API client against a
+# running dev API (`pnpm api:check`), builds the docs site, and runs the entire backend
+# test suite; it stays on the manual Validate workflow. Offline codes.ts parity IS
+# covered here via GeneratedCodesParityTests.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  web:
+    name: Web checks
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Enable pnpm
+        run: corepack enable
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Check version and changelog structure
+        run: pnpm release:check
+
+      - name: Typecheck
+        run: pnpm check
+
+      - name: Unit tests
+        run: pnpm test:unit && pnpm test:web-svelte
+
+  backend:
+    name: Backend architecture & discipline tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Run architecture and identifier-discipline guards
+        run: >
+          dotnet test apps/backend/Prismedia.slnx
+          --filter "FullyQualifiedName~InfrastructureBoundaryTests|FullyQualifiedName~ConstantsDriftGuardTests|FullyQualifiedName~ApiProblemCodeDisciplineTests|FullyQualifiedName~GeneratedCodesParityTests|FullyQualifiedName~CodesManifestContractTests|FullyQualifiedName~CodecCompletenessTests|FullyQualifiedName~CodecRegistryTests"
