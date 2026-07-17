@@ -1,4 +1,5 @@
 using Prismedia.Application.Videos;
+using Prismedia.Domain.Entities;
 using Prismedia.Infrastructure.Processes;
 
 namespace Prismedia.Infrastructure.Media.Processing;
@@ -389,7 +390,7 @@ public sealed class ThumbnailService {
 
         var probe = await _mediaProbe.ProbeVideoAsync(inputPath, cancellationToken, toolOptions.FfprobePath);
         var videoStream = probe?.Streams?
-            .Where(stream => stream.Type.Equals("Video", StringComparison.OrdinalIgnoreCase))
+            .Where(stream => stream.Type.Equals(StreamKind.Video.ToCode(), StringComparison.OrdinalIgnoreCase))
             .OrderBy(stream => stream.StreamIndex)
             .FirstOrDefault();
 

@@ -674,6 +674,14 @@ export const REQUEST_REVIEW_SELECTION = {
 
 export type RequestReviewSelectionCode = (typeof REQUEST_REVIEW_SELECTION)[keyof typeof REQUEST_REVIEW_SELECTION];
 
+// source: enum StreamKind
+export const STREAM_KIND = {
+  video: "Video",
+  audio: "Audio",
+} as const;
+
+export type StreamKindCode = (typeof STREAM_KIND)[keyof typeof STREAM_KIND];
+
 // source: enum SubtitleStyle
 export const SUBTITLE_STYLE = {
   stylized: "stylized",

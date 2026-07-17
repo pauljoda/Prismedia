@@ -1,6 +1,7 @@
 using Prismedia.Application.Settings;
 using Prismedia.Contracts.Jellyfin;
 using Prismedia.Contracts.Media;
+using Prismedia.Domain.Entities;
 
 namespace Prismedia.Application.Videos;
 
@@ -169,7 +170,7 @@ public sealed class PlaybackInfoService : IPlaybackInfoService {
         int? requestedIndex,
         string? preferredLanguages) {
         var audioStreams = source.Streams?
-            .Where(stream => stream.Type.Equals("Audio", StringComparison.OrdinalIgnoreCase))
+            .Where(stream => stream.Type.Equals(StreamKind.Audio.ToCode(), StringComparison.OrdinalIgnoreCase))
             .OrderBy(stream => stream.StreamIndex)
             .ToList() ?? [];
         if (audioStreams.Count == 0) {
@@ -264,7 +265,7 @@ public sealed class PlaybackInfoService : IPlaybackInfoService {
             return source.Streams
                 .OrderBy(stream => stream.StreamIndex)
                 .Select(stream => {
-                    var range = stream.Type.Equals("Video", StringComparison.OrdinalIgnoreCase)
+                    var range = stream.Type.Equals(StreamKind.Video.ToCode(), StringComparison.OrdinalIgnoreCase)
                         ? VideoPlaybackRangePolicy.Classify(stream)
                         : null;
                     return new MediaStreamInfoResult(
@@ -302,7 +303,7 @@ public sealed class PlaybackInfoService : IPlaybackInfoService {
 
         var videoStream = new MediaStreamInfoResult(
             0,
-            "Video",
+            StreamKind.Video.ToCode(),
             source.VideoCodec ?? CodecFromContentType(source.ContentType),
             null,
             "Video",
@@ -320,7 +321,7 @@ public sealed class PlaybackInfoService : IPlaybackInfoService {
 
         var audioStream = new MediaStreamInfoResult(
             1,
-            "Audio",
+            StreamKind.Audio.ToCode(),
             source.AudioCodec,
             null,
             "Audio",
@@ -337,7 +338,7 @@ public sealed class PlaybackInfoService : IPlaybackInfoService {
 
     private static VideoSourceStream? PrimaryVideoStream(VideoSourceFile source) =>
         source.Streams?
-            .Where(stream => stream.Type.Equals("Video", StringComparison.OrdinalIgnoreCase))
+            .Where(stream => stream.Type.Equals(StreamKind.Video.ToCode(), StringComparison.OrdinalIgnoreCase))
             .OrderBy(stream => stream.StreamIndex)
             .FirstOrDefault();
 
@@ -346,7 +347,7 @@ public sealed class PlaybackInfoService : IPlaybackInfoService {
             return stream.Title!;
         }
 
-        if (stream.Type.Equals("Audio", StringComparison.OrdinalIgnoreCase)) {
+        if (stream.Type.Equals(StreamKind.Audio.ToCode(), StringComparison.OrdinalIgnoreCase)) {
             var language = string.IsNullOrWhiteSpace(stream.Language) ? "Audio" : stream.Language!.ToUpperInvariant();
             var channels = stream.Channels is > 0 ? $" · {stream.Channels}ch" : "";
             return $"{language}{channels}";
@@ -356,7 +357,7 @@ public sealed class PlaybackInfoService : IPlaybackInfoService {
     }
 
     private static bool StreamIsSelected(VideoSourceStream stream, int? selectedAudioStreamIndex) {
-        if (!stream.Type.Equals("Audio", StringComparison.OrdinalIgnoreCase) ||
+        if (!stream.Type.Equals(StreamKind.Audio.ToCode(), StringComparison.OrdinalIgnoreCase) ||
             selectedAudioStreamIndex is null) {
             return stream.IsDefault;
         }

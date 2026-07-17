@@ -6,6 +6,7 @@ using Prismedia.Application.Settings;
 using Prismedia.Application.Videos;
 using Prismedia.Contracts.Jellyfin;
 using Prismedia.Contracts.Media;
+using Prismedia.Domain.Entities;
 using Prismedia.Infrastructure.Media.Processing;
 using Prismedia.Infrastructure.Persistence;
 using Prismedia.Infrastructure.Processes;
@@ -560,7 +561,7 @@ public sealed partial class HlsAssetService : IHlsAssetService {
 
     private static int? SelectAudioStreamIndex(VideoSourceFile source, int? requestedAudioStreamIndex) {
         var audioStreams = source.Streams?
-            .Where(stream => stream.Type.Equals("Audio", StringComparison.OrdinalIgnoreCase))
+            .Where(stream => stream.Type.Equals(StreamKind.Audio.ToCode(), StringComparison.OrdinalIgnoreCase))
             .OrderBy(stream => stream.StreamIndex)
             .ToList() ?? [];
 

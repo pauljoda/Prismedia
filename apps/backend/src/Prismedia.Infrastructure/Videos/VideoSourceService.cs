@@ -216,12 +216,12 @@ public sealed class VideoSourceService : IVideoSourceService {
         string path,
         string? videoCodec,
         IReadOnlyList<VideoSourceStream> streams) {
-        if (streams.Count(stream => stream.Type.Equals("Audio", StringComparison.OrdinalIgnoreCase)) <= 1) {
+        if (streams.Count(stream => stream.Type.Equals(StreamKind.Audio.ToCode(), StringComparison.OrdinalIgnoreCase)) <= 1) {
             return true;
         }
 
         var primaryVideo = streams
-            .Where(stream => stream.Type.Equals("Video", StringComparison.OrdinalIgnoreCase))
+            .Where(stream => stream.Type.Equals(StreamKind.Video.ToCode(), StringComparison.OrdinalIgnoreCase))
             .OrderBy(stream => stream.StreamIndex)
             .FirstOrDefault();
         if (primaryVideo is null) {

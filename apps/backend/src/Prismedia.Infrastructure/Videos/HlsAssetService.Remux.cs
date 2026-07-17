@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging;
 using Prismedia.Application.Videos;
 using Prismedia.Contracts.Jellyfin;
 using Prismedia.Contracts.Media;
+using Prismedia.Domain.Entities;
 using Prismedia.Infrastructure.Processes;
 
 namespace Prismedia.Infrastructure.Videos;
@@ -420,7 +421,7 @@ public sealed partial class HlsAssetService {
         }
 
         return streams
-            .Where(stream => stream.Type.Equals("Audio", StringComparison.OrdinalIgnoreCase))
+            .Where(stream => stream.Type.Equals(StreamKind.Audio.ToCode(), StringComparison.OrdinalIgnoreCase))
             .OrderBy(stream => stream.StreamIndex)
             .FirstOrDefault()?.Codec;
     }

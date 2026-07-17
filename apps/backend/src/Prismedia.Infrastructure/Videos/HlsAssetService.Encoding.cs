@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging;
 using Prismedia.Application.Settings;
 using Prismedia.Application.Videos;
 using Prismedia.Contracts.Media;
+using Prismedia.Domain.Entities;
 using Prismedia.Infrastructure.Media.Processing;
 using Prismedia.Infrastructure.Persistence;
 using Prismedia.Infrastructure.Processes;
@@ -313,7 +314,7 @@ public sealed partial class HlsAssetService {
 
     private static int SourceVideoBitrate(VideoSourceFile source) =>
         source.Streams?
-            .Where(stream => stream.Type.Equals("Video", StringComparison.OrdinalIgnoreCase))
+            .Where(stream => stream.Type.Equals(StreamKind.Video.ToCode(), StringComparison.OrdinalIgnoreCase))
             .OrderBy(stream => stream.StreamIndex)
             .Select(stream => stream.BitRate)
             .FirstOrDefault(bitRate => bitRate is > 0) ??
@@ -353,7 +354,7 @@ public sealed partial class HlsAssetService {
 
     private static VideoSourceStream? PrimaryVideoStream(VideoSourceFile source) =>
         source.Streams?
-            .Where(stream => stream.Type.Equals("Video", StringComparison.OrdinalIgnoreCase))
+            .Where(stream => stream.Type.Equals(StreamKind.Video.ToCode(), StringComparison.OrdinalIgnoreCase))
             .OrderBy(stream => stream.StreamIndex)
             .FirstOrDefault();
 

@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Prismedia.Domain.Entities;
 using Prismedia.Infrastructure.Processes;
 
 namespace Prismedia.Infrastructure.Media.Processing;
@@ -42,6 +43,7 @@ public sealed class MediaProbeService {
 
         if (streams.ValueKind == JsonValueKind.Array) {
             foreach (var stream in streams.EnumerateArray()) {
+                // prism-vocab: external — ffprobe codec_type values decoded at this boundary only.
                 var codecType = stream.GetStringOrDefault("codec_type");
                 if (codecType == "video" && videoStream is null)
                     videoStream = stream;
@@ -57,7 +59,7 @@ public sealed class MediaProbeService {
                 var pixelFormat = stream.GetStringOrDefault("pix_fmt");
                 streamResults.Add(new MediaStreamProbeResult(
                     stream.GetIntOrDefault("index") ?? 0,
-                    codecType == "video" ? "Video" : "Audio",
+                    codecType == "video" ? StreamKind.Video.ToCode() : StreamKind.Audio.ToCode(),
                     stream.GetStringOrDefault("codec_name"),
                     tags.GetStringOrDefault("language"),
                     tags.GetStringOrDefault("title"),
