@@ -471,6 +471,25 @@ export const MEDIA_IMAGE_KIND = {
 
 export type MediaImageKindCode = (typeof MEDIA_IMAGE_KIND)[keyof typeof MEDIA_IMAGE_KIND];
 
+// source: enum MetadataPatchField
+export const METADATA_PATCH_FIELD = {
+  title: "title",
+  description: "description",
+  externalIds: "externalIds",
+  urls: "urls",
+  dates: "dates",
+  stats: "stats",
+  positions: "positions",
+  classification: "classification",
+  flags: "flags",
+  tags: "tags",
+  studio: "studio",
+  credits: "credits",
+  images: "images",
+} as const;
+
+export type MetadataPatchFieldCode = (typeof METADATA_PATCH_FIELD)[keyof typeof METADATA_PATCH_FIELD];
+
 // source: enum MonitorPreset
 export const MONITOR_PRESET = {
   all: "all",

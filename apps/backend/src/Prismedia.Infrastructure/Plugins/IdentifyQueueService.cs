@@ -1280,7 +1280,7 @@ public sealed class IdentifyQueueService : IIdentifyQueueService {
     private static int CountApplySteps(EntityMetadataProposal proposal, IReadOnlyCollection<string> selectedFields) {
         var selected = selectedFields.ToHashSet(StringComparer.OrdinalIgnoreCase);
         var count = 1;
-        if (selected.Contains("credits") || selected.Contains("studio") || selected.Contains("tags")) {
+        if (selected.Contains(MetadataPatchField.Credits.ToCode()) || selected.Contains(MetadataPatchField.Studio.ToCode()) || selected.Contains(MetadataPatchField.Tags.ToCode())) {
             count += CountRelationships(proposal);
         }
 

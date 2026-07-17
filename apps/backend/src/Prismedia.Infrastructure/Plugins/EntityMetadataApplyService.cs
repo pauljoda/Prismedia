@@ -165,13 +165,13 @@ public sealed partial class EntityMetadataApplyService : IEntityMetadataPatchSer
         var now = DateTimeOffset.UtcNow;
         await ApplyScopedPatchToEntityAsync(entity, fields, request.Patch, now, cancellationToken);
 
-        if (fields.Contains("images") && request.SelectedImages is not null) {
+        if (fields.Contains(MetadataPatchField.Images.ToCode()) && request.SelectedImages is not null) {
             await _artwork.DownloadSelectedImagesAsync(entityId, request.SelectedImages, now, cancellationToken);
         }
 
         if (request.Children is { Count: > 0 } || request.Relationships is { Count: > 0 }) {
             var relationshipFieldsApplied =
-                fields.Contains("credits") || fields.Contains("studio") || fields.Contains("tags");
+                fields.Contains(MetadataPatchField.Credits.ToCode()) || fields.Contains(MetadataPatchField.Studio.ToCode()) || fields.Contains(MetadataPatchField.Tags.ToCode());
             await ApplyChildNodesAsync(
                 entity.Id,
                 request.Children ?? [],
@@ -196,41 +196,41 @@ public sealed partial class EntityMetadataApplyService : IEntityMetadataPatchSer
         EntityMetadataPatch patch,
         DateTimeOffset now,
         CancellationToken cancellationToken) {
-        if (fields.Contains("title")) {
+        if (fields.Contains(MetadataPatchField.Title.ToCode())) {
             entity.Title = patch.Title!.Trim();
         }
 
-        if (fields.Contains("description")) {
+        if (fields.Contains(MetadataPatchField.Description.ToCode())) {
             await UpsertDescriptionAsync(entity.Id, patch.Description, now, cancellationToken);
         }
 
-        if (fields.Contains("externalIds")) {
+        if (fields.Contains(MetadataPatchField.ExternalIds.ToCode())) {
             await ReplaceExternalIdsAsync(entity.Id, patch.ExternalIds, patch.Urls, cancellationToken);
         }
 
-        if (fields.Contains("urls")) {
+        if (fields.Contains(MetadataPatchField.Urls.ToCode())) {
             await ReplaceUrlsAsync(entity.Id, patch.Urls, now, cancellationToken);
         }
 
         await ApplyScopedRelationshipFieldsAsync(entity, fields, patch, now, cancellationToken);
 
-        if (fields.Contains("dates")) {
+        if (fields.Contains(MetadataPatchField.Dates.ToCode())) {
             await ReplaceDatesAsync(entity.Id, patch.Dates, now, cancellationToken);
         }
 
-        if (fields.Contains("stats")) {
+        if (fields.Contains(MetadataPatchField.Stats.ToCode())) {
             await ReplaceStatsAsync(entity.Id, patch.Stats, now, cancellationToken);
         }
 
-        if (fields.Contains("positions")) {
+        if (fields.Contains(MetadataPatchField.Positions.ToCode())) {
             await ReplacePositionsAsync(entity, EntityMetadataPositionRules.Normalize(patch.Positions), now, cancellationToken);
         }
 
-        if (fields.Contains("classification")) {
+        if (fields.Contains(MetadataPatchField.Classification.ToCode())) {
             await ReplaceClassificationAsync(entity.Id, patch.Classification, now, cancellationToken);
         }
 
-        if (fields.Contains("flags")) {
+        if (fields.Contains(MetadataPatchField.Flags.ToCode())) {
             await UpsertFlagsAsync(entity.Id, patch.Flags, now, cancellationToken);
         }
     }
@@ -364,15 +364,15 @@ public sealed partial class EntityMetadataApplyService : IEntityMetadataPatchSer
         var rootPath = new[] { rootTitle };
         await ReportApplyProgressAsync(progress, entity.KindCode.DecodeAs<EntityKind>(), rootTitle, rootPath, cancellationToken);
 
-        if (selected.Contains("title") && !string.IsNullOrWhiteSpace(patch.Title)) {
+        if (selected.Contains(MetadataPatchField.Title.ToCode()) && !string.IsNullOrWhiteSpace(patch.Title)) {
             entity.Title = patch.Title.Trim();
         }
 
-        if (selected.Contains("description")) {
+        if (selected.Contains(MetadataPatchField.Description.ToCode())) {
             await UpsertDescriptionAsync(entityId, patch.Description, now, cancellationToken);
         }
 
-        if (selected.Contains("externalIds")) {
+        if (selected.Contains(MetadataPatchField.ExternalIds.ToCode())) {
             await UpsertExternalIdsAsync(entityId, patch.ExternalIds, patch.Urls, cancellationToken);
         }
         await BindProviderIdentityAsync(
@@ -381,7 +381,7 @@ public sealed partial class EntityMetadataApplyService : IEntityMetadataPatchSer
             patch.ExternalIds,
             cancellationToken);
 
-        if (selected.Contains("urls")) {
+        if (selected.Contains(MetadataPatchField.Urls.ToCode())) {
             await UpsertUrlsAsync(entityId, patch.Urls, now, cancellationToken);
         }
 
@@ -390,24 +390,24 @@ public sealed partial class EntityMetadataApplyService : IEntityMetadataPatchSer
         var markNsfw = patch.Flags?.IsNsfw == true;
         await ApplySelectedRelationshipFieldsAsync(entity, selected, patch, now, markNsfw, cancellationToken);
 
-        if (selected.Contains("dates")) {
+        if (selected.Contains(MetadataPatchField.Dates.ToCode())) {
             await UpsertDatesAsync(entityId, patch.Dates, now, cancellationToken);
         }
 
-        if (selected.Contains("stats")) {
+        if (selected.Contains(MetadataPatchField.Stats.ToCode())) {
             await UpsertStatsAsync(entityId, patch.Stats, now, cancellationToken);
         }
 
-        if (selected.Contains("positions")) {
+        if (selected.Contains(MetadataPatchField.Positions.ToCode())) {
             var normalizedPositions = EntityMetadataPositionRules.Normalize(patch.Positions);
             await UpsertPositionsAsync(entity, normalizedPositions, now, cancellationToken);
         }
 
-        if (selected.Contains("classification")) {
+        if (selected.Contains(MetadataPatchField.Classification.ToCode())) {
             await UpsertClassificationAsync(entityId, patch.Classification, now, cancellationToken);
         }
 
-        if (selected.Contains("images") && selectedImages is not null) {
+        if (selected.Contains(MetadataPatchField.Images.ToCode()) && selectedImages is not null) {
             await _artwork.DownloadSelectedImagesAsync(entityId, selectedImages, now, cancellationToken);
         }
 
@@ -419,7 +419,7 @@ public sealed partial class EntityMetadataApplyService : IEntityMetadataPatchSer
         // applier. Relationship proposals only enrich entities the root's credit/studio/tags fields
         // linked, so gate them on that selection (the scalar fields were applied just above).
         var rootRelationshipFieldsApplied =
-            selected.Contains("credits") || selected.Contains("studio") || selected.Contains("tags");
+            selected.Contains(MetadataPatchField.Credits.ToCode()) || selected.Contains(MetadataPatchField.Studio.ToCode()) || selected.Contains(MetadataPatchField.Tags.ToCode());
         await ApplyChildNodesAsync(
             entity.Id,
             EntityMetadataProposalTraversal.StructuralChildren(proposal),

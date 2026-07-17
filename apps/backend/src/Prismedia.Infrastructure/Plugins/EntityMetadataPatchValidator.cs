@@ -1,5 +1,6 @@
 using Prismedia.Contracts.Plugins;
 using Prismedia.Domain.Capabilities;
+using Prismedia.Domain.Entities;
 
 namespace Prismedia.Infrastructure.Plugins;
 
@@ -22,11 +23,11 @@ public static class EntityMetadataPatchValidator {
     public static void Validate(ISet<string> fields, EntityMetadataPatch patch) {
         var errors = new List<string>();
 
-        if (fields.Contains("title") && string.IsNullOrWhiteSpace(patch.Title)) {
+        if (fields.Contains(MetadataPatchField.Title.ToCode()) && string.IsNullOrWhiteSpace(patch.Title)) {
             errors.Add("title is required");
         }
 
-        if (fields.Contains("urls")) {
+        if (fields.Contains(MetadataPatchField.Urls.ToCode())) {
             foreach (var url in patch.Urls.Where(value => !string.IsNullOrWhiteSpace(value))) {
                 if (!Uri.TryCreate(url, UriKind.Absolute, out var parsed) ||
                     parsed.Scheme is not ("http" or "https")) {
@@ -35,7 +36,7 @@ public static class EntityMetadataPatchValidator {
             }
         }
 
-        if (fields.Contains("dates")) {
+        if (fields.Contains(MetadataPatchField.Dates.ToCode())) {
             foreach (var (code, value) in patch.Dates) {
                 if (string.IsNullOrWhiteSpace(code) || string.IsNullOrWhiteSpace(value)) {
                     errors.Add("date codes and values cannot be empty");

@@ -28,7 +28,7 @@ public sealed partial class EntityMetadataApplyService {
         EntityMetadataPatch patch,
         DateTimeOffset now,
         CancellationToken cancellationToken) {
-        if (!fields.Contains("tags") && !fields.Contains("studio") && !fields.Contains("credits")) {
+        if (!fields.Contains(MetadataPatchField.Tags.ToCode()) && !fields.Contains(MetadataPatchField.Studio.ToCode()) && !fields.Contains(MetadataPatchField.Credits.ToCode())) {
             return;
         }
 
@@ -37,18 +37,18 @@ public sealed partial class EntityMetadataApplyService {
             return;
         }
 
-        if (fields.Contains("tags")) {
+        if (fields.Contains(MetadataPatchField.Tags.ToCode())) {
             await ReplaceTagsAsync(owner.Id, patch.Tags, now, markNsfw: false, cancellationToken);
         }
 
-        if (fields.Contains("studio")) {
+        if (fields.Contains(MetadataPatchField.Studio.ToCode())) {
             await RemoveRelationshipAsync(owner.Id, RelationshipKind.Studio.ToCode(), cancellationToken);
             if (!string.IsNullOrWhiteSpace(patch.Studio)) {
                 await SetStudioAsync(owner.Id, patch.Studio, now, markNsfw: false, cancellationToken);
             }
         }
 
-        if (fields.Contains("credits")) {
+        if (fields.Contains(MetadataPatchField.Credits.ToCode())) {
             await ReplaceCreditsAsync(owner.Id, patch.Credits, now, markNsfw: false, cancellationToken);
         }
 
@@ -62,9 +62,9 @@ public sealed partial class EntityMetadataApplyService {
         DateTimeOffset now,
         bool markNsfw,
         CancellationToken cancellationToken) {
-        if (!selected.Contains("tags") &&
-            !(selected.Contains("studio") && !string.IsNullOrWhiteSpace(patch.Studio)) &&
-            !selected.Contains("credits")) {
+        if (!selected.Contains(MetadataPatchField.Tags.ToCode()) &&
+            !(selected.Contains(MetadataPatchField.Studio.ToCode()) && !string.IsNullOrWhiteSpace(patch.Studio)) &&
+            !selected.Contains(MetadataPatchField.Credits.ToCode())) {
             return;
         }
 
@@ -73,15 +73,15 @@ public sealed partial class EntityMetadataApplyService {
             return;
         }
 
-        if (selected.Contains("tags")) {
+        if (selected.Contains(MetadataPatchField.Tags.ToCode())) {
             await ReplaceTagsAsync(owner.Id, patch.Tags, now, markNsfw, cancellationToken);
         }
 
-        if (selected.Contains("studio") && !string.IsNullOrWhiteSpace(patch.Studio)) {
+        if (selected.Contains(MetadataPatchField.Studio.ToCode()) && !string.IsNullOrWhiteSpace(patch.Studio)) {
             await SetStudioAsync(owner.Id, patch.Studio, now, markNsfw, cancellationToken);
         }
 
-        if (selected.Contains("credits")) {
+        if (selected.Contains(MetadataPatchField.Credits.ToCode())) {
             await ReplaceCreditsAsync(owner.Id, patch.Credits, now, markNsfw, cancellationToken);
         }
 
@@ -158,8 +158,8 @@ public sealed partial class EntityMetadataApplyService {
     }
 
     private async Task SetStudioAsync(Guid entityId, string studioName, DateTimeOffset now, bool markNsfw, CancellationToken cancellationToken) {
-        var studio = await FindEntityByTitleAsync("studio", studioName.Trim(), parentEntityId: null, cancellationToken)
-            ?? CreateEntity("studio", studioName.Trim(), now);
+        var studio = await FindEntityByTitleAsync(EntityKind.Studio.ToCode(), studioName.Trim(), parentEntityId: null, cancellationToken)
+            ?? CreateEntity(EntityKind.Studio.ToCode(), studioName.Trim(), now);
         MarkNsfwIfRequested(studio, markNsfw, now);
         await RemoveRelationshipAsync(entityId, RelationshipKind.Studio.ToCode(), cancellationToken);
         AddRelationship(entityId, RelationshipKind.Studio.ToCode(), "Studio", studio.Id, studio.KindCode, 0, null, now);

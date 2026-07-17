@@ -19,21 +19,21 @@ public static class ProposalApplySelection {
         var fields = new List<string>();
 
         if (patch is not null) {
-            if (!string.IsNullOrWhiteSpace(patch.Title)) fields.Add("title");
-            if (!string.IsNullOrWhiteSpace(patch.Description)) fields.Add("description");
-            if (patch.ExternalIds is { Count: > 0 }) fields.Add("externalIds");
-            if (patch.Urls is { Count: > 0 }) fields.Add("urls");
-            if (patch.Dates is { Count: > 0 }) fields.Add("dates");
-            if (patch.Stats is { Count: > 0 }) fields.Add("stats");
-            if (patch.Positions is { Count: > 0 }) fields.Add("positions");
-            if (!string.IsNullOrWhiteSpace(patch.Classification)) fields.Add("classification");
-            if (patch.Flags is not null) fields.Add("flags");
-            if (patch.Tags is { Count: > 0 }) fields.Add("tags");
-            if (!string.IsNullOrWhiteSpace(patch.Studio)) fields.Add("studio");
-            if (patch.Credits is { Count: > 0 }) fields.Add("credits");
+            if (!string.IsNullOrWhiteSpace(patch.Title)) fields.Add(MetadataPatchField.Title.ToCode());
+            if (!string.IsNullOrWhiteSpace(patch.Description)) fields.Add(MetadataPatchField.Description.ToCode());
+            if (patch.ExternalIds is { Count: > 0 }) fields.Add(MetadataPatchField.ExternalIds.ToCode());
+            if (patch.Urls is { Count: > 0 }) fields.Add(MetadataPatchField.Urls.ToCode());
+            if (patch.Dates is { Count: > 0 }) fields.Add(MetadataPatchField.Dates.ToCode());
+            if (patch.Stats is { Count: > 0 }) fields.Add(MetadataPatchField.Stats.ToCode());
+            if (patch.Positions is { Count: > 0 }) fields.Add(MetadataPatchField.Positions.ToCode());
+            if (!string.IsNullOrWhiteSpace(patch.Classification)) fields.Add(MetadataPatchField.Classification.ToCode());
+            if (patch.Flags is not null) fields.Add(MetadataPatchField.Flags.ToCode());
+            if (patch.Tags is { Count: > 0 }) fields.Add(MetadataPatchField.Tags.ToCode());
+            if (!string.IsNullOrWhiteSpace(patch.Studio)) fields.Add(MetadataPatchField.Studio.ToCode());
+            if (patch.Credits is { Count: > 0 }) fields.Add(MetadataPatchField.Credits.ToCode());
         }
 
-        if (proposal.Images is { Count: > 0 }) fields.Add("images");
+        if (proposal.Images is { Count: > 0 }) fields.Add(MetadataPatchField.Images.ToCode());
 
         return fields;
     }
