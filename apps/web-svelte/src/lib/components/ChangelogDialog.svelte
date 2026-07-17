@@ -88,8 +88,7 @@
   import type { Snippet } from "svelte";
   import { RefreshCw, X } from "@lucide/svelte";
   import { fetchReleaseUpdateStatus, type ReleaseUpdateStatus } from "$lib/version";
-  import { getGetChangelogUrl } from "$lib/api/generated/prismedia";
-  import { apiPath } from "$lib/api/orval-fetch";
+  import { getChangelog } from "$lib/api/generated/prismedia";
 
   const communityLinks = [
     {
@@ -138,10 +137,8 @@
     if (content || loading) return;
     loading = true;
     try {
-      // Raw text fetch: the changelog endpoint returns markdown, which the JSON-parsing
-      // generated client cannot decode; the URL still comes from the generated helper.
-      const res = await fetch(apiPath(getGetChangelogUrl()));
-      content = res.ok ? await res.text() : "Failed to load changelog.";
+      const response = await getChangelog();
+      content = response.status === 200 ? response.data : "Failed to load changelog.";
     } catch {
       content = "Failed to load changelog.";
     } finally {

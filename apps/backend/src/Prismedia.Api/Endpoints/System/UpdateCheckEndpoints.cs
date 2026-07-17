@@ -30,7 +30,9 @@ internal static class UpdateCheckEndpoints {
         })
             .WithName("GetChangelog")
             .WithTags("System")
-            .WithSummary("Returns the bundled Prismedia changelog markdown.");
+            .WithSummary("Returns the bundled Prismedia changelog markdown.")
+            .Produces<string>(StatusCodes.Status200OK, "text/markdown")
+            .Produces<ApiProblem>(StatusCodes.Status404NotFound);
 
         return routes;
     }

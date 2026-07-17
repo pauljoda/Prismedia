@@ -4183,16 +4183,23 @@ export const getUpdateCheck = async (params?: GetUpdateCheckParams, options?: Re
 
 
 export type getChangelogResponse200 = {
-  data: void
+  data: string
   status: 200
+}
+
+export type getChangelogResponse404 = {
+  data: ApiProblem
+  status: 404
 }
 
 export type getChangelogResponseSuccess = (getChangelogResponse200) & {
   headers: Headers;
 };
-;
+export type getChangelogResponseError = (getChangelogResponse404) & {
+  headers: Headers;
+};
 
-export type getChangelogResponse = (getChangelogResponseSuccess)
+export type getChangelogResponse = (getChangelogResponseSuccess | getChangelogResponseError)
 
 export const getGetChangelogUrl = () => {
 

@@ -122,6 +122,25 @@ public sealed class EntityContractShapeTests {
                 .Order(StringComparer.Ordinal));
     }
 
+    [Fact]
+    public async Task OpenApiDescribesChangelogAsMarkdownText() {
+        using var factory = new WebApplicationFactory<Program>();
+        using var client = factory.CreateClient();
+        using var document = JsonDocument.Parse(await client.GetStringAsync("/openapi/v1.json"));
+
+        var schema = document.RootElement
+            .GetProperty("paths")
+            .GetProperty("/api/changelog")
+            .GetProperty("get")
+            .GetProperty("responses")
+            .GetProperty("200")
+            .GetProperty("content")
+            .GetProperty("text/markdown")
+            .GetProperty("schema");
+
+        Assert.Equal("string", schema.GetProperty("type").GetString());
+    }
+
     private static Type[] DirectEntityContractInterfaces(Type type) {
         var interfaces = type.GetInterfaces();
         var inheritedInterfaces = interfaces
