@@ -64,6 +64,15 @@ public static class VideoDirectPlayPolicy {
         bool directStreamAllowed,
         bool transcodingAllowed) {
         var rangeAllowed = VideoPlaybackRangePolicy.AllowsDirectPlayback(range, supportedVideoRangeTypes);
+        var primaryVideoStream = PrimaryVideoStream(source);
+
+        // HDR10, HLG, HDR10+, and Dolby Vision all require at least 10-bit samples. A stream with
+        // HDR signaling over 8/9-bit video is internally contradictory; preserving that signaling
+        // through DirectPlay or Remux causes standards-compliant displays to render it incorrectly.
+        // Normalize it through the existing HDR-to-SDR transcode path for every client.
+        if (VideoPlaybackRangePolicy.RequiresToneMappingForInvalidBitDepth(range, primaryVideoStream?.BitDepth)) {
+            return new VideoPlaybackDecision(VideoPlaybackMethod.Transcode);
+        }
 
         // Without a device profile we cannot reason about the client's codec support, so fall back
         // to the extension-based heuristic: only containers a browser plays natively are eligible.
@@ -119,14 +128,17 @@ public static class VideoDirectPlayPolicy {
     // True when the source's primary video stream is a Dolby Vision layer that cannot be handed to a
     // non-Dolby-Vision decoder by a plain stream copy (Profile 5 / base-layer compatibility id 0).
     private static bool RequiresDolbyVisionToneMapping(VideoSourceFile source) {
-        var stream = source.Streams?
-            .Where(candidate => candidate.Type.Equals("Video", StringComparison.OrdinalIgnoreCase))
-            .OrderBy(candidate => candidate.StreamIndex)
-            .FirstOrDefault();
+        var stream = PrimaryVideoStream(source);
         return VideoPlaybackRangePolicy.RequiresDolbyVisionToneMapping(
             stream?.DvProfile,
             stream?.DvBlSignalCompatibilityId);
     }
+
+    private static VideoSourceStream? PrimaryVideoStream(VideoSourceFile source) =>
+        source.Streams?
+            .Where(candidate => candidate.Type.Equals("Video", StringComparison.OrdinalIgnoreCase))
+            .OrderBy(candidate => candidate.StreamIndex)
+            .FirstOrDefault();
 
     private static bool ContainerMatches(string? profileContainers, string sourceContainer) =>
         Tokens(profileContainers).Any(token => Comparer.Equals(NormalizeContainerToken(token), sourceContainer));

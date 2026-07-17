@@ -75,6 +75,20 @@ public static class VideoPlaybackRangePolicy {
         dvProfile is 5 || dvBlSignalCompatibilityId is 0;
 
     /// <summary>
+    /// Decides whether HDR metadata is incompatible with the encoded sample depth. HDR formats
+    /// require at least 10-bit samples; copying a sub-10-bit stream while preserving PQ/HLG/Dolby
+    /// Vision signaling makes standards-compliant displays apply the wrong transfer function and
+    /// commonly produces severely dim playback. Unknown depth remains eligible for normal client
+    /// capability negotiation because older probes may not have recorded it.
+    /// </summary>
+    /// <param name="range">Classified source dynamic range.</param>
+    /// <param name="bitDepth">Probed component bit depth, when available.</param>
+    /// <returns>True when the source must be normalized through the SDR transcode path.</returns>
+    public static bool RequiresToneMappingForInvalidBitDepth(VideoPlaybackRange range, int? bitDepth) =>
+        !Comparer.Equals(range.VideoRangeType, VideoPlaybackRange.Sdr.VideoRangeType) &&
+        bitDepth is < 10;
+
+    /// <summary>
     /// Returns true when the range is SDR or the client explicitly advertised support for the HDR range type.
     /// </summary>
     /// <param name="range">Classified source dynamic range.</param>

@@ -76,6 +76,38 @@ public sealed class VideoDirectPlayPolicyTests {
                     IsForced: false),
             ]);
 
+    private static VideoSourceFile Hdr10Source(string path, int bitDepth) =>
+        new(
+            Guid.NewGuid(),
+            path,
+            "video/x-matroska",
+            DirectPlayable: false,
+            Container: "matroska",
+            VideoCodec: "hevc",
+            AudioCodec: "eac3",
+            Streams:
+            [
+                new VideoSourceStream(
+                    StreamIndex: 0,
+                    Type: "Video",
+                    Codec: "hevc",
+                    Language: null,
+                    Title: null,
+                    Width: 1920,
+                    Height: 1080,
+                    FrameRate: 24,
+                    BitRate: null,
+                    SampleRate: null,
+                    Channels: null,
+                    IsDefault: true,
+                    IsForced: false,
+                    PixelFormat: bitDepth >= 10 ? "yuv420p10le" : "yuv420p",
+                    BitDepth: bitDepth,
+                    ColorSpace: "bt2020nc",
+                    ColorTransfer: "smpte2084",
+                    ColorPrimaries: "bt2020")
+            ]);
+
     [Fact]
     public void CapableClientDirectPlaysDolbyVisionHevcAtmosMkv() {
         var source = Source("/media/e02.mkv", "matroska", "hevc", "eac3");
@@ -86,6 +118,42 @@ public sealed class VideoDirectPlayPolicyTests {
             range: VideoPlaybackRange.Dovi,
             profile: CapableClient,
             supportedVideoRangeTypes: ["DOVI", "DOVIWithHDR10", "HDR10"],
+            directPlayAllowed: true,
+            directStreamAllowed: true,
+            transcodingAllowed: true);
+
+        Assert.Equal(VideoPlaybackMethod.DirectPlay, decision.Method);
+    }
+
+    [Theory]
+    [InlineData(8)]
+    [InlineData(9)]
+    public void SubTenBitHdrTranscodesRatherThanCopyingMalformedHdr(int bitDepth) {
+        var source = Hdr10Source("/media/malformed-hdr.mkv", bitDepth);
+
+        var decision = VideoDirectPlayPolicy.Decide(
+            source,
+            selectedAudioCodec: "eac3",
+            range: VideoPlaybackRange.Hdr10,
+            profile: CapableClient,
+            supportedVideoRangeTypes: ["HDR10"],
+            directPlayAllowed: true,
+            directStreamAllowed: true,
+            transcodingAllowed: true);
+
+        Assert.Equal(VideoPlaybackMethod.Transcode, decision.Method);
+    }
+
+    [Fact]
+    public void TenBitHdrRemainsEligibleForStreamCopy() {
+        var source = Hdr10Source("/media/valid-hdr.mkv", bitDepth: 10);
+
+        var decision = VideoDirectPlayPolicy.Decide(
+            source,
+            selectedAudioCodec: "eac3",
+            range: VideoPlaybackRange.Hdr10,
+            profile: CapableClient,
+            supportedVideoRangeTypes: ["HDR10"],
             directPlayAllowed: true,
             directStreamAllowed: true,
             transcodingAllowed: true);

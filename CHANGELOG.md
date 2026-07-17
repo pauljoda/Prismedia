@@ -148,6 +148,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Updated documentation, README screenshots, branding assets, install metadata, and app copy to match the current Prismedia v1 surface.
 
 ### Fixed
+- HDR video with contradictory sub-10-bit samples is now normalized through the SDR tone-mapping path instead of being copied with HDR signaling that makes standards-compliant TVs render it severely dim.
 - Acquisition imports now remain in the durable queue and enter the CPU/disk-intensive import pipeline one at a time, rather than claiming many completed episodes as simultaneously running while they wait for the same media-placement coordinator.
 - Season Acquisition tabs now open active episode work automatically and show each episode’s search/download state independently from its future-monitoring switch.
 - Download-client handoffs now recover automatically after a lost response or interrupted add instead of leaving acquisitions stuck on “Preparing download”; qBittorrent adds that conclusively create no identifiable torrent now release the failed attempt and immediately schedule monitored child fallback instead of waiting for the next daily retry.
