@@ -5,6 +5,7 @@ using Prismedia.Api.Endpoints;
 using Prismedia.Api.Security;
 using Prismedia.Api.Serialization;
 using Prismedia.Application;
+using Prismedia.Application.Updates;
 using Prismedia.Contracts.Entities;
 using Prismedia.Contracts.Media;
 using Prismedia.Contracts.System;
@@ -12,6 +13,7 @@ using Prismedia.Infrastructure;
 using Prismedia.Infrastructure.Database;
 using Prismedia.Infrastructure.Persistence;
 using Prismedia.Infrastructure.Security;
+using Prismedia.Infrastructure.Updates;
 using Prismedia.Infrastructure.Serialization;
 using Prismedia.Infrastructure.Videos;
 using Microsoft.Extensions.FileProviders;
@@ -65,6 +67,7 @@ builder.Services.AddHttpClient(GhcrUpdateCheckService.HttpClientName, client => 
     client.Timeout = TimeSpan.FromSeconds(5);
     client.DefaultRequestHeaders.UserAgent.ParseAdd("Prismedia-UpdateCheck/1.0");
 });
+builder.Services.AddSingleton(new UpdateCheckOptions(builder.Environment.ContentRootPath));
 builder.Services.AddSingleton<IUpdateCheckService, GhcrUpdateCheckService>();
 builder.Services.AddCors(options => {
     options.AddPolicy("PrismediaDevCors", policy => {

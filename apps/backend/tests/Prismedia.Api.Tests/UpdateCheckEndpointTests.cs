@@ -1,10 +1,8 @@
 using System.Net;
 using System.Text;
-using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.FileProviders;
 using Microsoft.Extensions.Logging.Abstractions;
-using Prismedia.Api.Endpoints;
+using Prismedia.Infrastructure.Updates;
 
 namespace Prismedia.Api.Tests;
 
@@ -197,7 +195,7 @@ public sealed class UpdateCheckEndpointTests {
         return new GhcrUpdateCheckService(
             new StubHttpClientFactory(handler),
             configuration,
-            new StubWebHostEnvironment(Directory.GetCurrentDirectory()),
+            new UpdateCheckOptions(Directory.GetCurrentDirectory()),
             NullLogger<GhcrUpdateCheckService>.Instance);
     }
 
@@ -260,12 +258,4 @@ public sealed class UpdateCheckEndpointTests {
             Task.FromResult(responder(request));
     }
 
-    private sealed class StubWebHostEnvironment(string contentRootPath) : IWebHostEnvironment {
-        public string EnvironmentName { get; set; } = "Development";
-        public string ApplicationName { get; set; } = "Prismedia.Api.Tests";
-        public string WebRootPath { get; set; } = contentRootPath;
-        public IFileProvider WebRootFileProvider { get; set; } = new NullFileProvider();
-        public string ContentRootPath { get; set; } = contentRootPath;
-        public IFileProvider ContentRootFileProvider { get; set; } = new NullFileProvider();
-    }
 }
