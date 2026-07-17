@@ -191,7 +191,7 @@ public sealed partial class LibraryScanPersistenceService {
     }
 
     private bool HasUsableAssetPath(string path) {
-        if (!path.StartsWith("/assets/", StringComparison.Ordinal)) {
+        if (!path.StartsWith(AssetPaths.AssetsUrlPrefix, StringComparison.Ordinal)) {
             return true;
         }
 

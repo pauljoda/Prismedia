@@ -5,6 +5,7 @@ using Prismedia.Contracts.Entities;
 using Prismedia.Contracts.Media;
 using Prismedia.Contracts.Plugins;
 using Prismedia.Domain.Entities;
+using Prismedia.Infrastructure.Media.Processing;
 using Prismedia.Infrastructure.Persistence;
 using Prismedia.Infrastructure.Persistence.Entities;
 
@@ -182,7 +183,7 @@ public sealed class PluginArtworkDownloader {
             _newArtworkPaths.Add(physicalPath);
         }
 
-        var publicPath = $"/assets/{relativePath.Replace(Path.DirectorySeparatorChar, '/')}";
+        var publicPath = $"{AssetPaths.AssetsUrlPrefix}{relativePath.Replace(Path.DirectorySeparatorChar, '/')}";
         _artworkEntityIds.Add(entityId);
         var existing = await FindEntityFileAsync(entityId, role, cancellationToken);
         if (existing is null) {

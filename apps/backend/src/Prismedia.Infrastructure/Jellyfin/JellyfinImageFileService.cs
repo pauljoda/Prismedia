@@ -32,7 +32,7 @@ public sealed class JellyfinImageFileService : IJellyfinImageFileService {
                 asset.ImageTag));
         }
 
-        var diskPath = asset.Path.StartsWith("/assets/", StringComparison.Ordinal)
+        var diskPath = asset.Path.StartsWith(AssetPaths.AssetsUrlPrefix, StringComparison.Ordinal)
             ? _assets.ResolveAssetDiskPath(asset.Path)
             : asset.Path;
         if (diskPath is null || !File.Exists(diskPath)) {

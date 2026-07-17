@@ -5,6 +5,7 @@ using Prismedia.Contracts.Entities;
 using Prismedia.Domain.Entities;
 using Prismedia.Infrastructure.Entities.Mappers;
 using Prismedia.Infrastructure.Entities.Thumbnails;
+using Prismedia.Infrastructure.Media.Processing;
 using Prismedia.Infrastructure.Persistence;
 using Prismedia.Infrastructure.Persistence.Entities;
 
@@ -556,7 +557,7 @@ public sealed partial class EfEntityReadService {
         HasUsableAssetPath(file.Path);
 
     private bool HasUsableAssetPath(string path) {
-        if (!path.StartsWith("/assets/", StringComparison.Ordinal)) {
+        if (!path.StartsWith(AssetPaths.AssetsUrlPrefix, StringComparison.Ordinal)) {
             return true;
         }
 

@@ -21,7 +21,7 @@ public sealed class AssetPathService {
     public string CacheRoot => _cacheRoot;
 
     public string VideoThumbnailPath(Guid entityId) =>
-        Path.Combine(_cacheRoot, "videos", entityId.ToString(), "thumb.jpg");
+        Path.Combine(_cacheRoot, AssetPaths.Videos, entityId.ToString(), AssetPaths.ThumbnailFile);
 
     /// <summary>
     /// Disk path for the small grid-sized cover variant. Stored in one flat,
@@ -29,15 +29,15 @@ public sealed class AssetPathService {
     /// same convention.
     /// </summary>
     public string GridThumbnailPath(Guid entityId) =>
-        Path.Combine(_cacheRoot, "grid-thumbs", entityId.ToString() + ".jpg");
+        Path.Combine(_cacheRoot, AssetPaths.GridThumbs, entityId.ToString() + ".jpg");
 
     /// <summary>Disk path for the double-density grid cover variant.</summary>
     public string GridThumbnail2xPath(Guid entityId) =>
-        Path.Combine(_cacheRoot, "grid-thumbs", entityId.ToString() + "@2x.jpg");
+        Path.Combine(_cacheRoot, AssetPaths.GridThumbs, entityId.ToString() + "@2x.jpg");
 
     /// <summary>Maps a stored <c>/assets/...</c> cover URL back to its cache-relative disk path.</summary>
     public string? ResolveAssetDiskPath(string assetUrl) {
-        const string prefix = "/assets/";
+        const string prefix = AssetPaths.AssetsUrlPrefix;
         if (string.IsNullOrEmpty(assetUrl) || !assetUrl.StartsWith(prefix, StringComparison.Ordinal)) {
             return null;
         }
@@ -53,37 +53,37 @@ public sealed class AssetPathService {
     }
 
     public string VideoPreviewPath(Guid entityId) =>
-        Path.Combine(_cacheRoot, "videos", entityId.ToString(), "preview.mp4");
+        Path.Combine(_cacheRoot, AssetPaths.Videos, entityId.ToString(), AssetPaths.PreviewFile);
 
     public string VideoSpritePath(Guid entityId) =>
-        Path.Combine(_cacheRoot, "videos", entityId.ToString(), "sprite.jpg");
+        Path.Combine(_cacheRoot, AssetPaths.Videos, entityId.ToString(), AssetPaths.SpriteFile);
 
     public string VideoTrickplayVttPath(Guid entityId) =>
-        Path.Combine(_cacheRoot, "videos", entityId.ToString(), "trickplay.vtt");
+        Path.Combine(_cacheRoot, AssetPaths.Videos, entityId.ToString(), AssetPaths.TrickplayVttFile);
 
     public string TrickplayFrameDir(Guid entityId) =>
-        Path.Combine(_cacheRoot, "videos", entityId.ToString(), "trickplay-frames");
+        Path.Combine(_cacheRoot, AssetPaths.Videos, entityId.ToString(), AssetPaths.TrickplayFrames);
 
     public string TrickplayTileDir(Guid entityId, int width) =>
-        Path.Combine(_cacheRoot, "trickplay", entityId.ToString(), width.ToString());
+        Path.Combine(_cacheRoot, AssetPaths.Trickplay, entityId.ToString(), width.ToString());
 
     public string ImageThumbnailPath(Guid entityId) =>
-        Path.Combine(_cacheRoot, "images", entityId.ToString(), "thumb.jpg");
+        Path.Combine(_cacheRoot, AssetPaths.Images, entityId.ToString(), AssetPaths.ThumbnailFile);
 
     public string ImagePreviewPath(Guid entityId) =>
-        Path.Combine(_cacheRoot, "images", entityId.ToString(), "preview.mp4");
+        Path.Combine(_cacheRoot, AssetPaths.Images, entityId.ToString(), AssetPaths.PreviewFile);
 
     public string BookPageThumbnailPath(Guid entityId) =>
-        Path.Combine(_cacheRoot, "book-pages", entityId.ToString(), "thumb.jpg");
+        Path.Combine(_cacheRoot, AssetPaths.BookPages, entityId.ToString(), AssetPaths.ThumbnailFile);
 
     public string BookCoverThumbnailPath(Guid entityId) =>
-        Path.Combine(_cacheRoot, "book-covers", entityId.ToString(), "thumb.jpg");
+        Path.Combine(_cacheRoot, AssetPaths.BookCovers, entityId.ToString(), AssetPaths.ThumbnailFile);
 
     public string AudioWaveformPath(Guid entityId) =>
-        Path.Combine(_cacheRoot, "audio-tracks", entityId.ToString(), "waveform.json");
+        Path.Combine(_cacheRoot, AssetPaths.AudioTracks, entityId.ToString(), AssetPaths.WaveformFile);
 
     public string SubtitleDir(Guid entityId) =>
-        Path.Combine(_cacheRoot, "videos", entityId.ToString(), "subtitles");
+        Path.Combine(_cacheRoot, AssetPaths.Videos, entityId.ToString(), AssetPaths.Subtitles);
 
     /// <summary>
     /// Creates the entity subtitle directory one component at a time while rejecting any existing
@@ -93,7 +93,7 @@ public sealed class AssetPathService {
     public string EnsureSubtitleDirectorySafe(Guid entityId) {
         EnsureOrdinaryDirectory(_cacheRoot, createIfMissing: true);
         var current = _cacheRoot;
-        foreach (var segment in new[] { "videos", entityId.ToString(), "subtitles" }) {
+        foreach (var segment in new[] { AssetPaths.Videos, entityId.ToString(), AssetPaths.Subtitles }) {
             current = Path.Combine(current, segment);
             EnsureOrdinaryDirectory(current, createIfMissing: true);
         }
@@ -164,9 +164,9 @@ public sealed class AssetPathService {
             var segments = Path.GetRelativePath(_cacheRoot, fullPath)
                 .Split(Path.DirectorySeparatorChar, StringSplitOptions.RemoveEmptyEntries);
             return segments.Length == 4 &&
-                string.Equals(segments[0], "videos", StringComparison.Ordinal) &&
+                string.Equals(segments[0], AssetPaths.Videos, StringComparison.Ordinal) &&
                 Guid.TryParse(segments[1], out var entityId) &&
-                string.Equals(segments[2], "subtitles", StringComparison.Ordinal) &&
+                string.Equals(segments[2], AssetPaths.Subtitles, StringComparison.Ordinal) &&
                 !string.IsNullOrWhiteSpace(segments[3]) &&
                 IsSubtitleAssetPath(entityId, fullPath);
         } catch (Exception exception) when (exception is ArgumentException or NotSupportedException or PathTooLongException) {
@@ -175,40 +175,40 @@ public sealed class AssetPathService {
     }
 
     public static string VideoThumbnailUrl(Guid entityId) =>
-        $"/assets/videos/{entityId}/thumb.jpg";
+        $"{AssetPaths.AssetsUrlPrefix}{AssetPaths.Videos}/{entityId}/{AssetPaths.ThumbnailFile}";
 
     public static string GridThumbnailUrl(Guid entityId) =>
-        $"/assets/grid-thumbs/{entityId}.jpg";
+        $"{AssetPaths.AssetsUrlPrefix}{AssetPaths.GridThumbs}/{entityId}.jpg";
 
     public static string GridThumbnail2xUrl(Guid entityId) =>
-        $"/assets/grid-thumbs/{entityId}@2x.jpg";
+        $"{AssetPaths.AssetsUrlPrefix}{AssetPaths.GridThumbs}/{entityId}@2x.jpg";
 
     public static string VideoPreviewUrl(Guid entityId) =>
-        $"/assets/videos/{entityId}/preview.mp4";
+        $"{AssetPaths.AssetsUrlPrefix}{AssetPaths.Videos}/{entityId}/{AssetPaths.PreviewFile}";
 
     public static string VideoTrickplayVttUrl(Guid entityId) =>
-        $"/assets/videos/{entityId}/trickplay.vtt";
+        $"{AssetPaths.AssetsUrlPrefix}{AssetPaths.Videos}/{entityId}/{AssetPaths.TrickplayVttFile}";
 
     public static string TrickplayPlaylistUrl(Guid entityId, int width) =>
         $"/Videos/{entityId}/Trickplay/{width}/tiles.m3u8";
 
     public static string ImageThumbnailUrl(Guid entityId) =>
-        $"/assets/images/{entityId}/thumb.jpg";
+        $"{AssetPaths.AssetsUrlPrefix}{AssetPaths.Images}/{entityId}/{AssetPaths.ThumbnailFile}";
 
     public static string ImagePreviewUrl(Guid entityId) =>
-        $"/assets/images/{entityId}/preview.mp4";
+        $"{AssetPaths.AssetsUrlPrefix}{AssetPaths.Images}/{entityId}/{AssetPaths.PreviewFile}";
 
     public static string BookPageThumbnailUrl(Guid entityId) =>
-        $"/assets/book-pages/{entityId}/thumb.jpg";
+        $"{AssetPaths.AssetsUrlPrefix}{AssetPaths.BookPages}/{entityId}/{AssetPaths.ThumbnailFile}";
 
     public static string BookCoverThumbnailUrl(Guid entityId) =>
-        $"/assets/book-covers/{entityId}/thumb.jpg";
+        $"{AssetPaths.AssetsUrlPrefix}{AssetPaths.BookCovers}/{entityId}/{AssetPaths.ThumbnailFile}";
 
     public static string AudioWaveformUrl(Guid entityId) =>
-        $"/assets/audio-tracks/{entityId}/waveform.json";
+        $"{AssetPaths.AssetsUrlPrefix}{AssetPaths.AudioTracks}/{entityId}/{AssetPaths.WaveformFile}";
 
     public static string SubtitleUrl(Guid entityId, string fileName) =>
-        $"/assets/videos/{entityId}/subtitles/{fileName}";
+        $"{AssetPaths.AssetsUrlPrefix}{AssetPaths.Videos}/{entityId}/{AssetPaths.Subtitles}/{fileName}";
 
     private static bool IsLowerHexToken(string value) =>
         value.All(character => character is >= '0' and <= '9' or >= 'a' and <= 'f');

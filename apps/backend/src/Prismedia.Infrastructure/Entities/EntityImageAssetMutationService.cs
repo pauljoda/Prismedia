@@ -3,6 +3,7 @@ using Prismedia.Application.Entities;
 using Prismedia.Application.Jobs.Ports;
 using Prismedia.Contracts.Media;
 using Prismedia.Domain.Entities;
+using Prismedia.Infrastructure.Media.Processing;
 using Prismedia.Infrastructure.Persistence;
 using Prismedia.Infrastructure.Persistence.Entities;
 
@@ -67,7 +68,7 @@ public sealed class EntityImageAssetMutationService(
             await content.CopyToAsync(output, cancellationToken);
         }
 
-        var publicPath = $"/assets/{relativePath.Replace(Path.DirectorySeparatorChar, '/')}";
+        var publicPath = $"{AssetPaths.AssetsUrlPrefix}{relativePath.Replace(Path.DirectorySeparatorChar, '/')}";
         var existing = await FindEntityFileAsync(entityId, fileRole, cancellationToken);
         if (existing is null) {
             db.EntityFiles.Add(new EntityFileRow {

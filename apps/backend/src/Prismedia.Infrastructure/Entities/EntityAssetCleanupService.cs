@@ -9,17 +9,7 @@ namespace Prismedia.Infrastructure.Entities;
 /// Filesystem failures are logged but never roll back an already-committed domain transition.
 /// </summary>
 public sealed class EntityAssetCleanupService {
-    private static readonly string[] GeneratedDirectoryRoots = [
-        "videos",
-        "images",
-        "trickplay",
-        "audio-tracks",
-        "book-pages",
-        "book-covers",
-        "hls",
-        "hls2",
-        "hlsv",
-    ];
+    private static readonly string[] GeneratedDirectoryRoots = AssetPaths.GeneratedDirectoryRoots;
 
     private readonly AssetPathService assets;
     private readonly ILogger logger;

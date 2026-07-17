@@ -63,7 +63,7 @@ public sealed class MaintenancePersistenceService(
             }
         }
 
-        var videosDirectory = Path.Combine(assets.CacheRoot, "videos");
+        var videosDirectory = Path.Combine(assets.CacheRoot, AssetPaths.Videos);
         if (!IsOrdinaryDirectory(videosDirectory)) {
             return 0;
         }
@@ -72,7 +72,7 @@ public sealed class MaintenancePersistenceService(
         var cutoff = DateTime.UtcNow - SubtitleOrphanGracePeriod;
         foreach (var entityDirectory in TryEnumerateDirectories(videosDirectory)) {
             cancellationToken.ThrowIfCancellationRequested();
-            var subtitleDirectory = Path.Combine(entityDirectory, "subtitles");
+            var subtitleDirectory = Path.Combine(entityDirectory, AssetPaths.Subtitles);
             if (!IsOrdinaryDirectory(entityDirectory) || !IsOrdinaryDirectory(subtitleDirectory)) {
                 continue;
             }
@@ -179,27 +179,27 @@ public sealed class MaintenancePersistenceService(
         switch (kind) {
             case EntityKind.Video:
                 HlsAssetService.CancelActiveGenerationsForItem(entityId);
-                DeleteFileIfExists(Path.Combine(cacheBase, "videos", id, "thumb.jpg"));
-                DeleteFileIfExists(Path.Combine(cacheBase, "videos", id, "preview.mp4"));
-                DeleteFileIfExists(Path.Combine(cacheBase, "videos", id, "sprite.jpg"));
-                DeleteFileIfExists(Path.Combine(cacheBase, "grid-thumbs", id + ".jpg"));
-                DeleteFileIfExists(Path.Combine(cacheBase, "grid-thumbs", id + "@2x.jpg"));
-                DeleteFileIfExists(Path.Combine(cacheBase, "videos", id, "trickplay.vtt"));
-                DeleteDirectoryIfExists(Path.Combine(cacheBase, "videos", id, "trickplay-frames"));
-                DeleteDirectoryIfExists(Path.Combine(cacheBase, "trickplay", id));
-                DeleteDirectoryIfExists(Path.Combine(cacheBase, "hlsv", id));
-                DeleteDirectoryIfExists(Path.Combine(cacheBase, "hls2", id));
-                DeleteDirectoryIfExists(Path.Combine(cacheBase, "hls", id));
+                DeleteFileIfExists(Path.Combine(cacheBase, AssetPaths.Videos, id, AssetPaths.ThumbnailFile));
+                DeleteFileIfExists(Path.Combine(cacheBase, AssetPaths.Videos, id, AssetPaths.PreviewFile));
+                DeleteFileIfExists(Path.Combine(cacheBase, AssetPaths.Videos, id, AssetPaths.SpriteFile));
+                DeleteFileIfExists(Path.Combine(cacheBase, AssetPaths.GridThumbs, id + ".jpg"));
+                DeleteFileIfExists(Path.Combine(cacheBase, AssetPaths.GridThumbs, id + "@2x.jpg"));
+                DeleteFileIfExists(Path.Combine(cacheBase, AssetPaths.Videos, id, AssetPaths.TrickplayVttFile));
+                DeleteDirectoryIfExists(Path.Combine(cacheBase, AssetPaths.Videos, id, AssetPaths.TrickplayFrames));
+                DeleteDirectoryIfExists(Path.Combine(cacheBase, AssetPaths.Trickplay, id));
+                DeleteDirectoryIfExists(Path.Combine(cacheBase, AssetPaths.Hlsv, id));
+                DeleteDirectoryIfExists(Path.Combine(cacheBase, AssetPaths.Hls2, id));
+                DeleteDirectoryIfExists(Path.Combine(cacheBase, AssetPaths.Hls, id));
                 break;
             case EntityKind.Image:
-                DeleteFileIfExists(Path.Combine(cacheBase, "images", id, "thumb.jpg"));
-                DeleteFileIfExists(Path.Combine(cacheBase, "images", id, "preview.mp4"));
+                DeleteFileIfExists(Path.Combine(cacheBase, AssetPaths.Images, id, AssetPaths.ThumbnailFile));
+                DeleteFileIfExists(Path.Combine(cacheBase, AssetPaths.Images, id, AssetPaths.PreviewFile));
                 break;
             case EntityKind.BookPage:
-                DeleteFileIfExists(Path.Combine(cacheBase, "book-pages", id, "thumb.jpg"));
+                DeleteFileIfExists(Path.Combine(cacheBase, AssetPaths.BookPages, id, AssetPaths.ThumbnailFile));
                 break;
             case EntityKind.AudioTrack:
-                DeleteFileIfExists(Path.Combine(cacheBase, "audio-tracks", id, "waveform.json"));
+                DeleteFileIfExists(Path.Combine(cacheBase, AssetPaths.AudioTracks, id, AssetPaths.WaveformFile));
                 break;
         }
     }

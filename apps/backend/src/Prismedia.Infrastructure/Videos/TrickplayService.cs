@@ -2,6 +2,7 @@ using System.Globalization;
 using Microsoft.EntityFrameworkCore;
 using Prismedia.Application.Videos;
 using Prismedia.Contracts.Media;
+using Prismedia.Infrastructure.Media.Processing;
 using Prismedia.Infrastructure.Persistence;
 using Prismedia.Infrastructure.Persistence.Entities;
 
@@ -81,7 +82,7 @@ public sealed class TrickplayService : ITrickplayService {
     }
 
     private string TrickplayRoot(Guid itemId, int width) =>
-        Path.Combine(_cacheRoot, "trickplay", itemId.ToString(), width.ToString(CultureInfo.InvariantCulture));
+        Path.Combine(_cacheRoot, AssetPaths.Trickplay, itemId.ToString(), width.ToString(CultureInfo.InvariantCulture));
 
     private async Task<ResolvedTrickplayWidth?> ResolveTrickplayWidthAsync(
         Guid itemId,
@@ -103,7 +104,7 @@ public sealed class TrickplayService : ITrickplayService {
             }
         }
 
-        var itemRoot = Path.Combine(_cacheRoot, "trickplay", itemId.ToString());
+        var itemRoot = Path.Combine(_cacheRoot, AssetPaths.Trickplay, itemId.ToString());
         if (Directory.Exists(itemRoot)) {
             foreach (var directory in Directory.EnumerateDirectories(itemRoot)) {
                 if (int.TryParse(

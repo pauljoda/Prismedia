@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging;
 using Prismedia.Application.Videos;
+using Prismedia.Infrastructure.Media.Processing;
 
 namespace Prismedia.Infrastructure.Videos;
 
@@ -17,7 +18,7 @@ namespace Prismedia.Infrastructure.Videos;
 /// </remarks>
 public sealed class TranscodeCacheService : ITranscodeCacheService {
     // The cache roots, relative to the cache directory, that hold generated HLS/transcode output.
-    private static readonly string[] CacheRootNames = ["hlsv", "hls", "hls2"];
+    private static readonly string[] CacheRootNames = AssetPaths.TranscodeCacheRoots;
 
     private readonly HlsAssetServiceOptions _options;
     private readonly ILogger<TranscodeCacheService>? _logger;

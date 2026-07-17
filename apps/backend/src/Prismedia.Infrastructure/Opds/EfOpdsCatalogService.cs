@@ -742,7 +742,7 @@ public sealed class EfOpdsCatalogService(
         ResolveFilePath(path) is { } resolved && File.Exists(resolved);
 
     private string? ResolveFilePath(string path) =>
-        path.StartsWith("/assets/", StringComparison.Ordinal)
+        path.StartsWith(AssetPaths.AssetsUrlPrefix, StringComparison.Ordinal)
             ? assets.ResolveAssetDiskPath(path)
             : path;
 
