@@ -15,6 +15,14 @@ paths, entity IDs, and media metadata are intentionally omitted.
 - The full test began with no video scan snapshot because the pending subtitle-sidecar migration
   intentionally invalidated video snapshots. Existing entities and media were retained.
 
+Two runtime commits landed in the shared checkout while the long baseline was running. Their diffs
+affect imported-episode auto-identify/job targeting and AAC remux playback; they do not touch
+snapshot gating, sidecar application, scan batch persistence, wanted binding, or discovery. The
+measurements remain explicitly tied to `0b2864b7`. After the audit, the resulting current runtime
+HEAD (`dd5e1952`) was built natively and deployed to `prismedia-dev` as
+`sha256:e73375d4cf18bed92caeb0059d6bce91aac04f62197c48bf38573adc562668fa`; internal and public
+health checks returned HTTP 200 with all job lanes idle.
+
 ## Results
 
 | Workload | Scope | Result |
