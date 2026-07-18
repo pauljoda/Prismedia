@@ -193,6 +193,14 @@ control or layout, find the block that owns the pattern and use it.
 - Always open and test Prismedia through the .NET app at `http://localhost:8008`; do not browse Vite directly because Vite is only the frontend dev server and does not provide the running app surface by itself.
 - Volumes: `/data` for database/cache/thumbnails and `/media` for the user's media library.
 
+## Remote Development Validation
+
+- When available, use `paul@10.10.10.100` for deployment, smoke testing, and verification that benefits from a rich media library. Local development remains appropriate for builds, launches, unit/integration tests, and checks that do not require representative content.
+- Prefer the remote rich-data environment for playback, transcoding/encoding, metadata flows, library scans, and other behavior whose validity or performance depends on real media diversity and collection scale.
+- Perform development experiments only against the `dev-prismedia` instance. Never modify, restart, replace, reconfigure, or run experiments against the standard live Prismedia container that serves `prismedia.pauljoda.com`.
+- Database snapshots of `dev-prismedia` are allowed before experiments so its state can be restored and results can be repeated. Treat snapshots and media as private development data; do not copy them into the repository or expose their contents in logs, commits, or reports.
+- Before changing performance-sensitive behavior, capture a baseline with stage-level timings and representative workload details. Compare changes against the same workload and report measured results rather than relying on perceived speed.
+
 ## Tooling Expectations
 
 - Local dev stack restarts must reproduce the canonical workflow from the shell.
