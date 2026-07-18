@@ -76,6 +76,7 @@ public sealed class JobQueueService : IJobQueueService {
 
     private static readonly string AutoIdentifyJobTypeCode = JobType.AutoIdentify.ToCode();
     private static readonly string AcquisitionImportJobTypeCode = JobType.AcquisitionImport.ToCode();
+    private static readonly string TargetedAutoIdentifyKindCode = EntityKindRegistry.Video.Code;
     private static readonly string MusicArtistKindCode = EntityKindRegistry.MusicArtist.Code;
     private static readonly string AudioLibraryKindCode = EntityKindRegistry.AudioLibrary.Code;
 
@@ -328,9 +329,9 @@ public sealed class JobQueueService : IJobQueueService {
                     WHERE id = (
                         SELECT id FROM job_runs
                         WHERE status = 'queued' AND available_at <= {0}
-                          AND ({3} = FALSE OR type <> {4})
-                          AND ({5} = FALSE OR type <> {4} OR COALESCE(target_entity_kind, '') <> {6})
-                          AND ({7} = FALSE OR type <> {8})
+                          AND ({3} = FALSE OR type <> {4} OR COALESCE(target_entity_kind, '') = {5})
+                          AND ({6} = FALSE OR type <> {4} OR COALESCE(target_entity_kind, '') <> {7})
+                          AND ({8} = FALSE OR type <> {9})
                         ORDER BY priority DESC, CASE WHEN lane = {2} THEN 1 ELSE 0 END DESC, available_at, created_at
                         LIMIT 1
                         FOR UPDATE SKIP LOCKED
@@ -342,6 +343,7 @@ public sealed class JobQueueService : IJobQueueService {
                     JobRunLane.ForegroundIdentify.ToCode(),
                     autoIdentifyBlocked,
                     AutoIdentifyJobTypeCode,
+                    TargetedAutoIdentifyKindCode,
                     audioLibraryAutoIdentifyBlocked,
                     AudioLibraryKindCode,
                     acquisitionImportRunning,
@@ -357,9 +359,9 @@ public sealed class JobQueueService : IJobQueueService {
                     WHERE id = (
                         SELECT id FROM job_runs
                         WHERE status = 'queued' AND available_at <= {0} AND lane = {2}
-                          AND ({3} = FALSE OR type <> {4})
-                          AND ({5} = FALSE OR type <> {4} OR COALESCE(target_entity_kind, '') <> {6})
-                          AND ({7} = FALSE OR type <> {8})
+                          AND ({3} = FALSE OR type <> {4} OR COALESCE(target_entity_kind, '') = {5})
+                          AND ({6} = FALSE OR type <> {4} OR COALESCE(target_entity_kind, '') <> {7})
+                          AND ({8} = FALSE OR type <> {9})
                         ORDER BY priority DESC, available_at, created_at
                         LIMIT 1
                         FOR UPDATE SKIP LOCKED
@@ -371,6 +373,7 @@ public sealed class JobQueueService : IJobQueueService {
                     lane.Value.ToCode(),
                     autoIdentifyBlocked,
                     AutoIdentifyJobTypeCode,
+                    TargetedAutoIdentifyKindCode,
                     audioLibraryAutoIdentifyBlocked,
                     AudioLibraryKindCode,
                     acquisitionImportRunning,
@@ -387,7 +390,9 @@ public sealed class JobQueueService : IJobQueueService {
         var query = _db.JobRuns
             .Where(job => job.Status == JobRunStatus.Queued && job.AvailableAt <= now);
         if (autoIdentifyBlocked) {
-            query = query.Where(job => job.Type != JobType.AutoIdentify);
+            query = query.Where(job =>
+                job.Type != JobType.AutoIdentify ||
+                job.TargetEntityKind == TargetedAutoIdentifyKindCode);
         }
 
         if (audioLibraryAutoIdentifyBlocked) {

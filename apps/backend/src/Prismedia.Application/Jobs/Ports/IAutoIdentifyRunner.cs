@@ -50,9 +50,18 @@ public static class AutoIdentifyPolicy {
 /// series may run beyond this total duration as long as children keep resolving.
 /// </param>
 /// <param name="ReportProgressAsync">Optional callback for publishing live job progress.</param>
+/// <param name="AllowChildTarget">
+/// Allows an explicitly targeted child, such as one newly imported episode, to be identified without
+/// cascading from its complete series. Ordinary scan jobs leave this false and continue targeting roots.
+/// </param>
+/// <param name="IgnoreOrganizedGate">
+/// Allows an explicit import target to refresh metadata even when the entity was already organized.
+/// </param>
 public sealed record AutoIdentifyRunOptions(
     TimeSpan? InactivityTimeout = null,
-    Func<AutoIdentifyProgress, CancellationToken, Task>? ReportProgressAsync = null) {
+    Func<AutoIdentifyProgress, CancellationToken, Task>? ReportProgressAsync = null,
+    bool AllowChildTarget = false,
+    bool IgnoreOrganizedGate = false) {
     public static AutoIdentifyRunOptions Default { get; } = new();
 }
 

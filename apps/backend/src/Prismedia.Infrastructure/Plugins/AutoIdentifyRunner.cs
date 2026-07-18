@@ -58,12 +58,12 @@ public sealed class AutoIdentifyRunner(
             });
         }
 
-        // Only identify scan roots. A child (an episode in a series, an image in a gallery,
-        // a track in an album) is filled by cascading from its identified parent, so identifying it
-        // directly would duplicate and conflict with the parent's work. Audio albums are the exception:
-        // Artist/Album scans intentionally parent albums under a MusicArtist grouping, but the album is
-        // still the metadata root to identify and cascade to tracks.
-        if (entity.ParentEntityId is not null && entity.KindCode != EntityKindRegistry.AudioLibrary.Code) {
+        // Ordinary scans identify roots so provider cascades cannot race each other. An acquisition can
+        // explicitly opt one newly imported episode into direct identification; that path is deliberately
+        // exact and never emitted by broad scan planning. Audio albums remain independent identify roots.
+        if (!options.AllowChildTarget &&
+            entity.ParentEntityId is not null &&
+            entity.KindCode != EntityKindRegistry.AudioLibrary.Code) {
             return new AutoIdentifyResult(false, SkipReason: "child entity; its parent is identified instead");
         }
 
@@ -76,7 +76,7 @@ public sealed class AutoIdentifyRunner(
             return new AutoIdentifyResult(false, SkipReason: $"kind '{selectorKind}' not selected");
         }
 
-        if (config.UnorganizedOnly && entity.IsOrganized) {
+        if (config.UnorganizedOnly && entity.IsOrganized && !options.IgnoreOrganizedGate) {
             return new AutoIdentifyResult(false, SkipReason: "already organized");
         }
 

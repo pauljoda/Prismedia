@@ -25,6 +25,7 @@ public sealed class AutoIdentifyJobHandler(
             return;
         }
 
+        var payload = AutoIdentifyJobPayload.Parse(context.Job.PayloadJson);
         await context.ReportProgressAsync(10, "Identifying", cancellationToken);
         AutoIdentifyResult result;
         try {
@@ -39,7 +40,9 @@ public sealed class AutoIdentifyJobHandler(
                         progress.Phase == AutoIdentifyProgressPhase.Applying
                             ? FormatApplyProgressMessage(progress)
                             : $"Identifying children ({progress.RootChildCount} found)",
-                        token)),
+                        token),
+                    payload.AllowChildTarget,
+                    payload.IgnoreOrganizedGate),
                 cancellationToken);
         } catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested) {
             throw new JobRetryLaterException(

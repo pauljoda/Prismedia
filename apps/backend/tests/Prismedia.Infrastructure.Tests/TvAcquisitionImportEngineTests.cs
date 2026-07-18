@@ -67,6 +67,17 @@ public sealed class TvAcquisitionImportEngineTests : IDisposable {
             .Where(row => row.ParentEntityId == harness.SeasonId && row.KindCode == EntityKindRegistry.Video.Code && row.SortOrder == 2)
             .ToArrayAsync());
         Assert.DoesNotContain(harness.Queue.Enqueued, request => request.Type == JobType.ScanLibrary);
+
+        var subtitleJob = Assert.Single(harness.Queue.Enqueued, request => request.Type == JobType.ExtractSubtitles);
+        Assert.Equal(EntityKindRegistry.Video.Code, subtitleJob.TargetEntityKind);
+        Assert.Equal(harness.WantedEpisodeId.ToString(), subtitleJob.TargetEntityId);
+
+        var identifyJob = Assert.Single(harness.Queue.Enqueued, request => request.Type == JobType.AutoIdentify);
+        Assert.Equal(EntityKindRegistry.Video.Code, identifyJob.TargetEntityKind);
+        Assert.Equal(harness.WantedEpisodeId.ToString(), identifyJob.TargetEntityId);
+        var identifyPayload = AutoIdentifyJobPayload.Parse(identifyJob.PayloadJson);
+        Assert.True(identifyPayload.AllowChildTarget);
+        Assert.True(identifyPayload.IgnoreOrganizedGate);
     }
 
     [Fact]

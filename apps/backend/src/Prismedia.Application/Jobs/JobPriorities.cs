@@ -32,6 +32,9 @@ public static class JobPriorities {
     /// <summary>Metadata sidecars such as embedded subtitle extraction.</summary>
     public const int Sidecar = 30;
 
+    /// <summary>Exact post-import Auto Identify targets; narrow enough to run alongside unrelated scans.</summary>
+    public const int TargetedAutoIdentify = Sidecar;
+
     /// <summary>Video preview clip and trickplay sprite generation — the heaviest work before provider identification.</summary>
     public const int Preview = 10;
 

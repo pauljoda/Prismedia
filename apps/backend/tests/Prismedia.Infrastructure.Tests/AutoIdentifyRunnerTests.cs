@@ -582,6 +582,34 @@ public sealed class AutoIdentifyRunnerTests {
     }
 
     [Fact]
+    public async Task ExplicitImportTargetIdentifiesOnlyTheOrganizedEpisode() {
+        await using var db = CreateContext();
+        var seriesId = await SeedVideoAsync(db, organized: false, kind: EntityKindRegistry.VideoSeries.Code);
+        var episodeId = await SeedVideoAsync(db, organized: true, parentId: seriesId);
+        var settings = await ConfigureAsync(db, enabled: true, providers: ["p1"], confidencePercent: 90m);
+        var identify = new FakeIdentifyProvider {
+            ProposalsByProvider = { ["p1"] = Proposal("p1", confidence: 0.99m, title: "Episode") },
+        };
+        var runner = new AutoIdentifyRunner(
+            settings,
+            identify,
+            db,
+            new EfIdentifyTargetEligibilityService(db),
+            NullLogger<AutoIdentifyRunner>.Instance);
+
+        var result = await runner.RunAsync(
+            episodeId,
+            new AutoIdentifyRunOptions(
+                AllowChildTarget: true,
+                IgnoreOrganizedGate: true),
+            CancellationToken.None);
+
+        Assert.True(result.Applied);
+        Assert.Equal(episodeId, Assert.Single(identify.IdentifyCalls).EntityId);
+        Assert.Single(identify.ApplyCalls);
+    }
+
+    [Fact]
     public async Task SkipsWantedTargetsWithoutQueryingProvidersOrConsumingAnAttempt() {
         await using var db = CreateContext();
         var entityId = await SeedVideoAsync(

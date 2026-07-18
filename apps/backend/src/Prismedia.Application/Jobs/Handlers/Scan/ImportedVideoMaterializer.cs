@@ -142,22 +142,22 @@ public sealed class ImportedVideoMaterializer(
             await context.EnqueueBatchAsync(downstreamJobs, cancellationToken);
         }
 
-        // An acquisition is explicit user intent, so imported identities trigger identify even when
-        // automatic scan identification is disabled for the library. Stamp those identities BEFORE
-        // either identify path is queued so another worker can never claim an ID-less job.
-        foreach (var owner in await acquisitionHints.ApplyToFolderOwnersAsync(
-                     cancellationToken,
-                     request.AcquisitionId)) {
-            await context.EnqueueIfNeededAsync(new EnqueueJobRequest(
+        // An acquisition is explicit user intent. Stamp its identities before publishing any job, then
+        // identify only the exact episodes materialized above. The payload permits this intentional child
+        // target while ordinary scans remain root-only and continue to cascade from a series.
+        await acquisitionHints.ApplyToFolderOwnersAsync(cancellationToken, request.AcquisitionId);
+        var identifyPayload = new AutoIdentifyJobPayload(
+            AllowChildTarget: true,
+            IgnoreOrganizedGate: true).ToJson();
+        foreach (var (entityId, sourcePath) in readyOwnerSources) {
+            await context.EnqueueIfNeededAsync(EnqueueJobRequest.ForEntity(
                 JobType.AutoIdentify,
-                TargetEntityKind: owner.TopLevelKindCode,
-                TargetEntityId: owner.TopLevelEntityId.ToString(),
-                TargetLabel: owner.TopLevelTitle,
-                Priority: JobPriorities.AutoIdentify), cancellationToken);
+                EntityKind.Video,
+                entityId.ToString(),
+                Path.GetFileNameWithoutExtension(sourcePath),
+                JobPriorities.TargetedAutoIdentify,
+                identifyPayload), cancellationToken);
         }
-
-        await AutoIdentifyScanEnqueue.EnqueueRootsAsync(
-            context, settings, downstreamNeeds, readyEntityIds, cancellationToken);
 
         logger.LogInformation(
             "Materialized {Count} imported TV file(s) in {SeriesFolder} before marking the acquisition imported.",

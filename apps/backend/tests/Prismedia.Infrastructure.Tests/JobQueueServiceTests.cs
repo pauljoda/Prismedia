@@ -378,6 +378,40 @@ public sealed class JobQueueServiceTests {
     }
 
     [Fact]
+    public async Task ClaimNextAllowsExactVideoIdentifyWhileBroadIdentifyWaitsForScan() {
+        await using var db = CreateContext();
+        var service = new JobQueueService(db);
+        var now = DateTimeOffset.UtcNow;
+        var scan = NewJobRun(
+            JobType.ScanLibrary,
+            JobRunStatus.Running,
+            now.AddMinutes(-5),
+            priority: JobPriorities.Scan);
+        var broadIdentify = NewJobRun(
+            JobType.AutoIdentify,
+            JobRunStatus.Queued,
+            now.AddMinutes(-1),
+            targetEntityKind: EntityKindRegistry.VideoSeries.Code,
+            priority: JobPriorities.AutoIdentify);
+        var exactIdentify = NewJobRun(
+            JobType.AutoIdentify,
+            JobRunStatus.Queued,
+            now,
+            targetEntityKind: EntityKindRegistry.Video.Code,
+            priority: JobPriorities.TargetedAutoIdentify);
+        db.JobRuns.AddRange(scan, broadIdentify, exactIdentify);
+        await db.SaveChangesAsync();
+
+        var claimed = await service.ClaimNextAsync("worker-1", CancellationToken.None);
+
+        Assert.NotNull(claimed);
+        Assert.Equal(exactIdentify.Id, claimed.Id);
+
+        var blocked = await service.ClaimNextAsync("worker-2", CancellationToken.None);
+        Assert.Null(blocked);
+    }
+
+    [Fact]
     public async Task ClaimNextProcessesMusicArtistAutoIdentifyBeforeAudioLibraryAutoIdentify() {
         await using var db = CreateContext();
         var service = new JobQueueService(db);
