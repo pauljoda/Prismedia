@@ -19,7 +19,7 @@ namespace Prismedia.Infrastructure.Videos;
 /// </summary>
 public sealed partial class HlsAssetService : IHlsAssetService {
     private const int SegmentDurationSeconds = 6;
-    private const int VirtualCacheFormatVersion = 9;
+    private const int VirtualCacheFormatVersion = 10;
 
     // How far ahead of a running generation's start/frontier a requested segment may be while still
     // attaching to that generation instead of starting a new one. It must comfortably exceed the

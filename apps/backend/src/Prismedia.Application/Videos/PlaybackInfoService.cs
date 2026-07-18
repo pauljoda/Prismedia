@@ -96,15 +96,16 @@ public sealed class PlaybackInfoService : IPlaybackInfoService {
             if (isRemux) {
                 transcodingUrl = BuildRemuxUrl(itemId, mediaSourceId, playSessionId, selectedAudioStream?.StreamIndex, request?.AccessToken);
                 transcodingContainer = MediaContainers.Mp4;
-                // Remux copies video but always encodes audio through timestamp correction so delayed
-                // source tracks retain their leading silence instead of playing early.
+                // AAC is packet-copied while the remux preserves the shared A/V timestamp timeline;
+                // codecs outside the browser-safe baseline are encoded to AAC.
+                var audioCopied = string.Equals(selectedAudioStream?.Codec, MediaCodecs.Aac, StringComparison.OrdinalIgnoreCase);
                 transcodingInfo = new TranscodingInfoResult(
                     MediaContainers.Mp4,
                     source.VideoCodec ?? videoStream?.Codec ?? MediaCodecs.Hevc,
                     MediaCodecs.Aac,
                     PlaybackMode.Hls.ToCode(),
                     IsVideoDirect: true,
-                    IsAudioDirect: false);
+                    IsAudioDirect: audioCopied);
             } else {
                 transcodingUrl = BuildTranscodingUrl(itemId, mediaSourceId, playSessionId, selectedAudioStream?.StreamIndex, request?.AccessToken);
                 transcodingContainer = MediaContainers.Ts;

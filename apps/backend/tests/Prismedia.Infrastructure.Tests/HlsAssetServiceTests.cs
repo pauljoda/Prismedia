@@ -153,19 +153,19 @@ public sealed class HlsAssetServiceTests : IDisposable {
     }
 
     [Fact]
-    public void RemuxEncodesAudioWithTimestampCorrectionAndOnlyDownmixesNonAacSources() {
-        // Every audio stream passes through aresample so a source track that begins after video keeps
-        // that delay as leading silence in fMP4 HLS. AAC retains its source channel layout; codecs the
-        // client may not decode are converted to the safe stereo-AAC baseline.
+    public void RemuxCopiesAacWithoutQualityLossAndOnlyDownmixesNonAacSources() {
+        // AAC is already the browser-safe target codec, so even 7.1 sources must be packet-copied rather
+        // than put through another lossy AAC generation. Codecs the client may not decode are converted
+        // to the safe stereo-AAC baseline while retaining their source timestamps.
         Assert.Equal(
-            ["-c:a", "aac", "-b:a", "192k", "-ar", "48000", "-af", "aresample=async=1:first_pts=0"],
-            HlsAssetService.RemuxAudioArguments(RemuxAudioSource("aac"), audioStreamIndex: null));
+            ["-c:a", "copy"],
+            HlsAssetService.RemuxAudioArguments(RemuxAudioSource("aac", channels: 8), audioStreamIndex: null));
         Assert.Equal(
-            ["-c:a", "aac", "-ac", "2", "-b:a", "192k", "-ar", "48000", "-af", "aresample=async=1:first_pts=0"],
+            ["-c:a", "aac", "-ac", "2", "-b:a", "192k", "-ar", "48000", "-af", "aresample=async=1"],
             HlsAssetService.RemuxAudioArguments(RemuxAudioSource("eac3"), audioStreamIndex: null));
         // An explicit absolute stream index resolves the codec of that stream.
         Assert.Equal(
-            ["-c:a", "aac", "-b:a", "192k", "-ar", "48000", "-af", "aresample=async=1:first_pts=0"],
+            ["-c:a", "copy"],
             HlsAssetService.RemuxAudioArguments(RemuxAudioSource("aac"), audioStreamIndex: 1));
     }
 
@@ -213,9 +213,17 @@ public sealed class HlsAssetServiceTests : IDisposable {
             .ToArray();
         Assert.Contains(mapIndexes, index => arguments[index + 1] == "0:2?");
         Assert.DoesNotContain(mapIndexes, index => arguments[index + 1] == "0:1?");
+        Assert.Contains("-copyts", arguments);
+        Assert.Contains("-start_at_zero", arguments);
+        var avoidNegativeTimestampsIndex = arguments.ToList().IndexOf("-avoid_negative_ts");
+        Assert.True(avoidNegativeTimestampsIndex >= 0);
+        Assert.Equal("disabled", arguments[avoidNegativeTimestampsIndex + 1]);
+        var audioCodecIndex = arguments.ToList().IndexOf("-c:a");
+        Assert.True(audioCodecIndex >= 0);
+        Assert.Equal("copy", arguments[audioCodecIndex + 1]);
     }
 
-    private static VideoSourceFile RemuxAudioSource(string audioCodec) =>
+    private static VideoSourceFile RemuxAudioSource(string audioCodec, int channels = 6) =>
         new(
             EntityId: Guid.NewGuid(),
             Path: "/media/x.mkv",
@@ -229,7 +237,7 @@ public sealed class HlsAssetServiceTests : IDisposable {
                     IsDefault: true, IsForced: false),
                 new VideoSourceStream(
                     StreamIndex: 1, Type: "Audio", Codec: audioCodec, Language: "eng", Title: null,
-                    Width: null, Height: null, FrameRate: null, BitRate: null, SampleRate: 48000, Channels: 6,
+                    Width: null, Height: null, FrameRate: null, BitRate: null, SampleRate: 48000, Channels: channels,
                     IsDefault: true, IsForced: false)
             ]);
 
@@ -471,7 +479,7 @@ public sealed class HlsAssetServiceTests : IDisposable {
     }
 
     [Fact]
-    public async Task VirtualCacheWithoutFormatVersionIsRefreshed() {
+    public async Task VirtualCacheFromPriorFormatVersionIsRefreshed() {
         var videoId = Guid.Parse("88888888-8888-8888-8888-888888888888");
         var sourcePath = Path.Combine(_cacheRoot, "source.mkv");
         await File.WriteAllTextAsync(sourcePath, "source");
@@ -486,7 +494,8 @@ public sealed class HlsAssetServiceTests : IDisposable {
               "SourceSize": {{sourceInfo.Length}},
               "SourceModifiedUtc": "{{sourceInfo.LastWriteTimeUtc:O}}",
               "DurationSeconds": 13,
-              "Renditions": ["720p"]
+              "Renditions": ["720p"],
+              "FormatVersion": 9
             }
             """);
         await File.WriteAllTextAsync(Path.Combine(virtualRoot, "v", "720p", "seg_00000.ts"), "old");
@@ -507,7 +516,7 @@ public sealed class HlsAssetServiceTests : IDisposable {
 
         Assert.NotNull(asset);
         var metadata = await File.ReadAllTextAsync(Path.Combine(virtualRoot, "metadata.json"));
-        Assert.Contains("\"FormatVersion\": 9", metadata);
+        Assert.Contains("\"FormatVersion\": 10", metadata);
         Assert.False(File.Exists(Path.Combine(virtualRoot, "v", "720p", "seg_00000.ts")));
     }
 

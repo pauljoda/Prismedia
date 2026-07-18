@@ -80,7 +80,7 @@ public sealed class PlaybackInfoServiceTests {
     }
 
     [Fact]
-    public async Task PlaybackInfoReportsRemuxAudioAsEncodedWhenTimestampCorrectionIsApplied() {
+    public async Task PlaybackInfoReportsAacRemuxAudioAsDirectWhenPacketsAreCopied() {
         var videoId = Guid.Parse("23232323-2323-2323-2323-232323232323");
         var service = new PlaybackInfoService(
             new FakeVideoSourceService(new VideoSourceFile(
@@ -112,7 +112,7 @@ public sealed class PlaybackInfoServiceTests {
         var source = Assert.Single(info.MediaSources);
         Assert.Contains("/hls/remux/", source.TranscodingUrl);
         Assert.True(source.TranscodingInfo?.IsVideoDirect);
-        Assert.False(source.TranscodingInfo?.IsAudioDirect);
+        Assert.True(source.TranscodingInfo?.IsAudioDirect);
     }
 
     [Fact]

@@ -29,7 +29,7 @@ public sealed partial class HlsAssetService {
     // RemuxInitialBurstSeconds are read flat out so the player gets an immediate buffer at startup.
     private const int RemuxReadRate = 60;
     private const int RemuxInitialBurstSeconds = 30;
-    private const string RemuxAudioTimestampFilter = "aresample=async=1:first_pts=0";
+    private const string RemuxAudioTimestampFilter = "aresample=async=1";
 
     // One whole-file remux generation per (item, audio track); the ffmpeg job runs to completion in
     // the background and the served files (init.mp4, seg_*.m4s, index.m3u8) appear as it progresses.
@@ -351,6 +351,11 @@ public sealed partial class HlsAssetService {
             RemuxInitialBurstSeconds.ToString(CultureInfo.InvariantCulture),
             "-readrate",
             RemuxReadRate.ToString(CultureInfo.InvariantCulture),
+            // Preserve packet timestamps for both copied streams, then move the shared input timeline
+            // to zero as one unit. Their relative offset survives, so delayed audio retains its leading
+            // silence without decoding and re-encoding an already browser-safe AAC track.
+            "-copyts",
+            "-start_at_zero",
             "-i",
             source.Path,
             "-map",
@@ -370,6 +375,10 @@ public sealed partial class HlsAssetService {
 
         arguments.AddRange(
         [
+            // Do not let the output muxer independently sanitize negative timestamps after copyts.
+            // A shared timeline shift is safe; a per-stream shift changes A/V synchronization.
+            "-avoid_negative_ts",
+            "disabled",
             "-f",
             "hls",
             "-hls_time",
@@ -396,20 +405,17 @@ public sealed partial class HlsAssetService {
     /// Builds the audio output arguments for a stream-copy remux.
     /// </summary>
     /// <remarks>
-    /// Every audio stream is encoded through <c>aresample=async=1:first_pts=0</c>. ffmpeg's fMP4 HLS
-    /// muxer otherwise rebases a delayed audio track independently from copied video, removing leading
-    /// silence and making audio play early. AAC input keeps its source channel layout; other codecs are
-    /// downmixed to stereo AAC as the safe universal baseline because the client may not decode them.
+    /// AAC is packet-copied so its original samples, bitrate, and channel layout remain untouched. The
+    /// enclosing remux command preserves the source streams' relative timestamps with <c>-copyts</c>,
+    /// <c>-start_at_zero</c>, and <c>-avoid_negative_ts disabled</c>, so timestamp correction does not
+    /// require a lossy AAC-to-AAC generation. Other codecs are downmixed to stereo AAC as the safe
+    /// universal baseline and use asynchronous resampling to correct timestamp discontinuities without
+    /// forcing the first audio packet to time zero.
     /// </remarks>
-    internal static IReadOnlyList<string> RemuxAudioArguments(VideoSourceFile source, int? audioStreamIndex) {
-        var arguments = new List<string> { "-c:a", MediaCodecs.Aac };
-        if (!IsAacCodec(SelectedAudioStreamCodec(source, audioStreamIndex))) {
-            arguments.AddRange(["-ac", "2"]);
-        }
-
-        arguments.AddRange(["-b:a", "192k", "-ar", "48000", "-af", RemuxAudioTimestampFilter]);
-        return arguments;
-    }
+    internal static IReadOnlyList<string> RemuxAudioArguments(VideoSourceFile source, int? audioStreamIndex) =>
+        IsAacCodec(SelectedAudioStreamCodec(source, audioStreamIndex))
+            ? ["-c:a", "copy"]
+            : ["-c:a", MediaCodecs.Aac, "-ac", "2", "-b:a", "192k", "-ar", "48000", "-af", RemuxAudioTimestampFilter];
 
     // Resolves the codec of the audio stream the remux maps, mirroring the -map expression: a null index
     // maps "0:a:0?" (the first audio stream); an explicit index maps "0:{index}?" (that absolute stream).
