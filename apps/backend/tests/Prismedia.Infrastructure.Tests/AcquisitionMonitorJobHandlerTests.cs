@@ -163,6 +163,22 @@ public sealed class AcquisitionMonitorJobHandlerTests {
     }
 
     [Fact]
+    public async Task CompletedTransferQueuesImportAheadOfBackgroundWork() {
+        await using var db = CreateContext();
+        var acquisitionId = await SeedDownloadingAsync(db, lastSeen: DateTimeOffset.UtcNow);
+        var queue = new RecordingJobQueue();
+        var complete = new DownloadItemStatus(
+            "hashX", "Book", 1, "completed", IsComplete: true, "/save", "/save/book");
+
+        await RunAsync(db, queue, listing: [complete], directLookup: complete, acquisitionId);
+
+        var import = Assert.Single(queue.Enqueued);
+        Assert.Equal(JobType.AcquisitionImport, import.Type);
+        Assert.Equal(JobPriorities.InteractiveRequest, import.Priority);
+        Assert.Null(import.Lane);
+    }
+
+    [Fact]
     public async Task QueuedSnapshotCannotRestoreDownloadingAfterUserCancellation() {
         await using var db = CreateContext();
         var acquisitionId = await SeedDownloadingAsync(

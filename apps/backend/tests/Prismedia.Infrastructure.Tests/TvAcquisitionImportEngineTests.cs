@@ -66,6 +66,7 @@ public sealed class TvAcquisitionImportEngineTests : IDisposable {
         Assert.Single(await db.Entities.AsNoTracking()
             .Where(row => row.ParentEntityId == harness.SeasonId && row.KindCode == EntityKindRegistry.Video.Code && row.SortOrder == 2)
             .ToArrayAsync());
+        Assert.DoesNotContain(harness.Queue.Enqueued, request => request.Type == JobType.ScanLibrary);
     }
 
     [Fact]

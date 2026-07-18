@@ -959,8 +959,6 @@ public sealed class MovieAcquisitionImportEngine(
             context,
             new ImportedEntityMaterializationRequest(import.Id, import.EntityId, root, placedMediaPaths),
             cancellationToken);
-        await ImportRootResolution.EnqueueReconciliationAsync(
-            context, JobType.ScanLibrary, root, "Imported movie scan", logger, cancellationToken);
 
         await torrents.HandleImportedAsync(import, importMode, cancellationToken);
 
@@ -1697,17 +1695,6 @@ public sealed class TvAcquisitionImportEngine(
 
         await context.ReportProgressAsync(75, "Cataloging imported episodes", cancellationToken);
         await materializer.MaterializeAsync(context, materialization, cancellationToken);
-
-        // Keep the aggregate scan for snapshot/stale cleanup and sidecars. Readiness no longer depends
-        // on this singleton job being accepted or finishing before the acquisition status changes.
-        await context.ReportProgressAsync(90, "Scheduling library housekeeping", cancellationToken);
-        try {
-            await context.EnqueueIfNeededAsync(
-                new EnqueueJobRequest(JobType.ScanLibrary, TargetLabel: "Imported episode scan"),
-                cancellationToken);
-        } catch (Exception ex) when (ex is not OperationCanceledException) {
-            logger.LogWarning(ex, "TV import completed readiness but could not queue optional library housekeeping.");
-        }
 
         await torrents.HandleImportedAsync(import, importMode, cancellationToken);
         // No fallible work follows the terminal commit. Otherwise a progress-store outage could make the

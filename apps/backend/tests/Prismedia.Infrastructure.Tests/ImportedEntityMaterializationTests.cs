@@ -68,7 +68,7 @@ public sealed class ImportedEntityMaterializationTests : IDisposable {
     }
 
     [Fact]
-    public async Task MovieImportBindsWantedWrapperBeforeImportedWhenHousekeepingQueueFails() {
+    public async Task MovieImportBindsWantedWrapperWithoutQueueingAFullLibraryScan() {
         await using var db = CreateContext();
         var rootPath = Directory.CreateDirectory(Path.Combine(_workRoot, "movies")).FullName;
         var payloadPath = Directory.CreateDirectory(Path.Combine(_workRoot, "movie-download")).FullName;
@@ -94,9 +94,9 @@ public sealed class ImportedEntityMaterializationTests : IDisposable {
             materializer,
             NullLogger<MovieAcquisitionImportEngine>.Instance);
         var import = ImportContext(db, EntityKind.Movie, wantedId, "Film", payloadPath, year: 2020);
-        var failingQueue = new ThrowingEnqueueJobQueue();
+        var queue = new MergedImportTestSupport.RecordingJobQueue();
 
-        await engine.ImportAsync(JobContext(db, import.Id, failingQueue), import, CancellationToken.None);
+        await engine.ImportAsync(JobContext(db, import.Id, queue), import, CancellationToken.None);
 
         var entity = await db.Entities.AsNoTracking().SingleAsync(row => row.Id == wantedId);
         Assert.False(entity.IsWanted);
@@ -104,7 +104,7 @@ public sealed class ImportedEntityMaterializationTests : IDisposable {
         Assert.Contains(await db.Entities.AsNoTracking().ToArrayAsync(), row =>
             row.ParentEntityId == wantedId && row.KindCode == EntityKindRegistry.Video.Code);
         Assert.True(await db.Entities.AsNoTracking().AnyAsync(row => row.Id == unrelatedId));
-        Assert.True(failingQueue.EnqueueAttempts > 0);
+        Assert.DoesNotContain(queue.Enqueued, request => request.Type == JobType.ScanLibrary);
         Assert.Equal(AcquisitionStatus.Imported, await StatusOfAsync(db, import.Id));
     }
 
@@ -565,47 +565,6 @@ public sealed class ImportedEntityMaterializationTests : IDisposable {
             ImportedEntityMaterializationRequest request,
             CancellationToken cancellationToken) =>
             throw new InvalidOperationException("Synthetic materialization failure.");
-    }
-
-    private sealed class ThrowingEnqueueJobQueue : IJobQueueService {
-        public int EnqueueAttempts { get; private set; }
-
-        public Task<JobRunSnapshot> EnqueueAsync(
-            EnqueueJobRequest request,
-            CancellationToken cancellationToken) {
-            EnqueueAttempts++;
-            throw new InvalidOperationException("Synthetic queue outage.");
-        }
-
-        public Task<int> EnqueueBatchAsync(
-            IReadOnlyList<EnqueueJobRequest> requests,
-            CancellationToken cancellationToken) {
-            EnqueueAttempts++;
-            throw new InvalidOperationException("Synthetic queue outage.");
-        }
-
-        public Task<bool> HasPendingAsync(
-            JobType type,
-            string? targetEntityId,
-            CancellationToken cancellationToken) => Task.FromResult(false);
-
-        public Task UpdateProgressAsync(
-            Guid id,
-            int progress,
-            string? message,
-            CancellationToken cancellationToken) => Task.CompletedTask;
-
-        public Task<IReadOnlyList<JobRunSnapshot>> ListAsync(bool hideNsfw, CancellationToken cancellationToken) => throw new NotSupportedException();
-        public Task<JobRunSnapshot> EnqueueAsync(JobType type, CancellationToken cancellationToken) => throw new NotSupportedException();
-        public Task<int> CancelAsync(JobType? type, CancellationToken cancellationToken) => throw new NotSupportedException();
-        public Task<bool> CancelRunAsync(Guid id, CancellationToken cancellationToken) => throw new NotSupportedException();
-        public Task<int> ClearFailuresAsync(JobType? type, CancellationToken cancellationToken) => throw new NotSupportedException();
-        public Task<JobRunSnapshot?> ClaimNextAsync(string workerId, CancellationToken cancellationToken, JobRunLane? lane = null) => throw new NotSupportedException();
-        public Task<int> RecoverStaleRunningAsync(string currentWorkerId, TimeSpan staleAfter, CancellationToken cancellationToken) => throw new NotSupportedException();
-        public Task CompleteAsync(Guid id, string? message, CancellationToken cancellationToken) => throw new NotSupportedException();
-        public Task FailAsync(Guid id, string message, TimeSpan retryDelay, CancellationToken cancellationToken) => throw new NotSupportedException();
-        public Task<IReadOnlyList<JobQueueCount>> GetQueueCountsAsync(bool hideNsfw, CancellationToken cancellationToken) => throw new NotSupportedException();
-        public Task<int> PruneHistoryAsync(TimeSpan retention, CancellationToken cancellationToken) => throw new NotSupportedException();
     }
 
     private sealed class RootPersistence : ILibraryScanRootPersistence {

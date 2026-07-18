@@ -6,8 +6,9 @@ namespace Prismedia.Domain.Entities;
 /// </summary>
 public enum JobRunLane {
     /// <summary>
-    /// Direct manual identify searches and their review cascades, initiated from one entity's
-    /// Identify screen and eligible for the worker's reserved foreground lane.
+    /// Direct interactive searches and their lightweight follow-up work, initiated from identify or
+    /// acquisition request screens and eligible for the worker's reserved foreground lane. The enum
+    /// name and wire code predate acquisition requests and remain stable for durable job history.
     /// </summary>
     [Code("foreground-identify")]
     ForegroundIdentify

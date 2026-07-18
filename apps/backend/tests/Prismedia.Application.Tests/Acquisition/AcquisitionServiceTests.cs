@@ -36,6 +36,10 @@ public sealed class AcquisitionServiceTests {
         Assert.Equal(
             [JobType.AcquisitionSearch, JobType.AcquisitionEnrich],
             harness.Queue.Requests.Select(request => request.Type).ToArray());
+        Assert.All(harness.Queue.Requests, request => {
+            Assert.Equal(JobPriorities.InteractiveRequest, request.Priority);
+            Assert.Equal(JobRunLane.ForegroundIdentify, request.Lane);
+        });
         Assert.Equal(AcquisitionStatus.Searching, created.Status);
         Assert.Equal(AcquisitionStatus.Searching, harness.Store.Status);
         Assert.Equal(0, harness.Lifecycle.ExecuteCalls);
@@ -735,7 +739,10 @@ public sealed class AcquisitionServiceTests {
         Assert.Contains(
             (AcquisitionId, AcquisitionStatus.Searching, (string?)null),
             harness.Store.StatusChanges);
-        Assert.Equal(JobType.AcquisitionSearch, Assert.Single(harness.Queue.Requests).Type);
+        var search = Assert.Single(harness.Queue.Requests);
+        Assert.Equal(JobType.AcquisitionSearch, search.Type);
+        Assert.Equal(JobPriorities.InteractiveRequest, search.Priority);
+        Assert.Equal(JobRunLane.ForegroundIdentify, search.Lane);
     }
 
     [Theory]
@@ -818,6 +825,8 @@ public sealed class AcquisitionServiceTests {
         Assert.Equal(JobType.AcquisitionSearch, search.Type);
         Assert.Equal(replacementId.ToString(), search.TargetEntityId);
         Assert.Equal(replacementId, AcquisitionJobPayload.Parse(search.PayloadJson!).AcquisitionId);
+        Assert.Equal(JobPriorities.InteractiveRequest, search.Priority);
+        Assert.Equal(JobRunLane.ForegroundIdentify, search.Lane);
         Assert.True(harness.Store.Deleted);
         var history = Assert.Single(harness.History.Entries);
         Assert.Equal(AcquisitionHistoryEvent.Removed, history.Event);
@@ -896,6 +905,8 @@ public sealed class AcquisitionServiceTests {
         Assert.True(detail?.Summary.HasResumableImport);
         var retry = Assert.Single(harness.Queue.Requests);
         Assert.Equal(JobType.AcquisitionImport, retry.Type);
+        Assert.Equal(JobPriorities.InteractiveRequest, retry.Priority);
+        Assert.Null(retry.Lane);
         var payload = AcquisitionJobPayload.Parse(retry.PayloadJson!);
         Assert.Equal(AcquisitionId, payload.AcquisitionId);
         Assert.True(payload.ManualRetry);

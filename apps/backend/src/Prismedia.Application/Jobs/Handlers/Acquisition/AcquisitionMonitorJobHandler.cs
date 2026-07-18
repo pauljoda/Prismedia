@@ -235,7 +235,8 @@ public sealed class AcquisitionMonitorJobHandler(
                         completionJob,
                         PayloadJson: AcquisitionJobPayload.Serialize(transfer.AcquisitionId),
                         TargetEntityId: transfer.AcquisitionId.ToString(),
-                        TargetLabel: isUpgrade ? "Replace with upgrade" : "Import completed download"),
+                        TargetLabel: isUpgrade ? "Replace with upgrade" : "Import completed download",
+                        Priority: JobPriorities.InteractiveRequest),
                     cancellationToken);
             } else {
                 if (await FindPayloadConflictAsync(downloadClient, connection, transfer, cancellationToken) is { } conflict) {

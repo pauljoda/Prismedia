@@ -653,7 +653,9 @@ public sealed class AcquisitionService(
                                 JobType.AcquisitionSearch,
                                 PayloadJson: AcquisitionJobPayload.Serialize(freshId),
                                 TargetEntityId: freshId.ToString(),
-                                TargetLabel: detail.Summary.Title),
+                                TargetLabel: detail.Summary.Title,
+                                Priority: JobPriorities.InteractiveRequest,
+                                Lane: JobRunLane.ForegroundIdentify),
                             cancellationToken);
                     }
                 }
@@ -768,7 +770,9 @@ public sealed class AcquisitionService(
                     JobType.AcquisitionSearch,
                     PayloadJson: AcquisitionJobPayload.Serialize(freshId),
                     TargetEntityId: freshId.ToString(),
-                    TargetLabel: detail.Summary.Title),
+                    TargetLabel: detail.Summary.Title,
+                    Priority: JobPriorities.InteractiveRequest,
+                    Lane: JobRunLane.ForegroundIdentify),
                 cancellationToken);
         }
 
@@ -956,7 +960,9 @@ public sealed class AcquisitionService(
                 JobType.AcquisitionSearch,
                 PayloadJson: AcquisitionJobPayload.Serialize(id),
                 TargetEntityId: id.ToString(),
-                TargetLabel: detail.Summary.Title),
+                TargetLabel: detail.Summary.Title,
+                Priority: JobPriorities.InteractiveRequest,
+                Lane: JobRunLane.ForegroundIdentify),
             cancellationToken);
         return await store.GetAsync(id, cancellationToken);
     }
@@ -1023,7 +1029,8 @@ public sealed class AcquisitionService(
                 JobType.AcquisitionImport,
                 PayloadJson: AcquisitionJobPayload.Serialize(id, allowFormatChange, manualRetry: true),
                 TargetEntityId: id.ToString(),
-                TargetLabel: detail.Summary.Title),
+                TargetLabel: detail.Summary.Title,
+                Priority: JobPriorities.InteractiveRequest),
             cancellationToken);
         return detail;
     }
@@ -1107,7 +1114,9 @@ public sealed class AcquisitionService(
                 JobType.AcquisitionSearch,
                 PayloadJson: AcquisitionJobPayload.Serialize(summary.Id),
                 TargetEntityId: summary.Id.ToString(),
-                TargetLabel: summary.Title),
+                TargetLabel: summary.Title,
+                Priority: JobPriorities.InteractiveRequest,
+                Lane: JobRunLane.ForegroundIdentify),
             cancellationToken);
 
         // When the request carries a persistent external identity, enrich the held metadata in the background
@@ -1120,7 +1129,9 @@ public sealed class AcquisitionService(
                     JobType.AcquisitionEnrich,
                     PayloadJson: AcquisitionJobPayload.Serialize(summary.Id),
                     TargetEntityId: summary.Id.ToString(),
-                    TargetLabel: summary.Title),
+                    TargetLabel: summary.Title,
+                    Priority: JobPriorities.InteractiveRequest,
+                    Lane: JobRunLane.ForegroundIdentify),
                 cancellationToken);
         }
 

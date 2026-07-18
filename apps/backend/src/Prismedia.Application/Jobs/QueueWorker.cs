@@ -22,9 +22,9 @@ public sealed class QueueWorker(
     private static readonly TimeSpan RetryDelay = TimeSpan.FromSeconds(30);
 
     /// <summary>
-    /// Extra worker slots reserved for direct foreground identify jobs. Priority only orders claims,
+    /// Extra worker slots reserved for direct foreground interactive jobs. Priority only orders claims,
     /// so a long-running scan occupying every regular slot would still make a manual identify wait
-    /// for it to finish; the lane lets direct manual identify work start immediately instead.
+    /// for it to finish; the lane lets direct identify and acquisition request work start immediately.
     /// </summary>
     private const int ForegroundLaneSlots = 1;
     private static readonly TimeSpan StaleLeaseTimeout = TimeSpan.FromMinutes(2);
@@ -90,8 +90,8 @@ public sealed class QueueWorker(
             }
 
             // With every regular slot busy, only the reserved foreground lane remains: claim
-            // exclusively direct manual identify work so bulk/background jobs cannot fill it.
-            var foregroundIdentifyOnly = runningJobs.Count >= concurrency;
+            // exclusively direct interactive work so bulk/background jobs cannot fill it.
+            var foregroundOnly = runningJobs.Count >= concurrency;
 
             JobRunSnapshot? job;
             try {
@@ -110,7 +110,7 @@ public sealed class QueueWorker(
                 job = await queue.ClaimNextAsync(
                     _workerId,
                     stoppingToken,
-                    foregroundIdentifyOnly ? JobRunLane.ForegroundIdentify : null);
+                    foregroundOnly ? JobRunLane.ForegroundIdentify : null);
             } catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) {
                 throw;
             } catch (Exception ex) {

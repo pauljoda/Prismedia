@@ -11,6 +11,9 @@ public static class JobPriorities {
     /// <summary>User-triggered identify review cascades — interactive UI work must not wait behind scan backlogs.</summary>
     public const int InteractiveIdentify = 70;
 
+    /// <summary>User-triggered acquisition searches and import handoffs share identify's foreground priority.</summary>
+    public const int InteractiveRequest = InteractiveIdentify;
+
     /// <summary>Library scan — creates the entities the UI shows. Highest so new media appears fast.</summary>
     public const int Scan = 60;
 

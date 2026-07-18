@@ -241,7 +241,8 @@ public sealed class JobScheduler(
                     jobType,
                     PayloadJson: Acquisition.AcquisitionJobPayload.Serialize(completion.AcquisitionId),
                     TargetEntityId: targetId,
-                    TargetLabel: completion.IsUpgrade ? "Replace with upgrade" : "Import completed download"),
+                    TargetLabel: completion.IsUpgrade ? "Replace with upgrade" : "Import completed download",
+                    Priority: JobPriorities.InteractiveRequest),
                 cancellationToken);
             logger.LogWarning(
                 "Recovered missing {JobType} handoff for downloaded acquisition {AcquisitionId}.",
