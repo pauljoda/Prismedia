@@ -47,11 +47,23 @@ public sealed record JobTimingReport(TimeSpan Total, IReadOnlyList<PhaseRecord> 
     /// <summary>
     /// Formats the report as a compact single-line summary for structured logging.
     /// Example: "total=12.34s | discover=0.12s | upsert=1.45s | enqueue=0.89s"
+    /// Repeated phase names are summed in first-seen order so callers can time per-item work
+    /// without producing one log field for every item.
     /// </summary>
     public string ToLogString() {
         var parts = new List<string> { $"total={Total.TotalSeconds:F2}s" };
+        var totals = new Dictionary<string, TimeSpan>(StringComparer.Ordinal);
+        var names = new List<string>();
         foreach (var phase in Phases) {
-            parts.Add($"{phase.Name}={phase.Duration.TotalSeconds:F2}s");
+            if (!totals.TryGetValue(phase.Name, out var elapsed)) {
+                names.Add(phase.Name);
+            }
+
+            totals[phase.Name] = elapsed + phase.Duration;
+        }
+
+        foreach (var name in names) {
+            parts.Add($"{name}={totals[name].TotalSeconds:F2}s");
         }
         return string.Join(" | ", parts);
     }

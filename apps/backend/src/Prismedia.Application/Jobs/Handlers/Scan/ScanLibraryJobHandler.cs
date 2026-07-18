@@ -54,9 +54,19 @@ public sealed class ScanLibraryJobHandler(
 
     protected override async Task OnNoFileChangesAsync(
         JobContext context, LibraryRootData root, CancellationToken cancellationToken) {
-        await AutoIdentifyScanEnqueue.EnqueueExistingRootsForUnchangedScanAsync(
-            context, Roots, downstreamNeeds, root, ScanCategories, cancellationToken);
-        await EnqueueExistingVideoJobsAsync(context, root, cancellationToken);
+        var timer = new JobPhaseTimer();
+        using (timer.Phase("auto-identify")) {
+            await AutoIdentifyScanEnqueue.EnqueueExistingRootsForUnchangedScanAsync(
+                context, Roots, downstreamNeeds, root, ScanCategories, cancellationToken);
+        }
+        using (timer.Phase("recovery-jobs")) {
+            await EnqueueExistingVideoJobsAsync(context, root, cancellationToken);
+        }
+
+        logger.LogInformation(
+            "[METRICS] scan-library-unchanged {Label} — {Timing}",
+            root.Label,
+            timer.Finish().ToLogString());
     }
 
     /// <summary>
@@ -178,7 +188,10 @@ public sealed class ScanLibraryJobHandler(
         var timer = new JobPhaseTimer();
 
         IReadOnlyList<string> files;
-        var excludedPaths = await Roots.GetExcludedPathsForRootAsync(root.Id, cancellationToken);
+        IReadOnlySet<string> excludedPaths;
+        using (timer.Phase("excluded-paths")) {
+            excludedPaths = await Roots.GetExcludedPathsForRootAsync(root.Id, cancellationToken);
+        }
         using (timer.Phase("discover")) {
             logger.LogInformation("ScanLibrary: discovering videos in {Path}", root.Path);
             files = await FileDiscovery.DiscoverFilesAsync(
@@ -186,7 +199,10 @@ public sealed class ScanLibraryJobHandler(
             logger.LogInformation("ScanLibrary: found {Count} video files in {Label}", files.Count, root.Label);
         }
 
-        var settings = await Roots.GetSettingsAsync(cancellationToken);
+        LibrarySettingsData settings;
+        using (timer.Phase("settings")) {
+            settings = await Roots.GetSettingsAsync(cancellationToken);
+        }
         if (!root.AutoIdentify) {
             // Honor this root's Auto Identify opt-out without touching other generation settings.
             settings = settings with { AutoIdentifyEnabled = false };
@@ -199,28 +215,45 @@ public sealed class ScanLibraryJobHandler(
         var validPaths = new HashSet<string>(files.Count, FileSystemPathComparison.Comparer);
         var validMovieFolders = new HashSet<string>(FileSystemPathComparison.Comparer);
 
-        using (timer.Phase("upsert")) {
-            for (var batchStart = 0; batchStart < files.Count; batchStart += BatchSize) {
-                var batchEnd = Math.Min(batchStart + BatchSize, files.Count);
-                var batchItems = new List<VideoUpsertItem>(batchEnd - batchStart);
+        for (var batchStart = 0; batchStart < files.Count; batchStart += BatchSize) {
+            var batchEnd = Math.Min(batchStart + BatchSize, files.Count);
+            var batchItems = new List<VideoUpsertItem>(batchEnd - batchStart);
 
-                for (var i = batchStart; i < batchEnd; i++) {
-                    var filePath = files[i];
-                    validPaths.Add(filePath);
-                    var sidecar = sidecars is null
+            for (var i = batchStart; i < batchEnd; i++) {
+                var filePath = files[i];
+                VideoSidecarMetadata? sidecar;
+                using (timer.Phase("sidecar-read")) {
+                    sidecar = sidecars is null
                         ? null
                         : await sidecars.ReadAsync(filePath, cancellationToken);
-                    var item = BuildVideoUpsertItem(filePath, root, files, sidecar);
+                }
+
+                VideoUpsertItem item;
+                using (timer.Phase("classify")) {
+                    validPaths.Add(filePath);
+                    item = BuildVideoUpsertItem(filePath, root, files, sidecar);
                     if (item.Movie is { } movie) {
                         validMovieFolders.Add(movie.FolderPath);
                     }
-
-                    await VideoWantedBinding.BindAsync(acquisitionHints, item, cancellationToken);
-
-                    batchItems.Add(item);
                 }
 
-                var (entityIds, persistedItems) = await UpsertBatchWithIsolationAsync(batchItems, failedPaths, cancellationToken);
+                using (timer.Phase("wanted-bind")) {
+                    await VideoWantedBinding.BindAsync(acquisitionHints, item, cancellationToken);
+                }
+
+                batchItems.Add(item);
+            }
+
+            IReadOnlyList<Guid> entityIds;
+            IReadOnlyList<VideoUpsertItem> persistedItems;
+            using (timer.Phase("persist-batch")) {
+                (entityIds, persistedItems) = await UpsertBatchWithIsolationAsync(
+                    batchItems,
+                    failedPaths,
+                    cancellationToken);
+            }
+
+            using (timer.Phase("sidecar-metadata")) {
                 if (scanMetadata is not null) {
                     for (var i = 0; i < persistedItems.Count && i < entityIds.Count; i++) {
                         if (persistedItems[i].Metadata is not { } metadata) {
@@ -235,33 +268,43 @@ public sealed class ScanLibraryJobHandler(
                             cancellationToken);
                     }
                 }
-                allEntityIds.AddRange(entityIds);
-                scannedPaths.AddRange(persistedItems.Select(item => item.FilePath));
+            }
+            allEntityIds.AddRange(entityIds);
+            scannedPaths.AddRange(persistedItems.Select(item => item.FilePath));
 
+            using (timer.Phase("progress-write")) {
                 await context.ReportProgressAsync(
                     batchEnd * 60 / files.Count,
                     $"Upserted {batchEnd}/{files.Count}", cancellationToken);
             }
         }
 
-        using (timer.Phase("enqueue")) {
-            var downstreamTargets = await ResolveVideoSourceOwnersAsync(
+        List<VideoSourceOwner> downstreamTargets;
+        using (timer.Phase("resolve-owners")) {
+            downstreamTargets = await ResolveVideoSourceOwnersAsync(
                 allEntityIds,
                 scannedPaths,
                 files,
                 cancellationToken);
+        }
+        using (timer.Phase("subtitle-invalidate")) {
             await InvalidateChangedSidecarsAsync(downstreamTargets, cancellationToken);
-            allEntityIds.Clear();
-            allEntityIds.AddRange(downstreamTargets.Select(target => target.EntityId).Distinct());
+        }
+        allEntityIds.Clear();
+        allEntityIds.AddRange(downstreamTargets.Select(target => target.EntityId).Distinct());
 
-            for (var batchStart = 0; batchStart < downstreamTargets.Count; batchStart += BatchSize) {
-                var batchEnd = Math.Min(batchStart + BatchSize, downstreamTargets.Count);
-                var batchTargets = downstreamTargets.GetRange(batchStart, batchEnd - batchStart);
-                var batchIds = batchTargets.Select(target => target.EntityId).ToList();
+        for (var batchStart = 0; batchStart < downstreamTargets.Count; batchStart += BatchSize) {
+            var batchEnd = Math.Min(batchStart + BatchSize, downstreamTargets.Count);
+            var batchTargets = downstreamTargets.GetRange(batchStart, batchEnd - batchStart);
+            var batchIds = batchTargets.Select(target => target.EntityId).ToList();
 
-                var needs = await downstreamNeeds.CheckDownstreamNeedsBatchAsync(batchIds, cancellationToken);
-                var jobRequests = new List<EnqueueJobRequest>();
+            IReadOnlyDictionary<Guid, DownstreamNeeds> needs;
+            using (timer.Phase("downstream-needs")) {
+                needs = await downstreamNeeds.CheckDownstreamNeedsBatchAsync(batchIds, cancellationToken);
+            }
+            var jobRequests = new List<EnqueueJobRequest>();
 
+            using (timer.Phase("downstream-plan")) {
                 for (var i = 0; i < batchIds.Count; i++) {
                     var entityId = batchIds[i];
                     if (needs.TryGetValue(entityId, out var entityNeeds)) {
@@ -272,12 +315,16 @@ public sealed class ScanLibraryJobHandler(
                             entityNeeds));
                     }
                 }
+            }
 
-                if (jobRequests.Count > 0) {
+            if (jobRequests.Count > 0) {
+                using (timer.Phase("downstream-enqueue")) {
                     var enqueued = await context.EnqueueBatchAsync(jobRequests, cancellationToken);
                     logger.LogDebug("ScanLibrary: enqueued {Enqueued}/{Total} downstream jobs for batch", enqueued, jobRequests.Count);
                 }
+            }
 
+            using (timer.Phase("progress-write")) {
                 await context.ReportProgressAsync(
                     60 + (batchEnd * 30 / downstreamTargets.Count),
                     $"Enqueued downstream for {batchEnd}/{downstreamTargets.Count}", cancellationToken);
@@ -290,35 +337,52 @@ public sealed class ScanLibraryJobHandler(
         // let identify resolve ID-first instead of leaving the imported tree metadata-less. This MUST run
         // before generic auto-identify is queued so a fast worker cannot claim the same root ID-less.
         if (acquisitionHints is not null) {
-            foreach (var owner in await acquisitionHints.ApplyToFolderOwnersAsync(cancellationToken)) {
-                await context.EnqueueIfNeededAsync(new EnqueueJobRequest(
-                    JobType.AutoIdentify,
-                    TargetEntityKind: owner.TopLevelKindCode,
-                    TargetEntityId: owner.TopLevelEntityId.ToString(),
-                    TargetLabel: owner.TopLevelTitle,
-                    Priority: JobPriorities.AutoIdentify), cancellationToken);
+            using (timer.Phase("acquisition-identify")) {
+                foreach (var owner in await acquisitionHints.ApplyToFolderOwnersAsync(cancellationToken)) {
+                    await context.EnqueueIfNeededAsync(new EnqueueJobRequest(
+                        JobType.AutoIdentify,
+                        TargetEntityKind: owner.TopLevelKindCode,
+                        TargetEntityId: owner.TopLevelEntityId.ToString(),
+                        TargetLabel: owner.TopLevelTitle,
+                        Priority: JobPriorities.AutoIdentify), cancellationToken);
+                }
             }
         }
 
         // Auto identify the top-level ancestors only (a series rather than each episode), so one job
         // identifies the whole tree and episodes are filled by cascading from it.
-        await AutoIdentifyScanEnqueue.EnqueueRootsAsync(context, settings, downstreamNeeds, allEntityIds, cancellationToken);
+        using (timer.Phase("auto-identify")) {
+            await AutoIdentifyScanEnqueue.EnqueueRootsAsync(
+                context,
+                settings,
+                downstreamNeeds,
+                allEntityIds,
+                cancellationToken);
+        }
 
         int removed;
+        int staleMovies;
+        int excluded;
         int orphans;
-        using (timer.Phase("cleanup")) {
+        using (timer.Phase("cleanup-stale-videos")) {
             removed = await videos.RemoveStaleVideosByRootAsync(root.Id, validPaths, cancellationToken);
             if (removed > 0)
                 logger.LogInformation("ScanLibrary: removed {Count} stale video entities from {Label}", removed, root.Label);
+        }
 
-            var staleMovies = await videos.RemoveStaleMoviesByRootAsync(root.Id, validMovieFolders, cancellationToken);
+        using (timer.Phase("cleanup-stale-movies")) {
+            staleMovies = await videos.RemoveStaleMoviesByRootAsync(root.Id, validMovieFolders, cancellationToken);
             if (staleMovies > 0)
                 logger.LogInformation("ScanLibrary: removed {Count} stale movie entities from {Label}", staleMovies, root.Label);
+        }
 
-            var excluded = await Roots.RemoveEntitiesInExcludedPathsAsync(root.Id, cancellationToken);
+        using (timer.Phase("cleanup-excluded")) {
+            excluded = await Roots.RemoveEntitiesInExcludedPathsAsync(root.Id, cancellationToken);
             if (excluded > 0)
                 logger.LogInformation("ScanLibrary: removed {Count} excluded entities from {Label}", excluded, root.Label);
+        }
 
+        using (timer.Phase("cleanup-orphans")) {
             orphans = await videos.RemoveOrphanSeriesAndSeasonsAsync(cancellationToken);
             if (orphans > 0)
                 logger.LogInformation("ScanLibrary: removed {Count} orphan movie/series/season entities", orphans);
@@ -326,8 +390,14 @@ public sealed class ScanLibraryJobHandler(
 
         var report = timer.Finish();
         logger.LogInformation(
-            "[METRICS] scan-library {Label} — {FileCount} files, {Removed} stale, {Orphans} orphans — {Timing}",
-            root.Label, files.Count, removed, orphans, report.ToLogString());
+            "[METRICS] scan-library {Label} — {FileCount} files, {Removed} stale videos, {StaleMovies} stale movies, {Excluded} excluded, {Orphans} orphans — {Timing}",
+            root.Label,
+            files.Count,
+            removed,
+            staleMovies,
+            excluded,
+            orphans,
+            report.ToLogString());
 
         return failedPaths.Count == 0 ? ScanRootOutcome.Success : new ScanRootOutcome(failedPaths);
     }

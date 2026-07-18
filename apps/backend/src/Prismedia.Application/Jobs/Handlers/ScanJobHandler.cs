@@ -35,19 +35,26 @@ public abstract class ScanJobHandler(
     public abstract JobType Type { get; }
 
     public async Task HandleAsync(JobContext context, CancellationToken cancellationToken) {
+        var timer = new JobPhaseTimer();
         var rootFailures = 0;
         string? firstRootError = null;
         var scannedRoots = 0;
 
         if (!ScanRootPayload.TryParse(context.Job.PayloadJson, out var payload)) {
-            var enabledRoots = await roots.GetEnabledRootsAsync(cancellationToken);
+            IReadOnlyList<LibraryRootData> enabledRoots;
+            using (timer.Phase("roots-list")) {
+                enabledRoots = await roots.GetEnabledRootsAsync(cancellationToken);
+            }
             var eligible = enabledRoots.Where(IsEligibleRoot).ToList();
             scannedRoots = eligible.Count;
             logger.LogInformation("{JobType}: scanning {Count} eligible roots", Type.ToCode(), eligible.Count);
 
             for (var i = 0; i < eligible.Count; i++) {
                 var listedRoot = eligible[i];
-                var currentRoot = await roots.GetLibraryRootAsync(listedRoot.Id, cancellationToken);
+                LibraryRootData? currentRoot;
+                using (timer.Phase("root-refresh")) {
+                    currentRoot = await roots.GetLibraryRootAsync(listedRoot.Id, cancellationToken);
+                }
                 if (currentRoot is null) {
                     logger.LogInformation(
                         "{JobType}: skipping library root {RootId} because it no longer exists",
@@ -60,8 +67,12 @@ public abstract class ScanJobHandler(
                     // One broken library must not freeze the others: record the failure, keep
                     // scanning the remaining roots, and fail the job at the end.
                     try {
-                        await ScanRootWithSnapshotAsync(context, currentRoot, cancellationToken);
-                        await roots.UpdateRootLastScannedAsync(currentRoot.Id, cancellationToken);
+                        using (timer.Phase("root-scan")) {
+                            await ScanRootWithSnapshotAsync(context, currentRoot, cancellationToken);
+                        }
+                        using (timer.Phase("root-last-scanned")) {
+                            await roots.UpdateRootLastScannedAsync(currentRoot.Id, cancellationToken);
+                        }
                     } catch (OperationCanceledException) {
                         throw;
                     } catch (Exception ex) {
@@ -75,33 +86,61 @@ public abstract class ScanJobHandler(
                 // single (potentially NSFW) target, so it is not redacted by the jobs list, and this
                 // message is persisted and shown to every client regardless of their SFW mode.
                 // A count keeps progress useful without leaking library names.
-                await context.ReportProgressAsync((i + 1) * 100 / eligible.Count,
-                    $"Scanned {i + 1} of {eligible.Count} {(eligible.Count == 1 ? "library" : "libraries")}",
-                    cancellationToken);
+                using (timer.Phase("progress-write")) {
+                    await context.ReportProgressAsync((i + 1) * 100 / eligible.Count,
+                        $"Scanned {i + 1} of {eligible.Count} {(eligible.Count == 1 ? "library" : "libraries")}",
+                        cancellationToken);
+                }
             }
         } else {
-            var root = await roots.GetLibraryRootAsync(payload.RootId, cancellationToken);
+            LibraryRootData? root;
+            using (timer.Phase("root-load")) {
+                root = await roots.GetLibraryRootAsync(payload.RootId, cancellationToken);
+            }
             if (root is null) {
                 logger.LogWarning("{JobType}: root {RootId} not found", Type.ToCode(), payload.RootId);
+                LogJobMetrics(scannedRoots, rootFailures, timer.Finish());
                 return;
             }
 
-            await ScanRootWithSnapshotAsync(context, root, cancellationToken);
-            await roots.UpdateRootLastScannedAsync(root.Id, cancellationToken);
-            await context.ReportProgressAsync(100, $"Scanned {root.Label}", cancellationToken);
+            scannedRoots = 1;
+            using (timer.Phase("root-scan")) {
+                await ScanRootWithSnapshotAsync(context, root, cancellationToken);
+            }
+            using (timer.Phase("root-last-scanned")) {
+                await roots.UpdateRootLastScannedAsync(root.Id, cancellationToken);
+            }
+            using (timer.Phase("progress-write")) {
+                await context.ReportProgressAsync(100, $"Scanned {root.Label}", cancellationToken);
+            }
         }
 
         // Runs once per scan job after every root is processed — including when every root's detailed
         // pass was skipped by the incremental fast path — so global cleanup that does not depend on
         // file changes (e.g. deleted library roots and orphaned taxonomy) still happens on an
         // otherwise no-op rescan.
-        await RemoveEntitiesOutsideConfiguredRootsAsync(cancellationToken);
-        await RemoveOrphanTagsIfEnabledAsync(cancellationToken);
+        using (timer.Phase("cleanup-outside-roots")) {
+            await RemoveEntitiesOutsideConfiguredRootsAsync(cancellationToken);
+        }
+        using (timer.Phase("cleanup-orphan-tags")) {
+            await RemoveOrphanTagsIfEnabledAsync(cancellationToken);
+        }
+
+        LogJobMetrics(scannedRoots, rootFailures, timer.Finish());
 
         if (rootFailures > 0) {
             throw new InvalidOperationException(
                 $"{rootFailures} of {scannedRoots} libraries failed to scan (the rest completed). First error: {firstRootError}");
         }
+    }
+
+    private void LogJobMetrics(int scannedRoots, int rootFailures, JobTimingReport report) {
+        logger.LogInformation(
+            "[METRICS] scan-job {JobType} — roots={RootCount} failures={FailureCount} — {Timing}",
+            Type.ToCode(),
+            scannedRoots,
+            rootFailures,
+            report.ToLogString());
     }
 
     /// <summary>
@@ -110,57 +149,134 @@ public abstract class ScanJobHandler(
     /// </summary>
     private async Task ScanRootWithSnapshotAsync(
         JobContext context, LibraryRootData root, CancellationToken cancellationToken) {
-        // Media-specific handlers can use this scope to serialize the signature snapshot and detailed
-        // reconciliation with import-time filesystem changes. It deliberately covers the fast path too:
-        // taking a pre-import snapshot and then scanning post-import files would advance inconsistent state.
-        await using var scanScope = await EnterScanScopeAsync(root, cancellationToken);
+        var timer = new JobPhaseTimer();
+        var mode = "full";
+        var currentCount = 0;
+        var previousCount = 0;
+        var delta = ScanDelta.Empty;
 
-        if (snapshots is null) {
-            // No snapshot store wired (e.g. in unit tests): always run the full scan.
-            ThrowIfFilesFailed(await ScanRootCoreAsync(context, root, cancellationToken));
-            return;
+        try {
+            // Media-specific handlers can use this scope to serialize the signature snapshot and detailed
+            // reconciliation with import-time filesystem changes. It deliberately covers the fast path too:
+            // taking a pre-import snapshot and then scanning post-import files would advance inconsistent state.
+            IAsyncDisposable? scanScope;
+            using (timer.Phase("scan-gate-wait")) {
+                scanScope = await EnterScanScopeAsync(root, cancellationToken);
+            }
+            await using var acquiredScanScope = scanScope;
+
+            if (snapshots is null) {
+                // No snapshot store wired (e.g. in unit tests): always run the full scan.
+                mode = "full-no-snapshot-store";
+                ScanRootOutcome outcome;
+                using (timer.Phase("detailed-reconcile")) {
+                    outcome = await ScanRootCoreAsync(context, root, cancellationToken);
+                }
+                ThrowIfFilesFailed(outcome);
+                LogRootMetrics(root, mode, currentCount, previousCount, delta, timer.Finish());
+                return;
+            }
+
+            var scanKind = Type.ToCode();
+            IReadOnlySet<string> excluded;
+            using (timer.Phase("excluded-paths")) {
+                excluded = await roots.GetExcludedPathsForRootAsync(root.Id, cancellationToken);
+            }
+
+            IReadOnlyList<FileSignature> current;
+            using (timer.Phase("signature-enumerate")) {
+                current = await EnumerateSignaturesAsync(root, excluded, cancellationToken);
+            }
+            currentCount = current.Count;
+
+            IReadOnlyList<FileSignature> previous;
+            using (timer.Phase("snapshot-load")) {
+                previous = await snapshots.LoadAsync(root.Id, scanKind, cancellationToken);
+            }
+            previousCount = previous.Count;
+
+            using (timer.Phase("snapshot-diff")) {
+                delta = ScanSnapshotDiff.Compute(previous, current);
+            }
+
+            // A snapshot exists and nothing on disk changed since it was taken, so the entities,
+            // structure, and assets this scan would produce are already persisted. The first scan (no
+            // snapshot) and any add/remove/change fall through to the full scan, which always sees the
+            // whole file set and therefore keeps folder-context classification correct.
+            if (previous.Count > 0 && !delta.HasChanges) {
+                mode = "unchanged";
+                logger.LogInformation(
+                    "{JobType}: no file changes in {Label} ({Count} files), skipping detailed scan",
+                    scanKind, root.Label, current.Count);
+                using (timer.Phase("unchanged-followup")) {
+                    await OnNoFileChangesAsync(context, root, cancellationToken);
+                }
+                LogRootMetrics(root, mode, currentCount, previousCount, delta, timer.Finish());
+                return;
+            }
+
+            mode = previous.Count == 0 ? "full-no-snapshot" : "full-changed";
+            if (delta.HasChanges && previous.Count > 0) {
+                logger.LogInformation(
+                    "{JobType}: {Label} changed since last scan (+{Added} -{Removed} ~{Changed}), rescanning",
+                    scanKind, root.Label, delta.Added.Count, delta.Removed.Count, delta.Changed.Count);
+            }
+
+            // A file whose on-disk signature changed may have been repaired or replaced, so any
+            // unreadable-source (probe-failure) marker it carries is stale: clear it before the scan's
+            // downstream checks so the file gets a fresh probing chance.
+            if (processingState is not null && (delta.Changed.Count > 0 || delta.Added.Count > 0)) {
+                using (timer.Phase("reset-changed-state")) {
+                    var touchedPaths = delta.Changed.Concat(delta.Added).Select(signature => signature.Path).ToList();
+                    await processingState.ClearProbeFailuresForPathsAsync(touchedPaths, cancellationToken);
+                    await processingState.ClearManagedSubtitleCompletionForPathsAsync(touchedPaths, cancellationToken);
+                }
+            }
+
+            ScanRootOutcome detailedOutcome;
+            using (timer.Phase("detailed-reconcile")) {
+                detailedOutcome = await ScanRootCoreAsync(context, root, cancellationToken);
+            }
+
+            // Files the scan could not persist are withheld from the snapshot so the next scan sees
+            // them as still added/changed and retries exactly them; everything that succeeded advances
+            // normally. The job still fails below so the skipped files stay visible.
+            using (timer.Phase("snapshot-apply")) {
+                await snapshots.ApplyAsync(
+                    root.Id,
+                    scanKind,
+                    WithoutFailedPaths(delta, detailedOutcome),
+                    cancellationToken);
+            }
+            ThrowIfFilesFailed(detailedOutcome);
+            LogRootMetrics(root, mode, currentCount, previousCount, delta, timer.Finish());
+        } catch (OperationCanceledException) {
+            LogRootMetrics(root, "cancelled", currentCount, previousCount, delta, timer.Finish());
+            throw;
+        } catch (Exception) {
+            LogRootMetrics(root, $"{mode}-failed", currentCount, previousCount, delta, timer.Finish());
+            throw;
         }
+    }
 
-        var scanKind = Type.ToCode();
-        var excluded = await roots.GetExcludedPathsForRootAsync(root.Id, cancellationToken);
-        var current = await EnumerateSignaturesAsync(root, excluded, cancellationToken);
-        var previous = await snapshots.LoadAsync(root.Id, scanKind, cancellationToken);
-        var delta = ScanSnapshotDiff.Compute(previous, current);
-
-        // A snapshot exists and nothing on disk changed since it was taken, so the entities,
-        // structure, and assets this scan would produce are already persisted. The first scan (no
-        // snapshot) and any add/remove/change fall through to the full scan, which always sees the
-        // whole file set and therefore keeps folder-context classification correct.
-        if (previous.Count > 0 && !delta.HasChanges) {
-            logger.LogInformation(
-                "{JobType}: no file changes in {Label} ({Count} files), skipping detailed scan",
-                scanKind, root.Label, current.Count);
-            await OnNoFileChangesAsync(context, root, cancellationToken);
-            return;
-        }
-
-        if (delta.HasChanges && previous.Count > 0) {
-            logger.LogInformation(
-                "{JobType}: {Label} changed since last scan (+{Added} -{Removed} ~{Changed}), rescanning",
-                scanKind, root.Label, delta.Added.Count, delta.Removed.Count, delta.Changed.Count);
-        }
-
-        // A file whose on-disk signature changed may have been repaired or replaced, so any
-        // unreadable-source (probe-failure) marker it carries is stale: clear it before the scan's
-        // downstream checks so the file gets a fresh probing chance.
-        if (processingState is not null && (delta.Changed.Count > 0 || delta.Added.Count > 0)) {
-            var touchedPaths = delta.Changed.Concat(delta.Added).Select(signature => signature.Path).ToList();
-            await processingState.ClearProbeFailuresForPathsAsync(touchedPaths, cancellationToken);
-            await processingState.ClearManagedSubtitleCompletionForPathsAsync(touchedPaths, cancellationToken);
-        }
-
-        var outcome = await ScanRootCoreAsync(context, root, cancellationToken);
-
-        // Files the scan could not persist are withheld from the snapshot so the next scan sees
-        // them as still added/changed and retries exactly them; everything that succeeded advances
-        // normally. The job still fails below so the skipped files stay visible.
-        await snapshots.ApplyAsync(root.Id, scanKind, WithoutFailedPaths(delta, outcome), cancellationToken);
-        ThrowIfFilesFailed(outcome);
+    private void LogRootMetrics(
+        LibraryRootData root,
+        string mode,
+        int currentCount,
+        int previousCount,
+        ScanDelta delta,
+        JobTimingReport report) {
+        logger.LogInformation(
+            "[METRICS] scan-root {JobType} {Label} — mode={Mode} current={CurrentCount} previous={PreviousCount} +{Added} -{Removed} ~{Changed} — {Timing}",
+            Type.ToCode(),
+            root.Label,
+            mode,
+            currentCount,
+            previousCount,
+            delta.Added.Count,
+            delta.Removed.Count,
+            delta.Changed.Count,
+            report.ToLogString());
     }
 
     private static ScanDelta WithoutFailedPaths(ScanDelta delta, ScanRootOutcome outcome) {
