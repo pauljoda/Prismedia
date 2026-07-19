@@ -393,19 +393,46 @@ public sealed partial class EfEntityReadService {
         bool hideNsfw,
         bool enforceLibraryVisibility,
         CancellationToken cancellationToken) {
-        var visibleEntities = _db.Entities.AsNoTracking();
+        // Resolve the small collection-membership set before applying the full library visibility
+        // projection. Joining visibility against the entire entity table first produced a very large
+        // anti-join plan (and a 20+ second query on the rich-data library) even for eleven members.
+        var memberRows = await _db.CollectionItemDetails.AsNoTracking()
+            .Where(item => collectionIds.Contains(item.CollectionEntityId))
+            .Select(item => new {
+                item.Id,
+                item.CollectionEntityId,
+                item.ItemEntityId,
+                item.SortOrder
+            })
+            .ToArrayAsync(cancellationToken);
+        if (memberRows.Length == 0) {
+            return [];
+        }
+
+        var memberIds = memberRows
+            .Select(item => item.ItemEntityId)
+            .Distinct()
+            .ToArray();
+        var allEntities = _db.Entities.AsNoTracking();
+        var visibleEntities = allEntities
+            .ExcludeBookOwnedAudioTracks(allEntities)
+            .Where(entity => memberIds.Contains(entity.Id));
         if (enforceLibraryVisibility) {
             visibleEntities = ApplyEnabledLibraryVisibility(visibleEntities);
         }
         visibleEntities = ApplyNsfwVisibility(visibleEntities, hideNsfw);
+        var visibleTitles = await visibleEntities
+            .Select(entity => new { entity.Id, entity.Title })
+            .ToDictionaryAsync(entity => entity.Id, entity => entity.Title, cancellationToken);
 
-        return await (
-            from item in _db.CollectionItemDetails.AsNoTracking()
-            join entity in visibleEntities on item.ItemEntityId equals entity.Id
-            where collectionIds.Contains(item.CollectionEntityId)
-            orderby item.CollectionEntityId, item.SortOrder, entity.Title, item.Id
-            select new CollectionMemberRow(item.CollectionEntityId, item.ItemEntityId))
-            .ToArrayAsync(cancellationToken);
+        return memberRows
+            .Where(item => visibleTitles.ContainsKey(item.ItemEntityId))
+            .OrderBy(item => item.CollectionEntityId)
+            .ThenBy(item => item.SortOrder)
+            .ThenBy(item => visibleTitles[item.ItemEntityId])
+            .ThenBy(item => item.Id)
+            .Select(item => new CollectionMemberRow(item.CollectionEntityId, item.ItemEntityId))
+            .ToArray();
     }
 
     private async Task<IReadOnlyList<EntityRow>> LoadVisibleThumbnailRowsAsync(

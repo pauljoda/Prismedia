@@ -1038,7 +1038,10 @@ public sealed class EfEntityReadServiceTests {
         var collectionId = Guid.Parse("11111111-aaaa-4444-8888-111111111111");
         var albumId = Guid.Parse("22222222-bbbb-4444-8888-222222222222");
         var trackId = Guid.Parse("33333333-cccc-4444-8888-333333333333");
+        var disabledRootId = Guid.Parse("44444444-dddd-4444-8888-444444444444");
+        var hiddenVideoId = Guid.Parse("55555555-eeee-4444-8888-555555555555");
 
+        db.LibraryRoots.Add(Root(disabledRootId, enabled: false, now));
         db.Entities.AddRange(
             new EntityRow {
                 Id = collectionId,
@@ -1061,6 +1064,13 @@ public sealed class EfEntityReadServiceTests {
                 ParentEntityId = albumId,
                 CreatedAt = now,
                 UpdatedAt = now
+            },
+            new EntityRow {
+                Id = hiddenVideoId,
+                KindCode = EntityKindRegistry.Video.Code,
+                Title = "Hidden Video",
+                CreatedAt = now,
+                UpdatedAt = now
             });
         db.CollectionDetails.Add(new CollectionDetailRow {
             EntityId = collectionId,
@@ -1068,15 +1078,27 @@ public sealed class EfEntityReadServiceTests {
         });
         db.AudioLibraryDetails.Add(new AudioLibraryDetailRow { EntityId = albumId });
         db.AudioTrackDetails.Add(new AudioTrackDetailRow { EntityId = trackId });
-        db.CollectionItemDetails.Add(new CollectionItemDetailRow {
-            Id = Guid.NewGuid(),
-            CollectionEntityId = collectionId,
-            ItemEntityId = trackId,
-            Source = CollectionItemSource.Manual,
-            SortOrder = 0,
-            AddedAt = now
-        });
-        db.EntityFiles.Add(File(albumId, EntityFileRole.Cover, "/assets/audio-libraries/album/cover.jpg", now));
+        db.VideoDetails.Add(new VideoDetailRow { EntityId = hiddenVideoId, LibraryRootId = disabledRootId });
+        db.CollectionItemDetails.AddRange(
+            new CollectionItemDetailRow {
+                Id = Guid.NewGuid(),
+                CollectionEntityId = collectionId,
+                ItemEntityId = hiddenVideoId,
+                Source = CollectionItemSource.Manual,
+                SortOrder = -1,
+                AddedAt = now
+            },
+            new CollectionItemDetailRow {
+                Id = Guid.NewGuid(),
+                CollectionEntityId = collectionId,
+                ItemEntityId = trackId,
+                Source = CollectionItemSource.Manual,
+                SortOrder = 0,
+                AddedAt = now
+            });
+        db.EntityFiles.AddRange(
+            File(hiddenVideoId, EntityFileRole.Poster, "/assets/videos/hidden/poster.jpg", now),
+            File(albumId, EntityFileRole.Cover, "/assets/audio-libraries/album/cover.jpg", now));
         await db.SaveChangesAsync();
 
         var result = await CreateService(db).ListAsync(
