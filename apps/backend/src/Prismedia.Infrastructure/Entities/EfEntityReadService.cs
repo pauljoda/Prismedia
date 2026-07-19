@@ -40,6 +40,11 @@ public sealed partial class EfEntityReadService : IEntityReadService {
     // for members, roots they were not granted). Null once resolved means unrestricted.
     private Guid[]? _hiddenRootIds;
     private bool _hiddenRootsResolved;
+    // The root and wanted-target projection is intentionally materialized once per request.
+    // Reusing its IQueryable inside the hierarchy predicate made EF inline the same large
+    // UNION many times, spending tens of seconds translating member library reads.
+    private Guid[]? _hiddenLibraryEntityIds;
+    private bool _hiddenLibraryEntitiesResolved;
 
     public EfEntityReadService(
         PrismediaDbContext db,
@@ -124,7 +129,7 @@ public sealed partial class EfEntityReadService : IEntityReadService {
             entityQuery = SuppressMovieChildVideos(entityQuery);
         }
 
-        var enforceLibraryVisibility = await HasDisabledLibraryRootsAsync(cancellationToken);
+        var enforceLibraryVisibility = await RequiresLibraryVisibilityAsync(cancellationToken);
         if (enforceLibraryVisibility) {
             var knownKindCode = kindCodes.Length == 1 ? kindCodes[0] : null;
             entityQuery = ApplyEnabledLibraryVisibility(entityQuery, knownKindCode);
@@ -515,7 +520,7 @@ public sealed partial class EfEntityReadService : IEntityReadService {
     }
 
     public async Task<EntityCard?> GetAsync(Guid id, bool hideNsfw, CancellationToken cancellationToken) {
-        var enforceLibraryVisibility = await HasDisabledLibraryRootsAsync(cancellationToken);
+        var enforceLibraryVisibility = await RequiresLibraryVisibilityAsync(cancellationToken);
         if ((enforceLibraryVisibility && !await IsEntityVisibleInEnabledLibraryAsync(id, cancellationToken)) ||
             hideNsfw && await IsEntityHiddenAsync(id, cancellationToken)) {
             return null;
@@ -577,7 +582,7 @@ public sealed partial class EfEntityReadService : IEntityReadService {
         CancellationToken cancellationToken) {
         var query = _db.Entities.AsNoTracking()
             .Where(entity => ids.Contains(entity.Id));
-        var enforceLibraryVisibility = await HasDisabledLibraryRootsAsync(cancellationToken);
+        var enforceLibraryVisibility = await RequiresLibraryVisibilityAsync(cancellationToken);
         if (enforceLibraryVisibility) {
             query = ApplyEnabledLibraryVisibility(query);
         }
@@ -590,7 +595,7 @@ public sealed partial class EfEntityReadService : IEntityReadService {
     }
 
     public async Task<IEntityCard?> GetDetailAsync(Guid id, string kind, bool hideNsfw, CancellationToken cancellationToken) {
-        var enforceLibraryVisibility = await HasDisabledLibraryRootsAsync(cancellationToken);
+        var enforceLibraryVisibility = await RequiresLibraryVisibilityAsync(cancellationToken);
         if ((enforceLibraryVisibility && !await IsEntityVisibleInEnabledLibraryAsync(id, cancellationToken)) ||
             hideNsfw && await IsEntityHiddenAsync(id, cancellationToken)) {
             return null;
@@ -710,36 +715,49 @@ public sealed partial class EfEntityReadService : IEntityReadService {
             : query;
 
     /// <summary>
-    /// Resolves (once per request) which library roots the caller must not see: disabled
-    /// roots for everyone, plus every root a member was not granted. Returns true when
-    /// any hiding applies; admins and the system context only ever hide disabled roots.
+    /// Resolves (once per request) which library roots and root-targeted entities the caller
+    /// must not see: disabled roots for everyone, plus every root a member was not granted.
+    /// Materializing the targeted entity set keeps later hierarchy predicates compact instead
+    /// of asking EF to inline the acquisition and detail-row projection at every ancestor check.
+    /// Returns true when any hiding applies; admins and the system context only ever hide
+    /// disabled roots.
     /// </summary>
-    private async Task<bool> HasDisabledLibraryRootsAsync(CancellationToken cancellationToken) {
-        if (_hiddenRootsResolved) {
-            return _hiddenRootIds is not null;
-        }
-
-        var disabledRootIds = await _db.LibraryRoots.AsNoTracking()
-            .Where(root => !root.Enabled)
-            .Select(root => root.Id)
-            .ToArrayAsync(cancellationToken);
-        var hidden = new HashSet<Guid>(disabledRootIds);
-
-        var allowedRootIds = await _currentUser.GetAllowedLibraryRootIdsAsync(cancellationToken);
-        if (allowedRootIds is not null) {
-            var allRootIds = await _db.LibraryRoots.AsNoTracking()
+    private async Task<bool> RequiresLibraryVisibilityAsync(CancellationToken cancellationToken) {
+        if (!_hiddenRootsResolved) {
+            var disabledRootIds = await _db.LibraryRoots.AsNoTracking()
+                .Where(root => !root.Enabled)
                 .Select(root => root.Id)
                 .ToArrayAsync(cancellationToken);
-            foreach (var rootId in allRootIds) {
-                if (!allowedRootIds.Contains(rootId)) {
-                    hidden.Add(rootId);
+            var hidden = new HashSet<Guid>(disabledRootIds);
+
+            var allowedRootIds = await _currentUser.GetAllowedLibraryRootIdsAsync(cancellationToken);
+            if (allowedRootIds is not null) {
+                var allRootIds = await _db.LibraryRoots.AsNoTracking()
+                    .Select(root => root.Id)
+                    .ToArrayAsync(cancellationToken);
+                foreach (var rootId in allRootIds) {
+                    if (!allowedRootIds.Contains(rootId)) {
+                        hidden.Add(rootId);
+                    }
                 }
             }
+
+            _hiddenRootIds = hidden.Count > 0 ? hidden.ToArray() : null;
+            _hiddenRootsResolved = true;
         }
 
-        _hiddenRootIds = hidden.Count > 0 ? hidden.ToArray() : null;
-        _hiddenRootsResolved = true;
-        return _hiddenRootIds is not null;
+        if (_hiddenRootIds is null) {
+            return false;
+        }
+
+        if (!_hiddenLibraryEntitiesResolved) {
+            _hiddenLibraryEntityIds = await HiddenLibraryTargetedEntityIds()
+                .Distinct()
+                .ToArrayAsync(cancellationToken);
+            _hiddenLibraryEntitiesResolved = true;
+        }
+
+        return true;
     }
 
     private IQueryable<Guid> HiddenLibraryTargetedEntityIds() {
@@ -850,7 +868,7 @@ public sealed partial class EfEntityReadService : IEntityReadService {
 
     private IQueryable<EntityRow> ApplyEnabledLibraryVisibility(IQueryable<EntityRow> query, string? knownKindCode = null) {
         var entities = _db.Entities;
-        var hiddenLibraryEntityIds = HiddenLibraryTargetedEntityIds();
+        var hiddenLibraryEntityIds = _hiddenLibraryEntityIds ?? [];
 
         if (KnownKindHasDirectLibraryRoot(knownKindCode)) {
             return query.Where(entity => !hiddenLibraryEntityIds.Contains(entity.Id));
@@ -963,7 +981,7 @@ public sealed partial class EfEntityReadService : IEntityReadService {
     private static IQueryable<EntityRow> ApplyInheritedEnabledLibraryVisibility(
         IQueryable<EntityRow> query,
         IQueryable<EntityRow> entities,
-        IQueryable<Guid> hiddenLibraryEntityIds) =>
+        Guid[] hiddenLibraryEntityIds) =>
         query.Where(entity =>
             !hiddenLibraryEntityIds.Contains(entity.Id) &&
             !entities.Any(parent =>
@@ -1024,7 +1042,7 @@ public sealed partial class EfEntityReadService : IEntityReadService {
     /// exists and no hidden-root rule (disabled or not granted to this user) hides it.
     /// </summary>
     internal async Task<bool> IsEntityVisibleToCurrentUserAsync(Guid id, CancellationToken cancellationToken) {
-        if (!await HasDisabledLibraryRootsAsync(cancellationToken)) {
+        if (!await RequiresLibraryVisibilityAsync(cancellationToken)) {
             return await _db.Entities.AsNoTracking().AnyAsync(entity => entity.Id == id, cancellationToken);
         }
 

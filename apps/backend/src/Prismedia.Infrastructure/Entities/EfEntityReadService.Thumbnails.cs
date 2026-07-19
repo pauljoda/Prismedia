@@ -519,6 +519,7 @@ public sealed partial class EfEntityReadService {
             .Select(member => thumbnailsById.GetValueOrDefault(member.ItemEntityId))
             .Where(thumbnail => thumbnail?.CoverUrl is not null)
             .Select(thumbnail => new EntityThumbnailHoverImage(thumbnail!.Id, thumbnail.Title, thumbnail.CoverUrl!))
+            .DistinctBy(image => image.Path, StringComparer.Ordinal)
             .ToArray();
     }
 

@@ -1038,6 +1038,7 @@ public sealed class EfEntityReadServiceTests {
         var collectionId = Guid.Parse("11111111-aaaa-4444-8888-111111111111");
         var albumId = Guid.Parse("22222222-bbbb-4444-8888-222222222222");
         var trackId = Guid.Parse("33333333-cccc-4444-8888-333333333333");
+        var secondTrackId = Guid.Parse("33333333-cccc-4444-8888-333333333334");
         var disabledRootId = Guid.Parse("44444444-dddd-4444-8888-444444444444");
         var hiddenVideoId = Guid.Parse("55555555-eeee-4444-8888-555555555555");
 
@@ -1066,6 +1067,14 @@ public sealed class EfEntityReadServiceTests {
                 UpdatedAt = now
             },
             new EntityRow {
+                Id = secondTrackId,
+                KindCode = EntityKindRegistry.AudioTrack.Code,
+                Title = "Closing Track",
+                ParentEntityId = albumId,
+                CreatedAt = now,
+                UpdatedAt = now
+            },
+            new EntityRow {
                 Id = hiddenVideoId,
                 KindCode = EntityKindRegistry.Video.Code,
                 Title = "Hidden Video",
@@ -1077,7 +1086,9 @@ public sealed class EfEntityReadServiceTests {
             CoverMode = CollectionCoverMode.Mosaic
         });
         db.AudioLibraryDetails.Add(new AudioLibraryDetailRow { EntityId = albumId });
-        db.AudioTrackDetails.Add(new AudioTrackDetailRow { EntityId = trackId });
+        db.AudioTrackDetails.AddRange(
+            new AudioTrackDetailRow { EntityId = trackId },
+            new AudioTrackDetailRow { EntityId = secondTrackId });
         db.VideoDetails.Add(new VideoDetailRow { EntityId = hiddenVideoId, LibraryRootId = disabledRootId });
         db.CollectionItemDetails.AddRange(
             new CollectionItemDetailRow {
@@ -1094,6 +1105,14 @@ public sealed class EfEntityReadServiceTests {
                 ItemEntityId = trackId,
                 Source = CollectionItemSource.Manual,
                 SortOrder = 0,
+                AddedAt = now
+            },
+            new CollectionItemDetailRow {
+                Id = Guid.NewGuid(),
+                CollectionEntityId = collectionId,
+                ItemEntityId = secondTrackId,
+                Source = CollectionItemSource.Manual,
+                SortOrder = 1,
                 AddedAt = now
             });
         db.EntityFiles.AddRange(

@@ -394,6 +394,26 @@ describe("EntityThumbnail", () => {
     expect(container.querySelector(".sequence-rail span.is-active")).not.toBeNull();
   });
 
+  it("renders image sequences when separate entities share the same artwork path", () => {
+    const base = imageSequenceCard();
+    if (base.hover.kind !== "image-sequence") throw new Error("Expected an image sequence test card.");
+    const sharedPathCard: EntityThumbnailCard = {
+      ...base,
+      hover: {
+        kind: "image-sequence",
+        assets: [
+          { alt: "First item", entityId: "item-1", src: "/assets/shared/cover.jpg" },
+          { alt: "Second item", entityId: "item-2", src: "/assets/shared/cover.jpg" },
+          { alt: "Third item", entityId: "item-3", src: "/assets/unique/cover.jpg" },
+        ],
+      },
+    };
+
+    const { container } = render(EntityThumbnail, { props: { card: sharedPathCard } });
+
+    expect(container.querySelectorAll(".sequence-rail span")).toHaveLength(2);
+  });
+
   it("scrubs image-sequence thumbnails from a mouse hover drag", async () => {
     vi.useFakeTimers();
     const { container } = render(EntityThumbnail, {

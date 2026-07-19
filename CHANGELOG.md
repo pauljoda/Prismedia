@@ -150,6 +150,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Updated documentation, README screenshots, branding assets, install metadata, and app copy to match the current Prismedia v1 surface.
 
 ### Fixed
+- Collection grids no longer crash when separate members resolve to the same artwork, and member accounts no longer wait tens of seconds for library visibility to be recalculated throughout every browse query.
 - Collection grids no longer stall while resolving fallback member artwork in large libraries; visibility checks are now scoped to the collection's actual members.
 - Request searches and metadata enrichment now use the same foreground priority as manual Identify work, while completed downloads enter the import pipeline ahead of background scans.
 - Movie and TV imports now catalog only the files they placed instead of scheduling a full video-library scan after every completed download, preventing season-pack imports from clogging the queue.

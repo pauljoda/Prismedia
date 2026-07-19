@@ -123,7 +123,12 @@
 
   const isSpriteHover = $derived(card.hover.kind === THUMBNAIL_HOVER_KIND.sprite);
   const isImageSequenceHover = $derived(card.hover.kind === THUMBNAIL_HOVER_KIND.imageSequence);
-  const sequenceAssets = $derived(card.hover.kind === THUMBNAIL_HOVER_KIND.imageSequence ? card.hover.assets : []);
+  const sequenceAssets = $derived.by(() => {
+    if (card.hover.kind !== THUMBNAIL_HOVER_KIND.imageSequence) return [];
+    return card.hover.assets.filter((asset, index, assets) =>
+      assets.findIndex((candidate) => candidate.src === asset.src) === index
+    );
+  });
   const asset = $derived(getThumbnailAsset(card, hoverBroken || isSpriteHover ? null : pointerRatio));
   const aspectRatio = $derived(toAspectRatioValue(card.aspectRatio));
   const imageOnly = $derived(mediaOnly);

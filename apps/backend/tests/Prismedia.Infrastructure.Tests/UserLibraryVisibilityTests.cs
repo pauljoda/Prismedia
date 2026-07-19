@@ -40,6 +40,30 @@ public sealed class UserLibraryVisibilityTests {
     }
 
     [Fact]
+    public async Task MemberMixedKindListsKeepRootlessTaxonomyAndExcludeRestrictedMedia() {
+        await using var db = CreateContext();
+        await SeedTwoRootedVideosAsync(db);
+        var rootlessTagId = Guid.Parse("bbbb0000-0000-0000-0000-000000000003");
+        var now = DateTimeOffset.UtcNow;
+        db.Entities.Add(new EntityRow {
+            Id = rootlessTagId,
+            KindCode = EntityKindRegistry.Tag.Code,
+            Title = "Shared taxonomy",
+            CreatedAt = now,
+            UpdatedAt = now
+        });
+        await db.SaveChangesAsync();
+        var service = CreateService(db, TestUserContext.Member(GrantedRootId));
+
+        var list = await service.ListAsync(null, null, null, null, null, CancellationToken.None);
+
+        Assert.Equal(2, list.TotalCount);
+        Assert.Equal(
+            [GrantedVideoId, rootlessTagId],
+            list.Items.Select(item => item.Id).Order().ToArray());
+    }
+
+    [Fact]
     public async Task AdminSeesEveryRootWithoutAccessRows() {
         await using var db = CreateContext();
         await SeedTwoRootedVideosAsync(db);
