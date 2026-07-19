@@ -414,16 +414,32 @@ public sealed partial class EfEntityReadService {
             .Distinct()
             .ToArray();
         var allEntities = _db.Entities.AsNoTracking();
-        var visibleEntities = allEntities
+        var candidateEntities = await allEntities
             .ExcludeBookOwnedAudioTracks(allEntities)
-            .Where(entity => memberIds.Contains(entity.Id));
-        if (enforceLibraryVisibility) {
-            visibleEntities = ApplyEnabledLibraryVisibility(visibleEntities);
+            .Where(entity => memberIds.Contains(entity.Id))
+            .Select(entity => new { entity.Id, entity.KindCode, entity.Title })
+            .ToArrayAsync(cancellationToken);
+
+        // Visibility has materially smaller SQL when the kind is known (direct-root books/videos,
+        // inherited audio tracks, and so on). Grouping this already-bounded member set avoids making
+        // EF translate the generic all-kind hierarchy expression on every collection page request.
+        var visibleIds = new HashSet<Guid>();
+        foreach (var kindGroup in candidateEntities.GroupBy(entity => entity.KindCode)) {
+            var idsForKind = kindGroup.Select(entity => entity.Id).ToArray();
+            var visibleForKind = _db.Entities.AsNoTracking()
+                .Where(entity => idsForKind.Contains(entity.Id));
+            if (enforceLibraryVisibility) {
+                visibleForKind = ApplyEnabledLibraryVisibility(visibleForKind, kindGroup.Key);
+            }
+            visibleForKind = ApplyNsfwVisibility(visibleForKind, hideNsfw);
+            visibleIds.UnionWith(await visibleForKind
+                .Select(entity => entity.Id)
+                .ToArrayAsync(cancellationToken));
         }
-        visibleEntities = ApplyNsfwVisibility(visibleEntities, hideNsfw);
-        var visibleTitles = await visibleEntities
-            .Select(entity => new { entity.Id, entity.Title })
-            .ToDictionaryAsync(entity => entity.Id, entity => entity.Title, cancellationToken);
+
+        var visibleTitles = candidateEntities
+            .Where(entity => visibleIds.Contains(entity.Id))
+            .ToDictionary(entity => entity.Id, entity => entity.Title);
 
         return memberRows
             .Where(item => visibleTitles.ContainsKey(item.ItemEntityId))
