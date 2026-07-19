@@ -179,10 +179,5 @@ public sealed class RequestEntityReviewServiceTests {
             return Task.FromResult(resolve(request));
         }
 
-        public Task<RequestReviewResponse?> RevalidateAsync(
-            RequestReviewRequest request,
-            bool hideNsfw,
-            CancellationToken cancellationToken) =>
-            throw new NotSupportedException();
     }
 }

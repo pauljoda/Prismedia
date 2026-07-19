@@ -100,6 +100,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Monitored series, seasons, and other containers now offer "Search missing content" on their Acquisition tab: one click sweeps the whole item at any depth — including episode gaps hiding inside partially-downloaded seasons — and starts a monitored search for every gap, reporting how many it covered. The existing "Search N missing" action remains when gaps are already visible.
 
 ### Changed
+- Identify and Request proposal reviews now use compact media-shaped thumbnails, make the full card useful, support Select all / Deselect all, and let container results drill into their held child details without repeating provider work.
+- Identify and Request reuse the reviewed proposal when accepting it, stage required artwork concurrently, and can progressively load up to 100 provider search results when the provider supports it.
 - Music navigation now separates Albums, Artists, and Tracks, with a library-wide track list that can play or shuffle every song while preserving each track's album artwork and artist context in Now Playing.
 - The web now-playing chrome now derives its outline, active transport controls, progress rail, and waveform accents from each current track's album artwork while keeping its ground surface opaque and neutral.
 - Popovers, menus, command search, confirmation prompts, and other transient controls now share a restrained neutral-glass treatment, with page color reserved for compact accents such as the sidebar section chevrons.
@@ -148,6 +150,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Updated documentation, README screenshots, branding assets, install metadata, and app copy to match the current Prismedia v1 surface.
 
 ### Fixed
+- Collection grids no longer stall while resolving fallback member artwork in large libraries; visibility checks are now scoped to the collection's actual members.
 - Request searches and metadata enrichment now use the same foreground priority as manual Identify work, while completed downloads enter the import pipeline ahead of background scans.
 - Movie and TV imports now catalog only the files they placed instead of scheduling a full video-library scan after every completed download, preventing season-pack imports from clogging the queue.
 - Imported TV episodes now run Auto Identify and subtitle processing against only the episode that was placed, avoiding a series-wide metadata cascade after every download.

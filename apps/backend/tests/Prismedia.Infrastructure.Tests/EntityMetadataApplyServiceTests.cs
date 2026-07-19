@@ -875,6 +875,24 @@ public sealed class EntityMetadataApplyServiceTests {
     }
 
     [Fact]
+    public async Task ArtworkStagingUsesBoundedConcurrentDownloads() {
+        await using var db = CreateContext();
+        var imageHandler = new ConcurrentImageHandler();
+        var downloader = new PluginArtworkDownloader(
+            db,
+            new PluginArtworkServiceOptions(Path.GetTempPath()),
+            new HttpClient(imageHandler));
+
+        await downloader.StageAsync(
+            Enumerable.Range(1, 12).Select(index => $"https://example.test/artwork-{index}.jpg"),
+            CancellationToken.None);
+
+        Assert.True(imageHandler.MaxConcurrent > 1);
+        Assert.True(imageHandler.MaxConcurrent <= 8);
+        Assert.Equal(12, imageHandler.CallCount);
+    }
+
+    [Fact]
     public async Task ApplySeriesCascadeReplacesExistingSeasonPosterArtwork() {
         await using var db = CreateContext();
         var seriesId = Guid.Parse("39393939-3939-3939-3939-393939393939");
@@ -2161,6 +2179,36 @@ public sealed class EntityMetadataApplyServiceTests {
             return Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.OK) {
                 Content = new ByteArrayContent([1, 2, 3])
             });
+        }
+    }
+
+    private sealed class ConcurrentImageHandler : HttpMessageHandler {
+        private int _active;
+        private int _callCount;
+        private int _maxConcurrent;
+
+        public int CallCount => Volatile.Read(ref _callCount);
+        public int MaxConcurrent => Volatile.Read(ref _maxConcurrent);
+
+        protected override async Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken) {
+            Interlocked.Increment(ref _callCount);
+            var active = Interlocked.Increment(ref _active);
+            int observed;
+            do {
+                observed = Volatile.Read(ref _maxConcurrent);
+                if (active <= observed) break;
+            } while (Interlocked.CompareExchange(ref _maxConcurrent, active, observed) != observed);
+
+            try {
+                await Task.Delay(40, cancellationToken);
+                return new HttpResponseMessage(System.Net.HttpStatusCode.OK) {
+                    Content = new ByteArrayContent([1, 2, 3])
+                };
+            } finally {
+                Interlocked.Decrement(ref _active);
+            }
         }
     }
 

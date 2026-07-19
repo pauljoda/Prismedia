@@ -172,11 +172,6 @@ public sealed class MonitoredSearchJobHandlerTests {
             CancellationToken cancellationToken) =>
             Task.FromResult<Prismedia.Contracts.Requests.RequestReviewResponse?>(null);
 
-        public Task<Prismedia.Contracts.Requests.RequestReviewResponse?> RevalidateAsync(
-            Prismedia.Contracts.Requests.RequestReviewRequest request,
-            bool hideNsfw,
-            CancellationToken cancellationToken) =>
-            Task.FromResult<Prismedia.Contracts.Requests.RequestReviewResponse?>(null);
     }
 
     private sealed class NullSuppressionStore : Prismedia.Application.Requests.IWantedSuppressionStore {

@@ -25,6 +25,23 @@ describe("ProposalNodeGrid", () => {
     expect(screen.getByText("S01")).toBeInTheDocument();
   });
 
+  it("uses the full card to toggle when there is no deeper review action", async () => {
+    const node = proposal();
+    const onSelectedChange = vi.fn();
+    render(ProposalNodeGrid, {
+      props: {
+        nodes: [node],
+        selectedIds: [],
+        selectableIds: [node.proposalId],
+        onSelectedChange,
+      },
+    });
+
+    await fireEvent.click(screen.getByRole("button", { name: "Select Season 1" }));
+
+    expect(onSelectedChange).toHaveBeenCalledWith("season-1", true);
+  });
+
   it("renders inert proposal context without fake actions or disabled selection controls", () => {
     render(ProposalNodeGrid, {
       props: {

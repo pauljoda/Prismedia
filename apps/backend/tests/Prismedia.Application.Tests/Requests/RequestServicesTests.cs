@@ -48,7 +48,25 @@ public sealed class RequestServicesTests {
         Assert.Equal(RequestMediaKind.Series, source.LastDescriptor?.Kind);
         Assert.Equal("zeta-metadata", source.LastPluginId);
         Assert.Same(fields, source.LastFields);
+        Assert.Equal(PluginSearchPaging.DefaultLimit, source.LastLimit);
         Assert.True(source.LastHideNsfw);
+    }
+
+    [Fact]
+    public async Task PluginSearchClampsRequestedLimitToTheInteractiveMaximum() {
+        var source = new FakePluginSearchSource();
+        var service = new RequestPluginSearchService(source);
+
+        await service.SearchAsync(
+            new RequestPluginSearchRequest(
+                RequestMediaKind.Movie,
+                "cinema-metadata",
+                new Dictionary<string, string> { ["title"] = "Arrival" },
+                Limit: PluginSearchPaging.MaxLimit + 50),
+            hideNsfw: false,
+            CancellationToken.None);
+
+        Assert.Equal(PluginSearchPaging.MaxLimit, source.LastLimit);
     }
 
     [Fact]
@@ -104,6 +122,7 @@ public sealed class RequestServicesTests {
         public RequestKindDescriptor? LastDescriptor { get; private set; }
         public string? LastPluginId { get; private set; }
         public IReadOnlyDictionary<string, string>? LastFields { get; private set; }
+        public int LastLimit { get; private set; }
         public bool LastHideNsfw { get; private set; }
         public Exception? Failure { get; init; }
 
@@ -112,10 +131,12 @@ public sealed class RequestServicesTests {
             string pluginId,
             IReadOnlyDictionary<string, string> fields,
             bool hideNsfw,
-            CancellationToken cancellationToken) {
+            CancellationToken cancellationToken,
+            int limit = PluginSearchPaging.DefaultLimit) {
             LastDescriptor = descriptor;
             LastPluginId = pluginId;
             LastFields = fields;
+            LastLimit = limit;
             LastHideNsfw = hideNsfw;
             return Failure is null
                 ? Task.FromResult<IReadOnlyList<RequestSearchResult>>([])

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Check, Layers } from "@lucide/svelte";
+  import { Check } from "@lucide/svelte";
   import { Checkbox, cn } from "@prismedia/ui-svelte";
   import type { EntityMetadataProposal } from "$lib/api/identify-types";
   import { proposalKindToEntityKind } from "$lib/entities/entity-codes";
@@ -58,6 +58,9 @@
             decoding="async"
             referrerpolicy="no-referrer"
             class="absolute inset-0 h-full w-full object-cover"
+            onerror={(event) => {
+              (event.currentTarget as HTMLImageElement).hidden = true;
+            }}
           />
         {/if}
         {#if isSelected}
@@ -80,6 +83,15 @@
           class="proposal-node-open"
           aria-label={`Review ${title}`}
           onclick={() => onActivate(node)}
+        >
+          {@render nodeContent()}
+        </button>
+      {:else if canSelect}
+        <button
+          type="button"
+          class="proposal-node-open"
+          aria-label={`${isSelected ? "Deselect" : "Select"} ${title}`}
+          onclick={() => onSelectedChange(node.proposalId, !isSelected)}
         >
           {@render nodeContent()}
         </button>

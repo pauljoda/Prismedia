@@ -12,7 +12,7 @@
     Users,
     X,
   } from "@lucide/svelte";
-  import { cn } from "@prismedia/ui-svelte";
+  import { Button, cn } from "@prismedia/ui-svelte";
   import EntityThumbnail from "$lib/components/thumbnails/EntityThumbnail.svelte";
   import ReviewSection from "$lib/components/review/ReviewSection.svelte";
   import ProposalContextBar from "$lib/components/review/ProposalContextBar.svelte";
@@ -168,6 +168,12 @@
       ...Object.fromEntries(DIFF_FIELD_KEYS.map((k) => [k, selected ? proposalHasField(proposal, k) : false])),
     };
     store.setReviewFieldSelections(proposal.proposalId, selectedFields);
+  }
+
+  function setAllChildren(selected: boolean) {
+    for (const proposalId of selectableChildIds) {
+      store.setReviewProposalSelected(proposalId, selected);
+    }
   }
 
   function setImageSelected(kind: string, url: string | null) {
@@ -434,6 +440,28 @@
     >
       {#snippet icon()}
         <Layers class="h-3.5 w-3.5 text-text-accent" />
+      {/snippet}
+      {#snippet actions()}
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          class="h-auto px-1.5 py-0.5"
+          aria-label="Select all Children"
+          onclick={() => setAllChildren(true)}
+        >
+          All
+        </Button>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          class="h-auto px-1.5 py-0.5"
+          aria-label="Deselect all Children"
+          onclick={() => setAllChildren(false)}
+        >
+          None
+        </Button>
       {/snippet}
       <div class="p-3.5">
         <ProposalNodeGrid

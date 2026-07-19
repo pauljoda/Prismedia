@@ -31,6 +31,8 @@
     candidateDisabled?: boolean;
     candidateStatus?: string | null;
     searchStatus?: string | null;
+    onLoadMore?: (() => void) | null;
+    loadingMore?: boolean;
     onSeek?: (() => void) | null;
     seeking?: boolean;
     seekDisabled?: boolean;
@@ -63,6 +65,8 @@
     candidateDisabled = false,
     candidateStatus = null,
     searchStatus = null,
+    onLoadMore = null,
+    loadingMore = false,
     onSeek = null,
     seeking = false,
     seekDisabled = false,
@@ -177,6 +181,21 @@
             {onActivate}
             {onPreview}
           />
+          {#if onLoadMore}
+            <div class="mt-3 flex justify-center border-t border-border-subtle pt-3">
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                class="gap-1.5"
+                disabled={candidateDisabled || searching || loadingMore}
+                onclick={onLoadMore}
+              >
+                {#if loadingMore}<Loader2 class="h-3.5 w-3.5 animate-spin" />{/if}
+                {loadingMore ? "Loading more…" : "Load more"}
+              </Button>
+            </div>
+          {/if}
         {:else if searching}
           <div class="flex items-center justify-center gap-2.5 p-7 text-text-muted" role="status">
             <Loader2 class="h-4 w-4 animate-spin" />

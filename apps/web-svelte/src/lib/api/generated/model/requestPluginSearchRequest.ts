@@ -11,4 +11,6 @@ export interface RequestPluginSearchRequest {
   kind: RequestMediaKind;
   pluginId: string;
   fields: RequestPluginSearchRequestFields;
+  /** @pattern ^-?(?:0|[1-9]\d*)$ */
+  limit?: number | string;
 }

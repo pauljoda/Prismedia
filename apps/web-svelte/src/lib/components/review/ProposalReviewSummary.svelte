@@ -1,5 +1,6 @@
 <script lang="ts">
   import { Layers, Users } from "@lucide/svelte";
+  import { Button } from "@prismedia/ui-svelte";
   import type { EntityMetadataProposal } from "$lib/api/identify-types";
   import { relationshipProposals, structuralChildProposals } from "$lib/components/identify-review";
   import { proposalImageUrl, proposalTitle } from "$lib/components/identify/identify-review-helpers";
@@ -36,6 +37,14 @@
   const imageShape = $derived(aspectRatioForKind(proposal.targetKind));
   const selectedCount = $derived(children.filter((child) => selectedIds.includes(child.proposalId)).length);
   const selectableCount = $derived(children.filter((child) => selectableIds.includes(child.proposalId)).length);
+
+  function setAllChildren(selected: boolean) {
+    for (const child of children) {
+      if (selectableIds.includes(child.proposalId)) {
+        onSelectedChange(child.proposalId, selected);
+      }
+    }
+  }
 </script>
 
 <div class="flex flex-col gap-4">
@@ -58,6 +67,30 @@
       meta={selectableCount > 0 ? `${selectedCount} of ${selectableCount} selected` : `${children.length} items`}
     >
       {#snippet icon()}<Layers class="h-3.5 w-3.5 text-text-accent" />{/snippet}
+      {#snippet actions()}
+        {#if selectableCount > 0}
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            class="h-auto px-1.5 py-0.5"
+            aria-label={`Select all ${childrenTitle}`}
+            onclick={() => setAllChildren(true)}
+          >
+            All
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            class="h-auto px-1.5 py-0.5"
+            aria-label={`Deselect all ${childrenTitle}`}
+            onclick={() => setAllChildren(false)}
+          >
+            None
+          </Button>
+        {/if}
+      {/snippet}
       <div class="p-3.5">
         <ProposalNodeGrid
           nodes={children}

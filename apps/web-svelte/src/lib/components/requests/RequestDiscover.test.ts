@@ -77,6 +77,7 @@ describe("RequestDiscover", () => {
         kind: REQUEST_MEDIA_KIND.series,
         pluginId: "cinema-metadata",
         fields: { seriesTitle: "Andor", year: "2022" },
+        limit: 25,
         hideNsfw: true,
       });
     });
@@ -140,6 +141,7 @@ describe("RequestDiscover", () => {
         kind: REQUEST_MEDIA_KIND.audiobook,
         pluginId: "openlibrary",
         fields: { title: "Project Hail Mary" },
+        limit: 25,
         hideNsfw: true,
       });
     });
@@ -160,6 +162,38 @@ describe("RequestDiscover", () => {
     expect(await screen.findByText(/No installed provider can search and review books/i)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Source:/ })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Search" })).not.toBeInTheDocument();
+  });
+
+  it("loads a larger ranked candidate window from providers that support it", async () => {
+    searchRequestsByPlugin
+      .mockResolvedValueOnce({
+        results: Array.from({ length: 25 }, (_, index) =>
+          result(`Match ${index + 1}`, `match-${index + 1}`, "cinema-metadata", "tmdb")),
+        providerErrors: [],
+      })
+      .mockResolvedValueOnce({
+        results: Array.from({ length: 50 }, (_, index) =>
+          result(`Match ${index + 1}`, `match-${index + 1}`, "cinema-metadata", "tmdb")),
+        providerErrors: [],
+      });
+
+    render(RequestDiscoverHarness);
+    await waitFor(() => expect(fetchPluginProviders).toHaveBeenCalledOnce());
+    await fireEvent.click(screen.getByRole("button", { name: "Series" }));
+    await fireEvent.input(await screen.findByLabelText("Series title"), { target: { value: "Andor" } });
+    await fireEvent.click(screen.getByRole("button", { name: "Search" }));
+    await screen.findByText("Match 25");
+
+    await fireEvent.click(screen.getByRole("button", { name: "Load more" }));
+
+    await waitFor(() => expect(searchRequestsByPlugin).toHaveBeenLastCalledWith({
+      kind: REQUEST_MEDIA_KIND.series,
+      pluginId: "cinema-metadata",
+      fields: { seriesTitle: "Andor" },
+      limit: 50,
+      hideNsfw: true,
+    }));
+    expect(await screen.findByText("Match 50")).toBeInTheDocument();
   });
 
   it("invalidates candidates and reselects an eligible provider when the NSFW boundary changes", async () => {

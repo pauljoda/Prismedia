@@ -245,6 +245,39 @@ describe("IdentifyReviewChoice", () => {
       title: "The Chair Company",
       fields: { seriesTitle: "The Chair Company", year: "2025" },
       requireChoice: true,
+      limit: 25,
+    });
+  });
+
+  it("requests a larger candidate window when more results are available", async () => {
+    const candidates = Array.from({ length: 25 }, (_, index) => searchCandidate({
+      externalIds: { tmdb: `${index + 1}` },
+      title: `Match ${index + 1}`,
+    }));
+    store.identifyEntity.mockResolvedValue({
+      state: "search",
+      candidates: Array.from({ length: 50 }, (_, index) => searchCandidate({
+        externalIds: { tmdb: `${index + 1}` },
+        title: `Match ${index + 1}`,
+      })),
+      provider: "tmdb",
+    });
+    render(IdentifyReviewChoice, {
+      props: {
+        entity: entity(),
+        candidates,
+        providerId: "tmdb",
+        hasSearched: true,
+      },
+    });
+
+    await fireEvent.click(screen.getByRole("button", { name: "Load more" }));
+
+    expect(store.identifyEntity).toHaveBeenCalledWith(entity(), "tmdb", {
+      title: "The Chair Company",
+      fields: { seriesTitle: "The Chair Company" },
+      requireChoice: true,
+      limit: 50,
     });
   });
 

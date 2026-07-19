@@ -176,7 +176,7 @@ public sealed class RequestEndpointTests {
     }
 
     [Fact]
-    public async Task ReviewedCommitRejectsDuplicateProposalIdsAsInvalidBeforeRevalidation() {
+    public async Task ReviewedCommitRejectsDuplicateProposalIdsBeforeProposalResolution() {
         var reviews = new NestedReviewSource();
         using var factory = CreateFactory(reviews);
         using var client = factory.CreateAuthenticatedClient();
@@ -194,7 +194,7 @@ public sealed class RequestEndpointTests {
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
         Assert.Equal(ApiProblemCodes.RequestInvalid, problem!.Code);
-        Assert.Equal(0, reviews.RevalidateCount);
+        Assert.Equal(0, reviews.ReviewCount);
     }
 
     [Fact]
@@ -216,7 +216,7 @@ public sealed class RequestEndpointTests {
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
         Assert.Equal(ApiProblemCodes.RequestInvalid, problem!.Code);
-        Assert.Equal(1, reviews.RevalidateCount);
+        Assert.Equal(1, reviews.ReviewCount);
     }
 
     [Fact]
@@ -230,7 +230,8 @@ public sealed class RequestEndpointTests {
             new RequestPluginSearchRequest(
                 RequestMediaKind.Movie,
                 "cinema-metadata",
-                new Dictionary<string, string> { ["title"] = "Film:CaseSensitive" }),
+                new Dictionary<string, string> { ["title"] = "Film:CaseSensitive" },
+                Limit: 50),
             CodecJson);
         var body = await response.Content.ReadFromJsonAsync<RequestSearchResponse>(CodecJson);
 
@@ -239,6 +240,7 @@ public sealed class RequestEndpointTests {
         Assert.Equal("cinema-metadata", result.PluginId);
         Assert.Equal(new ExternalIdentity("tmdb", "Movie:CaseSensitive"), result.ExternalIdentity);
         Assert.Equal("cinema-metadata", searches.LastPluginId);
+        Assert.Equal(50, searches.LastLimit);
         Assert.True(searches.LastHideNsfw);
     }
 
@@ -348,13 +350,15 @@ public sealed class RequestEndpointTests {
     private sealed class EndpointPluginSearchSource : IPluginRequestSearchSource {
         public string? LastPluginId { get; private set; }
         public bool LastHideNsfw { get; private set; }
+        public int LastLimit { get; private set; }
 
         public Task<IReadOnlyList<RequestSearchResult>> SearchAsync(
             RequestKindDescriptor descriptor,
             string pluginId,
             IReadOnlyDictionary<string, string> fields,
             bool hideNsfw,
-            CancellationToken cancellationToken) {
+            CancellationToken cancellationToken,
+            int limit = PluginSearchPaging.DefaultLimit) {
             if (!fields.TryGetValue("title", out var title) || string.IsNullOrWhiteSpace(title)) {
                 throw new RequestSearchValidationException("The required title field is missing.");
             }
@@ -364,6 +368,7 @@ public sealed class RequestEndpointTests {
 
             LastPluginId = pluginId;
             LastHideNsfw = hideNsfw;
+            LastLimit = limit;
             return Task.FromResult<IReadOnlyList<RequestSearchResult>>([
                 new(
                     Guid.Empty,
@@ -394,12 +399,13 @@ public sealed class RequestEndpointTests {
 
     private sealed class NestedReviewSource : IPluginRequestReviewSource {
         public bool LastHideNsfw { get; private set; }
-        public int RevalidateCount { get; private set; }
+        public int ReviewCount { get; private set; }
 
         public Task<RequestReviewResponse?> ReviewAsync(
             RequestReviewRequest request,
             bool hideNsfw,
             CancellationToken cancellationToken) {
+            ReviewCount++;
             LastHideNsfw = hideNsfw;
             var episode = new EntityMetadataProposal(
                 "episode-child",
@@ -450,14 +456,6 @@ public sealed class RequestEndpointTests {
                     new("season-child", RequestMediaKind.Season, EntityKind.VideoSeason, new ExternalIdentity("tvdb", "season:one"), true, 1),
                     new("episode-child", RequestMediaKind.Episode, EntityKind.Video, new ExternalIdentity("episode-db", "episode:one"), true, 1)
                 ]));
-        }
-
-        public Task<RequestReviewResponse?> RevalidateAsync(
-            RequestReviewRequest request,
-            bool hideNsfw,
-            CancellationToken cancellationToken) {
-            RevalidateCount++;
-            return ReviewAsync(request, hideNsfw, cancellationToken);
         }
 
         private static EntityMetadataPatch Patch(string title, string identityNamespace, string identityValue) =>

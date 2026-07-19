@@ -1188,7 +1188,7 @@ public sealed class RequestCommitServiceTests {
             hideNsfw: false,
             CancellationToken.None));
 
-        Assert.Single(reviews.RevalidateCalls);
+        Assert.Single(reviews.ReviewCalls);
         Assert.Empty(writer.Ensured);
         Assert.Empty(writer.Applied);
         Assert.Empty(acquisitions.Created);
@@ -1450,10 +1450,10 @@ public sealed class RequestCommitServiceTests {
     }
 
     [Fact]
-    public async Task ReviewedCommitRejectsDuplicateSelectionBeforeRevalidation() {
+    public async Task ReviewedCommitRejectsDuplicateSelectionBeforeProposalResolution() {
         var identity = new ExternalIdentity("tmdb", "603");
         var proposal = Node("movie:603", "cinema-metadata", ProposalKind.Movie, "The Matrix", identity);
-        var reviews = new FakeReviewSource(_ => throw new InvalidOperationException("Must not revalidate invalid input."));
+        var reviews = new FakeReviewSource(_ => throw new InvalidOperationException("Must not resolve invalid input."));
         var (service, writer, acquisitions, _, _) = ReviewedService(proposal, reviews);
 
         await Assert.ThrowsAsync<RequestCommitValidationException>(() => service.CommitReviewedAsync(
@@ -1466,7 +1466,7 @@ public sealed class RequestCommitServiceTests {
             hideNsfw: false,
             CancellationToken.None));
 
-        Assert.Empty(reviews.RevalidateCalls);
+        Assert.Empty(reviews.ReviewCalls);
         Assert.Empty(writer.Ensured);
         Assert.Empty(acquisitions.Created);
     }
@@ -1573,7 +1573,7 @@ public sealed class RequestCommitServiceTests {
         Assert.Single(writer.Ensured, call => call.Kind == EntityKind.Book);
         Assert.DoesNotContain(writer.Ensured, call => call.ItemId == volumeIdentity.Value);
         Assert.Single(acquisitions.Created);
-        Assert.Single(reviews.RevalidateCalls);
+        Assert.Single(reviews.ReviewCalls);
     }
 
     [Fact]
@@ -1649,7 +1649,7 @@ public sealed class RequestCommitServiceTests {
         Assert.Equal("Episode:One", episodeCall.ItemId);
         Assert.Equal(FakeWantedEntityWriter.EntityIdFor("Season:One"), episodeCall.ParentEntityId);
         Assert.Collection(
-            reviews.RevalidateCalls,
+            reviews.ReviewCalls,
             call => {
                 Assert.Equal(pluginId, call.PluginId);
                 Assert.Equal(seriesIdentity, call.ExternalIdentity);
@@ -1691,7 +1691,7 @@ public sealed class RequestCommitServiceTests {
             CancellationToken.None);
 
         Assert.Null(response);
-        Assert.Equal(2, reviews.RevalidateCalls.Count);
+        Assert.Equal(2, reviews.ReviewCalls.Count);
         Assert.Empty(writer.Ensured);
         Assert.Empty(writer.Applied);
         Assert.Empty(acquisitions.Created);
@@ -1987,17 +1987,11 @@ public sealed class RequestCommitServiceTests {
             CancellationToken cancellationToken) =>
             Task.FromResult<RequestReviewResponse?>(null);
 
-        public Task<RequestReviewResponse?> RevalidateAsync(
-            RequestReviewRequest request,
-            bool hideNsfw,
-            CancellationToken cancellationToken) =>
-            Task.FromResult<RequestReviewResponse?>(null);
     }
 
     private sealed class FakeReviewSource(
         Func<RequestReviewRequest, RequestReviewResponse?> resolve) : IPluginRequestReviewSource {
         public List<RequestReviewRequest> ReviewCalls { get; } = [];
-        public List<RequestReviewRequest> RevalidateCalls { get; } = [];
 
         public Task<RequestReviewResponse?> ReviewAsync(
             RequestReviewRequest request,
@@ -2007,13 +2001,6 @@ public sealed class RequestCommitServiceTests {
             return Task.FromResult(resolve(request));
         }
 
-        public Task<RequestReviewResponse?> RevalidateAsync(
-            RequestReviewRequest request,
-            bool hideNsfw,
-            CancellationToken cancellationToken) {
-            RevalidateCalls.Add(request);
-            return Task.FromResult(resolve(request));
-        }
     }
 
     private sealed class FakeWantedEntityWriter : IWantedEntityWriter {

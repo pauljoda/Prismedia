@@ -1,3 +1,4 @@
+using Prismedia.Contracts.Plugins;
 using Prismedia.Contracts.Requests;
 using Prismedia.Domain.Entities;
 
@@ -11,7 +12,8 @@ public interface IPluginRequestSearchSource {
         string pluginId,
         IReadOnlyDictionary<string, string> fields,
         bool hideNsfw,
-        CancellationToken cancellationToken);
+        CancellationToken cancellationToken,
+        int limit = PluginSearchPaging.DefaultLimit);
 }
 
 /// <summary>An expected validation failure in a schema-driven plugin request search.</summary>
@@ -44,15 +46,6 @@ public interface IPluginRequestReviewSource {
     /// does not declare the identity for the requested kind, or cannot resolve the item.
     /// </summary>
     Task<RequestReviewResponse?> ReviewAsync(
-        RequestReviewRequest request,
-        bool hideNsfw,
-        CancellationToken cancellationToken);
-
-    /// <summary>
-    /// Re-resolves the review through the exact selected plugin without using a proposal cache. Commit
-    /// uses this path so the reviewed revision is compared with current upstream content.
-    /// </summary>
-    Task<RequestReviewResponse?> RevalidateAsync(
         RequestReviewRequest request,
         bool hideNsfw,
         CancellationToken cancellationToken);
@@ -89,7 +82,8 @@ public sealed class RequestPluginSearchService(IPluginRequestSearchSource source
                 request.PluginId,
                 request.Fields,
                 hideNsfw,
-                cancellationToken);
+                cancellationToken,
+                Math.Clamp(request.Limit, 1, PluginSearchPaging.MaxLimit));
             return new RequestSearchResponse(results, []);
         } catch (RequestSearchValidationException) {
             throw;

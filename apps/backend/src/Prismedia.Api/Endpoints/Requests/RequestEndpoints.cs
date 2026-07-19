@@ -154,7 +154,7 @@ public static class RequestEndpoints {
                 }
             })
             .WithName("CommitReviewedRequest")
-            .WithSummary("Commits selected proposal ids after revalidating the exact plugin and reviewed proposal revision.")
+            .WithSummary("Commits selected proposal ids from the server-held plugin review after validating its proposal revision.")
             .Produces<RequestCommitResponse>()
             .Produces<ApiProblem>(StatusCodes.Status400BadRequest)
             .Produces<ApiProblem>(StatusCodes.Status404NotFound)

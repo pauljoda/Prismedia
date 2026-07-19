@@ -7,10 +7,12 @@ namespace Prismedia.Contracts.Requests;
 /// <param name="Kind">The single discoverable request kind being searched.</param>
 /// <param name="PluginId">Stable manifest id of the plugin selected by the user.</param>
 /// <param name="Fields">Plugin-owned search values keyed by its declared search schema.</param>
+/// <param name="Limit">Maximum ranked candidates requested from the selected plugin.</param>
 public sealed record RequestPluginSearchRequest(
     RequestMediaKind Kind,
     string PluginId,
-    IReadOnlyDictionary<string, string> Fields);
+    IReadOnlyDictionary<string, string> Fields,
+    int Limit = PluginSearchPaging.DefaultLimit);
 
 /// <summary>Aggregated request search response.</summary>
 public sealed record RequestSearchResponse(
@@ -146,8 +148,8 @@ public sealed record RequestCommitRequest(
 
 /// <summary>
 /// Commits an item from the canonical proposal review surface. Structural selections are proposal ids,
-/// never client-supplied external identities; the server re-resolves the exact plugin and derives every
-/// selected node's persistent identity from the fresh proposal before it writes anything.
+/// never client-supplied external identities; the server reuses the exact plugin proposal held during
+/// review and derives every selected node's persistent identity from that revision before it writes anything.
 /// </summary>
 /// <param name="Kind">Request-flow kind reviewed by the user.</param>
 /// <param name="PluginId">Stable manifest id of the plugin that produced the review.</param>

@@ -291,6 +291,56 @@ describe("Identify review surfaces", () => {
     expect(screen.getByAltText("Local Episode One")).toHaveAttribute("src", "/assets/thumbnails/episode-1.jpg");
   });
 
+  it("bulk-selects and deselects nested child proposals", async () => {
+    const childOne = proposal("episode-1-proposal", { targetKind: "video-episode", title: "Episode One" });
+    const childTwo = proposal("episode-2-proposal", { targetKind: "video-episode", title: "Episode Two" });
+
+    render(IdentifyReviewChild, {
+      props: {
+        entity: entity(),
+        parentProposal: proposal("root"),
+        proposal: proposal("season-1-proposal", {
+          targetKind: "video-season",
+          title: "Season 1",
+          children: [childOne, childTwo],
+        }),
+      },
+    });
+
+    await fireEvent.click(screen.getByRole("button", { name: "Deselect all Children" }));
+    expect(store.setReviewProposalSelected).toHaveBeenCalledWith(childOne.proposalId, false);
+    expect(store.setReviewProposalSelected).toHaveBeenCalledWith(childTwo.proposalId, false);
+
+    await fireEvent.click(screen.getByRole("button", { name: "Select all Children" }));
+    expect(store.setReviewProposalSelected).toHaveBeenCalledWith(childOne.proposalId, true);
+    expect(store.setReviewProposalSelected).toHaveBeenCalledWith(childTwo.proposalId, true);
+  });
+
+  it("bulk-selects matched children on the parent review", async () => {
+    render(IdentifyReviewParent, {
+      props: {
+        entity: entity(),
+        detail: detail({
+          childrenByKind: [{
+            kind: "video",
+            label: "Episodes",
+            entities: [entity({ id: "episode-1", kind: "video", title: "Local Episode" })],
+          }],
+        }),
+        proposal: proposal("root", {
+          children: [proposal("episode-1-proposal", {
+            targetKind: "video-episode",
+            title: "Episode One",
+            targetEntityId: "episode-1",
+          })],
+        }),
+      },
+    });
+
+    await fireEvent.click(screen.getByRole("button", { name: "Deselect all matched children" }));
+    expect(store.setReviewProposalSelected).toHaveBeenCalledWith("episode-1-proposal", false);
+  });
+
   it("renders a full-width apply progress row with the active proposal path", () => {
     store.applying = true;
     store.applyProgress = {

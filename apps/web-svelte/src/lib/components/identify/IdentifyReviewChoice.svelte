@@ -3,6 +3,11 @@
   import IdentifyTargetPreview from "./IdentifyTargetPreview.svelte";
   import IdentifyRejectQueueActions from "./IdentifyRejectQueueActions.svelte";
   import PluginSearchSurface from "$lib/components/plugins/PluginSearchSurface.svelte";
+  import {
+    nextPluginSearchLimit,
+    PLUGIN_SEARCH_MAX_LIMIT,
+    PLUGIN_SEARCH_PAGE_SIZE,
+  } from "$lib/components/plugins/plugin-search-paging";
   import UniversalLightbox from "$lib/components/UniversalLightbox.svelte";
   import { IDENTIFY_QUEUE_STATE } from "$lib/api/generated/codes";
   import type { EntitySearchCandidate } from "$lib/api/identify-types";
@@ -50,6 +55,7 @@
   let searchedCandidates = $state<EntitySearchCandidate[] | null>(null);
   let invalidatedResultRevision = $state<string | null>(null);
   let candidatesInvalidated = $state(false);
+  let searchLimit = $state(PLUGIN_SEARCH_PAGE_SIZE);
 
   const providerOptions = $derived(store.providersForKind(entity.kind));
   const activeProviderId = $derived(supportedProviderId(providerOptions, selectedProviderId, providerId));
@@ -87,6 +93,11 @@
   const seekDisabled = $derived(searching || seeking || rescanning || store.isItemBusy(entity.id) || providerOptions.length === 0);
   const searchStatus = $derived(store.itemSearchStatus(entity.id));
   const surfaceSearching = $derived(searching || store.isItemBusy(entity.id));
+  const canLoadMore = $derived(
+    !queryInFlight &&
+      localCandidates.length >= searchLimit &&
+      searchLimit < PLUGIN_SEARCH_MAX_LIMIT,
+  );
 
   // Navigating between items reuses this component instance, so local search state must be cleared
   // when the entity changes — otherwise a previous item's searched candidates and query stick around.
@@ -102,10 +113,16 @@
     previewCandidate = null;
     invalidatedResultRevision = null;
     candidatesInvalidated = false;
+    searchLimit = PLUGIN_SEARCH_PAGE_SIZE;
   });
 
   function setSearchValues(values: Record<string, string>) {
     searchValuesBySchema = { ...searchValuesBySchema, [activeSearchFormKey]: values };
+  }
+
+  function chooseProvider(providerId: string) {
+    selectedProviderId = providerId;
+    searchLimit = PLUGIN_SEARCH_PAGE_SIZE;
   }
 
   async function handleRescan() {
@@ -129,8 +146,9 @@
     }
   }
 
-  async function handleSearch() {
+  async function handleSearch(limit = PLUGIN_SEARCH_PAGE_SIZE) {
     if (!activeProvider || !canSubmitSearch) return;
+    searchLimit = limit;
     searching = true;
     store.error = null;
     searchedCandidates = null;
@@ -144,6 +162,7 @@
         title: pluginSearchCompatibilityTitle(activeSearchFields, searchValues, entity.title),
         fields: submittedSearchValues,
         requireChoice: true,
+        limit,
       });
       if (result?.state === IDENTIFY_QUEUE_STATE.search) {
         searchedCandidates = result.candidates;
@@ -294,7 +313,7 @@
     selectedProviderId={activeProviderId}
     fields={activeSearchFields}
     values={searchValues}
-    onProviderChange={(nextProviderId) => (selectedProviderId = nextProviderId)}
+    onProviderChange={chooseProvider}
     onValuesChange={setSearchValues}
     onSubmit={() => void handleSearch()}
     onClear={() => setSearchValues(Object.fromEntries(activeSearchFields.map((field) => [field.key, ""])))}
@@ -319,6 +338,8 @@
     {seekDisabled}
     onRescan={() => void handleRescan()}
     {rescanning}
+    onLoadMore={canLoadMore ? () => void handleSearch(nextPluginSearchLimit(searchLimit)) : null}
+    loadingMore={surfaceSearching && searchLimit > PLUGIN_SEARCH_PAGE_SIZE}
     noProvidersMessage={`No enabled provider supports ${entity.kind}.`}
   />
 

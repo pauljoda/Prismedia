@@ -24,6 +24,27 @@ describe("ProposalReviewSummary", () => {
     expect(onSelectedChange).toHaveBeenCalledWith("season-1", true);
     expect(screen.getAllByRole("checkbox")).toHaveLength(1);
   });
+
+  it("offers bulk selection for requestable children", async () => {
+    const onSelectedChange = vi.fn();
+    const root = proposal();
+    render(ProposalReviewSummary, {
+      props: {
+        proposal: root,
+        selectedIds: [],
+        selectableIds: ["season-1"],
+        onSelectedChange,
+        childrenTitle: "Seasons",
+      },
+    });
+
+    await fireEvent.click(screen.getByRole("button", { name: "Select all Seasons" }));
+    expect(onSelectedChange).toHaveBeenCalledWith("season-1", true);
+
+    onSelectedChange.mockClear();
+    await fireEvent.click(screen.getByRole("button", { name: "Deselect all Seasons" }));
+    expect(onSelectedChange).toHaveBeenCalledWith("season-1", false);
+  });
 });
 
 function proposal(): EntityMetadataProposal {

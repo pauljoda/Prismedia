@@ -137,6 +137,65 @@ describe("reviewed request route", () => {
     expect(mocks.goto).toHaveBeenCalledWith("/request");
   });
 
+  it("drills into child proposal details without reloading provider data", async () => {
+    const review = seriesReview();
+    setRoute(
+      REQUEST_MEDIA_KIND.series,
+      review.externalIdentity.value,
+      `plugin=${review.pluginId}&namespace=${review.externalIdentity.namespace}`,
+    );
+    mocks.reviewRequest.mockResolvedValue(review);
+
+    render(Page);
+
+    await screen.findByRole("heading", { name: "Andor" });
+    await fireEvent.click(screen.getByRole("button", { name: "Review Season 1" }));
+
+    expect(screen.getByRole("heading", { name: "Season 1" })).toBeInTheDocument();
+    expect(screen.getByText("Episode 1")).toBeInTheDocument();
+    expect(mocks.reviewRequest).toHaveBeenCalledTimes(1);
+
+    await fireEvent.click(screen.getByRole("button", { name: "Back to Andor" }));
+    expect(screen.getByRole("heading", { name: "Andor" })).toBeInTheDocument();
+  });
+
+  it("loads a shallow child once and reuses it while walking the held review", async () => {
+    const rootReview = seriesReview();
+    const season = rootReview.proposal.children[0] as EntityMetadataProposal;
+    rootReview.proposal.children = [
+      { ...season, children: [] },
+      rootReview.proposal.children[1] as EntityMetadataProposal,
+    ];
+    const childReview = seasonReview(season);
+    setRoute(
+      REQUEST_MEDIA_KIND.series,
+      rootReview.externalIdentity.value,
+      `plugin=${rootReview.pluginId}&namespace=${rootReview.externalIdentity.namespace}`,
+    );
+    mocks.reviewRequest
+      .mockResolvedValueOnce(rootReview)
+      .mockResolvedValueOnce(childReview);
+
+    render(Page);
+
+    await screen.findByRole("heading", { name: "Andor" });
+    await fireEvent.click(screen.getByRole("button", { name: "Review Season 1" }));
+
+    expect(await screen.findByText("Episode 1")).toBeInTheDocument();
+    expect(mocks.reviewRequest).toHaveBeenNthCalledWith(2, {
+      kind: REQUEST_MEDIA_KIND.season,
+      pluginId: rootReview.pluginId,
+      externalIdentity: { namespace: EXTERNAL_ID_PROVIDER.tmdb, value: "Show:AbC:01:1" },
+      hideNsfw: true,
+    });
+
+    await fireEvent.click(screen.getByRole("button", { name: "Back to Andor" }));
+    await fireEvent.click(screen.getByRole("button", { name: "Review Season 1" }));
+
+    expect(screen.getByText("Episode 1")).toBeInTheDocument();
+    expect(mocks.reviewRequest).toHaveBeenCalledTimes(2);
+  });
+
   it("allows a future-only container monitor with no current child selection", async () => {
     const review = seriesReview();
     setRoute(
@@ -439,6 +498,36 @@ function movieReview(): RequestReviewResponse {
       externalIdentity,
       requestable: true,
     }],
+  };
+}
+
+function seasonReview(season: EntityMetadataProposal): RequestReviewResponse {
+  const externalIdentity = { namespace: EXTERNAL_ID_PROVIDER.tmdb, value: "Show:AbC:01:1" };
+  return {
+    pluginId: "cinema-metadata",
+    externalIdentity,
+    entityKind: ENTITY_KIND.videoSeason,
+    kind: REQUEST_MEDIA_KIND.season,
+    proposal: season,
+    revision: "season-revision",
+    targets: [
+      {
+        proposalId: season.proposalId,
+        kind: REQUEST_MEDIA_KIND.season,
+        entityKind: ENTITY_KIND.videoSeason,
+        externalIdentity,
+        requestable: true,
+        position: 1,
+      },
+      {
+        proposalId: "episode-1",
+        kind: REQUEST_MEDIA_KIND.episode,
+        entityKind: ENTITY_KIND.video,
+        externalIdentity: { namespace: EXTERNAL_ID_PROVIDER.tmdb, value: "Show:AbC:01:1:1" },
+        requestable: true,
+        position: 1,
+      },
+    ],
   };
 }
 

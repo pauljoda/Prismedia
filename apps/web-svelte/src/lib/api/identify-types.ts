@@ -37,6 +37,7 @@ export interface IdentifyQuery {
   externalIds?: Record<string, string> | null;
   requireChoice?: boolean | null;
   fields?: Record<string, string> | null;
+  limit?: number;
 }
 
 export interface ImageCandidate {

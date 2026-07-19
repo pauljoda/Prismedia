@@ -80,7 +80,8 @@ public sealed class PluginRequestMetadataSourceRoutingTests : IDisposable {
                 ["year"] = " 2026 "
             },
             hideNsfw: false,
-            CancellationToken.None);
+            CancellationToken.None,
+            limit: 50);
 
         var call = Assert.Single(runner.Calls);
         Assert.Equal("zeta-metadata", call.Descriptor.Manifest.Id);
@@ -88,6 +89,7 @@ public sealed class PluginRequestMetadataSourceRoutingTests : IDisposable {
         Assert.Equal(string.Empty, call.Request.Query.Fields!["context"]);
         Assert.Equal("Film:CaseSensitive", call.Request.Query.Fields["workName"]);
         Assert.Equal("2026", call.Request.Query.Fields["year"]);
+        Assert.Equal(50, call.Request.Query.Limit);
         Assert.DoesNotContain("title", call.Request.Query.Fields.Keys);
         var result = Assert.Single(results);
         Assert.Equal("zeta-metadata", result.PluginId);
@@ -259,7 +261,7 @@ public sealed class PluginRequestMetadataSourceRoutingTests : IDisposable {
         Assert.Equal(identity.Value, call.Request.Query.ExternalIds!["tmdb"]);
 
         runner.Calls.Clear();
-        var failedSelectedPlugin = await source.RevalidateAsync(
+        var failedSelectedPlugin = await source.ReviewAsync(
             new RequestReviewRequest(
                 RequestMediaKind.Movie,
                 "alpha-metadata",
@@ -272,7 +274,7 @@ public sealed class PluginRequestMetadataSourceRoutingTests : IDisposable {
     }
 
     [Fact]
-    public async Task RevalidateBypassesTheExplicitProposalCache() {
+    public async Task ReviewReusesTheExplicitProposalCache() {
         await using var db = await CreateInstalledPluginAsync("cinema-metadata");
         var catalog = Catalog(db);
         var runner = new ProposalFactoryRunner((descriptor, request, call) =>
@@ -288,13 +290,13 @@ public sealed class PluginRequestMetadataSourceRoutingTests : IDisposable {
 
         var first = await source.ReviewAsync(request, hideNsfw: false, CancellationToken.None);
         var cached = await source.ReviewAsync(request, hideNsfw: false, CancellationToken.None);
-        var fresh = await source.RevalidateAsync(request, hideNsfw: false, CancellationToken.None);
+        var repeated = await source.ReviewAsync(request, hideNsfw: false, CancellationToken.None);
 
         Assert.NotNull(first);
         Assert.Equal(first!.Revision, cached!.Revision);
-        Assert.NotEqual(first.Revision, fresh!.Revision);
-        Assert.Equal("Revision 2", fresh.Proposal.Patch.Title);
-        Assert.Equal(2, runner.Calls.Count);
+        Assert.Equal(first.Revision, repeated!.Revision);
+        Assert.Equal("Revision 1", repeated.Proposal.Patch.Title);
+        Assert.Single(runner.Calls);
     }
 
     [Theory]

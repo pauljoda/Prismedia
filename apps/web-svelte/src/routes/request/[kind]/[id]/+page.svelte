@@ -1,5 +1,6 @@
 <script lang="ts">
   import { goto } from "$app/navigation";
+  import { resolve } from "$app/paths";
   import { page } from "$app/state";
   import { ChevronLeft, Loader2, RefreshCw, Send } from "@lucide/svelte";
   import { Button, Select } from "@prismedia/ui-svelte";
@@ -12,6 +13,7 @@
   import { ApiError } from "$lib/api/orval-fetch";
   import { commitReviewedRequest, reviewRequest } from "$lib/api/requests";
   import RequestTargetOptions from "$lib/components/acquisitions/RequestTargetOptions.svelte";
+  import { structuralChildProposals } from "$lib/components/identify-review";
   import ProposalReviewSummary from "$lib/components/review/ProposalReviewSummary.svelte";
   import { resolveEntityHref } from "$lib/entities/entity-codes";
   import { useNsfw } from "$lib/nsfw/store.svelte";
@@ -57,8 +59,13 @@
   let submitting = $state(false);
   let error = $state<string | null>(null);
   let reviewChanged = $state(false);
+  let proposalPath = $state.raw<EntityMetadataProposal[]>([]);
+  let proposalCache = $state.raw<Record<string, EntityMetadataProposal>>({});
+  let reviewingProposalId = $state<string | null>(null);
 
   const proposal = $derived(review?.proposal as EntityMetadataProposal | undefined);
+  const activeProposal = $derived(proposalPath.at(-1) ?? proposal);
+  const activeParent = $derived(proposalPath.length > 1 ? proposalPath.at(-2) : proposal);
   const selection = $derived(review ? deriveRequestReviewSelection(review) : null);
   const kindInfo = $derived(review ? requestKindInfo(review.kind) : null);
   const childNoun = $derived(kindInfo?.childNoun ?? "item");
@@ -106,6 +113,9 @@
     review = null;
     error = null;
     reviewChanged = false;
+    proposalPath = [];
+    proposalCache = {};
+    reviewingProposalId = null;
     selectedProposalIds = [];
     chosenPreset = DEFAULT_MONITOR_PRESET;
     targetLibraryRootId = null;
@@ -129,6 +139,9 @@
 
       const nextSelection = deriveRequestReviewSelection(response);
       review = response;
+      const rootProposal = response.proposal as EntityMetadataProposal;
+      proposalPath = [rootProposal];
+      proposalCache = { [rootProposal.proposalId]: rootProposal };
       selectionCustomized = false;
       selectedProposalIds = nextSelection.mode === REQUEST_REVIEW_SELECTION.directChildren
         ? resolvePresetSelection(chosenPreset, nextSelection.presetChildren)
@@ -154,6 +167,57 @@
     selectedProposalIds = selected
       ? Array.from(new Set([...selectedProposalIds, proposalId]))
       : selectedProposalIds.filter((id) => id !== proposalId);
+  }
+
+  async function openProposal(nextProposal: EntityMetadataProposal) {
+    if (!review || reviewingProposalId) return;
+
+    const cached = proposalCache[nextProposal.proposalId];
+    if (cached) {
+      proposalPath = [...proposalPath, cached];
+      return;
+    }
+
+    if (structuralChildProposals(nextProposal).length > 0) {
+      proposalCache = { ...proposalCache, [nextProposal.proposalId]: nextProposal };
+      proposalPath = [...proposalPath, nextProposal];
+      return;
+    }
+
+    const target = review.targets.find((candidate) => candidate.proposalId === nextProposal.proposalId);
+    if (!target) {
+      proposalCache = { ...proposalCache, [nextProposal.proposalId]: nextProposal };
+      proposalPath = [...proposalPath, nextProposal];
+      return;
+    }
+
+    const requestKey = loadedKey;
+    reviewingProposalId = nextProposal.proposalId;
+    error = null;
+    try {
+      const childReview = await reviewRequest({
+        kind: target.kind,
+        pluginId: review.pluginId,
+        externalIdentity: target.externalIdentity,
+        hideNsfw: nsfw.mode !== "show",
+      });
+      if (requestKey !== loadedKey) return;
+      const resolved = childReview.proposal as EntityMetadataProposal;
+      proposalCache = { ...proposalCache, [nextProposal.proposalId]: resolved };
+      proposalPath = [...proposalPath, resolved];
+    } catch (err) {
+      if (requestKey === loadedKey) {
+        error = err instanceof Error ? err.message : "Failed to load child review";
+      }
+    } finally {
+      if (requestKey === loadedKey) reviewingProposalId = null;
+    }
+  }
+
+  function closeProposal() {
+    if (proposalPath.length > 1) {
+      proposalPath = proposalPath.slice(0, -1);
+    }
   }
 
   async function requestSelection() {
@@ -189,7 +253,7 @@
       const requested = response.items.filter((item) => item.outcome === REQUEST_COMMIT_OUTCOME.requested);
       if (requested.length === 0) {
         if (response.containerEntityId) {
-          await goto(resolveEntityHref(review.entityKind, response.containerEntityId) ?? "/request");
+          await goto(resolve((resolveEntityHref(review.entityKind, response.containerEntityId) ?? "/request") as "/"));
           return;
         }
         const alreadyOwned = response.items.filter(
@@ -206,7 +270,7 @@
       const singleHref = single?.entityId
         ? resolveEntityHref(target?.entityKind ?? review.entityKind, single.entityId)
         : null;
-      await goto(singleHref ?? "/request");
+      await goto(resolve((singleHref ?? "/request") as "/"));
     } catch (err) {
       if (err instanceof ApiError && err.problemCode === PROBLEM_CODE.requestProposalChanged) {
         reviewChanged = true;
@@ -231,11 +295,11 @@
   }
 </script>
 
-<svelte:head><title>{proposal ? proposalTitle(proposal) : "Request"} · Prismedia</title></svelte:head>
+<svelte:head><title>{activeProposal ? proposalTitle(activeProposal) : "Request"} · Prismedia</title></svelte:head>
 
 <div class="space-y-4">
   <a
-    href={backHref}
+    href={resolve(backHref as "/")}
     class="inline-flex items-center gap-1 text-[0.78rem] font-medium text-text-muted transition-colors hover:text-text-primary"
   >
     <ChevronLeft class="h-4 w-4" />
@@ -249,11 +313,33 @@
   {:else if error && !review}
     <div class="surface-panel p-6 text-[0.82rem] leading-relaxed text-error-text">{error}</div>
   {:else if review && proposal && selection}
+    {#if proposalPath.length > 1 && activeParent}
+      <Button
+        type="button"
+        variant="secondary"
+        size="sm"
+        class="gap-1.5"
+        aria-label={`Back to ${proposalTitle(activeParent)}`}
+        onclick={closeProposal}
+      >
+        <ChevronLeft class="h-3.5 w-3.5" />
+        {proposalTitle(activeParent)}
+      </Button>
+    {/if}
+
+    {#if reviewingProposalId}
+      <div class="flex items-center gap-2 text-[0.75rem] text-text-muted" aria-live="polite">
+        <Loader2 class="h-3.5 w-3.5 animate-spin" />
+        Loading child details…
+      </div>
+    {/if}
+
     <ProposalReviewSummary
-      {proposal}
+      proposal={activeProposal ?? proposal}
       selectedIds={selectedProposalIds}
       selectableIds={selection.selectableIds}
       onSelectedChange={toggleProposal}
+      onActivate={openProposal}
       {childrenTitle}
       subtitle={`${review.externalIdentity.namespace}:${review.externalIdentity.value}`}
     />

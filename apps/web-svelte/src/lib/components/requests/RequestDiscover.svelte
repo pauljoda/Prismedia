@@ -3,12 +3,18 @@
   import { AlertTriangle, Loader2, PackageSearch, PlugZap } from "@lucide/svelte";
   import { Button } from "@prismedia/ui-svelte";
   import { goto } from "$app/navigation";
+  import { resolve } from "$app/paths";
   import { ENTITY_KIND, type RequestMediaKindCode } from "$lib/api/generated/codes";
   import type { ExternalIdentity, RequestSearchResult } from "$lib/api/generated/model";
   import type { EntitySearchCandidate, PluginProvider } from "$lib/api/identify-types";
   import { fetchPluginProviders } from "$lib/api/plugins";
   import { searchRequestsByPlugin } from "$lib/api/requests";
   import PluginSearchSurface from "$lib/components/plugins/PluginSearchSurface.svelte";
+  import {
+    nextPluginSearchLimit,
+    PLUGIN_SEARCH_MAX_LIMIT,
+    PLUGIN_SEARCH_PAGE_SIZE,
+  } from "$lib/components/plugins/plugin-search-paging";
   import {
     hasRequiredPluginSearchFields,
     seedPluginSearchFields,
@@ -50,6 +56,7 @@
   let providerWarnings = $state.raw<string[]>([]);
   let activeCandidateKey = $state<string | null>(null);
   let searchRevision = 0;
+  let searchLimit = $state(PLUGIN_SEARCH_PAGE_SIZE);
 
   const hideNsfw = $derived(nsfw.mode !== "show");
   const selectedKindInfo = $derived(
@@ -79,6 +86,9 @@
     }),
   );
   const candidates = $derived(candidateEntries.map((entry) => entry.candidate));
+  const canLoadMore = $derived(
+    hasSearched && results.length >= searchLimit && searchLimit < PLUGIN_SEARCH_MAX_LIMIT,
+  );
   let lastHideNsfw: boolean | null = null;
 
   onMount(() => {
@@ -162,6 +172,7 @@
     searchError = null;
     providerWarnings = [];
     activeCandidateKey = null;
+    searchLimit = PLUGIN_SEARCH_PAGE_SIZE;
   }
 
   function chooseKind(kind: RequestMediaKindCode) {
@@ -191,14 +202,15 @@
     resetSearch();
   }
 
-  async function runSearch() {
+  async function runSearch(limit = PLUGIN_SEARCH_PAGE_SIZE) {
     if (!selectedKind || !activeProvider || !canSubmitSearch) return;
 
     const revision = ++searchRevision;
+    const loadingMore = limit > PLUGIN_SEARCH_PAGE_SIZE && results.length > 0;
     searching = true;
     searchError = null;
     providerWarnings = [];
-    results = [];
+    if (!loadingMore) results = [];
     activeCandidateKey = null;
 
     try {
@@ -206,12 +218,14 @@
         kind: selectedKind,
         pluginId: activeProvider.id,
         fields: submittedPluginSearchFields(activeSearchFields, searchValues),
+        limit,
         hideNsfw,
       });
       if (revision !== searchRevision) return;
 
       // Plugin order is the ranking contract. Invalid legacy rows are omitted without re-sorting.
       results = response.results;
+      searchLimit = limit;
       hasSearched = true;
       providerWarnings = Array.from(new Set(
         response.providerErrors.map((warning) => `${warning.displayName}: ${warning.message}`),
@@ -237,9 +251,8 @@
     });
     if (back?.trim()) query.set("back", back.trim());
 
-    void goto(
-      `/request/${encodeURIComponent(selectedKind)}/${encodeURIComponent(result.externalIdentity.value)}?${query.toString()}`,
-    );
+    const href = `/request/${encodeURIComponent(selectedKind)}/${encodeURIComponent(result.externalIdentity.value)}?${query.toString()}`;
+    void goto(resolve(href as "/"));
   }
 </script>
 
@@ -327,6 +340,8 @@
       {hasSearched}
       {activeCandidateKey}
       onActivate={activateCandidate}
+      onLoadMore={canLoadMore ? () => void runSearch(nextPluginSearchLimit(searchLimit)) : null}
+      loadingMore={searching && results.length > 0}
     />
   {/if}
 </div>

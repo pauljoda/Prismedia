@@ -25,11 +25,12 @@ export async function searchRequestsByPlugin(params: {
   kind: RequestMediaKindCode;
   pluginId: string;
   fields: Record<string, string>;
+  limit?: number;
   hideNsfw?: boolean;
 }): Promise<RequestSearchResponse> {
   return unwrapGenerated(
     await searchRequestsByPluginRequest(
-      { kind: params.kind, pluginId: params.pluginId, fields: params.fields },
+      { kind: params.kind, pluginId: params.pluginId, fields: params.fields, limit: params.limit },
       { hideNsfw: params.hideNsfw },
     ),
     "Failed to search the selected plugin",
@@ -68,7 +69,7 @@ export async function reviewEntityRequest(
   );
 }
 
-/** Commits only proposal ids from a freshly revision-validated review. */
+/** Commits only proposal ids from the server-held, revision-validated review. */
 export async function commitReviewedRequest(
   request: ReviewedRequestCommitRequest,
   hideNsfw?: boolean,

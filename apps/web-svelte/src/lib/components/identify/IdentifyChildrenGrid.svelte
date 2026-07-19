@@ -1,6 +1,6 @@
 <script lang="ts">
   import { Check, Clock, Loader2 } from "@lucide/svelte";
-  import { cn } from "@prismedia/ui-svelte";
+  import { Button, cn } from "@prismedia/ui-svelte";
   import { assetUrl } from "$lib/api/orval-fetch";
   import type { EntityMetadataProposal } from "$lib/api/identify-types";
   import {
@@ -34,6 +34,14 @@
   const matchedIds = $derived(
     new Set(structuralNodes.map((child) => child.targetEntityId).filter((id): id is string => Boolean(id))),
   );
+  const matchedProposals = $derived(
+    childEntities
+      .map((child) => matchedProposal(child.id))
+      .filter((child): child is EntityMetadataProposal => child !== null),
+  );
+  const selectedMatchedCount = $derived(
+    matchedProposals.filter((child) => store.isReviewProposalSelected(child.proposalId)).length,
+  );
 
   // The cascade resolves children serially in this order, flushing each as it matches. So everything
   // up to the last matched child has been processed (matched, or attempted with no match), the next
@@ -66,7 +74,43 @@
     if (image) return reviewImagePreviewUrl(image, matched?.targetKind);
     return assetUrl(fallback ?? undefined) || undefined;
   }
+
+  function setAllMatched(selected: boolean) {
+    for (const child of matchedProposals) {
+      store.setReviewProposalSelected(child.proposalId, selected);
+    }
+  }
 </script>
+
+<div class="flex items-center justify-between gap-3 border-b border-border-subtle px-3.5 py-2">
+  <span class="font-mono text-[0.64rem] text-text-muted">
+    {selectedMatchedCount} of {matchedProposals.length} selected
+  </span>
+  {#if matchedProposals.length > 0}
+    <div class="flex items-center gap-1">
+      <Button
+        type="button"
+        variant="ghost"
+        size="sm"
+        class="h-auto px-1.5 py-0.5"
+        aria-label="Select all matched children"
+        onclick={() => setAllMatched(true)}
+      >
+        All
+      </Button>
+      <Button
+        type="button"
+        variant="ghost"
+        size="sm"
+        class="h-auto px-1.5 py-0.5"
+        aria-label="Deselect all matched children"
+        onclick={() => setAllMatched(false)}
+      >
+        None
+      </Button>
+    </div>
+  {/if}
+</div>
 
 <div class="children-grid p-3.5">
   {#each childEntities as child, index (child.id)}
@@ -85,7 +129,16 @@
           aria-label={matched ? `Review ${matched.patch?.title ?? child.title}` : child.title}
         >
           {#if cover}
-            <img src={cover} alt={child.title} loading="lazy" referrerpolicy="no-referrer" />
+            <img
+              src={cover}
+              alt={child.title}
+              loading="lazy"
+              decoding="async"
+              referrerpolicy="no-referrer"
+              onerror={(event) => {
+                (event.currentTarget as HTMLImageElement).hidden = true;
+              }}
+            />
           {:else}
             <div class="child-cover-empty"></div>
           {/if}
@@ -104,7 +157,7 @@
             type="button"
             class={cn("child-select", selected && "is-on")}
             onclick={() => matched && store.setReviewProposalSelected(matched.proposalId, !selected)}
-            aria-label={selected ? "Deselect" : "Select"}
+            aria-label={`${selected ? "Deselect" : "Select"} ${matched.patch?.title ?? child.title}`}
           >
             {#if selected}<Check class="h-3.5 w-3.5" />{/if}
           </button>

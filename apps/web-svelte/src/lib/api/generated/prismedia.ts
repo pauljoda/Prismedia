@@ -12242,7 +12242,7 @@ export const getCommitReviewedRequestUrl = (params?: CommitReviewedRequestParams
 }
 
 /**
- * @summary Commits selected proposal ids after revalidating the exact plugin and reviewed proposal revision.
+ * @summary Commits selected proposal ids from the server-held plugin review after validating its proposal revision.
  */
 export const commitReviewedRequest = async (reviewedRequestCommitRequest: ReviewedRequestCommitRequest,
     params?: CommitReviewedRequestParams, options?: RequestInit): Promise<commitReviewedRequestResponse> => {

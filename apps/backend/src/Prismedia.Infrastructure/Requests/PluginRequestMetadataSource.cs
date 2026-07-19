@@ -41,7 +41,8 @@ public sealed class PluginRequestMetadataSource(
         string pluginId,
         IReadOnlyDictionary<string, string> fields,
         bool hideNsfw,
-        CancellationToken cancellationToken) {
+        CancellationToken cancellationToken,
+        int limit = PluginSearchPaging.DefaultLimit) {
         var selected = await SelectSearchProviderAsync(descriptor, pluginId, hideNsfw, cancellationToken);
         var validated = ValidateSearchFields(selected.Provider, selected.Schema, fields);
         return await RunSearchAsync(
@@ -50,6 +51,7 @@ public sealed class PluginRequestMetadataSource(
             selected.Descriptor,
             validated.CompatibilityTitle,
             validated.Fields,
+            limit,
             hideNsfw,
             cancellationToken);
     }
@@ -60,6 +62,7 @@ public sealed class PluginRequestMetadataSource(
         PluginDescriptor descriptor,
         string? compatibilityTitle,
         IReadOnlyDictionary<string, string>? fields,
+        int limit,
         bool hideNsfw,
         CancellationToken cancellationToken) {
         var auth = await catalog.GetAuthAsync(descriptor.Manifest, cancellationToken);
@@ -73,7 +76,7 @@ public sealed class PluginRequestMetadataSource(
                 compatibilityTitle ?? string.Empty,
                 new Dictionary<string, string>(),
                 []),
-            Query: new IdentifyQuery(compatibilityTitle, null, null, Fields: fields),
+            Query: new IdentifyQuery(compatibilityTitle, null, null, Fields: fields, Limit: limit),
             Hints: new IdentifyMatchHints(new Dictionary<string, string>(), [], compatibilityTitle, null),
             StructuralContext: null,
             IncludeNsfw: !hideNsfw,
@@ -206,19 +209,11 @@ public sealed class PluginRequestMetadataSource(
         RequestReviewRequest request,
         bool hideNsfw,
         CancellationToken cancellationToken) =>
-        await ResolveReviewAsync(request, hideNsfw, bypassCache: false, cancellationToken);
-
-    /// <inheritdoc />
-    public async Task<RequestReviewResponse?> RevalidateAsync(
-        RequestReviewRequest request,
-        bool hideNsfw,
-        CancellationToken cancellationToken) =>
-        await ResolveReviewAsync(request, hideNsfw, bypassCache: true, cancellationToken);
+        await ResolveReviewAsync(request, hideNsfw, cancellationToken);
 
     private async Task<RequestReviewResponse?> ResolveReviewAsync(
         RequestReviewRequest request,
         bool hideNsfw,
-        bool bypassCache,
         CancellationToken cancellationToken) {
         var descriptor = RequestKindRegistry.Find(request.Kind);
         if (descriptor is null || string.IsNullOrWhiteSpace(request.PluginId) || request.ExternalIdentity is null) {
@@ -231,19 +226,12 @@ public sealed class PluginRequestMetadataSource(
             return null;
         }
 
-        var proposal = bypassCache
-            ? await RunRouteAsync(
-                descriptor.PluginEntityKind,
-                route,
-                hideNsfw,
-                includeChildren: true,
-                cancellationToken)
-            : await ResolveExplicitProposalAsync(
-                descriptor.PluginEntityKind,
-                route,
-                hideNsfw,
-                includeChildren: true,
-                cancellationToken);
+        var proposal = await ResolveExplicitProposalAsync(
+            descriptor.PluginEntityKind,
+            route,
+            hideNsfw,
+            includeChildren: true,
+            cancellationToken);
         if (proposal?.Patch is null
             || !IsCompatibleTarget(descriptor, proposal.TargetKind)
             || !MatchesExplicitRoute(proposal, route)

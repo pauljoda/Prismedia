@@ -246,9 +246,10 @@ public sealed class RequestCommitService(
     }
 
     /// <summary>
-    /// Commits a canonical request review. The exact plugin is re-run without cache, the revision and
-    /// complete selection are validated before any write, and selected proposal ids are mapped to
-    /// server-derived identities from that fresh review.
+    /// Commits a canonical request review. The server-held proposal is resolved through the exact
+    /// plugin route, its revision and complete selection are validated before any write, and selected
+    /// proposal ids are mapped to server-derived identities. The short proposal cache makes an
+    /// immediate review-to-commit transition avoid a redundant provider round-trip.
     /// </summary>
     public async Task<RequestCommitResponse?> CommitReviewedAsync(
         ReviewedRequestCommitRequest request,
@@ -270,7 +271,7 @@ public sealed class RequestCommitService(
             throw new RequestCommitValidationException("Selected proposal ids must be non-empty and unique.");
         }
 
-        var review = await reviews.RevalidateAsync(
+        var review = await reviews.ReviewAsync(
             new RequestReviewRequest(request.Kind, request.PluginId, request.RootExternalIdentity),
             hideNsfw,
             cancellationToken);
@@ -365,7 +366,7 @@ public sealed class RequestCommitService(
 
         var prepared = new Dictionary<ExternalIdentity, PreparedPhantomDescendants>();
         foreach (var selected in selectedNodes) {
-            var review = await reviews.RevalidateAsync(
+            var review = await reviews.ReviewAsync(
                 new RequestReviewRequest(selectedDescriptor.Kind, rootReview.PluginId, selected.Identity),
                 hideNsfw,
                 cancellationToken);

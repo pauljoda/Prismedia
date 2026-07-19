@@ -18,6 +18,7 @@ public sealed class PluginArtworkDownloader {
     // A browser-like agent: many image CDNs reject generic/bot agents with 403.
     private const string UserAgent =
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
+    private const int MaxConcurrentArtworkDownloads = 8;
     private readonly PrismediaDbContext _db;
     private readonly PluginArtworkServiceOptions _options;
     private readonly HttpClient _http;
@@ -45,11 +46,23 @@ public sealed class PluginArtworkDownloader {
         IEnumerable<string?> urls,
         CancellationToken cancellationToken) {
         _stagedDownloads.Clear();
-        foreach (var url in urls
-                     .Where(url => !string.IsNullOrWhiteSpace(url))
-                     .Select(url => url!)
-                     .Distinct(StringComparer.Ordinal)) {
-            _stagedDownloads[url] = await TryDownloadRemoteAsync(url, cancellationToken);
+        var distinctUrls = urls
+            .Where(url => !string.IsNullOrWhiteSpace(url))
+            .Select(url => url!)
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+        var downloads = new byte[]?[distinctUrls.Length];
+
+        await Parallel.ForEachAsync(
+            Enumerable.Range(0, distinctUrls.Length),
+            new ParallelOptions {
+                MaxDegreeOfParallelism = MaxConcurrentArtworkDownloads,
+                CancellationToken = cancellationToken
+            },
+            async (index, token) => downloads[index] = await TryDownloadRemoteAsync(distinctUrls[index], token));
+
+        for (var index = 0; index < distinctUrls.Length; index++) {
+            _stagedDownloads[distinctUrls[index]] = downloads[index];
         }
     }
 
