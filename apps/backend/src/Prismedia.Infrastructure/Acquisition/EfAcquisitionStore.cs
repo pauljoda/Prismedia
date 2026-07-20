@@ -112,6 +112,7 @@ public sealed class EfAcquisitionStore(PrismediaDbContext db, IAcquisitionHistor
             row.Series, row.SeasonNumber, row.EpisodeNumber, row.VolumeNumber, row.BookRendition);
     }
 
+
     private static bool IsVideoKind(EntityKind kind) =>
         kind is EntityKind.Movie or EntityKind.Video or EntityKind.VideoSeason or EntityKind.VideoSeries;
 
@@ -537,8 +538,8 @@ public sealed class EfAcquisitionStore(PrismediaDbContext db, IAcquisitionHistor
             .OrderByDescending(row => row.CreatedAt)
             .FirstOrDefaultAsync(cancellationToken);
 
-        var selectedTitle = child.SelectedReleaseJson is { Length: > 0 } json
-            ? JsonSerializer.Deserialize<SelectedRelease>(json)?.Title
+        var selected = child.SelectedReleaseJson is { Length: > 0 } json
+            ? JsonSerializer.Deserialize<SelectedRelease>(json)
             : null;
 
         return new UpgradeReplaceTarget(
@@ -546,7 +547,7 @@ public sealed class EfAcquisitionStore(PrismediaDbContext db, IAcquisitionHistor
             parent.EntityId,
             parent.FinalSourcePath,
             new BookQualityRank(parent.OwnedSourceTier, parent.OwnedFormatTier),
-            selectedTitle,
+            selected?.Title,
             transfer?.ContentPath,
             transfer?.ClientItemId,
             transfer?.DownloadClientConfigId,
@@ -554,7 +555,8 @@ public sealed class EfAcquisitionStore(PrismediaDbContext db, IAcquisitionHistor
             parent.OwnedMediaQuality,
             parent.OwnedMediaRevision,
             parent.ProfileId,
-            parent.OwnedFormatScore);
+            parent.OwnedFormatScore,
+            selected?.ManualPick == true);
     }
 
     public async Task EnrichMetadataAsync(Guid acquisitionId, string? description, string? posterUrl, int? year, CancellationToken cancellationToken) {

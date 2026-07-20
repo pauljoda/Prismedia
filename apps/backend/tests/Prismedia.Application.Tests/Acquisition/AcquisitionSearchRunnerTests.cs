@@ -182,6 +182,22 @@ public sealed class AcquisitionSearchRunnerTests {
     }
 
     [Fact]
+    public async Task CustomSearchUsesOnlyTheReviewedTerm() {
+        var release = new IndexerRelease("The exact release", 5_000_000, 60, 3, DownloadProtocol.Torrent, "http://dl", "magnet:?c", "hash", "http://info", null, null);
+        var client = new QueryAwareIndexerSearchClient(new Dictionary<string, IReadOnlyList<IndexerRelease>>(StringComparer.OrdinalIgnoreCase) {
+            ["author preferred translation"] = [release],
+        });
+        var runner = Runner(client, Settings(), DownloadProtocol.Torrent);
+
+        await runner.RunAsync(
+            new AcquisitionSearchInput(Guid.NewGuid(), "Book", "Author"),
+            CancellationToken.None,
+            customQuery: "  author preferred translation  ");
+
+        Assert.Equal(["author preferred translation"], client.Queries);
+    }
+
+    [Fact]
     public void QueryLadderBuildsContextRichRungsPerKind() {
         var policies = Policies(
             new BookAcquisitionPolicyModule(),

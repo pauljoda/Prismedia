@@ -172,7 +172,7 @@ public sealed class AcquisitionService(
     IAcquisitionJobCleanup acquisitionJobs,
     IEntityLifecycleMutationLease entityLifecycle,
     IAcquisitionImportResetCleanup importResetCleanup,
-    VideoScanConcurrencyGate? scanGate = null) : IAcquisitionRequestService {
+    VideoScanConcurrencyGate? scanGate = null, IAcquisitionUploadStorage? uploads = null) : IAcquisitionRequestService {
     public Task<IReadOnlyList<AcquisitionSummary>> ListAsync(CancellationToken cancellationToken) =>
         store.ListAsync(cancellationToken);
 
@@ -830,7 +830,7 @@ public sealed class AcquisitionService(
         if (string.IsNullOrWhiteSpace(transfer?.ClientItemId)) {
             return;
         }
-
+        if (uploads?.Owns(transfer.ClientItemId) == true) { await uploads.DeleteAsync(transfer.ClientItemId, cancellationToken); return; }
         var client = await ResolveRemovalClientAsync(transfer, cancellationToken);
         if (client is null) {
             return;
@@ -855,7 +855,7 @@ public sealed class AcquisitionService(
         if (string.IsNullOrWhiteSpace(transfer?.ClientItemId)) {
             return;
         }
-
+        if (uploads?.Owns(transfer.ClientItemId) == true) { await uploads.DeleteAsync(transfer.ClientItemId, cancellationToken); return; }
         var client = await ResolveRemovalClientAsync(transfer, cancellationToken);
         if (client is null) {
             throw new AcquisitionConfigurationException(
@@ -934,7 +934,7 @@ public sealed class AcquisitionService(
     /// user action may revive Cancelled by claiming Searching before enqueue; stale queued jobs cannot. Returns
     /// the acquisition, or null when it no longer exists.
     /// </summary>
-    public async Task<AcquisitionDetail?> ReSearchAsync(Guid id, CancellationToken cancellationToken) {
+    public async Task<AcquisitionDetail?> ReSearchAsync(Guid id, CancellationToken cancellationToken, string? customQuery = null) {
         var detail = await store.GetAsync(id, cancellationToken);
         if (detail is null) {
             return null;
@@ -958,7 +958,7 @@ public sealed class AcquisitionService(
         await queue.EnqueueAsync(
             new EnqueueJobRequest(
                 JobType.AcquisitionSearch,
-                PayloadJson: AcquisitionJobPayload.Serialize(id),
+                PayloadJson: AcquisitionJobPayload.Serialize(id, manualReview: true, customQuery: customQuery),
                 TargetEntityId: id.ToString(),
                 TargetLabel: detail.Summary.Title,
                 Priority: JobPriorities.InteractiveRequest,

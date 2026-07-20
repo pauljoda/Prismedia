@@ -131,6 +131,20 @@ public sealed record AcquisitionDetail(
 /// <summary>Selects which scored candidate to download for an acquisition.</summary>
 public sealed record AcquisitionQueueRequest(Guid CandidateId);
 
+/// <summary>Starts a user-reviewed release search, optionally replacing the generated query with an exact term.</summary>
+public sealed record AcquisitionSearchRequest(string? Query = null);
+
+/// <summary>Runs a transient replacement search for an on-disk entity without changing its acquisition state.</summary>
+public sealed record ManualReplacementSearchRequest(string? Query = null);
+
+/// <summary>Transient replacement candidates. The search id is consumed only when the user chooses a release.</summary>
+public sealed record ManualReplacementSearchResult(
+    Guid SearchId,
+    IReadOnlyList<ReleaseCandidateView> Candidates);
+
+/// <summary>Materializes and queues one explicitly reviewed candidate from a transient replacement search.</summary>
+public sealed record ManualReplacementQueueRequest(Guid SearchId, Guid CandidateId);
+
 /// <summary>Live transfer telemetry for an in-flight acquisition, including per-piece state for a progress map.</summary>
 public sealed record AcquisitionTransferView(
     double Progress,

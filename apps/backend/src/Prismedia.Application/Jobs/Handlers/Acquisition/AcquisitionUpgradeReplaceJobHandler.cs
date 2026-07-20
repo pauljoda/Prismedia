@@ -1,17 +1,17 @@
 using Microsoft.Extensions.Logging;
 using Prismedia.Application.Acquisition;
+using Prismedia.Application.Entities;
 using Prismedia.Domain.Entities;
 
 namespace Prismedia.Application.Jobs.Handlers;
 
 /// <summary>
-/// Applies a fully-downloaded upgrade child to the single-file owned copy it upgrades — a book, or a movie
-/// or single TV episode: re-confirms the downloaded release is still a strict improvement (in the parent
-/// kind's quality vocabulary), atomically swaps the better file in for the owned one (keeping the original as
-/// a backup), updates the parent's owned quality, refreshes the entity via a re-scan, cleans up the torrent,
-/// and releases the monitor's upgrade slot. The owned file is the only library file mutated, and only after
-/// every gate passes; any failure leaves the owned copy untouched and surfaces the download for manual
-/// handling.
+/// Applies a fully-transferred replacement child to the single-file owned copy it replaces — a book, movie,
+/// or single TV episode. Automatic upgrades must still be a strict improvement; an explicitly reviewed
+/// release or upload may replace at the user's direction. The handler atomically swaps the file (keeping the
+/// original as a backup), updates owned quality when the payload identifies it, refreshes the entity via a
+/// re-scan, cleans up the transfer source, and releases any monitor upgrade slot. The owned file is the only
+/// library file mutated, and only after every safety gate passes.
 /// </summary>
 public sealed class AcquisitionUpgradeReplaceJobHandler(
     IAcquisitionStore acquisitions,
@@ -21,7 +21,9 @@ public sealed class AcquisitionUpgradeReplaceJobHandler(
     IDownloadClientConfigStore downloadClients,
     IDownloadClientFactory clients,
     IAcquisitionHistoryStore history,
-    ILogger<AcquisitionUpgradeReplaceJobHandler> logger) : IJobHandler {
+    ILogger<AcquisitionUpgradeReplaceJobHandler> logger,
+    IEntityLifecycleMutationLease? entityLifecycle = null,
+    IAcquisitionUploadStorage? uploads = null) : IJobHandler {
     public JobType Type => JobType.AcquisitionUpgradeReplace;
 
     public async Task HandleAsync(JobContext context, CancellationToken cancellationToken) {
@@ -44,9 +46,7 @@ public sealed class AcquisitionUpgradeReplaceJobHandler(
         // Revalidate and execute the complete swap while holding the direct Active Entity monitor. Managed
         // Delete files and unmonitor contend on the same monitor/Entity boundary, so a stale queued replace
         // job either completes before their preflight is revalidated or performs no filesystem mutation.
-        var accepted = await monitors.ExecuteIfActiveEntityMutationAsync(
-            parentEntityId,
-            async leaseCancellationToken => {
+        async Task ReplaceAsync(CancellationToken leaseCancellationToken) {
                 var current = await acquisitions.GetUpgradeReplaceTargetAsync(
                     childId,
                     leaseCancellationToken);
@@ -64,8 +64,16 @@ public sealed class AcquisitionUpgradeReplaceJobHandler(
                     return;
                 }
                 await HandleClaimedAsync(context, current, childId, leaseCancellationToken);
-            },
-            cancellationToken);
+        }
+        var accepted = entityLifecycle is null
+            ? await monitors.ExecuteIfActiveEntityMutationAsync(
+                parentEntityId,
+                ReplaceAsync,
+                cancellationToken)
+            : await entityLifecycle.ExecuteAsync(
+                parentEntityId,
+                ReplaceAsync,
+                cancellationToken);
         if (!accepted) {
             logger.LogInformation(
                 "AcquisitionUpgradeReplace: {Child} lost its active Entity lifecycle lease; skipping.",
@@ -106,7 +114,7 @@ public sealed class AcquisitionUpgradeReplaceJobHandler(
         // parent's CURRENT owned quality (it may have changed since the search). The format axis is re-checked
         // against the actual file inside the replacer; here we guard overall dominance from the release title.
         var candidate = BookFormatDetection.DetectQuality(target.ChildSelectedTitle!);
-        if (!candidate.StrictlyDominates(target.ParentOwnedQuality)) {
+        if (!target.ChildManualPick && !candidate.StrictlyDominates(target.ParentOwnedQuality)) {
             await AbortAsync(childId, "The downloaded release is no longer an upgrade over the current copy.", cancellationToken);
             return;
         }
@@ -122,7 +130,12 @@ public sealed class AcquisitionUpgradeReplaceJobHandler(
         // doing it before the best-effort cleanup means a crash mid-completion leaves the loop seeing the
         // upgrade rather than retrying it. Then refresh metadata via a re-scan, clean up the torrent, release
         // the upgrade slot (counting the attempt), and remove the now-consumed child acquisition.
-        var newOwned = new BookQualityRank(BookFormatDetection.DetectSource(target.ChildSelectedTitle!), result.NewFormat);
+        var detectedSource = BookFormatDetection.DetectSource(target.ChildSelectedTitle!);
+        var newOwned = new BookQualityRank(
+            target.ChildManualPick && detectedSource == BookSourceTier.Unknown
+                ? target.ParentOwnedQuality.Source
+                : detectedSource,
+            result.NewFormat);
         await acquisitions.UpdateOwnedQualityAsync(target.ParentId, newOwned, cancellationToken);
         await RecordUpgradedAsync(
             target,
@@ -151,7 +164,7 @@ public sealed class AcquisitionUpgradeReplaceJobHandler(
             && rules.CutoffFormatScore is { } cutoff
             && target.ParentOwnedFormatScore < cutoff
             && candidateFormatScore > target.ParentOwnedFormatScore;
-        if (!higherQuality && !sameQualityBetterRevision && !sameQualityBetterFormatScore) {
+        if (!target.ChildManualPick && !higherQuality && !sameQualityBetterRevision && !sameQualityBetterFormatScore) {
             await AbortAsync(childId, "The downloaded release is no longer an upgrade over the current copy.", cancellationToken);
             return;
         }
@@ -168,12 +181,21 @@ public sealed class AcquisitionUpgradeReplaceJobHandler(
         // release) FIRST — the load-bearing bookkeeping — before the best-effort cleanup, mirroring the book
         // path. Advancing the revision and format score alongside the code is what lets a same-quality proper
         // or format-score upgrade settle instead of re-firing.
-        await acquisitions.UpdateOwnedMediaQualityAsync(target.ParentId, candidateCode, candidateRevision, candidateFormatScore, cancellationToken);
+        var resolvedCode = target.ChildManualPick && candidatePosition == 0
+            ? target.ParentOwnedMediaQuality ?? VideoQuality.Unknown.ToCode()
+            : candidateCode;
+        var resolvedRevision = target.ChildManualPick && candidatePosition == 0
+            ? target.ParentOwnedMediaRevision
+            : candidateRevision;
+        var resolvedFormatScore = target.ChildManualPick && candidatePosition == 0
+            ? target.ParentOwnedFormatScore
+            : candidateFormatScore;
+        await acquisitions.UpdateOwnedMediaQualityAsync(target.ParentId, resolvedCode, resolvedRevision, resolvedFormatScore, cancellationToken);
         await RecordUpgradedAsync(
             target,
-            newCode: candidateCode,
+            newCode: resolvedCode,
             oldQuality: string.IsNullOrWhiteSpace(target.ParentOwnedMediaQuality) ? VideoQuality.Unknown.ToCode() : target.ParentOwnedMediaQuality!,
-            newQuality: candidateCode,
+            newQuality: resolvedCode,
             cancellationToken);
         await FinishAsync(context, target, childId, JobType.ScanLibrary, "Upgraded video scan", cancellationToken);
     }
@@ -226,6 +248,10 @@ public sealed class AcquisitionUpgradeReplaceJobHandler(
 
     private async Task RemoveTorrentAsync(UpgradeReplaceTarget target, CancellationToken cancellationToken) {
         if (string.IsNullOrWhiteSpace(target.ChildClientItemId)) {
+            return;
+        }
+        if (uploads?.Owns(target.ChildClientItemId) == true) {
+            await uploads.DeleteAsync(target.ChildClientItemId, cancellationToken);
             return;
         }
 

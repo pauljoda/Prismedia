@@ -197,9 +197,14 @@ public sealed class ImportedTorrentRemover(
     IAcquisitionStore acquisitions,
     IDownloadClientConfigStore downloadClients,
     IDownloadClientFactory clients,
-    ILogger<ImportedTorrentRemover> logger) {
+    ILogger<ImportedTorrentRemover> logger,
+    IAcquisitionUploadStorage? uploads = null) {
     /// <summary>Move → remove now; hardlink/copy → seeding watch (or leave to the client's own rules when no goal is set).</summary>
     public async Task HandleImportedAsync(AcquisitionImportContext import, ImportMode mode, CancellationToken cancellationToken) {
+        if (uploads?.Owns(import.ClientItemId) == true) {
+            await uploads.DeleteAsync(import.ClientItemId!, cancellationToken);
+            return;
+        }
         if (mode == ImportMode.Move) {
             await RemoveAsync(import, cancellationToken);
             return;

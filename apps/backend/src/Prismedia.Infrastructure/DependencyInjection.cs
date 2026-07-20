@@ -87,7 +87,7 @@ public static class DependencyInjection {
         RegisterFilesAndOrganization(services);
         RegisterPlayback(services, configuration, cacheDir, mediaToolOptions);
         RegisterRequests(services);
-        RegisterAcquisition(services);
+        RegisterAcquisition(services, dataDir);
         RegisterJobsSettingsAndState(services, configuration, dataDir, connectionString, pathBase);
 
         return services;
@@ -384,7 +384,7 @@ public static class DependencyInjection {
         services.AddScoped<IProviderTrackingCatalog, PluginProviderTrackingCatalog>();
     }
 
-    private static void RegisterAcquisition(IServiceCollection services) {
+    private static void RegisterAcquisition(IServiceCollection services, string dataDir) {
         services.AddScoped<IIndexerConfigStore, EfIndexerConfigStore>();
         services.AddScoped<IIndexerStatusStore, EfIndexerStatusStore>();
         services.AddSingleton<IndexerQueryWindow>();
@@ -395,6 +395,14 @@ public static class DependencyInjection {
         services.AddScoped<IBookAcquisitionProfileStore, EfBookAcquisitionProfileStore>();
         services.AddScoped<ICustomFormatStore, EfCustomFormatStore>();
         services.AddScoped<IAcquisitionStore, EfAcquisitionStore>();
+        services.AddScoped<EfManualAcquisitionStore>();
+        services.AddScoped<IManualReplacementStore>(provider =>
+            provider.GetRequiredService<EfManualAcquisitionStore>());
+        services.AddScoped<IAcquisitionUploadStore>(provider =>
+            provider.GetRequiredService<EfManualAcquisitionStore>());
+        services.AddSingleton(new AcquisitionUploadStorageOptions(
+            Path.Combine(dataDir, "acquisition-uploads")));
+        services.AddSingleton<IAcquisitionUploadStorage, LocalAcquisitionUploadStorage>();
         services.AddScoped<IAcquisitionLifecycleStore>(provider =>
             provider.GetRequiredService<IAcquisitionStore>());
         services.AddScoped<IAcquisitionTransferAddCoordinator, EfAcquisitionTransferAddCoordinator>();

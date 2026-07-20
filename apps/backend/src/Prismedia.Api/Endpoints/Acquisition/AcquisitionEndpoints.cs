@@ -4,10 +4,12 @@ using Prismedia.Contracts.System;
 using Prismedia.Domain.Entities;
 
 using Prismedia.Api.Security;
+using Microsoft.AspNetCore.Mvc;
 
 namespace Prismedia.Api.Endpoints;
 
 public static class AcquisitionEndpoints {
+    private const long AcquisitionUploadLimitBytes = 250L * 1024 * 1024 * 1024;
     public static RouteGroupBuilder MapAcquisitionEndpoints(this IEndpointRouteBuilder routes) {
         var group = routes.MapGroup("/api/acquisitions")
             .RequireAdmin()
@@ -137,6 +139,85 @@ public static class AcquisitionEndpoints {
             .WithSummary("Lists every direct acquisition backing a library Entity, including independent ebook and audiobook rows.")
             .Produces<IReadOnlyList<AcquisitionDetail>>();
 
+        group.MapPost("/for-entity/{entityId:guid}/replacement-search", async (
+            Guid entityId,
+            ManualReplacementSearchRequest request,
+            ManualReplacementService replacements,
+            CancellationToken cancellationToken) => {
+                try {
+                    return Results.Ok(await replacements.SearchAsync(entityId, request.Query, cancellationToken));
+                } catch (AcquisitionConfigurationException ex) {
+                    return Results.BadRequest(new ApiProblem(ex.Code, ex.Message));
+                }
+            })
+            .WithName("SearchManualReplacement")
+            .WithSummary("Searches for replacement releases without changing durable acquisition state or auto-selecting a result.")
+            .Produces<ManualReplacementSearchResult>()
+            .Produces<ApiProblem>(StatusCodes.Status400BadRequest);
+
+        group.MapPost("/for-entity/{entityId:guid}/replacement-queue", async (
+            Guid entityId,
+            ManualReplacementQueueRequest request,
+            ManualReplacementService replacements,
+            CancellationToken cancellationToken) => {
+                try {
+                    return Results.Ok(await replacements.QueueAsync(
+                        entityId,
+                        request.SearchId,
+                        request.CandidateId,
+                        cancellationToken));
+                } catch (AcquisitionConfigurationException ex) {
+                    return Results.BadRequest(new ApiProblem(ex.Code, ex.Message));
+                }
+            })
+            .WithName("QueueManualReplacement")
+            .WithSummary("Queues one explicitly reviewed replacement through the existing upgrade-child workflow.")
+            .Produces<AcquisitionDetail>()
+            .Produces<ApiProblem>(StatusCodes.Status400BadRequest);
+
+        group.MapPost("/for-entity/{entityId:guid}/upload", async (
+            Guid entityId,
+            HttpRequest request,
+            AcquisitionUploadService uploads,
+            CancellationToken cancellationToken) => {
+                if (!request.HasFormContentType) {
+                    return Results.BadRequest(new ApiProblem(
+                        ApiProblemCodes.InvalidUpload,
+                        "Acquisition upload expects multipart form data."));
+                }
+
+                var form = await request.ReadFormAsync(cancellationToken);
+                if (form.Files.Count == 0) {
+                    return Results.BadRequest(new ApiProblem(
+                        ApiProblemCodes.InvalidUpload,
+                        "Choose at least one file to upload."));
+                }
+                var relativePaths = form["relativePaths"].ToArray();
+                var items = form.Files.Select((file, index) => new AcquisitionUploadItem(
+                    index < relativePaths.Length && !string.IsNullOrWhiteSpace(relativePaths[index])
+                        ? relativePaths[index]!
+                        : file.FileName,
+                    file.OpenReadStream())).ToArray();
+                try {
+                    return Results.Ok(await uploads.UploadAsync(entityId, items, cancellationToken));
+                } catch (AcquisitionConfigurationException ex) {
+                    return Results.BadRequest(new ApiProblem(ex.Code, ex.Message));
+                } catch (InvalidDataException ex) {
+                    return Results.BadRequest(new ApiProblem(ApiProblemCodes.InvalidUpload, ex.Message));
+                } finally {
+                    foreach (var item in items) {
+                        await item.Content.DisposeAsync();
+                    }
+                }
+            })
+            .WithName("UploadAcquisitionContent")
+            .WithSummary("Uploads local content through the completed-acquisition import or replacement workflow; wrapped ZIP payloads are inspected and safely expanded.")
+            .WithMetadata(new RequestFormLimitsAttribute { MultipartBodyLengthLimit = AcquisitionUploadLimitBytes })
+            .WithMetadata(new RequestSizeLimitAttribute(AcquisitionUploadLimitBytes))
+            .DisableAntiforgery()
+            .Produces<AcquisitionDetail>()
+            .Produces<ApiProblem>(StatusCodes.Status400BadRequest);
+
         group.MapPost("/{id:guid}/queue", async (
             Guid id,
             AcquisitionQueueRequest request,
@@ -176,15 +257,16 @@ public static class AcquisitionEndpoints {
 
         group.MapPost("/{id:guid}/search", async (
             Guid id,
+            AcquisitionSearchRequest request,
             AcquisitionService acquisitions,
             CancellationToken cancellationToken) => {
-                var detail = await acquisitions.ReSearchAsync(id, cancellationToken);
+                var detail = await acquisitions.ReSearchAsync(id, cancellationToken, request.Query);
                 return detail is null
                     ? Results.NotFound(new ApiProblem(ApiProblemCodes.AcquisitionNotFound, "Acquisition was not found."))
                     : Results.Ok(detail);
             })
             .WithName("ReSearchAcquisition")
-            .WithSummary("Re-runs the release search for an existing acquisition on demand.")
+            .WithSummary("Re-runs the release search for review, optionally using an exact custom query; never auto-selects a result.")
             .Produces<AcquisitionDetail>()
             .Produces<ApiProblem>(StatusCodes.Status404NotFound);
 

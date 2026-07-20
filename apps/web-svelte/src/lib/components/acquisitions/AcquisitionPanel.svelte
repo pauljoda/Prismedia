@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onDestroy } from "svelte";
   import { CloudDownload, FileText, History, Loader2, RefreshCw, RotateCcw, Search, SearchX, Upload, X } from "@lucide/svelte";
-  import { Badge, Button } from "@prismedia/ui-svelte";
+  import { Badge, Button, SearchInput } from "@prismedia/ui-svelte";
   import AcquisitionHistoryList from "$lib/components/acquisitions/AcquisitionHistoryList.svelte";
   import ConfirmDialog from "$lib/components/entities/ConfirmDialog.svelte";
   import PieceStateBar from "$lib/components/acquisitions/PieceStateBar.svelte";
@@ -71,6 +71,7 @@
   let pollTimer: ReturnType<typeof setInterval> | null = null;
   let bridgePolls = $state(0);
   let resetConfirmOpen = $state(false);
+  let customQuery = $state("");
 
   const status = $derived(detail?.summary.status ?? null);
   const hasResumableImport = $derived(detail?.summary.hasResumableImport === true);
@@ -232,11 +233,11 @@
   }
 
   // Re-run the release search on demand (manual counterpart to monitoring).
-  async function reSearch() {
+  async function reSearch(query?: string) {
     if (busy) return;
     busy = true;
     try {
-      detail = await reSearchAcquisition(acquisitionId);
+      detail = await reSearchAcquisition(acquisitionId, query);
     } catch (err) {
       error = err instanceof Error ? err.message : "Failed to re-search";
     } finally {
@@ -498,6 +499,28 @@
           Releases
           <span class="ml-1.5 font-mono text-[0.68rem] font-normal text-text-muted">{detail.candidates.length}</span>
         </h2>
+
+        {#if canPickRelease}
+          <form
+            class="flex flex-col gap-2 sm:flex-row"
+            onsubmit={(event) => {
+              event.preventDefault();
+              void reSearch(customQuery);
+            }}
+          >
+            <SearchInput
+              bind:value={customQuery}
+              ariaLabel="Custom release search term"
+              placeholder="Try an exact title, edition, group, or quality…"
+              loading={busy}
+              class="min-w-0 flex-1"
+            />
+            <Button type="submit" variant="secondary" disabled={busy || !customQuery.trim()} class="gap-1.5">
+              <Search class="h-3.5 w-3.5" />
+              Search term
+            </Button>
+          </form>
+        {/if}
 
         {#if detail.candidates.length === 0}
           <StatePlaceholder

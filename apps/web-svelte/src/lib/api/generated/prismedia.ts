@@ -14,6 +14,7 @@ import type {
   AcquisitionHistoryView,
   AcquisitionImportRetryRequest,
   AcquisitionQueueRequest,
+  AcquisitionSearchRequest,
   AcquisitionSummary,
   AcquisitionTransferView,
   AdminSetPasswordRequest,
@@ -203,6 +204,9 @@ import type {
   ListVideosParams,
   LoginRequest,
   LoginResponse,
+  ManualReplacementQueueRequest,
+  ManualReplacementSearchRequest,
+  ManualReplacementSearchResult,
   MissingChildrenCommitRequest,
   MissingChildrenCommitResponse,
   MonitorCreateRequest,
@@ -12951,6 +12955,139 @@ export const listAcquisitionsForEntity = async (entityId: string, options?: Requ
 
 
 
+export type searchManualReplacementResponse200 = {
+  data: ManualReplacementSearchResult
+  status: 200
+}
+
+export type searchManualReplacementResponse400 = {
+  data: ApiProblem
+  status: 400
+}
+
+export type searchManualReplacementResponseSuccess = (searchManualReplacementResponse200) & {
+  headers: Headers;
+};
+export type searchManualReplacementResponseError = (searchManualReplacementResponse400) & {
+  headers: Headers;
+};
+
+export type searchManualReplacementResponse = (searchManualReplacementResponseSuccess | searchManualReplacementResponseError)
+
+export const getSearchManualReplacementUrl = (entityId: string,) => {
+
+
+
+
+  return `/api/acquisitions/for-entity/${entityId}/replacement-search`
+}
+
+/**
+ * @summary Searches for replacement releases without changing durable acquisition state or auto-selecting a result.
+ */
+export const searchManualReplacement = async (entityId: string,
+    manualReplacementSearchRequest: ManualReplacementSearchRequest, options?: RequestInit): Promise<searchManualReplacementResponse> => {
+
+  return orvalFetch<searchManualReplacementResponse>(getSearchManualReplacementUrl(entityId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      manualReplacementSearchRequest,)
+  }
+);}
+
+
+
+export type queueManualReplacementResponse200 = {
+  data: AcquisitionDetail
+  status: 200
+}
+
+export type queueManualReplacementResponse400 = {
+  data: ApiProblem
+  status: 400
+}
+
+export type queueManualReplacementResponseSuccess = (queueManualReplacementResponse200) & {
+  headers: Headers;
+};
+export type queueManualReplacementResponseError = (queueManualReplacementResponse400) & {
+  headers: Headers;
+};
+
+export type queueManualReplacementResponse = (queueManualReplacementResponseSuccess | queueManualReplacementResponseError)
+
+export const getQueueManualReplacementUrl = (entityId: string,) => {
+
+
+
+
+  return `/api/acquisitions/for-entity/${entityId}/replacement-queue`
+}
+
+/**
+ * @summary Queues one explicitly reviewed replacement through the existing upgrade-child workflow.
+ */
+export const queueManualReplacement = async (entityId: string,
+    manualReplacementQueueRequest: ManualReplacementQueueRequest, options?: RequestInit): Promise<queueManualReplacementResponse> => {
+
+  return orvalFetch<queueManualReplacementResponse>(getQueueManualReplacementUrl(entityId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      manualReplacementQueueRequest,)
+  }
+);}
+
+
+
+export type uploadAcquisitionContentResponse200 = {
+  data: AcquisitionDetail
+  status: 200
+}
+
+export type uploadAcquisitionContentResponse400 = {
+  data: ApiProblem
+  status: 400
+}
+
+export type uploadAcquisitionContentResponseSuccess = (uploadAcquisitionContentResponse200) & {
+  headers: Headers;
+};
+export type uploadAcquisitionContentResponseError = (uploadAcquisitionContentResponse400) & {
+  headers: Headers;
+};
+
+export type uploadAcquisitionContentResponse = (uploadAcquisitionContentResponseSuccess | uploadAcquisitionContentResponseError)
+
+export const getUploadAcquisitionContentUrl = (entityId: string,) => {
+
+
+
+
+  return `/api/acquisitions/for-entity/${entityId}/upload`
+}
+
+/**
+ * @summary Uploads local content through the completed-acquisition import or replacement workflow; wrapped ZIP payloads are inspected and safely expanded.
+ */
+export const uploadAcquisitionContent = async (entityId: string, options?: RequestInit): Promise<uploadAcquisitionContentResponse> => {
+
+  return orvalFetch<uploadAcquisitionContentResponse>(getUploadAcquisitionContentUrl(entityId),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
 export type queueAcquisitionResponse200 = {
   data: AcquisitionDetail
   status: 200
@@ -13074,16 +13211,18 @@ export const getReSearchAcquisitionUrl = (id: string,) => {
 }
 
 /**
- * @summary Re-runs the release search for an existing acquisition on demand.
+ * @summary Re-runs the release search for review, optionally using an exact custom query; never auto-selects a result.
  */
-export const reSearchAcquisition = async (id: string, options?: RequestInit): Promise<reSearchAcquisitionResponse> => {
+export const reSearchAcquisition = async (id: string,
+    acquisitionSearchRequest: AcquisitionSearchRequest, options?: RequestInit): Promise<reSearchAcquisitionResponse> => {
 
   return orvalFetch<reSearchAcquisitionResponse>(getReSearchAcquisitionUrl(id),
   {
     ...options,
-    method: 'POST'
-
-
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      acquisitionSearchRequest,)
   }
 );}
 

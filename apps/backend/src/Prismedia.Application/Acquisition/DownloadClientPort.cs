@@ -109,6 +109,32 @@ public interface IDownloadClientFactory {
     IDownloadClient Get(DownloadClientKind kind);
 }
 
+/// <summary>One browser-uploaded file and its relative path within the submitted payload.</summary>
+public sealed record AcquisitionUploadItem(string RelativePath, Stream Content);
+
+/// <summary>A fully staged local upload, shaped like a completed download-client item.</summary>
+public sealed record CompletedAcquisitionUpload(
+    string ClientItemId,
+    string ContentPath,
+    string DisplayName);
+
+/// <summary>
+/// Local acquisition source adapter. It accepts browser-uploaded bytes, safely expands container archives
+/// when they wrap importable media, and returns the same completed-payload facts as a download client.
+/// </summary>
+public interface IAcquisitionUploadStorage {
+    Task<CompletedAcquisitionUpload> StageAsync(
+        Guid acquisitionId,
+        IReadOnlyList<AcquisitionUploadItem> items,
+        CancellationToken cancellationToken);
+
+    /// <summary>True when the client item id belongs to this local upload adapter.</summary>
+    bool Owns(string? clientItemId);
+
+    /// <summary>Deletes the adapter-owned staging directory. Missing uploads are already clean.</summary>
+    Task DeleteAsync(string clientItemId, CancellationToken cancellationToken);
+}
+
 /// <summary>Command for creating or updating a download client configuration.</summary>
 /// <param name="ApiKey">API key for clients that authenticate with one (SABnzbd); blank keeps the stored key.</param>
 public sealed record DownloadClientSaveCommand(

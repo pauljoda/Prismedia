@@ -29,13 +29,19 @@ public sealed class AcquisitionSearchRunner(
     /// owned quality (in the kind's vocabulary — a book rank or a media ladder code) and never downgrade the
     /// format. Null for an ordinary first-grab search.
     /// </param>
-    public async Task<AcquisitionSearchOutcome> RunAsync(AcquisitionSearchInput input, CancellationToken cancellationToken, UpgradeOwnedQuality? upgradeOwnedQuality = null) {
+    public async Task<AcquisitionSearchOutcome> RunAsync(
+        AcquisitionSearchInput input,
+        CancellationToken cancellationToken,
+        UpgradeOwnedQuality? upgradeOwnedQuality = null,
+        string? customQuery = null) {
         if (string.IsNullOrWhiteSpace(input.Title)) {
             return new AcquisitionSearchOutcome([], []);
         }
 
         var policy = policies.Get(input.Kind);
-        var queries = policy.BuildQueries(input);
+        var queries = string.IsNullOrWhiteSpace(customQuery)
+            ? policy.BuildQueries(input)
+            : [customQuery.Trim()];
 
         // An indexer inside its failure-backoff window is skipped for this search rather than
         // contributing the same error to every pass; it rejoins automatically when the window closes.

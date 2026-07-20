@@ -25,8 +25,10 @@ import {
   listDownloadQueue,
   listDownloadClients,
   listIndexers,
+  queueManualReplacement as queueManualReplacementRequest,
   queueAcquisition as queueAcquisitionRequest,
   reSearchAcquisition as reSearchAcquisitionRequest,
+  searchManualReplacement as searchManualReplacementRequest,
   retryAcquisitionImport as retryAcquisitionImportRequest,
   saveAcquisitionProfile as saveAcquisitionProfileRequest,
   saveDownloadClient,
@@ -61,9 +63,11 @@ import type {
   IndexerConfigSummary,
   IndexerTestRequest,
   IndexerTestResponse,
+  ManualReplacementSearchResult,
   UploadAcquisitionTorrentBody,
 } from "$lib/api/generated/model";
 import { unwrapGenerated } from "$lib/api/generated-response";
+import { ApiError, apiPath } from "$lib/api/orval-fetch";
 
 // ── Indexers ──────────────────────────────────────────────────
 export async function fetchIndexers(): Promise<IndexerConfigSummary[]> {
@@ -159,9 +163,72 @@ export async function cancelAcquisition(id: string): Promise<AcquisitionDetail> 
   return unwrapGenerated(await cancelAcquisitionRequest(id), "Failed to cancel acquisition");
 }
 
-/** Re-runs the release search for an existing acquisition on demand. */
-export async function reSearchAcquisition(id: string): Promise<AcquisitionDetail> {
-  return unwrapGenerated(await reSearchAcquisitionRequest(id), "Failed to re-search");
+/** Re-runs the release search for explicit review; a custom query bypasses the generated query ladder. */
+export async function reSearchAcquisition(id: string, query?: string): Promise<AcquisitionDetail> {
+  return unwrapGenerated(await reSearchAcquisitionRequest(id, { query: query?.trim() || null }), "Failed to re-search");
+}
+
+/** Runs a transient replacement review without changing the owned acquisition. */
+export async function searchManualReplacement(entityId: string, query?: string): Promise<ManualReplacementSearchResult> {
+  return unwrapGenerated(
+    await searchManualReplacementRequest(entityId, { query: query?.trim() || null }),
+    "Failed to search for replacements",
+  );
+}
+
+/** Materializes the upgrade child only after the user chooses one transient replacement candidate. */
+export async function queueManualReplacement(
+  entityId: string,
+  searchId: string,
+  candidateId: string,
+): Promise<AcquisitionDetail> {
+  return unwrapGenerated(
+    await queueManualReplacementRequest(entityId, { searchId, candidateId }),
+    "Failed to queue replacement",
+  );
+}
+
+/** Uploads local acquisition content with browser-native progress reporting. */
+export function uploadAcquisitionContent(
+  entityId: string,
+  files: File[],
+  onProgress: (progress: number) => void,
+): Promise<AcquisitionDetail> {
+  return new Promise((resolve, reject) => {
+    const form = new FormData();
+    for (const file of files) {
+      form.append("files", file);
+      const relativePath = (file as File & { webkitRelativePath?: string }).webkitRelativePath || file.name;
+      form.append("relativePaths", relativePath);
+    }
+
+    const request = new XMLHttpRequest();
+    request.open("POST", apiPath(`/acquisitions/for-entity/${entityId}/upload`));
+    request.withCredentials = true;
+    request.upload.onprogress = (event) => {
+      if (event.lengthComputable && event.total > 0) onProgress(event.loaded / event.total);
+    };
+    request.onerror = () => reject(new ApiError("The upload connection failed.", 0));
+    request.onload = () => {
+      let payload: unknown;
+      try {
+        payload = request.responseText ? JSON.parse(request.responseText) as unknown : undefined;
+      } catch {
+        reject(new ApiError(`Upload returned an unreadable response (${request.status}).`, request.status));
+        return;
+      }
+      if (request.status >= 200 && request.status < 300) {
+        onProgress(1);
+        resolve(payload as AcquisitionDetail);
+        return;
+      }
+      const message = payload && typeof payload === "object" && "message" in payload
+        ? String((payload as { message: unknown }).message)
+        : `Upload failed (${request.status}).`;
+      reject(new ApiError(message, request.status));
+    };
+    request.send(form);
+  });
 }
 
 /**

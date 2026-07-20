@@ -60,7 +60,11 @@ public sealed class AcquisitionSearchJobHandler(
             // If this acquisition is an upgrade child, run an upgrade search against the parent's owned quality
             // so only strictly-better releases are accepted.
             var upgradeOwned = await store.GetUpgradeOwnedQualityAsync(payload.AcquisitionId, cancellationToken);
-            var outcome = await runner.RunAsync(input, cancellationToken, upgradeOwned);
+            var outcome = await runner.RunAsync(
+                input,
+                cancellationToken,
+                upgradeOwned,
+                payload.CustomQuery);
             var message = BuildMessage(outcome);
             if (!await store.TryCompleteSearchAsync(
                     payload.AcquisitionId,
@@ -78,7 +82,9 @@ public sealed class AcquisitionSearchJobHandler(
             // accepted release — the user asked for the item, not for a release-picking chore; the
             // release picker remains for the no-acceptable-release case. Ad-hoc acquisitions keep the
             // profile's explicit auto-pick opt-in.
-            var autoGrab = input.EntityId is not null || await profiles.GetAutoPickAsync(input.ProfileId, input.Kind, cancellationToken);
+            var autoGrab = !payload.ManualReview
+                && (input.EntityId is not null
+                    || await profiles.GetAutoPickAsync(input.ProfileId, input.Kind, cancellationToken));
             if (autoGrab && outcome.Candidates.Any(candidate => candidate.Accepted)) {
                 await TryAutoQueueAsync(payload.AcquisitionId, cancellationToken);
             }

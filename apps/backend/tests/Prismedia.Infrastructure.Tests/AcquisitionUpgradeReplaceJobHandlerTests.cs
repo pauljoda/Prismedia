@@ -67,6 +67,23 @@ public sealed class AcquisitionUpgradeReplaceJobHandlerTests {
     }
 
     [Fact]
+    public async Task ReviewedBookReplacementMayBeEqualWithoutErasingKnownSourceQuality() {
+        await using var db = CreateContext();
+        var (parentId, childId, _) = await SeedAsync(
+            db,
+            childSelectedTitle: "manually-uploaded.epub",
+            manualPick: true);
+        var replacer = new FakeReplacer(OwnedFileReplaceResult.Ok("/library/Some Book/Book.epub", BookFormatTier.Reflowable));
+
+        await RunAsync(db, new RecordingJobQueue(), replacer, childId);
+
+        Assert.True(replacer.Called);
+        var parent = await db.Acquisitions.AsNoTracking().SingleAsync(row => row.Id == parentId);
+        Assert.Equal(BookSourceTier.Web, parent.OwnedSourceTier);
+        Assert.Equal(BookFormatTier.Reflowable, parent.OwnedFormatTier);
+    }
+
+    [Fact]
     public async Task MovieSuccessfulSwapRecordsOwnedLadderCodeAndConsumesTheChild() {
         await using var db = CreateContext();
         var (parentId, childId, monitorId) = await SeedMediaAsync(db, EntityKind.Movie, ownedCode: "webdl-720p", childSelectedTitle: "Movie 2020 1080p BluRay");
@@ -96,6 +113,24 @@ public sealed class AcquisitionUpgradeReplaceJobHandlerTests {
         await RunAsync(db, queue, replacer, childId);
 
         Assert.False(replacer.Called); // bailed before invoking the destructive swap
+    }
+
+    [Fact]
+    public async Task ReviewedMovieReplacementWithUnknownTitleKeepsKnownOwnedQuality() {
+        await using var db = CreateContext();
+        var (parentId, childId, _) = await SeedMediaAsync(
+            db,
+            EntityKind.Movie,
+            ownedCode: "bluray-1080p",
+            childSelectedTitle: "manually-uploaded.mkv",
+            manualPick: true);
+        var replacer = new FakeReplacer(OwnedFileReplaceResult.Ok("/library/Movie (2020)/Movie (2020).mkv", BookFormatTier.Unknown));
+
+        await RunAsync(db, new RecordingJobQueue(), replacer, childId);
+
+        Assert.True(replacer.Called);
+        var parent = await db.Acquisitions.AsNoTracking().SingleAsync(row => row.Id == parentId);
+        Assert.Equal("bluray-1080p", parent.OwnedMediaQuality);
     }
 
     [Fact]
@@ -145,7 +180,12 @@ public sealed class AcquisitionUpgradeReplaceJobHandlerTests {
             (await db.Monitors.AsNoTracking().SingleAsync(row => row.Id == monitorId)).UpgradeChildAcquisitionId);
     }
 
-    private static async Task<(Guid ParentId, Guid ChildId, Guid MonitorId)> SeedMediaAsync(PrismediaDbContext db, EntityKind kind, string ownedCode, string childSelectedTitle) {
+    private static async Task<(Guid ParentId, Guid ChildId, Guid MonitorId)> SeedMediaAsync(
+        PrismediaDbContext db,
+        EntityKind kind,
+        string ownedCode,
+        string childSelectedTitle,
+        bool manualPick = false) {
         var now = DateTimeOffset.UtcNow;
         var entityId = Guid.NewGuid();
         var parentId = Guid.NewGuid();
@@ -163,7 +203,7 @@ public sealed class AcquisitionUpgradeReplaceJobHandlerTests {
         });
         db.Acquisitions.Add(new AcquisitionRow {
             Id = childId, Kind = kind, Status = AcquisitionStatus.Downloaded, Title = "Some Movie", ExternalIdsJson = "{}", SourceUrlsJson = "[]",
-            UpgradeOfAcquisitionId = parentId, SelectedReleaseJson = JsonSerializer.Serialize(new SelectedRelease(childSelectedTitle, "Indexer", "hash")),
+            UpgradeOfAcquisitionId = parentId, SelectedReleaseJson = JsonSerializer.Serialize(new SelectedRelease(childSelectedTitle, "Indexer", "hash", manualPick)),
             CreatedAt = now, UpdatedAt = now
         });
         db.DownloadTransfers.Add(new DownloadTransferRow {
@@ -190,7 +230,10 @@ public sealed class AcquisitionUpgradeReplaceJobHandlerTests {
         await handler.HandleAsync(new JobContext(job, queue), CancellationToken.None);
     }
 
-    private static async Task<(Guid ParentId, Guid ChildId, Guid MonitorId)> SeedAsync(PrismediaDbContext db, string childSelectedTitle) {
+    private static async Task<(Guid ParentId, Guid ChildId, Guid MonitorId)> SeedAsync(
+        PrismediaDbContext db,
+        string childSelectedTitle,
+        bool manualPick = false) {
         var now = DateTimeOffset.UtcNow;
         var entityId = Guid.NewGuid();
         var parentId = Guid.NewGuid();
@@ -209,7 +252,7 @@ public sealed class AcquisitionUpgradeReplaceJobHandlerTests {
         });
         db.Acquisitions.Add(new AcquisitionRow {
             Id = childId, Status = AcquisitionStatus.Downloaded, Title = "Some Book", ExternalIdsJson = "{}", SourceUrlsJson = "[]",
-            UpgradeOfAcquisitionId = parentId, SelectedReleaseJson = JsonSerializer.Serialize(new SelectedRelease(childSelectedTitle, "Indexer", "hash")),
+            UpgradeOfAcquisitionId = parentId, SelectedReleaseJson = JsonSerializer.Serialize(new SelectedRelease(childSelectedTitle, "Indexer", "hash", manualPick)),
             CreatedAt = now, UpdatedAt = now
         });
         db.DownloadTransfers.Add(new DownloadTransferRow {

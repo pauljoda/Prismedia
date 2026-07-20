@@ -19,7 +19,8 @@ public sealed class AcquisitionMonitorJobHandler(
     IDownloadClientFactory clients,
     RemotePathMapper remotePaths,
     IAcquisitionHistoryStore history,
-    ILogger<AcquisitionMonitorJobHandler> logger) : IJobHandler {
+    ILogger<AcquisitionMonitorJobHandler> logger,
+    AcquisitionCompletionService? completion = null) : IJobHandler {
     public JobType Type => JobType.AcquisitionMonitor;
 
     /// <summary>
@@ -227,17 +228,21 @@ public sealed class AcquisitionMonitorJobHandler(
                         return;
                     }
                 }
-                // Downloaded is the durable handoff ticket. If enqueue fails or the process dies here, the
-                // scheduler reconciles this status into the same ordinary-import or upgrade-replace job
-                // through target deduplication; transfer polling does not need to remain active.
-                await context.EnqueueIfNeededAsync(
-                    new EnqueueJobRequest(
-                        completionJob,
-                        PayloadJson: AcquisitionJobPayload.Serialize(transfer.AcquisitionId),
-                        TargetEntityId: transfer.AcquisitionId.ToString(),
-                        TargetLabel: isUpgrade ? "Replace with upgrade" : "Import completed download",
-                        Priority: JobPriorities.InteractiveRequest),
-                    cancellationToken);
+                // Downloaded is the shared durable handoff ticket. Production routes both remote clients
+                // and browser uploads through the same completion service; the fallback keeps focused
+                // handler tests independent of the application service.
+                if (completion is not null) {
+                    await completion.ScheduleAsync(transfer.AcquisitionId, cancellationToken);
+                } else {
+                    await context.EnqueueIfNeededAsync(
+                        new EnqueueJobRequest(
+                            completionJob,
+                            PayloadJson: AcquisitionJobPayload.Serialize(transfer.AcquisitionId),
+                            TargetEntityId: transfer.AcquisitionId.ToString(),
+                            TargetLabel: isUpgrade ? "Replace with upgrade" : "Import completed download",
+                            Priority: JobPriorities.InteractiveRequest),
+                        cancellationToken);
+                }
             } else {
                 if (await FindPayloadConflictAsync(downloadClient, connection, transfer, cancellationToken) is { } conflict) {
                     logger.LogWarning(

@@ -12,6 +12,7 @@
   import { ACQUISITION_STATUS, ENTITY_KIND } from "$lib/api/generated/codes";
   import type { EntityCapability } from "$lib/api/generated/model";
   import AcquisitionPanel from "$lib/components/acquisitions/AcquisitionPanel.svelte";
+  import ManualAcquisitionActions from "$lib/components/acquisitions/ManualAcquisitionActions.svelte";
   import EntityChildMonitoring from "$lib/components/acquisitions/EntityChildMonitoring.svelte";
   import type { EntityAcquisition } from "$lib/components/acquisitions/use-entity-acquisition.svelte";
   import { acquisitionStatusShouldPoll } from "$lib/requests/acquisition-status";
@@ -30,7 +31,7 @@
     /** The page-owned acquisition state (from {@link useEntityAcquisition}). */
     acq: EntityAcquisition;
     /** Entity core projected into the shared managed-file action. */
-    entity?: { id: string; title: string; capabilities: EntityCapability[] } | null;
+    entity?: { id: string; title: string; kind?: string; capabilities: EntityCapability[] } | null;
     /** Route follow-ups after managed deletion either removes or reverts the Entity. */
     fileManagement?: EntityFileManagementCallbacks;
     /** False when an owner-specific surface provides its own monitor and request controls. */
@@ -60,6 +61,16 @@
   const failedParentWithChildActivity = $derived(
     acq.acquisition?.summary.status === ACQUISITION_STATUS.failed
       && activeChildAcquisitionCount > 0,
+  );
+  const replaceableKind = $derived(
+    entity?.kind === ENTITY_KIND.book
+      || entity?.kind === ENTITY_KIND.movie
+      || entity?.kind === ENTITY_KIND.video,
+  );
+  const uploadableAcquisitionKind = $derived(
+    replaceableKind
+      || entity?.kind === ENTITY_KIND.audioLibrary
+      || entity?.kind === ENTITY_KIND.videoSeason,
   );
   const activeChildLabel = $derived(
     acq.childCards.every((card) => card.entity.kind === ENTITY_KIND.video)
@@ -188,6 +199,18 @@
       <p class="text-[0.72rem] text-text-muted">
         No file yet. Searching starts an auto-grabbing, monitored acquisition for this item.
       </p>
+    {/if}
+
+    {#if entity && uploadableAcquisitionKind}
+      <ManualAcquisitionActions
+        entityId={entity.id}
+        canReplace={acq.showFileManagement && replaceableKind}
+        canUpload={Boolean(acq.acquisition) || (acq.showFileManagement && replaceableKind)}
+        onStarted={async (detail) => {
+          acq.acquisition = detail;
+          await acq.refresh();
+        }}
+      />
     {/if}
 
     {#if acq.childCards.length > 0}

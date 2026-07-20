@@ -265,6 +265,15 @@ public sealed record AcquisitionSearchOutcome(
     IReadOnlyList<ScoredRelease> Candidates,
     IReadOnlyList<IndexerSearchError> Errors);
 
+/// <summary>A transient search candidate with the stable id shown to the reviewing client.</summary>
+public sealed record ReviewedReleaseCandidate(Guid Id, ScoredRelease Release);
+
+/// <summary>Everything needed to score a manual replacement search without mutating acquisition state.</summary>
+public sealed record ManualReplacementSearchTarget(
+    Guid EntityId,
+    AcquisitionSearchInput Input,
+    UpgradeOwnedQuality OwnedQuality);
+
 /// <summary>Server-side view of a candidate selected for download, including the links kept out of the API surface.</summary>
 public sealed record AcquisitionQueueCandidate(
     Guid CandidateId,
@@ -385,7 +394,8 @@ public sealed record UpgradeReplaceTarget(
     string? ParentOwnedMediaQuality = null,
     int ParentOwnedMediaRevision = 1,
     Guid? ParentProfileId = null,
-    int ParentOwnedFormatScore = 0);
+    int ParentOwnedFormatScore = 0,
+    bool ChildManualPick = false);
 
 /// <summary>
 /// Outcome of an in-place owned-file replacement. On success the owned file was atomically swapped for the

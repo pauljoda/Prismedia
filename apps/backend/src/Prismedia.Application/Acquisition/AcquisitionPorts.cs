@@ -960,7 +960,6 @@ public interface IMonitorStore {
     /// </summary>
     Task ResolveUpgradeChildAsync(Guid childId, bool succeeded, CancellationToken cancellationToken);
 }
-
 /// <summary>
 /// Persistence port for the acquisition blocklist: release identities refused for future grabs. Consulted
 /// by the search runner (to reject blocklisted releases) and written by failed-download auto-recovery and

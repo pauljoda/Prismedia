@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
   fetchAcquisitionFiles: vi.fn(),
   fetchAcquisitionHistory: vi.fn(),
   retryAcquisitionImport: vi.fn(),
+  reSearchAcquisition: vi.fn(),
   deleteAcquisition: vi.fn(),
 }));
 
@@ -24,7 +25,7 @@ vi.mock("$lib/api/acquisitions", () => ({
   fetchAcquisitionHistory: mocks.fetchAcquisitionHistory,
   fetchAcquisitionTransfer: vi.fn(),
   queueAcquisitionCandidate: vi.fn(),
-  reSearchAcquisition: vi.fn(),
+  reSearchAcquisition: mocks.reSearchAcquisition,
   retryAcquisitionImport: mocks.retryAcquisitionImport,
   uploadManualTorrent: vi.fn(),
 }));
@@ -214,6 +215,22 @@ describe("AcquisitionPanel", () => {
 
     await waitFor(() => expect(mocks.fetchAcquisition).toHaveBeenCalledOnce());
     expect(view.queryByRole("button", { name: /monitor/i })).toBeNull();
+  });
+
+  it("submits an exact custom term from release review", async () => {
+    const awaiting = acquisition(ACQUISITION_STATUS.awaitingSelection);
+    mocks.fetchAcquisition.mockResolvedValue(awaiting);
+    mocks.reSearchAcquisition.mockResolvedValue(acquisition(ACQUISITION_STATUS.searching));
+    const view = render(AcquisitionPanel, {
+      acquisitionId: "acquisition-1",
+      detail: awaiting,
+    });
+
+    const input = await view.findByRole("searchbox", { name: "Custom release search term" });
+    await fireEvent.input(input, { target: { value: "director cut remux" } });
+    await fireEvent.click(view.getByRole("button", { name: "Search term" }));
+
+    expect(mocks.reSearchAcquisition).toHaveBeenCalledWith("acquisition-1", "director cut remux");
   });
 
 });

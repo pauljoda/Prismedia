@@ -743,6 +743,9 @@ public sealed class AcquisitionServiceTests {
         Assert.Equal(JobType.AcquisitionSearch, search.Type);
         Assert.Equal(JobPriorities.InteractiveRequest, search.Priority);
         Assert.Equal(JobRunLane.ForegroundIdentify, search.Lane);
+        var payload = AcquisitionJobPayload.Parse(search.PayloadJson!);
+        Assert.True(payload.ManualReview);
+        Assert.Null(payload.CustomQuery);
     }
 
     [Theory]
