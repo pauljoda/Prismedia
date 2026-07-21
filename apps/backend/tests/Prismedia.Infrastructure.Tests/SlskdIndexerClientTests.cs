@@ -1,5 +1,6 @@
 using System.Net;
 using System.Text;
+using System.Text.Json;
 using Prismedia.Application.Acquisition;
 using Prismedia.Domain.Entities;
 using Prismedia.Infrastructure.Acquisition;
@@ -81,6 +82,22 @@ public sealed class SlskdIndexerClientTests {
     }
 
     [Fact]
+    public async Task SearchAllowsSoulseekPeersTimeToRespond() {
+        var handler = new Handler(request => request.RequestUri!.AbsolutePath.EndsWith("/responses", StringComparison.Ordinal)
+            ? "[]"
+            : """{"state":"Completed"}""");
+        var client = new SlskdIndexerClient(new HttpClient(handler));
+
+        await client.SearchAsync(
+            Connection(),
+            new IndexerQuery("Artist Album", [3000], EntityKind.AudioLibrary),
+            CancellationToken.None);
+
+        using var payload = JsonDocument.Parse(Assert.Single(handler.RequestBodies));
+        Assert.Equal(10_000, payload.RootElement.GetProperty("searchTimeout").GetInt32());
+    }
+
+    [Fact]
     public async Task ConcurrentSearchesShareOneSlskdOperationSlot() {
         var handler = new BlockingSearchHandler();
         var gate = new SlskdSearchConcurrencyGate();
@@ -121,12 +138,17 @@ public sealed class SlskdIndexerClientTests {
 
     private sealed class Handler(Func<HttpRequestMessage, string> response) : HttpMessageHandler {
         public List<HttpRequestMessage> Requests { get; } = [];
+        public List<string> RequestBodies { get; } = [];
 
-        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) {
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) {
             Requests.Add(request);
-            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) {
+            if (request.Content is not null) {
+                RequestBodies.Add(await request.Content.ReadAsStringAsync(cancellationToken));
+            }
+
+            return new HttpResponseMessage(HttpStatusCode.OK) {
                 Content = new StringContent(response(request), Encoding.UTF8, "application/json")
-            });
+            };
         }
     }
 

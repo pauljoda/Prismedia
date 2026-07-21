@@ -77,6 +77,7 @@ public sealed class SlskdSearchConcurrencyGate {
 public sealed partial class SlskdIndexerClient(
     HttpClient http,
     SlskdSearchConcurrencyGate? concurrency = null) : IIndexerSearchClient {
+    private const int SoulseekSearchTimeoutMilliseconds = 10_000;
     private const int SearchCompletionPollAttempts = 60;
     private static readonly TimeSpan SearchCompletionPollInterval = TimeSpan.FromMilliseconds(250);
     private static readonly IReadOnlySet<string> AudioExtensions = new HashSet<string>(StringComparer.OrdinalIgnoreCase) {
@@ -102,7 +103,7 @@ public sealed partial class SlskdIndexerClient(
         post.Content = JsonContent.Create(new {
             id = searchId,
             searchText = query.Text,
-            searchTimeout = 10,
+            searchTimeout = SoulseekSearchTimeoutMilliseconds,
             responseLimit = 100,
             fileLimit = 10_000,
             filterResponses = true,
