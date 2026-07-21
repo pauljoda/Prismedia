@@ -216,6 +216,56 @@ public sealed class EntityLifecycleConcurrencyPostgresTests {
 
     [Fact]
     [Trait("Category", "PostgreSQL")]
+    public async Task SearchCompletionPersistsLargeOpaqueDownloadLocators() {
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        var acquisitionId = Guid.NewGuid();
+        var now = DateTimeOffset.UtcNow;
+        await using (var setup = database.CreateContext()) {
+            setup.Acquisitions.Add(new AcquisitionRow {
+                Id = acquisitionId,
+                Status = AcquisitionStatus.Searching,
+                Title = "Large Soulseek album",
+                ExternalIdsJson = "{}",
+                SourceUrlsJson = "[]",
+                CreatedAt = now,
+                UpdatedAt = now,
+            });
+            await setup.SaveChangesAsync();
+        }
+
+        var locator = SoulseekProtocol.LocatorPrefix + new string('x', 6_000);
+        var scored = new ScoredRelease(
+            new IndexerRelease(
+                "Large Soulseek album release",
+                1_000,
+                null,
+                null,
+                DownloadProtocol.Soulseek,
+                locator,
+                null,
+                null,
+                null,
+                null,
+                now),
+            null,
+            "Soulseek",
+            Accepted: true,
+            Score: 100,
+            Rejections: []);
+        await using (var search = database.CreateContext()) {
+            Assert.True(await AcquisitionTestFactory.Store(search).TryCompleteSearchAsync(
+                acquisitionId,
+                [scored],
+                "1 acceptable release.",
+                CancellationToken.None));
+        }
+
+        await using var verification = database.CreateContext();
+        Assert.Equal(locator, (await verification.ReleaseCandidates.AsNoTracking().SingleAsync()).DownloadUrl);
+    }
+
+    [Fact]
+    [Trait("Category", "PostgreSQL")]
     public async Task ParentSyncLeaseFirstThenChildOffLeavesNoProviderPhantom() {
         await using var database = await PostgresTestDatabase.CreateAsync();
         var now = DateTimeOffset.UtcNow;

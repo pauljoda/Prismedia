@@ -154,6 +154,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Updated documentation, README screenshots, branding assets, install metadata, and app copy to match the current Prismedia v1 surface.
 
 ### Fixed
+- Acquisition transfer polling now runs ahead of large request search fan-outs, so completed or failed Soulseek downloads keep advancing through import and recovery while the remaining artist albums and tracks are still being searched.
+- Soulseek album searches can now persist opaque multi-file release locators of any practical length instead of failing the entire acquisition when a peer folder encodes beyond the former URL limit.
 - Artist requests now record monitoring for every selected album before background metadata hydration begins, so the child-activity panel keeps all requested albums visibly monitored and labels the pre-search phase as Preparing metadata instead of making queued work look turned off.
 - Artist requests now retain the reviewed album artwork URLs in the initial library graph, so album cards reuse the thumbnails already shown during review while background hydration localizes the image files.
 - Soulseek searches now serialize through slskd's one-operation limit and wait for each asynchronous search to finish before reading peer responses, preventing HTTP 429 backoff and valid album or track results from being discarded in progress.

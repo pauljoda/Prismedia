@@ -227,6 +227,18 @@ public sealed class PrismediaDbContextModelTests {
         Assert.EndsWith("InitialPrismediaSchema", migrations[0], StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void ReleaseCandidateDownloadLocatorsUseUnboundedText() {
+        using var db = CreateContext();
+        var property = db.Model
+            .FindEntityType(typeof(ReleaseCandidateRow))!
+            .FindProperty(nameof(ReleaseCandidateRow.DownloadUrl));
+
+        Assert.NotNull(property);
+        Assert.Null(property!.GetMaxLength());
+        Assert.Equal("text", property.GetColumnType());
+    }
+
     [Theory]
     [InlineData(typeof(EntityRow), nameof(EntityRow.KindCode), "kind_code")]
     [InlineData(typeof(UserEntityStateRow), nameof(UserEntityStateRow.RatingValue), "rating_value")]

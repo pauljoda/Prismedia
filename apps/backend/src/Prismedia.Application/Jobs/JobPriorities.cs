@@ -8,6 +8,12 @@ namespace Prismedia.Application.Jobs;
 /// intentionally last because provider lookups can be slow and should not delay first-scan assets.
 /// </summary>
 public static class JobPriorities {
+    /// <summary>
+    /// Active transfer polling must preempt acquisition-search fanout so completed and failed downloads
+    /// continue advancing while a large artist request is still searching its remaining children.
+    /// </summary>
+    public const int AcquisitionMonitor = 75;
+
     /// <summary>User-triggered identify review cascades — interactive UI work must not wait behind scan backlogs.</summary>
     public const int InteractiveIdentify = 70;
 

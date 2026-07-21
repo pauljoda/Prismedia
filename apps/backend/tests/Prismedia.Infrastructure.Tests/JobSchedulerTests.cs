@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Prismedia.Application.Acquisition;
@@ -8,10 +9,53 @@ using Prismedia.Application.Settings;
 using Prismedia.Contracts.Acquisition;
 using Prismedia.Contracts.Settings;
 using Prismedia.Domain.Entities;
+using Prismedia.Infrastructure.Acquisition;
+using Prismedia.Infrastructure.Persistence;
+using Prismedia.Infrastructure.Persistence.Entities;
 
 namespace Prismedia.Infrastructure.Tests;
 
 public sealed class JobSchedulerTests {
+    [Fact]
+    public async Task ScheduleAcquisitionMonitorAsyncKeepsTransferPollingAheadOfSearchFanout() {
+        await using var db = new PrismediaDbContext(
+            new DbContextOptionsBuilder<PrismediaDbContext>()
+                .UseInMemoryDatabase(Guid.NewGuid().ToString())
+                .Options);
+        var acquisitionId = Guid.NewGuid();
+        var now = DateTimeOffset.UtcNow;
+        db.Acquisitions.Add(new AcquisitionRow {
+            Id = acquisitionId,
+            Status = AcquisitionStatus.Queued,
+            Title = "Active download",
+            ExternalIdsJson = "{}",
+            SourceUrlsJson = "[]",
+            CreatedAt = now,
+            UpdatedAt = now,
+        });
+        db.DownloadTransfers.Add(new DownloadTransferRow {
+            Id = Guid.NewGuid(),
+            AcquisitionId = acquisitionId,
+            ClientItemId = "active-client-item",
+            CreatedAt = now,
+            UpdatedAt = now,
+        });
+        await db.SaveChangesAsync();
+
+        var queue = new SchedulerJobQueue();
+        await using var provider = CreateProvider(
+            new SchedulerSettingsPersistence([]),
+            queue,
+            acquisitions: AcquisitionTestFactory.Store(db));
+        var scheduler = CreateScheduler(provider, now);
+
+        await scheduler.ScheduleAcquisitionMonitorAsync(CancellationToken.None);
+
+        var request = Assert.Single(queue.Enqueued);
+        Assert.Equal(JobType.AcquisitionMonitor, request.Type);
+        Assert.True(request.Priority > JobPriorities.InteractiveRequest);
+    }
+
     [Fact]
     public async Task ScheduleRecurringScansAsyncSkipsRootAwayFromScheduleBoundary() {
         var rootId = Guid.NewGuid();
@@ -294,7 +338,11 @@ public sealed class JobSchedulerTests {
         services.AddScoped<SettingsService>();
         services.AddSingleton(queue);
         services.AddSingleton(monitors ?? new SchedulerMonitorStore(hasActive: false));
-        services.AddSingleton(acquisitions ?? new SchedulerAcquisitionLifecycleStore([]));
+        var lifecycle = acquisitions ?? new SchedulerAcquisitionLifecycleStore([]);
+        services.AddSingleton(lifecycle);
+        if (lifecycle is IAcquisitionStore store) {
+            services.AddSingleton(store);
+        }
         services.AddSingleton(importEngines ?? new SchedulerImportEngineFactory([]));
         return services.BuildServiceProvider();
     }

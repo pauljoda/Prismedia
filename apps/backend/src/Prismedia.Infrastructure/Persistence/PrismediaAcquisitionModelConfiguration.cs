@@ -281,7 +281,10 @@ internal static partial class PrismediaModelConfiguration {
                 .HasConversion(value => value.ToCode(), value => value.DecodeAs<DownloadProtocol>())
                 .HasDefaultValue(DownloadProtocol.Torrent)
                 .IsRequired();
-            entity.Property(row => row.DownloadUrl).HasColumnName("download_url").HasMaxLength(4096);
+            // Soulseek album locators encode the selected peer plus every remote file. Multi-track
+            // releases can legitimately exceed ordinary URL limits, so this durable server-only locator
+            // must remain unbounded instead of failing the entire search publication.
+            entity.Property(row => row.DownloadUrl).HasColumnName("download_url").HasColumnType("text");
             entity.Property(row => row.MagnetUrl).HasColumnName("magnet_url");
             entity.Property(row => row.InfoHash).HasColumnName("info_hash").HasMaxLength(128);
             entity.Property(row => row.InfoUrl).HasColumnName("info_url").HasMaxLength(4096);

@@ -203,7 +203,10 @@ public sealed class JobScheduler(
         }
 
         await queue.EnqueueAsync(
-            new EnqueueJobRequest(JobType.AcquisitionMonitor, TargetLabel: "Monitor acquisition downloads"),
+            new EnqueueJobRequest(
+                JobType.AcquisitionMonitor,
+                TargetLabel: "Monitor acquisition downloads",
+                Priority: JobPriorities.AcquisitionMonitor),
             cancellationToken);
     }
 
