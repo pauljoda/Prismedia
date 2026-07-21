@@ -214,6 +214,7 @@ public sealed class MonitoredSearchJobHandlerTests {
         public Task<Prismedia.Application.Requests.WantedEntityResult> EnsureAsync(EntityKind kind, ExternalIdentity identity, string title, Guid? parentEntityId, bool matchTitleKindWide, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<bool> BindProviderIdentityAsync(Guid entityId, Prismedia.Application.Plugins.PluginIdentityRoute route, CancellationToken cancellationToken) => Task.FromResult(false);
         public Task ApplyProposalAsync(Guid entityId, Prismedia.Contracts.Plugins.EntityMetadataProposal proposal, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task ApplyProposalWithDeferredArtworkAsync(Guid entityId, Prismedia.Contracts.Plugins.EntityMetadataProposal proposal, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<bool> DeleteIfWantedAsync(Guid entityId, CancellationToken cancellationToken) => Task.FromResult(false);
         public Task<Prismedia.Application.Requests.MonitorableEntity?> GetEntityAsync(Guid entityId, CancellationToken cancellationToken) =>
             Task.FromResult<Prismedia.Application.Requests.MonitorableEntity?>(null);

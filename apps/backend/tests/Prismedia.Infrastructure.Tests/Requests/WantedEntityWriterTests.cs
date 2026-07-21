@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Prismedia.Application.Entities;
 using Prismedia.Application.Plugins;
 using Prismedia.Application.Requests;
+using Prismedia.Contracts.Plugins;
 using Prismedia.Domain.Entities;
 using Prismedia.Infrastructure.Entities;
 using Prismedia.Infrastructure.Persistence;
@@ -292,6 +293,59 @@ public sealed class WantedEntityWriterTests {
     }
 
     [Fact]
+    public async Task DeferredArtworkApplyPersistsReviewedAlbumUrlsWithoutDownloadingThem() {
+        await using var db = CreateContext();
+        var artistId = AddEntity(db, EntityKindRegistry.MusicArtist.Code, "Divide Music", isWanted: true);
+        var firstId = AddEntity(
+            db,
+            EntityKindRegistry.AudioLibrary.Code,
+            "First Album",
+            isWanted: true,
+            parentEntityId: artistId);
+        var secondId = AddEntity(
+            db,
+            EntityKindRegistry.AudioLibrary.Code,
+            "Second Album",
+            isWanted: true,
+            parentEntityId: artistId);
+        await db.SaveChangesAsync();
+        var firstUrl = "https://images.test/first.jpg";
+        var secondUrl = "https://images.test/second.jpg";
+        var proposal = MetadataProposal(
+            "artist",
+            ProposalKind.MusicArtist,
+            "Divide Music",
+            artistId,
+            MetadataProposal(
+                "first",
+                ProposalKind.AudioLibrary,
+                "First Album",
+                firstId,
+                new ImageCandidate(
+                    MediaImageKind.Cover.ToCode(), firstUrl, "musicbrainz", 1, null, 500, 500)),
+            MetadataProposal(
+                "second",
+                ProposalKind.AudioLibrary,
+                "Second Album",
+                secondId,
+                new ImageCandidate(
+                    MediaImageKind.Cover.ToCode(), secondUrl, "musicbrainz", 1, null, 500, 500)));
+
+        await Writer(db).ApplyProposalWithDeferredArtworkAsync(
+            artistId,
+            proposal,
+            CancellationToken.None);
+
+        var artwork = await db.EntityFiles.AsNoTracking()
+            .Where(file => file.Role == EntityFileRole.Cover)
+            .OrderBy(file => file.Path)
+            .ToArrayAsync();
+        Assert.Equal(2, artwork.Length);
+        Assert.Equal([firstUrl, secondUrl], artwork.Select(file => file.Path).ToArray());
+        Assert.All(artwork, file => Assert.Equal(FileSourceKind.Custom.ToCode(), file.Source));
+    }
+
+    [Fact]
     public async Task EnsureCreatesAWantedMovieWithoutADetailRow() {
         await using var db = CreateContext();
 
@@ -543,6 +597,36 @@ public sealed class WantedEntityWriterTests {
             Id = Guid.NewGuid(), EntityId = entityId, Role = EntityFileRole.Source, Path = path, CreatedAt = now, UpdatedAt = now
         });
     }
+
+    private static EntityMetadataProposal MetadataProposal(
+        string proposalId,
+        ProposalKind kind,
+        string title,
+        Guid targetEntityId,
+        params object[] childrenOrImages) =>
+        new(
+            proposalId,
+            "musicbrainz",
+            kind,
+            1,
+            "external-id",
+            new EntityMetadataPatch(
+                title,
+                null,
+                new Dictionary<string, string>(),
+                [],
+                [],
+                null,
+                [],
+                new Dictionary<string, string>(),
+                new Dictionary<string, int>(),
+                new Dictionary<string, int>(),
+                null),
+            childrenOrImages.OfType<ImageCandidate>().ToArray(),
+            childrenOrImages.OfType<EntityMetadataProposal>().ToArray(),
+            [],
+            targetEntityId,
+            []);
 
     private static PrismediaDbContext CreateContext() =>
         new(new DbContextOptionsBuilder<PrismediaDbContext>().UseInMemoryDatabase(Guid.NewGuid().ToString()).Options);

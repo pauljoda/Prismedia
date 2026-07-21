@@ -209,6 +209,16 @@ public interface IWantedEntityWriter {
     Task ApplyProposalAsync(Guid entityId, EntityMetadataProposal proposal, CancellationToken cancellationToken);
 
     /// <summary>
+    /// Applies reviewed metadata while persisting the selected remote artwork URLs as immediately usable
+    /// references. The durable hydration pipeline can later replace those references with locally cached
+    /// files without making the visible request commit wait for remote image downloads.
+    /// </summary>
+    Task ApplyProposalWithDeferredArtworkAsync(
+        Guid entityId,
+        EntityMetadataProposal proposal,
+        CancellationToken cancellationToken);
+
+    /// <summary>
     /// Hard-deletes a request-created wanted entity — the cancel path's other half: cancelling a request
     /// removes the placeholder it created. Deletes nothing when the entity is gone, no longer Wanted, or
     /// owns a real file (an import won the race). Removing the last child of a wanted, fileless container
@@ -997,18 +1007,24 @@ public sealed partial class RequestCommitService(
         // Apply the proposal only to newly materialized, fileless works: already-requested metadata is
         // already durable and must not be rewritten on an idempotent repeat. Bind each reviewed node to
         // the Entity just created so the cascade does not resolve 100+ identities again. Artist album
-        // artwork is intentionally left to the durable acquisition enrichment job; downloading every
-        // cover is remote I/O and cannot sit on the request's visible database commit boundary.
+        // artwork stays as the reviewed remote URL during the visible commit; durable hydration later
+        // replaces it with a cached file without downloading every cover on the HTTP boundary.
         var anythingNew = picks.Any(pick => pick.Outcome == RequestCommitOutcome.Requested);
         if (container.Created || anythingNew) {
             var applyChildren = proposal.Children.Where(node => node.TargetKind.IsRelationship())
                 .Concat(picks
                     .Where(pick => pick.Outcome == RequestCommitOutcome.Requested && !pick.Entity.HasFile)
-                    .Select(pick => PrepareImmediateChildProposal(
-                        pick,
-                        deferArtwork: deferRequestedChildHydration)))
+                    .Select(PrepareImmediateChildProposal))
                 .ToArray();
-            await wanted.ApplyProposalAsync(container.EntityId, proposal with { Children = applyChildren }, cancellationToken);
+            var immediateProposal = proposal with { Children = applyChildren };
+            if (deferRequestedChildHydration) {
+                await wanted.ApplyProposalWithDeferredArtworkAsync(
+                    container.EntityId,
+                    immediateProposal,
+                    cancellationToken);
+            } else {
+                await wanted.ApplyProposalAsync(container.EntityId, immediateProposal, cancellationToken);
+            }
         }
 
         if (exactPluginId is not null) {
@@ -1118,23 +1134,11 @@ public sealed partial class RequestCommitService(
     }
 
     /// <summary>
-    /// Binds reviewed metadata to the child Entity already resolved by the request writer. Album artwork
-    /// can be hydrated by the durable acquisition pipeline after the visible graph commit; stripping it
-    /// recursively prevents a future nested music proposal from reintroducing synchronous remote I/O.
+    /// Binds reviewed metadata, including its remote artwork references, to the child Entity already
+    /// resolved by the request writer. The deferred-artwork apply path decides when bytes are localized.
     /// </summary>
-    private static EntityMetadataProposal PrepareImmediateChildProposal(
-        CommitPick pick,
-        bool deferArtwork) {
-        var targeted = pick.Proposal with { TargetEntityId = pick.Entity.EntityId };
-        return deferArtwork ? WithoutArtwork(targeted) : targeted;
-    }
-
-    private static EntityMetadataProposal WithoutArtwork(EntityMetadataProposal proposal) =>
-        proposal with {
-            Images = [],
-            Children = proposal.Children.Select(WithoutArtwork).ToArray(),
-            Relationships = (proposal.Relationships ?? []).Select(WithoutArtwork).ToArray()
-        };
+    private static EntityMetadataProposal PrepareImmediateChildProposal(CommitPick pick) =>
+        pick.Proposal with { TargetEntityId = pick.Entity.EntityId };
 
     /// <summary>
     /// Materializes a pick's own structural children as wanted phantoms when its kind nests further —

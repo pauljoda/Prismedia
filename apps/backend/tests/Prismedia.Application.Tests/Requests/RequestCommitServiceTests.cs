@@ -1723,15 +1723,16 @@ public sealed class RequestCommitServiceTests {
         Assert.Equal("Divide Music", scheduled.ContainerTitle);
         Assert.Equal(response.Items.Select(item => item.EntityId!.Value).ToHashSet(), scheduled.ChildEntityIds.ToHashSet());
         Assert.True(scheduled.HideNsfw);
-        var applied = Assert.Single(writer.Applied);
+        Assert.Empty(writer.Applied);
+        var applied = Assert.Single(writer.DeferredArtworkApplied);
         var appliedAlbums = applied.Proposal.Children
             .Where(child => child.TargetKind == ProposalKind.AudioLibrary)
             .ToArray();
         Assert.Equal(2, appliedAlbums.Length);
-        Assert.All(appliedAlbums, child => {
-            Assert.NotNull(child.TargetEntityId);
-            Assert.Empty(child.Images);
-        });
+        Assert.All(appliedAlbums, child => Assert.NotNull(child.TargetEntityId));
+        Assert.Equal(
+            ["https://images.test/first.jpg", "https://images.test/second.jpg"],
+            appliedAlbums.SelectMany(child => child.Images).Select(image => image.Url).ToArray());
         Assert.Equal(3, writer.ProviderIdentityBindings.Count);
     }
 
@@ -2387,6 +2388,7 @@ public sealed class RequestCommitServiceTests {
 
         public List<EnsureCall> Ensured { get; } = [];
         public List<ApplyCall> Applied { get; } = [];
+        public List<ApplyCall> DeferredArtworkApplied { get; } = [];
         public List<(Guid EntityId, PluginIdentityRoute Route)> ProviderIdentityBindings { get; } = [];
         public bool RejectProviderIdentityBindings { get; set; }
         public HashSet<Guid> RemovedEntityIds { get; } = [];
@@ -2430,6 +2432,14 @@ public sealed class RequestCommitServiceTests {
 
         public Task ApplyProposalAsync(Guid entityId, EntityMetadataProposal proposal, CancellationToken cancellationToken) {
             Applied.Add(new ApplyCall(entityId, proposal));
+            return Task.CompletedTask;
+        }
+
+        public Task ApplyProposalWithDeferredArtworkAsync(
+            Guid entityId,
+            EntityMetadataProposal proposal,
+            CancellationToken cancellationToken) {
+            DeferredArtworkApplied.Add(new ApplyCall(entityId, proposal));
             return Task.CompletedTask;
         }
 

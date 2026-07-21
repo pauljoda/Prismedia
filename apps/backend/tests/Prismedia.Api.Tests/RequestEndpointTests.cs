@@ -574,6 +574,12 @@ public sealed class RequestEndpointTests {
             CancellationToken cancellationToken) =>
             throw new NotSupportedException();
 
+        public Task ApplyProposalWithDeferredArtworkAsync(
+            Guid entityId,
+            EntityMetadataProposal proposal,
+            CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
         public Task<bool> DeleteIfWantedAsync(Guid entityId, CancellationToken cancellationToken) =>
             throw new NotSupportedException();
 
