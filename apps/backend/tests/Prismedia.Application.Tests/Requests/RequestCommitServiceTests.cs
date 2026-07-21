@@ -309,6 +309,7 @@ public sealed class RequestCommitServiceTests {
 
         Assert.Equal(2, missing);
         Assert.Equal(2, covered); // the in-flight episode counts as covered, not duplicated
+        Assert.Equal([episode2], acquisitions.EnsuredOpenEntitySearches);
         Assert.Equal(episode3, Assert.Single(acquisitions.Created).EntityId);
     }
 
@@ -2582,6 +2583,7 @@ public sealed class RequestCommitServiceTests {
         public List<AcquisitionCreateRequest> CreatedWithinEntityLifecycle { get; } = [];
         public List<Guid> CreatedIds { get; } = [];
         public HashSet<Guid> EntitiesWithAcquisitions { get; } = [];
+        public List<Guid> EnsuredOpenEntitySearches { get; } = [];
         public Dictionary<Guid, Guid[]> AcquisitionIdsByEntity { get; } = [];
         public List<Guid> Deleted { get; } = [];
 
@@ -2610,6 +2612,18 @@ public sealed class RequestCommitServiceTests {
 
         public Task<bool> AnyOpenForEntityAsync(Guid entityId, CancellationToken cancellationToken) =>
             Task.FromResult(EntitiesWithAcquisitions.Contains(entityId));
+
+        public Task<bool> EnsureOpenEntitySearchAsync(
+            Guid entityId,
+            BookRendition? bookRendition,
+            CancellationToken cancellationToken) {
+            if (!EntitiesWithAcquisitions.Contains(entityId)) {
+                return Task.FromResult(false);
+            }
+
+            EnsuredOpenEntitySearches.Add(entityId);
+            return Task.FromResult(true);
+        }
 
         public Task<IReadOnlyList<Guid>> ListIdsForEntityAsync(Guid entityId, CancellationToken cancellationToken) =>
             Task.FromResult<IReadOnlyList<Guid>>(AcquisitionIdsByEntity.GetValueOrDefault(entityId) ?? []);

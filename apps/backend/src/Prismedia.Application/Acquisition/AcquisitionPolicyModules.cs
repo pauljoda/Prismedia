@@ -111,9 +111,9 @@ public sealed class MusicAcquisitionPolicyModule : AcquisitionPolicyModule {
     public override IReadOnlyList<string> BuildQueries(AcquisitionSearchInput input) =>
         AcquisitionPolicyQueries.FromTitle(input, input.Kind == EntityKind.AudioTrack
             ? [
-                AcquisitionPolicyQueries.Join(AcquisitionPolicyQueries.Join(input.Author, input.Series), input.Title),
-                AcquisitionPolicyQueries.Join(input.Series, input.Title),
-                AcquisitionPolicyQueries.Join(input.Author, input.Title),
+                AcquisitionPolicyQueries.JoinDistinct(input.Author, input.Series, input.Title),
+                AcquisitionPolicyQueries.JoinDistinct(input.Series, input.Title),
+                AcquisitionPolicyQueries.JoinDistinct(input.Author, input.Title),
                 input.Title
             ]
             : [
@@ -253,4 +253,10 @@ internal static class AcquisitionPolicyQueries {
         string.Join(' ', new[] { left, right }
             .Where(part => !string.IsNullOrWhiteSpace(part))
             .Select(part => part!.Trim()));
+
+    public static string JoinDistinct(params string?[] parts) =>
+        string.Join(' ', parts
+            .Where(part => !string.IsNullOrWhiteSpace(part))
+            .Select(part => part!.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase));
 }

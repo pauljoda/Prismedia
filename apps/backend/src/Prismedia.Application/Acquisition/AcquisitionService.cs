@@ -44,6 +44,17 @@ public interface IAcquisitionRequestService {
         AnyOpenForEntityAsync(entityId, cancellationToken);
 
     /// <summary>
+    /// Covers a missing child with its existing actionable acquisition and republishes barren pre-download
+    /// work when it is safe to do so. Active transfers and manual-import states remain untouched; terminal
+    /// history returns false so the caller can create fresh work.
+    /// </summary>
+    Task<bool> EnsureOpenEntitySearchAsync(
+        Guid entityId,
+        BookRendition? bookRendition,
+        CancellationToken cancellationToken) =>
+        Task.FromResult(false);
+
+    /// <summary>
     /// Returns the requested Entity ids that already have actionable work for the same rendition.
     /// Production adapters use one bounded query; the default preserves narrow test adapters.
     /// </summary>
@@ -942,46 +953,6 @@ public sealed partial class AcquisitionService(
             new BlocklistAddRequest(identity, BlocklistReason.Manual, candidate.Title, candidate.IndexerName, candidate.InfoHash, id, "Blocklisted from the release picker."),
             cancellationToken);
         await store.MarkCandidatesBlocklistedAsync(id, identity, cancellationToken);
-        return await store.GetAsync(id, cancellationToken);
-    }
-
-    /// <summary>
-    /// Re-runs the release search for an existing acquisition on demand (the manual counterpart to monitoring).
-    /// Enqueues the standard <see cref="JobType.AcquisitionSearch"/> — deduped per acquisition, and the handler
-    /// re-checks that the acquisition is still searchable — so it can't disturb an in-flight grab. An explicit
-    /// user action may revive Cancelled by claiming Searching before enqueue; stale queued jobs cannot. Returns
-    /// the acquisition, or null when it no longer exists.
-    /// </summary>
-    public async Task<AcquisitionDetail?> ReSearchAsync(Guid id, CancellationToken cancellationToken, string? customQuery = null) {
-        var detail = await store.GetAsync(id, cancellationToken);
-        if (detail is null) {
-            return null;
-        }
-
-        var explicitRevival = detail.Summary.Status == AcquisitionStatus.Cancelled;
-        if (!explicitRevival && !AcquisitionSearchJobHandler.CanScheduleSearch(detail.Summary.Status)) {
-            return detail;
-        }
-
-        await EnsureImportCheckpointCanBeSupersededAsync(detail, cancellationToken);
-        if (!await store.TryTransitionStatusAsync(
-                id,
-                [detail.Summary.Status],
-                AcquisitionStatus.Searching,
-                null,
-                cancellationToken)) {
-            return await store.GetAsync(id, cancellationToken);
-        }
-
-        await queue.EnqueueAsync(
-            new EnqueueJobRequest(
-                JobType.AcquisitionSearch,
-                PayloadJson: AcquisitionJobPayload.Serialize(id, manualReview: true, customQuery: customQuery),
-                TargetEntityId: id.ToString(),
-                TargetLabel: detail.Summary.Title,
-                Priority: JobPriorities.InteractiveRequest,
-                Lane: JobRunLane.ForegroundIdentify),
-            cancellationToken);
         return await store.GetAsync(id, cancellationToken);
     }
 

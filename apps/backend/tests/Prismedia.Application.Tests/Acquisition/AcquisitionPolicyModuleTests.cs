@@ -77,6 +77,22 @@ public sealed class AcquisitionPolicyModuleTests {
     }
 
     [Fact]
+    public void MusicTrackQueriesDoNotRepeatAnAlbumTitleThatMatchesTheTrack() {
+        var module = new MusicAcquisitionPolicyModule();
+        var track = new AcquisitionSearchInput(
+            Guid.NewGuid(),
+            "Had Enough",
+            "Divide Music",
+            EntityKind.AudioTrack,
+            Series: "Had Enough");
+
+        Assert.Equal([
+            "Divide Music Had Enough",
+            "Had Enough"
+        ], module.BuildQueries(track));
+    }
+
+    [Fact]
     public void ModulesRouteConfiguredCategoriesWithinTheirTorznabRange() {
         var book = new BookAcquisitionPolicyModule();
         var movie = new MovieAcquisitionPolicyModule();

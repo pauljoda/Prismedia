@@ -750,6 +750,45 @@ public sealed class AcquisitionServiceTests {
         Assert.Null(payload.CustomQuery);
     }
 
+    [Fact]
+    public async Task MissingChildFallbackRequeuesAnExistingBarrenAcquisitionForAutoSelection() {
+        var harness = Harness(TransferInfo(RecordedClientId, AcquisitionStatus.AwaitingSelection));
+
+        var covered = await harness.Service.EnsureOpenEntitySearchAsync(
+            WantedEntityId,
+            bookRendition: null,
+            CancellationToken.None);
+
+        Assert.True(covered);
+        Assert.Equal(AcquisitionStatus.Searching, harness.Store.Status);
+        var search = Assert.Single(harness.Queue.Requests);
+        Assert.Equal(JobType.AcquisitionSearch, search.Type);
+        Assert.Equal(JobPriorities.InteractiveRequest, search.Priority);
+        var payload = AcquisitionJobPayload.Parse(search.PayloadJson!);
+        Assert.False(payload.ManualReview);
+        Assert.Null(payload.CustomQuery);
+    }
+
+    [Theory]
+    [InlineData(AcquisitionStatus.Downloading, true)]
+    [InlineData(AcquisitionStatus.ManualImportRequired, true)]
+    [InlineData(AcquisitionStatus.Cancelled, false)]
+    [InlineData(AcquisitionStatus.Imported, false)]
+    public async Task MissingChildFallbackPreservesActiveManualAndTerminalAcquisitions(
+        AcquisitionStatus status,
+        bool covered) {
+        var harness = Harness(TransferInfo(RecordedClientId, status));
+
+        var result = await harness.Service.EnsureOpenEntitySearchAsync(
+            WantedEntityId,
+            bookRendition: null,
+            CancellationToken.None);
+
+        Assert.Equal(covered, result);
+        Assert.Equal(status, harness.Store.Status);
+        Assert.Empty(harness.Queue.Requests);
+    }
+
     [Theory]
     [InlineData(AcquisitionStatus.Pending)]
     [InlineData(AcquisitionStatus.AwaitingSelection)]
@@ -1401,8 +1440,14 @@ public sealed class AcquisitionServiceTests {
         }
         public Task<bool> IsCurrentImportPlacementCheckpointAsync(Guid acquisitionId, ImportPlacementCheckpoint checkpoint, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task WriteImportHintAsync(Guid acquisitionId, string sourcePath, AcquisitionImportContext context, BookQualityRank ownedQuality, CancellationToken cancellationToken) => throw new NotSupportedException();
-        public Task<bool> AnyOpenForEntityAsync(Guid entityId, CancellationToken cancellationToken) => throw new NotSupportedException();
-        public Task<AcquisitionDetail?> GetLatestForEntityAsync(Guid entityId, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<bool> AnyOpenForEntityAsync(Guid entityId, CancellationToken cancellationToken) =>
+            Task.FromResult(entityId == WantedEntityId
+                && Status is not AcquisitionStatus.Imported and not AcquisitionStatus.Cancelled);
+
+        public Task<AcquisitionDetail?> GetLatestForEntityAsync(Guid entityId, CancellationToken cancellationToken) =>
+            entityId == WantedEntityId
+                ? GetAsync(AcquisitionId, cancellationToken)
+                : Task.FromResult<AcquisitionDetail?>(null);
         public Task<IReadOnlyList<Guid>> ListIdsForEntityAsync(Guid entityId, CancellationToken cancellationToken) => throw new NotSupportedException();
     }
 
