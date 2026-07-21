@@ -11,7 +11,7 @@ namespace Prismedia.Application.Jobs.Handlers;
 /// newly imported media and skips it, while provider enrichment remains in the acquisition job chain.
 /// </summary>
 public sealed class RequestAcquisitionFanoutJobHandler(
-    RequestCommitService requests,
+    IRequestGraphAcquisitionStarter requests,
     IRequestChildHydrator childHydrator,
     ILogger<RequestAcquisitionFanoutJobHandler> logger) : IJobHandler {
     public JobType Type => JobType.RequestAcquisitionFanout;
@@ -26,18 +26,26 @@ public sealed class RequestAcquisitionFanoutJobHandler(
         for (var index = 0; index < payload.ChildEntityIds.Count; index++) {
             cancellationToken.ThrowIfCancellationRequested();
             var entityId = payload.ChildEntityIds[index];
-            var response = await requests.RequestEntityFromGraphAsync(
+
+            // A structural unit's children are search input, not post-search decoration. Hydrate before
+            // CreateAndSearch publishes the parent acquisition so a barren album/season search can
+            // immediately fall back to its already-materialized tracks/episodes.
+            var hydration = await childHydrator.HydrateAsync(
+                entityId,
+                payload.HideNsfw,
+                cancellationToken);
+            if (hydration is { Hydrated: false }) {
+                logger.LogWarning(
+                    "Request acquisition fan-out could not hydrate structural children for Entity {EntityId}; continuing with the whole-unit search.",
+                    entityId);
+            }
+
+            await requests.RequestEntityFromGraphAsync(
                 entityId,
                 payload.HideNsfw,
                 cancellationToken,
                 targeting,
                 hydrateChildren: false);
-            if (response?.Items.Any(item => item.Outcome == RequestCommitOutcome.AlreadyRequested) == true) {
-                // A repeat artist request is also a repair pass: older album acquisitions may predate the
-                // persisted plugin route or their enrichment job may have completed before tracks existed.
-                // Hydrate in this durable job, never on the interactive commit boundary.
-                await childHydrator.HydrateAsync(entityId, payload.HideNsfw, cancellationToken);
-            }
             await context.ReportProgressAsync(
                 (index + 1) * 100 / payload.ChildEntityIds.Count,
                 $"Started {index + 1} of {payload.ChildEntityIds.Count} requests",

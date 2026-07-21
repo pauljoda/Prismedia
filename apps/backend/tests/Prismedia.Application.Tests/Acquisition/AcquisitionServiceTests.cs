@@ -786,6 +786,7 @@ public sealed class AcquisitionServiceTests {
             queue: null!,
             downloadClients: null!,
             settings: null!,
+            missingChildren: null!,
             NullLogger<AcquisitionSearchJobHandler>.Instance);
 
         await handler.HandleAsync(

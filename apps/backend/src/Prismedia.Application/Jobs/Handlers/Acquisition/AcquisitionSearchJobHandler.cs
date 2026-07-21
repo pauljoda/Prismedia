@@ -20,6 +20,7 @@ public sealed class AcquisitionSearchJobHandler(
     AcquisitionQueueService queue,
     IDownloadClientConfigStore downloadClients,
     SettingsService settings,
+    AcquisitionMissingChildFallback missingChildren,
     ILogger<AcquisitionSearchJobHandler> logger) : IJobHandler {
     public JobType Type => JobType.AcquisitionSearch;
 
@@ -75,6 +76,15 @@ public sealed class AcquisitionSearchJobHandler(
                     "AcquisitionSearch: acquisition {Id} changed before search results completed; discarding stale results.",
                     payload.AcquisitionId);
                 return;
+            }
+
+            var fallback = await missingChildren.TryStartAsync(input, outcome, cancellationToken);
+            if (fallback is { Missing: > 0 }) {
+                logger.LogInformation(
+                    "AcquisitionSearch: whole-unit search for {Id} was barren; {Covered} of {Missing} missing children now have direct acquisitions.",
+                    payload.AcquisitionId,
+                    fallback.Value.Covered,
+                    fallback.Value.Missing);
             }
             await context.ReportProgressAsync(100, "Search finished", cancellationToken);
 

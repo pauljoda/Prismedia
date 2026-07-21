@@ -59,10 +59,13 @@ public static class DependencyInjection {
         services.AddScoped<RequestCommitService>();
         services.AddScoped<IMonitoredEntityRecovery>(sp => sp.GetRequiredService<RequestCommitService>());
         services.AddScoped<IRequestChildHydrator>(sp => sp.GetRequiredService<RequestCommitService>());
+        services.AddScoped<IRequestGraphAcquisitionStarter>(sp => sp.GetRequiredService<RequestCommitService>());
+        services.AddScoped<IMissingChildAcquisitionRequester>(sp => sp.GetRequiredService<RequestCommitService>());
         services.AddScoped<Acquisition.IndexerConfigCommandService>();
         services.AddScoped<Acquisition.DownloadClientCommandService>();
         services.AddScoped<Acquisition.BookAcquisitionProfileCommandService>();
         services.AddScoped<Acquisition.AcquisitionSearchRunner>();
+        services.AddScoped<Acquisition.AcquisitionMissingChildFallback>();
         services.AddSingleton<Acquisition.ManualReplacementSearchSessionStore>();
         services.AddScoped<Acquisition.ManualReplacementService>();
         services.AddScoped<Acquisition.AcquisitionCompletionService>();

@@ -5,10 +5,25 @@ using Prismedia.Domain.Entities;
 
 namespace Prismedia.Application.Requests;
 
+/// <summary>
+/// Starts an acquisition from an already-committed Entity graph. Background request fan-out depends on
+/// this narrow seam so structural hydration can be ordered before acquisition/search publication.
+/// </summary>
+public interface IRequestGraphAcquisitionStarter {
+    /// <summary>Starts or observes one graph-backed acquisition.</summary>
+    Task<RequestCommitResponse?> RequestEntityFromGraphAsync(
+        Guid entityId,
+        bool hideNsfw,
+        CancellationToken cancellationToken,
+        AcquisitionTargeting? targeting = null,
+        BookRendition? bookRendition = null,
+        bool hydrateChildren = true);
+}
+
 public sealed partial class RequestCommitService {
     /// <summary>
     /// Requests an entity from its own graph with no provider round-trip. Deferred reviewed-container
-    /// fan-out uses the already committed Entity metadata and lets acquisition enrichment hydrate children.
+    /// fan-out uses the already committed Entity metadata after structural children have been hydrated.
     /// </summary>
     public async Task<RequestCommitResponse?> RequestEntityFromGraphAsync(
         Guid entityId,

@@ -25,6 +25,17 @@ public interface IRequestChildHydrator {
         CancellationToken cancellationToken);
 }
 
+/// <summary>
+/// Starts direct acquisitions for still-wanted structural children after a whole-unit search proves
+/// barren or an imported unit remains incomplete.
+/// </summary>
+public interface IMissingChildAcquisitionRequester {
+    /// <summary>Requests each still-wanted direct child and reports how many gaps are covered.</summary>
+    Task<(int Covered, int Missing)> RequestMissingChildrenAsync(
+        Guid entityId,
+        CancellationToken cancellationToken);
+}
+
 public sealed partial class RequestCommitService {
     /// <inheritdoc />
     public async Task<RequestChildHydrationResult?> HydrateAsync(

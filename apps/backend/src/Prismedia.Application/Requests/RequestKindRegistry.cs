@@ -53,8 +53,8 @@ namespace Prismedia.Application.Requests;
 /// </param>
 /// <param name="DeferChildPhantomHydration">
 /// True for a container whose selected children's structural descendants should be hydrated by the
-/// post-request enrichment job instead of delaying the interactive container commit. The selected child
-/// metadata itself is still persisted and its acquisition starts synchronously.
+/// post-request acquisition fan-out instead of delaying the interactive container commit. Each selected
+/// child is expanded before its acquisition search is published.
 /// </param>
 /// <param name="BookRendition">Requested book rendition; null for non-book kinds and book containers.</param>
 public sealed record RequestKindDescriptor(

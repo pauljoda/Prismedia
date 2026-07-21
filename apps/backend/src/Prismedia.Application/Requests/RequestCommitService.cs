@@ -294,7 +294,11 @@ public sealed partial class RequestCommitService(
     Acquisition.IMonitorStore monitors,
     IWantedSuppressionStore suppressions,
     IEntityGiveUpService entityGiveUp,
-    IRequestAcquisitionFanoutScheduler? fanout = null) : IMonitoredEntityRecovery, IRequestChildHydrator {
+    IRequestAcquisitionFanoutScheduler? fanout = null) :
+    IMonitoredEntityRecovery,
+    IRequestChildHydrator,
+    IRequestGraphAcquisitionStarter,
+    IMissingChildAcquisitionRequester {
     /// <summary>
     /// Commits a reviewed request. Returns null when the kind isn't committable, the identity-qualified
     /// id is malformed, or no plugin can resolve it; otherwise reports a per-item outcome (an
