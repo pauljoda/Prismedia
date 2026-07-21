@@ -968,14 +968,24 @@ public sealed partial class RequestCommitService(
             cancellationToken,
             requestOwnedEntity: explicitRequest && requestOwnedChildren && child.AcquireFromEntity);
 
-        // Apply the proposal filtered to the picked (fileless) works: the cascade finds the pre-created
-        // skeletons external-id-first and enriches them in place, and never materializes unpicked works.
-        // Owned works are excluded so a request can't overwrite metadata the library already has. A
-        // discovery sync that found nothing new skips the apply entirely (no daily artwork churn).
+        var deferRequestedChildHydration = fanout is not null
+            && startAcquisitions
+            && explicitRequest
+            && descriptor.DeferChildPhantomHydration;
+
+        // Apply the proposal only to newly materialized, fileless works: already-requested metadata is
+        // already durable and must not be rewritten on an idempotent repeat. Bind each reviewed node to
+        // the Entity just created so the cascade does not resolve 100+ identities again. Artist album
+        // artwork is intentionally left to the durable acquisition enrichment job; downloading every
+        // cover is remote I/O and cannot sit on the request's visible database commit boundary.
         var anythingNew = picks.Any(pick => pick.Outcome == RequestCommitOutcome.Requested);
-        if (anythingNew || explicitRequest) {
+        if (container.Created || anythingNew) {
             var applyChildren = proposal.Children.Where(node => node.TargetKind.IsRelationship())
-                .Concat(picks.Where(pick => !pick.Entity.HasFile).Select(pick => pick.Proposal))
+                .Concat(picks
+                    .Where(pick => pick.Outcome == RequestCommitOutcome.Requested && !pick.Entity.HasFile)
+                    .Select(pick => PrepareImmediateChildProposal(
+                        pick,
+                        deferArtwork: deferRequestedChildHydration)))
                 .ToArray();
             await wanted.ApplyProposalAsync(container.EntityId, proposal with { Children = applyChildren }, cancellationToken);
         }
@@ -995,10 +1005,7 @@ public sealed partial class RequestCommitService(
         var attachOwnedEntityMonitor = requestOwnedChildren
             || preset == MonitorPreset.All
             || !explicitRequest;
-        var useBatchedArtistCommit = fanout is not null
-            && startAcquisitions
-            && explicitRequest
-            && descriptor.DeferChildPhantomHydration;
+        var useBatchedArtistCommit = deferRequestedChildHydration;
         var deferredPicks = useBatchedArtistCommit
             ? picks.Where(pick => pick.Outcome == RequestCommitOutcome.Requested).ToArray()
             : [];
@@ -1072,6 +1079,25 @@ public sealed partial class RequestCommitService(
 
         return new RequestCommitResponse(container.EntityId, items);
     }
+
+    /// <summary>
+    /// Binds reviewed metadata to the child Entity already resolved by the request writer. Album artwork
+    /// can be hydrated by the durable acquisition pipeline after the visible graph commit; stripping it
+    /// recursively prevents a future nested music proposal from reintroducing synchronous remote I/O.
+    /// </summary>
+    private static EntityMetadataProposal PrepareImmediateChildProposal(
+        CommitPick pick,
+        bool deferArtwork) {
+        var targeted = pick.Proposal with { TargetEntityId = pick.Entity.EntityId };
+        return deferArtwork ? WithoutArtwork(targeted) : targeted;
+    }
+
+    private static EntityMetadataProposal WithoutArtwork(EntityMetadataProposal proposal) =>
+        proposal with {
+            Images = [],
+            Children = proposal.Children.Select(WithoutArtwork).ToArray(),
+            Relationships = (proposal.Relationships ?? []).Select(WithoutArtwork).ToArray()
+        };
 
     /// <summary>
     /// Materializes a pick's own structural children as wanted phantoms when its kind nests further —

@@ -1671,8 +1671,12 @@ public sealed class RequestCommitServiceTests {
         var artistIdentity = new ExternalIdentity("musicbrainzartist", "Artist:One");
         var firstIdentity = new ExternalIdentity("musicbrainzreleasegroup", "Album:One");
         var secondIdentity = new ExternalIdentity("musicbrainzreleasegroup", "Album:Two");
-        var first = Node("album:one", pluginId, ProposalKind.AudioLibrary, "First Album", firstIdentity);
-        var second = Node("album:two", pluginId, ProposalKind.AudioLibrary, "Second Album", secondIdentity);
+        var first = Node("album:one", pluginId, ProposalKind.AudioLibrary, "First Album", firstIdentity) with {
+            Images = [new ImageCandidate("cover", "https://images.test/first.jpg", pluginId, 1, null, 500, 500)]
+        };
+        var second = Node("album:two", pluginId, ProposalKind.AudioLibrary, "Second Album", secondIdentity) with {
+            Images = [new ImageCandidate("cover", "https://images.test/second.jpg", pluginId, 1, null, 500, 500)]
+        };
         var artist = Node(
             "artist:one",
             pluginId,
@@ -1692,7 +1696,7 @@ public sealed class RequestCommitServiceTests {
                 Target(second, RequestMediaKind.Album, secondIdentity)
             ]);
         var fanout = new FakeRequestAcquisitionFanoutScheduler();
-        var (service, _, acquisitions, _, _) = ReviewedService(
+        var (service, writer, acquisitions, _, _) = ReviewedService(
             artist,
             new FakeReviewSource(_ => review),
             fanout);
@@ -1719,6 +1723,15 @@ public sealed class RequestCommitServiceTests {
         Assert.Equal("Divide Music", scheduled.ContainerTitle);
         Assert.Equal(response.Items.Select(item => item.EntityId!.Value).ToHashSet(), scheduled.ChildEntityIds.ToHashSet());
         Assert.True(scheduled.HideNsfw);
+        var applied = Assert.Single(writer.Applied);
+        var appliedAlbums = applied.Proposal.Children
+            .Where(child => child.TargetKind == ProposalKind.AudioLibrary)
+            .ToArray();
+        Assert.Equal(2, appliedAlbums.Length);
+        Assert.All(appliedAlbums, child => {
+            Assert.NotNull(child.TargetEntityId);
+            Assert.Empty(child.Images);
+        });
     }
 
     [Fact]
@@ -1752,7 +1765,11 @@ public sealed class RequestCommitServiceTests {
             artist,
             new FakeReviewSource(_ => review),
             fanout);
-        writer.ExistingWanted.UnionWith([firstIdentity.Value, secondIdentity.Value]);
+        writer.ExistingWanted.UnionWith([
+            artistIdentity.Value,
+            firstIdentity.Value,
+            secondIdentity.Value
+        ]);
         acquisitions.EntitiesWithAcquisitions.UnionWith([
             FakeWantedEntityWriter.EntityIdFor(firstIdentity.Value),
             FakeWantedEntityWriter.EntityIdFor(secondIdentity.Value)
@@ -1774,6 +1791,7 @@ public sealed class RequestCommitServiceTests {
         });
         Assert.Empty(acquisitions.Created);
         Assert.Empty(fanout.Calls);
+        Assert.Empty(writer.Applied);
         Assert.Equal([response.ContainerEntityId!.Value], monitors.EntityLifecycleMutationIds);
         Assert.Equal(2, suppressions.Cleared.Distinct().Count());
     }
