@@ -132,6 +132,164 @@ public sealed class WantedEntityWriter(
     }
 
     /// <inheritdoc />
+    public async Task<IReadOnlyList<WantedEntityResult>> EnsureChildrenAsync(
+        Guid parentEntityId,
+        IReadOnlyList<WantedEntityEnsureRequest> requests,
+        CancellationToken cancellationToken) {
+        if (requests.Count == 0) {
+            return [];
+        }
+
+        var kind = requests[0].Kind;
+        if (requests.Any(request => request.Kind != kind)) {
+            throw new ArgumentException("A reviewed child batch must contain one Entity kind.", nameof(requests));
+        }
+        if (requests.Select(request => request.Identity).Distinct().Count() != requests.Count) {
+            throw new ArgumentException("A reviewed child batch cannot contain duplicate external identities.", nameof(requests));
+        }
+
+        IReadOnlyList<WantedEntityResult>? results = null;
+        await ExecuteIfLifecycleMutableAsync(
+            parentEntityId,
+            async leaseCancellationToken => {
+                var kindCode = kind.ToCode();
+                var identities = requests.Select(request => request.Identity).ToHashSet();
+                var namespaces = identities.Select(identity => identity.Namespace).Distinct().ToArray();
+                var values = identities.Select(identity => identity.Value).Distinct().ToArray();
+                var identityRows = await db.EntityExternalIds.AsNoTracking()
+                    .Where(row => namespaces.Contains(row.Provider.Trim().ToLower())
+                        && values.Contains(row.Value.Trim()))
+                    .ToArrayAsync(leaseCancellationToken);
+                var exactIdentityRows = identityRows
+                    .Select(row => (Row: row, Identity: TryIdentity(row.Provider, row.Value)))
+                    .Where(pair => pair.Identity is not null && identities.Contains(pair.Identity))
+                    .ToArray();
+                var candidateIds = exactIdentityRows.Select(pair => pair.Row.EntityId).Distinct().ToArray();
+                var identityEntities = await db.Entities
+                    .Where(row => candidateIds.Contains(row.Id)
+                        && row.KindCode == kindCode
+                        && row.ParentEntityId == parentEntityId)
+                    .ToDictionaryAsync(row => row.Id, leaseCancellationToken);
+
+                var entitiesByIdentity = exactIdentityRows
+                    .Where(pair => identityEntities.ContainsKey(pair.Row.EntityId))
+                    .GroupBy(pair => pair.Identity!)
+                    .ToDictionary(
+                        group => group.Key,
+                        group => group.Select(pair => pair.Row.EntityId).Distinct().Order().ToArray());
+                foreach (var (identity, entityIds) in entitiesByIdentity) {
+                    if (entityIds.Length <= 1) {
+                        continue;
+                    }
+
+                    var resolution = await externalIdentities.ResolveAsync(
+                        kind,
+                        [identity],
+                        parentEntityId,
+                        leaseCancellationToken);
+                    throw new ExternalIdentityAmbiguityException(kind, resolution);
+                }
+
+                var requestedTitles = requests
+                    .Select(request => request.Title.Trim().ToLower())
+                    .Distinct()
+                    .ToArray();
+                var titleCandidates = await db.Entities
+                    .Where(row => row.KindCode == kindCode
+                        && row.ParentEntityId == parentEntityId
+                        && requestedTitles.Contains(row.Title.ToLower()))
+                    .OrderBy(row => row.Id)
+                    .ToArrayAsync(leaseCancellationToken);
+                var titleCandidatesByTitle = titleCandidates
+                    .GroupBy(row => row.Title.Trim().ToLower())
+                    .ToDictionary(group => group.Key, group => new Queue<EntityRow>(group));
+                var allocatedTitleMatches = new HashSet<Guid>();
+                var now = DateTimeOffset.UtcNow;
+                var materialized = new List<(WantedEntityEnsureRequest Request, EntityRow Entity, bool Created)>(requests.Count);
+
+                foreach (var request in requests) {
+                    EntityRow? entity = null;
+                    if (entitiesByIdentity.TryGetValue(request.Identity, out var identityEntityIds)
+                        && identityEntityIds.Length == 1) {
+                        entity = identityEntities[identityEntityIds[0]];
+                        allocatedTitleMatches.Add(entity.Id);
+                    }
+
+                    if (entity is null
+                        && titleCandidatesByTitle.TryGetValue(request.Title.Trim().ToLower(), out var candidates)) {
+                        while (candidates.Count > 0 && entity is null) {
+                            var candidate = candidates.Dequeue();
+                            if (allocatedTitleMatches.Add(candidate.Id)) {
+                                entity = candidate;
+                            }
+                        }
+                    }
+
+                    if (entity is not null) {
+                        // Only a title fallback needs a new identity association. Exact identity matches
+                        // already carry the row used above; AddMissing preserves any other value already
+                        // claimed by this Entity for the same namespace.
+                        if (!entitiesByIdentity.ContainsKey(request.Identity)) {
+                            await StampExternalIdAsync(entity.Id, request.Identity, leaseCancellationToken);
+                        }
+                        materialized.Add((request, entity, Created: false));
+                        continue;
+                    }
+
+                    entity = new EntityRow {
+                        Id = Guid.NewGuid(),
+                        KindCode = kindCode,
+                        Title = request.Title.Trim(),
+                        ParentEntityId = parentEntityId,
+                        IsWanted = true,
+                        CreatedAt = now,
+                        UpdatedAt = now
+                    };
+                    db.Entities.Add(entity);
+                    AddDetailRowFor(kind, entity.Id);
+                    db.EntityExternalIds.Add(new EntityExternalIdRow {
+                        Id = Guid.NewGuid(),
+                        EntityId = entity.Id,
+                        Provider = request.Identity.Namespace,
+                        Value = request.Identity.Value,
+                        CreatedAt = now,
+                        UpdatedAt = now
+                    });
+                    materialized.Add((request, entity, Created: true));
+                }
+
+                await db.SaveChangesAsync(leaseCancellationToken);
+                var resolved = new List<WantedEntityResult>(materialized.Count);
+                foreach (var item in materialized) {
+                    if (item.Created) {
+                        resolved.Add(new WantedEntityResult(
+                            item.Entity.Id,
+                            Created: true,
+                            HasFile: false,
+                            RequestedRenditionOwned: false));
+                        continue;
+                    }
+
+                    var hasFile = await HasSourceFileAsync(item.Entity.Id, leaseCancellationToken);
+                    var hasRequestedRendition = await HasRequestedRenditionAsync(
+                        item.Entity.Id,
+                        item.Request.Kind,
+                        item.Request.BookRendition,
+                        leaseCancellationToken);
+                    resolved.Add(new WantedEntityResult(
+                        item.Entity.Id,
+                        Created: false,
+                        hasFile,
+                        hasRequestedRendition));
+                }
+
+                results = resolved;
+            },
+            cancellationToken);
+        return results ?? throw LifecycleConflict();
+    }
+
+    /// <inheritdoc />
     public async Task<bool> BindProviderIdentityAsync(
         Guid entityId,
         PluginIdentityRoute route,

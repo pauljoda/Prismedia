@@ -153,6 +153,10 @@ public enum JobType {
     [Code("acquisition-enrich")]
     AcquisitionEnrich,
 
+    /// <summary>Starts acquisitions for a reviewed container's committed children after the interactive response.</summary>
+    [Code("request-acquisition-fanout")]
+    RequestAcquisitionFanout,
+
     /// <summary>Purges recycle-bin entries older than the configured cleanup window.</summary>
     [Code("recycle-bin-cleanup")]
     RecycleBinCleanup

@@ -44,6 +44,24 @@ public interface IAcquisitionRequestService {
         AnyOpenForEntityAsync(entityId, cancellationToken);
 
     /// <summary>
+    /// Returns the requested Entity ids that already have actionable work for the same rendition.
+    /// Production adapters use one bounded query; the default preserves narrow test adapters.
+    /// </summary>
+    async Task<IReadOnlySet<Guid>> FilterOpenEntityIdsAsync(
+        IReadOnlyCollection<Guid> entityIds,
+        BookRendition? bookRendition,
+        CancellationToken cancellationToken) {
+        var result = new HashSet<Guid>();
+        foreach (var entityId in entityIds.Distinct()) {
+            if (await AnyOpenForEntityAsync(entityId, bookRendition, cancellationToken)) {
+                result.Add(entityId);
+            }
+        }
+
+        return result;
+    }
+
+    /// <summary>
     /// Every acquisition owned by this library Entity, including upgrade descendants whose stable
     /// ownership is inherited through <c>UpgradeOfAcquisitionId</c>. Destructive Entity lifecycles must
     /// close this complete graph so an in-flight replacement transfer cannot leak.
@@ -159,7 +177,7 @@ public interface IAcquisitionImportResetCleanup {
 /// Application use case for the acquisition lifecycle from the API's perspective: create an acquisition
 /// from request metadata and kick off a background release search, then list and read acquisition state.
 /// </summary>
-public sealed class AcquisitionService(
+public sealed partial class AcquisitionService(
     IAcquisitionStore store,
     IAcquisitionBlocklistStore blocklist,
     IJobQueueService queue,
@@ -1162,36 +1180,4 @@ public sealed class AcquisitionService(
         }
     }
 
-    /// <inheritdoc />
-    public Task<bool> AnyOpenForEntityAsync(Guid entityId, CancellationToken cancellationToken) =>
-        store.AnyOpenForEntityAsync(entityId, cancellationToken);
-
-    /// <inheritdoc />
-    public Task<bool> AnyOpenForEntityAsync(
-        Guid entityId,
-        BookRendition? bookRendition,
-        CancellationToken cancellationToken) =>
-        store.AnyOpenForEntityAsync(entityId, bookRendition, cancellationToken);
-
-    /// <inheritdoc />
-    public Task<IReadOnlyList<Guid>> ListIdsForEntityAsync(Guid entityId, CancellationToken cancellationToken) =>
-        store.ListIdsForEntityAsync(entityId, cancellationToken);
-
-    /// <summary>
-    /// The durable acquisition activity log, newest-first. <paramref name="limit"/> is clamped by the store
-    /// (default 200, max 500); <paramref name="entityId"/> optionally restricts it to one entity's events.
-    /// </summary>
-    public Task<IReadOnlyList<AcquisitionHistoryView>> ListHistoryAsync(int limit, Guid? entityId, CancellationToken cancellationToken) =>
-        history.ListAsync(limit, entityId, cancellationToken);
-
-    /// <summary>Records a durable Removed event for an acquisition being cancelled or deleted. Best-effort.</summary>
-    private Task RecordRemovedAsync(AcquisitionSummary summary, string message, CancellationToken cancellationToken) =>
-        history.SafeAddAsync(logger, new AcquisitionHistoryEntry(
-            summary.Id,
-            summary.EntityId,
-            summary.Kind,
-            AcquisitionHistoryEvent.Removed,
-            summary.Title,
-            Message: message),
-            cancellationToken);
 }

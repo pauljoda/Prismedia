@@ -235,6 +235,12 @@ const _JOB_DEFINITIONS = [
     description: "Fills provider metadata and artwork for request-created entities.",
   },
   {
+    type: JOB_TYPE.requestAcquisitionFanout,
+    queueName: "acquisition",
+    label: "Request Fan-out",
+    description: "Starts acquisition searches for children committed by a container request.",
+  },
+  {
     type: JOB_TYPE.monitoredSearch,
     queueName: "monitored-search",
     label: "Monitored Search",

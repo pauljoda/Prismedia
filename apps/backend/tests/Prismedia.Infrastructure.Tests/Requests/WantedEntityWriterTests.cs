@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Prismedia.Application.Entities;
 using Prismedia.Application.Plugins;
+using Prismedia.Application.Requests;
 using Prismedia.Domain.Entities;
 using Prismedia.Infrastructure.Entities;
 using Prismedia.Infrastructure.Persistence;
@@ -234,6 +235,49 @@ public sealed class WantedEntityWriterTests {
         Assert.Null((await db.MusicArtistDetails.AsNoTracking().FirstAsync(row => row.EntityId == artist.EntityId)).LibraryRootId);
         Assert.Null((await db.AudioLibraryDetails.AsNoTracking().FirstAsync(row => row.EntityId == album.EntityId)).LibraryRootId);
         Assert.Equal(artist.EntityId, (await db.Entities.AsNoTracking().FirstAsync(row => row.Id == album.EntityId)).ParentEntityId);
+    }
+
+    [Fact]
+    public async Task EnsureChildrenMaterializesReviewedAlbumsAsOneOrderedBatch() {
+        await using var db = CreateContext();
+        var artistId = AddEntity(db, EntityKindRegistry.MusicArtist.Code, "Divide Music", isWanted: true);
+        await db.SaveChangesAsync();
+        var writer = Writer(db);
+        var requests = new[] {
+            new WantedEntityEnsureRequest(
+                EntityKind.AudioLibrary,
+                new ExternalIdentity("musicbrainzreleasegroup", "RG1"),
+                "Same Title"),
+            new WantedEntityEnsureRequest(
+                EntityKind.AudioLibrary,
+                new ExternalIdentity("musicbrainzreleasegroup", "RG2"),
+                "Same Title"),
+            new WantedEntityEnsureRequest(
+                EntityKind.AudioLibrary,
+                new ExternalIdentity("musicbrainzreleasegroup", "RG3"),
+                "Third Album")
+        };
+
+        var created = await writer.EnsureChildrenAsync(artistId, requests, CancellationToken.None);
+        var reused = await writer.EnsureChildrenAsync(artistId, requests, CancellationToken.None);
+
+        Assert.Equal(3, created.Count);
+        Assert.All(created, result => Assert.True(result.Created));
+        Assert.Equal(created.Select(result => result.EntityId), reused.Select(result => result.EntityId));
+        Assert.All(reused, result => Assert.False(result.Created));
+        Assert.Equal(3, created.Select(result => result.EntityId).Distinct().Count());
+        Assert.Equal(3, await db.AudioLibraryDetails.AsNoTracking().CountAsync());
+        var albums = await db.Entities.AsNoTracking()
+            .Where(row => row.ParentEntityId == artistId)
+            .ToArrayAsync();
+        Assert.Equal(3, albums.Length);
+        var createdIds = created.Select(result => result.EntityId).ToArray();
+        var identities = await db.EntityExternalIds.AsNoTracking()
+            .Where(row => createdIds.Contains(row.EntityId))
+            .OrderBy(row => row.Value)
+            .Select(row => row.Value)
+            .ToArrayAsync();
+        Assert.Equal(["RG1", "RG2", "RG3"], identities);
     }
 
     [Fact]

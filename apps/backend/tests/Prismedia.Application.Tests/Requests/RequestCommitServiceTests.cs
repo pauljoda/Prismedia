@@ -1666,6 +1666,62 @@ public sealed class RequestCommitServiceTests {
     }
 
     [Fact]
+    public async Task ReviewedArtistDefersAlbumAcquisitionsAfterVisibleGraphCommit() {
+        var pluginId = "musicbrainz";
+        var artistIdentity = new ExternalIdentity("musicbrainzartist", "Artist:One");
+        var firstIdentity = new ExternalIdentity("musicbrainzreleasegroup", "Album:One");
+        var secondIdentity = new ExternalIdentity("musicbrainzreleasegroup", "Album:Two");
+        var first = Node("album:one", pluginId, ProposalKind.AudioLibrary, "First Album", firstIdentity);
+        var second = Node("album:two", pluginId, ProposalKind.AudioLibrary, "Second Album", secondIdentity);
+        var artist = Node(
+            "artist:one",
+            pluginId,
+            ProposalKind.MusicArtist,
+            "Divide Music",
+            artistIdentity,
+            first,
+            second);
+        var review = Review(
+            pluginId,
+            RequestMediaKind.Artist,
+            artistIdentity,
+            artist,
+            [
+                Target(artist, RequestMediaKind.Artist, artistIdentity),
+                Target(first, RequestMediaKind.Album, firstIdentity),
+                Target(second, RequestMediaKind.Album, secondIdentity)
+            ]);
+        var fanout = new FakeRequestAcquisitionFanoutScheduler();
+        var (service, _, acquisitions, _, _) = ReviewedService(
+            artist,
+            new FakeReviewSource(_ => review),
+            fanout);
+
+        var response = await service.CommitReviewedAsync(
+            new ReviewedRequestCommitRequest(
+                RequestMediaKind.Artist,
+                pluginId,
+                artistIdentity,
+                review.Revision,
+                [first.ProposalId, second.ProposalId]),
+            hideNsfw: true,
+            CancellationToken.None);
+
+        Assert.NotNull(response);
+        Assert.Empty(acquisitions.Created);
+        Assert.All(response.Items, item => {
+            Assert.Equal(RequestCommitOutcome.Requested, item.Outcome);
+            Assert.Null(item.AcquisitionId);
+        });
+        var scheduled = Assert.Single(fanout.Calls);
+        Assert.Equal(response.ContainerEntityId, scheduled.ContainerEntityId);
+        Assert.Equal(EntityKind.MusicArtist, scheduled.ContainerKind);
+        Assert.Equal("Divide Music", scheduled.ContainerTitle);
+        Assert.Equal(response.Items.Select(item => item.EntityId!.Value).ToHashSet(), scheduled.ChildEntityIds.ToHashSet());
+        Assert.True(scheduled.HideNsfw);
+    }
+
+    [Fact]
     public async Task ReviewedSeriesHydratesEpisodePhantomsThroughSamePluginAndPerNodeIdentities() {
         var pluginId = "series-metadata";
         var seriesIdentity = new ExternalIdentity("tmdb", "Series:One");
@@ -1954,7 +2010,8 @@ public sealed class RequestCommitServiceTests {
 
     private static (RequestCommitService Service, FakeWantedEntityWriter Writer, FakeAcquisitionRequestService Acquisitions, FakeMonitorStore Monitors, FakeSuppressionStore Suppressions) ReviewedService(
         EntityMetadataProposal proposal,
-        FakeReviewSource reviews) {
+        FakeReviewSource reviews,
+        IRequestAcquisitionFanoutScheduler? fanout = null) {
         var writer = new FakeWantedEntityWriter();
         var acquisitions = new FakeAcquisitionRequestService();
         var monitors = new FakeMonitorStore();
@@ -1966,7 +2023,8 @@ public sealed class RequestCommitServiceTests {
             acquisitions,
             monitors,
             suppressions,
-            new FakeEntityGiveUpService(writer));
+            new FakeEntityGiveUpService(writer),
+            fanout);
         return (service, writer, acquisitions, monitors, suppressions);
     }
 
@@ -2495,6 +2553,36 @@ public sealed class RequestCommitServiceTests {
 
         public Task<Guid?> ReacquireAsync(Guid id, CancellationToken cancellationToken) =>
             throw new NotSupportedException();
+    }
+
+    private sealed record FanoutCall(
+        Guid ContainerEntityId,
+        EntityKind ContainerKind,
+        string ContainerTitle,
+        IReadOnlyList<Guid> ChildEntityIds,
+        AcquisitionTargeting Targeting,
+        bool HideNsfw);
+
+    private sealed class FakeRequestAcquisitionFanoutScheduler : IRequestAcquisitionFanoutScheduler {
+        public List<FanoutCall> Calls { get; } = [];
+
+        public Task ScheduleAsync(
+            Guid containerEntityId,
+            EntityKind containerKind,
+            string containerTitle,
+            IReadOnlyList<Guid> childEntityIds,
+            AcquisitionTargeting targeting,
+            bool hideNsfw,
+            CancellationToken cancellationToken) {
+            Calls.Add(new FanoutCall(
+                containerEntityId,
+                containerKind,
+                containerTitle,
+                childEntityIds,
+                targeting,
+                hideNsfw));
+            return Task.CompletedTask;
+        }
     }
 
     private sealed class FakeEntityGiveUpService(FakeWantedEntityWriter writer) : IEntityGiveUpService {

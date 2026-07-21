@@ -1636,6 +1636,26 @@ public sealed class EfAcquisitionStore(PrismediaDbContext db, IAcquisitionHistor
                 && row.Status != AcquisitionStatus.Cancelled,
             cancellationToken);
 
+    /// <inheritdoc />
+    public async Task<IReadOnlySet<Guid>> FilterOpenEntityIdsAsync(
+        IReadOnlyCollection<Guid> entityIds,
+        BookRendition? bookRendition,
+        CancellationToken cancellationToken) {
+        var ids = entityIds.Distinct().ToArray();
+        if (ids.Length == 0) {
+            return new HashSet<Guid>();
+        }
+
+        return await db.Acquisitions.AsNoTracking()
+            .Where(row => row.EntityId != null
+                && ids.Contains(row.EntityId.Value)
+                && row.BookRendition == bookRendition
+                && row.Status != AcquisitionStatus.Imported
+                && row.Status != AcquisitionStatus.Cancelled)
+            .Select(row => row.EntityId!.Value)
+            .ToHashSetAsync(cancellationToken);
+    }
+
     public async Task<IReadOnlyList<Guid>> ListIdsForEntityAsync(
         Guid entityId,
         CancellationToken cancellationToken) {

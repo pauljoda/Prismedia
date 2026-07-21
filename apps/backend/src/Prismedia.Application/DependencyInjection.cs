@@ -55,6 +55,7 @@ public static class DependencyInjection {
         services.AddScoped<EntitySourcePathMutationCoordinator>();
         services.AddScoped<RequestPluginSearchService>();
         services.AddScoped<RequestEntityReviewService>();
+        services.AddScoped<IRequestAcquisitionFanoutScheduler, RequestAcquisitionFanoutScheduler>();
         services.AddScoped<RequestCommitService>();
         services.AddScoped<IMonitoredEntityRecovery>(sp => sp.GetRequiredService<RequestCommitService>());
         services.AddScoped<IRequestChildHydrator>(sp => sp.GetRequiredService<RequestCommitService>());
@@ -183,6 +184,7 @@ public static class DependencyInjection {
         services.AddTransient<IJobHandler, MonitoredSearchJobHandler>();
         services.AddTransient<IJobHandler, AcquisitionUpgradeReplaceJobHandler>();
         services.AddTransient<IJobHandler, AcquisitionEnrichJobHandler>();
+        services.AddTransient<IJobHandler, RequestAcquisitionFanoutJobHandler>();
 
         // Background services
         services.AddSingleton<WorkerRuntimeIdentity>();

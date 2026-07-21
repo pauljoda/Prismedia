@@ -724,6 +724,21 @@ public interface IAcquisitionStore : IAcquisitionLifecycleStore {
         CancellationToken cancellationToken) =>
         AnyOpenForEntityAsync(entityId, cancellationToken);
 
+    /// <summary>Batch form of the rendition-scoped duplicate check.</summary>
+    async Task<IReadOnlySet<Guid>> FilterOpenEntityIdsAsync(
+        IReadOnlyCollection<Guid> entityIds,
+        BookRendition? bookRendition,
+        CancellationToken cancellationToken) {
+        var result = new HashSet<Guid>();
+        foreach (var entityId in entityIds.Distinct()) {
+            if (await AnyOpenForEntityAsync(entityId, bookRendition, cancellationToken)) {
+                result.Add(entityId);
+            }
+        }
+
+        return result;
+    }
+
     /// <summary>The newest acquisition targeting this library entity with its candidates, or null when it has none.</summary>
     Task<AcquisitionDetail?> GetLatestForEntityAsync(Guid entityId, CancellationToken cancellationToken);
 

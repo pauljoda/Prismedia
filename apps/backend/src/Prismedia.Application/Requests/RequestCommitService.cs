@@ -73,6 +73,13 @@ public sealed record WantedEntityResult(
     public bool HasRequestedRendition => RequestedRenditionOwned ?? HasFile;
 }
 
+/// <summary>One reviewed entity skeleton to resolve or create beneath a committed container.</summary>
+public sealed record WantedEntityEnsureRequest(
+    EntityKind Kind,
+    ExternalIdentity Identity,
+    string Title,
+    BookRendition? BookRendition = null);
+
 /// <summary>
 /// A library entity read for monitoring/removal: its kind, display title, the external identities a
 /// discovery sync can re-resolve it from, and whether its canonical Entity subtree owns a source file.
@@ -147,6 +154,29 @@ public interface IWantedEntityWriter {
         CancellationToken cancellationToken,
         BookRendition? bookRendition) =>
         EnsureAsync(kind, identity, title, parentEntityId, matchTitleKindWide, cancellationToken);
+
+    /// <summary>
+    /// Resolves or creates a reviewed set of direct children while preserving input order. Production
+    /// adapters batch identity, ownership, and persistence work; the default preserves narrow adapters.
+    /// </summary>
+    async Task<IReadOnlyList<WantedEntityResult>> EnsureChildrenAsync(
+        Guid parentEntityId,
+        IReadOnlyList<WantedEntityEnsureRequest> requests,
+        CancellationToken cancellationToken) {
+        var results = new List<WantedEntityResult>(requests.Count);
+        foreach (var request in requests) {
+            results.Add(await EnsureAsync(
+                request.Kind,
+                request.Identity,
+                request.Title,
+                parentEntityId,
+                matchTitleKindWide: false,
+                cancellationToken,
+                request.BookRendition));
+        }
+
+        return results;
+    }
 
     /// <summary>
     /// Persists one exact, enabled plugin route as the Entity's monitoring/metadata identity without
@@ -246,7 +276,8 @@ public sealed partial class RequestCommitService(
     IAcquisitionRequestService acquisitions,
     Acquisition.IMonitorStore monitors,
     IWantedSuppressionStore suppressions,
-    IEntityGiveUpService entityGiveUp) : IMonitoredEntityRecovery, IRequestChildHydrator {
+    IEntityGiveUpService entityGiveUp,
+    IRequestAcquisitionFanoutScheduler? fanout = null) : IMonitoredEntityRecovery, IRequestChildHydrator {
     /// <summary>
     /// Commits a reviewed request. Returns null when the kind isn't committable, the identity-qualified
     /// id is malformed, or no plugin can resolve it; otherwise reports a per-item outcome (an
@@ -764,107 +795,6 @@ public sealed partial class RequestCommitService(
     }
 
     /// <summary>
-    /// Requests an entity from its own graph — no provider round-trip. The wanted entity is already
-    /// identified (that is the whole wanted design), so its title, positions (season/episode), and
-    /// ancestor titles (series, author, artist) are enough to search releases. Used for kinds whose
-    /// units cannot be provider-resolved standalone, and as the degrade path when providers fail.
-    /// </summary>
-    private async Task<RequestCommitResponse?> RequestFromEntityGraphAsync(
-        RequestKindDescriptor descriptor, MonitorableEntity entity, AcquisitionTargeting targeting, bool hideNsfw, CancellationToken cancellationToken) {
-        var primaryIdentity = entity.ProviderIdentity?.Identity
-            ?? entity.ExternalIdentities.FirstOrDefault();
-        // Ordinary owned leaves are already satisfied. Graph-acquired units are different: an existing
-        // child can still be explicitly monitored so the same acquisition loop searches for missing files
-        // or cutoff upgrades (season/episode and future album/track-style hierarchies share this path).
-        var requestOwnedEntity = descriptor.AcquireFromEntity;
-        if (entity.HasRendition(descriptor.BookRendition) && !requestOwnedEntity) {
-            return new RequestCommitResponse(null, [Item(RequestCommitOutcome.AlreadyOwned, null)]);
-        }
-
-        if (await acquisitions.AnyOpenForEntityAsync(entity.EntityId, descriptor.BookRendition, cancellationToken)) {
-            if (primaryIdentity is not null) {
-                await EnsurePhantomDescendantsAsync(
-                    descriptor,
-                    primaryIdentity,
-                    entity.EntityId,
-                    entity.ProviderIdentity?.PluginId,
-                    prepared: null,
-                    hideNsfw,
-                    cancellationToken);
-            }
-            return new RequestCommitResponse(null, [Item(RequestCommitOutcome.AlreadyRequested, null)]);
-        }
-
-        // Ancestor context: the nearest creator grouping names the author/artist, the nearest series
-        // names the TV context — the same drill-down rule the query ladder is built on.
-        string? creator = null;
-        string? series = null;
-        var parentId = entity.ParentEntityId;
-        var visitedAncestors = new HashSet<Guid>();
-        while (parentId is { } id && visitedAncestors.Add(id)) {
-            var ancestor = await wanted.GetEntityAsync(id, cancellationToken);
-            if (ancestor is null) {
-                break;
-            }
-
-            creator ??= ancestor.Kind is EntityKind.BookAuthor or EntityKind.MusicArtist ? ancestor.Title : null;
-            series ??= ancestor.Kind is EntityKind.VideoSeries or EntityKind.AudioLibrary ? ancestor.Title : null;
-            parentId = ancestor.ParentEntityId;
-        }
-
-        // A direct request un-blacklists the work, exactly like the provider path.
-        var intentIdentities = primaryIdentity is null
-            ? entity.ExternalIdentities
-            : [primaryIdentity];
-        await suppressions.ClearAsync(intentIdentities, cancellationToken);
-
-        var positions = entity.Positions ?? new Dictionary<string, int>();
-        var summary = await acquisitions.CreateAndSearchAsync(
-            new AcquisitionCreateRequest(
-                entity.Title,
-                creator,
-                series,
-                Year: null,
-                PosterUrl: null,
-                primaryIdentity?.Namespace,
-                primaryIdentity?.Value,
-                Description: null,
-                descriptor.AcquisitionKind,
-                entity.EntityId,
-                targeting.ProfileId,
-                targeting.TargetLibraryRootId,
-                positions.TryGetValue(EntityPositionCodes.Season, out var season) ? season : null,
-                positions.TryGetValue(EntityPositionCodes.Episode, out var episode) ? episode : null,
-                positions.TryGetValue(EntityPositionCodes.Volume, out var volume) ? volume : null,
-                descriptor.BookRendition),
-            cancellationToken);
-        await StartMonitorOrRollbackAcquisitionAsync(
-            summary.Id,
-            descriptor.AcquisitionKind,
-            entity.Title,
-            creator,
-            cancellationToken);
-        if (primaryIdentity is not null) {
-            await EnsurePhantomDescendantsAsync(
-                descriptor,
-                primaryIdentity,
-                entity.EntityId,
-                entity.ProviderIdentity?.PluginId,
-                prepared: null,
-                hideNsfw,
-                cancellationToken);
-        }
-        return new RequestCommitResponse(null, [Item(RequestCommitOutcome.Requested, summary.Id)]);
-
-        RequestCommitItem Item(RequestCommitOutcome outcome, Guid? acquisitionId) =>
-            new(
-                primaryIdentity is null
-                    ? entity.EntityId.ToString()
-                    : RequestProposalReading.FormatQualifiedIdentity(primaryIdentity),
-                entity.Title, outcome, entity.EntityId, acquisitionId);
-    }
-
-    /// <summary>
     /// Re-syncs a monitored container entity from its provider: resolves the container's proposal, and
     /// materializes any works selected by the container's discovery policy and sends them through the same
     /// generic monitored child-acquisition path as a direct child toggle. Per-child suppression remains
@@ -1031,15 +961,12 @@ public sealed partial class RequestCommitService(
                 .ToArray();
         }
 
-        var picks = new List<CommitPick>();
-        foreach (var childProposal in selectedChildren) {
-            var pick = await EnsurePickAsync(
-                child, childProposal, container.EntityId, cancellationToken,
-                requestOwnedEntity: explicitRequest && requestOwnedChildren && child.AcquireFromEntity);
-            if (pick is not null) {
-                picks.Add(pick);
-            }
-        }
+        var picks = await EnsurePicksAsync(
+            child,
+            selectedChildren,
+            container.EntityId,
+            cancellationToken,
+            requestOwnedEntity: explicitRequest && requestOwnedChildren && child.AcquireFromEntity);
 
         // Apply the proposal filtered to the picked (fileless) works: the cascade finds the pre-created
         // skeletons external-id-first and enriches them in place, and never materializes unpicked works.
@@ -1068,10 +995,34 @@ public sealed partial class RequestCommitService(
         var attachOwnedEntityMonitor = requestOwnedChildren
             || preset == MonitorPreset.All
             || !explicitRequest;
+        var deferredPicks = fanout is not null
+            && startAcquisitions
+            && explicitRequest
+            && descriptor.DeferChildPhantomHydration
+            ? picks.Where(pick => pick.Outcome == RequestCommitOutcome.Requested).ToArray()
+            : [];
+        var deferAcquisitions = deferredPicks.Length > 0;
+        if (deferAcquisitions) {
+            // The reviewed graph and its explicit un-suppression are committed before one durable job
+            // starts the ordinary per-child acquisition pipeline. This keeps the request response bounded
+            // by metadata persistence instead of every search/monitor/job round-trip.
+            await suppressions.ClearAsync(
+                picks.SelectMany(IdentitiesOf).Distinct().ToArray(),
+                cancellationToken);
+        }
+
         var items = new List<RequestCommitItem>();
         foreach (var pick in picks) {
-            items.Add(startAcquisitions
-                ? await StartAcquisitionAsync(
+            if (deferAcquisitions && pick.Outcome == RequestCommitOutcome.Requested) {
+                items.Add(new RequestCommitItem(
+                    RequestProposalReading.FormatQualifiedIdentity(pick.Identity),
+                    pick.Title,
+                    pick.Outcome,
+                    pick.Entity.EntityId,
+                    AcquisitionId: null));
+            } else {
+                items.Add(startAcquisitions
+                    ? await StartAcquisitionAsync(
                     pick,
                     child.AcquisitionKind,
                     child.BookRendition,
@@ -1089,6 +1040,7 @@ public sealed partial class RequestCommitService(
                     pick.Outcome,
                     pick.Entity.EntityId,
                     null));
+            }
 
             // A pick that nests further (a season's episodes) materializes its own children as wanted
             // phantoms — discovery only, never acquisitions; each phantom is requested from its page.
@@ -1102,6 +1054,17 @@ public sealed partial class RequestCommitService(
                     cancellationToken,
                     requireFreshProviderMetadata: !explicitRequest);
             }
+        }
+
+        if (deferAcquisitions) {
+            await fanout!.ScheduleAsync(
+                container.EntityId,
+                descriptor.WantedEntityKind,
+                containerTitle,
+                deferredPicks.Select(pick => pick.Entity.EntityId).ToArray(),
+                targeting,
+                hideNsfw,
+                cancellationToken);
         }
 
         return new RequestCommitResponse(container.EntityId, items);

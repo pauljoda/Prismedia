@@ -437,6 +437,7 @@ export const JOB_TYPE = {
   monitoredSearch: "monitored-search",
   acquisitionUpgradeReplace: "acquisition-upgrade-replace",
   acquisitionEnrich: "acquisition-enrich",
+  requestAcquisitionFanout: "request-acquisition-fanout",
   recycleBinCleanup: "recycle-bin-cleanup",
 } as const;
 
