@@ -51,9 +51,9 @@ public sealed class ScanAudioJobHandler(
     }
 
     /// <summary>
-    /// Materializes only the album folders touched by one import through the audio scanner's canonical
-    /// classifier, wanted binding, upserts, and downstream jobs. Existing tracks in those albums are
-    /// included so ordering remains stable; no root-wide stale cleanup is performed.
+    /// Materializes only the album folders touched by one album or individual-track import through the
+    /// audio scanner's canonical classifier, wanted binding, upserts, and downstream jobs. Existing tracks
+    /// in those albums are included so ordering remains stable; no root-wide stale cleanup is performed.
     /// </summary>
     public async Task MaterializeImportedPathsAsync(
         JobContext context,
@@ -98,6 +98,21 @@ public sealed class ScanAudioJobHandler(
         }
 
         if (acquisitionHints is not null) {
+            // A track acquisition links the Wanted track rather than its album. Bind its one exact placed
+            // file before the path-keyed upsert so the scanner reuses that stable Entity. A multi-file
+            // payload is intentionally left unbound because it cannot identify one requested track safely.
+            if (normalizedPaths.Length == 1
+                && await acquisitionHints.ResolveTargetEntityIdAsync(
+                    EntityKind.AudioTrack,
+                    acquisitionId,
+                    cancellationToken) is not null) {
+                await acquisitionHints.BindWantedEntityAsync(
+                    EntityKind.AudioTrack,
+                    normalizedPaths[0],
+                    cancellationToken,
+                    acquisitionId);
+            }
+
             foreach (var artist in layout.Artists) {
                 await acquisitionHints.BindWantedParentAsync(
                     EntityKind.MusicArtist,
@@ -108,6 +123,11 @@ public sealed class ScanAudioJobHandler(
 
             foreach (var album in layout.Albums) {
                 await acquisitionHints.BindWantedEntityAsync(
+                    EntityKind.AudioLibrary,
+                    album.Path,
+                    cancellationToken,
+                    acquisitionId);
+                await acquisitionHints.BindWantedParentAsync(
                     EntityKind.AudioLibrary,
                     album.Path,
                     cancellationToken,

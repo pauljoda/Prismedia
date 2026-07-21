@@ -164,6 +164,59 @@ public sealed class ImportedEntityMaterializationTests : IDisposable {
     }
 
     [Fact]
+    public async Task AudioTrackImportBindsWantedTrackBeforeImported() {
+        await using var db = CreateContext();
+        var rootPath = Directory.CreateDirectory(Path.Combine(_workRoot, "track-music")).FullName;
+        var payloadPath = Directory.CreateDirectory(Path.Combine(_workRoot, "track-download")).FullName;
+        await File.WriteAllTextAsync(Path.Combine(payloadPath, "01 - Had Enough.mp3"), "audio-bytes");
+        var root = new RootPersistence(rootPath, scanAudio: true);
+        var artistId = AddWantedEntity(db, EntityKind.MusicArtist, "Divide Music");
+        var albumId = AddWantedEntity(db, EntityKind.AudioLibrary, "Had Enough", artistId);
+        var trackId = AddWantedEntity(db, EntityKind.AudioTrack, "Had Enough", albumId);
+        var acquisitionId = await AddAcquisitionAsync(db, EntityKind.AudioTrack, trackId, "Had Enough");
+        var store = AcquisitionTestFactory.Store(db);
+        var materializer = AlbumMaterializer(db, root, EntityKind.AudioTrack);
+        var engine = new MusicAcquisitionImportEngine(
+            store,
+            new EfBookAcquisitionProfileStore(db),
+            root,
+            new DownloadPayloadReader(),
+            new ImportFileMover(),
+            Torrents(store),
+            new EfImportTargetIndex(db),
+            new EfAcquisitionBlocklistStore(db),
+            new EfAcquisitionHistoryStore(db),
+            materializer,
+            NullLogger<MusicAcquisitionImportEngine>.Instance,
+            kind: EntityKind.AudioTrack);
+        var import = new AcquisitionImportContext(
+            acquisitionId,
+            "Had Enough",
+            Author: "Divide Music",
+            Series: "Had Enough",
+            Year: 2025,
+            PosterUrl: null,
+            ExternalIdentity: null,
+            ProfileId: null,
+            ContentPath: payloadPath,
+            ClientItemId: null,
+            DownloadClientConfigId: null,
+            Kind: EntityKind.AudioTrack,
+            EntityId: trackId,
+            TargetLibraryRootId: root.Root.Id);
+
+        await engine.ImportAsync(JobContext(db, import.Id), import, CancellationToken.None);
+
+        Assert.False((await db.Entities.AsNoTracking().SingleAsync(row => row.Id == artistId)).IsWanted);
+        Assert.False((await db.Entities.AsNoTracking().SingleAsync(row => row.Id == albumId)).IsWanted);
+        var track = await db.Entities.AsNoTracking().SingleAsync(row => row.Id == trackId);
+        Assert.False(track.IsWanted);
+        Assert.True(await HasSourceInSubtreeAsync(db, trackId));
+        Assert.Equal(3, await db.Entities.AsNoTracking().CountAsync());
+        Assert.Equal(AcquisitionStatus.Imported, await StatusOfAsync(db, acquisitionId));
+    }
+
+    [Fact]
     public async Task AlbumCheckpointIncludesAudioAndCoverWhileReadinessUsesAudioOnly() {
         await using var db = CreateContext();
         var rootPath = Directory.CreateDirectory(Path.Combine(_workRoot, "music-checkpoint")).FullName;
@@ -370,7 +423,8 @@ public sealed class ImportedEntityMaterializationTests : IDisposable {
 
     private static IImportedEntityMaterializer AlbumMaterializer(
         PrismediaDbContext db,
-        RootPersistence root) {
+        RootPersistence root,
+        EntityKind kind = EntityKind.AudioLibrary) {
         var persistence = new LibraryScanPersistenceService(db);
         var hints = new AcquisitionHintApplier(db);
         var scan = new ScanAudioJobHandler(
@@ -380,7 +434,7 @@ public sealed class ImportedEntityMaterializationTests : IDisposable {
             persistence,
             persistence,
             acquisitionHints: hints);
-        return Materializer(db, new ImportedAlbumMaterializationPolicy(scan));
+        return Materializer(db, new ImportedAlbumMaterializationPolicy(scan, kind));
     }
 
     private static IImportedEntityMaterializer Materializer(
