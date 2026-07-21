@@ -25,6 +25,7 @@ namespace Prismedia.Infrastructure.Requests;
 /// <param name="providerIdentities">Persisted exact plugin route selected for the Entity.</param>
 /// <param name="identityRouter">Manifest-driven fallback for Entities created before bindings existed.</param>
 /// <param name="hierarchy">Canonical kind-agnostic Entity hierarchy reader used for source ownership.</param>
+/// <param name="sourceOwnership">Bounded source-ownership projection for reviewed child batches.</param>
 public sealed class WantedEntityWriter(
     PrismediaDbContext db,
     EntityMetadataApplyService apply,
@@ -32,6 +33,7 @@ public sealed class WantedEntityWriter(
     IEntityProviderIdentityStore providerIdentities,
     IPluginIdentityRouter identityRouter,
     IEntityHierarchyReader hierarchy,
+    IEntitySourceOwnershipReader sourceOwnership,
     IEntityLifecycleMutationLease? lifecycle = null) : IWantedEntityWriter {
     private readonly IEntityLifecycleMutationLease lifecycleLease =
         lifecycle ?? new EfEntityLifecycleMutationLease(db, hierarchy);
@@ -259,6 +261,14 @@ public sealed class WantedEntityWriter(
                 }
 
                 await db.SaveChangesAsync(leaseCancellationToken);
+                var existingIds = materialized
+                    .Where(item => !item.Created)
+                    .Select(item => item.Entity.Id)
+                    .Distinct()
+                    .ToArray();
+                var sourceBackedIds = await sourceOwnership.ResolveAsync(
+                    existingIds,
+                    leaseCancellationToken);
                 var resolved = new List<WantedEntityResult>(materialized.Count);
                 foreach (var item in materialized) {
                     if (item.Created) {
@@ -270,12 +280,14 @@ public sealed class WantedEntityWriter(
                         continue;
                     }
 
-                    var hasFile = await HasSourceFileAsync(item.Entity.Id, leaseCancellationToken);
-                    var hasRequestedRendition = await HasRequestedRenditionAsync(
-                        item.Entity.Id,
-                        item.Request.Kind,
-                        item.Request.BookRendition,
-                        leaseCancellationToken);
+                    var hasFile = sourceBackedIds.Contains(item.Entity.Id);
+                    var hasRequestedRendition = item.Request.Kind == EntityKind.Book
+                        ? await HasRequestedRenditionAsync(
+                            item.Entity.Id,
+                            item.Request.Kind,
+                            item.Request.BookRendition,
+                            leaseCancellationToken)
+                        : hasFile;
                     resolved.Add(new WantedEntityResult(
                         item.Entity.Id,
                         Created: false,

@@ -373,7 +373,8 @@ public sealed class MonitorServiceTests {
                 new EfEntityExternalIdentityStore(db, TimeProvider.System),
                 new EfEntityProviderIdentityStore(db, TimeProvider.System),
                 router,
-                new EfEntityHierarchyReader(db)),
+                new EfEntityHierarchyReader(db),
+                new EfEntitySourceOwnershipProjection(db)),
             trackingCatalog ?? new FakeTrackingCatalog(trackable),
             new EntityUnmonitorService(
                 new EfEntityUnmonitorPersistence(db, new EfEntityHierarchyReader(db)),

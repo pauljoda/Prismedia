@@ -995,17 +995,18 @@ public sealed partial class RequestCommitService(
         var attachOwnedEntityMonitor = requestOwnedChildren
             || preset == MonitorPreset.All
             || !explicitRequest;
-        var deferredPicks = fanout is not null
+        var useBatchedArtistCommit = fanout is not null
             && startAcquisitions
             && explicitRequest
-            && descriptor.DeferChildPhantomHydration
+            && descriptor.DeferChildPhantomHydration;
+        var deferredPicks = useBatchedArtistCommit
             ? picks.Where(pick => pick.Outcome == RequestCommitOutcome.Requested).ToArray()
             : [];
-        var deferAcquisitions = deferredPicks.Length > 0;
-        if (deferAcquisitions) {
+        if (useBatchedArtistCommit) {
             // The reviewed graph and its explicit un-suppression are committed before one durable job
             // starts the ordinary per-child acquisition pipeline. This keeps the request response bounded
-            // by metadata persistence instead of every search/monitor/job round-trip.
+            // by metadata persistence instead of every search/monitor/job round-trip. The same batch path
+            // handles repeat commits without taking one lifecycle lease per already-requested child.
             await suppressions.ClearAsync(
                 picks.SelectMany(IdentitiesOf).Distinct().ToArray(),
                 cancellationToken);
@@ -1013,7 +1014,9 @@ public sealed partial class RequestCommitService(
 
         var items = new List<RequestCommitItem>();
         foreach (var pick in picks) {
-            if (deferAcquisitions && pick.Outcome == RequestCommitOutcome.Requested) {
+            var needsOwnedEntityMonitor = pick.Outcome == RequestCommitOutcome.AlreadyOwned
+                && attachOwnedEntityMonitor;
+            if (useBatchedArtistCommit && !needsOwnedEntityMonitor) {
                 items.Add(new RequestCommitItem(
                     RequestProposalReading.FormatQualifiedIdentity(pick.Identity),
                     pick.Title,
@@ -1056,7 +1059,7 @@ public sealed partial class RequestCommitService(
             }
         }
 
-        if (deferAcquisitions) {
+        if (deferredPicks.Length > 0) {
             await fanout!.ScheduleAsync(
                 container.EntityId,
                 descriptor.WantedEntityKind,

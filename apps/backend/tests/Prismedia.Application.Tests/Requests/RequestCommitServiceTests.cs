@@ -1722,6 +1722,63 @@ public sealed class RequestCommitServiceTests {
     }
 
     [Fact]
+    public async Task ReviewedArtistRepeatBatchesAlreadyRequestedAlbumsWithoutPerAlbumLifecycleWork() {
+        var pluginId = "musicbrainz";
+        var artistIdentity = new ExternalIdentity("musicbrainzartist", "Artist:One");
+        var firstIdentity = new ExternalIdentity("musicbrainzreleasegroup", "Album:One");
+        var secondIdentity = new ExternalIdentity("musicbrainzreleasegroup", "Album:Two");
+        var first = Node("album:one", pluginId, ProposalKind.AudioLibrary, "First Album", firstIdentity);
+        var second = Node("album:two", pluginId, ProposalKind.AudioLibrary, "Second Album", secondIdentity);
+        var artist = Node(
+            "artist:one",
+            pluginId,
+            ProposalKind.MusicArtist,
+            "Divide Music",
+            artistIdentity,
+            first,
+            second);
+        var review = Review(
+            pluginId,
+            RequestMediaKind.Artist,
+            artistIdentity,
+            artist,
+            [
+                Target(artist, RequestMediaKind.Artist, artistIdentity),
+                Target(first, RequestMediaKind.Album, firstIdentity),
+                Target(second, RequestMediaKind.Album, secondIdentity)
+            ]);
+        var fanout = new FakeRequestAcquisitionFanoutScheduler();
+        var (service, writer, acquisitions, monitors, suppressions) = ReviewedService(
+            artist,
+            new FakeReviewSource(_ => review),
+            fanout);
+        writer.ExistingWanted.UnionWith([firstIdentity.Value, secondIdentity.Value]);
+        acquisitions.EntitiesWithAcquisitions.UnionWith([
+            FakeWantedEntityWriter.EntityIdFor(firstIdentity.Value),
+            FakeWantedEntityWriter.EntityIdFor(secondIdentity.Value)
+        ]);
+        var response = await service.CommitReviewedAsync(
+            new ReviewedRequestCommitRequest(
+                RequestMediaKind.Artist,
+                pluginId,
+                artistIdentity,
+                review.Revision,
+                [first.ProposalId, second.ProposalId]),
+            hideNsfw: false,
+            CancellationToken.None);
+
+        Assert.NotNull(response);
+        Assert.All(response.Items, item => {
+            Assert.Equal(RequestCommitOutcome.AlreadyRequested, item.Outcome);
+            Assert.Null(item.AcquisitionId);
+        });
+        Assert.Empty(acquisitions.Created);
+        Assert.Empty(fanout.Calls);
+        Assert.Equal([response.ContainerEntityId!.Value], monitors.EntityLifecycleMutationIds);
+        Assert.Equal(2, suppressions.Cleared.Distinct().Count());
+    }
+
+    [Fact]
     public async Task ReviewedSeriesHydratesEpisodePhantomsThroughSamePluginAndPerNodeIdentities() {
         var pluginId = "series-metadata";
         var seriesIdentity = new ExternalIdentity("tmdb", "Series:One");
@@ -2402,6 +2459,7 @@ public sealed class RequestCommitServiceTests {
         public AcquisitionTargeting? StoredTargeting { get; set; }
         public HashSet<Guid> DirectEntityIds { get; } = [];
         public Dictionary<Guid, MonitorStatus> EntityStatuses { get; } = [];
+        public List<Guid> EntityLifecycleMutationIds { get; } = [];
         public bool ThrowStoppingOnStart { get; set; }
         public Action? BeforeEntityMutation { get; set; }
         public Action? BeforeEntityIntentMutation { get; set; }
@@ -2461,6 +2519,7 @@ public sealed class RequestCommitServiceTests {
             Guid entityId,
             Func<CancellationToken, Task> mutation,
             CancellationToken cancellationToken) {
+            EntityLifecycleMutationIds.Add(entityId);
             BeforeEntityIntentMutation?.Invoke();
             if (await GetByEntityAsync(entityId, cancellationToken) is {
                     Status: MonitorStatus.Stopping or MonitorStatus.DeletingFiles

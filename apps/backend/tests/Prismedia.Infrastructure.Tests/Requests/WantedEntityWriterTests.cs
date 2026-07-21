@@ -259,12 +259,23 @@ public sealed class WantedEntityWriterTests {
         };
 
         var created = await writer.EnsureChildrenAsync(artistId, requests, CancellationToken.None);
+        var trackId = AddEntity(
+            db,
+            EntityKindRegistry.AudioTrack.Code,
+            "Track 1",
+            isWanted: false,
+            parentEntityId: created[0].EntityId);
+        AddSourceFile(db, trackId, "/media/audio/Divide Music/Same Title/01.flac");
+        await db.SaveChangesAsync();
         var reused = await writer.EnsureChildrenAsync(artistId, requests, CancellationToken.None);
 
         Assert.Equal(3, created.Count);
         Assert.All(created, result => Assert.True(result.Created));
         Assert.Equal(created.Select(result => result.EntityId), reused.Select(result => result.EntityId));
         Assert.All(reused, result => Assert.False(result.Created));
+        Assert.True(reused[0].HasFile);
+        Assert.False(reused[1].HasFile);
+        Assert.False(reused[2].HasFile);
         Assert.Equal(3, created.Select(result => result.EntityId).Distinct().Count());
         Assert.Equal(3, await db.AudioLibraryDetails.AsNoTracking().CountAsync());
         var albums = await db.Entities.AsNoTracking()
@@ -442,7 +453,8 @@ public sealed class WantedEntityWriterTests {
             new EfEntityExternalIdentityStore(db, TimeProvider.System),
             new EfEntityProviderIdentityStore(db, TimeProvider.System),
             identityRouter ?? new EmptyIdentityRouter(),
-            new EfEntityHierarchyReader(db));
+            new EfEntityHierarchyReader(db),
+            new EfEntitySourceOwnershipProjection(db));
 
     private sealed class EmptyIdentityRouter : IPluginIdentityRouter {
         public Task<IReadOnlyList<PluginIdentityRoute>> ResolveAsync(
