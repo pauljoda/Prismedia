@@ -1130,8 +1130,7 @@ public sealed class AcquisitionService(
                     PayloadJson: AcquisitionJobPayload.Serialize(summary.Id),
                     TargetEntityId: summary.Id.ToString(),
                     TargetLabel: summary.Title,
-                    Priority: JobPriorities.InteractiveRequest,
-                    Lane: JobRunLane.ForegroundIdentify),
+                    Priority: JobPriorities.RequestEnrichment),
                 cancellationToken);
         }
 

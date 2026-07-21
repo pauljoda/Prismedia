@@ -246,7 +246,7 @@ public sealed partial class RequestCommitService(
     IAcquisitionRequestService acquisitions,
     Acquisition.IMonitorStore monitors,
     IWantedSuppressionStore suppressions,
-    IEntityGiveUpService entityGiveUp) : IMonitoredEntityRecovery {
+    IEntityGiveUpService entityGiveUp) : IMonitoredEntityRecovery, IRequestChildHydrator {
     /// <summary>
     /// Commits a reviewed request. Returns null when the kind isn't committable, the identity-qualified
     /// id is malformed, or no plugin can resolve it; otherwise reports a per-item outcome (an
@@ -372,6 +372,10 @@ public sealed partial class RequestCommitService(
         ReviewedRequestSelection selection,
         bool hideNsfw,
         CancellationToken cancellationToken) {
+        if (rootDescriptor.DeferChildPhantomHydration) {
+            return new Dictionary<ExternalIdentity, PreparedPhantomDescendants>();
+        }
+
         var selectedDescriptor = rootDescriptor.IsContainer || !selection.SelectRoot
             ? RequestKindRegistry.ChildOf(rootDescriptor)
             : rootDescriptor;
@@ -707,6 +711,14 @@ public sealed partial class RequestCommitService(
         // Conservative SFW default, mirroring the discovery sweep: the fallback runs with no user
         // session, and the phantoms it requests were materialized under the same rule.
         var missing = await wanted.ListWantedChildIdsAsync(entityId, child.WantedEntityKind, cancellationToken);
+        if (missing.Count == 0 && descriptor!.MaterializeChildPhantoms) {
+            // Normally the post-request enrichment job has already built this graph. Hydrate lazily as
+            // a recovery net when that best-effort job was cancelled, missed its provider, or the user
+            // asks for missing children before it runs.
+            await HydrateAsync(entityId, hideNsfw: true, cancellationToken);
+            missing = await wanted.ListWantedChildIdsAsync(entityId, child.WantedEntityKind, cancellationToken);
+        }
+
         var covered = 0;
         foreach (var childId in missing) {
             var response = await RequestEntityAsync(childId, hideNsfw: true, cancellationToken);
@@ -1080,14 +1092,16 @@ public sealed partial class RequestCommitService(
 
             // A pick that nests further (a season's episodes) materializes its own children as wanted
             // phantoms — discovery only, never acquisitions; each phantom is requested from its page.
-            await EnsurePhantomDescendantsAsync(
-                child,
-                pick,
-                exactPluginId,
-                preparedDescendants?.GetValueOrDefault(pick.Identity),
-                hideNsfw,
-                cancellationToken,
-                requireFreshProviderMetadata: !explicitRequest);
+            if (!descriptor.DeferChildPhantomHydration) {
+                await EnsurePhantomDescendantsAsync(
+                    child,
+                    pick,
+                    exactPluginId,
+                    preparedDescendants?.GetValueOrDefault(pick.Identity),
+                    hideNsfw,
+                    cancellationToken,
+                    requireFreshProviderMetadata: !explicitRequest);
+            }
         }
 
         return new RequestCommitResponse(container.EntityId, items);

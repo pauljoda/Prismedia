@@ -36,10 +36,12 @@ public sealed class AcquisitionServiceTests {
         Assert.Equal(
             [JobType.AcquisitionSearch, JobType.AcquisitionEnrich],
             harness.Queue.Requests.Select(request => request.Type).ToArray());
-        Assert.All(harness.Queue.Requests, request => {
-            Assert.Equal(JobPriorities.InteractiveRequest, request.Priority);
-            Assert.Equal(JobRunLane.ForegroundIdentify, request.Lane);
-        });
+        var search = harness.Queue.Requests[0];
+        Assert.Equal(JobPriorities.InteractiveRequest, search.Priority);
+        Assert.Equal(JobRunLane.ForegroundIdentify, search.Lane);
+        var enrichment = harness.Queue.Requests[1];
+        Assert.Equal(JobPriorities.RequestEnrichment, enrichment.Priority);
+        Assert.Null(enrichment.Lane);
         Assert.Equal(AcquisitionStatus.Searching, created.Status);
         Assert.Equal(AcquisitionStatus.Searching, harness.Store.Status);
         Assert.Equal(0, harness.Lifecycle.ExecuteCalls);

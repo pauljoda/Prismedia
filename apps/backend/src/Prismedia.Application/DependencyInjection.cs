@@ -57,6 +57,7 @@ public static class DependencyInjection {
         services.AddScoped<RequestEntityReviewService>();
         services.AddScoped<RequestCommitService>();
         services.AddScoped<IMonitoredEntityRecovery>(sp => sp.GetRequiredService<RequestCommitService>());
+        services.AddScoped<IRequestChildHydrator>(sp => sp.GetRequiredService<RequestCommitService>());
         services.AddScoped<Acquisition.IndexerConfigCommandService>();
         services.AddScoped<Acquisition.DownloadClientCommandService>();
         services.AddScoped<Acquisition.BookAcquisitionProfileCommandService>();

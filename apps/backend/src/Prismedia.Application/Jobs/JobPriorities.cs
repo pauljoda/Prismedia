@@ -14,6 +14,12 @@ public static class JobPriorities {
     /// <summary>User-triggered acquisition searches and import handoffs share identify's foreground priority.</summary>
     public const int InteractiveRequest = InteractiveIdentify;
 
+    /// <summary>
+    /// Post-request metadata and structural hydration. Runs after every interactive acquisition search has
+    /// been claimed, but ahead of scan and asset backlogs so fallback graphs become ready promptly.
+    /// </summary>
+    public const int RequestEnrichment = 65;
+
     /// <summary>Library scan — creates the entities the UI shows. Highest so new media appears fast.</summary>
     public const int Scan = 60;
 

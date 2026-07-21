@@ -1616,6 +1616,56 @@ public sealed class RequestCommitServiceTests {
     }
 
     [Fact]
+    public async Task ReviewedArtistCommitsVisibleAlbumsWithoutSynchronouslyHydratingTracks() {
+        var pluginId = "musicbrainz";
+        var artistIdentity = new ExternalIdentity("musicbrainzartist", "Artist:One");
+        var albumIdentity = new ExternalIdentity("musicbrainzreleasegroup", "Album:One");
+        var album = Node(
+            "album:one",
+            pluginId,
+            ProposalKind.AudioLibrary,
+            "First Album",
+            albumIdentity);
+        var artist = Node(
+            "artist:one",
+            pluginId,
+            ProposalKind.MusicArtist,
+            "Divide Music",
+            artistIdentity,
+            album);
+        var review = Review(
+            pluginId,
+            RequestMediaKind.Artist,
+            artistIdentity,
+            artist,
+            [
+                Target(artist, RequestMediaKind.Artist, artistIdentity),
+                Target(album, RequestMediaKind.Album, albumIdentity)
+            ]);
+        var reviews = new FakeReviewSource(request =>
+            request.Kind == RequestMediaKind.Artist ? review : null);
+        var (service, writer, acquisitions, _, _) = ReviewedService(artist, reviews);
+
+        var response = await service.CommitReviewedAsync(
+            new ReviewedRequestCommitRequest(
+                RequestMediaKind.Artist,
+                pluginId,
+                artistIdentity,
+                review.Revision,
+                [album.ProposalId]),
+            hideNsfw: false,
+            CancellationToken.None);
+
+        Assert.NotNull(response);
+        Assert.Single(reviews.ReviewCalls);
+        Assert.Equal(RequestMediaKind.Artist, reviews.ReviewCalls[0].Kind);
+        Assert.Single(writer.Ensured, call => call.Kind == EntityKind.MusicArtist);
+        Assert.Single(writer.Ensured, call => call.Kind == EntityKind.AudioLibrary);
+        Assert.DoesNotContain(writer.Ensured, call => call.Kind == EntityKind.AudioTrack);
+        Assert.Single(acquisitions.Created);
+    }
+
+    [Fact]
     public async Task ReviewedSeriesHydratesEpisodePhantomsThroughSamePluginAndPerNodeIdentities() {
         var pluginId = "series-metadata";
         var seriesIdentity = new ExternalIdentity("tmdb", "Series:One");
@@ -1697,6 +1747,70 @@ public sealed class RequestCommitServiceTests {
                 Assert.Equal(pluginId, call.PluginId);
                 Assert.Equal(seasonIdentity, call.ExternalIdentity);
             });
+    }
+
+    [Fact]
+    public async Task BackgroundChildHydrationMaterializesAlbumTracksThroughItsPersistedPluginRoute() {
+        var pluginId = "musicbrainz";
+        var albumIdentity = new ExternalIdentity("musicbrainzreleasegroup", "Album:Hydrate");
+        var firstTrackIdentity = new ExternalIdentity("musicbrainzrecording", "Track:One");
+        var secondTrackIdentity = new ExternalIdentity("musicbrainzrecording", "Track:Two");
+        var firstTrack = Node(
+            "track:one",
+            pluginId,
+            ProposalKind.AudioTrack,
+            "First Track",
+            firstTrackIdentity);
+        var secondTrack = Node(
+            "track:two",
+            pluginId,
+            ProposalKind.AudioTrack,
+            "Second Track",
+            secondTrackIdentity);
+        var album = Node(
+            "album:hydrate",
+            pluginId,
+            ProposalKind.AudioLibrary,
+            "Hydrated Album",
+            albumIdentity,
+            firstTrack,
+            secondTrack);
+        var proposals = new FakeProposalSource(album) { FreshProposal = album };
+        var writer = new FakeWantedEntityWriter();
+        var acquisitions = new FakeAcquisitionRequestService();
+        var monitors = new FakeMonitorStore();
+        var suppressions = new FakeSuppressionStore();
+        var service = new RequestCommitService(
+            proposals,
+            new NullReviewSource(),
+            writer,
+            acquisitions,
+            monitors,
+            suppressions,
+            new FakeEntityGiveUpService(writer));
+        var albumEntityId = FakeWantedEntityWriter.EntityIdFor(albumIdentity.Value);
+        writer.Containers[albumEntityId] = new MonitorableEntity(
+            albumEntityId,
+            EntityKind.AudioLibrary,
+            "Hydrated Album",
+            [albumIdentity],
+            ProviderIdentity: new PluginIdentityRoute(pluginId, albumIdentity));
+
+        var result = await service.HydrateAsync(
+            albumEntityId,
+            hideNsfw: true,
+            CancellationToken.None);
+
+        Assert.NotNull(result);
+        Assert.True(result.Hydrated);
+        Assert.Equal(
+            new PluginIdentityRoute(pluginId, albumIdentity),
+            Assert.Single(proposals.FreshExactRoutes));
+        var tracks = writer.Ensured.Where(call => call.Kind == EntityKind.AudioTrack).ToArray();
+        Assert.Equal(["Track:One", "Track:Two"], tracks.Select(call => call.ItemId).ToArray());
+        Assert.All(tracks, call => Assert.Equal(albumEntityId, call.ParentEntityId));
+        Assert.Contains(writer.Applied, call =>
+            call.EntityId == albumEntityId && call.Proposal.Children.Count == 2);
     }
 
     [Fact]

@@ -6,15 +6,15 @@ using Prismedia.Domain.Entities;
 namespace Prismedia.Application.Jobs.Handlers;
 
 /// <summary>
-/// Enriches a request's held metadata from its originating metadata plugin: resolves the cover, fuller
-/// description, and dates by the persistent work identity (which lightweight request search often
-/// lacks) and fills only the gaps. Best-effort — a provider miss or error leaves the held metadata as-is and
-/// never disturbs the acquisition's state machine. The deeper, authoritative metadata pass (and children)
-/// still runs at import via auto-identify.
+/// Enriches a request from its originating metadata plugin after the interactive commit: resolves the
+/// cover, fuller description, and dates by persistent work identity and, for structural acquisition units,
+/// materializes their child graph from the same provider response. Best-effort — a provider miss or error
+/// leaves held metadata and acquisition state untouched; import still runs authoritative auto-identify.
 /// </summary>
 public sealed class AcquisitionEnrichJobHandler(
     IAcquisitionStore acquisitions,
     IRequestMetadataEnricher enricher,
+    IRequestChildHydrator childHydrator,
     ILogger<AcquisitionEnrichJobHandler> logger) : IJobHandler {
     public JobType Type => JobType.AcquisitionEnrich;
 
@@ -26,15 +26,25 @@ public sealed class AcquisitionEnrichJobHandler(
         }
 
         RequestMetadataEnrichment? enrichment;
+        RequestChildHydrationResult? childHydration = null;
         try {
             // Conservative SFW default: this background pass has no user session, and the request already
             // captured whatever the (already SFW-gated) search returned — so never pull NSFW-unrestricted
             // results here. An NSFW-flagged provider is skipped by the enricher.
-            enrichment = await enricher.LookupByIdAsync(
-                import.Kind,
-                externalIdentity,
-                hideNsfw: true,
-                cancellationToken);
+            if (import.EntityId is { } entityId) {
+                childHydration = await childHydrator.HydrateAsync(
+                    entityId,
+                    hideNsfw: true,
+                    cancellationToken);
+            }
+
+            enrichment = childHydration is null
+                ? await enricher.LookupByIdAsync(
+                    import.Kind,
+                    externalIdentity,
+                    hideNsfw: true,
+                    cancellationToken)
+                : childHydration.Enrichment;
         } catch (OperationCanceledException) {
             throw;
         } catch (Exception ex) {
@@ -42,11 +52,21 @@ public sealed class AcquisitionEnrichJobHandler(
             return;
         }
 
-        if (enrichment is null) {
+        if (enrichment is null && childHydration is not { Hydrated: true }) {
             return;
         }
 
-        await acquisitions.EnrichMetadataAsync(payload.AcquisitionId, enrichment.Description, enrichment.PosterUrl, enrichment.Year, cancellationToken);
-        await context.ReportProgressAsync(100, "Metadata enriched", cancellationToken);
+        if (enrichment is not null) {
+            await acquisitions.EnrichMetadataAsync(
+                payload.AcquisitionId,
+                enrichment.Description,
+                enrichment.PosterUrl,
+                enrichment.Year,
+                cancellationToken);
+        }
+        await context.ReportProgressAsync(
+            100,
+            childHydration is { Hydrated: true } ? "Metadata and child graph enriched" : "Metadata enriched",
+            cancellationToken);
     }
 }

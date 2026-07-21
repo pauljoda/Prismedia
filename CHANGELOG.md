@@ -153,6 +153,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Updated documentation, README screenshots, branding assets, install metadata, and app copy to match the current Prismedia v1 surface.
 
 ### Fixed
+- Artist requests now persist the reviewed artist and albums and start album searches immediately; album track graphs hydrate through prioritized background enrichment instead of serially blocking the request on one metadata lookup per selected album.
 - TV imports now reconcile byte-identical episodes that already reached the library—whether or not a concurrent scan indexed them first—instead of creating duplicates, demanding manual import, or blocklisting a release that already satisfied the request. Imports waiting behind a library scan also show that state explicitly.
 - Monitored series, authors, and artists now bypass cached provider proposals whenever checking for new releases and preserve each discovered work's plugin-declared identity across hierarchy levels (such as TMDB series → season → episode), so newly published seasons and episodes appear on the next tracking pass instead of being discarded.
 - Collection grids no longer crash when separate members resolve to the same artwork, and member accounts no longer wait tens of seconds for library visibility to be recalculated throughout every browse query.

@@ -55,20 +55,60 @@ public sealed class AcquisitionEnrichJobHandlerTests {
         Assert.Equal("http://held", (await db.Acquisitions.AsNoTracking().FirstAsync(a => a.Id == id)).PosterUrl);
     }
 
-    private static async Task RunAsync(PrismediaDbContext db, FakeEnricher enricher, Guid id) {
-        var handler = new AcquisitionEnrichJobHandler(AcquisitionTestFactory.Store(db), enricher, NullLogger<AcquisitionEnrichJobHandler>.Instance);
+    [Fact]
+    public async Task ChildHydrationReusesItsProviderResponseForAcquisitionMetadata() {
+        await using var db = CreateContext();
+        var entityId = Guid.NewGuid();
+        var id = await SeedAsync(
+            db,
+            identityNamespace: "musicbrainzreleasegroup",
+            identityValue: "RG1",
+            posterUrl: null,
+            entityId);
+        var enricher = new FakeEnricher(new RequestMetadataEnrichment("duplicate", "http://duplicate", 1999));
+        var childHydrator = new FakeChildHydrator(
+            new RequestChildHydrationResult(
+                Hydrated: true,
+                new RequestMetadataEnrichment("album detail", "http://covers/RG1.jpg", 2024)));
+
+        await RunAsync(db, enricher, id, childHydrator);
+
+        var row = await db.Acquisitions.AsNoTracking().FirstAsync(a => a.Id == id);
+        Assert.Equal(entityId, childHydrator.EntityId);
+        Assert.Null(enricher.LookedUp);
+        Assert.Equal("http://covers/RG1.jpg", row.PosterUrl);
+        Assert.Equal("album detail", row.Description);
+        Assert.Equal(2024, row.Year);
+    }
+
+    private static async Task RunAsync(
+        PrismediaDbContext db,
+        FakeEnricher enricher,
+        Guid id,
+        FakeChildHydrator? childHydrator = null) {
+        var handler = new AcquisitionEnrichJobHandler(
+            AcquisitionTestFactory.Store(db),
+            enricher,
+            childHydrator ?? new FakeChildHydrator(null),
+            NullLogger<AcquisitionEnrichJobHandler>.Instance);
         var job = new JobRunSnapshot(
             Guid.NewGuid(), JobType.AcquisitionEnrich, JobRunStatus.Running, 0, null,
             AcquisitionJobPayload.Serialize(id), null, null, null, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow, null);
         await handler.HandleAsync(new JobContext(job, new NoopJobQueue()), CancellationToken.None);
     }
 
-    private static async Task<Guid> SeedAsync(PrismediaDbContext db, string? identityNamespace, string? identityValue, string? posterUrl) {
+    private static async Task<Guid> SeedAsync(
+        PrismediaDbContext db,
+        string? identityNamespace,
+        string? identityValue,
+        string? posterUrl,
+        Guid? entityId = null) {
         var now = DateTimeOffset.UtcNow;
         var id = Guid.NewGuid();
         db.Acquisitions.Add(new AcquisitionRow {
             Id = id, Status = AcquisitionStatus.Pending, Title = "B", ExternalIdsJson = "{}", SourceUrlsJson = "[]",
-            IdentityNamespace = identityNamespace, IdentityValue = identityValue, PosterUrl = posterUrl, CreatedAt = now, UpdatedAt = now
+            IdentityNamespace = identityNamespace, IdentityValue = identityValue, PosterUrl = posterUrl,
+            EntityId = entityId, CreatedAt = now, UpdatedAt = now
         });
         await db.SaveChangesAsync();
         return id;
@@ -81,6 +121,18 @@ public sealed class AcquisitionEnrichJobHandlerTests {
         public string? LookedUp { get; private set; }
         public Task<RequestMetadataEnrichment?> LookupByIdAsync(EntityKind kind, ExternalIdentity identity, bool hideNsfw, CancellationToken cancellationToken) {
             LookedUp = RequestProposalReading.FormatQualifiedIdentity(identity);
+            return Task.FromResult(result);
+        }
+    }
+
+    private sealed class FakeChildHydrator(RequestChildHydrationResult? result) : IRequestChildHydrator {
+        public Guid? EntityId { get; private set; }
+
+        public Task<RequestChildHydrationResult?> HydrateAsync(
+            Guid entityId,
+            bool hideNsfw,
+            CancellationToken cancellationToken) {
+            EntityId = entityId;
             return Task.FromResult(result);
         }
     }

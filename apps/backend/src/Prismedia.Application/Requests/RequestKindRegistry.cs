@@ -51,6 +51,11 @@ namespace Prismedia.Application.Requests;
 /// True when acquiring this unit should hydrate its structural children as wanted phantoms. This is an
 /// explicit structural rule, distinct from sibling-option children such as a book series' other volumes.
 /// </param>
+/// <param name="DeferChildPhantomHydration">
+/// True for a container whose selected children's structural descendants should be hydrated by the
+/// post-request enrichment job instead of delaying the interactive container commit. The selected child
+/// metadata itself is still persisted and its acquisition starts synchronously.
+/// </param>
 /// <param name="BookRendition">Requested book rendition; null for non-book kinds and book containers.</param>
 public sealed record RequestKindDescriptor(
     RequestMediaKind Kind,
@@ -69,6 +74,7 @@ public sealed record RequestKindDescriptor(
     bool Discoverable = true,
     bool AcquireFromEntity = false,
     bool MaterializeChildPhantoms = false,
+    bool DeferChildPhantomHydration = false,
     BookRendition? BookRendition = null) {
     /// <summary>The plugin-protocol kind code for <see cref="PluginEntityKind"/>.</summary>
     public string PluginKindCode => PluginEntityKind.ToCode();
@@ -129,7 +135,8 @@ public static class RequestKindRegistry {
         new(RequestMediaKind.Artist, "Artist", "Artists", "album", EntityKind.MusicArtist, EntityKind.MusicArtist,
             ProfileEntityKind: EntityKind.AudioLibrary, LibraryRootMediaCapability: LibraryRootMediaCapability.ScanAudio,
             ReviewSelection: RequestReviewSelection.DirectChildren,
-            IsContainer: true, ChildKind: RequestMediaKind.Album, Committable: true, AcquisitionKind: EntityKind.AudioLibrary),
+            IsContainer: true, ChildKind: RequestMediaKind.Album, Committable: true, AcquisitionKind: EntityKind.AudioLibrary,
+            DeferChildPhantomHydration: true),
         new(RequestMediaKind.Album, "Album", "Albums", "track", EntityKind.AudioLibrary, EntityKind.AudioLibrary,
             ProfileEntityKind: EntityKind.AudioLibrary, LibraryRootMediaCapability: LibraryRootMediaCapability.ScanAudio,
             ReviewSelection: RequestReviewSelection.Root,
@@ -158,9 +165,8 @@ public static class RequestKindRegistry {
 
     /// <summary>
     /// Whether the descriptor exposes a direct child kind the request flow can actually commit. This is
-    /// deliberately independent of <see cref="RequestKindDescriptor.IsContainer"/>: books and seasons can
-    /// search missing children without running provider-container discovery, while an album currently has
-    /// neither even when requestable child Entities happen to be present in its library graph.
+    /// deliberately independent of <see cref="RequestKindDescriptor.IsContainer"/>: books, seasons, and
+    /// albums can search missing children without running provider-container discovery.
     /// </summary>
     public static bool CanSearchMissingChildren(RequestKindDescriptor descriptor) =>
         ChildOf(descriptor) is { Committable: true };
