@@ -474,6 +474,14 @@ public sealed class RequestEndpointTests {
     }
 
     private sealed class MovieProposalSource : IPluginRequestProposalSource {
+        public Task<EntityMetadataProposal?> ResolveFreshProposalAsync(
+            RequestKindDescriptor descriptor,
+            PluginIdentityRoute route,
+            bool hideNsfw,
+            bool includeChildren,
+            CancellationToken cancellationToken) =>
+            ResolveProposalAsync(descriptor, route, hideNsfw, includeChildren, cancellationToken);
+
         public Task<EntityMetadataProposal?> ResolveProposalAsync(
             RequestKindDescriptor descriptor,
             PluginIdentityRoute route,

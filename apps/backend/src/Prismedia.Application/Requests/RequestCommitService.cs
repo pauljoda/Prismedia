@@ -38,6 +38,18 @@ public interface IPluginRequestProposalSource {
         bool hideNsfw,
         bool includeChildren,
         CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Resolves through the explicitly selected plugin and identity route without accepting a cached
+    /// proposal. Monitoring uses this path so a provider's newly-published works and structural children
+    /// are visible on every tracking pass.
+    /// </summary>
+    Task<EntityMetadataProposal?> ResolveFreshProposalAsync(
+        RequestKindDescriptor descriptor,
+        PluginIdentityRoute route,
+        bool hideNsfw,
+        bool includeChildren,
+        CancellationToken cancellationToken);
 }
 
 /// <summary>Result of ensuring a wanted entity: the entity, whether this call created it, and whether it already owns a real file.</summary>
@@ -862,7 +874,7 @@ public sealed class RequestCommitService(
         foreach (var route in new[] { container.ProviderIdentity }) {
             var identity = route.Identity;
             // Conservative SFW default: the sweep has no user session (mirrors background enrichment).
-            var proposal = await proposals.ResolveProposalAsync(
+            var proposal = await proposals.ResolveFreshProposalAsync(
                 descriptor, route, hideNsfw: true, includeChildren: true, cancellationToken);
             if (proposal?.Patch is null) {
                 continue;
@@ -1068,7 +1080,8 @@ public sealed class RequestCommitService(
                 exactPluginId,
                 preparedDescendants?.GetValueOrDefault(pick.Identity),
                 hideNsfw,
-                cancellationToken);
+                cancellationToken,
+                requireFreshProviderMetadata: !explicitRequest);
         }
 
         return new RequestCommitResponse(container.EntityId, items);
@@ -1087,7 +1100,8 @@ public sealed class RequestCommitService(
         string? exactPluginId,
         PreparedPhantomDescendants? prepared,
         bool hideNsfw,
-        CancellationToken cancellationToken) =>
+        CancellationToken cancellationToken,
+        bool requireFreshProviderMetadata = false) =>
         EnsurePhantomDescendantsAsync(
             pickDescriptor,
             pick.Identity,
@@ -1095,7 +1109,8 @@ public sealed class RequestCommitService(
             exactPluginId,
             prepared,
             hideNsfw,
-            cancellationToken);
+            cancellationToken,
+            requireFreshProviderMetadata);
 
     private Task EnsurePhantomDescendantsAsync(
         RequestKindDescriptor pickDescriptor,
@@ -1111,7 +1126,8 @@ public sealed class RequestCommitService(
             exactPluginId: null,
             prepared: null,
             hideNsfw,
-            cancellationToken);
+            cancellationToken,
+            requireFreshProviderMetadata: false);
 
     private async Task EnsurePhantomDescendantsAsync(
         RequestKindDescriptor pickDescriptor,
@@ -1120,7 +1136,8 @@ public sealed class RequestCommitService(
         string? exactPluginId,
         PreparedPhantomDescendants? prepared,
         bool hideNsfw,
-        CancellationToken cancellationToken) {
+        CancellationToken cancellationToken,
+        bool requireFreshProviderMetadata = false) {
         var grandchild = RequestKindRegistry.ChildOf(pickDescriptor);
         if (!pickDescriptor.MaterializeChildPhantoms || grandchild is null) {
             return;
@@ -1136,12 +1153,20 @@ public sealed class RequestCommitService(
             proposal = prepared.Proposal;
             childProposals = prepared.Children;
         } else if (exactPluginId is not null) {
-            proposal = await proposals.ResolveProposalAsync(
-                pickDescriptor,
-                new PluginIdentityRoute(exactPluginId, identity),
-                hideNsfw,
-                includeChildren: true,
-                cancellationToken);
+            var route = new PluginIdentityRoute(exactPluginId, identity);
+            proposal = requireFreshProviderMetadata
+                ? await proposals.ResolveFreshProposalAsync(
+                    pickDescriptor,
+                    route,
+                    hideNsfw,
+                    includeChildren: true,
+                    cancellationToken)
+                : await proposals.ResolveProposalAsync(
+                    pickDescriptor,
+                    route,
+                    hideNsfw,
+                    includeChildren: true,
+                    cancellationToken);
             childProposals = proposal?.Patch is null
                 ? []
                 : ResolveLegacyStructuralChildren(identity.Namespace, proposal);

@@ -590,7 +590,8 @@ public sealed class RequestCommitServiceTests {
                 new PluginIdentityRoute("series-metadata", rootIdentity),
                 new PluginIdentityRoute("series-metadata", new ExternalIdentity("tmdb", "S1"))
             ],
-            source.ExactRoutes);
+            source.FreshExactRoutes);
+        Assert.Empty(source.ExactRoutes);
         Assert.Empty(source.IdentityOnlyLookups);
         Assert.Contains(writer.Ensured, call =>
             call.Kind == EntityKind.Video && call.ItemId == "E1");
@@ -1933,6 +1934,7 @@ public sealed class RequestCommitServiceTests {
     /// <summary>Resolves any node of the proposal tree by its provider item id — the shape of a plugin's per-item lookups.</summary>
     private sealed class FakeProposalSource(EntityMetadataProposal proposal) : IPluginRequestProposalSource {
         public List<PluginIdentityRoute> ExactRoutes { get; } = [];
+        public List<PluginIdentityRoute> FreshExactRoutes { get; } = [];
         public List<ExternalIdentity> IdentityOnlyLookups { get; } = [];
         public Action? AfterResolve { get; set; }
         public string? IdentityOnlyPluginIdOverride { get; set; }
@@ -1944,6 +1946,18 @@ public sealed class RequestCommitServiceTests {
             bool includeChildren,
             CancellationToken cancellationToken) {
             ExactRoutes.Add(route);
+            var resolved = FindByItemId(proposal, route.Identity.Namespace, route.Identity.Value);
+            AfterResolve?.Invoke();
+            return Task.FromResult(resolved);
+        }
+
+        public Task<EntityMetadataProposal?> ResolveFreshProposalAsync(
+            RequestKindDescriptor descriptor,
+            PluginIdentityRoute route,
+            bool hideNsfw,
+            bool includeChildren,
+            CancellationToken cancellationToken) {
+            FreshExactRoutes.Add(route);
             var resolved = FindByItemId(proposal, route.Identity.Namespace, route.Identity.Value);
             AfterResolve?.Invoke();
             return Task.FromResult(resolved);

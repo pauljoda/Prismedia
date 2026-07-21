@@ -299,6 +299,34 @@ public sealed class PluginRequestMetadataSourceRoutingTests : IDisposable {
         Assert.Single(runner.Calls);
     }
 
+    [Fact]
+    public async Task FreshResolutionBypassesAndReplacesTheExplicitProposalCache() {
+        await using var db = await CreateInstalledPluginAsync("cinema-metadata");
+        var catalog = Catalog(db);
+        var runner = new ProposalFactoryRunner((descriptor, request, call) =>
+            MovieProposal(descriptor.Manifest.Id, Assert.Single(request.Query.ExternalIds!), $"Revision {call}"));
+        var source = new PluginRequestMetadataSource(
+            catalog,
+            new PluginIdentityRouter(catalog),
+            new IdentifyRunnerSelector([runner]));
+        var descriptor = RequestKindRegistry.Find(RequestMediaKind.Movie)!;
+        var route = new PluginIdentityRoute(
+            "cinema-metadata",
+            new ExternalIdentity("tmdb", $"fresh:{Guid.NewGuid():N}"));
+
+        var first = await source.ResolveProposalAsync(
+            descriptor, route, hideNsfw: false, includeChildren: true, CancellationToken.None);
+        var fresh = await source.ResolveFreshProposalAsync(
+            descriptor, route, hideNsfw: false, includeChildren: true, CancellationToken.None);
+        var cachedFresh = await source.ResolveProposalAsync(
+            descriptor, route, hideNsfw: false, includeChildren: true, CancellationToken.None);
+
+        Assert.Equal("Revision 1", first!.Patch.Title);
+        Assert.Equal("Revision 2", fresh!.Patch.Title);
+        Assert.Equal("Revision 2", cachedFresh!.Patch.Title);
+        Assert.Equal(2, runner.Calls.Count);
+    }
+
     [Theory]
     [InlineData("provider")]
     [InlineData("identity")]

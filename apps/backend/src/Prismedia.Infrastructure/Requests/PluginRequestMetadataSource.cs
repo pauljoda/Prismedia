@@ -231,6 +231,7 @@ public sealed class PluginRequestMetadataSource(
             route,
             hideNsfw,
             includeChildren: true,
+            forceRefresh: false,
             cancellationToken);
         if (proposal?.Patch is null
             || !IsCompatibleTarget(descriptor, proposal.TargetKind)
@@ -277,6 +278,24 @@ public sealed class PluginRequestMetadataSource(
                 route,
                 hideNsfw,
                 includeChildren,
+                forceRefresh: false,
+                cancellationToken);
+
+    /// <inheritdoc />
+    public async Task<EntityMetadataProposal?> ResolveFreshProposalAsync(
+        RequestKindDescriptor descriptor,
+        PluginIdentityRoute route,
+        bool hideNsfw,
+        bool includeChildren,
+        CancellationToken cancellationToken) =>
+        await ValidateExplicitRouteAsync(descriptor.PluginEntityKind, route, hideNsfw, cancellationToken) is null
+            ? null
+            : await ResolveExplicitProposalAsync(
+                descriptor.PluginEntityKind,
+                route,
+                hideNsfw,
+                includeChildren,
+                forceRefresh: true,
                 cancellationToken);
 
     /// <summary>
@@ -306,6 +325,7 @@ public sealed class PluginRequestMetadataSource(
         PluginIdentityRoute route,
         bool hideNsfw,
         bool includeChildren,
+        bool forceRefresh,
         CancellationToken cancellationToken) {
         var cacheKey = new ProposalCacheKey(
             entityKind,
@@ -313,7 +333,9 @@ public sealed class PluginRequestMetadataSource(
             route.Identity,
             hideNsfw,
             includeChildren);
-        if (ProposalCache.TryGetValue(cacheKey, out var hit) && DateTimeOffset.UtcNow - hit.At < ProposalTtl) {
+        if (!forceRefresh
+            && ProposalCache.TryGetValue(cacheKey, out var hit)
+            && DateTimeOffset.UtcNow - hit.At < ProposalTtl) {
             if (MatchesExplicitRoute(hit.Resolved.Proposal, route)) {
                 return hit.Resolved.Proposal;
             }
