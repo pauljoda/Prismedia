@@ -54,6 +54,33 @@ public sealed class SlskdIndexerClientTests {
     }
 
     [Fact]
+    public async Task SearchWaitsForSlskdCompletionBeforeReadingResponses() {
+        var handler = new Handler(request => request.RequestUri!.AbsolutePath.EndsWith("/responses", StringComparison.Ordinal)
+            ? """[{"username":"peer","files":[{"filename":"Music\\Artist\\Album\\01 First.flac","size":100}]}]"""
+            : request.Method == HttpMethod.Post
+                ? """{"id":"33333333-3333-3333-3333-333333333333","state":"InProgress"}"""
+                : """{"id":"33333333-3333-3333-3333-333333333333","state":"Completed, TimedOut"}"""
+        );
+        var client = new SlskdIndexerClient(new HttpClient(handler));
+
+        var releases = await client.SearchAsync(
+            Connection(),
+            new IndexerQuery("Artist Album", [3000], EntityKind.AudioLibrary),
+            CancellationToken.None);
+
+        Assert.Single(releases);
+        Assert.Collection(
+            handler.Requests,
+            request => Assert.Equal(HttpMethod.Post, request.Method),
+            request => {
+                Assert.Equal(HttpMethod.Get, request.Method);
+                Assert.StartsWith("/api/v0/searches/", request.RequestUri!.AbsolutePath, StringComparison.Ordinal);
+                Assert.DoesNotContain("/responses", request.RequestUri.AbsolutePath, StringComparison.Ordinal);
+            },
+            request => Assert.EndsWith("/responses", request.RequestUri!.AbsolutePath, StringComparison.Ordinal));
+    }
+
+    [Fact]
     public async Task SoulseekSearchIsAudioOnly() {
         var handler = new Handler(_ => throw new InvalidOperationException("HTTP should not be called"));
         var client = new SlskdIndexerClient(new HttpClient(handler));

@@ -155,6 +155,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 - Artist requests now retain the reviewed album artwork URLs in the initial library graph, so album cards reuse the thumbnails already shown during review while background hydration localizes the image files.
+- Soulseek searches now wait for slskd's asynchronous search to finish before reading peer responses, preventing valid album or track results from being discarded while the search is still in progress.
 - Fixed large artist requests waiting on every album acquisition or cover download before returning: reviewed album entities, metadata, and provider routes are committed in one batch, while a durable background fan-out expands each album's track graph before publishing its acquisition search.
 - Album searches that find no acceptable complete release now start artist/album/track-qualified child searches immediately. Track hydration happens before the parent search, so individual-file sources such as Soulseek no longer wait for a later enrichment or monitoring pass.
 - TV imports now reconcile byte-identical episodes that already reached the library—whether or not a concurrent scan indexed them first—instead of creating duplicates, demanding manual import, or blocklisting a release that already satisfied the request. Imports waiting behind a library scan also show that state explicitly.

@@ -16,6 +16,7 @@ public static class SoulseekProtocol {
     public const string DownloadBatchesPath = "/api/v0/transfers/downloads/batches";
     public const string DownloadsPath = "/api/v0/transfers/downloads";
     public const string ServerPath = "/api/v0/server";
+    public const string SearchCompletedState = "Completed";
     public const string TransferCompletedState = "Completed";
     public const string TransferSucceededState = "Succeeded";
     public const string NormalizedFailedState = "Failed";
@@ -55,6 +56,8 @@ public static class SoulseekLocator {
 
 /// <summary>Searches the Soulseek network through slskd and normalizes peer folders/files as releases.</summary>
 public sealed partial class SlskdIndexerClient(HttpClient http) : IIndexerSearchClient {
+    private const int SearchCompletionPollAttempts = 60;
+    private static readonly TimeSpan SearchCompletionPollInterval = TimeSpan.FromMilliseconds(250);
     private static readonly IReadOnlySet<string> AudioExtensions = new HashSet<string>(StringComparer.OrdinalIgnoreCase) {
         ".mp3", ".flac", ".wav", ".ogg", ".aac", ".m4a", ".m4b", ".wma", ".opus",
         ".aiff", ".aif", ".alac", ".ape", ".dsf", ".dff", ".wv"
@@ -83,6 +86,8 @@ public sealed partial class SlskdIndexerClient(HttpClient http) : IIndexerSearch
         });
         using var started = await http.SendAsync(post, cancellationToken);
         await EnsureSuccessAsync(started, "search Soulseek", cancellationToken);
+        var search = await started.Content.ReadFromJsonAsync<SlskdSearchState>(SoulseekLocator.JsonOptions, cancellationToken);
+        await WaitForSearchCompletionAsync(connection, searchId, search?.State, cancellationToken);
 
         using var get = Request(connection, HttpMethod.Get, $"{SoulseekProtocol.SearchesPath}/{searchId}/responses");
         using var response = await http.SendAsync(get, cancellationToken);
@@ -92,6 +97,26 @@ public sealed partial class SlskdIndexerClient(HttpClient http) : IIndexerSearch
         return query.Kind == EntityKind.AudioTrack
             ? TrackReleases(query, searchId, peers)
             : AlbumReleases(query, searchId, peers);
+    }
+
+    private async Task WaitForSearchCompletionAsync(
+        IndexerConnection connection,
+        Guid searchId,
+        string? initialState,
+        CancellationToken cancellationToken) {
+        var state = initialState;
+        for (var attempt = 0; attempt < SearchCompletionPollAttempts; attempt++) {
+            if (HasState(state, SoulseekProtocol.SearchCompletedState)) return;
+
+            using var request = Request(connection, HttpMethod.Get, $"{SoulseekProtocol.SearchesPath}/{searchId}");
+            using var response = await http.SendAsync(request, cancellationToken);
+            await EnsureSuccessAsync(response, "read Soulseek search state", cancellationToken);
+            state = (await response.Content.ReadFromJsonAsync<SlskdSearchState>(SoulseekLocator.JsonOptions, cancellationToken))?.State;
+            if (HasState(state, SoulseekProtocol.SearchCompletedState)) return;
+            await Task.Delay(SearchCompletionPollInterval, cancellationToken);
+        }
+
+        throw new TimeoutException($"slskd search {searchId:D} did not complete; its last state was {state ?? "unknown"}.");
     }
 
     public async Task<IndexerConnectionTest> TestAsync(IndexerConnection connection, CancellationToken cancellationToken) {
@@ -176,6 +201,8 @@ public sealed partial class SlskdIndexerClient(HttpClient http) : IIndexerSearch
     private static string LastSegment(string path) => path.Split('\\', '/', StringSplitOptions.RemoveEmptyEntries).LastOrDefault() ?? path;
     private static string[] SignificantWords(string value) => Normalize(value).Split(' ', StringSplitOptions.RemoveEmptyEntries);
     private static string Normalize(string value) => NonWordRegex().Replace(value.ToLowerInvariant(), " ").Trim();
+    private static bool HasState(string? value, string state) => value?.Split(',', StringSplitOptions.TrimEntries)
+        .Contains(state, StringComparer.OrdinalIgnoreCase) == true;
 
     private static HttpRequestMessage Request(IndexerConnection connection, HttpMethod method, string path) {
         var request = new HttpRequestMessage(method, connection.BaseUrl.TrimEnd('/') + path);
@@ -204,6 +231,7 @@ public sealed partial class SlskdIndexerClient(HttpClient http) : IIndexerSearch
         int? BitDepth = null,
         int? BitRate = null,
         int? SampleRate = null);
+    private sealed record SlskdSearchState(string? State);
     private sealed record SlskdServerState(string? State, bool IsConnected, bool IsLoggedIn);
 }
 
