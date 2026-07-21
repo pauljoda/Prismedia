@@ -469,6 +469,42 @@ public sealed class RequestCommitServiceTests {
     }
 
     [Fact]
+    public async Task ContainerSyncDiscoversAWorkMissingFromTheInteractiveProposalCache() {
+        var cached = Container(ProposalKind.Person, "Author", "A1", Leaf(ProposalKind.Book, "Known", "W1"));
+        var fresh = Container(
+            ProposalKind.Person,
+            "Author",
+            "A1",
+            Leaf(ProposalKind.Book, "Known", "W1"),
+            Leaf(ProposalKind.Book, "Newly published", "W2"));
+        var source = new FakeProposalSource(cached) { FreshProposal = fresh };
+        var writer = new FakeWantedEntityWriter();
+        var acquisitions = new FakeAcquisitionRequestService();
+        var monitors = new FakeMonitorStore();
+        var service = new RequestCommitService(
+            source,
+            new NullReviewSource(),
+            writer,
+            acquisitions,
+            monitors,
+            new FakeSuppressionStore(),
+            new FakeEntityGiveUpService(writer));
+        var authorEntityId = FakeWantedEntityWriter.EntityIdFor("A1");
+        writer.Container = MonitoredContainer(
+            authorEntityId, EntityKind.BookAuthor, "Author", new ExternalIdentity(Provider, "A1"));
+        writer.ExistingWanted.Add("W1");
+        acquisitions.EntitiesWithAcquisitions.Add(FakeWantedEntityWriter.EntityIdFor("W1"));
+        monitors.DirectEntityIds.Add(authorEntityId);
+
+        Assert.True(await service.SyncContainerAsync(authorEntityId, CancellationToken.None));
+
+        Assert.Contains(writer.Ensured, call => call.ItemId == "W2");
+        Assert.Equal("W2", Assert.Single(acquisitions.Created).IdentityValue);
+        Assert.Single(source.FreshExactRoutes);
+        Assert.Empty(source.ExactRoutes);
+    }
+
+    [Fact]
     public async Task ContainerSyncWritesNothingWhenStoppingClaimWinsDuringProviderLookup() {
         var proposal = Container(
             ProposalKind.Person,
@@ -1938,6 +1974,7 @@ public sealed class RequestCommitServiceTests {
         public List<ExternalIdentity> IdentityOnlyLookups { get; } = [];
         public Action? AfterResolve { get; set; }
         public string? IdentityOnlyPluginIdOverride { get; set; }
+        public EntityMetadataProposal? FreshProposal { get; set; }
 
         public Task<EntityMetadataProposal?> ResolveProposalAsync(
             RequestKindDescriptor descriptor,
@@ -1958,7 +1995,10 @@ public sealed class RequestCommitServiceTests {
             bool includeChildren,
             CancellationToken cancellationToken) {
             FreshExactRoutes.Add(route);
-            var resolved = FindByItemId(proposal, route.Identity.Namespace, route.Identity.Value);
+            var resolved = FindByItemId(
+                FreshProposal ?? proposal,
+                route.Identity.Namespace,
+                route.Identity.Value);
             AfterResolve?.Invoke();
             return Task.FromResult(resolved);
         }

@@ -24,11 +24,11 @@ public sealed class PluginRequestMetadataSource(
     private static readonly string SearchAction = IdentifyAction.Search.ToCode();
     private static readonly string LookupIdAction = IdentifyAction.LookupId.ToCode();
 
-    // Resolved proposals are stable on the minutes scale, but every surface that reads one — request
-    // review, shared child-monitoring controls, a commit right after review, container
-    // sync — used to pay a fresh plugin round-trip each time. A short process-wide TTL cache makes
-    // repeat reads instant without holding provider data long enough to go stale. The source is
-    // scoped, hence the static cache; the cap bounds memory (proposals with children can be large).
+    // Resolved proposals are stable on the minutes scale, but interactive review and commit surfaces
+    // used to pay a fresh plugin round-trip for every repeat read. A short process-wide TTL cache keeps
+    // those transitions instant. Tracking explicitly bypasses it so provider discovery is fresh on every
+    // pass. The source is scoped, hence the static cache; the cap bounds memory (proposals with children
+    // can be large).
     private static readonly TimeSpan ProposalTtl = TimeSpan.FromMinutes(15);
     private const int ProposalCacheCap = 128;
     private static readonly System.Collections.Concurrent.ConcurrentDictionary<
