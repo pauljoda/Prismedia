@@ -5,12 +5,13 @@ import type { ReleaseCandidateView } from "$lib/api/generated/model";
 import ReleaseTable from "./ReleaseTable.svelte";
 
 describe("ReleaseTable", () => {
-  it("labels both usenet and torrent releases with protocol chips", () => {
+  it("labels every supported release protocol with its own chip", () => {
     render(ReleaseTable, {
       props: {
         candidates: [
           candidate({ id: "usenet-release", protocol: DOWNLOAD_PROTOCOL.usenet }),
           candidate({ id: "torrent-release", protocol: DOWNLOAD_PROTOCOL.torrent }),
+          candidate({ id: "soulseek-release", protocol: DOWNLOAD_PROTOCOL.soulseek }),
         ],
         canChoose: true,
         busy: false,
@@ -20,6 +21,7 @@ describe("ReleaseTable", () => {
 
     expect(screen.getAllByText("Usenet")).toHaveLength(2);
     expect(screen.getAllByText("Torrent")).toHaveLength(2);
+    expect(screen.getAllByText("Soulseek")).toHaveLength(2);
   });
 
   it("reveals release candidates ten at a time", async () => {

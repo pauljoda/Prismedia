@@ -91,7 +91,15 @@
   }
 
   function protocolLabel(protocol: ReleaseCandidateView["protocol"]): string {
-    return protocol === DOWNLOAD_PROTOCOL.usenet ? "Usenet" : "Torrent";
+    if (protocol === DOWNLOAD_PROTOCOL.usenet) return "Usenet";
+    if (protocol === DOWNLOAD_PROTOCOL.soulseek) return "Soulseek";
+    return "Torrent";
+  }
+
+  function protocolBadgeVariant(protocol: ReleaseCandidateView["protocol"]): "accent" | "default" | "info" {
+    if (protocol === DOWNLOAD_PROTOCOL.usenet) return "info";
+    if (protocol === DOWNLOAD_PROTOCOL.soulseek) return "accent";
+    return "default";
   }
 
   // Text keys default to A→Z; numeric keys default to high→low (best first).
@@ -230,7 +238,7 @@
           <td class="px-3 py-2">
             <div class="flex min-w-0 items-center gap-2">
               <div class="min-w-0 flex-1 truncate text-text-primary" title={row.title}>{row.title}</div>
-              <Badge variant={c.protocol === DOWNLOAD_PROTOCOL.usenet ? "info" : "default"} class="shrink-0">{protocolLabel(c.protocol)}</Badge>
+              <Badge variant={protocolBadgeVariant(c.protocol)} class="shrink-0">{protocolLabel(c.protocol)}</Badge>
             </div>
             {#if !c.accepted && c.rejections.length > 0}
               <div class="truncate text-[0.7rem] text-warning-text" title={rejectionText(c)}>{rejectionText(c)}</div>
@@ -286,7 +294,7 @@
         <div class="min-w-0 flex-1">
           <div class="flex flex-wrap items-center gap-2">
             <div class="min-w-0 flex-1 text-sm text-text-primary">{row.title}</div>
-            <Badge variant={c.protocol === DOWNLOAD_PROTOCOL.usenet ? "info" : "default"} class="shrink-0">{protocolLabel(c.protocol)}</Badge>
+            <Badge variant={protocolBadgeVariant(c.protocol)} class="shrink-0">{protocolLabel(c.protocol)}</Badge>
           </div>
           {#if row.category}<div class="mt-0.5 font-mono text-[0.62rem] text-text-muted">{row.category}</div>{/if}
           {#if !c.accepted && c.rejections.length > 0}
