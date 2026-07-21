@@ -182,6 +182,13 @@ public sealed class MonitoredSearchJobHandlerTests {
     }
 
     private sealed class NullProposalSource : Prismedia.Application.Requests.IPluginRequestProposalSource {
+        public Task<Prismedia.Contracts.Requests.RequestReviewResponse?> ResolveFreshReviewAsync(
+            Prismedia.Application.Requests.RequestKindDescriptor descriptor,
+            Prismedia.Application.Plugins.PluginIdentityRoute route,
+            bool hideNsfw,
+            CancellationToken cancellationToken) =>
+            Task.FromResult<Prismedia.Contracts.Requests.RequestReviewResponse?>(null);
+
         public Task<Prismedia.Contracts.Plugins.EntityMetadataProposal?> ResolveFreshProposalAsync(
             Prismedia.Application.Requests.RequestKindDescriptor descriptor,
             Prismedia.Application.Plugins.PluginIdentityRoute route,

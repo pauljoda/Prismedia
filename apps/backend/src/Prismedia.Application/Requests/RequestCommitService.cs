@@ -50,6 +50,17 @@ public interface IPluginRequestProposalSource {
         bool hideNsfw,
         bool includeChildren,
         CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Resolves a fresh proposal together with the plugin-manifest-validated persistent identity for
+    /// every requestable node. Container monitoring uses the returned targets instead of assuming that
+    /// descendants share the root identity namespace (for example TMDB series, seasons, and episodes do not).
+    /// </summary>
+    Task<RequestReviewResponse?> ResolveFreshReviewAsync(
+        RequestKindDescriptor descriptor,
+        PluginIdentityRoute route,
+        bool hideNsfw,
+        CancellationToken cancellationToken);
 }
 
 /// <summary>Result of ensuring a wanted entity: the entity, whether this call created it, and whether it already owns a real file.</summary>
@@ -874,23 +885,18 @@ public sealed class RequestCommitService(
         foreach (var route in new[] { container.ProviderIdentity }) {
             var identity = route.Identity;
             // Conservative SFW default: the sweep has no user session (mirrors background enrichment).
-            var proposal = await proposals.ResolveFreshProposalAsync(
-                descriptor, route, hideNsfw: true, includeChildren: true, cancellationToken);
+            var review = await proposals.ResolveFreshReviewAsync(
+                descriptor, route, hideNsfw: true, cancellationToken);
+            var proposal = review?.Proposal;
             if (proposal?.Patch is null) {
                 continue;
             }
 
             // Presets that do not auto-monitor new works pass no children, so a discovered work is never
             // materialized or acquired; the container is still touched (kept alive) but nothing new appears.
-            var childIds = autoMonitorsNewWorks
-                ? proposal.Children
-                    .Where(child => !child.TargetKind.IsRelationship())
-                    .Select(child => RequestProposalReading.QualifiedIdFor(identity.Namespace, child))
-                    .Where(id => id is not null)
-                    .Select(id => id!)
-                    .ToArray()
+            var selectedChildren = autoMonitorsNewWorks
+                ? ResolveReviewedStructuralChildren(proposal, review!.Targets)
                 : [];
-            var selectedChildren = SelectStructuralChildren(identity.Namespace, proposal, childIds);
 
             // Provider resolution can be slow. Materialization runs under the exact direct monitor's
             // Active lease; recursive unmonitor claims contend on the same database row. If cleanup wins,
@@ -1154,22 +1160,27 @@ public sealed class RequestCommitService(
             childProposals = prepared.Children;
         } else if (exactPluginId is not null) {
             var route = new PluginIdentityRoute(exactPluginId, identity);
-            proposal = requireFreshProviderMetadata
-                ? await proposals.ResolveFreshProposalAsync(
+            if (requireFreshProviderMetadata) {
+                var review = await proposals.ResolveFreshReviewAsync(
                     pickDescriptor,
                     route,
                     hideNsfw,
-                    includeChildren: true,
-                    cancellationToken)
-                : await proposals.ResolveProposalAsync(
+                    cancellationToken);
+                proposal = review?.Proposal;
+                childProposals = proposal?.Patch is null
+                    ? []
+                    : ResolveReviewedStructuralChildren(proposal, review!.Targets);
+            } else {
+                proposal = await proposals.ResolveProposalAsync(
                     pickDescriptor,
                     route,
                     hideNsfw,
                     includeChildren: true,
                     cancellationToken);
-            childProposals = proposal?.Patch is null
-                ? []
-                : ResolveLegacyStructuralChildren(identity.Namespace, proposal);
+                childProposals = proposal?.Patch is null
+                    ? []
+                    : ResolveLegacyStructuralChildren(identity.Namespace, proposal);
+            }
         } else {
             var resolved = await proposals.ResolveProposalAsync(
                 pickDescriptor,
@@ -1598,6 +1609,25 @@ public sealed class RequestCommitService(
             .Where(item => item.Identity is not null)
             .Select(item => new ResolvedRequestProposalNode(item.Proposal, item.Identity!))
             .ToArray();
+
+    /// <summary>
+    /// Direct structural children paired with the canonical identities selected from the plugin manifest.
+    /// Proposal external-id bags can contain several namespaces and descendant namespaces commonly differ
+    /// from their parent, so proposal id is the stable join between the reviewed tree and its targets.
+    /// </summary>
+    private static IReadOnlyList<ResolvedRequestProposalNode> ResolveReviewedStructuralChildren(
+        EntityMetadataProposal proposal,
+        IReadOnlyList<RequestReviewTarget> targets) {
+        var identitiesByProposalId = targets
+            .Where(target => target.Requestable)
+            .GroupBy(target => target.ProposalId, StringComparer.Ordinal)
+            .ToDictionary(group => group.Key, group => group.First().ExternalIdentity, StringComparer.Ordinal);
+        return proposal.Children
+            .Where(child => !child.TargetKind.IsRelationship())
+            .Where(child => identitiesByProposalId.ContainsKey(child.ProposalId))
+            .Select(child => new ResolvedRequestProposalNode(child, identitiesByProposalId[child.ProposalId]))
+            .ToArray();
+    }
 
     private static string TitleOr(string? title, string fallback) =>
         string.IsNullOrWhiteSpace(title) ? fallback : title.Trim();

@@ -583,19 +583,19 @@ public sealed class RequestCommitServiceTests {
     }
 
     [Fact]
-    public async Task BoundContainerSyncKeepsTheExactPluginForDescendantLookups() {
-        var proposal = Rekey(
-            Container(
-                ProposalKind.VideoSeries,
-                "Series",
-                "TV1",
-                Container(
-                    ProposalKind.VideoSeason,
-                    "Season 1",
-                    "S1",
-                    Leaf(ProposalKind.Video, "Episode 1", "E1"))),
-            identityNamespace: "tmdb",
+    public async Task BoundContainerSyncKeepsTheExactPluginAndUsesDeclaredDescendantIdentityNamespaces() {
+        var episode = Rekey(
+            Leaf(ProposalKind.Video, "Episode 1", "TV1:1:1"),
+            identityNamespace: "tmdbepisode",
             pluginId: "series-metadata");
+        var season = Rekey(
+            Container(ProposalKind.VideoSeason, "Season 1", "TV1:1"),
+            identityNamespace: "tmdbseason",
+            pluginId: "series-metadata") with { Children = [episode] };
+        var proposal = Rekey(
+            Container(ProposalKind.VideoSeries, "Series", "TV1"),
+            identityNamespace: "tmdb",
+            pluginId: "series-metadata") with { Children = [season] };
         var source = new FakeProposalSource(proposal);
         var writer = new FakeWantedEntityWriter();
         var acquisitions = new FakeAcquisitionRequestService();
@@ -624,14 +624,16 @@ public sealed class RequestCommitServiceTests {
         Assert.Equal(
             [
                 new PluginIdentityRoute("series-metadata", rootIdentity),
-                new PluginIdentityRoute("series-metadata", new ExternalIdentity("tmdb", "S1"))
+                new PluginIdentityRoute("series-metadata", new ExternalIdentity("tmdbseason", "TV1:1"))
             ],
             source.FreshExactRoutes);
         Assert.Empty(source.ExactRoutes);
         Assert.Empty(source.IdentityOnlyLookups);
         Assert.Contains(writer.Ensured, call =>
-            call.Kind == EntityKind.Video && call.ItemId == "E1");
-        Assert.Equal(EntityKind.VideoSeason, Assert.Single(acquisitions.Created).Kind);
+            call.Kind == EntityKind.Video && call.ItemId == "TV1:1:1");
+        var acquisition = Assert.Single(acquisitions.Created);
+        Assert.Equal(EntityKind.VideoSeason, acquisition.Kind);
+        Assert.Equal(("tmdbseason", "TV1:1"), (acquisition.IdentityNamespace, acquisition.IdentityValue));
         Assert.Single(monitors.AcquisitionMonitors);
     }
 
@@ -1976,6 +1978,22 @@ public sealed class RequestCommitServiceTests {
         public string? IdentityOnlyPluginIdOverride { get; set; }
         public EntityMetadataProposal? FreshProposal { get; set; }
 
+        public Task<RequestReviewResponse?> ResolveFreshReviewAsync(
+            RequestKindDescriptor descriptor,
+            PluginIdentityRoute route,
+            bool hideNsfw,
+            CancellationToken cancellationToken) {
+            FreshExactRoutes.Add(route);
+            var resolved = FindByItemId(
+                FreshProposal ?? proposal,
+                route.Identity.Namespace,
+                route.Identity.Value);
+            AfterResolve?.Invoke();
+            return Task.FromResult(resolved is null
+                ? null
+                : FreshReview(descriptor, route, resolved));
+        }
+
         public Task<EntityMetadataProposal?> ResolveProposalAsync(
             RequestKindDescriptor descriptor,
             PluginIdentityRoute route,
@@ -2031,6 +2049,56 @@ public sealed class RequestCommitServiceTests {
             }
 
             return null;
+        }
+
+        private static RequestReviewResponse FreshReview(
+            RequestKindDescriptor descriptor,
+            PluginIdentityRoute route,
+            EntityMetadataProposal resolved) {
+            var targets = new List<RequestReviewTarget>();
+            AddTargets(resolved, descriptor, route.Identity, targets);
+            return new RequestReviewResponse(
+                route.PluginId,
+                route.Identity,
+                resolved.TargetKind.ToEntityKind(),
+                descriptor.Kind,
+                resolved,
+                RequestProposalRevision.Compute(resolved),
+                targets);
+        }
+
+        private static void AddTargets(
+            EntityMetadataProposal node,
+            RequestKindDescriptor descriptor,
+            ExternalIdentity identity,
+            ICollection<RequestReviewTarget> targets) {
+            targets.Add(Target(
+                node,
+                descriptor.Kind,
+                identity,
+                node.TargetKind.ToEntityKind(),
+                RequestProposalReading.ChildNumberOf(descriptor.Kind, node.Patch!)));
+            var childDescriptor = RequestKindRegistry.ChildOf(descriptor);
+            if (childDescriptor is null) {
+                return;
+            }
+
+            foreach (var child in node.Children.Where(candidate => !candidate.TargetKind.IsRelationship())) {
+                if (child.Patch is not { } patch) {
+                    continue;
+                }
+
+                var externalId = patch.ExternalIds.FirstOrDefault();
+                if (string.IsNullOrWhiteSpace(externalId.Key) || string.IsNullOrWhiteSpace(externalId.Value)) {
+                    continue;
+                }
+
+                AddTargets(
+                    child,
+                    childDescriptor,
+                    new ExternalIdentity(externalId.Key, externalId.Value),
+                    targets);
+            }
         }
     }
 

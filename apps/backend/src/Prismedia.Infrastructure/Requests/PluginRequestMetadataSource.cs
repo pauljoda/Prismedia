@@ -208,19 +208,26 @@ public sealed class PluginRequestMetadataSource(
     public async Task<RequestReviewResponse?> ReviewAsync(
         RequestReviewRequest request,
         bool hideNsfw,
-        CancellationToken cancellationToken) =>
-        await ResolveReviewAsync(request, hideNsfw, cancellationToken);
-
-    private async Task<RequestReviewResponse?> ResolveReviewAsync(
-        RequestReviewRequest request,
-        bool hideNsfw,
         CancellationToken cancellationToken) {
         var descriptor = RequestKindRegistry.Find(request.Kind);
         if (descriptor is null || string.IsNullOrWhiteSpace(request.PluginId) || request.ExternalIdentity is null) {
             return null;
         }
 
-        var route = new PluginIdentityRoute(request.PluginId, request.ExternalIdentity);
+        return await ResolveReviewAsync(
+            descriptor,
+            new PluginIdentityRoute(request.PluginId, request.ExternalIdentity),
+            hideNsfw,
+            forceRefresh: false,
+            cancellationToken);
+    }
+
+    private async Task<RequestReviewResponse?> ResolveReviewAsync(
+        RequestKindDescriptor descriptor,
+        PluginIdentityRoute route,
+        bool hideNsfw,
+        bool forceRefresh,
+        CancellationToken cancellationToken) {
         var provider = await ValidateExplicitRouteAsync(descriptor.PluginEntityKind, route, hideNsfw, cancellationToken);
         if (provider is null) {
             return null;
@@ -231,7 +238,7 @@ public sealed class PluginRequestMetadataSource(
             route,
             hideNsfw,
             includeChildren: true,
-            forceRefresh: false,
+            forceRefresh,
             cancellationToken);
         if (proposal?.Patch is null
             || !IsCompatibleTarget(descriptor, proposal.TargetKind)
@@ -255,6 +262,14 @@ public sealed class PluginRequestMetadataSource(
             Revision: RequestProposalRevision.Compute(proposal),
             Targets: targets);
     }
+
+    /// <inheritdoc />
+    public Task<RequestReviewResponse?> ResolveFreshReviewAsync(
+        RequestKindDescriptor descriptor,
+        PluginIdentityRoute route,
+        bool hideNsfw,
+        CancellationToken cancellationToken) =>
+        ResolveReviewAsync(descriptor, route, hideNsfw, forceRefresh: true, cancellationToken);
 
     public Task<RoutedRequestProposal?> ResolveProposalAsync(
         RequestKindDescriptor descriptor, ExternalIdentity identity, bool hideNsfw, bool includeChildren, CancellationToken cancellationToken) =>

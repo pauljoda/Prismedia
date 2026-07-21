@@ -151,7 +151,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Updated documentation, README screenshots, branding assets, install metadata, and app copy to match the current Prismedia v1 surface.
 
 ### Fixed
-- Monitored series, authors, and artists now bypass cached provider proposals whenever checking for new releases, including nested season/episode discovery, so newly published provider data appears on the next tracking pass.
+- Monitored series, authors, and artists now bypass cached provider proposals whenever checking for new releases and preserve each discovered work's plugin-declared identity across hierarchy levels (such as TMDB series → season → episode), so newly published seasons and episodes appear on the next tracking pass instead of being discarded.
 - Collection grids no longer crash when separate members resolve to the same artwork, and member accounts no longer wait tens of seconds for library visibility to be recalculated throughout every browse query.
 - Collection grids no longer stall while resolving fallback member artwork in large libraries; visibility checks are now scoped to the collection's actual members.
 - Request searches and metadata enrichment now use the same foreground priority as manual Identify work, while completed downloads enter the import pipeline ahead of background scans.

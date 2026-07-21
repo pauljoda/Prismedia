@@ -474,6 +474,27 @@ public sealed class RequestEndpointTests {
     }
 
     private sealed class MovieProposalSource : IPluginRequestProposalSource {
+        public Task<RequestReviewResponse?> ResolveFreshReviewAsync(
+            RequestKindDescriptor descriptor,
+            PluginIdentityRoute route,
+            bool hideNsfw,
+            CancellationToken cancellationToken) {
+            var proposal = Proposal(route.Identity);
+            return Task.FromResult<RequestReviewResponse?>(new RequestReviewResponse(
+                route.PluginId,
+                route.Identity,
+                EntityKind.Movie,
+                descriptor.Kind,
+                proposal,
+                "revision",
+                [new RequestReviewTarget(
+                    proposal.ProposalId,
+                    descriptor.Kind,
+                    EntityKind.Movie,
+                    route.Identity,
+                    true)]));
+        }
+
         public Task<EntityMetadataProposal?> ResolveFreshProposalAsync(
             RequestKindDescriptor descriptor,
             PluginIdentityRoute route,
