@@ -1,5 +1,6 @@
 using System.Net;
 using System.Text;
+using System.Text.Json;
 using Prismedia.Application.Acquisition;
 using Prismedia.Domain.Entities;
 using Prismedia.Infrastructure.Acquisition;
@@ -84,6 +85,43 @@ public sealed class SlskdDownloadClientTests {
         Assert.Equal([HttpMethod.Post, HttpMethod.Get, HttpMethod.Post], handler.Requests.Select(request => request.Method));
     }
 
+    [Fact]
+    public async Task AddFallsBackToLegacySlskdAndTracksTheQueuedRelease() {
+        var locator = SoulseekLocator.Encode(new SoulseekReleaseLocator(
+            Guid.Parse("11111111-1111-1111-1111-111111111111"), "peer",
+            [
+                new SoulseekFileLocator("Music\\Album\\01.flac", 100),
+                new SoulseekFileLocator("Music\\Album\\02.flac", 300)
+            ]));
+        const string downloads = """[{"username":"peer","directories":[{"directory":"Music\\Album","files":[{"id":"44444444-4444-4444-4444-444444444444","filename":"Music\\Album\\01.flac","size":100,"bytesTransferred":100,"state":"Completed, Succeeded","batchId":null},{"id":"55555555-5555-5555-5555-555555555555","filename":"Music\\Album\\02.flac","size":300,"bytesTransferred":300,"state":"Completed, Succeeded","batchId":null}]}]}]""";
+        var handler = new StatusHandler([
+            (HttpStatusCode.BadRequest, """The JSON value could not be converted to System.Collections.Generic.IEnumerable`1[slskd.Transfers.API.QueueDownloadRequest]."""),
+            (HttpStatusCode.Created, """{"enqueued":[{"id":"44444444-4444-4444-4444-444444444444","username":"peer","filename":"Music\\Album\\01.flac","size":100,"bytesTransferred":0,"state":"Queued"},{"id":"55555555-5555-5555-5555-555555555555","username":"peer","filename":"Music\\Album\\02.flac","size":300,"bytesTransferred":0,"state":"Queued"}],"failed":[]}"""),
+            (HttpStatusCode.OK, downloads),
+            (HttpStatusCode.OK, downloads)
+        ]);
+        var client = new SlskdDownloadClient(new HttpClient(handler));
+
+        var id = await client.AddAsync(Connection, new DownloadAddRequest(locator, null, "prismedia", "Artist Album"), CancellationToken.None);
+        var item = await client.GetItemAsync(Connection, id, CancellationToken.None);
+        var listed = await client.ListItemsAsync(Connection, CancellationToken.None);
+
+        Assert.Equal([
+            "/api/v0/transfers/downloads/batches",
+            "/api/v0/transfers/downloads/peer",
+            "/api/v0/transfers/downloads",
+            "/api/v0/transfers/downloads"
+        ], handler.Requests.Select(request => request.RequestUri!.AbsolutePath));
+        using var legacyPayload = JsonDocument.Parse(handler.Bodies[1]);
+        Assert.Equal(JsonValueKind.Array, legacyPayload.RootElement.ValueKind);
+        Assert.NotNull(item);
+        Assert.True(item.IsComplete);
+        Assert.Equal("Music\\Album", item.Name);
+        Assert.InRange(id.Length, 1, DownloadAddCorrelation.MaxLength);
+        Assert.Equal("/downloads/Music/Album", item.ContentPath);
+        Assert.Contains(listed, listedItem => listedItem.ClientItemId == id && listedItem.IsComplete);
+    }
+
     private sealed class Handler(Func<HttpRequestMessage, string> response) : HttpMessageHandler {
         public List<HttpRequestMessage> Requests { get; } = [];
         public List<string> Bodies { get; } = [];
@@ -100,13 +138,15 @@ public sealed class SlskdDownloadClientTests {
     private sealed class StatusHandler(IReadOnlyList<(HttpStatusCode Status, string Body)> responses) : HttpMessageHandler {
         private int index;
         public List<HttpRequestMessage> Requests { get; } = [];
+        public List<string> Bodies { get; } = [];
 
-        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) {
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) {
             Requests.Add(request);
+            Bodies.Add(request.Content is null ? string.Empty : await request.Content.ReadAsStringAsync(cancellationToken));
             var response = responses[index++];
-            return Task.FromResult(new HttpResponseMessage(response.Status) {
+            return new HttpResponseMessage(response.Status) {
                 Content = new StringContent(response.Body, Encoding.UTF8, "application/json")
-            });
+            };
         }
     }
 }

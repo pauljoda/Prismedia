@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -12,6 +13,7 @@ namespace Prismedia.Infrastructure.Acquisition;
 public static class SoulseekProtocol {
     public const string ApiKeyHeader = "X-API-Key";
     public const string LocatorPrefix = "slskd:";
+    public const string LegacyTransferLocatorPrefix = "slskd-legacy:";
     public const string SearchesPath = "/api/v0/searches";
     public const string DownloadBatchesPath = "/api/v0/transfers/downloads/batches";
     public const string DownloadsPath = "/api/v0/transfers/downloads";
@@ -28,6 +30,9 @@ public sealed record SoulseekFileLocator(string Filename, long Size);
 
 /// <summary>Server-only payload passed from the slskd search adapter to its download adapter.</summary>
 public sealed record SoulseekReleaseLocator(Guid SearchId, string Username, IReadOnlyList<SoulseekFileLocator> Files);
+
+/// <summary>Durable identity for a group of transfers queued through a legacy slskd release.</summary>
+internal sealed record SoulseekLegacyTransferLocator(string Fingerprint);
 
 /// <summary>Encodes Soulseek peer/file identity without exposing it through Prismedia's public contracts.</summary>
 public static class SoulseekLocator {
@@ -47,6 +52,25 @@ public static class SoulseekLocator {
         encoded = encoded.PadRight(encoded.Length + ((4 - encoded.Length % 4) % 4), '=');
         return JsonSerializer.Deserialize<SoulseekReleaseLocator>(Convert.FromBase64String(encoded), JsonOptions)
             ?? throw new InvalidDataException("The selected Soulseek locator is empty.");
+    }
+
+    internal static string EncodeLegacy(SoulseekLegacyTransferLocator locator) {
+        return $"{SoulseekProtocol.LegacyTransferLocatorPrefix}{locator.Fingerprint}";
+    }
+
+    internal static bool TryDecodeLegacy(string value, out SoulseekLegacyTransferLocator locator) {
+        locator = null!;
+        if (!value.StartsWith(SoulseekProtocol.LegacyTransferLocatorPrefix, StringComparison.Ordinal)) {
+            return false;
+        }
+
+        var fingerprint = value[SoulseekProtocol.LegacyTransferLocatorPrefix.Length..];
+        if (fingerprint.Length != 43 || fingerprint.Any(character => !char.IsAsciiLetterOrDigit(character) && character is not '-' and not '_')) {
+            return false;
+        }
+
+        locator = new SoulseekLegacyTransferLocator(fingerprint);
+        return true;
     }
 
     internal static JsonSerializerOptions JsonOptions { get; } = new(JsonSerializerDefaults.Web) {
@@ -279,6 +303,10 @@ public sealed class SlskdDownloadClient(HttpClient http) : IDownloadClient {
                 options = new { destination, externalId = request.Title }
             });
             using var response = await http.SendAsync(message, cancellationToken);
+            if (response.StatusCode == HttpStatusCode.BadRequest
+                && await IsLegacyEndpointResponseAsync(response, cancellationToken)) {
+                return await AddLegacyAsync(connection, locator, cancellationToken);
+            }
             if (response.StatusCode == HttpStatusCode.Conflict) {
                 var existing = await GetBatchAsync(connection, batchId.ToString("D"), cancellationToken);
                 if (existing is not null && Represents(existing, locator)) return batchId.ToString("D");
@@ -300,30 +328,57 @@ public sealed class SlskdDownloadClient(HttpClient http) : IDownloadClient {
         throw new NotSupportedException("slskd does not accept torrent files.");
 
     public async Task<DownloadItemStatus?> GetItemAsync(DownloadClientConnection connection, string clientItemId, CancellationToken cancellationToken) {
+        if (SoulseekLocator.TryDecodeLegacy(clientItemId, out var legacy)) {
+            var group = await GetLegacyGroupAsync(connection, legacy.Fingerprint, cancellationToken);
+            return group is null ? null : ToLegacyStatus(connection, clientItemId, group.Name, group.Transfers);
+        }
+
         var batch = await GetBatchAsync(connection, clientItemId, cancellationToken);
         return batch is null ? null : ToStatus(connection, batch);
     }
 
     public async Task<IReadOnlyList<DownloadItemStatus>> ListItemsAsync(DownloadClientConnection connection, CancellationToken cancellationToken) {
-        using var message = Request(connection, HttpMethod.Get, SoulseekProtocol.DownloadsPath);
-        using var response = await http.SendAsync(message, cancellationToken);
-        await EnsureSuccessAsync(response, "list Soulseek downloads", cancellationToken);
-        var users = await response.Content.ReadFromJsonAsync<UserDownloads[]>(SoulseekLocator.JsonOptions, cancellationToken) ?? [];
+        var users = await GetDownloadsAsync(connection, cancellationToken);
         var batchIds = users.SelectMany(user => user.Directories).SelectMany(directory => directory.Files)
             .Where(file => file.BatchId is not null).Select(file => file.BatchId!.Value).Distinct().ToArray();
         var items = new List<DownloadItemStatus>(batchIds.Length);
         foreach (var id in batchIds) {
             if (await GetBatchAsync(connection, id.ToString("D"), cancellationToken) is { } batch) items.Add(ToStatus(connection, batch));
         }
+        foreach (var group in LegacyGroups(users)) {
+            var id = SoulseekLocator.EncodeLegacy(new SoulseekLegacyTransferLocator(group.Fingerprint));
+            items.Add(ToLegacyStatus(connection, id, group.Name, group.Transfers));
+        }
         return items;
     }
 
     public async Task<IReadOnlyList<DownloadItemFile>> GetFilesAsync(DownloadClientConnection connection, string clientItemId, CancellationToken cancellationToken) {
+        if (SoulseekLocator.TryDecodeLegacy(clientItemId, out var legacy)) {
+            var group = await GetLegacyGroupAsync(connection, legacy.Fingerprint, cancellationToken);
+            return group?.Transfers.Select(file => new DownloadItemFile(file.Filename, file.Size, Progress(file))).ToArray() ?? [];
+        }
+
         var batch = await GetBatchAsync(connection, clientItemId, cancellationToken);
         return batch?.Transfers.Select(file => new DownloadItemFile(file.Filename, file.Size, Progress(file))).ToArray() ?? [];
     }
 
     public async Task<DownloadItemProperties?> GetPropertiesAsync(DownloadClientConnection connection, string clientItemId, CancellationToken cancellationToken) {
+        if (SoulseekLocator.TryDecodeLegacy(clientItemId, out var legacy)) {
+            var group = await GetLegacyGroupAsync(connection, legacy.Fingerprint, cancellationToken);
+            if (group is null) return null;
+            var legacyTotal = group.Transfers.Sum(file => file.Size);
+            var legacySpeed = group.Transfers.Sum(file => file.AverageSpeed);
+            var legacyRemaining = group.Transfers.Sum(file => Math.Max(0, file.Size - file.BytesTransferred));
+            return new DownloadItemProperties(
+                legacyTotal,
+                legacySpeed,
+                0,
+                legacySpeed <= 0 ? 0 : (long)(legacyRemaining / legacySpeed),
+                0,
+                0,
+                LegacyContentPath(connection, group.Transfers));
+        }
+
         var batch = await GetBatchAsync(connection, clientItemId, cancellationToken);
         if (batch is null) return null;
         var total = batch.Transfers.Sum(file => file.Size);
@@ -336,6 +391,16 @@ public sealed class SlskdDownloadClient(HttpClient http) : IDownloadClient {
         Task.FromResult(Array.Empty<byte>());
 
     public async Task RemoveAsync(DownloadClientConnection connection, string clientItemId, bool deleteData, CancellationToken cancellationToken) {
+        if (SoulseekLocator.TryDecodeLegacy(clientItemId, out var legacy)) {
+            var group = await GetLegacyGroupAsync(connection, legacy.Fingerprint, cancellationToken);
+            if (group is not null) {
+                foreach (var transfer in group.Transfers) {
+                    await RemoveTransferAsync(connection, group.Username, transfer.Id, cancellationToken);
+                }
+            }
+            return;
+        }
+
         var batch = await GetBatchAsync(connection, clientItemId, cancellationToken);
         if (batch is not null) await RemoveBatchAsync(connection, batch, cancellationToken);
     }
@@ -366,10 +431,70 @@ public sealed class SlskdDownloadClient(HttpClient http) : IDownloadClient {
 
     private async Task RemoveBatchAsync(DownloadClientConnection connection, Batch batch, CancellationToken cancellationToken) {
         foreach (var transfer in batch.Transfers) {
-            using var message = Request(connection, HttpMethod.Delete,
-                $"{SoulseekProtocol.DownloadsPath}/{Uri.EscapeDataString(batch.Username)}/{transfer.Id:D}?remove=true");
-            using var response = await http.SendAsync(message, cancellationToken);
-            if (response.StatusCode != HttpStatusCode.NotFound) await EnsureSuccessAsync(response, "remove a Soulseek transfer", cancellationToken);
+            await RemoveTransferAsync(connection, batch.Username, transfer.Id, cancellationToken);
+        }
+    }
+
+    private async Task<string> AddLegacyAsync(
+        DownloadClientConnection connection,
+        SoulseekReleaseLocator locator,
+        CancellationToken cancellationToken) {
+        using var message = Request(
+            connection,
+            HttpMethod.Post,
+            $"{SoulseekProtocol.DownloadsPath}/{Uri.EscapeDataString(locator.Username)}");
+        message.Content = JsonContent.Create(locator.Files.Select(file => new { filename = file.Filename, size = file.Size }));
+        using var response = await http.SendAsync(message, cancellationToken);
+        await EnsureSuccessAsync(response, "enqueue the Soulseek files", cancellationToken);
+        var body = await response.Content.ReadFromJsonAsync<LegacyEnqueueResponse>(SoulseekLocator.JsonOptions, cancellationToken);
+        if (body is null || body.Failed.Count != 0 || body.Enqueued.Count != locator.Files.Count) {
+            if (body is not null) {
+                foreach (var transfer in body.Enqueued) {
+                    await RemoveTransferAsync(connection, locator.Username, transfer.Id, cancellationToken);
+                }
+            }
+            throw new DownloadClientAddUnresolvedException("slskd did not enqueue every file in the selected release.");
+        }
+
+        return SoulseekLocator.EncodeLegacy(new SoulseekLegacyTransferLocator(
+            LegacyFingerprint(locator.Username, body.Enqueued)));
+    }
+
+    private static async Task<bool> IsLegacyEndpointResponseAsync(HttpResponseMessage response, CancellationToken cancellationToken) {
+        var body = await response.Content.ReadAsStringAsync(cancellationToken);
+        return body.Contains("IEnumerable", StringComparison.Ordinal)
+            && body.Contains("QueueDownloadRequest", StringComparison.Ordinal);
+    }
+
+    private async Task<SoulseekLegacyTransferGroup?> GetLegacyGroupAsync(
+        DownloadClientConnection connection,
+        string fingerprint,
+        CancellationToken cancellationToken) {
+        var users = await GetDownloadsAsync(connection, cancellationToken);
+        return LegacyGroups(users).SingleOrDefault(group => string.Equals(group.Fingerprint, fingerprint, StringComparison.Ordinal));
+    }
+
+    private async Task<IReadOnlyList<UserDownloads>> GetDownloadsAsync(
+        DownloadClientConnection connection,
+        CancellationToken cancellationToken) {
+        using var message = Request(connection, HttpMethod.Get, SoulseekProtocol.DownloadsPath);
+        using var response = await http.SendAsync(message, cancellationToken);
+        await EnsureSuccessAsync(response, "list Soulseek downloads", cancellationToken);
+        return await response.Content.ReadFromJsonAsync<UserDownloads[]>(SoulseekLocator.JsonOptions, cancellationToken) ?? [];
+    }
+
+    private async Task RemoveTransferAsync(
+        DownloadClientConnection connection,
+        string username,
+        Guid transferId,
+        CancellationToken cancellationToken) {
+        using var message = Request(
+            connection,
+            HttpMethod.Delete,
+            $"{SoulseekProtocol.DownloadsPath}/{Uri.EscapeDataString(username)}/{transferId:D}?remove=true");
+        using var response = await http.SendAsync(message, cancellationToken);
+        if (response.StatusCode != HttpStatusCode.NotFound) {
+            await EnsureSuccessAsync(response, "remove a Soulseek transfer", cancellationToken);
         }
     }
 
@@ -391,10 +516,87 @@ public sealed class SlskdDownloadClient(HttpClient http) : IDownloadClient {
             FailureMessage: failed ? batch.Transfers.First(file => Terminal(file.State) && !Successful(file.State)).Exception : null);
     }
 
+    private static DownloadItemStatus ToLegacyStatus(
+        DownloadClientConnection connection,
+        string clientItemId,
+        string? name,
+        IReadOnlyList<Transfer> transfers) {
+        var complete = transfers.Count > 0 && transfers.All(file => Successful(file.State));
+        var failedTransfer = transfers.FirstOrDefault(file => Terminal(file.State) && !Successful(file.State));
+        var failed = failedTransfer is not null;
+        var total = transfers.Sum(file => file.Size);
+        var transferred = transfers.Sum(file => Math.Min(file.Size, file.BytesTransferred));
+        var progress = total <= 0 ? 0 : transferred / (double)total;
+        var state = failed
+            ? SoulseekProtocol.NormalizedFailedState
+            : complete
+                ? SoulseekProtocol.TransferCompletedState
+                : transfers.FirstOrDefault()?.State ?? SoulseekProtocol.NormalizedQueuedState;
+        var path = LegacyContentPath(connection, transfers);
+        return new DownloadItemStatus(
+            clientItemId,
+            name,
+            complete ? 1 : progress,
+            state,
+            complete,
+            path,
+            complete ? path : null,
+            IsStalled: false,
+            IsFailed: failed,
+            FailureMessage: failedTransfer?.Exception);
+    }
+
     private static string? ContentPath(DownloadClientConnection connection, Batch batch) =>
         string.IsNullOrWhiteSpace(connection.DownloadDirectory) || string.IsNullOrWhiteSpace(batch.Options?.Destination)
             ? null
             : Path.Combine(connection.DownloadDirectory, batch.Options.Destination.Replace('/', Path.DirectorySeparatorChar));
+    private static string? LegacyContentPath(DownloadClientConnection connection, IReadOnlyList<Transfer> transfers) {
+        if (string.IsNullOrWhiteSpace(connection.DownloadDirectory)) return null;
+        var files = transfers.Select(file => {
+            var segments = file.Filename
+                .Split('\\', '/', StringSplitOptions.RemoveEmptyEntries)
+                .Where(segment => segment is not "." and not "..")
+                .ToArray();
+            return segments.Length == 0
+                ? connection.DownloadDirectory
+                : Path.Combine([connection.DownloadDirectory, .. segments]);
+        }).ToArray();
+        if (files.Length == 1) return files[0];
+        var directories = files.Select(Path.GetDirectoryName).Where(path => !string.IsNullOrWhiteSpace(path)).Distinct(StringComparer.Ordinal).ToArray();
+        return directories.Length == 1 ? directories[0] : connection.DownloadDirectory;
+    }
+
+    private static IReadOnlyList<SoulseekLegacyTransferGroup> LegacyGroups(IReadOnlyList<UserDownloads> users) {
+        var groups = new Dictionary<string, SoulseekLegacyTransferGroup>(StringComparer.Ordinal);
+        foreach (var user in users) {
+            foreach (var directory in user.Directories) {
+                var transfers = directory.Files.Where(file => file.BatchId is null).ToArray();
+                foreach (var transfer in transfers) {
+                    Add([transfer], transfer.Filename);
+                }
+                if (transfers.Length > 1) {
+                    Add(transfers, directory.Directory);
+                }
+            }
+
+            void Add(IReadOnlyList<Transfer> transfers, string name) {
+                var fingerprint = LegacyFingerprint(user.Username, transfers);
+                groups.TryAdd(fingerprint, new SoulseekLegacyTransferGroup(user.Username, fingerprint, name, transfers));
+            }
+        }
+        return groups.Values.ToArray();
+    }
+
+    private static string LegacyFingerprint(string username, IEnumerable<Transfer> transfers) {
+        var identity = new StringBuilder(username).Append('\n');
+        foreach (var transfer in transfers.OrderBy(file => file.Filename, StringComparer.Ordinal)) {
+            identity.Append(transfer.Filename).Append('\0').Append(transfer.Size).Append('\n');
+        }
+        return Convert.ToBase64String(SHA256.HashData(Encoding.UTF8.GetBytes(identity.ToString())))
+            .TrimEnd('=')
+            .Replace('+', '-')
+            .Replace('/', '_');
+    }
     private static double Progress(Transfer file) => file.Size <= 0 ? 0 : Math.Clamp(file.BytesTransferred / (double)file.Size, 0, 1);
     private static bool Successful(string state) =>
         state.Contains(SoulseekProtocol.TransferCompletedState, StringComparison.OrdinalIgnoreCase)
@@ -425,9 +627,11 @@ public sealed class SlskdDownloadClient(HttpClient http) : IDownloadClient {
 
     private sealed record EnqueueResponse(Batch Batch, IReadOnlyList<EnqueueFailure> Failures);
     private sealed record EnqueueFailure(string Filename, string Message);
+    private sealed record LegacyEnqueueResponse(IReadOnlyList<Transfer> Enqueued, IReadOnlyList<JsonElement> Failed);
     private sealed record Batch(Guid Id, string Username, BatchOptions? Options, IReadOnlyList<Transfer> Transfers);
     private sealed record BatchOptions(string? Destination, string? ExternalId);
     private sealed record Transfer(Guid Id, string Filename, long Size, long BytesTransferred, string State, double AverageSpeed = 0, string? Exception = null, Guid? BatchId = null);
+    private sealed record SoulseekLegacyTransferGroup(string Username, string Fingerprint, string Name, IReadOnlyList<Transfer> Transfers);
     private sealed record UserDownloads(string Username, IReadOnlyList<DirectoryDownloads> Directories);
     private sealed record DirectoryDownloads(string Directory, IReadOnlyList<Transfer> Files);
     private sealed record SlskdServerState(string? State, bool IsConnected, bool IsLoggedIn);
