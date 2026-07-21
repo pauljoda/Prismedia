@@ -118,7 +118,7 @@ public sealed class SlskdDownloadClientTests {
         Assert.True(item.IsComplete);
         Assert.Equal("Music\\Album", item.Name);
         Assert.InRange(id.Length, 1, DownloadAddCorrelation.MaxLength);
-        Assert.Equal("/downloads/Music/Album", item.ContentPath);
+        Assert.Equal("/downloads/Album", item.ContentPath);
         Assert.Contains(listed, listedItem => listedItem.ClientItemId == id && listedItem.IsComplete);
     }
 

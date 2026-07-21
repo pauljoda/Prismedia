@@ -556,6 +556,8 @@ public sealed class SlskdDownloadClient(HttpClient http) : IDownloadClient {
             var segments = file.Filename
                 .Split('\\', '/', StringSplitOptions.RemoveEmptyEntries)
                 .Where(segment => segment is not "." and not "..")
+                // Legacy slskd's ToLocalRelativeFilename keeps only the immediate parent and file.
+                .TakeLast(2)
                 .ToArray();
             return segments.Length == 0
                 ? connection.DownloadDirectory
