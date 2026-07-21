@@ -316,6 +316,48 @@ public sealed class WantedEntityWriterTests {
     }
 
     [Fact]
+    public async Task BindProviderIdentitiesValidatesAndPersistsReviewedRoutesAsOneBoundedBatch() {
+        await using var db = CreateContext();
+        var artistIdentity = new ExternalIdentity("musicbrainzartist", "A1");
+        var firstIdentity = new ExternalIdentity("musicbrainzreleasegroup", "RG1");
+        var secondIdentity = new ExternalIdentity("musicbrainzreleasegroup", "RG2");
+        var artistId = AddEntity(db, EntityKindRegistry.MusicArtist.Code, "Artist", isWanted: true);
+        var firstId = AddEntity(
+            db,
+            EntityKindRegistry.AudioLibrary.Code,
+            "First",
+            isWanted: true,
+            parentEntityId: artistId);
+        var secondId = AddEntity(
+            db,
+            EntityKindRegistry.AudioLibrary.Code,
+            "Second",
+            isWanted: true,
+            parentEntityId: artistId);
+        AddExternalId(db, artistId, artistIdentity.Namespace, artistIdentity.Value);
+        AddExternalId(db, firstId, firstIdentity.Namespace, firstIdentity.Value);
+        AddExternalId(db, secondId, secondIdentity.Namespace, secondIdentity.Value);
+        await db.SaveChangesAsync();
+        var routes = new Dictionary<Guid, PluginIdentityRoute> {
+            [artistId] = new("musicbrainz", artistIdentity),
+            [firstId] = new("musicbrainz", firstIdentity),
+            [secondId] = new("musicbrainz", secondIdentity)
+        };
+        var router = new ConfiguredIdentityRouter(routes.Values.ToArray());
+
+        var bound = await Writer(db, router).BindProviderIdentitiesAsync(routes, CancellationToken.None);
+
+        Assert.True(bound.SetEquals(routes.Keys));
+        Assert.Equal(2, router.CallCount);
+        var persisted = await db.EntityProviderIdentities.AsNoTracking()
+            .OrderBy(row => row.IdentityValue)
+            .ToArrayAsync();
+        Assert.Equal(3, persisted.Length);
+        Assert.All(persisted, row => Assert.Equal("musicbrainz", row.PluginId));
+        Assert.Equal(["A1", "RG1", "RG2"], persisted.Select(row => row.IdentityValue).ToArray());
+    }
+
+    [Fact]
     public async Task DeleteIfWantedPrunesAnOrphanedWantedArtistLikeAnAuthor() {
         await using var db = CreateContext();
         var artistId = AddEntity(db, EntityKindRegistry.MusicArtist.Code, "Artist", isWanted: true);

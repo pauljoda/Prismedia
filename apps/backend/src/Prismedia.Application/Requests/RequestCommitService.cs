@@ -188,6 +188,23 @@ public interface IWantedEntityWriter {
         PluginIdentityRoute route,
         CancellationToken cancellationToken);
 
+    /// <summary>
+    /// Persists exact provider routes for a bounded reviewed Entity set. Production adapters batch the
+    /// route validation and write; the default preserves narrow adapters through the single-Entity seam.
+    /// </summary>
+    async Task<IReadOnlySet<Guid>> BindProviderIdentitiesAsync(
+        IReadOnlyDictionary<Guid, PluginIdentityRoute> routes,
+        CancellationToken cancellationToken) {
+        var bound = new HashSet<Guid>();
+        foreach (var (entityId, route) in routes) {
+            if (await BindProviderIdentityAsync(entityId, route, cancellationToken)) {
+                bound.Add(entityId);
+            }
+        }
+
+        return bound;
+    }
+
     /// <summary>Applies a plugin proposal to an entity through the shared metadata-apply cascade (all present fields, default artwork).</summary>
     Task ApplyProposalAsync(Guid entityId, EntityMetadataProposal proposal, CancellationToken cancellationToken);
 
@@ -990,6 +1007,21 @@ public sealed partial class RequestCommitService(
             await wanted.ApplyProposalAsync(container.EntityId, proposal with { Children = applyChildren }, cancellationToken);
         }
 
+        if (exactPluginId is not null) {
+            var providerRoutes = new Dictionary<Guid, PluginIdentityRoute> {
+                [container.EntityId] = new(exactPluginId, rootIdentity)
+            };
+            foreach (var pick in picks) {
+                providerRoutes[pick.Entity.EntityId] = new PluginIdentityRoute(exactPluginId, pick.Identity);
+            }
+
+            var boundEntityIds = await wanted.BindProviderIdentitiesAsync(providerRoutes, cancellationToken);
+            if (!boundEntityIds.SetEquals(providerRoutes.Keys)) {
+                throw new RequestCommitValidationException(
+                    "The exact plugin identity route could not be persisted for every selected item.");
+            }
+        }
+
         // The container keeps watching for new works either way — requesting an author/artist implies
         // following them; the daily sweep then acquires future works through direct child intent. The
         // request's library/profile choices and monitoring preset stick to the monitor so later child work
@@ -1006,8 +1038,9 @@ public sealed partial class RequestCommitService(
             || preset == MonitorPreset.All
             || !explicitRequest;
         var useBatchedArtistCommit = deferRequestedChildHydration;
-        var deferredPicks = useBatchedArtistCommit
-            ? picks.Where(pick => pick.Outcome == RequestCommitOutcome.Requested).ToArray()
+        var fanoutPicks = useBatchedArtistCommit
+            ? picks.Where(pick => pick.Outcome is
+                RequestCommitOutcome.Requested or RequestCommitOutcome.AlreadyRequested).ToArray()
             : [];
         if (useBatchedArtistCommit) {
             // The reviewed graph and its explicit un-suppression are committed before one durable job
@@ -1066,12 +1099,12 @@ public sealed partial class RequestCommitService(
             }
         }
 
-        if (deferredPicks.Length > 0) {
+        if (fanoutPicks.Length > 0) {
             await fanout!.ScheduleAsync(
                 container.EntityId,
                 descriptor.WantedEntityKind,
                 containerTitle,
-                deferredPicks.Select(pick => pick.Entity.EntityId).ToArray(),
+                fanoutPicks.Select(pick => pick.Entity.EntityId).ToArray(),
                 targeting,
                 hideNsfw,
                 cancellationToken);

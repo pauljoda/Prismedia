@@ -1732,6 +1732,7 @@ public sealed class RequestCommitServiceTests {
             Assert.NotNull(child.TargetEntityId);
             Assert.Empty(child.Images);
         });
+        Assert.Equal(3, writer.ProviderIdentityBindings.Count);
     }
 
     [Fact]
@@ -1790,8 +1791,10 @@ public sealed class RequestCommitServiceTests {
             Assert.Null(item.AcquisitionId);
         });
         Assert.Empty(acquisitions.Created);
-        Assert.Empty(fanout.Calls);
+        var scheduled = Assert.Single(fanout.Calls);
+        Assert.Equal(response.Items.Select(item => item.EntityId!.Value).ToHashSet(), scheduled.ChildEntityIds.ToHashSet());
         Assert.Empty(writer.Applied);
+        Assert.Equal(3, writer.ProviderIdentityBindings.Count);
         Assert.Equal([response.ContainerEntityId!.Value], monitors.EntityLifecycleMutationIds);
         Assert.Equal(2, suppressions.Cleared.Distinct().Count());
     }

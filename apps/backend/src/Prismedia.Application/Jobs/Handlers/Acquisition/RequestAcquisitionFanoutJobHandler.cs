@@ -12,6 +12,7 @@ namespace Prismedia.Application.Jobs.Handlers;
 /// </summary>
 public sealed class RequestAcquisitionFanoutJobHandler(
     RequestCommitService requests,
+    IRequestChildHydrator childHydrator,
     ILogger<RequestAcquisitionFanoutJobHandler> logger) : IJobHandler {
     public JobType Type => JobType.RequestAcquisitionFanout;
 
@@ -25,12 +26,18 @@ public sealed class RequestAcquisitionFanoutJobHandler(
         for (var index = 0; index < payload.ChildEntityIds.Count; index++) {
             cancellationToken.ThrowIfCancellationRequested();
             var entityId = payload.ChildEntityIds[index];
-            await requests.RequestEntityFromGraphAsync(
+            var response = await requests.RequestEntityFromGraphAsync(
                 entityId,
                 payload.HideNsfw,
                 cancellationToken,
                 targeting,
                 hydrateChildren: false);
+            if (response?.Items.Any(item => item.Outcome == RequestCommitOutcome.AlreadyRequested) == true) {
+                // A repeat artist request is also a repair pass: older album acquisitions may predate the
+                // persisted plugin route or their enrichment job may have completed before tracks existed.
+                // Hydrate in this durable job, never on the interactive commit boundary.
+                await childHydrator.HydrateAsync(entityId, payload.HideNsfw, cancellationToken);
+            }
             await context.ReportProgressAsync(
                 (index + 1) * 100 / payload.ChildEntityIds.Count,
                 $"Started {index + 1} of {payload.ChildEntityIds.Count} requests",

@@ -356,6 +356,89 @@ public sealed class WantedEntityWriter(
         return bound;
     }
 
+    /// <inheritdoc />
+    public async Task<IReadOnlySet<Guid>> BindProviderIdentitiesAsync(
+        IReadOnlyDictionary<Guid, PluginIdentityRoute> routes,
+        CancellationToken cancellationToken) {
+        if (routes.Count == 0) {
+            return new HashSet<Guid>();
+        }
+
+        var entityIds = routes.Keys.ToArray();
+        var entities = await db.Entities.AsNoTracking()
+            .Where(entity => entityIds.Contains(entity.Id))
+            .ToDictionaryAsync(entity => entity.Id, cancellationToken);
+        var externalRows = await db.EntityExternalIds.AsNoTracking()
+            .Where(row => entityIds.Contains(row.EntityId))
+            .ToArrayAsync(cancellationToken);
+        var ownedIdentities = externalRows
+            .Select(row => (row.EntityId, Identity: TryIdentity(row.Provider, row.Value)))
+            .Where(value => value.Identity is not null)
+            .Select(value => (value.EntityId, value.Identity!))
+            .ToHashSet();
+
+        var validEntityIds = new HashSet<Guid>();
+        foreach (var kindGroup in routes
+            .Where(route => entities.ContainsKey(route.Key))
+            .GroupBy(route => entities[route.Key].KindCode)) {
+            var requestedRoutes = kindGroup.ToArray();
+            var supportedRoutes = await identityRouter.ResolveAsync(
+                kindGroup.Key,
+                IdentifyAction.LookupId,
+                requestedRoutes.Select(route => route.Value.Identity).Distinct().ToArray(),
+                cancellationToken);
+            foreach (var (entityId, requestedRoute) in requestedRoutes) {
+                var supported = supportedRoutes.Any(candidate =>
+                    candidate.Identity == requestedRoute.Identity
+                    && string.Equals(
+                        candidate.PluginId,
+                        requestedRoute.PluginId,
+                        StringComparison.OrdinalIgnoreCase));
+                if (supported && ownedIdentities.Contains((entityId, requestedRoute.Identity))) {
+                    validEntityIds.Add(entityId);
+                }
+            }
+        }
+
+        if (validEntityIds.Count == 0) {
+            return validEntityIds;
+        }
+
+        var existingRows = await db.EntityProviderIdentities
+            .Where(row => validEntityIds.Contains(row.EntityId))
+            .ToDictionaryAsync(row => row.EntityId, cancellationToken);
+        var now = DateTimeOffset.UtcNow;
+        foreach (var entityId in validEntityIds) {
+            var route = routes[entityId];
+            var pluginId = route.PluginId.Trim().ToLowerInvariant();
+            if (!existingRows.TryGetValue(entityId, out var row)) {
+                db.EntityProviderIdentities.Add(new EntityProviderIdentityRow {
+                    EntityId = entityId,
+                    PluginId = pluginId,
+                    IdentityNamespace = route.Identity.Namespace,
+                    IdentityValue = route.Identity.Value,
+                    CreatedAt = now,
+                    UpdatedAt = now
+                });
+                continue;
+            }
+
+            if (row.PluginId == pluginId
+                && row.IdentityNamespace == route.Identity.Namespace
+                && row.IdentityValue == route.Identity.Value) {
+                continue;
+            }
+
+            row.PluginId = pluginId;
+            row.IdentityNamespace = route.Identity.Namespace;
+            row.IdentityValue = route.Identity.Value;
+            row.UpdatedAt = now;
+        }
+
+        await db.SaveChangesAsync(cancellationToken);
+        return validEntityIds;
+    }
+
     /// <summary>
     /// Adds the kind's detail row for a wanted skeleton, always with no library root: root-scoped stale
     /// cleanup must never touch a placeholder, and the import-time scan upsert fills in the real values
