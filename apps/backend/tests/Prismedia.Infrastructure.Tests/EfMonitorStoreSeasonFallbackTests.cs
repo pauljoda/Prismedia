@@ -14,6 +14,39 @@ namespace Prismedia.Infrastructure.Tests;
 /// </summary>
 public sealed class EfMonitorStoreSeasonFallbackTests {
     [Fact]
+    public async Task PartialAlbumWithWantedTracksIsDueForTrackFallback() {
+        await using var db = CreateContext();
+        var now = DateTimeOffset.UtcNow;
+        var albumId = Guid.NewGuid();
+        db.Entities.Add(new EntityRow {
+            Id = albumId, KindCode = EntityKind.AudioLibrary.ToCode(), Title = "Album",
+            CreatedAt = now, UpdatedAt = now
+        });
+        db.Entities.Add(new EntityRow {
+            Id = Guid.NewGuid(), KindCode = EntityKind.AudioTrack.ToCode(), Title = "Missing Track",
+            ParentEntityId = albumId, IsWanted = true, SortOrder = 2, CreatedAt = now, UpdatedAt = now
+        });
+        var acquisitionId = Guid.NewGuid();
+        db.Acquisitions.Add(new AcquisitionRow {
+            Id = acquisitionId, Kind = EntityKind.AudioLibrary, Status = AcquisitionStatus.Imported,
+            Title = "Artist Album", EntityId = albumId, ExternalIdsJson = "{}", SourceUrlsJson = "[]",
+            CreatedAt = now, UpdatedAt = now
+        });
+        db.AcquisitionImportHints.Add(new AcquisitionImportHintRow {
+            Id = Guid.NewGuid(), AcquisitionId = acquisitionId, EntityId = albumId,
+            SourcePath = "/downloads/artist/album", Consumed = true, CreatedAt = now, UpdatedAt = now
+        });
+        await db.SaveChangesAsync();
+        var store = new EfMonitorStore(db);
+        await store.StartAsync(acquisitionId, EntityKind.AudioLibrary, "Artist Album", "Artist", CancellationToken.None);
+
+        var fallback = Assert.Single(await store.ListDueMonitorsAsync(360, CancellationToken.None));
+
+        Assert.True(fallback.MissingChildFallback);
+        Assert.Equal(albumId, fallback.EntityId);
+    }
+
+    [Fact]
     public async Task ImportedSeasonWithWantedEpisodesIsDueForMissingChildFallback() {
         await using var db = CreateContext();
         var (store, seasonEntityId, _) = await SeedImportedSeasonAsync(db, wantedEpisodes: 2, hintConsumed: true);

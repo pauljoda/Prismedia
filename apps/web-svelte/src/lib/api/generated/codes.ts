@@ -184,6 +184,7 @@ export const DOWNLOAD_CLIENT_KIND = {
   qBittorrent: "qbittorrent",
   transmission: "transmission",
   sabnzbd: "sabnzbd",
+  slskd: "slskd",
 } as const;
 
 export type DownloadClientKindCode = (typeof DOWNLOAD_CLIENT_KIND)[keyof typeof DOWNLOAD_CLIENT_KIND];
@@ -192,6 +193,7 @@ export type DownloadClientKindCode = (typeof DOWNLOAD_CLIENT_KIND)[keyof typeof 
 export const DOWNLOAD_PROTOCOL = {
   torrent: "torrent",
   usenet: "usenet",
+  soulseek: "soulseek",
 } as const;
 
 export type DownloadProtocolCode = (typeof DOWNLOAD_PROTOCOL)[keyof typeof DOWNLOAD_PROTOCOL];
@@ -375,6 +377,7 @@ export const INDEXER_KIND = {
   jackett: "jackett",
   torznab: "torznab",
   newznab: "newznab",
+  slskd: "slskd",
 } as const;
 
 export type IndexerKindCode = (typeof INDEXER_KIND)[keyof typeof INDEXER_KIND];
@@ -672,6 +675,7 @@ export const REQUEST_MEDIA_KIND = {
   episode: "episode",
   artist: "artist",
   album: "album",
+  track: "track",
   plugin: "plugin",
 } as const;
 
@@ -989,7 +993,8 @@ export const REQUEST_KIND_MANIFEST = [
   { kind: "season", label: "Season", plural: "Seasons", committable: true, childNoun: "episode", entityKind: "video-season", pluginEntityKind: "video-season", acquisitionKind: "video-season", profileKind: "video-series", rootFlag: "scanVideos", discoverable: false, reviewSelection: "root" },
   { kind: "episode", label: "Episode", plural: "Episodes", committable: true, childNoun: null, entityKind: "video", pluginEntityKind: "video", acquisitionKind: "video", profileKind: "video-series", rootFlag: "scanVideos", discoverable: false, reviewSelection: "root" },
   { kind: "artist", label: "Artist", plural: "Artists", committable: true, childNoun: "album", entityKind: "music-artist", pluginEntityKind: "music-artist", acquisitionKind: "audio-library", profileKind: "audio-library", rootFlag: "scanAudio", discoverable: true, reviewSelection: "direct-children" },
-  { kind: "album", label: "Album", plural: "Albums", committable: true, childNoun: null, entityKind: "audio-library", pluginEntityKind: "audio-library", acquisitionKind: "audio-library", profileKind: "audio-library", rootFlag: "scanAudio", discoverable: true, reviewSelection: "root" },
+  { kind: "album", label: "Album", plural: "Albums", committable: true, childNoun: "track", entityKind: "audio-library", pluginEntityKind: "audio-library", acquisitionKind: "audio-library", profileKind: "audio-library", rootFlag: "scanAudio", discoverable: true, reviewSelection: "root" },
+  { kind: "track", label: "Track", plural: "Tracks", committable: true, childNoun: null, entityKind: "audio-track", pluginEntityKind: "audio-track", acquisitionKind: "audio-track", profileKind: "audio-library", rootFlag: "scanAudio", discoverable: false, reviewSelection: "root" },
 ] as const satisfies readonly RequestKindManifestEntry[];
 
 export const ENTITY_KINDS_SUPPORTING_FILE_DELETION = [
@@ -1012,6 +1017,7 @@ export type FileDeletableEntityKindCode = (typeof ENTITY_KINDS_SUPPORTING_FILE_D
 
 export const ENTITY_KINDS_SUPPORTING_REQUESTS = [
   "audio-library",
+  "audio-track",
   "book",
   "music-artist",
   "book-author",

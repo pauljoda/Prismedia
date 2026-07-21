@@ -8,7 +8,9 @@ export function availableDownloadProtocols(clients: DownloadClientSummary[]): Do
     if (!client.enabled) continue;
     const protocol = client.kind === DOWNLOAD_CLIENT_KIND.sabnzbd
       ? DOWNLOAD_PROTOCOL.usenet
-      : DOWNLOAD_PROTOCOL.torrent;
+      : client.kind === DOWNLOAD_CLIENT_KIND.slskd
+        ? DOWNLOAD_PROTOCOL.soulseek
+        : DOWNLOAD_PROTOCOL.torrent;
     if (!available.includes(protocol)) available.push(protocol);
   }
   return available;

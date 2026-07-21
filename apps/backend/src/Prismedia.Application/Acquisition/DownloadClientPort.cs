@@ -5,6 +5,7 @@ namespace Prismedia.Application.Acquisition;
 
 /// <summary>Connection details a download client needs to act on a transfer.</summary>
 /// <param name="ApiKey">API key for clients that authenticate with one (SABnzbd); null for cookie/session clients.</param>
+/// <param name="DownloadDirectory">Prismedia-visible completed-download root shared with slskd batch destinations.</param>
 public sealed record DownloadClientConnection(
     Guid Id,
     DownloadClientKind Kind,
@@ -12,7 +13,8 @@ public sealed record DownloadClientConnection(
     string? Username,
     string? Password,
     string Category,
-    string? ApiKey = null);
+    string? ApiKey = null,
+    string? DownloadDirectory = null);
 
 /// <summary>A release to add to a download client.</summary>
 /// <param name="Url">The download/magnet URL (for Prowlarr, a self-authenticating proxy URL).</param>
@@ -149,7 +151,8 @@ public sealed record DownloadClientSaveCommand(
     string? ApiKey = null,
     int Priority = 25,
     double? SeedRatio = null,
-    int? SeedTimeMinutes = null);
+    int? SeedTimeMinutes = null,
+    string? DownloadDirectory = null);
 
 /// <summary>Persistence port for configured download clients.</summary>
 public interface IDownloadClientConfigStore {

@@ -16,17 +16,20 @@
     onchange,
   }: Props = $props();
 
-  const hasUsenet = $derived(availableProtocols.includes(DOWNLOAD_PROTOCOL.usenet));
-  const hasTorrent = $derived(availableProtocols.includes(DOWNLOAD_PROTOCOL.torrent));
-  const canChoose = $derived(hasUsenet && hasTorrent);
-  const onlyProtocol = $derived(hasUsenet ? DOWNLOAD_PROTOCOL.usenet : hasTorrent ? DOWNLOAD_PROTOCOL.torrent : null);
+  const canChoose = $derived(availableProtocols.length > 1);
+  const onlyProtocol = $derived(availableProtocols.length === 1 ? availableProtocols[0] : null);
   const options = [
     { value: DOWNLOAD_PROTOCOL.usenet, label: "Usenet" },
     { value: DOWNLOAD_PROTOCOL.torrent, label: "Torrent" },
-  ];
+    { value: DOWNLOAD_PROTOCOL.soulseek, label: "Soulseek" },
+  ].filter((option) => availableProtocols.includes(option.value));
+
+  function label(protocol: DownloadProtocolCode): string {
+    return options.find((option) => option.value === protocol)?.label ?? protocol;
+  }
 
   function choose(raw: string) {
-    if (raw === DOWNLOAD_PROTOCOL.usenet || raw === DOWNLOAD_PROTOCOL.torrent) onchange(raw);
+    if (availableProtocols.includes(raw as DownloadProtocolCode)) onchange(raw as DownloadProtocolCode);
   }
 </script>
 
@@ -51,12 +54,8 @@
     </div>
   {:else if onlyProtocol}
     <div class="flex flex-wrap items-center gap-2 text-[0.78rem] text-text-muted">
-      <Badge variant="default">{onlyProtocol === DOWNLOAD_PROTOCOL.usenet ? "Usenet only" : "Torrent only"}</Badge>
-      <span>
-        {onlyProtocol === DOWNLOAD_PROTOCOL.usenet
-          ? "Add and enable a torrent client to choose a preference."
-          : "Add and enable a usenet client to choose a preference."}
-      </span>
+      <Badge variant="default">{label(onlyProtocol)} only</Badge>
+      <span>Add and enable a client for another protocol to choose a preference.</span>
     </div>
   {:else}
     <p class="text-[0.78rem] text-text-muted">No enabled download clients. Add one before choosing a preference.</p>

@@ -12,4 +12,5 @@ export const DownloadClientKind = {
   qbittorrent: 'qbittorrent',
   transmission: 'transmission',
   sabnzbd: 'sabnzbd',
+  slskd: 'slskd',
 } as const;

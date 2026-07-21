@@ -32,7 +32,7 @@ describe("AcquisitionProtocolPreference", () => {
 
     expect(screen.queryByLabelText("Preferred download type")).not.toBeInTheDocument();
     expect(screen.getByText("Usenet only")).toBeInTheDocument();
-    expect(screen.getByText(/Add and enable a torrent client/)).toBeInTheDocument();
+    expect(screen.getByText(/client for another protocol/)).toBeInTheDocument();
   });
 
   it("explains that a client is required when no protocol is available", () => {

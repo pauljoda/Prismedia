@@ -108,11 +108,15 @@ public static class DependencyInjection {
         services.AddScoped<IImportedEntityMaterializationPolicy, ImportedBookMaterializationPolicy>();
         services.AddScoped<IImportedEntityMaterializationPolicy, ImportedMovieMaterializationPolicy>();
         services.AddScoped<IImportedEntityMaterializationPolicy, ImportedAlbumMaterializationPolicy>();
+        services.AddScoped<IImportedEntityMaterializationPolicy>(provider =>
+            ActivatorUtilities.CreateInstance<ImportedAlbumMaterializationPolicy>(provider, EntityKind.AudioTrack));
         services.AddScoped<IImportedEntityMaterializer, ImportedEntityMaterializer>();
         services.AddScoped<ImportedTorrentRemover>();
         services.AddScoped<IAcquisitionImportEngine, BookAcquisitionImportEngine>();
         services.AddScoped<IAcquisitionImportEngine, MovieAcquisitionImportEngine>();
         services.AddScoped<IAcquisitionImportEngine, MusicAcquisitionImportEngine>();
+        services.AddScoped<IAcquisitionImportEngine>(provider =>
+            ActivatorUtilities.CreateInstance<MusicAcquisitionImportEngine>(provider, EntityKind.AudioTrack));
         // One TV engine class serves both acquisition units: season packs and single episodes.
         services.AddScoped<IAcquisitionImportEngine>(provider =>
             ActivatorUtilities.CreateInstance<TvAcquisitionImportEngine>(provider, EntityKind.VideoSeason));

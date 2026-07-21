@@ -11,4 +11,5 @@ export type DownloadProtocol = typeof DownloadProtocol[keyof typeof DownloadProt
 export const DownloadProtocol = {
   torrent: 'torrent',
   usenet: 'usenet',
+  soulseek: 'soulseek',
 } as const;

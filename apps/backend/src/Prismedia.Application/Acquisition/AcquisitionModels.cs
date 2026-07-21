@@ -181,7 +181,10 @@ public sealed record IndexerConnection(
     IReadOnlyList<int> Categories);
 
 /// <summary>A normalized search query handed to an indexer client.</summary>
-public sealed record IndexerQuery(string Text, IReadOnlyList<int> Categories);
+public sealed record IndexerQuery(
+    string Text,
+    IReadOnlyList<int> Categories,
+    EntityKind Kind = EntityKind.Book);
 
 /// <summary>Result of probing an indexer connection.</summary>
 public sealed record IndexerConnectionTest(bool Connected, string? Message);
@@ -243,7 +246,9 @@ public sealed record AcquisitionSearchInput(
 
             if (Kind is EntityKind.AudioLibrary or EntityKind.AudioTrack or EntityKind.MusicArtist
                 && !string.IsNullOrWhiteSpace(Author)) {
-                return $"{Author} {Title}".Trim();
+                return Kind == EntityKind.AudioTrack && !string.IsNullOrWhiteSpace(Series)
+                    ? $"{Author} {Series} {Title}".Trim()
+                    : $"{Author} {Title}".Trim();
             }
 
             return Title;

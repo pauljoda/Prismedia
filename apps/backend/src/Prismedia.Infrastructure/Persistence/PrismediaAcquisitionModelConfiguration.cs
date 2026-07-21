@@ -64,6 +64,7 @@ internal static partial class PrismediaModelConfiguration {
             entity.Property(row => row.DisplayName).HasColumnName("display_name").HasMaxLength(256).IsRequired();
             entity.Property(row => row.BaseUrl).HasColumnName("base_url").HasMaxLength(2048).IsRequired();
             entity.Property(row => row.Username).HasColumnName("username").HasMaxLength(256);
+            entity.Property(row => row.DownloadDirectory).HasColumnName("download_directory").HasMaxLength(2048);
             entity.Property(row => row.Category).HasColumnName("category").HasMaxLength(256).IsRequired();
             entity.Property(row => row.Priority).HasColumnName("priority").HasDefaultValue(25);
             entity.Property(row => row.SeedRatio).HasColumnName("seed_ratio");

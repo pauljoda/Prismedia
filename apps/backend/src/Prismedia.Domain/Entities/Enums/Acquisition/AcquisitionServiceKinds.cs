@@ -20,7 +20,11 @@ public enum IndexerKind {
 
     /// <summary>A usenet indexer speaking the Newznab XML API directly (DrunkenSlug, NZBgeek, …).</summary>
     [Code("newznab")]
-    Newznab
+    Newznab,
+
+    /// <summary>Soulseek network search through a configured slskd instance.</summary>
+    [Code("slskd")]
+    Slskd
 }
 
 /// <summary>
@@ -39,7 +43,11 @@ public enum DownloadClientKind {
 
     /// <summary>SABnzbd usenet client, driven through its JSON API.</summary>
     [Code("sabnzbd")]
-    Sabnzbd
+    Sabnzbd,
+
+    /// <summary>Soulseek transfer client driven through the slskd REST API.</summary>
+    [Code("slskd")]
+    Slskd
 }
 
 /// <summary>
@@ -54,7 +62,11 @@ public enum DownloadProtocol {
 
     /// <summary>Usenet (NZB) release, acquired through a usenet client such as SABnzbd.</summary>
     [Code("usenet")]
-    Usenet
+    Usenet,
+
+    /// <summary>Soulseek peer-to-peer file transfer through slskd.</summary>
+    [Code("soulseek")]
+    Soulseek
 }
 
 /// <summary>Protocol capabilities of the download client families.</summary>
@@ -63,6 +75,7 @@ public static class DownloadClientKindProtocol {
     public static DownloadProtocol Protocol(this DownloadClientKind kind) => kind switch {
         DownloadClientKind.QBittorrent or DownloadClientKind.Transmission => DownloadProtocol.Torrent,
         DownloadClientKind.Sabnzbd => DownloadProtocol.Usenet,
+        DownloadClientKind.Slskd => DownloadProtocol.Soulseek,
         _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Unmapped download client kind.")
     };
 }

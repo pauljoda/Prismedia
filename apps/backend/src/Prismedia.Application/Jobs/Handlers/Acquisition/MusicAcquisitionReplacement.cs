@@ -23,13 +23,19 @@ public sealed partial class MusicAcquisitionImportEngine {
 
         if (target.ArtistFolderPath is { } artistFolder && Directory.Exists(artistFolder)) {
             var albumSegment = MusicImportPlanBuilder
-                .AlbumFolderRelative(artist, import.Title, profile?.PathTemplate, import.Year)
+                .AlbumFolderRelative(artist, AlbumTitleOf(import), profile?.PathTemplate, import.Year)
                 .Split('/')[^1];
             return Path.Combine(artistFolder, albumSegment);
         }
 
         return null;
     }
+
+    /// <summary>Album context for either a whole-album acquisition or an individual track fallback.</summary>
+    private static string AlbumTitleOf(AcquisitionImportContext import) =>
+        import.Kind == EntityKind.AudioTrack && !string.IsNullOrWhiteSpace(import.Series)
+            ? import.Series
+            : import.Title;
 
     private async Task<LibraryRootData?> ResolveCheckpointRootAsync(
         ImportPlacementCheckpoint checkpoint,

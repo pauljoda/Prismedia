@@ -32,4 +32,6 @@ export interface DownloadClientSaveRequest {
      * @pattern ^-?(?:0|[1-9]\d*)$
      */
   seedTimeMinutes?: number | string | null;
+  /** @nullable */
+  downloadDirectory?: string | null;
 }

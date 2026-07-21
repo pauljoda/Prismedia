@@ -197,8 +197,8 @@
       allRoots = roots;
       customFormats = formats;
       const configuredProtocol = findSetting(settings, settingKeys.acquisitionPreferredProtocol)?.value;
-      preferredProtocol = configuredProtocol === DOWNLOAD_PROTOCOL.torrent
-        ? DOWNLOAD_PROTOCOL.torrent
+      preferredProtocol = Object.values(DOWNLOAD_PROTOCOL).includes(configuredProtocol as DownloadProtocolCode)
+        ? configuredProtocol as DownloadProtocolCode
         : DOWNLOAD_PROTOCOL.usenet;
     } catch (err) {
       onError(err instanceof Error ? err.message : "Failed to load acquisition settings");
@@ -212,11 +212,13 @@
     { value: INDEXER_KIND.prowlarr, label: "Prowlarr (aggregator)" },
     { value: INDEXER_KIND.torznab, label: "Torznab (torrent indexer / Jackett)" },
     { value: INDEXER_KIND.newznab, label: "Newznab (usenet indexer)" },
+    { value: INDEXER_KIND.slskd, label: "Soulseek (slskd)" },
   ];
   const indexerKindDefaults: Record<string, string> = {
     [INDEXER_KIND.prowlarr]: "Prowlarr",
     [INDEXER_KIND.torznab]: "Torznab indexer",
     [INDEXER_KIND.newznab]: "Newznab indexer",
+    [INDEXER_KIND.slskd]: "Soulseek",
   };
   function indexerKindLabel(kind: string): string {
     return indexerKindOptions.find((option) => option.value === kind)?.label.split(" (")[0] ?? kind;
@@ -226,6 +228,7 @@
     const untouched = indexerForm.displayName === indexerKindDefaults[indexerForm.kind];
     indexerForm.kind = kind as typeof indexerForm.kind;
     if (untouched) indexerForm.displayName = indexerKindDefaults[kind] ?? indexerForm.displayName;
+    if (kind === INDEXER_KIND.slskd) indexerCategories = "3000";
   }
   function newIndexer() {
     indexerForm = { id: null, kind: INDEXER_KIND.prowlarr, displayName: "Prowlarr", baseUrl: "", apiKey: null, enabled: true, priority: 25, categories: [7000, 8000], queryLimitPerHour: null, seedRatio: null, seedTimeMinutes: null };
@@ -283,17 +286,19 @@
     { value: DOWNLOAD_CLIENT_KIND.qBittorrent, label: "qBittorrent (torrent)" },
     { value: DOWNLOAD_CLIENT_KIND.transmission, label: "Transmission (torrent)" },
     { value: DOWNLOAD_CLIENT_KIND.sabnzbd, label: "SABnzbd (usenet)" },
+    { value: DOWNLOAD_CLIENT_KIND.slskd, label: "Soulseek (slskd)" },
   ];
   const clientKindDefaults: Record<string, string> = {
     [DOWNLOAD_CLIENT_KIND.qBittorrent]: "qBittorrent",
     [DOWNLOAD_CLIENT_KIND.transmission]: "Transmission",
     [DOWNLOAD_CLIENT_KIND.sabnzbd]: "SABnzbd",
+    [DOWNLOAD_CLIENT_KIND.slskd]: "Soulseek",
   };
   function clientKindLabel(kind: string): string {
     return clientKindDefaults[kind] ?? kind;
   }
   function newClient() {
-    clientForm = { id: null, kind: DOWNLOAD_CLIENT_KIND.qBittorrent, displayName: "qBittorrent", baseUrl: "", username: null, password: null, apiKey: null, category: "prismedia-books", enabled: true, priority: 25, seedRatio: null, seedTimeMinutes: null };
+    clientForm = { id: null, kind: DOWNLOAD_CLIENT_KIND.qBittorrent, displayName: "qBittorrent", baseUrl: "", username: null, password: null, apiKey: null, category: "prismedia-books", enabled: true, priority: 25, seedRatio: null, seedTimeMinutes: null, downloadDirectory: null };
     clientTest = null;
   }
   function setClientKind(kind: string) {
@@ -302,9 +307,13 @@
     const untouched = clientForm.displayName === clientKindDefaults[clientForm.kind];
     clientForm.kind = kind as DownloadClientSaveRequest["kind"];
     if (untouched) clientForm.displayName = clientKindDefaults[kind] ?? clientForm.displayName;
+    if (kind === DOWNLOAD_CLIENT_KIND.slskd) {
+      if (clientForm.category === "prismedia-books") clientForm.category = "prismedia-audio";
+      clientForm.downloadDirectory ??= "/downloads";
+    }
   }
   function editClient(item: DownloadClientSummary) {
-    clientForm = { id: item.id, kind: item.kind, displayName: item.displayName, baseUrl: item.baseUrl, username: item.username, password: null, apiKey: null, category: item.category, enabled: item.enabled, priority: item.priority ?? 25, seedRatio: item.seedRatio ?? null, seedTimeMinutes: item.seedTimeMinutes ?? null };
+    clientForm = { id: item.id, kind: item.kind, displayName: item.displayName, baseUrl: item.baseUrl, username: item.username, password: null, apiKey: null, category: item.category, enabled: item.enabled, priority: item.priority ?? 25, seedRatio: item.seedRatio ?? null, seedTimeMinutes: item.seedTimeMinutes ?? null, downloadDirectory: item.downloadDirectory ?? null };
     clientTest = null;
   }
   async function testClient() {
@@ -346,12 +355,12 @@
   }
 
   async function savePreferredProtocol(protocol: DownloadProtocolCode) {
-    if (availableProtocols.length !== 2 || protocol === preferredProtocol) return;
+    if (availableProtocols.length < 2 || protocol === preferredProtocol) return;
     protocolBusy = true;
     try {
       const updated = await updateSetting(settingKeys.acquisitionPreferredProtocol, protocol);
-      preferredProtocol = updated.value === DOWNLOAD_PROTOCOL.torrent
-        ? DOWNLOAD_PROTOCOL.torrent
+      preferredProtocol = Object.values(DOWNLOAD_PROTOCOL).includes(updated.value as DownloadProtocolCode)
+        ? updated.value as DownloadProtocolCode
         : DOWNLOAD_PROTOCOL.usenet;
       onMessage("Preferred download type saved");
     } catch (err) {
@@ -615,7 +624,7 @@
                 <label class="space-y-1"><span class="text-label text-text-muted">Name</span>
                   <TextInput size="sm" value={indexerForm.displayName} oninput={(e) => indexerForm && (indexerForm.displayName = e.currentTarget.value)} /></label>
                 <label class="space-y-1"><span class="text-label text-text-muted">Base URL</span>
-                  <TextInput size="sm" value={indexerForm.baseUrl} oninput={(e) => indexerForm && (indexerForm.baseUrl = e.currentTarget.value)} placeholder={indexerForm.kind === INDEXER_KIND.prowlarr ? "https://prowlarr.example.com" : "https://indexer.example.com (or a Jackett /api path)"} /></label>
+                  <TextInput size="sm" value={indexerForm.baseUrl} oninput={(e) => indexerForm && (indexerForm.baseUrl = e.currentTarget.value)} placeholder={indexerForm.kind === INDEXER_KIND.slskd ? "http://slskd:5030" : indexerForm.kind === INDEXER_KIND.prowlarr ? "https://prowlarr.example.com" : "https://indexer.example.com (or a Jackett /api path)"} /></label>
                 <label class="space-y-1"><span class="text-label text-text-muted">API key</span>
                   <TextInput size="sm" type="password" value={indexerForm.apiKey ?? ""} oninput={(e) => indexerForm && (indexerForm.apiKey = e.currentTarget.value)} placeholder={indexerForm.id ? "(unchanged)" : ""} /></label>
                 <label class="space-y-1"><span class="text-label text-text-muted">Categories</span>
@@ -688,19 +697,25 @@
                   <TextInput size="sm" value={clientForm.displayName} oninput={(e) => clientForm && (clientForm.displayName = e.currentTarget.value)} /></label>
                 <label class="space-y-1"><span class="text-label text-text-muted">Base URL</span>
                   <TextInput size="sm" value={clientForm.baseUrl} oninput={(e) => clientForm && (clientForm.baseUrl = e.currentTarget.value)} placeholder="http://localhost:8080" /></label>
-                {#if clientForm.kind === DOWNLOAD_CLIENT_KIND.sabnzbd}
+                {#if clientForm.kind === DOWNLOAD_CLIENT_KIND.sabnzbd || clientForm.kind === DOWNLOAD_CLIENT_KIND.slskd}
                   <label class="space-y-1"><span class="text-label text-text-muted">API key</span>
-                    <TextInput size="sm" type="password" value={clientForm.apiKey ?? ""} oninput={(e) => clientForm && (clientForm.apiKey = e.currentTarget.value)} placeholder={clientForm.id ? "(unchanged)" : "from SABnzbd Config → General"} /></label>
+                    <TextInput size="sm" type="password" value={clientForm.apiKey ?? ""} oninput={(e) => clientForm && (clientForm.apiKey = e.currentTarget.value)} placeholder={clientForm.id ? "(unchanged)" : clientForm.kind === DOWNLOAD_CLIENT_KIND.slskd ? "from slskd web/API configuration" : "from SABnzbd Config → General"} /></label>
                 {/if}
-                <label class="space-y-1"><span class="text-label text-text-muted">Username</span>
-                  <TextInput size="sm" value={clientForm.username ?? ""} oninput={(e) => clientForm && (clientForm.username = e.currentTarget.value)} /></label>
-                <label class="space-y-1"><span class="text-label text-text-muted">Password</span>
-                  <TextInput size="sm" type="password" value={clientForm.password ?? ""} oninput={(e) => clientForm && (clientForm.password = e.currentTarget.value)} placeholder={clientForm.id ? "(unchanged)" : ""} /></label>
+                {#if clientForm.kind !== DOWNLOAD_CLIENT_KIND.slskd}
+                  <label class="space-y-1"><span class="text-label text-text-muted">Username</span>
+                    <TextInput size="sm" value={clientForm.username ?? ""} oninput={(e) => clientForm && (clientForm.username = e.currentTarget.value)} /></label>
+                  <label class="space-y-1"><span class="text-label text-text-muted">Password</span>
+                    <TextInput size="sm" type="password" value={clientForm.password ?? ""} oninput={(e) => clientForm && (clientForm.password = e.currentTarget.value)} placeholder={clientForm.id ? "(unchanged)" : ""} /></label>
+                {/if}
                 <label class="space-y-1"><span class="text-label text-text-muted">Category / label</span>
                   <TextInput size="sm" value={clientForm.category} oninput={(e) => clientForm && (clientForm.category = e.currentTarget.value)} /></label>
                 <label class="space-y-1"><span class="text-label text-text-muted">Priority (lower wins)</span>
                   <TextInput size="sm" type="number" value={String(clientForm.priority ?? 25)} oninput={(e) => clientForm && (clientForm.priority = Number(e.currentTarget.value) || 25)} /></label>
-                {#if clientForm.kind !== DOWNLOAD_CLIENT_KIND.sabnzbd}
+                {#if clientForm.kind === DOWNLOAD_CLIENT_KIND.slskd}
+                  <label class="space-y-1"><span class="text-label text-text-muted">Shared download directory (Prismedia path)</span>
+                    <TextInput size="sm" value={clientForm.downloadDirectory ?? ""} oninput={(e) => clientForm && (clientForm.downloadDirectory = e.currentTarget.value)} placeholder="/downloads" /></label>
+                {/if}
+                {#if clientForm.kind === DOWNLOAD_CLIENT_KIND.qBittorrent || clientForm.kind === DOWNLOAD_CLIENT_KIND.transmission}
                   <label class="space-y-1"><span class="text-label text-text-muted">Default seed ratio goal</span>
                     <TextInput size="sm" type="number" value={clientForm.seedRatio == null ? "" : String(clientForm.seedRatio)} oninput={(e) => clientForm && (clientForm.seedRatio = e.currentTarget.value ? Number(e.currentTarget.value) : null)} placeholder="none (client rules)" /></label>
                   <label class="space-y-1"><span class="text-label text-text-muted">Default seed time goal (minutes)</span>
@@ -714,7 +729,7 @@
                 </div>
                 <div class="flex gap-1.5">
                   <Button size="sm" variant="ghost" onclick={() => (clientForm = null)} disabled={busy}>Cancel</Button>
-                  <Button size="sm" variant="primary" onclick={saveClient} disabled={busy || !clientForm.displayName || !clientForm.baseUrl || !clientForm.category}>Save</Button>
+                  <Button size="sm" variant="primary" onclick={saveClient} disabled={busy || !clientForm.displayName || !clientForm.baseUrl || !clientForm.category || (clientForm.kind === DOWNLOAD_CLIENT_KIND.slskd && !clientForm.downloadDirectory)}>Save</Button>
                 </div>
               </div>
             </div>

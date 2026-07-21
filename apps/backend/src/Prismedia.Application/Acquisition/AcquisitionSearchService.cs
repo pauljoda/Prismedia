@@ -203,7 +203,7 @@ public sealed class AcquisitionSearchRunner(
             // movie or album search never queries the book categories the indexer was set up with.
             var categories = policy.RouteCategories(input, config.Categories);
             var connection = new IndexerConnection(config.Id, config.Kind, config.BaseUrl, config.ApiKey, categories);
-            var found = await clients.Get(config.Kind).SearchAsync(connection, new IndexerQuery(text, categories), cancellationToken);
+            var found = await clients.Get(config.Kind).SearchAsync(connection, new IndexerQuery(text, categories, input.Kind), cancellationToken);
             return new IndexerSearchResult(config, found, null);
         } catch (Exception ex) when (ex is not OperationCanceledException) {
             return new IndexerSearchResult(config, [], ex.Message);

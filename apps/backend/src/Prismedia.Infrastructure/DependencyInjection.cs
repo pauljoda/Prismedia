@@ -424,6 +424,8 @@ public static class DependencyInjection {
         services.AddScoped<IIndexerSearchClient>(provider => provider.GetRequiredService<TorznabIndexerClient>());
         services.AddScoped(_ => new NewznabIndexerClient(new HttpClient { Timeout = TimeSpan.FromSeconds(60) }));
         services.AddScoped<IIndexerSearchClient>(provider => provider.GetRequiredService<NewznabIndexerClient>());
+        services.AddScoped(_ => new SlskdIndexerClient(new HttpClient { Timeout = TimeSpan.FromSeconds(30) }));
+        services.AddScoped<IIndexerSearchClient>(provider => provider.GetRequiredService<SlskdIndexerClient>());
         services.AddScoped<IIndexerSearchClientFactory, IndexerSearchClientFactory>();
         // UseCookies=false keeps the default handler from swallowing qBittorrent's Set-Cookie SID,
         // so the client can read and re-send the session cookie explicitly.
@@ -433,6 +435,8 @@ public static class DependencyInjection {
         services.AddScoped<IDownloadClient>(provider => provider.GetRequiredService<SabnzbdDownloadClient>());
         services.AddScoped(_ => new TransmissionDownloadClient(new HttpClient()));
         services.AddScoped<IDownloadClient>(provider => provider.GetRequiredService<TransmissionDownloadClient>());
+        services.AddScoped(_ => new SlskdDownloadClient(new HttpClient()));
+        services.AddScoped<IDownloadClient>(provider => provider.GetRequiredService<SlskdDownloadClient>());
         services.AddScoped<IDownloadClientFactory, DownloadClientFactory>();
         services.AddScoped<IAcquisitionImportPlanner, AcquisitionImportPlanner>();
         services.AddScoped<IImportFileMover, ImportFileMover>();

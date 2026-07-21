@@ -13,4 +13,5 @@ export const IndexerKind = {
   jackett: 'jackett',
   torznab: 'torznab',
   newznab: 'newznab',
+  slskd: 'slskd',
 } as const;

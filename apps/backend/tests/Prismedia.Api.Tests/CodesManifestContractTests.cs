@@ -31,7 +31,7 @@ public sealed class CodesManifestContractTests {
         Assert.Contains(EntityKind.Book, manifestKinds);
         Assert.Contains(EntityKind.VideoSeason, manifestKinds);
         Assert.Contains(EntityKind.AudioLibrary, manifestKinds);
-        Assert.DoesNotContain(EntityKind.AudioTrack, manifestKinds);
+        Assert.Contains(EntityKind.AudioTrack, manifestKinds);
         Assert.DoesNotContain(EntityKind.BookVolume, manifestKinds);
     }
 

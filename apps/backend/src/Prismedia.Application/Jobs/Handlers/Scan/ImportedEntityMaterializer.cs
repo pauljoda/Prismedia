@@ -142,9 +142,9 @@ public sealed class ImportedMovieMaterializationPolicy(ScanLibraryJobHandler sca
 }
 
 /// <summary>Album import policy backed by the audio scanner's exact-path materialization seam.</summary>
-public sealed class ImportedAlbumMaterializationPolicy(ScanAudioJobHandler scan)
+public sealed class ImportedAlbumMaterializationPolicy(ScanAudioJobHandler scan, EntityKind kind = EntityKind.AudioLibrary)
     : IImportedEntityMaterializationPolicy {
-    public EntityKind Kind => EntityKind.AudioLibrary;
+    public EntityKind Kind => kind;
 
     public Task MaterializeAsync(
         JobContext context,

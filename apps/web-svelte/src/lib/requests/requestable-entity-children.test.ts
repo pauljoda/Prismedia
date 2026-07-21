@@ -29,14 +29,14 @@ describe("requestableDirectChildCards", () => {
       .toEqual(["season-1", "sub-series", "special-1", "movie-1"]);
   });
 
-  it("keeps requestable audio-library children but excludes non-requestable tracks", () => {
+  it("keeps requestable audio-library and track children", () => {
     const cards = [
       card("disc-1", ENTITY_KIND.audioLibrary, "album-1"),
       card("track-1", ENTITY_KIND.audioTrack, "album-1"),
     ];
 
     expect(requestableDirectChildCards("album-1", cards).map((item) => item.entity.id))
-      .toEqual(["disc-1"]);
+      .toEqual(["disc-1", "track-1"]);
   });
 });
 

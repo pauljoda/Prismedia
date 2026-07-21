@@ -695,5 +695,5 @@ public sealed class AcquisitionQueueService(
             : BookFormatDetection.DetectSource(releaseTitle).ToCode();
 
     private static DownloadClientConnection ConnectionFor(DownloadClientDetail client) =>
-        new(client.Id, client.Kind, client.BaseUrl, client.Username, client.Password, client.Category, client.ApiKey);
+        new(client.Id, client.Kind, client.BaseUrl, client.Username, client.Password, client.Category, client.ApiKey, client.DownloadDirectory);
 }

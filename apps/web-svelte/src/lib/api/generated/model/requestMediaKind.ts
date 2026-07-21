@@ -18,5 +18,6 @@ export const RequestMediaKind = {
   episode: 'episode',
   artist: 'artist',
   album: 'album',
+  track: 'track',
   plugin: 'plugin',
 } as const;

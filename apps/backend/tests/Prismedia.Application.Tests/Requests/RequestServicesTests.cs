@@ -31,6 +31,18 @@ public sealed class RequestServicesTests {
     }
 
     [Fact]
+    public void AlbumsMaterializeRequestableTrackFallbacks() {
+        var album = RequestKindRegistry.Find(RequestMediaKind.Album);
+        var track = RequestKindRegistry.ChildOf(album!);
+
+        Assert.True(album!.MaterializeChildPhantoms);
+        Assert.Equal(RequestMediaKind.Track, track?.Kind);
+        Assert.Equal(EntityKind.AudioTrack, track?.AcquisitionKind);
+        Assert.True(track?.AcquireFromEntity);
+        Assert.Same(album, RequestKindRegistry.FindChildMaterializingUnit(EntityKind.AudioLibrary));
+    }
+
+    [Fact]
     public async Task PluginSearchRoutesOneDiscoverableKindAndExactPluginFields() {
         var source = new FakePluginSearchSource();
         var service = new RequestPluginSearchService(source);

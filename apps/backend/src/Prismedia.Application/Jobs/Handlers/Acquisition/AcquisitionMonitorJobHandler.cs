@@ -118,7 +118,7 @@ public sealed class AcquisitionMonitorJobHandler(
         }
 
         try {
-            var connection = new DownloadClientConnection(client.Id, client.Kind, client.BaseUrl, client.Username, client.Password, client.Category, client.ApiKey);
+            var connection = new DownloadClientConnection(client.Id, client.Kind, client.BaseUrl, client.Username, client.Password, client.Category, client.ApiKey, client.DownloadDirectory);
             var downloadClient = clients.Get(client.Kind);
             var properties = await downloadClient.GetPropertiesAsync(connection, watch.ClientItemId, cancellationToken);
             if (properties is null) {
@@ -160,7 +160,7 @@ public sealed class AcquisitionMonitorJobHandler(
         }
 
         try {
-            var connection = new DownloadClientConnection(client.Id, client.Kind, client.BaseUrl, client.Username, client.Password, client.Category, client.ApiKey);
+            var connection = new DownloadClientConnection(client.Id, client.Kind, client.BaseUrl, client.Username, client.Password, client.Category, client.ApiKey, client.DownloadDirectory);
             var downloadClient = clients.Get(client.Kind);
             var listing = await GetListingAsync(client.Id, downloadClient, connection, listingCache, cancellationToken);
             if (listing is null) {

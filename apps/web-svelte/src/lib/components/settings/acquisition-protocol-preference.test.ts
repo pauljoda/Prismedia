@@ -9,7 +9,8 @@ describe("availableDownloadProtocols", () => {
       client(DOWNLOAD_CLIENT_KIND.sabnzbd),
       client(DOWNLOAD_CLIENT_KIND.qBittorrent),
       client(DOWNLOAD_CLIENT_KIND.transmission),
-    ])).toEqual([DOWNLOAD_PROTOCOL.usenet, DOWNLOAD_PROTOCOL.torrent]);
+      client(DOWNLOAD_CLIENT_KIND.slskd),
+    ])).toEqual([DOWNLOAD_PROTOCOL.usenet, DOWNLOAD_PROTOCOL.torrent, DOWNLOAD_PROTOCOL.soulseek]);
   });
 
   it("does not advertise a protocol supported only by disabled clients", () => {

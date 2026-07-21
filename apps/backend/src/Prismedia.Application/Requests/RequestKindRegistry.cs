@@ -124,15 +124,22 @@ public static class RequestKindRegistry {
             IsContainer: false, ChildKind: null, Committable: true, AcquisitionKind: EntityKind.Video,
             Discoverable: false, AcquireFromEntity: true),
 
-        // Music: the album is the acquisition unit; an artist fans out into album acquisitions.
+        // Music: prefer an album acquisition, but materialize its tracks so monitoring can fill any
+        // missing files one-by-one when Soulseek (or another source) has no complete album folder.
         new(RequestMediaKind.Artist, "Artist", "Artists", "album", EntityKind.MusicArtist, EntityKind.MusicArtist,
             ProfileEntityKind: EntityKind.AudioLibrary, LibraryRootMediaCapability: LibraryRootMediaCapability.ScanAudio,
             ReviewSelection: RequestReviewSelection.DirectChildren,
             IsContainer: true, ChildKind: RequestMediaKind.Album, Committable: true, AcquisitionKind: EntityKind.AudioLibrary),
-        new(RequestMediaKind.Album, "Album", "Albums", null, EntityKind.AudioLibrary, EntityKind.AudioLibrary,
+        new(RequestMediaKind.Album, "Album", "Albums", "track", EntityKind.AudioLibrary, EntityKind.AudioLibrary,
             ProfileEntityKind: EntityKind.AudioLibrary, LibraryRootMediaCapability: LibraryRootMediaCapability.ScanAudio,
             ReviewSelection: RequestReviewSelection.Root,
-            IsContainer: false, ChildKind: null, Committable: true, AcquisitionKind: EntityKind.AudioLibrary),
+            IsContainer: false, ChildKind: RequestMediaKind.Track, Committable: true, AcquisitionKind: EntityKind.AudioLibrary,
+            MaterializeChildPhantoms: true),
+        new(RequestMediaKind.Track, "Track", "Tracks", null, EntityKind.AudioTrack, EntityKind.AudioTrack,
+            ProfileEntityKind: EntityKind.AudioLibrary, LibraryRootMediaCapability: LibraryRootMediaCapability.ScanAudio,
+            ReviewSelection: RequestReviewSelection.Root,
+            IsContainer: false, ChildKind: null, Committable: true, AcquisitionKind: EntityKind.AudioTrack,
+            Discoverable: false, AcquireFromEntity: true),
     ];
 
     private static readonly IReadOnlyDictionary<RequestMediaKind, RequestKindDescriptor> ByKind =

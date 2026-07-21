@@ -28,7 +28,8 @@ public sealed class DownloadClientCommandService(
         var apiKey = string.IsNullOrWhiteSpace(request.ApiKey) ? stored?.ApiKey : request.ApiKey;
 
         var connection = new DownloadClientConnection(
-            request.Id ?? Guid.Empty, request.Kind, request.BaseUrl.Trim().TrimEnd('/'), request.Username, password, stored?.Category ?? string.Empty, apiKey);
+            request.Id ?? Guid.Empty, request.Kind, request.BaseUrl.Trim().TrimEnd('/'), request.Username, password,
+            stored?.Category ?? string.Empty, apiKey, request.DownloadDirectory ?? stored?.DownloadDirectory);
         var result = await clients.Get(request.Kind).TestAsync(connection, cancellationToken);
         return new DownloadClientTestResponse(result.Connected, result.Message);
     }
@@ -44,6 +45,10 @@ public sealed class DownloadClientCommandService(
 
         ValidateBaseUrl(request.BaseUrl);
 
+        if (request.Kind == Domain.Entities.DownloadClientKind.Slskd && string.IsNullOrWhiteSpace(request.DownloadDirectory)) {
+            throw new AcquisitionConfigurationException(ApiProblemCodes.DownloadClientInvalid, "The slskd download directory is required.");
+        }
+
         return new DownloadClientSaveCommand(
             request.Id,
             request.Kind,
@@ -56,7 +61,8 @@ public sealed class DownloadClientCommandService(
             request.ApiKey,
             request.Priority,
             request.SeedRatio,
-            request.SeedTimeMinutes);
+            request.SeedTimeMinutes,
+            string.IsNullOrWhiteSpace(request.DownloadDirectory) ? null : request.DownloadDirectory.Trim().TrimEnd('/', '\\'));
     }
 
     private static void ValidateBaseUrl(string baseUrl) {

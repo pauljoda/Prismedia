@@ -161,12 +161,13 @@ public static class AppSettingsRegistry {
                 "Keep searching for monitored items until they are acquired.",
                 22,
                 "Preferred download type",
-                "When both Usenet and torrent clients are enabled, search the preferred type first and use the other type only when no acceptable preferred release is found.",
+                "When multiple download protocols are enabled, search the preferred type first and use the others only when no acceptable preferred release is found.",
                 DownloadProtocol.Usenet.ToCode(),
                 60,
                 [
                     new SettingOption(DownloadProtocol.Usenet.ToCode(), "Usenet", "Prefer NZB releases handled by an enabled Usenet client."),
-                    new SettingOption(DownloadProtocol.Torrent.ToCode(), "Torrent", "Prefer torrent releases handled by an enabled torrent client.")
+                    new SettingOption(DownloadProtocol.Torrent.ToCode(), "Torrent", "Prefer torrent releases handled by an enabled torrent client."),
+                    new SettingOption(DownloadProtocol.Soulseek.ToCode(), "Soulseek", "Prefer peer files handled by an enabled slskd client.")
                 ]),
 
             Boolean(

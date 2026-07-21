@@ -234,7 +234,7 @@ public sealed class ImportedTorrentRemover(
         }
 
         try {
-            var connection = new DownloadClientConnection(client.Id, client.Kind, client.BaseUrl, client.Username, client.Password, client.Category, client.ApiKey);
+            var connection = new DownloadClientConnection(client.Id, client.Kind, client.BaseUrl, client.Username, client.Password, client.Category, client.ApiKey, client.DownloadDirectory);
             await clients.Get(client.Kind).RemoveAsync(connection, import.ClientItemId, deleteData: true, cancellationToken);
         } catch (OperationCanceledException) {
             throw;
@@ -1822,8 +1822,9 @@ public sealed partial class MusicAcquisitionImportEngine(
     IAcquisitionHistoryStore history,
     IImportedEntityMaterializer materializer,
     ILogger<MusicAcquisitionImportEngine> logger,
-    IMonitorStore? monitors = null) : IAcquisitionImportEngine {
-    public EntityKind Kind => EntityKind.AudioLibrary;
+    IMonitorStore? monitors = null,
+    EntityKind kind = EntityKind.AudioLibrary) : IAcquisitionImportEngine {
+    public EntityKind Kind => kind;
 
     public async Task ImportAsync(JobContext context, AcquisitionImportContext import, CancellationToken cancellationToken) {
         var profile = await profiles.GetImportProfileAsync(import.ProfileId, EntityKind.AudioLibrary, cancellationToken);
@@ -1892,7 +1893,8 @@ public sealed partial class MusicAcquisitionImportEngine(
         }
 
         var artist = string.IsNullOrWhiteSpace(import.Author) ? "Unknown Artist" : import.Author;
-        var rawPlan = MusicImportPlanBuilder.Plan(payload.Files, artist, import.Title, profile?.PathTemplate, import.Year);
+        var albumTitle = AlbumTitleOf(import);
+        var rawPlan = MusicImportPlanBuilder.Plan(payload.Files, artist, albumTitle, profile?.PathTemplate, import.Year);
         if (rawPlan.Blocked) {
             await acquisitions.SetStatusAsync(
                 import.Id, AcquisitionStatus.ManualImportRequired,
@@ -1957,7 +1959,7 @@ public sealed partial class MusicAcquisitionImportEngine(
         var importMode = profile?.ImportMode ?? ImportMode.Move;
         // The hint and final path key on the ALBUM folder (not a disc subfolder a track landed in), so
         // the audio scan's album upsert path matches the bind exactly.
-        var albumFolder = Path.GetFullPath(Path.Combine(root.Path, MusicImportPlanBuilder.AlbumFolderRelative(artist, import.Title, profile?.PathTemplate, import.Year)));
+        var albumFolder = Path.GetFullPath(Path.Combine(root.Path, MusicImportPlanBuilder.AlbumFolderRelative(artist, albumTitle, profile?.PathTemplate, import.Year)));
         var units = ImportPlacementExecution.ReserveUnits(
             payload.ContentRoot,
             plan.Items
@@ -2119,7 +2121,7 @@ public sealed partial class MusicAcquisitionImportEngine(
         // An album is multi-file, so its monitor fulfills on import (no single-file swap); the code is captured
         // for display only.
         var selected = await acquisitions.GetSelectedReleaseAsync(import.Id, cancellationToken);
-        var ownedMediaQuality = selected is null ? null : MediaQualityLadder.Detect(EntityKind.AudioLibrary, selected.Title).Code;
+        var ownedMediaQuality = selected is null ? null : MediaQualityLadder.Detect(import.Kind, selected.Title).Code;
         var ownedMediaRevision = selected is null ? 1 : ReleaseRevisionDetection.Detect(selected.Title);
         var ownedFormatScore = await OwnedFormatScore.ComputeAsync(profiles, import.ProfileId, EntityKind.AudioLibrary, selected, cancellationToken);
 

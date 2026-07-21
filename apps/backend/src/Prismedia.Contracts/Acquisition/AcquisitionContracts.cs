@@ -218,7 +218,8 @@ public sealed record DownloadClientSummary(
     bool HasApiKey = false,
     int Priority = 25,
     double? SeedRatio = null,
-    int? SeedTimeMinutes = null);
+    int? SeedTimeMinutes = null,
+    string? DownloadDirectory = null);
 
 /// <summary>Configured download client with secret material for server-side use only.</summary>
 public sealed record DownloadClientDetail(
@@ -234,7 +235,8 @@ public sealed record DownloadClientDetail(
     string? ApiKey = null,
     int Priority = 25,
     double? SeedRatio = null,
-    int? SeedTimeMinutes = null);
+    int? SeedTimeMinutes = null,
+    string? DownloadDirectory = null);
 
 /// <summary>Request payload for creating or updating a download client configuration.</summary>
 /// <param name="ApiKey">API key for clients that authenticate with one (SABnzbd); blank keeps the stored key.</param>
@@ -250,7 +252,8 @@ public sealed record DownloadClientSaveRequest(
     string? ApiKey = null,
     int Priority = 25,
     double? SeedRatio = null,
-    int? SeedTimeMinutes = null);
+    int? SeedTimeMinutes = null,
+    string? DownloadDirectory = null);
 
 /// <summary>Connection test payload for a download client configuration that may not be saved yet.</summary>
 public sealed record DownloadClientTestRequest(
@@ -259,7 +262,8 @@ public sealed record DownloadClientTestRequest(
     string BaseUrl,
     string? Username,
     string? Password,
-    string? ApiKey = null);
+    string? ApiKey = null,
+    string? DownloadDirectory = null);
 
 /// <summary>Connection test result for a download client configuration.</summary>
 public sealed record DownloadClientTestResponse(bool Connected, string? Message);

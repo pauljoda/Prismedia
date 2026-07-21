@@ -192,7 +192,7 @@ public sealed class MonitorServiceTests {
     }
 
     [Fact]
-    public async Task EligibilitySeparatesBookChildSearchFromAnAlbumWithNoRequestableChildKind() {
+    public async Task EligibilityExposesBookAndAlbumMissingChildSearchKinds() {
         await using var db = CreateContext();
         var bookId = Guid.NewGuid();
         var albumId = Guid.NewGuid();
@@ -215,8 +215,8 @@ public sealed class MonitorServiceTests {
         Assert.Equal(EntityKind.Book, book.MissingChildEntityKind);
         Assert.True(album.CanMonitor);
         Assert.False(album.DiscoversChildren);
-        Assert.False(album.CanSearchMissingChildren);
-        Assert.Null(album.MissingChildEntityKind);
+        Assert.True(album.CanSearchMissingChildren);
+        Assert.Equal(EntityKind.AudioTrack, album.MissingChildEntityKind);
         Assert.False((await service.GetEligibilityAsync(Guid.NewGuid(), CancellationToken.None)).CanMonitor);
     }
 

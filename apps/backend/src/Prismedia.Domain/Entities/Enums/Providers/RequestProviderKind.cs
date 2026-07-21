@@ -72,6 +72,10 @@ public enum RequestMediaKind {
     [Code("album")]
     Album,
 
+    /// <summary>Individual music track, used as the monitored fallback for incomplete albums.</summary>
+    [Code("track")]
+    Track,
+
     /// <summary>Plugin-defined request target.</summary>
     [Code("plugin")]
     Plugin

@@ -796,7 +796,7 @@ public sealed partial class RequestCommitService(
             }
 
             creator ??= ancestor.Kind is EntityKind.BookAuthor or EntityKind.MusicArtist ? ancestor.Title : null;
-            series ??= ancestor.Kind == EntityKind.VideoSeries ? ancestor.Title : null;
+            series ??= ancestor.Kind is EntityKind.VideoSeries or EntityKind.AudioLibrary ? ancestor.Title : null;
             parentId = ancestor.ParentEntityId;
         }
 

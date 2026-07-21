@@ -109,10 +109,17 @@ public sealed class MusicAcquisitionPolicyModule : AcquisitionPolicyModule {
 
     /// <inheritdoc />
     public override IReadOnlyList<string> BuildQueries(AcquisitionSearchInput input) =>
-        AcquisitionPolicyQueries.FromTitle(input, [
-            AcquisitionPolicyQueries.Join(input.Author, input.Title),
-            input.Title
-        ]);
+        AcquisitionPolicyQueries.FromTitle(input, input.Kind == EntityKind.AudioTrack
+            ? [
+                AcquisitionPolicyQueries.Join(AcquisitionPolicyQueries.Join(input.Author, input.Series), input.Title),
+                AcquisitionPolicyQueries.Join(input.Series, input.Title),
+                AcquisitionPolicyQueries.Join(input.Author, input.Title),
+                input.Title
+            ]
+            : [
+                AcquisitionPolicyQueries.Join(input.Author, input.Title),
+                input.Title
+            ]);
 }
 
 /// <summary>Release-search policy shared by TV series, season packs, and episodes.</summary>

@@ -72,6 +72,9 @@ public sealed class DownloadClientConfigRow {
     public string BaseUrl { get; set; } = string.Empty;
     public string? Username { get; set; }
 
+    /// <summary>Prismedia-visible root shared with completed slskd batch destinations.</summary>
+    public string? DownloadDirectory { get; set; }
+
     /// <summary>Category/label applied to torrents Prismedia adds, so they can be filtered and managed in isolation.</summary>
     public string Category { get; set; } = "prismedia-books";
 
