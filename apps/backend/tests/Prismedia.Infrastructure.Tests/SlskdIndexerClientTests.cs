@@ -81,6 +81,23 @@ public sealed class SlskdIndexerClientTests {
     }
 
     [Fact]
+    public async Task ConcurrentSearchesShareOneSlskdOperationSlot() {
+        var handler = new BlockingSearchHandler();
+        var gate = new SlskdSearchConcurrencyGate();
+        var client = new SlskdIndexerClient(new HttpClient(handler), gate);
+
+        var first = client.SearchAsync(Connection(), new IndexerQuery("Artist First", [3000], EntityKind.AudioLibrary), CancellationToken.None);
+        await handler.FirstSearchStarted;
+        var second = client.SearchAsync(Connection(), new IndexerQuery("Artist Second", [3000], EntityKind.AudioLibrary), CancellationToken.None);
+        await Task.Delay(50);
+
+        Assert.Equal(1, handler.StartedSearches);
+        handler.ReleaseFirstSearch();
+        await Task.WhenAll(first, second);
+        Assert.Equal(2, handler.StartedSearches);
+    }
+
+    [Fact]
     public async Task SoulseekSearchIsAudioOnly() {
         var handler = new Handler(_ => throw new InvalidOperationException("HTTP should not be called"));
         var client = new SlskdIndexerClient(new HttpClient(handler));
@@ -110,6 +127,34 @@ public sealed class SlskdIndexerClientTests {
             return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) {
                 Content = new StringContent(response(request), Encoding.UTF8, "application/json")
             });
+        }
+    }
+
+    private sealed class BlockingSearchHandler : HttpMessageHandler {
+        private readonly TaskCompletionSource _firstSearchStarted = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly TaskCompletionSource _releaseFirstSearch = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private int _startedSearches;
+
+        public Task FirstSearchStarted => _firstSearchStarted.Task;
+        public int StartedSearches => Volatile.Read(ref _startedSearches);
+        public void ReleaseFirstSearch() => _releaseFirstSearch.TrySetResult();
+
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) {
+            string response;
+            if (request.Method == HttpMethod.Post) {
+                var started = Interlocked.Increment(ref _startedSearches);
+                if (started == 1) {
+                    _firstSearchStarted.TrySetResult();
+                    await _releaseFirstSearch.Task.WaitAsync(cancellationToken);
+                }
+                response = """{"state":"Completed"}""";
+            } else {
+                response = "[]";
+            }
+
+            return new HttpResponseMessage(HttpStatusCode.OK) {
+                Content = new StringContent(response, Encoding.UTF8, "application/json")
+            };
         }
     }
 }

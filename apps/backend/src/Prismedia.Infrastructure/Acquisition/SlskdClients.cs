@@ -54,8 +54,29 @@ public static class SoulseekLocator {
     };
 }
 
+/// <summary>Serializes Soulseek searches because slskd permits only one active operation at a time.</summary>
+public sealed class SlskdSearchConcurrencyGate {
+    private readonly SemaphoreSlim _semaphore = new(1, 1);
+
+    /// <summary>Waits for the slskd search slot and returns a lease that releases it.</summary>
+    public async ValueTask<IDisposable> EnterAsync(CancellationToken cancellationToken) {
+        await _semaphore.WaitAsync(cancellationToken);
+        return new Lease(_semaphore);
+    }
+
+    private sealed class Lease(SemaphoreSlim semaphore) : IDisposable {
+        private int _disposed;
+
+        public void Dispose() {
+            if (Interlocked.Exchange(ref _disposed, 1) == 0) semaphore.Release();
+        }
+    }
+}
+
 /// <summary>Searches the Soulseek network through slskd and normalizes peer folders/files as releases.</summary>
-public sealed partial class SlskdIndexerClient(HttpClient http) : IIndexerSearchClient {
+public sealed partial class SlskdIndexerClient(
+    HttpClient http,
+    SlskdSearchConcurrencyGate? concurrency = null) : IIndexerSearchClient {
     private const int SearchCompletionPollAttempts = 60;
     private static readonly TimeSpan SearchCompletionPollInterval = TimeSpan.FromMilliseconds(250);
     private static readonly IReadOnlySet<string> AudioExtensions = new HashSet<string>(StringComparer.OrdinalIgnoreCase) {
@@ -73,6 +94,9 @@ public sealed partial class SlskdIndexerClient(HttpClient http) : IIndexerSearch
             return [];
         }
 
+        using var searchLease = concurrency is null
+            ? null
+            : await concurrency.EnterAsync(cancellationToken);
         var searchId = Guid.NewGuid();
         using var post = Request(connection, HttpMethod.Post, SoulseekProtocol.SearchesPath);
         post.Content = JsonContent.Create(new {
