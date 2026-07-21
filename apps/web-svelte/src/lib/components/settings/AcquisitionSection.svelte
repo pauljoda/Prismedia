@@ -42,6 +42,7 @@
   import { fetchAccessibleLibraryRoots, fetchSettings, updateSetting, type LibraryRootSummary } from "$lib/api/settings";
   import { findSetting, settingKeys } from "$lib/settings/app-settings";
   import AcquisitionProtocolPreference from "$lib/components/settings/AcquisitionProtocolPreference.svelte";
+  import AcquisitionBlocklistManager from "$lib/components/settings/AcquisitionBlocklistManager.svelte";
   import { availableDownloadProtocols } from "$lib/components/settings/acquisition-protocol-preference";
 
   interface Props {
@@ -970,27 +971,13 @@
         {/if}
       </section>
 
-      <!-- Blocklist -->
-      <section class="space-y-2">
-        <h3 class="text-kicker text-text-primary">Blocklist</h3>
-        <p class="text-[0.72rem] text-text-muted">
-          Releases a failed download blocklisted so they are never grabbed again. Remove an entry to allow that release to be acquired once more.
-        </p>
-        {#if blocklist.length === 0}
-          <p class="text-[0.78rem] text-text-muted">No blocklisted releases.</p>
-        {/if}
-        {#each blocklist as entry (entry.id)}
-          <div class="flex items-center justify-between gap-2 rounded-sm border border-border-subtle bg-surface-1 px-3 py-2">
-            <!-- The release title takes its own full line on mobile so the badge never crushes it. -->
-            <div class="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1">
-              <Badge variant="default">{reasonLabels[entry.reason] ?? entry.reason}</Badge>
-              {#if entry.indexerName}<span class="text-xs text-text-muted">{entry.indexerName}</span>{/if}
-              <span class="min-w-0 basis-full truncate text-sm text-text-primary sm:flex-1" title={entry.title ?? undefined}>{entry.title ?? "Unknown release"}</span>
-            </div>
-            <Button size="sm" variant="ghost" onclick={() => removeBlocklistEntry(entry.id)} disabled={busy}><Trash2 class="h-3.5 w-3.5" /></Button>
-          </div>
-        {/each}
-      </section>
+      <AcquisitionBlocklistManager
+        entries={blocklist}
+        history={[]}
+        {reasonLabels}
+        {busy}
+        onRemove={removeBlocklistEntry}
+      />
     {/if}
   </div>
 </Panel>

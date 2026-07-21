@@ -52,6 +52,67 @@ public sealed class EfAcquisitionBlocklistStoreTests {
     }
 
     [Fact]
+    public async Task ListIncludesTheAssociatedWorkFromTheCurrentAcquisition() {
+        await using var db = CreateContext();
+        var acquisitionId = Guid.NewGuid();
+        var entityId = Guid.NewGuid();
+        db.Acquisitions.Add(new AcquisitionRow {
+            Id = acquisitionId,
+            EntityId = entityId,
+            Kind = EntityKind.AudioLibrary,
+            Status = AcquisitionStatus.Imported,
+            Title = "Hamilton",
+            CreatedAt = DateTimeOffset.UtcNow,
+            UpdatedAt = DateTimeOffset.UtcNow
+        });
+        db.AcquisitionBlocklist.Add(new AcquisitionBlocklistRow {
+            Id = Guid.NewGuid(),
+            Identity = "title:indexer|hamilton.flac",
+            Reason = BlocklistReason.Failed,
+            Title = "Hamilton.FLAC",
+            IndexerName = "Indexer",
+            AcquisitionId = acquisitionId,
+            CreatedAt = DateTimeOffset.UtcNow
+        });
+        await db.SaveChangesAsync();
+
+        var entry = Assert.Single(await new EfAcquisitionBlocklistStore(db).ListAsync(CancellationToken.None));
+        Assert.Equal(entityId, entry.EntityId);
+        Assert.Equal(EntityKind.AudioLibrary, entry.EntityKind);
+        Assert.Equal("Hamilton", entry.EntityTitle);
+    }
+
+    [Fact]
+    public async Task ListUsesDurableHistoryWhenTheAcquisitionWasRemoved() {
+        await using var db = CreateContext();
+        var entityId = Guid.NewGuid();
+        db.AcquisitionHistory.Add(new AcquisitionHistoryRow {
+            Id = Guid.NewGuid(),
+            EntityId = entityId,
+            Kind = EntityKind.AudioLibrary,
+            Event = AcquisitionHistoryEvent.Blocklisted,
+            Title = "Hamilton",
+            ReleaseTitle = "Hamilton.FLAC",
+            IndexerName = "Indexer",
+            CreatedAt = DateTimeOffset.UtcNow
+        });
+        db.AcquisitionBlocklist.Add(new AcquisitionBlocklistRow {
+            Id = Guid.NewGuid(),
+            Identity = "title:indexer|hamilton.flac",
+            Reason = BlocklistReason.Failed,
+            Title = "Hamilton.FLAC",
+            IndexerName = "Indexer",
+            CreatedAt = DateTimeOffset.UtcNow
+        });
+        await db.SaveChangesAsync();
+
+        var entry = Assert.Single(await new EfAcquisitionBlocklistStore(db).ListAsync(CancellationToken.None));
+        Assert.Equal(entityId, entry.EntityId);
+        Assert.Equal(EntityKind.AudioLibrary, entry.EntityKind);
+        Assert.Equal("Hamilton", entry.EntityTitle);
+    }
+
+    [Fact]
     public async Task DeleteRemovesEntryAndReportsMissing() {
         await using var db = CreateContext();
         var store = new EfAcquisitionBlocklistStore(db);

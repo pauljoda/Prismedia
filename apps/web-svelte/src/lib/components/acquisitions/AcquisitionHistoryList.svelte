@@ -1,12 +1,14 @@
 <script lang="ts">
-  import { Badge } from "@prismedia/ui-svelte";
-  import type { AcquisitionHistoryView } from "$lib/api/generated/model";
+  import { RotateCcw } from "@lucide/svelte";
+  import { Badge, Button } from "@prismedia/ui-svelte";
+  import type { AcquisitionBlocklistEntry, AcquisitionHistoryView } from "$lib/api/generated/model";
   import { labelForEntityKind } from "$lib/entities/entity-codes";
   import { formatRelativeTime } from "$lib/utils/format";
   import {
     acquisitionHistoryEventLabel,
     acquisitionHistoryEventVariant,
   } from "$lib/requests/acquisition-history";
+  import { findBlocklistEntryForHistory } from "$lib/requests/acquisition-blocklist";
 
   /**
    * Renders the durable acquisition activity log as compact rows: an event badge, the item title, the
@@ -17,15 +19,23 @@
   let {
     entries,
     showKind = false,
+    blocklistEntries = [],
+    removingBlocklistIds = [],
+    onRemoveBlocklist,
   }: {
     entries: AcquisitionHistoryView[];
     /** Show a media-kind badge per row (for the mixed-kind global log). */
     showKind?: boolean;
+    /** Current live blocklist rows; enables the inline Allow again action for Blocklisted events. */
+    blocklistEntries?: AcquisitionBlocklistEntry[];
+    removingBlocklistIds?: string[];
+    onRemoveBlocklist?: (id: string) => void | Promise<void>;
   } = $props();
 </script>
 
 <div class="history-list">
   {#each entries as entry (entry.id)}
+    {@const blocklistEntry = findBlocklistEntryForHistory(entry, blocklistEntries)}
     <div class="history-row" title={entry.message ?? undefined}>
       <div class="history-content">
         <div class="history-heading">
@@ -55,9 +65,26 @@
           <p class="history-message">{entry.message}</p>
         {/if}
       </div>
-      <span class="history-time">
-        {formatRelativeTime(entry.createdAt)}
-      </span>
+      <div class="history-actions">
+        <span class="history-time">
+          {formatRelativeTime(entry.createdAt)}
+        </span>
+        {#if blocklistEntry && onRemoveBlocklist}
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            class="no-lift gap-1.5"
+            disabled={removingBlocklistIds.includes(blocklistEntry.id)}
+            onclick={() => void onRemoveBlocklist?.(blocklistEntry.id)}
+            aria-label={`Allow ${blocklistEntry.title ?? "release"} again`}
+            title="Remove this release from the blocklist"
+          >
+            <RotateCcw class="h-3.5 w-3.5" />
+            Allow again
+          </Button>
+        {/if}
+      </div>
     </div>
   {/each}
 </div>
@@ -155,6 +182,14 @@
     color: var(--color-text-muted, rgb(196 201 212 / 0.72));
   }
 
+  .history-actions {
+    display: flex;
+    flex: 0 0 auto;
+    align-items: flex-end;
+    gap: 0.35rem;
+    flex-direction: column;
+  }
+
   @media (max-width: 640px) {
     .history-row {
       flex-direction: column;
@@ -177,6 +212,13 @@
 
     .history-time {
       align-self: flex-start;
+    }
+
+    .history-actions {
+      width: 100%;
+      align-items: flex-start;
+      flex-direction: row;
+      justify-content: space-between;
     }
   }
 </style>

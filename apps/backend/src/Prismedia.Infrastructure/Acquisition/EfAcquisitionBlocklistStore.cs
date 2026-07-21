@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Prismedia.Application.Acquisition;
 using Prismedia.Contracts.Acquisition;
+using Prismedia.Domain.Entities;
 using Prismedia.Infrastructure.Persistence;
 using Prismedia.Infrastructure.Persistence.Entities;
 
@@ -51,9 +52,66 @@ public sealed class EfAcquisitionBlocklistStore(PrismediaDbContext db) : IAcquis
             .AsNoTracking()
             .OrderByDescending(row => row.CreatedAt)
             .ToArrayAsync(cancellationToken);
+
+        var acquisitionIds = rows
+            .Where(row => row.AcquisitionId.HasValue)
+            .Select(row => row.AcquisitionId!.Value)
+            .Distinct()
+            .ToArray();
+        var acquisitionContexts = (await db.Acquisitions
+                .AsNoTracking()
+                .Where(row => acquisitionIds.Contains(row.Id))
+                .Select(row => new { row.Id, row.EntityId, row.Kind, row.Title })
+                .ToArrayAsync(cancellationToken))
+            .ToDictionary(
+                row => row.Id,
+                row => new BlocklistEntityContext(row.Id, row.EntityId, row.Kind, row.Title));
+
+        // Acquisition rows may be removed while both history and the blocklist deliberately survive. The
+        // append-only Blocklisted event retains the work title/kind/entity, so it is the durable fallback
+        // that keeps old entries organized instead of collapsing a long-lived list into "unknown".
+        var historyContexts = (await db.AcquisitionHistory
+                .AsNoTracking()
+                .Where(row => row.Event == AcquisitionHistoryEvent.Blocklisted)
+                .OrderByDescending(row => row.CreatedAt)
+                .Select(row => new {
+                    row.AcquisitionId,
+                    row.EntityId,
+                    row.Kind,
+                    row.Title,
+                    row.ReleaseTitle,
+                    row.IndexerName
+                })
+                .ToArrayAsync(cancellationToken))
+            .GroupBy(row => ReleaseContextKey(row.ReleaseTitle, row.IndexerName), StringComparer.Ordinal)
+            .ToDictionary(
+                group => group.Key,
+                group => {
+                    var row = group.First();
+                    return new BlocklistEntityContext(row.AcquisitionId, row.EntityId, row.Kind, row.Title);
+                },
+                StringComparer.Ordinal);
+
         return rows
-            .Select(row => new AcquisitionBlocklistEntry(
-                row.Id, row.Reason, row.Title, row.IndexerName, row.InfoHash, row.AcquisitionId, row.Message, row.CreatedAt))
+            .Select(row => {
+                BlocklistEntityContext? context = null;
+                if (row.AcquisitionId is { } acquisitionId) {
+                    acquisitionContexts.TryGetValue(acquisitionId, out context);
+                }
+                context ??= historyContexts.GetValueOrDefault(ReleaseContextKey(row.Title, row.IndexerName));
+                return new AcquisitionBlocklistEntry(
+                    row.Id,
+                    row.Reason,
+                    row.Title,
+                    row.IndexerName,
+                    row.InfoHash,
+                    row.AcquisitionId,
+                    context?.EntityId,
+                    context?.Kind,
+                    context?.Title,
+                    row.Message,
+                    row.CreatedAt);
+            })
             .ToArray();
     }
 
@@ -67,4 +125,13 @@ public sealed class EfAcquisitionBlocklistStore(PrismediaDbContext db) : IAcquis
         await db.SaveChangesAsync(cancellationToken);
         return true;
     }
+
+    private static string ReleaseContextKey(string? title, string? indexerName) =>
+        $"{title?.Trim().ToUpperInvariant()}\u001f{indexerName?.Trim().ToUpperInvariant()}";
+
+    private sealed record BlocklistEntityContext(
+        Guid? AcquisitionId,
+        Guid? EntityId,
+        EntityKind Kind,
+        string Title);
 }

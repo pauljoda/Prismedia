@@ -224,13 +224,13 @@ public sealed class JobScheduler(
         var queue = scope.ServiceProvider.GetRequiredService<IJobQueueService>();
         var importEngines = scope.ServiceProvider.GetRequiredService<IAcquisitionImportEngineFactory>();
         foreach (var completion in work) {
-            if (!completion.IsUpgrade && importEngines.Find(completion.Kind) is null) {
+            var jobType = Acquisition.AcquisitionCompletionService.CompletionJobType(
+                completion.Kind,
+                completion.IsUpgrade);
+            if (jobType == JobType.AcquisitionImport && importEngines.Find(completion.Kind) is null) {
                 continue;
             }
 
-            var jobType = completion.IsUpgrade
-                ? JobType.AcquisitionUpgradeReplace
-                : JobType.AcquisitionImport;
             var targetId = completion.AcquisitionId.ToString();
             if (await queue.HasPendingAsync(jobType, targetId, cancellationToken)) {
                 continue;

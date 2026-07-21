@@ -516,5 +516,8 @@ public sealed record AcquisitionBlocklistEntry(
     string? IndexerName,
     string? InfoHash,
     Guid? AcquisitionId,
+    Guid? EntityId,
+    EntityKind? EntityKind,
+    string? EntityTitle,
     string? Message,
     DateTimeOffset CreatedAt);

@@ -65,13 +65,18 @@
   const replaceableKind = $derived(
     entity?.kind === ENTITY_KIND.book
       || entity?.kind === ENTITY_KIND.movie
-      || entity?.kind === ENTITY_KIND.video,
+      || entity?.kind === ENTITY_KIND.video
+      || entity?.kind === ENTITY_KIND.audioLibrary,
   );
   const uploadableAcquisitionKind = $derived(
     replaceableKind
       || entity?.kind === ENTITY_KIND.audioLibrary
       || entity?.kind === ENTITY_KIND.videoSeason,
   );
+  const hasImportedBaseline = $derived(
+    acq.acquisition?.summary.status === ACQUISITION_STATUS.imported,
+  );
+  const hasOwnedContent = $derived(acq.showFileManagement || hasImportedBaseline);
   const activeChildLabel = $derived(
     acq.childCards.every((card) => card.entity.kind === ENTITY_KIND.video)
       ? activeChildAcquisitionCount === 1 ? "episode" : "episodes"
@@ -204,8 +209,8 @@
     {#if entity && uploadableAcquisitionKind}
       <ManualAcquisitionActions
         entityId={entity.id}
-        canReplace={acq.showFileManagement && replaceableKind}
-        canUpload={Boolean(acq.acquisition) || (acq.showFileManagement && replaceableKind)}
+        canReplace={hasOwnedContent && replaceableKind}
+        canUpload={Boolean(acq.acquisition) || (hasOwnedContent && replaceableKind)}
         onStarted={async (detail) => {
           acq.acquisition = detail;
           await acq.refresh();

@@ -19,15 +19,25 @@ public sealed class AcquisitionCompletionService(
         }
 
         var isUpgrade = await acquisitions.GetUpgradeOwnedQualityAsync(acquisitionId, cancellationToken) is not null;
+        var jobType = CompletionJobType(detail.Summary.Kind, isUpgrade);
         await jobs.EnqueueAsync(
             new EnqueueJobRequest(
-                isUpgrade ? JobType.AcquisitionUpgradeReplace : JobType.AcquisitionImport,
+                jobType,
                 PayloadJson: AcquisitionJobPayload.Serialize(acquisitionId),
                 TargetEntityId: acquisitionId.ToString(),
-                TargetLabel: isUpgrade ? "Replace with upgrade" : "Import completed acquisition",
+                TargetLabel: isUpgrade ? "Replace with reviewed release" : "Import completed acquisition",
                 Priority: JobPriorities.InteractiveRequest),
             cancellationToken);
     }
+
+    /// <summary>
+    /// Single-file upgrades use the atomic replace handler. A reviewed album is also an upgrade child,
+    /// but its multi-file folder replacement belongs to the music import engine's durable placement plan.
+    /// </summary>
+    public static JobType CompletionJobType(EntityKind kind, bool isUpgrade) =>
+        isUpgrade && kind != EntityKind.AudioLibrary
+            ? JobType.AcquisitionUpgradeReplace
+            : JobType.AcquisitionImport;
 }
 
 /// <summary>Accepts local bytes through the upload adapter and joins the shared completed-acquisition flow.</summary>

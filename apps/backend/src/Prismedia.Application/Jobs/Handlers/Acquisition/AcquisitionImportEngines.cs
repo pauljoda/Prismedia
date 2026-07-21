@@ -1810,7 +1810,7 @@ public sealed class TvAcquisitionImportEngine(
 /// and artist folders to their wanted entities via the acquisition hint. The profile's import mode controls
 /// whether the payload is moved, copied, or hardlinked before cleanup or seeding watch.
 /// </summary>
-public sealed class MusicAcquisitionImportEngine(
+public sealed partial class MusicAcquisitionImportEngine(
     IAcquisitionStore acquisitions,
     IBookAcquisitionProfileStore profiles,
     ILibraryScanRootPersistence roots,
@@ -1821,7 +1821,8 @@ public sealed class MusicAcquisitionImportEngine(
     IAcquisitionBlocklistStore blocklist,
     IAcquisitionHistoryStore history,
     IImportedEntityMaterializer materializer,
-    ILogger<MusicAcquisitionImportEngine> logger) : IAcquisitionImportEngine {
+    ILogger<MusicAcquisitionImportEngine> logger,
+    IMonitorStore? monitors = null) : IAcquisitionImportEngine {
     public EntityKind Kind => EntityKind.AudioLibrary;
 
     public async Task ImportAsync(JobContext context, AcquisitionImportContext import, CancellationToken cancellationToken) {
@@ -1846,13 +1847,30 @@ public sealed class MusicAcquisitionImportEngine(
                 return;
             }
 
-            var resumed = await ImportPlacementExecution.ExecuteAsync(
-                acquisitions,
-                mover,
-                import.Id,
-                durableCheckpoint,
-                cancellationToken);
+            ImportPlacementCheckpoint? resumed;
+            var replacementAlreadySwapped = import.UpgradeOfAcquisitionId is not null
+                && AlbumReplacementAlreadySwapped(durableCheckpoint);
+            if (replacementAlreadySwapped) {
+                resumed = durableCheckpoint;
+            } else {
+                resumed = await ImportPlacementExecution.ExecuteAsync(
+                    acquisitions,
+                    mover,
+                    import.Id,
+                    durableCheckpoint,
+                    cancellationToken);
+            }
             if (resumed is null) {
+                return;
+            }
+
+            if (import.UpgradeOfAcquisitionId is not null) {
+                await FinalizeAlbumReplacementAsync(
+                    context,
+                    import,
+                    checkpointRoot,
+                    resumed,
+                    cancellationToken);
                 return;
             }
 
@@ -1879,6 +1897,17 @@ public sealed class MusicAcquisitionImportEngine(
             await acquisitions.SetStatusAsync(
                 import.Id, AcquisitionStatus.ManualImportRequired,
                 "The download contains no supported audio files.", cancellationToken);
+            return;
+        }
+
+        if (import.UpgradeOfAcquisitionId is not null) {
+            await ReplaceExistingAlbumAsync(
+                context,
+                import,
+                payload,
+                rawPlan,
+                profile,
+                cancellationToken);
             return;
         }
 
@@ -1970,26 +1999,6 @@ public sealed class MusicAcquisitionImportEngine(
             completed.ImportMode,
             completed.SuccessMessage,
             cancellationToken);
-    }
-
-    /// <summary>
-    /// The existing album folder to merge into: the album's own on-disk folder when it has one, else a
-    /// template-named album folder INSIDE the existing artist folder (never a second artist folder).
-    /// Null when neither container exists on disk — the caller keeps the template placement.
-    /// </summary>
-    private static string? ExistingAlbumFolderOf(AlbumDiskTarget target, string artist, AcquisitionImportContext import, BookImportProfile? profile) {
-        if (target.AlbumFolderPath is { } albumFolder && Directory.Exists(albumFolder)) {
-            return albumFolder;
-        }
-
-        if (target.ArtistFolderPath is { } artistFolder && Directory.Exists(artistFolder)) {
-            var albumSegment = MusicImportPlanBuilder
-                .AlbumFolderRelative(artist, import.Title, profile?.PathTemplate, import.Year)
-                .Split('/')[^1];
-            return Path.Combine(artistFolder, albumSegment);
-        }
-
-        return null;
     }
 
     /// <summary>
@@ -2095,18 +2104,6 @@ public sealed class MusicAcquisitionImportEngine(
             string.IsNullOrWhiteSpace(import.ClientItemId) ? null : import.ClientItemId,
             Guid.NewGuid(),
             context.Job.Id);
-
-    private async Task<LibraryRootData?> ResolveCheckpointRootAsync(
-        ImportPlacementCheckpoint checkpoint,
-        CancellationToken cancellationToken) {
-        var root = await roots.GetLibraryRootAsync(checkpoint.LibraryRootId, cancellationToken);
-        return root is { Enabled: true, ScanAudio: true }
-            && FileSystemPathComparison.Equals(
-                Path.GetFullPath(root.Path),
-                checkpoint.LibraryRootPath)
-                ? root
-                : null;
-    }
 
     /// <summary>The shared success tail: hint, final source path, scan chain, torrent handling, and the imported mark.</summary>
     private async Task FinalizeImportAsync(

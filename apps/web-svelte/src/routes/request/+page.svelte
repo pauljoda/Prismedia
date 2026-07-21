@@ -14,8 +14,8 @@
   import type { SelectOption } from "@prismedia/ui-svelte";
   import { goto } from "$app/navigation";
   import { REQUEST_KIND_MANIFEST } from "$lib/api/generated/codes";
-  import type { AcquisitionHistoryView } from "$lib/api/generated/model";
-  import { fetchAcquisitionHistory } from "$lib/api/acquisitions";
+  import type { AcquisitionBlocklistEntry, AcquisitionHistoryView } from "$lib/api/generated/model";
+  import { deleteBlocklistEntry, fetchAcquisitionHistory, fetchBlocklist } from "$lib/api/acquisitions";
   import { labelForEntityKind } from "$lib/entities/entity-codes";
   import AcquisitionHistoryList from "$lib/components/acquisitions/AcquisitionHistoryList.svelte";
   import DownloadsPanel from "$lib/components/acquisitions/DownloadsPanel.svelte";
@@ -50,6 +50,8 @@
   let history = $state<AcquisitionHistoryView[]>([]);
   let historyLoading = $state(false);
   let historyError = $state<string | null>(null);
+  let historyBlocklist = $state<AcquisitionBlocklistEntry[]>([]);
+  let removingBlocklistIds = $state<string[]>([]);
   let historyLoaded = false;
 
   async function loadHistory() {
@@ -57,12 +59,29 @@
     historyLoading = true;
     historyError = null;
     try {
-      history = await fetchAcquisitionHistory({ limit: 200 });
+      [history, historyBlocklist] = await Promise.all([
+        fetchAcquisitionHistory({ limit: 200 }),
+        fetchBlocklist(),
+      ]);
       historyLoaded = true;
     } catch (err) {
       historyError = err instanceof Error ? err.message : "Failed to load history";
     } finally {
       historyLoading = false;
+    }
+  }
+
+  async function allowBlocklistedReleaseAgain(id: string) {
+    if (removingBlocklistIds.includes(id)) return;
+    removingBlocklistIds = [...removingBlocklistIds, id];
+    historyError = null;
+    try {
+      await deleteBlocklistEntry(id);
+      historyBlocklist = historyBlocklist.filter((entry) => entry.id !== id);
+    } catch (err) {
+      historyError = err instanceof Error ? err.message : "Failed to remove blocklist entry";
+    } finally {
+      removingBlocklistIds = removingBlocklistIds.filter((candidate) => candidate !== id);
     }
   }
 
@@ -147,7 +166,13 @@
       </div>
     {/if}
     {#if history.length > 0}
-      <AcquisitionHistoryList entries={history} showKind />
+      <AcquisitionHistoryList
+        entries={history}
+        showKind
+        blocklistEntries={historyBlocklist}
+        {removingBlocklistIds}
+        onRemoveBlocklist={allowBlocklistedReleaseAgain}
+      />
     {:else if historyLoading}
       <div class="flex items-center justify-center gap-2.5 p-10 text-text-muted">
         <Loader2 class="h-4 w-4 animate-spin" />

@@ -13,7 +13,8 @@ namespace Prismedia.Infrastructure.Acquisition;
 /// </summary>
 public sealed class EfManualAcquisitionStore(
     PrismediaDbContext db,
-    IAcquisitionStore acquisitions) : IManualReplacementStore, IAcquisitionUploadStore {
+    IAcquisitionStore acquisitions,
+    IImportTargetIndex? targets = null) : IManualReplacementStore, IAcquisitionUploadStore {
     /// <inheritdoc />
     public async Task<ManualReplacementSearchTarget?> GetSearchTargetAsync(
         Guid entityId,
@@ -37,30 +38,34 @@ public sealed class EfManualAcquisitionStore(
             return null;
         }
 
-        var sourcePath = await db.EntityFiles.AsNoTracking()
-            .Where(file => file.EntityId == entityId && file.Role == EntityFileRole.Source)
-            .OrderBy(file => file.CreatedAt)
-            .Select(file => file.Path)
-            .FirstOrDefaultAsync(cancellationToken);
+        var sourcePath = kind == EntityKind.AudioLibrary
+            ? targets is null
+                ? null
+                : (await targets.GetAlbumTargetAsync(entityId, cancellationToken))?.AlbumFolderPath
+            : await db.EntityFiles.AsNoTracking()
+                .Where(file => file.EntityId == entityId && file.Role == EntityFileRole.Source)
+                .OrderBy(file => file.CreatedAt)
+                .Select(file => file.Path)
+                .FirstOrDefaultAsync(cancellationToken);
         if (!PathExists(sourcePath)) {
             return null;
         }
 
-        var (series, seasonNumber, episodeNumber) = await ResolveManualVideoContextAsync(
+        var (author, series, seasonNumber, episodeNumber) = await ResolveManualContextAsync(
             entity,
             kind,
             cancellationToken);
         var input = new AcquisitionSearchInput(
             Guid.Empty,
             entity.Title,
-            null,
+            author,
             kind,
             entityId,
             Series: series,
             SeasonNumber: seasonNumber,
             EpisodeNumber: episodeNumber,
             BookRendition: kind == EntityKind.Book ? BookRendition.Ebook : null);
-        var owned = MediaQualityLadder.IsUpgradeCapableKind(kind)
+        var owned = MediaQualityLadder.IsUpgradeCapableKind(kind) || MediaQualityLadder.IsAudioKind(kind)
             ? new UpgradeOwnedQuality(null, MediaQualityLadder.Detect(kind, Path.GetFileName(sourcePath!)).Code)
             : new UpgradeOwnedQuality(
                 new BookQualityRank(BookSourceTier.Unknown, BookFormatDetection.FormatTierFromExtension(sourcePath!)),
@@ -88,11 +93,15 @@ public sealed class EfManualAcquisitionStore(
             .OrderByDescending(row => row.UpdatedAt)
             .FirstOrDefaultAsync(cancellationToken);
         if (parent is null) {
-            var sourcePath = await db.EntityFiles.AsNoTracking()
-                .Where(file => file.EntityId == entityId && file.Role == EntityFileRole.Source)
-                .OrderBy(file => file.CreatedAt)
-                .Select(file => file.Path)
-                .FirstOrDefaultAsync(cancellationToken);
+            var sourcePath = target.Input.Kind == EntityKind.AudioLibrary
+                ? targets is null
+                    ? null
+                    : (await targets.GetAlbumTargetAsync(entityId, cancellationToken))?.AlbumFolderPath
+                : await db.EntityFiles.AsNoTracking()
+                    .Where(file => file.EntityId == entityId && file.Role == EntityFileRole.Source)
+                    .OrderBy(file => file.CreatedAt)
+                    .Select(file => file.Path)
+                    .FirstOrDefaultAsync(cancellationToken);
             if (!PathExists(sourcePath)) {
                 return null;
             }
@@ -289,23 +298,30 @@ public sealed class EfManualAcquisitionStore(
         }
     }
 
-    private async Task<(string? Series, int? SeasonNumber, int? EpisodeNumber)> ResolveManualVideoContextAsync(
+    private async Task<(string? Author, string? Series, int? SeasonNumber, int? EpisodeNumber)> ResolveManualContextAsync(
         EntityRow entity,
         EntityKind kind,
         CancellationToken cancellationToken) {
+        if (kind == EntityKind.AudioLibrary) {
+            var artist = entity.ParentEntityId is { } artistId
+                ? await db.Entities.AsNoTracking().FirstOrDefaultAsync(row => row.Id == artistId, cancellationToken)
+                : null;
+            return (artist?.Title, null, null, null);
+        }
+
         if (kind != EntityKind.Video || entity.ParentEntityId is not { } seasonId) {
-            return (null, null, null);
+            return (null, null, null, null);
         }
 
         var season = await db.Entities.AsNoTracking().FirstOrDefaultAsync(row => row.Id == seasonId, cancellationToken);
         var series = season?.ParentEntityId is { } seriesId
             ? await db.Entities.AsNoTracking().FirstOrDefaultAsync(row => row.Id == seriesId, cancellationToken)
             : null;
-        return (series?.Title, season?.SortOrder, entity.SortOrder);
+        return (null, series?.Title, season?.SortOrder, entity.SortOrder);
     }
 
     private static UpgradeOwnedQuality OwnedQuality(AcquisitionRow parent) =>
-        MediaQualityLadder.IsUpgradeCapableKind(parent.Kind)
+        MediaQualityLadder.IsUpgradeCapableKind(parent.Kind) || MediaQualityLadder.IsAudioKind(parent.Kind)
             ? new UpgradeOwnedQuality(null, parent.OwnedMediaQuality, parent.OwnedMediaRevision, parent.OwnedFormatScore)
             : new UpgradeOwnedQuality(
                 new BookQualityRank(parent.OwnedSourceTier, parent.OwnedFormatTier),
@@ -315,7 +331,9 @@ public sealed class EfManualAcquisitionStore(
     private static bool TryDecodeReplaceableKind(string code, out EntityKind kind) {
         try {
             kind = code.DecodeAs<EntityKind>();
-            return kind == EntityKind.Book || MediaQualityLadder.IsUpgradeCapableKind(kind);
+            return kind == EntityKind.Book
+                || kind == EntityKind.AudioLibrary
+                || MediaQualityLadder.IsUpgradeCapableKind(kind);
         } catch (ArgumentException) {
             kind = default;
             return false;

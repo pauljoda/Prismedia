@@ -26,6 +26,17 @@ describe("EntityAcquisitionCard", () => {
     expect(screen.queryByRole("button", { name: "Notify imported" })).not.toBeInTheDocument();
   });
 
+  it("always offers reviewed replacement search for an on-disk album", () => {
+    render(Harness, {
+      initialAcquisition: acquisition("album-acquisition"),
+      refresh: vi.fn(async () => {}),
+      showFileManagement: true,
+      entityKind: ENTITY_KIND.audioLibrary,
+    });
+
+    expect(screen.getByRole("button", { name: "Replace" })).toBeInTheDocument();
+  });
+
   it("forwards an imported transition to the owning entity page", async () => {
     const onImported = vi.fn();
 

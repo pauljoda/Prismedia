@@ -513,7 +513,7 @@ public sealed class EfAcquisitionStore(PrismediaDbContext db, IAcquisitionHistor
             return null;
         }
 
-        return MediaQualityLadder.IsUpgradeCapableKind(parent.Kind)
+        return MediaQualityLadder.IsUpgradeCapableKind(parent.Kind) || MediaQualityLadder.IsAudioKind(parent.Kind)
             ? new UpgradeOwnedQuality(null, parent.OwnedMediaQuality, parent.OwnedMediaRevision, parent.OwnedFormatScore)
             : new UpgradeOwnedQuality(new BookQualityRank(parent.OwnedSourceTier, parent.OwnedFormatTier), null, FormatScore: parent.OwnedFormatScore);
     }
@@ -1147,7 +1147,7 @@ public sealed class EfAcquisitionStore(PrismediaDbContext db, IAcquisitionHistor
             row.Id, row.Title, row.Author, row.Series, row.Year, row.PosterUrl, externalIdentity,
             row.ProfileId, transfer?.ContentPath, transfer?.ClientItemId, transfer?.DownloadClientConfigId, row.Description,
             row.Kind, row.TargetLibraryRootId, row.SeasonNumber, row.EpisodeNumber, row.EntityId, row.FinalSourcePath,
-            tvImportCheckpoint, importPlacementCheckpoint, row.BookRendition);
+            tvImportCheckpoint, importPlacementCheckpoint, row.BookRendition, row.UpgradeOfAcquisitionId);
     }
 
     public async Task<AcquisitionTransferInfo?> GetTransferInfoAsync(Guid acquisitionId, CancellationToken cancellationToken) {

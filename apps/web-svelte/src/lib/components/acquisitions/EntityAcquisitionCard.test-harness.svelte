@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { CAPABILITY_KIND } from "$lib/api/generated/codes";
+  import { CAPABILITY_KIND, ENTITY_KIND } from "$lib/api/generated/codes";
   import type { AcquisitionDetail, EntityCapability } from "$lib/api/generated/model";
   import type { EntityAcquisition } from "$lib/components/acquisitions/use-entity-acquisition.svelte";
   import EntityAcquisitionCard from "$lib/components/acquisitions/EntityAcquisitionCard.svelte";
@@ -13,6 +13,7 @@
     monitorDeletingFiles = false,
     monitorUnknownStatus = false,
     onToggleMonitor,
+    entityKind = ENTITY_KIND.book,
   }: {
     initialAcquisition?: AcquisitionDetail | null;
     refresh: () => Promise<void>;
@@ -22,6 +23,7 @@
     monitorDeletingFiles?: boolean;
     monitorUnknownStatus?: boolean;
     onToggleMonitor?: () => void | Promise<void>;
+    entityKind?: string;
   } = $props();
 
   let acquisition = $derived<AcquisitionDetail | null>(initialAcquisition);
@@ -81,6 +83,7 @@
   const entity = $derived({
     id: "entity-1",
     title: "Managed Entity",
+    kind: entityKind,
     capabilities: showFileManagement
       ? [{ kind: CAPABILITY_KIND.fileManagement, canDeleteFiles: true } as EntityCapability]
       : [],

@@ -581,7 +581,8 @@ public sealed record AcquisitionImportContext(
     string? FinalSourcePath = null,
     TvImportCheckpoint? TvImportCheckpoint = null,
     ImportPlacementCheckpoint? ImportPlacementCheckpoint = null,
-    BookRendition? BookRendition = null) {
+    BookRendition? BookRendition = null,
+    Guid? UpgradeOfAcquisitionId = null) {
     /// <summary>
     /// The user's explicit "import anyway": an upgrade that changes the file extension — normally held
     /// for manual import — replaces the owned file across formats. Carried by the manual retry-import

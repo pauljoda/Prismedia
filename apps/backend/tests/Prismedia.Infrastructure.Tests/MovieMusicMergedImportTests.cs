@@ -94,6 +94,47 @@ public sealed class MovieMusicMergedImportTests : IDisposable {
         Assert.Equal(BlocklistReason.NoImportableFiles, Assert.Single(await db.AcquisitionBlocklist.AsNoTracking().ToArrayAsync()).Reason);
     }
 
+    [Fact]
+    public async Task ReviewedAlbumReplacementStagesThenReplacesTheWholeOwnedFolder() {
+        await using var db = CreateContext();
+        var world = await MusicWorldAsync(
+            db,
+            ownedTracks: ["01 - Old.flac", "02 - Removed.flac"],
+            payloadTracks: ["01 - New.flac", "02 - New.flac"]);
+        var child = await db.Acquisitions.SingleAsync(row => row.Id == world.Import.Id);
+        var parentId = Guid.NewGuid();
+        var now = DateTimeOffset.UtcNow;
+        db.Acquisitions.Add(new AcquisitionRow {
+            Id = parentId,
+            Kind = EntityKind.AudioLibrary,
+            EntityId = child.EntityId,
+            Status = AcquisitionStatus.Imported,
+            Title = child.Title,
+            Author = "The Artist",
+            FinalSourcePath = world.AlbumFolder,
+            OwnedMediaQuality = AudioQuality.Lossy.ToCode(),
+            UpgradeQualityCaptured = true,
+            CreatedAt = now.AddDays(-1),
+            UpdatedAt = now.AddDays(-1)
+        });
+        child.UpgradeOfAcquisitionId = parentId;
+        await db.SaveChangesAsync();
+        var replacementImport = world.Import with { UpgradeOfAcquisitionId = parentId };
+
+        await world.Engine.ImportAsync(world.Context, replacementImport, CancellationToken.None);
+
+        Assert.False(await db.Acquisitions.AnyAsync(row => row.Id == child.Id));
+        var parent = await db.Acquisitions.AsNoTracking().SingleAsync(row => row.Id == parentId);
+        Assert.Equal(AudioQuality.Lossless.ToCode(), parent.OwnedMediaQuality);
+        Assert.False(File.Exists(Path.Combine(world.AlbumFolder, "01 - Old.flac")));
+        Assert.False(File.Exists(Path.Combine(world.AlbumFolder, "02 - Removed.flac")));
+        Assert.Equal("payload-bytes", await File.ReadAllTextAsync(Path.Combine(world.AlbumFolder, "01 - New.flac")));
+        Assert.Equal("payload-bytes", await File.ReadAllTextAsync(Path.Combine(world.AlbumFolder, "02 - New.flac")));
+        Assert.Empty(Directory.GetDirectories(Path.GetDirectoryName(world.AlbumFolder)!, "*.prismedia-*-*"));
+        Assert.Contains(await db.AcquisitionHistory.AsNoTracking().ToArrayAsync(), row =>
+            row.AcquisitionId == parentId && row.Event == AcquisitionHistoryEvent.Upgraded);
+    }
+
     private sealed record MovieWorld(MovieAcquisitionImportEngine Engine, JobContext Context, AcquisitionImportContext Import, string LibraryRoot, string OwnedFilePath);
 
     private sealed record MusicWorld(MusicAcquisitionImportEngine Engine, JobContext Context, AcquisitionImportContext Import, string LibraryRoot, string AlbumFolder);

@@ -5,6 +5,7 @@
  * OpenAPI spec version: 1.0.0
  */
 import type { BlocklistReason } from './blocklistReason';
+import type { EntityKind } from './entityKind';
 
 export interface AcquisitionBlocklistEntry {
   id: string;
@@ -17,6 +18,11 @@ export interface AcquisitionBlocklistEntry {
   infoHash: string | null;
   /** @nullable */
   acquisitionId: string | null;
+  /** @nullable */
+  entityId: string | null;
+  entityKind: null | EntityKind;
+  /** @nullable */
+  entityTitle: string | null;
   /** @nullable */
   message: string | null;
   createdAt: string;
