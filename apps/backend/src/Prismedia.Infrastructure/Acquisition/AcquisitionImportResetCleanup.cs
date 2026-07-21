@@ -61,15 +61,19 @@ public sealed class AcquisitionImportResetCleanup(
         foreach (var unit in checkpoint.Units) {
             cancellationToken.ThrowIfCancellationRequested();
             var target = Path.GetFullPath(unit.TargetAbsolutePath);
-            if (unit.PreviousFilePath is { } previousPath) {
-                RestorePreviousFile(unit, target, Path.GetFullPath(previousPath));
-                if (!FileSystemPathComparison.Equals(target, previousPath)) {
+            // An adopted target predates the acquisition, so reset may clean the downloaded duplicate
+            // and catalog state but must never delete the pre-existing library bytes.
+            if (!unit.AdoptedExistingTarget) {
+                if (unit.PreviousFilePath is { } previousPath) {
+                    RestorePreviousFile(unit, target, Path.GetFullPath(previousPath));
+                    if (!FileSystemPathComparison.Equals(target, previousPath)) {
+                        removedTargets.Add(target);
+                        restoredTargets[target] = Path.GetFullPath(previousPath);
+                    }
+                } else {
+                    DeleteFileBestEffort(target);
                     removedTargets.Add(target);
-                    restoredTargets[target] = Path.GetFullPath(previousPath);
                 }
-            } else {
-                DeleteFileBestEffort(target);
-                removedTargets.Add(target);
             }
 
             DeleteFileBestEffort(unit.SourceAbsolutePath);

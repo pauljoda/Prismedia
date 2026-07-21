@@ -173,7 +173,7 @@ function downloadDescription(status: AcquisitionStatusCode, statusMessage: strin
     case ACQUISITION_STATUS.downloaded:
       return "Download complete; importing…";
     case ACQUISITION_STATUS.importing:
-      return "Importing into your library…";
+      return statusMessage ?? "Importing into your library…";
     case ACQUISITION_STATUS.manualImportRequired:
       return statusMessage ?? "Manual import required.";
     case ACQUISITION_STATUS.stopping:

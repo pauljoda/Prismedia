@@ -68,6 +68,10 @@ public static class TvImportCheckpointLifecycle {
     private static bool MutationMayHaveStarted(
         AcquisitionImportContext import,
         TvImportCheckpointUnit unit) {
+        if (unit.AdoptedExistingTarget) {
+            return false;
+        }
+
         if (!string.IsNullOrWhiteSpace(unit.FinalPath)) {
             return true;
         }

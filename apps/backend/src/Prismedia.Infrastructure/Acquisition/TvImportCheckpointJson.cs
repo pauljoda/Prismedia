@@ -94,6 +94,10 @@ internal static class TvImportCheckpointJson {
             }
         }
 
+        if (unit.AdoptedExistingTarget && unit.PreviousFilePath is not null) {
+            Invalid($"{prefix} cannot adopt an existing target while replacing an owned file.");
+        }
+
         if (unit.PreviousFilePath is null) {
             if (unit.ReplacementBackupPath is not null || unit.ReplacementEvidencePath is not null) {
                 Invalid($"{prefix} cannot carry replacement artifacts without PreviousFilePath.");

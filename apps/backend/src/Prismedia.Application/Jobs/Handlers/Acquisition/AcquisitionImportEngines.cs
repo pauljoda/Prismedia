@@ -990,8 +990,8 @@ public sealed class MovieAcquisitionImportEngine(
 /// (<see cref="EntityKind.Video"/>) — since placement rules are identical at either granularity.
 /// An acquisition linked to a series that already lives on disk MERGES into the existing folder tree
 /// instead: new episodes land in the real season folders, already-owned episodes follow the upgrade
-/// rules (replace strictly-better in place, drop the rest), and a payload with nothing better than the
-/// owned files fails with the release blocklisted.
+/// rules (replace strictly-better in place, reconcile byte-identical copies, drop the rest), and a
+/// payload with nothing usable fails with the release blocklisted.
 /// </summary>
 public sealed class TvAcquisitionImportEngine(
     EntityKind kind,
@@ -1024,7 +1024,8 @@ public sealed class TvAcquisitionImportEngine(
 
         // Keep a full video scan from observing moved files before the acquisition hint and wanted
         // bindings exist. The same singleton gate wraps scan snapshots and reconciliation.
-        await using var scanLease = await scanGate.EnterAsync(cancellationToken);
+        await using var scanLease = await TvImportExecutionSupport.EnterScanGateAsync(
+            scanGate, acquisitions, context, import.Id, cancellationToken);
 
         if (import.TvImportCheckpoint is { } durableCheckpoint) {
             if (!await acquisitions.IsCurrentTvImportCheckpointAsync(
@@ -1150,9 +1151,9 @@ public sealed class TvAcquisitionImportEngine(
 
     /// <summary>
     /// The merged path for an existing series: plan units against the real on-disk layout, place new
-    /// episodes into the existing folders, replace strictly-better collisions in place, and drop the
-    /// rest. A payload that produced nothing is failed (blocklisting the release) or held for manual
-    /// import when the only upgrades change the file format.
+    /// episodes into the existing folders, replace strictly-better collisions in place, reconcile exact
+    /// copies already cataloged by a concurrent scan, and drop the rest. A payload that produced nothing
+    /// is failed (blocklisting the release) or held when the only upgrades change the file format.
     /// </summary>
     private async Task ImportIntoExistingSeriesAsync(
         JobContext context,
@@ -1216,15 +1217,20 @@ public sealed class TvAcquisitionImportEngine(
             .Where(item => item.Action is MergeFileAction.PlaceNew or MergeFileAction.ReplaceUpgrade)
             .ToArray();
         var formatChanges = merged.Count(item => item.Action == MergeFileAction.DropFormatChange);
-        if (executable.Length == 0) {
+        var reconciledExisting = executable.Length == 0
+            && TvImportExecutionSupport.AllDroppedFilesMatchPayload(merged, payload);
+        if (executable.Length == 0 && !reconciledExisting) {
             await HandleNothingUsableAsync(import, selected, formatChanges > 0, cancellationToken);
             return;
         }
 
-        var skipped = merged.Count - executable.Length;
-        var message = skipped == 0
-            ? "Imported into the existing series."
-            : $"Imported {executable.Length} of {merged.Count} file(s) into the existing series; {skipped} were not upgrades over the files you already have.";
+        var checkpointItems = reconciledExisting ? merged.ToArray() : executable;
+        var skipped = merged.Count - checkpointItems.Length;
+        var message = reconciledExisting
+            ? "The downloaded episodes already existed in the library and were reconciled."
+            : skipped == 0
+                ? "Imported into the existing series."
+                : $"Imported {checkpointItems.Length} of {merged.Count} file(s) into the existing series; {skipped} were not upgrades over the files you already have.";
         var unitsBySource = unitsPlan.Units.ToDictionary(
             unit => unit.SourceRelativePath,
             FileSystemPathComparison.Comparer);
@@ -1235,7 +1241,7 @@ public sealed class TvAcquisitionImportEngine(
             import.AllowFormatChange,
             message,
             PreferSingleFileFinalSource: true,
-            executable.Select(item => {
+            checkpointItems.Select(item => {
                 var unit = unitsBySource[item.SourceRelativePath];
                 return new TvImportCheckpointUnit(
                     item.SourceRelativePath,
@@ -1243,7 +1249,8 @@ public sealed class TvAcquisitionImportEngine(
                     unit.Season,
                     unit.Episode,
                     unit.ExtraEpisodes,
-                    item.Action == MergeFileAction.ReplaceUpgrade ? item.OwnedFilePath : null);
+                    item.Action == MergeFileAction.ReplaceUpgrade ? item.OwnedFilePath : null,
+                    AdoptedExistingTarget: reconciledExisting);
             }).ToArray(),
             TransferClientItemId: NormalizeClientItemId(import.ClientItemId),
             AttemptId: Guid.NewGuid(),
@@ -1274,7 +1281,9 @@ public sealed class TvAcquisitionImportEngine(
         var units = new TvImportCheckpointUnit[checkpoint.Units.Count];
         for (var index = 0; index < checkpoint.Units.Count; index++) {
             var unit = checkpoint.Units[index];
+            var sourceAbsolutePath = Path.GetFullPath(Path.Combine(payload.ContentRoot, unit.SourceRelativePath));
             string exactTarget;
+            var adoptedExistingTarget = unit.AdoptedExistingTarget;
             if (unit.PreviousFilePath is { } previousFilePath) {
                 exactTarget = Path.ChangeExtension(
                     Path.GetFullPath(previousFilePath),
@@ -1291,30 +1300,44 @@ public sealed class TvAcquisitionImportEngine(
                 if (reservedTargets.Contains(exactTarget, FileSystemPathComparison.Comparer)) {
                     throw new InvalidOperationException("The TV import plan assigns multiple files to one upgrade target.");
                 }
+            } else if (adoptedExistingTarget) {
+                exactTarget = Path.GetFullPath(unit.TargetAbsolutePath);
+                if (reservedTargets.Contains(exactTarget, FileSystemPathComparison.Comparer)) {
+                    throw new InvalidOperationException("The TV import plan assigns multiple files to one adopted target.");
+                }
             } else {
                 var desiredTarget = Path.GetFullPath(unit.TargetAbsolutePath);
                 exactTarget = mover.ResolveExactTargetPath(desiredTarget, reservedTargets);
                 if (!FileSystemPathComparison.Equals(exactTarget, desiredTarget)) {
-                    await acquisitions.SetStatusAsync(
-                        import.Id,
-                        AcquisitionStatus.ManualImportRequired,
-                        $"The episode slot target already exists in the library ({Path.GetFileName(desiredTarget)}). " +
-                        "Review the conflicting file before retrying; Prismedia will not create a duplicate episode variant implicitly.",
-                        cancellationToken);
-                    return null;
+                    var alreadyReserved = reservedTargets.Contains(
+                        desiredTarget,
+                        FileSystemPathComparison.Comparer);
+                    if (!alreadyReserved && TvImportExecutionSupport.FilesHaveSameContent(desiredTarget, sourceAbsolutePath)) {
+                        exactTarget = desiredTarget;
+                        adoptedExistingTarget = true;
+                    } else {
+                        await acquisitions.SetStatusAsync(
+                            import.Id,
+                            AcquisitionStatus.ManualImportRequired,
+                            $"The episode slot target already exists in the library ({Path.GetFileName(desiredTarget)}). " +
+                            "Review the conflicting file before retrying; Prismedia will not create a duplicate episode variant implicitly.",
+                            cancellationToken);
+                        return null;
+                    }
                 }
             }
 
             reservedTargets.Add(exactTarget);
             units[index] = unit with {
                 TargetAbsolutePath = exactTarget,
-                SourceAbsolutePath = Path.GetFullPath(Path.Combine(payload.ContentRoot, unit.SourceRelativePath)),
+                SourceAbsolutePath = sourceAbsolutePath,
                 ReplacementBackupPath = unit.PreviousFilePath is null
                     ? null
                     : OwnedFileReplacementArtifacts.CheckpointBackupPath(unit.PreviousFilePath, checkpoint.AttemptId),
                 ReplacementEvidencePath = unit.PreviousFilePath is null
                     ? null
                     : OwnedFileReplacementArtifacts.CheckpointEvidencePath(unit.PreviousFilePath, checkpoint.AttemptId),
+                AdoptedExistingTarget = adoptedExistingTarget,
             };
 
             if ((!string.IsNullOrWhiteSpace(units[index].ReplacementBackupPath)
@@ -1409,7 +1432,7 @@ public sealed class TvAcquisitionImportEngine(
                 var evidenceMatchesTarget = evidencePath is not null
                     && File.Exists(evidencePath)
                     && File.Exists(expectedPath)
-                    && FilesHaveSameContent(evidencePath, expectedPath);
+                    && TvImportExecutionSupport.FilesHaveSameContent(evidencePath, expectedPath);
                 if (previousPath is not null
                     && (sourceAbsolute is null || !File.Exists(sourceAbsolute))
                     && File.Exists(OwnedFileReplacementArtifacts.StagedPath(previousPath))) {
@@ -1433,11 +1456,21 @@ public sealed class TvAcquisitionImportEngine(
                 var isReplacement = previousPath is not null;
                 var targetMatchesAvailableSource = targetExists
                     && sourceExists
-                    && FilesHaveSameContent(expectedPath, sourceAbsolute!);
+                    && TvImportExecutionSupport.FilesHaveSameContent(expectedPath, sourceAbsolute!);
+                if (unit.AdoptedExistingTarget && !targetMatchesAvailableSource) {
+                    await acquisitions.SetStatusAsync(
+                        import.Id,
+                        AcquisitionStatus.ManualImportRequired,
+                        $"The previously matching episode file changed before it could be reconciled ({Path.GetFileName(expectedPath)}). " +
+                        "Review the file before retrying; Prismedia did not overwrite it.",
+                        cancellationToken);
+                    return;
+                }
 
                 // New exact-path placements publish atomically into a target that was absent when the
-                // checkpoint was written. Replacements need stronger evidence because their same-path
-                // target existed before the mutation: the retained backup proves the atomic install ran.
+                // checkpoint was written. An adopted target is accepted only after its bytes are checked
+                // again here. Replacements need stronger evidence because their same-path target existed
+                // before the mutation: the retained backup proves the atomic install ran.
                 var replacementInstallCompleted = isReplacement
                     && !sourceExists
                     && targetExists
@@ -1615,24 +1648,6 @@ public sealed class TvAcquisitionImportEngine(
             .Where(path => MovieImportPlanBuilder.VideoExtensions.Contains(Path.GetExtension(path)))
             .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
             .ToArray();
-    }
-
-    private static bool FilesHaveSameContent(string firstPath, string secondPath) {
-        try {
-            var first = new FileInfo(firstPath);
-            var second = new FileInfo(secondPath);
-            if (!first.Exists || !second.Exists || first.Length != second.Length) {
-                return false;
-            }
-
-            using var firstStream = first.OpenRead();
-            using var secondStream = second.OpenRead();
-            return SHA256.HashData(firstStream).AsSpan().SequenceEqual(SHA256.HashData(secondStream));
-        } catch (IOException) {
-            return false;
-        } catch (UnauthorizedAccessException) {
-            return false;
-        }
     }
 
     private static string RestoreReplacementArtifactSource(

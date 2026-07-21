@@ -44,6 +44,20 @@ describe("download acquisition list items", () => {
     expect(item.menuActions).toEqual([]);
   });
 
+  it("shows why an import is waiting instead of presenting it as active work", () => {
+    const row = download(ACQUISITION_STATUS.importing);
+    row.statusMessage = "Waiting for the current library scan to finish.";
+
+    const item = downloadToListItem(
+      row,
+      null,
+      { onReSearch: vi.fn(), onRemove: vi.fn() },
+      false,
+    );
+
+    expect(item.description).toBe(row.statusMessage);
+  });
+
   it("locks wanted-list actions while monitor cleanup owns the Entity", () => {
     const item = wantedToListItem(
       wanted(MONITOR_STATUS.deletingFiles),

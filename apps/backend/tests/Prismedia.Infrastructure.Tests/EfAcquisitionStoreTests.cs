@@ -1014,6 +1014,28 @@ public sealed class EfAcquisitionStoreTests {
     }
 
     [Fact]
+    public async Task AdoptedExistingTargetRoundTripsThroughTheDurableCheckpoint() {
+        await using var db = CreateContext();
+        var acquisitionId = AddCheckpointAcquisition(db);
+        await db.SaveChangesAsync();
+        var checkpoint = ValidTvCheckpoint();
+        var adopted = checkpoint.Units[0] with {
+            PreviousFilePath = null,
+            ReplacementBackupPath = null,
+            ReplacementEvidencePath = null,
+            AdoptedExistingTarget = true,
+        };
+        checkpoint = checkpoint with { Units = [adopted] };
+        var store = AcquisitionTestFactory.Store(db);
+
+        await store.SetTvImportCheckpointAsync(acquisitionId, checkpoint, CancellationToken.None);
+        var context = await store.GetImportContextAsync(acquisitionId, CancellationToken.None);
+
+        var decoded = Assert.IsType<TvImportCheckpoint>(context?.TvImportCheckpoint);
+        Assert.True(Assert.Single(decoded.Units).AdoptedExistingTarget);
+    }
+
+    [Fact]
     public async Task StatusTransitionClaimsOnlyTheExpectedLifecycleState() {
         await using var db = CreateContext();
         var acquisitionId = AddCheckpointAcquisition(db);
@@ -1171,6 +1193,7 @@ public sealed class EfAcquisitionStoreTests {
     [InlineData("wrong-replacement-target")]
     [InlineData("format-change-without-consent")]
     [InlineData("mismatched-final-path")]
+    [InlineData("adopted-replacement")]
     public async Task InvalidTvCheckpointRecoveryShapeFailsClosed(string invalidCase) {
         await using var db = CreateContext();
         var acquisitionId = AddCheckpointAcquisition(db);
@@ -1270,6 +1293,7 @@ public sealed class EfAcquisitionStoreTests {
                 unit["TargetAbsolutePath"] = Path.ChangeExtension(unit["PreviousFilePath"]!.GetValue<string>(), ".mp4");
                 break;
             case "mismatched-final-path": unit["FinalPath"] = otherSeriesPath; break;
+            case "adopted-replacement": unit["AdoptedExistingTarget"] = true; break;
             default: throw new ArgumentOutOfRangeException(nameof(invalidCase), invalidCase, null);
         }
 

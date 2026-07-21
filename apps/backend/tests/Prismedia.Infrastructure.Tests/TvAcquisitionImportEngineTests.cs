@@ -81,6 +81,37 @@ public sealed class TvAcquisitionImportEngineTests : IDisposable {
     }
 
     [Fact]
+    public async Task ImportWaitingForLibraryScanReportsItsBlockedState() {
+        await using var db = CreateContext();
+        var harness = await HarnessAsync(
+            db,
+            ownedEpisodeName: "Show - s01e01 720p WEB.mkv",
+            payloadFiles: ["Show.S01E02.1080p.WEB-DL.mkv"],
+            releaseTitle: "Show S01 1080p WEB-DL");
+        var scanLease = await harness.ScanGate.EnterAsync(CancellationToken.None);
+
+        var importTask = harness.Engine.ImportAsync(harness.Context, harness.Import, CancellationToken.None);
+        try {
+            var waiting = await WaitForProgressAsync(harness.Queue, "Waiting for the current library scan to finish.");
+
+            Assert.Equal(0, waiting.Progress);
+            Assert.False(importTask.IsCompleted);
+            db.ChangeTracker.Clear();
+            Assert.Equal(
+                waiting.Message,
+                await db.Acquisitions.AsNoTracking()
+                    .Where(row => row.Id == harness.Import.Id)
+                    .Select(row => row.StatusMessage)
+                    .SingleAsync());
+        } finally {
+            await scanLease.DisposeAsync();
+        }
+
+        await importTask;
+        Assert.Equal(AcquisitionStatus.Imported, await StatusOf(db, harness.Import.Id));
+    }
+
+    [Fact]
     public async Task DeletedWantedSeasonIsReboundBeforeImportedWhileMissingEpisodesStayWanted() {
         await using var db = CreateContext();
         var harness = await HarnessAsync(
@@ -362,18 +393,94 @@ public sealed class TvAcquisitionImportEngineTests : IDisposable {
             payloadFiles: ["Show.S01E02.1080p.WEB-DL.mkv"],
             releaseTitle: "Show S01 1080p WEB-DL",
             payloadContent: "new-episode",
-            preexistingTargetContent: "unrelated-existing-file");
+            preexistingTargetContent: "wrong-bytes");
 
         await harness.Engine.ImportAsync(harness.Context, harness.Import, CancellationToken.None);
 
         Assert.Equal(AcquisitionStatus.ManualImportRequired, await StatusOf(db, harness.Import.Id));
         Assert.Equal(
-            "unrelated-existing-file",
+            "wrong-bytes",
             await File.ReadAllTextAsync(Path.Combine(harness.SeasonFolder, "Show - S01E02.mkv")));
         Assert.Equal(
             "new-episode",
             await File.ReadAllTextAsync(Path.Combine(harness.Import.ContentPath!, "Show.S01E02.1080p.WEB-DL.mkv")));
         Assert.False(File.Exists(Path.Combine(harness.SeasonFolder, "Show - S01E02 (2).mkv")));
+    }
+
+    [Fact]
+    public async Task UnindexedIdenticalSeasonPackIsMaterializedWithoutCreatingDuplicates() {
+        await using var db = CreateContext();
+        var harness = await HarnessAsync(
+            db,
+            ownedEpisodeName: "Show - s01e01 720p WEB.mkv",
+            payloadFiles: [
+                "Show.S01E02.1080p.WEB-DL.mkv",
+                "Show.S01E03.1080p.WEB-DL.mkv"
+            ],
+            releaseTitle: "Show S01 1080p WEB-DL",
+            payloadContent: "already-imported-episode",
+            wantedEpisodeNumbers: [2, 3],
+            preexistingTargetContent: "already-imported-episode");
+        await File.WriteAllTextAsync(
+            Path.Combine(harness.SeasonFolder, "Show - S01E03.mkv"),
+            "already-imported-episode");
+
+        await harness.Engine.ImportAsync(harness.Context, harness.Import, CancellationToken.None);
+
+        var episodes = await db.Entities.AsNoTracking()
+            .Where(row => row.ParentEntityId == harness.SeasonId && row.SortOrder >= 2 && row.SortOrder <= 3)
+            .OrderBy(row => row.SortOrder)
+            .ToArrayAsync();
+        Assert.Equal(AcquisitionStatus.Imported, await StatusOf(db, harness.Import.Id));
+        Assert.Equal<int?>([2, 3], episodes.Select(row => row.SortOrder));
+        Assert.All(episodes, episode => Assert.False(episode.IsWanted));
+        Assert.All(episodes, episode => Assert.True(db.EntityFiles.AsNoTracking().Any(file =>
+            file.EntityId == episode.Id && file.Role == EntityFileRole.Source)));
+        Assert.False(File.Exists(Path.Combine(harness.SeasonFolder, "Show - S01E02 (2).mkv")));
+        Assert.False(File.Exists(Path.Combine(harness.SeasonFolder, "Show - S01E03 (2).mkv")));
+    }
+
+    [Fact]
+    public async Task ScanReconciledIdenticalSeasonPackFinishesInsteadOfBlocklistingTheRelease() {
+        await using var db = CreateContext();
+        var harness = await HarnessAsync(
+            db,
+            ownedEpisodeName: "Show - s01e01 720p WEB.mkv",
+            payloadFiles: [
+                "Show.S01E02.1080p.WEB-DL.mkv",
+                "Show.S01E03.1080p.WEB-DL.mkv"
+            ],
+            releaseTitle: "Show S01 1080p WEB-DL",
+            payloadContent: "already-imported-episode",
+            wantedEpisodeNumbers: [2, 3]);
+        var episodes = await db.Entities
+            .Where(row => row.ParentEntityId == harness.SeasonId && row.SortOrder >= 2 && row.SortOrder <= 3)
+            .OrderBy(row => row.SortOrder)
+            .ToArrayAsync();
+        var now = DateTimeOffset.UtcNow;
+        foreach (var episode in episodes) {
+            var target = Path.Combine(harness.SeasonFolder, $"Show - S01E{episode.SortOrder:00}.mkv");
+            await File.WriteAllTextAsync(target, "already-imported-episode");
+            episode.IsWanted = false;
+            db.EntityFiles.Add(new EntityFileRow {
+                Id = Guid.NewGuid(),
+                EntityId = episode.Id,
+                Role = EntityFileRole.Source,
+                Path = target,
+                CreatedAt = now,
+                UpdatedAt = now,
+            });
+        }
+        await db.SaveChangesAsync();
+
+        await harness.Engine.ImportAsync(harness.Context, harness.Import, CancellationToken.None);
+
+        Assert.Equal(AcquisitionStatus.Imported, await StatusOf(db, harness.Import.Id));
+        Assert.Empty(await db.AcquisitionBlocklist.AsNoTracking().ToArrayAsync());
+        Assert.All(episodes, episode => Assert.True(File.Exists(
+            Path.Combine(harness.SeasonFolder, $"Show - S01E{episode.SortOrder:00}.mkv"))));
+        Assert.False(File.Exists(Path.Combine(harness.SeasonFolder, "Show - S01E02 (2).mkv")));
+        Assert.False(File.Exists(Path.Combine(harness.SeasonFolder, "Show - S01E03 (2).mkv")));
     }
 
     [Fact]
@@ -658,7 +765,8 @@ public sealed class TvAcquisitionImportEngineTests : IDisposable {
         Guid SeasonId,
         Guid OwnedEpisodeId,
         Guid WantedEpisodeId,
-        MergedImportTestSupport.RecordingJobQueue Queue);
+        MergedImportTestSupport.RecordingJobQueue Queue,
+        VideoScanConcurrencyGate ScanGate);
 
     /// <summary>
     /// One seeded world: a library root, an on-disk series (`Show (2008)/S01/<ownedEpisodeName>`) mirrored
@@ -778,6 +886,7 @@ public sealed class TvAcquisitionImportEngineTests : IDisposable {
         var resumeReplacer = new OwnedFileReplacer(
             new MergedImportTestSupport.NoRecycleBin(),
             NullLogger<OwnedFileReplacer>.Instance);
+        var scanGate = new VideoScanConcurrencyGate();
         var engine = CreateEngine(firstMaterializer, firstMover, firstReplacer);
         var resumeEngine = CreateEngine(realMaterializer, realMover, resumeReplacer);
 
@@ -797,7 +906,7 @@ public sealed class TvAcquisitionImportEngineTests : IDisposable {
             new EfAcquisitionBlocklistStore(db),
             history,
             importedVideoMaterializer,
-            new VideoScanConcurrencyGate(),
+            scanGate,
             NullLogger<TvAcquisitionImportEngine>.Instance);
 
         var job = new JobRunSnapshot(
@@ -807,7 +916,22 @@ public sealed class TvAcquisitionImportEngineTests : IDisposable {
         return new Harness(
             engine, resumeEngine, new JobContext(job, queue), import,
             libraryRoot, seriesFolder, seasonFolder, ownedEpisodePath, seasonId, ownedEpisodeId, wantedEpisodeId,
-            queue);
+            queue, scanGate);
+    }
+
+    private static async Task<(int Progress, string? Message)> WaitForProgressAsync(
+        MergedImportTestSupport.RecordingJobQueue queue,
+        string message) {
+        for (var attempt = 0; attempt < 100; attempt++) {
+            var update = queue.ProgressUpdates.FirstOrDefault(item => item.Message == message);
+            if (update.Message is not null) {
+                return update;
+            }
+
+            await Task.Delay(10);
+        }
+
+        throw new TimeoutException($"The import never reported '{message}'.");
     }
 
     private static Guid AddEntity(PrismediaDbContext db, string kindCode, Guid? parent, int? sortOrder, string sourcePath) {

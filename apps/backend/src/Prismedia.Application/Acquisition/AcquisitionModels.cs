@@ -673,6 +673,7 @@ public sealed record TvImportCheckpoint(
 /// <param name="FinalPath">Actual placed path once the mutation completes; null while still pending.</param>
 /// <param name="ReplacementBackupPath">Attempt-specific retained copy of the pre-upgrade bytes.</param>
 /// <param name="ReplacementEvidencePath">Attempt-specific incoming-byte evidence retained until FinalPath is durable.</param>
+/// <param name="AdoptedExistingTarget">Whether the target predates this acquisition and matched the payload exactly.</param>
 public sealed record TvImportCheckpointUnit(
     string SourceRelativePath,
     string TargetAbsolutePath,
@@ -683,7 +684,8 @@ public sealed record TvImportCheckpointUnit(
     string? FinalPath = null,
     string? SourceAbsolutePath = null,
     string? ReplacementBackupPath = null,
-    string? ReplacementEvidencePath = null);
+    string? ReplacementEvidencePath = null,
+    bool AdoptedExistingTarget = false);
 
 /// <summary>
 /// Stable sidecar paths used by the crash-safe owned-file replacement protocol. They deliberately use

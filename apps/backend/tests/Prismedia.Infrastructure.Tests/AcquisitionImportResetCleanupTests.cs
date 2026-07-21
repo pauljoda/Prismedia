@@ -123,6 +123,56 @@ public sealed class AcquisitionImportResetCleanupTests {
         }
     }
 
+    [Fact]
+    public async Task AdoptedExistingTvTargetSurvivesImportReset() {
+        var boundary = TempBoundary();
+        try {
+            var payloadRoot = Path.Combine(boundary, "payload");
+            var seriesRoot = Path.Combine(boundary, "library", "Show");
+            var source = Path.Combine(payloadRoot, "Show.S01E01.mkv");
+            var target = Path.Combine(seriesRoot, "Season 01", "Show - S01E01.mkv");
+            Directory.CreateDirectory(Path.GetDirectoryName(source)!);
+            Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+            await File.WriteAllTextAsync(source, "same-video");
+            await File.WriteAllTextAsync(target, "same-video");
+
+            await using var db = CreateContext();
+            var entityId = Guid.NewGuid();
+            AddEntity(db, entityId, isWanted: false);
+            db.EntityFiles.Add(SourceFile(entityId, target));
+            await db.SaveChangesAsync();
+
+            var checkpoint = new TvImportCheckpoint(
+                Guid.NewGuid(),
+                seriesRoot,
+                ImportMode.Move,
+                AllowFormatChange: false,
+                "Imported.",
+                PreferSingleFileFinalSource: true,
+                [new TvImportCheckpointUnit(
+                    "Show.S01E01.mkv",
+                    target,
+                    1,
+                    1,
+                    [],
+                    FinalPath: target,
+                    SourceAbsolutePath: source,
+                    AdoptedExistingTarget: true)],
+                AttemptId: Guid.NewGuid(),
+                ClaimJobId: Guid.NewGuid());
+            var import = Context(entityId, payloadRoot, tvCheckpoint: checkpoint);
+
+            await Cleaner(db).CleanupAsync(import, CancellationToken.None);
+
+            Assert.Equal("same-video", await File.ReadAllTextAsync(target));
+            Assert.False(File.Exists(source));
+            Assert.Equal(target, (await db.EntityFiles.SingleAsync()).Path);
+            Assert.False((await db.Entities.SingleAsync()).IsWanted);
+        } finally {
+            DeleteBoundary(boundary);
+        }
+    }
+
     private static AcquisitionImportResetCleanup Cleaner(PrismediaDbContext db) =>
         new(db, new VideoScanConcurrencyGate(), NullLogger<AcquisitionImportResetCleanup>.Instance);
 

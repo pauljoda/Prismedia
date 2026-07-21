@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using Prismedia.Application.Acquisition;
 using Prismedia.Application.Jobs;
 using Prismedia.Application.Jobs.Ports;
@@ -59,6 +60,7 @@ internal static class MergedImportTestSupport {
 
     internal sealed class RecordingJobQueue : IJobQueueService {
         public List<EnqueueJobRequest> Enqueued { get; } = [];
+        public ConcurrentQueue<(int Progress, string? Message)> ProgressUpdates { get; } = new();
 
         public Task<JobRunSnapshot> EnqueueAsync(EnqueueJobRequest request, CancellationToken cancellationToken) {
             Enqueued.Add(request);
@@ -70,7 +72,10 @@ internal static class MergedImportTestSupport {
 
         public Task<bool> HasPendingAsync(JobType type, string? targetEntityId, CancellationToken cancellationToken) =>
             Task.FromResult(Enqueued.Any(request => request.Type == type && request.TargetEntityId == targetEntityId));
-        public Task UpdateProgressAsync(Guid id, int progress, string? message, CancellationToken cancellationToken) => Task.CompletedTask;
+        public Task UpdateProgressAsync(Guid id, int progress, string? message, CancellationToken cancellationToken) {
+            ProgressUpdates.Enqueue((progress, message));
+            return Task.CompletedTask;
+        }
 
         public Task<IReadOnlyList<JobRunSnapshot>> ListAsync(bool hideNsfw, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<JobRunSnapshot> EnqueueAsync(JobType type, CancellationToken cancellationToken) => throw new NotSupportedException();
