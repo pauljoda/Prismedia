@@ -138,6 +138,32 @@ public sealed class MediaReleaseDecisionEnginesTests {
     }
 
     [Fact]
+    public void MusicEngineUsesSoulseekFolderContextForTrackIdentity() {
+        var engine = new MusicReleaseDecisionEngine(EntityKind.AudioTrack);
+        var rules = BookAcquisitionRules.Default with {
+            TargetTitle = "Divide Music Had Enough",
+            AllowedProtocols = [DownloadProtocol.Soulseek]
+        };
+
+        var scored = engine.Evaluate([
+            (Release(
+                "Music / Divide Music / Had Enough / 01 Had Enough.flac FLAC [Soulseek peer]",
+                seeders: 1,
+                protocol: DownloadProtocol.Soulseek), null, "slskd"),
+            (Release(
+                "Music / Other Artist / Had Enough / 01 Had Enough.flac FLAC [Soulseek peer]",
+                seeders: 1,
+                protocol: DownloadProtocol.Soulseek), null, "slskd"),
+        ], rules);
+
+        var verdicts = scored.ToDictionary(candidate => candidate.Release.Title, candidate => candidate);
+        Assert.True(verdicts["Music / Divide Music / Had Enough / 01 Had Enough.flac FLAC [Soulseek peer]"].Accepted);
+        Assert.Contains(
+            ReleaseRejectionReason.TitleMismatch,
+            verdicts["Music / Other Artist / Had Enough / 01 Had Enough.flac FLAC [Soulseek peer]"].Rejections);
+    }
+
+    [Fact]
     public void SharedGatesStillApplyToTheNewEngines() {
         var engine = new MovieReleaseDecisionEngine();
         var rules = BookAcquisitionRules.Default with { MinSeeders = 5, IgnoredTerms = ["cam"] };
@@ -313,8 +339,11 @@ public sealed class MediaReleaseDecisionEnginesTests {
         Assert.Contains(ReleaseRejectionReason.DangerousContent, scored[0].Rejections);
     }
 
-    private static IndexerRelease Release(string title, int seeders) =>
-        new(title, SizeBytes: 1_000_000_000, Seeders: seeders, Peers: seeders, DownloadProtocol.Torrent,
+    private static IndexerRelease Release(
+        string title,
+        int seeders,
+        DownloadProtocol protocol = DownloadProtocol.Torrent) =>
+        new(title, SizeBytes: 1_000_000_000, Seeders: seeders, Peers: seeders, protocol,
             DownloadUrl: "http://dl", MagnetUrl: null, InfoHash: null, InfoUrl: null, Language: null, PublishedAt: null);
 
     private static AcquisitionSearchInput Input(EntityKind kind, BookRendition? rendition = null) =>

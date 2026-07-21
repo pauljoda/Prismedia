@@ -247,8 +247,8 @@ public sealed record AcquisitionSearchInput(
             if (Kind is EntityKind.AudioLibrary or EntityKind.AudioTrack or EntityKind.MusicArtist
                 && !string.IsNullOrWhiteSpace(Author)) {
                 return Kind == EntityKind.AudioTrack && !string.IsNullOrWhiteSpace(Series)
-                    ? $"{Author} {Series} {Title}".Trim()
-                    : $"{Author} {Title}".Trim();
+                    ? AcquisitionPolicyQueries.JoinDistinct(Author, Series, Title)
+                    : AcquisitionPolicyQueries.JoinDistinct(Author, Title);
             }
 
             return Title;

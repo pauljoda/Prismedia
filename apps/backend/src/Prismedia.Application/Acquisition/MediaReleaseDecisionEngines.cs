@@ -48,11 +48,10 @@ public sealed class MusicReleaseDecisionEngine(EntityKind kind = EntityKind.Audi
 
     private readonly IReleaseSpecification[] _specifications = [
         new DangerousContentSpecification(),
-        // The same leading-title identity gate the video kinds use: music scene naming leads
-        // "Artist - Album (Year) [FLAC]" and the music target is "Artist Album", so the strict
-        // prefix walk fits. NO year gate on purpose — remaster/reissue years legitimately diverge
-        // from the album's release year and would reject wanted releases.
-        new TitleIdentitySpecification(),
+        // Torrent/Usenet scene names lead with artist and work, while Soulseek exposes the work in
+        // its remote folder path. Keep the strict scene-title guard everywhere except that path-based
+        // protocol. NO year gate on purpose — remaster/reissue years legitimately diverge.
+        new MusicTitleIdentitySpecification(),
         new ProtocolSpecification(),
         new DownloadLinkSpecification(),
         new MinSeedersSpecification(),
@@ -79,6 +78,22 @@ public sealed class MusicReleaseDecisionEngine(EntityKind kind = EntityKind.Audi
             + quality * 100_000
             + MediaReleaseEvaluation.RevisionBoost(release.Title, rules)
             + Math.Min(release.Seeders ?? 0, 9_999);
+    }
+}
+
+/// <summary>
+/// Rejects music releases that do not identify the sought artist/work. Torrent and Usenet candidates
+/// retain the strict leading-title convention; Soulseek candidates may place artist, album, and track
+/// in successive remote path segments, so every target token must occur somewhere in that path title.
+/// </summary>
+public sealed class MusicTitleIdentitySpecification : IReleaseSpecification {
+    public ReleaseRejectionReason Reason => ReleaseRejectionReason.TitleMismatch;
+
+    public ReleaseRejectionReason? Evaluate(IndexerRelease release, BookAcquisitionRules rules) {
+        var matched = release.Protocol == DownloadProtocol.Soulseek
+            ? ReleaseTitleIdentity.ContainsAllTokens(release.Title, rules.TargetTitle)
+            : ReleaseTitleIdentity.Match(release.Title, rules.TargetTitle).TitleMatched;
+        return matched ? null : Reason;
     }
 }
 

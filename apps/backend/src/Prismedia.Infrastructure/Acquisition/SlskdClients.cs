@@ -167,7 +167,7 @@ public sealed partial class SlskdIndexerClient(
                 .Where(IsAudio)
                 .GroupBy(file => DirectoryOf(file.Filename), StringComparer.OrdinalIgnoreCase)
                 .Where(group => !string.IsNullOrWhiteSpace(group.Key))
-                .Select(group => Release(query.Text, searchId, peer, group.Key, group.ToArray())))
+                .Select(group => Release(searchId, peer, group.Key, group.ToArray())))
             .ToArray();
 
     private static IReadOnlyList<IndexerRelease> TrackReleases(IndexerQuery query, Guid searchId, IEnumerable<SlskdSearchResponse> peers) {
@@ -178,12 +178,11 @@ public sealed partial class SlskdIndexerClient(
             .SelectMany(peer => peer.Files
                 .Where(file => IsAudio(file)
                     && (sought is null || Normalize(Path.GetFileNameWithoutExtension(file.Filename)).Contains(sought, StringComparison.Ordinal)))
-                .Select(file => Release(query.Text, searchId, peer, Path.GetFileName(file.Filename), [file])))
+                .Select(file => Release(searchId, peer, file.Filename, [file])))
             .ToArray();
     }
 
     private static IndexerRelease Release(
-        string query,
         Guid searchId,
         SlskdSearchResponse peer,
         string label,
@@ -194,7 +193,7 @@ public sealed partial class SlskdIndexerClient(
             peer.Username,
             files.Select(file => new SoulseekFileLocator(file.Filename, file.Size)).ToArray()));
         return new IndexerRelease(
-            $"{query} {quality} [Soulseek {peer.Username}: {LastSegment(label)}]".Trim(),
+            $"{PathContext(label)} {quality} [Soulseek {peer.Username}]".Trim(),
             files.Sum(file => file.Size),
             null,
             peer.QueueLength > int.MaxValue ? int.MaxValue : (int)peer.QueueLength,
@@ -223,7 +222,9 @@ public sealed partial class SlskdIndexerClient(
         var index = path.LastIndexOfAny(['\\', '/']);
         return index <= 0 ? string.Empty : path[..index];
     }
-    private static string LastSegment(string path) => path.Split('\\', '/', StringSplitOptions.RemoveEmptyEntries).LastOrDefault() ?? path;
+    private static string PathContext(string path) => string.Join(
+        " / ",
+        path.Split('\\', '/', StringSplitOptions.RemoveEmptyEntries).TakeLast(4));
     private static string[] SignificantWords(string value) => Normalize(value).Split(' ', StringSplitOptions.RemoveEmptyEntries);
     private static string Normalize(string value) => NonWordRegex().Replace(value.ToLowerInvariant(), " ").Trim();
     private static bool HasState(string? value, string state) => value?.Split(',', StringSplitOptions.TrimEntries)

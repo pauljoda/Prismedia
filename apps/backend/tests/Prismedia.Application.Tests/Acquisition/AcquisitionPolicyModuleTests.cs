@@ -90,6 +90,7 @@ public sealed class AcquisitionPolicyModuleTests {
             "Divide Music Had Enough",
             "Had Enough"
         ], module.BuildQueries(track));
+        Assert.Equal("Divide Music Had Enough", track.WorkTitle);
     }
 
     [Fact]
