@@ -130,6 +130,31 @@ public sealed class ImportPlacementExecutionTests : IDisposable {
             ImportPlacementCheckpointJson.Deserialize(json.ToJsonString()));
     }
 
+    [Fact]
+    public void CheckpointCodecRoundTripsAudioTrackPlacement() {
+        var payloadRoot = Path.GetFullPath(Path.Combine(_workRoot, "track-codec-payload"));
+        var libraryRoot = Path.GetFullPath(Path.Combine(_workRoot, "track-codec-library"));
+        var source = Path.Combine(payloadRoot, "01 - Had Enough.mp3");
+        var target = Path.Combine(libraryRoot, "Divide Music", "Had Enough", "01 - Had Enough.mp3");
+        var checkpoint = new ImportPlacementCheckpoint(
+            EntityKind.AudioTrack,
+            Guid.NewGuid(),
+            libraryRoot,
+            payloadRoot,
+            ImportMode.Move,
+            Path.GetDirectoryName(target)!,
+            Path.GetDirectoryName(target)!,
+            "Imported.",
+            [new ImportPlacementCheckpointUnit("01 - Had Enough.mp3", source, target, IsMedia: true)],
+            AttemptId: Guid.NewGuid(),
+            ClaimJobId: Guid.NewGuid());
+
+        var decoded = Assert.IsType<ImportPlacementCheckpoint>(
+            ImportPlacementCheckpointJson.Deserialize(ImportPlacementCheckpointJson.Serialize(checkpoint)));
+
+        Assert.Equal(EntityKind.AudioTrack, decoded.Kind);
+    }
+
     private static PrismediaDbContext CreateContext() => new(
         new DbContextOptionsBuilder<PrismediaDbContext>()
             .UseInMemoryDatabase(Guid.NewGuid().ToString())

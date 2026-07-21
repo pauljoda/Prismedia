@@ -597,7 +597,7 @@ public sealed record AcquisitionImportContext(
 }
 
 /// <summary>
-/// Durable, kind-neutral placement plan for a book, movie, or album import. The plan reserves every
+/// Durable, kind-neutral placement plan for a book, movie, album, or audio-track import. The plan reserves every
 /// exact library target before the first filesystem mutation and advances one unit at a time. A retry
 /// therefore resumes the same paths even when Move consumed the payload, while Copy and Hardlink can
 /// recognize already-published bytes instead of producing a collision suffix.

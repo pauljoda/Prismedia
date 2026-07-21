@@ -7,7 +7,7 @@ using Prismedia.Infrastructure.Serialization;
 
 namespace Prismedia.Infrastructure.Acquisition;
 
-/// <summary>Stable codec-enum JSON persistence for resumable book, movie, and album placements.</summary>
+/// <summary>Stable codec-enum JSON persistence for resumable book, movie, album, and audio-track placements.</summary>
 internal static class ImportPlacementCheckpointJson {
     private static readonly JsonSerializerOptions Options = new() {
         Converters = { new CodecJsonConverterFactory() }
@@ -86,8 +86,8 @@ internal static class ImportPlacementCheckpointJson {
     }
 
     private static void Validate(ImportPlacementCheckpoint checkpoint) {
-        if (checkpoint.Kind is not (EntityKind.Book or EntityKind.Movie or EntityKind.AudioLibrary)) {
-            Invalid("Kind must be book, movie, or audio library.");
+        if (checkpoint.Kind is not (EntityKind.Book or EntityKind.Movie or EntityKind.AudioLibrary or EntityKind.AudioTrack)) {
+            Invalid("Kind must be book, movie, audio library, or audio track.");
         }
         if (checkpoint.LibraryRootId == Guid.Empty) {
             Invalid("LibraryRootId must be non-empty.");
