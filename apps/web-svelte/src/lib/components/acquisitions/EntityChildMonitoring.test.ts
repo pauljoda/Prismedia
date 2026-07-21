@@ -129,6 +129,24 @@ describe("EntityChildMonitoring", () => {
     expect(mocks.startEntityMonitor).not.toHaveBeenCalled();
   });
 
+  it("shows monitored Wanted children as preparing metadata before acquisition work is published", async () => {
+    const wanted = childCard("album-1", ENTITY_KIND.audioLibrary, "First Album", true);
+    mocks.fetchEntityMonitorStates.mockResolvedValue([
+      entityState("album-1", {
+        canRequest: true,
+        monitor: monitor("album-monitor", "album-1", null),
+      }),
+    ]);
+
+    render(EntityChildMonitoring, { cards: [wanted] });
+
+    await expand();
+    expect(screen.getByText("Preparing metadata · Monitoring")).toBeInTheDocument();
+    expect(screen.getByText("1 preparing")).toBeInTheDocument();
+    expect(screen.getByRole("switch", { name: "Monitor First Album" }))
+      .toHaveAttribute("aria-checked", "true");
+  });
+
   it("uses authoritative server eligibility to monitor a source-backed child without an acquisition", async () => {
     mocks.startEntityMonitor.mockResolvedValue(monitor("artist-monitor", "artist-1", null));
     mocks.fetchEntityMonitorStates.mockResolvedValue([entityState("artist-1", { canMonitor: true })]);

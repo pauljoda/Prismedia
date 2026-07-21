@@ -97,6 +97,10 @@
     let searching = 0;
     let importing = 0;
     for (const row of rows) {
+      if (isPreparingMetadata(row)) {
+        preparing += 1;
+        continue;
+      }
       switch (row.acquisition?.status) {
         case ACQUISITION_STATUS.downloading:
           downloading += 1;
@@ -226,6 +230,13 @@
       && acquisitionStatusShouldPoll(row.acquisition.status);
   }
 
+  function isPreparingMetadata(row: ChildMonitoringRow): boolean {
+    return row.acquisition === null
+      && isActive(row)
+      && row.canRequest
+      && isWanted(row.card.entity.capabilities);
+  }
+
   function isDeletingFiles(row: ChildMonitoringRow): boolean {
     return monitorIsDeletingFiles(row.monitor);
   }
@@ -259,6 +270,7 @@
     if (isDeletingFiles(row)) return "Deleting files…";
     if (isAcquisitionStopping(row) || isStopping(row)) return "Stopping…";
     if (hasUnknownMonitorStatus(row)) return "Updating…";
+    if (isPreparingMetadata(row)) return "Preparing metadata · Monitoring";
     if (isActive(row)) return acquisitionLabel ? `${acquisitionLabel} · Monitoring` : "Monitoring";
     if (row.monitor) return acquisitionLabel ? `${acquisitionLabel} · Paused` : "Paused";
     if (row.acquisition && row.acquisition.status !== ACQUISITION_STATUS.imported) {
@@ -413,8 +425,9 @@
     {#if open}
       <div class="body">
         <p class="activity-help">
-          Downloads and search progress appear here. Monitoring controls future searches and retries,
-          so activity can continue while a switch is off.
+          Downloads and search progress appear here. Requested children prepare their search metadata
+          before searching. Monitoring controls future searches and retries, so activity can continue
+          while a switch is off.
         </p>
         <div class="toolbar">
           <span class="toolbar-label">{childLabel}</span>

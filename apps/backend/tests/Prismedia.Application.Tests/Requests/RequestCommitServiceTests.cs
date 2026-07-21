@@ -1667,7 +1667,7 @@ public sealed class RequestCommitServiceTests {
     }
 
     [Fact]
-    public async Task ReviewedArtistDefersAlbumAcquisitionsAfterVisibleGraphCommit() {
+    public async Task ReviewedArtistRecordsAlbumMonitoringBeforeDeferredAcquisitions() {
         var pluginId = "musicbrainz";
         var artistIdentity = new ExternalIdentity("musicbrainzartist", "Artist:One");
         var firstIdentity = new ExternalIdentity("musicbrainzreleasegroup", "Album:One");
@@ -1697,7 +1697,7 @@ public sealed class RequestCommitServiceTests {
                 Target(second, RequestMediaKind.Album, secondIdentity)
             ]);
         var fanout = new FakeRequestAcquisitionFanoutScheduler();
-        var (service, writer, acquisitions, _, _) = ReviewedService(
+        var (service, writer, acquisitions, monitors, _) = ReviewedService(
             artist,
             new FakeReviewSource(_ => review),
             fanout);
@@ -1718,6 +1718,12 @@ public sealed class RequestCommitServiceTests {
             Assert.Equal(RequestCommitOutcome.Requested, item.Outcome);
             Assert.Null(item.AcquisitionId);
         });
+        Assert.Equal(
+            response.Items.Select(item => item.EntityId!.Value).Append(response.ContainerEntityId!.Value).ToHashSet(),
+            monitors.EntityMonitors.ToHashSet());
+        Assert.All(
+            response.Items.Select(item => item.EntityId!.Value),
+            entityId => Assert.Equal(1, monitors.EntityMonitors.Count(candidate => candidate == entityId)));
         var scheduled = Assert.Single(fanout.Calls);
         Assert.Equal(response.ContainerEntityId, scheduled.ContainerEntityId);
         Assert.Equal(EntityKind.MusicArtist, scheduled.ContainerKind);

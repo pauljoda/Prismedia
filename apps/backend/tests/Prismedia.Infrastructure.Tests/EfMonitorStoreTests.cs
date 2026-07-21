@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Prismedia.Application.Acquisition;
 using Prismedia.Domain.Entities;
 using Prismedia.Infrastructure.Acquisition;
 using Prismedia.Infrastructure.Persistence;
@@ -7,6 +8,32 @@ using Prismedia.Infrastructure.Persistence.Entities;
 namespace Prismedia.Infrastructure.Tests;
 
 public sealed class EfMonitorStoreTests {
+    [Fact]
+    public async Task BatchStartRecordsEveryExplicitEntityIntentBeforeAcquisitionWorkExists() {
+        await using var db = CreateContext();
+        var store = new EfMonitorStore(db);
+        var firstEntity = Guid.NewGuid();
+        var secondEntity = Guid.NewGuid();
+        var libraryRootId = Guid.NewGuid();
+        var profileId = Guid.NewGuid();
+        var targeting = new AcquisitionTargeting(libraryRootId, profileId);
+
+        var started = await store.StartForEntitiesAsync([
+            new EntityMonitorStart(firstEntity, EntityKind.AudioLibrary, "First Album", targeting, null),
+            new EntityMonitorStart(secondEntity, EntityKind.AudioLibrary, "Second Album", targeting, null)
+        ], CancellationToken.None);
+
+        Assert.Equal([firstEntity, secondEntity], started.Select(monitor => monitor.EntityId).ToArray());
+        var rows = await db.Monitors.AsNoTracking().OrderBy(monitor => monitor.Title).ToArrayAsync();
+        Assert.Equal(2, rows.Length);
+        Assert.All(rows, row => {
+            Assert.Equal(MonitorStatus.Active, row.Status);
+            Assert.Null(row.AcquisitionId);
+            Assert.Equal(libraryRootId, row.TargetLibraryRootId);
+            Assert.Equal(profileId, row.ProfileId);
+        });
+    }
+
     [Fact]
     public async Task EntityMonitorListIncludesBothBookRenditionsInStableCreationOrder() {
         await using var db = CreateContext();

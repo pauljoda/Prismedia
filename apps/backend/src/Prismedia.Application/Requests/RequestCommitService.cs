@@ -1006,6 +1006,14 @@ public sealed partial class RequestCommitService(
             await suppressions.ClearAsync(
                 picks.SelectMany(IdentitiesOf).Distinct().ToArray(),
                 cancellationToken);
+            await monitors.StartForEntitiesAsync(
+                fanoutPicks.Select(pick => new EntityMonitorStart(
+                    pick.Entity.EntityId,
+                    child.AcquisitionKind,
+                    pick.Title,
+                    targeting,
+                    Preset: null)).ToArray(),
+                cancellationToken);
         }
 
         var items = new List<RequestCommitItem>();

@@ -12,7 +12,7 @@ using Prismedia.Infrastructure.Persistence.Entities;
 namespace Prismedia.Infrastructure.Acquisition;
 
 /// <summary>EF-backed store for monitors, including the reconcile + due logic the scheduled sweep relies on.</summary>
-public sealed class EfMonitorStore(
+public sealed partial class EfMonitorStore(
     PrismediaDbContext db,
     IEntityHierarchyReader? entityHierarchy = null,
     IEntityLifecycleMutationLease? lifecycleLease = null) : IMonitorStore {
