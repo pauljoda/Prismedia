@@ -103,6 +103,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Monitored series, seasons, and other containers now offer "Search missing content" on their Acquisition tab: one click sweeps the whole item at any depth — including episode gaps hiding inside partially-downloaded seasons — and starts a monitored search for every gap, reporting how many it covered. The existing "Search N missing" action remains when gaps are already visible.
 
 ### Changed
+- Detail-page provider chips now show only the provider name, keeping long opaque IDs out of the layout while preserving the full linked identity as accessible context.
 - Identify and Request proposal reviews now use compact media-shaped thumbnails, make the full card useful, support Select all / Deselect all, and let container results drill into their held child details without repeating provider work.
 - Identify and Request reuse the reviewed proposal when accepting it, stage required artwork concurrently, and can progressively load up to 100 provider search results when the provider supports it.
 - Music navigation now separates Albums, Artists, and Tracks, with a library-wide track list that can play or shuffle every song while preserving each track's album artwork and artist context in Now Playing.

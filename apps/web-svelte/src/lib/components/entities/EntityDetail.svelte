@@ -237,11 +237,7 @@
   const studioThumbnailCards = $derived(cardFull.studio ? [creditToThumbnailCard(cardFull.studio)] : []);
   const urlLinks = $derived(card.links.filter((link) => !hasProvider(link)));
   const providerIdLinks = $derived(card.links.filter(hasProvider));
-  const providerIdentityLabel = $derived.by(() => {
-    const identity = card.providerIdentity;
-    if (!identity) return "";
-    return `${identity.pluginId} · ${identity.identityNamespace}:${identity.identityValue}`;
-  });
+  const providerIdentityLabel = $derived(card.providerIdentity?.pluginId ?? "");
   const providerIdentityTitle = $derived.by(() => {
     const identity = card.providerIdentity;
     if (!identity) return "";

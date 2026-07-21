@@ -110,7 +110,8 @@ describe("EntityDetail", () => {
       "title",
       "Metadata and monitoring source: metadata-router, CaseSensitive ID Show:AbC:01:5",
     );
-    expect(chip).toHaveTextContent("metadata-router · CaseSensitive:Show:AbC:01:5");
+    expect(chip.textContent?.trim()).toBe("metadata-router");
+    expect(chip).not.toHaveTextContent("Show:AbC:01:5");
     expect(chip).toHaveClass("provider-identity-chip");
     expect(readFileSync("src/lib/components/entities/EntityDetail.svelte", "utf8")).toContain(
       ".provider-identity-chip {\n    gap: 0.35rem;\n    min-width: 0;\n    max-width: 100%;\n    text-decoration: none;\n    text-transform: none;",
@@ -141,7 +142,8 @@ describe("EntityDetail", () => {
       "Metadata and monitoring source: source-plugin, opaque ID Value:Keeps:Case",
     );
     expect(chip.tagName).toBe("SPAN");
-    expect(chip).toHaveTextContent("source-plugin · opaque:Value:Keeps:Case");
+    expect(chip.textContent?.trim()).toBe("source-plugin");
+    expect(chip).not.toHaveTextContent("Value:Keeps:Case");
 
     unmount();
 
