@@ -56,6 +56,12 @@ public static class JellyfinProtocol {
 
         /// <summary>snake_case API key query parameter.</summary>
         public const string ApiKeySnake = "api_key";
+
+        /// <summary>Selected source audio stream index for video playback.</summary>
+        public const string AudioStreamIndex = "AudioStreamIndex";
+
+        /// <summary>Whether a remux should preserve the negotiated source audio stream.</summary>
+        public const string CopyAudio = "CopyAudio";
     }
 
     /// <summary>Field names parsed from the Emby authorization header value.</summary>

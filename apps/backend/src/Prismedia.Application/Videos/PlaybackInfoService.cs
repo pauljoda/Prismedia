@@ -81,8 +81,8 @@ public sealed class PlaybackInfoService : IPlaybackInfoService {
             clientToneMappingAllowed: request?.EnableClientToneMapping == true);
 
         // A DirectPlay verdict serves the raw file; a Remux verdict serves a stream-copy fMP4 HLS
-        // (video copied, audio to AAC) so a client that can decode the codec but not the container
-        // avoids an expensive re-encode; anything else is a full transcode.
+        // so a client that can decode the codecs but not the container avoids an expensive re-encode;
+        // anything else is a full transcode.
         var supportsDirectPlayback = decision.Method == VideoPlaybackMethod.DirectPlay;
         var serveTranscode = supportsTranscoding && !supportsDirectPlayback;
         var isRemux = serveTranscode && decision.Method == VideoPlaybackMethod.Remux;
@@ -94,15 +94,22 @@ public sealed class PlaybackInfoService : IPlaybackInfoService {
         if (serveTranscode) {
             transcodingSubProtocol = PlaybackMode.Hls.ToCode();
             if (isRemux) {
-                transcodingUrl = BuildRemuxUrl(itemId, mediaSourceId, playSessionId, selectedAudioStream?.StreamIndex, request?.AccessToken);
+                transcodingUrl = BuildRemuxUrl(
+                    itemId,
+                    mediaSourceId,
+                    playSessionId,
+                    selectedAudioStream?.StreamIndex,
+                    decision.CopyAudio,
+                    request?.AccessToken);
                 transcodingContainer = MediaContainers.Mp4;
-                // AAC is packet-copied while the remux preserves the shared A/V timestamp timeline;
-                // codecs outside the browser-safe baseline are encoded to AAC.
-                var audioCopied = string.Equals(selectedAudioStream?.Codec, MediaCodecs.Aac, StringComparison.OrdinalIgnoreCase);
+                // AAC remains the safe remux baseline. When negotiation proves the client accepts the
+                // selected source codec, preserve that stream too instead of downmixing it to stereo AAC.
+                var audioCopied = decision.CopyAudio ||
+                    string.Equals(selectedAudioStream?.Codec, MediaCodecs.Aac, StringComparison.OrdinalIgnoreCase);
                 transcodingInfo = new TranscodingInfoResult(
                     MediaContainers.Mp4,
                     source.VideoCodec ?? videoStream?.Codec ?? MediaCodecs.Hevc,
-                    MediaCodecs.Aac,
+                    audioCopied ? selectedAudioStream?.Codec ?? MediaCodecs.Aac : MediaCodecs.Aac,
                     PlaybackMode.Hls.ToCode(),
                     IsVideoDirect: true,
                     IsAudioDirect: audioCopied);
@@ -141,7 +148,7 @@ public sealed class PlaybackInfoService : IPlaybackInfoService {
         string? accessToken) {
         var url = $"/Videos/{itemId:D}/{JellyfinProtocol.Hls.MasterPlaylist}?MediaSourceId={mediaSourceId}&PlaySessionId={playSessionId}";
         if (audioStreamIndex is not null) {
-            url = $"{url}&AudioStreamIndex={audioStreamIndex.Value}";
+            url = $"{url}&{JellyfinProtocol.QueryKeys.AudioStreamIndex}={audioStreamIndex.Value}";
         }
 
         return string.IsNullOrWhiteSpace(accessToken)
@@ -154,10 +161,14 @@ public sealed class PlaybackInfoService : IPlaybackInfoService {
         string mediaSourceId,
         string playSessionId,
         int? audioStreamIndex,
+        bool copyAudio,
         string? accessToken) {
         var url = $"/Videos/{itemId:D}/hls/remux/{JellyfinProtocol.Hls.StreamPlaylist}?MediaSourceId={mediaSourceId}&PlaySessionId={playSessionId}";
         if (audioStreamIndex is not null) {
-            url = $"{url}&AudioStreamIndex={audioStreamIndex.Value}";
+            url = $"{url}&{JellyfinProtocol.QueryKeys.AudioStreamIndex}={audioStreamIndex.Value}";
+        }
+        if (copyAudio) {
+            url = $"{url}&{JellyfinProtocol.QueryKeys.CopyAudio}=true";
         }
 
         return string.IsNullOrWhiteSpace(accessToken)

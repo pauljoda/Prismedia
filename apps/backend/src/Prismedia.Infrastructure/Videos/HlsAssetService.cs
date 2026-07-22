@@ -96,13 +96,19 @@ public sealed partial class HlsAssetService : IHlsAssetService {
         Guid id,
         string assetPath,
         int? audioStreamIndex,
-        CancellationToken cancellationToken) {
+        CancellationToken cancellationToken,
+        bool copyAudio = false) {
         var normalizedAssetPath = NormalizeAssetPath(assetPath);
         if (normalizedAssetPath is null) {
             return null;
         }
 
-        var virtualAsset = await TryGetVirtualAssetAsync(id, normalizedAssetPath, audioStreamIndex, cancellationToken);
+        var virtualAsset = await TryGetVirtualAssetAsync(
+            id,
+            normalizedAssetPath,
+            audioStreamIndex,
+            copyAudio,
+            cancellationToken);
         if (virtualAsset is not null) {
             return virtualAsset;
         }
@@ -134,6 +140,7 @@ public sealed partial class HlsAssetService : IHlsAssetService {
         Guid id,
         string normalizedAssetPath,
         int? requestedAudioStreamIndex,
+        bool copyAudio,
         CancellationToken cancellationToken) {
         if (_sources is null || _processes is null) {
             return null;
@@ -147,7 +154,7 @@ public sealed partial class HlsAssetService : IHlsAssetService {
         var renditions = RenditionsFor(source);
         await EnsureVirtualCacheAsync(id, source, renditions, cancellationToken);
         var selectedAudioStreamIndex = SelectAudioStreamIndex(source, requestedAudioStreamIndex);
-        var audioCacheKey = AudioCacheKey(selectedAudioStreamIndex);
+        var audioCacheKey = AudioCacheKey(selectedAudioStreamIndex, copyAudio);
 
         if (normalizedAssetPath.Equals(JellyfinProtocol.Hls.MasterPlaylist, StringComparison.OrdinalIgnoreCase)) {
             var trickplayStreams = await GetTrickplayStreamsAsync(id, cancellationToken);
@@ -185,7 +192,13 @@ public sealed partial class HlsAssetService : IHlsAssetService {
             parts[0].Equals("v", StringComparison.OrdinalIgnoreCase) &&
             parts[1].Equals("remux", StringComparison.OrdinalIgnoreCase)) {
             return await TryGetRemuxAssetAsync(
-                id, source, audioCacheKey, selectedAudioStreamIndex, parts[2], cancellationToken);
+                id,
+                source,
+                audioCacheKey,
+                selectedAudioStreamIndex,
+                copyAudio,
+                parts[2],
+                cancellationToken);
         }
 
         if (parts.Length == 3 &&
@@ -556,8 +569,10 @@ public sealed partial class HlsAssetService : IHlsAssetService {
     private string VirtualPath(Guid id, params string[] parts) =>
         Path.Combine([VirtualRoot(id), .. parts]);
 
-    private static string AudioCacheKey(int? audioStreamIndex) =>
-        audioStreamIndex is null ? "audio_default" : $"audio_{audioStreamIndex.Value:00000}";
+    private static string AudioCacheKey(int? audioStreamIndex, bool copyAudio) {
+        var track = audioStreamIndex is null ? "audio_default" : $"audio_{audioStreamIndex.Value:00000}";
+        return copyAudio ? $"{track}_copy" : track;
+    }
 
     private static int? SelectAudioStreamIndex(VideoSourceFile source, int? requestedAudioStreamIndex) {
         var audioStreams = source.Streams?
@@ -625,7 +640,7 @@ public sealed partial class HlsAssetService : IHlsAssetService {
             var bandwidth = ToBitsPerSecond(rendition.VideoBitrate);
             lines.Add(
                 $"#EXT-X-STREAM-INF:BANDWIDTH={bandwidth},AVERAGE-BANDWIDTH={bandwidth}{resolution},CODECS=\"{codecs},mp4a.40.2\"");
-            lines.Add(AppendAudioStreamQuery($"hls/{rendition.Name}/{JellyfinProtocol.Hls.StreamPlaylist}", audioStreamIndex));
+            lines.Add(AppendPlaybackQuery($"hls/{rendition.Name}/{JellyfinProtocol.Hls.StreamPlaylist}", audioStreamIndex));
         }
 
         foreach (var stream in trickplayStreams) {
@@ -671,7 +686,7 @@ public sealed partial class HlsAssetService : IHlsAssetService {
 
         for (var index = 0; index < total; index++) {
             lines.Add($"#EXTINF:{SegmentDuration(durationSeconds, index):0.000000},");
-            lines.Add(AppendAudioStreamQuery($"seg_{index:00000}.ts", audioStreamIndex));
+            lines.Add(AppendPlaybackQuery($"seg_{index:00000}.ts", audioStreamIndex));
         }
 
         lines.Add("#EXT-X-ENDLIST");
@@ -679,13 +694,21 @@ public sealed partial class HlsAssetService : IHlsAssetService {
         return string.Join('\n', lines);
     }
 
-    private static string AppendAudioStreamQuery(string url, int? audioStreamIndex) {
-        if (audioStreamIndex is null || url.Contains("AudioStreamIndex=", StringComparison.OrdinalIgnoreCase)) {
-            return url;
+    private static string AppendPlaybackQuery(string url, int? audioStreamIndex, bool copyAudio = false) {
+        if (audioStreamIndex is not null &&
+            !url.Contains($"{JellyfinProtocol.QueryKeys.AudioStreamIndex}=", StringComparison.OrdinalIgnoreCase)) {
+            url = AppendQuery(url, JellyfinProtocol.QueryKeys.AudioStreamIndex, audioStreamIndex.Value.ToString());
         }
 
-        var separator = url.Contains('?', StringComparison.Ordinal) ? "&" : "?";
-        return $"{url}{separator}AudioStreamIndex={audioStreamIndex.Value}";
+        if (copyAudio &&
+            !url.Contains($"{JellyfinProtocol.QueryKeys.CopyAudio}=", StringComparison.OrdinalIgnoreCase)) {
+            url = AppendQuery(url, JellyfinProtocol.QueryKeys.CopyAudio, bool.TrueString.ToLowerInvariant());
+        }
+
+        return url;
     }
+
+    private static string AppendQuery(string url, string key, string value) =>
+        $"{url}{(url.Contains('?', StringComparison.Ordinal) ? "&" : "?")}{key}={value}";
 
 }

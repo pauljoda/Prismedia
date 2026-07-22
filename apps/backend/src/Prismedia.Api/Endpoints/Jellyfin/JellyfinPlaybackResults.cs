@@ -54,6 +54,7 @@ internal static class JellyfinPlaybackResults {
         Guid itemId,
         string asset,
         int? audioStreamIndex,
+        bool copyAudio,
         IHlsAssetService hlsAssets,
         IEntityReadService entities,
         HttpContext httpContext,
@@ -62,7 +63,12 @@ internal static class JellyfinPlaybackResults {
             return Results.NotFound(new ApiProblem(ApiProblemCodes.VideoHlsNotFound, $"Video HLS asset '{asset}' for '{itemId}' was not found."));
         }
 
-        var hlsAsset = await hlsAssets.GetAssetAsync(itemId, asset, audioStreamIndex, cancellationToken);
+        var hlsAsset = await hlsAssets.GetAssetAsync(
+            itemId,
+            asset,
+            audioStreamIndex,
+            cancellationToken,
+            copyAudio);
         if (hlsAsset is null) {
             return Results.NotFound(new ApiProblem(ApiProblemCodes.VideoHlsNotFound, $"Video HLS asset '{asset}' for '{itemId}' was not found."));
         }

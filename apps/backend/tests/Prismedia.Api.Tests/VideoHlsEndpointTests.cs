@@ -114,7 +114,8 @@ public sealed class VideoHlsEndpointTests : IDisposable {
             Guid id,
             string assetPath,
             int? audioStreamIndex,
-            CancellationToken cancellationToken) {
+            CancellationToken cancellationToken,
+            bool copyAudio = false) {
             return Task.FromResult(id == VideoId ? _asset : null);
         }
     }

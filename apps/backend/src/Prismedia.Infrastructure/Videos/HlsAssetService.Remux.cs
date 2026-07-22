@@ -13,8 +13,9 @@ namespace Prismedia.Infrastructure.Videos;
 /// <summary>
 /// Stream-copy (remux) HLS path for <see cref="HlsAssetService"/>. When a client can decode the
 /// source video codec but not its container (for example a browser that hardware-decodes HEVC but
-/// cannot demux MKV), the video is copied — not re-encoded — into an fMP4 HLS stream while the audio
-/// is transcoded to AAC. Copying is near free (tens of seconds for a whole movie versus a slow,
+/// cannot demux MKV), the video is copied — not re-encoded — into an fMP4 HLS stream. Audio is also
+/// copied when the negotiated client profile accepts its codec; otherwise it uses the AAC baseline.
+/// Copying is near free (tens of seconds for a whole movie versus a slow,
 /// CPU/GPU-bound transcode), so the client hardware-decodes the original stream and playback is
 /// smooth with negligible server load, matching how other media servers serve HEVC to browsers.
 /// </summary>
@@ -66,6 +67,7 @@ public sealed partial class HlsAssetService {
         VideoSourceFile source,
         string audioCacheKey,
         int? audioStreamIndex,
+        bool copyAudio,
         string assetName,
         CancellationToken cancellationToken) {
         if (_processes is null) {
@@ -95,13 +97,29 @@ public sealed partial class HlsAssetService {
         RemuxLastRequestedUtc[$"{id}/{audioCacheKey}"] = DateTimeOffset.UtcNow;
 
         var remuxDir = VirtualPath(id, "remux", audioCacheKey);
-        await EnsureRemuxStartedAsync(id, source, audioCacheKey, audioStreamIndex, remuxDir, options, cancellationToken);
+        await EnsureRemuxStartedAsync(
+            id,
+            source,
+            audioCacheKey,
+            audioStreamIndex,
+            copyAudio,
+            remuxDir,
+            options,
+            cancellationToken);
 
         // The playlist is served as ffmpeg's growing event playlist immediately, while the complete VOD
         // manifest (full seekable timeline) is computed off the request thread and swapped in once ready.
         // The init/segment files are produced by the background remux and waited on as the player asks.
         if (fileName.Equals("index.m3u8", StringComparison.OrdinalIgnoreCase)) {
-            return await GetRemuxPlaylistAssetAsync(id, source, audioCacheKey, audioStreamIndex, remuxDir, options, cancellationToken);
+            return await GetRemuxPlaylistAssetAsync(
+                id,
+                source,
+                audioCacheKey,
+                audioStreamIndex,
+                copyAudio,
+                remuxDir,
+                options,
+                cancellationToken);
         }
 
         var filePath = Path.Combine(remuxDir, fileName);
@@ -131,12 +149,19 @@ public sealed partial class HlsAssetService {
         VideoSourceFile source,
         string audioCacheKey,
         int? audioStreamIndex,
+        bool copyAudio,
         string remuxDir,
         HlsAssetServiceOptions options,
         CancellationToken cancellationToken) {
         var vodPath = Path.Combine(remuxDir, "index.vod.m3u8");
         if (File.Exists(vodPath) && new FileInfo(vodPath).Length > 0) {
-            return await WriteRemuxServedPlaylistAsync(vodPath, remuxDir, audioStreamIndex, CacheControlForExtension(".m3u8"), cancellationToken);
+            return await WriteRemuxServedPlaylistAsync(
+                vodPath,
+                remuxDir,
+                audioStreamIndex,
+                copyAudio,
+                CacheControlForExtension(".m3u8"),
+                cancellationToken);
         }
 
         // Fast path: get the keyframe times cheaply — from the durable cache, or by reading the
@@ -151,6 +176,7 @@ public sealed partial class HlsAssetService {
                 remuxDir,
                 BuildRemuxSegmentDurations(fastKeyframes, source.DurationSeconds.Value),
                 audioStreamIndex,
+                copyAudio,
                 cancellationToken);
         }
 
@@ -159,14 +185,27 @@ public sealed partial class HlsAssetService {
         // persists the durable keyframe cache so the next play is instant) and serve the growing event
         // playlist now, bounded so a stalled ffmpeg can never re-introduce the manifest hang. The full
         // VOD takes over once the build lands.
-        EnsureRemuxVodComputationStarted(id, source, audioCacheKey, audioStreamIndex, remuxDir, options);
+        EnsureRemuxVodComputationStarted(
+            id,
+            source,
+            audioCacheKey,
+            audioStreamIndex,
+            copyAudio,
+            remuxDir,
+            options);
 
         var legacyPath = Path.Combine(remuxDir, "index.m3u8");
         if (!await WaitForRemuxFileAsync(id, audioCacheKey, legacyPath, cancellationToken, EventPlaylistWaitBudget)) {
             return null;
         }
 
-        return await WriteRemuxServedPlaylistAsync(legacyPath, remuxDir, audioStreamIndex, "no-cache", cancellationToken);
+        return await WriteRemuxServedPlaylistAsync(
+            legacyPath,
+            remuxDir,
+            audioStreamIndex,
+            copyAudio,
+            "no-cache",
+            cancellationToken);
     }
 
     /// <summary>Writes the remux VOD playlist atomically and returns it as a cacheable asset.</summary>
@@ -174,11 +213,15 @@ public sealed partial class HlsAssetService {
         string remuxDir,
         IReadOnlyList<double> durations,
         int? audioStreamIndex,
+        bool copyAudio,
         CancellationToken cancellationToken) {
         Directory.CreateDirectory(remuxDir);
         var vodPath = Path.Combine(remuxDir, "index.vod.m3u8");
         var tempPath = vodPath + "." + Path.GetRandomFileName();
-        await File.WriteAllTextAsync(tempPath, BuildRemuxVodPlaylist(durations, audioStreamIndex), cancellationToken);
+        await File.WriteAllTextAsync(
+            tempPath,
+            BuildRemuxVodPlaylist(durations, audioStreamIndex, copyAudio),
+            cancellationToken);
         File.Move(tempPath, vodPath, overwrite: true);
         return new HlsAsset(vodPath, MediaContentTypes.HlsPlaylist, CacheControlForExtension(".m3u8"));
     }
@@ -187,11 +230,12 @@ public sealed partial class HlsAssetService {
         string sourcePath,
         string remuxDir,
         int? audioStreamIndex,
+        bool copyAudio,
         string cacheControl,
         CancellationToken cancellationToken) {
         var servedPath = Path.Combine(remuxDir, "index.served.m3u8");
         var playlist = await File.ReadAllTextAsync(sourcePath, cancellationToken);
-        var rewritten = RewriteRemuxPlaylistUris(playlist, audioStreamIndex);
+        var rewritten = RewriteRemuxPlaylistUris(playlist, audioStreamIndex, copyAudio);
         await File.WriteAllTextAsync(servedPath, rewritten, cancellationToken);
         return new HlsAsset(servedPath, MediaContentTypes.HlsPlaylist, cacheControl);
     }
@@ -205,6 +249,7 @@ public sealed partial class HlsAssetService {
         VideoSourceFile source,
         string audioCacheKey,
         int? audioStreamIndex,
+        bool copyAudio,
         string remuxDir,
         HlsAssetServiceOptions options) {
         var key = $"{id}/{audioCacheKey}";
@@ -212,7 +257,17 @@ public sealed partial class HlsAssetService {
             return;
         }
 
-        RemuxVodComputations.GetOrAdd(key, _ => ComputeRemuxVodAsync(id, source, audioCacheKey, audioStreamIndex, remuxDir, options, key));
+        RemuxVodComputations.GetOrAdd(
+            key,
+            _ => ComputeRemuxVodAsync(
+                id,
+                source,
+                audioCacheKey,
+                audioStreamIndex,
+                copyAudio,
+                remuxDir,
+                options,
+                key));
     }
 
     /// <summary>
@@ -224,6 +279,7 @@ public sealed partial class HlsAssetService {
         VideoSourceFile source,
         string audioCacheKey,
         int? audioStreamIndex,
+        bool copyAudio,
         string remuxDir,
         HlsAssetServiceOptions options,
         string key) {
@@ -244,7 +300,7 @@ public sealed partial class HlsAssetService {
                 return;
             }
 
-            await WriteRemuxVodAsync(remuxDir, durations, audioStreamIndex, token);
+            await WriteRemuxVodAsync(remuxDir, durations, audioStreamIndex, copyAudio, token);
         } catch (OperationCanceledException) {
             // Playback stopped; the next play recomputes from scratch.
         } catch (Exception ex) {
@@ -259,6 +315,7 @@ public sealed partial class HlsAssetService {
         VideoSourceFile source,
         string audioCacheKey,
         int? audioStreamIndex,
+        bool copyAudio,
         string remuxDir,
         HlsAssetServiceOptions options,
         CancellationToken cancellationToken) {
@@ -284,7 +341,15 @@ public sealed partial class HlsAssetService {
 
             var cancellation = new CancellationTokenSource();
             RemuxGenerations[key] = new RemuxGeneration(
-                GenerateRemuxAsync(id, source, audioStreamIndex, remuxDir, key, options, cancellation.Token),
+                GenerateRemuxAsync(
+                    id,
+                    source,
+                    audioStreamIndex,
+                    copyAudio,
+                    remuxDir,
+                    key,
+                    options,
+                    cancellation.Token),
                 cancellation,
                 id,
                 DateTimeOffset.UtcNow);
@@ -297,6 +362,7 @@ public sealed partial class HlsAssetService {
         Guid id,
         VideoSourceFile source,
         int? audioStreamIndex,
+        bool copyAudio,
         string remuxDir,
         string key,
         HlsAssetServiceOptions options,
@@ -309,7 +375,7 @@ public sealed partial class HlsAssetService {
             // full transcode. ffmpeg re-copies over the existing files (atomically, via the temp_file
             // flag); the copy is deterministic so re-produced segments are byte-identical.
             Directory.CreateDirectory(remuxDir);
-            var arguments = RemuxArguments(source, audioStreamIndex, remuxDir);
+            var arguments = RemuxArguments(source, audioStreamIndex, copyAudio, remuxDir);
             var result = await _processes!.RunAsync(options.FfmpegPath, arguments, environment: null, cancellationToken);
             if (result.ExitCode != 0) {
                 _logger?.LogWarning(
@@ -329,7 +395,11 @@ public sealed partial class HlsAssetService {
         }
     }
 
-    private IReadOnlyList<string> RemuxArguments(VideoSourceFile source, int? audioStreamIndex, string remuxDir) {
+    private IReadOnlyList<string> RemuxArguments(
+        VideoSourceFile source,
+        int? audioStreamIndex,
+        bool copyAudio,
+        string remuxDir) {
         var arguments = new List<string>
         {
             "-hide_banner",
@@ -371,7 +441,7 @@ public sealed partial class HlsAssetService {
         };
 
         arguments.AddRange(HevcSampleEntryTagArguments(source));
-        arguments.AddRange(RemuxAudioArguments(source, audioStreamIndex));
+        arguments.AddRange(RemuxAudioArguments(source, audioStreamIndex, copyAudio));
 
         arguments.AddRange(
         [
@@ -405,15 +475,19 @@ public sealed partial class HlsAssetService {
     /// Builds the audio output arguments for a stream-copy remux.
     /// </summary>
     /// <remarks>
-    /// AAC is packet-copied so its original samples, bitrate, and channel layout remain untouched. The
+    /// Negotiated source audio and AAC are packet-copied so their original samples, bitrate, and channel
+    /// layout remain untouched. The
     /// enclosing remux command preserves the source streams' relative timestamps with <c>-copyts</c>,
     /// <c>-start_at_zero</c>, and <c>-avoid_negative_ts disabled</c>, so timestamp correction does not
     /// require a lossy AAC-to-AAC generation. Other codecs are downmixed to stereo AAC as the safe
     /// universal baseline and use asynchronous resampling to correct timestamp discontinuities without
     /// forcing the first audio packet to time zero.
     /// </remarks>
-    internal static IReadOnlyList<string> RemuxAudioArguments(VideoSourceFile source, int? audioStreamIndex) =>
-        IsAacCodec(SelectedAudioStreamCodec(source, audioStreamIndex))
+    internal static IReadOnlyList<string> RemuxAudioArguments(
+        VideoSourceFile source,
+        int? audioStreamIndex,
+        bool copyAudio = false) =>
+        copyAudio || IsAacCodec(SelectedAudioStreamCodec(source, audioStreamIndex))
             ? ["-c:a", "copy"]
             : ["-c:a", MediaCodecs.Aac, "-ac", "2", "-b:a", "192k", "-ar", "48000", "-af", RemuxAudioTimestampFilter];
 
@@ -673,7 +747,10 @@ public sealed partial class HlsAssetService {
     /// ffmpeg writes (version, init map, independent segments) but listing every segment up front and
     /// terminating with <c>#EXT-X-ENDLIST</c> so the player treats the whole duration as seekable.
     /// </summary>
-    internal static string BuildRemuxVodPlaylist(IReadOnlyList<double> segmentDurations, int? audioStreamIndex = null) {
+    internal static string BuildRemuxVodPlaylist(
+        IReadOnlyList<double> segmentDurations,
+        int? audioStreamIndex = null,
+        bool copyAudio = false) {
         var targetDuration = segmentDurations.Count == 0
             ? SegmentDurationSeconds
             : Math.Max(1, (int)Math.Round(segmentDurations.Max(), MidpointRounding.AwayFromZero));
@@ -685,12 +762,12 @@ public sealed partial class HlsAssetService {
             "#EXT-X-MEDIA-SEQUENCE:0",
             "#EXT-X-PLAYLIST-TYPE:VOD",
             "#EXT-X-INDEPENDENT-SEGMENTS",
-            $"#EXT-X-MAP:URI=\"{AppendAudioStreamQuery("init.mp4", audioStreamIndex)}\"",
+            $"#EXT-X-MAP:URI=\"{AppendPlaybackQuery("init.mp4", audioStreamIndex, copyAudio)}\"",
         };
 
         for (var index = 0; index < segmentDurations.Count; index++) {
             lines.Add(string.Format(CultureInfo.InvariantCulture, "#EXTINF:{0:0.000000},", segmentDurations[index]));
-            lines.Add(AppendAudioStreamQuery($"seg_{index:00000}.m4s", audioStreamIndex));
+            lines.Add(AppendPlaybackQuery($"seg_{index:00000}.m4s", audioStreamIndex, copyAudio));
         }
 
         lines.Add("#EXT-X-ENDLIST");
@@ -698,26 +775,28 @@ public sealed partial class HlsAssetService {
         return string.Join('\n', lines);
     }
 
-    internal static string RewriteRemuxPlaylistUris(string playlist, int? audioStreamIndex) {
-        if (audioStreamIndex is null || string.IsNullOrEmpty(playlist)) {
+    internal static string RewriteRemuxPlaylistUris(
+        string playlist,
+        int? audioStreamIndex,
+        bool copyAudio = false) {
+        if ((audioStreamIndex is null && !copyAudio) || string.IsNullOrEmpty(playlist)) {
             return playlist;
         }
 
-        var index = audioStreamIndex.Value;
         var lines = playlist.Replace("\r\n", "\n").Split('\n');
         for (var i = 0; i < lines.Length; i++) {
             var line = lines[i];
             if (line.StartsWith("#EXT-X-MAP:", StringComparison.OrdinalIgnoreCase)) {
-                lines[i] = RewriteMapUri(line, index);
+                lines[i] = RewriteMapUri(line, audioStreamIndex, copyAudio);
             } else if (line.Length > 0 && !line.StartsWith('#')) {
-                lines[i] = AppendAudioStreamQuery(line, index);
+                lines[i] = AppendPlaybackQuery(line, audioStreamIndex, copyAudio);
             }
         }
 
         return string.Join('\n', lines);
     }
 
-    private static string RewriteMapUri(string line, int audioStreamIndex) {
+    private static string RewriteMapUri(string line, int? audioStreamIndex, bool copyAudio) {
         const string marker = "URI=\"";
         var uriStart = line.IndexOf(marker, StringComparison.OrdinalIgnoreCase);
         if (uriStart < 0) {
@@ -731,7 +810,7 @@ public sealed partial class HlsAssetService {
         }
 
         var uri = line[uriStart..uriEnd];
-        var rewritten = AppendAudioStreamQuery(uri, audioStreamIndex);
+        var rewritten = AppendPlaybackQuery(uri, audioStreamIndex, copyAudio);
         return line[..uriStart] + rewritten + line[uriEnd..];
     }
 

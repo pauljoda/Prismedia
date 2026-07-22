@@ -2,6 +2,7 @@ using System.Text.Json;
 using Prismedia.Application.Videos;
 using Prismedia.Infrastructure.Videos;
 using Prismedia.Application.Settings;
+using Prismedia.Contracts.Jellyfin;
 using Prismedia.Contracts.Settings;
 
 namespace Prismedia.Infrastructure.Tests;
@@ -111,6 +112,44 @@ public sealed class PlaybackInfoServiceTests {
         Assert.NotNull(info);
         var source = Assert.Single(info.MediaSources);
         Assert.Contains("/hls/remux/", source.TranscodingUrl);
+        Assert.True(source.TranscodingInfo?.IsVideoDirect);
+        Assert.True(source.TranscodingInfo?.IsAudioDirect);
+    }
+
+    [Fact]
+    public async Task PlaybackInfoPreservesNegotiatedMultichannelAudioDuringRemux() {
+        var videoId = Guid.Parse("24242424-2424-2424-2424-242424242424");
+        var service = new PlaybackInfoService(
+            new FakeVideoSourceService(new VideoSourceFile(
+                videoId,
+                "/media/movie.mkv",
+                "video/x-matroska",
+                false,
+                DurationSeconds: 60,
+                Container: "matroska",
+                VideoCodec: "h264",
+                AudioCodec: "ac3",
+                Streams:
+                [
+                    new(0, "Video", "h264", null, "Video", 1920, 1080, 24, null, null, null, true, false),
+                    new(1, "Audio", "ac3", "eng", "English", null, null, null, 640_000, 48000, 6, true, false)
+                ])),
+            new TranscodeSessionService());
+
+        var info = await service.GetPlaybackInfoAsync(videoId, new PlaybackInfoQuery {
+            EnableDirectPlay = true,
+            EnableDirectStream = true,
+            EnableTranscoding = true,
+            Profile = new ClientPlaybackProfile(
+                200_000_000,
+                [new ClientDirectPlayProfile("Video", "mp4", "h264", "ac3")])
+        }, CancellationToken.None);
+
+        Assert.NotNull(info);
+        var source = Assert.Single(info.MediaSources);
+        Assert.Contains("/hls/remux/", source.TranscodingUrl);
+        Assert.Contains($"{JellyfinProtocol.QueryKeys.CopyAudio}=true", source.TranscodingUrl);
+        Assert.Equal("ac3", source.TranscodingInfo?.AudioCodec);
         Assert.True(source.TranscodingInfo?.IsVideoDirect);
         Assert.True(source.TranscodingInfo?.IsAudioDirect);
     }

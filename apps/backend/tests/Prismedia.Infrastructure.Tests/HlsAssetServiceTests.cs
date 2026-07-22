@@ -124,11 +124,15 @@ public sealed class HlsAssetServiceTests : IDisposable {
 
     [Fact]
     public void RemuxVodPlaylistCarriesSelectedAudioStreamIndexOnMediaUris() {
-        var playlist = HlsAssetService.BuildRemuxVodPlaylist([6.006, 4.2], audioStreamIndex: 2);
+        var playlist = HlsAssetService.BuildRemuxVodPlaylist(
+            [6.006, 4.2],
+            audioStreamIndex: 2,
+            copyAudio: true);
 
-        Assert.Contains("#EXT-X-MAP:URI=\"init.mp4?AudioStreamIndex=2\"", playlist);
-        Assert.Contains("#EXTINF:6.006000,\nseg_00000.m4s?AudioStreamIndex=2", playlist);
-        Assert.Contains("#EXTINF:4.200000,\nseg_00001.m4s?AudioStreamIndex=2", playlist);
+        var query = $"{JellyfinProtocol.QueryKeys.AudioStreamIndex}=2&{JellyfinProtocol.QueryKeys.CopyAudio}=true";
+        Assert.Contains($"#EXT-X-MAP:URI=\"init.mp4?{query}\"", playlist);
+        Assert.Contains($"#EXTINF:6.006000,\nseg_00000.m4s?{query}", playlist);
+        Assert.Contains($"#EXTINF:4.200000,\nseg_00001.m4s?{query}", playlist);
     }
 
     [Fact]
@@ -143,17 +147,21 @@ public sealed class HlsAssetServiceTests : IDisposable {
             seg_00001.m4s?AudioStreamIndex=2
             """;
 
-        var playlist = HlsAssetService.RewriteRemuxPlaylistUris(eventPlaylist, audioStreamIndex: 2);
+        var playlist = HlsAssetService.RewriteRemuxPlaylistUris(
+            eventPlaylist,
+            audioStreamIndex: 2,
+            copyAudio: true);
 
-        Assert.Contains("#EXT-X-MAP:URI=\"init.mp4?AudioStreamIndex=2\"", playlist);
-        Assert.Contains("#EXTINF:6.006000,\nseg_00000.m4s?AudioStreamIndex=2", playlist);
-        Assert.Contains("#EXTINF:6.006000,\nseg_00001.m4s?AudioStreamIndex=2", playlist);
+        var query = $"{JellyfinProtocol.QueryKeys.AudioStreamIndex}=2&{JellyfinProtocol.QueryKeys.CopyAudio}=true";
+        Assert.Contains($"#EXT-X-MAP:URI=\"init.mp4?{query}\"", playlist);
+        Assert.Contains($"#EXTINF:6.006000,\nseg_00000.m4s?{query}", playlist);
+        Assert.Contains($"#EXTINF:6.006000,\nseg_00001.m4s?{query}", playlist);
         Assert.DoesNotContain("AudioStreamIndex=2?AudioStreamIndex=2", playlist);
         Assert.DoesNotContain("AudioStreamIndex=2&AudioStreamIndex=2", playlist);
     }
 
     [Fact]
-    public void RemuxCopiesAacWithoutQualityLossAndOnlyDownmixesNonAacSources() {
+    public void RemuxCopiesNegotiatedAudioWithoutQualityLossAndDownmixesUnsupportedSources() {
         // AAC is already the browser-safe target codec, so even 7.1 sources must be packet-copied rather
         // than put through another lossy AAC generation. Codecs the client may not decode are converted
         // to the safe stereo-AAC baseline while retaining their source timestamps.
@@ -163,6 +171,12 @@ public sealed class HlsAssetServiceTests : IDisposable {
         Assert.Equal(
             ["-c:a", "aac", "-ac", "2", "-b:a", "192k", "-ar", "48000", "-af", "aresample=async=1"],
             HlsAssetService.RemuxAudioArguments(RemuxAudioSource("eac3"), audioStreamIndex: null));
+        Assert.Equal(
+            ["-c:a", "copy"],
+            HlsAssetService.RemuxAudioArguments(
+                RemuxAudioSource("ac3"),
+                audioStreamIndex: null,
+                copyAudio: true));
         // An explicit absolute stream index resolves the codec of that stream.
         Assert.Equal(
             ["-c:a", "copy"],
@@ -195,14 +209,19 @@ public sealed class HlsAssetServiceTests : IDisposable {
                         Width: null, Height: null, FrameRate: null, BitRate: null, SampleRate: 48000, Channels: 2,
                         IsDefault: true, IsForced: false),
                     new VideoSourceStream(
-                        StreamIndex: 2, Type: "Audio", Codec: "aac", Language: "eng", Title: "English",
+                        StreamIndex: 2, Type: "Audio", Codec: "ac3", Language: "eng", Title: "English",
                         Width: null, Height: null, FrameRate: null, BitRate: null, SampleRate: 48000, Channels: 2,
                         IsDefault: false, IsForced: false)
                 ])),
             process,
             NullLogger<HlsAssetService>.Instance);
 
-        var segment = await service.GetAssetAsync(videoId, "v/remux/seg_00000.m4s", 2, CancellationToken.None);
+        var segment = await service.GetAssetAsync(
+            videoId,
+            "v/remux/seg_00000.m4s",
+            2,
+            CancellationToken.None,
+            copyAudio: true);
 
         Assert.NotNull(segment);
         var arguments = Assert.Single(process.ArgumentHistory);

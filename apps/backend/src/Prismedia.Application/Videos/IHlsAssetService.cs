@@ -11,12 +11,14 @@ public interface IHlsAssetService {
     /// <param name="assetPath">Package-relative HLS asset path.</param>
     /// <param name="audioStreamIndex">Optional source audio stream index to use for virtual HLS.</param>
     /// <param name="cancellationToken">Token used to cancel the lookup.</param>
+    /// <param name="copyAudio">Whether the negotiated remux may preserve the selected source audio codec.</param>
     /// <returns>HLS asset metadata, or null when the requested asset is missing or invalid.</returns>
     Task<HlsAsset?> GetAssetAsync(
         Guid id,
         string assetPath,
         int? audioStreamIndex,
-        CancellationToken cancellationToken);
+        CancellationToken cancellationToken,
+        bool copyAudio = false);
 }
 
 /// <summary>

@@ -144,6 +144,23 @@ public sealed class JellyfinPlaybackEndpointTests : IDisposable {
     }
 
     [Fact]
+    public async Task HlsVariantEndpointPassesNegotiatedAudioCopyMode() {
+        var path = Path.Combine(_tempDir, "index.m3u8");
+        await File.WriteAllTextAsync(path, "#EXTM3U\n");
+        var hls = new RecordingHlsAssetService(new HlsAsset(path, "application/vnd.apple.mpegurl", "public, max-age=60"));
+        using var factory = CreateFactory(hls: hls);
+        using var client = factory.CreateAuthenticatedClient();
+
+        using var response = await client.GetAsync(
+            $"/Videos/{VideoId}/hls/remux/stream.m3u8?{JellyfinProtocol.QueryKeys.AudioStreamIndex}=2&{JellyfinProtocol.QueryKeys.CopyAudio}=true");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal("v/remux/stream.m3u8", hls.LastAssetPath);
+        Assert.Equal(2, hls.LastAudioStreamIndex);
+        Assert.True(hls.LastCopyAudio);
+    }
+
+    [Fact]
     public async Task HlsVariantEndpointAcceptsMasterPlaylistRelativeUrls() {
         var path = Path.Combine(_tempDir, "index.m3u8");
         await File.WriteAllTextAsync(path, "#EXTM3U\n");
@@ -490,14 +507,17 @@ public sealed class JellyfinPlaybackEndpointTests : IDisposable {
 
         public string? LastAssetPath { get; private set; }
         public int? LastAudioStreamIndex { get; private set; }
+        public bool LastCopyAudio { get; private set; }
 
         public Task<HlsAsset?> GetAssetAsync(
             Guid id,
             string assetPath,
             int? audioStreamIndex,
-            CancellationToken cancellationToken) {
+            CancellationToken cancellationToken,
+            bool copyAudio = false) {
             LastAssetPath = assetPath;
             LastAudioStreamIndex = audioStreamIndex;
+            LastCopyAudio = copyAudio;
             return Task.FromResult(id == VideoId ? _asset : null);
         }
     }
