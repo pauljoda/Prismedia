@@ -272,8 +272,13 @@ public sealed class ImportedEntityMaterializationTests : IDisposable {
         var rootPath = Directory.CreateDirectory(Path.Combine(_workRoot, "divide-repair")).FullName;
         var artistPath = Directory.CreateDirectory(Path.Combine(rootPath, "Divide Music")).FullName;
         var albumPath = Directory.CreateDirectory(Path.Combine(artistPath, "WAR")).FullName;
+        var root = new RootPersistence(rootPath, scanAudio: true);
         var artistId = AddSourceEntity(db, EntityKind.MusicArtist, "Divide Music", artistPath);
         var albumId = AddSourceEntity(db, EntityKind.AudioLibrary, "WAR", albumPath, artistId);
+        db.AudioLibraryDetails.Add(new AudioLibraryDetailRow {
+            EntityId = albumId,
+            LibraryRootId = root.Root.Id
+        });
         var wantedTrackId = AddWantedEntity(db, EntityKind.AudioTrack, "WAR", albumId);
         var sourcePath = Path.Combine(albumPath, "01 - WAR.mp3");
         await File.WriteAllTextAsync(sourcePath, "audio-bytes");
@@ -342,7 +347,6 @@ public sealed class ImportedEntityMaterializationTests : IDisposable {
         });
         await db.SaveChangesAsync();
 
-        var root = new RootPersistence(rootPath, scanAudio: true);
         var persistence = new LibraryScanPersistenceService(db);
         var scan = new ScanAudioJobHandler(
             NullLogger<ScanAudioJobHandler>.Instance,
@@ -350,14 +354,23 @@ public sealed class ImportedEntityMaterializationTests : IDisposable {
             root,
             persistence,
             persistence,
+            snapshots: new FixedSnapshotStore(sourcePath),
             acquisitionHints: new AcquisitionHintApplier(db));
         var queue = new MergedImportTestSupport.RecordingJobQueue();
-        await scan.MaterializeImportedPathsAsync(
-            JobContext(Guid.NewGuid(), queue),
+        var scanJob = new JobRunSnapshot(
             Guid.NewGuid(),
-            root.Root,
-            [sourcePath],
-            CancellationToken.None);
+            JobType.ScanAudio,
+            JobRunStatus.Running,
+            0,
+            null,
+            new ScanRootPayload(root.Root.Id).ToJson(),
+            EntityKindRegistry.AudioLibrary.Code,
+            root.Root.Id.ToString(),
+            root.Root.Label,
+            now,
+            now,
+            null);
+        await scan.HandleAsync(new JobContext(scanJob, queue), CancellationToken.None);
 
         var retained = await db.Entities.AsNoTracking().SingleAsync(row => row.Id == wantedTrackId);
         Assert.Equal("WAR", retained.Title);
@@ -880,6 +893,24 @@ public sealed class ImportedEntityMaterializationTests : IDisposable {
         public Task<int> RemoveEntitiesInExcludedPathsAsync(Guid rootId, CancellationToken cancellationToken) => Task.FromResult(0);
         public Task<int> RemoveEntitiesOutsideLibraryRootsAsync(CancellationToken cancellationToken) => Task.FromResult(0);
         public Task<int> RemoveOrphanTagsAsync(CancellationToken cancellationToken) => Task.FromResult(0);
+    }
+
+    private sealed class FixedSnapshotStore(string sourcePath) : IScanSnapshotStore {
+        public Task<IReadOnlyList<FileSignature>> LoadAsync(
+            Guid rootId,
+            string scanKind,
+            CancellationToken cancellationToken) {
+            var file = new FileInfo(sourcePath);
+            return Task.FromResult<IReadOnlyList<FileSignature>>([
+                new FileSignature(file.FullName, file.Length, file.LastWriteTimeUtc.Ticks)
+            ]);
+        }
+
+        public Task ApplyAsync(
+            Guid rootId,
+            string scanKind,
+            ScanDelta delta,
+            CancellationToken cancellationToken) => Task.CompletedTask;
     }
 
     private sealed class SuccessfulAudioProbe : IMediaProbe {

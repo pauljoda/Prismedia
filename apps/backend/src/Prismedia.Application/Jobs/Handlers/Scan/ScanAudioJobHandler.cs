@@ -38,9 +38,22 @@ public sealed class ScanAudioJobHandler(
             settings = settings with { AutoIdentifyEnabled = false };
         }
 
+        IReadOnlyList<WantedAudioTrackReconciliation> reconciliations = acquisitionHints is null
+            ? []
+            : await acquisitionHints.ReconcileExistingWantedAudioTracksAsync(root.Id, cancellationToken);
+
         await AutoIdentifyScanEnqueue.EnqueueExistingRootsForRootAsync(
             context, settings, downstreamNeeds, root.Id, ScanCategories, cancellationToken);
         await EnqueueExistingTrackJobsAsync(context, settings, root.Id, cancellationToken);
+        if (!settings.AutoGeneratePreview) {
+            foreach (var reconciliation in reconciliations.Where(result => result.NeedsWaveformRegeneration)) {
+                await EnqueueWaveformRegenerationAsync(
+                    context,
+                    reconciliation.EntityId,
+                    "Audio track",
+                    cancellationToken);
+            }
+        }
         // Container covers (identify artwork on albums/artists) can predate their grid variants; an
         // unchanged scan self-heals them the same way the video scan does, instead of leaving grids
         // serving full-size originals until the daily sweep.

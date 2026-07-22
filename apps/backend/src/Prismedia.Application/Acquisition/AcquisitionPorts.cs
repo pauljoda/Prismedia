@@ -293,6 +293,15 @@ public interface IAcquisitionHintApplier {
         CancellationToken cancellationToken) => Task.FromResult<WantedAudioTrackReconciliation?>(null);
 
     /// <summary>
+    /// Runs the same conservative reconciliation over scanner-owned audio tracks already cataloged in
+    /// one library root. This lets an unchanged incremental scan heal duplicates created by older builds.
+    /// </summary>
+    Task<IReadOnlyList<WantedAudioTrackReconciliation>> ReconcileExistingWantedAudioTracksAsync(
+        Guid libraryRootId,
+        CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<WantedAudioTrackReconciliation>>([]);
+
+    /// <summary>
     /// Applies every unconsumed video/audio hint after Source binding (book hints keep
     /// <see cref="ApplyAsync"/>). A hint linked to an acquisition Entity stamps that exact Entity, even
     /// when its crash-safe path is a broader ancestor folder; an unlinked hint stamps the path owner.

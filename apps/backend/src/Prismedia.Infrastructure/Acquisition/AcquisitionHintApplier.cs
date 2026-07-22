@@ -363,6 +363,47 @@ public sealed class AcquisitionHintApplier(
     }
 
     /// <inheritdoc />
+    public async Task<IReadOnlyList<WantedAudioTrackReconciliation>> ReconcileExistingWantedAudioTracksAsync(
+        Guid libraryRootId,
+        CancellationToken cancellationToken) {
+        var audioTrackCode = EntityKindRegistry.AudioTrack.Code;
+        var candidates = await db.Entities.AsNoTracking()
+            .Where(track => track.KindCode == audioTrackCode
+                && !track.IsWanted
+                && track.ParentEntityId != null)
+            .Join(
+                db.EntityFiles.AsNoTracking().Where(file => file.Role == EntityFileRole.Source),
+                track => track.Id,
+                file => file.EntityId,
+                (track, file) => new { Track = track, SourcePath = file.Path })
+            .Join(
+                db.AudioLibraryDetails.AsNoTracking().Where(detail => detail.LibraryRootId == libraryRootId),
+                candidate => candidate.Track.ParentEntityId,
+                detail => detail.EntityId,
+                (candidate, _) => new {
+                    AudioLibraryId = candidate.Track.ParentEntityId!.Value,
+                    candidate.SourcePath,
+                    candidate.Track.Title,
+                    SortOrder = candidate.Track.SortOrder ?? 0
+                })
+            .ToArrayAsync(cancellationToken);
+
+        var reconciliations = new List<WantedAudioTrackReconciliation>();
+        foreach (var candidate in candidates) {
+            var reconciliation = await ReconcileWantedAudioTrackAsync(
+                candidate.AudioLibraryId,
+                candidate.SourcePath,
+                candidate.Title,
+                candidate.SortOrder,
+                cancellationToken);
+            if (reconciliation is not null) {
+                reconciliations.Add(reconciliation);
+            }
+        }
+        return reconciliations;
+    }
+
+    /// <inheritdoc />
     public async Task<WantedAudioTrackReconciliation?> ReconcileWantedAudioTrackAsync(
         Guid audioLibraryId,
         string sourcePath,
