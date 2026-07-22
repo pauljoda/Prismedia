@@ -278,6 +278,20 @@ public interface IAcquisitionHintApplier {
         CancellationToken cancellationToken);
 
     /// <summary>
+    /// Reconciles one scanned audio file with the single fileless wanted track under its album whose
+    /// canonical title exactly matches <paramref name="scannedTitle"/>. The implementation preserves
+    /// the wanted Entity id and provider identity, attaches or moves the Source file, clears Wanted,
+    /// and may remove only an otherwise-unowned filename-derived duplicate. Call before track upsert.
+    /// Returns the retained wanted track id, or null when the match is ambiguous or unsafe.
+    /// </summary>
+    Task<Guid?> ReconcileWantedAudioTrackAsync(
+        Guid audioLibraryId,
+        string sourcePath,
+        string scannedTitle,
+        int sortOrder,
+        CancellationToken cancellationToken) => Task.FromResult<Guid?>(null);
+
+    /// <summary>
     /// Applies every unconsumed video/audio hint after Source binding (book hints keep
     /// <see cref="ApplyAsync"/>). A hint linked to an acquisition Entity stamps that exact Entity, even
     /// when its crash-safe path is a broader ancestor folder; an unlinked hint stamps the path owner.

@@ -15,6 +15,12 @@ public static class JobPriorities {
     public const int AcquisitionCompletion = 80;
 
     /// <summary>
+    /// Technical probes for newly imported media make the completed acquisition immediately playable
+    /// and therefore share completion priority rather than waiting behind later request enrichment.
+    /// </summary>
+    public const int AcquisitionProbe = AcquisitionCompletion;
+
+    /// <summary>
     /// Active transfer polling must preempt acquisition-search fanout so completed and failed downloads
     /// continue advancing while a large artist request is still searching its remaining children.
     /// </summary>

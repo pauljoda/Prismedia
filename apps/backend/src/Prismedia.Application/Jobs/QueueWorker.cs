@@ -45,6 +45,7 @@ public sealed class QueueWorker(
     protected override async Task ExecuteAsync(CancellationToken stoppingToken) {
         var concurrency = await LoadConcurrencyAsync(stoppingToken);
         var runningJobs = new HashSet<Task>();
+        var foregroundJobs = new HashSet<Task>();
         var nextConcurrencyRefreshAt = DateTimeOffset.UtcNow.Add(_concurrencyRefreshInterval);
 
         logger.LogInformation(
@@ -55,6 +56,7 @@ public sealed class QueueWorker(
         var restorePauseLogged = false;
         while (!stoppingToken.IsCancellationRequested) {
             RemoveCompletedJobs(runningJobs);
+            RemoveCompletedJobs(foregroundJobs);
 
             if (await HasPendingRestoreAsync(stoppingToken)) {
                 if (!restorePauseLogged) {
@@ -84,14 +86,11 @@ public sealed class QueueWorker(
                 nextConcurrencyRefreshAt = now.Add(_concurrencyRefreshInterval);
             }
 
-            if (runningJobs.Count >= concurrency + ForegroundLaneSlots) {
-                await WaitForCapacityOrRefreshAsync(runningJobs, nextConcurrencyRefreshAt, stoppingToken);
+            if (runningJobs.Count >= concurrency && foregroundJobs.Count >= ForegroundLaneSlots) {
+                await WaitForCapacityOrRefreshAsync(
+                    runningJobs, foregroundJobs, nextConcurrencyRefreshAt, stoppingToken);
                 continue;
             }
-
-            // With every regular slot busy, only the reserved foreground lane remains: claim
-            // exclusively direct interactive work so bulk/background jobs cannot fill it.
-            var foregroundOnly = runningJobs.Count >= concurrency;
 
             JobRunSnapshot? job;
             try {
@@ -107,28 +106,43 @@ public sealed class QueueWorker(
                     nextRecoveryAt = now.Add(StaleLeaseRecoveryInterval);
                 }
 
-                job = await queue.ClaimNextAsync(
-                    _workerId,
-                    stoppingToken,
-                    foregroundOnly ? JobRunLane.ForegroundIdentify : null);
+                // Fill standard capacity only with standard jobs. If none are ready (or every standard
+                // slot is occupied), fill the dedicated foreground slot independently. This prevents a
+                // search flood from taking general capacity while still starting one interactive job.
+                job = runningJobs.Count < concurrency
+                    ? await queue.ClaimNextAsync(_workerId, stoppingToken)
+                    : null;
+                if (job is null && foregroundJobs.Count < ForegroundLaneSlots) {
+                    job = await queue.ClaimNextAsync(
+                        _workerId,
+                        stoppingToken,
+                        JobRunLane.ForegroundIdentify);
+                }
             } catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) {
                 throw;
             } catch (Exception ex) {
                 logger.LogError(ex, "Failed to claim next job.");
-                await WaitForCapacityOrRefreshAsync(runningJobs, nextConcurrencyRefreshAt, stoppingToken);
+                await WaitForCapacityOrRefreshAsync(
+                    runningJobs, foregroundJobs, nextConcurrencyRefreshAt, stoppingToken);
                 continue;
             }
 
             if (job is null) {
-                await WaitForCapacityOrRefreshAsync(runningJobs, nextConcurrencyRefreshAt, stoppingToken);
+                await WaitForCapacityOrRefreshAsync(
+                    runningJobs, foregroundJobs, nextConcurrencyRefreshAt, stoppingToken);
                 continue;
             }
 
-            runningJobs.Add(Task.Run(() => ProcessJobAsync(job, stoppingToken), stoppingToken));
+            var running = Task.Run(() => ProcessJobAsync(job, stoppingToken), stoppingToken);
+            if (job.Lane == JobRunLane.ForegroundIdentify) {
+                foregroundJobs.Add(running);
+            } else {
+                runningJobs.Add(running);
+            }
         }
 
-        if (runningJobs.Count > 0) {
-            await Task.WhenAll(runningJobs);
+        if (runningJobs.Count > 0 || foregroundJobs.Count > 0) {
+            await Task.WhenAll(runningJobs.Concat(foregroundJobs));
         }
     }
 
@@ -151,21 +165,24 @@ public sealed class QueueWorker(
 
     private static async Task WaitForCapacityOrRefreshAsync(
         HashSet<Task> runningJobs,
+        HashSet<Task> foregroundJobs,
         DateTimeOffset nextConcurrencyRefreshAt,
         CancellationToken stoppingToken) {
         var delay = NextCheckDelay(nextConcurrencyRefreshAt);
         try {
-            if (runningJobs.Count == 0) {
+            var allJobs = runningJobs.Concat(foregroundJobs).ToArray();
+            if (allJobs.Length == 0) {
                 await Task.Delay(delay, stoppingToken);
                 return;
             }
 
-            var jobCompletion = Task.WhenAny(runningJobs);
+            var jobCompletion = Task.WhenAny(allJobs);
             var refreshDelay = Task.Delay(delay, stoppingToken);
             var completed = await Task.WhenAny(jobCompletion, refreshDelay);
             if (completed == jobCompletion) {
                 var finishedJob = await jobCompletion;
                 runningJobs.Remove(finishedJob);
+                foregroundJobs.Remove(finishedJob);
             }
         } catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) {
             // Host is shutting down; return so the worker loop exits cleanly.

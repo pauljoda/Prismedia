@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Collections.Concurrent;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Prismedia.Application.Backups;
@@ -86,6 +87,40 @@ public sealed class QueueWorkerTests {
             queue.Add(CreateJob(JobRunLane.ForegroundIdentify), JobPriorities.InteractiveIdentify);
             await handler.WaitForMaxActiveAsync(2, timeout.Token);
             Assert.Equal(2, handler.MaxActive);
+        } finally {
+            handler.ReleaseAll();
+            await worker.StopAsync(CancellationToken.None);
+        }
+    }
+
+    [Fact]
+    public async Task QueueWorkerAdvancesStandardJobDuringForegroundFlood() {
+        var foreground = Enumerable.Range(0, 10)
+            .Select(_ => CreateJob(JobRunLane.ForegroundIdentify));
+        var standard = CreateJob();
+        var queue = new RecordingJobQueueService(foreground.Append(standard));
+        var settings = new MutableSettingsPersistence { BackgroundConcurrency = 2 };
+        var handler = new BlockingJobHandler();
+
+        var services = new ServiceCollection();
+        services.AddSingleton<IJobQueueService>(queue);
+        services.AddSingleton<ISettingsPersistence>(settings);
+        services.AddScoped<SettingsService>();
+        services.AddSingleton<IJobHandler>(handler);
+        await using var provider = services.BuildServiceProvider();
+
+        var worker = new QueueWorker(
+            provider.GetRequiredService<IServiceScopeFactory>(),
+            new WorkerRuntimeIdentity(),
+            NullLogger<QueueWorker>.Instance,
+            TimeSpan.FromMilliseconds(25));
+
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        await worker.StartAsync(CancellationToken.None);
+        try {
+            await handler.WaitForMaxActiveAsync(2, timeout.Token);
+            Assert.Contains(standard.Id, handler.StartedJobIds);
+            Assert.Equal(1, handler.StartedLanes.Count(lane => lane == JobRunLane.ForegroundIdentify));
         } finally {
             handler.ReleaseAll();
             await worker.StopAsync(CancellationToken.None);
@@ -227,6 +262,7 @@ public sealed class QueueWorkerTests {
 
     private sealed class BlockingJobHandler : IJobHandler {
         private readonly TaskCompletionSource _release = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly ConcurrentDictionary<Guid, JobRunLane?> _started = new();
         private int _active;
         private int _maxActive;
 
@@ -234,7 +270,12 @@ public sealed class QueueWorkerTests {
 
         public int MaxActive => Volatile.Read(ref _maxActive);
 
+        public IReadOnlyCollection<Guid> StartedJobIds => _started.Keys.ToArray();
+
+        public IReadOnlyCollection<JobRunLane?> StartedLanes => _started.Values.ToArray();
+
         public async Task HandleAsync(JobContext context, CancellationToken cancellationToken) {
+            _started[context.Job.Id] = context.Job.Lane;
             var active = Interlocked.Increment(ref _active);
             var observedMax = _maxActive;
             while (active > observedMax) {
@@ -501,6 +542,9 @@ public sealed class QueueWorkerTests {
                 var bestPriority = int.MinValue;
                 for (var i = 0; i < _jobs.Count; i++) {
                     if (lane is not null && _jobs[i].Job.Lane != lane) {
+                        continue;
+                    }
+                    if (lane is null && _jobs[i].Job.Lane == JobRunLane.ForegroundIdentify) {
                         continue;
                     }
 

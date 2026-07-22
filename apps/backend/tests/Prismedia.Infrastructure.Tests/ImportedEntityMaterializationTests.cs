@@ -3,10 +3,13 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Prismedia.Application.Acquisition;
 using Prismedia.Application.Jobs;
 using Prismedia.Application.Jobs.Handlers;
+using Prismedia.Application.Jobs.Handlers.Probe;
 using Prismedia.Application.Jobs.Handlers.Scan;
 using Prismedia.Application.Jobs.Ports;
 using Prismedia.Application.Jobs.Scanning;
 using Prismedia.Domain.Entities;
+using Prismedia.Contracts.Entities;
+using Prismedia.Contracts.Media;
 using Prismedia.Infrastructure.Acquisition;
 using Prismedia.Infrastructure.Entities;
 using Prismedia.Infrastructure.Media.Adapters;
@@ -109,18 +112,28 @@ public sealed class ImportedEntityMaterializationTests : IDisposable {
     }
 
     [Fact]
-    public async Task AlbumImportBindsWantedWrapperAndTracksBeforeImported() {
+    public async Task AlbumImportReusesWantedTrackAndImmediatelyProcessesProbe() {
         await using var db = CreateContext();
         var rootPath = Directory.CreateDirectory(Path.Combine(_workRoot, "music")).FullName;
         var payloadPath = Directory.CreateDirectory(Path.Combine(_workRoot, "album-download")).FullName;
-        await File.WriteAllTextAsync(Path.Combine(payloadPath, "01 - Track.flac"), "audio-bytes");
-        var root = new RootPersistence(rootPath, scanAudio: true);
+        await File.WriteAllTextAsync(Path.Combine(payloadPath, "01 Drag Me Under [262 kbps].opus"), "audio-bytes");
+        var root = new RootPersistence(rootPath, scanAudio: true, autoGenerateMetadata: true);
         var unrelatedFolder = Directory.CreateDirectory(Path.Combine(rootPath, "Other Artist", "Other Album")).FullName;
         var unrelatedPath = Path.Combine(unrelatedFolder, "01 - Other.flac");
         await File.WriteAllTextAsync(unrelatedPath, "existing-audio");
         var unrelatedId = AddSourceEntity(db, EntityKind.AudioTrack, "Other Track", unrelatedPath);
         var artistId = AddWantedEntity(db, EntityKind.MusicArtist, "Artist");
         var albumId = AddWantedEntity(db, EntityKind.AudioLibrary, "Album", artistId);
+        var wantedTrackId = AddWantedEntity(db, EntityKind.AudioTrack, "Drag Me Under", albumId);
+        var now = DateTimeOffset.UtcNow;
+        db.EntityExternalIds.Add(new EntityExternalIdRow {
+            Id = Guid.NewGuid(),
+            EntityId = wantedTrackId,
+            Provider = ExternalIdProviders.MusicBrainz,
+            Value = "recording-identity",
+            CreatedAt = now,
+            UpdatedAt = now
+        });
         var acquisitionId = await AddAcquisitionAsync(db, EntityKind.AudioLibrary, albumId, "Album");
         var store = AcquisitionTestFactory.Store(db);
         var materializer = AlbumMaterializer(db, root);
@@ -152,13 +165,50 @@ public sealed class ImportedEntityMaterializationTests : IDisposable {
             EntityId: albumId,
             TargetLibraryRootId: root.Root.Id);
 
-        await engine.ImportAsync(JobContext(db, import.Id), import, CancellationToken.None);
+        var queue = new MergedImportTestSupport.RecordingJobQueue();
+        await engine.ImportAsync(JobContext(db, import.Id, queue), import, CancellationToken.None);
 
         Assert.False((await db.Entities.AsNoTracking().SingleAsync(row => row.Id == artistId)).IsWanted);
         Assert.False((await db.Entities.AsNoTracking().SingleAsync(row => row.Id == albumId)).IsWanted);
         Assert.True(await HasSourceInSubtreeAsync(db, albumId));
-        Assert.Contains(await db.Entities.AsNoTracking().ToArrayAsync(), row =>
-            row.ParentEntityId == albumId && row.KindCode == EntityKindRegistry.AudioTrack.Code);
+        var tracks = await db.Entities.AsNoTracking()
+            .Where(row => row.ParentEntityId == albumId && row.KindCode == EntityKindRegistry.AudioTrack.Code)
+            .ToArrayAsync();
+        var retainedTrack = Assert.Single(tracks);
+        Assert.Equal(wantedTrackId, retainedTrack.Id);
+        Assert.Equal("Drag Me Under", retainedTrack.Title);
+        Assert.False(retainedTrack.IsWanted);
+        Assert.True(await HasSourceInSubtreeAsync(db, wantedTrackId));
+        Assert.True(await db.EntityExternalIds.AsNoTracking().AnyAsync(row =>
+            row.EntityId == wantedTrackId && row.Provider == ExternalIdProviders.MusicBrainz));
+
+        var probeRequest = Assert.Single(queue.Enqueued, request =>
+            request.Type == JobType.ProbeAudio && request.TargetEntityId == wantedTrackId.ToString());
+        Assert.Equal(JobPriorities.AcquisitionProbe, probeRequest.Priority);
+        var persistence = new LibraryScanPersistenceService(db);
+        var probeHandler = new ProbeAudioJobHandler(
+            NullLogger<ProbeAudioJobHandler>.Instance,
+            new SuccessfulAudioProbe(),
+            persistence,
+            root,
+            persistence);
+        var probeJob = new JobRunSnapshot(
+            Guid.NewGuid(),
+            JobType.ProbeAudio,
+            JobRunStatus.Running,
+            0,
+            null,
+            probeRequest.PayloadJson ?? "{}",
+            probeRequest.TargetEntityKind,
+            probeRequest.TargetEntityId,
+            probeRequest.TargetLabel,
+            DateTimeOffset.UtcNow,
+            DateTimeOffset.UtcNow,
+            null);
+        await probeHandler.HandleAsync(new JobContext(probeJob, queue), CancellationToken.None);
+        var technical = await db.EntityTechnical.AsNoTracking().SingleAsync(row => row.EntityId == wantedTrackId);
+        Assert.Equal(201.5, technical.DurationSeconds);
+        Assert.Equal(MediaCodecs.Opus, technical.Codec);
         Assert.True(await db.Entities.AsNoTracking().AnyAsync(row => row.Id == unrelatedId));
         Assert.Equal(AcquisitionStatus.Imported, await StatusOfAsync(db, acquisitionId));
     }
@@ -214,6 +264,55 @@ public sealed class ImportedEntityMaterializationTests : IDisposable {
         Assert.True(await HasSourceInSubtreeAsync(db, trackId));
         Assert.Equal(3, await db.Entities.AsNoTracking().CountAsync());
         Assert.Equal(AcquisitionStatus.Imported, await StatusOfAsync(db, acquisitionId));
+    }
+
+    [Fact]
+    public async Task AudioRescanRepairsSafeFilenameDerivedDuplicateOntoWantedTrack() {
+        await using var db = CreateContext();
+        var albumId = AddWantedEntity(db, EntityKind.AudioLibrary, "WAR");
+        var wantedTrackId = AddWantedEntity(db, EntityKind.AudioTrack, "WAR", albumId);
+        var sourcePath = Path.Combine(_workRoot, "01 - WAR.mp3");
+        await File.WriteAllTextAsync(sourcePath, "audio-bytes");
+        var duplicateId = AddSourceEntity(
+            db,
+            EntityKind.AudioTrack,
+            "01 - WAR",
+            sourcePath,
+            albumId);
+        db.AudioTrackDetails.Add(new AudioTrackDetailRow { EntityId = duplicateId });
+        var now = DateTimeOffset.UtcNow;
+        var oldProbeId = Guid.NewGuid();
+        db.JobRuns.Add(new JobRunRow {
+            Id = oldProbeId,
+            Type = JobType.ProbeAudio,
+            Status = JobRunStatus.Queued,
+            PayloadJson = "{}",
+            Priority = JobPriorities.Probe,
+            Attempts = 0,
+            MaxAttempts = 3,
+            TargetEntityKind = EntityKindRegistry.AudioTrack.Code,
+            TargetEntityId = duplicateId.ToString(),
+            TargetLabel = "01 - WAR",
+            AvailableAt = now,
+            CreatedAt = now
+        });
+        await db.SaveChangesAsync();
+
+        var reconciled = await new AcquisitionHintApplier(db).ReconcileWantedAudioTrackAsync(
+            albumId,
+            sourcePath,
+            "01 - WAR",
+            0,
+            CancellationToken.None);
+
+        Assert.Equal(wantedTrackId, reconciled);
+        var retained = await db.Entities.AsNoTracking().SingleAsync(row => row.Id == wantedTrackId);
+        Assert.False(retained.IsWanted);
+        Assert.False(await db.Entities.AsNoTracking().AnyAsync(row => row.Id == duplicateId));
+        Assert.True(await db.EntityFiles.AsNoTracking().AnyAsync(file =>
+            file.EntityId == wantedTrackId && file.Path == sourcePath && file.Role == EntityFileRole.Source));
+        var oldProbe = await db.JobRuns.AsNoTracking().SingleAsync(row => row.Id == oldProbeId);
+        Assert.Equal(JobRunStatus.Cancelled, oldProbe.Status);
     }
 
     [Fact]
@@ -622,11 +721,15 @@ public sealed class ImportedEntityMaterializationTests : IDisposable {
     }
 
     private sealed class RootPersistence : ILibraryScanRootPersistence {
+        private readonly bool _autoGenerateMetadata;
+
         public RootPersistence(
             string path,
             bool scanVideos = false,
             bool scanAudio = false,
-            bool scanBooks = false) {
+            bool scanBooks = false,
+            bool autoGenerateMetadata = false) {
+            _autoGenerateMetadata = autoGenerateMetadata;
             Root = new LibraryRootData(
                 Guid.NewGuid(),
                 path,
@@ -650,7 +753,7 @@ public sealed class ImportedEntityMaterializationTests : IDisposable {
 
         public Task<LibrarySettingsData> GetSettingsAsync(CancellationToken cancellationToken) =>
             Task.FromResult(new LibrarySettingsData(
-                AutoGenerateMetadata: false,
+                AutoGenerateMetadata: _autoGenerateMetadata,
                 AutoGenerateOshash: false,
                 AutoGenerateMd5: false,
                 AutoGeneratePreview: false,
@@ -669,5 +772,31 @@ public sealed class ImportedEntityMaterializationTests : IDisposable {
         public Task<int> RemoveEntitiesInExcludedPathsAsync(Guid rootId, CancellationToken cancellationToken) => Task.FromResult(0);
         public Task<int> RemoveEntitiesOutsideLibraryRootsAsync(CancellationToken cancellationToken) => Task.FromResult(0);
         public Task<int> RemoveOrphanTagsAsync(CancellationToken cancellationToken) => Task.FromResult(0);
+    }
+
+    private sealed class SuccessfulAudioProbe : IMediaProbe {
+        public Task<AudioProbeData?> ProbeAudioAsync(string filePath, CancellationToken cancellationToken) =>
+            Task.FromResult<AudioProbeData?>(new AudioProbeData(
+                DurationSeconds: 201.5,
+                FileSize: 11,
+                BitRate: 262_000,
+                Codec: MediaCodecs.Opus,
+                Container: null,
+                SampleRate: 48_000,
+                Channels: 2,
+                Artist: "Divide Music",
+                Album: "Drag Me Under",
+                Title: "Drag Me Under",
+                TrackNumber: "1"));
+
+        public Task<VideoProbeData?> ProbeVideoAsync(string filePath, CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
+        public Task<ImageProbeData?> ProbeImageAsync(string filePath, CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
+        public Task<IReadOnlyList<SubtitleStreamData>> ProbeSubtitleStreamsAsync(
+            string filePath,
+            CancellationToken cancellationToken) => throw new NotSupportedException();
     }
 }

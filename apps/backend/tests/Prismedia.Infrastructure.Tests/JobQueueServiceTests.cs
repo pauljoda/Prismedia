@@ -296,7 +296,7 @@ public sealed class JobQueueServiceTests {
     }
 
     [Fact]
-    public async Task ClaimNextPrefersForegroundIdentifyOverSamePriorityBacklog() {
+    public async Task StandardClaimAdvancesBacklogWithoutConsumingForegroundLane() {
         await using var db = CreateContext();
         var service = new JobQueueService(db);
         var now = DateTimeOffset.UtcNow;
@@ -317,7 +317,7 @@ public sealed class JobQueueServiceTests {
         var claimed = await service.ClaimNextAsync("worker-1", CancellationToken.None);
 
         Assert.NotNull(claimed);
-        Assert.Equal(foregroundSearch.Id, claimed.Id);
+        Assert.Equal(oldBulkSearch.Id, claimed.Id);
     }
 
     [Fact]
@@ -339,7 +339,8 @@ public sealed class JobQueueServiceTests {
         db.JobRuns.AddRange(autoIdentify, foregroundSearch);
         await db.SaveChangesAsync();
 
-        var claimed = await service.ClaimNextAsync("worker-1", CancellationToken.None);
+        var claimed = await service.ClaimNextAsync(
+            "worker-1", CancellationToken.None, JobRunLane.ForegroundIdentify);
 
         Assert.NotNull(claimed);
         Assert.Equal(foregroundSearch.Id, claimed.Id);
@@ -569,7 +570,8 @@ public sealed class JobQueueServiceTests {
             JobType.BulkIdentify,
             Priority: JobPriorities.InteractiveIdentify,
             Lane: JobRunLane.ForegroundIdentify), CancellationToken.None);
-        await service.ClaimNextAsync("worker-1", CancellationToken.None);
+        await service.ClaimNextAsync(
+            "worker-1", CancellationToken.None, JobRunLane.ForegroundIdentify);
 
         await service.DeferAsync(
             created.Id,

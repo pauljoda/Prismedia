@@ -58,6 +58,11 @@ public interface IJobQueueService {
     /// Claims the next available queued job for one worker using atomic row locking. When
     /// <paramref name="lane"/> is set, only jobs explicitly assigned to that queue lane are eligible.
     /// </summary>
+    /// <summary>
+    /// Claims the next standard job when <paramref name="lane"/> is null, or the next job in the
+    /// requested reserved lane. Standard claims deliberately exclude reserved-lane work so a flood
+    /// of interactive jobs cannot consume general worker capacity.
+    /// </summary>
     Task<JobRunSnapshot?> ClaimNextAsync(string workerId, CancellationToken cancellationToken, JobRunLane? lane = null);
 
     /// <summary>

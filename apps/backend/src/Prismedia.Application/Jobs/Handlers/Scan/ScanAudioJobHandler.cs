@@ -187,6 +187,17 @@ public sealed class ScanAudioJobHandler(
             }
         }
 
+        if (acquisitionHints is not null) {
+            foreach (var track in trackItems) {
+                await acquisitionHints.ReconcileWantedAudioTrackAsync(
+                    track.AudioLibraryId!.Value,
+                    track.FilePath,
+                    track.Title,
+                    track.SortOrder,
+                    cancellationToken);
+            }
+        }
+
         var trackIds = await audio.UpsertAudioTracksBatchAsync(trackItems, cancellationToken);
         if (trackIds.Count != trackItems.Count) {
             throw new InvalidOperationException("One or more imported album tracks could not be persisted.");
@@ -202,7 +213,8 @@ public sealed class ScanAudioJobHandler(
                     settings,
                     trackIds[trackIndex],
                     trackItems[trackIndex].Title,
-                    cancellationToken));
+                    cancellationToken,
+                    JobPriorities.AcquisitionProbe));
         }
 
         var materializedIds = artistIds.Concat(albumIds).Concat(trackIds).ToArray();
@@ -367,6 +379,17 @@ public sealed class ScanAudioJobHandler(
             }
         }
 
+        if (acquisitionHints is not null) {
+            foreach (var track in trackItems.Where(track => !track.IsLoose)) {
+                await acquisitionHints.ReconcileWantedAudioTrackAsync(
+                    track.Item.AudioLibraryId!.Value,
+                    track.Item.FilePath,
+                    track.Item.Title,
+                    track.Item.SortOrder,
+                    cancellationToken);
+            }
+        }
+
         // 4. Loose tracks sitting directly under the root (no album folder).
         var validLooseTrackPaths = new HashSet<string>(FileSystemPathComparison.Comparer);
         if (filesByDirectory.TryGetValue(NormalizePath(root.Path), out var looseFiles)) {
@@ -449,7 +472,8 @@ public sealed class ScanAudioJobHandler(
         LibrarySettingsData settings,
         Guid trackId,
         string title,
-        CancellationToken cancellationToken) {
+        CancellationToken cancellationToken,
+        int probePriority = JobPriorities.Probe) {
         var hasTechnical = await downstreamNeeds.HasEntityTechnicalAsync(trackId, cancellationToken);
         if (settings.AutoGenerateMetadata && !hasTechnical) {
             await context.EnqueueIfNeededAsync(
@@ -458,7 +482,7 @@ public sealed class ScanAudioJobHandler(
                     EntityKind.AudioTrack,
                     trackId.ToString(),
                     title,
-                    JobPriorities.Probe),
+                    probePriority),
                 cancellationToken);
         }
 

@@ -294,7 +294,7 @@ public sealed class JobQueueService : IJobQueueService {
     }
 
     /// <summary>
-    /// Claims the next available job, optionally restricted to one foreground lane. Uses atomic
+    /// Claims the next standard job, or one job restricted to the supplied foreground lane. Uses atomic
     /// FOR UPDATE SKIP LOCKED on PostgreSQL for safe concurrent access, with an EF Core fallback for
     /// test providers.
     /// </summary>
@@ -328,7 +328,7 @@ public sealed class JobQueueService : IJobQueueService {
                         attempts = attempts + 1
                     WHERE id = (
                         SELECT id FROM job_runs
-                        WHERE status = 'queued' AND available_at <= {0}
+                        WHERE status = 'queued' AND available_at <= {0} AND (lane IS NULL OR lane <> {2})
                           AND ({3} = FALSE OR type <> {4} OR COALESCE(target_entity_kind, '') = {5})
                           AND ({6} = FALSE OR type <> {4} OR COALESCE(target_entity_kind, '') <> {7})
                           AND ({8} = FALSE OR type <> {9})
@@ -405,11 +405,12 @@ public sealed class JobQueueService : IJobQueueService {
 
         if (lane is not null) {
             query = query.Where(job => job.Lane == lane);
+        } else {
+            query = query.Where(job => job.Lane == null || job.Lane != JobRunLane.ForegroundIdentify);
         }
 
         var row = await query
             .OrderByDescending(job => job.Priority)
-            .ThenByDescending(job => job.Lane == JobRunLane.ForegroundIdentify)
             .ThenBy(job => job.AvailableAt)
             .ThenBy(job => job.CreatedAt)
             .FirstOrDefaultAsync(cancellationToken);

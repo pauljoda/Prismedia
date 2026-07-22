@@ -361,6 +361,136 @@ public sealed class AcquisitionHintApplier(
         return boundId;
     }
 
+    /// <inheritdoc />
+    public async Task<Guid?> ReconcileWantedAudioTrackAsync(
+        Guid audioLibraryId,
+        string sourcePath,
+        string scannedTitle,
+        int sortOrder,
+        CancellationToken cancellationToken) {
+        if (string.IsNullOrWhiteSpace(sourcePath)) {
+            return null;
+        }
+
+        var normalizedTitle = AudioTrackTitleText.Normalize(scannedTitle);
+        if (normalizedTitle.Length == 0) {
+            return null;
+        }
+
+        var audioTrackCode = EntityKindRegistry.AudioTrack.Code;
+        var candidates = await db.Entities.AsNoTracking()
+            .Where(entity => entity.ParentEntityId == audioLibraryId
+                && entity.KindCode == audioTrackCode
+                && entity.IsWanted
+                && !db.EntityFiles.Any(file => file.EntityId == entity.Id && file.Role == EntityFileRole.Source))
+            .Select(entity => new { entity.Id, entity.Title })
+            .ToArrayAsync(cancellationToken);
+        var matching = candidates
+            .Where(entity => AudioTrackTitleText.Normalize(entity.Title) == normalizedTitle)
+            .ToArray();
+        if (matching.Length != 1) {
+            return null;
+        }
+
+        var retainedId = matching[0].Id;
+        Guid? reconciledId = null;
+        if (!await _lifecycle.ExecuteAsync(
+                retainedId,
+                async leaseCancellationToken => {
+                    var retained = await db.Entities.FirstOrDefaultAsync(
+                        entity => entity.Id == retainedId
+                            && entity.ParentEntityId == audioLibraryId
+                            && entity.KindCode == audioTrackCode
+                            && entity.IsWanted,
+                        leaseCancellationToken);
+                    if (retained is null || await HasSourceFileAsync(retained.Id, leaseCancellationToken)) {
+                        return;
+                    }
+
+                    var normalizedSourcePath = Normalize(sourcePath);
+                    var sourceCandidates = await db.EntityFiles
+                        .Where(file => file.Role == EntityFileRole.Source
+                            && file.Path.Length == normalizedSourcePath.Length)
+                        .ToArrayAsync(leaseCancellationToken);
+                    var matchingSources = sourceCandidates.Where(file =>
+                        FileSystemPathComparison.Equals(Normalize(file.Path), normalizedSourcePath)).ToArray();
+                    if (matchingSources.Length > 1) {
+                        return;
+                    }
+
+                    var ownedSource = matchingSources.SingleOrDefault();
+                    var now = DateTimeOffset.UtcNow;
+                    if (ownedSource is null) {
+                        db.EntityFiles.Add(new EntityFileRow {
+                            Id = Guid.NewGuid(),
+                            EntityId = retained.Id,
+                            Role = EntityFileRole.Source,
+                            Path = sourcePath,
+                            MimeType = ContentTypeForPath(sourcePath),
+                            SizeBytes = TryGetFileSize(sourcePath),
+                            CreatedAt = now,
+                            UpdatedAt = now
+                        });
+                    } else if (ownedSource.EntityId != retained.Id) {
+                        var duplicate = await db.Entities.FirstOrDefaultAsync(
+                            entity => entity.Id == ownedSource.EntityId,
+                            leaseCancellationToken);
+                        if (duplicate is null
+                            || duplicate.ParentEntityId != audioLibraryId
+                            || duplicate.KindCode != audioTrackCode
+                            || duplicate.IsWanted
+                            || duplicate.IsOrganized
+                            || AudioTrackTitleText.Normalize(duplicate.Title) != normalizedTitle
+                            || await HasDurableIdentityOrContentAsync(duplicate.Id, leaseCancellationToken)) {
+                            return;
+                        }
+
+                        var duplicateFiles = await db.EntityFiles
+                            .Where(file => file.EntityId == duplicate.Id)
+                            .ToArrayAsync(leaseCancellationToken);
+                        if (duplicateFiles.Length != 1 || duplicateFiles[0].Id != ownedSource.Id) {
+                            return;
+                        }
+
+                        var duplicateTarget = duplicate.Id.ToString();
+                        var activeJobs = await db.JobRuns
+                            .Where(job => job.TargetEntityId == duplicateTarget
+                                && (job.Status == JobRunStatus.Queued || job.Status == JobRunStatus.Running))
+                            .ToArrayAsync(leaseCancellationToken);
+                        if (activeJobs.Any(job => job.Status == JobRunStatus.Running)) {
+                            return;
+                        }
+
+                        foreach (var job in activeJobs) {
+                            job.Status = JobRunStatus.Cancelled;
+                            job.Message = "Superseded by wanted audio-track reconciliation.";
+                            job.FinishedAt = now;
+                        }
+
+                        ownedSource.EntityId = retained.Id;
+                        ownedSource.UpdatedAt = now;
+                        db.Entities.Remove(duplicate);
+                    }
+
+                    retained.IsWanted = false;
+                    retained.SortOrder ??= sortOrder;
+                    retained.UpdatedAt = now;
+                    await db.SaveChangesAsync(leaseCancellationToken);
+                    reconciledId = retained.Id;
+                },
+                cancellationToken)) {
+            throw new EntityLifecycleMutationConflictException(retainedId);
+        }
+
+        return reconciledId;
+    }
+
+    private async Task<bool> HasDurableIdentityOrContentAsync(Guid entityId, CancellationToken cancellationToken) =>
+        await db.EntityExternalIds.AsNoTracking().AnyAsync(row => row.EntityId == entityId, cancellationToken)
+        || await db.EntityTechnical.AsNoTracking().AnyAsync(row => row.EntityId == entityId, cancellationToken)
+        || await db.Acquisitions.AsNoTracking().AnyAsync(row => row.EntityId == entityId, cancellationToken)
+        || await db.Entities.AsNoTracking().AnyAsync(row => row.ParentEntityId == entityId, cancellationToken);
+
     /// <summary>The wanted-entity link of the unconsumed hint whose import path overlaps <paramref name="path"/>, or null.</summary>
     private async Task<Guid?> FindWantedEntityIdForPathAsync(
         string path,
