@@ -206,7 +206,8 @@ public sealed class JobScheduler(
             new EnqueueJobRequest(
                 JobType.AcquisitionMonitor,
                 TargetLabel: "Monitor acquisition downloads",
-                Priority: JobPriorities.AcquisitionMonitor),
+                Priority: JobPriorities.AcquisitionMonitor,
+                Lane: JobRunLane.ForegroundIdentify),
             cancellationToken);
     }
 

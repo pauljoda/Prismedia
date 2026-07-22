@@ -54,6 +54,7 @@ public sealed class JobSchedulerTests {
         var request = Assert.Single(queue.Enqueued);
         Assert.Equal(JobType.AcquisitionMonitor, request.Type);
         Assert.True(request.Priority > JobPriorities.InteractiveRequest);
+        Assert.Equal(JobRunLane.ForegroundIdentify, request.Lane);
     }
 
     [Fact]
