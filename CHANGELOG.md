@@ -154,6 +154,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Updated documentation, README screenshots, branding assets, install metadata, and app copy to match the current Prismedia v1 surface.
 
 ### Fixed
+- Failed Soulseek transfers now enter blocklist-and-retry recovery immediately instead of waiting behind a large artist's remaining searches.
 - Acquisition transfer polling now runs ahead of large request search fan-outs, so completed or failed Soulseek downloads keep advancing through import and recovery while the remaining artist albums and tracks are still being searched.
 - Soulseek album searches can now persist opaque multi-file release locators of any practical length instead of failing the entire acquisition when a peer folder encodes beyond the former URL limit.
 - Artist requests now record monitoring for every selected album before background metadata hydration begins, so the child-activity panel keeps all requested albums visibly monitored and labels the pre-search phase as Preparing metadata instead of making queued work look turned off.

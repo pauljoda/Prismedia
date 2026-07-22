@@ -14,6 +14,12 @@ public static class JobPriorities {
     /// </summary>
     public const int AcquisitionMonitor = 75;
 
+    /// <summary>
+    /// Failed-transfer recovery must keep pace with monitoring so dead peer downloads are blocklisted
+    /// and replaced instead of waiting behind the remaining acquisition-search fanout.
+    /// </summary>
+    public const int AcquisitionRecovery = AcquisitionMonitor;
+
     /// <summary>User-triggered identify review cascades — interactive UI work must not wait behind scan backlogs.</summary>
     public const int InteractiveIdentify = 70;
 

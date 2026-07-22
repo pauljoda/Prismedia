@@ -438,7 +438,9 @@ public sealed class AcquisitionMonitorJobHandler(
                 JobType.AcquisitionFailedHandle,
                 PayloadJson: AcquisitionFailedPayload.Serialize(acquisitionId, reason, message, selected),
                 TargetEntityId: acquisitionId.ToString(),
-                TargetLabel: "Recover failed download"),
+                TargetLabel: "Recover failed download",
+                Priority: JobPriorities.AcquisitionRecovery,
+                Lane: JobRunLane.ForegroundIdentify),
             cancellationToken);
     }
 

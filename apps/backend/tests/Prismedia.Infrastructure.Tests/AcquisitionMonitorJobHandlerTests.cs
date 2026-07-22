@@ -107,6 +107,8 @@ public sealed class AcquisitionMonitorJobHandlerTests {
 
         var enqueued = Assert.Single(queue.Enqueued);
         Assert.Equal(JobType.AcquisitionFailedHandle, enqueued.Type);
+        Assert.Equal(JobPriorities.AcquisitionRecovery, enqueued.Priority);
+        Assert.Equal(JobRunLane.ForegroundIdentify, enqueued.Lane);
         var payload = AcquisitionFailedPayload.Parse(enqueued.PayloadJson!);
         Assert.Equal(BlocklistReason.Stalled, payload.Reason);
         Assert.Equal("hashX", payload.Selected!.InfoHash);
