@@ -51,8 +51,7 @@ internal sealed class EfEntitySourceOwnershipProjection(PrismediaDbContext db)
 
         var distinctIds = entityIds.Distinct().ToArray();
         if (_db.Database.IsNpgsql()) {
-            return await PostgreSqlSourceBackedIds()
-                .Where(id => distinctIds.Contains(id))
+            return await PostgreSqlSourceBackedIds(distinctIds)
                 .ToHashSetAsync(cancellationToken);
         }
 
@@ -80,6 +79,40 @@ internal sealed class EfEntitySourceOwnershipProjection(PrismediaDbContext db)
             )
             SELECT "Value"
             FROM source_backed
+            """);
+    }
+
+    /// <summary>
+    /// Resolves a bounded batch by walking down only from the requested roots. The list and detail APIs
+    /// frequently ask for tens of cards from a library containing millions of files; computing the global
+    /// source-backed closure and filtering it afterward made each thumbnail poll scan the entire library.
+    /// </summary>
+    private IQueryable<Guid> PostgreSqlSourceBackedIds(Guid[] rootIds) {
+        var sourceRole = EntityFileRole.Source.ToCode();
+        return _db.Database.SqlQuery<Guid>($"""
+            WITH RECURSIVE requested_roots(root_id, entity_id, path) AS (
+                SELECT entity.id, entity.id, ARRAY[entity.id]
+                FROM entities AS entity
+                WHERE entity.id = ANY ({rootIds})
+            ),
+            entity_tree(root_id, entity_id, path) AS (
+                SELECT root_id, entity_id, path
+                FROM requested_roots
+                UNION ALL
+                SELECT tree.root_id, child.id, tree.path || child.id
+                FROM entity_tree AS tree
+                INNER JOIN entities AS child ON child.parent_entity_id = tree.entity_id
+                WHERE NOT child.id = ANY (tree.path)
+            )
+            SELECT tree.root_id AS "Value"
+            FROM entity_tree AS tree
+            WHERE EXISTS (
+                SELECT 1
+                FROM entity_files AS file
+                WHERE file.entity_id = tree.entity_id
+                  AND file.role = {sourceRole}
+            )
+            GROUP BY tree.root_id
             """);
     }
 

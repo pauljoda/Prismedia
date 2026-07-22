@@ -44,6 +44,78 @@ public sealed class EfAcquisitionStoreTests {
     }
 
     [Fact]
+    public async Task ListHidesFulfilledPassiveTargetsButKeepsPartialAndUpgradeWork() {
+        await using var db = CreateContext();
+        var now = DateTimeOffset.UtcNow;
+        var albumId = AddEntity("Complete album", EntityKindRegistry.AudioLibrary.Code, isWanted: false);
+        var trackId = AddEntity("Complete track", EntityKindRegistry.AudioTrack.Code, isWanted: false, albumId);
+        AddSource(trackId, "/media/complete.flac");
+
+        var partialAlbumId = AddEntity("Partial album", EntityKindRegistry.AudioLibrary.Code, isWanted: false);
+        var ownedTrackId = AddEntity("Owned track", EntityKindRegistry.AudioTrack.Code, isWanted: false, partialAlbumId);
+        _ = AddEntity("Missing track", EntityKindRegistry.AudioTrack.Code, isWanted: true, partialAlbumId);
+        AddSource(ownedTrackId, "/media/owned.flac");
+
+        var fulfilledId = Guid.NewGuid();
+        var partialId = Guid.NewGuid();
+        var importedBaseId = Guid.NewGuid();
+        var upgradeId = Guid.NewGuid();
+        db.Acquisitions.AddRange(
+            Row(fulfilledId, trackId, AcquisitionStatus.AwaitingSelection),
+            Row(partialId, partialAlbumId, AcquisitionStatus.AwaitingSelection),
+            Row(importedBaseId, trackId, AcquisitionStatus.Imported),
+            Row(upgradeId, trackId, AcquisitionStatus.AwaitingSelection, importedBaseId));
+        await db.SaveChangesAsync();
+
+        var rows = await AcquisitionTestFactory.Store(db).ListAsync(CancellationToken.None);
+
+        Assert.DoesNotContain(rows, row => row.Id == fulfilledId);
+        Assert.Contains(rows, row => row.Id == partialId);
+        Assert.Contains(rows, row => row.Id == importedBaseId);
+        Assert.Contains(rows, row => row.Id == upgradeId);
+
+        Guid AddEntity(string title, string kind, bool isWanted, Guid? parentId = null) {
+            var id = Guid.NewGuid();
+            db.Entities.Add(new EntityRow {
+                Id = id,
+                KindCode = kind,
+                Title = title,
+                ParentEntityId = parentId,
+                IsWanted = isWanted,
+                CreatedAt = now,
+                UpdatedAt = now
+            });
+            return id;
+        }
+
+        void AddSource(Guid entityId, string path) => db.EntityFiles.Add(new EntityFileRow {
+            Id = Guid.NewGuid(),
+            EntityId = entityId,
+            Role = EntityFileRole.Source,
+            Path = path,
+            CreatedAt = now,
+            UpdatedAt = now
+        });
+
+        AcquisitionRow Row(
+            Guid id,
+            Guid entityId,
+            AcquisitionStatus status,
+            Guid? upgradeOf = null) => new() {
+                Id = id,
+                EntityId = entityId,
+                Kind = EntityKind.AudioTrack,
+                Status = status,
+                Title = "Track",
+                UpgradeOfAcquisitionId = upgradeOf,
+                ExternalIdsJson = "{}",
+                SourceUrlsJson = "[]",
+                CreatedAt = now,
+                UpdatedAt = now
+            };
+    }
+
+    [Fact]
     public async Task EntityAcquisitionListIncludesEveryBookRenditionInDeterministicNewestFirstOrder() {
         await using var db = CreateContext();
         var entityId = AddWantedEntity(db, EntityKindRegistry.Book.Code, "A Game of Thrones");
@@ -509,6 +581,79 @@ public sealed class EfAcquisitionStoreTests {
             CreatedAt = now,
             UpdatedAt = now
         };
+    }
+
+    [Fact]
+    public async Task MarkImportedRetiresPassiveFulfilledChildAndKeepsStableMonitoring() {
+        await using var db = CreateContext();
+        var now = DateTimeOffset.UtcNow;
+        var albumId = AddWantedEntity(db, EntityKindRegistry.AudioLibrary.Code, "Album");
+        var trackId = AddWantedEntity(db, EntityKindRegistry.AudioTrack.Code, "Track", albumId);
+        Assert.Single(db.Entities.Local, entity => entity.Id == albumId).IsWanted = false;
+        Assert.Single(db.Entities.Local, entity => entity.Id == trackId).IsWanted = false;
+        db.EntityFiles.Add(new EntityFileRow {
+            Id = Guid.NewGuid(),
+            EntityId = trackId,
+            Role = EntityFileRole.Source,
+            Path = "/media/track.flac",
+            CreatedAt = now,
+            UpdatedAt = now
+        });
+        var importedId = Guid.NewGuid();
+        var trackRequestId = Guid.NewGuid();
+        db.Acquisitions.AddRange(
+            Row(importedId, albumId, EntityKind.AudioLibrary, AcquisitionStatus.Importing, "Album"),
+            Row(trackRequestId, trackId, EntityKind.AudioTrack, AcquisitionStatus.AwaitingSelection, "Track"));
+        db.Monitors.Add(new MonitorRow {
+            Id = Guid.NewGuid(),
+            AcquisitionId = trackRequestId,
+            EntityId = trackId,
+            Kind = EntityKind.AudioTrack,
+            Status = MonitorStatus.Active,
+            Title = "Track",
+            CreatedAt = now,
+            UpdatedAt = now
+        });
+        db.AcquisitionImportHints.Add(new AcquisitionImportHintRow {
+            Id = Guid.NewGuid(),
+            AcquisitionId = trackRequestId,
+            EntityId = trackId,
+            SourcePath = "/downloads/track.flac",
+            CreatedAt = now,
+            UpdatedAt = now
+        });
+        await db.SaveChangesAsync();
+
+        await AcquisitionTestFactory.Store(db).MarkImportedWithQualityAsync(
+            importedId,
+            BookQualityRank.Floor,
+            "Imported.",
+            CancellationToken.None,
+            ownedMediaQuality: "lossless");
+
+        Assert.Equal(AcquisitionStatus.Cancelled, (await db.Acquisitions.FindAsync(trackRequestId))!.Status);
+        var monitor = await db.Monitors.SingleAsync();
+        Assert.Equal(trackId, monitor.EntityId);
+        Assert.Null(monitor.AcquisitionId);
+        Assert.Equal(MonitorStatus.Active, monitor.Status);
+        Assert.False(await db.AcquisitionImportHints.AnyAsync(hint => hint.AcquisitionId == trackRequestId));
+
+        AcquisitionRow Row(
+            Guid id,
+            Guid entityId,
+            EntityKind kind,
+            AcquisitionStatus status,
+            string title) => new() {
+                Id = id,
+                EntityId = entityId,
+                Kind = kind,
+                Status = status,
+                Title = title,
+                ExternalIdsJson = "{}",
+                SourceUrlsJson = "[]",
+                CreatedAt = now,
+                UpdatedAt = now
+            };
     }
 
     [Fact]

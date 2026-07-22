@@ -15,6 +15,7 @@
     type AcquisitionListItem,
   } from "$lib/requests/acquisition-list-item";
   import { acquisitionStatusShouldPoll } from "$lib/requests/acquisition-status";
+  import { createSerializedRefresh } from "$lib/async/serialized-refresh";
 
   /**
    * The global Downloads view: every active acquisition across all kinds as a shared card list, with
@@ -22,11 +23,13 @@
    * the item's own library page, where the acquisition card carries the full management surface.
    */
 
-  let rows = $state<DownloadQueueItemView[]>([]);
-  let thumbs = $state<Map<string, EntityThumbnail>>(new Map());
+  let rows = $state.raw<DownloadQueueItemView[]>([]);
+  let thumbs = $state.raw<Map<string, EntityThumbnail>>(new Map());
   let loading = $state(true);
   let error = $state<string | null>(null);
   let acting = $state(false);
+
+  let thumbnailEntityKey = "";
 
   const ACTIVE_POLL_INTERVAL_MS = 4_000;
   const IDLE_POLL_INTERVAL_MS = 15_000;
@@ -67,20 +70,37 @@
     },
   ];
 
-  async function load() {
+  async function loadOnce() {
     try {
-      rows = await fetchDownloadQueue();
-      // Real entity thumbnails, resolved the same way the library grid does — proper cover + kind shape.
-      const ids = rows.map((row) => row.entityId).filter((id): id is string => !!id);
-      const fetched = await fetchEntityThumbnails(ids).catch(() => []);
-      thumbs = new Map(fetched.map((thumbnail) => [thumbnail.id, thumbnail]));
+      const nextRows = await fetchDownloadQueue();
+      rows = nextRows;
       error = null;
+      loading = false;
+
+      // Artwork and entity hierarchy metadata do not change with transfer telemetry. Reuse the resolved
+      // batch while its entity membership is stable so the four-second progress poll remains cheap.
+      const ids = [...new Set(nextRows.map((row) => row.entityId).filter((id): id is string => !!id))].sort();
+      const nextThumbnailEntityKey = ids.join("\u0000");
+      if (nextThumbnailEntityKey !== thumbnailEntityKey) {
+        try {
+          const fetched = await fetchEntityThumbnails(ids);
+          thumbs = new Map(fetched.map((thumbnail) => [thumbnail.id, thumbnail]));
+          thumbnailEntityKey = nextThumbnailEntityKey;
+        } catch {
+          // Keep the rows and last-known artwork usable; the next poll retries this auxiliary batch.
+        }
+      }
     } catch (err) {
       error = err instanceof Error ? err.message : "Failed to load downloads";
     } finally {
       loading = false;
     }
   }
+
+  // Polls, focus, and visibility can all request a refresh at once. Keep one network/database pass in
+  // flight and collapse every overlapping request into one trailing refresh instead of letting slow
+  // thumbnail projections accumulate indefinitely.
+  const load = createSerializedRefresh(loadOnce);
 
   async function reSearchOne(id: string) {
     acting = true;

@@ -388,7 +388,7 @@ public sealed partial class EfMonitorStore(
     }
 
     public async Task<IReadOnlyList<DueMonitor>> ListDueMonitorsAsync(int defaultIntervalMinutes, CancellationToken cancellationToken) {
-        await RetireMissingEntityTargetsAsync(cancellationToken);
+        await ReconcilePassiveTargetsAsync(cancellationToken);
 
         // The default profile of each kind governs its upgrades. Upgrade-seeking is fully automatic, so it
         // requires both the cutoff toggle and auto-grab; without auto-grab there is no path to act on a found

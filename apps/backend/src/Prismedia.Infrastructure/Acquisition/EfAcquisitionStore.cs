@@ -72,9 +72,11 @@ public sealed partial class EfAcquisitionStore(PrismediaDbContext db, IAcquisiti
                 || !OrphanRetirableStatuses.Contains(row.Status))
             .OrderByDescending(row => row.CreatedAt)
             .ToArrayAsync(cancellationToken);
-        var ids = rows.Select(row => row.Id).ToArray();
+        var fulfilledPassiveIds = await ResolveFulfilledPassiveAcquisitionIdsAsync(rows, cancellationToken);
+        var visibleRows = rows.Where(row => !fulfilledPassiveIds.Contains(row.Id)).ToArray();
+        var ids = visibleRows.Select(row => row.Id).ToArray();
         var progress = await LatestProgressAsync(ids, cancellationToken);
-        return rows.Select(row => ToSummary(row, progress.GetValueOrDefault(row.Id))).ToArray();
+        return visibleRows.Select(row => ToSummary(row, progress.GetValueOrDefault(row.Id))).ToArray();
     }
 
     public async Task<AcquisitionDetail?> GetAsync(Guid id, CancellationToken cancellationToken) {
@@ -672,6 +674,7 @@ public sealed partial class EfAcquisitionStore(PrismediaDbContext db, IAcquisiti
         row.UpdatedAt = DateTimeOffset.UtcNow;
 
         await RetireSupersededPassiveDuplicatesAsync(row, cancellationToken);
+        await RetireFulfilledPassiveSubtreeAcquisitionsAsync(row, cancellationToken);
 
         await db.SaveChangesAsync(cancellationToken);
 
