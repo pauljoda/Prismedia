@@ -16,7 +16,8 @@ public static partial class AudioTrackTitleText {
 
         var withoutBitrate = TrailingBitrate().Replace(value.Trim(), string.Empty);
         var withoutTrackNumber = LeadingTrackNumber().Replace(withoutBitrate, string.Empty);
-        return ReleaseTitleText.Normalize(withoutTrackNumber);
+        var filesystemSafe = ImportPlanBuilder.SanitizeSegment(withoutTrackNumber);
+        return ReleaseTitleText.Normalize(filesystemSafe);
     }
 
     [GeneratedRegex(@"\s*\[\s*\d+(?:\.\d+)?\s*kbps\s*\]\s*$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]

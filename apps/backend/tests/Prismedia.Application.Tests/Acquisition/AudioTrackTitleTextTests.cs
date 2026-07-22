@@ -1,0 +1,37 @@
+using Prismedia.Application.Acquisition;
+
+namespace Prismedia.Application.Tests.Acquisition;
+
+public sealed class AudioTrackTitleTextTests {
+    [Theory]
+    [InlineData(
+        "Bow Down (Inspired by \"Dragon Ball\")",
+        "01. Bow Down (Inspired by Dragon Ball )")]
+    [InlineData(
+        "Demons (Inspired by \"My Hero Academia\")",
+        "01. Demons (Inspired by My Hero Academia )")]
+    [InlineData(
+        "Say My Name (Inspired by \"Dragon Ball\")",
+        "01. Say My Name (Inspired by Dragon Ball )")]
+    [InlineData(
+        "Set It On Fire (Inspired by \"Demon Slayer: Mugen Train\")",
+        "01. Set It On Fire (Inspired by Demon Slayer_ Mugen Train )")]
+    [InlineData(
+        "Who's Standing Now?",
+        "01. Who's Standing Now ")]
+    [InlineData(
+        "Re/Align.",
+        "01 - Re Align_")]
+    public void NormalizeMatchesOnlyFilesystemSafeTitleDecoration(string wantedTitle, string scannedTitle) {
+        Assert.Equal(
+            AudioTrackTitleText.Normalize(wantedTitle),
+            AudioTrackTitleText.Normalize(scannedTitle));
+    }
+
+    [Fact]
+    public void NormalizePreservesPunctuationThatTheImportSanitizerAllows() {
+        Assert.NotEqual(
+            AudioTrackTitleText.Normalize("Light It Up!"),
+            AudioTrackTitleText.Normalize("Light It Up"));
+    }
+}

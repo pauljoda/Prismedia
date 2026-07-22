@@ -271,21 +271,23 @@ public sealed class ImportedEntityMaterializationTests : IDisposable {
         await using var db = CreateContext();
         var rootPath = Directory.CreateDirectory(Path.Combine(_workRoot, "divide-repair")).FullName;
         var artistPath = Directory.CreateDirectory(Path.Combine(rootPath, "Divide Music")).FullName;
-        var albumPath = Directory.CreateDirectory(Path.Combine(artistPath, "WAR")).FullName;
+        var albumPath = Directory.CreateDirectory(Path.Combine(artistPath, "Set It On Fire")).FullName;
         var root = new RootPersistence(rootPath, scanAudio: true);
         var artistId = AddSourceEntity(db, EntityKind.MusicArtist, "Divide Music", artistPath);
-        var albumId = AddSourceEntity(db, EntityKind.AudioLibrary, "WAR", albumPath, artistId);
+        var albumId = AddSourceEntity(db, EntityKind.AudioLibrary, "Set It On Fire", albumPath, artistId);
         db.AudioLibraryDetails.Add(new AudioLibraryDetailRow {
             EntityId = albumId,
             LibraryRootId = root.Root.Id
         });
-        var wantedTrackId = AddWantedEntity(db, EntityKind.AudioTrack, "WAR", albumId);
-        var sourcePath = Path.Combine(albumPath, "01 - WAR.mp3");
+        const string wantedTitle = "Set It On Fire (Inspired by \"Demon Slayer: Mugen Train\")";
+        const string scannedTitle = "01. Set It On Fire (Inspired by Demon Slayer_ Mugen Train )";
+        var wantedTrackId = AddWantedEntity(db, EntityKind.AudioTrack, wantedTitle, albumId);
+        var sourcePath = Path.Combine(albumPath, scannedTitle + ".mp3");
         await File.WriteAllTextAsync(sourcePath, "audio-bytes");
         var duplicateId = AddSourceEntity(
             db,
             EntityKind.AudioTrack,
-            "01 - WAR",
+            scannedTitle,
             sourcePath,
             albumId);
         var now = DateTimeOffset.UtcNow;
@@ -295,14 +297,14 @@ public sealed class ImportedEntityMaterializationTests : IDisposable {
             Id = Guid.NewGuid(),
             EntityId = wantedTrackId,
             Provider = ExternalIdProviders.MusicBrainz,
-            Value = "war-recording",
+            Value = "set-it-on-fire-recording",
             CreatedAt = now,
             UpdatedAt = now
         });
         db.AudioTrackDetails.Add(new AudioTrackDetailRow {
             EntityId = duplicateId,
             EmbeddedArtist = "Divide Music",
-            EmbeddedAlbum = "WAR"
+            EmbeddedAlbum = "Set It On Fire"
         });
         db.EntityTechnical.Add(new EntityTechnicalRow {
             EntityId = duplicateId,
@@ -318,7 +320,7 @@ public sealed class ImportedEntityMaterializationTests : IDisposable {
             EntityId = duplicateId,
             EntityFileId = sourceFileId,
             Algorithm = FingerprintAlgorithm.Md5,
-            Value = "war-md5",
+            Value = "set-it-on-fire-md5",
             CreatedAt = now
         });
         db.EntityFiles.Add(new EntityFileRow {
@@ -341,7 +343,7 @@ public sealed class ImportedEntityMaterializationTests : IDisposable {
             MaxAttempts = 3,
             TargetEntityKind = EntityKindRegistry.AudioTrack.Code,
             TargetEntityId = duplicateId.ToString(),
-            TargetLabel = "01 - WAR",
+            TargetLabel = scannedTitle,
             AvailableAt = now,
             CreatedAt = now
         });
@@ -373,12 +375,12 @@ public sealed class ImportedEntityMaterializationTests : IDisposable {
         await scan.HandleAsync(new JobContext(scanJob, queue), CancellationToken.None);
 
         var retained = await db.Entities.AsNoTracking().SingleAsync(row => row.Id == wantedTrackId);
-        Assert.Equal("WAR", retained.Title);
+        Assert.Equal(wantedTitle, retained.Title);
         Assert.False(retained.IsWanted);
         Assert.True(await db.EntityExternalIds.AsNoTracking().AnyAsync(row =>
             row.EntityId == wantedTrackId
             && row.Provider == ExternalIdProviders.MusicBrainz
-            && row.Value == "war-recording"));
+            && row.Value == "set-it-on-fire-recording"));
         Assert.False(await db.Entities.AsNoTracking().AnyAsync(row => row.Id == duplicateId));
         var source = await db.EntityFiles.AsNoTracking().SingleAsync(file =>
             file.EntityId == wantedTrackId && file.Role == EntityFileRole.Source);
@@ -392,10 +394,10 @@ public sealed class ImportedEntityMaterializationTests : IDisposable {
         var fingerprint = await db.EntityFileFingerprints.AsNoTracking().SingleAsync(row =>
             row.EntityId == wantedTrackId && row.Algorithm == FingerprintAlgorithm.Md5);
         Assert.Equal(sourceFileId, fingerprint.EntityFileId);
-        Assert.Equal("war-md5", fingerprint.Value);
+        Assert.Equal("set-it-on-fire-md5", fingerprint.Value);
         var detail = await db.AudioTrackDetails.AsNoTracking().SingleAsync(row => row.EntityId == wantedTrackId);
         Assert.Equal("Divide Music", detail.EmbeddedArtist);
-        Assert.Equal("WAR", detail.EmbeddedAlbum);
+        Assert.Equal("Set It On Fire", detail.EmbeddedAlbum);
         Assert.Single(await db.Entities.AsNoTracking().Where(row =>
             row.ParentEntityId == albumId && row.KindCode == EntityKindRegistry.AudioTrack.Code).ToArrayAsync());
         Assert.Contains(queue.Enqueued, request =>
@@ -403,6 +405,43 @@ public sealed class ImportedEntityMaterializationTests : IDisposable {
             && request.TargetEntityId == wantedTrackId.ToString());
         var oldProbe = await db.JobRuns.AsNoTracking().SingleAsync(row => row.Id == oldProbeId);
         Assert.Equal(JobRunStatus.Cancelled, oldProbe.Status);
+    }
+
+    [Fact]
+    public async Task AudioRescanLeavesFilesystemPunctuationCollisionUnchanged() {
+        await using var db = CreateContext();
+        var rootPath = Directory.CreateDirectory(Path.Combine(_workRoot, "divide-ambiguous")).FullName;
+        var artistPath = Directory.CreateDirectory(Path.Combine(rootPath, "Divide Music")).FullName;
+        var albumPath = Directory.CreateDirectory(Path.Combine(artistPath, "Who's Standing Now")).FullName;
+        var root = new RootPersistence(rootPath, scanAudio: true);
+        var artistId = AddSourceEntity(db, EntityKind.MusicArtist, "Divide Music", artistPath);
+        var albumId = AddSourceEntity(db, EntityKind.AudioLibrary, "Who's Standing Now", albumPath, artistId);
+        db.AudioLibraryDetails.Add(new AudioLibraryDetailRow {
+            EntityId = albumId,
+            LibraryRootId = root.Root.Id
+        });
+        var punctuatedWantedId = AddWantedEntity(db, EntityKind.AudioTrack, "Who's Standing Now?", albumId);
+        var plainWantedId = AddWantedEntity(db, EntityKind.AudioTrack, "Who's Standing Now", albumId);
+        var sourcePath = Path.Combine(albumPath, "01. Who's Standing Now .mp3");
+        await File.WriteAllTextAsync(sourcePath, "audio-bytes");
+        var duplicateId = AddSourceEntity(
+            db,
+            EntityKind.AudioTrack,
+            "01. Who's Standing Now ",
+            sourcePath,
+            albumId);
+        await db.SaveChangesAsync();
+
+        var reconciliations = await new AcquisitionHintApplier(db).ReconcileExistingWantedAudioTracksAsync(
+            root.Root.Id,
+            CancellationToken.None);
+
+        Assert.Empty(reconciliations);
+        Assert.True((await db.Entities.AsNoTracking().SingleAsync(row => row.Id == punctuatedWantedId)).IsWanted);
+        Assert.True((await db.Entities.AsNoTracking().SingleAsync(row => row.Id == plainWantedId)).IsWanted);
+        Assert.True(await db.Entities.AsNoTracking().AnyAsync(row => row.Id == duplicateId));
+        Assert.True(await db.EntityFiles.AsNoTracking().AnyAsync(row =>
+            row.EntityId == duplicateId && row.Role == EntityFileRole.Source));
     }
 
     [Fact]
