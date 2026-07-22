@@ -140,6 +140,13 @@ public sealed class AcquisitionSearchRunner(
                 return outcome;
             }
 
+            // A usable fallback is better than repeating a broader query against an indexer that
+            // already timed out or failed on this rung. Preserve its error for the review UI and let
+            // the health backoff keep that source out of subsequent searches until it recovers.
+            if (outcome.Errors.Count > 0 && outcome.Candidates.Any(candidate => candidate.Accepted)) {
+                return outcome;
+            }
+
             if (fallbackOutcome is null && outcome.Candidates.Any(candidate => candidate.Accepted)) {
                 fallbackOutcome = outcome;
             }
@@ -205,6 +212,10 @@ public sealed class AcquisitionSearchRunner(
             var connection = new IndexerConnection(config.Id, config.Kind, config.BaseUrl, config.ApiKey, categories);
             var found = await clients.Get(config.Kind).SearchAsync(connection, new IndexerQuery(text, categories, input.Kind), cancellationToken);
             return new IndexerSearchResult(config, found, null);
+        } catch (OperationCanceledException ex) when (!cancellationToken.IsCancellationRequested) {
+            // HttpClient reports its own Timeout as TaskCanceledException. That is one indexer's
+            // failure, not cancellation of the durable acquisition-search job.
+            return new IndexerSearchResult(config, [], ex.Message);
         } catch (Exception ex) when (ex is not OperationCanceledException) {
             return new IndexerSearchResult(config, [], ex.Message);
         }

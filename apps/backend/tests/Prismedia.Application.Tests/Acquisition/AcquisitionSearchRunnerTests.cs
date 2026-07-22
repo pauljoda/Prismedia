@@ -182,6 +182,65 @@ public sealed class AcquisitionSearchRunnerTests {
     }
 
     [Fact]
+    public async Task IndexerHttpTimeoutKeepsSoulseekFallbackAndDoesNotCancelTheSearchJob() {
+        var prowlarrId = Guid.NewGuid();
+        var soulseekId = Guid.NewGuid();
+        var soulseek = new FakeIndexerSearchClient([
+            new IndexerRelease(
+                "Music / Pharrell Williams / Double Life (From Despicable Me 4) OPUS [Soulseek peer]",
+                7_000_000,
+                null,
+                null,
+                DownloadProtocol.Soulseek,
+                "slskd:locator",
+                null,
+                null,
+                null,
+                null,
+                null)
+        ], IndexerKind.Slskd);
+        var timedOut = new TimedOutIndexerSearchClient();
+        var statuses = new FakeIndexerStatusStore();
+        var runner = new AcquisitionSearchRunner(
+            new FakeIndexerConfigStore(
+                Config(prowlarrId, IndexerKind.Prowlarr, "Prowlarr", priority: 10),
+                Config(soulseekId, IndexerKind.Slskd, "Soulseek", priority: 25)),
+            new FakeClientFactory(timedOut, soulseek),
+            new FakeProfileStore(),
+            new FakeBlocklistStore("unrelated"),
+            new FakeDownloadClientConfigStore(DownloadProtocol.Torrent, DownloadProtocol.Soulseek),
+            statuses,
+            new IndexerQueryWindow(),
+            Policies(new MusicAcquisitionPolicyModule()),
+            Settings());
+
+        var outcome = await runner.RunAsync(
+            new AcquisitionSearchInput(
+                Guid.NewGuid(),
+                "Double Life (From \"Despicable Me 4\")",
+                "Pharrell Williams",
+                EntityKind.AudioLibrary),
+            CancellationToken.None);
+
+        Assert.Single(outcome.Errors, error => error.IndexerId == prowlarrId);
+        Assert.Single(statuses.Failures, failure => failure.IndexerConfigId == prowlarrId);
+        Assert.Single(outcome.Candidates, candidate => candidate.Accepted && candidate.Release.Protocol == DownloadProtocol.Soulseek);
+        Assert.Equal(1, timedOut.SearchCount);
+        Assert.Equal(1, soulseek.SearchCount);
+    }
+
+    [Fact]
+    public async Task CallerCancellationStillCancelsTheWholeSearch() {
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+        var runner = Runner(new CallerCancelledIndexerSearchClient(), Settings(), DownloadProtocol.Torrent);
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => runner.RunAsync(
+            new AcquisitionSearchInput(Guid.NewGuid(), "Book", null),
+            cancellation.Token));
+    }
+
+    [Fact]
     public async Task CustomSearchUsesOnlyTheReviewedTerm() {
         var release = new IndexerRelease("The exact release", 5_000_000, 60, 3, DownloadProtocol.Torrent, "http://dl", "magnet:?c", "hash", "http://info", null, null);
         var client = new QueryAwareIndexerSearchClient(new Dictionary<string, IReadOnlyList<IndexerRelease>>(StringComparer.OrdinalIgnoreCase) {
@@ -337,10 +396,24 @@ public sealed class AcquisitionSearchRunnerTests {
         public Task<IndexerConnectionTest> TestAsync(IndexerConnection connection, CancellationToken cancellationToken) => throw new NotSupportedException();
     }
 
+    private static IndexerConfigDetail Config(
+        Guid id,
+        IndexerKind kind,
+        string name,
+        int priority) =>
+        new(id, kind, name, "http://x", true, priority, [], true, "key");
+
     private sealed class FakeIndexerConfigStore : IIndexerConfigStore {
+        private readonly IReadOnlyList<IndexerConfigDetail> _configs;
+
+        public FakeIndexerConfigStore(params IndexerConfigDetail[] configs) {
+            _configs = configs.Length > 0
+                ? configs
+                : [Config(Guid.NewGuid(), IndexerKind.Prowlarr, "Indexer", priority: 25)];
+        }
+
         public Task<IReadOnlyList<IndexerConfigDetail>> ListDetailsAsync(CancellationToken cancellationToken) =>
-            Task.FromResult<IReadOnlyList<IndexerConfigDetail>>(
-                [new IndexerConfigDetail(Guid.NewGuid(), IndexerKind.Prowlarr, "Indexer", "http://x", true, 25, [], true, "key")]);
+            Task.FromResult(_configs);
 
         public Task<IReadOnlyList<IndexerConfigSummary>> ListAsync(CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<IndexerConfigDetail?> GetAsync(Guid id, CancellationToken cancellationToken) => throw new NotSupportedException();
@@ -348,15 +421,58 @@ public sealed class AcquisitionSearchRunnerTests {
         public Task<bool> DeleteAsync(Guid id, CancellationToken cancellationToken) => throw new NotSupportedException();
     }
 
-    private sealed class FakeClientFactory(IIndexerSearchClient client) : IIndexerSearchClientFactory {
-        public IIndexerSearchClient Get(IndexerKind kind) => client;
+    private sealed class FakeClientFactory : IIndexerSearchClientFactory {
+        private readonly IReadOnlyDictionary<IndexerKind, IIndexerSearchClient> _clients;
+
+        public FakeClientFactory(params IIndexerSearchClient[] clients) {
+            _clients = clients.ToDictionary(client => client.Kind);
+        }
+
+        public IIndexerSearchClient Get(IndexerKind kind) => _clients[kind];
     }
 
-    private sealed class FakeIndexerSearchClient(IReadOnlyList<IndexerRelease> releases) : IIndexerSearchClient {
-        public IndexerKind Kind => IndexerKind.Prowlarr;
-        public Task<IReadOnlyList<IndexerRelease>> SearchAsync(IndexerConnection connection, IndexerQuery query, CancellationToken cancellationToken) =>
-            Task.FromResult(releases);
+    private sealed class FakeIndexerSearchClient(
+        IReadOnlyList<IndexerRelease> releases,
+        IndexerKind kind = IndexerKind.Prowlarr) : IIndexerSearchClient {
+        public int SearchCount { get; private set; }
+        public IndexerKind Kind => kind;
+        public Task<IReadOnlyList<IndexerRelease>> SearchAsync(IndexerConnection connection, IndexerQuery query, CancellationToken cancellationToken) {
+            SearchCount++;
+            return Task.FromResult(releases);
+        }
         public Task<IndexerConnectionTest> TestAsync(IndexerConnection connection, CancellationToken cancellationToken) => throw new NotSupportedException();
+    }
+
+    private sealed class TimedOutIndexerSearchClient : IIndexerSearchClient {
+        public int SearchCount { get; private set; }
+        public IndexerKind Kind => IndexerKind.Prowlarr;
+
+        public Task<IReadOnlyList<IndexerRelease>> SearchAsync(
+            IndexerConnection connection,
+            IndexerQuery query,
+            CancellationToken cancellationToken) {
+            SearchCount++;
+            return Task.FromException<IReadOnlyList<IndexerRelease>>(
+                new TaskCanceledException("The configured HttpClient.Timeout elapsed."));
+        }
+
+        public Task<IndexerConnectionTest> TestAsync(IndexerConnection connection, CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+    }
+
+    private sealed class CallerCancelledIndexerSearchClient : IIndexerSearchClient {
+        public IndexerKind Kind => IndexerKind.Prowlarr;
+
+        public Task<IReadOnlyList<IndexerRelease>> SearchAsync(
+            IndexerConnection connection,
+            IndexerQuery query,
+            CancellationToken cancellationToken) {
+            cancellationToken.ThrowIfCancellationRequested();
+            throw new InvalidOperationException("The cancelled token should have thrown.");
+        }
+
+        public Task<IndexerConnectionTest> TestAsync(IndexerConnection connection, CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
     }
 
     private sealed class FakeProfileStore : IBookAcquisitionProfileStore {
@@ -383,9 +499,14 @@ public sealed class AcquisitionSearchRunnerTests {
     }
 
     private sealed class FakeIndexerStatusStore : IIndexerStatusStore {
+        public List<(Guid IndexerConfigId, string Message)> Failures { get; } = [];
+
         public Task<IReadOnlyDictionary<Guid, IndexerHealth>> GetAllAsync(CancellationToken cancellationToken) =>
             Task.FromResult<IReadOnlyDictionary<Guid, IndexerHealth>>(new Dictionary<Guid, IndexerHealth>());
-        public Task RecordFailureAsync(Guid indexerConfigId, string message, CancellationToken cancellationToken) => Task.CompletedTask;
+        public Task RecordFailureAsync(Guid indexerConfigId, string message, CancellationToken cancellationToken) {
+            Failures.Add((indexerConfigId, message));
+            return Task.CompletedTask;
+        }
         public Task RecordSuccessAsync(Guid indexerConfigId, CancellationToken cancellationToken) => Task.CompletedTask;
     }
 

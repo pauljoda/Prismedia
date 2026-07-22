@@ -154,6 +154,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Updated documentation, README screenshots, branding assets, install metadata, and app copy to match the current Prismedia v1 surface.
 
 ### Fixed
+- A slow indexer's HTTP timeout now stays scoped to that indexer instead of cancelling and requeuing the entire acquisition search; usable results from Soulseek or another source proceed immediately without repeating broader queries against the failed source.
 - Soulseek music matching now understands artist/album/track path-shaped results and treats quotes, slashes, and other punctuation as token boundaries, so valid releases such as quoted soundtrack singles are no longer mislabeled as title mismatches.
 - Wanted audio-track placeholders remain visible in acquisition monitoring but are excluded from playable album, track, collection, restored-queue, and native browse surfaces; the audio source API also refuses to stream them until a real file fulfills the request.
 - Completed acquisitions now preempt remaining release searches, so a large artist request cannot leave finished Soulseek downloads waiting to import while its metadata and search fanout continues.
