@@ -154,6 +154,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Updated documentation, README screenshots, branding assets, install metadata, and app copy to match the current Prismedia v1 surface.
 
 ### Fixed
+- Soulseek music matching now understands artist/album/track path-shaped results and treats quotes, slashes, and other punctuation as token boundaries, so valid releases such as quoted soundtrack singles are no longer mislabeled as title mismatches.
+- Wanted audio-track placeholders remain visible in acquisition monitoring but are excluded from playable album, track, collection, restored-queue, and native browse surfaces; the audio source API also refuses to stream them until a real file fulfills the request.
 - Completed acquisitions now preempt remaining release searches, so a large artist request cannot leave finished Soulseek downloads waiting to import while its metadata and search fanout continues.
 - Manual replacement reviews can now be retried safely after a failed download-client handoff: Prismedia reuses the reviewed upgrade and candidates, repairs old transferless Preparing rows into an actionable state, and prevents same-request duplicate replacement children.
 - Imported singles now attach their downloaded audio file to the original metadata track—even when filenames include track numbers or bitrate decorations—preserving provider identity and Wanted fulfillment. Existing scanner-created duplicates heal on the next audio scan without losing probe data or fingerprints, and entity-bound waveforms regenerate against the retained track. Their probes run at import priority, while foreground search floods remain confined to reserved worker capacity so standard jobs keep advancing.

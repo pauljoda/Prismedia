@@ -136,6 +136,24 @@ public sealed class ReleaseTitleIdentityTests {
         Assert.Contains(ReleaseRejectionReason.TitleMismatch, verdicts["Another Band - The Wall (2005) [FLAC]"].Rejections);
     }
 
+    [Theory]
+    [InlineData(
+        "Pharrell Williams Double Life (From \"Despicable Me 4\")",
+        "Music / Pharrell Williams / Double Life (From Despicable Me 4) (2024) OPUS [Soulseek peer]",
+        true)]
+    [InlineData(
+        "Pharrell Williams Double Life (From \"Despicable Me 4\")",
+        @"Music\Pharrell Williams\Double Life (From Despicable Me 4)\01 - Double Life.opus [Soulseek peer]",
+        true)]
+    [InlineData(
+        "Pharrell Williams Double Life (From \"Despicable Me 4\")",
+        "Music / Other Artist / Double Life (From Despicable Me 4) / 01 Double Life.opus [Soulseek peer]",
+        false)]
+    public void SoulseekPathIdentityTreatsPathAndQuotedMetadataPunctuationAsTokenBoundaries(
+        string target, string release, bool expected) {
+        Assert.Equal(expected, ReleaseTitleIdentity.MatchesSoulseekPath(release, target));
+    }
+
     [Fact]
     public void BookSearchRequiresTheTitleRunAndTheAuthorAnywhere() {
         var spec = new BookTitleIdentitySpecification();

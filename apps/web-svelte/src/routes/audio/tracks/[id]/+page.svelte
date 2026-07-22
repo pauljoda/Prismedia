@@ -11,7 +11,7 @@
     updateEntityMetadata,
     updateEntityRating,
   } from "$lib/api/entity-mutations";
-  import { getCapability } from "$lib/api/capabilities";
+  import { getCapability, isWanted } from "$lib/api/capabilities";
   import {
     toggleOptimisticEntityFlag,
     updateOptimisticEntityRating,
@@ -65,10 +65,11 @@
   const dates = $derived(card?.dates ?? []);
 
   const trackItem = $derived(track ? audioTrackDetailToListItem(track) : null);
+  const wanted = $derived(track ? isWanted(track.capabilities) : false);
   const coverUrl = $derived(card?.posterCard?.cover?.src ?? card?.poster?.src ?? null);
 
   const heroActions = $derived.by((): EntityDetailActionButton[] => {
-    if (!trackItem) return [];
+    if (!trackItem || wanted) return [];
     const isCurrent = playback.isCurrent(trackItem.id);
     return [{
       id: "play",
@@ -112,7 +113,7 @@
   ]);
 
   function playTrack() {
-    if (!trackItem) return;
+    if (!trackItem || wanted) return;
     if (playback.isCurrent(trackItem.id)) {
       playback.toggle();
       return;

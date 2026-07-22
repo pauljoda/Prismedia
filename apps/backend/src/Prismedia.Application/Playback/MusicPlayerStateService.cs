@@ -128,6 +128,10 @@ public sealed class MusicPlayerStateService {
                 continue;
             }
 
+            if (track.Capabilities.OfType<FlagsCapability>().Any(flags => flags.IsWanted == true)) {
+                continue;
+            }
+
             oldToNewIndex[i] = tracks.Count;
             tracks.Add(track);
         }

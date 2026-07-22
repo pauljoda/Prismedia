@@ -112,6 +112,14 @@ public sealed partial class EfEntityReadService : IEntityReadService {
             entityQuery = ApplyBrowseHierarchyFilter(entityQuery, kindCodes);
         }
 
+        // Wanted audio tracks are acquisition placeholders, not playable library entries. Keep them
+        // available to explicit wanted queries and parent-detail child projections for monitoring,
+        // while excluding them from ordinary track lists, search, and native-client browse results.
+        if (wanted is null) {
+            entityQuery = entityQuery.Where(entity =>
+                entity.KindCode != EntityKindRegistry.AudioTrack.Code || !entity.IsWanted);
+        }
+
         if (!string.IsNullOrWhiteSpace(query)) {
             var normalized = query.Trim().ToLower();
             entityQuery = entityQuery.Where(entity => entity.Title.ToLower().Contains(normalized));

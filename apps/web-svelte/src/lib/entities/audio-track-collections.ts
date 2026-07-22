@@ -88,6 +88,7 @@ export async function collectCollectionAudioTracks(
     if (!entity) continue;
 
     if (entity.kind === ENTITY_KIND.audioTrack) {
+      if (entity.isWanted === true) continue;
       const album = entity.parentEntityId ? await getCachedAudioLibrary(entity.parentEntityId, albumCache) : null;
       if (album) albumCoverUrls[album.id] = audioLibraryCoverUrl(album);
       tracks.push(entityThumbnailToTrackItem(entity, entity.parentEntityId ?? null, {
@@ -109,12 +110,13 @@ export async function collectCollectionAudioTracks(
   return { tracks, albumCoverUrls };
 }
 
-function tracksFromAudioLibraryDetail(
+export function tracksFromAudioLibraryDetail(
   detail: AudioLibraryDetail,
   groupByAlbum: boolean,
 ): AudioTrackListItemDto[] {
   const trackGroup = detail.childrenByKind.find((group) => group.kind === ENTITY_KIND.audioTrack);
   return (trackGroup?.entities ?? [])
+    .filter((thumb) => thumb.isWanted !== true)
     .map((thumb) => entityThumbnailToTrackItem(thumb, detail.id, {
       sectionLabel: groupByAlbum ? detail.title : undefined,
       sectionKey: groupByAlbum ? albumSectionKey(detail.id) : undefined,

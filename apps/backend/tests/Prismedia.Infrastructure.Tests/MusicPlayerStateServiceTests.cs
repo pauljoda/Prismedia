@@ -43,6 +43,37 @@ public sealed class MusicPlayerStateServiceTests {
     }
 
     [Fact]
+    public async Task GetFiltersWantedTrackPlaceholdersAndRepairsOrder() {
+        var browserSessionId = Guid.NewGuid();
+        var playable = Guid.NewGuid();
+        var wanted = Guid.NewGuid();
+        var settings = new InMemoryBrowserSessionPersistence();
+        var entities = new FakeEntityReadService(new HashSet<Guid> { wanted }, playable, wanted);
+        var service = new MusicPlayerStateService(settings, entities);
+
+        await service.SaveAsync(browserSessionId, new UpdateMusicPlayerStateRequest(
+            QueueTrackIds: [wanted, playable],
+            Order: [0, 1],
+            Position: 0,
+            CurrentTime: 12,
+            Playing: true,
+            Shuffle: false,
+            Repeat: MusicPlayerRepeatMode.Off,
+            Volume: 1,
+            Muted: false,
+            Collapsed: false,
+            CollapsedSide: MusicPlayerMiniSide.Left,
+            Context: null),
+            CancellationToken.None);
+
+        var loaded = await service.GetAsync(browserSessionId, CancellationToken.None);
+
+        Assert.Equal(playable, Assert.Single(loaded.Tracks).Id);
+        Assert.Equal([0], loaded.Order);
+        Assert.Equal(0, loaded.Position);
+    }
+
+    [Fact]
     public async Task ClearRemovesQueueButKeepsBrowserOutputSettings() {
         var browserSessionId = Guid.NewGuid();
         var track = Guid.NewGuid();
@@ -207,7 +238,11 @@ public sealed class MusicPlayerStateServiceTests {
     private sealed class FakeEntityReadService : IEntityReadService {
         private readonly IReadOnlyDictionary<Guid, AudioTrackDetail> _tracks;
 
-        public FakeEntityReadService(params Guid[] trackIds) {
+        public FakeEntityReadService(params Guid[] trackIds)
+            : this(new HashSet<Guid>(), trackIds) {
+        }
+
+        public FakeEntityReadService(IReadOnlySet<Guid> wantedTrackIds, params Guid[] trackIds) {
             _tracks = trackIds.ToDictionary(
                 id => id,
                 id => new AudioTrackDetail {
@@ -216,7 +251,10 @@ public sealed class MusicPlayerStateServiceTests {
                     Title = $"Track {id:N}",
                     ParentEntityId = null,
                     SortOrder = null,
-                    Capabilities = [new TechnicalCapability(TimeSpan.FromSeconds(100), null, null, null, null, null, null, null, null, null)],
+                    Capabilities = [
+                        new TechnicalCapability(TimeSpan.FromSeconds(100), null, null, null, null, null, null, null, null, null),
+                        new FlagsCapability(null, null, null, wantedTrackIds.Contains(id))
+                    ],
                     ChildrenByKind = [],
                     Relationships = [],
                     EmbeddedArtist = null,

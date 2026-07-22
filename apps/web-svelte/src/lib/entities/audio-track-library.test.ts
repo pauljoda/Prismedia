@@ -91,4 +91,22 @@ describe("loadAudioTrackLibrary", () => {
     expect(listPage).toHaveBeenCalledTimes(2);
     expect(result.tracks.map((item) => item.id)).toEqual(["track-1"]);
   });
+
+  it("excludes wanted placeholders from playable track hydration", async () => {
+    const playable = thumbnail("track-playable", EntityKind["audio-track"], "Playable", null);
+    const wanted = {
+      ...thumbnail("track-wanted", EntityKind["audio-track"], "Wanted", null),
+      isWanted: true,
+    };
+
+    const result = await loadAudioTrackLibrary(
+      { hideNsfw: false },
+      {
+        listPage: async () => ({ items: [playable, wanted], nextCursor: null, totalCount: 2 }),
+        fetchThumbnails: async () => [],
+      },
+    );
+
+    expect(result.tracks.map((item) => item.id)).toEqual(["track-playable"]);
+  });
 });

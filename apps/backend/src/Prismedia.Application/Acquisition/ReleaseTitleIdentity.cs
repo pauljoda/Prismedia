@@ -140,6 +140,35 @@ public static partial class ReleaseTitleIdentity {
         return target.All(tokens.Contains);
     }
 
+    /// <summary>
+    /// True when a Soulseek result's path-shaped display title contains the full artist/work identity.
+    /// Soulseek commonly exposes artist, album, and filename in separate slash-delimited segments, so
+    /// their identity is positional context rather than a scene-style leading title.
+    /// </summary>
+    public static bool MatchesSoulseekPath(string releasePathTitle, string? targetText) {
+        var target = ComparableSoulseekPathTokens(targetText);
+        if (target.Count == 0) {
+            return true;
+        }
+
+        var tokens = ComparableSoulseekPathTokens(releasePathTitle).ToHashSet(StringComparer.Ordinal);
+        return target.All(tokens.Contains);
+    }
+
+    /// <summary>
+    /// Comparison tokens specialized for Soulseek's remote path display. Quotes, slashes, backslashes,
+    /// and filename punctuation are structural delimiters here; changing the general release-title
+    /// normalizer would also weaken strict post-import audio-title reconciliation.
+    /// </summary>
+    private static IReadOnlyList<string> ComparableSoulseekPathTokens(string? value) {
+        if (string.IsNullOrWhiteSpace(value)) {
+            return [];
+        }
+
+        var pathWords = SoulseekPathTokenSeparators().Replace(value.Replace("&", " and "), " ");
+        return ComparableTokens(pathWords);
+    }
+
     /// <summary>True when a tail-position token legitimately ends a title rather than extending it.</summary>
     private static bool IsBoundaryToken(string token) =>
         ReleaseTitleVocabulary.MetadataTokens.Contains(token)
@@ -180,4 +209,7 @@ public static partial class ReleaseTitleIdentity {
 
     [GeneratedRegex(@"^\d{1,2}x\d{2,4}$", RegexOptions.CultureInvariant)]
     private static partial Regex AltTvUnitTokenRegex();
+
+    [GeneratedRegex(@"[\s\p{P}\p{S}]+", RegexOptions.CultureInvariant)]
+    private static partial Regex SoulseekPathTokenSeparators();
 }

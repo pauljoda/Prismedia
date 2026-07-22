@@ -91,7 +91,7 @@ public sealed class MusicTitleIdentitySpecification : IReleaseSpecification {
 
     public ReleaseRejectionReason? Evaluate(IndexerRelease release, BookAcquisitionRules rules) {
         var matched = release.Protocol == DownloadProtocol.Soulseek
-            ? ReleaseTitleIdentity.ContainsAllTokens(release.Title, rules.TargetTitle)
+            ? ReleaseTitleIdentity.MatchesSoulseekPath(release.Title, rules.TargetTitle)
             : ReleaseTitleIdentity.Match(release.Title, rules.TargetTitle).TitleMatched;
         return matched ? null : Reason;
     }

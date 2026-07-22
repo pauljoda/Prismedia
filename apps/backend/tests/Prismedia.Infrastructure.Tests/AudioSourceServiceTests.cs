@@ -34,6 +34,20 @@ public sealed class AudioSourceServiceTests : IDisposable {
         Assert.Equal(codec, source.Codec);
     }
 
+    [Fact]
+    public async Task WantedTrackNeverResolvesAsAPlayableAudioSource() {
+        await using var db = CreateContext();
+        var trackId = Guid.Parse("22222222-2222-2222-2222-222222222222");
+        var filePath = Path.Combine(_tempDir, "wanted-track.mp3");
+        await File.WriteAllTextAsync(filePath, "placeholder-audio-bytes");
+        SeedAudioSource(db, trackId, filePath, "mp3", isWanted: true);
+        await db.SaveChangesAsync();
+
+        var source = await new AudioSourceService(db).GetSourceAsync(trackId, CancellationToken.None);
+
+        Assert.Null(source);
+    }
+
     public void Dispose() {
         if (Directory.Exists(_tempDir)) {
             Directory.Delete(_tempDir, recursive: true);
@@ -49,11 +63,13 @@ public sealed class AudioSourceServiceTests : IDisposable {
         PrismediaDbContext db,
         Guid trackId,
         string filePath,
-        string codec) {
+        string codec,
+        bool isWanted = false) {
         db.Entities.Add(new EntityRow {
             Id = trackId,
             KindCode = EntityKindRegistry.AudioTrack.Code,
             Title = "Track",
+            IsWanted = isWanted,
             CreatedAt = DateTimeOffset.UtcNow,
             UpdatedAt = DateTimeOffset.UtcNow
         });

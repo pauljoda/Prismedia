@@ -219,6 +219,54 @@ public sealed class EfEntityReadServiceTests {
     }
 
     [Fact]
+    public async Task ListAsyncHidesWantedAudioTracksUnlessExplicitlyRequested() {
+        await using var db = CreateContext();
+        var playableTrackId = Guid.Parse("dddddddd-1111-4444-8888-dddddddddddd");
+        var wantedTrackId = Guid.Parse("eeeeeeee-1111-4444-8888-eeeeeeeeeeee");
+        var now = DateTimeOffset.UtcNow;
+        db.Entities.AddRange(
+            new EntityRow {
+                Id = playableTrackId,
+                KindCode = EntityKindRegistry.AudioTrack.Code,
+                Title = "Playable track",
+                CreatedAt = now,
+                UpdatedAt = now
+            },
+            new EntityRow {
+                Id = wantedTrackId,
+                KindCode = EntityKindRegistry.AudioTrack.Code,
+                Title = "Wanted track",
+                IsWanted = true,
+                CreatedAt = now,
+                UpdatedAt = now
+            });
+        db.AudioTrackDetails.AddRange(
+            new AudioTrackDetailRow { EntityId = playableTrackId },
+            new AudioTrackDetailRow { EntityId = wantedTrackId });
+        await db.SaveChangesAsync();
+
+        var service = CreateService(db);
+        var ordinary = await service.ListAsync(
+            EntityKindRegistry.AudioTrack.Code,
+            null,
+            null,
+            hideNsfw: true,
+            null,
+            CancellationToken.None);
+        var explicitlyWanted = await service.ListAsync(
+            EntityKindRegistry.AudioTrack.Code,
+            null,
+            null,
+            hideNsfw: true,
+            null,
+            CancellationToken.None,
+            wanted: true);
+
+        Assert.Equal(playableTrackId, Assert.Single(ordinary.Items).Id);
+        Assert.Equal(wantedTrackId, Assert.Single(explicitlyWanted.Items).Id);
+    }
+
+    [Fact]
     public async Task ListAsyncSearchSuppressesMovieChildVideoButKeepsVideoBrowse() {
         await using var db = CreateContext();
         var movieId = Guid.Parse("aaaaaaaa-aaaa-4444-8888-aaaaaaaaaaaa");

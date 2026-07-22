@@ -87,7 +87,7 @@ export async function loadAudioTrackLibrary(
     }, options.signal);
 
     for (const track of page.items) {
-      if (seenTrackIds.has(track.id)) continue;
+      if (track.isWanted === true || seenTrackIds.has(track.id)) continue;
       seenTrackIds.add(track.id);
       trackThumbnails.push(track);
     }

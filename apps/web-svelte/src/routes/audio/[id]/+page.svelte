@@ -212,6 +212,7 @@
 
       // Build track items from entity thumbnails already in the response — no N+1 fetches
       trackItems = (trackGroup?.entities ?? [])
+        .filter((thumb) => thumb.isWanted !== true)
         .map((thumb) => entityThumbnailToTrackItem(thumb, nextLibrary.id))
         .sort((a, b) => a.sortOrder - b.sortOrder);
 

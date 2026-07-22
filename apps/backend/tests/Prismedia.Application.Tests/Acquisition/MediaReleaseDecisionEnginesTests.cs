@@ -164,6 +164,25 @@ public sealed class MediaReleaseDecisionEnginesTests {
     }
 
     [Fact]
+    public void MusicEngineAcceptsQuotedAlbumMetadataInSoulseekPathContext() {
+        var engine = new MusicReleaseDecisionEngine();
+        var rules = BookAcquisitionRules.Default with {
+            TargetTitle = "Pharrell Williams Double Life (From \"Despicable Me 4\")",
+            AllowedProtocols = [DownloadProtocol.Soulseek]
+        };
+
+        var candidate = Assert.Single(engine.Evaluate([
+            (Release(
+                "Music / Pharrell Williams / Double Life (From Despicable Me 4) (2024) OPUS [Soulseek peer]",
+                seeders: 1,
+                protocol: DownloadProtocol.Soulseek), null, "slskd")
+        ], rules));
+
+        Assert.True(candidate.Accepted);
+        Assert.DoesNotContain(ReleaseRejectionReason.TitleMismatch, candidate.Rejections);
+    }
+
+    [Fact]
     public void SharedGatesStillApplyToTheNewEngines() {
         var engine = new MovieReleaseDecisionEngine();
         var rules = BookAcquisitionRules.Default with { MinSeeders = 5, IgnoredTerms = ["cam"] };

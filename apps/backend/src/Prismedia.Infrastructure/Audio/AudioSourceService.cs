@@ -39,6 +39,7 @@ public sealed class AudioSourceService : IAudioSourceService {
             from technical in technicalRows.DefaultIfEmpty()
             where entity.Id == id &&
                 entity.KindCode == EntityKindRegistry.AudioTrack.Code &&
+                !entity.IsWanted &&
                 file.Role == EntityFileRole.Source
             select new {
                 File = file,
