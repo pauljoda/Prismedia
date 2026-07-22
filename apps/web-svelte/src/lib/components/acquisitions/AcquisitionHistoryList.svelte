@@ -146,9 +146,9 @@
   .history-message {
     min-width: 0;
     max-width: 100%;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    word-break: normal;
   }
 
   .history-title {
@@ -198,16 +198,6 @@
 
     .history-meta {
       align-items: flex-start;
-    }
-
-    .history-title,
-    .history-release,
-    .history-message {
-      overflow: visible;
-      text-overflow: clip;
-      white-space: normal;
-      overflow-wrap: anywhere;
-      word-break: normal;
     }
 
     .history-time {
