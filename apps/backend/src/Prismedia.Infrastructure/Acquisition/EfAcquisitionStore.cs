@@ -64,6 +64,12 @@ public sealed partial class EfAcquisitionStore(PrismediaDbContext db, IAcquisiti
     public async Task<IReadOnlyList<AcquisitionSummary>> ListAsync(CancellationToken cancellationToken) {
         var rows = await db.Acquisitions
             .AsNoTracking()
+            // A passive acquisition whose target Entity was reconciled away cannot be acted on: its link
+            // resolves to a 404 and it has no transfer to manage. Keep terminal history and in-flight
+            // transfers visible, while the monitor sweep retires the dangling passive intent durably.
+            .Where(row => row.EntityId == null
+                || db.Entities.Any(entity => entity.Id == row.EntityId)
+                || !OrphanRetirableStatuses.Contains(row.Status))
             .OrderByDescending(row => row.CreatedAt)
             .ToArrayAsync(cancellationToken);
         var ids = rows.Select(row => row.Id).ToArray();
@@ -664,6 +670,9 @@ public sealed partial class EfAcquisitionStore(PrismediaDbContext db, IAcquisiti
         row.ImportCheckpointJson = null;
         row.ImportClaimJobId = null;
         row.UpdatedAt = DateTimeOffset.UtcNow;
+
+        await RetireSupersededPassiveDuplicatesAsync(row, cancellationToken);
+
         await db.SaveChangesAsync(cancellationToken);
 
         // Durable Imported event: the single choke point for all four import engines. History is

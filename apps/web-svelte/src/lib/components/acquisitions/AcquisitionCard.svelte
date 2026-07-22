@@ -403,7 +403,7 @@
   .menu-item :global(svg) { color: rgb(199 201 204 / 0.75); flex: 0 0 auto; }
 
   /* ── Mobile / narrow container: title + status stack under the poster, actions drop to a full row ── */
-  @container (max-width: 40rem) {
+  @container (max-width: 48rem) {
     .acq-card {
       grid-template-columns: min-content min-content minmax(0, 1fr);
       grid-template-areas:

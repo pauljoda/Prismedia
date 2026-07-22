@@ -154,6 +154,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Updated documentation, README screenshots, branding assets, install metadata, and app copy to match the current Prismedia v1 surface.
 
 ### Fixed
+- Reconciled imports now retire older requests and monitors for the same provider identity, passive requests whose target was removed no longer render as broken Downloads cards, and acquisition cards restack before their status and action controls can overlap.
 - The Downloads view now refreshes attention-only requests and rechecks when the browser becomes visible, so a scan that reconciles an awaiting-selection item into the library removes its stale request card without a manual reload.
 - Partial music imports now keep provider tracks visible as missing and non-playable, expose per-track monitoring, immediately search for the remaining tracks, merge equivalent Soulseek filenames without duplicate library entries, and survive concurrent library scans without losing newly imported files.
 - A slow indexer's HTTP timeout now stays scoped to that indexer instead of cancelling and requeuing the entire acquisition search; usable results from Soulseek or another source proceed immediately without repeating broader queries against the failed source.

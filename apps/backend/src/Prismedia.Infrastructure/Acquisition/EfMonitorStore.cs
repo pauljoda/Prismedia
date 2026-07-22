@@ -22,7 +22,6 @@ public sealed partial class EfMonitorStore(
         lifecycleLease ?? new EfEntityLifecycleMutationLease(
             db,
             entityHierarchy ?? new EfEntityHierarchyReader(db));
-
     public async Task<MonitorView> StartAsync(Guid acquisitionId, EntityKind kind, string title, string? author, CancellationToken cancellationToken) {
         var now = DateTimeOffset.UtcNow;
         var acquisitionTarget = await db.Acquisitions.AsNoTracking()
@@ -389,6 +388,8 @@ public sealed partial class EfMonitorStore(
     }
 
     public async Task<IReadOnlyList<DueMonitor>> ListDueMonitorsAsync(int defaultIntervalMinutes, CancellationToken cancellationToken) {
+        await RetireMissingEntityTargetsAsync(cancellationToken);
+
         // The default profile of each kind governs its upgrades. Upgrade-seeking is fully automatic, so it
         // requires both the cutoff toggle and auto-grab; without auto-grab there is no path to act on a found
         // upgrade. Books gate on the source/format cutoff tiers; media kinds (movies, single episodes) gate on

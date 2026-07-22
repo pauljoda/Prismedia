@@ -468,6 +468,14 @@ public sealed class EfMonitorStoreTests {
     public async Task ImportedStableEntityMonitorDetachesAcquisitionAndStaysActive() {
         await using var db = CreateContext();
         var entityId = Guid.NewGuid();
+        var now = DateTimeOffset.UtcNow;
+        db.Entities.Add(new EntityRow {
+            Id = entityId,
+            KindCode = EntityKind.Book.ToCode(),
+            Title = "Book",
+            CreatedAt = now,
+            UpdatedAt = now
+        });
         var acquisitionId = SeedAcquisition(db, AcquisitionStatus.Imported, entityId);
         await db.SaveChangesAsync();
         var store = new EfMonitorStore(db);
@@ -590,6 +598,52 @@ public sealed class EfMonitorStoreTests {
 
         Assert.Empty(await store.ListDueMonitorsAsync(360, CancellationToken.None));
         Assert.Equal(MonitorStatus.Paused, (await store.ListAsync(CancellationToken.None))[0].Status);
+    }
+
+    [Fact]
+    public async Task MissingEntityTargetRetiresPassiveAcquisitionMonitorAndHint() {
+        await using var db = CreateContext();
+        var now = DateTimeOffset.UtcNow;
+        var missingEntityId = Guid.NewGuid();
+        var acquisitionId = Guid.NewGuid();
+        db.Acquisitions.Add(new AcquisitionRow {
+            Id = acquisitionId,
+            EntityId = missingEntityId,
+            Kind = EntityKind.AudioLibrary,
+            Status = AcquisitionStatus.AwaitingSelection,
+            Title = "Dynamite",
+            ExternalIdsJson = "{}",
+            SourceUrlsJson = "[]",
+            CreatedAt = now,
+            UpdatedAt = now
+        });
+        db.Monitors.Add(new MonitorRow {
+            Id = Guid.NewGuid(),
+            AcquisitionId = acquisitionId,
+            EntityId = missingEntityId,
+            Kind = EntityKind.AudioLibrary,
+            Status = MonitorStatus.Active,
+            Title = "Dynamite",
+            CreatedAt = now,
+            UpdatedAt = now
+        });
+        db.AcquisitionImportHints.Add(new AcquisitionImportHintRow {
+            Id = Guid.NewGuid(),
+            AcquisitionId = acquisitionId,
+            EntityId = missingEntityId,
+            SourcePath = "/downloads/dynamite",
+            CreatedAt = now,
+            UpdatedAt = now
+        });
+        await db.SaveChangesAsync();
+
+        Assert.Empty(await new EfMonitorStore(db).ListDueMonitorsAsync(360, CancellationToken.None));
+
+        Assert.False(await db.Monitors.AnyAsync());
+        Assert.False(await db.AcquisitionImportHints.AnyAsync());
+        var acquisition = await db.Acquisitions.AsNoTracking().SingleAsync();
+        Assert.Equal(AcquisitionStatus.Cancelled, acquisition.Status);
+        Assert.Contains("no longer exists", acquisition.StatusMessage);
     }
 
     [Fact]

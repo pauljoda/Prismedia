@@ -11,6 +11,39 @@ namespace Prismedia.Infrastructure.Tests;
 
 public sealed class EfAcquisitionStoreTests {
     [Fact]
+    public async Task ListHidesPassiveAcquisitionsWhoseTargetEntityNoLongerExists() {
+        await using var db = CreateContext();
+        var now = DateTimeOffset.UtcNow;
+        var missingEntityId = Guid.NewGuid();
+        var awaitingId = Guid.NewGuid();
+        var downloadingId = Guid.NewGuid();
+        var importedId = Guid.NewGuid();
+        db.Acquisitions.AddRange(
+            Row(awaitingId, AcquisitionStatus.AwaitingSelection),
+            Row(downloadingId, AcquisitionStatus.Downloading),
+            Row(importedId, AcquisitionStatus.Imported));
+        await db.SaveChangesAsync();
+
+        var rows = await AcquisitionTestFactory.Store(db).ListAsync(CancellationToken.None);
+
+        Assert.DoesNotContain(rows, row => row.Id == awaitingId);
+        Assert.Contains(rows, row => row.Id == downloadingId);
+        Assert.Contains(rows, row => row.Id == importedId);
+
+        AcquisitionRow Row(Guid id, AcquisitionStatus status) => new() {
+            Id = id,
+            EntityId = missingEntityId,
+            Kind = EntityKind.AudioLibrary,
+            Status = status,
+            Title = "Dynamite",
+            ExternalIdsJson = "{}",
+            SourceUrlsJson = "[]",
+            CreatedAt = now,
+            UpdatedAt = now
+        };
+    }
+
+    [Fact]
     public async Task EntityAcquisitionListIncludesEveryBookRenditionInDeterministicNewestFirstOrder() {
         await using var db = CreateContext();
         var entityId = AddWantedEntity(db, EntityKindRegistry.Book.Code, "A Game of Thrones");
@@ -416,6 +449,66 @@ public sealed class EfAcquisitionStoreTests {
         Assert.Equal(BookSourceTier.Retail, row.OwnedSourceTier);
         Assert.Equal(BookFormatTier.Reflowable, row.OwnedFormatTier);
         Assert.True(row.UpgradeQualityCaptured);
+    }
+
+    [Fact]
+    public async Task MarkImportedRetiresPassiveDuplicateIdentityAndItsMonitor() {
+        await using var db = CreateContext();
+        var now = DateTimeOffset.UtcNow;
+        var importedId = Guid.NewGuid();
+        var supersededId = Guid.NewGuid();
+        var importedEntityId = AddWantedEntity(db, EntityKindRegistry.AudioLibrary.Code, "Dynamite");
+        var supersededEntityId = AddWantedEntity(db, EntityKindRegistry.AudioLibrary.Code, "Dynamite");
+        db.Acquisitions.AddRange(
+            Row(importedId, importedEntityId, AcquisitionStatus.Importing),
+            Row(supersededId, supersededEntityId, AcquisitionStatus.AwaitingSelection));
+        db.Monitors.Add(new MonitorRow {
+            Id = Guid.NewGuid(),
+            AcquisitionId = supersededId,
+            EntityId = supersededEntityId,
+            Kind = EntityKind.AudioLibrary,
+            Status = MonitorStatus.Active,
+            Title = "Dynamite",
+            CreatedAt = now,
+            UpdatedAt = now
+        });
+        db.AcquisitionImportHints.Add(new AcquisitionImportHintRow {
+            Id = Guid.NewGuid(),
+            AcquisitionId = supersededId,
+            EntityId = supersededEntityId,
+            SourcePath = "/downloads/dynamite",
+            CreatedAt = now,
+            UpdatedAt = now
+        });
+        await db.SaveChangesAsync();
+
+        await AcquisitionTestFactory.Store(db).MarkImportedWithQualityAsync(
+            importedId,
+            BookQualityRank.Floor,
+            "Imported.",
+            CancellationToken.None,
+            ownedMediaQuality: "lossless");
+
+        Assert.Equal(AcquisitionStatus.Imported, (await db.Acquisitions.FindAsync(importedId))!.Status);
+        var superseded = (await db.Acquisitions.FindAsync(supersededId))!;
+        Assert.Equal(AcquisitionStatus.Cancelled, superseded.Status);
+        Assert.Contains("Superseded", superseded.StatusMessage);
+        Assert.False(await db.Monitors.AnyAsync(monitor => monitor.AcquisitionId == supersededId));
+        Assert.False(await db.AcquisitionImportHints.AnyAsync(hint => hint.AcquisitionId == supersededId));
+
+        AcquisitionRow Row(Guid id, Guid entityId, AcquisitionStatus status) => new() {
+            Id = id,
+            EntityId = entityId,
+            Kind = EntityKind.AudioLibrary,
+            Status = status,
+            Title = "Dynamite",
+            IdentityNamespace = "musicbrainzreleasegroup",
+            IdentityValue = "8aee12f6-896f-4cbb-8b40-60d607f30e11",
+            ExternalIdsJson = "{}",
+            SourceUrlsJson = "[]",
+            CreatedAt = now,
+            UpdatedAt = now
+        };
     }
 
     [Fact]
