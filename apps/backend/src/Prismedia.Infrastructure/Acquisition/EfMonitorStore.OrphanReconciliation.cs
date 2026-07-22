@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Prismedia.Domain.Entities;
+using Prismedia.Infrastructure.Entities;
 
 namespace Prismedia.Infrastructure.Acquisition;
 
@@ -12,6 +13,12 @@ public sealed partial class EfMonitorStore {
         AcquisitionStatus.Failed,
         AcquisitionStatus.ManualImportRequired
     ];
+
+    /// <summary>Reconciles passive work whose target disappeared or was fulfilled outside that work.</summary>
+    private async Task ReconcilePassiveTargetsAsync(CancellationToken cancellationToken) {
+        await RetireMissingEntityTargetsAsync(cancellationToken);
+        await RetireFulfilledEntityTargetsAsync(cancellationToken);
+    }
 
     /// <summary>
     /// Retires passive monitoring rows whose target Entity no longer exists. Imported and cancelled
@@ -66,6 +73,55 @@ public sealed partial class EfMonitorStore {
             .Where(hint => safelyRetiredAcquisitionIds.Contains(hint.AcquisitionId))
             .ToArrayAsync(cancellationToken));
         db.Monitors.RemoveRange(safelyRetired);
+        await db.SaveChangesAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// Cancels passive non-upgrade acquisitions after another import or scan fulfills their complete Entity
+    /// subtree. The stable Entity monitor remains Active and detaches from transient acquisition bookkeeping.
+    /// </summary>
+    private async Task RetireFulfilledEntityTargetsAsync(CancellationToken cancellationToken) {
+        var candidates = await (
+            from monitor in db.Monitors
+            where monitor.AcquisitionId != null
+            join acquisition in db.Acquisitions on monitor.AcquisitionId equals acquisition.Id
+            where acquisition.EntityId != null
+                && acquisition.UpgradeOfAcquisitionId == null
+                && OrphanRetirableStatuses.Contains(acquisition.Status)
+            select new { Monitor = monitor, Acquisition = acquisition })
+            .ToArrayAsync(cancellationToken);
+        if (candidates.Length == 0) {
+            return;
+        }
+
+        var fulfilledEntityIds = await new EfEntityFulfillmentProjection(db).ResolveAsync(
+            candidates.Select(candidate => candidate.Acquisition.EntityId!.Value).Distinct().ToArray(),
+            cancellationToken);
+        var fulfilled = candidates
+            .Where(candidate => fulfilledEntityIds.Contains(candidate.Acquisition.EntityId!.Value))
+            .ToArray();
+        if (fulfilled.Length == 0) {
+            return;
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        var acquisitionIds = new HashSet<Guid>();
+        foreach (var candidate in fulfilled) {
+            candidate.Acquisition.Status = AcquisitionStatus.Cancelled;
+            candidate.Acquisition.StatusMessage = "Target Entity was fulfilled by another import or scan.";
+            candidate.Acquisition.ImportCheckpointJson = null;
+            candidate.Acquisition.ImportClaimJobId = null;
+            candidate.Acquisition.UpdatedAt = now;
+            acquisitionIds.Add(candidate.Acquisition.Id);
+
+            candidate.Monitor.EntityId ??= candidate.Acquisition.EntityId;
+            candidate.Monitor.AcquisitionId = null;
+            candidate.Monitor.UpdatedAt = now;
+        }
+
+        db.AcquisitionImportHints.RemoveRange(await db.AcquisitionImportHints
+            .Where(hint => acquisitionIds.Contains(hint.AcquisitionId))
+            .ToArrayAsync(cancellationToken));
         await db.SaveChangesAsync(cancellationToken);
     }
 }

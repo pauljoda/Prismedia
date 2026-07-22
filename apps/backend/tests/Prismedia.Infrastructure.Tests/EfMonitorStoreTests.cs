@@ -647,6 +647,128 @@ public sealed class EfMonitorStoreTests {
     }
 
     [Fact]
+    public async Task FulfilledEntityTargetCancelsPassiveAcquisitionAndDetachesStableMonitor() {
+        await using var db = CreateContext();
+        var now = DateTimeOffset.UtcNow;
+        var entityId = Guid.NewGuid();
+        var acquisitionId = Guid.NewGuid();
+        db.Entities.Add(new EntityRow {
+            Id = entityId,
+            KindCode = EntityKindRegistry.AudioTrack.Code,
+            Title = "Dynamite",
+            IsWanted = false,
+            CreatedAt = now,
+            UpdatedAt = now
+        });
+        db.EntityFiles.Add(new EntityFileRow {
+            Id = Guid.NewGuid(),
+            EntityId = entityId,
+            Role = EntityFileRole.Source,
+            Path = "/media/dynamite.flac",
+            CreatedAt = now,
+            UpdatedAt = now
+        });
+        db.Acquisitions.Add(new AcquisitionRow {
+            Id = acquisitionId,
+            EntityId = entityId,
+            Kind = EntityKind.AudioTrack,
+            Status = AcquisitionStatus.AwaitingSelection,
+            Title = "Dynamite",
+            ExternalIdsJson = "{}",
+            SourceUrlsJson = "[]",
+            CreatedAt = now,
+            UpdatedAt = now
+        });
+        db.Monitors.Add(new MonitorRow {
+            Id = Guid.NewGuid(),
+            AcquisitionId = acquisitionId,
+            EntityId = entityId,
+            Kind = EntityKind.AudioTrack,
+            Status = MonitorStatus.Active,
+            Title = "Dynamite",
+            CreatedAt = now,
+            UpdatedAt = now
+        });
+        db.AcquisitionImportHints.Add(new AcquisitionImportHintRow {
+            Id = Guid.NewGuid(),
+            AcquisitionId = acquisitionId,
+            EntityId = entityId,
+            SourcePath = "/downloads/dynamite.flac",
+            CreatedAt = now,
+            UpdatedAt = now
+        });
+        await db.SaveChangesAsync();
+
+        _ = await new EfMonitorStore(db).ListDueMonitorsAsync(360, CancellationToken.None);
+
+        var acquisition = await db.Acquisitions.AsNoTracking().SingleAsync();
+        Assert.Equal(AcquisitionStatus.Cancelled, acquisition.Status);
+        Assert.Contains("fulfilled", acquisition.StatusMessage);
+        var monitor = await db.Monitors.AsNoTracking().SingleAsync();
+        Assert.Equal(MonitorStatus.Active, monitor.Status);
+        Assert.Equal(entityId, monitor.EntityId);
+        Assert.Null(monitor.AcquisitionId);
+        Assert.False(await db.AcquisitionImportHints.AnyAsync());
+    }
+
+    [Fact]
+    public async Task FulfilledEntityTargetKeepsDeliberateUpgradeAcquisitionLinked() {
+        await using var db = CreateContext();
+        var now = DateTimeOffset.UtcNow;
+        var entityId = Guid.NewGuid();
+        var importedId = Guid.NewGuid();
+        var upgradeId = Guid.NewGuid();
+        db.Entities.Add(new EntityRow {
+            Id = entityId,
+            KindCode = EntityKindRegistry.AudioTrack.Code,
+            Title = "Lossless upgrade",
+            IsWanted = false,
+            CreatedAt = now,
+            UpdatedAt = now
+        });
+        db.EntityFiles.Add(new EntityFileRow {
+            Id = Guid.NewGuid(),
+            EntityId = entityId,
+            Role = EntityFileRole.Source,
+            Path = "/media/track.mp3",
+            CreatedAt = now,
+            UpdatedAt = now
+        });
+        db.Acquisitions.AddRange(
+            Row(importedId, AcquisitionStatus.Imported),
+            Row(upgradeId, AcquisitionStatus.AwaitingSelection, importedId));
+        db.Monitors.Add(new MonitorRow {
+            Id = Guid.NewGuid(),
+            AcquisitionId = upgradeId,
+            EntityId = entityId,
+            Kind = EntityKind.AudioTrack,
+            Status = MonitorStatus.Active,
+            Title = "Lossless upgrade",
+            CreatedAt = now,
+            UpdatedAt = now
+        });
+        await db.SaveChangesAsync();
+
+        _ = await new EfMonitorStore(db).ListDueMonitorsAsync(360, CancellationToken.None);
+
+        Assert.Equal(AcquisitionStatus.AwaitingSelection, (await db.Acquisitions.FindAsync(upgradeId))!.Status);
+        Assert.Equal(upgradeId, (await db.Monitors.AsNoTracking().SingleAsync()).AcquisitionId);
+
+        AcquisitionRow Row(Guid id, AcquisitionStatus status, Guid? upgradeOf = null) => new() {
+            Id = id,
+            EntityId = entityId,
+            Kind = EntityKind.AudioTrack,
+            Status = status,
+            Title = "Lossless upgrade",
+            UpgradeOfAcquisitionId = upgradeOf,
+            ExternalIdsJson = "{}",
+            SourceUrlsJson = "[]",
+            CreatedAt = now,
+            UpdatedAt = now
+        };
+    }
+
+    [Fact]
     public async Task DeleteRemovesTheMonitorButLeavesTheAcquisition() {
         await using var db = CreateContext();
         var store = await SeedMonitorAsync(db, AcquisitionStatus.Failed);
