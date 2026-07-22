@@ -20,6 +20,54 @@ public sealed class AcquisitionServiceTests {
     private const string ClientItemId = "download-owned-by-recorded-client";
 
     [Fact]
+    public async Task FilesReturnsTheRetainedCompletedLedger() {
+        var ledger = new AcquisitionImportFileLedger(
+            AcquisitionImportPhase.Imported,
+            [new AcquisitionImportFileLedgerEntry(
+                "stable-file", "Dune.epub", 42, "payload/Dune.epub", "Books/Dune.epub",
+                AcquisitionImportFileRole.Media, AcquisitionImportContentKind.Book,
+                AcquisitionImportFileStatus.Imported, AcquisitionImportDecision.PlaceNew, null)]);
+        var harness = Harness(new AcquisitionTransferInfo(
+            AcquisitionStatus.Imported, null, null, null, ImportResult: ledger));
+
+        var files = await harness.Service.GetFilesAsync(AcquisitionId, CancellationToken.None);
+
+        var file = Assert.Single(files.Files);
+        Assert.True(files.Imported);
+        Assert.Equal(AcquisitionImportPhase.Imported, files.Phase);
+        Assert.Equal("stable-file", file.Id);
+        Assert.Equal("payload/Dune.epub", file.SourceRelativePath);
+        Assert.Equal("Books/Dune.epub", file.DestinationRelativePath);
+    }
+
+    [Fact]
+    public async Task FilesMarksUnreadableActiveImportInformationUnavailable() {
+        var harness = Harness(new AcquisitionTransferInfo(
+            AcquisitionStatus.Importing, null, null, null, ImportResultUnavailable: true));
+
+        var files = await harness.Service.GetFilesAsync(AcquisitionId, CancellationToken.None);
+
+        Assert.False(files.Imported);
+        Assert.Empty(files.Files);
+        Assert.Equal(AcquisitionImportPhase.Importing, files.Phase);
+        Assert.True(files.ImportInformationUnavailable);
+    }
+
+    [Fact]
+    public async Task FilesReturnsPrivacySafeLiveDownloadDataBeforeImport() {
+        var harness = Harness(TransferInfo(RecordedClientId, AcquisitionStatus.Downloaded));
+        harness.Downloads.Files.Add(new DownloadItemFile("/private/downloads/Dune.epub", 42, 1));
+
+        var files = await harness.Service.GetFilesAsync(AcquisitionId, CancellationToken.None);
+
+        var file = Assert.Single(files.Files);
+        Assert.Equal(AcquisitionImportPhase.Downloaded, files.Phase);
+        Assert.Equal("Dune.epub", file.SourceRelativePath);
+        Assert.False(Path.IsPathFullyQualified(file.SourceRelativePath!));
+        Assert.Equal(AcquisitionImportFileStatus.Downloaded, file.Status);
+    }
+
+    [Fact]
     public async Task CreateNormalizesTheNamespaceAndPreservesAnOpaqueColonIdentityValue() {
         var harness = Harness(TransferInfo(RecordedClientId));
 
@@ -1534,6 +1582,7 @@ public sealed class AcquisitionServiceTests {
         public Exception? AddFailure { set => _client.AddFailure = value; }
         public Action? OnAdd { get => _client.OnAdd; set => _client.OnAdd = value; }
         public List<DownloadItemStatus> Items => _client.Items;
+        public List<DownloadItemFile> Files => _client.Files;
         public IDownloadClient Get(DownloadClientKind kind) => _client;
     }
 
@@ -1548,6 +1597,7 @@ public sealed class AcquisitionServiceTests {
         public Exception? AddFailure { get; set; }
         public int AddCount { get; private set; }
         public List<DownloadItemStatus> Items { get; } = [];
+        public List<DownloadItemFile> Files { get; } = [];
 
         public Task RemoveAsync(DownloadClientConnection connection, string clientItemId, bool deleteData, CancellationToken cancellationToken) {
             Removals.Add((connection.Id, clientItemId, deleteData));
@@ -1592,7 +1642,8 @@ public sealed class AcquisitionServiceTests {
         }
         public Task<IReadOnlyList<DownloadItemStatus>> ListItemsAsync(DownloadClientConnection connection, CancellationToken cancellationToken) =>
             Task.FromResult<IReadOnlyList<DownloadItemStatus>>(Items.ToArray());
-        public Task<IReadOnlyList<DownloadItemFile>> GetFilesAsync(DownloadClientConnection connection, string clientItemId, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<IReadOnlyList<DownloadItemFile>> GetFilesAsync(DownloadClientConnection connection, string clientItemId, CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<DownloadItemFile>>(Files.ToArray());
         public Task<DownloadItemProperties?> GetPropertiesAsync(DownloadClientConnection connection, string clientItemId, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<byte[]> GetPieceStatesAsync(DownloadClientConnection connection, string clientItemId, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<DownloadClientConnectionTest> TestAsync(DownloadClientConnection connection, CancellationToken cancellationToken) => throw new NotSupportedException();

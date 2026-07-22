@@ -510,7 +510,9 @@ public sealed record AcquisitionTransferInfo(
     string? ClientItemId,
     Guid? DownloadClientConfigId,
     string? Category = null,
-    string? State = null);
+    string? State = null,
+    AcquisitionImportFileLedger? ImportResult = null,
+    bool ImportResultUnavailable = false);
 
 /// <summary>Lists the files that landed on disk for an imported acquisition.</summary>
 public interface IImportedFilesReader {
@@ -636,7 +638,9 @@ public sealed record ImportPlacementCheckpoint(
     IReadOnlyList<ImportPlacementCheckpointUnit> Units,
     string? TransferClientItemId = null,
     Guid AttemptId = default,
-    Guid ClaimJobId = default);
+    Guid ClaimJobId = default) {
+    public AcquisitionImportFileLedger? ImportFileLedger { get; init; }
+}
 
 /// <summary>One exact payload-to-library placement in a kind-neutral durable import plan.</summary>
 /// <param name="SourceRelativePath">Download-payload-relative source path retained for diagnostics and validation.</param>
@@ -676,7 +680,15 @@ public sealed record TvImportCheckpoint(
     IReadOnlyList<TvImportCheckpointUnit> Units,
     string? TransferClientItemId = null,
     Guid AttemptId = default,
-    Guid ClaimJobId = default);
+    Guid ClaimJobId = default) {
+    /// <summary>
+    /// Absolute root boundary captured when the plan is created. Older checkpoints may omit it; the
+    /// persistence adapter then resolves the configured root before producing relative ledger paths.
+    /// </summary>
+    public string? LibraryRootPath { get; init; }
+
+    public AcquisitionImportFileLedger? ImportFileLedger { get; init; }
+}
 
 /// <summary>One durable TV file placement and its exact Entity position.</summary>
 /// <param name="SourceRelativePath">Download-payload-relative source path.</param>

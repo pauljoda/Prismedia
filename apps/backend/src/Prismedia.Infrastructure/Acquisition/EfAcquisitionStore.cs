@@ -331,6 +331,26 @@ public sealed partial class EfAcquisitionStore(PrismediaDbContext db, IAcquisiti
 
         row.Status = status;
         row.StatusMessage = message;
+        if (status == AcquisitionStatus.Failed
+            && !string.IsNullOrWhiteSpace(message)
+            && AcquisitionImportFileLedgerJson.TryDeserialize(row.ImportResultJson, out var importResult)
+            && importResult is not null) {
+            string? payloadRoot = null;
+            string? libraryRoot = null;
+            if (row.Kind is EntityKind.Video or EntityKind.VideoSeason) {
+                var checkpoint = TvImportCheckpointJson.Deserialize(row.ImportCheckpointJson);
+                if (checkpoint is not null) {
+                    libraryRoot = await db.LibraryRoots.Where(root => root.Id == checkpoint.LibraryRootId)
+                        .Select(root => root.Path).SingleOrDefaultAsync(cancellationToken);
+                }
+            } else {
+                var checkpoint = ImportPlacementCheckpointJson.Deserialize(row.ImportCheckpointJson);
+                payloadRoot = checkpoint?.PayloadRootPath;
+                libraryRoot = checkpoint?.LibraryRootPath;
+            }
+            var safeError = AcquisitionImportErrorSanitizer.Sanitize(message, payloadRoot, libraryRoot);
+            row.ImportResultJson = AcquisitionImportFileLedgerJson.Serialize(importResult.Fail(safeError));
+        }
         if (status is not (AcquisitionStatus.Importing or AcquisitionStatus.Failed)) {
             row.ImportClaimJobId = null;
         }
@@ -669,6 +689,10 @@ public sealed partial class EfAcquisitionStore(PrismediaDbContext db, IAcquisiti
         row.UpgradeQualityCaptured = true;
         row.ImportCheckpointJson = null;
         row.ImportClaimJobId = null;
+        if (AcquisitionImportFileLedgerJson.TryDeserialize(row.ImportResultJson, out var importResult)
+            && importResult is not null) {
+            row.ImportResultJson = AcquisitionImportFileLedgerJson.Serialize(importResult.Complete());
+        }
         row.UpdatedAt = DateTimeOffset.UtcNow;
 
         await RetireSupersededPassiveDuplicatesAsync(row, cancellationToken);
@@ -1153,111 +1177,6 @@ public sealed partial class EfAcquisitionStore(PrismediaDbContext db, IAcquisiti
             tvImportCheckpoint, importPlacementCheckpoint, row.BookRendition, row.UpgradeOfAcquisitionId);
     }
 
-    public async Task<AcquisitionTransferInfo?> GetTransferInfoAsync(Guid acquisitionId, CancellationToken cancellationToken) {
-        var row = await db.Acquisitions
-            .AsNoTracking()
-            .Where(row => row.Id == acquisitionId)
-            .Select(row => new { row.Status, row.FinalSourcePath })
-            .FirstOrDefaultAsync(cancellationToken);
-        if (row is null) {
-            return null;
-        }
-
-        var transfer = await db.DownloadTransfers
-            .AsNoTracking()
-            .Where(transfer => transfer.AcquisitionId == acquisitionId)
-            .OrderByDescending(transfer => transfer.CreatedAt)
-            .Select(transfer => new {
-                transfer.ClientItemId,
-                transfer.DownloadClientConfigId,
-                transfer.Category,
-                transfer.State
-            })
-            .FirstOrDefaultAsync(cancellationToken);
-
-        return new AcquisitionTransferInfo(
-            row.Status,
-            row.FinalSourcePath,
-            transfer?.ClientItemId,
-            transfer?.DownloadClientConfigId,
-            transfer?.Category,
-            transfer?.State);
-    }
-
-    public async Task SetFinalSourcePathAsync(Guid acquisitionId, string finalSourcePath, CancellationToken cancellationToken) {
-        var row = await db.Acquisitions.FirstOrDefaultAsync(row => row.Id == acquisitionId, cancellationToken);
-        if (row is null) {
-            return;
-        }
-
-        row.FinalSourcePath = finalSourcePath;
-        row.UpdatedAt = DateTimeOffset.UtcNow;
-        await db.SaveChangesAsync(cancellationToken);
-    }
-
-    public async Task SetTvImportCheckpointAsync(
-        Guid acquisitionId,
-        TvImportCheckpoint? checkpoint,
-        CancellationToken cancellationToken) {
-        var row = await db.Acquisitions.FirstOrDefaultAsync(row => row.Id == acquisitionId, cancellationToken);
-        if (row is null) {
-            return;
-        }
-
-        row.ImportCheckpointJson = checkpoint is null ? null : TvImportCheckpointJson.Serialize(checkpoint);
-        row.ImportClaimJobId = checkpoint?.ClaimJobId;
-        if (checkpoint is null) {
-            // Abandoning a superseded partial import clears any legacy final-path anchor and its hint,
-            // so neither can masquerade as successful content or bind the next release.
-            row.FinalSourcePath = null;
-            var staleHints = await db.AcquisitionImportHints
-                .Where(hint => hint.AcquisitionId == acquisitionId)
-                .ToArrayAsync(cancellationToken);
-            db.AcquisitionImportHints.RemoveRange(staleHints);
-        }
-        row.UpdatedAt = DateTimeOffset.UtcNow;
-        await db.SaveChangesAsync(cancellationToken);
-    }
-
-    public async Task<bool> TryCreateTvImportCheckpointAsync(
-        Guid acquisitionId,
-        TvImportCheckpoint checkpoint,
-        CancellationToken cancellationToken) {
-        var checkpointJson = TvImportCheckpointJson.Serialize(checkpoint);
-        var transferClientItemId = checkpoint.TransferClientItemId;
-        var now = DateTimeOffset.UtcNow;
-        if (db.Database.IsRelational()) {
-            var affected = await db.Acquisitions
-                .Where(row => row.Id == acquisitionId
-                    && row.Status == AcquisitionStatus.Importing
-                    && row.ImportCheckpointJson == null
-                    && row.ImportClaimJobId == checkpoint.ClaimJobId
-                    && (transferClientItemId == null || db.DownloadTransfers.Any(transfer =>
-                        transfer.AcquisitionId == acquisitionId
-                        && transfer.ClientItemId == transferClientItemId)))
-                .ExecuteUpdateAsync(setters => setters
-                    .SetProperty(row => row.ImportCheckpointJson, checkpointJson)
-                    .SetProperty(row => row.UpdatedAt, now), cancellationToken);
-            return await SynchronizeTrackedAcquisitionAsync(acquisitionId, affected, cancellationToken);
-        }
-
-        var row = await db.Acquisitions.FirstOrDefaultAsync(value => value.Id == acquisitionId, cancellationToken);
-        if (row is null
-            || row.Status != AcquisitionStatus.Importing
-            || row.ImportCheckpointJson is not null
-            || row.ImportClaimJobId != checkpoint.ClaimJobId
-            || (transferClientItemId is not null && !await db.DownloadTransfers.AnyAsync(transfer =>
-                transfer.AcquisitionId == acquisitionId
-                && transfer.ClientItemId == transferClientItemId, cancellationToken))) {
-            return false;
-        }
-
-        row.ImportCheckpointJson = checkpointJson;
-        row.UpdatedAt = now;
-        await db.SaveChangesAsync(cancellationToken);
-        return true;
-    }
-
     public async Task<bool> TryClaimTvImportCheckpointAsync(
         Guid acquisitionId,
         TvImportCheckpoint checkpoint,
@@ -1375,6 +1294,10 @@ public sealed partial class EfAcquisitionStore(PrismediaDbContext db, IAcquisiti
         ImportPlacementCheckpoint checkpoint,
         CancellationToken cancellationToken) {
         var checkpointJson = ImportPlacementCheckpointJson.Serialize(checkpoint);
+        var resultJson = AcquisitionImportFileLedgerJson.Serialize(
+            AcquisitionImportFileLedger.Synchronize(
+                checkpoint.ImportFileLedger ?? AcquisitionImportFileLedger.Create(checkpoint),
+                checkpoint));
         var transferClientItemId = checkpoint.TransferClientItemId;
         var now = DateTimeOffset.UtcNow;
         if (db.Database.IsRelational()) {
@@ -1389,6 +1312,7 @@ public sealed partial class EfAcquisitionStore(PrismediaDbContext db, IAcquisiti
                         && transfer.ClientItemId == transferClientItemId)))
                 .ExecuteUpdateAsync(setters => setters
                     .SetProperty(row => row.ImportCheckpointJson, checkpointJson)
+                    .SetProperty(row => row.ImportResultJson, resultJson)
                     .SetProperty(row => row.UpdatedAt, now), cancellationToken);
             return await SynchronizeTrackedAcquisitionAsync(acquisitionId, affected, cancellationToken);
         }
@@ -1406,6 +1330,7 @@ public sealed partial class EfAcquisitionStore(PrismediaDbContext db, IAcquisiti
         }
 
         row.ImportCheckpointJson = checkpointJson;
+        row.ImportResultJson = resultJson;
         row.UpdatedAt = now;
         await db.SaveChangesAsync(cancellationToken);
         return true;
@@ -1422,6 +1347,10 @@ public sealed partial class EfAcquisitionStore(PrismediaDbContext db, IAcquisiti
 
         var expectedJson = ImportPlacementCheckpointJson.Serialize(expected);
         var advancedJson = ImportPlacementCheckpointJson.Serialize(advanced);
+        var resultJson = AcquisitionImportFileLedgerJson.Serialize(
+            AcquisitionImportFileLedger.Synchronize(
+                advanced.ImportFileLedger ?? AcquisitionImportFileLedger.Create(advanced),
+                advanced));
         var now = DateTimeOffset.UtcNow;
         if (db.Database.IsRelational()) {
             var affected = await db.Acquisitions
@@ -1432,6 +1361,7 @@ public sealed partial class EfAcquisitionStore(PrismediaDbContext db, IAcquisiti
                     && row.ImportCheckpointJson == expectedJson)
                 .ExecuteUpdateAsync(setters => setters
                     .SetProperty(row => row.ImportCheckpointJson, advancedJson)
+                    .SetProperty(row => row.ImportResultJson, resultJson)
                     .SetProperty(row => row.UpdatedAt, now), cancellationToken);
             return await SynchronizeTrackedAcquisitionAsync(acquisitionId, affected, cancellationToken);
         }
@@ -1446,6 +1376,7 @@ public sealed partial class EfAcquisitionStore(PrismediaDbContext db, IAcquisiti
         }
 
         row.ImportCheckpointJson = advancedJson;
+        row.ImportResultJson = resultJson;
         row.UpdatedAt = now;
         await db.SaveChangesAsync(cancellationToken);
         return true;

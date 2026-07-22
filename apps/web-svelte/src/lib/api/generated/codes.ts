@@ -15,6 +15,65 @@ export const ACQUISITION_HISTORY_EVENT = {
 
 export type AcquisitionHistoryEventCode = (typeof ACQUISITION_HISTORY_EVENT)[keyof typeof ACQUISITION_HISTORY_EVENT];
 
+// source: enum AcquisitionImportContentKind
+export const ACQUISITION_IMPORT_CONTENT_KIND = {
+  book: "book",
+  audio: "audio",
+  video: "video",
+  image: "image",
+  subtitle: "subtitle",
+  archive: "archive",
+  other: "other",
+} as const;
+
+export type AcquisitionImportContentKindCode = (typeof ACQUISITION_IMPORT_CONTENT_KIND)[keyof typeof ACQUISITION_IMPORT_CONTENT_KIND];
+
+// source: enum AcquisitionImportDecision
+export const ACQUISITION_IMPORT_DECISION = {
+  placeNew: "place-new",
+  replaceUpgrade: "replace-upgrade",
+  adoptExisting: "adopt-existing",
+  skipExisting: "skip-existing",
+  skipNotUpgrade: "skip-not-upgrade",
+  holdFormatChange: "hold-format-change",
+  holdStructuralConflict: "hold-structural-conflict",
+  unsupported: "unsupported",
+  ambiguous: "ambiguous",
+} as const;
+
+export type AcquisitionImportDecisionCode = (typeof ACQUISITION_IMPORT_DECISION)[keyof typeof ACQUISITION_IMPORT_DECISION];
+
+// source: enum AcquisitionImportFileRole
+export const ACQUISITION_IMPORT_FILE_ROLE = {
+  media: "media",
+  companion: "companion",
+  unknown: "unknown",
+} as const;
+
+export type AcquisitionImportFileRoleCode = (typeof ACQUISITION_IMPORT_FILE_ROLE)[keyof typeof ACQUISITION_IMPORT_FILE_ROLE];
+
+// source: enum AcquisitionImportFileStatus
+export const ACQUISITION_IMPORT_FILE_STATUS = {
+  downloaded: "downloaded",
+  pendingImport: "pending-import",
+  importing: "importing",
+  imported: "imported",
+  skipped: "skipped",
+  failed: "failed",
+} as const;
+
+export type AcquisitionImportFileStatusCode = (typeof ACQUISITION_IMPORT_FILE_STATUS)[keyof typeof ACQUISITION_IMPORT_FILE_STATUS];
+
+// source: enum AcquisitionImportPhase
+export const ACQUISITION_IMPORT_PHASE = {
+  downloading: "downloading",
+  downloaded: "downloaded",
+  importing: "importing",
+  imported: "imported",
+} as const;
+
+export type AcquisitionImportPhaseCode = (typeof ACQUISITION_IMPORT_PHASE)[keyof typeof ACQUISITION_IMPORT_PHASE];
+
 // source: enum AcquisitionStatus
 export const ACQUISITION_STATUS = {
   pending: "pending",

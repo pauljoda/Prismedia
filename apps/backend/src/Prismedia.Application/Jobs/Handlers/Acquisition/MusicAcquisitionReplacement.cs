@@ -142,6 +142,10 @@ public sealed partial class MusicAcquisitionImportEngine {
             string.IsNullOrWhiteSpace(import.ClientItemId) ? null : import.ClientItemId,
             attemptId,
             context.Job.Id);
+        checkpoint = checkpoint with {
+            ImportFileLedger = AcquisitionImportFileLedger.Create(checkpoint)
+                .WithDecision(AcquisitionImportDecision.ReplaceUpgrade)
+        };
         if (!await acquisitions.TryCreateImportPlacementCheckpointAsync(import.Id, checkpoint, cancellationToken)) {
             logger.LogInformation(
                 "Album replacement checkpoint for {Id} was superseded before placement; skipping stale work.",

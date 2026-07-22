@@ -417,29 +417,6 @@ public sealed partial class AcquisitionService(
         int? Peers,
         string ClientName);
 
-    /// <summary>The acquisition's files: the imported library files once imported, otherwise the in-progress download files.</summary>
-    public async Task<AcquisitionFilesView> GetFilesAsync(Guid id, CancellationToken cancellationToken) {
-        var info = await store.GetTransferInfoAsync(id, cancellationToken);
-        if (info is null) {
-            return new AcquisitionFilesView(false, []);
-        }
-
-        if (!string.IsNullOrWhiteSpace(info.FinalSourcePath)) {
-            var imported = importedFiles.List(info.FinalSourcePath);
-            return new AcquisitionFilesView(true, imported.Select(ToFileItem).ToArray());
-        }
-
-        if (info.ClientItemId is { } clientItemId) {
-            var client = await ResolveClientAsync(info.DownloadClientConfigId, cancellationToken);
-            if (client is not null) {
-                var files = await clients.Get(client.Kind).GetFilesAsync(ConnectionFor(client), clientItemId, cancellationToken);
-                return new AcquisitionFilesView(false, files.Select(ToFileItem).ToArray());
-            }
-        }
-
-        return new AcquisitionFilesView(false, []);
-    }
-
     private async Task<Contracts.Acquisition.DownloadClientDetail?> ResolveClientAsync(Guid? configId, CancellationToken cancellationToken) =>
         configId is { } id
             ? await downloadClients.GetAsync(id, cancellationToken) ?? await downloadClients.GetDefaultAsync(cancellationToken)
@@ -454,8 +431,6 @@ public sealed partial class AcquisitionService(
 
     private static DownloadClientConnection ConnectionFor(Contracts.Acquisition.DownloadClientDetail client) =>
         new(client.Id, client.Kind, client.BaseUrl, client.Username, client.Password, client.Category, client.ApiKey);
-
-    private static AcquisitionFileItem ToFileItem(DownloadItemFile file) => new(file.Name, file.SizeBytes, file.Progress);
 
     /// <summary>Cancels an acquisition: best-effort removes the download (and its data) from the owning client, then marks it cancelled.</summary>
     public async Task<AcquisitionDetail?> CancelAsync(Guid id, CancellationToken cancellationToken) {

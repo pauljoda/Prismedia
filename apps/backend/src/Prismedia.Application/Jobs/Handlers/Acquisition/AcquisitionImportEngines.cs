@@ -753,7 +753,6 @@ public sealed class MovieAcquisitionImportEngine(
             await acquisitions.SetStatusAsync(import.Id, AcquisitionStatus.ManualImportRequired, BlockMessage(plan.BlockReason), cancellationToken);
             return;
         }
-
         var importMode = profile?.ImportMode ?? ImportMode.Move;
         var units = ImportPlacementExecution.ReserveUnits(
             payload.ContentRoot,
@@ -1134,7 +1133,9 @@ public sealed class TvAcquisitionImportEngine(
                 .ToArray(),
             TransferClientItemId: NormalizeClientItemId(import.ClientItemId),
             AttemptId: Guid.NewGuid(),
-            ClaimJobId: context.Job.Id);
+            ClaimJobId: context.Job.Id) {
+            LibraryRootPath = root.Path
+        };
         if (await PrepareTvCheckpointAsync(import, payload, checkpoint, cancellationToken) is not { } preparedCheckpoint) {
             return;
         }
@@ -1172,13 +1173,11 @@ public sealed class TvAcquisitionImportEngine(
             await acquisitions.SetStatusAsync(import.Id, AcquisitionStatus.ManualImportRequired, BlockMessage(unitsPlan.BlockReason), cancellationToken);
             return;
         }
-
         var owningRoot = await ResolveOwningVideoRootAsync(layout.SeriesFolderPath, cancellationToken);
         if (owningRoot is null) {
             await Fail(import.Id, "The existing series is not inside an enabled video library root.", cancellationToken);
             return;
         }
-
         // Incoming quality from the release title; a title that ranks Unknown falls back to the
         // payload's own file tokens so a well-named pack under a bare title still gates honestly.
         var incomingPosition = selected is null ? 0 : MediaQualityLadder.Detect(import.Kind, selected.Title).Position;
@@ -1188,14 +1187,12 @@ public sealed class TvAcquisitionImportEngine(
                 .DefaultIfEmpty(0)
                 .Max();
         }
-
         var incomingRevision = selected is null ? 1 : ReleaseRevisionDetection.Detect(selected.Title);
         var rules = await profiles.GetRulesAsync(import.ProfileId, import.Kind, cancellationToken);
         var merged = TvExistingTargetMerge.Plan(
             unitsPlan.Units, layout,
             season => TvImportPlanBuilder.SeasonFolderSegment(series, season, profile?.PathTemplate),
             incomingPosition, incomingRevision, rules.ProperPolicy, import.AllowFormatChange);
-
         if (merged.Any(item => item.Action == MergeFileAction.HoldStructuralConflict)) {
             await acquisitions.SetStatusAsync(
                 import.Id,
@@ -1204,14 +1201,12 @@ public sealed class TvAcquisitionImportEngine(
                 cancellationToken);
             return;
         }
-
         // Safety net: a merged import never writes outside the existing series folder.
         var seriesRoot = Path.GetFullPath(layout.SeriesFolderPath);
         if (merged.Any(item => !IsUnderFolder(Path.GetFullPath(item.TargetAbsolutePath), seriesRoot))) {
             await Fail(import.Id, "The merged import computed a target outside the series folder.", cancellationToken);
             return;
         }
-
         var importMode = profile?.ImportMode ?? ImportMode.Move;
         var executable = merged
             .Where(item => item.Action is MergeFileAction.PlaceNew or MergeFileAction.ReplaceUpgrade)
@@ -1223,7 +1218,6 @@ public sealed class TvAcquisitionImportEngine(
             await HandleNothingUsableAsync(import, selected, formatChanges > 0, cancellationToken);
             return;
         }
-
         var checkpointItems = reconciledExisting ? merged.ToArray() : executable;
         var skipped = merged.Count - checkpointItems.Length;
         var message = reconciledExisting
@@ -1255,6 +1249,11 @@ public sealed class TvAcquisitionImportEngine(
             TransferClientItemId: NormalizeClientItemId(import.ClientItemId),
             AttemptId: Guid.NewGuid(),
             ClaimJobId: context.Job.Id);
+        checkpoint = checkpoint with {
+            LibraryRootPath = owningRoot.Path,
+            ImportFileLedger = AcquisitionImportFileLedger.Create(
+                checkpoint, owningRoot.Path, merged, reconciledExisting)
+        };
         if (await PrepareTvCheckpointAsync(import, payload, checkpoint, cancellationToken) is not { } preparedCheckpoint) {
             return;
         }
@@ -2055,6 +2054,9 @@ public sealed partial class MusicAcquisitionImportEngine(
             Path.GetFullPath(albumFolder),
             message,
             units);
+        checkpoint = checkpoint with {
+            ImportFileLedger = AcquisitionImportFileLedger.Create(checkpoint, merged)
+        };
         if (!await acquisitions.TryCreateImportPlacementCheckpointAsync(import.Id, checkpoint, cancellationToken)) {
             logger.LogInformation(
                 "Existing-album import checkpoint for {Id} was superseded before placement; skipping stale work.",

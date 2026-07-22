@@ -158,10 +158,25 @@ public sealed record AcquisitionTransferView(
     IReadOnlyList<int> PieceStates);
 
 /// <summary>One file belonging to an acquisition (download client file while transferring, or imported library file).</summary>
-public sealed record AcquisitionFileItem(string Name, long SizeBytes, double Progress);
+public sealed record AcquisitionFileItem(
+    string Name,
+    long SizeBytes,
+    double Progress,
+    string? Id = null,
+    string? SourceRelativePath = null,
+    string? DestinationRelativePath = null,
+    AcquisitionImportFileRole? Role = null,
+    AcquisitionImportContentKind? ContentKind = null,
+    AcquisitionImportFileStatus? Status = null,
+    AcquisitionImportDecision? Decision = null,
+    string? TechnicalError = null);
 
 /// <summary>The files of an acquisition; <see cref="Imported"/> distinguishes library files from in-progress download files.</summary>
-public sealed record AcquisitionFilesView(bool Imported, IReadOnlyList<AcquisitionFileItem> Files);
+public sealed record AcquisitionFilesView(
+    bool Imported,
+    IReadOnlyList<AcquisitionFileItem> Files,
+    AcquisitionImportPhase? Phase = null,
+    bool? ImportInformationUnavailable = null);
 
 /// <summary>
 /// Re-runs the import for a downloaded or manual-import-held acquisition.

@@ -5,8 +5,12 @@
  * OpenAPI spec version: 1.0.0
  */
 import type { AcquisitionFileItem } from './acquisitionFileItem';
+import type { AcquisitionFilesViewPhase } from './acquisitionFilesViewPhase';
 
 export interface AcquisitionFilesView {
   imported: boolean;
   files: AcquisitionFileItem[];
+  phase?: AcquisitionFilesViewPhase;
+  /** @nullable */
+  importInformationUnavailable?: boolean | null;
 }

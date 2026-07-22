@@ -234,6 +234,7 @@ internal static partial class PrismediaModelConfiguration {
             // Keep the established SQL column name for an additive, data-preserving rollout; the CLR
             // surface is kind-neutral because books, movies, TV, and albums all persist recovery plans.
             entity.Property(row => row.ImportCheckpointJson).HasColumnName("tv_import_checkpoint_json").HasColumnType("jsonb");
+            entity.Property(row => row.ImportResultJson).HasColumnName("import_result_json").HasColumnType("jsonb");
             entity.Property(row => row.ImportClaimJobId).HasColumnName("import_claim_job_id");
             entity.Property(row => row.OwnedSourceTier)
                 .HasColumnName("owned_source_tier")

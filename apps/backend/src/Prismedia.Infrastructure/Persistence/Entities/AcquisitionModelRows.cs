@@ -326,6 +326,9 @@ public sealed class AcquisitionRow {
     /// <summary>Durable kind-specific file-placement plan/checkpoint (jsonb), cleared after Imported.</summary>
     public string? ImportCheckpointJson { get; set; }
 
+    /// <summary>Privacy-safe durable per-file import outcome ledger (jsonb), retained after completion.</summary>
+    public string? ImportResultJson { get; set; }
+
     /// <summary>
     /// Queue job that exclusively owns the active import, including the short pre-checkpoint planning
     /// window. Retained across retry scheduling for the same job and replaced by an explicit checkpoint retry.

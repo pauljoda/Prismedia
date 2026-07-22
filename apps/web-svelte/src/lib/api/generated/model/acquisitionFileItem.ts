@@ -4,6 +4,10 @@
  * Prismedia.Api | v1
  * OpenAPI spec version: 1.0.0
  */
+import type { AcquisitionFileItemContentKind } from './acquisitionFileItemContentKind';
+import type { AcquisitionFileItemDecision } from './acquisitionFileItemDecision';
+import type { AcquisitionFileItemRole } from './acquisitionFileItemRole';
+import type { AcquisitionFileItemStatus } from './acquisitionFileItemStatus';
 
 export interface AcquisitionFileItem {
   name: string;
@@ -11,4 +15,16 @@ export interface AcquisitionFileItem {
   sizeBytes: number | string;
   /** @pattern ^-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?$ */
   progress: number | string;
+  /** @nullable */
+  id?: string | null;
+  /** @nullable */
+  sourceRelativePath?: string | null;
+  /** @nullable */
+  destinationRelativePath?: string | null;
+  role?: AcquisitionFileItemRole;
+  contentKind?: AcquisitionFileItemContentKind;
+  status?: AcquisitionFileItemStatus;
+  decision?: AcquisitionFileItemDecision;
+  /** @nullable */
+  technicalError?: string | null;
 }

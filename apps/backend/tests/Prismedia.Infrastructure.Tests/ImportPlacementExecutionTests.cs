@@ -70,6 +70,9 @@ public sealed class ImportPlacementExecutionTests : IDisposable {
             acquisitionId,
             checkpoint,
             CancellationToken.None));
+        var pendingLedger = AcquisitionImportFileLedgerJson.Deserialize(
+            (await db.Acquisitions.AsNoTracking().SingleAsync(row => row.Id == acquisitionId)).ImportResultJson);
+        Assert.Equal(AcquisitionImportFileStatus.PendingImport, Assert.Single(pendingLedger!.Files).Status);
 
         await Assert.ThrowsAsync<SyntheticPlacementCrashException>(() =>
             ImportPlacementExecution.ExecuteAsync(
@@ -94,6 +97,9 @@ public sealed class ImportPlacementExecutionTests : IDisposable {
                 CancellationToken.None));
 
         Assert.Equal(Path.GetFullPath(target), Assert.Single(completed.Units).FinalPath);
+        var importedLedger = AcquisitionImportFileLedgerJson.Deserialize(
+            (await db.Acquisitions.AsNoTracking().SingleAsync(row => row.Id == acquisitionId)).ImportResultJson);
+        Assert.Equal(AcquisitionImportFileStatus.Imported, Assert.Single(importedLedger!.Files).Status);
         Assert.False(File.Exists(Path.Combine(Path.GetDirectoryName(target)!, "Novel (2).epub")));
         Assert.Single(Directory.GetFiles(libraryRoot, "*.epub", SearchOption.AllDirectories));
 
@@ -103,6 +109,9 @@ public sealed class ImportPlacementExecutionTests : IDisposable {
             "Imported.",
             CancellationToken.None);
         Assert.Null((await store.GetImportContextAsync(acquisitionId, CancellationToken.None))?.ImportPlacementCheckpoint);
+        var terminalRow = await db.Acquisitions.AsNoTracking().SingleAsync(row => row.Id == acquisitionId);
+        var terminalLedger = AcquisitionImportFileLedgerJson.Deserialize(terminalRow.ImportResultJson);
+        Assert.Equal(AcquisitionImportPhase.Imported, terminalLedger!.Phase);
     }
 
     [Fact]
