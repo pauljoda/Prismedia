@@ -428,7 +428,7 @@ public sealed class AcquisitionHintApplier(
             .Select(entity => new { entity.Id, entity.Title })
             .ToArrayAsync(cancellationToken);
         var matching = candidates
-            .Where(entity => AudioTrackTitleText.Normalize(entity.Title) == normalizedTitle)
+            .Where(entity => AudioTrackTitleText.MatchesMetadataTitle(entity.Title, scannedTitle))
             .ToArray();
         if (matching.Length != 1) {
             return null;

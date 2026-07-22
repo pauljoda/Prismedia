@@ -1745,6 +1745,32 @@ public sealed class LibraryScanPersistenceServiceTests {
     }
 
     [Fact]
+    public async Task RemoveStaleAudioTracksPreservesSourceAddedAfterDiscoverySnapshot() {
+        var directory = Path.Combine(Path.GetTempPath(), $"prismedia-scan-race-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(directory);
+        try {
+            var sourcePath = Path.Combine(directory, "late-import.flac");
+            await File.WriteAllTextAsync(sourcePath, "audio-bytes");
+            await using var db = CreateContext();
+            var libraryId = Guid.NewGuid();
+            var trackId = Guid.NewGuid();
+            SeedSourceEntity(db, libraryId, EntityKindRegistry.AudioLibrary.Code, directory);
+            SeedSourceEntity(db, trackId, EntityKindRegistry.AudioTrack.Code, sourcePath, libraryId, 0);
+            await db.SaveChangesAsync();
+
+            var removed = await new LibraryScanPersistenceService(db).RemoveStaleAudioTracksInLibraryAsync(
+                libraryId,
+                new HashSet<string>(StringComparer.OrdinalIgnoreCase),
+                CancellationToken.None);
+
+            Assert.Equal(0, removed);
+            Assert.True(await db.Entities.AnyAsync(entity => entity.Id == trackId));
+        } finally {
+            DeleteDirectory(directory);
+        }
+    }
+
+    [Fact]
     public async Task RemoveStaleGalleriesInRootRemovesStaleFolderSubtree() {
         await using var db = CreateContext();
         var service = new LibraryScanPersistenceService(db);

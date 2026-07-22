@@ -65,7 +65,12 @@
   let relationshipStudio = $state<EntityDetailCredit | null>(null);
   let relationshipTags = $state<EntityDetailTag[]>([]);
   let trackItems = $state<AudioTrackListItemDto[]>([]);
+  let trackCards = $state<EntityThumbnailCard[]>([]);
   let artistLink = $state<{ id: string; title: string } | null>(null);
+
+  const playableTrackItems = $derived(
+    trackItems.filter((track) => track.hasSourceMedia !== false && track.isWanted !== true),
+  );
 
   const card = $derived.by((): EntityDetailCardFull | null => {
     if (!library) return null;
@@ -89,14 +94,12 @@
   });
   const identifyAction = useIdentifyDetailAction(() => library);
 
-  // A phantom album's request state and its direct requestable sub-libraries share the same
-  // Acquisition surface as every other Entity hierarchy. Tracks intentionally stay out until
-  // AudioTrack becomes a RequestKindRegistry acquisition unit; exposing them now would offer an
-  // action the server correctly rejects.
+  // Albums expose their provider track graph through the same shared child-monitoring surface as
+  // seasons/episodes. Wanted tracks can start or stop their own missing-content acquisition.
   const acq = useEntityAcquisition({
     entityId: () => library?.id,
     capabilities: () => library?.capabilities,
-    childCards: () => subLibraryCards,
+    childCards: () => requestableDirectChildCards(library?.id, [...subLibraryCards, ...trackCards]),
     onChanged: () => loadLibrary({ showLoading: false }),
     onPruned: () => goto("/audio"),
   });
@@ -110,7 +113,7 @@
 
   const heroActions = $derived.by((): EntityDetailActionButton[] => {
     const actions: EntityDetailActionButton[] = [];
-    if (trackItems.length > 0) {
+    if (playableTrackItems.length > 0) {
       actions.push(
         {
           id: "play-all",
@@ -210,9 +213,14 @@
       relationshipCredits = relationships.credits;
       relationshipTags = relationships.relationshipTags;
 
-      // Build track items from entity thumbnails already in the response — no N+1 fetches
-      trackItems = (trackGroup?.entities ?? [])
-        .filter((thumb) => thumb.isWanted !== true)
+      const trackThumbs = trackGroup?.entities ?? [];
+      trackCards = thumbnailsToCards(trackThumbs, {
+        hrefFor: (thumbnail) => resolveEntityHref(ENTITY_KIND.audioTrack, thumbnail.id),
+      });
+
+      // Keep provider-backed missing tracks in the list. Their thumbnail projection already carries
+      // wanted/source/acquisition state, so rows stay visibly non-playable without N+1 reads.
+      trackItems = trackThumbs
         .map((thumb) => entityThumbnailToTrackItem(thumb, nextLibrary.id))
         .sort((a, b) => a.sortOrder - b.sortOrder);
 
@@ -304,20 +312,21 @@
   }
 
   function playAll() {
-    const firstTrack = trackItems[0];
+    const firstTrack = playableTrackItems[0];
     if (!firstTrack) return;
-    playback.play(trackItems, firstTrack.id, albumContext(), { shuffle: false });
+    playback.play(playableTrackItems, firstTrack.id, albumContext(), { shuffle: false });
   }
 
   function shuffleAll() {
-    if (trackItems.length === 0) return;
-    playback.play(trackItems, undefined, albumContext(), { shuffle: true });
+    if (playableTrackItems.length === 0) return;
+    playback.play(playableTrackItems, undefined, albumContext(), { shuffle: true });
   }
 
   function playTrack(trackId: string) {
+    if (!playableTrackItems.some((track) => track.id === trackId)) return;
     // Re-clicking the current track toggles play/pause; otherwise (re)load the album from that track.
     if (playback.isCurrent(trackId)) playback.toggle();
-    else playback.play(trackItems, trackId, albumContext(), { shuffle: false });
+    else playback.play(playableTrackItems, trackId, albumContext(), { shuffle: false });
   }
 </script>
 
@@ -359,7 +368,9 @@
         <EntityDetailHeroDates {dates} leadingSeparator={Boolean(artistLink || studio)} />
         {#if trackItems.length > 0}
           {#if artistLink || studio || dates.length > 0}<span class="meta-sep"></span>{/if}
-          <span class="meta-item">{trackItems.length} {trackItems.length === 1 ? "track" : "tracks"}</span>
+          <span class="meta-item">
+            {playableTrackItems.length} of {trackItems.length} {trackItems.length === 1 ? "track" : "tracks"} present
+          </span>
         {/if}
       {/snippet}
 

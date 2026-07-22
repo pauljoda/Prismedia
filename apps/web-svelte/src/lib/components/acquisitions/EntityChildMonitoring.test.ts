@@ -70,6 +70,21 @@ describe("EntityChildMonitoring", () => {
       .toHaveAttribute("aria-checked", "false");
   });
 
+  it("labels wanted audio children as track activity with per-track monitoring", async () => {
+    const track = childCard("track-1", ENTITY_KIND.audioTrack, "Happy", true);
+    mocks.fetchEntityMonitorStates.mockResolvedValue([
+      entityState("track-1", { canRequest: true }),
+    ]);
+
+    render(EntityChildMonitoring, { cards: [track] });
+
+    const disclosure = screen.getByRole("button", { name: /Track activity/ });
+    await fireEvent.click(disclosure);
+    expect(await screen.findByText("Tracks")).toBeInTheDocument();
+    expect(screen.getByText("Wanted · Not monitored")).toBeInTheDocument();
+    expect(screen.getByRole("switch", { name: "Monitor Happy" })).toBeInTheDocument();
+  });
+
   it("uses stable Entity monitoring instead of a historical acquisition row", async () => {
     mocks.fetchEntityMonitorStates.mockResolvedValue([
       entityState("season-1", {

@@ -646,6 +646,38 @@ public sealed class MediaImportMergeTests {
         Assert.Equal(MergeFileAction.PlaceNew, merged[1].Action);
         Assert.Equal(Path.Combine("/media/music/Artist/Album", "Disc 1/02 track.flac"), merged[1].TargetAbsolutePath);
     }
+
+    [Fact]
+    public void MusicMergeSkipsUniqueSoulseekFilenameVariantOfOwnedTrack() {
+        var items = new[] {
+            new ImportPlanItem(
+                "release/01. Find Your Way (Inspired by Avatar_ The Last Airbender ).flac",
+                "Divide Music/Find Your Way/01. Find Your Way (Inspired by Avatar_ The Last Airbender ).flac")
+        };
+        var existing = new HashSet<string>(StringComparer.OrdinalIgnoreCase) {
+            "01 Find Your Way (Inspired by “Avatar - The Last Airbender”) [798 kbps].flac"
+        };
+
+        var merged = MusicExistingTargetMerge.Plan(
+            items,
+            "/media/music/Divide Music/Find Your Way",
+            existing);
+
+        Assert.Equal(MergeFileAction.DropNotUpgrade, Assert.Single(merged).Action);
+    }
+
+    [Fact]
+    public void MusicMergeKeepsAmbiguousRepeatedTrackTitles() {
+        var items = new[] {
+            new ImportPlanItem("release/disc1/01 Intro.flac", "Artist/Album/disc1/01 Intro.flac"),
+            new ImportPlanItem("release/disc2/01 Intro.flac", "Artist/Album/disc2/01 Intro.flac")
+        };
+        var existing = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "disc0/01 Intro.flac" };
+
+        var merged = MusicExistingTargetMerge.Plan(items, "/media/music/Artist/Album", existing);
+
+        Assert.All(merged, item => Assert.Equal(MergeFileAction.PlaceNew, item.Action));
+    }
 }
 
 /// <summary>

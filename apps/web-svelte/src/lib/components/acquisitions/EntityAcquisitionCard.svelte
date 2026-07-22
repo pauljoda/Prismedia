@@ -80,6 +80,8 @@
   const activeChildLabel = $derived(
     acq.childCards.every((card) => card.entity.kind === ENTITY_KIND.video)
       ? activeChildAcquisitionCount === 1 ? "episode" : "episodes"
+      : acq.childCards.every((card) => card.entity.kind === ENTITY_KIND.audioTrack)
+        ? activeChildAcquisitionCount === 1 ? "track" : "tracks"
       : activeChildAcquisitionCount === 1 ? "child item" : "child items",
   );
 </script>

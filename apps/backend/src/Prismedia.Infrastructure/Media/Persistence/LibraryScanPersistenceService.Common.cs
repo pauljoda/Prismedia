@@ -252,11 +252,16 @@ public sealed partial class LibraryScanPersistenceService {
             .ToListAsync(cancellationToken);
 
         return sourcePaths
-            .Where(sp => !validPaths.Contains(sp.Path))
+            // Discovery is a point-in-time snapshot. A targeted import may materialize another source
+            // while a root scan is still processing its earlier snapshot; keep any source that exists now
+            // so stale cleanup cannot erase the new catalog row and strand a real file until another scan.
+            .Where(sp => !validPaths.Contains(sp.Path) && !SourcePathExists(sp.Path))
             .Select(sp => sp.EntityId)
             .Distinct()
             .ToList();
     }
+
+    private static bool SourcePathExists(string path) => File.Exists(path) || Directory.Exists(path);
 
     private async Task<List<Guid>> ExpandContainerSubtreeIdsAsync(
         List<Guid> staleContainerIds, IReadOnlySet<string> validPaths, CancellationToken cancellationToken) {

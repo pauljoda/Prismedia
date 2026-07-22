@@ -53,12 +53,16 @@
   const hasArtwork = $derived(
     tracks.some((track) => track.libraryId && artworkUrls[track.libraryId]),
   );
-  const visibleTrackIds = $derived(new Set(tracks.map((track) => track.id)));
+  const presentTracks = $derived(
+    tracks.filter((track) => track.hasSourceMedia !== false && track.isWanted !== true),
+  );
+  const missingTrackCount = $derived(tracks.length - presentTracks.length);
+  const visibleTrackIds = $derived(new Set(presentTracks.map((track) => track.id)));
   const visibleSelectedIds = $derived(selectedIds.filter((id) => visibleTrackIds.has(id)));
   const selectedIdSet = $derived(new Set(visibleSelectedIds));
   const selectedCount = $derived(visibleSelectedIds.length);
   const allTracksSelected = $derived(
-    tracks.length > 0 && tracks.every((track) => selectedIdSet.has(track.id)),
+    presentTracks.length > 0 && presentTracks.every((track) => selectedIdSet.has(track.id)),
   );
   const someTracksSelected = $derived(selectedCount > 0 && !allTracksSelected);
   const selectedCollectionItems = $derived(
@@ -108,7 +112,7 @@
   }
 
   function selectAllTracks() {
-    setSelectedIds(tracks.map((track) => track.id));
+    setSelectedIds(presentTracks.map((track) => track.id));
   }
 
   function clearSelection() {
@@ -144,7 +148,7 @@
     <span></span>
   </div>
 
-  {#if selectable && tracks.length > 0}
+  {#if selectable && presentTracks.length > 0}
     <div class="track-select-row">
       <label class="track-select-all">
         <Checkbox
@@ -158,7 +162,9 @@
       <span class="track-select-count">
         {selectedCount > 0
           ? `${selectedCount} selected`
-          : `${tracks.length} ${tracks.length === 1 ? "track" : "tracks"}`}
+          : missingTrackCount > 0
+            ? `${presentTracks.length} present · ${missingTrackCount} missing`
+            : `${tracks.length} ${tracks.length === 1 ? "track" : "tracks"}`}
       </span>
     </div>
 
@@ -209,7 +215,11 @@
   {#if tracks.length > 0}
     <div class="flex items-center justify-between border-t border-border-subtle px-3 py-2 sm:px-4">
       <span class="font-mono text-[0.72rem] tabular-nums text-text-disabled">
-        {tracks.length} {tracks.length === 1 ? "track" : "tracks"}
+        {#if missingTrackCount > 0}
+          {presentTracks.length} present · {missingTrackCount} missing · {tracks.length} total
+        {:else}
+          {tracks.length} {tracks.length === 1 ? "track" : "tracks"}
+        {/if}
       </span>
       {#if totalDuration > 0}
         <span class="font-mono text-[0.72rem] tabular-nums text-text-disabled">

@@ -78,6 +78,32 @@ describe("TrackListRow", () => {
     expect(onPlay).not.toHaveBeenCalled();
   });
 
+  it("shows a wanted track as missing and prevents playback or selection", async () => {
+    const onPlay = vi.fn();
+    const onSelectedChange = vi.fn();
+    const missing = { ...track("track-missing", "Happy"), isWanted: true, hasSourceMedia: false };
+
+    const { container } = render(TrackListRow, {
+      props: {
+        track: missing,
+        index: 3,
+        isActive: false,
+        isPlaying: false,
+        onPlay,
+        selectable: true,
+        selected: false,
+        onSelectedChange,
+      },
+    });
+
+    expect(screen.getByText("Missing · not playable")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Play Happy" })).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Select Happy")).toBeDisabled();
+    await fireEvent.click(container.querySelector(".track-row")!);
+    expect(onPlay).not.toHaveBeenCalled();
+    expect(onSelectedChange).not.toHaveBeenCalled();
+  });
+
   it("opens a row actions flyout and renames a track without starting playback", async () => {
     const onPlay = vi.fn();
     const onRename = vi.fn().mockResolvedValue(undefined);

@@ -66,6 +66,14 @@ export interface AudioTrackListItemDto {
   rating: number | null;
   organized: boolean;
   isNsfw: boolean;
+  /** Provider-backed placeholder has not been fulfilled by a source file yet. */
+  isWanted?: boolean;
+  /** Server-projected source ownership; false distinguishes metadata tracks from playable files. */
+  hasSourceMedia?: boolean;
+  /** Latest acquisition state for a still-wanted track. */
+  wantedStatus?: string | null;
+  /** Latest acquisition state even after a track becomes source-backed. */
+  latestAcquisitionStatus?: string | null;
   duration: number | null;
   bitRate: number | null;
   sampleRate: number | null;

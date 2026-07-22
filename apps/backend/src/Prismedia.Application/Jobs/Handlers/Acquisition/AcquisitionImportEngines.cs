@@ -2139,6 +2139,8 @@ public sealed partial class MusicAcquisitionImportEngine(
 
         await torrents.HandleImportedAsync(import, importMode, cancellationToken);
         await acquisitions.MarkImportedWithQualityAsync(import.Id, BookQualityRank.Floor, message, cancellationToken, ownedMediaQuality, ownedMediaRevision, ownedFormatScore);
+
+        await QueueMissingChildFallbackAsync(context, import, cancellationToken);
     }
 
     private Task Fail(Guid acquisitionId, string message, CancellationToken cancellationToken) =>

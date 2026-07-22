@@ -59,6 +59,8 @@
   let renameError = $state<string | null>(null);
 
   const displayTrackNumber = $derived(displayNumber ?? (track.trackNumber ?? index) + 1);
+  const presenceKnown = $derived(track.hasSourceMedia !== undefined || track.isWanted !== undefined);
+  const isMissing = $derived(track.hasSourceMedia === false || track.isWanted === true);
 
   function formatDuration(sec: number | null | undefined) {
     if (!sec) return null;
@@ -114,15 +116,17 @@
 <!-- svelte-ignore a11y_click_events_have_key_events -->
 <div
   class={cn(
-    "track-row group/row relative cursor-pointer transition-colors duration-fast",
+    "track-row group/row relative transition-colors duration-fast",
     "before:pointer-events-none before:absolute before:inset-y-0 before:left-0 before:w-[2px] before:transition-all before:duration-normal",
     selectable && "has-selection",
     showArtwork && "has-artwork",
+    isMissing ? "is-missing cursor-default" : "cursor-pointer",
     isActive
       ? "bg-surface-2 before:bg-[var(--entity-accent,var(--color-accent-500))]"
       : "hover:bg-surface-2 before:bg-transparent",
   )}
   onclick={(e) => {
+    if (isMissing) return;
     // Don't intercept clicks on interactive children (links, buttons, rating stars)
     const target = e.target as HTMLElement;
     if (target.closest("a, button, input, [role='slider'], [role='menu']")) return;
@@ -133,6 +137,7 @@
     <div class="selection-cell flex items-center justify-center">
       <Checkbox
         checked={selected}
+        disabled={isMissing}
         aria-label={`Select ${track.title}`}
         onchange={handleSelectedChange}
       />
@@ -152,7 +157,7 @@
   {/if}
 
   <div class="index-cell flex h-7 w-7 items-center justify-center">
-    {#if isActive && isPlaying}
+    {#if !isMissing && isActive && isPlaying}
       <span
         class="flex h-4 items-end gap-[2px]"
         aria-label="Now playing"
@@ -165,21 +170,27 @@
     {:else}
       <span class={cn(
         "absolute font-mono text-[0.72rem] tabular-nums transition-opacity duration-fast",
-        isActive ? "text-accent-400 opacity-0" : "text-text-disabled group-hover/row:opacity-0",
+        isMissing
+          ? "text-text-disabled"
+          : isActive
+            ? "text-accent-400 opacity-0"
+            : "text-text-disabled group-hover/row:opacity-0",
       )}>
         {displayTrackNumber}
       </span>
-      <button
-        type="button"
-        onclick={() => onPlay(track.id)}
-        aria-label={isActive ? "Resume" : `Play ${track.title}`}
-        class={cn(
-          "inline-flex h-7 w-7 items-center justify-center transition-opacity duration-fast",
-          isActive ? "text-accent-400 opacity-100 hover:text-accent-300" : "text-text-primary opacity-0 group-hover/row:opacity-100 hover:text-accent-300",
-        )}
-      >
-        <Play class="h-3.5 w-3.5" fill="currentColor" />
-      </button>
+      {#if !isMissing}
+        <button
+          type="button"
+          onclick={() => onPlay(track.id)}
+          aria-label={isActive ? "Resume" : `Play ${track.title}`}
+          class={cn(
+            "inline-flex h-7 w-7 items-center justify-center transition-opacity duration-fast",
+            isActive ? "text-accent-400 opacity-100 hover:text-accent-300" : "text-text-primary opacity-0 group-hover/row:opacity-100 hover:text-accent-300",
+          )}
+        >
+          <Play class="h-3.5 w-3.5" fill="currentColor" />
+        </button>
+      {/if}
     {/if}
   </div>
 
@@ -241,6 +252,14 @@
         {track.title}
       </span>
     {/if}
+    {#if !renaming && presenceKnown}
+      <p class={cn(
+        "track-presence mt-1 font-mono text-[0.62rem] font-semibold uppercase tracking-wider",
+        isMissing ? "text-warning-text" : "text-success-text",
+      )}>
+        {isMissing ? "Missing · not playable" : "Present"}
+      </p>
+    {/if}
     {#if !renaming && (track.embeddedArtist || track.embeddedAlbum)}
       <p class="track-subtitle mt-0.5 text-[0.72rem] text-text-muted">
         {track.embeddedArtist ?? ""}
@@ -252,14 +271,18 @@
 
   <div class={cn(
     "rating-cell transition-opacity duration-fast",
-    onRatingChange ? "opacity-80 hover:opacity-100 focus-within:opacity-100" : "opacity-60",
+    isMissing ? "opacity-50" : onRatingChange ? "opacity-80 hover:opacity-100 focus-within:opacity-100" : "opacity-60",
   )}>
-    <StarRatingPicker
-      value={track.rating}
-      onChange={onRatingChange ? (v) => onRatingChange!(track.id, v) : undefined}
-      readOnly={!onRatingChange}
-      ariaLabelPrefix={ratingAriaPrefix ?? `Rate ${track.title} with`}
-    />
+    {#if isMissing}
+      <span class="font-mono text-[0.66rem] text-text-disabled">—</span>
+    {:else}
+      <StarRatingPicker
+        value={track.rating}
+        onChange={onRatingChange ? (v) => onRatingChange!(track.id, v) : undefined}
+        readOnly={!onRatingChange}
+        ariaLabelPrefix={ratingAriaPrefix ?? `Rate ${track.title} with`}
+      />
+    {/if}
   </div>
 
   <div class="time-cell flex flex-col items-end gap-0.5 font-mono text-[0.72rem] tabular-nums text-text-muted">
@@ -351,6 +374,10 @@
     row-gap: 0.45rem;
     min-height: 4.75rem;
     padding: 0.75rem;
+  }
+
+  .track-row.is-missing {
+    background: color-mix(in srgb, var(--color-warning, #f59e0b) 3%, transparent);
   }
 
   .track-row.has-selection {

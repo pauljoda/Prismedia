@@ -187,27 +187,50 @@ public static class TvExistingTargetMerge {
 
 /// <summary>
 /// Pure merge planning for a music import whose album (or artist) already lives on disk: plan items are
-/// re-anchored from the template-rendered album folder onto the existing one, and a track whose relative
-/// path the album already owns is dropped — track filenames carry no reliable quality signal, so an
-/// existing track is never replaced.
+/// re-anchored from the template-rendered album folder onto the existing one. Exact paths and uniquely
+/// equivalent track titles are dropped — Soulseek peers often spell the same track with different track
+/// prefixes and filesystem punctuation, while track filenames carry no reliable quality signal for replacement.
 /// </summary>
 public static class MusicExistingTargetMerge {
     public static IReadOnlyList<MergedImportItem> Plan(
         IReadOnlyList<ImportPlanItem> items,
         string albumFolderAbsolute,
         IReadOnlySet<string> existingRelativeFiles) {
+        var incomingTitleCounts = CountTrackTitles(items.Select(item => item.TargetRelativePath));
+        var existingTitleCounts = CountTrackTitles(existingRelativeFiles);
         var merged = new List<MergedImportItem>(items.Count);
         foreach (var item in items) {
             // Template plans render as "<album folder>/<inner path>"; the inner path (disc folders,
             // track names) is preserved, only the album folder is re-anchored.
             var inner = InnerRelativePath(item.TargetRelativePath);
+            var titleIdentity = TrackTitleIdentity(inner);
+            var alreadyOwnsTrack = MusicImportPlanBuilder.IsAudioFile(item.SourceRelativePath)
+                && titleIdentity.Length > 0
+                && incomingTitleCounts.GetValueOrDefault(titleIdentity) == 1
+                && existingTitleCounts.GetValueOrDefault(titleIdentity) == 1;
             merged.Add(new MergedImportItem(
                 item.SourceRelativePath,
                 Path.Combine(albumFolderAbsolute, inner),
-                existingRelativeFiles.Contains(inner) ? MergeFileAction.DropNotUpgrade : MergeFileAction.PlaceNew));
+                existingRelativeFiles.Contains(inner) || alreadyOwnsTrack
+                    ? MergeFileAction.DropNotUpgrade
+                    : MergeFileAction.PlaceNew));
         }
 
         return merged;
+    }
+
+    private static Dictionary<string, int> CountTrackTitles(IEnumerable<string> paths) =>
+        paths
+            .Where(MusicImportPlanBuilder.IsAudioFile)
+            .Select(TrackTitleIdentity)
+            .Where(identity => identity.Length > 0)
+            .GroupBy(identity => identity, StringComparer.Ordinal)
+            .ToDictionary(group => group.Key, group => group.Count(), StringComparer.Ordinal);
+
+    private static string TrackTitleIdentity(string path) {
+        var normalized = path.Replace('\\', '/');
+        var fileName = normalized[(normalized.LastIndexOf('/') + 1)..];
+        return AudioTrackTitleText.Normalize(Path.GetFileNameWithoutExtension(fileName));
     }
 
     /// <summary>The path inside the album folder: the render's segments beyond the album-folder prefix.</summary>

@@ -78,6 +78,8 @@
   const sectionTitle = $derived(
     childKind === ENTITY_KIND.video
       ? "Episode activity"
+      : childKind === ENTITY_KIND.audioTrack
+        ? "Track activity"
       : childKind === ENTITY_KIND.videoSeason
         ? "Season activity"
         : "Child activity",
@@ -85,6 +87,8 @@
   const childLabel = $derived.by(() => {
     return childKind === ENTITY_KIND.video
       ? "Episodes"
+      : childKind === ENTITY_KIND.audioTrack
+        ? "Tracks"
       : childKind
       ? labelForEntityKind(childKind)
       : "Items";

@@ -3,11 +3,33 @@ using Prismedia.Application.Acquisition;
 using Prismedia.Application.Files;
 using Prismedia.Application.Jobs.Handlers.Scan;
 using Prismedia.Application.Jobs.Ports;
+using Prismedia.Application.Requests;
 using Prismedia.Domain.Entities;
 
 namespace Prismedia.Application.Jobs.Handlers;
 
 public sealed partial class MusicAcquisitionImportEngine {
+    /// <summary>
+    /// Makes an imported structural unit's monitor immediately eligible to fill any provider tracks
+    /// that targeted materialization left wanted, rather than waiting for the periodic monitor interval.
+    /// </summary>
+    private async Task QueueMissingChildFallbackAsync(
+        JobContext context,
+        AcquisitionImportContext import,
+        CancellationToken cancellationToken) {
+        if (monitors is null || RequestKindRegistry.FindChildMaterializingUnit(import.Kind) is null) {
+            return;
+        }
+
+        await monitors.MarkSearchDueByAcquisitionAsync(import.Id, cancellationToken);
+        await context.EnqueueIfNeededAsync(
+            new EnqueueJobRequest(
+                JobType.MonitoredSearch,
+                TargetLabel: "Fill missing imported tracks",
+                Priority: JobPriorities.RequestEnrichment),
+            cancellationToken);
+    }
+
     /// <summary>
     /// The existing album folder to merge into: the album's own on-disk folder when it has one, else a
     /// template-named album folder inside the existing artist folder. Null keeps template placement.

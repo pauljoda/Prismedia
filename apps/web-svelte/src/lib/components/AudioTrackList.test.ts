@@ -36,6 +36,27 @@ describe("AudioTrackList", () => {
 
     expect(onBulk).toHaveBeenCalledWith(["track-1", "track-2"]);
   });
+
+  it("keeps missing tracks visible while select-all targets only present tracks", async () => {
+    const onSelectionChange = vi.fn();
+    render(AudioTrackList, {
+      props: {
+        tracks: [
+          { ...track("track-present", "Happy"), isWanted: false, hasSourceMedia: true },
+          { ...track("track-missing", "Scream"), isWanted: true, hasSourceMedia: false },
+        ],
+        activeTrackId: null,
+        isPlaying: false,
+        onPlay: vi.fn(),
+        onSelectionChange,
+      },
+    });
+
+    expect(screen.getByText("1 present · 1 missing")).toBeInTheDocument();
+    expect(screen.getByText("Missing · not playable")).toBeInTheDocument();
+    await fireEvent.click(screen.getByLabelText("Select all tracks"));
+    expect(onSelectionChange).toHaveBeenLastCalledWith(["track-present"]);
+  });
 });
 
 function track(id: string, title: string): AudioTrackListItemDto {

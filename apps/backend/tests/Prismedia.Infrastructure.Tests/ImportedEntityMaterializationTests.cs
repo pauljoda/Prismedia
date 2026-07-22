@@ -112,11 +112,11 @@ public sealed class ImportedEntityMaterializationTests : IDisposable {
     }
 
     [Fact]
-    public async Task AlbumImportReusesWantedTrackAndImmediatelyProcessesProbe() {
+    public async Task PartialAlbumImportReusesArtistPrefixedTrackAndQueuesMissingTrackFallback() {
         await using var db = CreateContext();
         var rootPath = Directory.CreateDirectory(Path.Combine(_workRoot, "music")).FullName;
         var payloadPath = Directory.CreateDirectory(Path.Combine(_workRoot, "album-download")).FullName;
-        await File.WriteAllTextAsync(Path.Combine(payloadPath, "01 Drag Me Under [262 kbps].opus"), "audio-bytes");
+        await File.WriteAllTextAsync(Path.Combine(payloadPath, "04 Pharrell Williams - Happy.flac"), "audio-bytes");
         var root = new RootPersistence(rootPath, scanAudio: true, autoGenerateMetadata: true);
         var unrelatedFolder = Directory.CreateDirectory(Path.Combine(rootPath, "Other Artist", "Other Album")).FullName;
         var unrelatedPath = Path.Combine(unrelatedFolder, "01 - Other.flac");
@@ -124,7 +124,8 @@ public sealed class ImportedEntityMaterializationTests : IDisposable {
         var unrelatedId = AddSourceEntity(db, EntityKind.AudioTrack, "Other Track", unrelatedPath);
         var artistId = AddWantedEntity(db, EntityKind.MusicArtist, "Artist");
         var albumId = AddWantedEntity(db, EntityKind.AudioLibrary, "Album", artistId);
-        var wantedTrackId = AddWantedEntity(db, EntityKind.AudioTrack, "Drag Me Under", albumId);
+        var wantedTrackId = AddWantedEntity(db, EntityKind.AudioTrack, "Happy", albumId);
+        var missingTrackId = AddWantedEntity(db, EntityKind.AudioTrack, "Scream", albumId);
         var now = DateTimeOffset.UtcNow;
         db.EntityExternalIds.Add(new EntityExternalIdRow {
             Id = Guid.NewGuid(),
@@ -136,6 +137,13 @@ public sealed class ImportedEntityMaterializationTests : IDisposable {
         });
         var acquisitionId = await AddAcquisitionAsync(db, EntityKind.AudioLibrary, albumId, "Album");
         var store = AcquisitionTestFactory.Store(db);
+        var monitorStore = new EfMonitorStore(db);
+        await monitorStore.StartAsync(
+            acquisitionId,
+            EntityKind.AudioLibrary,
+            "Album",
+            "Artist",
+            CancellationToken.None);
         var materializer = AlbumMaterializer(db, root);
         var engine = new MusicAcquisitionImportEngine(
             store,
@@ -148,7 +156,8 @@ public sealed class ImportedEntityMaterializationTests : IDisposable {
             new EfAcquisitionBlocklistStore(db),
             new EfAcquisitionHistoryStore(db),
             materializer,
-            NullLogger<MusicAcquisitionImportEngine>.Instance);
+            NullLogger<MusicAcquisitionImportEngine>.Instance,
+            monitorStore);
         var import = new AcquisitionImportContext(
             acquisitionId,
             "Album",
@@ -174,10 +183,11 @@ public sealed class ImportedEntityMaterializationTests : IDisposable {
         var tracks = await db.Entities.AsNoTracking()
             .Where(row => row.ParentEntityId == albumId && row.KindCode == EntityKindRegistry.AudioTrack.Code)
             .ToArrayAsync();
-        var retainedTrack = Assert.Single(tracks);
+        var retainedTrack = Assert.Single(tracks, track => track.Id == wantedTrackId);
         Assert.Equal(wantedTrackId, retainedTrack.Id);
-        Assert.Equal("Drag Me Under", retainedTrack.Title);
+        Assert.Equal("Happy", retainedTrack.Title);
         Assert.False(retainedTrack.IsWanted);
+        Assert.True(Assert.Single(tracks, track => track.Id == missingTrackId).IsWanted);
         Assert.True(await HasSourceInSubtreeAsync(db, wantedTrackId));
         Assert.True(await db.EntityExternalIds.AsNoTracking().AnyAsync(row =>
             row.EntityId == wantedTrackId && row.Provider == ExternalIdProviders.MusicBrainz));
@@ -185,6 +195,12 @@ public sealed class ImportedEntityMaterializationTests : IDisposable {
         var probeRequest = Assert.Single(queue.Enqueued, request =>
             request.Type == JobType.ProbeAudio && request.TargetEntityId == wantedTrackId.ToString());
         Assert.Equal(JobPriorities.AcquisitionProbe, probeRequest.Priority);
+        Assert.Contains(queue.Enqueued, request =>
+            request.Type == JobType.MonitoredSearch
+            && request.Priority == JobPriorities.RequestEnrichment);
+        var fallback = Assert.Single(await monitorStore.ListDueMonitorsAsync(360, CancellationToken.None));
+        Assert.True(fallback.MissingChildFallback);
+        Assert.Equal(albumId, fallback.EntityId);
         var persistence = new LibraryScanPersistenceService(db);
         var probeHandler = new ProbeAudioJobHandler(
             NullLogger<ProbeAudioJobHandler>.Instance,
