@@ -445,7 +445,32 @@ public sealed class SlskdDownloadClient(HttpClient http) : IDownloadClient {
             $"{SoulseekProtocol.DownloadsPath}/{Uri.EscapeDataString(locator.Username)}");
         message.Content = JsonContent.Create(locator.Files.Select(file => new { filename = file.Filename, size = file.Size }));
         using var response = await http.SendAsync(message, cancellationToken);
-        await EnsureSuccessAsync(response, "enqueue the Soulseek files", cancellationToken);
+        if (!response.IsSuccessStatusCode) {
+            var users = await GetDownloadsAsync(connection, cancellationToken);
+            var matchingGroups = LegacyGroups(users)
+                .Where(group => Represents(group, locator))
+                .ToArray();
+            if (matchingGroups.Length == 1) {
+                return SoulseekLocator.EncodeLegacy(new SoulseekLegacyTransferLocator(matchingGroups[0].Fingerprint));
+            }
+
+            var matchingFiles = users
+                .Where(user => user.Username.Equals(locator.Username, StringComparison.Ordinal))
+                .SelectMany(user => user.Directories)
+                .SelectMany(directory => directory.Files)
+                .Where(actual => locator.Files.Any(expected =>
+                    actual.Filename.Equals(expected.Filename, StringComparison.Ordinal)
+                    && actual.Size == expected.Size))
+                .ToArray();
+            var detail = await response.Content.ReadAsStringAsync(cancellationToken);
+            if (matchingFiles.Length == 0) {
+                throw new DownloadClientAddUnresolvedException(
+                    $"slskd rejected the Soulseek files and no matching download exists: {(int)response.StatusCode} {detail}".Trim());
+            }
+
+            throw new InvalidOperationException(
+                $"slskd could not enqueue the Soulseek files and matching downloads are ambiguous: {(int)response.StatusCode} {detail}".Trim());
+        }
         var body = await response.Content.ReadFromJsonAsync<LegacyEnqueueResponse>(SoulseekLocator.JsonOptions, cancellationToken);
         if (body is null || body.Failed.Count != 0 || body.Enqueued.Count != locator.Files.Count) {
             if (body is not null) {
@@ -609,6 +634,12 @@ public sealed class SlskdDownloadClient(HttpClient http) : IDownloadClient {
         batch.Username.Equals(locator.Username, StringComparison.Ordinal)
         && batch.Transfers.Count == locator.Files.Count
         && locator.Files.All(expected => batch.Transfers.Any(actual =>
+            actual.Filename.Equals(expected.Filename, StringComparison.Ordinal)
+            && actual.Size == expected.Size));
+    private static bool Represents(SoulseekLegacyTransferGroup group, SoulseekReleaseLocator locator) =>
+        group.Username.Equals(locator.Username, StringComparison.Ordinal)
+        && group.Transfers.Count == locator.Files.Count
+        && locator.Files.All(expected => group.Transfers.Any(actual =>
             actual.Filename.Equals(expected.Filename, StringComparison.Ordinal)
             && actual.Size == expected.Size));
     private static Guid DeterministicBatchId(string locator) {

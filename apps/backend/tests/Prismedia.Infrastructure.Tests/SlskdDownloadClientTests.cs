@@ -122,6 +122,51 @@ public sealed class SlskdDownloadClientTests {
         Assert.Contains(listed, listedItem => listedItem.ClientItemId == id && listedItem.IsComplete);
     }
 
+    [Fact]
+    public async Task RejectedLegacyAddWithNoMatchingDownloadIsProvenUnresolved() {
+        var locator = SoulseekLocator.Encode(new SoulseekReleaseLocator(
+            Guid.Parse("11111111-1111-1111-1111-111111111111"), "offline-peer",
+            [new SoulseekFileLocator("Music\\Album\\01.flac", 100)]));
+        var handler = new StatusHandler([
+            (HttpStatusCode.BadRequest, """The JSON value could not be converted to System.Collections.Generic.IEnumerable`1[slskd.Transfers.API.QueueDownloadRequest]."""),
+            (HttpStatusCode.InternalServerError, "The peer did not respond."),
+            (HttpStatusCode.OK, "[]")
+        ]);
+        var client = new SlskdDownloadClient(new HttpClient(handler));
+
+        var error = await Assert.ThrowsAsync<DownloadClientAddUnresolvedException>(() =>
+            client.AddAsync(Connection, new DownloadAddRequest(locator, null, "prismedia", "Artist Album"), CancellationToken.None));
+
+        Assert.Contains("no matching download exists", error.Message, StringComparison.Ordinal);
+        Assert.Equal([
+            "/api/v0/transfers/downloads/batches",
+            "/api/v0/transfers/downloads/offline-peer",
+            "/api/v0/transfers/downloads"
+        ], handler.Requests.Select(request => request.RequestUri!.AbsolutePath));
+    }
+
+    [Fact]
+    public async Task RejectedLegacyAddAdoptsTheExactlyMatchingDownload() {
+        var locator = SoulseekLocator.Encode(new SoulseekReleaseLocator(
+            Guid.Parse("11111111-1111-1111-1111-111111111111"), "peer",
+            [new SoulseekFileLocator("Music\\Album\\01.flac", 100)]));
+        const string downloads = """[{"username":"peer","directories":[{"directory":"Music\\Album","files":[{"id":"44444444-4444-4444-4444-444444444444","filename":"Music\\Album\\01.flac","size":100,"bytesTransferred":0,"state":"Queued","batchId":null}]}]}]""";
+        var handler = new StatusHandler([
+            (HttpStatusCode.BadRequest, """The JSON value could not be converted to System.Collections.Generic.IEnumerable`1[slskd.Transfers.API.QueueDownloadRequest]."""),
+            (HttpStatusCode.InternalServerError, "The response was interrupted."),
+            (HttpStatusCode.OK, downloads)
+        ]);
+        var client = new SlskdDownloadClient(new HttpClient(handler));
+
+        var id = await client.AddAsync(
+            Connection,
+            new DownloadAddRequest(locator, null, "prismedia", "Artist Album"),
+            CancellationToken.None);
+
+        Assert.StartsWith("slskd-legacy:", id, StringComparison.Ordinal);
+        Assert.Equal(3, handler.Requests.Count);
+    }
+
     private sealed class Handler(Func<HttpRequestMessage, string> response) : HttpMessageHandler {
         public List<HttpRequestMessage> Requests { get; } = [];
         public List<string> Bodies { get; } = [];
