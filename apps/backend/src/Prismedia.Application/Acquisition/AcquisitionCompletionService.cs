@@ -26,7 +26,8 @@ public sealed class AcquisitionCompletionService(
                 PayloadJson: AcquisitionJobPayload.Serialize(acquisitionId),
                 TargetEntityId: acquisitionId.ToString(),
                 TargetLabel: isUpgrade ? "Replace with reviewed release" : "Import completed acquisition",
-                Priority: JobPriorities.InteractiveRequest),
+                Priority: JobPriorities.AcquisitionCompletion,
+                Lane: JobRunLane.ForegroundIdentify),
             cancellationToken);
     }
 

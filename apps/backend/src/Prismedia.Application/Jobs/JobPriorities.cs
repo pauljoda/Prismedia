@@ -9,6 +9,12 @@ namespace Prismedia.Application.Jobs;
 /// </summary>
 public static class JobPriorities {
     /// <summary>
+    /// Completed downloads must enter the library before more searches consume foreground capacity.
+    /// This also keeps the download client's completed payload from waiting behind a large request fanout.
+    /// </summary>
+    public const int AcquisitionCompletion = 80;
+
+    /// <summary>
     /// Active transfer polling must preempt acquisition-search fanout so completed and failed downloads
     /// continue advancing while a large artist request is still searching its remaining children.
     /// </summary>
@@ -23,7 +29,7 @@ public static class JobPriorities {
     /// <summary>User-triggered identify review cascades — interactive UI work must not wait behind scan backlogs.</summary>
     public const int InteractiveIdentify = 70;
 
-    /// <summary>User-triggered acquisition searches and import handoffs share identify's foreground priority.</summary>
+    /// <summary>User-triggered acquisition searches share identify's foreground priority.</summary>
     public const int InteractiveRequest = InteractiveIdentify;
 
     /// <summary>

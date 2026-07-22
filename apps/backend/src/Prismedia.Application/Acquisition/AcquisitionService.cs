@@ -1019,7 +1019,8 @@ public sealed partial class AcquisitionService(
                 PayloadJson: AcquisitionJobPayload.Serialize(id, allowFormatChange, manualRetry: true),
                 TargetEntityId: id.ToString(),
                 TargetLabel: detail.Summary.Title,
-                Priority: JobPriorities.InteractiveRequest),
+                Priority: JobPriorities.AcquisitionCompletion,
+                Lane: JobRunLane.ForegroundIdentify),
             cancellationToken);
         return detail;
     }

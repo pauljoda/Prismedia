@@ -950,8 +950,8 @@ public sealed class AcquisitionServiceTests {
         Assert.True(detail?.Summary.HasResumableImport);
         var retry = Assert.Single(harness.Queue.Requests);
         Assert.Equal(JobType.AcquisitionImport, retry.Type);
-        Assert.Equal(JobPriorities.InteractiveRequest, retry.Priority);
-        Assert.Null(retry.Lane);
+        Assert.Equal(JobPriorities.AcquisitionCompletion, retry.Priority);
+        Assert.Equal(JobRunLane.ForegroundIdentify, retry.Lane);
         var payload = AcquisitionJobPayload.Parse(retry.PayloadJson!);
         Assert.Equal(AcquisitionId, payload.AcquisitionId);
         Assert.True(payload.ManualRetry);

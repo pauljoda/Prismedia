@@ -176,8 +176,9 @@ public sealed class AcquisitionMonitorJobHandlerTests {
 
         var import = Assert.Single(queue.Enqueued);
         Assert.Equal(JobType.AcquisitionImport, import.Type);
-        Assert.Equal(JobPriorities.InteractiveRequest, import.Priority);
-        Assert.Null(import.Lane);
+        Assert.Equal(JobPriorities.AcquisitionCompletion, import.Priority);
+        Assert.True(import.Priority > JobPriorities.AcquisitionMonitor);
+        Assert.Equal(JobRunLane.ForegroundIdentify, import.Lane);
     }
 
     [Fact]

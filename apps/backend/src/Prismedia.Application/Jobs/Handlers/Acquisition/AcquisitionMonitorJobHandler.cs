@@ -244,7 +244,8 @@ public sealed class AcquisitionMonitorJobHandler(
                             PayloadJson: AcquisitionJobPayload.Serialize(transfer.AcquisitionId),
                             TargetEntityId: transfer.AcquisitionId.ToString(),
                             TargetLabel: isUpgrade ? "Replace with upgrade" : "Import completed download",
-                            Priority: JobPriorities.InteractiveRequest),
+                            Priority: JobPriorities.AcquisitionCompletion,
+                            Lane: JobRunLane.ForegroundIdentify),
                         cancellationToken);
                 }
             } else {

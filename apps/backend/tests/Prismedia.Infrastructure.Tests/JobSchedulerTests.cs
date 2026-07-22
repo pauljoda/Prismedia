@@ -324,8 +324,8 @@ public sealed class JobSchedulerTests {
         Assert.Equal(expectedType, request.Type);
         Assert.Equal(acquisitionId.ToString(), request.TargetEntityId);
         Assert.Equal(acquisitionId, AcquisitionJobPayload.Parse(request.PayloadJson!).AcquisitionId);
-        Assert.Equal(JobPriorities.InteractiveRequest, request.Priority);
-        Assert.Null(request.Lane);
+        Assert.Equal(JobPriorities.AcquisitionCompletion, request.Priority);
+        Assert.Equal(JobRunLane.ForegroundIdentify, request.Lane);
     }
 
     private static ServiceProvider CreateProvider(
