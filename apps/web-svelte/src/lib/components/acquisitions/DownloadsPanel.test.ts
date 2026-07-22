@@ -1,5 +1,6 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/svelte";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { ACQUISITION_STATUS } from "$lib/api/generated/codes";
 import DownloadsPanel from "./DownloadsPanel.svelte";
 
 const mocks = vi.hoisted(() => ({
@@ -62,5 +63,29 @@ describe("DownloadsPanel", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent(
       "Removed 1 of 2 downloads. download-1: Client refused removal",
     );
+  });
+
+  it("keeps polling attention-only rows so external reconciliation clears stale downloads", async () => {
+    const idlePoll: { run: (() => void) | null } = { run: null };
+    vi.spyOn(globalThis, "setInterval").mockImplementation((handler, delay) => {
+      if (delay === 15_000) idlePoll.run = handler as () => void;
+      return 1 as never;
+    });
+    mocks.fetchDownloadQueue
+      .mockResolvedValueOnce([
+        {
+          acquisitionId: "double-life",
+          entityId: "double-life-album",
+          status: ACQUISITION_STATUS.awaitingSelection,
+        },
+      ])
+      .mockResolvedValueOnce([]);
+
+    render(DownloadsPanel);
+
+    await waitFor(() => expect(mocks.fetchDownloadQueue).toHaveBeenCalledOnce());
+    expect(idlePoll.run).not.toBeNull();
+    idlePoll.run?.();
+    await waitFor(() => expect(mocks.fetchDownloadQueue).toHaveBeenCalledTimes(2));
   });
 });

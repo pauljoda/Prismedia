@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onDestroy, onMount } from "svelte";
+  import { onMount } from "svelte";
   import { HardDriveDownload } from "@lucide/svelte";
   import type { DownloadQueueItemView, EntityThumbnail } from "$lib/api/generated/model";
   import { deleteAcquisition, fetchDownloadQueue, reSearchAcquisition } from "$lib/api/acquisitions";
@@ -27,7 +27,9 @@
   let loading = $state(true);
   let error = $state<string | null>(null);
   let acting = $state(false);
-  let pollTimer: ReturnType<typeof setInterval> | null = null;
+
+  const ACTIVE_POLL_INTERVAL_MS = 4_000;
+  const IDLE_POLL_INTERVAL_MS = 15_000;
 
   let pendingRemoveIds = $state<string[]>([]);
   let confirmOpen = $state(false);
@@ -117,24 +119,30 @@
     }
   }
 
-  // Poll while anything is mid-flight so progress/speed stay live.
+  // Attention states can still resolve outside this panel when a scan reconciles a downloaded file
+  // to its provider Entity. Keep a slower idle poll so those rows disappear without requiring a reload.
+  const pollIntervalMs = $derived(
+    rows.some((row) => acquisitionStatusShouldPoll(row.status))
+      ? ACTIVE_POLL_INTERVAL_MS
+      : IDLE_POLL_INTERVAL_MS,
+  );
+
   $effect(() => {
-    const active = rows.some((row) => acquisitionStatusShouldPoll(row.status));
-    if (active && !pollTimer) {
-      pollTimer = setInterval(load, 4000);
-    } else if (!active && pollTimer) {
-      clearInterval(pollTimer);
-      pollTimer = null;
-    }
+    const timer = setInterval(load, pollIntervalMs);
+    return () => clearInterval(timer);
   });
 
   onMount(load);
-  onDestroy(() => {
-    if (pollTimer) clearInterval(pollTimer);
-  });
+
+  function refreshWhenVisible() {
+    if (document.visibilityState === "visible") void load();
+  }
 
   const removeCount = $derived(pendingRemoveIds.length);
 </script>
+
+<svelte:window onfocus={() => void load()} />
+<svelte:document onvisibilitychange={refreshWhenVisible} />
 
 <AcquisitionListShell
   {items}
