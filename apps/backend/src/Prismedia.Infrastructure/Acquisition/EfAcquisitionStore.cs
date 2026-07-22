@@ -72,8 +72,7 @@ public sealed partial class EfAcquisitionStore(PrismediaDbContext db, IAcquisiti
                 || !OrphanRetirableStatuses.Contains(row.Status))
             .OrderByDescending(row => row.CreatedAt)
             .ToArrayAsync(cancellationToken);
-        var fulfilledPassiveIds = await ResolveFulfilledPassiveAcquisitionIdsAsync(rows, cancellationToken);
-        var visibleRows = rows.Where(row => !fulfilledPassiveIds.Contains(row.Id)).ToArray();
+        var visibleRows = await ExcludeFulfilledPassiveAcquisitionsAsync(rows, cancellationToken);
         var ids = visibleRows.Select(row => row.Id).ToArray();
         var progress = await LatestProgressAsync(ids, cancellationToken);
         return visibleRows.Select(row => ToSummary(row, progress.GetValueOrDefault(row.Id))).ToArray();
@@ -1633,13 +1632,14 @@ public sealed partial class EfAcquisitionStore(PrismediaDbContext db, IAcquisiti
     }
 
     public async Task<AcquisitionDetail?> GetLatestForEntityAsync(Guid entityId, CancellationToken cancellationToken) {
-        var id = await db.Acquisitions
+        var rows = await db.Acquisitions
             .AsNoTracking()
             .Where(row => row.EntityId == entityId)
             .OrderByDescending(row => row.CreatedAt)
-            .Select(row => (Guid?)row.Id)
-            .FirstOrDefaultAsync(cancellationToken);
-        return id is { } acquisitionId ? await GetAsync(acquisitionId, cancellationToken) : null;
+            .ThenByDescending(row => row.Id)
+            .ToArrayAsync(cancellationToken);
+        var latest = (await ExcludeFulfilledPassiveAcquisitionsAsync(rows, cancellationToken)).FirstOrDefault();
+        return latest is not null ? await GetAsync(latest.Id, cancellationToken) : null;
     }
 
     /// <inheritdoc />
@@ -1655,7 +1655,12 @@ public sealed partial class EfAcquisitionStore(PrismediaDbContext db, IAcquisiti
             return [];
         }
 
-        var ids = rows.Select(row => row.Id).ToArray();
+        var visibleRows = await ExcludeFulfilledPassiveAcquisitionsAsync(rows, cancellationToken);
+        if (visibleRows.Length == 0) {
+            return [];
+        }
+
+        var ids = visibleRows.Select(row => row.Id).ToArray();
         var candidates = await db.ReleaseCandidates.AsNoTracking()
             .Where(candidate => ids.Contains(candidate.AcquisitionId))
             .OrderByDescending(candidate => candidate.Accepted)
@@ -1664,7 +1669,7 @@ public sealed partial class EfAcquisitionStore(PrismediaDbContext db, IAcquisiti
             .ToArrayAsync(cancellationToken);
         var candidatesByAcquisition = candidates.ToLookup(candidate => candidate.AcquisitionId);
         var progress = await LatestProgressAsync(ids, cancellationToken);
-        return rows.Select(row => new AcquisitionDetail(
+        return visibleRows.Select(row => new AcquisitionDetail(
             ToSummary(row, progress.GetValueOrDefault(row.Id)),
             candidatesByAcquisition[row.Id].Select(ToView).ToArray())).ToArray();
     }
@@ -1681,7 +1686,8 @@ public sealed partial class EfAcquisitionStore(PrismediaDbContext db, IAcquisiti
             .Where(row => row.EntityId != null && requestedIds.Contains(row.EntityId.Value))
             .OrderByDescending(row => row.CreatedAt)
             .ToArrayAsync(cancellationToken);
-        var latest = rows
+        var visibleRows = await ExcludeFulfilledPassiveAcquisitionsAsync(rows, cancellationToken);
+        var latest = visibleRows
             .GroupBy(row => row.EntityId!.Value)
             .Select(group => group.First())
             .ToArray();
