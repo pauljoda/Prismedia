@@ -42,6 +42,17 @@ public sealed partial class EfAcquisitionStore {
     }
 
     /// <summary>
+    /// Removes fulfilled passive work from read projections without rewriting terminal history or
+    /// deliberate upgrades. Durable monitor reconciliation remains responsible for state mutation.
+    /// </summary>
+    private async Task<AcquisitionRow[]> ExcludeFulfilledPassiveAcquisitionsAsync(
+        AcquisitionRow[] rows,
+        CancellationToken cancellationToken) {
+        var fulfilledPassiveIds = await ResolveFulfilledPassiveAcquisitionIdsAsync(rows, cancellationToken);
+        return rows.Where(row => !fulfilledPassiveIds.Contains(row.Id)).ToArray();
+    }
+
+    /// <summary>
     /// Retires older passive requests for the same provider item after a successful import becomes
     /// authoritative. Transfer-owning duplicates remain visible for their normal teardown workflow.
     /// </summary>
