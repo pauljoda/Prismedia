@@ -187,14 +187,18 @@ public sealed class ScanAudioJobHandler(
             }
         }
 
+        var waveformRegenerationIds = new HashSet<Guid>();
         if (acquisitionHints is not null) {
             foreach (var track in trackItems) {
-                await acquisitionHints.ReconcileWantedAudioTrackAsync(
+                var reconciliation = await acquisitionHints.ReconcileWantedAudioTrackAsync(
                     track.AudioLibraryId!.Value,
                     track.FilePath,
                     track.Title,
                     track.SortOrder,
                     cancellationToken);
+                if (reconciliation?.NeedsWaveformRegeneration == true) {
+                    waveformRegenerationIds.Add(reconciliation.EntityId);
+                }
             }
         }
 
@@ -208,13 +212,20 @@ public sealed class ScanAudioJobHandler(
             await ImportedMaterializationHousekeeping.TryAsync(
                 logger,
                 "Imported album tracks are ready but their downstream jobs could not be queued.",
-                () => ChainTrackJobsAsync(
-                    context,
-                    settings,
-                    trackIds[trackIndex],
-                    trackItems[trackIndex].Title,
-                    cancellationToken,
-                    JobPriorities.AcquisitionProbe));
+                async () => {
+                    var trackId = trackIds[trackIndex];
+                    var title = trackItems[trackIndex].Title;
+                    await ChainTrackJobsAsync(
+                        context,
+                        settings,
+                        trackId,
+                        title,
+                        cancellationToken,
+                        JobPriorities.AcquisitionProbe);
+                    if (!settings.AutoGeneratePreview && waveformRegenerationIds.Contains(trackId)) {
+                        await EnqueueWaveformRegenerationAsync(context, trackId, title, cancellationToken);
+                    }
+                });
         }
 
         var materializedIds = artistIds.Concat(albumIds).Concat(trackIds).ToArray();
@@ -379,14 +390,18 @@ public sealed class ScanAudioJobHandler(
             }
         }
 
+        var waveformRegenerationIds = new HashSet<Guid>();
         if (acquisitionHints is not null) {
             foreach (var track in trackItems.Where(track => !track.IsLoose)) {
-                await acquisitionHints.ReconcileWantedAudioTrackAsync(
+                var reconciliation = await acquisitionHints.ReconcileWantedAudioTrackAsync(
                     track.Item.AudioLibraryId!.Value,
                     track.Item.FilePath,
                     track.Item.Title,
                     track.Item.SortOrder,
                     cancellationToken);
+                if (reconciliation?.NeedsWaveformRegeneration == true) {
+                    waveformRegenerationIds.Add(reconciliation.EntityId);
+                }
             }
         }
 
@@ -419,6 +434,9 @@ public sealed class ScanAudioJobHandler(
             var trackId = trackIds[i];
 
             await ChainTrackJobsAsync(context, settings, trackId, track.Item.Title, cancellationToken);
+            if (!settings.AutoGeneratePreview && waveformRegenerationIds.Contains(trackId)) {
+                await EnqueueWaveformRegenerationAsync(context, trackId, track.Item.Title, cancellationToken);
+            }
             if (track.IsLoose) {
                 autoIdentifyIds.Add(trackId);
             }
@@ -509,6 +527,20 @@ public sealed class ScanAudioJobHandler(
                 cancellationToken);
         }
     }
+
+    private static Task<JobRunSnapshot?> EnqueueWaveformRegenerationAsync(
+        JobContext context,
+        Guid trackId,
+        string title,
+        CancellationToken cancellationToken) =>
+        context.EnqueueIfNeededAsync(
+            EnqueueJobRequest.ForEntity(
+                JobType.GenerateAudioWaveform,
+                EntityKind.AudioTrack,
+                trackId.ToString(),
+                title,
+                JobPriorities.Waveform),
+            cancellationToken);
 
     private async Task EnqueueExistingTrackJobsAsync(
         JobContext context,

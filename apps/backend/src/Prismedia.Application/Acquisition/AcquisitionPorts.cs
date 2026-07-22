@@ -282,14 +282,15 @@ public interface IAcquisitionHintApplier {
     /// canonical title exactly matches <paramref name="scannedTitle"/>. The implementation preserves
     /// the wanted Entity id and provider identity, attaches or moves the Source file, clears Wanted,
     /// and may remove only an otherwise-unowned filename-derived duplicate. Call before track upsert.
-    /// Returns the retained wanted track id, or null when the match is ambiguous or unsafe.
+    /// Returns the retained wanted track and any generated-asset repair it requires, or null when the
+    /// match is ambiguous or unsafe.
     /// </summary>
-    Task<Guid?> ReconcileWantedAudioTrackAsync(
+    Task<WantedAudioTrackReconciliation?> ReconcileWantedAudioTrackAsync(
         Guid audioLibraryId,
         string sourcePath,
         string scannedTitle,
         int sortOrder,
-        CancellationToken cancellationToken) => Task.FromResult<Guid?>(null);
+        CancellationToken cancellationToken) => Task.FromResult<WantedAudioTrackReconciliation?>(null);
 
     /// <summary>
     /// Applies every unconsumed video/audio hint after Source binding (book hints keep
@@ -310,6 +311,12 @@ public sealed record ImportedBookPathOwner(string SourcePath, Guid BookEntityId)
 
 /// <summary>A stamped import hint's identify root (a series, album, or movie), for the post-import identify kick.</summary>
 public sealed record StampedHintOwner(Guid TopLevelEntityId, string TopLevelKindCode, string TopLevelTitle);
+
+/// <summary>
+/// Result of retaining a provider-backed wanted audio track while reconciling its scanned source.
+/// Generated assets whose paths encode a discarded duplicate id are reported for regeneration.
+/// </summary>
+public sealed record WantedAudioTrackReconciliation(Guid EntityId, bool NeedsWaveformRegeneration);
 
 /// <summary>One season of an existing on-disk series: its folder and the episode files it already owns, keyed by episode number.</summary>
 public sealed record TvSeasonDiskLayout(
