@@ -137,6 +137,24 @@ public sealed class EfManualAcquisitionStore(
             db.Acquisitions.Add(parent);
         }
 
+        var reviewedCandidateIds = candidates.Select(candidate => candidate.Id).ToArray();
+        if (reviewedCandidateIds.Length > 0) {
+            var replayChildId = await db.Acquisitions.AsNoTracking()
+                .Where(row => row.UpgradeOfAcquisitionId == parent.Id
+                    && db.ReleaseCandidates.Any(candidate =>
+                        candidate.AcquisitionId == row.Id
+                        && reviewedCandidateIds.Contains(candidate.Id)))
+                .OrderByDescending(row => row.CreatedAt)
+                .Select(row => (Guid?)row.Id)
+                .FirstOrDefaultAsync(cancellationToken);
+            if (replayChildId is not null) {
+                if (transaction is not null) {
+                    await transaction.CommitAsync(cancellationToken);
+                }
+                return replayChildId;
+            }
+        }
+
         if (await db.Acquisitions.AsNoTracking().AnyAsync(
                 row => row.UpgradeOfAcquisitionId == parent.Id
                     && row.Status != AcquisitionStatus.Cancelled,

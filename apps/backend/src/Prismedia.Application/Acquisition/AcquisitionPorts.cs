@@ -595,8 +595,28 @@ public interface IAcquisitionStore : IAcquisitionLifecycleStore {
         Task.FromResult<IReadOnlyList<PendingTransferAdd>>([]);
 
     /// <summary>
-    /// True when any acquisition still has an in-flight transfer, including a durable pre-Add placeholder;
-    /// gates scheduling the monitor job.
+    /// Lists old Queued claims that have neither a selected release nor any durable transfer ownership.
+    /// The age guard keeps monitor reconciliation away from the brief status-to-placeholder window of a
+    /// live queue request.
+    /// </summary>
+    Task<IReadOnlyList<TransferlessQueueClaim>> ListTransferlessQueueClaimsAsync(
+        TimeSpan olderThan,
+        CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<TransferlessQueueClaim>>([]);
+
+    /// <summary>
+    /// Atomically rolls back a Queued claim only while it still has no selected release and no transfer row.
+    /// False means a concurrent handoff or lifecycle change won and must remain authoritative.
+    /// </summary>
+    Task<bool> TryRecoverTransferlessQueueClaimAsync(
+        Guid acquisitionId,
+        AcquisitionStatus recoveryStatus,
+        string message,
+        CancellationToken cancellationToken) => Task.FromResult(false);
+
+    /// <summary>
+    /// True when any acquisition has an in-flight transfer, a durable pre-Add placeholder, or a transferless
+    /// Queued claim requiring recovery; gates scheduling the monitor job.
     /// </summary>
     Task<bool> HasActiveTransfersAsync(CancellationToken cancellationToken);
 

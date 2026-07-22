@@ -137,7 +137,7 @@ public sealed record AcquisitionSearchRequest(string? Query = null);
 /// <summary>Runs a transient replacement search for an on-disk entity without changing its acquisition state.</summary>
 public sealed record ManualReplacementSearchRequest(string? Query = null);
 
-/// <summary>Transient replacement candidates. The search id is consumed only when the user chooses a release.</summary>
+/// <summary>Transient replacement candidates. The search id stays replayable until its server-side review expires.</summary>
 public sealed record ManualReplacementSearchResult(
     Guid SearchId,
     IReadOnlyList<ReleaseCandidateView> Candidates);

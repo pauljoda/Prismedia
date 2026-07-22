@@ -37,6 +37,19 @@ public sealed class AcquisitionQueueService(
             throw new AcquisitionConfigurationException(ApiProblemCodes.AcquisitionReleaseNotFound, "The selected release was not found for this acquisition.");
         }
 
+        var existingAttempt = await acquisitions.GetTransferInfoAsync(acquisitionId, cancellationToken);
+        if (await IsCompletedAttemptAsync(acquisitionId, candidate, existingAttempt, cancellationToken)) {
+            return await acquisitions.GetAsync(acquisitionId, cancellationToken);
+        }
+
+        if (existingAttempt is null) {
+            await acquisitions.TryRecoverTransferlessQueueClaimAsync(
+                acquisitionId,
+                AcquisitionStatus.AwaitingSelection,
+                "The download-client handoff did not start. Choose the reviewed release again to retry.",
+                cancellationToken);
+        }
+
         // The release protocol picks the clients: torrent releases go to torrent clients, usenet
         // releases to usenet clients. Resolving up front keeps the error actionable ("configure a
         // usenet client") instead of failing mid-add.
@@ -61,7 +74,6 @@ public sealed class AcquisitionQueueService(
         var category = await ResolveCategoryAsync(acquisitionId, cancellationToken);
         var indexerSeedGoal = await ResolveIndexerSeedGoalAsync(candidate, cancellationToken);
         var correlation = DownloadAddCorrelation.Create(candidate.InfoHash, candidate.Title);
-        var existingAttempt = await acquisitions.GetTransferInfoAsync(acquisitionId, cancellationToken);
         DownloadClientDetail client;
         string attemptCategory;
         string? recoveredClientItemId = null;
@@ -98,9 +110,14 @@ public sealed class AcquisitionQueueService(
                     attemptCategory,
                     seedGoal,
                     CancellationToken.None)) {
+                await acquisitions.TryRecoverTransferlessQueueClaimAsync(
+                    acquisitionId,
+                    queueOrigin.Value,
+                    "The download-client handoff did not start. Choose the release again to retry.",
+                    CancellationToken.None);
                 throw new AcquisitionConfigurationException(
                     ApiProblemCodes.AcquisitionInvalid,
-                    "The acquisition began cleanup before the download-client handoff. No release was queued; retry cleanup.");
+                    "The download-client handoff did not start. No release was queued; refresh and retry the release.");
             }
             createdPlaceholder = true;
         }
@@ -112,6 +129,11 @@ public sealed class AcquisitionQueueService(
                     acquisitionId,
                     client.Id,
                     correlation,
+                    CancellationToken.None);
+                await acquisitions.TryRecoverTransferlessQueueClaimAsync(
+                    acquisitionId,
+                    queueOrigin!.Value,
+                    "The download-client handoff did not start. Choose the release again to retry.",
                     CancellationToken.None);
             }
             throw new AcquisitionConfigurationException(
@@ -223,6 +245,13 @@ public sealed class AcquisitionQueueService(
         var correlation = TorrentInfoHash.TryComputeV1(torrent)
             ?? DownloadAddCorrelation.Create(infoHash: null, fileName);
         var existingAttempt = await acquisitions.GetTransferInfoAsync(acquisitionId, cancellationToken);
+        if (existingAttempt is null) {
+            await acquisitions.TryRecoverTransferlessQueueClaimAsync(
+                acquisitionId,
+                AcquisitionStatus.AwaitingSelection,
+                "The manual download handoff did not start. Retry the upload or torrent file.",
+                cancellationToken);
+        }
         DownloadClientDetail client;
         string attemptCategory;
         string? recoveredClientItemId = null;
@@ -257,9 +286,14 @@ public sealed class AcquisitionQueueService(
                     attemptCategory,
                     seedGoal.IsEmpty ? null : seedGoal,
                     CancellationToken.None)) {
+                await acquisitions.TryRecoverTransferlessQueueClaimAsync(
+                    acquisitionId,
+                    queueOrigin.Value,
+                    "The manual download handoff did not start. Retry the upload or torrent file.",
+                    CancellationToken.None);
                 throw new AcquisitionConfigurationException(
                     ApiProblemCodes.AcquisitionInvalid,
-                    "The acquisition began cleanup before the manual download handoff. No file was queued; retry cleanup.");
+                    "The manual download handoff did not start. No file was queued; refresh and retry.");
             }
             createdPlaceholder = true;
         }
@@ -271,6 +305,11 @@ public sealed class AcquisitionQueueService(
                     acquisitionId,
                     client.Id,
                     correlation,
+                    CancellationToken.None);
+                await acquisitions.TryRecoverTransferlessQueueClaimAsync(
+                    acquisitionId,
+                    queueOrigin!.Value,
+                    "The manual download handoff did not start. Retry the upload or torrent file.",
                     CancellationToken.None);
             }
             throw new AcquisitionConfigurationException(
@@ -503,6 +542,34 @@ public sealed class AcquisitionQueueService(
     private static bool IsAdding(AcquisitionTransferInfo? transfer) =>
         transfer?.State == TransferOwnershipState.Adding.ToCode()
         && !string.IsNullOrWhiteSpace(transfer.ClientItemId);
+
+    private async Task<bool> IsCompletedAttemptAsync(
+        Guid acquisitionId,
+        AcquisitionQueueCandidate candidate,
+        AcquisitionTransferInfo? transfer,
+        CancellationToken cancellationToken) {
+        if (transfer is null
+            || IsAdding(transfer)
+            || string.IsNullOrWhiteSpace(transfer.ClientItemId)) {
+            return false;
+        }
+
+        var status = await acquisitions.GetStatusAsync(acquisitionId, cancellationToken);
+        if (status is not (AcquisitionStatus.Queued
+            or AcquisitionStatus.Downloading
+            or AcquisitionStatus.Downloaded
+            or AcquisitionStatus.Importing
+            or AcquisitionStatus.Imported)) {
+            return false;
+        }
+
+        var selected = await acquisitions.GetSelectedReleaseAsync(acquisitionId, cancellationToken);
+        return selected is not null
+            && string.Equals(
+                ReleaseIdentity.For(selected.InfoHash, selected.IndexerName, selected.Title),
+                ReleaseIdentity.For(candidate.InfoHash, candidate.IndexerName, candidate.Title),
+                StringComparison.Ordinal);
+    }
 
     private async Task<DownloadClientDetail> ResolveAttemptOwnerAsync(
         AcquisitionTransferInfo attempt,

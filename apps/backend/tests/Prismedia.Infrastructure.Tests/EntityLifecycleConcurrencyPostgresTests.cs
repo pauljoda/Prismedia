@@ -155,6 +155,56 @@ public sealed class EntityLifecycleConcurrencyPostgresTests {
 
     [Fact]
     [Trait("Category", "PostgreSQL")]
+    public async Task DirectQueueTransitionRefreshesATrackedChildBeforeTransferOwnershipBegins() {
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        var acquisitionId = Guid.NewGuid();
+        var clientId = Guid.NewGuid();
+        var now = DateTimeOffset.UtcNow;
+        await using var context = database.CreateContext();
+        context.DownloadClientConfigs.Add(new DownloadClientConfigRow {
+            Id = clientId,
+            Kind = DownloadClientKind.Slskd,
+            DisplayName = "Soulseek",
+            BaseUrl = "http://download.test",
+            Category = "music",
+            CreatedAt = now,
+            UpdatedAt = now
+        });
+        context.Acquisitions.Add(new AcquisitionRow {
+            Id = acquisitionId,
+            Status = AcquisitionStatus.AwaitingSelection,
+            Title = "Hamilton",
+            ExternalIdsJson = "{}",
+            SourceUrlsJson = "[]",
+            CreatedAt = now,
+            UpdatedAt = now
+        });
+        await context.SaveChangesAsync();
+        var trackedChild = await context.Acquisitions.SingleAsync(row => row.Id == acquisitionId);
+        var store = AcquisitionTestFactory.Store(context);
+
+        Assert.True(await store.TryTransitionStatusAsync(
+            acquisitionId,
+            [AcquisitionStatus.AwaitingSelection],
+            AcquisitionStatus.Queued,
+            "Preparing the selected release for the download client.",
+            CancellationToken.None));
+        Assert.Equal(AcquisitionStatus.Queued, trackedChild.Status);
+
+        Assert.True(await store.BeginTransferAddAsync(
+            acquisitionId,
+            clientId,
+            "Hamilton album",
+            "music",
+            null,
+            CancellationToken.None));
+        var transfer = await context.DownloadTransfers.AsNoTracking().SingleAsync();
+        Assert.Equal(acquisitionId, transfer.AcquisitionId);
+        Assert.Equal(TransferOwnershipState.Adding.ToCode(), transfer.State);
+    }
+
+    [Fact]
+    [Trait("Category", "PostgreSQL")]
     public async Task CancellationCommittedFirstPreventsStaleSearchCandidatePublication() {
         await using var database = await PostgresTestDatabase.CreateAsync();
         var acquisitionId = Guid.NewGuid();

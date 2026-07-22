@@ -5,24 +5,33 @@ namespace Prismedia.Application.Tests.Acquisition;
 
 public sealed class ManualReplacementSearchSessionStoreTests {
     [Fact]
-    public void ClaimedSessionCanOnlyMaterializeOnce() {
+    public async Task SessionRemainsAvailableAfterAQueueAttemptSoTheDurableHandoffCanBeReplayed() {
         var store = new ManualReplacementSearchSessionStore();
         var parentId = Guid.NewGuid();
         var session = store.Create(parentId, [Candidate()]);
 
-        var claimed = store.Claim(session.Id, parentId);
-        var replay = store.Claim(session.Id, parentId);
+        var first = await store.ExecuteExclusiveAsync(
+            session.Id,
+            parentId,
+            value => Task.FromResult(value));
+        var replay = await store.ExecuteExclusiveAsync(
+            session.Id,
+            parentId,
+            value => Task.FromResult(value));
 
-        Assert.NotNull(claimed);
-        Assert.Null(replay);
+        Assert.NotNull(first);
+        Assert.Equal(first, replay);
     }
 
     [Fact]
-    public void SessionCannotBeClaimedForAnotherAcquisition() {
+    public async Task SessionCannotBeUsedForAnotherEntity() {
         var store = new ManualReplacementSearchSessionStore();
         var session = store.Create(Guid.NewGuid(), [Candidate()]);
 
-        Assert.Null(store.Claim(session.Id, Guid.NewGuid()));
+        Assert.Null(await store.ExecuteExclusiveAsync(
+            session.Id,
+            Guid.NewGuid(),
+            value => Task.FromResult(value)));
     }
 
     private static ReviewedReleaseCandidate Candidate() => new(

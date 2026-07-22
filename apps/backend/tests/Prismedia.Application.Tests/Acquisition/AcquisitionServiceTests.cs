@@ -512,6 +512,53 @@ public sealed class AcquisitionServiceTests {
     }
 
     [Fact]
+    public async Task CompletedQueueReplayReturnsTheSameDurableHandoffWithoutAnotherAdd() {
+        var harness = Harness(new AcquisitionTransferInfo(
+            AcquisitionStatus.AwaitingSelection, null, null, null));
+        PrepareQueueCandidate(harness.Store);
+        var queue = QueueService(harness, new RecordingTransferAddCoordinator());
+
+        var first = await queue.QueueAsync(AcquisitionId, CandidateId, CancellationToken.None);
+        harness.Store.SetTransferRuntimeState(AcquisitionStatus.Downloading.ToCode());
+        var replay = await queue.QueueAsync(AcquisitionId, CandidateId, CancellationToken.None);
+
+        Assert.Equal(first, replay);
+        Assert.Equal(1, harness.Store.BeginTransferAddCalls);
+        Assert.Equal(1, harness.Downloads.AddCount);
+        Assert.Equal("new-client-item", harness.Store.TransferPointer?.ClientItemId);
+        Assert.Equal(AcquisitionStatus.Downloading.ToCode(), harness.Store.TransferPointer?.State);
+    }
+
+    [Fact]
+    public async Task ReviewedSoulseekReleaseCompletesTheDurableTransferHandoff() {
+        var harness = Harness(new AcquisitionTransferInfo(
+            AcquisitionStatus.AwaitingSelection, null, null, null));
+        PrepareQueueCandidate(harness.Store);
+        harness.Store.QueueCandidate = harness.Store.QueueCandidate! with {
+            Title = "Hamilton album",
+            IndexerName = "Soulseek",
+            DownloadUrl = "slskd://reviewed-release",
+            InfoHash = null,
+            Protocol = DownloadProtocol.Soulseek
+        };
+
+        var detail = await QueueService(harness, new RecordingTransferAddCoordinator())
+            .QueueAsync(
+                AcquisitionId,
+                CandidateId,
+                CancellationToken.None,
+                manualPick: true);
+
+        Assert.Equal(AcquisitionStatus.Queued, detail?.Summary.Status);
+        Assert.Equal(1, harness.Store.BeginTransferAddCalls);
+        Assert.Equal(1, harness.Downloads.AddCount);
+        Assert.Equal("new-client-item", harness.Store.TransferPointer?.ClientItemId);
+        Assert.Null(harness.Store.TransferPointer?.State);
+        Assert.Equal("Hamilton album", harness.Store.SelectedRelease?.Title);
+        Assert.True(harness.Store.SelectedRelease?.ManualPick);
+    }
+
+    [Fact]
     public async Task QueueRecoveryDoesNotAddAgainWhenTheOriginalHandoffFinishesWhileItWaitsForTheLease() {
         var harness = Harness(new AcquisitionTransferInfo(
             AcquisitionStatus.Queued,
@@ -1219,6 +1266,9 @@ public sealed class AcquisitionServiceTests {
         }
 
         public void ForceStatus(AcquisitionStatus status) => Status = status;
+
+        public void SetTransferRuntimeState(string state) =>
+            TransferPointer = TransferPointer! with { State = state };
 
         public async Task<bool> TryTransitionStatusAsync(
             Guid id,

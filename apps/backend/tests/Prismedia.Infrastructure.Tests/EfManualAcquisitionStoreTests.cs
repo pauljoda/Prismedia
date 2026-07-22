@@ -36,7 +36,7 @@ public sealed class EfManualAcquisitionStoreTests : IDisposable {
             UpdatedAt = now
         });
         await db.SaveChangesAsync();
-        var store = new EfManualAcquisitionStore(db, null!);
+        var store = new EfManualAcquisitionStore(db, AcquisitionTestFactory.Store(db));
 
         var target = await store.GetSearchTargetAsync(entityId, CancellationToken.None);
 
@@ -63,6 +63,68 @@ public sealed class EfManualAcquisitionStoreTests : IDisposable {
         Assert.True(selected?.ManualPick);
         Assert.Contains(await db.DownloadTransfers.AsNoTracking().ToArrayAsync(), transfer =>
             transfer.AcquisitionId == child.Id && transfer.ClientItemId == completed.ClientItemId);
+    }
+
+    [Fact]
+    public async Task ReplayingTheSameReviewedCandidatesReturnsTheExistingUpgradeChild() {
+        Directory.CreateDirectory(_root);
+        var sourcePath = Path.Combine(_root, "Hamilton.epub");
+        await File.WriteAllTextAsync(sourcePath, "owned");
+        await using var db = CreateContext();
+        var now = DateTimeOffset.UtcNow;
+        var entityId = Guid.NewGuid();
+        db.Entities.Add(new EntityRow {
+            Id = entityId,
+            KindCode = EntityKind.Book.ToCode(),
+            Title = "Hamilton",
+            CreatedAt = now,
+            UpdatedAt = now
+        });
+        db.EntityFiles.Add(new EntityFileRow {
+            Id = Guid.NewGuid(),
+            EntityId = entityId,
+            Role = EntityFileRole.Source,
+            Path = sourcePath,
+            CreatedAt = now,
+            UpdatedAt = now
+        });
+        await db.SaveChangesAsync();
+        var candidate = new ReviewedReleaseCandidate(
+            Guid.NewGuid(),
+            new ScoredRelease(
+                new IndexerRelease(
+                    "Hamilton album",
+                    1_000,
+                    1,
+                    0,
+                    DownloadProtocol.Soulseek,
+                    "slskd://reviewed-release",
+                    null,
+                    null,
+                    null,
+                    null,
+                    null),
+                null,
+                "Soulseek",
+                true,
+                100,
+                []));
+        var store = new EfManualAcquisitionStore(db, AcquisitionTestFactory.Store(db));
+
+        var first = await store.CreateReviewedReplacementAsync(
+            entityId,
+            [candidate],
+            CancellationToken.None);
+        var replay = await store.CreateReviewedReplacementAsync(
+            entityId,
+            [candidate],
+            CancellationToken.None);
+
+        Assert.Equal(first, replay);
+        Assert.Single(await db.Acquisitions.AsNoTracking()
+            .Where(row => row.UpgradeOfAcquisitionId != null)
+            .ToArrayAsync());
+        Assert.Single(await db.ReleaseCandidates.AsNoTracking().ToArrayAsync());
     }
 
     private static PrismediaDbContext CreateContext() =>

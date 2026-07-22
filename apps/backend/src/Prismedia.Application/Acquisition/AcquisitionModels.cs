@@ -548,6 +548,16 @@ public sealed record PendingTransferAdd(
     DateTimeOffset UpdatedAt);
 
 /// <summary>
+/// A Queued acquisition whose download-client handoff never acquired durable transfer ownership.
+/// Reviewed candidates make the release picker reusable; rows without candidates recover to an honest
+/// failure state instead.
+/// </summary>
+public sealed record TransferlessQueueClaim(
+    Guid AcquisitionId,
+    bool HasReviewedCandidates,
+    DateTimeOffset UpdatedAt);
+
+/// <summary>
 /// Durable completion ticket for an acquisition whose download finished before its import or replacement
 /// job was safely queued. <see cref="Kind"/> determines whether an ordinary acquisition has a registered
 /// import engine; <see cref="IsUpgrade"/> routes upgrade children to the in-place replacement workflow.

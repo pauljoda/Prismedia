@@ -23,6 +23,49 @@ public sealed class AcquisitionMonitorJobHandlerTests {
     private static readonly Guid ClientId = Guid.NewGuid();
 
     [Fact]
+    public async Task OldTransferlessReviewedClaimReturnsToReusableSelection() {
+        await using var db = CreateContext();
+        var now = DateTimeOffset.UtcNow.AddMinutes(-10);
+        var acquisitionId = Guid.NewGuid();
+        var candidateId = Guid.NewGuid();
+        db.Acquisitions.Add(new AcquisitionRow {
+            Id = acquisitionId,
+            Status = AcquisitionStatus.Queued,
+            Title = "Hamilton",
+            ExternalIdsJson = "{}",
+            SourceUrlsJson = "[]",
+            CreatedAt = now,
+            UpdatedAt = now
+        });
+        db.ReleaseCandidates.Add(new ReleaseCandidateRow {
+            Id = candidateId,
+            AcquisitionId = acquisitionId,
+            IndexerName = "Soulseek",
+            Title = "Hamilton album",
+            DownloadUrl = "slskd://reviewed-release",
+            Accepted = true,
+            Score = 100,
+            Protocol = DownloadProtocol.Soulseek,
+            RejectionsJson = "[]",
+            CreatedAt = now
+        });
+        await db.SaveChangesAsync();
+
+        await RunAsync(
+            db,
+            new RecordingJobQueue(),
+            listing: [],
+            directLookup: null,
+            acquisitionId);
+
+        var acquisition = await db.Acquisitions.AsNoTracking().SingleAsync(row => row.Id == acquisitionId);
+        Assert.Equal(AcquisitionStatus.AwaitingSelection, acquisition.Status);
+        Assert.Contains("reviewed release", acquisition.StatusMessage, StringComparison.OrdinalIgnoreCase);
+        Assert.True(await db.ReleaseCandidates.AsNoTracking().AnyAsync(row => row.Id == candidateId));
+        Assert.Empty(await db.DownloadTransfers.AsNoTracking().ToArrayAsync());
+    }
+
+    [Fact]
     public async Task PendingAddIsRequeuedThroughTheSameCandidateBeforePolling() {
         await using var db = CreateContext();
         var now = DateTimeOffset.UtcNow.AddMinutes(-10);

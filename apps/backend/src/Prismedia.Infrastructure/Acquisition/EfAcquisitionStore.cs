@@ -10,7 +10,7 @@ using Prismedia.Infrastructure.Persistence.Entities;
 namespace Prismedia.Infrastructure.Acquisition;
 
 /// <summary>EF-backed store for acquisition records and their scored release candidates.</summary>
-public sealed class EfAcquisitionStore(PrismediaDbContext db, IAcquisitionHistoryStore history, ILogger<EfAcquisitionStore> logger) : IAcquisitionStore {
+public sealed partial class EfAcquisitionStore(PrismediaDbContext db, IAcquisitionHistoryStore history, ILogger<EfAcquisitionStore> logger) : IAcquisitionStore {
     /// <inheritdoc />
     public async Task<IReadOnlyList<DownloadedAcquisitionCompletion>> ListDownloadedCompletionWorkAsync(
         CancellationToken cancellationToken) {
@@ -345,7 +345,7 @@ public sealed class EfAcquisitionStore(PrismediaDbContext db, IAcquisitionHistor
         var expected = expectedStatuses.Distinct().ToArray();
         var now = DateTimeOffset.UtcNow;
         if (db.Database.IsRelational()) {
-            return await db.Acquisitions
+            var affected = await db.Acquisitions
                 .Where(row => row.Id == id && expected.Contains(row.Status))
                 .ExecuteUpdateAsync(setters => setters
                     .SetProperty(row => row.Status, status)
@@ -355,7 +355,8 @@ public sealed class EfAcquisitionStore(PrismediaDbContext db, IAcquisitionHistor
                         status is AcquisitionStatus.Importing or AcquisitionStatus.Failed
                             ? row => row.ImportClaimJobId
                             : row => null)
-                    .SetProperty(row => row.UpdatedAt, now), cancellationToken) == 1;
+                    .SetProperty(row => row.UpdatedAt, now), cancellationToken);
+            return await SynchronizeTrackedAcquisitionAsync(id, affected, cancellationToken);
         }
 
         var row = await db.Acquisitions.FirstOrDefaultAsync(value => value.Id == id, cancellationToken);
@@ -389,14 +390,15 @@ public sealed class EfAcquisitionStore(PrismediaDbContext db, IAcquisitionHistor
             : JsonSerializer.Serialize(expectedSelectedRelease);
         var now = DateTimeOffset.UtcNow;
         if (db.Database.IsRelational()) {
-            return await db.Acquisitions
+            var affected = await db.Acquisitions
                 .Where(row => row.Id == id
                     && expected.Contains(row.Status)
                     && row.SelectedReleaseJson == selectedJson)
                 .ExecuteUpdateAsync(setters => setters
                     .SetProperty(row => row.Status, AcquisitionStatus.Failed)
                     .SetProperty(row => row.StatusMessage, message)
-                    .SetProperty(row => row.UpdatedAt, now), cancellationToken) == 1;
+                    .SetProperty(row => row.UpdatedAt, now), cancellationToken);
+            return await SynchronizeTrackedAcquisitionAsync(id, affected, cancellationToken);
         }
 
         var row = await db.Acquisitions.FirstOrDefaultAsync(value => value.Id == id, cancellationToken);
@@ -420,7 +422,7 @@ public sealed class EfAcquisitionStore(PrismediaDbContext db, IAcquisitionHistor
         CancellationToken cancellationToken) {
         var now = DateTimeOffset.UtcNow;
         if (db.Database.IsRelational()) {
-            return await db.Acquisitions
+            var affected = await db.Acquisitions
                 .Where(row => row.Id == id
                     && (row.Status == AcquisitionStatus.Downloaded
                         || (allowManualRetry && row.Status == AcquisitionStatus.ManualImportRequired)
@@ -431,7 +433,8 @@ public sealed class EfAcquisitionStore(PrismediaDbContext db, IAcquisitionHistor
                     .SetProperty(row => row.Status, AcquisitionStatus.Importing)
                     .SetProperty(row => row.StatusMessage, (string?)null)
                     .SetProperty(row => row.ImportClaimJobId, claimJobId)
-                    .SetProperty(row => row.UpdatedAt, now), cancellationToken) == 1;
+                    .SetProperty(row => row.UpdatedAt, now), cancellationToken);
+            return await SynchronizeTrackedAcquisitionAsync(id, affected, cancellationToken);
         }
 
         var row = await db.Acquisitions.FirstOrDefaultAsync(value => value.Id == id, cancellationToken);
@@ -464,7 +467,7 @@ public sealed class EfAcquisitionStore(PrismediaDbContext db, IAcquisitionHistor
         };
         var now = DateTimeOffset.UtcNow;
         if (db.Database.IsRelational()) {
-            return await db.Acquisitions
+            var affected = await db.Acquisitions
                 .Where(row => row.Id == id
                     && row.ImportCheckpointJson != null
                     && (holdable.Contains(row.Status)
@@ -474,7 +477,8 @@ public sealed class EfAcquisitionStore(PrismediaDbContext db, IAcquisitionHistor
                     .SetProperty(row => row.Status, AcquisitionStatus.ManualImportRequired)
                     .SetProperty(row => row.StatusMessage, message)
                     .SetProperty(row => row.ImportClaimJobId, (Guid?)null)
-                    .SetProperty(row => row.UpdatedAt, now), cancellationToken) == 1;
+                    .SetProperty(row => row.UpdatedAt, now), cancellationToken);
+            return await SynchronizeTrackedAcquisitionAsync(id, affected, cancellationToken);
         }
 
         var row = await db.Acquisitions.FirstOrDefaultAsync(value => value.Id == id, cancellationToken);
@@ -687,9 +691,12 @@ public sealed class EfAcquisitionStore(PrismediaDbContext db, IAcquisitionHistor
                 return false;
             }
 
+            await SynchronizeTrackedAcquisitionAsync(id, transitioned, cancellationToken);
+
             await db.ReleaseCandidates
                 .Where(candidate => candidate.AcquisitionId == id)
                 .ExecuteDeleteAsync(cancellationToken);
+            DetachTrackedReleaseCandidates(id);
             AddCandidates(id, candidates, now);
             await db.SaveChangesAsync(cancellationToken);
             await transaction.CommitAsync(cancellationToken);
@@ -916,6 +923,7 @@ public sealed class EfAcquisitionStore(PrismediaDbContext db, IAcquisitionHistor
                     && row.ClientItemId == correlation
                     && row.State == addingCode)
                 .ExecuteDeleteAsync(cancellationToken);
+            DetachTrackedTransferAdds(acquisitionId, downloadClientConfigId, correlation, addingCode);
             return;
         }
 
@@ -1072,20 +1080,6 @@ public sealed class EfAcquisitionStore(PrismediaDbContext db, IAcquisitionHistor
             .ToArray();
     }
 
-    public async Task<bool> HasActiveTransfersAsync(CancellationToken cancellationToken) {
-        var active = new[] {
-            AcquisitionStatus.Queued,
-            AcquisitionStatus.Downloading,
-        };
-        // Seeding watches keep the monitor scheduled after import, so seed goals are actually enforced.
-        // Pre-Add placeholders also count: the monitor owns their safe, idempotent reconciliation.
-        return await (
-            from transfer in db.DownloadTransfers.AsNoTracking()
-            join acquisition in db.Acquisitions.AsNoTracking() on transfer.AcquisitionId equals acquisition.Id
-            where active.Contains(acquisition.Status) || transfer.SeedingSince != null
-            select transfer.Id).AnyAsync(cancellationToken);
-    }
-
     /// <inheritdoc />
     public async Task<IReadOnlyList<Guid>> ListStaleSearchingAsync(TimeSpan olderThan, CancellationToken cancellationToken) {
         var cutoff = DateTimeOffset.UtcNow - olderThan;
@@ -1224,7 +1218,7 @@ public sealed class EfAcquisitionStore(PrismediaDbContext db, IAcquisitionHistor
         var transferClientItemId = checkpoint.TransferClientItemId;
         var now = DateTimeOffset.UtcNow;
         if (db.Database.IsRelational()) {
-            return await db.Acquisitions
+            var affected = await db.Acquisitions
                 .Where(row => row.Id == acquisitionId
                     && row.Status == AcquisitionStatus.Importing
                     && row.ImportCheckpointJson == null
@@ -1234,7 +1228,8 @@ public sealed class EfAcquisitionStore(PrismediaDbContext db, IAcquisitionHistor
                         && transfer.ClientItemId == transferClientItemId)))
                 .ExecuteUpdateAsync(setters => setters
                     .SetProperty(row => row.ImportCheckpointJson, checkpointJson)
-                    .SetProperty(row => row.UpdatedAt, now), cancellationToken) == 1;
+                    .SetProperty(row => row.UpdatedAt, now), cancellationToken);
+            return await SynchronizeTrackedAcquisitionAsync(acquisitionId, affected, cancellationToken);
         }
 
         var row = await db.Acquisitions.FirstOrDefaultAsync(value => value.Id == acquisitionId, cancellationToken);
@@ -1271,7 +1266,7 @@ public sealed class EfAcquisitionStore(PrismediaDbContext db, IAcquisitionHistor
         var now = DateTimeOffset.UtcNow;
 
         if (db.Database.IsRelational()) {
-            return await db.Acquisitions
+            var affected = await db.Acquisitions
                 .Where(row => row.Id == acquisitionId
                     && row.ImportCheckpointJson == expectedJson
                     && (claimable.Contains(row.Status)
@@ -1283,7 +1278,8 @@ public sealed class EfAcquisitionStore(PrismediaDbContext db, IAcquisitionHistor
                     .SetProperty(row => row.StatusMessage, (string?)null)
                     .SetProperty(row => row.ImportCheckpointJson, claimedJson)
                     .SetProperty(row => row.ImportClaimJobId, claimJobId)
-                    .SetProperty(row => row.UpdatedAt, now), cancellationToken) == 1;
+                    .SetProperty(row => row.UpdatedAt, now), cancellationToken);
+            return await SynchronizeTrackedAcquisitionAsync(acquisitionId, affected, cancellationToken);
         }
 
         var row = await db.Acquisitions.FirstOrDefaultAsync(value => value.Id == acquisitionId, cancellationToken);
@@ -1331,6 +1327,7 @@ public sealed class EfAcquisitionStore(PrismediaDbContext db, IAcquisitionHistor
                 await db.AcquisitionImportHints
                     .Where(hint => hint.AcquisitionId == acquisitionId)
                     .ExecuteDeleteAsync(cancellationToken);
+                await SynchronizeTrackedAcquisitionAsync(acquisitionId, affected, cancellationToken);
             }
             return affected == 1;
         }
@@ -1372,7 +1369,7 @@ public sealed class EfAcquisitionStore(PrismediaDbContext db, IAcquisitionHistor
         var transferClientItemId = checkpoint.TransferClientItemId;
         var now = DateTimeOffset.UtcNow;
         if (db.Database.IsRelational()) {
-            return await db.Acquisitions
+            var affected = await db.Acquisitions
                 .Where(row => row.Id == acquisitionId
                     && row.Kind == checkpoint.Kind
                     && row.Status == AcquisitionStatus.Importing
@@ -1383,7 +1380,8 @@ public sealed class EfAcquisitionStore(PrismediaDbContext db, IAcquisitionHistor
                         && transfer.ClientItemId == transferClientItemId)))
                 .ExecuteUpdateAsync(setters => setters
                     .SetProperty(row => row.ImportCheckpointJson, checkpointJson)
-                    .SetProperty(row => row.UpdatedAt, now), cancellationToken) == 1;
+                    .SetProperty(row => row.UpdatedAt, now), cancellationToken);
+            return await SynchronizeTrackedAcquisitionAsync(acquisitionId, affected, cancellationToken);
         }
 
         var row = await db.Acquisitions.FirstOrDefaultAsync(value => value.Id == acquisitionId, cancellationToken);
@@ -1417,7 +1415,7 @@ public sealed class EfAcquisitionStore(PrismediaDbContext db, IAcquisitionHistor
         var advancedJson = ImportPlacementCheckpointJson.Serialize(advanced);
         var now = DateTimeOffset.UtcNow;
         if (db.Database.IsRelational()) {
-            return await db.Acquisitions
+            var affected = await db.Acquisitions
                 .Where(row => row.Id == acquisitionId
                     && row.Kind == expected.Kind
                     && row.Status == AcquisitionStatus.Importing
@@ -1425,7 +1423,8 @@ public sealed class EfAcquisitionStore(PrismediaDbContext db, IAcquisitionHistor
                     && row.ImportCheckpointJson == expectedJson)
                 .ExecuteUpdateAsync(setters => setters
                     .SetProperty(row => row.ImportCheckpointJson, advancedJson)
-                    .SetProperty(row => row.UpdatedAt, now), cancellationToken) == 1;
+                    .SetProperty(row => row.UpdatedAt, now), cancellationToken);
+            return await SynchronizeTrackedAcquisitionAsync(acquisitionId, affected, cancellationToken);
         }
 
         var row = await db.Acquisitions.FirstOrDefaultAsync(value => value.Id == acquisitionId, cancellationToken);
@@ -1460,7 +1459,7 @@ public sealed class EfAcquisitionStore(PrismediaDbContext db, IAcquisitionHistor
         var now = DateTimeOffset.UtcNow;
 
         if (db.Database.IsRelational()) {
-            return await db.Acquisitions
+            var affected = await db.Acquisitions
                 .Where(row => row.Id == acquisitionId
                     && row.Kind == checkpoint.Kind
                     && row.ImportCheckpointJson == expectedJson
@@ -1473,7 +1472,8 @@ public sealed class EfAcquisitionStore(PrismediaDbContext db, IAcquisitionHistor
                     .SetProperty(row => row.StatusMessage, (string?)null)
                     .SetProperty(row => row.ImportCheckpointJson, claimedJson)
                     .SetProperty(row => row.ImportClaimJobId, claimJobId)
-                    .SetProperty(row => row.UpdatedAt, now), cancellationToken) == 1;
+                    .SetProperty(row => row.UpdatedAt, now), cancellationToken);
+            return await SynchronizeTrackedAcquisitionAsync(acquisitionId, affected, cancellationToken);
         }
 
         var row = await db.Acquisitions.FirstOrDefaultAsync(value => value.Id == acquisitionId, cancellationToken);
@@ -1523,6 +1523,7 @@ public sealed class EfAcquisitionStore(PrismediaDbContext db, IAcquisitionHistor
                 await db.AcquisitionImportHints
                     .Where(hint => hint.AcquisitionId == acquisitionId)
                     .ExecuteDeleteAsync(cancellationToken);
+                await SynchronizeTrackedAcquisitionAsync(acquisitionId, affected, cancellationToken);
             }
             return affected == 1;
         }

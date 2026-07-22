@@ -155,6 +155,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 - Completed acquisitions now preempt remaining release searches, so a large artist request cannot leave finished Soulseek downloads waiting to import while its metadata and search fanout continues.
+- Manual replacement reviews can now be retried safely after a failed download-client handoff: Prismedia reuses the reviewed upgrade and candidates, repairs old transferless Preparing rows into an actionable state, and prevents same-request duplicate replacement children.
 - Legacy slskd enqueue errors now reconcile the exact peer files before Prismedia decides whether the handoff succeeded, failed cleanly, or remains ambiguous, preventing a rejected peer from leaving requests permanently stuck in Preparing or Stopping.
 - Failed Soulseek transfers now enter blocklist-and-retry recovery immediately instead of waiting behind a large artist's remaining searches.
 - Acquisition transfer polling now runs ahead of large request search fan-outs, so completed or failed Soulseek downloads keep advancing through import and recovery while the remaining artist albums and tracks are still being searched.

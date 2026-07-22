@@ -653,6 +653,44 @@ public sealed class EfAcquisitionStoreTests {
     }
 
     [Fact]
+    public async Task OldTransferlessQueueClaimReturnsToItsPersistedReleaseReview() {
+        await using var db = CreateContext();
+        var acquisitionId = Guid.NewGuid();
+        var old = DateTimeOffset.UtcNow.AddMinutes(-10);
+        db.Acquisitions.Add(new AcquisitionRow {
+            Id = acquisitionId,
+            Status = AcquisitionStatus.Queued,
+            StatusMessage = "Preparing the selected release for the download client.",
+            Title = "Hamilton",
+            ExternalIdsJson = "{}",
+            SourceUrlsJson = "[]",
+            CreatedAt = old,
+            UpdatedAt = old
+        });
+        AddCandidate(db, acquisitionId, null, "Soulseek", "Hamilton album", 100);
+        await db.SaveChangesAsync();
+        var store = AcquisitionTestFactory.Store(db);
+
+        Assert.True(await store.HasActiveTransfersAsync(CancellationToken.None));
+        var claim = Assert.Single(await store.ListTransferlessQueueClaimsAsync(
+            TimeSpan.FromMinutes(1),
+            CancellationToken.None));
+        Assert.True(claim.HasReviewedCandidates);
+
+        Assert.True(await store.TryRecoverTransferlessQueueClaimAsync(
+            acquisitionId,
+            AcquisitionStatus.AwaitingSelection,
+            "Choose a reviewed release to retry.",
+            CancellationToken.None));
+
+        var detail = (await store.GetAsync(acquisitionId, CancellationToken.None))!;
+        Assert.Equal(AcquisitionStatus.AwaitingSelection, detail.Summary.Status);
+        Assert.Equal("Choose a reviewed release to retry.", detail.Summary.StatusMessage);
+        Assert.Single(detail.Candidates);
+        Assert.False(await store.HasActiveTransfersAsync(CancellationToken.None));
+    }
+
+    [Fact]
     public async Task EnrichMetadataFillsGapsWithoutClobbering() {
         await using var db = CreateContext();
         var now = DateTimeOffset.UtcNow;

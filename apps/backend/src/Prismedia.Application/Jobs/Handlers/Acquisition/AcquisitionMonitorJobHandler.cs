@@ -40,8 +40,31 @@ public sealed class AcquisitionMonitorJobHandler(
     /// dead release.
     /// </summary>
     private static readonly TimeSpan StallGrace = TimeSpan.FromMinutes(60);
+    private static readonly TimeSpan TransferlessQueueGrace = TimeSpan.FromMinutes(1);
 
     public async Task HandleAsync(JobContext context, CancellationToken cancellationToken) {
+        var transferlessClaims = await acquisitions.ListTransferlessQueueClaimsAsync(
+            TransferlessQueueGrace,
+            cancellationToken);
+        foreach (var claim in transferlessClaims) {
+            var recoveryStatus = claim.HasReviewedCandidates
+                ? AcquisitionStatus.AwaitingSelection
+                : AcquisitionStatus.Failed;
+            var message = claim.HasReviewedCandidates
+                ? "The download-client handoff did not start. Choose a reviewed release to retry."
+                : "The download-client handoff did not start. Retry the manual download.";
+            if (await acquisitions.TryRecoverTransferlessQueueClaimAsync(
+                    claim.AcquisitionId,
+                    recoveryStatus,
+                    message,
+                    cancellationToken)) {
+                logger.LogWarning(
+                    "Recovered transferless Queued acquisition {AcquisitionId} to {Status}",
+                    claim.AcquisitionId,
+                    recoveryStatus);
+            }
+        }
+
         var pendingAdds = await acquisitions.ListPendingTransferAddsAsync(cancellationToken);
         foreach (var pending in pendingAdds) {
             cancellationToken.ThrowIfCancellationRequested();
