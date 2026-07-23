@@ -157,6 +157,51 @@ public sealed class AcquisitionImportJobHandlerCheckpointTests : IDisposable {
     }
 
     [Fact]
+    public async Task ImportFailureHistoryRetainsEntityScope() {
+        await using var db = CreateContext();
+        var acquisitionId = Guid.NewGuid();
+        var entityId = Guid.NewGuid();
+        var now = DateTimeOffset.UtcNow;
+        var contentRoot = Directory.CreateDirectory(Path.Combine(_root, "dangerous-download")).FullName;
+        await File.WriteAllTextAsync(Path.Combine(contentRoot, "Novel.scr"), "dangerous-payload");
+        db.Acquisitions.Add(new AcquisitionRow {
+            Id = acquisitionId,
+            EntityId = entityId,
+            Status = AcquisitionStatus.Downloaded,
+            Kind = EntityKind.Book,
+            Title = "Novel",
+            ExternalIdsJson = "{}",
+            SourceUrlsJson = "[]",
+            CreatedAt = now,
+            UpdatedAt = now
+        });
+        db.DownloadTransfers.Add(new DownloadTransferRow {
+            Id = Guid.NewGuid(),
+            AcquisitionId = acquisitionId,
+            ClientItemId = "transfer-1",
+            ContentPath = contentRoot,
+            CreatedAt = now,
+            UpdatedAt = now
+        });
+        await db.SaveChangesAsync();
+        var handler = new AcquisitionImportJobHandler(
+            AcquisitionTestFactory.Store(db),
+            new SingleEngineFactory(new RecordingEngine(EntityKind.Book)),
+            new DownloadPayloadReader(),
+            new EfAcquisitionHistoryStore(db),
+            NullLogger<AcquisitionImportJobHandler>.Instance,
+            new RecordingLifecycleLease());
+
+        await handler.HandleAsync(
+            ContextFor(acquisitionId, Guid.NewGuid(), now),
+            CancellationToken.None);
+
+        var history = await db.AcquisitionHistory.AsNoTracking().SingleAsync();
+        Assert.Equal(AcquisitionHistoryEvent.ImportFailed, history.Event);
+        Assert.Equal(entityId, history.EntityId);
+    }
+
+    [Fact]
     public async Task BookPlacementCheckpointIsClaimedAndDispatchedWithoutReplanningConsumedPayload() {
         await using var db = CreateContext();
         var acquisitionId = Guid.NewGuid();

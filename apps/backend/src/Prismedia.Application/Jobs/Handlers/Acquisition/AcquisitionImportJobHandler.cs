@@ -195,7 +195,7 @@ public sealed class AcquisitionImportJobHandler(
     private Task RecordImportFailedAsync(AcquisitionImportContext import, string message, CancellationToken cancellationToken) =>
         history.SafeAddAsync(logger, new AcquisitionHistoryEntry(
             import.Id,
-            EntityId: null,
+            import.EntityId,
             import.Kind,
             AcquisitionHistoryEvent.ImportFailed,
             import.Title,
