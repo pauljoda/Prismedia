@@ -86,6 +86,7 @@ public sealed class ScanLibraryJobHandler(
 
         await using var scanLease = scanGate is null ? null : await scanGate.EnterAsync(cancellationToken);
         var files = placedPaths.Select(Path.GetFullPath).ToArray();
+        var seriesSeasonFolders = BuildSeriesSeasonFolderIndex(root.Path, files);
         var settings = await Roots.GetSettingsAsync(cancellationToken);
         if (!root.AutoIdentify) {
             settings = settings with { AutoIdentifyEnabled = false };
@@ -96,7 +97,7 @@ public sealed class ScanLibraryJobHandler(
             var sidecar = sidecars is null
                 ? null
                 : await sidecars.ReadAsync(filePath, cancellationToken);
-            var item = BuildVideoUpsertItem(filePath, root, files, sidecar);
+            var item = BuildVideoUpsertItem(filePath, root, files, seriesSeasonFolders, sidecar);
             await VideoWantedBinding.BindAsync(
                 acquisitionHints,
                 item,
@@ -207,6 +208,10 @@ public sealed class ScanLibraryJobHandler(
             // Honor this root's Auto Identify opt-out without touching other generation settings.
             settings = settings with { AutoIdentifyEnabled = false };
         }
+        IReadOnlyDictionary<string, SeriesSeasonFolderInfo> seriesSeasonFolders;
+        using (timer.Phase("classify-folders")) {
+            seriesSeasonFolders = BuildSeriesSeasonFolderIndex(root.Path, files);
+        }
         var allEntityIds = new List<Guid>(files.Count);
         // Parallel to allEntityIds: the source path behind each persisted entity id. Files whose
         // persistence failed are skipped, so downstream label lookups cannot index `files` directly.
@@ -231,7 +236,7 @@ public sealed class ScanLibraryJobHandler(
                 VideoUpsertItem item;
                 using (timer.Phase("classify")) {
                     validPaths.Add(filePath);
-                    item = BuildVideoUpsertItem(filePath, root, files, sidecar);
+                    item = BuildVideoUpsertItem(filePath, root, files, seriesSeasonFolders, sidecar);
                     if (item.Movie is { } movie) {
                         validMovieFolders.Add(movie.FolderPath);
                     }
@@ -516,6 +521,7 @@ public sealed class ScanLibraryJobHandler(
         string filePath,
         LibraryRootData root,
         IReadOnlyList<string> allFiles,
+        IReadOnlyDictionary<string, SeriesSeasonFolderInfo> seriesSeasonFolders,
         VideoSidecarMetadata? metadata = null) {
         var fallbackTitle = Path.GetFileNameWithoutExtension(filePath);
         var title = string.IsNullOrWhiteSpace(metadata?.Title) ? fallbackTitle : metadata.Title.Trim();
@@ -570,6 +576,27 @@ public sealed class ScanLibraryJobHandler(
                     Metadata: metadata);
             }
 
+            // Once any sibling folder establishes the parent as a series root, every direct content
+            // folder beneath it is a season. Named folders without season tokens are ordered after the
+            // highest detected season instead of being promoted into unrelated leaf-level series.
+            if (seriesSeasonFolders.TryGetValue(parentFolder, out var groupedSeason)) {
+                return new VideoUpsertItem(
+                    filePath,
+                    title,
+                    root.Id,
+                    root.IsNsfw,
+                    new VideoSeriesScanInfo(
+                        groupedSeason.SeriesFolderPath,
+                        Path.GetFileName(groupedSeason.SeriesFolderPath)),
+                    new VideoSeasonScanInfo(
+                        parentFolder,
+                        parentFolderName,
+                        groupedSeason.SeasonNumber),
+                    EpisodeNumber: null,
+                    AbsoluteEpisodeNumber: null,
+                    Metadata: metadata);
+            }
+
             if (episodeToken is not null && !SamePath(parentFolder, root.Path)) {
                 return new VideoUpsertItem(
                     filePath,
@@ -605,6 +632,101 @@ public sealed class ScanLibraryJobHandler(
         }
 
         return new VideoUpsertItem(filePath, title, root.Id, root.IsNsfw, Metadata: metadata);
+    }
+
+    /// <summary>
+    /// Finds folder-backed season groups before classifying individual files. A canonical season name
+    /// or a consistent SxxExx season token establishes the common parent as the series folder. Other
+    /// direct child folders then remain inside that series, ordered by title after its numbered seasons.
+    /// </summary>
+    private static IReadOnlyDictionary<string, SeriesSeasonFolderInfo> BuildSeriesSeasonFolderIndex(
+        string rootPath,
+        IReadOnlyList<string> allFiles) {
+        var filesByFolder = new Dictionary<string, List<string>>(FileSystemPathComparison.Comparer);
+        foreach (var filePath in allFiles) {
+            var folderPath = Path.GetDirectoryName(filePath);
+            if (string.IsNullOrWhiteSpace(folderPath)) {
+                continue;
+            }
+
+            if (!filesByFolder.TryGetValue(folderPath, out var folderFiles)) {
+                folderFiles = [];
+                filesByFolder[folderPath] = folderFiles;
+            }
+            folderFiles.Add(filePath);
+        }
+
+        var foldersBySeries = new Dictionary<string, List<string>>(FileSystemPathComparison.Comparer);
+        foreach (var folderPath in filesByFolder.Keys) {
+            var seriesFolderPath = Path.GetDirectoryName(folderPath);
+            if (string.IsNullOrWhiteSpace(seriesFolderPath) || SamePath(seriesFolderPath, rootPath)) {
+                continue;
+            }
+
+            if (!foldersBySeries.TryGetValue(seriesFolderPath, out var seasonFolders)) {
+                seasonFolders = [];
+                foldersBySeries[seriesFolderPath] = seasonFolders;
+            }
+            seasonFolders.Add(folderPath);
+        }
+
+        var detectedSeasonNumbers = new Dictionary<string, int>(FileSystemPathComparison.Comparer);
+        foreach (var (folderPath, folderFiles) in filesByFolder) {
+            if (TryParseSeasonFolder(Path.GetFileName(folderPath), out var folderSeasonNumber)) {
+                detectedSeasonNumbers[folderPath] = folderSeasonNumber;
+                continue;
+            }
+
+            int? detectedSeasonNumber = null;
+            var hasConflictingSeasonNumbers = false;
+            foreach (var filePath in folderFiles) {
+                var episodeToken = ParseEpisodeToken(Path.GetFileNameWithoutExtension(filePath));
+                if (episodeToken is null) {
+                    continue;
+                }
+
+                if (detectedSeasonNumber is null) {
+                    detectedSeasonNumber = episodeToken.SeasonNumber;
+                } else if (detectedSeasonNumber != episodeToken.SeasonNumber) {
+                    hasConflictingSeasonNumbers = true;
+                    break;
+                }
+            }
+
+            if (detectedSeasonNumber is { } seasonNumber && !hasConflictingSeasonNumbers) {
+                detectedSeasonNumbers[folderPath] = seasonNumber;
+            }
+        }
+
+        var result = new Dictionary<string, SeriesSeasonFolderInfo>(FileSystemPathComparison.Comparer);
+        foreach (var (seriesFolderPath, seasonFolders) in foldersBySeries) {
+            var numberedFolders = seasonFolders
+                .Where(detectedSeasonNumbers.ContainsKey)
+                .ToArray();
+            if (numberedFolders.Length == 0) {
+                continue;
+            }
+
+            foreach (var folderPath in numberedFolders) {
+                result[folderPath] = new SeriesSeasonFolderInfo(
+                    seriesFolderPath,
+                    detectedSeasonNumbers[folderPath]);
+            }
+
+            var nextSeasonNumber = numberedFolders
+                .Select(folderPath => detectedSeasonNumbers[folderPath])
+                .Max() + 1;
+            var titledFolders = seasonFolders
+                .Where(folderPath => !detectedSeasonNumbers.ContainsKey(folderPath))
+                .OrderBy(Path.GetFileName, StringComparer.OrdinalIgnoreCase)
+                .ThenBy(folderPath => folderPath, StringComparer.Ordinal)
+                .ToArray();
+            foreach (var folderPath in titledFolders) {
+                result[folderPath] = new SeriesSeasonFolderInfo(seriesFolderPath, nextSeasonNumber++);
+            }
+        }
+
+        return result;
     }
 
     /// <summary>
@@ -748,6 +870,8 @@ public sealed class ScanLibraryJobHandler(
             !relative.StartsWith("..", StringComparison.Ordinal) &&
             !Path.IsPathRooted(relative);
     }
+
+    private sealed record SeriesSeasonFolderInfo(string SeriesFolderPath, int SeasonNumber);
 
     private sealed record EpisodeToken(int SeasonNumber, int EpisodeNumber);
 }

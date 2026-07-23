@@ -156,6 +156,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Updated documentation, README screenshots, branding assets, install metadata, and app copy to match the current Prismedia v1 surface.
 
 ### Fixed
+- Video scans now keep unnumbered, custom-titled season folders inside an established parent series and order them by title after detected numbered seasons, instead of promoting each folder to a separate series.
 - Video remuxing now preserves a negotiated multichannel audio track instead of unnecessarily downmixing it to stereo AAC.
 - Downloads and entity detail pages now retire passive requests once their surviving entity is fully present, while preserving partial imports and deliberate upgrades; refreshes are serialized and source checks stay scoped to visible entities so large libraries no longer saturate PostgreSQL.
 - Long titles, release paths, and messages in Request History now wrap within their rows instead of overflowing the page.

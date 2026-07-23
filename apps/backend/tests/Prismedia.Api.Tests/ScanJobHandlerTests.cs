@@ -835,6 +835,68 @@ public sealed class ScanJobHandlerTests {
     }
 
     [Fact]
+    public async Task VideoScanKeepsTitledSiblingFoldersInsideEstablishedSeries() {
+        var root = new LibraryRootData(
+            Guid.Parse("11111111-1111-1111-1111-111111111111"),
+            "/media/videos",
+            "Videos",
+            Enabled: true,
+            Recursive: true,
+            ScanVideos: true,
+            ScanImages: false,
+            ScanAudio: false,
+            ScanBooks: false,
+            IsNsfw: false);
+        var videoIds = Enumerable.Range(0, 4).Select(_ => Guid.NewGuid()).ToArray();
+        var persistence = new FakeScanPersistence([root]) {
+            Settings = DisabledGeneratedWorkSettings,
+            UpsertedVideoIds = videoIds
+        };
+        // Discovery order deliberately differs from folder-title order. Season 1 establishes the
+        // parent as the series; the other direct child folders follow it alphabetically as seasons.
+        var discovery = new RecordingFileDiscovery([
+            "/media/videos/Series Root/Random Title Folder/Zeta.mp4",
+            "/media/videos/Series Root/Season 1/Episode One.mp4",
+            "/media/videos/Series Root/Other Title/Only Feature.mp4",
+            "/media/videos/Series Root/Random Title Folder/Alpha.mp4"
+        ]);
+        var handler = new ScanLibraryJobHandler(
+            NullLogger<ScanLibraryJobHandler>.Instance,
+            discovery,
+            persistence,
+            persistence,
+            persistence);
+
+        await handler.HandleAsync(
+            new JobContext(SingleRootScanJob(root), new RecordingJobQueue()),
+            CancellationToken.None);
+
+        Assert.Equal(4, persistence.UpsertedVideoItems.Count);
+        Assert.All(persistence.UpsertedVideoItems, item => {
+            Assert.Equal("Series Root", item.Series?.Title);
+            Assert.Equal("/media/videos/Series Root", item.Series?.FolderPath);
+            Assert.NotNull(item.Season);
+            Assert.Null(item.Movie);
+        });
+
+        var numberedSeason = Assert.Single(
+            persistence.UpsertedVideoItems,
+            item => item.Season?.Title == "Season 1");
+        Assert.Equal(1, numberedSeason.Season?.SeasonNumber);
+
+        var otherTitleSeason = Assert.Single(
+            persistence.UpsertedVideoItems,
+            item => item.Season?.Title == "Other Title");
+        Assert.Equal(2, otherTitleSeason.Season?.SeasonNumber);
+
+        var randomTitleSeason = persistence.UpsertedVideoItems
+            .Where(item => item.Season?.Title == "Random Title Folder")
+            .ToArray();
+        Assert.Equal(2, randomTitleSeason.Length);
+        Assert.All(randomTitleSeason, item => Assert.Equal(3, item.Season?.SeasonNumber));
+    }
+
+    [Fact]
     public async Task VideoScanKeepsRootLevelEpisodeFilesDirectlyUnderSeries() {
         var root = new LibraryRootData(
             Guid.Parse("11111111-1111-1111-1111-111111111111"),
