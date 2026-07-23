@@ -575,8 +575,6 @@
       busy = false;
     }
   }
-
-
   onMount(load);
 </script>
 
@@ -987,11 +985,13 @@
       </section>
 
       <AcquisitionBlocklistManager
-        entries={blocklist}
+        bind:entries={blocklist}
         history={[]}
         {reasonLabels}
         {busy}
         onRemove={removeBlocklistEntry}
+        {onError}
+        {onMessage}
       />
     {/if}
   </div>

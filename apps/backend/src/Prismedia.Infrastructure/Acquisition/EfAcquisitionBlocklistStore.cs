@@ -126,6 +126,28 @@ public sealed class EfAcquisitionBlocklistStore(PrismediaDbContext db) : IAcquis
         return true;
     }
 
+    public async Task<int> ClearAsync(
+        Guid? entityId,
+        DateTimeOffset? createdAfter,
+        CancellationToken cancellationToken) {
+        var entries = await ListAsync(cancellationToken);
+        var matchingIds = entries
+            .Where(entry => entityId is null || entry.EntityId == entityId)
+            .Where(entry => createdAfter is null || entry.CreatedAt >= createdAfter)
+            .Select(entry => entry.Id)
+            .ToArray();
+        if (matchingIds.Length == 0) {
+            return 0;
+        }
+
+        var rows = await db.AcquisitionBlocklist
+            .Where(row => matchingIds.Contains(row.Id))
+            .ToArrayAsync(cancellationToken);
+        db.AcquisitionBlocklist.RemoveRange(rows);
+        await db.SaveChangesAsync(cancellationToken);
+        return rows.Length;
+    }
+
     private static string ReleaseContextKey(string? title, string? indexerName) =>
         $"{title?.Trim().ToUpperInvariant()}\u001f{indexerName?.Trim().ToUpperInvariant()}";
 

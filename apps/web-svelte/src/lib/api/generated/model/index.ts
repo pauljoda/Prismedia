@@ -7,6 +7,7 @@
 
 export * from './acquireVideoSubtitleRequest';
 export * from './acquireVideoSubtitleResponse';
+export * from './acquisitionBlocklistClearResponse';
 export * from './acquisitionBlocklistEntry';
 export * from './acquisitionCreateRequest';
 export * from './acquisitionCreateRequestBookRendition';
@@ -55,6 +56,7 @@ export * from './browserSessionResponse';
 export * from './bulkJobResponse';
 export * from './cancelJobsParams';
 export * from './changeOwnPasswordRequest';
+export * from './clearAcquisitionBlocklistParams';
 export * from './clearJobFailuresParams';
 export * from './collectionAddItemsRequest';
 export * from './collectionCoverMode';

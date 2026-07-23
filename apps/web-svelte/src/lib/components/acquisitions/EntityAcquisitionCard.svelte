@@ -18,6 +18,7 @@
   import { acquisitionStatusShouldPoll } from "$lib/requests/acquisition-status";
   import EntityFileManagementAction from "$lib/components/entities/EntityFileManagementAction.svelte";
   import type { EntityFileManagementCallbacks } from "$lib/entities/entity-file-management";
+  import EntityBlocklistClearAction from "$lib/components/acquisitions/EntityBlocklistClearAction.svelte";
 
   let {
     acq,
@@ -218,6 +219,10 @@
           await acq.refresh();
         }}
       />
+    {/if}
+
+    {#if entity}
+      <EntityBlocklistClearAction entityId={entity.id} entityTitle={entity.title} />
     {/if}
 
     {#if acq.childCards.length > 0}

@@ -513,6 +513,17 @@ public static class AcquisitionEndpoints {
             .WithSummary("Lists blocklisted releases that failed-download recovery refuses for future acquisition.")
             .Produces<IReadOnlyList<AcquisitionBlocklistEntry>>();
 
+        group.MapDelete("/blocklist", async (
+            IAcquisitionBlocklistStore blocklist,
+            CancellationToken cancellationToken,
+            Guid? entityId = null,
+            DateTimeOffset? createdAfter = null) =>
+            Results.Ok(new AcquisitionBlocklistClearResponse(
+                await blocklist.ClearAsync(entityId, createdAfter, cancellationToken))))
+            .WithName("ClearAcquisitionBlocklist")
+            .WithSummary("Allows blocklisted releases again, optionally scoped to one library Entity and/or entries created after a cutoff.")
+            .Produces<AcquisitionBlocklistClearResponse>();
+
         group.MapDelete("/blocklist/{id:guid}", async (
             Guid id,
             IAcquisitionBlocklistStore blocklist,

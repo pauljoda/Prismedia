@@ -845,4 +845,31 @@ public interface IAcquisitionBlocklistStore {
 
     /// <summary>Removes a blocklist entry by id. Returns false when it no longer exists.</summary>
     Task<bool> DeleteAsync(Guid id, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Removes every entry matching an optional library Entity and creation-time lower bound. Null
+    /// filters clear the complete blocklist. Returns the number of releases allowed again.
+    /// </summary>
+    Task<int> ClearAsync(
+        Guid? entityId,
+        DateTimeOffset? createdAfter,
+        CancellationToken cancellationToken) {
+        return ClearMatchingEntriesAsync(entityId, createdAfter, cancellationToken);
+
+        async Task<int> ClearMatchingEntriesAsync(
+            Guid? scopedEntityId,
+            DateTimeOffset? cutoff,
+            CancellationToken token) {
+            var entries = await ListAsync(token);
+            var removed = 0;
+            foreach (var entry in entries
+                .Where(entry => scopedEntityId is null || entry.EntityId == scopedEntityId)
+                .Where(entry => cutoff is null || entry.CreatedAt >= cutoff)) {
+                if (await DeleteAsync(entry.Id, token)) {
+                    removed++;
+                }
+            }
+            return removed;
+        }
+    }
 }

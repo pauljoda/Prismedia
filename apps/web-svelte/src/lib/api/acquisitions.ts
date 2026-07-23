@@ -1,6 +1,7 @@
 import {
   blocklistAcquisitionCandidate as blocklistAcquisitionCandidateRequest,
   cancelAcquisition as cancelAcquisitionRequest,
+  clearAcquisitionBlocklist as clearAcquisitionBlocklistRequest,
   createAcquisition as createAcquisitionRequest,
   deleteAcquisition as deleteAcquisitionRequest,
   deleteAcquisitionBlocklistEntry,
@@ -41,6 +42,7 @@ import {
   uploadAcquisitionTorrent,
 } from "$lib/api/generated/prismedia";
 import type {
+  AcquisitionBlocklistClearResponse,
   AcquisitionBlocklistEntry,
   CustomFormatSaveRequest,
   CustomFormatView,
@@ -283,6 +285,16 @@ export async function fetchBlocklist(): Promise<AcquisitionBlocklistEntry[]> {
 
 export async function deleteBlocklistEntry(id: string): Promise<void> {
   unwrapGenerated(await deleteAcquisitionBlocklistEntry(id), "Failed to remove blocklist entry", [204]);
+}
+
+export async function clearBlocklist(
+  options: { entityId?: string; createdAfter?: string } = {},
+): Promise<number> {
+  const response = unwrapGenerated<AcquisitionBlocklistClearResponse>(
+    await clearAcquisitionBlocklistRequest(options),
+    "Failed to clear blocklist",
+  );
+  return Number(response.removed);
 }
 
 export async function fetchRemotePathMappings(): Promise<RemotePathMappingView[]> {

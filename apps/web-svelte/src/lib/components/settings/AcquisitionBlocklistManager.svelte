@@ -1,6 +1,6 @@
 <script lang="ts">
   import { ChevronDown, ChevronRight, ListFilter, Trash2 } from "@lucide/svelte";
-  import { Badge, Button, SearchInput } from "@prismedia/ui-svelte";
+  import { Badge, Button, SearchInput, Select } from "@prismedia/ui-svelte";
   import type { AcquisitionBlocklistEntry, AcquisitionHistoryView } from "$lib/api/generated/model";
   import { labelForEntityKind } from "$lib/entities/entity-codes";
   import { formatRelativeTime } from "$lib/utils/format";
@@ -9,28 +9,45 @@
     groupAcquisitionBlocklist,
     type AcquisitionBlocklistGroup,
   } from "$lib/requests/acquisition-blocklist";
+  import ConfirmDialog from "$lib/components/entities/ConfirmDialog.svelte";
+  import { clearBlocklist, fetchBlocklist } from "$lib/api/acquisitions";
 
   const entryBatchSize = 25;
   const groupBatchSize = 20;
+  const clearRangeOptions = [
+    { value: "hour", label: "Last hour", milliseconds: 60 * 60 * 1_000 },
+    { value: "day", label: "Last 24 hours", milliseconds: 24 * 60 * 60 * 1_000 },
+    { value: "week", label: "Last 7 days", milliseconds: 7 * 24 * 60 * 60 * 1_000 },
+    { value: "four-weeks", label: "Last 4 weeks", milliseconds: 28 * 24 * 60 * 60 * 1_000 },
+    { value: "all", label: "All time", milliseconds: null },
+  ] as const;
+  type ClearRange = (typeof clearRangeOptions)[number]["value"];
 
   let {
-    entries,
+    entries = $bindable(),
     history,
     reasonLabels,
     busy = false,
     onRemove,
+    onError,
+    onMessage,
   }: {
     entries: AcquisitionBlocklistEntry[];
     history: AcquisitionHistoryView[];
     reasonLabels: Partial<Record<string, string>>;
     busy?: boolean;
     onRemove: (id: string) => void | Promise<void>;
+    onError: (message: string) => void;
+    onMessage: (message: string) => void;
   } = $props();
 
   let query = $state("");
   let expandedKeys = $state<string[]>([]);
   let visibleGroupCount = $state(groupBatchSize);
   let visibleEntryCounts = $state<Record<string, number>>({});
+  let clearRange = $state<ClearRange>("day");
+  let clearConfirmOpen = $state(false);
+  let clearing = $state(false);
 
   const groups = $derived(groupAcquisitionBlocklist(entries, history));
   const matchingGroups = $derived(groups.filter((group) => blocklistGroupMatches(group, query)));
@@ -38,6 +55,39 @@
     query.trim() ? matchingGroups : matchingGroups.slice(0, visibleGroupCount),
   );
   const hiddenGroupCount = $derived(Math.max(0, matchingGroups.length - visibleGroups.length));
+  const selectedClearRange = $derived(
+    clearRangeOptions.find((option) => option.value === clearRange) ?? clearRangeOptions[1],
+  );
+
+  function selectClearRange(value: string) {
+    if (clearRangeOptions.some((option) => option.value === value)) {
+      clearRange = value as ClearRange;
+    }
+  }
+
+  function selectedCreatedAfter(): string | null {
+    if (selectedClearRange.milliseconds === null) return null;
+    return new Date(Date.now() - selectedClearRange.milliseconds).toISOString();
+  }
+
+  async function clearEntries() {
+    clearing = true;
+    try {
+      const createdAfter = selectedCreatedAfter();
+      const removed = await clearBlocklist({ createdAfter: createdAfter ?? undefined });
+      entries = await fetchBlocklist();
+      onMessage(
+        removed === 1
+          ? "Allowed one blocklisted release again"
+          : `Allowed ${removed} blocklisted releases again`,
+      );
+    } catch (err) {
+      onError(err instanceof Error ? err.message : "Failed to clear blocklist");
+      throw err;
+    } finally {
+      clearing = false;
+    }
+  }
 
   function isExpanded(group: AcquisitionBlocklistGroup): boolean {
     return query.trim().length > 0 || expandedKeys.includes(group.key);
@@ -77,11 +127,35 @@
   </div>
 
   {#if entries.length > 0}
-    <SearchInput
-      bind:value={query}
-      ariaLabel="Search blocklisted releases"
-      placeholder="Search works, releases, indexers, or errors…"
-    />
+    <div class="flex flex-col gap-2 sm:flex-row sm:items-center">
+      <div class="min-w-0 flex-1">
+        <SearchInput
+          bind:value={query}
+          ariaLabel="Search blocklisted releases"
+          placeholder="Search works, releases, indexers, or errors…"
+        />
+      </div>
+      <div class="flex items-center gap-2">
+        <Select
+          size="sm"
+          value={clearRange}
+          options={clearRangeOptions.map(({ value, label }) => ({ value, label }))}
+          ariaLabel="Blocklist clear time range"
+          onchange={selectClearRange}
+        />
+        <Button
+          type="button"
+          size="sm"
+          variant="danger"
+          class="no-lift shrink-0 gap-1.5"
+          disabled={busy || clearing}
+          onclick={() => (clearConfirmOpen = true)}
+        >
+          <Trash2 class="h-3.5 w-3.5" />
+          Clear
+        </Button>
+      </div>
+    </div>
   {/if}
 
   {#if entries.length === 0}
@@ -169,3 +243,13 @@
     {/if}
   {/if}
 </section>
+
+<ConfirmDialog
+  open={clearConfirmOpen}
+  title={`Clear blocklist · ${selectedClearRange.label}?`}
+  message={`This allows every release blocked during ${selectedClearRange.label.toLocaleLowerCase()} to be selected and downloaded again.`}
+  confirmLabel="Clear blocklist"
+  danger
+  onConfirm={clearEntries}
+  onClose={() => (clearConfirmOpen = false)}
+/>

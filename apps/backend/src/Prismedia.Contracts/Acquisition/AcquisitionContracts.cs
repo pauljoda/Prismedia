@@ -540,3 +540,7 @@ public sealed record AcquisitionBlocklistEntry(
     string? EntityTitle,
     string? Message,
     DateTimeOffset CreatedAt);
+
+/// <summary>Result of allowing a filtered set of acquisition releases to be grabbed again.</summary>
+/// <param name="Removed">Number of blocklist entries removed.</param>
+public sealed record AcquisitionBlocklistClearResponse(int Removed);

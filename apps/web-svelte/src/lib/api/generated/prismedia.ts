@@ -7,6 +7,7 @@
 import type {
   AcquireVideoSubtitleRequest,
   AcquireVideoSubtitleResponse,
+  AcquisitionBlocklistClearResponse,
   AcquisitionBlocklistEntry,
   AcquisitionCreateRequest,
   AcquisitionDetail,
@@ -32,6 +33,7 @@ import type {
   BulkJobResponse,
   CancelJobsParams,
   ChangeOwnPasswordRequest,
+  ClearAcquisitionBlocklistParams,
   ClearJobFailuresParams,
   CollectionAddItemsRequest,
   CollectionDeleteResponse,
@@ -14020,6 +14022,49 @@ export const listAcquisitionBlocklist = async ( options?: RequestInit): Promise<
   {
     ...options,
     method: 'GET'
+
+
+  }
+);}
+
+
+
+export type clearAcquisitionBlocklistResponse200 = {
+  data: AcquisitionBlocklistClearResponse
+  status: 200
+}
+
+export type clearAcquisitionBlocklistResponseSuccess = (clearAcquisitionBlocklistResponse200) & {
+  headers: Headers;
+};
+;
+
+export type clearAcquisitionBlocklistResponse = (clearAcquisitionBlocklistResponseSuccess)
+
+export const getClearAcquisitionBlocklistUrl = (params?: ClearAcquisitionBlocklistParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/acquisitions/blocklist?${stringifiedParams}` : `/api/acquisitions/blocklist`
+}
+
+/**
+ * @summary Allows blocklisted releases again, optionally scoped to one library Entity and/or entries created after a cutoff.
+ */
+export const clearAcquisitionBlocklist = async (params?: ClearAcquisitionBlocklistParams, options?: RequestInit): Promise<clearAcquisitionBlocklistResponse> => {
+
+  return orvalFetch<clearAcquisitionBlocklistResponse>(getClearAcquisitionBlocklistUrl(params),
+  {
+    ...options,
+    method: 'DELETE'
 
 
   }

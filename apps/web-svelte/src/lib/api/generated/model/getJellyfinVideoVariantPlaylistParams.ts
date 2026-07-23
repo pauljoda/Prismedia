@@ -10,4 +10,5 @@ export type GetJellyfinVideoVariantPlaylistParams = {
  * @pattern ^-?(?:0|[1-9]\d*)$
  */
 audioStreamIndex?: number | string;
+copyAudio?: boolean;
 };

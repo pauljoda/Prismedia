@@ -125,6 +125,85 @@ public sealed class EfAcquisitionBlocklistStoreTests {
         Assert.Empty(await store.GetIdentitiesAsync(CancellationToken.None));
     }
 
+    [Fact]
+    public async Task ClearScopesEntriesToOneWorkAndTimeRange() {
+        await using var db = CreateContext();
+        var entityId = Guid.NewGuid();
+        var otherEntityId = Guid.NewGuid();
+        var recentAcquisitionId = Guid.NewGuid();
+        var otherAcquisitionId = Guid.NewGuid();
+        var now = DateTimeOffset.UtcNow;
+        db.Acquisitions.AddRange(
+            Acquisition(recentAcquisitionId, entityId, "Target work"),
+            Acquisition(otherAcquisitionId, otherEntityId, "Other work"));
+        db.AcquisitionHistory.Add(new AcquisitionHistoryRow {
+            Id = Guid.NewGuid(),
+            EntityId = entityId,
+            Kind = EntityKind.Book,
+            Event = AcquisitionHistoryEvent.Blocklisted,
+            Title = "Target work",
+            ReleaseTitle = "Target old release",
+            IndexerName = "Indexer",
+            CreatedAt = now.AddDays(-2)
+        });
+        var recent = BlocklistEntry("Target recent release", now.AddMinutes(-30), recentAcquisitionId);
+        var old = BlocklistEntry("Target old release", now.AddDays(-2));
+        var other = BlocklistEntry("Other recent release", now.AddMinutes(-15), otherAcquisitionId);
+        db.AcquisitionBlocklist.AddRange(recent, old, other);
+        await db.SaveChangesAsync();
+
+        var removed = await new EfAcquisitionBlocklistStore(db).ClearAsync(
+            entityId,
+            now.AddHours(-1),
+            CancellationToken.None);
+
+        Assert.Equal(1, removed);
+        Assert.Equal(
+            [old.Id, other.Id],
+            (await db.AcquisitionBlocklist.AsNoTracking().OrderBy(row => row.CreatedAt).ToArrayAsync())
+                .Select(row => row.Id));
+    }
+
+    [Fact]
+    public async Task ClearWithoutFiltersRemovesEveryEntry() {
+        await using var db = CreateContext();
+        db.AcquisitionBlocklist.AddRange(
+            BlocklistEntry("First", DateTimeOffset.UtcNow.AddDays(-10)),
+            BlocklistEntry("Second", DateTimeOffset.UtcNow));
+        await db.SaveChangesAsync();
+
+        var removed = await new EfAcquisitionBlocklistStore(db).ClearAsync(
+            entityId: null,
+            createdAfter: null,
+            CancellationToken.None);
+
+        Assert.Equal(2, removed);
+        Assert.Empty(await db.AcquisitionBlocklist.AsNoTracking().ToArrayAsync());
+    }
+
+    private static AcquisitionRow Acquisition(Guid id, Guid entityId, string title) => new() {
+        Id = id,
+        EntityId = entityId,
+        Kind = EntityKind.Book,
+        Status = AcquisitionStatus.Failed,
+        Title = title,
+        CreatedAt = DateTimeOffset.UtcNow,
+        UpdatedAt = DateTimeOffset.UtcNow
+    };
+
+    private static AcquisitionBlocklistRow BlocklistEntry(
+        string title,
+        DateTimeOffset createdAt,
+        Guid? acquisitionId = null) => new() {
+            Id = Guid.NewGuid(),
+            Identity = $"title:indexer|{title.ToLowerInvariant()}",
+            Reason = BlocklistReason.Failed,
+            Title = title,
+            IndexerName = "Indexer",
+            AcquisitionId = acquisitionId,
+            CreatedAt = createdAt
+        };
+
     private static PrismediaDbContext CreateContext() =>
         new(new DbContextOptionsBuilder<PrismediaDbContext>()
             .UseInMemoryDatabase(Guid.NewGuid().ToString())
