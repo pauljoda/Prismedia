@@ -1902,6 +1902,12 @@ public sealed class RequestCommitServiceTests {
         Assert.Equal("episode-db", episodeCall.IdentityNamespace);
         Assert.Equal("Episode:One", episodeCall.ItemId);
         Assert.Equal(FakeWantedEntityWriter.EntityIdFor("Season:One"), episodeCall.ParentEntityId);
+        var appliedSeason = Assert.Single(
+            writer.Applied,
+            call => call.EntityId == FakeWantedEntityWriter.EntityIdFor("Season:One"));
+        Assert.Equal(
+            FakeWantedEntityWriter.EntityIdFor("Episode:One"),
+            Assert.Single(appliedSeason.Proposal.Children).TargetEntityId);
         Assert.Collection(
             reviews.ReviewCalls,
             call => {

@@ -1221,7 +1221,9 @@ public sealed partial class RequestCommitService(
         // artwork); owned children are excluded so a request can't overwrite real metadata.
         if (phantomPicks.Any(phantom => phantom.Outcome == RequestCommitOutcome.Requested)) {
             var applyChildren = proposal.Children.Where(node => node.TargetKind.IsRelationship())
-                .Concat(phantomPicks.Where(phantom => !phantom.Entity.HasFile).Select(phantom => phantom.Proposal))
+                .Concat(phantomPicks
+                    .Where(phantom => !phantom.Entity.HasFile)
+                    .Select(PrepareImmediateChildProposal))
                 .ToArray();
             await wanted.ApplyProposalAsync(parentEntityId, proposal with { Children = applyChildren }, cancellationToken);
         }
