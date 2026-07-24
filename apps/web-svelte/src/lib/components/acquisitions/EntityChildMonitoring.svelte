@@ -110,6 +110,7 @@
           downloading += 1;
           break;
         case ACQUISITION_STATUS.queued:
+        case ACQUISITION_STATUS.waitingForDownloadClient:
           preparing += 1;
           break;
         case ACQUISITION_STATUS.pending:

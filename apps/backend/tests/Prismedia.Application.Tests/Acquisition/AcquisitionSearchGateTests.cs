@@ -18,6 +18,7 @@ public sealed class AcquisitionSearchGateTests {
     [Theory]
     [InlineData(AcquisitionStatus.Queued)]
     [InlineData(AcquisitionStatus.Downloading)]
+    [InlineData(AcquisitionStatus.WaitingForDownloadClient)]
     [InlineData(AcquisitionStatus.Downloaded)]
     [InlineData(AcquisitionStatus.Importing)]
     [InlineData(AcquisitionStatus.Imported)]

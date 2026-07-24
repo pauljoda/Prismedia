@@ -429,6 +429,51 @@ public sealed class AcquisitionServiceTests {
     }
 
     [Fact]
+    public async Task OfflineDownloadClientWaitsAndRetainsTheExactHandoffForRetry() {
+        var harness = Harness(new AcquisitionTransferInfo(
+            AcquisitionStatus.AwaitingSelection,
+            null,
+            null,
+            null));
+        PrepareQueueCandidate(harness.Store);
+        harness.Downloads.AddFailure = new HttpRequestException("connection refused");
+
+        var exception = await Assert.ThrowsAsync<AcquisitionConfigurationException>(() =>
+            QueueService(harness, new RecordingTransferAddCoordinator())
+                .QueueAsync(AcquisitionId, CandidateId, CancellationToken.None));
+
+        Assert.Equal(ApiProblemCodes.DownloadClientUnreachable, exception.Code);
+        Assert.Equal(AcquisitionStatus.WaitingForDownloadClient, harness.Store.Status);
+        Assert.Equal("abc123", harness.Store.TransferPointer?.ClientItemId);
+        Assert.Equal(TransferOwnershipState.Adding.ToCode(), harness.Store.TransferPointer?.State);
+        Assert.Null(harness.Store.SelectedRelease);
+    }
+
+    [Fact]
+    public async Task RecoveredDownloadClientCompletesTheWaitingHandoff() {
+        var harness = Harness(new AcquisitionTransferInfo(
+            AcquisitionStatus.AwaitingSelection,
+            null,
+            null,
+            null));
+        PrepareQueueCandidate(harness.Store);
+        harness.Downloads.AddFailure = new HttpRequestException("connection refused");
+        var queue = QueueService(harness, new RecordingTransferAddCoordinator());
+        await Assert.ThrowsAsync<AcquisitionConfigurationException>(() =>
+            queue.QueueAsync(AcquisitionId, CandidateId, CancellationToken.None));
+
+        harness.Downloads.AddFailure = null;
+        await QueueService(harness, new RecordingTransferAddCoordinator())
+            .QueueAsync(AcquisitionId, CandidateId, CancellationToken.None);
+
+        Assert.Equal(AcquisitionStatus.Queued, harness.Store.Status);
+        Assert.Equal(1, harness.Downloads.AddCount);
+        Assert.Equal("abc123", harness.Store.TransferPointer?.ClientItemId);
+        Assert.Null(harness.Store.TransferPointer?.State);
+        Assert.Equal("Dune.2021.1080p", harness.Store.SelectedRelease?.Title);
+    }
+
+    [Fact]
     public async Task QueueRetainsACrashRecoveryPointerWhenTeardownWinsBeforeItsRecoveryLease() {
         var harness = Harness(new AcquisitionTransferInfo(
             AcquisitionStatus.Queued,
@@ -1467,6 +1512,7 @@ public sealed class AcquisitionServiceTests {
             BeforeCreateTransfer?.Invoke();
             CreateTransferCancellationToken = cancellationToken;
             if (CreateTransferResult) {
+                Status = AcquisitionStatus.Queued;
                 SelectedRelease = selectedRelease;
                 TransferPointer = new AcquisitionTransferInfo(
                     Status ?? AcquisitionStatus.Queued,

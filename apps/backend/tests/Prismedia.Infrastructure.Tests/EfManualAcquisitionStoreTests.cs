@@ -127,6 +127,42 @@ public sealed class EfManualAcquisitionStoreTests : IDisposable {
         Assert.Single(await db.ReleaseCandidates.AsNoTracking().ToArrayAsync());
     }
 
+    [Fact]
+    public async Task WaitingDownloadClientAttemptCannotBeReplacedByAManualUpload() {
+        await using var db = CreateContext();
+        var acquisitionId = Guid.NewGuid();
+        var now = DateTimeOffset.UtcNow;
+        db.Acquisitions.Add(new AcquisitionRow {
+            Id = acquisitionId,
+            Status = AcquisitionStatus.WaitingForDownloadClient,
+            Title = "Waiting book",
+            ExternalIdsJson = "{}",
+            SourceUrlsJson = "[]",
+            CreatedAt = now,
+            UpdatedAt = now
+        });
+        db.DownloadTransfers.Add(new DownloadTransferRow {
+            Id = Guid.NewGuid(),
+            AcquisitionId = acquisitionId,
+            ClientItemId = "existing-transfer",
+            Progress = 0.4,
+            CreatedAt = now,
+            UpdatedAt = now
+        });
+        await db.SaveChangesAsync();
+        var store = new EfManualAcquisitionStore(db, AcquisitionTestFactory.Store(db));
+
+        var completed = await store.CompleteAsync(
+            acquisitionId,
+            new CompletedAcquisitionUpload("manual-upload", "/upload", "book.epub"),
+            CancellationToken.None);
+
+        Assert.False(completed);
+        Assert.Contains(
+            await db.DownloadTransfers.AsNoTracking().ToArrayAsync(),
+            transfer => transfer.ClientItemId == "existing-transfer");
+    }
+
     private static PrismediaDbContext CreateContext() =>
         new(new DbContextOptionsBuilder<PrismediaDbContext>()
             .UseInMemoryDatabase(Guid.NewGuid().ToString())

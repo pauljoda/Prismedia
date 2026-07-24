@@ -58,6 +58,24 @@ describe("download acquisition list items", () => {
     expect(item.description).toBe(row.statusMessage);
   });
 
+  it("shows download-client recovery as a waiting state without a restart action", () => {
+    const row = download(ACQUISITION_STATUS.waitingForDownloadClient);
+    row.statusMessage = "Waiting for download client \"qBittorrent\" to recover.";
+
+    const item = downloadToListItem(
+      row,
+      null,
+      { onReSearch: vi.fn(), onRemove: vi.fn() },
+      false,
+    );
+
+    expect(item.statusLabel).toBe("Waiting for download client");
+    expect(item.tone).toBe("queued");
+    expect(item.indeterminate).toBe(true);
+    expect(item.description).toBe(row.statusMessage);
+    expect(item.primaryAction?.id).toBe("view");
+  });
+
   it("locks wanted-list actions while monitor cleanup owns the Entity", () => {
     const item = wantedToListItem(
       wanted(MONITOR_STATUS.deletingFiles),

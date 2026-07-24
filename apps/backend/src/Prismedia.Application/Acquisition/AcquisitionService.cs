@@ -419,8 +419,8 @@ public sealed partial class AcquisitionService(
 
     private async Task<Contracts.Acquisition.DownloadClientDetail?> ResolveClientAsync(Guid? configId, CancellationToken cancellationToken) =>
         configId is { } id
-            ? await downloadClients.GetAsync(id, cancellationToken) ?? await downloadClients.GetDefaultAsync(cancellationToken)
-            : await downloadClients.GetDefaultAsync(cancellationToken);
+            ? await downloadClients.GetAsync(id, cancellationToken)
+            : null;
 
     private async Task<Contracts.Acquisition.DownloadClientDetail?> ResolveRemovalClientAsync(
         AcquisitionTransferInfo transfer,

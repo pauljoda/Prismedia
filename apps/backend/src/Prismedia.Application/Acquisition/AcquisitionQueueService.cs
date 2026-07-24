@@ -215,7 +215,7 @@ public sealed class AcquisitionQueueService(
                 CancellationToken.None);
             await acquisitions.TryTransitionStatusAsync(
                 acquisitionId,
-                [AcquisitionStatus.Queued],
+                [AcquisitionStatus.Queued, AcquisitionStatus.WaitingForDownloadClient],
                 queueOrigin ?? AcquisitionStatus.Failed,
                 ex.Message,
                 CancellationToken.None);
@@ -224,8 +224,15 @@ public sealed class AcquisitionQueueService(
         } catch (AcquisitionConfigurationException) {
             throw;
         } catch (Exception ex) when (ex is not OperationCanceledException) {
-            // The pre-Add ownership placeholder remains Queued + adding. A recovered queue job retries the
-            // same correlation; teardown claims the row lock, then resolves/removes a remotely accepted item.
+            // The pre-Add ownership placeholder stays durable while the lifecycle explicitly waits for this
+            // client to recover. A monitor retry uses the same correlation, so an accepted-but-unacknowledged
+            // Add is reconciled instead of being mistaken for a bad release and blocklisted.
+            await acquisitions.TryTransitionStatusAsync(
+                acquisitionId,
+                [AcquisitionStatus.Queued, AcquisitionStatus.WaitingForDownloadClient],
+                AcquisitionStatus.WaitingForDownloadClient,
+                $"Waiting for download client \"{client.DisplayName}\" to recover.",
+                CancellationToken.None);
             throw new AcquisitionConfigurationException(
                 ApiProblemCodes.DownloadClientUnreachable,
                 $"The download-client handoff did not finish: {ex.Message}. Retry the same release; cleanup remains safely blocked until it is reconciled.");
@@ -387,7 +394,7 @@ public sealed class AcquisitionQueueService(
                 CancellationToken.None);
             await acquisitions.TryTransitionStatusAsync(
                 acquisitionId,
-                [AcquisitionStatus.Queued],
+                [AcquisitionStatus.Queued, AcquisitionStatus.WaitingForDownloadClient],
                 queueOrigin ?? AcquisitionStatus.Failed,
                 ex.Message,
                 CancellationToken.None);
@@ -396,6 +403,12 @@ public sealed class AcquisitionQueueService(
         } catch (AcquisitionConfigurationException) {
             throw;
         } catch (Exception ex) when (ex is not OperationCanceledException) {
+            await acquisitions.TryTransitionStatusAsync(
+                acquisitionId,
+                [AcquisitionStatus.Queued, AcquisitionStatus.WaitingForDownloadClient],
+                AcquisitionStatus.WaitingForDownloadClient,
+                $"Waiting for download client \"{client.DisplayName}\" to recover.",
+                CancellationToken.None);
             throw new AcquisitionConfigurationException(
                 ApiProblemCodes.DownloadClientUnreachable,
                 $"The manual download handoff did not finish: {ex.Message}. Retry the same file; cleanup remains safely blocked until it is reconciled.");
@@ -557,6 +570,7 @@ public sealed class AcquisitionQueueService(
         var status = await acquisitions.GetStatusAsync(acquisitionId, cancellationToken);
         if (status is not (AcquisitionStatus.Queued
             or AcquisitionStatus.Downloading
+            or AcquisitionStatus.WaitingForDownloadClient
             or AcquisitionStatus.Downloaded
             or AcquisitionStatus.Importing
             or AcquisitionStatus.Imported)) {

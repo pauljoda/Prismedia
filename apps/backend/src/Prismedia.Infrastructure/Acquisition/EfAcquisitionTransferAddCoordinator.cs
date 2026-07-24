@@ -24,7 +24,9 @@ public sealed class EfAcquisitionTransferAddCoordinator(PrismediaDbContext db)
             var gate = InMemoryLocks.GetOrAdd(acquisitionId, _ => new SemaphoreSlim(1, 1));
             await gate.WaitAsync(cancellationToken);
             if (await db.Acquisitions.AsNoTracking().AnyAsync(
-                    row => row.Id == acquisitionId && row.Status == AcquisitionStatus.Queued,
+                    row => row.Id == acquisitionId
+                        && (row.Status == AcquisitionStatus.Queued
+                            || row.Status == AcquisitionStatus.WaitingForDownloadClient),
                     cancellationToken)) {
                 return new InMemoryLease(gate);
             }
@@ -43,9 +45,11 @@ public sealed class EfAcquisitionTransferAddCoordinator(PrismediaDbContext db)
             idParameter.Value = acquisitionId;
             command.Parameters.Add(idParameter);
             var status = await command.ExecuteScalarAsync(cancellationToken);
-            if (!string.Equals(
-                    Convert.ToString(status, System.Globalization.CultureInfo.InvariantCulture),
-                    AcquisitionStatus.Queued.ToCode(),
+            var statusCode = Convert.ToString(status, System.Globalization.CultureInfo.InvariantCulture);
+            if (!string.Equals(statusCode, AcquisitionStatus.Queued.ToCode(), StringComparison.Ordinal)
+                && !string.Equals(
+                    statusCode,
+                    AcquisitionStatus.WaitingForDownloadClient.ToCode(),
                     StringComparison.Ordinal)) {
                 await transaction.RollbackAsync(CancellationToken.None);
                 await transaction.DisposeAsync();

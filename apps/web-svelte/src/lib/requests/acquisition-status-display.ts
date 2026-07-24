@@ -51,6 +51,8 @@ export function acquisitionStatusDisplay(status: string | null | undefined): Acq
       return { label: "Review", icon: Search, tone: "attention" };
     case ACQUISITION_STATUS.queued:
       return { label: "Queued", icon: Hourglass, tone: "queued" };
+    case ACQUISITION_STATUS.waitingForDownloadClient:
+      return { label: "Waiting for client", icon: Hourglass, tone: "queued" };
     case ACQUISITION_STATUS.downloading:
     case ACQUISITION_STATUS.downloaded:
     case ACQUISITION_STATUS.importing:

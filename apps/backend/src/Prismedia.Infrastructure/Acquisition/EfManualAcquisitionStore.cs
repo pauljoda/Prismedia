@@ -223,6 +223,7 @@ public sealed class EfManualAcquisitionStore(
             or AcquisitionStatus.Downloaded
             or AcquisitionStatus.Queued
             or AcquisitionStatus.Downloading
+            or AcquisitionStatus.WaitingForDownloadClient
             or AcquisitionStatus.Stopping) {
             return false;
         }

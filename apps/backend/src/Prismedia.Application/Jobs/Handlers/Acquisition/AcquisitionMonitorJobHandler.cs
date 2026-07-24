@@ -65,9 +65,20 @@ public sealed class AcquisitionMonitorJobHandler(
             }
         }
 
+        await ResumeTransferlessDownloadClientWaitsAsync(context, cancellationToken);
+
         var pendingAdds = await acquisitions.ListPendingTransferAddsAsync(cancellationToken);
         foreach (var pending in pendingAdds) {
             cancellationToken.ThrowIfCancellationRequested();
+            if (pending.DownloadClientConfigId is not { } pendingClientId
+                || await downloadClients.GetAsync(pendingClientId, cancellationToken) is null) {
+                await ResetForRemovedClientAsync(
+                    pending.AcquisitionId,
+                    pending.TransferId,
+                    cancellationToken);
+                continue;
+            }
+
             try {
                 await queueService.QueueAsync(
                     pending.AcquisitionId,
@@ -108,13 +119,20 @@ public sealed class AcquisitionMonitorJobHandler(
         }
 
         var clientCache = new Dictionary<Guid, Contracts.Acquisition.DownloadClientDetail?>();
+        var healthCache = new Dictionary<Guid, DownloadClientConnectionTest>();
         // Authoritative per-client torrent listings, fetched at most once per pass. A null entry means the
-        // listing could not be read this pass, in which case transfers are left untouched.
+        // listing could not be read this pass, in which case transfers wait for that client to recover.
         var listingCache = new Dictionary<Guid, IReadOnlyDictionary<string, DownloadItemStatus>?>();
         var processed = 0;
         foreach (var transfer in transfers) {
             cancellationToken.ThrowIfCancellationRequested();
-            await AdvanceTransferAsync(context, transfer, clientCache, listingCache, cancellationToken);
+            await AdvanceTransferAsync(
+                context,
+                transfer,
+                clientCache,
+                healthCache,
+                listingCache,
+                cancellationToken);
             processed++;
             await context.ReportProgressAsync(processed * 100 / Math.Max(transfers.Count, 1), "Polling transfers", cancellationToken);
         }
@@ -137,6 +155,7 @@ public sealed class AcquisitionMonitorJobHandler(
         CancellationToken cancellationToken) {
         var client = await ResolveClientAsync(watch.DownloadClientConfigId, clientCache, cancellationToken);
         if (client is null) {
+            await acquisitions.ClearTransferSeedingAsync(watch.TransferId, cancellationToken);
             return;
         }
 
@@ -175,10 +194,15 @@ public sealed class AcquisitionMonitorJobHandler(
         JobContext context,
         ActiveTransfer transfer,
         Dictionary<Guid, Contracts.Acquisition.DownloadClientDetail?> clientCache,
+        Dictionary<Guid, DownloadClientConnectionTest> healthCache,
         Dictionary<Guid, IReadOnlyDictionary<string, DownloadItemStatus>?> listingCache,
         CancellationToken cancellationToken) {
         var client = await ResolveClientAsync(transfer.DownloadClientConfigId, clientCache, cancellationToken);
         if (client is null) {
+            await ResetForRemovedClientAsync(
+                transfer.AcquisitionId,
+                transfer.TransferId,
+                cancellationToken);
             return;
         }
 
@@ -187,7 +211,11 @@ public sealed class AcquisitionMonitorJobHandler(
             var downloadClient = clients.Get(client.Kind);
             var listing = await GetListingAsync(client.Id, downloadClient, connection, listingCache, cancellationToken);
             if (listing is null) {
-                // Couldn't read the client this pass — leave the acquisition untouched and try again later.
+                await WaitForDownloadClientAsync(
+                    transfer,
+                    client,
+                    "The download client could not be reached.",
+                    cancellationToken);
                 return;
             }
 
@@ -196,15 +224,46 @@ public sealed class AcquisitionMonitorJobHandler(
                 // torrent whose category drifted in the client (the category filter silently omits it), so
                 // confirm with an unfiltered per-hash lookup before treating it as gone — otherwise a
                 // recategorized but perfectly healthy download would be failed and permanently blocklisted.
-                var direct = await downloadClient.GetItemAsync(connection, transfer.ClientItemId, cancellationToken);
+                DownloadItemStatus? direct;
+                try {
+                    direct = await downloadClient.GetItemAsync(
+                        connection,
+                        transfer.ClientItemId,
+                        cancellationToken);
+                } catch (OperationCanceledException) {
+                    throw;
+                } catch (Exception ex) {
+                    logger.LogWarning(
+                        ex,
+                        "AcquisitionMonitor: failed to read transfer {TransferId} directly from download client {ClientId}",
+                        transfer.TransferId,
+                        client.Id);
+                    await WaitForDownloadClientAsync(
+                        transfer,
+                        client,
+                        "The download client could not confirm the transfer.",
+                        cancellationToken);
+                    return;
+                }
+
                 if (direct is null) {
+                    if (!await IsClientHealthyAsync(
+                            transfer,
+                            client,
+                            downloadClient,
+                            connection,
+                            healthCache,
+                            cancellationToken)) {
+                        return;
+                    }
+
                     // Genuinely gone — the user (or another tool) removed the download from the client. That
                     // is not evidence the release was bad, so nothing is blocklisted or failed; the
                     // acquisition falls back to a fresh release search instead, so it can never sit orphaned
                     // in Downloading against a torrent that no longer exists. Removal is only declared after
                     // the grace window so a brief client outage doesn't restart a healthy download.
                     if (DateTimeOffset.UtcNow - transfer.UpdatedAt >= RemovalGrace) {
-                        await FallBackToSearchAsync(context, transfer.AcquisitionId, cancellationToken);
+                        await FallBackToSearchAsync(context, transfer, cancellationToken);
                     } else {
                         logger.LogDebug("AcquisitionMonitor: transfer {TransferId} not in client listing; within grace window.", transfer.TransferId);
                     }
@@ -222,6 +281,16 @@ public sealed class AcquisitionMonitorJobHandler(
             await acquisitions.UpdateTransferAsync(transfer.TransferId, status.Progress, status.State, localContentPath, cancellationToken);
 
             if (status.IsFailed) {
+                if (!await IsClientHealthyAsync(
+                        transfer,
+                        client,
+                        downloadClient,
+                        connection,
+                        healthCache,
+                        cancellationToken)) {
+                    return;
+                }
+
                 // The client says this download is definitively dead (e.g. a SABnzbd Failed history entry:
                 // incomplete, unpack failed, or encrypted). Unlike a stall, it cannot recover, so it goes to
                 // failed-download recovery immediately instead of waiting out the stall grace window.
@@ -280,7 +349,15 @@ public sealed class AcquisitionMonitorJobHandler(
                     return;
                 }
 
-                await AdvanceStallAsync(context, transfer, status, cancellationToken);
+                await AdvanceStallAsync(
+                    context,
+                    transfer,
+                    status,
+                    client,
+                    downloadClient,
+                    connection,
+                    healthCache,
+                    cancellationToken);
             }
         } catch (OperationCanceledException) {
             throw;
@@ -300,7 +377,15 @@ public sealed class AcquisitionMonitorJobHandler(
     /// continuous, truly-stuck stretch. The terminal Failed transition is owned by the failed-handle job (as
     /// in the removal path); the monitor only surfaces the acquisition as actively downloading here.
     /// </summary>
-    private async Task AdvanceStallAsync(JobContext context, ActiveTransfer transfer, DownloadItemStatus status, CancellationToken cancellationToken) {
+    private async Task AdvanceStallAsync(
+        JobContext context,
+        ActiveTransfer transfer,
+        DownloadItemStatus status,
+        Contracts.Acquisition.DownloadClientDetail client,
+        IDownloadClient downloadClient,
+        DownloadClientConnection connection,
+        Dictionary<Guid, DownloadClientConnectionTest> healthCache,
+        CancellationToken cancellationToken) {
         // A torrent that advanced since the last poll is alive even if it reads stalled this instant (slow,
         // not dead). Only a stalled torrent that has not moved is a stall candidate.
         var madeProgress = status.Progress > transfer.Progress;
@@ -329,6 +414,16 @@ public sealed class AcquisitionMonitorJobHandler(
         }
 
         if (DateTimeOffset.UtcNow - stalledSince >= StallGrace) {
+            if (!await IsClientHealthyAsync(
+                    transfer,
+                    client,
+                    downloadClient,
+                    connection,
+                    healthCache,
+                    cancellationToken)) {
+                return;
+            }
+
             await EnqueueFailedHandleAsync(
                 context,
                 transfer.AcquisitionId,
@@ -408,21 +503,24 @@ public sealed class AcquisitionMonitorJobHandler(
     /// blocklisted: a user delete says nothing about release quality, and the release picker's explicit
     /// blocklist action covers the "never grab that one again" case.
     /// </summary>
-    private async Task FallBackToSearchAsync(JobContext context, Guid acquisitionId, CancellationToken cancellationToken) {
+    private async Task FallBackToSearchAsync(
+        JobContext context,
+        ActiveTransfer transfer,
+        CancellationToken cancellationToken) {
         const string message = "The download was removed from the client; searching for a release again.";
-        if (!await acquisitions.TryTransitionStatusAsync(
-                acquisitionId,
-                [AcquisitionStatus.Queued, AcquisitionStatus.Downloading],
+        var input = await acquisitions.GetSearchInputAsync(transfer.AcquisitionId, cancellationToken);
+        var selected = await acquisitions.GetSelectedReleaseAsync(transfer.AcquisitionId, cancellationToken);
+        if (!await acquisitions.TryResetDownloadAttemptAsync(
+                transfer.AcquisitionId,
+                transfer.TransferId,
                 AcquisitionStatus.Searching,
                 message,
                 cancellationToken)) {
             return;
         }
 
-        var input = await acquisitions.GetSearchInputAsync(acquisitionId, cancellationToken);
-        var selected = await acquisitions.GetSelectedReleaseAsync(acquisitionId, cancellationToken);
         await history.SafeAddAsync(logger, new AcquisitionHistoryEntry(
-            acquisitionId,
+            transfer.AcquisitionId,
             input?.EntityId,
             input?.Kind ?? EntityKind.Book,
             AcquisitionHistoryEvent.DownloadFailed,
@@ -437,11 +535,123 @@ public sealed class AcquisitionMonitorJobHandler(
         await context.EnqueueIfNeededAsync(
             new EnqueueJobRequest(
                 JobType.AcquisitionSearch,
-                PayloadJson: AcquisitionJobPayload.Serialize(acquisitionId),
-                TargetEntityId: acquisitionId.ToString(),
+                PayloadJson: AcquisitionJobPayload.Serialize(transfer.AcquisitionId),
+                TargetEntityId: transfer.AcquisitionId.ToString(),
                 TargetLabel: input?.Title ?? "Search again after client removal"),
             cancellationToken);
-        logger.LogInformation("AcquisitionMonitor: download for acquisition {AcquisitionId} is gone from the client; falling back to a new release search.", acquisitionId);
+        logger.LogInformation(
+            "AcquisitionMonitor: download for acquisition {AcquisitionId} is gone from the client; falling back to a new release search.",
+            transfer.AcquisitionId);
+    }
+
+    private async Task ResetForRemovedClientAsync(
+        Guid acquisitionId,
+        Guid transferId,
+        CancellationToken cancellationToken) {
+        const string message = "The configured download client was removed. Waiting for a download client before searching again.";
+        if (!await acquisitions.TryResetDownloadAttemptAsync(
+                acquisitionId,
+                transferId,
+                AcquisitionStatus.WaitingForDownloadClient,
+                message,
+                cancellationToken)) {
+            return;
+        }
+
+        logger.LogWarning(
+            "AcquisitionMonitor: cleared download attempt {TransferId} for acquisition {AcquisitionId} because its configured client was removed.",
+            transferId,
+            acquisitionId);
+    }
+
+    private async Task ResumeTransferlessDownloadClientWaitsAsync(
+        JobContext context,
+        CancellationToken cancellationToken) {
+        var waiting = await acquisitions.ListTransferlessDownloadClientWaitsAsync(cancellationToken);
+        if (waiting.Count == 0
+            || await downloadClients.GetDefaultAsync(cancellationToken) is null) {
+            return;
+        }
+
+        foreach (var acquisitionId in waiting) {
+            if (!await acquisitions.TryTransitionStatusAsync(
+                    acquisitionId,
+                    [AcquisitionStatus.WaitingForDownloadClient],
+                    AcquisitionStatus.Searching,
+                    "A download client is available; searching for a release again.",
+                    cancellationToken)) {
+                continue;
+            }
+
+            var input = await acquisitions.GetSearchInputAsync(acquisitionId, cancellationToken);
+            await context.EnqueueIfNeededAsync(
+                new EnqueueJobRequest(
+                    JobType.AcquisitionSearch,
+                    PayloadJson: AcquisitionJobPayload.Serialize(acquisitionId),
+                    TargetEntityId: acquisitionId.ToString(),
+                    TargetLabel: input?.Title ?? "Search after download client recovery"),
+                cancellationToken);
+        }
+    }
+
+    private async Task<bool> IsClientHealthyAsync(
+        ActiveTransfer transfer,
+        Contracts.Acquisition.DownloadClientDetail client,
+        IDownloadClient downloadClient,
+        DownloadClientConnection connection,
+        Dictionary<Guid, DownloadClientConnectionTest> cache,
+        CancellationToken cancellationToken) {
+        if (!cache.TryGetValue(client.Id, out var health)) {
+            try {
+                health = await downloadClient.TestAsync(connection, cancellationToken);
+            } catch (OperationCanceledException) {
+                throw;
+            } catch (Exception ex) {
+                health = new DownloadClientConnectionTest(false, ex.Message);
+            }
+
+            cache[client.Id] = health;
+        }
+
+        if (health.Connected) {
+            return true;
+        }
+
+        await WaitForDownloadClientAsync(
+            transfer,
+            client,
+            string.IsNullOrWhiteSpace(health.Message)
+                ? "The download client reported an unhealthy connection."
+                : health.Message,
+            cancellationToken);
+        return false;
+    }
+
+    private async Task WaitForDownloadClientAsync(
+        ActiveTransfer transfer,
+        Contracts.Acquisition.DownloadClientDetail client,
+        string reason,
+        CancellationToken cancellationToken) {
+        // An outage is not a stalled release. Clear the anchor so time spent waiting for the client cannot
+        // make an otherwise recoverable download immediately cross the blocklist threshold after reconnect.
+        if (transfer.StalledSince is not null) {
+            await acquisitions.MarkTransferStalledAsync(
+                transfer.TransferId,
+                null,
+                cancellationToken);
+        }
+
+        var message = $"Waiting for download client \"{client.DisplayName}\" to recover. {reason}";
+        await acquisitions.TryTransitionStatusAsync(
+            transfer.AcquisitionId,
+            [
+                AcquisitionStatus.Queued,
+                AcquisitionStatus.Downloading,
+                AcquisitionStatus.WaitingForDownloadClient,
+            ],
+            AcquisitionStatus.WaitingForDownloadClient,
+            message,
+            cancellationToken);
     }
 
     /// <summary>
@@ -470,8 +680,8 @@ public sealed class AcquisitionMonitorJobHandler(
 
     /// <summary>
     /// Returns the client's torrents keyed by lowercased hash, fetched at most once per pass. Returns null
-    /// when the listing can't be read so callers leave their transfers untouched rather than treating every
-    /// torrent as removed.
+    /// when the listing can't be read so callers wait for the client rather than treating every torrent as
+    /// removed.
     /// </summary>
     private async Task<IReadOnlyDictionary<string, DownloadItemStatus>?> GetListingAsync(
         Guid clientId,
@@ -507,14 +717,14 @@ public sealed class AcquisitionMonitorJobHandler(
         Dictionary<Guid, Contracts.Acquisition.DownloadClientDetail?> cache,
         CancellationToken cancellationToken) {
         if (configId is not { } id) {
-            return await downloadClients.GetDefaultAsync(cancellationToken);
+            return null;
         }
 
         if (cache.TryGetValue(id, out var cached)) {
             return cached;
         }
 
-        var client = await downloadClients.GetAsync(id, cancellationToken) ?? await downloadClients.GetDefaultAsync(cancellationToken);
+        var client = await downloadClients.GetAsync(id, cancellationToken);
         cache[id] = client;
         return client;
     }

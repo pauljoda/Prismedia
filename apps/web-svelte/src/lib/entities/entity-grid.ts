@@ -129,6 +129,7 @@ export const AVAILABILITY_FILTER_DEFS = [
   { id: `${AVAILABILITY_PREFIX}${ACQUISITION_STATUS.awaitingSelection}`, label: "Review", capabilityKind: CAPABILITY_KIND.flags, value: ACQUISITION_STATUS.awaitingSelection },
   { id: `${AVAILABILITY_PREFIX}${ACQUISITION_STATUS.queued}`, label: "Queued", capabilityKind: CAPABILITY_KIND.flags, value: ACQUISITION_STATUS.queued },
   { id: `${AVAILABILITY_PREFIX}${ACQUISITION_STATUS.downloading}`, label: "Downloading", capabilityKind: CAPABILITY_KIND.flags, value: ACQUISITION_STATUS.downloading },
+  { id: `${AVAILABILITY_PREFIX}${ACQUISITION_STATUS.waitingForDownloadClient}`, label: "Waiting for client", capabilityKind: CAPABILITY_KIND.flags, value: ACQUISITION_STATUS.waitingForDownloadClient },
   { id: `${AVAILABILITY_PREFIX}${ACQUISITION_STATUS.downloaded}`, label: "Downloaded", capabilityKind: CAPABILITY_KIND.flags, value: ACQUISITION_STATUS.downloaded },
   { id: `${AVAILABILITY_PREFIX}${ACQUISITION_STATUS.importing}`, label: "Importing", capabilityKind: CAPABILITY_KIND.flags, value: ACQUISITION_STATUS.importing },
   { id: `${AVAILABILITY_PREFIX}${ACQUISITION_STATUS.imported}`, label: "Imported", capabilityKind: CAPABILITY_KIND.flags, value: ACQUISITION_STATUS.imported },

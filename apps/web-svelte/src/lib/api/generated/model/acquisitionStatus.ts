@@ -14,6 +14,7 @@ export const AcquisitionStatus = {
   'awaiting-selection': 'awaiting-selection',
   queued: 'queued',
   downloading: 'downloading',
+  'waiting-for-download-client': 'waiting-for-download-client',
   downloaded: 'downloaded',
   importing: 'importing',
   imported: 'imported',

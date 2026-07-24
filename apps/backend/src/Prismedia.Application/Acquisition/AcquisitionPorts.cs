@@ -625,6 +625,26 @@ public interface IAcquisitionStore : IAcquisitionLifecycleStore {
         Task.FromResult<IReadOnlyList<PendingTransferAdd>>([]);
 
     /// <summary>
+    /// Lists acquisitions waiting for a replacement download client after their prior client configuration
+    /// was removed. These waits deliberately have no transfer pointer and restart from a fresh search once
+    /// any enabled client becomes available.
+    /// </summary>
+    Task<IReadOnlyList<Guid>> ListTransferlessDownloadClientWaitsAsync(CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<Guid>>([]);
+
+    /// <summary>
+    /// Atomically clears one obsolete download attempt (transfer, selected release, candidates, and
+    /// pre-import state) and publishes either a fresh search or a wait for a replacement client. False means
+    /// the lifecycle or transfer changed first and the newer state remains authoritative.
+    /// </summary>
+    Task<bool> TryResetDownloadAttemptAsync(
+        Guid acquisitionId,
+        Guid transferId,
+        AcquisitionStatus recoveryStatus,
+        string message,
+        CancellationToken cancellationToken) => Task.FromResult(false);
+
+    /// <summary>
     /// Lists old Queued claims that have neither a selected release nor any durable transfer ownership.
     /// The age guard keeps monitor reconciliation away from the brief status-to-placeholder window of a
     /// live queue request.

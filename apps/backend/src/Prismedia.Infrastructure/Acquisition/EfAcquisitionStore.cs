@@ -923,7 +923,9 @@ public sealed partial class EfAcquisitionStore(PrismediaDbContext db, IAcquisiti
                 && row.ClientItemId == correlation
                 && row.State == addingCode,
             cancellationToken);
-        if (acquisition is null || acquisition.Status != AcquisitionStatus.Queued || transfer is null) {
+        if (acquisition is null
+            || acquisition.Status is not (AcquisitionStatus.Queued or AcquisitionStatus.WaitingForDownloadClient)
+            || transfer is null) {
             return false;
         }
 
@@ -1055,6 +1057,7 @@ public sealed partial class EfAcquisitionStore(PrismediaDbContext db, IAcquisiti
         var active = new[] {
             AcquisitionStatus.Queued,
             AcquisitionStatus.Downloading,
+            AcquisitionStatus.WaitingForDownloadClient,
         };
         var adding = TransferOwnershipState.Adding.ToCode();
         var rows = await (
@@ -1075,9 +1078,13 @@ public sealed partial class EfAcquisitionStore(PrismediaDbContext db, IAcquisiti
         var placeholders = await (
             from transfer in db.DownloadTransfers.AsNoTracking()
             join acquisition in db.Acquisitions.AsNoTracking() on transfer.AcquisitionId equals acquisition.Id
-            where acquisition.Status == AcquisitionStatus.Queued && transfer.State == adding
+            where (acquisition.Status == AcquisitionStatus.Queued
+                    || acquisition.Status == AcquisitionStatus.WaitingForDownloadClient)
+                && transfer.State == adding
             select new {
+                transfer.Id,
                 transfer.AcquisitionId,
+                transfer.DownloadClientConfigId,
                 Correlation = transfer.ClientItemId,
                 transfer.UpdatedAt,
             })
@@ -1108,7 +1115,12 @@ public sealed partial class EfAcquisitionStore(PrismediaDbContext db, IAcquisiti
                         StringComparison.Ordinal));
                 return candidate is null
                     ? null
-                    : new PendingTransferAdd(placeholder.AcquisitionId, candidate.Id, placeholder.UpdatedAt);
+                    : new PendingTransferAdd(
+                        placeholder.Id,
+                        placeholder.AcquisitionId,
+                        candidate.Id,
+                        placeholder.DownloadClientConfigId,
+                        placeholder.UpdatedAt);
             })
             .Where(row => row is not null)
             .Cast<PendingTransferAdd>()

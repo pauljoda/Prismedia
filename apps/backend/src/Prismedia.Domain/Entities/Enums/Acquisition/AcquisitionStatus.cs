@@ -26,6 +26,13 @@ public enum AcquisitionStatus {
     [Code("downloading")]
     Downloading,
 
+    /// <summary>
+    /// A download handoff or active transfer is paused because its configured client is unavailable.
+    /// Prismedia keeps retryable ownership without treating the release itself as failed.
+    /// </summary>
+    [Code("waiting-for-download-client")]
+    WaitingForDownloadClient,
+
     /// <summary>The download completed and the payload is ready to import.</summary>
     [Code("downloaded")]
     Downloaded,

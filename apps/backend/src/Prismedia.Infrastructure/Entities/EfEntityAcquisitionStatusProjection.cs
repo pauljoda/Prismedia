@@ -17,6 +17,7 @@ internal sealed class EfEntityAcquisitionStatusProjection(PrismediaDbContext db)
         AcquisitionStatus.AwaitingSelection,
         AcquisitionStatus.Queued,
         AcquisitionStatus.Downloading,
+        AcquisitionStatus.WaitingForDownloadClient,
         AcquisitionStatus.Downloaded,
         AcquisitionStatus.Importing,
         AcquisitionStatus.Stopping,

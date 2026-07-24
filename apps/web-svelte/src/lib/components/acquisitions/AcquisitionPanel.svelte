@@ -413,6 +413,14 @@
         busy
       />
 
+    {:else if status === ACQUISITION_STATUS.waitingForDownloadClient}
+      <StatePlaceholder
+        icon={CloudDownload}
+        title="Waiting for download client"
+        description={detail?.summary.statusMessage ?? "Prismedia will resume automatically when the download client is healthy."}
+        busy
+      />
+
     {:else if isDownloading}
       <!-- ── Live transfer ── -->
       <section class="space-y-3">

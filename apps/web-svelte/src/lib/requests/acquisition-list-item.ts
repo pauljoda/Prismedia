@@ -109,6 +109,7 @@ function toneForStatus(status: AcquisitionStatusCode): AcquisitionItemTone {
     case ACQUISITION_STATUS.importing:
       return "downloading";
     case ACQUISITION_STATUS.queued:
+    case ACQUISITION_STATUS.waitingForDownloadClient:
       return "queued";
     case ACQUISITION_STATUS.pending:
     case ACQUISITION_STATUS.searching:
@@ -137,6 +138,7 @@ function iconForStatus(status: AcquisitionStatusCode): Component {
     case ACQUISITION_STATUS.importing:
       return CloudDownload;
     case ACQUISITION_STATUS.queued:
+    case ACQUISITION_STATUS.waitingForDownloadClient:
       return Hourglass;
     case ACQUISITION_STATUS.pending:
     case ACQUISITION_STATUS.searching:
@@ -168,6 +170,8 @@ function downloadDescription(status: AcquisitionStatusCode, statusMessage: strin
       return "Finding releases…";
     case ACQUISITION_STATUS.queued:
       return "Waiting for a download slot.";
+    case ACQUISITION_STATUS.waitingForDownloadClient:
+      return statusMessage ?? "Waiting for the download client to recover.";
     case ACQUISITION_STATUS.failed:
       return statusMessage ?? "The download failed.";
     case ACQUISITION_STATUS.downloaded:
@@ -189,6 +193,7 @@ function isIndeterminate(status: AcquisitionStatusCode): boolean {
     status === ACQUISITION_STATUS.pending ||
     status === ACQUISITION_STATUS.searching ||
     status === ACQUISITION_STATUS.queued ||
+    status === ACQUISITION_STATUS.waitingForDownloadClient ||
     status === ACQUISITION_STATUS.stopping ||
     !acquisitionStatusIsKnown(status)
   );

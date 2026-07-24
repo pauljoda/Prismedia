@@ -31,6 +31,7 @@ public sealed class AcquisitionSearchJobHandler(
     public static bool CanScheduleSearch(AcquisitionStatus status) => status is not (
         AcquisitionStatus.Queued
         or AcquisitionStatus.Downloading
+        or AcquisitionStatus.WaitingForDownloadClient
         or AcquisitionStatus.Downloaded
         or AcquisitionStatus.Importing
         or AcquisitionStatus.Imported

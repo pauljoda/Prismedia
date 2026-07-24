@@ -15,6 +15,7 @@ describe("acquisition status", () => {
     expect(acquisitionStatusLabel(ACQUISITION_STATUS.awaitingSelection)).toBe("Choose release");
     expect(acquisitionStatusLabel(ACQUISITION_STATUS.queued)).toBe("Queued");
     expect(acquisitionStatusLabel(ACQUISITION_STATUS.downloading)).toBe("Downloading");
+    expect(acquisitionStatusLabel(ACQUISITION_STATUS.waitingForDownloadClient)).toBe("Waiting for download client");
     expect(acquisitionStatusLabel(ACQUISITION_STATUS.downloaded)).toBe("Downloaded");
     expect(acquisitionStatusLabel(ACQUISITION_STATUS.importing)).toBe("Importing");
     expect(acquisitionStatusLabel(ACQUISITION_STATUS.imported)).toBe("Imported");
@@ -30,6 +31,7 @@ describe("acquisition status", () => {
       ACQUISITION_STATUS.searching,
       ACQUISITION_STATUS.queued,
       ACQUISITION_STATUS.downloading,
+      ACQUISITION_STATUS.waitingForDownloadClient,
       ACQUISITION_STATUS.downloaded,
       ACQUISITION_STATUS.importing,
       ACQUISITION_STATUS.stopping,
@@ -44,6 +46,14 @@ describe("acquisition status", () => {
       tone: "cleanup",
     });
     expect(acquisitionStatusShouldPoll(ACQUISITION_STATUS.stopping)).toBe(true);
+  });
+
+  it("presents an unhealthy download client as retryable waiting work", () => {
+    expect(acquisitionStatusDisplay(ACQUISITION_STATUS.waitingForDownloadClient)).toMatchObject({
+      label: "Waiting for client",
+      tone: "queued",
+    });
+    expect(acquisitionStatusShouldPoll(ACQUISITION_STATUS.waitingForDownloadClient)).toBe(true);
   });
 
   it("fails closed for a newer status until the generated client catches up", () => {

@@ -545,8 +545,10 @@ public sealed record ActiveTransfer(
 /// reconcile the same release after a lost response or process interruption.
 /// </summary>
 public sealed record PendingTransferAdd(
+    Guid TransferId,
     Guid AcquisitionId,
     Guid CandidateId,
+    Guid? DownloadClientConfigId,
     DateTimeOffset UpdatedAt);
 
 /// <summary>
