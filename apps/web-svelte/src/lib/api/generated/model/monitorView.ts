@@ -26,4 +26,8 @@ export interface MonitorView {
   entityId?: string | null;
   preset?: MonitorViewPreset;
   bookRendition?: MonitorViewBookRendition;
+  /** @nullable */
+  targetLibraryRootId?: string | null;
+  /** @nullable */
+  profileId?: string | null;
 }

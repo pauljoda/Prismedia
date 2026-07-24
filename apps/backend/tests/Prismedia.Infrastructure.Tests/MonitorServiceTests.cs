@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Prismedia.Application.Acquisition;
+using Prismedia.Application.Jobs;
 using Prismedia.Application.Plugins;
 using Prismedia.Application.Requests;
 using Prismedia.Contracts.Acquisition;
@@ -340,6 +341,34 @@ public sealed class MonitorServiceTests {
     }
 
     [Fact]
+    public async Task StartForEntityPersistsTargetingAndQueuesAnImmediateMonitoredSweep() {
+        await using var db = CreateContext();
+        var entityId = SeedContainerEntity(
+            db,
+            "Daniel Tiger's Neighborhood",
+            provider: "tmdb",
+            kind: EntityKind.VideoSeries);
+        var profileId = Guid.NewGuid();
+        var libraryRootId = Guid.NewGuid();
+        await db.SaveChangesAsync();
+        var queue = new RecordingJobQueue();
+        var service = Service(db, trackableProviders: ["tmdb"], queue: queue);
+
+        var monitor = await service.StartForEntityAsync(
+            entityId,
+            new AcquisitionTargeting(libraryRootId, profileId),
+            MonitorPreset.All,
+            CancellationToken.None);
+
+        Assert.NotNull(monitor);
+        Assert.Equal(profileId, monitor!.ProfileId);
+        Assert.Equal(libraryRootId, monitor.TargetLibraryRootId);
+        var job = Assert.Single(queue.Enqueued);
+        Assert.Equal(JobType.MonitoredSearch, job.Type);
+        Assert.Equal(entityId.ToString(), job.TargetEntityId);
+    }
+
+    [Fact]
     public async Task MonitoringAnOnDiskSeasonCreatesOnlyStableEntityIntent() {
         await using var db = CreateContext();
         var entityId = SeedContainerEntity(db, "Season 1", provider: "tmdbseason", kind: EntityKind.VideoSeason);
@@ -357,7 +386,8 @@ public sealed class MonitorServiceTests {
         PrismediaDbContext db,
         string[]? trackableProviders = null,
         IPluginIdentityRouter? identityRouter = null,
-        IProviderTrackingCatalog? trackingCatalog = null) {
+        IProviderTrackingCatalog? trackingCatalog = null,
+        IJobQueueService? queue = null) {
         var trackable = trackableProviders ?? [];
         var router = identityRouter ?? new TrackingIdentityRouter(trackable);
         var suppressions = new Prismedia.Infrastructure.Requests.EfWantedSuppressionStore(db);
@@ -379,7 +409,103 @@ public sealed class MonitorServiceTests {
             new EntityUnmonitorService(
                 new EfEntityUnmonitorPersistence(db, new EfEntityHierarchyReader(db)),
                 acquisitionRequests),
-            suppressions);
+            suppressions,
+            queue);
+    }
+
+    private sealed class RecordingJobQueue : IJobQueueService {
+        public List<EnqueueJobRequest> Enqueued { get; } = [];
+
+        public Task<bool> HasPendingAsync(
+            JobType type,
+            string? targetEntityId,
+            CancellationToken cancellationToken) =>
+            Task.FromResult(false);
+
+        public Task<JobRunSnapshot> EnqueueAsync(
+            EnqueueJobRequest request,
+            CancellationToken cancellationToken) {
+            Enqueued.Add(request);
+            return Task.FromResult(Snapshot(request));
+        }
+
+        public Task<JobRunSnapshot> EnqueueAsync(JobType type, CancellationToken cancellationToken) =>
+            EnqueueAsync(new EnqueueJobRequest(type), cancellationToken);
+
+        public Task<IReadOnlyList<JobRunSnapshot>> ListAsync(
+            bool hideNsfw,
+            CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<JobRunSnapshot>>([]);
+
+        public Task<int> EnqueueBatchAsync(
+            IReadOnlyList<EnqueueJobRequest> requests,
+            CancellationToken cancellationToken) =>
+            Task.FromResult(0);
+
+        public Task<int> CancelAsync(JobType? type, CancellationToken cancellationToken) =>
+            Task.FromResult(0);
+
+        public Task<bool> CancelRunAsync(Guid id, CancellationToken cancellationToken) =>
+            Task.FromResult(false);
+
+        public Task<int> ClearFailuresAsync(JobType? type, CancellationToken cancellationToken) =>
+            Task.FromResult(0);
+
+        public Task<JobRunSnapshot?> ClaimNextAsync(
+            string workerId,
+            CancellationToken cancellationToken,
+            JobRunLane? lane = null) =>
+            Task.FromResult<JobRunSnapshot?>(null);
+
+        public Task<int> RecoverStaleRunningAsync(
+            string currentWorkerId,
+            TimeSpan staleAfter,
+            CancellationToken cancellationToken) =>
+            Task.FromResult(0);
+
+        public Task UpdateProgressAsync(
+            Guid id,
+            int progress,
+            string? message,
+            CancellationToken cancellationToken) =>
+            Task.CompletedTask;
+
+        public Task CompleteAsync(Guid id, string? message, CancellationToken cancellationToken) =>
+            Task.CompletedTask;
+
+        public Task FailAsync(
+            Guid id,
+            string message,
+            TimeSpan retryDelay,
+            CancellationToken cancellationToken) =>
+            Task.CompletedTask;
+
+        public Task<IReadOnlyList<JobQueueCount>> GetQueueCountsAsync(
+            bool hideNsfw,
+            CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<JobQueueCount>>([]);
+
+        public Task<int> PruneHistoryAsync(
+            TimeSpan retention,
+            CancellationToken cancellationToken) =>
+            Task.FromResult(0);
+
+        private static JobRunSnapshot Snapshot(EnqueueJobRequest request) {
+            var now = DateTimeOffset.UtcNow;
+            return new JobRunSnapshot(
+                Guid.NewGuid(),
+                request.Type,
+                JobRunStatus.Queued,
+                Progress: 0,
+                Message: null,
+                request.PayloadJson ?? "{}",
+                request.TargetEntityKind,
+                request.TargetEntityId,
+                request.TargetLabel,
+                now,
+                StartedAt: null,
+                FinishedAt: null);
+        }
     }
 
     private sealed class FixedIdentityRouter(IReadOnlyList<PluginIdentityRoute> routes) : IPluginIdentityRouter {

@@ -17,7 +17,7 @@ const generated = vi.hoisted(() => ({
 
 vi.mock("$lib/api/generated/prismedia", () => generated);
 
-import { fetchEntityMonitors, fetchEntityMonitorStates } from "./monitors";
+import { fetchEntityMonitors, fetchEntityMonitorStates, startEntityMonitor } from "./monitors";
 
 describe("monitor API", () => {
   beforeEach(() => {
@@ -40,6 +40,26 @@ describe("monitor API", () => {
       { id: "audiobook-monitor" },
     ]);
     expect(generated.listEntityMonitors).toHaveBeenCalledWith("book-1");
+  });
+
+  it("starts entity monitoring with the selected profile and import target", async () => {
+    generated.startEntityMonitor.mockResolvedValue({
+      status: 200,
+      data: { id: "monitor-1" },
+    });
+
+    await startEntityMonitor("series-1", {
+      preset: "all",
+      profileId: "profile-tv",
+      targetLibraryRootId: "library-tv",
+    });
+
+    expect(generated.startEntityMonitor).toHaveBeenCalledWith({
+      entityId: "series-1",
+      preset: "all",
+      profileId: "profile-tv",
+      targetLibraryRootId: "library-tv",
+    });
   });
 
   it("keeps large child collections within the server batch limit and preserves order", async () => {

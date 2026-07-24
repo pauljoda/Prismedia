@@ -1,4 +1,3 @@
-import { MONITOR_STATUS } from "$lib/api/generated/codes";
 import type {
   AcquisitionDetail,
   EntityCapability,
@@ -10,10 +9,10 @@ import { fetchAcquisitionForEntity } from "$lib/api/acquisitions";
 import {
   fetchEntityMonitor,
   fetchMonitorEligibility,
-  resumeMonitor,
   startEntityMonitor,
   stopMonitor,
 } from "$lib/api/monitors";
+import type { EntityMonitorTargeting } from "$lib/api/monitors";
 import { commitEntityRequest, requestMissingChildren, syncContainerRequest } from "$lib/api/requests";
 import type { EntityThumbnailCard } from "$lib/entities/entity-thumbnail";
 import { acquisitionStatusShouldPoll } from "$lib/requests/acquisition-status";
@@ -82,7 +81,9 @@ export interface EntityAcquisition {
   refresh(): Promise<void>;
   /** Immediately forgets an acquisition that the server deleted, unmounting every stale-id surface. */
   clearAcquisition(): void;
-  toggleMonitor(): Promise<void>;
+  toggleMonitor(targeting?: EntityMonitorTargeting): Promise<void>;
+  /** Persists new acquisition choices on an already-active monitor and schedules a fresh pass. */
+  updateMonitorTargeting(targeting: EntityMonitorTargeting): Promise<void>;
   syncNow(): Promise<void>;
   searchMissing(): Promise<void>;
   searchForRelease(): Promise<void>;
@@ -235,7 +236,7 @@ export function useEntityAcquisition(options: UseEntityAcquisitionOptions): Enti
   });
 
   /** The shared Entity-level monitor control: not monitored → start; paused → resume; active → stop. */
-  async function toggleMonitor(): Promise<void> {
+  async function toggleMonitor(targeting: EntityMonitorTargeting = {}): Promise<void> {
     const id = options.entityId();
     if (!id || monitorBusy || monitorDeletingFiles || monitorUnknownStatus) return;
     monitorBusy = true;
@@ -253,11 +254,11 @@ export function useEntityAcquisition(options: UseEntityAcquisitionOptions): Enti
         } else {
           await refresh();
         }
-      } else if (monitor) {
-        await resumeMonitor(monitor.id);
-        monitor = { ...monitor, status: MONITOR_STATUS.active };
       } else {
-        monitor = await startEntityMonitor(id);
+        monitor = await startEntityMonitor(id, {
+          ...targeting,
+          preset: monitor?.preset ?? targeting.preset,
+        });
       }
     } catch (reason) {
       // Preserve the last confirmed state and tell the user why the requested transition did not land.
@@ -271,6 +272,24 @@ export function useEntityAcquisition(options: UseEntityAcquisitionOptions): Enti
     } catch (reason) {
       const detail = reason instanceof Error ? reason.message : "Unknown refresh error";
       monitorError = `Monitoring was updated, but this page could not refresh: ${detail}`;
+    } finally {
+      monitorBusy = false;
+    }
+  }
+
+  async function updateMonitorTargeting(targeting: EntityMonitorTargeting): Promise<void> {
+    const id = options.entityId();
+    if (!id || !monitorActive || monitorBusy) return;
+    monitorBusy = true;
+    monitorError = null;
+    try {
+      monitor = await startEntityMonitor(id, {
+        ...targeting,
+        preset: monitor?.preset ?? targeting.preset,
+      });
+      await options.onChanged?.();
+    } catch (reason) {
+      monitorError = reason instanceof Error ? reason.message : "Failed to update monitoring";
     } finally {
       monitorBusy = false;
     }
@@ -400,6 +419,7 @@ export function useEntityAcquisition(options: UseEntityAcquisitionOptions): Enti
       acquisition = null;
     },
     toggleMonitor,
+    updateMonitorTargeting,
     syncNow,
     searchMissing,
     searchForRelease,

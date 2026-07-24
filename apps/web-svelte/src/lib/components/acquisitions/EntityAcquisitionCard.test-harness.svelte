@@ -3,6 +3,9 @@
   import type { AcquisitionDetail, EntityCapability } from "$lib/api/generated/model";
   import type { EntityAcquisition } from "$lib/components/acquisitions/use-entity-acquisition.svelte";
   import EntityAcquisitionCard from "$lib/components/acquisitions/EntityAcquisitionCard.svelte";
+  import { provideNsfw } from "$lib/nsfw/store.svelte";
+
+  provideNsfw(() => ({ initialMode: "show", allowed: true }));
 
   let {
     initialAcquisition = null,
@@ -84,6 +87,7 @@
     async toggleMonitor() {
       await onToggleMonitor?.();
     },
+    async updateMonitorTargeting() {},
     async syncNow() {},
     async searchMissing() {},
     async searchForRelease() {},

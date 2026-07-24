@@ -9,4 +9,8 @@ import type { EntityMonitorCreateRequestPreset } from './entityMonitorCreateRequ
 export interface EntityMonitorCreateRequest {
   entityId: string;
   preset?: EntityMonitorCreateRequestPreset;
+  /** @nullable */
+  targetLibraryRootId?: string | null;
+  /** @nullable */
+  profileId?: string | null;
 }

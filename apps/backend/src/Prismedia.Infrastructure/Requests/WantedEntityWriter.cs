@@ -86,6 +86,14 @@ public sealed class WantedEntityWriter(
                     // gains the provider id so every later lookup resolves it id-first.
                     await StampExternalIdAsync(current.Id, identity, leaseCancellationToken);
 
+                    // Provider hydration can materialize a fileless Entity before an acquisition is
+                    // selected. Reusing that shell for a request must promote it to Wanted so both the
+                    // acquisition store and library projections recognize the pending work.
+                    if (!hasRequestedRendition && !current.IsWanted) {
+                        current.IsWanted = true;
+                        current.UpdatedAt = now;
+                    }
+
                     // Re-requesting a still-parentless wanted leaf through its container adopts it under
                     // the container, but never while a lifecycle owner controls either ancestry.
                     if (parentEntityId is { } parent
@@ -149,6 +157,14 @@ public sealed class WantedEntityWriter(
         if (requests.Select(request => request.Identity).Distinct().Count() != requests.Count) {
             throw new ArgumentException("A reviewed child batch cannot contain duplicate external identities.", nameof(requests));
         }
+        if (requests
+                .Where(request => request.PreferredEntityId is not null)
+                .Select(request => request.PreferredEntityId)
+                .Distinct()
+                .Count()
+            != requests.Count(request => request.PreferredEntityId is not null)) {
+            throw new ArgumentException("A reviewed child batch cannot target the same local Entity twice.", nameof(requests));
+        }
 
         IReadOnlyList<WantedEntityResult>? results = null;
         await ExecuteIfLifecycleMutableAsync(
@@ -169,6 +185,16 @@ public sealed class WantedEntityWriter(
                 var candidateIds = exactIdentityRows.Select(pair => pair.Row.EntityId).Distinct().ToArray();
                 var identityEntities = await db.Entities
                     .Where(row => candidateIds.Contains(row.Id)
+                        && row.KindCode == kindCode
+                        && row.ParentEntityId == parentEntityId)
+                    .ToDictionaryAsync(row => row.Id, leaseCancellationToken);
+                var preferredIds = requests
+                    .Where(request => request.PreferredEntityId is not null)
+                    .Select(request => request.PreferredEntityId!.Value)
+                    .Distinct()
+                    .ToArray();
+                var preferredEntities = await db.Entities
+                    .Where(row => preferredIds.Contains(row.Id)
                         && row.KindCode == kindCode
                         && row.ParentEntityId == parentEntityId)
                     .ToDictionaryAsync(row => row.Id, leaseCancellationToken);
@@ -211,8 +237,22 @@ public sealed class WantedEntityWriter(
 
                 foreach (var request in requests) {
                     EntityRow? entity = null;
-                    if (entitiesByIdentity.TryGetValue(request.Identity, out var identityEntityIds)
-                        && identityEntityIds.Length == 1) {
+                    entitiesByIdentity.TryGetValue(request.Identity, out var identityEntityIds);
+                    if (request.PreferredEntityId is { } preferredId
+                        && preferredEntities.TryGetValue(preferredId, out var preferredEntity)) {
+                        if (identityEntityIds is { Length: > 0 }
+                            && identityEntityIds.Any(entityId => entityId != preferredId)) {
+                            var resolution = await externalIdentities.ResolveAsync(
+                                kind,
+                                [request.Identity],
+                                parentEntityId,
+                                leaseCancellationToken);
+                            throw new ExternalIdentityAmbiguityException(kind, resolution);
+                        }
+
+                        entity = preferredEntity;
+                        allocatedTitleMatches.Add(entity.Id);
+                    } else if (identityEntityIds is { Length: 1 }) {
                         entity = identityEntities[identityEntityIds[0]];
                         allocatedTitleMatches.Add(entity.Id);
                     }
@@ -270,6 +310,7 @@ public sealed class WantedEntityWriter(
                     existingIds,
                     leaseCancellationToken);
                 var resolved = new List<WantedEntityResult>(materialized.Count);
+                var promotedWantedEntity = false;
                 foreach (var item in materialized) {
                     if (item.Created) {
                         resolved.Add(new WantedEntityResult(
@@ -288,11 +329,22 @@ public sealed class WantedEntityWriter(
                             item.Request.BookRendition,
                             leaseCancellationToken)
                         : hasFile;
+                    // Structural/provider matching can select an existing metadata-only child. It becomes
+                    // a real Wanted child at the moment this reviewed batch requests it; otherwise the
+                    // acquisition guard rejects it and its parent detail view filters it out.
+                    if (!hasRequestedRendition && !item.Entity.IsWanted) {
+                        item.Entity.IsWanted = true;
+                        item.Entity.UpdatedAt = now;
+                        promotedWantedEntity = true;
+                    }
                     resolved.Add(new WantedEntityResult(
                         item.Entity.Id,
                         Created: false,
                         hasFile,
                         hasRequestedRendition));
+                }
+                if (promotedWantedEntity) {
+                    await db.SaveChangesAsync(leaseCancellationToken);
                 }
 
                 results = resolved;

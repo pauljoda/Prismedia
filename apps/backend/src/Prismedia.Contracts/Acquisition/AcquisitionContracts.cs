@@ -406,7 +406,9 @@ public sealed record MonitorView(
     DateTimeOffset UpdatedAt,
     Guid? EntityId = null,
     MonitorPreset Preset = MonitorPreset.All,
-    BookRendition? BookRendition = null);
+    BookRendition? BookRendition = null,
+    Guid? TargetLibraryRootId = null,
+    Guid? ProfileId = null);
 
 /// <summary>Outcome of a completed recursive unmonitor operation.</summary>
 /// <param name="EntityPruned">
@@ -505,7 +507,13 @@ public sealed record MonitorCreateRequest(Guid AcquisitionId);
 /// any preset a prior request recorded untouched (and defaults to <see cref="MonitorPreset.All"/> for a
 /// fresh grouping), so a plain monitor toggle never narrows child discovery.
 /// </param>
-public sealed record EntityMonitorCreateRequest(Guid EntityId, MonitorPreset? Preset = null);
+/// <param name="TargetLibraryRootId">Optional import destination inherited by discovered descendants.</param>
+/// <param name="ProfileId">Optional acquisition profile inherited by discovered descendants.</param>
+public sealed record EntityMonitorCreateRequest(
+    Guid EntityId,
+    MonitorPreset? Preset = null,
+    Guid? TargetLibraryRootId = null,
+    Guid? ProfileId = null);
 
 /// <summary>
 /// One entry in the durable acquisition activity log, surfaced newest-first for the history surface.

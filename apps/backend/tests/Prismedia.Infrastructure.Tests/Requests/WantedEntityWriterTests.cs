@@ -54,6 +54,29 @@ public sealed class WantedEntityWriterTests {
     }
 
     [Fact]
+    public async Task EnsurePromotesAFilelessProviderEntityToWantedWhenItIsRequested() {
+        await using var db = CreateContext();
+        var entityId = AddEntity(db, EntityKindRegistry.Book.Code, "Elantris", isWanted: false);
+        AddExternalId(db, entityId, "openlibrary", "W1");
+        await db.SaveChangesAsync();
+
+        var result = await Writer(db).EnsureAsync(
+            EntityKind.Book,
+            new ExternalIdentity("openlibrary", "W1"),
+            "Elantris",
+            null,
+            matchTitleKindWide: false,
+            CancellationToken.None);
+
+        Assert.False(result.Created);
+        Assert.False(result.HasRequestedRendition);
+        Assert.True(await db.Entities.AsNoTracking()
+            .Where(row => row.Id == entityId)
+            .Select(row => row.IsWanted)
+            .SingleAsync());
+    }
+
+    [Fact]
     public async Task EnsureTreatsBookTextAndAudioAsIndependentOwnedRenditions() {
         await using var db = CreateContext();
         var bookId = AddEntity(db, EntityKindRegistry.Book.Code, "Elantris", isWanted: false);
@@ -290,6 +313,82 @@ public sealed class WantedEntityWriterTests {
             .Select(row => row.Value)
             .ToArrayAsync();
         Assert.Equal(["RG1", "RG2", "RG3"], identities);
+    }
+
+    [Fact]
+    public async Task EnsureChildrenReusesTheProviderMatchedLocalSeasonWhenItsFolderTitleIsNonCanonical() {
+        await using var db = CreateContext();
+        var seriesId = AddEntity(
+            db,
+            EntityKindRegistry.VideoSeries.Code,
+            "Daniel Tiger's Neighborhood",
+            isWanted: false);
+        var localSeasonId = AddEntity(
+            db,
+            EntityKindRegistry.VideoSeason.Code,
+            "Season 06",
+            isWanted: false,
+            parentEntityId: seriesId);
+        AddExternalId(db, localSeasonId, "tmdbseason", "40050:6");
+        await db.SaveChangesAsync();
+        var writer = Writer(db);
+
+        var result = Assert.Single(await writer.EnsureChildrenAsync(
+            seriesId,
+            [
+                new WantedEntityEnsureRequest(
+                    EntityKind.VideoSeason,
+                    new ExternalIdentity("tmdb", "40050_s6"),
+                    "Season 6",
+                    PreferredEntityId: localSeasonId)
+            ],
+            CancellationToken.None));
+
+        Assert.False(result.Created);
+        Assert.Equal(localSeasonId, result.EntityId);
+        Assert.Equal(2, await db.EntityExternalIds.AsNoTracking()
+            .CountAsync(row => row.EntityId == localSeasonId));
+        Assert.Single(await db.Entities.AsNoTracking()
+            .Where(row =>
+                row.ParentEntityId == seriesId
+                && row.KindCode == EntityKindRegistry.VideoSeason.Code)
+            .ToArrayAsync());
+    }
+
+    [Fact]
+    public async Task EnsureChildrenPromotesAFilelessProviderSeasonToVisibleWantedState() {
+        await using var db = CreateContext();
+        var seriesId = AddEntity(
+            db,
+            EntityKindRegistry.VideoSeries.Code,
+            "Daniel Tiger's Neighborhood",
+            isWanted: false);
+        var seasonId = AddEntity(
+            db,
+            EntityKindRegistry.VideoSeason.Code,
+            "Season 2",
+            isWanted: false,
+            parentEntityId: seriesId);
+        AddExternalId(db, seasonId, "tmdb", "40050_s2");
+        await db.SaveChangesAsync();
+
+        var result = Assert.Single(await Writer(db).EnsureChildrenAsync(
+            seriesId,
+            [
+                new WantedEntityEnsureRequest(
+                    EntityKind.VideoSeason,
+                    new ExternalIdentity("tmdb", "40050_s2"),
+                    "Season 2",
+                    PreferredEntityId: seasonId)
+            ],
+            CancellationToken.None));
+
+        Assert.False(result.Created);
+        Assert.False(result.HasRequestedRendition);
+        Assert.True(await db.Entities.AsNoTracking()
+            .Where(row => row.Id == seasonId)
+            .Select(row => row.IsWanted)
+            .SingleAsync());
     }
 
     [Fact]

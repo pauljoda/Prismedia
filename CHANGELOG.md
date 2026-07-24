@@ -159,6 +159,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Updated documentation, README screenshots, branding assets, install metadata, and app copy to match the current Prismedia v1 surface.
 
 ### Fixed
+- Turning Monitor on now starts an immediate provider sweep with editable quality-profile and import-target choices, promotes provider-known missing works into visible Wanted items, and searches gaps throughout owned container trees. Provider matches also reuse oddly titled local season folders instead of creating a duplicate canonical season.
 - Entity acquisition history now retains import failures recorded during manual-review holds and import exceptions, so those events no longer disappear from the affected item’s history.
 - Video scans now keep unnumbered, custom-titled season folders inside an established parent series and order them by title after detected numbered seasons, instead of promoting each folder to a separate series.
 - Video remuxing now preserves a negotiated multichannel audio track instead of unnecessarily downmixing it to stereo AAC.

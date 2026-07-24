@@ -24,6 +24,13 @@ import { unwrapGenerated } from "$lib/api/generated-response";
 
 const ENTITY_MONITOR_STATE_BATCH_LIMIT = 500;
 
+/** Acquisition choices persisted on a stable Entity monitor and inherited by discovered descendants. */
+export interface EntityMonitorTargeting {
+  preset?: MonitorPresetCode | null;
+  profileId?: string | null;
+  targetLibraryRootId?: string | null;
+}
+
 export async function fetchMonitors(): Promise<MonitorView[]> {
   return unwrapGenerated(await listMonitors(), "Failed to load monitors");
 }
@@ -62,8 +69,19 @@ export async function startMonitor(acquisitionId: string): Promise<MonitorView> 
  * Entities discover children; leaves keep their acquisition/presence intent attached to the Entity even
  * when transient acquisition rows are replaced. A preset only affects grouping discovery scope.
  */
-export async function startEntityMonitor(entityId: string, preset?: MonitorPresetCode | null): Promise<MonitorView> {
-  return unwrapGenerated(await startEntityMonitorRequest({ entityId, preset: preset ?? undefined }), "Failed to monitor this item");
+export async function startEntityMonitor(
+  entityId: string,
+  targeting: EntityMonitorTargeting = {},
+): Promise<MonitorView> {
+  return unwrapGenerated(
+    await startEntityMonitorRequest({
+      entityId,
+      preset: targeting.preset ?? undefined,
+      profileId: targeting.profileId ?? undefined,
+      targetLibraryRootId: targeting.targetLibraryRootId ?? undefined,
+    }),
+    "Failed to monitor this item",
+  );
 }
 
 /** Whether this requestable Entity's authoritative provider identity is trackable by an enabled plugin. */

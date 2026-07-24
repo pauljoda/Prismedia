@@ -113,6 +113,9 @@ public sealed partial class EfMonitorStore(
                     && monitor.Status != MonitorStatus.DeletingFiles)
                 .ExecuteUpdateAsync(setters => setters
                     .SetProperty(monitor => monitor.Status, status)
+                    .SetProperty(
+                        monitor => monitor.LastSearchedAt,
+                        monitor => status == MonitorStatus.Active ? null : monitor.LastSearchedAt)
                     .SetProperty(monitor => monitor.UpdatedAt, DateTimeOffset.UtcNow), cancellationToken) > 0;
         }
 
@@ -126,6 +129,9 @@ public sealed partial class EfMonitorStore(
         }
 
         row.Status = status;
+        if (status == MonitorStatus.Active) {
+            row.LastSearchedAt = null;
+        }
         row.UpdatedAt = DateTimeOffset.UtcNow;
         await db.SaveChangesAsync(cancellationToken);
         return true;
@@ -1001,6 +1007,9 @@ public sealed partial class EfMonitorStore(
         if (preset is { } chosenPreset) {
             row.Preset = chosenPreset;
         }
+        if (targeting is not null || preset is not null) {
+            row.LastSearchedAt = null;
+        }
 
         try {
             await db.SaveChangesAsync(cancellationToken);
@@ -1265,7 +1274,8 @@ public sealed partial class EfMonitorStore(
     /// </summary>
     private static MonitorView ToView(MonitorRow row, AcquisitionStatus? acquisitionStatus, Guid? acquisitionEntityId = null) =>
         new(row.Id, row.Kind, row.AcquisitionId, row.Status, row.Title, row.Author, acquisitionStatus,
-            row.CreatedAt, row.UpdatedAt, row.EntityId ?? acquisitionEntityId, row.Preset, row.BookRendition);
+            row.CreatedAt, row.UpdatedAt, row.EntityId ?? acquisitionEntityId, row.Preset, row.BookRendition,
+            row.TargetLibraryRootId, row.ProfileId);
 
     private static AcquisitionConfigurationException LifecycleClaimConflict() =>
         new(

@@ -1,4 +1,5 @@
 using Prismedia.Application.Requests;
+using Prismedia.Application.Jobs;
 using Prismedia.Contracts.Acquisition;
 using Prismedia.Domain.Entities;
 
@@ -15,7 +16,8 @@ public sealed class MonitorService(
     IWantedEntityWriter entities,
     IProviderTrackingCatalog tracking,
     EntityUnmonitorService unmonitoring,
-    IWantedSuppressionStore suppressions) {
+    IWantedSuppressionStore suppressions,
+    IJobQueueService? queue = null) {
     public Task<IReadOnlyList<MonitorView>> ListAsync(CancellationToken cancellationToken) =>
         monitors.ListAsync(cancellationToken);
 
@@ -91,7 +93,22 @@ public sealed class MonitorService(
     /// descriptor. Wanted placeholders and source-backed Entities use the same path. Returns null when the
     /// Entity is missing, its kind is not committable, or no enabled plugin can track its provider route.
     /// </summary>
-    public async Task<MonitorView?> StartForEntityAsync(Guid entityId, MonitorPreset? preset, CancellationToken cancellationToken) {
+    public Task<MonitorView?> StartForEntityAsync(
+        Guid entityId,
+        MonitorPreset? preset,
+        CancellationToken cancellationToken) =>
+        StartForEntityAsync(entityId, targeting: null, preset, cancellationToken);
+
+    /// <summary>
+    /// Starts or reconfigures stable Entity monitoring with optional acquisition targeting, then schedules
+    /// an immediate monitor pass. The normal recurring sweep remains the durable fallback if no queue is
+    /// available (for example in a focused application test).
+    /// </summary>
+    public async Task<MonitorView?> StartForEntityAsync(
+        Guid entityId,
+        AcquisitionTargeting? targeting,
+        MonitorPreset? preset,
+        CancellationToken cancellationToken) {
         var (entity, trackable) = await ResolveEligibilityAsync(entityId, cancellationToken);
         if (entity is null || trackable.Count == 0) {
             return null;
@@ -116,7 +133,7 @@ public sealed class MonitorService(
                     entityId,
                     currentEntity.Kind,
                     currentEntity.Title,
-                    targeting: null,
+                    targeting,
                     preset,
                     leaseCancellationToken);
                 if (monitor.Status == MonitorStatus.Active) {
@@ -132,6 +149,12 @@ public sealed class MonitorService(
             throw LifecycleConflict();
         }
 
+        if (monitor is { Status: MonitorStatus.Active }) {
+            await ScheduleImmediateSearchAsync(
+                entityId.ToString(),
+                monitor.Title,
+                cancellationToken);
+        }
         return monitor;
     }
 
@@ -273,8 +296,19 @@ public sealed class MonitorService(
     public Task<bool> PauseAsync(Guid monitorId, CancellationToken cancellationToken) =>
         SetExplicitStatusAsync(monitorId, MonitorStatus.Paused, cancellationToken);
 
-    public Task<bool> ResumeAsync(Guid monitorId, CancellationToken cancellationToken) =>
-        SetExplicitStatusAsync(monitorId, MonitorStatus.Active, cancellationToken);
+    public async Task<bool> ResumeAsync(Guid monitorId, CancellationToken cancellationToken) {
+        if (!await SetExplicitStatusAsync(monitorId, MonitorStatus.Active, cancellationToken)) {
+            return false;
+        }
+
+        var monitor = (await monitors.ListAsync(cancellationToken))
+            .FirstOrDefault(candidate => candidate.Id == monitorId);
+        await ScheduleImmediateSearchAsync(
+            monitor?.EntityId?.ToString() ?? monitorId.ToString(),
+            monitor?.Title ?? "monitored item",
+            cancellationToken);
+        return true;
+    }
 
     private async Task<bool> SetExplicitStatusAsync(
         Guid monitorId,
@@ -304,4 +338,25 @@ public sealed class MonitorService(
         new(
             Prismedia.Contracts.System.ApiProblemCodes.AcquisitionInvalid,
             "This Entity is being cleaned up. Wait for that operation to finish, then try again.");
+
+    private async Task ScheduleImmediateSearchAsync(
+        string targetEntityId,
+        string title,
+        CancellationToken cancellationToken) {
+        if (queue is null
+            || await queue.HasPendingAsync(
+                JobType.MonitoredSearch,
+                targetEntityId,
+                cancellationToken)) {
+            return;
+        }
+
+        await queue.EnqueueAsync(
+            new EnqueueJobRequest(
+                JobType.MonitoredSearch,
+                TargetEntityKind: JobTargetKinds.Entity,
+                TargetEntityId: targetEntityId,
+                TargetLabel: $"Check monitored content for {title}"),
+            cancellationToken);
+    }
 }

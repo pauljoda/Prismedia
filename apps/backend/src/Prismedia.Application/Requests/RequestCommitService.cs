@@ -78,7 +78,8 @@ public sealed record WantedEntityEnsureRequest(
     EntityKind Kind,
     ExternalIdentity Identity,
     string Title,
-    BookRendition? BookRendition = null);
+    BookRendition? BookRendition = null,
+    Guid? PreferredEntityId = null);
 
 /// <summary>
 /// A library entity read for monitoring/removal: its kind, display title, the external identities a
@@ -639,9 +640,10 @@ public sealed partial class RequestCommitService(
     }
 
     /// <summary>
-    /// Maintains an Entity-only monitor. Containers run provider child discovery; an owned leaf remains
-    /// actively monitored without work; a fileless leaf re-enters the normal request pipeline and its new
-    /// acquisition reattaches to this same Entity monitor.
+    /// Maintains an Entity-only monitor. Containers run provider child discovery and fill every current
+    /// missing descendant; owned structural units fill their own missing children without reacquiring the
+    /// unit; a fileless leaf re-enters the normal request pipeline and its new acquisition reattaches to
+    /// this same Entity monitor.
     /// </summary>
     public async Task<bool> MaintainAsync(Guid entityId, CancellationToken cancellationToken) {
         return await MaintainAsync(entityId, bookRendition: null, cancellationToken);
@@ -669,10 +671,17 @@ public sealed partial class RequestCommitService(
         }
 
         if (descriptor.IsContainer) {
-            return await SyncContainerAsync(entityId, cancellationToken);
+            var synced = await SyncContainerAsync(entityId, cancellationToken);
+            if (synced) {
+                await RequestMissingChildrenAsync(entityId, cancellationToken);
+            }
+            return synced;
         }
 
         if (entity.HasRendition(bookRendition)) {
+            if (descriptor.MaterializeChildPhantoms) {
+                await RequestMissingChildrenAsync(entityId, cancellationToken);
+            }
             return true;
         }
 

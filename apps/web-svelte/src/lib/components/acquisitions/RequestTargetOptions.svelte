@@ -87,6 +87,11 @@
       if (!targetLibraryRootId) {
         targetLibraryRootId = defaultRootFor(kindProfiles.find((profile) => profile.id === profileId) ?? defaultProfile);
       }
+    } catch {
+      // Keep the stable empty controls when either settings lookup is temporarily unavailable. The
+      // parent action remains usable with server defaults and a later mount retries both lookups.
+      roots = [];
+      profiles = [];
     } finally {
       loaded = true;
     }

@@ -643,7 +643,14 @@ public static class AcquisitionEndpoints {
             MonitorService monitors,
             CancellationToken cancellationToken) => {
                 try {
-                    var monitor = await monitors.StartForEntityAsync(request.EntityId, request.Preset, cancellationToken);
+                    var targeting = request.TargetLibraryRootId is not null || request.ProfileId is not null
+                        ? new AcquisitionTargeting(request.TargetLibraryRootId, request.ProfileId)
+                        : null;
+                    var monitor = await monitors.StartForEntityAsync(
+                        request.EntityId,
+                        targeting,
+                        request.Preset,
+                        cancellationToken);
                     return monitor is null
                         ? Results.BadRequest(new ApiProblem(ApiProblemCodes.RequestInvalid, "The Entity can't be monitored: its kind must support requests and it must have a provider identity an enabled plugin can track (run Identify first for scanned-in items)."))
                         : Results.Ok(monitor);

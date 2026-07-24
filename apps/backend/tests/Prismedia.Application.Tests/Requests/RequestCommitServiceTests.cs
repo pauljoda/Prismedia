@@ -1087,17 +1087,33 @@ public sealed class RequestCommitServiceTests {
     }
 
     [Fact]
-    public async Task SourceBackedGraphAcquiredUnitMaintenanceDoesNotRequestAgainAfterImport() {
+    public async Task SourceBackedGraphAcquiredUnitMaintenanceRequestsItsMissingChildrenWithoutReacquiringTheUnit() {
         var (service, writer, acquisitions, monitors) = ServiceWithMonitors(
             Leaf(ProposalKind.VideoSeason, "Season 1", "S1"));
         var entityId = Guid.NewGuid();
+        var episodeId = Guid.NewGuid();
         writer.Container = new MonitorableEntity(
             entityId, EntityKind.VideoSeason, "Season 1", [], HasSourceFile: true,
             Positions: new Dictionary<string, int> { [EntityPositionCodes.Season] = 1 });
+        writer.Containers[episodeId] = new MonitorableEntity(
+            episodeId,
+            EntityKind.Video,
+            "Episode 2",
+            [],
+            HasSourceFile: false,
+            ParentEntityId: entityId,
+            Positions: new Dictionary<string, int> {
+                [EntityPositionCodes.Season] = 1,
+                [EntityPositionCodes.Episode] = 2
+            });
+        writer.WantedChildren[entityId] = [episodeId];
         monitors.DirectEntityIds.Add(entityId);
 
         Assert.True(await service.MaintainAsync(entityId, CancellationToken.None));
-        Assert.Empty(acquisitions.Created);
+        var acquisition = Assert.Single(acquisitions.Created);
+        Assert.Equal(episodeId, acquisition.EntityId);
+        Assert.Equal(EntityKind.Video, acquisition.Kind);
+        Assert.Equal(2, acquisition.EpisodeNumber);
     }
 
     [Fact]
@@ -1813,13 +1829,16 @@ public sealed class RequestCommitServiceTests {
         var seriesIdentity = new ExternalIdentity("tmdb", "Series:One");
         var seasonIdentity = new ExternalIdentity("tvdb", "Season:One");
         var episodeIdentity = new ExternalIdentity("episode-db", "Episode:One");
+        var matchedLocalSeasonId = Guid.NewGuid();
         var seasonShell = Node(
             "season:one",
             pluginId,
             ProposalKind.VideoSeason,
             "Season 1",
             seasonIdentity,
-            new Dictionary<string, int> { [EntityPositionCodes.Season] = 1 });
+            new Dictionary<string, int> { [EntityPositionCodes.Season] = 1 }) with {
+                TargetEntityId = matchedLocalSeasonId
+            };
         var series = Node("series:one", pluginId, ProposalKind.VideoSeries, "Series", seriesIdentity, seasonShell);
         var seriesReview = Review(
             pluginId,
@@ -1875,6 +1894,10 @@ public sealed class RequestCommitServiceTests {
         var seasonAcquisition = Assert.Single(acquisitions.Created);
         Assert.Equal("tvdb", seasonAcquisition.IdentityNamespace);
         Assert.Equal("Season:One", seasonAcquisition.IdentityValue);
+        Assert.Equal(
+            matchedLocalSeasonId,
+            Assert.Single(writer.EnsuredChildren, request => request.Kind == EntityKind.VideoSeason)
+                .PreferredEntityId);
         var episodeCall = Assert.Single(writer.Ensured, call => call.Kind == EntityKind.Video);
         Assert.Equal("episode-db", episodeCall.IdentityNamespace);
         Assert.Equal("Episode:One", episodeCall.ItemId);
@@ -2394,6 +2417,7 @@ public sealed class RequestCommitServiceTests {
         public sealed record ApplyCall(Guid EntityId, EntityMetadataProposal Proposal);
 
         public List<EnsureCall> Ensured { get; } = [];
+        public List<WantedEntityEnsureRequest> EnsuredChildren { get; } = [];
         public List<ApplyCall> Applied { get; } = [];
         public List<ApplyCall> DeferredArtworkApplied { get; } = [];
         public List<(Guid EntityId, PluginIdentityRoute Route)> ProviderIdentityBindings { get; } = [];
@@ -2435,6 +2459,26 @@ public sealed class RequestCommitServiceTests {
                 : OwnedRenditions.Contains((identity.Value, bookRendition.Value));
             return Task.FromResult(new WantedEntityResult(
                 EntityIdFor(identity.Value), created, hasFile, ownsRequested));
+        }
+
+        public async Task<IReadOnlyList<WantedEntityResult>> EnsureChildrenAsync(
+            Guid parentEntityId,
+            IReadOnlyList<WantedEntityEnsureRequest> requests,
+            CancellationToken cancellationToken) {
+            EnsuredChildren.AddRange(requests);
+            var results = new List<WantedEntityResult>(requests.Count);
+            foreach (var request in requests) {
+                results.Add(await EnsureAsync(
+                    request.Kind,
+                    request.Identity,
+                    request.Title,
+                    parentEntityId,
+                    matchTitleKindWide: false,
+                    cancellationToken,
+                    request.BookRendition));
+            }
+
+            return results;
         }
 
         public Task ApplyProposalAsync(Guid entityId, EntityMetadataProposal proposal, CancellationToken cancellationToken) {

@@ -20,6 +20,10 @@
   import type { EntityFileManagementCallbacks } from "$lib/entities/entity-file-management";
   import EntityBlocklistClearAction from "$lib/components/acquisitions/EntityBlocklistClearAction.svelte";
   import EntityMonitorControl from "$lib/components/acquisitions/EntityMonitorControl.svelte";
+  import {
+    requestKindForEntityKind,
+    requestKindInfo,
+  } from "$lib/requests/request-helpers";
 
   let {
     acq,
@@ -81,6 +85,10 @@
       || entity?.kind === ENTITY_KIND.audioLibrary
       || entity?.kind === ENTITY_KIND.videoSeason,
   );
+  const monitorKindInfo = $derived.by(() => {
+    const kind = entity?.kind ? requestKindForEntityKind(entity.kind) : null;
+    return kind ? requestKindInfo(kind) : null;
+  });
   const hasImportedBaseline = $derived(
     acq.acquisition?.summary.status === ACQUISITION_STATUS.imported,
   );
@@ -108,7 +116,7 @@
     {/if}
 
     {#if showEntityRequestControls && acq.showMonitor}
-      <EntityMonitorControl {acq} />
+      <EntityMonitorControl {acq} kindInfo={monitorKindInfo} />
     {/if}
 
     {#if acq.monitorError}

@@ -174,7 +174,8 @@ public sealed partial class RequestCommitService {
                 descriptor.WantedEntityKind,
                 node.Identity,
                 titles[index],
-                descriptor.BookRendition)).ToArray(),
+                descriptor.BookRendition,
+                node.Proposal.TargetEntityId)).ToArray(),
             cancellationToken);
         if (entities.Count != nodes.Count) {
             throw new InvalidOperationException("Wanted child materialization did not preserve the reviewed selection.");
