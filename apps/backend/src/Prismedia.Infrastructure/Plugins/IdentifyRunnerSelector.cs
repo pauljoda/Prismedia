@@ -1,3 +1,6 @@
+using Prismedia.Application.Plugins;
+using Prismedia.Contracts.Plugins;
+
 namespace Prismedia.Infrastructure.Plugins;
 
 /// <summary>
@@ -21,7 +24,24 @@ public sealed class IdentifyRunnerSelector {
     /// <returns>The runner that owns the descriptor's runtime.</returns>
     /// <exception cref="InvalidOperationException">No runner supports the descriptor's runtime.</exception>
     public IIdentifyRunner Resolve(PluginDescriptor descriptor) =>
-        _runners.FirstOrDefault(runner => runner.CanRun(descriptor)) ??
-        throw new InvalidOperationException(
-            $"No identify runner supports runtime '{descriptor.Manifest.Runtime}'.");
+        new IdentitySafeIdentifyRunner(
+            _runners.FirstOrDefault(runner => runner.CanRun(descriptor)) ??
+            throw new InvalidOperationException(
+                $"No identify runner supports runtime '{descriptor.Manifest.Runtime}'."));
+
+    private sealed class IdentitySafeIdentifyRunner(IIdentifyRunner inner) : IIdentifyRunner {
+        public bool CanRun(PluginDescriptor descriptor) => inner.CanRun(descriptor);
+
+        public async Task<IdentifyPluginResponse> IdentifyAsync(
+            PluginDescriptor descriptor,
+            IdentifyPluginRequest request,
+            CancellationToken cancellationToken) {
+            var response = await inner.IdentifyAsync(descriptor, request, cancellationToken);
+            return response.Result is null
+                ? response
+                : response with {
+                    Result = EntityMetadataProposalIdentityPolicy.RemoveSharedStructuralIdentities(response.Result)
+                };
+        }
+    }
 }

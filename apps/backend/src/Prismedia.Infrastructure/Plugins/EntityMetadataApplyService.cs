@@ -309,6 +309,7 @@ public sealed partial class EntityMetadataApplyService : IEntityMetadataPatchSer
         CancellationToken cancellationToken) {
         ArgumentNullException.ThrowIfNull(proposal);
         ArgumentNullException.ThrowIfNull(selectedFields);
+        proposal = EntityMetadataProposalIdentityPolicy.RemoveSharedStructuralIdentities(proposal);
 
         await _artwork.StageAsync(
             (selectedImages?.Values ?? [])

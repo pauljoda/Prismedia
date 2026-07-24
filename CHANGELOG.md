@@ -159,6 +159,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Updated documentation, README screenshots, branding assets, install metadata, and app copy to match the current Prismedia v1 surface.
 
 ### Fixed
+- Plugin metadata can no longer stamp one parent or locator identity onto several structural children: shared proposal identities are discarded before matching or persistence, and upgrading repairs affected AniList episodes, MangaDex volumes and chapters, Open Library series children, and repeated MusicBrainz track recordings already stored in the library.
 - Monitored container sync now keeps exact Entity bindings through nested provider hydration, preventing contextual parent aliases from aborting a season/episode merge after the Request flow has already matched or created the wanted children.
 - Applying new provider metadata to a monitored container now immediately checks that exact Entity for provider-only missing works, so a season with no files on disk becomes Wanted without waiting for the daily sweep. Targeted monitor checks also run independently from the global sweep and other Entity checks.
 - Video pages now show the saved resume position on the seek bar immediately, before the stream finishes loading.
