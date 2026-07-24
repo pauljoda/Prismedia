@@ -44,7 +44,8 @@ public sealed class JobQueueService : IJobQueueService {
 
     /// <summary>
     /// Queue-wide singleton job types. Each scan covers every enabled root of its kind, so only one of each
-    /// may be queued or running at a time — see the singleton guard in <see cref="EnqueueAsync(EnqueueJobRequest, CancellationToken)"/>.
+    /// may be queued or running at a time. The recurring monitored-search sweep is likewise global, while
+    /// an explicitly targeted monitored search remains independent from that sweep and other Entity targets.
     /// </summary>
     private static readonly JobType[] SingletonJobTypes =
         [JobType.ScanLibrary, JobType.ScanGallery, JobType.ScanBook, JobType.ScanAudio, JobType.DatabaseBackup, JobType.MonitoredSearch, JobType.GridThumbnailSweep];
@@ -88,9 +89,12 @@ public sealed class JobQueueService : IJobQueueService {
         // Some jobs are queue-wide singletons: scans already walk every enabled root of their kind,
         // and database backups should never overlap. When one is already queued or running, return
         // the in-flight job instead of stacking another.
-        if (SingletonJobTypes.Contains(request.Type)) {
+        var isQueueWideSingleton = SingletonJobTypes.Contains(request.Type)
+            && (request.Type != JobType.MonitoredSearch || request.TargetEntityId is null);
+        if (isQueueWideSingleton) {
             var existing = await _db.JobRuns.AsNoTracking()
                 .Where(job => job.Type == request.Type &&
+                              (request.Type != JobType.MonitoredSearch || job.TargetEntityId == null) &&
                               (job.Status == JobRunStatus.Queued || job.Status == JobRunStatus.Running))
                 .OrderBy(job => job.CreatedAt)
                 .FirstOrDefaultAsync(cancellationToken);

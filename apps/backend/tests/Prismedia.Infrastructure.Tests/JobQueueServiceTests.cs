@@ -53,6 +53,33 @@ public sealed class JobQueueServiceTests {
     }
 
     [Fact]
+    public async Task TargetedMonitoredSearchesDoNotCollapseIntoOrBlockTheGlobalSweep() {
+        await using var db = CreateContext();
+        var service = new JobQueueService(db);
+        var firstEntityId = Guid.NewGuid().ToString();
+        var secondEntityId = Guid.NewGuid().ToString();
+
+        var firstTarget = await service.EnqueueAsync(new EnqueueJobRequest(
+            JobType.MonitoredSearch,
+            TargetEntityKind: JobTargetKinds.Entity,
+            TargetEntityId: firstEntityId), CancellationToken.None);
+        var global = await service.EnqueueAsync(JobType.MonitoredSearch, CancellationToken.None);
+        var secondTarget = await service.EnqueueAsync(new EnqueueJobRequest(
+            JobType.MonitoredSearch,
+            TargetEntityKind: JobTargetKinds.Entity,
+            TargetEntityId: secondEntityId), CancellationToken.None);
+        var duplicateFirstTarget = await service.EnqueueAsync(new EnqueueJobRequest(
+            JobType.MonitoredSearch,
+            TargetEntityKind: JobTargetKinds.Entity,
+            TargetEntityId: firstEntityId), CancellationToken.None);
+
+        Assert.NotEqual(global.Id, firstTarget.Id);
+        Assert.NotEqual(firstTarget.Id, secondTarget.Id);
+        Assert.Equal(firstTarget.Id, duplicateFirstTarget.Id);
+        Assert.Equal(3, await db.JobRuns.CountAsync());
+    }
+
+    [Fact]
     public async Task TargetedJobsReturnExistingPendingRunInsteadOfStackingDuplicates() {
         await using var db = CreateContext();
         var service = new JobQueueService(db);

@@ -14,7 +14,7 @@ namespace Prismedia.Infrastructure.Plugins;
 /// <summary>
 /// Owns the durable identify queue state machine for entity metadata review.
 /// </summary>
-public sealed class IdentifyQueueService : IIdentifyQueueService {
+public sealed partial class IdentifyQueueService : IIdentifyQueueService {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web) {
         PropertyNameCaseInsensitive = true,
         WriteIndented = false,
@@ -1067,6 +1067,10 @@ public sealed class IdentifyQueueService : IIdentifyQueueService {
         }
 
         var refreshedEntity = await LoadEntityAsync(entityId, cancellationToken) ?? entity;
+        await QueueMonitoredRefreshAsync(
+            entityId,
+            refreshedEntity.Title,
+            cancellationToken);
         return MapRow(row, refreshedEntity);
     }
 

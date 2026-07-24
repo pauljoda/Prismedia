@@ -929,6 +929,57 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
     }
 
     [Fact]
+    public async Task ApplyAsyncQueuesAnImmediateRefreshForAnActiveEntityMonitor() {
+        await using var db = CreateContext();
+        var entityId = Guid.NewGuid();
+        var now = DateTimeOffset.UtcNow;
+        SeedEntity(db, entityId, EntityKindRegistry.VideoSeries.Code, "Old Series");
+        var proposal = ApplyRaceProposal(
+            entityId,
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            staleProposalIsBound: false) with {
+                Children = []
+            };
+        db.IdentifyQueueItems.Add(new IdentifyQueueItemRow {
+            Id = Guid.NewGuid(),
+            EntityId = entityId,
+            State = IdentifyQueueState.Proposal,
+            ProviderCode = "anilist",
+            Action = IdentifyAction.LookupId,
+            ProposalJson = JsonSerializer.Serialize(proposal, JsonOptions),
+            CreatedAt = now,
+            UpdatedAt = now
+        });
+        db.Monitors.Add(new MonitorRow {
+            Id = Guid.NewGuid(),
+            EntityId = entityId,
+            Kind = EntityKind.VideoSeries,
+            Status = MonitorStatus.Active,
+            Title = "Old Series",
+            CreatedAt = now,
+            UpdatedAt = now
+        });
+        await db.SaveChangesAsync();
+        var jobs = new RecordingJobQueue();
+        var service = CreateQueueService(
+            db,
+            new ProposalProcessExecutor(),
+            _tempRoot,
+            jobs);
+
+        await service.ApplyAsync(
+            entityId,
+            new ApplyIdentifyQueueItemRequest(proposal, ["title"], null),
+            CancellationToken.None);
+
+        var refresh = Assert.Single(jobs.Enqueued);
+        Assert.Equal(JobType.MonitoredSearch, refresh.Type);
+        Assert.Equal(JobTargetKinds.Entity, refresh.TargetEntityKind);
+        Assert.Equal(entityId.ToString(), refresh.TargetEntityId);
+    }
+
+    [Fact]
     public async Task ApplyAsyncRejectsAProposalWhenSourceMediaWasRemovedDuringReview() {
         await using var db = CreateContext();
         var entityId = Guid.NewGuid();
@@ -1585,12 +1636,13 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
     private static IdentifyQueueService CreateQueueService(
         PrismediaDbContext db,
         ProcessExecutor executor,
-        string tempRoot) =>
+        string tempRoot,
+        RecordingJobQueue? queue = null) =>
         new(
             db,
             CreateIdentifyService(db, executor, tempRoot),
             new InMemoryIdentifyApplyProgressStore(),
-            new RecordingJobQueue(),
+            queue ?? new RecordingJobQueue(),
             new EfIdentifyTargetEligibilityService(db));
 
     private static IdentifyPluginService CreateIdentifyService(
