@@ -54,7 +54,7 @@
     }
     if (acq.monitorActive && acq.showSync) {
       return acq.trackedVia
-        ? `Checks daily for new content via ${acq.trackedVia}.`
+        ? `Checks daily via ${acq.trackedVia}; content grouping follows that provider.`
         : "Checks daily for new content.";
     }
     if (acq.monitorActive) {

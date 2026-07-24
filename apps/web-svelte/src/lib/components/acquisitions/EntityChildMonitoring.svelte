@@ -58,10 +58,7 @@
     onChanged?: () => void | Promise<void>;
   } = $props();
 
-  let open = $state(untrack(() => cards.some((card) =>
-    acquisitionStatusShouldPoll(card.wantedStatus)
-    || acquisitionStatusShouldPoll(card.latestAcquisitionStatus),
-  )));
+  let open = $state(untrack(() => cards.some(cardHasActiveAcquisition)));
   let loading = $state(false);
   let bulkBusy = $state(false);
   let busyIds = $state.raw<string[]>([]);
@@ -105,7 +102,7 @@
         preparing += 1;
         continue;
       }
-      switch (row.acquisition?.status) {
+      switch (effectiveAcquisitionStatus(row)) {
         case ACQUISITION_STATUS.downloading:
           downloading += 1;
           break;
@@ -125,10 +122,7 @@
     }
     return { downloading, preparing, searching, importing };
   });
-  const hasCardActivity = $derived(cards.some((card) =>
-    acquisitionStatusShouldPoll(card.wantedStatus)
-    || acquisitionStatusShouldPoll(card.latestAcquisitionStatus),
-  ));
+  const hasCardActivity = $derived(cards.some(cardHasActiveAcquisition));
   const acting = $derived(bulkBusy || busyIds.length > 0);
 
   // The open panel is a live read surface: loading on every expansion prevents a same-id cache from
@@ -186,7 +180,7 @@
       }
 
       const previousStatusByEntity = new Map(
-        rows.map((row) => [row.card.entity.id, row.acquisition?.status ?? null]),
+        rows.map((row) => [row.card.entity.id, effectiveAcquisitionStatus(row)]),
       );
       const nextRows = cards.map((card): ChildMonitoringRow => {
         const state = stateByEntity[card.entity.id];
@@ -204,8 +198,8 @@
         const previous = previousStatusByEntity.get(row.card.entity.id);
         return previous !== undefined
           && previous !== null
-          && ACTIVE_ACQUISITION_STATUSES.includes(previous)
-          && row.acquisition?.status === ACQUISITION_STATUS.imported;
+          && ACTIVE_ACQUISITION_STATUSES.some((status) => status === previous)
+          && effectiveAcquisitionStatus(row) === ACQUISITION_STATUS.imported;
       });
       if (importedTransition) await onChanged?.();
     } catch (reason) {
@@ -231,12 +225,11 @@
   }
 
   function hasActiveAcquisition(row: ChildMonitoringRow): boolean {
-    return row.acquisition !== null
-      && acquisitionStatusShouldPoll(row.acquisition.status);
+    return acquisitionStatusShouldPoll(effectiveAcquisitionStatus(row));
   }
 
   function isPreparingMetadata(row: ChildMonitoringRow): boolean {
-    return row.acquisition === null
+    return effectiveAcquisitionStatus(row) === null
       && isActive(row)
       && row.canRequest
       && isWanted(row.card.entity.capabilities);
@@ -271,14 +264,15 @@
   }
 
   function rowStatus(row: ChildMonitoringRow): string {
-    const acquisitionLabel = row.acquisition ? acquisitionLabelFor(row.acquisition) : null;
+    const acquisitionStatus = effectiveAcquisitionStatus(row);
+    const acquisitionLabel = acquisitionStatus ? acquisitionLabelFor(acquisitionStatus) : null;
     if (isDeletingFiles(row)) return "Deleting files…";
     if (isAcquisitionStopping(row) || isStopping(row)) return "Stopping…";
     if (hasUnknownMonitorStatus(row)) return "Updating…";
     if (isPreparingMetadata(row)) return "Preparing metadata · Monitoring";
     if (isActive(row)) return acquisitionLabel ? `${acquisitionLabel} · Monitoring` : "Monitoring";
     if (row.monitor) return acquisitionLabel ? `${acquisitionLabel} · Paused` : "Paused";
-    if (row.acquisition && row.acquisition.status !== ACQUISITION_STATUS.imported) {
+    if (acquisitionStatus && acquisitionStatus !== ACQUISITION_STATUS.imported) {
       return `${acquisitionLabel} · Not monitored`;
     }
     if (isWanted(row.card.entity.capabilities)) {
@@ -288,11 +282,49 @@
     return "On disk";
   }
 
-  function acquisitionLabelFor(acquisition: AcquisitionSummary): string {
-    if (acquisition.status === ACQUISITION_STATUS.stopping) return "Stopping…";
-    if (acquisition.status === ACQUISITION_STATUS.imported) return "Imported";
-    if (acquisition.status === ACQUISITION_STATUS.cancelled) return "Cancelled";
-    return acquisitionStatusDisplay(acquisition.status).label;
+  function acquisitionLabelFor(status: string): string {
+    if (status === ACQUISITION_STATUS.stopping) return "Stopping…";
+    if (status === ACQUISITION_STATUS.imported) return "Imported";
+    if (status === ACQUISITION_STATUS.cancelled) return "Cancelled";
+    return acquisitionStatusDisplay(status).label;
+  }
+
+  /**
+   * The compact monitor-state API is direct-only, while thumbnail status membership intentionally
+   * projects through the structural subtree. Select the most actionable state across both so an old
+   * terminal season acquisition cannot hide episode work happening underneath it.
+   */
+  function effectiveAcquisitionStatus(row: ChildMonitoringRow): string | null {
+    const statuses = [
+      ...(row.acquisition ? [row.acquisition.status] : []),
+      ...(row.card.acquisitionStatuses ?? []),
+    ];
+    const priority = [
+      ACQUISITION_STATUS.downloading,
+      ACQUISITION_STATUS.importing,
+      ACQUISITION_STATUS.downloaded,
+      ACQUISITION_STATUS.waitingForDownloadClient,
+      ACQUISITION_STATUS.queued,
+      ACQUISITION_STATUS.searching,
+      ACQUISITION_STATUS.pending,
+      ACQUISITION_STATUS.stopping,
+      ACQUISITION_STATUS.awaitingSelection,
+      ACQUISITION_STATUS.failed,
+      ACQUISITION_STATUS.manualImportRequired,
+      ACQUISITION_STATUS.cancelled,
+      ACQUISITION_STATUS.imported,
+    ];
+    return priority.find((status) => statuses.includes(status))
+      ?? row.acquisition?.status
+      ?? row.card.latestAcquisitionStatus
+      ?? row.card.wantedStatus
+      ?? null;
+  }
+
+  function cardHasActiveAcquisition(card: EntityThumbnailCard): boolean {
+    return acquisitionStatusShouldPoll(card.wantedStatus)
+      || acquisitionStatusShouldPoll(card.latestAcquisitionStatus)
+      || card.acquisitionStatuses?.some(acquisitionStatusShouldPoll) === true;
   }
 
   async function setChildMonitoring(row: ChildMonitoringRow, monitored: boolean): Promise<void> {

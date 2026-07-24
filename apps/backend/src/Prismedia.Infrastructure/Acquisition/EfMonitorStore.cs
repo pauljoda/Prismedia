@@ -393,9 +393,33 @@ public sealed partial class EfMonitorStore(
         return (KindUpgrades: true, HaveOwned: true, CutoffMet: ladderCutoffMet && formatCutoffMet, ownedMediaQuality, cutoffCode);
     }
 
-    public async Task<IReadOnlyList<DueMonitor>> ListDueMonitorsAsync(int defaultIntervalMinutes, CancellationToken cancellationToken) {
-        await ReconcilePassiveTargetsAsync(cancellationToken);
+    public Task<IReadOnlyList<DueMonitor>> ListDueMonitorsAsync(
+        int defaultIntervalMinutes,
+        CancellationToken cancellationToken) =>
+        ListSearchWorkAsync(
+            defaultIntervalMinutes,
+            targetEntityId: null,
+            forceImmediate: false,
+            cancellationToken);
 
+    /// <inheritdoc />
+    public Task<IReadOnlyList<DueMonitor>> ListImmediateForEntityAsync(
+        Guid entityId,
+        CancellationToken cancellationToken) =>
+        ListSearchWorkAsync(
+            defaultIntervalMinutes: 1,
+            targetEntityId: entityId,
+            forceImmediate: true,
+            cancellationToken);
+
+    private async Task<IReadOnlyList<DueMonitor>> ListSearchWorkAsync(
+        int defaultIntervalMinutes,
+        Guid? targetEntityId,
+        bool forceImmediate,
+        CancellationToken cancellationToken) {
+        if (targetEntityId is null) {
+            await ReconcilePassiveTargetsAsync(cancellationToken);
+        }
         // The default profile of each kind governs its upgrades. Upgrade-seeking is fully automatic, so it
         // requires both the cutoff toggle and auto-grab; without auto-grab there is no path to act on a found
         // upgrade. Books gate on the source/format cutoff tiers; media kinds (movies, single episodes) gate on
@@ -408,6 +432,7 @@ public sealed partial class EfMonitorStore(
         var rows = await (
             from monitor in db.Monitors
             where monitor.Status == MonitorStatus.Active
+                && (targetEntityId == null || monitor.EntityId == targetEntityId)
             join acquisition in db.Acquisitions on monitor.AcquisitionId equals acquisition.Id into joined
             from acquisition in joined.DefaultIfEmpty()
             select new {
@@ -442,7 +467,7 @@ public sealed partial class EfMonitorStore(
             // Entity-only intent has no current acquisition. Groupings run discovery; source-backed leaves
             // remain satisfied; fileless leaves re-enter the request pipeline in the handler.
             if (monitor.AcquisitionId is null && monitor.EntityId is { } watchedEntityId) {
-                if (monitor.LastSearchedAt is null || now - monitor.LastSearchedAt >= interval) {
+                if (forceImmediate || monitor.LastSearchedAt is null || now - monitor.LastSearchedAt >= interval) {
                     due.Add(new DueMonitor(
                         monitor.Id, null, monitor.Title, IsUpgrade: false, EntityId: watchedEntityId,
                         BookRendition: monitor.BookRendition));
@@ -507,7 +532,7 @@ public sealed partial class EfMonitorStore(
                         && entity.IsWanted,
                     cancellationToken);
                 if (hasMissingChildren) {
-                    if (monitor.LastSearchedAt is null || now - monitor.LastSearchedAt >= interval) {
+                    if (forceImmediate || monitor.LastSearchedAt is null || now - monitor.LastSearchedAt >= interval) {
                         due.Add(new DueMonitor(
                             monitor.Id, acquisitionId, monitor.Title,
                             IsUpgrade: false, EntityId: structuralParentEntityId, MissingChildFallback: true,
@@ -574,7 +599,7 @@ public sealed partial class EfMonitorStore(
                     // Exponential backoff keyed on consecutive barren searches, capped, so an item that never
                     // gets a better release does not hammer indexers.
                     var backoff = BackoffFor(interval, monitor.BarrenSearches);
-                    if (monitor.LastSearchedAt is null || now - monitor.LastSearchedAt >= backoff) {
+                    if (forceImmediate || monitor.LastSearchedAt is null || now - monitor.LastSearchedAt >= backoff) {
                         due.Add(new DueMonitor(
                             monitor.Id, acquisitionId, monitor.Title,
                             IsUpgrade: true, EntityId: monitor.EntityId,
@@ -599,7 +624,7 @@ public sealed partial class EfMonitorStore(
                 continue;
             }
 
-            if (monitor.LastSearchedAt is null || now - monitor.LastSearchedAt >= interval) {
+            if (forceImmediate || monitor.LastSearchedAt is null || now - monitor.LastSearchedAt >= interval) {
                 due.Add(new DueMonitor(
                     monitor.Id, acquisitionId, monitor.Title,
                     EntityId: monitor.EntityId,

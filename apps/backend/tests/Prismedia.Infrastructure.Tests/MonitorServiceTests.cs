@@ -369,6 +369,29 @@ public sealed class MonitorServiceTests {
     }
 
     [Fact]
+    public async Task ScheduleEntitySearchNowQueuesAnExactActiveEntityMonitor() {
+        await using var db = CreateContext();
+        var entityId = SeedContainerEntity(
+            db,
+            "Jujutsu Kaisen",
+            provider: "tmdb",
+            kind: EntityKind.VideoSeries);
+        await db.SaveChangesAsync();
+        var queue = new RecordingJobQueue();
+        var service = Service(db, trackableProviders: ["tmdb"], queue: queue);
+        await service.StartForEntityAsync(entityId, preset: MonitorPreset.All, CancellationToken.None);
+        queue.Enqueued.Clear();
+
+        var scheduled = await service.ScheduleEntitySearchNowAsync(entityId, CancellationToken.None);
+
+        Assert.True(scheduled);
+        var job = Assert.Single(queue.Enqueued);
+        Assert.Equal(JobType.MonitoredSearch, job.Type);
+        Assert.Equal(JobTargetKinds.Entity, job.TargetEntityKind);
+        Assert.Equal(entityId.ToString(), job.TargetEntityId);
+    }
+
+    [Fact]
     public async Task MonitoringAnOnDiskSeasonCreatesOnlyStableEntityIntent() {
         await using var db = CreateContext();
         var entityId = SeedContainerEntity(db, "Season 1", provider: "tmdbseason", kind: EntityKind.VideoSeason);

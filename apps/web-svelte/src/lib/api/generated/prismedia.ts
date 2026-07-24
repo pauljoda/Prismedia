@@ -12425,15 +12425,10 @@ export type syncContainerRequestResponse404 = {
   status: 404
 }
 
-export type syncContainerRequestResponse409 = {
-  data: ApiProblem
-  status: 409
-}
-
 export type syncContainerRequestResponseSuccess = (syncContainerRequestResponse204) & {
   headers: Headers;
 };
-export type syncContainerRequestResponseError = (syncContainerRequestResponse404 | syncContainerRequestResponse409) & {
+export type syncContainerRequestResponseError = (syncContainerRequestResponse404) & {
   headers: Headers;
 };
 
@@ -12448,7 +12443,7 @@ export const getSyncContainerRequestUrl = () => {
 }
 
 /**
- * @summary Immediately re-syncs a monitored container Entity from its provider, surfacing newly discovered children as wanted placeholders.
+ * @summary Queues an immediate provider re-sync for one monitored container Entity, surfacing newly discovered children as wanted placeholders.
  */
 export const syncContainerRequest = async (requestEntityCommitRequest: RequestEntityCommitRequest, options?: RequestInit): Promise<syncContainerRequestResponse> => {
 

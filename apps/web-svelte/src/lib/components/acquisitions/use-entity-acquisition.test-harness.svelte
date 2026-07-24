@@ -27,6 +27,9 @@
 </script>
 
 <button type="button" onclick={() => void acq.searchForRelease()}>Search for release</button>
+{#if acq.showSync}
+  <button type="button" onclick={() => void acq.syncNow()}>Check for new works</button>
+{/if}
 {#if acq.showMonitor}
   <button
     type="button"

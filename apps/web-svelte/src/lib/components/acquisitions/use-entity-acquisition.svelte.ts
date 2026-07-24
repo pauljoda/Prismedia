@@ -109,12 +109,14 @@ export function useEntityAcquisition(options: UseEntityAcquisitionOptions): Enti
   let missingResult = $state<string | null>(null);
   let loadedId = $state<string | null>(null);
   let lastRequestedId = "";
+  let syncPollGeneration = 0;
 
   const childCards = $derived(options.childCards?.() ?? []);
   const hasActiveChildAcquisition = $derived(
     childCards.some((card) =>
       acquisitionStatusShouldPoll(card.wantedStatus)
-      || acquisitionStatusShouldPoll(card.latestAcquisitionStatus),
+      || acquisitionStatusShouldPoll(card.latestAcquisitionStatus)
+      || card.acquisitionStatuses?.some(acquisitionStatusShouldPoll) === true,
     ),
   );
   // Only the server-declared request child kind contributes to the visible gap count. Mixed direct
@@ -201,6 +203,7 @@ export function useEntityAcquisition(options: UseEntityAcquisitionOptions): Enti
       monitorError = null;
       loadedId = null;
       lastRequestedId = "";
+      syncPollGeneration += 1;
       return;
     }
     if (id === lastRequestedId) return;
@@ -295,18 +298,43 @@ export function useEntityAcquisition(options: UseEntityAcquisitionOptions): Enti
     }
   }
 
-  /** Run the discovery sync now instead of waiting for the daily sweep. */
+  /**
+   * Queues provider discovery now instead of waiting for the daily sweep. The request returns as soon
+   * as the exact Entity job is queued; owner polling then makes newly materialized children appear
+   * without requiring a page refresh.
+   */
   async function syncNow(): Promise<void> {
     const id = options.entityId();
     if (!id || !showSync || syncBusy) return;
     syncBusy = true;
+    monitorError = null;
     try {
       await syncContainerRequest(id);
+      await refresh();
       await options.onChanged?.();
-    } catch {
-      // best-effort; the daily sweep covers it either way
+      const generation = ++syncPollGeneration;
+      void pollOwnerAfterSync(id, generation);
+    } catch (reason) {
+      monitorError = reason instanceof Error ? reason.message : "Failed to check for new works";
     } finally {
       syncBusy = false;
+    }
+  }
+
+  async function pollOwnerAfterSync(entityId: string, generation: number): Promise<void> {
+    for (let attempt = 0; attempt < 12; attempt += 1) {
+      await new Promise<void>((resolve) => setTimeout(resolve, 5_000));
+      if (
+        generation !== syncPollGeneration
+        || options.entityId() !== entityId
+      ) {
+        return;
+      }
+
+      await Promise.allSettled([
+        refresh(),
+        Promise.resolve().then(() => options.onChanged?.()),
+      ]);
     }
   }
 

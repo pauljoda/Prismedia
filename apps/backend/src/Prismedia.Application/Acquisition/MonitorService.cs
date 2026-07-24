@@ -275,14 +275,24 @@ public sealed class MonitorService(
         monitors.ListForEntityAsync(entityId, cancellationToken);
 
     /// <summary>
-    /// Stamps the Entity monitor as just-searched after manual work, so the sweep's clock restarts from
-    /// now instead of immediately repeating it. A no-op when the Entity is not monitored.
+    /// Queues one immediate pass scoped to the Entity's active monitor(s). The worker resolves that exact
+    /// Entity instead of joining the global due sweep, so unrelated provider failures cannot block a
+    /// user-requested check. Returns false when the Entity has no active monitor.
     /// </summary>
-    public async Task MarkEntitySearchedAsync(Guid entityId, CancellationToken cancellationToken) {
-        var monitor = await monitors.GetByEntityAsync(entityId, cancellationToken);
-        if (monitor is not null) {
-            await monitors.MarkSearchedAsync(monitor.Id, cancellationToken);
+    public async Task<bool> ScheduleEntitySearchNowAsync(
+        Guid entityId,
+        CancellationToken cancellationToken) {
+        var activeMonitor = (await monitors.ListForEntityAsync(entityId, cancellationToken))
+            .FirstOrDefault(candidate => candidate.Status == MonitorStatus.Active);
+        if (activeMonitor is null) {
+            return false;
         }
+
+        await ScheduleImmediateSearchAsync(
+            entityId.ToString(),
+            activeMonitor.Title,
+            cancellationToken);
+        return true;
     }
 
     /// <summary>

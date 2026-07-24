@@ -70,6 +70,25 @@ describe("EntityChildMonitoring", () => {
       .toHaveAttribute("aria-checked", "false");
   });
 
+  it("rolls descendant episode activity up onto a season without a direct acquisition", async () => {
+    const season = childCard("season-1", ENTITY_KIND.videoSeason, "Season 1", false, true, true);
+    season.acquisitionStatuses = [
+      ACQUISITION_STATUS.searching,
+      ACQUISITION_STATUS.downloading,
+    ];
+    mocks.fetchEntityMonitorStates.mockResolvedValue([
+      entityState("season-1", {
+        monitor: monitor("monitor-season", "season-1", null),
+        latestAcquisition: acquisition("historical-season-acquisition", "season-1"),
+      }),
+    ]);
+
+    render(EntityChildMonitoring, { cards: [season] });
+
+    expect(await screen.findByText("Downloading · Monitoring")).toBeInTheDocument();
+    expect(screen.getByText("1 downloading")).toBeInTheDocument();
+  });
+
   it("labels wanted audio children as track activity with per-track monitoring", async () => {
     const track = childCard("track-1", ENTITY_KIND.audioTrack, "Happy", true);
     mocks.fetchEntityMonitorStates.mockResolvedValue([

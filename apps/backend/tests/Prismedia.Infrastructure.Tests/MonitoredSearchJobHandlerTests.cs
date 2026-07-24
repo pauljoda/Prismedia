@@ -134,6 +134,76 @@ public sealed class MonitoredSearchJobHandlerTests {
         Assert.Equal([monitorId], monitors.Searched);
     }
 
+    [Fact]
+    public async Task EntityTargetedJobProcessesOnlyThatEntitiesActiveMonitorWithoutReadingTheDueSweep() {
+        var targetEntityId = Guid.NewGuid();
+        var targetMonitorId = Guid.NewGuid();
+        var unrelatedMonitorId = Guid.NewGuid();
+        var monitors = new FakeMonitorStore([
+            new DueMonitor(unrelatedMonitorId, null, "Unrelated series", EntityId: Guid.NewGuid())
+        ]);
+        monitors.ImmediateWork[targetEntityId] = [
+            new DueMonitor(targetMonitorId, null, "Target series", EntityId: targetEntityId)
+        ];
+
+        await Handler(monitors, new FakeAcquisitionLifecycleStore())
+            .HandleAsync(
+                new JobContext(Job(targetEntityId), new RecordingJobQueue()),
+                CancellationToken.None);
+
+        Assert.Equal(0, monitors.DueListCalls);
+        Assert.Equal([targetMonitorId], monitors.Searched);
+        Assert.DoesNotContain(unrelatedMonitorId, monitors.Searched);
+    }
+
+    [Fact]
+    public async Task EntityTargetedJobPreservesUpgradeWorkResolvedByTheStore() {
+        var targetEntityId = Guid.NewGuid();
+        var monitorId = Guid.NewGuid();
+        var importedAcquisitionId = Guid.NewGuid();
+        var upgradeAcquisitionId = Guid.NewGuid();
+        var monitors = new FakeMonitorStore([]) { ChildId = upgradeAcquisitionId };
+        monitors.ImmediateWork[targetEntityId] = [
+            new DueMonitor(
+                monitorId,
+                importedAcquisitionId,
+                "Movie",
+                IsUpgrade: true,
+                EntityId: targetEntityId)
+        ];
+        var queue = new RecordingJobQueue();
+
+        await Handler(
+            monitors,
+            new FakeAcquisitionLifecycleStore(importedAcquisitionId, upgradeAcquisitionId))
+            .HandleAsync(
+                new JobContext(Job(targetEntityId), queue),
+                CancellationToken.None);
+
+        Assert.Equal([monitorId], monitors.CreatedChildFor);
+        Assert.Equal(upgradeAcquisitionId.ToString(), Assert.Single(queue.Enqueued).TargetEntityId);
+    }
+
+    [Fact]
+    public async Task RecurringSweepContinuesAfterOneMonitorFailsThenRethrowsTheFailure() {
+        var failedAcquisitionId = Guid.NewGuid();
+        var healthyAcquisitionId = Guid.NewGuid();
+        var monitors = new FakeMonitorStore([
+            new DueMonitor(Guid.NewGuid(), failedAcquisitionId, "Broken"),
+            new DueMonitor(Guid.NewGuid(), healthyAcquisitionId, "Healthy"),
+        ]);
+        var queue = new RecordingJobQueue { FailTarget = failedAcquisitionId.ToString() };
+
+        await Assert.ThrowsAsync<IOException>(() =>
+            Handler(
+                monitors,
+                new FakeAcquisitionLifecycleStore(failedAcquisitionId, healthyAcquisitionId))
+                .HandleAsync(new JobContext(Job(), queue), CancellationToken.None));
+
+        Assert.Equal(healthyAcquisitionId.ToString(), Assert.Single(queue.Enqueued).TargetEntityId);
+        Assert.Single(monitors.Searched);
+    }
+
     private static MonitoredSearchJobHandler Handler(
         IMonitorStore monitors,
         IAcquisitionLifecycleStore acquisitions) =>
@@ -144,9 +214,21 @@ public sealed class MonitoredSearchJobHandlerTests {
             CommitService(monitors),
             NullLogger<MonitoredSearchJobHandler>.Instance);
 
-    private static JobRunSnapshot Job() {
+    private static JobRunSnapshot Job(Guid? targetEntityId = null) {
         var now = DateTimeOffset.UtcNow;
-        return new JobRunSnapshot(Guid.NewGuid(), JobType.MonitoredSearch, JobRunStatus.Running, 0, null, "{}", null, null, null, now, now, null);
+        return new JobRunSnapshot(
+            Guid.NewGuid(),
+            JobType.MonitoredSearch,
+            JobRunStatus.Running,
+            0,
+            null,
+            "{}",
+            targetEntityId is null ? null : JobTargetKinds.Entity,
+            targetEntityId?.ToString(),
+            null,
+            now,
+            now,
+            null);
     }
 
     /// <summary>A commit service whose container sync never resolves (null sources), for the non-container test paths.</summary>
@@ -244,10 +326,36 @@ public sealed class MonitoredSearchJobHandlerTests {
     private sealed class FakeMonitorStore(IReadOnlyList<DueMonitor> due) : IMonitorStore {
         public List<Guid> Searched { get; } = [];
         public List<Guid> CreatedChildFor { get; } = [];
+        public Dictionary<Guid, IReadOnlyList<MonitorView>> EntityMonitors { get; } = [];
+        public Dictionary<Guid, IReadOnlyList<DueMonitor>> ImmediateWork { get; } = [];
+        public int DueListCalls { get; private set; }
         public Guid? ChildId { get; set; }
-        public Task<IReadOnlyList<DueMonitor>> ListDueMonitorsAsync(int defaultIntervalMinutes, CancellationToken cancellationToken) => Task.FromResult(due);
+        public Task<IReadOnlyList<DueMonitor>> ListDueMonitorsAsync(int defaultIntervalMinutes, CancellationToken cancellationToken) {
+            DueListCalls += 1;
+            return Task.FromResult(due);
+        }
+        public Task<IReadOnlyList<DueMonitor>> ListImmediateForEntityAsync(
+            Guid entityId,
+            CancellationToken cancellationToken) =>
+            Task.FromResult(ImmediateWork.GetValueOrDefault(entityId) ?? []);
         public Task<bool> IsActiveAsync(Guid monitorId, CancellationToken cancellationToken) =>
-            Task.FromResult(due.Any(monitor => monitor.MonitorId == monitorId));
+            Task.FromResult(
+                due.Any(monitor => monitor.MonitorId == monitorId)
+                || ImmediateWork.Values.SelectMany(value => value).Any(monitor =>
+                    monitor.MonitorId == monitorId)
+                || EntityMonitors.Values.SelectMany(value => value).Any(monitor =>
+                    monitor.Id == monitorId && monitor.Status == MonitorStatus.Active));
+        public async Task<bool> ExecuteIfActiveEntityMutationAsync(
+            Guid entityId,
+            Func<CancellationToken, Task> mutation,
+            CancellationToken cancellationToken) {
+            if (!ImmediateWork.ContainsKey(entityId) && !EntityMonitors.ContainsKey(entityId)) {
+                return false;
+            }
+
+            await mutation(cancellationToken);
+            return true;
+        }
         public Task MarkSearchedAsync(Guid monitorId, CancellationToken cancellationToken) { Searched.Add(monitorId); return Task.CompletedTask; }
         public Task<Guid?> CreateUpgradeChildAsync(Guid monitorId, CancellationToken cancellationToken) { CreatedChildFor.Add(monitorId); return Task.FromResult(ChildId); }
         public Task ResolveUpgradeChildAsync(Guid childId, bool succeeded, CancellationToken cancellationToken) => Task.CompletedTask;
@@ -260,7 +368,10 @@ public sealed class MonitoredSearchJobHandlerTests {
         public Task<WantedPage> ListCutoffUnmetAsync(int page, int pageSize, EntityKind? kind, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<MonitorView?> GetByAcquisitionAsync(Guid acquisitionId, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<MonitorView> StartForEntityAsync(Guid entityId, EntityKind kind, string title, AcquisitionTargeting? targeting, MonitorPreset? preset, CancellationToken cancellationToken) => throw new NotSupportedException();
-        public Task<MonitorView?> GetByEntityAsync(Guid entityId, CancellationToken cancellationToken) => Task.FromResult<MonitorView?>(null);
+        public Task<MonitorView?> GetByEntityAsync(Guid entityId, CancellationToken cancellationToken) =>
+            Task.FromResult(EntityMonitors.GetValueOrDefault(entityId)?.FirstOrDefault());
+        public Task<IReadOnlyList<MonitorView>> ListForEntityAsync(Guid entityId, CancellationToken cancellationToken) =>
+            Task.FromResult(EntityMonitors.GetValueOrDefault(entityId) ?? []);
         public Task<AcquisitionTargeting?> GetTargetingByEntityAsync(Guid entityId, CancellationToken cancellationToken) => Task.FromResult<AcquisitionTargeting?>(null);
         public Task<MonitorPreset?> GetPresetByEntityAsync(Guid entityId, CancellationToken cancellationToken) => Task.FromResult<MonitorPreset?>(null);
         public Task<bool> HasActiveMonitorsAsync(CancellationToken cancellationToken) => throw new NotSupportedException();
@@ -317,9 +428,10 @@ public sealed class MonitoredSearchJobHandlerTests {
     private sealed class RecordingJobQueue : IJobQueueService {
         public List<EnqueueJobRequest> Enqueued { get; } = [];
         public Exception? EnqueueFailure { get; init; }
+        public string? FailTarget { get; init; }
         public Task<JobRunSnapshot> EnqueueAsync(EnqueueJobRequest request, CancellationToken cancellationToken) {
-            if (EnqueueFailure is not null) {
-                throw EnqueueFailure;
+            if (EnqueueFailure is not null || request.TargetEntityId == FailTarget) {
+                throw EnqueueFailure ?? new IOException("target queue unavailable");
             }
 
             Enqueued.Add(request);

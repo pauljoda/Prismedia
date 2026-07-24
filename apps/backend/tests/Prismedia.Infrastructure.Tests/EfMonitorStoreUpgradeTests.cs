@@ -40,6 +40,33 @@ public sealed class EfMonitorStoreUpgradeTests {
     }
 
     [Fact]
+    public async Task ImmediateEntityWorkIgnoresTheIntervalAndPreservesUpgradeSemantics() {
+        await using var db = CreateContext();
+        var store = await SeedUpgradeMonitorAsync(
+            db,
+            owned: new(BookSourceTier.Web, BookFormatTier.Reflowable),
+            cutoff: new(BookSourceTier.Retail, BookFormatTier.Reflowable));
+        var entityId = Guid.NewGuid();
+        var now = DateTimeOffset.UtcNow;
+        db.Entities.Add(new EntityRow {
+            Id = entityId,
+            KindCode = EntityKind.Book.ToCode(),
+            Title = "Some Book",
+            CreatedAt = now,
+            UpdatedAt = now
+        });
+        var monitor = await db.Monitors.SingleAsync();
+        monitor.EntityId = entityId;
+        await db.SaveChangesAsync();
+        await store.MarkSearchedAsync(monitor.Id, CancellationToken.None);
+        Assert.Empty(await store.ListDueMonitorsAsync(360, CancellationToken.None));
+
+        var immediate = await store.ListImmediateForEntityAsync(entityId, CancellationToken.None);
+
+        Assert.True(Assert.Single(immediate).IsUpgrade);
+    }
+
+    [Fact]
     public async Task ImportedAtCutoffFulfills() {
         await using var db = CreateContext();
         var store = await SeedUpgradeMonitorAsync(db, owned: new(BookSourceTier.Retail, BookFormatTier.Reflowable), cutoff: new(BookSourceTier.Retail, BookFormatTier.Reflowable));

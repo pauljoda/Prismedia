@@ -172,6 +172,24 @@ public interface IMonitorStore {
         int defaultIntervalMinutes,
         CancellationToken cancellationToken);
 
+    /// <summary>
+    /// Resolves the exact work an active Entity monitor can perform now, bypassing only its time interval.
+    /// Production adapters preserve the same upgrade, missing-child fallback, and lifecycle gates as the
+    /// recurring due sweep. The default supports focused adapters with Entity-only intent.
+    /// </summary>
+    async Task<IReadOnlyList<DueMonitor>> ListImmediateForEntityAsync(
+        Guid entityId,
+        CancellationToken cancellationToken) =>
+        (await ListForEntityAsync(entityId, cancellationToken))
+            .Where(monitor => monitor.Status == MonitorStatus.Active)
+            .Select(monitor => new DueMonitor(
+                monitor.Id,
+                monitor.AcquisitionId,
+                monitor.Title,
+                EntityId: monitor.EntityId,
+                BookRendition: monitor.BookRendition))
+            .ToArray();
+
     /// <summary>Stamps a monitor as just searched.</summary>
     Task MarkSearchedAsync(Guid monitorId, CancellationToken cancellationToken);
 

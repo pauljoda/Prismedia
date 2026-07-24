@@ -228,27 +228,22 @@ public static class RequestEndpoints {
 
         group.MapPost("/sync-container", async (
             RequestEntityCommitRequest request,
-            RequestCommitService commits,
             MonitorService monitors,
             CancellationToken cancellationToken) => {
-                // The manual counterpart to the daily sweep for one container: discover new works now.
-                try {
-                    var synced = await commits.SyncContainerAsync(request.EntityId, cancellationToken);
-                    if (!synced) {
-                        return Results.NotFound(new ApiProblem(ApiProblemCodes.NotFound, "The container could not be synced — it may be gone, not a followable kind, or unresolvable from its providers."));
-                    }
-
-                    await monitors.MarkEntitySearchedAsync(request.EntityId, cancellationToken);
-                    return Results.NoContent();
-                } catch (ExternalIdentityAmbiguityException ex) {
-                    return ExternalIdentityConflict(ex);
+                // Queue the manual counterpart to the daily sweep. The exact Entity target keeps this
+                // request fast and prevents an unrelated monitored item's metadata failure blocking it.
+                if (!await monitors.ScheduleEntitySearchNowAsync(request.EntityId, cancellationToken)) {
+                    return Results.NotFound(new ApiProblem(
+                        ApiProblemCodes.NotFound,
+                        "The container does not have an active monitor to check."));
                 }
+
+                return Results.NoContent();
             })
             .WithName("SyncContainerRequest")
-            .WithSummary("Immediately re-syncs a monitored container Entity from its provider, surfacing newly discovered children as wanted placeholders.")
+            .WithSummary("Queues an immediate provider re-sync for one monitored container Entity, surfacing newly discovered children as wanted placeholders.")
             .Produces(StatusCodes.Status204NoContent)
-            .Produces<ApiProblem>(StatusCodes.Status404NotFound)
-            .Produces<ApiProblem>(StatusCodes.Status409Conflict);
+            .Produces<ApiProblem>(StatusCodes.Status404NotFound);
 
         return group;
     }

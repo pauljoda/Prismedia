@@ -20,6 +20,7 @@ const mocks = vi.hoisted(() => ({
   resumeMonitor: vi.fn(),
   startEntityMonitor: vi.fn(),
   stopMonitor: vi.fn(),
+  syncContainerRequest: vi.fn(),
 }));
 
 vi.mock("$lib/api/acquisitions", () => ({
@@ -37,7 +38,7 @@ vi.mock("$lib/api/monitors", () => ({
 vi.mock("$lib/api/requests", () => ({
   commitEntityRequest: mocks.commitEntityRequest,
   requestMissingChildren: vi.fn(),
-  syncContainerRequest: vi.fn(),
+  syncContainerRequest: mocks.syncContainerRequest,
 }));
 
 describe("useEntityAcquisition", () => {
@@ -46,6 +47,7 @@ describe("useEntityAcquisition", () => {
     mocks.fetchEntityMonitor.mockResolvedValue(null);
     mocks.fetchMonitorEligibility.mockResolvedValue(null);
     mocks.stopMonitor.mockResolvedValue({ entityPruned: false });
+    mocks.syncContainerRequest.mockResolvedValue(undefined);
     mocks.commitEntityRequest.mockResolvedValue({
       containerEntityId: null,
       items: [{
@@ -276,6 +278,45 @@ describe("useEntityAcquisition", () => {
     render(Harness, { entityId: "series-1" });
 
     await waitFor(() => expect(screen.getByTestId("show-sync")).toHaveTextContent("yes"));
+  });
+
+  it("surfaces a failed provider check instead of silently doing nothing", async () => {
+    mocks.fetchAcquisitionForEntity.mockResolvedValue(null);
+    mocks.fetchEntityMonitor.mockResolvedValue(activeMonitor("series-1", null));
+    mocks.fetchMonitorEligibility.mockResolvedValue({
+      canMonitor: true,
+      trackableProviders: ["tmdb"],
+      discoversChildren: true,
+    });
+    mocks.syncContainerRequest.mockRejectedValue(new Error("The check could not be queued"));
+
+    render(Harness, { entityId: "series-1" });
+    await fireEvent.click(await screen.findByRole("button", { name: "Check for new works" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("The check could not be queued");
+  });
+
+  it("refreshes the owning entity while a queued provider check runs", async () => {
+    vi.useFakeTimers();
+    const onChanged = vi.fn(async () => {});
+    mocks.fetchAcquisitionForEntity.mockResolvedValue(null);
+    mocks.fetchEntityMonitor.mockResolvedValue(activeMonitor("series-1", null));
+    mocks.fetchMonitorEligibility.mockResolvedValue({
+      canMonitor: true,
+      trackableProviders: ["tmdb"],
+      discoversChildren: true,
+    });
+
+    render(Harness, { entityId: "series-1", onChanged });
+    await vi.waitFor(() => {
+      expect(screen.getByTestId("show-sync")).toHaveTextContent("yes");
+    });
+    await fireEvent.click(screen.getByRole("button", { name: "Check for new works" }));
+    await vi.waitFor(() => expect(onChanged).toHaveBeenCalledOnce());
+
+    await vi.advanceTimersByTimeAsync(5_000);
+
+    expect(onChanged).toHaveBeenCalledTimes(2);
   });
 
   it("does not offer provider sync for a monitored leaf", async () => {
