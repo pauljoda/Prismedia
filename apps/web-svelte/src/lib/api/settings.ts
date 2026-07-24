@@ -26,8 +26,9 @@ import type {
 import { DATABASE_BACKUP_STATUS, type DatabaseBackupStatusCode, type PlaybackModeCode } from "$lib/api/generated/codes";
 import { requestInit, unwrapGenerated, type RequestOptions } from "$lib/api/generated-response";
 import { fetchApi } from "$lib/api/orval-fetch";
+import type { SubtitlePreferenceTerm } from "$lib/player/subtitle-types";
 
-export type SettingValue = boolean | number | string | string[];
+export type SettingValue = boolean | number | string | string[] | SubtitlePreferenceTerm[];
 
 export interface SettingConstraints {
   min?: number | null;
@@ -86,7 +87,7 @@ export interface LibrarySettings {
   showCastControls: boolean;
   audioPreferredLanguages: string;
   subtitlesAutoEnable: boolean;
-  subtitlesPreferredLanguages: string;
+  subtitlesPreferredTerms: SubtitlePreferenceTerm[];
   subtitlesAutoDownloadEnabled: boolean;
   subtitlesAutoDownloadLanguages: string;
   subtitlesAutoDownloadMinimumConfidence: number;
@@ -378,6 +379,12 @@ export async function deleteLibraryRoot(
 
 function normalizeSettingValue(value: unknown): SettingValue {
   if (Array.isArray(value)) {
+    if (value.every(isSubtitlePreferenceTerm)) {
+      return value.map((item) => ({
+        term: item.term.trim(),
+        weight: Number(item.weight),
+      }));
+    }
     return value.map((item) => String(item));
   }
   if (typeof value === "boolean" || typeof value === "number" || typeof value === "string") {
@@ -385,6 +392,17 @@ function normalizeSettingValue(value: unknown): SettingValue {
   }
   if (value == null) return "";
   return String(value);
+}
+
+function isSubtitlePreferenceTerm(
+  value: unknown,
+): value is { term: string; weight: number | string } {
+  if (typeof value !== "object" || value === null) return false;
+  const candidate = value as { term?: unknown; weight?: unknown };
+  return typeof candidate.term === "string"
+    && candidate.term.trim().length > 0
+    && (typeof candidate.weight === "number" || typeof candidate.weight === "string")
+    && Number.isFinite(Number(candidate.weight));
 }
 
 function normalizeSettingDescriptor(descriptor: GeneratedSettingDescriptor): SettingDescriptor {

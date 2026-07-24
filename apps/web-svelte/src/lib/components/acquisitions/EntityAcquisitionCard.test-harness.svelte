@@ -12,6 +12,9 @@
     monitorStopping = false,
     monitorDeletingFiles = false,
     monitorUnknownStatus = false,
+    monitorActive = false,
+    showMonitor = false,
+    showSearch = false,
     onToggleMonitor,
     entityKind = ENTITY_KIND.book,
   }: {
@@ -22,6 +25,9 @@
     monitorStopping?: boolean;
     monitorDeletingFiles?: boolean;
     monitorUnknownStatus?: boolean;
+    monitorActive?: boolean;
+    showMonitor?: boolean;
+    showSearch?: boolean;
     onToggleMonitor?: () => void | Promise<void>;
     entityKind?: string;
   } = $props();
@@ -38,7 +44,9 @@
     get monitor() {
       return monitorStopping || monitorDeletingFiles || monitorUnknownStatus ? ({} as never) : null;
     },
-    monitorActive: false,
+    get monitorActive() {
+      return monitorActive || monitorDeletingFiles;
+    },
     get monitorStopping() {
       return monitorStopping;
     },
@@ -54,9 +62,11 @@
     },
     showSync: false,
     get showMonitor() {
-      return monitorStopping || monitorDeletingFiles || monitorUnknownStatus;
+      return showMonitor || monitorStopping || monitorDeletingFiles || monitorUnknownStatus;
     },
-    showSearch: false,
+    get showSearch() {
+      return showSearch;
+    },
     showSearchMissing: false,
     visible: true,
     childCards: [],

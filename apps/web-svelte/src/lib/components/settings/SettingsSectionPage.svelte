@@ -25,6 +25,7 @@
   import BackLink from "$lib/components/BackLink.svelte";
   import StatePlaceholder from "$lib/components/StatePlaceholder.svelte";
   import SettingsControl from "$lib/components/settings/SettingsControl.svelte";
+  import WeightedTermListControl from "$lib/components/settings/WeightedTermListControl.svelte";
   import AcquisitionSection from "$lib/components/settings/AcquisitionSection.svelte";
   import AutoIdentifySection from "$lib/components/settings/AutoIdentifySection.svelte";
   import DatabaseBackupsSection from "$lib/components/settings/DatabaseBackupsSection.svelte";
@@ -82,7 +83,7 @@
   });
 
   // Subtitle settings split into behavior (rows) and appearance (left column)
-  const subtitleBehaviorKeys: readonly string[] = [settingKeys.subtitlesAutoEnable, settingKeys.subtitlesPreferredLanguages];
+  const subtitleBehaviorKeys: readonly string[] = [settingKeys.subtitlesAutoEnable];
   const subtitleAppearanceKeys: readonly string[] = [
     settingKeys.subtitlesStyle,
     settingKeys.subtitlesFontScale,
@@ -91,6 +92,9 @@
   ];
   const subtitleBehavior = $derived(
     settingsInGroup(catalog, "subtitles").filter((s) => subtitleBehaviorKeys.includes(s.key)),
+  );
+  const subtitlePreferenceTermsSetting = $derived(
+    findSetting(catalog, settingKeys.subtitlesPreferredLanguages),
   );
   const subtitleAppearanceSettings = $derived(
     settingsInGroup(catalog, "subtitles").filter((s) => subtitleAppearanceKeys.includes(s.key)),
@@ -378,6 +382,12 @@
           {#each subtitleBehavior as setting (setting.key)}
             <SettingsControl {setting} onCommit={handleSettingCommit} />
           {/each}
+          {#if subtitlePreferenceTermsSetting}
+            <WeightedTermListControl
+              setting={subtitlePreferenceTermsSetting}
+              onSave={autoSaveSetting}
+            />
+          {/if}
         </div>
 
         <!-- Appearance: style controls left, preview right -->

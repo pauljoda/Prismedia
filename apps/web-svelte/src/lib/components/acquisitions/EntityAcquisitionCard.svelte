@@ -7,7 +7,7 @@
    * page-owned {@link useEntityAcquisition} composable, whose `visible` also gates the tab itself;
    * this component only renders it. Renders nothing while the state says there is no story.
    */
-  import { Bell, BellRing, RefreshCw, Search, Trash2 } from "@lucide/svelte";
+  import { RefreshCw, Search } from "@lucide/svelte";
   import { Button } from "@prismedia/ui-svelte";
   import { ACQUISITION_STATUS, ENTITY_KIND } from "$lib/api/generated/codes";
   import type { EntityCapability } from "$lib/api/generated/model";
@@ -19,6 +19,7 @@
   import EntityFileManagementAction from "$lib/components/entities/EntityFileManagementAction.svelte";
   import type { EntityFileManagementCallbacks } from "$lib/entities/entity-file-management";
   import EntityBlocklistClearAction from "$lib/components/acquisitions/EntityBlocklistClearAction.svelte";
+  import EntityMonitorControl from "$lib/components/acquisitions/EntityMonitorControl.svelte";
 
   let {
     acq,
@@ -50,10 +51,16 @@
 
   const hasActions = $derived(
     acq.showSync ||
-      (showEntityRequestControls && acq.showMonitor) ||
       (showEntityRequestControls && acq.showSearch) ||
       acq.showSearchMissing ||
       (acq.showFileManagement && Boolean(entity && fileManagement)),
+  );
+  const monitorExpanded = $derived(
+    !showEntityRequestControls
+      || !acq.showMonitor
+      || acq.monitorActive
+      || acq.monitorStopping
+      || acq.monitorDeletingFiles,
   );
   const activeChildAcquisitionCount = $derived(acq.childCards.filter((card) =>
     acquisitionStatusShouldPoll(card.wantedStatus)
@@ -89,7 +96,27 @@
 
 {#if acq.visible}
   <section class="acquisition-card">
-    {#if hasActions}
+    {#if !monitorExpanded && acq.showFileManagement && entity && fileManagement}
+      <div class="flex justify-end">
+        <EntityFileManagementAction
+          {entity}
+          onDeleted={fileManagement.onDeleted}
+          onReverted={fileManagement.onReverted}
+          compact
+        />
+      </div>
+    {/if}
+
+    {#if showEntityRequestControls && acq.showMonitor}
+      <EntityMonitorControl {acq} />
+    {/if}
+
+    {#if acq.monitorError}
+      <p role="alert" class="text-[0.72rem] text-error-text">{acq.monitorError}</p>
+    {/if}
+
+    {#if monitorExpanded}
+      {#if hasActions}
       <div class="flex flex-wrap items-center gap-2">
         {#if acq.showSync}
           <Button
@@ -103,42 +130,6 @@
           >
             <RefreshCw class="h-3.5 w-3.5" />
             {acq.syncBusy ? "Checking…" : "Check for new works"}
-          </Button>
-        {/if}
-        {#if showEntityRequestControls && acq.showMonitor}
-          <Button
-            type="button"
-            variant={acq.monitorActive || acq.monitorDeletingFiles ? "primary" : "secondary"}
-            size="sm"
-            disabled={acq.monitorBusy || acq.monitorDeletingFiles || acq.monitorUnknownStatus}
-            onclick={() => void acq.toggleMonitor()}
-            class="no-lift gap-1.5 px-2.5 py-1 text-xs"
-            title={acq.monitorStopping
-              ? "Cleanup did not finish; retry unmonitoring"
-              : acq.monitorDeletingFiles
-                ? "Managed file deletion is in progress; retry from Delete files if needed"
-                : acq.monitorUnknownStatus
-                  ? "Monitoring is locked until this status can be refreshed"
-              : acq.monitorActive
-                ? "Monitoring this item — click to stop and clear its off-disk acquisition state"
-                : "Monitor this item and manage its off-disk acquisition state"}
-          >
-            {#if acq.monitorStopping}
-              <RefreshCw class="h-3.5 w-3.5" />
-              Finish unmonitoring
-            {:else if acq.monitorDeletingFiles}
-              <Trash2 class="h-3.5 w-3.5" />
-              Deleting files…
-            {:else if acq.monitorUnknownStatus}
-              <RefreshCw class="h-3.5 w-3.5" />
-              Updating…
-            {:else if acq.monitorActive}
-              <BellRing class="h-3.5 w-3.5" />
-              Monitoring
-            {:else}
-              <Bell class="h-3.5 w-3.5" />
-              {acq.monitor ? "Resume monitoring" : "Monitor"}
-            {/if}
           </Button>
         {/if}
         {#if showEntityRequestControls && acq.showSearch}
@@ -181,65 +172,61 @@
           />
         {/if}
       </div>
-    {/if}
+      {/if}
 
-    {#if acq.missingResult}
-      <p class="text-[0.72rem] text-text-muted">{acq.missingResult}</p>
-    {/if}
+      {#if acq.missingResult}
+        <p class="text-[0.72rem] text-text-muted">{acq.missingResult}</p>
+      {/if}
 
-    {#if acq.monitorError}
-      <p role="alert" class="text-[0.72rem] text-error-text">{acq.monitorError}</p>
-    {/if}
+      {#if showEntityRequestControls && acq.showSearch}
+        <p class="text-[0.72rem] text-text-muted">
+          No file yet. Searching starts an auto-grabbing, monitored acquisition for this item.
+        </p>
+      {/if}
 
-    {#if showEntityRequestControls && acq.showMonitor && acq.trackedVia}
-      <p class="text-[0.72rem] text-text-muted">
-        {acq.monitorActive && acq.showSync
-          ? `Watching for new works daily via ${acq.trackedVia}.`
-          : acq.monitorDeletingFiles
-            ? `Monitoring stays enabled via ${acq.trackedVia} while files are deleted.`
-          : acq.monitorActive
-            ? `Monitoring via ${acq.trackedVia}.`
-            : `Monitoring available — tracked via ${acq.trackedVia}.`}
-      </p>
-    {/if}
+      {#if entity && uploadableAcquisitionKind}
+        <ManualAcquisitionActions
+          entityId={entity.id}
+          canReplace={hasOwnedContent && replaceableKind}
+          canUpload={Boolean(acq.acquisition) || (hasOwnedContent && replaceableKind)}
+          onStarted={async (detail) => {
+            acq.acquisition = detail;
+            await acq.refresh();
+          }}
+        />
+      {/if}
 
-    {#if showEntityRequestControls && acq.showSearch}
-      <p class="text-[0.72rem] text-text-muted">
-        No file yet. Searching starts an auto-grabbing, monitored acquisition for this item.
-      </p>
-    {/if}
+      {#if entity}
+        <EntityBlocklistClearAction entityId={entity.id} entityTitle={entity.title} />
+      {/if}
 
-    {#if entity && uploadableAcquisitionKind}
-      <ManualAcquisitionActions
-        entityId={entity.id}
-        canReplace={hasOwnedContent && replaceableKind}
-        canUpload={Boolean(acq.acquisition) || (hasOwnedContent && replaceableKind)}
-        onStarted={async (detail) => {
-          acq.acquisition = detail;
-          await acq.refresh();
-        }}
-      />
-    {/if}
+      {#if acq.childCards.length > 0}
+        <EntityChildMonitoring
+          cards={acq.childCards}
+          onChanged={acq.childMonitoringChanged}
+        />
+      {/if}
 
-    {#if entity}
-      <EntityBlocklistClearAction entityId={entity.id} entityTitle={entity.title} />
-    {/if}
-
-    {#if acq.childCards.length > 0}
-      <EntityChildMonitoring
-        cards={acq.childCards}
-        onChanged={acq.childMonitoringChanged}
-      />
-    {/if}
-
-    {#if showAcquisitionPanel && acq.acquisition}
-      {#if failedParentWithChildActivity}
-        <details class="parent-attempt">
-          <summary>
-            Parent release attempt failed
-            <span>{activeChildAcquisitionCount} {activeChildLabel} active instead</span>
-          </summary>
-          <div class="parent-attempt-body">
+      {#if showAcquisitionPanel && acq.acquisition}
+        {#if failedParentWithChildActivity}
+          <details class="parent-attempt">
+            <summary>
+              Parent release attempt failed
+              <span>{activeChildAcquisitionCount} {activeChildLabel} active instead</span>
+            </summary>
+            <div class="parent-attempt-body">
+              {#key acq.acquisition.summary.id}
+                <AcquisitionPanel
+                  acquisitionId={acq.acquisition.summary.id}
+                  bind:detail={acq.acquisition}
+                  {onCancelled}
+                  {onImported}
+                  onReset={acq.refresh}
+                />
+              {/key}
+            </div>
+          </details>
+        {:else}
             {#key acq.acquisition.summary.id}
               <AcquisitionPanel
                 acquisitionId={acq.acquisition.summary.id}
@@ -249,18 +236,7 @@
                 onReset={acq.refresh}
               />
             {/key}
-          </div>
-        </details>
-      {:else}
-        {#key acq.acquisition.summary.id}
-          <AcquisitionPanel
-            acquisitionId={acq.acquisition.summary.id}
-            bind:detail={acq.acquisition}
-            {onCancelled}
-            {onImported}
-            onReset={acq.refresh}
-          />
-        {/key}
+        {/if}
       {/if}
     {/if}
   </section>

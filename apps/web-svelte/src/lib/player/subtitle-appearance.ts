@@ -3,6 +3,7 @@ import {
   subtitleDisplayStyles,
   type SubtitleAppearance,
   type SubtitleDisplayStyle,
+  type SubtitlePreferenceTerm,
 } from "./subtitle-types";
 
 export { defaultSubtitleAppearance, subtitleDisplayStyles };
@@ -85,7 +86,7 @@ export function captionClassName(style: SubtitleDisplayStyle): string {
   }
 }
 
-/** Pick the best track for the user's preferred language list. */
+/** Picks the track with the highest sum of independently matched preference-term weights. */
 export function pickPreferredSubtitleTrack(
   tracks: {
     id: string;
@@ -93,32 +94,35 @@ export function pickPreferredSubtitleTrack(
     label?: string | null;
     isDefault?: boolean;
   }[],
-  preferredLanguages: string,
+  preferredTerms: SubtitlePreferenceTerm[],
 ): string | null {
   if (!tracks.length) return null;
-  const prefs = preferredLanguages
-    .split(",")
-    .map((p) => p.trim().toLowerCase())
-    .filter(Boolean);
-  if (prefs.length === 0) return tracks[0]!.id;
+  const terms = preferredTerms
+    .map(({ term, weight }) => ({ term: term.trim().toLowerCase(), weight }))
+    .filter(({ term, weight }) => term.length > 0 && Number.isFinite(weight) && weight > 0);
+  if (terms.length === 0) return tracks[0]!.id;
 
-  for (const pref of prefs) {
-    const exact = tracks.find((t) =>
-      subtitleTrackTokens(t).some((token) => token === pref),
+  let best: { id: string; score: number } | null = null;
+  for (const track of tracks) {
+    const tokens = subtitleTrackTokens(track);
+    const score = terms.reduce(
+      (total, preference) =>
+        total + (termMatchesTokens(preference.term, tokens) ? preference.weight : 0),
+      0,
     );
-    if (exact) return exact.id;
-    const prefix = tracks.find((t) =>
-      subtitleTrackTokens(t).some(
-        (token) => token.startsWith(pref) || pref.startsWith(token),
-      ),
-    );
-    if (prefix) return prefix.id;
-    const equiv = tracks.find((t) =>
-      subtitleTrackTokens(t).some((token) => iso639Equivalent(token, pref)),
-    );
-    if (equiv) return equiv.id;
+    if (score > 0 && (best === null || score > best.score)) {
+      best = { id: track.id, score };
+    }
   }
-  return null;
+  return best?.id ?? null;
+}
+
+function termMatchesTokens(term: string, tokens: string[]): boolean {
+  return tokens.some((token) =>
+    token.startsWith(term)
+    || term.startsWith(token)
+    || iso639Equivalent(token, term),
+  );
 }
 
 const ISO639_PAIRS: Record<string, string> = {
@@ -161,7 +165,12 @@ function subtitleTrackTokens(track: {
     .filter((value): value is string => Boolean(value?.trim()))
     .flatMap((value) => {
       const normalized = value.trim().toLowerCase();
-      return [normalized, normalized.replace(/\s*\([^)]*\)\s*/g, "").trim()];
+      const withoutParentheses = normalized.replace(/\s*\([^)]*\)\s*/g, "").trim();
+      return [
+        normalized,
+        withoutParentheses,
+        ...withoutParentheses.split(/[^\p{L}\p{N}]+/u),
+      ];
     })
     .filter(Boolean);
 

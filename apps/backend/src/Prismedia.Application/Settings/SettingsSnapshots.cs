@@ -82,7 +82,7 @@ public sealed record PlaybackSettings(
 /// </summary>
 public sealed record SubtitleSettings(
     bool AutoEnable,
-    IReadOnlyList<string> PreferredLanguages,
+    IReadOnlyList<Prismedia.Contracts.Settings.SubtitlePreferenceTerm> PreferredTerms,
     bool AutoDownloadEnabled,
     IReadOnlyList<string> AutoDownloadLanguages,
     int AutoDownloadMinimumConfidence,

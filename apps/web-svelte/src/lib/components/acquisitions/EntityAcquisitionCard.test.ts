@@ -65,6 +65,27 @@ describe("EntityAcquisitionCard", () => {
     expect(onToggleMonitor).toHaveBeenCalledOnce();
   });
 
+  it("starts as a slim monitor toggle and reveals acquisition actions only when enabled", async () => {
+    const onToggleMonitor = vi.fn(async () => {});
+    const view = render(Harness, {
+      initialAcquisition: null,
+      refresh: vi.fn(async () => {}),
+      showMonitor: true,
+      showSearch: true,
+      monitorActive: false,
+      onToggleMonitor,
+    });
+
+    const monitor = screen.getByRole("switch", { name: "Monitor" });
+    expect(monitor).toHaveAttribute("aria-checked", "false");
+    expect(screen.queryByRole("button", { name: "Search for release" })).toBeNull();
+
+    await view.rerender({ monitorActive: true });
+
+    expect(screen.getByRole("switch", { name: "Monitor" })).toHaveAttribute("aria-checked", "true");
+    expect(screen.getByRole("button", { name: "Search for release" })).toBeInTheDocument();
+  });
+
   it("renders Delete-files as a locked checked state without exposing unmonitor retry", async () => {
     const onToggleMonitor = vi.fn(async () => {});
     render(Harness, {
@@ -74,8 +95,10 @@ describe("EntityAcquisitionCard", () => {
       onToggleMonitor,
     });
 
-    const button = screen.getByRole("button", { name: "Deleting files…" });
-    expect(button).toBeDisabled();
+    const monitor = screen.getByRole("switch", { name: "Monitor" });
+    expect(monitor).toBeDisabled();
+    expect(monitor).toHaveAttribute("aria-checked", "true");
+    expect(screen.getByText("Monitoring stays on while managed files are deleted.")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Finish unmonitoring" })).toBeNull();
     expect(onToggleMonitor).not.toHaveBeenCalled();
   });
@@ -87,8 +110,12 @@ describe("EntityAcquisitionCard", () => {
       monitorUnknownStatus: true,
     });
 
-    const button = screen.getByRole("button", { name: "Updating…" });
-    expect(button).toBeDisabled();
+    const monitor = screen.getByRole("switch", { name: "Monitor" });
+    expect(monitor).toBeDisabled();
+    expect(monitor).toHaveAttribute("aria-checked", "false");
+    expect(screen.getByText(
+      "Refreshing an unfamiliar monitor status before changes are allowed.",
+    )).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Finish unmonitoring" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Resume monitoring" })).toBeNull();
   });

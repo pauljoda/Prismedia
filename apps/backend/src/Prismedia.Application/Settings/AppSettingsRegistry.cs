@@ -404,15 +404,18 @@ public static class AppSettingsRegistry {
                 "Turn on subtitles automatically when a matching preferred-language track is available.",
                 false,
                 10),
-            StringList(
+            WeightedTermList(
                 AppSettingKeys.SubtitlesPreferredLanguages,
                 Subtitles,
                 "Subtitles",
                 "Default caption behavior and appearance.",
                 60,
-                "Preferred languages",
-                "Comma-separated priority list for subtitle tracks.",
-                ["en", "eng"],
+                "Preferred subtitle terms",
+                "Each case-insensitive match adds its weight. A track matching several terms receives their combined score.",
+                [
+                    new SubtitlePreferenceTerm("English", 100),
+                    new SubtitlePreferenceTerm("Eng", 80),
+                ],
                 20),
             Boolean(
                 AppSettingKeys.SubtitlesAutoDownloadEnabled,
@@ -714,6 +717,29 @@ public static class AppSettingsRegistry {
             SettingValueType.StringList,
             JsonSerializer.SerializeToElement(defaultValue),
             order);
+
+    private static SettingDefinition WeightedTermList(
+        string key,
+        string groupKey,
+        string groupLabel,
+        string groupDescription,
+        int groupOrder,
+        string label,
+        string description,
+        IReadOnlyList<SubtitlePreferenceTerm> defaultValue,
+        int order) =>
+        new(
+            key,
+            groupKey,
+            groupLabel,
+            groupDescription,
+            groupOrder,
+            label,
+            description,
+            SettingValueType.WeightedTermList,
+            JsonSerializer.SerializeToElement(defaultValue),
+            order,
+            new SettingConstraints(Min: 1, Max: 100, Step: 1, MinItems: 0, MaxItems: 32));
 
     private static IReadOnlyList<SettingOption> QualityPresetOptions() => [
         new SettingOption("1", "Best", "Highest resolution, largest files."),

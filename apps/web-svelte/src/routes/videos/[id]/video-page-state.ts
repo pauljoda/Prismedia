@@ -2,14 +2,16 @@ import type { LibrarySettings } from "$lib/api/settings";
 import type {
   SubtitleAppearance,
   SubtitleDisplayStyle,
+  SubtitlePreferenceTerm,
 } from "$lib/player/subtitle-types";
+import { defaultSubtitlePreferenceTerms } from "$lib/player/subtitle-types";
 
 const transcriptDockedKey = "prismedia:transcript-docked";
 const transcriptDockWidthKey = "prismedia:transcript-dock-width";
 
 export interface VideoSubtitleDefaults {
   autoEnable: boolean;
-  preferredLanguages: string;
+  preferredTerms: SubtitlePreferenceTerm[];
   appearance: SubtitleAppearance;
 }
 
@@ -36,7 +38,7 @@ export function buildSubtitleDefaults(
 
   return {
     autoEnable: settings.subtitlesAutoEnable ?? false,
-    preferredLanguages: settings.subtitlesPreferredLanguages ?? "en,eng",
+    preferredTerms: settings.subtitlesPreferredTerms ?? defaultSubtitlePreferenceTerms,
     appearance: {
       style: (settings.subtitleStyle ?? "stylized") as SubtitleDisplayStyle,
       fontScale: settings.subtitleFontScale ?? 1,

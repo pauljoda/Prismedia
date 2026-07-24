@@ -20,7 +20,10 @@ describe("video page state helpers", () => {
     expect(buildSubtitleDefaults(null)).toBeUndefined();
     const settings = {
       subtitlesAutoEnable: true,
-      subtitlesPreferredLanguages: "ja,en",
+      subtitlesPreferredTerms: [
+        { term: "Japanese", weight: 100 },
+        { term: "English", weight: 50 },
+      ],
       subtitleStyle: "native",
       subtitleFontScale: 1.25,
       subtitlePositionPercent: 72,
@@ -29,7 +32,10 @@ describe("video page state helpers", () => {
 
     expect(buildSubtitleDefaults(settings)).toEqual({
       autoEnable: true,
-      preferredLanguages: "ja,en",
+      preferredTerms: [
+        { term: "Japanese", weight: 100 },
+        { term: "English", weight: 50 },
+      ],
       appearance: {
         style: "native",
         fontScale: 1.25,

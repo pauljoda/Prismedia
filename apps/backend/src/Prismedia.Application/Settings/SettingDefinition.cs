@@ -12,6 +12,7 @@ public enum SettingValueType {
     Decimal,
     String,
     StringList,
+    WeightedTermList,
     Select,
 }
 
@@ -126,6 +127,7 @@ public sealed class SettingDefinition {
             SettingValueType.Decimal => ValidateDecimal(value),
             SettingValueType.String => ValidateString(value),
             SettingValueType.StringList => ValidateStringList(value),
+            SettingValueType.WeightedTermList => ValidateWeightedTermList(value),
             SettingValueType.Select => ValidateSelect(value),
             _ => SettingValidationResult.Invalid($"Unsupported setting type '{Type}'.")
         };
@@ -229,6 +231,83 @@ public sealed class SettingDefinition {
         return SettingValidationResult.Valid(JsonSerializer.SerializeToElement(items));
     }
 
+    private SettingValidationResult ValidateWeightedTermList(JsonElement value) {
+        if (value.ValueKind == JsonValueKind.String) {
+            var legacyTerms = (value.GetString() ?? string.Empty)
+                .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            return ValidateLegacyWeightedTerms(legacyTerms);
+        }
+
+        if (value.ValueKind != JsonValueKind.Array) {
+            return SettingValidationResult.Invalid($"{Key} must be a list of weighted terms.");
+        }
+
+        var items = value.EnumerateArray().ToArray();
+        if (items.All(item => item.ValueKind == JsonValueKind.String)) {
+            return ValidateLegacyWeightedTerms(
+                items.Select(item => item.GetString() ?? string.Empty).ToArray());
+        }
+
+        if (items.Any(item => item.ValueKind != JsonValueKind.Object)) {
+            return SettingValidationResult.Invalid($"{Key} must be a list of weighted terms.");
+        }
+
+        var terms = new List<SubtitlePreferenceTerm>(items.Length);
+        foreach (var item in items) {
+            if (!item.TryGetProperty("term", out var termElement) ||
+                termElement.ValueKind != JsonValueKind.String) {
+                return SettingValidationResult.Invalid($"{Key} terms must include text.");
+            }
+
+            if (!item.TryGetProperty("weight", out var weightElement) ||
+                weightElement.ValueKind != JsonValueKind.Number ||
+                !weightElement.TryGetInt32(out var weight)) {
+                return SettingValidationResult.Invalid($"{Key} term weights must be integers.");
+            }
+
+            var term = termElement.GetString()?.Trim() ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(term)) {
+                return SettingValidationResult.Invalid($"{Key} terms cannot be blank.");
+            }
+
+            var minimumWeight = (int)(Constraints?.Min ?? 1);
+            var maximumWeight = (int)(Constraints?.Max ?? 100);
+            if (weight < minimumWeight || weight > maximumWeight) {
+                return SettingValidationResult.Invalid(
+                    $"{Key} term weights must be between {minimumWeight} and {maximumWeight}.");
+            }
+
+            terms.Add(new SubtitlePreferenceTerm(term, weight));
+        }
+
+        return NormalizeWeightedTerms(terms);
+    }
+
+    private SettingValidationResult ValidateLegacyWeightedTerms(IReadOnlyList<string> values) {
+        var terms = values
+            .Select(term => term.Trim())
+            .Where(term => !string.IsNullOrWhiteSpace(term))
+            .Select((term, index) => new SubtitlePreferenceTerm(term, Math.Max(1, 100 - index)))
+            .ToArray();
+        return NormalizeWeightedTerms(terms);
+    }
+
+    private SettingValidationResult NormalizeWeightedTerms(IReadOnlyList<SubtitlePreferenceTerm> terms) {
+        if (Constraints?.MinItems is { } minItems && terms.Count < minItems) {
+            return SettingValidationResult.Invalid($"{Key} must include at least {minItems} term.");
+        }
+
+        if (Constraints?.MaxItems is { } maxItems && terms.Count > maxItems) {
+            return SettingValidationResult.Invalid($"{Key} must include no more than {maxItems} terms.");
+        }
+
+        if (terms.Select(term => term.Term).Distinct(StringComparer.OrdinalIgnoreCase).Count() != terms.Count) {
+            return SettingValidationResult.Invalid($"{Key} cannot include duplicate terms.");
+        }
+
+        return SettingValidationResult.Valid(JsonSerializer.SerializeToElement(terms));
+    }
+
     private SettingValidationResult ValidateSelect(JsonElement value) {
         if (value.ValueKind != JsonValueKind.String) {
             return SettingValidationResult.Invalid($"{Key} must be a string option.");
@@ -249,6 +328,7 @@ public sealed class SettingDefinition {
             SettingValueType.Decimal => "decimal",
             SettingValueType.String => "string",
             SettingValueType.StringList => "stringList",
+            SettingValueType.WeightedTermList => "weightedTermList",
             SettingValueType.Select => "select",
             _ => "unknown"
         };

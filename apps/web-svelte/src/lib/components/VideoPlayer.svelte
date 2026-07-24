@@ -41,8 +41,8 @@
   } from "vidstack";
   import type { MediaPlayerElement } from "vidstack/elements";
   import {
-    type SubtitleAppearance,
-    type SubtitleCue,
+    type SubtitleAppearance, type SubtitleCue,
+    type SubtitlePreferenceTerm,
     type VideoSubtitleTrack,
   } from "$lib/player/subtitle-types";
   import { fetchVideoSubtitleCues } from "$lib/player/video-subtitles";
@@ -145,7 +145,7 @@
     subtitleChoiceLocked?: boolean;
     subtitleDefaults?: {
       autoEnable: boolean;
-      preferredLanguages: string;
+      preferredTerms: SubtitlePreferenceTerm[];
       appearance: SubtitleAppearance;
     };
     isTranscriptSidecarOpen?: boolean;
@@ -1219,7 +1219,9 @@
   $effect(() => {
     const nextAutoSelectionKey = [
       subtitleDefaults?.autoEnable ? "auto" : "manual",
-      subtitleDefaults?.preferredLanguages ?? "",
+      subtitleDefaults?.preferredTerms
+        .map((term) => `${term.term}:${term.weight}`)
+        .join("|") ?? "",
       subtitleTracks
         .map((track) => `${track.id}:${track.language}:${track.label ?? ""}`)
         .join("|"),
@@ -1240,7 +1242,7 @@
         label: track.label,
         isDefault: track.isDefault,
       })),
-      subtitleDefaults.preferredLanguages,
+      subtitleDefaults.preferredTerms,
     );
     if (picked) {
       autoSelected = true;

@@ -329,7 +329,7 @@ public sealed partial class SettingsService {
 
         return new SubtitleSettings(
             GetBoolean(values, AppSettingKeys.SubtitlesAutoEnable),
-            GetStringList(values, AppSettingKeys.SubtitlesPreferredLanguages),
+            GetWeightedTerms(values, AppSettingKeys.SubtitlesPreferredLanguages),
             GetBoolean(values, AppSettingKeys.SubtitlesAutoDownloadEnabled),
             GetStringList(values, AppSettingKeys.SubtitlesAutoDownloadLanguages),
             GetInt(values, AppSettingKeys.SubtitlesAutoDownloadMinimumConfidence),
@@ -458,4 +458,9 @@ public sealed partial class SettingsService {
             .Select(item => item.GetString() ?? string.Empty)
             .Where(item => !string.IsNullOrWhiteSpace(item))
             .ToArray();
+
+    private static IReadOnlyList<SubtitlePreferenceTerm> GetWeightedTerms(
+        IReadOnlyDictionary<string, JsonElement> values,
+        string key) =>
+        values[key].Deserialize<SubtitlePreferenceTerm[]>() ?? [];
 }

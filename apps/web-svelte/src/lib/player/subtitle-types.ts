@@ -11,6 +11,16 @@ export interface SubtitleAppearance {
   opacity: number;
 }
 
+export interface SubtitlePreferenceTerm {
+  term: string;
+  weight: number;
+}
+
+export const defaultSubtitlePreferenceTerms: SubtitlePreferenceTerm[] = [
+  { term: "English", weight: 100 },
+  { term: "Eng", weight: 80 },
+];
+
 export const defaultSubtitleAppearance: SubtitleAppearance = {
   style: "stylized",
   fontScale: 1,

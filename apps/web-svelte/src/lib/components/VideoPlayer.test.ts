@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import VideoPlayer from "./VideoPlayer.svelte";
 import type {
   SubtitleAppearance,
+  SubtitlePreferenceTerm,
   VideoSubtitleTrack,
 } from "$lib/player/subtitle-types";
 
@@ -16,11 +17,14 @@ vi.mock("vidstack", () => ({
 
 const subtitleDefaults: {
   autoEnable: boolean;
-  preferredLanguages: string;
+  preferredTerms: SubtitlePreferenceTerm[];
   appearance: SubtitleAppearance;
 } = {
   autoEnable: true,
-  preferredLanguages: "en,eng",
+  preferredTerms: [
+    { term: "English", weight: 100 },
+    { term: "Eng", weight: 80 },
+  ],
   appearance: {
     style: "stylized",
     fontScale: 1,

@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Prismedia.Application.Settings;
+using Prismedia.Contracts.Settings;
 using Prismedia.Infrastructure.Persistence;
 using Prismedia.Infrastructure.Settings;
 
@@ -86,6 +87,67 @@ public sealed class AppSettingsRegistryTests {
 
         Assert.Equal(AppSettingKeys.JobsBackgroundConcurrency, ex.Key);
         Assert.Contains("between 1 and 32", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task SubtitlePreferenceTermsNormalizeLegacyListsAndPreserveExplicitWeights() {
+        await using var db = CreateContext();
+        var service = new SettingsService(new EfSettingsPersistence(db));
+
+        var legacy = await service.UpdateSettingAsync(
+            AppSettingKeys.SubtitlesPreferredLanguages,
+            JsonSerializer.SerializeToElement(new[] { "Forced", "English", "Eng" }),
+            CancellationToken.None);
+        var legacyTerms = legacy.Value.Deserialize<SubtitlePreferenceTerm[]>();
+
+        Assert.NotNull(legacyTerms);
+        Assert.Equal(
+            [
+                new SubtitlePreferenceTerm("Forced", 100),
+                new SubtitlePreferenceTerm("English", 99),
+                new SubtitlePreferenceTerm("Eng", 98),
+            ],
+            legacyTerms);
+
+        var weighted = await service.UpdateSettingAsync(
+            AppSettingKeys.SubtitlesPreferredLanguages,
+            JsonSerializer.SerializeToElement(new[] {
+                new SubtitlePreferenceTerm("Forced", 80),
+                new SubtitlePreferenceTerm("English", 55),
+                new SubtitlePreferenceTerm("Eng", 35),
+            }),
+            CancellationToken.None);
+        var snapshot = await service.GetSubtitleSettingsAsync(CancellationToken.None);
+        var weightedTerms = weighted.Value.Deserialize<SubtitlePreferenceTerm[]>();
+
+        Assert.NotNull(weightedTerms);
+        Assert.Equal(
+            [
+                new SubtitlePreferenceTerm("Forced", 80),
+                new SubtitlePreferenceTerm("English", 55),
+                new SubtitlePreferenceTerm("Eng", 35),
+            ],
+            weightedTerms);
+        Assert.Equal(weightedTerms, snapshot.PreferredTerms);
+    }
+
+    [Theory]
+    [InlineData("""[{"term":"","weight":50}]""")]
+    [InlineData("""[{"term":"English","weight":0}]""")]
+    [InlineData("""[{"term":"English","weight":101}]""")]
+    [InlineData("""[{"term":"English","weight":50},{"term":"english","weight":40}]""")]
+    public async Task SubtitlePreferenceTermsRejectInvalidRules(string json) {
+        await using var db = CreateContext();
+        var service = new SettingsService(new EfSettingsPersistence(db));
+        using var document = JsonDocument.Parse(json);
+
+        var exception = await Assert.ThrowsAsync<SettingValidationException>(() =>
+            service.UpdateSettingAsync(
+                AppSettingKeys.SubtitlesPreferredLanguages,
+                document.RootElement,
+                CancellationToken.None));
+
+        Assert.Equal(AppSettingKeys.SubtitlesPreferredLanguages, exception.Key);
     }
 
     [Fact]

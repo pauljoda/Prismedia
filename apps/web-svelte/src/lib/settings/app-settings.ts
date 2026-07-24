@@ -5,6 +5,10 @@ import type {
   SettingsGroup,
   SettingValue,
 } from "$lib/api/settings";
+import {
+  defaultSubtitlePreferenceTerms,
+  type SubtitlePreferenceTerm,
+} from "$lib/player/subtitle-types";
 
 // Setting keys are generated from the backend AppSettingKeys (see scripts/gen-codes.mjs).
 import { ENTITY_KIND, SETTING_KEYS as settingKeys, type SettingKey } from "$lib/api/generated/codes";
@@ -36,7 +40,7 @@ export const defaultLibrarySettings: LibrarySettings = {
   showCastControls: true,
   audioPreferredLanguages: "en,eng,en-US",
   subtitlesAutoEnable: false,
-  subtitlesPreferredLanguages: "en,eng",
+  subtitlesPreferredTerms: defaultSubtitlePreferenceTerms,
   subtitlesAutoDownloadEnabled: false,
   subtitlesAutoDownloadLanguages: "en",
   subtitlesAutoDownloadMinimumConfidence: 90,
@@ -112,9 +116,42 @@ export function valueAsStringListText(value: SettingValue | undefined, fallback 
 }
 
 export function valueAsStringList(value: SettingValue | undefined, fallback: string[] = []): string[] {
-  if (Array.isArray(value)) return value.map((item) => String(item)).filter(Boolean);
+  if (Array.isArray(value)) {
+    return value
+      .filter((item): item is string => typeof item === "string")
+      .map((item) => item.trim())
+      .filter(Boolean);
+  }
   if (typeof value === "string" && value.trim()) return parseStringList(value);
   return fallback;
+}
+
+export function valueAsSubtitlePreferenceTerms(
+  value: SettingValue | undefined,
+  fallback: SubtitlePreferenceTerm[] = defaultSubtitlePreferenceTerms,
+): SubtitlePreferenceTerm[] {
+  if (Array.isArray(value) && value.every((item) => typeof item === "string")) {
+    return value
+      .map((term) => term.trim())
+      .filter(Boolean)
+      .map((term, index) => ({ term, weight: Math.max(1, 100 - index) }));
+  }
+  if (Array.isArray(value)) {
+    const terms = value
+      .filter((item): item is SubtitlePreferenceTerm =>
+        typeof item === "object"
+        && item !== null
+        && typeof item.term === "string"
+        && typeof item.weight === "number")
+      .map((item) => ({ term: item.term.trim(), weight: item.weight }))
+      .filter((item) => item.term.length > 0 && Number.isFinite(item.weight));
+    if (terms.length > 0 || value.length === 0) return terms;
+  }
+  if (typeof value === "string") {
+    return parseStringList(value)
+      .map((term, index) => ({ term, weight: Math.max(1, 100 - index) }));
+  }
+  return fallback.map((item) => ({ ...item }));
 }
 
 export function parseStringList(text: string): string[] {
@@ -236,9 +273,9 @@ export function valuesToLibrarySettings(
       values[settingKeys.subtitlesAutoEnable],
       fallback.subtitlesAutoEnable,
     ),
-    subtitlesPreferredLanguages: valueAsStringListText(
+    subtitlesPreferredTerms: valueAsSubtitlePreferenceTerms(
       values[settingKeys.subtitlesPreferredLanguages],
-      fallback.subtitlesPreferredLanguages,
+      fallback.subtitlesPreferredTerms,
     ),
     subtitlesAutoDownloadEnabled: valueAsBoolean(
       values[settingKeys.subtitlesAutoDownloadEnabled],
