@@ -58,6 +58,7 @@
     canUseDirectPlayback,
     fallbackPlaybackModeForError,
     hlsStatusUrlForSrc,
+    normalizeInitialPlaybackTime,
   } from "$lib/player/video-player-load";
   import { playbackMethodBadge, resolutionBadge, type StreamMethod } from "$lib/player/media-badges";
   import {
@@ -136,6 +137,7 @@
     onPlayStarted?: () => void;
     onTimeUpdate?: (time: number) => void;
     trickplayPlaylist?: string;
+    initialTime?: number;
     subtitleTracks?: VideoSubtitleTrack[];
     audioTrackOptions?: VideoPlayerAudioTrack[];
     onAudioTrackChange?: (streamIndex: number) => void | Promise<void>;
@@ -193,6 +195,7 @@
     onPlayStarted,
     onTimeUpdate,
     trickplayPlaylist,
+    initialTime = 0,
     subtitleTracks = [],
     audioTrackOptions = [],
     onAudioTrackChange,
@@ -253,7 +256,8 @@
   let qualityMode = $state<QualityMode>("auto");
   // The name of the manually-pinned quality tier, or null for server-chosen ("Auto").
   let selectedRungName = $state<string | null>(null);
-  let currentTime = $state(0);
+  // svelte-ignore state_referenced_locally
+  let currentTime = $state(normalizeInitialPlaybackTime(initialTime, propDuration ?? 0));
   let duration = $state(0);
   let playing = $state(false);
   let buffering = $state(false);
@@ -277,12 +281,10 @@
   } | null>(null);
   let timelineTrickplayFrames = $state<TrickplayFrame[] | null>(null);
   let timelineTrickplayError = $state(false);
-
   let settingsMenuRendered = $state(false);
   let settingsMenuClosing = $state(false);
   let settingsView = $state<SettingsView>("root");
   let settingsCloseTimer: number | null = null;
-
   let internalSubtitleId = $state<string | null>(null);
   let activeTrackCues = $state<SubtitleCue[]>([]);
   let activeCueText = $state<string | null>(null);
@@ -630,7 +632,6 @@
     onActiveSubtitleTrackIdChange?.(id);
     closeMenus();
   }
-
 
   function handleAppearanceChange(next: SubtitleAppearance) {
     localAppearance = next;
@@ -1116,8 +1117,8 @@
     playbackMode = sourcePolicy.playbackMode;
     qualityMode = sourcePolicy.qualityMode;
     selectedRungName = sourcePolicy.selectedRungName;
-    currentTime = 0;
     duration = propDuration ?? 0;
+    currentTime = normalizeInitialPlaybackTime(initialTime, duration);
     bufferAhead = 0;
     playerNotice = null;
     activeQualityLabel = null;
@@ -2094,6 +2095,5 @@
       padding: 0;
       width: 2.25rem;
     }
-
   }
 </style>

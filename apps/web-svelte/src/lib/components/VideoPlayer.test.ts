@@ -110,6 +110,22 @@ describe("VideoPlayer", () => {
     );
   });
 
+  it("shows the initial playback position on the seek bar before media events arrive", () => {
+    render(VideoPlayer, {
+      props: {
+        src: "/api/videos/video-1/hls/master.m3u8",
+        defaultPlaybackMode: "hls",
+        duration: 100,
+        initialTime: 25,
+      },
+    });
+
+    expect(screen.getByTestId("video-progress-track")).toHaveStyle(
+      "--prismedia-slider-fill: 25%",
+    );
+    expect(screen.getByText("0:25 / 1:40")).toBeInTheDocument();
+  });
+
   it("auto-selects the preferred subtitle track when unlocked", async () => {
     const onActiveSubtitleTrackIdChange = vi.fn();
 

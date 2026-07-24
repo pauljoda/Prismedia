@@ -8,6 +8,7 @@ import {
   computeVideoLoadState,
   fallbackPlaybackModeForError,
   hlsStatusUrlForSrc,
+  normalizeInitialPlaybackTime,
   requestedModeFromQualityMode,
 } from "./video-player-load";
 
@@ -207,6 +208,13 @@ describe("video-player-load", () => {
     ).toBe("/api/video-stream/video-1/hls2/status?token=abc");
     expect(hlsStatusUrlForSrc("/api/video-stream/video-1/source")).toBeNull();
     expect(hlsStatusUrlForSrc("/api/videos/video-1/hls/master.m3u8")).toBeNull();
+  });
+
+  it("keeps the initial playback position within the known timeline", () => {
+    expect(normalizeInitialPlaybackTime(25, 100)).toBe(25);
+    expect(normalizeInitialPlaybackTime(125, 100)).toBe(100);
+    expect(normalizeInitialPlaybackTime(-10, 100)).toBe(0);
+    expect(normalizeInitialPlaybackTime(Number.NaN, 100)).toBe(0);
   });
 
   it("asks hls.js to load from an out-of-buffer adaptive seek instead of clamping", () => {

@@ -264,6 +264,11 @@
     if (!video) return 0;
     return durationToSeconds(getCapability(video.capabilities, "technical")?.duration ?? null) ?? 0;
   });
+  const initialPlaybackTime = $derived(
+    playbackState && !playbackState.completedAt && playbackState.resumeSeconds > 5
+      ? playbackState.resumeSeconds
+      : 0,
+  );
 
   let playbackBusy = $state(false);
 
@@ -757,6 +762,7 @@
             mediaArtist={seriesRef?.title}
             markers={playerProps.markers}
             duration={playerProps.duration || undefined}
+            initialTime={initialPlaybackTime}
             onPlayStarted={handlePlayStarted}
             onTimeUpdate={handleTimeUpdate}
             trickplayPlaylist={playerProps.trickplayPlaylist}

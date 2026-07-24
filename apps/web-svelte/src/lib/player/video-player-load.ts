@@ -247,6 +247,12 @@ export function hlsStatusUrlForSrc(src: string): string | null {
   return statusUrl === src ? null : statusUrl;
 }
 
+export function normalizeInitialPlaybackTime(time: number, duration: number): number {
+  if (!Number.isFinite(time)) return 0;
+  const safeTime = Math.max(0, time);
+  return duration > 0 ? Math.min(safeTime, duration) : safeTime;
+}
+
 export function adaptiveSeekPlan({
   streamMode,
   target,

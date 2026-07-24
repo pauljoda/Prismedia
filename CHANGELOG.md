@@ -159,6 +159,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Updated documentation, README screenshots, branding assets, install metadata, and app copy to match the current Prismedia v1 surface.
 
 ### Fixed
+- Video pages now show the saved resume position on the seek bar immediately, before the stream finishes loading.
 - On-demand monitored checks now queue immediately for only the selected Entity, continue updating its detail page while provider work runs, and cannot be blocked by a different monitored item's metadata failure. Season activity also rolls up searches and downloads from episodes underneath it, making continuously numbered provider seasons visible while they work.
 - Downloads now wait without blocklisting when their client is offline or unhealthy, recover cleanly when a client is removed from settings, and return to a fresh Wanted search when the client-side download is deleted.
 - Turning Monitor on now starts an immediate provider sweep with editable quality-profile and import-target choices, promotes provider-known missing works into visible Wanted items, and searches gaps throughout owned container trees. Provider matches also reuse oddly titled local season folders instead of creating a duplicate canonical season.
