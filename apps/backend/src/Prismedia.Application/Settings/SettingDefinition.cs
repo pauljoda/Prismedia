@@ -12,6 +12,7 @@ public enum SettingValueType {
     Decimal,
     String,
     StringList,
+    StringMap,
     WeightedTermList,
     Select,
 }
@@ -53,7 +54,8 @@ public sealed class SettingDefinition {
         IReadOnlyList<SettingOption>? options = null,
         string? inputKind = null,
         string? applyHint = null,
-        bool emptyStringUsesDefault = false) {
+        bool emptyStringUsesDefault = false,
+        IReadOnlyList<string>? allowedKeys = null) {
         Key = key;
         GroupKey = groupKey;
         GroupLabel = groupLabel;
@@ -69,6 +71,7 @@ public sealed class SettingDefinition {
         InputKind = inputKind;
         ApplyHint = applyHint;
         EmptyStringUsesDefault = emptyStringUsesDefault;
+        AllowedKeys = allowedKeys ?? [];
     }
 
     /// <summary>Stable dotted key used by API clients and persisted overrides.</summary>
@@ -116,6 +119,9 @@ public sealed class SettingDefinition {
     /// <summary>Whether an empty string should normalize to the setting default.</summary>
     public bool EmptyStringUsesDefault { get; }
 
+    /// <summary>Optional canonical keys accepted by object-valued settings.</summary>
+    public IReadOnlyList<string> AllowedKeys { get; }
+
     /// <summary>
     /// Validates a raw JSON value and returns the normalized value that should be persisted.
     /// </summary>
@@ -127,6 +133,7 @@ public sealed class SettingDefinition {
             SettingValueType.Decimal => ValidateDecimal(value),
             SettingValueType.String => ValidateString(value),
             SettingValueType.StringList => ValidateStringList(value),
+            SettingValueType.StringMap => ValidateStringMap(value),
             SettingValueType.WeightedTermList => ValidateWeightedTermList(value),
             SettingValueType.Select => ValidateSelect(value),
             _ => SettingValidationResult.Invalid($"Unsupported setting type '{Type}'.")
@@ -231,6 +238,42 @@ public sealed class SettingDefinition {
         return SettingValidationResult.Valid(JsonSerializer.SerializeToElement(items));
     }
 
+    private SettingValidationResult ValidateStringMap(JsonElement value) {
+        if (value.ValueKind != JsonValueKind.Object) {
+            return SettingValidationResult.Invalid($"{Key} must be an object with string values.");
+        }
+
+        var normalized = new SortedDictionary<string, string>(StringComparer.Ordinal);
+        foreach (var property in value.EnumerateObject()) {
+            var canonicalKey = AllowedKeys.FirstOrDefault(allowed =>
+                allowed.Equals(property.Name.Trim(), StringComparison.OrdinalIgnoreCase));
+            if (AllowedKeys.Count > 0 && canonicalKey is null) {
+                return SettingValidationResult.Invalid($"{Key} contains unknown key '{property.Name}'.");
+            }
+
+            canonicalKey ??= property.Name.Trim();
+            if (string.IsNullOrWhiteSpace(canonicalKey) ||
+                property.Value.ValueKind != JsonValueKind.String ||
+                string.IsNullOrWhiteSpace(property.Value.GetString())) {
+                return SettingValidationResult.Invalid($"{Key} must contain non-empty string keys and values.");
+            }
+
+            if (!normalized.TryAdd(canonicalKey, property.Value.GetString()!.Trim())) {
+                return SettingValidationResult.Invalid($"{Key} cannot contain duplicate key '{canonicalKey}'.");
+            }
+        }
+
+        if (Constraints?.MinItems is { } minItems && normalized.Count < minItems) {
+            return SettingValidationResult.Invalid($"{Key} must include at least {minItems} item.");
+        }
+
+        if (Constraints?.MaxItems is { } maxItems && normalized.Count > maxItems) {
+            return SettingValidationResult.Invalid($"{Key} must include no more than {maxItems} items.");
+        }
+
+        return SettingValidationResult.Valid(JsonSerializer.SerializeToElement(normalized));
+    }
+
     private SettingValidationResult ValidateWeightedTermList(JsonElement value) {
         if (value.ValueKind == JsonValueKind.String) {
             var legacyTerms = (value.GetString() ?? string.Empty)
@@ -328,6 +371,7 @@ public sealed class SettingDefinition {
             SettingValueType.Decimal => "decimal",
             SettingValueType.String => "string",
             SettingValueType.StringList => "stringList",
+            SettingValueType.StringMap => "stringMap",
             SettingValueType.WeightedTermList => "weightedTermList",
             SettingValueType.Select => "select",
             _ => "unknown"

@@ -602,9 +602,9 @@ public sealed class IdentifyQueueService : IIdentifyQueueService {
 
     /// <summary>
     /// Resolves which providers a search walks: the explicitly requested one, or every installed,
-    /// enabled, credentialed provider capable of the entity's kind, in catalog order. Mirrors the
-    /// review screen's provider filter; the auto-identify settings gate deliberately does not apply
-    /// to user-requested searches.
+    /// enabled, credentialed provider capable of the entity's kind, with the configured per-kind
+    /// default first when it is usable. Mirrors the review screen's provider filter; the
+    /// auto-identify settings gate deliberately does not apply to user-requested searches.
     /// </summary>
     private async Task<IReadOnlyList<string>> ResolveSearchProvidersAsync(
         string? requestedProvider,

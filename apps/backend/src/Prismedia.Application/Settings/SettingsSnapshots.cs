@@ -35,6 +35,13 @@ public sealed record ProperDownloadSettings(Prismedia.Domain.Entities.ProperDown
 public sealed record PreferredDownloadProtocolSettings(Prismedia.Domain.Entities.DownloadProtocol Protocol);
 
 /// <summary>
+/// User-configured metadata provider defaults keyed by canonical EntityKind code.
+/// Provider availability is evaluated at lookup time so stale ids remain safe.
+/// </summary>
+/// <param name="DefaultProviders">Configured provider id for each explicitly customized EntityKind.</param>
+public sealed record IdentifyProviderSettings(IReadOnlyDictionary<string, string> DefaultProviders);
+
+/// <summary>
 /// Auto-identify settings that drive plugin-based identification during library scans.
 /// </summary>
 /// <param name="Enabled">Whether scanned media is auto-identified through enabled plugins.</param>

@@ -1,5 +1,6 @@
 import { IDENTIFY_ACTION, type RequestMediaKindCode } from "$lib/api/generated/codes";
 import type { PluginEntitySupport, PluginProvider } from "$lib/api/identify-types";
+import { orderProvidersWithDefault } from "$lib/identify/provider-selection";
 import { requestKindInfo } from "$lib/requests/request-helpers";
 
 /** Returns the usable schema-bearing support declaration for a plugin in Discover. */
@@ -32,8 +33,10 @@ export function discoverSearchProviders(
   providers: PluginProvider[],
   kind: RequestMediaKindCode,
   hideNsfw: boolean,
+  defaultProviderId?: string | null,
 ): PluginProvider[] {
-  return providers
-    .filter((provider) => discoverSearchSupport(provider, kind, hideNsfw))
-    .toSorted((left, right) => left.name.localeCompare(right.name));
+  return orderProvidersWithDefault(
+    providers.filter((provider) => discoverSearchSupport(provider, kind, hideNsfw)),
+    defaultProviderId,
+  );
 }

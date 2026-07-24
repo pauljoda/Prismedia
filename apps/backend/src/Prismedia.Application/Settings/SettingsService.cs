@@ -228,6 +228,16 @@ public sealed partial class SettingsService {
     }
 
     /// <summary>
+    /// Returns configured metadata-provider defaults keyed by canonical EntityKind code.
+    /// Stored provider ids are intentionally not resolved here; provider discovery decides whether
+    /// each id is currently installed, enabled, authenticated, and compatible.
+    /// </summary>
+    public async Task<IdentifyProviderSettings> GetIdentifyProviderSettingsAsync(CancellationToken cancellationToken) {
+        var values = await GetValueMapAsync([AppSettingKeys.IdentifyDefaultProviders], cancellationToken);
+        return new IdentifyProviderSettings(GetStringMap(values, AppSettingKeys.IdentifyDefaultProviders));
+    }
+
+    /// <summary>
     /// Returns auto-identify settings used to drive plugin identification during scans.
     /// The stored confidence threshold is a 0–100 percentage and is returned here as a 0–1 fraction.
     /// </summary>
@@ -458,6 +468,15 @@ public sealed partial class SettingsService {
             .Select(item => item.GetString() ?? string.Empty)
             .Where(item => !string.IsNullOrWhiteSpace(item))
             .ToArray();
+
+    private static IReadOnlyDictionary<string, string> GetStringMap(
+        IReadOnlyDictionary<string, JsonElement> values,
+        string key) =>
+        values[key].EnumerateObject()
+            .ToDictionary(
+                property => property.Name,
+                property => property.Value.GetString() ?? string.Empty,
+                StringComparer.OrdinalIgnoreCase);
 
     private static IReadOnlyList<SubtitlePreferenceTerm> GetWeightedTerms(
         IReadOnlyDictionary<string, JsonElement> values,

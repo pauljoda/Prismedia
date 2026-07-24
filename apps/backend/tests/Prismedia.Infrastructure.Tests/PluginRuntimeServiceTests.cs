@@ -1394,7 +1394,9 @@ public sealed class PluginRuntimeServiceTests : IDisposable {
             new IdentifyMatchHintResolver(db),
             new IdentifyRunnerSelector([new DotnetPluginProcessRunner(executor, new PluginCatalogOptions([], _tempRoot, "1.0.0"))]),
             new EntityMetadataApplyService(db, new PluginArtworkServiceOptions(_tempRoot)),
-            new AlwaysEligibleIdentifyTargetEligibilityService());
+            new AlwaysEligibleIdentifyTargetEligibilityService(),
+            new Prismedia.Application.Settings.SettingsService(
+                new Prismedia.Infrastructure.Settings.EfSettingsPersistence(db)));
 
     private sealed class AlwaysEligibleIdentifyTargetEligibilityService : IIdentifyTargetEligibilityService {
         public Task<IdentifyTargetEligibility> EvaluateAsync(Guid entityId, CancellationToken cancellationToken) =>

@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Prismedia.Application.Plugins;
+using Prismedia.Application.Settings;
 using Prismedia.Contracts.Plugins;
 using Prismedia.Domain.Entities;
 using Prismedia.Infrastructure.Persistence;
@@ -17,6 +18,7 @@ public sealed partial class IdentifyPluginService : IIdentifyProviderService {
     private readonly IdentifyRunnerSelector _runners;
     private readonly EntityMetadataApplyService _apply;
     private readonly IIdentifyTargetEligibilityService _eligibility;
+    private readonly SettingsService _settings;
 
     public IdentifyPluginService(
         PrismediaDbContext db,
@@ -24,13 +26,15 @@ public sealed partial class IdentifyPluginService : IIdentifyProviderService {
         IdentifyMatchHintResolver hints,
         IdentifyRunnerSelector runners,
         EntityMetadataApplyService apply,
-        IIdentifyTargetEligibilityService eligibility) {
+        IIdentifyTargetEligibilityService eligibility,
+        SettingsService settings) {
         _db = db;
         _catalog = catalog;
         _hints = hints;
         _runners = runners;
         _apply = apply;
         _eligibility = eligibility;
+        _settings = settings;
     }
 
     /// <summary>
@@ -38,10 +42,12 @@ public sealed partial class IdentifyPluginService : IIdentifyProviderService {
     /// </summary>
     public async Task<IReadOnlyList<PluginProvider>> ListProvidersAsync(string? entityKind, CancellationToken cancellationToken) {
         var providers = await _catalog.ListInstalledProvidersAsync(cancellationToken);
-        return providers
+        var compatible = providers
             .Where(provider => entityKind is null || provider.Supports.Any(support =>
                 PluginEntityKindCompatibility.SupportsKind(support, entityKind)))
             .ToArray();
+        var settings = await _settings.GetIdentifyProviderSettingsAsync(cancellationToken);
+        return IdentifyProviderDefaultPolicy.Order(compatible, entityKind, settings);
     }
 
     /// <summary>

@@ -5,6 +5,7 @@ import type { EntityCard, EntityDetailCard } from "$lib/api/entities";
 import { MAIN_SCROLL_TOP_EVENT } from "$lib/stores/main-scroll";
 
 const fetchPluginProviders = vi.fn();
+const fetchSettingsValues = vi.fn();
 const fetchIdentifyQueue = vi.fn();
 const fetchIdentifyEntity = vi.fn();
 const fetchIdentifyQueueItem = vi.fn();
@@ -23,6 +24,14 @@ vi.mock("$lib/api/plugins", async (importOriginal) => {
   return {
     ...actual,
     fetchPluginProviders: (...args: unknown[]) => fetchPluginProviders(...args),
+  };
+});
+
+vi.mock("$lib/api/settings", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("$lib/api/settings")>();
+  return {
+    ...actual,
+    fetchSettingsValues: (...args: unknown[]) => fetchSettingsValues(...args),
   };
 });
 
@@ -48,6 +57,7 @@ vi.mock("$lib/api/identify-client", async (importOriginal) => {
 describe("IdentifyStore", () => {
   beforeEach(() => {
     fetchPluginProviders.mockReset();
+    fetchSettingsValues.mockReset();
     fetchIdentifyQueue.mockReset();
     fetchIdentifyEntity.mockReset();
     fetchIdentifyQueueItem.mockReset();
@@ -58,6 +68,7 @@ describe("IdentifyStore", () => {
     deleteIdentifyQueueItem.mockReset();
     fetchIdentifyApplyProgress.mockReset();
     fetchPluginProviders.mockResolvedValue([]);
+    fetchSettingsValues.mockResolvedValue({ values: { "identify.defaultProviders": {} } });
     fetchIdentifyQueue.mockResolvedValue([]);
     fetchIdentifyEntity.mockResolvedValue(null);
     fetchIdentifyQueueItem.mockResolvedValue(queueItem("video-1"));
@@ -237,6 +248,21 @@ describe("IdentifyStore", () => {
     expect(store.isItemBusy("video-1")).toBe(true);
     expect(store.isItemBusy("video-2")).toBe(true);
     expect(store.isItemBusy("video-3")).toBe(false);
+  });
+
+  it("orders a valid configured provider first and safely ignores a stale default", () => {
+    const store = new IdentifyStore();
+    store.providers = [
+      provider("alpha", "Alpha"),
+      provider("zulu", "Zulu"),
+    ];
+    store.defaultProviders = { video: "zulu" };
+
+    expect(store.providersForKind("video").map((item) => item.id)).toEqual(["zulu", "alpha"]);
+
+    store.defaultProviders = { video: "removed-provider" };
+
+    expect(store.providersForKind("video").map((item) => item.id)).toEqual(["alpha", "zulu"]);
   });
 
   it("opens an existing queued item without enqueueing or searching again", async () => {

@@ -13,6 +13,7 @@ public static class AppSettingsRegistry {
     private const string Collections = "collections";
     private const string Monitoring = "monitoring";
     private const string Taxonomy = "taxonomy";
+    private const string Identify = "identify";
     private const string AutoIdentify = "autoIdentify";
     private const string Generation = "generation";
     private const string Jobs = "jobs";
@@ -180,6 +181,18 @@ public static class AppSettingsRegistry {
                 "When on, tags that nothing references are deleted during each library scan, keeping the tag list free of stale leftovers. A tag you create but have not applied to anything yet counts as orphaned and will be removed on the next scan.",
                 false,
                 10),
+
+            StringMap(
+                AppSettingKeys.IdentifyDefaultProviders,
+                Identify,
+                "Identify",
+                "Choose the metadata provider each Entity kind starts with in Identify and Request.",
+                24,
+                "Default metadata providers",
+                "Maps canonical EntityKind codes to provider ids. A missing or unavailable provider falls back to the first compatible enabled provider.",
+                new Dictionary<string, string>(),
+                10,
+                EntityKindRegistry.All.Select(descriptor => descriptor.Code).ToArray()),
 
             Boolean(
                 AppSettingKeys.AutoIdentifyEnabled,
@@ -717,6 +730,31 @@ public static class AppSettingsRegistry {
             SettingValueType.StringList,
             JsonSerializer.SerializeToElement(defaultValue),
             order);
+
+    private static SettingDefinition StringMap(
+        string key,
+        string groupKey,
+        string groupLabel,
+        string groupDescription,
+        int groupOrder,
+        string label,
+        string description,
+        IReadOnlyDictionary<string, string> defaultValue,
+        int order,
+        IReadOnlyList<string> allowedKeys) =>
+        new(
+            key,
+            groupKey,
+            groupLabel,
+            groupDescription,
+            groupOrder,
+            label,
+            description,
+            SettingValueType.StringMap,
+            JsonSerializer.SerializeToElement(defaultValue),
+            order,
+            new SettingConstraints(MinItems: 0, MaxItems: allowedKeys.Count),
+            allowedKeys: allowedKeys);
 
     private static SettingDefinition WeightedTermList(
         string key,

@@ -28,7 +28,13 @@ import { requestInit, unwrapGenerated, type RequestOptions } from "$lib/api/gene
 import { fetchApi } from "$lib/api/orval-fetch";
 import type { SubtitlePreferenceTerm } from "$lib/player/subtitle-types";
 
-export type SettingValue = boolean | number | string | string[] | SubtitlePreferenceTerm[];
+export type SettingValue =
+  | boolean
+  | number
+  | string
+  | string[]
+  | Record<string, string>
+  | SubtitlePreferenceTerm[];
 
 export interface SettingConstraints {
   min?: number | null;
@@ -67,6 +73,7 @@ export interface LibrarySettings {
   visibilityDefaultMode: "off" | "show";
   autoScanEnabled: boolean;
   scanIntervalMinutes: number;
+  identifyDefaultProviders: Record<string, string>;
   autoIdentifyEnabled: boolean;
   autoIdentifyProviders: string[];
   autoIdentifyEntityKinds: string[];
@@ -390,8 +397,19 @@ function normalizeSettingValue(value: unknown): SettingValue {
   if (typeof value === "boolean" || typeof value === "number" || typeof value === "string") {
     return value;
   }
+  if (isStringMap(value)) {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, providerId]) => [key, providerId.trim()]),
+    );
+  }
   if (value == null) return "";
   return String(value);
+}
+
+function isStringMap(value: unknown): value is Record<string, string> {
+  return typeof value === "object"
+    && value !== null
+    && Object.values(value).every((item) => typeof item === "string");
 }
 
 function isSubtitlePreferenceTerm(

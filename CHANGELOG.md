@@ -105,6 +105,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Monitored series, seasons, and other containers now offer "Search missing content" on their Acquisition tab: one click sweeps the whole item at any depth — including episode gaps hiding inside partially-downloaded seasons — and starts a monitored search for every gap, reporting how many it covered. The existing "Search N missing" action remains when gaps are already visible.
 
 ### Changed
+- Identify and Request can now start with a different preferred metadata provider for every Entity kind, while safely falling back to the first compatible enabled provider when a saved choice is unavailable.
 - Acquisition tabs now begin with a compact Monitor toggle and reveal search, activity, child monitoring, and other acquisition controls only while monitoring is enabled.
 - Automatic subtitle selection now uses a case-insensitive weighted term list: every matching language or label term contributes to a track's score, making preferences such as English + Forced additive while preserving compatibility with existing language lists.
 - Detail-page provider chips now show only the provider name, keeping long opaque IDs out of the layout while preserving the full linked identity as accessible context.

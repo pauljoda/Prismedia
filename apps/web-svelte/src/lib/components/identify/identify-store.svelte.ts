@@ -14,6 +14,7 @@ import {
   startBulkIdentify,
 } from "$lib/api/identify-client";
 import { fetchPluginProviders } from "$lib/api/plugins";
+import { fetchSettingsValues } from "$lib/api/settings";
 import { IDENTIFY_APPLY_STATE, IDENTIFY_QUEUE_STATE } from "$lib/api/generated/codes";
 import type {
   EntityMetadataProposal,
@@ -33,6 +34,8 @@ import {
   defaultFieldSelectionForReview,
   defaultImageSelectionForReview,
 } from "$lib/components/identify-review";
+import { selectIdentifyProviders } from "$lib/identify/provider-selection";
+import { settingKeys, valueAsStringMap } from "$lib/settings/app-settings";
 
 /**
  * Status of one local structural child in the review grid, derived from the streamed proposal and
@@ -111,6 +114,7 @@ export class IdentifyStore {
 
   view = $state<IdentifyView>({ kind: "dashboard" });
   providers = $state<PluginProvider[]>([]);
+  defaultProviders = $state<Record<string, string>>({});
   queue = $state<IdentifyQueueItem[]>([]);
   loading = $state(true);
   error = $state<string | null>(null);
@@ -198,14 +202,11 @@ export class IdentifyStore {
   providersForKind(kind: string): PluginProvider[] {
     // Hide NSFW providers (including every Stash scraper) while browsing in SFW mode so they are
     // never offered as identify sources.
-    const hideNsfw = this.#getHideNsfw();
-    return this.providers.filter(
-      (provider) =>
-        provider.installed &&
-        provider.enabled &&
-        provider.missingAuthKeys.length === 0 &&
-        (!hideNsfw || !provider.isNsfw) &&
-        provider.supports.some((support) => support.entityKind === kind),
+    return selectIdentifyProviders(
+      this.providers,
+      kind,
+      this.defaultProviders[kind],
+      this.#getHideNsfw(),
     );
   }
 
@@ -213,11 +214,15 @@ export class IdentifyStore {
     this.loading = true;
     this.error = null;
     try {
-      const [providers, queue] = await Promise.all([
+      const [providers, queue, settings] = await Promise.all([
         fetchPluginProviders(),
         fetchIdentifyQueue(false, this.#getHideNsfw()),
+        fetchSettingsValues([settingKeys.identifyDefaultProviders]),
       ]);
       this.providers = providers;
+      this.defaultProviders = valueAsStringMap(
+        settings.values[settingKeys.identifyDefaultProviders],
+      );
       this.queue = queue.map((item) => queueItemFromApi(item));
       this.#queueHideNsfw = this.#getHideNsfw();
       this.ensureQueuePolling();
@@ -251,14 +256,18 @@ export class IdentifyStore {
     try {
       // Opening an item never starts a search; it renders whatever state the server holds.
       // Searches are requested explicitly (identify button, candidate pick, manual query).
-      const [providers, item, detail] = await Promise.all([
+      const [providers, item, detail, settings] = await Promise.all([
         fetchPluginProviders(),
         fetchIdentifyQueueItem(entityId).catch(async () => addIdentifyQueueItem(entityId)),
         fetchEntityDetail(entityId),
+        fetchSettingsValues([settingKeys.identifyDefaultProviders]),
       ]);
       const hideNsfw = this.#getHideNsfw();
       const queue = await fetchIdentifyQueue(false, hideNsfw);
       this.providers = providers;
+      this.defaultProviders = valueAsStringMap(
+        settings.values[settingKeys.identifyDefaultProviders],
+      );
       this.queue = queue.map((queued) => queueItemFromApi(queued));
       this.#queueHideNsfw = hideNsfw;
       if (hideNsfw && item.isNsfw) {

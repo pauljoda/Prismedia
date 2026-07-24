@@ -20,6 +20,7 @@ export const defaultLibrarySettings: LibrarySettings = {
   visibilityDefaultMode: "off",
   autoScanEnabled: false,
   scanIntervalMinutes: 60,
+  identifyDefaultProviders: {},
   autoIdentifyEnabled: false,
   autoIdentifyProviders: [],
   autoIdentifyEntityKinds: [ENTITY_KIND.video, ENTITY_KIND.gallery, ENTITY_KIND.image, ENTITY_KIND.audio, ENTITY_KIND.book],
@@ -126,6 +127,22 @@ export function valueAsStringList(value: SettingValue | undefined, fallback: str
   return fallback;
 }
 
+export function valueAsStringMap(
+  value: SettingValue | undefined,
+  fallback: Record<string, string> = {},
+): Record<string, string> {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return { ...fallback };
+  }
+
+  return Object.fromEntries(
+    Object.entries(value)
+      .filter((entry): entry is [string, string] => typeof entry[1] === "string")
+      .map(([key, providerId]) => [key.trim(), providerId.trim()])
+      .filter(([key, providerId]) => Boolean(key) && Boolean(providerId)),
+  );
+}
+
 export function valueAsSubtitlePreferenceTerms(
   value: SettingValue | undefined,
   fallback: SubtitlePreferenceTerm[] = defaultSubtitlePreferenceTerms,
@@ -195,6 +212,10 @@ export function valuesToLibrarySettings(
     scanIntervalMinutes: valueAsNumber(
       values[settingKeys.scanIntervalMinutes],
       fallback.scanIntervalMinutes,
+    ),
+    identifyDefaultProviders: valueAsStringMap(
+      values[settingKeys.identifyDefaultProviders],
+      fallback.identifyDefaultProviders,
     ),
     autoIdentifyEnabled: valueAsBoolean(
       values[settingKeys.autoIdentifyEnabled],

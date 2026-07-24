@@ -6,6 +6,10 @@ describe("settings API", () => {
     const fetchMock = mockFetch({
       values: {
         "scan.intervalMinutes": "30",
+        "identify.defaultProviders": {
+          movie: "tmdb",
+          book: "openlibrary",
+        },
         "subtitles.preferredLanguages": [
           { term: "Forced", weight: "80" },
           { term: "English", weight: 55 },
@@ -21,6 +25,10 @@ describe("settings API", () => {
     );
     expect(response.values).toEqual({
       "scan.intervalMinutes": "30",
+      "identify.defaultProviders": {
+        movie: "tmdb",
+        book: "openlibrary",
+      },
       "subtitles.preferredLanguages": [
         { term: "Forced", weight: 80 },
         { term: "English", weight: 55 },

@@ -12,11 +12,16 @@ import type { PluginProvider } from "$lib/api/identify-types";
 import RequestDiscoverHarness from "./RequestDiscover.test-harness.svelte";
 
 const fetchPluginProviders = vi.fn();
+const fetchSettingsValues = vi.fn();
 const searchRequestsByPlugin = vi.fn();
 const goto = vi.fn();
 
 vi.mock("$lib/api/plugins", () => ({
   fetchPluginProviders: (...args: unknown[]) => fetchPluginProviders(...args),
+}));
+
+vi.mock("$lib/api/settings", () => ({
+  fetchSettingsValues: (...args: unknown[]) => fetchSettingsValues(...args),
 }));
 
 vi.mock("$lib/api/requests", () => ({
@@ -31,9 +36,11 @@ vi.mock("$app/navigation", () => ({
 describe("RequestDiscover", () => {
   beforeEach(() => {
     fetchPluginProviders.mockReset();
+    fetchSettingsValues.mockReset();
     searchRequestsByPlugin.mockReset();
     goto.mockReset();
     fetchPluginProviders.mockResolvedValue([tmdb(), tvdb(), openLibrary()]);
+    fetchSettingsValues.mockResolvedValue({ values: { "identify.defaultProviders": {} } });
     searchRequestsByPlugin.mockResolvedValue({ results: [], providerErrors: [] });
   });
 
@@ -59,6 +66,24 @@ describe("RequestDiscover", () => {
     expect(await screen.findByLabelText("Show name")).toBeInTheDocument();
     expect(screen.getByLabelText("Episode title")).toBeInTheDocument();
     expect(screen.queryByLabelText("Series title")).not.toBeInTheDocument();
+  });
+
+  it("starts Request discovery with the configured provider for the selected EntityKind", async () => {
+    fetchSettingsValues.mockResolvedValue({
+      values: {
+        "identify.defaultProviders": {
+          [ENTITY_KIND.videoSeries]: "tv-database",
+        },
+      },
+    });
+    render(RequestDiscoverHarness);
+    await waitFor(() => expect(fetchPluginProviders).toHaveBeenCalledOnce());
+
+    await fireEvent.click(screen.getByRole("button", { name: "Series" }));
+
+    expect(await screen.findByRole("button", { name: "Source: Beta TV Database" }))
+      .toBeInTheDocument();
+    expect(await screen.findByLabelText("Show name")).toBeInTheDocument();
   });
 
   it("submits exactly the selected plugin's trimmed schema fields with the NSFW boundary", async () => {

@@ -60,6 +60,33 @@ public sealed class SettingsEndpointServiceTests {
     }
 
     [Fact]
+    public async Task SettingsValuesExposeTypedPerKindIdentifyProviderDefaults() {
+        using var factory = CreateFactory();
+        using var client = factory.CreateAuthenticatedClient();
+        var configured = new Dictionary<string, string> {
+            [Prismedia.Domain.Entities.EntityKindRegistry.Movie.Code] = "tmdb",
+            [Prismedia.Domain.Entities.EntityKindRegistry.Book.Code] = "openlibrary",
+        };
+
+        var update = await client.PatchAsJsonAsync(
+            $"/api/settings/{AppSettingKeys.IdentifyDefaultProviders}",
+            new SettingUpdateRequest(JsonSerializer.SerializeToElement(configured)));
+        var descriptor = await update.Content.ReadFromJsonAsync<SettingDescriptor>();
+        var values = await client.GetFromJsonAsync<SettingsValuesResponse>(
+            $"/api/settings/values?keys={Uri.EscapeDataString(AppSettingKeys.IdentifyDefaultProviders)}");
+
+        Assert.True(update.IsSuccessStatusCode);
+        Assert.NotNull(descriptor);
+        Assert.Equal("stringMap", descriptor.Type);
+        Assert.Equal(configured, descriptor.Value.Deserialize<Dictionary<string, string>>());
+        Assert.Empty(descriptor.DefaultValue.EnumerateObject());
+        Assert.NotNull(values);
+        var defaults = values.Values[AppSettingKeys.IdentifyDefaultProviders]
+            .Deserialize<Dictionary<string, string>>();
+        Assert.Equal(configured, defaults);
+    }
+
+    [Fact]
     public async Task SettingsEndpointsReturnProblemDetailsForUnknownAndInvalidKeys() {
         using var factory = CreateFactory();
         using var client = factory.CreateAuthenticatedClient();

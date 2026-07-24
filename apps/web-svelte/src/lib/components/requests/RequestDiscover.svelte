@@ -5,6 +5,7 @@
   import { goto } from "$app/navigation";
   import { resolve } from "$app/paths";
   import { ENTITY_KIND, type RequestMediaKindCode } from "$lib/api/generated/codes";
+  import { fetchSettingsValues } from "$lib/api/settings";
   import type { ExternalIdentity, RequestSearchResult } from "$lib/api/generated/model";
   import type { EntitySearchCandidate, PluginProvider } from "$lib/api/identify-types";
   import { fetchPluginProviders } from "$lib/api/plugins";
@@ -23,6 +24,7 @@
   import { useNsfw } from "$lib/nsfw/store.svelte";
   import { discoverSearchProviders, discoverSearchSupport } from "$lib/requests/discovery-plugins";
   import { DISCOVERABLE_REQUEST_KINDS, numericValue } from "$lib/requests/request-helpers";
+  import { settingKeys, valueAsStringMap } from "$lib/settings/app-settings";
 
   interface Props {
     /** Search-page query state to restore when the review page's Back action is used. */
@@ -44,6 +46,7 @@
   const nsfw = useNsfw();
 
   let providers = $state.raw<PluginProvider[]>([]);
+  let defaultProviders = $state<Record<string, string>>({});
   let providersLoading = $state(true);
   let providersError = $state<string | null>(null);
   let selectedKind = $state<RequestMediaKindCode | null>(null);
@@ -62,8 +65,15 @@
   const selectedKindInfo = $derived(
     DISCOVERABLE_REQUEST_KINDS.find((kind) => kind.kind === selectedKind) ?? null,
   );
+  const defaultProviderId = $derived(
+    selectedKindInfo
+      ? defaultProviders[selectedKindInfo.pluginEntityKind]
+      : null,
+  );
   const eligibleProviders = $derived(
-    selectedKind ? discoverSearchProviders(providers, selectedKind, hideNsfw) : [],
+    selectedKind
+      ? discoverSearchProviders(providers, selectedKind, hideNsfw, defaultProviderId)
+      : [],
   );
   const activeProvider = $derived(
     eligibleProviders.find((provider) => provider.id === selectedProviderId) ?? eligibleProviders[0] ?? null,
@@ -94,10 +104,16 @@
   onMount(() => {
     let mounted = true;
 
-    void fetchPluginProviders()
-      .then((loadedProviders) => {
+    void Promise.all([
+      fetchPluginProviders(),
+      fetchSettingsValues([settingKeys.identifyDefaultProviders]),
+    ])
+      .then(([loadedProviders, settings]) => {
         if (!mounted) return;
         providers = loadedProviders;
+        defaultProviders = valueAsStringMap(
+          settings.values[settingKeys.identifyDefaultProviders],
+        );
       })
       .catch((error: unknown) => {
         if (!mounted) return;
@@ -133,7 +149,15 @@
       return;
     }
 
-    const nextProvider = discoverSearchProviders(providers, kind, nextHideNsfw)[0] ?? null;
+    const preferredProviderId = defaultProviders[
+      DISCOVERABLE_REQUEST_KINDS.find((candidate) => candidate.kind === kind)?.pluginEntityKind ?? ""
+    ];
+    const nextProvider = discoverSearchProviders(
+      providers,
+      kind,
+      nextHideNsfw,
+      preferredProviderId,
+    )[0] ?? null;
     selectedProviderId = nextProvider?.id ?? "";
     const fields = nextProvider
       ? discoverSearchSupport(nextProvider, kind, nextHideNsfw)?.search?.fields ?? []
@@ -177,7 +201,14 @@
 
   function chooseKind(kind: RequestMediaKindCode) {
     selectedKind = kind;
-    const nextProviders = discoverSearchProviders(providers, kind, hideNsfw);
+    const pluginEntityKind = DISCOVERABLE_REQUEST_KINDS
+      .find((candidate) => candidate.kind === kind)?.pluginEntityKind;
+    const nextProviders = discoverSearchProviders(
+      providers,
+      kind,
+      hideNsfw,
+      pluginEntityKind ? defaultProviders[pluginEntityKind] : null,
+    );
     const nextProvider = nextProviders[0] ?? null;
     selectedProviderId = nextProvider?.id ?? "";
     const fields = nextProvider

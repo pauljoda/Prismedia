@@ -8,13 +8,28 @@
     Search,
     Sparkles,
   } from "@lucide/svelte";
-  import { Badge, Checkbox, Panel, TextInput, Toggle, cn } from "@prismedia/ui-svelte";
+  import {
+    Badge,
+    Checkbox,
+    Panel,
+    Select,
+    TextInput,
+    Toggle,
+    cn,
+    type SelectOption,
+  } from "@prismedia/ui-svelte";
+  import { ENTITY_KIND_LABELS } from "$lib/api/generated/codes";
+  import {
+    providerCanIdentifyKind,
+    providerIdsEqual,
+  } from "$lib/identify/provider-selection";
   import SettingsControl from "$lib/components/settings/SettingsControl.svelte";
   import {
     findSetting,
     settingKeys,
     valueAsBoolean,
     valueAsStringList,
+    valueAsStringMap,
   } from "$lib/settings/app-settings";
   import type {
     SettingsCatalogResponse,
@@ -46,6 +61,9 @@
   let search = $state("");
 
   const enabledSetting = $derived(findSetting(catalog, settingKeys.autoIdentifyEnabled));
+  const defaultProvidersSetting = $derived(
+    findSetting(catalog, settingKeys.identifyDefaultProviders),
+  );
   const confidenceSetting = $derived(findSetting(catalog, settingKeys.autoIdentifyConfidenceThreshold));
   const unorganizedSetting = $derived(findSetting(catalog, settingKeys.autoIdentifyUnorganizedOnly));
 
@@ -56,11 +74,25 @@
   const selectedKinds = $derived(
     valueAsStringList(findSetting(catalog, settingKeys.autoIdentifyEntityKinds)?.value),
   );
+  const configuredDefaultProviders = $derived(
+    valueAsStringMap(defaultProvidersSetting?.value),
+  );
 
   // Only installed and enabled providers are eligible for auto identify. NSFW providers (including
   // every Stash scraper) stay hidden in SFW mode so they never surface in the settings list.
   const installed = $derived(
     filterNsfwAware(providers.filter((p) => p.installed && p.enabled)),
+  );
+  const usableDefaultProviders = $derived(
+    installed.filter((provider) => provider.missingAuthKeys.length === 0),
+  );
+  const configurableDefaultKinds = $derived(
+    Object.entries(ENTITY_KIND_LABELS)
+      .filter(([kind]) =>
+        Boolean(configuredDefaultProviders[kind]) ||
+        usableDefaultProviders.some((provider) => providerCanIdentifyKind(provider, kind)),
+      )
+      .sort((left, right) => left[1].localeCompare(right[1])),
   );
   const hasPlugins = $derived(installed.length > 0);
   const masterToggleDisabled = $derived(!hasPlugins && !enabled);
@@ -134,6 +166,49 @@
       .map((support) => support.entityKind)
       .filter((kind, i, arr) => arr.indexOf(kind) === i);
   }
+
+  function defaultProviderOptions(kind: string): SelectOption[] {
+    const configuredProviderId = configuredDefaultProviders[kind];
+    const compatible = usableDefaultProviders
+      .filter((provider) => providerCanIdentifyKind(provider, kind))
+      .toSorted((left, right) => left.name.localeCompare(right.name));
+    const options: SelectOption[] = [
+      { value: "", label: "Automatic (alphabetical)" },
+      ...compatible.map((provider) => ({ value: provider.id, label: provider.name })),
+    ];
+    if (
+      configuredProviderId &&
+      !compatible.some((provider) => providerIdsEqual(provider.id, configuredProviderId))
+    ) {
+      options.push({
+        value: configuredProviderId,
+        label: `${configuredProviderId} (unavailable)`,
+        disabled: true,
+      });
+    }
+    return options;
+  }
+
+  function selectedDefaultProviderId(kind: string): string {
+    const configuredProviderId = configuredDefaultProviders[kind];
+    if (!configuredProviderId) return "";
+    return usableDefaultProviders
+      .find((provider) =>
+        providerCanIdentifyKind(provider, kind) &&
+        providerIdsEqual(provider.id, configuredProviderId),
+      )?.id ?? configuredProviderId;
+  }
+
+  function setDefaultProvider(kind: string, providerId: string) {
+    const next = { ...configuredDefaultProviders };
+    if (providerId) {
+      next[kind] = providerId;
+    } else {
+      delete next[kind];
+    }
+    onCommit(settingKeys.identifyDefaultProviders, next);
+  }
+
 </script>
 
 <Panel>
@@ -141,11 +216,48 @@
     <div class="flex items-center gap-2.5">
       <Sparkles class="h-4 w-4 text-text-accent" />
       <div>
-        <h2 class="text-kicker text-text-primary">Auto Identify</h2>
+        <h2 class="text-kicker text-text-primary">Metadata Identify</h2>
         <p class="text-[0.68rem] text-text-muted">
-          Let trusted plugins identify and fill new media automatically during scans
+          Choose provider defaults and control automatic matching during scans
         </p>
       </div>
+    </div>
+
+    <div class="space-y-2.5">
+      <div>
+        <div class="text-label text-text-muted">Default metadata providers</div>
+        <p class="mt-1 text-[0.68rem] leading-relaxed text-text-muted">
+          Choose the provider that Identify and Request open with for each supported kind.
+          Unavailable choices fall back to the first compatible provider.
+        </p>
+      </div>
+
+      {#if loadingProviders}
+        <p class="text-[0.7rem] text-text-muted">Loading provider defaults…</p>
+      {:else if providerError}
+        <p class="text-[0.7rem] text-status-error-text">{providerError}</p>
+      {:else if configurableDefaultKinds.length === 0}
+        <p class="surface-well px-3 py-2.5 text-[0.7rem] text-text-muted">
+          Install and enable a metadata provider to configure per-kind defaults.
+        </p>
+      {:else}
+        <div class="surface-well divide-y divide-border-subtle">
+          {#each configurableDefaultKinds as [kind, label] (kind)}
+            <div class="flex flex-wrap items-center justify-between gap-3 px-3 py-2.5">
+              <span class="text-[0.76rem] font-medium text-text-secondary">{label}</span>
+              <div class="w-full sm:w-64">
+                <Select
+                  options={defaultProviderOptions(kind)}
+                  value={selectedDefaultProviderId(kind)}
+                  size="sm"
+                  ariaLabel={`Default provider for ${label}`}
+                  onchange={(providerId) => setDefaultProvider(kind, providerId)}
+                />
+              </div>
+            </div>
+          {/each}
+        </div>
+      {/if}
     </div>
 
     <!-- Master toggle -->

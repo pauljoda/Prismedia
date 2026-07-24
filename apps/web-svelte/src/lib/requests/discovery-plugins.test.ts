@@ -26,6 +26,31 @@ describe("Discover plugin capabilities", () => {
     expect(discoverSearchProviders([searchOnly, missingAuth, nsfw, valid], REQUEST_MEDIA_KIND.movie, true))
       .toEqual([valid]);
   });
+
+  it("places the configured default first and falls back when it is unavailable", () => {
+    const alpha = provider("alpha", ENTITY_KIND.movie);
+    const preferred = provider("zulu", ENTITY_KIND.movie);
+    const disabled = { ...provider("disabled", ENTITY_KIND.movie), enabled: false };
+
+    expect(discoverSearchProviders(
+      [preferred, alpha],
+      REQUEST_MEDIA_KIND.movie,
+      false,
+      preferred.id,
+    )).toEqual([preferred, alpha]);
+    expect(discoverSearchProviders(
+      [disabled, preferred, alpha],
+      REQUEST_MEDIA_KIND.movie,
+      false,
+      disabled.id,
+    )).toEqual([alpha, preferred]);
+    expect(discoverSearchProviders(
+      [preferred, alpha],
+      REQUEST_MEDIA_KIND.movie,
+      false,
+      "removed-provider",
+    )).toEqual([alpha, preferred]);
+  });
 });
 
 function provider(

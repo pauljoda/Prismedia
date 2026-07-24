@@ -33,6 +33,7 @@ import type {
   IdentifyQueueItem,
   PluginProvider,
 } from "$lib/api/identify-types";
+export { providerCanIdentifyKind } from "$lib/identify/provider-selection";
 
 interface ApplyIdentifyQueueItemOptions extends RequestOptions {
   progressId?: string | null;
@@ -42,14 +43,6 @@ export function fetchIdentifyProviders(kind?: string, options?: RequestOptions):
   return listIdentifyProviders({ kind }, requestInit(options)).then((response) =>
     unwrapGenerated(response, "Failed to list identify providers") as PluginProvider[],
   );
-}
-
-export function providerCanIdentifyKind(provider: PluginProvider, kind: string): boolean {
-  const normalizedKind = kind.toLowerCase();
-  return provider.installed &&
-    provider.enabled &&
-    provider.missingAuthKeys.length === 0 &&
-    provider.supports.some((support) => support.entityKind.toLowerCase() === normalizedKind);
 }
 
 export function applyIdentifyProposal(

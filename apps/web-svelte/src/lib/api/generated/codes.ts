@@ -895,6 +895,7 @@ export const SETTING_KEYS = {
   hlsMaxCacheSizeGb: "hls.maxCacheSizeGb",
   hlsTranscoderProfile: "hls.transcoderProfile",
   hlsVaapiDevice: "hls.vaapiDevice",
+  identifyDefaultProviders: "identify.defaultProviders",
   jobsBackgroundConcurrency: "jobs.backgroundConcurrency",
   monitoringIntervalMinutes: "monitoring.intervalMinutes",
   monitoringSearchEnabled: "monitoring.searchEnabled",

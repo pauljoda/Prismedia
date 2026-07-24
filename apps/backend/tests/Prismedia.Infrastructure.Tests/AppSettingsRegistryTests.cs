@@ -2,6 +2,7 @@ using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Prismedia.Application.Settings;
 using Prismedia.Contracts.Settings;
+using Prismedia.Domain.Entities;
 using Prismedia.Infrastructure.Persistence;
 using Prismedia.Infrastructure.Settings;
 
@@ -27,6 +28,11 @@ public sealed class AppSettingsRegistryTests {
             definition.Key == AppSettingKeys.CollectionsAutoRefreshEnabled &&
             definition.Type == SettingValueType.Boolean &&
             definition.DefaultValue.GetBoolean());
+        Assert.Contains(definitions, definition =>
+            definition.Key == AppSettingKeys.IdentifyDefaultProviders &&
+            definition.Type == SettingValueType.StringMap &&
+            definition.DefaultValue.ValueKind == JsonValueKind.Object &&
+            !definition.DefaultValue.EnumerateObject().Any());
 
         foreach (var definition in definitions) {
             var validated = definition.Validate(definition.DefaultValue);
@@ -173,6 +179,51 @@ public sealed class AppSettingsRegistryTests {
         Assert.Equal(15, scan.IntervalMinutes);
         Assert.False(collections.AutoRefreshEnabled);
         Assert.Equal(["ja", "jpn"], playback.AudioPreferredLanguages);
+    }
+
+    [Fact]
+    public async Task IdentifyProviderDefaultsSerializeEveryKnownEntityKindAndTrimProviderIds() {
+        await using var db = CreateContext();
+        var service = new SettingsService(new EfSettingsPersistence(db));
+        var configured = EntityKindRegistry.All.ToDictionary(
+            descriptor => descriptor.Code,
+            descriptor => $"  provider-{descriptor.Value}  ",
+            StringComparer.Ordinal);
+
+        var updated = await service.UpdateSettingAsync(
+            AppSettingKeys.IdentifyDefaultProviders,
+            JsonSerializer.SerializeToElement(configured),
+            CancellationToken.None);
+        var snapshot = await service.GetIdentifyProviderSettingsAsync(CancellationToken.None);
+
+        Assert.Equal(EntityKindRegistry.All.Count, updated.Value.EnumerateObject().Count());
+        Assert.Equal(EntityKindRegistry.All.Count, snapshot.DefaultProviders.Count);
+        foreach (var descriptor in EntityKindRegistry.All) {
+            Assert.Equal($"provider-{descriptor.Value}", snapshot.DefaultProviders[descriptor.Code]);
+        }
+
+        var row = await db.AppSettings.SingleAsync();
+        Assert.Equal(AppSettingKeys.IdentifyDefaultProviders, row.Key);
+        Assert.Equal(JsonValueKind.Object, JsonDocument.Parse(row.ValueJson).RootElement.ValueKind);
+    }
+
+    [Theory]
+    [InlineData("""{"unknown-kind":"provider"}""")]
+    [InlineData("""{"video":42}""")]
+    [InlineData("""{"video":"  "}""")]
+    public async Task IdentifyProviderDefaultsRejectUnknownKindsAndInvalidProviderIds(string json) {
+        await using var db = CreateContext();
+        var service = new SettingsService(new EfSettingsPersistence(db));
+        using var document = JsonDocument.Parse(json);
+
+        var exception = await Assert.ThrowsAsync<SettingValidationException>(() =>
+            service.UpdateSettingAsync(
+                AppSettingKeys.IdentifyDefaultProviders,
+                document.RootElement,
+                CancellationToken.None));
+
+        Assert.Equal(AppSettingKeys.IdentifyDefaultProviders, exception.Key);
+        Assert.Empty(await db.AppSettings.ToArrayAsync());
     }
 
     private static PrismediaDbContext CreateContext() {

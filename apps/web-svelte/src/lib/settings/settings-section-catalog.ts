@@ -105,8 +105,8 @@ export const settingsSections: readonly SettingsSection[] = [
   },
   {
     id: SETTING_SECTION.autoIdentify,
-    title: "Auto Identify",
-    description: "Choose trusted plugins and matching rules for scan-time identification.",
+    title: "Metadata Identify",
+    description: "Choose default metadata providers and matching rules for automatic identification.",
     href: "/settings/auto-identify",
     icon: icon(Sparkles as unknown as Component<Record<string, unknown>>),
     accent: PRISM_MATERIAL_SPECTRUM.magenta,

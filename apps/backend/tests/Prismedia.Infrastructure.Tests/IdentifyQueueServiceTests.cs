@@ -1604,7 +1604,9 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
             new IdentifyMatchHintResolver(db),
             new IdentifyRunnerSelector([new DotnetPluginProcessRunner(executor, new PluginCatalogOptions([], tempRoot, "1.0.0"))]),
             new EntityMetadataApplyService(db, new PluginArtworkServiceOptions(tempRoot)),
-            new EfIdentifyTargetEligibilityService(db));
+            new EfIdentifyTargetEligibilityService(db),
+            new Prismedia.Application.Settings.SettingsService(
+                new Prismedia.Infrastructure.Settings.EfSettingsPersistence(db)));
     }
 
     /// <summary>Minimal in-memory job queue for tests: records enqueues, no worker runs the cascade.</summary>

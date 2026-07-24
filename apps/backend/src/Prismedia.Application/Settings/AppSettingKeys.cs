@@ -19,6 +19,8 @@ public static class AppSettingKeys {
     public const string AcquisitionDownloadPropers = "acquisition.downloadPropers";
     public const string AcquisitionPreferredProtocol = "acquisition.preferredProtocol";
 
+    public const string IdentifyDefaultProviders = "identify.defaultProviders";
+
     public const string AutoIdentifyEnabled = "autoIdentify.enabled";
     public const string AutoIdentifyProviders = "autoIdentify.providers";
     public const string AutoIdentifyEntityKinds = "autoIdentify.entityKinds";
