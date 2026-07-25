@@ -1,5 +1,18 @@
 # Prismedia Product Hunt launch
 
+## Draft status
+
+- Draft: <https://www.producthunt.com/products/prismedia?launch=prismedia>
+- Editor: <https://www.producthunt.com/posts/prismedia/edit>
+- State: saved, complete, and intentionally unscheduled
+- Hunter and maker: Paul “pauljoda” Davis
+- Team: solo maker
+- Pricing: free
+- Funding: bootstrapped
+
+Scheduling is the final consequential launch action. Choose the launch date before
+using **Schedule launch** in Product Hunt.
+
 ## Main information
 
 **Name**
@@ -21,9 +34,15 @@ stay on infrastructure you control.
 
 **Launch tags**
 
-1. Entertainment
+The saved editor currently shows these tags:
+
+1. iOS
 2. Apple TV
-3. iOS
+3. GitHub
+4. Entertainment
+
+Product Hunt added GitHub after the repository link was supplied. The public draft
+preview currently surfaces iOS, Apple TV, and GitHub.
 
 **Links**
 
@@ -35,6 +54,28 @@ stay on infrastructure you control.
 The Product Hunt **Open source** switch remains off. The public repository uses a
 CC BY-NC-SA 4.0 noncommercial license, which is source-available but not an
 OSI-approved open-source license.
+
+## Built with
+
+**Svelte**
+
+Svelte keeps Prismedia’s media-heavy workspace fast and direct without burying the
+product in framework ceremony. Its component model made it practical to keep library,
+detail, player, form, and settings patterns consistent across a very large interface.
+
+**GitHub Actions**
+
+GitHub Actions is Prismedia’s release backbone: it validates every change, builds the
+development container from main, and publishes the static product site from the same
+source. Keeping code, automation, and release history together makes a large
+self-hosted project much easier to ship responsibly.
+
+**Xcode**
+
+Xcode is where Prismedia’s iPhone, iPad, and Apple TV experiences become genuinely
+native instead of web views in a shell. SwiftUI previews, simulators, Instruments,
+and the platform SDKs let the same media model become a real reader, full media
+players, and a focus-first ten-foot interface.
 
 ## First maker comment
 
