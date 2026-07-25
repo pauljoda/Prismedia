@@ -159,6 +159,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Updated documentation, README screenshots, branding assets, install metadata, and app copy to match the current Prismedia v1 surface.
 
 ### Fixed
+- The launch-site navigation drawer now renders reliably above page content on
+  mobile Safari.
 - Launch-site section links no longer all appear selected at once in desktop and
   mobile navigation.
 - Plugin metadata can no longer stamp one parent or locator identity onto several structural children: shared proposal identities are discarded before matching or persistence, and upgrading repairs affected AniList episodes, MangaDex volumes and chapters, Open Library series children, and repeated MusicBrainz track recordings already stored in the library.

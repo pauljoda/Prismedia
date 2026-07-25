@@ -447,6 +447,29 @@ blockquote {
 }
 
 @media (max-width: 996px) {
+  .navbar {
+    background: var(--prismedia-surface-1);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+
+  .navbar-sidebar__backdrop {
+    z-index: 0;
+  }
+
+  .navbar-sidebar {
+    z-index: 1;
+    isolation: isolate;
+  }
+
+  .navbar-sidebar,
+  .navbar-sidebar__brand,
+  .navbar-sidebar__items {
+    background: var(--prismedia-surface-1);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+
   .theme-doc-sidebar-container {
     background: var(--prismedia-glass-3);
   }
