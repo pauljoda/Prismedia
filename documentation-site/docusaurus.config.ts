@@ -21,6 +21,10 @@ const prismediaPrismTheme: PrismTheme = {
   ],
 };
 
+// Landing-page section links share the root pathname, so Docusaurus' path-only
+// active-state matching would otherwise mark every section as selected.
+const disablePathOnlyActiveState = 'a^';
+
 // This runs in Node.js - Don't use client-side code here (browser APIs, JSX...)
 
 const config: Config = {
@@ -121,10 +125,30 @@ const config: Config = {
         src: 'img/logo.png',
       },
       items: [
-        {to: '/?section=product', label: 'Product', position: 'left'},
-        {to: '/?section=experiences', label: 'Experiences', position: 'left'},
-        {to: '/?section=platforms', label: 'Platforms', position: 'left'},
-        {to: '/?section=self-hosting', label: 'Self-hosting', position: 'left'},
+        {
+          to: '/?section=product',
+          label: 'Product',
+          position: 'left',
+          activeBaseRegex: disablePathOnlyActiveState,
+        },
+        {
+          to: '/?section=experiences',
+          label: 'Experiences',
+          position: 'left',
+          activeBaseRegex: disablePathOnlyActiveState,
+        },
+        {
+          to: '/?section=platforms',
+          label: 'Platforms',
+          position: 'left',
+          activeBaseRegex: disablePathOnlyActiveState,
+        },
+        {
+          to: '/?section=self-hosting',
+          label: 'Self-hosting',
+          position: 'left',
+          activeBaseRegex: disablePathOnlyActiveState,
+        },
         {
           type: 'docSidebar',
           sidebarId: 'docsSidebar',
