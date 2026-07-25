@@ -1,4 +1,10 @@
-import {useEffect, type CSSProperties, type ReactNode} from 'react';
+import {
+  useEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type ReactNode,
+} from 'react';
 import Link from '@docusaurus/Link';
 import useBaseUrl from '@docusaurus/useBaseUrl';
 import {useLocation} from '@docusaurus/router';
@@ -281,7 +287,7 @@ function PrismFlow({
         <i className={styles.prismFlowInputLine} />
       </div>
       <div className={styles.prismFlowMark}>
-        <ProductImage src="/img/logo.png" alt="" />
+        <ProductImage src="/img/logo-mark.png" alt="" />
         <strong>prismedia</strong>
       </div>
       <ol className={styles.prismFlowOutputs}>
@@ -322,7 +328,8 @@ function Hero() {
           <p className={styles.eyebrow}>Private · self-hosted · made for the household</p>
           <Heading as="h1" className={styles.heroTitle}>
             Your whole media life.
-            <span>One private home.</span>
+            <br />
+            <span className={styles.spectrumText}>One private home.</span>
           </Heading>
           <p className={styles.heroLead}>
             Prismedia keeps discovery, requests, downloads, metadata, files,
@@ -387,7 +394,8 @@ function MediaRail() {
             id="spectrum-story-title"
             className={styles.spectrumStoryTitle}
           >
-            One library in. Every experience out.
+            One library in.{' '}
+            <span className={styles.spectrumText}>Every experience out.</span>
           </Heading>
         </div>
         <p>
@@ -470,6 +478,15 @@ function LaunchFilm() {
   const posterUrl = useBaseUrl(
     '/img/showcase/prismedia-launch-poster.webp',
   );
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const [hasStarted, setHasStarted] = useState(false);
+
+  function playFilm() {
+    const playback = videoRef.current?.play();
+    if (playback) {
+      void playback.catch(() => undefined);
+    }
+  }
 
   return (
     <section
@@ -496,21 +513,41 @@ function LaunchFilm() {
 
       <div className={`container ${styles.filmStage}`}>
         <div className={styles.filmShell}>
-          <video
-            className={styles.filmVideo}
-            controls
-            muted
-            playsInline
-            preload="metadata"
-            poster={posterUrl}
-            aria-label="Silent Prismedia product film"
-          >
-            <source src={filmUrl} type="video/mp4" />
-            <p>
-              Your browser cannot play this film.{' '}
-              <a href={filmUrl}>Download the MP4 instead.</a>
-            </p>
-          </video>
+          <div className={styles.filmMedia}>
+            <video
+              ref={videoRef}
+              className={styles.filmVideo}
+              controls
+              muted
+              playsInline
+              preload="metadata"
+              poster={posterUrl}
+              aria-label="Silent Prismedia product film"
+              onPlay={() => setHasStarted(true)}
+            >
+              <source src={filmUrl} type="video/mp4" />
+              <p>
+                Your browser cannot play this film.{' '}
+                <a href={filmUrl}>Download the MP4 instead.</a>
+              </p>
+            </video>
+            {!hasStarted && (
+              <button
+                className={styles.filmPlayPrompt}
+                type="button"
+                onClick={playFilm}
+                aria-label="Play the 72-second silent Prismedia product film"
+              >
+                <span className={styles.filmPlayGlyph} aria-hidden>
+                  <i />
+                </span>
+                <span>
+                  <strong>Play the product film</strong>
+                  <small>72 seconds · silent</small>
+                </span>
+              </button>
+            )}
+          </div>
           <div className={styles.filmFooter}>
             <span>Watch · Read · Listen · Request</span>
             <span>Web · iPhone · iPad · Apple TV</span>
@@ -547,7 +584,7 @@ function VideoExperience() {
             <li>Direct Play, stream copy, and adaptive HLS</li>
             <li>Subtitles, docked transcripts, and trickplay</li>
             <li>Personal progress across the household</li>
-            <li>Native playback built for the television</li>
+            <li>Custom native playback with device-level codec support</li>
           </ul>
         </div>
         <Frame label="Movie detail · artwork reactive">
@@ -565,11 +602,13 @@ function VideoExperience() {
           />
         </div>
         <div className={styles.tvCaption}>
-          <span className={styles.platformLabel}>Apple TV</span>
-          <Heading as="h3">Pause the movie. See the whole playback story.</Heading>
+          <span className={styles.platformLabel}>Custom native player · Apple TV</span>
+          <Heading as="h3">Full-fidelity playback, built around the device.</Heading>
           <p>
-            Title, direct-play state, resolution, codecs, timeline, audio,
-            subtitles, and speed controls stay readable from the couch.
+            Across iPhone, iPad, and Apple TV, Prismedia uses the device&apos;s
+            own codec and playback stack to direct-play supported sources at
+            original quality—including lossless audio—while keeping stream
+            state and controls clear.
           </p>
         </div>
       </div>
@@ -820,7 +859,7 @@ function SelfHosting() {
           </div>
           <div className={styles.topologyBeam} aria-hidden />
           <div className={styles.topologyCore}>
-            <ProductImage src="/img/logo.png" alt="" />
+            <ProductImage src="/img/logo-mark.png" alt="" />
             <strong>Prismedia</strong>
             <small>private · port 8008</small>
           </div>
@@ -849,7 +888,8 @@ function FinalCta() {
         <PrismFlow compact inputLabel="One private library" />
         <p className={styles.kicker}>Bring the whole collection into focus</p>
         <Heading as="h2" className={styles.displayTitle}>
-          Self-host the library. Take the experience everywhere.
+          Self-host the library. Take the{' '}
+          <span className={styles.spectrumText}>experience everywhere.</span>
         </Heading>
         <div className={styles.finalActions}>
           <Link

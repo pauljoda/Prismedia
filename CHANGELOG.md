@@ -300,6 +300,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Removed development-only route shells and redundant prerelease UI panels so the app surface and release notes focus on the production Prismedia experience.
 
 ### Docs
+- Refined the launch site with full-spectrum headline accents, clearer native-platform composition, an explicit film play control, transparent optical marks, and full-fidelity native playback messaging.
 - Extended the launch film's one-light-in, spectrum-out story across the product site with a labeled media map, centered optical paths, media-specific experience rails, platform accents, a self-hosting topology, and a responsive closing call to action.
 - Rebuilt the documentation landing page as a product-first launch site with real web, iPhone, and Apple TV captures, an embedded 72-second silent product film, explicit video, reading, audio, and image experience stories, and direct install and TestFlight paths while preserving task-oriented Docs routes.
 - Documented audiobook scanning and manual placement, including supported formats, Books-root configuration, folder grouping, ebook matching, multipart ordering, and rescan behavior.
