@@ -389,40 +389,206 @@
 }
 
 .mediaRail {
-  background: #0a0a0b;
+  padding: clamp(6rem, 10vw, 9rem) 0 clamp(5rem, 9vw, 8rem);
+  background:
+    radial-gradient(circle at 64% 52%, rgba(83, 111, 176, 0.08), transparent 30%),
+    #050506;
+  border-top: 1px solid var(--prismedia-border-subtle);
   border-bottom: 1px solid var(--prismedia-border-subtle);
 }
 
-.mediaRail > div {
-  display: flex;
-  align-items: baseline;
-  gap: 1.5rem;
-  padding-top: 1.1rem;
-  padding-bottom: 1.1rem;
+.spectrumStoryHeader {
+  display: grid;
+  grid-template-columns: minmax(0, 1.05fr) minmax(300px, 0.55fr);
+  align-items: end;
+  gap: clamp(3rem, 8vw, 8rem);
 }
 
-.mediaRailLabel {
-  flex: 0 0 auto;
+.spectrumStoryTitle {
+  max-width: 12ch;
+  margin: 1rem 0 0;
+  color: #fff;
+  font-size: clamp(2.7rem, 5.4vw, 5.8rem);
+  font-weight: 600;
+  letter-spacing: -0.065em;
+  line-height: 0.94;
 }
 
-.mediaRail ul {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0;
+.spectrumStoryHeader > p {
   margin: 0;
+  padding-left: 1.4rem;
+  color: var(--prismedia-text-muted);
+  border-left: 1px solid var(--prismedia-border-strong);
+  line-height: 1.72;
+}
+
+.spectrumStoryCanvas {
+  margin-top: clamp(3.5rem, 7vw, 6rem);
+  padding-top: 1.2rem;
+  border-top: 1px solid var(--prismedia-border-default);
+}
+
+.spectrumLegend {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 2rem;
+  margin: 0;
+  padding: 0;
+  color: var(--prismedia-text-muted);
+  font-family: var(--ifm-font-family-monospace);
+  font-size: 0.58rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.spectrumLegend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+.spectrumLegend span::before {
+  width: 34px;
+  height: 1px;
+  content: '';
+  background: rgba(238, 239, 241, 0.82);
+  box-shadow: 0 0 8px rgba(238, 239, 241, 0.2);
+}
+
+.spectrumLegend span:last-child::before {
+  background: linear-gradient(
+    90deg,
+    var(--prismedia-material-red),
+    var(--prismedia-material-yellow),
+    var(--prismedia-material-green),
+    var(--prismedia-material-cyan),
+    var(--prismedia-material-violet)
+  );
+}
+
+.prismFlow {
+  --prism-axis-offset: 66px;
+
+  display: grid;
+  grid-template-columns: minmax(220px, 0.8fr) 132px minmax(430px, 1.35fr);
+  min-height: 370px;
+  align-items: center;
+}
+
+.prismFlowInput {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: auto minmax(80px, 1fr);
+  align-items: center;
+  gap: 1rem;
+}
+
+.prismFlowInput span,
+.prismFlowOutputs span {
+  color: var(--prismedia-text-muted);
+  font-family: var(--ifm-font-family-monospace);
+  font-size: 0.58rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.prismFlowInputLine {
+  display: block;
+  height: 1px;
+  margin-right: calc(-1 * var(--prism-axis-offset));
+  background: linear-gradient(
+    90deg,
+    rgba(224, 226, 230, 0.08),
+    rgba(245, 246, 247, 0.96)
+  );
+  box-shadow: 0 0 9px rgba(235, 237, 240, 0.22);
+  transform-origin: right center;
+}
+
+.prismFlowMark {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  flex-direction: column;
+}
+
+.prismFlowMark::before {
+  position: absolute;
+  inset: 17% -20%;
+  z-index: -1;
+  content: '';
+  background: radial-gradient(circle, rgba(224, 226, 230, 0.08), transparent 68%);
+  filter: blur(14px);
+}
+
+.prismFlowMark img {
+  display: block;
+  width: 104px;
+  height: 104px;
+  mix-blend-mode: screen;
+  object-fit: contain;
+}
+
+.prismFlowMark strong {
+  position: absolute;
+  top: calc(50% + 61px);
+  color: rgba(246, 247, 248, 0.94);
+  font-family: var(--ifm-heading-font-family);
+  font-size: 0.92rem;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+}
+
+.prismFlowOutputs {
+  position: relative;
+  width: calc(100% + var(--prism-axis-offset));
+  height: 330px;
+  margin: 0 0 0 calc(-1 * var(--prism-axis-offset));
   padding: 0;
   list-style: none;
 }
 
-.mediaRail li {
-  color: var(--prismedia-text-secondary);
-  font-size: 0.75rem;
+.prismFlowOutputs li {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  display: flex;
+  width: var(--ray-length);
+  align-items: center;
+  transform: translateY(-50%) rotate(var(--ray-angle));
+  transform-origin: left center;
 }
 
-.mediaRail li:not(:last-child)::after {
-  margin: 0 0.55rem;
+.prismFlowOutputs li i {
+  display: block;
+  flex: 1;
+  height: 1px;
+  background: var(--ray-color);
+  box-shadow: 0 0 8px color-mix(in srgb, var(--ray-color) 36%, transparent);
+  transform-origin: left center;
+}
+
+.prismFlowOutputs li span {
+  margin-left: 0.65rem;
+  color: color-mix(in srgb, var(--ray-color) 72%, #b7bac0);
+  transform: rotate(var(--ray-counter-angle));
+}
+
+.spectrumSupporting {
+  margin: 0;
+  padding-top: 1rem;
   color: var(--prismedia-text-disabled);
-  content: '·';
+  border-top: 1px solid var(--prismedia-border-subtle);
+  font-family: var(--ifm-font-family-monospace);
+  font-size: 0.58rem;
+  letter-spacing: 0.09em;
+  text-align: center;
+  text-transform: uppercase;
 }
 
 .problem {
@@ -560,15 +726,13 @@
   content: '';
   background: linear-gradient(
     90deg,
-    transparent 8%,
-    var(--prismedia-material-red) 29%,
-    var(--prismedia-material-yellow) 40%,
-    var(--prismedia-material-green) 51%,
-    var(--prismedia-material-cyan) 63%,
-    var(--prismedia-material-violet) 75%,
-    transparent 92%
+    transparent 12%,
+    rgba(232, 233, 236, 0.05) 34%,
+    rgba(232, 233, 236, 0.72) 50%,
+    rgba(232, 233, 236, 0.05) 66%,
+    transparent 88%
   );
-  opacity: 0.7;
+  opacity: 0.8;
 }
 
 .launchFilmHeader {
@@ -671,6 +835,57 @@
   text-transform: uppercase;
 }
 
+.filmHandoff {
+  position: relative;
+  z-index: 1;
+  width: min(720px, 82%);
+  height: 116px;
+  margin: 1rem auto -5rem;
+}
+
+.filmHandoff span,
+.filmHandoff i {
+  position: absolute;
+  top: 50%;
+  display: block;
+  height: 1px;
+}
+
+.filmHandoff span {
+  right: 50%;
+  left: 0;
+  background: linear-gradient(90deg, transparent, rgba(240, 241, 243, 0.82));
+  box-shadow: 0 0 8px rgba(240, 241, 243, 0.16);
+}
+
+.filmHandoff i {
+  right: 0;
+  left: 50%;
+  background: var(--prismedia-material-red);
+  transform: rotate(-5deg);
+  transform-origin: left center;
+}
+
+.filmHandoff i:nth-of-type(2) {
+  background: var(--prismedia-material-yellow);
+  transform: rotate(-2.5deg);
+}
+
+.filmHandoff i:nth-of-type(3) {
+  background: var(--prismedia-material-green);
+  transform: rotate(0deg);
+}
+
+.filmHandoff i:nth-of-type(4) {
+  background: var(--prismedia-material-cyan);
+  transform: rotate(2.5deg);
+}
+
+.filmHandoff i:nth-of-type(5) {
+  background: var(--prismedia-material-violet);
+  transform: rotate(5deg);
+}
+
 .experiences {
   background: #050506;
 }
@@ -694,29 +909,55 @@
 }
 
 .experience {
+  --experience-color: var(--prismedia-neutral);
+
+  position: relative;
   padding: clamp(6rem, 10vw, 9rem) 0;
   border-top: 1px solid var(--prismedia-border-subtle);
 }
 
+.experience::before {
+  position: absolute;
+  top: -1px;
+  left: max(1.5rem, calc((100vw - 1320px) / 2));
+  width: clamp(84px, 18vw, 270px);
+  height: 2px;
+  content: '';
+  background: linear-gradient(90deg, var(--experience-color), transparent);
+  box-shadow: 0 0 9px color-mix(in srgb, var(--experience-color) 20%, transparent);
+}
+
+.experience .kicker::before {
+  background: var(--experience-color);
+}
+
 .videoExperience {
+  --experience-color: var(--prismedia-material-red);
+
   background:
     radial-gradient(circle at 80% 14%, rgba(179, 72, 77, 0.1), transparent 24%),
     #050506;
 }
 
 .readingExperience {
+  --experience-color: var(--prismedia-material-yellow);
+
   background:
     radial-gradient(circle at 22% 23%, rgba(158, 135, 59, 0.09), transparent 24%),
     #090909;
 }
 
 .audioExperience {
+  --experience-color: var(--prismedia-material-violet);
+
   background:
     radial-gradient(circle at 68% 28%, rgba(119, 92, 165, 0.12), transparent 30%),
     #050506;
 }
 
 .imageExperience {
+  --experience-color: var(--prismedia-material-green);
+
   background:
     radial-gradient(circle at 75% 35%, rgba(77, 146, 93, 0.08), transparent 28%),
     #080909;
@@ -895,6 +1136,8 @@
 }
 
 .platformCard {
+  --platform-color: var(--prismedia-neutral);
+
   position: relative;
   overflow: hidden;
   min-height: 620px;
@@ -904,15 +1147,31 @@
   border-radius: var(--prismedia-radius-xl);
 }
 
+.platformCard::before {
+  position: absolute;
+  top: -1px;
+  left: 2rem;
+  width: 72px;
+  height: 2px;
+  content: '';
+  background: linear-gradient(90deg, var(--platform-color), transparent);
+}
+
 .platformWeb {
+  --platform-color: var(--prismedia-material-cyan);
+
   grid-column: span 7;
 }
 
 .platformPhone {
+  --platform-color: var(--prismedia-material-blue);
+
   grid-column: span 5;
 }
 
 .platformTv {
+  --platform-color: var(--prismedia-material-red);
+
   grid-column: span 12;
   display: grid;
   grid-template-columns: minmax(280px, 0.45fr) minmax(0, 1.55fr);
@@ -928,7 +1187,7 @@
 }
 
 .platformCardCopy > span {
-  color: var(--prismedia-text-muted);
+  color: color-mix(in srgb, var(--platform-color) 72%, #b7bac0);
   font-family: var(--ifm-font-family-monospace);
   font-size: 0.64rem;
   letter-spacing: 0.12em;
@@ -984,7 +1243,7 @@
 .topology {
   position: relative;
   display: grid;
-  grid-template-columns: auto 80px auto 120px auto;
+  grid-template-columns: minmax(120px, auto) 90px 150px 140px minmax(120px, auto);
   align-items: center;
   justify-content: center;
   min-height: 390px;
@@ -1015,27 +1274,41 @@
   font-size: 0.58rem;
 }
 
+.topologyInput span {
+  padding: 0;
+  color: var(--prismedia-text-secondary);
+  background: transparent;
+  border: 0;
+  letter-spacing: 0.08em;
+  text-align: right;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
 .topologyBeam {
   height: 1px;
-  background: var(--prismedia-neutral);
+  background: linear-gradient(
+    90deg,
+    rgba(224, 226, 230, 0.12),
+    rgba(245, 246, 247, 0.96)
+  );
+  box-shadow: 0 0 9px rgba(235, 237, 240, 0.22);
 }
 
 .topologyCore {
   display: flex;
-  width: 130px;
-  height: 150px;
+  width: 150px;
+  height: 180px;
   align-items: center;
   justify-content: center;
   flex-direction: column;
-  background: var(--prismedia-surface-1);
-  border: 1px solid var(--prismedia-border-strong);
-  border-radius: var(--prismedia-radius-lg);
-  box-shadow: 0 22px 50px rgba(0, 0, 0, 0.46);
+  background: radial-gradient(circle, rgba(224, 226, 230, 0.07), transparent 64%);
 }
 
 .topologyCore img {
-  width: 58px;
-  height: 58px;
+  width: 96px;
+  height: 96px;
+  mix-blend-mode: screen;
   object-fit: contain;
 }
 
@@ -1060,12 +1333,13 @@
   display: block;
   height: 1px;
   background: var(--prismedia-material-red);
+  box-shadow: 0 0 7px rgba(179, 72, 77, 0.18);
   transform: rotate(-5deg);
   transform-origin: left;
 }
 
 .topologySpectrum i:nth-child(2) {
-  background: var(--prismedia-material-green);
+  background: var(--prismedia-material-yellow);
   transform: rotate(-1.5deg);
 }
 
@@ -1090,16 +1364,37 @@
 
 .finalCtaInner {
   display: flex;
-  max-width: 900px;
+  max-width: 1050px;
   align-items: center;
   flex-direction: column;
 }
 
-.finalLogo {
-  width: 88px;
-  height: 88px;
-  margin-bottom: 2rem;
-  object-fit: contain;
+.prismFlowCompact {
+  --prism-axis-offset: 47px;
+
+  grid-template-columns: minmax(160px, 0.72fr) 94px minmax(350px, 1.28fr);
+  width: min(100%, 900px);
+  min-height: 250px;
+  margin: -1rem auto 2.8rem;
+  text-align: left;
+}
+
+.prismFlowCompact .prismFlowMark img {
+  width: 76px;
+  height: 76px;
+}
+
+.prismFlowCompact .prismFlowMark strong {
+  display: none;
+}
+
+.prismFlowCompact .prismFlowOutputs {
+  height: 220px;
+}
+
+.prismFlowCompact .prismFlowInput span,
+.prismFlowCompact .prismFlowOutputs span {
+  font-size: 0.5rem;
 }
 
 .finalCta .displayTitle {
@@ -1169,6 +1464,12 @@
   .selfHostingGrid {
     grid-template-columns: 1fr;
   }
+
+  .prismFlow {
+    --prism-axis-offset: 58px;
+
+    grid-template-columns: minmax(180px, 0.75fr) 116px minmax(360px, 1.25fr);
+  }
 }
 
 @media (max-width: 996px) {
@@ -1231,6 +1532,20 @@
   .filmMeta {
     padding-bottom: 0;
   }
+
+  .spectrumStoryHeader {
+    grid-template-columns: 1fr;
+  }
+
+  .spectrumStoryHeader > p {
+    max-width: 720px;
+  }
+
+  .prismFlow {
+    --prism-axis-offset: 52px;
+
+    grid-template-columns: minmax(150px, 0.7fr) 104px minmax(330px, 1.3fr);
+  }
 }
 
 @media (max-width: 700px) {
@@ -1286,10 +1601,81 @@
     grid-template-columns: 1fr 1fr;
   }
 
-  .mediaRail > div {
+  .mediaRail {
+    padding-top: 5rem;
+  }
+
+  .spectrumStoryHeader {
+    gap: 2rem;
+  }
+
+  .spectrumStoryHeader > p {
+    padding-left: 1rem;
+  }
+
+  .spectrumStoryCanvas {
+    margin-top: 3rem;
+  }
+
+  .spectrumLegend {
     align-items: flex-start;
     flex-direction: column;
-    gap: 0.65rem;
+    gap: 0.7rem;
+  }
+
+  .prismFlow:not(.prismFlowCompact) {
+    grid-template-columns: 1fr;
+    min-height: auto;
+    gap: 1.5rem;
+    padding: 2rem 0 1rem;
+  }
+
+  .prismFlow:not(.prismFlowCompact) .prismFlowMark img {
+    width: 86px;
+    height: 86px;
+  }
+
+  .prismFlow:not(.prismFlowCompact) .prismFlowMark strong {
+    position: static;
+    margin-top: 0.65rem;
+  }
+
+  .prismFlow:not(.prismFlowCompact) .prismFlowOutputs {
+    position: static;
+    display: grid;
+    width: auto;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    height: auto;
+    margin: 0;
+    gap: 1rem 0.75rem;
+  }
+
+  .prismFlow:not(.prismFlowCompact) .prismFlowOutputs li {
+    position: static;
+    width: auto;
+    align-items: flex-start;
+    flex-direction: column-reverse;
+    gap: 0.4rem;
+    transform: none;
+  }
+
+  .prismFlow:not(.prismFlowCompact) .prismFlowOutputs li i {
+    width: 100%;
+    flex: none;
+  }
+
+  .prismFlow:not(.prismFlowCompact) .prismFlowOutputs li span {
+    margin: 0;
+    font-size: 0.5rem;
+    transform: none;
+  }
+
+  .prismFlow:not(.prismFlowCompact) .prismFlowInputLine {
+    margin-right: 0;
+  }
+
+  .spectrumSupporting {
+    line-height: 1.7;
   }
 
   .displayTitle {
@@ -1318,6 +1704,12 @@
 
   .filmFooter {
     padding: 0.7rem 0.4rem 0.35rem;
+  }
+
+  .filmHandoff {
+    width: 96%;
+    height: 86px;
+    margin-bottom: -3.4rem;
   }
 
   .readerComposition {
@@ -1356,6 +1748,10 @@
     padding: 1.4rem;
   }
 
+  .platformCard::before {
+    left: 1.4rem;
+  }
+
   .platformWeb .frame {
     right: -18%;
     bottom: 5%;
@@ -1374,22 +1770,86 @@
   }
 
   .topology {
-    grid-template-columns: 1fr;
-    gap: 1.2rem;
-    justify-items: center;
+    grid-template-columns: 64px 22px 68px 38px minmax(60px, 1fr);
+    gap: 0;
+    min-height: 260px;
+    padding: 1rem;
   }
 
   .topologyBeam {
-    width: 1px;
-    height: 35px;
+    width: auto;
+    height: 1px;
   }
 
   .topologySpectrum {
-    width: 120px;
+    width: auto;
+    gap: 8px;
+  }
+
+  .topologyInput span {
+    font-size: 0.42rem;
+    line-height: 1.45;
+    white-space: normal;
+  }
+
+  .topologyCore {
+    width: 68px;
+    height: 112px;
+  }
+
+  .topologyCore img {
+    width: 54px;
+    height: 54px;
+  }
+
+  .topologyCore strong {
+    margin-top: 0.4rem;
+    font-size: 0.58rem;
+  }
+
+  .topologyCore small {
+    display: none;
   }
 
   .topologyDevices {
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: 1fr;
+    gap: 0.35rem;
+  }
+
+  .topologyDevices span {
+    padding: 0.35rem;
+    font-size: 0.44rem;
+  }
+
+  .prismFlowCompact {
+    --prism-axis-offset: 29px;
+
+    grid-template-columns: minmax(72px, 0.75fr) 58px minmax(150px, 1.25fr);
+    width: 100%;
+    min-height: 180px;
+    margin-bottom: 2rem;
+  }
+
+  .prismFlowCompact .prismFlowInput {
+    grid-template-columns: 1fr;
+  }
+
+  .prismFlowCompact .prismFlowInput span {
+    display: none;
+  }
+
+  .prismFlowCompact .prismFlowMark img {
+    width: 54px;
+    height: 54px;
+  }
+
+  .prismFlowCompact .prismFlowOutputs {
+    height: 160px;
+  }
+
+  .prismFlowCompact .prismFlowOutputs span {
+    margin-left: 0.38rem;
+    font-size: 0.42rem;
   }
 
   .finalActions,
@@ -1404,6 +1864,11 @@
   .testFlightButton,
   .lifecycleStep::before {
     transition: none;
+  }
+
+  .prismFlowInputLine,
+  .prismFlowOutputs li i {
+    animation: none;
   }
 
   .heroFrame,

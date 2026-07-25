@@ -77,19 +77,70 @@ const LIFECYCLE = [
   },
 ] as const;
 
-const MEDIA_TYPES = [
-  'Movies',
-  'Series',
-  'Videos',
-  'Music',
-  'Audiobooks',
-  'Books',
-  'Comics',
-  'eBooks',
-  'Images',
-  'Galleries',
-  'People',
-  'Collections',
+const SPECTRUM_MEDIA = [
+  {
+    label: 'Movies',
+    color: 'var(--prismedia-material-red)',
+    angle: '-20deg',
+    counterAngle: '20deg',
+    length: '76%',
+  },
+  {
+    label: 'Series',
+    color: '#b9543f',
+    angle: '-15deg',
+    counterAngle: '15deg',
+    length: '82%',
+  },
+  {
+    label: 'Videos',
+    color: 'var(--prismedia-material-orange)',
+    angle: '-10deg',
+    counterAngle: '10deg',
+    length: '88%',
+  },
+  {
+    label: 'Music',
+    color: 'var(--prismedia-material-yellow)',
+    angle: '-5deg',
+    counterAngle: '5deg',
+    length: '94%',
+  },
+  {
+    label: 'Audiobooks',
+    color: 'var(--prismedia-material-green)',
+    angle: '0deg',
+    counterAngle: '0deg',
+    length: '98%',
+  },
+  {
+    label: 'Books',
+    color: 'var(--prismedia-material-cyan)',
+    angle: '5deg',
+    counterAngle: '-5deg',
+    length: '94%',
+  },
+  {
+    label: 'Comics',
+    color: '#467eaa',
+    angle: '10deg',
+    counterAngle: '-10deg',
+    length: '88%',
+  },
+  {
+    label: 'Images',
+    color: 'var(--prismedia-material-blue)',
+    angle: '15deg',
+    counterAngle: '-15deg',
+    length: '82%',
+  },
+  {
+    label: 'Galleries',
+    color: 'var(--prismedia-material-violet)',
+    angle: '20deg',
+    counterAngle: '-20deg',
+    length: '76%',
+  },
 ] as const;
 
 type ImageProps = {
@@ -205,6 +256,56 @@ function Phone({
   );
 }
 
+function PrismFlow({
+  compact = false,
+  inputLabel = 'One private library',
+}: {
+  compact?: boolean;
+  inputLabel?: string;
+}) {
+  return (
+    <div
+      className={`${styles.prismFlow} ${
+        compact ? styles.prismFlowCompact : ''
+      }`}
+      aria-label={
+        compact
+          ? undefined
+          : 'One private library enters Prismedia and becomes purpose-built experiences for every media type.'
+      }
+      aria-hidden={compact || undefined}
+      role={compact ? undefined : 'img'}
+    >
+      <div className={styles.prismFlowInput}>
+        <span>{inputLabel}</span>
+        <i className={styles.prismFlowInputLine} />
+      </div>
+      <div className={styles.prismFlowMark}>
+        <ProductImage src="/img/logo.png" alt="" />
+        <strong>prismedia</strong>
+      </div>
+      <ol className={styles.prismFlowOutputs}>
+        {SPECTRUM_MEDIA.map((item) => (
+          <li
+            key={item.label}
+            style={
+              {
+                '--ray-color': item.color,
+                '--ray-angle': item.angle,
+                '--ray-counter-angle': item.counterAngle,
+                '--ray-length': item.length,
+              } as CSSProperties
+            }
+          >
+            <i />
+            <span>{item.label}</span>
+          </li>
+        ))}
+      </ol>
+    </div>
+  );
+}
+
 function Hero() {
   return (
     <header className={styles.hero}>
@@ -274,14 +375,36 @@ function Hero() {
 
 function MediaRail() {
   return (
-    <section className={styles.mediaRail} aria-label="Supported media">
-      <div className="container">
-        <p className={styles.mediaRailLabel}>One library, purpose-built experiences</p>
-        <ul>
-          {MEDIA_TYPES.map((type) => (
-            <li key={type}>{type}</li>
-          ))}
-        </ul>
+    <section
+      className={styles.mediaRail}
+      aria-labelledby="spectrum-story-title"
+    >
+      <div className={`container ${styles.spectrumStoryHeader}`}>
+        <div>
+          <p className={styles.kicker}>The product idea, in one picture</p>
+          <Heading
+            as="h2"
+            id="spectrum-story-title"
+            className={styles.spectrumStoryTitle}
+          >
+            One library in. Every experience out.
+          </Heading>
+        </div>
+        <p>
+          Prismedia keeps the shared shape of your media in one private system,
+          then gives movies, music, books, audiobooks, comics, and galleries the
+          interfaces they deserve.
+        </p>
+      </div>
+      <div className={`container ${styles.spectrumStoryCanvas}`}>
+        <div className={styles.spectrumLegend} aria-hidden>
+          <span>White light · shared foundation</span>
+          <span>Spectrum · purpose-built media</span>
+        </div>
+        <PrismFlow />
+        <p className={styles.spectrumSupporting}>
+          People · Studios · Tags · Collections · Progress · Files · History
+        </p>
       </div>
     </section>
   );
@@ -392,6 +515,14 @@ function LaunchFilm() {
             <span>Watch · Read · Listen · Request</span>
             <span>Web · iPhone · iPad · Apple TV</span>
           </div>
+        </div>
+        <div className={styles.filmHandoff} aria-hidden>
+          <span />
+          <i />
+          <i />
+          <i />
+          <i />
+          <i />
         </div>
       </div>
     </section>
@@ -679,16 +810,19 @@ function SelfHosting() {
             </Link>
           </div>
         </div>
-        <div className={styles.topology} aria-label="Prismedia deployment model">
+        <div
+          className={styles.topology}
+          aria-label="One Docker image enters a private Prismedia server and serves the web, iPhone, iPad, and Apple TV experiences."
+          role="img"
+        >
           <div className={styles.topologyInput}>
-            <span>/media</span>
-            <span>/data</span>
+            <span>One Docker image</span>
           </div>
           <div className={styles.topologyBeam} aria-hidden />
           <div className={styles.topologyCore}>
             <ProductImage src="/img/logo.png" alt="" />
             <strong>Prismedia</strong>
-            <small>port 8008</small>
+            <small>private · port 8008</small>
           </div>
           <div className={styles.topologySpectrum} aria-hidden>
             <i />
@@ -712,7 +846,7 @@ function FinalCta() {
   return (
     <section className={styles.finalCta}>
       <div className={`container ${styles.finalCtaInner}`}>
-        <ProductImage src="/img/logo.png" alt="" className={styles.finalLogo} />
+        <PrismFlow compact inputLabel="One private library" />
         <p className={styles.kicker}>Bring the whole collection into focus</p>
         <Heading as="h2" className={styles.displayTitle}>
           Self-host the library. Take the experience everywhere.
