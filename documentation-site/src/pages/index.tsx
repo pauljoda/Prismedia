@@ -9,6 +9,20 @@ import styles from './index.module.css';
 
 const TESTFLIGHT_URL = 'https://testflight.apple.com/join/c9bgDxr7';
 const GITHUB_URL = 'https://github.com/pauljoda/Prismedia';
+const PRODUCT_SCHEMA = {
+  '@context': 'https://schema.org',
+  '@type': 'SoftwareApplication',
+  name: 'Prismedia',
+  applicationCategory: 'MultimediaApplication',
+  operatingSystem: 'Web, iOS, iPadOS, tvOS',
+  description:
+    'A private, self-hosted media library that connects discovery, acquisition, metadata, files, playback, reading, and listening.',
+  url: 'https://pauljoda.github.io/Prismedia/',
+  image:
+    'https://pauljoda.github.io/Prismedia/img/showcase/prism-refraction-hero.png',
+  softwareRequirements: 'Docker',
+  sameAs: [GITHUB_URL, TESTFLIGHT_URL],
+};
 const SECTION_IDS = new Set([
   'product',
   'experiences',
@@ -658,6 +672,10 @@ export default function Home(): ReactNode {
       title="Your whole media life. One private home."
       description="Prismedia is a private, self-hosted media library that connects discovery, acquisition, metadata, files, playback, reading, and listening across web, iPhone, iPad, and Apple TV."
     >
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{__html: JSON.stringify(PRODUCT_SCHEMA)}}
+      />
       <SectionRoute />
       <Hero />
       <main>

@@ -78,6 +78,27 @@ const config: Config = {
 
   themeConfig: {
     image: 'img/showcase/prism-refraction-hero.png',
+    metadata: [
+      {
+        name: 'keywords',
+        content:
+          'self-hosted media library, private media server, movies, music, audiobooks, ebooks, comics, iOS, Apple TV, Docker',
+      },
+      {name: 'application-name', content: 'Prismedia'},
+      {name: 'apple-mobile-web-app-title', content: 'Prismedia'},
+      {name: 'theme-color', content: '#050506'},
+      {property: 'og:type', content: 'website'},
+      {property: 'og:site_name', content: 'Prismedia'},
+      {
+        name: 'twitter:title',
+        content: 'Your whole media life. One private home.',
+      },
+      {
+        name: 'twitter:description',
+        content:
+          'A private, self-hosted media library for web, iPhone, iPad, and Apple TV.',
+      },
+    ],
     colorMode: {
       defaultMode: 'dark',
       disableSwitch: false,
