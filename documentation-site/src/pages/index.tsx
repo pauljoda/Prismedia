@@ -23,6 +23,20 @@ const PRODUCT_SCHEMA = {
   softwareRequirements: 'Docker',
   sameAs: [GITHUB_URL, TESTFLIGHT_URL],
 };
+const VIDEO_SCHEMA = {
+  '@context': 'https://schema.org',
+  '@type': 'VideoObject',
+  name: 'Prismedia — Your whole media life. One private home.',
+  description:
+    'A silent product film showing Prismedia requests, playback, reader customization, combined reading and listening, music, audiobooks, and native experiences across web, iPhone, iPad, and Apple TV.',
+  thumbnailUrl:
+    'https://pauljoda.github.io/Prismedia/img/showcase/prismedia-launch-poster.webp',
+  contentUrl:
+    'https://pauljoda.github.io/Prismedia/video/prismedia-launch.mp4',
+  uploadDate: '2026-07-24',
+  duration: 'PT1M12S',
+  isFamilyFriendly: true,
+};
 const SECTION_IDS = new Set([
   'product',
   'experiences',
@@ -322,6 +336,62 @@ function Problem() {
             Provider identity, acquisition state, files, artwork, history, and
             progress stay connected as an item moves through Prismedia.
           </p>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function LaunchFilm() {
+  const filmUrl = useBaseUrl('/video/prismedia-launch.mp4');
+  const posterUrl = useBaseUrl(
+    '/img/showcase/prismedia-launch-poster.webp',
+  );
+
+  return (
+    <section
+      className={styles.launchFilm}
+      aria-labelledby="launch-film-title"
+    >
+      <div className={`container ${styles.launchFilmHeader}`}>
+        <div>
+          <p className={styles.kicker}>Prismedia in motion · Silent film</p>
+          <Heading
+            as="h2"
+            id="launch-film-title"
+            className={styles.displayTitle}
+          >
+            One library, from first request to every screen.
+          </Heading>
+        </div>
+        <div className={styles.filmMeta} aria-label="Film details">
+          <span>01:12</span>
+          <span>Silent</span>
+          <span>1920 × 1080</span>
+        </div>
+      </div>
+
+      <div className={`container ${styles.filmStage}`}>
+        <div className={styles.filmShell}>
+          <video
+            className={styles.filmVideo}
+            controls
+            muted
+            playsInline
+            preload="metadata"
+            poster={posterUrl}
+            aria-label="Silent Prismedia product film"
+          >
+            <source src={filmUrl} type="video/mp4" />
+            <p>
+              Your browser cannot play this film.{' '}
+              <a href={filmUrl}>Download the MP4 instead.</a>
+            </p>
+          </video>
+          <div className={styles.filmFooter}>
+            <span>Watch · Read · Listen · Request</span>
+            <span>Web · iPhone · iPad · Apple TV</span>
+          </div>
         </div>
       </div>
     </section>
@@ -676,11 +746,16 @@ export default function Home(): ReactNode {
         type="application/ld+json"
         dangerouslySetInnerHTML={{__html: JSON.stringify(PRODUCT_SCHEMA)}}
       />
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{__html: JSON.stringify(VIDEO_SCHEMA)}}
+      />
       <SectionRoute />
       <Hero />
       <main>
         <MediaRail />
         <Problem />
+        <LaunchFilm />
         <Experiences />
         <Platforms />
         <SelfHosting />
