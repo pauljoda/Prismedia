@@ -7,7 +7,7 @@
 <p align="center">
   <strong>Your whole media life. One private home.</strong>
   <br />
-  A self-hosted media library that keeps discovery, requests, downloads, metadata, files, playback, reading, and listening connected.
+  A private, self-hosted media library for watching, reading, listening, requesting, and managing across web, iPhone, iPad, and Apple TV.
 </p>
 
 <p align="center">
@@ -20,8 +20,20 @@
   <a href="https://testflight.apple.com/join/c9bgDxr7">
     <img alt="Join the Prismedia TestFlight" src="https://img.shields.io/badge/Join-TestFlight-0d96f6?style=for-the-badge&logo=apple&logoColor=white" />
   </a>
+  <a href="https://www.producthunt.com/products/prismedia?launch=prismedia">
+    <img alt="Follow Prismedia on Product Hunt" src="https://img.shields.io/badge/Follow-Product_Hunt-da552f?style=for-the-badge&logo=producthunt&logoColor=white" />
+  </a>
   <a href="https://github.com/pauljoda/Prismedia/pkgs/container/prismedia">
     <img alt="Container image" src="https://img.shields.io/badge/GHCR-prismedia-0b0e12?style=for-the-badge&logo=github&logoColor=white" />
+  </a>
+</p>
+
+<p align="center">
+  <a href="https://github.com/pauljoda/Prismedia/actions/workflows/ci.yml">
+    <img alt="Prismedia CI status" src="https://github.com/pauljoda/Prismedia/actions/workflows/ci.yml/badge.svg?branch=main" />
+  </a>
+  <a href="https://github.com/pauljoda/Prismedia/actions/workflows/documentation-site.yml">
+    <img alt="Prismedia documentation deployment status" src="https://github.com/pauljoda/Prismedia/actions/workflows/documentation-site.yml/badge.svg?branch=main" />
   </a>
 </p>
 
@@ -30,22 +42,23 @@
   <a href="https://pauljoda.github.io/Prismedia/docs/intro">Docs</a> &middot;
   <a href="#quick-start">Quick Start</a> &middot;
   <a href="https://testflight.apple.com/join/c9bgDxr7">TestFlight</a> &middot;
+  <a href="https://www.producthunt.com/products/prismedia?launch=prismedia">Product Hunt</a> &middot;
   <a href="https://www.reddit.com/r/Prismedia/">Subreddit</a>
 </p>
 
 <p align="center">
-  <img src="documentation-site/static/img/prismedia-social-card.png" alt="Prismedia turns one private media library into purpose-built experiences for every screen" width="100%" />
+  <img src="docs/launch/product-hunt/assets/01-one-private-home.png" alt="One private Prismedia library enters as white light and becomes purpose-built media experiences across the spectrum" width="100%" />
 </p>
 
-## What Is Prismedia?
+## One Library In. Every Experience Out.
 
-Prismedia is a private, self-hosted media library for the whole lifecycle. An item remains the same item while it moves from discovery and request through acquisition, identification, organization, playback or reading, and long-term maintenance.
+Movies, music, books, audiobooks, comics, images, and galleries share the same underlying needs: identity, artwork, files, metadata, relationships, progress, and history. Self-hosted media usually spreads those needs across one app for playback, another for requests, and a suite of services for acquisition and maintenance.
 
-The complete web workspace, native iPhone and iPad experience, and focus-first Apple TV app share one household library. Video is the foundation, while music, audiobooks, eBooks, comics, images, and galleries receive purpose-built interfaces instead of being flattened into one generic file browser. The native Apple apps are available to a limited testing group through [TestFlight](https://testflight.apple.com/join/c9bgDxr7).
+Prismedia keeps that shared foundation in one private system, then gives every medium an interface shaped around how it is actually used. The logo makes the idea literal: **one light enters; every medium leaves in its own color.**
 
-The production image is intentionally simple. PostgreSQL 16, ffmpeg, the .NET API, the .NET worker, and the built Svelte frontend all ship together as one Docker image. Application data lives in `/data`; your library lives under `/media`; the web app listens on port `8008`.
+The complete web workspace, native iPhone and iPad experience, and focus-first Apple TV app share one household library. An item remains the same item while it moves from discovery and request through acquisition, identification, organization, playback or reading, and long-term maintenance.
 
-Prismedia owns its own library model. Stash community scrapers can be wrapped as identify providers for discovery workflows, but Prismedia's schema, UI, and release process are built around its own media entities.
+The native Apple apps are open to a limited testing group through [TestFlight](https://testflight.apple.com/join/c9bgDxr7).
 
 <p align="center">
   <a href="https://pauljoda.github.io/Prismedia/#launch-film-title">
@@ -55,7 +68,25 @@ Prismedia owns its own library model. Stash community scrapers can be wrapped as
   <a href="https://pauljoda.github.io/Prismedia/#launch-film-title"><strong>▶ Watch the 72-second silent product film</strong></a>
 </p>
 
+<p align="center">
+  <a href="https://www.producthunt.com/products/prismedia?launch=prismedia">
+    <img alt="Prismedia on Product Hunt" height="54" width="250" src="https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=1205980&amp;theme=dark" />
+  </a>
+</p>
+
+## From “I Want It” To “Press Play”
+
+Discovery, requests, acquisition, metadata, files, playback, reading, and listening are one connected lifecycle. Provider identity, download state, artwork, history, and personal progress stay attached to the same library item instead of disappearing at every handoff.
+
+<p align="center">
+  <img src="docs/launch/product-hunt/assets/02-one-media-lifecycle.png" alt="Prismedia connects discovery, requests, acquisition, management, and enjoyment in one media lifecycle" width="100%" />
+</p>
+
 ## Quick Start
+
+<p align="center">
+  <img src="docs/launch/product-hunt/assets/06-self-hosted.png" alt="One self-hosted Prismedia image connects the web, iPhone, iPad, and Apple TV experiences for a household" width="100%" />
+</p>
 
 > [!IMPORTANT]
 > **Prismedia is in early development.** Not every image tag is guaranteed to be published yet. The **`dev`** tag is always built (every push to `main`), and **`alpha`** is generally available. **`beta`**, **`release`**, and **`latest`** are promoted manually and **may not be available yet** — if `latest` can't be pulled, use `dev` (or `alpha`) for now. Expect rough edges and breaking changes while things stabilize.
@@ -122,6 +153,12 @@ Read [CHANGELOG.md](CHANGELOG.md) before upgrading a library you care about.
 
 ## What Prismedia Manages
 
+Video is the foundation, but music, audiobooks, eBooks, comics, images, and galleries are first-class media—not generic files forced into the same grid.
+
+<p align="center">
+  <img src="docs/launch/product-hunt/assets/05-purpose-built-media.png" alt="Prismedia gives video, music, audiobooks, eBooks, comics, images, and galleries purpose-built native experiences" width="100%" />
+</p>
+
 ### Library And Search
 
 Prismedia has dedicated browse surfaces for movies, series, videos, images, galleries, comics, eBooks, audio, artists, people, studios, tags, and collections. The dashboard leads with Continue Watching and Recently Watched; the search page and command palette jump across every entity type.
@@ -178,18 +215,16 @@ A Jellyfin-compatible API lets client apps discover Prismedia, sign in, and stre
 
 The responsive web app is the complete library workspace: browse every medium, request and identify items, manage files, tune settings, and inspect background work from one interface.
 
-The native iPhone and iPad app adds adaptive Apple-platform navigation, video and audio playback, music and audiobook players, and customizable EPUB, PDF, comic, and webtoon reading. Reading and listening progress stay together on the same book, with separate actions for continuing each edition.
+The native iPhone and iPad app adds adaptive Apple-platform navigation, video and audio playback, dedicated music and audiobook players, and customizable EPUB, PDF, comic, and webtoon reading. Tune typeface, size, weight, line spacing, margins, theme, and brightness. When a title has both text and audio editions, reading and listening progress stay together with separate actions for continuing each experience.
 
 <p align="center">
-  <img src="documentation-site/static/img/showcase/ios-reader.webp" alt="A Game of Thrones in Prismedia's native iPhone reader" width="31%" />
-  <img src="documentation-site/static/img/showcase/ios-reader-settings.webp" alt="Prismedia reader typography, theme, and spacing controls" width="31%" />
-  <img src="documentation-site/static/img/showcase/ios-book-combined.webp" alt="Prismedia showing reading and audiobook progress together" width="31%" />
+  <img src="docs/launch/product-hunt/assets/04-custom-reader.png" alt="Prismedia's native reader with literary typography, deep customization, and combined reading and audiobook progress" width="100%" />
 </p>
 
-The Apple TV app uses a cinematic, focus-first interface and a custom native player that works with the device's codec and playback stack. Supported sources can direct-play at original quality—including lossless audio—while title, stream state, timeline, audio, subtitles, and playback controls remain readable from the couch.
+The Apple TV app uses a cinematic, focus-first interface and a custom native player built on the device's codec and playback stack. Supported sources direct-play at original quality—including lossless audio—while the paused chrome keeps title, stream state, resolution, codecs, timeline, audio, subtitles, and playback controls readable from the couch.
 
 <p align="center">
-  <img src="documentation-site/static/img/showcase/tvos-playback.webp" alt="A movie paused in Prismedia's native Apple TV player with direct-play and codec state visible" width="100%" />
+  <img src="docs/launch/product-hunt/assets/03-native-playback.png" alt="Prismedia's custom Apple TV player showing direct play, original-quality video, lossless audio, native codecs, and paused playback controls" width="100%" />
 </p>
 
 The iPhone, iPad, and Apple TV apps are currently distributed through the limited [Prismedia TestFlight](https://testflight.apple.com/join/c9bgDxr7).

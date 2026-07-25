@@ -305,6 +305,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Removed development-only route shells and redundant prerelease UI panels so the app surface and release notes focus on the production Prismedia experience.
 
 ### Docs
+- Reworked the repository README around Prismedia's launch story, product film,
+  native app experiences, Product Hunt page, and campaign artwork.
 - Added wide, square, and vertical Product Hunt campaign artwork, strengthened the
   maker profile around Prismedia’s privacy-first native product story, and added
   reproducible checks for social-asset dimensions, copy clipping, and upload size.
