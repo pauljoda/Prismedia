@@ -77,7 +77,7 @@ const config: Config = {
   ],
 
   themeConfig: {
-    image: 'img/showcase/prism-refraction-hero.png',
+    image: 'img/prismedia-social-card.png',
     metadata: [
       {
         name: 'keywords',
@@ -90,6 +90,11 @@ const config: Config = {
       {property: 'og:type', content: 'website'},
       {property: 'og:site_name', content: 'Prismedia'},
       {
+        property: 'og:image:alt',
+        content:
+          'Prismedia prism splitting one library into watch, read, listen, and request experiences.',
+      },
+      {
         name: 'twitter:title',
         content: 'Your whole media life. One private home.',
       },
@@ -97,6 +102,11 @@ const config: Config = {
         name: 'twitter:description',
         content:
           'A private, self-hosted media library for web, iPhone, iPad, and Apple TV.',
+      },
+      {
+        name: 'twitter:image:alt',
+        content:
+          'Prismedia prism splitting one library into watch, read, listen, and request experiences.',
       },
     ],
     colorMode: {

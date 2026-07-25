@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://pauljoda.github.io/Prismedia/sitemap.xml

@@ -25,8 +25,21 @@ const PRODUCT_SCHEMA = {
     'A private, self-hosted media library that connects discovery, acquisition, metadata, files, playback, reading, and listening.',
   url: 'https://pauljoda.github.io/Prismedia/',
   image:
-    'https://pauljoda.github.io/Prismedia/img/showcase/prism-refraction-hero.png',
+    'https://pauljoda.github.io/Prismedia/img/prismedia-social-card.png',
   softwareRequirements: 'Docker',
+  isAccessibleForFree: true,
+  featureList: [
+    'Discovery, requests, and acquisition in one library lifecycle',
+    'Video, music, audiobooks, ebooks, comics, images, and galleries',
+    'Native experiences for iPhone, iPad, and Apple TV',
+    'Custom native playback using device codec support',
+    'Personal progress and household accounts',
+  ],
+  screenshot: [
+    'https://pauljoda.github.io/Prismedia/img/showcase/web-dashboard.webp',
+    'https://pauljoda.github.io/Prismedia/img/showcase/ios-dashboard.webp',
+    'https://pauljoda.github.io/Prismedia/img/showcase/tvos-dashboard.webp',
+  ],
   sameAs: [GITHUB_URL, TESTFLIGHT_URL],
 };
 const VIDEO_SCHEMA = {

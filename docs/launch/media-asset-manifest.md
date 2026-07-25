@@ -45,6 +45,14 @@ from `docs/logo-mark.png` as an original launch asset. The prompt direction was:
 The unmodified generation is retained in the Codex generated-image archive for
 this launch task.
 
+## Social sharing
+
+`documentation-site/static/img/prismedia-social-card.png` is the dedicated
+1200×630 Open Graph and large-card preview. It combines the reviewed
+`prism-refraction-hero.png` atmosphere with the public positioning line,
+platform scope, and watch/read/listen/request experience rail. The launch site
+uses it for Open Graph, X/Twitter, and `SoftwareApplication` structured data.
+
 ## Publication review
 
 Before a public campaign or app-store submission, review every artwork,
