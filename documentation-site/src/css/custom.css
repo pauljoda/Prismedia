@@ -100,6 +100,14 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
+[role='region'][aria-label='Skip to main content'] > a {
+  left: -9999px !important;
+}
+
+[role='region'][aria-label='Skip to main content'] > a:focus {
+  left: 1rem !important;
+}
+
 * {
   scrollbar-color: rgba(199, 201, 204, 0.2) transparent;
   scrollbar-width: thin;

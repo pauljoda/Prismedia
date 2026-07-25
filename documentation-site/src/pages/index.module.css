@@ -1708,6 +1708,12 @@
     left: 0;
   }
 
+  .heroBeam {
+    right: 0;
+    width: 54%;
+    transform: none;
+  }
+
   .proofRail {
     display: grid;
     grid-template-columns: 1fr 1fr;
@@ -1750,6 +1756,10 @@
   .prismFlow:not(.prismFlowCompact) .prismFlowMark strong {
     position: static;
     margin-top: 0.65rem;
+  }
+
+  .prismFlow:not(.prismFlowCompact) .prismFlowMark::before {
+    inset: 17% 0;
   }
 
   .prismFlow:not(.prismFlowCompact) .prismFlowOutputs {
@@ -1892,9 +1902,11 @@
   }
 
   .platformWeb .frame {
-    right: -18%;
-    bottom: 5%;
-    width: 116%;
+    right: 1.4rem;
+    bottom: 1.4rem;
+    left: 1.4rem;
+    width: auto;
+    transform: none;
   }
 
   .platformPhone .phone {
