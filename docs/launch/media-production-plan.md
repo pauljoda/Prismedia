@@ -466,24 +466,40 @@ Retirement means remove the old image from launch surfaces and update the
 referencing documentation when the new assets land. Do not delete historical
 files as part of this planning task.
 
-## 64-second product-film storyboard
+## 72-second product-film storyboard
 
-Master: 3840×2160, 30 fps, approximately 64 seconds. The narration below is a
-guide, not a final voice contract. Each line is short enough to breathe beside
-the UI. Use an original or fully licensed score with a restrained low pulse,
-quiet glass/control foley, and one prism-like spectral transition motif.
+Master: 3840×2160, 30 fps, approximately 72 seconds. This is the recommended
+launch-film length: long enough to prove each purpose-built experience without
+turning the film into a feature inventory. The narration below is a creative
+guide, not a final voice contract; the production pipeline owns the final
+scene scripts and timing. Use an original or fully licensed score with a
+restrained low pulse, quiet glass/control foley, and one prism-like spectral
+transition motif.
 
 | Time | Picture and motion | Narration / on-screen line | Source |
 | --- | --- | --- | --- |
-| 0:00–0:04 | Black. A neutral beam resolves into the prism mark; a thin spectrum separates once and settles back to silver. | On screen: **One library. Every medium.** | C01 concept using approved brand assets |
-| 0:04–0:12 | W01 dashboard enters full-bleed. Slow 3% push toward the Continue billboard; shelves remain readable. | "Bring every kind of media into one private, coherent library." | W01 state, captured as a short motion take |
-| 0:12–0:19 | Clean match cuts across W03 video grid, W05 gallery lightbox, and P01 comic spread. Spectrum appears only as brief edge wipes keyed to each entity family. | "Browse video, images, books, and audio without changing how the collection feels." | W03, W05, P01 |
-| 0:19–0:27 | W02: begin on the cleared video frame, scrub briefly through trickplay, then dock the transcript. Keep pointer motion minimal. | "Direct play when possible. Adapt when needed. Keep subtitles and context close." | W02 |
-| 0:27–0:35 | W07 player bar rises; match the album art into I01 native Now Playing. A second beat reveals P01's iPad reader controls. | "Listen and read with native controls that remember where you stopped." | W07, I01, P01 |
-| 0:35–0:43 | T01 Home full-bleed, then focus moves once into T02's episode rail; the background reacts to the selected artwork. | "Move from phone to tablet to the biggest screen in the house." | T01, T02 |
-| 0:43–0:50 | W04 Files selection; a linked entity opens. Quick cut to W08 proposal choice, then W10 healthy active job. | "Your files, metadata, and background work stay visible and under your control." | W04, W08, W10 |
-| 0:50–0:56 | Minimal topology line: `/media` and `/data` enter one container; port 8008 connects to the device family. No pseudo-dashboard. | "One Docker image. Your hardware. No cloud library required." | C03 concept |
-| 0:56–1:04 | C02 cross-device family built from W01, I01, P01, and T01. Resolve to prism mark and CTA. | On screen: **Prismedia** / **One library. Every medium.** / **Self-host it.** | C02 and C04 concepts using real approved captures |
+| 0:00–0:05 | Black studio. A thin white beam enters the exact prism mark; the controlled spectrum separates toward the right. The mark remains crisp and unwarped. | On screen: **Your whole media life. One private home.** | `prism-refraction-hero.webp` plus the approved logo mark |
+| 0:05–0:12 | The beam resolves into `web-dashboard.webp`. Slow 3% push toward Continue, then reveal the native iPhone dashboard beside it. | "Bring every kind of media into one private, coherent library." | `web-dashboard.webp`, `ios-dashboard.webp` |
+| 0:12–0:19 | `web-request.webp` enters as a full product frame. The searched title and provider candidates stay legible; no request is submitted. | "Discover it, request it, and keep its identity attached from the start." | `web-request.webp` |
+| 0:19–0:28 | Match `web-detail.webp` into `tvos-playback.webp`. Hold the Apple TV frame long enough to read title, Direct Play, resolution, codecs, timeline, audio, subtitles, and speed controls. | "Watch with the playback path, quality, subtitles, and progress still in view." | `web-detail.webp`, `tvos-playback.webp` |
+| 0:28–0:39 | `ios-reader.webp` rises full-height. Slide `ios-reader-settings.webp` beside it, pausing on Dark, Literary Serif, 120%, 105%, and 1.7 line spacing. Resolve into `ios-book-combined.webp`. | "Read with the page tuned to you, then move between the written and narrated edition." | `ios-reader.webp`, `ios-reader-settings.webp`, `ios-book-combined.webp` |
+| 0:39–0:47 | Album artwork from `ios-music-player.webp` expands from the spectrum; `ios-audiobook.webp` joins as a paired native Now Playing view. Both remain paused. | "Music and audiobooks get focused native players, queues, chapters, and familiar controls." | `ios-music-player.webp`, `ios-audiobook.webp` |
+| 0:47–0:55 | `tvos-dashboard.webp` fills the canvas, then settles into a cross-device family with iPhone and web. Keep the television largest. | "Take the same household library from the browser to your phone and the biggest screen." | `tvos-dashboard.webp`, `ios-dashboard.webp`, `web-dashboard.webp` |
+| 0:55–1:02 | A controlled montage crosses `web-movies.webp`, the reviewed gallery capture, and the reader. Small neutral labels name Movies, Series, Music, Audiobooks, Books, Comics, Images, and Galleries. | "Every medium shares one foundation without being forced into the same interface." | `web-movies.webp`, `documentation-site/static/img/screenshots/galleries.png`, reader captures |
+| 1:02–1:08 | Minimal topology: `/media` and `/data` enter one Prismedia container; port 8008 connects to Web, iPhone, iPad, and Apple TV. | "One Docker image on your hardware, connected to the services you choose." | C03 concept, matching the landing-page topology |
+| 1:08–1:12 | Devices fold back into the prism. Spectrum contracts to the mark; TestFlight and install actions appear with generous separation. | On screen: **Self-host Prismedia** / **Join the limited TestFlight** / **Read the Docs** | Approved logo, official TestFlight asset, real product captures |
+
+### Launch-film cutdowns
+
+- **30-second product cut:** opening, dashboard, Request, paused Apple TV
+  playback, reader/settings, native audio, end card.
+- **15-second TestFlight cut:** iPhone dashboard, reader/settings, music and
+  audiobook players, Apple TV proof, TestFlight end card.
+- **9:16 social cut:** retain the iPhone reader, audio, and dashboard shots at
+  native prominence; use center crops of web and television proof only as
+  background context.
+- **6-second bumper:** beam → prism → cross-device family → **Your whole media
+  life. One private home.**
 
 Motion rules:
 
