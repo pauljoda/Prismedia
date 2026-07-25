@@ -25,7 +25,7 @@ const prismediaPrismTheme: PrismTheme = {
 
 const config: Config = {
   title: 'Prismedia',
-  tagline: 'A private, self-hosted home for your entire media collection.',
+  tagline: 'Your whole media life. One private home.',
   favicon: 'img/favicon-32.png',
 
   // Future flags, see https://docusaurus.io/docs/api/docusaurus-config#future
@@ -77,7 +77,7 @@ const config: Config = {
   ],
 
   themeConfig: {
-    image: 'img/screenshots/dashboard.png',
+    image: 'img/showcase/prism-refraction-hero.png',
     colorMode: {
       defaultMode: 'dark',
       disableSwitch: false,
@@ -90,25 +90,26 @@ const config: Config = {
         src: 'img/logo.png',
       },
       items: [
+        {to: '/?section=product', label: 'Product', position: 'left'},
+        {to: '/?section=experiences', label: 'Experiences', position: 'left'},
+        {to: '/?section=platforms', label: 'Platforms', position: 'left'},
+        {to: '/?section=self-hosting', label: 'Self-hosting', position: 'left'},
         {
           type: 'docSidebar',
           sidebarId: 'docsSidebar',
           position: 'left',
           label: 'Docs',
         },
-        {to: '/docs/getting-started/install', label: 'Get Started', position: 'left'},
-        {to: '/docs/jellyfin/overview', label: 'Jellyfin', position: 'left'},
-        {to: '/docs/developers/architecture', label: 'Developers', position: 'left'},
-        {to: '/docs/plugins/overview', label: 'Plugins', position: 'left'},
         {
           href: 'https://github.com/pauljoda/Prismedia',
           label: 'GitHub',
           position: 'right',
         },
         {
-          href: 'https://www.reddit.com/r/Prismedia/',
-          label: 'Reddit',
+          href: 'https://testflight.apple.com/join/c9bgDxr7',
+          label: 'Join TestFlight',
           position: 'right',
+          className: 'navbar__testflight',
         },
       ],
     },
@@ -129,15 +130,19 @@ const config: Config = {
           ],
         },
         {
-          title: 'Build',
+          title: 'Product',
           items: [
             {
-              label: 'Architecture',
-              to: '/docs/developers/architecture',
+              label: 'Experiences',
+              to: '/?section=experiences',
             },
             {
-              label: 'Plugin development',
-              to: '/docs/plugins/overview',
+              label: 'Platforms',
+              to: '/?section=platforms',
+            },
+            {
+              label: 'Self-hosting',
+              to: '/?section=self-hosting',
             },
           ],
         },
@@ -155,6 +160,10 @@ const config: Config = {
             {
               label: 'Subreddit',
               href: 'https://www.reddit.com/r/Prismedia/',
+            },
+            {
+              label: 'Join TestFlight',
+              href: 'https://testflight.apple.com/join/c9bgDxr7',
             },
           ],
         },
