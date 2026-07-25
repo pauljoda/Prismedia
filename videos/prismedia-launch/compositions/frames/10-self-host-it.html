@@ -1,0 +1,260 @@
+<template>
+  <style>
+    @font-face { font-family: "Geist Sans"; src: url("assets/fonts/Geist-400.woff2") format("woff2"); font-weight: 400; font-style: normal; font-display: swap; }
+    @font-face { font-family: "Geist Sans"; src: url("assets/fonts/Geist-500.woff2") format("woff2"); font-weight: 500; font-style: normal; font-display: swap; }
+    @font-face { font-family: "Geist Sans"; src: url("assets/fonts/Geist-600.woff2") format("woff2"); font-weight: 600; font-style: normal; font-display: swap; }
+    @font-face { font-family: "Geist Sans"; src: url("assets/fonts/Geist-700.woff2") format("woff2"); font-weight: 700; font-style: normal; font-display: swap; }
+    @font-face { font-family: "Geist Sans"; src: url("assets/fonts/Geist-800.woff2") format("woff2"); font-weight: 800; font-style: normal; font-display: swap; }
+    @font-face { font-family: "Inter Variable"; src: url("assets/fonts/Inter-Variable.woff2") format("woff2"); font-weight: 100 900; font-style: normal; font-display: swap; }
+    @font-face { font-family: "JetBrains Mono"; src: url("assets/fonts/JetBrainsMono-Variable.woff2") format("woff2"); font-weight: 100 800; font-style: normal; font-display: swap; }
+
+    #root {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      container-type: size;
+      color: #F5F5F6;
+    }
+
+    .clip { position: absolute; inset: 0; z-index: 0; background: #000000; }
+
+    .f10-self-host-it-hook {
+      position: absolute;
+      left: 5.5cqw;
+      top: 6.5cqh;
+      z-index: 6;
+      width: 42cqw;
+      margin: 0;
+      color: #F5F5F6;
+      font-family: "Geist Sans", sans-serif;
+      font-size: 4.5cqw;
+      font-weight: 700;
+      line-height: 1.04;
+      letter-spacing: -0.02em;
+    }
+
+    .f10-self-host-it-hook-accent { color: #B3484D; }
+
+    .f10-self-host-it-hook-rule {
+      position: absolute;
+      left: 5.7cqw;
+      top: 18.8cqh;
+      z-index: 6;
+      width: 36px;
+      height: 2px;
+      background: #B3484D;
+    }
+
+    .f10-self-host-it-system {
+      position: absolute;
+      inset: 0;
+      z-index: 2;
+      width: 100%;
+      height: 100%;
+      overflow: visible;
+    }
+
+    .f10-self-host-it-system path {
+      fill: none;
+      stroke-linecap: square;
+      stroke-width: 1;
+    }
+
+    .f10-self-host-it-input { stroke: rgba(245, 245, 246, 0.72); }
+    .f10-self-host-it-output-red { stroke: #B3484D; }
+    .f10-self-host-it-output-orange { stroke: #B76337; }
+    .f10-self-host-it-output-yellow { stroke: #9E873B; }
+    .f10-self-host-it-output-cyan { stroke: #3B869C; }
+    .f10-self-host-it-output-violet { stroke: #775CA5; }
+
+    .f10-self-host-it-path-label {
+      position: absolute;
+      z-index: 4;
+      color: #C8C9CC;
+      font-family: "JetBrains Mono", monospace;
+      font-size: 0.82cqw;
+      font-weight: 500;
+      letter-spacing: 0.14em;
+      line-height: 1;
+      text-transform: uppercase;
+    }
+
+    .f10-self-host-it-media-label { left: 13.5cqw; top: 31cqh; }
+    .f10-self-host-it-data-label { left: 13.5cqw; top: 57cqh; }
+
+    .f10-self-host-it-lockup {
+      position: absolute;
+      left: 50%;
+      top: 35cqh;
+      z-index: 5;
+      width: 55cqw;
+      height: 27cqh;
+      margin-left: -27.5cqw;
+      transform-origin: 50% 50%;
+    }
+
+    .f10-self-host-it-mark {
+      position: absolute;
+      left: 13.6cqw;
+      top: 0;
+      width: 10.8cqw;
+      height: auto;
+      object-fit: contain;
+    }
+
+    .f10-self-host-it-wordmark {
+      position: absolute;
+      left: 26.2cqw;
+      top: 7.6cqh;
+      margin: 0;
+      color: #F5F5F6;
+      font-family: "Geist Sans", sans-serif;
+      font-size: 5.5cqw;
+      font-weight: 800;
+      letter-spacing: -0.04em;
+      line-height: 0.9;
+    }
+
+    .f10-self-host-it-statement {
+      position: absolute;
+      left: 50%;
+      top: 65.2cqh;
+      z-index: 5;
+      width: 70cqw;
+      margin-left: -35cqw;
+      color: #C8C9CC;
+      font-family: "JetBrains Mono", monospace;
+      font-size: 1.05cqw;
+      font-weight: 500;
+      letter-spacing: 0.14em;
+      line-height: 1.2;
+      text-align: center;
+      text-transform: uppercase;
+      transform-origin: 0 50%;
+    }
+
+    .f10-self-host-it-action {
+      position: absolute;
+      z-index: 7;
+      top: 75.5cqh;
+      height: 7.3cqh;
+      border-top: 1px solid rgba(164, 172, 185, 0.32);
+      color: #F5F5F6;
+      font-family: "JetBrains Mono", monospace;
+      font-size: 1cqw;
+      font-weight: 500;
+      letter-spacing: 0.14em;
+      line-height: 7.3cqh;
+      text-transform: uppercase;
+      transform-origin: 0 50%;
+      white-space: nowrap;
+    }
+
+    .f10-self-host-it-action::before {
+      content: "";
+      position: absolute;
+      left: 0;
+      top: -1px;
+      width: 36px;
+      height: 2px;
+      background: #B3484D;
+    }
+
+    .f10-self-host-it-action-left { left: 14.5cqw; width: 29cqw; }
+    .f10-self-host-it-action-right { left: 53.5cqw; width: 32cqw; }
+
+    .f10-self-host-it-testflight {
+      width: 2.55cqw;
+      height: 2.55cqw;
+      margin-right: 1cqw;
+      vertical-align: middle;
+      object-fit: contain;
+    }
+  </style>
+
+  <div id="root" data-composition-id="10-self-host-it" data-start="0" data-duration="6" data-width="1920" data-height="1080">
+    <div class="clip" data-start="0" data-duration="6" data-track-index="0"></div>
+
+    <h1 class="f10-self-host-it-hook" id="f10-self-host-it-hook">ONE DOCKER IMAGE.<br /><span class="f10-self-host-it-hook-accent">YOUR HARDWARE.</span></h1>
+    <div class="f10-self-host-it-hook-rule" id="f10-self-host-it-hook-rule"></div>
+
+    <svg class="f10-self-host-it-system" viewBox="0 0 1920 1080" aria-hidden="true">
+      <path class="f10-self-host-it-input" id="f10-self-host-it-media-path" d="M 300 355 L 700 355 L 940 475" />
+      <path class="f10-self-host-it-input" id="f10-self-host-it-data-path" d="M 300 635 L 700 635 L 940 475" />
+      <path class="f10-self-host-it-input" id="f10-self-host-it-white-input" d="M 840 475 L 1045 475" />
+      <path class="f10-self-host-it-output-red" id="f10-self-host-it-rail-red" d="M 970 475 L 1380 286" />
+      <path class="f10-self-host-it-output-orange" id="f10-self-host-it-rail-orange" d="M 970 475 L 1510 372" />
+      <path class="f10-self-host-it-output-yellow" id="f10-self-host-it-rail-yellow" d="M 970 475 L 1560 475" />
+      <path class="f10-self-host-it-output-cyan" id="f10-self-host-it-rail-cyan" d="M 970 475 L 1510 578" />
+      <path class="f10-self-host-it-output-violet" id="f10-self-host-it-rail-violet" d="M 970 475 L 1380 664" />
+    </svg>
+
+    <div class="f10-self-host-it-path-label f10-self-host-it-media-label" id="f10-self-host-it-media-label">MEDIA</div>
+    <div class="f10-self-host-it-path-label f10-self-host-it-data-label" id="f10-self-host-it-data-label">DATA</div>
+
+    <div class="f10-self-host-it-lockup" id="f10-self-host-it-lockup">
+      <img class="f10-self-host-it-mark" id="f10-self-host-it-mark" src="assets/logo-mark.png" alt="" />
+      <div class="f10-self-host-it-wordmark" id="f10-self-host-it-wordmark">prismedia</div>
+    </div>
+    <div class="f10-self-host-it-statement" id="f10-self-host-it-statement">SELF-HOST THE LIBRARY. TAKE IT EVERYWHERE.</div>
+
+    <div class="f10-self-host-it-action f10-self-host-it-action-left" id="f10-self-host-it-self-host-action">SELF-HOST PRISMEDIA</div>
+    <div class="f10-self-host-it-action f10-self-host-it-action-right" id="f10-self-host-it-testflight-action"><img class="f10-self-host-it-testflight" src="assets/testflight-icon.webp" alt="" />JOIN THE LIMITED TESTFLIGHT</div>
+  </div>
+
+  <script>
+    (() => {
+      const gsap = window.gsap;
+      const tl = gsap.timeline({ paused: true });
+      window.__timelines = window.__timelines || {};
+
+      const pathIds = [
+        "#f10-self-host-it-media-path",
+        "#f10-self-host-it-data-path",
+        "#f10-self-host-it-white-input",
+        "#f10-self-host-it-rail-red",
+        "#f10-self-host-it-rail-orange",
+        "#f10-self-host-it-rail-yellow",
+        "#f10-self-host-it-rail-cyan",
+        "#f10-self-host-it-rail-violet"
+      ];
+      pathIds.forEach((selector) => {
+        const path = document.querySelector(selector);
+        const length = path.getTotalLength();
+        path.style.strokeDasharray = `${length}`;
+        path.style.strokeDashoffset = `${length}`;
+      });
+
+      const hook = "#f10-self-host-it-hook";
+      const hookRule = "#f10-self-host-it-hook-rule";
+      const mark = "#f10-self-host-it-mark";
+      const wordmark = "#f10-self-host-it-wordmark";
+      const lockup = "#f10-self-host-it-lockup";
+      const statement = "#f10-self-host-it-statement";
+      const selfHostAction = "#f10-self-host-it-self-host-action";
+      const testflightAction = "#f10-self-host-it-testflight-action";
+
+      tl.fromTo(hook, { opacity: 0, y: -28 }, { opacity: 1, y: 0, duration: 0.52, ease: "power3.out" }, 0.08)
+        .fromTo(hookRule, { opacity: 0, scaleX: 0 }, { opacity: 1, scaleX: 1, duration: 0.42, ease: "power3.out" }, 0.24)
+        .to("#f10-self-host-it-media-path", { strokeDashoffset: 0, duration: 0.72, ease: "power3.out" }, 0.3)
+        .to("#f10-self-host-it-data-path", { strokeDashoffset: 0, duration: 0.72, ease: "power3.out" }, 0.46)
+        .fromTo(["#f10-self-host-it-media-label", "#f10-self-host-it-data-label"], { opacity: 0, x: -12 }, { opacity: 1, x: 0, duration: 0.38, stagger: 0.12, ease: "power3.out" }, 0.58)
+        .to("#f10-self-host-it-white-input", { strokeDashoffset: 0, duration: 0.44, ease: "power3.out" }, 1.22)
+        .fromTo(mark, { opacity: 0, scale: 0.78 }, { opacity: 1, scale: 1, duration: 0.7, ease: "power3.out" }, 1.46)
+        .to("#f10-self-host-it-rail-red", { strokeDashoffset: 0, duration: 0.58, ease: "power3.out" }, 1.62)
+        .to("#f10-self-host-it-rail-orange", { strokeDashoffset: 0, duration: 0.58, ease: "power3.out" }, 1.7)
+        .to("#f10-self-host-it-rail-yellow", { strokeDashoffset: 0, duration: 0.58, ease: "power3.out" }, 1.78)
+        .to("#f10-self-host-it-rail-cyan", { strokeDashoffset: 0, duration: 0.58, ease: "power3.out" }, 1.86)
+        .to("#f10-self-host-it-rail-violet", { strokeDashoffset: 0, duration: 0.58, ease: "power3.out" }, 1.94)
+        .fromTo(wordmark, { opacity: 0, x: -30 }, { opacity: 1, x: 0, duration: 0.56, ease: "power3.out" }, 2.84)
+        .fromTo(statement, { opacity: 0, scaleX: 0 }, { opacity: 1, scaleX: 1, duration: 0.58, ease: "power3.out" }, 3.24)
+        .to(lockup, { y: -92, duration: 0.56, ease: "power3.out" }, 4.0)
+        .to(statement, { y: -92, duration: 0.56, ease: "power3.out" }, 4.0)
+        .fromTo(selfHostAction, { opacity: 0, clipPath: "inset(0 100% 0 0)" }, { opacity: 1, clipPath: "inset(0 0% 0 0)", duration: 0.5, ease: "power3.out" }, 4.08)
+        .fromTo(testflightAction, { opacity: 0, clipPath: "inset(0 100% 0 0)" }, { opacity: 1, clipPath: "inset(0 0% 0 0)", duration: 0.5, ease: "power3.out" }, 4.28);
+
+      window.__timelines["10-self-host-it"] = tl;
+    })();
+  </script>
+</template>

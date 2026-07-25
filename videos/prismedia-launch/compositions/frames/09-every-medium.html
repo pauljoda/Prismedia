@@ -1,0 +1,238 @@
+<template>
+  <style>
+    @font-face {
+      font-family: "Geist Sans";
+      src: url("assets/fonts/Geist-700.woff2") format("woff2");
+      font-style: normal;
+      font-weight: 700;
+    }
+    @font-face {
+      font-family: "Geist Sans";
+      src: url("assets/fonts/Geist-800.woff2") format("woff2");
+      font-style: normal;
+      font-weight: 800;
+    }
+    @font-face {
+      font-family: "JetBrains Mono";
+      src: url("assets/fonts/JetBrainsMono-Variable.woff2") format("woff2");
+      font-style: normal;
+      font-weight: 400 800;
+    }
+
+    #root {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      isolation: isolate;
+      container-type: size;
+    }
+
+    .clip {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      background: #000000;
+    }
+
+    [class~="09-every-medium-kicker"] {
+      position: absolute;
+      top: 5.7cqh;
+      left: 5.5cqw;
+      color: #f5f5f6;
+      font-family: "Geist Sans";
+      font-size: 3.05cqw;
+      font-weight: 800;
+      letter-spacing: -0.035em;
+      line-height: 0.95;
+    }
+
+    [class~="09-every-medium-payoff"] {
+      position: absolute;
+      top: 10.4cqh;
+      left: 5.5cqw;
+      width: 77cqw;
+      color: #f5f5f6;
+      font-family: "Geist Sans";
+      font-size: 4.45cqw;
+      font-weight: 800;
+      letter-spacing: -0.043em;
+      line-height: 0.92;
+    }
+
+    [class~="09-every-medium-payoff"] span {
+      display: block;
+    }
+
+    [class~="09-every-medium-payoff"] span:first-child {
+      color: #92959d;
+      font-size: 2.1cqw;
+      font-weight: 700;
+      letter-spacing: -0.025em;
+      margin-bottom: 0.65cqh;
+    }
+
+    [class~="09-every-medium-mosaic"] {
+      position: absolute;
+      inset: 0;
+    }
+
+    [class~="09-every-medium-tile"] {
+      position: absolute;
+      overflow: hidden;
+      border: 1px solid rgba(245, 245, 246, 0.16);
+      background: #09090a;
+    }
+
+    [class~="09-every-medium-tile"] img {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    [class~="09-every-medium-movies"] {
+      top: 25.0cqh;
+      left: 30.0cqw;
+      width: 40.0cqw;
+      height: 40.0cqh;
+    }
+
+    [class~="09-every-medium-galleries"] {
+      top: 28.0cqh;
+      left: 5.0cqw;
+      width: 21.0cqw;
+      height: 21.0cqh;
+    }
+
+    [class~="09-every-medium-reader"] {
+      top: 53.0cqh;
+      left: 10.0cqw;
+      width: 7.5cqw;
+      height: 29.0cqh;
+    }
+
+    [class~="09-every-medium-music"] {
+      top: 51.0cqh;
+      left: 80.0cqw;
+      width: 8.0cqw;
+      height: 31.0cqh;
+    }
+
+    [class~="09-every-medium-television"] {
+      top: 27.0cqh;
+      left: 72.0cqw;
+      width: 21.0cqw;
+      height: 21.0cqh;
+    }
+
+    [class~="09-every-medium-label-group"] {
+      position: absolute;
+      height: 2.1cqh;
+      color: #c8c9cc;
+      font-family: "JetBrains Mono";
+      font-size: 0.72cqw;
+      font-weight: 500;
+      letter-spacing: 0.14em;
+      line-height: 1;
+      white-space: nowrap;
+    }
+
+    [class~="09-every-medium-label-group"] i {
+      display: block;
+      width: 2.2cqw;
+      height: 1px;
+      margin-top: 0.72cqh;
+      background: rgba(245, 245, 246, 0.55);
+    }
+
+    [class~="09-every-medium-movies-label"] {
+      top: 22.6cqh;
+      left: 30.0cqw;
+    }
+
+    [class~="09-every-medium-images-label"] {
+      top: 25.6cqh;
+      left: 5.0cqw;
+    }
+
+    [class~="09-every-medium-books-label"] {
+      top: 50.5cqh;
+      left: 10.0cqw;
+    }
+
+    [class~="09-every-medium-music-label"] {
+      top: 48.5cqh;
+      left: 80.0cqw;
+    }
+  </style>
+
+  <div id="root" data-composition-id="09-every-medium" data-start="0" data-duration="6.4" data-width="1920" data-height="1080">
+    <div class="clip" data-start="0" data-duration="6.4" data-track-index="0"></div>
+
+    <div class="09-every-medium-kicker" id="09-every-medium-kicker">EVERY MEDIUM.</div>
+    <div class="09-every-medium-payoff" id="09-every-medium-payoff">
+      <span>ONE FOUNDATION.</span>
+      <span>PURPOSE-BUILT EXPERIENCES.</span>
+    </div>
+
+    <div class="09-every-medium-mosaic" id="09-every-medium-mosaic">
+      <div class="09-every-medium-tile 09-every-medium-movies" id="09-every-medium-movies">
+        <img src="assets/web-movies.webp" alt="Prismedia movie library" />
+      </div>
+      <div class="09-every-medium-tile 09-every-medium-galleries" id="09-every-medium-galleries">
+        <img src="assets/web-galleries.png" alt="Prismedia gallery library" />
+      </div>
+      <div class="09-every-medium-tile 09-every-medium-reader" id="09-every-medium-reader">
+        <img src="assets/ios-reader.webp" alt="Prismedia reader" />
+      </div>
+      <div class="09-every-medium-tile 09-every-medium-music" id="09-every-medium-music">
+        <img src="assets/ios-music-player.webp" alt="Prismedia music player" />
+      </div>
+      <div class="09-every-medium-tile 09-every-medium-television" id="09-every-medium-television">
+        <img src="assets/tvos-dashboard.webp" alt="Prismedia television dashboard" />
+      </div>
+    </div>
+
+    <div class="09-every-medium-label-group 09-every-medium-movies-label" id="09-every-medium-movies-label">MOVIES · SERIES<i></i></div>
+    <div class="09-every-medium-label-group 09-every-medium-music-label" id="09-every-medium-music-label">MUSIC · AUDIOBOOKS<i></i></div>
+    <div class="09-every-medium-label-group 09-every-medium-books-label" id="09-every-medium-books-label">BOOKS · COMICS<i></i></div>
+    <div class="09-every-medium-label-group 09-every-medium-images-label" id="09-every-medium-images-label">IMAGES · GALLERIES<i></i></div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+  <script>
+    window.__timelines = window.__timelines || {};
+
+    const tl = gsap.timeline({ paused: true });
+    const kicker = document.getElementById("09-every-medium-kicker");
+    const payoff = document.getElementById("09-every-medium-payoff");
+    const movies = document.getElementById("09-every-medium-movies");
+    const galleries = document.getElementById("09-every-medium-galleries");
+    const reader = document.getElementById("09-every-medium-reader");
+    const music = document.getElementById("09-every-medium-music");
+    const television = document.getElementById("09-every-medium-television");
+    const labels = [
+      document.getElementById("09-every-medium-movies-label"),
+      document.getElementById("09-every-medium-music-label"),
+      document.getElementById("09-every-medium-books-label"),
+      document.getElementById("09-every-medium-images-label"),
+    ];
+
+    tl.fromTo(kicker, { y: -22, opacity: 0 }, { y: 0, opacity: 1, duration: 0.64, ease: "power3.out" }, 0.08);
+    tl.fromTo(movies, { x: -92, y: 18, scale: 0.97, opacity: 0 }, { x: 0, y: 0, scale: 1, opacity: 1, duration: 0.72, ease: "power3.out" }, 0.28);
+
+    tl.fromTo(galleries, { x: -74, y: 14, scale: 0.96, opacity: 0 }, { x: 0, y: 0, scale: 1, opacity: 1, duration: 0.58, ease: "power3.out" }, 1.28);
+    tl.fromTo(reader, { x: -52, y: 16, scale: 0.96, opacity: 0 }, { x: 0, y: 0, scale: 1, opacity: 1, duration: 0.54, ease: "power3.out" }, 1.88);
+    tl.fromTo(music, { x: 52, y: 16, scale: 0.96, opacity: 0 }, { x: 0, y: 0, scale: 1, opacity: 1, duration: 0.54, ease: "power3.out" }, 2.50);
+    tl.fromTo(television, { x: 74, y: 14, scale: 0.96, opacity: 0 }, { x: 0, y: 0, scale: 1, opacity: 1, duration: 0.58, ease: "power3.out" }, 3.12);
+
+    labels.forEach((label, index) => {
+      tl.fromTo(label, { y: 12, opacity: 0 }, { y: 0, opacity: 1, duration: 0.38, ease: "power3.out" }, 3.82 + index * 0.27);
+    });
+    tl.fromTo(payoff, { y: 20, opacity: 0 }, { y: 0, opacity: 1, duration: 0.66, ease: "power3.out" }, 5.02);
+
+    window.__timelines["09-every-medium"] = tl;
+  </script>
+</template>

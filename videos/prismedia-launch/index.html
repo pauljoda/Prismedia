@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=1920, height=1080" />
-    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js" integrity="sha384-sG0Hv1tP1lZCk9KQmrIbY/XNwi+OY84GQqhMscbnsoBFqAz8KNCil1kvfL3Hbbk2" crossorigin="anonymous"></script>
     <style>
       * {
         margin: 0;
@@ -12,19 +12,23 @@
       }
       html,
       body {
-        margin: 0;
         width: 1920px;
         height: 1080px;
         overflow: hidden;
         background: #000;
       }
-      body {
-        font-family: "Inter", sans-serif;
+      #root {
+        position: relative;
+        width: 1920px;
+        height: 1080px;
+        overflow: hidden;
+        background: #000000;
       }
-      code,
-      pre,
-      .monospace {
-        font-family: "JetBrains Mono", monospace;
+      .scene {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
       }
     </style>
   </head>
@@ -33,24 +37,137 @@
       id="root"
       data-composition-id="main"
       data-start="0"
-      data-duration="10"
+      data-duration="72"
       data-width="1920"
       data-height="1080"
     >
-      <!--
-        Add your clips here. Example:
-        <div id="title" class="clip" data-start="0" data-duration="5" data-track-index="1"
-             style="font-size: 64px; color: #fff; padding: 40px">
-          Hello World
-        </div>
-      -->
+      <div
+        id="el-01-one-collection"
+        class="scene"
+        data-composition-id="01-one-collection"
+        data-composition-src="compositions/frames/01-one-collection.html"
+        data-start="0"
+        data-duration="6.4"
+        data-track-index="0"
+      ></div>
+
+      <div
+        id="el-02-whole-library"
+        class="scene"
+        data-composition-id="02-whole-library"
+        data-composition-src="compositions/frames/02-whole-library.html"
+        data-start="6"
+        data-duration="7.5"
+        data-track-index="1"
+      ></div>
+
+      <div
+        id="el-03-one-lifecycle"
+        class="scene"
+        data-composition-id="03-one-lifecycle"
+        data-composition-src="compositions/frames/03-one-lifecycle.html"
+        data-start="13"
+        data-duration="7.4"
+        data-track-index="0"
+      ></div>
+
+      <div
+        id="el-04-watch"
+        class="scene"
+        data-composition-id="04-watch"
+        data-composition-src="compositions/frames/04-watch.html"
+        data-start="20"
+        data-duration="9.4"
+        data-track-index="1"
+      ></div>
+
+      <div
+        id="el-05-read-your-way"
+        class="scene"
+        data-composition-id="05-read-your-way"
+        data-composition-src="compositions/frames/05-read-your-way.html"
+        data-start="29"
+        data-duration="11.5"
+        data-track-index="0"
+      ></div>
+
+      <div
+        id="el-06-read-and-listen"
+        class="scene"
+        data-composition-id="06-read-and-listen"
+        data-composition-src="compositions/frames/06-read-and-listen.html"
+        data-start="40"
+        data-duration="6.4"
+        data-track-index="1"
+      ></div>
+
+      <div
+        id="el-07-listen"
+        class="scene"
+        data-composition-id="07-listen"
+        data-composition-src="compositions/frames/07-listen.html"
+        data-start="46"
+        data-duration="7.4"
+        data-track-index="0"
+      ></div>
+
+      <div
+        id="el-08-every-screen"
+        class="scene"
+        data-composition-id="08-every-screen"
+        data-composition-src="compositions/frames/08-every-screen.html"
+        data-start="53"
+        data-duration="7.5"
+        data-track-index="1"
+      ></div>
+
+      <div
+        id="el-09-every-medium"
+        class="scene"
+        data-composition-id="09-every-medium"
+        data-composition-src="compositions/frames/09-every-medium.html"
+        data-start="60"
+        data-duration="6.4"
+        data-track-index="0"
+      ></div>
+
+      <div
+        id="el-10-self-host-it"
+        class="scene"
+        data-composition-id="10-self-host-it"
+        data-composition-src="compositions/frames/10-self-host-it.html"
+        data-start="66"
+        data-duration="6"
+        data-track-index="1"
+      ></div>
+
     </div>
 
     <script>
       window.__timelines = window.__timelines || {};
-      const tl = gsap.timeline({ paused: true });
-      // Example: tl.from("#title", { opacity: 0, y: -50, duration: 1 }, 0);
-      window.__timelines["main"] = tl;
+      window.__timelines["main"] = gsap.timeline({ paused: true });
+      // ── frame transitions (injected by transitions.mjs) ──
+      (function () { var tl = window.__timelines["main"];
+        tl.to("#el-01-one-collection", { scale: 2.5, opacity: 0, filter: "blur(8px)", duration: 0.4, ease: "power3.in" }, 6);
+        tl.fromTo("#el-02-whole-library", { scale: 0.5, opacity: 0, filter: "blur(8px)" }, { scale: 1, opacity: 1, filter: "blur(0px)", duration: 0.4, ease: "power3.out" }, 6);
+        tl.to("#el-02-whole-library", { opacity: 0, duration: 0.5, ease: "power2.inOut" }, 13);
+        tl.fromTo("#el-03-one-lifecycle", { opacity: 0 }, { opacity: 1, duration: 0.5, ease: "power2.inOut" }, 13);
+        tl.to("#el-03-one-lifecycle", { scaleX: 0, transformOrigin: "left center", duration: 0.4, ease: "power3.inOut" }, 20);
+        tl.fromTo("#el-04-watch", { scaleX: 0, transformOrigin: "right center", opacity: 1 }, { scaleX: 1, transformOrigin: "right center", duration: 0.4, ease: "power3.inOut" }, 20);
+        tl.to("#el-04-watch", { scale: 2.5, opacity: 0, filter: "blur(8px)", duration: 0.4, ease: "power3.in" }, 29);
+        tl.fromTo("#el-05-read-your-way", { scale: 0.5, opacity: 0, filter: "blur(8px)" }, { scale: 1, opacity: 1, filter: "blur(0px)", duration: 0.4, ease: "power3.out" }, 29);
+        tl.to("#el-05-read-your-way", { opacity: 0, duration: 0.5, ease: "power2.inOut" }, 40);
+        tl.fromTo("#el-06-read-and-listen", { opacity: 0 }, { opacity: 1, duration: 0.5, ease: "power2.inOut" }, 40);
+        tl.to("#el-06-read-and-listen", { scaleX: 0, transformOrigin: "left center", duration: 0.4, ease: "power3.inOut" }, 46);
+        tl.fromTo("#el-07-listen", { scaleX: 0, transformOrigin: "right center", opacity: 1 }, { scaleX: 1, transformOrigin: "right center", duration: 0.4, ease: "power3.inOut" }, 46);
+        tl.to("#el-07-listen", { scale: 2.5, opacity: 0, filter: "blur(8px)", duration: 0.4, ease: "power3.in" }, 53);
+        tl.fromTo("#el-08-every-screen", { scale: 0.5, opacity: 0, filter: "blur(8px)" }, { scale: 1, opacity: 1, filter: "blur(0px)", duration: 0.4, ease: "power3.out" }, 53);
+        tl.to("#el-08-every-screen", { x: -1920, duration: 0.5, ease: "power3.inOut" }, 60);
+        tl.fromTo("#el-09-every-medium", { x: 1920, opacity: 1 }, { x: 0, duration: 0.5, ease: "power3.inOut" }, 60);
+        tl.to("#el-09-every-medium", { scale: 2.5, opacity: 0, filter: "blur(8px)", duration: 0.4, ease: "power3.in" }, 66);
+        tl.fromTo("#el-10-self-host-it", { scale: 0.5, opacity: 0, filter: "blur(8px)" }, { scale: 1, opacity: 1, filter: "blur(0px)", duration: 0.4, ease: "power3.out" }, 66);
+        tl.to({}, { duration: 72 }, 0); // full-span anchor — main.duration() == composition total (Studio master duration)
+      })();
     </script>
   </body>
 </html>

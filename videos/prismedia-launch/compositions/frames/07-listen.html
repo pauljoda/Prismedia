@@ -1,0 +1,195 @@
+<template>
+  <style>
+    @font-face { font-family: "Geist Sans"; src: url("assets/fonts/Geist-400.woff2") format("woff2"); font-weight: 400; font-style: normal; font-display: swap; }
+    @font-face { font-family: "Geist Sans"; src: url("assets/fonts/Geist-500.woff2") format("woff2"); font-weight: 500; font-style: normal; font-display: swap; }
+    @font-face { font-family: "Geist Sans"; src: url("assets/fonts/Geist-600.woff2") format("woff2"); font-weight: 600; font-style: normal; font-display: swap; }
+    @font-face { font-family: "Geist Sans"; src: url("assets/fonts/Geist-700.woff2") format("woff2"); font-weight: 700; font-style: normal; font-display: swap; }
+    @font-face { font-family: "Geist Sans"; src: url("assets/fonts/Geist-800.woff2") format("woff2"); font-weight: 800; font-style: normal; font-display: swap; }
+    @font-face { font-family: "Inter Variable"; src: url("assets/fonts/Inter-Variable.woff2") format("woff2"); font-weight: 100 900; font-style: normal; font-display: swap; }
+    @font-face { font-family: "JetBrains Mono"; src: url("assets/fonts/JetBrainsMono-Variable.woff2") format("woff2"); font-weight: 100 800; font-style: normal; font-display: swap; }
+
+    #root {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      container-type: size;
+      color: #F5F5F6;
+      perspective: 1800px;
+    }
+
+    .clip {
+      position: absolute;
+      inset: 0;
+      z-index: 0;
+      background: #000000;
+    }
+
+    .f07-listen-sample {
+      position: absolute;
+      top: 26cqh;
+      width: 35cqw;
+      height: 49cqh;
+      opacity: 0.12;
+      z-index: 1;
+    }
+
+    .f07-listen-sample-left { left: 5.5cqw; background: #B76337; }
+    .f07-listen-sample-right { right: 5.5cqw; background: #775CA5; }
+
+    .f07-listen-title {
+      position: absolute;
+      left: 5.5cqw;
+      top: 5.5cqh;
+      z-index: 7;
+      margin: 0;
+      color: #F5F5F6;
+      font-family: "Geist Sans", sans-serif;
+      font-size: 7.5cqw;
+      font-weight: 800;
+      line-height: 0.9;
+      letter-spacing: -0.03em;
+    }
+
+    .f07-listen-title-rule {
+      position: absolute;
+      left: 5.7cqw;
+      top: 17cqh;
+      z-index: 7;
+      width: 36px;
+      height: 2px;
+      background: #B3484D;
+    }
+
+    .f07-listen-stage {
+      position: absolute;
+      left: 0;
+      top: 21.5cqh;
+      width: 100%;
+      height: 61.5cqh;
+      z-index: 3;
+      transform-style: preserve-3d;
+    }
+
+    .f07-listen-card {
+      position: absolute;
+      top: 0;
+      width: 29.4cqw;
+      height: 61.5cqh;
+      transform-style: preserve-3d;
+      transform-origin: 50% 50%;
+      will-change: transform, opacity;
+    }
+
+    .f07-listen-card-left { left: 18.7cqw; }
+    .f07-listen-card-right { right: 18.7cqw; }
+
+    .f07-listen-player {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      object-position: 50% 50%;
+      border: 1px solid rgba(164, 172, 185, 0.16);
+      box-sizing: border-box;
+    }
+
+    .f07-listen-surface-label {
+      position: absolute;
+      top: 18.5cqh;
+      z-index: 6;
+      color: #F5F5F6;
+      font-family: "Geist Sans", sans-serif;
+      font-size: 3.15cqw;
+      font-weight: 800;
+      letter-spacing: -0.03em;
+      line-height: 0.9;
+      pointer-events: none;
+    }
+
+    .f07-listen-surface-label-left { left: 16.4cqw; }
+    .f07-listen-surface-label-right { right: 14.1cqw; }
+
+    .f07-listen-label-rail {
+      position: absolute;
+      z-index: 7;
+      width: 16.3cqw;
+      color: #F5F5F6;
+      font-family: "JetBrains Mono", monospace;
+      font-size: 0.82cqw;
+      font-weight: 500;
+      letter-spacing: 0.14em;
+      line-height: 1.25;
+      text-transform: uppercase;
+      transform-origin: 0 50%;
+    }
+
+    .f07-listen-label-rail::before {
+      content: "";
+      display: block;
+      width: 100%;
+      height: 1px;
+      margin-bottom: 1cqh;
+      background: #B3484D;
+    }
+
+    .f07-listen-label-left { left: 33.3cqw; top: 73cqh; text-align: right; transform-origin: 100% 50%; }
+    .f07-listen-label-right { left: 50.4cqw; top: 73cqh; }
+  </style>
+
+  <div id="root" data-composition-id="07-listen" data-start="0" data-duration="7.4" data-width="1920" data-height="1080">
+    <div class="clip" data-start="0" data-duration="7.4" data-track-index="0"></div>
+    <div class="f07-listen-sample f07-listen-sample-left" id="f07-listen-sample-left"></div>
+    <div class="f07-listen-sample f07-listen-sample-right" id="f07-listen-sample-right"></div>
+
+    <h1 class="f07-listen-title" id="f07-listen-title">LISTEN.</h1>
+    <div class="f07-listen-title-rule" id="f07-listen-title-rule"></div>
+
+    <div class="f07-listen-stage">
+      <div class="f07-listen-card f07-listen-card-left" id="f07-listen-music-card">
+        <img class="f07-listen-player" src="assets/ios-music-player.webp" alt="" />
+      </div>
+      <div class="f07-listen-card f07-listen-card-right" id="f07-listen-audiobook-card">
+        <img class="f07-listen-player" src="assets/ios-audiobook.webp" alt="" />
+      </div>
+    </div>
+
+    <div class="f07-listen-surface-label f07-listen-surface-label-left" id="f07-listen-music-label">MUSIC.</div>
+    <div class="f07-listen-surface-label f07-listen-surface-label-right" id="f07-listen-audiobook-label">AUDIOBOOKS.</div>
+
+    <div class="f07-listen-label-rail f07-listen-label-left" id="f07-listen-native-label">NATIVE CONTROLS</div>
+    <div class="f07-listen-label-rail f07-listen-label-right" id="f07-listen-focus-label">PURPOSE-BUILT FOCUS</div>
+  </div>
+
+  <script>
+    (() => {
+      const gsap = window.gsap;
+      const tl = gsap.timeline({ paused: true });
+      window.__timelines = window.__timelines || {};
+
+      const title = "#f07-listen-title";
+      const titleRule = "#f07-listen-title-rule";
+      const musicCard = "#f07-listen-music-card";
+      const audiobookCard = "#f07-listen-audiobook-card";
+      const musicLabel = "#f07-listen-music-label";
+      const audiobookLabel = "#f07-listen-audiobook-label";
+      const nativeLabel = "#f07-listen-native-label";
+      const focusLabel = "#f07-listen-focus-label";
+
+      tl.fromTo(title, { opacity: 0, y: -42 }, { opacity: 1, y: 0, duration: 0.58, ease: "power3.out" }, 0.08)
+        .fromTo(titleRule, { opacity: 0, scaleX: 0 }, { opacity: 1, scaleX: 1, duration: 0.44, ease: "power3.out" }, 0.3)
+        .fromTo("#f07-listen-sample-left", { opacity: 0 }, { opacity: 0.12, duration: 0.7, ease: "power3.out" }, 0.25)
+        .fromTo("#f07-listen-sample-right", { opacity: 0 }, { opacity: 0.12, duration: 0.7, ease: "power3.out" }, 0.4)
+        .fromTo(musicCard, { opacity: 0, x: -380, scale: 0.88, rotateY: 24 }, { opacity: 1, x: 0, scale: 1, rotateY: 12, duration: 0.82, ease: "power3.out" }, 1.4)
+        .fromTo(audiobookCard, { opacity: 0, x: 380, scale: 0.88, rotateY: -24 }, { opacity: 1, x: 0, scale: 1, rotateY: -12, duration: 0.82, ease: "power3.out" }, 1.58)
+        .to(musicCard, { rotateY: 0, duration: 0.58, ease: "power3.out" }, 2.42)
+        .to(audiobookCard, { rotateY: 0, duration: 0.58, ease: "power3.out" }, 2.6)
+        .fromTo(musicLabel, { opacity: 0, y: -18 }, { opacity: 1, y: 0, duration: 0.48, ease: "power3.out" }, 2.38)
+        .fromTo(audiobookLabel, { opacity: 0, y: -18 }, { opacity: 1, y: 0, duration: 0.48, ease: "power3.out" }, 2.76)
+        .fromTo(nativeLabel, { opacity: 0, scaleX: 0 }, { opacity: 1, scaleX: 1, duration: 0.52, ease: "power3.out" }, 3.65)
+        .fromTo(focusLabel, { opacity: 0, scaleX: 0 }, { opacity: 1, scaleX: 1, duration: 0.52, ease: "power3.out" }, 4.35);
+
+      window.__timelines["07-listen"] = tl;
+    })();
+  </script>
+</template>

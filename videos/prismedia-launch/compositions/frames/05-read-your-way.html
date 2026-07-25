@@ -1,0 +1,259 @@
+<template>
+  <style>
+    @font-face { font-family: "Geist Sans"; src: url("assets/fonts/Geist-400.woff2") format("woff2"); font-weight: 400; font-style: normal; font-display: block; }
+    @font-face { font-family: "Geist Sans"; src: url("assets/fonts/Geist-500.woff2") format("woff2"); font-weight: 500; font-style: normal; font-display: block; }
+    @font-face { font-family: "Geist Sans"; src: url("assets/fonts/Geist-600.woff2") format("woff2"); font-weight: 600; font-style: normal; font-display: block; }
+    @font-face { font-family: "Geist Sans"; src: url("assets/fonts/Geist-700.woff2") format("woff2"); font-weight: 700; font-style: normal; font-display: block; }
+    @font-face { font-family: "Geist Sans"; src: url("assets/fonts/Geist-800.woff2") format("woff2"); font-weight: 800; font-style: normal; font-display: block; }
+    @font-face { font-family: "Inter Variable"; src: url("assets/fonts/Inter-Variable.woff2") format("woff2"); font-weight: 100 900; font-style: normal; font-display: block; }
+    @font-face { font-family: "JetBrains Mono"; src: url("assets/fonts/JetBrainsMono-Variable.woff2") format("woff2"); font-weight: 100 800; font-style: normal; font-display: block; }
+
+    * { box-sizing: border-box; }
+    #root {
+      position: relative;
+      width: 1920px;
+      height: 1080px;
+      overflow: hidden;
+      container-type: size;
+      color: #f5f5f6;
+    }
+    .clip { position: absolute; }
+    .frame-05-read-your-way-ground { inset: 0; background: #000000; }
+    .frame-05-read-your-way-rule {
+      left: 106px;
+      top: 94px;
+      width: 36px;
+      height: 2px;
+      background: #b3484d;
+      transform-origin: left center;
+    }
+    .frame-05-read-your-way-title {
+      left: 104px;
+      top: 127px;
+      z-index: 8;
+      width: 500px;
+      font-family: "Geist Sans";
+      font-size: 4.8cqw;
+      font-weight: 800;
+      letter-spacing: -0.045em;
+      line-height: 0.86;
+    }
+    .frame-05-read-your-way-title span { display: block; }
+    .frame-05-read-your-way-title .frame-05-read-your-way-title-accent { color: #b3484d; }
+    .frame-05-read-your-way-stage {
+      left: 0;
+      top: 0;
+      width: 1920px;
+      height: 900px;
+      perspective: 1800px;
+      transform-style: preserve-3d;
+    }
+    .frame-05-read-your-way-card {
+      position: absolute;
+      overflow: hidden;
+      transform-style: preserve-3d;
+      border: 1px solid rgba(164, 172, 185, 0.25);
+      transform-origin: 50% 50%;
+    }
+    .frame-05-read-your-way-card img {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      object-position: top;
+    }
+    .frame-05-read-your-way-reader {
+      left: 418px;
+      top: 266px;
+      width: 286px;
+      height: 621px;
+    }
+    .frame-05-read-your-way-settings {
+      left: 1044px;
+      top: 185px;
+      width: 320px;
+      height: 695px;
+    }
+    .frame-05-read-your-way-divider {
+      left: 910px;
+      top: 228px;
+      width: 1px;
+      height: 620px;
+      background: rgba(200, 201, 204, 0.7);
+      transform-origin: center top;
+    }
+    .frame-05-read-your-way-proof {
+      left: 1402px;
+      z-index: 8;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      width: 380px;
+      color: #c8c9cc;
+      font-family: "JetBrains Mono";
+      font-size: 0.88cqw;
+      font-weight: 500;
+      letter-spacing: 0.11em;
+      line-height: 1.3;
+      white-space: nowrap;
+    }
+    .frame-05-read-your-way-proof-1 { top: 385px; }
+    .frame-05-read-your-way-proof-2 { top: 545px; }
+    .frame-05-read-your-way-proof-3 { top: 675px; }
+    .frame-05-read-your-way-proof-rail {
+      flex: 0 0 38px;
+      height: 1px;
+      background: #c8c9cc;
+      transform-origin: left center;
+    }
+    .frame-05-read-your-way-reader-rail {
+      left: 378px;
+      width: 24px;
+      height: 1px;
+      background: #c8c9cc;
+      transform-origin: right center;
+    }
+    .frame-05-read-your-way-reader-rail-1 { top: 430px; }
+    .frame-05-read-your-way-reader-rail-2 { top: 586px; }
+    .frame-05-read-your-way-reader-rail-3 { top: 718px; }
+    .frame-05-read-your-way-final {
+      left: 722px;
+      top: 105px;
+      z-index: 9;
+      width: 980px;
+      overflow: hidden;
+      color: #f5f5f6;
+      font-family: "Geist Sans";
+      font-size: 2.2cqw;
+      font-weight: 700;
+      letter-spacing: -0.025em;
+      line-height: 1;
+      white-space: nowrap;
+    }
+    .frame-05-read-your-way-final span { display: block; }
+  </style>
+
+  <main id="root" data-composition-id="05-read-your-way" data-start="0" data-duration="11.5" data-width="1920" data-height="1080">
+    <div class="clip frame-05-read-your-way-ground" data-start="0" data-duration="11.5" data-track-index="0"></div>
+    <div id="frame-05-read-your-way-rule" class="clip frame-05-read-your-way-rule" data-start="0" data-duration="11.5" data-track-index="1"></div>
+
+    <h1 id="frame-05-read-your-way-title" class="clip frame-05-read-your-way-title" data-start="0" data-duration="11.5" data-track-index="3">
+      <span>READ IT</span>
+      <span class="frame-05-read-your-way-title-accent">YOUR WAY.</span>
+    </h1>
+
+    <section class="clip frame-05-read-your-way-stage" data-start="0" data-duration="11.5" data-track-index="4" aria-label="Reader and reader settings">
+      <div id="frame-05-read-your-way-reader" class="frame-05-read-your-way-card frame-05-read-your-way-reader">
+        <img src="assets/ios-reader.webp" alt="" />
+      </div>
+      <div id="frame-05-read-your-way-settings" class="frame-05-read-your-way-card frame-05-read-your-way-settings">
+        <img src="assets/ios-reader-settings.webp" alt="" />
+      </div>
+    </section>
+
+    <div id="frame-05-read-your-way-divider" class="clip frame-05-read-your-way-divider" data-start="0" data-duration="11.5" data-track-index="5"></div>
+
+    <div id="frame-05-read-your-way-proof-1" class="clip frame-05-read-your-way-proof frame-05-read-your-way-proof-1" data-start="0" data-duration="11.5" data-track-index="6">
+      <i class="frame-05-read-your-way-proof-rail"></i><span>DARK · LITERARY SERIF</span>
+    </div>
+    <div id="frame-05-read-your-way-proof-2" class="clip frame-05-read-your-way-proof frame-05-read-your-way-proof-2" data-start="0" data-duration="11.5" data-track-index="7">
+      <i class="frame-05-read-your-way-proof-rail"></i><span>120% · 105%</span>
+    </div>
+    <div id="frame-05-read-your-way-proof-3" class="clip frame-05-read-your-way-proof frame-05-read-your-way-proof-3" data-start="0" data-duration="11.5" data-track-index="8">
+      <i class="frame-05-read-your-way-proof-rail"></i><span>LINE SPACING 1.7</span>
+    </div>
+    <div id="frame-05-read-your-way-reader-rail-1" class="clip frame-05-read-your-way-reader-rail frame-05-read-your-way-reader-rail-1" data-start="0" data-duration="11.5" data-track-index="9"></div>
+    <div id="frame-05-read-your-way-reader-rail-2" class="clip frame-05-read-your-way-reader-rail frame-05-read-your-way-reader-rail-2" data-start="0" data-duration="11.5" data-track-index="10"></div>
+    <div id="frame-05-read-your-way-reader-rail-3" class="clip frame-05-read-your-way-reader-rail frame-05-read-your-way-reader-rail-3" data-start="0" data-duration="11.5" data-track-index="11"></div>
+
+    <div id="frame-05-read-your-way-final" class="clip frame-05-read-your-way-final" data-start="0" data-duration="11.5" data-track-index="12">
+      <span>THE PAGE, TUNED TO YOU.</span>
+    </div>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
+  <script>
+    window.__timelines = window.__timelines || {};
+    const frame05 = {
+      rule: "#frame-05-read-your-way-rule",
+      title: "#frame-05-read-your-way-title",
+      reader: "#frame-05-read-your-way-reader",
+      settings: "#frame-05-read-your-way-settings",
+      divider: "#frame-05-read-your-way-divider",
+      final: "#frame-05-read-your-way-final",
+      proof: [
+        "#frame-05-read-your-way-proof-1",
+        "#frame-05-read-your-way-proof-2",
+        "#frame-05-read-your-way-proof-3"
+      ],
+      readerRails: [
+        "#frame-05-read-your-way-reader-rail-1",
+        "#frame-05-read-your-way-reader-rail-2",
+        "#frame-05-read-your-way-reader-rail-3"
+      ]
+    };
+    const tl = gsap.timeline({ paused: true });
+
+    gsap.set([frame05.title, frame05.settings, frame05.divider, frame05.final, ...frame05.proof, ...frame05.readerRails], { autoAlpha: 0 });
+
+    tl.fromTo(frame05.rule,
+      { autoAlpha: 0, scaleX: 0 },
+      { autoAlpha: 1, scaleX: 1, duration: 0.38, ease: "power3.out" },
+      0.12
+    );
+    tl.fromTo(frame05.reader,
+      { autoAlpha: 0, x: -310, y: 18, rotateY: 10, scale: 0.96 },
+      { autoAlpha: 1, x: 0, y: 0, rotateY: 2, scale: 1, duration: 1.36, ease: "power3.out" },
+      0.18
+    );
+    tl.set(frame05.title, { autoAlpha: 1 }, 0.42);
+    tl.fromTo("#frame-05-read-your-way-title span:first-child",
+      { autoAlpha: 0, y: -28 },
+      { autoAlpha: 1, y: 0, duration: 0.58, ease: "power3.out" },
+      0.42
+    );
+    tl.fromTo("#frame-05-read-your-way-title span:last-child",
+      { autoAlpha: 0, y: -28 },
+      { autoAlpha: 1, y: 0, duration: 0.58, ease: "power3.out" },
+      0.88
+    );
+
+    tl.to(frame05.reader,
+      { rotateY: 0, duration: 0.64, ease: "power3.out" },
+      2.02
+    );
+    tl.fromTo(frame05.settings,
+      { autoAlpha: 0, x: 300, y: 14, rotateY: -10, scale: 0.96 },
+      { autoAlpha: 1, x: 0, y: 0, rotateY: 0, scale: 1, duration: 1.24, ease: "power3.out" },
+      2.18
+    );
+    tl.fromTo(frame05.divider,
+      { autoAlpha: 0, scaleY: 0 },
+      { autoAlpha: 1, scaleY: 1, duration: 0.64, ease: "power3.out" },
+      3.08
+    );
+
+    [4.68, 5.56, 6.36].forEach((at, index) => {
+      const label = `frame05-edit-${index + 1}`;
+      tl.addLabel(label, at);
+      tl.fromTo(frame05.proof[index],
+        { autoAlpha: 0, x: 20 },
+        { autoAlpha: 1, x: 0, duration: 0.58, ease: "power3.out" },
+        label
+      );
+      tl.fromTo(frame05.readerRails[index],
+        { autoAlpha: 0, scaleX: 0 },
+        { autoAlpha: 1, scaleX: 1, duration: 0.58, ease: "power3.out" },
+        label
+      );
+    });
+
+    tl.fromTo(frame05.final,
+      { autoAlpha: 0, clipPath: "inset(0 100% 0 0)" },
+      { autoAlpha: 1, clipPath: "inset(0 0% 0 0)", duration: 0.72, ease: "power3.out" },
+      7.28
+    );
+
+    window.__timelines["05-read-your-way"] = tl;
+  </script>
+</template>

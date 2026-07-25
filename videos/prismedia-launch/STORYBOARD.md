@@ -6,6 +6,7 @@ arc: "Before → One private home → Lifecycle proof → Purpose-built experien
 audience: "People and households who self-host their media"
 mode: autonomous
 music: none
+captions: skipped (silent film by user request)
 ---
 
 ## Video direction
@@ -243,7 +244,7 @@ On-screen copy: **WATCH.** / **DIRECT PLAY · 1080P · H.264 · AAC STEREO** /
 - duration: 11s
 - poster: 7.8s
 - transition_in: zoom-through
-- status: outline
+- status: animated
 - src: compositions/frames/05-read-your-way.html
 - type: feature_showcase
 - persuasion: Personalization proof instead of a generic reader claim
@@ -297,7 +298,7 @@ On-screen copy: **DARK. LITERARY SERIF. 120%. 105%. 1.7.** /
 - duration: 6s
 - poster: 4.6s
 - transition_in: crossfade
-- status: outline
+- status: animated
 - src: compositions/frames/06-read-and-listen.html
 - type: benefit_highlight
 - persuasion: Feature-to-benefit translation
@@ -343,7 +344,7 @@ On-screen copy: **READ. LISTEN. KEEP YOUR PLACE.**
 - duration: 7s
 - poster: 5.2s
 - transition_in: squeeze
-- status: outline
+- status: animated
 - src: compositions/frames/07-listen.html
 - type: feature_showcase
 - persuasion: Familiar native controls as trust proof
@@ -388,7 +389,7 @@ On-screen copy: **MUSIC.** / **AUDIOBOOKS.** /
 - duration: 7s
 - poster: 5.5s
 - transition_in: zoom-through
-- status: outline
+- status: animated
 - src: compositions/frames/08-every-screen.html
 - type: benefit_highlight
 - persuasion: Ecosystem continuity
@@ -436,7 +437,7 @@ On-screen copy: **WEB. IPHONE. IPAD. APPLE TV.** /
 - duration: 6s
 - poster: 4.6s
 - transition_in: push-slide LEFT
-- status: outline
+- status: animated
 - src: compositions/frames/09-every-medium.html
 - type: benefit_highlight
 - persuasion: Value stacking with category breadth
@@ -487,7 +488,7 @@ IMAGES · GALLERIES**
 - duration: 6s
 - poster: 4.8s
 - transition_in: zoom-through
-- status: outline
+- status: animated
 - src: compositions/frames/10-self-host-it.html
 - type: cta
 - persuasion: Friction reduction with a concrete next step

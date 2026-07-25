@@ -1,0 +1,271 @@
+<template>
+  <style>
+    @font-face {
+      font-family: "Geist Sans";
+      src: url("assets/fonts/Geist-700.woff2") format("woff2");
+      font-style: normal;
+      font-weight: 700;
+    }
+    @font-face {
+      font-family: "Geist Sans";
+      src: url("assets/fonts/Geist-800.woff2") format("woff2");
+      font-style: normal;
+      font-weight: 800;
+    }
+    @font-face {
+      font-family: "JetBrains Mono";
+      src: url("assets/fonts/JetBrainsMono-Variable.woff2") format("woff2");
+      font-style: normal;
+      font-weight: 400 800;
+    }
+
+    #root {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      isolation: isolate;
+      container-type: size;
+    }
+
+    .clip {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      background: #000000;
+    }
+
+    [class~="03-one-lifecycle-surface"] {
+      position: absolute;
+      top: 3.2cqh;
+      left: 20.0cqw;
+      width: 76.5cqw;
+      height: 43.03cqw;
+      overflow: hidden;
+      border: 1px solid rgba(245, 245, 246, 0.16);
+      background: #09090a;
+    }
+
+    [class~="03-one-lifecycle-surface"] img {
+      display: block;
+      width: 100%;
+      height: auto;
+    }
+
+    [class~="03-one-lifecycle-claim"] {
+      position: absolute;
+      top: 16.3cqh;
+      left: 5.5cqw;
+      width: 23cqw;
+      color: #f5f5f6;
+      font-family: "Geist Sans";
+      font-size: 5.5cqw;
+      font-weight: 800;
+      letter-spacing: -0.045em;
+      line-height: 0.9;
+    }
+
+    [class~="03-one-lifecycle-claim"] i {
+      display: block;
+      width: 3.2cqw;
+      height: 2px;
+      margin: 2.1cqh 0 0.9cqh;
+      background: #b3484d;
+    }
+
+    [class~="03-one-lifecycle-kicker"] {
+      display: block;
+      color: #92959d;
+      font-family: "JetBrains Mono";
+      font-size: 0.72cqw;
+      font-weight: 500;
+      letter-spacing: 0.14em;
+      line-height: 1.45;
+    }
+
+    [class~="03-one-lifecycle-rail"] {
+      position: absolute;
+      top: 12.3cqh;
+      left: 28.5cqw;
+      width: 64.2cqw;
+      height: 6.1cqh;
+    }
+
+    [class~="03-one-lifecycle-terms"] {
+      position: absolute;
+      inset: 0 0 auto;
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+    }
+
+    [class~="03-one-lifecycle-term"] {
+      position: relative;
+      color: #f5f5f6;
+      font-family: "JetBrains Mono";
+      font-size: 1.15cqw;
+      font-weight: 500;
+      letter-spacing: 0.105em;
+      line-height: 1;
+      white-space: nowrap;
+      transform-origin: center bottom;
+    }
+
+    [class~="03-one-lifecycle-segment"] {
+      position: absolute;
+      top: 4.15cqh;
+      height: 1px;
+      background: rgba(245, 245, 246, 0.44);
+      transform-origin: left center;
+    }
+
+    [id="03-one-lifecycle-segment-1"] { left: 0; width: 16.6cqw; }
+    [id="03-one-lifecycle-segment-2"] { left: 16.6cqw; width: 16.1cqw; }
+    [id="03-one-lifecycle-segment-3"] { left: 32.7cqw; width: 15.4cqw; }
+    [id="03-one-lifecycle-segment-4"] { left: 48.1cqw; width: 16.1cqw; }
+
+    [class~="03-one-lifecycle-continuity"] {
+      position: absolute;
+      top: 4.15cqh;
+      left: 0;
+      width: 64.2cqw;
+      height: 1px;
+      background: #f5f5f6;
+      transform-origin: left center;
+    }
+
+    [class~="03-one-lifecycle-focus"] {
+      position: absolute;
+      top: 75.9cqh;
+      left: 34.5cqw;
+      width: 59.5cqw;
+      height: 3.9cqh;
+      border: 1px solid rgba(245, 245, 246, 0.72);
+      pointer-events: none;
+    }
+
+    [class~="03-one-lifecycle-target-hook"] {
+      position: absolute;
+      top: 79.5cqh;
+      left: 92.25cqw;
+      width: 2.25cqw;
+      height: 1px;
+      background: #f5f5f6;
+      transform-origin: right center;
+    }
+
+    [class~="03-one-lifecycle-payoff"] {
+      position: absolute;
+      top: 69.6cqh;
+      left: 66.4cqw;
+      width: 24cqw;
+      color: #f5f5f6;
+      font-family: "Geist Sans";
+      font-size: 2.7cqw;
+      font-weight: 700;
+      letter-spacing: -0.028em;
+      line-height: 0.98;
+      text-align: right;
+    }
+
+    [class~="03-one-lifecycle-payoff"] b {
+      color: #b3484d;
+      font-weight: 700;
+    }
+  </style>
+
+  <div id="root" data-composition-id="03-one-lifecycle" data-start="0" data-duration="7.4" data-width="1920" data-height="1080">
+    <div class="clip" data-start="0" data-duration="7.4" data-track-index="0"></div>
+
+    <div class="03-one-lifecycle-surface" id="03-one-lifecycle-surface">
+      <img src="assets/web-request.webp" alt="Prismedia Request search results" />
+    </div>
+
+    <div class="03-one-lifecycle-claim" id="03-one-lifecycle-claim">
+      ONE<br />LIFECYCLE.
+      <i></i>
+      <span class="03-one-lifecycle-kicker">REQUEST / 01</span>
+    </div>
+
+    <div class="03-one-lifecycle-rail" id="03-one-lifecycle-rail">
+      <div class="03-one-lifecycle-terms">
+        <span class="03-one-lifecycle-term" id="03-one-lifecycle-term-0">DISCOVER</span>
+        <span class="03-one-lifecycle-term" id="03-one-lifecycle-term-1">ACQUIRE</span>
+        <span class="03-one-lifecycle-term" id="03-one-lifecycle-term-2">IDENTIFY</span>
+        <span class="03-one-lifecycle-term" id="03-one-lifecycle-term-3">ENJOY</span>
+        <span class="03-one-lifecycle-term" id="03-one-lifecycle-term-4">MAINTAIN</span>
+      </div>
+      <span class="03-one-lifecycle-segment" id="03-one-lifecycle-segment-1"></span>
+      <span class="03-one-lifecycle-segment" id="03-one-lifecycle-segment-2"></span>
+      <span class="03-one-lifecycle-segment" id="03-one-lifecycle-segment-3"></span>
+      <span class="03-one-lifecycle-segment" id="03-one-lifecycle-segment-4"></span>
+      <span class="03-one-lifecycle-continuity" id="03-one-lifecycle-continuity"></span>
+    </div>
+
+    <div class="03-one-lifecycle-focus" id="03-one-lifecycle-focus"></div>
+    <div class="03-one-lifecycle-target-hook" id="03-one-lifecycle-target-hook"></div>
+    <div class="03-one-lifecycle-payoff" id="03-one-lifecycle-payoff">STILL THE<br /><b>SAME ITEM.</b></div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+  <script>
+    window.__timelines = window.__timelines || {};
+
+    const tl = gsap.timeline({ paused: true });
+    const surface = document.getElementById("03-one-lifecycle-surface");
+    const claim = document.getElementById("03-one-lifecycle-claim");
+    const focus = document.getElementById("03-one-lifecycle-focus");
+    const hook = document.getElementById("03-one-lifecycle-target-hook");
+    const continuity = document.getElementById("03-one-lifecycle-continuity");
+    const payoff = document.getElementById("03-one-lifecycle-payoff");
+    const segments = [1, 2, 3, 4].map((index) => document.getElementById(`03-one-lifecycle-segment-${index}`));
+
+    tl.fromTo(surface, { y: 42, opacity: 0 }, { y: 0, opacity: 1, duration: 1.35, ease: "power3.out" }, 0);
+    tl.fromTo(claim, { y: 22, opacity: 0 }, { y: 0, opacity: 1, duration: 0.72, ease: "power3.out" }, 0.42);
+
+    const lifecycle = [
+      { id: 0, word: "DISCOVER", segment: 1 },
+      { id: 1, word: "ACQUIRE", segment: 2 },
+      { id: 2, word: "IDENTIFY", segment: 3 },
+      { id: 3, word: "ENJOY", segment: 4 },
+      { id: 4, word: "MAINTAIN", segment: null },
+    ];
+    const baseDuration = 0.31;
+    const secondsPerCharacter = 0.035;
+    const availableSequence = 2.78;
+    const rawDurations = lifecycle.map((entry) => baseDuration + entry.word.length * secondsPerCharacter);
+    const timingScale = availableSequence / rawDurations.reduce((total, duration) => total + duration, 0);
+    let cursor = 2.28;
+    const lifecycleTimeline = lifecycle.map((entry, index) => {
+      const duration = rawDurations[index] * timingScale;
+      const timed = { ...entry, start: cursor, end: cursor + duration };
+      cursor += duration;
+      return timed;
+    });
+
+    lifecycleTimeline.forEach((entry) => {
+      const term = document.getElementById(`03-one-lifecycle-term-${entry.id}`);
+      tl.fromTo(term, { y: 14, opacity: 0 }, { y: 0, opacity: 1, duration: 0.26, ease: "power3.out" }, entry.start);
+      if (entry.segment) {
+        const segment = document.getElementById(`03-one-lifecycle-segment-${entry.segment}`);
+        tl.fromTo(segment, { scaleX: 0, opacity: 0 }, { scaleX: 1, opacity: 1, duration: 0.31, ease: "power2.out" }, entry.end - 0.1);
+      }
+    });
+
+    tl.fromTo(focus, { opacity: 0 }, { opacity: 0.78, duration: 0.18, ease: "none" }, 3.74);
+    tl.to(focus, { opacity: 0, duration: 0.28, ease: "none" }, 4.18);
+
+    tl.addLabel("same-item", 5.2);
+    lifecycleTimeline.forEach((entry) => {
+      const term = document.getElementById(`03-one-lifecycle-term-${entry.id}`);
+      tl.to(term, { scaleY: 0.04, opacity: 0.22, duration: 0.42, ease: "power2.inOut" }, "same-item");
+    });
+    tl.to(segments, { scaleX: 0, opacity: 0, duration: 0.42, ease: "power2.inOut" }, "same-item");
+    tl.fromTo(continuity, { scaleX: 0, opacity: 0 }, { scaleX: 1, opacity: 1, duration: 0.62, ease: "power2.inOut" }, "same-item");
+    tl.fromTo(hook, { scaleX: 0, opacity: 0 }, { scaleX: 1, opacity: 1, duration: 0.62, ease: "power2.inOut" }, "same-item");
+    tl.fromTo(payoff, { y: 12, opacity: 0 }, { y: 0, opacity: 1, duration: 0.5, ease: "power3.out" }, "same-item+=0.36");
+
+    window.__timelines["03-one-lifecycle"] = tl;
+  </script>
+</template>

@@ -1,0 +1,290 @@
+<template>
+  <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+  <style>
+    @font-face {
+      font-family: "Geist Sans";
+      src: url("assets/fonts/Geist-400.woff2") format("woff2");
+      font-style: normal;
+      font-weight: 400;
+    }
+    @font-face {
+      font-family: "Geist Sans";
+      src: url("assets/fonts/Geist-500.woff2") format("woff2");
+      font-style: normal;
+      font-weight: 500;
+    }
+    @font-face {
+      font-family: "Geist Sans";
+      src: url("assets/fonts/Geist-800.woff2") format("woff2");
+      font-style: normal;
+      font-weight: 800;
+    }
+    @font-face {
+      font-family: "JetBrains Mono";
+      src: url("assets/fonts/JetBrainsMono-Variable.woff2") format("woff2");
+      font-style: normal;
+      font-weight: 100 800;
+    }
+    #root {
+      position: relative;
+      width: 1920px;
+      height: 1080px;
+      overflow: hidden;
+      container-type: size;
+      color: #f5f5f6;
+      font-family: "Geist Sans";
+      isolation: isolate;
+    }
+
+    #root [data-frame-part="01-one-collection-ground"],
+    #root [data-frame-part="01-one-collection-prism"],
+    #root [data-frame-part="01-one-collection-shroud"] {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+    }
+
+    #root [data-frame-part="01-one-collection-ground"] {
+      background: #000000;
+      z-index: 0;
+    }
+
+    #root [data-frame-part="01-one-collection-prism"] {
+      z-index: 1;
+      object-fit: cover;
+      object-position: center center;
+      opacity: 0.14;
+    }
+
+    #root [data-frame-part="01-one-collection-shroud"] {
+      z-index: 2;
+      background: #000000;
+      opacity: 0.48;
+      pointer-events: none;
+    }
+
+    #root [data-frame-part="01-one-collection-statement-stage"] {
+      position: absolute;
+      left: 106px;
+      top: 274px;
+      width: 1430px;
+      height: 390px;
+      z-index: 5;
+      overflow: visible;
+    }
+
+    #root [data-frame-part="01-one-collection-line"] {
+      position: absolute;
+      left: 0;
+      top: 0;
+      width: 100%;
+      color: #f5f5f6;
+      font-size: 142px;
+      font-weight: 800;
+      letter-spacing: -0.055em;
+      line-height: 0.9;
+      white-space: nowrap;
+    }
+
+    #root [data-frame-part="01-one-collection-line"] span {
+      display: inline-block;
+      margin-right: 0.19em;
+      will-change: transform, opacity, filter;
+    }
+
+    #root [data-frame-part="01-one-collection-handoff-labels"] {
+      position: absolute;
+      left: 10px;
+      top: 156px;
+      display: grid;
+      gap: 13px;
+      color: #c8c9cc;
+      font-family: "JetBrains Mono";
+      font-size: 18px;
+      font-weight: 500;
+      letter-spacing: 0.15em;
+      line-height: 1;
+      opacity: 0;
+    }
+
+    #root [data-frame-part="01-one-collection-label-row"] {
+      border-left: 1px solid rgba(200, 201, 204, 0.3);
+      padding-left: 16px;
+    }
+
+    #root [data-frame-part="01-one-collection-lockup"] {
+      position: absolute;
+      left: 854px;
+      top: 196px;
+      width: 448px;
+      height: 562px;
+      z-index: 6;
+      pointer-events: none;
+    }
+
+    #root [data-frame-part="01-one-collection-logo"] {
+      position: absolute;
+      left: 127px;
+      top: 82px;
+      width: 198px;
+      height: auto;
+      opacity: 0;
+      will-change: transform, opacity;
+    }
+
+    #root [data-frame-part="01-one-collection-final-line"] {
+      position: absolute;
+      left: 686px;
+      top: 766px;
+      z-index: 7;
+      width: 820px;
+      height: 102px;
+      overflow: hidden;
+      color: #f5f5f6;
+      font-size: 67px;
+      font-weight: 800;
+      letter-spacing: -0.045em;
+      line-height: 1;
+      white-space: nowrap;
+    }
+
+    #root [data-frame-part="01-one-collection-final-text"] {
+      display: block;
+      will-change: transform;
+    }
+
+    #root [data-frame-part="01-one-collection-hairline"] {
+      position: absolute;
+      left: 686px;
+      top: 744px;
+      z-index: 7;
+      width: 34px;
+      height: 2px;
+      background: #b3484d;
+      opacity: 0;
+    }
+  </style>
+
+  <div id="root" data-composition-id="01-one-collection" data-start="0" data-duration="6.4" data-width="1920" data-height="1080">
+    <div id="f01-one-collection-ground" class="clip" data-frame-part="01-one-collection-ground" data-start="0" data-duration="6.4" data-track-index="0"></div>
+    <img id="f01-one-collection-prism" class="clip" data-frame-part="01-one-collection-prism" data-start="0" data-duration="6.4" data-track-index="1" src="assets/prism-refraction-hero.webp" alt="" />
+    <div data-frame-part="01-one-collection-shroud" aria-hidden="true"></div>
+
+    <div data-frame-part="01-one-collection-statement-stage" aria-label="One collection. Dozens of handoffs.">
+      <div data-frame-part="01-one-collection-line" data-frame-state="01-one-collection-first">
+        <span>ONE</span><span>COLLECTION.</span>
+      </div>
+      <div data-frame-part="01-one-collection-line" data-frame-state="01-one-collection-second" aria-hidden="true">
+        <span>DOZENS</span><span>OF</span><span>HANDOFFS.</span>
+      </div>
+      <div data-frame-part="01-one-collection-handoff-labels" aria-hidden="true">
+        <div data-frame-part="01-one-collection-label-row">01 / ONE</div>
+        <div data-frame-part="01-one-collection-label-row">02 / COLLECTION</div>
+        <div data-frame-part="01-one-collection-label-row">03 / HANDOFFS</div>
+      </div>
+    </div>
+
+    <div data-frame-part="01-one-collection-lockup" aria-hidden="true">
+      <img data-frame-part="01-one-collection-logo" src="assets/logo-mark.png" alt="" />
+    </div>
+    <div data-frame-part="01-one-collection-hairline" aria-hidden="true"></div>
+    <div data-frame-part="01-one-collection-final-line" aria-label="One private home.">
+      <span data-frame-part="01-one-collection-final-text">ONE PRIVATE HOME.</span>
+    </div>
+  </div>
+
+  <script>
+    (() => {
+      const root = document.querySelector('[data-composition-id="01-one-collection"]');
+      const firstLine = root.querySelector('[data-frame-state="01-one-collection-first"]');
+      const secondLine = root.querySelector('[data-frame-state="01-one-collection-second"]');
+      const firstWords = Array.from(firstLine.querySelectorAll('span'));
+      const secondWords = Array.from(secondLine.querySelectorAll('span'));
+      const labels = root.querySelector('[data-frame-part="01-one-collection-handoff-labels"]');
+      const prism = root.querySelector('[data-frame-part="01-one-collection-prism"]');
+      const shroud = root.querySelector('[data-frame-part="01-one-collection-shroud"]');
+      const lockup = root.querySelector('[data-frame-part="01-one-collection-lockup"]');
+      const logo = root.querySelector('[data-frame-part="01-one-collection-logo"]');
+      const hairline = root.querySelector('[data-frame-part="01-one-collection-hairline"]');
+      const finalText = root.querySelector('[data-frame-part="01-one-collection-final-text"]');
+
+      // Content-paced word windows are computed once, keeping each phrase's reveal deterministic.
+      const wordWindows = (words, start, pace) => words.reduce((windows, word) => {
+        const previous = windows[windows.length - 1];
+        const at = previous ? previous.end + pace.gap : start;
+        const duration = pace.base + word.textContent.length * pace.perCharacter;
+        windows.push({ word, start: at, end: at + duration });
+        return windows;
+      }, []);
+      const firstWindows = wordWindows(firstWords, 0.08, { base: 0.2, perCharacter: 0.025, gap: 0.13 });
+      const secondWindows = wordWindows(secondWords, 1.46, { base: 0.16, perCharacter: 0.018, gap: 0.09 });
+
+      window.__timelines = window.__timelines || {};
+      const tl = gsap.timeline({ paused: true });
+      window.__timelines['01-one-collection'] = tl;
+
+      gsap.set(secondLine, { autoAlpha: 0 });
+      gsap.set(labels, { autoAlpha: 0 });
+      gsap.set(lockup, { autoAlpha: 0 });
+      gsap.set(finalText, { x: -840 });
+      gsap.set(hairline, { autoAlpha: 0 });
+
+      firstWindows.forEach(({ word, start, end }) => {
+        tl.fromTo(word, { autoAlpha: 0, y: 42, filter: 'blur(11px)' }, {
+          autoAlpha: 1,
+          y: 0,
+          filter: 'blur(0px)',
+          duration: end - start,
+          ease: 'power3.out',
+        }, start);
+      });
+
+      // Scene 2: a direct state cut followed by a downward waterfall entrance at the same anchor.
+      tl.set(firstLine, { autoAlpha: 0 }, 1.4);
+      tl.set(secondLine, { autoAlpha: 1 }, 1.4);
+      secondWindows.forEach(({ word, start, end }) => {
+        tl.fromTo(word, { autoAlpha: 0, y: -112, filter: 'blur(18px)' }, {
+          autoAlpha: 1,
+          y: 0,
+          filter: 'blur(0px)',
+          duration: end - start,
+          ease: 'power4.out',
+        }, start);
+      });
+      tl.fromTo(labels, { autoAlpha: 0, y: -18 }, {
+        autoAlpha: 0.46,
+        y: 0,
+        duration: 0.17,
+        ease: 'none',
+      }, 1.68);
+      tl.set(labels, { autoAlpha: 0 }, 2.18);
+
+      // Scene 3: the real optical image rises from silhouette to the sole spectrum payoff.
+      tl.set(secondLine, { autoAlpha: 0 }, 2.8);
+      tl.to(prism, { opacity: 1, duration: 1.14, ease: 'power2.inOut' }, 2.8);
+      tl.to(shroud, { opacity: 0.06, duration: 1.14, ease: 'power2.inOut' }, 2.8);
+      tl.fromTo(lockup, { autoAlpha: 0, scale: 0.72 }, {
+        autoAlpha: 1,
+        scale: 1,
+        duration: 0.54,
+        ease: 'power3.out',
+      }, 3.63);
+      tl.fromTo(logo, { autoAlpha: 0, scale: 0.82 }, {
+        autoAlpha: 1,
+        scale: 1,
+        duration: 0.42,
+        ease: 'power3.out',
+      }, 3.77);
+
+      // Scene 4: the final copy is a clean left-to-right masked reveal, then a still hold.
+      tl.fromTo(hairline, { autoAlpha: 0, scaleX: 0 }, {
+        autoAlpha: 1,
+        scaleX: 1,
+        duration: 0.18,
+        ease: 'power2.out',
+      }, 4.68);
+      tl.to(finalText, { x: 0, duration: 0.56, ease: 'power3.out' }, 4.75);
+    })();
+  </script>
+</template>
