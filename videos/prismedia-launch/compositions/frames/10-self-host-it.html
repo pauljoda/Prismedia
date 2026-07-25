@@ -46,10 +46,17 @@
       background: #B3484D;
     }
 
-    .f10-self-host-it-system {
+    .f10-self-host-it-diagram {
       position: absolute;
       inset: 0;
       z-index: 2;
+      overflow: visible;
+      pointer-events: none;
+    }
+
+    .f10-self-host-it-system {
+      position: absolute;
+      inset: 0;
       width: 100%;
       height: 100%;
       overflow: visible;
@@ -58,15 +65,23 @@
     .f10-self-host-it-system path {
       fill: none;
       stroke-linecap: square;
-      stroke-width: 1;
+      stroke-width: 2;
     }
 
-    .f10-self-host-it-input { stroke: rgba(245, 245, 246, 0.72); }
-    .f10-self-host-it-output-red { stroke: #B3484D; }
-    .f10-self-host-it-output-orange { stroke: #B76337; }
-    .f10-self-host-it-output-yellow { stroke: #9E873B; }
-    .f10-self-host-it-output-cyan { stroke: #3B869C; }
-    .f10-self-host-it-output-violet { stroke: #775CA5; }
+    .f10-self-host-it-input {
+      stroke: rgba(245, 245, 246, 0.92);
+      filter: drop-shadow(0 0 7px rgba(245, 245, 246, 0.42));
+    }
+
+    .f10-self-host-it-output-movies { stroke: #B3484D; }
+    .f10-self-host-it-output-series { stroke: #B9543F; }
+    .f10-self-host-it-output-videos { stroke: #B76337; }
+    .f10-self-host-it-output-music { stroke: #9E873B; }
+    .f10-self-host-it-output-audiobooks { stroke: #4D925D; }
+    .f10-self-host-it-output-books { stroke: #3B869C; }
+    .f10-self-host-it-output-comics { stroke: #467EAA; }
+    .f10-self-host-it-output-images { stroke: #536FB0; }
+    .f10-self-host-it-output-galleries { stroke: #775CA5; }
 
     .f10-self-host-it-path-label {
       position: absolute;
@@ -78,42 +93,51 @@
       letter-spacing: 0.14em;
       line-height: 1;
       text-transform: uppercase;
+      white-space: nowrap;
     }
 
-    .f10-self-host-it-media-label { left: 13.5cqw; top: 31cqh; }
-    .f10-self-host-it-data-label { left: 13.5cqw; top: 57cqh; }
-
-    .f10-self-host-it-lockup {
-      position: absolute;
-      left: 50%;
-      top: 35cqh;
-      z-index: 5;
-      width: 55cqw;
-      height: 27cqh;
-      margin-left: -27.5cqw;
-      transform-origin: 50% 50%;
+    .f10-self-host-it-input-label {
+      left: 13cqw;
+      top: 39.8cqh;
+      color: #F5F5F6;
     }
+
+    .f10-self-host-it-output-label { left: var(--label-x); top: var(--label-y); }
+    .f10-self-host-it-label-movies { --label-x: 74.5cqw; --label-y: 23.2cqh; }
+    .f10-self-host-it-label-series { --label-x: 77.2cqw; --label-y: 27.9cqh; }
+    .f10-self-host-it-label-videos { --label-x: 79.5cqw; --label-y: 32.5cqh; }
+    .f10-self-host-it-label-music { --label-x: 81.2cqw; --label-y: 37.2cqh; }
+    .f10-self-host-it-label-audiobooks { --label-x: 82.2cqw; --label-y: 42cqh; }
+    .f10-self-host-it-label-books { --label-x: 81.2cqw; --label-y: 46.6cqh; }
+    .f10-self-host-it-label-comics { --label-x: 79.5cqw; --label-y: 51.3cqh; }
+    .f10-self-host-it-label-images { --label-x: 77.2cqw; --label-y: 55.9cqh; }
+    .f10-self-host-it-label-galleries { --label-x: 74.5cqw; --label-y: 60.5cqh; }
 
     .f10-self-host-it-mark {
       position: absolute;
-      left: 13.6cqw;
-      top: 0;
-      width: 10.8cqw;
+      left: 42.55cqw;
+      top: 29.55cqh;
+      z-index: 5;
+      width: 8.35cqw;
       height: auto;
       object-fit: contain;
+      transform-origin: 50% 100%;
     }
 
     .f10-self-host-it-wordmark {
       position: absolute;
-      left: 26.2cqw;
-      top: 7.6cqh;
+      left: 41.7cqw;
+      top: 44.2cqh;
+      z-index: 5;
+      width: 10cqw;
       margin: 0;
       color: #F5F5F6;
       font-family: "Geist Sans", sans-serif;
-      font-size: 5.5cqw;
+      font-size: 1.85cqw;
       font-weight: 800;
-      letter-spacing: -0.04em;
-      line-height: 0.9;
+      letter-spacing: -0.035em;
+      line-height: 1;
+      text-align: center;
     }
 
     .f10-self-host-it-statement {
@@ -179,21 +203,31 @@
     <h1 class="f10-self-host-it-hook" id="f10-self-host-it-hook">ONE DOCKER IMAGE.<br /><span class="f10-self-host-it-hook-accent">YOUR HARDWARE.</span></h1>
     <div class="f10-self-host-it-hook-rule" id="f10-self-host-it-hook-rule"></div>
 
-    <svg class="f10-self-host-it-system" viewBox="0 0 1920 1080" aria-hidden="true">
-      <path class="f10-self-host-it-input" id="f10-self-host-it-media-path" d="M 300 355 L 700 355 L 940 475" />
-      <path class="f10-self-host-it-input" id="f10-self-host-it-data-path" d="M 300 635 L 700 635 L 940 475" />
-      <path class="f10-self-host-it-input" id="f10-self-host-it-white-input" d="M 840 475 L 1045 475" />
-      <path class="f10-self-host-it-output-red" id="f10-self-host-it-rail-red" d="M 970 475 L 1380 286" />
-      <path class="f10-self-host-it-output-orange" id="f10-self-host-it-rail-orange" d="M 970 475 L 1510 372" />
-      <path class="f10-self-host-it-output-yellow" id="f10-self-host-it-rail-yellow" d="M 970 475 L 1560 475" />
-      <path class="f10-self-host-it-output-cyan" id="f10-self-host-it-rail-cyan" d="M 970 475 L 1510 578" />
-      <path class="f10-self-host-it-output-violet" id="f10-self-host-it-rail-violet" d="M 970 475 L 1380 664" />
-    </svg>
+    <div class="f10-self-host-it-diagram" id="f10-self-host-it-diagram" aria-label="One library enters Prismedia and becomes purpose-built experiences for every media type.">
+      <svg class="f10-self-host-it-system" viewBox="0 0 1920 1080" aria-hidden="true">
+        <path class="f10-self-host-it-input" id="f10-self-host-it-input" d="M 250 455 L 827 455" />
+        <path class="f10-self-host-it-output-movies" id="f10-self-host-it-rail-movies" d="M 967 455 L 1390 255" />
+        <path class="f10-self-host-it-output-series" id="f10-self-host-it-rail-series" d="M 967 455 L 1442 305" />
+        <path class="f10-self-host-it-output-videos" id="f10-self-host-it-rail-videos" d="M 967 455 L 1486 355" />
+        <path class="f10-self-host-it-output-music" id="f10-self-host-it-rail-music" d="M 967 455 L 1518 405" />
+        <path class="f10-self-host-it-output-audiobooks" id="f10-self-host-it-rail-audiobooks" d="M 967 455 L 1538 455" />
+        <path class="f10-self-host-it-output-books" id="f10-self-host-it-rail-books" d="M 967 455 L 1518 505" />
+        <path class="f10-self-host-it-output-comics" id="f10-self-host-it-rail-comics" d="M 967 455 L 1486 555" />
+        <path class="f10-self-host-it-output-images" id="f10-self-host-it-rail-images" d="M 967 455 L 1442 605" />
+        <path class="f10-self-host-it-output-galleries" id="f10-self-host-it-rail-galleries" d="M 967 455 L 1390 655" />
+      </svg>
 
-    <div class="f10-self-host-it-path-label f10-self-host-it-media-label" id="f10-self-host-it-media-label">MEDIA</div>
-    <div class="f10-self-host-it-path-label f10-self-host-it-data-label" id="f10-self-host-it-data-label">DATA</div>
+      <div class="f10-self-host-it-path-label f10-self-host-it-input-label" id="f10-self-host-it-input-label">ONE LIBRARY</div>
+      <div class="f10-self-host-it-path-label f10-self-host-it-output-label f10-self-host-it-label-movies" id="f10-self-host-it-label-movies">MOVIES</div>
+      <div class="f10-self-host-it-path-label f10-self-host-it-output-label f10-self-host-it-label-series" id="f10-self-host-it-label-series">SERIES</div>
+      <div class="f10-self-host-it-path-label f10-self-host-it-output-label f10-self-host-it-label-videos" id="f10-self-host-it-label-videos">VIDEOS</div>
+      <div class="f10-self-host-it-path-label f10-self-host-it-output-label f10-self-host-it-label-music" id="f10-self-host-it-label-music">MUSIC</div>
+      <div class="f10-self-host-it-path-label f10-self-host-it-output-label f10-self-host-it-label-audiobooks" id="f10-self-host-it-label-audiobooks">AUDIOBOOKS</div>
+      <div class="f10-self-host-it-path-label f10-self-host-it-output-label f10-self-host-it-label-books" id="f10-self-host-it-label-books">BOOKS</div>
+      <div class="f10-self-host-it-path-label f10-self-host-it-output-label f10-self-host-it-label-comics" id="f10-self-host-it-label-comics">COMICS</div>
+      <div class="f10-self-host-it-path-label f10-self-host-it-output-label f10-self-host-it-label-images" id="f10-self-host-it-label-images">IMAGES</div>
+      <div class="f10-self-host-it-path-label f10-self-host-it-output-label f10-self-host-it-label-galleries" id="f10-self-host-it-label-galleries">GALLERIES</div>
 
-    <div class="f10-self-host-it-lockup" id="f10-self-host-it-lockup">
       <img class="f10-self-host-it-mark" id="f10-self-host-it-mark" src="assets/logo-mark.png" alt="" />
       <div class="f10-self-host-it-wordmark" id="f10-self-host-it-wordmark">prismedia</div>
     </div>
@@ -210,14 +244,28 @@
       window.__timelines = window.__timelines || {};
 
       const pathIds = [
-        "#f10-self-host-it-media-path",
-        "#f10-self-host-it-data-path",
-        "#f10-self-host-it-white-input",
-        "#f10-self-host-it-rail-red",
-        "#f10-self-host-it-rail-orange",
-        "#f10-self-host-it-rail-yellow",
-        "#f10-self-host-it-rail-cyan",
-        "#f10-self-host-it-rail-violet"
+        "#f10-self-host-it-input",
+        "#f10-self-host-it-rail-movies",
+        "#f10-self-host-it-rail-series",
+        "#f10-self-host-it-rail-videos",
+        "#f10-self-host-it-rail-music",
+        "#f10-self-host-it-rail-audiobooks",
+        "#f10-self-host-it-rail-books",
+        "#f10-self-host-it-rail-comics",
+        "#f10-self-host-it-rail-images",
+        "#f10-self-host-it-rail-galleries"
+      ];
+      const railIds = pathIds.slice(1);
+      const labelIds = [
+        "#f10-self-host-it-label-movies",
+        "#f10-self-host-it-label-series",
+        "#f10-self-host-it-label-videos",
+        "#f10-self-host-it-label-music",
+        "#f10-self-host-it-label-audiobooks",
+        "#f10-self-host-it-label-books",
+        "#f10-self-host-it-label-comics",
+        "#f10-self-host-it-label-images",
+        "#f10-self-host-it-label-galleries"
       ];
       pathIds.forEach((selector) => {
         const path = document.querySelector(selector);
@@ -230,27 +278,33 @@
       const hookRule = "#f10-self-host-it-hook-rule";
       const mark = "#f10-self-host-it-mark";
       const wordmark = "#f10-self-host-it-wordmark";
-      const lockup = "#f10-self-host-it-lockup";
       const statement = "#f10-self-host-it-statement";
       const selfHostAction = "#f10-self-host-it-self-host-action";
       const testflightAction = "#f10-self-host-it-testflight-action";
 
       tl.fromTo(hook, { opacity: 0, y: -28 }, { opacity: 1, y: 0, duration: 0.52, ease: "power3.out" }, 0.08)
         .fromTo(hookRule, { opacity: 0, scaleX: 0 }, { opacity: 1, scaleX: 1, duration: 0.42, ease: "power3.out" }, 0.24)
-        .to("#f10-self-host-it-media-path", { strokeDashoffset: 0, duration: 0.72, ease: "power3.out" }, 0.3)
-        .to("#f10-self-host-it-data-path", { strokeDashoffset: 0, duration: 0.72, ease: "power3.out" }, 0.46)
-        .fromTo(["#f10-self-host-it-media-label", "#f10-self-host-it-data-label"], { opacity: 0, x: -12 }, { opacity: 1, x: 0, duration: 0.38, stagger: 0.12, ease: "power3.out" }, 0.58)
-        .to("#f10-self-host-it-white-input", { strokeDashoffset: 0, duration: 0.44, ease: "power3.out" }, 1.22)
-        .fromTo(mark, { opacity: 0, scale: 0.78 }, { opacity: 1, scale: 1, duration: 0.7, ease: "power3.out" }, 1.46)
-        .to("#f10-self-host-it-rail-red", { strokeDashoffset: 0, duration: 0.58, ease: "power3.out" }, 1.62)
-        .to("#f10-self-host-it-rail-orange", { strokeDashoffset: 0, duration: 0.58, ease: "power3.out" }, 1.7)
-        .to("#f10-self-host-it-rail-yellow", { strokeDashoffset: 0, duration: 0.58, ease: "power3.out" }, 1.78)
-        .to("#f10-self-host-it-rail-cyan", { strokeDashoffset: 0, duration: 0.58, ease: "power3.out" }, 1.86)
-        .to("#f10-self-host-it-rail-violet", { strokeDashoffset: 0, duration: 0.58, ease: "power3.out" }, 1.94)
-        .fromTo(wordmark, { opacity: 0, x: -30 }, { opacity: 1, x: 0, duration: 0.56, ease: "power3.out" }, 2.84)
+        .to("#f10-self-host-it-input", { strokeDashoffset: 0, duration: 0.76, ease: "power3.out" }, 0.34)
+        .fromTo("#f10-self-host-it-input-label", { opacity: 0, x: -12 }, { opacity: 1, x: 0, duration: 0.4, ease: "power3.out" }, 0.58)
+        .fromTo(mark, { opacity: 0, scale: 0.78 }, { opacity: 1, scale: 1, duration: 0.64, ease: "power3.out" }, 1.12);
+
+      railIds.forEach((rail, index) => {
+        tl.to(rail, {
+          strokeDashoffset: 0,
+          duration: 0.62,
+          ease: "power3.out"
+        }, 1.48 + index * 0.07);
+      });
+
+      tl.fromTo(labelIds, { opacity: 0, x: -10 }, {
+          opacity: 1,
+          x: 0,
+          duration: 0.34,
+          stagger: 0.07,
+          ease: "power3.out"
+        }, 1.84)
+        .fromTo(wordmark, { opacity: 0, y: -12 }, { opacity: 1, y: 0, duration: 0.48, ease: "power3.out" }, 2.72)
         .fromTo(statement, { opacity: 0, scaleX: 0 }, { opacity: 1, scaleX: 1, duration: 0.58, ease: "power3.out" }, 3.24)
-        .to(lockup, { y: -92, duration: 0.56, ease: "power3.out" }, 4.0)
-        .to(statement, { y: -92, duration: 0.56, ease: "power3.out" }, 4.0)
         .fromTo(selfHostAction, { opacity: 0, clipPath: "inset(0 100% 0 0)" }, { opacity: 1, clipPath: "inset(0 0% 0 0)", duration: 0.5, ease: "power3.out" }, 4.08)
         .fromTo(testflightAction, { opacity: 0, clipPath: "inset(0 100% 0 0)" }, { opacity: 1, clipPath: "inset(0 0% 0 0)", duration: 0.5, ease: "power3.out" }, 4.28);
 

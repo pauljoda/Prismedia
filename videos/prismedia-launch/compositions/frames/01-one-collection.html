@@ -113,30 +113,10 @@
       padding-left: 16px;
     }
 
-    #root [data-frame-part="01-one-collection-lockup"] {
-      position: absolute;
-      left: 854px;
-      top: 196px;
-      width: 448px;
-      height: 562px;
-      z-index: 6;
-      pointer-events: none;
-    }
-
-    #root [data-frame-part="01-one-collection-logo"] {
-      position: absolute;
-      left: 127px;
-      top: 82px;
-      width: 198px;
-      height: auto;
-      opacity: 0;
-      will-change: transform, opacity;
-    }
-
     #root [data-frame-part="01-one-collection-final-line"] {
       position: absolute;
-      left: 686px;
-      top: 766px;
+      left: 106px;
+      top: 752px;
       z-index: 7;
       width: 820px;
       height: 102px;
@@ -156,8 +136,8 @@
 
     #root [data-frame-part="01-one-collection-hairline"] {
       position: absolute;
-      left: 686px;
-      top: 744px;
+      left: 106px;
+      top: 730px;
       z-index: 7;
       width: 34px;
       height: 2px;
@@ -185,12 +165,9 @@
       </div>
     </div>
 
-    <div data-frame-part="01-one-collection-lockup" aria-hidden="true">
-      <img data-frame-part="01-one-collection-logo" src="assets/logo-mark.png" alt="" />
-    </div>
     <div data-frame-part="01-one-collection-hairline" aria-hidden="true"></div>
     <div data-frame-part="01-one-collection-final-line" aria-label="One private home.">
-      <span data-frame-part="01-one-collection-final-text">ONE PRIVATE HOME.</span>
+      <span data-frame-part="01-one-collection-final-text" data-layout-allow-occlusion data-layout-allow-overflow>ONE PRIVATE HOME.</span>
     </div>
   </div>
 
@@ -204,8 +181,6 @@
       const labels = root.querySelector('[data-frame-part="01-one-collection-handoff-labels"]');
       const prism = root.querySelector('[data-frame-part="01-one-collection-prism"]');
       const shroud = root.querySelector('[data-frame-part="01-one-collection-shroud"]');
-      const lockup = root.querySelector('[data-frame-part="01-one-collection-lockup"]');
-      const logo = root.querySelector('[data-frame-part="01-one-collection-logo"]');
       const hairline = root.querySelector('[data-frame-part="01-one-collection-hairline"]');
       const finalText = root.querySelector('[data-frame-part="01-one-collection-final-text"]');
 
@@ -226,7 +201,6 @@
 
       gsap.set(secondLine, { autoAlpha: 0 });
       gsap.set(labels, { autoAlpha: 0 });
-      gsap.set(lockup, { autoAlpha: 0 });
       gsap.set(finalText, { x: -840 });
       gsap.set(hairline, { autoAlpha: 0 });
 
@@ -264,18 +238,6 @@
       tl.set(secondLine, { autoAlpha: 0 }, 2.8);
       tl.to(prism, { opacity: 1, duration: 1.14, ease: 'power2.inOut' }, 2.8);
       tl.to(shroud, { opacity: 0.06, duration: 1.14, ease: 'power2.inOut' }, 2.8);
-      tl.fromTo(lockup, { autoAlpha: 0, scale: 0.72 }, {
-        autoAlpha: 1,
-        scale: 1,
-        duration: 0.54,
-        ease: 'power3.out',
-      }, 3.63);
-      tl.fromTo(logo, { autoAlpha: 0, scale: 0.82 }, {
-        autoAlpha: 1,
-        scale: 1,
-        duration: 0.42,
-        ease: 'power3.out',
-      }, 3.77);
 
       // Scene 4: the final copy is a clean left-to-right masked reveal, then a still hold.
       tl.fromTo(hairline, { autoAlpha: 0, scaleX: 0 }, {

@@ -42,7 +42,7 @@ captions: skipped (silent film by user request)
 
 ## Frame 1 — One collection
 
-- scene: Fragmented media needs collapse into the exact Prismedia prism and one private home.
+- scene: Fragmented media needs collapse into one optical Prismedia prism and one private home.
 - voiceover: ""
 - duration: 6s
 - poster: 4.8s
@@ -54,12 +54,12 @@ captions: skipped (silent film by user request)
 - beat: tension → relief
 - blueprint: kinetic-type-beats
 - blueprint-posture: Adapt
-- asset_candidates: assets/prism-refraction-hero.webp — black optical prism atmosphere; assets/logo-mark.png — exact Prismedia mark
+- asset_candidates: assets/prism-refraction-hero.webp — black optical prism atmosphere and sole brand focal point
 - focal: assets/prism-refraction-hero.webp
 - roles: prism-refraction-hero = background (full-bleed, dim 35% until the
-  refraction cue) · logo-mark = cutout (exact centered brand anchor)
+  refraction cue, then the sole optical prism identity)
 
-Adapt: keep the centered kinetic statement relay and logo-resolve signature;
+Adapt: keep the centered kinetic statement relay and optical-prism resolve;
 change the inherited bright broadside field to true black, and make the real
 optical refraction the payoff rather than a synthetic typographic effect.
 
@@ -74,11 +74,11 @@ stack of mono labels flashes once behind the type, then resolves to black.
 
 Scene 3 (2.8–4.6s): the words collapse toward the optical prism as the white
 beam reveals from left to center and the real spectrum opens to the right;
-exposure rises through the source image while the exact logo mark locks over
-the prism. Layered-depth composition, hero spanning ~78% of frame.
+exposure rises through the source image with no duplicate foreground mark.
+Layered-depth composition, hero spanning ~78% of frame.
 
-Scene 4 (4.6–6.0s): **ONE PRIVATE HOME.** arrives below the fixed mark via a
-clean left-to-right mask reveal; the beam, mark, and statement hold dead still.
+Scene 4 (4.6–6.0s): **ONE PRIVATE HOME.** arrives below the optical prism via a
+clean left-to-right mask reveal; the beam, prism, and statement hold dead still.
 
 narrativeRole: Validate the familiar fragmentation without naming competitors,
 then resolve it immediately into the category promise.
@@ -483,7 +483,7 @@ IMAGES · GALLERIES**
 
 ## Frame 10 — Self-host it
 
-- scene: Media and data paths enter one Prismedia container, resolve into the prism mark, then end on install and TestFlight actions.
+- scene: One white library beam enters the Prismedia mark and nine labeled media experiences emerge as a spectrum before the install and TestFlight actions.
 - voiceover: ""
 - duration: 6s
 - poster: 4.8s
@@ -501,25 +501,27 @@ IMAGES · GALLERIES**
   supporting (official Apple testing action)
 
 Adapt: keep the literal mark assembly, wordmark resolve, and long static end
-lockup; change the inherited ornamental logo parts into two crisp media/data
-paths converging through the exact prism, then resolve into two concrete action
-rails without a camera push-through.
+lockup; express the product story as one white beam entering the exact prism
+and a labeled material-spectrum rail for every media type exiting it, then
+resolve into two concrete action rails without a camera push-through.
 
 Scene 1 (0.0–1.2s): **ONE DOCKER IMAGE. YOUR HARDWARE.** reveals high-left on
-true black while two 1px neutral paths labeled **MEDIA** and **DATA** draw
-toward an empty center. The bottom keep-out stays clear.
+true black while one white path labeled **ONE LIBRARY** draws toward an empty
+center. The bottom keep-out stays clear.
 
 Scene 2 (1.2–2.8s): the exact Prismedia mark assembles at the paths' meeting
-point from a white input line and restrained material-spectrum output rails
-(`svg-path-draw` + `center-outward-expansion`). The mark itself remains
-front-facing and unaltered.
+point, precisely bridging the white input and nine restrained
+material-spectrum output rails labeled **MOVIES**, **SERIES**, **VIDEOS**,
+**MUSIC**, **AUDIOBOOKS**, **BOOKS**, **COMICS**, **IMAGES**, and
+**GALLERIES** (`svg-path-draw` + `center-outward-expansion`). The mark itself
+remains front-facing and unaltered.
 
 Scene 3 (2.8–4.0s): the wordmark reveals beside the fixed mark to complete the
 centered lockup; **SELF-HOST THE LIBRARY. TAKE IT EVERYWHERE.** wipes in below
 as the spectrum rails settle to stillness.
 
-Scene 4 (4.0–4.8s): the lockup shifts upward once to make room for two sharp
-action rails: **SELF-HOST PRISMEDIA** enters left, followed by the official
+Scene 4 (4.0–4.8s): two sharp action rails appear below the stable optical
+diagram: **SELF-HOST PRISMEDIA** enters left, followed by the official
 TestFlight icon and **JOIN THE LIMITED TESTFLIGHT** right.
 
 Scene 5 (4.8–6.0s): deliberate terminal hold. The exact mark, self-host action,
