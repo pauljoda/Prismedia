@@ -12,7 +12,9 @@ test-results/
 .claude/
 # Local sample media at the repo root only — unanchored `videos/` would also swallow
 # C# source under */Videos/ on case-insensitive filesystems.
-/videos/
+/videos/*
+!/videos/prismedia-launch/
+!/videos/prismedia-launch/**
 
 apps/web-svelte/.svelte-kit/
 apps/web-svelte/build/

@@ -1,0 +1,16 @@
+{"id":"image_001","type":"image","path":"assets/ios-audiobook.webp","source":"existing","description":"ios audiobook","width":1320,"height":2868,"provenance":{"provider":"local","adopted":true}}
+{"id":"image_002","type":"image","path":"assets/ios-book-combined.webp","source":"existing","description":"ios book combined","width":1320,"height":2868,"provenance":{"provider":"local","adopted":true}}
+{"id":"image_003","type":"image","path":"assets/ios-dashboard.webp","source":"existing","description":"ios dashboard","width":1320,"height":2868,"provenance":{"provider":"local","adopted":true}}
+{"id":"image_004","type":"image","path":"assets/ios-music-player.webp","source":"existing","description":"ios music player","width":1320,"height":2868,"provenance":{"provider":"local","adopted":true}}
+{"id":"image_005","type":"image","path":"assets/ios-reader-settings.webp","source":"existing","description":"ios reader settings","width":1320,"height":2868,"provenance":{"provider":"local","adopted":true}}
+{"id":"image_006","type":"image","path":"assets/ios-reader.webp","source":"existing","description":"ios reader","width":1320,"height":2868,"provenance":{"provider":"local","adopted":true}}
+{"id":"image_007","type":"image","path":"assets/logo-mark.png","source":"existing","description":"logo mark","width":640,"height":590,"provenance":{"provider":"local","adopted":true}}
+{"id":"image_008","type":"image","path":"assets/prism-refraction-hero.webp","source":"existing","description":"prism refraction hero","width":1672,"height":941,"provenance":{"provider":"local","adopted":true}}
+{"id":"image_009","type":"image","path":"assets/testflight-icon.webp","source":"existing","description":"testflight icon","width":1024,"height":1024,"provenance":{"provider":"local","adopted":true}}
+{"id":"image_010","type":"image","path":"assets/tvos-dashboard.webp","source":"existing","description":"tvos dashboard","width":3840,"height":2160,"provenance":{"provider":"local","adopted":true}}
+{"id":"image_011","type":"image","path":"assets/tvos-playback.webp","source":"existing","description":"tvos playback","width":3840,"height":2160,"provenance":{"provider":"local","adopted":true}}
+{"id":"image_012","type":"image","path":"assets/web-dashboard.webp","source":"existing","description":"web dashboard","width":1280,"height":720,"provenance":{"provider":"local","adopted":true}}
+{"id":"image_013","type":"image","path":"assets/web-detail.webp","source":"existing","description":"web detail","width":1280,"height":720,"provenance":{"provider":"local","adopted":true}}
+{"id":"image_014","type":"image","path":"assets/web-galleries.png","source":"existing","description":"web galleries","width":1280,"height":720,"provenance":{"provider":"local","adopted":true}}
+{"id":"image_015","type":"image","path":"assets/web-movies.webp","source":"existing","description":"web movies","width":1280,"height":720,"provenance":{"provider":"local","adopted":true}}
+{"id":"image_016","type":"image","path":"assets/web-request.webp","source":"existing","description":"web request","width":1280,"height":720,"provenance":{"provider":"local","adopted":true}}

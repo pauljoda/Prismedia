@@ -1,0 +1,7 @@
+capture/
+.hyperframes/
+assets/source/
+renders/
+node_modules/
+caption_groups.json
+audio_meta.json
