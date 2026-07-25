@@ -510,7 +510,7 @@ true black while one white path labeled **ONE LIBRARY** draws toward an empty
 center. The bottom keep-out stays clear.
 
 Scene 2 (1.2–2.8s): the exact Prismedia mark assembles at the paths' meeting
-point, precisely bridging the white input and nine restrained
+point, with the white input crossing its vertical center and nine restrained
 material-spectrum output rails labeled **MOVIES**, **SERIES**, **VIDEOS**,
 **MUSIC**, **AUDIOBOOKS**, **BOOKS**, **COMICS**, **IMAGES**, and
 **GALLERIES** (`svg-path-draw` + `center-outward-expansion`). The mark itself
