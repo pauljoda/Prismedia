@@ -5,17 +5,20 @@
 <h1 align="center">Prismedia</h1>
 
 <p align="center">
-  <strong>A private, self-hosted media library for the whole household.</strong>
+  <strong>Your whole media life. One private home.</strong>
   <br />
-  Video-first, with first-class movies, series, images, galleries, comics, eBooks, audio, people, studios, tags, collections, plugins, and file management.
+  A self-hosted media library that keeps discovery, requests, downloads, metadata, files, playback, reading, and listening connected.
 </p>
 
 <p align="center">
   <a href="https://pauljoda.github.io/Prismedia/">
-    <img alt="Read the docs" src="https://img.shields.io/badge/Docs-Prismedia-c7c9cc?style=for-the-badge&logo=gitbook&logoColor=111214" />
+    <img alt="Visit the Prismedia website" src="https://img.shields.io/badge/Website-Prismedia-c7c9cc?style=for-the-badge&logo=googlechrome&logoColor=111214" />
   </a>
   <a href="https://pauljoda.github.io/Prismedia/docs/getting-started/install">
     <img alt="Quick start guide" src="https://img.shields.io/badge/Get_Started-Docker-202734?style=for-the-badge&logo=docker&logoColor=white" />
+  </a>
+  <a href="https://testflight.apple.com/join/c9bgDxr7">
+    <img alt="Join the Prismedia TestFlight" src="https://img.shields.io/badge/Join-TestFlight-0d96f6?style=for-the-badge&logo=apple&logoColor=white" />
   </a>
   <a href="https://github.com/pauljoda/Prismedia/pkgs/container/prismedia">
     <img alt="Container image" src="https://img.shields.io/badge/GHCR-prismedia-0b0e12?style=for-the-badge&logo=github&logoColor=white" />
@@ -23,24 +26,34 @@
 </p>
 
 <p align="center">
-  <a href="https://pauljoda.github.io/Prismedia/">Docs</a> &middot;
+  <a href="https://pauljoda.github.io/Prismedia/">Website</a> &middot;
+  <a href="https://pauljoda.github.io/Prismedia/docs/intro">Docs</a> &middot;
   <a href="#quick-start">Quick Start</a> &middot;
-  <a href="#what-prismedia-manages">Features</a> &middot;
-  <a href="#development">Development</a> &middot;
+  <a href="https://testflight.apple.com/join/c9bgDxr7">TestFlight</a> &middot;
   <a href="https://www.reddit.com/r/Prismedia/">Subreddit</a>
 </p>
 
 <p align="center">
-  <img src="docs/screenshots/dashboard.png" alt="Prismedia dashboard" width="100%" />
+  <img src="documentation-site/static/img/prismedia-social-card.png" alt="Prismedia turns one private media library into purpose-built experiences for every screen" width="100%" />
 </p>
 
 ## What Is Prismedia?
 
-Prismedia is a private media library for self-hosted collections. It is optimized for a single trusted user or household on a private LAN: mount your media, open a browser, and browse from your phone, tablet, desktop, or TV browser. It can also serve your library to **Jellyfin client apps** like Infuse and Manet.
+Prismedia is a private, self-hosted media library for the whole lifecycle. An item remains the same item while it moves from discovery and request through acquisition, identification, organization, playback or reading, and long-term maintenance.
+
+The complete web workspace, native iPhone and iPad experience, and focus-first Apple TV app share one household library. Video is the foundation, while music, audiobooks, eBooks, comics, images, and galleries receive purpose-built interfaces instead of being flattened into one generic file browser. The native Apple apps are available to a limited testing group through [TestFlight](https://testflight.apple.com/join/c9bgDxr7).
 
 The production image is intentionally simple. PostgreSQL 16, ffmpeg, the .NET API, the .NET worker, and the built Svelte frontend all ship together as one Docker image. Application data lives in `/data`; your library lives under `/media`; the web app listens on port `8008`.
 
 Prismedia owns its own library model. Stash community scrapers can be wrapped as identify providers for discovery workflows, but Prismedia's schema, UI, and release process are built around its own media entities.
+
+<p align="center">
+  <a href="https://pauljoda.github.io/Prismedia/#launch-film-title">
+    <img src="documentation-site/static/img/showcase/prismedia-launch-poster.webp" alt="Prismedia product film showing the web, iPhone, iPad, and Apple TV experiences" width="100%" />
+  </a>
+  <br />
+  <a href="https://pauljoda.github.io/Prismedia/#launch-film-title"><strong>▶ Watch the 72-second silent product film</strong></a>
+</p>
 
 ## Quick Start
 
@@ -161,16 +174,25 @@ Request is Prismedia's first-party acquisition workspace. Search for books, auth
 
 A Jellyfin-compatible API lets client apps discover Prismedia, sign in, and stream — tested with **Infuse** (video + audio) and music clients like **Manet**, **Finamp**, and **Symfonium**. Clients sign in with your Prismedia user accounts, and each user carries their own library access and NSFW visibility, so you can run separate SFW and NSFW "servers" in your client. Resume position and play counts sync both ways, per user. See [Jellyfin Compatibility](https://pauljoda.github.io/Prismedia/docs/jellyfin/overview).
 
-### Navigation And Mobile
+### Web And Native Apple Apps
 
-The sidebar is yours to arrange — rename, reorder, group, hide, and collapse sections — and your layout is saved on the server and follows you across devices. On phones, a roomy bottom bar holds up to four pinned destinations, and a navigation drawer opens by swiping up from the bar. Every view is touch-first and avoids hover-only core actions.
+The responsive web app is the complete library workspace: browse every medium, request and identify items, manage files, tune settings, and inspect background work from one interface.
+
+The native iPhone and iPad app adds adaptive Apple-platform navigation, video and audio playback, music and audiobook players, and customizable EPUB, PDF, comic, and webtoon reading. Reading and listening progress stay together on the same book, with separate actions for continuing each edition.
 
 <p align="center">
-  <img src="docs/screenshots/mobile-dashboard.png" alt="Mobile dashboard" width="24%" />
-  <img src="docs/screenshots/mobile-videos.png" alt="Mobile videos" width="24%" />
-  <img src="docs/screenshots/mobile-video-detail.png" alt="Mobile video detail" width="24%" />
-  <img src="docs/screenshots/mobile-files.png" alt="Mobile files" width="24%" />
+  <img src="documentation-site/static/img/showcase/ios-reader.webp" alt="A Game of Thrones in Prismedia's native iPhone reader" width="31%" />
+  <img src="documentation-site/static/img/showcase/ios-reader-settings.webp" alt="Prismedia reader typography, theme, and spacing controls" width="31%" />
+  <img src="documentation-site/static/img/showcase/ios-book-combined.webp" alt="Prismedia showing reading and audiobook progress together" width="31%" />
 </p>
+
+The Apple TV app uses a cinematic, focus-first interface and a custom native player that works with the device's codec and playback stack. Supported sources can direct-play at original quality—including lossless audio—while title, stream state, timeline, audio, subtitles, and playback controls remain readable from the couch.
+
+<p align="center">
+  <img src="documentation-site/static/img/showcase/tvos-playback.webp" alt="A movie paused in Prismedia's native Apple TV player with direct-play and codec state visible" width="100%" />
+</p>
+
+The iPhone, iPad, and Apple TV apps are currently distributed through the limited [Prismedia TestFlight](https://testflight.apple.com/join/c9bgDxr7).
 
 ### Collections
 
