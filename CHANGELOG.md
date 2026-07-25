@@ -300,6 +300,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Removed development-only route shells and redundant prerelease UI panels so the app surface and release notes focus on the production Prismedia experience.
 
 ### Docs
+- Scheduled Prismedia’s Product Hunt launch for August 23, added the official launch badge to the public site, and documented a preparation, launch-day, and follow-up campaign.
 - Added a reproducible Product Hunt launch kit with final listing copy, a square prism thumbnail, and six visually reviewed 1270×760 gallery cards covering the media lifecycle, native playback, reader customization, purpose-built media experiences, and self-hosted architecture.
 - Prevented the web-platform proof frame from creating horizontal overflow on narrow launch-site viewports.
 - Reframed the public README around the connected media lifecycle, product film, TestFlight path, native reader customization, and full-fidelity Apple TV playback.

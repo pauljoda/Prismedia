@@ -1,17 +1,23 @@
 # Prismedia Product Hunt launch
 
-## Draft status
+## Launch status
 
-- Draft: <https://www.producthunt.com/products/prismedia?launch=prismedia>
+- Scheduled launch: <https://www.producthunt.com/products/prismedia?launch=prismedia>
+- Pre-launch dashboard:
+  <https://www.producthunt.com/products/prismedia/prismedia/prelaunch>
+- Forum discussion:
+  <https://www.producthunt.com/p/prismedia/why-does-self-hosted-media-still-feel-like-five-separate-products>
 - Editor: <https://www.producthunt.com/posts/prismedia/edit>
-- State: saved, complete, and intentionally unscheduled
+- State: scheduled
+- Preview visibility: public to anyone with the URL
+- Launch date: Sunday, August 23, 2026
+- Launch time: 12:01 AM Pacific / 2:01 AM Central
 - Hunter and maker: Paul “pauljoda” Davis
 - Team: solo maker
 - Pricing: free
 - Funding: bootstrapped
 
-Scheduling is the final consequential launch action. Choose the launch date before
-using **Schedule launch** in Product Hunt.
+The date remains editable from the pre-launch dashboard until launch.
 
 ## Main information
 
@@ -124,6 +130,18 @@ Use `prismedia-thumbnail.png` as the square launch thumbnail.
 The silent launch film remains available on the public site. Product Hunt accepts a
 YouTube URL rather than a direct MP4 for its video field, so a public YouTube upload
 is intentionally left as a separate publishing decision.
+
+## Pre-launch promotion
+
+The public site uses Product Hunt’s official dark launch badge:
+
+- Post ID: `1205980`
+- Badge:
+  `https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=1205980&theme=dark`
+- Campaign link:
+  `https://www.producthunt.com/products/prismedia?launch=prismedia&embed=true&utm_source=badge-featured&utm_medium=badge&utm_campaign=badge-prismedia`
+
+The launch cadence and channel copy live in `launch-plan.md`.
 
 ## Regenerating the gallery
 

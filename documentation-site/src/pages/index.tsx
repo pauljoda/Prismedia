@@ -15,6 +15,8 @@ import styles from './index.module.css';
 
 const TESTFLIGHT_URL = 'https://testflight.apple.com/join/c9bgDxr7';
 const GITHUB_URL = 'https://github.com/pauljoda/Prismedia';
+const PRODUCT_HUNT_URL =
+  'https://www.producthunt.com/products/prismedia?launch=prismedia';
 const PRODUCT_SCHEMA = {
   '@context': 'https://schema.org',
   '@type': 'SoftwareApplication',
@@ -40,7 +42,7 @@ const PRODUCT_SCHEMA = {
     'https://pauljoda.github.io/Prismedia/img/showcase/ios-dashboard.webp',
     'https://pauljoda.github.io/Prismedia/img/showcase/tvos-dashboard.webp',
   ],
-  sameAs: [GITHUB_URL, TESTFLIGHT_URL],
+  sameAs: [GITHUB_URL, TESTFLIGHT_URL, PRODUCT_HUNT_URL],
 };
 const VIDEO_SCHEMA = {
   '@context': 'https://schema.org',
@@ -233,6 +235,28 @@ function TestFlightButton({compact = false}: {compact?: boolean}) {
         View in TestFlight
       </span>
     </Link>
+  );
+}
+
+function ProductHuntBadge() {
+  return (
+    <div className={styles.productHuntPromo}>
+      <span>Launching August 23, 2026</span>
+      <Link
+        className={styles.productHuntBadge}
+        href={`${PRODUCT_HUNT_URL}&embed=true&utm_source=badge-featured&utm_medium=badge&utm_campaign=badge-prismedia`}
+        aria-label="Find Prismedia on Product Hunt"
+      >
+        <img
+          src="https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=1205980&theme=dark"
+          alt="Prismedia — find us on Product Hunt"
+          width="250"
+          height="54"
+          loading="lazy"
+          decoding="async"
+        />
+      </Link>
+    </div>
   );
 }
 
@@ -913,6 +937,7 @@ function FinalCta() {
           </Link>
           <TestFlightButton />
         </div>
+        <ProductHuntBadge />
         <div className={styles.finalLinks}>
           <Link to="/docs/intro">Read the docs</Link>
           <Link href={GITHUB_URL}>GitHub</Link>

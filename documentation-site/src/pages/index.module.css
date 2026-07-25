@@ -1518,6 +1518,43 @@
   margin-top: 2.3rem;
 }
 
+.productHuntPromo {
+  display: flex;
+  align-items: center;
+  flex-direction: column;
+  gap: 0.65rem;
+  margin-top: 1.75rem;
+}
+
+.productHuntPromo > span {
+  color: var(--prismedia-text-muted);
+  font-family: var(--ifm-font-family-monospace);
+  font-size: 0.62rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.productHuntBadge {
+  display: block;
+  width: 250px;
+  height: 54px;
+  border-radius: 10px;
+  transition:
+    opacity 160ms ease,
+    transform 160ms ease;
+}
+
+.productHuntBadge:hover {
+  opacity: 0.92;
+  transform: translateY(-1px);
+}
+
+.productHuntBadge img {
+  display: block;
+  width: 250px;
+  height: 54px;
+}
+
 .finalLinks {
   display: flex;
   gap: 1.4rem;
