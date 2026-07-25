@@ -1,0 +1,596 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Prismedia App Store gallery</title>
+    <style>
+      @font-face {
+        font-family: "Geist";
+        font-style: normal;
+        font-weight: 400;
+        src: url("../../../apps/backend/src/Prismedia.Api/wwwroot/_app/immutable/assets/geist-sans-latin-400-normal.gapTbOY8.woff2")
+          format("woff2");
+      }
+
+      @font-face {
+        font-family: "Geist";
+        font-style: normal;
+        font-weight: 600;
+        src: url("../../../apps/backend/src/Prismedia.Api/wwwroot/_app/immutable/assets/geist-sans-latin-600-normal.DFOURf8L.woff2")
+          format("woff2");
+      }
+
+      @font-face {
+        font-family: "Geist";
+        font-style: normal;
+        font-weight: 700;
+        src: url("../../../apps/backend/src/Prismedia.Api/wwwroot/_app/immutable/assets/geist-sans-latin-700-normal.BmN9tIp5.woff2")
+          format("woff2");
+      }
+
+      @font-face {
+        font-family: "JetBrains Mono";
+        font-style: normal;
+        font-weight: 400 800;
+        src: url("../../../apps/backend/src/Prismedia.Api/wwwroot/_app/immutable/assets/jetbrains-mono-latin-wght-normal.B9CIFXIH.woff2")
+          format("woff2");
+      }
+
+      :root {
+        color-scheme: dark;
+        --ink: #030405;
+        --surface: #0c0f12;
+        --text: #f8f8f8;
+        --muted: #b8bbc3;
+        --line: rgba(255, 255, 255, 0.15);
+        --red: #ff716c;
+        --orange: #ff9f55;
+        --yellow: #f4d85f;
+        --green: #7bd69a;
+        --cyan: #63cdea;
+        --blue: #7595ff;
+        --violet: #af7ce7;
+        --spectrum: linear-gradient(
+          45deg,
+          var(--red) 0%,
+          var(--orange) 17%,
+          var(--yellow) 34%,
+          var(--green) 51%,
+          var(--cyan) 68%,
+          var(--blue) 84%,
+          var(--violet) 100%
+        );
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        width: 100%;
+        min-height: 100%;
+        margin: 0;
+        background: #000;
+      }
+
+      body {
+        color: var(--text);
+        font-family: "Geist", -apple-system, BlinkMacSystemFont, sans-serif;
+      }
+
+      .slide {
+        position: relative;
+        display: none;
+        overflow: hidden;
+        isolation: isolate;
+        background:
+          radial-gradient(circle at 90% 8%, rgba(111, 143, 255, 0.12), transparent 28%),
+          radial-gradient(circle at 6% 94%, rgba(255, 100, 90, 0.1), transparent 31%),
+          var(--ink);
+      }
+
+      .slide.is-active {
+        display: block;
+      }
+
+      .slide::before {
+        position: absolute;
+        z-index: -2;
+        inset: 0;
+        content: "";
+        background-image:
+          linear-gradient(rgba(255, 255, 255, 0.025) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(255, 255, 255, 0.025) 1px, transparent 1px);
+        background-size: 92px 92px;
+        mask-image: linear-gradient(to bottom, black 0%, transparent 90%);
+      }
+
+      .slide::after {
+        position: absolute;
+        z-index: -1;
+        right: -18%;
+        bottom: -16%;
+        width: 72%;
+        aspect-ratio: 1;
+        content: "";
+        opacity: 0.18;
+        background: conic-gradient(
+          from 224deg,
+          transparent 0deg,
+          var(--red) 3deg,
+          transparent 5deg,
+          transparent 8deg,
+          var(--orange) 10deg,
+          transparent 12deg,
+          transparent 15deg,
+          var(--yellow) 17deg,
+          transparent 19deg,
+          transparent 22deg,
+          var(--green) 24deg,
+          transparent 26deg,
+          transparent 29deg,
+          var(--cyan) 31deg,
+          transparent 33deg,
+          transparent 36deg,
+          var(--blue) 38deg,
+          transparent 40deg,
+          transparent 43deg,
+          var(--violet) 45deg,
+          transparent 47deg
+        );
+        filter: blur(10px);
+      }
+
+      .iphone-slide {
+        width: 1320px;
+        height: 2868px;
+      }
+
+      .ipad-slide {
+        width: 2064px;
+        height: 2752px;
+      }
+
+      .tvos-slide {
+        width: 3840px;
+        height: 2160px;
+      }
+
+      .brand {
+        position: absolute;
+        z-index: 5;
+        display: flex;
+        align-items: center;
+      }
+
+      .brand img {
+        display: block;
+        object-fit: contain;
+        filter: drop-shadow(0 14px 32px rgba(0, 0, 0, 0.65));
+      }
+
+      .brand span,
+      .eyebrow,
+      .proof {
+        font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+        font-weight: 600;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+      }
+
+      .brand span {
+        color: #f2f2f2;
+      }
+
+      .copy {
+        position: absolute;
+        z-index: 4;
+      }
+
+      h1,
+      p {
+        margin: 0;
+      }
+
+      h1 {
+        font-weight: 700;
+        letter-spacing: -0.058em;
+        line-height: 0.94;
+      }
+
+      p {
+        color: var(--muted);
+        line-height: 1.3;
+      }
+
+      .gradient-text {
+        color: transparent;
+        background: var(--spectrum);
+        background-clip: text;
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+      }
+
+      .device {
+        position: absolute;
+        z-index: 3;
+        overflow: hidden;
+        background: #050607;
+        border: 2px solid rgba(255, 255, 255, 0.19);
+        box-shadow:
+          0 70px 180px rgba(0, 0, 0, 0.68),
+          0 0 0 15px rgba(255, 255, 255, 0.018);
+      }
+
+      .device img {
+        display: block;
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        object-position: top center;
+      }
+
+      .iphone-slide .brand {
+        top: 78px;
+        left: 86px;
+        gap: 24px;
+      }
+
+      .iphone-slide .brand img {
+        width: 54px;
+        height: 54px;
+      }
+
+      .iphone-slide .brand span {
+        font-size: 27px;
+      }
+
+      .iphone-slide .copy {
+        top: 208px;
+        left: 86px;
+        width: 1148px;
+      }
+
+      .iphone-slide .eyebrow {
+        margin-bottom: 28px;
+        color: #9398a2;
+        font-size: 24px;
+      }
+
+      .iphone-slide h1 {
+        max-width: 1160px;
+        font-size: 120px;
+      }
+
+      .iphone-slide p {
+        max-width: 1080px;
+        margin-top: 30px;
+        font-size: 38px;
+      }
+
+      .iphone-slide .device {
+        bottom: -96px;
+        left: 132px;
+        width: 1056px;
+        height: 2294px;
+        padding: 15px;
+        border-radius: 108px;
+      }
+
+      .iphone-slide .device img {
+        border-radius: 91px;
+      }
+
+      .iphone-slide.compact-copy .copy {
+        top: 215px;
+      }
+
+      .iphone-slide.compact-copy h1 {
+        font-size: 112px;
+      }
+
+      .iphone-slide.compact-copy .device {
+        height: 2235px;
+      }
+
+      .ipad-slide .brand {
+        top: 82px;
+        left: 126px;
+        gap: 28px;
+      }
+
+      .ipad-slide .brand img {
+        width: 62px;
+        height: 62px;
+      }
+
+      .ipad-slide .brand span {
+        font-size: 30px;
+      }
+
+      .ipad-slide .copy {
+        top: 205px;
+        left: 126px;
+        width: 1812px;
+      }
+
+      .ipad-slide .eyebrow {
+        margin-bottom: 30px;
+        color: #9398a2;
+        font-size: 26px;
+      }
+
+      .ipad-slide h1 {
+        max-width: 1860px;
+        font-size: 143px;
+      }
+
+      .ipad-slide p {
+        max-width: 1720px;
+        margin-top: 32px;
+        font-size: 43px;
+      }
+
+      .ipad-slide .device {
+        bottom: -105px;
+        left: 184px;
+        width: 1696px;
+        height: 2261px;
+        padding: 14px;
+        border-radius: 70px;
+      }
+
+      .ipad-slide .device img {
+        border-radius: 56px;
+      }
+
+      .ipad-slide.compact-copy h1 {
+        font-size: 132px;
+      }
+
+      .tvos-slide .brand {
+        top: 90px;
+        left: 188px;
+        gap: 32px;
+      }
+
+      .tvos-slide .brand img {
+        width: 72px;
+        height: 72px;
+      }
+
+      .tvos-slide .brand span {
+        font-size: 34px;
+      }
+
+      .tvos-slide .copy {
+        top: 90px;
+        right: 178px;
+        width: 2450px;
+        text-align: right;
+      }
+
+      .tvos-slide .eyebrow {
+        margin-bottom: 22px;
+        color: #9398a2;
+        font-size: 27px;
+      }
+
+      .tvos-slide h1 {
+        font-size: 116px;
+      }
+
+      .tvos-slide p {
+        margin-top: 22px;
+        font-size: 39px;
+      }
+
+      .tvos-slide .device {
+        bottom: -76px;
+        left: 230px;
+        width: 3380px;
+        height: 1901px;
+        padding: 15px;
+        border-radius: 62px;
+      }
+
+      .tvos-slide .device img {
+        border-radius: 47px;
+      }
+
+      .proof {
+        position: absolute;
+        z-index: 5;
+        color: rgba(255, 255, 255, 0.68);
+      }
+
+      .iphone-slide .proof {
+        right: 68px;
+        bottom: 44px;
+        font-size: 17px;
+      }
+
+      .ipad-slide .proof {
+        right: 95px;
+        bottom: 47px;
+        font-size: 19px;
+      }
+
+      .tvos-slide .proof {
+        right: 138px;
+        bottom: 38px;
+        font-size: 22px;
+      }
+    </style>
+  </head>
+  <body>
+    <section class="slide iphone-slide" id="iphone-01">
+      <div class="brand"><img src="../../logo-mark.png" alt="" /><span>Prismedia</span></div>
+      <div class="copy" data-copy>
+        <div class="eyebrow">Private · self-hosted · native</div>
+        <h1>Your whole media life. <span class="gradient-text">One home.</span></h1>
+        <p>Movies, series, books, audiobooks, music, images, and galleries—together.</p>
+      </div>
+      <div class="device"><img src="raw/iphone-dashboard.png" alt="Prismedia dashboard on iPhone" /></div>
+      <div class="proof">iPhone · native app</div>
+    </section>
+
+    <section class="slide iphone-slide compact-copy" id="iphone-02">
+      <div class="brand"><img src="../../logo-mark.png" alt="" /><span>Prismedia</span></div>
+      <div class="copy" data-copy>
+        <div class="eyebrow">Custom native playback</div>
+        <h1>Direct play. <span class="gradient-text">Full fidelity.</span></h1>
+        <p>Your source file, Apple’s media stack, and clear codec details when direct play is supported.</p>
+      </div>
+      <div class="device"><img src="raw/iphone-playback.png" alt="Direct-play video in Prismedia on iPhone" /></div>
+      <div class="proof">Direct Play · 1080p · H.264</div>
+    </section>
+
+    <section class="slide iphone-slide compact-copy" id="iphone-03">
+      <div class="brand"><img src="../../logo-mark.png" alt="" /><span>Prismedia</span></div>
+      <div class="copy" data-copy>
+        <div class="eyebrow">Ebook + audiobook</div>
+        <h1>Read it. Hear it. <span class="gradient-text">Keep your place.</span></h1>
+        <p>One title can hold text and narration, with progress ready on every screen.</p>
+      </div>
+      <div class="device"><img src="raw/iphone-book.png" alt="Combined ebook and audiobook detail in Prismedia" /></div>
+      <div class="proof">Read · listen · continue</div>
+    </section>
+
+    <section class="slide iphone-slide compact-copy" id="iphone-04">
+      <div class="brand"><img src="../../logo-mark.png" alt="" /><span>Prismedia</span></div>
+      <div class="copy" data-copy>
+        <div class="eyebrow">Purpose-built reader</div>
+        <h1>A beautiful page. <span class="gradient-text">Nothing in the way.</span></h1>
+        <p>Publisher-quality books with illustrations, dark themes, and a calm reading surface.</p>
+      </div>
+      <div class="device"><img src="raw/iphone-reader.png" alt="Alice in Wonderland in Prismedia's ebook reader" /></div>
+      <div class="proof">Dark theme · literary serif</div>
+    </section>
+
+    <section class="slide iphone-slide compact-copy" id="iphone-05">
+      <div class="brand"><img src="../../logo-mark.png" alt="" /><span>Prismedia</span></div>
+      <div class="copy" data-copy>
+        <div class="eyebrow">Your reader, your rules</div>
+        <h1>Type, weight, theme, and <span class="gradient-text">rhythm.</span></h1>
+        <p>Save a custom reading profile with typography and spacing tuned for you.</p>
+      </div>
+      <div class="device">
+        <img src="raw/iphone-reader-settings.png" alt="Prismedia reader customization controls" />
+      </div>
+      <div class="proof">Profiles · typography · spacing</div>
+    </section>
+
+    <section class="slide iphone-slide compact-copy" id="iphone-06">
+      <div class="brand"><img src="../../logo-mark.png" alt="" /><span>Prismedia</span></div>
+      <div class="copy" data-copy>
+        <div class="eyebrow">Music, made native</div>
+        <h1>Your collection. <span class="gradient-text">Your queue.</span></h1>
+        <p>Familiar playback, AirPlay, shuffle, repeat, and queue controls for self-hosted audio.</p>
+      </div>
+      <div class="device"><img src="raw/iphone-music.png" alt="Prismedia music player on iPhone" /></div>
+      <div class="proof">AirPlay · queue · repeat</div>
+    </section>
+
+    <section class="slide ipad-slide" id="ipad-01">
+      <div class="brand"><img src="../../logo-mark.png" alt="" /><span>Prismedia</span></div>
+      <div class="copy" data-copy>
+        <div class="eyebrow">Made for iPad</div>
+        <h1>The whole library. <span class="gradient-text">At a glance.</span></h1>
+        <p>A spacious, adaptive home for every medium on your server.</p>
+      </div>
+      <div class="device"><img src="raw/ipad-dashboard.png" alt="Prismedia dashboard on iPad" /></div>
+      <div class="proof">iPad · adaptive navigation</div>
+    </section>
+
+    <section class="slide ipad-slide compact-copy" id="ipad-02">
+      <div class="brand"><img src="../../logo-mark.png" alt="" /><span>Prismedia</span></div>
+      <div class="copy" data-copy>
+        <div class="eyebrow">Native media engine</div>
+        <h1>See the source. <span class="gradient-text">Keep the quality.</span></h1>
+        <p>Direct-play state, resolution, video codec, and audio codec stay visible.</p>
+      </div>
+      <div class="device"><img src="raw/ipad-playback.png" alt="Prismedia direct-play video on iPad" /></div>
+      <div class="proof">Direct Play · 1080p · H.264</div>
+    </section>
+
+    <section class="slide ipad-slide compact-copy" id="ipad-03">
+      <div class="brand"><img src="../../logo-mark.png" alt="" /><span>Prismedia</span></div>
+      <div class="copy" data-copy>
+        <div class="eyebrow">Reading and listening</div>
+        <h1>One book. <span class="gradient-text">Two ways in.</span></h1>
+        <p>Pair an EPUB and audiobook, then move between text and narration.</p>
+      </div>
+      <div class="device"><img src="raw/ipad-book.png" alt="Combined ebook and audiobook in Prismedia on iPad" /></div>
+      <div class="proof">Ebook · audiobook · chapters</div>
+    </section>
+
+    <section class="slide ipad-slide compact-copy" id="ipad-04">
+      <div class="brand"><img src="../../logo-mark.png" alt="" /><span>Prismedia</span></div>
+      <div class="copy" data-copy>
+        <div class="eyebrow">A reader built for books</div>
+        <h1>Room for the words. <span class="gradient-text">And the art.</span></h1>
+        <p>Generous pages, literary typography, and original illustrations.</p>
+      </div>
+      <div class="device"><img src="raw/ipad-reader.png" alt="Alice in Wonderland reader on iPad" /></div>
+      <div class="proof">Typography · illustrations · focus</div>
+    </section>
+
+    <section class="slide ipad-slide compact-copy" id="ipad-05">
+      <div class="brand"><img src="../../logo-mark.png" alt="" /><span>Prismedia</span></div>
+      <div class="copy" data-copy>
+        <div class="eyebrow">Reader customization</div>
+        <h1>Your page. <span class="gradient-text">Precisely tuned.</span></h1>
+        <p>Profiles, themes, typefaces, size, weight, and spacing stay close at hand.</p>
+      </div>
+      <div class="device">
+        <img src="raw/ipad-reader-settings.png" alt="Prismedia reader settings on iPad" />
+      </div>
+      <div class="proof">Profiles · themes · type</div>
+    </section>
+
+    <section class="slide ipad-slide compact-copy" id="ipad-06">
+      <div class="brand"><img src="../../logo-mark.png" alt="" /><span>Prismedia</span></div>
+      <div class="copy" data-copy>
+        <div class="eyebrow">Albums and tracks</div>
+        <h1>Music belongs in <span class="gradient-text">your media home.</span></h1>
+        <p>Browse albums, play a collection, and keep every track on your server.</p>
+      </div>
+      <div class="device"><img src="raw/ipad-music.png" alt="Prismedia album detail on iPad" /></div>
+      <div class="proof">Albums · tracks · playback</div>
+    </section>
+
+    <section class="slide tvos-slide" id="tvos-01">
+      <div class="brand"><img src="../../logo-mark.png" alt="" /><span>Prismedia</span></div>
+      <div class="copy" data-copy>
+        <div class="eyebrow">Native Apple TV</div>
+        <h1>Your library. <span class="gradient-text">Biggest screen.</span></h1>
+        <p>Continue at home with focus-driven navigation built for the Siri Remote.</p>
+      </div>
+      <div class="device"><img src="raw/tvos-dashboard.png" alt="Prismedia home on Apple TV" /></div>
+      <div class="proof">Apple TV · Siri Remote</div>
+    </section>
+
+    <section class="slide tvos-slide" id="tvos-02">
+      <div class="brand"><img src="../../logo-mark.png" alt="" /><span>Prismedia</span></div>
+      <div class="copy" data-copy>
+        <div class="eyebrow">Custom native player</div>
+        <h1>Pause the movie. <span class="gradient-text">See the whole story.</span></h1>
+        <p>Direct-play state, codecs, timeline, audio, subtitles, and speed—from the couch.</p>
+      </div>
+      <div class="device"><img src="raw/tvos-playback.png" alt="Paused Prismedia player on Apple TV" /></div>
+      <div class="proof">Direct Play · 1080p · H.264</div>
+    </section>
+
+    <script>
+      const requested = new URLSearchParams(window.location.search).get("slide") ?? "iphone-01";
+      const slide = document.getElementById(requested);
+      if (!slide) {
+        throw new Error(`Unknown App Store slide: ${requested}`);
+      }
+      slide.classList.add("is-active");
+    </script>
+  </body>
+</html>

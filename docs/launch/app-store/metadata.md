@@ -209,32 +209,33 @@ description:
 ### iPhone 6.9-inch — 1320 × 2868 portrait
 
 1. One private home — native dashboard and the complete media spectrum
-2. Full-fidelity playback — paused player chrome and direct-play details
+2. Full-fidelity playback — decoded video and direct-play details
 3. Read and listen together — combined book detail
-4. A reader that is yours — typography and appearance controls
-5. Music, made native — album and Now Playing
-6. Every medium has an experience — comic, image, and gallery proof
+4. A beautiful page — distraction-free text and illustration
+5. A reader that is yours — typography and appearance controls
+6. Music, made native — Now Playing, AirPlay, queue, shuffle, and repeat
 
-### iPad 13-inch — 2752 × 2064 landscape
+### iPad 13-inch — 2064 × 2752 portrait
 
 1. Your whole library, at a glance
 2. Full-fidelity native playback
-3. A spacious, customizable reader
-4. Read and listen together
-5. Music, albums, and queue
-6. Browse every media family
+3. Read and listen together
+4. A spacious native reader
+5. Reader typography and appearance controls
+6. Music, albums, and tracks
 
 ### Apple TV — 3840 × 2160 landscape
 
 1. Your media on the biggest screen
-2. Full-fidelity native playback
-3. Pause and see the whole playback story
-4. Movies and series, focus first
-5. Continue across the household
-6. One private server behind every screen
+2. Pause and see the whole playback story
 
 Every screenshot must show the real app in use. Text and background treatment
 may frame the capture, but must not obscure or simulate product controls.
+
+The rendered upload files live under `screenshots/`, grouped by App Store
+display class. `gallery.html` and `render-gallery.mjs` are the reproducible
+source and renderer. The renderer verifies exact pixel dimensions, clipped
+marketing copy, and Apple's 10 MB screenshot limit before writing each file.
 
 ## Submission boundary
 
