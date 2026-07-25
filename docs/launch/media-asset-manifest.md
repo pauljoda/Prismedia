@@ -53,6 +53,28 @@ this launch task.
 platform scope, and watch/read/listen/request experience rail. The launch site
 uses it for Open Graph, X/Twitter, and `SoftwareApplication` structured data.
 
+## Product Hunt launch kit
+
+`docs/launch/product-hunt/assets/` contains the reviewed campaign thumbnail and
+six 1270×760 launch-gallery cards. The editable source, listing copy, and
+reproducible Playwright renderer live beside those exports:
+
+- `01-one-private-home.png` introduces the one-light-in, every-medium-out story.
+- `02-one-media-lifecycle.png` follows Discover → Request → Acquire → Manage →
+  Enjoy.
+- `03-native-playback.png` calls out Prismedia's custom Apple TV player,
+  device-native codecs, original-quality video, and lossless audio.
+- `04-custom-reader.png` proves the reader typography, appearance controls, and
+  combined reading/listening position.
+- `05-purpose-built-media.png` shows native music, audiobook, and video
+  experiences beside the complete media spectrum.
+- `06-self-hosted.png` explains the single-image server topology and web,
+  iPhone/iPad, and Apple TV clients.
+
+The Product Hunt thumbnail is 240×240, every gallery card is 1270×760, and all
+exports are below 1 MB. `render-gallery.mjs` also fails if the output geometry
+changes or a marked copy block clips.
+
 ## Publication review
 
 Before a public campaign or app-store submission, review every artwork,
