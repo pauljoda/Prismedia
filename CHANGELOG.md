@@ -305,6 +305,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Removed development-only route shells and redundant prerelease UI panels so the app surface and release notes focus on the production Prismedia experience.
 
 ### Docs
+- Prepared the native App Store listing, screenshot story, review notes, privacy
+  answers, licensed demonstration-media ledger, and an isolated Apple review
+  deployment that cannot mount the household library.
+- Added public support and privacy pages for the native app listing, including
+  self-hosted data boundaries, reviewer-server handling, and direct support paths.
 - Reworked the repository README around Prismedia's launch story, product film,
   native app experiences, Product Hunt page, and campaign artwork.
 - Added wide, square, and vertical Product Hunt campaign artwork, strengthened the

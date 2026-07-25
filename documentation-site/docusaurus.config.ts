@@ -220,6 +220,14 @@ const config: Config = {
               label: 'Join TestFlight',
               href: 'https://testflight.apple.com/join/c9bgDxr7',
             },
+            {
+              label: 'Support',
+              to: '/support',
+            },
+            {
+              label: 'Privacy',
+              to: '/privacy',
+            },
           ],
         },
       ],

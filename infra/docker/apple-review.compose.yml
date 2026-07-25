@@ -1,0 +1,31 @@
+name: apple-prismedia
+
+services:
+  prismedia:
+    image: ghcr.io/pauljoda/prismedia@sha256:d8f80333e35713016084028eac20a036689425b5760d80006ae427572a819737
+    container_name: apple-prismedia
+    user: "0:0"
+    environment:
+      PUBLIC_APP_URL: https://apple-prismedia.pauljoda.com
+      PUBLIC_API_URL: /api
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - /home/paul/docker-data/apple-prismedia:/data
+      - /home/paul/docker-data/apple-prismedia-media:/media:ro
+    networks:
+      - archiver
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=archiver
+      - traefik.http.services.apple-prismedia.loadbalancer.server.port=8008
+      - traefik.http.routers.apple-prismedia-http.rule=Host(`apple-prismedia.pauljoda.com`)
+      - traefik.http.routers.apple-prismedia-https.rule=Host(`apple-prismedia.pauljoda.com`)
+      - traefik.http.routers.apple-prismedia-https.entrypoints=websecure
+      - traefik.http.routers.apple-prismedia-https.tls=true
+      - traefik.http.routers.apple-prismedia-https.tls.certresolver=cloudflare
+      - traefik.http.routers.apple-prismedia-https.service=apple-prismedia
+    restart: unless-stopped
+
+networks:
+  archiver:
+    external: true
