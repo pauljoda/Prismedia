@@ -162,6 +162,10 @@ Yes.
 | Username | Stored in the private reviewer-credential handoff |
 | Password | Stored in the private reviewer-credential handoff |
 
+The remote compose environment pins `PRISMEDIA_IMAGE` to the immutable
+multi-architecture digest built from the exact `main` commit deployed for
+review. It never follows the mutable `dev` tag.
+
 ### Review notes
 
 > Prismedia is a native client for a self-hosted Prismedia media server. The

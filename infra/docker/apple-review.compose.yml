@@ -2,7 +2,7 @@ name: apple-prismedia
 
 services:
   prismedia:
-    image: ghcr.io/pauljoda/prismedia@sha256:d8f80333e35713016084028eac20a036689425b5760d80006ae427572a819737
+    image: ${PRISMEDIA_IMAGE:?Set PRISMEDIA_IMAGE to an immutable ghcr.io/pauljoda/prismedia@sha256 digest}
     container_name: apple-prismedia
     user: "0:0"
     environment:
