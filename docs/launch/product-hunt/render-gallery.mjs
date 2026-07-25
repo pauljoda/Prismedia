@@ -1,5 +1,5 @@
 import { chromium } from "@playwright/test";
-import { mkdir } from "node:fs/promises";
+import { mkdir, stat } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 
@@ -15,6 +15,24 @@ const captures = [
   { id: "slide-04", width: 1270, height: 760, filename: "04-custom-reader.png" },
   { id: "slide-05", width: 1270, height: 760, filename: "05-purpose-built-media.png" },
   { id: "slide-06", width: 1270, height: 760, filename: "06-self-hosted.png" },
+  {
+    id: "social-card",
+    width: 1200,
+    height: 630,
+    filename: "social-card-product-hunt.png",
+  },
+  {
+    id: "social-square",
+    width: 1080,
+    height: 1080,
+    filename: "social-square-product-hunt.png",
+  },
+  {
+    id: "social-story",
+    width: 1080,
+    height: 1920,
+    filename: "social-story-product-hunt.png",
+  },
 ];
 
 await mkdir(outputDirectory, { recursive: true });
@@ -70,13 +88,24 @@ try {
       throw new Error(`${capture.id} has clipped copy: ${JSON.stringify(overflow)}`);
     }
 
+    const outputPath = path.join(outputDirectory, capture.filename);
+
     await target.screenshot({
-      path: path.join(outputDirectory, capture.filename),
+      path: outputPath,
       type: "png",
     });
 
+    const output = await stat(outputPath);
+    if (output.size > 5_000_000) {
+      throw new Error(
+        `${capture.filename} is ${output.size} bytes; expected a campaign asset below 5 MB`,
+      );
+    }
+
     await page.close();
-    console.log(`Rendered ${capture.filename}`);
+    console.log(
+      `Rendered ${capture.filename} (${capture.width}×${capture.height}, ${Math.round(output.size / 1024)} KB)`,
+    );
   }
 } finally {
   await browser.close();

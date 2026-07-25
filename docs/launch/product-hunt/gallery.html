@@ -909,6 +909,456 @@
         gap: 12px;
       }
 
+      /* Social launch system */
+      .social {
+        position: relative;
+        display: none;
+        overflow: hidden;
+        isolation: isolate;
+        background:
+          radial-gradient(circle at 84% 8%, rgba(92, 123, 255, 0.1), transparent 34%),
+          radial-gradient(circle at 8% 90%, rgba(255, 89, 92, 0.1), transparent 38%),
+          #030405;
+      }
+
+      .social.is-active {
+        display: block;
+      }
+
+      .social::after {
+        position: absolute;
+        z-index: -1;
+        inset: 0;
+        content: "";
+        pointer-events: none;
+        background-image:
+          linear-gradient(rgba(255, 255, 255, 0.024) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(255, 255, 255, 0.024) 1px, transparent 1px);
+        background-size: 80px 80px;
+        mask-image: linear-gradient(to bottom, black 0%, rgba(0, 0, 0, 0.7) 72%, transparent 100%);
+      }
+
+      .social-brand {
+        position: absolute;
+        z-index: 8;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+
+      .social-brand img {
+        display: block;
+        width: 32px;
+        height: 32px;
+        object-fit: contain;
+      }
+
+      .social-brand span {
+        color: #f4f4f4;
+        font-family: "JetBrains Mono", ui-monospace, monospace;
+        font-size: 14px;
+        font-weight: 700;
+        letter-spacing: 0.22em;
+        text-transform: uppercase;
+      }
+
+      .launch-chip {
+        position: absolute;
+        z-index: 8;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 10px 13px;
+        color: #e8e8e8;
+        background: rgba(6, 7, 8, 0.78);
+        border: 1px solid rgba(255, 255, 255, 0.18);
+        border-radius: 7px;
+        font-family: "JetBrains Mono", ui-monospace, monospace;
+        font-size: 11px;
+        font-weight: 600;
+        letter-spacing: 0.11em;
+        text-transform: uppercase;
+        backdrop-filter: blur(16px);
+      }
+
+      .launch-chip::before {
+        width: 7px;
+        height: 7px;
+        flex: 0 0 auto;
+        content: "";
+        background: #ff6a55;
+        border-radius: 50%;
+        box-shadow: 0 0 12px rgba(255, 106, 85, 0.72);
+      }
+
+      .social-footer {
+        position: absolute;
+        z-index: 8;
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        color: #898e98;
+        font-family: "JetBrains Mono", ui-monospace, monospace;
+        font-size: 11px;
+        font-weight: 600;
+        letter-spacing: 0.11em;
+        text-transform: uppercase;
+      }
+
+      .social-footer::before {
+        width: 32px;
+        height: 1px;
+        content: "";
+        background: #e8e8e8;
+      }
+
+      /* 1200 × 630 announcement card */
+      #social-card {
+        width: 1200px;
+        height: 630px;
+      }
+
+      #social-card .social-atmosphere {
+        position: absolute;
+        z-index: -3;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+      }
+
+      #social-card::before {
+        position: absolute;
+        z-index: -2;
+        inset: 0;
+        content: "";
+        background:
+          linear-gradient(90deg, #030405 0%, rgba(3, 4, 5, 0.97) 31%, rgba(3, 4, 5, 0.48) 57%, rgba(3, 4, 5, 0.1) 100%),
+          linear-gradient(180deg, rgba(0, 0, 0, 0.55), transparent 46%, rgba(0, 0, 0, 0.62));
+      }
+
+      #social-card .social-brand {
+        top: 34px;
+        left: 46px;
+      }
+
+      #social-card .launch-chip {
+        top: 34px;
+        right: 42px;
+      }
+
+      .card-copy {
+        position: absolute;
+        top: 132px;
+        left: 48px;
+        width: 570px;
+        height: 330px;
+      }
+
+      .card-copy .eyebrow {
+        margin-bottom: 22px;
+        color: #a9adb5;
+        font-size: 13px;
+      }
+
+      .card-copy h1 {
+        font-size: 62px;
+      }
+
+      .card-copy h1 .gradient-text {
+        display: block;
+        margin-top: 5px;
+        font-size: 60px;
+      }
+
+      .card-copy p {
+        max-width: 500px;
+        margin-top: 24px;
+        color: #c8cbd1;
+        font-size: 18px;
+        line-height: 1.42;
+        text-shadow:
+          0 2px 12px #000,
+          0 0 20px #000;
+      }
+
+      #social-card .social-footer {
+        bottom: 38px;
+        left: 48px;
+      }
+
+      .card-platforms {
+        position: absolute;
+        right: 40px;
+        bottom: 38px;
+        color: #9ca1aa;
+        font-family: "JetBrains Mono", ui-monospace, monospace;
+        font-size: 10px;
+        font-weight: 600;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+      }
+
+      /* 1080 × 1080 square feed card */
+      #social-square {
+        width: 1080px;
+        height: 1080px;
+      }
+
+      #social-square .social-brand {
+        top: 50px;
+        left: 56px;
+      }
+
+      #social-square .launch-chip {
+        top: 48px;
+        right: 50px;
+      }
+
+      .square-prism {
+        position: absolute;
+        z-index: -3;
+        top: 0;
+        left: 0;
+        width: 1080px;
+        height: 680px;
+        object-fit: cover;
+        object-position: 58% center;
+      }
+
+      #social-square::before {
+        position: absolute;
+        z-index: -2;
+        inset: 0;
+        content: "";
+        background:
+          linear-gradient(180deg, rgba(3, 4, 5, 0.2) 0%, rgba(3, 4, 5, 0.08) 32%, #030405 67%, #030405 100%),
+          linear-gradient(90deg, rgba(3, 4, 5, 0.8), transparent 56%);
+      }
+
+      .square-copy {
+        position: absolute;
+        top: 610px;
+        left: 56px;
+        width: 930px;
+        height: 280px;
+      }
+
+      .square-copy .eyebrow {
+        margin-bottom: 20px;
+        color: #a6abb4;
+        font-size: 14px;
+      }
+
+      .square-copy h1 {
+        font-size: 77px;
+        line-height: 0.96;
+      }
+
+      .square-copy h1 .gradient-text {
+        display: block;
+        margin-top: 7px;
+      }
+
+      .square-experiences {
+        position: absolute;
+        bottom: 112px;
+        left: 58px;
+        display: grid;
+        grid-template-columns: repeat(5, max-content);
+        gap: 12px;
+      }
+
+      .square-experiences span {
+        padding: 10px 13px;
+        color: #bcc0c7;
+        background: rgba(255, 255, 255, 0.038);
+        border: 1px solid rgba(255, 255, 255, 0.13);
+        border-radius: 5px;
+        font-family: "JetBrains Mono", ui-monospace, monospace;
+        font-size: 11px;
+        font-weight: 600;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+      }
+
+      #social-square .social-footer {
+        right: 56px;
+        bottom: 52px;
+      }
+
+      /* 1080 × 1920 story card */
+      #social-story {
+        width: 1080px;
+        height: 1920px;
+        background:
+          radial-gradient(circle at 96% 2%, rgba(101, 130, 255, 0.12), transparent 28%),
+          radial-gradient(circle at 2% 88%, rgba(255, 102, 86, 0.1), transparent 28%),
+          #030405;
+      }
+
+      #social-story .social-brand {
+        top: 58px;
+        left: 62px;
+      }
+
+      #social-story .launch-chip {
+        top: 56px;
+        right: 58px;
+      }
+
+      .story-copy {
+        position: absolute;
+        top: 180px;
+        left: 62px;
+        width: 920px;
+        height: 325px;
+      }
+
+      .story-copy .eyebrow {
+        margin-bottom: 26px;
+        color: #a6abb4;
+        font-size: 15px;
+      }
+
+      .story-copy h1 {
+        font-size: 92px;
+        line-height: 0.94;
+      }
+
+      .story-copy h1 .gradient-text {
+        display: block;
+        margin-top: 9px;
+      }
+
+      .story-spectrum {
+        position: absolute;
+        top: 548px;
+        right: 62px;
+        left: 62px;
+        height: 2px;
+        overflow: visible;
+        background: linear-gradient(90deg, #fff 0 13%, var(--red) 28%, var(--orange) 39%, var(--yellow) 50%, var(--green) 61%, var(--cyan) 72%, var(--blue) 84%, var(--violet));
+        box-shadow: 0 0 18px rgba(255, 255, 255, 0.18);
+      }
+
+      .story-proof-label {
+        position: absolute;
+        color: #9297a0;
+        font-family: "JetBrains Mono", ui-monospace, monospace;
+        font-size: 11px;
+        font-weight: 600;
+        letter-spacing: 0.13em;
+        text-transform: uppercase;
+      }
+
+      .story-proof-label.lifecycle {
+        top: 600px;
+        left: 64px;
+      }
+
+      .story-web-screen {
+        position: absolute;
+        top: 642px;
+        left: 62px;
+        width: 956px;
+        height: 538px;
+        border-radius: 19px;
+      }
+
+      .story-web-screen::before {
+        position: absolute;
+        z-index: 3;
+        top: 0;
+        right: 0;
+        left: 0;
+        height: 34px;
+        content: "";
+        background:
+          radial-gradient(circle at 20px 17px, #ff625f 0 4px, transparent 5px),
+          radial-gradient(circle at 37px 17px, #f7c958 0 4px, transparent 5px),
+          radial-gradient(circle at 54px 17px, #6dcf88 0 4px, transparent 5px),
+          rgba(12, 14, 16, 0.97);
+        border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+      }
+
+      .story-proof-label.native {
+        top: 1236px;
+        left: 64px;
+      }
+
+      .story-tv-screen {
+        position: absolute;
+        top: 1280px;
+        left: 62px;
+        width: 642px;
+        height: 361px;
+        border-radius: 17px;
+      }
+
+      .story-reader-device {
+        position: absolute;
+        top: 1242px;
+        right: 62px;
+        width: 274px;
+        height: 596px;
+        border-radius: 31px;
+      }
+
+      .story-reader-device img {
+        object-position: top center;
+      }
+
+      .story-native-copy {
+        position: absolute;
+        top: 1678px;
+        left: 64px;
+        width: 630px;
+        height: 96px;
+      }
+
+      .story-native-copy strong {
+        display: block;
+        color: #f2f2f2;
+        font-size: 26px;
+        letter-spacing: -0.02em;
+      }
+
+      .story-native-copy span {
+        display: block;
+        margin-top: 8px;
+        color: #a8adb5;
+        font-size: 16px;
+        line-height: 1.4;
+      }
+
+      .story-cta {
+        position: absolute;
+        right: 62px;
+        bottom: 56px;
+        left: 62px;
+        display: flex;
+        min-height: 74px;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0 22px;
+        color: #f4f4f4;
+        background: rgba(255, 255, 255, 0.055);
+        border: 1px solid rgba(255, 255, 255, 0.16);
+        border-radius: 8px;
+        font-size: 17px;
+        font-weight: 600;
+        backdrop-filter: blur(16px);
+      }
+
+      .story-cta span:last-child {
+        color: #a9aeb6;
+        font-family: "JetBrains Mono", ui-monospace, monospace;
+        font-size: 11px;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+      }
+
       @media (prefers-reduced-motion: reduce) {
         * {
           animation: none !important;
@@ -1228,6 +1678,104 @@
         <span class="chip accent">Self-hosted</span>
         <span class="chip">Household accounts</span>
         <span class="chip">Personal progress</span>
+      </div>
+    </section>
+
+    <section id="social-card" class="social" aria-label="Prismedia Product Hunt announcement card">
+      <img
+        class="social-atmosphere"
+        src="../../../documentation-site/static/img/showcase/prism-refraction-hero.png"
+        alt=""
+      />
+      <div class="social-brand">
+        <img src="../../../documentation-site/static/img/logo-mark.png" alt="" />
+        <span>Prismedia</span>
+      </div>
+      <div class="launch-chip">Product Hunt · August 23</div>
+      <div class="card-copy" data-copy>
+        <div class="eyebrow">Private · self-hosted · made for the household</div>
+        <h1>
+          Your whole media life.
+          <span class="gradient-text">One private home.</span>
+        </h1>
+        <p>
+          Request, manage, watch, listen, read, and browse—without losing the
+          collection between apps.
+        </p>
+      </div>
+      <div class="social-footer">Launching August 23, 2026</div>
+      <div class="card-platforms">Web · iPhone · iPad · Apple TV</div>
+    </section>
+
+    <section id="social-square" class="social" aria-label="Prismedia square launch card">
+      <img
+        class="square-prism"
+        src="../../../documentation-site/static/img/showcase/prism-refraction-hero.png"
+        alt=""
+      />
+      <div class="social-brand">
+        <img src="../../../documentation-site/static/img/logo-mark.png" alt="" />
+        <span>Prismedia</span>
+      </div>
+      <div class="launch-chip">Product Hunt · August 23</div>
+      <div class="square-copy" data-copy>
+        <div class="eyebrow">One light in · every medium out</div>
+        <h1>
+          One collection.
+          <span class="gradient-text">Every experience.</span>
+        </h1>
+      </div>
+      <div class="square-experiences" aria-label="Prismedia experiences">
+        <span>Request</span>
+        <span>Manage</span>
+        <span>Watch</span>
+        <span>Listen</span>
+        <span>Read</span>
+      </div>
+      <div class="social-footer">Private · self-hosted · native</div>
+    </section>
+
+    <section id="social-story" class="social" aria-label="Prismedia vertical launch story">
+      <div class="social-brand">
+        <img src="../../../documentation-site/static/img/logo-mark.png" alt="" />
+        <span>Prismedia</span>
+      </div>
+      <div class="launch-chip">Product Hunt · August 23</div>
+      <div class="story-copy" data-copy>
+        <div class="eyebrow">Your media was always one collection</div>
+        <h1>
+          Keep the whole
+          <span class="gradient-text">experience connected.</span>
+        </h1>
+      </div>
+      <div class="story-spectrum" aria-hidden="true"></div>
+      <div class="story-proof-label lifecycle">01 · Request and manage from the web</div>
+      <div class="screen story-web-screen">
+        <img
+          src="../../../documentation-site/static/img/showcase/web-request.webp"
+          alt=""
+        />
+      </div>
+      <div class="story-proof-label native">02 · Enjoy it natively</div>
+      <div class="screen story-tv-screen">
+        <img
+          src="../../../documentation-site/static/img/showcase/tvos-playback.webp"
+          alt=""
+        />
+      </div>
+      <div class="device story-reader-device">
+        <img
+          src="../../../documentation-site/static/img/showcase/ios-reader.webp"
+          alt=""
+        />
+      </div>
+      <div class="story-native-copy" data-copy>
+        <strong>Original-quality playback. A reader made for books.</strong>
+        <span>Purpose-built experiences across iPhone, iPad, and Apple TV.</span>
+      </div>
+      <div class="story-cta" data-copy>
+        <span>Launching August 23 on Product Hunt</span>
+        <span>pauljoda.github.io/Prismedia</span>
       </div>
     </section>
 

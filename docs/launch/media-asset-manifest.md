@@ -75,6 +75,16 @@ The Product Hunt thumbnail is 240×240, every gallery card is 1270×760, and all
 exports are below 1 MB. `render-gallery.mjs` also fails if the output geometry
 changes or a marked copy block clips.
 
+The same launch source produces three scheduled-campaign formats:
+
+- `social-card-product-hunt.png` is a 1200×630 link and announcement card.
+- `social-square-product-hunt.png` is a 1080×1080 prism-first feed card.
+- `social-story-product-hunt.png` is a 1080×1920 vertical story with a real web
+  request flow, paused Apple TV playback chrome, and the customized iOS reader.
+
+Every social export stays below 1 MB. The renderer now enforces a 5 MB hard ceiling
+in addition to exact geometry and marked-copy overflow checks.
+
 ## Publication review
 
 Before a public campaign or app-store submission, review every artwork,

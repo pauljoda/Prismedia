@@ -44,6 +44,10 @@ Completed July 25:
 - Published the first Prismedia forum discussion.
 - Completed the launch description, maker comment, six-image gallery, thumbnail,
   links, pricing, maker attribution, and build-tool shoutouts.
+- Replaced the placeholder maker profile with Prismedia’s privacy-first native
+  product story, the public site, and the source repository.
+- Added wide, square, and vertical announcement artwork with automated geometry,
+  clipping, and file-size checks.
 
 ### July 25–31
 

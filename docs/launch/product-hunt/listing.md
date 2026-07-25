@@ -13,6 +13,7 @@
 - Launch date: Sunday, August 23, 2026
 - Launch time: 12:01 AM Pacific / 2:01 AM Central
 - Hunter and maker: Paul “pauljoda” Davis
+- Maker profile: <https://www.producthunt.com/@pauljoda>
 - Team: solo maker
 - Pricing: free
 - Funding: bootstrapped
@@ -130,6 +131,18 @@ Use `prismedia-thumbnail.png` as the square launch thumbnail.
 The silent launch film remains available on the public site. Product Hunt accepts a
 YouTube URL rather than a direct MP4 for its video field, so a public YouTube upload
 is intentionally left as a separate publishing decision.
+
+### Social launch artwork
+
+The same renderer also exports three announcement formats:
+
+1. `social-card-product-hunt.png` — 1200×630 link and announcement card
+2. `social-square-product-hunt.png` — 1080×1080 square feed card
+3. `social-story-product-hunt.png` — 1080×1920 vertical story with web, Apple TV,
+   and reader proof
+
+All three are below 1 MB and use the scheduled August 23 date. Channel-specific copy,
+alt text, and publishing checks live in `social-kit.md`.
 
 ## Pre-launch promotion
 
