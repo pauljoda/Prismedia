@@ -72,7 +72,7 @@ internal static class IdentifyQueueEndpoints {
                 }
             })
             .WithName("SearchIdentifyQueueItem")
-            .WithSummary("Requests a provider search; a background identify-search job runs it and the item reports progress through its state.")
+            .WithSummary("Requests a provider search in a new interactive graph; the item reports progress through its state.")
             .Produces<IdentifyQueueItem>()
             .Produces<ApiProblem>(StatusCodes.Status409Conflict)
             .Produces<ApiProblem>(StatusCodes.Status404NotFound);
@@ -125,7 +125,7 @@ internal static class IdentifyQueueEndpoints {
                 }
             })
             .WithName("ApplyIdentifyQueueItem")
-            .WithSummary("Applies a reviewed identify queue proposal and marks the item done.")
+            .WithSummary("Queues a reviewed identify proposal for application in its existing interactive graph.")
             .Produces<IdentifyQueueItem>()
             .Produces<ApiProblem>(StatusCodes.Status400BadRequest)
             .Produces<ApiProblem>(StatusCodes.Status409Conflict)

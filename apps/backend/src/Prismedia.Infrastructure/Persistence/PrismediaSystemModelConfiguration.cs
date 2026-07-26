@@ -218,6 +218,7 @@ internal static partial class PrismediaModelConfiguration {
             entity.HasKey(row => row.Id);
             entity.Property(row => row.Id).HasColumnName("id").ValueGeneratedNever();
             entity.Property(row => row.EntityId).HasColumnName("entity_id");
+            entity.Property(row => row.JobGraphId).HasColumnName("job_graph_id");
             entity.Property(row => row.State)
                 .HasColumnName("state")
                 .HasMaxLength(32)
@@ -239,8 +240,10 @@ internal static partial class PrismediaModelConfiguration {
             entity.Property(row => row.UpdatedAt).HasColumnName("updated_at");
             entity.Property(row => row.CompletedAt).HasColumnName("completed_at");
             entity.HasIndex(row => row.EntityId).IsUnique();
+            entity.HasIndex(row => row.JobGraphId);
             entity.HasIndex(row => new { row.State, row.UpdatedAt });
             entity.HasOne<EntityRow>().WithMany().HasForeignKey(row => row.EntityId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne<JobGraphRow>().WithMany().HasForeignKey(row => row.JobGraphId).OnDelete(DeleteBehavior.SetNull);
         });
 
         modelBuilder.Entity<FingerprintSubmissionRow>(entity => {
@@ -421,13 +424,6 @@ internal static partial class PrismediaModelConfiguration {
                 .HasConversion(value => value.ToCode(), value => value.DecodeAs<JobRunStatus>())
                 .IsRequired();
             entity.Property(row => row.PayloadJson).HasColumnName("payload_json").HasColumnType("jsonb").IsRequired();
-            entity.Property(row => row.Priority).HasColumnName("priority");
-            entity.Property(row => row.Lane)
-                .HasColumnName("lane")
-                .HasMaxLength(64)
-                .HasConversion(
-                    value => value == null ? null : value.Value.ToCode(),
-                    value => value == null ? null : value.DecodeAs<JobRunLane>());
             entity.Property(row => row.Attempts).HasColumnName("attempts");
             entity.Property(row => row.MaxAttempts).HasColumnName("max_attempts");
             entity.Property(row => row.Progress).HasColumnName("progress");
@@ -441,7 +437,7 @@ internal static partial class PrismediaModelConfiguration {
             entity.Property(row => row.CreatedAt).HasColumnName("created_at");
             entity.Property(row => row.StartedAt).HasColumnName("started_at");
             entity.Property(row => row.FinishedAt).HasColumnName("finished_at");
-            entity.HasIndex(row => new { row.Status, row.Lane, row.AvailableAt, row.Priority });
+            entity.HasIndex(row => new { row.Status, row.AvailableAt });
             entity.HasIndex(row => new { row.GraphId, row.Status, row.AvailableAt, row.Sequence });
             entity.HasIndex(row => new { row.GraphId, row.NodeKey })
                 .IsUnique()

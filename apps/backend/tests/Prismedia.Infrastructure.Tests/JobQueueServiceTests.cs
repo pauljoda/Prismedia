@@ -1,5 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Prismedia.Application.Jobs;
+using Prismedia.Contracts.Entities;
+using Prismedia.Contracts.Plugins;
 using Prismedia.Domain.Entities;
 using Prismedia.Infrastructure.Persistence;
 using Prismedia.Infrastructure.Persistence.Entities;
@@ -37,7 +39,7 @@ public sealed class JobQueueServiceTests {
             JobType.IdentifySearch,
             TargetEntityKind: EntityKindRegistry.Video.Code,
             TargetEntityId: entityId,
-            Lane: JobRunLane.ForegroundIdentify);
+            Origin: JobGraphOrigin.Interactive);
 
         var first = await service.EnqueueAsync(request, CancellationToken.None);
         var second = await service.EnqueueAsync(request, CancellationToken.None);
@@ -50,6 +52,34 @@ public sealed class JobQueueServiceTests {
     }
 
     [Fact]
+    public async Task InteractiveGraphRecordsTheInitiatingUserAndChildrenRetainThatGraph() {
+        await using var db = CreateContext();
+        var userId = Guid.NewGuid();
+        var service = new JobQueueService(db, TestUserContext.MemberAs(userId));
+        var parent = await service.EnqueueAsync(
+            new EnqueueJobRequest(
+                JobType.RefreshEntity,
+                TargetEntityKind: EntityKindRegistry.Video.Code,
+                TargetEntityId: Guid.NewGuid().ToString(),
+                Origin: JobGraphOrigin.Interactive),
+            CancellationToken.None);
+
+        var child = await service.EnqueueChildAsync(
+            parent,
+            new EnqueueJobRequest(
+                JobType.ProbeVideo,
+                TargetEntityKind: EntityKindRegistry.Video.Code,
+                TargetEntityId: Guid.NewGuid().ToString()),
+            CancellationToken.None);
+
+        var graph = await db.JobGraphs.SingleAsync();
+        Assert.Equal(userId, graph.InitiatingUserId);
+        Assert.Equal(graph.Id, parent.GraphId);
+        Assert.Equal(graph.Id, child.GraphId);
+        Assert.Equal(JobGraphOrigin.Interactive, child.GraphOrigin);
+    }
+
+    [Fact]
     public async Task ChildEnqueueInheritsTheParentsGraphAndLane() {
         await using var db = CreateContext();
         var service = new JobQueueService(db);
@@ -57,7 +87,7 @@ public sealed class JobQueueServiceTests {
             new EnqueueJobRequest(
                 JobType.RefreshEntity,
                 TargetEntityId: Guid.NewGuid().ToString(),
-                Lane: JobRunLane.ForegroundIdentify),
+                Origin: JobGraphOrigin.Interactive),
             CancellationToken.None);
 
         var child = await service.EnqueueChildAsync(
@@ -336,284 +366,83 @@ public sealed class JobQueueServiceTests {
     }
 
     [Fact]
-    public async Task ClaimNextKeepsAdditionalAcquisitionImportsQueuedWhileOneRuns() {
+    public async Task InteractiveAndBackgroundClaimsUseSeparatePools() {
         await using var db = CreateContext();
         var service = new JobQueueService(db);
-        var now = DateTimeOffset.UtcNow.AddMinutes(-3);
-        var firstImport = NewJobRun(
-            JobType.AcquisitionImport,
-            JobRunStatus.Queued,
-            now,
-            targetEntityId: Guid.NewGuid().ToString());
-        var secondImport = NewJobRun(
-            JobType.AcquisitionImport,
-            JobRunStatus.Queued,
-            now.AddSeconds(1),
-            targetEntityId: Guid.NewGuid().ToString());
-        var unrelated = NewJobRun(
-            JobType.Noop,
-            JobRunStatus.Queued,
-            now.AddSeconds(2));
-        db.JobRuns.AddRange(firstImport, secondImport, unrelated);
-        await db.SaveChangesAsync();
-
-        var firstClaim = await service.ClaimNextAsync("worker-1", CancellationToken.None);
-        var unrelatedClaim = await service.ClaimNextAsync("worker-1", CancellationToken.None);
-
-        Assert.Equal(firstImport.Id, firstClaim?.Id);
-        Assert.Equal(unrelated.Id, unrelatedClaim?.Id);
-        Assert.Equal(JobRunStatus.Queued, (await db.JobRuns.FindAsync(secondImport.Id))?.Status);
-
-        await service.CompleteAsync(firstImport.Id, "Imported", CancellationToken.None);
-        var nextImport = await service.ClaimNextAsync("worker-1", CancellationToken.None);
-
-        Assert.Equal(secondImport.Id, nextImport?.Id);
-    }
-
-    [Fact]
-    public async Task StandardClaimAdvancesBacklogWithoutConsumingForegroundLane() {
-        await using var db = CreateContext();
-        var service = new JobQueueService(db);
-        var now = DateTimeOffset.UtcNow;
-        var oldBulkSearch = NewJobRun(
+        var background = await service.EnqueueAsync(JobType.Noop, CancellationToken.None);
+        var interactive = await service.EnqueueAsync(new EnqueueJobRequest(
             JobType.IdentifySearch,
-            JobRunStatus.Queued,
-            now.AddMinutes(-10),
-            priority: JobPriorities.InteractiveIdentify);
-        var foregroundSearch = NewJobRun(
-            JobType.IdentifySearch,
-            JobRunStatus.Queued,
-            now,
-            priority: JobPriorities.InteractiveIdentify,
-            lane: JobRunLane.ForegroundIdentify);
-        db.JobRuns.AddRange(oldBulkSearch, foregroundSearch);
-        await db.SaveChangesAsync();
+            TargetEntityKind: EntityKindRegistry.Video.Code,
+            TargetEntityId: Guid.NewGuid().ToString(),
+            Origin: JobGraphOrigin.Interactive), CancellationToken.None);
 
-        var claimed = await service.ClaimNextAsync("worker-1", CancellationToken.None);
+        var interactiveClaim = await service.ClaimNextGraphNodeAsync(
+            "interactive-worker", JobGraphOrigin.Interactive, CancellationToken.None);
+        var backgroundClaim = await service.ClaimNextGraphNodeAsync(
+            "background-worker", JobGraphOrigin.Background, CancellationToken.None);
 
-        Assert.NotNull(claimed);
-        Assert.Equal(oldBulkSearch.Id, claimed.Id);
+        Assert.Equal(interactive.Id, interactiveClaim?.Id);
+        Assert.Equal(background.Id, backgroundClaim?.Id);
     }
 
     [Fact]
-    public async Task ClaimNextPrefersInteractiveIdentifyOverAutoIdentifyBacklog() {
+    public async Task CpuEligibilityIsAppliedBeforeAJobIsClaimed() {
         await using var db = CreateContext();
         var service = new JobQueueService(db);
-        var now = DateTimeOffset.UtcNow;
-        var autoIdentify = NewJobRun(
-            JobType.AutoIdentify,
-            JobRunStatus.Queued,
-            now.AddMinutes(-10),
-            priority: JobPriorities.AutoIdentify);
-        var foregroundSearch = NewJobRun(
-            JobType.IdentifySearch,
-            JobRunStatus.Queued,
-            now,
-            priority: JobPriorities.InteractiveIdentify,
-            lane: JobRunLane.ForegroundIdentify);
-        db.JobRuns.AddRange(autoIdentify, foregroundSearch);
-        await db.SaveChangesAsync();
-
-        var claimed = await service.ClaimNextAsync(
-            "worker-1", CancellationToken.None, JobRunLane.ForegroundIdentify);
-
-        Assert.NotNull(claimed);
-        Assert.Equal(foregroundSearch.Id, claimed.Id);
-    }
-
-    [Fact]
-    public async Task ClaimNextDoesNotClaimAutoIdentifyWhileScanIsRunning() {
-        await using var db = CreateContext();
-        var service = new JobQueueService(db);
-        var now = DateTimeOffset.UtcNow;
-        var scan = NewJobRun(
-            JobType.ScanLibrary,
-            JobRunStatus.Running,
-            now.AddMinutes(-5),
-            priority: JobPriorities.Scan);
-        var autoIdentify = NewJobRun(
-            JobType.AutoIdentify,
-            JobRunStatus.Queued,
-            now,
-            priority: JobPriorities.AutoIdentify);
-        db.JobRuns.AddRange(scan, autoIdentify);
-        await db.SaveChangesAsync();
-
-        var blocked = await service.ClaimNextAsync("worker-1", CancellationToken.None);
-
-        Assert.Null(blocked);
-
-        scan.Status = JobRunStatus.Completed;
-        scan.FinishedAt = now;
-        await db.SaveChangesAsync();
-
-        var claimed = await service.ClaimNextAsync("worker-1", CancellationToken.None);
-
-        Assert.NotNull(claimed);
-        Assert.Equal(autoIdentify.Id, claimed.Id);
-    }
-
-    [Fact]
-    public async Task ClaimNextAllowsExactVideoIdentifyWhileBroadIdentifyWaitsForScan() {
-        await using var db = CreateContext();
-        var service = new JobQueueService(db);
-        var now = DateTimeOffset.UtcNow;
-        var scan = NewJobRun(
-            JobType.ScanLibrary,
-            JobRunStatus.Running,
-            now.AddMinutes(-5),
-            priority: JobPriorities.Scan);
-        var broadIdentify = NewJobRun(
-            JobType.AutoIdentify,
-            JobRunStatus.Queued,
-            now.AddMinutes(-1),
-            targetEntityKind: EntityKindRegistry.VideoSeries.Code,
-            priority: JobPriorities.AutoIdentify);
-        var exactIdentify = NewJobRun(
-            JobType.AutoIdentify,
-            JobRunStatus.Queued,
-            now,
-            targetEntityKind: EntityKindRegistry.Video.Code,
-            priority: JobPriorities.TargetedAutoIdentify);
-        db.JobRuns.AddRange(scan, broadIdentify, exactIdentify);
-        await db.SaveChangesAsync();
-
-        var claimed = await service.ClaimNextAsync("worker-1", CancellationToken.None);
-
-        Assert.NotNull(claimed);
-        Assert.Equal(exactIdentify.Id, claimed.Id);
-
-        var blocked = await service.ClaimNextAsync("worker-2", CancellationToken.None);
-        Assert.Null(blocked);
-    }
-
-    [Fact]
-    public async Task ClaimNextProcessesMusicArtistAutoIdentifyBeforeAudioLibraryAutoIdentify() {
-        await using var db = CreateContext();
-        var service = new JobQueueService(db);
-        var now = DateTimeOffset.UtcNow;
-        var album = NewJobRun(
-            JobType.AutoIdentify,
-            JobRunStatus.Queued,
-            now.AddMinutes(-10),
-            targetEntityKind: EntityKindRegistry.AudioLibrary.Code,
-            priority: JobPriorities.AutoIdentify);
-        var artist = NewJobRun(
-            JobType.AutoIdentify,
-            JobRunStatus.Queued,
-            now,
-            targetEntityKind: EntityKindRegistry.MusicArtist.Code,
-            priority: JobPriorities.AutoIdentify);
-        db.JobRuns.AddRange(album, artist);
-        await db.SaveChangesAsync();
-
-        var claimed = await service.ClaimNextAsync("worker-1", CancellationToken.None);
-
-        Assert.NotNull(claimed);
-        Assert.Equal(artist.Id, claimed.Id);
-    }
-
-    [Fact]
-    public async Task ClaimNextWaitsForDeferredMusicArtistBeforeAudioLibraryAutoIdentify() {
-        await using var db = CreateContext();
-        var service = new JobQueueService(db);
-        var now = DateTimeOffset.UtcNow;
-        var album = NewJobRun(
-            JobType.AutoIdentify,
-            JobRunStatus.Queued,
-            now.AddMinutes(-10),
-            targetEntityKind: EntityKindRegistry.AudioLibrary.Code,
-            priority: JobPriorities.AutoIdentify);
-        var deferredArtist = NewJobRun(
-            JobType.AutoIdentify,
-            JobRunStatus.Queued,
-            now.AddMinutes(5),
-            targetEntityKind: EntityKindRegistry.MusicArtist.Code,
-            priority: JobPriorities.AutoIdentify);
-        db.JobRuns.AddRange(album, deferredArtist);
-        await db.SaveChangesAsync();
-
-        var blocked = await service.ClaimNextAsync("worker-1", CancellationToken.None);
-
-        Assert.Null(blocked);
-
-        deferredArtist.Status = JobRunStatus.Completed;
-        deferredArtist.FinishedAt = now;
-        await db.SaveChangesAsync();
-
-        var claimed = await service.ClaimNextAsync("worker-1", CancellationToken.None);
-
-        Assert.NotNull(claimed);
-        Assert.Equal(album.Id, claimed.Id);
-    }
-
-    [Fact]
-    public async Task ClaimNextClaimsPreviewBeforeAutoIdentifyEvenWithLowerPreviewPriority() {
-        await using var db = CreateContext();
-        var service = new JobQueueService(db);
-        var now = DateTimeOffset.UtcNow;
-        var autoIdentify = NewJobRun(
-            JobType.AutoIdentify,
-            JobRunStatus.Queued,
-            now.AddMinutes(-10),
-            priority: JobPriorities.AutoIdentify);
-        var preview = NewJobRun(
+        var heavy = await service.EnqueueAsync(new EnqueueJobRequest(
             JobType.GeneratePreview,
-            JobRunStatus.Queued,
-            now,
-            priority: JobPriorities.Preview);
-        db.JobRuns.AddRange(autoIdentify, preview);
-        await db.SaveChangesAsync();
+            ResourceClass: JobResourceClass.HeavyCpu), CancellationToken.None);
+        var light = await service.EnqueueAsync(new EnqueueJobRequest(
+            JobType.Noop,
+            ResourceClass: JobResourceClass.Light), CancellationToken.None);
 
-        var claimed = await service.ClaimNextAsync("worker-1", CancellationToken.None);
+        var claimed = await service.ClaimNextGraphNodeAsync(
+            "worker-1",
+            JobGraphOrigin.Background,
+            CancellationToken.None,
+            [JobResourceClass.Light]);
 
-        Assert.NotNull(claimed);
-        Assert.Equal(preview.Id, claimed.Id);
+        Assert.Equal(light.Id, claimed?.Id);
+        Assert.Equal(JobRunStatus.Queued, (await db.JobRuns.FindAsync(heavy.Id))?.Status);
     }
 
     [Fact]
-    public async Task ClaimNextWithForegroundLaneIgnoresNonForegroundBacklog() {
+    public async Task DurablePluginResourceSerializesInvocationsAndHonorsStartInterval() {
         await using var db = CreateContext();
         var service = new JobQueueService(db);
-        var now = DateTimeOffset.UtcNow;
-        var autoIdentify = NewJobRun(
-            JobType.AutoIdentify,
-            JobRunStatus.Queued,
-            now.AddMinutes(-10),
-            priority: JobPriorities.AutoIdentify);
-        db.JobRuns.Add(autoIdentify);
-        await db.SaveChangesAsync();
-
-        var laneClaim = await service.ClaimNextAsync(
-            "worker-1", CancellationToken.None, JobRunLane.ForegroundIdentify);
-        Assert.Null(laneClaim);
-
-        var manualBulkIdentify = NewJobRun(
-            JobType.BulkIdentify,
-            JobRunStatus.Queued,
-            now,
-            priority: JobPriorities.InteractiveIdentify);
-        db.JobRuns.Add(manualBulkIdentify);
-        await db.SaveChangesAsync();
-
-        var stolen = await service.ClaimNextAsync(
-            "worker-1", CancellationToken.None, JobRunLane.ForegroundIdentify);
-        Assert.Null(stolen);
-
-        var foregroundSearch = NewJobRun(
+        var resourceKey = JobResourceKeys.Plugin(WellKnownPluginIds.MusicBrainz);
+        await service.DeclareResourceAsync(
+            resourceKey,
+            maxConcurrency: 1,
+            minimumStartInterval: TimeSpan.FromSeconds(30),
+            CancellationToken.None);
+        var first = await service.EnqueueAsync(new EnqueueJobRequest(
             JobType.IdentifySearch,
-            JobRunStatus.Queued,
-            now.AddSeconds(-1),
-            priority: JobPriorities.InteractiveIdentify,
-            lane: JobRunLane.ForegroundIdentify);
-        db.JobRuns.Add(foregroundSearch);
+            Origin: JobGraphOrigin.Interactive,
+            ResourceKey: resourceKey), CancellationToken.None);
+        var second = await service.EnqueueAsync(new EnqueueJobRequest(
+            JobType.IdentifySearch,
+            Origin: JobGraphOrigin.Interactive,
+            ResourceKey: resourceKey), CancellationToken.None);
+
+        var firstClaim = await service.ClaimNextGraphNodeAsync(
+            "worker-1", JobGraphOrigin.Interactive, CancellationToken.None);
+        var overlappingClaim = await service.ClaimNextGraphNodeAsync(
+            "worker-2", JobGraphOrigin.Interactive, CancellationToken.None);
+        Assert.Equal(first.Id, firstClaim?.Id);
+        Assert.Null(overlappingClaim);
+
+        await service.CompleteAsync(first.Id, "done", CancellationToken.None);
+        var intervalBlockedClaim = await service.ClaimNextGraphNodeAsync(
+            "worker-2", JobGraphOrigin.Interactive, CancellationToken.None);
+        Assert.Null(intervalBlockedClaim);
+
+        var resource = await db.JobResourceStates.SingleAsync(row => row.Key == resourceKey);
+        resource.NextAvailableAt = DateTimeOffset.UtcNow.AddSeconds(-1);
         await db.SaveChangesAsync();
-
-        var claimed = await service.ClaimNextAsync(
-            "worker-1", CancellationToken.None, JobRunLane.ForegroundIdentify);
-
-        Assert.NotNull(claimed);
-        Assert.Equal(foregroundSearch.Id, claimed.Id);
+        var secondClaim = await service.ClaimNextGraphNodeAsync(
+            "worker-2", JobGraphOrigin.Interactive, CancellationToken.None);
+        Assert.Equal(second.Id, secondClaim?.Id);
     }
 
     [Fact]
@@ -637,16 +466,15 @@ public sealed class JobQueueServiceTests {
     }
 
     [Fact]
-    public async Task DeferKeepsPriorityAndLaneWhenProviderSlotIsBusy() {
+    public async Task DeferKeepsGraphAssociationWhenProviderSlotIsBusy() {
         await using var db = CreateContext();
         var service = new JobQueueService(db);
 
         var created = await service.EnqueueAsync(new EnqueueJobRequest(
             JobType.BulkIdentify,
-            Priority: JobPriorities.InteractiveIdentify,
-            Lane: JobRunLane.ForegroundIdentify), CancellationToken.None);
-        await service.ClaimNextAsync(
-            "worker-1", CancellationToken.None, JobRunLane.ForegroundIdentify);
+            Origin: JobGraphOrigin.Interactive), CancellationToken.None);
+        await service.ClaimNextGraphNodeAsync(
+            "worker-1", JobGraphOrigin.Interactive, CancellationToken.None);
 
         await service.DeferAsync(
             created.Id,
@@ -657,8 +485,7 @@ public sealed class JobQueueServiceTests {
         var deferred = await db.JobRuns.FindAsync(created.Id);
         Assert.NotNull(deferred);
         Assert.Equal(JobRunStatus.Queued, deferred.Status);
-        Assert.Equal(JobPriorities.InteractiveIdentify, deferred.Priority);
-        Assert.Equal(JobRunLane.ForegroundIdentify, deferred.Lane);
+        Assert.Equal(created.GraphId, deferred.GraphId);
         Assert.Equal(0, deferred.Attempts);
         Assert.Equal("Bulk identify waiting for provider slot; retrying soon.", deferred.Message);
     }
@@ -749,16 +576,12 @@ public sealed class JobQueueServiceTests {
         JobRunStatus status,
         DateTimeOffset createdAt,
         string? targetEntityId = null,
-        string? targetEntityKind = null,
-        int priority = 0,
-        JobRunLane? lane = null) =>
+        string? targetEntityKind = null) =>
         new() {
             Id = Guid.NewGuid(),
             Type = type,
             Status = status,
             PayloadJson = "{}",
-            Priority = priority,
-            Lane = lane,
             Attempts = status == JobRunStatus.Running ? 1 : 0,
             MaxAttempts = 3,
             Progress = status == JobRunStatus.Running ? 50 : 0,

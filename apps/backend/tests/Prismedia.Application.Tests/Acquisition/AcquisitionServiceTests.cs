@@ -85,11 +85,9 @@ public sealed class AcquisitionServiceTests {
             [JobType.AcquisitionSearch, JobType.AcquisitionEnrich],
             harness.Queue.Requests.Select(request => request.Type).ToArray());
         var search = harness.Queue.Requests[0];
-        Assert.Equal(JobPriorities.InteractiveRequest, search.Priority);
-        Assert.Equal(JobRunLane.ForegroundIdentify, search.Lane);
+        Assert.Equal(JobGraphOrigin.Interactive, search.Origin);
         var enrichment = harness.Queue.Requests[1];
-        Assert.Equal(JobPriorities.RequestEnrichment, enrichment.Priority);
-        Assert.Null(enrichment.Lane);
+        Assert.Equal(JobGraphOrigin.Background, enrichment.Origin);
         Assert.Equal(AcquisitionStatus.Searching, created.Status);
         Assert.Equal(AcquisitionStatus.Searching, harness.Store.Status);
         Assert.Equal(0, harness.Lifecycle.ExecuteCalls);
@@ -918,8 +916,7 @@ public sealed class AcquisitionServiceTests {
             harness.Store.StatusChanges);
         var search = Assert.Single(harness.Queue.Requests);
         Assert.Equal(JobType.AcquisitionSearch, search.Type);
-        Assert.Equal(JobPriorities.InteractiveRequest, search.Priority);
-        Assert.Equal(JobRunLane.ForegroundIdentify, search.Lane);
+        Assert.Equal(JobGraphOrigin.Interactive, search.Origin);
         var payload = AcquisitionJobPayload.Parse(search.PayloadJson!);
         Assert.True(payload.ManualReview);
         Assert.Null(payload.CustomQuery);
@@ -938,7 +935,7 @@ public sealed class AcquisitionServiceTests {
         Assert.Equal(AcquisitionStatus.Searching, harness.Store.Status);
         var search = Assert.Single(harness.Queue.Requests);
         Assert.Equal(JobType.AcquisitionSearch, search.Type);
-        Assert.Equal(JobPriorities.InteractiveRequest, search.Priority);
+        Assert.Equal(JobGraphOrigin.Interactive, search.Origin);
         var payload = AcquisitionJobPayload.Parse(search.PayloadJson!);
         Assert.False(payload.ManualReview);
         Assert.Null(payload.CustomQuery);
@@ -1045,8 +1042,7 @@ public sealed class AcquisitionServiceTests {
         Assert.Equal(JobType.AcquisitionSearch, search.Type);
         Assert.Equal(replacementId.ToString(), search.TargetEntityId);
         Assert.Equal(replacementId, AcquisitionJobPayload.Parse(search.PayloadJson!).AcquisitionId);
-        Assert.Equal(JobPriorities.InteractiveRequest, search.Priority);
-        Assert.Equal(JobRunLane.ForegroundIdentify, search.Lane);
+        Assert.Equal(JobGraphOrigin.Interactive, search.Origin);
         Assert.True(harness.Store.Deleted);
         var history = Assert.Single(harness.History.Entries);
         Assert.Equal(AcquisitionHistoryEvent.Removed, history.Event);
@@ -1125,8 +1121,7 @@ public sealed class AcquisitionServiceTests {
         Assert.True(detail?.Summary.HasResumableImport);
         var retry = Assert.Single(harness.Queue.Requests);
         Assert.Equal(JobType.AcquisitionImport, retry.Type);
-        Assert.Equal(JobPriorities.AcquisitionCompletion, retry.Priority);
-        Assert.Equal(JobRunLane.ForegroundIdentify, retry.Lane);
+        Assert.Equal(JobGraphOrigin.Interactive, retry.Origin);
         var payload = AcquisitionJobPayload.Parse(retry.PayloadJson!);
         Assert.Equal(AcquisitionId, payload.AcquisitionId);
         Assert.True(payload.ManualRetry);
@@ -1873,7 +1868,7 @@ public sealed class AcquisitionServiceTests {
         public Task<int> CancelAsync(JobType? type, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<bool> CancelRunAsync(Guid id, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<int> ClearFailuresAsync(JobType? type, CancellationToken cancellationToken) => throw new NotSupportedException();
-        public Task<JobRunSnapshot?> ClaimNextAsync(string workerId, CancellationToken cancellationToken, JobRunLane? lane = null) => throw new NotSupportedException();
+        public Task<JobRunSnapshot?> ClaimNextAsync(string workerId, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<int> RecoverStaleRunningAsync(string currentWorkerId, TimeSpan staleAfter, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task UpdateProgressAsync(Guid id, int progress, string? message, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task CompleteAsync(Guid id, string? message, CancellationToken cancellationToken) => throw new NotSupportedException();

@@ -40,7 +40,18 @@ internal static class PluginIndexParser {
             ManifestVersion: manifestVersion,
             ApiTags: GetStringArray(entry, "apiTags", ["prismedia"]),
             Compat: ParseJsonCompatibility(entry),
-            Supports: ParseJsonSupports(entry, manifestVersion));
+            Supports: ParseJsonSupports(entry, manifestVersion),
+            Execution: ParseJsonExecution(entry));
+    }
+
+    private static PluginExecutionPolicy? ParseJsonExecution(JsonElement entry) {
+        if (!entry.TryGetProperty("execution", out var execution) || execution.ValueKind != JsonValueKind.Object) {
+            return null;
+        }
+
+        return new PluginExecutionPolicy(
+            GetInt(execution, "maxConcurrentInvocations", 0),
+            GetInt(execution, "minimumStartIntervalMs", 0));
     }
 
     private static PluginCompatibility ParseJsonCompatibility(JsonElement entry) {
@@ -187,6 +198,11 @@ internal static class PluginIndexParser {
                 continue;
             }
 
+            if (section == "execution" && indent == 4) {
+                SetYamlExecution(entry, trimmed);
+                continue;
+            }
+
             if (section != "supports") {
                 continue;
             }
@@ -314,6 +330,19 @@ internal static class PluginIndexParser {
                 break;
             case "prismediaMax":
                 entry.PrismediaMax = NullIfYamlNull(value);
+                break;
+        }
+    }
+
+    private static void SetYamlExecution(YamlEntry entry, string line) {
+        var (key, value) = SplitYamlPair(line);
+        if (!int.TryParse(value, out var number)) return;
+        switch (key) {
+            case "maxConcurrentInvocations":
+                entry.MaxConcurrentInvocations = number;
+                break;
+            case "minimumStartIntervalMs":
+                entry.MinimumStartIntervalMs = number;
                 break;
         }
     }
@@ -463,6 +492,8 @@ internal static class PluginIndexParser {
         public string? PluginApiMax { get; set; }
         public string PrismediaMin { get; set; } = "1.0.0";
         public string? PrismediaMax { get; set; }
+        public int? MaxConcurrentInvocations { get; set; }
+        public int MinimumStartIntervalMs { get; set; }
         public List<PluginEntitySupportBuilder> Supports { get; } = [];
 
         public PluginIndexEntry ToIndexEntry() =>
@@ -492,7 +523,10 @@ internal static class PluginIndexParser {
                         support.IdentityUrls.Count > 0
                             ? support.IdentityUrls.Select(format => format.ToContract()).ToArray()
                             : null))
-                    .ToArray());
+                    .ToArray(),
+                MaxConcurrentInvocations is { } maximum
+                    ? new PluginExecutionPolicy(maximum, MinimumStartIntervalMs)
+                    : null);
     }
 
     private sealed class PluginEntitySupportBuilder {

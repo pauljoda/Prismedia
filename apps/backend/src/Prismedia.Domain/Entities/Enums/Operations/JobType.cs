@@ -26,6 +26,10 @@ public enum JobType {
     [Code("scan-audio")]
     ScanAudio,
 
+    /// <summary>Plans and appends processing work for one exact entity tree without enumerating a library root.</summary>
+    [Code("reconcile-entity")]
+    ReconcileEntity,
+
     // ── Probing ─────────────────────────────────────────────────
     /// <summary>Extracts technical metadata from a video file via ffprobe.</summary>
     [Code("probe-video")]
@@ -112,6 +116,14 @@ public enum JobType {
     [Code("identify-search")]
     IdentifySearch,
 
+    /// <summary>Runs provider-backed identify expansion for one queued entity graph.</summary>
+    [Code("identify-provider-call")]
+    IdentifyProviderCall,
+
+    /// <summary>Applies one reviewed identify proposal inside its existing interactive graph.</summary>
+    [Code("identify-apply")]
+    IdentifyApply,
+
     /// <summary>Legacy batch identify; retained so historical job rows decode. New batches enqueue one identify-search job per entity.</summary>
     [Code("bulk-identify")]
     BulkIdentify,
@@ -120,7 +132,7 @@ public enum JobType {
     [Code("auto-identify")]
     AutoIdentify,
 
-    /// <summary>Walks a queued entity's full child tree through a provider, streaming the growing proposal onto the queue item.</summary>
+    /// <summary>Legacy identify cascade; retained so historical job rows decode.</summary>
     [Code("identify-cascade")]
     IdentifyCascade,
 
@@ -136,6 +148,10 @@ public enum JobType {
     /// <summary>Moves a completed acquisition payload into a library root, writes identify hints, and enqueues a book scan.</summary>
     [Code("acquisition-import")]
     AcquisitionImport,
+
+    /// <summary>Publishes an acquisition as imported after required entity reconciliation succeeds.</summary>
+    [Code("acquisition-finalize")]
+    AcquisitionFinalize,
 
     /// <summary>Handles a failed download: blocklists the release and, when auto-redownload is on, grabs the next-best candidate.</summary>
     [Code("acquisition-failed-handle")]

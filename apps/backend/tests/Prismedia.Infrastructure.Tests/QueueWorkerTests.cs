@@ -15,7 +15,7 @@ public sealed class QueueWorkerTests {
     [Fact]
     public async Task QueueWorkerRunsFourInteractiveLanesAlongsideTheBackgroundPoolOnEightCpus() {
         var foreground = Enumerable.Range(0, 5)
-            .Select(_ => CreateJob(JobRunLane.ForegroundIdentify));
+            .Select(_ => CreateJob(JobGraphOrigin.Interactive));
         var queue = new RecordingJobQueueService(foreground.Append(CreateJob()));
         var settings = new MutableSettingsPersistence { BackgroundConcurrency = 1 };
         var handler = new BlockingJobHandler();
@@ -40,8 +40,8 @@ public sealed class QueueWorkerTests {
             await handler.WaitForMaxActiveAsync(5, timeout.Token);
 
             Assert.Equal(5, handler.MaxActive);
-            Assert.Equal(4, handler.StartedLanes.Count(lane => lane == JobRunLane.ForegroundIdentify));
-            Assert.Equal(1, handler.StartedLanes.Count(lane => lane is null));
+            Assert.Equal(4, handler.StartedOrigins.Count(origin => origin == JobGraphOrigin.Interactive));
+            Assert.Equal(1, handler.StartedOrigins.Count(origin => origin == JobGraphOrigin.Background));
         } finally {
             handler.ReleaseAll();
             await worker.StopAsync(CancellationToken.None);
@@ -86,7 +86,7 @@ public sealed class QueueWorkerTests {
     }
 
     [Fact]
-    public async Task QueueWorkerClaimsForegroundIdentifyJobThroughReservedLaneWhenSaturated() {
+    public async Task QueueWorkerClaimsInteractiveGraphWhileBackgroundPoolIsSaturated() {
         var queue = new RecordingJobQueueService([CreateJob()]);
         var settings = new MutableSettingsPersistence { BackgroundConcurrency = 1 };
         var handler = new BlockingJobHandler();
@@ -110,18 +110,11 @@ public sealed class QueueWorkerTests {
             // The lone background slot fills with a long-running job.
             await handler.WaitForMaxActiveAsync(1, timeout.Token);
 
-            // A queued background job must NOT enter the reserved lane...
-            queue.Add(CreateJob(), priority: 0);
+            queue.Add(CreateJob());
             await Task.Delay(150, timeout.Token);
             Assert.Equal(1, handler.MaxActive);
 
-            // A broad priority-70 identify job without the foreground lane cannot steal it either.
-            queue.Add(CreateJob(), JobPriorities.InteractiveIdentify);
-            await Task.Delay(150, timeout.Token);
-            Assert.Equal(1, handler.MaxActive);
-
-            // ...but a direct manual identify job is claimed immediately through it.
-            queue.Add(CreateJob(JobRunLane.ForegroundIdentify), JobPriorities.InteractiveIdentify);
+            queue.Add(CreateJob(JobGraphOrigin.Interactive));
             await handler.WaitForMaxActiveAsync(2, timeout.Token);
             Assert.Equal(2, handler.MaxActive);
         } finally {
@@ -133,7 +126,7 @@ public sealed class QueueWorkerTests {
     [Fact]
     public async Task QueueWorkerAdvancesStandardJobDuringForegroundFlood() {
         var foreground = Enumerable.Range(0, 10)
-            .Select(_ => CreateJob(JobRunLane.ForegroundIdentify));
+            .Select(_ => CreateJob(JobGraphOrigin.Interactive));
         var standard = CreateJob();
         var queue = new RecordingJobQueueService(foreground.Append(standard));
         var settings = new MutableSettingsPersistence { BackgroundConcurrency = 2 };
@@ -158,7 +151,7 @@ public sealed class QueueWorkerTests {
         try {
             await handler.WaitForMaxActiveAsync(2, timeout.Token);
             Assert.Contains(standard.Id, handler.StartedJobIds);
-            Assert.Equal(1, handler.StartedLanes.Count(lane => lane == JobRunLane.ForegroundIdentify));
+            Assert.Equal(1, handler.StartedOrigins.Count(origin => origin == JobGraphOrigin.Interactive));
         } finally {
             handler.ReleaseAll();
             await worker.StopAsync(CancellationToken.None);
@@ -282,7 +275,7 @@ public sealed class QueueWorkerTests {
         }
     }
 
-    private static JobRunSnapshot CreateJob(JobRunLane? lane = null) =>
+    private static JobRunSnapshot CreateJob(JobGraphOrigin origin = JobGraphOrigin.Background) =>
         new(
             Guid.NewGuid(),
             JobType.Noop,
@@ -296,11 +289,12 @@ public sealed class QueueWorkerTests {
             DateTimeOffset.UtcNow,
             DateTimeOffset.UtcNow,
             null,
-            Lane: lane);
+            GraphId: Guid.NewGuid(),
+            GraphOrigin: origin);
 
     private sealed class BlockingJobHandler : IJobHandler {
         private readonly TaskCompletionSource _release = new(TaskCreationOptions.RunContinuationsAsynchronously);
-        private readonly ConcurrentDictionary<Guid, JobRunLane?> _started = new();
+        private readonly ConcurrentDictionary<Guid, JobGraphOrigin> _started = new();
         private int _active;
         private int _maxActive;
 
@@ -310,10 +304,10 @@ public sealed class QueueWorkerTests {
 
         public IReadOnlyCollection<Guid> StartedJobIds => _started.Keys.ToArray();
 
-        public IReadOnlyCollection<JobRunLane?> StartedLanes => _started.Values.ToArray();
+        public IReadOnlyCollection<JobGraphOrigin> StartedOrigins => _started.Values.ToArray();
 
         public async Task HandleAsync(JobContext context, CancellationToken cancellationToken) {
-            _started[context.Job.Id] = context.Job.Lane;
+            _started[context.Job.Id] = context.Job.GraphOrigin ?? JobGraphOrigin.Background;
             var active = Interlocked.Increment(ref _active);
             var observedMax = _maxActive;
             while (active > observedMax) {
@@ -483,7 +477,11 @@ public sealed class QueueWorkerTests {
     private sealed class ScopedRecordingJobQueueService(ScopedQueueState state) : IJobQueueService {
         public Guid ScopeId { get; } = Guid.NewGuid();
 
-        public Task<JobRunSnapshot?> ClaimNextAsync(string workerId, CancellationToken cancellationToken, JobRunLane? lane = null) =>
+        public Task<JobRunSnapshot?> ClaimNextGraphNodeAsync(
+            string workerId,
+            JobGraphOrigin origin,
+            CancellationToken cancellationToken,
+            IReadOnlyCollection<JobResourceClass>? allowedResourceClasses = null) =>
             Task.FromResult(state.Claim());
 
         public Task FailAsync(Guid id, string message, TimeSpan retryDelay, CancellationToken cancellationToken) {
@@ -539,14 +537,14 @@ public sealed class QueueWorkerTests {
 
     private sealed class RecordingJobQueueService : IJobQueueService {
         private readonly object _lock = new();
-        private readonly List<(int Priority, JobRunSnapshot Job)> _jobs;
+        private readonly List<JobRunSnapshot> _jobs;
         private readonly HashSet<Guid> _cancelled = [];
         private readonly List<Guid> _completedJobIds = [];
         private int _claims;
         private int _enqueuedCount;
 
         public RecordingJobQueueService(IEnumerable<JobRunSnapshot> jobs) {
-            _jobs = jobs.Select(job => (0, job)).ToList();
+            _jobs = jobs.ToList();
         }
 
         public int Claims => Volatile.Read(ref _claims);
@@ -561,9 +559,9 @@ public sealed class QueueWorkerTests {
             }
         }
 
-        public void Add(JobRunSnapshot job, int priority) {
+        public void Add(JobRunSnapshot job) {
             lock (_lock) {
-                _jobs.Add((priority, job));
+                _jobs.Add(job);
             }
         }
 
@@ -573,30 +571,22 @@ public sealed class QueueWorkerTests {
             }
         }
 
-        public Task<JobRunSnapshot?> ClaimNextAsync(string workerId, CancellationToken cancellationToken, JobRunLane? lane = null) {
+        public Task<JobRunSnapshot?> ClaimNextGraphNodeAsync(
+            string workerId,
+            JobGraphOrigin origin,
+            CancellationToken cancellationToken,
+            IReadOnlyCollection<JobResourceClass>? allowedResourceClasses = null) {
             Interlocked.Increment(ref _claims);
             lock (_lock) {
-                var bestIndex = -1;
-                var bestPriority = int.MinValue;
-                for (var i = 0; i < _jobs.Count; i++) {
-                    if (lane is not null && _jobs[i].Job.Lane != lane) {
-                        continue;
-                    }
-                    if (lane is null && _jobs[i].Job.Lane == JobRunLane.ForegroundIdentify) {
-                        continue;
-                    }
-
-                    if (_jobs[i].Priority > bestPriority) {
-                        bestPriority = _jobs[i].Priority;
-                        bestIndex = i;
-                    }
-                }
+                var bestIndex = _jobs.FindIndex(job =>
+                    (job.GraphOrigin ?? JobGraphOrigin.Background) == origin &&
+                    (allowedResourceClasses is null || allowedResourceClasses.Contains(job.ResourceClass)));
 
                 if (bestIndex < 0) {
                     return Task.FromResult<JobRunSnapshot?>(null);
                 }
 
-                var job = _jobs[bestIndex].Job;
+                var job = _jobs[bestIndex];
                 _jobs.RemoveAt(bestIndex);
                 return Task.FromResult<JobRunSnapshot?>(job);
             }

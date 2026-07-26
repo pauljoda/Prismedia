@@ -243,6 +243,9 @@ public sealed class BookAcquisitionProfileRow {
 public sealed class AcquisitionRow {
     public Guid Id { get; set; }
 
+    /// <summary>Durable job graph that owns this request, its transfer wait, import, and recovery work.</summary>
+    public Guid? JobGraphId { get; set; }
+
     /// <summary>Media kind being acquired; drives per-kind release scoring, import, and monitoring.</summary>
     public EntityKind Kind { get; set; } = EntityKind.Book;
 

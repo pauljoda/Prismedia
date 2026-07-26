@@ -171,13 +171,7 @@ public sealed class ScanBookJobHandler(
             }
 
             // A book is the top-level root of its volumes/chapters/pages, so identify it directly.
-            if (bestEffortHousekeeping) {
-                await ImportedMaterializationHousekeeping.TryAsync(
-                    logger,
-                    "Imported book is ready but its auto-identify job could not be queued.",
-                    () => QueueBookAutoIdentifyAsync(
-                        context, settings, bookId, first.BookTitle, cancellationToken));
-            } else {
+            if (!bestEffortHousekeeping) {
                 await QueueBookAutoIdentifyAsync(
                     context, settings, bookId, first.BookTitle, cancellationToken);
             }
@@ -443,13 +437,7 @@ public sealed class ScanBookJobHandler(
             await scanMetadata.ApplyComicInfoMetadataAsync(bookId, item.Metadata, item.IsNsfw, cancellationToken);
         }
 
-        if (bestEffortHousekeeping) {
-            await ImportedMaterializationHousekeeping.TryAsync(
-                logger,
-                "Imported book is ready but its downstream jobs could not be queued.",
-                () => QueueSingleFileBookJobsAsync(
-                    context, settings, bookId, item.Title, cancellationToken));
-        } else {
+        if (!bestEffortHousekeeping) {
             await QueueSingleFileBookJobsAsync(
                 context, settings, bookId, item.Title, cancellationToken);
         }
@@ -528,7 +516,9 @@ public sealed class ScanBookJobHandler(
                     BookFormat.Audio,
                     cancellationToken);
                 validBookPaths.Add(sourcePath);
-                await QueueBookAutoIdentifyAsync(context, settings, bookId, title, cancellationToken);
+                if (!bestEffortHousekeeping) {
+                    await QueueBookAutoIdentifyAsync(context, settings, bookId, title, cancellationToken);
+                }
             } else if (acquisitionId is not null && acquisitionHints is not null) {
                 await acquisitionHints.ApplyAsync(bookId, sourcePath, cancellationToken);
             }
@@ -550,14 +540,7 @@ public sealed class ScanBookJobHandler(
                 .Select(track => track.FilePath)
                 .ToHashSet(FileSystemPathComparison.Comparer);
             for (var index = 0; index < trackIds.Count && index < tracks.Length; index++) {
-                if (bestEffortHousekeeping) {
-                    var trackIndex = index;
-                    await ImportedMaterializationHousekeeping.TryAsync(
-                        logger,
-                        "Imported audiobook is ready but its audio processing jobs could not be queued.",
-                        () => QueueAudiobookTrackJobsAsync(
-                            context, settings, trackIds[trackIndex], tracks[trackIndex].Title, cancellationToken));
-                } else {
+                if (!bestEffortHousekeeping) {
                     await QueueAudiobookTrackJobsAsync(
                         context, settings, trackIds[index], tracks[index].Title, cancellationToken);
                 }
@@ -592,7 +575,7 @@ public sealed class ScanBookJobHandler(
         if (settings.AutoGenerateMetadata && !hasTechnical) {
             await context.EnqueueIfNeededAsync(
                 EnqueueJobRequest.ForEntity(
-                    JobType.ProbeAudio, EntityKind.AudioTrack, trackId.ToString(), title, JobPriorities.Probe),
+                    JobType.ProbeAudio, EntityKind.AudioTrack, trackId.ToString(), title),
                 cancellationToken);
         }
 
@@ -600,7 +583,7 @@ public sealed class ScanBookJobHandler(
                 downstreamNeeds, settings, trackId, cancellationToken)) {
             await context.EnqueueIfNeededAsync(
                 EnqueueJobRequest.ForEntity(
-                    JobType.FingerprintAudio, EntityKind.AudioTrack, trackId.ToString(), title, JobPriorities.Fingerprint),
+                    JobType.FingerprintAudio, EntityKind.AudioTrack, trackId.ToString(), title),
                 cancellationToken);
         }
 
@@ -608,7 +591,7 @@ public sealed class ScanBookJobHandler(
             !await downstreamNeeds.HasEntityFileAsync(trackId, EntityFileRole.Waveform, cancellationToken)) {
             await context.EnqueueIfNeededAsync(
                 EnqueueJobRequest.ForEntity(
-                    JobType.GenerateAudioWaveform, EntityKind.AudioTrack, trackId.ToString(), title, JobPriorities.Waveform),
+                    JobType.GenerateAudioWaveform, EntityKind.AudioTrack, trackId.ToString(), title),
                 cancellationToken);
         }
     }
@@ -670,8 +653,7 @@ public sealed class ScanBookJobHandler(
                     JobType.GenerateBookCoverThumbnail,
                     EntityKind.Book,
                     bookId.ToString(),
-                    title,
-                    JobPriorities.Thumbnail),
+                    title),
                 cancellationToken);
         }
 
@@ -696,8 +678,7 @@ public sealed class ScanBookJobHandler(
                     JobType.GenerateBookPageThumbnail,
                     EntityKind.BookPage,
                     pageIds[index].ToString(),
-                    pageItems[index].Title,
-                    JobPriorities.Thumbnail),
+                    pageItems[index].Title),
                 cancellationToken);
         }
     }
@@ -764,13 +745,7 @@ public sealed class ScanBookJobHandler(
         }
 
         var pageIds = await books.UpsertBookPagesBatchAsync(pageItems, cancellationToken);
-        if (bestEffortHousekeeping) {
-            await ImportedMaterializationHousekeeping.TryAsync(
-                logger,
-                "Imported book pages are ready but their thumbnail jobs could not be queued.",
-                () => QueueBookPageJobsAsync(
-                    context, settings, pageItems, pageIds, cancellationToken));
-        } else {
+        if (!bestEffortHousekeeping) {
             await QueueBookPageJobsAsync(
                 context, settings, pageItems, pageIds, cancellationToken);
         }

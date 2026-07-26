@@ -61,7 +61,7 @@ public sealed class MovieMusicMergedImportTests : IDisposable {
 
         await world.Engine.ImportAsync(world.Context, world.Import, CancellationToken.None);
 
-        Assert.Equal(AcquisitionStatus.Imported, await StatusOf(db, world.Import.Id));
+        Assert.Equal(AcquisitionStatus.Importing, await StatusOf(db, world.Import.Id));
         Assert.True(File.Exists(Path.Combine(world.AlbumFolder, "02 - Two.flac")));
         Assert.Equal("owned-bytes", await File.ReadAllTextAsync(Path.Combine(world.AlbumFolder, "01 - One.flac"))); // never replaced
         Assert.Single(Directory.GetDirectories(world.LibraryRoot)); // no duplicate artist folder
@@ -123,14 +123,16 @@ public sealed class MovieMusicMergedImportTests : IDisposable {
 
         await world.Engine.ImportAsync(world.Context, replacementImport, CancellationToken.None);
 
-        Assert.False(await db.Acquisitions.AnyAsync(row => row.Id == child.Id));
+        Assert.Equal(
+            AcquisitionStatus.Importing,
+            (await db.Acquisitions.AsNoTracking().SingleAsync(row => row.Id == child.Id)).Status);
         var parent = await db.Acquisitions.AsNoTracking().SingleAsync(row => row.Id == parentId);
         Assert.Equal(AudioQuality.Lossless.ToCode(), parent.OwnedMediaQuality);
         Assert.False(File.Exists(Path.Combine(world.AlbumFolder, "01 - Old.flac")));
         Assert.False(File.Exists(Path.Combine(world.AlbumFolder, "02 - Removed.flac")));
         Assert.Equal("payload-bytes", await File.ReadAllTextAsync(Path.Combine(world.AlbumFolder, "01 - New.flac")));
         Assert.Equal("payload-bytes", await File.ReadAllTextAsync(Path.Combine(world.AlbumFolder, "02 - New.flac")));
-        Assert.Empty(Directory.GetDirectories(Path.GetDirectoryName(world.AlbumFolder)!, "*.prismedia-*-*"));
+        Assert.Single(Directory.GetDirectories(Path.GetDirectoryName(world.AlbumFolder)!, "*.prismedia-bak-*"));
         Assert.Contains(await db.AcquisitionHistory.AsNoTracking().ToArrayAsync(), row =>
             row.AcquisitionId == parentId && row.Event == AcquisitionHistoryEvent.Upgraded);
     }
@@ -267,10 +269,16 @@ public sealed class MovieMusicMergedImportTests : IDisposable {
         new(new DbContextOptionsBuilder<PrismediaDbContext>().UseInMemoryDatabase(Guid.NewGuid().ToString()).Options);
 
     private sealed class ExistingReadyMaterializer : IImportedEntityMaterializer {
-        public Task MaterializeAsync(
+        public Task<ImportedEntityMaterializationResult> MaterializeAsync(
             EntityKind kind,
             JobContext context,
             ImportedEntityMaterializationRequest request,
-            CancellationToken cancellationToken) => Task.CompletedTask;
+            CancellationToken cancellationToken) => Task.FromResult(
+                new ImportedEntityMaterializationResult(
+                    request.EntityId is { } id ? [new ImportedEntityReference(id, kind)] : [],
+                    [],
+                    request.PlacedMediaPaths,
+                    [],
+                    []));
     }
 }

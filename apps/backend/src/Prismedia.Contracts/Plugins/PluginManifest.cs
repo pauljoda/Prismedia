@@ -85,6 +85,11 @@ public sealed record PluginEntitySupport(
     PluginSearchDefinition? Search = null,
     IReadOnlyList<PluginIdentityUrlFormat>? IdentityUrls = null);
 
+/// <summary>Optional host-enforced invocation policy shared by all lanes using a plugin.</summary>
+public sealed record PluginExecutionPolicy(
+    int MaxConcurrentInvocations,
+    int MinimumStartIntervalMs);
+
 /// <summary>
 /// Manifest embedded in a community plugin artifact.
 /// </summary>
@@ -110,7 +115,8 @@ public sealed record PluginManifest(
     PluginCompatibility Compat,
     IReadOnlyList<PluginAuthField> Auth,
     bool IsNsfw,
-    IReadOnlyList<PluginEntitySupport> Supports);
+    IReadOnlyList<PluginEntitySupport> Supports,
+    PluginExecutionPolicy? Execution = null);
 
 /// <summary>
 /// Index entry consumed by the Prismedia plugin manager.
@@ -139,7 +145,8 @@ public sealed record PluginIndexEntry(
     int ManifestVersion,
     IReadOnlyList<string> ApiTags,
     PluginCompatibility Compat,
-    IReadOnlyList<PluginEntitySupport> Supports);
+    IReadOnlyList<PluginEntitySupport> Supports,
+    PluginExecutionPolicy? Execution = null);
 
 /// <summary>
 /// API-facing plugin provider summary.

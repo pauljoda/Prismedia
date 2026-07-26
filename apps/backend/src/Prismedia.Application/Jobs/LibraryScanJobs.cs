@@ -32,9 +32,6 @@ public static class LibraryScanJobs {
         if (scanBooks) yield return JobType.ScanBook;
     }
 
-    /// <summary>Priority for scan jobs — see <see cref="JobPriorities.Scan"/>.</summary>
-    public const int ScanPriority = JobPriorities.Scan;
-
     /// <summary>
     /// Enqueues one scan job per enabled media kind. Each scan job covers every enabled library root
     /// of that kind (the scan handler iterates them, skipping unchanged roots via the file snapshot),
@@ -64,7 +61,7 @@ public static class LibraryScanJobs {
                 continue;
             }
 
-            await queue.EnqueueAsync(new EnqueueJobRequest(Type: type, Priority: ScanPriority), cancellationToken);
+            await queue.EnqueueAsync(new EnqueueJobRequest(Type: type), cancellationToken);
             queued++;
         }
 

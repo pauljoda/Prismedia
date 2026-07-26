@@ -2726,7 +2726,7 @@ public sealed class RequestCommitServiceTests {
     private sealed class FakeRequestAcquisitionFanoutScheduler : IRequestAcquisitionFanoutScheduler {
         public List<FanoutCall> Calls { get; } = [];
 
-        public Task ScheduleAsync(
+        public Task<Guid?> ScheduleAsync(
             Guid containerEntityId,
             EntityKind containerKind,
             string containerTitle,
@@ -2741,7 +2741,7 @@ public sealed class RequestCommitServiceTests {
                 childEntityIds,
                 targeting,
                 hideNsfw));
-            return Task.CompletedTask;
+            return Task.FromResult<Guid?>(null);
         }
     }
 

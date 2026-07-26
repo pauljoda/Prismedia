@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging;
+using Prismedia.Application.Jobs;
 using Prismedia.Application.Jobs.Scanning;
 using Prismedia.Contracts.Acquisition;
 using Prismedia.Contracts.System;
@@ -24,7 +25,8 @@ public sealed class AcquisitionQueueService(
     IAcquisitionTransferAddCoordinator transferAdds,
     IAcquisitionHistoryStore history,
     ILogger<AcquisitionQueueService> logger,
-    VideoScanConcurrencyGate? scanGate = null) : IAcquisitionQueueService {
+    VideoScanConcurrencyGate? scanGate = null,
+    IJobGraphService? graphs = null) : IAcquisitionQueueService {
     /// <summary>Queues a chosen candidate: resolves a usable link (direct, magnet, or scraped from the info page) and hands it to a download client.</summary>
     public async Task<AcquisitionDetail?> QueueAsync(
         Guid acquisitionId,
@@ -203,6 +205,7 @@ public sealed class AcquisitionQueueService(
             }
             await addLease.CommitAsync(CancellationToken.None);
             await RecordGrabbedAsync(acquisitionId, candidate.Title, candidate.IndexerName, client.DisplayName, cancellationToken);
+            await MoveGraphToTransferWaitAsync(acquisitionId, cancellationToken);
         } catch (DownloadClientAddUnresolvedException ex) {
             // qBittorrent proved this call created no new torrent and could not correlate a pre-existing
             // one. Keeping the Adding placeholder would turn a rejected candidate into permanent
@@ -239,6 +242,25 @@ public sealed class AcquisitionQueueService(
         }
 
         return await acquisitions.GetAsync(acquisitionId, cancellationToken);
+    }
+
+    private async Task MoveGraphToTransferWaitAsync(Guid acquisitionId, CancellationToken cancellationToken) {
+        if (graphs is null || await acquisitions.GetJobGraphIdAsync(acquisitionId, cancellationToken) is not { } graphId) {
+            return;
+        }
+
+        var detail = await graphs.GetAsync(graphId, cancellationToken);
+        var reviewKey = AcquisitionGraphSignals.Review(acquisitionId);
+        if (detail?.Signals.Any(signal => signal.Key == reviewKey && signal.ResolvedAt is null && signal.CancelledAt is null) == true) {
+            await graphs.ResolveSignalAsync(graphId, reviewKey, [], cancellationToken);
+        }
+        await graphs.OpenSignalAsync(
+            graphId,
+            AcquisitionGraphSignals.ExternalTransfer(acquisitionId),
+            JobGraphSignalKind.ExternalTransfer,
+            acquisitionId.ToString(),
+            "Waiting for download",
+            cancellationToken);
     }
 
     /// <summary>Queues an acquisition from a user-supplied .torrent file (the manual fallback for linkless releases).</summary>
@@ -386,6 +408,7 @@ public sealed class AcquisitionQueueService(
             await addLease.CommitAsync(CancellationToken.None);
             // A manual .torrent has no grab indexer; the uploaded file name stands in for the release title.
             await RecordGrabbedAsync(acquisitionId, fileName, indexerName: null, client.DisplayName, cancellationToken);
+            await MoveGraphToTransferWaitAsync(acquisitionId, cancellationToken);
         } catch (DownloadClientAddUnresolvedException ex) {
             await acquisitions.AbandonTransferAddAsync(
                 acquisitionId,

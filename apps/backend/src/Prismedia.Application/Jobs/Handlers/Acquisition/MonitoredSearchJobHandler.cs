@@ -21,7 +21,8 @@ public sealed class MonitoredSearchJobHandler(
     IAcquisitionLifecycleStore acquisitions,
     SettingsService settings,
     RequestCommitService requests,
-    ILogger<MonitoredSearchJobHandler> logger) : IJobHandler {
+    ILogger<MonitoredSearchJobHandler> logger,
+    IJobQueueService? jobs = null) : IJobHandler {
     public JobType Type => JobType.MonitoredSearch;
 
     public async Task HandleAsync(JobContext context, CancellationToken cancellationToken) {
@@ -81,7 +82,11 @@ public sealed class MonitoredSearchJobHandler(
         // Request registry and shared child traversal decide what those children are; this handler has
         // no season/episode, artist/album, or book/volume branch.
         if (monitor.MissingChildFallback && monitor.EntityId is { } parentEntityId) {
-            var outcome = await requests.RequestMissingChildrenAsync(parentEntityId, cancellationToken);
+            var outcome = await requests.RequestMissingChildrenAsync(
+                parentEntityId,
+                parentContext: null,
+                JobGraphOrigin.Background,
+                cancellationToken);
             logger.LogInformation(
                 "MonitoredSearch: '{Title}' imported with {Missing} missing child item(s); {Covered} covered by child acquisitions.",
                 monitor.Title, outcome.Missing, outcome.Covered);
@@ -96,7 +101,10 @@ public sealed class MonitoredSearchJobHandler(
         // and fileless leaves request themselves. Acquisition-linked dues always take the branch below.
         if (monitor.AcquisitionId is null && monitor.EntityId is { } watchedEntityId) {
             var maintained = await requests.MaintainAsync(
-                watchedEntityId, monitor.BookRendition, cancellationToken);
+                watchedEntityId,
+                monitor.BookRendition,
+                JobGraphOrigin.Background,
+                cancellationToken);
             if (!maintained) {
                 // False also means lifecycle contention (a child is being unmonitored or this Entity
                 // is deleting files). That is transient and must never rewrite durable parent intent.
@@ -158,13 +166,21 @@ public sealed class MonitoredSearchJobHandler(
             return null;
         }
 
-        await context.EnqueueIfNeededAsync(
-            new EnqueueJobRequest(
+        var request = new EnqueueJobRequest(
                 JobType.AcquisitionSearch,
                 PayloadJson: AcquisitionJobPayload.Serialize(searchTarget),
                 TargetEntityId: searchTarget.ToString(),
-                TargetLabel: monitor.Title),
-            cancellationToken);
+                TargetLabel: monitor.Title,
+                Origin: JobGraphOrigin.Background,
+                GraphRootEntityId: monitor.EntityId?.ToString());
+        if (jobs is null) {
+            await context.EnqueueIfNeededAsync(request, cancellationToken);
+        } else {
+            var search = await jobs.EnqueueAsync(request, cancellationToken);
+            if (search.GraphId is { } graphId) {
+                await acquisitions.SetJobGraphIdAsync(searchTarget, graphId, cancellationToken);
+            }
+        }
         await monitors.MarkSearchedAsync(monitor.MonitorId, cancellationToken);
         return $"Re-searching {monitor.Title}";
     }

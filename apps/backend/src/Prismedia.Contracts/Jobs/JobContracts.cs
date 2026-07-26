@@ -47,8 +47,17 @@ public sealed record JobListResponse(IReadOnlyList<JobRun> Items, IReadOnlyList<
 /// <summary>
 /// API response returned after creating a new job run.
 /// </summary>
-/// <param name="Job">The created job run.</param>
-public sealed record JobCreateResponse(JobRun Job);
+/// <param name="Job">The created root node.</param>
+/// <param name="Graph">Durable graph and logical lane created for the operation.</param>
+public sealed record JobCreateResponse(JobRun Job, JobGraphReference Graph);
+
+/// <summary>Stable reference returned when an operation creates a durable graph.</summary>
+public sealed record JobGraphReference(
+    Guid Id,
+    JobGraphOrigin Origin,
+    string? RootEntityKind,
+    string? RootEntityId,
+    JobRun InitialNode);
 
 /// <summary>
 /// API response returned after cancelling queued or running job runs.
@@ -66,5 +75,73 @@ public sealed record JobFailureClearResponse(int Cleared);
 /// API response returned after a bulk job operation such as rebuild-previews or backfill-fingerprints.
 /// </summary>
 /// <param name="Enqueued">Number of jobs queued.</param>
-/// <param name="Skipped">Number of entities skipped because a pending job already exists.</param>
-public sealed record BulkJobResponse(int Enqueued, int Skipped);
+/// <param name="Skipped">Number of entities skipped because a pending graph already exists.</param>
+/// <param name="Graphs">One graph reference per enqueued top-level target.</param>
+public sealed record BulkJobResponse(
+    int Enqueued,
+    int Skipped,
+    IReadOnlyList<JobGraphReference> Graphs);
+
+/// <summary>One graph/lane row for the jobs dashboard.</summary>
+public sealed record JobGraphSummary(
+    Guid Id,
+    JobGraphOrigin Origin,
+    JobGraphStatus Status,
+    string DisplayName,
+    string? RootEntityKind,
+    string? RootEntityId,
+    int Progress,
+    int NodeCount,
+    int CompletedNodeCount,
+    int WarningCount,
+    JobType? CurrentNodeType,
+    string? WaitReason,
+    DateTimeOffset CreatedAt,
+    DateTimeOffset UpdatedAt,
+    DateTimeOffset? FinishedAt);
+
+/// <summary>Executable node shown inside expanded graph detail.</summary>
+public sealed record JobGraphNode(
+    Guid Id,
+    string? NodeKey,
+    Guid? ParentRunId,
+    JobType Type,
+    JobRunStatus Status,
+    JobNodeImportance Importance,
+    JobResourceClass ResourceClass,
+    string? ResourceKey,
+    int Progress,
+    string? Message,
+    string? TargetKind,
+    string? TargetId,
+    string? TargetLabel,
+    DateTimeOffset CreatedAt,
+    DateTimeOffset? StartedAt,
+    DateTimeOffset? FinishedAt);
+
+/// <summary>Dependency edge between graph nodes.</summary>
+public sealed record JobGraphDependency(Guid PredecessorRunId, Guid SuccessorRunId);
+
+/// <summary>Durable graph wait surfaced to the operations UI.</summary>
+public sealed record JobGraphSignal(
+    Guid Id,
+    string Key,
+    JobGraphSignalKind Kind,
+    string? CorrelationId,
+    string? Message,
+    DateTimeOffset CreatedAt,
+    DateTimeOffset? ResolvedAt,
+    DateTimeOffset? CancelledAt);
+
+/// <summary>Graph summary list response.</summary>
+public sealed record JobGraphListResponse(IReadOnlyList<JobGraphSummary> Items);
+
+/// <summary>Expanded graph response containing nodes, dependencies, and waits.</summary>
+public sealed record JobGraphDetailResponse(
+    JobGraphSummary Graph,
+    IReadOnlyList<JobGraphNode> Nodes,
+    IReadOnlyList<JobGraphDependency> Dependencies,
+    IReadOnlyList<JobGraphSignal> Signals);
+
+/// <summary>Result of graph cancellation.</summary>
+public sealed record JobGraphCancelResponse(bool Cancelled);

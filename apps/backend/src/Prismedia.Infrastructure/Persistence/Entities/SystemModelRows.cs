@@ -131,6 +131,8 @@ public sealed class IdentifyResultRow {
 public sealed class IdentifyQueueItemRow {
     public Guid Id { get; set; }
     public Guid EntityId { get; set; }
+    /// <summary>Interactive graph that owns search, review, apply, and structural child work.</summary>
+    public Guid? JobGraphId { get; set; }
     public IdentifyQueueState State { get; set; } = IdentifyQueueState.Search;
     public string? ProviderCode { get; set; }
     public IdentifyAction Action { get; set; } = IdentifyAction.Search;
@@ -140,8 +142,8 @@ public sealed class IdentifyQueueItemRow {
     public string? Error { get; set; }
 
     /// <summary>
-    /// Id of the background <see cref="Prismedia.Domain.Entities.JobType.IdentifyCascade"/> run
-    /// currently streaming this item's child tree, or null when none is in flight. The review screen
+    /// Id of the first <see cref="Prismedia.Domain.Entities.JobType.IdentifyProviderCall"/> node
+    /// currently expanding this item's child tree, or null when none is in flight. The review screen
     /// treats a non-null value as "still resolving children" and gates Accept until it clears.
     /// </summary>
     public Guid? CascadeJobId { get; set; }

@@ -12,11 +12,11 @@ internal static class PluginManifestContract {
 
     /// <summary>Returns whether the manifest schema and support declarations are usable.</summary>
     internal static bool IsValid(PluginManifest manifest) =>
-        IsValid(manifest.ManifestVersion, manifest.Id, manifest.Supports);
+        IsValid(manifest.ManifestVersion, manifest.Id, manifest.Supports, manifest.Execution);
 
     /// <summary>Returns whether the index entry schema and support declarations are usable.</summary>
     internal static bool IsValid(PluginIndexEntry entry) =>
-        IsValid(entry.ManifestVersion, entry.Id, entry.Supports);
+        IsValid(entry.ManifestVersion, entry.Id, entry.Supports, entry.Execution);
 
     /// <summary>Returns a manifest whose support declarations are complete for runtime consumers.</summary>
     internal static PluginManifest Normalize(PluginManifest manifest) =>
@@ -33,8 +33,14 @@ internal static class PluginManifestContract {
     private static bool IsValid(
         int manifestVersion,
         string pluginId,
-        IReadOnlyList<PluginEntitySupport>? supports) {
+        IReadOnlyList<PluginEntitySupport>? supports,
+        PluginExecutionPolicy? execution) {
         if (manifestVersion is not (1 or 2)) {
+            return false;
+        }
+        if (execution is not null &&
+            (execution.MaxConcurrentInvocations is < 1 or > 64 ||
+             execution.MinimumStartIntervalMs is < 0 or > 86_400_000)) {
             return false;
         }
 

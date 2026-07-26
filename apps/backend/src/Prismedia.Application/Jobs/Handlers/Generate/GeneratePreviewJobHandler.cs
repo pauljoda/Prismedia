@@ -45,12 +45,10 @@ public sealed class GeneratePreviewJobHandler(
                     JobType.ProbeVideo,
                     EntityKind.Video,
                     entityId.ToString(),
-                    context.Job.TargetLabel,
-                    JobPriorities.Probe),
+                    context.Job.TargetLabel),
                 cancellationToken);
-            // Queue priority is global rather than entity-scoped: with concurrent workers, another
-            // video's preview can be claimed while this video's higher-priority probe is still running.
-            // This is an expected dependency wait, not a failed generation attempt.
+            // Ordinary graph planning places the probe dependency before preview generation. This
+            // retry-safe fallback repairs historical graphs that predate explicit dependencies.
             throw new JobRetryLaterException(
                 $"Waiting for video probe metadata before generating trickplay for {entityId}.",
                 TimeSpan.FromSeconds(5));

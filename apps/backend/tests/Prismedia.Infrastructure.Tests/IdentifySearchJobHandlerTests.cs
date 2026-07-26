@@ -27,24 +27,39 @@ public sealed class IdentifySearchJobHandlerTests {
     }
 
     [Fact]
-    public async Task HandleAsyncRequeuesImmediatelyWhenIdentifySlotIsBusy() {
+    public async Task HandleAsyncScopesTheFallbackGateOnlyToProviderAgnosticSearches() {
         var runner = new RecordingIdentifySearchRunner();
         var gate = new AutoIdentifyConcurrencyGate();
         var handler = new IdentifySearchJobHandler(runner, gate, NullLogger<IdentifySearchJobHandler>.Instance);
 
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-        var first = handler.HandleAsync(new JobContext(CreateJob(Guid.NewGuid(), "tmdb"), new NoopJobQueue()), timeout.Token);
+        var first = handler.HandleAsync(new JobContext(CreateJob(Guid.NewGuid(), provider: null), new NoopJobQueue()), timeout.Token);
         await runner.WaitForStartedCallsAsync(1, timeout.Token);
 
         var busy = await Assert.ThrowsAsync<JobRetryLaterException>(() =>
-            handler.HandleAsync(new JobContext(CreateJob(Guid.NewGuid(), "tmdb"), new NoopJobQueue()), timeout.Token));
+            handler.HandleAsync(new JobContext(CreateJob(Guid.NewGuid(), provider: null), new NoopJobQueue()), timeout.Token));
 
-        Assert.Equal("Identify search slot busy.", busy.Message);
+        Assert.Equal("Unscoped identify search slot busy.", busy.Message);
         Assert.Equal(TimeSpan.FromSeconds(5), busy.RetryDelay);
         Assert.Equal(1, runner.StartedCalls);
 
         runner.Release();
         await first;
+    }
+
+    [Fact]
+    public async Task HandleAsyncDoesNotGloballySerializeProviderScopedSearches() {
+        var runner = new RecordingIdentifySearchRunner();
+        var gate = new AutoIdentifyConcurrencyGate();
+        using var held = gate.TryEnterInteractive();
+        var handler = new IdentifySearchJobHandler(runner, gate, NullLogger<IdentifySearchJobHandler>.Instance);
+
+        runner.Release();
+        await handler.HandleAsync(
+            new JobContext(CreateJob(Guid.NewGuid(), "tmdb"), new NoopJobQueue()),
+            CancellationToken.None);
+
+        Assert.Equal(1, runner.StartedCalls);
     }
 
     [Fact]
@@ -129,7 +144,7 @@ public sealed class IdentifySearchJobHandlerTests {
         public Task<int> ClearFailuresAsync(JobType? type, CancellationToken cancellationToken) =>
             Task.FromResult(0);
 
-        public Task<JobRunSnapshot?> ClaimNextAsync(string workerId, CancellationToken cancellationToken, JobRunLane? lane = null) =>
+        public Task<JobRunSnapshot?> ClaimNextAsync(string workerId, CancellationToken cancellationToken) =>
             Task.FromResult<JobRunSnapshot?>(null);
 
         public Task<int> RecoverStaleRunningAsync(string currentWorkerId, TimeSpan staleAfter, CancellationToken cancellationToken) =>

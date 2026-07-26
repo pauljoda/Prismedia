@@ -116,6 +116,7 @@ public sealed class ExtractSubtitlesJobHandler(
 
         if (failedCandidateCount == 0 && acquisitionScheduler is not null) {
             await acquisitionScheduler.ScheduleAsync(
+                context,
                 entityId,
                 context.Job.TargetLabel ?? entityId.ToString(),
                 cancellationToken);

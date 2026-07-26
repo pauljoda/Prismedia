@@ -12,6 +12,22 @@ namespace Prismedia.Infrastructure.Acquisition;
 /// <summary>EF-backed store for acquisition records and their scored release candidates.</summary>
 public sealed partial class EfAcquisitionStore(PrismediaDbContext db, IAcquisitionHistoryStore history, ILogger<EfAcquisitionStore> logger) : IAcquisitionStore {
     /// <inheritdoc />
+    public Task<Guid?> GetJobGraphIdAsync(Guid id, CancellationToken cancellationToken) =>
+        db.Acquisitions.AsNoTracking()
+            .Where(row => row.Id == id)
+            .Select(row => row.JobGraphId)
+            .SingleOrDefaultAsync(cancellationToken);
+
+    /// <inheritdoc />
+    public async Task SetJobGraphIdAsync(Guid id, Guid graphId, CancellationToken cancellationToken) {
+        await db.Acquisitions
+            .Where(row => row.Id == id && row.JobGraphId == null)
+            .ExecuteUpdateAsync(
+                setters => setters.SetProperty(row => row.JobGraphId, graphId),
+                cancellationToken);
+    }
+
+    /// <inheritdoc />
     public async Task<IReadOnlyList<DownloadedAcquisitionCompletion>> ListDownloadedCompletionWorkAsync(
         CancellationToken cancellationToken) {
         var rows = await db.Acquisitions.AsNoTracking()
@@ -1753,7 +1769,7 @@ public sealed partial class EfAcquisitionStore(PrismediaDbContext db, IAcquisiti
     private static AcquisitionSummary ToSummary(AcquisitionRow row, double? progress) =>
         new(row.Id, row.Status, row.StatusMessage, row.Title, row.Author, row.Series, row.Year, row.PosterUrl,
             progress, row.CreatedAt, row.UpdatedAt, row.Description, row.Kind, row.EntityId,
-            HasResumableImport: row.ImportCheckpointJson is not null, row.BookRendition);
+            HasResumableImport: row.ImportCheckpointJson is not null, row.BookRendition, row.JobGraphId);
 
     private static ReleaseCandidateView ToView(ReleaseCandidateRow row) =>
         new(row.Id, row.IndexerName, row.Title, row.SizeBytes, row.Seeders, row.Peers, row.Protocol, row.Accepted,

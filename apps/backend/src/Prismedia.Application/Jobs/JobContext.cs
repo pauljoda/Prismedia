@@ -50,6 +50,17 @@ public sealed class JobContext {
     }
 
     /// <summary>
+    /// Appends a dependency-aware node to this job's graph. The current graph and lane are always inherited;
+    /// handlers may describe work and predecessor nodes but cannot redirect a child into another workflow.
+    /// </summary>
+    public async Task<JobRunSnapshot> AppendNodeAsync(
+        GraphJobNodeRequest request,
+        CancellationToken cancellationToken = default) {
+        await ThrowIfCancelledAsync(cancellationToken);
+        return await _queue.AppendChildGraphNodeAsync(Job, request, cancellationToken);
+    }
+
+    /// <summary>
     /// Enqueues a batch of downstream jobs in a single round-trip, deduplicating against pending jobs.
     /// Returns the number of jobs actually enqueued.
     /// </summary>

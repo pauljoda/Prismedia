@@ -1,5 +1,6 @@
 using System.Net;
 using Microsoft.EntityFrameworkCore;
+using Prismedia.Contracts.Plugins;
 using Prismedia.Domain.Entities;
 using Prismedia.Infrastructure.Persistence;
 using Prismedia.Infrastructure.Plugins;
@@ -8,6 +9,66 @@ namespace Prismedia.Infrastructure.Tests;
 
 public sealed class PluginManifestV2CatalogTests : IDisposable {
     private readonly string _tempRoot = Path.Combine(Path.GetTempPath(), $"prismedia-plugin-v2-tests-{Guid.NewGuid():N}");
+
+    [Fact]
+    public async Task CatalogPreservesValidExecutionPolicy() {
+        await WriteManifestAsync(
+            "paced",
+            """
+            {
+              "manifestVersion": 2,
+              "apiTags": ["prismedia"],
+              "id": "musicbrainz",
+              "name": "MusicBrainz",
+              "version": "2.0.0",
+              "runtime": "dotnet-process",
+              "entry": "MusicBrainz.dll",
+              "compat": { "pluginApiMin": "2.0.0", "pluginApiMax": null, "prismediaMin": "1.0.0", "prismediaMax": null },
+              "auth": [],
+              "execution": { "maxConcurrentInvocations": 1, "minimumStartIntervalMs": 1100 },
+              "supports": [
+                { "entityKind": "audio-library", "actions": ["lookup-id"], "identityNamespaces": ["musicbrainz"] }
+              ]
+            }
+            """);
+        await using var db = CreateContext();
+        var catalog = new PluginCatalogService(db, new PluginCatalogOptions([_tempRoot], _tempRoot, "1.0.0"));
+
+        var descriptor = await catalog.FindProviderAsync(
+            "musicbrainz",
+            EntityKindRegistry.AudioLibrary.Code,
+            CancellationToken.None);
+
+        Assert.Equal(1, descriptor!.Manifest.Execution!.MaxConcurrentInvocations);
+        Assert.Equal(1100, descriptor.Manifest.Execution.MinimumStartIntervalMs);
+    }
+
+    [Fact]
+    public async Task CatalogRejectsInvalidExecutionPolicy() {
+        await WriteManifestAsync(
+            "invalid-execution",
+            """
+            {
+              "manifestVersion": 2,
+              "apiTags": ["prismedia"],
+              "id": "invalid-execution",
+              "name": "Invalid",
+              "version": "2.0.0",
+              "runtime": "dotnet-process",
+              "entry": "Invalid.dll",
+              "compat": { "pluginApiMin": "2.0.0", "pluginApiMax": null, "prismediaMin": "1.0.0", "prismediaMax": null },
+              "auth": [],
+              "execution": { "maxConcurrentInvocations": 0, "minimumStartIntervalMs": -1 },
+              "supports": [
+                { "entityKind": "book", "actions": ["lookup-id"], "identityNamespaces": ["invalid"] }
+              ]
+            }
+            """);
+        await using var db = CreateContext();
+        var catalog = new PluginCatalogService(db, new PluginCatalogOptions([_tempRoot], _tempRoot, "1.0.0"));
+
+        Assert.Empty(await catalog.ListProvidersAsync(CancellationToken.None));
+    }
 
     [Fact]
     public async Task CatalogNormalizesVersionOneSupportsForApiConsumers() {
@@ -222,6 +283,7 @@ public sealed class PluginManifestV2CatalogTests : IDisposable {
             "path": "plugins/books.zip", "sha256": "abc", "runtime": "dotnet-process",
             "manifestVersion": 2, "apiTags": ["prismedia"],
             "compat": { "pluginApiMin": "2.0.0", "prismediaMin": "1.0.0" },
+            "execution": { "maxConcurrentInvocations": 1, "minimumStartIntervalMs": 1100 },
             "supports": [{
               "entityKind": "book", "actions": ["search"], "identityNamespaces": ["openlibrary", "isbn"],
               "identityUrls": [
@@ -253,6 +315,9 @@ public sealed class PluginManifestV2CatalogTests : IDisposable {
           compat:
             pluginApiMin: 2.0.0
             prismediaMin: 1.0.0
+          execution:
+            maxConcurrentInvocations: 1
+            minimumStartIntervalMs: 1100
           supports:
             - entityKind: book
               actions:
@@ -277,8 +342,10 @@ public sealed class PluginManifestV2CatalogTests : IDisposable {
                     help: Optional author context
         """;
 
-        var jsonSupport = Assert.Single(Assert.Single(PluginIndexParser.Parse(json, "index.json")).Supports);
-        var yamlSupport = Assert.Single(Assert.Single(PluginIndexParser.Parse(yaml, "index.yml")).Supports);
+        var jsonEntry = Assert.Single(PluginIndexParser.Parse(json, "index.json"));
+        var yamlEntry = Assert.Single(PluginIndexParser.Parse(yaml, "index.yml"));
+        var jsonSupport = Assert.Single(jsonEntry.Supports);
+        var yamlSupport = Assert.Single(yamlEntry.Supports);
 
         Assert.Equal(jsonSupport.EntityKind, yamlSupport.EntityKind);
         Assert.Equal(jsonSupport.Actions, yamlSupport.Actions);
@@ -289,6 +356,8 @@ public sealed class PluginManifestV2CatalogTests : IDisposable {
             yamlSupport.Search!.Fields.Select(field => (field.Key, field.Label, field.Type, field.Required, field.Placeholder, field.Help)));
         Assert.Equal(["openlibrary", "isbn"], jsonSupport.IdentityNamespaces);
         Assert.Equal(2, jsonSupport.Search!.Fields.Count);
+        Assert.Equal(jsonEntry.Execution, yamlEntry.Execution);
+        Assert.Equal(new PluginExecutionPolicy(1, 1100), jsonEntry.Execution);
     }
 
     [Fact]

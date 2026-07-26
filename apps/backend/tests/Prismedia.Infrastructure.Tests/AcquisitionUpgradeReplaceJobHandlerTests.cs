@@ -13,13 +13,13 @@ using Prismedia.Infrastructure.Persistence.Entities;
 namespace Prismedia.Infrastructure.Tests;
 
 /// <summary>
-/// Covers the upgrade-replace orchestration: a successful swap records the new owned quality, releases the
-/// monitor's slot counting the attempt, removes the consumed child, and enqueues a re-scan; an aborted swap
+/// Covers the upgrade-replace orchestration: a successful swap records the new owned quality, retains the
+/// consumed child until required Entity readiness finalizes it, and enqueues exact reconciliation; an aborted swap
 /// (e.g. no longer an upgrade, or the replacer refused) leaves the owned book untouched and counts barren.
 /// </summary>
 public sealed class AcquisitionUpgradeReplaceJobHandlerTests {
     [Fact]
-    public async Task SuccessfulSwapUpdatesOwnedQualityAndConsumesTheChild() {
+    public async Task SuccessfulSwapUpdatesOwnedQualityAndReadinessFinalizerConsumesTheChild() {
         await using var db = CreateContext();
         var (parentId, childId, monitorId) = await SeedAsync(db, childSelectedTitle: "Some Book (retail) (epub)");
         var queue = new RecordingJobQueue();
@@ -29,11 +29,20 @@ public sealed class AcquisitionUpgradeReplaceJobHandlerTests {
         var parent = await db.Acquisitions.AsNoTracking().FirstAsync(a => a.Id == parentId);
         Assert.Equal(BookSourceTier.Retail, parent.OwnedSourceTier); // upgraded source recorded
         Assert.Equal(BookFormatTier.Reflowable, parent.OwnedFormatTier);
-        Assert.False(await db.Acquisitions.AsNoTracking().AnyAsync(a => a.Id == childId)); // child consumed
+        Assert.Equal(
+            AcquisitionStatus.Importing,
+            (await db.Acquisitions.AsNoTracking().SingleAsync(a => a.Id == childId)).Status);
         var monitor = await db.Monitors.AsNoTracking().FirstAsync(m => m.Id == monitorId);
+        Assert.Equal(childId, monitor.UpgradeChildAcquisitionId);
+        Assert.DoesNotContain(queue.Enqueued, job => job.Type == JobType.ScanBook);
+        Assert.Contains(queue.Enqueued, job => job.Type == JobType.ReconcileEntity);
+
+        await FinalizeAsync(db, queue);
+
+        Assert.False(await db.Acquisitions.AsNoTracking().AnyAsync(a => a.Id == childId));
+        monitor = await db.Monitors.AsNoTracking().FirstAsync(m => m.Id == monitorId);
         Assert.Null(monitor.UpgradeChildAcquisitionId);
         Assert.Equal(1, monitor.UpgradeAttempts);
-        Assert.Contains(queue.Enqueued, job => job.Type == JobType.ScanBook);
     }
 
     [Fact]
@@ -84,7 +93,7 @@ public sealed class AcquisitionUpgradeReplaceJobHandlerTests {
     }
 
     [Fact]
-    public async Task MovieSuccessfulSwapRecordsOwnedLadderCodeAndConsumesTheChild() {
+    public async Task MovieSuccessfulSwapRecordsOwnedLadderCodeAndFinalizerConsumesTheChild() {
         await using var db = CreateContext();
         var (parentId, childId, monitorId) = await SeedMediaAsync(db, EntityKind.Movie, ownedCode: "webdl-720p", childSelectedTitle: "Movie 2020 1080p BluRay");
         var queue = new RecordingJobQueue();
@@ -95,11 +104,20 @@ public sealed class AcquisitionUpgradeReplaceJobHandlerTests {
         Assert.Equal(EntityKind.Movie, replacer.CalledWithKind); // routed through the video replace path
         var parent = await db.Acquisitions.AsNoTracking().FirstAsync(a => a.Id == parentId);
         Assert.Equal("bluray-1080p", parent.OwnedMediaQuality); // upgraded ladder code recorded
-        Assert.False(await db.Acquisitions.AsNoTracking().AnyAsync(a => a.Id == childId)); // child consumed
+        Assert.Equal(
+            AcquisitionStatus.Importing,
+            (await db.Acquisitions.AsNoTracking().SingleAsync(a => a.Id == childId)).Status);
         var monitor = await db.Monitors.AsNoTracking().FirstAsync(m => m.Id == monitorId);
+        Assert.Equal(childId, monitor.UpgradeChildAcquisitionId);
+        Assert.DoesNotContain(queue.Enqueued, job => job.Type == JobType.ScanLibrary);
+        Assert.Contains(queue.Enqueued, job => job.Type == JobType.ReconcileEntity);
+
+        await FinalizeAsync(db, queue);
+
+        Assert.False(await db.Acquisitions.AsNoTracking().AnyAsync(a => a.Id == childId));
+        monitor = await db.Monitors.AsNoTracking().FirstAsync(m => m.Id == monitorId);
         Assert.Null(monitor.UpgradeChildAcquisitionId);
         Assert.Equal(1, monitor.UpgradeAttempts);
-        Assert.Contains(queue.Enqueued, job => job.Type == JobType.ScanLibrary);
     }
 
     [Fact]
@@ -230,6 +248,29 @@ public sealed class AcquisitionUpgradeReplaceJobHandlerTests {
         await handler.HandleAsync(new JobContext(job, queue), CancellationToken.None);
     }
 
+    private static async Task FinalizeAsync(PrismediaDbContext db, RecordingJobQueue queue) {
+        var reconcile = Assert.Single(queue.Enqueued, job => job.Type == JobType.ReconcileEntity);
+        var payload = AcquisitionFinalizeJobPayload.Parse(reconcile.PayloadJson!);
+        var handler = new AcquisitionFinalizeJobHandler(
+            AcquisitionTestFactory.Store(db),
+            new EfMonitorStore(db));
+        var now = DateTimeOffset.UtcNow;
+        var job = new JobRunSnapshot(
+            Guid.NewGuid(),
+            JobType.AcquisitionFinalize,
+            JobRunStatus.Running,
+            0,
+            null,
+            payload.ToJson(),
+            null,
+            payload.AcquisitionId.ToString(),
+            null,
+            now,
+            now,
+            null);
+        await handler.HandleAsync(new JobContext(job, queue), CancellationToken.None);
+    }
+
     private static async Task<(Guid ParentId, Guid ChildId, Guid MonitorId)> SeedAsync(
         PrismediaDbContext db,
         string childSelectedTitle,
@@ -311,7 +352,7 @@ public sealed class AcquisitionUpgradeReplaceJobHandlerTests {
         public Task<int> CancelAsync(JobType? type, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<bool> CancelRunAsync(Guid id, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<int> ClearFailuresAsync(JobType? type, CancellationToken cancellationToken) => throw new NotSupportedException();
-        public Task<JobRunSnapshot?> ClaimNextAsync(string workerId, CancellationToken cancellationToken, JobRunLane? lane = null) => throw new NotSupportedException();
+        public Task<JobRunSnapshot?> ClaimNextAsync(string workerId, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<int> RecoverStaleRunningAsync(string currentWorkerId, TimeSpan staleAfter, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task CompleteAsync(Guid id, string? message, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task FailAsync(Guid id, string message, TimeSpan retryDelay, CancellationToken cancellationToken) => throw new NotSupportedException();

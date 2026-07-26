@@ -39,7 +39,24 @@ public interface IImportedEntityReadinessPersistence {
         Guid? entityId,
         IReadOnlyCollection<string> placedMediaPaths,
         CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Resolves the exact source-owning entities and their ancestors for already-materialized paths.
+    /// The lookup is path-scoped and must not enumerate a library root.
+    /// </summary>
+    Task<ImportedEntityReadyScope> ResolveScopeAsync(
+        IReadOnlyCollection<string> placedMediaPaths,
+        CancellationToken cancellationToken) =>
+        Task.FromResult(new ImportedEntityReadyScope([], []));
 }
+
+/// <summary>One source-owning Entity resolved from an exact imported path.</summary>
+public sealed record ImportedEntityOwner(Guid Id, EntityKind Kind);
+
+/// <summary>Exact source owners and affected hierarchy projections for an import.</summary>
+public sealed record ImportedEntityReadyScope(
+    IReadOnlyList<ImportedEntityOwner> Owners,
+    IReadOnlyList<Guid> AncestorIds);
 
 /// <summary>Video scan persistence operations for discovered files and stale cleanup.</summary>
 public interface IVideoScanPersistence {
@@ -574,7 +591,7 @@ public sealed record ImportedTvMaterializationRequest(
 /// downstream-job semantics as a video scan. Completion guarantees every file is Source-backed.
 /// </summary>
 public interface IImportedVideoMaterializer {
-    Task MaterializeAsync(
+    Task<Prismedia.Application.Jobs.Handlers.Scan.ImportedEntityMaterializationResult> MaterializeAsync(
         JobContext context,
         ImportedTvMaterializationRequest request,
         CancellationToken cancellationToken);

@@ -173,18 +173,22 @@ public sealed record ReviewedRequestCommitRequest(
 /// <param name="ExternalId">Provider-qualified id of the item this outcome describes.</param>
 /// <param name="EntityId">The library entity (created wanted, or pre-existing) backing the item.</param>
 /// <param name="AcquisitionId">The acquisition started for the item; null when none was started.</param>
+/// <param name="JobGraphId">Interactive graph owning the acquisition workflow, when one was started.</param>
 public sealed record RequestCommitItem(
     string ExternalId,
     string Title,
     RequestCommitOutcome Outcome,
     Guid? EntityId,
-    Guid? AcquisitionId);
+    Guid? AcquisitionId,
+    Guid? JobGraphId = null);
 
 /// <summary>Result of a request commit.</summary>
 /// <param name="ContainerEntityId">The wanted container entity (the author) when the commit created/reused one.</param>
+/// <param name="JobGraphIds">Interactive graphs created for deferred container fan-out work.</param>
 public sealed record RequestCommitResponse(
     Guid? ContainerEntityId,
-    IReadOnlyList<RequestCommitItem> Items);
+    IReadOnlyList<RequestCommitItem> Items,
+    IReadOnlyList<Guid>? JobGraphIds = null);
 
 /// <summary>
 /// Requests an existing library entity by id — a wanted placeholder's "Search for release". The server

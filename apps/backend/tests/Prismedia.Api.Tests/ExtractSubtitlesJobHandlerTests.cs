@@ -346,7 +346,11 @@ public sealed class ExtractSubtitlesJobHandlerTests : IDisposable {
     private sealed class RecordingAcquisitionScheduler : IAutomaticSubtitleAcquisitionScheduler {
         public List<(Guid VideoId, string Label)> Requests { get; } = [];
 
-        public Task ScheduleAsync(Guid videoId, string label, CancellationToken cancellationToken) {
+        public Task ScheduleAsync(
+            JobContext context,
+            Guid videoId,
+            string label,
+            CancellationToken cancellationToken) {
             Requests.Add((videoId, label));
             return Task.CompletedTask;
         }
@@ -516,8 +520,7 @@ public sealed class ExtractSubtitlesJobHandlerTests : IDisposable {
         public Task<int> ClearFailuresAsync(JobType? type, CancellationToken cancellationToken) =>
             Task.FromResult(0);
 
-        public Task<JobRunSnapshot?> ClaimNextAsync(string workerId, CancellationToken cancellationToken,
-            JobRunLane? lane = null) => Task.FromResult<JobRunSnapshot?>(null);
+        public Task<JobRunSnapshot?> ClaimNextAsync(string workerId, CancellationToken cancellationToken) => Task.FromResult<JobRunSnapshot?>(null);
 
         public Task<int> RecoverStaleRunningAsync(string currentWorkerId, TimeSpan staleAfter,
             CancellationToken cancellationToken) => Task.FromResult(0);

@@ -149,8 +149,7 @@ public sealed class ScanGalleryJobHandler(
                         JobType.GenerateImageThumbnail,
                         EntityKind.Image,
                         imageId.ToString(),
-                        item.Title,
-                        JobPriorities.Thumbnail),
+                        item.Title),
                     cancellationToken);
             }
 
@@ -160,8 +159,7 @@ public sealed class ScanGalleryJobHandler(
                         JobType.FingerprintImage,
                         EntityKind.Image,
                         imageId.ToString(),
-                        item.Title,
-                        JobPriorities.Fingerprint),
+                        item.Title),
                     cancellationToken);
             }
 

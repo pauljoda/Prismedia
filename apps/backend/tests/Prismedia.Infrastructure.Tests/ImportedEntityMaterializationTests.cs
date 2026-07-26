@@ -12,6 +12,7 @@ using Prismedia.Contracts.Entities;
 using Prismedia.Contracts.Media;
 using Prismedia.Infrastructure.Acquisition;
 using Prismedia.Infrastructure.Entities;
+using Prismedia.Infrastructure.Jobs;
 using Prismedia.Infrastructure.Media.Adapters;
 using Prismedia.Infrastructure.Media.Persistence;
 using Prismedia.Infrastructure.Media.Processing;
@@ -61,13 +62,17 @@ public sealed class ImportedEntityMaterializationTests : IDisposable {
             NullLogger<BookAcquisitionImportEngine>.Instance);
         var import = ImportContext(db, EntityKind.Book, wantedId, "Novel", payloadPath, author: "Author");
 
-        await engine.ImportAsync(JobContext(db, import.Id), import, CancellationToken.None);
+        var queue = new MergedImportTestSupport.RecordingJobQueue();
+        await engine.ImportAsync(JobContext(db, import.Id, queue), import, CancellationToken.None);
 
         var entity = await db.Entities.AsNoTracking().SingleAsync(row => row.Id == wantedId);
         Assert.False(entity.IsWanted);
         Assert.True(await HasSourceInSubtreeAsync(db, wantedId));
         Assert.True(await db.Entities.AsNoTracking().AnyAsync(row => row.Id == unrelatedId));
-        Assert.Equal(AcquisitionStatus.Imported, await StatusOfAsync(db, import.Id));
+        Assert.DoesNotContain(queue.Enqueued, request => request.Type == JobType.ScanBook);
+        Assert.Contains(queue.Enqueued, request =>
+            request.Type == JobType.ReconcileEntity && request.TargetEntityId == wantedId.ToString());
+        Assert.Equal(AcquisitionStatus.Importing, await StatusOfAsync(db, import.Id));
     }
 
     [Fact]
@@ -108,9 +113,18 @@ public sealed class ImportedEntityMaterializationTests : IDisposable {
             row.ParentEntityId == wantedId && row.KindCode == EntityKindRegistry.Video.Code);
         Assert.True(await db.Entities.AsNoTracking().AnyAsync(row => row.Id == unrelatedId));
         Assert.DoesNotContain(queue.Enqueued, request => request.Type == JobType.ScanLibrary);
-        var subtitleJob = Assert.Single(queue.Enqueued, request => request.Type == JobType.ExtractSubtitles);
-        Assert.Equal(JobPriorities.AcquisitionSidecar, subtitleJob.Priority);
-        Assert.Equal(AcquisitionStatus.Imported, await StatusOfAsync(db, import.Id));
+        var importedVideoId = await db.EntityFiles.AsNoTracking()
+            .Where(file => file.Role == EntityFileRole.Source && file.Path.EndsWith("Film (2020).mkv"))
+            .Select(file => file.EntityId)
+            .SingleAsync();
+        Assert.Contains(queue.Enqueued, request =>
+            request.Type == JobType.ReconcileEntity && request.TargetEntityId == importedVideoId.ToString());
+        Assert.True(await db.ScannedFiles.AsNoTracking().AnyAsync(row =>
+            row.LibraryRootId == root.Root.Id
+            && row.ScanKind == JobType.ScanLibrary.ToCode()
+            && row.Path.EndsWith("Film (2020).mkv", StringComparison.Ordinal)));
+        Assert.DoesNotContain(queue.Enqueued, request => request.Type == JobType.ExtractSubtitles);
+        Assert.Equal(AcquisitionStatus.Importing, await StatusOfAsync(db, import.Id));
     }
 
     [Fact]
@@ -194,41 +208,15 @@ public sealed class ImportedEntityMaterializationTests : IDisposable {
         Assert.True(await db.EntityExternalIds.AsNoTracking().AnyAsync(row =>
             row.EntityId == wantedTrackId && row.Provider == ExternalIdProviders.MusicBrainz));
 
-        var probeRequest = Assert.Single(queue.Enqueued, request =>
-            request.Type == JobType.ProbeAudio && request.TargetEntityId == wantedTrackId.ToString());
-        Assert.Equal(JobPriorities.AcquisitionProbe, probeRequest.Priority);
+        Assert.DoesNotContain(queue.Enqueued, request => request.Type == JobType.ProbeAudio);
         Assert.Contains(queue.Enqueued, request =>
             request.Type == JobType.MonitoredSearch
-            && request.Priority == JobPriorities.RequestEnrichment);
-        var fallback = Assert.Single(await monitorStore.ListDueMonitorsAsync(360, CancellationToken.None));
-        Assert.True(fallback.MissingChildFallback);
-        Assert.Equal(albumId, fallback.EntityId);
-        var persistence = new LibraryScanPersistenceService(db);
-        var probeHandler = new ProbeAudioJobHandler(
-            NullLogger<ProbeAudioJobHandler>.Instance,
-            new SuccessfulAudioProbe(),
-            persistence,
-            root,
-            persistence);
-        var probeJob = new JobRunSnapshot(
-            Guid.NewGuid(),
-            JobType.ProbeAudio,
-            JobRunStatus.Running,
-            0,
-            null,
-            probeRequest.PayloadJson ?? "{}",
-            probeRequest.TargetEntityKind,
-            probeRequest.TargetEntityId,
-            probeRequest.TargetLabel,
-            DateTimeOffset.UtcNow,
-            DateTimeOffset.UtcNow,
-            null);
-        await probeHandler.HandleAsync(new JobContext(probeJob, queue), CancellationToken.None);
-        var technical = await db.EntityTechnical.AsNoTracking().SingleAsync(row => row.EntityId == wantedTrackId);
-        Assert.Equal(201.5, technical.DurationSeconds);
-        Assert.Equal(MediaCodecs.Opus, technical.Codec);
+            && request.Origin == JobGraphOrigin.Background);
+        Assert.DoesNotContain(queue.Enqueued, request => request.Type == JobType.ScanAudio);
+        Assert.Contains(queue.Enqueued, request =>
+            request.Type == JobType.ReconcileEntity && request.TargetEntityId == wantedTrackId.ToString());
         Assert.True(await db.Entities.AsNoTracking().AnyAsync(row => row.Id == unrelatedId));
-        Assert.Equal(AcquisitionStatus.Imported, await StatusOfAsync(db, acquisitionId));
+        Assert.Equal(AcquisitionStatus.Importing, await StatusOfAsync(db, acquisitionId));
     }
 
     [Fact]
@@ -281,7 +269,7 @@ public sealed class ImportedEntityMaterializationTests : IDisposable {
         Assert.False(track.IsWanted);
         Assert.True(await HasSourceInSubtreeAsync(db, trackId));
         Assert.Equal(3, await db.Entities.AsNoTracking().CountAsync());
-        Assert.Equal(AcquisitionStatus.Imported, await StatusOfAsync(db, acquisitionId));
+        Assert.Equal(AcquisitionStatus.Importing, await StatusOfAsync(db, acquisitionId));
     }
 
     [Fact]
@@ -356,7 +344,6 @@ public sealed class ImportedEntityMaterializationTests : IDisposable {
             Type = JobType.ProbeAudio,
             Status = JobRunStatus.Queued,
             PayloadJson = "{}",
-            Priority = JobPriorities.Probe,
             Attempts = 0,
             MaxAttempts = 3,
             TargetEntityKind = EntityKindRegistry.AudioTrack.Code,
@@ -589,9 +576,9 @@ public sealed class ImportedEntityMaterializationTests : IDisposable {
             import with { ImportPlacementCheckpoint = claimed },
             CancellationToken.None);
 
-        Assert.Equal(AcquisitionStatus.Imported, await StatusOfAsync(db, import.Id));
+        Assert.Equal(AcquisitionStatus.Importing, await StatusOfAsync(db, import.Id));
         Assert.Single(Directory.GetFiles(rootPath, "*.epub", SearchOption.AllDirectories));
-        Assert.Null((await store.GetImportContextAsync(import.Id, CancellationToken.None))?.ImportPlacementCheckpoint);
+        Assert.NotNull((await store.GetImportContextAsync(import.Id, CancellationToken.None))?.ImportPlacementCheckpoint);
     }
 
     [Fact]
@@ -719,7 +706,8 @@ public sealed class ImportedEntityMaterializationTests : IDisposable {
         IImportedEntityMaterializationPolicy policy) =>
         new ImportedEntityMaterializer(
             [policy],
-            new EfImportedEntityReadinessPersistence(db, new EfEntityHierarchyReader(db)));
+            new EfImportedEntityReadinessPersistence(db, new EfEntityHierarchyReader(db)),
+            new EfScanSnapshotStore(db));
 
     private static FileDiscoveryAdapter Discovery() => new(new FileDiscoveryService());
 
@@ -890,7 +878,7 @@ public sealed class ImportedEntityMaterializationTests : IDisposable {
     }
 
     private sealed class FailingMaterializer : IImportedEntityMaterializer {
-        public Task MaterializeAsync(
+        public Task<ImportedEntityMaterializationResult> MaterializeAsync(
             EntityKind kind,
             JobContext context,
             ImportedEntityMaterializationRequest request,

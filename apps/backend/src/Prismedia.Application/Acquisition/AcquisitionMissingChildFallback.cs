@@ -1,5 +1,7 @@
 using Microsoft.Extensions.Logging;
+using Prismedia.Application.Jobs;
 using Prismedia.Application.Requests;
+using Prismedia.Domain.Entities;
 
 namespace Prismedia.Application.Acquisition;
 
@@ -11,6 +13,13 @@ namespace Prismedia.Application.Acquisition;
 public sealed class AcquisitionMissingChildFallback(
     IMissingChildAcquisitionRequester requests,
     ILogger<AcquisitionMissingChildFallback> logger) {
+    /// <summary>Starts an interactive fallback outside an existing worker graph.</summary>
+    public Task<(int Covered, int Missing)?> TryStartAsync(
+        AcquisitionSearchInput input,
+        AcquisitionSearchOutcome outcome,
+        CancellationToken cancellationToken) =>
+        TryStartAsync(input, outcome, parentContext: null, cancellationToken);
+
     /// <summary>
     /// Requests wanted children when <paramref name="input"/> is a structural unit linked to an Entity
     /// and <paramref name="outcome"/> contains no acceptable whole-unit release. Returns null when no
@@ -19,6 +28,7 @@ public sealed class AcquisitionMissingChildFallback(
     public async Task<(int Covered, int Missing)?> TryStartAsync(
         AcquisitionSearchInput input,
         AcquisitionSearchOutcome outcome,
+        JobContext? parentContext,
         CancellationToken cancellationToken) {
         if (input.EntityId is not { } entityId
             || outcome.Candidates.Any(candidate => candidate.Accepted)
@@ -27,7 +37,11 @@ public sealed class AcquisitionMissingChildFallback(
         }
 
         try {
-            return await requests.RequestMissingChildrenAsync(entityId, cancellationToken);
+            return await requests.RequestMissingChildrenAsync(
+                entityId,
+                parentContext,
+                parentContext?.Job.GraphOrigin ?? JobGraphOrigin.Interactive,
+                cancellationToken);
         } catch (OperationCanceledException) {
             throw;
         } catch (Exception exception) {

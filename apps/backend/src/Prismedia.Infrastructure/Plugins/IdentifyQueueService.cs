@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Prismedia.Application.Jobs;
+using Prismedia.Application.Jobs.Handlers;
 using Prismedia.Application.Jobs.Ports;
 using Prismedia.Application.Plugins;
 using Prismedia.Contracts.Plugins;
@@ -28,18 +29,21 @@ public sealed partial class IdentifyQueueService : IIdentifyQueueService {
     private readonly IIdentifyApplyProgressStore _progress;
     private readonly IJobQueueService _jobs;
     private readonly IIdentifyTargetEligibilityService _eligibility;
+    private readonly IJobGraphService? _graphs;
 
     public IdentifyQueueService(
         PrismediaDbContext db,
         IdentifyPluginService identify,
         IIdentifyApplyProgressStore progress,
         IJobQueueService jobs,
-        IIdentifyTargetEligibilityService eligibility) {
+        IIdentifyTargetEligibilityService eligibility,
+        IJobGraphService? graphs = null) {
         _db = db;
         _identify = identify;
         _progress = progress;
         _jobs = jobs;
         _eligibility = eligibility;
+        _graphs = graphs;
     }
 
     /// <summary>
@@ -64,6 +68,7 @@ public sealed partial class IdentifyQueueService : IIdentifyQueueService {
 
         await ReconcileIneligibleTargetsAsync(rows, cancellationToken);
         await ReconcileOrphanedSearchesAsync(rows, cancellationToken);
+        await ReconcileOrphanedAppliesAsync(rows, cancellationToken);
         var visibleRows = includeCompleted
             ? rows
             : rows.Where(row => row.State != IdentifyQueueState.Done && row.State != IdentifyQueueState.Deleted).ToArray();
@@ -83,6 +88,7 @@ public sealed partial class IdentifyQueueService : IIdentifyQueueService {
 
         await ReconcileIneligibleTargetsAsync([row], cancellationToken);
         await ReconcileOrphanedSearchesAsync([row], cancellationToken);
+        await ReconcileOrphanedAppliesAsync([row], cancellationToken);
         return await MapRowAsync(row, cancellationToken);
     }
 
@@ -171,6 +177,57 @@ public sealed partial class IdentifyQueueService : IIdentifyQueueService {
     }
 
     /// <summary>
+    /// Converts apply rows whose owning graph no longer has a queued or running apply node into a
+    /// recoverable error. This covers graph cancellation and the narrow failure window between
+    /// marking a review as applying and durably appending its continuation node.
+    /// </summary>
+    private async Task ReconcileOrphanedAppliesAsync(
+        IReadOnlyList<IdentifyQueueItemRow> rows,
+        CancellationToken cancellationToken) {
+        var applying = rows.Where(row => row.State == IdentifyQueueState.Applying).ToArray();
+        if (applying.Length == 0) {
+            return;
+        }
+
+        var graphIds = applying
+            .Where(row => row.JobGraphId is not null)
+            .Select(row => row.JobGraphId!.Value)
+            .Distinct()
+            .ToArray();
+        var activeGraphIds = await _db.JobRuns
+            .AsNoTracking()
+            .Where(run =>
+                run.GraphId != null && graphIds.Contains(run.GraphId.Value) &&
+                run.Type == JobType.IdentifyApply &&
+                (run.Status == JobRunStatus.Queued || run.Status == JobRunStatus.Running))
+            .Select(run => run.GraphId!.Value)
+            .Distinct()
+            .ToArrayAsync(cancellationToken);
+        var active = activeGraphIds.ToHashSet();
+        var changed = false;
+
+        foreach (var snapshot in applying.Where(row => row.JobGraphId is null || !active.Contains(row.JobGraphId.Value))) {
+            var tracked = await _db.IdentifyQueueItems
+                .FirstOrDefaultAsync(item => item.Id == snapshot.Id, cancellationToken);
+            if (tracked is null || tracked.State != IdentifyQueueState.Applying) {
+                continue;
+            }
+
+            tracked.State = IdentifyQueueState.Error;
+            tracked.Error = "The queued metadata apply is no longer running. Review and accept it again.";
+            tracked.UpdatedAt = DateTimeOffset.UtcNow;
+            snapshot.State = tracked.State;
+            snapshot.Error = tracked.Error;
+            snapshot.UpdatedAt = tracked.UpdatedAt;
+            changed = true;
+        }
+
+        if (changed) {
+            await _db.SaveChangesAsync(cancellationToken);
+        }
+    }
+
+    /// <summary>
     /// Adds an entity to the identify queue, preserving active work and resetting terminal items.
     /// </summary>
     public async Task<IdentifyQueueItem> AddAsync(Guid entityId, CancellationToken cancellationToken) {
@@ -236,6 +293,7 @@ public sealed partial class IdentifyQueueService : IIdentifyQueueService {
         ArgumentNullException.ThrowIfNull(request);
 
         var enqueued = 0;
+        var graphIds = new List<Guid>();
         var distinctIds = entityIds.Distinct().ToArray();
         var eligibility = await _eligibility.EvaluateManyAsync(distinctIds, cancellationToken);
         foreach (var entityId in distinctIds) {
@@ -248,7 +306,8 @@ public sealed partial class IdentifyQueueService : IIdentifyQueueService {
                 var entity = await LoadEntityAsync(entityId, cancellationToken)
                     ?? throw new KeyNotFoundException($"Entity '{entityId}' was not found.");
 
-                await StampQueuedSearchAsync(row, entity, request, hideNsfw, isForeground: false, cancellationToken);
+                var job = await StampQueuedSearchAsync(row, entity, request, hideNsfw, isForeground: true, cancellationToken);
+                if (job.GraphId is { } graphId) graphIds.Add(graphId);
                 await _db.SaveChangesAsync(cancellationToken);
                 enqueued++;
             } catch (KeyNotFoundException) {
@@ -256,7 +315,7 @@ public sealed partial class IdentifyQueueService : IIdentifyQueueService {
             }
         }
 
-        return new IdentifyBulkAcceptedResponse(entityIds.Count, enqueued);
+        return new IdentifyBulkAcceptedResponse(entityIds.Count, enqueued, graphIds);
     }
 
     /// <summary>
@@ -360,7 +419,7 @@ public sealed partial class IdentifyQueueService : IIdentifyQueueService {
     /// any in-flight cascade and search job, clears prior results, persists the provider hint and
     /// query, enqueues the identify-search job, and stamps its id as the row's search owner.
     /// </summary>
-    private async Task StampQueuedSearchAsync(
+    private async Task<JobRunSnapshot> StampQueuedSearchAsync(
         IdentifyQueueItemRow row,
         EntityRow entity,
         IdentifyQueueSearchRequest request,
@@ -369,6 +428,10 @@ public sealed partial class IdentifyQueueService : IIdentifyQueueService {
         CancellationToken cancellationToken) {
         await CancelCascadeAsync(row, cancellationToken);
         await CancelSearchJobAsync(row, cancellationToken);
+        if (_graphs is not null && row.JobGraphId is { } previousGraphId) {
+            await _graphs.CancelAsync(previousGraphId, cancellationToken);
+            row.JobGraphId = null;
+        }
 
         row.State = IdentifyQueueState.Queued;
         row.ProviderCode = string.IsNullOrWhiteSpace(request.Provider) ? null : request.Provider;
@@ -381,6 +444,16 @@ public sealed partial class IdentifyQueueService : IIdentifyQueueService {
         row.CompletedAt = null;
 
         var payload = new IdentifySearchPayload(entity.Id, row.ProviderCode, request.Query, hideNsfw, isForeground);
+        string? resourceKey = null;
+        if (row.ProviderCode is { } providerCode &&
+            await _identify.GetExecutionPolicyAsync(providerCode, entity.KindCode, cancellationToken) is { } execution) {
+            resourceKey = JobResourceKeys.Plugin(providerCode);
+            await _jobs.DeclareResourceAsync(
+                resourceKey,
+                execution.MaxConcurrentInvocations,
+                TimeSpan.FromMilliseconds(execution.MinimumStartIntervalMs),
+                cancellationToken);
+        }
         var job = await _jobs.EnqueueAsync(
             new EnqueueJobRequest(
                 JobType.IdentifySearch,
@@ -388,10 +461,12 @@ public sealed partial class IdentifyQueueService : IIdentifyQueueService {
                 TargetEntityKind: entity.KindCode,
                 TargetEntityId: entity.Id.ToString(),
                 TargetLabel: entity.Title,
-                Priority: JobPriorities.InteractiveIdentify,
-                Lane: isForeground ? JobRunLane.ForegroundIdentify : null),
+                Origin: isForeground ? JobGraphOrigin.Interactive : JobGraphOrigin.Background,
+                ResourceKey: resourceKey),
             cancellationToken);
         row.SearchJobId = job.Id;
+        row.JobGraphId = job.GraphId;
+        return job;
     }
 
     /// <summary>
@@ -474,6 +549,15 @@ public sealed partial class IdentifyQueueService : IIdentifyQueueService {
             row.SearchJobId = null;
             row.UpdatedAt = DateTimeOffset.UtcNow;
             await _db.SaveChangesAsync(cancellationToken);
+            if (_graphs is not null && row.JobGraphId is { } graphId && IsResolvedSearchOutcome(row)) {
+                await _graphs.OpenSignalAsync(
+                    graphId,
+                    IdentifyGraphSignals.Review(payload.EntityId),
+                    JobGraphSignalKind.IdentifyReview,
+                    payload.EntityId.ToString(),
+                    "Waiting for identify review",
+                    cancellationToken);
+            }
         } catch (OperationCanceledException) {
             // Handler timeout (the job defers) or worker shutdown (the run is recovered later):
             // return to queued so the retry resumes from an honest state. The marker stays ours.
@@ -716,93 +800,12 @@ public sealed partial class IdentifyQueueService : IIdentifyQueueService {
     }
 
     /// <summary>
-    /// Enqueues a background cascade to stream the entity's full child tree and related entity details
-    /// onto the seeded proposal when there is deferred work to walk.
+    /// Expands deferred identify work into one provider-call node per concrete local Entity. Direct
+    /// children are appended now; each completed child appends its own direct children transactionally,
+    /// keeping the full hierarchy in the root Entity's graph without one handler monopolizing the lane.
+    /// Relationship hydration remains one best-effort root call because relationship shells need not have
+    /// local Entity ids yet.
     /// </summary>
-    private async Task EnqueueCascadeIfNeededAsync(
-        IdentifyQueueItemRow row,
-        EntityRow entity,
-        string provider,
-        IdentifyQuery? query,
-        EntityMetadataProposal proposal,
-        bool hideNsfw,
-        bool isForeground,
-        CancellationToken cancellationToken) {
-        var needsStructuralCascade = false;
-        if (EntityKindRegistry.EnumeratesIdentifyChildren(entity.KindCode)) {
-            needsStructuralCascade = await _db.Entities
-                .AsNoTracking()
-                .AnyAsync(child => child.ParentEntityId == entity.Id, cancellationToken);
-        }
-
-        var needsRelationshipCascade = await HasHydratableRelationshipsAsync(provider, proposal, cancellationToken);
-        if (!needsStructuralCascade && !needsRelationshipCascade) {
-            return;
-        }
-
-        var gatesApply = needsStructuralCascade;
-        var payload = new IdentifyCascadePayload(
-            entity.Id,
-            provider,
-            query,
-            hideNsfw,
-            isForeground,
-            GateApply: gatesApply,
-            ExpectedProposalId: gatesApply ? null : proposal.ProposalId);
-        var job = await _jobs.EnqueueAsync(
-            new EnqueueJobRequest(
-                JobType.IdentifyCascade,
-                payload.ToJson(),
-                TargetEntityKind: entity.KindCode,
-                TargetEntityId: entity.Id.ToString(),
-                TargetLabel: entity.Title,
-                Priority: JobPriorities.InteractiveIdentify,
-                Lane: isForeground ? JobRunLane.ForegroundIdentify : null),
-            cancellationToken);
-        if (gatesApply) {
-            row.CascadeJobId = job.Id;
-        }
-    }
-
-    private async Task<bool> HasHydratableRelationshipsAsync(
-        string provider,
-        EntityMetadataProposal proposal,
-        CancellationToken cancellationToken) {
-        var relationships = EntityMetadataProposalTraversal.Relationships(proposal)
-            .Concat((proposal.Children ?? []).Where(child => EntityMetadataProposalTraversal.IsRelationshipKind(child.TargetKind)))
-            .ToArray();
-        if (relationships.Length == 0) {
-            return false;
-        }
-
-        var supportByKind = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
-        foreach (var relationship in relationships) {
-            var patch = relationship.Patch;
-            var hasLookupInput =
-                (patch.ExternalIds?.Count ?? 0) > 0 ||
-                (patch.Urls?.Count ?? 0) > 0 ||
-                !string.IsNullOrWhiteSpace(patch.Title);
-            if (!hasLookupInput) {
-                continue;
-            }
-
-            var kindCode = relationship.TargetKind.ToEntityKind().ToCode();
-            if (!supportByKind.TryGetValue(kindCode, out var supportsKind)) {
-                var providers = await _identify.ListProvidersAsync(kindCode, cancellationToken);
-                supportsKind = providers.Any(candidate =>
-                    candidate.Id.Equals(provider, StringComparison.OrdinalIgnoreCase) && candidate.Enabled);
-                supportByKind[kindCode] = supportsKind;
-            }
-
-            if (supportsKind) {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    /// <summary>Cancels the in-flight cascade job for a row, if any, and clears its marker.</summary>
     private async Task CancelCascadeAsync(IdentifyQueueItemRow row, CancellationToken cancellationToken) {
         if (row.CascadeJobId is not { } jobId) {
             return;
@@ -903,6 +906,157 @@ public sealed partial class IdentifyQueueService : IIdentifyQueueService {
     }
 
     /// <summary>
+    /// Resolves one concrete Entity, merges it into the root review proposal, and appends only its
+    /// direct children. Since an interactive lane executes one node at a time, proposal writes remain
+    /// deterministic while deep hierarchies yield between entities.
+    /// </summary>
+    public async Task RunProviderCallAsync(
+        IdentifyProviderCallPayload payload,
+        JobContext context,
+        bool isFinalAttempt,
+        CancellationToken cancellationToken) {
+        try {
+            var row = await _db.IdentifyQueueItems
+                .FirstOrDefaultAsync(item => item.EntityId == payload.RootEntityId, cancellationToken);
+            if (row is not { State: IdentifyQueueState.Proposal }
+                || (_graphs is not null && row.JobGraphId != context.Job.GraphId)
+                || Deserialize<EntityMetadataProposal>(row.ProposalJson) is not { } root
+                || !string.Equals(root.ProposalId, payload.ExpectedProposalId, StringComparison.Ordinal)) {
+                return;
+            }
+
+            var target = await LoadEntityAsync(payload.TargetEntityId, cancellationToken);
+            if (target is null) return;
+            var response = await _identify.IdentifyAsync(
+                payload.TargetEntityId,
+                payload.Provider,
+                payload.Query,
+                payload.ParentExternalIds,
+                payload.HideNsfw,
+                cancellationToken,
+                cascadeChildren: false,
+                sink: null,
+                hydrateRelationships: payload.HydrateRelationships,
+                allowParentFallback: false);
+            if (!response.Ok || response.Result?.Patch is null) {
+                throw new InvalidOperationException(response.Error ?? $"Provider returned no metadata for '{target.Title}'.");
+            }
+
+            var resolved = response.Result with { TargetEntityId = payload.TargetEntityId };
+            var merged = payload.TargetEntityId == payload.RootEntityId
+                ? MergeRootProviderResult(root, resolved)
+                : UpsertResolvedChild(root, payload.ParentEntityId ?? payload.RootEntityId, resolved);
+            row.ProposalJson = JsonSerializer.Serialize(merged, JsonOptions);
+            row.UpdatedAt = DateTimeOffset.UtcNow;
+            await _db.SaveChangesAsync(cancellationToken);
+
+            if (EntityKindRegistry.EnumeratesIdentifyChildren(target.KindCode)) {
+                var children = await EligibleProviderChildrenAsync(target.Id, payload.Provider, cancellationToken);
+                foreach (var child in children) {
+                    await AppendIdentifyProviderCallAsync(
+                        row,
+                        child,
+                        target.Id,
+                        payload.Provider,
+                        query: null,
+                        resolved.Patch.ExternalIds,
+                        payload.HideNsfw,
+                        hydrateRelationships: true,
+                        payload.ExpectedProposalId,
+                        context.Job.Id,
+                        context.Job.GraphOrigin == JobGraphOrigin.Interactive,
+                        cancellationToken);
+                }
+            }
+
+            await ClearProviderExpansionMarkerIfFinishedAsync(
+                row,
+                context.Job.Id,
+                cancellationToken);
+        } catch when (isFinalAttempt) {
+            await TryClearProviderExpansionMarkerIfFinishedAsync(
+                payload.RootEntityId,
+                context.Job.Id);
+            throw;
+        }
+    }
+
+    private async Task ClearProviderExpansionMarkerIfFinishedAsync(
+        IdentifyQueueItemRow row,
+        Guid currentJobId,
+        CancellationToken cancellationToken) {
+        if (row.CascadeJobId is null || row.JobGraphId is not { } graphId) return;
+        var hasRemaining = await _db.JobRuns.AsNoTracking().AnyAsync(job =>
+            job.GraphId == graphId &&
+            job.Id != currentJobId &&
+            job.Type == JobType.IdentifyProviderCall &&
+            (job.Status == JobRunStatus.Queued || job.Status == JobRunStatus.Running),
+            cancellationToken);
+        if (hasRemaining) return;
+        row.CascadeJobId = null;
+        row.UpdatedAt = DateTimeOffset.UtcNow;
+        await _db.SaveChangesAsync(cancellationToken);
+    }
+
+    private async Task TryClearProviderExpansionMarkerIfFinishedAsync(Guid rootEntityId, Guid currentJobId) {
+        try {
+            var row = await _db.IdentifyQueueItems
+                .FirstOrDefaultAsync(item => item.EntityId == rootEntityId, CancellationToken.None);
+            if (row is not null) {
+                await ClearProviderExpansionMarkerIfFinishedAsync(row, currentJobId, CancellationToken.None);
+            }
+        } catch {
+            // Best effort: queue reconciliation or the next surviving provider node clears the marker.
+        }
+    }
+
+    private static EntityMetadataProposal MergeRootProviderResult(
+        EntityMetadataProposal root,
+        EntityMetadataProposal resolved) =>
+        root with {
+            Patch = resolved.Patch,
+            Children = MergeProposalCollections(root.Children, resolved.Children),
+            Relationships = MergeProposalCollections(root.Relationships, resolved.Relationships)
+        };
+
+    private static EntityMetadataProposal UpsertResolvedChild(
+        EntityMetadataProposal node,
+        Guid parentEntityId,
+        EntityMetadataProposal resolved) {
+        if (node.TargetEntityId == parentEntityId) {
+            var children = (node.Children ?? []).ToList();
+            var index = children.FindIndex(child => child.TargetEntityId == resolved.TargetEntityId);
+            if (index >= 0) {
+                resolved = resolved with { ProposalId = children[index].ProposalId };
+                children[index] = resolved;
+            } else {
+                children.Add(resolved);
+            }
+            return node with { Children = children };
+        }
+
+        return node with {
+            Children = (node.Children ?? [])
+                .Select(child => UpsertResolvedChild(child, parentEntityId, resolved))
+                .ToArray()
+        };
+    }
+
+    private static IReadOnlyList<EntityMetadataProposal> MergeProposalCollections(
+        IReadOnlyList<EntityMetadataProposal>? existing,
+        IReadOnlyList<EntityMetadataProposal>? updates) {
+        var merged = (existing ?? []).ToList();
+        foreach (var update in updates ?? []) {
+            var index = merged.FindIndex(candidate =>
+                candidate.TargetEntityId is not null && candidate.TargetEntityId == update.TargetEntityId ||
+                string.Equals(candidate.ProposalId, update.ProposalId, StringComparison.Ordinal));
+            if (index >= 0) merged[index] = update with { ProposalId = merged[index].ProposalId };
+            else merged.Add(update);
+        }
+        return merged;
+    }
+
+    /// <summary>
     /// Reports whether a background cascade still has a live destination: the queue item exists, is still
     /// being reviewed (a <see cref="IdentifyQueueState.Proposal"/>), and is still marked with this
     /// cascade's job id (or transiently unmarked). Returns false once the user removes the item or a
@@ -971,154 +1125,6 @@ public sealed partial class IdentifyQueueService : IIdentifyQueueService {
         }
     }
 
-    /// <summary>
-    /// Applies the reviewed proposal and marks the queue item as done.
-    /// </summary>
-    public async Task<IdentifyQueueItem> ApplyAsync(
-        Guid entityId,
-        ApplyIdentifyQueueItemRequest request,
-        CancellationToken cancellationToken) {
-        ArgumentNullException.ThrowIfNull(request);
-
-        (await _eligibility.EvaluateAsync(entityId, cancellationToken)).EnsureEligible();
-
-        var row = await _db.IdentifyQueueItems
-            .FirstOrDefaultAsync(item => item.EntityId == entityId, cancellationToken)
-            ?? throw new KeyNotFoundException($"Identify queue item for entity '{entityId}' was not found.");
-
-        // Terminal rows are one-way. A Done/Deleted item still carries its ProposalJson (kept for
-        // history), so without this guard a re-POST, double-click, or a bulk-accept loop hitting the same
-        // entity twice would re-run the full recursive write. Reject instead of silently re-applying.
-        if (row.State is IdentifyQueueState.Done or IdentifyQueueState.Deleted) {
-            throw new InvalidOperationException(
-                $"Identify queue item for entity '{entityId}' is already '{row.State.ToCode()}' and cannot be applied again.");
-        }
-
-        // A queued or running search means the stored ProposalJson is stale (the request cleared it,
-        // or a new result is about to land): applying now would write the wrong metadata.
-        if (row.State is IdentifyQueueState.Queued or IdentifyQueueState.Searching) {
-            throw new InvalidOperationException(
-                $"Identify queue item for entity '{entityId}' is awaiting its requested search; cannot apply yet.");
-        }
-
-        // Do not apply while the background cascade is still streaming the child tree: the stored proposal
-        // is only partial until the cascade clears its marker, so applying now would drop the children
-        // that have not streamed in yet. The single-item review disables Accept on this same signal;
-        // enforce it here too so the bulk-accept path cannot apply a half-resolved tree.
-        if (row.CascadeJobId is not null) {
-            throw new InvalidOperationException(
-                $"Identify cascade for entity '{entityId}' is still resolving children; cannot apply yet.");
-        }
-
-        var entity = await LoadEntityAsync(entityId, cancellationToken)
-            ?? throw new KeyNotFoundException($"Entity '{entityId}' was not found.");
-        var storedProposal = Deserialize<EntityMetadataProposal>(row.ProposalJson)
-            ?? throw new InvalidOperationException("Identify queue item has no proposal to apply.");
-        var proposal = request.Proposal ?? storedProposal;
-        if (!string.Equals(proposal.ProposalId, storedProposal.ProposalId, StringComparison.Ordinal)) {
-            throw new InvalidOperationException("Only the root identify proposal can be applied to a queue item.");
-        }
-        if (proposal.TargetKind.ToEntityKind() != entity.KindCode.DecodeAs<EntityKind>()) {
-            throw new InvalidOperationException("Identify proposal kind does not match the queued entity.");
-        }
-        var preparedProposal = await _identify.PrepareApplyProposalAsync(
-            entityId,
-            proposal,
-            cancellationToken);
-        var acceptedProposal = AcceptedProposalMarker.MarkTreeOrganized(preparedProposal);
-        IdentifyApplyProgressReporter? progressReporter = null;
-        if (request.ProgressId is { } progressId) {
-            _progress.Begin(progressId, entityId, CountApplySteps(acceptedProposal, request.SelectedFields));
-            progressReporter = new IdentifyApplyProgressReporter(_progress, progressId);
-        }
-
-        try {
-            var applied = await _identify.ApplyPreparedProposalAsync(
-                entityId,
-                acceptedProposal,
-                request.SelectedFields,
-                request.SelectedImages,
-                progressReporter,
-                cancellationToken);
-            if (!applied) {
-                throw new KeyNotFoundException($"Entity '{entityId}' was not found.");
-            }
-
-            var now = DateTimeOffset.UtcNow;
-            row.State = IdentifyQueueState.Done;
-            row.ProposalJson = JsonSerializer.Serialize(acceptedProposal, JsonOptions);
-            row.Error = null;
-            row.UpdatedAt = now;
-            row.CompletedAt = now;
-
-            var entityRow = await _db.Entities.FindAsync([entityId], cancellationToken);
-            if (entityRow is not null) {
-                entityRow.IsOrganized = true;
-                entityRow.UpdatedAt = now;
-            }
-
-            await _db.SaveChangesAsync(cancellationToken);
-            if (request.ProgressId is { } completedProgressId) {
-                _progress.Complete(completedProgressId);
-            }
-        } catch (Exception ex) when (request.ProgressId is { } failedProgressId) {
-            _progress.Fail(failedProgressId, ex.Message);
-            throw;
-        }
-
-        var refreshedEntity = await LoadEntityAsync(entityId, cancellationToken) ?? entity;
-        await QueueMonitoredRefreshAsync(
-            entityId,
-            refreshedEntity.Title,
-            cancellationToken);
-        return MapRow(row, refreshedEntity);
-    }
-
-    /// <summary>
-    /// Persists an updated in-progress proposal onto the queued entity (e.g. as children resolve)
-    /// without applying it, so the accumulated proposal survives navigation and page refresh.
-    /// </summary>
-    public async Task<IdentifyQueueItem> SaveProposalAsync(
-        Guid entityId,
-        EntityMetadataProposal proposal,
-        CancellationToken cancellationToken) {
-        ArgumentNullException.ThrowIfNull(proposal);
-
-        (await _eligibility.EvaluateAsync(entityId, cancellationToken)).EnsureEligible();
-
-        var row = await _db.IdentifyQueueItems
-            .FirstOrDefaultAsync(item => item.EntityId == entityId, cancellationToken)
-            ?? throw new KeyNotFoundException($"Identify queue item for entity '{entityId}' was not found.");
-        var entity = await LoadEntityAsync(entityId, cancellationToken)
-            ?? throw new KeyNotFoundException($"Entity '{entityId}' was not found.");
-        var storedProposal = Deserialize<EntityMetadataProposal>(row.ProposalJson)
-            ?? throw new InvalidOperationException("Identify queue item has no proposal to update.");
-        if (!string.Equals(proposal.ProposalId, storedProposal.ProposalId, StringComparison.Ordinal)) {
-            throw new InvalidOperationException("Only the queue item's own root proposal can be saved.");
-        }
-
-        row.ProposalJson = JsonSerializer.Serialize(proposal, JsonOptions);
-        row.UpdatedAt = DateTimeOffset.UtcNow;
-        await _db.SaveChangesAsync(cancellationToken);
-        return MapRow(row, entity);
-    }
-
-    /// <summary>
-    /// Removes an item from the active identify queue without applying metadata.
-    /// </summary>
-    public async Task<IdentifyQueueItem?> DeleteAsync(Guid entityId, CancellationToken cancellationToken) {
-        var row = await _db.IdentifyQueueItems
-            .FirstOrDefaultAsync(item => item.EntityId == entityId, cancellationToken);
-        if (row is null) {
-            return null;
-        }
-
-        var entity = await LoadEntityAsync(entityId, cancellationToken)
-            ?? throw new KeyNotFoundException($"Entity '{entityId}' was not found.");
-        await RetireRowAsync(row, cancellationToken);
-        await _db.SaveChangesAsync(cancellationToken);
-        return MapRow(row, entity);
-    }
 
     private async Task<bool> RetireActiveTargetIfIneligibleAsync(
         Guid entityId,
@@ -1210,7 +1216,8 @@ public sealed partial class IdentifyQueueService : IIdentifyQueueService {
             row.CascadeJobId is not null,
             row.CreatedAt,
             row.UpdatedAt,
-            row.CompletedAt);
+            row.CompletedAt,
+            row.JobGraphId);
 
     private async Task<EntityRow?> LoadEntityAsync(Guid entityId, CancellationToken cancellationToken) =>
         await _db.Entities

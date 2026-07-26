@@ -56,4 +56,37 @@ public sealed class EfImportedEntityReadinessPersistence(
         return expectedPaths.SetEquals(
             targetOwnedPaths.Where(expectedPaths.Contains));
     }
+
+    public async Task<ImportedEntityReadyScope> ResolveScopeAsync(
+        IReadOnlyCollection<string> placedMediaPaths,
+        CancellationToken cancellationToken) {
+        var expectedPaths = placedMediaPaths
+            .Select(Path.GetFullPath)
+            .ToHashSet(FileSystemPathComparison.Comparer);
+        if (expectedPaths.Count == 0) return new ImportedEntityReadyScope([], []);
+
+        var lengths = expectedPaths.Select(path => path.Length).Distinct().ToArray();
+        var candidates = await db.EntityFiles.AsNoTracking()
+            .Where(file => file.Role == EntityFileRole.Source && lengths.Contains(file.Path.Length))
+            .Join(
+                db.Entities.AsNoTracking(),
+                file => file.EntityId,
+                entity => entity.Id,
+                (file, entity) => new { entity.Id, entity.KindCode, file.Path })
+            .ToListAsync(cancellationToken);
+        var owners = candidates
+            .Where(candidate => expectedPaths.Contains(Path.GetFullPath(candidate.Path)))
+            .Select(candidate => EntityKindRegistry.TryGet(candidate.KindCode, out var kind)
+                ? new ImportedEntityOwner(candidate.Id, kind)
+                : null)
+            .Where(owner => owner is not null)
+            .Select(owner => owner!)
+            .DistinctBy(owner => owner.Id)
+            .ToArray();
+        var ancestors = new HashSet<Guid>();
+        foreach (var owner in owners) {
+            ancestors.UnionWith(await hierarchy.ListAncestorIdsAsync(owner.Id, cancellationToken));
+        }
+        return new ImportedEntityReadyScope(owners, ancestors.ToArray());
+    }
 }

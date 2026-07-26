@@ -9,36 +9,13 @@ namespace Prismedia.Infrastructure.Tests;
 
 public sealed class IdentifyCascadeJobHandlerTests {
     [Fact]
-    public async Task HandleAsyncRequeuesImmediatelyWhenProviderSlotIsBusy() {
-        var gate = new AutoIdentifyConcurrencyGate();
-        var handler = new IdentifyCascadeJobHandler(
-            new NoopCascadeRunner(),
-            gate,
-            NullLogger<IdentifyCascadeJobHandler>.Instance);
-
-        using var lease = gate.TryEnterInteractive();
-        Assert.NotNull(lease);
-
-        var busy = await Assert.ThrowsAsync<JobRetryLaterException>(() =>
-            handler.HandleAsync(new JobContext(CreateJob(), new IdentifySearchJobHandlerTestsQueue()), CancellationToken.None));
-
-        Assert.Equal("Identify provider slot busy.", busy.Message);
-        Assert.Equal(TimeSpan.FromSeconds(5), busy.RetryDelay);
-    }
-
-    [Fact]
-    public async Task HandleAsyncRunsTheCascadeWhileHoldingTheProviderSlot() {
-        var gate = new AutoIdentifyConcurrencyGate();
+    public async Task HandleAsyncRunsTheCascadeWithoutAGlobalProviderLock() {
         var runner = new NoopCascadeRunner();
-        var handler = new IdentifyCascadeJobHandler(runner, gate, NullLogger<IdentifyCascadeJobHandler>.Instance);
+        var handler = new IdentifyCascadeJobHandler(runner, NullLogger<IdentifyCascadeJobHandler>.Instance);
 
         await handler.HandleAsync(new JobContext(CreateJob(), new IdentifySearchJobHandlerTestsQueue()), CancellationToken.None);
 
         Assert.Equal(1, runner.Calls);
-        // The slot was released when the cascade finished.
-        var lease = gate.TryEnterInteractive();
-        Assert.NotNull(lease);
-        lease.Dispose();
     }
 
     private static JobRunSnapshot CreateJob() =>
@@ -94,7 +71,7 @@ internal sealed class IdentifySearchJobHandlerTestsQueue : IJobQueueService {
     public Task<int> ClearFailuresAsync(JobType? type, CancellationToken cancellationToken) =>
         Task.FromResult(0);
 
-    public Task<JobRunSnapshot?> ClaimNextAsync(string workerId, CancellationToken cancellationToken, JobRunLane? lane = null) =>
+    public Task<JobRunSnapshot?> ClaimNextAsync(string workerId, CancellationToken cancellationToken) =>
         Task.FromResult<JobRunSnapshot?>(null);
 
     public Task<int> RecoverStaleRunningAsync(string currentWorkerId, TimeSpan staleAfter, CancellationToken cancellationToken) =>

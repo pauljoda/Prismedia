@@ -24,8 +24,10 @@ public sealed class IdentifySearchJobHandler(
     public async Task HandleAsync(JobContext context, CancellationToken cancellationToken) {
         var payload = IdentifySearchPayload.Parse(context.Job.PayloadJson);
 
-        using var lease = gate.TryEnterInteractive()
-            ?? throw new JobRetryLaterException("Identify search slot busy.", TimeSpan.FromSeconds(5));
+        using var lease = payload.Provider is null
+            ? gate.TryEnterInteractive()
+                ?? throw new JobRetryLaterException("Unscoped identify search slot busy.", TimeSpan.FromSeconds(5))
+            : null;
 
         await context.ReportProgressAsync(10, "Searching", cancellationToken);
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);

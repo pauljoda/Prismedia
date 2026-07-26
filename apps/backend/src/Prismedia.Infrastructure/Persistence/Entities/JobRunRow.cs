@@ -30,10 +30,6 @@ public sealed class JobRunRow {
 
     public string PayloadJson { get; set; } = "{}";
 
-    public int Priority { get; set; }
-
-    public JobRunLane? Lane { get; set; }
-
     public int Attempts { get; set; }
 
     public int MaxAttempts { get; set; } = 3;

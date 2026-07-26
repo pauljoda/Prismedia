@@ -124,8 +124,7 @@ public sealed class JobScheduler(
         await queue.EnqueueAsync(
             new EnqueueJobRequest(
                 JobType.DatabaseBackup,
-                TargetLabel: "Daily database backup",
-            Priority: -100),
+                TargetLabel: "Daily database backup"),
             cancellationToken);
     }
 
@@ -151,8 +150,7 @@ public sealed class JobScheduler(
         await queue.EnqueueAsync(
             new EnqueueJobRequest(
                 JobType.RefreshCollection,
-                TargetLabel: "Hourly collection refresh",
-                Priority: 0),
+                TargetLabel: "Hourly collection refresh"),
             cancellationToken);
 
         logger.LogInformation("Scheduled hourly collection refresh job.");
@@ -205,9 +203,7 @@ public sealed class JobScheduler(
         await queue.EnqueueAsync(
             new EnqueueJobRequest(
                 JobType.AcquisitionMonitor,
-                TargetLabel: "Monitor acquisition downloads",
-                Priority: JobPriorities.AcquisitionMonitor,
-                Lane: JobRunLane.ForegroundIdentify),
+                TargetLabel: "Monitor acquisition downloads"),
             cancellationToken);
     }
 
@@ -227,6 +223,7 @@ public sealed class JobScheduler(
 
         var queue = scope.ServiceProvider.GetRequiredService<IJobQueueService>();
         var importEngines = scope.ServiceProvider.GetRequiredService<IAcquisitionImportEngineFactory>();
+        var completionService = scope.ServiceProvider.GetService<Acquisition.AcquisitionCompletionService>();
         foreach (var completion in work) {
             var jobType = Acquisition.AcquisitionCompletionService.CompletionJobType(
                 completion.Kind,
@@ -235,20 +232,29 @@ public sealed class JobScheduler(
                 continue;
             }
 
-            var targetId = completion.AcquisitionId.ToString();
-            if (await queue.HasPendingAsync(jobType, targetId, cancellationToken)) {
+            if (await queue.HasPendingAsync(jobType, completion.AcquisitionId.ToString(), cancellationToken)) {
                 continue;
             }
 
-            await queue.EnqueueAsync(
-                new EnqueueJobRequest(
-                    jobType,
-                    PayloadJson: Acquisition.AcquisitionJobPayload.Serialize(completion.AcquisitionId),
-                    TargetEntityId: targetId,
-                    TargetLabel: completion.IsUpgrade ? "Replace with upgrade" : "Import completed download",
-                    Priority: JobPriorities.AcquisitionCompletion,
-                    Lane: JobRunLane.ForegroundIdentify),
-                cancellationToken);
+            if (completionService is not null) {
+                await completionService.ScheduleAsync(
+                    completion.AcquisitionId,
+                    cancellationToken,
+                    JobGraphOrigin.Background);
+            } else {
+                // Keeps the scheduler independently testable and safe in minimal hosts. The production
+                // container always registers AcquisitionCompletionService so graph signals are resumed.
+                await queue.EnqueueAsync(
+                    new EnqueueJobRequest(
+                        jobType,
+                        PayloadJson: Acquisition.AcquisitionJobPayload.Serialize(completion.AcquisitionId),
+                        TargetEntityKind: completion.Kind.ToCode(),
+                        TargetEntityId: completion.AcquisitionId.ToString(),
+                        TargetLabel: completion.IsUpgrade
+                            ? "Replace with reviewed release"
+                            : "Import completed acquisition"),
+                    cancellationToken);
+            }
             logger.LogWarning(
                 "Recovered missing {JobType} handoff for downloaded acquisition {AcquisitionId}.",
                 jobType,
@@ -319,7 +325,7 @@ public sealed class JobScheduler(
         var queue = scope.ServiceProvider.GetRequiredService<IJobQueueService>();
         if (!await queue.HasPendingAsync(JobType.GridThumbnailSweep, null, cancellationToken)) {
             await queue.EnqueueAsync(
-                new EnqueueJobRequest(JobType.GridThumbnailSweep, TargetLabel: "Grid thumbnail sweep", Priority: -50),
+                new EnqueueJobRequest(JobType.GridThumbnailSweep, TargetLabel: "Grid thumbnail sweep"),
                 cancellationToken);
             logger.LogInformation("Scheduled grid-thumbnail sweep.");
         }
@@ -347,7 +353,7 @@ public sealed class JobScheduler(
         }
 
         await queue.EnqueueAsync(
-            new EnqueueJobRequest(JobType.RecycleBinCleanup, TargetLabel: "Daily recycle-bin cleanup", Priority: -50),
+            new EnqueueJobRequest(JobType.RecycleBinCleanup, TargetLabel: "Daily recycle-bin cleanup"),
             cancellationToken);
     }
 

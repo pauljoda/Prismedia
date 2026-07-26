@@ -66,14 +66,10 @@ internal static class VideoDownstreamJobPlanner {
             settings,
             entityId,
             sourcePath,
-            needs,
-            JobPriorities.Probe,
-            JobPriorities.Sidecar);
+            needs);
 
     /// <summary>
-    /// Plans the same processing graph as a scan, but promotes the lightweight technical probe and
-    /// local subtitle reconciliation that make a completed video acquisition immediately usable.
-    /// Heavy previews, fingerprints, and provider work retain their normal background priorities.
+    /// Plans the same processing graph as a scan for an exact imported entity.
     /// </summary>
     public static IReadOnlyList<EnqueueJobRequest> BuildForImport(
         LibrarySettingsData settings,
@@ -84,44 +80,40 @@ internal static class VideoDownstreamJobPlanner {
             settings,
             entityId,
             sourcePath,
-            needs,
-            JobPriorities.AcquisitionProbe,
-            JobPriorities.AcquisitionSidecar);
+            needs);
 
     private static IReadOnlyList<EnqueueJobRequest> BuildCore(
         LibrarySettingsData settings,
         Guid entityId,
         string sourcePath,
-        DownstreamNeeds needs,
-        int probePriority,
-        int subtitlePriority) {
+        DownstreamNeeds needs) {
         var label = Path.GetFileNameWithoutExtension(sourcePath);
         var entityIdText = entityId.ToString();
         var requests = new List<EnqueueJobRequest>(5);
 
         if (settings.AutoGenerateMetadata && needs.NeedsProbe) {
             requests.Add(EnqueueJobRequest.ForEntity(
-                JobType.ProbeVideo, EntityKind.Video, entityIdText, label, probePriority));
+                JobType.ProbeVideo, EntityKind.Video, entityIdText, label));
         }
 
         if (FingerprintGating.ShouldFingerprint(settings, needs)) {
             requests.Add(EnqueueJobRequest.ForEntity(
-                JobType.FingerprintVideo, EntityKind.Video, entityIdText, label, JobPriorities.Fingerprint));
+                JobType.FingerprintVideo, EntityKind.Video, entityIdText, label));
         }
 
         if (needs.NeedsSubtitleExtraction) {
             requests.Add(EnqueueJobRequest.ForEntity(
-                JobType.ExtractSubtitles, EntityKind.Video, entityIdText, label, subtitlePriority));
+                JobType.ExtractSubtitles, EntityKind.Video, entityIdText, label));
         }
 
         var shouldGeneratePreview = settings.AutoGeneratePreview && needs.NeedsPreview;
         var shouldGenerateTrickplay = settings.GenerateTrickplay && needs.NeedsTrickplay;
         if (shouldGeneratePreview || shouldGenerateTrickplay) {
             requests.Add(EnqueueJobRequest.ForEntity(
-                JobType.GeneratePreview, EntityKind.Video, entityIdText, label, JobPriorities.Preview));
+                JobType.GeneratePreview, EntityKind.Video, entityIdText, label));
         } else if (needs.NeedsGridThumbnail) {
             requests.Add(EnqueueJobRequest.ForEntity(
-                JobType.GenerateGridThumbnail, EntityKind.Video, entityIdText, label, JobPriorities.Thumbnail));
+                JobType.GenerateGridThumbnail, EntityKind.Video, entityIdText, label));
         }
 
         return requests;

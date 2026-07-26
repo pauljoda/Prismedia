@@ -1,4 +1,5 @@
 using Prismedia.Application.Acquisition;
+using Prismedia.Application.Jobs;
 using Prismedia.Contracts.Acquisition;
 using Prismedia.Contracts.Requests;
 using Prismedia.Domain.Entities;
@@ -18,6 +19,24 @@ public interface IRequestGraphAcquisitionStarter {
         AcquisitionTargeting? targeting = null,
         BookRendition? bookRendition = null,
         bool hydrateChildren = true);
+
+    /// <summary>Starts one acquisition while preserving an inherited graph or explicit root origin.</summary>
+    Task<RequestCommitResponse?> RequestEntityFromGraphAsync(
+        Guid entityId,
+        bool hideNsfw,
+        CancellationToken cancellationToken,
+        AcquisitionTargeting? targeting,
+        BookRendition? bookRendition,
+        bool hydrateChildren,
+        JobContext? parentContext,
+        JobGraphOrigin origin) =>
+        RequestEntityFromGraphAsync(
+            entityId,
+            hideNsfw,
+            cancellationToken,
+            targeting,
+            bookRendition,
+            hydrateChildren);
 }
 
 public sealed partial class RequestCommitService {
@@ -32,6 +51,27 @@ public sealed partial class RequestCommitService {
         AcquisitionTargeting? targeting = null,
         BookRendition? bookRendition = null,
         bool hydrateChildren = true) {
+        return await RequestEntityFromGraphAsync(
+            entityId,
+            hideNsfw,
+            cancellationToken,
+            targeting,
+            bookRendition,
+            hydrateChildren,
+            parentContext: null,
+            JobGraphOrigin.Interactive);
+    }
+
+    /// <inheritdoc />
+    public async Task<RequestCommitResponse?> RequestEntityFromGraphAsync(
+        Guid entityId,
+        bool hideNsfw,
+        CancellationToken cancellationToken,
+        AcquisitionTargeting? targeting,
+        BookRendition? bookRendition,
+        bool hydrateChildren,
+        JobContext? parentContext,
+        JobGraphOrigin origin) {
         var entity = await wanted.GetEntityAsync(entityId, cancellationToken);
         if (entity is null) {
             return null;
@@ -56,7 +96,9 @@ public sealed partial class RequestCommitService {
             targeting,
             hideNsfw,
             cancellationToken,
-            hydrateChildren);
+            hydrateChildren,
+            parentContext,
+            origin);
     }
 
     /// <summary>Starts one graph-backed request after resolving its descriptor and inherited targeting.</summary>
@@ -66,7 +108,9 @@ public sealed partial class RequestCommitService {
         AcquisitionTargeting targeting,
         bool hideNsfw,
         CancellationToken cancellationToken,
-        bool hydrateChildren = true) {
+        bool hydrateChildren = true,
+        JobContext? parentContext = null,
+        JobGraphOrigin origin = JobGraphOrigin.Interactive) {
         var primaryIdentity = entity.ProviderIdentity?.Identity
             ?? entity.ExternalIdentities.FirstOrDefault();
         var requestOwnedEntity = descriptor.AcquireFromEntity;
@@ -127,6 +171,8 @@ public sealed partial class RequestCommitService {
                 positions.TryGetValue(EntityPositionCodes.Episode, out var episode) ? episode : null,
                 positions.TryGetValue(EntityPositionCodes.Volume, out var volume) ? volume : null,
                 descriptor.BookRendition),
+            parentContext,
+            origin,
             cancellationToken);
         await StartMonitorOrRollbackAcquisitionAsync(
             summary.Id,
@@ -144,14 +190,14 @@ public sealed partial class RequestCommitService {
                 hideNsfw,
                 cancellationToken);
         }
-        return new RequestCommitResponse(null, [Item(RequestCommitOutcome.Requested, summary.Id)]);
+        return new RequestCommitResponse(null, [Item(RequestCommitOutcome.Requested, summary.Id, summary.JobGraphId)]);
 
-        RequestCommitItem Item(RequestCommitOutcome outcome, Guid? acquisitionId) =>
+        RequestCommitItem Item(RequestCommitOutcome outcome, Guid? acquisitionId, Guid? jobGraphId = null) =>
             new(
                 primaryIdentity is null
                     ? entity.EntityId.ToString()
                     : RequestProposalReading.FormatQualifiedIdentity(primaryIdentity),
-                entity.Title, outcome, entity.EntityId, acquisitionId);
+                entity.Title, outcome, entity.EntityId, acquisitionId, jobGraphId);
     }
 
     /// <summary>

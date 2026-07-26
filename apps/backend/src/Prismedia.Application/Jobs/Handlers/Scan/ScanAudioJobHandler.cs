@@ -37,7 +37,6 @@ public sealed class ScanAudioJobHandler(
         if (!root.AutoIdentify) {
             settings = settings with { AutoIdentifyEnabled = false };
         }
-
         IReadOnlyList<WantedAudioTrackReconciliation> reconciliations = acquisitionHints is null
             ? []
             : await acquisitionHints.ReconcileExistingWantedAudioTracksAsync(root.Id, cancellationToken);
@@ -105,10 +104,6 @@ public sealed class ScanAudioJobHandler(
         }
 
         var layout = AudioLibraryClassifier.Classify(root.Path, filesByDirectory.Keys);
-        var settings = await Roots.GetSettingsAsync(cancellationToken);
-        if (!root.AutoIdentify) {
-            settings = settings with { AutoIdentifyEnabled = false };
-        }
 
         if (acquisitionHints is not null) {
             // A track acquisition links the Wanted track rather than its album. Bind its one exact placed
@@ -200,7 +195,6 @@ public sealed class ScanAudioJobHandler(
             }
         }
 
-        var waveformRegenerationIds = new HashSet<Guid>();
         if (acquisitionHints is not null) {
             foreach (var track in trackItems) {
                 var reconciliation = await acquisitionHints.ReconcileWantedAudioTrackAsync(
@@ -209,9 +203,7 @@ public sealed class ScanAudioJobHandler(
                     track.Title,
                     track.SortOrder,
                     cancellationToken);
-                if (reconciliation?.NeedsWaveformRegeneration == true) {
-                    waveformRegenerationIds.Add(reconciliation.EntityId);
-                }
+                _ = reconciliation;
             }
         }
 
@@ -220,64 +212,8 @@ public sealed class ScanAudioJobHandler(
             throw new InvalidOperationException("One or more imported album tracks could not be persisted.");
         }
 
-        for (var index = 0; index < trackIds.Count; index++) {
-            var trackIndex = index;
-            await ImportedMaterializationHousekeeping.TryAsync(
-                logger,
-                "Imported album tracks are ready but their downstream jobs could not be queued.",
-                async () => {
-                    var trackId = trackIds[trackIndex];
-                    var title = trackItems[trackIndex].Title;
-                    await ChainTrackJobsAsync(
-                        context,
-                        settings,
-                        trackId,
-                        title,
-                        cancellationToken,
-                        JobPriorities.AcquisitionProbe);
-                    if (!settings.AutoGeneratePreview && waveformRegenerationIds.Contains(trackId)) {
-                        await EnqueueWaveformRegenerationAsync(context, trackId, title, cancellationToken);
-                    }
-                });
-        }
-
-        var materializedIds = artistIds.Concat(albumIds).Concat(trackIds).ToArray();
-        await ImportedMaterializationHousekeeping.TryAsync(
-            logger,
-            "Imported album is ready but automatic identification housekeeping could not be queued.",
-            () => AutoIdentifyScanEnqueue.EnqueueRootsAsync(
-                context,
-                settings,
-                downstreamNeeds,
-                materializedIds,
-                cancellationToken));
-
-        var containerTargets = artistItems
-            .Select((item, index) => new EntityRefreshTarget(
-                artistIds[index], EntityKind.MusicArtist.ToCode(), item.Title))
-            .Concat(albumItems.Select((item, index) => new EntityRefreshTarget(
-                albumIds[index], EntityKind.AudioLibrary.ToCode(), item.Title)))
-            .ToArray();
-        await ImportedMaterializationHousekeeping.TryAsync(
-            logger,
-            "Imported album is ready but container thumbnail jobs could not be queued.",
-            () => EnqueueContainerGridThumbnailsAsync(context, containerTargets, cancellationToken));
-
         if (acquisitionHints is not null) {
-            var owners = await acquisitionHints.ApplyToFolderOwnersAsync(
-                cancellationToken,
-                acquisitionId);
-            foreach (var owner in owners) {
-                await ImportedMaterializationHousekeeping.TryAsync(
-                    logger,
-                    "Imported album is ready but its identify job could not be queued.",
-                    () => context.EnqueueIfNeededAsync(new EnqueueJobRequest(
-                        JobType.AutoIdentify,
-                        TargetEntityKind: owner.TopLevelKindCode,
-                        TargetEntityId: owner.TopLevelEntityId.ToString(),
-                        TargetLabel: owner.TopLevelTitle,
-                        Priority: JobPriorities.AutoIdentify), cancellationToken));
-            }
+            await acquisitionHints.ApplyToFolderOwnersAsync(cancellationToken, acquisitionId);
         }
     }
 
@@ -489,8 +425,7 @@ public sealed class ScanAudioJobHandler(
                     JobType.AutoIdentify,
                     TargetEntityKind: owner.TopLevelKindCode,
                     TargetEntityId: owner.TopLevelEntityId.ToString(),
-                    TargetLabel: owner.TopLevelTitle,
-                    Priority: JobPriorities.AutoIdentify), cancellationToken);
+                    TargetLabel: owner.TopLevelTitle), cancellationToken);
             }
         }
 
@@ -503,8 +438,7 @@ public sealed class ScanAudioJobHandler(
         LibrarySettingsData settings,
         Guid trackId,
         string title,
-        CancellationToken cancellationToken,
-        int probePriority = JobPriorities.Probe) {
+        CancellationToken cancellationToken) {
         var hasTechnical = await downstreamNeeds.HasEntityTechnicalAsync(trackId, cancellationToken);
         if (settings.AutoGenerateMetadata && !hasTechnical) {
             await context.EnqueueIfNeededAsync(
@@ -512,8 +446,7 @@ public sealed class ScanAudioJobHandler(
                     JobType.ProbeAudio,
                     EntityKind.AudioTrack,
                     trackId.ToString(),
-                    title,
-                    probePriority),
+                    title),
                 cancellationToken);
         }
 
@@ -523,8 +456,7 @@ public sealed class ScanAudioJobHandler(
                     JobType.FingerprintAudio,
                     EntityKind.AudioTrack,
                     trackId.ToString(),
-                    title,
-                    JobPriorities.Fingerprint),
+                    title),
                 cancellationToken);
         }
 
@@ -535,8 +467,7 @@ public sealed class ScanAudioJobHandler(
                     JobType.GenerateAudioWaveform,
                     EntityKind.AudioTrack,
                     trackId.ToString(),
-                    title,
-                    JobPriorities.Waveform),
+                    title),
                 cancellationToken);
         }
     }
@@ -551,8 +482,7 @@ public sealed class ScanAudioJobHandler(
                 JobType.GenerateAudioWaveform,
                 EntityKind.AudioTrack,
                 trackId.ToString(),
-                title,
-                JobPriorities.Waveform),
+                title),
             cancellationToken);
 
     private async Task EnqueueExistingTrackJobsAsync(
@@ -579,8 +509,7 @@ public sealed class ScanAudioJobHandler(
                     JobType.ProbeAudio,
                     EntityKind.AudioTrack,
                     id,
-                    track.Title,
-                    JobPriorities.Probe));
+                    track.Title));
             }
 
             if (FingerprintGating.ShouldFingerprint(settings, entityNeeds)) {
@@ -588,8 +517,7 @@ public sealed class ScanAudioJobHandler(
                     JobType.FingerprintAudio,
                     EntityKind.AudioTrack,
                     id,
-                    track.Title,
-                    JobPriorities.Fingerprint));
+                    track.Title));
             }
 
             if (settings.AutoGeneratePreview && !entityNeeds.NeedsProbe && entityNeeds.NeedsPreview) {
@@ -597,8 +525,7 @@ public sealed class ScanAudioJobHandler(
                     JobType.GenerateAudioWaveform,
                     EntityKind.AudioTrack,
                     id,
-                    track.Title,
-                    JobPriorities.Waveform));
+                    track.Title));
             }
         }
 
@@ -629,8 +556,7 @@ public sealed class ScanAudioJobHandler(
                 JobType.GenerateGridThumbnail,
                 container.KindCode.DecodeAs<EntityKind>(),
                 container.Id.ToString(),
-                container.Title,
-                JobPriorities.Thumbnail))
+                container.Title))
             .ToArray();
         if (requests.Length > 0) {
             var enqueued = await context.EnqueueBatchAsync(requests, cancellationToken);

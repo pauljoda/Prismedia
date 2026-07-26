@@ -138,4 +138,7 @@ public sealed record IdentifyBulkStartRequest(
 /// </summary>
 /// <param name="Requested">Number of entities in the request.</param>
 /// <param name="Enqueued">Number of identify-search jobs actually enqueued (duplicates pending searches are skipped).</param>
-public sealed record IdentifyBulkAcceptedResponse(int Requested, int Enqueued);
+public sealed record IdentifyBulkAcceptedResponse(
+    int Requested,
+    int Enqueued,
+    IReadOnlyList<Guid>? GraphIds = null);

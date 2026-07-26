@@ -25,8 +25,7 @@ public sealed partial class MusicAcquisitionImportEngine {
         await context.EnqueueIfNeededAsync(
             new EnqueueJobRequest(
                 JobType.MonitoredSearch,
-                TargetLabel: "Fill missing imported tracks",
-                Priority: JobPriorities.RequestEnrichment),
+                TargetLabel: "Fill missing imported tracks"),
             cancellationToken);
     }
 
@@ -190,18 +189,11 @@ public sealed partial class MusicAcquisitionImportEngine {
             .ToArray();
         try {
             await context.ReportProgressAsync(80, "Cataloging replacement album", cancellationToken);
-            await materializer.MaterializeAsync(
+            var materialized = await materializer.MaterializeAsync(
                 import.Kind,
                 context,
                 new ImportedEntityMaterializationRequest(import.Id, import.EntityId, root, mediaPaths),
                 cancellationToken);
-
-            // Catalog materialization succeeded against the new folder. Retire the old folder before
-            // publishing terminal DB state; if a later durable step retries, the checkpoint's completed
-            // units plus the live album folder unambiguously mean the swap already finished.
-            if (Directory.Exists(backupFolder)) {
-                Directory.Delete(backupFolder, recursive: true);
-            }
 
             var selected = await acquisitions.GetSelectedReleaseAsync(import.Id, cancellationToken);
             var qualityCode = selected is null
@@ -228,18 +220,17 @@ public sealed partial class MusicAcquisitionImportEngine {
                     FormatScore: formatScore,
                     Message: checkpoint.SuccessMessage),
                 CancellationToken.None);
-            if (monitors is not null) {
-                await monitors.ResolveUpgradeChildAsync(import.Id, succeeded: true, cancellationToken);
-            }
-            await ImportRootResolution.EnqueueReconciliationAsync(
-                context,
-                JobType.ScanAudio,
-                root,
-                "Replaced album scan",
-                logger,
-                cancellationToken);
             await torrents.HandleImportedAsync(import, checkpoint.ImportMode, cancellationToken);
-            await acquisitions.DeleteAsync(import.Id, cancellationToken);
+            await ImportedEntityReconciliation.EnqueueAsync(
+                context,
+                materialized,
+                AcquisitionFinalizeJobPayload.CreateUpgrade(
+                    import.Id,
+                    parentId,
+                    checkpoint.SuccessMessage,
+                    backupFolder,
+                    materialized.TouchedAncestorIds),
+                cancellationToken);
         } catch {
             RestoreAlbumReplacement(albumFolder, backupFolder);
             throw;

@@ -108,17 +108,20 @@ public sealed class QueueWorker(
 
                 // Interactive graphs are considered first for the next free CPU permit, while their
                 // independent cap prevents a foreground flood from consuming background capacity.
+                var acquirableResources = cpuPool.AcquirableClasses();
                 job = interactiveJobs.Count < interactiveLaneLimit
                     ? await queue.ClaimNextGraphNodeAsync(
                         _workerId,
                         JobGraphOrigin.Interactive,
-                        stoppingToken)
+                        stoppingToken,
+                        acquirableResources)
                     : null;
                 if (job is null && runningJobs.Count < concurrency) {
                     job = await queue.ClaimNextGraphNodeAsync(
                         _workerId,
                         JobGraphOrigin.Background,
-                        stoppingToken);
+                        stoppingToken,
+                        acquirableResources);
                 }
             } catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) {
                 throw;
@@ -135,20 +138,10 @@ public sealed class QueueWorker(
                 continue;
             }
 
-            var origin = job.GraphOrigin
-                ?? (job.Lane == JobRunLane.ForegroundIdentify
-                    ? JobGraphOrigin.Interactive
-                    : JobGraphOrigin.Background);
+            var origin = job.GraphOrigin ?? JobGraphOrigin.Background;
             job = job with { GraphOrigin = origin };
             if (!cpuPool.TryAcquire(job.ResourceClass, out var cpuLease)) {
-                await MutateJobWithFreshQueueAsync(
-                    freshQueue => freshQueue.DeferAsync(
-                        job.Id,
-                        "Waiting for CPU capacity.",
-                        TimeSpan.FromMilliseconds(250),
-                        stoppingToken),
-                    stoppingToken);
-                continue;
+                throw new InvalidOperationException("A CPU-ineligible graph node was claimed.");
             }
 
             var running = Task.Run(async () => {
@@ -294,6 +287,7 @@ public sealed class QueueWorker(
             try {
                 await using var scope = scopeFactory.CreateAsyncScope();
                 var queue = scope.ServiceProvider.GetRequiredService<IJobQueueService>();
+                await queue.HeartbeatAsync(jobId, _workerId, cancellationToken);
                 if (await queue.IsRunCancelledAsync(jobId, cancellationToken)) {
                     jobCancellation.Cancel();
                     return;

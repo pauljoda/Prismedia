@@ -248,7 +248,7 @@ public sealed class FilesVisibilityTests {
         public Task<int> ClearFailuresAsync(JobType? type, CancellationToken cancellationToken) =>
             throw new NotSupportedException();
 
-        public Task<JobRunSnapshot?> ClaimNextAsync(string workerId, CancellationToken cancellationToken, JobRunLane? lane = null) =>
+        public Task<JobRunSnapshot?> ClaimNextAsync(string workerId, CancellationToken cancellationToken) =>
             throw new NotSupportedException();
 
         public Task<int> RecoverStaleRunningAsync(string currentWorkerId, TimeSpan staleAfter, CancellationToken cancellationToken) =>

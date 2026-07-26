@@ -142,17 +142,24 @@ public sealed class InfrastructureBoundaryTests {
 
     [Fact]
     public void RefreshEntityHandlerUsesNarrowScanPersistencePorts() {
-        var constructorTypes = typeof(Prismedia.Application.Jobs.Handlers.Maintenance.RefreshEntityJobHandler)
+        var handlerConstructorTypes = typeof(Prismedia.Application.Jobs.Handlers.Maintenance.RefreshEntityJobHandler)
+            .GetConstructors()
+            .Single()
+            .GetParameters()
+            .Select(parameter => parameter.ParameterType)
+            .ToArray();
+        var plannerConstructorTypes = typeof(Prismedia.Application.Jobs.Handlers.Maintenance.EntityProcessingGraphPlanner)
             .GetConstructors()
             .Single()
             .GetParameters()
             .Select(parameter => parameter.ParameterType)
             .ToArray();
 
-        Assert.DoesNotContain("Prismedia.Application.Jobs.Ports.ILibraryScanPersistence", constructorTypes.Select(type => type.FullName));
-        Assert.Contains(typeof(Prismedia.Application.Jobs.Ports.IEntityRefreshTreePersistence), constructorTypes);
-        Assert.Contains(typeof(Prismedia.Application.Jobs.Ports.ILibraryScanRootPersistence), constructorTypes);
-        Assert.Contains(typeof(Prismedia.Application.Jobs.Ports.IDownstreamNeedsPersistence), constructorTypes);
+        Assert.Contains(typeof(Prismedia.Application.Jobs.Handlers.Maintenance.EntityProcessingGraphPlanner), handlerConstructorTypes);
+        Assert.DoesNotContain("Prismedia.Application.Jobs.Ports.ILibraryScanPersistence", plannerConstructorTypes.Select(type => type.FullName));
+        Assert.Contains(typeof(Prismedia.Application.Jobs.Ports.IEntityRefreshTreePersistence), plannerConstructorTypes);
+        Assert.Contains(typeof(Prismedia.Application.Jobs.Ports.ILibraryScanRootPersistence), plannerConstructorTypes);
+        Assert.Contains(typeof(Prismedia.Application.Jobs.Ports.IDownstreamNeedsPersistence), plannerConstructorTypes);
     }
 
     [Fact]

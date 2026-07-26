@@ -12,18 +12,11 @@ namespace Prismedia.Application.Jobs.Handlers;
 /// </summary>
 public sealed class IdentifyCascadeJobHandler(
     IIdentifyCascadeRunner runner,
-    AutoIdentifyConcurrencyGate gate,
     ILogger<IdentifyCascadeJobHandler> logger) : IJobHandler {
     public JobType Type => JobType.IdentifyCascade;
 
     public async Task HandleAsync(JobContext context, CancellationToken cancellationToken) {
         var payload = IdentifyCascadePayload.Parse(context.Job.PayloadJson);
-
-        // The cascade's per-child provider calls share the same process-wide provider slot as
-        // searches, so a streaming cascade can never hit a rate-limited provider concurrently
-        // with the next batch item's search.
-        using var lease = gate.TryEnterInteractive()
-            ?? throw new JobRetryLaterException("Identify provider slot busy.", TimeSpan.FromSeconds(5));
 
         await context.ReportProgressAsync(10, "Resolving children", cancellationToken);
         try {

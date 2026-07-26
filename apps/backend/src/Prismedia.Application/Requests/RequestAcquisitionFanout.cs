@@ -9,7 +9,7 @@ namespace Prismedia.Application.Requests;
 /// <summary>Durably schedules acquisition work after a reviewed container graph has been committed.</summary>
 public interface IRequestAcquisitionFanoutScheduler {
     /// <summary>Queues the newly wanted children without delaying the interactive commit response.</summary>
-    Task ScheduleAsync(
+    Task<Guid?> ScheduleAsync(
         Guid containerEntityId,
         EntityKind containerKind,
         string containerTitle,
@@ -22,7 +22,7 @@ public interface IRequestAcquisitionFanoutScheduler {
 /// <summary>Queue-backed request fan-out scheduler.</summary>
 public sealed class RequestAcquisitionFanoutScheduler(IJobQueueService jobs) : IRequestAcquisitionFanoutScheduler {
     /// <inheritdoc />
-    public async Task ScheduleAsync(
+    public async Task<Guid?> ScheduleAsync(
         Guid containerEntityId,
         EntityKind containerKind,
         string containerTitle,
@@ -32,7 +32,7 @@ public sealed class RequestAcquisitionFanoutScheduler(IJobQueueService jobs) : I
         CancellationToken cancellationToken) {
         var distinctChildIds = childEntityIds.Distinct().ToArray();
         if (distinctChildIds.Length == 0) {
-            return;
+            return null;
         }
 
         var payload = new RequestAcquisitionFanoutPayload(
@@ -40,15 +40,16 @@ public sealed class RequestAcquisitionFanoutScheduler(IJobQueueService jobs) : I
             targeting.TargetLibraryRootId,
             targeting.ProfileId,
             hideNsfw);
-        await jobs.EnqueueAsync(
+        var job = await jobs.EnqueueAsync(
             EnqueueJobRequest.ForEntity(
                 JobType.RequestAcquisitionFanout,
                 containerKind,
                 containerEntityId.ToString(),
                 containerTitle,
-                JobPriorities.InteractiveRequest,
-                payload.ToJson()),
+                payload.ToJson(),
+                JobGraphOrigin.Interactive),
             cancellationToken);
+        return job.GraphId;
     }
 }
 

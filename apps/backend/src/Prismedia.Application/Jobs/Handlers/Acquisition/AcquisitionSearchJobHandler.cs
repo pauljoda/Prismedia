@@ -21,7 +21,8 @@ public sealed class AcquisitionSearchJobHandler(
     IDownloadClientConfigStore downloadClients,
     SettingsService settings,
     AcquisitionMissingChildFallback missingChildren,
-    ILogger<AcquisitionSearchJobHandler> logger) : IJobHandler {
+    ILogger<AcquisitionSearchJobHandler> logger,
+    IJobGraphService? graphs = null) : IJobHandler {
     public JobType Type => JobType.AcquisitionSearch;
 
     /// <summary>
@@ -79,7 +80,7 @@ public sealed class AcquisitionSearchJobHandler(
                 return;
             }
 
-            var fallback = await missingChildren.TryStartAsync(input, outcome, cancellationToken);
+            var fallback = await missingChildren.TryStartAsync(input, outcome, context, cancellationToken);
             if (fallback is { Missing: > 0 }) {
                 logger.LogInformation(
                     "AcquisitionSearch: whole-unit search for {Id} was barren; {Covered} of {Missing} missing children now have direct acquisitions.",
@@ -97,7 +98,10 @@ public sealed class AcquisitionSearchJobHandler(
                 && (input.EntityId is not null
                     || await profiles.GetAutoPickAsync(input.ProfileId, input.Kind, cancellationToken));
             if (autoGrab && outcome.Candidates.Any(candidate => candidate.Accepted)) {
+                await OpenReviewSignalAsync(context, payload.AcquisitionId, cancellationToken);
                 await TryAutoQueueAsync(payload.AcquisitionId, cancellationToken);
+            } else if (outcome.Candidates.Count > 0) {
+                await OpenReviewSignalAsync(context, payload.AcquisitionId, cancellationToken);
             }
         } catch (Exception ex) when (ex is not OperationCanceledException) {
             logger.LogWarning(ex, "AcquisitionSearch: failed for acquisition {Id}", payload.AcquisitionId);
@@ -114,6 +118,20 @@ public sealed class AcquisitionSearchJobHandler(
             }
             throw;
         }
+    }
+
+    private async Task OpenReviewSignalAsync(
+        JobContext context,
+        Guid acquisitionId,
+        CancellationToken cancellationToken) {
+        if (graphs is null || context.Job.GraphId is not { } graphId) return;
+        await graphs.OpenSignalAsync(
+            graphId,
+            AcquisitionGraphSignals.Review(acquisitionId),
+            JobGraphSignalKind.DomainEvent,
+            acquisitionId.ToString(),
+            "Waiting for release review",
+            cancellationToken);
     }
 
     /// <summary>

@@ -72,6 +72,7 @@ public static class DependencyInjection {
         services.AddScoped<Acquisition.AcquisitionUploadService>();
         services.AddScoped<Acquisition.AcquisitionService>();
         services.AddScoped<Acquisition.IAcquisitionRequestService>(sp => sp.GetRequiredService<Acquisition.AcquisitionService>());
+        services.AddScoped<Acquisition.IAcquisitionGraphCancellation>(sp => sp.GetRequiredService<Acquisition.AcquisitionService>());
         services.AddScoped<Acquisition.AcquisitionQueueService>();
         services.AddScoped<Acquisition.IAcquisitionQueueService>(sp => sp.GetRequiredService<Acquisition.AcquisitionQueueService>());
         services.AddScoped<Acquisition.MonitorService>();
@@ -167,13 +168,17 @@ public static class DependencyInjection {
         // Metadata / collections / maintenance
         services.AddTransient<IJobHandler, ImportMetadataJobHandler>();
         services.AddTransient<IJobHandler, RefreshCollectionJobHandler>();
-        services.AddTransient<IJobHandler, RefreshEntityJobHandler>();
+        services.AddTransient<RefreshEntityJobHandler>();
+        services.AddTransient<IJobHandler>(provider => provider.GetRequiredService<RefreshEntityJobHandler>());
+        services.AddTransient<IJobHandler, ReconcileEntityJobHandler>();
         services.AddTransient<IJobHandler, LibraryMaintenanceJobHandler>();
         services.AddTransient<IJobHandler, DatabaseBackupJobHandler>();
 
         // Identify
         services.AddSingleton<AutoIdentifyConcurrencyGate>();
         services.AddTransient<IJobHandler, IdentifySearchJobHandler>();
+        services.AddTransient<IJobHandler, IdentifyProviderCallJobHandler>();
+        services.AddTransient<IJobHandler, IdentifyApplyJobHandler>();
         services.AddTransient<IJobHandler, BulkIdentifyJobHandler>();
         services.AddTransient<IJobHandler, AutoIdentifyJobHandler>();
         services.AddTransient<IJobHandler, IdentifyCascadeJobHandler>();
@@ -182,6 +187,7 @@ public static class DependencyInjection {
         services.AddTransient<IJobHandler, AcquisitionSearchJobHandler>();
         services.AddTransient<IJobHandler, AcquisitionMonitorJobHandler>();
         services.AddTransient<IJobHandler, AcquisitionImportJobHandler>();
+        services.AddTransient<IJobHandler, AcquisitionFinalizeJobHandler>();
         services.AddTransient<IJobHandler, RecycleBinCleanupJobHandler>();
         services.AddTransient<IJobHandler, AcquisitionFailedHandleJobHandler>();
         services.AddTransient<IJobHandler, MonitoredSearchJobHandler>();

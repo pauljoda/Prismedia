@@ -44,6 +44,28 @@ public sealed record JobGraphSnapshot(
     DateTimeOffset UpdatedAt,
     DateTimeOffset? FinishedAt = null);
 
+/// <summary>Durable wait attached to a job graph.</summary>
+public sealed record JobGraphSignalSnapshot(
+    Guid Id,
+    Guid GraphId,
+    string Key,
+    JobGraphSignalKind Kind,
+    string? CorrelationId,
+    string? Message,
+    DateTimeOffset CreatedAt,
+    DateTimeOffset? ResolvedAt,
+    DateTimeOffset? CancelledAt);
+
+/// <summary>One dependency edge in graph detail.</summary>
+public sealed record JobGraphDependencySnapshot(Guid PredecessorRunId, Guid SuccessorRunId);
+
+/// <summary>Complete diagnostic view of one graph.</summary>
+public sealed record JobGraphDetailSnapshot(
+    JobGraphSnapshot Graph,
+    IReadOnlyList<JobRunSnapshot> Nodes,
+    IReadOnlyList<JobGraphDependencySnapshot> Dependencies,
+    IReadOnlyList<JobGraphSignalSnapshot> Signals);
+
 /// <summary>Application port for creating and expanding durable job graphs.</summary>
 public interface IJobGraphService {
     Task<JobGraphSnapshot> StartAsync(StartJobGraphRequest request, CancellationToken cancellationToken);
@@ -52,4 +74,37 @@ public interface IJobGraphService {
         Guid graphId,
         GraphJobNodeRequest request,
         CancellationToken cancellationToken);
+
+    Task<JobGraphSignalSnapshot> OpenSignalAsync(
+        Guid graphId,
+        string key,
+        JobGraphSignalKind kind,
+        string? correlationId,
+        string? message,
+        CancellationToken cancellationToken);
+
+    Task<JobGraphSignalSnapshot> ResolveSignalAsync(
+        Guid graphId,
+        string key,
+        IReadOnlyList<GraphJobNodeRequest> continuationNodes,
+        CancellationToken cancellationToken);
+
+    Task<IReadOnlyList<JobGraphSnapshot>> ListAsync(CancellationToken cancellationToken);
+
+    /// <summary>Lists graphs while excluding Entity-backed work hidden by the active NSFW policy.</summary>
+    Task<IReadOnlyList<JobGraphSnapshot>> ListAsync(
+        bool hideNsfw,
+        CancellationToken cancellationToken) =>
+        ListAsync(cancellationToken);
+
+    Task<JobGraphDetailSnapshot?> GetAsync(Guid graphId, CancellationToken cancellationToken);
+
+    /// <summary>Gets a graph only when its Entity-backed work is visible under the active NSFW policy.</summary>
+    Task<JobGraphDetailSnapshot?> GetAsync(
+        Guid graphId,
+        bool hideNsfw,
+        CancellationToken cancellationToken) =>
+        GetAsync(graphId, cancellationToken);
+
+    Task<bool> CancelAsync(Guid graphId, CancellationToken cancellationToken);
 }

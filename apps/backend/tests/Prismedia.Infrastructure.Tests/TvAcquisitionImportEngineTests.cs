@@ -8,6 +8,7 @@ using Prismedia.Application.Jobs.Ports;
 using Prismedia.Application.Jobs.Scanning;
 using Prismedia.Domain.Entities;
 using Prismedia.Infrastructure.Acquisition;
+using Prismedia.Infrastructure.Jobs;
 using Prismedia.Infrastructure.Media.Persistence;
 using Prismedia.Infrastructure.Persistence;
 using Prismedia.Infrastructure.Persistence.Entities;
@@ -44,7 +45,7 @@ public sealed class TvAcquisitionImportEngineTests : IDisposable {
         Assert.DoesNotContain(
             Directory.GetDirectories(_workRoot),
             dir => dir.Contains("Season", StringComparison.Ordinal)); // no template-derived parallel series folder
-        Assert.Equal(AcquisitionStatus.Imported, await StatusOf(db, harness.Import.Id));
+        Assert.Equal(AcquisitionStatus.Importing, await StatusOf(db, harness.Import.Id));
         Assert.Empty(await db.AcquisitionBlocklist.AsNoTracking().ToArrayAsync());
     }
 
@@ -59,7 +60,7 @@ public sealed class TvAcquisitionImportEngineTests : IDisposable {
         var source = await db.EntityFiles.AsNoTracking()
             .SingleAsync(row => row.EntityId == harness.WantedEpisodeId && row.Role == EntityFileRole.Source);
 
-        Assert.Equal(AcquisitionStatus.Imported, await StatusOf(db, harness.Import.Id));
+        Assert.Equal(AcquisitionStatus.Importing, await StatusOf(db, harness.Import.Id));
         Assert.False(wantedEpisode.IsWanted);
         Assert.Equal(Path.Combine(harness.SeasonFolder, "Show - S01E02.mkv"), source.Path);
         Assert.True(await db.VideoDetails.AsNoTracking().AnyAsync(row => row.EntityId == harness.WantedEpisodeId));
@@ -68,17 +69,12 @@ public sealed class TvAcquisitionImportEngineTests : IDisposable {
             .ToArrayAsync());
         Assert.DoesNotContain(harness.Queue.Enqueued, request => request.Type == JobType.ScanLibrary);
 
-        var subtitleJob = Assert.Single(harness.Queue.Enqueued, request => request.Type == JobType.ExtractSubtitles);
-        Assert.Equal(EntityKindRegistry.Video.Code, subtitleJob.TargetEntityKind);
-        Assert.Equal(harness.WantedEpisodeId.ToString(), subtitleJob.TargetEntityId);
-        Assert.Equal(JobPriorities.AcquisitionSidecar, subtitleJob.Priority);
+        Assert.DoesNotContain(harness.Queue.Enqueued, request => request.Type == JobType.ExtractSubtitles);
+        var reconciliation = Assert.Single(harness.Queue.Enqueued, request => request.Type == JobType.ReconcileEntity);
+        Assert.Equal(EntityKindRegistry.Video.Code, reconciliation.TargetEntityKind);
+        Assert.Equal(harness.WantedEpisodeId.ToString(), reconciliation.TargetEntityId);
 
-        var identifyJob = Assert.Single(harness.Queue.Enqueued, request => request.Type == JobType.AutoIdentify);
-        Assert.Equal(EntityKindRegistry.Video.Code, identifyJob.TargetEntityKind);
-        Assert.Equal(harness.WantedEpisodeId.ToString(), identifyJob.TargetEntityId);
-        var identifyPayload = AutoIdentifyJobPayload.Parse(identifyJob.PayloadJson);
-        Assert.True(identifyPayload.AllowChildTarget);
-        Assert.True(identifyPayload.IgnoreOrganizedGate);
+        Assert.DoesNotContain(harness.Queue.Enqueued, request => request.Type == JobType.AutoIdentify);
     }
 
     [Fact]
@@ -109,7 +105,7 @@ public sealed class TvAcquisitionImportEngineTests : IDisposable {
         }
 
         await importTask;
-        Assert.Equal(AcquisitionStatus.Imported, await StatusOf(db, harness.Import.Id));
+        Assert.Equal(AcquisitionStatus.Importing, await StatusOf(db, harness.Import.Id));
     }
 
     [Fact]
@@ -132,7 +128,7 @@ public sealed class TvAcquisitionImportEngineTests : IDisposable {
         var episodeOne = Assert.Single(episodes, row => row.SortOrder == 1);
         var episodeTwo = Assert.Single(episodes, row => row.SortOrder == 2);
 
-        Assert.Equal(AcquisitionStatus.Imported, await StatusOf(db, harness.Import.Id));
+        Assert.Equal(AcquisitionStatus.Importing, await StatusOf(db, harness.Import.Id));
         Assert.False(season.IsWanted);
         Assert.True(episodeOne.IsWanted);
         Assert.False(episodeTwo.IsWanted);
@@ -185,8 +181,8 @@ public sealed class TvAcquisitionImportEngineTests : IDisposable {
             resumeImport,
             CancellationToken.None);
 
-        Assert.Equal(AcquisitionStatus.Imported, await StatusOf(db, harness.Import.Id));
-        Assert.Null((await db.Acquisitions.AsNoTracking().SingleAsync(row => row.Id == harness.Import.Id)).ImportCheckpointJson);
+        Assert.Equal(AcquisitionStatus.Importing, await StatusOf(db, harness.Import.Id));
+        Assert.NotNull((await db.Acquisitions.AsNoTracking().SingleAsync(row => row.Id == harness.Import.Id)).ImportCheckpointJson);
         Assert.True(await db.EntityFiles.AsNoTracking().AnyAsync(row =>
             row.EntityId == harness.WantedEpisodeId && row.Role == EntityFileRole.Source));
     }
@@ -233,8 +229,8 @@ public sealed class TvAcquisitionImportEngineTests : IDisposable {
         Assert.All(readyEpisodes, episode => Assert.False(episode.IsWanted));
         Assert.All(readyEpisodes, episode => Assert.True(db.EntityFiles.AsNoTracking().Any(row =>
             row.EntityId == episode.Id && row.Role == EntityFileRole.Source)));
-        Assert.Equal(AcquisitionStatus.Imported, await StatusOf(db, harness.Import.Id));
-        Assert.Null((await db.Acquisitions.AsNoTracking().SingleAsync(row => row.Id == harness.Import.Id)).ImportCheckpointJson);
+        Assert.Equal(AcquisitionStatus.Importing, await StatusOf(db, harness.Import.Id));
+        Assert.NotNull((await db.Acquisitions.AsNoTracking().SingleAsync(row => row.Id == harness.Import.Id)).ImportCheckpointJson);
     }
 
     [Fact]
@@ -382,7 +378,7 @@ public sealed class TvAcquisitionImportEngineTests : IDisposable {
         var source = await db.EntityFiles.AsNoTracking()
             .SingleAsync(row => row.EntityId == harness.WantedEpisodeId && row.Role == EntityFileRole.Source);
         Assert.Equal(exactTarget, source.Path);
-        Assert.Equal(AcquisitionStatus.Imported, await StatusOf(db, harness.Import.Id));
+        Assert.Equal(AcquisitionStatus.Importing, await StatusOf(db, harness.Import.Id));
     }
 
     [Fact]
@@ -432,7 +428,7 @@ public sealed class TvAcquisitionImportEngineTests : IDisposable {
             .Where(row => row.ParentEntityId == harness.SeasonId && row.SortOrder >= 2 && row.SortOrder <= 3)
             .OrderBy(row => row.SortOrder)
             .ToArrayAsync();
-        Assert.Equal(AcquisitionStatus.Imported, await StatusOf(db, harness.Import.Id));
+        Assert.Equal(AcquisitionStatus.Importing, await StatusOf(db, harness.Import.Id));
         Assert.Equal<int?>([2, 3], episodes.Select(row => row.SortOrder));
         Assert.All(episodes, episode => Assert.False(episode.IsWanted));
         Assert.All(episodes, episode => Assert.True(db.EntityFiles.AsNoTracking().Any(file =>
@@ -476,7 +472,7 @@ public sealed class TvAcquisitionImportEngineTests : IDisposable {
 
         await harness.Engine.ImportAsync(harness.Context, harness.Import, CancellationToken.None);
 
-        Assert.Equal(AcquisitionStatus.Imported, await StatusOf(db, harness.Import.Id));
+        Assert.Equal(AcquisitionStatus.Importing, await StatusOf(db, harness.Import.Id));
         Assert.Empty(await db.AcquisitionBlocklist.AsNoTracking().ToArrayAsync());
         Assert.All(episodes, episode => Assert.True(File.Exists(
             Path.Combine(harness.SeasonFolder, $"Show - S01E{episode.SortOrder:00}.mkv"))));
@@ -492,7 +488,7 @@ public sealed class TvAcquisitionImportEngineTests : IDisposable {
         await harness.Engine.ImportAsync(harness.Context, harness.Import, CancellationToken.None);
 
         Assert.True(File.Exists(Path.Combine(harness.SeriesFolder, "Season 02", "Show - S02E01.mkv")));
-        Assert.Equal(AcquisitionStatus.Imported, await StatusOf(db, harness.Import.Id));
+        Assert.Equal(AcquisitionStatus.Importing, await StatusOf(db, harness.Import.Id));
     }
 
     [Fact]
@@ -502,7 +498,7 @@ public sealed class TvAcquisitionImportEngineTests : IDisposable {
 
         await harness.Engine.ImportAsync(harness.Context, harness.Import, CancellationToken.None);
 
-        Assert.Equal(AcquisitionStatus.Imported, await StatusOf(db, harness.Import.Id));
+        Assert.Equal(AcquisitionStatus.Importing, await StatusOf(db, harness.Import.Id));
         // Same path, new content; the previous file is preserved as the recoverable backup.
         Assert.Equal("upgraded-bytes", await File.ReadAllTextAsync(harness.OwnedEpisodePath));
         Assert.Single(Directory.GetFiles(
@@ -557,8 +553,9 @@ public sealed class TvAcquisitionImportEngineTests : IDisposable {
         var source = await db.EntityFiles.AsNoTracking().SingleAsync(row =>
             row.EntityId == harness.OwnedEpisodeId && row.Role == EntityFileRole.Source);
         Assert.Equal(new FileInfo(harness.OwnedEpisodePath).Length, source.SizeBytes);
+        Assert.DoesNotContain(harness.Queue.Enqueued, request => request.Type == JobType.ProbeVideo);
         Assert.Contains(harness.Queue.Enqueued, request =>
-            request.Type == JobType.ProbeVideo
+            request.Type == JobType.ReconcileEntity
             && request.TargetEntityId == harness.OwnedEpisodeId.ToString());
     }
 
@@ -610,7 +607,7 @@ public sealed class TvAcquisitionImportEngineTests : IDisposable {
         var source = await db.EntityFiles.AsNoTracking()
             .SingleAsync(row => row.EntityId == harness.OwnedEpisodeId && row.Role == EntityFileRole.Source);
 
-        Assert.Equal(AcquisitionStatus.Imported, await StatusOf(db, harness.Import.Id));
+        Assert.Equal(AcquisitionStatus.Importing, await StatusOf(db, harness.Import.Id));
         Assert.Single(episodes);
         Assert.Equal(harness.OwnedEpisodeId, episodes[0].Id);
         Assert.Equal(Path.ChangeExtension(harness.OwnedEpisodePath, ".mkv"), source.Path);
@@ -677,7 +674,7 @@ public sealed class TvAcquisitionImportEngineTests : IDisposable {
                 && row.KindCode == EntityKindRegistry.Video.Code
                 && row.SortOrder == 1)
             .ToArrayAsync());
-        Assert.Equal(AcquisitionStatus.Imported, await StatusOf(db, harness.Import.Id));
+        Assert.Equal(AcquisitionStatus.Importing, await StatusOf(db, harness.Import.Id));
     }
 
     [Fact]
@@ -707,7 +704,7 @@ public sealed class TvAcquisitionImportEngineTests : IDisposable {
         Assert.True(File.Exists(OwnedFileReplacementArtifacts.CheckpointBackupPath(
             harness.OwnedEpisodePath,
             attemptId)));
-        Assert.Equal(AcquisitionStatus.Imported, await StatusOf(db, harness.Import.Id));
+        Assert.Equal(AcquisitionStatus.Importing, await StatusOf(db, harness.Import.Id));
     }
 
     [Fact]
@@ -736,7 +733,7 @@ public sealed class TvAcquisitionImportEngineTests : IDisposable {
 
         Assert.Equal("incoming-upgrade", await File.ReadAllTextAsync(harness.OwnedEpisodePath));
         Assert.False(File.Exists(evidence));
-        Assert.Equal(AcquisitionStatus.Imported, await StatusOf(db, harness.Import.Id));
+        Assert.Equal(AcquisitionStatus.Importing, await StatusOf(db, harness.Import.Id));
     }
 
     [Fact]
@@ -749,7 +746,7 @@ public sealed class TvAcquisitionImportEngineTests : IDisposable {
         // Template path: a fresh series folder under the library root, not the existing tree.
         Assert.True(File.Exists(Path.Combine(harness.LibraryRoot, "Show", "Season 01", "Show - S01E02.mkv")));
         Assert.False(File.Exists(Path.Combine(harness.SeasonFolder, "Show - S01E02.mkv")));
-        Assert.Equal(AcquisitionStatus.Imported, await StatusOf(db, harness.Import.Id));
+        Assert.Equal(AcquisitionStatus.Importing, await StatusOf(db, harness.Import.Id));
         Assert.True(await db.EntityFiles.AsNoTracking().AnyAsync(row =>
             row.Role == EntityFileRole.Source && row.Path == Path.Combine(harness.LibraryRoot, "Show", "Season 01", "Show - S01E02.mkv")));
     }
@@ -864,10 +861,9 @@ public sealed class TvAcquisitionImportEngineTests : IDisposable {
         var hints = new AcquisitionHintApplier(db);
         var realMaterializer = new ImportedVideoMaterializer(
             scanPersistence,
-            rootPersistence,
-            scanPersistence,
             hints,
-            NullLogger<ImportedVideoMaterializer>.Instance);
+            NullLogger<ImportedVideoMaterializer>.Instance,
+            snapshots: new EfScanSnapshotStore(db));
         IImportedVideoMaterializer firstMaterializer = failMaterialization
             ? new FailOnCallImportedVideoMaterializer(realMaterializer, 1)
             : realMaterializer;
@@ -976,7 +972,7 @@ public sealed class TvAcquisitionImportEngineTests : IDisposable {
         int failingCall) : IImportedVideoMaterializer {
         private int _calls;
 
-        public Task MaterializeAsync(
+        public Task<ImportedEntityMaterializationResult> MaterializeAsync(
             JobContext context,
             ImportedTvMaterializationRequest request,
             CancellationToken cancellationToken) {

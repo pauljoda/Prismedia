@@ -11,8 +11,12 @@ namespace Prismedia.Application.Acquisition;
 /// </summary>
 public sealed class AcquisitionCompletionService(
     IAcquisitionStore acquisitions,
-    IJobQueueService jobs) {
-    public async Task ScheduleAsync(Guid acquisitionId, CancellationToken cancellationToken) {
+    IJobQueueService jobs,
+    IJobGraphService? graphs = null) {
+    public async Task ScheduleAsync(
+        Guid acquisitionId,
+        CancellationToken cancellationToken,
+        JobGraphOrigin fallbackOrigin = JobGraphOrigin.Interactive) {
         var detail = await acquisitions.GetAsync(acquisitionId, cancellationToken);
         if (detail?.Summary.Status != AcquisitionStatus.Downloaded) {
             return;
@@ -20,15 +24,42 @@ public sealed class AcquisitionCompletionService(
 
         var isUpgrade = await acquisitions.GetUpgradeOwnedQualityAsync(acquisitionId, cancellationToken) is not null;
         var jobType = CompletionJobType(detail.Summary.Kind, isUpgrade);
-        await jobs.EnqueueAsync(
-            new EnqueueJobRequest(
+        var request = new EnqueueJobRequest(
                 jobType,
                 PayloadJson: AcquisitionJobPayload.Serialize(acquisitionId),
+                TargetEntityKind: detail.Summary.Kind.ToCode(),
                 TargetEntityId: acquisitionId.ToString(),
                 TargetLabel: isUpgrade ? "Replace with reviewed release" : "Import completed acquisition",
-                Priority: JobPriorities.AcquisitionCompletion,
-                Lane: JobRunLane.ForegroundIdentify),
-            cancellationToken);
+                Origin: fallbackOrigin,
+                GraphRootEntityKind: detail.Summary.Kind.ToCode(),
+                GraphRootEntityId: detail.Summary.EntityId?.ToString());
+        if (graphs is not null && detail.Summary.JobGraphId is { } graphId) {
+            var node = new GraphJobNodeRequest(
+                $"{jobType.ToCode()}:{acquisitionId}",
+                request,
+                Importance: JobNodeImportance.Required,
+                ResourceClass: JobDefinitionRegistry.ResourceClass(jobType),
+                ResourceKey: detail.Summary.EntityId is { } entityId
+                    ? JobResourceKeys.Entity(entityId.ToString())
+                    : null);
+            var signalKey = AcquisitionGraphSignals.ExternalTransfer(acquisitionId);
+            var graph = await graphs.GetAsync(graphId, cancellationToken);
+            var openSignal = graph?.Signals.FirstOrDefault(signal =>
+                (signal.Key == signalKey || signal.Key == AcquisitionGraphSignals.Review(acquisitionId))
+                && signal.ResolvedAt is null
+                && signal.CancelledAt is null);
+            if (openSignal is not null) {
+                await graphs.ResolveSignalAsync(graphId, openSignal.Key, [node], cancellationToken);
+            } else {
+                await graphs.AppendNodeAsync(graphId, node, cancellationToken);
+            }
+            return;
+        }
+
+        var job = await jobs.EnqueueAsync(request, cancellationToken);
+        if (job.GraphId is { } recoveryGraphId) {
+            await acquisitions.SetJobGraphIdAsync(acquisitionId, recoveryGraphId, cancellationToken);
+        }
     }
 
     /// <summary>

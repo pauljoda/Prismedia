@@ -654,6 +654,19 @@ public sealed partial class RequestCommitService(
         Guid entityId,
         BookRendition? bookRendition,
         CancellationToken cancellationToken) {
+        return await MaintainAsync(
+            entityId,
+            bookRendition,
+            JobGraphOrigin.Interactive,
+            cancellationToken);
+    }
+
+    /// <summary>Maintains a monitored Entity while preserving the requested scheduling origin.</summary>
+    public async Task<bool> MaintainAsync(
+        Guid entityId,
+        BookRendition? bookRendition,
+        JobGraphOrigin origin,
+        CancellationToken cancellationToken) {
         var monitor = await monitors.GetByEntityAsync(entityId, bookRendition, cancellationToken);
         if (monitor?.Status != MonitorStatus.Active) {
             return false;
@@ -673,20 +686,27 @@ public sealed partial class RequestCommitService(
         if (descriptor.IsContainer) {
             var synced = await SyncContainerAsync(entityId, cancellationToken);
             if (synced) {
-                await RequestMissingChildrenAsync(entityId, cancellationToken);
+                await RequestMissingChildrenAsync(entityId, parentContext: null, origin, cancellationToken);
             }
             return synced;
         }
 
         if (entity.HasRendition(bookRendition)) {
             if (descriptor.MaterializeChildPhantoms) {
-                await RequestMissingChildrenAsync(entityId, cancellationToken);
+                await RequestMissingChildrenAsync(entityId, parentContext: null, origin, cancellationToken);
             }
             return true;
         }
 
-        return await RequestEntityAsync(
-            entityId, hideNsfw: true, cancellationToken, bookRendition: bookRendition) is not null;
+        return await RequestEntityFromGraphAsync(
+            entityId,
+            hideNsfw: true,
+            cancellationToken,
+            targeting: null,
+            bookRendition,
+            hydrateChildren: true,
+            parentContext: null,
+            origin) is not null;
     }
 
     /// <inheritdoc />
@@ -1072,8 +1092,9 @@ public sealed partial class RequestCommitService(
             }
         }
 
+        Guid? fanoutGraphId = null;
         if (fanoutPicks.Length > 0) {
-            await fanout!.ScheduleAsync(
+            fanoutGraphId = await fanout!.ScheduleAsync(
                 container.EntityId,
                 descriptor.WantedEntityKind,
                 containerTitle,
@@ -1083,7 +1104,10 @@ public sealed partial class RequestCommitService(
                 cancellationToken);
         }
 
-        return new RequestCommitResponse(container.EntityId, items);
+        return new RequestCommitResponse(
+            container.EntityId,
+            items,
+            fanoutGraphId is { } graphId ? [graphId] : null);
     }
 
     /// <summary>
@@ -1398,6 +1422,7 @@ public sealed partial class RequestCommitService(
         bool attachOwnedEntityMonitor = false,
         PluginIdentityRoute? ownedEntityProviderRoute = null) {
         Guid? acquisitionId = null;
+        Guid? acquisitionGraphId = null;
         var lifecycleAccepted = await monitors.ExecuteIfEntityLifecycleMutableAsync(
             pick.Entity.EntityId,
             async leaseCancellationToken => {
@@ -1455,6 +1480,7 @@ public sealed partial class RequestCommitService(
                         bookRendition),
                     leaseCancellationToken);
                 acquisitionId = summary.Id;
+                acquisitionGraphId = summary.JobGraphId;
                 await StartMonitorOrRollbackAcquisitionAsync(
                     summary.Id,
                     acquisitionKind,
@@ -1472,7 +1498,8 @@ public sealed partial class RequestCommitService(
             pick.Title,
             pick.Outcome,
             pick.Entity.EntityId,
-            acquisitionId);
+            acquisitionId,
+            acquisitionGraphId);
     }
 
     private static AcquisitionConfigurationException LifecycleConflict() =>

@@ -20,7 +20,8 @@ public sealed class AcquisitionMonitorJobHandler(
     RemotePathMapper remotePaths,
     IAcquisitionHistoryStore history,
     ILogger<AcquisitionMonitorJobHandler> logger,
-    AcquisitionCompletionService? completion = null) : IJobHandler {
+    AcquisitionCompletionService? completion = null,
+    IJobGraphService? graphs = null) : IJobHandler {
     public JobType Type => JobType.AcquisitionMonitor;
 
     /// <summary>
@@ -328,7 +329,10 @@ public sealed class AcquisitionMonitorJobHandler(
                 // and browser uploads through the same completion service; the fallback keeps focused
                 // handler tests independent of the application service.
                 if (completion is not null) {
-                    await completion.ScheduleAsync(transfer.AcquisitionId, cancellationToken);
+                    await completion.ScheduleAsync(
+                        transfer.AcquisitionId,
+                        cancellationToken,
+                        context.Job.GraphOrigin ?? JobGraphOrigin.Background);
                 } else {
                     await context.EnqueueIfNeededAsync(
                         new EnqueueJobRequest(
@@ -336,8 +340,7 @@ public sealed class AcquisitionMonitorJobHandler(
                             PayloadJson: AcquisitionJobPayload.Serialize(transfer.AcquisitionId),
                             TargetEntityId: transfer.AcquisitionId.ToString(),
                             TargetLabel: isUpgrade ? "Replace with upgrade" : "Import completed download",
-                            Priority: JobPriorities.AcquisitionCompletion,
-                            Lane: JobRunLane.ForegroundIdentify),
+                            Origin: JobGraphOrigin.Interactive),
                         cancellationToken);
                 }
             } else {
@@ -667,15 +670,41 @@ public sealed class AcquisitionMonitorJobHandler(
         }
 
         var selected = await acquisitions.GetSelectedReleaseAsync(acquisitionId, cancellationToken);
-        await context.EnqueueIfNeededAsync(
-            new EnqueueJobRequest(
-                JobType.AcquisitionFailedHandle,
-                PayloadJson: AcquisitionFailedPayload.Serialize(acquisitionId, reason, message, selected),
-                TargetEntityId: acquisitionId.ToString(),
-                TargetLabel: "Recover failed download",
-                Priority: JobPriorities.AcquisitionRecovery,
-                Lane: JobRunLane.ForegroundIdentify),
-            cancellationToken);
+        var request = new EnqueueJobRequest(
+            JobType.AcquisitionFailedHandle,
+            PayloadJson: AcquisitionFailedPayload.Serialize(acquisitionId, reason, message, selected),
+            TargetEntityId: acquisitionId.ToString(),
+            TargetLabel: "Recover failed download",
+            Origin: JobGraphOrigin.Interactive);
+        var graphId = await acquisitions.GetJobGraphIdAsync(acquisitionId, cancellationToken);
+        if (graphs is not null && graphId is { } owningGraphId) {
+            var detail = await graphs.GetAsync(owningGraphId, cancellationToken);
+            if (detail is not null && detail.Graph.Status is
+                    JobGraphStatus.Queued or JobGraphStatus.Running or JobGraphStatus.Waiting) {
+                var acquisition = await acquisitions.GetAsync(acquisitionId, cancellationToken);
+                var node = new GraphJobNodeRequest(
+                    $"{JobType.AcquisitionFailedHandle.ToCode()}:{acquisitionId}",
+                    request,
+                    Importance: JobNodeImportance.Required,
+                    ResourceClass: JobResourceClass.Light,
+                    ResourceKey: acquisition?.Summary.EntityId is { } entityId
+                        ? JobResourceKeys.Entity(entityId.ToString())
+                        : null);
+                var signalKey = AcquisitionGraphSignals.ExternalTransfer(acquisitionId);
+                var signal = detail.Signals.FirstOrDefault(candidate =>
+                    (candidate.Key == signalKey || candidate.Key == AcquisitionGraphSignals.Review(acquisitionId))
+                    && candidate.ResolvedAt is null
+                    && candidate.CancelledAt is null);
+                if (signal is not null) {
+                    await graphs.ResolveSignalAsync(owningGraphId, signal.Key, [node], cancellationToken);
+                } else {
+                    await graphs.AppendNodeAsync(owningGraphId, node, cancellationToken);
+                }
+                return;
+            }
+        }
+
+        await context.EnqueueIfNeededAsync(request, cancellationToken);
     }
 
     /// <summary>

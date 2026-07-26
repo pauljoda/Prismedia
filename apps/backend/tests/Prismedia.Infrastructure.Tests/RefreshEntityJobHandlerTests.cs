@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging.Abstractions;
+using Prismedia.Application.Acquisition;
 using Prismedia.Application.Jobs;
 using Prismedia.Application.Jobs.Handlers.Maintenance;
 using Prismedia.Application.Jobs.Ports;
@@ -57,17 +58,68 @@ public sealed class RefreshEntityJobHandlerTests {
         Assert.Empty(queue.Enqueued);
     }
 
+    [Fact]
+    public async Task ReconciliationFinalizerDependsOnRequiredProbeAndPrecedesBestEffortBranches() {
+        var videoId = Guid.NewGuid();
+        var acquisitionId = Guid.NewGuid();
+        var ancestorId = Guid.NewGuid();
+        var persistence = new RecordingPersistence([
+            new EntityRefreshTarget(videoId, EntityKindRegistry.Video.Code, "Movie")
+        ]) {
+            AutoGenerateMetadata = true,
+            NeedsProbe = true,
+            NeedsPreview = true
+        };
+        var planner = new EntityProcessingGraphPlanner(
+            NullLogger<EntityProcessingGraphPlanner>.Instance,
+            persistence,
+            persistence,
+            persistence,
+            persistence,
+            new StubSubtitleSidecarDiscovery([]),
+            persistence);
+        var queue = new RecordingJobQueue();
+        var finalization = AcquisitionFinalizeJobPayload.Create(
+            acquisitionId,
+            BookQualityRank.Floor,
+            "Imported",
+            touchedAncestorIds: [ancestorId]);
+        var job = RefreshJob(videoId) with {
+            Type = JobType.ReconcileEntity,
+            PayloadJson = finalization.ToJson(),
+            GraphId = Guid.NewGuid(),
+            GraphOrigin = JobGraphOrigin.Interactive
+        };
+
+        await new ReconcileEntityJobHandler(planner).HandleAsync(
+            new JobContext(job, queue),
+            CancellationToken.None);
+
+        var probe = Assert.Single(queue.Nodes, node => node.Job.Type == JobType.ProbeVideo);
+        var finalizer = Assert.Single(queue.Nodes, node => node.Job.Type == JobType.AcquisitionFinalize);
+        var preview = Assert.Single(queue.Nodes, node => node.Job.Type == JobType.GeneratePreview);
+        var ancestorProjection = Assert.Single(
+            queue.Nodes,
+            node => node.Job.Type == JobType.GenerateGridThumbnail && node.Job.TargetEntityId == ancestorId.ToString());
+        Assert.Contains(queue.RunIds[probe.NodeKey], finalizer.DependsOn!);
+        Assert.Contains(queue.RunIds[finalizer.NodeKey], ancestorProjection.DependsOn!);
+        Assert.True(queue.Nodes.IndexOf(finalizer) < queue.Nodes.IndexOf(preview));
+        Assert.True(queue.Nodes.IndexOf(preview) < queue.Nodes.IndexOf(ancestorProjection));
+        Assert.Equal(JobNodeImportance.Required, finalizer.Importance);
+        Assert.Equal(JobNodeImportance.BestEffort, preview.Importance);
+    }
+
     private static RefreshEntityJobHandler CreateHandler(
         RecordingPersistence persistence,
         ISubtitleSidecarDiscovery discovery) =>
-        new(
-            NullLogger<RefreshEntityJobHandler>.Instance,
+        new(new EntityProcessingGraphPlanner(
+            NullLogger<EntityProcessingGraphPlanner>.Instance,
             persistence,
             persistence,
             persistence,
             persistence,
             discovery,
-            persistence);
+            persistence));
 
     private static JobRunSnapshot RefreshJob(Guid entityId) {
         var now = DateTimeOffset.UtcNow;
@@ -116,6 +168,9 @@ public sealed class RefreshEntityJobHandlerTests {
         public List<VideoSubtitleSidecarState> InvalidatedSubtitleStates { get; } = [];
         public int ClearGeneratedAssetsCalls { get; private set; }
         public int DownstreamChecks { get; private set; }
+        public bool AutoGenerateMetadata { get; init; }
+        public bool NeedsProbe { get; init; }
+        public bool NeedsPreview { get; init; }
 
         public Task<IReadOnlyList<EntityRefreshTarget>> GetEntityTreeAsync(
             Guid entityId,
@@ -123,10 +178,10 @@ public sealed class RefreshEntityJobHandlerTests {
 
         public Task<LibrarySettingsData> GetSettingsAsync(CancellationToken cancellationToken) =>
             Task.FromResult(new LibrarySettingsData(
-                AutoGenerateMetadata: false,
+                AutoGenerateMetadata,
                 AutoGenerateOshash: false,
                 AutoGenerateMd5: false,
-                AutoGeneratePreview: false,
+                AutoGeneratePreview: NeedsPreview,
                 GenerateTrickplay: false,
                 TrickplayIntervalSeconds: 10,
                 PreviewClipDurationSeconds: 8,
@@ -138,7 +193,10 @@ public sealed class RefreshEntityJobHandlerTests {
             CancellationToken cancellationToken) {
             DownstreamChecks++;
             return Task.FromResult<IReadOnlyDictionary<Guid, DownstreamNeeds>>(
-                entityIds.ToDictionary(id => id, _ => NoDownstreamWork));
+                entityIds.ToDictionary(id => id, _ => NoDownstreamWork with {
+                    NeedsProbe = NeedsProbe,
+                    NeedsPreview = NeedsPreview
+                }));
         }
 
         public Task InvalidateSubtitleStateAsync(
@@ -233,6 +291,8 @@ public sealed class RefreshEntityJobHandlerTests {
 
     private sealed class RecordingJobQueue : IJobQueueService {
         public List<EnqueueJobRequest> Enqueued { get; } = [];
+        public List<GraphJobNodeRequest> Nodes { get; } = [];
+        public Dictionary<string, Guid> RunIds { get; } = [];
 
         public Task<IReadOnlyList<JobRunSnapshot>> ListAsync(bool hideNsfw, CancellationToken cancellationToken) =>
             Task.FromResult<IReadOnlyList<JobRunSnapshot>>([]);
@@ -240,8 +300,54 @@ public sealed class RefreshEntityJobHandlerTests {
         public Task<JobRunSnapshot> EnqueueAsync(JobType type, CancellationToken cancellationToken) =>
             throw new NotSupportedException();
 
-        public Task<JobRunSnapshot> EnqueueAsync(EnqueueJobRequest request, CancellationToken cancellationToken) =>
-            throw new NotSupportedException();
+        public Task<JobRunSnapshot> EnqueueAsync(EnqueueJobRequest request, CancellationToken cancellationToken) {
+            Enqueued.Add(request);
+            var now = DateTimeOffset.UtcNow;
+            return Task.FromResult(new JobRunSnapshot(
+                Guid.NewGuid(),
+                request.Type,
+                JobRunStatus.Queued,
+                0,
+                null,
+                request.PayloadJson ?? "{}",
+                request.TargetEntityKind,
+                request.TargetEntityId,
+                request.TargetLabel,
+                now,
+                null,
+                null));
+        }
+
+        public Task<JobRunSnapshot> AppendChildGraphNodeAsync(
+            JobRunSnapshot parent,
+            GraphJobNodeRequest request,
+            CancellationToken cancellationToken) {
+            Nodes.Add(request);
+            Enqueued.Add(request.Job);
+            var id = Guid.NewGuid();
+            RunIds[request.NodeKey] = id;
+            var now = DateTimeOffset.UtcNow;
+            return Task.FromResult(new JobRunSnapshot(
+                id,
+                request.Job.Type,
+                JobRunStatus.Queued,
+                0,
+                null,
+                request.Job.PayloadJson ?? "{}",
+                request.Job.TargetEntityKind,
+                request.Job.TargetEntityId,
+                request.Job.TargetLabel,
+                now,
+                null,
+                null,
+                GraphId: parent.GraphId,
+                GraphOrigin: parent.GraphOrigin,
+                NodeKey: request.NodeKey,
+                ParentRunId: parent.Id,
+                Importance: request.Importance,
+                ResourceClass: request.ResourceClass,
+                ResourceKey: request.ResourceKey));
+        }
 
         public Task<bool> HasPendingAsync(JobType type, string? targetEntityId, CancellationToken cancellationToken) =>
             Task.FromResult(false);
@@ -258,8 +364,7 @@ public sealed class RefreshEntityJobHandlerTests {
         public Task<int> ClearFailuresAsync(JobType? type, CancellationToken cancellationToken) => Task.FromResult(0);
         public Task<JobRunSnapshot?> ClaimNextAsync(
             string workerId,
-            CancellationToken cancellationToken,
-            JobRunLane? lane = null) => Task.FromResult<JobRunSnapshot?>(null);
+            CancellationToken cancellationToken) => Task.FromResult<JobRunSnapshot?>(null);
         public Task<int> RecoverStaleRunningAsync(
             string currentWorkerId,
             TimeSpan staleAfter,

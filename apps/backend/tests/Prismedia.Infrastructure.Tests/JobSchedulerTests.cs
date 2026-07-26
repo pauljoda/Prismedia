@@ -53,8 +53,7 @@ public sealed class JobSchedulerTests {
 
         var request = Assert.Single(queue.Enqueued);
         Assert.Equal(JobType.AcquisitionMonitor, request.Type);
-        Assert.True(request.Priority > JobPriorities.InteractiveRequest);
-        Assert.Equal(JobRunLane.ForegroundIdentify, request.Lane);
+        Assert.Equal(JobGraphOrigin.Background, request.Origin);
     }
 
     [Fact]
@@ -324,8 +323,7 @@ public sealed class JobSchedulerTests {
         Assert.Equal(expectedType, request.Type);
         Assert.Equal(acquisitionId.ToString(), request.TargetEntityId);
         Assert.Equal(acquisitionId, AcquisitionJobPayload.Parse(request.PayloadJson!).AcquisitionId);
-        Assert.Equal(JobPriorities.AcquisitionCompletion, request.Priority);
-        Assert.Equal(JobRunLane.ForegroundIdentify, request.Lane);
+        Assert.Equal(JobGraphOrigin.Background, request.Origin);
     }
 
     private static ServiceProvider CreateProvider(
@@ -467,7 +465,7 @@ public sealed class JobSchedulerTests {
         public Task<int> ClearFailuresAsync(JobType? type, CancellationToken cancellationToken) =>
             Task.FromResult(0);
 
-        public Task<JobRunSnapshot?> ClaimNextAsync(string workerId, CancellationToken cancellationToken, JobRunLane? lane = null) =>
+        public Task<JobRunSnapshot?> ClaimNextAsync(string workerId, CancellationToken cancellationToken) =>
             Task.FromResult<JobRunSnapshot?>(null);
 
         public Task<int> RecoverStaleRunningAsync(string currentWorkerId, TimeSpan staleAfter, CancellationToken cancellationToken) =>

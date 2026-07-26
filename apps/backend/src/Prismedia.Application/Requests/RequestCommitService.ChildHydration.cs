@@ -1,3 +1,6 @@
+using Prismedia.Application.Jobs;
+using Prismedia.Domain.Entities;
+
 namespace Prismedia.Application.Requests;
 
 /// <summary>
@@ -34,6 +37,14 @@ public interface IMissingChildAcquisitionRequester {
     Task<(int Covered, int Missing)> RequestMissingChildrenAsync(
         Guid entityId,
         CancellationToken cancellationToken);
+
+    /// <summary>Requests gaps while preserving the caller's graph or explicit root scheduling pool.</summary>
+    Task<(int Covered, int Missing)> RequestMissingChildrenAsync(
+        Guid entityId,
+        JobContext? parentContext,
+        JobGraphOrigin origin,
+        CancellationToken cancellationToken) =>
+        RequestMissingChildrenAsync(entityId, cancellationToken);
 }
 
 public sealed partial class RequestCommitService {
@@ -92,6 +103,19 @@ public sealed partial class RequestCommitService {
     public async Task<(int Covered, int Missing)> RequestMissingChildrenAsync(
         Guid entityId,
         CancellationToken cancellationToken) {
+        return await RequestMissingChildrenAsync(
+            entityId,
+            parentContext: null,
+            JobGraphOrigin.Interactive,
+            cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public async Task<(int Covered, int Missing)> RequestMissingChildrenAsync(
+        Guid entityId,
+        JobContext? parentContext,
+        JobGraphOrigin origin,
+        CancellationToken cancellationToken) {
         var entity = await wanted.GetEntityAsync(entityId, cancellationToken);
         if (entity is null) {
             return (0, 0);
@@ -115,12 +139,22 @@ public sealed partial class RequestCommitService {
             if (await acquisitions.EnsureOpenEntitySearchAsync(
                     childId,
                     child.BookRendition,
+                    parentContext,
+                    origin,
                     cancellationToken)) {
                 covered++;
                 continue;
             }
 
-            var response = await RequestEntityAsync(childId, hideNsfw: true, cancellationToken);
+            var response = await RequestEntityFromGraphAsync(
+                childId,
+                hideNsfw: true,
+                cancellationToken,
+                targeting: null,
+                child.BookRendition,
+                hydrateChildren: true,
+                parentContext,
+                origin);
             if (response is { Items.Count: > 0 }) {
                 covered++;
             }
@@ -140,7 +174,11 @@ public sealed partial class RequestCommitService {
                 continue;
             }
 
-            var (subCovered, subMissing) = await RequestMissingChildrenAsync(ownedChildId, cancellationToken);
+            var (subCovered, subMissing) = await RequestMissingChildrenAsync(
+                ownedChildId,
+                parentContext,
+                origin,
+                cancellationToken);
             covered += subCovered;
             total += subMissing;
         }

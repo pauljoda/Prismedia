@@ -29,6 +29,14 @@ internal sealed class JobCpuPermitPool(int totalPermits) {
     private readonly object _gate = new();
     private int _available = Math.Max(1, totalPermits);
 
+    public IReadOnlyCollection<JobResourceClass> AcquirableClasses() {
+        lock (_gate) {
+            return Enum.GetValues<JobResourceClass>()
+                .Where(resourceClass => AdaptiveJobCapacity.CpuCost(resourceClass, totalPermits) <= _available)
+                .ToArray();
+        }
+    }
+
     public bool TryAcquire(JobResourceClass resourceClass, out IDisposable lease) {
         var cost = AdaptiveJobCapacity.CpuCost(resourceClass, totalPermits);
         lock (_gate) {

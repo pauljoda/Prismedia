@@ -87,11 +87,6 @@ public sealed class ScanLibraryJobHandler(
         await using var scanLease = scanGate is null ? null : await scanGate.EnterAsync(cancellationToken);
         var files = placedPaths.Select(Path.GetFullPath).ToArray();
         var seriesSeasonFolders = BuildSeriesSeasonFolderIndex(root.Path, files);
-        var settings = await Roots.GetSettingsAsync(cancellationToken);
-        if (!root.AutoIdentify) {
-            settings = settings with { AutoIdentifyEnabled = false };
-        }
-
         var items = new List<VideoUpsertItem>(files.Length);
         foreach (var filePath in files) {
             var sidecar = sidecars is null
@@ -130,58 +125,10 @@ public sealed class ScanLibraryJobHandler(
             }
         }
 
-        var downstreamTargets = await ResolveVideoSourceOwnersAsync(
-            entityIds.ToList(),
-            persistedItems.Select(item => item.FilePath).ToList(),
-            files,
-            cancellationToken);
-        await InvalidateChangedSidecarsAsync(downstreamTargets, cancellationToken);
-        var downstreamIds = downstreamTargets.Select(target => target.EntityId).Distinct().ToArray();
-        var needs = await downstreamNeeds.CheckDownstreamNeedsBatchAsync(downstreamIds, cancellationToken);
-        var downstreamJobs = new List<EnqueueJobRequest>();
-        foreach (var target in downstreamTargets) {
-            if (needs.TryGetValue(target.EntityId, out var entityNeeds)) {
-                downstreamJobs.AddRange(VideoDownstreamJobPlanner.BuildForImport(
-                    settings,
-                    target.EntityId,
-                    target.FilePath,
-                    entityNeeds));
-            }
-        }
-
-        if (downstreamJobs.Count > 0) {
-            await ImportedMaterializationHousekeeping.TryAsync(
-                logger,
-                "Imported movie is ready but its downstream jobs could not be queued.",
-                () => context.EnqueueBatchAsync(downstreamJobs, cancellationToken));
-        }
-
         if (acquisitionHints is not null) {
-            var owners = await acquisitionHints.ApplyToFolderOwnersAsync(
-                cancellationToken,
-                acquisitionId);
-            foreach (var owner in owners) {
-                await ImportedMaterializationHousekeeping.TryAsync(
-                    logger,
-                    "Imported movie is ready but its identify job could not be queued.",
-                    () => context.EnqueueIfNeededAsync(new EnqueueJobRequest(
-                        JobType.AutoIdentify,
-                        TargetEntityKind: owner.TopLevelKindCode,
-                        TargetEntityId: owner.TopLevelEntityId.ToString(),
-                        TargetLabel: owner.TopLevelTitle,
-                        Priority: JobPriorities.AutoIdentify), cancellationToken));
-            }
+            await acquisitionHints.ApplyToFolderOwnersAsync(cancellationToken, acquisitionId);
         }
 
-        await ImportedMaterializationHousekeeping.TryAsync(
-            logger,
-            "Imported movie is ready but automatic identification housekeeping could not be queued.",
-            () => AutoIdentifyScanEnqueue.EnqueueRootsAsync(
-                context,
-                settings,
-                downstreamNeeds,
-                entityIds,
-                cancellationToken));
     }
 
     protected override async Task<ScanRootOutcome> ScanRootCoreAsync(
@@ -348,8 +295,7 @@ public sealed class ScanLibraryJobHandler(
                         JobType.AutoIdentify,
                         TargetEntityKind: owner.TopLevelKindCode,
                         TargetEntityId: owner.TopLevelEntityId.ToString(),
-                        TargetLabel: owner.TopLevelTitle,
-                        Priority: JobPriorities.AutoIdentify), cancellationToken);
+                        TargetLabel: owner.TopLevelTitle), cancellationToken);
                 }
             }
         }

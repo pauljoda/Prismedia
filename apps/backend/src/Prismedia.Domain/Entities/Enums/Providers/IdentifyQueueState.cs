@@ -20,6 +20,10 @@ public enum IdentifyQueueState {
     [Code("proposal")]
     Proposal,
 
+    /// <summary>The reviewed proposal is queued or running in its interactive graph.</summary>
+    [Code("applying")]
+    Applying,
+
     /// <summary>The proposal was accepted and applied to the entity.</summary>
     [Code("done")]
     Done,

@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging;
 using Prismedia.Application.Acquisition;
+using Prismedia.Application.Entities;
 using Prismedia.Application.Files;
 using Prismedia.Application.Jobs.Ports;
 using Prismedia.Domain.Entities;
@@ -13,12 +14,12 @@ namespace Prismedia.Application.Jobs.Handlers.Scan;
 /// </summary>
 public sealed class ImportedVideoMaterializer(
     IVideoScanPersistence videos,
-    ILibraryScanRootPersistence roots,
-    IDownstreamNeedsPersistence downstreamNeeds,
     IAcquisitionHintApplier acquisitionHints,
     ILogger<ImportedVideoMaterializer> logger,
-    IMaintenancePersistence? maintenance = null) : IImportedVideoMaterializer {
-    public async Task MaterializeAsync(
+    IMaintenancePersistence? maintenance = null,
+    IScanSnapshotStore? snapshots = null,
+    IEntityHierarchyReader? hierarchy = null) : IImportedVideoMaterializer {
+    public async Task<ImportedEntityMaterializationResult> MaterializeAsync(
         JobContext context,
         ImportedTvMaterializationRequest request,
         CancellationToken cancellationToken) {
@@ -120,49 +121,43 @@ public sealed class ImportedVideoMaterializer(
             }
         }
 
-        var settings = await roots.GetSettingsAsync(cancellationToken);
-        if (!request.Root.AutoIdentify) {
-            settings = settings with { AutoIdentifyEnabled = false };
-        }
-
         var readyEntityIds = readyOwnerSources.Keys.ToArray();
-        var needs = await downstreamNeeds.CheckDownstreamNeedsBatchAsync(readyEntityIds, cancellationToken);
-        var downstreamJobs = new List<EnqueueJobRequest>();
-        foreach (var (entityId, sourcePath) in readyOwnerSources) {
-            if (needs.TryGetValue(entityId, out var entityNeeds)) {
-                downstreamJobs.AddRange(VideoDownstreamJobPlanner.BuildForImport(
-                    settings,
-                    entityId,
-                    sourcePath,
-                    entityNeeds));
-            }
+        if (snapshots is not null) {
+            await ImportedScanSnapshot.ApplyAsync(
+                snapshots,
+                request.Root.Id,
+                JobType.ScanLibrary,
+                items.Select(item => item.FilePath).ToArray(),
+                request.Episodes
+                    .Where(episode => !string.IsNullOrWhiteSpace(episode.PreviousFilePath))
+                    .Select(episode => episode.PreviousFilePath!)
+                    .ToArray(),
+                cancellationToken);
         }
-
-        if (downstreamJobs.Count > 0) {
-            await context.EnqueueBatchAsync(downstreamJobs, cancellationToken);
+        var touchedAncestors = new HashSet<Guid>();
+        if (hierarchy is not null) {
+            foreach (var entityId in readyEntityIds) {
+                touchedAncestors.UnionWith(await hierarchy.ListAncestorIdsAsync(entityId, cancellationToken));
+            }
         }
 
         // An acquisition is explicit user intent. Stamp its identities before publishing any job, then
         // identify only the exact episodes materialized above. The payload permits this intentional child
         // target while ordinary scans remain root-only and continue to cascade from a series.
         await acquisitionHints.ApplyToFolderOwnersAsync(cancellationToken, request.AcquisitionId);
-        var identifyPayload = new AutoIdentifyJobPayload(
-            AllowChildTarget: true,
-            IgnoreOrganizedGate: true).ToJson();
-        foreach (var (entityId, sourcePath) in readyOwnerSources) {
-            await context.EnqueueIfNeededAsync(EnqueueJobRequest.ForEntity(
-                JobType.AutoIdentify,
-                EntityKind.Video,
-                entityId.ToString(),
-                Path.GetFileNameWithoutExtension(sourcePath),
-                JobPriorities.TargetedAutoIdentify,
-                identifyPayload), cancellationToken);
-        }
-
         logger.LogInformation(
             "Materialized {Count} imported TV file(s) in {SeriesFolder} before marking the acquisition imported.",
             entityIds.Count,
             seriesFolder);
+        return new ImportedEntityMaterializationResult(
+            readyEntityIds.Select(entityId => new ImportedEntityReference(entityId, EntityKind.Video)).ToArray(),
+            touchedAncestors.ToArray(),
+            items.Select(item => item.FilePath).ToArray(),
+            request.Episodes
+                .Where(episode => !string.IsNullOrWhiteSpace(episode.PreviousFilePath))
+                .Select(episode => Path.GetFullPath(episode.PreviousFilePath!))
+                .ToArray(),
+            []);
     }
 
     private static void EnsureInsideRoot(string candidate, string rootPath) {

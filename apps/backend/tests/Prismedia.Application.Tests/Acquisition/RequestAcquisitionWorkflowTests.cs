@@ -41,6 +41,8 @@ public sealed class RequestAcquisitionWorkflowTests {
             $"hydrate:{second}",
             $"start:{second}"
         ], events);
+        Assert.All(requests.ParentContexts, context => Assert.NotNull(context));
+        Assert.All(requests.Origins, origin => Assert.Equal(JobGraphOrigin.Interactive, origin));
     }
 
     [Fact]
@@ -120,7 +122,9 @@ public sealed class RequestAcquisitionWorkflowTests {
             "Divide Music",
             now,
             now,
-            null);
+            null,
+            GraphId: Guid.NewGuid(),
+            GraphOrigin: JobGraphOrigin.Interactive);
     }
 
     private sealed class RecordingChildHydrator(List<string> events) : IRequestChildHydrator {
@@ -135,6 +139,9 @@ public sealed class RequestAcquisitionWorkflowTests {
     }
 
     private sealed class RecordingGraphAcquisitionStarter(List<string> events) : IRequestGraphAcquisitionStarter {
+        public List<JobContext?> ParentContexts { get; } = [];
+        public List<JobGraphOrigin> Origins { get; } = [];
+
         public Task<RequestCommitResponse?> RequestEntityFromGraphAsync(
             Guid entityId,
             bool hideNsfw,
@@ -151,6 +158,26 @@ public sealed class RequestAcquisitionWorkflowTests {
                     RequestCommitOutcome.Requested,
                     entityId,
                     Guid.NewGuid())]));
+        }
+
+        public Task<RequestCommitResponse?> RequestEntityFromGraphAsync(
+            Guid entityId,
+            bool hideNsfw,
+            CancellationToken cancellationToken,
+            AcquisitionTargeting? targeting,
+            BookRendition? bookRendition,
+            bool hydrateChildren,
+            JobContext? parentContext,
+            JobGraphOrigin origin) {
+            ParentContexts.Add(parentContext);
+            Origins.Add(origin);
+            return RequestEntityFromGraphAsync(
+                entityId,
+                hideNsfw,
+                cancellationToken,
+                targeting,
+                bookRendition,
+                hydrateChildren);
         }
     }
 
@@ -177,7 +204,7 @@ public sealed class RequestAcquisitionWorkflowTests {
         public Task<int> CancelAsync(JobType? type, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<bool> CancelRunAsync(Guid id, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<int> ClearFailuresAsync(JobType? type, CancellationToken cancellationToken) => throw new NotSupportedException();
-        public Task<JobRunSnapshot?> ClaimNextAsync(string workerId, CancellationToken cancellationToken, JobRunLane? lane = null) => throw new NotSupportedException();
+        public Task<JobRunSnapshot?> ClaimNextAsync(string workerId, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<int> RecoverStaleRunningAsync(string currentWorkerId, TimeSpan staleAfter, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task CompleteAsync(Guid id, string? message, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task FailAsync(Guid id, string message, TimeSpan retryDelay, CancellationToken cancellationToken) => throw new NotSupportedException();

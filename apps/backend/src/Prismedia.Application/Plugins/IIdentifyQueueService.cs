@@ -19,7 +19,7 @@ public interface IIdentifyQueueService {
     Task<IdentifyQueueItem?> GetAsync(Guid entityId, CancellationToken cancellationToken);
 
     /// <summary>
-    /// Requests a provider search for the entity. The item enters the queued state and a background
+    /// Requests a provider search for the entity. The item enters the queued state and an interactive
     /// identify-search job runs the provider work; any search or cascade already in flight for the
     /// item is superseded.
     /// </summary>
@@ -49,7 +49,7 @@ public interface IIdentifyQueueService {
         bool hideNsfw,
         CancellationToken cancellationToken);
 
-    /// <summary>Applies a reviewed queue proposal and marks the item done.</summary>
+    /// <summary>Queues a reviewed proposal for application in the item's interactive graph.</summary>
     Task<IdentifyQueueItem> ApplyAsync(
         Guid entityId,
         ApplyIdentifyQueueItemRequest request,

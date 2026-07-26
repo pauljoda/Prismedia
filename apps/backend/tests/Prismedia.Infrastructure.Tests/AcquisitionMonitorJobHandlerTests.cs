@@ -150,8 +150,7 @@ public sealed class AcquisitionMonitorJobHandlerTests {
 
         var enqueued = Assert.Single(queue.Enqueued);
         Assert.Equal(JobType.AcquisitionFailedHandle, enqueued.Type);
-        Assert.Equal(JobPriorities.AcquisitionRecovery, enqueued.Priority);
-        Assert.Equal(JobRunLane.ForegroundIdentify, enqueued.Lane);
+        Assert.Equal(JobGraphOrigin.Interactive, enqueued.Origin);
         var payload = AcquisitionFailedPayload.Parse(enqueued.PayloadJson!);
         Assert.Equal(BlocklistReason.Stalled, payload.Reason);
         Assert.Equal("hashX", payload.Selected!.InfoHash);
@@ -219,9 +218,7 @@ public sealed class AcquisitionMonitorJobHandlerTests {
 
         var import = Assert.Single(queue.Enqueued);
         Assert.Equal(JobType.AcquisitionImport, import.Type);
-        Assert.Equal(JobPriorities.AcquisitionCompletion, import.Priority);
-        Assert.True(import.Priority > JobPriorities.AcquisitionMonitor);
-        Assert.Equal(JobRunLane.ForegroundIdentify, import.Lane);
+        Assert.Equal(JobGraphOrigin.Interactive, import.Origin);
     }
 
     [Fact]
@@ -656,7 +653,7 @@ public sealed class AcquisitionMonitorJobHandlerTests {
         public Task<int> CancelAsync(JobType? type, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<bool> CancelRunAsync(Guid id, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<int> ClearFailuresAsync(JobType? type, CancellationToken cancellationToken) => throw new NotSupportedException();
-        public Task<JobRunSnapshot?> ClaimNextAsync(string workerId, CancellationToken cancellationToken, JobRunLane? lane = null) => throw new NotSupportedException();
+        public Task<JobRunSnapshot?> ClaimNextAsync(string workerId, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<int> RecoverStaleRunningAsync(string currentWorkerId, TimeSpan staleAfter, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task CompleteAsync(Guid id, string? message, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task FailAsync(Guid id, string message, TimeSpan retryDelay, CancellationToken cancellationToken) => throw new NotSupportedException();

@@ -45,7 +45,10 @@ public sealed class RequestAcquisitionFanoutJobHandler(
                 payload.HideNsfw,
                 cancellationToken,
                 targeting,
-                hydrateChildren: false);
+                bookRendition: null,
+                hydrateChildren: false,
+                context,
+                context.Job.GraphOrigin ?? JobGraphOrigin.Interactive);
             await context.ReportProgressAsync(
                 (index + 1) * 100 / payload.ChildEntityIds.Count,
                 $"Started {index + 1} of {payload.ChildEntityIds.Count} requests",

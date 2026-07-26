@@ -391,6 +391,14 @@ public sealed record AcquisitionTeardownClaim(
 /// before enqueueing or executing acquisition work.
 /// </summary>
 public interface IAcquisitionLifecycleStore {
+    /// <summary>Returns the durable graph that owns the acquisition workflow, when linked.</summary>
+    Task<Guid?> GetJobGraphIdAsync(Guid id, CancellationToken cancellationToken) =>
+        Task.FromResult<Guid?>(null);
+
+    /// <summary>Links an acquisition to its owning graph without replacing an already-linked graph.</summary>
+    Task SetJobGraphIdAsync(Guid id, Guid graphId, CancellationToken cancellationToken) =>
+        Task.CompletedTask;
+
     /// <summary>
     /// Lists durable Downloaded completion tickets that still need an ordinary import or upgrade-replace
     /// job. Queue reconciliation uses this projection to close the status-before-enqueue crash window.

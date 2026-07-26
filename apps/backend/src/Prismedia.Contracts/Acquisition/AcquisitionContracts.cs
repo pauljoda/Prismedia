@@ -121,7 +121,8 @@ public sealed record AcquisitionSummary(
     EntityKind Kind = EntityKind.Book,
     Guid? EntityId = null,
     bool HasResumableImport = false,
-    BookRendition? BookRendition = null);
+    BookRendition? BookRendition = null,
+    Guid? JobGraphId = null);
 
 /// <summary>An acquisition with its scored candidates for the review screen.</summary>
 public sealed record AcquisitionDetail(

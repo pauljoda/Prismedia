@@ -10,24 +10,26 @@ namespace Prismedia.Application.Jobs;
 /// <param name="TargetEntityKind">Optional entity kind for display and deduplication (e.g. "video", "library-root").</param>
 /// <param name="TargetEntityId">Optional entity identifier for display and deduplication.</param>
 /// <param name="TargetLabel">Optional human-readable label shown on the dashboard.</param>
-/// <param name="Priority">Higher values are claimed first. Defaults to zero.</param>
-/// <param name="Lane">Optional queue lane for work that needs dedicated foreground worker selection.</param>
+/// <param name="Origin">Interactive or background scheduling pool for a root operation.</param>
 /// <param name="NodeKey">Optional stable graph-local key for idempotent child expansion.</param>
 /// <param name="Importance">Optional override for required versus best-effort graph behavior.</param>
 /// <param name="ResourceClass">Optional override for the job type's CPU resource profile.</param>
 /// <param name="ResourceKey">Optional shared external or entity resource key.</param>
+/// <param name="GraphRootEntityKind">Optional top-level Entity kind for a root graph when the executable node targets another durable record.</param>
+/// <param name="GraphRootEntityId">Optional top-level Entity id for a root graph when the executable node targets another durable record.</param>
 public sealed record EnqueueJobRequest(
     JobType Type,
     string? PayloadJson = null,
     string? TargetEntityKind = null,
     string? TargetEntityId = null,
     string? TargetLabel = null,
-    int Priority = 0,
-    JobRunLane? Lane = null,
+    JobGraphOrigin Origin = JobGraphOrigin.Background,
     string? NodeKey = null,
     JobNodeImportance? Importance = null,
     JobResourceClass? ResourceClass = null,
-    string? ResourceKey = null) {
+    string? ResourceKey = null,
+    string? GraphRootEntityKind = null,
+    string? GraphRootEntityId = null) {
     /// <summary>
     /// Creates a queue request for a Prismedia entity target using the canonical entity-kind code.
     /// </summary>
@@ -36,15 +38,13 @@ public sealed record EnqueueJobRequest(
         EntityKind kind,
         string entityId,
         string? label,
-        int priority = 0,
         string? payloadJson = null,
-        JobRunLane? lane = null) =>
+        JobGraphOrigin origin = JobGraphOrigin.Background) =>
         new(
             type,
             payloadJson,
             kind.ToCode(),
             entityId,
             label,
-            priority,
-            lane);
+            origin);
 }

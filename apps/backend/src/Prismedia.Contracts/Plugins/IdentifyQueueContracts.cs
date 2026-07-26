@@ -22,6 +22,7 @@ namespace Prismedia.Contracts.Plugins;
 /// <param name="CreatedAt">When the item was first queued.</param>
 /// <param name="UpdatedAt">When queue state last changed.</param>
 /// <param name="CompletedAt">When the item reached a terminal state.</param>
+/// <param name="JobGraphId">Durable lane that owns the search, review wait, and continuation work.</param>
 public sealed record IdentifyQueueItem(
     Guid Id,
     Guid EntityId,
@@ -38,7 +39,8 @@ public sealed record IdentifyQueueItem(
     bool CascadeRunning,
     DateTimeOffset CreatedAt,
     DateTimeOffset UpdatedAt,
-    DateTimeOffset? CompletedAt);
+    DateTimeOffset? CompletedAt,
+    Guid? JobGraphId = null);
 
 /// <summary>
 /// Live progress for applying a reviewed Identify proposal.
@@ -66,8 +68,8 @@ public sealed record IdentifyApplyProgress(
     DateTimeOffset UpdatedAt);
 
 /// <summary>
-/// Request body for requesting an identify provider search. The search itself runs as a background
-/// identify-search job; the returned queue item reports its progress through the state codes.
+/// Request body for requesting an identify provider search. The search runs in an interactive
+/// graph; the returned queue item reports its progress through the state codes.
 /// </summary>
 /// <param name="Provider">
 /// Provider code selected by the user, or null to let the server walk the enabled providers that

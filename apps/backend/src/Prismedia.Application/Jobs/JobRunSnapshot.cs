@@ -19,7 +19,6 @@ namespace Prismedia.Application.Jobs;
 /// <param name="FinishedAt">Time the job finished, when complete or failed.</param>
 /// <param name="Attempts">Number of times this run has been claimed, including the current attempt.</param>
 /// <param name="MaxAttempts">Maximum attempts before the run is failed terminally rather than retried.</param>
-/// <param name="Lane">Optional queue lane used for foreground worker selection.</param>
 /// <param name="GraphId">Owning durable graph, when the run has been migrated.</param>
 /// <param name="GraphOrigin">Origin that determines interactive or background worker selection.</param>
 /// <param name="NodeKey">Stable graph-local node key.</param>
@@ -42,7 +41,6 @@ public sealed record JobRunSnapshot(
     DateTimeOffset? FinishedAt,
     int Attempts = 0,
     int MaxAttempts = 0,
-    JobRunLane? Lane = null,
     Guid? GraphId = null,
     JobGraphOrigin? GraphOrigin = null,
     string? NodeKey = null,

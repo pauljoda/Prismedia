@@ -476,8 +476,7 @@ public sealed class MonitorServiceTests {
 
         public Task<JobRunSnapshot?> ClaimNextAsync(
             string workerId,
-            CancellationToken cancellationToken,
-            JobRunLane? lane = null) =>
+            CancellationToken cancellationToken) =>
             Task.FromResult<JobRunSnapshot?>(null);
 
         public Task<int> RecoverStaleRunningAsync(

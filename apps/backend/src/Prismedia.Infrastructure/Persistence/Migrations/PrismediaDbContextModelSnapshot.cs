@@ -330,6 +330,10 @@ namespace Prismedia.Infrastructure.Persistence.Migrations
                         .HasColumnType("jsonb")
                         .HasColumnName("import_result_json");
 
+                    b.Property<Guid?>("JobGraphId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("job_graph_id");
+
                     b.Property<string>("Kind")
                         .IsRequired()
                         .ValueGeneratedOnAdd()
@@ -464,6 +468,8 @@ namespace Prismedia.Infrastructure.Persistence.Migrations
                     b.HasIndex("CreatedAt");
 
                     b.HasIndex("EntityId");
+
+                    b.HasIndex("JobGraphId");
 
                     b.HasIndex("ProfileId");
 
@@ -2284,6 +2290,10 @@ namespace Prismedia.Infrastructure.Persistence.Migrations
                         .HasColumnType("text")
                         .HasColumnName("error");
 
+                    b.Property<Guid?>("JobGraphId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("job_graph_id");
+
                     b.Property<string>("ProposalJson")
                         .HasColumnType("jsonb")
                         .HasColumnName("proposal_json");
@@ -2315,6 +2325,8 @@ namespace Prismedia.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("EntityId")
                         .IsUnique();
+
+                    b.HasIndex("JobGraphId");
 
                     b.HasIndex("State", "UpdatedAt");
 
@@ -2767,11 +2779,6 @@ namespace Prismedia.Infrastructure.Persistence.Migrations
                         .HasDefaultValue("required")
                         .HasColumnName("importance");
 
-                    b.Property<string>("Lane")
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)")
-                        .HasColumnName("lane");
-
                     b.Property<DateTimeOffset?>("LockedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("locked_at");
@@ -2802,10 +2809,6 @@ namespace Prismedia.Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .HasColumnType("jsonb")
                         .HasColumnName("payload_json");
-
-                    b.Property<int>("Priority")
-                        .HasColumnType("integer")
-                        .HasColumnName("priority");
 
                     b.Property<int>("Progress")
                         .HasColumnType("integer")
@@ -2874,12 +2877,12 @@ namespace Prismedia.Infrastructure.Persistence.Migrations
                         .HasDatabaseName("ux_job_runs_graph_node_key")
                         .HasFilter("graph_id IS NOT NULL AND node_key IS NOT NULL");
 
+                    b.HasIndex("Status", "AvailableAt");
+
                     b.HasIndex("Type", "TargetEntityId", "Status")
                         .HasDatabaseName("ix_job_runs_dedup");
 
                     b.HasIndex("GraphId", "Status", "AvailableAt", "Sequence");
-
-                    b.HasIndex("Status", "Lane", "AvailableAt", "Priority");
 
                     b.ToTable("job_runs", null, t =>
                         {
@@ -4128,6 +4131,11 @@ namespace Prismedia.Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("Prismedia.Infrastructure.Persistence.Entities.AcquisitionRow", b =>
                 {
+                    b.HasOne("Prismedia.Infrastructure.Persistence.Entities.JobGraphRow", null)
+                        .WithMany()
+                        .HasForeignKey("JobGraphId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
                     b.HasOne("Prismedia.Infrastructure.Persistence.Entities.BookAcquisitionProfileRow", null)
                         .WithMany()
                         .HasForeignKey("ProfileId")
@@ -4480,6 +4488,11 @@ namespace Prismedia.Infrastructure.Persistence.Migrations
                         .HasForeignKey("EntityId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+
+                    b.HasOne("Prismedia.Infrastructure.Persistence.Entities.JobGraphRow", null)
+                        .WithMany()
+                        .HasForeignKey("JobGraphId")
+                        .OnDelete(DeleteBehavior.SetNull);
                 });
 
             modelBuilder.Entity("Prismedia.Infrastructure.Persistence.Entities.IdentifyResultRow", b =>

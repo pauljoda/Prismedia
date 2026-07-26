@@ -178,6 +178,7 @@ internal static partial class PrismediaModelConfiguration {
             entity.ToTable("acquisitions");
             entity.HasKey(row => row.Id);
             entity.Property(row => row.Id).HasColumnName("id").ValueGeneratedNever();
+            entity.Property(row => row.JobGraphId).HasColumnName("job_graph_id");
             entity.Property(row => row.Kind)
                 .HasColumnName("kind")
                 .HasMaxLength(64)
@@ -258,11 +259,13 @@ internal static partial class PrismediaModelConfiguration {
             entity.HasIndex(row => row.CreatedAt);
             entity.HasIndex(row => row.Status);
             entity.HasIndex(row => row.UpgradeOfAcquisitionId);
+            entity.HasIndex(row => row.JobGraphId);
             // Loose link into the entity graph: deleting the wanted entity never cascades into (or is
             // blocked by) a transient acquisition attempt.
             entity.HasIndex(row => row.EntityId);
             entity.HasOne<BookAcquisitionProfileRow>().WithMany().HasForeignKey(row => row.ProfileId).OnDelete(DeleteBehavior.SetNull);
             entity.HasOne<AcquisitionRow>().WithMany().HasForeignKey(row => row.UpgradeOfAcquisitionId).OnDelete(DeleteBehavior.SetNull);
+            entity.HasOne<JobGraphRow>().WithMany().HasForeignKey(row => row.JobGraphId).OnDelete(DeleteBehavior.SetNull);
         });
 
         modelBuilder.Entity<ReleaseCandidateRow>(entity => {

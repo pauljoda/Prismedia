@@ -10,8 +10,6 @@ namespace Prismedia.Application.Jobs.Handlers.Scan;
 /// parent cascades to its descendants instead of each child racing to re-identify the whole tree.
 /// </summary>
 internal static class AutoIdentifyScanEnqueue {
-    private const int AutoIdentifyPriority = JobPriorities.AutoIdentify;
-
     /// <summary>
     /// Resolves the distinct top-level ancestors of the scanned entities and queues one auto-identify
     /// job per root whose media kind the user enabled. No-ops when auto identify is disabled.
@@ -126,8 +124,7 @@ internal static class AutoIdentifyScanEnqueue {
             JobType.AutoIdentify,
             TargetEntityKind: entityKind,
             TargetEntityId: entityId,
-            TargetLabel: label,
-            Priority: AutoIdentifyPriority);
+            TargetLabel: label);
     }
 
     /// <summary>

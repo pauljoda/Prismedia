@@ -1,5 +1,7 @@
 using Prismedia.Application.Jobs.Ports;
+using Prismedia.Application.Acquisition;
 using Prismedia.Contracts.Jobs;
+using Prismedia.Contracts.Plugins;
 using Prismedia.Domain.Entities;
 
 namespace Prismedia.Application.Jobs;
@@ -12,6 +14,8 @@ public sealed class JobService {
     private readonly IMaintenancePersistence _maintenance;
     private readonly IDownstreamNeedsPersistence _downstreamNeeds;
     private readonly ILibraryScanRootPersistence _scanRoots;
+    private readonly IJobGraphService _graphs;
+    private readonly IAcquisitionGraphCancellation? _acquisitions;
 
     /// <summary>
     /// Creates a job service over the durable queue and maintenance persistence ports.
@@ -24,11 +28,15 @@ public sealed class JobService {
         IJobQueueService queue,
         IMaintenancePersistence maintenance,
         IDownstreamNeedsPersistence downstreamNeeds,
-        ILibraryScanRootPersistence scanRoots) {
+        ILibraryScanRootPersistence scanRoots,
+        IJobGraphService graphs,
+        IAcquisitionGraphCancellation? acquisitions = null) {
         _queue = queue;
         _maintenance = maintenance;
         _downstreamNeeds = downstreamNeeds;
         _scanRoots = scanRoots;
+        _graphs = graphs;
+        _acquisitions = acquisitions;
     }
 
     /// <summary>
@@ -47,7 +55,85 @@ public sealed class JobService {
     /// </summary>
     public async Task<JobCreateResponse> CreateAsync(JobType type, CancellationToken cancellationToken) {
         var job = await _queue.EnqueueAsync(type, cancellationToken);
-        return new JobCreateResponse(ToContract(job));
+        var contract = ToContract(job);
+        return new JobCreateResponse(contract, ToGraphReference(job, contract));
+    }
+
+    /// <summary>Lists durable logical lanes with aggregate node progress and blocking reason.</summary>
+    public Task<JobGraphListResponse> ListGraphsAsync(CancellationToken cancellationToken) =>
+        ListGraphsAsync(hideNsfw: false, cancellationToken);
+
+    /// <summary>Lists durable logical lanes with aggregate node progress and blocking reason.</summary>
+    public async Task<JobGraphListResponse> ListGraphsAsync(bool hideNsfw, CancellationToken cancellationToken) {
+        var graphs = await _graphs.ListAsync(hideNsfw, cancellationToken);
+        var results = new List<JobGraphSummary>(graphs.Count);
+        foreach (var graph in graphs) {
+            var detail = await _graphs.GetAsync(graph.Id, hideNsfw, cancellationToken);
+            if (detail is not null) results.Add(ToSummary(detail));
+        }
+        return new JobGraphListResponse(results);
+    }
+
+    /// <summary>Returns one expanded graph, or null when it does not exist.</summary>
+    public Task<JobGraphDetailResponse?> GetGraphAsync(Guid graphId, CancellationToken cancellationToken) =>
+        GetGraphAsync(graphId, hideNsfw: false, cancellationToken);
+
+    /// <summary>Returns one expanded graph, or null when it does not exist.</summary>
+    public async Task<JobGraphDetailResponse?> GetGraphAsync(
+        Guid graphId,
+        bool hideNsfw,
+        CancellationToken cancellationToken) {
+        var detail = await _graphs.GetAsync(graphId, hideNsfw, cancellationToken);
+        if (detail is null) return null;
+        return new JobGraphDetailResponse(
+            ToSummary(detail),
+            detail.Nodes.Select(node => new JobGraphNode(
+                node.Id,
+                node.NodeKey,
+                node.ParentRunId,
+                node.Type,
+                node.Status,
+                node.Importance,
+                node.ResourceClass,
+                node.ResourceKey,
+                node.Progress,
+                node.Message,
+                node.TargetEntityKind,
+                node.TargetEntityId,
+                node.TargetLabel,
+                node.CreatedAt,
+                node.StartedAt,
+                node.FinishedAt)).ToArray(),
+            detail.Dependencies.Select(edge => new JobGraphDependency(
+                edge.PredecessorRunId,
+                edge.SuccessorRunId)).ToArray(),
+            detail.Signals.Select(signal => new JobGraphSignal(
+                signal.Id,
+                signal.Key,
+                signal.Kind,
+                signal.CorrelationId,
+                signal.Message,
+                signal.CreatedAt,
+                signal.ResolvedAt,
+                signal.CancelledAt)).ToArray());
+    }
+
+    /// <summary>Cancels one graph, all active nodes, and all open signals.</summary>
+    public async Task<JobGraphCancelResponse> CancelGraphAsync(Guid graphId, CancellationToken cancellationToken) {
+        var detail = await _graphs.GetAsync(graphId, cancellationToken);
+        var cancelled = await _graphs.CancelAsync(graphId, cancellationToken);
+        if (cancelled && _acquisitions is not null && detail is not null) {
+            var acquisitionIds = detail.Signals
+                .Where(signal => signal.Kind == JobGraphSignalKind.ExternalTransfer)
+                .Select(signal => Guid.TryParse(signal.CorrelationId, out var id) ? id : (Guid?)null)
+                .Where(id => id is not null)
+                .Select(id => id!.Value)
+                .Distinct();
+            foreach (var acquisitionId in acquisitionIds) {
+                await _acquisitions.CancelFromGraphAsync(acquisitionId, cancellationToken);
+            }
+        }
+        return new JobGraphCancelResponse(cancelled);
     }
 
     /// <summary>
@@ -91,6 +177,7 @@ public sealed class JobService {
         };
 
         int enqueued = 0, skipped = 0;
+        var graphs = new List<JobGraphReference>();
         foreach (var (kind, jobType) in previewKinds) {
             var entityIds = await _maintenance.GetActiveEntityIdsByKindAsync(kind, cancellationToken);
             foreach (var entityId in entityIds) {
@@ -102,17 +189,19 @@ public sealed class JobService {
                     continue;
                 }
 
-                await _queue.EnqueueAsync(
+                var job = await _queue.EnqueueAsync(
                     new EnqueueJobRequest(
                         Type: jobType,
                         TargetEntityKind: EntityKindRegistry.ToCode(kind),
                         TargetEntityId: id),
                     cancellationToken);
+                var contract = ToContract(job);
+                graphs.Add(ToGraphReference(job, contract));
                 enqueued++;
             }
         }
 
-        return new BulkJobResponse(enqueued, skipped);
+        return new BulkJobResponse(enqueued, skipped, graphs);
     }
 
     /// <summary>
@@ -124,7 +213,7 @@ public sealed class JobService {
     public async Task<BulkJobResponse> BackfillFingerprintsAsync(CancellationToken cancellationToken) {
         var settings = await _scanRoots.GetSettingsAsync(cancellationToken);
         if (!settings.AutoGenerateOshash && !settings.AutoGenerateMd5) {
-            return new BulkJobResponse(0, 0);
+            return new BulkJobResponse(0, 0, []);
         }
 
         var fingerprintKinds = new (EntityKind Kind, JobType JobType)[]
@@ -135,6 +224,7 @@ public sealed class JobService {
         };
 
         int enqueued = 0, skipped = 0;
+        var graphs = new List<JobGraphReference>();
         foreach (var (kind, jobType) in fingerprintKinds) {
             var entityIds = await _maintenance.GetActiveEntityIdsByKindAsync(kind, cancellationToken);
             foreach (var entityId in entityIds) {
@@ -150,17 +240,19 @@ public sealed class JobService {
                     continue;
                 }
 
-                await _queue.EnqueueAsync(
+                var job = await _queue.EnqueueAsync(
                     new EnqueueJobRequest(
                         Type: jobType,
                         TargetEntityKind: EntityKindRegistry.ToCode(kind),
                         TargetEntityId: id),
                     cancellationToken);
+                var contract = ToContract(job);
+                graphs.Add(ToGraphReference(job, contract));
                 enqueued++;
             }
         }
 
-        return new BulkJobResponse(enqueued, skipped);
+        return new BulkJobResponse(enqueued, skipped, graphs);
     }
 
     private static JobRun ToContract(JobRunSnapshot job) =>
@@ -176,4 +268,61 @@ public sealed class JobService {
             job.CreatedAt,
             job.StartedAt,
             job.FinishedAt);
+
+    private static JobGraphReference ToGraphReference(JobRunSnapshot job, JobRun contract) =>
+        new(
+            job.GraphId ?? throw new InvalidOperationException("New job nodes must belong to a durable graph."),
+            job.GraphOrigin ?? JobGraphOrigin.Background,
+            job.TargetEntityKind,
+            job.TargetEntityId,
+            contract);
+
+    private static JobGraphSummary ToSummary(JobGraphDetailSnapshot detail) {
+        var nodes = detail.Nodes;
+        var completed = nodes.Count(node => node.Status == JobRunStatus.Completed);
+        var warnings = nodes.Count(node =>
+            node.Status == JobRunStatus.Failed && node.Importance == JobNodeImportance.BestEffort);
+        var current = nodes.FirstOrDefault(node => node.Status == JobRunStatus.Running)
+            ?? nodes.FirstOrDefault(node => node.Status == JobRunStatus.Queued);
+        var openSignal = detail.Signals.FirstOrDefault(signal => signal.ResolvedAt is null && signal.CancelledAt is null);
+        var waitReason = openSignal?.Message
+            ?? (current?.ResourceKey is { } resourceKey ? ResourceWaitReason(resourceKey) : current?.Message);
+        var progress = nodes.Count == 0
+            ? 0
+            : (int)Math.Round(nodes.Average(node => node.Progress));
+        return new JobGraphSummary(
+            detail.Graph.Id,
+            detail.Graph.Origin,
+            detail.Graph.Status,
+            detail.Graph.DisplayName,
+            detail.Graph.RootEntityKind,
+            detail.Graph.RootEntityId,
+            progress,
+            nodes.Count,
+            completed,
+            warnings,
+            current?.Type,
+            waitReason,
+            detail.Graph.CreatedAt,
+            detail.Graph.UpdatedAt,
+            detail.Graph.FinishedAt);
+    }
+
+    private static string ResourceWaitReason(string resourceKey) {
+        if (resourceKey.StartsWith(JobResourceKeys.PluginPrefix, StringComparison.Ordinal)) {
+            var provider = resourceKey[JobResourceKeys.PluginPrefix.Length..];
+            return $"Queued for {ProviderDisplayName(provider)}.";
+        }
+
+        return resourceKey.StartsWith(JobResourceKeys.EntityPrefix, StringComparison.Ordinal)
+            ? "Waiting for another change to this entity."
+            : "Waiting for a shared resource.";
+    }
+
+    private static string ProviderDisplayName(string provider) => provider.ToLowerInvariant() switch {
+        WellKnownPluginIds.MusicBrainz => "MusicBrainz",
+        WellKnownPluginIds.MangaDex => "MangaDex",
+        WellKnownPluginIds.OpenLibrary => "Open Library",
+        _ => provider
+    };
 }

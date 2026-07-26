@@ -28,6 +28,17 @@ public interface IJobQueueService {
         CancellationToken cancellationToken) =>
         EnqueueAsync(request, cancellationToken);
 
+    /// <summary>
+    /// Appends an explicitly-shaped node to the parent's graph. Implementations must inherit the graph,
+    /// lane, origin, initiating user, and top-level target from <paramref name="parent"/> and must reject
+    /// dependencies outside that graph.
+    /// </summary>
+    Task<JobRunSnapshot> AppendChildGraphNodeAsync(
+        JobRunSnapshot parent,
+        GraphJobNodeRequest request,
+        CancellationToken cancellationToken) =>
+        EnqueueChildAsync(parent, request.Job, cancellationToken);
+
     /// <summary>Appends multiple child nodes to the parent's graph.</summary>
     Task<int> EnqueueChildBatchAsync(
         JobRunSnapshot parent,
@@ -68,16 +79,9 @@ public interface IJobQueueService {
     /// </summary>
     Task<int> ClearFailuresAsync(JobType? type, CancellationToken cancellationToken);
 
-    /// <summary>
-    /// Claims the next available queued job for one worker using atomic row locking. When
-    /// <paramref name="lane"/> is set, only jobs explicitly assigned to that queue lane are eligible.
-    /// </summary>
-    /// <summary>
-    /// Claims the next standard job when <paramref name="lane"/> is null, or the next job in the
-    /// requested reserved lane. Standard claims deliberately exclude reserved-lane work so a flood
-    /// of interactive jobs cannot consume general worker capacity.
-    /// </summary>
-    Task<JobRunSnapshot?> ClaimNextAsync(string workerId, CancellationToken cancellationToken, JobRunLane? lane = null);
+    /// <summary>Compatibility entry point that claims the next background graph node.</summary>
+    Task<JobRunSnapshot?> ClaimNextAsync(string workerId, CancellationToken cancellationToken) =>
+        Task.FromResult<JobRunSnapshot?>(null);
 
     /// <summary>
     /// Claims the next dependency-ready node from a durable graph of the requested origin. Interactive
@@ -86,17 +90,21 @@ public interface IJobQueueService {
     Task<JobRunSnapshot?> ClaimNextGraphNodeAsync(
         string workerId,
         JobGraphOrigin origin,
-        CancellationToken cancellationToken) =>
-        ClaimNextAsync(
-            workerId,
-            cancellationToken,
-            origin == JobGraphOrigin.Interactive ? JobRunLane.ForegroundIdentify : null);
+        CancellationToken cancellationToken,
+        IReadOnlyCollection<JobResourceClass>? allowedResourceClasses = null) =>
+        ClaimNextAsync(workerId, cancellationToken);
 
     /// <summary>Creates or updates a durable shared resource policy used during graph-node claims.</summary>
     Task DeclareResourceAsync(
         string resourceKey,
         int maxConcurrency,
         TimeSpan minimumStartInterval,
+        CancellationToken cancellationToken) => Task.CompletedTask;
+
+    /// <summary>Renews the running-node heartbeat and any durable resource lease owned by it.</summary>
+    Task HeartbeatAsync(
+        Guid id,
+        string workerId,
         CancellationToken cancellationToken) => Task.CompletedTask;
 
     /// <summary>

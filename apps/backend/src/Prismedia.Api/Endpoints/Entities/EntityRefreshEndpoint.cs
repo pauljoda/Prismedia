@@ -16,19 +16,20 @@ internal static class EntityRefreshEndpoint {
                 Guid id,
                 IJobQueueService queue,
                 CancellationToken cancellationToken) => {
-            var pending = await queue.HasPendingAsync(JobType.RefreshEntity, id.ToString(), cancellationToken);
-            if (pending)
-                return Results.Ok(new EntityRefreshResponse(null, AlreadyPending: true));
-
             var job = await queue.EnqueueAsync(
                 new EnqueueJobRequest(
                     JobType.RefreshEntity,
                     TargetEntityKind: JobTargetKinds.Entity,
                     TargetEntityId: id.ToString(),
-                    Priority: 25),
+                    Origin: JobGraphOrigin.Interactive),
                 cancellationToken);
 
-            return Results.Ok(new EntityRefreshResponse(job.Id, AlreadyPending: false));
+            return Results.Ok(new EntityRefreshResponse(
+                job.Id,
+                job.GraphId,
+                job.GraphOrigin ?? JobGraphOrigin.Interactive,
+                job.TargetEntityId,
+                AlreadyPending: false));
         })
             .RequireAdmin()
             .WithName("RefreshEntity")
@@ -44,4 +45,9 @@ internal static class EntityRefreshEndpoint {
 /// </summary>
 /// <param name="JobId">Queued job identifier, or null when a refresh was already pending.</param>
 /// <param name="AlreadyPending">True when a refresh job is already queued or running for this entity.</param>
-public sealed record EntityRefreshResponse(Guid? JobId, bool AlreadyPending);
+public sealed record EntityRefreshResponse(
+    Guid? JobId,
+    Guid? GraphId,
+    JobGraphOrigin Origin,
+    string? RootEntityId,
+    bool AlreadyPending);

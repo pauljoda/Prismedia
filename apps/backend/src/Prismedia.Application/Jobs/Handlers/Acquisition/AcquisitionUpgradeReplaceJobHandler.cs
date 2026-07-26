@@ -143,7 +143,7 @@ public sealed class AcquisitionUpgradeReplaceJobHandler(
             oldQuality: $"{target.ParentOwnedQuality.Source.ToCode()}/{target.ParentOwnedQuality.Format.ToCode()}",
             newQuality: $"{newOwned.Source.ToCode()}/{newOwned.Format.ToCode()}",
             cancellationToken);
-        await FinishAsync(context, target, childId, JobType.ScanBook, "Upgraded book scan", cancellationToken);
+        await FinishAsync(context, target, childId, cancellationToken);
     }
 
     /// <summary>The movie/single-episode replace path: ladder-position (or same-quality revision) dominance, an in-place same-extension video-file swap, and a library re-scan.</summary>
@@ -197,16 +197,33 @@ public sealed class AcquisitionUpgradeReplaceJobHandler(
             oldQuality: string.IsNullOrWhiteSpace(target.ParentOwnedMediaQuality) ? VideoQuality.Unknown.ToCode() : target.ParentOwnedMediaQuality!,
             newQuality: resolvedCode,
             cancellationToken);
-        await FinishAsync(context, target, childId, JobType.ScanLibrary, "Upgraded video scan", cancellationToken);
+        await FinishAsync(context, target, childId, cancellationToken);
     }
 
-    /// <summary>Shared post-swap completion: release the monitor's slot (counting the attempt), re-scan, clean up the torrent, and remove the consumed child.</summary>
-    private async Task FinishAsync(JobContext context, UpgradeReplaceTarget target, Guid childId, JobType scanJob, string scanLabel, CancellationToken cancellationToken) {
-        await monitors.ResolveUpgradeChildAsync(childId, succeeded: true, cancellationToken);
-        await context.EnqueueIfNeededAsync(new EnqueueJobRequest(scanJob, TargetLabel: scanLabel), cancellationToken);
+    /// <summary>
+    /// Shared post-swap completion: append exact Entity reconciliation and let its required-readiness
+    /// finalizer release the monitor slot and remove the consumed child. Transfer cleanup can happen now;
+    /// the durable child remains Importing until the replacement is technically ready.
+    /// </summary>
+    private async Task FinishAsync(JobContext context, UpgradeReplaceTarget target, Guid childId, CancellationToken cancellationToken) {
+        if (target.ParentEntityId is { } entityId) {
+            await context.EnqueueIfNeededAsync(
+                EnqueueJobRequest.ForEntity(
+                    JobType.ReconcileEntity,
+                    target.ParentKind,
+                    entityId.ToString(),
+                    target.ChildSelectedTitle,
+                    AcquisitionFinalizeJobPayload.CreateUpgrade(
+                        childId,
+                        target.ParentId,
+                        "Upgrade ready").ToJson()),
+                cancellationToken);
+        }
         await RemoveTorrentAsync(target, cancellationToken);
-        await acquisitions.DeleteAsync(childId, cancellationToken);
-        logger.LogInformation("AcquisitionUpgradeReplace: upgraded acquisition {Parent} via child {Child}.", target.ParentId, childId);
+        logger.LogInformation(
+            "AcquisitionUpgradeReplace: replacement for acquisition {Parent} is awaiting required Entity readiness via child {Child}.",
+            target.ParentId,
+            childId);
     }
 
     /// <summary>Records the upgrade attempt as failed: marks the child failed (so it stays visible) and releases the monitor's slot, counting it as barren.</summary>

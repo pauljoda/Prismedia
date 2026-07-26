@@ -50,6 +50,13 @@ public sealed partial class IdentifyPluginService : IIdentifyProviderService {
         return IdentifyProviderDefaultPolicy.Order(compatible, entityKind, settings);
     }
 
+    /// <summary>Returns a plugin's declared host execution policy, or null when the host adds no gate.</summary>
+    public async Task<PluginExecutionPolicy?> GetExecutionPolicyAsync(
+        string providerId,
+        string? entityKind,
+        CancellationToken cancellationToken) =>
+        (await _catalog.FindProviderAsync(providerId, entityKind, cancellationToken))?.Manifest.Execution;
+
     /// <summary>
     /// Runs one transient identify lookup for an entity.
     /// </summary>
@@ -62,7 +69,31 @@ public sealed partial class IdentifyPluginService : IIdentifyProviderService {
         CancellationToken cancellationToken,
         bool cascadeChildren = true,
         IIdentifyCascadeSink? sink = null,
-        bool hydrateRelationships = true) {
+        bool hydrateRelationships = true) =>
+        await IdentifyAsync(
+            entityId,
+            providerId,
+            query,
+            parentExternalIds,
+            hideNsfw,
+            cancellationToken,
+            cascadeChildren,
+            sink,
+            hydrateRelationships,
+            allowParentFallback: true);
+
+    /// <summary>Runs one identify lookup with explicit control over the legacy parent-container fallback.</summary>
+    public async Task<IdentifyPluginResponse> IdentifyAsync(
+        Guid entityId,
+        string providerId,
+        IdentifyQuery? query,
+        IReadOnlyDictionary<string, string>? parentExternalIds,
+        bool hideNsfw,
+        CancellationToken cancellationToken,
+        bool cascadeChildren,
+        IIdentifyCascadeSink? sink,
+        bool hydrateRelationships,
+        bool allowParentFallback) {
         var entity = await _db.Entities
             .AsNoTracking()
             .FirstOrDefaultAsync(
@@ -104,7 +135,7 @@ public sealed partial class IdentifyPluginService : IIdentifyProviderService {
             cancellationToken,
             cascadeChildren,
             sink,
-            hydrateRelationships);
+            hydrateRelationships: hydrateRelationships);
 
         if (directResult.Ok && directResult.Result?.Patch is not null) {
             return ApplyNsfwPolicies(directResult, providerIsNsfw);
@@ -113,7 +144,7 @@ public sealed partial class IdentifyPluginService : IIdentifyProviderService {
         // A user who explicitly asked to choose from candidates gets their search results back
         // untouched — the parent's stored-id auto match would discard them and push the user
         // straight through the very match they are trying to replace.
-        if (entity.ParentEntityId is not null && query?.RequireChoice != true) {
+        if (allowParentFallback && entity.ParentEntityId is not null && query?.RequireChoice != true) {
             var cascadeResult = await CascadeFromParentAsync(entity, descriptor, auth, includeNsfw: !hideNsfw, cancellationToken);
             if (cascadeResult is not null) {
                 return ApplyNsfwPolicies(cascadeResult, providerIsNsfw);

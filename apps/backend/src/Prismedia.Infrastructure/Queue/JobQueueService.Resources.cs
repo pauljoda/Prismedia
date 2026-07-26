@@ -19,21 +19,66 @@ public sealed partial class JobQueueService {
         }
 
         var now = DateTimeOffset.UtcNow;
+        var minimumIntervalMs = checked((int)minimumStartInterval.TotalMilliseconds);
+        if (_db.Database.IsRelational()) {
+            await _db.Database.ExecuteSqlInterpolatedAsync($"""
+                INSERT INTO job_resource_states
+                    (key, max_concurrency, minimum_start_interval_ms, next_available_at, updated_at)
+                VALUES
+                    ({resourceKey}, {maxConcurrency}, {minimumIntervalMs}, {now}, {now})
+                ON CONFLICT (key) DO UPDATE
+                SET max_concurrency = EXCLUDED.max_concurrency,
+                    minimum_start_interval_ms = EXCLUDED.minimum_start_interval_ms,
+                    updated_at = EXCLUDED.updated_at
+                """, cancellationToken);
+            return;
+        }
+
         var row = await _db.JobResourceStates.FindAsync([resourceKey], cancellationToken);
         if (row is null) {
             _db.JobResourceStates.Add(new JobResourceStateRow {
                 Key = resourceKey,
                 MaxConcurrency = maxConcurrency,
-                MinimumStartIntervalMs = checked((int)minimumStartInterval.TotalMilliseconds),
+                MinimumStartIntervalMs = minimumIntervalMs,
                 NextAvailableAt = DateTimeOffset.MinValue,
                 UpdatedAt = now
             });
         } else {
             row.MaxConcurrency = maxConcurrency;
-            row.MinimumStartIntervalMs = checked((int)minimumStartInterval.TotalMilliseconds);
+            row.MinimumStartIntervalMs = minimumIntervalMs;
             row.UpdatedAt = now;
         }
 
+        await _db.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task HeartbeatAsync(
+        Guid id,
+        string workerId,
+        CancellationToken cancellationToken) {
+        ArgumentException.ThrowIfNullOrWhiteSpace(workerId);
+        var now = DateTimeOffset.UtcNow;
+        if (_db.Database.IsRelational()) {
+            await _db.JobRuns
+                .Where(run => run.Id == id && run.Status == JobRunStatus.Running && run.LockedBy == workerId)
+                .ExecuteUpdateAsync(setters => setters.SetProperty(run => run.LockedAt, now), cancellationToken);
+            await _db.JobResourceLeases
+                .Where(lease => lease.JobRunId == id)
+                .ExecuteUpdateAsync(
+                    setters => setters.SetProperty(lease => lease.ExpiresAt, now.Add(ResourceLeaseDuration)),
+                    cancellationToken);
+            return;
+        }
+
+        var run = await _db.JobRuns.SingleOrDefaultAsync(
+            candidate => candidate.Id == id && candidate.Status == JobRunStatus.Running && candidate.LockedBy == workerId,
+            cancellationToken);
+        if (run is null) return;
+        run.LockedAt = now;
+        var leases = await _db.JobResourceLeases
+            .Where(lease => lease.JobRunId == id)
+            .ToArrayAsync(cancellationToken);
+        foreach (var lease in leases) lease.ExpiresAt = now.Add(ResourceLeaseDuration);
         await _db.SaveChangesAsync(cancellationToken);
     }
 

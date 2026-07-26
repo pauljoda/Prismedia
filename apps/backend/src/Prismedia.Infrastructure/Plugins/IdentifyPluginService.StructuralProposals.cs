@@ -78,7 +78,7 @@ public sealed partial class IdentifyPluginService {
         // Hydrate related people/studios/tags incrementally before walking structural children. This
         // mirrors the child cascade: the review opens with lightweight relationship shells, then each
         // actor/studio/tag card gains provider detail as it resolves instead of blocking the first view.
-        if (cascadeChildren && hydrateRelationships && baseRelationships.Count > 0) {
+        if (hydrateRelationships && baseRelationships.Count > 0) {
             foreach (var relationship in baseRelationships) {
                 if (sink is not null && !await sink.IsActiveAsync(cancellationToken)) {
                     break;

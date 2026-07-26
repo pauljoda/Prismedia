@@ -20,6 +20,18 @@ public interface IAcquisitionRequestService {
     Task<AcquisitionSummary> CreateAndSearchAsync(AcquisitionCreateRequest request, CancellationToken cancellationToken);
 
     /// <summary>
+    /// Persists a new acquisition and schedules its search in the supplied graph scope. A non-null
+    /// <paramref name="parentContext"/> keeps the search and all descendants in the caller's graph;
+    /// otherwise <paramref name="origin"/> selects the pool for a new root graph.
+    /// </summary>
+    Task<AcquisitionSummary> CreateAndSearchAsync(
+        AcquisitionCreateRequest request,
+        JobContext? parentContext,
+        JobGraphOrigin origin,
+        CancellationToken cancellationToken) =>
+        CreateAndSearchAsync(request, cancellationToken);
+
+    /// <summary>
     /// Persists and schedules an acquisition while the caller already holds the target Entity lifecycle
     /// lease. Request commit uses this seam inside its wider suppression/monitor intent transaction so it
     /// does not recursively reacquire the same locks. Other callers must use <see cref="CreateAndSearchAsync"/>.
@@ -53,6 +65,15 @@ public interface IAcquisitionRequestService {
         BookRendition? bookRendition,
         CancellationToken cancellationToken) =>
         Task.FromResult(false);
+
+    /// <summary>Republishes an existing search in the supplied inherited or root graph scope.</summary>
+    Task<bool> EnsureOpenEntitySearchAsync(
+        Guid entityId,
+        BookRendition? bookRendition,
+        JobContext? parentContext,
+        JobGraphOrigin origin,
+        CancellationToken cancellationToken) =>
+        EnsureOpenEntitySearchAsync(entityId, bookRendition, cancellationToken);
 
     /// <summary>
     /// Returns the requested Entity ids that already have actionable work for the same rendition.
@@ -180,6 +201,11 @@ public interface IAcquisitionJobCleanup {
     Task<int> CancelAsync(Guid acquisitionId, CancellationToken cancellationToken);
 }
 
+/// <summary>Graph-owned cancellation seam that also tears down any linked external transfer.</summary>
+public interface IAcquisitionGraphCancellation {
+    Task CancelFromGraphAsync(Guid acquisitionId, CancellationToken cancellationToken);
+}
+
 /// <summary>
 /// Removes filesystem and catalog artifacts owned by an interrupted import checkpoint. This is the
 /// explicit destructive escape hatch used only when the user chooses to discard the attempt and start over.
@@ -209,7 +235,8 @@ public sealed partial class AcquisitionService(
     IAcquisitionJobCleanup acquisitionJobs,
     IEntityLifecycleMutationLease entityLifecycle,
     IAcquisitionImportResetCleanup importResetCleanup,
-    VideoScanConcurrencyGate? scanGate = null, IAcquisitionUploadStorage? uploads = null) : IAcquisitionRequestService {
+    VideoScanConcurrencyGate? scanGate = null,
+    IAcquisitionUploadStorage? uploads = null) : IAcquisitionRequestService, IAcquisitionGraphCancellation {
     public Task<IReadOnlyList<AcquisitionSummary>> ListAsync(CancellationToken cancellationToken) =>
         store.ListAsync(cancellationToken);
 
@@ -472,6 +499,11 @@ public sealed partial class AcquisitionService(
         return await store.GetAsync(id, cancellationToken);
     }
 
+    /// <inheritdoc />
+    public async Task CancelFromGraphAsync(Guid acquisitionId, CancellationToken cancellationToken) {
+        await CancelAsync(acquisitionId, cancellationToken);
+    }
+
     /// <summary>
     /// Removes an acquisition (the download pipeline record): best-effort deletes its download (and data)
     /// from the owning client, then hard-deletes the record. The wanted placeholder entity is KEPT —
@@ -687,8 +719,9 @@ public sealed partial class AcquisitionService(
                                 PayloadJson: AcquisitionJobPayload.Serialize(freshId),
                                 TargetEntityId: freshId.ToString(),
                                 TargetLabel: detail.Summary.Title,
-                                Priority: JobPriorities.InteractiveRequest,
-                                Lane: JobRunLane.ForegroundIdentify),
+                                Origin: JobGraphOrigin.Interactive,
+                                GraphRootEntityKind: detail.Summary.Kind.ToCode(),
+                                GraphRootEntityId: detail.Summary.EntityId?.ToString()),
                             cancellationToken);
                     }
                 }
@@ -804,8 +837,9 @@ public sealed partial class AcquisitionService(
                     PayloadJson: AcquisitionJobPayload.Serialize(freshId),
                     TargetEntityId: freshId.ToString(),
                     TargetLabel: detail.Summary.Title,
-                    Priority: JobPriorities.InteractiveRequest,
-                    Lane: JobRunLane.ForegroundIdentify),
+                    Origin: JobGraphOrigin.Interactive,
+                    GraphRootEntityKind: detail.Summary.Kind.ToCode(),
+                    GraphRootEntityId: detail.Summary.EntityId?.ToString()),
                 cancellationToken);
         }
 
@@ -1017,143 +1051,21 @@ public sealed partial class AcquisitionService(
             return detail;
         }
 
-        await queue.EnqueueAsync(
+        var importJob = await queue.EnqueueAsync(
             new EnqueueJobRequest(
                 JobType.AcquisitionImport,
                 PayloadJson: AcquisitionJobPayload.Serialize(id, allowFormatChange, manualRetry: true),
                 TargetEntityId: id.ToString(),
                 TargetLabel: detail.Summary.Title,
-                Priority: JobPriorities.AcquisitionCompletion,
-                Lane: JobRunLane.ForegroundIdentify),
+                Origin: JobGraphOrigin.Interactive,
+                GraphRootEntityKind: detail.Summary.Kind.ToCode(),
+                GraphRootEntityId: detail.Summary.EntityId?.ToString()),
             cancellationToken);
-        return detail;
+        if (importJob.GraphId is { } graphId) {
+            await store.SetJobGraphIdAsync(detail.Summary.Id, graphId, cancellationToken);
+        }
+        return await store.GetAsync(id, cancellationToken);
     }
 
-    /// <summary>
-    /// Persists a new acquisition and schedules its search. Entity-bound work holds the authoritative
-    /// Entity/monitor lifecycle lease across persistence, Searching provenance, and queue publication.
-    /// Unbound work preserves the ordinary acquisition-only path.
-    /// </summary>
-    public async Task<AcquisitionSummary> CreateAndSearchAsync(AcquisitionCreateRequest request, CancellationToken cancellationToken) {
-        var metadata = CreateMetadata(request);
-        if (metadata.EntityId is not { } entityId) {
-            return await CreateAndSearchCoreAsync(metadata, cancellationToken);
-        }
-
-        AcquisitionSummary? summary = null;
-        var accepted = await entityLifecycle.ExecuteAsync(
-            entityId,
-            async leaseCancellationToken => summary = await CreateAndSearchCoreAsync(
-                metadata,
-                leaseCancellationToken),
-            cancellationToken);
-        if (!accepted || summary is null) {
-            throw EntityLifecycleConflict();
-        }
-
-        return summary;
-    }
-
-    /// <inheritdoc />
-    public Task<AcquisitionSummary> CreateAndSearchWithinEntityLifecycleAsync(
-        AcquisitionCreateRequest request,
-        CancellationToken cancellationToken) =>
-        CreateAndSearchCoreAsync(CreateMetadata(request), cancellationToken);
-
-    private static AcquisitionMetadata CreateMetadata(AcquisitionCreateRequest request) {
-        if (string.IsNullOrWhiteSpace(request.Title)) {
-            throw new AcquisitionConfigurationException(ApiProblemCodes.AcquisitionInvalid, "A title is required to start an acquisition.");
-        }
-
-        var externalIdentity = CreateExternalIdentity(request);
-        return new AcquisitionMetadata(
-            request.Title.Trim(),
-            string.IsNullOrWhiteSpace(request.Author) ? null : request.Author.Trim(),
-            string.IsNullOrWhiteSpace(request.Series) ? null : request.Series.Trim(),
-            request.Year,
-            string.IsNullOrWhiteSpace(request.PosterUrl) ? null : request.PosterUrl.Trim(),
-            externalIdentity,
-            string.IsNullOrWhiteSpace(request.Description) ? null : request.Description.Trim(),
-            request.Kind,
-            request.EntityId,
-            request.ProfileId,
-            request.TargetLibraryRootId,
-            request.SeasonNumber,
-            request.EpisodeNumber,
-            request.VolumeNumber,
-            request.Kind == EntityKind.Book
-                ? request.BookRendition ?? BookRendition.Ebook
-                : null);
-    }
-
-    private async Task<AcquisitionSummary> CreateAndSearchCoreAsync(
-        AcquisitionMetadata metadata,
-        CancellationToken cancellationToken) {
-        var summary = await store.CreateAsync(metadata, cancellationToken);
-        if (!await store.TryTransitionStatusAsync(
-                summary.Id,
-                [AcquisitionStatus.Pending],
-                AcquisitionStatus.Searching,
-                null,
-                cancellationToken)) {
-            throw LifecycleChangedConflict();
-        }
-        summary = summary with {
-            Status = AcquisitionStatus.Searching,
-            StatusMessage = null,
-            UpdatedAt = DateTimeOffset.UtcNow
-        };
-        await queue.EnqueueAsync(
-            new EnqueueJobRequest(
-                JobType.AcquisitionSearch,
-                PayloadJson: AcquisitionJobPayload.Serialize(summary.Id),
-                TargetEntityId: summary.Id.ToString(),
-                TargetLabel: summary.Title,
-                Priority: JobPriorities.InteractiveRequest,
-                Lane: JobRunLane.ForegroundIdentify),
-            cancellationToken);
-
-        // When the request carries a persistent external identity, enrich the held metadata in the background
-        // through the plugin registered for its namespace (cover, fuller description, dates the lightweight
-        // search result lacked), so the acquisition surface fills in and the imported book can be seeded.
-        // Best-effort — never blocks the request.
-        if (metadata.ExternalIdentity is not null) {
-            await queue.EnqueueAsync(
-                new EnqueueJobRequest(
-                    JobType.AcquisitionEnrich,
-                    PayloadJson: AcquisitionJobPayload.Serialize(summary.Id),
-                    TargetEntityId: summary.Id.ToString(),
-                    TargetLabel: summary.Title,
-                    Priority: JobPriorities.RequestEnrichment),
-                cancellationToken);
-        }
-
-        return summary;
-    }
-
-    private static AcquisitionConfigurationException EntityLifecycleConflict() =>
-        new(
-            ApiProblemCodes.AcquisitionInvalid,
-            "This Entity is missing or still being changed by another cleanup operation. Refresh and retry the request.");
-
-    private static ExternalIdentity? CreateExternalIdentity(AcquisitionCreateRequest request) {
-        var hasNamespace = !string.IsNullOrWhiteSpace(request.IdentityNamespace);
-        var hasValue = !string.IsNullOrWhiteSpace(request.IdentityValue);
-        if (!hasNamespace && !hasValue) {
-            return null;
-        }
-
-        if (!hasNamespace || !hasValue) {
-            throw new AcquisitionConfigurationException(
-                ApiProblemCodes.AcquisitionInvalid,
-                "An external identity requires both a namespace and a value.");
-        }
-
-        try {
-            return new ExternalIdentity(request.IdentityNamespace!, request.IdentityValue!);
-        } catch (ArgumentException exception) {
-            throw new AcquisitionConfigurationException(ApiProblemCodes.AcquisitionInvalid, exception.Message);
-        }
-    }
 
 }

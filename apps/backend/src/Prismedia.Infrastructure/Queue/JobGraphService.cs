@@ -7,7 +7,7 @@ using Prismedia.Infrastructure.Persistence.Entities;
 namespace Prismedia.Infrastructure.Queue;
 
 /// <summary>EF Core implementation of durable graph creation and idempotent expansion.</summary>
-public sealed class JobGraphService(PrismediaDbContext db) : IJobGraphService {
+public sealed partial class JobGraphService(PrismediaDbContext db) : IJobGraphService {
     public async Task<JobGraphSnapshot> StartAsync(
         StartJobGraphRequest request,
         CancellationToken cancellationToken) {
@@ -98,6 +98,10 @@ public sealed class JobGraphService(PrismediaDbContext db) : IJobGraphService {
         var row = CreateRun(graphId, Guid.NewGuid(), request, sequence + 1, now);
         db.JobRuns.Add(row);
         AddDependencies(graphId, row.Id, request.DependsOn);
+        if (graph.Status == JobGraphStatus.Waiting) {
+            graph.Status = JobGraphStatus.Queued;
+            graph.FinishedAt = null;
+        }
         graph.UpdatedAt = now;
 
         try {
@@ -183,8 +187,6 @@ public sealed class JobGraphService(PrismediaDbContext db) : IJobGraphService {
             Type = request.Job.Type,
             Status = JobRunStatus.Queued,
             PayloadJson = request.Job.PayloadJson ?? "{}",
-            Priority = request.Job.Priority,
-            Lane = request.Job.Lane,
             Attempts = 0,
             MaxAttempts = 3,
             Progress = 0,
@@ -195,7 +197,7 @@ public sealed class JobGraphService(PrismediaDbContext db) : IJobGraphService {
             CreatedAt = now
         };
 
-    private static JobGraphSnapshot ToSnapshot(JobGraphRow graph) =>
+    internal static JobGraphSnapshot ToSnapshot(JobGraphRow graph) =>
         new(
             graph.Id,
             graph.Id,
