@@ -434,6 +434,7 @@ public static class DependencyInjection {
             provider.GetRequiredService<SlskdSearchConcurrencyGate>()));
         services.AddScoped<IIndexerSearchClient>(provider => provider.GetRequiredService<SlskdIndexerClient>());
         services.AddScoped<IIndexerSearchClientFactory, IndexerSearchClientFactory>();
+        services.AddScoped<IAcquisitionSearchResourcePolicy, IndexerSearchJobResourcePolicy>();
         // UseCookies=false keeps the default handler from swallowing qBittorrent's Set-Cookie SID,
         // so the client can read and re-send the session cookie explicitly.
         services.AddScoped(_ => new QBittorrentDownloadClient(new HttpClient(new HttpClientHandler { UseCookies = false })));

@@ -5,6 +5,7 @@ public static class JobResourceKeys {
     public const string EntityPrefix = "entity:";
     public const string PluginPrefix = "plugin:";
     public const string IdentifyProviderWalk = "integration:identify-provider-walk";
+    public const string AcquisitionIndexerSearch = "integration:acquisition-indexer-search";
 
     public static string Entity(string entityId) => $"{EntityPrefix}{entityId}";
 

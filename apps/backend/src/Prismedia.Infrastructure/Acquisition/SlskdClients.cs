@@ -5,6 +5,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using Prismedia.Application.Acquisition;
+using Prismedia.Application.Jobs;
 using Prismedia.Domain.Entities;
 
 namespace Prismedia.Infrastructure.Acquisition;
@@ -80,7 +81,9 @@ public static class SoulseekLocator {
 
 /// <summary>Serializes Soulseek searches because slskd permits only one active operation at a time.</summary>
 public sealed class SlskdSearchConcurrencyGate {
-    private readonly SemaphoreSlim _semaphore = new(1, 1);
+    private const int MaxConcurrentSearches = 1;
+    internal static JobExecutionPolicy ExecutionPolicy { get; } = new(MaxConcurrentSearches, TimeSpan.Zero);
+    private readonly SemaphoreSlim _semaphore = new(MaxConcurrentSearches, MaxConcurrentSearches);
 
     /// <summary>Waits for the slskd search slot and returns a lease that releases it.</summary>
     public async ValueTask<IDisposable> EnterAsync(CancellationToken cancellationToken) {
@@ -110,6 +113,8 @@ public sealed partial class SlskdIndexerClient(
     };
 
     public IndexerKind Kind => IndexerKind.Slskd;
+    /// <inheritdoc />
+    public JobExecutionPolicy? ExecutionPolicy => SlskdSearchConcurrencyGate.ExecutionPolicy;
 
     public async Task<IReadOnlyList<IndexerRelease>> SearchAsync(
         IndexerConnection connection,

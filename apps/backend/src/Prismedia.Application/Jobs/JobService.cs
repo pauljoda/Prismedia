@@ -314,6 +314,10 @@ public sealed class JobService {
             return $"Queued for {ProviderDisplayName(provider)}.";
         }
 
+        if (resourceKey == JobResourceKeys.AcquisitionIndexerSearch) {
+            return "Queued for an acquisition provider.";
+        }
+
         return resourceKey.StartsWith(JobResourceKeys.EntityPrefix, StringComparison.Ordinal)
             ? "Waiting for another change to this entity."
             : "Waiting for a shared resource.";

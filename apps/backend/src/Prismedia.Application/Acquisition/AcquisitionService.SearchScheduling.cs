@@ -100,6 +100,7 @@ public sealed partial class AcquisitionService {
             return await store.GetAsync(detail.Summary.Id, cancellationToken);
         }
 
+        var resourceKey = await DeclareSearchResourceAsync(cancellationToken);
         var searchRequest = new EnqueueJobRequest(
                 JobType.AcquisitionSearch,
                 PayloadJson: AcquisitionJobPayload.Serialize(
@@ -110,7 +111,8 @@ public sealed partial class AcquisitionService {
                 TargetLabel: detail.Summary.Title,
                 Origin: origin,
                 GraphRootEntityKind: detail.Summary.Kind.ToCode(),
-                GraphRootEntityId: detail.Summary.EntityId?.ToString());
+                GraphRootEntityId: detail.Summary.EntityId?.ToString(),
+                ResourceKey: resourceKey);
         var searchJob = parentContext is null
             ? await queue.EnqueueAsync(searchRequest, cancellationToken)
             : await parentContext.EnqueueAsync(searchRequest, cancellationToken);
@@ -211,6 +213,7 @@ public sealed partial class AcquisitionService {
             StatusMessage = null,
             UpdatedAt = DateTimeOffset.UtcNow
         };
+        var resourceKey = await DeclareSearchResourceAsync(cancellationToken);
         var searchRequest = new EnqueueJobRequest(
                 JobType.AcquisitionSearch,
                 PayloadJson: AcquisitionJobPayload.Serialize(summary.Id),
@@ -218,7 +221,8 @@ public sealed partial class AcquisitionService {
                 TargetLabel: summary.Title,
                 Origin: origin,
                 GraphRootEntityKind: summary.Kind.ToCode(),
-                GraphRootEntityId: summary.EntityId?.ToString());
+                GraphRootEntityId: summary.EntityId?.ToString(),
+                ResourceKey: resourceKey);
         var searchJob = parentContext is null
             ? await queue.EnqueueAsync(searchRequest, cancellationToken)
             : await parentContext.EnqueueAsync(searchRequest, cancellationToken);
@@ -243,6 +247,23 @@ public sealed partial class AcquisitionService {
         }
 
         return summary;
+    }
+
+    /// <summary>
+    /// Materializes adapter-declared limits in the durable scheduler before publishing a node that needs
+    /// them. Resource claims therefore happen before a worker or lane slot is occupied.
+    /// </summary>
+    private async Task<string?> DeclareSearchResourceAsync(CancellationToken cancellationToken) {
+        if (searchResources is null || await searchResources.ResolveAsync(cancellationToken) is not { } requirement) {
+            return null;
+        }
+
+        await queue.DeclareResourceAsync(
+            requirement.Key,
+            requirement.Policy.MaxConcurrency,
+            requirement.Policy.MinimumStartInterval,
+            cancellationToken);
+        return requirement.Key;
     }
 
     private static AcquisitionConfigurationException EntityLifecycleConflict() =>

@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text.Json;
 using Prismedia.Application.Acquisition;
+using Prismedia.Application.Jobs;
 using Prismedia.Domain.Entities;
 
 namespace Prismedia.Infrastructure.Acquisition;
@@ -14,6 +15,8 @@ public sealed class ProwlarrIndexerClient(
     HttpClient http,
     ProwlarrSearchConcurrencyGate? concurrency = null) : IIndexerSearchClient {
     public IndexerKind Kind => IndexerKind.Prowlarr;
+    /// <inheritdoc />
+    public JobExecutionPolicy? ExecutionPolicy => ProwlarrSearchConcurrencyGate.ExecutionPolicy;
 
     public async Task<IReadOnlyList<IndexerRelease>> SearchAsync(IndexerConnection connection, IndexerQuery query, CancellationToken cancellationToken) {
         // One Prowlarr request fans out across every configured indexer. Large season-to-episode
@@ -138,6 +141,7 @@ public sealed class ProwlarrIndexerClient(
 /// </summary>
 public sealed class ProwlarrSearchConcurrencyGate {
     private const int MaxConcurrentSearches = 2;
+    internal static JobExecutionPolicy ExecutionPolicy { get; } = new(MaxConcurrentSearches, TimeSpan.Zero);
     private readonly SemaphoreSlim _semaphore = new(MaxConcurrentSearches, MaxConcurrentSearches);
 
     /// <summary>Waits for one aggregate-search slot and returns a lease that releases it.</summary>

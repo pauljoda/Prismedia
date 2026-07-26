@@ -94,6 +94,27 @@ public sealed class AcquisitionServiceTests {
     }
 
     [Fact]
+    public async Task CreateDeclaresAndAttachesTheResolvedIndexerResourceBeforeEnqueue() {
+        var policy = new FixedAcquisitionSearchResourcePolicy(new JobResourceRequirement(
+            JobResourceKeys.AcquisitionIndexerSearch,
+            new JobExecutionPolicy(1, TimeSpan.FromMilliseconds(250))));
+        var harness = Harness(TransferInfo(RecordedClientId), searchResources: policy);
+
+        await harness.Service.CreateAndSearchAsync(
+            new AcquisitionCreateRequest(
+                "Album", null, null, null, null, null, null,
+                Kind: EntityKind.AudioLibrary),
+            CancellationToken.None);
+
+        var request = Assert.Single(harness.Queue.Requests);
+        Assert.Equal(JobResourceKeys.AcquisitionIndexerSearch, request.ResourceKey);
+        var declaration = Assert.Single(harness.Queue.ResourceDeclarations);
+        Assert.Equal(JobResourceKeys.AcquisitionIndexerSearch, declaration.Key);
+        Assert.Equal(1, declaration.MaxConcurrency);
+        Assert.Equal(TimeSpan.FromMilliseconds(250), declaration.MinimumStartInterval);
+    }
+
+    [Fact]
     public async Task EntityBoundCreateHoldsLifecycleThroughPersistenceAndQueuePublication() {
         var harness = Harness(TransferInfo(RecordedClientId));
         harness.Store.BeforeCreate = () => Assert.True(harness.Lifecycle.IsHeld);
@@ -1188,7 +1209,10 @@ public sealed class AcquisitionServiceTests {
             ImportPlacementCheckpoint: checkpoint);
     }
 
-    private static TestHarness Harness(AcquisitionTransferInfo transfer, bool includeRecordedClient = true) {
+    private static TestHarness Harness(
+        AcquisitionTransferInfo transfer,
+        bool includeRecordedClient = true,
+        IAcquisitionSearchResourcePolicy? searchResources = null) {
         var store = new FakeAcquisitionStore(transfer);
         var downloads = new RecordingDownloadClientFactory();
         var configs = new FakeDownloadClientConfigStore(includeRecordedClient);
@@ -1210,7 +1234,8 @@ public sealed class AcquisitionServiceTests {
             monitors,
             jobCleanup,
             lifecycle,
-            importCleanup);
+            importCleanup,
+            searchResources: searchResources);
 
         return new TestHarness(service, store, downloads, history, monitors, queue, jobCleanup, lifecycle, importCleanup);
     }
@@ -1835,6 +1860,12 @@ public sealed class AcquisitionServiceTests {
             Task.FromResult<string?>(null);
     }
 
+    private sealed class FixedAcquisitionSearchResourcePolicy(JobResourceRequirement? requirement)
+        : IAcquisitionSearchResourcePolicy {
+        public Task<JobResourceRequirement?> ResolveAsync(CancellationToken cancellationToken) =>
+            Task.FromResult(requirement);
+    }
+
     private sealed class ThrowingBlocklistStore : IAcquisitionBlocklistStore {
         public Task<IReadOnlySet<string>> GetIdentitiesAsync(CancellationToken cancellationToken) =>
             Task.FromResult<IReadOnlySet<string>>(new HashSet<string>(StringComparer.OrdinalIgnoreCase));
@@ -1845,6 +1876,7 @@ public sealed class AcquisitionServiceTests {
 
     private sealed class RecordingJobQueue : IJobQueueService {
         public List<EnqueueJobRequest> Requests { get; } = [];
+        public List<(string Key, int MaxConcurrency, TimeSpan MinimumStartInterval)> ResourceDeclarations { get; } = [];
         public Exception? EnqueueFailure { get; set; }
         public Action? BeforeEnqueue { get; set; }
 
@@ -1864,6 +1896,14 @@ public sealed class AcquisitionServiceTests {
         }
         public Task<bool> HasPendingAsync(JobType type, string? targetEntityId, CancellationToken cancellationToken) =>
             Task.FromResult(Requests.Any(request => request.Type == type && request.TargetEntityId == targetEntityId));
+        public Task DeclareResourceAsync(
+            string resourceKey,
+            int maxConcurrency,
+            TimeSpan minimumStartInterval,
+            CancellationToken cancellationToken) {
+            ResourceDeclarations.Add((resourceKey, maxConcurrency, minimumStartInterval));
+            return Task.CompletedTask;
+        }
         public Task<int> EnqueueBatchAsync(IReadOnlyList<EnqueueJobRequest> requests, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<int> CancelAsync(JobType? type, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<bool> CancelRunAsync(Guid id, CancellationToken cancellationToken) => throw new NotSupportedException();

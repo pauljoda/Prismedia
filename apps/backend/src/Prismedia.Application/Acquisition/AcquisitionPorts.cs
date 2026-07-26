@@ -1,3 +1,4 @@
+using Prismedia.Application.Jobs;
 using Prismedia.Contracts.Acquisition;
 using Prismedia.Domain.Entities;
 
@@ -13,6 +14,12 @@ public sealed class AcquisitionConfigurationException(string code, string messag
 public interface IIndexerSearchClient {
     /// <summary>The indexer family this client serves.</summary>
     IndexerKind Kind { get; }
+
+    /// <summary>
+    /// Optional host-wide execution policy. Undeclared adapters are governed only by ordinary lane and
+    /// CPU scheduling plus their own retry behavior.
+    /// </summary>
+    JobExecutionPolicy? ExecutionPolicy => null;
 
     /// <summary>Runs a release search against the connection, returning normalized releases.</summary>
     Task<IReadOnlyList<IndexerRelease>> SearchAsync(IndexerConnection connection, IndexerQuery query, CancellationToken cancellationToken);
@@ -47,6 +54,15 @@ public interface IIndexerConfigStore {
     Task<IndexerConfigDetail?> GetAsync(Guid id, CancellationToken cancellationToken);
     Task<IndexerConfigSummary> SaveAsync(IndexerConfigSaveCommand command, CancellationToken cancellationToken);
     Task<bool> DeleteAsync(Guid id, CancellationToken cancellationToken);
+}
+
+/// <summary>Resolves the durable resource required by the currently enabled acquisition search adapters.</summary>
+public interface IAcquisitionSearchResourcePolicy {
+    /// <summary>
+    /// Returns the strictest declared adapter policy for one acquisition-search node, or null when every
+    /// participating adapter intentionally leaves execution unconstrained by the host.
+    /// </summary>
+    Task<JobResourceRequirement?> ResolveAsync(CancellationToken cancellationToken);
 }
 
 /// <summary>The import target a profile contributes: which library root, how to place files, and the path template.</summary>

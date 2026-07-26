@@ -236,7 +236,8 @@ public sealed partial class AcquisitionService(
     IEntityLifecycleMutationLease entityLifecycle,
     IAcquisitionImportResetCleanup importResetCleanup,
     VideoScanConcurrencyGate? scanGate = null,
-    IAcquisitionUploadStorage? uploads = null) : IAcquisitionRequestService, IAcquisitionGraphCancellation {
+    IAcquisitionUploadStorage? uploads = null,
+    IAcquisitionSearchResourcePolicy? searchResources = null) : IAcquisitionRequestService, IAcquisitionGraphCancellation {
     public Task<IReadOnlyList<AcquisitionSummary>> ListAsync(CancellationToken cancellationToken) =>
         store.ListAsync(cancellationToken);
 

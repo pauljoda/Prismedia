@@ -2,6 +2,16 @@ using Prismedia.Domain.Entities;
 
 namespace Prismedia.Application.Jobs;
 
+/// <summary>Host-enforced concurrency and pacing limits for one external job resource.</summary>
+public sealed record JobExecutionPolicy(
+    int MaxConcurrency,
+    TimeSpan MinimumStartInterval);
+
+/// <summary>A durable scheduler resource key paired with the policy that governs claims against it.</summary>
+public sealed record JobResourceRequirement(
+    string Key,
+    JobExecutionPolicy Policy);
+
 /// <summary>One executable node requested as part of a durable job graph.</summary>
 /// <param name="NodeKey">Stable graph-local key used to make expansion idempotent.</param>
 /// <param name="Job">Typed job payload and target.</param>

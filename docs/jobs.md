@@ -22,7 +22,7 @@ Required-node failure skips dependent descendants and fails the graph. Best-effo
 
 The central job definition registry classifies work as light, standard CPU, or heavy CPU. The process shares `max(1, logical processors - 1)` CPU permits across both scheduling pools. Standard work costs one permit; heavy work costs two when available. Interactive CPU work receives the next free permit before new background CPU work, but running work is not preempted.
 
-Entity mutation resources (`entity:{id}`) serialize conflicting writes across otherwise independent graphs. Plugin manifests may declare maximum concurrency and a minimum start interval; the host turns those declarations into durable `plugin:{id}` resources shared by interactive and background graphs. Resource capacity is checked before a node is claimed, and leases follow node heartbeats so a crashed worker cannot permanently hold capacity.
+Entity mutation resources (`entity:{id}`) serialize conflicting writes across otherwise independent graphs. Plugin manifests may declare maximum concurrency and a minimum start interval; the host turns those declarations into durable `plugin:{id}` resources shared by interactive and background graphs. Built-in acquisition adapters use the same opt-in policy contract: Prowlarr retains two concurrent searches, slskd retains one, and direct Torznab/Newznab adapters receive no invented limit. Resource capacity is checked before a node is claimed, and leases follow node heartbeats so a crashed worker cannot permanently hold capacity.
 
 ## Identify and acquisition waits
 
