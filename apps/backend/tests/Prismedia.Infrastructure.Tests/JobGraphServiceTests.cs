@@ -119,6 +119,47 @@ public sealed class JobGraphServiceTests {
         Assert.Contains(secondClaim.GraphId!.Value, new[] { first.Id, second.Id });
     }
 
+    [Fact]
+    public async Task DeclaredExternalResourceQueuesNodesAcrossIndependentGraphs() {
+        await using var db = CreateContext();
+        var graphs = new JobGraphService(db);
+        var queue = new JobQueueService(db);
+        await queue.DeclareResourceAsync("plugin:musicbrainz", 1, TimeSpan.Zero, CancellationToken.None);
+
+        foreach (var title in new[] { "Album One", "Album Two" }) {
+            await graphs.StartAsync(
+                new StartJobGraphRequest(
+                    JobGraphOrigin.Interactive,
+                    title,
+                    new GraphJobNodeRequest(
+                        "identify",
+                        new EnqueueJobRequest(JobType.IdentifySearch),
+                        ResourceKey: "plugin:musicbrainz")),
+                CancellationToken.None);
+        }
+
+        var first = await queue.ClaimNextGraphNodeAsync(
+            "worker-1",
+            JobGraphOrigin.Interactive,
+            CancellationToken.None);
+        var blocked = await queue.ClaimNextGraphNodeAsync(
+            "worker-2",
+            JobGraphOrigin.Interactive,
+            CancellationToken.None);
+
+        Assert.NotNull(first);
+        Assert.Null(blocked);
+
+        await queue.CompleteAsync(first.Id, "done", CancellationToken.None);
+        var second = await queue.ClaimNextGraphNodeAsync(
+            "worker-2",
+            JobGraphOrigin.Interactive,
+            CancellationToken.None);
+
+        Assert.NotNull(second);
+        Assert.NotEqual(first.Id, second.Id);
+    }
+
     private static PrismediaDbContext CreateContext() {
         var options = new DbContextOptionsBuilder<PrismediaDbContext>()
             .UseInMemoryDatabase($"job-graphs-{Guid.NewGuid():N}")

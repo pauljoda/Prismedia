@@ -457,10 +457,6 @@ internal static partial class PrismediaModelConfiguration {
                 .OnDelete(DeleteBehavior.SetNull);
             entity.HasIndex(row => new { row.Type, row.TargetEntityId, row.Status })
                 .HasDatabaseName("ix_job_runs_dedup");
-            entity.HasIndex(row => new { row.Type, row.TargetEntityId })
-                .IsUnique()
-                .HasFilter("status IN ('queued', 'running') AND target_entity_id IS NOT NULL")
-                .HasDatabaseName("ux_job_runs_pending_type_target");
             entity.ToTable(table => {
                 table.HasCheckConstraint("ck_job_runs_progress", "progress >= 0 AND progress <= 100");
                 table.HasCheckConstraint("ck_job_runs_attempts", "attempts >= 0 AND max_attempts > 0");

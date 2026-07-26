@@ -13,6 +13,42 @@ namespace Prismedia.Infrastructure.Tests;
 
 public sealed class QueueWorkerTests {
     [Fact]
+    public async Task QueueWorkerRunsFourInteractiveLanesAlongsideTheBackgroundPoolOnEightCpus() {
+        var foreground = Enumerable.Range(0, 5)
+            .Select(_ => CreateJob(JobRunLane.ForegroundIdentify));
+        var queue = new RecordingJobQueueService(foreground.Append(CreateJob()));
+        var settings = new MutableSettingsPersistence { BackgroundConcurrency = 1 };
+        var handler = new BlockingJobHandler();
+
+        var services = new ServiceCollection();
+        services.AddSingleton<IJobQueueService>(queue);
+        services.AddSingleton<ISettingsPersistence>(settings);
+        services.AddScoped<SettingsService>();
+        services.AddSingleton<IJobHandler>(handler);
+        await using var provider = services.BuildServiceProvider();
+
+        var worker = new QueueWorker(
+            provider.GetRequiredService<IServiceScopeFactory>(),
+            new WorkerRuntimeIdentity(),
+            NullLogger<QueueWorker>.Instance,
+            TimeSpan.FromMilliseconds(25),
+            logicalProcessorCount: 8);
+
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        await worker.StartAsync(CancellationToken.None);
+        try {
+            await handler.WaitForMaxActiveAsync(5, timeout.Token);
+
+            Assert.Equal(5, handler.MaxActive);
+            Assert.Equal(4, handler.StartedLanes.Count(lane => lane == JobRunLane.ForegroundIdentify));
+            Assert.Equal(1, handler.StartedLanes.Count(lane => lane is null));
+        } finally {
+            handler.ReleaseAll();
+            await worker.StopAsync(CancellationToken.None);
+        }
+    }
+
+    [Fact]
     public async Task QueueWorkerIncreasesParallelClaimsWhenConcurrencySettingChanges() {
         var queue = new RecordingJobQueueService(Enumerable.Range(0, 4).Select(_ => CreateJob()).ToArray());
         var settings = new MutableSettingsPersistence { BackgroundConcurrency = 1 };
@@ -29,7 +65,8 @@ public sealed class QueueWorkerTests {
             provider.GetRequiredService<IServiceScopeFactory>(),
             new WorkerRuntimeIdentity(),
             NullLogger<QueueWorker>.Instance,
-            TimeSpan.FromMilliseconds(25));
+            TimeSpan.FromMilliseconds(25),
+            logicalProcessorCount: 2);
 
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
         await worker.StartAsync(CancellationToken.None);
@@ -113,7 +150,8 @@ public sealed class QueueWorkerTests {
             provider.GetRequiredService<IServiceScopeFactory>(),
             new WorkerRuntimeIdentity(),
             NullLogger<QueueWorker>.Instance,
-            TimeSpan.FromMilliseconds(25));
+            TimeSpan.FromMilliseconds(25),
+            logicalProcessorCount: 2);
 
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
         await worker.StartAsync(CancellationToken.None);

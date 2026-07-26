@@ -12,6 +12,10 @@ namespace Prismedia.Application.Jobs;
 /// <param name="TargetLabel">Optional human-readable label shown on the dashboard.</param>
 /// <param name="Priority">Higher values are claimed first. Defaults to zero.</param>
 /// <param name="Lane">Optional queue lane for work that needs dedicated foreground worker selection.</param>
+/// <param name="NodeKey">Optional stable graph-local key for idempotent child expansion.</param>
+/// <param name="Importance">Optional override for required versus best-effort graph behavior.</param>
+/// <param name="ResourceClass">Optional override for the job type's CPU resource profile.</param>
+/// <param name="ResourceKey">Optional shared external or entity resource key.</param>
 public sealed record EnqueueJobRequest(
     JobType Type,
     string? PayloadJson = null,
@@ -19,7 +23,11 @@ public sealed record EnqueueJobRequest(
     string? TargetEntityId = null,
     string? TargetLabel = null,
     int Priority = 0,
-    JobRunLane? Lane = null) {
+    JobRunLane? Lane = null,
+    string? NodeKey = null,
+    JobNodeImportance? Importance = null,
+    JobResourceClass? ResourceClass = null,
+    string? ResourceKey = null) {
     /// <summary>
     /// Creates a queue request for a Prismedia entity target using the canonical entity-kind code.
     /// </summary>

@@ -21,6 +21,20 @@ public interface IJobQueueService {
     /// </summary>
     Task<JobRunSnapshot> EnqueueAsync(EnqueueJobRequest request, CancellationToken cancellationToken);
 
+    /// <summary>Appends a child node that inherits the parent's graph, origin, and logical lane.</summary>
+    Task<JobRunSnapshot> EnqueueChildAsync(
+        JobRunSnapshot parent,
+        EnqueueJobRequest request,
+        CancellationToken cancellationToken) =>
+        EnqueueAsync(request, cancellationToken);
+
+    /// <summary>Appends multiple child nodes to the parent's graph.</summary>
+    Task<int> EnqueueChildBatchAsync(
+        JobRunSnapshot parent,
+        IReadOnlyList<EnqueueJobRequest> requests,
+        CancellationToken cancellationToken) =>
+        EnqueueBatchAsync(requests, cancellationToken);
+
     /// <summary>
     /// Checks whether a queued or running job already exists for the given type and optional target.
     /// Used to prevent duplicate work.
@@ -77,6 +91,13 @@ public interface IJobQueueService {
             workerId,
             cancellationToken,
             origin == JobGraphOrigin.Interactive ? JobRunLane.ForegroundIdentify : null);
+
+    /// <summary>Creates or updates a durable shared resource policy used during graph-node claims.</summary>
+    Task DeclareResourceAsync(
+        string resourceKey,
+        int maxConcurrency,
+        TimeSpan minimumStartInterval,
+        CancellationToken cancellationToken) => Task.CompletedTask;
 
     /// <summary>
     /// Requeues running jobs whose worker lease is stale and not owned by the current worker process.

@@ -442,6 +442,53 @@ export const INDEXER_KIND = {
 
 export type IndexerKindCode = (typeof INDEXER_KIND)[keyof typeof INDEXER_KIND];
 
+// source: enum JobGraphOrigin
+export const JOB_GRAPH_ORIGIN = {
+  background: "background",
+  interactive: "interactive",
+} as const;
+
+export type JobGraphOriginCode = (typeof JOB_GRAPH_ORIGIN)[keyof typeof JOB_GRAPH_ORIGIN];
+
+// source: enum JobGraphSignalKind
+export const JOB_GRAPH_SIGNAL_KIND = {
+  identifyReview: "identify-review",
+  externalTransfer: "external-transfer",
+  domainEvent: "domain-event",
+} as const;
+
+export type JobGraphSignalKindCode = (typeof JOB_GRAPH_SIGNAL_KIND)[keyof typeof JOB_GRAPH_SIGNAL_KIND];
+
+// source: enum JobGraphStatus
+export const JOB_GRAPH_STATUS = {
+  queued: "queued",
+  running: "running",
+  waiting: "waiting",
+  completed: "completed",
+  completedWithWarnings: "completed-with-warnings",
+  failed: "failed",
+  cancelled: "cancelled",
+} as const;
+
+export type JobGraphStatusCode = (typeof JOB_GRAPH_STATUS)[keyof typeof JOB_GRAPH_STATUS];
+
+// source: enum JobNodeImportance
+export const JOB_NODE_IMPORTANCE = {
+  required: "required",
+  bestEffort: "best-effort",
+} as const;
+
+export type JobNodeImportanceCode = (typeof JOB_NODE_IMPORTANCE)[keyof typeof JOB_NODE_IMPORTANCE];
+
+// source: enum JobResourceClass
+export const JOB_RESOURCE_CLASS = {
+  light: "light",
+  standardCpu: "standard-cpu",
+  heavyCpu: "heavy-cpu",
+} as const;
+
+export type JobResourceClassCode = (typeof JOB_RESOURCE_CLASS)[keyof typeof JOB_RESOURCE_CLASS];
+
 // source: enum JobRunLane
 export const JOB_RUN_LANE = {
   foregroundIdentify: "foreground-identify",

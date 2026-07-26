@@ -22,6 +22,54 @@ public sealed class JobQueueServiceTests {
         Assert.Equal(2, jobs.Count);
         Assert.Equal(second.Id, jobs[0].Id);
         Assert.Equal(first.Id, jobs[1].Id);
+        Assert.NotNull(first.GraphId);
+        Assert.NotNull(second.GraphId);
+        Assert.All(await db.JobGraphs.ToListAsync(), graph =>
+            Assert.Equal(JobGraphOrigin.Background, graph.Origin));
+    }
+
+    [Fact]
+    public async Task SeparateInteractiveActionsForTheSameEntityCreateIndependentGraphs() {
+        await using var db = CreateContext();
+        var service = new JobQueueService(db);
+        var entityId = Guid.NewGuid().ToString();
+        var request = new EnqueueJobRequest(
+            JobType.IdentifySearch,
+            TargetEntityKind: EntityKindRegistry.Video.Code,
+            TargetEntityId: entityId,
+            Lane: JobRunLane.ForegroundIdentify);
+
+        var first = await service.EnqueueAsync(request, CancellationToken.None);
+        var second = await service.EnqueueAsync(request, CancellationToken.None);
+
+        Assert.NotEqual(first.Id, second.Id);
+        Assert.NotEqual(first.GraphId, second.GraphId);
+        Assert.Equal(2, await db.JobGraphs.CountAsync());
+        Assert.All(await db.JobGraphs.ToListAsync(), graph =>
+            Assert.Equal(JobGraphOrigin.Interactive, graph.Origin));
+    }
+
+    [Fact]
+    public async Task ChildEnqueueInheritsTheParentsGraphAndLane() {
+        await using var db = CreateContext();
+        var service = new JobQueueService(db);
+        var parent = await service.EnqueueAsync(
+            new EnqueueJobRequest(
+                JobType.RefreshEntity,
+                TargetEntityId: Guid.NewGuid().ToString(),
+                Lane: JobRunLane.ForegroundIdentify),
+            CancellationToken.None);
+
+        var child = await service.EnqueueChildAsync(
+            parent,
+            new EnqueueJobRequest(
+                JobType.ProbeVideo,
+                TargetEntityId: Guid.NewGuid().ToString()),
+            CancellationToken.None);
+
+        Assert.Equal(parent.GraphId, child.GraphId);
+        Assert.Equal(parent.Id, child.ParentRunId);
+        Assert.Equal(JobGraphOrigin.Interactive, child.GraphOrigin);
     }
 
     [Fact]

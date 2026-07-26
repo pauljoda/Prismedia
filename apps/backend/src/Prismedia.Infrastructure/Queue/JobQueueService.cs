@@ -1,4 +1,6 @@
 using Microsoft.EntityFrameworkCore;
+using System.Security.Cryptography;
+using System.Text;
 using Prismedia.Application.Jobs;
 using Prismedia.Domain.Entities;
 using Prismedia.Infrastructure.Persistence;
@@ -6,7 +8,7 @@ using Prismedia.Infrastructure.Persistence.Entities;
 
 namespace Prismedia.Infrastructure.Queue;
 
-public sealed class JobQueueService : IJobQueueService {
+public sealed partial class JobQueueService : IJobQueueService {
     private readonly PrismediaDbContext _db;
 
     public JobQueueService(PrismediaDbContext db) {
@@ -103,7 +105,8 @@ public sealed class JobQueueService : IJobQueueService {
             }
         }
 
-        if (request.TargetEntityId is not null) {
+        var origin = OriginFor(request);
+        if (origin == JobGraphOrigin.Background && request.TargetEntityId is not null) {
             var existing = await _db.JobRuns.AsNoTracking()
                 .Where(job => job.Type == request.Type &&
                               job.TargetEntityId == request.TargetEntityId &&
@@ -115,43 +118,85 @@ public sealed class JobQueueService : IJobQueueService {
             }
         }
 
-        var now = DateTimeOffset.UtcNow;
-        var row = new JobRunRow {
-            Id = Guid.NewGuid(),
-            Type = request.Type,
-            Status = JobRunStatus.Queued,
-            PayloadJson = request.PayloadJson ?? "{}",
-            Priority = request.Priority,
-            Lane = request.Lane,
-            Attempts = 0,
-            MaxAttempts = 3,
-            Progress = 0,
-            TargetEntityKind = request.TargetEntityKind,
-            TargetEntityId = request.TargetEntityId,
-            TargetLabel = request.TargetLabel,
-            AvailableAt = now,
-            CreatedAt = now
-        };
-
+        var (graph, row) = CreateRootGraph(request, origin, DateTimeOffset.UtcNow);
+        await EnsureEntityResourceDeclaredAsync(row.ResourceKey, cancellationToken);
+        _db.JobGraphs.Add(graph);
         _db.JobRuns.Add(row);
         try {
             await _db.SaveChangesAsync(cancellationToken);
-        } catch (DbUpdateException) when (request.TargetEntityId is not null) {
-            _db.Entry(row).State = EntityState.Detached;
-            var existing = await _db.JobRuns.AsNoTracking()
-                .Where(job => job.Type == request.Type &&
-                              job.TargetEntityId == request.TargetEntityId &&
-                              (job.Status == JobRunStatus.Queued || job.Status == JobRunStatus.Running))
-                .OrderBy(job => job.CreatedAt)
+        } catch (DbUpdateException) when (graph.ActiveKey is not null) {
+            _db.ChangeTracker.Clear();
+            var existing = await _db.JobGraphs.AsNoTracking()
+                .Where(active => active.ActiveKey == graph.ActiveKey &&
+                    (active.Status == JobGraphStatus.Queued ||
+                     active.Status == JobGraphStatus.Running ||
+                     active.Status == JobGraphStatus.Waiting))
+                .Join(
+                    _db.JobRuns.AsNoTracking(),
+                    active => active.RootRunId,
+                    run => run.Id,
+                    (active, run) => new { active.Origin, Run = run })
+                .OrderBy(candidate => candidate.Run.CreatedAt)
                 .FirstOrDefaultAsync(cancellationToken);
             if (existing is null) {
                 throw;
             }
 
-            return ToSnapshot(existing);
+            return ToSnapshot(existing.Run, existing.Origin);
         }
 
-        return ToSnapshot(row);
+        return ToSnapshot(row, origin);
+    }
+
+    public async Task<JobRunSnapshot> EnqueueChildAsync(
+        JobRunSnapshot parent,
+        EnqueueJobRequest request,
+        CancellationToken cancellationToken) {
+        if (parent.GraphId is not { } graphId) {
+            return await EnqueueAsync(request, cancellationToken);
+        }
+
+        var graph = await _db.JobGraphs.AsNoTracking()
+            .SingleOrDefaultAsync(candidate => candidate.Id == graphId, cancellationToken)
+            ?? throw new InvalidOperationException($"Job graph '{graphId}' was not found.");
+        var node = new GraphJobNodeRequest(
+            request.NodeKey ?? DefaultNodeKey(request),
+            request,
+            ParentRunId: parent.Id,
+            DependsOn: [parent.Id],
+            Importance: request.Importance ?? JobDefinitionRegistry.Importance(request.Type),
+            ResourceClass: request.ResourceClass ?? JobDefinitionRegistry.ResourceClass(request.Type),
+            ResourceKey: request.ResourceKey ?? EntityResourceKey(request));
+        await EnsureEntityResourceDeclaredAsync(node.ResourceKey, cancellationToken);
+
+        var appended = await new JobGraphService(_db)
+            .AppendNodeAsync(graphId, node, cancellationToken);
+        return appended with { GraphOrigin = graph.Origin };
+    }
+
+    public async Task<int> EnqueueChildBatchAsync(
+        JobRunSnapshot parent,
+        IReadOnlyList<EnqueueJobRequest> requests,
+        CancellationToken cancellationToken) {
+        var added = 0;
+        foreach (var request in requests) {
+            var before = parent.GraphId is null
+                ? await _db.JobRuns.CountAsync(cancellationToken)
+                : await _db.JobRuns.CountAsync(
+                    run => run.GraphId == parent.GraphId && run.NodeKey == (request.NodeKey ?? DefaultNodeKey(request)),
+                    cancellationToken);
+            await EnqueueChildAsync(parent, request, cancellationToken);
+            var after = parent.GraphId is null
+                ? await _db.JobRuns.CountAsync(cancellationToken)
+                : await _db.JobRuns.CountAsync(
+                    run => run.GraphId == parent.GraphId && run.NodeKey == (request.NodeKey ?? DefaultNodeKey(request)),
+                    cancellationToken);
+            if (after > before) {
+                added++;
+            }
+        }
+
+        return added;
     }
 
     public async Task<int> EnqueueBatchAsync(IReadOnlyList<EnqueueJobRequest> requests, CancellationToken cancellationToken) {
@@ -186,22 +231,10 @@ public sealed class JobQueueService : IJobQueueService {
                 continue;
             }
 
-            _db.JobRuns.Add(new JobRunRow {
-                Id = Guid.NewGuid(),
-                Type = request.Type,
-                Status = JobRunStatus.Queued,
-                PayloadJson = request.PayloadJson ?? "{}",
-                Priority = request.Priority,
-                Lane = request.Lane,
-                Attempts = 0,
-                MaxAttempts = 3,
-                Progress = 0,
-                TargetEntityKind = request.TargetEntityKind,
-                TargetEntityId = request.TargetEntityId,
-                TargetLabel = request.TargetLabel,
-                AvailableAt = now,
-                CreatedAt = now
-            });
+            var (graph, run) = CreateRootGraph(request, OriginFor(request), now);
+            await EnsureEntityResourceDeclaredAsync(run.ResourceKey, cancellationToken);
+            _db.JobGraphs.Add(graph);
+            _db.JobRuns.Add(run);
             enqueued++;
         }
 
@@ -210,6 +243,98 @@ public sealed class JobQueueService : IJobQueueService {
         }
 
         return enqueued;
+    }
+
+    private static (JobGraphRow Graph, JobRunRow Run) CreateRootGraph(
+        EnqueueJobRequest request,
+        JobGraphOrigin origin,
+        DateTimeOffset now) {
+        var graphId = Guid.NewGuid();
+        var runId = Guid.NewGuid();
+        var graph = new JobGraphRow {
+            Id = graphId,
+            Origin = origin,
+            Status = JobGraphStatus.Queued,
+            DisplayName = request.TargetLabel ?? request.Type.ToCode(),
+            RootRunId = runId,
+            RootEntityKind = request.TargetEntityKind,
+            RootEntityId = request.TargetEntityId,
+            ActiveKey = ActiveGraphKeyFor(request, origin),
+            CreatedAt = now,
+            UpdatedAt = now
+        };
+        var row = new JobRunRow {
+            Id = runId,
+            GraphId = graphId,
+            NodeKey = request.NodeKey ?? "root",
+            Importance = request.Importance ?? JobDefinitionRegistry.Importance(request.Type),
+            ResourceClass = request.ResourceClass ?? JobDefinitionRegistry.ResourceClass(request.Type),
+            ResourceKey = request.ResourceKey ?? EntityResourceKey(request),
+            Sequence = 0,
+            Type = request.Type,
+            Status = JobRunStatus.Queued,
+            PayloadJson = request.PayloadJson ?? "{}",
+            Priority = request.Priority,
+            Lane = request.Lane,
+            Attempts = 0,
+            MaxAttempts = 3,
+            Progress = 0,
+            TargetEntityKind = request.TargetEntityKind,
+            TargetEntityId = request.TargetEntityId,
+            TargetLabel = request.TargetLabel,
+            AvailableAt = now,
+            CreatedAt = now
+        };
+        return (graph, row);
+    }
+
+    private static JobGraphOrigin OriginFor(EnqueueJobRequest request) =>
+        request.Lane == JobRunLane.ForegroundIdentify
+            ? JobGraphOrigin.Interactive
+            : JobGraphOrigin.Background;
+
+    private static string? ActiveGraphKeyFor(EnqueueJobRequest request, JobGraphOrigin origin) {
+        if (origin != JobGraphOrigin.Background) return null;
+        if (request.TargetEntityId is not null) {
+            return $"{request.Type.ToCode()}:{request.TargetEntityId}";
+        }
+
+        return SingletonJobTypes.Contains(request.Type)
+            ? request.Type.ToCode()
+            : null;
+    }
+
+    private static string DefaultNodeKey(EnqueueJobRequest request) {
+        var target = request.TargetEntityId;
+        if (target is null) {
+            var payload = request.PayloadJson ?? "{}";
+            target = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(payload)))[..16].ToLowerInvariant();
+        }
+
+        return $"{request.Type.ToCode()}:{target}";
+    }
+
+    private static string? EntityResourceKey(EnqueueJobRequest request) =>
+        request.TargetEntityId is null || request.TargetEntityKind is null
+            ? null
+            : JobResourceKeys.Entity(request.TargetEntityId);
+
+    private async Task EnsureEntityResourceDeclaredAsync(
+        string? resourceKey,
+        CancellationToken cancellationToken) {
+        if (resourceKey is null || !JobResourceKeys.IsEntity(resourceKey)) return;
+        if (_db.JobResourceStates.Local.Any(resource => resource.Key == resourceKey) ||
+            await _db.JobResourceStates.AnyAsync(resource => resource.Key == resourceKey, cancellationToken)) {
+            return;
+        }
+
+        _db.JobResourceStates.Add(new JobResourceStateRow {
+            Key = resourceKey,
+            MaxConcurrency = 1,
+            MinimumStartIntervalMs = 0,
+            NextAvailableAt = DateTimeOffset.MinValue,
+            UpdatedAt = DateTimeOffset.UtcNow
+        });
     }
 
     public async Task<bool> HasPendingAsync(JobType type, string? targetEntityId, CancellationToken cancellationToken) {
@@ -464,6 +589,21 @@ public sealed class JobQueueService : IJobQueueService {
                       AND graph.origin = {2}
                       AND graph.status IN ('queued', 'running')
                       AND graph.cancellation_requested = FALSE
+                      AND (
+                          candidate.resource_key IS NULL
+                          OR EXISTS (
+                              SELECT 1
+                              FROM job_resource_states AS resource
+                              WHERE resource.key = candidate.resource_key
+                                AND resource.next_available_at <= {0}
+                                AND (
+                                    SELECT COUNT(*)
+                                    FROM job_resource_leases AS lease
+                                    WHERE lease.resource_key = resource.key
+                                      AND lease.expires_at > {0}
+                                ) < resource.max_concurrency
+                          )
+                      )
                       AND NOT EXISTS (
                           SELECT 1
                           FROM job_dependencies AS dependency
@@ -496,13 +636,21 @@ public sealed class JobQueueService : IJobQueueService {
                 origin.ToCode()).ToListAsync(cancellationToken);
             claimedId = claimed.Count == 0 ? null : claimed[0];
             if (claimedId is not null) {
-                var graphId = await _db.JobRuns.AsNoTracking()
+                var claimDetails = await _db.JobRuns.AsNoTracking()
                     .Where(run => run.Id == claimedId)
-                    .Select(run => run.GraphId)
+                    .Select(run => new { run.GraphId, run.ResourceKey })
                     .SingleAsync(cancellationToken);
-                if (graphId is not null) {
+                if (claimDetails.ResourceKey is not null &&
+                    !await TryAcquireResourceAsync(
+                        claimDetails.ResourceKey,
+                        claimedId.Value,
+                        now,
+                        cancellationToken)) {
+                    await RequeueUnstartedClaimAsync(claimedId.Value, cancellationToken);
+                    claimedId = null;
+                } else if (claimDetails.GraphId is not null) {
                     await _db.JobGraphs
-                        .Where(graph => graph.Id == graphId)
+                        .Where(graph => graph.Id == claimDetails.GraphId)
                         .ExecuteUpdateAsync(
                             setters => setters
                                 .SetProperty(graph => graph.Status, JobGraphStatus.Running)
@@ -533,6 +681,12 @@ public sealed class JobQueueService : IJobQueueService {
                         predecessor => predecessor.Id,
                         (_, predecessor) => predecessor)
                     .Any(predecessor => predecessor.Status != JobRunStatus.Completed));
+            candidates = candidates.Where(candidate => candidate.Run.ResourceKey == null ||
+                _db.JobResourceStates.Any(resource =>
+                    resource.Key == candidate.Run.ResourceKey &&
+                    resource.NextAvailableAt <= now &&
+                    _db.JobResourceLeases.Count(lease =>
+                        lease.ResourceKey == resource.Key && lease.ExpiresAt > now) < resource.MaxConcurrency));
             if (origin == JobGraphOrigin.Interactive) {
                 candidates = candidates.Where(candidate => !_db.JobRuns.Any(active =>
                     active.GraphId == candidate.Graph.Id && active.Status == JobRunStatus.Running));
@@ -546,6 +700,11 @@ public sealed class JobQueueService : IJobQueueService {
                 .ThenBy(candidate => candidate.Run.CreatedAt)
                 .FirstOrDefaultAsync(cancellationToken);
             if (selected is null) {
+                return null;
+            }
+
+            if (selected.Run.ResourceKey is not null &&
+                !await TryAcquireResourceAsync(selected.Run.ResourceKey, selected.Run.Id, now, cancellationToken)) {
                 return null;
             }
 
@@ -708,12 +867,16 @@ public sealed class JobQueueService : IJobQueueService {
         const int maxConcurrencyRetries = 3;
         for (var attempt = 0; ; attempt++) {
             var row = await _db.JobRuns.FindAsync([id], cancellationToken);
+            var wasRunning = row?.Status == JobRunStatus.Running;
             if (row is null || !mutate(row)) {
                 return false;
             }
 
             try {
                 await _db.SaveChangesAsync(cancellationToken);
+                if (wasRunning && row.Status != JobRunStatus.Running) {
+                    await ReleaseResourceLeaseAsync(id, cancellationToken);
+                }
                 return true;
             } catch (DbUpdateConcurrencyException) when (attempt < maxConcurrencyRetries) {
                 await _db.Entry(row).ReloadAsync(cancellationToken);

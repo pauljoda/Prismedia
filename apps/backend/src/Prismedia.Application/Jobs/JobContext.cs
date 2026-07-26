@@ -33,12 +33,12 @@ public sealed class JobContext {
     /// </summary>
     public async Task<JobRunSnapshot?> EnqueueIfNeededAsync(EnqueueJobRequest request, CancellationToken cancellationToken = default) {
         await ThrowIfCancelledAsync(cancellationToken);
-        if (await _queue.HasPendingAsync(request.Type, request.TargetEntityId, cancellationToken)) {
+        if (Job.GraphId is null &&
+            await _queue.HasPendingAsync(request.Type, request.TargetEntityId, cancellationToken)) {
             return null;
         }
 
-        await ThrowIfCancelledAsync(cancellationToken);
-        return await _queue.EnqueueAsync(request, cancellationToken);
+        return await _queue.EnqueueChildAsync(Job, request, cancellationToken);
     }
 
     /// <summary>
@@ -46,7 +46,7 @@ public sealed class JobContext {
     /// </summary>
     public async Task<JobRunSnapshot> EnqueueAsync(EnqueueJobRequest request, CancellationToken cancellationToken = default) {
         await ThrowIfCancelledAsync(cancellationToken);
-        return await _queue.EnqueueAsync(request, cancellationToken);
+        return await _queue.EnqueueChildAsync(Job, request, cancellationToken);
     }
 
     /// <summary>
@@ -55,7 +55,7 @@ public sealed class JobContext {
     /// </summary>
     public async Task<int> EnqueueBatchAsync(IReadOnlyList<EnqueueJobRequest> requests, CancellationToken cancellationToken = default) {
         await ThrowIfCancelledAsync(cancellationToken);
-        return await _queue.EnqueueBatchAsync(requests, cancellationToken);
+        return await _queue.EnqueueChildBatchAsync(Job, requests, cancellationToken);
     }
 
     private async Task ThrowIfCancelledAsync(CancellationToken cancellationToken) {

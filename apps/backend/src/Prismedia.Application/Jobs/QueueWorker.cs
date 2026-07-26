@@ -17,16 +17,11 @@ public sealed class QueueWorker(
     WorkerRuntimeIdentity workerIdentity,
     ILogger<QueueWorker> logger,
     TimeSpan? concurrencyRefreshInterval = null,
-    TimeSpan? restorePauseInterval = null) : BackgroundService {
+    TimeSpan? restorePauseInterval = null,
+    int? logicalProcessorCount = null) : BackgroundService {
     private static readonly TimeSpan IdleDelay = TimeSpan.FromSeconds(2);
     private static readonly TimeSpan RetryDelay = TimeSpan.FromSeconds(30);
 
-    /// <summary>
-    /// Extra worker slots reserved for direct foreground interactive jobs. Priority only orders claims,
-    /// so a long-running scan occupying every regular slot would still make a manual identify wait
-    /// for it to finish; the lane lets direct identify and acquisition request work start immediately.
-    /// </summary>
-    private const int ForegroundLaneSlots = 1;
     private static readonly TimeSpan StaleLeaseTimeout = TimeSpan.FromMinutes(2);
     private static readonly TimeSpan StaleLeaseRecoveryInterval = TimeSpan.FromSeconds(30);
     private static readonly TimeSpan JobCancellationPollInterval = TimeSpan.FromSeconds(1);
@@ -37,6 +32,7 @@ public sealed class QueueWorker(
     private readonly TimeSpan _restorePauseInterval =
         restorePauseInterval ?? DefaultRestorePauseInterval;
     private readonly string _workerId = workerIdentity.WorkerId;
+    private readonly int _logicalProcessorCount = Math.Max(1, logicalProcessorCount ?? Environment.ProcessorCount);
 
     /// <summary>
     /// Runs the worker loop until the host shuts down. Supports concurrent job processing
@@ -45,18 +41,22 @@ public sealed class QueueWorker(
     protected override async Task ExecuteAsync(CancellationToken stoppingToken) {
         var concurrency = await LoadConcurrencyAsync(stoppingToken);
         var runningJobs = new HashSet<Task>();
-        var foregroundJobs = new HashSet<Task>();
+        var interactiveJobs = new HashSet<Task>();
+        var interactiveLaneLimit = AdaptiveJobCapacity.InteractiveLaneLimit(_logicalProcessorCount);
+        var cpuPermits = AdaptiveJobCapacity.CpuPermitBudget(_logicalProcessorCount);
+        var cpuPool = new JobCpuPermitPool(cpuPermits);
         var nextConcurrencyRefreshAt = DateTimeOffset.UtcNow.Add(_concurrencyRefreshInterval);
 
         logger.LogInformation(
-            "Prismedia .NET worker {WorkerId} started with concurrency {Concurrency}.",
-            _workerId, concurrency);
+            "Prismedia .NET worker {WorkerId} started with {BackgroundConcurrency} background slots, " +
+            "{InteractiveConcurrency} interactive lanes, and {CpuPermits} CPU permits.",
+            _workerId, concurrency, interactiveLaneLimit, cpuPermits);
 
         var nextRecoveryAt = DateTimeOffset.MinValue;
         var restorePauseLogged = false;
         while (!stoppingToken.IsCancellationRequested) {
             RemoveCompletedJobs(runningJobs);
-            RemoveCompletedJobs(foregroundJobs);
+            RemoveCompletedJobs(interactiveJobs);
 
             if (await HasPendingRestoreAsync(stoppingToken)) {
                 if (!restorePauseLogged) {
@@ -86,9 +86,9 @@ public sealed class QueueWorker(
                 nextConcurrencyRefreshAt = now.Add(_concurrencyRefreshInterval);
             }
 
-            if (runningJobs.Count >= concurrency && foregroundJobs.Count >= ForegroundLaneSlots) {
+            if (runningJobs.Count >= concurrency && interactiveJobs.Count >= interactiveLaneLimit) {
                 await WaitForCapacityOrRefreshAsync(
-                    runningJobs, foregroundJobs, nextConcurrencyRefreshAt, stoppingToken);
+                    runningJobs, interactiveJobs, nextConcurrencyRefreshAt, stoppingToken);
                 continue;
             }
 
@@ -106,43 +106,65 @@ public sealed class QueueWorker(
                     nextRecoveryAt = now.Add(StaleLeaseRecoveryInterval);
                 }
 
-                // Fill standard capacity only with standard jobs. If none are ready (or every standard
-                // slot is occupied), fill the dedicated foreground slot independently. This prevents a
-                // search flood from taking general capacity while still starting one interactive job.
-                job = runningJobs.Count < concurrency
-                    ? await queue.ClaimNextAsync(_workerId, stoppingToken)
-                    : null;
-                if (job is null && foregroundJobs.Count < ForegroundLaneSlots) {
-                    job = await queue.ClaimNextAsync(
+                // Interactive graphs are considered first for the next free CPU permit, while their
+                // independent cap prevents a foreground flood from consuming background capacity.
+                job = interactiveJobs.Count < interactiveLaneLimit
+                    ? await queue.ClaimNextGraphNodeAsync(
                         _workerId,
-                        stoppingToken,
-                        JobRunLane.ForegroundIdentify);
+                        JobGraphOrigin.Interactive,
+                        stoppingToken)
+                    : null;
+                if (job is null && runningJobs.Count < concurrency) {
+                    job = await queue.ClaimNextGraphNodeAsync(
+                        _workerId,
+                        JobGraphOrigin.Background,
+                        stoppingToken);
                 }
             } catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) {
                 throw;
             } catch (Exception ex) {
                 logger.LogError(ex, "Failed to claim next job.");
                 await WaitForCapacityOrRefreshAsync(
-                    runningJobs, foregroundJobs, nextConcurrencyRefreshAt, stoppingToken);
+                    runningJobs, interactiveJobs, nextConcurrencyRefreshAt, stoppingToken);
                 continue;
             }
 
             if (job is null) {
                 await WaitForCapacityOrRefreshAsync(
-                    runningJobs, foregroundJobs, nextConcurrencyRefreshAt, stoppingToken);
+                    runningJobs, interactiveJobs, nextConcurrencyRefreshAt, stoppingToken);
                 continue;
             }
 
-            var running = Task.Run(() => ProcessJobAsync(job, stoppingToken), stoppingToken);
-            if (job.Lane == JobRunLane.ForegroundIdentify) {
-                foregroundJobs.Add(running);
+            var origin = job.GraphOrigin
+                ?? (job.Lane == JobRunLane.ForegroundIdentify
+                    ? JobGraphOrigin.Interactive
+                    : JobGraphOrigin.Background);
+            job = job with { GraphOrigin = origin };
+            if (!cpuPool.TryAcquire(job.ResourceClass, out var cpuLease)) {
+                await MutateJobWithFreshQueueAsync(
+                    freshQueue => freshQueue.DeferAsync(
+                        job.Id,
+                        "Waiting for CPU capacity.",
+                        TimeSpan.FromMilliseconds(250),
+                        stoppingToken),
+                    stoppingToken);
+                continue;
+            }
+
+            var running = Task.Run(async () => {
+                using (cpuLease) {
+                    await ProcessJobAsync(job, stoppingToken);
+                }
+            }, stoppingToken);
+            if (origin == JobGraphOrigin.Interactive) {
+                interactiveJobs.Add(running);
             } else {
                 runningJobs.Add(running);
             }
         }
 
-        if (runningJobs.Count > 0 || foregroundJobs.Count > 0) {
-            await Task.WhenAll(runningJobs.Concat(foregroundJobs));
+        if (runningJobs.Count > 0 || interactiveJobs.Count > 0) {
+            await Task.WhenAll(runningJobs.Concat(interactiveJobs));
         }
     }
 
