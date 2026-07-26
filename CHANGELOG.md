@@ -6,6 +6,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 ### What's New
+- Jobs now run as durable dependency graphs with one fair interactive lane per user-selected Entity, a separately configured background pool, shared CPU balancing, durable provider rate limits, restart-safe waits, graph-level progress and cancellation, and a dependency view in Jobs.
 - Prismedia now has real multi-user accounts. A first-run setup wizard creates your administrator, every household member gets their own username and password, and the same credentials sign in to the web app, Jellyfin-compatible clients (Infuse, Swiftfin, and friends), and OPDS readers — so reverse-proxy auth middleware is no longer needed in front of Prismedia.
 - Everything personal is now per user: watch progress, played state, favorites, ratings, Continue Watching, and NSFW visibility belong to the signed-in account, and administrators control which libraries each member can see.
 - Prismedia is now a complete self-hosted media library for videos, movies, shows, images, galleries, comics, ebooks, audio, people, studios, tags, collections, files, plugins, and background jobs.
@@ -22,6 +23,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Release operations are now ready for channel publishing: the root package version is the source of truth, Docker builds validate the release metadata, pushes to `main` publish only the dev image, and alpha/beta/release images are published manually.
 
 ### Changed
+- Acquisition imports now reconcile only the exact imported Entities, files, descendants, and affected ancestors. Movie, TV, music, book, retry, merged, and upgrade imports no longer trigger a whole-library or media-kind rescan.
+- Identify review, metadata application, request fan-out, downloads, imports, readiness processing, and acquisition finalization remain in their originating lane; provider review and external transfers release workers while they wait and resume the same graph when signalled.
 - Playback Stats has been rebuilt around the prism: one beam of playback enters the Prismedia mark and separates into a band per media family, sized by its share of the window, and selecting a band filters the whole page. Watch time, completion, library reach, streaks, and the busiest day sit beside it, an activity chart adapts from per-day to per-week columns to stay readable at any width, and a weekday-by-hour rhythm grid shows exactly when the library gets used. Charts now use the spectrum as a cool-to-warm scale so hue reads as volume, and every list shows real artwork, how far playback actually reached, and accumulated watch time.
 - Delete files now performs a complete removal: the selected media subtree, managed files, generated assets, monitors, acquisitions, and stuck lifecycle state are removed together instead of monitored content returning to Wanted.
 - Browse, Settings, navigation, ambient backgrounds, and missing artwork now share one restrained rainbow palette in deliberate spectrum order across the web and Apple apps.

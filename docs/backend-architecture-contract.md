@@ -196,6 +196,7 @@ Stable string identifiers are owned by exactly one source and must not be retype
 ### Course Corrections
 
 - Do not introduce a service named `EntityGraph` or a global load/save coordinator.
+- Durable `JobGraph` is scheduling state, not a domain Entity relationship model; its graph terminology is intentional and does not weaken the no-global-EntityGraph rule.
 - Keep "graph" terminology out of new internal infrastructure names. Prefer "entity relationships", "structural children", "relationship links", or "entity slices".
 - Do not make `EfEntityRepository.SaveAsync` the universal write path for every table. It should remain a bounded domain-slice persistence adapter. Media scanning, playback, queues, collections, and settings can use specific application handlers and EF persistence services.
 - For read APIs, build DTO projections from EF with `AsNoTracking` instead of hydrating domain entities only to map them back to DTOs.

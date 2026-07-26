@@ -191,14 +191,8 @@ receive arbitrary filesystem or download-client access. External identities
 flow through acquisition/import as `ExternalIdentity`; the persistence columns
 are `identity_namespace` and `identity_value`, not misleading plugin-id fields.
 
-## Queue Direction
+## Durable job graphs
 
-Initial queue families:
+Long-running work is a PostgreSQL-backed graph of executable nodes, dependency edges, durable waits, and shared resource leases. Interactive Entity actions receive independent, fairly scheduled lanes; non-interactive scans, backups, monitoring, and maintenance use the separately configured background pool. CPU-heavy processing and declared external providers share capacity across both pools.
 
-- `library-scan`
-- `media-probe`
-- `fingerprint`
-- `preview`
-- `metadata-import`
-
-Queues must be durable, restart-safe, and visible in the UI.
+Acquisition imports materialize exact files and Entities, then use the shared Entity reconciliation planner. Imports never schedule a root or media-kind-wide scan. See [jobs.md](jobs.md) for graph semantics, scheduling, resource gates, Identify/acquisition continuity, and scoped import rules.

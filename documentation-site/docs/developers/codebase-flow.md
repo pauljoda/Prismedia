@@ -179,35 +179,35 @@ Important groups currently mapped:
 | Entity browse/detail | `/api/entities`, kind aliases like `/api/videos` | `IEntityReadService`, entity projectors, generated DTOs. |
 | Library roots | `/api/libraries` | Settings and scan-root persistence. |
 | Files | `/api/files` | `FilesService`, managed storage, file persistence. |
-| Jobs | `/api/jobs` | `JobService`, `IJobQueueService`, `job_runs`. |
+| Jobs | `/api/jobs` | `JobService`, `IJobGraphService`, `IJobQueueService`, durable graph/node/signal/resource rows. |
 | Identify | `/api/identify` | Plugin services, identify queues, cascade runners. |
 | Requests | `/api/requests` | Radarr, Sonarr, Lidarr clients and history stores. |
 | Playback | `/api/playback`, `/api/music-player`, Jellyfin routes | Playback services, HLS assets, stream sources. |
 | Settings/auth | `/api/settings`, `/api/auth`, `/api/users` | Settings registry, user authentication, and user administration services. |
 
-## Background Job Flow
+## Durable Job Flow
 
 ```mermaid
 sequenceDiagram
   participant UI as UI or scheduler
   participant API as API endpoint or app service
   participant Queue as JobQueueService
-  participant Db as job_runs table
+  participant Db as job graphs, nodes, edges, signals, resources
   participant Worker as QueueWorker
   participant Handler as IJobHandler
   participant Infra as Media and EF adapters
 
   UI->>API: Scan, refresh, identify, thumbnail, probe, or maintenance action
   API->>Queue: EnqueueJobRequest
-  Queue->>Db: Insert queued job row
-  Worker->>Queue: Claim runnable job
-  Queue->>Db: Mark running with lease/concurrency token
+  Queue->>Db: Create graph and root node
+  Worker->>Queue: Claim dependency-ready node from a fair lane
+  Queue->>Db: Acquire CPU/external/entity resources and mark running
   Worker->>Handler: Handle with JobContext
   Handler->>Infra: Discover files, probe media, generate assets, apply metadata
   Infra->>Db: Persist entity rows, files, relationships, progress, states
-  Handler->>Queue: Enqueue downstream work when needed
+  Handler->>Queue: Append stable-key child nodes and dependency edges
   Queue->>Db: Complete, retry, fail, or cancel
-  UI->>API: Poll /api/jobs and affected entities
+  UI->>API: Poll graph progress, waits, warnings, and affected Entities
 ```
 
 Registered handler families:
@@ -218,7 +218,8 @@ Registered handler families:
 | Probe | `ProbeVideoJobHandler`, `ProbeAudioJobHandler` | Run media probes and persist technical metadata. |
 | Fingerprint | `FingerprintJobHandler` for video, image, audio | Compute MD5/oshash-style fingerprints where enabled and needed. |
 | Asset generation | Grid thumbnails, image thumbnails, book covers/pages, audio waveforms, video previews, subtitles | Produce generated assets and capability state. |
-| Identify | Search, bulk identify, auto identify, cascade identify | Call providers/plugins, store review state, apply metadata and structure. |
+| Identify | Search, one-provider-per-Entity expansion, reviewed apply, auto identify | Call providers/plugins, wait durably for review, apply metadata, and append structural work in the same lane. |
+| Acquisition | Search, monitor, import, upgrade replace, finalize | Wait for review/transfers, materialize exact Entities and files, reconcile readiness, and finalize usable imports. |
 | Maintenance | Refresh entity, refresh collection, library maintenance | Keep derived views and stale records tidy. |
 
 ## Entity And Capability Flow
@@ -300,7 +301,7 @@ flowchart TD
   Discovery --> Classifier["Folder/file classifier"]
   Classifier --> Upsert["LibraryScanPersistenceService"]
   Upsert --> EntityRows["Entity, file, child, relationship rows"]
-  Upsert --> Downstream["Probe, fingerprint, thumbnail, preview, identify jobs"]
+  Upsert --> Downstream["Append probe, fingerprint, thumbnail, preview, identify nodes"]
   Downstream --> Workers["Worker handlers"]
   Workers --> GeneratedAssets["Thumbnails, waveforms, previews, subtitles"]
   Workers --> UpdatedDetail["Updated cards/detail/progress state"]
@@ -397,7 +398,7 @@ instead of adding one-off branches.
 | Backend identify | `IdentifyQueueService`, `IdentifyPluginService*` | Async matching, provider behavior, queue state, cascade and apply paths. |
 | Backend playback | `HlsAssetService*`, playback policy services | Direct play, direct stream, transcode, cache, seek, and process lifecycle all interact. |
 | Backend scanning | `LibraryScanPersistenceService.*`, scan handlers | Converts files into canonical entities and downstream job work. |
-| Backend queue | `JobQueueService`, `QueueWorker` | Durable work, visibility, retries, cancellation, concurrency, foreground lane behavior. |
+| Backend queue | `JobGraphService`, `JobQueueService`, `QueueWorker` | Dependencies, durable waits, fair interactive/background lanes, CPU/provider/entity resources, visibility, retries, and cancellation. |
 
 ### Low-Noise Findings
 
