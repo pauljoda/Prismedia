@@ -30,6 +30,8 @@ public sealed class CollectionCommandPersistence(PrismediaDbContext db) : IColle
         });
         db.CollectionDetails.Add(new CollectionDetailRow {
             EntityId = collection.Id,
+            OwnerUserId = collection.OwnerUserId,
+            IsShared = collection.IsShared,
             Mode = collection.Mode,
             RuleTreeJson = collection.RuleTreeJson,
             CoverMode = collection.CoverMode,
@@ -45,23 +47,29 @@ public sealed class CollectionCommandPersistence(PrismediaDbContext db) : IColle
     public async Task<bool> UpdateAsync(
         Collection collection,
         string? description,
+        Guid ownerUserId,
         CancellationToken cancellationToken) {
         var entity = await db.Entities
             .FirstOrDefaultAsync(row =>
                 row.Id == collection.Id &&
-                row.KindCode == EntityKindRegistry.Collection.Code,
+                row.KindCode == EntityKindRegistry.Collection.Code &&
+                db.CollectionDetails.Any(detail =>
+                    detail.EntityId == row.Id &&
+                    detail.OwnerUserId == ownerUserId),
                 cancellationToken);
         if (entity is null) {
             return false;
         }
 
-        var detail = await db.CollectionDetails.FindAsync([collection.Id], cancellationToken)
-            ?? TrackCollectionDetail(collection.Id);
+        var detail = await db.CollectionDetails.FirstAsync(
+            row => row.EntityId == collection.Id && row.OwnerUserId == ownerUserId,
+            cancellationToken);
         var now = DateTimeOffset.UtcNow;
         entity.Title = collection.Title;
         entity.IsNsfw = collection.IsNsfw ?? false;
         entity.UpdatedAt = now;
         detail.Mode = collection.Mode;
+        detail.IsShared = collection.IsShared;
         detail.RuleTreeJson = collection.RuleTreeJson;
         detail.CoverMode = collection.CoverMode;
         detail.CoverItemEntityId = collection.CoverItemId;
@@ -73,11 +81,17 @@ public sealed class CollectionCommandPersistence(PrismediaDbContext db) : IColle
     }
 
     /// <inheritdoc />
-    public async Task<bool> DeleteAsync(Guid collectionId, CancellationToken cancellationToken) {
+    public async Task<bool> DeleteAsync(
+        Guid collectionId,
+        Guid ownerUserId,
+        CancellationToken cancellationToken) {
         var entity = await db.Entities
             .FirstOrDefaultAsync(row =>
                 row.Id == collectionId &&
-                row.KindCode == EntityKindRegistry.Collection.Code,
+                row.KindCode == EntityKindRegistry.Collection.Code &&
+                db.CollectionDetails.Any(detail =>
+                    detail.EntityId == row.Id &&
+                    detail.OwnerUserId == ownerUserId),
                 cancellationToken);
         if (entity is null) {
             return false;
@@ -91,8 +105,9 @@ public sealed class CollectionCommandPersistence(PrismediaDbContext db) : IColle
     }
 
     /// <inheritdoc />
-    public async Task<CollectionMode?> GetModeAsync(
+    public async Task<CollectionEditState?> GetEditStateAsync(
         Guid collectionId,
+        Guid ownerUserId,
         CancellationToken cancellationToken) {
         var row = await db.Entities
             .Where(entity =>
@@ -102,9 +117,11 @@ public sealed class CollectionCommandPersistence(PrismediaDbContext db) : IColle
                 db.CollectionDetails,
                 entity => entity.Id,
                 detail => detail.EntityId,
-                (_, detail) => new { detail.Mode })
+                (_, detail) => detail)
+            .Where(detail => detail.OwnerUserId == ownerUserId)
+            .Select(detail => new CollectionEditState(detail.Mode, detail.IsShared))
             .FirstOrDefaultAsync(cancellationToken);
-        return row?.Mode;
+        return row;
     }
 
     /// <inheritdoc />
@@ -126,8 +143,13 @@ public sealed class CollectionCommandPersistence(PrismediaDbContext db) : IColle
     /// <inheritdoc />
     public async Task<int> AddManualItemsAsync(
         Guid collectionId,
+        Guid ownerUserId,
         IReadOnlyList<Guid> entityIds,
         CancellationToken cancellationToken) {
+        if (!await IsOwnedAsync(collectionId, ownerUserId, cancellationToken)) {
+            return 0;
+        }
+
         var existingIds = await db.CollectionItemDetails
             .Where(row => row.CollectionEntityId == collectionId)
             .Select(row => row.ItemEntityId)
@@ -161,8 +183,13 @@ public sealed class CollectionCommandPersistence(PrismediaDbContext db) : IColle
     /// <inheritdoc />
     public async Task<int> RemoveItemsAsync(
         Guid collectionId,
+        Guid ownerUserId,
         IReadOnlyList<Guid> itemIds,
         CancellationToken cancellationToken) {
+        if (!await IsOwnedAsync(collectionId, ownerUserId, cancellationToken)) {
+            return 0;
+        }
+
         var rows = await db.CollectionItemDetails
             .Where(row => row.CollectionEntityId == collectionId && itemIds.Contains(row.Id))
             .ToArrayAsync(cancellationToken);
@@ -175,8 +202,13 @@ public sealed class CollectionCommandPersistence(PrismediaDbContext db) : IColle
     /// <inheritdoc />
     public async Task<int> ReorderItemsAsync(
         Guid collectionId,
+        Guid ownerUserId,
         IReadOnlyList<Guid> itemIds,
         CancellationToken cancellationToken) {
+        if (!await IsOwnedAsync(collectionId, ownerUserId, cancellationToken)) {
+            return 0;
+        }
+
         var rows = await db.CollectionItemDetails
             .Where(row => row.CollectionEntityId == collectionId)
             .OrderBy(row => row.SortOrder)
@@ -204,14 +236,21 @@ public sealed class CollectionCommandPersistence(PrismediaDbContext db) : IColle
     }
 
     /// <inheritdoc />
-    public async Task<bool> ExistsAsync(Guid collectionId, CancellationToken cancellationToken) =>
-        await db.Entities.AnyAsync(row =>
-            row.Id == collectionId &&
-            row.KindCode == EntityKindRegistry.Collection.Code,
-            cancellationToken);
+    public Task<bool> ExistsAsync(
+        Guid collectionId,
+        Guid ownerUserId,
+        CancellationToken cancellationToken) =>
+        IsOwnedAsync(collectionId, ownerUserId, cancellationToken);
 
     /// <inheritdoc />
-    public async Task<int> CountItemsAsync(Guid collectionId, CancellationToken cancellationToken) {
+    public async Task<int> CountItemsAsync(
+        Guid collectionId,
+        Guid ownerUserId,
+        CancellationToken cancellationToken) {
+        if (!await IsOwnedAsync(collectionId, ownerUserId, cancellationToken)) {
+            return 0;
+        }
+
         var allEntities = db.Entities.AsNoTracking();
         var catalogEntities = allEntities.ExcludeBookOwnedAudioTracks(allEntities);
         return await (
@@ -294,9 +333,11 @@ public sealed class CollectionCommandPersistence(PrismediaDbContext db) : IColle
             .Select(row => (int?)row.SortOrder)
             .MaxAsync(cancellationToken) ?? -1) + 1;
 
-    private CollectionDetailRow TrackCollectionDetail(Guid collectionId) {
-        var detail = new CollectionDetailRow { EntityId = collectionId };
-        db.CollectionDetails.Add(detail);
-        return detail;
-    }
+    private Task<bool> IsOwnedAsync(
+        Guid collectionId,
+        Guid ownerUserId,
+        CancellationToken cancellationToken) =>
+        db.CollectionDetails.AnyAsync(
+            row => row.EntityId == collectionId && row.OwnerUserId == ownerUserId,
+            cancellationToken);
 }

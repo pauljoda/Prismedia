@@ -208,6 +208,17 @@ public sealed class EfSecurityPersistence : ISecurityPersistence {
             return false;
         }
 
+        var ownedCollectionIds = await _db.CollectionDetails
+            .Where(collection => collection.OwnerUserId == userId)
+            .Select(collection => collection.EntityId)
+            .ToArrayAsync(cancellationToken);
+        if (ownedCollectionIds.Length > 0) {
+            var ownedCollections = await _db.Entities
+                .Where(entity => ownedCollectionIds.Contains(entity.Id))
+                .ToArrayAsync(cancellationToken);
+            _db.Entities.RemoveRange(ownedCollections);
+        }
+
         _db.Users.Remove(row);
         await _db.SaveChangesAsync(cancellationToken);
         return true;

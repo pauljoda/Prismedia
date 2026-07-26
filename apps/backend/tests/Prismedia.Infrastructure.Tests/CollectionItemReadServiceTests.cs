@@ -25,6 +25,10 @@ public sealed class CollectionItemReadServiceTests {
         SeedEntity(db, secondId, EntityKindRegistry.AudioTrack.Code, "Second");
         SeedEntity(db, bookId, EntityKindRegistry.Book.Code, "Spoken Story");
         SeedEntity(db, audiobookTrackId, EntityKindRegistry.AudioTrack.Code, "Book Chapter", parentEntityId: bookId);
+        db.CollectionDetails.Add(new CollectionDetailRow {
+            EntityId = collectionId,
+            OwnerUserId = TestUserContext.UserId,
+        });
         db.CollectionItemDetails.AddRange(
             Item(collectionId, audiobookTrackId, 30),
             Item(collectionId, secondId, 20),
@@ -32,7 +36,10 @@ public sealed class CollectionItemReadServiceTests {
             Item(collectionId, firstId, 0));
         await db.SaveChangesAsync();
 
-        var service = new CollectionItemReadService(db, new FakeEntityReadService(db));
+        var service = new CollectionItemReadService(
+            db,
+            new FakeEntityReadService(db),
+            TestUserContext.Admin());
 
         var result = await service.ListItemsAsync(collectionId, hideNsfw: true, CancellationToken.None);
 
@@ -48,6 +55,37 @@ public sealed class CollectionItemReadServiceTests {
                 Assert.Equal(EntityKind.AudioTrack, second.EntityType);
                 Assert.Equal("Second", second.Entity.Title);
             });
+    }
+
+    [Fact]
+    public async Task ListItemsAsyncHidesAnotherUsersPrivateCollectionButAllowsSharedCollection() {
+        await using var db = CreateContext();
+        var ownerUserId = Guid.Parse("11111111-1111-4111-8111-111111111111");
+        var viewerUserId = Guid.Parse("22222222-2222-4222-8222-222222222222");
+        var collectionId = Guid.NewGuid();
+        var itemId = Guid.NewGuid();
+        SeedEntity(db, collectionId, EntityKindRegistry.Collection.Code, "Scoped");
+        SeedEntity(db, itemId, EntityKindRegistry.Video.Code, "Item");
+        db.CollectionDetails.Add(new CollectionDetailRow {
+            EntityId = collectionId,
+            OwnerUserId = ownerUserId,
+            IsShared = false,
+        });
+        db.CollectionItemDetails.Add(Item(collectionId, itemId, 0));
+        await db.SaveChangesAsync();
+        var service = new CollectionItemReadService(
+            db,
+            new FakeEntityReadService(db),
+            TestUserContext.MemberAs(viewerUserId));
+
+        var hidden = await service.ListItemsAsync(collectionId, hideNsfw: false, CancellationToken.None);
+        Assert.Empty(hidden.Items);
+
+        (await db.CollectionDetails.SingleAsync()).IsShared = true;
+        await db.SaveChangesAsync();
+
+        var visible = await service.ListItemsAsync(collectionId, hideNsfw: false, CancellationToken.None);
+        Assert.Equal(itemId, Assert.Single(visible.Items).EntityId);
     }
 
     private static CollectionItemDetailRow Item(Guid collectionId, Guid itemId, int sortOrder) =>

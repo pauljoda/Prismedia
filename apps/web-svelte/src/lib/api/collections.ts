@@ -9,6 +9,7 @@ import {
   removeCollectionItems as removeCollectionItemsRequest,
   reorderCollectionItems as reorderCollectionItemsRequest,
   updateCollection as updateCollectionRequest,
+  getCollection,
 } from "$lib/api/generated/prismedia";
 import type {
   CollectionAddItemsRequest as GeneratedCollectionAddItemsRequest,
@@ -45,6 +46,23 @@ export async function fetchCollections(
     await listCollectionsRequest(undefined, requestInit(options)),
     "Failed to fetch collections",
   );
+}
+
+/** Lists only collections the current user owns and can mutate. */
+export async function fetchEditableCollections(
+  options?: RequestOptions,
+): Promise<{ id: string; title: string }[]> {
+  const response = await fetchCollections(options);
+  const details = await Promise.all(
+    response.items.map(async (item) =>
+      unwrapGenerated<CollectionDetail>(
+        await getCollection(item.id, undefined, requestInit(options)),
+        `Failed to fetch collection ${item.id}`,
+      )),
+  );
+  return details
+    .filter((collection) => collection.canEdit)
+    .map((collection) => ({ id: collection.id, title: collection.title }));
 }
 
 export async function fetchCollectionItems(

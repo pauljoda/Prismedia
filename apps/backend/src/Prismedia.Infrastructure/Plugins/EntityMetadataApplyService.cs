@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Prismedia.Application.Entities;
 using Prismedia.Application.Jobs.Ports;
 using Prismedia.Application.Plugins;
+using Prismedia.Application.Security;
 using Prismedia.Contracts.Entities;
 using Prismedia.Contracts.Plugins;
 using Prismedia.Domain.Entities;
@@ -35,6 +36,7 @@ public sealed partial class EntityMetadataApplyService : IEntityMetadataPatchSer
     private readonly IEntityLifecycleMutationLease _lifecycle;
     private readonly PluginArtworkDownloader _artwork;
     private readonly IGridThumbnailService? _gridThumbnails;
+    private readonly ICurrentUserContext? _currentUser;
 
     /// <summary>
     /// Creates an apply service over EF Core rows and optional artwork downloading.
@@ -58,7 +60,8 @@ public sealed partial class EntityMetadataApplyService : IEntityMetadataPatchSer
         IEntityExternalIdentityStore? externalIdentities = null,
         IEntityProviderIdentityStore? providerIdentities = null,
         IPluginIdentityRouter? identityRouter = null,
-        IEntityLifecycleMutationLease? lifecycle = null) {
+        IEntityLifecycleMutationLease? lifecycle = null,
+        ICurrentUserContext? currentUser = null) {
         _db = db;
         _externalIdentities = externalIdentities ?? new EfEntityExternalIdentityStore(db, TimeProvider.System);
         _providerIdentities = providerIdentities;
@@ -68,6 +71,7 @@ public sealed partial class EntityMetadataApplyService : IEntityMetadataPatchSer
             new EfEntityHierarchyReader(db));
         _artwork = new PluginArtworkDownloader(db, options, http);
         _gridThumbnails = gridThumbnails;
+        _currentUser = currentUser;
     }
 
     /// <summary>
@@ -113,6 +117,10 @@ public sealed partial class EntityMetadataApplyService : IEntityMetadataPatchSer
         var fields = EntityMetadataPatchValidator.NormalizeFieldSet(request.Fields);
         EntityMetadataPatchValidator.Validate(fields, request.Patch);
 
+        if (!await CanEditCollectionAsync(entityId, cancellationToken)) {
+            return EntityMetadataPatchResult.NotFound;
+        }
+
         await _artwork.StageAsync(
             (request.SelectedImages?.Values ?? [])
                 .Concat(ProposalArtworkUrls(request.Children ?? []))
@@ -142,6 +150,18 @@ public sealed partial class EntityMetadataApplyService : IEntityMetadataPatchSer
             _artwork.RollbackStagedWrites();
         }
         return accepted ? result : EntityMetadataPatchResult.NotFound;
+    }
+
+    private async Task<bool> CanEditCollectionAsync(Guid entityId, CancellationToken cancellationToken) {
+        if (_currentUser is null || _currentUser.IsSystem) {
+            return true;
+        }
+
+        var ownership = await _db.CollectionDetails.AsNoTracking()
+            .Where(detail => detail.EntityId == entityId)
+            .Select(detail => (Guid?)detail.OwnerUserId)
+            .FirstOrDefaultAsync(cancellationToken);
+        return ownership is null || ownership == _currentUser.UserId;
     }
 
     private async Task<EntityMetadataPatchResult> ApplyPatchWithinLifecycleAsync(

@@ -2,6 +2,7 @@
   import { THUMBNAIL_HOVER_KIND } from "$lib/api/generated/codes";
   import { onMount } from "svelte";
   import { goto } from "$app/navigation";
+  import { resolve } from "$app/paths";
   import { page } from "$app/state";
   import {
     Layers,
@@ -88,8 +89,11 @@
       posterCard: collectionPosterCard(detailCard),
     };
   });
-  const canManuallyCurate = $derived(collection?.mode !== "dynamic");
-  const canRefreshRules = $derived(collection?.mode === "dynamic" || collection?.mode === "hybrid");
+  const canEditCollection = $derived(collection?.canEdit === true);
+  const canManuallyCurate = $derived(canEditCollection && collection?.mode !== "dynamic");
+  const canRefreshRules = $derived(
+    canEditCollection && (collection?.mode === "dynamic" || collection?.mode === "hybrid"),
+  );
   const hasAudioMembers = $derived(collectionItems.some((item) => isAudioCollectionMemberKind(item.entityType)));
   // Route-level grid bulk action. Selected cards expose entity ids, so the
   // handler maps them back to the collection item ids the remove endpoint
@@ -115,6 +119,7 @@
         href: `/collections/${card.entity.id}/edit`,
         ariaLabel: "Edit collection rules",
         title: "Edit collection rules",
+        hidden: !canEditCollection,
       },
       {
         id: "refresh-dynamic-items",
@@ -136,6 +141,7 @@
         ariaLabel: "Delete collection",
         title: "Delete collection",
         onClick: handleDeleteCollection,
+        hidden: !canEditCollection,
       },
     ];
   });
@@ -356,7 +362,7 @@
     deleteBusy = true;
     try {
       await deleteCollection(collection.id);
-      await goto("/collections");
+      await goto(resolve("/collections"));
     } catch (err) {
       itemMutationError = err instanceof Error ? err.message : "Failed to delete collection.";
     } finally {
@@ -388,8 +394,8 @@
       {card}
       onRatingChange={handleRatingChange}
       onFavoriteToggle={handleFavoriteToggle}
-      onOrganizedToggle={handleOrganizedToggle}
-      onMetadataSave={handleMetadataSave}
+      onOrganizedToggle={canEditCollection ? handleOrganizedToggle : undefined}
+      onMetadataSave={canEditCollection ? handleMetadataSave : undefined}
       {ratingBusy}
       posterSize="large"
       standaloneMetadataSectionIds={[]}
@@ -408,6 +414,9 @@
       {#snippet heroBadges()}
         {#if collection?.mode}
           <span class="hero-badge">{collection.mode}</span>
+        {/if}
+        {#if collection?.isShared}
+          <span class="hero-badge">shared</span>
         {/if}
       {/snippet}
 

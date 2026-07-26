@@ -4,6 +4,8 @@ namespace Prismedia.Infrastructure.Persistence.Entities;
 
 public sealed class CollectionDetailRow {
     public Guid EntityId { get; set; }
+    public Guid OwnerUserId { get; set; }
+    public bool IsShared { get; set; }
     public CollectionMode Mode { get; set; } = CollectionMode.Manual;
     public string? RuleTreeJson { get; set; }
     public CollectionCoverMode CoverMode { get; set; } = CollectionCoverMode.Mosaic;

@@ -621,7 +621,15 @@ public sealed class EfEntityRepositoryTests {
         var tag = new Tag(Guid.NewGuid(), "T", ignoreAutoTag: true);
         var track = new AudioTrack(Guid.NewGuid(), "A", "Artist", "Album");
         var book = new Book(Guid.NewGuid(), "B", BookType.Manga, cover);
-        var collection = new Collection(Guid.NewGuid(), "C", CollectionMode.Dynamic, "{}", CollectionCoverMode.Custom, cover, refreshed);
+        var collection = new Collection(
+            Guid.NewGuid(),
+            "C",
+            TestUserContext.UserId,
+            CollectionMode.Dynamic,
+            "{}",
+            CollectionCoverMode.Custom,
+            cover,
+            refreshed);
 
         foreach (var entity in new Entity[] { gallery, person, tag, track, book, collection }) {
             await repository.SaveAsync(entity, CancellationToken.None);

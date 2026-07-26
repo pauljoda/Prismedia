@@ -189,9 +189,77 @@ public sealed class UserLibraryVisibilityTests {
         Assert.All(thumbnails.Items, item => Assert.Null(item.PlayCount));
     }
 
+    [Fact]
+    public async Task CollectionsAreVisibleOnlyToTheirOwnerUnlessShared() {
+        await using var db = CreateContext();
+        var ownerUserId = TestUserContext.UserId;
+        var otherUserId = Guid.Parse("cccc0000-0000-4000-8000-000000000010");
+        var ownedPrivateId = SeedCollection(db, "Mine", ownerUserId, isShared: false);
+        var otherPrivateId = SeedCollection(db, "Theirs", otherUserId, isShared: false);
+        var sharedId = SeedCollection(db, "Shared", otherUserId, isShared: true);
+        await db.SaveChangesAsync();
+        var service = CreateService(db, TestUserContext.Admin(ownerUserId));
+
+        var list = await service.ListAsync(
+            EntityKindRegistry.Collection.Code,
+            null,
+            null,
+            null,
+            null,
+            CancellationToken.None);
+        var thumbnails = await service.GetThumbnailsAsync(
+            [ownedPrivateId, otherPrivateId, sharedId],
+            hideNsfw: false,
+            CancellationToken.None);
+
+        Assert.Equal(new[] { ownedPrivateId, sharedId }.Order(), list.Items.Select(item => item.Id).Order());
+        Assert.Equal(new[] { ownedPrivateId, sharedId }.Order(), thumbnails.Items.Select(item => item.Id).Order());
+        Assert.NotNull(await service.GetDetailAsync(
+            ownedPrivateId,
+            EntityKindRegistry.Collection.Code,
+            hideNsfw: false,
+            CancellationToken.None));
+        Assert.Null(await service.GetDetailAsync(
+            otherPrivateId,
+            EntityKindRegistry.Collection.Code,
+            hideNsfw: false,
+            CancellationToken.None));
+        var shared = Assert.IsType<Prismedia.Contracts.Collections.CollectionDetail>(
+            await service.GetDetailAsync(
+                sharedId,
+                EntityKindRegistry.Collection.Code,
+                hideNsfw: false,
+                CancellationToken.None));
+        Assert.True(shared.IsShared);
+        Assert.False(shared.CanEdit);
+    }
+
     private static EfEntityReadService CreateService(PrismediaDbContext db, ICurrentUserContext user) {
-        var repository = new EfEntityRepository(db, user, EntityMappers.Kinds(db), EntityMappers.Capabilities(db, user));
-        return new EfEntityReadService(db, user, repository, EntityMappers.Kinds(db), ThumbnailContributors.For(db));
+        var kindMappers = EntityMappers.Kinds(db, user);
+        var repository = new EfEntityRepository(db, user, kindMappers, EntityMappers.Capabilities(db, user));
+        return new EfEntityReadService(db, user, repository, kindMappers, ThumbnailContributors.For(db));
+    }
+
+    private static Guid SeedCollection(
+        PrismediaDbContext db,
+        string title,
+        Guid ownerUserId,
+        bool isShared) {
+        var id = Guid.NewGuid();
+        var now = DateTimeOffset.UtcNow;
+        db.Entities.Add(new EntityRow {
+            Id = id,
+            KindCode = EntityKindRegistry.Collection.Code,
+            Title = title,
+            CreatedAt = now,
+            UpdatedAt = now,
+        });
+        db.CollectionDetails.Add(new CollectionDetailRow {
+            EntityId = id,
+            OwnerUserId = ownerUserId,
+            IsShared = isShared,
+        });
+        return id;
     }
 
     private static async Task SeedTwoRootedVideosAsync(PrismediaDbContext db) {

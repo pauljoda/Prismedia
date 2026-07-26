@@ -20,8 +20,10 @@ namespace Prismedia.Infrastructure.Entities.Mappers;
 /// </summary>
 public static class EntityMappers {
     /// <summary>Discovers every concrete kind mapper bound to <paramref name="db"/>.</summary>
-    public static IReadOnlyList<IEntityKindMapper> Kinds(PrismediaDbContext db) {
-        var explicitMappers = Discover<IEntityKindMapper>(db, currentUser: null);
+    public static IReadOnlyList<IEntityKindMapper> Kinds(
+        PrismediaDbContext db,
+        Prismedia.Application.Security.ICurrentUserContext? currentUser = null) {
+        var explicitMappers = Discover<IEntityKindMapper>(db, currentUser);
         var mappedKinds = explicitMappers.Select(mapper => mapper.Kind).ToHashSet();
         var conventionMappers = EntityKindRegistry.All
             .Where(descriptor => descriptor.ClrType is not null && !mappedKinds.Contains(descriptor.Value))

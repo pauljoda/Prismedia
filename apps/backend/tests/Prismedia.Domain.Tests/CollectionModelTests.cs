@@ -4,11 +4,40 @@ using Prismedia.Domain.Media;
 namespace Prismedia.Domain.Tests;
 
 public sealed class CollectionModelTests {
+    private static readonly Guid OwnerUserId = Guid.Parse("11111111-1111-4111-8111-111111111111");
+
+    [Fact]
+    public void SharingKeepsOwnershipAndExpandsReadScope() {
+        var otherUserId = Guid.Parse("22222222-2222-4222-8222-222222222222");
+        var collection = new Collection(
+            Guid.Parse("99999999-9999-4999-8999-999999999999"),
+            "Household Picks",
+            OwnerUserId);
+
+        Assert.True(collection.IsOwnedBy(OwnerUserId));
+        Assert.True(collection.CanView(OwnerUserId));
+        Assert.False(collection.CanView(otherUserId));
+
+        collection.SetSharing(true);
+
+        Assert.Equal(OwnerUserId, collection.OwnerUserId);
+        Assert.True(collection.IsShared);
+        Assert.True(collection.CanView(otherUserId));
+        Assert.False(collection.IsOwnedBy(otherUserId));
+    }
+
+    [Fact]
+    public void CollectionRequiresAnOwner() {
+        Assert.Throws<ArgumentException>(() =>
+            new Collection(Guid.NewGuid(), "Ownerless", Guid.Empty));
+    }
+
     [Fact]
     public void ConfigureRulesNormalizesManualCollectionsAndKeepsCoverSettings() {
         var collection = new Collection(
             Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
             "Watch Later",
+            OwnerUserId,
             CollectionMode.Dynamic,
             "{\"type\":\"group\"}",
             CollectionCoverMode.Mosaic);
@@ -24,7 +53,10 @@ public sealed class CollectionModelTests {
 
     [Fact]
     public void ConfigureRulesRequiresRulesForRuleDrivenCollections() {
-        var collection = new Collection(Guid.Parse("cccccccc-cccc-cccc-cccc-cccccccccccc"), "Smart Picks");
+        var collection = new Collection(
+            Guid.Parse("cccccccc-cccc-cccc-cccc-cccccccccccc"),
+            "Smart Picks",
+            OwnerUserId);
 
         var ex = Assert.Throws<ArgumentException>(() =>
             collection.ConfigureRules(CollectionMode.Dynamic, null));
@@ -34,10 +66,14 @@ public sealed class CollectionModelTests {
 
     [Fact]
     public void ManualMembershipIsDomainGuardedByModeAndItemKind() {
-        var manual = new Collection(Guid.Parse("dddddddd-dddd-dddd-dddd-dddddddddddd"), "Manual");
+        var manual = new Collection(
+            Guid.Parse("dddddddd-dddd-dddd-dddd-dddddddddddd"),
+            "Manual",
+            OwnerUserId);
         var dynamic = new Collection(
             Guid.Parse("eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee"),
             "Dynamic",
+            OwnerUserId,
             CollectionMode.Dynamic,
             "{\"type\":\"group\"}");
 

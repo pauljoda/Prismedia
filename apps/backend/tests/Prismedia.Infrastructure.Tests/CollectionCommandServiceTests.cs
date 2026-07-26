@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Prismedia.Application.Collections;
 using Prismedia.Application.Entities;
 using Prismedia.Application.Jobs.Ports;
+using Prismedia.Application.Security;
 using Prismedia.Contracts.Collections;
 using Prismedia.Contracts.Entities;
 using Prismedia.Domain.Entities;
@@ -32,12 +33,73 @@ public sealed class CollectionCommandServiceTests {
         Assert.NotNull(result.Collection);
         Assert.Equal("Favorites", result.Collection.Title);
         Assert.Equal(CollectionMode.Hybrid, result.Collection.Mode);
+        Assert.False(result.Collection.IsShared);
+        Assert.True(result.Collection.CanEdit);
 
         var entity = Assert.Single(db.Entities);
         Assert.Equal(EntityKindRegistry.Collection.Code, entity.KindCode);
         Assert.True(entity.IsNsfw);
         Assert.Equal("Pinned media", Assert.Single(db.EntityDescriptions).Value);
-        Assert.Equal(CollectionMode.Hybrid, Assert.Single(db.CollectionDetails).Mode);
+        var detail = Assert.Single(db.CollectionDetails);
+        Assert.Equal(CollectionMode.Hybrid, detail.Mode);
+        Assert.Equal(TestUserContext.UserId, detail.OwnerUserId);
+        Assert.False(detail.IsShared);
+    }
+
+    [Fact]
+    public async Task UpdateAsyncAllowsOwnerToShareCollectionAndRejectsOtherUsers() {
+        await using var db = CreateContext();
+        var ownerUserId = Guid.Parse("11111111-1111-4111-8111-111111111111");
+        var otherUserId = Guid.Parse("22222222-2222-4222-8222-222222222222");
+        var collectionId = SeedCollection(db, "Private", ownerUserId: ownerUserId);
+        await db.SaveChangesAsync();
+        var request = new CollectionWriteRequest(
+            "Shared picks",
+            null,
+            CollectionMode.Manual,
+            null,
+            CollectionCoverMode.Mosaic,
+            null,
+            false,
+            true);
+
+        var rejected = await CreateService(db, user: TestUserContext.MemberAs(otherUserId))
+            .UpdateAsync(collectionId, request, CancellationToken.None);
+
+        Assert.Equal(CollectionCommandStatus.NotFound, rejected.Status);
+        Assert.False((await db.CollectionDetails.SingleAsync()).IsShared);
+
+        var updated = await CreateService(db, user: TestUserContext.MemberAs(ownerUserId))
+            .UpdateAsync(collectionId, request, CancellationToken.None);
+
+        Assert.Equal(CollectionCommandStatus.Succeeded, updated.Status);
+        Assert.True(updated.Collection!.IsShared);
+        Assert.True((await db.CollectionDetails.SingleAsync()).IsShared);
+    }
+
+    [Fact]
+    public async Task RulePreviewAndStoredRefreshUseAuthenticatedOwnerState() {
+        await using var db = CreateContext();
+        var ownerUserId = Guid.Parse("33333333-3333-4333-8333-333333333333");
+        var engine = new FakeCollectionRuleEngine([]);
+        var service = CreateService(db, engine, user: TestUserContext.MemberAs(ownerUserId));
+
+        _ = await service.PreviewRulesAsync(
+            new CollectionRulePreviewRequest(EmptyRuleJson),
+            hideNsfw: false,
+            CancellationToken.None);
+        _ = await service.CreateAsync(
+            new CollectionWriteRequest(
+                "Skipped by me",
+                null,
+                CollectionMode.Dynamic,
+                EmptyRuleJson,
+                CollectionCoverMode.Mosaic,
+                null,
+                false),
+            CancellationToken.None);
+
+        Assert.Equal([ownerUserId, ownerUserId], engine.UserIds);
     }
 
     [Theory]
@@ -354,20 +416,26 @@ public sealed class CollectionCommandServiceTests {
     private static Prismedia.Application.Collections.CollectionCommandService CreateService(
         PrismediaDbContext db,
         ICollectionRuleEngine? ruleEngine = null,
-        ICollectionRefreshPersistence? refreshPersistence = null) =>
+        ICollectionRefreshPersistence? refreshPersistence = null,
+        ICurrentUserContext? user = null) =>
         new(
             new CollectionCommandPersistence(db),
             new FakeEntityReadService(db),
             ruleEngine ?? new FakeCollectionRuleEngine([]),
-            refreshPersistence ?? new FakeCollectionRefreshPersistence());
+            refreshPersistence ?? new FakeCollectionRefreshPersistence(),
+            user ?? TestUserContext.Admin());
 
     private static Guid SeedCollection(
         PrismediaDbContext db,
         string title,
-        CollectionMode mode = CollectionMode.Manual) {
+        CollectionMode mode = CollectionMode.Manual,
+        Guid? ownerUserId = null,
+        bool isShared = false) {
         var id = SeedEntity(db, EntityKindRegistry.Collection.Code, title);
         db.CollectionDetails.Add(new CollectionDetailRow {
             EntityId = id,
+            OwnerUserId = ownerUserId ?? TestUserContext.UserId,
+            IsShared = isShared,
             Mode = mode,
             RuleTreeJson = mode == CollectionMode.Manual ? null : EmptyRuleJson,
         });
@@ -481,15 +549,22 @@ public sealed class CollectionCommandServiceTests {
                 CoverMode = detail.CoverMode,
                 CoverItemId = detail.CoverItemEntityId,
                 LastRefreshedAt = detail.LastRefreshedAt,
+                IsShared = detail.IsShared,
+                CanEdit = detail.OwnerUserId == TestUserContext.UserId,
             };
         }
     }
 
     private sealed class FakeCollectionRuleEngine(IReadOnlyList<CollectionRuleMatch> matches) : ICollectionRuleEngine {
+        public List<Guid> UserIds { get; } = [];
+
         public Task<IReadOnlyList<CollectionRuleMatch>> EvaluateAsync(
             string ruleTreeJson,
-            CancellationToken cancellationToken) =>
-            Task.FromResult(matches);
+            Guid userId,
+            CancellationToken cancellationToken) {
+            UserIds.Add(userId);
+            return Task.FromResult(matches);
+        }
     }
 
     private sealed class FakeCollectionRefreshPersistence : ICollectionRefreshPersistence {

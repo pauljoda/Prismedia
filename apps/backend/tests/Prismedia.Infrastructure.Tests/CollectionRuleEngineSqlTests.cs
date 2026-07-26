@@ -137,6 +137,7 @@ public sealed class CollectionRuleEngineSqlTests {
 
     [Fact]
     public void SkipCountRulesUsePlaybackState() {
+        var ownerUserId = Guid.Parse("33333333-3333-4333-8333-333333333333");
         var group = new CollectionRuleGroup {
             Operator = "and",
             Children = [
@@ -148,12 +149,17 @@ public sealed class CollectionRuleEngineSqlTests {
             ]
         };
 
-        var query = new CollectionRuleEngine(null!).BuildQuery(group, "video");
+        var query = new CollectionRuleEngine(null!).BuildQuery(group, "video", ownerUserId);
 
         Assert.NotNull(query);
-        Assert.Contains("FROM user_entity_states GROUP BY entity_id", query.Value.Sql, StringComparison.Ordinal);
+        Assert.Contains("pb.user_id =", query.Value.Sql, StringComparison.Ordinal);
+        Assert.DoesNotContain("GROUP BY entity_id", query.Value.Sql, StringComparison.Ordinal);
         Assert.DoesNotContain("entity_playback pb", query.Value.Sql, StringComparison.Ordinal);
         Assert.Contains("COALESCE(pb.skip_count, 0) >=", query.Value.Sql, StringComparison.Ordinal);
+        Assert.Contains(query.Value.Parameters, parameter =>
+            parameter.NpgsqlDbType == NpgsqlDbType.Uuid &&
+            parameter.Value is Guid value &&
+            value == ownerUserId);
     }
 
     [Fact]

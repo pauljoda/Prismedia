@@ -10,6 +10,8 @@ internal static partial class PrismediaModelConfiguration {
             entity.ToTable("collection_details");
             entity.HasKey(row => row.EntityId);
             entity.Property(row => row.EntityId).HasColumnName("entity_id");
+            entity.Property(row => row.OwnerUserId).HasColumnName("owner_user_id");
+            entity.Property(row => row.IsShared).HasColumnName("is_shared");
             entity.Property(row => row.Mode)
                 .HasColumnName("mode")
                 .HasMaxLength(64)
@@ -22,6 +24,8 @@ internal static partial class PrismediaModelConfiguration {
             entity.Property(row => row.CoverItemEntityId).HasColumnName("cover_item_entity_id");
             entity.Property(row => row.LastRefreshedAt).HasColumnName("last_refreshed_at");
             entity.HasOne<EntityRow>().WithOne().HasForeignKey<CollectionDetailRow>(row => row.EntityId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne<UserRow>().WithMany().HasForeignKey(row => row.OwnerUserId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(row => new { row.OwnerUserId, row.IsShared });
         });
 
         modelBuilder.Entity<CollectionItemDetailRow>(entity => {

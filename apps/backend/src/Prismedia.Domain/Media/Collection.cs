@@ -23,19 +23,29 @@ public sealed class Collection : Entity {
     public Collection(
         Guid id,
         string title,
+        Guid ownerUserId,
         CollectionMode mode = CollectionMode.Manual,
         string? ruleTreeJson = null,
         CollectionCoverMode coverMode = CollectionCoverMode.Item,
         Guid? coverItemId = null,
         DateTimeOffset? lastRefreshedAt = null,
+        bool isShared = false,
         IEnumerable<EntityCapability>? capabilities = null)
         : base(id, title, capabilities) {
+        if (ownerUserId == Guid.Empty) {
+            throw new ArgumentException("Collections require an owning user.", nameof(ownerUserId));
+        }
+
+        OwnerUserId = ownerUserId;
+        IsShared = isShared;
         ConfigureRules(mode, ruleTreeJson);
         SetCover(coverMode, coverItemId);
         LastRefreshedAt = lastRefreshedAt;
     }
 
     public override EntityKind Kind => EntityKind.Collection;
+    public Guid OwnerUserId { get; }
+    public bool IsShared { get; private set; }
     public CollectionMode Mode { get; private set; }
     public string? RuleTreeJson { get; private set; }
     public CollectionCoverMode CoverMode { get; private set; }
@@ -47,6 +57,17 @@ public sealed class Collection : Entity {
 
     /// <summary>True when collection membership is at least partly produced from a rule tree.</summary>
     public bool UsesRules => Mode is CollectionMode.Dynamic or CollectionMode.Hybrid;
+
+    /// <summary>Returns whether the supplied user owns and may mutate this collection.</summary>
+    public bool IsOwnedBy(Guid userId) => userId != Guid.Empty && OwnerUserId == userId;
+
+    /// <summary>Returns whether the supplied user may view this collection.</summary>
+    public bool CanView(Guid userId) => IsShared || IsOwnedBy(userId);
+
+    /// <summary>Sets whether other household users may view this collection.</summary>
+    public void SetSharing(bool isShared) {
+        IsShared = isShared;
+    }
 
     /// <summary>Returns whether collections may directly contain the supplied entity kind.</summary>
     public static bool CanContain(EntityKind kind) => ContainableKinds.Contains(kind);

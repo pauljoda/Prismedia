@@ -67,15 +67,31 @@ public sealed class CollectionRuleEngine(PrismediaDbContext db) : ICollectionRul
     };
 
     public async Task<IReadOnlyList<CollectionRuleMatch>> EvaluateAsync(
-        string ruleTreeJson, CancellationToken cancellationToken) {
+        string ruleTreeJson,
+        Guid userId,
+        CancellationToken cancellationToken) {
         var ruleTree = JsonSerializer.Deserialize<CollectionRuleNode>(ruleTreeJson);
-        if (ruleTree is not CollectionRuleGroup group) return [];
+        if (ruleTree is not CollectionRuleGroup group || userId == Guid.Empty) return [];
+
+        var owner = await db.Users.AsNoTracking()
+            .Where(user => user.Id == userId)
+            .Select(user => new { user.Role })
+            .FirstOrDefaultAsync(cancellationToken);
+        if (owner is null) return [];
+
+        IReadOnlySet<Guid>? allowedRootIds = null;
+        if (owner.Role != UserRole.Admin) {
+            allowedRootIds = await db.UserLibraryAccess.AsNoTracking()
+                .Where(access => access.UserId == userId)
+                .Select(access => access.LibraryRootId)
+                .ToHashSetAsync(cancellationToken);
+        }
 
         var results = new List<CollectionRuleMatch>();
 
         foreach (var kind in TargetKinds) {
             var kindCode = EntityKindRegistry.ToCode(kind);
-            var query = BuildQuery(group, kindCode);
+            var query = BuildQuery(group, kindCode, userId, allowedRootIds);
             if (query is null) continue;
 
             var ids = await ExecuteQueryAsync(query.Value.Sql, query.Value.Parameters, cancellationToken);
@@ -87,13 +103,24 @@ public sealed class CollectionRuleEngine(PrismediaDbContext db) : ICollectionRul
         return results;
     }
 
-    internal (string Sql, List<NpgsqlParameter> Parameters)? BuildQuery(CollectionRuleGroup group, string kindCode) {
-        var ctx = new SqlBuildContext();
+    internal (string Sql, List<NpgsqlParameter> Parameters)? BuildQuery(
+        CollectionRuleGroup group,
+        string kindCode,
+        Guid userId = default,
+        IReadOnlySet<Guid>? allowedRootIds = null) {
+        var ctx = new SqlBuildContext(userId);
         var whereFragment = TranslateNode(group, kindCode, ctx);
-        return whereFragment is null ? null : (BuildSql(kindCode, whereFragment, ctx), ctx.Parameters);
+        if (whereFragment is null) return null;
+
+        var libraryScope = BuildLibraryScope(kindCode, allowedRootIds, ctx);
+        return (BuildSql(kindCode, whereFragment, libraryScope, ctx), ctx.Parameters);
     }
 
-    private static string BuildSql(string kindCode, string whereFragment, SqlBuildContext ctx) {
+    private static string BuildSql(
+        string kindCode,
+        string whereFragment,
+        string? libraryScope,
+        SqlBuildContext ctx) {
         var sb = new System.Text.StringBuilder();
         sb.AppendLine("SELECT DISTINCT e.id FROM entities e");
 
@@ -113,6 +140,11 @@ public sealed class CollectionRuleEngine(PrismediaDbContext db) : ICollectionRul
         sb.Append("AND (");
         sb.Append(whereFragment);
         sb.AppendLine(")");
+        if (libraryScope is not null) {
+            sb.Append("AND (");
+            sb.Append(libraryScope);
+            sb.AppendLine(")");
+        }
 
         return sb.ToString();
     }
@@ -253,13 +285,8 @@ public sealed class CollectionRuleEngine(PrismediaDbContext db) : ICollectionRul
     }
 
     private string? TranslatePlayback(string column, CollectionRuleCondition condition, SqlBuildContext ctx) {
-        // Playback state is per-user (user_entity_states); collections are shared, so rules
-        // filter on the household-level count: the highest count any user has for the entity.
-        // MAX also preserves pre-split semantics — the migration fan-out copied the old global
-        // counters identically to every user.
         ctx.EnsureJoin(
-            "LEFT JOIN (SELECT entity_id, MAX(play_count) AS play_count, MAX(skip_count) AS skip_count " +
-            "FROM user_entity_states GROUP BY entity_id) pb ON pb.entity_id = e.id");
+            $"LEFT JOIN user_entity_states pb ON pb.entity_id = e.id AND pb.user_id = {ctx.UserIdParameter}");
         return TranslateScalar($"COALESCE(pb.{column}, 0)", condition.Operator, condition.Value, ctx);
     }
 
@@ -477,6 +504,32 @@ public sealed class CollectionRuleEngine(PrismediaDbContext db) : ICollectionRul
             : QuantifyLibraryRootMatch(condition, existsBuilder, ctx);
     }
 
+    private static string? BuildLibraryScope(
+        string kindCode,
+        IReadOnlySet<Guid>? allowedRootIds,
+        SqlBuildContext ctx) {
+        if (allowedRootIds is null) {
+            return null;
+        }
+
+        var existsBuilder = LibraryRootExistsBuilder(kindCode, ctx);
+        if (existsBuilder is null) {
+            return null;
+        }
+
+        if (allowedRootIds.Count == 0) {
+            return "false";
+        }
+
+        var parameters = allowedRootIds
+            .Order()
+            .Select(id => ctx.AddParam(id, NpgsqlDbType.Uuid))
+            .ToArray();
+        return existsBuilder(column => parameters.Length == 1
+            ? $"{column} = {parameters[0]}"
+            : $"{column} IN ({string.Join(", ", parameters)})");
+    }
+
     private static Func<Func<string, string>, string>? LibraryRootExistsBuilder(string kindCode, SqlBuildContext ctx) {
         if (KindEquals(kindCode, EntityKindRegistry.Video.Code)) {
             return rootPredicate => DirectRootExists("video_details", "vd", rootPredicate);
@@ -689,12 +742,16 @@ public sealed class CollectionRuleEngine(PrismediaDbContext db) : ICollectionRul
         return ids;
     }
 
-    private sealed class SqlBuildContext {
+    private sealed class SqlBuildContext(Guid userId) {
         private int _paramIndex;
         private readonly HashSet<string> _joinSet = new(StringComparer.Ordinal);
+        private string? _userIdParameter;
 
         public List<NpgsqlParameter> Parameters { get; } = [];
         public List<string> Joins { get; } = [];
+
+        public string UserIdParameter =>
+            _userIdParameter ??= AddParam(userId, NpgsqlDbType.Uuid);
 
         public void EnsureJoin(string joinClause) {
             if (_joinSet.Add(joinClause))

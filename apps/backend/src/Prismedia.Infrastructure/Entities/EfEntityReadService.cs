@@ -112,6 +112,8 @@ public sealed partial class EfEntityReadService : IEntityReadService {
             entityQuery = ApplyBrowseHierarchyFilter(entityQuery, kindCodes);
         }
 
+        entityQuery = ApplyCollectionVisibility(entityQuery);
+
         // Wanted audio tracks are acquisition placeholders, not playable library entries. Keep them
         // available to explicit wanted queries and parent-detail child projections for monitoring,
         // while excluding them from ordinary track lists, search, and native-client browse results.
@@ -529,7 +531,8 @@ public sealed partial class EfEntityReadService : IEntityReadService {
 
     public async Task<EntityCard?> GetAsync(Guid id, bool hideNsfw, CancellationToken cancellationToken) {
         var enforceLibraryVisibility = await RequiresLibraryVisibilityAsync(cancellationToken);
-        if ((enforceLibraryVisibility && !await IsEntityVisibleInEnabledLibraryAsync(id, cancellationToken)) ||
+        if (!await IsCollectionVisibleAsync(id, cancellationToken) ||
+            (enforceLibraryVisibility && !await IsEntityVisibleInEnabledLibraryAsync(id, cancellationToken)) ||
             hideNsfw && await IsEntityHiddenAsync(id, cancellationToken)) {
             return null;
         }
@@ -590,6 +593,7 @@ public sealed partial class EfEntityReadService : IEntityReadService {
         CancellationToken cancellationToken) {
         var query = _db.Entities.AsNoTracking()
             .Where(entity => ids.Contains(entity.Id));
+        query = ApplyCollectionVisibility(query);
         var enforceLibraryVisibility = await RequiresLibraryVisibilityAsync(cancellationToken);
         if (enforceLibraryVisibility) {
             query = ApplyEnabledLibraryVisibility(query);
@@ -604,7 +608,8 @@ public sealed partial class EfEntityReadService : IEntityReadService {
 
     public async Task<IEntityCard?> GetDetailAsync(Guid id, string kind, bool hideNsfw, CancellationToken cancellationToken) {
         var enforceLibraryVisibility = await RequiresLibraryVisibilityAsync(cancellationToken);
-        if ((enforceLibraryVisibility && !await IsEntityVisibleInEnabledLibraryAsync(id, cancellationToken)) ||
+        if (!await IsCollectionVisibleAsync(id, cancellationToken) ||
+            (enforceLibraryVisibility && !await IsEntityVisibleInEnabledLibraryAsync(id, cancellationToken)) ||
             hideNsfw && await IsEntityHiddenAsync(id, cancellationToken)) {
             return null;
         }

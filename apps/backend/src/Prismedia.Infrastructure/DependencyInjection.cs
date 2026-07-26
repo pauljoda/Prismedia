@@ -171,7 +171,8 @@ public static class DependencyInjection {
             externalIdentities: provider.GetRequiredService<IEntityExternalIdentityStore>(),
             providerIdentities: provider.GetRequiredService<IEntityProviderIdentityStore>(),
             identityRouter: provider.GetRequiredService<IPluginIdentityRouter>(),
-            lifecycle: provider.GetRequiredService<IEntityLifecycleMutationLease>()));
+            lifecycle: provider.GetRequiredService<IEntityLifecycleMutationLease>(),
+            currentUser: provider.GetRequiredService<Prismedia.Application.Security.ICurrentUserContext>()));
         services.AddScoped<IEntityMetadataPatchService>(provider =>
             provider.GetRequiredService<EntityMetadataApplyService>());
         services.AddScoped<IEntityManagementService, EntityManagementService>();

@@ -1131,6 +1131,7 @@ public sealed class EfEntityReadServiceTests {
             });
         db.CollectionDetails.Add(new CollectionDetailRow {
             EntityId = collectionId,
+            OwnerUserId = TestUserContext.UserId,
             CoverMode = CollectionCoverMode.Mosaic
         });
         db.AudioLibraryDetails.Add(new AudioLibraryDetailRow { EntityId = albumId });

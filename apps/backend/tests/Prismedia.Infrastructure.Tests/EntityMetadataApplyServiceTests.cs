@@ -14,6 +14,35 @@ namespace Prismedia.Infrastructure.Tests;
 
 public sealed class EntityMetadataApplyServiceTests {
     [Fact]
+    public async Task ApplyPatchHidesSharedCollectionFromNonOwnerMutation() {
+        await using var db = CreateContext();
+        var collectionId = Guid.NewGuid();
+        var ownerUserId = Guid.Parse("11111111-1111-4111-8111-111111111111");
+        var viewerUserId = Guid.Parse("22222222-2222-4222-8222-222222222222");
+        SeedEntity(db, collectionId, EntityKindRegistry.Collection.Code, "Shared title");
+        db.CollectionDetails.Add(new CollectionDetailRow {
+            EntityId = collectionId,
+            OwnerUserId = ownerUserId,
+            IsShared = true,
+        });
+        await db.SaveChangesAsync();
+        var service = new EntityMetadataApplyService(
+            db,
+            new PluginArtworkServiceOptions(Path.GetTempPath()),
+            currentUser: TestUserContext.MemberAs(viewerUserId));
+
+        var applied = await service.ApplyPatchAsync(
+            collectionId,
+            new EntityMetadataUpdateRequest(
+                Fields: [MetadataPatchField.Title.ToCode()],
+                Patch: EmptyPatch() with { Title = "Changed by viewer" }),
+            CancellationToken.None);
+
+        Assert.False(applied);
+        Assert.Equal("Shared title", (await db.Entities.FindAsync([collectionId]))!.Title);
+    }
+
+    [Fact]
     public async Task ApplyPatchUpdatesEditableEntityMetadataAndCanClearNullableFields() {
         await using var db = CreateContext();
         var entityId = Guid.Parse("18181818-1818-1818-1818-181818181818");

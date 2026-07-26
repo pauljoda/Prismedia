@@ -1,5 +1,6 @@
 <script lang="ts">
   import { goto } from "$app/navigation";
+  import { resolve } from "$app/paths";
   import { onMount } from "svelte";
   import {
     Eye,
@@ -8,6 +9,7 @@
     List,
     Loader2,
     Save,
+    Share2,
     ShieldAlert,
     SlidersHorizontal,
     Type,
@@ -15,7 +17,7 @@
     Zap,
   } from "@lucide/svelte";
   import type { Component } from "svelte";
-  import { cn } from "@prismedia/ui-svelte";
+  import { cn, Toggle } from "@prismedia/ui-svelte";
   import type { CollectionDetail } from "$lib/api/generated/model";
   import { createCollection, previewCollectionRules, updateCollection } from "$lib/api/collections";
   import { getDescription, isNsfw as hasNsfw } from "$lib/api/capabilities";
@@ -67,6 +69,7 @@
   let mode = $state<CollectionMode>("manual");
   let coverMode = $state<CollectionCoverMode>("mosaic");
   let isNsfw = $state(false);
+  let isShared = $state(false);
   let ruleTree = $state<CollectionRuleGroup>({ ...EMPTY_COLLECTION_RULE, children: [] });
   let saving = $state(false);
   let saveError = $state<string | null>(null);
@@ -180,6 +183,7 @@
       mode = "manual";
       coverMode = "mosaic";
       isNsfw = false;
+      isShared = false;
       ruleTree = { ...EMPTY_COLLECTION_RULE, children: [] };
       resetPreview();
       return;
@@ -190,6 +194,7 @@
     mode = normalizeMode(collection.mode);
     coverMode = normalizeCoverMode(collection.coverMode);
     isNsfw = hasNsfw(collection.capabilities);
+    isShared = collection.isShared;
     ruleTree = parseRuleTree(collection.ruleTreeJson);
   });
 
@@ -260,6 +265,7 @@
       coverMode,
       coverItemId: collection?.coverItemId ?? null,
       isNsfw,
+      isShared,
     };
   }
 
@@ -271,7 +277,7 @@
       const saved = isNew || !collection
         ? await createCollection(buildRequest())
         : await updateCollection(collection.id, buildRequest());
-      await goto(`/collections/${saved.id}`);
+      await goto(resolve(`/collections/${saved.id}` as "/"));
     } catch (err) {
       saveError = err instanceof Error ? err.message : "Failed to save collection.";
     } finally {
@@ -332,7 +338,7 @@
     </div>
     <div class="flex items-center gap-2">
       <a
-        href={collection ? `/collections/${collection.id}` : "/collections"}
+        href={resolve((collection ? `/collections/${collection.id}` : "/collections") as "/")}
         class={cn(
           "inline-flex items-center gap-1.5 rounded-sm border border-border-subtle bg-surface-2 px-3 py-2 text-[0.78rem] text-text-muted no-underline transition-colors",
           "hover:border-border-default hover:text-text-primary",
@@ -396,6 +402,22 @@
           <h2 class="text-kicker m-0 flex items-center gap-1.5">
             <SlidersHorizontal class="h-3 w-3" /> Settings
           </h2>
+        </div>
+        <div class="flex items-center justify-between gap-4 rounded-sm border border-border-subtle bg-surface-2 p-3">
+          <div class="min-w-0">
+            <h3 class="text-kicker m-0 flex items-center gap-1.5">
+              <Share2 class="h-3 w-3" /> Household Sharing
+            </h3>
+            <p class="m-0 mt-1 text-[0.68rem] leading-snug text-text-disabled">
+              {isShared ? "Visible to every signed-in user" : "Visible only to you"}
+            </p>
+          </div>
+          <Toggle
+            checked={isShared}
+            disabled={saving}
+            onchange={(checked) => (isShared = checked)}
+            ariaLabel="Share collection with household users"
+          />
         </div>
         <div class="grid gap-2">
           <h3 class="text-kicker m-0 flex items-center gap-1.5">

@@ -11,6 +11,7 @@ namespace Prismedia.Contracts.Collections;
 /// <param name="CoverMode">Cover selection mode code: mosaic, custom, or item.</param>
 /// <param name="CoverItemId">Optional entity used as the collection cover.</param>
 /// <param name="IsNsfw">Whether the collection itself should be hidden in SFW mode.</param>
+/// <param name="IsShared">Whether other household users may view the collection.</param>
 public sealed record CollectionWriteRequest(
     string Title,
     string? Description,
@@ -18,7 +19,8 @@ public sealed record CollectionWriteRequest(
     string? RuleTreeJson,
     CollectionCoverMode? CoverMode,
     Guid? CoverItemId,
-    bool? IsNsfw);
+    bool? IsNsfw,
+    bool? IsShared = null);
 
 /// <summary>Reference to an entity being added to a collection.</summary>
 /// <param name="EntityType">Entity kind code for the item.</param>
@@ -96,6 +98,12 @@ public sealed record CollectionItemsResponse(IReadOnlyList<CollectionItemDetail>
 /// API-facing collection detail shape with expanded collection members.
 /// </summary>
 public sealed record CollectionDetail : EntityDetail {
+    /// <summary>Whether other household users may view the collection.</summary>
+    public required bool IsShared { get; init; }
+
+    /// <summary>Whether the current user owns and may edit the collection.</summary>
+    public required bool CanEdit { get; init; }
+
     /// <summary>Collection membership mode.</summary>
     public required CollectionMode? Mode { get; init; }
 

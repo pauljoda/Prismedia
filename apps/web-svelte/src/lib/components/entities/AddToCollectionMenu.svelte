@@ -2,7 +2,7 @@
   import { AlertCircle, Check, FolderPlus, Loader2, Search } from "@lucide/svelte";
   import { cn } from "@prismedia/ui-svelte";
   import { keepFlyoutOnScreen } from "$lib/actions/keep-flyout-on-screen";
-  import { addCollectionItems, fetchCollections } from "$lib/api/collections";
+  import { addCollectionItems, fetchEditableCollections } from "$lib/api/collections";
   import type { CollectionEntityType } from "$lib/collections/models";
 
   interface CollectionOption {
@@ -38,8 +38,7 @@
     loadState = "loading";
     errorMessage = null;
     try {
-      const response = await fetchCollections();
-      collections = response.items.map((item) => ({ id: item.id, title: item.title }));
+      collections = await fetchEditableCollections();
       loadState = "ready";
     } catch (err) {
       errorMessage = err instanceof Error ? err.message : "Failed to load collections.";

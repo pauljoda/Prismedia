@@ -16,7 +16,7 @@ public sealed class CollectionRefreshPersistenceService(PrismediaDbContext db) :
         var row = await db.CollectionDetails
             .Where(c => c.EntityId == collectionEntityId &&
                         (c.Mode == CollectionMode.Dynamic || c.Mode == CollectionMode.Hybrid))
-            .Select(c => new { c.EntityId, c.Mode, c.RuleTreeJson })
+            .Select(c => new { c.EntityId, c.OwnerUserId, c.Mode, c.RuleTreeJson })
             .FirstOrDefaultAsync(cancellationToken);
 
         if (row?.RuleTreeJson is null) return null;
@@ -31,6 +31,7 @@ public sealed class CollectionRefreshPersistenceService(PrismediaDbContext db) :
         return new CollectionRefreshData(
             row.EntityId,
             entity,
+            row.OwnerUserId,
             row.Mode,
             row.RuleTreeJson);
     }
@@ -45,6 +46,7 @@ public sealed class CollectionRefreshPersistenceService(PrismediaDbContext db) :
             select new CollectionRefreshData(
                 detail.EntityId,
                 entity.Title,
+                detail.OwnerUserId,
                 detail.Mode,
                 detail.RuleTreeJson!))
             .ToArrayAsync(cancellationToken);

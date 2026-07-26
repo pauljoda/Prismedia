@@ -14,20 +14,29 @@ internal static class TestUserContext {
     /// <summary>Unrestricted admin context with a stable user id.</summary>
     internal static ICurrentUserContext Admin() => Context(UserRole.Admin);
 
+    /// <summary>Unrestricted admin context with an explicit user id.</summary>
+    internal static ICurrentUserContext Admin(Guid userId) => Context(UserRole.Admin, userId: userId);
+
     /// <summary>Member context restricted to the given library roots.</summary>
     internal static ICurrentUserContext Member(params Guid[] allowedRootIds) =>
         Context(UserRole.Member, allowedRootIds.ToHashSet());
 
+    /// <summary>Member context with an explicit user id and unrestricted test-library access.</summary>
+    internal static ICurrentUserContext MemberAs(Guid userId) => Context(UserRole.Member, userId: userId);
+
     /// <summary>Unauthenticated context (no user, no engagement state).</summary>
     internal static ICurrentUserContext Anonymous() => new CurrentUserContextHolder();
 
-    private static ICurrentUserContext Context(UserRole role, IReadOnlySet<Guid>? allowedRootIds = null) {
+    private static ICurrentUserContext Context(
+        UserRole role,
+        IReadOnlySet<Guid>? allowedRootIds = null,
+        Guid? userId = null) {
         var holder = new CurrentUserContextHolder(
             allowedRootIds is null ? null : new FixedAccess(allowedRootIds));
         var now = DateTimeOffset.UtcNow;
         holder.Set(
             new User(
-                UserId,
+                userId ?? UserId,
                 "test-user",
                 "Test User",
                 role,

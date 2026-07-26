@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Prismedia.Application.Collections;
 using Prismedia.Application.Entities;
+using Prismedia.Application.Security;
 using Prismedia.Contracts.Collections;
 using Prismedia.Domain.Entities;
 using Prismedia.Infrastructure.Entities;
@@ -13,7 +14,8 @@ namespace Prismedia.Infrastructure.Collections;
 /// </summary>
 public sealed class CollectionItemReadService(
     PrismediaDbContext db,
-    IEntityReadService entities) : ICollectionItemReadService {
+    IEntityReadService entities,
+    ICurrentUserContext currentUser) : ICollectionItemReadService {
     public async Task<CollectionItemsResponse> ListItemsAsync(
         Guid collectionId,
         bool hideNsfw,
@@ -21,7 +23,12 @@ public sealed class CollectionItemReadService(
         var collectionExists = await db.Entities.AsNoTracking()
             .AnyAsync(entity =>
                 entity.Id == collectionId &&
-                entity.KindCode == EntityKindRegistry.Collection.Code,
+                entity.KindCode == EntityKindRegistry.Collection.Code &&
+                db.CollectionDetails.Any(detail =>
+                    detail.EntityId == entity.Id &&
+                    (currentUser.IsSystem ||
+                     detail.OwnerUserId == currentUser.UserId ||
+                     detail.IsShared)),
                 cancellationToken);
 
         if (!collectionExists) {

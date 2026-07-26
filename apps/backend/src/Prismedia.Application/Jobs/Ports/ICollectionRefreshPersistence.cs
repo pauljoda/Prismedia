@@ -33,10 +33,12 @@ public interface ICollectionRefreshPersistence {
 /// </summary>
 /// <param name="EntityId">The collection entity's ID.</param>
 /// <param name="Title">Collection title for logging.</param>
+/// <param name="OwnerUserId">User whose engagement and library scope govern the rules.</param>
 /// <param name="Mode">Collection mode (dynamic or hybrid).</param>
 /// <param name="RuleTreeJson">The stored rule tree JSON.</param>
 public sealed record CollectionRefreshData(
     Guid EntityId,
     string Title,
+    Guid OwnerUserId,
     CollectionMode Mode,
     string RuleTreeJson);

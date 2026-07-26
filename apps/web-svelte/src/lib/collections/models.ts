@@ -116,6 +116,7 @@ export interface CollectionWriteRequest {
   coverMode?: CollectionCoverMode | null;
   coverItemId?: string | null;
   isNsfw?: boolean | null;
+  isShared?: boolean | null;
 }
 
 export interface CollectionAddItemsRequest {

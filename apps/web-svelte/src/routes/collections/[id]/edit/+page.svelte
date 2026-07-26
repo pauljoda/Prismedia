@@ -1,5 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
+  import { goto } from "$app/navigation";
+  import { resolve } from "$app/paths";
   import { page } from "$app/state";
   import { getCollection } from "$lib/api/generated/prismedia";
   import type { CollectionDetail } from "$lib/api/generated/model";
@@ -24,10 +26,15 @@
     errorMessage = null;
     try {
       const id = page.params.id ?? "";
-      collection = unwrapGenerated<CollectionDetail>(
+      const loaded = unwrapGenerated<CollectionDetail>(
         await getCollection(id),
         `Failed to fetch collection ${id}`,
       );
+      if (!loaded.canEdit) {
+        await goto(resolve(`/collections/${id}` as "/"), { replaceState: true });
+        return;
+      }
+      collection = loaded;
       loadState = "ready";
     } catch (err) {
       if (redirectHiddenEntityNotFound(err, nsfw.mode)) return;

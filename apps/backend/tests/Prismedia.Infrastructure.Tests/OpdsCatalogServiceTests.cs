@@ -283,6 +283,9 @@ public sealed class OpdsCatalogServiceTests : IDisposable {
             BookDetail(HiddenBookId, VisibleRootId),
             BookDetail(DisabledBookId, DisabledRootId),
             BookDetail(SeriesChildId, VisibleRootId));
+        db.CollectionDetails.AddRange(
+            new CollectionDetailRow { EntityId = VisibleCollectionId, OwnerUserId = TestUserContext.UserId },
+            new CollectionDetailRow { EntityId = HiddenCollectionId, OwnerUserId = TestUserContext.UserId });
         db.EntityFiles.AddRange(
             Source(VisibleBookId, Path.Combine(_tempDir, "visible.epub"), MediaContentTypes.Epub),
             Source(HiddenBookId, Path.Combine(_tempDir, "hidden.epub"), MediaContentTypes.Epub),

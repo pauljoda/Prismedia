@@ -10,13 +10,16 @@ public interface ICollectionCommandPersistence {
     Task<Guid> CreateAsync(Collection collection, string? description, CancellationToken cancellationToken);
 
     /// <summary>Persists collection aggregate settings and description for an existing collection.</summary>
-    Task<bool> UpdateAsync(Collection collection, string? description, CancellationToken cancellationToken);
+    Task<bool> UpdateAsync(Collection collection, string? description, Guid ownerUserId, CancellationToken cancellationToken);
 
     /// <summary>Soft-deletes a collection entity.</summary>
-    Task<bool> DeleteAsync(Guid collectionId, CancellationToken cancellationToken);
+    Task<bool> DeleteAsync(Guid collectionId, Guid ownerUserId, CancellationToken cancellationToken);
 
-    /// <summary>Returns the current collection mode for an active collection.</summary>
-    Task<CollectionMode?> GetModeAsync(Guid collectionId, CancellationToken cancellationToken);
+    /// <summary>Returns owner-editable collection settings for an active owned collection.</summary>
+    Task<CollectionEditState?> GetEditStateAsync(
+        Guid collectionId,
+        Guid ownerUserId,
+        CancellationToken cancellationToken);
 
     /// <summary>Loads active entities by id so the application can validate collection membership.</summary>
     Task<IReadOnlyDictionary<Guid, CollectionItemCandidate>> GetActiveItemsAsync(
@@ -24,19 +27,31 @@ public interface ICollectionCommandPersistence {
         CancellationToken cancellationToken);
 
     /// <summary>Adds manual collection item rows, skipping already-present entity ids.</summary>
-    Task<int> AddManualItemsAsync(Guid collectionId, IReadOnlyList<Guid> entityIds, CancellationToken cancellationToken);
+    Task<int> AddManualItemsAsync(
+        Guid collectionId,
+        Guid ownerUserId,
+        IReadOnlyList<Guid> entityIds,
+        CancellationToken cancellationToken);
 
     /// <summary>Removes collection item rows by collection item id.</summary>
-    Task<int> RemoveItemsAsync(Guid collectionId, IReadOnlyList<Guid> itemIds, CancellationToken cancellationToken);
+    Task<int> RemoveItemsAsync(
+        Guid collectionId,
+        Guid ownerUserId,
+        IReadOnlyList<Guid> itemIds,
+        CancellationToken cancellationToken);
 
     /// <summary>Reorders existing collection item rows by preferred item id order.</summary>
-    Task<int> ReorderItemsAsync(Guid collectionId, IReadOnlyList<Guid> itemIds, CancellationToken cancellationToken);
+    Task<int> ReorderItemsAsync(
+        Guid collectionId,
+        Guid ownerUserId,
+        IReadOnlyList<Guid> itemIds,
+        CancellationToken cancellationToken);
 
     /// <summary>Returns whether an active collection exists.</summary>
-    Task<bool> ExistsAsync(Guid collectionId, CancellationToken cancellationToken);
+    Task<bool> ExistsAsync(Guid collectionId, Guid ownerUserId, CancellationToken cancellationToken);
 
     /// <summary>Counts persisted collection item rows.</summary>
-    Task<int> CountItemsAsync(Guid collectionId, CancellationToken cancellationToken);
+    Task<int> CountItemsAsync(Guid collectionId, Guid ownerUserId, CancellationToken cancellationToken);
 
     /// <summary>Filters rule matches to active, visible entities while preserving rule-order uniqueness.</summary>
     Task<IReadOnlyList<CollectionVisibleRuleMatch>> FilterVisibleRuleMatchesAsync(
@@ -47,6 +62,9 @@ public interface ICollectionCommandPersistence {
 
 /// <summary>Active entity candidate used to validate manual collection membership requests.</summary>
 public sealed record CollectionItemCandidate(Guid EntityId, EntityKind EntityKind);
+
+/// <summary>Persisted settings needed to authorize and normalize an owner edit.</summary>
+public sealed record CollectionEditState(CollectionMode Mode, bool IsShared);
 
 /// <summary>Visible rule match after persistence-level visibility filtering.</summary>
 public sealed record CollectionVisibleRuleMatch(string EntityType, Guid EntityId);

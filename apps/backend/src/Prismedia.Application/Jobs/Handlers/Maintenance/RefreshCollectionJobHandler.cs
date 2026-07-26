@@ -68,7 +68,10 @@ public sealed class RefreshCollectionJobHandler(
             await context.ReportProgressAsync(10, "Evaluating rules", cancellationToken);
         }
 
-        var matches = await ruleEngine.EvaluateAsync(collection.RuleTreeJson, cancellationToken);
+        var matches = await ruleEngine.EvaluateAsync(
+            collection.RuleTreeJson,
+            collection.OwnerUserId,
+            cancellationToken);
 
         if (reportProgress) {
             await context.ReportProgressAsync(50, $"Resolved {matches.Count} entities, updating membership", cancellationToken);

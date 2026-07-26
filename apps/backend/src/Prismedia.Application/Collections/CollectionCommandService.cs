@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text.Json;
 using Prismedia.Application.Entities;
 using Prismedia.Application.Jobs.Ports;
+using Prismedia.Application.Security;
 using Prismedia.Contracts.Collections;
 using Prismedia.Contracts.Entities;
 using Prismedia.Domain.Entities;
@@ -17,7 +18,8 @@ public sealed class CollectionCommandService(
     ICollectionCommandPersistence persistence,
     IEntityReadService entities,
     ICollectionRuleEngine ruleEngine,
-    ICollectionRefreshPersistence refreshPersistence) : ICollectionCommandService {
+    ICollectionRefreshPersistence refreshPersistence,
+    ICurrentUserContext currentUser) : ICollectionCommandService {
     private const int PreviewSampleSize = 24;
     private const string EmptyRuleJson = """{"type":"group","operator":"and","children":[]}""";
     private static readonly HashSet<string> RuleFields = new(StringComparer.Ordinal) {
@@ -77,7 +79,7 @@ public sealed class CollectionCommandService(
             return InvalidWrite(message);
         }
 
-        var collection = CreateCollection(Guid.NewGuid(), write);
+        var collection = CreateCollection(Guid.NewGuid(), write, write.IsShared ?? false);
         var collectionId = await persistence.CreateAsync(collection, write.Description, cancellationToken);
         await RefreshRulesAfterWriteAsync(collectionId, collection, cancellationToken);
         return await DetailResultAsync(collectionId, cancellationToken);
@@ -92,8 +94,16 @@ public sealed class CollectionCommandService(
             return InvalidWrite(message);
         }
 
-        var collection = CreateCollection(collectionId, write);
-        if (!await persistence.UpdateAsync(collection, write.Description, cancellationToken)) {
+        var current = await persistence.GetEditStateAsync(
+            collectionId,
+            currentUser.UserId,
+            cancellationToken);
+        if (current is null) {
+            return new CollectionWriteResult(CollectionCommandStatus.NotFound, Message: "Collection was not found.");
+        }
+
+        var collection = CreateCollection(collectionId, write, write.IsShared ?? current.IsShared);
+        if (!await persistence.UpdateAsync(collection, write.Description, currentUser.UserId, cancellationToken)) {
             return new CollectionWriteResult(CollectionCommandStatus.NotFound, Message: "Collection was not found.");
         }
 
@@ -105,7 +115,7 @@ public sealed class CollectionCommandService(
     public async Task<CollectionCommandResult> DeleteAsync(
         Guid collectionId,
         CancellationToken cancellationToken) =>
-        await persistence.DeleteAsync(collectionId, cancellationToken)
+        await persistence.DeleteAsync(collectionId, currentUser.UserId, cancellationToken)
             ? new CollectionCommandResult(CollectionCommandStatus.Succeeded)
             : new CollectionCommandResult(CollectionCommandStatus.NotFound, "Collection was not found.");
 
@@ -149,6 +159,7 @@ public sealed class CollectionCommandService(
 
         var added = await persistence.AddManualItemsAsync(
             collectionId,
+            currentUser.UserId,
             requested.Select(item => item.Reference.EntityId).ToArray(),
             cancellationToken);
         return new CollectionCountResult(CollectionCommandStatus.Succeeded, added);
@@ -165,7 +176,11 @@ public sealed class CollectionCommandService(
         }
 
         var itemIds = (request.ItemIds ?? []).Distinct().ToArray();
-        var removed = await persistence.RemoveItemsAsync(collectionId, itemIds, cancellationToken);
+        var removed = await persistence.RemoveItemsAsync(
+            collectionId,
+            currentUser.UserId,
+            itemIds,
+            cancellationToken);
         return new CollectionCountResult(CollectionCommandStatus.Succeeded, removed);
     }
 
@@ -181,6 +196,7 @@ public sealed class CollectionCommandService(
 
         var reordered = await persistence.ReorderItemsAsync(
             collectionId,
+            currentUser.UserId,
             (request.ItemIds ?? []).Distinct().ToArray(),
             cancellationToken);
         return new CollectionCountResult(CollectionCommandStatus.Succeeded, reordered);
@@ -195,7 +211,10 @@ public sealed class CollectionCommandService(
             return null;
         }
 
-        var matches = await ruleEngine.EvaluateAsync(request.RuleTreeJson, cancellationToken);
+        var matches = await ruleEngine.EvaluateAsync(
+            request.RuleTreeJson,
+            currentUser.UserId,
+            cancellationToken);
         var visible = await persistence.FilterVisibleRuleMatchesAsync(matches, hideNsfw, cancellationToken);
         var counts = visible
             .GroupBy(match => match.EntityType)
@@ -219,42 +238,63 @@ public sealed class CollectionCommandService(
     public async Task<CollectionRefreshResponse?> RefreshAsync(
         Guid collectionId,
         CancellationToken cancellationToken) {
-        if (!await persistence.ExistsAsync(collectionId, cancellationToken)) {
+        if (!await persistence.ExistsAsync(collectionId, currentUser.UserId, cancellationToken)) {
             return null;
         }
 
         var collection = await refreshPersistence.GetDynamicCollectionAsync(collectionId, cancellationToken);
         if (collection is null) {
-            var currentCount = await persistence.CountItemsAsync(collectionId, cancellationToken);
+            var currentCount = await persistence.CountItemsAsync(
+                collectionId,
+                currentUser.UserId,
+                cancellationToken);
             return new CollectionRefreshResponse(false, currentCount);
         }
 
-        var matches = await ruleEngine.EvaluateAsync(collection.RuleTreeJson, cancellationToken);
+        var matches = await ruleEngine.EvaluateAsync(
+            collection.RuleTreeJson,
+            collection.OwnerUserId,
+            cancellationToken);
         await refreshPersistence.RefreshCollectionItemsAsync(collectionId, matches, cancellationToken);
-        return new CollectionRefreshResponse(true, await persistence.CountItemsAsync(collectionId, cancellationToken));
+        return new CollectionRefreshResponse(
+            true,
+            await persistence.CountItemsAsync(collectionId, currentUser.UserId, cancellationToken));
     }
 
     private async Task<CollectionCountResult?> ManualMembershipAsync(
         Guid collectionId,
         string invalidMessage,
         CancellationToken cancellationToken) {
-        var mode = await persistence.GetModeAsync(collectionId, cancellationToken);
-        if (mode is null) {
+        var state = await persistence.GetEditStateAsync(
+            collectionId,
+            currentUser.UserId,
+            cancellationToken);
+        if (state is null) {
             return new CollectionCountResult(CollectionCommandStatus.NotFound, Message: "Collection was not found.");
         }
 
         var collection = new Collection(
             collectionId,
             "Collection",
-            mode.Value,
-            mode == CollectionMode.Manual ? null : EmptyRuleJson);
+            currentUser.UserId,
+            state.Mode,
+            state.Mode == CollectionMode.Manual ? null : EmptyRuleJson,
+            isShared: state.IsShared);
         return collection.CanEditManualMembership
             ? null
             : new CollectionCountResult(CollectionCommandStatus.Invalid, Message: invalidMessage);
     }
 
-    private static Collection CreateCollection(Guid id, NormalizedCollectionWrite write) {
-        var collection = new Collection(id, write.Title, write.Mode, write.RuleTreeJson, write.CoverMode, write.CoverItemId);
+    private Collection CreateCollection(Guid id, NormalizedCollectionWrite write, bool isShared) {
+        var collection = new Collection(
+            id,
+            write.Title,
+            currentUser.UserId,
+            write.Mode,
+            write.RuleTreeJson,
+            write.CoverMode,
+            write.CoverItemId,
+            isShared: isShared);
         collection.PatchFlags(isFavorite: null, isNsfw: write.IsNsfw, isOrganized: null);
         return collection;
     }
@@ -283,7 +323,10 @@ public sealed class CollectionCommandService(
             return;
         }
 
-        var matches = await ruleEngine.EvaluateAsync(collection.RuleTreeJson, cancellationToken);
+        var matches = await ruleEngine.EvaluateAsync(
+            collection.RuleTreeJson,
+            collection.OwnerUserId,
+            cancellationToken);
         await refreshPersistence.RefreshCollectionItemsAsync(collectionId, matches, cancellationToken);
     }
 
@@ -316,7 +359,8 @@ public sealed class CollectionCommandService(
             ruleTreeJson,
             coverMode,
             request.CoverItemId,
-            request.IsNsfw ?? false);
+            request.IsNsfw ?? false,
+            request.IsShared);
         return true;
     }
 
@@ -536,5 +580,6 @@ public sealed class CollectionCommandService(
         string? RuleTreeJson,
         CollectionCoverMode CoverMode,
         Guid? CoverItemId,
-        bool IsNsfw);
+        bool IsNsfw,
+        bool? IsShared);
 }

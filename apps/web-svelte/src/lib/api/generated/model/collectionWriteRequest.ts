@@ -19,4 +19,6 @@ export interface CollectionWriteRequest {
   coverItemId: string | null;
   /** @nullable */
   isNsfw: boolean | null;
+  /** @nullable */
+  isShared?: boolean | null;
 }

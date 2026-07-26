@@ -9,18 +9,22 @@ namespace Prismedia.Infrastructure.Tests;
 public sealed class RefreshCollectionJobHandlerTests {
     [Fact]
     public async Task UntargetedRefreshUpdatesEveryDynamicCollection() {
-        var first = new CollectionRefreshData(Guid.NewGuid(), "A", CollectionMode.Dynamic, RuleJson);
-        var second = new CollectionRefreshData(Guid.NewGuid(), "B", CollectionMode.Hybrid, RuleJson);
+        var firstOwnerId = Guid.NewGuid();
+        var secondOwnerId = Guid.NewGuid();
+        var first = new CollectionRefreshData(Guid.NewGuid(), "A", firstOwnerId, CollectionMode.Dynamic, RuleJson);
+        var second = new CollectionRefreshData(Guid.NewGuid(), "B", secondOwnerId, CollectionMode.Hybrid, RuleJson);
         var matchId = Guid.NewGuid();
         var persistence = new RecordingCollectionRefreshPersistence([first, second]);
+        var ruleEngine = new StaticRuleEngine([new CollectionRuleMatch(EntityKind.AudioTrack, matchId)]);
         var handler = new RefreshCollectionJobHandler(
             NullLogger<RefreshCollectionJobHandler>.Instance,
             persistence,
-            new StaticRuleEngine([new CollectionRuleMatch(EntityKind.AudioTrack, matchId)]));
+            ruleEngine);
 
         await handler.HandleAsync(new JobContext(Job(targetEntityId: null), new NoopJobQueue()), CancellationToken.None);
 
         Assert.Equal([first.EntityId, second.EntityId], persistence.Refreshes.Select(call => call.CollectionEntityId));
+        Assert.Equal([firstOwnerId, secondOwnerId], ruleEngine.UserIds);
         Assert.All(persistence.Refreshes, call => {
             var item = Assert.Single(call.ResolvedItems);
             Assert.Equal(EntityKind.AudioTrack, item.EntityKind);
@@ -71,8 +75,15 @@ public sealed class RefreshCollectionJobHandlerTests {
     }
 
     private sealed class StaticRuleEngine(IReadOnlyList<CollectionRuleMatch> matches) : ICollectionRuleEngine {
-        public Task<IReadOnlyList<CollectionRuleMatch>> EvaluateAsync(string ruleTreeJson, CancellationToken cancellationToken) =>
-            Task.FromResult(matches);
+        public List<Guid> UserIds { get; } = [];
+
+        public Task<IReadOnlyList<CollectionRuleMatch>> EvaluateAsync(
+            string ruleTreeJson,
+            Guid userId,
+            CancellationToken cancellationToken) {
+            UserIds.Add(userId);
+            return Task.FromResult(matches);
+        }
     }
 
     private sealed class NoopJobQueue : IJobQueueService {

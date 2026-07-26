@@ -11,6 +11,8 @@ import type { EntityGroup } from './entityGroup';
 import type { EntityKind } from './entityKind';
 
 export interface CollectionDetail {
+  isShared: boolean;
+  canEdit: boolean;
   mode: null | CollectionMode;
   /** @nullable */
   ruleTreeJson: string | null;

@@ -11,7 +11,13 @@ public interface ICollectionRuleEngine {
     /// <summary>
     /// Evaluates a rule tree JSON string and returns all matching entity references.
     /// </summary>
-    Task<IReadOnlyList<CollectionRuleMatch>> EvaluateAsync(string ruleTreeJson, CancellationToken cancellationToken);
+    /// <param name="ruleTreeJson">Serialized rule tree to evaluate.</param>
+    /// <param name="userId">Owning user whose engagement and library scope govern evaluation.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    Task<IReadOnlyList<CollectionRuleMatch>> EvaluateAsync(
+        string ruleTreeJson,
+        Guid userId,
+        CancellationToken cancellationToken);
 }
 
 /// <summary>

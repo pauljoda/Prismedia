@@ -443,6 +443,11 @@ public sealed class EfOpdsCatalogService(
             .Where(entity =>
                 collectionIds.Contains(entity.Id) &&
                 entity.KindCode == CollectionKindCode &&
+                db.CollectionDetails.Any(detail =>
+                    detail.EntityId == entity.Id &&
+                    (currentUser.IsSystem ||
+                     detail.OwnerUserId == currentUser.UserId ||
+                     detail.IsShared)) &&
                 (!hideNsfw || !entity.IsNsfw))
             .Select(entity => new { entity.Id, entity.Title, entity.SortName })
             .ToArrayAsync(cancellationToken);
@@ -533,6 +538,12 @@ public sealed class EfOpdsCatalogService(
             .AnyAsync(entity =>
                 entity.Id == id &&
                 entity.KindCode == kindCode &&
+                (kindCode != CollectionKindCode ||
+                 db.CollectionDetails.Any(detail =>
+                     detail.EntityId == entity.Id &&
+                     (currentUser.IsSystem ||
+                      detail.OwnerUserId == currentUser.UserId ||
+                      detail.IsShared))) &&
                 (!hideNsfw || !entity.IsNsfw),
                 cancellationToken);
 
