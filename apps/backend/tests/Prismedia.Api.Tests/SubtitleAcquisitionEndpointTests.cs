@@ -1,16 +1,21 @@
 using System.Net;
 using System.Net.Http.Json;
+using System.Text.Json;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Prismedia.Application.Subtitles;
 using Prismedia.Contracts.Media;
 using Prismedia.Contracts.System;
+using Prismedia.Domain.Entities;
+using Prismedia.Infrastructure.Serialization;
 
 namespace Prismedia.Api.Tests;
 
 public sealed class SubtitleAcquisitionEndpointTests {
     private static readonly Guid VideoId = Guid.Parse("11111111-2222-3333-4444-555555555555");
+    private static readonly JsonSerializerOptions CodecJson =
+        new(JsonSerializerDefaults.Web) { Converters = { new CodecJsonConverterFactory() } };
 
     [Fact]
     public async Task SearchReturnsProviderOwnedRankingEvidence() {
@@ -52,20 +57,23 @@ public sealed class SubtitleAcquisitionEndpointTests {
     }
 
     [Fact]
-    public async Task ExpiredCandidateReturnsStableGoneProblem() {
-        var service = new FakeSubtitleAcquisitionService {
-            AcquireException = new SubtitleCandidateUnavailableException("Candidate expired.")
-        };
+    public async Task DownloadQueuesAnInteractiveEntityGraphWithoutCallingTheProviderInTheRequest() {
+        var service = new FakeSubtitleAcquisitionService();
         using var factory = CreateFactory(service);
         using var client = factory.CreateAuthenticatedClient();
 
         using var response = await client.PostAsJsonAsync(
             $"/api/videos/{VideoId}/subtitles/download",
             new AcquireVideoSubtitleRequest(SubtitleProviderCodes.OpenSubtitles, "42:84"));
-        var problem = await response.Content.ReadFromJsonAsync<ApiProblem>();
+        var body = await response.Content.ReadFromJsonAsync<AcquireVideoSubtitleResponse>(CodecJson);
 
-        Assert.Equal(HttpStatusCode.Gone, response.StatusCode);
-        Assert.Equal(ApiProblemCodes.SubtitleCandidateUnavailable, problem?.Code);
+        Assert.Equal(HttpStatusCode.Accepted, response.StatusCode);
+        var graph = Assert.IsType<AcquireVideoSubtitleResponse>(body).Graph;
+        Assert.Equal(JobGraphOrigin.Interactive, graph.Origin);
+        Assert.Equal(EntityKind.Video.ToCode(), graph.RootEntityKind);
+        Assert.Equal(VideoId.ToString(), graph.RootEntityId);
+        Assert.Equal(JobType.AcquireSubtitle, graph.InitialNode.Type);
+        Assert.Equal(0, service.AcquireCalls);
     }
 
     [Fact]
@@ -102,7 +110,7 @@ public sealed class SubtitleAcquisitionEndpointTests {
             new(false, false, false, false, false, false);
         public IReadOnlyList<SubtitleSearchResult> SearchResults { get; init; } = [];
         public SubtitleSearchRequest? SearchRequest { get; private set; }
-        public Exception? AcquireException { get; init; }
+        public int AcquireCalls { get; private set; }
 
         public Task<OpenSubtitlesConfiguration> GetOpenSubtitlesConfigurationAsync(
             CancellationToken cancellationToken) => Task.FromResult(Configuration);
@@ -126,10 +134,10 @@ public sealed class SubtitleAcquisitionEndpointTests {
             Guid videoId,
             string provider,
             string candidateId,
-            CancellationToken cancellationToken) =>
-            AcquireException is null
-                ? Task.FromResult(new SubtitleAcquisitionResult(Guid.NewGuid(), AlreadyPresent: false))
-                : Task.FromException<SubtitleAcquisitionResult>(AcquireException);
+            CancellationToken cancellationToken) {
+            AcquireCalls++;
+            return Task.FromResult(new SubtitleAcquisitionResult(Guid.NewGuid(), AlreadyPresent: false));
+        }
 
         public Task<AutomaticSubtitleAcquisitionResult> AcquireMissingPreferredAsync(
             Guid videoId,

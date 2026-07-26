@@ -16,11 +16,9 @@
 
   interface Props {
     videoId: string;
-    onTracksChanged: () => void | Promise<void>;
-    onActiveTrackIdChange: (id: string | null) => void;
   }
 
-  let { videoId, onTracksChanged, onActiveTrackIdChange }: Props = $props();
+  let { videoId }: Props = $props();
 
   let languageDraft = $state("en");
   let candidates = $state.raw<SubtitleCandidate[]>([]);
@@ -89,11 +87,7 @@
     message = null;
     try {
       const result = await acquireVideoSubtitle(videoId, candidate);
-      await onTracksChanged();
-      onActiveTrackIdChange(result.trackId);
-      message = result.alreadyPresent
-        ? "This subtitle was already in the library and is now active."
-        : "Subtitle acquired and activated.";
+      message = `Subtitle queued in foreground jobs (${result.graph.id.slice(0, 8)}). It will appear here when the download finishes.`;
     } catch (err) {
       error = err instanceof Error ? err.message : "Failed to acquire subtitle";
     } finally {

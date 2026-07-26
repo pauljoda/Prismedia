@@ -29,6 +29,7 @@ export const JobType = {
   'generate-audio-waveform': 'generate-audio-waveform',
   'extract-subtitles': 'extract-subtitles',
   'acquire-subtitles': 'acquire-subtitles',
+  'acquire-subtitle': 'acquire-subtitle',
   'import-metadata': 'import-metadata',
   'refresh-collection': 'refresh-collection',
   'library-maintenance': 'library-maintenance',

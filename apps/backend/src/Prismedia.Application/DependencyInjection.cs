@@ -164,6 +164,7 @@ public static class DependencyInjection {
         services.AddTransient<IJobHandler, GenerateAudioWaveformJobHandler>();
         services.AddTransient<IJobHandler, ExtractSubtitlesJobHandler>();
         services.AddTransient<IJobHandler, AutoAcquireSubtitlesJobHandler>();
+        services.AddTransient<IJobHandler, AcquireSubtitleJobHandler>();
 
         // Metadata / collections / maintenance
         services.AddTransient<IJobHandler, ImportMetadataJobHandler>();

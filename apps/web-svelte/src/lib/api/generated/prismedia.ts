@@ -6168,39 +6168,17 @@ export const searchVideoSubtitles = async (id: string,
 
 
 
-export type acquireVideoSubtitleResponse200 = {
+export type acquireVideoSubtitleResponse202 = {
   data: AcquireVideoSubtitleResponse
-  status: 200
+  status: 202
 }
 
-export type acquireVideoSubtitleResponse404 = {
-  data: ApiProblem
-  status: 404
-}
-
-export type acquireVideoSubtitleResponse410 = {
-  data: ApiProblem
-  status: 410
-}
-
-export type acquireVideoSubtitleResponse422 = {
-  data: ApiProblem
-  status: 422
-}
-
-export type acquireVideoSubtitleResponse502 = {
-  data: ApiProblem
-  status: 502
-}
-
-export type acquireVideoSubtitleResponseSuccess = (acquireVideoSubtitleResponse200) & {
+export type acquireVideoSubtitleResponseSuccess = (acquireVideoSubtitleResponse202) & {
   headers: Headers;
 };
-export type acquireVideoSubtitleResponseError = (acquireVideoSubtitleResponse404 | acquireVideoSubtitleResponse410 | acquireVideoSubtitleResponse422 | acquireVideoSubtitleResponse502) & {
-  headers: Headers;
-};
+;
 
-export type acquireVideoSubtitleResponse = (acquireVideoSubtitleResponseSuccess | acquireVideoSubtitleResponseError)
+export type acquireVideoSubtitleResponse = (acquireVideoSubtitleResponseSuccess)
 
 export const getAcquireVideoSubtitleUrl = (id: string,) => {
 
@@ -11742,7 +11720,7 @@ export const getSearchIdentifyQueueItemUrl = (entityId: string,
 }
 
 /**
- * @summary Requests a provider search; a background identify-search job runs it and the item reports progress through its state.
+ * @summary Requests a provider search in a new interactive graph; the item reports progress through its state.
  */
 export const searchIdentifyQueueItem = async (entityId: string,
     identifyQueueSearchRequest: IdentifyQueueSearchRequest,
@@ -11862,7 +11840,7 @@ export const getApplyIdentifyQueueItemUrl = (entityId: string,) => {
 }
 
 /**
- * @summary Applies a reviewed identify queue proposal and marks the item done.
+ * @summary Queues a reviewed identify proposal for application in its existing interactive graph.
  */
 export const applyIdentifyQueueItem = async (entityId: string,
     applyIdentifyQueueItemRequest: ApplyIdentifyQueueItemRequest, options?: RequestInit): Promise<applyIdentifyQueueItemResponse> => {

@@ -132,6 +132,12 @@ const _JOB_DEFINITIONS = [
     label: "Subtitle Acquisition",
     description: "Finds and imports trusted provider subtitles for missing preferred languages.",
   },
+  {
+    type: JOB_TYPE.acquireSubtitle,
+    queueName: JOB_TYPE.acquireSubtitle,
+    label: "Selected Subtitle",
+    description: "Downloads and imports one subtitle selected by the user.",
+  },
   // Metadata / identify
   {
     type: JOB_TYPE.importMetadata,

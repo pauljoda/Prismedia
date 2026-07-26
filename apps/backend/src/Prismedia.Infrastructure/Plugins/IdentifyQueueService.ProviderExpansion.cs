@@ -195,5 +195,48 @@ public sealed partial class IdentifyQueueService {
         return false;
     }
 
-    /// <summary>Cancels the in-flight cascade job for a row, if any, and clears its marker.</summary>
+    /// <summary>Declares the strict durable provider resource required before a search can be claimed.</summary>
+    private async Task<string?> DeclareSearchResourceAsync(
+        string? providerCode,
+        EntityRow entity,
+        bool hideNsfw,
+        CancellationToken cancellationToken) {
+        if (providerCode is not null &&
+            await _identify.GetExecutionPolicyAsync(providerCode, entity.KindCode, cancellationToken) is { } execution) {
+            var pluginKey = JobResourceKeys.Plugin(providerCode);
+            await _jobs.DeclareResourceAsync(
+                pluginKey,
+                execution.MaxConcurrentInvocations,
+                TimeSpan.FromMilliseconds(execution.MinimumStartIntervalMs),
+                cancellationToken);
+            return pluginKey;
+        }
+
+        if (providerCode is not null) {
+            return null;
+        }
+
+        // A provider walk may reach a rate-limited plugin after trying an unrestricted one. Give
+        // the whole walk one durable cross-worker resource whenever any participating provider
+        // declares a policy, using the strictest declared values so that provider can never be
+        // overlapped or started too quickly by another unscoped lane.
+        var providers = await ResolveSearchProvidersAsync(null, entity, hideNsfw, cancellationToken);
+        var policies = new List<PluginExecutionPolicy>();
+        foreach (var provider in providers) {
+            if (await _identify.GetExecutionPolicyAsync(provider, entity.KindCode, cancellationToken) is { } policy) {
+                policies.Add(policy);
+            }
+        }
+
+        if (policies.Count == 0) {
+            return null;
+        }
+
+        await _jobs.DeclareResourceAsync(
+            JobResourceKeys.IdentifyProviderWalk,
+            policies.Min(policy => policy.MaxConcurrentInvocations),
+            TimeSpan.FromMilliseconds(policies.Max(policy => policy.MinimumStartIntervalMs)),
+            cancellationToken);
+        return JobResourceKeys.IdentifyProviderWalk;
+    }
 }

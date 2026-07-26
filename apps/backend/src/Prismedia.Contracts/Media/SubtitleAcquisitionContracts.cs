@@ -1,3 +1,5 @@
+using Prismedia.Contracts.Jobs;
+
 namespace Prismedia.Contracts.Media;
 
 /// <summary>Secret-free configuration state for OpenSubtitles.com.</summary>
@@ -47,8 +49,8 @@ public sealed record SearchVideoSubtitlesResponse(IReadOnlyList<SubtitleCandidat
 /// <summary>Acquires one opaque candidate through its server-side provider adapter.</summary>
 public sealed record AcquireVideoSubtitleRequest(string Provider, string CandidateId);
 
-/// <summary>Stable track identity created or reused by subtitle acquisition.</summary>
-public sealed record AcquireVideoSubtitleResponse(Guid TrackId, bool AlreadyPresent);
+/// <summary>Interactive graph that will download and import the selected candidate.</summary>
+public sealed record AcquireVideoSubtitleResponse(JobGraphReference Graph);
 
 /// <summary>Connectivity result for a configured subtitle provider.</summary>
 public sealed record SubtitleProviderTestResponse(bool Success, string Message);

@@ -1,8 +1,11 @@
 using Prismedia.Application.Videos;
 using Prismedia.Application.Subtitles;
 using Prismedia.Contracts.Media;
+using Prismedia.Contracts.Jobs;
 using Prismedia.Contracts.System;
 using Prismedia.Api.Security;
+using Prismedia.Application.Jobs;
+using Prismedia.Domain.Entities;
 
 namespace Prismedia.Api.Endpoints;
 
@@ -37,11 +40,7 @@ public static class VideoEndpoints {
             .WithName("AcquireVideoSubtitle")
             .WithSummary("Downloads and safely imports one provider subtitle candidate.")
             .RequireAdmin()
-            .Produces<AcquireVideoSubtitleResponse>()
-            .Produces<ApiProblem>(StatusCodes.Status404NotFound)
-            .Produces<ApiProblem>(StatusCodes.Status410Gone)
-            .Produces<ApiProblem>(StatusCodes.Status422UnprocessableEntity)
-            .Produces<ApiProblem>(StatusCodes.Status502BadGateway);
+            .Produces<AcquireVideoSubtitleResponse>(StatusCodes.Status202Accepted);
 
         var providers = routes.MapGroup("/api/subtitle-providers")
             .WithTags("Subtitle Providers")
@@ -84,33 +83,37 @@ public static class VideoEndpoints {
     private static async Task<IResult> AcquireSubtitleAsync(
         Guid id,
         AcquireVideoSubtitleRequest request,
-        ISubtitleAcquisitionService subtitles,
+        IJobQueueService jobs,
         CancellationToken cancellationToken) {
-        try {
-            var result = await subtitles.AcquireAsync(
-                id,
-                request.Provider,
-                request.CandidateId,
-                cancellationToken);
-            return Results.Ok(new AcquireVideoSubtitleResponse(result.TrackId, result.AlreadyPresent));
-        } catch (KeyNotFoundException exception) {
-            return Results.NotFound(new ApiProblem(ApiProblemCodes.EntityNotFound, exception.Message));
-        } catch (SubtitleCandidateUnavailableException exception) {
-            return Results.Json(
-                new ApiProblem(ApiProblemCodes.SubtitleCandidateUnavailable, exception.Message),
-                statusCode: StatusCodes.Status410Gone);
-        } catch (SubtitleImportException exception) {
-            return Results.UnprocessableEntity(
-                new ApiProblem(ApiProblemCodes.SubtitleImportFailed, exception.Message));
-        } catch (SubtitleProviderUnavailableException exception) {
-            return Results.Json(
-                new ApiProblem(ApiProblemCodes.SubtitleProviderUnavailable, exception.Message),
-                statusCode: StatusCodes.Status502BadGateway);
-        } catch (ArgumentOutOfRangeException exception) {
-            return Results.BadRequest(new ApiProblem(ApiProblemCodes.SubtitleProviderUnavailable, exception.Message));
-        } catch (InvalidOperationException exception) {
-            return Results.BadRequest(new ApiProblem(ApiProblemCodes.SubtitleProviderUnavailable, exception.Message));
-        }
+        var payload = new ManualSubtitleAcquisitionPayload(id, request.Provider, request.CandidateId);
+        var job = await jobs.EnqueueAsync(
+            new EnqueueJobRequest(
+                JobType.AcquireSubtitle,
+                payload.ToJson(),
+                TargetEntityKind: EntityKind.Video.ToCode(),
+                TargetEntityId: id.ToString(),
+                Origin: JobGraphOrigin.Interactive,
+                ResourceKey: JobResourceKeys.Entity(id.ToString())),
+            cancellationToken);
+        var contract = new JobRun(
+            job.Id,
+            job.Type,
+            job.Status,
+            job.Progress,
+            job.Message,
+            job.TargetEntityKind,
+            job.TargetEntityId,
+            job.TargetLabel,
+            job.CreatedAt,
+            job.StartedAt,
+            job.FinishedAt);
+        var graph = new JobGraphReference(
+            job.GraphId ?? throw new InvalidOperationException("Subtitle acquisition must create a durable graph."),
+            job.GraphOrigin ?? JobGraphOrigin.Interactive,
+            job.TargetEntityKind,
+            job.TargetEntityId,
+            contract);
+        return Results.Accepted($"/api/jobs/graphs/{graph.Id}", new AcquireVideoSubtitleResponse(graph));
     }
 
     private static async Task<OpenSubtitlesConfigurationResponse> GetOpenSubtitlesConfigurationAsync(

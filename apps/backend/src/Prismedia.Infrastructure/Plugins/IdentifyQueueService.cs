@@ -444,16 +444,7 @@ public sealed partial class IdentifyQueueService : IIdentifyQueueService {
         row.CompletedAt = null;
 
         var payload = new IdentifySearchPayload(entity.Id, row.ProviderCode, request.Query, hideNsfw, isForeground);
-        string? resourceKey = null;
-        if (row.ProviderCode is { } providerCode &&
-            await _identify.GetExecutionPolicyAsync(providerCode, entity.KindCode, cancellationToken) is { } execution) {
-            resourceKey = JobResourceKeys.Plugin(providerCode);
-            await _jobs.DeclareResourceAsync(
-                resourceKey,
-                execution.MaxConcurrentInvocations,
-                TimeSpan.FromMilliseconds(execution.MinimumStartIntervalMs),
-                cancellationToken);
-        }
+        var resourceKey = await DeclareSearchResourceAsync(row.ProviderCode, entity, hideNsfw, cancellationToken);
         var job = await _jobs.EnqueueAsync(
             new EnqueueJobRequest(
                 JobType.IdentifySearch,

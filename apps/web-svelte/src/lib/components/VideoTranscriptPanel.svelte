@@ -451,11 +451,7 @@
     </div>
 
     {#if session.isAdmin}
-      <SubtitleSearchSurface
-        {videoId}
-        {onTracksChanged}
-        {onActiveTrackIdChange}
-      />
+      <SubtitleSearchSurface {videoId} />
     {/if}
   {/if}
 

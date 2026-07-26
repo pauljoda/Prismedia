@@ -523,6 +523,7 @@ export const JOB_TYPE = {
   generateAudioWaveform: "generate-audio-waveform",
   extractSubtitles: "extract-subtitles",
   acquireSubtitles: "acquire-subtitles",
+  acquireSubtitle: "acquire-subtitle",
   importMetadata: "import-metadata",
   refreshCollection: "refresh-collection",
   libraryMaintenance: "library-maintenance",

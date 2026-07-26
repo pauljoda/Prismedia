@@ -501,6 +501,13 @@ public sealed partial class JobQueueService : IJobQueueService {
                 }
             }
 
+            // Resource acquisition uses tracked rows so the lease insert and next-eligible start
+            // time share this claim transaction. The run/graph claims above use ExecuteUpdate;
+            // without this explicit save the in-memory resource reservation would be discarded at
+            // commit and concurrent workers could immediately exceed the declared policy.
+            if (claimedId is not null) {
+                await _db.SaveChangesAsync(cancellationToken);
+            }
             await transaction.CommitAsync(cancellationToken);
         } else {
             var candidates = _db.JobRuns

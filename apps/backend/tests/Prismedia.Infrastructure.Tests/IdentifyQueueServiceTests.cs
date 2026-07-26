@@ -1671,6 +1671,37 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
     }
 
     [Fact]
+    public async Task UnscopedSearchUsesTheStrictestDeclaredProviderPolicyAsADurableWalkGate() {
+        await using var db = CreateContext();
+        var entityId = Guid.NewGuid();
+        SeedProvider(db);
+        SeedEntity(db, entityId, EntityKind.Video.ToCode(), "Rate Limited Walk");
+        await db.SaveChangesAsync();
+        var identify = CreateIdentifyService(db, new ProposalProcessExecutor(), _tempRoot);
+        WriteExecutionPolicy(_tempRoot, maxConcurrentInvocations: 1, minimumStartIntervalMs: 1100);
+        var jobs = new JobQueueService(db);
+        var service = new IdentifyQueueService(
+            db,
+            identify,
+            new InMemoryIdentifyApplyProgressStore(),
+            jobs,
+            new EfIdentifyTargetEligibilityService(db));
+
+        await service.RequestSearchAsync(
+            entityId,
+            new IdentifyQueueSearchRequest(null, null),
+            hideNsfw: false,
+            CancellationToken.None);
+
+        var run = await db.JobRuns.AsNoTracking().SingleAsync(job => job.Type == JobType.IdentifySearch);
+        var resource = await db.JobResourceStates.AsNoTracking()
+            .SingleAsync(state => state.Key == JobResourceKeys.IdentifyProviderWalk);
+        Assert.Equal(JobResourceKeys.IdentifyProviderWalk, run.ResourceKey);
+        Assert.Equal(1, resource.MaxConcurrency);
+        Assert.Equal(1100, resource.MinimumStartIntervalMs);
+    }
+
+    [Fact]
     public async Task ApplyAsyncRejectsItemAwaitingItsSearch() {
         await using var db = CreateContext();
         var entityId = Guid.Parse("66666666-6666-6666-6666-666666666666");
@@ -1864,6 +1895,20 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
               ]
             }
             """);
+    }
+
+    private static void WriteExecutionPolicy(
+        string root,
+        int maxConcurrentInvocations,
+        int minimumStartIntervalMs) {
+        var path = Path.Combine(root, "manifest.json");
+        var manifest = File.ReadAllText(path);
+        File.WriteAllText(
+            path,
+            manifest.Replace(
+                "\"runtime\": \"dotnet-process\",",
+                $"\"runtime\": \"dotnet-process\",\n              \"execution\": {{ \"maxConcurrentInvocations\": {maxConcurrentInvocations}, \"minimumStartIntervalMs\": {minimumStartIntervalMs} }},",
+                StringComparison.Ordinal));
     }
 
     private static void SeedProvider(PrismediaDbContext db) {

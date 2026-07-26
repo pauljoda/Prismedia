@@ -89,6 +89,10 @@ public enum JobType {
     [Code("acquire-subtitles")]
     AcquireSubtitles,
 
+    /// <summary>Downloads and imports one user-selected subtitle candidate.</summary>
+    [Code("acquire-subtitle")]
+    AcquireSubtitle,
+
     // ── Metadata / collections ──────────────────────────────────
     /// <summary>Coordinates provider imports and metadata application.</summary>
     [Code("import-metadata")]
@@ -145,7 +149,7 @@ public enum JobType {
     [Code("acquisition-monitor")]
     AcquisitionMonitor,
 
-    /// <summary>Moves a completed acquisition payload into a library root, writes identify hints, and enqueues a book scan.</summary>
+    /// <summary>Moves a completed acquisition into a library root and materializes its exact entity scope.</summary>
     [Code("acquisition-import")]
     AcquisitionImport,
 

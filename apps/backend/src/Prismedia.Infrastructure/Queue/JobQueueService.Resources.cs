@@ -93,7 +93,10 @@ public sealed partial class JobQueueService {
                 .Where(lease => lease.ResourceKey == resourceKey && lease.ExpiresAt <= now)
                 .ExecuteDeleteAsync(cancellationToken);
             resource = await _db.JobResourceStates
-                .FromSqlInterpolated($"SELECT * FROM job_resource_states WHERE key = {resourceKey} FOR UPDATE")
+                // PostgreSQL system columns are not part of SELECT *. EF composes this query as a
+                // subquery and projects the mapped xmin concurrency token from its outer alias, so
+                // xmin must be named explicitly or the first real resource claim fails at runtime.
+                .FromSqlInterpolated($"SELECT *, xmin FROM job_resource_states WHERE key = {resourceKey} FOR UPDATE")
                 .SingleOrDefaultAsync(cancellationToken);
         } else {
             var expired = await _db.JobResourceLeases
