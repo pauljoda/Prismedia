@@ -59,8 +59,8 @@
 
   <ConfirmDialog
     open={confirmOpen}
-    title={`Delete the files for "${entity.title}"?`}
-    message="This permanently deletes the Entity's managed source files and every structural child beneath it. Monitored content goes back to Wanted and is searched again; unmonitored content is removed from the library. This cannot be undone."
+    title={`Delete "${entity.title}" permanently?`}
+    message="This permanently removes this Entity and every structural child from the library, deletes their managed source files and generated assets, and stops all monitoring and acquisition work — including stuck operations. This cannot be undone."
     confirmLabel="Delete files"
     danger
     onConfirm={handleConfirmDelete}

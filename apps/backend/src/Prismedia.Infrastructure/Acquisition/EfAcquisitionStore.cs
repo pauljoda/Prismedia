@@ -224,6 +224,32 @@ public sealed partial class EfAcquisitionStore(PrismediaDbContext db, IAcquisiti
         }
     }
 
+    /// <inheritdoc />
+    public async Task<bool> TryClaimEntityRemovalTeardownAsync(
+        Guid id,
+        string message,
+        CancellationToken cancellationToken) {
+        var row = await db.Acquisitions.FirstOrDefaultAsync(value => value.Id == id, cancellationToken);
+        if (row is null) {
+            return false;
+        }
+
+        row.TeardownOriginalStatus ??= row.Status;
+        row.TeardownIntent = AcquisitionTeardownIntent.Remove;
+        row.Status = AcquisitionStatus.Stopping;
+        row.StatusMessage = message;
+        row.TeardownReplacementAcquisitionId = null;
+        row.ImportClaimJobId = null;
+        row.UpdatedAt = DateTimeOffset.UtcNow;
+        try {
+            await db.SaveChangesAsync(cancellationToken);
+            return true;
+        } catch (DbUpdateConcurrencyException) {
+            db.Entry(row).State = EntityState.Detached;
+            return false;
+        }
+    }
+
     public async Task<bool> DeleteAsync(Guid id, CancellationToken cancellationToken) {
         var row = await db.Acquisitions.FirstOrDefaultAsync(row => row.Id == id, cancellationToken);
         if (row is null) {

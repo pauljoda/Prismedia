@@ -8,10 +8,10 @@ namespace Prismedia.Api.Endpoints;
 /// DELETE /api/entities/{id} and POST /api/entities/bulk-delete — permanently removes file-backed media
 /// entities (a movie, a series with its seasons and episodes, an album, …) from the library together with
 /// their source files and folders on disk. <c>deleteFiles=true</c> is required; library-only removal is
-/// refused because a scan would rediscover those files. Monitored content instead remains as
-/// wanted placeholders and immediately starts a clean reacquisition; unmonitored content tears down its
-/// monitors/acquisitions entirely. Destructive and irreversible; admin only. Taxonomy kinds (tags, people,
-/// studios) keep their own detach-only delete route.
+/// refused because a scan would rediscover those files. Monitoring, acquisition work, and stale lifecycle
+/// claims are torn down with the selected subtree; deleted content is never reverted to Wanted or reacquired.
+/// Destructive and irreversible; admin only. Taxonomy kinds (tags, people, studios) keep their own
+/// detach-only delete route.
 /// </summary>
 internal static class EntityDeleteEndpoint {
     internal static RouteGroupBuilder MapEntityDeleteEndpoint(this RouteGroupBuilder group) {
@@ -84,8 +84,6 @@ public sealed record EntityDeleteFailure(Guid Id, string Message);
 
 /// <summary>
 /// Outcome of a delete: how many entities were processed, how many on-disk paths went with them, any
-/// failures, and how many of the processed entities were REVERTED to wanted placeholders (they were
-/// under active monitoring, so their files were deleted but they stay in the library to be re-acquired)
-/// rather than removed outright.
+/// failures, and the legacy reverted count (always zero for full Entity removal).
 /// </summary>
 public sealed record EntityDeleteResponse(int Deleted, int FilesDeleted, IReadOnlyList<EntityDeleteFailure> Failures, int Reverted = 0);

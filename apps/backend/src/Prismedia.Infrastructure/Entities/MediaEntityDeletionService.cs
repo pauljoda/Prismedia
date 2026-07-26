@@ -16,11 +16,10 @@ namespace Prismedia.Infrastructure.Entities;
 
 /// <summary>
 /// EF-backed implementation of <see cref="IMediaEntityDeletionService"/>: resolves the entity's
-/// descendant tree and partitions it by direct monitor intent. Directly monitored targets plus their
-/// required structural ancestors survive; unmonitored sibling
-/// branches are removed, suppressed, and have their acquisition state torn down. Source paths are deleted
-/// through managed storage, generated assets are reconciled per retained/removed branch, and affected scans
-/// are queued to settle bookkeeping.
+/// descendant tree, claims its complete monitor/acquisition lifecycle, deletes every managed source path,
+/// and removes the entire selected subtree. Existing monitoring, in-flight work, and stale teardown claims
+/// never preserve or reacquire deleted content. Provider identities are suppressed so a monitored ancestor
+/// cannot recreate the removed branch, and affected scans are queued to settle bookkeeping.
 /// </summary>
 public sealed class MediaEntityDeletionService(
     PrismediaDbContext db,
@@ -28,7 +27,6 @@ public sealed class MediaEntityDeletionService(
     IManagedFileStorage storage,
     IWantedSuppressionStore suppressions,
     IAcquisitionRequestService acquisitions,
-    IMonitoredEntityRecovery monitoredRecovery,
     IJobQueueService jobs,
     AssetPathService assets,
     IEntityHierarchyReader hierarchy,
@@ -151,18 +149,13 @@ public sealed class MediaEntityDeletionService(
         var tree = await LoadTreeAsync(ids, cancellationToken);
         var identitiesByEntity = await LoadIdentitiesAsync(ids, cancellationToken);
 
-        // Direct Active monitor targets are the only new retention authority; DeletingFiles preserves that
-        // same immutable intent on retry. A parent/container monitor never blanket-owns descendants; child
-        // selection is represented by real child monitors created by the shared monitoring UI.
+        // Explicit deletion owns the complete selected subtree. Monitors still participate in the lifecycle
+        // snapshot and are torn down with their acquisitions, but they never retain or re-want content after
+        // the user confirms this irreversible operation.
         var targetedMonitors = await ListTargetedMonitorsAsync(ids, cancellationToken);
-        if (targetedMonitors.Any(monitor => monitor.Status == MonitorStatus.Stopping)) {
-            return Conflict(
-                "This Entity is still being unmonitored. Finish or retry that cleanup before deleting its files.");
-        }
-        var plan = BuildDeletionPlan(tree, targetedMonitors);
-        // Snapshot every acquisition before mutating monitors, disk, or Entity rows. Only directly monitored
-        // targets reacquire their newest acquisition; everything else is teardown, including unmonitored
-        // siblings and historical acquisitions attached to retained structural ancestors.
+        var plan = BuildDeletionPlan(tree);
+        // Snapshot the complete acquisition graph before mutating monitors, disk, or Entity rows. Every
+        // acquisition in the selected subtree is teardown, including upgrade children and stale history.
         var acquisitionIdsByEntity = new Dictionary<Guid, IReadOnlyList<Guid>>();
         foreach (var entityId in ids) {
             var entityAcquisitionIds = (await acquisitions.ListIdsForEntityAsync(entityId, cancellationToken))
@@ -174,82 +167,12 @@ public sealed class MediaEntityDeletionService(
         }
 
         var acquisitionIds = acquisitionIdsByEntity.Values.SelectMany(value => value).Distinct().ToArray();
-        // The request service owns lifecycle legality, while this EF adapter also snapshots concrete status
-        // for rows present in its unit of work. Fresh-claim revalidation uses both: an import that wins the
-        // Entity lease race cannot hide behind an unchanged acquisition id.
+        // Snapshot concrete statuses as well as graph membership so fresh-claim revalidation detects an
+        // import or queue transition that won the Entity lease race.
         var acquisitionStatuses = await db.Acquisitions.AsNoTracking()
             .Where(row => acquisitionIds.Contains(row.Id))
             .ToDictionaryAsync(row => row.Id, row => row.Status, cancellationToken);
-        var claimedReacquires = await db.Acquisitions.AsNoTracking()
-            .Where(row => acquisitionIds.Contains(row.Id)
-                && row.Status == AcquisitionStatus.Stopping
-                && row.TeardownIntent == AcquisitionTeardownIntent.Reacquire)
-            .Select(row => new {
-                row.Id,
-                row.EntityId,
-                row.TeardownReplacementAcquisitionId
-            })
-            .ToArrayAsync(cancellationToken);
-        var claimedReacquireIds = claimedReacquires.Select(row => row.Id).ToArray();
-        var claimedReacquireIdSet = claimedReacquireIds.ToHashSet();
-        var claimedReacquireTargetIds = claimedReacquires
-            .Where(row => row.EntityId.HasValue)
-            .Select(row => row.EntityId!.Value)
-            .ToHashSet();
-        var protectedReplacementIds = claimedReacquires
-            .Where(row => row.TeardownReplacementAcquisitionId.HasValue)
-            .Select(row => row.TeardownReplacementAcquisitionId!.Value)
-            .ToHashSet();
-
-        // Every direct monitor was frozen together before the first external effect. During resume, an
-        // Active target normally means its claimed acquisition was replaced successfully. The exception is
-        // the durable handoff window where the monitor already points at the replacement but the old
-        // Stopping/Reacquire owner still exists. Keep that target in the operation and protect its linked
-        // replacement so retry can finish the exact handoff instead of adopting or deleting newer work.
-        var completedDirectTargetIds = resumesManagedDeletion
-            ? targetedMonitors
-                .Where(monitor => monitor.Status == MonitorStatus.Active
-                    && !claimedReacquireTargetIds.Contains(monitor.TargetEntityId))
-                .Select(monitor => monitor.TargetEntityId)
-                .ToHashSet()
-            : [];
-        var outstandingDirectTargetIds = plan.DirectTargetIds
-            .Where(targetId => !completedDirectTargetIds.Contains(targetId))
-            .ToHashSet();
-        var operationAcquisitionsByEntity = acquisitionIdsByEntity
-            .Where(pair => !completedDirectTargetIds.Contains(pair.Key))
-            .ToDictionary(pair => pair.Key, pair => pair.Value);
-        var reacquireByEntity = operationAcquisitionsByEntity
-            .Where(pair => outstandingDirectTargetIds.Contains(pair.Key))
-            .ToDictionary(
-                pair => pair.Key,
-                pair => {
-                    var claimedId = pair.Value.FirstOrDefault(claimedReacquireIdSet.Contains);
-                    return claimedId != Guid.Empty ? claimedId : pair.Value[0];
-                });
-        var reacquireIds = reacquireByEntity.Values.Distinct().ToArray();
-        var reacquireIdSet = reacquireIds.ToHashSet();
-        var deleteAcquisitionIds = operationAcquisitionsByEntity.Values
-            .SelectMany(value => value)
-            .Distinct()
-            .Where(acquisitionId => !reacquireIdSet.Contains(acquisitionId)
-                && !protectedReplacementIds.Contains(acquisitionId))
-            .ToArray();
-
-        // Preflight the COMPLETE operation set. A mixed tree must never delete an unmonitored sibling's
-        // files and only then discover its acquisition cannot be removed safely.
-        foreach (var acquisitionId in reacquireIds) {
-            var eligibility = await acquisitions.GetReacquireEligibilityAsync(acquisitionId, cancellationToken);
-            if (!eligibility.CanReacquire) {
-                return Conflict(eligibility.Message ?? "A linked acquisition cannot be safely replaced right now.");
-            }
-        }
-        foreach (var acquisitionId in deleteAcquisitionIds) {
-            var eligibility = await acquisitions.GetRemovalEligibilityAsync(acquisitionId, cancellationToken);
-            if (!eligibility.CanRemove) {
-                return Conflict(eligibility.Message ?? "A linked acquisition cannot be safely removed right now.");
-            }
-        }
+        var deleteAcquisitionIds = acquisitionIds;
 
         // Deterministic disk ownership conflicts must be found before lifecycle claims. There is no useful
         // retry while another unrelated Entity owns the same folder/archive, so freezing monitors or
@@ -279,8 +202,6 @@ public sealed class MediaEntityDeletionService(
                 targetedMonitors,
                 acquisitionIdsByEntity,
                 acquisitionStatuses,
-                reacquireIds,
-                deleteAcquisitionIds,
                 physicalPreflight,
                 cancellationToken)) {
             // A completely fresh claim has not changed monitor/acquisition state yet and is safe to
@@ -296,9 +217,8 @@ public sealed class MediaEntityDeletionService(
         }
 
         var directMonitorIds = targetedMonitors
-            .Where(monitor => plan.DirectTargetIds.Contains(monitor.TargetEntityId)
-                && (monitor.Status == MonitorStatus.DeletingFiles
-                    || (!resumesManagedDeletion && monitor.Status == MonitorStatus.Active)))
+            .Where(monitor => monitor.Status == MonitorStatus.DeletingFiles
+                || monitor.Status == MonitorStatus.Active)
             .Select(monitor => monitor.Id)
             .Distinct()
             .ToArray();
@@ -307,21 +227,11 @@ public sealed class MediaEntityDeletionService(
                 "A monitor changed while managed file deletion was being claimed. No files were changed; refresh and retry Delete files.");
         }
 
-        // Claim every acquisition only after direct monitor intent is durably frozen. If one acquisition
-        // claim loses a race, DeletingFiles preserves this exact plan for retry instead of recomputing a
-        // different remove-vs-reacquire split around already-claimed acquisitions.
+        // Claim every acquisition only after active monitor intent is durably frozen. If one acquisition
+        // claim loses a race, DeletingFiles preserves this exact full-removal plan for retry.
         try {
-            foreach (var acquisitionId in reacquireIds) {
-                await acquisitions.ClaimTeardownAsync(
-                    acquisitionId,
-                    AcquisitionTeardownIntent.Reacquire,
-                    cancellationToken);
-            }
             foreach (var acquisitionId in deleteAcquisitionIds) {
-                await acquisitions.ClaimTeardownAsync(
-                    acquisitionId,
-                    AcquisitionTeardownIntent.Remove,
-                    cancellationToken);
+                await acquisitions.ClaimEntityRemovalTeardownAsync(acquisitionId, cancellationToken);
             }
         } catch (AcquisitionConfigurationException exception) {
             return Conflict(exception.Message);
@@ -330,7 +240,7 @@ public sealed class MediaEntityDeletionService(
         // Remote transfers are part of the destructive boundary, not best-effort cleanup. Confirm the
         // complete operation set absent only after durable local claims prevent requeue. If confirmation or
         // disk fails, those claims remain retryable while files, source rows, Entities, and suppression stay.
-        foreach (var acquisitionId in reacquireIds.Concat(deleteAcquisitionIds).Distinct()) {
+        foreach (var acquisitionId in deleteAcquisitionIds) {
             try {
                 await acquisitions.ConfirmTransferRemovedAsync(acquisitionId, cancellationToken);
             } catch (AcquisitionConfigurationException exception) {
@@ -338,20 +248,10 @@ public sealed class MediaEntityDeletionService(
             }
         }
 
-        // Keep active direct monitors and the monitor currently backing a reacquisition. Every monitor for
-        // a removed/structural-only branch, and every superseded acquisition monitor, is teardown state.
-        var keptMonitorIds = targetedMonitors
-            .Where(monitor =>
-                (IsFileDeletionIntentStatus(monitor.Status)
-                    && plan.DirectTargetIds.Contains(monitor.TargetEntityId))
-                || (monitor.AcquisitionId is { } acquisitionId && reacquireIdSet.Contains(acquisitionId)))
-            .Select(monitor => monitor.Id)
-            .ToHashSet();
+        // Every monitor targeting the removed subtree, directly or through an acquisition, is teardown state.
         var doomedTargetedMonitorIds = targetedMonitors
-            .Where(monitor => !keptMonitorIds.Contains(monitor.Id))
             .Select(monitor => monitor.Id)
             .ToArray();
-        var keptMonitorIdArray = keptMonitorIds.ToArray();
 
         // Re-read the physical plan immediately before the irreversible boundary. A new outside owner or a
         // changed source path is a real TOCTOU conflict: claims now deliberately remain retryable, while no
@@ -377,10 +277,9 @@ public sealed class MediaEntityDeletionService(
         var filesDeleted = physicalDeletion.PathsDeleted;
 
         var doomedMonitors = await db.Monitors
-            .Where(monitor => !keptMonitorIdArray.Contains(monitor.Id)
-                && (doomedTargetedMonitorIds.Contains(monitor.Id)
-                    || (monitor.AcquisitionId != null
-                        && deleteAcquisitionIds.Contains(monitor.AcquisitionId.Value))))
+            .Where(monitor => doomedTargetedMonitorIds.Contains(monitor.Id)
+                || (monitor.AcquisitionId != null
+                    && deleteAcquisitionIds.Contains(monitor.AcquisitionId.Value)))
             .ToArrayAsync(cancellationToken);
         if (doomedMonitors.Length > 0) {
             db.Monitors.RemoveRange(doomedMonitors);
@@ -414,8 +313,7 @@ public sealed class MediaEntityDeletionService(
                 cancellationToken);
         }
 
-        // Each removed branch root is blacklisted independently. Retained ancestors and monitored targets
-        // are never suppressed, while an unmonitored sibling remains deleted even under a container watch.
+        // Suppress each removed branch root so a surviving monitored ancestor cannot recreate it.
         foreach (var branchRootId in plan.RemovedBranchRootIds) {
             if (!identitiesByEntity.TryGetValue(branchRootId, out var branchIdentities)
                 || branchIdentities.Count == 0
@@ -425,88 +323,34 @@ public sealed class MediaEntityDeletionService(
             await suppressions.SuppressAsync(branchIdentities, branch.Kind, branch.Title, cancellationToken);
         }
 
-        var retainedIds = plan.RetainedIds.ToArray();
         var removedIds = plan.RemovedIds.ToArray();
-        entityAssetCleanup.Cleanup(retainedIds, preserveArtwork: true);
         var removedArtworkPaths = await db.EntityFiles.AsNoTracking()
             .Where(file => removedIds.Contains(file.EntityId) && file.Role != EntityFileRole.Source)
             .Select(file => file.Path)
             .Distinct()
             .ToArrayAsync(cancellationToken);
         entityAssetCleanup.Cleanup(removedIds, preserveArtwork: false, removedArtworkPaths);
-
-        var playbackDerivedRoles = new[] {
-            EntityFileRole.Preview, EntityFileRole.Sprite, EntityFileRole.Trickplay, EntityFileRole.Waveform,
-        };
-        var retainedSourceRows = await db.EntityFiles
-            .Where(file => retainedIds.Contains(file.EntityId)
-                && (file.Role == EntityFileRole.Source || playbackDerivedRoles.Contains(file.Role)))
-            .ToArrayAsync(cancellationToken);
-        db.EntityFiles.RemoveRange(retainedSourceRows);
-        var retainedRows = await db.Entities.Where(row => retainedIds.Contains(row.Id)).ToArrayAsync(cancellationToken);
-        var now = DateTimeOffset.UtcNow;
-        foreach (var row in retainedRows) {
-            if (plan.WantedIds.Contains(row.Id)) {
-                row.IsWanted = true;
-            }
-            row.UpdatedAt = now;
-        }
         var removedRows = await db.Entities.Where(row => removedIds.Contains(row.Id)).ToArrayAsync(cancellationToken);
         db.Entities.RemoveRange(removedRows);
         await db.SaveChangesAsync(cancellationToken);
 
-        // The old Imported row cannot be searched directly. Reacquire only direct targets; when no usable
-        // acquisition exists, the registry-driven recovery port performs the correct leaf/container action.
-        var entitiesWithReplacement = completedDirectTargetIds.ToHashSet();
-        foreach (var acquisitionId in reacquireIds) {
-            if (await acquisitions.ReacquireAsync(acquisitionId, cancellationToken) is { }) {
-                foreach (var pair in reacquireByEntity.Where(pair => pair.Value == acquisitionId)) {
-                    entitiesWithReplacement.Add(pair.Key);
-                }
-            } else {
-                logger.LogWarning(
-                    "MediaEntityDeletion: removed acquisition {AcquisitionId} without a replacement after reverting entity {EntityId} to wanted because a clean retry could not be created.",
-                    acquisitionId, id);
-            }
-        }
-
-        // ReacquireAsync atomically retargets each acquisition-linked DeletingFiles monitor and restores it
-        // Active. What remains is Entity-only intent; re-enable those exact rows only after every claimed
-        // acquisition has been replaced, then let shared recovery create any missing work.
-        await RestoreDirectMonitorsAsync(directMonitorIds, CancellationToken.None);
-
-        // The destructive boundary is now complete: disk/source rows are reconciled, retained monitor
-        // intent is Active again, and reacquisition handoffs own their new work. Release the stable Entity
-        // claim before ordinary monitored recovery re-enters the request pipeline.
+        // The destructive boundary is complete. The claimed Entity row may already be gone, which makes
+        // releasing its operation idempotently a no-op.
         await ReleaseEntityDeletionClaimAsync(
             id,
             entityDeletionClaim.OperationId,
             CancellationToken.None);
-        foreach (var targetId in plan.DirectTargetIds.Where(targetId => !entitiesWithReplacement.Contains(targetId))) {
-            try {
-                // Entity/source reconciliation is already committed and cannot be rolled back. Finish this
-                // best-effort handoff independently of request cancellation; an Active monitor is durable
-                // recovery intent and the scheduled sweep will retry if immediate maintenance is unavailable.
-                await monitoredRecovery.MaintainAsync(targetId, CancellationToken.None);
-            } catch (Exception exception) {
-                logger.LogWarning(
-                    exception,
-                    "MediaEntityDeletion: immediate monitored recovery failed for Entity {EntityId} after deletion committed; the Active monitor will retry on its scheduled sweep.",
-                    targetId);
-            }
-        }
 
         // Scans observe the reconciled model, never the physical/local half-state. Queue only after source
-        // rows, Entities, acquisitions, monitor restoration, and recovery all completed successfully.
+        // rows, Entities, acquisitions, and monitors have all been removed successfully.
         await QueueReconciliationScansAsync(physicalDeletion.TouchedRoots);
 
         logger.LogInformation(
-            "MediaEntityDeletion: reconciled \"{Title}\" ({Kind}) — {Retained} retained, {Removed} removed, {Files} on-disk paths removed.",
-            entity.Title, entity.KindCode, retainedRows.Length, removedRows.Length, filesDeleted);
+            "MediaEntityDeletion: removed \"{Title}\" ({Kind}) — {Removed} Entities and {Files} on-disk paths removed.",
+            entity.Title, entity.KindCode, removedRows.Length, filesDeleted);
         return new MediaEntityDeleteResult(
             true,
-            FilesDeleted: filesDeleted,
-            Reverted: plan.DirectTargetIds.Count > 0);
+            FilesDeleted: filesDeleted);
     }
 
     private static MediaEntityDeleteResult Conflict(string message) =>
@@ -565,8 +409,7 @@ public sealed class MediaEntityDeletionService(
             var root = lockedEntities.FirstOrDefault(row => row.Id == entityId);
             if (root is null
                 || lockedEntities.Any(row => row.Id != entityId && row.LifecycleClaimKind != null)
-                || root.LifecycleClaimKind is not (null or EntityLifecycleClaimKind.DeletingFiles)
-                || lockedMonitors.Any(row => row.Status == MonitorStatus.Stopping)) {
+                || root.LifecycleClaimKind is not (null or EntityLifecycleClaimKind.DeletingFiles)) {
                 return null;
             }
 
@@ -597,10 +440,9 @@ public sealed class MediaEntityDeletionService(
                     lockedMonitors.Add(locked);
                 }
             }
-            if (lockedMonitors.Any(row => row.Status == MonitorStatus.Stopping)
-                || (!resumed
-                    && !allowLegacyResume
-                    && lockedMonitors.Any(row => row.Status == MonitorStatus.DeletingFiles))) {
+            if (!resumed
+                && !allowLegacyResume
+                && lockedMonitors.Any(row => row.Status == MonitorStatus.DeletingFiles)) {
                 return null;
             }
 
@@ -658,9 +500,8 @@ public sealed class MediaEntityDeletionService(
                     .SetProperty(row => row.LifecycleClaimedAt, (DateTimeOffset?)null)
                     .SetProperty(row => row.UpdatedAt, now), cancellationToken);
             if (released > 0) {
-                // ExecuteUpdate intentionally bypasses the change tracker. This scoped DbContext already
-                // tracks the claim owner from claim/reconciliation; synchronize it before immediate
-                // monitored recovery re-enters Writer/monitor queries and identity-resolves that instance.
+                // ExecuteUpdate intentionally bypasses the change tracker. Keep this scoped context in sync
+                // in case post-delete reconciliation still identity-resolves the tracked claim owner.
                 var tracked = db.ChangeTracker.Entries<EntityRow>()
                     .FirstOrDefault(entry => entry.Entity.Id == entityId);
                 if (tracked is not null) {
@@ -700,8 +541,6 @@ public sealed class MediaEntityDeletionService(
         IReadOnlyList<TargetedMonitor> expectedMonitors,
         IReadOnlyDictionary<Guid, IReadOnlyList<Guid>> expectedAcquisitionsByEntity,
         IReadOnlyDictionary<Guid, AcquisitionStatus> expectedAcquisitionStatuses,
-        IReadOnlyCollection<Guid> expectedReacquireIds,
-        IReadOnlyCollection<Guid> expectedRemovalIds,
         PhysicalDeletionPreparation expectedPhysicalPlan,
         CancellationToken cancellationToken) {
         var currentEntityIds = (await hierarchy.ListSubtreeIdsAsync(
@@ -751,23 +590,6 @@ public sealed class MediaEntityDeletionService(
             }
         }
 
-        // Status equality catches the concrete EF race; eligibility is the application-owned invariant and
-        // also covers checkpoint/filesystem conditions that are not represented by the public status alone.
-        foreach (var acquisitionId in expectedReacquireIds) {
-            if (!(await acquisitions.GetReacquireEligibilityAsync(
-                    acquisitionId,
-                    cancellationToken)).CanReacquire) {
-                return false;
-            }
-        }
-        foreach (var acquisitionId in expectedRemovalIds) {
-            if (!(await acquisitions.GetRemovalEligibilityAsync(
-                    acquisitionId,
-                    cancellationToken)).CanRemove) {
-                return false;
-            }
-        }
-
         var currentPhysicalPlan = await PreparePhysicalDeletionAsync(
             rootEntityId,
             currentEntityIds,
@@ -811,35 +633,12 @@ public sealed class MediaEntityDeletionService(
                     .ToArray());
     }
 
-    private static DeletionPlan BuildDeletionPlan(
-        IReadOnlyDictionary<Guid, DeletionTreeEntity> tree,
-        IReadOnlyList<TargetedMonitor> targetedMonitors) {
-        var directTargetIds = targetedMonitors
-            .Where(monitor => IsFileDeletionIntentStatus(monitor.Status))
-            .Select(monitor => monitor.TargetEntityId)
-            .ToHashSet();
-        var wantedIds = directTargetIds.ToHashSet();
-        var retainedIds = wantedIds.ToHashSet();
-        foreach (var wantedId in wantedIds) {
-            var currentId = wantedId;
-            var visited = new HashSet<Guid> { wantedId };
-            while (tree.TryGetValue(currentId, out var current)
-                && current.ParentEntityId is { } parentId
-                && tree.ContainsKey(parentId)
-                && visited.Add(parentId)) {
-                retainedIds.Add(parentId);
-                currentId = parentId;
-            }
-        }
-
-        var removedIds = tree.Keys.Where(entityId => !retainedIds.Contains(entityId)).ToHashSet();
+    private static DeletionPlan BuildDeletionPlan(IReadOnlyDictionary<Guid, DeletionTreeEntity> tree) {
+        var removedIds = tree.Keys.ToHashSet();
         var removedBranchRootIds = removedIds
             .Where(entityId => tree[entityId].ParentEntityId is not { } parentId || !removedIds.Contains(parentId))
             .ToHashSet();
         return new DeletionPlan(
-            directTargetIds,
-            wantedIds,
-            retainedIds,
             removedIds,
             removedBranchRootIds);
     }
@@ -893,9 +692,6 @@ public sealed class MediaEntityDeletionService(
     private sealed record EntityDeletionClaim(Guid OperationId, bool Resumed);
 
     private sealed record DeletionPlan(
-        IReadOnlySet<Guid> DirectTargetIds,
-        IReadOnlySet<Guid> WantedIds,
-        IReadOnlySet<Guid> RetainedIds,
         IReadOnlySet<Guid> RemovedIds,
         IReadOnlySet<Guid> RemovedBranchRootIds);
 
@@ -938,9 +734,6 @@ public sealed class MediaEntityDeletionService(
         public static PhysicalDeletionResult Success { get; } = new(0, [], []);
         public bool Succeeded => Failures.Count == 0;
     }
-
-    private static bool IsFileDeletionIntentStatus(MonitorStatus status) =>
-        status is MonitorStatus.Active or MonitorStatus.DeletingFiles;
 
     private static string PhysicalDeletionConflictMessage(PhysicalDeletionResult result) {
         var failures = string.Join(
@@ -987,35 +780,6 @@ public sealed class MediaEntityDeletionService(
         }
         await db.SaveChangesAsync(cancellationToken);
         return true;
-    }
-
-    /// <summary>Re-enables only the direct monitor rows claimed by this completed managed deletion.</summary>
-    private async Task RestoreDirectMonitorsAsync(
-        IReadOnlyCollection<Guid> monitorIds,
-        CancellationToken cancellationToken) {
-        if (monitorIds.Count == 0) {
-            return;
-        }
-
-        var ids = monitorIds.ToArray();
-        var now = DateTimeOffset.UtcNow;
-        if (db.Database.IsRelational()) {
-            await db.Monitors
-                .Where(row => ids.Contains(row.Id) && row.Status == MonitorStatus.DeletingFiles)
-                .ExecuteUpdateAsync(setters => setters
-                    .SetProperty(row => row.Status, MonitorStatus.Active)
-                    .SetProperty(row => row.UpdatedAt, now), cancellationToken);
-            return;
-        }
-
-        var rows = await db.Monitors
-            .Where(row => ids.Contains(row.Id) && row.Status == MonitorStatus.DeletingFiles)
-            .ToArrayAsync(cancellationToken);
-        foreach (var row in rows) {
-            row.Status = MonitorStatus.Active;
-            row.UpdatedAt = now;
-        }
-        await db.SaveChangesAsync(cancellationToken);
     }
 
     private async Task QueueReconciliationScansAsync(

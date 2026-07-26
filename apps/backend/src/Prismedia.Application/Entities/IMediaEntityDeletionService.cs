@@ -13,13 +13,10 @@ public enum MediaEntityDeleteFailureKind {
 }
 
 /// <summary>Outcome of deleting one media entity together with its managed files on disk.</summary>
-/// <param name="Deleted">True when the delete was carried out (files removed; entities removed or reverted).</param>
+/// <param name="Deleted">True when the Entity subtree and its files were removed.</param>
 /// <param name="Message">Human-readable failure detail when <paramref name="Deleted"/> is false.</param>
 /// <param name="FilesDeleted">How many on-disk paths (files or folders) were removed.</param>
-/// <param name="Reverted">
-/// True when the entity was under active monitoring and therefore reverted to a wanted placeholder
-/// (files deleted, library entry kept) instead of being removed from the library.
-/// </param>
+/// <param name="Reverted">Compatibility field retained for older clients; full deletion always returns false.</param>
 /// <param name="FailureKind">Structured refusal reason when <paramref name="Deleted"/> is false.</param>
 public sealed record MediaEntityDeleteResult(
     bool Deleted,
@@ -42,24 +39,16 @@ public sealed record MediaEntityBulkDeleteResult(
     int Reverted);
 
 /// <summary>
-/// Application port for deleting file-backed media entities — the destructive counterpart to the
-/// taxonomy-only <see cref="IEntityManagementService"/>. Delete manages disk state and reconciles the
-/// directly linked acquisition/monitor lifecycle:
-/// <list type="bullet">
-/// <item>Directly targeted ACTIVE monitors retain their target Entities as wanted placeholders. Linked
-/// acquisitions are replaced with clean retries; directly monitored targets without an acquisition re-enter
-/// the registry-driven request flow. Structural ancestors survive only when needed to parent retained work.</item>
-/// <item>Unmonitored sibling branches are REMOVED and their root provider identities are suppressed so a
-/// future container sweep never re-requests them. An ancestor container monitor alone is not deletion
-/// authority, preserving explicit child-off intent.</item>
-/// </list>
-/// Both paths remove in-flight download-client data. Full removal hard-deletes acquisition state; revert
-/// replaces it with a clean search. There is no soft-delete or undo, and disk deletion is only guarded by
-/// the watched library roots.
+/// Application port for fully deleting file-backed media entities — the destructive counterpart to the
+/// taxonomy-only <see cref="IEntityManagementService"/>. Delete removes the selected Entity subtree,
+/// monitored or unmonitored, together with its monitor/acquisition state, generated assets, and managed
+/// source files. Provider identities are suppressed so a surviving monitored ancestor cannot rediscover the
+/// removed branch. There is no soft-delete, reacquisition, or undo, and disk deletion is guarded by watched
+/// library roots.
 /// </summary>
 public interface IMediaEntityDeletionService {
     /// <summary>
-    /// Deletes one media entity's disk presence per the monitor-aware semantics above.
+    /// Deletes one media Entity and its complete descendant tree per the full-removal semantics above.
     /// <paramref name="deleteFiles"/> must be true and permanently removes source files/folders from disk. Every source path
     /// must resolve inside a watched library root and delete successfully (already-missing counts as done),
     /// otherwise the operation is refused without changing library rows. Library-only removal is deliberately

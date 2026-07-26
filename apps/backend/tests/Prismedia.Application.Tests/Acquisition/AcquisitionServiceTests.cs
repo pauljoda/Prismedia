@@ -361,6 +361,41 @@ public sealed class AcquisitionServiceTests {
     }
 
     [Fact]
+    public async Task EntityRemovalClaimCanTakeOverAStuckImportAndClearItsPartialArtifacts() {
+        var harness = Harness(TransferInfo(RecordedClientId, AcquisitionStatus.Importing));
+        var import = PartialBookImportContext();
+        harness.Store.ImportContext = import;
+
+        Assert.True(await harness.Service.ClaimEntityRemovalTeardownAsync(
+            AcquisitionId,
+            CancellationToken.None));
+
+        Assert.Equal(
+            new AcquisitionTeardownClaim(AcquisitionTeardownIntent.Remove, AcquisitionStatus.Importing),
+            harness.Store.TeardownClaim);
+        Assert.Equal(AcquisitionStatus.Stopping, harness.Store.Status);
+        Assert.Equal([AcquisitionId], harness.JobCleanup.Cancelled);
+        Assert.Equal([import], harness.ImportCleanup.Cleaned);
+    }
+
+    [Fact]
+    public async Task EntityRemovalClaimOverridesAStuckReacquireClaim() {
+        var harness = Harness(TransferInfo(RecordedClientId, AcquisitionStatus.Stopping));
+        harness.Store.ForceTeardownClaim(new AcquisitionTeardownClaim(
+            AcquisitionTeardownIntent.Reacquire,
+            AcquisitionStatus.Imported));
+
+        Assert.True(await harness.Service.ClaimEntityRemovalTeardownAsync(
+            AcquisitionId,
+            CancellationToken.None));
+
+        Assert.Equal(
+            new AcquisitionTeardownClaim(AcquisitionTeardownIntent.Remove, AcquisitionStatus.Imported),
+            harness.Store.TeardownClaim);
+        Assert.Equal([AcquisitionId], harness.JobCleanup.Cancelled);
+    }
+
+    [Fact]
     public async Task PreserveWantedDeleteRemovesCloneWhenStoppingClaimWinsRetargetRace() {
         var harness = Harness(TransferInfo(RecordedClientId));
         var cloneId = Guid.NewGuid();
@@ -1360,6 +1395,8 @@ public sealed class AcquisitionServiceTests {
 
         public void ForceStatus(AcquisitionStatus status) => Status = status;
 
+        public void ForceTeardownClaim(AcquisitionTeardownClaim claim) => TeardownClaim = claim;
+
         public void SetTransferRuntimeState(string state) =>
             TransferPointer = TransferPointer! with { State = state };
 
@@ -1409,6 +1446,20 @@ public sealed class AcquisitionServiceTests {
             }
 
             TeardownClaim = new AcquisitionTeardownClaim(intent, expectedStatus);
+            await SetStatusAsync(id, AcquisitionStatus.Stopping, message, cancellationToken);
+            return true;
+        }
+
+        public async Task<bool> TryClaimEntityRemovalTeardownAsync(
+            Guid id,
+            string message,
+            CancellationToken cancellationToken) {
+            if (id != AcquisitionId || Status is null) {
+                return false;
+            }
+
+            var originalStatus = TeardownClaim?.OriginalStatus ?? Status.Value;
+            TeardownClaim = new AcquisitionTeardownClaim(AcquisitionTeardownIntent.Remove, originalStatus);
             await SetStatusAsync(id, AcquisitionStatus.Stopping, message, cancellationToken);
             return true;
         }

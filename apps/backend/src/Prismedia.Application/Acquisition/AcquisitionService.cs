@@ -108,6 +108,14 @@ public interface IAcquisitionRequestService {
         CancellationToken cancellationToken);
 
     /// <summary>
+    /// Durably takes over any local acquisition lifecycle for an explicit full Entity deletion, cancels its
+    /// jobs, and clears partial import artifacts. Unlike ordinary unmonitor/removal, this is the user's
+    /// escape hatch from stale importing, awaiting-selection, or competing teardown state.
+    /// </summary>
+    Task<bool> ClaimEntityRemovalTeardownAsync(Guid id, CancellationToken cancellationToken) =>
+        ClaimTeardownAsync(id, AcquisitionTeardownIntent.Remove, cancellationToken);
+
+    /// <summary>
     /// Strictly removes the recorded remote transfer and its data, or confirms it is already absent,
     /// without changing local acquisition, monitor, job, or history state. Missing/unreachable client
     /// configuration and client failures are actionable conflicts. Destructive Entity workflows call this
@@ -545,6 +553,27 @@ public sealed partial class AcquisitionService(
     }
 
     /// <inheritdoc />
+    public async Task<bool> ClaimEntityRemovalTeardownAsync(
+        Guid id,
+        CancellationToken cancellationToken) {
+        var detail = await store.GetAsync(id, cancellationToken);
+        if (detail is null) {
+            return false;
+        }
+
+        if (!await store.TryClaimEntityRemovalTeardownAsync(
+                id,
+                "Removing acquisition with its Entity.",
+                cancellationToken)) {
+            throw LifecycleChangedConflict();
+        }
+
+        await acquisitionJobs.CancelAsync(id, cancellationToken);
+        await CleanupInterruptedImportAsync(id, cancellationToken);
+        return true;
+    }
+
+    /// <inheritdoc />
     public Task ConfirmTransferRemovedAsync(Guid id, CancellationToken cancellationToken) =>
         RemoveTransferDataStrictAsync(id, cancellationToken);
 
@@ -593,7 +622,7 @@ public sealed partial class AcquisitionService(
             if (detail.Summary.Status == AcquisitionStatus.Imported) {
                 throw new AcquisitionConfigurationException(
                     ApiProblemCodes.AcquisitionInvalid,
-                    "This acquisition already owns library files. Use Delete files when you want to remove them and reacquire.");
+                    "This acquisition already owns library files. Use Delete files when you want to remove the Entity and its files.");
             }
             if (!await store.TryClaimTeardownAsync(
                     id,

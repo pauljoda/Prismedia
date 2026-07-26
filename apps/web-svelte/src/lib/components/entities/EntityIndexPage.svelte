@@ -402,8 +402,8 @@
 {:else if canDeleteMedia}
   <ConfirmDialog
     open={confirmDeleteOpen}
-    title={`Delete the files for ${pendingDeleteIds.length === 1 ? "this item" : `${pendingDeleteIds.length} items`}?`}
-    message={`This permanently deletes ${pendingDeleteIds.length === 1 ? "its" : "their"} files from disk — including structural children — and cannot be undone. Directly monitored Entities go back to Wanted and are searched again; unmonitored branches are removed. Parent monitoring alone never overrides a child you turned off.`}
+    title={`Delete ${pendingDeleteIds.length === 1 ? "this item" : `${pendingDeleteIds.length} items`} permanently?`}
+    message={`This permanently removes ${pendingDeleteIds.length === 1 ? "the Entity and every structural child" : "these Entities and every structural child"} from the library, deletes ${pendingDeleteIds.length === 1 ? "its" : "their"} managed source files and generated assets, and stops all monitoring and acquisition work — including stuck operations. This cannot be undone.`}
     confirmLabel="Delete files"
     danger
     onConfirm={handleConfirmDelete}

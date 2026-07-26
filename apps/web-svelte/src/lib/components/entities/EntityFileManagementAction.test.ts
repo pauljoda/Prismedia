@@ -50,6 +50,8 @@ describe("EntityFileManagementAction", () => {
     });
 
     await fireEvent.click(screen.getByRole("button", { name: /Delete files/ }));
+    expect(screen.getByText(/stops all monitoring and acquisition work/i)).toBeInTheDocument();
+    expect(screen.getByText(/including stuck operations/i)).toBeInTheDocument();
     await fireEvent.click(screen.getByRole("button", { name: "Confirm Delete files" }));
 
     await waitFor(() => expect(onReverted).toHaveBeenCalledOnce());

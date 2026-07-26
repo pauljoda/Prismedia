@@ -464,6 +464,16 @@ public interface IAcquisitionStore : IAcquisitionLifecycleStore {
         CancellationToken cancellationToken);
 
     /// <summary>
+    /// Atomically claims an acquisition for explicit Entity removal from any local lifecycle state. An
+    /// existing teardown claim is replaced with <see cref="AcquisitionTeardownIntent.Remove"/> because the
+    /// user has chosen to delete the owning Entity rather than preserve or reacquire it.
+    /// </summary>
+    Task<bool> TryClaimEntityRemovalTeardownAsync(
+        Guid id,
+        string message,
+        CancellationToken cancellationToken);
+
+    /// <summary>
     /// When the given acquisition is an upgrade child (its <c>UpgradeOfAcquisitionId</c> is set), returns the
     /// owned quality of the parent it must beat — used to run the child's search as an upgrade search. The
     /// returned record carries the parent's quality in its kind's vocabulary (a book rank, or a media ladder

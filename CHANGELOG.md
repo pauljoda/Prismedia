@@ -22,6 +22,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Release operations are now ready for channel publishing: the root package version is the source of truth, Docker builds validate the release metadata, pushes to `main` publish only the dev image, and alpha/beta/release images are published manually.
 
 ### Changed
+- Delete files now performs a complete removal: the selected media subtree, managed files, generated assets, monitors, acquisitions, and stuck lifecycle state are removed together instead of monitored content returning to Wanted.
 - Browse, Settings, navigation, ambient backgrounds, and missing artwork now share one restrained rainbow palette in deliberate spectrum order across the web and Apple apps.
 
 ### Added

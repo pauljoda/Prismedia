@@ -43,7 +43,7 @@ public sealed class MediaEntityDeletionServiceTests {
         var suppressions = new RecordingSuppressions();
         var acquisitions = new RecordingAcquisitions([seasonId]);
         var service = new MediaEntityDeletionService(
-            db, new FakeRoots(root), storage, suppressions, acquisitions, new RecordingRecovery(), new NullJobQueue(),
+            db, new FakeRoots(root), storage, suppressions, acquisitions, new NullJobQueue(),
             new Prismedia.Infrastructure.Media.Processing.AssetPathService(System.IO.Path.GetTempPath()),
             new EfEntityHierarchyReader(db),
             NullLogger<MediaEntityDeletionService>.Instance);
@@ -91,11 +91,10 @@ public sealed class MediaEntityDeletionServiceTests {
 
         var storage = new RecordingStorage();
         var acquisitions = new RecordingAcquisitions([seriesId]);
-        var recovery = new RecordingRecovery();
         var suppressions = new RecordingSuppressions();
         var service = new MediaEntityDeletionService(
             db, new FakeRoots(root), storage, suppressions, acquisitions,
-            recovery, new NullJobQueue(),
+            new NullJobQueue(),
             new Prismedia.Infrastructure.Media.Processing.AssetPathService(System.IO.Path.GetTempPath()),
             new EfEntityHierarchyReader(db),
             NullLogger<MediaEntityDeletionService>.Instance);
@@ -122,12 +121,11 @@ public sealed class MediaEntityDeletionServiceTests {
         Assert.Empty(acquisitions.ConfirmedTransferRemovals);
         Assert.Empty(acquisitions.Deleted);
         Assert.Empty(acquisitions.Reacquired);
-        Assert.Empty(recovery.Requested);
         Assert.Empty(suppressions.SuppressedIdentities);
     }
 
     [Fact]
-    public async Task ActivelyMonitoredContentRevertsToWantedInsteadOfBeingRemoved() {
+    public async Task ActivelyMonitoredSeasonWithAwaitingSelectionAcquisitionIsFullyRemoved() {
         await using var db = CreateContext();
         var root = new FileLibraryRoot(Guid.NewGuid(), "/media/tv", "TV", true, true, false, false, false, false);
         var (seriesId, seasonId, episodeId) = await SeedSeriesTreeAsync(db, root.Path, MonitorStatus.Active);
@@ -150,6 +148,10 @@ public sealed class MediaEntityDeletionServiceTests {
             CreatedAt = DateTimeOffset.UtcNow.AddDays(-1),
             UpdatedAt = DateTimeOffset.UtcNow.AddDays(-1)
         });
+        db.EntityExternalIds.Add(new EntityExternalIdRow {
+            Id = Guid.NewGuid(), EntityId = seasonId, Provider = " TMDBSEASON ", Value = " 8379:1 ",
+            CreatedAt = DateTimeOffset.UtcNow, UpdatedAt = DateTimeOffset.UtcNow
+        });
         await db.SaveChangesAsync();
 
         var storage = new RecordingStorage();
@@ -159,42 +161,38 @@ public sealed class MediaEntityDeletionServiceTests {
             RecordingAcquisitions.AcquisitionId,
             RecordingAcquisitions.OlderAcquisitionId
         ];
+        acquisitions.IneligibleReacquireIds.Add(RecordingAcquisitions.AcquisitionId);
         var service = new MediaEntityDeletionService(
             db, new FakeRoots(root), storage, suppressions, acquisitions,
-            new RecordingRecovery(), new NullJobQueue(),
+            new NullJobQueue(),
             new Prismedia.Infrastructure.Media.Processing.AssetPathService(System.IO.Path.GetTempPath()),
             new EfEntityHierarchyReader(db),
             NullLogger<MediaEntityDeletionService>.Instance);
 
-        // Deleting the directly monitored SEASON: disk state goes, library state reverts to wanted so
-        // the monitoring loop re-acquires it. The ancestor series monitor is not deletion authority.
+        // An explicit delete owns the whole selected season even when its active acquisition is in a
+        // non-imported state such as AwaitingSelection. Monitoring must not turn removal into reacquisition.
         var result = await service.DeleteAsync(seasonId, deleteFiles: true, CancellationToken.None);
 
         Assert.True(result.Deleted);
-        Assert.True(result.Reverted);
+        Assert.False(result.Reverted);
         Assert.Equal(["/media/tv/Clifford the Big Red Dog/Season 01"], storage.DeletedPaths);
-        // The directly monitored season survives as Wanted. Its unmonitored episode branch is removed;
-        // the season acquisition will materialize the correct structural children again after import.
-        var season = await db.Entities.SingleAsync(row => row.Id == seasonId);
-        Assert.True(season.IsWanted);
+        Assert.Null(await db.Entities.SingleOrDefaultAsync(row => row.Id == seasonId));
         Assert.Null(await db.Entities.SingleOrDefaultAsync(row => row.Id == episodeId));
-        Assert.Empty(await db.EntityFiles.Where(file => file.EntityId == seasonId).ToArrayAsync());
-        // The series and both its container monitor and the season's acquisition monitor stay. The
-        // acquisition is replaced only after the entity is durably Wanted + fileless, then immediately
-        // re-searched; it is never hard-deleted into an orphaned UI state.
         Assert.NotNull(await db.Entities.SingleOrDefaultAsync(row => row.Id == seriesId));
         var monitors = await db.Monitors.ToArrayAsync();
         Assert.Contains(monitors, monitor => monitor.EntityId == seriesId && monitor.Status == MonitorStatus.Active);
-        Assert.Contains(monitors, monitor => monitor.AcquisitionId == RecordingAcquisitions.AcquisitionId);
+        Assert.DoesNotContain(monitors, monitor => monitor.EntityId == seasonId);
+        Assert.DoesNotContain(monitors, monitor => monitor.AcquisitionId == RecordingAcquisitions.AcquisitionId);
         Assert.DoesNotContain(monitors, monitor => monitor.AcquisitionId == RecordingAcquisitions.OlderAcquisitionId);
-        Assert.Equal([RecordingAcquisitions.AcquisitionId], acquisitions.Reacquired);
-        Assert.Equal([RecordingAcquisitions.OlderAcquisitionId], acquisitions.Deleted);
-        Assert.True(acquisitions.ReacquireSawWantedFileless);
-        Assert.Empty(suppressions.Suppressed);
+        Assert.Empty(acquisitions.Reacquired);
+        Assert.Equal(
+            [RecordingAcquisitions.AcquisitionId, RecordingAcquisitions.OlderAcquisitionId],
+            acquisitions.Deleted.Order().ToArray());
+        Assert.Contains("tmdbseason:8379:1", suppressions.Suppressed);
     }
 
     [Fact]
-    public async Task ActiveDescendantAcquisitionBlocksMonitoredDeleteBeforeAnyMutation() {
+    public async Task FullDeleteOverridesActiveDescendantReacquisitionState() {
         await using var db = CreateContext();
         var root = new FileLibraryRoot(Guid.NewGuid(), "/media/tv", "TV", true, true, false, false, false, false);
         var (_, seasonId, episodeId) = await SeedSeriesTreeAsync(db, root.Path, MonitorStatus.Active);
@@ -217,13 +215,6 @@ public sealed class MediaEntityDeletionServiceTests {
             UpdatedAt = DateTimeOffset.UtcNow
         });
         await db.SaveChangesAsync();
-        var sourceFileIds = await db.EntityFiles
-            .Where(file => file.EntityId == seasonId || file.EntityId == episodeId)
-            .Select(file => file.Id)
-            .OrderBy(value => value)
-            .ToArrayAsync();
-        var monitorIds = await db.Monitors.Select(monitor => monitor.Id).ToArrayAsync();
-
         var storage = new RecordingStorage();
         var acquisitions = new RecordingAcquisitions([seasonId, episodeId]);
         acquisitions.AcquisitionIdsByEntity[seasonId] = [RecordingAcquisitions.AcquisitionId];
@@ -231,39 +222,36 @@ public sealed class MediaEntityDeletionServiceTests {
         acquisitions.IneligibleReacquireIds.Add(RecordingAcquisitions.ActiveAcquisitionId);
         var jobs = new NullJobQueue(hasPending: false);
         var cacheRoot = Path.Combine(Path.GetTempPath(), "prismedia-delete-tests", Guid.NewGuid().ToString());
-        var cacheDirectory = Path.Combine(cacheRoot, "videos", seasonId.ToString());
+        var cacheDirectory = Path.Combine(cacheRoot, "cache", "videos", seasonId.ToString());
         var cacheFile = Path.Combine(cacheDirectory, "preview.m3u8");
         Directory.CreateDirectory(cacheDirectory);
         await File.WriteAllTextAsync(cacheFile, "still owned by the imported entity");
         try {
             var service = new MediaEntityDeletionService(
                 db, new FakeRoots(root), storage, new RecordingSuppressions(), acquisitions,
-                new RecordingRecovery(), jobs,
+                jobs,
                 new Prismedia.Infrastructure.Media.Processing.AssetPathService(cacheRoot),
                 new EfEntityHierarchyReader(db),
                 NullLogger<MediaEntityDeletionService>.Instance);
 
             var result = await service.DeleteAsync(seasonId, deleteFiles: true, CancellationToken.None);
 
-            Assert.False(result.Deleted);
-            Assert.Equal(MediaEntityDeleteFailureKind.Conflict, result.FailureKind);
-            Assert.Contains("downloading", result.Message, StringComparison.OrdinalIgnoreCase);
-            Assert.Empty(storage.DeletedPaths);
-            Assert.True(File.Exists(cacheFile));
+            Assert.True(result.Deleted);
+            Assert.False(result.Reverted);
+            Assert.Equal(["/media/tv/Clifford the Big Red Dog/Season 01"], storage.DeletedPaths);
+            Assert.False(File.Exists(cacheFile));
+            Assert.Empty(await db.EntityFiles
+                .Where(file => file.EntityId == seasonId || file.EntityId == episodeId)
+                .ToArrayAsync());
+            Assert.Empty(await db.Entities
+                .Where(entity => entity.Id == seasonId || entity.Id == episodeId)
+                .ToArrayAsync());
+            Assert.Single(await db.Monitors.Where(monitor => monitor.EntityId != seasonId && monitor.EntityId != episodeId).ToArrayAsync());
             Assert.Equal(
-                sourceFileIds,
-                await db.EntityFiles
-                    .Where(file => file.EntityId == seasonId || file.EntityId == episodeId)
-                    .Select(file => file.Id)
-                    .OrderBy(value => value)
-                    .ToArrayAsync());
-            Assert.All(
-                await db.Entities.Where(entity => entity.Id == seasonId || entity.Id == episodeId).ToArrayAsync(),
-                entity => Assert.False(entity.IsWanted));
-            Assert.Equal(monitorIds, await db.Monitors.Select(monitor => monitor.Id).ToArrayAsync());
-            Assert.Empty(acquisitions.Deleted);
+                [RecordingAcquisitions.AcquisitionId, RecordingAcquisitions.ActiveAcquisitionId],
+                acquisitions.Deleted.Order().ToArray());
             Assert.Empty(acquisitions.Reacquired);
-            Assert.Empty(jobs.Enqueued);
+            Assert.Contains(jobs.Enqueued, job => job.Type == JobType.ScanLibrary);
         } finally {
             Directory.Delete(cacheRoot, recursive: true);
         }
@@ -281,10 +269,9 @@ public sealed class MediaEntityDeletionServiceTests {
         var suppressions = new RecordingSuppressions();
         var acquisitions = new RecordingAcquisitions([seasonId]);
         acquisitions.TransferRemovalFailureIds.Add(RecordingAcquisitions.AcquisitionId);
-        var recovery = new RecordingRecovery();
         var jobs = new NullJobQueue(hasPending: false);
         var service = new MediaEntityDeletionService(
-            db, new FakeRoots(root), storage, suppressions, acquisitions, recovery, jobs,
+            db, new FakeRoots(root), storage, suppressions, acquisitions, jobs,
             new Prismedia.Infrastructure.Media.Processing.AssetPathService(System.IO.Path.GetTempPath()),
             new EfEntityHierarchyReader(db),
             NullLogger<MediaEntityDeletionService>.Instance);
@@ -301,7 +288,6 @@ public sealed class MediaEntityDeletionServiceTests {
         Assert.Equal(monitorIds, await db.Monitors.Select(row => row.Id).OrderBy(value => value).ToArrayAsync());
         Assert.Empty(acquisitions.Deleted);
         Assert.Empty(acquisitions.Reacquired);
-        Assert.Empty(recovery.Requested);
         Assert.Empty(suppressions.SuppressedIdentities);
         Assert.Empty(jobs.Enqueued);
     }
@@ -336,9 +322,8 @@ public sealed class MediaEntityDeletionServiceTests {
         var suppressions = new RecordingSuppressions();
         var acquisitions = new RecordingAcquisitions([entityId]);
         acquisitions.TransferRemovalFailureIds.Add(RecordingAcquisitions.AcquisitionId);
-        var recovery = new RecordingRecovery();
         var service = new MediaEntityDeletionService(
-            db, new FakeRoots(root), storage, suppressions, acquisitions, recovery, new NullJobQueue(hasPending: false),
+            db, new FakeRoots(root), storage, suppressions, acquisitions, new NullJobQueue(hasPending: false),
             new Prismedia.Infrastructure.Media.Processing.AssetPathService(System.IO.Path.GetTempPath()),
             new EfEntityHierarchyReader(db),
             NullLogger<MediaEntityDeletionService>.Instance);
@@ -354,12 +339,11 @@ public sealed class MediaEntityDeletionServiceTests {
         Assert.NotNull(await db.Monitors.SingleOrDefaultAsync(row => row.Id == monitorId));
         Assert.Empty(acquisitions.Deleted);
         Assert.Empty(acquisitions.Reacquired);
-        Assert.Empty(recovery.Requested);
         Assert.Empty(suppressions.SuppressedIdentities);
     }
 
     [Fact]
-    public async Task StorageFailureLeavesRemoteRemovedLifecycleClaimedAndRetryReacquires() {
+    public async Task StorageFailureLeavesFullRemovalClaimedAndRetryCompletesIt() {
         await using var db = CreateContext();
         var root = new FileLibraryRoot(Guid.NewGuid(), "/media/movies", "Movies", true, true, false, false, false, false);
         var entityId = Guid.NewGuid();
@@ -381,12 +365,9 @@ public sealed class MediaEntityDeletionServiceTests {
         var storage = new RecordingStorage();
         storage.FailPaths.Add(path);
         var acquisitions = new RecordingAcquisitions([entityId], db);
-        var recovery = new RecordingRecovery(
-            db,
-            async () => Assert.Null((await db.Entities.FindAsync(entityId))?.LifecycleClaimKind));
         var jobs = new NullJobQueue(hasPending: false);
         var service = new MediaEntityDeletionService(
-            db, new FakeRoots(root), storage, new RecordingSuppressions(), acquisitions, recovery, jobs,
+            db, new FakeRoots(root), storage, new RecordingSuppressions(), acquisitions, jobs,
             new Prismedia.Infrastructure.Media.Processing.AssetPathService(System.IO.Path.GetTempPath()),
             new EfEntityHierarchyReader(db),
             NullLogger<MediaEntityDeletionService>.Instance);
@@ -396,10 +377,9 @@ public sealed class MediaEntityDeletionServiceTests {
         Assert.False(failed.Deleted);
         Assert.Equal(MediaEntityDeleteFailureKind.Conflict, failed.FailureKind);
         Assert.Equal(MonitorStatus.DeletingFiles, (await db.Monitors.SingleAsync(row => row.Id == monitorId)).Status);
-        Assert.Equal(AcquisitionTeardownIntent.Reacquire, acquisitions.TeardownClaims[RecordingAcquisitions.AcquisitionId]);
+        Assert.Equal(AcquisitionTeardownIntent.Remove, acquisitions.TeardownClaims[RecordingAcquisitions.AcquisitionId]);
         Assert.Equal([RecordingAcquisitions.AcquisitionId], acquisitions.ConfirmedTransferRemovals);
         Assert.Empty(acquisitions.Reacquired);
-        Assert.Empty(recovery.Requested);
         Assert.Empty(jobs.Enqueued);
         Assert.NotNull(await db.EntityFiles.SingleOrDefaultAsync(row => row.EntityId == entityId));
         var claimedEntity = await db.Entities.SingleAsync(row => row.Id == entityId);
@@ -411,15 +391,11 @@ public sealed class MediaEntityDeletionServiceTests {
         var retried = await service.DeleteAsync(entityId, deleteFiles: true, CancellationToken.None);
 
         Assert.True(retried.Deleted);
-        Assert.True(retried.Reverted);
-        Assert.Equal(MonitorStatus.Active, (await db.Monitors.SingleAsync(row => row.Id == monitorId)).Status);
-        var recoveredEntity = await db.Entities.SingleAsync(row => row.Id == entityId);
-        Assert.True(recoveredEntity.IsWanted);
-        Assert.Null(recoveredEntity.LifecycleClaimKind);
-        Assert.Null(recoveredEntity.LifecycleClaimId);
-        Assert.Null(recoveredEntity.LifecycleClaimedAt);
-        Assert.Empty(await db.EntityFiles.Where(row => row.EntityId == entityId && row.Role == EntityFileRole.Source).ToArrayAsync());
-        Assert.Equal([RecordingAcquisitions.AcquisitionId], acquisitions.Reacquired);
+        Assert.False(retried.Reverted);
+        Assert.Null(await db.Monitors.SingleOrDefaultAsync(row => row.Id == monitorId));
+        Assert.Null(await db.Entities.SingleOrDefaultAsync(row => row.Id == entityId));
+        Assert.Empty(acquisitions.Reacquired);
+        Assert.Equal([RecordingAcquisitions.AcquisitionId], acquisitions.Deleted);
         Assert.Equal(
             [RecordingAcquisitions.AcquisitionId, RecordingAcquisitions.AcquisitionId],
             acquisitions.ConfirmedTransferRemovals);
@@ -479,7 +455,6 @@ public sealed class MediaEntityDeletionServiceTests {
             new RecordingStorage(),
             new RecordingSuppressions(),
             acquisitions,
-            new RecordingRecovery(db),
             new NullJobQueue(),
             new Prismedia.Infrastructure.Media.Processing.AssetPathService(Path.GetTempPath()),
             new EfEntityHierarchyReader(db),
@@ -488,13 +463,14 @@ public sealed class MediaEntityDeletionServiceTests {
         var result = await service.DeleteAsync(entityId, deleteFiles: true, CancellationToken.None);
 
         Assert.True(result.Deleted);
-        Assert.Contains((parentAcquisitionId, AcquisitionTeardownIntent.Reacquire), acquisitions.ClaimedTeardowns);
+        Assert.Contains((parentAcquisitionId, AcquisitionTeardownIntent.Remove), acquisitions.ClaimedTeardowns);
         Assert.Contains((upgradeChildId, AcquisitionTeardownIntent.Remove), acquisitions.ClaimedTeardowns);
+        Assert.Contains(parentAcquisitionId, acquisitions.ConfirmedTransferRemovals);
         Assert.Contains(upgradeChildId, acquisitions.ConfirmedTransferRemovals);
+        Assert.Contains(parentAcquisitionId, acquisitions.Deleted);
         Assert.Contains(upgradeChildId, acquisitions.Deleted);
-        var monitor = await db.Monitors.SingleAsync(row => row.Id == monitorId);
-        Assert.Null(monitor.UpgradeChildAcquisitionId);
-        Assert.Equal(MonitorStatus.Active, monitor.Status);
+        Assert.Null(await db.Monitors.SingleOrDefaultAsync(row => row.Id == monitorId));
+        Assert.Null(await db.Entities.SingleOrDefaultAsync(row => row.Id == entityId));
     }
 
     [Fact]
@@ -510,7 +486,7 @@ public sealed class MediaEntityDeletionServiceTests {
         storage.NotFoundPaths.Add(path);
         var service = new MediaEntityDeletionService(
             db, new FakeRoots(root), storage, new RecordingSuppressions(), new RecordingAcquisitions([]),
-            new RecordingRecovery(), new NullJobQueue(hasPending: false),
+            new NullJobQueue(hasPending: false),
             new Prismedia.Infrastructure.Media.Processing.AssetPathService(Path.GetTempPath()),
             new EfEntityHierarchyReader(db),
             NullLogger<MediaEntityDeletionService>.Instance);
@@ -543,7 +519,7 @@ public sealed class MediaEntityDeletionServiceTests {
         var storage = new RecordingStorage();
         var service = new MediaEntityDeletionService(
             db, new FakeRoots(root), storage, new RecordingSuppressions(), new RecordingAcquisitions([]),
-            new RecordingRecovery(), new NullJobQueue(hasPending: false),
+            new NullJobQueue(hasPending: false),
             new Prismedia.Infrastructure.Media.Processing.AssetPathService(Path.GetTempPath()),
             new EfEntityHierarchyReader(db),
             NullLogger<MediaEntityDeletionService>.Instance);
@@ -583,7 +559,7 @@ public sealed class MediaEntityDeletionServiceTests {
         var acquisitions = new RecordingAcquisitions([galleryId]);
         var service = new MediaEntityDeletionService(
             db, new FakeRoots(root), storage, new RecordingSuppressions(), acquisitions,
-            new RecordingRecovery(), new NullJobQueue(),
+            new NullJobQueue(),
             new Prismedia.Infrastructure.Media.Processing.AssetPathService(Path.GetTempPath()),
             new EfEntityHierarchyReader(db),
             NullLogger<MediaEntityDeletionService>.Instance);
@@ -618,7 +594,7 @@ public sealed class MediaEntityDeletionServiceTests {
         var storage = new RecordingStorage();
         var service = new MediaEntityDeletionService(
             db, new FakeRoots(root), storage, new RecordingSuppressions(), new RecordingAcquisitions([]),
-            new RecordingRecovery(), new NullJobQueue(),
+            new NullJobQueue(),
             new Prismedia.Infrastructure.Media.Processing.AssetPathService(Path.GetTempPath()),
             new EfEntityHierarchyReader(db),
             NullLogger<MediaEntityDeletionService>.Instance);
@@ -651,7 +627,7 @@ public sealed class MediaEntityDeletionServiceTests {
         var storage = new RecordingStorage();
         var service = new MediaEntityDeletionService(
             db, new FakeRoots(root), storage, new RecordingSuppressions(), new RecordingAcquisitions([]),
-            new RecordingRecovery(), new NullJobQueue(hasPending: false),
+            new NullJobQueue(hasPending: false),
             new Prismedia.Infrastructure.Media.Processing.AssetPathService(Path.GetTempPath()),
             new EfEntityHierarchyReader(db),
             NullLogger<MediaEntityDeletionService>.Instance);
@@ -683,7 +659,7 @@ public sealed class MediaEntityDeletionServiceTests {
         var storage = new RecordingStorage();
         var service = new MediaEntityDeletionService(
             db, new FakeRoots(root), storage, new RecordingSuppressions(), new RecordingAcquisitions([]),
-            new RecordingRecovery(), new NullJobQueue(hasPending: false),
+            new NullJobQueue(hasPending: false),
             new Prismedia.Infrastructure.Media.Processing.AssetPathService(Path.GetTempPath()),
             new EfEntityHierarchyReader(db),
             NullLogger<MediaEntityDeletionService>.Instance);
@@ -707,7 +683,7 @@ public sealed class MediaEntityDeletionServiceTests {
         var storage = new RecordingStorage();
         var service = new MediaEntityDeletionService(
             db, new FakeRoots(root), storage, new RecordingSuppressions(), new RecordingAcquisitions([]),
-            new RecordingRecovery(), new NullJobQueue(hasPending: false),
+            new NullJobQueue(hasPending: false),
             new Prismedia.Infrastructure.Media.Processing.AssetPathService(Path.GetTempPath()),
             new EfEntityHierarchyReader(db),
             NullLogger<MediaEntityDeletionService>.Instance);
@@ -720,7 +696,7 @@ public sealed class MediaEntityDeletionServiceTests {
     }
 
     [Fact]
-    public async Task BulkDeleteCountsSelectedMonitoredChildAsCoveredWhenTheRootRetainsIt() {
+    public async Task BulkDeleteCountsSelectedMonitoredChildAsCoveredByFullRootRemoval() {
         await using var db = CreateContext();
         var root = new FileLibraryRoot(Guid.NewGuid(), "/media/tv", "TV", true, true, false, false, false, false);
         var seriesId = Guid.NewGuid();
@@ -744,7 +720,7 @@ public sealed class MediaEntityDeletionServiceTests {
         await db.SaveChangesAsync();
         var service = new MediaEntityDeletionService(
             db, new FakeRoots(root), new RecordingStorage(), new RecordingSuppressions(), new RecordingAcquisitions([]),
-            new RecordingRecovery(), new NullJobQueue(hasPending: false),
+            new NullJobQueue(hasPending: false),
             new Prismedia.Infrastructure.Media.Processing.AssetPathService(Path.GetTempPath()),
             new EfEntityHierarchyReader(db),
             NullLogger<MediaEntityDeletionService>.Instance);
@@ -752,15 +728,14 @@ public sealed class MediaEntityDeletionServiceTests {
         var result = await service.DeleteManyAsync([seasonId, seriesId], true, CancellationToken.None);
 
         Assert.Equal(2, result.Deleted);
-        Assert.Equal(1, result.Reverted);
+        Assert.Equal(0, result.Reverted);
         Assert.Empty(result.Failures);
-        Assert.NotNull(await db.Entities.SingleOrDefaultAsync(row => row.Id == seriesId));
-        Assert.True((await db.Entities.SingleAsync(row => row.Id == seasonId)).IsWanted);
+        Assert.Empty(await db.Entities.Where(row => row.Id == seriesId || row.Id == seasonId).ToArrayAsync());
         Assert.Empty(await db.EntityFiles.Where(row => row.EntityId == seriesId || row.EntityId == seasonId).ToArrayAsync());
     }
 
     [Fact]
-    public async Task EntityOnlyMonitorStaysFrozenAfterStorageFailureThenRecoversOnRetry() {
+    public async Task EntityOnlyMonitorStaysFrozenAfterStorageFailureThenIsRemovedOnRetry() {
         await using var db = CreateContext();
         var root = new FileLibraryRoot(Guid.NewGuid(), "/media/movies", "Movies", true, true, false, false, false, false);
         var entityId = Guid.NewGuid();
@@ -780,12 +755,9 @@ public sealed class MediaEntityDeletionServiceTests {
         await db.SaveChangesAsync();
         var storage = new RecordingStorage();
         storage.FailPaths.Add(path);
-        var recovery = new RecordingRecovery(
-            db,
-            async () => Assert.Null((await db.Entities.FindAsync(entityId))?.LifecycleClaimKind));
         var jobs = new NullJobQueue(hasPending: false);
         var service = new MediaEntityDeletionService(
-            db, new FakeRoots(root), storage, new RecordingSuppressions(), new RecordingAcquisitions([]), recovery, jobs,
+            db, new FakeRoots(root), storage, new RecordingSuppressions(), new RecordingAcquisitions([]), jobs,
             new Prismedia.Infrastructure.Media.Processing.AssetPathService(System.IO.Path.GetTempPath()),
             new EfEntityHierarchyReader(db),
             NullLogger<MediaEntityDeletionService>.Instance);
@@ -794,20 +766,18 @@ public sealed class MediaEntityDeletionServiceTests {
 
         Assert.False(failed.Deleted);
         Assert.Equal(MonitorStatus.DeletingFiles, (await db.Monitors.SingleAsync(row => row.Id == monitorId)).Status);
-        Assert.Empty(recovery.Requested);
         Assert.Empty(jobs.Enqueued);
 
         storage.FailPaths.Clear();
         var retried = await service.DeleteAsync(entityId, deleteFiles: true, CancellationToken.None);
 
         Assert.True(retried.Deleted);
-        Assert.Equal(MonitorStatus.Active, (await db.Monitors.SingleAsync(row => row.Id == monitorId)).Status);
-        Assert.Equal([entityId], recovery.Requested);
-        Assert.True(recovery.SawWantedFileless);
+        Assert.Null(await db.Monitors.SingleOrDefaultAsync(row => row.Id == monitorId));
+        Assert.Null(await db.Entities.SingleOrDefaultAsync(row => row.Id == entityId));
     }
 
     [Fact]
-    public async Task ReconciliationScanQueuesOnlyAfterEntityCommitAndRecovery() {
+    public async Task ReconciliationScanQueuesOnlyAfterFullEntityRemovalCommits() {
         await using var db = CreateContext();
         var root = new FileLibraryRoot(Guid.NewGuid(), "/media/movies", "Movies", true, true, false, false, false, false);
         var entityId = Guid.NewGuid();
@@ -820,15 +790,9 @@ public sealed class MediaEntityDeletionServiceTests {
         });
         await db.SaveChangesAsync();
         var jobs = new NullJobQueue(hasPending: false);
-        var recovery = new RecordingRecovery(db, async () => {
-            Assert.Empty(jobs.Enqueued);
-            Assert.True((await db.Entities.SingleAsync(row => row.Id == entityId)).IsWanted);
-            Assert.Empty(await db.EntityFiles.Where(row =>
-                row.EntityId == entityId && row.Role == EntityFileRole.Source).ToArrayAsync());
-        });
         var service = new MediaEntityDeletionService(
             db, new FakeRoots(root), new RecordingStorage(), new RecordingSuppressions(),
-            new RecordingAcquisitions([]), recovery, jobs,
+            new RecordingAcquisitions([]), jobs,
             new Prismedia.Infrastructure.Media.Processing.AssetPathService(System.IO.Path.GetTempPath()),
             new EfEntityHierarchyReader(db),
             NullLogger<MediaEntityDeletionService>.Instance);
@@ -836,12 +800,12 @@ public sealed class MediaEntityDeletionServiceTests {
         var result = await service.DeleteAsync(entityId, deleteFiles: true, CancellationToken.None);
 
         Assert.True(result.Deleted);
-        Assert.Equal([entityId], recovery.Requested);
+        Assert.Null(await db.Entities.SingleOrDefaultAsync(row => row.Id == entityId));
         Assert.Contains(jobs.Enqueued, job => job.Type == JobType.ScanLibrary);
     }
 
     [Fact]
-    public async Task PostCommitEntityOnlyRecoveryFailureStillReportsCommittedDeletion() {
+    public async Task FullRemovalDeletesActiveMonitorBeforeScanQueues() {
         await using var db = CreateContext();
         var root = new FileLibraryRoot(Guid.NewGuid(), "/media/movies", "Movies", true, true, false, false, false, false);
         var entityId = Guid.NewGuid();
@@ -858,11 +822,6 @@ public sealed class MediaEntityDeletionServiceTests {
             UpdatedAt = DateTimeOffset.UtcNow
         });
         await db.SaveChangesAsync();
-        var attempts = 0;
-        var recovery = new RecordingRecovery(db, () => {
-            attempts++;
-            throw new IOException("Simulated recovery dependency outage after Entity commit.");
-        });
         var jobs = new NullJobQueue(hasPending: false);
         var service = new MediaEntityDeletionService(
             db,
@@ -870,7 +829,6 @@ public sealed class MediaEntityDeletionServiceTests {
             new RecordingStorage(),
             new RecordingSuppressions(),
             new RecordingAcquisitions([]),
-            recovery,
             jobs,
             new Prismedia.Infrastructure.Media.Processing.AssetPathService(System.IO.Path.GetTempPath()),
             new EfEntityHierarchyReader(db),
@@ -879,15 +837,9 @@ public sealed class MediaEntityDeletionServiceTests {
         var result = await service.DeleteAsync(entityId, deleteFiles: true, CancellationToken.None);
 
         Assert.True(result.Deleted);
-        Assert.True(result.Reverted);
-        Assert.Equal(1, attempts);
-        Assert.True((await db.Entities.AsNoTracking().SingleAsync(row => row.Id == entityId)).IsWanted);
-        Assert.Empty(await db.EntityFiles.AsNoTracking()
-            .Where(row => row.EntityId == entityId && row.Role == EntityFileRole.Source)
-            .ToArrayAsync());
-        Assert.Equal(
-            MonitorStatus.Active,
-            (await db.Monitors.AsNoTracking().SingleAsync(row => row.Id == monitorId)).Status);
+        Assert.False(result.Reverted);
+        Assert.Null(await db.Entities.AsNoTracking().SingleOrDefaultAsync(row => row.Id == entityId));
+        Assert.Null(await db.Monitors.AsNoTracking().SingleOrDefaultAsync(row => row.Id == monitorId));
         Assert.Contains(jobs.Enqueued, job => job.Type == JobType.ScanLibrary);
     }
 
@@ -901,7 +853,7 @@ public sealed class MediaEntityDeletionServiceTests {
         await db.SaveChangesAsync();
         var service = new MediaEntityDeletionService(
             db, new FakeRoots(root), new RecordingStorage(), new RecordingSuppressions(),
-            new RecordingAcquisitions([]), new RecordingRecovery(), new NullJobQueue(hasPending: false, throwOnEnqueue: true),
+            new RecordingAcquisitions([]), new NullJobQueue(hasPending: false, throwOnEnqueue: true),
             new Prismedia.Infrastructure.Media.Processing.AssetPathService(System.IO.Path.GetTempPath()),
             new EfEntityHierarchyReader(db),
             NullLogger<MediaEntityDeletionService>.Instance);
@@ -914,7 +866,7 @@ public sealed class MediaEntityDeletionServiceTests {
     }
 
     [Fact]
-    public async Task MonitorChangeBeforeClaimBlocksBeforeAcquisitionClaimOrExternalEffects() {
+    public async Task FullRemovalDoesNotDependOnReacquisitionEligibility() {
         await using var db = CreateContext();
         var root = new FileLibraryRoot(Guid.NewGuid(), "/media/movies", "Movies", true, true, false, false, false, false);
         var entityId = Guid.NewGuid();
@@ -940,23 +892,24 @@ public sealed class MediaEntityDeletionServiceTests {
         var storage = new RecordingStorage();
         var service = new MediaEntityDeletionService(
             db, new FakeRoots(root), storage, new RecordingSuppressions(), acquisitions,
-            new RecordingRecovery(), new NullJobQueue(hasPending: false),
+            new NullJobQueue(hasPending: false),
             new Prismedia.Infrastructure.Media.Processing.AssetPathService(System.IO.Path.GetTempPath()),
             new EfEntityHierarchyReader(db),
             NullLogger<MediaEntityDeletionService>.Instance);
 
         var result = await service.DeleteAsync(entityId, deleteFiles: true, CancellationToken.None);
 
-        Assert.False(result.Deleted);
-        Assert.Equal(MediaEntityDeleteFailureKind.Conflict, result.FailureKind);
-        Assert.Equal(MonitorStatus.Paused, (await db.Monitors.SingleAsync(row => row.Id == monitorId)).Status);
-        Assert.Empty(acquisitions.ClaimedTeardowns);
-        Assert.Empty(acquisitions.ConfirmedTransferRemovals);
-        Assert.Empty(storage.AttemptedPaths);
+        Assert.True(result.Deleted);
+        Assert.Null(await db.Monitors.SingleOrDefaultAsync(row => row.Id == monitorId));
+        Assert.Equal(
+            [(RecordingAcquisitions.AcquisitionId, AcquisitionTeardownIntent.Remove)],
+            acquisitions.ClaimedTeardowns);
+        Assert.Equal([RecordingAcquisitions.AcquisitionId], acquisitions.ConfirmedTransferRemovals);
+        Assert.Equal(["/media/movies/Arrival/Arrival.mkv"], storage.DeletedPaths);
     }
 
     [Fact]
-    public async Task ImportEligibilityChangeAfterEntityClaimBlocksBeforeDiskOrAcquisitionTeardown() {
+    public async Task FullRemovalIgnoresAStaleReacquisitionEligibilityTransition() {
         await using var db = CreateContext();
         var root = new FileLibraryRoot(Guid.NewGuid(), "/media/movies", "Movies", true, true, false, false, false, false);
         var entityId = Guid.NewGuid();
@@ -989,7 +942,6 @@ public sealed class MediaEntityDeletionServiceTests {
             storage,
             new RecordingSuppressions(),
             acquisitions,
-            new RecordingRecovery(),
             new NullJobQueue(hasPending: false),
             new Prismedia.Infrastructure.Media.Processing.AssetPathService(Path.GetTempPath()),
             new EfEntityHierarchyReader(db),
@@ -1000,17 +952,18 @@ public sealed class MediaEntityDeletionServiceTests {
             deleteFiles: true,
             CancellationToken.None);
 
-        Assert.False(result.Deleted);
-        Assert.Equal(MediaEntityDeleteFailureKind.Conflict, result.FailureKind);
-        Assert.Equal(2, eligibilityChecks);
-        Assert.Empty(acquisitions.ClaimedTeardowns);
-        Assert.Empty(acquisitions.ConfirmedTransferRemovals);
-        Assert.Empty(storage.AttemptedPaths);
-        Assert.Null((await db.Entities.SingleAsync(row => row.Id == entityId)).LifecycleClaimKind);
+        Assert.True(result.Deleted);
+        Assert.Equal(0, eligibilityChecks);
+        Assert.Equal(
+            [(RecordingAcquisitions.AcquisitionId, AcquisitionTeardownIntent.Remove)],
+            acquisitions.ClaimedTeardowns);
+        Assert.Equal([RecordingAcquisitions.AcquisitionId], acquisitions.ConfirmedTransferRemovals);
+        Assert.Equal(["/media/movies/Arrival/Arrival.mkv"], storage.DeletedPaths);
+        Assert.Null(await db.Entities.SingleOrDefaultAsync(row => row.Id == entityId));
     }
 
     [Fact]
-    public async Task DeleteFilesCannotAdoptAnUnmonitorStoppingClaim() {
+    public async Task FullDeleteCompletesAStuckUnmonitorStoppingClaim() {
         await using var db = CreateContext();
         var root = new FileLibraryRoot(Guid.NewGuid(), "/media/movies", "Movies", true, true, false, false, false, false);
         var entityId = Guid.NewGuid();
@@ -1033,25 +986,26 @@ public sealed class MediaEntityDeletionServiceTests {
         var storage = new RecordingStorage();
         var service = new MediaEntityDeletionService(
             db, new FakeRoots(root), storage, new RecordingSuppressions(), acquisitions,
-            new RecordingRecovery(), new NullJobQueue(hasPending: false),
+            new NullJobQueue(hasPending: false),
             new Prismedia.Infrastructure.Media.Processing.AssetPathService(System.IO.Path.GetTempPath()),
             new EfEntityHierarchyReader(db),
             NullLogger<MediaEntityDeletionService>.Instance);
 
         var result = await service.DeleteAsync(entityId, deleteFiles: true, CancellationToken.None);
 
-        Assert.False(result.Deleted);
-        Assert.Equal(MediaEntityDeleteFailureKind.Conflict, result.FailureKind);
-        Assert.Contains("unmonitored", result.Message, StringComparison.OrdinalIgnoreCase);
-        Assert.Equal(MonitorStatus.Stopping, (await db.Monitors.SingleAsync(row => row.Id == monitorId)).Status);
-        Assert.NotNull(await db.EntityFiles.SingleOrDefaultAsync(row => row.EntityId == entityId));
-        Assert.Empty(acquisitions.ClaimedTeardowns);
-        Assert.Empty(acquisitions.ConfirmedTransferRemovals);
-        Assert.Empty(storage.AttemptedPaths);
+        Assert.True(result.Deleted);
+        Assert.False(result.Reverted);
+        Assert.Null(await db.Entities.SingleOrDefaultAsync(row => row.Id == entityId));
+        Assert.Null(await db.Monitors.SingleOrDefaultAsync(row => row.Id == monitorId));
+        Assert.Equal(
+            [(RecordingAcquisitions.AcquisitionId, AcquisitionTeardownIntent.Remove)],
+            acquisitions.ClaimedTeardowns);
+        Assert.Equal([RecordingAcquisitions.AcquisitionId], acquisitions.ConfirmedTransferRemovals);
+        Assert.Equal(["/media/movies/Arrival/Arrival.mkv"], storage.DeletedPaths);
     }
 
     [Fact]
-    public async Task FilelessClaimedReacquisitionCanResumeAfterLocalReconciliationCrash() {
+    public async Task FilelessClaimedReacquisitionIsRemovedByAFullDeleteRetry() {
         await using var db = CreateContext();
         var entityId = Guid.NewGuid();
         var monitorId = Guid.NewGuid();
@@ -1073,7 +1027,7 @@ public sealed class MediaEntityDeletionServiceTests {
         acquisitions.TeardownClaims[RecordingAcquisitions.AcquisitionId] = AcquisitionTeardownIntent.Reacquire;
         var service = new MediaEntityDeletionService(
             db, new FakeRoots(), new RecordingStorage(), new RecordingSuppressions(), acquisitions,
-            new RecordingRecovery(db), new NullJobQueue(hasPending: false),
+            new NullJobQueue(hasPending: false),
             new Prismedia.Infrastructure.Media.Processing.AssetPathService(System.IO.Path.GetTempPath()),
             new EfEntityHierarchyReader(db),
             NullLogger<MediaEntityDeletionService>.Instance);
@@ -1081,13 +1035,15 @@ public sealed class MediaEntityDeletionServiceTests {
         var result = await service.DeleteAsync(entityId, deleteFiles: true, CancellationToken.None);
 
         Assert.True(result.Deleted);
-        Assert.True(result.Reverted);
-        Assert.Equal([RecordingAcquisitions.AcquisitionId], acquisitions.Reacquired);
-        Assert.Equal(MonitorStatus.Active, (await db.Monitors.SingleAsync(row => row.Id == monitorId)).Status);
+        Assert.False(result.Reverted);
+        Assert.Empty(acquisitions.Reacquired);
+        Assert.Equal([RecordingAcquisitions.AcquisitionId], acquisitions.Deleted);
+        Assert.Null(await db.Entities.SingleOrDefaultAsync(row => row.Id == entityId));
+        Assert.Null(await db.Monitors.SingleOrDefaultAsync(row => row.Id == monitorId));
     }
 
     [Fact]
-    public async Task RetryAfterMonitorRetargetCrashFinishesTheDurablyLinkedReplacementExactlyOnce() {
+    public async Task FullRemovalDoesNotCreateAReacquisitionReplacement() {
         await using var db = CreateContext();
         var root = new FileLibraryRoot(Guid.NewGuid(), "/media/movies", "Movies", true, true, false, false, false, false);
         var entityId = Guid.NewGuid();
@@ -1144,42 +1100,22 @@ public sealed class MediaEntityDeletionServiceTests {
             new RecordingStorage(),
             new RecordingSuppressions(),
             acquisitionService,
-            new RecordingRecovery(db),
             jobs,
             new Prismedia.Infrastructure.Media.Processing.AssetPathService(System.IO.Path.GetTempPath()),
             new EfEntityHierarchyReader(db),
             NullLogger<MediaEntityDeletionService>.Instance);
 
-        await Assert.ThrowsAsync<IOException>(() =>
-            service.DeleteAsync(entityId, deleteFiles: true, CancellationToken.None));
+        var result = await service.DeleteAsync(entityId, deleteFiles: true, CancellationToken.None);
 
-        var teardownOwner = await db.Acquisitions.AsNoTracking().SingleAsync(row => row.Id == acquisitionId);
-        var replacementId = Assert.IsType<Guid>(teardownOwner.TeardownReplacementAcquisitionId);
-        Assert.Equal(AcquisitionStatus.Stopping, teardownOwner.Status);
-        Assert.Equal(AcquisitionTeardownIntent.Reacquire, teardownOwner.TeardownIntent);
-        Assert.Equal(
-            AcquisitionStatus.Pending,
-            (await db.Acquisitions.AsNoTracking().SingleAsync(row => row.Id == replacementId)).Status);
-        var retargetedMonitor = await db.Monitors.AsNoTracking().SingleAsync(row => row.Id == monitorId);
-        Assert.Equal((replacementId, MonitorStatus.Active), (retargetedMonitor.AcquisitionId, retargetedMonitor.Status));
+        Assert.True(result.Deleted);
+        Assert.Empty(await db.Acquisitions.AsNoTracking().ToArrayAsync());
+        Assert.Empty(await db.Monitors.AsNoTracking().ToArrayAsync());
+        Assert.Null(await db.Entities.AsNoTracking().SingleOrDefaultAsync(row => row.Id == entityId));
         Assert.DoesNotContain(jobs.Enqueued, job => job.Type == JobType.AcquisitionSearch);
-
-        var retried = await service.DeleteAsync(entityId, deleteFiles: true, CancellationToken.None);
-
-        Assert.True(retried.Deleted);
-        var survivingAcquisition = await db.Acquisitions.AsNoTracking().SingleAsync();
-        Assert.Equal(replacementId, survivingAcquisition.Id);
-        Assert.Equal(AcquisitionStatus.Searching, survivingAcquisition.Status);
-        Assert.Null(await db.Acquisitions.AsNoTracking().SingleOrDefaultAsync(row => row.Id == acquisitionId));
-        retargetedMonitor = await db.Monitors.AsNoTracking().SingleAsync(row => row.Id == monitorId);
-        Assert.Equal((replacementId, MonitorStatus.Active), (retargetedMonitor.AcquisitionId, retargetedMonitor.Status));
-        var search = Assert.Single(jobs.Enqueued, job => job.Type == JobType.AcquisitionSearch);
-        Assert.Equal(replacementId.ToString(), search.TargetEntityId);
-        Assert.Equal(replacementId, AcquisitionJobPayload.Parse(search.PayloadJson!).AcquisitionId);
     }
 
     [Fact]
-    public async Task MultiTargetRetrySkipsAnAlreadyReplacedTargetAndFinishesOutstandingClaims() {
+    public async Task MultiTargetFullRemovalNeverInvokesReacquisition() {
         await using var db = CreateContext();
         var root = new FileLibraryRoot(Guid.NewGuid(), "/media/tv", "TV", true, true, false, false, false, false);
         var seriesId = Guid.NewGuid();
@@ -1233,40 +1169,28 @@ public sealed class MediaEntityDeletionServiceTests {
             acquisitions.TeardownClaims.Remove(acquisitionId);
             return replacementId;
         };
-        var recovery = new RecordingRecovery(db);
         var service = new MediaEntityDeletionService(
             db, new FakeRoots(root), new RecordingStorage(), new RecordingSuppressions(), acquisitions,
-            recovery, new NullJobQueue(hasPending: false),
+            new NullJobQueue(hasPending: false),
             new Prismedia.Infrastructure.Media.Processing.AssetPathService(System.IO.Path.GetTempPath()),
             new EfEntityHierarchyReader(db),
             NullLogger<MediaEntityDeletionService>.Instance);
 
-        await Assert.ThrowsAsync<IOException>(() =>
-            service.DeleteAsync(seriesId, deleteFiles: true, CancellationToken.None));
+        var result = await service.DeleteAsync(seriesId, deleteFiles: true, CancellationToken.None);
 
-        Assert.Equal(MonitorStatus.Active, (await db.Monitors.SingleAsync(row => row.Id == firstMonitorId)).Status);
-        Assert.Equal(firstReplacementId, (await db.Monitors.SingleAsync(row => row.Id == firstMonitorId)).AcquisitionId);
-        Assert.Equal(MonitorStatus.DeletingFiles, (await db.Monitors.SingleAsync(row => row.Id == secondMonitorId)).Status);
-        Assert.Equal(AcquisitionTeardownIntent.Reacquire, acquisitions.TeardownClaims[RecordingAcquisitions.ActiveAcquisitionId]);
-        Assert.Empty(await db.EntityFiles.Where(row => row.EntityId == firstSeasonId || row.EntityId == secondSeasonId).ToArrayAsync());
-
-        var retried = await service.DeleteAsync(seriesId, deleteFiles: true, CancellationToken.None);
-
-        Assert.True(retried.Deleted);
-        Assert.Equal(MonitorStatus.Active, (await db.Monitors.SingleAsync(row => row.Id == secondMonitorId)).Status);
-        Assert.Equal(secondReplacementId, (await db.Monitors.SingleAsync(row => row.Id == secondMonitorId)).AcquisitionId);
-        Assert.DoesNotContain(firstReplacementId, acquisitions.ReacquireEligibilityIds);
-        Assert.DoesNotContain(firstReplacementId, acquisitions.ConfirmedTransferRemovals);
-        Assert.DoesNotContain(acquisitions.ClaimedTeardowns, claim => claim.Id == firstReplacementId);
-        Assert.Equal(1, acquisitions.Reacquired.Count(id => id == RecordingAcquisitions.AcquisitionId));
-        Assert.Equal(1, acquisitions.Reacquired.Count(id => id == RecordingAcquisitions.ActiveAcquisitionId));
-        Assert.Empty(recovery.Requested);
+        Assert.True(result.Deleted);
+        Assert.Empty(await db.Entities.ToArrayAsync());
+        Assert.Empty(await db.Monitors.ToArrayAsync());
+        Assert.Empty(acquisitions.Reacquired);
+        Assert.Equal(
+            [RecordingAcquisitions.AcquisitionId, RecordingAcquisitions.ActiveAcquisitionId],
+            acquisitions.Deleted.Order().ToArray());
     }
 
     [Theory]
     [InlineData(ActiveMonitorTarget.EntityId)]
     [InlineData(ActiveMonitorTarget.AcquisitionEntityId)]
-    public async Task ActiveMonitorEffectiveTargetsRevertTheEntityToWanted(ActiveMonitorTarget target) {
+    public async Task ActiveMonitorEffectiveTargetsAreRemovedWithTheEntity(ActiveMonitorTarget target) {
         await using var db = CreateContext();
         var root = new FileLibraryRoot(Guid.NewGuid(), "/media/movies", "Movies", true, true, false, false, false, false);
         var entityId = Guid.NewGuid();
@@ -1303,10 +1227,9 @@ public sealed class MediaEntityDeletionServiceTests {
 
         db.Monitors.Add(monitor);
         await db.SaveChangesAsync();
-        var recovery = new RecordingRecovery(db);
         var service = new MediaEntityDeletionService(
             db, new FakeRoots(root), new RecordingStorage(), new RecordingSuppressions(), acquisitions,
-            recovery, new NullJobQueue(),
+            new NullJobQueue(),
             new Prismedia.Infrastructure.Media.Processing.AssetPathService(System.IO.Path.GetTempPath()),
             new EfEntityHierarchyReader(db),
             NullLogger<MediaEntityDeletionService>.Instance);
@@ -1314,15 +1237,9 @@ public sealed class MediaEntityDeletionServiceTests {
         var result = await service.DeleteAsync(entityId, deleteFiles: true, CancellationToken.None);
 
         Assert.True(result.Deleted);
-        Assert.True(result.Reverted);
-        Assert.True((await db.Entities.SingleAsync(row => row.Id == entityId)).IsWanted);
-        Assert.Empty(await db.EntityFiles.Where(file => file.EntityId == entityId && file.Role == EntityFileRole.Source).ToArrayAsync());
-        if (target == ActiveMonitorTarget.AcquisitionEntityId) {
-            Assert.Empty(recovery.Requested);
-        } else {
-            Assert.Equal([entityId], recovery.Requested);
-            Assert.True(recovery.SawWantedFileless);
-        }
+        Assert.False(result.Reverted);
+        Assert.Null(await db.Entities.SingleOrDefaultAsync(row => row.Id == entityId));
+        Assert.Null(await db.Monitors.SingleOrDefaultAsync(row => row.Id == monitor.Id));
     }
 
     [Fact]
@@ -1343,10 +1260,9 @@ public sealed class MediaEntityDeletionServiceTests {
 
         var acquisitions = new RecordingAcquisitions([seasonId]);
         var suppressions = new RecordingSuppressions([seasonIdentity]);
-        var recovery = new RecordingRecovery();
         var service = new MediaEntityDeletionService(
             db, new FakeRoots(root), new RecordingStorage(), suppressions, acquisitions,
-            recovery, new NullJobQueue(),
+            new NullJobQueue(),
             new Prismedia.Infrastructure.Media.Processing.AssetPathService(System.IO.Path.GetTempPath()),
             new EfEntityHierarchyReader(db),
             NullLogger<MediaEntityDeletionService>.Instance);
@@ -1358,12 +1274,11 @@ public sealed class MediaEntityDeletionServiceTests {
         Assert.Empty(await db.Entities.Where(row => row.Id == seasonId || row.Id == episodeId).ToArrayAsync());
         Assert.Equal([RecordingAcquisitions.AcquisitionId], acquisitions.Deleted);
         Assert.Empty(acquisitions.Reacquired);
-        Assert.Empty(recovery.Requested);
         Assert.Contains(seasonIdentity, suppressions.SuppressedIdentities);
     }
 
     [Fact]
-    public async Task MixedTreeRetainsOnlyTheDirectlyMonitoredBranchAndRemovesItsSiblings() {
+    public async Task MixedTreeFullRemovalDeletesEveryMonitoredAndUnmonitoredBranch() {
         await using var db = CreateContext();
         var root = new FileLibraryRoot(Guid.NewGuid(), "/media/tv", "TV", true, true, false, false, false, false);
         var tree = await SeedMixedSeriesTreeAsync(db, root.Path);
@@ -1375,10 +1290,9 @@ public sealed class MediaEntityDeletionServiceTests {
             RecordingAcquisitions.OlderAcquisitionId
         ];
         acquisitions.AcquisitionIdsByEntity[tree.UnmonitoredSeasonId] = [RecordingAcquisitions.ActiveAcquisitionId];
-        var recovery = new RecordingRecovery(db);
         var service = new MediaEntityDeletionService(
             db, new FakeRoots(root), storage, suppressions, acquisitions,
-            recovery, new NullJobQueue(),
+            new NullJobQueue(),
             new Prismedia.Infrastructure.Media.Processing.AssetPathService(System.IO.Path.GetTempPath()),
             new EfEntityHierarchyReader(db),
             NullLogger<MediaEntityDeletionService>.Instance);
@@ -1386,31 +1300,21 @@ public sealed class MediaEntityDeletionServiceTests {
         var result = await service.DeleteAsync(tree.SeriesId, deleteFiles: true, CancellationToken.None);
 
         Assert.True(result.Deleted);
-        Assert.True(result.Reverted);
+        Assert.False(result.Reverted);
         Assert.Equal([$"{root.Path}/Mixed Show"], storage.DeletedPaths);
-        var survivors = await db.Entities.OrderBy(row => row.SortOrder).ToArrayAsync();
-        Assert.Equal([tree.SeriesId, tree.MonitoredSeasonId], survivors.Select(row => row.Id));
-        Assert.True(survivors.Single(row => row.Id == tree.SeriesId).IsWanted);
-        Assert.True(survivors.Single(row => row.Id == tree.MonitoredSeasonId).IsWanted);
-        Assert.Empty(await db.EntityFiles.Where(file =>
-            (file.EntityId == tree.SeriesId || file.EntityId == tree.MonitoredSeasonId)
-            && file.Role == EntityFileRole.Source).ToArrayAsync());
-        Assert.Equal([RecordingAcquisitions.AcquisitionId], acquisitions.Reacquired);
+        Assert.Empty(await db.Entities.ToArrayAsync());
+        Assert.Empty(acquisitions.Reacquired);
         Assert.Equal(
-            [RecordingAcquisitions.OlderAcquisitionId, RecordingAcquisitions.ActiveAcquisitionId],
-            acquisitions.Deleted);
-        Assert.Equal([tree.SeriesId], recovery.Requested);
-        Assert.Contains(tree.UnmonitoredSeasonIdentity, suppressions.SuppressedIdentities);
-        Assert.DoesNotContain(tree.SeriesIdentity, suppressions.SuppressedIdentities);
+            [RecordingAcquisitions.AcquisitionId, RecordingAcquisitions.OlderAcquisitionId, RecordingAcquisitions.ActiveAcquisitionId],
+            acquisitions.Deleted.Order().ToArray());
+        Assert.Contains(tree.SeriesIdentity, suppressions.SuppressedIdentities);
+        Assert.DoesNotContain(tree.UnmonitoredSeasonIdentity, suppressions.SuppressedIdentities);
         Assert.DoesNotContain(tree.MonitoredSeasonIdentity, suppressions.SuppressedIdentities);
-        var monitors = await db.Monitors.ToArrayAsync();
-        Assert.Equal(2, monitors.Length);
-        Assert.Contains(monitors, monitor => monitor.EntityId == tree.SeriesId && monitor.Status == MonitorStatus.Active);
-        Assert.Contains(monitors, monitor => monitor.EntityId == tree.MonitoredSeasonId && monitor.Status == MonitorStatus.Active);
+        Assert.Empty(await db.Monitors.ToArrayAsync());
     }
 
     [Fact]
-    public async Task MixedTreeRemovalConflictBlocksBeforeDiskOrEntityMutation() {
+    public async Task MixedTreeFullRemovalOverridesStaleAcquisitionEligibility() {
         await using var db = CreateContext();
         var root = new FileLibraryRoot(Guid.NewGuid(), "/media/tv", "TV", true, true, false, false, false, false);
         var tree = await SeedMixedSeriesTreeAsync(db, root.Path);
@@ -1430,30 +1334,25 @@ public sealed class MediaEntityDeletionServiceTests {
         ];
         acquisitions.AcquisitionIdsByEntity[tree.UnmonitoredSeasonId] = [RecordingAcquisitions.ActiveAcquisitionId];
         acquisitions.IneligibleRemovalIds.Add(RecordingAcquisitions.ActiveAcquisitionId);
-        var recovery = new RecordingRecovery();
         var service = new MediaEntityDeletionService(
             db, new FakeRoots(root), storage, suppressions, acquisitions,
-            recovery, new NullJobQueue(),
+            new NullJobQueue(),
             new Prismedia.Infrastructure.Media.Processing.AssetPathService(System.IO.Path.GetTempPath()),
             new EfEntityHierarchyReader(db),
             NullLogger<MediaEntityDeletionService>.Instance);
 
         var result = await service.DeleteAsync(tree.SeriesId, deleteFiles: true, CancellationToken.None);
 
-        Assert.False(result.Deleted);
-        Assert.Equal(MediaEntityDeleteFailureKind.Conflict, result.FailureKind);
-        Assert.Empty(storage.DeletedPaths);
-        Assert.Equal(entityIds, await db.Entities.Select(row => row.Id).OrderBy(value => value).ToArrayAsync());
-        Assert.Equal(sourceFileIds, await db.EntityFiles
-            .Where(file => file.Role == EntityFileRole.Source)
-            .Select(file => file.Id)
-            .OrderBy(value => value)
-            .ToArrayAsync());
-        Assert.Equal(monitorIds, await db.Monitors.Select(row => row.Id).OrderBy(value => value).ToArrayAsync());
-        Assert.Empty(acquisitions.Deleted);
+        Assert.True(result.Deleted);
+        Assert.Equal([$"{root.Path}/Mixed Show"], storage.DeletedPaths);
+        Assert.Empty(await db.Entities.ToArrayAsync());
+        Assert.Empty(await db.EntityFiles.ToArrayAsync());
+        Assert.Empty(await db.Monitors.ToArrayAsync());
+        Assert.Equal(
+            [RecordingAcquisitions.AcquisitionId, RecordingAcquisitions.OlderAcquisitionId, RecordingAcquisitions.ActiveAcquisitionId],
+            acquisitions.Deleted.Order().ToArray());
         Assert.Empty(acquisitions.Reacquired);
-        Assert.Empty(recovery.Requested);
-        Assert.Empty(suppressions.SuppressedIdentities);
+        Assert.Contains(tree.SeriesIdentity, suppressions.SuppressedIdentities);
     }
 
     [Fact]
@@ -1476,7 +1375,7 @@ public sealed class MediaEntityDeletionServiceTests {
         var jobs = new NullJobQueue(hasPending: false);
         var service = new MediaEntityDeletionService(
             db, new FakeRoots(root), storage, suppressions, acquisitions,
-            new RecordingRecovery(), jobs,
+            jobs,
             new Prismedia.Infrastructure.Media.Processing.AssetPathService(System.IO.Path.GetTempPath()),
             new EfEntityHierarchyReader(db),
             NullLogger<MediaEntityDeletionService>.Instance);
@@ -1528,7 +1427,7 @@ public sealed class MediaEntityDeletionServiceTests {
         var jobs = new NullJobQueue(hasPending: false);
         var service = new MediaEntityDeletionService(
             db, new FakeRoots(root), storage, new RecordingSuppressions(),
-            new RecordingAcquisitions([]), new RecordingRecovery(), jobs,
+            new RecordingAcquisitions([]), jobs,
             new Prismedia.Infrastructure.Media.Processing.AssetPathService(System.IO.Path.GetTempPath()),
             new EfEntityHierarchyReader(db),
             NullLogger<MediaEntityDeletionService>.Instance);
@@ -1546,54 +1445,46 @@ public sealed class MediaEntityDeletionServiceTests {
     }
 
     [Fact]
-    public async Task DirectParentMonitorRetainsOnlyItsOwnEntity() {
+    public async Task DirectParentMonitorIsRemovedWithItsFullTree() {
         await using var db = CreateContext();
         var root = new FileLibraryRoot(Guid.NewGuid(), "/media/tv", "TV", true, true, false, false, false, false);
         var (seriesId, seasonId, episodeId) = await SeedSeriesTreeAsync(db, root.Path, MonitorStatus.Active);
-        var recovery = new RecordingRecovery(db);
         var service = new MediaEntityDeletionService(
             db, new FakeRoots(root), new RecordingStorage(), new RecordingSuppressions(),
-            new RecordingAcquisitions([]), recovery, new NullJobQueue(),
+            new RecordingAcquisitions([]), new NullJobQueue(),
             new Prismedia.Infrastructure.Media.Processing.AssetPathService(System.IO.Path.GetTempPath()),
             new EfEntityHierarchyReader(db),
             NullLogger<MediaEntityDeletionService>.Instance);
 
         var result = await service.DeleteAsync(seriesId, deleteFiles: true, CancellationToken.None);
 
-        Assert.True(result.Reverted);
-        var rows = await db.Entities.Where(row => row.Id == seriesId || row.Id == seasonId || row.Id == episodeId).ToArrayAsync();
-        var series = Assert.Single(rows);
-        Assert.Equal(seriesId, series.Id);
-        Assert.True(series.IsWanted);
-        Assert.Equal([seriesId], recovery.Requested);
+        Assert.False(result.Reverted);
+        Assert.Empty(await db.Entities.Where(row => row.Id == seriesId || row.Id == seasonId || row.Id == episodeId).ToArrayAsync());
     }
 
     [Fact]
-    public async Task DirectParentMonitorDoesNotRetainAChildOffBranch() {
+    public async Task DirectParentMonitorDoesNotRetainAnyChildBranch() {
         await using var db = CreateContext();
         var root = new FileLibraryRoot(Guid.NewGuid(), "/media/tv", "TV", true, true, false, false, false, false);
         var (seriesId, seasonId, episodeId) = await SeedSeriesTreeAsync(db, root.Path, MonitorStatus.Active);
         var seasonIdentity = new ExternalIdentity("tmdbseason", "8379:1");
         db.EntityExternalIds.Add(NewExternalId(seasonId, seasonIdentity));
         await db.SaveChangesAsync();
-        var recovery = new RecordingRecovery(db);
         var suppressions = new RecordingSuppressions([seasonIdentity]);
         var service = new MediaEntityDeletionService(
             db, new FakeRoots(root), new RecordingStorage(), suppressions,
-            new RecordingAcquisitions([]), recovery, new NullJobQueue(),
+            new RecordingAcquisitions([]), new NullJobQueue(),
             new Prismedia.Infrastructure.Media.Processing.AssetPathService(System.IO.Path.GetTempPath()),
             new EfEntityHierarchyReader(db),
             NullLogger<MediaEntityDeletionService>.Instance);
 
         var result = await service.DeleteAsync(seriesId, deleteFiles: true, CancellationToken.None);
 
-        Assert.True(result.Reverted);
-        var series = await db.Entities.SingleAsync(row => row.Id == seriesId);
-        Assert.True(series.IsWanted);
+        Assert.False(result.Reverted);
+        Assert.Null(await db.Entities.SingleOrDefaultAsync(row => row.Id == seriesId));
         Assert.Null(await db.Entities.SingleOrDefaultAsync(row => row.Id == seasonId));
         Assert.Null(await db.Entities.SingleOrDefaultAsync(row => row.Id == episodeId));
-        Assert.Equal([seriesId], recovery.Requested);
-        Assert.Contains(seasonIdentity, suppressions.SuppressedIdentities);
+        Assert.DoesNotContain($"{seasonIdentity.Namespace}:{seasonIdentity.Value}", suppressions.Suppressed);
     }
 
     [Fact]
@@ -1605,7 +1496,7 @@ public sealed class MediaEntityDeletionServiceTests {
 
         var service = new MediaEntityDeletionService(
             db, new FakeRoots(), new RecordingStorage(), new RecordingSuppressions(),
-            new RecordingAcquisitions([]), new RecordingRecovery(), new NullJobQueue(),
+            new RecordingAcquisitions([]), new NullJobQueue(),
             new Prismedia.Infrastructure.Media.Processing.AssetPathService(System.IO.Path.GetTempPath()),
             new EfEntityHierarchyReader(db),
             NullLogger<MediaEntityDeletionService>.Instance);
@@ -1639,9 +1530,8 @@ public sealed class MediaEntityDeletionServiceTests {
         await db.SaveChangesAsync();
         var storage = new RecordingStorage();
         var acquisitions = new RecordingAcquisitions([entityId]);
-        var recovery = new RecordingRecovery();
         var service = new MediaEntityDeletionService(
-            db, new FakeRoots(), storage, new RecordingSuppressions(), acquisitions, recovery,
+            db, new FakeRoots(), storage, new RecordingSuppressions(), acquisitions,
             new NullJobQueue(hasPending: false),
             new Prismedia.Infrastructure.Media.Processing.AssetPathService(System.IO.Path.GetTempPath()),
             new EfEntityHierarchyReader(db),
@@ -1658,7 +1548,6 @@ public sealed class MediaEntityDeletionServiceTests {
         Assert.Empty(acquisitions.ConfirmedTransferRemovals);
         Assert.Empty(acquisitions.Deleted);
         Assert.Empty(acquisitions.Reacquired);
-        Assert.Empty(recovery.Requested);
     }
 
     /// <summary>A series → season → episode tree with source paths under <paramref name="basePath"/>, a container monitor, and a tmdb identity.</summary>
@@ -1826,33 +1715,6 @@ public sealed class MediaEntityDeletionServiceTests {
         }
     }
 
-    private sealed class RecordingRecovery(
-        PrismediaDbContext? db = null,
-        Func<Task>? onMaintain = null) : IMonitoredEntityRecovery {
-        public List<Guid> Requested { get; } = [];
-        public bool SawWantedFileless { get; private set; }
-
-        public Task<bool> MaintainAsync(Guid entityId, CancellationToken cancellationToken) =>
-            RequestIfMonitoredAndFilelessAsync(entityId, cancellationToken);
-
-        public async Task<bool> RequestIfMonitoredAndFilelessAsync(
-            Guid entityId,
-            CancellationToken cancellationToken) {
-            if (onMaintain is not null) {
-                await onMaintain();
-            }
-            Requested.Add(entityId);
-            if (db is not null) {
-                SawWantedFileless = await db.Entities.AsNoTracking()
-                    .AnyAsync(entity => entity.Id == entityId && entity.IsWanted, cancellationToken)
-                    && !await db.EntityFiles.AsNoTracking()
-                        .AnyAsync(file => file.EntityId == entityId && file.Role == EntityFileRole.Source, cancellationToken);
-            }
-
-            return true;
-        }
-    }
-
     public enum ActiveMonitorTarget {
         EntityId,
         AcquisitionEntityId
@@ -1935,6 +1797,14 @@ public sealed class MediaEntityDeletionServiceTests {
             }
             TeardownClaims[id] = intent;
             ClaimedTeardowns.Add((id, intent));
+            return Task.FromResult(true);
+        }
+
+        public Task<bool> ClaimEntityRemovalTeardownAsync(
+            Guid id,
+            CancellationToken cancellationToken) {
+            TeardownClaims[id] = AcquisitionTeardownIntent.Remove;
+            ClaimedTeardowns.Add((id, AcquisitionTeardownIntent.Remove));
             return Task.FromResult(true);
         }
 

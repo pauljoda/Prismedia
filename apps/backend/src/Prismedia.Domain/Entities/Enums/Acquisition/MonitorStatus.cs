@@ -17,9 +17,9 @@ public enum MonitorStatus {
     Paused,
 
     /// <summary>
-    /// Managed Delete files has durably frozen this monitor while remote and on-disk state is reconciled.
-    /// It retains reacquisition intent across partial failure but cannot search, pause, resume, or unmonitor
-    /// until the same Delete files operation finishes and restores it to <see cref="Active"/>.
+    /// Full Entity deletion has durably frozen this monitor while remote and on-disk state is reconciled.
+    /// It cannot search, pause, resume, or unmonitor; a retry resumes the same deletion until the monitor is
+    /// removed with its Entity subtree.
     /// </summary>
     [Code("deleting-files")]
     DeletingFiles,
