@@ -17,6 +17,7 @@
   import { firstSearchResult, searchEntities } from "$lib/search/entity-search";
   import { entityTerms } from "$lib/terminology";
   import { ENTITY_KIND } from "$lib/entities/entity-codes";
+  import { entityAccentForKind } from "$lib/entities/entity-accent";
   import { SEARCH_KIND_CONFIG } from "$lib/components/search-kind-config";
 
   const PAGE_SIZE = 20;
@@ -236,6 +237,7 @@
         {@const config = SEARCH_KIND_CONFIG[kind]}
         {@const Icon = config.icon}
         {@const active = activeKinds.has(kind)}
+        {@const kindAccent = entityAccentForKind(kind).primary}
         <button
           type="button"
           class={cn(
@@ -244,7 +246,7 @@
           )}
           onclick={() => toggleKind(kind)}
         >
-          <Icon class="h-3 w-3" />
+          <Icon class="h-3 w-3" color={kindAccent} aria-hidden="true" />
           {kindLabel(kind)}
         </button>
       {/each}
@@ -350,11 +352,12 @@
         {@const loadingMore = expanded[group.kind]?.loading ?? false}
         {@const hasMore = items.length < total}
         {@const Icon = SEARCH_KIND_CONFIG[group.kind].icon}
+        {@const groupAccent = entityAccentForKind(group.kind).primary}
 
         <section>
           <div class="mb-3 flex items-center justify-between">
             <div class="flex items-center gap-2">
-              <Icon class="h-4 w-4 text-text-muted" />
+              <Icon class="h-4 w-4" color={groupAccent} aria-hidden="true" />
               <span class="text-sm font-medium text-text-primary">
                 {kindLabel(group.kind)}
               </span>

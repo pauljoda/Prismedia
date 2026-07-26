@@ -24,6 +24,7 @@
   import { useNsfw } from "$lib/nsfw/store.svelte";
   import { discoverSearchProviders, discoverSearchSupport } from "$lib/requests/discovery-plugins";
   import { DISCOVERABLE_REQUEST_KINDS, numericValue } from "$lib/requests/request-helpers";
+  import { requestKindAccent, requestKindIcon } from "$lib/requests/request-kind-presentation";
   import { settingKeys, valueAsStringMap } from "$lib/settings/app-settings";
 
   interface Props {
@@ -300,6 +301,8 @@
         <span class="font-mono text-[0.72rem] text-text-muted">Content kind</span>
         <div class="flex flex-wrap gap-1.5" role="group" aria-label="Choose a content kind">
           {#each DISCOVERABLE_REQUEST_KINDS as kind (kind.kind)}
+            {@const KindIcon = requestKindIcon(kind.kind)}
+            {@const kindAccent = requestKindAccent(kind.kind)}
             <Button
               type="button"
               size="sm"
@@ -307,6 +310,7 @@
               aria-pressed={selectedKind === kind.kind}
               onclick={() => chooseKind(kind.kind)}
             >
+              <KindIcon class="h-3.5 w-3.5" color={kindAccent} aria-hidden="true" />
               {kind.label}
             </Button>
           {/each}

@@ -11,6 +11,7 @@
   import IdentifyProviderSelect from "./IdentifyProviderSelect.svelte";
   import { useIdentifyStore } from "./identify-store.svelte";
   import { entityKindIcon } from "$lib/entities/entity-kind-icons";
+  import { entityAccentForKind } from "$lib/entities/entity-accent";
 
   interface Props {
     entityKind: string;
@@ -34,6 +35,7 @@
   const activeProvider = $derived(kindProviders.find((p) => p.id === activeProviderId) ?? null);
 
   const KindIcon = $derived(entityKindIcon(entityKind));
+  const kindAccent = $derived(entityAccentForKind(entityKind).primary);
   const kindLabel = $derived(store.supportedKinds.find((k) => k.kind === entityKind)?.label ?? entityKind);
 
   const filteredEntities = $derived(
@@ -80,7 +82,7 @@
   <!-- Toolbar: filter toggle + provider selector + queue action -->
   <div class="flex flex-wrap items-center gap-2.5">
     <div class="flex items-center gap-1.5">
-      <KindIcon class="h-4 w-4 text-text-accent" />
+      <KindIcon class="h-4 w-4" color={kindAccent} aria-hidden="true" />
       <span class="font-heading text-[0.86rem] font-semibold text-text-primary">{kindLabel}</span>
       <span class="font-mono text-[0.7rem] text-text-muted">
         {showAll ? allEntities.length : unorganizedCount}

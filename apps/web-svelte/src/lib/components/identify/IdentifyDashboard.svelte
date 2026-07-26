@@ -12,6 +12,7 @@
   import { cn } from "@prismedia/ui-svelte";
   import { useIdentifyStore } from "./identify-store.svelte";
   import { entityKindIcon } from "$lib/entities/entity-kind-icons";
+  import { entityAccentForKind } from "$lib/entities/entity-accent";
 
   const store = useIdentifyStore();
 
@@ -69,6 +70,7 @@
       {#each store.supportedKinds as kindInfo (kindInfo.kind)}
         {@const hasPending = kindInfo.pending > 0}
         {@const KindIcon = entityKindIcon(kindInfo.kind)}
+        {@const kindAccent = entityAccentForKind(kindInfo.kind).primary}
         <button
           type="button"
           class={cn(
@@ -86,7 +88,7 @@
                   : "border-border-subtle bg-surface-3 text-text-secondary",
               )}
             >
-              <KindIcon class="h-[18px] w-[18px]" />
+              <KindIcon class="h-[18px] w-[18px]" color={kindAccent} aria-hidden="true" />
             </div>
           </div>
 

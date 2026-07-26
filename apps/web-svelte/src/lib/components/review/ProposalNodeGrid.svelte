@@ -4,6 +4,7 @@
   import type { EntityMetadataProposal } from "$lib/api/identify-types";
   import { proposalKindToEntityKind } from "$lib/entities/entity-codes";
   import { entityKindIcon } from "$lib/entities/entity-kind-icons";
+  import { entityAccentForKind } from "$lib/entities/entity-accent";
   import { aspectRatioForKind, toAspectRatioValue } from "$lib/entities/entity-thumbnail";
   import { childMeta, proposalImageUrl, proposalTitle } from "$lib/components/identify/identify-review-helpers";
 
@@ -40,6 +41,7 @@
     {@const title = proposalTitle(node)}
     {@const entityKind = proposalKindToEntityKind(node.targetKind)}
     {@const NodeIcon = entityKindIcon(entityKind)}
+    {@const nodeAccent = entityAccentForKind(entityKind).primary}
     {@const coverUrl = imageUrl(node)}
     {@const meta = childMeta(node) ?? []}
     {@const canSelect = selectionMode && selectable.has(node.proposalId)}
@@ -48,7 +50,7 @@
     {#snippet nodeContent()}
       <div class="proposal-node-cover" style={`aspect-ratio: ${toAspectRatioValue(aspectRatioForKind(entityKind))};`}>
         <div class="grid h-full w-full place-items-center">
-          <NodeIcon class="h-6 w-6 text-text-disabled" />
+          <NodeIcon class="h-6 w-6" color={nodeAccent} aria-hidden="true" />
         </div>
         {#if coverUrl}
           <img

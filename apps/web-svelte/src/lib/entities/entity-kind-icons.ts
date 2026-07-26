@@ -21,6 +21,7 @@ const KIND_ICON_MAP: Partial<Record<string, Component>> = {
   [ENTITY_KIND.audioLibrary]: Disc3,
   [ENTITY_KIND.audioTrack]: Music,
   [ENTITY_KIND.book]: BookOpen,
+  [ENTITY_KIND.bookAuthor]: Users,
   [ENTITY_KIND.bookChapter]: BookOpen,
   [ENTITY_KIND.bookPage]: BookOpen,
   [ENTITY_KIND.bookVolume]: BookOpen,

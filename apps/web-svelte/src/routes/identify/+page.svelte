@@ -20,6 +20,7 @@
   import IdentifyReviewParent from "$lib/components/identify/IdentifyReviewParent.svelte";
   import IdentifyReviewChild from "$lib/components/identify/IdentifyReviewChild.svelte";
   import { entityKindIcon } from "$lib/entities/entity-kind-icons";
+  import { entityAccentForKind } from "$lib/entities/entity-accent";
   import { useAppChrome } from "$lib/stores/app-chrome.svelte";
 
   const store = useIdentifyStore();
@@ -93,6 +94,7 @@
         {#each store.supportedKinds as kindInfo (kindInfo.kind)}
           {@const isActive = store.view.kind === "kind-tab" && store.view.entityKind === kindInfo.kind}
           {@const KindIcon = entityKindIcon(kindInfo.kind)}
+          {@const kindAccent = entityAccentForKind(kindInfo.kind).primary}
           <button
             type="button"
             class={cn(
@@ -103,7 +105,7 @@
             )}
             onclick={() => store.navigateToKind(kindInfo.kind)}
           >
-            <KindIcon class="h-3.5 w-3.5" />
+            <KindIcon class="h-3.5 w-3.5" color={kindAccent} aria-hidden="true" />
             <span>{kindInfo.label}</span>
             {#if kindInfo.pending > 0}
               <span class="font-mono text-[0.6rem] text-text-accent">{kindInfo.pending}</span>

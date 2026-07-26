@@ -4,6 +4,7 @@
   import type { EntitySearchCandidate } from "$lib/api/identify-types";
   import { identifyCandidateKey } from "$lib/components/identify/identify-candidate-card";
   import { entityKindIcon } from "$lib/entities/entity-kind-icons";
+  import { entityAccentForKind } from "$lib/entities/entity-accent";
   import { aspectRatioForKind, toAspectRatioValue } from "$lib/entities/entity-thumbnail";
 
   interface Props {
@@ -28,6 +29,7 @@
 
   const candidateAspect = $derived(toAspectRatioValue(aspectRatioForKind(entityKind)));
   const CandidateKindIcon = $derived(entityKindIcon(entityKind));
+  const candidateKindAccent = $derived(entityAccentForKind(entityKind).primary);
 
   function candidateTitle(candidate: EntitySearchCandidate): string {
     return candidate.title?.trim() || "Untitled match";
@@ -83,7 +85,7 @@
           style={`aspect-ratio: ${candidateAspect};`}
         >
           <div class="grid h-full w-full place-items-center">
-            <CandidateKindIcon class="h-6 w-6 text-text-disabled" />
+            <CandidateKindIcon class="h-6 w-6" color={candidateKindAccent} aria-hidden="true" />
           </div>
           {#if hasCover}
             <img
