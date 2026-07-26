@@ -278,14 +278,14 @@ export function iconForKind(kind: string): EntityThumbnailMetaIcon {
 }
 
 const PLACEHOLDER_GRADIENTS = [
-  "linear-gradient(135deg, #1a1028 0%, #2d1b4e 40%, #4a2040 100%)",
-  "linear-gradient(135deg, #0f1a2e 0%, #1b3a5c 40%, #0d2847 100%)",
-  "linear-gradient(135deg, #1a0f0a 0%, #3d2415 40%, #5c3a1b 100%)",
-  "linear-gradient(135deg, #0a1a14 0%, #153d2b 40%, #1b5c3f 100%)",
-  "linear-gradient(135deg, #1a1018 0%, #3d1535 40%, #5c1b4a 100%)",
-  "linear-gradient(135deg, #1a180a 0%, #3d3515 40%, #5c4f1b 100%)",
-  "linear-gradient(135deg, #0a0f1a 0%, #15243d 40%, #1b365c 100%)",
-  "linear-gradient(135deg, #1a0a12 0%, #3d1528 40%, #5c1b3b 100%)",
+  "linear-gradient(135deg, var(--color-material-spectrum-red), var(--color-material-spectrum-orange))",
+  "linear-gradient(135deg, var(--color-material-spectrum-orange), var(--color-material-spectrum-yellow))",
+  "linear-gradient(135deg, var(--color-material-spectrum-yellow), var(--color-material-spectrum-green))",
+  "linear-gradient(135deg, var(--color-material-spectrum-green), var(--color-material-spectrum-cyan))",
+  "linear-gradient(135deg, var(--color-material-spectrum-cyan), var(--color-material-spectrum-blue))",
+  "linear-gradient(135deg, var(--color-material-spectrum-blue), var(--color-material-spectrum-violet))",
+  "linear-gradient(135deg, var(--color-material-spectrum-violet), var(--color-material-spectrum-magenta))",
+  "linear-gradient(135deg, var(--color-material-spectrum-magenta), var(--color-material-spectrum-red))",
 ];
 
 /** Picks a deterministic gradient background from the palette based on the entity title. */

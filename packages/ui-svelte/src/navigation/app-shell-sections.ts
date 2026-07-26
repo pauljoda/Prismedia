@@ -4,7 +4,7 @@ export const appShellSections = [
   {
     id: "overview",
     kicker: "Overview",
-    accent: colors.accent[500],
+    accent: colors.materialSpectrum.red,
     items: [
       { label: "Dashboard", href: "/", icon: "layout-dashboard" },
       { label: "Search", href: "/search", icon: "search" },
@@ -24,7 +24,7 @@ export const appShellSections = [
   {
     id: "images",
     kicker: "Images",
-    accent: colors.materialSpectrum.green,
+    accent: colors.materialSpectrum.yellow,
     items: [
       { label: "Galleries", href: "/galleries", icon: "images" },
       { label: "Images", href: "/images", icon: "image" },
@@ -33,7 +33,7 @@ export const appShellSections = [
   {
     id: "audio",
     kicker: "Audio",
-    accent: colors.materialSpectrum.violet,
+    accent: colors.materialSpectrum.green,
     items: [
       { label: "Albums", href: "/audio", icon: "music" },
       { label: "Artists", href: "/artists", icon: "mic-vocal" },
@@ -54,7 +54,7 @@ export const appShellSections = [
   {
     id: "browse",
     kicker: "Browse",
-    accent: colors.materialSpectrum.magenta,
+    accent: colors.materialSpectrum.blue,
     items: [
       { label: "People", href: "/people", icon: "users" },
       { label: "Studios", href: "/studios", icon: "building" },
@@ -65,7 +65,7 @@ export const appShellSections = [
   {
     id: "operate",
     kicker: "Operate",
-    accent: colors.accent[500],
+    accent: colors.materialSpectrum.violet,
     items: [
       { label: "Files", href: "/files", icon: "folder-tree" },
       { label: "Identify", href: "/identify", icon: "scan-search" },

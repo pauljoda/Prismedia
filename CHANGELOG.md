@@ -21,6 +21,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - SFW/NSFW controls now apply across browsing, plugins, identify, requests, OPDS, Jellyfin clients, thumbnails, queues, and metadata so visibility stays consistent across the app and external clients.
 - Release operations are now ready for channel publishing: the root package version is the source of truth, Docker builds validate the release metadata, pushes to `main` publish only the dev image, and alpha/beta/release images are published manually.
 
+### Changed
+- Browse, Settings, navigation, ambient backgrounds, and missing artwork now share one restrained rainbow palette in deliberate spectrum order across the web and Apple apps.
+
 ### Added
 - Acquisition file results now retain a privacy-safe per-file import record, including source-to-library mapping and clear imported, skipped, or failed outcomes, so completed and partial imports remain understandable after the job finishes.
 - Added first-class Soulseek support through slskd: Prismedia can search peer results as album folders or individual tracks, show their remote folder context with a dedicated Soulseek chip in release review, queue them as atomic slskd batches, monitor and import their files, and configure Soulseek alongside torrent and Usenet clients. Album requests now materialize their track list and automatically fall back to artist/album/track-qualified searches for anything still missing after a failed or partial album acquisition, while searches allow a full peer-response window instead of ending after only a few milliseconds.

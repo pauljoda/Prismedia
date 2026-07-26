@@ -73,6 +73,16 @@
   --color-spectrum-violet: #7a14f5;
   --color-spectrum-magenta: #d60de0;
 
+  /* ── Material spectrum (persistent UI paint) ── */
+  --color-material-spectrum-red: #b3484d;
+  --color-material-spectrum-orange: #b76337;
+  --color-material-spectrum-yellow: #9e873b;
+  --color-material-spectrum-green: #4d925d;
+  --color-material-spectrum-cyan: #3b869c;
+  --color-material-spectrum-blue: #536fb0;
+  --color-material-spectrum-violet: #775ca5;
+  --color-material-spectrum-magenta: #9a4f9d;
+
   /* ── Muted Blue (cool accent counterpoint) ── */
   --color-muted-blue: #3b475c;
 
@@ -181,7 +191,16 @@
     margin: 0;
     min-height: 100vh;
     background-color: var(--color-bg);
-    background-image: linear-gradient(180deg, #000 0%, #050506 100%);
+    background-image:
+      radial-gradient(ellipse 70% 58% at -8% 2%, color-mix(in srgb, var(--color-material-spectrum-red) 13%, transparent), transparent 72%),
+      radial-gradient(ellipse 72% 60% at 24% -12%, color-mix(in srgb, var(--color-material-spectrum-orange) 11%, transparent), transparent 72%),
+      radial-gradient(ellipse 68% 62% at 55% 4%, color-mix(in srgb, var(--color-material-spectrum-yellow) 9%, transparent), transparent 74%),
+      radial-gradient(ellipse 74% 62% at 92% 18%, color-mix(in srgb, var(--color-material-spectrum-green) 11%, transparent), transparent 72%),
+      radial-gradient(ellipse 76% 68% at 108% 58%, color-mix(in srgb, var(--color-material-spectrum-cyan) 12%, transparent), transparent 74%),
+      radial-gradient(ellipse 78% 70% at 76% 104%, color-mix(in srgb, var(--color-material-spectrum-blue) 12%, transparent), transparent 74%),
+      radial-gradient(ellipse 72% 66% at 38% 110%, color-mix(in srgb, var(--color-material-spectrum-violet) 12%, transparent), transparent 74%),
+      radial-gradient(ellipse 70% 64% at -10% 78%, color-mix(in srgb, var(--color-material-spectrum-magenta) 11%, transparent), transparent 72%),
+      linear-gradient(180deg, #000 0%, #050506 100%);
     background-attachment: fixed;
   }
 
@@ -1112,14 +1131,14 @@
   }
 
   /* ── Gradient thumbnail placeholders ── */
-  .gradient-thumb-1 { background: linear-gradient(135deg, #1a1028 0%, #2d1b4e 40%, #4a2040 100%); }
-  .gradient-thumb-2 { background: linear-gradient(135deg, #0f1a2e 0%, #1b3a5c 40%, #0d2847 100%); }
-  .gradient-thumb-3 { background: linear-gradient(135deg, #1a0f0a 0%, #3d2415 40%, #5c3a1b 100%); }
-  .gradient-thumb-4 { background: linear-gradient(135deg, #0a1a14 0%, #153d2b 40%, #1b5c3f 100%); }
-  .gradient-thumb-5 { background: linear-gradient(135deg, #1a1018 0%, #3d1535 40%, #5c1b4a 100%); }
-  .gradient-thumb-6 { background: linear-gradient(135deg, #1a180a 0%, #3d3515 40%, #5c4f1b 100%); }
-  .gradient-thumb-7 { background: linear-gradient(135deg, #0a0f1a 0%, #15243d 40%, #1b365c 100%); }
-  .gradient-thumb-8 { background: linear-gradient(135deg, #1a0a12 0%, #3d1528 40%, #5c1b3b 100%); }
+  .gradient-thumb-1 { background: linear-gradient(135deg, var(--color-material-spectrum-red), var(--color-material-spectrum-orange)); }
+  .gradient-thumb-2 { background: linear-gradient(135deg, var(--color-material-spectrum-orange), var(--color-material-spectrum-yellow)); }
+  .gradient-thumb-3 { background: linear-gradient(135deg, var(--color-material-spectrum-yellow), var(--color-material-spectrum-green)); }
+  .gradient-thumb-4 { background: linear-gradient(135deg, var(--color-material-spectrum-green), var(--color-material-spectrum-cyan)); }
+  .gradient-thumb-5 { background: linear-gradient(135deg, var(--color-material-spectrum-cyan), var(--color-material-spectrum-blue)); }
+  .gradient-thumb-6 { background: linear-gradient(135deg, var(--color-material-spectrum-blue), var(--color-material-spectrum-violet)); }
+  .gradient-thumb-7 { background: linear-gradient(135deg, var(--color-material-spectrum-violet), var(--color-material-spectrum-magenta)); }
+  .gradient-thumb-8 { background: linear-gradient(135deg, var(--color-material-spectrum-magenta), var(--color-material-spectrum-red)); }
 
   /* ── Tag color accents ── */
   .tag-chip {
