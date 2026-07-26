@@ -4,6 +4,7 @@ using System.Text.Json;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Prismedia.Application.Jobs;
 using Prismedia.Application.Subtitles;
 using Prismedia.Contracts.Media;
 using Prismedia.Contracts.System;
@@ -59,7 +60,8 @@ public sealed class SubtitleAcquisitionEndpointTests {
     [Fact]
     public async Task DownloadQueuesAnInteractiveEntityGraphWithoutCallingTheProviderInTheRequest() {
         var service = new FakeSubtitleAcquisitionService();
-        using var factory = CreateFactory(service);
+        var jobs = new RecordingJobQueue();
+        using var factory = CreateFactory(service, jobs);
         using var client = factory.CreateAuthenticatedClient();
 
         using var response = await client.PostAsJsonAsync(
@@ -73,6 +75,7 @@ public sealed class SubtitleAcquisitionEndpointTests {
         Assert.Equal(EntityKind.Video.ToCode(), graph.RootEntityKind);
         Assert.Equal(VideoId.ToString(), graph.RootEntityId);
         Assert.Equal(JobType.AcquireSubtitle, graph.InitialNode.Type);
+        Assert.Equal(JobResourceKeys.Entity(VideoId.ToString()), jobs.LastRequest?.ResourceKey);
         Assert.Equal(0, service.AcquireCalls);
     }
 
@@ -97,13 +100,47 @@ public sealed class SubtitleAcquisitionEndpointTests {
         Assert.DoesNotContain("password-secret", body, StringComparison.Ordinal);
     }
 
-    private static WebApplicationFactory<Program> CreateFactory(FakeSubtitleAcquisitionService service) =>
+    private static WebApplicationFactory<Program> CreateFactory(
+        FakeSubtitleAcquisitionService service,
+        IJobQueueService? jobs = null) =>
         new WebApplicationFactory<Program>()
             .WithWebHostBuilder(builder => builder.ConfigureServices(services => {
                 services.RemoveAll<ISubtitleAcquisitionService>();
                 services.AddSingleton<ISubtitleAcquisitionService>(service);
+                if (jobs is not null) {
+                    services.RemoveAll<IJobQueueService>();
+                    services.AddSingleton<IJobQueueService>(jobs);
+                }
             }))
             .WithTestAuth();
+
+    private sealed class RecordingJobQueue : IJobQueueService {
+        public EnqueueJobRequest? LastRequest { get; private set; }
+
+        public Task<JobRunSnapshot> EnqueueAsync(EnqueueJobRequest request, CancellationToken cancellationToken) {
+            LastRequest = request;
+            var now = DateTimeOffset.UtcNow;
+            return Task.FromResult(new JobRunSnapshot(
+                Guid.NewGuid(), request.Type, JobRunStatus.Queued, 0, null, request.PayloadJson ?? "{}",
+                request.TargetEntityKind, request.TargetEntityId, request.TargetLabel, now, null, null,
+                GraphId: Guid.NewGuid(), GraphOrigin: request.Origin, ResourceKey: request.ResourceKey));
+        }
+
+        public Task<JobRunSnapshot> EnqueueAsync(JobType type, CancellationToken cancellationToken) =>
+            EnqueueAsync(new EnqueueJobRequest(type), cancellationToken);
+        public Task<IReadOnlyList<JobRunSnapshot>> ListAsync(bool hideNsfw, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<bool> HasPendingAsync(JobType type, string? targetEntityId, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<int> EnqueueBatchAsync(IReadOnlyList<EnqueueJobRequest> requests, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<int> CancelAsync(JobType? type, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<bool> CancelRunAsync(Guid id, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<int> ClearFailuresAsync(JobType? type, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<int> RecoverStaleRunningAsync(string currentWorkerId, TimeSpan staleAfter, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task UpdateProgressAsync(Guid id, int progress, string? message, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task CompleteAsync(Guid id, string? message, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task FailAsync(Guid id, string message, TimeSpan retryDelay, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<IReadOnlyList<JobQueueCount>> GetQueueCountsAsync(bool hideNsfw, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<int> PruneHistoryAsync(TimeSpan retention, CancellationToken cancellationToken) => throw new NotSupportedException();
+    }
 
     private sealed class FakeSubtitleAcquisitionService : ISubtitleAcquisitionService {
         public OpenSubtitlesConfiguration Configuration { get; init; } =
