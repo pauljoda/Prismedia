@@ -160,6 +160,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Updated documentation, README screenshots, branding assets, install metadata, and app copy to match the current Prismedia v1 surface.
 
 ### Fixed
+- Wide 4K video masters such as 3840×1920 are no longer mislabeled as 1440p in library thumbnails and web metadata when playback correctly identifies them as 4K.
 - The launch-site navigation drawer now renders reliably above page content on
   mobile Safari.
 - Launch-site section links no longer all appear selected at once in desktop and

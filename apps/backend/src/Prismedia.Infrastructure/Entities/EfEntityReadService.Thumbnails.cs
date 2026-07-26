@@ -671,11 +671,15 @@ public sealed partial class EfEntityReadService {
     }
 
     private static string FormatResolution(int width, int height) {
-        if (height >= 2160) return "4K";
-        if (height >= 1440) return "1440p";
-        if (height >= 1080) return "1080p";
-        if (height >= 720) return "720p";
-        if (height >= 480) return "480p";
+        // Width participates so scope and other cropped masters keep their source tier.
+        // For example, a 3840x1920 frame is still a 4K source even though its shorter
+        // edge sits below the conventional 2160-line threshold.
+        if (width >= 7600 || height >= 4300) return "8K";
+        if (width >= 3800 || height >= 2000) return "4K";
+        if (width >= 2540 || height >= 1400) return "1440p";
+        if (width >= 1800 || height >= 1000) return "1080p";
+        if (width >= 1200 || height >= 700) return "720p";
+        if (width >= 640 || height >= 480) return "480p";
         return $"{width}x{height}";
     }
 

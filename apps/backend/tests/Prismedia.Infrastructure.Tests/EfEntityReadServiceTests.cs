@@ -766,8 +766,8 @@ public sealed class EfEntityReadServiceTests {
         db.EntityTechnical.Add(new EntityTechnicalRow {
             EntityId = videoId,
             DurationSeconds = 596,
-            Width = 1920,
-            Height = 1080,
+            Width = 3840,
+            Height = 1920,
             BitRate = 8_000_000,
             Codec = "h264",
             Container = "matroska",
@@ -784,7 +784,7 @@ public sealed class EfEntityReadServiceTests {
         Assert.Equal(
             [
                 new EntityThumbnailMeta("duration", "09:56"),
-                new EntityThumbnailMeta("video", "1080p"),
+                new EntityThumbnailMeta("video", "4K"),
                 new EntityThumbnailMeta("video", "H264"),
                 new EntityThumbnailMeta("video", "MATROSKA")
             ],

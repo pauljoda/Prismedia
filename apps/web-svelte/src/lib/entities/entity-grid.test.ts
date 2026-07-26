@@ -52,7 +52,7 @@ function stats(): EntityCapability {
   };
 }
 
-function technical(): EntityCapability {
+function technical(): Extract<EntityCapability, { kind: "technical" }> {
   return {
     kind: "technical",
     duration: "00:02:30",
@@ -212,6 +212,19 @@ describe("entity grid helpers", () => {
       title: "Season 1, Episode 2",
     });
     expect(thumbnail.meta?.map((item) => item.label)).not.toContain("season 1");
+  });
+
+  it("keeps cropped 3840-wide sources in the 4K thumbnail tier", () => {
+    const thumbnail = entityCardToThumbnailCard(card("scope-4k", "video", "Scope Feature", [
+      {
+        ...technical(),
+        width: 3840,
+        height: 1920,
+      },
+    ]));
+
+    expect(thumbnail.meta?.map((item) => item.label)).toContain("4K");
+    expect(thumbnail.meta?.map((item) => item.label)).not.toContain("1440p");
   });
 
   it("derives a progress fraction from playback and reading-progress capabilities", () => {

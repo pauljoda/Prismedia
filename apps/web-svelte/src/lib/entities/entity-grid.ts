@@ -9,7 +9,8 @@ import {
   isWanted,
   type EntityCapabilityKind,
 } from "$lib/api/capabilities";
-import { numberValue, formatDurationString, durationToSeconds, normalized, formatResolutionLabel } from "$lib/utils/format";
+import { numberValue, formatDurationString, durationToSeconds, normalized } from "$lib/utils/format";
+import { resolutionBadge } from "$lib/player/media-badges";
 import type { EntityCard, EntityCapability, ListEntitiesParams } from "$lib/api/generated/model";
 import type { EntityThumbnail } from "$lib/api/generated/model";
 import { isDeletableMediaKind } from "$lib/api/entity-deletion";
@@ -181,7 +182,7 @@ function isBitrateLabel(label: string): boolean {
 
 
 function formatResolutionLabelFull(width: number, height: number): string {
-  return formatResolutionLabel(height) ?? `${width}×${height}`;
+  return resolutionBadge(width, height) ?? `${width}×${height}`;
 }
 
 type EntityGridSourceEntity = EntityCard | EntityThumbnail;

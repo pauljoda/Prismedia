@@ -346,6 +346,38 @@ describe("entity detail view model", () => {
     expect(detail.technical.map((row) => row.value)).not.toContain("10.2 Mbps");
   });
 
+  it("labels cropped 3840-wide detail metadata as 4K", () => {
+    const detail = entityCardToDetailCard({
+      id: "scope-4k",
+      kind: "video",
+      title: "Scope Feature",
+      parentEntityId: null,
+      sortOrder: null,
+      capabilities: [
+        {
+          kind: "technical",
+          duration: "01:42:00",
+          width: 3840,
+          height: 1920,
+          frameRate: 24,
+          bitRate: null,
+          sampleRate: null,
+          channels: null,
+          codec: "hevc",
+          container: "mkv",
+          format: null,
+        },
+      ],
+      childrenByKind: [],
+      relationships: [],
+    } satisfies EntityCard);
+
+    expect(detail.technical).toContainEqual({
+      label: "Resolution",
+      value: "3840×1920 (4K)",
+    });
+  });
+
   it("does not expose provider popularity as a generic detail stat", () => {
     const detail = entityCardToDetailCard({
       id: "person-1",

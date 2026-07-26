@@ -99,14 +99,3 @@ export function formatEta(seconds: number): string {
   const m = Math.floor((seconds % 3600) / 60);
   return h > 0 ? `${h}h ${m}m` : `${m}m`;
 }
-
-/** Map a video height to a short resolution label ("4K", "1080p", etc.). */
-export function formatResolutionLabel(height: number): string | null {
-  if (!Number.isFinite(height) || height <= 0) return null;
-  if (height >= 2160) return "4K";
-  if (height >= 1440) return "1440p";
-  if (height >= 1080) return "1080p";
-  if (height >= 720) return "720p";
-  if (height >= 480) return "480p";
-  return `${height}p`;
-}

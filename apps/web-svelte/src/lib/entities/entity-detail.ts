@@ -7,7 +7,8 @@ import {
   isNsfw,
   type EntityCapabilityKind,
 } from "$lib/api/capabilities";
-import { numberValue, formatDurationString, durationToSeconds, formatResolutionLabel } from "$lib/utils/format";
+import { numberValue, formatDurationString, durationToSeconds } from "$lib/utils/format";
+import { resolutionBadge } from "$lib/player/media-badges";
 import type {
   EntityCapability,
   EntityCard,
@@ -233,7 +234,7 @@ export interface EntityDetailCardFull extends EntityDetailCard {
 
 
 function formatResolution(width: number, height: number): string {
-  const label = formatResolutionLabel(height);
+  const label = resolutionBadge(width, height);
   return label ? `${width}×${height} (${label})` : `${width}×${height}`;
 }
 
