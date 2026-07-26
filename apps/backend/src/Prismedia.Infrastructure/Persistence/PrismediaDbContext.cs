@@ -122,6 +122,16 @@ public sealed class PrismediaDbContext : DbContext {
 
     public DbSet<JobRunRow> JobRuns => Set<JobRunRow>();
 
+    public DbSet<JobGraphRow> JobGraphs => Set<JobGraphRow>();
+
+    public DbSet<JobDependencyRow> JobDependencies => Set<JobDependencyRow>();
+
+    public DbSet<JobGraphSignalRow> JobGraphSignals => Set<JobGraphSignalRow>();
+
+    public DbSet<JobResourceStateRow> JobResourceStates => Set<JobResourceStateRow>();
+
+    public DbSet<JobResourceLeaseRow> JobResourceLeases => Set<JobResourceLeaseRow>();
+
     public DbSet<IndexerConfigRow> IndexerConfigs => Set<IndexerConfigRow>();
     public DbSet<IndexerStatusRow> IndexerStatuses => Set<IndexerStatusRow>();
 
@@ -166,6 +176,12 @@ public sealed class PrismediaDbContext : DbContext {
             // A uint, store-generated, concurrency-token property is recognized by the Npgsql convention
             // and mapped to the existing xmin system column without emitting any migration DDL.
             modelBuilder.Entity<JobRunRow>()
+                .Property<uint>("Version")
+                .IsRowVersion();
+            modelBuilder.Entity<JobGraphRow>()
+                .Property<uint>("Version")
+                .IsRowVersion();
+            modelBuilder.Entity<JobResourceStateRow>()
                 .Property<uint>("Version")
                 .IsRowVersion();
         }

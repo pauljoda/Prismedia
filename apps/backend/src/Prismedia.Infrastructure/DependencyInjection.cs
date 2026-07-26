@@ -364,6 +364,7 @@ public static class DependencyInjection {
         services.AddSingleton<IWorkerHeartbeatStore>(new FileWorkerHeartbeatStore(dataDir));
         services.AddScoped<IDatabaseBackupService, DatabaseBackupService>();
         services.AddScoped<IJobQueueService, JobQueueService>();
+        services.AddScoped<IJobGraphService, JobGraphService>();
         services.AddScoped<ISettingsPersistence, EfSettingsPersistence>();
         services.AddScoped<IBrowserSessionPersistence, EfBrowserSessionPersistence>();
         services.AddScoped<ISecurityPersistence, EfSecurityPersistence>();

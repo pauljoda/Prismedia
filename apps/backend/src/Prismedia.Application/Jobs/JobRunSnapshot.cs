@@ -20,6 +20,13 @@ namespace Prismedia.Application.Jobs;
 /// <param name="Attempts">Number of times this run has been claimed, including the current attempt.</param>
 /// <param name="MaxAttempts">Maximum attempts before the run is failed terminally rather than retried.</param>
 /// <param name="Lane">Optional queue lane used for foreground worker selection.</param>
+/// <param name="GraphId">Owning durable graph, when the run has been migrated.</param>
+/// <param name="GraphOrigin">Origin that determines interactive or background worker selection.</param>
+/// <param name="NodeKey">Stable graph-local node key.</param>
+/// <param name="ParentRunId">Optional display parent node.</param>
+/// <param name="Importance">Whether terminal failure fails the graph.</param>
+/// <param name="ResourceClass">CPU scheduling profile.</param>
+/// <param name="ResourceKey">Optional shared external or entity resource.</param>
 public sealed record JobRunSnapshot(
     Guid Id,
     JobType Type,
@@ -35,7 +42,14 @@ public sealed record JobRunSnapshot(
     DateTimeOffset? FinishedAt,
     int Attempts = 0,
     int MaxAttempts = 0,
-    JobRunLane? Lane = null) {
+    JobRunLane? Lane = null,
+    Guid? GraphId = null,
+    JobGraphOrigin? GraphOrigin = null,
+    string? NodeKey = null,
+    Guid? ParentRunId = null,
+    JobNodeImportance Importance = JobNodeImportance.Required,
+    JobResourceClass ResourceClass = JobResourceClass.Light,
+    string? ResourceKey = null) {
     /// <summary>
     /// True when the current attempt is the last the queue will run; a failure now is terminal
     /// (the run is failed, not requeued) rather than retried.

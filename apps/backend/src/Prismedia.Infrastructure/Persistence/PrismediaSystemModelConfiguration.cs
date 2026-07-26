@@ -282,10 +282,134 @@ internal static partial class PrismediaModelConfiguration {
             entity.HasIndex(row => new { row.IsManual, row.ExpiresAt });
         });
 
+        modelBuilder.Entity<JobGraphRow>(entity => {
+            entity.ToTable("job_graphs");
+            entity.HasKey(row => row.Id);
+            entity.Property(row => row.Id).HasColumnName("id").ValueGeneratedNever();
+            entity.Property(row => row.Origin)
+                .HasColumnName("origin")
+                .HasMaxLength(32)
+                .HasConversion(value => value.ToCode(), value => value.DecodeAs<JobGraphOrigin>())
+                .IsRequired();
+            entity.Property(row => row.Status)
+                .HasColumnName("status")
+                .HasMaxLength(32)
+                .HasConversion(value => value.ToCode(), value => value.DecodeAs<JobGraphStatus>())
+                .IsRequired();
+            entity.Property(row => row.DisplayName).HasColumnName("display_name").HasMaxLength(512).IsRequired();
+            entity.Property(row => row.RootRunId).HasColumnName("root_run_id");
+            entity.Property(row => row.InitiatingUserId).HasColumnName("initiating_user_id");
+            entity.Property(row => row.RootEntityKind).HasColumnName("root_entity_kind").HasMaxLength(64);
+            entity.Property(row => row.RootEntityId).HasColumnName("root_entity_id").HasMaxLength(64);
+            entity.Property(row => row.ActiveKey).HasColumnName("active_key").HasMaxLength(256);
+            entity.Property(row => row.CancellationRequested).HasColumnName("cancellation_requested");
+            entity.Property(row => row.LastDispatchedAt).HasColumnName("last_dispatched_at");
+            entity.Property(row => row.CreatedAt).HasColumnName("created_at");
+            entity.Property(row => row.UpdatedAt).HasColumnName("updated_at");
+            entity.Property(row => row.FinishedAt).HasColumnName("finished_at");
+            entity.HasIndex(row => new { row.Origin, row.Status, row.LastDispatchedAt });
+            entity.HasIndex(row => row.ActiveKey)
+                .IsUnique()
+                .HasFilter("active_key IS NOT NULL AND status IN ('queued', 'running', 'waiting')")
+                .HasDatabaseName("ux_job_graphs_active_key");
+        });
+
+        modelBuilder.Entity<JobDependencyRow>(entity => {
+            entity.ToTable("job_dependencies");
+            entity.HasKey(row => new { row.PredecessorJobRunId, row.SuccessorJobRunId });
+            entity.Property(row => row.GraphId).HasColumnName("graph_id");
+            entity.Property(row => row.PredecessorJobRunId).HasColumnName("predecessor_job_run_id");
+            entity.Property(row => row.SuccessorJobRunId).HasColumnName("successor_job_run_id");
+            entity.HasIndex(row => new { row.GraphId, row.SuccessorJobRunId });
+            entity.HasOne<JobGraphRow>()
+                .WithMany()
+                .HasForeignKey(row => row.GraphId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne<JobRunRow>()
+                .WithMany()
+                .HasForeignKey(row => row.PredecessorJobRunId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne<JobRunRow>()
+                .WithMany()
+                .HasForeignKey(row => row.SuccessorJobRunId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<JobGraphSignalRow>(entity => {
+            entity.ToTable("job_graph_signals");
+            entity.HasKey(row => row.Id);
+            entity.Property(row => row.Id).HasColumnName("id").ValueGeneratedNever();
+            entity.Property(row => row.GraphId).HasColumnName("graph_id");
+            entity.Property(row => row.Key).HasColumnName("key").HasMaxLength(256).IsRequired();
+            entity.Property(row => row.Kind)
+                .HasColumnName("kind")
+                .HasMaxLength(32)
+                .HasConversion(value => value.ToCode(), value => value.DecodeAs<JobGraphSignalKind>())
+                .IsRequired();
+            entity.Property(row => row.CorrelationId).HasColumnName("correlation_id").HasMaxLength(256);
+            entity.Property(row => row.Message).HasColumnName("message").HasMaxLength(1024);
+            entity.Property(row => row.CreatedAt).HasColumnName("created_at");
+            entity.Property(row => row.ResolvedAt).HasColumnName("resolved_at");
+            entity.Property(row => row.CancelledAt).HasColumnName("cancelled_at");
+            entity.HasIndex(row => new { row.GraphId, row.Key }).IsUnique();
+            entity.HasOne<JobGraphRow>()
+                .WithMany()
+                .HasForeignKey(row => row.GraphId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<JobResourceStateRow>(entity => {
+            entity.ToTable("job_resource_states");
+            entity.HasKey(row => row.Key);
+            entity.Property(row => row.Key).HasColumnName("key").HasMaxLength(256);
+            entity.Property(row => row.MaxConcurrency).HasColumnName("max_concurrency");
+            entity.Property(row => row.MinimumStartIntervalMs).HasColumnName("minimum_start_interval_ms");
+            entity.Property(row => row.NextAvailableAt).HasColumnName("next_available_at");
+            entity.Property(row => row.UpdatedAt).HasColumnName("updated_at");
+            entity.ToTable(table => {
+                table.HasCheckConstraint("ck_job_resource_states_concurrency", "max_concurrency > 0");
+                table.HasCheckConstraint("ck_job_resource_states_interval", "minimum_start_interval_ms >= 0");
+            });
+        });
+
+        modelBuilder.Entity<JobResourceLeaseRow>(entity => {
+            entity.ToTable("job_resource_leases");
+            entity.HasKey(row => new { row.ResourceKey, row.JobRunId });
+            entity.Property(row => row.ResourceKey).HasColumnName("resource_key").HasMaxLength(256);
+            entity.Property(row => row.JobRunId).HasColumnName("job_run_id");
+            entity.Property(row => row.ExpiresAt).HasColumnName("expires_at");
+            entity.HasIndex(row => row.ExpiresAt);
+            entity.HasOne<JobResourceStateRow>()
+                .WithMany()
+                .HasForeignKey(row => row.ResourceKey)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne<JobRunRow>()
+                .WithMany()
+                .HasForeignKey(row => row.JobRunId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
         modelBuilder.Entity<JobRunRow>(entity => {
             entity.ToTable("job_runs");
             entity.HasKey(row => row.Id);
             entity.Property(row => row.Id).HasColumnName("id").ValueGeneratedNever();
+            entity.Property(row => row.GraphId).HasColumnName("graph_id");
+            entity.Property(row => row.NodeKey).HasColumnName("node_key").HasMaxLength(256);
+            entity.Property(row => row.ParentRunId).HasColumnName("parent_run_id");
+            entity.Property(row => row.Importance)
+                .HasColumnName("importance")
+                .HasMaxLength(32)
+                .HasConversion(value => value.ToCode(), value => value.DecodeAs<JobNodeImportance>())
+                .HasDefaultValue(JobNodeImportance.Required)
+                .IsRequired();
+            entity.Property(row => row.ResourceClass)
+                .HasColumnName("resource_class")
+                .HasMaxLength(32)
+                .HasConversion(value => value.ToCode(), value => value.DecodeAs<JobResourceClass>())
+                .HasDefaultValue(JobResourceClass.Light)
+                .IsRequired();
+            entity.Property(row => row.ResourceKey).HasColumnName("resource_key").HasMaxLength(256);
+            entity.Property(row => row.Sequence).HasColumnName("sequence");
             entity.Property(row => row.Type)
                 .HasColumnName("type")
                 .HasMaxLength(128)
@@ -318,6 +442,19 @@ internal static partial class PrismediaModelConfiguration {
             entity.Property(row => row.StartedAt).HasColumnName("started_at");
             entity.Property(row => row.FinishedAt).HasColumnName("finished_at");
             entity.HasIndex(row => new { row.Status, row.Lane, row.AvailableAt, row.Priority });
+            entity.HasIndex(row => new { row.GraphId, row.Status, row.AvailableAt, row.Sequence });
+            entity.HasIndex(row => new { row.GraphId, row.NodeKey })
+                .IsUnique()
+                .HasFilter("graph_id IS NOT NULL AND node_key IS NOT NULL")
+                .HasDatabaseName("ux_job_runs_graph_node_key");
+            entity.HasOne<JobGraphRow>()
+                .WithMany()
+                .HasForeignKey(row => row.GraphId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne<JobRunRow>()
+                .WithMany()
+                .HasForeignKey(row => row.ParentRunId)
+                .OnDelete(DeleteBehavior.SetNull);
             entity.HasIndex(row => new { row.Type, row.TargetEntityId, row.Status })
                 .HasDatabaseName("ix_job_runs_dedup");
             entity.HasIndex(row => new { row.Type, row.TargetEntityId })

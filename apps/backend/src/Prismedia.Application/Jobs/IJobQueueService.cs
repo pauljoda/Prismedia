@@ -66,6 +66,19 @@ public interface IJobQueueService {
     Task<JobRunSnapshot?> ClaimNextAsync(string workerId, CancellationToken cancellationToken, JobRunLane? lane = null);
 
     /// <summary>
+    /// Claims the next dependency-ready node from a durable graph of the requested origin. Interactive
+    /// graphs permit one running node per graph; background graphs use the shared configured pool.
+    /// </summary>
+    Task<JobRunSnapshot?> ClaimNextGraphNodeAsync(
+        string workerId,
+        JobGraphOrigin origin,
+        CancellationToken cancellationToken) =>
+        ClaimNextAsync(
+            workerId,
+            cancellationToken,
+            origin == JobGraphOrigin.Interactive ? JobRunLane.ForegroundIdentify : null);
+
+    /// <summary>
     /// Requeues running jobs whose worker lease is stale and not owned by the current worker process.
     /// </summary>
     Task<int> RecoverStaleRunningAsync(string currentWorkerId, TimeSpan staleAfter, CancellationToken cancellationToken);

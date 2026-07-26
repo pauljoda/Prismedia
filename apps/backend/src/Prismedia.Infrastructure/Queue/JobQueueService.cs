@@ -433,6 +433,143 @@ public sealed class JobQueueService : IJobQueueService {
         return ToSnapshot(row);
     }
 
+    /// <summary>
+    /// Claims one dependency-ready node from a durable graph. PostgreSQL performs the selection and
+    /// state transition under row locks; the in-memory provider follows the same predicates for tests.
+    /// </summary>
+    public async Task<JobRunSnapshot?> ClaimNextGraphNodeAsync(
+        string workerId,
+        JobGraphOrigin origin,
+        CancellationToken cancellationToken) {
+        ArgumentException.ThrowIfNullOrWhiteSpace(workerId);
+        var now = DateTimeOffset.UtcNow;
+
+        Guid? claimedId;
+        if (_db.Database.IsRelational()) {
+            await using var transaction = await _db.Database.BeginTransactionAsync(cancellationToken);
+            var claimed = await _db.Database.SqlQueryRaw<Guid>(
+                """
+                UPDATE job_runs AS claimed
+                SET status = 'running',
+                    locked_at = {0},
+                    locked_by = {1},
+                    started_at = COALESCE(started_at, {0}),
+                    attempts = attempts + 1
+                WHERE claimed.id = (
+                    SELECT candidate.id
+                    FROM job_runs AS candidate
+                    INNER JOIN job_graphs AS graph ON graph.id = candidate.graph_id
+                    WHERE candidate.status = 'queued'
+                      AND candidate.available_at <= {0}
+                      AND graph.origin = {2}
+                      AND graph.status IN ('queued', 'running')
+                      AND graph.cancellation_requested = FALSE
+                      AND NOT EXISTS (
+                          SELECT 1
+                          FROM job_dependencies AS dependency
+                          INNER JOIN job_runs AS predecessor
+                              ON predecessor.id = dependency.predecessor_job_run_id
+                          WHERE dependency.successor_job_run_id = candidate.id
+                            AND predecessor.status <> 'completed'
+                      )
+                      AND (
+                          graph.origin <> 'interactive'
+                          OR NOT EXISTS (
+                              SELECT 1
+                              FROM job_runs AS active
+                              WHERE active.graph_id = graph.id
+                                AND active.status = 'running'
+                          )
+                      )
+                    ORDER BY graph.last_dispatched_at NULLS FIRST,
+                             graph.created_at,
+                             candidate.sequence,
+                             candidate.available_at,
+                             candidate.created_at
+                    LIMIT 1
+                    FOR UPDATE OF candidate SKIP LOCKED
+                )
+                RETURNING claimed.id
+                """,
+                now,
+                workerId,
+                origin.ToCode()).ToListAsync(cancellationToken);
+            claimedId = claimed.Count == 0 ? null : claimed[0];
+            if (claimedId is not null) {
+                var graphId = await _db.JobRuns.AsNoTracking()
+                    .Where(run => run.Id == claimedId)
+                    .Select(run => run.GraphId)
+                    .SingleAsync(cancellationToken);
+                if (graphId is not null) {
+                    await _db.JobGraphs
+                        .Where(graph => graph.Id == graphId)
+                        .ExecuteUpdateAsync(
+                            setters => setters
+                                .SetProperty(graph => graph.Status, JobGraphStatus.Running)
+                                .SetProperty(graph => graph.LastDispatchedAt, now)
+                                .SetProperty(graph => graph.UpdatedAt, now),
+                            cancellationToken);
+                }
+            }
+
+            await transaction.CommitAsync(cancellationToken);
+        } else {
+            var candidates = _db.JobRuns
+                .Where(run => run.GraphId != null &&
+                    run.Status == JobRunStatus.Queued &&
+                    run.AvailableAt <= now)
+                .Join(
+                    _db.JobGraphs.Where(graph => graph.Origin == origin &&
+                        (graph.Status == JobGraphStatus.Queued || graph.Status == JobGraphStatus.Running) &&
+                        !graph.CancellationRequested),
+                    run => run.GraphId,
+                    graph => graph.Id,
+                    (run, graph) => new { Run = run, Graph = graph })
+                .Where(candidate => !_db.JobDependencies
+                    .Where(dependency => dependency.SuccessorJobRunId == candidate.Run.Id)
+                    .Join(
+                        _db.JobRuns,
+                        dependency => dependency.PredecessorJobRunId,
+                        predecessor => predecessor.Id,
+                        (_, predecessor) => predecessor)
+                    .Any(predecessor => predecessor.Status != JobRunStatus.Completed));
+            if (origin == JobGraphOrigin.Interactive) {
+                candidates = candidates.Where(candidate => !_db.JobRuns.Any(active =>
+                    active.GraphId == candidate.Graph.Id && active.Status == JobRunStatus.Running));
+            }
+
+            var selected = await candidates
+                .OrderBy(candidate => candidate.Graph.LastDispatchedAt)
+                .ThenBy(candidate => candidate.Graph.CreatedAt)
+                .ThenBy(candidate => candidate.Run.Sequence)
+                .ThenBy(candidate => candidate.Run.AvailableAt)
+                .ThenBy(candidate => candidate.Run.CreatedAt)
+                .FirstOrDefaultAsync(cancellationToken);
+            if (selected is null) {
+                return null;
+            }
+
+            selected.Run.Status = JobRunStatus.Running;
+            selected.Run.LockedAt = now;
+            selected.Run.LockedBy = workerId;
+            selected.Run.StartedAt ??= now;
+            selected.Run.Attempts += 1;
+            selected.Graph.Status = JobGraphStatus.Running;
+            selected.Graph.LastDispatchedAt = now;
+            selected.Graph.UpdatedAt = now;
+            await _db.SaveChangesAsync(cancellationToken);
+            claimedId = selected.Run.Id;
+        }
+
+        if (claimedId is null) {
+            return null;
+        }
+
+        var claimedRow = await _db.JobRuns.AsNoTracking()
+            .SingleAsync(run => run.Id == claimedId, cancellationToken);
+        return ToSnapshot(claimedRow, origin);
+    }
+
     private Task<bool> HasPendingAutoIdentifyPrerequisiteAsync(CancellationToken cancellationToken) =>
         _db.JobRuns.AsNoTracking().AnyAsync(job =>
             AutoIdentifyPrerequisiteJobTypes.Contains(job.Type) &&
@@ -654,7 +791,7 @@ public sealed class JobQueueService : IJobQueueService {
             .ExecuteDeleteAsync(cancellationToken);
     }
 
-    private static JobRunSnapshot ToSnapshot(JobRunRow row) {
+    internal static JobRunSnapshot ToSnapshot(JobRunRow row, JobGraphOrigin? graphOrigin = null) {
         return new JobRunSnapshot(
             row.Id,
             row.Type,
@@ -670,6 +807,13 @@ public sealed class JobQueueService : IJobQueueService {
             row.FinishedAt,
             row.Attempts,
             row.MaxAttempts,
-            row.Lane);
+            row.Lane,
+            row.GraphId,
+            graphOrigin,
+            row.NodeKey,
+            row.ParentRunId,
+            row.Importance,
+            row.ResourceClass,
+            row.ResourceKey);
     }
 }

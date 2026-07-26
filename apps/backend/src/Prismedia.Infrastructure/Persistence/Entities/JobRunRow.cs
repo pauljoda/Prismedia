@@ -5,6 +5,25 @@ namespace Prismedia.Infrastructure.Persistence.Entities;
 public sealed class JobRunRow {
     public Guid Id { get; set; }
 
+    /// <summary>Owning durable graph. Null only for legacy rows awaiting migration/backfill.</summary>
+    public Guid? GraphId { get; set; }
+
+    /// <summary>Stable graph-local node key used for idempotent dynamic expansion.</summary>
+    public string? NodeKey { get; set; }
+
+    /// <summary>Optional parent node used for graph display and inherited workflow context.</summary>
+    public Guid? ParentRunId { get; set; }
+
+    public JobNodeImportance Importance { get; set; } = JobNodeImportance.Required;
+
+    public JobResourceClass ResourceClass { get; set; } = JobResourceClass.Light;
+
+    /// <summary>Optional durable external or entity resource required before the node may run.</summary>
+    public string? ResourceKey { get; set; }
+
+    /// <summary>Stable insertion order within the owning graph.</summary>
+    public long Sequence { get; set; }
+
     public JobType Type { get; set; } = JobType.Noop;
 
     public JobRunStatus Status { get; set; } = JobRunStatus.Queued;
