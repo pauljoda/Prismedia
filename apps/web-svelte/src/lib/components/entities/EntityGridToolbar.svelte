@@ -801,7 +801,7 @@
     border-color: var(--color-border-accent, rgba(199, 201, 204, 0.25));
     background: var(--color-surface-4, #1c2235);
     color: var(--color-text-accent, #c7c9cc);
-    box-shadow: inset 2px 0 0 var(--entity-accent, var(--color-accent-500));
+    box-shadow: inset 0 -2px 0 var(--entity-accent, var(--color-accent-500));
   }
 
   .ctrl-label {
