@@ -36,7 +36,7 @@
     Record<string, { items: SearchResultItem[]; total: number; loading: boolean }>
   >({});
 
-  let inputRef: HTMLInputElement | undefined = $state();
+  let inputRef = $state<HTMLInputElement | null>(null);
   let activeRequest = 0;
 
   function initialKinds(): Set<SearchEntityKind> {
