@@ -168,6 +168,7 @@ public static class DependencyInjection {
         // Metadata / collections / maintenance
         services.AddTransient<IJobHandler, ImportMetadataJobHandler>();
         services.AddTransient<IJobHandler, RefreshCollectionJobHandler>();
+        services.AddTransient<EntityProcessingGraphPlanner>();
         services.AddTransient<RefreshEntityJobHandler>();
         services.AddTransient<IJobHandler>(provider => provider.GetRequiredService<RefreshEntityJobHandler>());
         services.AddTransient<IJobHandler, ReconcileEntityJobHandler>();
