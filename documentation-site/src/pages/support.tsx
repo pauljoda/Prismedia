@@ -4,8 +4,6 @@ import Heading from '@theme/Heading';
 
 import styles from './legal.module.css';
 
-const SUPPORT_EMAIL = 'pauldavis101@gmail.com';
-
 export default function SupportPage() {
   return (
     <Layout
@@ -47,26 +45,14 @@ export default function SupportPage() {
             <section className={styles.section}>
               <Heading as="h2">Contact support</Heading>
               <p>
-                For account, TestFlight, or private support questions, email{' '}
-                <a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a>. Include
-                the platform, app version, server version, and the exact action
-                that did not work. Do not send passwords, access tokens, or
-                private media.
-              </p>
-              <p>
-                For reproducible bugs and feature requests that can be discussed
-                publicly, use GitHub Issues so the resolution can help other
-                self-hosters.
+                Use GitHub Issues for reproducible bugs, documentation gaps, and
+                feature requests. Include the platform, app version, server
+                version, and the exact action that did not work. Do not post
+                passwords, access tokens, private host details, or private media.
               </p>
               <div className={styles.actions}>
                 <a
                   className={styles.primaryAction}
-                  href={`mailto:${SUPPORT_EMAIL}?subject=Prismedia%20Support`}
-                >
-                  Email support
-                </a>
-                <a
-                  className={styles.secondaryAction}
                   href="https://github.com/pauljoda/Prismedia/issues"
                 >
                   Open GitHub Issues

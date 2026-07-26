@@ -55,7 +55,7 @@ public sealed class UserBootstrapRunnerTests {
     [Fact]
     public async Task RecoveryPasswordResetsExistingAccountToEnabledAdminAndInvalidatesSessions() {
         await using var provider = BuildProvider(out var db);
-        var user = NewUser("paul", passwordHash: Hasher.Hash("forgotten"));
+        var user = NewUser("recovery-user", passwordHash: Hasher.Hash("forgotten"));
         user.Role = UserRole.Member;
         user.Enabled = false;
         db.Users.Add(user);
@@ -70,7 +70,7 @@ public sealed class UserBootstrapRunnerTests {
 
         await UserBootstrapRunner.RunUserBootstrapAsync(provider, Config(
             (UserBootstrapRunner.RecoveryPasswordVariable, "rescued-password"),
-            (UserBootstrapRunner.RecoveryUsernameVariable, "paul")));
+            (UserBootstrapRunner.RecoveryUsernameVariable, "recovery-user")));
 
         db.ChangeTracker.Clear();
         var rescued = await db.Users.SingleAsync();

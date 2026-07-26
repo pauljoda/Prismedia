@@ -1,9 +1,8 @@
+import Link from '@docusaurus/Link';
 import Layout from '@theme/Layout';
 import Heading from '@theme/Heading';
 
 import styles from './legal.module.css';
-
-const SUPPORT_EMAIL = 'pauldavis101@gmail.com';
 
 export default function PrivacyPage() {
   return (
@@ -123,8 +122,8 @@ export default function PrivacyPage() {
               <p>
                 This policy may be updated as Prismedia&apos;s features or
                 distribution change. The effective date above identifies the
-                current version. Questions about this policy can be sent to{' '}
-                <a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a>.
+                current version. Questions about this policy can be submitted
+                through the <Link to="/support">Prismedia support page</Link>.
               </p>
             </section>
           </div>

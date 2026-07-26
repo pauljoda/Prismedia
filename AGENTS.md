@@ -105,7 +105,17 @@ docs/                  Architecture and design language docs.
 - Keep provider integrations behind stable adapter interfaces.
 - Do not embed a third-party application schema as Prismedia's application schema.
 - Normalize external hashes and metadata into Prismedia-owned tables and contracts.
-- Plugin development discovery should include `~/Dev/Prismedia-Plugins` when it exists.
+- Plugin development may use a separate Prismedia-Plugins checkout, but no
+  developer-specific checkout location belongs in tracked repository files.
+
+## Repository Privacy
+
+- Do not commit private hostnames, IP addresses, usernames, home-directory paths,
+  credentials, private media details, or deployment topology.
+- Keep dated audits, active roadmaps, campaign plans, submission packets, and
+  other working notes outside tracked documentation.
+- Tracked documentation must be durable project documentation or content intended
+  for publication. Use ignored local workspaces for private planning and audits.
 
 ## Identifier Discipline (Magic-String Contract)
 
@@ -192,17 +202,6 @@ control or layout, find the block that owns the pattern and use it.
 - The .NET API listens on port 8008, serves same-origin `/api/*` routes, and serves the built Svelte assets.
 - Always open and test Prismedia through the .NET app at `http://localhost:8008`; do not browse Vite directly because Vite is only the frontend dev server and does not provide the running app surface by itself.
 - Volumes: `/data` for database/cache/thumbnails and `/media` for the user's media library.
-
-## Remote Development Validation
-
-- When available, use `paul@10.10.10.100` for deployment, smoke testing, and verification that benefits from a rich media library. Local development remains appropriate for builds, launches, unit/integration tests, and checks that do not require representative content.
-- Prefer the remote rich-data environment for playback, transcoding/encoding, metadata flows, library scans, and other behavior whose validity or performance depends on real media diversity and collection scale.
-- Remote verification must use an image built from the current local checkout. Do not collect validation or performance results from an existing `dev-prismedia`/`prismedia-dev` image until its source revision has been confirmed to match, or the current checkout has been built and deployed to it. Record the source commit and image identity with test results.
-- Build the current checkout natively for the remote server's `linux/amd64` architecture when practical (for example by sending the local build context to the server's Docker daemon over SSH). Do not assume an image built on the local ARM host is runnable on the remote x86 server.
-- Perform development experiments only against the `dev-prismedia` instance. Never modify, restart, replace, reconfigure, or run experiments against the standard live Prismedia container that serves `prismedia.pauljoda.com`.
-- The live Prismedia container may be inspected strictly read-only when its historical jobs, logs, or aggregate database state can improve an audit or comparison. Use read-only transactions and non-mutating container inspection only; never deploy to it, run test jobs on it, change its database, or alter its runtime state.
-- Database snapshots of `dev-prismedia` are allowed before experiments so its state can be restored and results can be repeated. Treat snapshots and media as private development data; do not copy them into the repository or expose their contents in logs, commits, or reports.
-- Before changing performance-sensitive behavior, capture a baseline with stage-level timings and representative workload details. Compare changes against the same workload and report measured results rather than relying on perceived speed.
 
 ## Tooling Expectations
 

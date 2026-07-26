@@ -24,8 +24,8 @@ public sealed class MediaToolServiceTests {
     [Fact]
     public void ToolOptionsResolveCompanionProbeForNamedFfmpegAliases() {
         Assert.Equal(
-            "/Users/pauldavis/.local/bin/jellyfin-ffprobe",
-            MediaToolOptions.ResolveFfprobePath("/Users/pauldavis/.local/bin/jellyfin-ffmpeg"));
+            "/opt/media-tools/jellyfin-ffprobe",
+            MediaToolOptions.ResolveFfprobePath("/opt/media-tools/jellyfin-ffmpeg"));
         Assert.Equal("ffprobe7", MediaToolOptions.ResolveFfprobePath("ffmpeg7"));
     }
 

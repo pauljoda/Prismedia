@@ -13,13 +13,19 @@ test-results/
 # Local sample media at the repo root only — unanchored `videos/` would also swallow
 # C# source under */Videos/ on case-insensitive filesystems.
 /videos/*
-!/videos/prismedia-launch/
-!/videos/prismedia-launch/**
 
 apps/web-svelte/.svelte-kit/
 apps/web-svelte/build/
 documentation-site/.docusaurus/
 documentation-site/build/
+
+# Private working notes and one-off launch/review workspaces. Keep durable,
+# publishable project documentation in docs/ or documentation-site/ instead.
+docs/audits/
+docs/launch/
+docs/discover-request-roadmap.md
+infra/docker/apple-review.compose.yml
+scripts/launch/
 
 **/bin/
 **/obj/

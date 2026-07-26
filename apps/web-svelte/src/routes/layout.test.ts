@@ -65,11 +65,11 @@ describe("root layout load", () => {
   });
 
   it("returns the signed-in user for authenticated boots", async () => {
-    stubAuthFetch({ user: { id: "u1", username: "paul", role: "admin" } });
+    stubAuthFetch({ user: { id: "u1", username: "admin-user", role: "admin" } });
 
     const data = await load(loadEvent("/movies"));
 
-    expect((data as App.PageData).user).toMatchObject({ username: "paul" });
+    expect((data as App.PageData).user).toMatchObject({ username: "admin-user" });
     expect((data as App.PageData).needsSetup).toBe(false);
   });
 

@@ -47,7 +47,7 @@
 </p>
 
 <p align="center">
-  <img src="docs/launch/product-hunt/assets/01-one-private-home.png" alt="One private Prismedia library enters as white light and becomes purpose-built media experiences across the spectrum" width="100%" />
+  <img src="docs/showcase/01-one-private-home.png" alt="One private Prismedia library enters as white light and becomes purpose-built media experiences across the spectrum" width="100%" />
 </p>
 
 ## One Library In. Every Experience Out.
@@ -79,13 +79,13 @@ The native Apple apps are open to a limited testing group through [TestFlight](h
 Discovery, requests, acquisition, metadata, files, playback, reading, and listening are one connected lifecycle. Provider identity, download state, artwork, history, and personal progress stay attached to the same library item instead of disappearing at every handoff.
 
 <p align="center">
-  <img src="docs/launch/product-hunt/assets/02-one-media-lifecycle.png" alt="Prismedia connects discovery, requests, acquisition, management, and enjoyment in one media lifecycle" width="100%" />
+  <img src="docs/showcase/02-one-media-lifecycle.png" alt="Prismedia connects discovery, requests, acquisition, management, and enjoyment in one media lifecycle" width="100%" />
 </p>
 
 ## Quick Start
 
 <p align="center">
-  <img src="docs/launch/product-hunt/assets/06-self-hosted.png" alt="One self-hosted Prismedia image connects the web, iPhone, iPad, and Apple TV experiences for a household" width="100%" />
+  <img src="docs/showcase/06-self-hosted.png" alt="One self-hosted Prismedia image connects the web, iPhone, iPad, and Apple TV experiences for a household" width="100%" />
 </p>
 
 > [!IMPORTANT]
@@ -156,7 +156,7 @@ Read [CHANGELOG.md](CHANGELOG.md) before upgrading a library you care about.
 Video is the foundation, but music, audiobooks, eBooks, comics, images, and galleries are first-class media—not generic files forced into the same grid.
 
 <p align="center">
-  <img src="docs/launch/product-hunt/assets/05-purpose-built-media.png" alt="Prismedia gives video, music, audiobooks, eBooks, comics, images, and galleries purpose-built native experiences" width="100%" />
+  <img src="docs/showcase/05-purpose-built-media.png" alt="Prismedia gives video, music, audiobooks, eBooks, comics, images, and galleries purpose-built native experiences" width="100%" />
 </p>
 
 ### Library And Search
@@ -218,13 +218,13 @@ The responsive web app is the complete library workspace: browse every medium, r
 The native iPhone and iPad app adds adaptive Apple-platform navigation, video and audio playback, dedicated music and audiobook players, and customizable EPUB, PDF, comic, and webtoon reading. Tune typeface, size, weight, line spacing, margins, theme, and brightness. When a title has both text and audio editions, reading and listening progress stay together with separate actions for continuing each experience.
 
 <p align="center">
-  <img src="docs/launch/product-hunt/assets/04-custom-reader.png" alt="Prismedia's native reader with literary typography, deep customization, and combined reading and audiobook progress" width="100%" />
+  <img src="docs/showcase/04-custom-reader.png" alt="Prismedia's native reader with literary typography, deep customization, and combined reading and audiobook progress" width="100%" />
 </p>
 
 The Apple TV app uses a cinematic, focus-first interface and a custom native player built on the device's codec and playback stack. Supported sources direct-play at original quality—including lossless audio—while the paused chrome keeps title, stream state, resolution, codecs, timeline, audio, subtitles, and playback controls readable from the couch.
 
 <p align="center">
-  <img src="docs/launch/product-hunt/assets/03-native-playback.png" alt="Prismedia's custom Apple TV player showing direct play, original-quality video, lossless audio, native codecs, and paused playback controls" width="100%" />
+  <img src="docs/showcase/03-native-playback.png" alt="Prismedia's custom Apple TV player showing direct play, original-quality video, lossless audio, native codecs, and paused playback controls" width="100%" />
 </p>
 
 The iPhone, iPad, and Apple TV apps are currently distributed through the limited [Prismedia TestFlight](https://testflight.apple.com/join/c9bgDxr7).
