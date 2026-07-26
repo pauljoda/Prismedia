@@ -5,8 +5,11 @@
  * OpenAPI spec version: 1.0.0
  */
 
-export interface PlaybackStatisticsBucket {
-  date: string;
+export interface PlaybackStatisticsRhythmCell {
+  /** @pattern ^-?(?:0|[1-9]\d*)$ */
+  dayOfWeek: number | string;
+  /** @pattern ^-?(?:0|[1-9]\d*)$ */
+  hour: number | string;
   /** @pattern ^-?(?:0|[1-9]\d*)$ */
   completedCount: number | string;
   /** @pattern ^-?(?:0|[1-9]\d*)$ */

@@ -11,6 +11,8 @@ export interface PlaybackStatisticsParams {
   hideNsfw?: boolean;
   userId?: string;
   allUsers?: boolean;
+  /** Viewer offset from UTC in minutes, so day and rhythm buckets follow their wall clock. */
+  utcOffsetMinutes?: number;
 }
 
 export function fetchPlaybackStatistics(
@@ -25,6 +27,7 @@ export function fetchPlaybackStatistics(
   if (params.hideNsfw != null) query.set("hideNsfw", String(params.hideNsfw));
   if (params.userId) query.set("userId", params.userId);
   if (params.allUsers != null) query.set("allUsers", String(params.allUsers));
+  if (params.utcOffsetMinutes != null) query.set("utcOffsetMinutes", String(params.utcOffsetMinutes));
 
   const suffix = query.size > 0 ? `?${query.toString()}` : "";
   return fetchApi<PlaybackStatisticsResponse>(`/playback/statistics${suffix}`, {

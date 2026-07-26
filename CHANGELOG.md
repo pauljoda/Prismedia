@@ -22,6 +22,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Release operations are now ready for channel publishing: the root package version is the source of truth, Docker builds validate the release metadata, pushes to `main` publish only the dev image, and alpha/beta/release images are published manually.
 
 ### Changed
+- Playback Stats has been rebuilt around the prism: one beam of playback enters the Prismedia mark and separates into a band per media family, sized by its share of the window, and selecting a band filters the whole page. Watch time, completion, library reach, streaks, and the busiest day sit beside it, an activity chart adapts from per-day to per-week columns to stay readable at any width, and a weekday-by-hour rhythm grid shows exactly when the library gets used. Charts now use the spectrum as a cool-to-warm scale so hue reads as volume, and every list shows real artwork, how far playback actually reached, and accumulated watch time.
 - Delete files now performs a complete removal: the selected media subtree, managed files, generated assets, monitors, acquisitions, and stuck lifecycle state are removed together instead of monitored content returning to Wanted.
 - Browse, Settings, navigation, ambient backgrounds, and missing artwork now share one restrained rainbow palette in deliberate spectrum order across the web and Apple apps.
 

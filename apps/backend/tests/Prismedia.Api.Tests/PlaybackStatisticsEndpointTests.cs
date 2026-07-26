@@ -82,6 +82,18 @@ public sealed class PlaybackStatisticsEndpointTests {
         Assert.True(query.AllUsers);
     }
 
+    [Fact]
+    public async Task CallerLocalOffsetFlowsIntoTheStatisticsQuery() {
+        var statistics = new CapturingPlaybackStatisticsService();
+        using var factory = CreateFactory(statistics);
+        using var admin = factory.CreateAuthenticatedClient();
+
+        using var response = await admin.GetAsync("/api/playback/statistics?utcOffsetMinutes=-300");
+
+        response.EnsureSuccessStatusCode();
+        Assert.Equal(-300, Assert.Single(statistics.Queries).UtcOffsetMinutes);
+    }
+
     private static WebApplicationFactory<Program> CreateFactory(CapturingPlaybackStatisticsService statistics) =>
         new WebApplicationFactory<Program>()
             .WithWebHostBuilder(builder => builder.ConfigureServices(services => {
@@ -104,9 +116,12 @@ public sealed class PlaybackStatisticsEndpointTests {
                 CompletedCount: 0,
                 SkippedCount: 0,
                 DistinctEntityCount: 0,
+                WatchSeconds: 0,
                 TopEntities: [],
                 RecentEvents: [],
-                DailyEvents: []));
+                DailyEvents: [],
+                KindBreakdown: [],
+                Rhythm: []));
         }
     }
 }

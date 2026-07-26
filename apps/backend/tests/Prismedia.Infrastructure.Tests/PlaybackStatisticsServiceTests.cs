@@ -118,6 +118,73 @@ public sealed class PlaybackStatisticsServiceTests {
         Assert.Equal(3, allUsersStatistics.TotalEvents);
     }
 
+    [Fact]
+    public async Task StatisticsProjectFamilyRhythmAndWatchTimeInTheRequestedLocalOffset() {
+        await using var db = CreateContext();
+        var now = DateTimeOffset.Parse("2026-06-18T12:00:00Z");
+        db.Entities.AddRange(
+            Entity(VideoId, EntityKind.Video, "Visible Video", isNsfw: false, now),
+            Entity(AudioId, EntityKind.AudioTrack, "Visible Audio", isNsfw: false, now));
+        db.EntityPlaybackEvents.AddRange(
+            // 2026-06-18T02:00Z is 2026-06-17T21:00 at -05:00, so the local fold must move this
+            // event to the previous calendar day and to Wednesday 21:00 rather than Thursday 02:00.
+            Event(VideoId, PlaybackEventKind.Completed, DateTimeOffset.Parse("2026-06-18T02:00:00Z"), 600, TestUserContext.UserId, durationSeconds: 900),
+            Event(VideoId, PlaybackEventKind.Skipped, DateTimeOffset.Parse("2026-06-18T02:30:00Z"), 5, TestUserContext.UserId, durationSeconds: 900),
+            // A position past the reported duration must be clamped to the duration.
+            Event(AudioId, PlaybackEventKind.Completed, DateTimeOffset.Parse("2026-06-18T09:00:00Z"), 500, TestUserContext.UserId, durationSeconds: 200));
+        await db.SaveChangesAsync();
+        var service = new EfPlaybackStatisticsService(db, TestUserContext.Admin());
+
+        var statistics = await service.GetAsync(
+            new PlaybackStatisticsQuery(
+                now.AddDays(-7),
+                now.AddSeconds(1),
+                Kind: null,
+                EventKind: null,
+                HideNsfw: true,
+                UtcOffsetMinutes: -300),
+            CancellationToken.None);
+
+        Assert.Equal(805, statistics.WatchSeconds);
+
+        var video = Assert.Single(statistics.KindBreakdown, slice => slice.Kind == EntityKind.Video);
+        Assert.Equal(2, video.TotalEvents);
+        Assert.Equal(1, video.CompletedCount);
+        Assert.Equal(1, video.SkippedCount);
+        Assert.Equal(1, video.DistinctEntityCount);
+        Assert.Equal(605, video.WatchSeconds);
+        Assert.Equal(200, Assert.Single(statistics.KindBreakdown, slice => slice.Kind == EntityKind.AudioTrack).WatchSeconds);
+        // Ordered by activity, so the two-event video family leads the single-event audio family.
+        Assert.Equal(EntityKind.Video, statistics.KindBreakdown[0].Kind);
+
+        Assert.Collection(
+            statistics.DailyEvents,
+            wednesday => {
+                Assert.Equal(new DateOnly(2026, 6, 17), wednesday.Date);
+                Assert.Equal(1, wednesday.CompletedCount);
+                Assert.Equal(1, wednesday.SkippedCount);
+                Assert.Equal(605, wednesday.WatchSeconds);
+            },
+            thursday => {
+                Assert.Equal(new DateOnly(2026, 6, 18), thursday.Date);
+                Assert.Equal(1, thursday.CompletedCount);
+                Assert.Equal(0, thursday.SkippedCount);
+                Assert.Equal(200, thursday.WatchSeconds);
+            });
+
+        var evening = Assert.Single(statistics.Rhythm, cell => cell.Hour == 21);
+        Assert.Equal((int)DayOfWeek.Wednesday, evening.DayOfWeek);
+        Assert.Equal(2, evening.CompletedCount + evening.SkippedCount);
+        var morning = Assert.Single(statistics.Rhythm, cell => cell.Hour == 4);
+        Assert.Equal((int)DayOfWeek.Thursday, morning.DayOfWeek);
+        Assert.Equal(1, morning.CompletedCount);
+
+        var topVideo = Assert.Single(statistics.TopEntities, item => item.Id == VideoId);
+        Assert.Equal(605, topVideo.WatchSeconds);
+        Assert.Equal(DateTimeOffset.Parse("2026-06-18T02:00:00Z"), topVideo.FirstEventAt);
+        Assert.Equal(DateTimeOffset.Parse("2026-06-18T02:30:00Z"), topVideo.LastEventAt);
+    }
+
     private static void Seed(PrismediaDbContext db, DateTimeOffset now) {
         db.Entities.AddRange(
             Entity(VideoId, EntityKind.Video, "Visible Video", isNsfw: false, now),
@@ -165,7 +232,8 @@ public sealed class PlaybackStatisticsServiceTests {
         PlaybackEventKind kind,
         DateTimeOffset occurredAt,
         double? positionSeconds,
-        Guid? userId) =>
+        Guid? userId,
+        double? durationSeconds = null) =>
         new() {
             Id = Guid.NewGuid(),
             EntityId = entityId,
@@ -173,7 +241,7 @@ public sealed class PlaybackStatisticsServiceTests {
             Kind = kind,
             OccurredAt = occurredAt,
             PositionSeconds = positionSeconds,
-            DurationSeconds = null,
+            DurationSeconds = durationSeconds,
             CreatedAt = occurredAt
         };
 

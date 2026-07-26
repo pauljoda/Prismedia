@@ -16,6 +16,7 @@ internal static class PlaybackStatisticsEndpoints {
             bool? hideNsfw,
             Guid? userId,
             bool? allUsers,
+            int? utcOffsetMinutes,
             HttpContext httpContext,
             IPlaybackStatisticsService statistics,
             TimeProvider timeProvider,
@@ -50,7 +51,8 @@ internal static class PlaybackStatisticsEndpoints {
                         decodedEventKind,
                         NsfwVisibility.ShouldHide(hideNsfw, httpContext),
                         UserId: statisticsUserId,
-                        AllUsers: includeAllUsers),
+                        AllUsers: includeAllUsers,
+                        UtcOffsetMinutes: utcOffsetMinutes ?? 0),
                     cancellationToken);
 
                 return Results.Ok(response);

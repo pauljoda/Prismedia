@@ -2,17 +2,25 @@
   import { onMount } from "svelte";
   import {
     Activity,
-    ChartNoAxesCombined,
+    CalendarRange,
     Clock3,
-    Eye,
+    Flame,
+    Gauge,
     History,
+    Layers,
     Loader2,
-    SkipForward,
+    Timer,
+    Triangle,
     Trophy,
     UsersRound,
   } from "@lucide/svelte";
   import { Button, Select, cn, type SelectOption } from "@prismedia/ui-svelte";
-  import EntityThumbnail from "$lib/components/thumbnails/EntityThumbnail.svelte";
+  import ActivityTimeline from "$lib/components/stats/ActivityTimeline.svelte";
+  import PrismDispersion from "$lib/components/stats/PrismDispersion.svelte";
+  import RecentEventTimeline from "$lib/components/stats/RecentEventTimeline.svelte";
+  import RhythmGrid from "$lib/components/stats/RhythmGrid.svelte";
+  import StatFigure from "$lib/components/stats/StatFigure.svelte";
+  import TopEntityBoard from "$lib/components/stats/TopEntityBoard.svelte";
   import { fetchEntityThumbnails } from "$lib/api/entities";
   import {
     fetchPlaybackStatistics,
@@ -22,20 +30,29 @@
   import { entityCardToThumbnailCard } from "$lib/entities/entity-grid";
   import {
     entityReferenceToThumbnailCard,
-    toAspectRatioNumeric,
     type EntityThumbnailCard,
   } from "$lib/entities/entity-thumbnail";
   import {
     ENTITY_KIND,
     PLAYBACK_EVENT_KIND,
-    labelForEntityKind,
     resolveEntityHref,
     type EntityKindCode,
     type PlaybackEventKindCode,
   } from "$lib/entities/entity-codes";
+  import {
+    buildDailySeries,
+    buildDispersion,
+    buildRhythm,
+    completionRate,
+    formatDayKey,
+    formatDayShort,
+    formatWatchDuration,
+    localUtcOffsetMinutes,
+    statNumber,
+    summarizeCadence,
+  } from "$lib/stats/playback-stats";
   import { useNsfw } from "$lib/nsfw/store.svelte";
   import type {
-    PlaybackStatisticsBucket,
     PlaybackStatisticsEntity,
     PlaybackStatisticsEvent,
     PlaybackStatisticsResponse,
@@ -63,37 +80,18 @@
     { key: "all", label: "All", days: null },
   ];
 
-  const KIND_FILTERS: ReadonlyArray<{ value: KindFilter; label: string }> = [
-    { value: ALL_FILTER, label: "All" },
-    { value: ENTITY_KIND.video, label: "Videos" },
-    { value: ENTITY_KIND.movie, label: "Movies" },
-    { value: ENTITY_KIND.videoSeries, label: "Series" },
-    { value: ENTITY_KIND.audioTrack, label: "Tracks" },
-    { value: ENTITY_KIND.audioLibrary, label: "Audio" },
-    { value: ENTITY_KIND.book, label: "Books" },
-    { value: ENTITY_KIND.gallery, label: "Galleries" },
-    { value: ENTITY_KIND.image, label: "Images" },
-  ];
-
   const EVENT_FILTERS: ReadonlyArray<{ value: EventFilter; label: string }> = [
     { value: ALL_FILTER, label: "All" },
     { value: PLAYBACK_EVENT_KIND.completed, label: "Plays" },
     { value: PLAYBACK_EVENT_KIND.skipped, label: "Skips" },
   ];
-  const STATS_THUMBNAIL_HEIGHT_REM = 3.75;
-  const DAILY_ACTIVITY_VISIBLE_ROW_LIMIT = 15;
-  const DAILY_ACTIVITY_ROW_HEIGHT_REM = 4.35;
-  const DAILY_ACTIVITY_ROW_GAP_REM = 0.5;
-  const DAILY_ACTIVITY_LIST_MAX_HEIGHT_REM =
-    DAILY_ACTIVITY_VISIBLE_ROW_LIMIT * DAILY_ACTIVITY_ROW_HEIGHT_REM +
-    (DAILY_ACTIVITY_VISIBLE_ROW_LIMIT - 1) * DAILY_ACTIVITY_ROW_GAP_REM;
 
   const nsfw = useNsfw();
   const session = useSession();
 
   let timeframe = $state<TimeframeKey>("year");
   let kindFilter = $state<KindFilter>(ALL_FILTER);
-  let eventFilter = $state<EventFilter>(PLAYBACK_EVENT_KIND.completed);
+  let eventFilter = $state<EventFilter>(ALL_FILTER);
   let selectedScope = $state(session.user?.id ?? "");
   let users = $state.raw<UserResponse[]>([]);
   let scopeError = $state<string | null>(null);
@@ -102,44 +100,49 @@
   let loading = $state(true);
   let error = $state<string | null>(null);
   let activeRequest = 0;
-  let selectedChartDate = $state<string | null>(null);
+  let selectedDate = $state<string | null>(null);
+
+  // The window's day, weekday, and hour folds happen server side, so the viewer's offset travels
+  // with the query instead of being reconstructed from UTC buckets in the browser.
+  const utcOffsetMinutes = localUtcOffsetMinutes();
+
+  const totalEvents = $derived(statNumber(stats?.totalEvents));
+  const completedCount = $derived(statNumber(stats?.completedCount));
+  const skippedCount = $derived(statNumber(stats?.skippedCount));
+  const distinctEntityCount = $derived(statNumber(stats?.distinctEntityCount));
+  const watchSeconds = $derived(statNumber(stats?.watchSeconds));
+
+  const dispersionBands = $derived(buildDispersion(stats?.kindBreakdown ?? []));
+  const rhythm = $derived(buildRhythm(stats?.rhythm ?? []));
+  const dailySeries = $derived(
+    stats ? buildDailySeries(stats.dailyEvents, stats.from, stats.to, utcOffsetMinutes) : [],
+  );
+  const cadence = $derived(summarizeCadence(dailySeries));
+  const completion = $derived(completionRate(completedCount, skippedCount));
 
   const topEntities = $derived(stats?.topEntities ?? []);
   const recentEvents = $derived(stats?.recentEvents ?? []);
-  const dailyEvents = $derived(stats?.dailyEvents ?? []);
-  const dailyChartBuckets = $derived.by(() => {
-    const activeBuckets = dailyEvents.filter((bucket) => countBucketEvents(bucket) > 0);
-    return activeBuckets.length > 0 ? activeBuckets : dailyEvents;
+
+  const showCompleted = $derived(eventFilter !== PLAYBACK_EVENT_KIND.skipped);
+  const showSkipped = $derived(eventFilter !== PLAYBACK_EVENT_KIND.completed);
+  const showEmpty = $derived(!loading && !error && totalEvents === 0);
+
+  const windowLabel = $derived.by(() => {
+    if (!stats || dailySeries.length === 0) return "";
+    const first = dailySeries[0].date;
+    const last = dailySeries[dailySeries.length - 1].date;
+    // A one-year window has the same month and day at both ends, so the year has to be shown or
+    // the label collapses into an identical-looking pair.
+    const options: Intl.DateTimeFormatOptions =
+      first.slice(0, 4) === last.slice(0, 4)
+        ? { month: "short", day: "numeric" }
+        : { month: "short", day: "numeric", year: "numeric" };
+    return `${formatDayKey(first, options)} – ${formatDayKey(last, options)}`;
   });
-  const dailyActivityBuckets = $derived.by(() => [...dailyChartBuckets].reverse());
-  const maxDailyEvents = $derived(
-    Math.max(1, ...dailyChartBuckets.map((bucket) => countBucketEvents(bucket))),
-  );
-  const selectedChartBucket = $derived.by(() => {
-    if (dailyActivityBuckets.length === 0) return null;
-    if (selectedChartDate) {
-      const selected = dailyActivityBuckets.find((bucket) => bucket.date === selectedChartDate);
-      if (selected) return selected;
-    }
-    return dailyActivityBuckets[0] ?? null;
-  });
-  const dailyActivityLabel = $derived(activityLabelFor(eventFilter));
-  const showCompletedLegend = $derived(eventFilter !== PLAYBACK_EVENT_KIND.skipped);
-  const showSkippedLegend = $derived(eventFilter !== PLAYBACK_EVENT_KIND.completed);
-  const dailyActivityCountLabel = $derived(
-    `${formatNumber(dailyActivityBuckets.length)} active ${dailyActivityBuckets.length === 1 ? "day" : "days"}`,
-  );
-  const selectedChartTotal = $derived(selectedChartBucket ? countBucketEvents(selectedChartBucket) : 0);
-  const summaryFrom = $derived(stats ? formatDate(stats.from) : "");
-  const summaryTo = $derived(stats ? formatDate(stats.to) : "");
-  const showEmpty = $derived(!loading && !error && (stats?.totalEvents ?? 0) === 0);
+
   const scopeOptions = $derived.by<SelectOption[]>(() => {
     if (!session.isAdmin) return [];
-    const availableUsers = users.length > 0
-      ? users
-      : session.user
-        ? [session.user]
-        : [];
+    const availableUsers = users.length > 0 ? users : session.user ? [session.user] : [];
     return [
       { value: ALL_USERS_SCOPE, label: "All users" },
       ...availableUsers.map((user) => ({
@@ -196,7 +199,7 @@
   });
 
   async function loadStatistics(
-    params: ReturnType<typeof buildQuery>,
+    params: PlaybackStatisticsParams,
     hideNsfw: boolean,
     signal: AbortSignal,
   ): Promise<{ response: PlaybackStatisticsResponse; thumbnails: Map<string, EntityThumbnailCard> }> {
@@ -229,6 +232,7 @@
       kind: selectedKind === ALL_FILTER ? undefined : selectedKind,
       eventKind: selectedEvent === ALL_FILTER ? undefined : selectedEvent,
       hideNsfw,
+      utcOffsetMinutes,
     };
     if (isAdmin && scope === ALL_USERS_SCOPE) {
       query.allUsers = true;
@@ -251,10 +255,6 @@
     return err instanceof DOMException && err.name === "AbortError";
   }
 
-  function countBucketEvents(bucket: PlaybackStatisticsBucket): number {
-    return Number(bucket.completedCount) + Number(bucket.skippedCount);
-  }
-
   function entityIdsForStatistics(response: PlaybackStatisticsResponse): string[] {
     return [
       ...new Set([
@@ -262,71 +262,6 @@
         ...response.recentEvents.map((event) => event.entityId),
       ]),
     ];
-  }
-
-  function formatNumber(value: number | string | null | undefined): string {
-    return Number(value ?? 0).toLocaleString();
-  }
-
-  function formatDate(value: string): string {
-    return new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric", year: "numeric" })
-      .format(new Date(value));
-  }
-
-  function formatShortDate(value: string): string {
-    return formatDateOnly(value, { month: "short", day: "numeric" });
-  }
-
-  function formatDateOnly(value: string, options: Intl.DateTimeFormatOptions): string {
-    const [year, month, day] = value.split("-").map(Number);
-    if (!year || !month || !day) return value;
-    return new Intl.DateTimeFormat(undefined, options).format(new Date(year, month - 1, day));
-  }
-
-  function formatEventTime(value: string): string {
-    return new Intl.DateTimeFormat(undefined, {
-      month: "short",
-      day: "numeric",
-      hour: "numeric",
-      minute: "2-digit",
-    }).format(new Date(value));
-  }
-
-  function eventLabel(kind: string): string {
-    return kind === PLAYBACK_EVENT_KIND.skipped ? "Skipped" : "Played";
-  }
-
-  function eventTone(kind: string): string {
-    return kind === PLAYBACK_EVENT_KIND.skipped
-      ? "border-warning/30 bg-warning-muted/30 text-warning-text"
-      : "border-border-accent bg-accent-950/40 text-text-accent-bright";
-  }
-
-  function activityLabelFor(selectedEvent: EventFilter): string {
-    if (selectedEvent === PLAYBACK_EVENT_KIND.completed) return "Completed plays by active day";
-    if (selectedEvent === PLAYBACK_EVENT_KIND.skipped) return "Skips by active day";
-    return "Plays and skips by active day";
-  }
-
-  function chartBucketLabel(bucket: PlaybackStatisticsBucket): string {
-    const completed = Number(bucket.completedCount);
-    const skipped = Number(bucket.skippedCount);
-    const total = completed + skipped;
-    return `${formatDateOnly(bucket.date, { month: "long", day: "numeric", year: "numeric" })}: ${formatNumber(total)} events, ${formatNumber(completed)} plays, ${formatNumber(skipped)} skips`;
-  }
-
-  function chartBucketSummary(bucket: PlaybackStatisticsBucket): string {
-    const completed = Number(bucket.completedCount);
-    const skipped = Number(bucket.skippedCount);
-    const parts: string[] = [];
-    if (showCompletedLegend) parts.push(`${formatNumber(completed)} ${completed === 1 ? "play" : "plays"}`);
-    if (showSkippedLegend) parts.push(`${formatNumber(skipped)} ${skipped === 1 ? "skip" : "skips"}`);
-    return parts.join(" · ");
-  }
-
-  function chartBucketShareWidth(value: number): string {
-    if (value <= 0 || maxDailyEvents <= 0) return "0%";
-    return `${Math.min(100, Math.max(2, Math.round((value / maxDailyEvents) * 100)))}%`;
   }
 
   function topEntityThumbnail(entity: PlaybackStatisticsEntity): EntityThumbnailCard {
@@ -353,41 +288,29 @@
     );
   }
 
-  function thumbnailWidth(card: EntityThumbnailCard): string {
-    const ratio = toAspectRatioNumeric(card.aspectRatio);
-    return `${(STATS_THUMBNAIL_HEIGHT_REM * ratio).toFixed(3)}rem`;
-  }
-
-  function entityHref(entity: Pick<PlaybackStatisticsEntity, "id" | "kind">): string | undefined {
-    return resolveEntityHref(entity.kind, entity.id);
-  }
-
-  function eventHref(event: Pick<PlaybackStatisticsEvent, "entityId" | "entityKind">): string | undefined {
-    return resolveEntityHref(event.entityKind, event.entityId);
-  }
-
   function selectTimeframe(value: TimeframeKey) {
     timeframe = value;
-    selectedChartDate = null;
-  }
-
-  function selectKind(value: KindFilter) {
-    kindFilter = value;
-    selectedChartDate = null;
+    selectedDate = null;
   }
 
   function selectEvent(value: EventFilter) {
     eventFilter = value;
-    selectedChartDate = null;
+    selectedDate = null;
+  }
+
+  function selectKind(value: string | null) {
+    kindFilter = (value as EntityKindCode | null) ?? ALL_FILTER;
+    selectedDate = null;
   }
 
   function selectScope(value: string) {
     selectedScope = value;
-    selectedChartDate = null;
+    selectedDate = null;
   }
 
-  function selectChartBucket(date: string) {
-    selectedChartDate = date;
+  function eventsPerActiveDayLabel(): string {
+    if (cadence.activeDays === 0) return "No activity yet";
+    return `${(totalEvents / cadence.activeDays).toFixed(1)} per active day`;
   }
 </script>
 
@@ -395,82 +318,67 @@
   <title>Playback Stats · Prismedia</title>
 </svelte:head>
 
-<div class="space-y-3 pb-6">
-  <section class="surface-panel overflow-hidden">
-    <div class="border-b border-border-subtle bg-gradient-to-br from-surface-2 via-surface-2 to-surface-1 px-3 py-3 sm:px-4">
-      <div class="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-        <div class="min-w-0 space-y-2">
-          <div class="flex items-center gap-2 text-[0.64rem] uppercase tracking-[0.18em] text-accent-300">
-            <ChartNoAxesCombined class="h-3.5 w-3.5" />
-            Playback History
-          </div>
-          <h1 class="font-heading text-xl text-text-primary sm:text-2xl">Playback Stats</h1>
-          <p class="max-w-2xl text-xs text-text-muted">
-            {#if stats}
-              {summaryFrom} - {summaryTo}
-            {:else}
-              Loading playback history
-            {/if}
-          </p>
+<section class="space-y-3 pb-6">
+  <header class="stats-head">
+    <div class="min-w-0">
+      <h1 class="stats-title">
+        <Activity class="h-5 w-5 text-text-muted" aria-hidden="true" />
+        Playback Stats
+      </h1>
+      <p class="stats-subtitle">
+        {#if loading && !stats}
+          Reading playback history
+        {:else if windowLabel}
+          {windowLabel} · {totalEvents.toLocaleString()} events across {cadence.activeDays.toLocaleString()} active
+          {cadence.activeDays === 1 ? "day" : "days"}
+        {:else}
+          No playback history in this window
+        {/if}
+      </p>
+    </div>
+
+    <div class="stats-controls">
+      {#if session.isAdmin}
+        <div class="surface-well flex min-w-44 items-center gap-1 p-0.5 pl-2">
+          <UsersRound class="h-3.5 w-3.5 shrink-0 text-text-muted" aria-hidden="true" />
+          <Select
+            size="sm"
+            class="min-w-36 border-0 bg-transparent shadow-none"
+            value={selectedScope}
+            options={scopeOptions}
+            ariaLabel="Playback statistics user scope"
+            onchange={selectScope}
+          />
         </div>
+      {/if}
 
-        <div class="flex max-w-full flex-wrap gap-1.5 lg:justify-end">
-          {#if session.isAdmin}
-            <div class="surface-well flex min-w-44 items-center gap-1 p-0.5 pl-2">
-              <UsersRound class="h-3.5 w-3.5 shrink-0 text-text-muted" />
-              <Select
-                size="sm"
-                class="min-w-36 border-0 bg-transparent shadow-none"
-                value={selectedScope}
-                options={scopeOptions}
-                ariaLabel="Playback statistics user scope"
-                onchange={selectScope}
-              />
-            </div>
-          {/if}
+      <div class="surface-well flex w-fit max-w-full flex-wrap gap-1 p-0.5">
+        {#each TIMEFRAMES as option (option.key)}
+          <Button
+            variant={timeframe === option.key ? "primary" : "ghost"}
+            size="sm"
+            class="h-6 px-2 text-[0.7rem]"
+            onclick={() => selectTimeframe(option.key)}
+          >
+            {option.label}
+          </Button>
+        {/each}
+      </div>
 
-          <div class="surface-well flex w-fit max-w-full flex-wrap gap-1 p-0.5">
-            {#each TIMEFRAMES as option (option.key)}
-              <Button
-                variant={timeframe === option.key ? "primary" : "ghost"}
-                size="sm"
-                class="h-6 px-2 text-[0.7rem]"
-                onclick={() => selectTimeframe(option.key)}
-              >
-                {option.label}
-              </Button>
-            {/each}
-          </div>
-
-          <div class="surface-well flex w-fit max-w-full flex-wrap gap-1 p-0.5">
-            {#each EVENT_FILTERS as option (option.value)}
-              <Button
-                variant={eventFilter === option.value ? "primary" : "ghost"}
-                size="sm"
-                class="h-6 px-2 text-[0.7rem]"
-                onclick={() => selectEvent(option.value)}
-              >
-                {option.label}
-              </Button>
-            {/each}
-          </div>
-        </div>
+      <div class="surface-well flex w-fit max-w-full flex-wrap gap-1 p-0.5">
+        {#each EVENT_FILTERS as option (option.value)}
+          <Button
+            variant={eventFilter === option.value ? "primary" : "ghost"}
+            size="sm"
+            class="h-6 px-2 text-[0.7rem]"
+            onclick={() => selectEvent(option.value)}
+          >
+            {option.label}
+          </Button>
+        {/each}
       </div>
     </div>
-
-    <div class="flex gap-1.5 overflow-x-auto px-3 py-2 sm:px-4">
-      {#each KIND_FILTERS as option (option.value)}
-        <Button
-          variant={kindFilter === option.value ? "primary" : "ghost"}
-          size="sm"
-          class="h-6 shrink-0 px-2 text-[0.7rem]"
-          onclick={() => selectKind(option.value)}
-        >
-          {option.label}
-        </Button>
-      {/each}
-    </div>
-  </section>
+  </header>
 
   {#if error}
     <div class="surface-panel border-l-2 border-error px-3 py-2 text-sm text-error-text" role="alert">
@@ -484,266 +392,321 @@
     </div>
   {/if}
 
-  <section class="surface-panel overflow-hidden">
-    <div class="grid divide-y divide-border-subtle sm:grid-cols-2 sm:divide-x sm:divide-y-0 lg:grid-cols-4">
-      <div class="min-h-20 px-3 py-3">
-        <div class="flex items-center justify-between text-text-muted">
-          <span class="text-mono-sm uppercase tracking-[0.14em]">Total</span>
-          <Activity class="h-3.5 w-3.5" />
-        </div>
-        <div class="mt-1.5 font-heading text-2xl font-semibold text-text-primary">
-          {loading ? "-" : formatNumber(stats?.totalEvents)}
-        </div>
-        <div class="mt-0.5 text-xs text-text-muted">Events in range</div>
-      </div>
-
-      <div class="min-h-20 px-3 py-3">
-        <div class="flex items-center justify-between text-text-muted">
-          <span class="text-mono-sm uppercase tracking-[0.14em]">Plays</span>
-          <Eye class="h-3.5 w-3.5" />
-        </div>
-        <div class="mt-1.5 font-heading text-2xl font-semibold text-text-accent-bright">
-          {loading ? "-" : formatNumber(stats?.completedCount)}
-        </div>
-        <div class="mt-0.5 text-xs text-text-muted">Completed events</div>
-      </div>
-
-      <div class="min-h-20 px-3 py-3">
-        <div class="flex items-center justify-between text-text-muted">
-          <span class="text-mono-sm uppercase tracking-[0.14em]">Skips</span>
-          <SkipForward class="h-3.5 w-3.5" />
-        </div>
-        <div class="mt-1.5 font-heading text-2xl font-semibold text-warning-text">
-          {loading ? "-" : formatNumber(stats?.skippedCount)}
-        </div>
-        <div class="mt-0.5 text-xs text-text-muted">Quick exits</div>
-      </div>
-
-      <div class="min-h-20 px-3 py-3">
-        <div class="flex items-center justify-between text-text-muted">
-          <span class="text-mono-sm uppercase tracking-[0.14em]">Items</span>
-          <Trophy class="h-3.5 w-3.5" />
-        </div>
-        <div class="mt-1.5 font-heading text-2xl font-semibold text-text-primary">
-          {loading ? "-" : formatNumber(stats?.distinctEntityCount)}
-        </div>
-        <div class="mt-0.5 text-xs text-text-muted">Distinct entities</div>
-      </div>
-    </div>
-  </section>
-
-  {#if loading}
-    <div class="surface-panel flex min-h-40 items-center justify-center">
-      <Loader2 class="h-5 w-5 animate-spin text-accent-300" />
+  {#if loading && !stats}
+    <div class="surface-panel flex min-h-72 items-center justify-center">
+      <Loader2 class="h-5 w-5 animate-spin text-accent-300" aria-hidden="true" />
+      <span class="sr-only">Loading playback statistics</span>
     </div>
   {:else if showEmpty}
-    <div class="surface-panel flex min-h-40 flex-col items-center justify-center px-4 text-center">
-      <History class="h-6 w-6 text-text-muted" />
+    <div class="surface-panel flex min-h-72 flex-col items-center justify-center px-4 text-center">
+      <History class="h-6 w-6 text-text-muted" aria-hidden="true" />
       <h2 class="mt-2 font-heading text-base text-text-primary">No playback history yet</h2>
       <p class="mt-1 max-w-md text-sm text-text-muted">
-        Completed and skipped events will appear here as playback history is recorded.
+        Completed and skipped events appear here as you watch, listen, and read. Adjust the
+        timeframe or filters above if you expected to see something.
       </p>
+      {#if kindFilter !== ALL_FILTER || eventFilter !== ALL_FILTER}
+        <Button
+          variant="ghost"
+          size="sm"
+          class="mt-3"
+          onclick={() => {
+            selectKind(null);
+            selectEvent(ALL_FILTER);
+          }}
+        >
+          Clear filters
+        </Button>
+      {/if}
     </div>
   {:else}
-    <section class="grid gap-3 xl:grid-cols-[minmax(0,1.25fr)_minmax(320px,0.75fr)]">
-      <section class="surface-panel overflow-hidden">
-        <div class="flex items-center justify-between gap-3 border-b border-border-subtle px-3 py-2.5">
-          <div>
-            <h2 class="font-heading text-base text-text-primary">Daily Activity</h2>
-            <p class="text-xs text-text-muted">{dailyActivityLabel}</p>
-          </div>
-          <span class="rounded-xs border border-border-subtle bg-surface-2 px-2 py-1 font-mono text-[0.68rem] text-text-muted">
-            {dailyActivityCountLabel}
-          </span>
+    <!--
+      The dispersion is this page's single accent moment: one library of playback entering the
+      prism and separating into its media families. Everything below it stays neutral.
+    -->
+    <section class={cn("surface-panel overflow-hidden", loading && "stats-refreshing")}>
+      <div class="panel-head">
+        <div>
+          <h2 class="panel-title">
+            <Triangle class="h-3.5 w-3.5 text-text-muted" aria-hidden="true" />
+            Spectrum
+          </h2>
+          <p class="panel-subtitle">
+            {dispersionBands.length === 1
+              ? "Filtered to one media family"
+              : `Playback separated across ${dispersionBands.length} media families`} · select a
+            family to filter the page
+          </p>
         </div>
-
-        <div class="px-3 py-3">
-          <div class="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(220px,0.34fr)]">
-            <div
-              class="space-y-2 overflow-y-auto pr-1"
-              style:max-height={`${DAILY_ACTIVITY_LIST_MAX_HEIGHT_REM}rem`}
-            >
-              {#each dailyActivityBuckets as bucket (bucket.date)}
-                {@const completed = Number(bucket.completedCount)}
-                {@const skipped = Number(bucket.skippedCount)}
-                {@const total = completed + skipped}
-                <button
-                  type="button"
-                  class={cn(
-                    "w-full rounded-xs border px-3 py-2 text-left transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500/25 focus-visible:ring-offset-1 focus-visible:ring-offset-bg",
-                    selectedChartBucket?.date === bucket.date
-                      ? "border-accent-300/70 bg-accent-950/20 shadow-[0_0_18px_rgba(199, 201, 204,0.16),inset_0_1px_0_rgba(255,255,255,0.06)]"
-                      : "border-border-subtle bg-surface-2/60 hover:border-border-accent hover:bg-surface-3/70",
-                  )}
-                  title={`${formatShortDate(bucket.date)}: ${total} events`}
-                  aria-label={chartBucketLabel(bucket)}
-                  aria-pressed={selectedChartBucket?.date === bucket.date}
-                  onclick={() => selectChartBucket(bucket.date)}
-                >
-                  <span class="flex items-start justify-between gap-3">
-                    <span class="min-w-0">
-                      <span class="block truncate text-[0.82rem] font-medium text-text-primary">
-                        {formatDateOnly(bucket.date, { month: "long", day: "numeric", year: "numeric" })}
-                      </span>
-                      <span class="mt-0.5 block text-xs text-text-muted">{chartBucketSummary(bucket)}</span>
-                    </span>
-                    <span class="shrink-0 font-heading text-lg font-semibold text-text-primary">{formatNumber(total)}</span>
-                  </span>
-
-                  <span class="mt-2 flex h-2 overflow-hidden rounded-xs border border-border-subtle bg-surface-1/80" aria-hidden="true">
-                    {#if completed > 0}
-                      <span
-                        class="h-full bg-accent-300/90 shadow-[0_0_12px_rgba(199, 201, 204,0.24)]"
-                        style:width={chartBucketShareWidth(completed)}
-                      ></span>
-                    {/if}
-                    {#if skipped > 0}
-                      <span
-                        class="h-full bg-warning/80"
-                        style:width={chartBucketShareWidth(skipped)}
-                      ></span>
-                    {/if}
-                  </span>
-                </button>
-              {/each}
-            </div>
-
-            <div class="border-t border-border-subtle pt-3 lg:border-l lg:border-t-0 lg:pl-3 lg:pt-0">
-              {#if selectedChartBucket}
-                <span class="text-mono-sm uppercase tracking-[0.14em] text-text-muted">Selected Day</span>
-                <div class="mt-1 font-heading text-lg font-semibold text-text-primary">
-                  {formatDateOnly(selectedChartBucket.date, { month: "long", day: "numeric", year: "numeric" })}
-                </div>
-                <div class="mt-3 flex items-end gap-2">
-                  <span class="font-heading text-4xl font-semibold text-text-primary">{formatNumber(selectedChartTotal)}</span>
-                  <span class="pb-1 text-xs text-text-muted">{selectedChartTotal === 1 ? "event" : "events"}</span>
-                </div>
-                <div class="mt-3 flex flex-wrap gap-2 text-xs">
-                  {#if showCompletedLegend}
-                    <span class="rounded-xs border border-border-accent bg-accent-950/40 px-1.5 py-0.5 font-mono text-text-accent-bright">
-                      {formatNumber(selectedChartBucket.completedCount)} plays
-                    </span>
-                  {/if}
-                  {#if showSkippedLegend}
-                    <span class="rounded-xs border border-warning/30 bg-warning-muted/30 px-1.5 py-0.5 font-mono text-warning-text">
-                      {formatNumber(selectedChartBucket.skippedCount)} skips
-                    </span>
-                  {/if}
-                </div>
-                <div class="mt-4 flex items-center gap-4 text-xs text-text-muted">
-                  {#if showCompletedLegend}
-                    <span class="inline-flex items-center gap-1.5"><span class="h-2 w-2 rounded-xs bg-accent-300"></span>Plays</span>
-                  {/if}
-                  {#if showSkippedLegend}
-                    <span class="inline-flex items-center gap-1.5"><span class="h-2 w-2 rounded-xs bg-warning"></span>Skips</span>
-                  {/if}
-                </div>
-              {/if}
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section class="surface-panel overflow-hidden">
-        <div class="flex items-center justify-between gap-3 border-b border-border-subtle px-3 py-2.5">
-          <div>
-            <h2 class="font-heading text-base text-text-primary">Top Entities</h2>
-            <p class="text-xs text-text-muted">Ranked by this window</p>
-          </div>
-          <Trophy class="h-3.5 w-3.5 text-accent-300" />
-        </div>
-
-        <div class="divide-y divide-border-subtle">
-          {#each topEntities as item, index (item.id)}
-            {@const href = entityHref(item)}
-            {@const thumbnail = topEntityThumbnail(item)}
-            <svelte:element
-              this={href ? "a" : "div"}
-              href={href ?? undefined}
-              class={cn(
-                "group grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2.5 px-3 py-2 transition-colors",
-                href && "hover:bg-surface-2/60",
-              )}
-            >
-              <div class="grid grid-cols-[auto_auto] items-center gap-2.5">
-                <span class="w-4 text-right font-mono text-[0.64rem] text-text-disabled">{index + 1}</span>
-                <div class="stats-thumb" style:width={thumbnailWidth(thumbnail)}>
-                  <EntityThumbnail
-                    card={thumbnail}
-                    imageLoading="lazy"
-                    interactive={false}
-                    mediaOnly
-                  />
-                </div>
-              </div>
-              <div class="min-w-0">
-                <div class="truncate text-[0.82rem] font-medium text-text-primary">{item.title}</div>
-                <div class="text-xs text-text-muted">{labelForEntityKind(item.kind)}</div>
-              </div>
-              <div class="grid shrink-0 grid-cols-2 gap-2 text-right font-mono text-xs">
-                <span class="text-text-accent-bright">{formatNumber(item.completedCount)}</span>
-                <span class="text-warning-text">{formatNumber(item.skippedCount)}</span>
-              </div>
-            </svelte:element>
-          {/each}
-        </div>
-      </section>
+        {#if kindFilter !== ALL_FILTER}
+          <Button variant="ghost" size="sm" class="h-6 px-2 text-[0.7rem]" onclick={() => selectKind(null)}>
+            Clear family
+          </Button>
+        {/if}
+      </div>
+      <div class="px-3 py-3 sm:px-4">
+        <PrismDispersion bands={dispersionBands} activeKind={kindFilter === ALL_FILTER ? null : kindFilter} onSelect={selectKind} />
+      </div>
     </section>
 
-    <section class="surface-panel overflow-hidden">
-      <div class="flex items-center justify-between gap-3 border-b border-border-subtle px-3 py-2.5">
-        <div>
-          <h2 class="font-heading text-base text-text-primary">Recent Events</h2>
-          <p class="text-xs text-text-muted">Latest playback history</p>
-        </div>
-        <Clock3 class="h-3.5 w-3.5 text-text-muted" />
+    <section class={cn("surface-panel overflow-hidden", loading && "stats-refreshing")}>
+      <div class="stats-figures">
+        <StatFigure
+          label="Watch time"
+          value={formatWatchDuration(watchSeconds)}
+          hint={cadence.activeDays > 0
+            ? `${formatWatchDuration(cadence.watchSecondsPerActiveDay)} per active day`
+            : undefined}
+          icon={Timer}
+          emphasis
+        />
+        <StatFigure
+          label="Events"
+          value={totalEvents.toLocaleString()}
+          hint={eventsPerActiveDayLabel()}
+          icon={Activity}
+        />
+        <StatFigure
+          label="Completion"
+          value={`${Math.round(completion * 100)}%`}
+          hint={`${completedCount.toLocaleString()} played · ${skippedCount.toLocaleString()} skipped`}
+          icon={Gauge}
+          ratio={completion}
+        />
+        <StatFigure
+          label="Items reached"
+          value={distinctEntityCount.toLocaleString()}
+          hint="Distinct library items"
+          icon={Layers}
+        />
+        <StatFigure
+          label="Streak"
+          value={`${cadence.currentStreak.toLocaleString()}d`}
+          hint={`Longest ${cadence.longestStreak.toLocaleString()}d · ${cadence.activeDays.toLocaleString()} of ${cadence.totalDays.toLocaleString()} days active`}
+          icon={Flame}
+          ratio={cadence.totalDays > 0 ? cadence.activeDays / cadence.totalDays : null}
+        />
+        <StatFigure
+          label="Busiest day"
+          value={cadence.busiestDay ? formatDayShort(cadence.busiestDay.date) : "—"}
+          hint={cadence.busiestDay
+            ? `${cadence.busiestDay.totalEvents.toLocaleString()} events · ${formatWatchDuration(cadence.busiestDay.watchSeconds)}`
+            : "No activity yet"}
+          icon={CalendarRange}
+        />
       </div>
+    </section>
 
-      <div class="divide-y divide-border-subtle">
-        {#each recentEvents as event (event.id)}
-          {@const href = eventHref(event)}
-          {@const thumbnail = recentEventThumbnail(event)}
-          <svelte:element
-            this={href ? "a" : "div"}
-            href={href ?? undefined}
-            class={cn(
-              "grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2.5 px-3 py-2 transition-colors",
-              href && "hover:bg-surface-2/60",
-            )}
-          >
-            <div class="stats-thumb" style:width={thumbnailWidth(thumbnail)}>
-              <EntityThumbnail
-                card={thumbnail}
-                imageLoading="lazy"
-                interactive={false}
-                mediaOnly
-              />
-            </div>
-            <div class="min-w-0">
-              <div class="truncate text-[0.82rem] font-medium text-text-primary">{event.entityTitle}</div>
-              <div class="text-xs text-text-muted">
-                {labelForEntityKind(event.entityKind)} · {formatEventTime(event.occurredAt)}
-              </div>
-            </div>
-            <span class={cn("shrink-0 rounded-xs border px-1.5 py-0.5 text-[0.68rem] font-medium", eventTone(event.kind))}>
-              {eventLabel(event.kind)}
-            </span>
-          </svelte:element>
-        {/each}
+    <section class={cn("surface-panel overflow-hidden", loading && "stats-refreshing")}>
+      <div class="panel-head">
+        <div>
+          <h2 class="panel-title">Activity</h2>
+          <p class="panel-subtitle">Events per day across the selected window</p>
+        </div>
       </div>
+      <div class="px-3 py-3 sm:px-4">
+        <ActivityTimeline
+          series={dailySeries}
+          {showCompleted}
+          {showSkipped}
+          {selectedDate}
+          onSelect={(date) => (selectedDate = date)}
+        />
+      </div>
+    </section>
+
+    <div class="grid gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+      <section class={cn("surface-panel overflow-hidden", loading && "stats-refreshing")}>
+        <div class="panel-head">
+          <div>
+            <h2 class="panel-title">
+              <Clock3 class="h-3.5 w-3.5 text-text-muted" aria-hidden="true" />
+              Rhythm
+            </h2>
+            <p class="panel-subtitle">Which hours of the week the library gets used</p>
+          </div>
+        </div>
+        <div class="px-3 py-3 sm:px-4">
+          <RhythmGrid {rhythm} />
+        </div>
+      </section>
+
+      <section class={cn("surface-panel overflow-hidden", loading && "stats-refreshing")}>
+        <div class="panel-head">
+          <div>
+            <h2 class="panel-title">
+              <Trophy class="h-3.5 w-3.5 text-text-muted" aria-hidden="true" />
+              Most played
+            </h2>
+            <p class="panel-subtitle">Ranked by events in this window</p>
+          </div>
+        </div>
+        <TopEntityBoard entities={topEntities} thumbnailFor={topEntityThumbnail} />
+      </section>
+    </div>
+
+    <section class={cn("surface-panel overflow-hidden", loading && "stats-refreshing")}>
+      <div class="panel-head">
+        <div>
+          <h2 class="panel-title">
+            <History class="h-3.5 w-3.5 text-text-muted" aria-hidden="true" />
+            History
+          </h2>
+          <p class="panel-subtitle">The most recent playback events</p>
+        </div>
+      </div>
+      <RecentEventTimeline
+        events={recentEvents}
+        thumbnailFor={recentEventThumbnail}
+        {utcOffsetMinutes}
+      />
     </section>
   {/if}
-</div>
+</section>
 
 <style>
-  .stats-thumb {
-    height: 3.75rem;
-    flex: 0 0 auto;
-    min-width: 0;
+  .stats-head {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid var(--color-border-subtle);
   }
 
-  .stats-thumb :global(.entity-thumbnail) {
-    width: 100%;
-    height: 100%;
+  @media (min-width: 64rem) {
+    .stats-head {
+      flex-direction: row;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 1rem;
+    }
+  }
+
+  .stats-title {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.6rem;
+    margin: 0;
+    font-family: var(--font-heading);
+    font-size: 1.55rem;
+    font-weight: 600;
+    letter-spacing: -0.025em;
+    line-height: 1.05;
+  }
+
+  .stats-subtitle {
+    margin: 0.35rem 0 0;
+    font-family: var(--font-mono);
+    font-size: 0.68rem;
+    font-variant-numeric: tabular-nums;
+    color: var(--color-text-muted);
+  }
+
+  .stats-controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.375rem;
+  }
+
+  @media (min-width: 64rem) {
+    .stats-controls {
+      justify-content: flex-end;
+    }
+  }
+
+  .panel-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding: 0.6rem 0.75rem;
+    border-bottom: 1px solid var(--color-border-subtle);
+  }
+
+  @media (min-width: 40rem) {
+    .panel-head {
+      padding-inline: 1rem;
+    }
+  }
+
+  .panel-title {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    margin: 0;
+    font-family: var(--font-heading);
+    font-size: 0.95rem;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    color: var(--color-text-primary);
+  }
+
+  .panel-subtitle {
+    margin: 0.15rem 0 0;
+    font-size: 0.72rem;
+    color: var(--color-text-muted);
+  }
+
+  .stats-figures {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .stats-figures > :global(*) {
+    border-top: 1px solid var(--color-border-subtle);
+    border-left: 1px solid var(--color-border-subtle);
+  }
+
+  .stats-figures > :global(:nth-child(-n + 2)) {
+    border-top: none;
+  }
+
+  .stats-figures > :global(:nth-child(2n + 1)) {
+    border-left: none;
+  }
+
+  @media (min-width: 48rem) {
+    .stats-figures {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .stats-figures > :global(:nth-child(-n + 3)) {
+      border-top: none;
+    }
+
+    .stats-figures > :global(:nth-child(2n + 1)) {
+      border-left: 1px solid var(--color-border-subtle);
+    }
+
+    .stats-figures > :global(:nth-child(3n + 1)) {
+      border-left: none;
+    }
+  }
+
+  @media (min-width: 80rem) {
+    .stats-figures {
+      grid-template-columns: repeat(6, minmax(0, 1fr));
+    }
+
+    .stats-figures > :global(*) {
+      border-top: none;
+      border-left: 1px solid var(--color-border-subtle);
+    }
+
+    .stats-figures > :global(:first-child) {
+      border-left: none;
+    }
+  }
+
+  /* A refresh keeps the previous window on screen at reduced contrast instead of blanking it. */
+  .stats-refreshing {
+    opacity: 0.6;
+    transition: opacity var(--duration-normal, 200ms) var(--ease-default, ease);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .stats-refreshing {
+      transition: none;
+    }
   }
 </style>

@@ -70,7 +70,8 @@ The everyday product surface should read as roughly 90–95% neutral. Use entity
 - a thin progress or active-state rail;
 - a selected control that also has a border, shape, or position cue;
 - artwork-derived atmosphere inside an entity detail experience;
-- the colored brand mark and literal prism/loading sequence.
+- the colored brand mark and literal prism/loading sequence;
+- a chart, where colour is the data rather than decoration.
 
 Every page must include one accent moment that communicates its identity without tinting the whole page. A library page can spend that moment on the top edge of its grid toolbar; Settings uses muted section icons; an entity detail page uses artwork atmosphere and its active-tab rail. Prefer one clear location over several competing accents.
 
@@ -93,6 +94,23 @@ Do not repeat the same entity color across a section label, icon, card border, b
 | Tags | Green → yellow |
 
 Use these pairs for small heading markers, selected rails, progress, and navigation-section defaults. Keep adjacent heading text, icons, cards, and buttons neutral. A user may override a navigation section color, but that does not redefine the entity family.
+
+## Data visualization
+
+Charts are the one place where colour carries the data instead of decorating it, so the neutral colour budget does not apply inside a plot. It still applies to everything around the plot: panel chrome, headings, axis labels, and legends stay neutral.
+
+The spectrum is used two different ways, and a chart must not mix them:
+
+- **Identity.** Colour names an entity family. Use the family pairs above, in `PRISM_SPECTRUM_ORDER`, so a set of families reads as one dispersed spectrum rather than an arbitrary palette. Persistent chrome takes the `materialSpectrum` pair; a literal light moment takes the brand pair.
+- **Magnitude.** Colour encodes how much. Use the shared cool-to-warm heat scale: cyan, green, yellow, orange, red. Cool reads quiet and warm reads busy, and every chart on a page must ramp in the same direction or the hues stop meaning anything. The scale deliberately starts at cyan — the spectrum's violet and blue are too dark to hold their own on a true-black canvas, and they stay reserved for identity.
+
+Rules:
+
+- A magnitude scale needs a visible key, or its hues are decoration.
+- When one series is coloured, its companion series is neutral. Two coloured series on one axis read as two points on the same scale.
+- Never encode a value in hue alone. Position, height, or length carries the value; hue reinforces it.
+- Reduce granularity to fit the available width. A year of per-day columns aliases into noise on a phone, so group into weeks and say so in the legend.
+- Round an axis maximum up to a readable gridline, but never report that rounded value as the observed peak.
 
 ## Artwork-reactive detail surfaces
 

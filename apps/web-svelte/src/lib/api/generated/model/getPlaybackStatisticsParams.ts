@@ -13,4 +13,8 @@ eventKind?: string;
 hideNsfw?: boolean;
 userId?: string;
 allUsers?: boolean;
+/**
+ * @pattern ^-?(?:0|[1-9]\d*)$
+ */
+utcOffsetMinutes?: number | string;
 };

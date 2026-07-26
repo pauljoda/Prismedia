@@ -7,6 +7,8 @@
 import type { PlaybackStatisticsBucket } from './playbackStatisticsBucket';
 import type { PlaybackStatisticsEntity } from './playbackStatisticsEntity';
 import type { PlaybackStatisticsEvent } from './playbackStatisticsEvent';
+import type { PlaybackStatisticsKindSlice } from './playbackStatisticsKindSlice';
+import type { PlaybackStatisticsRhythmCell } from './playbackStatisticsRhythmCell';
 
 export interface PlaybackStatisticsResponse {
   from: string;
@@ -19,7 +21,11 @@ export interface PlaybackStatisticsResponse {
   skippedCount: number | string;
   /** @pattern ^-?(?:0|[1-9]\d*)$ */
   distinctEntityCount: number | string;
+  /** @pattern ^-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?$ */
+  watchSeconds: number | string;
   topEntities: PlaybackStatisticsEntity[];
   recentEvents: PlaybackStatisticsEvent[];
   dailyEvents: PlaybackStatisticsBucket[];
+  kindBreakdown: PlaybackStatisticsKindSlice[];
+  rhythm: PlaybackStatisticsRhythmCell[];
 }

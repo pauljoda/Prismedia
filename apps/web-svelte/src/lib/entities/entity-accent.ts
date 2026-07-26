@@ -14,19 +14,45 @@ export const PRISM_MATERIAL_SPECTRUM = {
   ...colors.materialSpectrum,
 } as const;
 
-const VIDEO = { primary: PRISM_MATERIAL_SPECTRUM.red, secondary: PRISM_MATERIAL_SPECTRUM.orange };
-const MOVIE = { primary: PRISM_MATERIAL_SPECTRUM.orange, secondary: PRISM_MATERIAL_SPECTRUM.yellow };
-const SERIES = { primary: PRISM_MATERIAL_SPECTRUM.yellow, secondary: PRISM_MATERIAL_SPECTRUM.green };
-const GALLERY = { primary: PRISM_MATERIAL_SPECTRUM.green, secondary: PRISM_MATERIAL_SPECTRUM.cyan };
-const BOOK = { primary: PRISM_MATERIAL_SPECTRUM.cyan, secondary: PRISM_MATERIAL_SPECTRUM.blue };
-const IMAGE = { primary: PRISM_MATERIAL_SPECTRUM.blue, secondary: PRISM_MATERIAL_SPECTRUM.violet };
-const AUDIO = { primary: PRISM_MATERIAL_SPECTRUM.violet, secondary: PRISM_MATERIAL_SPECTRUM.magenta };
-const COLLECTION = { primary: PRISM_MATERIAL_SPECTRUM.magenta, secondary: PRISM_MATERIAL_SPECTRUM.red };
-const PEOPLE = { primary: PRISM_MATERIAL_SPECTRUM.red, secondary: PRISM_MATERIAL_SPECTRUM.violet };
-const STUDIOS = { primary: PRISM_MATERIAL_SPECTRUM.orange, secondary: PRISM_MATERIAL_SPECTRUM.magenta };
-const TAGS = { primary: PRISM_MATERIAL_SPECTRUM.green, secondary: PRISM_MATERIAL_SPECTRUM.yellow };
+/** A hue of the prism spectrum, available as both brand light and muted material paint. */
+export type PrismSpectrumHue = keyof typeof PRISM_MATERIAL_SPECTRUM;
 
-const ENTITY_ACCENTS: Readonly<Record<string, EntityAccent>> = {
+/**
+ * Hue order of the prism spectrum, from the red end to the magenta end. This is the order
+ * dispersed light arrives in, so any surface that lays entity families out as a spectrum should
+ * sort by it rather than by an incidental data order.
+ */
+export const PRISM_SPECTRUM_ORDER = [
+  "red",
+  "orange",
+  "yellow",
+  "green",
+  "cyan",
+  "blue",
+  "violet",
+  "magenta",
+] as const satisfies ReadonlyArray<PrismSpectrumHue>;
+
+/**
+ * The hue pair that identifies each entity family, named rather than valued so the material and
+ * emitted palettes can never drift apart. Adjacent families share a boundary hue, which is what
+ * makes the whole set read as one continuous spectrum.
+ */
+type EntityHuePair = readonly [PrismSpectrumHue, PrismSpectrumHue];
+
+const VIDEO: EntityHuePair = ["red", "orange"];
+const MOVIE: EntityHuePair = ["orange", "yellow"];
+const SERIES: EntityHuePair = ["yellow", "green"];
+const GALLERY: EntityHuePair = ["green", "cyan"];
+const BOOK: EntityHuePair = ["cyan", "blue"];
+const IMAGE: EntityHuePair = ["blue", "violet"];
+const AUDIO: EntityHuePair = ["violet", "magenta"];
+const COLLECTION: EntityHuePair = ["magenta", "red"];
+const PEOPLE: EntityHuePair = ["red", "violet"];
+const STUDIOS: EntityHuePair = ["orange", "magenta"];
+const TAGS: EntityHuePair = ["green", "yellow"];
+
+const ENTITY_HUES: Readonly<Record<string, EntityHuePair>> = {
   [ENTITY_KIND.video]: VIDEO,
   [ENTITY_KIND.movie]: MOVIE,
   [ENTITY_KIND.videoSeries]: SERIES,
@@ -48,9 +74,42 @@ const ENTITY_ACCENTS: Readonly<Record<string, EntityAccent>> = {
   [ENTITY_KIND.tag]: TAGS,
 };
 
-const FALLBACK_ACCENT = { primary: PRISM_MATERIAL_SPECTRUM.cyan, secondary: PRISM_MATERIAL_SPECTRUM.violet };
+const FALLBACK_HUES: EntityHuePair = ["cyan", "violet"];
 
-/** Returns the stable spectrum pair that represents an entity family. */
+function huesForKind(kind: string): EntityHuePair {
+  return ENTITY_HUES[kind] ?? FALLBACK_HUES;
+}
+
+/**
+ * Returns the stable spectrum pair that represents an entity family, in muted material paint.
+ * This is the palette for persistent chrome: markers, rails, borders, and state fills.
+ */
 export function entityAccentForKind(kind: string): EntityAccent {
-  return ENTITY_ACCENTS[kind] ?? FALLBACK_ACCENT;
+  const [primary, secondary] = huesForKind(kind);
+  return {
+    primary: PRISM_MATERIAL_SPECTRUM[primary],
+    secondary: PRISM_MATERIAL_SPECTRUM[secondary],
+  };
+}
+
+/**
+ * Returns an entity family's spectrum pair in full brand light, matching the prism logo.
+ * Reserved for literal emitted-light moments such as the prism mark, the loading beam, and a
+ * dispersion chart. Persistent chrome uses {@link entityAccentForKind} instead.
+ */
+export function entityEmittedAccentForKind(kind: string): EntityAccent {
+  const [primary, secondary] = huesForKind(kind);
+  return {
+    primary: PRISM_SPECTRUM[primary],
+    secondary: PRISM_SPECTRUM[secondary],
+  };
+}
+
+/**
+ * Position of an entity family along the prism spectrum, taken from where its primary hue sits
+ * in {@link PRISM_SPECTRUM_ORDER}. Unknown families sort last.
+ */
+export function entitySpectrumIndex(kind: string): number {
+  const index = PRISM_SPECTRUM_ORDER.indexOf(huesForKind(kind)[0]);
+  return index < 0 ? PRISM_SPECTRUM_ORDER.length : index;
 }

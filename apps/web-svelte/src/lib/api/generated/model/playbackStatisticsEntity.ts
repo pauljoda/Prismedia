@@ -16,5 +16,8 @@ export interface PlaybackStatisticsEntity {
   completedCount: number | string;
   /** @pattern ^-?(?:0|[1-9]\d*)$ */
   skippedCount: number | string;
+  /** @pattern ^-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?$ */
+  watchSeconds: number | string;
+  firstEventAt: string;
   lastEventAt: string;
 }

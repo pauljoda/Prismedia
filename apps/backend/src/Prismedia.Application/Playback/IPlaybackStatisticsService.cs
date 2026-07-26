@@ -26,6 +26,10 @@ public interface IPlaybackStatisticsService {
 /// When true (admins only, enforced at the endpoint), includes every user's events
 /// and null-stamped legacy household events instead of only the caller's own events.
 /// </param>
+/// <param name="UtcOffsetMinutes">
+/// Minutes to add to UTC before bucketing events into calendar days, weekdays, and hours, so
+/// day and rhythm projections match the caller's wall clock instead of UTC.
+/// </param>
 public sealed record PlaybackStatisticsQuery(
     DateTimeOffset From,
     DateTimeOffset To,
@@ -33,4 +37,5 @@ public sealed record PlaybackStatisticsQuery(
     PlaybackEventKind? EventKind,
     bool HideNsfw,
     Guid? UserId = null,
-    bool AllUsers = false);
+    bool AllUsers = false,
+    int UtcOffsetMinutes = 0);
