@@ -397,6 +397,7 @@ export const IDENTIFY_QUEUE_STATE = {
   queued: "queued",
   searching: "searching",
   proposal: "proposal",
+  applying: "applying",
   done: "done",
   deleted: "deleted",
   error: "error",
@@ -489,13 +490,6 @@ export const JOB_RESOURCE_CLASS = {
 
 export type JobResourceClassCode = (typeof JOB_RESOURCE_CLASS)[keyof typeof JOB_RESOURCE_CLASS];
 
-// source: enum JobRunLane
-export const JOB_RUN_LANE = {
-  foregroundIdentify: "foreground-identify",
-} as const;
-
-export type JobRunLaneCode = (typeof JOB_RUN_LANE)[keyof typeof JOB_RUN_LANE];
-
 // source: enum JobRunStatus
 export const JOB_RUN_STATUS = {
   queued: "queued",
@@ -514,6 +508,7 @@ export const JOB_TYPE = {
   scanGallery: "scan-gallery",
   scanBook: "scan-book",
   scanAudio: "scan-audio",
+  reconcileEntity: "reconcile-entity",
   probeVideo: "probe-video",
   probeAudio: "probe-audio",
   fingerprintVideo: "fingerprint-video",
@@ -534,12 +529,15 @@ export const JOB_TYPE = {
   databaseBackup: "database-backup",
   refreshEntity: "refresh-entity",
   identifySearch: "identify-search",
+  identifyProviderCall: "identify-provider-call",
+  identifyApply: "identify-apply",
   bulkIdentify: "bulk-identify",
   autoIdentify: "auto-identify",
   identifyCascade: "identify-cascade",
   acquisitionSearch: "acquisition-search",
   acquisitionMonitor: "acquisition-monitor",
   acquisitionImport: "acquisition-import",
+  acquisitionFinalize: "acquisition-finalize",
   acquisitionFailedHandle: "acquisition-failed-handle",
   monitoredSearch: "monitored-search",
   acquisitionUpgradeReplace: "acquisition-upgrade-replace",

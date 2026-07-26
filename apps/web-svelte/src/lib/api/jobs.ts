@@ -1,10 +1,13 @@
 import {
   backfillFingerprints as backfillFingerprintsRequest,
   cancelJobRun as cancelJobRunRequest,
+  cancelJobGraph as cancelJobGraphRequest,
   cancelJobs as cancelJobsRequest,
   clearJobFailures as clearJobFailuresRequest,
   createJob as createJobRequest,
   getWorkerHealth,
+  getJobGraph,
+  listJobGraphs,
   listJobs,
   rebuildPreviews as rebuildPreviewsRequest,
 } from "$lib/api/generated/prismedia";
@@ -12,6 +15,9 @@ import type {
   BulkJobResponse as GeneratedBulkJobResponse,
   JobCancelResponse as GeneratedJobCancelResponse,
   JobCreateResponse,
+  JobGraphCancelResponse,
+  JobGraphDetailResponse,
+  JobGraphListResponse,
   JobFailureClearResponse as GeneratedJobFailureClearResponse,
   JobListResponse,
   JobRun as GeneratedJobRun,
@@ -25,6 +31,7 @@ export type JobRun = GeneratedJobRun & {
   targetLabel?: string | null;
 };
 export type { JobCreateResponse, JobListResponse };
+export type { JobGraphDetailResponse, JobGraphListResponse };
 
 export interface JobCancelResponse {
   cancelled: number;
@@ -50,6 +57,37 @@ export async function fetchJobs(options?: RequestOptions): Promise<JobListRespon
   return unwrapGenerated(
     await listJobs(undefined, requestInit(options)),
     "Failed to load jobs",
+  );
+}
+
+export async function fetchJobGraphs(
+  hideNsfw?: boolean,
+  options?: RequestOptions,
+): Promise<JobGraphListResponse> {
+  return unwrapGenerated(
+    await listJobGraphs({ hideNsfw }, requestInit(options)),
+    "Failed to load job lanes",
+  );
+}
+
+export async function fetchJobGraph(
+  graphId: string,
+  hideNsfw?: boolean,
+  options?: RequestOptions,
+): Promise<JobGraphDetailResponse> {
+  return unwrapGenerated(
+    await getJobGraph(graphId, { hideNsfw }, requestInit(options)),
+    "Failed to load job lane detail",
+  );
+}
+
+export async function cancelJobGraph(
+  graphId: string,
+  options?: RequestOptions,
+): Promise<JobGraphCancelResponse> {
+  return unwrapGenerated(
+    await cancelJobGraphRequest(graphId, requestInit(options)),
+    "Failed to cancel job lane",
   );
 }
 

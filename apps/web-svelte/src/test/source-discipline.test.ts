@@ -70,10 +70,6 @@ const MAGIC_CODE_ALLOWLIST: Record<string, string[]> = {
   "lib/jobs/jobs-dashboard.ts": [
     "acquire-subtitles", "database-backup", "extract-subtitles", "library-maintenance", "monitored-search",
   ],
-  "lib/jobs/models.ts": [
-    "acquire-subtitles", "database-backup", "extract-subtitles", "library-maintenance", "monitored-search",
-  ],
-  "lib/jobs/run-catalog.ts": ["monitored-search"],
   "lib/player/media-badges.ts": ["direct"],
   "lib/player/quality-preference.ts": ["direct"],
   "lib/player/video-player-load.ts": ["direct", "hls"],

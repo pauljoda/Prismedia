@@ -115,6 +115,7 @@ import type {
   GetJellyfinVideoHlsSegmentParams,
   GetJellyfinVideoMasterPlaylistParams,
   GetJellyfinVideoVariantPlaylistParams,
+  GetJobGraphParams,
   GetMovieParams,
   GetMusicArtistParams,
   GetOpdsAuthorBooksParams,
@@ -172,6 +173,9 @@ import type {
   JobCancelResponse,
   JobCreateResponse,
   JobFailureClearResponse,
+  JobGraphCancelResponse,
+  JobGraphDetailResponse,
+  JobGraphListResponse,
   JobListResponse,
   LibraryAccessUpdateRequest,
   LibraryBrowseResponse,
@@ -195,6 +199,7 @@ import type {
   ListIdentifyProvidersParams,
   ListIdentifyQueueParams,
   ListImagesParams,
+  ListJobGraphsParams,
   ListJobsParams,
   ListMissingWantedParams,
   ListMoviesParams,
@@ -9167,6 +9172,137 @@ export const getCancelJobsUrl = (params?: CancelJobsParams,) => {
 export const cancelJobs = async (params?: CancelJobsParams, options?: RequestInit): Promise<cancelJobsResponse> => {
 
   return orvalFetch<cancelJobsResponse>(getCancelJobsUrl(params),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+export type listJobGraphsResponse200 = {
+  data: JobGraphListResponse
+  status: 200
+}
+
+export type listJobGraphsResponseSuccess = (listJobGraphsResponse200) & {
+  headers: Headers;
+};
+;
+
+export type listJobGraphsResponse = (listJobGraphsResponseSuccess)
+
+export const getListJobGraphsUrl = (params?: ListJobGraphsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/jobs/graphs?${stringifiedParams}` : `/api/jobs/graphs`
+}
+
+/**
+ * @summary Lists durable job graphs and logical execution lanes.
+ */
+export const listJobGraphs = async (params?: ListJobGraphsParams, options?: RequestInit): Promise<listJobGraphsResponse> => {
+
+  return orvalFetch<listJobGraphsResponse>(getListJobGraphsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type getJobGraphResponse200 = {
+  data: JobGraphDetailResponse
+  status: 200
+}
+
+export type getJobGraphResponse404 = {
+  data: void
+  status: 404
+}
+
+export type getJobGraphResponseSuccess = (getJobGraphResponse200) & {
+  headers: Headers;
+};
+export type getJobGraphResponseError = (getJobGraphResponse404) & {
+  headers: Headers;
+};
+
+export type getJobGraphResponse = (getJobGraphResponseSuccess | getJobGraphResponseError)
+
+export const getGetJobGraphUrl = (graphId: string,
+    params?: GetJobGraphParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/jobs/graphs/${graphId}?${stringifiedParams}` : `/api/jobs/graphs/${graphId}`
+}
+
+/**
+ * @summary Gets nodes, dependencies, warnings, and waits for one job graph.
+ */
+export const getJobGraph = async (graphId: string,
+    params?: GetJobGraphParams, options?: RequestInit): Promise<getJobGraphResponse> => {
+
+  return orvalFetch<getJobGraphResponse>(getGetJobGraphUrl(graphId,params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type cancelJobGraphResponse200 = {
+  data: JobGraphCancelResponse
+  status: 200
+}
+
+export type cancelJobGraphResponseSuccess = (cancelJobGraphResponse200) & {
+  headers: Headers;
+};
+;
+
+export type cancelJobGraphResponse = (cancelJobGraphResponseSuccess)
+
+export const getCancelJobGraphUrl = (graphId: string,) => {
+
+
+
+
+  return `/api/jobs/graphs/${graphId}`
+}
+
+/**
+ * @summary Cancels a graph, its active nodes, and its open waits.
+ */
+export const cancelJobGraph = async (graphId: string, options?: RequestInit): Promise<cancelJobGraphResponse> => {
+
+  return orvalFetch<cancelJobGraphResponse>(getCancelJobGraphUrl(graphId),
   {
     ...options,
     method: 'DELETE'

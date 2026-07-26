@@ -10,4 +10,6 @@ export interface RequestCommitResponse {
   /** @nullable */
   containerEntityId: string | null;
   items: RequestCommitItem[];
+  /** @nullable */
+  jobGraphIds?: string[] | null;
 }

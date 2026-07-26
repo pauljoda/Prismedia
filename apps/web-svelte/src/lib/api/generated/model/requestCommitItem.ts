@@ -14,4 +14,6 @@ export interface RequestCommitItem {
   entityId: string | null;
   /** @nullable */
   acquisitionId: string | null;
+  /** @nullable */
+  jobGraphId?: string | null;
 }

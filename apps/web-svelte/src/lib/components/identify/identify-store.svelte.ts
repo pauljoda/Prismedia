@@ -36,6 +36,13 @@ import {
 } from "$lib/components/identify-review";
 import { selectIdentifyProviders } from "$lib/identify/provider-selection";
 import { settingKeys, valueAsStringMap } from "$lib/settings/app-settings";
+import {
+  createOperationId,
+  initialApplyProgress,
+  nowMs,
+  wait,
+  waitForMinimumApplyProgress,
+} from "$lib/components/identify/identify-apply-progress";
 
 /**
  * Status of one local structural child in the review grid, derived from the streamed proposal and
@@ -102,7 +109,6 @@ export interface IdentifyKindInfo {
 const identifyStoreContext = createContext<IdentifyStore>("IdentifyStore");
 export const setIdentifyStore = identifyStoreContext.provide;
 export const useIdentifyStore = identifyStoreContext.use;
-const MIN_APPLY_PROGRESS_VISIBLE_MS = 650;
 const QUEUE_POLL_INITIAL_MS = 300;
 const QUEUE_POLL_INTERVAL_MS = 1_000;
 const SEARCH_RESULT_POLL_MS = 750;
@@ -185,7 +191,9 @@ export class IdentifyStore {
   /** Whether the entity's queue item is waiting on or running a requested search. */
   isItemBusy(entityId: string): boolean {
     const item = this.queue.find((queued) => queued.entityId === entityId);
-    return item?.state === IDENTIFY_QUEUE_STATE.queued || item?.state === IDENTIFY_QUEUE_STATE.searching;
+    return item?.state === IDENTIFY_QUEUE_STATE.queued ||
+      item?.state === IDENTIFY_QUEUE_STATE.searching ||
+      item?.state === IDENTIFY_QUEUE_STATE.applying;
   }
 
   /** Short status line for an item's in-flight search, or null when none is running. */
@@ -196,6 +204,7 @@ export class IdentifyStore {
       const provider = this.providers.find((candidate) => candidate.id === item.provider);
       return `Searching with ${provider?.name ?? item.provider ?? "providers"}`;
     }
+    if (item?.state === IDENTIFY_QUEUE_STATE.applying) return "Applying reviewed metadata";
     return null;
   }
 
@@ -415,7 +424,10 @@ export class IdentifyStore {
     this.#stopApplyProgressPolling?.();
     this.#stopApplyProgressPolling = this.#pollApplyProgress(entity.id, progressId);
     try {
-      const item = await applyIdentifyQueueItem(entity.id, proposal, selectedFields, selectedImages, { progressId });
+      const requested = await applyIdentifyQueueItem(entity.id, proposal, selectedFields, selectedImages, { progressId });
+      const item = requested.state === IDENTIFY_QUEUE_STATE.applying
+        ? await this.#waitForApplyCompletion(entity.id)
+        : requested;
       this.#removeActiveQueueItem(item.entityId);
       if (options.navigateNext) {
         const next = this.nextQueueItem(item.entityId);
@@ -534,12 +546,15 @@ export class IdentifyStore {
     // backend rejects an apply with a live cascade marker. Mirrors the review screen's Accept gate.
     if (item.state !== "proposal" || !item.proposal || item.cascadeRunning) return false;
     const payload = buildDefaultApplyPayload(item.proposal);
-    const applied = await applyIdentifyQueueItem(
+    const requested = await applyIdentifyQueueItem(
       item.entityId,
       payload.proposal,
       payload.selectedFields,
       payload.selectedImages,
     );
+    const applied = requested.state === IDENTIFY_QUEUE_STATE.applying
+      ? await this.#waitForApplyCompletion(item.entityId)
+      : requested;
     this.#removeActiveQueueItem(applied.entityId);
     return true;
   }
@@ -556,14 +571,14 @@ export class IdentifyStore {
     this.bulkAcceptTotal = acceptable.length;
     this.error = null;
     try {
-      for (const item of acceptable) {
+      await Promise.all(acceptable.map(async (item) => {
         try {
           await this.acceptQueueProposal(item);
         } catch (err) {
           this.error = readError(err);
         }
         this.bulkAcceptDone++;
-      }
+      }));
     } finally {
       this.bulkAccepting = false;
     }
@@ -661,7 +676,23 @@ export class IdentifyStore {
     return this.queue.some((item) =>
       item.state === IDENTIFY_QUEUE_STATE.queued ||
       item.state === IDENTIFY_QUEUE_STATE.searching ||
+      item.state === IDENTIFY_QUEUE_STATE.applying ||
       item.cascadeRunning);
+  }
+
+  async #waitForApplyCompletion(entityId: string): Promise<ApiIdentifyQueueItem> {
+    const deadline = Date.now() + 30 * 60_000;
+    while (Date.now() < deadline) {
+      const item = await fetchIdentifyQueueItem(entityId);
+      const existing = this.queue.find((queued) => queued.entityId === entityId);
+      this.#upsertQueueItem(queueItemFromApi(item, existing?.entity, existing?.detail));
+      if (item.state === IDENTIFY_QUEUE_STATE.done) return item;
+      if (item.state === IDENTIFY_QUEUE_STATE.error) {
+        throw new Error(item.error ?? "Identify apply failed");
+      }
+      await wait(400);
+    }
+    throw new Error("Identify apply did not finish within 30 minutes");
   }
 
   #pollQueue(): () => void {
@@ -1031,98 +1062,6 @@ function isActiveQueueState(state: IdentifyQueueState): boolean {
   return state !== "done" && state !== "deleted";
 }
 
-function createOperationId(): string {
-  return globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(16).slice(2)}`;
-}
-
-function nowMs(): number {
-  return globalThis.performance?.now?.() ?? Date.now();
-}
-
-async function waitForMinimumApplyProgress(startedAt: number): Promise<void> {
-  const remaining = MIN_APPLY_PROGRESS_VISIBLE_MS - (nowMs() - startedAt);
-  if (remaining > 0) {
-    await wait(remaining);
-  }
-}
-
-function wait(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-function initialApplyProgress(
-  id: string,
-  entity: EntityCard,
-  proposal: EntityMetadataProposal,
-  selectedFields: string[],
-): IdentifyApplyProgress {
-  const title = proposalTitleForProgress(proposal) || entity.title;
-  return {
-    id,
-    entityId: entity.id,
-    state: IDENTIFY_APPLY_STATE.running,
-    currentIndex: 0,
-    total: countApplyProgressSteps(proposal, selectedFields),
-    // Optimistic progress is for the root entity being applied, so its real kind
-    // is the entity's own kind. (The proposal target vocabulary can carry
-    // non-entity tokens like "video-episode", which this typed field must not.)
-    currentKind: entity.kind,
-    currentTitle: title,
-    currentPath: [title],
-    error: null,
-    updatedAt: new Date().toISOString(),
-  };
-}
-
-function countApplyProgressSteps(
-  proposal: EntityMetadataProposal,
-  selectedFields: string[],
-): number {
-  const selected = new Set(selectedFields.map((field) => field.toLowerCase()));
-  let count = 1;
-  if (selected.has("credits") || selected.has("studio") || selected.has("tags")) {
-    count += relationshipProgressSteps(proposal);
-  }
-
-  count += structuralProgressChildren(proposal).reduce(
-    (total, child) => total + countStructuralApplyProgressSteps(child),
-    0,
-  );
-  return Math.max(count, 1);
-}
-
-function countStructuralApplyProgressSteps(proposal: EntityMetadataProposal): number {
-  let count = 1;
-  if (proposal.patch.credits.length > 0 || Boolean(proposal.patch.studio?.trim()) || proposal.patch.tags.length > 0) {
-    count += relationshipProgressSteps(proposal);
-  }
-
-  count += structuralProgressChildren(proposal).reduce(
-    (total, child) => total + countStructuralApplyProgressSteps(child),
-    0,
-  );
-  return count;
-}
-
-function relationshipProgressSteps(proposal: EntityMetadataProposal): number {
-  return new Set(
-    (proposal.relationships ?? [])
-      .filter((child) => isRelationshipProgressKind(child.targetKind))
-      .map((child) => child.proposalId),
-  ).size;
-}
-
-function structuralProgressChildren(proposal: EntityMetadataProposal): EntityMetadataProposal[] {
-  return (proposal.children ?? []).filter((child) => !isRelationshipProgressKind(child.targetKind));
-}
-
-function isRelationshipProgressKind(kind: string): boolean {
-  return kind === "person" || kind === "studio" || kind === "tag";
-}
-
-function proposalTitleForProgress(proposal: EntityMetadataProposal): string {
-  return proposal.patch.title?.trim() ?? "";
-}
 
 function relationshipEntityIdForProposal(
   detail: EntityDetailCard | null | undefined,

@@ -29,4 +29,6 @@ export interface IdentifyQueueItem {
   updatedAt: string;
   /** @nullable */
   completedAt: string | null;
+  /** @nullable */
+  jobGraphId?: string | null;
 }

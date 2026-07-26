@@ -1,7 +1,6 @@
 import { JobRunStatus, type JobQueueCountDto, type JobRun as ApiJobRun } from "$lib/api/generated/model";
 import { JOB_TYPE, type JobTypeCode } from "$lib/api/generated/codes";
 import {
-  queueDefinitions,
   type JobRun as DashboardJobRun,
   type JobRunGroup,
   type JobsDashboard,
@@ -19,8 +18,6 @@ type JobDefinition = {
 
 /** A definition resolved for an arbitrary runtime type string (possibly newer than this build). */
 type ResolvedJobDefinition = Omit<JobDefinition, "type"> & { type: string };
-
-const queueDefinitionByName = new Map(queueDefinitions.map((queue) => [queue.name, queue]));
 
 const _JOB_DEFINITIONS = [
   // Scanning
@@ -161,6 +158,18 @@ const _JOB_DEFINITIONS = [
     description: "Searches metadata providers for identify candidates.",
   },
   {
+    type: JOB_TYPE.identifyProviderCall,
+    queueName: "metadata-import",
+    label: "Identify Provider Call",
+    description: "Resolves one concrete entity through its selected metadata provider.",
+  },
+  {
+    type: JOB_TYPE.identifyApply,
+    queueName: "metadata-import",
+    label: "Identify Apply",
+    description: "Applies a reviewed metadata proposal inside its interactive lane.",
+  },
+  {
     type: JOB_TYPE.identifyCascade,
     queueName: "metadata-import",
     label: "Identify Cascade",
@@ -171,6 +180,12 @@ const _JOB_DEFINITIONS = [
     queueName: "metadata-import",
     label: "Entity Refresh",
     description: "Re-queues probing, artwork, and metadata work for an entity tree.",
+  },
+  {
+    type: JOB_TYPE.reconcileEntity,
+    queueName: "metadata-import",
+    label: "Entity Reconciliation",
+    description: "Plans exact technical and asset processing for one imported or refreshed entity.",
   },
   // Collections / maintenance
   {
@@ -215,6 +230,12 @@ const _JOB_DEFINITIONS = [
     queueName: "acquisition",
     label: "Acquisition Import",
     description: "Imports completed downloads into the library.",
+  },
+  {
+    type: JOB_TYPE.acquisitionFinalize,
+    queueName: "acquisition",
+    label: "Acquisition Finalize",
+    description: "Publishes an import after its required readiness nodes complete.",
   },
   {
     type: JOB_TYPE.acquisitionFailedHandle,
@@ -290,13 +311,11 @@ function definitionForJob(type: string): ResolvedJobDefinition {
 }
 
 function queueSummaryBase(definition: ResolvedJobDefinition): QueueSummary {
-  const queueDefinition = queueDefinitionByName.get(definition.queueName);
   return {
     name: definition.queueName,
-    label: queueDefinition?.label || definition.label || definition.queueName,
-    description: definition.description || queueDefinition?.description || "",
+    label: definition.label || definition.queueName,
+    description: definition.description,
     status: "idle",
-    concurrency: queueDefinition?.concurrency ?? 1,
     active: 0,
     waiting: 0,
     delayed: 0,
@@ -330,7 +349,6 @@ function normalizeProgress(progress: ApiJobRun["progress"]): number {
 
 export function mapJobRun(job: ApiJobRun): DashboardJobRun {
   const definition = definitionForJob(job.type);
-  const queueDefinition = queueDefinitionByName.get(definition.queueName);
   const status = mapJobStatus(job.status);
 
   return {
@@ -339,7 +357,7 @@ export function mapJobRun(job: ApiJobRun): DashboardJobRun {
     jobLabel: definition.label,
     jobDescription: definition.description,
     queueName: definition.queueName,
-    queueLabel: queueDefinition?.label ?? definition.label,
+    queueLabel: definition.label,
     status,
     targetType: job.targetKind ?? job.type,
     targetId: job.targetId ?? null,
@@ -356,6 +374,10 @@ export function mapJobRun(job: ApiJobRun): DashboardJobRun {
     createdAt: job.createdAt,
     updatedAt: job.finishedAt ?? job.startedAt ?? job.createdAt,
   };
+}
+
+export function jobLabelForType(type: string | null): string {
+  return type ? definitionForJob(type).label : "Waiting";
 }
 
 export function groupJobRunsByKind(jobs: readonly DashboardJobRun[]): JobRunGroup[] {

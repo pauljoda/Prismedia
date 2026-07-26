@@ -4,10 +4,12 @@
  * Prismedia.Api | v1
  * OpenAPI spec version: 1.0.0
  */
+import type { JobGraphReference } from './jobGraphReference';
 
 export interface BulkJobResponse {
   /** @pattern ^-?(?:0|[1-9]\d*)$ */
   enqueued: number | string;
   /** @pattern ^-?(?:0|[1-9]\d*)$ */
   skipped: number | string;
+  graphs: JobGraphReference[];
 }

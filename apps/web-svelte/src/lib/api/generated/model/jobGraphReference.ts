@@ -5,14 +5,14 @@
  * OpenAPI spec version: 1.0.0
  */
 import type { JobGraphOrigin } from './jobGraphOrigin';
+import type { JobRun } from './jobRun';
 
-export interface EntityRefreshResponse {
-  /** @nullable */
-  jobId: string | null;
-  /** @nullable */
-  graphId: string | null;
+export interface JobGraphReference {
+  id: string;
   origin: JobGraphOrigin;
   /** @nullable */
+  rootEntityKind: string | null;
+  /** @nullable */
   rootEntityId: string | null;
-  alreadyPending: boolean;
+  initialNode: JobRun;
 }

@@ -39,4 +39,6 @@ export interface AcquisitionSummary {
   entityId?: string | null;
   hasResumableImport?: boolean;
   bookRendition?: AcquisitionSummaryBookRendition;
+  /** @nullable */
+  jobGraphId?: string | null;
 }

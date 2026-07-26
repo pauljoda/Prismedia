@@ -4,8 +4,10 @@
  * Prismedia.Api | v1
  * OpenAPI spec version: 1.0.0
  */
+import type { JobGraphReference } from './jobGraphReference';
 import type { JobRun } from './jobRun';
 
 export interface JobCreateResponse {
   job: JobRun;
+  graph: JobGraphReference;
 }

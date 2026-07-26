@@ -213,7 +213,7 @@
       </div>
 
       {#each store.queue as item, i (item.entityId)}
-        {@const stateLabel = { proposal: "REVIEW", search: "CHOOSE", queued: "QUEUED", searching: "SEARCHING", done: "DONE", deleted: "DELETED", error: "ERROR" }[item.state]}
+        {@const stateLabel = { proposal: "REVIEW", search: "CHOOSE", queued: "QUEUED", searching: "SEARCHING", applying: "APPLYING", done: "DONE", deleted: "DELETED", error: "ERROR" }[item.state]}
         {@const isSelected = selectedQueueIds.has(item.entityId)}
         <div
           class={cn(

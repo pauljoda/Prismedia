@@ -10,4 +10,6 @@ export interface IdentifyBulkAcceptedResponse {
   requested: number | string;
   /** @pattern ^-?(?:0|[1-9]\d*)$ */
   enqueued: number | string;
+  /** @nullable */
+  graphIds?: string[] | null;
 }
