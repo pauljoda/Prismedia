@@ -130,7 +130,7 @@ public sealed class ImportedVideoMaterializer(
         var downstreamJobs = new List<EnqueueJobRequest>();
         foreach (var (entityId, sourcePath) in readyOwnerSources) {
             if (needs.TryGetValue(entityId, out var entityNeeds)) {
-                downstreamJobs.AddRange(VideoDownstreamJobPlanner.Build(
+                downstreamJobs.AddRange(VideoDownstreamJobPlanner.BuildForImport(
                     settings,
                     entityId,
                     sourcePath,

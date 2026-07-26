@@ -55,20 +55,53 @@ internal static class VideoWantedBinding {
     }
 }
 
-/// <summary>Builds the downstream jobs shared by full video scans and synchronous TV imports.</summary>
+/// <summary>Builds video processing jobs for ordinary scans and acquisition-readiness materialization.</summary>
 internal static class VideoDownstreamJobPlanner {
     public static IReadOnlyList<EnqueueJobRequest> Build(
         LibrarySettingsData settings,
         Guid entityId,
         string sourcePath,
-        DownstreamNeeds needs) {
+        DownstreamNeeds needs) =>
+        BuildCore(
+            settings,
+            entityId,
+            sourcePath,
+            needs,
+            JobPriorities.Probe,
+            JobPriorities.Sidecar);
+
+    /// <summary>
+    /// Plans the same processing graph as a scan, but promotes the lightweight technical probe and
+    /// local subtitle reconciliation that make a completed video acquisition immediately usable.
+    /// Heavy previews, fingerprints, and provider work retain their normal background priorities.
+    /// </summary>
+    public static IReadOnlyList<EnqueueJobRequest> BuildForImport(
+        LibrarySettingsData settings,
+        Guid entityId,
+        string sourcePath,
+        DownstreamNeeds needs) =>
+        BuildCore(
+            settings,
+            entityId,
+            sourcePath,
+            needs,
+            JobPriorities.AcquisitionProbe,
+            JobPriorities.AcquisitionSidecar);
+
+    private static IReadOnlyList<EnqueueJobRequest> BuildCore(
+        LibrarySettingsData settings,
+        Guid entityId,
+        string sourcePath,
+        DownstreamNeeds needs,
+        int probePriority,
+        int subtitlePriority) {
         var label = Path.GetFileNameWithoutExtension(sourcePath);
         var entityIdText = entityId.ToString();
         var requests = new List<EnqueueJobRequest>(5);
 
         if (settings.AutoGenerateMetadata && needs.NeedsProbe) {
             requests.Add(EnqueueJobRequest.ForEntity(
-                JobType.ProbeVideo, EntityKind.Video, entityIdText, label, JobPriorities.Probe));
+                JobType.ProbeVideo, EntityKind.Video, entityIdText, label, probePriority));
         }
 
         if (FingerprintGating.ShouldFingerprint(settings, needs)) {
@@ -78,7 +111,7 @@ internal static class VideoDownstreamJobPlanner {
 
         if (needs.NeedsSubtitleExtraction) {
             requests.Add(EnqueueJobRequest.ForEntity(
-                JobType.ExtractSubtitles, EntityKind.Video, entityIdText, label, JobPriorities.Sidecar));
+                JobType.ExtractSubtitles, EntityKind.Video, entityIdText, label, subtitlePriority));
         }
 
         var shouldGeneratePreview = settings.AutoGeneratePreview && needs.NeedsPreview;

@@ -141,7 +141,7 @@ public sealed class ScanLibraryJobHandler(
         var downstreamJobs = new List<EnqueueJobRequest>();
         foreach (var target in downstreamTargets) {
             if (needs.TryGetValue(target.EntityId, out var entityNeeds)) {
-                downstreamJobs.AddRange(VideoDownstreamJobPlanner.Build(
+                downstreamJobs.AddRange(VideoDownstreamJobPlanner.BuildForImport(
                     settings,
                     target.EntityId,
                     target.FilePath,

@@ -48,7 +48,12 @@ public sealed class GeneratePreviewJobHandler(
                     context.Job.TargetLabel,
                     JobPriorities.Probe),
                 cancellationToken);
-            throw new InvalidOperationException($"Cannot generate trickplay for {entityId} until video probe metadata is available.");
+            // Queue priority is global rather than entity-scoped: with concurrent workers, another
+            // video's preview can be claimed while this video's higher-priority probe is still running.
+            // This is an expected dependency wait, not a failed generation attempt.
+            throw new JobRetryLaterException(
+                $"Waiting for video probe metadata before generating trickplay for {entityId}.",
+                TimeSpan.FromSeconds(5));
         }
 
         if (settings.AutoGeneratePreview) {

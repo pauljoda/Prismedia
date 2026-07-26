@@ -21,6 +21,12 @@ public static class JobPriorities {
     public const int AcquisitionProbe = AcquisitionCompletion;
 
     /// <summary>
+    /// Local subtitle discovery and extraction for newly imported videos is part of acquisition
+    /// readiness, so it must not wait behind unrelated scan and enrichment backlogs.
+    /// </summary>
+    public const int AcquisitionSidecar = AcquisitionCompletion;
+
+    /// <summary>
     /// Active transfer polling must preempt acquisition-search fanout so completed and failed downloads
     /// continue advancing while a large artist request is still searching its remaining children.
     /// </summary>

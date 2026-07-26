@@ -108,6 +108,8 @@ public sealed class ImportedEntityMaterializationTests : IDisposable {
             row.ParentEntityId == wantedId && row.KindCode == EntityKindRegistry.Video.Code);
         Assert.True(await db.Entities.AsNoTracking().AnyAsync(row => row.Id == unrelatedId));
         Assert.DoesNotContain(queue.Enqueued, request => request.Type == JobType.ScanLibrary);
+        var subtitleJob = Assert.Single(queue.Enqueued, request => request.Type == JobType.ExtractSubtitles);
+        Assert.Equal(JobPriorities.AcquisitionSidecar, subtitleJob.Priority);
         Assert.Equal(AcquisitionStatus.Imported, await StatusOfAsync(db, import.Id));
     }
 

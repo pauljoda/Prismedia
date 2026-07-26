@@ -117,10 +117,11 @@ public sealed class GeneratePreviewJobHandlerTests : IDisposable {
             FinishedAt: null);
         var queue = new RecordingJobQueue();
 
-        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+        var ex = await Assert.ThrowsAsync<JobRetryLaterException>(() =>
             handler.HandleAsync(new JobContext(job, queue), CancellationToken.None));
 
         Assert.Contains("probe metadata", ex.Message);
+        Assert.Equal(TimeSpan.FromSeconds(5), ex.RetryDelay);
         Assert.False(assets.GeneratedThumbnailAndPreview);
         Assert.Empty(persistence.EntityFiles);
         var probe = Assert.Single(queue.Enqueued);

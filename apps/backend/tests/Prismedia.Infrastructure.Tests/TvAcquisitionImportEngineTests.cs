@@ -71,6 +71,7 @@ public sealed class TvAcquisitionImportEngineTests : IDisposable {
         var subtitleJob = Assert.Single(harness.Queue.Enqueued, request => request.Type == JobType.ExtractSubtitles);
         Assert.Equal(EntityKindRegistry.Video.Code, subtitleJob.TargetEntityKind);
         Assert.Equal(harness.WantedEpisodeId.ToString(), subtitleJob.TargetEntityId);
+        Assert.Equal(JobPriorities.AcquisitionSidecar, subtitleJob.Priority);
 
         var identifyJob = Assert.Single(harness.Queue.Enqueued, request => request.Type == JobType.AutoIdentify);
         Assert.Equal(EntityKindRegistry.Video.Code, identifyJob.TargetEntityKind);
