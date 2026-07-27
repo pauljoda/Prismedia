@@ -51,7 +51,16 @@ public sealed record EntityMetadataPatch(
 
     /// <summary>Optional shared user-state flags.</summary>
     public EntityMetadataFlagsPatch? Flags { get; init; }
+
+    /// <summary>
+    /// Typed semantic dates supplied by modern plugins. These entries take precedence over an equivalent
+    /// legacy <see cref="Dates"/> key and let providers express distinct release milestones.
+    /// </summary>
+    public IReadOnlyList<EntityMetadataDatePatch> DateEntries { get; init; } = [];
 }
+
+/// <summary>A typed metadata date whose meaning is stable across providers.</summary>
+public sealed record EntityMetadataDatePatch(EntityDateType Type, string Value);
 
 /// <summary>
 /// Editable shared entity flags carried by the unified metadata patch shape.

@@ -211,7 +211,7 @@ public sealed class EntityMetadataApplyServiceTests {
         Assert.True(applied);
         Assert.Equal("Keep Title", (await db.Entities.FindAsync([entityId]))?.Title);
         Assert.Null(await db.EntityDates.FindAsync([entityId, "released"]));
-        Assert.Equal("2026-05-21", (await db.EntityDates.FindAsync([entityId, "aired"]))?.Value);
+        Assert.Equal("2026-05-21", (await db.EntityDates.FindAsync([entityId, EntityDateType.Air.ToCode()]))?.Value);
         Assert.Null(await db.EntityStats.FindAsync([entityId, "runtime"]));
         Assert.Equal(12, (await db.EntityStats.FindAsync([entityId, "votes"]))?.Value);
         Assert.Null(await db.EntityPositions.FindAsync([entityId, "episode"]));
@@ -258,7 +258,8 @@ public sealed class EntityMetadataApplyServiceTests {
             CancellationToken.None);
 
         Assert.True(applied);
-        Assert.Equal("2021-02-03", (await db.EntityDates.FindAsync([entityId, "released"]))?.Value);
+        Assert.Null(await db.EntityDates.FindAsync([entityId, EntityDateLegacyCodes.Released]));
+        Assert.Equal("2021-02-03", (await db.EntityDates.FindAsync([entityId, EntityDateType.Release.ToCode()]))?.Value);
         Assert.Equal(100, (await db.EntityStats.FindAsync([entityId, "runtimeMinutes"]))?.Value);
         Assert.Equal(2, (await db.EntityPositions.FindAsync([entityId, "episode"]))?.Value);
     }
@@ -290,17 +291,17 @@ public sealed class EntityMetadataApplyServiceTests {
         var service = new EntityMetadataApplyService(db, new PluginArtworkServiceOptions(Path.GetTempPath()));
         await service.ApplyAsync(entityId, proposal, ["dates"], selectedImages: null, CancellationToken.None);
 
-        var released = await db.EntityDates.FindAsync([entityId, "released"]);
+        var released = await db.EntityDates.FindAsync([entityId, EntityDateType.Release.ToCode()]);
         Assert.Equal("2025", released?.Value);
         Assert.Equal(new DateOnly(2025, 1, 1), released?.SortableValue);
         Assert.Equal("year", released?.Precision);
 
-        var aired = await db.EntityDates.FindAsync([entityId, "aired"]);
+        var aired = await db.EntityDates.FindAsync([entityId, EntityDateType.Air.ToCode()]);
         Assert.Equal("2024-07", aired?.Value);
         Assert.Equal(new DateOnly(2024, 7, 1), aired?.SortableValue);
         Assert.Equal("month", aired?.Precision);
 
-        var published = await db.EntityDates.FindAsync([entityId, "published"]);
+        var published = await db.EntityDates.FindAsync([entityId, EntityDateType.Publication.ToCode()]);
         Assert.Equal("2021-05-29", published?.Value);
         Assert.Equal(new DateOnly(2021, 5, 29), published?.SortableValue);
         Assert.Equal("day", published?.Precision);
@@ -317,6 +318,36 @@ public sealed class EntityMetadataApplyServiceTests {
                     ["published"] = "2021-05-29T13:00:12-07:00"
                 }
             });
+    }
+
+    [Fact]
+    public async Task TypedDateEntriesOverrideEquivalentLegacyDates() {
+        await using var db = CreateContext();
+        var entityId = Guid.Parse("23232323-2323-2323-2323-232323232323");
+        SeedEntity(db, entityId, EntityKind.Movie.ToCode(), "Movie");
+        await db.SaveChangesAsync();
+
+        var patch = EmptyPatch() with {
+            Dates = new Dictionary<string, string> {
+                [EntityDateLegacyCodes.Digital] = "2026-08-01"
+            },
+            DateEntries = [
+                new EntityMetadataDatePatch(EntityDateType.DigitalRelease, "2026-08-14"),
+                new EntityMetadataDatePatch(EntityDateType.PhysicalRelease, "2026-09")
+            ]
+        };
+
+        var service = new EntityMetadataApplyService(db, new PluginArtworkServiceOptions(Path.GetTempPath()));
+        await service.ApplyPatchAsync(
+            entityId,
+            new EntityMetadataUpdateRequest([MetadataPatchField.Dates.ToCode()], patch),
+            CancellationToken.None);
+
+        var digital = await db.EntityDates.FindAsync([entityId, EntityDateType.DigitalRelease.ToCode()]);
+        var physical = await db.EntityDates.FindAsync([entityId, EntityDateType.PhysicalRelease.ToCode()]);
+        Assert.Equal("2026-08-14", digital?.Value);
+        Assert.Equal("2026-09", physical?.Value);
+        Assert.Equal(DatePrecision.Month.ToCode(), physical?.Precision);
     }
 
     [Fact]
@@ -354,7 +385,7 @@ public sealed class EntityMetadataApplyServiceTests {
                     Dates = new Dictionary<string, string> { ["released"] = "not-a-date" }
                 }));
 
-        Assert.Contains("released", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(EntityDateType.Release.ToCode(), exception.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -590,7 +621,7 @@ public sealed class EntityMetadataApplyServiceTests {
             .Where(row => row.KindCode == "person")
             .Select(row => row.Title)
             .SingleAsync());
-        Assert.Equal("2026-05-16", (await db.EntityDates.FindAsync([entityId, "released"]))?.Value);
+        Assert.Equal("2026-05-16", (await db.EntityDates.FindAsync([entityId, EntityDateType.Release.ToCode()]))?.Value);
         Assert.Equal(90, (await db.EntityStats.FindAsync([entityId, "runtime-minutes"]))?.Value);
         Assert.Equal(42, (await db.EntityStats.FindAsync([entityId, "votes"]))?.Value);
         Assert.Equal("movie", (await db.EntityClassifications.FindAsync([entityId]))?.Value);

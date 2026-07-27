@@ -1,3 +1,5 @@
+using Prismedia.Domain.Entities;
+
 namespace Prismedia.Domain.Capabilities;
 
 /// <summary>
@@ -15,4 +17,8 @@ public sealed class CapabilityDates(IEnumerable<EntityDate>? items = null)
     public void Set(string code, string value, DateOnly? sortableValue = null, string? precision = null) {
         Upsert(item => string.Equals(item.Code, code, StringComparison.Ordinal), new EntityDate(code, value, sortableValue, precision));
     }
+
+    /// <summary>Sets a canonical typed date, replacing any existing value for the same semantic type.</summary>
+    public void Set(EntityDateType type, string value, DateOnly? sortableValue = null, DatePrecision? precision = null) =>
+        Set(type.ToCode(), value, sortableValue, precision?.ToCode());
 }

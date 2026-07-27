@@ -235,7 +235,11 @@ public sealed partial class EntityMetadataApplyService : IEntityMetadataPatchSer
         await ApplyScopedRelationshipFieldsAsync(entity, fields, patch, now, cancellationToken);
 
         if (fields.Contains(MetadataPatchField.Dates.ToCode())) {
-            await ReplaceDatesAsync(entity.Id, patch.Dates, now, cancellationToken);
+            await ReplaceDatesAsync(
+                entity.Id,
+                EntityMetadataDateNormalization.Normalize(patch),
+                now,
+                cancellationToken);
         }
 
         if (fields.Contains(MetadataPatchField.Stats.ToCode())) {
@@ -412,7 +416,11 @@ public sealed partial class EntityMetadataApplyService : IEntityMetadataPatchSer
         await ApplySelectedRelationshipFieldsAsync(entity, selected, patch, now, markNsfw, cancellationToken);
 
         if (selected.Contains(MetadataPatchField.Dates.ToCode())) {
-            await UpsertDatesAsync(entityId, patch.Dates, now, cancellationToken);
+            await UpsertDatesAsync(
+                entityId,
+                EntityMetadataDateNormalization.Normalize(patch),
+                now,
+                cancellationToken);
         }
 
         if (selected.Contains(MetadataPatchField.Stats.ToCode())) {

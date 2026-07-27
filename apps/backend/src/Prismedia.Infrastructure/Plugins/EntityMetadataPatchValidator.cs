@@ -37,7 +37,7 @@ public static class EntityMetadataPatchValidator {
         }
 
         if (fields.Contains(MetadataPatchField.Dates.ToCode())) {
-            foreach (var (code, value) in patch.Dates) {
+            foreach (var (code, value) in EntityMetadataDateNormalization.Normalize(patch)) {
                 if (string.IsNullOrWhiteSpace(code) || string.IsNullOrWhiteSpace(value)) {
                     errors.Add("date codes and values cannot be empty");
                 } else if (EntityDateParser.Parse(value) is null) {
@@ -49,5 +49,23 @@ public static class EntityMetadataPatchValidator {
         if (errors.Count > 0) {
             throw new ArgumentException($"Invalid entity metadata patch: {string.Join("; ", errors)}.");
         }
+    }
+}
+
+/// <summary>Combines the legacy date dictionary and typed plugin entries into canonical stored codes.</summary>
+internal static class EntityMetadataDateNormalization {
+    public static IReadOnlyDictionary<string, string> Normalize(EntityMetadataPatch patch) {
+        var normalized = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var (code, value) in patch.Dates ?? new Dictionary<string, string>()) {
+            if (!string.IsNullOrWhiteSpace(code)) {
+                normalized[EntityDateTypeRegistry.NormalizeCode(code)] = value;
+            }
+        }
+
+        foreach (var entry in patch.DateEntries ?? []) {
+            normalized[entry.Type.ToCode()] = entry.Value;
+        }
+
+        return normalized;
     }
 }
