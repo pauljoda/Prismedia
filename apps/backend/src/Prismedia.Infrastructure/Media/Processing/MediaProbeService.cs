@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Prismedia.Contracts.Media;
 using Prismedia.Domain.Entities;
 using Prismedia.Infrastructure.Processes;
 
@@ -198,8 +199,10 @@ public sealed class MediaProbeService {
         var results = new List<SubtitleStreamInfo>();
 
         foreach (var stream in streams.EnumerateArray()) {
-            var codecName = stream.GetStringOrDefault("codec_name") ?? "";
-            if (imageBased.Contains(codecName))
+            var codecName = stream.GetStringOrDefault("codec_name");
+            if (string.IsNullOrWhiteSpace(codecName)
+                || string.Equals(codecName, MediaCodecs.Unknown, StringComparison.OrdinalIgnoreCase)
+                || imageBased.Contains(codecName))
                 continue;
 
             var index = stream.GetIntOrDefault("index") ?? 0;

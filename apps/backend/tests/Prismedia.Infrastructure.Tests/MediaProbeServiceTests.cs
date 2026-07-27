@@ -1,3 +1,4 @@
+using Prismedia.Contracts.Media;
 using Prismedia.Infrastructure.Media.Processing;
 using Prismedia.Infrastructure.Processes;
 
@@ -109,6 +110,38 @@ public sealed class MediaProbeServiceTests {
         Assert.Equal("bt2020", video.ColorPrimaries);
         Assert.Null(video.DvProfile);
         Assert.False(video.Hdr10PlusPresentFlag);
+    }
+
+    [Fact]
+    public async Task ProbeSubtitleStreamsSkipsUnknownOrMissingCodecs() {
+        var service = new MediaProbeService(new JsonProcessExecutor($$"""
+            {
+              "streams": [
+                {
+                  "index": 3,
+                  "codec_type": "subtitle",
+                  "codec_name": "{{MediaCodecs.SubRip}}",
+                  "tags": { "language": "eng" }
+                },
+                {
+                  "index": 4,
+                  "codec_type": "subtitle",
+                  "codec_name": "{{MediaCodecs.Unknown}}"
+                },
+                {
+                  "index": 5,
+                  "codec_type": "subtitle"
+                }
+              ]
+            }
+            """));
+
+        var result = await service.ProbeSubtitleStreamsAsync("/media/movie.mkv", CancellationToken.None);
+
+        var stream = Assert.Single(result);
+        Assert.Equal(3, stream.StreamIndex);
+        Assert.Equal(MediaCodecs.SubRip, stream.CodecName);
+        Assert.Equal("eng", stream.Language);
     }
 
     private sealed class JsonProcessExecutor : ProcessExecutor {

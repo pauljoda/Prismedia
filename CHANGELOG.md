@@ -173,6 +173,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 - Jobs now separate dormant signal waits from active execution lanes, making it explicit that review and external-event waits preserve workflow state without consuming worker capacity.
+- Unknown embedded subtitle streams are now skipped, and subtitle extraction remains best-effort so unsupported tracks cannot fail an otherwise healthy library scan.
 - Interactive acquisition imports now resume immediately after download completion, including imports already queued before upgrading; graph continuations declare their entity gate automatically and startup repairs missing scheduler state.
 - Large scan graphs no longer fail media probes, subtitle extraction, or previews through graph-level PostgreSQL concurrency conflicts, and stale graphs whose nodes are already terminal repair their displayed status automatically.
 - Audio probes now persist complete media-source state, preventing unchanged tracks from being re-probed on every scheduled audio scan.

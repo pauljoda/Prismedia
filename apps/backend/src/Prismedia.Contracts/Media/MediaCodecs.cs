@@ -8,6 +8,13 @@ namespace Prismedia.Contracts.Media;
 /// persisted.
 /// </summary>
 public static class MediaCodecs {
+    // ── Probe output ────────────────────────────────────────────────────
+    /// <summary>ffprobe's placeholder when it cannot determine a stream codec.</summary>
+    public const string Unknown = "unknown";
+
+    /// <summary>SubRip text subtitles.</summary>
+    public const string SubRip = "subrip";
+
     // ── Video ───────────────────────────────────────────────────────────
     /// <summary>HEVC / H.265 video.</summary>
     public const string Hevc = "hevc";

@@ -32,6 +32,7 @@ public static class JobDefinitionRegistry {
         JobType.GenerateBookPageThumbnail,
         JobType.GenerateBookCoverThumbnail,
         JobType.GenerateAudioWaveform,
+        JobType.ExtractSubtitles,
         JobType.AcquireSubtitles,
         JobType.AutoIdentify
     ];
