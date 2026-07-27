@@ -201,7 +201,8 @@ public sealed class PluginRequestMetadataSource(
         return new RequestMetadataEnrichment(
             patch.Description,
             RequestProposalReading.BestImage(proposal),
-            RequestProposalReading.YearFromDates(patch.Dates));
+            RequestProposalReading.YearFromDates(patch.Dates),
+            patch);
     }
 
     /// <inheritdoc />

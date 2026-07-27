@@ -20,8 +20,15 @@ public interface IPluginRequestSearchSource {
 /// <param name="message">Human-readable reason the selected plugin search cannot run.</param>
 public sealed class RequestSearchValidationException(string message) : ArgumentException(message);
 
-/// <summary>Full metadata a plugin can resolve for a persistent external identity, used to enrich a held request before import.</summary>
-public sealed record RequestMetadataEnrichment(string? Description, string? PosterUrl, int? Year);
+/// <summary>
+/// Full metadata a plugin can resolve for a persistent external identity, used to enrich a held request
+/// and refresh release dates on its wanted Entity before import.
+/// </summary>
+public sealed record RequestMetadataEnrichment(
+    string? Description,
+    string? PosterUrl,
+    int? Year,
+    EntityMetadataPatch? Patch = null);
 
 /// <summary>
 /// Resolves full metadata for a known external identity (no library entity), so a request's held metadata

@@ -133,6 +133,39 @@ public sealed class MonitoredSearchJobHandlerTests {
     }
 
     [Fact]
+    public async Task WaitingReleaseMonitorRefreshesProviderWhenMilestoneMetadataIsMissing() {
+        var acquisitionId = Guid.NewGuid();
+        var monitorId = Guid.NewGuid();
+        var entityId = Guid.NewGuid();
+        var monitors = new FakeMonitorStore([
+            new DueMonitor(
+                monitorId,
+                acquisitionId,
+                "Toy Story 5",
+                EntityId: entityId,
+                Kind: EntityKind.Movie)
+        ]);
+        var acquisitions = new FakeAcquisitionLifecycleStore(acquisitionId);
+        acquisitions.Statuses[acquisitionId] = AcquisitionStatus.WaitingForRelease;
+        var timing = new FixedReleaseTimingService(new AcquisitionReleaseTimingDecision(
+            false,
+            EntityDateType.StreamingRelease,
+            WaitingForMetadata: true,
+            Message: "Waiting for streaming release date metadata."));
+        var queue = new RecordingJobQueue();
+
+        await Handler(monitors, acquisitions, timing)
+            .HandleAsync(new JobContext(Job(), queue), CancellationToken.None);
+
+        var refresh = Assert.Single(queue.Enqueued);
+        Assert.Equal(JobType.AcquisitionEnrich, refresh.Type);
+        Assert.Equal(acquisitionId.ToString(), refresh.TargetEntityId);
+        Assert.Equal(entityId.ToString(), refresh.GraphRootEntityId);
+        Assert.Equal(AcquisitionStatus.WaitingForRelease, acquisitions.Statuses[acquisitionId]);
+        Assert.Equal(monitorId, Assert.Single(monitors.Searched));
+    }
+
+    [Fact]
     public async Task MonitorPublishesSearchingBeforeAnEnqueueFailure() {
         var acquisitionId = Guid.NewGuid();
         var monitors = new FakeMonitorStore([

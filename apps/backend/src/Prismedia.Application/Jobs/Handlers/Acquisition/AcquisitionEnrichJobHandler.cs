@@ -1,6 +1,8 @@
 using Microsoft.Extensions.Logging;
 using Prismedia.Application.Acquisition;
+using Prismedia.Application.Entities;
 using Prismedia.Application.Requests;
+using Prismedia.Contracts.Entities;
 using Prismedia.Domain.Entities;
 
 namespace Prismedia.Application.Jobs.Handlers;
@@ -15,7 +17,9 @@ public sealed class AcquisitionEnrichJobHandler(
     IAcquisitionStore acquisitions,
     IRequestMetadataEnricher enricher,
     IRequestChildHydrator childHydrator,
-    ILogger<AcquisitionEnrichJobHandler> logger) : IJobHandler {
+    ILogger<AcquisitionEnrichJobHandler> logger,
+    IEntityMetadataPatchService? entityMetadata = null,
+    IMonitorStore? monitors = null) : IJobHandler {
     public JobType Type => JobType.AcquisitionEnrich;
 
     public async Task HandleAsync(JobContext context, CancellationToken cancellationToken) {
@@ -63,6 +67,24 @@ public sealed class AcquisitionEnrichJobHandler(
                 enrichment.PosterUrl,
                 enrichment.Year,
                 cancellationToken);
+
+            if (import.EntityId is { } entityId
+                && entityMetadata is not null
+                && enrichment.Patch is { } patch
+                && (patch.DateEntries.Count > 0 || patch.Dates.Count > 0)) {
+                var result = await entityMetadata.ApplyPatchAsync(
+                    entityId,
+                    new EntityMetadataUpdateRequest(
+                        [MetadataPatchField.Dates.ToCode()],
+                        patch),
+                    import.Kind.ToCode(),
+                    cancellationToken);
+                if (result == EntityMetadataPatchResult.Applied && monitors is not null) {
+                    await monitors.MarkSearchDueByAcquisitionAsync(
+                        payload.AcquisitionId,
+                        cancellationToken);
+                }
+            }
         }
         await context.ReportProgressAsync(
             100,

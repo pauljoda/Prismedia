@@ -132,6 +132,18 @@ public sealed class MonitoredSearchJobHandler(
                 monitor.Kind,
                 cancellationToken);
             if (!timing.CanSearch) {
+                if (timing.WaitingForMetadata) {
+                    await context.EnqueueIfNeededAsync(
+                        new EnqueueJobRequest(
+                            JobType.AcquisitionEnrich,
+                            PayloadJson: AcquisitionJobPayload.Serialize(acquisitionId),
+                            TargetEntityId: acquisitionId.ToString(),
+                            TargetLabel: monitor.Title,
+                            Origin: JobGraphOrigin.Background,
+                            GraphRootEntityKind: monitor.Kind.ToCode(),
+                            GraphRootEntityId: monitor.EntityId?.ToString()),
+                        cancellationToken);
+                }
                 await monitors.MarkSearchedAsync(monitor.MonitorId, cancellationToken);
                 return timing.Message ?? $"Waiting to search for {monitor.Title}";
             }

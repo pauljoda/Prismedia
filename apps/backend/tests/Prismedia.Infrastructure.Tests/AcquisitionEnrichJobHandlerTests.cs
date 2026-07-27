@@ -1,9 +1,13 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using Prismedia.Application.Acquisition;
+using Prismedia.Application.Entities;
 using Prismedia.Application.Jobs;
 using Prismedia.Application.Jobs.Handlers;
 using Prismedia.Application.Requests;
+using Prismedia.Contracts.Acquisition;
+using Prismedia.Contracts.Entities;
+using Prismedia.Contracts.Plugins;
 using Prismedia.Domain.Entities;
 using Prismedia.Infrastructure.Acquisition;
 using Prismedia.Infrastructure.Persistence;
@@ -81,16 +85,49 @@ public sealed class AcquisitionEnrichJobHandlerTests {
         Assert.Equal(2024, row.Year);
     }
 
+    [Fact]
+    public async Task RefreshesTypedEntityDatesAndMakesWaitingMonitorDue() {
+        await using var db = CreateContext();
+        var entityId = Guid.NewGuid();
+        var id = await SeedAsync(
+            db,
+            identityNamespace: "tmdb",
+            identityValue: "123",
+            posterUrl: null,
+            entityId);
+        var patch = EmptyPatch() with {
+            DateEntries = [new EntityMetadataDatePatch(EntityDateType.StreamingRelease, "2026-09-01")]
+        };
+        var metadata = new RecordingMetadataPatchService();
+        var monitors = new RecordingMonitorStore();
+
+        await RunAsync(
+            db,
+            new FakeEnricher(new RequestMetadataEnrichment(null, null, null, patch)),
+            id,
+            metadata: metadata,
+            monitors: monitors);
+
+        Assert.Equal(entityId, metadata.EntityId);
+        Assert.Equal(MetadataPatchField.Dates.ToCode(), Assert.Single(metadata.Request!.Fields));
+        Assert.Equal(EntityDateType.StreamingRelease, Assert.Single(metadata.Request.Patch.DateEntries).Type);
+        Assert.Equal(id, Assert.Single(monitors.Due));
+    }
+
     private static async Task RunAsync(
         PrismediaDbContext db,
         FakeEnricher enricher,
         Guid id,
-        FakeChildHydrator? childHydrator = null) {
+        FakeChildHydrator? childHydrator = null,
+        IEntityMetadataPatchService? metadata = null,
+        IMonitorStore? monitors = null) {
         var handler = new AcquisitionEnrichJobHandler(
             AcquisitionTestFactory.Store(db),
             enricher,
             childHydrator ?? new FakeChildHydrator(null),
-            NullLogger<AcquisitionEnrichJobHandler>.Instance);
+            NullLogger<AcquisitionEnrichJobHandler>.Instance,
+            metadata,
+            monitors);
         var job = new JobRunSnapshot(
             Guid.NewGuid(), JobType.AcquisitionEnrich, JobRunStatus.Running, 0, null,
             AcquisitionJobPayload.Serialize(id), null, null, null, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow, null);
@@ -117,6 +154,19 @@ public sealed class AcquisitionEnrichJobHandlerTests {
     private static PrismediaDbContext CreateContext() =>
         new(new DbContextOptionsBuilder<PrismediaDbContext>().UseInMemoryDatabase(Guid.NewGuid().ToString()).Options);
 
+    private static EntityMetadataPatch EmptyPatch() => new(
+        null,
+        null,
+        new Dictionary<string, string>(),
+        [],
+        [],
+        null,
+        [],
+        new Dictionary<string, string>(),
+        new Dictionary<string, int>(),
+        new Dictionary<string, int>(),
+        null);
+
     private sealed class FakeEnricher(RequestMetadataEnrichment? result) : IRequestMetadataEnricher {
         public string? LookedUp { get; private set; }
         public Task<RequestMetadataEnrichment?> LookupByIdAsync(EntityKind kind, ExternalIdentity identity, bool hideNsfw, CancellationToken cancellationToken) {
@@ -135,6 +185,49 @@ public sealed class AcquisitionEnrichJobHandlerTests {
             EntityId = entityId;
             return Task.FromResult(result);
         }
+    }
+
+    private sealed class RecordingMetadataPatchService : IEntityMetadataPatchService {
+        public Guid? EntityId { get; private set; }
+        public EntityMetadataUpdateRequest? Request { get; private set; }
+
+        public Task<EntityMetadataPatchResult> ApplyPatchAsync(
+            Guid entityId,
+            EntityMetadataUpdateRequest request,
+            string? expectedKind,
+            CancellationToken cancellationToken) {
+            EntityId = entityId;
+            Request = request;
+            return Task.FromResult(EntityMetadataPatchResult.Applied);
+        }
+    }
+
+    private sealed class RecordingMonitorStore : IMonitorStore {
+        public List<Guid> Due { get; } = [];
+
+        public Task MarkSearchDueByAcquisitionAsync(Guid acquisitionId, CancellationToken cancellationToken) {
+            Due.Add(acquisitionId);
+            return Task.CompletedTask;
+        }
+
+        public Task<MonitorView> StartAsync(Guid acquisitionId, EntityKind kind, string title, string? author, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<MonitorView> StartForEntityAsync(Guid entityId, EntityKind kind, string title, AcquisitionTargeting? targeting, MonitorPreset? preset, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<bool> DeleteAsync(Guid monitorId, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<bool> RetargetAsync(Guid fromAcquisitionId, Guid toAcquisitionId, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<bool> SetStatusAsync(Guid monitorId, MonitorStatus status, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<IReadOnlyList<MonitorView>> ListAsync(CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<IReadOnlyList<DueMonitor>> ListDueMonitorsAsync(int defaultIntervalMinutes, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<WantedPage> ListMissingAsync(int page, int pageSize, EntityKind? kind, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<WantedPage> ListCutoffUnmetAsync(int page, int pageSize, EntityKind? kind, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<MonitorView?> GetByAcquisitionAsync(Guid acquisitionId, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<MonitorView?> GetByEntityAsync(Guid entityId, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<IReadOnlyList<MonitorView>> ListForEntityAsync(Guid entityId, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<AcquisitionTargeting?> GetTargetingByEntityAsync(Guid entityId, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<MonitorPreset?> GetPresetByEntityAsync(Guid entityId, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<Guid?> CreateUpgradeChildAsync(Guid monitorId, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task ResolveUpgradeChildAsync(Guid childId, bool succeeded, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task MarkSearchedAsync(Guid monitorId, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<bool> HasActiveMonitorsAsync(CancellationToken cancellationToken) => throw new NotSupportedException();
     }
 
     private sealed class NoopJobQueue : IJobQueueService {
