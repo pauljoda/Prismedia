@@ -193,6 +193,7 @@ public sealed class PluginRequestMetadataSource(
             identity,
             hideNsfw,
             includeChildren: false,
+            forceRefresh: true,
             cancellationToken))?.Proposal;
         if (proposal?.Patch is not { } patch) {
             return null;
@@ -274,7 +275,13 @@ public sealed class PluginRequestMetadataSource(
 
     public Task<RoutedRequestProposal?> ResolveProposalAsync(
         RequestKindDescriptor descriptor, ExternalIdentity identity, bool hideNsfw, bool includeChildren, CancellationToken cancellationToken) =>
-        ResolveProposalCoreAsync(descriptor.PluginEntityKind, identity, hideNsfw, includeChildren, cancellationToken);
+        ResolveProposalCoreAsync(
+            descriptor.PluginEntityKind,
+            identity,
+            hideNsfw,
+            includeChildren,
+            forceRefresh: false,
+            cancellationToken);
 
     /// <summary>
     /// Resolves through one explicit plugin route after validating that the installed, enabled plugin
@@ -319,9 +326,16 @@ public sealed class PluginRequestMetadataSource(
     /// on the same enabled/NSFW rules as search. Shared-namespace routes are tried deterministically.
     /// </summary>
     private async Task<RoutedRequestProposal?> ResolveProposalCoreAsync(
-        EntityKind entityKind, ExternalIdentity identity, bool hideNsfw, bool includeChildren, CancellationToken cancellationToken) {
+        EntityKind entityKind,
+        ExternalIdentity identity,
+        bool hideNsfw,
+        bool includeChildren,
+        bool forceRefresh,
+        CancellationToken cancellationToken) {
         var cacheKey = new ProposalCacheKey(entityKind, PluginId: null, identity, hideNsfw, includeChildren);
-        if (ProposalCache.TryGetValue(cacheKey, out var hit) && DateTimeOffset.UtcNow - hit.At < ProposalTtl) {
+        if (!forceRefresh
+            && ProposalCache.TryGetValue(cacheKey, out var hit)
+            && DateTimeOffset.UtcNow - hit.At < ProposalTtl) {
             return hit.Resolved;
         }
 

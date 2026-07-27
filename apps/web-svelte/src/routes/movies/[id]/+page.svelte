@@ -137,6 +137,7 @@
     entityId: () => movie?.id,
     capabilities: () => movie?.capabilities,
     onChanged: refreshMovie,
+    onStatusChanged: refreshMovie,
     onPruned: () => goto("/movies"),
   });
   const wantedStateLabel = $derived(acquisitionStatusDisplay(acq.acquisition?.summary.status).label);

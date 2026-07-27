@@ -334,6 +334,7 @@
     capabilities: () => book?.capabilities,
     childCards: () => requestableDirectChildCards(book?.id, childBookCards),
     onChanged: handleBookAcquisitionChanged,
+    onStatusChanged: () => loadBook(bookId, { showLoading: false }),
     onPruned: () => goto("/books"),
   });
   const wantedStateLabel = $derived(acquisitionStatusDisplay(acq.acquisition?.summary.status).label);

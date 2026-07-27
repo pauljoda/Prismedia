@@ -144,6 +144,7 @@
     entityId: () => video?.id,
     capabilities: () => video?.capabilities,
     onChanged: () => loadVideo({ showLoading: false }),
+    onStatusChanged: () => loadVideo({ showLoading: false }),
     onPruned: () => goto(seriesRef ? `/series/${seriesRef.id}` : "/videos"),
   });
   const wantedStateLabel = $derived(acquisitionStatusDisplay(acq.acquisition?.summary.status).label);

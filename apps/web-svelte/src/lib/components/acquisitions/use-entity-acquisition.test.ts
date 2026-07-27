@@ -8,7 +8,7 @@ import {
   MONITOR_STATUS,
   THUMBNAIL_HOVER_KIND,
 } from "$lib/api/generated/codes";
-import type { AcquisitionDetail, EntityKind } from "$lib/api/generated/model";
+import type { AcquisitionDetail, AcquisitionStatus, EntityKind } from "$lib/api/generated/model";
 import type { EntityThumbnailCard } from "$lib/entities/entity-thumbnail";
 import Harness from "./use-entity-acquisition.test-harness.svelte";
 
@@ -399,6 +399,24 @@ describe("useEntityAcquisition", () => {
 
     expect(onChanged).not.toHaveBeenCalled();
   });
+
+  it("reloads provider-written entity metadata when polling observes a status transition", async () => {
+    vi.useFakeTimers();
+    const onStatusChanged = vi.fn(async () => {});
+    mocks.fetchAcquisitionForEntity
+      .mockResolvedValueOnce(acquisition("acquisition-1", ACQUISITION_STATUS.waitingForRelease))
+      .mockResolvedValueOnce(acquisition("acquisition-1", ACQUISITION_STATUS.manualSearchRequired));
+
+    render(Harness, { entityId: "movie-1", onStatusChanged });
+    await vi.waitFor(() => {
+      expect(screen.getByTestId("acquisition-id")).toHaveTextContent("acquisition-1");
+    });
+    expect(onStatusChanged).not.toHaveBeenCalled();
+
+    await vi.advanceTimersByTimeAsync(5_000);
+
+    expect(onStatusChanged).toHaveBeenCalledOnce();
+  });
 });
 
 function wantedChild(id: string, kind: EntityKind, parentEntityId: string): EntityThumbnailCard {
@@ -442,11 +460,14 @@ function activeMonitor(entityId: string, acquisitionId: string | null) {
   };
 }
 
-function acquisition(id: string): AcquisitionDetail {
+function acquisition(
+  id: string,
+  status: AcquisitionStatus = ACQUISITION_STATUS.searching,
+): AcquisitionDetail {
   return {
     summary: {
       id,
-      status: ACQUISITION_STATUS.searching,
+      status,
       statusMessage: null,
       title: "Season 1",
       author: null,

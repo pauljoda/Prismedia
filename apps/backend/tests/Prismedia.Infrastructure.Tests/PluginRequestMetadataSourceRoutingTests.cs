@@ -327,6 +327,43 @@ public sealed class PluginRequestMetadataSourceRoutingTests : IDisposable {
         Assert.Equal(2, runner.Calls.Count);
     }
 
+    [Fact]
+    public async Task MetadataEnrichmentBypassesAndReplacesTheIdentityProposalCache() {
+        await using var db = await CreateInstalledPluginAsync("cinema-metadata");
+        var catalog = Catalog(db);
+        var runner = new ProposalFactoryRunner((descriptor, request, call) =>
+            MovieProposal(descriptor.Manifest.Id, Assert.Single(request.Query.ExternalIds!), $"Revision {call}"));
+        var source = new PluginRequestMetadataSource(
+            catalog,
+            new PluginIdentityRouter(catalog),
+            new IdentifyRunnerSelector([runner]));
+        var descriptor = RequestKindRegistry.Find(RequestMediaKind.Movie)!;
+        var identity = new ExternalIdentity("tmdb", $"enrichment:{Guid.NewGuid():N}");
+
+        var first = await source.ResolveProposalAsync(
+            descriptor,
+            identity,
+            hideNsfw: false,
+            includeChildren: false,
+            CancellationToken.None);
+        var fresh = await source.LookupByIdAsync(
+            EntityKind.Movie,
+            identity,
+            hideNsfw: false,
+            CancellationToken.None);
+        var cachedFresh = await source.ResolveProposalAsync(
+            descriptor,
+            identity,
+            hideNsfw: false,
+            includeChildren: false,
+            CancellationToken.None);
+
+        Assert.Equal("Revision 1", first!.Proposal.Patch.Title);
+        Assert.Equal("Revision 2", fresh!.Patch!.Title);
+        Assert.Equal("Revision 2", cachedFresh!.Proposal.Patch.Title);
+        Assert.Equal(2, runner.Calls.Count);
+    }
+
     [Theory]
     [InlineData("provider")]
     [InlineData("identity")]

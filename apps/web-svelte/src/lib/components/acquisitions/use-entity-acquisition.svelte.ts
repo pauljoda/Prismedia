@@ -35,6 +35,8 @@ export interface UseEntityAcquisitionOptions {
   childCards?: () => EntityThumbnailCard[] | undefined;
   /** Called after a state change (request started, monitor toggled, sync run) so the page can reload. */
   onChanged?: () => void | Promise<void>;
+  /** Called when background polling observes a new acquisition status so provider-written metadata can reload. */
+  onStatusChanged?: () => void | Promise<void>;
   /** Called instead of refreshing when unmonitoring pruned the fileless Entity backing this detail route. */
   onPruned?: () => void | Promise<void>;
 }
@@ -227,7 +229,12 @@ export function useEntityAcquisition(options: UseEntityAcquisitionOptions): Enti
       if (pollBusy) return;
       pollBusy = true;
       try {
+        const previousStatus = acquisition?.summary.status ?? null;
         await refresh();
+        const nextStatus = acquisition?.summary.status ?? null;
+        if (previousStatus !== nextStatus) {
+          await options.onStatusChanged?.();
+        }
       } catch {
         // Polling is best-effort; the next interval retries both slices.
       } finally {

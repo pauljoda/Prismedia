@@ -8,12 +8,14 @@
     capabilities = [],
     childCards = [],
     onChanged,
+    onStatusChanged,
     onPruned,
   }: {
     entityId: string;
     capabilities?: EntityCapability[];
     childCards?: EntityThumbnailCard[];
     onChanged?: () => void | Promise<void>;
+    onStatusChanged?: () => void | Promise<void>;
     onPruned?: () => void | Promise<void>;
   } = $props();
 
@@ -22,6 +24,7 @@
     capabilities: () => capabilities,
     childCards: () => childCards,
     onChanged: () => onChanged?.(),
+    onStatusChanged: () => onStatusChanged?.(),
     onPruned: () => onPruned?.(),
   });
 </script>

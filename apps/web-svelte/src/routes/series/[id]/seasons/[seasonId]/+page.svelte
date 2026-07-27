@@ -112,6 +112,7 @@
     capabilities: () => season?.capabilities,
     childCards: () => requestableDirectChildCards(season?.id, episodeCards),
     onChanged: () => loadSeason({ showLoading: false }),
+    onStatusChanged: () => loadSeason({ showLoading: false }),
     onPruned: () => goto(`/series/${seriesId}`),
   });
   const wantedStateLabel = $derived(acquisitionStatusDisplay(acq.acquisition?.summary.status).label);
