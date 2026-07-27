@@ -97,6 +97,34 @@
     }),
   );
   const candidates = $derived(candidateEntries.map((entry) => entry.candidate));
+
+  /**
+   * The registry lists kinds in its own grouping order, which reads as arbitrary in a picker.
+   * Sorting by label gives the chooser and the chip row one predictable order.
+   */
+  const orderedKinds = [...DISCOVERABLE_REQUEST_KINDS].sort((left, right) =>
+    left.plural.localeCompare(right.plural),
+  );
+
+  /**
+   * How many installed providers can actually search each kind. Surfacing this on the chooser
+   * answers "what can I even request?" before a selection is made, instead of after.
+   */
+  const sourceCountByKind = $derived.by(() => {
+    const counts = new Map<RequestMediaKindCode, number>();
+    for (const info of DISCOVERABLE_REQUEST_KINDS) {
+      counts.set(
+        info.kind,
+        discoverSearchProviders(
+          providers,
+          info.kind,
+          hideNsfw,
+          defaultProviders[info.pluginEntityKind] ?? null,
+        ).length,
+      );
+    }
+    return counts;
+  });
   const canLoadMore = $derived(
     hasSearched && results.length >= searchLimit && searchLimit < PLUGIN_SEARCH_MAX_LIMIT,
   );
@@ -299,22 +327,58 @@
     <div class="space-y-3 p-3.5">
       <div class="space-y-1.5">
         <span class="font-mono text-[0.72rem] text-text-muted">Content kind</span>
-        <div class="flex flex-wrap gap-1.5" role="group" aria-label="Choose a content kind">
-          {#each DISCOVERABLE_REQUEST_KINDS as kind (kind.kind)}
-            {@const KindIcon = requestKindIcon(kind.kind)}
-            {@const kindAccent = requestKindAccent(kind.kind)}
-            <Button
-              type="button"
-              size="sm"
-              variant={selectedKind === kind.kind ? "primary" : "secondary"}
-              aria-pressed={selectedKind === kind.kind}
-              onclick={() => chooseKind(kind.kind)}
-            >
-              <KindIcon class="h-3.5 w-3.5" color={kindAccent} aria-hidden="true" />
-              {kind.label}
-            </Button>
-          {/each}
-        </div>
+        {#if selectedKind}
+          <!-- Once a kind is chosen the chooser collapses to chips so the search surface leads. -->
+          <div class="flex flex-wrap gap-1.5" role="group" aria-label="Choose a content kind">
+            {#each orderedKinds as kind (kind.kind)}
+              {@const KindIcon = requestKindIcon(kind.kind)}
+              {@const kindAccent = requestKindAccent(kind.kind)}
+              <Button
+                type="button"
+                size="sm"
+                variant={selectedKind === kind.kind ? "primary" : "secondary"}
+                aria-pressed={selectedKind === kind.kind}
+                onclick={() => chooseKind(kind.kind)}
+              >
+                <KindIcon class="h-3.5 w-3.5" color={kindAccent} aria-hidden="true" />
+                {kind.plural}
+              </Button>
+            {/each}
+          </div>
+        {:else}
+          <!--
+            Nothing selected is the page's real starting point, so it gets a full chooser rather
+            than a strip of chips over an empty page. Each card states whether a source exists.
+          -->
+          <div class="kind-chooser" role="group" aria-label="Choose a content kind">
+            {#each orderedKinds as kind (kind.kind)}
+              {@const KindIcon = requestKindIcon(kind.kind)}
+              {@const sources = sourceCountByKind.get(kind.kind) ?? 0}
+              <button
+                type="button"
+                class="kind-card"
+                class:has-no-source={!providersLoading && sources === 0}
+                style:--family-accent={requestKindAccent(kind.kind)}
+                aria-label={kind.plural}
+                aria-describedby={`discover-sources-${kind.kind}`}
+                onclick={() => chooseKind(kind.kind)}
+              >
+                <span class="kind-card-rail" aria-hidden="true"></span>
+                <KindIcon class="kind-card-icon" aria-hidden="true" />
+                <span class="kind-card-label">{kind.plural}</span>
+                <span class="kind-card-sources" id={`discover-sources-${kind.kind}`}>
+                  {#if providersLoading}
+                    Checking sources…
+                  {:else if sources === 0}
+                    No source installed
+                  {:else}
+                    {sources} {sources === 1 ? "source" : "sources"}
+                  {/if}
+                </span>
+              </button>
+            {/each}
+          </div>
+        {/if}
       </div>
 
       {#if selectedKind}
@@ -338,10 +402,6 @@
             </p>
           </div>
         {/if}
-      {:else}
-        <div class="empty-rack-slot p-4 text-[0.78rem] text-text-muted">
-          Choose one content kind to see the providers and search fields built for it.
-        </div>
       {/if}
     </div>
   </section>
@@ -380,3 +440,95 @@
     />
   {/if}
 </div>
+
+<style>
+  .kind-chooser {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr));
+    gap: 0.5rem;
+  }
+
+  .kind-card {
+    position: relative;
+    display: grid;
+    grid-template-columns: 3px auto minmax(0, 1fr);
+    grid-template-rows: auto auto;
+    align-items: center;
+    gap: 0.1rem 0.6rem;
+    padding: 0.85rem 0.9rem 0.85rem 0;
+    border: 1px solid var(--color-border-subtle);
+    border-radius: var(--radius-sm);
+    background: var(--color-surface-2);
+    text-align: left;
+    cursor: pointer;
+    overflow: hidden;
+    transition:
+      border-color var(--duration-fast, 120ms) var(--ease-default, ease),
+      background var(--duration-fast, 120ms) var(--ease-default, ease);
+  }
+
+  .kind-card:hover,
+  .kind-card:focus-visible {
+    border-color: var(--color-border-default);
+    background: var(--color-surface-3);
+    outline: none;
+  }
+
+  .kind-card:focus-visible {
+    border-color: var(--color-border-accent-strong);
+  }
+
+  /* The family's colour is a leading rail, keeping the card itself neutral material. */
+  .kind-card-rail {
+    grid-row: 1 / span 2;
+    align-self: stretch;
+    background: var(--family-accent);
+    opacity: 0.85;
+  }
+
+  .kind-card :global(.kind-card-icon) {
+    grid-row: 1 / span 2;
+    box-sizing: content-box;
+    width: 1.15rem;
+    height: 1.15rem;
+    margin-left: 0.75rem;
+    padding: 0.45rem;
+    border-radius: var(--radius-xs);
+    background: var(--color-surface-1);
+    color: var(--color-text-secondary);
+  }
+
+  .kind-card-label {
+    font-family: var(--font-heading);
+    font-size: 0.92rem;
+    font-weight: 600;
+    color: var(--color-text-primary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .kind-card-sources {
+    font-family: var(--font-mono);
+    font-size: 0.64rem;
+    color: var(--color-text-muted);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* A kind with no installed provider stays selectable so the empty-state guidance can explain why. */
+  .kind-card.has-no-source .kind-card-label {
+    color: var(--color-text-muted);
+  }
+
+  .kind-card.has-no-source .kind-card-rail {
+    opacity: 0.3;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .kind-card {
+      transition: none;
+    }
+  }
+</style>

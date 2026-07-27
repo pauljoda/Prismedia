@@ -272,19 +272,19 @@
     max-width: 22rem;
     height: 2.1rem;
     padding: 0 0.6rem;
-    border: 1px solid rgb(255 255 255 / 0.1);
+    border: 1px solid var(--color-border-subtle);
     border-radius: var(--radius-sm, 6px);
-    background: rgb(255 255 255 / 0.04);
-    color: rgb(196 201 212 / 0.7);
+    background: var(--color-surface-2);
+    color: var(--color-text-muted);
     transition: border-color 120ms ease;
   }
-  .search:focus-within { border-color: rgb(199 201 204 / 0.4); }
+  .search:focus-within { border-color: var(--color-border-accent-strong); }
   .search input {
     flex: 1 1 auto;
     min-width: 0;
     border: none;
     background: transparent;
-    color: rgb(244 239 230 / 0.95);
+    color: var(--color-text-primary);
     font-size: 0.82rem;
     outline: none;
   }
@@ -294,7 +294,7 @@
     color: rgb(196 201 212 / 0.6);
     cursor: pointer;
   }
-  .search-clear:hover { color: rgb(244 239 230 / 0.9); }
+  .search-clear:hover { color: var(--color-text-primary); }
 
   .chips {
     display: flex;
@@ -307,21 +307,20 @@
     gap: 0.3rem;
     padding: 0.3rem 0.6rem;
     border-radius: var(--radius-xs, 4px);
-    border: 1px solid rgb(255 255 255 / 0.1);
-    background: rgb(255 255 255 / 0.03);
-    color: rgb(196 201 212 / 0.72);
+    border: 1px solid var(--color-border-subtle);
+    background: var(--color-surface-2);
+    color: var(--color-text-secondary);
     font-size: 0.72rem;
     font-weight: 600;
     cursor: pointer;
     transition: all 120ms ease;
     white-space: nowrap;
   }
-  .pill:hover { color: rgb(244 239 230 / 0.92); border-color: rgb(255 255 255 / 0.18); }
+  .pill:hover { color: var(--color-text-primary); border-color: var(--color-border-default); }
   .pill.is-active {
-    color: #c7c9cc;
-    border-color: rgb(199 201 204 / 0.5);
-    background: rgb(50 38 14 / 0.5);
-    box-shadow: 0 0 10px rgb(199 201 204 / 0.12);
+    color: var(--color-text-primary);
+    border-color: var(--color-border-accent-strong);
+    background: var(--color-surface-3);
   }
   .pill-count {
     font-family: var(--font-mono, "JetBrains Mono", monospace);
@@ -337,6 +336,36 @@
     color: var(--color-text-muted, rgb(196 201 212 / 0.6));
   }
 
+  /*
+   * Two wrapping chip groups push the first row of content far down a phone screen. Each group
+   * becomes one horizontally scrollable line instead — the same treatment the page's tab rail
+   * uses, where the clipped chip affords the swipe.
+   */
+  @media (max-width: 48rem) {
+    .search {
+      flex-basis: 100%;
+      max-width: none;
+    }
+
+    .chips {
+      flex-wrap: nowrap;
+      overflow-x: auto;
+      scrollbar-width: none;
+      -webkit-overflow-scrolling: touch;
+      max-width: 100%;
+      /* Room for the focus ring, which would otherwise be clipped by the scroll container. */
+      padding-block: 2px;
+    }
+
+    .chips::-webkit-scrollbar {
+      display: none;
+    }
+
+    .sort {
+      margin-left: 0;
+    }
+  }
+
   .bulk-bar {
     display: flex;
     align-items: center;
@@ -350,8 +379,8 @@
     transition: border-color 120ms ease, background 120ms ease;
   }
   .bulk-bar.has-selection {
-    border-color: rgb(199 201 204 / 0.3);
-    background: rgb(40 30 12 / 0.35);
+    border-color: var(--color-border-accent);
+    background: var(--color-surface-2);
   }
   .bulk-all {
     display: inline-flex;

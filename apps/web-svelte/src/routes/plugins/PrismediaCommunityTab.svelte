@@ -12,6 +12,8 @@
   } from "@lucide/svelte";
   import { Badge, Button, TextInput } from "@prismedia/ui-svelte";
   import type { PluginProvider } from "$lib/api/generated/model";
+  import PluginCapabilityChips from "$lib/components/plugins/PluginCapabilityChips.svelte";
+  import { pluginCapabilities } from "$lib/plugins/plugin-capabilities";
   import PluginCredentialForm from "./PluginCredentialForm.svelte";
 
   interface Props {
@@ -48,11 +50,9 @@
     );
   });
 
-  function providerSupportLabels(plugin: PluginProvider): string[] {
-    return plugin.supports.map((support) =>
-      `${support.entityKind}: ${support.actions.join(", ")}`,
-    );
-  }
+  const capabilitiesByPlugin = $derived(
+    new Map(plugins.map((plugin) => [plugin.id, pluginCapabilities(plugin.supports)])),
+  );
 
   function toggleAuthExpanded(pluginId: string) {
     if (authExpandedFor === pluginId) {
@@ -159,15 +159,12 @@
               {/if}
             </div>
             <p class="text-text-disabled text-[0.65rem] mt-0.5 font-mono">
-              {plugin.id} · dotnet-process
+              {plugin.id}
             </p>
-            <div class="flex flex-wrap items-center gap-1.5 mt-1.5">
-              {#each providerSupportLabels(plugin) as label (label)}
-                <span class="tag-chip-default text-[0.55rem] px-1.5 py-0.5">
-                  {label}
-                </span>
-              {/each}
-            </div>
+            <PluginCapabilityChips
+              capabilities={capabilitiesByPlugin.get(plugin.id) ?? []}
+              class="mt-1.5"
+            />
           </div>
           <div class="flex items-center gap-2 shrink-0">
             {#if hasAuth && plugin.installed}

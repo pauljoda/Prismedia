@@ -153,7 +153,7 @@ describe("RequestDiscover", () => {
 
     render(RequestDiscoverHarness);
     await waitFor(() => expect(fetchPluginProviders).toHaveBeenCalledOnce());
-    await fireEvent.click(screen.getByRole("button", { name: "Audiobook" }));
+    await fireEvent.click(screen.getByRole("button", { name: "Audiobooks" }));
 
     expect(await screen.findByRole("button", { name: "Source: Open Library" })).toBeInTheDocument();
     await fireEvent.input(screen.getByLabelText("Book title"), {
@@ -182,7 +182,7 @@ describe("RequestDiscover", () => {
     render(RequestDiscoverHarness);
     await waitFor(() => expect(fetchPluginProviders).toHaveBeenCalledOnce());
 
-    await fireEvent.click(screen.getByRole("button", { name: "Book" }));
+    await fireEvent.click(screen.getByRole("button", { name: "Books" }));
 
     expect(await screen.findByText(/No installed provider can search and review books/i)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Source:/ })).not.toBeInTheDocument();

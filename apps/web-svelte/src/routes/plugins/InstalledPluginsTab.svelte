@@ -16,6 +16,8 @@
   import { Badge, Button, TextInput } from "@prismedia/ui-svelte";
   import { ENTITY_KIND } from "$lib/api/generated/codes";
   import type { PluginProvider } from "$lib/api/generated/model";
+  import PluginCapabilityChips from "$lib/components/plugins/PluginCapabilityChips.svelte";
+  import { pluginCapabilities } from "$lib/plugins/plugin-capabilities";
   import { entityTerms } from "$lib/terminology";
   import PluginCredentialForm from "./PluginCredentialForm.svelte";
 
@@ -80,11 +82,9 @@
     return plugin.supports.some((support) => support.entityKind === ENTITY_KIND.person);
   }
 
-  function providerSupportLabels(plugin: PluginProvider): string[] {
-    return plugin.supports.map((support) =>
-      `${support.entityKind}: ${support.actions.join(", ")}`,
-    );
-  }
+  const capabilitiesByPlugin = $derived(
+    new Map(providers.map((plugin) => [plugin.id, pluginCapabilities(plugin.supports)])),
+  );
 </script>
 
 <section class="space-y-2">
@@ -152,7 +152,11 @@
       </p>
     </div>
   {:else}
-    <div class="space-y-1">
+    <!--
+      Each card's own content is narrow, so a single full-width column leaves most of the row
+      empty. Two columns on a wide viewport halves the list height without shrinking anything.
+    -->
+    <div class="plugin-grid">
       {#each filteredProviders as plugin (plugin.id)}
         {@const authExpanded = authExpandedFor === `prismedia:${plugin.id}`}
         {@const hasAuth = plugin.auth.length > 0}
@@ -184,13 +188,12 @@
                   {/if}
                 </div>
                 <p class="text-mono-sm text-text-disabled mt-0.5">
-                  {plugin.id} · v{plugin.version} · dotnet-process
+                  {plugin.id} · v{plugin.version}
                 </p>
-                <div class="flex flex-wrap items-center gap-1.5 mt-2.5">
-                  {#each providerSupportLabels(plugin) as label (label)}
-                    <span class="tag-chip-default text-[0.6rem] px-1.5 py-0.5">{label}</span>
-                  {/each}
-                </div>
+                <PluginCapabilityChips
+                  capabilities={capabilitiesByPlugin.get(plugin.id) ?? []}
+                  class="mt-2"
+                />
               </div>
               <div class="flex items-center gap-2 shrink-0">
                 {#if plugin.installed && plugin.updateAvailable}
@@ -281,3 +284,18 @@
     </div>
   {/if}
 </section>
+
+<style>
+  .plugin-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.35rem;
+    align-items: start;
+  }
+
+  @media (min-width: 80rem) {
+    .plugin-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+</style>
