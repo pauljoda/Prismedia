@@ -5,6 +5,11 @@ Important user-facing changes are documented here. This changelog is intentional
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
+
+### Fixed
+
+- Preserved surround channels when video playback must convert an unsupported audio codec.
+
 ### What's New
 - Jobs now run as durable dependency graphs with one fair interactive lane per user-selected Entity, a separately configured background pool, shared CPU balancing, durable provider rate limits, restart-safe waits, graph-level progress and cancellation, and a dependency view in Jobs.
 - Prismedia now has real multi-user accounts. A first-run setup wizard creates your administrator, every household member gets their own username and password, and the same credentials sign in to the web app, Jellyfin-compatible clients (Infuse, Swiftfin, and friends), and OPDS readers — so reverse-proxy auth middleware is no longer needed in front of Prismedia.

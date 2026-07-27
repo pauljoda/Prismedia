@@ -103,7 +103,8 @@ public sealed class PlaybackInfoService : IPlaybackInfoService {
                     request?.AccessToken);
                 transcodingContainer = MediaContainers.Mp4;
                 // AAC remains the safe remux baseline. When negotiation proves the client accepts the
-                // selected source codec, preserve that stream too instead of downmixing it to stereo AAC.
+                // selected source codec, preserve that stream without re-encoding; otherwise retain its
+                // channel count while converting it to AAC.
                 var audioCopied = decision.CopyAudio ||
                     string.Equals(selectedAudioStream?.Codec, MediaCodecs.Aac, StringComparison.OrdinalIgnoreCase);
                 transcodingInfo = new TranscodingInfoResult(

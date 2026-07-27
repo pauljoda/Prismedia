@@ -84,14 +84,14 @@ public sealed partial class HlsAssetService {
             gop.ToString(),
             "-sc_threshold",
             "0",
-            "-c:a",
-            MediaCodecs.Aac,
-            "-b:a",
-            rendition.AudioBitrate,
-            "-ac",
-            "2",
-            "-ar",
-            "48000",
+        ]);
+        arguments.AddRange(
+            TranscodedAudioArguments(
+                source,
+                audioStreamIndex,
+                rendition.AudioBitrate));
+        arguments.AddRange(
+        [
             "-copyts",
             "-avoid_negative_ts",
             "disabled",

@@ -479,9 +479,9 @@ public sealed partial class HlsAssetService {
     /// layout remain untouched. The
     /// enclosing remux command preserves the source streams' relative timestamps with <c>-copyts</c>,
     /// <c>-start_at_zero</c>, and <c>-avoid_negative_ts disabled</c>, so timestamp correction does not
-    /// require a lossy AAC-to-AAC generation. Other codecs are downmixed to stereo AAC as the safe
-    /// universal baseline and use asynchronous resampling to correct timestamp discontinuities without
-    /// forcing the first audio packet to time zero.
+    /// require a lossy AAC-to-AAC generation. Other codecs are converted to multichannel AAC and use
+    /// asynchronous resampling to correct timestamp discontinuities without forcing the first audio
+    /// packet to time zero.
     /// </remarks>
     internal static IReadOnlyList<string> RemuxAudioArguments(
         VideoSourceFile source,
@@ -489,24 +489,60 @@ public sealed partial class HlsAssetService {
         bool copyAudio = false) =>
         copyAudio || IsAacCodec(SelectedAudioStreamCodec(source, audioStreamIndex))
             ? ["-c:a", "copy"]
-            : ["-c:a", MediaCodecs.Aac, "-ac", "2", "-b:a", "192k", "-ar", "48000", "-af", RemuxAudioTimestampFilter];
+            : TranscodedAudioArguments(
+                source,
+                audioStreamIndex,
+                stereoBitrate: "192k",
+                audioFilter: RemuxAudioTimestampFilter);
+
+    /// <summary>
+    /// Builds AAC encoding arguments that retain as many source channels as Apple playback routes accept.
+    /// </summary>
+    internal static IReadOnlyList<string> TranscodedAudioArguments(
+        VideoSourceFile source,
+        int? audioStreamIndex,
+        string stereoBitrate,
+        string? audioFilter = null) {
+        var channels = Math.Clamp(
+            SelectedAudioStream(source, audioStreamIndex)?.Channels ?? source.Channels ?? 2,
+            1,
+            8);
+        var bitrate = channels switch {
+            >= 7 => "512k",
+            >= 3 => "384k",
+            _ => stereoBitrate,
+        };
+        var arguments = new List<string> {
+            "-c:a", MediaCodecs.Aac,
+            "-ac", channels.ToString(CultureInfo.InvariantCulture),
+            "-b:a", bitrate,
+            "-ar", "48000",
+        };
+        if (!string.IsNullOrWhiteSpace(audioFilter)) {
+            arguments.AddRange(["-af", audioFilter]);
+        }
+        return arguments;
+    }
 
     // Resolves the codec of the audio stream the remux maps, mirroring the -map expression: a null index
     // maps "0:a:0?" (the first audio stream); an explicit index maps "0:{index}?" (that absolute stream).
-    private static string? SelectedAudioStreamCodec(VideoSourceFile source, int? audioStreamIndex) {
+    private static string? SelectedAudioStreamCodec(VideoSourceFile source, int? audioStreamIndex) =>
+        SelectedAudioStream(source, audioStreamIndex)?.Codec;
+
+    private static VideoSourceStream? SelectedAudioStream(VideoSourceFile source, int? audioStreamIndex) {
         var streams = source.Streams;
         if (streams is not { Count: > 0 }) {
             return null;
         }
 
         if (audioStreamIndex is { } index) {
-            return streams.FirstOrDefault(stream => stream.StreamIndex == index)?.Codec;
+            return streams.FirstOrDefault(stream => stream.StreamIndex == index);
         }
 
         return streams
             .Where(stream => stream.Type.Equals(StreamKind.Audio.ToCode(), StringComparison.OrdinalIgnoreCase))
             .OrderBy(stream => stream.StreamIndex)
-            .FirstOrDefault()?.Codec;
+            .FirstOrDefault();
     }
 
     private static bool IsAacCodec(string? codec) =>

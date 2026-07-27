@@ -161,16 +161,19 @@ public sealed class HlsAssetServiceTests : IDisposable {
     }
 
     [Fact]
-    public void RemuxCopiesNegotiatedAudioWithoutQualityLossAndDownmixesUnsupportedSources() {
+    public void RemuxCopiesNegotiatedAudioAndPreservesChannelsWhenTranscodingUnsupportedSources() {
         // AAC is already the browser-safe target codec, so even 7.1 sources must be packet-copied rather
         // than put through another lossy AAC generation. Codecs the client may not decode are converted
-        // to the safe stereo-AAC baseline while retaining their source timestamps.
+        // to AAC while retaining their source channel count and timestamps.
         Assert.Equal(
             ["-c:a", "copy"],
             HlsAssetService.RemuxAudioArguments(RemuxAudioSource("aac", channels: 8), audioStreamIndex: null));
         Assert.Equal(
-            ["-c:a", "aac", "-ac", "2", "-b:a", "192k", "-ar", "48000", "-af", "aresample=async=1"],
+            ["-c:a", "aac", "-ac", "6", "-b:a", "384k", "-ar", "48000", "-af", "aresample=async=1"],
             HlsAssetService.RemuxAudioArguments(RemuxAudioSource("eac3"), audioStreamIndex: null));
+        Assert.Equal(
+            ["-c:a", "aac", "-ac", "8", "-b:a", "512k", "-ar", "48000", "-af", "aresample=async=1"],
+            HlsAssetService.RemuxAudioArguments(RemuxAudioSource("truehd", channels: 8), audioStreamIndex: null));
         Assert.Equal(
             ["-c:a", "copy"],
             HlsAssetService.RemuxAudioArguments(
@@ -514,7 +517,7 @@ public sealed class HlsAssetServiceTests : IDisposable {
               "SourceModifiedUtc": "{{sourceInfo.LastWriteTimeUtc:O}}",
               "DurationSeconds": 13,
               "Renditions": ["720p"],
-              "FormatVersion": 9
+              "FormatVersion": 10
             }
             """);
         await File.WriteAllTextAsync(Path.Combine(virtualRoot, "v", "720p", "seg_00000.ts"), "old");
@@ -535,7 +538,7 @@ public sealed class HlsAssetServiceTests : IDisposable {
 
         Assert.NotNull(asset);
         var metadata = await File.ReadAllTextAsync(Path.Combine(virtualRoot, "metadata.json"));
-        Assert.Contains("\"FormatVersion\": 10", metadata);
+        Assert.Contains("\"FormatVersion\": 11", metadata);
         Assert.False(File.Exists(Path.Combine(virtualRoot, "v", "720p", "seg_00000.ts")));
     }
 
