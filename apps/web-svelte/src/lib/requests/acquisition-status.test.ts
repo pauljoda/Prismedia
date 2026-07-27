@@ -12,6 +12,7 @@ describe("acquisition status", () => {
   it("labels every acquisition state for user-facing status surfaces", () => {
     expect(acquisitionStatusLabel(ACQUISITION_STATUS.pending)).toBe("Pending");
     expect(acquisitionStatusLabel(ACQUISITION_STATUS.searching)).toBe("Searching");
+    expect(acquisitionStatusLabel(ACQUISITION_STATUS.waitingForRelease)).toBe("Waiting for release");
     expect(acquisitionStatusLabel(ACQUISITION_STATUS.awaitingSelection)).toBe("Choose release");
     expect(acquisitionStatusLabel(ACQUISITION_STATUS.queued)).toBe("Queued");
     expect(acquisitionStatusLabel(ACQUISITION_STATUS.downloading)).toBe("Downloading");
@@ -37,7 +38,16 @@ describe("acquisition status", () => {
       ACQUISITION_STATUS.stopping,
     ]);
     expect(ACTIVE_ACQUISITION_STATUSES).not.toContain(ACQUISITION_STATUS.awaitingSelection);
+    expect(ACTIVE_ACQUISITION_STATUSES).not.toContain(ACQUISITION_STATUS.waitingForRelease);
     expect(ACTIVE_ACQUISITION_STATUSES).not.toContain(ACQUISITION_STATUS.imported);
+  });
+
+  it("presents release waits without treating them as a hot polling state", () => {
+    expect(acquisitionStatusDisplay(ACQUISITION_STATUS.waitingForRelease)).toMatchObject({
+      label: "Waiting for release",
+      tone: "queued",
+    });
+    expect(acquisitionStatusShouldPoll(ACQUISITION_STATUS.waitingForRelease)).toBe(false);
   });
 
   it("presents destructive cleanup as neutral in-progress work", () => {

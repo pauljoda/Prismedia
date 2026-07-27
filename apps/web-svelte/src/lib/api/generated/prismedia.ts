@@ -205,6 +205,7 @@ import type {
   ListMoviesParams,
   ListMusicArtistsParams,
   ListPeopleParams,
+  ListReleaseCalendarParams,
   ListStudiosParams,
   ListTagsParams,
   ListVideoSeriesParams,
@@ -243,6 +244,7 @@ import type {
   PreviewCollectionRulesParams,
   ProblemDetails,
   RatingUpdateRequest,
+  ReleaseCalendarEvent,
   RemotePathMappingSaveRequest,
   RemotePathMappingView,
   RemoveFileExclusionParams,
@@ -14867,6 +14869,56 @@ export const resumeMonitor = async (id: string, options?: RequestInit): Promise<
   {
     ...options,
     method: 'POST'
+
+
+  }
+);}
+
+
+
+export type listReleaseCalendarResponse200 = {
+  data: ReleaseCalendarEvent[]
+  status: 200
+}
+
+export type listReleaseCalendarResponse400 = {
+  data: ApiProblem
+  status: 400
+}
+
+export type listReleaseCalendarResponseSuccess = (listReleaseCalendarResponse200) & {
+  headers: Headers;
+};
+export type listReleaseCalendarResponseError = (listReleaseCalendarResponse400) & {
+  headers: Headers;
+};
+
+export type listReleaseCalendarResponse = (listReleaseCalendarResponseSuccess | listReleaseCalendarResponseError)
+
+export const getListReleaseCalendarUrl = (params: ListReleaseCalendarParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/calendar/releases?${stringifiedParams}` : `/api/calendar/releases`
+}
+
+/**
+ * @summary Lists typed release milestones for actively monitored requests.
+ */
+export const listReleaseCalendar = async (params: ListReleaseCalendarParams, options?: RequestInit): Promise<listReleaseCalendarResponse> => {
+
+  return orvalFetch<listReleaseCalendarResponse>(getListReleaseCalendarUrl(params),
+  {
+    ...options,
+    method: 'GET'
 
 
   }

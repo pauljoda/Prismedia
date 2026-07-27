@@ -1,6 +1,7 @@
 import type { Component } from "svelte";
 import {
   BellOff,
+  CalendarClock,
   CircleAlert,
   CircleCheck,
   CircleX,
@@ -110,6 +111,7 @@ function toneForStatus(status: AcquisitionStatusCode): AcquisitionItemTone {
       return "downloading";
     case ACQUISITION_STATUS.queued:
     case ACQUISITION_STATUS.waitingForDownloadClient:
+    case ACQUISITION_STATUS.waitingForRelease:
       return "queued";
     case ACQUISITION_STATUS.pending:
     case ACQUISITION_STATUS.searching:
@@ -140,6 +142,8 @@ function iconForStatus(status: AcquisitionStatusCode): Component {
     case ACQUISITION_STATUS.queued:
     case ACQUISITION_STATUS.waitingForDownloadClient:
       return Hourglass;
+    case ACQUISITION_STATUS.waitingForRelease:
+      return CalendarClock;
     case ACQUISITION_STATUS.pending:
     case ACQUISITION_STATUS.searching:
     case ACQUISITION_STATUS.awaitingSelection:
@@ -162,6 +166,8 @@ function iconForStatus(status: AcquisitionStatusCode): Component {
 /** The one-line description under the status chip for a download row (null when the progress bar says it all). */
 function downloadDescription(status: AcquisitionStatusCode, statusMessage: string | null | undefined): string | null {
   switch (status) {
+    case ACQUISITION_STATUS.waitingForRelease:
+      return statusMessage ?? "Waiting for the configured release date.";
     case ACQUISITION_STATUS.awaitingSelection:
       return "Select a release to start the download.";
     case ACQUISITION_STATUS.pending:
@@ -290,6 +296,7 @@ export function downloadToListItem(
 
   const searchable =
     status === ACQUISITION_STATUS.awaitingSelection ||
+    status === ACQUISITION_STATUS.waitingForRelease ||
     status === ACQUISITION_STATUS.failed ||
     status === ACQUISITION_STATUS.searching ||
     status === ACQUISITION_STATUS.pending;
@@ -300,7 +307,7 @@ export function downloadToListItem(
     primaryAction = null;
   } else if (status === ACQUISITION_STATUS.awaitingSelection && href) {
     primaryAction = { id: "choose", label: "Choose release", icon: Search, tone: "primary", href };
-  } else if (status === ACQUISITION_STATUS.failed || status === ACQUISITION_STATUS.searching || status === ACQUISITION_STATUS.pending) {
+  } else if (status === ACQUISITION_STATUS.waitingForRelease || status === ACQUISITION_STATUS.failed || status === ACQUISITION_STATUS.searching || status === ACQUISITION_STATUS.pending) {
     primaryAction = { id: "search", label: "Search again", icon: RotateCw, tone: "primary", disabled: acting, run: () => callbacks.onReSearch(row) };
   } else if (href) {
     primaryAction = { id: "view", label: "View", icon: Eye, tone: "primary", href };

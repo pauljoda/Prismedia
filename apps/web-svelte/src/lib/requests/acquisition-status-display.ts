@@ -1,6 +1,7 @@
 import type { Component } from "svelte";
 import {
   Bookmark,
+  CalendarClock,
   CircleAlert,
   CircleCheck,
   CircleX,
@@ -44,6 +45,8 @@ export function acquisitionStatusDisplay(status: string | null | undefined): Acq
   }
 
   switch (status) {
+    case ACQUISITION_STATUS.waitingForRelease:
+      return { label: "Waiting for release", icon: CalendarClock, tone: "queued" };
     case ACQUISITION_STATUS.searching:
     case ACQUISITION_STATUS.pending:
       return { label: "Searching", icon: Search, tone: "searching" };

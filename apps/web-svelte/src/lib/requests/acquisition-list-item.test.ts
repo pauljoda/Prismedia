@@ -76,6 +76,26 @@ describe("download acquisition list items", () => {
     expect(item.primaryAction?.id).toBe("view");
   });
 
+  it("offers a deliberate manual search while an automatic release gate is waiting", () => {
+    const onReSearch = vi.fn();
+    const row = download(ACQUISITION_STATUS.waitingForRelease);
+    row.statusMessage = "Waiting until 2026-09-01, after the digital release date.";
+
+    const item = downloadToListItem(
+      row,
+      null,
+      { onReSearch, onRemove: vi.fn() },
+      false,
+    );
+
+    expect(item.statusLabel).toBe("Waiting for release");
+    expect(item.indeterminate).toBe(false);
+    expect(item.description).toBe(row.statusMessage);
+    expect(item.primaryAction?.id).toBe("search");
+    item.primaryAction?.run?.();
+    expect(onReSearch).toHaveBeenCalledWith(row);
+  });
+
   it("locks wanted-list actions while monitor cleanup owns the Entity", () => {
     const item = wantedToListItem(
       wanted(MONITOR_STATUS.deletingFiles),

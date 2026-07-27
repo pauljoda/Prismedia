@@ -103,6 +103,9 @@
         continue;
       }
       switch (effectiveAcquisitionStatus(row)) {
+        case ACQUISITION_STATUS.waitingForRelease:
+          preparing += 1;
+          break;
         case ACQUISITION_STATUS.downloading:
           downloading += 1;
           break;
@@ -305,6 +308,7 @@
       ACQUISITION_STATUS.downloaded,
       ACQUISITION_STATUS.waitingForDownloadClient,
       ACQUISITION_STATUS.queued,
+      ACQUISITION_STATUS.waitingForRelease,
       ACQUISITION_STATUS.searching,
       ACQUISITION_STATUS.pending,
       ACQUISITION_STATUS.stopping,

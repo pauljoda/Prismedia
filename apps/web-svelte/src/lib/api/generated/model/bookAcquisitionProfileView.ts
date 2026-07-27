@@ -6,6 +6,7 @@
  */
 import type { BookAcquisitionProfileViewAllowedFormatsItem } from './bookAcquisitionProfileViewAllowedFormatsItem';
 import type { BookAcquisitionProfileViewFormatScores } from './bookAcquisitionProfileViewFormatScores';
+import type { BookAcquisitionProfileViewSearchAfterDateType } from './bookAcquisitionProfileViewSearchAfterDateType';
 import type { BookFormatTier } from './bookFormatTier';
 import type { BookSourceTier } from './bookSourceTier';
 import type { EntityKind } from './entityKind';
@@ -58,4 +59,7 @@ export interface BookAcquisitionProfileView {
      * @pattern ^-?(?:0|[1-9]\d*)$
      */
   cutoffFormatScore?: number | string | null;
+  searchAfterDateType?: BookAcquisitionProfileViewSearchAfterDateType;
+  /** @pattern ^-?(?:0|[1-9]\d*)$ */
+  searchDelayDays?: number | string;
 }

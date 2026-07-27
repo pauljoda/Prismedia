@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onDestroy } from "svelte";
-  import { CloudDownload, FileText, History, Loader2, RefreshCw, RotateCcw, Search, SearchX, Upload, X } from "@lucide/svelte";
+  import { CalendarClock, CloudDownload, FileText, History, Loader2, RefreshCw, RotateCcw, Search, SearchX, Upload, X } from "@lucide/svelte";
   import { Badge, Button, SearchInput } from "@prismedia/ui-svelte";
   import AcquisitionHistoryList from "$lib/components/acquisitions/AcquisitionHistoryList.svelte";
   import ConfirmDialog from "$lib/components/entities/ConfirmDialog.svelte";
@@ -294,7 +294,8 @@
   // hold, where searching for a different release is a legitimate way out. In-flight grabs and
   // imported/cancelled items are left alone (the server enforces the same gate).
   const canReSearch = $derived(
-    status === ACQUISITION_STATUS.awaitingSelection ||
+    status === ACQUISITION_STATUS.waitingForRelease ||
+      status === ACQUISITION_STATUS.awaitingSelection ||
       (status === ACQUISITION_STATUS.failed && !hasResumableImport) ||
       status === ACQUISITION_STATUS.manualImportRequired,
   );
@@ -403,6 +404,13 @@
           ? "Removing the download and managed files. Actions will return when cleanup finishes."
           : "Prismedia is finishing a newer lifecycle transition. Actions are temporarily unavailable."}
         busy
+      />
+
+    {:else if status === ACQUISITION_STATUS.waitingForRelease}
+      <StatePlaceholder
+        icon={CalendarClock}
+        title="Waiting for release"
+        description={detail.summary.statusMessage ?? "Automatic searches will begin when the configured release milestone arrives. You can still search manually now."}
       />
 
     {:else if status === ACQUISITION_STATUS.searching}

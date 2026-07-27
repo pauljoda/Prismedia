@@ -43,14 +43,15 @@
   import { findSetting, settingKeys } from "$lib/settings/app-settings";
   import AcquisitionProtocolPreference from "$lib/components/settings/AcquisitionProtocolPreference.svelte";
   import AcquisitionBlocklistManager from "$lib/components/settings/AcquisitionBlocklistManager.svelte";
+  import AcquisitionReleaseTimingFields from "$lib/components/settings/AcquisitionReleaseTimingFields.svelte";
   import { availableDownloadProtocols } from "$lib/components/settings/acquisition-protocol-preference";
+  import { profileSupportsReleaseDate, releaseTimingLabel } from "$lib/components/settings/acquisition-profile-release-timing";
 
   interface Props {
     onError: (msg: string) => void;
     onMessage: (msg: string) => void;
   }
   let { onError, onMessage }: Props = $props();
-
   const DEFAULT_PATH_TEMPLATE = "{Author}/{Title} ({Year})/{Title}{ - Volume}.{ext}";
   // Per-kind naming templates, mirroring the backend MediaNamingTemplates defaults. Books own their own
   // template; movies/TV/music each control names within a structure the scan binding depends on.
@@ -73,7 +74,6 @@
   function namingHintFor(kind: string): string {
     return NAMING_HINTS[kind] ?? "";
   }
-
   let indexers = $state<IndexerConfigSummary[]>([]);
   let downloadClients = $state<DownloadClientSummary[]>([]);
   let profiles = $state<BookAcquisitionProfileView[]>([]);
@@ -84,9 +84,7 @@
   let busy = $state(false);
   let protocolBusy = $state(false);
   let preferredProtocol = $state<DownloadProtocolCode>(DOWNLOAD_PROTOCOL.usenet);
-
   const availableProtocols = $derived(availableDownloadProtocols(downloadClients));
-
   // Inline edit forms (null = closed).
   let indexerForm = $state<IndexerConfigSaveRequest | null>(null);
   let indexerCategories = $state("7000,8000");
@@ -98,7 +96,6 @@
   let clientTest = $state<TestResult | null>(null);
   let profileForm = $state<BookAcquisitionProfileSaveRequest | null>(null);
   let profileTerms = $state({ preferred: "", required: "", ignored: "", weighted: "", languages: "" });
-
   // The quality ladders per profile kind, worst → best, for the allowed-set picker and cutoff select.
   const videoQualityLadder = Object.values(VIDEO_QUALITY).filter((code) => code !== VIDEO_QUALITY.unknown);
   const audioQualityLadder = Object.values(AUDIO_QUALITY).filter((code) => code !== AUDIO_QUALITY.unknown);
@@ -112,7 +109,6 @@
     const current = profileForm.allowedQualities ?? [];
     profileForm.allowedQualities = current.includes(code) ? current.filter((c) => c !== code) : [...current, code];
   }
-
   const importModeOptions = [
     { value: IMPORT_MODE.move, label: "Move (delete torrent after import)" },
     { value: IMPORT_MODE.hardlink, label: "Hardlink (instant, keeps seeding)" },
@@ -175,7 +171,6 @@
     }
     profileForm.formatScores = next;
   }
-
   async function load() {
     try {
       const [idx, clients, profs, bl, roots, mappings, formats, settings] = await Promise.all([
@@ -206,7 +201,6 @@
       loading = false;
     }
   }
-
   // ── Indexers ────────────────────────────────────────────────
   const indexerKindOptions = [
     { value: INDEXER_KIND.prowlarr, label: "Prowlarr (aggregator)" },
@@ -404,7 +398,6 @@
   function clientNameOf(id: string): string {
     return downloadClients.find((c) => c.id === id)?.displayName ?? "(removed client)";
   }
-
   // ── Acquisition profiles (kind-scoped) ──────────────────────
   function newProfile() {
     profileForm = {
@@ -416,6 +409,7 @@
       upgradeUntilCutoff: false, cutoffSourceTier: BOOK_SOURCE_TIER.unknown, cutoffFormatTier: BOOK_FORMAT_TIER.unknown,
       downloadCategory: null, allowedQualities: [], cutoffQuality: null,
       formatScores: {}, minFormatScore: 0, cutoffFormatScore: null,
+      searchAfterDateType: undefined, searchDelayDays: 0,
     };
     profileTerms = { preferred: "", required: "", ignored: "", weighted: "", languages: "English" };
   }
@@ -437,6 +431,11 @@
     if (profileForm.pathTemplate === namingDefaultFor(previousKind)) {
       profileForm.pathTemplate = namingDefaultFor(kind);
     }
+    if (profileForm.searchAfterDateType
+      && !profileSupportsReleaseDate(kind, profileForm.searchAfterDateType)) {
+      profileForm.searchAfterDateType = undefined;
+      profileForm.searchDelayDays = 0;
+    }
   }
   function editProfile(p: BookAcquisitionProfileView) {
     profileForm = {
@@ -448,6 +447,7 @@
       upgradeUntilCutoff: p.upgradeUntilCutoff, cutoffSourceTier: p.cutoffSourceTier, cutoffFormatTier: p.cutoffFormatTier,
       downloadCategory: p.downloadCategory ?? null, allowedQualities: p.allowedQualities ?? [], cutoffQuality: p.cutoffQuality ?? null,
       formatScores: { ...(p.formatScores ?? {}) }, minFormatScore: p.minFormatScore ?? 0, cutoffFormatScore: p.cutoffFormatScore ?? null,
+      searchAfterDateType: p.searchAfterDateType ?? undefined, searchDelayDays: Number(p.searchDelayDays ?? 0),
     };
     profileTerms = {
       preferred: p.preferredTerms.join(", "),
@@ -882,6 +882,7 @@
               <Badge variant="default">{profileKindLabels[p.kind] ?? p.kind}</Badge>
               <span class="min-w-0 truncate text-sm text-text-primary">{p.displayName}</span>
               {#if p.isDefault}<Badge variant="accent">default</Badge>{/if}
+              {#if p.searchAfterDateType}<Badge variant="default">Search {releaseTimingLabel(p.searchAfterDateType)}{Number(p.searchDelayDays) > 0 ? ` +${p.searchDelayDays}d` : ""}</Badge>{/if}
               <span class="min-w-0 truncate text-xs text-text-muted">→ {allRoots.find((r) => r.id === p.targetLibraryRootId)?.label ?? "root"}</span>
             </div>
             <div class="flex shrink-0 items-center gap-1">
@@ -906,6 +907,7 @@
                 <Select size="sm" value={profileForm.importMode} options={importModeOptions} onchange={(v) => profileForm && (profileForm.importMode = v as typeof profileForm.importMode)} /></label>
               <label class="space-y-1"><span class="text-label text-text-muted">Download category</span>
                 <TextInput size="sm" value={profileForm.downloadCategory ?? ""} oninput={(e) => profileForm && (profileForm.downloadCategory = e.currentTarget.value || null)} placeholder="client default" /></label>
+              <AcquisitionReleaseTimingFields profile={profileForm} />
               {#if qualityLadderFor(profileForm.kind).length > 0}
                 <div class="space-y-1 sm:col-span-2">
                   <span class="text-label text-text-muted">Allowed qualities (none = all)</span>

@@ -77,6 +77,7 @@ export type AcquisitionImportPhaseCode = (typeof ACQUISITION_IMPORT_PHASE)[keyof
 // source: enum AcquisitionStatus
 export const ACQUISITION_STATUS = {
   pending: "pending",
+  waitingForRelease: "waiting-for-release",
   searching: "searching",
   awaitingSelection: "awaiting-selection",
   queued: "queued",
@@ -257,6 +258,27 @@ export const DOWNLOAD_PROTOCOL = {
 } as const;
 
 export type DownloadProtocolCode = (typeof DOWNLOAD_PROTOCOL)[keyof typeof DOWNLOAD_PROTOCOL];
+
+// source: enum EntityDateType
+export const ENTITY_DATE_TYPE = {
+  announcement: "announcement",
+  premiere: "premiere",
+  theatricalRelease: "theatrical-release",
+  streamingRelease: "streaming-release",
+  digitalRelease: "digital-release",
+  physicalRelease: "physical-release",
+  air: "air",
+  firstAir: "first-air",
+  lastAir: "last-air",
+  publication: "publication",
+  release: "release",
+  birth: "birth",
+  death: "death",
+  careerStart: "career-start",
+  careerEnd: "career-end",
+} as const;
+
+export type EntityDateTypeCode = (typeof ENTITY_DATE_TYPE)[keyof typeof ENTITY_DATE_TYPE];
 
 // source: enum EntityFileRole
 export const ENTITY_FILE_ROLE = {
@@ -977,6 +999,7 @@ export const PROBLEM_CODE = {
   audioStreamNotFound: "audio_stream_not_found",
   authRateLimited: "auth_rate_limited",
   authenticationRequired: "authentication_required",
+  calendarRangeInvalid: "calendar_range_invalid",
   changelogNotFound: "changelog_not_found",
   collectionNotFound: "collection_not_found",
   databaseBackupInvalid: "database_backup_invalid",
