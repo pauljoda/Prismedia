@@ -42,4 +42,4 @@ The `reconcile-entity` planner derives downstream work from Entity kind, capabil
 
 Graph endpoints list aggregate lane progress and expose nodes, edges, signals, warnings, wait reasons, and cancellation. Durable foreground endpoints return or expose their graph IDs; administrative operations return background graph references. The flat job history endpoints remain a compatibility and diagnostic projection.
 
-The Jobs page renders one row per graph and expands it into the dependency tree. Provider waits use friendly labels, and Entity-backed graph data obeys the active NSFW visibility policy.
+The Jobs page renders executing graphs as active lanes, while graphs paused on durable signals appear in a separate waiting-workflows section because they consume no worker or scheduling capacity. Each workflow expands into its dependency tree. Provider waits use friendly labels, and Entity-backed graph data obeys the active NSFW visibility policy.

@@ -5,6 +5,7 @@
     AlertTriangle,
     Ban,
     CheckCircle2,
+    CirclePause,
     Clock,
     GitBranch,
     Loader2,
@@ -27,7 +28,11 @@
   import { fetchSettingsValues } from "$lib/api/settings";
   import { settingKeys, valuesToLibrarySettings } from "$lib/settings/app-settings";
   import type { JobsDashboard } from "$lib/jobs/models";
-  import { buildJobsDashboard, type ScheduleInfo } from "$lib/jobs/jobs-dashboard";
+  import {
+    buildJobsDashboard,
+    groupJobGraphsByActivity,
+    type ScheduleInfo,
+  } from "$lib/jobs/jobs-dashboard";
   import { RUN_CATALOG } from "$lib/jobs/run-catalog";
   import {
     displayJobHeading,
@@ -63,16 +68,10 @@
   let pollTimer: ReturnType<typeof setInterval> | null = null;
   let lastNsfwMode = $state(nsfw.mode);
 
-  const liveGraphs = $derived(
-    graphs.filter((graph) =>
-      graph.status === JOB_GRAPH_STATUS.queued ||
-      graph.status === JOB_GRAPH_STATUS.running ||
-      graph.status === JOB_GRAPH_STATUS.waiting,
-    ),
-  );
-  const recentGraphs = $derived(
-    graphs.filter((graph) => !liveGraphs.some((live) => live.id === graph.id)).slice(0, 30),
-  );
+  const graphGroups = $derived(groupJobGraphsByActivity(graphs));
+  const activeGraphs = $derived(graphGroups.active);
+  const waitingGraphs = $derived(graphGroups.waiting);
+  const recentGraphs = $derived(graphGroups.recent);
   const runningCount = $derived(graphs.filter((graph) => graph.status === JOB_GRAPH_STATUS.running).length);
   const waitingCount = $derived(graphs.filter((graph) => graph.status === JOB_GRAPH_STATUS.waiting).length);
   const queuedCount = $derived(graphs.filter((graph) => graph.status === JOB_GRAPH_STATUS.queued).length);
@@ -85,7 +84,11 @@
     failedGroups.filter((group) => !dismissedErrors.isDismissed(group.fingerprint)),
   );
   const allQuiet = $derived(
-    !loading && liveGraphs.length === 0 && recentGraphs.length === 0 && visibleFailedGroups.length === 0,
+    !loading &&
+      activeGraphs.length === 0 &&
+      waitingGraphs.length === 0 &&
+      recentGraphs.length === 0 &&
+      visibleFailedGroups.length === 0,
   );
 
   $effect(() => {
@@ -194,11 +197,11 @@
     message = null;
     try {
       const result = await cancelJobGraph(graph.id);
-      message = result.cancelled ? "The lane was cancelled." : "The lane was already finished.";
+      message = result.cancelled ? "The workflow was cancelled." : "The workflow was already finished.";
       error = null;
       await loadDashboard();
     } catch (err) {
-      error = err instanceof Error ? err.message : "Failed to cancel lane";
+      error = err instanceof Error ? err.message : "Failed to cancel workflow";
     } finally {
       cancellingGraphId = null;
     }
@@ -295,18 +298,46 @@
   </section>
 
   {#if allQuiet}
-    <EmptyPanel title="All quiet" detail="No active or recent job graphs. Start an administrative task or an entity action to create a lane." />
+    <EmptyPanel title="All quiet" detail="No active, waiting, or recent job workflows. Start an administrative task or an entity action to create one." />
   {/if}
 
-  {#if liveGraphs.length > 0}
+  {#if activeGraphs.length > 0}
     <section class="space-y-2">
       <div class="flex items-center gap-2 px-1">
         <GitBranch class="h-4 w-4 text-text-accent" />
-        <h2 class="text-kicker text-text-accent">Active lanes</h2>
-        <span class="text-mono-sm text-text-disabled">{liveGraphs.length}</span>
+        <h2 class="text-kicker text-text-accent">Active execution lanes</h2>
+        <span class="text-mono-sm text-text-disabled">{activeGraphs.length}</span>
       </div>
       <div class="space-y-2">
-        {#each liveGraphs as graph (graph.id)}
+        {#each activeGraphs as graph (graph.id)}
+          <GraphLaneCard
+            {graph}
+            detail={graphDetails[graph.id]}
+            expanded={expandedGraphId === graph.id}
+            loadingDetail={loadingGraphId === graph.id}
+            cancelling={cancellingGraphId === graph.id}
+            onToggle={handleToggleGraph}
+            onCancel={handleCancelGraph}
+          />
+        {/each}
+      </div>
+    </section>
+  {/if}
+
+  {#if waitingGraphs.length > 0}
+    <section class="space-y-2">
+      <div class="flex flex-wrap items-center justify-between gap-2 px-1">
+        <div class="flex items-center gap-2">
+          <CirclePause class="h-4 w-4 text-status-warning-text" />
+          <h2 class="text-kicker text-status-warning-text">Waiting workflows</h2>
+          <span class="text-mono-sm text-text-disabled">{waitingGraphs.length}</span>
+        </div>
+        <p class="text-[0.68rem] text-text-disabled">
+          Waiting on review or an external event · no worker or active lane is held.
+        </p>
+      </div>
+      <div class="space-y-2">
+        {#each waitingGraphs as graph (graph.id)}
           <GraphLaneCard
             {graph}
             detail={graphDetails[graph.id]}

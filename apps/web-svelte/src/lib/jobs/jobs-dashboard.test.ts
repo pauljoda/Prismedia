@@ -1,7 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { JOB_GRAPH_STATUS } from "$lib/api/generated/codes";
-import { buildJobsDashboard, groupJobRunsByKind, jobLabelForType, mapJobRun } from "./jobs-dashboard";
-import type { JobRun } from "$lib/api/generated/model";
+import { JOB_GRAPH_ORIGIN, JOB_GRAPH_STATUS } from "$lib/api/generated/codes";
+import {
+  buildJobsDashboard,
+  groupJobGraphsByActivity,
+  groupJobRunsByKind,
+  jobLabelForType,
+  mapJobRun,
+} from "./jobs-dashboard";
+import type { JobGraphSummary, JobRun } from "$lib/api/generated/model";
 
 const baseJob: JobRun = {
   id: "job-1",
@@ -17,6 +23,26 @@ const baseJob: JobRun = {
   finishedAt: null,
 };
 
+const baseGraph: JobGraphSummary = {
+  id: "graph-1",
+  origin: JOB_GRAPH_ORIGIN.background,
+  status: JOB_GRAPH_STATUS.queued,
+  displayName: "Graph",
+  rootEntityKind: null,
+  rootEntityId: null,
+  progress: 0,
+  nodeCount: 1,
+  completedNodeCount: 0,
+  failedNodeCount: 0,
+  terminalNodeCount: 0,
+  warningCount: 0,
+  currentNodeType: null,
+  waitReason: null,
+  createdAt: "2026-07-27T16:00:00Z",
+  updatedAt: "2026-07-27T16:00:00Z",
+  finishedAt: null,
+};
+
 describe("jobs dashboard adapter", () => {
   it("uses the graph status when a terminal graph has no current node", () => {
     expect(jobLabelForType(null, JOB_GRAPH_STATUS.completed)).toBe("Completed");
@@ -26,6 +52,24 @@ describe("jobs dashboard adapter", () => {
     expect(jobLabelForType(null, JOB_GRAPH_STATUS.running)).toBe("Running");
     expect(jobLabelForType(null, JOB_GRAPH_STATUS.queued)).toBe("Queued");
     expect(jobLabelForType(null, JOB_GRAPH_STATUS.waiting)).toBe("Waiting");
+  });
+
+  it("does not count durable signal waits as active execution lanes", () => {
+    const groups = groupJobGraphsByActivity([
+      { ...baseGraph, id: "running", status: JOB_GRAPH_STATUS.running },
+      { ...baseGraph, id: "queued", status: JOB_GRAPH_STATUS.queued },
+      {
+        ...baseGraph,
+        id: "review",
+        status: JOB_GRAPH_STATUS.waiting,
+        waitReason: "Waiting for release review",
+      },
+      { ...baseGraph, id: "completed", status: JOB_GRAPH_STATUS.completed },
+    ]);
+
+    expect(groups.active.map((graph) => graph.id)).toEqual(["running", "queued"]);
+    expect(groups.waiting.map((graph) => graph.id)).toEqual(["review"]);
+    expect(groups.recent.map((graph) => graph.id)).toEqual(["completed"]);
   });
 
   it("maps job lifecycle codes into the existing jobs page run shape", () => {

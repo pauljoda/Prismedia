@@ -1,6 +1,7 @@
 import {
   JobRunStatus,
   type JobGraphStatus as ApiJobGraphStatus,
+  type JobGraphSummary,
   type JobQueueCountDto,
   type JobRun as ApiJobRun,
 } from "$lib/api/generated/model";
@@ -396,6 +397,32 @@ export function jobLabelForType(type: string | null, graphStatus?: ApiJobGraphSt
   if (graphStatus === JOB_GRAPH_STATUS.running) return "Running";
   if (graphStatus === JOB_GRAPH_STATUS.queued) return "Queued";
   return "Waiting";
+}
+
+/** Separates executing lanes from durable signal waits and terminal history. */
+export function groupJobGraphsByActivity(
+  graphs: readonly JobGraphSummary[],
+  recentLimit = 30,
+): {
+  active: JobGraphSummary[];
+  waiting: JobGraphSummary[];
+  recent: JobGraphSummary[];
+} {
+  const active: JobGraphSummary[] = [];
+  const waiting: JobGraphSummary[] = [];
+  const recent: JobGraphSummary[] = [];
+
+  for (const graph of graphs) {
+    if (graph.status === JOB_GRAPH_STATUS.queued || graph.status === JOB_GRAPH_STATUS.running) {
+      active.push(graph);
+    } else if (graph.status === JOB_GRAPH_STATUS.waiting) {
+      waiting.push(graph);
+    } else if (recent.length < recentLimit) {
+      recent.push(graph);
+    }
+  }
+
+  return { active, waiting, recent };
 }
 
 export function groupJobRunsByKind(jobs: readonly DashboardJobRun[]): JobRunGroup[] {

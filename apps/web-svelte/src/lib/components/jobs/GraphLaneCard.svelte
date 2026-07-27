@@ -50,7 +50,7 @@
   const terminalCount = $derived(Number(graph.terminalNodeCount));
   const failedCount = $derived(Number(graph.failedNodeCount));
   const warningCount = $derived(Number(graph.warningCount));
-  const isActive = $derived(
+  const isCancellable = $derived(
     graph.status === JOB_GRAPH_STATUS.queued ||
       graph.status === JOB_GRAPH_STATUS.running ||
       graph.status === JOB_GRAPH_STATUS.waiting,
@@ -168,7 +168,7 @@
       </div>
     </div>
 
-    {#if isActive}
+    {#if isCancellable}
       <Button
         type="button"
         variant="ghost"
