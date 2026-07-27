@@ -134,7 +134,7 @@ public sealed class AcquisitionServiceTests {
     }
 
     [Fact]
-    public async Task ReleaseGatedCreateWaitsAndOnlySchedulesMetadataEnrichment() {
+    public async Task ReleaseGatedCreateWaitsWithoutRefreshingAKnownDate() {
         var timing = new FixedReleaseTimingService(new AcquisitionReleaseTimingDecision(
             false,
             EntityDateType.DigitalRelease,
@@ -151,8 +151,50 @@ public sealed class AcquisitionServiceTests {
 
         Assert.Equal(AcquisitionStatus.WaitingForRelease, created.Status);
         Assert.Equal(AcquisitionStatus.WaitingForRelease, harness.Store.Status);
-        Assert.Equal(JobType.AcquisitionEnrich, Assert.Single(harness.Queue.Requests).Type);
+        Assert.Empty(harness.Queue.Requests);
         Assert.Equal(WantedEntityId, timing.EntityId);
+    }
+
+    [Fact]
+    public async Task MissingReleaseDateSchedulesOneMetadataRefresh() {
+        var timing = new FixedReleaseTimingService(new AcquisitionReleaseTimingDecision(
+            false,
+            EntityDateType.StreamingRelease,
+            WaitingForMetadata: true,
+            Message: "Waiting for streaming release date metadata."));
+        var harness = Harness(TransferInfo(RecordedClientId), releaseTiming: timing);
+
+        var created = await harness.Service.CreateAndSearchAsync(
+            new AcquisitionCreateRequest(
+                "Toy Story 5", null, null, 2026, null, "tmdb", "1084242",
+                Kind: EntityKind.Movie,
+                EntityId: WantedEntityId),
+            CancellationToken.None);
+
+        Assert.Equal(AcquisitionStatus.WaitingForRelease, created.Status);
+        Assert.Equal(JobType.AcquisitionEnrich, Assert.Single(harness.Queue.Requests).Type);
+    }
+
+    [Fact]
+    public async Task MissingReleaseDateWithoutProviderIdentityStartsInManualSearchState() {
+        var timing = new FixedReleaseTimingService(new AcquisitionReleaseTimingDecision(
+            false,
+            EntityDateType.PhysicalRelease,
+            WaitingForMetadata: true,
+            Message: "Waiting for physical release date metadata."));
+        var harness = Harness(TransferInfo(RecordedClientId), releaseTiming: timing);
+
+        var created = await harness.Service.CreateAndSearchAsync(
+            new AcquisitionCreateRequest(
+                "Unknown Movie", null, null, null, null, null, null,
+                Kind: EntityKind.Movie,
+                EntityId: WantedEntityId),
+            CancellationToken.None);
+
+        Assert.Equal(AcquisitionStatus.ManualSearchRequired, created.Status);
+        Assert.Contains("did not return", created.StatusMessage);
+        Assert.Contains("enter the date", created.StatusMessage);
+        Assert.Empty(harness.Queue.Requests);
     }
 
     [Fact]

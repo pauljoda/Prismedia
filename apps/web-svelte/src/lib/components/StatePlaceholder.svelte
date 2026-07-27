@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { Component } from "svelte";
+  import type { Component, Snippet } from "svelte";
   import PrismediaLoadingMark from "./PrismediaLoadingMark.svelte";
 
   interface Props {
@@ -9,9 +9,11 @@
     description?: string;
     /** Renders a spinning accent ring around the icon to signal active work. */
     busy?: boolean;
+    /** Optional action row rendered beneath the explanatory copy. */
+    children?: Snippet;
   }
 
-  let { icon, title, description, busy = false }: Props = $props();
+  let { icon, title, description, busy = false, children }: Props = $props();
   const Icon = $derived(icon);
 </script>
 
@@ -25,6 +27,7 @@
   {/if}
   <strong>{title}</strong>
   {#if description}<span class="desc">{description}</span>{/if}
+  {#if children}<div class="actions">{@render children()}</div>{/if}
 </div>
 
 <style>
@@ -72,6 +75,14 @@
     font-size: 0.8rem;
     line-height: 1.45;
     color: var(--color-text-muted, #8a93a6);
+  }
+
+  .actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 0.5rem;
+    margin-top: 0.45rem;
   }
 
 </style>

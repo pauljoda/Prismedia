@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Prismedia.Application.Acquisition;
 using Prismedia.Application.Entities;
 using Prismedia.Application.Jobs.Ports;
 using Prismedia.Application.Plugins;
@@ -37,6 +38,7 @@ public sealed partial class EntityMetadataApplyService : IEntityMetadataPatchSer
     private readonly PluginArtworkDownloader _artwork;
     private readonly IGridThumbnailService? _gridThumbnails;
     private readonly ICurrentUserContext? _currentUser;
+    private readonly IAcquisitionReleaseDateChangeHandler? _releaseDateChanges;
 
     /// <summary>
     /// Creates an apply service over EF Core rows and optional artwork downloading.
@@ -61,7 +63,8 @@ public sealed partial class EntityMetadataApplyService : IEntityMetadataPatchSer
         IEntityProviderIdentityStore? providerIdentities = null,
         IPluginIdentityRouter? identityRouter = null,
         IEntityLifecycleMutationLease? lifecycle = null,
-        ICurrentUserContext? currentUser = null) {
+        ICurrentUserContext? currentUser = null,
+        IAcquisitionReleaseDateChangeHandler? releaseDateChanges = null) {
         _db = db;
         _externalIdentities = externalIdentities ?? new EfEntityExternalIdentityStore(db, TimeProvider.System);
         _providerIdentities = providerIdentities;
@@ -72,6 +75,7 @@ public sealed partial class EntityMetadataApplyService : IEntityMetadataPatchSer
         _artwork = new PluginArtworkDownloader(db, options, http);
         _gridThumbnails = gridThumbnails;
         _currentUser = currentUser;
+        _releaseDateChanges = releaseDateChanges;
     }
 
     /// <summary>
@@ -146,6 +150,9 @@ public sealed partial class EntityMetadataApplyService : IEntityMetadataPatchSer
         if (accepted && result == EntityMetadataPatchResult.Applied) {
             _artwork.CommitStagedWrites();
             await RefreshGridThumbnailsForDownloadedArtworkAsync(cancellationToken);
+            if (_releaseDateChanges is not null && fields.Contains(MetadataPatchField.Dates.ToCode())) {
+                await _releaseDateChanges.HandleAsync(entityId, cancellationToken);
+            }
         } else {
             _artwork.RollbackStagedWrites();
         }
@@ -361,6 +368,10 @@ public sealed partial class EntityMetadataApplyService : IEntityMetadataPatchSer
         if (accepted && applied) {
             _artwork.CommitStagedWrites();
             await RefreshGridThumbnailsForDownloadedArtworkAsync(cancellationToken);
+            if (_releaseDateChanges is not null
+                && selectedFields.Contains(MetadataPatchField.Dates.ToCode(), StringComparer.OrdinalIgnoreCase)) {
+                await _releaseDateChanges.HandleAsync(entityId, cancellationToken);
+            }
         } else {
             _artwork.RollbackStagedWrites();
         }

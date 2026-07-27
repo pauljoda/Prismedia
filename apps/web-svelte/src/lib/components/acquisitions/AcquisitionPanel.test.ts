@@ -14,7 +14,10 @@ const mocks = vi.hoisted(() => ({
   retryAcquisitionImport: vi.fn(),
   reSearchAcquisition: vi.fn(),
   deleteAcquisition: vi.fn(),
+  goto: vi.fn(),
 }));
+
+vi.mock("$app/navigation", () => ({ goto: mocks.goto }));
 
 vi.mock("$lib/api/acquisitions", () => ({
   blocklistAcquisitionCandidate: vi.fn(),
@@ -215,6 +218,40 @@ describe("AcquisitionPanel", () => {
 
     await waitFor(() => expect(mocks.fetchAcquisition).toHaveBeenCalledOnce());
     expect(view.queryByRole("button", { name: /monitor/i })).toBeNull();
+  });
+
+  it("only prompts for a date after the provider returned no release date", async () => {
+    const manual = acquisition(ACQUISITION_STATUS.manualSearchRequired);
+    manual.summary.statusMessage = "The configured metadata provider did not return a streaming release date. This item is waiting: check again later, search manually, or enter the date yourself.";
+    mocks.fetchAcquisition.mockResolvedValue(manual);
+    mocks.reSearchAcquisition.mockResolvedValue(acquisition(ACQUISITION_STATUS.searching));
+
+    const view = render(AcquisitionPanel, {
+      acquisitionId: "acquisition-1",
+      detail: manual,
+    });
+
+    expect(await view.findByText("Release date unavailable")).toBeInTheDocument();
+    expect(view.getAllByText(/provider did not return/i)).toHaveLength(2);
+    await fireEvent.click(view.getByRole("button", { name: "Enter release date" }));
+    expect(mocks.goto).toHaveBeenCalledWith("/?edit=dates#entity-dates-editor");
+    await fireEvent.click(view.getByRole("button", { name: "Search again" }));
+    expect(mocks.reSearchAcquisition).toHaveBeenCalledWith("acquisition-1", undefined);
+  });
+
+  it("does not prompt for a manual date while the initial provider check is pending", async () => {
+    const waiting = acquisition(ACQUISITION_STATUS.waitingForRelease);
+    waiting.summary.statusMessage = "No streaming release date was included in the request metadata. Checking the configured provider once before asking you to choose what to do.";
+    mocks.fetchAcquisition.mockResolvedValue(waiting);
+
+    const view = render(AcquisitionPanel, {
+      acquisitionId: "acquisition-1",
+      detail: waiting,
+    });
+
+    expect(await view.findAllByText("Waiting for release")).toHaveLength(2);
+    expect(view.queryByText("Release date unavailable")).toBeNull();
+    expect(view.queryByRole("button", { name: "Enter release date" })).toBeNull();
   });
 
   it("submits an exact custom term from release review", async () => {

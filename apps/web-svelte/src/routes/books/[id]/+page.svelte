@@ -91,6 +91,7 @@
     type EpubContentsEntry,
   } from "$lib/entities/epub-contents";
   import { acquisitionStatusShouldPoll } from "$lib/requests/acquisition-status";
+  import { acquisitionStatusDisplay } from "$lib/requests/acquisition-status-display";
   import { monitorIsActive } from "$lib/requests/monitor-status";
 
   type LoadState = "loading" | "ready" | "error";
@@ -335,6 +336,7 @@
     onChanged: handleBookAcquisitionChanged,
     onPruned: () => goto("/books"),
   });
+  const wantedStateLabel = $derived(acquisitionStatusDisplay(acq.acquisition?.summary.status).label);
   const fileManagement = {
     onDeleted: () => goto("/books"),
     onReverted: () => refreshAfterManagedFileRevert(
@@ -1005,6 +1007,7 @@
   {:else if card && book}
     <EntityDetail
       {card}
+      wantedStatus={acq.acquisition?.summary.status ?? null}
       onRatingChange={handleRatingChange}
       onFavoriteToggle={handleFavoriteToggle}
       onOrganizedToggle={handleOrganizedToggle}
@@ -1036,7 +1039,7 @@
 
       {#snippet heroBadges()}
         {#if entityWanted}
-          <span class="hero-badge wanted">Wanted</span>
+          <span class="hero-badge wanted">{wantedStateLabel}</span>
         {/if}
         {#if progressDisplay}
           <span class="hero-badge">Read {progressDisplay.percent}%</span>

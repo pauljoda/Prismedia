@@ -78,6 +78,7 @@ export type AcquisitionImportPhaseCode = (typeof ACQUISITION_IMPORT_PHASE)[keyof
 export const ACQUISITION_STATUS = {
   pending: "pending",
   waitingForRelease: "waiting-for-release",
+  manualSearchRequired: "manual-search-required",
   searching: "searching",
   awaitingSelection: "awaiting-selection",
   queued: "queued",

@@ -7,6 +7,7 @@ const ACQUISITION_STATUS_LABELS: Record<AcquisitionStatusCode, string> = {
   [ACQUISITION_STATUS.pending]: "Pending",
   [ACQUISITION_STATUS.searching]: "Searching",
   [ACQUISITION_STATUS.waitingForRelease]: "Waiting for release",
+  [ACQUISITION_STATUS.manualSearchRequired]: "Manual search",
   [ACQUISITION_STATUS.awaitingSelection]: "Choose release",
   [ACQUISITION_STATUS.queued]: "Queued",
   [ACQUISITION_STATUS.downloading]: "Downloading",

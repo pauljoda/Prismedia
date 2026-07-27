@@ -94,7 +94,8 @@ public sealed class AcquisitionEnrichJobHandlerTests {
             identityNamespace: "tmdb",
             identityValue: "123",
             posterUrl: null,
-            entityId);
+            entityId,
+            AcquisitionStatus.WaitingForRelease);
         var patch = EmptyPatch() with {
             DateEntries = [new EntityMetadataDatePatch(EntityDateType.StreamingRelease, "2026-09-01")]
         };
@@ -106,7 +107,8 @@ public sealed class AcquisitionEnrichJobHandlerTests {
             new FakeEnricher(new RequestMetadataEnrichment(null, null, null, patch)),
             id,
             metadata: metadata,
-            monitors: monitors);
+            monitors: monitors,
+            releaseTiming: new FixedReleaseTimingService(AcquisitionReleaseTimingDecision.Ready));
 
         Assert.Equal(entityId, metadata.EntityId);
         Assert.Equal(MetadataPatchField.Dates.ToCode(), Assert.Single(metadata.Request!.Fields));
@@ -114,20 +116,125 @@ public sealed class AcquisitionEnrichJobHandlerTests {
         Assert.Equal(id, Assert.Single(monitors.Due));
     }
 
+    [Fact]
+    public async Task ProviderMissMovesReleaseGateToManualSearchRequired() {
+        await using var db = CreateContext();
+        var id = await SeedAsync(
+            db,
+            identityNamespace: "tmdb",
+            identityValue: "404",
+            posterUrl: null,
+            entityId: Guid.NewGuid(),
+            status: AcquisitionStatus.WaitingForRelease);
+
+        await RunAsync(
+            db,
+            new FakeEnricher(null),
+            id,
+            releaseTiming: new FixedReleaseTimingService(new AcquisitionReleaseTimingDecision(
+                false,
+                EntityDateType.StreamingRelease,
+                WaitingForMetadata: true)));
+
+        var row = await db.Acquisitions.AsNoTracking().SingleAsync(acquisition => acquisition.Id == id);
+        Assert.Equal(AcquisitionStatus.ManualSearchRequired, row.Status);
+        Assert.Contains("did not return", row.StatusMessage);
+        Assert.Contains("enter the date", row.StatusMessage);
+    }
+
+    [Fact]
+    public async Task UserSuppliedReleaseDateResumesManualHoldAndMakesMonitorDue() {
+        await using var db = CreateContext();
+        var entityId = Guid.NewGuid();
+        var id = await SeedAsync(
+            db,
+            identityNamespace: "tmdb",
+            identityValue: "123",
+            posterUrl: null,
+            entityId,
+            AcquisitionStatus.ManualSearchRequired);
+        var monitors = new RecordingMonitorStore();
+        var handler = new AcquisitionReleaseDateChangeHandler(
+            AcquisitionTestFactory.Store(db),
+            new FixedReleaseTimingService(AcquisitionReleaseTimingDecision.Ready),
+            monitors);
+
+        await handler.HandleAsync(entityId, CancellationToken.None);
+
+        var row = await db.Acquisitions.AsNoTracking().SingleAsync(acquisition => acquisition.Id == id);
+        Assert.Equal(AcquisitionStatus.WaitingForRelease, row.Status);
+        Assert.Equal(id, Assert.Single(monitors.Due));
+    }
+
+    [Fact]
+    public async Task KnownFutureDateRemainsOnReleaseWaitWithoutMakingMonitorDue() {
+        await using var db = CreateContext();
+        var id = await SeedAsync(
+            db,
+            identityNamespace: "tmdb",
+            identityValue: "123",
+            posterUrl: null,
+            entityId: Guid.NewGuid(),
+            status: AcquisitionStatus.WaitingForRelease);
+        var monitors = new RecordingMonitorStore();
+
+        await RunAsync(
+            db,
+            new FakeEnricher(new RequestMetadataEnrichment(null, null, null)),
+            id,
+            monitors: monitors,
+            releaseTiming: new FixedReleaseTimingService(new AcquisitionReleaseTimingDecision(
+                false,
+                EntityDateType.StreamingRelease,
+                SearchNotBefore: new DateOnly(2027, 1, 1))));
+
+        Assert.Equal(
+            AcquisitionStatus.WaitingForRelease,
+            (await db.Acquisitions.AsNoTracking().SingleAsync(acquisition => acquisition.Id == id)).Status);
+        Assert.Empty(monitors.Due);
+    }
+
+    [Fact]
+    public async Task ProviderFailureKeepsReleaseGateRetryable() {
+        await using var db = CreateContext();
+        var id = await SeedAsync(
+            db,
+            identityNamespace: "tmdb",
+            identityValue: "123",
+            posterUrl: null,
+            entityId: Guid.NewGuid(),
+            status: AcquisitionStatus.WaitingForRelease);
+
+        await RunAsync(
+            db,
+            new ThrowingEnricher(),
+            id,
+            releaseTiming: new FixedReleaseTimingService(new AcquisitionReleaseTimingDecision(
+                false,
+                EntityDateType.StreamingRelease,
+                WaitingForMetadata: true)));
+
+        Assert.Equal(
+            AcquisitionStatus.WaitingForRelease,
+            (await db.Acquisitions.AsNoTracking().SingleAsync(acquisition => acquisition.Id == id)).Status);
+    }
+
     private static async Task RunAsync(
         PrismediaDbContext db,
-        FakeEnricher enricher,
+        IRequestMetadataEnricher enricher,
         Guid id,
         FakeChildHydrator? childHydrator = null,
         IEntityMetadataPatchService? metadata = null,
-        IMonitorStore? monitors = null) {
+        IMonitorStore? monitors = null,
+        IAcquisitionReleaseTimingService? releaseTiming = null) {
         var handler = new AcquisitionEnrichJobHandler(
             AcquisitionTestFactory.Store(db),
             enricher,
             childHydrator ?? new FakeChildHydrator(null),
             NullLogger<AcquisitionEnrichJobHandler>.Instance,
             metadata,
-            monitors);
+            monitors,
+            releaseTiming);
         var job = new JobRunSnapshot(
             Guid.NewGuid(), JobType.AcquisitionEnrich, JobRunStatus.Running, 0, null,
             AcquisitionJobPayload.Serialize(id), null, null, null, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow, null);
@@ -139,11 +246,12 @@ public sealed class AcquisitionEnrichJobHandlerTests {
         string? identityNamespace,
         string? identityValue,
         string? posterUrl,
-        Guid? entityId = null) {
+        Guid? entityId = null,
+        AcquisitionStatus status = AcquisitionStatus.Pending) {
         var now = DateTimeOffset.UtcNow;
         var id = Guid.NewGuid();
         db.Acquisitions.Add(new AcquisitionRow {
-            Id = id, Status = AcquisitionStatus.Pending, Title = "B", ExternalIdsJson = "{}", SourceUrlsJson = "[]",
+            Id = id, Status = status, Title = "B", ExternalIdsJson = "{}", SourceUrlsJson = "[]",
             IdentityNamespace = identityNamespace, IdentityValue = identityValue, PosterUrl = posterUrl,
             EntityId = entityId, CreatedAt = now, UpdatedAt = now
         });
@@ -173,6 +281,23 @@ public sealed class AcquisitionEnrichJobHandlerTests {
             LookedUp = RequestProposalReading.FormatQualifiedIdentity(identity);
             return Task.FromResult(result);
         }
+    }
+
+    private sealed class ThrowingEnricher : IRequestMetadataEnricher {
+        public Task<RequestMetadataEnrichment?> LookupByIdAsync(
+            EntityKind kind,
+            ExternalIdentity identity,
+            bool hideNsfw,
+            CancellationToken cancellationToken) => throw new HttpRequestException("provider offline");
+    }
+
+    private sealed class FixedReleaseTimingService(AcquisitionReleaseTimingDecision decision)
+        : IAcquisitionReleaseTimingService {
+        public Task<AcquisitionReleaseTimingDecision> EvaluateAsync(
+            Guid? entityId,
+            Guid? profileId,
+            EntityKind kind,
+            CancellationToken cancellationToken) => Task.FromResult(decision);
     }
 
     private sealed class FakeChildHydrator(RequestChildHydrationResult? result) : IRequestChildHydrator {

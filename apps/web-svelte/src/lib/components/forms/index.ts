@@ -2,6 +2,7 @@ export { default as FormField } from "./FormField.svelte";
 export { default as TextField } from "./TextField.svelte";
 export { default as TextAreaField } from "./TextAreaField.svelte";
 export { default as DateField } from "./DateField.svelte";
+export { default as EntityDatesEditor } from "./EntityDatesEditor.svelte";
 export { default as SearchSelect } from "./SearchSelect.svelte";
 export { default as TagSelect } from "./TagSelect.svelte";
 export { default as ToggleChip } from "./ToggleChip.svelte";

@@ -521,6 +521,17 @@ public sealed class EfMonitorStoreTests {
     }
 
     [Fact]
+    public async Task ManualSearchRequiredRemainsWantedButIsNotAutomaticallyDue() {
+        await using var db = CreateContext();
+        var store = await SeedMonitorAsync(db, AcquisitionStatus.ManualSearchRequired);
+
+        Assert.Empty(await store.ListDueMonitorsAsync(360, CancellationToken.None));
+        Assert.Equal(MonitorStatus.Active, Assert.Single(await store.ListAsync(CancellationToken.None)).Status);
+        var wanted = Assert.Single((await store.ListMissingAsync(1, 50, null, CancellationToken.None)).Items);
+        Assert.Equal(AcquisitionStatus.ManualSearchRequired, wanted.AcquisitionStatus);
+    }
+
+    [Fact]
     public async Task AwaitingSelectionWithNoAcceptedCandidateIsDue() {
         // Search ran but found nothing acceptable — still missing, so keep looking.
         await using var db = CreateContext();

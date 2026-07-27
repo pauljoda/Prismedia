@@ -6,6 +6,8 @@ namespace Prismedia.Application.Tests.Acquisition;
 public sealed class AcquisitionSearchGateTests {
     [Theory]
     [InlineData(AcquisitionStatus.Pending)]
+    [InlineData(AcquisitionStatus.WaitingForRelease)]
+    [InlineData(AcquisitionStatus.ManualSearchRequired)]
     [InlineData(AcquisitionStatus.Searching)]
     [InlineData(AcquisitionStatus.AwaitingSelection)]
     [InlineData(AcquisitionStatus.Failed)]

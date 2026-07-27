@@ -10,6 +10,7 @@ public sealed partial class EfAcquisitionStore {
     private static readonly AcquisitionStatus[] OrphanRetirableStatuses = [
         AcquisitionStatus.Pending,
         AcquisitionStatus.WaitingForRelease,
+        AcquisitionStatus.ManualSearchRequired,
         AcquisitionStatus.Searching,
         AcquisitionStatus.AwaitingSelection,
         AcquisitionStatus.Failed,

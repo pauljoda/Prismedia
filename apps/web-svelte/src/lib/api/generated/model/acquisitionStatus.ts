@@ -11,6 +11,7 @@ export type AcquisitionStatus = typeof AcquisitionStatus[keyof typeof Acquisitio
 export const AcquisitionStatus = {
   pending: 'pending',
   'waiting-for-release': 'waiting-for-release',
+  'manual-search-required': 'manual-search-required',
   searching: 'searching',
   'awaiting-selection': 'awaiting-selection',
   queued: 'queued',

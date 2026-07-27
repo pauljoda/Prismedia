@@ -33,6 +33,6 @@
     {/if}
   </div>
   <p class="text-[0.72rem] leading-relaxed text-text-muted">
-    Automatic indexer searches wait for the selected date supplied by metadata plugins. If the date is not known yet, Prismedia keeps refreshing it. A manual Search again always starts immediately.
+    Immediately is the default and searches regardless of release timing. For a selected milestone, Prismedia asks the metadata plugin once when the date is missing; if none is supplied, the item stays Wanted for manual Search again.
   </p>
 </div>

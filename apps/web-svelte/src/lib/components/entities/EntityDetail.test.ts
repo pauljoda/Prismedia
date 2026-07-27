@@ -3,6 +3,7 @@ import { FileText, Play } from "@lucide/svelte";
 import { readFileSync } from "node:fs";
 import { createRawSnippet } from "svelte";
 import { describe, expect, it, vi } from "vitest";
+import { ACQUISITION_STATUS, CAPABILITY_KIND } from "$lib/api/generated/codes";
 import type { EntityDetailCard, EntityDetailCardFull } from "$lib/entities/entity-detail";
 import type { EntityDetailSection } from "./EntityDetail.svelte";
 import EntityDetail from "./EntityDetail.test-harness.svelte";
@@ -164,7 +165,13 @@ describe("EntityDetail", () => {
         title: "Book One",
         parentEntityId: null,
         sortOrder: null,
-        capabilities: [],
+        capabilities: [{
+          kind: CAPABILITY_KIND.flags,
+          isFavorite: null,
+          isNsfw: null,
+          isOrganized: null,
+          isWanted: true,
+        }],
         childrenByKind: [],
         relationships: [],
       },
@@ -178,10 +185,17 @@ describe("EntityDetail", () => {
       },
     };
 
-    const { container } = render(EntityDetail, { props: { card, posterSize: "large" } });
+    const { container } = render(EntityDetail, {
+      props: {
+        card,
+        posterSize: "large",
+        wantedStatus: ACQUISITION_STATUS.waitingForRelease,
+      },
+    });
 
     expect(container.querySelector(".poster-frame .entity-thumbnail")).toBeInTheDocument();
     expect(container.querySelector(".poster-frame img")).toHaveAttribute("src", "/covers/book.jpg");
+    expect(screen.getAllByLabelText("Wanted — Waiting for release")).toHaveLength(2);
   });
 
   it("shows editable poster and header drop zones when artwork is missing", async () => {

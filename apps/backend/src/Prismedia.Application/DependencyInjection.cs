@@ -65,6 +65,7 @@ public static class DependencyInjection {
         services.AddScoped<Acquisition.DownloadClientCommandService>();
         services.AddScoped<Acquisition.BookAcquisitionProfileCommandService>();
         services.AddScoped<Acquisition.IAcquisitionReleaseTimingService, Acquisition.AcquisitionReleaseTimingService>();
+        services.AddScoped<Acquisition.IAcquisitionReleaseDateChangeHandler, Acquisition.AcquisitionReleaseDateChangeHandler>();
         services.AddScoped<Acquisition.AcquisitionSearchRunner>();
         services.AddScoped<Acquisition.AcquisitionMissingChildFallback>();
         services.AddSingleton<Acquisition.ManualReplacementSearchSessionStore>();

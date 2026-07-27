@@ -96,6 +96,45 @@ describe("download acquisition list items", () => {
     expect(onReSearch).toHaveBeenCalledWith(row);
   });
 
+  it("surfaces unavailable release metadata as manual waiting work", () => {
+    const onReSearch = vi.fn();
+    const row = download(ACQUISITION_STATUS.manualSearchRequired);
+    row.statusMessage = "The configured metadata provider did not return a streaming release date. This item is waiting: check again later, search manually, or enter the date yourself.";
+
+    const item = downloadToListItem(
+      row,
+      null,
+      { onReSearch, onRemove: vi.fn() },
+      false,
+    );
+
+    expect(item.statusLabel).toBe("Manual search");
+    expect(item.tone).toBe("attention");
+    expect(item.indeterminate).toBe(false);
+    expect(item.description).toBe(row.statusMessage);
+    expect(item.primaryAction?.id).toBe("search");
+  });
+
+  it("keeps a manual release-metadata miss in Wanted without a fake next-search ETA", () => {
+    const row = wanted(MONITOR_STATUS.active);
+    row.acquisitionStatus = ACQUISITION_STATUS.manualSearchRequired;
+
+    const item = wantedToListItem(
+      row,
+      "missing",
+      null,
+      { onSearchNow: vi.fn(), onUnmonitor: vi.fn() },
+      false,
+    );
+
+    expect(item.statusLabel).toBe("Manual search");
+    expect(item.tone).toBe("attention");
+    expect(item.indeterminate).toBe(false);
+    expect(item.metaParts).toContain("manual search");
+    expect(item.metaParts.some((part) => part.startsWith("next "))).toBe(false);
+    expect(item.primaryAction?.label).toBe("Search now");
+  });
+
   it("locks wanted-list actions while monitor cleanup owns the Entity", () => {
     const item = wantedToListItem(
       wanted(MONITOR_STATUS.deletingFiles),

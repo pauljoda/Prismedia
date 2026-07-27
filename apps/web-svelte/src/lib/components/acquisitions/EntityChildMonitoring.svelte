@@ -312,6 +312,7 @@
       ACQUISITION_STATUS.searching,
       ACQUISITION_STATUS.pending,
       ACQUISITION_STATUS.stopping,
+      ACQUISITION_STATUS.manualSearchRequired,
       ACQUISITION_STATUS.awaitingSelection,
       ACQUISITION_STATUS.failed,
       ACQUISITION_STATUS.manualImportRequired,

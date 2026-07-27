@@ -57,12 +57,14 @@
   import EntityThumbnail from "$lib/components/thumbnails/EntityThumbnail.svelte";
   import MetadataCard from "$lib/components/MetadataCard.svelte";
   import MetadataCardGrid from "$lib/components/MetadataCardGrid.svelte";
+  import EntityDateEditRequest from "./EntityDateEditRequest.svelte";
   import EntityTagChips from "./EntityTagChips.svelte";
   import EntityCastAndCrewSection from "./EntityCastAndCrewSection.svelte";
   import EntityActionButton from "./EntityActionButton.svelte";
   import MarkdownEditor from "$lib/components/forms/MarkdownEditor.svelte";
   import EntityPicker from "$lib/components/forms/EntityPicker.svelte";
   import CreditsEditor from "$lib/components/forms/CreditsEditor.svelte";
+  import EntityDatesEditor from "$lib/components/forms/EntityDatesEditor.svelte";
   import ListEditor from "$lib/components/forms/ListEditor.svelte";
   import KeyValueEditor from "$lib/components/forms/KeyValueEditor.svelte";
   import FormField from "$lib/components/forms/FormField.svelte";
@@ -98,6 +100,7 @@
 
   let {
     card,
+    wantedStatus,
     onRatingChange,
     onFavoriteToggle,
     onOrganizedToggle,
@@ -466,20 +469,24 @@
   }
 
   function posterCardForDisplay(): EntityThumbnailCard | null {
+    const withWantedStatus = (posterCard: EntityThumbnailCard): EntityThumbnailCard =>
+      wantedStatus === undefined ? posterCard : { ...posterCard, wantedStatus };
     const poster = displayPoster;
     if (poster) {
-      return {
+      return withWantedStatus({
         ...(card.posterCard ?? entityReferenceToThumbnailCard(card.entity)),
         cover: { src: poster.src, alt: poster.alt, role: ENTITY_FILE_ROLE.poster },
         hover: { kind: THUMBNAIL_HOVER_KIND.none },
-      };
+      });
     }
 
-    if (!isEditingActiveTab) return card.posterCard ?? null;
-    return {
+    if (!isEditingActiveTab) {
+      return card.posterCard ? withWantedStatus(card.posterCard) : null;
+    }
+    return withWantedStatus({
       ...entityReferenceToThumbnailCard(card.entity, { cover: null }),
       hover: { kind: THUMBNAIL_HOVER_KIND.none },
-    };
+    });
   }
 
   function roleSupported(role: EntityFileRoleCode): boolean {
@@ -788,16 +795,11 @@
 {/snippet}
 
 {#snippet datesEditSection()}
-  <section class="detail-section edit-section">
-    <KeyValueEditor
+  <section id="entity-dates-editor" class="detail-section edit-section">
+    <EntityDatesEditor
+      entityKind={card.entity.kind}
       values={editDraft.dates}
       onChange={(v) => (editDraft.dates = v)}
-      label="Dates"
-      icon={Calendar}
-      keyPlaceholder="date"
-      valuePlaceholder="YYYY-MM-DD"
-      keyLabel="Code"
-      valueLabel="Date"
     />
   </section>
 {/snippet}
@@ -1133,6 +1135,18 @@
     </div>
   {/if}
 {/snippet}
+
+<EntityDateEditRequest
+  {canEdit}
+  {hasTabs}
+  {visibleTabs}
+  {standaloneEditSections}
+  onEditTab={(tab) => {
+    activeTabId = tab.id;
+    startEdit(tab);
+  }}
+  onEditStandalone={() => startEdit()}
+/>
 
 <input
   bind:this={posterInput}

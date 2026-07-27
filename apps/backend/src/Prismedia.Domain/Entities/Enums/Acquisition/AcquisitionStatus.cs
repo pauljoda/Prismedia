@@ -14,6 +14,13 @@ public enum AcquisitionStatus {
     [Code("waiting-for-release")]
     WaitingForRelease,
 
+    /// <summary>
+    /// The selected release milestone was not supplied by a metadata provider. Monitoring intent is
+    /// retained, but automatic searches pause until metadata changes or the user starts a manual search.
+    /// </summary>
+    [Code("manual-search-required")]
+    ManualSearchRequired,
+
     /// <summary>An indexer search is currently running for this acquisition.</summary>
     [Code("searching")]
     Searching,

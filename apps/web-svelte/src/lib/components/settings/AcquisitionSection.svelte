@@ -46,7 +46,6 @@
   import AcquisitionReleaseTimingFields from "$lib/components/settings/AcquisitionReleaseTimingFields.svelte";
   import { availableDownloadProtocols } from "$lib/components/settings/acquisition-protocol-preference";
   import { profileSupportsReleaseDate, releaseTimingLabel } from "$lib/components/settings/acquisition-profile-release-timing";
-
   interface Props {
     onError: (msg: string) => void;
     onMessage: (msg: string) => void;

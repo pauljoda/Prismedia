@@ -11,7 +11,9 @@ namespace Prismedia.Application.Jobs.Handlers;
 /// Enriches a request from its originating metadata plugin after the interactive commit: resolves the
 /// cover, fuller description, and dates by persistent work identity and, for structural acquisition units,
 /// materializes their child graph from the same provider response. Best-effort — a provider miss or error
-/// leaves held metadata and acquisition state untouched; import still runs authoritative auto-identify.
+/// leaves held descriptive metadata untouched; a successful release-date miss moves a release-gated request
+/// to manual search, while a transient provider error remains retryable. Import still runs authoritative
+/// auto-identify.
 /// </summary>
 public sealed class AcquisitionEnrichJobHandler(
     IAcquisitionStore acquisitions,
@@ -19,14 +21,19 @@ public sealed class AcquisitionEnrichJobHandler(
     IRequestChildHydrator childHydrator,
     ILogger<AcquisitionEnrichJobHandler> logger,
     IEntityMetadataPatchService? entityMetadata = null,
-    IMonitorStore? monitors = null) : IJobHandler {
+    IMonitorStore? monitors = null,
+    IAcquisitionReleaseTimingService? releaseTiming = null) : IJobHandler {
     public JobType Type => JobType.AcquisitionEnrich;
 
     public async Task HandleAsync(JobContext context, CancellationToken cancellationToken) {
         var payload = AcquisitionJobPayload.Parse(context.Job.PayloadJson);
         var import = await acquisitions.GetImportContextAsync(payload.AcquisitionId, cancellationToken);
-        if (import?.ExternalIdentity is not { } externalIdentity) {
-            return; // nothing to enrich from
+        if (import is null) {
+            return;
+        }
+        if (import.ExternalIdentity is not { } externalIdentity) {
+            await CompleteReleaseTimingRefreshAsync(import, cancellationToken);
+            return;
         }
 
         RequestMetadataEnrichment? enrichment;
@@ -57,6 +64,7 @@ public sealed class AcquisitionEnrichJobHandler(
         }
 
         if (enrichment is null && childHydration is not { Hydrated: true }) {
+            await CompleteReleaseTimingRefreshAsync(import, cancellationToken);
             return;
         }
 
@@ -72,23 +80,54 @@ public sealed class AcquisitionEnrichJobHandler(
                 && entityMetadata is not null
                 && enrichment.Patch is { } patch
                 && (patch.DateEntries.Count > 0 || patch.Dates.Count > 0)) {
-                var result = await entityMetadata.ApplyPatchAsync(
+                await entityMetadata.ApplyPatchAsync(
                     entityId,
                     new EntityMetadataUpdateRequest(
                         [MetadataPatchField.Dates.ToCode()],
                         patch),
                     import.Kind.ToCode(),
                     cancellationToken);
-                if (result == EntityMetadataPatchResult.Applied && monitors is not null) {
-                    await monitors.MarkSearchDueByAcquisitionAsync(
-                        payload.AcquisitionId,
-                        cancellationToken);
-                }
             }
         }
+        await CompleteReleaseTimingRefreshAsync(import, cancellationToken);
         await context.ReportProgressAsync(
             100,
             childHydration is { Hydrated: true } ? "Metadata and child graph enriched" : "Metadata enriched",
             cancellationToken);
+    }
+
+    /// <summary>
+    /// Re-evaluates a release gate after one completed provider pass. A newly available or removed gate is
+    /// made due for the monitor to claim; a still-missing configured date becomes an explicit manual state;
+    /// a known future date remains on its normal low-frequency monitor cadence.
+    /// </summary>
+    private async Task CompleteReleaseTimingRefreshAsync(
+        AcquisitionImportContext import,
+        CancellationToken cancellationToken) {
+        if (releaseTiming is null
+            || await acquisitions.GetStatusAsync(import.Id, cancellationToken) != AcquisitionStatus.WaitingForRelease) {
+            return;
+        }
+
+        var timing = await releaseTiming.EvaluateAsync(
+            import.EntityId,
+            import.ProfileId,
+            import.Kind,
+            cancellationToken);
+        if (timing.CanSearch) {
+            if (monitors is not null) {
+                await monitors.MarkSearchDueByAcquisitionAsync(import.Id, cancellationToken);
+            }
+            return;
+        }
+
+        if (timing.WaitingForMetadata) {
+            await acquisitions.TryTransitionStatusAsync(
+                import.Id,
+                [AcquisitionStatus.WaitingForRelease],
+                AcquisitionStatus.ManualSearchRequired,
+                AcquisitionReleaseTimingService.ManualSearchRequiredMessage(timing.DateType),
+                cancellationToken);
+        }
     }
 }

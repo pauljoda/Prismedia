@@ -208,26 +208,34 @@ public sealed partial class AcquisitionService {
                 metadata.Kind,
                 cancellationToken);
         if (!timing.CanSearch) {
+            var waitingStatus = timing.WaitingForMetadata && metadata.ExternalIdentity is null
+                ? AcquisitionStatus.ManualSearchRequired
+                : AcquisitionStatus.WaitingForRelease;
+            var waitingMessage = waitingStatus == AcquisitionStatus.ManualSearchRequired
+                ? AcquisitionReleaseTimingService.ManualSearchRequiredMessage(timing.DateType)
+                : timing.Message;
             if (!await store.TryTransitionStatusAsync(
                     summary.Id,
                     [AcquisitionStatus.Pending],
-                    AcquisitionStatus.WaitingForRelease,
-                    timing.Message,
+                    waitingStatus,
+                    waitingMessage,
                     cancellationToken)) {
                 throw LifecycleChangedConflict();
             }
 
             summary = summary with {
-                Status = AcquisitionStatus.WaitingForRelease,
-                StatusMessage = timing.Message,
+                Status = waitingStatus,
+                StatusMessage = waitingMessage,
                 UpdatedAt = DateTimeOffset.UtcNow
             };
-            await EnqueueStandaloneEnrichmentAsync(
-                summary,
-                metadata,
-                parentContext,
-                origin,
-                cancellationToken);
+            if (timing.WaitingForMetadata && waitingStatus == AcquisitionStatus.WaitingForRelease) {
+                await EnqueueStandaloneEnrichmentAsync(
+                    summary,
+                    metadata,
+                    parentContext,
+                    origin,
+                    cancellationToken);
+            }
             return summary;
         }
 

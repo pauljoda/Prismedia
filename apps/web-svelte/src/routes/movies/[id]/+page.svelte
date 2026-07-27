@@ -74,6 +74,7 @@
     writeTranscriptDockWidth,
   } from "../../videos/[id]/video-page-state";
   import { redirectHiddenEntityNotFound } from "$lib/nsfw/hidden-entity";
+  import { acquisitionStatusDisplay } from "$lib/requests/acquisition-status-display";
 
   type LoadState = "loading" | "ready" | "error";
 
@@ -138,6 +139,7 @@
     onChanged: refreshMovie,
     onPruned: () => goto("/movies"),
   });
+  const wantedStateLabel = $derived(acquisitionStatusDisplay(acq.acquisition?.summary.status).label);
   const fileManagement = {
     onDeleted: () => goto("/movies"),
     onReverted: () => refreshAfterManagedFileRevert(acq, refreshMovie),
@@ -789,6 +791,7 @@
 
     <EntityDetail
       {card}
+      wantedStatus={acq.acquisition?.summary.status ?? null}
       onRatingChange={handleRatingChange}
       onFavoriteToggle={handleFavoriteToggle}
       onOrganizedToggle={handleOrganizedToggle}
@@ -849,6 +852,7 @@
          wanted/tracking state is managed on the entity itself, same as books. -->
     <EntityDetail
       {card}
+      wantedStatus={acq.acquisition?.summary.status ?? null}
       onRatingChange={handleRatingChange}
       onFavoriteToggle={handleFavoriteToggle}
       onOrganizedToggle={handleOrganizedToggle}
@@ -870,7 +874,7 @@
 
       {#snippet heroBadges()}
         {#if entityWanted}
-          <span class="hero-badge wanted">Wanted</span>
+          <span class="hero-badge wanted">{wantedStateLabel}</span>
         {/if}
       {/snippet}
 

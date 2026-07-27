@@ -53,9 +53,20 @@ public static class RequestProposalReading {
             .Select(image => image.Url)
             .FirstOrDefault(url => !string.IsNullOrWhiteSpace(url));
 
-    /// <summary>Extracts a 4-digit year from any of the patch's date values (e.g. "2024" or "2024-03-26").</summary>
-    public static int? YearFromDates(IReadOnlyDictionary<string, string> dates) {
-        foreach (var value in dates.Values) {
+    /// <summary>
+    /// Extracts a 4-digit year from a patch's typed semantic dates first, then its legacy date
+    /// dictionary. Request and Identify summaries therefore retain a year when a modern plugin sends
+    /// only <see cref="EntityMetadataPatch.DateEntries"/>.
+    /// </summary>
+    public static int? YearFromDates(EntityMetadataPatch patch) =>
+        YearFromDateValues(patch.DateEntries.Select(entry => entry.Value).Concat(patch.Dates.Values));
+
+    /// <summary>Extracts a 4-digit year from legacy date values (e.g. "2024" or "2024-03-26").</summary>
+    public static int? YearFromDates(IReadOnlyDictionary<string, string> dates) =>
+        YearFromDateValues(dates.Values);
+
+    private static int? YearFromDateValues(IEnumerable<string> values) {
+        foreach (var value in values) {
             if (value is { Length: >= 4 } && int.TryParse(value[..4], out var year) && year is >= 1000 and <= 9999) {
                 return year;
             }

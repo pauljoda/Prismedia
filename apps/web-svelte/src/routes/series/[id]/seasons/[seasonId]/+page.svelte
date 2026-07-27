@@ -48,6 +48,7 @@
   import { redirectHiddenEntityNotFound } from "$lib/nsfw/hidden-entity";
   import { useNsfw } from "$lib/nsfw/store.svelte";
   import { useAppChrome } from "$lib/stores/app-chrome.svelte";
+  import { acquisitionStatusDisplay } from "$lib/requests/acquisition-status-display";
 
   type LoadState = "loading" | "ready" | "error";
 
@@ -113,6 +114,7 @@
     onChanged: () => loadSeason({ showLoading: false }),
     onPruned: () => goto(`/series/${seriesId}`),
   });
+  const wantedStateLabel = $derived(acquisitionStatusDisplay(acq.acquisition?.summary.status).label);
   const fileManagement = {
     onDeleted: () => goto(`/series/${seriesId}`),
     onReverted: () => refreshAfterManagedFileRevert(acq, () => loadSeason({ showLoading: false })),
@@ -299,6 +301,7 @@
   {:else if card && season}
     <EntityDetail
       {card}
+      wantedStatus={acq.acquisition?.summary.status ?? null}
       onRatingChange={handleRatingChange}
       onFavoriteToggle={handleFavoriteToggle}
       onOrganizedToggle={handleOrganizedToggle}
@@ -322,7 +325,7 @@
 
       {#snippet heroBadges()}
         {#if seasonWanted}
-          <span class="hero-badge wanted">Wanted</span>
+          <span class="hero-badge wanted">{wantedStateLabel}</span>
         {/if}
         {#if seasonNumber != null}
           <span class="hero-badge">S{String(seasonNumber).padStart(2, "0")}</span>

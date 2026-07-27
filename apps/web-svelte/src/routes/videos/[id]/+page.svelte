@@ -76,6 +76,7 @@
     writeTranscriptDockWidth,
   } from "./video-page-state";
   import { redirectHiddenEntityNotFound } from "$lib/nsfw/hidden-entity";
+  import { acquisitionStatusDisplay } from "$lib/requests/acquisition-status-display";
 
   type LoadState = "loading" | "ready" | "error";
 
@@ -145,6 +146,7 @@
     onChanged: () => loadVideo({ showLoading: false }),
     onPruned: () => goto(seriesRef ? `/series/${seriesRef.id}` : "/videos"),
   });
+  const wantedStateLabel = $derived(acquisitionStatusDisplay(acq.acquisition?.summary.status).label);
   const fileManagement = {
     onDeleted: () => goto(seriesRef ? `/series/${seriesRef.id}` : "/videos"),
     onReverted: () => refreshAfterManagedFileRevert(acq, () => loadVideo({ showLoading: false })),
@@ -836,6 +838,7 @@
 
     <EntityDetail
       {card}
+      wantedStatus={acq.acquisition?.summary.status ?? null}
       onRatingChange={handleRatingChange}
       onFavoriteToggle={handleFavoriteToggle}
       onOrganizedToggle={handleOrganizedToggle}
@@ -897,13 +900,14 @@
          releases, live download, monitoring, cancel), exactly like a wanted movie or book. -->
     <EntityDetail
       {card}
+      wantedStatus={acq.acquisition?.summary.status ?? null}
       posterSize="medium"
       actionButtons={heroActions}
       tabs={wantedDetailTabs}
       sections={detailSections}
     >
       {#snippet heroBadges()}
-        <span class="hero-badge wanted">Wanted</span>
+        <span class="hero-badge wanted">{wantedStateLabel}</span>
       {/snippet}
 
       {#snippet sectionContent(section)}

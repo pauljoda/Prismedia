@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { ENTITY_DATE_TYPE, METADATA_PATCH_FIELD } from "$lib/entities/entity-codes";
 import type { EntityMetadataProposal } from "$lib/api/identify-types";
 import type { EntityCard as EntityDetailCard, EntityKind } from "$lib/api/generated/model";
 import {
@@ -436,6 +437,26 @@ describe("identify review helpers", () => {
     expect(selection.studio).toBe(true);
     expect(selection.credits).toBe(true);
     expect(selection.images).toBe(true);
+  });
+
+  it("selects, describes, and preserves typed release dates", () => {
+    const root = proposal("movie", "movie");
+    root.patch.dateEntries = [
+      { type: ENTITY_DATE_TYPE.streamingRelease, value: "2026-11-01" },
+    ];
+
+    const selection = defaultFieldSelectionForReview(root);
+    expect(selection[METADATA_PATCH_FIELD.dates]).toBe(true);
+    expect(proposalFieldValue(root, METADATA_PATCH_FIELD.dates)).toBe("Streaming release: 2026-11-01");
+
+    const payload = buildProposalForApply(root, {
+      selectedFieldsByProposal: { movie: selection },
+      selectedImagesByProposal: {},
+      selectedCreditsByProposal: {},
+      selectedTagsByProposal: {},
+      selectedCascade: {},
+    });
+    expect(payload.patch.dateEntries).toEqual(root.patch.dateEntries);
   });
 
   it("describes season and episode positions as sort-order changes", () => {

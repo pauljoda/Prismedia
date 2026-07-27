@@ -36,6 +36,57 @@ public interface IAcquisitionReleaseTimingService {
 }
 
 /// <summary>
+/// Re-evaluates release-gated acquisitions after typed Entity dates change. Metadata apply paths call
+/// this after releasing their Entity mutation lease so a provider or user-supplied milestone can resume
+/// waiting work without a second request.
+/// </summary>
+public interface IAcquisitionReleaseDateChangeHandler {
+    Task HandleAsync(Guid entityId, CancellationToken cancellationToken);
+}
+
+/// <summary>Moves manual release holds back into automatic timing when new date metadata satisfies them.</summary>
+public sealed class AcquisitionReleaseDateChangeHandler(
+    IAcquisitionStore acquisitions,
+    IAcquisitionReleaseTimingService releaseTiming,
+    IMonitorStore monitors) : IAcquisitionReleaseDateChangeHandler {
+    public async Task HandleAsync(Guid entityId, CancellationToken cancellationToken) {
+        var details = await acquisitions.ListForEntityAsync(entityId, cancellationToken);
+        foreach (var detail in details.Where(detail => detail.Summary.Status is
+                     AcquisitionStatus.WaitingForRelease or AcquisitionStatus.ManualSearchRequired)) {
+            var import = await acquisitions.GetImportContextAsync(detail.Summary.Id, cancellationToken);
+            if (import is null) {
+                continue;
+            }
+
+            var timing = await releaseTiming.EvaluateAsync(
+                entityId,
+                import.ProfileId,
+                import.Kind,
+                cancellationToken);
+            if (timing.WaitingForMetadata) {
+                continue;
+            }
+
+            if (detail.Summary.Status == AcquisitionStatus.ManualSearchRequired) {
+                var moved = await acquisitions.TryTransitionStatusAsync(
+                    detail.Summary.Id,
+                    [AcquisitionStatus.ManualSearchRequired],
+                    AcquisitionStatus.WaitingForRelease,
+                    timing.Message,
+                    cancellationToken);
+                if (!moved) {
+                    continue;
+                }
+            }
+
+            if (timing.CanSearch) {
+                await monitors.MarkSearchDueByAcquisitionAsync(detail.Summary.Id, cancellationToken);
+            }
+        }
+    }
+}
+
+/// <summary>
 /// Applies a profile's selected release milestone to the typed dates supplied by metadata providers.
 /// Manual release searches intentionally bypass this service; it gates automatic request and monitor work.
 /// </summary>
@@ -60,7 +111,7 @@ public sealed class AcquisitionReleaseTimingService(
                 type,
                 date,
                 WaitingForMetadata: true,
-                Message: $"Waiting for {DisplayName(type)} date metadata.");
+                Message: $"No {DisplayName(type)} date was included in the request metadata. Checking the configured provider once before asking you to choose what to do.");
         }
 
         var milestone = EndOfPrecision(sortable, date.Precision);
@@ -132,4 +183,12 @@ public sealed class AcquisitionReleaseTimingService(
         EntityDateType.CareerEnd => "career end",
         _ => type.ToCode()
     };
+
+    /// <summary>
+    /// Explains that a configured release gate could not be evaluated after its metadata refresh. The
+    /// request retains its monitoring intent, but only an explicit manual search may bypass the unavailable milestone.
+    /// </summary>
+    public static string ManualSearchRequiredMessage(EntityDateType? type) => type is { } dateType
+        ? $"The configured metadata provider did not return a {DisplayName(dateType)} date. This item is waiting: check again later, search manually, or enter the date yourself."
+        : "The configured metadata provider did not return the required release date. This item is waiting: check again later, search manually, or enter the date yourself.";
 }

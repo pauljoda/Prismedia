@@ -14,6 +14,7 @@ import {
   CAPABILITY_KIND,
   ENTITY_KIND,
   ENTITY_KINDS_ENUMERATING_IDENTIFY_CHILDREN,
+  ENTITY_DATE_TYPE,
   MEDIA_IMAGE_KIND,
   METADATA_PATCH_FIELD,
 } from "$lib/entities/entity-codes";
@@ -60,6 +61,24 @@ export const reviewFieldLabels: Record<string, string> = {
   positions: "Sort order",
   classification: "Classification",
   images: "Artwork",
+};
+
+const entityDateTypeLabels: Record<string, string> = {
+  [ENTITY_DATE_TYPE.announcement]: "Announcement",
+  [ENTITY_DATE_TYPE.premiere]: "Premiere",
+  [ENTITY_DATE_TYPE.theatricalRelease]: "Theatrical release",
+  [ENTITY_DATE_TYPE.streamingRelease]: "Streaming release",
+  [ENTITY_DATE_TYPE.digitalRelease]: "Digital release",
+  [ENTITY_DATE_TYPE.physicalRelease]: "Physical release",
+  [ENTITY_DATE_TYPE.air]: "Air date",
+  [ENTITY_DATE_TYPE.firstAir]: "First air date",
+  [ENTITY_DATE_TYPE.lastAir]: "Last air date",
+  [ENTITY_DATE_TYPE.publication]: "Publication",
+  [ENTITY_DATE_TYPE.release]: "Release",
+  [ENTITY_DATE_TYPE.birth]: "Birth",
+  [ENTITY_DATE_TYPE.death]: "Death",
+  [ENTITY_DATE_TYPE.careerStart]: "Career start",
+  [ENTITY_DATE_TYPE.careerEnd]: "Career end",
 };
 
 export interface IdentifyReviewSelectionState {
@@ -277,7 +296,12 @@ export function proposalFieldValue(result: EntityMetadataProposal, field: string
   if (field === METADATA_PATCH_FIELD.credits) return patch.credits.map((credit) =>
     credit.character ? `${credit.name} as ${credit.character}` : credit.name,
   ).join(", ");
-  if (field === METADATA_PATCH_FIELD.dates) return entries(patch.dates).join(", ");
+  if (field === METADATA_PATCH_FIELD.dates) {
+    const typed = (patch.dateEntries ?? []).map((entry) =>
+      `${entityDateTypeLabels[entry.type] ?? entry.type}: ${entry.value}`
+    );
+    return [...typed, ...entries(patch.dates)].join(", ");
+  }
   if (field === METADATA_PATCH_FIELD.stats) return entries(patch.stats).join(", ");
   if (field === METADATA_PATCH_FIELD.positions) return reviewPositionValue(patch.positions, result.targetKind);
   if (field === METADATA_PATCH_FIELD.classification) return patch.classification ?? "";
@@ -480,6 +504,7 @@ function patchForSelectedFields(
     studio: fields.studio ? studio : null,
     credits: fields.credits ? credits : [],
     dates: fields.dates ? patch.dates : {},
+    dateEntries: fields.dates ? (patch.dateEntries ?? []) : [],
     stats: fields.stats ? patch.stats : {},
     positions: fields.positions ? patch.positions : {},
     classification: fields.classification ? patch.classification : null,

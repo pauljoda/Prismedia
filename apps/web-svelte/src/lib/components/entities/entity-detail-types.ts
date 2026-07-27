@@ -3,6 +3,7 @@ import type { Snippet } from "svelte";
 import type { CreditRoleCode, EntityFileRoleCode } from "$lib/entities/entity-codes";
 import type { EntityDetailCard } from "$lib/entities/entity-detail";
 import type { ArtworkPalette } from "$lib/entities/artwork-palette";
+import type { AcquisitionStatus } from "$lib/api/generated/model";
 import type {
   EntityMetadataPatch,
   EntityMetadataUpdateRequest,
@@ -53,6 +54,8 @@ export interface EntityDetailSection {
 
 export interface EntityDetailProps {
   card: EntityDetailCard;
+  /** Current acquisition state shown on the wanted poster badge. */
+  wantedStatus?: AcquisitionStatus | null;
   onRatingChange?: (value: number | null) => void;
   onFavoriteToggle?: () => void;
   onOrganizedToggle?: () => void;

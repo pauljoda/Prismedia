@@ -620,7 +620,7 @@ public sealed partial class EfMonitorStore(
             // that turned up no acceptable release. Every other state — Pending/Searching (a search is
             // already in progress), Queued/Downloading/Downloaded/Importing (a grab is in flight),
             // AwaitingSelection WITH candidates (found, awaiting the user or already auto-grabbed),
-            // ManualImportRequired (needs a human) — is left untouched. Re-searching an in-flight item
+            // ManualSearchRequired / ManualImportRequired (need a human) — is left untouched. Re-searching an in-flight item
             // would reset its status and, with auto-pick on, delete the live torrent and re-grab — so this
             // gate is what keeps monitoring safe.
             var stillMissing = row.AcquisitionStatus is AcquisitionStatus.Failed

@@ -27,6 +27,15 @@ public sealed class RequestProposalReadingTests {
         Assert.Equal(3, RequestProposalReading.ChildNumberOf(RequestMediaKind.Book, patch));
     }
 
+    [Fact]
+    public void YearFromDatesReadsTypedReleaseMetadata() {
+        var patch = Patch(new Dictionary<string, int>()) with {
+            DateEntries = [new EntityMetadataDatePatch(EntityDateType.StreamingRelease, "2026-11-01")]
+        };
+
+        Assert.Equal(2026, RequestProposalReading.YearFromDates(patch));
+    }
+
     private static EntityMetadataPatch Patch(IReadOnlyDictionary<string, int> positions) =>
         new(
             Title: "Child",

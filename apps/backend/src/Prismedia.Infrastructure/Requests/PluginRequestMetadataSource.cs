@@ -201,7 +201,7 @@ public sealed class PluginRequestMetadataSource(
         return new RequestMetadataEnrichment(
             patch.Description,
             RequestProposalReading.BestImage(proposal),
-            RequestProposalReading.YearFromDates(patch.Dates),
+            RequestProposalReading.YearFromDates(patch),
             patch);
     }
 
@@ -552,7 +552,7 @@ public sealed class PluginRequestMetadataSource(
             ExternalIdentity: identity,
             Requestable: descriptor.Committable,
             Position: RequestProposalReading.ChildNumberOf(descriptor.Kind, proposal.Patch),
-            Year: RequestProposalReading.YearFromDates(proposal.Patch.Dates),
+            Year: RequestProposalReading.YearFromDates(proposal.Patch),
             Monitored: null));
     }
 

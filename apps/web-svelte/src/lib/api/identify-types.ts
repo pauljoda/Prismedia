@@ -1,6 +1,11 @@
 import type { EntityKind, ProposalKind } from "$lib/api/generated/model";
 import type { PluginSearchDefinition } from "$lib/api/generated/model";
-import type { IdentifyActionCode, IdentifyApplyStateCode, IdentifyQueueStateCode } from "$lib/api/generated/codes";
+import type {
+  EntityDateTypeCode,
+  IdentifyActionCode,
+  IdentifyApplyStateCode,
+  IdentifyQueueStateCode,
+} from "$lib/api/generated/codes";
 import type { EntityMetadataFlagsPatch } from "$lib/api/entity-mutations";
 
 export interface PluginEntitySupport {
@@ -81,6 +86,7 @@ export interface EntityMetadataPatch {
   studio?: string | null;
   credits: CreditPatch[];
   dates: Record<string, string>;
+  dateEntries?: Array<{ type: EntityDateTypeCode; value: string }>;
   stats: Record<string, number>;
   positions: Record<string, number>;
   classification?: string | null;

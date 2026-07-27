@@ -1465,7 +1465,7 @@ public sealed partial class RequestCommitService(
                         pick.Title,
                         author,
                         series,
-                        RequestProposalReading.YearFromDates(patch?.Dates ?? new Dictionary<string, string>()),
+                        patch is null ? null : RequestProposalReading.YearFromDates(patch),
                         RequestProposalReading.BestImage(pick.Proposal),
                         pick.Identity.Namespace,
                         pick.Identity.Value,

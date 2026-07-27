@@ -23,7 +23,9 @@ public static class ProposalApplySelection {
             if (!string.IsNullOrWhiteSpace(patch.Description)) fields.Add(MetadataPatchField.Description.ToCode());
             if (patch.ExternalIds is { Count: > 0 }) fields.Add(MetadataPatchField.ExternalIds.ToCode());
             if (patch.Urls is { Count: > 0 }) fields.Add(MetadataPatchField.Urls.ToCode());
-            if (patch.Dates is { Count: > 0 }) fields.Add(MetadataPatchField.Dates.ToCode());
+            if (patch.Dates is { Count: > 0 } || patch.DateEntries is { Count: > 0 }) {
+                fields.Add(MetadataPatchField.Dates.ToCode());
+            }
             if (patch.Stats is { Count: > 0 }) fields.Add(MetadataPatchField.Stats.ToCode());
             if (patch.Positions is { Count: > 0 }) fields.Add(MetadataPatchField.Positions.ToCode());
             if (!string.IsNullOrWhiteSpace(patch.Classification)) fields.Add(MetadataPatchField.Classification.ToCode());

@@ -118,6 +118,7 @@ function toneForStatus(status: AcquisitionStatusCode): AcquisitionItemTone {
       return "searching";
     case ACQUISITION_STATUS.failed:
       return "failed";
+    case ACQUISITION_STATUS.manualSearchRequired:
     case ACQUISITION_STATUS.awaitingSelection:
     case ACQUISITION_STATUS.manualImportRequired:
       return "attention";
@@ -146,6 +147,7 @@ function iconForStatus(status: AcquisitionStatusCode): Component {
       return CalendarClock;
     case ACQUISITION_STATUS.pending:
     case ACQUISITION_STATUS.searching:
+    case ACQUISITION_STATUS.manualSearchRequired:
     case ACQUISITION_STATUS.awaitingSelection:
       return Search;
     case ACQUISITION_STATUS.failed:
@@ -168,6 +170,8 @@ function downloadDescription(status: AcquisitionStatusCode, statusMessage: strin
   switch (status) {
     case ACQUISITION_STATUS.waitingForRelease:
       return statusMessage ?? "Waiting for the configured release date.";
+    case ACQUISITION_STATUS.manualSearchRequired:
+      return statusMessage ?? "The configured release date was unavailable. Search manually when you are ready.";
     case ACQUISITION_STATUS.awaitingSelection:
       return "Select a release to start the download.";
     case ACQUISITION_STATUS.pending:
@@ -297,6 +301,7 @@ export function downloadToListItem(
   const searchable =
     status === ACQUISITION_STATUS.awaitingSelection ||
     status === ACQUISITION_STATUS.waitingForRelease ||
+    status === ACQUISITION_STATUS.manualSearchRequired ||
     status === ACQUISITION_STATUS.failed ||
     status === ACQUISITION_STATUS.searching ||
     status === ACQUISITION_STATUS.pending;
@@ -307,7 +312,7 @@ export function downloadToListItem(
     primaryAction = null;
   } else if (status === ACQUISITION_STATUS.awaitingSelection && href) {
     primaryAction = { id: "choose", label: "Choose release", icon: Search, tone: "primary", href };
-  } else if (status === ACQUISITION_STATUS.waitingForRelease || status === ACQUISITION_STATUS.failed || status === ACQUISITION_STATUS.searching || status === ACQUISITION_STATUS.pending) {
+  } else if (status === ACQUISITION_STATUS.waitingForRelease || status === ACQUISITION_STATUS.manualSearchRequired || status === ACQUISITION_STATUS.failed || status === ACQUISITION_STATUS.searching || status === ACQUISITION_STATUS.pending) {
     primaryAction = { id: "search", label: "Search again", icon: RotateCw, tone: "primary", disabled: acting, run: () => callbacks.onReSearch(row) };
   } else if (href) {
     primaryAction = { id: "view", label: "View", icon: Eye, tone: "primary", href };
@@ -379,15 +384,17 @@ function wantedStatusLabel(
 function wantedDescription(
   variant: "missing" | "cutoffUnmet",
   transition: WantedTransitionState | null,
+  acquisitionStatus: AcquisitionStatusCode | null,
 ): string {
-  if (!transition) {
-    return variant === "missing"
-      ? "Watching for a release…"
-      : "Owned copy is below the quality cutoff — upgrading.";
+  if (transition?.deletingFiles) return "Removing managed files before monitoring resumes…";
+  if (transition?.stopping) return "Removing pending work and wanted state…";
+  if (transition) return "Waiting for Prismedia to finish this transition…";
+  if (acquisitionStatus === ACQUISITION_STATUS.manualSearchRequired) {
+    return "The configured metadata provider did not return the release date. Wait for metadata, search manually, or enter the date yourself.";
   }
-  if (transition.deletingFiles) return "Removing managed files before monitoring resumes…";
-  if (transition.stopping) return "Removing pending work and wanted state…";
-  return "Waiting for Prismedia to finish this transition…";
+  return variant === "missing"
+    ? "Watching for a release…"
+    : "Owned copy is below the quality cutoff — upgrading.";
 }
 
 /** A compact future ETA ("in 3h", "due now") for a wanted item's next scheduled search. */
@@ -432,10 +439,9 @@ export function wantedToListItem(
     unknown: monitorUnknown || (acqStatus !== null && !acquisitionStatusIsKnown(acqStatus)),
   };
 
-  const metaParts: string[] = [
-    `last ${formatRelativeTime(row.lastSearchedAt ?? null, true)}`,
-    `next ${nextSearchLabel(row.nextSearchAt)}`,
-  ];
+  const manualSearchRequired = acqStatus === ACQUISITION_STATUS.manualSearchRequired;
+  const metaParts: string[] = [`last ${formatRelativeTime(row.lastSearchedAt ?? null, true)}`];
+  metaParts.push(manualSearchRequired ? "manual search" : `next ${nextSearchLabel(row.nextSearchAt)}`);
   if (Number(row.barrenSearches) > 0) {
     metaParts.push(`${row.barrenSearches} barren`);
   }
@@ -454,10 +460,10 @@ export function wantedToListItem(
     statusLabel,
     statusIcon: transitionLocked ? LoaderCircle : iconForStatus(status),
     // Missing items are actively re-searched; cutoff items own a copy and upgrade quietly.
-    tone: transitionLocked ? "cleanup" : variant === "missing" ? "searching" : "attention",
+    tone: transitionLocked ? "cleanup" : manualSearchRequired ? "attention" : variant === "missing" ? "searching" : "attention",
     progress: null,
-    indeterminate: transitionLocked || variant === "missing",
-    description: wantedDescription(variant, transitionLocked ? transition : null),
+    indeterminate: transitionLocked || (variant === "missing" && !manualSearchRequired),
+    description: wantedDescription(variant, transitionLocked ? transition : null, acqStatus),
     clientLabel: null,
     qualityGap: variant === "cutoffUnmet" ? `${row.ownedQuality ?? "—"} → ${row.cutoffQuality ?? "—"}` : null,
     metaParts,

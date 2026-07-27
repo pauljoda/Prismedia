@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Prismedia.Application.Acquisition;
 using Prismedia.Application.Entities;
 using Prismedia.Application.Plugins;
 using Prismedia.Contracts.Entities;
@@ -348,6 +349,31 @@ public sealed class EntityMetadataApplyServiceTests {
         Assert.Equal("2026-08-14", digital?.Value);
         Assert.Equal("2026-09", physical?.Value);
         Assert.Equal(DatePrecision.Month.ToCode(), physical?.Precision);
+    }
+
+    [Fact]
+    public async Task ApplyingDatesReevaluatesReleaseGatedAcquisitions() {
+        await using var db = CreateContext();
+        var entityId = Guid.NewGuid();
+        SeedEntity(db, entityId, EntityKind.Movie.ToCode(), "Movie");
+        await db.SaveChangesAsync();
+        var releaseDates = new RecordingReleaseDateChangeHandler();
+        var service = new EntityMetadataApplyService(
+            db,
+            new PluginArtworkServiceOptions(Path.GetTempPath()),
+            releaseDateChanges: releaseDates);
+
+        var applied = await service.ApplyPatchAsync(
+            entityId,
+            new EntityMetadataUpdateRequest(
+                [MetadataPatchField.Dates.ToCode()],
+                EmptyPatch() with {
+                    DateEntries = [new EntityMetadataDatePatch(EntityDateType.StreamingRelease, "2026-11-01")]
+                }),
+            CancellationToken.None);
+
+        Assert.True(applied);
+        Assert.Equal(entityId, Assert.Single(releaseDates.EntityIds));
     }
 
     [Fact]
@@ -2180,6 +2206,15 @@ public sealed class EntityMetadataApplyServiceTests {
             ExternalIdentityWriteMode mode,
             CancellationToken cancellationToken) {
             WriteCalls.Add(new ExternalIdentityWriteCall(entityId, identities.ToArray(), mode));
+            return Task.CompletedTask;
+        }
+    }
+
+    private sealed class RecordingReleaseDateChangeHandler : IAcquisitionReleaseDateChangeHandler {
+        public List<Guid> EntityIds { get; } = [];
+
+        public Task HandleAsync(Guid entityId, CancellationToken cancellationToken) {
+            EntityIds.Add(entityId);
             return Task.CompletedTask;
         }
     }

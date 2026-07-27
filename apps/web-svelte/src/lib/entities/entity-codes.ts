@@ -1,6 +1,7 @@
 import {
   CAPABILITY_KIND,
   CREDIT_ROLE,
+  ENTITY_DATE_TYPE,
   ENTITY_FILE_ROLE,
   ENTITY_KIND,
   ENTITY_KIND_LABELS,
@@ -12,6 +13,7 @@ import {
   RELATIONSHIP_CODE,
   type CapabilityKindCode,
   type CreditRoleCode,
+  type EntityDateTypeCode,
   type EntityFileRoleCode,
   type EntityKindCode,
   type IdentifyContainerEntityKindCode,
@@ -28,6 +30,7 @@ import {
 export {
   CAPABILITY_KIND,
   CREDIT_ROLE,
+  ENTITY_DATE_TYPE,
   ENTITY_FILE_ROLE,
   ENTITY_KIND,
   ENTITY_KIND_LABELS,
@@ -41,6 +44,7 @@ export {
 export type {
   CapabilityKindCode,
   CreditRoleCode,
+  EntityDateTypeCode,
   EntityFileRoleCode,
   EntityKindCode,
   IdentifyContainerEntityKindCode,

@@ -90,7 +90,7 @@ public sealed partial class RequestCommitService {
             new RequestMetadataEnrichment(
                 patch.Description,
                 RequestProposalReading.BestImage(review.Proposal),
-                RequestProposalReading.YearFromDates(patch.Dates),
+                RequestProposalReading.YearFromDates(patch),
                 patch));
     }
 

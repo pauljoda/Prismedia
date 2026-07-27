@@ -4,6 +4,7 @@ using Prismedia.Application.Jobs;
 using Prismedia.Application.Jobs.Handlers;
 using Prismedia.Application.Jobs.Ports;
 using Prismedia.Application.Plugins;
+using Prismedia.Application.Requests;
 using Prismedia.Contracts.Plugins;
 using Prismedia.Domain.Entities;
 using Prismedia.Infrastructure.Persistence;
@@ -1257,7 +1258,7 @@ public sealed partial class IdentifyQueueService : IIdentifyQueueService {
             new EntitySearchCandidate(
                 proposal.Patch.ExternalIds,
                 title,
-                YearFromDates(proposal.Patch.Dates),
+                RequestProposalReading.YearFromDates(proposal.Patch),
                 proposal.Patch.Description,
                 poster,
                 Popularity: null,
@@ -1266,17 +1267,6 @@ public sealed partial class IdentifyQueueService : IIdentifyQueueService {
                 Confidence: proposal.Confidence,
                 MatchReason: proposal.MatchReason)
         ];
-    }
-
-    private static int? YearFromDates(IReadOnlyDictionary<string, string> dates) {
-        foreach (var key in new[] { "release", "firstAir", "airDate", "date" }) {
-            if (dates.TryGetValue(key, out var value) &&
-                DateOnly.TryParse(value, out var parsed)) {
-                return parsed.Year;
-            }
-        }
-
-        return null;
     }
 
     private static int CountApplySteps(EntityMetadataProposal proposal, IReadOnlyCollection<string> selectedFields) {

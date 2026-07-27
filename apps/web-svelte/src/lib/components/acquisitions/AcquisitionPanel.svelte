@@ -1,7 +1,9 @@
 <script lang="ts">
   import { onDestroy } from "svelte";
-  import { CalendarClock, CloudDownload, FileText, History, Loader2, RefreshCw, RotateCcw, Search, SearchX, Upload, X } from "@lucide/svelte";
+  import { CalendarClock, CloudDownload, FileText, History, Loader2, PencilLine, RefreshCw, RotateCcw, Search, SearchX, Upload, X } from "@lucide/svelte";
   import { Badge, Button, SearchInput } from "@prismedia/ui-svelte";
+  import { goto } from "$app/navigation";
+  import { page } from "$app/state";
   import AcquisitionHistoryList from "$lib/components/acquisitions/AcquisitionHistoryList.svelte";
   import ConfirmDialog from "$lib/components/entities/ConfirmDialog.svelte";
   import PieceStateBar from "$lib/components/acquisitions/PieceStateBar.svelte";
@@ -9,6 +11,7 @@
   import StatePlaceholder from "$lib/components/StatePlaceholder.svelte";
   import { isTransferActive, transferStageLabel } from "$lib/requests/acquisition-transfer";
   import { ACQUISITION_STATUS } from "$lib/api/generated/codes";
+  import { METADATA_PATCH_FIELD } from "$lib/entities/entity-codes";
   import type {
     AcquisitionDetail,
     AcquisitionFilesView,
@@ -72,6 +75,8 @@
   let bridgePolls = $state(0);
   let resetConfirmOpen = $state(false);
   let customQuery = $state("");
+
+  const EDIT_QUERY_KEY = "edit";
 
   const status = $derived(detail?.summary.status ?? null);
   const hasResumableImport = $derived(detail?.summary.hasResumableImport === true);
@@ -245,6 +250,13 @@
     }
   }
 
+  function openDateEditor() {
+    const target = new URL(page.url);
+    target.searchParams.set(EDIT_QUERY_KEY, METADATA_PATCH_FIELD.dates);
+    target.hash = "entity-dates-editor";
+    void goto(`${target.pathname}${target.search}${target.hash}`);
+  }
+
   // Re-run a held import. A manual hold carries explicit format-change consent; a failed durable
   // checkpoint simply resumes its already-persisted plan without broadening that consent.
   async function retryImport(allowFormatChange: boolean) {
@@ -295,6 +307,7 @@
   // imported/cancelled items are left alone (the server enforces the same gate).
   const canReSearch = $derived(
     status === ACQUISITION_STATUS.waitingForRelease ||
+      status === ACQUISITION_STATUS.manualSearchRequired ||
       status === ACQUISITION_STATUS.awaitingSelection ||
       (status === ACQUISITION_STATUS.failed && !hasResumableImport) ||
       status === ACQUISITION_STATUS.manualImportRequired,
@@ -405,14 +418,25 @@
           : "Prismedia is finishing a newer lifecycle transition. Actions are temporarily unavailable."}
         busy
       />
-
-    {:else if status === ACQUISITION_STATUS.waitingForRelease}
-      <StatePlaceholder
-        icon={CalendarClock}
-        title="Waiting for release"
-        description={detail.summary.statusMessage ?? "Automatic searches will begin when the configured release milestone arrives. You can still search manually now."}
-      />
-
+    {:else if status === ACQUISITION_STATUS.waitingForRelease || status === ACQUISITION_STATUS.manualSearchRequired}
+      {#if status === ACQUISITION_STATUS.manualSearchRequired}
+        <StatePlaceholder
+          icon={SearchX}
+          title="Release date unavailable"
+          description={detail.summary.statusMessage ?? "The configured metadata provider did not return the required release date. Leave this item waiting and check again later, search manually, or enter the date yourself."}
+        >
+          <Button type="button" variant="secondary" class="gap-1.5" onclick={openDateEditor}>
+            <PencilLine class="h-3.5 w-3.5" />
+            Enter release date
+          </Button>
+        </StatePlaceholder>
+      {:else}
+        <StatePlaceholder
+          icon={CalendarClock}
+          title="Waiting for release"
+          description={detail.summary.statusMessage ?? "Automatic searches will begin when the configured release milestone arrives. You can still search manually now."}
+        />
+      {/if}
     {:else if status === ACQUISITION_STATUS.searching}
       <StatePlaceholder
         icon={Search}
