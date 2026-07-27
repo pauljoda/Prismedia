@@ -1,16 +1,19 @@
 <script lang="ts">
-  import { CalendarClock, CalendarDays, ChevronLeft, ChevronRight, Loader2 } from "@lucide/svelte";
-  import { Button, Select, cn, type SelectOption } from "@prismedia/ui-svelte";
+  import { CalendarClock, CalendarDays, ChevronLeft, ChevronRight, Loader2, X } from "@lucide/svelte";
+  import { Button, Dialog, Select, cn, type SelectOption } from "@prismedia/ui-svelte";
   import { ACQUISITION_STATUS, type EntityDateTypeCode, type EntityKindCode } from "$lib/api/generated/codes";
   import type { ReleaseCalendarEvent } from "$lib/api/generated/model";
   import { fetchReleaseCalendar } from "$lib/api/release-calendar";
   import {
+    calendarDayEventSlice,
     monthGridRange,
     parseLocalDate,
+    releaseCalendarEventHref,
+    releaseCalendarEventTitle,
     releaseDateLabel,
   } from "$lib/calendar/release-calendar";
   import { entityAccentForKind } from "$lib/entities/entity-accent";
-  import { labelForEntityKind, resolveEntityHref } from "$lib/entities/entity-codes";
+  import { labelForEntityKind } from "$lib/entities/entity-codes";
   import { useNsfw } from "$lib/nsfw/store.svelte";
 
   const ALL = "all" as const;
@@ -33,6 +36,7 @@
   let error = $state<string | null>(null);
   let kindFilter = $state<typeof ALL | EntityKindCode>(ALL);
   let dateFilter = $state<typeof ALL | EntityDateTypeCode>(ALL);
+  let expandedDay = $state<string | null>(null);
   let requestSequence = 0;
 
   const range = $derived(monthGridRange(month));
@@ -62,12 +66,14 @@
       grouped[event.date] = dayEvents;
     }
     for (const dayEvents of Object.values(grouped)) {
-      dayEvents.sort((left, right) => left.title.localeCompare(right.title)
+      dayEvents.sort((left, right) => releaseCalendarEventTitle(left).localeCompare(releaseCalendarEventTitle(right))
+        || left.title.localeCompare(right.title)
         || releaseDateLabel(left.dateType).localeCompare(releaseDateLabel(right.dateType)));
     }
     return grouped;
   });
   const agendaDays = $derived(range.days.filter((day) => (eventsByDate[day]?.length ?? 0) > 0));
+  const expandedDayEvents = $derived(expandedDay ? eventsByDate[expandedDay] ?? [] : []);
 
   $effect(() => {
     const start = range.start;
@@ -109,8 +115,12 @@
     return date.getFullYear() === month.getFullYear() && date.getMonth() === month.getMonth();
   }
 
-  function eventHref(event: ReleaseCalendarEvent): string | undefined {
-    return resolveEntityHref(event.kind, event.entityId);
+  function openDay(day: string): void {
+    expandedDay = day;
+  }
+
+  function closeDay(): void {
+    expandedDay = null;
   }
 
   function gateLabel(event: ReleaseCalendarEvent): string | null {
@@ -189,6 +199,7 @@
     <div class="hidden grid-cols-7 md:grid">
       {#each range.days as day (day)}
         {@const dayEvents = eventsByDate[day] ?? []}
+        {@const daySlice = calendarDayEventSlice(dayEvents)}
         {@const dayDate = parseLocalDate(day)}
         <div class={cn(
           "min-h-32 border-b border-r border-border-subtle p-1.5 last:border-r-0",
@@ -202,11 +213,19 @@
             {dayDate.getDate()}
           </div>
           <div class="space-y-1">
-            {#each dayEvents.slice(0, 4) as event (`${event.monitorId}:${event.dateType}:${event.date}`)}
+            {#each daySlice.visible as event (`${event.monitorId}:${event.dateType}:${event.date}`)}
               {@render eventRow(event, true)}
             {/each}
-            {#if dayEvents.length > 4}
-              <div class="px-1 text-[0.65rem] text-text-muted">+{dayEvents.length - 4} more</div>
+            {#if daySlice.hiddenCount > 0}
+              <Button
+                variant="ghost"
+                size="sm"
+                class="h-6 w-full justify-start px-1.5 text-[0.65rem]"
+                aria-label={`Show all ${dayEvents.length} events for ${agendaFormatter.format(dayDate)}`}
+                onclick={() => openDay(day)}
+              >
+                +{daySlice.hiddenCount} more
+              </Button>
             {/if}
           </div>
         </div>
@@ -241,8 +260,34 @@
   </section>
 </section>
 
+<Dialog
+  open={expandedDay !== null}
+  onClose={closeDay}
+  ariaLabel={expandedDay ? `Release events for ${agendaFormatter.format(parseLocalDate(expandedDay))}` : "Release events"}
+  class="w-[min(92vw,36rem)] overflow-hidden"
+>
+  <div class="flex items-start justify-between gap-3 border-b border-border-subtle px-4 py-3">
+    <div class="min-w-0">
+      <h2 class="font-heading text-base font-semibold text-text-primary">
+        {expandedDay ? agendaFormatter.format(parseLocalDate(expandedDay)) : "Release events"}
+      </h2>
+      <p class="mt-0.5 text-xs text-text-muted">
+        {expandedDayEvents.length} {expandedDayEvents.length === 1 ? "event" : "events"}
+      </p>
+    </div>
+    <Button variant="ghost" size="icon" aria-label="Close day events" onclick={closeDay}>
+      <X class="h-4 w-4" aria-hidden="true" />
+    </Button>
+  </div>
+  <div class="max-h-[min(65dvh,36rem)] space-y-1.5 overflow-y-auto p-2">
+    {#each expandedDayEvents as event (`${event.monitorId}:${event.dateType}:${event.date}`)}
+      {@render eventRow(event, false)}
+    {/each}
+  </div>
+</Dialog>
+
 {#snippet eventRow(event: ReleaseCalendarEvent, compact: boolean)}
-  {@const href = eventHref(event)}
+  {@const href = releaseCalendarEventHref(event)}
   {@const accent = entityAccentForKind(event.kind).primary}
   {@const gate = gateLabel(event)}
   {#if href}
@@ -268,7 +313,12 @@
 
 {#snippet eventContent(event: ReleaseCalendarEvent, compact: boolean, gate: string | null)}
   <div class="min-w-0">
-    <div class={cn("truncate font-medium text-text-primary", compact ? "text-[0.68rem]" : "text-sm")}>{event.title}</div>
+    <div
+      class={cn("truncate font-medium text-text-primary", compact ? "text-[0.68rem]" : "text-sm")}
+      title={releaseCalendarEventTitle(event)}
+    >
+      {#if event.parentTitle}<span>{event.parentTitle}</span><span class="mx-1 text-text-muted">·</span>{/if}{event.title}
+    </div>
     <div class={cn("mt-0.5 flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5 text-text-muted", compact ? "text-[0.6rem]" : "text-[0.72rem]")}>
       <span>{releaseDateLabel(event.dateType)}</span>
       {#if !compact}<span>·</span><span>{labelForEntityKind(event.kind)}</span>{/if}

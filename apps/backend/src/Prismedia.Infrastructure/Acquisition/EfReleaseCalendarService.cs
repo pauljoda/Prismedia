@@ -39,11 +39,27 @@ public sealed class EfReleaseCalendarService(PrismediaDbContext db, TimeProvider
         var entityIds = targets.Select(target => target.EntityId).Distinct().ToArray();
         var entities = await db.Entities.AsNoTracking()
             .Where(entity => entityIds.Contains(entity.Id) && (!hideNsfw || !entity.IsNsfw))
-            .Select(entity => new { entity.Id, entity.Title })
+            .Select(entity => new CalendarEntity(
+                entity.Id,
+                entity.KindCode,
+                entity.Title,
+                entity.ParentEntityId))
             .ToDictionaryAsync(entity => entity.Id, cancellationToken);
         if (entities.Count == 0) {
             return [];
         }
+
+        var parentIds = entities.Values
+            .Where(entity => entity.ParentEntityId != null)
+            .Select(entity => entity.ParentEntityId!.Value)
+            .Distinct()
+            .ToArray();
+        var parents = parentIds.Length == 0
+            ? new Dictionary<Guid, CalendarParent>()
+            : await db.Entities.AsNoTracking()
+                .Where(entity => parentIds.Contains(entity.Id) && (!hideNsfw || !entity.IsNsfw))
+                .Select(entity => new CalendarParent(entity.Id, entity.KindCode, entity.Title))
+                .ToDictionaryAsync(entity => entity.Id, cancellationToken);
 
         var visibleIds = entities.Keys.ToArray();
         var dateCodes = ReleaseCalendarDateTypes.All.Select(type => type.ToCode()).ToArray();
@@ -93,12 +109,23 @@ public sealed class EfReleaseCalendarService(PrismediaDbContext db, TimeProvider
                 ? AcquisitionReleaseTimingService.EndOfPrecision(date.SortableValue!.Value, date.Precision)
                     .AddDays(profile!.SearchDelayDays)
                 : (DateOnly?)null;
+            var calendarEntity = entities[target.EntityId];
+            var parent = calendarEntity.ParentEntityId is { } parentId
+                && parents.TryGetValue(parentId, out var resolvedParent)
+                    ? resolvedParent
+                    : null;
+            var parentKind = parent?.KindCode.TryDecodeAs<EntityKind>(out var decodedParentKind) == true
+                ? decodedParentKind
+                : (EntityKind?)null;
             result.Add(new ReleaseCalendarEvent(
                 target.EntityId,
                 target.MonitorId,
                 target.AcquisitionId,
                 target.Kind,
-                entities[target.EntityId].Title,
+                calendarEntity.Title,
+                parent?.Id,
+                parentKind,
+                parent?.Title,
                 dateType,
                 date.Value,
                 date.SortableValue!.Value,
@@ -122,4 +149,8 @@ public sealed class EfReleaseCalendarService(PrismediaDbContext db, TimeProvider
         Guid? ProfileId,
         AcquisitionStatus? AcquisitionStatus,
         string? PosterUrl);
+
+    private sealed record CalendarEntity(Guid Id, string KindCode, string Title, Guid? ParentEntityId);
+
+    private sealed record CalendarParent(Guid Id, string KindCode, string Title);
 }

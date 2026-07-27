@@ -1,4 +1,8 @@
 import { ENTITY_DATE_TYPE, type EntityDateTypeCode } from "$lib/api/generated/codes";
+import type { ReleaseCalendarEvent } from "$lib/api/generated/model";
+import { resolveEntityHref } from "$lib/entities/entity-codes";
+
+export const CALENDAR_DAY_VISIBLE_EVENT_LIMIT = 3;
 
 export const RELEASE_DATE_LABELS: Record<EntityDateTypeCode, string> = {
   [ENTITY_DATE_TYPE.announcement]: "Announcement",
@@ -22,6 +26,36 @@ export interface MonthGridRange {
   start: string;
   end: string;
   days: string[];
+}
+
+export interface CalendarDayEventSlice<T> {
+  visible: T[];
+  hiddenCount: number;
+}
+
+/** Keeps month cells bounded while retaining the total needed for an explicit overflow action. */
+export function calendarDayEventSlice<T>(events: T[]): CalendarDayEventSlice<T> {
+  return {
+    visible: events.slice(0, CALENDAR_DAY_VISIBLE_EVENT_LIMIT),
+    hiddenCount: Math.max(0, events.length - CALENDAR_DAY_VISIBLE_EVENT_LIMIT),
+  };
+}
+
+/** Adds structural context to generic child titles such as "Season 15". */
+export function releaseCalendarEventTitle(
+  event: Pick<ReleaseCalendarEvent, "title" | "parentTitle">,
+): string {
+  return event.parentTitle ? `${event.parentTitle} · ${event.title}` : event.title;
+}
+
+/** Resolves nested calendar entries through their structural parent when their route requires it. */
+export function releaseCalendarEventHref(
+  event: Pick<ReleaseCalendarEvent, "entityId" | "kind" | "parentEntityId" | "parentKind">,
+): string | undefined {
+  const parent = event.parentEntityId && event.parentKind
+    ? { id: event.parentEntityId, kind: event.parentKind }
+    : undefined;
+  return resolveEntityHref(event.kind, event.entityId, parent);
 }
 
 /** Formats a local calendar day without the UTC conversion that can shift dates near midnight. */

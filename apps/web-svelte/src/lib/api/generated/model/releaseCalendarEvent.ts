@@ -16,6 +16,11 @@ export interface ReleaseCalendarEvent {
   acquisitionId: string | null;
   kind: EntityKind;
   title: string;
+  /** @nullable */
+  parentEntityId: string | null;
+  parentKind: null | EntityKind;
+  /** @nullable */
+  parentTitle: string | null;
   dateType: EntityDateType;
   value: string;
   date: string;

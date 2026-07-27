@@ -78,6 +78,59 @@ public sealed class EfReleaseCalendarServiceTests {
         Assert.Equal(AcquisitionStatus.WaitingForRelease, gate.AcquisitionStatus);
     }
 
+    [Fact]
+    public async Task IncludesStructuralParentContextForNestedCalendarEntries() {
+        await using var db = CreateContext();
+        var now = new DateTimeOffset(2026, 7, 27, 12, 0, 0, TimeSpan.Zero);
+        var seriesId = Guid.NewGuid();
+        var seasonId = Guid.NewGuid();
+        var monitorId = Guid.NewGuid();
+        db.Entities.AddRange(
+            new EntityRow {
+                Id = seriesId,
+                KindCode = EntityKind.VideoSeries.ToCode(),
+                Title = "It's Always Sunny in Philadelphia",
+                CreatedAt = now,
+                UpdatedAt = now
+            },
+            new EntityRow {
+                Id = seasonId,
+                KindCode = EntityKind.VideoSeason.ToCode(),
+                Title = "Season 15",
+                ParentEntityId = seriesId,
+                IsWanted = true,
+                CreatedAt = now,
+                UpdatedAt = now
+            });
+        db.Monitors.Add(new MonitorRow {
+            Id = monitorId,
+            EntityId = seasonId,
+            Kind = EntityKind.VideoSeason,
+            Status = MonitorStatus.Active,
+            Title = "Season 15",
+            CreatedAt = now,
+            UpdatedAt = now
+        });
+        db.EntityDates.Add(Date(
+            seasonId,
+            EntityDateType.Air,
+            "2026-07-20",
+            new DateOnly(2026, 7, 20),
+            now));
+        await db.SaveChangesAsync();
+
+        var service = new EfReleaseCalendarService(db, new FixedTimeProvider(now));
+        var calendarEvent = Assert.Single(await service.ListAsync(
+            new DateOnly(2026, 7, 1),
+            new DateOnly(2026, 7, 31),
+            hideNsfw: false,
+            CancellationToken.None));
+
+        Assert.Equal(seriesId, calendarEvent.ParentEntityId);
+        Assert.Equal(EntityKind.VideoSeries, calendarEvent.ParentKind);
+        Assert.Equal("It's Always Sunny in Philadelphia", calendarEvent.ParentTitle);
+    }
+
     private static EntityDateRow Date(
         Guid entityId,
         EntityDateType type,
