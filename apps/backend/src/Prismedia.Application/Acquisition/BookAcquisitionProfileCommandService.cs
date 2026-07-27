@@ -40,6 +40,19 @@ public sealed class BookAcquisitionProfileCommandService(
             throw new AcquisitionConfigurationException(ApiProblemCodes.AcquisitionProfileInvalid, "Profiles support books, movies, TV series, and albums.");
         }
 
+        if (request.SearchAfterDateType is { } dateType
+            && !AcquisitionReleaseTimingService.Supports(request.Kind, dateType)) {
+            throw new AcquisitionConfigurationException(
+                ApiProblemCodes.AcquisitionProfileInvalid,
+                $"The {AcquisitionReleaseTimingService.DisplayName(dateType)} date cannot gate {request.Kind.ToCode()} searches.");
+        }
+
+        if (request.SearchDelayDays is < 0 or > 3650) {
+            throw new AcquisitionConfigurationException(
+                ApiProblemCodes.AcquisitionProfileInvalid,
+                "Release search delay must be between 0 and 3650 days.");
+        }
+
         var pathTemplate = ResolvePathTemplate(request.Kind, request.PathTemplate);
 
         return new BookAcquisitionProfileSaveCommand(
@@ -81,7 +94,9 @@ public sealed class BookAcquisitionProfileCommandService(
                 .Where(entry => entry.Value != 0)
                 .ToDictionary(entry => entry.Key, entry => Math.Clamp(entry.Value, -10_000, 10_000)),
             Math.Clamp(request.MinFormatScore, -10_000, 10_000),
-            request.CutoffFormatScore is { } cutoff ? Math.Clamp(cutoff, -10_000, 10_000) : null);
+            request.CutoffFormatScore is { } cutoff ? Math.Clamp(cutoff, -10_000, 10_000) : null,
+            request.SearchAfterDateType,
+            request.SearchDelayDays);
     }
 
     /// <summary>

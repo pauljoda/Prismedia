@@ -30,6 +30,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Browse, Settings, navigation, ambient backgrounds, and missing artwork now share one restrained rainbow palette in deliberate spectrum order across the web and Apple apps.
 
 ### Added
+- Acquisition profiles can now defer automatic searches until a provider-supplied release milestone (such as digital, streaming, or physical availability), with an optional delay; waiting requests stay monitored, show their release state, and appear with every known milestone on the new release calendar.
 - Metadata plugins can now provide typed semantic dates, including theatrical, digital, streaming, physical, broadcast, and publication milestones, while legacy date keys remain compatible and normalize at ingestion.
 - Collections now belong to their creator and stay private by default, with an edit-screen sharing control for household visibility. Shared collections remain owner-managed, and dynamic rules evaluate play and skip activity using the owner's personal history.
 - Acquisition file results now retain a privacy-safe per-file import record, including source-to-library mapping and clear imported, skipped, or failed outcomes, so completed and partial imports remain understandable after the job finishes.

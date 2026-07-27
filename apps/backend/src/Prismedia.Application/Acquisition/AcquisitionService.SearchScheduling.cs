@@ -200,6 +200,37 @@ public sealed partial class AcquisitionService {
         JobGraphOrigin origin,
         CancellationToken cancellationToken) {
         var summary = await store.CreateAsync(metadata, cancellationToken);
+        var timing = releaseTiming is null
+            ? AcquisitionReleaseTimingDecision.Ready
+            : await releaseTiming.EvaluateAsync(
+                metadata.EntityId,
+                metadata.ProfileId,
+                metadata.Kind,
+                cancellationToken);
+        if (!timing.CanSearch) {
+            if (!await store.TryTransitionStatusAsync(
+                    summary.Id,
+                    [AcquisitionStatus.Pending],
+                    AcquisitionStatus.WaitingForRelease,
+                    timing.Message,
+                    cancellationToken)) {
+                throw LifecycleChangedConflict();
+            }
+
+            summary = summary with {
+                Status = AcquisitionStatus.WaitingForRelease,
+                StatusMessage = timing.Message,
+                UpdatedAt = DateTimeOffset.UtcNow
+            };
+            await EnqueueStandaloneEnrichmentAsync(
+                summary,
+                metadata,
+                parentContext,
+                origin,
+                cancellationToken);
+            return summary;
+        }
+
         if (!await store.TryTransitionStatusAsync(
                 summary.Id,
                 [AcquisitionStatus.Pending],
@@ -247,6 +278,36 @@ public sealed partial class AcquisitionService {
         }
 
         return summary;
+    }
+
+    /// <summary>
+    /// A release-gated request still refreshes provider metadata so a missing future milestone can arrive.
+    /// It has no search parent yet, so enrichment is published as its own graph node in the caller's scope.
+    /// </summary>
+    private async Task EnqueueStandaloneEnrichmentAsync(
+        AcquisitionSummary summary,
+        AcquisitionMetadata metadata,
+        JobContext? parentContext,
+        JobGraphOrigin origin,
+        CancellationToken cancellationToken) {
+        if (metadata.ExternalIdentity is null) {
+            return;
+        }
+
+        var request = new EnqueueJobRequest(
+            JobType.AcquisitionEnrich,
+            PayloadJson: AcquisitionJobPayload.Serialize(summary.Id),
+            TargetEntityId: summary.Id.ToString(),
+            TargetLabel: summary.Title,
+            Origin: origin,
+            GraphRootEntityKind: summary.Kind.ToCode(),
+            GraphRootEntityId: summary.EntityId?.ToString());
+        var job = parentContext is null
+            ? await queue.EnqueueAsync(request, cancellationToken)
+            : await parentContext.EnqueueAsync(request, cancellationToken);
+        if (job.GraphId is { } graphId) {
+            await store.SetJobGraphIdAsync(summary.Id, graphId, cancellationToken);
+        }
     }
 
     /// <summary>

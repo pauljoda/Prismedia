@@ -96,7 +96,9 @@ public sealed record BookAcquisitionProfileSaveCommand(
     string? CutoffQuality = null,
     IReadOnlyDictionary<string, int>? FormatScores = null,
     int MinFormatScore = 0,
-    int? CutoffFormatScore = null);
+    int? CutoffFormatScore = null,
+    EntityDateType? SearchAfterDateType = null,
+    int SearchDelayDays = 0);
 
 /// <summary>
 /// Persistence port for custom formats (named, scored release classifiers), scoped per profile kind.
@@ -133,6 +135,13 @@ public interface IBookAcquisitionProfileStore {
 
     /// <summary>True when the resolved profile auto-blocklists a failed download and grabs the next-best candidate.</summary>
     Task<bool> GetAutoRedownloadAsync(Guid? profileId, EntityKind kind, CancellationToken cancellationToken);
+
+    /// <summary>The resolved profile's automatic release-search gate, or immediate when none is configured.</summary>
+    Task<AcquisitionReleaseTimingPolicy> GetReleaseTimingAsync(
+        Guid? profileId,
+        EntityKind kind,
+        CancellationToken cancellationToken) =>
+        Task.FromResult(AcquisitionReleaseTimingPolicy.Immediate);
 
     /// <summary>The resolved profile's download-client category override, or null to use the client's own category.</summary>
     Task<string?> GetDownloadCategoryAsync(Guid? profileId, EntityKind kind, CancellationToken cancellationToken);

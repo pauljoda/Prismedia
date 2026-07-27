@@ -134,6 +134,28 @@ public sealed class AcquisitionServiceTests {
     }
 
     [Fact]
+    public async Task ReleaseGatedCreateWaitsAndOnlySchedulesMetadataEnrichment() {
+        var timing = new FixedReleaseTimingService(new AcquisitionReleaseTimingDecision(
+            false,
+            EntityDateType.DigitalRelease,
+            SearchNotBefore: new DateOnly(2026, 8, 16),
+            Message: "Waiting for digital release."));
+        var harness = Harness(TransferInfo(RecordedClientId), releaseTiming: timing);
+
+        var created = await harness.Service.CreateAndSearchAsync(
+            new AcquisitionCreateRequest(
+                "Toy Story 5", null, null, 2026, null, "tmdb", "1084242",
+                Kind: EntityKind.Movie,
+                EntityId: WantedEntityId),
+            CancellationToken.None);
+
+        Assert.Equal(AcquisitionStatus.WaitingForRelease, created.Status);
+        Assert.Equal(AcquisitionStatus.WaitingForRelease, harness.Store.Status);
+        Assert.Equal(JobType.AcquisitionEnrich, Assert.Single(harness.Queue.Requests).Type);
+        Assert.Equal(WantedEntityId, timing.EntityId);
+    }
+
+    [Fact]
     public async Task AlreadyLeasedCreateSeamDoesNotReenterTheEntityLifecycleLease() {
         var harness = Harness(TransferInfo(RecordedClientId));
 
@@ -1212,7 +1234,8 @@ public sealed class AcquisitionServiceTests {
     private static TestHarness Harness(
         AcquisitionTransferInfo transfer,
         bool includeRecordedClient = true,
-        IAcquisitionSearchResourcePolicy? searchResources = null) {
+        IAcquisitionSearchResourcePolicy? searchResources = null,
+        IAcquisitionReleaseTimingService? releaseTiming = null) {
         var store = new FakeAcquisitionStore(transfer);
         var downloads = new RecordingDownloadClientFactory();
         var configs = new FakeDownloadClientConfigStore(includeRecordedClient);
@@ -1235,7 +1258,8 @@ public sealed class AcquisitionServiceTests {
             jobCleanup,
             lifecycle,
             importCleanup,
-            searchResources: searchResources);
+            searchResources: searchResources,
+            releaseTiming: releaseTiming);
 
         return new TestHarness(service, store, downloads, history, monitors, queue, jobCleanup, lifecycle, importCleanup);
     }
@@ -1853,6 +1877,20 @@ public sealed class AcquisitionServiceTests {
         public Task<IReadOnlyList<IndexerConfigDetail>> ListDetailsAsync(CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<IndexerConfigSummary> SaveAsync(IndexerConfigSaveCommand command, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<bool> DeleteAsync(Guid id, CancellationToken cancellationToken) => throw new NotSupportedException();
+    }
+
+    private sealed class FixedReleaseTimingService(AcquisitionReleaseTimingDecision decision)
+        : IAcquisitionReleaseTimingService {
+        public Guid? EntityId { get; private set; }
+
+        public Task<AcquisitionReleaseTimingDecision> EvaluateAsync(
+            Guid? entityId,
+            Guid? profileId,
+            EntityKind kind,
+            CancellationToken cancellationToken) {
+            EntityId = entityId;
+            return Task.FromResult(decision);
+        }
     }
 
     private sealed class NullReleaseLinkResolver : IReleaseLinkResolver {

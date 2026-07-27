@@ -34,6 +34,16 @@ public sealed class EfBookAcquisitionProfileStore(PrismediaDbContext db) : IBook
         return row?.AutoRedownload ?? false;
     }
 
+    public async Task<AcquisitionReleaseTimingPolicy> GetReleaseTimingAsync(
+        Guid? profileId,
+        EntityKind kind,
+        CancellationToken cancellationToken) {
+        var row = await ResolveRowAsync(profileId, kind, cancellationToken);
+        return row is null
+            ? AcquisitionReleaseTimingPolicy.Immediate
+            : new AcquisitionReleaseTimingPolicy(row.SearchAfterDateType, row.SearchDelayDays);
+    }
+
     public async Task<string?> GetDownloadCategoryAsync(Guid? profileId, EntityKind kind, CancellationToken cancellationToken) {
         var row = await ResolveRowAsync(profileId, kind, cancellationToken);
         return string.IsNullOrWhiteSpace(row?.DownloadCategory) ? null : row.DownloadCategory;
@@ -100,6 +110,8 @@ public sealed class EfBookAcquisitionProfileStore(PrismediaDbContext db) : IBook
         row.FormatScoresJson = JsonSerializer.Serialize(command.FormatScores ?? new Dictionary<string, int>());
         row.MinFormatScore = command.MinFormatScore;
         row.CutoffFormatScore = command.CutoffFormatScore;
+        row.SearchAfterDateType = command.SearchAfterDateType;
+        row.SearchDelayDays = command.SearchDelayDays;
         row.AutoPick = command.AutoPick;
         row.AutoRedownload = command.AutoRedownload;
         row.UpgradeUntilCutoff = command.UpgradeUntilCutoff;
@@ -245,7 +257,9 @@ public sealed class EfBookAcquisitionProfileStore(PrismediaDbContext db) : IBook
             row.CutoffQuality,
             DecodeFormatScores(row.FormatScoresJson),
             row.MinFormatScore,
-            row.CutoffFormatScore);
+            row.CutoffFormatScore,
+            row.SearchAfterDateType,
+            row.SearchDelayDays);
 
     private static IReadOnlyList<WeightedTerm> DecodeWeightedTerms(string json) {
         if (string.IsNullOrWhiteSpace(json)) {

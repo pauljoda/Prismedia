@@ -397,6 +397,8 @@ public static class DependencyInjection {
         services.AddScoped<IRecycleBin, RecycleBin>();
         services.AddScoped<IDownloadClientConfigStore, EfDownloadClientConfigStore>();
         services.AddScoped<IBookAcquisitionProfileStore, EfBookAcquisitionProfileStore>();
+        services.AddScoped<IEntityReleaseDateStore, EfEntityReleaseDateStore>();
+        services.AddScoped<IReleaseCalendarService, EfReleaseCalendarService>();
         services.AddScoped<ICustomFormatStore, EfCustomFormatStore>();
         services.AddScoped<IAcquisitionStore, EfAcquisitionStore>();
         services.AddScoped<EfManualAcquisitionStore>();

@@ -187,7 +187,9 @@ public interface IMonitorStore {
                 monitor.AcquisitionId,
                 monitor.Title,
                 EntityId: monitor.EntityId,
-                BookRendition: monitor.BookRendition))
+                BookRendition: monitor.BookRendition,
+                ProfileId: monitor.ProfileId,
+                Kind: monitor.Kind))
             .ToArray();
 
     /// <summary>Stamps a monitor as just searched.</summary>

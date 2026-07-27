@@ -10,6 +10,10 @@ public enum AcquisitionStatus {
     [Code("pending")]
     Pending,
 
+    /// <summary>The profile is holding automatic searches until its selected release milestone.</summary>
+    [Code("waiting-for-release")]
+    WaitingForRelease,
+
     /// <summary>An indexer search is currently running for this acquisition.</summary>
     [Code("searching")]
     Searching,

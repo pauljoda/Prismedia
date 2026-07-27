@@ -70,6 +70,35 @@ public sealed class BookAcquisitionProfileCommandServiceTests {
         Assert.Equal(ApiProblemCodes.AcquisitionProfileInvalid, ex.Code);
     }
 
+    [Fact]
+    public async Task MovieReleaseGateIsCapturedByTheProfileCommand() {
+        var store = new CapturingStore();
+        var service = CreateService(store);
+
+        await service.SaveAsync(
+            Request(EntityKind.Movie, MediaNamingTemplates.MovieDefault) with {
+                SearchAfterDateType = EntityDateType.DigitalRelease,
+                SearchDelayDays = 2
+            },
+            CancellationToken.None);
+
+        Assert.Equal(EntityDateType.DigitalRelease, store.LastCommand?.SearchAfterDateType);
+        Assert.Equal(2, store.LastCommand?.SearchDelayDays);
+    }
+
+    [Fact]
+    public async Task ProfileRejectsAMilestoneThatDoesNotApplyToItsKind() {
+        var service = CreateService(new CapturingStore());
+
+        var exception = await Assert.ThrowsAsync<AcquisitionConfigurationException>(() => service.SaveAsync(
+            Request(EntityKind.Movie, MediaNamingTemplates.MovieDefault) with {
+                SearchAfterDateType = EntityDateType.FirstAir
+            },
+            CancellationToken.None));
+
+        Assert.Equal(ApiProblemCodes.AcquisitionProfileInvalid, exception.Code);
+    }
+
     private static BookAcquisitionProfileCommandService CreateService(IBookAcquisitionProfileStore store) =>
         new(store, new CurrentUserContextHolder());
 

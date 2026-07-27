@@ -104,6 +104,35 @@ public sealed class MonitoredSearchJobHandlerTests {
     }
 
     [Fact]
+    public async Task WaitingReleaseMonitorDoesNotSearchBeforeItsMilestone() {
+        var acquisitionId = Guid.NewGuid();
+        var monitorId = Guid.NewGuid();
+        var monitors = new FakeMonitorStore([
+            new DueMonitor(
+                monitorId,
+                acquisitionId,
+                "Toy Story 5",
+                EntityId: Guid.NewGuid(),
+                Kind: EntityKind.Movie)
+        ]);
+        var acquisitions = new FakeAcquisitionLifecycleStore(acquisitionId);
+        acquisitions.Statuses[acquisitionId] = AcquisitionStatus.WaitingForRelease;
+        var timing = new FixedReleaseTimingService(new AcquisitionReleaseTimingDecision(
+            false,
+            EntityDateType.DigitalRelease,
+            SearchNotBefore: new DateOnly(2026, 9, 1),
+            Message: "Waiting for digital release."));
+        var queue = new RecordingJobQueue();
+
+        await Handler(monitors, acquisitions, timing)
+            .HandleAsync(new JobContext(Job(), queue), CancellationToken.None);
+
+        Assert.Empty(queue.Enqueued);
+        Assert.Equal(AcquisitionStatus.WaitingForRelease, acquisitions.Statuses[acquisitionId]);
+        Assert.Equal(monitorId, Assert.Single(monitors.Searched));
+    }
+
+    [Fact]
     public async Task MonitorPublishesSearchingBeforeAnEnqueueFailure() {
         var acquisitionId = Guid.NewGuid();
         var monitors = new FakeMonitorStore([
@@ -206,13 +235,15 @@ public sealed class MonitoredSearchJobHandlerTests {
 
     private static MonitoredSearchJobHandler Handler(
         IMonitorStore monitors,
-        IAcquisitionLifecycleStore acquisitions) =>
+        IAcquisitionLifecycleStore acquisitions,
+        IAcquisitionReleaseTimingService? releaseTiming = null) =>
         new(
             monitors,
             acquisitions,
             new SettingsService(new EmptySettingsPersistence()),
             CommitService(monitors),
-            NullLogger<MonitoredSearchJobHandler>.Instance);
+            NullLogger<MonitoredSearchJobHandler>.Instance,
+            releaseTiming: releaseTiming);
 
     private static JobRunSnapshot Job(Guid? targetEntityId = null) {
         var now = DateTimeOffset.UtcNow;
@@ -409,6 +440,15 @@ public sealed class MonitoredSearchJobHandlerTests {
             SelectedRelease? expectedSelectedRelease,
             string message,
             CancellationToken cancellationToken) => throw new NotSupportedException();
+    }
+
+    private sealed class FixedReleaseTimingService(AcquisitionReleaseTimingDecision decision)
+        : IAcquisitionReleaseTimingService {
+        public Task<AcquisitionReleaseTimingDecision> EvaluateAsync(
+            Guid? entityId,
+            Guid? profileId,
+            EntityKind kind,
+            CancellationToken cancellationToken) => Task.FromResult(decision);
     }
 
     private sealed class EmptySettingsPersistence : ISettingsPersistence {

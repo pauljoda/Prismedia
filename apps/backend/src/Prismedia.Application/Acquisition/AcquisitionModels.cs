@@ -352,7 +352,8 @@ public sealed record AcquisitionCandidateRef(Guid CandidateId, string Title, str
 /// </summary>
 public sealed record DueMonitor(
     Guid MonitorId, Guid? AcquisitionId, string Title, bool IsUpgrade = false, Guid? EntityId = null,
-    bool MissingChildFallback = false, BookRendition? BookRendition = null);
+    bool MissingChildFallback = false, BookRendition? BookRendition = null, Guid? ProfileId = null,
+    EntityKind Kind = EntityKind.Book);
 
 /// <summary>
 /// The owned quality an upgrade child must beat, expressed in the vocabulary of the child's kind. A book

@@ -22,7 +22,8 @@ public sealed class MonitoredSearchJobHandler(
     SettingsService settings,
     RequestCommitService requests,
     ILogger<MonitoredSearchJobHandler> logger,
-    IJobQueueService? jobs = null) : IJobHandler {
+    IJobQueueService? jobs = null,
+    IAcquisitionReleaseTimingService? releaseTiming = null) : IJobHandler {
     public JobType Type => JobType.MonitoredSearch;
 
     public async Task HandleAsync(JobContext context, CancellationToken cancellationToken) {
@@ -123,6 +124,19 @@ public sealed class MonitoredSearchJobHandler(
             return null; // defensive: a non-container due always carries its acquisition
         }
 
+        var searchStatus = await acquisitions.GetStatusAsync(acquisitionId, cancellationToken);
+        if (searchStatus == AcquisitionStatus.WaitingForRelease && releaseTiming is not null) {
+            var timing = await releaseTiming.EvaluateAsync(
+                monitor.EntityId,
+                monitor.ProfileId,
+                monitor.Kind,
+                cancellationToken);
+            if (!timing.CanSearch) {
+                await monitors.MarkSearchedAsync(monitor.MonitorId, cancellationToken);
+                return timing.Message ?? $"Waiting to search for {monitor.Title}";
+            }
+        }
+
         // An upgrade-due monitor searches on a fresh CHILD acquisition (claimed atomically), so the
         // imported parent and its on-disk file are never touched by the search or its grab. A still-missing
         // monitor re-searches its own acquisition. Either way the search job is deduped per target.
@@ -152,7 +166,7 @@ public sealed class MonitoredSearchJobHandler(
         // The active monitor is explicit durable provenance for a retry. Publish Searching BEFORE
         // enqueue so enqueue failure leaves recoverable intent, while redelivery after review/manual
         // state cannot infer a new search on its own.
-        var searchStatus = await acquisitions.GetStatusAsync(searchTarget, cancellationToken);
+        searchStatus = await acquisitions.GetStatusAsync(searchTarget, cancellationToken);
         if (searchStatus is null || !AcquisitionSearchJobHandler.CanScheduleSearch(searchStatus.Value)) {
             return null;
         }
@@ -204,7 +218,9 @@ public sealed class MonitoredSearchJobHandler(
                     monitor.AcquisitionId,
                     monitor.Title,
                     EntityId: monitor.EntityId,
-                    BookRendition: monitor.BookRendition))
+                    BookRendition: monitor.BookRendition,
+                    ProfileId: monitor.ProfileId,
+                    Kind: monitor.Kind))
                 .ToArray();
         }
 

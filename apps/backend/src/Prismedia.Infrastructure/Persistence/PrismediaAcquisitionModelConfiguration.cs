@@ -151,6 +151,13 @@ internal static partial class PrismediaModelConfiguration {
             entity.Property(row => row.FormatScoresJson).HasColumnName("format_scores_json").HasColumnType("jsonb").HasDefaultValue("{}").IsRequired();
             entity.Property(row => row.MinFormatScore).HasColumnName("min_format_score").HasDefaultValue(0);
             entity.Property(row => row.CutoffFormatScore).HasColumnName("cutoff_format_score");
+            entity.Property(row => row.SearchAfterDateType)
+                .HasColumnName("search_after_date_type")
+                .HasMaxLength(64)
+                .HasConversion(
+                    value => value == null ? null : value.Value.ToCode(),
+                    value => string.IsNullOrWhiteSpace(value) ? null : value.DecodeAs<EntityDateType>());
+            entity.Property(row => row.SearchDelayDays).HasColumnName("search_delay_days").HasDefaultValue(0);
             entity.Property(row => row.CreatedAt).HasColumnName("created_at");
             entity.Property(row => row.UpdatedAt).HasColumnName("updated_at");
             entity.HasIndex(row => row.IsDefault);

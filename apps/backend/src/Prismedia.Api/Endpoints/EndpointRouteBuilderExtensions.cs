@@ -41,6 +41,7 @@ public static class EndpointRouteBuilderExtensions {
         routes.MapRequestEndpoints();
         routes.MapAcquisitionEndpoints();
         routes.MapMonitorEndpoints();
+        routes.MapReleaseCalendarEndpoints();
 
         return routes;
     }

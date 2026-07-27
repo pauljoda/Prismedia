@@ -232,6 +232,12 @@ public sealed class BookAcquisitionProfileRow {
     /// <summary>The custom-format score at or above which the upgrade loop stops chasing better-scoring releases. Null = no format-score cutoff.</summary>
     public int? CutoffFormatScore { get; set; }
 
+    /// <summary>Typed Entity date milestone after which automatic searches may begin; null searches immediately.</summary>
+    public EntityDateType? SearchAfterDateType { get; set; }
+
+    /// <summary>Additional whole days after the selected milestone before automatic searching begins.</summary>
+    public int SearchDelayDays { get; set; }
+
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }
 }

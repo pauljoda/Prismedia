@@ -439,6 +439,7 @@ public sealed partial class EfMonitorStore(
                 Monitor = monitor,
                 AcquisitionStatus = acquisition == null ? (AcquisitionStatus?)null : acquisition.Status,
                 AcquisitionEntityId = acquisition == null ? null : acquisition.EntityId,
+                AcquisitionProfileId = acquisition == null ? null : acquisition.ProfileId,
                 // An unconsumed import hint means the library scan has not bound the imported unit's files
                 // yet, so structural child completeness cannot be judged until it has.
                 AwaitingImportReconcile = acquisition != null
@@ -470,7 +471,7 @@ public sealed partial class EfMonitorStore(
                 if (forceImmediate || monitor.LastSearchedAt is null || now - monitor.LastSearchedAt >= interval) {
                     due.Add(new DueMonitor(
                         monitor.Id, null, monitor.Title, IsUpgrade: false, EntityId: watchedEntityId,
-                        BookRendition: monitor.BookRendition));
+                        BookRendition: monitor.BookRendition, ProfileId: monitor.ProfileId, Kind: monitor.Kind));
                 }
 
                 continue;
@@ -536,7 +537,9 @@ public sealed partial class EfMonitorStore(
                         due.Add(new DueMonitor(
                             monitor.Id, acquisitionId, monitor.Title,
                             IsUpgrade: false, EntityId: structuralParentEntityId, MissingChildFallback: true,
-                            BookRendition: monitor.BookRendition));
+                            BookRendition: monitor.BookRendition,
+                            ProfileId: row.AcquisitionProfileId,
+                            Kind: monitor.Kind));
                     }
 
                     continue;
@@ -603,7 +606,9 @@ public sealed partial class EfMonitorStore(
                         due.Add(new DueMonitor(
                             monitor.Id, acquisitionId, monitor.Title,
                             IsUpgrade: true, EntityId: monitor.EntityId,
-                            BookRendition: monitor.BookRendition));
+                            BookRendition: monitor.BookRendition,
+                            ProfileId: row.AcquisitionProfileId,
+                            Kind: monitor.Kind));
                     }
 
                     continue;
@@ -618,7 +623,9 @@ public sealed partial class EfMonitorStore(
             // ManualImportRequired (needs a human) — is left untouched. Re-searching an in-flight item
             // would reset its status and, with auto-pick on, delete the live torrent and re-grab — so this
             // gate is what keeps monitoring safe.
-            var stillMissing = row.AcquisitionStatus is AcquisitionStatus.Failed or AcquisitionStatus.Cancelled
+            var stillMissing = row.AcquisitionStatus is AcquisitionStatus.Failed
+                or AcquisitionStatus.Cancelled
+                or AcquisitionStatus.WaitingForRelease
                 || (row.AcquisitionStatus == AcquisitionStatus.AwaitingSelection && row.AcceptedCount == 0);
             if (!stillMissing) {
                 continue;
@@ -628,7 +635,9 @@ public sealed partial class EfMonitorStore(
                 due.Add(new DueMonitor(
                     monitor.Id, acquisitionId, monitor.Title,
                     EntityId: monitor.EntityId,
-                    BookRendition: monitor.BookRendition));
+                    BookRendition: monitor.BookRendition,
+                    ProfileId: row.AcquisitionProfileId,
+                    Kind: monitor.Kind));
             }
         }
 

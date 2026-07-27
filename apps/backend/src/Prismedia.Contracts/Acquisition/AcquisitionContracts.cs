@@ -337,7 +337,9 @@ public sealed record BookAcquisitionProfileView(
     string? CutoffQuality = null,
     IReadOnlyDictionary<string, int>? FormatScores = null,
     int MinFormatScore = 0,
-    int? CutoffFormatScore = null);
+    int? CutoffFormatScore = null,
+    EntityDateType? SearchAfterDateType = null,
+    int SearchDelayDays = 0);
 
 /// <summary>Request payload for creating or updating an acquisition profile.</summary>
 public sealed record BookAcquisitionProfileSaveRequest(
@@ -367,7 +369,9 @@ public sealed record BookAcquisitionProfileSaveRequest(
     string? CutoffQuality = null,
     IReadOnlyDictionary<string, int>? FormatScores = null,
     int MinFormatScore = 0,
-    int? CutoffFormatScore = null);
+    int? CutoffFormatScore = null,
+    EntityDateType? SearchAfterDateType = null,
+    int SearchDelayDays = 0);
 
 /// <summary>One condition of a custom format for the API surface (see the application <c>CustomFormatCondition</c>).</summary>
 /// <param name="Type">The release axis this condition tests.</param>

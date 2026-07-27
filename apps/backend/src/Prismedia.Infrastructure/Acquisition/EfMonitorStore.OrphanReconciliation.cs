@@ -8,6 +8,7 @@ namespace Prismedia.Infrastructure.Acquisition;
 public sealed partial class EfMonitorStore {
     private static readonly AcquisitionStatus[] OrphanRetirableStatuses = [
         AcquisitionStatus.Pending,
+        AcquisitionStatus.WaitingForRelease,
         AcquisitionStatus.Searching,
         AcquisitionStatus.AwaitingSelection,
         AcquisitionStatus.Failed,

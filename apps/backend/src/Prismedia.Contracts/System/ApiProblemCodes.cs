@@ -7,6 +7,9 @@ namespace Prismedia.Contracts.System;
 /// constants instead of bare string literals.
 /// </summary>
 public static class ApiProblemCodes {
+    /// <summary>Problem code <c>calendar_range_invalid</c>.</summary>
+    public const string CalendarRangeInvalid = "calendar_range_invalid";
+
     /// <summary>Problem code <c>subtitle_provider_unavailable</c>.</summary>
     public const string SubtitleProviderUnavailable = "subtitle_provider_unavailable";
 
