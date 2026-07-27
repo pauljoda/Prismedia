@@ -279,6 +279,12 @@ public sealed class AcquisitionRow {
     public string? StatusMessage { get; set; }
 
     /// <summary>
+    /// True only after a completed provider lookup could not supply the release milestone required by
+    /// this acquisition's profile. The acquisition itself remains WaitingForRelease and stays monitored.
+    /// </summary>
+    public bool ReleaseDateMetadataUnavailable { get; set; }
+
+    /// <summary>
     /// Durable destructive-operation intent. Set atomically with <see cref="AcquisitionStatus.Stopping"/>
     /// before any remote or filesystem effect and retained across partial failure so retry cannot switch
     /// an acquisition between removal and reacquisition.

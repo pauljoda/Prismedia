@@ -143,10 +143,22 @@ public sealed class MonitoredSearchJobHandler(
                             GraphRootEntityKind: monitor.Kind.ToCode(),
                             GraphRootEntityId: monitor.EntityId?.ToString()),
                         cancellationToken);
+                } else {
+                    await acquisitions.SetReleaseDateMetadataUnavailableAsync(
+                        acquisitionId,
+                        unavailable: false,
+                        timing.Message,
+                        cancellationToken);
                 }
                 await monitors.MarkSearchedAsync(monitor.MonitorId, cancellationToken);
                 return timing.Message ?? $"Waiting to search for {monitor.Title}";
             }
+
+            await acquisitions.SetReleaseDateMetadataUnavailableAsync(
+                acquisitionId,
+                unavailable: false,
+                message: null,
+                cancellationToken);
         }
 
         // An upgrade-due monitor searches on a fresh CHILD acquisition (claimed atomically), so the

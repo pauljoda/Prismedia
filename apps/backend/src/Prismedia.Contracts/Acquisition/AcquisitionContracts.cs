@@ -122,7 +122,8 @@ public sealed record AcquisitionSummary(
     Guid? EntityId = null,
     bool HasResumableImport = false,
     BookRendition? BookRendition = null,
-    Guid? JobGraphId = null);
+    Guid? JobGraphId = null,
+    bool ReleaseDateMetadataUnavailable = false);
 
 /// <summary>An acquisition with its scored candidates for the review screen.</summary>
 public sealed record AcquisitionDetail(

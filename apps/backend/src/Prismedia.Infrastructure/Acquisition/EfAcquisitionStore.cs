@@ -1769,7 +1769,8 @@ public sealed partial class EfAcquisitionStore(PrismediaDbContext db, IAcquisiti
     private static AcquisitionSummary ToSummary(AcquisitionRow row, double? progress) =>
         new(row.Id, row.Status, row.StatusMessage, row.Title, row.Author, row.Series, row.Year, row.PosterUrl,
             progress, row.CreatedAt, row.UpdatedAt, row.Description, row.Kind, row.EntityId,
-            HasResumableImport: row.ImportCheckpointJson is not null, row.BookRendition, row.JobGraphId);
+            HasResumableImport: row.ImportCheckpointJson is not null, row.BookRendition, row.JobGraphId,
+            row.ReleaseDateMetadataUnavailable);
 
     private static ReleaseCandidateView ToView(ReleaseCandidateRow row) =>
         new(row.Id, row.IndexerName, row.Title, row.SizeBytes, row.Seeders, row.Peers, row.Protocol, row.Accepted,

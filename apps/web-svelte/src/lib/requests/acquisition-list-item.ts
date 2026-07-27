@@ -112,13 +112,13 @@ function toneForStatus(status: AcquisitionStatusCode): AcquisitionItemTone {
     case ACQUISITION_STATUS.queued:
     case ACQUISITION_STATUS.waitingForDownloadClient:
     case ACQUISITION_STATUS.waitingForRelease:
+    case ACQUISITION_STATUS.manualSearchRequired:
       return "queued";
     case ACQUISITION_STATUS.pending:
     case ACQUISITION_STATUS.searching:
       return "searching";
     case ACQUISITION_STATUS.failed:
       return "failed";
-    case ACQUISITION_STATUS.manualSearchRequired:
     case ACQUISITION_STATUS.awaitingSelection:
     case ACQUISITION_STATUS.manualImportRequired:
       return "attention";
@@ -144,10 +144,10 @@ function iconForStatus(status: AcquisitionStatusCode): Component {
     case ACQUISITION_STATUS.waitingForDownloadClient:
       return Hourglass;
     case ACQUISITION_STATUS.waitingForRelease:
+    case ACQUISITION_STATUS.manualSearchRequired:
       return CalendarClock;
     case ACQUISITION_STATUS.pending:
     case ACQUISITION_STATUS.searching:
-    case ACQUISITION_STATUS.manualSearchRequired:
     case ACQUISITION_STATUS.awaitingSelection:
       return Search;
     case ACQUISITION_STATUS.failed:
@@ -171,7 +171,7 @@ function downloadDescription(status: AcquisitionStatusCode, statusMessage: strin
     case ACQUISITION_STATUS.waitingForRelease:
       return statusMessage ?? "Waiting for the configured release date.";
     case ACQUISITION_STATUS.manualSearchRequired:
-      return statusMessage ?? "The configured release date was unavailable. Search manually when you are ready.";
+      return statusMessage ?? "Waiting for the configured release date. You can search manually at any time.";
     case ACQUISITION_STATUS.awaitingSelection:
       return "Select a release to start the download.";
     case ACQUISITION_STATUS.pending:
@@ -439,9 +439,8 @@ export function wantedToListItem(
     unknown: monitorUnknown || (acqStatus !== null && !acquisitionStatusIsKnown(acqStatus)),
   };
 
-  const manualSearchRequired = acqStatus === ACQUISITION_STATUS.manualSearchRequired;
   const metaParts: string[] = [`last ${formatRelativeTime(row.lastSearchedAt ?? null, true)}`];
-  metaParts.push(manualSearchRequired ? "manual search" : `next ${nextSearchLabel(row.nextSearchAt)}`);
+  metaParts.push(`next ${nextSearchLabel(row.nextSearchAt)}`);
   if (Number(row.barrenSearches) > 0) {
     metaParts.push(`${row.barrenSearches} barren`);
   }
@@ -460,9 +459,9 @@ export function wantedToListItem(
     statusLabel,
     statusIcon: transitionLocked ? LoaderCircle : iconForStatus(status),
     // Missing items are actively re-searched; cutoff items own a copy and upgrade quietly.
-    tone: transitionLocked ? "cleanup" : manualSearchRequired ? "attention" : variant === "missing" ? "searching" : "attention",
+    tone: transitionLocked ? "cleanup" : variant === "missing" ? "searching" : "attention",
     progress: null,
-    indeterminate: transitionLocked || (variant === "missing" && !manualSearchRequired),
+    indeterminate: transitionLocked || variant === "missing",
     description: wantedDescription(variant, transitionLocked ? transition : null, acqStatus),
     clientLabel: null,
     qualityGap: variant === "cutoffUnmet" ? `${row.ownedQuality ?? "—"} → ${row.cutoffQuality ?? "—"}` : null,

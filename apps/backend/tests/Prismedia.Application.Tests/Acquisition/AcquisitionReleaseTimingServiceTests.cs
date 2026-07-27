@@ -60,6 +60,31 @@ public sealed class AcquisitionReleaseTimingServiceTests {
         Assert.True(decision.WaitingForMetadata);
     }
 
+    [Fact]
+    public async Task StreamingPreferenceFallsBackToDigitalVodDate() {
+        var digitalDate = new EntityDate(
+            EntityDateType.DigitalRelease.ToCode(),
+            "2026-07-25",
+            new DateOnly(2026, 7, 25),
+            DatePrecision.Day.ToCode());
+        var service = new AcquisitionReleaseTimingService(
+            new StubProfiles(new AcquisitionReleaseTimingPolicy(EntityDateType.StreamingRelease, 0)),
+            new StubDates(new Dictionary<EntityDateType, EntityDate> {
+                [EntityDateType.DigitalRelease] = digitalDate
+            }),
+            new FixedTimeProvider(new DateTimeOffset(2026, 7, 24, 12, 0, 0, TimeSpan.Zero)));
+
+        var decision = await service.EvaluateAsync(EntityId, null, EntityKind.Movie, CancellationToken.None);
+
+        Assert.False(decision.CanSearch);
+        Assert.False(decision.WaitingForMetadata);
+        Assert.Equal(EntityDateType.StreamingRelease, decision.DateType);
+        Assert.Equal(EntityDateType.DigitalRelease, decision.ResolvedDateType);
+        Assert.Equal(digitalDate, decision.Date);
+        Assert.Equal(new DateOnly(2026, 7, 25), decision.SearchNotBefore);
+        Assert.Contains("using the digital release date", decision.Message);
+    }
+
     private static AcquisitionReleaseTimingService Create(
         AcquisitionReleaseTimingPolicy policy,
         EntityDate? date,
@@ -67,8 +92,14 @@ public sealed class AcquisitionReleaseTimingServiceTests {
         new(new StubProfiles(policy), new StubDates(date), new FixedTimeProvider(now));
 
     private sealed class StubDates(EntityDate? date) : IEntityReleaseDateStore {
+        public StubDates(IReadOnlyDictionary<EntityDateType, EntityDate> dates) : this((EntityDate?)null) {
+            Dates = dates;
+        }
+
+        private IReadOnlyDictionary<EntityDateType, EntityDate>? Dates { get; }
+
         public Task<EntityDate?> GetAsync(Guid entityId, EntityDateType type, CancellationToken cancellationToken) =>
-            Task.FromResult(date);
+            Task.FromResult(Dates?.GetValueOrDefault(type) ?? date);
     }
 
     private sealed class FixedTimeProvider(DateTimeOffset now) : TimeProvider {

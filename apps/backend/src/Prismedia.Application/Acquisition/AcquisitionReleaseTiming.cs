@@ -16,7 +16,8 @@ public sealed record AcquisitionReleaseTimingDecision(
     EntityDate? Date = null,
     DateOnly? SearchNotBefore = null,
     bool WaitingForMetadata = false,
-    string? Message = null) {
+    string? Message = null,
+    EntityDateType? ResolvedDateType = null) {
     /// <summary>An acquisition that is not release-gated.</summary>
     public static AcquisitionReleaseTimingDecision Ready { get; } = new(true);
 }
@@ -44,7 +45,7 @@ public interface IAcquisitionReleaseDateChangeHandler {
     Task HandleAsync(Guid entityId, CancellationToken cancellationToken);
 }
 
-/// <summary>Moves manual release holds back into automatic timing when new date metadata satisfies them.</summary>
+/// <summary>Refreshes waiting release gates when new date metadata satisfies them.</summary>
 public sealed class AcquisitionReleaseDateChangeHandler(
     IAcquisitionStore acquisitions,
     IAcquisitionReleaseTimingService releaseTiming,
@@ -67,17 +68,11 @@ public sealed class AcquisitionReleaseDateChangeHandler(
                 continue;
             }
 
-            if (detail.Summary.Status == AcquisitionStatus.ManualSearchRequired) {
-                var moved = await acquisitions.TryTransitionStatusAsync(
-                    detail.Summary.Id,
-                    [AcquisitionStatus.ManualSearchRequired],
-                    AcquisitionStatus.WaitingForRelease,
-                    timing.Message,
-                    cancellationToken);
-                if (!moved) {
-                    continue;
-                }
-            }
+            await acquisitions.SetReleaseDateMetadataUnavailableAsync(
+                detail.Summary.Id,
+                unavailable: false,
+                timing.Message,
+                cancellationToken);
 
             if (timing.CanSearch) {
                 await monitors.MarkSearchDueByAcquisitionAsync(detail.Summary.Id, cancellationToken);
@@ -104,7 +99,18 @@ public sealed class AcquisitionReleaseTimingService(
             return AcquisitionReleaseTimingDecision.Ready;
         }
 
-        var date = await dates.GetAsync(id, type, cancellationToken);
+        EntityDate? date = null;
+        EntityDateType? resolvedType = null;
+        foreach (var candidateType in ResolutionOrder(type)) {
+            var candidate = await dates.GetAsync(id, candidateType, cancellationToken);
+            if (candidate?.SortableValue is null) {
+                continue;
+            }
+
+            date = candidate;
+            resolvedType = candidateType;
+            break;
+        }
         if (date?.SortableValue is not { } sortable) {
             return new AcquisitionReleaseTimingDecision(
                 false,
@@ -124,8 +130,22 @@ public sealed class AcquisitionReleaseTimingService(
             searchNotBefore,
             Message: today >= searchNotBefore
                 ? null
-                : $"Waiting until {searchNotBefore:yyyy-MM-dd}, after the {DisplayName(type)} date.");
+                : resolvedType == type
+                    ? $"Waiting until {searchNotBefore:yyyy-MM-dd}, after the {DisplayName(type)} date."
+                    : $"Waiting until {searchNotBefore:yyyy-MM-dd}, using the {DisplayName(resolvedType!.Value)} date for the {DisplayName(type)} preference.",
+            ResolvedDateType: resolvedType);
     }
+
+    /// <summary>
+    /// Ordered milestones that can satisfy a configured gate. Subscription streaming and digital/VOD
+    /// describe the same downloadable availability tier across providers, so either may supply the date;
+    /// an exact provider milestone wins when both exist.
+    /// </summary>
+    public static IReadOnlyList<EntityDateType> ResolutionOrder(EntityDateType configuredType) => configuredType switch {
+        EntityDateType.StreamingRelease => [EntityDateType.StreamingRelease, EntityDateType.DigitalRelease],
+        EntityDateType.DigitalRelease => [EntityDateType.DigitalRelease, EntityDateType.StreamingRelease],
+        _ => [configuredType]
+    };
 
     /// <summary>Whether a release milestone is meaningful for a profile kind.</summary>
     public static bool Supports(EntityKind kind, EntityDateType type) => AcquisitionProfileKinds.For(kind) switch {
@@ -186,9 +206,9 @@ public sealed class AcquisitionReleaseTimingService(
 
     /// <summary>
     /// Explains that a configured release gate could not be evaluated after its metadata refresh. The
-    /// request retains its monitoring intent, but only an explicit manual search may bypass the unavailable milestone.
+    /// request retains its waiting state and monitoring intent while offering date entry and manual search.
     /// </summary>
-    public static string ManualSearchRequiredMessage(EntityDateType? type) => type is { } dateType
+    public static string ReleaseDateUnavailableMessage(EntityDateType? type) => type is { } dateType
         ? $"The configured metadata provider did not return a {DisplayName(dateType)} date. This item is waiting: check again later, search manually, or enter the date yourself."
         : "The configured metadata provider did not return the required release date. This item is waiting: check again later, search manually, or enter the date yourself.";
 }

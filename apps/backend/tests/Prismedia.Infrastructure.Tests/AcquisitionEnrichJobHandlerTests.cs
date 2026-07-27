@@ -117,7 +117,7 @@ public sealed class AcquisitionEnrichJobHandlerTests {
     }
 
     [Fact]
-    public async Task ProviderMissMovesReleaseGateToManualSearchRequired() {
+    public async Task ProviderMissKeepsReleaseGateWaitingAndEnablesDatePrompt() {
         await using var db = CreateContext();
         var id = await SeedAsync(
             db,
@@ -137,7 +137,8 @@ public sealed class AcquisitionEnrichJobHandlerTests {
                 WaitingForMetadata: true)));
 
         var row = await db.Acquisitions.AsNoTracking().SingleAsync(acquisition => acquisition.Id == id);
-        Assert.Equal(AcquisitionStatus.ManualSearchRequired, row.Status);
+        Assert.Equal(AcquisitionStatus.WaitingForRelease, row.Status);
+        Assert.True(row.ReleaseDateMetadataUnavailable);
         Assert.Contains("did not return", row.StatusMessage);
         Assert.Contains("enter the date", row.StatusMessage);
     }
@@ -163,6 +164,7 @@ public sealed class AcquisitionEnrichJobHandlerTests {
 
         var row = await db.Acquisitions.AsNoTracking().SingleAsync(acquisition => acquisition.Id == id);
         Assert.Equal(AcquisitionStatus.WaitingForRelease, row.Status);
+        Assert.False(row.ReleaseDateMetadataUnavailable);
         Assert.Equal(id, Assert.Single(monitors.Due));
     }
 

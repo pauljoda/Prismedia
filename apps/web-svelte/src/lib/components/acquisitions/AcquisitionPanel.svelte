@@ -79,6 +79,10 @@
   const EDIT_QUERY_KEY = "edit";
 
   const status = $derived(detail?.summary.status ?? null);
+  const releaseDateMetadataUnavailable = $derived(
+    detail?.summary.releaseDateMetadataUnavailable === true ||
+      status === ACQUISITION_STATUS.manualSearchRequired,
+  );
   const hasResumableImport = $derived(detail?.summary.hasResumableImport === true);
   const canRetryImport = $derived(
     status === ACQUISITION_STATUS.manualImportRequired ||
@@ -302,13 +306,10 @@
     }
   }
 
-  // Re-search is offered whenever the item is still seeking a release — including a manual-import
-  // hold, where searching for a different release is a legitimate way out. In-flight grabs and
-  // imported/cancelled items are left alone (the server enforces the same gate).
+  // Waiting-for-release renders its own explicit Manual search action. The toolbar action remains for
+  // review, failed-search, and manual-import states where searching for another release is a way out.
   const canReSearch = $derived(
-    status === ACQUISITION_STATUS.waitingForRelease ||
-      status === ACQUISITION_STATUS.manualSearchRequired ||
-      status === ACQUISITION_STATUS.awaitingSelection ||
+    status === ACQUISITION_STATUS.awaitingSelection ||
       (status === ACQUISITION_STATUS.failed && !hasResumableImport) ||
       status === ACQUISITION_STATUS.manualImportRequired,
   );
@@ -419,24 +420,24 @@
         busy
       />
     {:else if status === ACQUISITION_STATUS.waitingForRelease || status === ACQUISITION_STATUS.manualSearchRequired}
-      {#if status === ACQUISITION_STATUS.manualSearchRequired}
-        <StatePlaceholder
-          icon={SearchX}
-          title="Release date unavailable"
-          description={detail.summary.statusMessage ?? "The configured metadata provider did not return the required release date. Leave this item waiting and check again later, search manually, or enter the date yourself."}
-        >
-          <Button type="button" variant="secondary" class="gap-1.5" onclick={openDateEditor}>
-            <PencilLine class="h-3.5 w-3.5" />
-            Enter release date
+      <StatePlaceholder
+        icon={CalendarClock}
+        title="Waiting for release"
+        description={detail.summary.statusMessage ?? "Automatic searches will begin when the configured release milestone arrives. You can still search manually now."}
+      >
+        <div class="flex flex-wrap items-center justify-center gap-2">
+          <Button type="button" variant="secondary" class="gap-1.5" disabled={busy} onclick={() => void reSearch()}>
+            <Search class="h-3.5 w-3.5" />
+            Manual search
           </Button>
-        </StatePlaceholder>
-      {:else}
-        <StatePlaceholder
-          icon={CalendarClock}
-          title="Waiting for release"
-          description={detail.summary.statusMessage ?? "Automatic searches will begin when the configured release milestone arrives. You can still search manually now."}
-        />
-      {/if}
+          {#if releaseDateMetadataUnavailable}
+            <Button type="button" variant="secondary" class="gap-1.5" onclick={openDateEditor}>
+              <PencilLine class="h-3.5 w-3.5" />
+              Enter release date
+            </Button>
+          {/if}
+        </div>
+      </StatePlaceholder>
     {:else if status === ACQUISITION_STATUS.searching}
       <StatePlaceholder
         icon={Search}

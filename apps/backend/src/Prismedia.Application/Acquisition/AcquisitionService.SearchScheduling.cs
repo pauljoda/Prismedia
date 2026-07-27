@@ -208,11 +208,10 @@ public sealed partial class AcquisitionService {
                 metadata.Kind,
                 cancellationToken);
         if (!timing.CanSearch) {
-            var waitingStatus = timing.WaitingForMetadata && metadata.ExternalIdentity is null
-                ? AcquisitionStatus.ManualSearchRequired
-                : AcquisitionStatus.WaitingForRelease;
-            var waitingMessage = waitingStatus == AcquisitionStatus.ManualSearchRequired
-                ? AcquisitionReleaseTimingService.ManualSearchRequiredMessage(timing.DateType)
+            var waitingStatus = AcquisitionStatus.WaitingForRelease;
+            var releaseDateUnavailable = timing.WaitingForMetadata && metadata.ExternalIdentity is null;
+            var waitingMessage = releaseDateUnavailable
+                ? AcquisitionReleaseTimingService.ReleaseDateUnavailableMessage(timing.DateType)
                 : timing.Message;
             if (!await store.TryTransitionStatusAsync(
                     summary.Id,
@@ -226,9 +225,16 @@ public sealed partial class AcquisitionService {
             summary = summary with {
                 Status = waitingStatus,
                 StatusMessage = waitingMessage,
-                UpdatedAt = DateTimeOffset.UtcNow
+                UpdatedAt = DateTimeOffset.UtcNow,
+                ReleaseDateMetadataUnavailable = releaseDateUnavailable
             };
-            if (timing.WaitingForMetadata && waitingStatus == AcquisitionStatus.WaitingForRelease) {
+            if (releaseDateUnavailable) {
+                await store.SetReleaseDateMetadataUnavailableAsync(
+                    summary.Id,
+                    unavailable: true,
+                    waitingMessage,
+                    cancellationToken);
+            } else if (timing.WaitingForMetadata) {
                 await EnqueueStandaloneEnrichmentAsync(
                     summary,
                     metadata,

@@ -13,7 +13,7 @@ describe("acquisition status", () => {
     expect(acquisitionStatusLabel(ACQUISITION_STATUS.pending)).toBe("Pending");
     expect(acquisitionStatusLabel(ACQUISITION_STATUS.searching)).toBe("Searching");
     expect(acquisitionStatusLabel(ACQUISITION_STATUS.waitingForRelease)).toBe("Waiting for release");
-    expect(acquisitionStatusLabel(ACQUISITION_STATUS.manualSearchRequired)).toBe("Manual search");
+    expect(acquisitionStatusLabel(ACQUISITION_STATUS.manualSearchRequired)).toBe("Waiting for release");
     expect(acquisitionStatusLabel(ACQUISITION_STATUS.awaitingSelection)).toBe("Choose release");
     expect(acquisitionStatusLabel(ACQUISITION_STATUS.queued)).toBe("Queued");
     expect(acquisitionStatusLabel(ACQUISITION_STATUS.downloading)).toBe("Downloading");
@@ -52,10 +52,10 @@ describe("acquisition status", () => {
     expect(acquisitionStatusShouldPoll(ACQUISITION_STATUS.waitingForRelease)).toBe(false);
   });
 
-  it("presents unavailable release metadata as manual Wanted work", () => {
+  it("presents legacy unavailable release metadata as a release wait", () => {
     expect(acquisitionStatusDisplay(ACQUISITION_STATUS.manualSearchRequired)).toMatchObject({
-      label: "Manual search",
-      tone: "attention",
+      label: "Waiting for release",
+      tone: "queued",
     });
     expect(acquisitionStatusShouldPoll(ACQUISITION_STATUS.manualSearchRequired)).toBe(false);
   });

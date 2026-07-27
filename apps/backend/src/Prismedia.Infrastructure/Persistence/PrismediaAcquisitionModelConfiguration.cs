@@ -209,6 +209,9 @@ internal static partial class PrismediaModelConfiguration {
                 .IsConcurrencyToken()
                 .IsRequired();
             entity.Property(row => row.StatusMessage).HasColumnName("status_message").HasMaxLength(2048);
+            entity.Property(row => row.ReleaseDateMetadataUnavailable)
+                .HasColumnName("release_date_metadata_unavailable")
+                .HasDefaultValue(false);
             entity.Property(row => row.TeardownIntent)
                 .HasColumnName("teardown_intent")
                 .HasMaxLength(32)

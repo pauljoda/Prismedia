@@ -171,6 +171,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Updated documentation, README screenshots, branding assets, install metadata, and app copy to match the current Prismedia v1 surface.
 
 ### Fixed
+- Streaming release gates now accept provider-supplied digital/VOD dates, remain visibly Waiting for release until the resolved date, and keep manual search as an action instead of a misleading lifecycle state. The date-entry prompt appears only after a completed provider lookup returns no compatible milestone.
 - Release calendar entries for seasons now include their series title and link to the season detail, while crowded dates collapse into an accessible full-day list instead of overflowing the month grid.
 - Durable provider gates now persist PostgreSQL leases and start intervals atomically, so concurrent workers cannot exceed MusicBrainz or other declared external-service limits; selected subtitle downloads also run in a foreground Entity lane instead of holding an API request open.
 - Newly imported videos now prioritize technical probing and subtitle reconciliation so they become playback-ready ahead of unrelated background work, and preview/trickplay jobs wait for probe metadata instead of surfacing false scan failures.

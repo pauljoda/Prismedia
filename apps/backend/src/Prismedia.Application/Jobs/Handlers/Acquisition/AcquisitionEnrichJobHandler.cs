@@ -11,8 +11,8 @@ namespace Prismedia.Application.Jobs.Handlers;
 /// Enriches a request from its originating metadata plugin after the interactive commit: resolves the
 /// cover, fuller description, and dates by persistent work identity and, for structural acquisition units,
 /// materializes their child graph from the same provider response. Best-effort — a provider miss or error
-/// leaves held descriptive metadata untouched; a successful release-date miss moves a release-gated request
-/// to manual search, while a transient provider error remains retryable. Import still runs authoritative
+/// leaves held descriptive metadata untouched; a successful release-date miss records that the date-entry
+/// prompt is now appropriate while the request remains WaitingForRelease. A transient provider error remains retryable. Import still runs authoritative
 /// auto-identify.
 /// </summary>
 public sealed class AcquisitionEnrichJobHandler(
@@ -98,14 +98,15 @@ public sealed class AcquisitionEnrichJobHandler(
 
     /// <summary>
     /// Re-evaluates a release gate after one completed provider pass. A newly available or removed gate is
-    /// made due for the monitor to claim; a still-missing configured date becomes an explicit manual state;
+    /// made due for the monitor to claim; a still-missing configured date enables the explicit date prompt;
     /// a known future date remains on its normal low-frequency monitor cadence.
     /// </summary>
     private async Task CompleteReleaseTimingRefreshAsync(
         AcquisitionImportContext import,
         CancellationToken cancellationToken) {
         if (releaseTiming is null
-            || await acquisitions.GetStatusAsync(import.Id, cancellationToken) != AcquisitionStatus.WaitingForRelease) {
+            || await acquisitions.GetStatusAsync(import.Id, cancellationToken) is not (
+                AcquisitionStatus.WaitingForRelease or AcquisitionStatus.ManualSearchRequired)) {
             return;
         }
 
@@ -115,6 +116,11 @@ public sealed class AcquisitionEnrichJobHandler(
             import.Kind,
             cancellationToken);
         if (timing.CanSearch) {
+            await acquisitions.SetReleaseDateMetadataUnavailableAsync(
+                import.Id,
+                unavailable: false,
+                message: null,
+                cancellationToken);
             if (monitors is not null) {
                 await monitors.MarkSearchDueByAcquisitionAsync(import.Id, cancellationToken);
             }
@@ -122,12 +128,18 @@ public sealed class AcquisitionEnrichJobHandler(
         }
 
         if (timing.WaitingForMetadata) {
-            await acquisitions.TryTransitionStatusAsync(
+            await acquisitions.SetReleaseDateMetadataUnavailableAsync(
                 import.Id,
-                [AcquisitionStatus.WaitingForRelease],
-                AcquisitionStatus.ManualSearchRequired,
-                AcquisitionReleaseTimingService.ManualSearchRequiredMessage(timing.DateType),
+                unavailable: true,
+                AcquisitionReleaseTimingService.ReleaseDateUnavailableMessage(timing.DateType),
                 cancellationToken);
+            return;
         }
+
+        await acquisitions.SetReleaseDateMetadataUnavailableAsync(
+            import.Id,
+            unavailable: false,
+            timing.Message,
+            cancellationToken);
     }
 }

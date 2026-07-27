@@ -128,7 +128,7 @@ export const AVAILABILITY_FILTER_DEFS = [
   { id: `${AVAILABILITY_PREFIX}${ACQUISITION_STATUS.pending}`, label: "Pending", capabilityKind: CAPABILITY_KIND.flags, value: ACQUISITION_STATUS.pending },
   { id: `${AVAILABILITY_PREFIX}${ACQUISITION_STATUS.searching}`, label: "Searching", capabilityKind: CAPABILITY_KIND.flags, value: ACQUISITION_STATUS.searching },
   { id: `${AVAILABILITY_PREFIX}${ACQUISITION_STATUS.waitingForRelease}`, label: "Waiting for release", capabilityKind: CAPABILITY_KIND.flags, value: ACQUISITION_STATUS.waitingForRelease },
-  { id: `${AVAILABILITY_PREFIX}${ACQUISITION_STATUS.manualSearchRequired}`, label: "Manual search", capabilityKind: CAPABILITY_KIND.flags, value: ACQUISITION_STATUS.manualSearchRequired },
+  { id: `${AVAILABILITY_PREFIX}${ACQUISITION_STATUS.manualSearchRequired}`, label: "Waiting for release", capabilityKind: CAPABILITY_KIND.flags, value: ACQUISITION_STATUS.manualSearchRequired },
   { id: `${AVAILABILITY_PREFIX}${ACQUISITION_STATUS.awaitingSelection}`, label: "Review", capabilityKind: CAPABILITY_KIND.flags, value: ACQUISITION_STATUS.awaitingSelection },
   { id: `${AVAILABILITY_PREFIX}${ACQUISITION_STATUS.queued}`, label: "Queued", capabilityKind: CAPABILITY_KIND.flags, value: ACQUISITION_STATUS.queued },
   { id: `${AVAILABILITY_PREFIX}${ACQUISITION_STATUS.downloading}`, label: "Downloading", capabilityKind: CAPABILITY_KIND.flags, value: ACQUISITION_STATUS.downloading },

@@ -444,6 +444,17 @@ public interface IAcquisitionLifecycleStore {
         CancellationToken cancellationToken);
 
     /// <summary>
+    /// Records whether a completed provider pass failed to supply the configured release milestone.
+    /// Release-gated items remain <see cref="AcquisitionStatus.WaitingForRelease"/>; this separate flag
+    /// controls the date-entry prompt without turning a manual-search action into lifecycle state.
+    /// </summary>
+    Task SetReleaseDateMetadataUnavailableAsync(
+        Guid id,
+        bool unavailable,
+        string? message,
+        CancellationToken cancellationToken) => Task.CompletedTask;
+
+    /// <summary>
     /// Atomically claims failed-download recovery only while both lifecycle and selected-release snapshot
     /// still match the failure payload. This prevents a stale job from taking over a cancelled or newly
     /// queued release.

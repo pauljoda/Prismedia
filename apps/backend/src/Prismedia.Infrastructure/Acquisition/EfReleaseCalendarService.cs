@@ -66,9 +66,7 @@ public sealed class EfReleaseCalendarService(PrismediaDbContext db, TimeProvider
         var dates = await db.EntityDates.AsNoTracking()
             .Where(date => visibleIds.Contains(date.EntityId)
                 && dateCodes.Contains(date.Code)
-                && date.SortableValue != null
-                && date.SortableValue >= start
-                && date.SortableValue <= end)
+                && date.SortableValue != null)
             .OrderBy(date => date.SortableValue)
             .ThenBy(date => date.Code)
             .ToArrayAsync(cancellationToken);
@@ -86,6 +84,9 @@ public sealed class EfReleaseCalendarService(PrismediaDbContext db, TimeProvider
         var today = DateOnly.FromDateTime(timeProvider.GetUtcNow().UtcDateTime);
         var result = new List<ReleaseCalendarEvent>(dates.Length);
         foreach (var date in dates) {
+            if (date.SortableValue < start || date.SortableValue > end) {
+                continue;
+            }
             if (!targetByEntity.TryGetValue(date.EntityId, out var target)
                 || !date.Code.TryDecodeAs<EntityDateType>(out var dateType)) {
                 continue;
@@ -100,7 +101,16 @@ public sealed class EfReleaseCalendarService(PrismediaDbContext db, TimeProvider
                 .OrderByDescending(candidate => candidate.IsDefault)
                 .ThenBy(candidate => candidate.CreatedAt)
                 .FirstOrDefault();
-            var isSearchGate = profile?.SearchAfterDateType == dateType;
+            var resolvedGateType = profile?.SearchAfterDateType is { } configuredGate
+                ? AcquisitionReleaseTimingService.ResolutionOrder(configuredGate)
+                    .Where(candidateType => dates.Any(candidate =>
+                        candidate.EntityId == date.EntityId
+                        && candidate.Code == candidateType.ToCode()
+                        && candidate.SortableValue != null))
+                    .Select(candidateType => (EntityDateType?)candidateType)
+                    .FirstOrDefault()
+                : (EntityDateType?)null;
+            var isSearchGate = resolvedGateType == dateType;
             var precision = date.Precision is { } precisionCode
                 && precisionCode.TryDecodeAs<DatePrecision>(out var decodedPrecision)
                     ? decodedPrecision

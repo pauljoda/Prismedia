@@ -41,4 +41,5 @@ export interface AcquisitionSummary {
   bookRendition?: AcquisitionSummaryBookRendition;
   /** @nullable */
   jobGraphId?: string | null;
+  releaseDateMetadataUnavailable?: boolean;
 }

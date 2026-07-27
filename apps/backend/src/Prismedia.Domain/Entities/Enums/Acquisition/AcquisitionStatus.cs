@@ -15,8 +15,8 @@ public enum AcquisitionStatus {
     WaitingForRelease,
 
     /// <summary>
-    /// The selected release milestone was not supplied by a metadata provider. Monitoring intent is
-    /// retained, but automatic searches pause until metadata changes or the user starts a manual search.
+    /// Legacy release-gate hold retained for wire and database compatibility. Current workflows normalize
+    /// this to <see cref="WaitingForRelease"/> and track a provider miss separately from lifecycle state.
     /// </summary>
     [Code("manual-search-required")]
     ManualSearchRequired,

@@ -46,9 +46,8 @@ export function acquisitionStatusDisplay(status: string | null | undefined): Acq
 
   switch (status) {
     case ACQUISITION_STATUS.waitingForRelease:
-      return { label: "Waiting for release", icon: CalendarClock, tone: "queued" };
     case ACQUISITION_STATUS.manualSearchRequired:
-      return { label: "Manual search", icon: Search, tone: "attention" };
+      return { label: "Waiting for release", icon: CalendarClock, tone: "queued" };
     case ACQUISITION_STATUS.searching:
     case ACQUISITION_STATUS.pending:
       return { label: "Searching", icon: Search, tone: "searching" };

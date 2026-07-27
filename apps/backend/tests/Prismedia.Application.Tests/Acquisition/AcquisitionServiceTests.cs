@@ -176,7 +176,7 @@ public sealed class AcquisitionServiceTests {
     }
 
     [Fact]
-    public async Task MissingReleaseDateWithoutProviderIdentityStartsInManualSearchState() {
+    public async Task MissingReleaseDateWithoutProviderIdentityRemainsWaitingAndEnablesDatePrompt() {
         var timing = new FixedReleaseTimingService(new AcquisitionReleaseTimingDecision(
             false,
             EntityDateType.PhysicalRelease,
@@ -191,7 +191,8 @@ public sealed class AcquisitionServiceTests {
                 EntityId: WantedEntityId),
             CancellationToken.None);
 
-        Assert.Equal(AcquisitionStatus.ManualSearchRequired, created.Status);
+        Assert.Equal(AcquisitionStatus.WaitingForRelease, created.Status);
+        Assert.True(created.ReleaseDateMetadataUnavailable);
         Assert.Contains("did not return", created.StatusMessage);
         Assert.Contains("enter the date", created.StatusMessage);
         Assert.Empty(harness.Queue.Requests);

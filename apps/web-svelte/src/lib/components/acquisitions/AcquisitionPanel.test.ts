@@ -221,21 +221,22 @@ describe("AcquisitionPanel", () => {
   });
 
   it("only prompts for a date after the provider returned no release date", async () => {
-    const manual = acquisition(ACQUISITION_STATUS.manualSearchRequired);
-    manual.summary.statusMessage = "The configured metadata provider did not return a streaming release date. This item is waiting: check again later, search manually, or enter the date yourself.";
-    mocks.fetchAcquisition.mockResolvedValue(manual);
+    const waiting = acquisition(ACQUISITION_STATUS.waitingForRelease);
+    waiting.summary.releaseDateMetadataUnavailable = true;
+    waiting.summary.statusMessage = "The configured metadata provider did not return a streaming release date. This item is waiting: check again later, search manually, or enter the date yourself.";
+    mocks.fetchAcquisition.mockResolvedValue(waiting);
     mocks.reSearchAcquisition.mockResolvedValue(acquisition(ACQUISITION_STATUS.searching));
 
     const view = render(AcquisitionPanel, {
       acquisitionId: "acquisition-1",
-      detail: manual,
+      detail: waiting,
     });
 
-    expect(await view.findByText("Release date unavailable")).toBeInTheDocument();
+    expect(await view.findAllByText("Waiting for release")).toHaveLength(2);
     expect(view.getAllByText(/provider did not return/i)).toHaveLength(2);
     await fireEvent.click(view.getByRole("button", { name: "Enter release date" }));
     expect(mocks.goto).toHaveBeenCalledWith("/?edit=dates#entity-dates-editor");
-    await fireEvent.click(view.getByRole("button", { name: "Search again" }));
+    await fireEvent.click(view.getByRole("button", { name: "Manual search" }));
     expect(mocks.reSearchAcquisition).toHaveBeenCalledWith("acquisition-1", undefined);
   });
 
@@ -250,8 +251,8 @@ describe("AcquisitionPanel", () => {
     });
 
     expect(await view.findAllByText("Waiting for release")).toHaveLength(2);
-    expect(view.queryByText("Release date unavailable")).toBeNull();
     expect(view.queryByRole("button", { name: "Enter release date" })).toBeNull();
+    expect(view.getByRole("button", { name: "Manual search" })).toBeInTheDocument();
   });
 
   it("submits an exact custom term from release review", async () => {

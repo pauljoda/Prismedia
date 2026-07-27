@@ -131,6 +131,70 @@ public sealed class EfReleaseCalendarServiceTests {
         Assert.Equal("It's Always Sunny in Philadelphia", calendarEvent.ParentTitle);
     }
 
+    [Fact]
+    public async Task MarksDigitalVodAsTheGateForAStreamingPreference() {
+        await using var db = CreateContext();
+        var now = new DateTimeOffset(2026, 7, 24, 12, 0, 0, TimeSpan.Zero);
+        var entityId = Guid.NewGuid();
+        var profileId = Guid.NewGuid();
+        var acquisitionId = Guid.NewGuid();
+        db.Entities.Add(new EntityRow {
+            Id = entityId,
+            KindCode = EntityKind.Movie.ToCode(),
+            Title = "Avatar Aang: The Last Airbender",
+            IsWanted = true,
+            CreatedAt = now,
+            UpdatedAt = now
+        });
+        db.BookAcquisitionProfiles.Add(new BookAcquisitionProfileRow {
+            Id = profileId,
+            Kind = EntityKind.Movie,
+            DisplayName = "Wait for streaming",
+            TargetLibraryRootId = Guid.NewGuid(),
+            PathTemplate = MediaNamingTemplates.MovieDefault,
+            SearchAfterDateType = EntityDateType.StreamingRelease,
+            CreatedAt = now,
+            UpdatedAt = now
+        });
+        db.Acquisitions.Add(new AcquisitionRow {
+            Id = acquisitionId,
+            EntityId = entityId,
+            ProfileId = profileId,
+            Kind = EntityKind.Movie,
+            Status = AcquisitionStatus.WaitingForRelease,
+            Title = "Avatar Aang: The Last Airbender",
+            CreatedAt = now,
+            UpdatedAt = now
+        });
+        db.Monitors.Add(new MonitorRow {
+            Id = Guid.NewGuid(),
+            EntityId = entityId,
+            AcquisitionId = acquisitionId,
+            Kind = EntityKind.Movie,
+            Status = MonitorStatus.Active,
+            Title = "Avatar Aang: The Last Airbender",
+            CreatedAt = now,
+            UpdatedAt = now
+        });
+        db.EntityDates.Add(Date(
+            entityId,
+            EntityDateType.DigitalRelease,
+            "2026-07-25",
+            new DateOnly(2026, 7, 25),
+            now));
+        await db.SaveChangesAsync();
+
+        var calendarEvent = Assert.Single(await new EfReleaseCalendarService(db, new FixedTimeProvider(now)).ListAsync(
+            new DateOnly(2026, 7, 1),
+            new DateOnly(2026, 7, 31),
+            hideNsfw: false,
+            CancellationToken.None));
+
+        Assert.Equal(EntityDateType.DigitalRelease, calendarEvent.DateType);
+        Assert.True(calendarEvent.IsSearchGate);
+        Assert.Equal(new DateOnly(2026, 7, 25), calendarEvent.SearchNotBefore);
+    }
+
     private static EntityDateRow Date(
         Guid entityId,
         EntityDateType type,
