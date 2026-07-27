@@ -93,6 +93,8 @@ public sealed record JobGraphSummary(
     int Progress,
     int NodeCount,
     int CompletedNodeCount,
+    int FailedNodeCount,
+    int TerminalNodeCount,
     int WarningCount,
     JobType? CurrentNodeType,
     string? WaitReason,

@@ -610,6 +610,8 @@ public sealed partial class JobQueueService : IJobQueueService {
             throw new ArgumentOutOfRangeException(nameof(staleAfter), staleAfter, "Stale timeout must be positive.");
         }
 
+        await JobResourceDeclaration.RepairQueuedEntityResourcesAsync(_db, cancellationToken);
+
         var now = DateTimeOffset.UtcNow;
         var cutoff = now.Subtract(staleAfter);
         var rows = await _db.JobRuns
@@ -636,9 +638,26 @@ public sealed partial class JobQueueService : IJobQueueService {
             foreach (var row in rows) {
                 await ReleaseResourceLeaseAsync(row.Id, cancellationToken);
             }
-            foreach (var graphId in rows.Where(row => row.GraphId is not null).Select(row => row.GraphId!.Value).Distinct()) {
-                await ReconcileGraphStateAsync(graphId, cancellationToken);
-            }
+        }
+
+        var orphanedGraphIds = await _db.JobGraphs.AsNoTracking()
+            .Where(graph => graph.Status == JobGraphStatus.Queued
+                || graph.Status == JobGraphStatus.Running
+                || graph.Status == JobGraphStatus.Waiting)
+            .Where(graph => !_db.JobRuns.Any(run => run.GraphId == graph.Id
+                && (run.Status == JobRunStatus.Queued || run.Status == JobRunStatus.Running)))
+            .Where(graph => !_db.JobGraphSignals.Any(signal => signal.GraphId == graph.Id
+                && signal.ResolvedAt == null
+                && signal.CancelledAt == null))
+            .Select(graph => graph.Id)
+            .ToArrayAsync(cancellationToken);
+        var affectedGraphIds = rows
+            .Where(row => row.GraphId is not null)
+            .Select(row => row.GraphId!.Value)
+            .Concat(orphanedGraphIds)
+            .Distinct();
+        foreach (var graphId in affectedGraphIds) {
+            await ReconcileGraphStateAsync(graphId, cancellationToken);
         }
 
         return rows.Count;
@@ -733,20 +752,25 @@ public sealed partial class JobQueueService : IJobQueueService {
         for (var attempt = 0; ; attempt++) {
             var row = await _db.JobRuns.FindAsync([id], cancellationToken);
             var wasRunning = row?.Status == JobRunStatus.Running;
+            var previousStatus = row?.Status;
             if (row is null || !mutate(row)) {
                 return false;
             }
 
             try {
                 await _db.SaveChangesAsync(cancellationToken);
-                if (wasRunning && row.Status != JobRunStatus.Running) {
-                    await ReleaseResourceLeaseAsync(id, cancellationToken);
-                }
-                await ReconcileGraphStateAsync(row.GraphId, cancellationToken);
-                return true;
             } catch (DbUpdateConcurrencyException) when (attempt < maxConcurrencyRetries) {
                 await _db.Entry(row).ReloadAsync(cancellationToken);
+                continue;
             }
+
+            if (wasRunning && row.Status != JobRunStatus.Running) {
+                await ReleaseResourceLeaseAsync(id, cancellationToken);
+            }
+            if (previousStatus != row.Status) {
+                await ReconcileGraphStateAsync(row.GraphId, cancellationToken);
+            }
+            return true;
         }
     }
 

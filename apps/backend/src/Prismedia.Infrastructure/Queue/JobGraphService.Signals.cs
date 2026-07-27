@@ -14,8 +14,9 @@ public sealed partial class JobGraphService {
         string? message,
         CancellationToken cancellationToken) {
         ArgumentException.ThrowIfNullOrWhiteSpace(key);
-        var graph = await db.JobGraphs.FindAsync([graphId], cancellationToken)
+        await using var mutation = await JobGraphMutationScope.AcquireAsync(db, graphId, cancellationToken)
             ?? throw new InvalidOperationException($"Job graph '{graphId}' was not found.");
+        var graph = mutation.Graph;
         if (graph.Status is JobGraphStatus.Completed or JobGraphStatus.CompletedWithWarnings
             or JobGraphStatus.Failed or JobGraphStatus.Cancelled) {
             throw new InvalidOperationException($"Job graph '{graphId}' is already terminal.");
@@ -23,7 +24,10 @@ public sealed partial class JobGraphService {
 
         var existing = await db.JobGraphSignals.AsNoTracking()
             .SingleOrDefaultAsync(signal => signal.GraphId == graphId && signal.Key == key, cancellationToken);
-        if (existing is not null) return ToSnapshot(existing);
+        if (existing is not null) {
+            await mutation.CommitAsync(cancellationToken);
+            return ToSnapshot(existing);
+        }
 
         var now = DateTimeOffset.UtcNow;
         var row = new JobGraphSignalRow {
@@ -49,6 +53,7 @@ public sealed partial class JobGraphService {
                 : JobGraphStatus.Waiting;
         graph.UpdatedAt = now;
         await db.SaveChangesAsync(cancellationToken);
+        await mutation.CommitAsync(cancellationToken);
         return ToSnapshot(row);
     }
 
@@ -58,9 +63,8 @@ public sealed partial class JobGraphService {
         IReadOnlyList<GraphJobNodeRequest> continuationNodes,
         CancellationToken cancellationToken) {
         ArgumentException.ThrowIfNullOrWhiteSpace(key);
-        await using var transaction = db.Database.IsRelational()
-            ? await db.Database.BeginTransactionAsync(cancellationToken)
-            : null;
+        await using var mutation = await JobGraphMutationScope.AcquireAsync(db, graphId, cancellationToken)
+            ?? throw new InvalidOperationException($"Job graph '{graphId}' was not found.");
         var signal = await db.JobGraphSignals
             .SingleOrDefaultAsync(item => item.GraphId == graphId && item.Key == key, cancellationToken)
             ?? throw new InvalidOperationException($"Signal '{key}' was not found in graph '{graphId}'.");
@@ -102,14 +106,15 @@ public sealed partial class JobGraphService {
         }
         graph.UpdatedAt = DateTimeOffset.UtcNow;
         await db.SaveChangesAsync(cancellationToken);
-        if (transaction is not null) await transaction.CommitAsync(cancellationToken);
+        await mutation.CommitAsync(cancellationToken);
         return ToSnapshot(signal);
     }
 
     public async Task<bool> CancelAsync(Guid graphId, CancellationToken cancellationToken) {
-        var graph = await db.JobGraphs.FindAsync([graphId], cancellationToken);
-        if (graph is null || graph.Status is JobGraphStatus.Completed or JobGraphStatus.CompletedWithWarnings
+        await using var mutation = await JobGraphMutationScope.AcquireAsync(db, graphId, cancellationToken);
+        if (mutation is null || mutation.Graph.Status is JobGraphStatus.Completed or JobGraphStatus.CompletedWithWarnings
             or JobGraphStatus.Failed or JobGraphStatus.Cancelled) return false;
+        var graph = mutation.Graph;
 
         var now = DateTimeOffset.UtcNow;
         var runs = await db.JobRuns
@@ -136,6 +141,7 @@ public sealed partial class JobGraphService {
         graph.UpdatedAt = now;
         graph.FinishedAt = now;
         await db.SaveChangesAsync(cancellationToken);
+        await mutation.CommitAsync(cancellationToken);
         return true;
     }
 

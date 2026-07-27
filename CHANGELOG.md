@@ -172,6 +172,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Updated documentation, README screenshots, branding assets, install metadata, and app copy to match the current Prismedia v1 surface.
 
 ### Fixed
+- Interactive acquisition imports now resume immediately after download completion, including imports already queued before upgrading; graph continuations declare their entity gate automatically and startup repairs missing scheduler state.
+- Large scan graphs no longer fail media probes, subtitle extraction, or previews through graph-level PostgreSQL concurrency conflicts, and stale graphs whose nodes are already terminal repair their displayed status automatically.
+- Audio probes now persist complete media-source state, preventing unchanged tracks from being re-probed on every scheduled audio scan.
+- Jobs now distinguish completed and failed lanes from genuine waits, count all terminal nodes in progress, expose failed-node totals, and describe entity serialization as queued exclusive access instead of an unexplained change wait.
 - Streaming release gates now accept provider-supplied digital/VOD dates, remain visibly Waiting for release until the resolved date, and keep manual search as an action instead of a misleading lifecycle state. The date-entry prompt appears only after a completed provider lookup returns no compatible milestone.
 - Release calendar entries for seasons now include their series title and link to the season detail, while crowded dates collapse into an accessible full-day list instead of overflowing the month grid.
 - Durable provider gates now persist PostgreSQL leases and start intervals atomically, so concurrent workers cannot exceed MusicBrainz or other declared external-service limits; selected subtitle downloads also run in a foreground Entity lane instead of holding an API request open.

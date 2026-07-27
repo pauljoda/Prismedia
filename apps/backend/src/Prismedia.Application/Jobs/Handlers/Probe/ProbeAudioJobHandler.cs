@@ -36,6 +36,34 @@ public sealed class ProbeAudioJobHandler(
             probe.DurationSeconds, null, null, null, probe.BitRate,
             probe.SampleRate, probe.Channels, probe.Codec, probe.Container, null,
             cancellationToken);
+        await Persistence.UpsertMediaSourceAsync(
+            entityId,
+            filePath,
+            new MediaSourceProbeData(
+                probe.DurationSeconds,
+                probe.FileSize,
+                probe.BitRate,
+                probe.Container,
+                null,
+                probe.Codec,
+                null,
+                null,
+                null),
+            [new MediaStreamProbeData(
+                0,
+                "Audio",
+                probe.Codec,
+                null,
+                "Audio",
+                null,
+                null,
+                null,
+                probe.BitRate,
+                probe.SampleRate,
+                probe.Channels,
+                IsDefault: true,
+                IsForced: false)],
+            cancellationToken);
 
         var trackNumber = ParseTrackNumber(probe.TrackNumber);
         if (probe.Artist is not null || probe.Album is not null || trackNumber is not null) {

@@ -47,7 +47,8 @@
 
   const progress = $derived(Math.max(0, Math.min(100, Number(graph.progress))));
   const nodeCount = $derived(Number(graph.nodeCount));
-  const completeCount = $derived(Number(graph.completedNodeCount));
+  const terminalCount = $derived(Number(graph.terminalNodeCount));
+  const failedCount = $derived(Number(graph.failedNodeCount));
   const warningCount = $derived(Number(graph.warningCount));
   const isActive = $derived(
     graph.status === JOB_GRAPH_STATUS.queued ||
@@ -134,8 +135,8 @@
       </div>
 
       <div class="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[0.7rem] text-text-muted">
-        <span>{jobLabelForType(graph.currentNodeType)}</span>
-        <span>{completeCount}/{nodeCount} nodes</span>
+        <span>{jobLabelForType(graph.currentNodeType, graph.status)}</span>
+        <span>{terminalCount}/{nodeCount} nodes</span>
         {#if graph.rootEntityKind}
           <span>{graph.rootEntityKind}</span>
         {/if}
@@ -143,6 +144,11 @@
         {#if warningCount > 0}
           <span class="flex items-center gap-1 text-status-warning-text">
             <AlertTriangle class="h-3 w-3" /> {warningCount} warning{warningCount === 1 ? "" : "s"}
+          </span>
+        {/if}
+        {#if failedCount > 0}
+          <span class="text-status-error-text">
+            {failedCount} failed
           </span>
         {/if}
       </div>

@@ -8,8 +8,9 @@ public sealed partial class JobQueueService {
     private async Task ReconcileGraphStateAsync(Guid? graphId, CancellationToken cancellationToken) {
         if (graphId is not { } id) return;
 
-        var graph = await _db.JobGraphs.FindAsync([id], cancellationToken);
-        if (graph is null) return;
+        await using var mutation = await JobGraphMutationScope.AcquireAsync(_db, id, cancellationToken);
+        if (mutation is null) return;
+        var graph = mutation.Graph;
 
         var runs = await _db.JobRuns
             .Where(run => run.GraphId == id)
@@ -82,5 +83,6 @@ public sealed partial class JobQueueService {
 
         graph.UpdatedAt = nowUtc;
         await _db.SaveChangesAsync(cancellationToken);
+        await mutation.CommitAsync(cancellationToken);
     }
 }

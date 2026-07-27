@@ -280,16 +280,36 @@ public sealed class JobService {
     private static JobGraphSummary ToSummary(JobGraphDetailSnapshot detail) {
         var nodes = detail.Nodes;
         var completed = nodes.Count(node => node.Status == JobRunStatus.Completed);
+        var failed = nodes.Count(node => node.Status == JobRunStatus.Failed);
+        var terminal = nodes.Count(node => node.Status is
+            JobRunStatus.Completed or JobRunStatus.Failed or JobRunStatus.Cancelled);
         var warnings = nodes.Count(node =>
             node.Status == JobRunStatus.Failed && node.Importance == JobNodeImportance.BestEffort);
+        var nodeStatusById = nodes.ToDictionary(node => node.Id, node => node.Status);
+        var dependencyBlocked = detail.Dependencies
+            .Where(edge => !nodeStatusById.TryGetValue(edge.PredecessorRunId, out var predecessorStatus)
+                || predecessorStatus != JobRunStatus.Completed)
+            .Select(edge => edge.SuccessorRunId)
+            .ToHashSet();
         var current = nodes.FirstOrDefault(node => node.Status == JobRunStatus.Running)
+            ?? nodes.FirstOrDefault(node =>
+                node.Status == JobRunStatus.Queued && !dependencyBlocked.Contains(node.Id))
             ?? nodes.FirstOrDefault(node => node.Status == JobRunStatus.Queued);
         var openSignal = detail.Signals.FirstOrDefault(signal => signal.ResolvedAt is null && signal.CancelledAt is null);
         var waitReason = openSignal?.Message
-            ?? (current?.ResourceKey is { } resourceKey ? ResourceWaitReason(resourceKey) : current?.Message);
+            ?? (current?.Status == JobRunStatus.Queued
+                ? dependencyBlocked.Contains(current.Id)
+                    ? "Waiting for dependencies."
+                    : current.ResourceKey is { } resourceKey
+                        ? ResourceWaitReason(resourceKey)
+                        : current.Message
+                : null);
         var progress = nodes.Count == 0
             ? 0
-            : (int)Math.Round(nodes.Average(node => node.Progress));
+            : (int)Math.Round(nodes.Average(node => node.Status is
+                JobRunStatus.Completed or JobRunStatus.Failed or JobRunStatus.Cancelled
+                    ? 100
+                    : node.Progress));
         return new JobGraphSummary(
             detail.Graph.Id,
             detail.Graph.Origin,
@@ -300,6 +320,8 @@ public sealed class JobService {
             progress,
             nodes.Count,
             completed,
+            failed,
+            terminal,
             warnings,
             current?.Type,
             waitReason,
@@ -319,7 +341,7 @@ public sealed class JobService {
         }
 
         return resourceKey.StartsWith(JobResourceKeys.EntityPrefix, StringComparison.Ordinal)
-            ? "Waiting for another change to this entity."
+            ? "Queued for exclusive entity access."
             : "Waiting for a shared resource.";
     }
 

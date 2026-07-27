@@ -220,6 +220,7 @@ public sealed class JobGraphServiceTests {
             CancellationToken.None);
         var root = await db.JobRuns.SingleAsync();
         root.MaxAttempts = 1;
+        await db.SaveChangesAsync();
         await graphs.AppendNodeAsync(
             graph.Id,
             new GraphJobNodeRequest(
@@ -280,6 +281,113 @@ public sealed class JobGraphServiceTests {
 
         Assert.Single((await graphs.GetAsync(graph.Id, CancellationToken.None))!.Nodes, node => node.NodeKey == "apply");
         Assert.NotNull(await queue.ClaimNextGraphNodeAsync("worker", JobGraphOrigin.Interactive, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task SignalContinuationDeclaresItsEntityResourceBeforeItBecomesRunnable() {
+        await using var db = CreateContext();
+        var graphs = new JobGraphService(db);
+        var queue = new JobQueueService(db);
+        var graph = await graphs.StartAsync(
+            new StartJobGraphRequest(
+                JobGraphOrigin.Interactive,
+                "Downloaded movie",
+                new GraphJobNodeRequest("search", new EnqueueJobRequest(JobType.AcquisitionSearch))),
+            CancellationToken.None);
+        var search = await queue.ClaimNextGraphNodeAsync(
+            "worker",
+            JobGraphOrigin.Interactive,
+            CancellationToken.None);
+        await graphs.OpenSignalAsync(
+            graph.Id,
+            "download",
+            JobGraphSignalKind.ExternalTransfer,
+            null,
+            "Waiting for download",
+            CancellationToken.None);
+        await queue.CompleteAsync(search!.Id, "download submitted", CancellationToken.None);
+
+        var entityId = Guid.NewGuid();
+        await graphs.ResolveSignalAsync(
+            graph.Id,
+            "download",
+            [new GraphJobNodeRequest(
+                "import",
+                new EnqueueJobRequest(
+                    JobType.AcquisitionImport,
+                    TargetEntityKind: EntityKind.Movie.ToCode(),
+                    TargetEntityId: Guid.NewGuid().ToString()),
+                ResourceKey: JobResourceKeys.Entity(entityId.ToString()))],
+            CancellationToken.None);
+
+        Assert.Contains(
+            await db.JobResourceStates.AsNoTracking().ToArrayAsync(),
+            resource => resource.Key == JobResourceKeys.Entity(entityId.ToString()));
+        var import = await queue.ClaimNextGraphNodeAsync(
+            "worker",
+            JobGraphOrigin.Interactive,
+            CancellationToken.None);
+        Assert.Equal(JobType.AcquisitionImport, import?.Type);
+    }
+
+    [Fact]
+    public async Task RecoveryReconcilesAnActiveGraphWhoseNodesAreAlreadyTerminal() {
+        await using var db = CreateContext();
+        var graphs = new JobGraphService(db);
+        var queue = new JobQueueService(db);
+        var graph = await graphs.StartAsync(
+            new StartJobGraphRequest(
+                JobGraphOrigin.Background,
+                "Broken scan",
+                new GraphJobNodeRequest("scan", new EnqueueJobRequest(JobType.ScanAudio))),
+            CancellationToken.None);
+        var run = await db.JobRuns.SingleAsync();
+        run.Status = JobRunStatus.Failed;
+        run.FinishedAt = DateTimeOffset.UtcNow;
+        var graphRow = await db.JobGraphs.SingleAsync();
+        graphRow.Status = JobGraphStatus.Running;
+        graphRow.FinishedAt = null;
+        await db.SaveChangesAsync();
+
+        await queue.RecoverStaleRunningAsync(
+            "worker",
+            TimeSpan.FromMinutes(1),
+            CancellationToken.None);
+
+        db.ChangeTracker.Clear();
+        var repaired = await db.JobGraphs.SingleAsync(row => row.Id == graph.Id);
+        Assert.Equal(JobGraphStatus.Failed, repaired.Status);
+        Assert.NotNull(repaired.FinishedAt);
+    }
+
+    [Fact]
+    public async Task RecoveryDeclaresEntityResourcesForPreviouslyQueuedNodes() {
+        await using var db = CreateContext();
+        var graphs = new JobGraphService(db);
+        var queue = new JobQueueService(db);
+        var graph = await graphs.StartAsync(
+            new StartJobGraphRequest(
+                JobGraphOrigin.Interactive,
+                "Existing downloaded movie",
+                new GraphJobNodeRequest("import", new EnqueueJobRequest(JobType.AcquisitionImport))),
+            CancellationToken.None);
+        var entityResource = JobResourceKeys.Entity(Guid.NewGuid().ToString());
+        var run = await db.JobRuns.SingleAsync(row => row.GraphId == graph.Id);
+        run.ResourceKey = entityResource;
+        await db.SaveChangesAsync();
+
+        await queue.RecoverStaleRunningAsync(
+            "worker",
+            TimeSpan.FromMinutes(1),
+            CancellationToken.None);
+
+        Assert.Contains(
+            await db.JobResourceStates.AsNoTracking().ToArrayAsync(),
+            resource => resource.Key == entityResource);
+        Assert.NotNull(await queue.ClaimNextGraphNodeAsync(
+            "worker",
+            JobGraphOrigin.Interactive,
+            CancellationToken.None));
     }
 
     [Fact]

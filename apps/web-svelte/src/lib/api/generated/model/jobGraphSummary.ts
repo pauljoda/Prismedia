@@ -24,6 +24,10 @@ export interface JobGraphSummary {
   /** @pattern ^-?(?:0|[1-9]\d*)$ */
   completedNodeCount: number | string;
   /** @pattern ^-?(?:0|[1-9]\d*)$ */
+  failedNodeCount: number | string;
+  /** @pattern ^-?(?:0|[1-9]\d*)$ */
+  terminalNodeCount: number | string;
+  /** @pattern ^-?(?:0|[1-9]\d*)$ */
   warningCount: number | string;
   currentNodeType: null | JobType;
   /** @nullable */

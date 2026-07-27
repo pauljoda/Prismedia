@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { buildJobsDashboard, groupJobRunsByKind, mapJobRun } from "./jobs-dashboard";
+import { JOB_GRAPH_STATUS } from "$lib/api/generated/codes";
+import { buildJobsDashboard, groupJobRunsByKind, jobLabelForType, mapJobRun } from "./jobs-dashboard";
 import type { JobRun } from "$lib/api/generated/model";
 
 const baseJob: JobRun = {
@@ -17,6 +18,16 @@ const baseJob: JobRun = {
 };
 
 describe("jobs dashboard adapter", () => {
+  it("uses the graph status when a terminal graph has no current node", () => {
+    expect(jobLabelForType(null, JOB_GRAPH_STATUS.completed)).toBe("Completed");
+    expect(jobLabelForType(null, JOB_GRAPH_STATUS.completedWithWarnings)).toBe("Completed with warnings");
+    expect(jobLabelForType(null, JOB_GRAPH_STATUS.failed)).toBe("Failed");
+    expect(jobLabelForType(null, JOB_GRAPH_STATUS.cancelled)).toBe("Cancelled");
+    expect(jobLabelForType(null, JOB_GRAPH_STATUS.running)).toBe("Running");
+    expect(jobLabelForType(null, JOB_GRAPH_STATUS.queued)).toBe("Queued");
+    expect(jobLabelForType(null, JOB_GRAPH_STATUS.waiting)).toBe("Waiting");
+  });
+
   it("maps job lifecycle codes into the existing jobs page run shape", () => {
     expect(mapJobRun({ ...baseJob, status: "queued" }).status).toBe("waiting");
     expect(mapJobRun({ ...baseJob, status: "running" }).status).toBe("active");

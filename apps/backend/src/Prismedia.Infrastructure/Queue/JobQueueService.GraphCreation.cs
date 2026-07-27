@@ -81,26 +81,12 @@ public sealed partial class JobQueueService {
     }
 
     private static string? EntityResourceKey(EnqueueJobRequest request) =>
-        request.TargetEntityId is null || request.TargetEntityKind is null
-            ? null
-            : JobResourceKeys.Entity(request.TargetEntityId);
+        JobResourceDeclaration.EntityKey(request);
 
     private async Task EnsureEntityResourceDeclaredAsync(
         string? resourceKey,
         CancellationToken cancellationToken) {
-        if (resourceKey is null || !JobResourceKeys.IsEntity(resourceKey)) return;
-        if (_db.JobResourceStates.Local.Any(resource => resource.Key == resourceKey) ||
-            await _db.JobResourceStates.AnyAsync(resource => resource.Key == resourceKey, cancellationToken)) {
-            return;
-        }
-
-        _db.JobResourceStates.Add(new JobResourceStateRow {
-            Key = resourceKey,
-            MaxConcurrency = 1,
-            MinimumStartIntervalMs = 0,
-            NextAvailableAt = DateTimeOffset.MinValue,
-            UpdatedAt = DateTimeOffset.UtcNow
-        });
+        await JobResourceDeclaration.EnsureImplicitAsync(_db, resourceKey, cancellationToken);
     }
 
     internal static JobRunSnapshot ToSnapshot(JobRunRow row, JobGraphOrigin? graphOrigin = null) {

@@ -1,5 +1,10 @@
-import { JobRunStatus, type JobQueueCountDto, type JobRun as ApiJobRun } from "$lib/api/generated/model";
-import { JOB_TYPE, type JobTypeCode } from "$lib/api/generated/codes";
+import {
+  JobRunStatus,
+  type JobGraphStatus as ApiJobGraphStatus,
+  type JobQueueCountDto,
+  type JobRun as ApiJobRun,
+} from "$lib/api/generated/model";
+import { JOB_GRAPH_STATUS, JOB_TYPE, type JobTypeCode } from "$lib/api/generated/codes";
 import {
   type JobRun as DashboardJobRun,
   type JobRunGroup,
@@ -382,8 +387,15 @@ export function mapJobRun(job: ApiJobRun): DashboardJobRun {
   };
 }
 
-export function jobLabelForType(type: string | null): string {
-  return type ? definitionForJob(type).label : "Waiting";
+export function jobLabelForType(type: string | null, graphStatus?: ApiJobGraphStatus): string {
+  if (type) return definitionForJob(type).label;
+  if (graphStatus === JOB_GRAPH_STATUS.completed) return "Completed";
+  if (graphStatus === JOB_GRAPH_STATUS.completedWithWarnings) return "Completed with warnings";
+  if (graphStatus === JOB_GRAPH_STATUS.failed) return "Failed";
+  if (graphStatus === JOB_GRAPH_STATUS.cancelled) return "Cancelled";
+  if (graphStatus === JOB_GRAPH_STATUS.running) return "Running";
+  if (graphStatus === JOB_GRAPH_STATUS.queued) return "Queued";
+  return "Waiting";
 }
 
 export function groupJobRunsByKind(jobs: readonly DashboardJobRun[]): JobRunGroup[] {

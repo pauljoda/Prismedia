@@ -43,6 +43,7 @@ public sealed partial class JobGraphService(PrismediaDbContext db) : IJobGraphSe
             UpdatedAt = now
         };
         var root = CreateRun(graphId, rootRunId, request.Root, sequence: 0, now);
+        await JobResourceDeclaration.EnsureImplicitAsync(db, root.ResourceKey, cancellationToken);
 
         db.JobGraphs.Add(graph);
         db.JobRuns.Add(root);
@@ -74,8 +75,9 @@ public sealed partial class JobGraphService(PrismediaDbContext db) : IJobGraphSe
         GraphJobNodeRequest request,
         CancellationToken cancellationToken) {
         ValidateNodeRequest(request);
-        var graph = await db.JobGraphs.FindAsync([graphId], cancellationToken)
+        await using var mutation = await JobGraphMutationScope.AcquireAsync(db, graphId, cancellationToken)
             ?? throw new InvalidOperationException($"Job graph '{graphId}' was not found.");
+        var graph = mutation.Graph;
         if (graph.Status is JobGraphStatus.Completed or JobGraphStatus.CompletedWithWarnings
             or JobGraphStatus.Failed or JobGraphStatus.Cancelled) {
             throw new InvalidOperationException($"Job graph '{graphId}' is already terminal.");
@@ -86,6 +88,9 @@ public sealed partial class JobGraphService(PrismediaDbContext db) : IJobGraphSe
                 run => run.GraphId == graphId && run.NodeKey == request.NodeKey,
                 cancellationToken);
         if (existing is not null) {
+            await JobResourceDeclaration.EnsureImplicitAsync(db, existing.ResourceKey, cancellationToken);
+            await db.SaveChangesAsync(cancellationToken);
+            await mutation.CommitAsync(cancellationToken);
             return JobQueueService.ToSnapshot(existing, graph.Origin);
         }
 
@@ -96,6 +101,7 @@ public sealed partial class JobGraphService(PrismediaDbContext db) : IJobGraphSe
             .MaxAsync(cancellationToken) ?? -1;
         var now = DateTimeOffset.UtcNow;
         var row = CreateRun(graphId, Guid.NewGuid(), request, sequence + 1, now);
+        await JobResourceDeclaration.EnsureImplicitAsync(db, row.ResourceKey, cancellationToken);
         db.JobRuns.Add(row);
         AddDependencies(graphId, row.Id, request.DependsOn);
         if (graph.Status == JobGraphStatus.Waiting) {
@@ -104,20 +110,8 @@ public sealed partial class JobGraphService(PrismediaDbContext db) : IJobGraphSe
         }
         graph.UpdatedAt = now;
 
-        try {
-            await db.SaveChangesAsync(cancellationToken);
-        } catch (DbUpdateException) {
-            db.ChangeTracker.Clear();
-            existing = await db.JobRuns.AsNoTracking()
-                .SingleOrDefaultAsync(
-                    run => run.GraphId == graphId && run.NodeKey == request.NodeKey,
-                    cancellationToken);
-            if (existing is null) {
-                throw;
-            }
-
-            return JobQueueService.ToSnapshot(existing, graph.Origin);
-        }
+        await db.SaveChangesAsync(cancellationToken);
+        await mutation.CommitAsync(cancellationToken);
 
         return JobQueueService.ToSnapshot(row, graph.Origin);
     }
@@ -182,7 +176,7 @@ public sealed partial class JobGraphService(PrismediaDbContext db) : IJobGraphSe
             ParentRunId = request.ParentRunId,
             Importance = request.Importance,
             ResourceClass = request.ResourceClass,
-            ResourceKey = request.ResourceKey,
+            ResourceKey = JobResourceDeclaration.Resolve(request),
             Sequence = sequence,
             Type = request.Job.Type,
             Status = JobRunStatus.Queued,

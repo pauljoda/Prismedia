@@ -1,17 +1,68 @@
 using Microsoft.EntityFrameworkCore;
 using Prismedia.Application.Entities;
 using Prismedia.Application.Jobs.Ports;
+using Prismedia.Application.Jobs;
+using Prismedia.Application.Jobs.Handlers.Probe;
 using Prismedia.Contracts.Media;
 using Prismedia.Domain.Entities;
 using Prismedia.Infrastructure.Media.Processing;
 using Prismedia.Infrastructure.Media.Persistence;
 using Prismedia.Infrastructure.Persistence;
 using Prismedia.Infrastructure.Persistence.Entities;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Prismedia.Infrastructure.Tests;
 
 public sealed class LibraryScanPersistenceServiceTests {
     private static readonly Guid RootId = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
+
+    [Fact]
+    public async Task SuccessfulAudioProbePersistsACompleteMediaSourceAndStopsFutureProbeScheduling() {
+        var sourcePath = Path.Combine(Path.GetTempPath(), $"prismedia-audio-probe-{Guid.NewGuid():N}.flac");
+        await File.WriteAllBytesAsync(sourcePath, [0x66, 0x4c, 0x61, 0x43]);
+        try {
+            await using var db = CreateContext();
+            var trackId = Guid.NewGuid();
+            SeedSourceEntity(db, trackId, EntityKind.AudioTrack.ToCode(), sourcePath);
+            db.AudioTrackDetails.Add(new AudioTrackDetailRow { EntityId = trackId });
+            await db.SaveChangesAsync();
+            var persistence = new LibraryScanPersistenceService(db);
+            var handler = new ProbeAudioJobHandler(
+                NullLogger<ProbeAudioJobHandler>.Instance,
+                new FixedAudioProbe(),
+                persistence,
+                persistence,
+                persistence);
+            var job = new JobRunSnapshot(
+                Guid.NewGuid(),
+                JobType.ProbeAudio,
+                JobRunStatus.Running,
+                0,
+                null,
+                "{}",
+                EntityKind.AudioTrack.ToCode(),
+                trackId.ToString(),
+                "Track",
+                DateTimeOffset.UtcNow,
+                DateTimeOffset.UtcNow,
+                null);
+
+            await handler.HandleAsync(
+                new JobContext(job, new MergedImportTestSupport.RecordingJobQueue()),
+                CancellationToken.None);
+
+            var source = await db.MediaSources.AsNoTracking().SingleAsync(row => row.EntityId == trackId);
+            Assert.Equal(sourcePath, source.Path);
+            Assert.Equal("flac", source.AudioCodec);
+            var stream = await db.MediaStreams.AsNoTracking().SingleAsync(row => row.MediaSourceId == source.Id);
+            Assert.Equal("Audio", stream.Type);
+            Assert.Equal("flac", stream.Codec);
+            var needs = await persistence.CheckDownstreamNeedsBatchAsync([trackId], CancellationToken.None);
+            Assert.False(needs[trackId].NeedsProbe);
+        } finally {
+            File.Delete(sourcePath);
+        }
+    }
 
     [Fact]
     public async Task DownstreamNeedsProbeWhenTechnicalRowsLackMediaSources() {
@@ -2464,5 +2515,31 @@ public sealed class LibraryScanPersistenceServiceTests {
             CreatedAt = DateTimeOffset.UtcNow,
             UpdatedAt = DateTimeOffset.UtcNow
         });
+    }
+
+    private sealed class FixedAudioProbe : IMediaProbe {
+        public Task<AudioProbeData?> ProbeAudioAsync(string filePath, CancellationToken cancellationToken) =>
+            Task.FromResult<AudioProbeData?>(new AudioProbeData(
+                180,
+                4,
+                900_000,
+                "flac",
+                "flac",
+                48_000,
+                2,
+                "Artist",
+                "Album",
+                "Track",
+                "1"));
+
+        public Task<VideoProbeData?> ProbeVideoAsync(string filePath, CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
+        public Task<ImageProbeData?> ProbeImageAsync(string filePath, CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
+        public Task<IReadOnlyList<SubtitleStreamData>> ProbeSubtitleStreamsAsync(
+            string filePath,
+            CancellationToken cancellationToken) => throw new NotSupportedException();
     }
 }
