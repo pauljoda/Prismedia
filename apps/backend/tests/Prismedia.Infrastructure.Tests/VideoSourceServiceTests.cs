@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Prismedia.Contracts.Media;
 using Prismedia.Domain.Entities;
 using Prismedia.Infrastructure.Media.Processing;
 using Prismedia.Infrastructure.Persistence;
@@ -277,6 +278,100 @@ public sealed class VideoSourceServiceTests : IDisposable {
         Assert.Equal("yuv420p10le", video.PixelFormat);
         Assert.Equal(5, video.DvProfile);
         Assert.True(video.RpuPresentFlag);
+    }
+
+    [Fact]
+    public async Task ReprobesAndUsesFreshMetadataWhenSourceFileSizeChanged() {
+        await using var db = CreateContext();
+        var videoId = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
+        var sourceId = Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb");
+        var filePath = Path.Combine(_tempDir, "replaced-video.mkv");
+        await File.WriteAllTextAsync(filePath, "replacement-video-bytes");
+        SeedVideoSource(db, videoId, filePath, null);
+        db.MediaSources.Add(new MediaSourceRow {
+            Id = sourceId,
+            EntityId = videoId,
+            Path = filePath,
+            Protocol = "File",
+            Container = "matroska",
+            SizeBytes = new FileInfo(filePath).Length + 1,
+            DurationSeconds = 84,
+            Width = 3840,
+            Height = 2160,
+            VideoCodec = MediaCodecs.Hevc,
+            AudioCodec = MediaCodecs.Ac3,
+            FrameRate = 23.976,
+            CreatedAt = DateTimeOffset.UtcNow,
+            UpdatedAt = DateTimeOffset.UtcNow
+        });
+        db.MediaStreams.AddRange(
+            new MediaStreamRow {
+                Id = Guid.NewGuid(),
+                MediaSourceId = sourceId,
+                EntityId = videoId,
+                StreamIndex = 0,
+                Type = StreamKind.Video.ToCode(),
+                Codec = MediaCodecs.Hevc,
+                Width = 3840,
+                Height = 2160,
+                PixelFormat = "yuv420p10le",
+                BitDepth = 10,
+                ColorTransfer = "smpte2084",
+                IsDefault = true,
+                CreatedAt = DateTimeOffset.UtcNow
+            },
+            new MediaStreamRow {
+                Id = Guid.NewGuid(),
+                MediaSourceId = sourceId,
+                EntityId = videoId,
+                StreamIndex = 1,
+                Type = StreamKind.Audio.ToCode(),
+                Codec = MediaCodecs.Ac3,
+                Channels = 6,
+                IsDefault = true,
+                CreatedAt = DateTimeOffset.UtcNow
+            },
+            new MediaStreamRow {
+                Id = Guid.NewGuid(),
+                MediaSourceId = sourceId,
+                EntityId = videoId,
+                StreamIndex = 2,
+                Type = StreamKind.Audio.ToCode(),
+                Codec = MediaCodecs.Ac3,
+                Channels = 6,
+                IsDefault = false,
+                CreatedAt = DateTimeOffset.UtcNow
+            });
+        await db.SaveChangesAsync();
+        var probe = new MediaProbeService(new JsonProcessExecutor("""
+            {
+              "format": {
+                "duration": "81.125",
+                "size": "23",
+                "bit_rate": "4200000",
+                "format_name": "matroska,webm"
+              },
+              "streams": [
+                { "index": 0, "codec_type": "video", "codec_name": "h264", "width": 1920, "height": 1080, "avg_frame_rate": "24/1", "disposition": { "default": 1, "forced": 0 } },
+                { "index": 1, "codec_type": "audio", "codec_name": "ac3", "sample_rate": "48000", "channels": 6, "disposition": { "default": 1, "forced": 0 } }
+              ]
+            }
+            """));
+
+        var service = new VideoSourceService(db, probe);
+        var source = await service.GetSourceAsync(videoId, CancellationToken.None);
+
+        Assert.NotNull(source);
+        Assert.Equal(81.125, source.DurationSeconds);
+        Assert.Equal(1920, source.Width);
+        Assert.Equal(1080, source.Height);
+        Assert.Equal(MediaCodecs.H264, source.VideoCodec);
+        Assert.Equal(MediaCodecs.Ac3, source.AudioCodec);
+        Assert.Equal(24, source.FrameRate);
+        Assert.Equal(2, source.Streams!.Count);
+        Assert.Equal(
+            1,
+            Assert.Single(source.Streams, stream => stream.Type == StreamKind.Audio.ToCode()).StreamIndex);
     }
 
     public void Dispose() {

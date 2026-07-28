@@ -89,7 +89,8 @@ public sealed partial class HlsAssetService {
             TranscodedAudioArguments(
                 source,
                 audioStreamIndex,
-                rendition.AudioBitrate));
+                rendition.AudioBitrate,
+                TranscodedAudioTimestampFilter(startSeconds)));
         arguments.AddRange(
         [
             "-copyts",

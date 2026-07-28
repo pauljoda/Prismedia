@@ -10,7 +10,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 - Entity thumbnails now inherit canonical owning artwork where appropriate and include their visible parent title as a consistent subtitle across clients.
 - Entity thumbnails now show batched, visibility-safe hierarchy and membership counts, while movies inherit technical metadata from their single playable file.
-- Preserved surround channels when video playback must convert an unsupported audio codec.
+- Video playback now preserves surround channels while keeping delayed audio tracks synchronized, and safely recovers when a replaced file's stored stream map is stale.
 
 ### What's New
 - Jobs now run as durable dependency graphs with one fair interactive lane per user-selected Entity, a separately configured background pool, shared CPU balancing, durable provider rate limits, restart-safe waits, graph-level progress and cancellation, and a dependency view in Jobs.

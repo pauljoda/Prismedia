@@ -30,7 +30,7 @@ public sealed partial class HlsAssetService {
     // RemuxInitialBurstSeconds are read flat out so the player gets an immediate buffer at startup.
     private const int RemuxReadRate = 60;
     private const int RemuxInitialBurstSeconds = 30;
-    private const string RemuxAudioTimestampFilter = "aresample=async=1";
+    private const int TranscodedAudioSampleRate = 48000;
 
     // One whole-file remux generation per (item, audio track); the ffmpeg job runs to completion in
     // the background and the served files (init.mp4, seg_*.m4s, index.m3u8) appear as it progresses.
@@ -480,8 +480,8 @@ public sealed partial class HlsAssetService {
     /// enclosing remux command preserves the source streams' relative timestamps with <c>-copyts</c>,
     /// <c>-start_at_zero</c>, and <c>-avoid_negative_ts disabled</c>, so timestamp correction does not
     /// require a lossy AAC-to-AAC generation. Other codecs are converted to multichannel AAC and use
-    /// asynchronous resampling to correct timestamp discontinuities without forcing the first audio
-    /// packet to time zero.
+    /// asynchronous resampling to correct timestamp discontinuities and fill any leading timestamp gap
+    /// with silence. That keeps a delayed audio track aligned instead of letting a player rebase it.
     /// </remarks>
     internal static IReadOnlyList<string> RemuxAudioArguments(
         VideoSourceFile source,
@@ -493,7 +493,7 @@ public sealed partial class HlsAssetService {
                 source,
                 audioStreamIndex,
                 stereoBitrate: "192k",
-                audioFilter: RemuxAudioTimestampFilter);
+                audioFilter: TranscodedAudioTimestampFilter(startSeconds: 0));
 
     /// <summary>
     /// Builds AAC encoding arguments that retain as many source channels as Apple playback routes accept.
@@ -516,12 +516,23 @@ public sealed partial class HlsAssetService {
             "-c:a", MediaCodecs.Aac,
             "-ac", channels.ToString(CultureInfo.InvariantCulture),
             "-b:a", bitrate,
-            "-ar", "48000",
+            "-ar", TranscodedAudioSampleRate.ToString(CultureInfo.InvariantCulture),
         };
         if (!string.IsNullOrWhiteSpace(audioFilter)) {
             arguments.AddRange(["-af", audioFilter]);
         }
         return arguments;
+    }
+
+    /// <summary>
+    /// Builds an async-resample filter whose first output timestamp matches the rendition's seek point.
+    /// Missing samples before the source track begins are emitted as silence without rebasing real audio.
+    /// </summary>
+    internal static string TranscodedAudioTimestampFilter(double startSeconds) {
+        var firstPts = (long)Math.Round(
+            startSeconds * TranscodedAudioSampleRate,
+            MidpointRounding.AwayFromZero);
+        return $"aresample=async=1:first_pts={firstPts.ToString(CultureInfo.InvariantCulture)}";
     }
 
     // Resolves the codec of the audio stream the remux maps, mirroring the -map expression: a null index

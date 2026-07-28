@@ -110,8 +110,12 @@ public sealed class VideoSourceService : IVideoSourceService {
                     row.DvBlSignalCompatibilityId,
                     row.Hdr10PlusPresentFlag))
                 .ToListAsync(cancellationToken);
+        var actualSizeBytes = new FileInfo(source.File.Path).Length;
+        var sourceFileChanged = mediaSource?.SizeBytes is { } probedSizeBytes &&
+            probedSizeBytes != actualSizeBytes;
         VideoProbeResult? probed = null;
-        if (_mediaProbe is not null && ShouldProbeStreams(source.File.Path, mediaSource?.VideoCodec ?? source.Technical?.Codec, streams)) {
+        if (_mediaProbe is not null &&
+            (sourceFileChanged || ShouldProbeStreams(source.File.Path, mediaSource?.VideoCodec ?? source.Technical?.Codec, streams))) {
             probed = await _mediaProbe.ProbeVideoAsync(source.File.Path, cancellationToken);
             if (probed?.Streams is { Count: > 0 }) {
                 streams = probed.Streams
@@ -146,27 +150,53 @@ public sealed class VideoSourceService : IVideoSourceService {
                     .ToList();
             }
         }
+        // A file may be replaced in place between scans. When its observed size no longer matches the
+        // persisted probe, the fresh probe must own both the stream map and the top-level metadata;
+        // otherwise playback can select an old audio index that now points at a subtitle stream.
+        var preferFreshProbe = sourceFileChanged && probed is not null;
         var extension = Path.GetExtension(source.File.Path);
         var directPlayable =
             BrowserNativeExtensions.Contains(extension) ||
             !RequiresTranscodeExtensions.Contains(extension);
+        var durationSeconds = mediaSource?.DurationSeconds ?? source.Technical?.DurationSeconds ?? probed?.DurationSeconds;
+        var width = mediaSource?.Width ?? source.Technical?.Width ?? probed?.Width;
+        var height = mediaSource?.Height ?? source.Technical?.Height ?? probed?.Height;
+        var container = mediaSource?.Container ?? source.Technical?.Container ?? probed?.Container;
+        var bitRate = mediaSource?.BitRate ?? source.Technical?.BitRate ?? probed?.BitRate;
+        var videoCodec = mediaSource?.VideoCodec ?? source.Technical?.Codec ?? probed?.Codec;
+        var audioCodec = mediaSource?.AudioCodec ?? probed?.AudioCodec;
+        var frameRate = mediaSource?.FrameRate ?? source.Technical?.FrameRate ?? probed?.FrameRate;
+        var sampleRate = source.Technical?.SampleRate ?? probed?.SampleRate;
+        var channels = source.Technical?.Channels ?? probed?.Channels;
+        if (preferFreshProbe) {
+            durationSeconds = probed!.DurationSeconds ?? durationSeconds;
+            width = probed.Width ?? width;
+            height = probed.Height ?? height;
+            container = probed.Container ?? container;
+            bitRate = probed.BitRate ?? bitRate;
+            videoCodec = probed.Codec ?? videoCodec;
+            audioCodec = probed.AudioCodec ?? audioCodec;
+            frameRate = probed.FrameRate ?? frameRate;
+            sampleRate = probed.SampleRate ?? sampleRate;
+            channels = probed.Channels ?? channels;
+        }
 
         return new VideoSourceFile(
             videoId.Value,
             source.File.Path,
             source.File.MimeType ?? MimeForExtension(extension),
             directPlayable,
-            mediaSource?.DurationSeconds ?? source.Technical?.DurationSeconds ?? probed?.DurationSeconds,
-            mediaSource?.Width ?? source.Technical?.Width ?? probed?.Width,
-            mediaSource?.Height ?? source.Technical?.Height ?? probed?.Height,
+            durationSeconds,
+            width,
+            height,
             mediaSource?.Id,
-            mediaSource?.Container ?? source.Technical?.Container ?? probed?.Container,
-            mediaSource?.BitRate ?? source.Technical?.BitRate ?? probed?.BitRate,
-            mediaSource?.VideoCodec ?? source.Technical?.Codec ?? probed?.Codec,
-            mediaSource?.AudioCodec ?? probed?.AudioCodec,
-            mediaSource?.FrameRate ?? source.Technical?.FrameRate ?? probed?.FrameRate,
-            source.Technical?.SampleRate ?? probed?.SampleRate,
-            source.Technical?.Channels ?? probed?.Channels,
+            container,
+            bitRate,
+            videoCodec,
+            audioCodec,
+            frameRate,
+            sampleRate,
+            channels,
             streams);
     }
 
