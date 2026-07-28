@@ -11,6 +11,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Entity thumbnails now inherit canonical owning artwork where appropriate and include their visible parent title as a consistent subtitle across clients.
 - Entity thumbnails now show batched, visibility-safe hierarchy and membership counts, while movies inherit technical metadata from their single playable file.
 - Video playback now preserves surround channels while keeping delayed audio tracks synchronized, and safely recovers when a replaced file's stored stream map is stale.
+- Direct-stream playback now preserves intentional per-track timing in fragmented MP4 without re-encoding supported surround audio.
 - Entity detail pages no longer report missing-resource errors while checking optional Identify, acquisition, and monitoring state.
 
 ### What's New

@@ -187,7 +187,7 @@ public sealed class HlsAssetServiceTests : IDisposable {
     }
 
     [Fact]
-    public async Task RemuxSegmentGenerationMapsRequestedAudioStreamIndex() {
+    public async Task RemuxSegmentGenerationMapsRequestedAudioAndPreservesFragmentTimeline() {
         var videoId = Guid.Parse("24242424-2424-2424-2424-242424242424");
         var sourcePath = Path.Combine(_cacheRoot, "multi-audio.mkv");
         await File.WriteAllTextAsync(sourcePath, "source");
@@ -240,6 +240,9 @@ public sealed class HlsAssetServiceTests : IDisposable {
         var avoidNegativeTimestampsIndex = arguments.ToList().IndexOf("-avoid_negative_ts");
         Assert.True(avoidNegativeTimestampsIndex >= 0);
         Assert.Equal("disabled", arguments[avoidNegativeTimestampsIndex + 1]);
+        var segmentOptionsIndex = arguments.ToList().IndexOf("-hls_segment_options");
+        Assert.True(segmentOptionsIndex >= 0);
+        Assert.Equal("movflags=+frag_discont", arguments[segmentOptionsIndex + 1]);
         var audioCodecIndex = arguments.ToList().IndexOf("-c:a");
         Assert.True(audioCodecIndex >= 0);
         Assert.Equal("copy", arguments[audioCodecIndex + 1]);
@@ -517,7 +520,7 @@ public sealed class HlsAssetServiceTests : IDisposable {
               "SourceModifiedUtc": "{{sourceInfo.LastWriteTimeUtc:O}}",
               "DurationSeconds": 13,
               "Renditions": ["720p"],
-              "FormatVersion": 11
+              "FormatVersion": 12
             }
             """);
         await File.WriteAllTextAsync(Path.Combine(virtualRoot, "v", "720p", "seg_00000.ts"), "old");
@@ -538,7 +541,7 @@ public sealed class HlsAssetServiceTests : IDisposable {
 
         Assert.NotNull(asset);
         var metadata = await File.ReadAllTextAsync(Path.Combine(virtualRoot, "metadata.json"));
-        Assert.Contains("\"FormatVersion\": 12", metadata);
+        Assert.Contains("\"FormatVersion\": 13", metadata);
         Assert.False(File.Exists(Path.Combine(virtualRoot, "v", "720p", "seg_00000.ts")));
     }
 

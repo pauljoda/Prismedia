@@ -455,6 +455,12 @@ public sealed partial class HlsAssetService {
             SegmentDurationSeconds.ToString(),
             "-hls_segment_type",
             "fmp4",
+            // Each fMP4 segment is a new fragmented-MP4 output. Tell the MOV muxer to seed that
+            // fragment from the packets' preserved DTS/PTS so a track with an intentional initial
+            // delay records that delay in TFDT instead of being independently rebased by the player.
+            // This keeps copied multichannel audio bit-exact while retaining its source A/V timing.
+            "-hls_segment_options",
+            "movflags=+frag_discont",
             "-hls_fmp4_init_filename",
             "init.mp4",
             "-hls_playlist_type",
