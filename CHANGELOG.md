@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- Entity thumbnails now inherit canonical owning artwork where appropriate and include their visible parent title as a consistent subtitle across clients.
 - Preserved surround channels when video playback must convert an unsupported audio codec.
 
 ### What's New

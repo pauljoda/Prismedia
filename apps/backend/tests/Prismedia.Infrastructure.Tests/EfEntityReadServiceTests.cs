@@ -2528,17 +2528,20 @@ public sealed class EfEntityReadServiceTests {
     }
 
     [Fact]
-    public async Task GetThumbnailsAsyncDoesNotInheritParentCoverForNonTrackChildEntities() {
+    public async Task GetThumbnailsAsyncUsesMovieArtworkVariantsForChildVideoWithoutOwnCover() {
         await using var db = CreateContext();
         var now = DateTimeOffset.UtcNow;
         var movieId = Guid.Parse("aaaaaaaa-0000-0000-0000-000000000031");
         var videoId = Guid.Parse("aaaaaaaa-0000-0000-0000-000000000032");
+        var movieCover = "/assets/movies/movie/cover.jpg";
+        var movieGrid = "/assets/grid-thumbs/movie.jpg";
+        var movieGrid2x = "/assets/grid-thumbs/movie@2x.jpg";
 
         db.Entities.AddRange(
             new EntityRow {
                 Id = movieId,
                 KindCode = EntityKindRegistry.Movie.Code,
-                Title = "Movie",
+                Title = "Parent Movie",
                 CreatedAt = now,
                 UpdatedAt = now
             },
@@ -2550,13 +2553,189 @@ public sealed class EfEntityReadServiceTests {
                 CreatedAt = now,
                 UpdatedAt = now
             });
-        db.EntityFiles.Add(File(movieId, EntityFileRole.Cover, "/assets/movies/movie/cover.jpg", now));
+        db.EntityFiles.AddRange(
+            File(movieId, EntityFileRole.Cover, movieCover, now),
+            File(movieId, EntityFileRole.GridThumbnail, movieGrid, now.AddSeconds(1)),
+            File(movieId, EntityFileRole.GridThumbnail2x, movieGrid2x, now.AddSeconds(2)));
         await db.SaveChangesAsync();
 
         var response = await CreateService(db).GetThumbnailsAsync([videoId], hideNsfw: false, CancellationToken.None);
 
         var video = Assert.Single(response.Items);
+        Assert.Equal("Feature", video.Title);
+        Assert.Equal("Parent Movie", video.Subtitle);
+        Assert.Equal(EntityKind.Movie, video.ParentKind);
+        Assert.Equal(movieCover, video.CoverUrl);
+        Assert.Equal(movieGrid, video.CoverThumbUrl);
+        Assert.Equal(movieGrid2x, video.CoverThumb2xUrl);
+    }
+
+    [Fact]
+    public async Task GetThumbnailsAsyncKeepsChildVideoArtworkBeforeMovieArtwork() {
+        await using var db = CreateContext();
+        var now = DateTimeOffset.UtcNow;
+        var movieId = Guid.Parse("aaaaaaaa-0000-0000-0000-000000000041");
+        var videoId = Guid.Parse("aaaaaaaa-0000-0000-0000-000000000042");
+        var childCover = "/assets/videos/feature/cover.jpg";
+        var childGrid = "/assets/grid-thumbs/feature.jpg";
+        var childGrid2x = "/assets/grid-thumbs/feature@2x.jpg";
+
+        db.Entities.AddRange(
+            new EntityRow {
+                Id = movieId,
+                KindCode = EntityKindRegistry.Movie.Code,
+                Title = "Parent Movie",
+                CreatedAt = now,
+                UpdatedAt = now
+            },
+            new EntityRow {
+                Id = videoId,
+                KindCode = EntityKindRegistry.Video.Code,
+                Title = "Feature",
+                ParentEntityId = movieId,
+                CreatedAt = now,
+                UpdatedAt = now
+            });
+        db.EntityFiles.AddRange(
+            File(movieId, EntityFileRole.Cover, "/assets/movies/movie/cover.jpg", now),
+            File(movieId, EntityFileRole.GridThumbnail, "/assets/grid-thumbs/movie.jpg", now.AddSeconds(1)),
+            File(movieId, EntityFileRole.GridThumbnail2x, "/assets/grid-thumbs/movie@2x.jpg", now.AddSeconds(2)),
+            File(videoId, EntityFileRole.Cover, childCover, now.AddSeconds(3)),
+            File(videoId, EntityFileRole.GridThumbnail, childGrid, now.AddSeconds(4)),
+            File(videoId, EntityFileRole.GridThumbnail2x, childGrid2x, now.AddSeconds(5)));
+        await db.SaveChangesAsync();
+
+        var response = await CreateService(db).GetThumbnailsAsync([videoId], hideNsfw: false, CancellationToken.None);
+
+        var video = Assert.Single(response.Items);
+        Assert.Equal("Parent Movie", video.Subtitle);
+        Assert.Equal(childCover, video.CoverUrl);
+        Assert.Equal(childGrid, video.CoverThumbUrl);
+        Assert.Equal(childGrid2x, video.CoverThumb2xUrl);
+    }
+
+    [Fact]
+    public async Task GetThumbnailsAsyncProjectsImmediateParentTitlesForSeriesHierarchy() {
+        await using var db = CreateContext();
+        var now = DateTimeOffset.UtcNow;
+        var seriesId = Guid.Parse("aaaaaaaa-0000-0000-0000-000000000051");
+        var seasonId = Guid.Parse("aaaaaaaa-0000-0000-0000-000000000052");
+        var episodeId = Guid.Parse("aaaaaaaa-0000-0000-0000-000000000053");
+
+        db.Entities.AddRange(
+            new EntityRow {
+                Id = seriesId,
+                KindCode = EntityKindRegistry.VideoSeries.Code,
+                Title = "Series Title",
+                CreatedAt = now,
+                UpdatedAt = now
+            },
+            new EntityRow {
+                Id = seasonId,
+                KindCode = EntityKindRegistry.VideoSeason.Code,
+                Title = "Season One",
+                ParentEntityId = seriesId,
+                CreatedAt = now,
+                UpdatedAt = now
+            },
+            new EntityRow {
+                Id = episodeId,
+                KindCode = EntityKindRegistry.Video.Code,
+                Title = "Pilot",
+                ParentEntityId = seasonId,
+                CreatedAt = now,
+                UpdatedAt = now
+            });
+        await db.SaveChangesAsync();
+
+        var response = await CreateService(db).GetThumbnailsAsync(
+            [seasonId, episodeId],
+            hideNsfw: false,
+            CancellationToken.None);
+
+        Assert.Collection(
+            response.Items,
+            season => {
+                Assert.Equal("Season One", season.Title);
+                Assert.Equal("Series Title", season.Subtitle);
+                Assert.Equal(EntityKind.VideoSeries, season.ParentKind);
+            },
+            episode => {
+                Assert.Equal("Pilot", episode.Title);
+                Assert.Equal("Season One", episode.Subtitle);
+                Assert.Equal(EntityKind.VideoSeason, episode.ParentKind);
+            });
+    }
+
+    [Fact]
+    public async Task GetThumbnailsAsyncDoesNotExposeHiddenMovieParentTitleOrArtwork() {
+        await using var db = CreateContext();
+        var now = DateTimeOffset.UtcNow;
+        var movieId = Guid.Parse("aaaaaaaa-0000-0000-0000-000000000061");
+        var videoId = Guid.Parse("aaaaaaaa-0000-0000-0000-000000000062");
+
+        db.Entities.AddRange(
+            new EntityRow {
+                Id = movieId,
+                KindCode = EntityKindRegistry.Movie.Code,
+                Title = "Hidden Parent Movie",
+                IsNsfw = true,
+                CreatedAt = now,
+                UpdatedAt = now
+            },
+            new EntityRow {
+                Id = videoId,
+                KindCode = EntityKindRegistry.Video.Code,
+                Title = "Safe Child Feature",
+                ParentEntityId = movieId,
+                CreatedAt = now,
+                UpdatedAt = now
+            });
+        db.EntityFiles.Add(File(movieId, EntityFileRole.Cover, "/assets/movies/hidden/cover.jpg", now));
+        await db.SaveChangesAsync();
+
+        var response = await CreateService(db).GetThumbnailsAsync([videoId], hideNsfw: true, CancellationToken.None);
+
+        var video = Assert.Single(response.Items);
+        Assert.Null(video.Subtitle);
+        Assert.Null(video.ParentKind);
         Assert.Null(video.CoverUrl);
+        Assert.Null(video.CoverThumbUrl);
+        Assert.Null(video.CoverThumb2xUrl);
+    }
+
+    [Fact]
+    public async Task GetThumbnailsAsyncDoesNotExposeMovieArtworkForChildInDisabledLibrary() {
+        await using var db = CreateContext();
+        var now = DateTimeOffset.UtcNow;
+        var rootId = Guid.Parse("aaaaaaaa-0000-0000-0000-000000000071");
+        var movieId = Guid.Parse("aaaaaaaa-0000-0000-0000-000000000072");
+        var videoId = Guid.Parse("aaaaaaaa-0000-0000-0000-000000000073");
+
+        db.LibraryRoots.Add(Root(rootId, enabled: false, now));
+        db.Entities.AddRange(
+            new EntityRow {
+                Id = movieId,
+                KindCode = EntityKindRegistry.Movie.Code,
+                Title = "Disabled Library Movie",
+                CreatedAt = now,
+                UpdatedAt = now
+            },
+            new EntityRow {
+                Id = videoId,
+                KindCode = EntityKindRegistry.Video.Code,
+                Title = "Hidden Feature",
+                ParentEntityId = movieId,
+                CreatedAt = now,
+                UpdatedAt = now
+            });
+        db.VideoDetails.Add(new VideoDetailRow { EntityId = videoId, LibraryRootId = rootId });
+        db.EntityFiles.Add(File(movieId, EntityFileRole.Cover, "/assets/movies/disabled/cover.jpg", now));
+        await db.SaveChangesAsync();
+
+        var response = await CreateService(db).GetThumbnailsAsync([videoId], hideNsfw: false, CancellationToken.None);
+
+        Assert.Empty(response.Items);
     }
 
     private static string CreateCacheRoot() {

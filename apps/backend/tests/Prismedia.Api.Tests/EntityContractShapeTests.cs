@@ -123,6 +123,26 @@ public sealed class EntityContractShapeTests {
     }
 
     [Fact]
+    public async Task OpenApiDescribesEntityThumbnailSubtitleAsNullableText() {
+        using var factory = new WebApplicationFactory<Program>();
+        using var client = factory.CreateClient();
+        using var document = JsonDocument.Parse(await client.GetStringAsync("/openapi/v1.json"));
+
+        var types = document.RootElement
+            .GetProperty("components")
+            .GetProperty("schemas")
+            .GetProperty(nameof(EntityThumbnail))
+            .GetProperty("properties")
+            .GetProperty("subtitle")
+            .GetProperty("type")
+            .EnumerateArray()
+            .Select(value => value.GetString()!)
+            .ToArray();
+
+        Assert.Equal(["null", "string"], types);
+    }
+
+    [Fact]
     public async Task OpenApiDescribesChangelogAsMarkdownText() {
         using var factory = new WebApplicationFactory<Program>();
         using var client = factory.CreateClient();

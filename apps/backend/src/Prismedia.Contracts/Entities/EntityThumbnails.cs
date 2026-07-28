@@ -53,6 +53,13 @@ public sealed record EntityThumbnail(
     public EntityKind? ParentKind { get; init; }
 
     /// <summary>
+    /// Meaningful secondary title for hierarchical thumbnails. This is the immediate visible
+    /// structural parent's title, without client-specific labels or formatting; null for root
+    /// entities and when the parent is not visible to the caller.
+    /// </summary>
+    public string? Subtitle { get; init; }
+
+    /// <summary>
     /// True for a request-created wanted placeholder: a real library entity with metadata and artwork
     /// but no file yet. Grids badge it; external projections (Jellyfin, OPDS) exclude it.
     /// </summary>

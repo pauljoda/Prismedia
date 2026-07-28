@@ -270,6 +270,15 @@ describe("entity grid helpers", () => {
     expect(thumbnail.hasSourceMedia).toBe(true);
   });
 
+  it("carries the backend-projected hierarchy subtitle from lightweight thumbnails", () => {
+    const thumbnail = entityCardToThumbnailCard({
+      ...thumbnailEntity("episode-1", "video", "Pilot"),
+      subtitle: "Season One",
+    });
+
+    expect(thumbnail.subtitle).toBe("Season One");
+  });
+
   it("uses cover fit for entity thumbnail images by default", () => {
     const thumbnail = entityCardToThumbnailCard(card("6", "person", "Performer", [
       flags(false),

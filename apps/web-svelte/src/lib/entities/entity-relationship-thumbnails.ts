@@ -38,13 +38,11 @@ export function thumbnailsToCards(
   thumbnails: EntityThumbnail[],
   options: {
     hrefFor?: (thumbnail: EntityThumbnail) => string | undefined;
-    subtitleFor?: (thumbnail: EntityThumbnail) => string | undefined;
   } = {},
 ): EntityThumbnailCard[] {
-  return thumbnails.map((thumbnail) => ({
-    ...entityCardToThumbnailCard(thumbnail, options.hrefFor?.(thumbnail)),
-    subtitle: options.subtitleFor?.(thumbnail),
-  }));
+  return thumbnails.map((thumbnail) =>
+    entityCardToThumbnailCard(thumbnail, options.hrefFor?.(thumbnail)),
+  );
 }
 
 export function tagsFromThumbnails(thumbnails: EntityThumbnail[]): EntityDetailTag[] {

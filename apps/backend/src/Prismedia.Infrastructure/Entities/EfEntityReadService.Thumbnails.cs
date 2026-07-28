@@ -32,28 +32,30 @@ public sealed partial class EfEntityReadService {
             .Select(parentId => parentId!.Value)
             .Distinct()
             .ToArray();
+        var parentQuery = _db.Entities.AsNoTracking()
+            .Where(parent => parentIds.Contains(parent.Id));
+        if (enforceLibraryVisibility) {
+            parentQuery = ApplyEnabledLibraryVisibility(parentQuery);
+        }
+        parentQuery = ApplyNsfwVisibility(parentQuery, hideNsfw);
         var parentRowsByEntity = parentIds.Length == 0
             ? new Dictionary<Guid, EntityRow>()
-            : await _db.Entities.AsNoTracking()
-                .Where(parent => parentIds.Contains(parent.Id))
-                .ToDictionaryAsync(parent => parent.Id, cancellationToken);
+            : await parentQuery.ToDictionaryAsync(parent => parent.Id, cancellationToken);
         var parentKindByEntity = parentRowsByEntity.ToDictionary(
             pair => pair.Key,
             pair => pair.Value.KindCode);
-        var albumParentIds = rows
+        var coverParentIds = rows
             .Where(row =>
-                row.KindCode == EntityKindRegistry.AudioTrack.Code &&
                 row.ParentEntityId is { } parentId &&
                 parentRowsByEntity.TryGetValue(parentId, out var parent) &&
-                parent.KindCode == EntityKindRegistry.AudioLibrary.Code &&
-                (!hideNsfw || !parent.IsNsfw))
+                CanBorrowParentCover(row.KindCode, parent.KindCode))
             .Select(row => row.ParentEntityId!.Value)
             .Distinct()
             .ToArray();
         var coverByEntity = await LoadCoverPathsAsync(ids, cancellationToken);
-        var coverByAlbumParent = albumParentIds.Length == 0
+        var coverByParent = coverParentIds.Length == 0
             ? new Dictionary<Guid, string>()
-            : await LoadCoverPathsAsync(albumParentIds, cancellationToken);
+            : await LoadCoverPathsAsync(coverParentIds, cancellationToken);
         var hoverFiles = await _db.EntityFiles.AsNoTracking()
             .Where(file => ids.Contains(file.EntityId) && file.Role == EntityFileRole.Trickplay)
             .Where(file => file.Path.EndsWith(".m3u8") || file.Path.EndsWith(".vtt"))
@@ -86,11 +88,11 @@ public sealed partial class EfEntityReadService {
                 .ToDictionaryAsync(detail => detail.EntityId, detail => detail.BookType, cancellationToken)
             : new Dictionary<Guid, BookType>();
         // Grid variants are loaded for the page's entities plus every entity whose cover a
-        // row can borrow (album parents for audio tracks, representative-cover children for
+        // row can borrow (owning album/movie parents and representative-cover children for
         // galleries and collections), so a card that inherits another entity's cover also
         // inherits that entity's small variants instead of downloading the full original.
         var borrowableCoverSourceIds = ids
-            .Concat(albumParentIds)
+            .Concat(coverParentIds)
             .Concat(hoverImagesByEntity.Values.SelectMany(images => images.Select(image => image.EntityId)))
             .Concat(collectionArtworkByEntity.Values.SelectMany(artwork => artwork.HoverImages.Select(image => image.EntityId)))
             .Distinct()
@@ -200,11 +202,12 @@ public sealed partial class EfEntityReadService {
             // matching the picture the card actually displays.
             var coverSourceId = row.Id;
             if (coverUrl is null &&
-                row.KindCode == EntityKindRegistry.AudioTrack.Code &&
-                row.ParentEntityId is { } albumId) {
-                coverUrl = coverByAlbumParent.GetValueOrDefault(albumId);
+                row.ParentEntityId is { } coverParentId &&
+                parentRowsByEntity.TryGetValue(coverParentId, out var parent) &&
+                CanBorrowParentCover(row.KindCode, parent.KindCode)) {
+                coverUrl = coverByParent.GetValueOrDefault(coverParentId);
                 if (coverUrl is not null) {
-                    coverSourceId = albumId;
+                    coverSourceId = coverParentId;
                 }
             }
 
@@ -250,6 +253,9 @@ public sealed partial class EfEntityReadService {
                     && parentKindCode.TryDecodeAs<EntityKind>(out var parentKind)
                         ? parentKind
                         : null,
+                Subtitle = row.ParentEntityId is { } subtitleParentId
+                    ? parentRowsByEntity.GetValueOrDefault(subtitleParentId)?.Title
+                    : null,
                 IsWanted = row.IsWanted,
                 HasSourceMedia = sourceMediaIds.Contains(row.Id),
                 LatestAcquisitionStatus = acquisitionStatusesByEntity.GetValueOrDefault(row.Id)?.LatestDirectStatus,
@@ -811,6 +817,12 @@ public sealed partial class EfEntityReadService {
         kindCode == EntityKindRegistry.Gallery.Code ||
         kindCode == EntityKindRegistry.VideoSeries.Code ||
         kindCode == EntityKindRegistry.VideoSeason.Code;
+
+    private static bool CanBorrowParentCover(string childKindCode, string parentKindCode) =>
+        (childKindCode == EntityKindRegistry.AudioTrack.Code &&
+            parentKindCode == EntityKindRegistry.AudioLibrary.Code) ||
+        (childKindCode == EntityKindRegistry.Video.Code &&
+            parentKindCode == EntityKindRegistry.Movie.Code);
 
     private sealed record CollectionArtwork(
         string? CoverUrl,

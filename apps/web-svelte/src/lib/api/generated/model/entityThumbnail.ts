@@ -43,6 +43,8 @@ export interface EntityThumbnail {
   /** @nullable */
   coverThumb2xUrl?: string | null;
   parentKind?: null | EntityKind;
+  /** @nullable */
+  subtitle?: string | null;
   isWanted?: boolean;
   hasSourceMedia?: boolean;
   latestAcquisitionStatus?: null | AcquisitionStatus;

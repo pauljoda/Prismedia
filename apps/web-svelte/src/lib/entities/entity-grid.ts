@@ -525,6 +525,7 @@ export function entityCardToThumbnailCard(
     href,
     meta: metaForEntity(entity),
     progress: progressForEntity(entity),
+    subtitle: isFullEntityCard(entity) ? undefined : entity.subtitle ?? undefined,
     hasSourceMedia: Boolean(entity.hasSourceMedia),
     // Only the thumbnail read model carries the wanted acquisition status; detail cards don't.
     wantedStatus: isFullEntityCard(entity) ? null : entity.wantedStatus ?? null,
