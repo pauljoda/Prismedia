@@ -1,20 +1,24 @@
 <script lang="ts">
-  import { THUMBNAIL_HOVER_KIND } from "$lib/api/generated/codes";
+  import { THUMBNAIL_HOVER_KIND, THUMBNAIL_META_ICON } from "$lib/api/generated/codes";
   import { onDestroy, type Snippet } from "svelte";
   import {
     Album,
+    BookCopy,
     BookOpen,
     Building2,
     Calendar,
     Clock3,
+    Clapperboard,
     Disc3,
     Film,
     Flame,
+    FileText,
     FolderOpen,
     Hash,
     Image,
     Images,
     Layers,
+    ListMusic,
     Music,
     Star,
     Tag,
@@ -770,7 +774,7 @@
         <div class="chips">
           {#if card.meta?.length}
             {#each card.meta as item (item.icon + item.label)}
-              <span class="chip">
+              <span class="chip" aria-label={`${item.icon} ${item.label}`}>
                 {@render MetaIcon({ icon: item.icon })}
                 {item.label}
               </span>
@@ -820,6 +824,18 @@
     <Calendar size={12} />
   {:else if icon === "chapter"}
     <Album size={12} />
+  {:else if icon === THUMBNAIL_META_ICON.season}
+    <Calendar size={12} />
+  {:else if icon === THUMBNAIL_META_ICON.episode}
+    <Clapperboard size={12} />
+  {:else if icon === THUMBNAIL_META_ICON.volume}
+    <BookCopy size={12} />
+  {:else if icon === THUMBNAIL_META_ICON.page}
+    <FileText size={12} />
+  {:else if icon === THUMBNAIL_META_ICON.album}
+    <Disc3 size={12} />
+  {:else if icon === THUMBNAIL_META_ICON.track}
+    <ListMusic size={12} />
   {:else if icon === "collection"}
     <Layers size={12} />
   {:else if icon === "duration"}

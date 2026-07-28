@@ -1079,6 +1079,32 @@ export const PROBLEM_CODE = {
 
 export type ProblemCode = (typeof PROBLEM_CODE)[keyof typeof PROBLEM_CODE];
 
+// source: registry EntityThumbnailMetaIcons
+export const THUMBNAIL_META_ICON = {
+  album: "album",
+  audio: "audio",
+  book: "book",
+  calendar: "calendar",
+  chapter: "chapter",
+  collection: "collection",
+  count: "count",
+  disc: "disc",
+  duration: "duration",
+  episode: "episode",
+  gallery: "gallery",
+  image: "image",
+  page: "page",
+  person: "person",
+  season: "season",
+  studio: "studio",
+  tag: "tag",
+  track: "track",
+  video: "video",
+  volume: "volume",
+} as const;
+
+export type ThumbnailMetaIconCode = (typeof THUMBNAIL_META_ICON)[keyof typeof THUMBNAIL_META_ICON];
+
 export const ENTITY_KIND_LABELS: Record<EntityKindCode, string> = {
   "audio": "Audio",
   "audio-library": "Audio Libraries",

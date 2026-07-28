@@ -1,10 +1,26 @@
 using Prismedia.Api.Codegen;
 using Prismedia.Application.Requests;
+using Prismedia.Contracts.Entities;
 using Prismedia.Domain.Entities;
 
 namespace Prismedia.Api.Tests;
 
 public sealed class CodesManifestContractTests {
+    [Fact]
+    public void ThumbnailMetaIconManifestCarriesExactStructuralUnits() {
+        var icons = CodesManifest.Build().ThumbnailMetaIcons
+            .Select(icon => icon.Value)
+            .ToHashSet(StringComparer.Ordinal);
+
+        Assert.Contains(EntityThumbnailMetaIcons.Season, icons);
+        Assert.Contains(EntityThumbnailMetaIcons.Episode, icons);
+        Assert.Contains(EntityThumbnailMetaIcons.Volume, icons);
+        Assert.Contains(EntityThumbnailMetaIcons.Chapter, icons);
+        Assert.Contains(EntityThumbnailMetaIcons.Page, icons);
+        Assert.Contains(EntityThumbnailMetaIcons.Album, icons);
+        Assert.Contains(EntityThumbnailMetaIcons.Track, icons);
+    }
+
     [Fact]
     public void EntityKindManifestCarriesTheRegistryFileDeletionPolicy() {
         var kinds = CodesManifest.Build().EntityKinds.ToDictionary(kind => kind.Code);

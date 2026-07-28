@@ -16,15 +16,31 @@ public sealed class ThumbnailContributions {
 
     /// <summary>Creates an accumulator over the rows being projected for the current page.</summary>
     /// <param name="rows">The entity rows the page is projecting into thumbnails.</param>
-    public ThumbnailContributions(IReadOnlyList<EntityRow> rows) => Rows = rows;
+    /// <param name="visibleEntities">
+    /// Caller-visible, non-wanted entities contributors may aggregate. The read service applies its
+    /// library and NSFW predicates once before exposing this query so contributors cannot drift from
+    /// the page's access rules.
+    /// </param>
+    public ThumbnailContributions(
+        IReadOnlyList<EntityRow> rows,
+        IQueryable<EntityRow> visibleEntities) {
+        Rows = rows;
+        VisibleEntities = visibleEntities;
+    }
 
     /// <summary>The entity rows being projected for the current page.</summary>
     public IReadOnlyList<EntityRow> Rows { get; }
 
     /// <summary>
+    /// Query root for caller-visible, non-wanted entities. Contributors compose grouped aggregates
+    /// over this query and must not enumerate it as entity rows.
+    /// </summary>
+    public IQueryable<EntityRow> VisibleEntities { get; }
+
+    /// <summary>
     /// Appends a meta chip to an entity. No-op when <paramref name="label"/> is blank so contributors
-    /// can pass optional values without guarding. Chips append after the base technical chips and the
-    /// combined list is capped by the read service.
+    /// can pass optional values without guarding. Contributed identity/count chips are merged before
+    /// lower-value base technical chips and the combined list is capped by the read service.
     /// </summary>
     /// <param name="entityId">Entity the chip belongs to.</param>
     /// <param name="icon">Icon code from the shared thumbnail vocabulary.</param>

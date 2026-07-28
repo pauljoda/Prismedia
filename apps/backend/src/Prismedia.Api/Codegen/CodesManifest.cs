@@ -75,6 +75,7 @@ public sealed record RequestKindManifestEntry(
 /// <param name="ExternalIdProviders">Well-known external-id provider keys.</param>
 /// <param name="SettingKeys">App setting keys.</param>
 /// <param name="ProblemCodes">Machine-readable API problem codes.</param>
+/// <param name="ThumbnailMetaIcons">Stable compact-thumbnail metadata icon codes.</param>
 public sealed record CodesManifest(
     IReadOnlyDictionary<string, IReadOnlyList<CodeEntry>> Enums,
     IReadOnlyList<EntityKindManifestEntry> EntityKinds,
@@ -82,7 +83,8 @@ public sealed record CodesManifest(
     IReadOnlyList<string> CapabilityKinds,
     IReadOnlyList<ConstantEntry> ExternalIdProviders,
     IReadOnlyList<ConstantEntry> SettingKeys,
-    IReadOnlyList<ConstantEntry> ProblemCodes) {
+    IReadOnlyList<ConstantEntry> ProblemCodes,
+    IReadOnlyList<ConstantEntry> ThumbnailMetaIcons) {
     /// <summary>Reflects the current backend registries into a fresh manifest.</summary>
     public static CodesManifest Build() => new(
         BuildEnums(),
@@ -91,7 +93,8 @@ public sealed record CodesManifest(
         CapabilityPolymorphism.DiscriminatorKinds,
         ReflectConstants(typeof(Contracts.Entities.ExternalIdProviders)),
         ReflectConstants(typeof(AppSettingKeys)),
-        ReflectConstants(typeof(Contracts.System.ApiProblemCodes)));
+        ReflectConstants(typeof(Contracts.System.ApiProblemCodes)),
+        ReflectConstants(typeof(EntityThumbnailMetaIcons)));
 
     private static IReadOnlyDictionary<string, IReadOnlyList<CodeEntry>> BuildEnums() {
         var result = new SortedDictionary<string, IReadOnlyList<CodeEntry>>(StringComparer.Ordinal);

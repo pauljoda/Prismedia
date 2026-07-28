@@ -62,6 +62,7 @@ public sealed partial class GeneratedCodesParityTests {
             ("registry ExternalIdProviders", manifest.ExternalIdProviders.Select(entry => entry.Value)),
             ("registry AppSettingKeys", manifest.SettingKeys.Select(entry => entry.Value)),
             ("registry ApiProblemCodes", manifest.ProblemCodes.Select(entry => entry.Value)),
+            ("registry EntityThumbnailMetaIcons", manifest.ThumbnailMetaIcons.Select(entry => entry.Value)),
         };
 
         foreach (var (source, expected) in registries) {

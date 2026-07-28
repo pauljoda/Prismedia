@@ -171,6 +171,16 @@ async function main() {
     ),
   );
 
+  // Compact thumbnail metadata icon vocabulary.
+  sections.push(
+    constBlock(
+      "THUMBNAIL_META_ICON",
+      "ThumbnailMetaIconCode",
+      (manifest.thumbnailMetaIcons ?? []).map((c) => [camel(c.name), c.value]),
+      "registry EntityThumbnailMetaIcons",
+    ),
+  );
+
   // Entity-kind plural display labels, keyed by kind code.
   const labelEntries = (manifest.entityKinds ?? []).map((k) => `  ${lit(k.code)}: ${lit(k.groupLabel)},`).join("\n");
   sections.push(

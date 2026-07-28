@@ -1,3 +1,4 @@
+using System.Globalization;
 using Microsoft.EntityFrameworkCore;
 using Prismedia.Contracts.Entities;
 using Prismedia.Domain.Entities;
@@ -35,7 +36,7 @@ internal sealed class ReferenceCountContributor(PrismediaDbContext db) : IThumbn
         var grouped = await db.EntityRelationshipLinks.AsNoTracking()
             .Where(link => targetIds.Contains(link.TargetEntityId))
             .Join(
-                db.Entities.AsNoTracking(),
+                contributions.VisibleEntities,
                 link => link.EntityId,
                 source => source.Id,
                 (link, source) => new { link.TargetEntityId, source.KindCode, source.Id })
@@ -64,7 +65,10 @@ internal sealed class ReferenceCountContributor(PrismediaDbContext db) : IThumbn
                 .OrderByDescending(chip => chip.Count)
                 .ThenBy(chip => chip.Icon, StringComparer.Ordinal);
             foreach (var chip in chips) {
-                contributions.AddMeta(perTarget.Key, chip.Icon, chip.Count.ToString());
+                contributions.AddMeta(
+                    perTarget.Key,
+                    chip.Icon,
+                    chip.Count.ToString(CultureInfo.InvariantCulture));
             }
         }
     }
@@ -84,21 +88,21 @@ internal sealed class ReferenceCountContributor(PrismediaDbContext db) : IThumbn
     /// "10 videos". Falls back to the generic count icon for kinds without a dedicated glyph.
     /// </summary>
     private static string ChipIcon(string kindCode) => kindCode switch {
-        var code when code == EntityKindRegistry.Video.Code => "video",
-        var code when code == EntityKindRegistry.Movie.Code => "video",
-        var code when code == EntityKindRegistry.VideoSeries.Code => "video",
-        var code when code == EntityKindRegistry.VideoSeason.Code => "video",
-        var code when code == EntityKindRegistry.Image.Code => "image",
-        var code when code == EntityKindRegistry.Gallery.Code => "gallery",
-        var code when code == EntityKindRegistry.Audio.Code => "audio",
-        var code when code == EntityKindRegistry.AudioTrack.Code => "audio",
-        var code when code == EntityKindRegistry.AudioLibrary.Code => "audio",
-        var code when code == EntityKindRegistry.MusicArtist.Code => "audio",
-        var code when code == EntityKindRegistry.Book.Code => "book",
-        var code when code == EntityKindRegistry.Collection.Code => "collection",
-        var code when code == EntityKindRegistry.Person.Code => "person",
-        var code when code == EntityKindRegistry.Studio.Code => "studio",
-        var code when code == EntityKindRegistry.Tag.Code => "tag",
-        _ => "count"
+        var code when code == EntityKindRegistry.Video.Code => EntityThumbnailMetaIcons.Video,
+        var code when code == EntityKindRegistry.Movie.Code => EntityThumbnailMetaIcons.Video,
+        var code when code == EntityKindRegistry.VideoSeries.Code => EntityThumbnailMetaIcons.Video,
+        var code when code == EntityKindRegistry.VideoSeason.Code => EntityThumbnailMetaIcons.Video,
+        var code when code == EntityKindRegistry.Image.Code => EntityThumbnailMetaIcons.Image,
+        var code when code == EntityKindRegistry.Gallery.Code => EntityThumbnailMetaIcons.Gallery,
+        var code when code == EntityKindRegistry.Audio.Code => EntityThumbnailMetaIcons.Audio,
+        var code when code == EntityKindRegistry.AudioTrack.Code => EntityThumbnailMetaIcons.Audio,
+        var code when code == EntityKindRegistry.AudioLibrary.Code => EntityThumbnailMetaIcons.Audio,
+        var code when code == EntityKindRegistry.MusicArtist.Code => EntityThumbnailMetaIcons.Audio,
+        var code when code == EntityKindRegistry.Book.Code => EntityThumbnailMetaIcons.Book,
+        var code when code == EntityKindRegistry.Collection.Code => EntityThumbnailMetaIcons.Collection,
+        var code when code == EntityKindRegistry.Person.Code => EntityThumbnailMetaIcons.Person,
+        var code when code == EntityKindRegistry.Studio.Code => EntityThumbnailMetaIcons.Studio,
+        var code when code == EntityKindRegistry.Tag.Code => EntityThumbnailMetaIcons.Tag,
+        _ => EntityThumbnailMetaIcons.Count
     };
 }

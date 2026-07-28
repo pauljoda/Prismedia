@@ -1,4 +1,4 @@
-import { THUMBNAIL_HOVER_KIND } from "$lib/api/generated/codes";
+import { THUMBNAIL_HOVER_KIND, type ThumbnailMetaIconCode } from "$lib/api/generated/codes";
 import type { EntityCapability, EntityCard, EntityThumbnail, EntityKind } from "$lib/api/generated/model";
 import { ENTITY_KIND, resolveEntityHref, type EntityRouteContext } from "./entity-codes";
 
@@ -56,20 +56,7 @@ export type EntityThumbnailHoverPreview =
     };
 
 /** Icon vocabulary for compact thumbnail metadata chips. */
-export type EntityThumbnailMetaIcon =
-  | "audio"
-  | "book"
-  | "calendar"
-  | "chapter"
-  | "collection"
-  | "count"
-  | "duration"
-  | "gallery"
-  | "image"
-  | "person"
-  | "studio"
-  | "tag"
-  | "video";
+export type EntityThumbnailMetaIcon = ThumbnailMetaIconCode;
 
 /** Small count, duration, position, or classification item shown under a thumbnail. */
 export interface EntityThumbnailMetaItem {

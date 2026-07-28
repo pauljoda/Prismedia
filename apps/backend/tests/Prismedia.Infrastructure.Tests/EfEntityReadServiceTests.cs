@@ -2339,6 +2339,359 @@ public sealed class EfEntityReadServiceTests {
     }
 
     [Fact]
+    public async Task GetThumbnailsAsyncCountsVisibleVideoHierarchyWithoutWantedOrHiddenDescendants() {
+        await using var db = CreateContext();
+        var now = DateTimeOffset.UtcNow;
+        var enabledRootId = Guid.NewGuid();
+        var disabledRootId = Guid.NewGuid();
+        var seriesId = Guid.NewGuid();
+        var visibleSeasonId = Guid.NewGuid();
+        var nsfwSeasonId = Guid.NewGuid();
+        var wantedSeasonId = Guid.NewGuid();
+        var visibleEpisodeId = Guid.NewGuid();
+        var directEpisodeId = Guid.NewGuid();
+        var nsfwEpisodeId = Guid.NewGuid();
+        var wantedEpisodeId = Guid.NewGuid();
+        var hiddenLibraryEpisodeId = Guid.NewGuid();
+        var episodeBelowHiddenSeasonId = Guid.NewGuid();
+
+        db.LibraryRoots.AddRange(
+            Root(enabledRootId, enabled: true, now),
+            Root(disabledRootId, enabled: false, now));
+        db.Entities.AddRange(
+            Row(seriesId, EntityKindRegistry.VideoSeries.Code, "Series", now),
+            Row(visibleSeasonId, EntityKindRegistry.VideoSeason.Code, "Season 1", now, seriesId),
+            Row(nsfwSeasonId, EntityKindRegistry.VideoSeason.Code, "Season 2", now, seriesId, isNsfw: true),
+            Row(wantedSeasonId, EntityKindRegistry.VideoSeason.Code, "Season 3", now, seriesId, isWanted: true),
+            Row(visibleEpisodeId, EntityKindRegistry.Video.Code, "Episode 1", now, visibleSeasonId),
+            Row(directEpisodeId, EntityKindRegistry.Video.Code, "Special", now, seriesId),
+            Row(nsfwEpisodeId, EntityKindRegistry.Video.Code, "Hidden Episode", now, visibleSeasonId, isNsfw: true),
+            Row(wantedEpisodeId, EntityKindRegistry.Video.Code, "Wanted Episode", now, visibleSeasonId, isWanted: true),
+            Row(hiddenLibraryEpisodeId, EntityKindRegistry.Video.Code, "Disabled Library Episode", now, visibleSeasonId),
+            Row(episodeBelowHiddenSeasonId, EntityKindRegistry.Video.Code, "Hidden Season Episode", now, nsfwSeasonId));
+        db.VideoDetails.AddRange(
+            new VideoDetailRow { EntityId = visibleEpisodeId, LibraryRootId = enabledRootId },
+            new VideoDetailRow { EntityId = directEpisodeId, LibraryRootId = enabledRootId },
+            new VideoDetailRow { EntityId = nsfwEpisodeId, LibraryRootId = enabledRootId },
+            new VideoDetailRow { EntityId = wantedEpisodeId, LibraryRootId = enabledRootId },
+            new VideoDetailRow { EntityId = hiddenLibraryEpisodeId, LibraryRootId = disabledRootId },
+            new VideoDetailRow { EntityId = episodeBelowHiddenSeasonId, LibraryRootId = enabledRootId });
+        await db.SaveChangesAsync();
+
+        var response = await CreateService(db).GetThumbnailsAsync(
+            [seriesId, visibleSeasonId],
+            hideNsfw: true,
+            CancellationToken.None);
+
+        var series = response.Items.Single(item => item.Id == seriesId);
+        Assert.Equal(
+            [
+                new EntityThumbnailMeta(EntityThumbnailMetaIcons.Season, "1"),
+                new EntityThumbnailMeta(EntityThumbnailMetaIcons.Episode, "2")
+            ],
+            series.Meta);
+        var season = response.Items.Single(item => item.Id == visibleSeasonId);
+        Assert.Equal([new EntityThumbnailMeta(EntityThumbnailMetaIcons.Episode, "1")], season.Meta);
+
+        static EntityRow Row(
+            Guid id,
+            string kind,
+            string title,
+            DateTimeOffset at,
+            Guid? parentId = null,
+            bool isNsfw = false,
+            bool isWanted = false) =>
+            new() {
+                Id = id,
+                KindCode = kind,
+                Title = title,
+                ParentEntityId = parentId,
+                IsNsfw = isNsfw,
+                IsWanted = isWanted,
+                CreatedAt = at,
+                UpdatedAt = at
+            };
+    }
+
+    [Fact]
+    public async Task GetThumbnailsAsyncCountsBookHierarchyAcrossDirectAndNestedPages() {
+        await using var db = CreateContext();
+        var now = DateTimeOffset.UtcNow;
+        var bookId = Guid.NewGuid();
+        var volumeId = Guid.NewGuid();
+        var nestedChapterId = Guid.NewGuid();
+        var directChapterId = Guid.NewGuid();
+        var directPageId = Guid.NewGuid();
+        var nestedPageId = Guid.NewGuid();
+        var chapterPageId = Guid.NewGuid();
+        var hiddenVolumeId = Guid.NewGuid();
+        var hiddenChapterId = Guid.NewGuid();
+        var hiddenPageId = Guid.NewGuid();
+        var wantedChapterId = Guid.NewGuid();
+        var wantedPageId = Guid.NewGuid();
+
+        db.Entities.AddRange(
+            Row(bookId, EntityKindRegistry.Book.Code, "Book", now),
+            Row(volumeId, EntityKindRegistry.BookVolume.Code, "Volume 1", now, bookId),
+            Row(nestedChapterId, EntityKindRegistry.BookChapter.Code, "Nested Chapter", now, volumeId),
+            Row(directChapterId, EntityKindRegistry.BookChapter.Code, "Direct Chapter", now, bookId),
+            Row(directPageId, EntityKindRegistry.BookPage.Code, "Loose Page", now, bookId),
+            Row(nestedPageId, EntityKindRegistry.BookPage.Code, "Nested Page", now, nestedChapterId),
+            Row(chapterPageId, EntityKindRegistry.BookPage.Code, "Direct Chapter Page", now, directChapterId),
+            Row(hiddenVolumeId, EntityKindRegistry.BookVolume.Code, "Hidden Volume", now, bookId, isNsfw: true),
+            Row(hiddenChapterId, EntityKindRegistry.BookChapter.Code, "Hidden Chapter", now, hiddenVolumeId),
+            Row(hiddenPageId, EntityKindRegistry.BookPage.Code, "Hidden Page", now, hiddenChapterId),
+            Row(wantedChapterId, EntityKindRegistry.BookChapter.Code, "Wanted Chapter", now, bookId, isWanted: true),
+            Row(wantedPageId, EntityKindRegistry.BookPage.Code, "Wanted Page", now, wantedChapterId));
+        db.BookDetails.Add(new BookDetailRow { EntityId = bookId, BookType = BookType.Book });
+        db.EntityTechnical.Add(new EntityTechnicalRow { EntityId = bookId, DurationSeconds = 3600, UpdatedAt = now });
+        await db.SaveChangesAsync();
+
+        var response = await CreateService(db).GetThumbnailsAsync(
+            [bookId, volumeId, nestedChapterId],
+            hideNsfw: true,
+            CancellationToken.None);
+
+        Assert.Equal(
+            [
+                new EntityThumbnailMeta(EntityThumbnailMetaIcons.Volume, "1"),
+                new EntityThumbnailMeta(EntityThumbnailMetaIcons.Chapter, "2"),
+                new EntityThumbnailMeta(EntityThumbnailMetaIcons.Page, "3"),
+                new EntityThumbnailMeta(EntityThumbnailMetaIcons.Book, "Book"),
+                new EntityThumbnailMeta(EntityThumbnailMetaIcons.Duration, "01:00")
+            ],
+            response.Items.Single(item => item.Id == bookId).Meta);
+        Assert.Equal(
+            [
+                new EntityThumbnailMeta(EntityThumbnailMetaIcons.Chapter, "1"),
+                new EntityThumbnailMeta(EntityThumbnailMetaIcons.Page, "1")
+            ],
+            response.Items.Single(item => item.Id == volumeId).Meta);
+        Assert.Equal(
+            [new EntityThumbnailMeta(EntityThumbnailMetaIcons.Page, "1")],
+            response.Items.Single(item => item.Id == nestedChapterId).Meta);
+
+        static EntityRow Row(
+            Guid id,
+            string kind,
+            string title,
+            DateTimeOffset at,
+            Guid? parentId = null,
+            bool isNsfw = false,
+            bool isWanted = false) =>
+            new() {
+                Id = id,
+                KindCode = kind,
+                Title = title,
+                ParentEntityId = parentId,
+                IsNsfw = isNsfw,
+                IsWanted = isWanted,
+                CreatedAt = at,
+                UpdatedAt = at
+            };
+    }
+
+    [Fact]
+    public async Task GetThumbnailsAsyncCountsRemainingStructuralAndMaterializedCollectionMembership() {
+        await using var db = CreateContext();
+        var now = DateTimeOffset.UtcNow;
+        var authorId = Guid.NewGuid();
+        var bookId = Guid.NewGuid();
+        var wantedBookId = Guid.NewGuid();
+        var artistId = Guid.NewGuid();
+        var albumId = Guid.NewGuid();
+        var wantedAlbumId = Guid.NewGuid();
+        var trackOneId = Guid.NewGuid();
+        var trackTwoId = Guid.NewGuid();
+        var wantedTrackId = Guid.NewGuid();
+        var galleryId = Guid.NewGuid();
+        var nestedGalleryId = Guid.NewGuid();
+        var imageOneId = Guid.NewGuid();
+        var imageTwoId = Guid.NewGuid();
+        var nsfwImageId = Guid.NewGuid();
+        var collectionId = Guid.NewGuid();
+
+        db.Entities.AddRange(
+            Row(authorId, EntityKindRegistry.BookAuthor.Code, "Author", now),
+            Row(bookId, EntityKindRegistry.Book.Code, "Published Book", now, authorId),
+            Row(wantedBookId, EntityKindRegistry.Book.Code, "Wanted Book", now, authorId, isWanted: true),
+            Row(artistId, EntityKindRegistry.MusicArtist.Code, "Artist", now),
+            Row(albumId, EntityKindRegistry.AudioLibrary.Code, "Album", now, artistId),
+            Row(wantedAlbumId, EntityKindRegistry.AudioLibrary.Code, "Wanted Album", now, artistId, isWanted: true),
+            Row(trackOneId, EntityKindRegistry.AudioTrack.Code, "Track 1", now, albumId),
+            Row(trackTwoId, EntityKindRegistry.AudioTrack.Code, "Track 2", now, albumId),
+            Row(wantedTrackId, EntityKindRegistry.AudioTrack.Code, "Wanted Track", now, albumId, isWanted: true),
+            Row(galleryId, EntityKindRegistry.Gallery.Code, "Gallery", now),
+            Row(nestedGalleryId, EntityKindRegistry.Gallery.Code, "Nested Gallery", now, galleryId),
+            Row(imageOneId, EntityKindRegistry.Image.Code, "Image 1", now, galleryId),
+            Row(imageTwoId, EntityKindRegistry.Image.Code, "Image 2", now, nestedGalleryId),
+            Row(nsfwImageId, EntityKindRegistry.Image.Code, "Hidden Image", now, galleryId, isNsfw: true),
+            Row(collectionId, EntityKindRegistry.Collection.Code, "Dynamic Collection", now));
+        db.CollectionDetails.Add(new CollectionDetailRow {
+            EntityId = collectionId,
+            OwnerUserId = TestUserContext.UserId,
+            Mode = CollectionMode.Dynamic
+        });
+        db.CollectionItemDetails.AddRange(
+            Item(collectionId, bookId, CollectionItemSource.Dynamic, now),
+            Item(collectionId, trackOneId, CollectionItemSource.Dynamic, now),
+            Item(collectionId, nsfwImageId, CollectionItemSource.Dynamic, now),
+            Item(collectionId, wantedTrackId, CollectionItemSource.Dynamic, now));
+        await db.SaveChangesAsync();
+
+        var response = await CreateService(db).GetThumbnailsAsync(
+            [authorId, artistId, albumId, galleryId, collectionId, imageOneId],
+            hideNsfw: true,
+            CancellationToken.None);
+
+        Assert.Equal(
+            [new EntityThumbnailMeta(EntityThumbnailMetaIcons.Book, "1")],
+            response.Items.Single(item => item.Id == authorId).Meta);
+        Assert.Equal(
+            [
+                new EntityThumbnailMeta(EntityThumbnailMetaIcons.Album, "1"),
+                new EntityThumbnailMeta(EntityThumbnailMetaIcons.Track, "2")
+            ],
+            response.Items.Single(item => item.Id == artistId).Meta);
+        Assert.Equal(
+            [new EntityThumbnailMeta(EntityThumbnailMetaIcons.Track, "2")],
+            response.Items.Single(item => item.Id == albumId).Meta);
+        Assert.Equal(
+            [new EntityThumbnailMeta(EntityThumbnailMetaIcons.Image, "1")],
+            response.Items.Single(item => item.Id == galleryId).Meta);
+        Assert.Equal(
+            [new EntityThumbnailMeta(EntityThumbnailMetaIcons.Collection, "2")],
+            response.Items.Single(item => item.Id == collectionId).Meta);
+        Assert.Empty(response.Items.Single(item => item.Id == imageOneId).Meta);
+
+        static EntityRow Row(
+            Guid id,
+            string kind,
+            string title,
+            DateTimeOffset at,
+            Guid? parentId = null,
+            bool isNsfw = false,
+            bool isWanted = false) =>
+            new() {
+                Id = id,
+                KindCode = kind,
+                Title = title,
+                ParentEntityId = parentId,
+                IsNsfw = isNsfw,
+                IsWanted = isWanted,
+                CreatedAt = at,
+                UpdatedAt = at
+            };
+
+        static CollectionItemDetailRow Item(
+            Guid collectionId,
+            Guid itemId,
+            CollectionItemSource source,
+            DateTimeOffset at) =>
+            new() {
+                Id = Guid.NewGuid(),
+                CollectionEntityId = collectionId,
+                ItemEntityId = itemId,
+                Source = source,
+                AddedAt = at
+            };
+    }
+
+    [Fact]
+    public async Task GetThumbnailsAsyncUsesOnlyUnambiguousMovieChildTechnicalMetadataAsFallback() {
+        await using var db = CreateContext();
+        var now = DateTimeOffset.UtcNow;
+        var fallbackMovieId = Guid.NewGuid();
+        var fallbackVideoId = Guid.NewGuid();
+        var wantedFallbackVideoId = Guid.NewGuid();
+        var ownMovieId = Guid.NewGuid();
+        var ownMovieVideoId = Guid.NewGuid();
+        var ambiguousMovieId = Guid.NewGuid();
+        var ambiguousVideoOneId = Guid.NewGuid();
+        var ambiguousVideoTwoId = Guid.NewGuid();
+
+        db.Entities.AddRange(
+            Row(fallbackMovieId, EntityKindRegistry.Movie.Code, "Fallback Movie", now),
+            Row(fallbackVideoId, EntityKindRegistry.Video.Code, "Fallback Movie File", now, fallbackMovieId),
+            WantedRow(wantedFallbackVideoId, EntityKindRegistry.Video.Code, "Wanted Alternate File", now, fallbackMovieId),
+            Row(ownMovieId, EntityKindRegistry.Movie.Code, "Own Movie", now),
+            Row(ownMovieVideoId, EntityKindRegistry.Video.Code, "Own Movie File", now, ownMovieId),
+            Row(ambiguousMovieId, EntityKindRegistry.Movie.Code, "Ambiguous Movie", now),
+            Row(ambiguousVideoOneId, EntityKindRegistry.Video.Code, "Part 1", now, ambiguousMovieId),
+            Row(ambiguousVideoTwoId, EntityKindRegistry.Video.Code, "Part 2", now, ambiguousMovieId));
+        db.EntityTechnical.AddRange(
+            Technical(fallbackVideoId, 596, 3840, 1920, "h264", "matroska", now),
+            Technical(wantedFallbackVideoId, 300, 1920, 1080, "h264", "mp4", now),
+            Technical(ownMovieId, 60, 1280, 720, "hevc", "mp4", now),
+            Technical(ownMovieVideoId, 596, 3840, 1920, "h264", "matroska", now),
+            Technical(ambiguousVideoOneId, 120, 1920, 1080, "h264", "mp4", now),
+            Technical(ambiguousVideoTwoId, 180, 1920, 1080, "h264", "mp4", now));
+        await db.SaveChangesAsync();
+
+        var response = await CreateService(db).GetThumbnailsAsync(
+            [fallbackMovieId, ownMovieId, ambiguousMovieId],
+            hideNsfw: false,
+            CancellationToken.None);
+
+        Assert.Equal(
+            [
+                new EntityThumbnailMeta(EntityThumbnailMetaIcons.Duration, "09:56"),
+                new EntityThumbnailMeta(EntityThumbnailMetaIcons.Video, "4K"),
+                new EntityThumbnailMeta(EntityThumbnailMetaIcons.Video, "H264"),
+                new EntityThumbnailMeta(EntityThumbnailMetaIcons.Video, "MATROSKA")
+            ],
+            response.Items.Single(item => item.Id == fallbackMovieId).Meta);
+        Assert.Equal(
+            [
+                new EntityThumbnailMeta(EntityThumbnailMetaIcons.Duration, "01:00"),
+                new EntityThumbnailMeta(EntityThumbnailMetaIcons.Video, "720p"),
+                new EntityThumbnailMeta(EntityThumbnailMetaIcons.Video, "HEVC"),
+                new EntityThumbnailMeta(EntityThumbnailMetaIcons.Video, "MP4")
+            ],
+            response.Items.Single(item => item.Id == ownMovieId).Meta);
+        Assert.Empty(response.Items.Single(item => item.Id == ambiguousMovieId).Meta);
+
+        static EntityRow Row(Guid id, string kind, string title, DateTimeOffset at, Guid? parentId = null) =>
+            new() {
+                Id = id,
+                KindCode = kind,
+                Title = title,
+                ParentEntityId = parentId,
+                CreatedAt = at,
+                UpdatedAt = at
+            };
+
+        static EntityRow WantedRow(Guid id, string kind, string title, DateTimeOffset at, Guid parentId) =>
+            new() {
+                Id = id,
+                KindCode = kind,
+                Title = title,
+                ParentEntityId = parentId,
+                IsWanted = true,
+                CreatedAt = at,
+                UpdatedAt = at
+            };
+
+        static EntityTechnicalRow Technical(
+            Guid id,
+            double duration,
+            int width,
+            int height,
+            string codec,
+            string container,
+            DateTimeOffset at) =>
+            new() {
+                EntityId = id,
+                DurationSeconds = duration,
+                Width = width,
+                Height = height,
+                Codec = codec,
+                Container = container,
+                UpdatedAt = at
+            };
+    }
+
+    [Fact]
     public async Task GetThumbnailsAsyncSurfacesReferenceCountsAndChipsForTaxonomy() {
         await using var db = CreateContext();
         var now = DateTimeOffset.UtcNow;
@@ -2346,22 +2699,28 @@ public sealed class EfEntityReadServiceTests {
         var videoA = Guid.Parse("cccccccc-0000-0000-0000-000000000002");
         var videoB = Guid.Parse("cccccccc-0000-0000-0000-000000000003");
         var galleryC = Guid.Parse("cccccccc-0000-0000-0000-000000000004");
+        var hiddenVideo = Guid.Parse("cccccccc-0000-0000-0000-000000000005");
+        var wantedGallery = Guid.Parse("cccccccc-0000-0000-0000-000000000006");
 
         db.Entities.AddRange(
             new EntityRow { Id = tagId, KindCode = EntityKindRegistry.Tag.Code, Title = "Noir", CreatedAt = now, UpdatedAt = now },
             new EntityRow { Id = videoA, KindCode = EntityKindRegistry.Video.Code, Title = "A", CreatedAt = now, UpdatedAt = now },
             new EntityRow { Id = videoB, KindCode = EntityKindRegistry.Video.Code, Title = "B", CreatedAt = now, UpdatedAt = now },
-            new EntityRow { Id = galleryC, KindCode = EntityKindRegistry.Gallery.Code, Title = "C", CreatedAt = now, UpdatedAt = now });
+            new EntityRow { Id = galleryC, KindCode = EntityKindRegistry.Gallery.Code, Title = "C", CreatedAt = now, UpdatedAt = now },
+            new EntityRow { Id = hiddenVideo, KindCode = EntityKindRegistry.Video.Code, Title = "Hidden", IsNsfw = true, CreatedAt = now, UpdatedAt = now },
+            new EntityRow { Id = wantedGallery, KindCode = EntityKindRegistry.Gallery.Code, Title = "Wanted", IsWanted = true, CreatedAt = now, UpdatedAt = now });
         db.EntityRelationshipLinks.AddRange(
             Link(videoA, tagId, "tags", now),
             // Same source under a second relationship code must still count once.
             Link(videoA, tagId, "featured", now),
             Link(videoB, tagId, "tags", now),
-            Link(galleryC, tagId, "tags", now));
+            Link(galleryC, tagId, "tags", now),
+            Link(hiddenVideo, tagId, "tags", now),
+            Link(wantedGallery, tagId, "tags", now));
         await db.SaveChangesAsync();
 
         var service = CreateService(db);
-        var response = await service.GetThumbnailsAsync([tagId, videoA], hideNsfw: false, CancellationToken.None);
+        var response = await service.GetThumbnailsAsync([tagId, videoA], hideNsfw: true, CancellationToken.None);
         var tag = response.Items.Single(item => item.Id == tagId);
         var video = response.Items.Single(item => item.Id == videoA);
 
@@ -2371,8 +2730,8 @@ public sealed class EfEntityReadServiceTests {
             new[] { (EntityKind.Video, 2), (EntityKind.Gallery, 1) },
             tag.ReferenceCounts!.Select(count => (count.Kind, count.Count)).ToArray());
         // Count chips derive from the same data using kind-mapped icons.
-        Assert.Contains(new EntityThumbnailMeta("video", "2"), tag.Meta);
-        Assert.Contains(new EntityThumbnailMeta("gallery", "1"), tag.Meta);
+        Assert.Contains(new EntityThumbnailMeta(EntityThumbnailMetaIcons.Video, "2"), tag.Meta);
+        Assert.Contains(new EntityThumbnailMeta(EntityThumbnailMetaIcons.Gallery, "1"), tag.Meta);
         // Media kinds carry no inbound-reference concept.
         Assert.Null(video.ReferenceCounts);
 

@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { tick } from "svelte";
 import EntityThumbnail from "./EntityThumbnail.svelte";
 import type { EntityThumbnailCard } from "$lib/entities/entity-thumbnail";
+import { THUMBNAIL_META_ICON } from "$lib/api/generated/codes";
 
 // jsdom lacks TouchEvent, so synthesize a cancelable event carrying a touches list.
 function touchEvent(type: string, touches: Array<{ clientX: number; clientY: number }>): Event {
@@ -540,6 +541,19 @@ describe("EntityThumbnail", () => {
 
     expect(container.querySelector(".glass-info")).not.toBeNull();
     expect(container.querySelector(".chips")?.textContent).toContain("Page 12");
+  });
+
+  it("exposes exact structural count units to assistive technology", () => {
+    const card = episodeCard();
+    card.meta = [
+      { icon: THUMBNAIL_META_ICON.season, label: "2" },
+      { icon: THUMBNAIL_META_ICON.episode, label: "18" },
+    ];
+
+    const { container } = render(EntityThumbnail, { props: { card } });
+    const chips = [...container.querySelectorAll(".chip")];
+
+    expect(chips.map((chip) => chip.getAttribute("aria-label"))).toEqual(["season 2", "episode 18"]);
   });
 
   it("replaces the entity-family fallback with an artwork-derived accent after the cover decodes", async () => {

@@ -26,6 +26,15 @@ public sealed partial class EfEntityReadService {
         }
 
         var ids = rows.Select(entity => entity.Id).ToArray();
+        // Contributors and owning-child technical fallback aggregate only over entities the caller
+        // can see. Wanted placeholders are intentionally excluded from membership facts, matching
+        // direct child projections that reserve wanted rows for explicit acquisition surfaces.
+        var visibleContributionEntities = _db.Entities.AsNoTracking()
+            .Where(entity => !entity.IsWanted);
+        if (enforceLibraryVisibility) {
+            visibleContributionEntities = ApplyEnabledLibraryVisibility(visibleContributionEntities);
+        }
+        visibleContributionEntities = ApplyNsfwVisibility(visibleContributionEntities, hideNsfw);
         var parentIds = rows
             .Select(entity => entity.ParentEntityId)
             .Where(parentId => parentId is not null)
@@ -75,6 +84,34 @@ public sealed partial class EfEntityReadService {
         var technicalByEntity = await _db.EntityTechnical.AsNoTracking()
             .Where(technical => ids.Contains(technical.EntityId))
             .ToDictionaryAsync(technical => technical.EntityId, cancellationToken);
+        var movieIds = rows
+            .Where(row => resolveCollectionArtwork && row.KindCode == EntityKindRegistry.Movie.Code)
+            .Select(row => row.Id)
+            .ToArray();
+        var movieIdsMissingTechnical = movieIds
+            .Where(movieId => !technicalByEntity.ContainsKey(movieId))
+            .ToArray();
+        // A movie owns exactly one playable video in the canonical model. When that single visible
+        // child holds the probe row, project it onto the movie without hydrating the child. NOT EXISTS
+        // enforces unambiguous ownership in one batched query; an own movie technical row still wins.
+        var movieChildTechnicalRows = movieIdsMissingTechnical.Length == 0
+            ? []
+            : await (
+                from child in visibleContributionEntities
+                where child.ParentEntityId != null &&
+                    movieIdsMissingTechnical.Contains(child.ParentEntityId.Value) &&
+                    child.KindCode == EntityKindRegistry.Video.Code &&
+                    !visibleContributionEntities.Any(other =>
+                        other.ParentEntityId == child.ParentEntityId &&
+                        other.KindCode == EntityKindRegistry.Video.Code &&
+                        other.Id != child.Id)
+                join technical in _db.EntityTechnical.AsNoTracking()
+                    on child.Id equals technical.EntityId
+                select new { MovieId = child.ParentEntityId!.Value, Technical = technical })
+                .ToArrayAsync(cancellationToken);
+        var movieChildTechnicalByEntity = movieChildTechnicalRows.ToDictionary(
+            row => row.MovieId,
+            row => row.Technical);
         // Section (disc) labels for audio tracks, surfaced as a thumbnail chip so album track
         // lists can group multi-disc albums and restart numbering per section.
         var sectionByEntity = rows.Any(row => row.KindCode == EntityKindRegistry.AudioTrack.Code)
@@ -133,10 +170,6 @@ public sealed partial class EfEntityReadService {
             : await _db.EntityTechnical.AsNoTracking()
                 .Where(technical => progressCurrentIds.Contains(technical.EntityId))
                 .ToDictionaryAsync(technical => technical.EntityId, cancellationToken);
-        var movieIds = rows
-            .Where(row => row.KindCode == EntityKindRegistry.Movie.Code)
-            .Select(row => row.Id)
-            .ToArray();
         var childStateByMovie = movieIds.Length == 0 || currentUserId == Guid.Empty
             ? new Dictionary<Guid, UserEntityStateRow>()
             : await LoadMovieChildStateAsync(movieIds, cancellationToken);
@@ -197,6 +230,10 @@ public sealed partial class EfEntityReadService {
             var hoverImages = hoverImagesByEntity.GetValueOrDefault(row.Id) ?? [];
             var coverUrl = coverByEntity.GetValueOrDefault(row.Id);
             var bookType = bookTypeByEntity.TryGetValue(row.Id, out var value) ? value : (BookType?)null;
+            var thumbnailTechnical = technicalByEntity.GetValueOrDefault(row.Id)
+                ?? (row.KindCode == EntityKindRegistry.Movie.Code
+                    ? movieChildTechnicalByEntity.GetValueOrDefault(row.Id)
+                    : null);
             // The entity that owns the cover image this card shows. Rows that borrow another
             // entity's cover borrow that entity's grid variants too, so the srcset pair keeps
             // matching the picture the card actually displays.
@@ -240,7 +277,7 @@ public sealed partial class EfEntityReadService {
                 hoverImages,
                 ProjectThumbnailMeta(
                     row,
-                    technicalByEntity.GetValueOrDefault(row.Id),
+                    thumbnailTechnical,
                     sectionByEntity.GetValueOrDefault(row.Id),
                     bookType),
                 ownState?.RatingValue,
@@ -278,11 +315,18 @@ public sealed partial class EfEntityReadService {
             };
         }).ToArray();
 
+        // Recursive collection-artwork projection needs only cover/hover data. Skipping contributors
+        // here prevents collection members that are themselves containers from adding aggregate
+        // queries to the outer thumbnail page.
+        if (!resolveCollectionArtwork) {
+            return baseThumbnails;
+        }
+
         // Let registered contributors fold in extra, kind-scoped data (e.g. taxonomy reference
         // counts) over the whole page. Each self-filters and runs at most one batched query, and
-        // they share the scoped DbContext so they run sequentially. Their extra chips append after
-        // the base technical chips and the combined list is capped at MaxThumbnailMeta.
-        var contributions = new ThumbnailContributions(rows);
+        // they share the scoped DbContext so they run sequentially. Contributed identity/count chips
+        // lead lower-value technical chips so useful counts survive the five-chip cap.
+        var contributions = new ThumbnailContributions(rows, visibleContributionEntities);
         foreach (var contributor in _thumbnailContributors) {
             await contributor.ContributeAsync(contributions, cancellationToken);
         }
@@ -296,7 +340,7 @@ public sealed partial class EfEntityReadService {
 
             var meta = extraMeta.Count == 0
                 ? thumbnail.Meta
-                : thumbnail.Meta.Concat(extraMeta).Take(MaxThumbnailMeta).ToArray();
+                : extraMeta.Concat(thumbnail.Meta).Take(MaxThumbnailMeta).ToArray();
             return thumbnail with { Meta = meta, ReferenceCounts = referenceCounts };
         }).ToArray();
     }
@@ -626,23 +670,28 @@ public sealed partial class EfEntityReadService {
         BookType? bookType = null) {
         var meta = new List<EntityThumbnailMeta>(MaxThumbnailMeta);
         // Lead with the disc/section chip so it survives the meta cap and clients can group tracks.
-        Add(meta, "disc", sectionLabel);
-        Add(meta, "book", FormatBookType(bookType));
+        Add(meta, EntityThumbnailMetaIcons.Disc, sectionLabel);
+        Add(meta, EntityThumbnailMetaIcons.Book, FormatBookType(bookType));
 
         if (technical is null) {
             return meta;
         }
 
-        Add(meta, "duration", FormatDuration(technical.DurationSeconds));
+        Add(meta, EntityThumbnailMetaIcons.Duration, FormatDuration(technical.DurationSeconds));
+        var usesVideoTechnical = row.KindCode == EntityKindRegistry.Video.Code ||
+            row.KindCode == EntityKindRegistry.Movie.Code;
         if (technical.Width is { } width && technical.Height is { } height) {
-            Add(meta, row.KindCode == EntityKindRegistry.Video.Code ? "video" : "image", FormatResolution(width, height));
+            Add(
+                meta,
+                usesVideoTechnical ? EntityThumbnailMetaIcons.Video : EntityThumbnailMetaIcons.Image,
+                FormatResolution(width, height));
         }
 
-        if (row.KindCode == EntityKindRegistry.Video.Code) {
-            Add(meta, "video", technical.Codec?.ToUpperInvariant());
-            Add(meta, "video", technical.Container?.ToUpperInvariant());
+        if (usesVideoTechnical) {
+            Add(meta, EntityThumbnailMetaIcons.Video, technical.Codec?.ToUpperInvariant());
+            Add(meta, EntityThumbnailMetaIcons.Video, technical.Container?.ToUpperInvariant());
         } else if (row.KindCode == EntityKindRegistry.AudioTrack.Code) {
-            Add(meta, "audio", technical.Codec?.ToUpperInvariant());
+            Add(meta, EntityThumbnailMetaIcons.Audio, technical.Codec?.ToUpperInvariant());
         }
 
         return meta.Take(MaxThumbnailMeta).ToArray();
