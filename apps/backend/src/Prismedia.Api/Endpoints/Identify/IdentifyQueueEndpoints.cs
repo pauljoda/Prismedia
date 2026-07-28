@@ -44,13 +44,13 @@ internal static class IdentifyQueueEndpoints {
             CancellationToken cancellationToken) => {
                 var item = await queue.GetAsync(entityId, cancellationToken);
                 return item is null
-                    ? Results.NotFound(new ApiProblem(ApiProblemCodes.IdentifyQueueItemNotFound, $"Entity '{entityId}' is not in the identify queue."))
+                    ? Results.NoContent()
                     : Results.Ok(item);
             })
             .WithName("GetIdentifyQueueItem")
-            .WithSummary("Gets one durable identify queue item by entity id.")
+            .WithSummary("Gets one durable identify queue item by entity id, when one exists.")
             .Produces<IdentifyQueueItem>()
-            .Produces<ApiProblem>(StatusCodes.Status404NotFound);
+            .Produces(StatusCodes.Status204NoContent);
 
         group.MapPost("/queue/entities/{entityId:guid}/search", async (
             Guid entityId,

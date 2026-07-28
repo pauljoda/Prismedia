@@ -104,8 +104,8 @@ describe("identify client", () => {
     );
   });
 
-  it("returns null for optional queue items that are not found", async () => {
-    vi.stubGlobal("fetch", vi.fn(async () => new Response("", { status: 404 })));
+  it("returns null when an entity has no queue item", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(null, { status: 204 })));
 
     await expect(fetchOptionalIdentifyQueueItem("missing")).resolves.toBeNull();
   });

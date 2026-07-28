@@ -115,7 +115,7 @@ export async function fetchEntityMonitorStates(entityIds: string[]): Promise<Ent
 /** The stable monitor targeting an Entity, or null when it is not monitored. */
 export async function fetchEntityMonitor(entityId: string): Promise<MonitorView | null> {
   const response = await getEntityMonitor(entityId);
-  if (response.status === 404) return null;
+  if (response.status === 204) return null;
   return unwrapGenerated(response, "Failed to load monitoring state");
 }
 

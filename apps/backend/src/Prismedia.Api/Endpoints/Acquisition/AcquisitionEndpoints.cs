@@ -122,13 +122,13 @@ public static class AcquisitionEndpoints {
             CancellationToken cancellationToken) => {
                 var detail = await acquisitions.GetForEntityAsync(entityId, cancellationToken);
                 return detail is null
-                    ? Results.NotFound(new ApiProblem(ApiProblemCodes.AcquisitionNotFound, "The entity has no acquisition."))
+                    ? Results.NoContent()
                     : Results.Ok(detail);
             })
             .WithName("GetAcquisitionForEntity")
             .WithSummary("Gets the latest acquisition backing a library entity, so entity detail pages can surface its wanted/tracking state inline.")
             .Produces<AcquisitionDetail>()
-            .Produces<ApiProblem>(StatusCodes.Status404NotFound);
+            .Produces(StatusCodes.Status204NoContent);
 
         group.MapGet("/for-entity/{entityId:guid}/all", (
             Guid entityId,
@@ -670,13 +670,13 @@ public static class AcquisitionEndpoints {
             CancellationToken cancellationToken) => {
                 var monitor = await monitors.GetForEntityAsync(entityId, cancellationToken);
                 return monitor is null
-                    ? Results.NotFound(new ApiProblem(ApiProblemCodes.NotFound, "The entity is not monitored."))
+                    ? Results.NoContent()
                     : Results.Ok(monitor);
             })
             .WithName("GetEntityMonitor")
             .WithSummary("Gets the stable monitor targeting a library Entity, when one exists.")
             .Produces<MonitorView>()
-            .Produces<ApiProblem>(StatusCodes.Status404NotFound);
+            .Produces(StatusCodes.Status204NoContent);
 
         group.MapGet("/for-entity/{entityId:guid}/all", (
             Guid entityId,

@@ -11600,19 +11600,17 @@ export type getIdentifyQueueItemResponse200 = {
   status: 200
 }
 
-export type getIdentifyQueueItemResponse404 = {
-  data: ApiProblem
-  status: 404
+export type getIdentifyQueueItemResponse204 = {
+  data: void
+  status: 204
 }
 
-export type getIdentifyQueueItemResponseSuccess = (getIdentifyQueueItemResponse200) & {
+export type getIdentifyQueueItemResponseSuccess = (getIdentifyQueueItemResponse200 | getIdentifyQueueItemResponse204) & {
   headers: Headers;
 };
-export type getIdentifyQueueItemResponseError = (getIdentifyQueueItemResponse404) & {
-  headers: Headers;
-};
+;
 
-export type getIdentifyQueueItemResponse = (getIdentifyQueueItemResponseSuccess | getIdentifyQueueItemResponseError)
+export type getIdentifyQueueItemResponse = (getIdentifyQueueItemResponseSuccess)
 
 export const getGetIdentifyQueueItemUrl = (entityId: string,) => {
 
@@ -11623,7 +11621,7 @@ export const getGetIdentifyQueueItemUrl = (entityId: string,) => {
 }
 
 /**
- * @summary Gets one durable identify queue item by entity id.
+ * @summary Gets one durable identify queue item by entity id, when one exists.
  */
 export const getIdentifyQueueItem = async (entityId: string, options?: RequestInit): Promise<getIdentifyQueueItemResponse> => {
 
@@ -12994,19 +12992,17 @@ export type getAcquisitionForEntityResponse200 = {
   status: 200
 }
 
-export type getAcquisitionForEntityResponse404 = {
-  data: ApiProblem
-  status: 404
+export type getAcquisitionForEntityResponse204 = {
+  data: void
+  status: 204
 }
 
-export type getAcquisitionForEntityResponseSuccess = (getAcquisitionForEntityResponse200) & {
+export type getAcquisitionForEntityResponseSuccess = (getAcquisitionForEntityResponse200 | getAcquisitionForEntityResponse204) & {
   headers: Headers;
 };
-export type getAcquisitionForEntityResponseError = (getAcquisitionForEntityResponse404) & {
-  headers: Headers;
-};
+;
 
-export type getAcquisitionForEntityResponse = (getAcquisitionForEntityResponseSuccess | getAcquisitionForEntityResponseError)
+export type getAcquisitionForEntityResponse = (getAcquisitionForEntityResponseSuccess)
 
 export const getGetAcquisitionForEntityUrl = (entityId: string,) => {
 
@@ -14588,19 +14584,17 @@ export type getEntityMonitorResponse200 = {
   status: 200
 }
 
-export type getEntityMonitorResponse404 = {
-  data: ApiProblem
-  status: 404
+export type getEntityMonitorResponse204 = {
+  data: void
+  status: 204
 }
 
-export type getEntityMonitorResponseSuccess = (getEntityMonitorResponse200) & {
+export type getEntityMonitorResponseSuccess = (getEntityMonitorResponse200 | getEntityMonitorResponse204) & {
   headers: Headers;
 };
-export type getEntityMonitorResponseError = (getEntityMonitorResponse404) & {
-  headers: Headers;
-};
+;
 
-export type getEntityMonitorResponse = (getEntityMonitorResponseSuccess | getEntityMonitorResponseError)
+export type getEntityMonitorResponse = (getEntityMonitorResponseSuccess)
 
 export const getGetEntityMonitorUrl = (entityId: string,) => {
 

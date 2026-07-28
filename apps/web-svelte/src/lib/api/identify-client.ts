@@ -89,7 +89,7 @@ export async function fetchOptionalIdentifyQueueItem(
   options?: RequestOptions,
 ): Promise<IdentifyQueueItem | null> {
   const response = await fetch(apiPath(getGetIdentifyQueueItemUrl(entityId)), requestInit(options));
-  if (response.status === 404) return null;
+  if (response.status === 204) return null;
   if (!response.ok) {
     const body = await response.text();
     throw new Error(body || `API ${response.status}: ${response.statusText}`);

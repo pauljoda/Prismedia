@@ -17,11 +17,20 @@ const generated = vi.hoisted(() => ({
 
 vi.mock("$lib/api/generated/prismedia", () => generated);
 
-import { fetchEntityMonitors, fetchEntityMonitorStates, startEntityMonitor } from "./monitors";
+import { fetchEntityMonitor, fetchEntityMonitors, fetchEntityMonitorStates, startEntityMonitor } from "./monitors";
 
 describe("monitor API", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  it("returns null when an entity is not monitored", async () => {
+    generated.getEntityMonitor.mockResolvedValue({
+      status: 204,
+      data: undefined,
+    });
+
+    await expect(fetchEntityMonitor("movie-1")).resolves.toBeNull();
   });
 
   it("does not call the server for an empty child collection", async () => {

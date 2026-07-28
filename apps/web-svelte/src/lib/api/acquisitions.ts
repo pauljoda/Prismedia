@@ -141,7 +141,7 @@ export async function fetchAcquisition(id: string): Promise<AcquisitionDetail> {
 /** The latest acquisition backing a library entity, or null when it has none (the common case for scanned-in items). */
 export async function fetchAcquisitionForEntity(entityId: string): Promise<AcquisitionDetail | null> {
   const response = await getAcquisitionForEntity(entityId);
-  if (response.status === 404) return null;
+  if (response.status === 204) return null;
   return unwrapGenerated(response, "Failed to load the entity's acquisition");
 }
 
