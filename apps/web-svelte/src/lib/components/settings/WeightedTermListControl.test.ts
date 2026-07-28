@@ -6,7 +6,7 @@ import WeightedTermListControl from "./WeightedTermListControl.svelte";
 describe("WeightedTermListControl", () => {
   afterEach(cleanup);
 
-  it("adds, weights, removes, and saves subtitle preference terms", async () => {
+  it("adds a negative weight, removes terms, and saves subtitle preferences", async () => {
     const onSave = vi.fn(async () => true);
     render(WeightedTermListControl, {
       setting: preferenceSetting(),
@@ -17,7 +17,7 @@ describe("WeightedTermListControl", () => {
       target: { value: "Forced" },
     });
     await fireEvent.input(screen.getByLabelText("New term weight"), {
-      target: { value: "75" },
+      target: { value: "-75" },
     });
     await fireEvent.click(screen.getByRole("button", { name: "Add term" }));
     await fireEvent.click(screen.getByRole("button", { name: "Remove Eng" }));
@@ -25,8 +25,9 @@ describe("WeightedTermListControl", () => {
 
     expect(onSave).toHaveBeenCalledWith("subtitles.preferredLanguages", [
       { term: "English", weight: 100 },
-      { term: "Forced", weight: 75 },
+      { term: "Forced", weight: -75 },
     ]);
+    expect(screen.getByText(/negative weights demote matching tracks/i)).toBeInTheDocument();
   });
 });
 
@@ -48,7 +49,7 @@ function preferenceSetting(): SettingDescriptor {
     isDefault: true,
     order: 20,
     constraints: {
-      min: 1,
+      min: -100,
       max: 100,
       step: 1,
       minItems: 0,

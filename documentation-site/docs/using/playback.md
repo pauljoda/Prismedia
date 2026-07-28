@@ -43,7 +43,7 @@ actually supply those formats.
 
 ![Subtitle view options](/img/screenshots/settings-subtitles.png)
 
-Subtitle view options control auto-enable behavior, preferred languages, caption style, text size, vertical position, and transparency. Video pages also offer per-browser overrides from the player.
+Subtitle view options control auto-enable behavior, weighted language and label preferences, caption style, text size, vertical position, and transparency. Positive weights promote matching tracks and negative weights demote them; video pages also offer per-browser appearance overrides from the player.
 
 ## Transcripts
 

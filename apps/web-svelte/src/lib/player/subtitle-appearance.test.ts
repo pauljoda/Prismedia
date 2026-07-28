@@ -30,4 +30,19 @@ describe("subtitle appearance helpers", () => {
 
     expect(picked).toBe("track-en");
   });
+
+  it("subtracts negative matching weights so a forced track can be demoted", () => {
+    const picked = pickPreferredSubtitleTrack(
+      [
+        { id: "track-en-forced", language: "eng", label: "English Forced" },
+        { id: "track-en", language: "eng", label: "English" },
+      ],
+      [
+        { term: "English", weight: 100 },
+        { term: "Forced", weight: -50 },
+      ],
+    );
+
+    expect(picked).toBe("track-en");
+  });
 });

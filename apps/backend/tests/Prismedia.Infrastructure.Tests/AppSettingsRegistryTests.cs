@@ -33,6 +33,11 @@ public sealed class AppSettingsRegistryTests {
             definition.Type == SettingValueType.StringMap &&
             definition.DefaultValue.ValueKind == JsonValueKind.Object &&
             !definition.DefaultValue.EnumerateObject().Any());
+        Assert.Contains(definitions, definition =>
+            definition.Key == AppSettingKeys.SubtitlesPreferredLanguages &&
+            definition.Type == SettingValueType.WeightedTermList &&
+            definition.Constraints?.Min == -100 &&
+            definition.Constraints?.Max == 100);
 
         foreach (var definition in definitions) {
             var validated = definition.Validate(definition.DefaultValue);
@@ -118,7 +123,7 @@ public sealed class AppSettingsRegistryTests {
         var weighted = await service.UpdateSettingAsync(
             AppSettingKeys.SubtitlesPreferredLanguages,
             JsonSerializer.SerializeToElement(new[] {
-                new SubtitlePreferenceTerm("Forced", 80),
+                new SubtitlePreferenceTerm("Forced", -80),
                 new SubtitlePreferenceTerm("English", 55),
                 new SubtitlePreferenceTerm("Eng", 35),
             }),
@@ -129,7 +134,7 @@ public sealed class AppSettingsRegistryTests {
         Assert.NotNull(weightedTerms);
         Assert.Equal(
             [
-                new SubtitlePreferenceTerm("Forced", 80),
+                new SubtitlePreferenceTerm("Forced", -80),
                 new SubtitlePreferenceTerm("English", 55),
                 new SubtitlePreferenceTerm("Eng", 35),
             ],
@@ -139,7 +144,7 @@ public sealed class AppSettingsRegistryTests {
 
     [Theory]
     [InlineData("""[{"term":"","weight":50}]""")]
-    [InlineData("""[{"term":"English","weight":0}]""")]
+    [InlineData("""[{"term":"English","weight":-101}]""")]
     [InlineData("""[{"term":"English","weight":101}]""")]
     [InlineData("""[{"term":"English","weight":50},{"term":"english","weight":40}]""")]
     public async Task SubtitlePreferenceTermsRejectInvalidRules(string json) {

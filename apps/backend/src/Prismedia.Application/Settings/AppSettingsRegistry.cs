@@ -424,7 +424,7 @@ public static class AppSettingsRegistry {
                 "Default caption behavior and appearance.",
                 60,
                 "Preferred subtitle terms",
-                "Each case-insensitive match adds its weight. A track matching several terms receives their combined score.",
+                "Each case-insensitive match adds its weight. Positive weights promote matching tracks; negative weights demote them.",
                 [
                     new SubtitlePreferenceTerm("English", 100),
                     new SubtitlePreferenceTerm("Eng", 80),
@@ -777,7 +777,7 @@ public static class AppSettingsRegistry {
             SettingValueType.WeightedTermList,
             JsonSerializer.SerializeToElement(defaultValue),
             order,
-            new SettingConstraints(Min: 1, Max: 100, Step: 1, MinItems: 0, MaxItems: 32));
+            new SettingConstraints(Min: -100, Max: 100, Step: 1, MinItems: 0, MaxItems: 32));
 
     private static IReadOnlyList<SettingOption> QualityPresetOptions() => [
         new SettingOption("1", "Best", "Highest resolution, largest files."),

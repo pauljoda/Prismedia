@@ -50,7 +50,9 @@ Playback settings cover direct/stream-copy/HLS behavior, adaptive transcoding (d
 Subtitle settings control:
 
 - Auto-enable on playback.
-- Preferred language order.
+- Weighted language and label terms for automatic track selection. Positive weights promote matches;
+  negative weights demote them, so `English: 100` with `Forced: -50` favors a plain English track
+  over an English Forced track.
 - OpenSubtitles.com connection and credential testing.
 - Automatic acquisition languages and the minimum identity confidence required for unattended downloads.
 - Caption style, text size, vertical position, and transparency.

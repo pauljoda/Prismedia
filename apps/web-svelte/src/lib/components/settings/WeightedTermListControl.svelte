@@ -84,8 +84,8 @@
     <p class="mt-0.5 text-[0.68rem] leading-relaxed text-text-muted">{setting.description}</p>
     <p class="mt-2 border-l-2 border-border-accent bg-surface-2/45 px-3 py-2 text-[0.68rem] leading-relaxed text-text-secondary">
       Every term is checked separately against the track language and label, ignoring case. Matching
-      weights add together, so “English Forced” can score for Forced, English, and Eng while a plain
-      English track still scores for its language terms.
+      weights add together. Positive weights promote matching tracks; negative weights demote matching
+      tracks, so English can be preferred while Forced is made less likely.
     </p>
   </div>
 
@@ -167,7 +167,7 @@
 
   <div class="mt-3 flex flex-wrap items-center justify-between gap-2">
     <p class="text-[0.64rem] text-text-muted">
-      Weights range from {minimumWeight} to {maximumWeight}. Highest total wins; ties keep track order.
+      Weights range from {minimumWeight} to {maximumWeight}. Highest positive total wins; ties keep track order.
     </p>
     <Button
       type="button"

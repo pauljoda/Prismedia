@@ -99,7 +99,7 @@ export function pickPreferredSubtitleTrack(
   if (!tracks.length) return null;
   const terms = preferredTerms
     .map(({ term, weight }) => ({ term: term.trim().toLowerCase(), weight }))
-    .filter(({ term, weight }) => term.length > 0 && Number.isFinite(weight) && weight > 0);
+    .filter(({ term, weight }) => term.length > 0 && Number.isFinite(weight) && weight !== 0);
   if (terms.length === 0) return tracks[0]!.id;
 
   let best: { id: string; score: number } | null = null;
