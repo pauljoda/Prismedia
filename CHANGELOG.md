@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- Web Book resume now converts native EPUB locators through the shared canonical cursor instead of opening Foliate at the first page.
 - Unified Book resume now carries forward a farther pre-migration audiobook position, preserves its within-chapter offset, and treats shared chapter boundaries as the start of the later chapter.
 - Entity thumbnails now inherit canonical owning artwork where appropriate and include their visible parent title as a consistent subtitle across clients.
 - Entity thumbnails now show batched, visibility-safe hierarchy and membership counts, while movies inherit technical metadata from their single playable file.

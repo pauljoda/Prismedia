@@ -5,6 +5,7 @@ import {
   flattenEpubToc,
   resolveCurrentEpubChapter,
   resolveEpubChapterByFraction,
+  webEpubLaunchLocation,
   type EpubBookNavigation,
   type EpubContentsEntry,
 } from "./epub-contents";
@@ -118,5 +119,12 @@ describe("EPUB contents", () => {
     expect(exactWebEpubResumeLocation("epubcfi(/6/14!/4/2)")).toBe("epubcfi(/6/14!/4/2)");
     expect(exactWebEpubResumeLocation("Text/chapter.xhtml#prismedia-progress=0.75")).toBeNull();
     expect(exactWebEpubResumeLocation('{"href":"Text/chapter.xhtml","locations":{"progression":0.75}}')).toBeNull();
+  });
+
+  it("keeps Foliate chapter links but rejects native one-launch locators", () => {
+    expect(webEpubLaunchLocation("Text/chapter.xhtml#section-2")).toBe("Text/chapter.xhtml#section-2");
+    expect(webEpubLaunchLocation("epubcfi(/6/14!/4/2)")).toBe("epubcfi(/6/14!/4/2)");
+    expect(webEpubLaunchLocation("Text/chapter.xhtml#prismedia-progress=0.75")).toBeNull();
+    expect(webEpubLaunchLocation('{"href":"Text/chapter.xhtml","locations":{"progression":0.75}}')).toBeNull();
   });
 });

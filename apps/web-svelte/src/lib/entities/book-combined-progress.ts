@@ -2,6 +2,7 @@ import { BOOK_ACTIVITY_KIND, PROGRESS_UNIT, type ReaderModeCode } from "$lib/api
 import type { BookProgressTrackMapping, EntityCapabilityProgressCapability } from "$lib/api/generated/model";
 import type { BookChapterRow } from "$lib/entities/book-chapter-list";
 import { resolveAudiobookResume } from "$lib/entities/audiobook-playback";
+import { exactWebEpubResumeLocation } from "$lib/entities/epub-contents";
 
 /** Saved book cursor normalized to both the whole readable rendition and its matched row. */
 export interface BookReadingPosition {
@@ -124,13 +125,14 @@ export function resolveChapterCombinedLaunch(
   const rowPosition = position?.rowId === row.id ? position : null;
   const chapterFraction = clampFraction(rowPosition?.chapterFraction ?? 0);
   const duration = Math.max(0, Number(row.audioTrack.duration ?? 0));
+  const readerLocation = exactWebEpubResumeLocation(rowPosition?.location);
 
   return {
     rowId: row.id,
     source: rowPosition ? "progress" : "start",
     audioStartSeconds: runwayStart(chapterFraction * duration),
-    readerLocation: rowPosition?.location ?? null,
-    readerFraction: rowPosition?.location ? null : epubReaderFraction(row, chapterFraction),
+    readerLocation,
+    readerFraction: readerLocation ? null : epubReaderFraction(row, chapterFraction),
     readerPageIndex: rowPosition?.pageIndex ?? pageReaderIndex(row, chapterFraction),
   };
 }

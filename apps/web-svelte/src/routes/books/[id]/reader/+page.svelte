@@ -31,7 +31,10 @@
   import { useNsfw } from "$lib/nsfw/store.svelte";
   import { useAudioPlayback } from "$lib/stores/audio-playback.svelte";
   import { BookActivityClock } from "$lib/entities/book-activity-clock";
-  import { exactWebEpubResumeLocation } from "$lib/entities/epub-contents";
+  import {
+    exactWebEpubResumeLocation,
+    webEpubLaunchLocation,
+  } from "$lib/entities/epub-contents";
 
   type ReaderFlow = "paginated" | "scrolled";
 
@@ -171,7 +174,7 @@
   async function loadSingleFileReader(nextBook: BookDetail, nextContext: BookReaderRouteContext) {
     const progress = getCapability(nextBook.capabilities, CAPABILITY_KIND.progress);
     const resume = nextContext.command !== "start-over" && !progress?.completedAt;
-    const launchLocation = nextContext.location ?? null;
+    const launchLocation = webEpubLaunchLocation(nextContext.location);
     const launchFraction = launchLocation ? null : nextContext.fraction ?? null;
     const persistedLocation = resume ? exactWebEpubResumeLocation(progress?.location) : null;
     singleFileBook = true;

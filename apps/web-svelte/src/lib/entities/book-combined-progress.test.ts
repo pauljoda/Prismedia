@@ -95,6 +95,17 @@ describe("unified book progress", () => {
     });
   });
 
+  it("falls back to the mapped fraction when native saved progress produced the latest cursor", () => {
+    expect(resolveChapterCombinedLaunch(epubRow(), {
+      ...reading,
+      location: '{"href":"Text/chapter-1.xhtml","locations":{"progression":0.5}}',
+    })).toMatchObject({
+      audioStartSeconds: 595,
+      readerLocation: null,
+      readerFraction: 0.3,
+    });
+  });
+
   it("resumes the row owned by the one whole-book cursor", () => {
     const secondRow: BookChapterRow = {
       ...epubRow(),

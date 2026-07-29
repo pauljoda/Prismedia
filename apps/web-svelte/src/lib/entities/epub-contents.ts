@@ -80,6 +80,15 @@ export function exactWebEpubResumeLocation(location: string | null | undefined):
   return normalized.toLowerCase().startsWith("epubcfi(") ? normalized : null;
 }
 
+/** Keeps Foliate navigation targets while rejecting native-only saved locator formats. */
+export function webEpubLaunchLocation(location: string | null | undefined): string | null {
+  const normalized = location?.trim() ?? "";
+  if (!normalized) return null;
+  if (normalized.startsWith("{") || normalized.startsWith("[")) return null;
+  if (normalized.includes("#prismedia-progress=")) return null;
+  return normalized;
+}
+
 function sourceChildren(value: unknown): EpubTocSourceEntry[] {
   return Array.isArray(value) ? value as EpubTocSourceEntry[] : [];
 }
