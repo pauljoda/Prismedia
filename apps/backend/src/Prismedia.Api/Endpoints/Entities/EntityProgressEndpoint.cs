@@ -21,6 +21,8 @@ internal static class EntityProgressEndpoint {
                 request.Completed,
                 request.Reset,
                 request.Location,
+                request.ActivitySeconds,
+                request.ActivityKind,
                 cancellationToken)))
             .WithName("UpdateEntityProgress")
             .WithSummary("Update Entity Progress.")

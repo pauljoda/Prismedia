@@ -49,6 +49,20 @@ public sealed class EntityPlaybackEventRow {
     public DateTimeOffset CreatedAt { get; set; }
 }
 
+/// <summary>
+/// One bounded interval of active reading or audiobook listening. These rows are independent
+/// of completion/skip history so periodic heartbeats contribute time without becoming fake plays.
+/// </summary>
+public sealed class EntityActivityEventRow {
+    public Guid Id { get; set; }
+    public Guid EntityId { get; set; }
+    public Guid? UserId { get; set; }
+    public BookActivityKind Kind { get; set; }
+    public DateTimeOffset OccurredAt { get; set; }
+    public double DurationSeconds { get; set; }
+    public DateTimeOffset CreatedAt { get; set; }
+}
+
 public sealed class EntityStatRow {
     public Guid EntityId { get; set; }
     public string Code { get; set; } = string.Empty;

@@ -4,6 +4,25 @@ using Prismedia.Domain.Entities;
 namespace Prismedia.Contracts.Playback;
 
 /// <summary>
+/// Chapter-scoped conversion from one audiobook track into Prismedia's canonical book cursor.
+/// </summary>
+/// <param name="TrackId">Concrete audiobook part.</param>
+/// <param name="CurrentEntityId">Book, readable chapter, or audio part stored as the cursor owner.</param>
+/// <param name="Unit">Canonical unit stored by the shared progress capability.</param>
+/// <param name="StartIndex">Canonical index at the start of the audio part.</param>
+/// <param name="EndIndex">Canonical index at the end of the audio part.</param>
+/// <param name="Total">Canonical unit total for the owning cursor.</param>
+/// <param name="Mode">Reader layout to retain when audio advances a readable cursor.</param>
+public sealed record BookProgressTrackMapping(
+    Guid TrackId,
+    Guid CurrentEntityId,
+    ProgressUnit Unit,
+    int StartIndex,
+    int EndIndex,
+    int Total,
+    ReaderMode? Mode);
+
+/// <summary>
 /// Context labels and artwork fallbacks used by the global music player.
 /// </summary>
 /// <param name="AlbumId">Album/library entity currently represented by the queue, when known.</param>
@@ -18,6 +37,10 @@ namespace Prismedia.Contracts.Playback;
 /// </param>
 /// <param name="PlaybackOwnerTitle">Display title for <paramref name="PlaybackOwnerEntityId"/>.</param>
 /// <param name="PlaybackOwnerEntityKind">Typed kind of the playback owner; never inferred from the id.</param>
+/// <param name="BookProgressMappings">
+/// Optional chapter-scoped audio-to-reader mappings used by audiobook queues to update the Book's
+/// one shared progress cursor. Missing mappings leave an existing readable cursor untouched.
+/// </param>
 public sealed record MusicPlayerContext(
     Guid? AlbumId,
     string? AlbumTitle,
@@ -27,7 +50,8 @@ public sealed record MusicPlayerContext(
     IReadOnlyDictionary<Guid, string?>? AlbumCoverUrls,
     Guid? PlaybackOwnerEntityId = null,
     string? PlaybackOwnerTitle = null,
-    EntityKind? PlaybackOwnerEntityKind = null);
+    EntityKind? PlaybackOwnerEntityKind = null,
+    IReadOnlyList<BookProgressTrackMapping>? BookProgressMappings = null);
 
 /// <summary>
 /// Persisted browser-scoped music player state returned to the web client.

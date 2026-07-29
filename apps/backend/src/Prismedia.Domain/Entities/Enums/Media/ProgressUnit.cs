@@ -24,5 +24,9 @@ public enum ProgressUnit {
 
     /// <summary>EPUB canonical fragment identifier; the index is approximate and the locator lives in Location.</summary>
     [Code("cfi")]
-    Cfi
+    Cfi,
+
+    /// <summary>Whole-second position inside an audiobook part when no readable rendition exists.</summary>
+    [Code("second")]
+    Second
 }

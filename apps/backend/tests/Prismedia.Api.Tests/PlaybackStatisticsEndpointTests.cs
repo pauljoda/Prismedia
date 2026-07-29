@@ -117,6 +117,8 @@ public sealed class PlaybackStatisticsEndpointTests {
                 SkippedCount: 0,
                 DistinctEntityCount: 0,
                 WatchSeconds: 0,
+                ReadingSeconds: 0,
+                ListeningSeconds: 0,
                 TopEntities: [],
                 RecentEvents: [],
                 DailyEvents: [],

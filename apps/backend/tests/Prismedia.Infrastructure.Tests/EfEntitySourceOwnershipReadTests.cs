@@ -232,6 +232,8 @@ public sealed class EfEntitySourceOwnershipReadTests {
             completed: null,
             reset: false,
             location: null,
+            activitySeconds: null,
+            activityKind: null,
             CancellationToken.None));
 
         foreach (var card in new[] { detail, rated, flagged, progressed }) {

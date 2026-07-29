@@ -15,6 +15,8 @@ namespace Prismedia.Contracts.Playback;
 /// Total observed playback seconds in the window, summed from each event's reported position and
 /// capped by the reported duration. Events without a position contribute nothing.
 /// </param>
+/// <param name="ReadingSeconds">Active reading time reported by book-reader heartbeats.</param>
+/// <param name="ListeningSeconds">Active audiobook time reported by player heartbeats.</param>
 /// <param name="TopEntities">Most active entities in the window.</param>
 /// <param name="RecentEvents">Most recent playback events in the window.</param>
 /// <param name="DailyEvents">Daily event buckets for timeline charts.</param>
@@ -34,6 +36,8 @@ public sealed record PlaybackStatisticsResponse(
     int SkippedCount,
     int DistinctEntityCount,
     double WatchSeconds,
+    double ReadingSeconds,
+    double ListeningSeconds,
     IReadOnlyList<PlaybackStatisticsEntity> TopEntities,
     IReadOnlyList<PlaybackStatisticsEvent> RecentEvents,
     IReadOnlyList<PlaybackStatisticsBucket> DailyEvents,

@@ -25,36 +25,52 @@ public sealed class EfPlaybackStatisticsService(PrismediaDbContext db, ICurrentU
         PlaybackStatisticsQuery query,
         CancellationToken cancellationToken) {
         var offset = TimeSpan.FromMinutes(Math.Clamp(query.UtcOffsetMinutes, -MaxUtcOffsetMinutes, MaxUtcOffsetMinutes));
-        var rows = QueryRows(query);
-        var counts = await rows
-            .GroupBy(_ => 1)
-            .Select(group => new PlaybackStatisticsCounts(
-                group.Count(),
-                group.Count(row => row.Kind == PlaybackEventKind.Completed),
-                group.Count(row => row.Kind == PlaybackEventKind.Skipped),
-                group.Select(row => row.EntityId).Distinct().Count()))
-            .SingleOrDefaultAsync(cancellationToken) ?? PlaybackStatisticsCounts.Empty;
+        var eventRows = await QueryRows(query).ToArrayAsync(cancellationToken);
+        var activityRows = query.EventKind is null
+            ? await QueryActivityRows(query).ToArrayAsync(cancellationToken)
+            : [];
+        var foldRows = eventRows
+            .Select(row => new PlaybackStatisticsFoldRow(
+                row.EntityId,
+                row.EntityKindCode,
+                row.EntityTitle,
+                row.Kind,
+                ActivityKind: null,
+                row.OccurredAt,
+                WatchSeconds(row)))
+            .Concat(activityRows.Select(row => new PlaybackStatisticsFoldRow(
+                row.EntityId,
+                row.EntityKindCode,
+                row.EntityTitle,
+                EventKind: null,
+                row.Kind,
+                row.OccurredAt,
+                row.DurationSeconds)))
+            .ToArray();
 
-        var topEntityRows = await rows
+        var counts = new PlaybackStatisticsCounts(
+            eventRows.Length,
+            eventRows.Count(row => row.Kind == PlaybackEventKind.Completed),
+            eventRows.Count(row => row.Kind == PlaybackEventKind.Skipped),
+            foldRows.Select(row => row.EntityId).Distinct().Count());
+        var topEntityRows = foldRows
             .GroupBy(row => new { row.EntityId, row.EntityKindCode, row.EntityTitle })
-            .Select(group => new {
+            .Select(group => new PlaybackStatisticsEntityFold(
                 group.Key.EntityId,
                 group.Key.EntityKindCode,
                 group.Key.EntityTitle,
-                CompletedCount = group.Count(row => row.Kind == PlaybackEventKind.Completed),
-                SkippedCount = group.Count(row => row.Kind == PlaybackEventKind.Skipped),
-                FirstEventAt = group.Min(row => row.OccurredAt),
-                LastEventAt = group.Max(row => row.OccurredAt)
-            })
+                group.Count(row => row.EventKind == PlaybackEventKind.Completed),
+                group.Count(row => row.EventKind == PlaybackEventKind.Skipped),
+                group.Sum(row => row.WatchSeconds),
+                group.Min(row => row.OccurredAt),
+                group.Max(row => row.OccurredAt)))
             .OrderByDescending(entity => entity.CompletedCount)
             .ThenByDescending(entity => entity.SkippedCount)
+            .ThenByDescending(entity => entity.WatchSeconds)
             .ThenByDescending(entity => entity.LastEventAt)
             .Take(TopEntityLimit)
-            .ToArrayAsync(cancellationToken);
-
-        var recentEventRows = await rows
-            .Take(RecentEventLimit)
-            .ToArrayAsync(cancellationToken);
+            .ToArray();
+        var recentEventRows = eventRows.Take(RecentEventLimit).ToArray();
 
         var coverByEntity = await LoadCoverPathsAsync(
             topEntityRows.Select(row => row.EntityId)
@@ -62,22 +78,6 @@ public sealed class EfPlaybackStatisticsService(PrismediaDbContext db, ICurrentU
                 .Distinct()
                 .ToArray(),
             cancellationToken);
-
-        // Day, weekday/hour, watch-time, and family projections all fold the same event set, so
-        // the window is materialized once with only the columns those folds need.
-        var foldRows = await rows
-            .Select(row => new PlaybackStatisticsFoldRow(
-                row.EntityId,
-                row.EntityKindCode,
-                row.Kind,
-                row.OccurredAt,
-                row.PositionSeconds,
-                row.DurationSeconds))
-            .ToArrayAsync(cancellationToken);
-
-        var watchSecondsByEntity = foldRows
-            .GroupBy(row => row.EntityId)
-            .ToDictionary(group => group.Key, group => group.Sum(WatchSeconds));
 
         var topEntities = topEntityRows
             .Select(row => new PlaybackStatisticsEntity(
@@ -87,7 +87,7 @@ public sealed class EfPlaybackStatisticsService(PrismediaDbContext db, ICurrentU
                 coverByEntity.GetValueOrDefault(row.EntityId),
                 row.CompletedCount,
                 row.SkippedCount,
-                watchSecondsByEntity.GetValueOrDefault(row.EntityId),
+                row.WatchSeconds,
                 row.FirstEventAt,
                 row.LastEventAt))
             .ToArray();
@@ -109,9 +109,9 @@ public sealed class EfPlaybackStatisticsService(PrismediaDbContext db, ICurrentU
             .GroupBy(row => DateOnly.FromDateTime(row.OccurredAt.ToOffset(offset).Date))
             .Select(group => new PlaybackStatisticsBucket(
                 group.Key,
-                group.Count(row => row.Kind == PlaybackEventKind.Completed),
-                group.Count(row => row.Kind == PlaybackEventKind.Skipped),
-                group.Sum(WatchSeconds)))
+                group.Count(row => row.EventKind == PlaybackEventKind.Completed),
+                group.Count(row => row.EventKind == PlaybackEventKind.Skipped),
+                group.Sum(row => row.WatchSeconds)))
             .OrderBy(bucket => bucket.Date)
             .ToArray();
 
@@ -123,9 +123,9 @@ public sealed class EfPlaybackStatisticsService(PrismediaDbContext db, ICurrentU
             .Select(group => new PlaybackStatisticsRhythmCell(
                 group.Key.DayOfWeek,
                 group.Key.Hour,
-                group.Count(row => row.Kind == PlaybackEventKind.Completed),
-                group.Count(row => row.Kind == PlaybackEventKind.Skipped),
-                group.Sum(WatchSeconds)))
+                group.Count(row => row.EventKind == PlaybackEventKind.Completed),
+                group.Count(row => row.EventKind == PlaybackEventKind.Skipped),
+                group.Sum(row => row.WatchSeconds)))
             .OrderBy(cell => cell.DayOfWeek)
             .ThenBy(cell => cell.Hour)
             .ToArray();
@@ -134,11 +134,11 @@ public sealed class EfPlaybackStatisticsService(PrismediaDbContext db, ICurrentU
             .GroupBy(row => row.EntityKindCode)
             .Select(group => new PlaybackStatisticsKindSlice(
                 group.Key.DecodeAs<EntityKind>(),
-                group.Count(),
-                group.Count(row => row.Kind == PlaybackEventKind.Completed),
-                group.Count(row => row.Kind == PlaybackEventKind.Skipped),
+                group.Count(row => row.EventKind is not null),
+                group.Count(row => row.EventKind == PlaybackEventKind.Completed),
+                group.Count(row => row.EventKind == PlaybackEventKind.Skipped),
                 group.Select(row => row.EntityId).Distinct().Count(),
-                group.Sum(WatchSeconds)))
+                group.Sum(row => row.WatchSeconds)))
             .OrderByDescending(slice => slice.TotalEvents)
             .ThenByDescending(slice => slice.WatchSeconds)
             .ThenBy(slice => slice.Kind)
@@ -151,7 +151,9 @@ public sealed class EfPlaybackStatisticsService(PrismediaDbContext db, ICurrentU
             counts.CompletedCount,
             counts.SkippedCount,
             counts.DistinctEntityCount,
-            foldRows.Sum(WatchSeconds),
+            foldRows.Sum(row => row.WatchSeconds),
+            foldRows.Where(row => row.ActivityKind == BookActivityKind.Reading).Sum(row => row.WatchSeconds),
+            foldRows.Where(row => row.ActivityKind == BookActivityKind.Listening).Sum(row => row.WatchSeconds),
             topEntities,
             recentEvents,
             dailyEvents,
@@ -164,7 +166,7 @@ public sealed class EfPlaybackStatisticsService(PrismediaDbContext db, ICurrentU
     /// playback reached, clamped to the reported duration so a stale or overshot position cannot
     /// inflate totals.
     /// </summary>
-    private static double WatchSeconds(PlaybackStatisticsFoldRow row) {
+    private static double WatchSeconds(PlaybackStatisticsRow row) {
         var position = row.PositionSeconds ?? 0d;
         if (double.IsNaN(position) || position <= 0d) {
             return 0d;
@@ -173,6 +175,35 @@ public sealed class EfPlaybackStatisticsService(PrismediaDbContext db, ICurrentU
         return row.DurationSeconds is { } duration && duration > 0d
             ? Math.Min(position, duration)
             : position;
+    }
+
+    private IQueryable<ActivityStatisticsRow> QueryActivityRows(PlaybackStatisticsQuery query) {
+        var activities = db.EntityActivityEvents.AsNoTracking()
+            .Where(evt => evt.OccurredAt >= query.From && evt.OccurredAt < query.To);
+        if (!query.AllUsers) {
+            var userId = query.UserId ?? currentUser.UserId;
+            activities = activities.Where(evt => evt.UserId == userId);
+        }
+
+        var rows =
+            from activity in activities
+            join entity in db.Entities.AsNoTracking() on activity.EntityId equals entity.Id
+            where !query.HideNsfw || !entity.IsNsfw
+            select new ActivityStatisticsRow {
+                EntityId = activity.EntityId,
+                EntityKindCode = entity.KindCode,
+                EntityTitle = entity.Title,
+                Kind = activity.Kind,
+                OccurredAt = activity.OccurredAt,
+                DurationSeconds = activity.DurationSeconds
+            };
+
+        if (query.Kind is { } kind) {
+            var kindCode = kind.ToCode();
+            rows = rows.Where(row => row.EntityKindCode == kindCode);
+        }
+
+        return rows;
     }
 
     private IQueryable<PlaybackStatisticsRow> QueryRows(PlaybackStatisticsQuery query) {
@@ -254,19 +285,37 @@ public sealed class EfPlaybackStatisticsService(PrismediaDbContext db, ICurrentU
         public double? DurationSeconds { get; init; }
     }
 
+    private sealed class ActivityStatisticsRow {
+        public Guid EntityId { get; init; }
+        public string EntityKindCode { get; init; } = string.Empty;
+        public string EntityTitle { get; init; } = string.Empty;
+        public BookActivityKind Kind { get; init; }
+        public DateTimeOffset OccurredAt { get; init; }
+        public double DurationSeconds { get; init; }
+    }
+
     private sealed record PlaybackStatisticsCounts(
         int TotalEvents,
         int CompletedCount,
         int SkippedCount,
-        int DistinctEntityCount) {
-        public static PlaybackStatisticsCounts Empty { get; } = new(0, 0, 0, 0);
-    }
+        int DistinctEntityCount);
+
+    private sealed record PlaybackStatisticsEntityFold(
+        Guid EntityId,
+        string EntityKindCode,
+        string EntityTitle,
+        int CompletedCount,
+        int SkippedCount,
+        double WatchSeconds,
+        DateTimeOffset FirstEventAt,
+        DateTimeOffset LastEventAt);
 
     private sealed record PlaybackStatisticsFoldRow(
         Guid EntityId,
         string EntityKindCode,
-        PlaybackEventKind Kind,
+        string EntityTitle,
+        PlaybackEventKind? EventKind,
+        BookActivityKind? ActivityKind,
         DateTimeOffset OccurredAt,
-        double? PositionSeconds,
-        double? DurationSeconds);
+        double WatchSeconds);
 }

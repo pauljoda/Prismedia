@@ -1,4 +1,5 @@
 using Prismedia.Application.Entities;
+using Prismedia.Application.Playback;
 using Prismedia.Domain.Capabilities;
 using Prismedia.Domain.Entities;
 using Prismedia.Domain.Media;
@@ -33,6 +34,8 @@ public sealed class EntityCapabilityServiceProgressTests {
             completed: null,
             reset: false,
             location: null,
+            activitySeconds: null,
+            activityKind: null,
             CancellationToken.None);
 
         var progress = Assert.IsType<Book>(repository.SavedEntity).Progress!;
@@ -65,11 +68,118 @@ public sealed class EntityCapabilityServiceProgressTests {
             completed: null,
             reset: false,
             location: null,
+            activitySeconds: null,
+            activityKind: null,
             CancellationToken.None);
 
         Assert.Null(repository.SavedEntity);
         Assert.Equal(ChapterTwoId, repository.Book.Progress!.CurrentEntityId);
         Assert.Equal(completedAt, repository.Book.Progress.CompletedAt);
+    }
+
+    [Fact]
+    public async Task SingleFileBookProgressDoesNotMoveBackwardWithinTheCanonicalCursor() {
+        var updatedAt = DateTimeOffset.UtcNow.AddMinutes(-5);
+        var repository = new FakeEntityWriteRepository(new CapabilityProgress(
+            currentEntityId: BookId,
+            unit: ProgressUnit.Cfi,
+            index: 6000,
+            total: 10000,
+            mode: ReaderMode.Paged,
+            updatedAt: updatedAt,
+            location: "epubcfi(/6/12!/4/2)"));
+        var service = new EntityCapabilityService(repository, new NoSourceOwnershipReader());
+
+        await service.UpdateProgressAsync(
+            BookId,
+            BookId,
+            ProgressUnit.Cfi,
+            index: 4000,
+            total: 10000,
+            mode: ReaderMode.Paged,
+            completed: null,
+            reset: false,
+            location: null,
+            activitySeconds: null,
+            activityKind: null,
+            CancellationToken.None);
+
+        Assert.Null(repository.SavedEntity);
+        Assert.Equal(6000, repository.Book.Progress!.Index);
+        Assert.Equal("epubcfi(/6/12!/4/2)", repository.Book.Progress.Location);
+    }
+
+    [Fact]
+    public async Task ReadingHeartbeatAccumulatesActivityWithoutAdvancingTheCursor() {
+        var progress = new CapabilityProgress(
+            currentEntityId: ChapterOneId,
+            unit: ProgressUnit.Page,
+            index: 1,
+            total: 2,
+            mode: ReaderMode.Paged,
+            updatedAt: DateTimeOffset.UtcNow.AddMinutes(-1));
+        var repository = new FakeEntityWriteRepository(progress);
+        var activities = new RecordingEntityActivityStore();
+        var service = new EntityCapabilityService(
+            repository,
+            new NoSourceOwnershipReader(),
+            activityEvents: activities);
+
+        await service.UpdateProgressAsync(
+            BookId,
+            ChapterOneId,
+            ProgressUnit.Page,
+            index: 1,
+            total: 2,
+            mode: ReaderMode.Paged,
+            completed: null,
+            reset: false,
+            location: null,
+            activitySeconds: 15,
+            activityKind: BookActivityKind.Reading,
+            CancellationToken.None);
+
+        var book = Assert.IsType<Book>(repository.SavedEntity);
+        Assert.Equal(TimeSpan.FromSeconds(15), book.PlaybackCapability?.Value.PlayDuration);
+        var activity = Assert.Single(activities.Events);
+        Assert.Equal(BookId, activity.EntityId);
+        Assert.Equal(BookActivityKind.Reading, activity.Kind);
+        Assert.Equal(15, activity.DurationSeconds);
+    }
+
+    [Fact]
+    public async Task BookHeartbeatCapsOneClientReportToOneMinute() {
+        var repository = new FakeEntityWriteRepository(new CapabilityProgress(
+            currentEntityId: ChapterOneId,
+            unit: ProgressUnit.Page,
+            index: 1,
+            total: 2,
+            mode: ReaderMode.Paged,
+            updatedAt: DateTimeOffset.UtcNow.AddMinutes(-1)));
+        var activities = new RecordingEntityActivityStore();
+        var service = new EntityCapabilityService(
+            repository,
+            new NoSourceOwnershipReader(),
+            activityEvents: activities);
+
+        await service.UpdateProgressAsync(
+            BookId,
+            ChapterOneId,
+            ProgressUnit.Page,
+            index: 1,
+            total: 2,
+            mode: ReaderMode.Paged,
+            completed: null,
+            reset: false,
+            location: null,
+            activitySeconds: 600,
+            activityKind: BookActivityKind.Listening,
+            CancellationToken.None);
+
+        Assert.Equal(60, Assert.Single(activities.Events).DurationSeconds);
+        Assert.Equal(
+            TimeSpan.FromSeconds(60),
+            Assert.IsType<Book>(repository.SavedEntity).PlaybackCapability?.Value.PlayDuration);
     }
 
     private sealed class FakeEntityWriteRepository : IEntityWriteRepository {
@@ -129,5 +239,14 @@ public sealed class EntityCapabilityServiceProgressTests {
             IReadOnlyCollection<Guid> entityIds,
             CancellationToken cancellationToken) =>
             Task.FromResult<IReadOnlySet<Guid>>(new HashSet<Guid>());
+    }
+
+    private sealed class RecordingEntityActivityStore : IEntityActivityStore {
+        public List<EntityActivityAppend> Events { get; } = [];
+
+        public Task StageAsync(EntityActivityAppend entry, CancellationToken cancellationToken) {
+            Events.Add(entry);
+            return Task.CompletedTask;
+        }
     }
 }

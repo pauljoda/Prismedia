@@ -185,6 +185,38 @@ public sealed class PlaybackStatisticsServiceTests {
         Assert.Equal(DateTimeOffset.Parse("2026-06-18T02:30:00Z"), topVideo.LastEventAt);
     }
 
+    [Fact]
+    public async Task StatisticsIncludeReadingAndListeningHeartbeatsWithoutCountingThemAsPlaybackEvents() {
+        await using var db = CreateContext();
+        var now = DateTimeOffset.Parse("2026-06-18T12:00:00Z");
+        db.Entities.Add(Entity(BookId, EntityKind.Book, "Visible Book", isNsfw: false, now));
+        db.EntityActivityEvents.AddRange(
+            Activity(BookId, BookActivityKind.Reading, now.AddMinutes(-2), 30),
+            Activity(BookId, BookActivityKind.Listening, now.AddMinutes(-1), 15));
+        await db.SaveChangesAsync();
+        var service = new EfPlaybackStatisticsService(db, TestUserContext.Admin());
+
+        var statistics = await service.GetAsync(
+            new PlaybackStatisticsQuery(
+                now.AddDays(-1),
+                now.AddSeconds(1),
+                Kind: null,
+                EventKind: null,
+                HideNsfw: true),
+            CancellationToken.None);
+
+        Assert.Equal(0, statistics.TotalEvents);
+        Assert.Equal(1, statistics.DistinctEntityCount);
+        Assert.Equal(45, statistics.WatchSeconds);
+        Assert.Equal(30, statistics.ReadingSeconds);
+        Assert.Equal(15, statistics.ListeningSeconds);
+        Assert.Equal(45, Assert.Single(statistics.TopEntities).WatchSeconds);
+        Assert.Equal(45, Assert.Single(statistics.DailyEvents).WatchSeconds);
+        Assert.Equal(45, Assert.Single(statistics.Rhythm).WatchSeconds);
+        Assert.Equal(45, Assert.Single(statistics.KindBreakdown).WatchSeconds);
+        Assert.Empty(statistics.RecentEvents);
+    }
+
     private static void Seed(PrismediaDbContext db, DateTimeOffset now) {
         db.Entities.AddRange(
             Entity(VideoId, EntityKind.Video, "Visible Video", isNsfw: false, now),
@@ -241,6 +273,21 @@ public sealed class PlaybackStatisticsServiceTests {
             Kind = kind,
             OccurredAt = occurredAt,
             PositionSeconds = positionSeconds,
+            DurationSeconds = durationSeconds,
+            CreatedAt = occurredAt
+        };
+
+    private static EntityActivityEventRow Activity(
+        Guid entityId,
+        BookActivityKind kind,
+        DateTimeOffset occurredAt,
+        double durationSeconds) =>
+        new() {
+            Id = Guid.NewGuid(),
+            EntityId = entityId,
+            UserId = TestUserContext.UserId,
+            Kind = kind,
+            OccurredAt = occurredAt,
             DurationSeconds = durationSeconds,
             CreatedAt = occurredAt
         };

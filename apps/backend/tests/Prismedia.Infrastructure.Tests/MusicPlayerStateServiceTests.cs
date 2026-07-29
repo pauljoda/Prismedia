@@ -144,7 +144,17 @@ public sealed class MusicPlayerStateServiceTests {
                 AlbumCoverUrls: null,
                 PlaybackOwnerEntityId: bookId,
                 PlaybackOwnerTitle: "Dune",
-                PlaybackOwnerEntityKind: EntityKind.Book)
+                PlaybackOwnerEntityKind: EntityKind.Book,
+                BookProgressMappings: [
+                    new BookProgressTrackMapping(
+                        trackId,
+                        bookId,
+                        ProgressUnit.Cfi,
+                        StartIndex: 2000,
+                        EndIndex: 4000,
+                        Total: 10000,
+                        ReaderMode.Paged)
+                ])
         };
 
         await service.SaveAsync(browserSessionId, request, CancellationToken.None);
@@ -153,6 +163,11 @@ public sealed class MusicPlayerStateServiceTests {
         Assert.Equal(bookId, loaded.Context?.PlaybackOwnerEntityId);
         Assert.Equal("Dune", loaded.Context?.PlaybackOwnerTitle);
         Assert.Equal(EntityKind.Book, loaded.Context?.PlaybackOwnerEntityKind);
+        var mapping = Assert.Single(loaded.Context?.BookProgressMappings ?? []);
+        Assert.Equal(trackId, mapping.TrackId);
+        Assert.Equal(ProgressUnit.Cfi, mapping.Unit);
+        Assert.Equal(2000, mapping.StartIndex);
+        Assert.Equal(4000, mapping.EndIndex);
     }
 
     private static UpdateMusicPlayerStateRequest Request(Guid trackId, double volume) =>

@@ -42,6 +42,8 @@ public sealed class PrismediaDbContext : DbContext {
 
     public DbSet<EntityPlaybackEventRow> EntityPlaybackEvents => Set<EntityPlaybackEventRow>();
 
+    public DbSet<EntityActivityEventRow> EntityActivityEvents => Set<EntityActivityEventRow>();
+
     public DbSet<EntityStatRow> EntityStats => Set<EntityStatRow>();
 
     public DbSet<EntityDateRow> EntityDates => Set<EntityDateRow>();

@@ -71,6 +71,30 @@ internal static partial class PrismediaModelConfiguration {
             entity.HasOne<UserRow>().WithMany().HasForeignKey(row => row.UserId).OnDelete(DeleteBehavior.Cascade);
         });
 
+        modelBuilder.Entity<EntityActivityEventRow>(entity => {
+            entity.ToTable("entity_activity_events");
+            entity.HasKey(row => row.Id);
+            entity.Property(row => row.Id).HasColumnName("id").ValueGeneratedNever();
+            entity.Property(row => row.EntityId).HasColumnName("entity_id");
+            entity.Property(row => row.UserId).HasColumnName("user_id");
+            entity.Property(row => row.Kind)
+                .HasColumnName("kind")
+                .HasMaxLength(64)
+                .IsRequired()
+                .HasConversion(value => value.ToCode(), value => value.DecodeAs<BookActivityKind>());
+            entity.Property(row => row.OccurredAt).HasColumnName("occurred_at");
+            entity.Property(row => row.DurationSeconds).HasColumnName("duration_seconds");
+            entity.Property(row => row.CreatedAt).HasColumnName("created_at");
+            entity.HasIndex(row => row.OccurredAt);
+            entity.HasIndex(row => new { row.EntityId, row.OccurredAt });
+            entity.HasIndex(row => new { row.UserId, row.OccurredAt });
+            entity.HasOne<EntityRow>().WithMany().HasForeignKey(row => row.EntityId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne<UserRow>().WithMany().HasForeignKey(row => row.UserId).OnDelete(DeleteBehavior.Cascade);
+            entity.ToTable(table => table.HasCheckConstraint(
+                "ck_entity_activity_events_duration",
+                "duration_seconds > 0"));
+        });
+
         modelBuilder.Entity<EntityStatRow>(entity => {
             entity.ToTable("entity_stats");
             entity.HasKey(row => new { row.EntityId, row.Code });

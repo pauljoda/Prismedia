@@ -21,7 +21,14 @@ public sealed class EntityCapabilityService {
     private readonly IEntityFileDeletionRecoveryReader? _deletionRecovery;
     private readonly IEntityVisibilityChecker? _visibility;
     private readonly IPlaybackEventStore _playbackEvents;
+    private readonly IEntityActivityStore _activityEvents;
     private readonly TimeProvider _timeProvider;
+
+    /// <summary>
+    /// Maximum active duration accepted from one reader/player heartbeat. This bounds time inflation
+    /// after suspended tabs or stale clients resume and report one oversized wall-clock interval.
+    /// </summary>
+    private const double MaxBookActivityHeartbeatSeconds = 60;
 
     /// <summary>
     /// Creates the service over the entity write port.
@@ -33,12 +40,14 @@ public sealed class EntityCapabilityService {
         IEntityVisibilityChecker? visibility = null,
         IPlaybackEventStore? playbackEvents = null,
         TimeProvider? timeProvider = null,
-        IEntityFileDeletionRecoveryReader? deletionRecovery = null) {
+        IEntityFileDeletionRecoveryReader? deletionRecovery = null,
+        IEntityActivityStore? activityEvents = null) {
         _entities = entities;
         _sourceOwnership = sourceOwnership;
         _deletionRecovery = deletionRecovery;
         _visibility = visibility;
         _playbackEvents = playbackEvents ?? NullPlaybackEventStore.Instance;
+        _activityEvents = activityEvents ?? NullEntityActivityStore.Instance;
         _timeProvider = timeProvider ?? TimeProvider.System;
     }
 
@@ -256,6 +265,8 @@ public sealed class EntityCapabilityService {
         bool? completed,
         bool reset,
         string? location,
+        double? activitySeconds,
+        BookActivityKind? activityKind,
         CancellationToken cancellationToken) {
         var ownerId = await ResolveProgressOwnerIdAsync(id, currentEntityId, cancellationToken);
         var entity = await _entities.FindShallowAsync(ownerId, cancellationToken);
@@ -265,6 +276,12 @@ public sealed class EntityCapabilityService {
 
         var progress = entity.GetOrAddCapability(() => new CapabilityProgress());
         var now = _timeProvider.GetUtcNow();
+        var hasActivity = await AccumulateBookActivityAsync(
+            entity,
+            activitySeconds,
+            activityKind,
+            now,
+            cancellationToken);
 
         // Explicit "mark unread": clear completion in place, independent of the cursor. Bypasses the
         // forward-only guard so a finished item can be reopened without losing the page position.
@@ -310,6 +327,27 @@ public sealed class EntityCapabilityService {
         if (proposedPosition is not null &&
             existingPosition is not null &&
             proposedPosition.Index < existingPosition.Index) {
+            if (hasActivity) {
+                await _entities.SaveAsync(entity, cancellationToken);
+            }
+            return await ProjectCardAsync(entity, cancellationToken);
+        }
+
+        if (proposedPosition is null &&
+            existingPosition is null &&
+            IsEarlierComparableCursor(progress, targetChapterId, unit, normalizedIndex, normalizedTotal)) {
+            if (hasActivity) {
+                await _entities.SaveAsync(entity, cancellationToken);
+            }
+            return await ProjectCardAsync(entity, cancellationToken);
+        }
+
+        // A readable cursor is the safe source of truth when an unmatched audiobook part cannot be
+        // mapped into that chapter. A later readable heartbeat may always replace an audio-only one.
+        if (unit == ProgressUnit.Second && progress.Unit is ProgressUnit.Page or ProgressUnit.Cfi) {
+            if (hasActivity) {
+                await _entities.SaveAsync(entity, cancellationToken);
+            }
             return await ProjectCardAsync(entity, cancellationToken);
         }
 
@@ -317,6 +355,9 @@ public sealed class EntityCapabilityService {
             (proposedPosition is null ||
              existingPosition is null ||
              proposedPosition.Index <= existingPosition.Index)) {
+            if (hasActivity) {
+                await _entities.SaveAsync(entity, cancellationToken);
+            }
             return await ProjectCardAsync(entity, cancellationToken);
         }
 
@@ -336,6 +377,47 @@ public sealed class EntityCapabilityService {
         await _entities.SaveAsync(entity, cancellationToken);
 
         return await ProjectCardAsync(entity, cancellationToken);
+    }
+
+    private async Task<bool> AccumulateBookActivityAsync(
+        Entity entity,
+        double? activitySeconds,
+        BookActivityKind? activityKind,
+        DateTimeOffset occurredAt,
+        CancellationToken cancellationToken) {
+        if (entity.Kind != EntityKind.Book ||
+            activityKind is null ||
+            activitySeconds is not { } reportedSeconds ||
+            !double.IsFinite(reportedSeconds) ||
+            reportedSeconds <= 0) {
+            return false;
+        }
+
+        var boundedSeconds = Math.Min(reportedSeconds, MaxBookActivityHeartbeatSeconds);
+        entity.GetOrAddCapability(() => new CapabilityPlayback())
+            .AccumulatePlayDuration(TimeSpan.FromSeconds(boundedSeconds));
+        await _activityEvents.StageAsync(
+            new EntityActivityAppend(entity.Id, activityKind.Value, occurredAt, boundedSeconds),
+            cancellationToken);
+        return true;
+    }
+
+    private static bool IsEarlierComparableCursor(
+        CapabilityProgress current,
+        Guid proposedEntityId,
+        ProgressUnit proposedUnit,
+        int proposedIndex,
+        int proposedTotal) {
+        if (current.CurrentEntityId != proposedEntityId ||
+            current.Unit != proposedUnit ||
+            current.Total <= 0 ||
+            proposedTotal <= 0) {
+            return false;
+        }
+
+        var currentFraction = current.Index / (double)current.Total;
+        var proposedFraction = proposedIndex / (double)proposedTotal;
+        return proposedFraction < currentFraction;
     }
 
     /// <summary>
