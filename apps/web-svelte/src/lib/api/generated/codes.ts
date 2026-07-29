@@ -125,6 +125,14 @@ export const BLOCKLIST_REASON = {
 
 export type BlocklistReasonCode = (typeof BLOCKLIST_REASON)[keyof typeof BLOCKLIST_REASON];
 
+// source: enum BookActivityKind
+export const BOOK_ACTIVITY_KIND = {
+  reading: "reading",
+  listening: "listening",
+} as const;
+
+export type BookActivityKindCode = (typeof BOOK_ACTIVITY_KIND)[keyof typeof BOOK_ACTIVITY_KIND];
+
 // source: enum BookFormat
 export const BOOK_FORMAT = {
   imageArchive: "image-archive",
@@ -693,6 +701,7 @@ export const PROGRESS_UNIT = {
   chapter: "chapter",
   track: "track",
   cfi: "cfi",
+  second: "second",
 } as const;
 
 export type ProgressUnitCode = (typeof PROGRESS_UNIT)[keyof typeof PROGRESS_UNIT];

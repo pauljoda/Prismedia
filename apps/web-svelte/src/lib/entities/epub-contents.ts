@@ -135,11 +135,27 @@ export function resolveCurrentEpubChapter(
   }, null);
 }
 
+/** Finds the TOC row whose chapter-scoped range owns a normalized whole-book position. */
+export function resolveEpubChapterByFraction(
+  entries: readonly EpubContentsEntry[],
+  fraction: number | null | undefined,
+): EpubContentsEntry | null {
+  if (typeof fraction !== "number" || !Number.isFinite(fraction)) return null;
+  const normalized = Math.max(0, Math.min(1, fraction));
+  return entries.find((entry) =>
+    typeof entry.startFraction === "number" &&
+    typeof entry.endFraction === "number" &&
+    normalized >= entry.startFraction &&
+    normalized <= entry.endFraction
+  ) ?? null;
+}
+
 /** Loads just enough of an EPUB with the vendored reader parser to expose its TOC on detail pages. */
 export async function loadEpubContents(
   sourceUrl: string,
   currentLocation?: string | null,
   signal?: AbortSignal,
+  currentFraction?: number | null,
 ): Promise<LoadedEpubContents> {
   const absoluteUrl = apiAssetUrl(sourceUrl) ?? sourceUrl;
   const response = await fetch(absoluteUrl, { signal });
@@ -151,7 +167,8 @@ export async function loadEpubContents(
   const book = await makeBook(file) as EpubBook;
   try {
     const entries = addEpubChapterRanges(flattenEpubToc(book.toc, book), book.sections ?? []);
-    const current = resolveCurrentEpubChapter(entries, currentLocation, book);
+    const current = resolveCurrentEpubChapter(entries, currentLocation, book)
+      ?? resolveEpubChapterByFraction(entries, currentFraction);
     return { entries, currentChapterId: current?.id ?? null };
   } finally {
     book.destroy?.();

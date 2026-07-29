@@ -23,6 +23,10 @@ export interface PlaybackStatisticsResponse {
   distinctEntityCount: number | string;
   /** @pattern ^-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?$ */
   watchSeconds: number | string;
+  /** @pattern ^-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?$ */
+  readingSeconds: number | string;
+  /** @pattern ^-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?$ */
+  listeningSeconds: number | string;
   topEntities: PlaybackStatisticsEntity[];
   recentEvents: PlaybackStatisticsEvent[];
   dailyEvents: PlaybackStatisticsBucket[];

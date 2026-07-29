@@ -3,7 +3,9 @@ import {
   addEpubChapterRanges,
   flattenEpubToc,
   resolveCurrentEpubChapter,
+  resolveEpubChapterByFraction,
   type EpubBookNavigation,
+  type EpubContentsEntry,
 } from "./epub-contents";
 
 describe("EPUB contents", () => {
@@ -91,5 +93,14 @@ describe("EPUB contents", () => {
       expect.objectContaining({ id: "one.xhtml", startFraction: 0.1, endFraction: 0.3 }),
       expect.objectContaining({ id: "two.xhtml", startFraction: 0.3, endFraction: 1 }),
     ]);
+  });
+
+  it("finds the current chapter from an estimated whole-book fraction", () => {
+    const entries: EpubContentsEntry[] = [
+      { id: "one", title: "One", location: "one", depth: 0, order: 0, sectionIndex: 0, startFraction: 0.1, endFraction: 0.3 },
+      { id: "two", title: "Two", location: "two", depth: 0, order: 1, sectionIndex: 1, startFraction: 0.3, endFraction: 0.8 },
+    ];
+
+    expect(resolveEpubChapterByFraction(entries, 0.55)?.id).toBe("two");
   });
 });

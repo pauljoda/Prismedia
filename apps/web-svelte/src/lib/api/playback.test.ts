@@ -36,6 +36,8 @@ describe("playback API", () => {
       index: 2,
       total: 10,
       completed: false,
+      activitySeconds: 15,
+      activityKind: "reading",
     });
 
     expect(fetchMock).toHaveBeenCalledWith(
@@ -51,6 +53,8 @@ describe("playback API", () => {
           completed: false,
           reset: false,
           location: null,
+          activitySeconds: 15,
+          activityKind: "reading",
         }),
       }),
     );

@@ -49,25 +49,22 @@ describe("AudioVidStackPlayer playback continuity", () => {
 
   it("persists audiobook progress on its Book owner across transport boundaries", () => {
     expect(source).toContain("function saveAudiobookProgress");
-    expect(source).toContain("updateEntityPlayback(ownerId");
+    expect(source).toContain("updateEntityProgress(ownerId, update)");
+    expect(source).toContain("ctx?.bookProgressMappings?.find");
+    expect(source).toContain("bookProgressUpdateForAudio(");
     expect(source).toContain("saveAudiobookProgress({ completed: false })");
     expect(source).toContain("saveAudiobookProgress({ completed: isFinalAudiobookPart() })");
-    expect(source).toContain("const absoluteSeconds = options.completed\n      ? 0");
+    expect(source).toContain("const positionSeconds = options.completed ? durationSeconds : playback.currentTime;");
     expect(source).toContain("const AUDIOBOOK_PROGRESS_SAVE_INTERVAL_SECONDS = 5;");
-    const saveStart = source.indexOf("function saveAudiobookProgress");
-    const saveEnd = source.indexOf("// Switch audio source", saveStart);
-    expect(source.slice(saveStart, saveEnd)).not.toContain("durationSeconds");
-    expect(source.slice(saveStart, saveEnd)).toContain("audiobookProgressSave = audiobookProgressSave");
+    expect(source).toContain("audiobookProgressSave = audiobookProgressSave");
   });
 
-  it("uses runtime media durations for unprobed audiobook parts and still persists completion", () => {
-    expect(source).toContain("const audiobookRuntimeDurations = new SvelteMap<string, number>();");
-    expect(source).toContain("audiobookRuntimeDurations.set(track.id, audio.duration);");
-    expect(source).toContain("audiobookDuration(playback.queue, audiobookRuntimeDurations)");
-    expect(source).toContain(
-      "audiobookAbsoluteTime(playback.queue, track.id, playback.currentTime, audiobookRuntimeDurations)",
-    );
-    expect(source).toContain("if (totalSeconds <= 0 && !options.completed) return;");
+  it("records active listening time with each mapped progress heartbeat", () => {
+    expect(source).toContain("const audiobookActivityClock = new BookActivityClock();");
+    expect(source).toContain("audiobookActivityClock.start();");
+    expect(source).toContain("audiobookActivityClock.stop()");
+    expect(source).toContain("audiobookActivityClock.take()");
+    expect(source).toContain("activitySeconds,");
   });
 
   it("keeps audiobook parts ordered and out of music skip counting", () => {

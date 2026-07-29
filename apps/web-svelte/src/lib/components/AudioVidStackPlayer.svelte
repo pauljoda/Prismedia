@@ -1,6 +1,5 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { SvelteMap } from "svelte/reactivity";
   import {
     ListMusic,
     Minimize2,
@@ -21,7 +20,7 @@
   } from "@lucide/svelte";
   import { cn } from "@prismedia/ui-svelte";
   import { formatDuration } from "$lib/utils/format";
-  import { recordEntityPlaybackEvent, updateEntityPlayback } from "$lib/api/playback";
+  import { recordEntityPlaybackEvent, updateEntityProgress } from "$lib/api/playback";
   import { apiAssetUrl, assetUrl } from "$lib/api/orval-fetch";
   import { paletteFromImage, type ArtworkPalette } from "$lib/entities/artwork-palette";
   import { resolveEntityHref } from "$lib/entities/entity-codes";
@@ -29,10 +28,8 @@
   import AudioWaveformFilmstrip from "./AudioWaveformFilmstrip.svelte";
   import PlaybackQueueFlyout from "./PlaybackQueueFlyout.svelte";
   import { waveformForDisplay } from "./audio-waveform";
-  import {
-    audiobookAbsoluteTime,
-    audiobookDuration,
-  } from "$lib/entities/audiobook-playback";
+  import { BookActivityClock } from "$lib/entities/book-activity-clock";
+  import { bookProgressUpdateForAudio } from "$lib/entities/book-combined-progress";
   import {
     AUDIO_PLAYBACK_SAVE_EVENT,
     resolveAudioArtwork,
@@ -73,9 +70,9 @@
   let tabCoordinator: AudioTabCoordinator | null = null;
   let currentTrackRequestedAtMs: number | null = null;
   let lastAudiobookProgressSeconds: number | null = null;
-  let lastAudiobookOwnerId: string | null = null;
+  let lastAudiobookTrackId: string | null = null;
   let audiobookProgressSave = Promise.resolve();
-  const audiobookRuntimeDurations = new SvelteMap<string, number>();
+  const audiobookActivityClock = new BookActivityClock();
 
   const activeTrack = $derived(playback.currentTrack);
   const ctx = $derived(playback.context);
@@ -444,38 +441,50 @@
     return isAudiobook && playback.position === playback.order.length - 1;
   }
 
-  function saveAudiobookProgress(options: { completed: boolean; periodic?: boolean }) {
+  function saveAudiobookProgress(options: {
+    completed: boolean;
+    periodic?: boolean;
+    stopActivity?: boolean;
+  }) {
     const ownerId = ctx?.playbackOwnerEntityId;
     const track = activeTrack;
     if (!isAudiobook || !ownerId || !track) return;
-    if (ownerId !== lastAudiobookOwnerId) {
-      lastAudiobookOwnerId = ownerId;
+    const mapping = ctx?.bookProgressMappings?.find((candidate) => candidate.trackId === track.id);
+    if (!mapping) return;
+    if (track.id !== lastAudiobookTrackId) {
+      lastAudiobookTrackId = track.id;
       lastAudiobookProgressSeconds = null;
     }
 
-    const totalSeconds = audiobookDuration(playback.queue, audiobookRuntimeDurations);
-    if (totalSeconds <= 0 && !options.completed) return;
-    // Completion is explicit state; reset the resume cursor so Listen again starts at the beginning.
-    const absoluteSeconds = options.completed
-      ? 0
-      : audiobookAbsoluteTime(playback.queue, track.id, playback.currentTime, audiobookRuntimeDurations);
+    const durationSeconds = Math.max(0, playback.duration || track.duration || 0);
+    if (durationSeconds <= 0) return;
+    const positionSeconds = options.completed ? durationSeconds : playback.currentTime;
     if (
       options.periodic &&
       lastAudiobookProgressSeconds !== null &&
-      Math.abs(absoluteSeconds - lastAudiobookProgressSeconds) < AUDIOBOOK_PROGRESS_SAVE_INTERVAL_SECONDS
+      Math.abs(positionSeconds - lastAudiobookProgressSeconds) < AUDIOBOOK_PROGRESS_SAVE_INTERVAL_SECONDS
     ) {
       return;
     }
 
-    lastAudiobookProgressSeconds = absoluteSeconds;
+    lastAudiobookProgressSeconds = positionSeconds;
+    const activitySeconds = options.stopActivity
+      ? audiobookActivityClock.stop()
+      : playing
+        ? audiobookActivityClock.take()
+        : null;
+    const update = bookProgressUpdateForAudio(
+      mapping,
+      positionSeconds,
+      durationSeconds,
+      activitySeconds,
+      options.completed,
+    );
     // Preserve seek/pause/part-transition ordering. Parallel writes can resolve backwards and move
     // the Book cursor to an older position even though the browser emitted events in the right order.
     audiobookProgressSave = audiobookProgressSave
       .catch(() => undefined)
-      .then(() => updateEntityPlayback(ownerId, {
-        resumeSeconds: absoluteSeconds,
-        completed: options.completed,
-      }))
+      .then(() => updateEntityProgress(ownerId, update))
       .then(() => undefined)
       .catch(() => undefined);
   }
@@ -614,9 +623,6 @@
       if (Number.isFinite(audio.duration)) {
         playback.duration = audio.duration;
         const track = activeTrack;
-        if (isAudiobook && track && audio.duration > 0) {
-          audiobookRuntimeDurations.set(track.id, audio.duration);
-        }
       }
       applyPendingInitialSeek(audio);
       setMediaSessionPosition(audio.duration, audio.currentTime);
@@ -626,9 +632,13 @@
       audioStartedInThisSession = true;
       playback.playIntent = true;
       playback.playing = true;
+      if (isAudiobook) audiobookActivityClock.start();
     };
     const handlePause = () => {
-      saveAudiobookProgress({ completed: audio.ended && isFinalAudiobookPart() });
+      saveAudiobookProgress({
+        completed: audio.ended && isFinalAudiobookPart(),
+        stopActivity: true,
+      });
       playback.playing = false;
       coordinator.releasePlayback();
       window.dispatchEvent(new Event(AUDIO_PLAYBACK_SAVE_EVENT));

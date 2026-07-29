@@ -1,16 +1,19 @@
 import { describe, expect, it } from "vitest";
+import { PROGRESS_UNIT, READER_MODE } from "$lib/api/generated/codes";
 import type { AudioTrackListItemDto } from "$lib/entities/media-view-models";
 import type { BookChapterRow } from "$lib/entities/book-chapter-list";
 import {
+  buildBookProgressMappings,
+  bookProgressUpdateForAudio,
+  resolveBookAudioResume,
   resolveBookCombinedResume,
   resolveChapterCombinedLaunch,
-  type BookListeningPosition,
   type BookReadingPosition,
 } from "./book-combined-progress";
 
-function audioTrack(duration = 1_200): AudioTrackListItemDto {
+function audioTrack(id = "audio-1", duration = 1_200): AudioTrackListItemDto {
   return {
-    id: "audio-1",
+    id,
     title: "Chapter One",
     date: null,
     rating: null,
@@ -66,18 +69,11 @@ const reading: BookReadingPosition = {
   pageIndex: null,
 };
 
-const listening: BookListeningPosition = {
-  rowId: "chapter-1",
-  overallFraction: 0.24,
-  chapterFraction: 0.2,
-  trackOffsetSeconds: 240,
-};
-
-describe("combined book progress", () => {
-  it("interpolates a reading cursor into audio and gives it a five-second runway", () => {
-    expect(resolveChapterCombinedLaunch(epubRow(), reading, listening)).toEqual({
+describe("unified book progress", () => {
+  it("uses the one canonical reading cursor to align audio with a five-second runway", () => {
+    expect(resolveChapterCombinedLaunch(epubRow(), reading)).toEqual({
       rowId: "chapter-1",
-      source: "reading",
+      source: "progress",
       audioStartSeconds: 595,
       readerLocation: "epubcfi(/6/8!/4/2)",
       readerFraction: null,
@@ -85,45 +81,18 @@ describe("combined book progress", () => {
     });
   });
 
-  it("starts from zero when the interpolated audio point is inside the runway", () => {
+  it("falls back to the saved text fraction when an estimated audio cursor has no exact CFI", () => {
     expect(resolveChapterCombinedLaunch(epubRow(), {
       ...reading,
-      overallFraction: 0.201,
-      chapterFraction: 0.002,
-    }, null)?.audioStartSeconds).toBe(0);
-  });
-
-  it("uses listening when it is farther and maps its chapter fraction back into the EPUB", () => {
-    expect(resolveChapterCombinedLaunch(epubRow(), reading, {
-      ...listening,
-      overallFraction: 0.36,
-      chapterFraction: 0.8,
-      trackOffsetSeconds: 960,
-    })).toEqual({
-      rowId: "chapter-1",
-      source: "listening",
-      audioStartSeconds: 955,
+      location: null,
+    })).toMatchObject({
+      audioStartSeconds: 595,
       readerLocation: null,
-      readerFraction: 0.36,
-      readerPageIndex: null,
+      readerFraction: 0.3,
     });
   });
 
-  it("maps listening progress to a page for archive chapters", () => {
-    const row: BookChapterRow = {
-      ...epubRow(),
-      readTarget: { kind: "entity-chapter", chapterId: "chapter-1" },
-      readPageCount: 20,
-    };
-
-    expect(resolveChapterCombinedLaunch(row, null, {
-      ...listening,
-      chapterFraction: 0.5,
-      trackOffsetSeconds: 600,
-    })?.readerPageIndex).toBe(9);
-  });
-
-  it("chooses the row owned by whichever whole-book cursor is farther", () => {
+  it("resumes the row owned by the one whole-book cursor", () => {
     const secondRow: BookChapterRow = {
       ...epubRow(),
       id: "chapter-2",
@@ -133,17 +102,101 @@ describe("combined book progress", () => {
         startFraction: 0.4,
         endFraction: 0.6,
       },
-      audioTrack: { ...audioTrack(), id: "audio-2" },
+      audioTrack: audioTrack("audio-2"),
     };
 
-    const plan = resolveBookCombinedResume([epubRow(), secondRow], reading, {
-      ...listening,
+    expect(resolveBookCombinedResume([epubRow(), secondRow], {
+      ...reading,
       rowId: "chapter-2",
       overallFraction: 0.55,
       chapterFraction: 0.75,
-      trackOffsetSeconds: 900,
-    });
+      location: null,
+    })).toMatchObject({ rowId: "chapter-2", source: "progress" });
+  });
 
-    expect(plan).toMatchObject({ rowId: "chapter-2", source: "listening" });
+  it("builds chapter-scoped EPUB mappings and converts listening into the shared CFI fraction", () => {
+    const mapping = expectSingle(buildBookProgressMappings(
+      "book-1",
+      [epubRow()],
+      READER_MODE.paged,
+    ));
+
+    expect(mapping).toEqual({
+      trackId: "audio-1",
+      currentEntityId: "book-1",
+      unit: PROGRESS_UNIT.cfi,
+      startIndex: 2000,
+      endIndex: 4000,
+      total: 10000,
+      mode: READER_MODE.paged,
+    });
+    expect(bookProgressUpdateForAudio(mapping, 900, 1200, 15, false)).toEqual({
+      currentEntityId: "book-1",
+      unit: PROGRESS_UNIT.cfi,
+      index: 3500,
+      total: 10000,
+      mode: READER_MODE.paged,
+      location: null,
+      completed: null,
+      activitySeconds: 15,
+      activityKind: "listening",
+    });
+  });
+
+  it("maps audio to a page only within the matched readable chapter", () => {
+    const row: BookChapterRow = {
+      ...epubRow(),
+      readTarget: { kind: "entity-chapter", chapterId: "chapter-entity-1" },
+      readPageCount: 20,
+    };
+    const mapping = expectSingle(buildBookProgressMappings(
+      "book-1",
+      [row],
+      READER_MODE.webtoon,
+    ));
+
+    expect(bookProgressUpdateForAudio(mapping, 600, 1200, null, false)).toMatchObject({
+      currentEntityId: "chapter-entity-1",
+      unit: PROGRESS_UNIT.page,
+      index: 9,
+      total: 20,
+      mode: READER_MODE.webtoon,
+    });
+  });
+
+  it("does not let an unmatched audio part invent a text position", () => {
+    const unmatched = { ...epubRow(), readTarget: null };
+    expect(buildBookProgressMappings("book-1", [epubRow(), unmatched], READER_MODE.paged))
+      .toHaveLength(1);
+  });
+
+  it("uses second progress only when the book has no readable rendition", () => {
+    const audioOnly = { ...epubRow(), readTarget: null };
+    expect(expectSingle(buildBookProgressMappings("book-1", [audioOnly], READER_MODE.paged)))
+      .toEqual({
+        trackId: "audio-1",
+        currentEntityId: "book-1",
+        unit: PROGRESS_UNIT.second,
+        startIndex: 0,
+        endIndex: 1200,
+        total: 1200,
+        mode: null,
+      });
+  });
+
+  it("maps the shared cursor back into the audiobook part for listening resume", () => {
+    const rows = [epubRow()];
+    const mappings = buildBookProgressMappings("book-1", rows, READER_MODE.paged);
+
+    expect(resolveBookAudioResume(rows, mappings, {
+      currentEntityId: "book-1",
+      unit: PROGRESS_UNIT.cfi,
+      index: 3500,
+    })).toEqual({ trackId: "audio-1", trackOffsetSeconds: 895 });
   });
 });
+
+function expectSingle<T>(items: readonly T[]): T {
+  expect(items).toHaveLength(1);
+  return items[0]!;
+}

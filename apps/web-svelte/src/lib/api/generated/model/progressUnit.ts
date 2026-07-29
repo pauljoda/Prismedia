@@ -14,4 +14,5 @@ export const ProgressUnit = {
   chapter: 'chapter',
   track: 'track',
   cfi: 'cfi',
+  second: 'second',
 } as const;

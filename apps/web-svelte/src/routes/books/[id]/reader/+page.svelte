@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { CAPABILITY_KIND, PROGRESS_UNIT, READER_MODE } from "$lib/api/generated/codes";
+  import { BOOK_ACTIVITY_KIND, CAPABILITY_KIND, PROGRESS_UNIT, READER_MODE } from "$lib/api/generated/codes";
   import { onMount } from "svelte";
   import { goto } from "$app/navigation";
   import { page } from "$app/state";
@@ -30,6 +30,7 @@
   import { redirectHiddenEntityNotFound } from "$lib/nsfw/hidden-entity";
   import { useNsfw } from "$lib/nsfw/store.svelte";
   import { useAudioPlayback } from "$lib/stores/audio-playback.svelte";
+  import { BookActivityClock } from "$lib/entities/book-activity-clock";
 
   type ReaderFlow = "paginated" | "scrolled";
 
@@ -56,6 +57,7 @@
   let returnHref = $state("/books");
   let errorMessage: string | null = $state(null);
   let progressSaveQueue: Promise<void> = Promise.resolve();
+  const readerActivityClock = new BookActivityClock();
 
   // EPUB reader state (reflowable, via foliate).
   let singleFileBook = $state(false);
@@ -90,8 +92,41 @@
   );
 
   onMount(() => {
-    void loadReader(page.url);
+    const startReader = async () => {
+      await loadReader(page.url);
+      if (loadState === "ready" && document.visibilityState === "visible") {
+        readerActivityClock.start();
+      }
+    };
+    const heartbeat = window.setInterval(() => queueReaderActivityHeartbeat(false), 15_000);
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        readerActivityClock.start();
+      } else {
+        queueReaderActivityHeartbeat(true);
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    void startReader();
+
+    return () => {
+      window.clearInterval(heartbeat);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      queueReaderActivityHeartbeat(true);
+    };
   });
+
+  function queueReaderActivityHeartbeat(stop: boolean) {
+    const activitySeconds = stop ? readerActivityClock.stop() : readerActivityClock.take();
+    if (!activitySeconds || loadState !== "ready") return;
+    if (singleFileBook) {
+      void queueSingleFileSave(false, activitySeconds).catch(() => undefined);
+    } else if (pdfBook) {
+      void queuePdfSave(pdfLastPage, pdfLastCount, false, activitySeconds).catch(() => undefined);
+    } else {
+      void queueProgressSave(readerIndex, false, activitySeconds).catch(() => undefined);
+    }
+  }
 
   async function loadReader(url: URL) {
     loadState = "loading";
@@ -141,7 +176,12 @@
     singleFileSource = `/entities/${nextBook.id}/files/source`;
     singleFileContentType = nextBook.format === "pdf" ? "application/pdf" : "application/epub+zip";
     singleFileLocation = launchLocation ?? (launchFraction === null && resume ? progress?.location ?? null : null);
-    singleFileInitialFraction = launchFraction;
+    singleFileInitialFraction = launchFraction
+      ?? (singleFileLocation
+        ? null
+        : resume && Number(progress?.total ?? 0) > 0
+          ? Number(progress?.index ?? 0) / Number(progress?.total ?? 0)
+          : null);
     singleFileFlow = progress?.mode === READER_MODE.scrolled ? "scrolled" : "paginated";
     singleFileFlowMode = singleFileFlow;
     singleFileSaveLocation = singleFileLocation;
@@ -164,7 +204,10 @@
     void queueSingleFileSave().catch(() => undefined);
   }
 
-  async function saveSingleFileProgress(completed = false) {
+  async function saveSingleFileProgress(
+    completed = false,
+    activitySeconds = readerActivityClock.take(),
+  ) {
     if (!book) return;
     const percent = Math.max(0, Math.min(10000, Math.round(singleFileSaveFraction * 10000)));
     await updateEntityProgress(book.id, {
@@ -177,13 +220,15 @@
       mode: singleFileFlowMode === "scrolled" ? READER_MODE.scrolled : READER_MODE.paged,
       location: singleFileSaveLocation,
       completed: completed ? true : null,
+      activitySeconds,
+      activityKind: activitySeconds ? BOOK_ACTIVITY_KIND.reading : undefined,
     });
   }
 
-  function queueSingleFileSave(completed = false) {
+  function queueSingleFileSave(completed = false, activitySeconds?: number | null) {
     const nextSave = progressSaveQueue
       .catch(() => undefined)
-      .then(() => saveSingleFileProgress(completed));
+      .then(() => saveSingleFileProgress(completed, activitySeconds));
     progressSaveQueue = nextSave;
     return nextSave;
   }
@@ -211,7 +256,12 @@
     loadState = "ready";
   }
 
-  async function savePdfProgress(page: number, count: number, completed: boolean) {
+  async function savePdfProgress(
+    page: number,
+    count: number,
+    completed: boolean,
+    activitySeconds = readerActivityClock.take(),
+  ) {
     if (!book || count === 0) return;
     await updateEntityProgress(book.id, {
       currentEntityId: book.id,
@@ -220,11 +270,20 @@
       total: count,
       mode: READER_MODE.scrolled,
       completed: completed ? true : null,
+      activitySeconds,
+      activityKind: activitySeconds ? BOOK_ACTIVITY_KIND.reading : undefined,
     });
   }
 
-  function queuePdfSave(page: number, count: number, completed: boolean) {
-    const nextSave = progressSaveQueue.catch(() => undefined).then(() => savePdfProgress(page, count, completed));
+  function queuePdfSave(
+    page: number,
+    count: number,
+    completed: boolean,
+    activitySeconds?: number | null,
+  ) {
+    const nextSave = progressSaveQueue
+      .catch(() => undefined)
+      .then(() => savePdfProgress(page, count, completed, activitySeconds));
     progressSaveQueue = nextSave;
     return nextSave;
   }
@@ -449,7 +508,11 @@
     };
   }
 
-  async function saveProgress(index = readerIndex, completed = false) {
+  async function saveProgress(
+    index = readerIndex,
+    completed = false,
+    activitySeconds = readerActivityClock.take(),
+  ) {
     if (!book || readerPages.length === 0) return;
     const position = positionForReaderIndex(index);
     if (!position.chapter) return;
@@ -462,13 +525,19 @@
       // Only an explicit end-of-book save reports completion; mid-reading sends null so it does not
       // get treated as an explicit "mark unread".
       completed: completed ? true : null,
+      activitySeconds,
+      activityKind: activitySeconds ? BOOK_ACTIVITY_KIND.reading : undefined,
     });
   }
 
-  function queueProgressSave(index = readerIndex, completed = false) {
+  function queueProgressSave(
+    index = readerIndex,
+    completed = false,
+    activitySeconds?: number | null,
+  ) {
     const nextSave = progressSaveQueue
       .catch(() => undefined)
-      .then(() => saveProgress(index, completed));
+      .then(() => saveProgress(index, completed, activitySeconds));
     progressSaveQueue = nextSave;
     return nextSave;
   }

@@ -7,6 +7,7 @@ import {
   type MusicPlayerRepeatModeCode,
 } from "$lib/api/generated/codes";
 import type { AudioTrackListItemDto } from "$lib/entities/media-view-models";
+import type { BookProgressTrackMapping } from "$lib/api/generated/model";
 import { createOptionalContext } from "$lib/utils/context";
 
 export type RepeatMode = MusicPlayerRepeatModeCode;
@@ -26,6 +27,8 @@ export interface PlaybackContext {
   playbackOwnerEntityId?: string | null;
   playbackOwnerTitle?: string | null;
   playbackOwnerEntityKind?: EntityKindCode | null;
+  /** Chapter-scoped conversions from each audiobook part into the Book's canonical cursor. */
+  bookProgressMappings?: BookProgressTrackMapping[] | null;
 }
 
 /** Element-level controls the global player registers so any component can drive playback. */

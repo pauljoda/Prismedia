@@ -4,19 +4,21 @@ import { describe, expect, it } from "vitest";
 const source = readFileSync("src/routes/books/[id]/+page.svelte", "utf8");
 
 describe("Book detail audiobook experience", () => {
-  it("keeps reading and listening as independent shared actions and progress panels", () => {
+  it("keeps reading and listening actions on one shared progress surface", () => {
     expect(source).toContain('id: "read-book"');
     expect(source).toContain('id: "listen-book"');
-    expect(source).toContain('<MediaProgressPanel\n          kind="read"');
-    expect(source).toContain('<MediaProgressPanel\n          kind="listen"');
+    expect(source).toContain("<BookCombinedProgressCard");
+    expect(source).toContain("progressPercent={canonicalPercent}");
+    expect(source).toContain("Progress {canonicalPercent}%");
     expect(source).toContain("Continue listening");
   });
 
   it("queues ordered audio-track children with the Book as playback owner", () => {
     expect(source).toContain("audiobookTrackItems(book)");
-    expect(source).toContain("resolveAudiobookResume(");
+    expect(source).toContain("resolveBookAudioResume(");
     expect(source).toContain("playbackOwnerEntityId: book.id");
     expect(source).toContain("playbackOwnerEntityKind: ENTITY_KIND.book");
+    expect(source).toContain("bookProgressMappings,");
     expect(source).toContain("playAudiobookTrack(resume.trackId, resume.trackOffsetSeconds)");
   });
 
@@ -29,14 +31,15 @@ describe("Book detail audiobook experience", () => {
     expect(source).toContain("pageIndex: plan.readerPageIndex ?? undefined");
   });
 
-  it("updates listening completion without reporting total runtime as watched-duration delta", () => {
+  it("updates listening completion through the canonical progress endpoint", () => {
     const toggleStart = source.indexOf("async function handleToggleListened");
     const toggleEnd = source.indexOf("async function startListeningOver", toggleStart);
     const startOverEnd = source.indexOf("function resumeProgress", toggleEnd);
     const mutationSource = source.slice(toggleStart, startOverEnd);
 
-    expect(mutationSource).toContain("updateEntityPlayback(book.id");
-    expect(mutationSource).not.toContain("durationSeconds");
+    expect(mutationSource).toContain("updateEntityProgress(book.id");
+    expect(mutationSource).toContain("currentEntityId: bookProgress.currentEntityId");
+    expect(mutationSource).not.toContain("resumeSeconds");
   });
 
   it("always exposes first-class ebook and audiobook management on the Book acquisition tab", () => {

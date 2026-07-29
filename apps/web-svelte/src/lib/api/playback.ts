@@ -1,4 +1,9 @@
-import type { PlaybackEventKindCode, ProgressUnitCode, ReaderModeCode } from "$lib/api/generated/codes";
+import type {
+  BookActivityKindCode,
+  PlaybackEventKindCode,
+  ProgressUnitCode,
+  ReaderModeCode,
+} from "$lib/api/generated/codes";
 import {
   createEntityPlaybackEvent as createEntityPlaybackEventRequest,
   recordAudioTrackPlay as recordAudioTrackPlayRequest,
@@ -188,6 +193,8 @@ export async function updateEntityProgress(
     completed?: boolean | null;
     reset?: boolean;
     location?: string | null;
+    activitySeconds?: number | null;
+    activityKind?: BookActivityKindCode;
   },
   options?: RequestOptions,
 ): Promise<EntityCard> {
@@ -203,6 +210,8 @@ export async function updateEntityProgress(
         completed: payload.completed ?? null,
         reset: payload.reset ?? false,
         location: payload.location ?? null,
+        activitySeconds: payload.activitySeconds ?? null,
+        activityKind: payload.activityKind,
       } as EntityProgressUpdateRequest,
       requestInit(options),
     ),

@@ -1,10 +1,9 @@
 <script lang="ts">
-  import { CAPABILITY_KIND, PROGRESS_UNIT, type BookRenditionCode } from "$lib/api/generated/codes";
+  import { CAPABILITY_KIND, PROGRESS_UNIT, READER_MODE, type BookRenditionCode } from "$lib/api/generated/codes";
   import { onMount } from "svelte";
   import { afterNavigate, goto } from "$app/navigation";
   import { page } from "$app/state";
   import { BookOpen, CloudDownload, Headphones, Info, Play, SlidersHorizontal, Users } from "@lucide/svelte";
-  import { formatDuration } from "$lib/utils/format";
   import EntityDetailSkeleton from "$lib/components/entities/EntityDetailSkeleton.svelte";
   import MediaProgressPanel from "$lib/components/MediaProgressPanel.svelte";
   import BookRenditionAcquisitionCard from "$lib/components/acquisitions/BookRenditionAcquisitionCard.svelte";
@@ -15,7 +14,7 @@
   import { fetchAcquisitionsForEntity } from "$lib/api/acquisitions";
   import { fetchEntityMonitors, resumeMonitor, stopMonitor } from "$lib/api/monitors";
   import { commitEntityRequest } from "$lib/api/requests";
-  import { updateEntityPlayback, updateEntityProgress } from "$lib/api/playback";
+  import { updateEntityProgress } from "$lib/api/playback";
   import { fetchBook, type BookDetail } from "$lib/api/media";
   import { BookFormat, type AcquisitionDetail, type MonitorView } from "$lib/api/generated/model";
   import { fetchEntity, type EntityCardFull } from "$lib/api/entities";
@@ -38,12 +37,7 @@
     type BookReaderChapter,
   } from "$lib/entities/book-entity-reader";
   import { bookReaderHref } from "$lib/entities/book-reader-route";
-  import {
-    audiobookAbsoluteTime,
-    audiobookDuration,
-    audiobookTrackItems,
-    resolveAudiobookResume,
-  } from "$lib/entities/audiobook-playback";
+  import { audiobookTrackItems } from "$lib/entities/audiobook-playback";
   import {
     fetchOrderedEntityThumbnails,
     hydrateStandardRelationshipCards,
@@ -79,13 +73,16 @@
     type ReadableBookChapter,
   } from "$lib/entities/book-chapter-list";
   import {
+    buildBookProgressMappings,
+    bookProgressCursor,
     epubChapterFraction,
+    resolveBookAudioResume,
     resolveBookCombinedResume,
     resolveChapterCombinedLaunch,
     type BookCombinedLaunch,
-    type BookListeningPosition,
     type BookReadingPosition,
   } from "$lib/entities/book-combined-progress";
+  import { formatWatchDuration } from "$lib/stats/playback-stats";
   import {
     loadEpubContents,
     type EpubContentsEntry,
@@ -173,42 +170,15 @@
     comicCompleted ? "Re-read" : comicStarted ? "Resume" : "Read",
   );
   const audiobookTracks = $derived(book ? audiobookTrackItems(book) : []);
-  const audiobookTotalSeconds = $derived(audiobookDuration(audiobookTracks));
   const audiobookPlayback = $derived(
     book ? getCapability(book.capabilities, CAPABILITY_KIND.playback) : undefined,
+  );
+  const bookProgress = $derived(
+    book ? getCapability(book.capabilities, CAPABILITY_KIND.progress) : undefined,
   );
   const isCurrentAudiobook = $derived(
     playback.context?.playbackOwnerEntityId === book?.id &&
       playback.context?.playbackOwnerEntityKind === ENTITY_KIND.book,
-  );
-  const audiobookResumeSeconds = $derived.by(() => {
-    const savedSeconds = numberValue(audiobookPlayback?.resumeSeconds) ?? 0;
-    const currentTrack = playback.currentTrack;
-    const seconds = isCurrentAudiobook && currentTrack
-      ? audiobookAbsoluteTime(audiobookTracks, currentTrack.id, playback.currentTime)
-      : savedSeconds;
-    return Math.max(0, Math.min(seconds, audiobookTotalSeconds));
-  });
-  const audiobookCompleted = $derived(Boolean(audiobookPlayback?.completedAt));
-  const audiobookPercent = $derived(
-    audiobookCompleted
-      ? 100
-      : audiobookTotalSeconds > 0
-        ? Math.round((audiobookResumeSeconds / audiobookTotalSeconds) * 100)
-        : 0,
-  );
-  const audiobookPositionLabel = $derived(
-    audiobookResumeSeconds > 0 && audiobookTotalSeconds > 0
-      ? `${formatDuration(audiobookResumeSeconds) ?? "0:00"} / ${formatDuration(audiobookTotalSeconds) ?? "0:00"}`
-      : null,
-  );
-  const savedAudiobookResume = $derived(
-    audiobookCompleted || audiobookResumeSeconds <= 0 || audiobookTotalSeconds <= 0
-      ? null
-      : resolveAudiobookResume(audiobookTracks, audiobookResumeSeconds),
-  );
-  const currentAudiobookTrackId = $derived(
-    isCurrentAudiobook ? playback.currentTrack?.id ?? savedAudiobookResume?.trackId ?? null : savedAudiobookResume?.trackId ?? null,
   );
   const readableChapters = $derived.by((): ReadableBookChapter[] => {
     if (book?.format === BookFormat.epub) {
@@ -235,7 +205,7 @@
       pageCount: chapter.pages.length,
     }));
   });
-  const chapterRows = $derived(buildBookChapterRows({
+  const baseChapterRows = $derived(buildBookChapterRows({
     readableChapters,
     audioTracks: audiobookTracks,
     currentReadableId: book?.format === BookFormat.epub
@@ -243,10 +213,46 @@
       : progressDisplay?.isComplete
         ? null
         : progressDisplay?.chapterId ?? null,
-    currentAudioTrackId: currentAudiobookTrackId,
+    currentAudioTrackId: isCurrentAudiobook ? playback.currentTrack?.id ?? null : null,
   }));
-  const readingPercent = $derived(
-    singleFileProgressDisplay?.percent ?? progressDisplay?.percent ?? 0,
+  const bookProgressMappings = $derived(buildBookProgressMappings(
+    book?.id ?? "",
+    baseChapterRows,
+    bookProgress?.mode ?? READER_MODE.paged,
+  ));
+  const savedAudiobookResume = $derived(resolveBookAudioResume(
+    baseChapterRows,
+    bookProgressMappings,
+    bookProgressCursor(bookProgress),
+  ));
+  const currentAudiobookTrackId = $derived(
+    isCurrentAudiobook
+      ? playback.currentTrack?.id ?? savedAudiobookResume?.trackId ?? null
+      : savedAudiobookResume?.trackId ?? null,
+  );
+  const chapterRows = $derived(baseChapterRows.map((row) => ({
+    ...row,
+    isCurrentAudio: row.audioTrack?.id === currentAudiobookTrackId,
+  })));
+  const canonicalCompleted = $derived(Boolean(bookProgress?.completedAt));
+  const canonicalPercent = $derived.by(() => {
+    if (canonicalCompleted) return 100;
+    if (singleFileProgressDisplay) return singleFileProgressDisplay.percent;
+    if (progressDisplay) return progressDisplay.percent;
+    const total = numberValue(bookProgress?.total) ?? 0;
+    const index = numberValue(bookProgress?.index) ?? 0;
+    return total > 0 ? Math.max(0, Math.min(100, Math.round((index / total) * 100))) : 0;
+  });
+  const canonicalPositionLabel = $derived(
+    singleFileProgressDisplay?.positionLabel
+      ?? progressDisplay?.workPageLabel
+      ?? progressDisplay?.chapterPageLabel
+      ?? progressDisplay?.pageLabel
+      ?? (savedAudiobookResume ? `${canonicalPercent}% of book` : null),
+  );
+  const bookActivitySeconds = $derived(numberValue(audiobookPlayback?.playDurationSeconds) ?? 0);
+  const bookActivityLabel = $derived(
+    bookActivitySeconds > 0 ? `${formatWatchDuration(bookActivitySeconds)} read or listened` : null,
   );
   const bookReadingPosition = $derived.by((): BookReadingPosition | null => {
     if (singleFileProgressDisplay && !singleFileProgressDisplay.isComplete && currentEpubChapterId) {
@@ -278,24 +284,10 @@
       pageIndex: Math.max(0, progressDisplay.currentPage - 1),
     };
   });
-  const bookListeningPosition = $derived.by((): BookListeningPosition | null => {
-    if (audiobookCompleted || !savedAudiobookResume || audiobookTotalSeconds <= 0) return null;
-    const row = chapterRows.find((candidate) => candidate.isCurrentAudio);
-    if (!row?.audioTrack) return null;
-    const duration = Math.max(0, Number(row.audioTrack.duration ?? 0));
-    return {
-      rowId: row.id,
-      overallFraction: audiobookResumeSeconds / audiobookTotalSeconds,
-      chapterFraction: duration > 0 ? savedAudiobookResume.trackOffsetSeconds / duration : 0,
-      trackOffsetSeconds: savedAudiobookResume.trackOffsetSeconds,
-    };
-  });
   const combinedResumePlan = $derived(
-    resolveBookCombinedResume(chapterRows, bookReadingPosition, bookListeningPosition),
+    resolveBookCombinedResume(chapterRows, bookReadingPosition),
   );
-  const hasCombinedContent = $derived(
-    chapterRows.some((row) => row.readTarget && row.audioTrack),
-  );
+  const hasCombinedContent = $derived(chapterRows.some((row) => row.readTarget && row.audioTrack));
   const fallbackBookPalette = entityAccentForKind(ENTITY_KIND.book);
   const chapterPalette = $derived(artworkPalette ?? {
     primary: fallbackBookPalette.primary,
@@ -308,7 +300,7 @@
       : progressDisplay?.chapterPageLabel ?? progressDisplay?.pageLabel ?? null,
   );
   const chapterListeningProgressLabel = $derived(
-    audiobookPositionLabel ?? (currentAudiobookTrackId ? "Current part" : null),
+    canonicalPositionLabel ?? (currentAudiobookTrackId ? "Current part" : null),
   );
   const hasReadableContent = $derived(
     isSingleFileBook ||
@@ -357,11 +349,11 @@
     if (isSingleFileBook) {
       actions.push({
         id: "read-book",
-        label: singleFileInProgress ? "Resume" : singleFileProgress?.completedAt ? "Re-read" : "Read",
+        label: canonicalCompleted ? "Re-read" : canonicalPercent > 0 ? "Resume" : "Read",
         icon: Play,
         iconFill: "currentColor",
         variant: "primary",
-        onClick: openSingleFileReader,
+        onClick: continueReading,
       });
     } else if (hasReadableContent) {
       actions.push({
@@ -370,7 +362,7 @@
         icon: Play,
         iconFill: "currentColor",
         variant: "primary",
-        onClick: openSelectedReader,
+        onClick: continueReading,
       });
     }
     if (audiobookTracks.length > 0) {
@@ -378,9 +370,9 @@
         id: "listen-book",
         label: isCurrentAudiobook && playback.playing
           ? "Pause"
-          : audiobookResumeSeconds > 0 && !audiobookCompleted
+          : canonicalPercent > 0 && !canonicalCompleted
             ? "Continue listening"
-            : audiobookCompleted
+            : canonicalCompleted
               ? "Listen again"
               : "Listen",
         icon: Headphones,
@@ -530,7 +522,11 @@
 
     const progress = getCapability(nextBook.capabilities, CAPABILITY_KIND.progress);
     const currentLocation = progress?.completedAt ? null : progress?.location;
-    const key = `${nextBook.id}:${currentLocation ?? ""}`;
+    const progressTotal = numberValue(progress?.total) ?? 0;
+    const currentFraction = progress?.completedAt || progressTotal <= 0
+      ? null
+      : (numberValue(progress?.index) ?? 0) / progressTotal;
+    const key = `${nextBook.id}:${currentLocation ?? ""}:${currentFraction ?? ""}`;
     if (key === loadedEpubKey && epubContents.length > 0) return;
 
     const controller = new AbortController();
@@ -541,6 +537,7 @@
         `/entities/${nextBook.id}/files/source`,
         currentLocation,
         controller.signal,
+        currentFraction,
       );
       if (controller.signal.aborted || token !== loadToken || bookId !== nextBook.id) return;
       epubContents = contents.entries;
@@ -744,6 +741,7 @@
       playbackOwnerEntityId: book.id,
       playbackOwnerTitle: book.title,
       playbackOwnerEntityKind: ENTITY_KIND.book,
+      bookProgressMappings,
     };
   }
 
@@ -774,14 +772,12 @@
     }));
   }
 
-  function openCombinedLaunch(plan: BookCombinedLaunch) {
+  function openReadingLaunch(plan: BookCombinedLaunch) {
     if (!book) return;
     const row = chapterRows.find((candidate) => candidate.id === plan.rowId);
     const target = row?.readTarget;
-    const track = row?.audioTrack;
-    if (!row || !target || !track) return;
+    if (!row || !target) return;
 
-    playAudiobookTrack(track.id, plan.audioStartSeconds);
     if (target.kind === "epub") {
       void goto(bookReaderHref({
         bookId: book.id,
@@ -804,6 +800,13 @@
     }));
   }
 
+  function openCombinedLaunch(plan: BookCombinedLaunch) {
+    const track = chapterRows.find((candidate) => candidate.id === plan.rowId)?.audioTrack;
+    if (!track) return;
+    playAudiobookTrack(track.id, plan.audioStartSeconds);
+    openReadingLaunch(plan);
+  }
+
   function listenToChapter(row: BookChapterRow) {
     const track = row.audioTrack;
     if (!track) return;
@@ -811,7 +814,7 @@
       playback.toggle();
       return;
     }
-    const startSeconds = savedAudiobookResume?.trackId === track.id
+    const startSeconds = currentAudiobookTrackId === track.id && savedAudiobookResume?.trackId === track.id
       ? savedAudiobookResume.trackOffsetSeconds
       : 0;
     playAudiobookTrack(track.id, startSeconds);
@@ -821,12 +824,15 @@
     const plan = resolveChapterCombinedLaunch(
       row,
       bookReadingPosition,
-      bookListeningPosition,
     );
     if (plan) openCombinedLaunch(plan);
   }
 
   function continueReading() {
+    if (combinedResumePlan && !canonicalCompleted) {
+      openReadingLaunch(combinedResumePlan);
+      return;
+    }
     if (isSingleFileBook) {
       openSingleFileReader();
       return;
@@ -840,25 +846,32 @@
 
   function listenToBook(options: { startOver?: boolean } = {}) {
     if (!book || audiobookTracks.length === 0) return;
-    if (!options.startOver && isCurrentAudiobook && !audiobookCompleted) {
+    if (!options.startOver && isCurrentAudiobook && !canonicalCompleted) {
       playback.toggle();
       return;
     }
 
-    const resume = resolveAudiobookResume(
-      audiobookTracks,
-      options.startOver || audiobookCompleted ? 0 : audiobookResumeSeconds,
-    );
+    const firstTrack = audiobookTracks[0];
+    const resume = !options.startOver && !canonicalCompleted
+      ? savedAudiobookResume
+      : firstTrack
+        ? { trackId: firstTrack.id, trackOffsetSeconds: 0 }
+        : null;
     if (!resume) return;
     playAudiobookTrack(resume.trackId, resume.trackOffsetSeconds);
   }
 
   async function handleToggleListened(listened: boolean) {
-    if (!book || audiobookTotalSeconds <= 0 || listeningBusy) return;
+    if (!book || !bookProgress?.currentEntityId || listeningBusy) return;
     listeningBusy = true;
     try {
-      await updateEntityPlayback(book.id, {
-        resumeSeconds: audiobookResumeSeconds,
+      await updateEntityProgress(book.id, {
+        currentEntityId: bookProgress.currentEntityId,
+        unit: bookProgress.unit,
+        index: numberValue(bookProgress.index) ?? 0,
+        total: numberValue(bookProgress.total) ?? 0,
+        mode: bookProgress.mode,
+        location: bookProgress.location,
         completed: listened,
       });
       await loadBook();
@@ -868,12 +881,21 @@
   }
 
   async function startListeningOver() {
-    if (!book || audiobookTotalSeconds <= 0 || listeningBusy) return;
+    const firstTrack = audiobookTracks[0];
+    const firstMapping = firstTrack
+      ? bookProgressMappings.find((mapping) => mapping.trackId === firstTrack.id)
+      : null;
+    if (!book || !firstTrack || !firstMapping || listeningBusy) return;
     listeningBusy = true;
     try {
-      await updateEntityPlayback(book.id, {
-        resumeSeconds: 0,
-        completed: false,
+      await updateEntityProgress(book.id, {
+        currentEntityId: firstMapping.currentEntityId,
+        unit: firstMapping.unit,
+        index: numberValue(firstMapping.startIndex) ?? 0,
+        total: numberValue(firstMapping.total) ?? 0,
+        mode: firstMapping.mode,
+        location: null,
+        reset: true,
       });
       listenToBook({ startOver: true });
       await loadBook();
@@ -925,7 +947,7 @@
         unit: PROGRESS_UNIT.page,
         index: 0,
         total: firstChapter.pageCount,
-        mode: progressDisplay?.readerMode ?? "paged",
+        mode: progressDisplay?.readerMode ?? READER_MODE.paged,
         reset: true,
       });
       await loadBook();
@@ -1036,19 +1058,18 @@
             {chapterDetails.reduce((total, chapter) => total + chapter.pages.length, 0)} pages
           </span>
         {/if}
+        {#if bookActivityLabel}
+          <span class="meta-sep"></span>
+          <span class="meta-item">{bookActivityLabel}</span>
+        {/if}
       {/snippet}
 
       {#snippet heroBadges()}
         {#if entityWanted}
           <span class="hero-badge wanted">{wantedStateLabel}</span>
         {/if}
-        {#if progressDisplay}
-          <span class="hero-badge">Read {progressDisplay.percent}%</span>
-        {:else if singleFileProgressDisplay}
-          <span class="hero-badge">Read {singleFileProgressDisplay.percent}%</span>
-        {/if}
-        {#if audiobookTracks.length > 0 && audiobookPercent > 0}
-          <span class="hero-badge">Listened {audiobookPercent}%</span>
+        {#if canonicalPercent > 0}
+          <span class="hero-badge">Progress {canonicalPercent}%</span>
         {/if}
       {/snippet}
 
@@ -1080,12 +1101,10 @@
 
     {#if hasCombinedContent}
       <BookCombinedProgressCard
-        readingPercent={readingPercent}
-        listeningPercent={audiobookPercent}
-        readingLabel={chapterReadingProgressLabel}
-        listeningLabel={audiobookPositionLabel}
-        readingCompleted={singleFileProgressDisplay?.isComplete ?? progressDisplay?.isComplete ?? false}
-        listeningCompleted={audiobookCompleted}
+        progressPercent={canonicalPercent}
+        progressLabel={canonicalPositionLabel}
+        completed={canonicalCompleted}
+        activityLabel={bookActivityLabel}
         primaryColor={chapterPalette.primary}
         secondaryColor={chapterPalette.secondary}
         onRead={continueReading}
@@ -1094,7 +1113,7 @@
       />
     {/if}
 
-    {#if progressDisplay}
+    {#if !hasCombinedContent && progressDisplay}
       <section class="progress-section">
         <MediaProgressPanel
           kind="read"
@@ -1110,7 +1129,7 @@
           onStartOver={startProgressOver}
         />
       </section>
-    {:else if singleFileProgressDisplay}
+    {:else if !hasCombinedContent && singleFileProgressDisplay}
       <section class="progress-section">
         <MediaProgressPanel
           kind="read"
@@ -1127,16 +1146,16 @@
       </section>
     {/if}
 
-    {#if audiobookTracks.length > 0}
+    {#if audiobookTracks.length > 0 && !hasReadableContent}
       <section class="progress-section">
         <MediaProgressPanel
           kind="listen"
-          completed={audiobookCompleted}
-          percent={audiobookPercent}
-          positionLabel={audiobookPositionLabel}
+          completed={canonicalCompleted}
+          percent={canonicalPercent}
+          positionLabel={canonicalPositionLabel}
           countLabel={`${audiobookTracks.length} part${audiobookTracks.length === 1 ? "" : "s"}`}
-          canResume={!audiobookCompleted && audiobookResumeSeconds > 0}
-          canStartOver={audiobookCompleted || audiobookResumeSeconds > 0}
+          canResume={!canonicalCompleted && canonicalPercent > 0}
+          canStartOver={canonicalCompleted || canonicalPercent > 0}
           busy={listeningBusy}
           onToggleCompleted={handleToggleListened}
           onResume={() => listenToBook()}

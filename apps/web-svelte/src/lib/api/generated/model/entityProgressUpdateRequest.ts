@@ -4,6 +4,7 @@
  * Prismedia.Api | v1
  * OpenAPI spec version: 1.0.0
  */
+import type { EntityProgressUpdateRequestActivityKind } from './entityProgressUpdateRequestActivityKind';
 import type { ProgressUnit } from './progressUnit';
 import type { ReaderMode } from './readerMode';
 
@@ -20,4 +21,10 @@ export interface EntityProgressUpdateRequest {
   reset?: boolean;
   /** @nullable */
   location?: string | null;
+  /**
+     * @nullable
+     * @pattern ^-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?$
+     */
+  activitySeconds?: number | string | null;
+  activityKind?: EntityProgressUpdateRequestActivityKind;
 }

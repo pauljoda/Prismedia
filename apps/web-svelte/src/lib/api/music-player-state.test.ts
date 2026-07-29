@@ -96,6 +96,15 @@ describe("music player state API", () => {
           playbackOwnerEntityId: "book-1",
           playbackOwnerTitle: "Project Hail Mary",
           playbackOwnerEntityKind: "book",
+          bookProgressMappings: [{
+            trackId: "part-2",
+            currentEntityId: "book-1",
+            unit: "cfi",
+            startIndex: 2000,
+            endIndex: 4000,
+            total: 10000,
+            mode: "paged",
+          }],
         },
       },
     });
@@ -106,6 +115,7 @@ describe("music player state API", () => {
       playbackOwnerEntityId: "book-1",
       playbackOwnerTitle: "Project Hail Mary",
       playbackOwnerEntityKind: "book",
+      bookProgressMappings: [expect.objectContaining({ trackId: "part-2" })],
     });
 
     await saveMusicPlayerState({
@@ -128,6 +138,7 @@ describe("music player state API", () => {
         playbackOwnerEntityId: "book-1",
         playbackOwnerTitle: "Project Hail Mary",
         playbackOwnerEntityKind: "book",
+        bookProgressMappings: [expect.objectContaining({ trackId: "part-2" })],
       }),
     }));
   });

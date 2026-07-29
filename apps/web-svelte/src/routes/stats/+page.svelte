@@ -2,11 +2,13 @@
   import { onMount } from "svelte";
   import {
     Activity,
+    BookOpen,
     CalendarRange,
     Clock3,
     Flame,
     Gauge,
     History,
+    Headphones,
     Layers,
     Loader2,
     Timer,
@@ -111,6 +113,8 @@
   const skippedCount = $derived(statNumber(stats?.skippedCount));
   const distinctEntityCount = $derived(statNumber(stats?.distinctEntityCount));
   const watchSeconds = $derived(statNumber(stats?.watchSeconds));
+  const readingSeconds = $derived(statNumber(stats?.readingSeconds));
+  const listeningSeconds = $derived(statNumber(stats?.listeningSeconds));
 
   const dispersionBands = $derived(buildDispersion(stats?.kindBreakdown ?? []));
   const rhythm = $derived(buildRhythm(stats?.rhythm ?? []));
@@ -125,7 +129,7 @@
 
   const showCompleted = $derived(eventFilter !== PLAYBACK_EVENT_KIND.skipped);
   const showSkipped = $derived(eventFilter !== PLAYBACK_EVENT_KIND.completed);
-  const showEmpty = $derived(!loading && !error && totalEvents === 0);
+  const showEmpty = $derived(!loading && !error && totalEvents === 0 && watchSeconds === 0);
 
   const windowLabel = $derived.by(() => {
     if (!stats || dailySeries.length === 0) return "";
@@ -452,7 +456,7 @@
     <section class={cn("surface-panel overflow-hidden", loading && "stats-refreshing")}>
       <div class="stats-figures">
         <StatFigure
-          label="Watch time"
+          label="Activity time"
           value={formatWatchDuration(watchSeconds)}
           hint={cadence.activeDays > 0
             ? `${formatWatchDuration(cadence.watchSecondsPerActiveDay)} per active day`
@@ -460,6 +464,20 @@
           icon={Timer}
           emphasis
         />
+        {#if readingSeconds > 0}
+          <StatFigure
+            label="Reading"
+            value={formatWatchDuration(readingSeconds)}
+            icon={BookOpen}
+          />
+        {/if}
+        {#if listeningSeconds > 0}
+          <StatFigure
+            label="Audiobooks"
+            value={formatWatchDuration(listeningSeconds)}
+            icon={Headphones}
+          />
+        {/if}
         <StatFigure
           label="Events"
           value={totalEvents.toLocaleString()}

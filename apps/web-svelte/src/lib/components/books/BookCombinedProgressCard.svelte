@@ -3,12 +3,10 @@
   import { Button, Panel } from "@prismedia/ui-svelte";
 
   interface Props {
-    readingPercent: number;
-    listeningPercent: number;
-    readingLabel?: string | null;
-    listeningLabel?: string | null;
-    readingCompleted?: boolean;
-    listeningCompleted?: boolean;
+    progressPercent: number;
+    progressLabel?: string | null;
+    completed?: boolean;
+    activityLabel?: string | null;
     primaryColor?: string;
     secondaryColor?: string;
     onRead: () => void;
@@ -17,12 +15,10 @@
   }
 
   let {
-    readingPercent,
-    listeningPercent,
-    readingLabel = null,
-    listeningLabel = null,
-    readingCompleted = false,
-    listeningCompleted = false,
+    progressPercent,
+    progressLabel = null,
+    completed = false,
+    activityLabel = null,
     primaryColor = "var(--color-accent-400)",
     secondaryColor = "var(--color-accent-200)",
     onRead,
@@ -30,21 +26,8 @@
     onCombined,
   }: Props = $props();
 
-  const readPercent = $derived(Math.max(0, Math.min(100, readingPercent)));
-  const listenPercent = $derived(Math.max(0, Math.min(100, listeningPercent)));
-  const readActionLabel = $derived(
-    readingCompleted ? "Read again" : readPercent > 0 ? "Continue reading" : "Start reading",
-  );
-  const listenActionLabel = $derived(
-    listeningCompleted ? "Listen again" : listenPercent > 0 ? "Continue listening" : "Start listening",
-  );
-  const combinedActionLabel = $derived(
-    readingCompleted && listeningCompleted
-      ? "Read and listen again"
-      : readPercent > 0 || listenPercent > 0
-        ? "Continue reading and listening"
-        : "Start reading and listening",
-  );
+  const percent = $derived(Math.max(0, Math.min(100, progressPercent)));
+  const actionPrefix = $derived(completed ? "Start" : percent > 0 ? "Continue" : "Start");
 </script>
 
 <section
@@ -55,58 +38,50 @@
 >
   <Panel variant="panel" class="combined-progress-card">
     <div class="combined-copy">
-      <p class="kicker">Two ways through</p>
+      <p class="kicker">One position · two formats</p>
       <h2 id="combined-progress-title">Continue your book</h2>
       <p class="explanation">
-        Pick up either edition, or align both from whichever is farther along.
+        Reading and listening share this position. Either one moves it forward.
       </p>
     </div>
 
-    <div class="progress-pair" aria-label="Reading and listening progress">
-      <div class="progress-row reading">
-        <BookOpen class="h-4 w-4" />
-        <span class="progress-name">Reading</span>
-        <span class="progress-label">{readingLabel ?? `${Math.round(readPercent)}%`}</span>
-        <div class="meter" aria-hidden="true">
-          <span style:width={`${readPercent}%`}></span>
-        </div>
+    <div class="progress-summary" aria-label="Book progress">
+      <div class="progress-heading">
+        <Layers2 class="h-4 w-4" />
+        <span>{progressLabel ?? `${Math.round(percent)}%`}</span>
       </div>
-      <div class="progress-row listening">
-        <Headphones class="h-4 w-4" />
-        <span class="progress-name">Listening</span>
-        <span class="progress-label">{listeningLabel ?? `${Math.round(listenPercent)}%`}</span>
-        <div class="meter" aria-hidden="true">
-          <span style:width={`${listenPercent}%`}></span>
-        </div>
+      <div class="meter" aria-hidden="true">
+        <span style:width={`${percent}%`}></span>
       </div>
+      {#if activityLabel}
+        <span class="activity-label">{activityLabel}</span>
+      {/if}
     </div>
 
     <div class="combined-actions">
       <Button variant="secondary" size="sm" class="read-button gap-1.5" onclick={onRead}>
         <BookOpen class="h-3.5 w-3.5" />
-        {readActionLabel}
+        {actionPrefix} reading
       </Button>
       <Button variant="secondary" size="sm" class="listen-button gap-1.5" onclick={onListen}>
         <Headphones class="h-3.5 w-3.5" />
-        {listenActionLabel}
+        {actionPrefix} listening
       </Button>
       <Button variant="primary" size="sm" class="combined-button gap-1.5" onclick={onCombined}>
         <Layers2 class="h-3.5 w-3.5" />
-        {combinedActionLabel}
+        {actionPrefix} both
       </Button>
     </div>
   </Panel>
 </section>
 
 <style>
-  .combined-progress-section {
-    min-width: 0;
-  }
+  .combined-progress-section { min-width: 0; }
 
   :global(.combined-progress-card) {
     position: relative;
     display: grid;
-    grid-template-columns: minmax(12rem, 0.85fr) minmax(16rem, 1.25fr) auto;
+    grid-template-columns: minmax(12rem, 0.85fr) minmax(14rem, 1fr) auto;
     gap: 1rem 1.4rem;
     align-items: center;
     overflow: hidden;
@@ -122,14 +97,11 @@
     position: absolute;
     inset: 0 auto 0 0;
     width: 4px;
-    background: linear-gradient(var(--reading-accent) 0 50%, var(--listening-accent) 50% 100%);
+    background: linear-gradient(var(--reading-accent), var(--listening-accent));
     content: "";
   }
 
-  .combined-copy {
-    min-width: 0;
-  }
-
+  .combined-copy, .progress-summary { min-width: 0; }
   .kicker {
     margin: 0 0 0.2rem;
     color: var(--color-text-disabled);
@@ -138,7 +110,6 @@
     letter-spacing: 0.17em;
     text-transform: uppercase;
   }
-
   h2 {
     margin: 0;
     color: var(--color-text-primary);
@@ -146,7 +117,6 @@
     font-size: 1rem;
     font-weight: 600;
   }
-
   .explanation {
     max-width: 30rem;
     margin: 0.35rem 0 0;
@@ -154,77 +124,42 @@
     font-size: 0.72rem;
     line-height: 1.45;
   }
-
-  .progress-pair {
-    display: grid;
-    gap: 0.65rem;
-    min-width: 0;
-  }
-
-  .progress-row {
-    display: grid;
-    grid-template-columns: 1rem 4.6rem minmax(5rem, auto);
-    gap: 0.45rem;
+  .progress-summary { display: grid; gap: 0.55rem; }
+  .progress-heading {
+    display: flex;
     align-items: center;
+    gap: 0.45rem;
     color: color-mix(in srgb, var(--reading-accent) 72%, white 20%);
-  }
-
-  .progress-row.listening {
-    color: color-mix(in srgb, var(--listening-accent) 72%, white 20%);
-  }
-
-  .progress-name,
-  .progress-label {
     font-family: var(--font-mono, "JetBrains Mono", monospace);
-    font-size: 0.64rem;
+    font-size: 0.66rem;
   }
-
-  .progress-label {
-    overflow: hidden;
-    color: var(--color-text-secondary);
-    text-align: right;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
   .meter {
-    grid-column: 2 / -1;
-    height: 2px;
+    height: 3px;
     overflow: hidden;
     background: color-mix(in srgb, var(--reading-accent) 12%, var(--color-border-subtle));
   }
-
   .meter span {
     display: block;
     height: 100%;
-    background: var(--reading-accent);
+    background: linear-gradient(90deg, var(--reading-accent), var(--listening-accent));
   }
-
-  .listening .meter {
-    background: color-mix(in srgb, var(--listening-accent) 12%, var(--color-border-subtle));
+  .activity-label {
+    color: var(--color-text-muted);
+    font-family: var(--font-mono, "JetBrains Mono", monospace);
+    font-size: 0.6rem;
   }
-
-  .listening .meter span {
-    background: var(--listening-accent);
-  }
-
   .combined-actions {
     display: flex;
     flex-wrap: wrap;
     justify-content: flex-end;
     gap: 0.45rem;
   }
-
-  :global(.read-button:hover),
-  :global(.read-button:focus-visible) {
+  :global(.read-button:hover), :global(.read-button:focus-visible) {
     border-color: color-mix(in srgb, var(--reading-accent) 45%, transparent);
   }
-
-  :global(.listen-button:hover),
-  :global(.listen-button:focus-visible) {
+  :global(.listen-button:hover), :global(.listen-button:focus-visible) {
     border-color: color-mix(in srgb, var(--listening-accent) 45%, transparent);
   }
-
   :global(.combined-button) {
     border-color: color-mix(in srgb, var(--reading-accent) 30%, var(--listening-accent));
     background: linear-gradient(
@@ -234,30 +169,13 @@
     );
     color: var(--color-text-primary);
   }
-
   @media (max-width: 960px) {
-    :global(.combined-progress-card) {
-      grid-template-columns: minmax(0, 1fr) minmax(16rem, 1fr);
-    }
-
-    .combined-actions {
-      grid-column: 1 / -1;
-      justify-content: flex-start;
-    }
+    :global(.combined-progress-card) { grid-template-columns: minmax(0, 1fr) minmax(14rem, 1fr); }
+    .combined-actions { grid-column: 1 / -1; justify-content: flex-start; }
   }
-
   @media (max-width: 620px) {
-    :global(.combined-progress-card) {
-      grid-template-columns: 1fr;
-      padding: 0.9rem 0.85rem 0.85rem 1rem;
-    }
-
-    .combined-actions {
-      grid-column: auto;
-    }
-
-    :global(.combined-actions > button) {
-      flex: 1 1 auto;
-    }
+    :global(.combined-progress-card) { grid-template-columns: 1fr; padding: 0.9rem 0.85rem 0.85rem 1rem; }
+    .combined-actions { grid-column: auto; }
+    :global(.combined-actions > button) { flex: 1 1 auto; }
   }
 </style>
