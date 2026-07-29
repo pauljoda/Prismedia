@@ -142,7 +142,7 @@ export function resolveEpubChapterByFraction(
 ): EpubContentsEntry | null {
   if (typeof fraction !== "number" || !Number.isFinite(fraction)) return null;
   const normalized = Math.max(0, Math.min(1, fraction));
-  return entries.find((entry) =>
+  return entries.findLast((entry) =>
     typeof entry.startFraction === "number" &&
     typeof entry.endFraction === "number" &&
     normalized >= entry.startFraction &&

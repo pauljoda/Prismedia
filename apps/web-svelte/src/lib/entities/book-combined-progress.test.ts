@@ -5,9 +5,12 @@ import type { BookChapterRow } from "$lib/entities/book-chapter-list";
 import {
   buildBookProgressMappings,
   bookProgressUpdateForAudio,
+  legacyBookProgressPromotion,
   resolveBookAudioResume,
   resolveBookCombinedResume,
+  resolveBookProgressMapping,
   resolveChapterCombinedLaunch,
+  shouldPromoteLegacyBookProgress,
   type BookReadingPosition,
 } from "./book-combined-progress";
 
@@ -193,6 +196,81 @@ describe("unified book progress", () => {
       unit: PROGRESS_UNIT.cfi,
       index: 3500,
     })).toEqual({ trackId: "audio-1", trackOffsetSeconds: 895 });
+  });
+
+  it("assigns a shared rounded boundary to the later chapter", () => {
+    const secondRow: BookChapterRow = {
+      ...epubRow(),
+      id: "chapter-2",
+      readTarget: {
+        kind: "epub",
+        location: "Text/chapter-2.xhtml",
+        startFraction: 0.4,
+        endFraction: 0.6,
+      },
+      audioTrack: audioTrack("audio-2"),
+    };
+    const mappings = buildBookProgressMappings("book-1", [epubRow(), secondRow], READER_MODE.paged);
+
+    expect(resolveBookProgressMapping(mappings, {
+      currentEntityId: "book-1",
+      unit: PROGRESS_UNIT.cfi,
+      index: 4000,
+    })?.trackId).toBe("audio-2");
+  });
+
+  it("does not invent an audiobook chapter for a readable cursor outside mapped ranges", () => {
+    const mappings = buildBookProgressMappings("book-1", [epubRow()], READER_MODE.paged);
+
+    expect(resolveBookProgressMapping(mappings, {
+      currentEntityId: "book-1",
+      unit: PROGRESS_UNIT.cfi,
+      index: 9000,
+    })).toBeNull();
+  });
+
+  it("promotes a farther legacy audiobook resume into canonical progress", () => {
+    const secondRow: BookChapterRow = {
+      ...epubRow(),
+      id: "chapter-2",
+      readTarget: {
+        kind: "epub",
+        location: "Text/chapter-2.xhtml",
+        startFraction: 0.4,
+        endFraction: 0.6,
+      },
+      audioTrack: { ...audioTrack("audio-2"), sortOrder: 1 },
+    };
+    const rows = [epubRow(), secondRow];
+    const mappings = buildBookProgressMappings("book-1", rows, READER_MODE.paged);
+    const promotion = legacyBookProgressPromotion(rows, mappings, 2_100);
+
+    expect(promotion).toMatchObject({
+      mapping: { trackId: "audio-2" },
+      update: { index: 5500, location: null, activitySeconds: null },
+    });
+    expect(shouldPromoteLegacyBookProgress(mappings, {
+      currentEntityId: "book-1",
+      unit: PROGRESS_UNIT.cfi,
+      index: 3500,
+    }, promotion)).toBe(true);
+  });
+
+  it("preserves a farther or unresolvable readable cursor during legacy promotion", () => {
+    const rows = [epubRow()];
+    const mappings = buildBookProgressMappings("book-1", rows, READER_MODE.paged);
+    const promotion = legacyBookProgressPromotion(rows, mappings, 600);
+
+    expect(shouldPromoteLegacyBookProgress(mappings, {
+      currentEntityId: "book-1",
+      unit: PROGRESS_UNIT.cfi,
+      index: 3900,
+    }, promotion)).toBe(false);
+    expect(shouldPromoteLegacyBookProgress(mappings, {
+      currentEntityId: "unmatched-readable-chapter",
+      unit: PROGRESS_UNIT.page,
+      index: 10,
+    }, promotion)).toBe(false);
   });
 });
 

@@ -82,6 +82,7 @@
     type BookCombinedLaunch,
     type BookReadingPosition,
   } from "$lib/entities/book-combined-progress";
+  import { useLegacyBookProgressMigration } from "$lib/entities/book-legacy-progress-migration.svelte";
   import { formatWatchDuration } from "$lib/stats/playback-stats";
   import {
     loadEpubContents,
@@ -92,11 +93,9 @@
   import { monitorIsActive } from "$lib/requests/monitor-status";
 
   type LoadState = "loading" | "ready" | "error";
-
   const nsfw = useNsfw();
   const appChrome = useAppChrome();
   const playback = useAudioPlayback()!;
-
   interface ChapterDetail {
     detail: EntityCardFull;
     pages: ReturnType<typeof orderedBookChildren>;
@@ -220,6 +219,7 @@
     baseChapterRows,
     bookProgress?.mode ?? READER_MODE.paged,
   ));
+  useLegacyBookProgressMigration(() => book, () => baseChapterRows, () => bookProgressMappings, loadBook);
   const savedAudiobookResume = $derived(resolveBookAudioResume(
     baseChapterRows,
     bookProgressMappings,

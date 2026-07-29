@@ -103,4 +103,13 @@ describe("EPUB contents", () => {
 
     expect(resolveEpubChapterByFraction(entries, 0.55)?.id).toBe("two");
   });
+
+  it("treats a shared range boundary as the start of the later chapter", () => {
+    const entries: EpubContentsEntry[] = [
+      { id: "tyrion", title: "Tyrion", location: "tyrion", depth: 0, order: 0, sectionIndex: 0, startFraction: 0.2, endFraction: 0.3 },
+      { id: "jon", title: "Jon", location: "jon", depth: 0, order: 1, sectionIndex: 1, startFraction: 0.3, endFraction: 0.4 },
+    ];
+
+    expect(resolveEpubChapterByFraction(entries, 0.3)?.id).toBe("jon");
+  });
 });

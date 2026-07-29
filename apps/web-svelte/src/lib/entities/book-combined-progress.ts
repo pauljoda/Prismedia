@@ -1,6 +1,7 @@
 import { BOOK_ACTIVITY_KIND, PROGRESS_UNIT, type ReaderModeCode } from "$lib/api/generated/codes";
 import type { BookProgressTrackMapping, EntityCapabilityProgressCapability } from "$lib/api/generated/model";
 import type { BookChapterRow } from "$lib/entities/book-chapter-list";
+import { resolveAudiobookResume } from "$lib/entities/audiobook-playback";
 
 /** Saved book cursor normalized to both the whole readable rendition and its matched row. */
 export interface BookReadingPosition {
@@ -47,6 +48,12 @@ export interface BookProgressCursor {
 export interface BookAudioResumePoint {
   trackId: string;
   trackOffsetSeconds: number;
+}
+
+/** One-time conversion of the pre-unification Book playback cursor into canonical progress. */
+export interface LegacyBookProgressPromotion {
+  mapping: BookProgressTrackMapping;
+  update: BookAudioProgressUpdate;
 }
 
 /** Converts the wire progress capability into the numeric cursor used by Book mapping helpers. */
@@ -246,14 +253,7 @@ export function resolveBookAudioResume(
   cursor: BookProgressCursor | null | undefined,
 ): BookAudioResumePoint | null {
   if (!cursor) return null;
-  const candidates = mappings.filter((mapping) =>
-    mapping.currentEntityId === cursor.currentEntityId && mapping.unit === cursor.unit
-  );
-  const mapping = candidates.find((candidate) => {
-    const start = Number(candidate.startIndex);
-    const end = Number(candidate.endIndex);
-    return cursor.index >= start && cursor.index <= end;
-  }) ?? candidates.at(-1) ?? null;
+  const mapping = resolveBookProgressMapping(mappings, cursor);
   if (!mapping) return null;
 
   const track = rows.find((row) => row.audioTrack?.id === mapping.trackId)?.audioTrack;
@@ -265,4 +265,74 @@ export function resolveBookAudioResume(
     trackId: mapping.trackId,
     trackOffsetSeconds: runwayStart(fraction * Math.max(0, Number(track.duration ?? 0))),
   };
+}
+
+/**
+ * Finds the chapter mapping that owns a canonical cursor. Adjacent EPUB/audio-only ranges share a
+ * rounded endpoint, so searching from the end makes that exact boundary the start of the later row.
+ */
+export function resolveBookProgressMapping(
+  mappings: readonly BookProgressTrackMapping[],
+  cursor: BookProgressCursor | null | undefined,
+): BookProgressTrackMapping | null {
+  if (!cursor) return null;
+  const candidates = mappings.filter((mapping) =>
+    mapping.currentEntityId === cursor.currentEntityId && mapping.unit === cursor.unit
+  );
+  return candidates.findLast((candidate) => {
+    const start = Number(candidate.startIndex);
+    const end = Number(candidate.endIndex);
+    return cursor.index >= start && cursor.index <= end;
+  }) ?? null;
+}
+
+/** Converts the legacy absolute audiobook resume time into the new chapter-scoped Book cursor. */
+export function legacyBookProgressPromotion(
+  rows: readonly BookChapterRow[],
+  mappings: readonly BookProgressTrackMapping[],
+  absoluteSeconds: number,
+): LegacyBookProgressPromotion | null {
+  if (!Number.isFinite(absoluteSeconds) || absoluteSeconds <= 0) return null;
+  const tracks = rows
+    .flatMap((row) => row.audioTrack ? [row.audioTrack] : [])
+    .sort((a, b) => a.sortOrder - b.sortOrder || a.title.localeCompare(b.title) || a.id.localeCompare(b.id));
+  if (tracks.some((track) => !Number.isFinite(Number(track.duration)) || Number(track.duration) <= 0)) {
+    return null;
+  }
+  const resume = resolveAudiobookResume(tracks, absoluteSeconds);
+  if (!resume) return null;
+  const mapping = mappings.find((candidate) => candidate.trackId === resume.trackId);
+  const track = tracks.find((candidate) => candidate.id === resume.trackId);
+  const duration = Math.max(0, Number(track?.duration ?? 0));
+  if (!mapping || !track || duration <= 0) return null;
+  return {
+    mapping,
+    update: bookProgressUpdateForAudio(
+      mapping,
+      resume.trackOffsetSeconds,
+      duration,
+      null,
+      false,
+    ),
+  };
+}
+
+/**
+ * Returns true only when legacy listening was farther than the canonical cursor. An unresolvable
+ * readable cursor remains authoritative, matching the server's safe text-position fallback.
+ */
+export function shouldPromoteLegacyBookProgress(
+  mappings: readonly BookProgressTrackMapping[],
+  current: BookProgressCursor | null | undefined,
+  promotion: LegacyBookProgressPromotion | null | undefined,
+): boolean {
+  if (!promotion) return false;
+  if (!current) return true;
+  const currentMapping = resolveBookProgressMapping(mappings, current);
+  if (!currentMapping) return false;
+  const currentOrder = mappings.indexOf(currentMapping);
+  const proposedOrder = mappings.indexOf(promotion.mapping);
+  if (currentOrder < 0 || proposedOrder < 0) return false;
+  if (proposedOrder !== currentOrder) return proposedOrder > currentOrder;
+  return promotion.update.index > current.index;
 }
