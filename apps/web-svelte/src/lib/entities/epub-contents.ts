@@ -74,6 +74,12 @@ export interface LoadedEpubContents {
   currentChapterId: string | null;
 }
 
+/** Keeps exact web EPUB cursors; native/foreign locator formats resume via canonical fraction. */
+export function exactWebEpubResumeLocation(location: string | null | undefined): string | null {
+  const normalized = location?.trim() ?? "";
+  return normalized.toLowerCase().startsWith("epubcfi(") ? normalized : null;
+}
+
 function sourceChildren(value: unknown): EpubTocSourceEntry[] {
   return Array.isArray(value) ? value as EpubTocSourceEntry[] : [];
 }

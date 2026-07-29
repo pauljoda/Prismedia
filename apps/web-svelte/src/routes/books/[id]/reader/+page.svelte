@@ -31,6 +31,7 @@
   import { useNsfw } from "$lib/nsfw/store.svelte";
   import { useAudioPlayback } from "$lib/stores/audio-playback.svelte";
   import { BookActivityClock } from "$lib/entities/book-activity-clock";
+  import { exactWebEpubResumeLocation } from "$lib/entities/epub-contents";
 
   type ReaderFlow = "paginated" | "scrolled";
 
@@ -172,10 +173,11 @@
     const resume = nextContext.command !== "start-over" && !progress?.completedAt;
     const launchLocation = nextContext.location ?? null;
     const launchFraction = launchLocation ? null : nextContext.fraction ?? null;
+    const persistedLocation = resume ? exactWebEpubResumeLocation(progress?.location) : null;
     singleFileBook = true;
     singleFileSource = `/entities/${nextBook.id}/files/source`;
     singleFileContentType = nextBook.format === "pdf" ? "application/pdf" : "application/epub+zip";
-    singleFileLocation = launchLocation ?? (launchFraction === null && resume ? progress?.location ?? null : null);
+    singleFileLocation = launchLocation ?? (launchFraction === null ? persistedLocation : null);
     singleFileInitialFraction = launchFraction
       ?? (singleFileLocation
         ? null

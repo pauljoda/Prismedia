@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   addEpubChapterRanges,
+  exactWebEpubResumeLocation,
   flattenEpubToc,
   resolveCurrentEpubChapter,
   resolveEpubChapterByFraction,
@@ -111,5 +112,11 @@ describe("EPUB contents", () => {
     ];
 
     expect(resolveEpubChapterByFraction(entries, 0.3)?.id).toBe("jon");
+  });
+
+  it("uses canonical fraction instead of passing native EPUB locators to the web reader", () => {
+    expect(exactWebEpubResumeLocation("epubcfi(/6/14!/4/2)")).toBe("epubcfi(/6/14!/4/2)");
+    expect(exactWebEpubResumeLocation("Text/chapter.xhtml#prismedia-progress=0.75")).toBeNull();
+    expect(exactWebEpubResumeLocation('{"href":"Text/chapter.xhtml","locations":{"progression":0.75}}')).toBeNull();
   });
 });
