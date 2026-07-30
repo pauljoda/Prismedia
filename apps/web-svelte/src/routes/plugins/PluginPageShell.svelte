@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { Snippet } from "svelte";
   import { Boxes, Globe, Loader2, Plug, Puzzle, Sparkles, X } from "@lucide/svelte";
+  import { Button } from "@prismedia/ui-svelte";
   import type { PluginTabDefinition, PluginsTab } from "./plugin-page-types";
 
   let {
@@ -44,13 +45,16 @@
     </div>
 
     {#if !loading}
-      <nav class="flex items-center gap-1 overflow-x-auto scrollbar-hidden">
+      <nav class="flex items-center gap-1 overflow-x-auto scrollbar-hidden" aria-label="Plugin views">
         {#each visibleTabs as t (t.key)}
           {@const Icon = tabIcon(t.key)}
           {@const active = tab === t.key}
-          <button
+          <Button
+            variant="ghost"
+            size="sm"
             onclick={() => onTabChange(t.key)}
-            class={"flex items-center gap-2 px-3.5 py-2 text-sm font-medium rounded-sm transition-all duration-fast whitespace-nowrap " +
+            aria-pressed={active}
+            class={"h-auto items-center gap-2 px-3.5 py-2 text-sm font-medium rounded-sm transition-all duration-fast whitespace-nowrap " +
               (active
                 ? "bg-accent-950 text-text-accent border border-border-accent shadow-[var(--shadow-glow-accent)]"
                 : "text-text-muted border border-transparent hover:text-text-secondary hover:bg-surface-3/40")}
@@ -74,7 +78,7 @@
                 {t.count}
               </span>
             {/if}
-          </button>
+          </Button>
         {/each}
       </nav>
     {/if}
@@ -85,13 +89,15 @@
       class="surface-well border-l-2 border-status-error px-3 py-2 text-sm text-status-error-text flex items-center gap-2"
     >
       <span class="flex-1">{error}</span>
-      <button
+      <Button
+        variant="ghost"
+        size="icon"
         onclick={onDismissError}
         aria-label="Dismiss error"
-        class="text-text-disabled hover:text-text-muted"
+        class="h-7 w-7 shrink-0 text-text-disabled hover:text-text-muted"
       >
         <X class="h-3 w-3" />
-      </button>
+      </Button>
     </div>
   {/if}
   {#if message && !error}

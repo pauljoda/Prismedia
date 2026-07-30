@@ -9,7 +9,7 @@
     SlidersHorizontal,
     Star,
   } from "@lucide/svelte";
-  import { SearchInput, cn } from "@prismedia/ui-svelte";
+  import { Button, SearchInput, cn } from "@prismedia/ui-svelte";
   import SearchResultCard from "$lib/components/SearchResultCard.svelte";
   import { buildHrefWithFrom } from "$lib/back-navigation";
   import { useNsfw } from "$lib/nsfw/store.svelte";
@@ -19,6 +19,7 @@
   import { ENTITY_KIND } from "$lib/entities/entity-codes";
   import { entityAccentForKind } from "$lib/entities/entity-accent";
   import { SEARCH_KIND_CONFIG } from "$lib/components/search-kind-config";
+  import DateField from "$lib/components/forms/DateField.svelte";
 
   const PAGE_SIZE = 20;
   const nsfw = useNsfw();
@@ -238,25 +239,31 @@
         {@const Icon = config.icon}
         {@const active = activeKinds.has(kind)}
         {@const kindAccent = entityAccentForKind(kind).primary}
-        <button
+        <Button
           type="button"
+          variant="ghost"
+          size="sm"
+          aria-pressed={active}
           class={cn(
-            "tag-chip flex cursor-pointer items-center gap-1.5 transition-colors duration-fast",
+            "tag-chip h-auto cursor-pointer gap-1.5 transition-colors duration-fast",
             active ? "tag-chip-accent" : "tag-chip-default",
           )}
           onclick={() => toggleKind(kind)}
         >
           <Icon class="h-3 w-3" color={kindAccent} aria-hidden="true" />
           {kindLabel(kind)}
-        </button>
+        </Button>
       {/each}
 
       <div class="h-4 w-px bg-border-subtle"></div>
 
-      <button
+      <Button
         type="button"
+        variant="ghost"
+        size="sm"
+        aria-expanded={filtersOpen}
         class={cn(
-          "tag-chip flex cursor-pointer items-center gap-1.5 transition-colors duration-fast",
+          "tag-chip h-auto cursor-pointer gap-1.5 transition-colors duration-fast",
           filtersOpen ? "tag-chip-info" : "tag-chip-default",
         )}
         onclick={() => (filtersOpen = !filtersOpen)}
@@ -268,7 +275,7 @@
             !
           </span>
         {/if}
-      </button>
+      </Button>
     </div>
 
     <!-- Filter panel -->
@@ -278,10 +285,12 @@
           <div class="text-kicker mb-2">Min Rating</div>
           <div class="flex items-center gap-1">
             {#each [1, 2, 3, 4, 5] as n (n)}
-              <button
+              <Button
                 type="button"
+                variant="ghost"
+                size="icon"
                 class={cn(
-                  "flex h-7 w-7 items-center justify-center transition-colors duration-fast",
+                  "h-7 w-7 transition-colors duration-fast",
                   minRating && n <= minRating
                     ? "text-text-accent"
                     : "text-text-disabled hover:text-text-muted",
@@ -293,36 +302,24 @@
                   class="h-3.5 w-3.5"
                   fill={minRating && n <= minRating ? "currentColor" : "none"}
                 />
-              </button>
+              </Button>
             {/each}
             {#if minRating}
-              <button
+              <Button
                 type="button"
-                class="ml-1 text-text-disabled hover:text-text-muted"
+                variant="ghost"
+                size="icon"
+                class="ml-1 h-7 w-7 text-text-disabled hover:text-text-muted"
                 onclick={() => (minRating = null)}
                 aria-label="Clear rating"
               >
                 <X class="h-3 w-3" />
-              </button>
+              </Button>
             {/if}
           </div>
         </div>
-        <div>
-          <div class="text-kicker mb-2">Date From</div>
-          <input
-            type="date"
-            bind:value={dateFrom}
-            class="control-input w-full text-[0.75rem]"
-          />
-        </div>
-        <div>
-          <div class="text-kicker mb-2">Date To</div>
-          <input
-            type="date"
-            bind:value={dateTo}
-            class="control-input w-full text-[0.75rem]"
-          />
-        </div>
+        <DateField label="Date From" value={dateFrom} onChange={(value) => (dateFrom = value)} />
+        <DateField label="Date To" value={dateTo} onChange={(value) => (dateTo = value)} />
       </div>
     {/if}
   </div>
@@ -379,10 +376,12 @@
 
           {#if hasMore}
             <div class="mt-3 flex justify-center">
-              <button
+              <Button
                 type="button"
+                variant="secondary"
+                size="sm"
                 class={cn(
-                  "surface-well flex items-center gap-1.5 px-4 py-1.5 text-[0.72rem] text-text-muted transition-colors duration-fast hover:text-text-primary",
+                  "surface-well gap-1.5 px-4 text-[0.72rem] text-text-muted hover:text-text-primary",
                   loadingMore && "cursor-wait opacity-60",
                 )}
                 disabled={loadingMore}
@@ -394,7 +393,7 @@
                   <ChevronDown class="h-3 w-3" />
                 {/if}
                 Show more ({total - items.length} remaining)
-              </button>
+              </Button>
             </div>
           {/if}
         </section>

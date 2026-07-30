@@ -10,7 +10,7 @@
     ScanSearch,
     X,
   } from "@lucide/svelte";
-  import { cn } from "@prismedia/ui-svelte";
+  import { Button, cn } from "@prismedia/ui-svelte";
   import {
     useIdentifyStore,
   } from "$lib/components/identify/identify-store.svelte";
@@ -76,10 +76,13 @@
   <!-- ── Tab strip (dashboard + per-kind tabs) ── -->
   {#if store.view.kind === "dashboard" || store.view.kind === "kind-tab"}
     <nav class="mt-4 flex items-stretch overflow-hidden rounded-sm border border-border-subtle bg-gradient-to-b from-surface-2 to-surface-1">
-      <button
+      <Button
         type="button"
+        variant="ghost"
+        size="sm"
+        aria-pressed={store.view.kind === "dashboard"}
         class={cn(
-          "flex items-center gap-2 border-b-2 border-r border-r-border-subtle px-3.5 py-2.5 font-heading text-[0.78rem] font-semibold transition-colors",
+          "h-auto items-center gap-2 rounded-none border-b-2 border-r border-r-border-subtle px-3.5 py-2.5 font-heading text-[0.78rem] font-semibold transition-colors",
           store.view.kind === "dashboard"
             ? "border-b-accent-500 bg-accent-950/20 text-text-accent-bright"
             : "border-b-transparent text-text-muted hover:bg-surface-2 hover:text-text-primary",
@@ -88,17 +91,20 @@
       >
         <Home class="h-3.5 w-3.5" />
         Dashboard
-      </button>
+      </Button>
 
       <div class="flex flex-1 items-stretch overflow-x-auto">
         {#each store.supportedKinds as kindInfo (kindInfo.kind)}
           {@const isActive = store.view.kind === "kind-tab" && store.view.entityKind === kindInfo.kind}
           {@const KindIcon = entityKindIcon(kindInfo.kind)}
           {@const kindAccent = entityAccentForKind(kindInfo.kind).primary}
-          <button
+          <Button
             type="button"
+            variant="ghost"
+            size="sm"
+            aria-pressed={isActive}
             class={cn(
-              "flex items-center gap-2 whitespace-nowrap border-b-2 px-3.5 py-2.5 font-heading text-[0.8rem] font-semibold transition-colors",
+              "h-auto items-center gap-2 whitespace-nowrap rounded-none border-b-2 px-3.5 py-2.5 font-heading text-[0.8rem] font-semibold transition-colors",
               isActive
                 ? "border-b-accent-500 bg-accent-950/20 text-text-accent-bright"
                 : "border-b-transparent text-text-secondary hover:bg-surface-2 hover:text-text-primary",
@@ -110,7 +116,7 @@
             {#if kindInfo.pending > 0}
               <span class="font-mono text-[0.6rem] text-text-accent">{kindInfo.pending}</span>
             {/if}
-          </button>
+          </Button>
         {/each}
       </div>
     </nav>
@@ -121,14 +127,16 @@
     <div class="mt-4 flex items-center gap-2.5 rounded-xs border border-error/40 bg-surface-1 px-3 py-2.5 text-[0.82rem] text-text-primary" role="alert">
       <AlertCircle class="h-4 w-4 shrink-0 text-error-text" />
       <span class="min-w-0 flex-1">{store.error}</span>
-      <button
+      <Button
         type="button"
+        variant="ghost"
+        size="icon"
         class="shrink-0 text-text-disabled transition-colors hover:text-text-primary"
         onclick={() => (store.error = null)}
         aria-label="Dismiss error"
       >
         <X class="h-3.5 w-3.5" />
-      </button>
+      </Button>
     </div>
   {/if}
 
@@ -136,14 +144,16 @@
     <div class="mt-4 flex items-center gap-2.5 rounded-xs border border-border-accent bg-surface-1 px-3 py-2.5 text-[0.82rem] text-text-primary">
       <Check class="h-4 w-4 shrink-0 text-text-accent" />
       <span class="min-w-0 flex-1">{store.message}</span>
-      <button
+      <Button
         type="button"
+        variant="ghost"
+        size="icon"
         class="shrink-0 text-text-disabled transition-colors hover:text-text-primary"
         onclick={() => (store.message = null)}
         aria-label="Dismiss message"
       >
         <X class="h-3.5 w-3.5" />
-      </button>
+      </Button>
     </div>
   {/if}
 
@@ -180,20 +190,20 @@
           </p>
         </div>
         <div class="flex items-center gap-2">
-          <button
+          <Button
             type="button"
-            class="inline-flex h-9 items-center gap-1.5 rounded-xs border border-border-default bg-surface-2 px-3 text-[0.78rem] text-text-muted transition-colors hover:bg-surface-3"
+            variant="secondary"
             onclick={reset}
           >
             Try again
-          </button>
-          <button
+          </Button>
+          <Button
             type="button"
-            class="inline-flex h-9 items-center gap-1.5 rounded-xs border border-border-accent-strong bg-accent-950/40 px-3 text-[0.78rem] text-text-accent transition-colors hover:bg-accent-950/60"
+            variant="primary"
             onclick={() => { reset(); store.navigateToDashboard(); }}
           >
             Back to dashboard
-          </button>
+          </Button>
         </div>
       </div>
     {/snippet}

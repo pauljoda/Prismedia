@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { Check, Download, Loader2, RefreshCw, Search, X } from "@lucide/svelte";
-  import { Badge, Button } from "@prismedia/ui-svelte";
+  import { Check, Download, Loader2, RefreshCw } from "@lucide/svelte";
+  import { Badge, Button, SearchInput } from "@prismedia/ui-svelte";
 
   /** A Stash community scraper row with its locally-installed state resolved. */
   export interface StashScraperRow {
@@ -46,23 +46,13 @@
       {entries.length} scrapers available · All Stash community scrapers are classified as NSFW
     </p>
     <div class="flex items-center gap-2">
-      <div class="relative">
-        <Search class="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-text-disabled" />
-        <input
-          class="control-input pl-8 w-64 py-1.5 text-sm"
-          placeholder="Filter by name or ID..."
-          bind:value={search}
-        />
-        {#if search}
-          <button
-            onclick={() => (search = "")}
-            aria-label="Clear search"
-            class="absolute right-2 top-1/2 -translate-y-1/2 text-text-disabled hover:text-text-muted"
-          >
-            <X class="h-3 w-3" />
-          </button>
-        {/if}
-      </div>
+      <SearchInput
+        class="w-64"
+        inputClass="text-sm"
+        ariaLabel="Filter scrapers by name or ID"
+        placeholder="Filter by name or ID..."
+        bind:value={search}
+      />
       <Button variant="secondary" size="sm" onclick={onRefresh} disabled={loading}>
         {#if loading}
           <Loader2 class="h-3.5 w-3.5 animate-spin" />
@@ -94,10 +84,12 @@
               <Check class="h-2.5 w-2.5 mr-1" />Installed
             </Badge>
           {:else}
-            <button
+            <Button
+              variant="ghost"
+              size="sm"
               onclick={() => onInstall(entry.providerId)}
               disabled={installingId === entry.providerId}
-              class="flex items-center gap-1.5 px-2.5 py-1.5 text-xs text-text-muted hover:text-text-accent transition-colors duration-fast shrink-0 disabled:opacity-40"
+              class="shrink-0 text-text-muted hover:text-text-accent"
             >
               {#if installingId === entry.providerId}
                 <Loader2 class="h-3.5 w-3.5 animate-spin" />
@@ -105,7 +97,7 @@
                 <Download class="h-3.5 w-3.5" />
               {/if}
               Install
-            </button>
+            </Button>
           {/if}
         </div>
       {/each}

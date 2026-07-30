@@ -212,11 +212,14 @@
           </div>
         </div>
         <div class="flex max-w-md rounded-sm border border-border-default bg-surface-1 p-1 shadow-well">
-          <button
+          <Button
             type="button"
+            variant="ghost"
+            size="sm"
+            aria-pressed={nsfw.mode === "off"}
             onclick={() => nsfw.setMode("off")}
             class={cn(
-              "flex flex-1 flex-col items-center justify-center gap-1.5 rounded-xs border py-2.5 transition-all duration-fast",
+              "h-auto flex-1 flex-col gap-1.5 rounded-xs border py-2.5 transition-all duration-fast",
               nsfw.mode === "off"
                 ? "border-border-subtle bg-surface-3 text-text-primary shadow-card"
                 : "border-transparent text-text-muted hover:bg-surface-2/50 hover:text-text-primary",
@@ -224,12 +227,15 @@
           >
             <Shield class={cn("h-4 w-4", nsfw.mode === "off" && "text-info-text")} />
             <span class="text-[0.75rem] font-medium">Off (SFW)</span>
-          </button>
-          <button
+          </Button>
+          <Button
             type="button"
+            variant="ghost"
+            size="sm"
+            aria-pressed={nsfw.mode === "show"}
             onclick={() => nsfw.setMode("show")}
             class={cn(
-              "flex flex-1 flex-col items-center justify-center gap-1.5 rounded-xs border py-2.5 transition-all duration-fast",
+              "h-auto flex-1 flex-col gap-1.5 rounded-xs border py-2.5 transition-all duration-fast",
               nsfw.mode === "show"
                 ? "border-border-accent bg-surface-3 text-accent-400 shadow-[var(--shadow-glow-accent)]"
                 : "border-transparent text-text-muted hover:bg-surface-2/50 hover:text-text-primary",
@@ -237,7 +243,7 @@
           >
             <Flame class={cn("h-4 w-4", nsfw.mode === "show" && "text-accent-500")} />
             <span class="text-[0.75rem] font-medium">Show</span>
-          </button>
+          </Button>
         </div>
       </div>
     </Panel>

@@ -10,6 +10,7 @@
     Loader2,
     Search,
   } from "@lucide/svelte";
+  import { Button } from "@prismedia/ui-svelte";
   import IdentifyRejectQueueActions from "$lib/components/identify/IdentifyRejectQueueActions.svelte";
   import IdentifyReviewChoice from "$lib/components/identify/IdentifyReviewChoice.svelte";
   import IdentifyReviewParent from "$lib/components/identify/IdentifyReviewParent.svelte";
@@ -103,40 +104,45 @@
     <!-- Queue position nav -->
     {#if store.queue.length > 1 && queueIndex >= 0}
       <div class="flex items-center gap-1.5">
-        <button
+        <Button
           type="button"
-          class="inline-flex h-8 w-8 items-center justify-center rounded-xs border border-border-default bg-surface-2 text-text-muted transition-colors hover:bg-surface-3 disabled:opacity-30 md:h-7 md:w-7"
+          variant="secondary"
+          size="icon"
+          class="h-8 w-8 disabled:opacity-30 md:h-7 md:w-7"
           disabled={!prevQueueItem}
           onclick={() => goToQueueItem(prevQueueItem)}
           aria-label="Previous queue item"
         >
           <ChevronUp class="h-3.5 w-3.5" />
-        </button>
+        </Button>
         <span class="font-mono text-[0.72rem] text-text-muted">
           {queueIndex + 1}/{store.queue.length}
         </span>
-        <button
+        <Button
           type="button"
-          class="inline-flex h-8 w-8 items-center justify-center rounded-xs border border-border-default bg-surface-2 text-text-muted transition-colors hover:bg-surface-3 disabled:opacity-30 md:h-7 md:w-7"
+          variant="secondary"
+          size="icon"
+          class="h-8 w-8 disabled:opacity-30 md:h-7 md:w-7"
           disabled={!nextQueueItem}
           onclick={() => goToQueueItem(nextQueueItem)}
           aria-label="Next queue item"
         >
           <ChevronDown class="h-3.5 w-3.5" />
-        </button>
+        </Button>
       </div>
     {/if}
 
     {#if current && current.state === IDENTIFY_QUEUE_STATE.proposal && activeProvider}
-      <button
+      <Button
         type="button"
-        class="inline-flex h-10 w-full items-center justify-center gap-1.5 rounded-xs border border-border-accent bg-accent-950/30 px-3 text-[0.8rem] font-medium text-text-accent shadow-[0_0_18px_rgba(199, 201, 204,0.10)] transition-colors hover:bg-accent-950/45 disabled:cursor-not-allowed disabled:opacity-40 md:hidden"
+        variant="primary"
+        class="h-10 w-full md:hidden"
         disabled={backToSearchDisabled}
         onclick={backToSearch}
       >
         <Search class="h-3.5 w-3.5" />
         Back to Search
-      </button>
+      </Button>
     {/if}
 
     {#if current && showRouteQueueRejectActions}
@@ -152,15 +158,17 @@
 
     {#if current}
       {#if current.state === IDENTIFY_QUEUE_STATE.proposal && activeProvider}
-        <button
+        <Button
           type="button"
-          class="hidden h-8 items-center gap-1.5 rounded-xs border border-border-default bg-surface-2 px-2.5 text-[0.76rem] text-text-muted transition-colors hover:border-border-accent hover:text-text-accent disabled:cursor-not-allowed disabled:opacity-40 md:inline-flex"
+          variant="secondary"
+          size="sm"
+          class="hidden hover:text-text-accent md:inline-flex"
           disabled={backToSearchDisabled}
           onclick={backToSearch}
         >
           <Search class="h-3.5 w-3.5" />
           Back to Search
-        </button>
+        </Button>
       {/if}
       {#if showRouteQueueRejectActions}
         <IdentifyRejectQueueActions
@@ -227,13 +235,13 @@
         </p>
       </div>
       <div class="flex items-center gap-2">
-        <button
+        <Button
           type="button"
-          class="inline-flex h-9 items-center gap-1.5 rounded-xs border border-border-default bg-surface-2 px-3 text-[0.78rem] text-text-muted transition-colors hover:bg-surface-3"
+          variant="secondary"
           onclick={reset}
         >
           Try again
-        </button>
+        </Button>
         <a
           href="/identify"
           class="inline-flex h-9 items-center gap-1.5 rounded-xs border border-border-accent-strong bg-accent-950/40 px-3 text-[0.78rem] text-text-accent transition-colors hover:bg-accent-950/60"

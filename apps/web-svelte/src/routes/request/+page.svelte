@@ -137,16 +137,18 @@
     <div class="primary-tabs" role="tablist" aria-label="Request views">
       {#each tabs as tab (tab.id)}
         {@const TabIcon = tab.icon}
-        <button
+        <Button
           type="button"
+          variant="ghost"
+          size="sm"
           role="tab"
           aria-selected={activeTab === tab.id}
           onclick={() => (activeTab = tab.id)}
-          class={cn("primary-tab", activeTab === tab.id && "is-active")}
+          class={cn("primary-tab h-auto", activeTab === tab.id && "is-active")}
         >
           <TabIcon class="h-4 w-4" />
           {tab.label}
-        </button>
+        </Button>
       {/each}
     </div>
   </div>
@@ -226,7 +228,7 @@
     pointer-events: none;
   }
 
-  .primary-tab {
+  .primary-tabs :global(.primary-tab) {
     position: relative;
     display: inline-flex;
     flex: 0 0 auto;
@@ -243,7 +245,7 @@
     transition: color var(--duration-fast, 120ms) var(--ease-default);
   }
 
-  .primary-tab::before {
+  .primary-tabs :global(.primary-tab)::before {
     content: "";
     position: absolute;
     inset: auto 0.35rem 0 0.35rem;
@@ -255,25 +257,25 @@
     z-index: 1;
   }
 
-  .primary-tab:hover {
+  .primary-tabs :global(.primary-tab:hover) {
     color: var(--color-text-secondary);
   }
 
-  .primary-tab:hover::before {
+  .primary-tabs :global(.primary-tab:hover)::before {
     background: rgb(255 255 255 / 0.16);
   }
 
-  .primary-tab:focus-visible {
+  .primary-tabs :global(.primary-tab:focus-visible) {
     outline: 1px solid rgb(199 201 204 / 0.72);
     outline-offset: 2px;
     border-radius: var(--radius-xs, 4px);
   }
 
-  .primary-tab.is-active {
+  .primary-tabs :global(.primary-tab.is-active) {
     color: var(--color-text-accent-bright, #c7c9cc);
   }
 
-  .primary-tab.is-active::before {
+  .primary-tabs :global(.primary-tab.is-active)::before {
     background: linear-gradient(
       to right,
       var(--color-accent-overlay-faint),

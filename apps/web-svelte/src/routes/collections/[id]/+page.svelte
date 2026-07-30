@@ -3,6 +3,7 @@
   import { goto } from "$app/navigation";
   import { resolve } from "$app/paths";
   import { page } from "$app/state";
+  import { Button } from "@prismedia/ui-svelte";
   import {
     Layers,
     Music,
@@ -370,38 +371,45 @@
     {#if itemMutationError}
       <div class="flex items-center justify-between gap-3 rounded-sm border border-error/50 bg-surface-2 px-4 py-3 text-[0.8rem] text-error-text">
         <span>{itemMutationError}</span>
-        <button
+        <Button
           type="button"
+          variant="ghost"
+          size="icon"
           onclick={() => (itemMutationError = null)}
-          class="inline-flex h-7 w-7 items-center justify-center rounded-xs border border-border-subtle bg-surface-3 text-text-muted transition-colors hover:text-text-primary"
+          class="h-7 w-7 shrink-0 border border-border-subtle bg-surface-3 text-text-muted hover:text-text-primary"
+          aria-label="Dismiss collection item error"
         >
           <X class="h-3 w-3" />
-        </button>
+        </Button>
       </div>
     {/if}
 
     {#if hasAudioMembers}
       <div class="collection-tabs" role="tablist" aria-label="Collection views">
-        <button
+        <Button
           type="button"
+          variant="ghost"
+          size="sm"
           role="tab"
           aria-selected={activeBodyTab === "items"}
-          class:active={activeBodyTab === "items"}
+          class={activeBodyTab === "items" ? "collection-body-tab active" : "collection-body-tab"}
           onclick={() => (activeBodyTab = "items")}
         >
           <Layers class="h-3.5 w-3.5" />
           Items
-        </button>
-        <button
+        </Button>
+        <Button
           type="button"
+          variant="ghost"
+          size="sm"
           role="tab"
           aria-selected={activeBodyTab === "audio"}
-          class:active={activeBodyTab === "audio"}
+          class={activeBodyTab === "audio" ? "collection-body-tab active" : "collection-body-tab"}
           onclick={() => (activeBodyTab = "audio")}
         >
           <Music class="h-3.5 w-3.5" />
           Audio
-        </button>
+        </Button>
       </div>
     {/if}
 
@@ -502,7 +510,7 @@
     box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.30);
   }
 
-  .collection-tabs button {
+  .collection-tabs :global(.collection-body-tab) {
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -523,9 +531,9 @@
       color var(--duration-fast, 80ms) var(--ease-default, cubic-bezier(0.4, 0, 0.2, 1));
   }
 
-  .collection-tabs button:hover,
-  .collection-tabs button:focus-visible,
-  .collection-tabs button.active {
+  .collection-tabs :global(.collection-body-tab:hover),
+  .collection-tabs :global(.collection-body-tab:focus-visible),
+  .collection-tabs :global(.collection-body-tab.active) {
     border-color: var(--color-border-accent, rgba(199, 201, 204, 0.25));
     background: var(--color-surface-3, #151a28);
     color: var(--color-text-accent, #c7c9cc);

@@ -3,6 +3,7 @@
   import { goto } from "$app/navigation";
   import { resolve } from "$app/paths";
   import { page } from "$app/state";
+  import { Button } from "@prismedia/ui-svelte";
   import { fetchEntity, type EntityCardFull } from "$lib/api/entities";
   import { getCollectionConfigurationCapability } from "$lib/api/capabilities";
   import { redirectHiddenEntityNotFound } from "$lib/nsfw/hidden-entity";
@@ -43,9 +44,9 @@
 {#if loadState === "loading"}
   <div class="loading-shell" aria-busy="true"></div>
 {:else if loadState === "error"}
-  <div class="error-notice">
+  <div class="error-notice" role="alert">
     <p>{errorMessage ?? "Failed to load collection."}</p>
-    <button type="button" onclick={() => void loadCollection()}>Retry</button>
+    <Button variant="secondary" size="sm" onclick={() => void loadCollection()}>Retry</Button>
   </div>
 {:else}
   <CollectionEditor {collection} />
@@ -69,13 +70,6 @@
     color: var(--color-text-muted);
     padding: 1rem;
     font-size: 0.85rem;
-  }
-
-  .error-notice button {
-    border: 1px solid var(--color-border-subtle);
-    background: var(--color-surface-3);
-    color: var(--color-text-muted);
-    padding: 0.4rem 0.8rem;
   }
 
   @keyframes pulse {

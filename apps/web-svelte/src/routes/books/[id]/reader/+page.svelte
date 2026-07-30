@@ -666,7 +666,7 @@
       <section class="reader-route-error">
         <AlertTriangle class="h-5 w-5" />
         <p>{errorMessage ?? "Unable to open reader."}</p>
-        <button type="button" onclick={() => void goto(returnHref)}>Back</button>
+        <Button variant="secondary" onclick={() => void goto(returnHref)}>Back</Button>
       </section>
     {/if}
   </main>
@@ -691,14 +691,6 @@
     padding: 1.25rem;
     text-align: center;
     color: var(--color-text-secondary);
-  }
-
-  .reader-route-error button {
-    border: 1px solid var(--color-border-default);
-    border-radius: var(--radius-sm);
-    background: var(--color-overlay-heavy);
-    padding: 0.55rem 0.85rem;
-    color: var(--color-text-primary);
   }
 
   .combined-audio-controls {
