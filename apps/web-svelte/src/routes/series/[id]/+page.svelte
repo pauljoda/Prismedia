@@ -1,24 +1,15 @@
 <script lang="ts">
-  import { onMount } from "svelte";
   import { goto } from "$app/navigation";
   import { resolve } from "$app/paths";
   import { page } from "$app/state";
   import { Users, Building2, Calendar, CloudDownload, Info, SlidersHorizontal } from "@lucide/svelte";
-  import EntityDetailSkeleton from "$lib/components/entities/EntityDetailSkeleton.svelte";
+  import EntityDetailPageState from "$lib/components/entities/EntityDetailPageState.svelte";
+  import { useEntityDetailPage } from "$lib/components/entities/entity-detail-page-controller.svelte";
   import MediaProgressPanel from "$lib/components/MediaProgressPanel.svelte";
   import { PROGRESS_UNIT } from "$lib/api/generated/codes";
   import { fetchEntity, type EntityCardFull } from "$lib/api/entities";
   import { updateEntityProgress } from "$lib/api/playback";
   import { getCapability } from "$lib/api/capabilities";
-  import {
-    updateEntityRating,
-    updateEntityFlags,
-    updateEntityMetadata,
-  } from "$lib/api/entity-mutations";
-  import {
-    toggleOptimisticEntityFlag,
-    updateOptimisticEntityRating,
-  } from "$lib/entities/entity-detail-state";
   import { refreshAfterManagedFileRevert } from "$lib/entities/entity-file-management";
   import EntityAcquisitionCard from "$lib/components/acquisitions/EntityAcquisitionCard.svelte";
   import { useEntityAcquisition } from "$lib/components/acquisitions/use-entity-acquisition.svelte";
@@ -40,27 +31,12 @@
   } from "$lib/entities/video-container-progress";
   import EntityDetail, {
     type EntityDetailActionButton,
-    type EntityMetadataUpdateRequest,
     type EntityDetailSection,
     type EntityDetailTab,
   } from "$lib/components/entities/EntityDetail.svelte";
   import EntityGrid from "$lib/components/entities/EntityGrid.svelte";
   import EntityGridSection from "$lib/components/entities/EntityGridSection.svelte";
-  import { redirectHiddenEntityNotFound } from "$lib/nsfw/hidden-entity";
-  import { useNsfw } from "$lib/nsfw/store.svelte";
-  import { useAppChrome } from "$lib/stores/app-chrome.svelte";
-
-  type LoadState = "loading" | "ready" | "error";
-
-  const nsfw = useNsfw();
-  const appChrome = useAppChrome();
-
-  let loadState: LoadState = $state("loading");
-  let series = $state<EntityCardFull | null>(null);
   let seasonEpisodeCounts = $state<Record<string, number>>({});
-  let errorMessage: string | null = $state(null);
-  let lastNsfwMode = $state(nsfw.mode);
-  let ratingBusy = $state(false);
   let seasonCards = $state<EntityThumbnailCard[]>([]);
   let childSeriesCards = $state<EntityThumbnailCard[]>([]);
   let videoCards = $state<EntityThumbnailCard[]>([]);
@@ -70,6 +46,16 @@
   let relationshipStudio = $state<EntityDetailCredit | null>(null);
   let relationshipTags = $state<EntityDetailTag[]>([]);
   let progressBusy = $state(false);
+
+  const detail = useEntityDetailPage<EntityCardFull>({
+    loadKey: () => page.params.id ?? "",
+    load: ({ signal }) => loadSeries(signal),
+    breadcrumbs: (entity) => [
+      { label: "Series", href: resolve("/series") },
+      { label: entity.title },
+    ],
+  });
+  const series = $derived(detail.entity);
 
   const card = $derived.by((): EntityDetailCardFull | null => {
     if (!series) return null;
@@ -154,75 +140,33 @@
     ];
   });
 
-  onMount(() => {
-    void loadSeries();
-  });
+  async function loadSeries(signal: AbortSignal): Promise<EntityCardFull> {
+    const nextSeries = await fetchEntity(page.params.id ?? "", { signal });
+    const hydration = await hydrateSeriesThumbnails(nextSeries, signal);
+    const episodeState = await loadSeriesEpisodes(nextSeries, hydration.videoCards, signal);
+    signal.throwIfAborted();
 
-  $effect(() => {
-    if (nsfw.mode === lastNsfwMode) return;
-    lastNsfwMode = nsfw.mode;
-    void loadSeries();
-  });
-
-  $effect(() => {
-    if (!series) return;
-    return appChrome.setBreadcrumbs([
-      { label: "Series", href: resolve("/series") },
-      { label: series.title },
-    ]);
-  });
-
-  async function loadSeries(options: { showLoading?: boolean } = {}) {
-    const showLoading = options.showLoading ?? true;
-    if (showLoading || !series) loadState = "loading";
-    errorMessage = null;
-    try {
-      const nextSeries = await fetchEntity(page.params.id ?? "");
-      await hydrateSeriesThumbnails(nextSeries);
-      const episodeState = await loadSeriesEpisodes(nextSeries);
-      seasonEpisodeCounts = episodeState.counts;
-      orderedSeriesEpisodeIds = episodeState.ids;
-      seriesProgressEpisodeCard = episodeState.progressCard;
-      series = nextSeries;
-      loadState = "ready";
-    } catch (err) {
-      if (redirectHiddenEntityNotFound(err, nsfw.mode)) return;
-      errorMessage = err instanceof Error ? err.message : String(err);
-      loadState = "error";
-    }
+    seasonCards = hydration.seasonCards;
+    childSeriesCards = hydration.childSeriesCards;
+    videoCards = hydration.videoCards;
+    relationshipCredits = hydration.relationshipCredits;
+    relationshipStudio = hydration.relationshipStudio;
+    relationshipTags = hydration.relationshipTags;
+    seasonEpisodeCounts = episodeState.counts;
+    orderedSeriesEpisodeIds = episodeState.ids;
+    seriesProgressEpisodeCard = episodeState.progressCard;
+    return nextSeries;
   }
 
-  async function refreshSeries() {
-    await loadSeries({ showLoading: false });
+  function refreshSeries(): Promise<void> {
+    return detail.reload({ showLoading: false });
   }
 
-  async function handleRatingChange(value: number | null) {
-    if (!series || ratingBusy) return;
-    ratingBusy = true;
-    try {
-      await updateOptimisticEntityRating(series, value, (next) => (series = next), updateEntityRating);
-    } finally {
-      ratingBusy = false;
-    }
-  }
-
-  async function handleFavoriteToggle() {
-    if (!series) return;
-    await toggleOptimisticEntityFlag(series, "isFavorite", (next) => (series = next), updateEntityFlags);
-  }
-
-  async function handleOrganizedToggle() {
-    if (!series) return;
-    await toggleOptimisticEntityFlag(series, "isOrganized", (next) => (series = next), updateEntityFlags);
-  }
-
-  async function handleMetadataSave(request: EntityMetadataUpdateRequest) {
-    if (!series) return;
-    await updateEntityMetadata(series.id, request, { kind: series.kind });
-    await loadSeries();
-  }
-
-  async function loadSeriesEpisodes(nextSeries: EntityCardFull): Promise<{
+  async function loadSeriesEpisodes(
+    nextSeries: EntityCardFull,
+    directVideoCards: EntityThumbnailCard[],
+    signal: AbortSignal,
+  ): Promise<{
     counts: Record<string, number>;
     ids: string[];
     progressCard: EntityThumbnailCard | null;
@@ -232,18 +176,18 @@
       const progress = getCapability(nextSeries.capabilities, CAPABILITY_KIND.progress);
       return {
         counts: {},
-        ids: videoCards.map((card) => card.entity.id),
-        progressCard: videoCards.find((card) => card.entity.id === progress?.currentEntityId) ?? null,
+        ids: directVideoCards.map((card) => card.entity.id),
+        progressCard: directVideoCards.find((card) => card.entity.id === progress?.currentEntityId) ?? null,
       };
     }
 
     const details = await Promise.all(
-      seasonIds.map((id) => fetchEntity(id)),
+      seasonIds.map((id) => fetchEntity(id, { signal })),
     );
     const episodeIds = details.flatMap((detail) => getChildIds(detail, ENTITY_KIND.video));
     const progress = getCapability(nextSeries.capabilities, CAPABILITY_KIND.progress);
     const progressCards = progress?.currentEntityId && episodeIds.includes(progress.currentEntityId)
-      ? thumbnailsToCards(await fetchOrderedEntityThumbnails([progress.currentEntityId]))
+      ? thumbnailsToCards(await fetchOrderedEntityThumbnails([progress.currentEntityId], { signal }))
       : [];
 
     return {
@@ -272,7 +216,7 @@
         total: progressDisplay.total,
         completed: watched,
       });
-      await loadSeries({ showLoading: false });
+      await detail.reload({ showLoading: false });
     } finally {
       progressBusy = false;
     }
@@ -289,13 +233,13 @@
         total: progressDisplay.total,
         reset: true,
       });
-      await loadSeries({ showLoading: false });
+      await detail.reload({ showLoading: false });
     } finally {
       progressBusy = false;
     }
   }
 
-  async function hydrateSeriesThumbnails(nextSeries: EntityCardFull) {
+  async function hydrateSeriesThumbnails(nextSeries: EntityCardFull, signal: AbortSignal) {
     const seasonIds = getChildIds(nextSeries, ENTITY_KIND.videoSeason);
     const childSeriesIds = getChildIds(nextSeries, ENTITY_KIND.videoSeries);
     const videoIds = getChildIds(nextSeries, ENTITY_KIND.video);
@@ -306,20 +250,22 @@
       videos,
       relationshipCards,
     ] = await Promise.all([
-      fetchOrderedEntityThumbnails(seasonIds),
-      fetchOrderedEntityThumbnails(childSeriesIds),
-      fetchOrderedEntityThumbnails(videoIds),
-      hydrateStandardRelationshipCards(nextSeries),
+      fetchOrderedEntityThumbnails(seasonIds, { signal }),
+      fetchOrderedEntityThumbnails(childSeriesIds, { signal }),
+      fetchOrderedEntityThumbnails(videoIds, { signal }),
+      hydrateStandardRelationshipCards(nextSeries, { signal }),
     ]);
 
-    seasonCards = thumbnailsToCards(seasons, {
-      hrefFor: (thumbnail) => `/series/${nextSeries.id}/seasons/${thumbnail.id}`,
-    });
-    childSeriesCards = thumbnailsToCards(childSeries);
-    videoCards = thumbnailsToCards(videos);
-    relationshipCredits = relationshipCards.credits;
-    relationshipStudio = relationshipCards.studio;
-    relationshipTags = relationshipCards.relationshipTags;
+    return {
+      seasonCards: thumbnailsToCards(seasons, {
+        hrefFor: (thumbnail) => `/series/${nextSeries.id}/seasons/${thumbnail.id}`,
+      }),
+      childSeriesCards: thumbnailsToCards(childSeries),
+      videoCards: thumbnailsToCards(videos),
+      relationshipCredits: relationshipCards.credits,
+      relationshipStudio: relationshipCards.studio,
+      relationshipTags: relationshipCards.relationshipTags,
+    };
   }
 
 </script>
@@ -329,21 +275,20 @@
 </svelte:head>
 
 <div class="series-page">
-  {#if loadState === "loading"}
-    <EntityDetailSkeleton />
-  {:else if loadState === "error"}
-    <div class="error-notice">
-      <p>{errorMessage ?? "Failed to load series."}</p>
-      <button type="button" onclick={() => void loadSeries()}>Retry</button>
-    </div>
-  {:else if card && series}
-    <EntityDetail
+  <EntityDetailPageState
+    loadState={detail.loadState}
+    errorMessage={detail.errorMessage}
+    fallbackError="Failed to load series."
+    onRetry={detail.retry}
+  >
+    {#if card && series}
+      <EntityDetail
       {card}
-      onRatingChange={handleRatingChange}
-      onFavoriteToggle={handleFavoriteToggle}
-      onOrganizedToggle={handleOrganizedToggle}
-      onMetadataSave={handleMetadataSave}
-      {ratingBusy}
+      onRatingChange={detail.changeRating}
+      onFavoriteToggle={detail.toggleFavorite}
+      onOrganizedToggle={detail.toggleOrganized}
+      onMetadataSave={detail.saveMetadata}
+      ratingBusy={detail.ratingBusy}
       posterSize="large"
       tabs={detailTabs}
       sections={detailSections}
@@ -381,7 +326,7 @@
           />
         {/if}
       {/snippet}
-    </EntityDetail>
+      </EntityDetail>
 
     {#if progressDisplay}
       <section class="progress-section">
@@ -456,7 +401,8 @@
         <p>No seasons, episodes, or sub-series linked to this series yet.</p>
       </div>
     {/if}
-  {/if}
+    {/if}
+  </EntityDetailPageState>
 </div>
 
 <style>
@@ -466,28 +412,6 @@
     padding: 0;
     max-width: none;
     margin: 0;
-  }
-
-
-  .error-notice {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 1rem;
-    padding: 1rem;
-    border: 1px solid color-mix(in srgb, #ef4444 50%, var(--color-border, #1c2235));
-    background: var(--color-surface-2, #101420);
-    color: var(--color-text-muted, #8a93a6);
-    font-size: 0.85rem;
-  }
-
-  .error-notice button {
-    border: 1px solid var(--color-border, #1c2235);
-    background: var(--color-surface-3, #151a28);
-    color: var(--color-text-muted, #8a93a6);
-    padding: 0.4rem 0.8rem;
-    font-size: 0.78rem;
-    cursor: pointer;
   }
 
   /* ── Hero meta items (used inside EntityDetail snippets) ── */

@@ -3,7 +3,10 @@ import type {
   EntityCreditMetadata,
   EntityThumbnail,
 } from "$lib/api/generated/model";
-import { fetchEntityThumbnails } from "$lib/api/entities";
+import {
+  fetchEntityThumbnails,
+  type EntityThumbnailRequestOptions,
+} from "$lib/api/entities";
 import { getCreditsCapability } from "$lib/api/capabilities";
 import { getRelationshipIds } from "./entity-children";
 import type { EntityDetailCredit, EntityDetailTag } from "./entity-detail";
@@ -21,8 +24,11 @@ type EntityRelationshipSource = Pick<EntityCard, "relationships">;
 export type { EntityThumbnailCard };
 
 /** Fetches thumbnails for IDs and restores the caller's relationship order. */
-export async function fetchOrderedEntityThumbnails(ids: string[]): Promise<EntityThumbnail[]> {
-  const thumbnails = await fetchEntityThumbnails(ids);
+export async function fetchOrderedEntityThumbnails(
+  ids: string[],
+  options?: EntityThumbnailRequestOptions,
+): Promise<EntityThumbnail[]> {
+  const thumbnails = await fetchEntityThumbnails(ids, options);
   const byId = new Map(thumbnails.map((thumbnail) => [thumbnail.id, thumbnail]));
   return ids.map((id) => byId.get(id)).filter((thumbnail): thumbnail is EntityThumbnail => Boolean(thumbnail));
 }
@@ -101,6 +107,7 @@ export function detailStudioFromThumbnails(thumbnails: EntityThumbnail[]): Entit
 
 export async function hydrateStandardRelationshipThumbnails(
   entity: EntityRelationshipSource,
+  options?: EntityThumbnailRequestOptions,
 ): Promise<{
   cast: EntityThumbnail[];
   studio: EntityThumbnail[];
@@ -109,7 +116,7 @@ export async function hydrateStandardRelationshipThumbnails(
   const castIds = relationshipIds(entity, RELATIONSHIP_CODE.cast, ENTITY_KIND.person);
   const studioIds = relationshipIds(entity, RELATIONSHIP_CODE.studio, ENTITY_KIND.studio);
   const tagIds = relationshipIds(entity, RELATIONSHIP_CODE.tags, ENTITY_KIND.tag);
-  const all = await fetchOrderedEntityThumbnails([...studioIds, ...castIds, ...tagIds]);
+  const all = await fetchOrderedEntityThumbnails([...studioIds, ...castIds, ...tagIds], options);
   const byId = new Map(all.map((thumbnail) => [thumbnail.id, thumbnail]));
 
   return {
@@ -121,12 +128,13 @@ export async function hydrateStandardRelationshipThumbnails(
 
 export async function hydrateStandardRelationshipCards(
   entity: EntityRelationshipSource & Pick<EntityCard, "capabilities">,
+  options?: EntityThumbnailRequestOptions,
 ): Promise<{
   relationshipTags: EntityDetailTag[];
   credits: EntityDetailCredit[];
   studio: EntityDetailCredit | null;
 }> {
-  const relationships = await hydrateStandardRelationshipThumbnails(entity);
+  const relationships = await hydrateStandardRelationshipThumbnails(entity, options);
   return {
     relationshipTags: tagsFromThumbnails(relationships.tags),
     credits: detailCreditsFromThumbnails(

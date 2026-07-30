@@ -1,12 +1,12 @@
 <script lang="ts">
   import { PROGRESS_UNIT } from "$lib/api/generated/codes";
-  import { onMount } from "svelte";
   import { goto } from "$app/navigation";
+  import { resolve } from "$app/paths";
   import { page } from "$app/state";
   import { BookOpen, Check, Images, Info, Play, RotateCcw, SlidersHorizontal } from "@lucide/svelte";
-  import EntityDetailSkeleton from "$lib/components/entities/EntityDetailSkeleton.svelte";
+  import EntityDetailPageState from "$lib/components/entities/EntityDetailPageState.svelte";
+  import { useEntityDetailPage } from "$lib/components/entities/entity-detail-page-controller.svelte";
   import { fetchEntity, type EntityCardFull } from "$lib/api/entities";
-  import { updateEntityMetadata } from "$lib/api/entity-mutations";
   import { updateEntityProgress } from "$lib/api/playback";
   import { entityCardToDetailCard, type EntityDetailCardFull } from "$lib/entities/entity-detail";
   import {
@@ -14,35 +14,43 @@
     orderedBookChildren,
     type BookReaderChapter,
   } from "$lib/entities/book-entity-reader";
-  import { bookReaderHref } from "$lib/entities/book-reader-route";
+  import { bookReaderHref, type BookReaderHrefOptions } from "$lib/entities/book-reader-route";
   import { thumbnailsToCards } from "$lib/entities/entity-relationship-thumbnails";
   import { ENTITY_KIND } from "$lib/entities/entity-codes";
   import type { EntityThumbnailCard } from "$lib/entities/entity-thumbnail";
   import EntityDetail, {
     type EntityDetailActionButton,
     type EntityDetailTab,
-    type EntityMetadataUpdateRequest,
   } from "$lib/components/entities/EntityDetail.svelte";
   import EntityGrid from "$lib/components/entities/EntityGrid.svelte";
-  import { redirectHiddenEntityNotFound } from "$lib/nsfw/hidden-entity";
-  import { useNsfw } from "$lib/nsfw/store.svelte";
-  import { useAppChrome } from "$lib/stores/app-chrome.svelte";
 
-  type LoadState = "loading" | "ready" | "error";
-
-  const nsfw = useNsfw();
-  const appChrome = useAppChrome();
-
-  let loadState: LoadState = $state("loading");
   let book = $state<EntityCardFull | null>(null);
-  let chapter = $state<EntityCardFull | null>(null);
-  let errorMessage: string | null = $state(null);
-  let lastNsfwMode = $state(nsfw.mode);
   let pageCards = $state<EntityThumbnailCard[]>([]);
   let chapterSummaries = $state.raw<BookReaderChapter[]>([]);
 
   const bookId = $derived(page.params.id ?? "");
   const chapterId = $derived(page.params.chapterId ?? "");
+  const detail = useEntityDetailPage<EntityCardFull>({
+    loadKey: () => `${bookId}:${chapterId}`,
+    load: async ({ signal }) => {
+      const [nextBook, nextChapter] = await Promise.all([
+        fetchEntity(bookId, { signal }),
+        fetchEntity(chapterId, { signal }),
+      ]);
+      const nextChapterSummaries = await loadChapterSummaries(nextBook, nextChapter, signal);
+      signal.throwIfAborted();
+      book = nextBook;
+      chapterSummaries = nextChapterSummaries;
+      pageCards = thumbnailsToCards(orderedBookChildren(nextChapter, ENTITY_KIND.bookPage));
+      return nextChapter;
+    },
+    breadcrumbs: (currentChapter) => [
+      { label: "Books", href: "/books" },
+      { label: book?.title ?? "Book", href: `/books/${bookId}` },
+      { label: currentChapter.title },
+    ],
+  });
+  const chapter = $derived(detail.entity);
   const bookTitle = $derived(book?.title ?? "Book");
   const card = $derived(chapter ? entityCardToDetailCard(chapter) as EntityDetailCardFull : null);
   const chapterPages = $derived(chapter ? orderedBookChildren(chapter, ENTITY_KIND.bookPage) : []);
@@ -100,49 +108,10 @@
     return tabs;
   });
 
-  onMount(() => {
-    void loadChapter();
-  });
-
-  $effect(() => {
-    if (nsfw.mode === lastNsfwMode) return;
-    lastNsfwMode = nsfw.mode;
-    void loadChapter();
-  });
-
-  $effect(() => {
-    if (!book || !chapter) return;
-    return appChrome.setBreadcrumbs([
-      { label: "Books", href: "/books" },
-      { label: book.title, href: `/books/${book.id}` },
-      { label: chapter.title },
-    ]);
-  });
-
-  async function loadChapter() {
-    loadState = "loading";
-    errorMessage = null;
-    try {
-      const [nextBook, nextChapter] = await Promise.all([
-        fetchEntity(bookId),
-        fetchEntity(chapterId),
-      ]);
-      book = nextBook;
-      chapter = nextChapter;
-      chapterSummaries = await loadChapterSummaries(nextBook, nextChapter);
-      pageCards = thumbnailsToCards(orderedBookChildren(nextChapter, ENTITY_KIND.bookPage));
-
-      loadState = "ready";
-    } catch (err) {
-      if (redirectHiddenEntityNotFound(err, nsfw.mode)) return;
-      errorMessage = err instanceof Error ? err.message : String(err);
-      loadState = "error";
-    }
-  }
-
   async function loadChapterSummaries(
     nextBook: EntityCardFull,
     currentChapter: EntityCardFull,
+    signal: AbortSignal,
   ): Promise<BookReaderChapter[]> {
     const currentPageCount = orderedBookChildren(currentChapter, ENTITY_KIND.bookPage).length;
     const volumeThumbnails = orderedBookChildren(nextBook, ENTITY_KIND.bookVolume);
@@ -150,10 +119,10 @@
     let currentVolume: EntityCardFull | null = null;
 
     if (parentVolumeIndex >= 0) {
-      currentVolume = await fetchEntity(volumeThumbnails[parentVolumeIndex].id);
+      currentVolume = await fetchEntity(volumeThumbnails[parentVolumeIndex].id, { signal });
     } else {
       for (const [index, volumeThumbnail] of volumeThumbnails.entries()) {
-        const volume = await fetchEntity(volumeThumbnail.id);
+        const volume = await fetchEntity(volumeThumbnail.id, { signal });
         if (orderedBookChildren(volume, ENTITY_KIND.bookChapter).some((child) => child.id === currentChapter.id)) {
           parentVolumeIndex = index;
           currentVolume = volume;
@@ -169,7 +138,7 @@
       if (currentIndex === chapterThumbnails.length - 1) {
         const nextVolume = volumeThumbnails[parentVolumeIndex + 1];
         if (nextVolume) {
-          const nextVolumeDetail = await fetchEntity(nextVolume.id);
+          const nextVolumeDetail = await fetchEntity(nextVolume.id, { signal });
           chapterThumbnails = [
             ...chapterThumbnails,
             ...orderedBookChildren(nextVolumeDetail, ENTITY_KIND.bookChapter),
@@ -194,32 +163,35 @@
     }));
   }
 
-  async function handleMetadataSave(request: EntityMetadataUpdateRequest) {
-    if (!chapter) return;
-    await updateEntityMetadata(chapter.id, request, { kind: chapter.kind });
-    await loadChapter();
-  }
-
   function openReaderAt(index: number) {
     if (!book || !chapter) return;
-    void goto(bookReaderHref({
+    void goto(resolve(bookReaderRoute({
       bookId: book.id,
       kind: "chapter",
       id: chapter.id,
       returnId: chapter.id,
       pageIndex: Math.max(0, Math.min(index, Math.max(0, readerPageCount - 1))),
-    }));
+    }), { id: book.id }));
   }
 
   function openPrimaryReader() {
     if (!book || !chapter) return;
-    void goto(bookReaderHref({
+    void goto(resolve(bookReaderRoute({
       bookId: book.id,
       kind: "chapter",
       id: chapter.id,
       returnId: chapter.id,
       command: chapterProgress && !chapterProgress.isComplete ? "resume" : undefined,
-    }));
+    }), { id: book.id }));
+  }
+
+  function bookReaderSearch(options: BookReaderHrefOptions): `?${string}` {
+    const href = bookReaderHref(options);
+    return href.slice(href.indexOf("?")) as `?${string}`;
+  }
+
+  function bookReaderRoute(options: BookReaderHrefOptions): `/books/[id]/reader?${string}` {
+    return `/books/[id]/reader${bookReaderSearch(options)}` as `/books/[id]/reader?${string}`;
   }
 
   async function markChapterRead() {
@@ -232,7 +204,7 @@
       mode: chapterProgress?.readerMode ?? "paged",
       completed: true,
     });
-    await loadChapter();
+    await detail.reload({ showLoading: false });
   }
 </script>
 
@@ -241,51 +213,55 @@
 </svelte:head>
 
 <div class="chapter-page">
-  {#if loadState === "loading"}
-    <EntityDetailSkeleton />
-  {:else if loadState === "error"}
-    <div class="error-notice">
-      <p>{errorMessage ?? "Failed to load chapter."}</p>
-      <button type="button" onclick={() => void loadChapter()}>Retry</button>
-    </div>
-  {:else if card && chapter && book}
-    <EntityDetail
-      {card}
-      onMetadataSave={handleMetadataSave}
-      posterSize="large"
-      tabs={detailTabs}
-      actionButtons={heroActions}
-    >
-      {#snippet heroMeta()}
-        <span class="meta-item">{bookTitle}</span>
-        <span class="meta-sep"></span>
-        <span class="meta-item">
-          {readerPageCount} page{readerPageCount === 1 ? "" : "s"}
-        </span>
-      {/snippet}
+  <EntityDetailPageState
+    loadState={detail.loadState}
+    errorMessage={detail.errorMessage}
+    fallbackError="Failed to load chapter."
+    onRetry={detail.retry}
+    tabCount={2}
+  >
+    {#if card && chapter && book}
+      <EntityDetail
+        {card}
+        onRatingChange={detail.changeRating}
+        onFavoriteToggle={detail.toggleFavorite}
+        onOrganizedToggle={detail.toggleOrganized}
+        onMetadataSave={detail.saveMetadata}
+        ratingBusy={detail.ratingBusy}
+        posterSize="large"
+        tabs={detailTabs}
+        actionButtons={heroActions}
+      >
+        {#snippet heroMeta()}
+          <span class="meta-item">{bookTitle}</span>
+          <span class="meta-sep"></span>
+          <span class="meta-item">
+            {readerPageCount} page{readerPageCount === 1 ? "" : "s"}
+          </span>
+        {/snippet}
+      </EntityDetail>
 
-    </EntityDetail>
-
-    <section class="content-section">
-      <h2 class="content-heading">
-        <Images class="h-4 w-4" />
-        Pages
-        <span class="content-count">{pageCards.length}</span>
-      </h2>
-      <EntityGrid
-        cards={pageCards}
-        prefsKey={`book-${book.id}-chapter-${chapter.id}-pages`}
-        initialSortBy="position"
-        initialMediaWall
-        emptyTitle="No pages"
-        emptyMessage="No pages found in this chapter."
-        onCardActivate={(card, visibleCards) => {
-          const index = visibleCards.findIndex((item) => item.entity.id === card.entity.id);
-          openReaderAt(Math.max(0, index));
-        }}
-      />
-    </section>
-  {/if}
+      <section class="content-section">
+        <h2 class="content-heading">
+          <Images class="h-4 w-4" />
+          Pages
+          <span class="content-count">{pageCards.length}</span>
+        </h2>
+        <EntityGrid
+          cards={pageCards}
+          prefsKey={`book-${book.id}-chapter-${chapter.id}-pages`}
+          initialSortBy="position"
+          initialMediaWall
+          emptyTitle="No pages"
+          emptyMessage="No pages found in this chapter."
+          onCardActivate={(card, visibleCards) => {
+            const index = visibleCards.findIndex((item) => item.entity.id === card.entity.id);
+            openReaderAt(Math.max(0, index));
+          }}
+        />
+      </section>
+    {/if}
+  </EntityDetailPageState>
 </div>
 
 <style>
@@ -296,38 +272,6 @@
     max-width: none;
     margin: 0;
   }
-
-
-  .error-notice {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 1rem;
-    padding: 1rem;
-    border: 1px solid color-mix(in srgb, #ef4444 50%, var(--color-border, #1c2235));
-    background: var(--color-surface-2, #101420);
-    color: var(--color-text-muted, #8a93a6);
-    font-size: 0.85rem;
-  }
-
-  .error-notice button {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.4rem;
-    border: 1px solid var(--color-border, #1c2235);
-    background: var(--color-surface-3, #151a28);
-    color: var(--color-text-muted, #8a93a6);
-    padding: 0.4rem 0.8rem;
-    font-size: 0.78rem;
-    cursor: pointer;
-  }
-
-  .error-notice button:hover {
-    color: var(--color-text-accent, #c7c9cc);
-    border-color: rgba(199, 201, 204, 0.45);
-    box-shadow: 0 0 16px rgb(199 201 204 / 0.16);
-  }
-
   :global(.meta-item) {
     white-space: nowrap;
     font-size: 0.82rem;

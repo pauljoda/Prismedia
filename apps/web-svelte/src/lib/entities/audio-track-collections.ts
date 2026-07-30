@@ -16,6 +16,7 @@ interface CollectOptions {
   groupByAlbum?: boolean;
   albumCache?: Map<string, EntityCard | null>;
   artistCache?: Map<string, EntityCard | null>;
+  signal?: AbortSignal;
 }
 
 export function isAudioCollectionMemberKind(kind: string): boolean {
@@ -29,7 +30,7 @@ export async function collectLibraryTracks(
   options: CollectOptions = {},
 ): Promise<AudioTrackCollectionResult> {
   const albumCache = options.albumCache ?? new Map<string, EntityCard | null>();
-  const detail = await getCachedAudioLibrary(libraryId, albumCache);
+  const detail = await getCachedAudioLibrary(libraryId, albumCache, options.signal);
   if (!detail) return { tracks: [], albumCoverUrls: {} };
 
   const tracks = tracksFromAudioLibraryDetail(detail, options.groupByAlbum === true);
@@ -55,7 +56,7 @@ export async function collectArtistTracks(
 ): Promise<AudioTrackCollectionResult> {
   const artistCache = options.artistCache ?? new Map<string, EntityCard | null>();
   const albumCache = options.albumCache ?? new Map<string, EntityCard | null>();
-  const artist = await getCachedMusicArtist(artistId, artistCache);
+  const artist = await getCachedMusicArtist(artistId, artistCache, options.signal);
   if (!artist) return { tracks: [], albumCoverUrls: {} };
 
   const albumIds = artist.childrenByKind
@@ -77,6 +78,7 @@ export async function collectArtistTracks(
 
 export async function collectCollectionAudioTracks(
   items: CollectionItem[],
+  options: Pick<CollectOptions, "signal"> = {},
 ): Promise<AudioTrackCollectionResult> {
   const albumCache = new Map<string, EntityCard | null>();
   const artistCache = new Map<string, EntityCard | null>();
@@ -84,12 +86,15 @@ export async function collectCollectionAudioTracks(
   const albumCoverUrls: Record<string, string | null | undefined> = {};
 
   for (const item of items) {
+    options.signal?.throwIfAborted();
     const entity = item.entity;
     if (!entity) continue;
 
     if (entity.kind === ENTITY_KIND.audioTrack) {
       if (entity.isWanted === true) continue;
-      const album = entity.parentEntityId ? await getCachedAudioLibrary(entity.parentEntityId, albumCache) : null;
+      const album = entity.parentEntityId
+        ? await getCachedAudioLibrary(entity.parentEntityId, albumCache, options.signal)
+        : null;
       if (album) albumCoverUrls[album.id] = audioLibraryCoverUrl(album);
       tracks.push(entityThumbnailToTrackItem(entity, entity.parentEntityId ?? null, {
         sectionLabel: album?.title ?? null,
@@ -97,11 +102,21 @@ export async function collectCollectionAudioTracks(
         libraryId: album?.id ?? entity.parentEntityId ?? null,
       }));
     } else if (entity.kind === ENTITY_KIND.audioLibrary) {
-      const album = await collectLibraryTracks(entity.id, { groupByAlbum: true, albumCache, artistCache });
+      const album = await collectLibraryTracks(entity.id, {
+        groupByAlbum: true,
+        albumCache,
+        artistCache,
+        signal: options.signal,
+      });
       tracks.push(...album.tracks);
       Object.assign(albumCoverUrls, album.albumCoverUrls);
     } else if (entity.kind === ENTITY_KIND.musicArtist) {
-      const artist = await collectArtistTracks(entity.id, { groupByAlbum: true, albumCache, artistCache });
+      const artist = await collectArtistTracks(entity.id, {
+        groupByAlbum: true,
+        albumCache,
+        artistCache,
+        signal: options.signal,
+      });
       tracks.push(...artist.tracks);
       Object.assign(albumCoverUrls, artist.albumCoverUrls);
     }
@@ -132,9 +147,13 @@ function audioLibraryCoverUrl(detail: EntityCard): string | null {
 async function getCachedAudioLibrary(
   id: string,
   cache: Map<string, EntityCard | null>,
+  signal?: AbortSignal,
 ): Promise<EntityCard | null> {
   if (cache.has(id)) return cache.get(id) ?? null;
-  const detail = await fetchEntity(id).catch(() => null);
+  const detail = await fetchEntity(id, { signal }).catch(() => {
+    signal?.throwIfAborted();
+    return null;
+  });
   cache.set(id, detail);
   return detail;
 }
@@ -142,9 +161,13 @@ async function getCachedAudioLibrary(
 async function getCachedMusicArtist(
   id: string,
   cache: Map<string, EntityCard | null>,
+  signal?: AbortSignal,
 ): Promise<EntityCard | null> {
   if (cache.has(id)) return cache.get(id) ?? null;
-  const detail = await fetchEntity(id).catch(() => null);
+  const detail = await fetchEntity(id, { signal }).catch(() => {
+    signal?.throwIfAborted();
+    return null;
+  });
   cache.set(id, detail);
   return detail;
 }

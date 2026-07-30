@@ -2,14 +2,11 @@
   import { goto } from "$app/navigation";
   import { page } from "$app/state";
   import { CloudDownload, Info, Layers, SlidersHorizontal } from "@lucide/svelte";
-  import EntityDetailSkeleton from "$lib/components/entities/EntityDetailSkeleton.svelte";
+  import EntityDetailPageState from "$lib/components/entities/EntityDetailPageState.svelte";
   import EntityDetailHeroDates from "$lib/components/entities/EntityDetailHeroDates.svelte";
+  import { useEntityDetailPage } from "$lib/components/entities/entity-detail-page-controller.svelte";
   import { fetchEntity, type EntityCardFull } from "$lib/api/entities";
-  import {
-    updateEntityRating,
-    updateEntityFlags,
-    updateEntityMetadata,
-  } from "$lib/api/entity-mutations";
+  import { updateEntityRating } from "$lib/api/entity-mutations";
   import {
     getCapability,
     getGalleryMetadataCapability,
@@ -18,19 +15,12 @@
     isNsfw as hasNsfwFlag,
     withRatingCapability,
   } from "$lib/api/capabilities";
-  import {
-    toggleOptimisticEntityFlag,
-    updateOptimisticEntityRating,
-  } from "$lib/entities/entity-detail-state";
   import { refreshAfterManagedFileRevert } from "$lib/entities/entity-file-management";
   import { getAllChildIds } from "$lib/entities/entity-children";
   import type { EntityDetailCredit, EntityDetailTag } from "$lib/entities/entity-detail";
   import type { EntityKindCode } from "$lib/entities/entity-codes";
   import { entityCardToDetailCard, type EntityDetailCardFull } from "$lib/entities/entity-detail";
   import { resolveEntityHref } from "$lib/entities/entity-routes";
-  import { redirectHiddenEntityNotFound } from "$lib/nsfw/hidden-entity";
-  import { useNsfw } from "$lib/nsfw/store.svelte";
-  import { useAppChrome } from "$lib/stores/app-chrome.svelte";
   import {
     fetchOrderedEntityThumbnails,
     hydrateStandardRelationshipCards,
@@ -40,7 +30,6 @@
   import EntityDetail, {
     type EntityDetailSection,
     type EntityDetailTab,
-    type EntityMetadataUpdateRequest,
   } from "$lib/components/entities/EntityDetail.svelte";
   import EntityAcquisitionCard from "$lib/components/acquisitions/EntityAcquisitionCard.svelte";
   import { useEntityAcquisition } from "$lib/components/acquisitions/use-entity-acquisition.svelte";
@@ -53,15 +42,6 @@
     type UniversalLightboxEntity,
   } from "$lib/components/universal-lightbox-media";
 
-  type LoadState = "loading" | "ready" | "error";
-
-  const nsfw = useNsfw();
-  const appChrome = useAppChrome();
-
-  let loadState: LoadState = $state("loading");
-  let gallery = $state<EntityCardFull | null>(null);
-  let errorMessage: string | null = $state(null);
-  let ratingBusy = $state(false);
   let childCards = $state<EntityThumbnailCard[]>([]);
   let relationshipCredits = $state<EntityDetailCredit[]>([]);
   let relationshipStudio = $state<EntityDetailCredit | null>(null);
@@ -71,8 +51,33 @@
   let lightboxIndex = $state(0);
   let hydratedLightboxEntities = $state.raw<Record<string, UniversalLightboxEntity>>({});
   let lightboxHydrationInFlight = $state.raw<string[]>([]);
-  let activeLoadToken = 0;
   const currentGalleryId = $derived(page.params.id ?? "");
+
+  const detail = useEntityDetailPage<EntityCardFull>({
+    loadKey: () => currentGalleryId,
+    load: async ({ signal }) => {
+      const nextGallery = await fetchEntity(currentGalleryId, { signal });
+      const [children, relationships] = await Promise.all([
+        fetchOrderedEntityThumbnails(getAllChildIds(nextGallery), { signal }),
+        hydrateStandardRelationshipCards(nextGallery, { signal }),
+      ]);
+      signal.throwIfAborted();
+
+      childCards = thumbnailsToCards(children, {
+        hrefFor: (thumbnail) => resolveEntityHref(thumbnail.kind, thumbnail.id),
+      });
+      relationshipCredits = relationships.credits;
+      relationshipStudio = relationships.studio;
+      relationshipTags = relationships.relationshipTags;
+      return nextGallery;
+    },
+    breadcrumbs: (nextGallery) => [
+      { label: "Galleries", href: "/galleries" },
+      { label: nextGallery.title },
+    ],
+  });
+
+  const gallery = $derived(detail.entity);
 
   const card = $derived.by((): EntityDetailCardFull | null => {
     if (!gallery) return null;
@@ -93,12 +98,12 @@
   const acq = useEntityAcquisition({
     entityId: () => gallery?.id,
     capabilities: () => gallery?.capabilities,
-    onChanged: () => loadGallery(),
+    onChanged: () => detail.reload({ showLoading: false }),
     onPruned: () => goto("/galleries"),
   });
   const fileManagement = {
     onDeleted: () => goto("/galleries"),
-    onReverted: () => refreshAfterManagedFileRevert(acq, () => loadGallery()),
+    onReverted: () => refreshAfterManagedFileRevert(acq, () => detail.reload({ showLoading: false })),
   };
   const detailSections = $derived.by((): EntityDetailSection[] => [
     { id: "acquisition" },
@@ -129,85 +134,12 @@
   );
 
   $effect(() => {
-    const currentNsfwMode = nsfw.mode;
-    if (!currentGalleryId) return;
-    void loadGallery(currentGalleryId, currentNsfwMode);
-  });
-
-  $effect(() => {
-    if (!gallery) return;
-    return appChrome.setBreadcrumbs([
-      { label: "Galleries", href: "/galleries" },
-      { label: gallery.title },
-    ]);
-  });
-
-  $effect(() => {
     if (!lightboxOpen || lightboxCards.length === 0) return;
     const currentCard = lightboxCards[lightboxIndex];
     if (!currentCard || currentCard.entity.kind !== "image") return;
     if (hydratedLightboxEntities[currentCard.entity.id]) return;
     void hydrateLightboxEntity(currentCard.entity.id);
   });
-
-  async function loadGallery(galleryId = currentGalleryId, nsfwMode = nsfw.mode) {
-    const loadToken = activeLoadToken + 1;
-    activeLoadToken = loadToken;
-    loadState = "loading";
-    errorMessage = null;
-    try {
-      const nextGallery = await fetchEntity(galleryId);
-      if (loadToken !== activeLoadToken) return;
-      gallery = nextGallery;
-      await hydrateGalleryThumbnails(nextGallery);
-      if (loadToken !== activeLoadToken) return;
-      loadState = "ready";
-    } catch (err) {
-      if (loadToken !== activeLoadToken) return;
-      if (redirectHiddenEntityNotFound(err, nsfwMode)) return;
-      errorMessage = err instanceof Error ? err.message : String(err);
-      loadState = "error";
-    }
-  }
-
-  async function hydrateGalleryThumbnails(nextGallery: EntityCardFull) {
-    const [children, relationships] = await Promise.all([
-      fetchOrderedEntityThumbnails(getAllChildIds(nextGallery)),
-      hydrateStandardRelationshipCards(nextGallery),
-    ]);
-    childCards = thumbnailsToCards(children, {
-      hrefFor: (thumbnail) => resolveEntityHref(thumbnail.kind, thumbnail.id),
-    });
-    relationshipCredits = relationships.credits;
-    relationshipStudio = relationships.studio;
-    relationshipTags = relationships.relationshipTags;
-  }
-
-  async function handleRatingChange(value: number | null) {
-    if (!gallery || ratingBusy) return;
-    ratingBusy = true;
-    try {
-      await updateOptimisticEntityRating(gallery, value, (next) => (gallery = next), updateEntityRating);
-    } finally {
-      ratingBusy = false;
-    }
-  }
-
-  async function handleFavoriteToggle() {
-    if (!gallery) return;
-    await toggleOptimisticEntityFlag(gallery, "isFavorite", (next) => (gallery = next), updateEntityFlags);
-  }
-
-  async function handleOrganizedToggle() {
-    if (!gallery) return;
-    await toggleOptimisticEntityFlag(gallery, "isOrganized", (next) => (gallery = next), updateEntityFlags);
-  }
-
-  async function handleMetadataSave(request: EntityMetadataUpdateRequest) {
-    if (!gallery) return;
-    await updateEntityMetadata(gallery.id, request, { kind: gallery.kind });
-    await loadGallery();
-  }
 
   function openImageLightbox(card: EntityThumbnailCard, visibleCards: EntityThumbnailCard[]) {
     const nextCards = visibleCards.length > 0 ? visibleCards : [card];
@@ -299,21 +231,20 @@
 </svelte:head>
 
 <div class="detail-page">
-  {#if loadState === "loading"}
-    <EntityDetailSkeleton />
-  {:else if loadState === "error"}
-    <div class="error-notice">
-      <p>{errorMessage ?? "Failed to load gallery."}</p>
-      <button type="button" onclick={() => void loadGallery()}>Retry</button>
-    </div>
-  {:else if card && gallery}
+  <EntityDetailPageState
+    loadState={detail.loadState}
+    errorMessage={detail.errorMessage}
+    fallbackError="Failed to load gallery."
+    onRetry={detail.retry}
+  >
+  {#if card && gallery}
     <EntityDetail
       {card}
-      onRatingChange={handleRatingChange}
-      onFavoriteToggle={handleFavoriteToggle}
-      onOrganizedToggle={handleOrganizedToggle}
-      onMetadataSave={handleMetadataSave}
-      {ratingBusy}
+      onRatingChange={detail.changeRating}
+      onFavoriteToggle={detail.toggleFavorite}
+      onOrganizedToggle={detail.toggleOrganized}
+      onMetadataSave={detail.saveMetadata}
+      ratingBusy={detail.ratingBusy}
       peopleLabel="People"
       posterSize="large"
       tabs={detailTabs}
@@ -387,6 +318,7 @@
       </div>
     {/if}
   {/if}
+  </EntityDetailPageState>
 </div>
 
 {#if lightboxOpen && lightboxEntities.length > 0}
@@ -411,28 +343,6 @@
     padding: 0;
     max-width: none;
     margin: 0;
-  }
-
-
-  .error-notice {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 1rem;
-    padding: 1rem;
-    border: 1px solid color-mix(in srgb, #ef4444 50%, var(--color-border, #1c2235));
-    background: var(--color-surface-2, #101420);
-    color: var(--color-text-muted, #8a93a6);
-    font-size: 0.85rem;
-  }
-
-  .error-notice button {
-    border: 1px solid var(--color-border, #1c2235);
-    background: var(--color-surface-3, #151a28);
-    color: var(--color-text-muted, #8a93a6);
-    padding: 0.4rem 0.8rem;
-    font-size: 0.78rem;
-    cursor: pointer;
   }
 
   :global(.meta-item) { white-space: nowrap; font-size: 0.82rem; }

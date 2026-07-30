@@ -1,15 +1,14 @@
 <script lang="ts">
   import { ENTITY_KIND } from "$lib/entities/entity-codes";
-  import { onMount } from "svelte";
   import { goto } from "$app/navigation";
   import { page } from "$app/state";
   import { CloudDownload, Info, MicVocal, Music, Play, Shuffle, SlidersHorizontal, Users } from "@lucide/svelte";
-  import EntityDetailSkeleton from "$lib/components/entities/EntityDetailSkeleton.svelte";
+  import EntityDetailPageState from "$lib/components/entities/EntityDetailPageState.svelte";
+  import { useEntityDetailPage } from "$lib/components/entities/entity-detail-page-controller.svelte";
   import EntityDetailHeroDates from "$lib/components/entities/EntityDetailHeroDates.svelte";
   import { fetchEntity, type EntityCardFull } from "$lib/api/entities";
   import {
     updateEntityRating,
-    updateEntityFlags,
     updateEntityMetadata,
   } from "$lib/api/entity-mutations";
   import { assetUrl } from "$lib/api/orval-fetch";
@@ -17,10 +16,6 @@
   import EntityAcquisitionCard from "$lib/components/acquisitions/EntityAcquisitionCard.svelte";
   import { useEntityAcquisition } from "$lib/components/acquisitions/use-entity-acquisition.svelte";
   import { requestableDirectChildCards } from "$lib/requests/requestable-entity-children";
-  import {
-    toggleOptimisticEntityFlag,
-    updateOptimisticEntityRating,
-  } from "$lib/entities/entity-detail-state";
   import { refreshAfterManagedFileRevert } from "$lib/entities/entity-file-management";
   import { entityCardToDetailCard, type EntityDetailCardFull, type EntityDetailCredit, type EntityDetailTag } from "$lib/entities/entity-detail";
   import { CAPABILITY_KIND, CREDIT_ROLE } from "$lib/entities/entity-codes";
@@ -38,27 +33,15 @@
     type EntityDetailActionButton,
     type EntityDetailSection,
     type EntityDetailTab,
-    type EntityMetadataUpdateRequest,
   } from "$lib/components/entities/EntityDetail.svelte";
   import EntityGrid from "$lib/components/entities/EntityGrid.svelte";
   import AudioTrackList from "$lib/components/AudioTrackList.svelte";
   import { useIdentifyDetailAction } from "$lib/components/identify/use-identify-detail-action.svelte";
-  import { redirectHiddenEntityNotFound } from "$lib/nsfw/hidden-entity";
-  import { useNsfw } from "$lib/nsfw/store.svelte";
-  import { useAppChrome, type AppBreadcrumb } from "$lib/stores/app-chrome.svelte";
+  import type { AppBreadcrumb } from "$lib/stores/app-chrome.svelte";
   import { useAudioPlayback, type PlaybackContext } from "$lib/stores/audio-playback.svelte";
 
-  type LoadState = "loading" | "ready" | "error";
-
-  const nsfw = useNsfw();
-  const appChrome = useAppChrome();
   const playback = useAudioPlayback()!;
 
-  let loadState: LoadState = $state("loading");
-  let library = $state<EntityCardFull | null>(null);
-  let errorMessage: string | null = $state(null);
-  let lastNsfwMode = $state(nsfw.mode);
-  let ratingBusy = $state(false);
   let childCards = $state<EntityThumbnailCard[]>([]);
   let artistCards = $state<EntityThumbnailCard[]>([]);
   let relationshipCredits = $state<EntityDetailCredit[]>([]);
@@ -67,6 +50,25 @@
   let trackItems = $state<AudioTrackListItemDto[]>([]);
   let trackCards = $state<EntityThumbnailCard[]>([]);
   let artistLink = $state<{ id: string; title: string } | null>(null);
+
+  const detail = useEntityDetailPage<EntityCardFull>({
+    loadKey: () => page.params.id ?? "",
+    load: ({ signal }) => loadLibrary(signal),
+    breadcrumbs: (entity) => {
+      // Albums are scanned under their artist, so surface the artist as a breadcrumb crumb
+      // ("Audio / Imagine Dragons / Evolve") when the music-artist parent resolved.
+      const crumbs: AppBreadcrumb[] = [{ label: "Audio", href: "/audio" }];
+      if (artistLink) {
+        crumbs.push({
+          label: artistLink.title,
+          href: resolveEntityHref(ENTITY_KIND.musicArtist, artistLink.id),
+        });
+      }
+      crumbs.push({ label: entity.title });
+      return crumbs;
+    },
+  });
+  const library = $derived(detail.entity);
 
   const playableTrackItems = $derived(
     trackItems.filter((track) => track.hasSourceMedia !== false && track.isWanted !== true),
@@ -100,14 +102,14 @@
     entityId: () => library?.id,
     capabilities: () => library?.capabilities,
     childCards: () => requestableDirectChildCards(library?.id, [...subLibraryCards, ...trackCards]),
-    onChanged: () => loadLibrary({ showLoading: false }),
+    onChanged: () => detail.reload({ showLoading: false }),
     onPruned: () => goto("/audio"),
   });
   const fileManagement = {
     onDeleted: () => goto("/audio"),
     onReverted: () => refreshAfterManagedFileRevert(
       acq,
-      () => loadLibrary({ showLoading: false }),
+      () => detail.reload({ showLoading: false }),
     ),
   };
 
@@ -151,34 +153,8 @@
       : []),
   ]);
 
-  onMount(() => {
-    void loadLibrary();
-  });
-
-  $effect(() => {
-    if (nsfw.mode === lastNsfwMode) return;
-    lastNsfwMode = nsfw.mode;
-    void loadLibrary();
-  });
-
-  $effect(() => {
-    if (!library) return;
-    // Albums are scanned under their artist, so surface the artist as a breadcrumb crumb
-    // ("Audio / Imagine Dragons / Evolve") when the music-artist parent resolved.
-    const crumbs: AppBreadcrumb[] = [{ label: "Audio", href: "/audio" }];
-    if (artistLink) {
-      crumbs.push({ label: artistLink.title, href: resolveEntityHref(ENTITY_KIND.musicArtist, artistLink.id) });
-    }
-    crumbs.push({ label: library.title });
-    return appChrome.setBreadcrumbs(crumbs);
-  });
-
-  async function loadLibrary(options = { showLoading: true }) {
-    // Silent for acquisition-driven refreshes: update in place instead of flashing the skeleton.
-    if (options.showLoading || !library) loadState = "loading";
-    errorMessage = null;
-    try {
-      const nextLibrary = await fetchEntity(page.params.id ?? "");
+  async function loadLibrary(signal: AbortSignal): Promise<EntityCardFull> {
+      const nextLibrary = await fetchEntity(page.params.id ?? "", { signal });
 
       // Separate track children from non-track children using the entity groups
       const trackGroup = nextLibrary.childrenByKind.find((g) => g.kind === ENTITY_KIND.audioTrack);
@@ -188,16 +164,17 @@
       // The album's parent (when set) is its artist grouping; resolve its title for a back-link.
       const parentId = nextLibrary.parentEntityId;
       const [children, relationships, parentThumbs] = await Promise.all([
-        fetchOrderedEntityThumbnails(nonTrackIds),
-        hydrateStandardRelationshipCards(nextLibrary),
-        parentId ? fetchOrderedEntityThumbnails([parentId]) : Promise.resolve([]),
+        fetchOrderedEntityThumbnails(nonTrackIds, { signal }),
+        hydrateStandardRelationshipCards(nextLibrary, { signal }),
+        parentId ? fetchOrderedEntityThumbnails([parentId], { signal }) : Promise.resolve([]),
       ]);
+
+      signal.throwIfAborted();
 
       const parentThumb = parentThumbs.find((t) => t.kind === ENTITY_KIND.musicArtist);
       const resolvedArtist = parentThumb ? { id: parentThumb.id, title: parentThumb.title } : null;
       artistLink = resolvedArtist;
 
-      library = nextLibrary;
       childCards = thumbnailsToCards(children, {
         hrefFor: (thumbnail) => resolveEntityHref(ENTITY_KIND.audioLibrary, thumbnail.id),
       });
@@ -224,22 +201,7 @@
         .map((thumb) => entityThumbnailToTrackItem(thumb, nextLibrary.id))
         .sort((a, b) => a.sortOrder - b.sortOrder);
 
-      loadState = "ready";
-    } catch (err) {
-      if (redirectHiddenEntityNotFound(err, nsfw.mode)) return;
-      errorMessage = err instanceof Error ? err.message : String(err);
-      loadState = "error";
-    }
-  }
-
-  async function handleRatingChange(value: number | null) {
-    if (!library || ratingBusy) return;
-    ratingBusy = true;
-    try {
-      await updateOptimisticEntityRating(library, value, (next) => (library = next), updateEntityRating);
-    } finally {
-      ratingBusy = false;
-    }
+      return nextLibrary;
   }
 
   async function handleTrackRatingChange(trackId: string, value: number | null) {
@@ -285,22 +247,6 @@
     }
   }
 
-  async function handleFavoriteToggle() {
-    if (!library) return;
-    await toggleOptimisticEntityFlag(library, "isFavorite", (next) => (library = next), updateEntityFlags);
-  }
-
-  async function handleOrganizedToggle() {
-    if (!library) return;
-    await toggleOptimisticEntityFlag(library, "isOrganized", (next) => (library = next), updateEntityFlags);
-  }
-
-  async function handleMetadataSave(request: EntityMetadataUpdateRequest) {
-    if (!library) return;
-    await updateEntityMetadata(library.id, request, { kind: library.kind });
-    await loadLibrary();
-  }
-
   function albumContext(): PlaybackContext {
     return {
       albumId: library?.id ?? null,
@@ -335,21 +281,21 @@
 </svelte:head>
 
 <div class="detail-page">
-  {#if loadState === "loading"}
-    <EntityDetailSkeleton posterAspect="1 / 1" />
-  {:else if loadState === "error"}
-    <div class="error-notice">
-      <p>{errorMessage ?? "Failed to load audio library."}</p>
-      <button type="button" onclick={() => void loadLibrary()}>Retry</button>
-    </div>
-  {:else if card && library}
+  <EntityDetailPageState
+    loadState={detail.loadState}
+    errorMessage={detail.errorMessage}
+    fallbackError="Failed to load audio library."
+    onRetry={detail.retry}
+    posterAspect="1 / 1"
+  >
+    {#if card && library}
     <EntityDetail
       {card}
-      onRatingChange={handleRatingChange}
-      onFavoriteToggle={handleFavoriteToggle}
-      onOrganizedToggle={handleOrganizedToggle}
-      onMetadataSave={handleMetadataSave}
-      {ratingBusy}
+      onRatingChange={detail.changeRating}
+      onFavoriteToggle={detail.toggleFavorite}
+      onOrganizedToggle={detail.toggleOrganized}
+      onMetadataSave={detail.saveMetadata}
+      ratingBusy={detail.ratingBusy}
       peopleLabel="Performers"
       defaultCreditRole={CREDIT_ROLE.artist}
       posterSize="large"
@@ -363,7 +309,7 @@
         {/if}
         {#if studio}
           {#if artistLink}<span class="meta-sep"></span>{/if}
-          <a href={resolveEntityHref("studio", studio.id)} class="meta-item is-studio">{studio.title}</a>
+          <a href={resolveEntityHref(ENTITY_KIND.studio, studio.id)} class="meta-item is-studio">{studio.title}</a>
         {/if}
         <EntityDetailHeroDates {dates} leadingSeparator={Boolean(artistLink || studio)} />
         {#if trackItems.length > 0}
@@ -388,8 +334,8 @@
             {acq}
             entity={library}
             {fileManagement}
-            onCancelled={() => void loadLibrary({ showLoading: false })}
-            onImported={() => loadLibrary({ showLoading: false })}
+            onCancelled={() => void detail.reload({ showLoading: false })}
+            onImported={() => detail.reload({ showLoading: false })}
           />
         {/if}
       {/snippet}
@@ -427,14 +373,12 @@
         <p>No tracks or sub-libraries in this audio library yet.</p>
       </div>
     {/if}
-  {/if}
+    {/if}
+  </EntityDetailPageState>
 </div>
 
 <style>
   .detail-page { display: grid; gap: 1.25rem; padding: 0; max-width: none; margin: 0; }
-  .error-notice { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 1rem; border: 1px solid color-mix(in srgb, #ef4444 50%, var(--color-border, #1c2235)); background: var(--color-surface-2, #101420); color: var(--color-text-muted, #8a93a6); font-size: 0.85rem; }
-  .error-notice button { border: 1px solid var(--color-border, #1c2235); background: var(--color-surface-3, #151a28); color: var(--color-text-muted, #8a93a6); padding: 0.4rem 0.8rem; font-size: 0.78rem; cursor: pointer; }
-
   :global(.meta-item) { white-space: nowrap; font-size: 0.82rem; }
   :global(.meta-item.is-studio) { color: var(--color-text-accent, #c7c9cc); text-decoration: none; transition: opacity 0.15s; }
   :global(.meta-item.is-studio:hover) { opacity: 0.8; }

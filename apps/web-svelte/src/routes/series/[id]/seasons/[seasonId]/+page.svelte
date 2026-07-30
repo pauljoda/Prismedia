@@ -1,24 +1,15 @@
 <script lang="ts">
-  import { onMount } from "svelte";
   import { goto } from "$app/navigation";
   import { page } from "$app/state";
   import { CloudDownload, Film, Info, SlidersHorizontal, Users } from "@lucide/svelte";
-  import EntityDetailSkeleton from "$lib/components/entities/EntityDetailSkeleton.svelte";
+  import EntityDetailPageState from "$lib/components/entities/EntityDetailPageState.svelte";
   import EntityDetailHeroDates from "$lib/components/entities/EntityDetailHeroDates.svelte";
+  import { useEntityDetailPage } from "$lib/components/entities/entity-detail-page-controller.svelte";
   import MediaProgressPanel from "$lib/components/MediaProgressPanel.svelte";
   import { PROGRESS_UNIT } from "$lib/api/generated/codes";
   import { fetchEntity, type EntityCardFull } from "$lib/api/entities";
   import { updateEntityProgress } from "$lib/api/playback";
-  import {
-    updateEntityRating,
-    updateEntityFlags,
-    updateEntityMetadata,
-  } from "$lib/api/entity-mutations";
   import { getCapability, isWanted } from "$lib/api/capabilities";
-  import {
-    toggleOptimisticEntityFlag,
-    updateOptimisticEntityRating,
-  } from "$lib/entities/entity-detail-state";
   import { refreshAfterManagedFileRevert } from "$lib/entities/entity-file-management";
   import { getChildIds } from "$lib/entities/entity-children";
   import type { EntityDetailCredit, EntityDetailTag } from "$lib/entities/entity-detail";
@@ -40,27 +31,13 @@
   import { useIdentifyDetailAction } from "$lib/components/identify/use-identify-detail-action.svelte";
   import EntityDetail, {
     type EntityDetailActionButton,
-    type EntityMetadataUpdateRequest,
     type EntityDetailSection,
     type EntityDetailTab,
   } from "$lib/components/entities/EntityDetail.svelte";
   import EntityGrid from "$lib/components/entities/EntityGrid.svelte";
-  import { redirectHiddenEntityNotFound } from "$lib/nsfw/hidden-entity";
-  import { useNsfw } from "$lib/nsfw/store.svelte";
-  import { useAppChrome } from "$lib/stores/app-chrome.svelte";
   import { acquisitionStatusDisplay } from "$lib/requests/acquisition-status-display";
 
-  type LoadState = "loading" | "ready" | "error";
-
-  const nsfw = useNsfw();
-  const appChrome = useAppChrome();
-
-  let loadState: LoadState = $state("loading");
   let parentSeries = $state<EntityCardFull | null>(null);
-  let season = $state<EntityCardFull | null>(null);
-  let errorMessage: string | null = $state(null);
-  let lastNsfwMode = $state(nsfw.mode);
-  let ratingBusy = $state(false);
   let episodeCards = $state<EntityThumbnailCard[]>([]);
   let relationshipCredits = $state<EntityDetailCredit[]>([]);
   let relationshipStudio = $state<EntityDetailCredit | null>(null);
@@ -69,6 +46,35 @@
 
   const seriesId = $derived(page.params.id ?? "");
   const seasonId = $derived(page.params.seasonId ?? "");
+
+  const detail = useEntityDetailPage<EntityCardFull>({
+    loadKey: () => `${seriesId}:${seasonId}`,
+    load: async ({ signal }) => {
+      const [seriesDetail, seasonDetail] = await Promise.all([
+        fetchEntity(seriesId, { signal }),
+        fetchEntity(seasonId, { signal }),
+      ]);
+      const [episodes, relationships] = await Promise.all([
+        loadEpisodeCards(seasonDetail, signal),
+        loadSeasonRelationships(seasonDetail, seriesDetail, signal),
+      ]);
+      signal.throwIfAborted();
+
+      parentSeries = seriesDetail;
+      episodeCards = episodes;
+      relationshipCredits = relationships.credits;
+      relationshipStudio = relationships.studio;
+      relationshipTags = relationships.relationshipTags;
+      return seasonDetail;
+    },
+    breadcrumbs: (nextSeason) => [
+      { label: "Series", href: "/series" },
+      { label: parentSeries?.title ?? "Series", href: `/series/${seriesId}` },
+      { label: nextSeason.title },
+    ],
+  });
+
+  const season = $derived(detail.entity);
 
   const card = $derived.by((): EntityDetailCardFull | null => {
     if (!season) return null;
@@ -111,14 +117,14 @@
     entityId: () => season?.id,
     capabilities: () => season?.capabilities,
     childCards: () => requestableDirectChildCards(season?.id, episodeCards),
-    onChanged: () => loadSeason({ showLoading: false }),
-    onStatusChanged: () => loadSeason({ showLoading: false }),
+    onChanged: () => detail.reload({ showLoading: false }),
+    onStatusChanged: () => detail.reload({ showLoading: false }),
     onPruned: () => goto(`/series/${seriesId}`),
   });
   const wantedStateLabel = $derived(acquisitionStatusDisplay(acq.acquisition?.summary.status).label);
   const fileManagement = {
     onDeleted: () => goto(`/series/${seriesId}`),
-    onReverted: () => refreshAfterManagedFileRevert(acq, () => loadSeason({ showLoading: false })),
+    onReverted: () => refreshAfterManagedFileRevert(acq, () => detail.reload({ showLoading: false })),
   };
 
   // Seasons are not relationship owners: tags, studio, and cast belong to the series and
@@ -153,80 +159,14 @@
     ];
   });
 
-  onMount(() => {
-    void loadSeason();
-  });
-
-  $effect(() => {
-    if (nsfw.mode === lastNsfwMode) return;
-    lastNsfwMode = nsfw.mode;
-    void loadSeason();
-  });
-
-  $effect(() => {
-    if (!season) return;
-    return appChrome.setBreadcrumbs([
-      { label: "Series", href: "/series" },
-      { label: parentSeries?.title ?? "Series", href: `/series/${seriesId}` },
-      { label: season.title },
-    ]);
-  });
-
   const seasonWanted = $derived(!!season && isWanted(season.capabilities));
 
-  async function loadSeason(options = { showLoading: true }) {
-    // Acquisition-driven refreshes (search started, download cancelled, revert) update in place —
-    // flashing the whole page back to its skeleton reads as a reload/crash.
-    if (options.showLoading || !season) loadState = "loading";
-    errorMessage = null;
-    try {
-      const [seriesDetail, seasonDetail] = await Promise.all([
-        fetchEntity(seriesId),
-        fetchEntity(seasonId),
-      ]);
-      parentSeries = seriesDetail;
-      season = seasonDetail;
-      await Promise.all([
-        hydrateEpisodeThumbnails(seasonDetail),
-        hydrateSeasonRelationships(seasonDetail, seriesDetail),
-      ]);
-      loadState = "ready";
-    } catch (err) {
-      if (redirectHiddenEntityNotFound(err, nsfw.mode)) return;
-      errorMessage = err instanceof Error ? err.message : String(err);
-      loadState = "error";
-    }
-  }
-
-  async function handleRatingChange(value: number | null) {
-    if (!season || ratingBusy) return;
-    ratingBusy = true;
-    try {
-      await updateOptimisticEntityRating(season, value, (next) => (season = next), updateEntityRating);
-    } finally {
-      ratingBusy = false;
-    }
-  }
-
-  async function handleFavoriteToggle() {
-    if (!season) return;
-    await toggleOptimisticEntityFlag(season, "isFavorite", (next) => (season = next), updateEntityFlags);
-  }
-
-  async function handleOrganizedToggle() {
-    if (!season) return;
-    await toggleOptimisticEntityFlag(season, "isOrganized", (next) => (season = next), updateEntityFlags);
-  }
-
-  async function handleMetadataSave(request: EntityMetadataUpdateRequest) {
-    if (!season) return;
-    await updateEntityMetadata(season.id, request, { kind: season.kind });
-    await loadSeason();
-  }
-
-  async function hydrateEpisodeThumbnails(seasonDetail: EntityCardFull) {
+  async function loadEpisodeCards(
+    seasonDetail: EntityCardFull,
+    signal: AbortSignal,
+  ): Promise<EntityThumbnailCard[]> {
     const episodeIds = getChildIds(seasonDetail, ENTITY_KIND.video);
-    episodeCards = thumbnailsToCards(await fetchOrderedEntityThumbnails(episodeIds));
+    return thumbnailsToCards(await fetchOrderedEntityThumbnails(episodeIds, { signal }));
   }
 
   function continueSeason() {
@@ -245,7 +185,7 @@
         total: progressDisplay.total,
         completed: watched,
       });
-      await loadSeason({ showLoading: false });
+      await detail.reload({ showLoading: false });
     } finally {
       progressBusy = false;
     }
@@ -262,28 +202,27 @@
         total: progressDisplay.total,
         reset: true,
       });
-      await loadSeason({ showLoading: false });
+      await detail.reload({ showLoading: false });
     } finally {
       progressBusy = false;
     }
   }
 
-  async function hydrateSeasonRelationships(
+  async function loadSeasonRelationships(
     seasonDetail: EntityCardFull,
     seriesDetail: EntityCardFull,
-  ) {
-    let relationshipCards = await hydrateStandardRelationshipCards(seasonDetail);
+    signal: AbortSignal,
+  ): Promise<Awaited<ReturnType<typeof hydrateStandardRelationshipCards>>> {
+    let relationshipCards = await hydrateStandardRelationshipCards(seasonDetail, { signal });
     if (
       !relationshipCards.studio &&
       relationshipCards.credits.length === 0 &&
       relationshipCards.relationshipTags.length === 0
     ) {
-      relationshipCards = await hydrateStandardRelationshipCards(seriesDetail);
+      relationshipCards = await hydrateStandardRelationshipCards(seriesDetail, { signal });
     }
 
-    relationshipCredits = relationshipCards.credits;
-    relationshipStudio = relationshipCards.studio;
-    relationshipTags = relationshipCards.relationshipTags;
+    return relationshipCards;
   }
 </script>
 
@@ -292,22 +231,21 @@
 </svelte:head>
 
 <div class="season-page">
-  {#if loadState === "loading"}
-    <EntityDetailSkeleton />
-  {:else if loadState === "error"}
-    <div class="error-notice">
-      <p>{errorMessage ?? "Failed to load season."}</p>
-      <button type="button" onclick={() => void loadSeason()}>Retry</button>
-    </div>
-  {:else if card && season}
+  <EntityDetailPageState
+    loadState={detail.loadState}
+    errorMessage={detail.errorMessage}
+    fallbackError="Failed to load season."
+    onRetry={detail.retry}
+  >
+  {#if card && season}
     <EntityDetail
       {card}
       wantedStatus={acq.acquisition?.summary.status ?? null}
-      onRatingChange={handleRatingChange}
-      onFavoriteToggle={handleFavoriteToggle}
-      onOrganizedToggle={handleOrganizedToggle}
-      onMetadataSave={handleMetadataSave}
-      {ratingBusy}
+      onRatingChange={detail.changeRating}
+      onFavoriteToggle={detail.toggleFavorite}
+      onOrganizedToggle={detail.toggleOrganized}
+      onMetadataSave={detail.saveMetadata}
+      ratingBusy={detail.ratingBusy}
       posterSize="large"
       tabs={detailTabs}
       sections={detailSections}
@@ -339,8 +277,8 @@
             {acq}
             entity={season}
             {fileManagement}
-            onCancelled={() => void loadSeason({ showLoading: false })}
-            onImported={() => loadSeason({ showLoading: false })}
+            onCancelled={() => void detail.reload({ showLoading: false })}
+            onImported={() => detail.reload({ showLoading: false })}
           />
         {/if}
       {/snippet}
@@ -388,6 +326,7 @@
       </div>
     {/if}
   {/if}
+  </EntityDetailPageState>
 </div>
 
 <style>
@@ -397,28 +336,6 @@
     padding: 0;
     max-width: none;
     margin: 0;
-  }
-
-
-  .error-notice {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 1rem;
-    padding: 1rem;
-    border: 1px solid color-mix(in srgb, #ef4444 50%, var(--color-border, #1c2235));
-    background: var(--color-surface-2, #101420);
-    color: var(--color-text-muted, #8a93a6);
-    font-size: 0.85rem;
-  }
-
-  .error-notice button {
-    border: 1px solid var(--color-border, #1c2235);
-    background: var(--color-surface-3, #151a28);
-    color: var(--color-text-muted, #8a93a6);
-    padding: 0.4rem 0.8rem;
-    font-size: 0.78rem;
-    cursor: pointer;
   }
 
   :global(.meta-item) {

@@ -1,6 +1,5 @@
 <script lang="ts">
   import { THUMBNAIL_HOVER_KIND } from "$lib/api/generated/codes";
-  import { onMount } from "svelte";
   import { goto } from "$app/navigation";
   import { resolve } from "$app/paths";
   import { page } from "$app/state";
@@ -14,11 +13,11 @@
     Trash2,
     X,
   } from "@lucide/svelte";
-  import EntityDetailSkeleton from "$lib/components/entities/EntityDetailSkeleton.svelte";
+  import EntityDetailPageState from "$lib/components/entities/EntityDetailPageState.svelte";
+  import { useEntityDetailPage } from "$lib/components/entities/entity-detail-page-controller.svelte";
   import ConfirmDialog from "$lib/components/entities/ConfirmDialog.svelte";
   import {
     updateEntityRating,
-    updateEntityFlags,
     updateEntityMetadata,
   } from "$lib/api/entity-mutations";
   import {
@@ -34,10 +33,6 @@
   import { fetchEntity, type EntityCardFull } from "$lib/api/entities";
   import { ENTITY_KIND } from "$lib/entities/entity-codes";
   import {
-    toggleOptimisticEntityFlag,
-    updateOptimisticEntityRating,
-  } from "$lib/entities/entity-detail-state";
-  import {
     collectCollectionAudioTracks,
     isAudioCollectionMemberKind,
   } from "$lib/entities/audio-track-collections";
@@ -50,28 +45,16 @@
   import { getEntityHref } from "$lib/components/collections/collection-item-helpers";
   import EntityDetail, {
     type EntityDetailActionButton,
-    type EntityMetadataUpdateRequest,
   } from "$lib/components/entities/EntityDetail.svelte";
   import EntityActionButton from "$lib/components/entities/EntityActionButton.svelte";
   import EntityGrid from "$lib/components/entities/EntityGrid.svelte";
   import AudioTrackList from "$lib/components/AudioTrackList.svelte";
-  import { redirectHiddenEntityNotFound } from "$lib/nsfw/hidden-entity";
-  import { useNsfw } from "$lib/nsfw/store.svelte";
-  import { useAppChrome } from "$lib/stores/app-chrome.svelte";
   import { useAudioPlayback, type PlaybackContext } from "$lib/stores/audio-playback.svelte";
 
-  type LoadState = "loading" | "ready" | "error";
   type CollectionBodyTab = "items" | "audio";
 
-  const nsfw = useNsfw();
-  const appChrome = useAppChrome();
   const playback = useAudioPlayback()!;
 
-  let loadState: LoadState = $state("loading");
-  let collection = $state<EntityCardFull | null>(null);
-  let errorMessage: string | null = $state(null);
-  let lastNsfwMode = $state(nsfw.mode);
-  let ratingBusy = $state(false);
   let collectionItems = $state.raw<CollectionItem[]>([]);
   let itemCards = $state<EntityThumbnailCard[]>([]);
   let refreshBusy = $state(false);
@@ -82,6 +65,16 @@
   let activeBodyTab = $state<CollectionBodyTab>("items");
   let audioTrackItems = $state.raw<AudioTrackListItemDto[]>([]);
   let audioAlbumCoverUrls = $state<Record<string, string | null | undefined>>({});
+
+  const detail = useEntityDetailPage<EntityCardFull>({
+    loadKey: () => page.params.id ?? "",
+    load: ({ signal }) => loadCollection(signal),
+    breadcrumbs: (entity) => [
+      { label: "Collections", href: "/collections" },
+      { label: entity.title },
+    ],
+  });
+  const collection = $derived(detail.entity);
 
   const card = $derived.by((): EntityDetailCardFull | null => {
     if (!collection) return null;
@@ -151,74 +144,27 @@
     ];
   });
 
-  onMount(() => {
-    void loadCollection();
-  });
-
-  $effect(() => {
-    if (nsfw.mode === lastNsfwMode) return;
-    lastNsfwMode = nsfw.mode;
-    void loadCollection();
-  });
-
-  $effect(() => {
-    if (!collection) return;
-    return appChrome.setBreadcrumbs([
-      { label: "Collections", href: "/collections" },
-      { label: collection.title },
+  async function loadCollection(signal: AbortSignal): Promise<EntityCardFull> {
+    const id = page.params.id ?? "";
+    const [nextCollection, nextItems] = await Promise.all([
+      fetchEntity(id, { signal }),
+      fetchCollectionItems(id, { signal }),
     ]);
-  });
+    const audio = await collectCollectionAudioTracks(nextItems, { signal });
+    signal.throwIfAborted();
 
-  async function loadCollection() {
-    loadState = "loading";
-    errorMessage = null;
-    try {
-      const id = page.params.id ?? "";
-      const nextCollection = await fetchEntity(id);
-      const nextItems = await fetchCollectionItems(id);
-      const audio = await collectCollectionAudioTracks(nextItems);
-      collection = nextCollection;
-      collectionItems = nextItems;
-      itemCards = nextItems
-        .map((item) => item.entity ? entityCardToThumbnailCard(item.entity, getEntityHref(item, `/collections/${id}`)) : null)
-        .filter((card): card is EntityThumbnailCard => Boolean(card));
-      audioTrackItems = audio.tracks;
-      audioAlbumCoverUrls = audio.albumCoverUrls;
-      if (!nextItems.some((item) => isAudioCollectionMemberKind(item.entityType))) {
-        activeBodyTab = "items";
-      }
-      loadState = "ready";
-    } catch (err) {
-      if (redirectHiddenEntityNotFound(err, nsfw.mode)) return;
-      errorMessage = err instanceof Error ? err.message : String(err);
-      loadState = "error";
+    collectionItems = nextItems;
+    itemCards = nextItems
+      .map((item) => item.entity
+        ? entityCardToThumbnailCard(item.entity, getEntityHref(item, `/collections/${id}`))
+        : null)
+      .filter((card): card is EntityThumbnailCard => Boolean(card));
+    audioTrackItems = audio.tracks;
+    audioAlbumCoverUrls = audio.albumCoverUrls;
+    if (!nextItems.some((item) => isAudioCollectionMemberKind(item.entityType))) {
+      activeBodyTab = "items";
     }
-  }
-
-  async function handleRatingChange(value: number | null) {
-    if (!collection || ratingBusy) return;
-    ratingBusy = true;
-    try {
-      await updateOptimisticEntityRating(collection, value, (next) => (collection = next), updateEntityRating);
-    } finally {
-      ratingBusy = false;
-    }
-  }
-
-  async function handleFavoriteToggle() {
-    if (!collection) return;
-    await toggleOptimisticEntityFlag(collection, "isFavorite", (next) => (collection = next), updateEntityFlags);
-  }
-
-  async function handleOrganizedToggle() {
-    if (!collection) return;
-    await toggleOptimisticEntityFlag(collection, "isOrganized", (next) => (collection = next), updateEntityFlags);
-  }
-
-  async function handleMetadataSave(request: EntityMetadataUpdateRequest) {
-    if (!collection) return;
-    await updateEntityMetadata(collection.id, request, { kind: collection.kind });
-    await loadCollection();
+    return nextCollection;
   }
 
   async function handleTrackRatingChange(trackId: string, value: number | null) {
@@ -336,7 +282,7 @@
     itemMutationError = null;
     try {
       await removeCollectionItems(collection.id, itemIds);
-      await loadCollection();
+      await detail.reload({ showLoading: false });
     } catch (err) {
       itemMutationError = err instanceof Error ? err.message : "Failed to remove items.";
     } finally {
@@ -350,7 +296,7 @@
     itemMutationError = null;
     try {
       await refreshCollection(collection.id);
-      await loadCollection();
+      await detail.reload({ showLoading: false });
     } catch (err) {
       itemMutationError = err instanceof Error ? err.message : "Failed to refresh collection.";
     } finally {
@@ -382,27 +328,20 @@
 </svelte:head>
 
 <div class="grid gap-5">
-  {#if loadState === "loading"}
-    <EntityDetailSkeleton />
-  {:else if loadState === "error"}
-    <div class="flex items-center justify-between gap-4 rounded-sm border border-error/50 bg-surface-2 p-4 text-[0.85rem] text-text-muted">
-      <p class="m-0">{errorMessage ?? "Failed to load collection."}</p>
-      <button
-        type="button"
-        onclick={() => void loadCollection()}
-        class="rounded-xs border border-border-subtle bg-surface-3 px-3 py-1.5 text-[0.78rem] text-text-muted transition-colors hover:border-border-default hover:text-text-primary"
-      >
-        Retry
-      </button>
-    </div>
-  {:else if card && collection}
-    <EntityDetail
+  <EntityDetailPageState
+    loadState={detail.loadState}
+    errorMessage={detail.errorMessage}
+    fallbackError="Failed to load collection."
+    onRetry={detail.retry}
+  >
+    {#if card && collection}
+      <EntityDetail
       {card}
-      onRatingChange={handleRatingChange}
-      onFavoriteToggle={handleFavoriteToggle}
-      onOrganizedToggle={canEditCollection ? handleOrganizedToggle : undefined}
-      onMetadataSave={canEditCollection ? handleMetadataSave : undefined}
-      {ratingBusy}
+      onRatingChange={detail.changeRating}
+      onFavoriteToggle={detail.toggleFavorite}
+      onOrganizedToggle={canEditCollection ? detail.toggleOrganized : undefined}
+      onMetadataSave={canEditCollection ? detail.saveMetadata : undefined}
+      ratingBusy={detail.ratingBusy}
       posterSize="large"
       standaloneMetadataSectionIds={[]}
       actionButtons={heroActions}
@@ -426,7 +365,7 @@
         {/if}
       {/snippet}
 
-    </EntityDetail>
+      </EntityDetail>
 
     {#if itemMutationError}
       <div class="flex items-center justify-between gap-3 rounded-sm border border-error/50 bg-surface-2 px-4 py-3 text-[0.8rem] text-error-text">
@@ -534,7 +473,8 @@
         {/if}
       </section>
     {/if}
-  {/if}
+    {/if}
+  </EntityDetailPageState>
 </div>
 
 <ConfirmDialog
