@@ -18,6 +18,9 @@ public sealed class GalleryEntityKindDefinition() : EntityKindDefinition<Gallery
     supportsFileDeletion: true,
     autoIdentifySelector: AutoIdentifySelectorKind.Gallery) {
     /// <inheritdoc />
+    public override bool OwnsMetadataRelationships => true;
+
+    /// <inheritdoc />
     public override IReadOnlyList<Type> ProjectedCapabilityTypes =>
         [typeof(GalleryMetadataDocumentCapability), typeof(CoverSelectionDocumentCapability)];
 

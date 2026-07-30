@@ -10,6 +10,14 @@ namespace Prismedia.Domain.Entities;
 /// discovery instead of edits to central registration lists.
 /// </summary>
 public abstract class EntityKindDefinition {
+    /// <summary>Shared media-structure ordering for kinds without a specific position policy.</summary>
+    public static IReadOnlyList<string> DefaultPositionSortOrderPrecedence { get; } = Array.AsReadOnly([
+        EntityPositionCodes.Track,
+        EntityPositionCodes.Page,
+        EntityPositionCodes.Chapter,
+        EntityPositionCodes.Volume,
+        EntityPositionCodes.Sort
+    ]);
     private readonly Func<IReadOnlyList<EntityCapability>> _defaultCapabilities;
 
     /// <summary>Creates one immutable kind definition.</summary>
@@ -75,6 +83,24 @@ public abstract class EntityKindDefinition {
 
     /// <summary>Whether users may create and delete this kind directly through entity routes.</summary>
     public bool SupportsManualManagement { get; }
+
+    /// <summary>
+    /// Optional compatible kind used when an identify plugin does not explicitly support this
+    /// kind. The fallback is a domain compatibility fact, not a plugin-runtime registration.
+    /// </summary>
+    public virtual EntityKind? IdentifyPluginFallbackKind => null;
+
+    /// <summary>
+    /// Canonical position-code precedence used to derive a structural sort order. Kinds without
+    /// an override use the shared media-structure ordering.
+    /// </summary>
+    public virtual IReadOnlyList<string> PositionSortOrderPrecedence => DefaultPositionSortOrderPrecedence;
+
+    /// <summary>
+    /// Whether metadata relationships applied to this kind belong directly to it. When false,
+    /// metadata import scopes relationships to the nearest structural ancestor with this trait.
+    /// </summary>
+    public virtual bool OwnsMetadataRelationships => false;
 
     /// <summary>
     /// Request workflow entries owned by this kind. Keeping them beside the kind definition makes

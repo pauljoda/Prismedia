@@ -13,18 +13,14 @@ internal static class EntityMetadataPositionRules {
     }
 
     public static int? SortOrderFor(string kindCode, IReadOnlyDictionary<string, int> positions) {
-        if (kindCode.Equals(EntityKind.VideoSeason.ToCode(), StringComparison.OrdinalIgnoreCase)) {
-            return PositionValue(positions, EntityPositionCodes.Season, EntityPositionCodes.Sort);
-        }
-
-        if (kindCode.Equals(EntityKind.Video.ToCode(), StringComparison.OrdinalIgnoreCase)) {
-            return PositionValue(positions, EntityPositionCodes.Episode, EntityPositionCodes.AbsoluteEpisode, EntityPositionCodes.Sort);
-        }
-
-        return PositionValue(positions, EntityPositionCodes.Track, EntityPositionCodes.Page, EntityPositionCodes.Chapter, EntityPositionCodes.Volume, EntityPositionCodes.Sort);
+        var precedence = kindCode.Equals(kindCode.Trim(), StringComparison.Ordinal) &&
+            EntityKindRegistry.TryDescribe(kindCode, out var definition)
+            ? definition.PositionSortOrderPrecedence
+            : EntityKindDefinition.DefaultPositionSortOrderPrecedence;
+        return PositionValue(positions, precedence);
     }
 
-    private static int? PositionValue(IReadOnlyDictionary<string, int> positions, params string[] codes) {
+    private static int? PositionValue(IReadOnlyDictionary<string, int> positions, IReadOnlyList<string> codes) {
         foreach (var code in codes) {
             if (positions.TryGetValue(code, out var value)) {
                 return value;

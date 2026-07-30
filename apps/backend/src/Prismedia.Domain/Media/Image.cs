@@ -13,7 +13,10 @@ public sealed class ImageEntityKindDefinition() : RootEntityKindDefinition<Image
     EntityStorageShape.File,
     static root => new Image(root.Id, root.Title),
     supportsFileDeletion: true,
-    autoIdentifySelector: AutoIdentifySelectorKind.Image);
+    autoIdentifySelector: AutoIdentifySelectorKind.Image) {
+    /// <inheritdoc />
+    public override bool OwnsMetadataRelationships => true;
+}
 
 /// <summary>
 /// Domain model for a single image entity.

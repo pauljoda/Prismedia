@@ -16,6 +16,9 @@ public sealed class AudioLibraryEntityKindDefinition() : RootEntityKindDefinitio
     supportsFileDeletion: true,
     autoIdentifySelector: AutoIdentifySelectorKind.Audio) {
     /// <inheritdoc />
+    public override bool OwnsMetadataRelationships => true;
+
+    /// <inheritdoc />
     public override IReadOnlyList<RequestKindDescriptor> RequestKinds =>
     [
         new(RequestMediaKind.Album, "Album", "Albums", "track", EntityKind.AudioLibrary, EntityKind.AudioLibrary,

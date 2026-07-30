@@ -21,6 +21,18 @@ public sealed class VideoEntityKindDefinition() : EntityKindDefinition<Video>(
     ],
     supportsFileDeletion: true,
     autoIdentifySelector: AutoIdentifySelectorKind.Video) {
+    private static readonly IReadOnlyList<string> SortOrderPrecedence = Array.AsReadOnly([
+        EntityPositionCodes.Episode,
+        EntityPositionCodes.AbsoluteEpisode,
+        EntityPositionCodes.Sort
+    ]);
+
+    /// <inheritdoc />
+    public override IReadOnlyList<string> PositionSortOrderPrecedence => SortOrderPrecedence;
+
+    /// <inheritdoc />
+    public override bool OwnsMetadataRelationships => true;
+
     /// <inheritdoc />
     public override IReadOnlyList<RequestKindDescriptor> RequestKinds =>
     [

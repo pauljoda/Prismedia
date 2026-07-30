@@ -17,6 +17,9 @@ public sealed class AudioTrackEntityKindDefinition() : EntityKindDefinition<Audi
     supportsFileDeletion: true,
     autoIdentifySelector: AutoIdentifySelectorKind.Audio) {
     /// <inheritdoc />
+    public override bool OwnsMetadataRelationships => true;
+
+    /// <inheritdoc />
     public override IReadOnlyList<Type> ProjectedCapabilityTypes => [typeof(EmbeddedAudioMetadataDocumentCapability)];
 
     /// <inheritdoc />

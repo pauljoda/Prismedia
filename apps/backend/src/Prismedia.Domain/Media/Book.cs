@@ -19,6 +19,9 @@ public sealed class BookEntityKindDefinition() : EntityKindDefinition<Book>(
     supportsFileDeletion: true,
     autoIdentifySelector: AutoIdentifySelectorKind.Book) {
     /// <inheritdoc />
+    public override bool OwnsMetadataRelationships => true;
+
+    /// <inheritdoc />
     public override IReadOnlyList<Type> ProjectedCapabilityTypes =>
         [typeof(BookMetadataDocumentCapability), typeof(CoverSelectionDocumentCapability)];
 

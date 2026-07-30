@@ -94,6 +94,28 @@ public sealed class EntityKindMetadataTests {
     }
 
     [Fact]
+    public void DefinitionsOwnPluginFallbackPositionPrecedenceAndRelationshipScope() {
+        var movie = EntityKindRegistry.Describe(EntityKind.Movie);
+        var video = EntityKindRegistry.Describe(EntityKind.Video);
+        var season = EntityKindRegistry.Describe(EntityKind.VideoSeason);
+        var track = EntityKindRegistry.Describe(EntityKind.AudioTrack);
+
+        Assert.Equal(EntityKind.Video, movie.IdentifyPluginFallbackKind);
+        Assert.Null(video.IdentifyPluginFallbackKind);
+
+        Assert.Equal([EntityPositionCodes.Episode, EntityPositionCodes.AbsoluteEpisode, EntityPositionCodes.Sort],
+            video.PositionSortOrderPrecedence);
+        Assert.Equal([EntityPositionCodes.Season, EntityPositionCodes.Sort],
+            season.PositionSortOrderPrecedence);
+        Assert.Equal([EntityPositionCodes.Track, EntityPositionCodes.Page, EntityPositionCodes.Chapter,
+            EntityPositionCodes.Volume, EntityPositionCodes.Sort], track.PositionSortOrderPrecedence);
+
+        Assert.True(movie.OwnsMetadataRelationships);
+        Assert.True(EntityKindRegistry.Describe(EntityKind.MusicArtist).OwnsMetadataRelationships);
+        Assert.False(season.OwnsMetadataRelationships);
+    }
+
+    [Fact]
     public void RegistryRoundTripsEveryKindByCodeAndType() {
         foreach (var kind in Enum.GetValues<EntityKind>()) {
             var descriptor = EntityKindRegistry.Describe(kind);

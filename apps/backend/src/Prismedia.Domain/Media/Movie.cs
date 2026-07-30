@@ -21,6 +21,12 @@ public sealed class MovieEntityKindDefinition() : EntityKindDefinition<Movie>(
     supportsFileDeletion: true,
     autoIdentifySelector: AutoIdentifySelectorKind.Video) {
     /// <inheritdoc />
+    public override EntityKind? IdentifyPluginFallbackKind => EntityKind.Video;
+
+    /// <inheritdoc />
+    public override bool OwnsMetadataRelationships => true;
+
+    /// <inheritdoc />
     public override IReadOnlyList<RequestKindDescriptor> RequestKinds =>
     [
         new(RequestMediaKind.Movie, "Movie", "Movies", null, EntityKind.Movie, EntityKind.Movie,

@@ -18,6 +18,9 @@ public sealed class VideoSeriesEntityKindDefinition() : EntityKindDefinition<Vid
     supportsFileDeletion: true,
     autoIdentifySelector: AutoIdentifySelectorKind.Video) {
     /// <inheritdoc />
+    public override bool OwnsMetadataRelationships => true;
+
+    /// <inheritdoc />
     public override IReadOnlyList<Type> ProjectedCapabilityTypes => [typeof(SeriesMetadataDocumentCapability)];
 
     /// <inheritdoc />
@@ -61,6 +64,14 @@ public sealed class VideoSeasonEntityKindDefinition() : RootEntityKindDefinition
     ],
     enumeratesIdentifyChildren: true,
     supportsFileDeletion: true) {
+    private static readonly IReadOnlyList<string> SortOrderPrecedence = Array.AsReadOnly([
+        EntityPositionCodes.Season,
+        EntityPositionCodes.Sort
+    ]);
+
+    /// <inheritdoc />
+    public override IReadOnlyList<string> PositionSortOrderPrecedence => SortOrderPrecedence;
+
     /// <inheritdoc />
     public override IReadOnlyList<RequestKindDescriptor> RequestKinds =>
     [
