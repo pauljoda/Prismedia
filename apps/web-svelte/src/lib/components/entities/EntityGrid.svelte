@@ -1,8 +1,5 @@
 <script lang="ts">
   import { browser } from "$app/environment";
-  import {
-    SearchX,
-  } from "@lucide/svelte";
   import { onMount } from "svelte";
   import { isNsfw, isWanted, withFlagCapability } from "$lib/api/capabilities";
   import { removeWantedEntities } from "$lib/api/requests";
@@ -11,7 +8,6 @@
   import { createFilterPresets, type FilterPreset } from "$lib/filter-presets";
   import { createEntityGridPrefs, type EntityGridPrefs } from "$lib/entities/entity-grid-prefs";
   import { usePageSnapshots } from "$lib/stores/page-snapshots.svelte";
-  import EntityThumbnail from "$lib/components/thumbnails/EntityThumbnail.svelte";
   import {
     ENTITY_GRID_ALL_KINDS,
     applyEntityGridState,
@@ -29,13 +25,13 @@
   import type { EntityThumbnailCard } from "$lib/entities/entity-thumbnail";
   import { isCollectionEntityType, type CollectionEntityType } from "$lib/collections/models";
   import EntityGridFilterDrawer from "./EntityGridFilterDrawer.svelte";
+  import EntityGridContent from "./EntityGridContent.svelte";
   import EntityGridPagination from "./EntityGridPagination.svelte";
   import EntityGridTabs from "./EntityGridTabs.svelte";
   import EntityGridToolbar from "./EntityGridToolbar.svelte";
   import { computeContainedScrollHeight } from "./entity-grid-viewport.svelte";
   import { useNsfw } from "$lib/nsfw/store.svelte";
   import type { NsfwMode } from "$lib/nsfw/cookie";
-  import PrismediaLoadingMark from "$lib/components/PrismediaLoadingMark.svelte";
 
   const DEFAULT_PAGE_SIZE = 250;
   const DEFAULT_PAGE_SIZE_OPTIONS = [100, 250, 500, 1000];
@@ -237,14 +233,6 @@
   // rest of the view state. Scroll-driven collapse is handled inside the toolbar
   // and never written here.
   let barsCollapsed = $state(persistedPrefs?.barsCollapsed ?? false);
-  // The feed view pulls in the inline video player, so it is code-split and only
-  // loaded the first time the feed is actually shown.
-  let FeedComponent = $state<typeof import("./EntityFeed.svelte").default | null>(null);
-  $effect(() => {
-    if (viewMode === "feed" && !FeedComponent) {
-      void import("./EntityFeed.svelte").then((module) => (FeedComponent = module.default));
-    }
-  });
   const nsfw = useNsfw();
   const effectiveNsfwMode = $derived(nsfwMode ?? nsfw.mode);
 
@@ -862,23 +850,6 @@
   }
 </script>
 
-{#snippet ThumbnailCard(card: EntityThumbnailCard)}
-  <EntityThumbnail
-    {card}
-    imageFetchPriority="auto"
-    imageLoading="lazy"
-    layout={viewMode === "feed" ? "grid" : viewMode}
-    linkable={cardLinks && !onCardActivate}
-    mediaOnly={mediaWall}
-    onActivate={onCardActivate ? (activatedCard) => onCardActivate(activatedCard, pagedCards) : undefined}
-    hoverPreviewSuppressed={areHoverPreviewsSuppressed}
-    selectable={selectable && selectionActive}
-    selectMode={selectionActive}
-    selected={selectedIds.includes(card.entity.id)}
-    onSelectedChange={(selected) => updateSelection(card.entity.id, selected)}
-  />
-{/snippet}
-
 <section
   bind:this={sectionEl}
   class="entity-grid"
@@ -975,32 +946,22 @@
     style:--entity-grid-scroll-max-height={effectiveScrollMaxHeight ?? undefined}
     onwheel={markScrolling}
   >
-    {#if loading && visibleCards.length === 0}
-      <div class="grid-loading">
-        <PrismediaLoadingMark label="Loading entities" showLabel />
-      </div>
-    {:else if visibleCards.length > 0 && viewMode === "feed" && FeedComponent}
-      <FeedComponent cards={pagedCards} onActivate={onCardActivate} {mediaWall} />
-    {:else if visibleCards.length > 0}
-      <div
-        class="cards"
-        class:is-list={viewMode === "list"}
-        class:is-media-wall={mediaWall}
-        aria-label="Entities"
-      >
-        {#each pagedCards as card (card.entity.id)}
-          {@render ThumbnailCard(card)}
-        {/each}
-      </div>
-    {:else}
-      <div class="empty" role="status">
-        <span class="empty-icon">
-          <SearchX aria-hidden="true" />
-        </span>
-        <strong>{emptyTitle}</strong>
-        <span>{emptyMessage}</span>
-      </div>
-    {/if}
+    <EntityGridContent
+      {cardLinks}
+      cards={pagedCards}
+      {emptyMessage}
+      {emptyTitle}
+      hasVisibleCards={visibleCards.length > 0}
+      hoverPreviewSuppressed={areHoverPreviewsSuppressed}
+      {loading}
+      {mediaWall}
+      {onCardActivate}
+      onCardSelectedChange={updateSelection}
+      {selectable}
+      {selectedIds}
+      {selectionActive}
+      {viewMode}
+    />
   </div>
 
   {#if shouldRenderPagination}
@@ -1100,30 +1061,6 @@
     min-height: 0;
   }
 
-  .cards {
-    display: grid;
-    grid-template-columns: repeat(
-      max(1, min(calc(var(--col-count, 5) - 1), 4)),
-      minmax(0, 1fr)
-    );
-    gap: 0.75rem;
-    align-items: start;
-    overflow-anchor: none;
-    contain: layout;
-    transition: grid-template-columns 240ms cubic-bezier(0.4, 0, 0.2, 1);
-  }
-
-  .cards.is-list {
-    display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
-  }
-
-  .cards.is-media-wall {
-    grid-template-columns: repeat(var(--col-count, 5), minmax(0, 1fr));
-    gap: clamp(0.25rem, 0.8vw, 0.5rem);
-  }
-
   .entity-grid.is-static :global(.toolbar-shell) {
     position: relative;
     top: auto;
@@ -1134,72 +1071,4 @@
     display: none;
   }
 
-  .grid-loading {
-    display: grid;
-    min-height: clamp(16rem, 42vh, 28rem);
-    place-items: center;
-    overflow: hidden;
-  }
-
-  .empty {
-    display: grid;
-    gap: 0.35rem;
-    min-height: 12rem;
-    place-content: center;
-    justify-items: center;
-    padding: 2.5rem 1.25rem;
-    background: var(--color-surface-1, #0c0f15);
-    border: 1px solid var(--color-border-subtle, rgba(148, 158, 178, 0.07));
-    border-radius: var(--radius-sm, 6px);
-    box-shadow: inset 0 2px 8px rgba(0,0,0,0.30);
-    color: var(--color-text-muted);
-    text-align: center;
-  }
-
-  .empty > strong,
-  .empty > span:not(.empty-icon) {
-    max-width: 32rem;
-  }
-
-  .empty-icon {
-    display: grid;
-    place-items: center;
-    justify-self: center;
-    width: 2rem;
-    height: 2rem;
-    color: var(--color-text-disabled);
-  }
-
-  .empty-icon :global(svg) {
-    width: 100%;
-    height: 100%;
-  }
-
-  .empty strong {
-    color: var(--color-text-primary);
-    font-family: var(--font-heading, Geist, sans-serif);
-    font-size: 1.1rem;
-  }
-
-  .empty span {
-    font-size: 0.85rem;
-  }
-
-  @media (min-width: 640px) {
-    .cards {
-      grid-template-columns: repeat(max(1, min(var(--col-count, 5), 4)), minmax(0, 1fr));
-    }
-  }
-
-  @media (min-width: 1024px) {
-    .cards {
-      grid-template-columns: repeat(var(--col-count, 5), minmax(0, 1fr));
-    }
-  }
-
-  @media (prefers-reduced-motion: reduce) {
-    .cards {
-      transition: none;
-    }
-  }
 </style>
