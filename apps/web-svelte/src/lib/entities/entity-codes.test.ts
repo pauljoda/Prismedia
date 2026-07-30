@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   ENTITY_FILE_ROLE,
+  ENTITY_KIND,
+  ENTITY_KIND_DEFINITIONS,
   ENTITY_KINDS,
   isTopLevelEntityKind,
   labelForEntityKind,
@@ -31,6 +33,12 @@ describe("code registries", () => {
     expect(resolveEntityHref("book-chapter", "chapter", { kind: "book", id: "book" })).toBe(
       "/books/book/chapters/chapter",
     );
+  });
+
+  it("keeps every collection member kind navigable through its definition", () => {
+    for (const kind of ENTITY_KIND_DEFINITIONS[ENTITY_KIND.collection].containableKinds) {
+      expect(resolveEntityHref(kind, "entity-1")).toMatch(/^\//);
+    }
   });
 
   it("includes server image roles used by detail artwork", () => {

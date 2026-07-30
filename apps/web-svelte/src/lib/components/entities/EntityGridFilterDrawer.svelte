@@ -1,7 +1,7 @@
 <script lang="ts">
   import { CalendarRange } from "@lucide/svelte";
   import { cn } from "@prismedia/ui-svelte";
-  import { CAPABILITY_KIND } from "$lib/entities/entity-codes";
+  import { CAPABILITY_KIND, isTaxonomyEntityKind } from "$lib/entities/entity-codes";
   import {
     AVAILABILITY_FILTER_DEFS,
     BOOK_FORMAT_FILTER_DEFS,
@@ -84,9 +84,7 @@
   // Taxonomy kinds (tags/people/studios) can be filtered by whether anything references them,
   // resolved server-side across the whole library. The two chips are mutually exclusive — neither
   // selected means "all".
-  const showReferenceFilters = $derived(
-    entityKind === "tag" || entityKind === "person" || entityKind === "studio",
-  );
+  const showReferenceFilters = $derived(entityKind != null && isTaxonomyEntityKind(entityKind));
   const REFERENCE_FILTER_IDS = ["taxonomy:referenced", "taxonomy:orphaned"];
   const AVAILABILITY_FILTER_IDS = AVAILABILITY_FILTER_DEFS.map((definition) => definition.id);
 

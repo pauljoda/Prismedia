@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 
+import { ENTITY_KIND } from "$lib/api/generated/codes";
 import type { EntitySearchCandidate } from "$lib/api/generated/model";
+import { aspectRatioForKind } from "$lib/entities/entity-thumbnail";
 
 import {
 	identifyCandidateKey,
@@ -25,13 +27,13 @@ describe("identify candidate cards", () => {
 			matchReason: null,
 		};
 
-		const card = identifyCandidateToThumbnailCard(candidate, "video-series", 0);
+		const card = identifyCandidateToThumbnailCard(candidate, ENTITY_KIND.videoSeries, 0);
 
 		expect(card.entity.id).toBe("tmdb:271267");
-		expect(card.entity.kind).toBe("video-series");
+		expect(card.entity.kind).toBe(ENTITY_KIND.videoSeries);
 		expect(card.cover?.src).toBe(candidate.posterUrl);
 		expect(card.cover?.alt).toBe(candidate.title);
-		expect(card.aspectRatio).toBe("poster");
+		expect(card.aspectRatio).toEqual(aspectRatioForKind(ENTITY_KIND.videoSeries));
 		expect(card.subtitle).toBe("2025");
 		expect(card.meta?.map((item) => item.label)).toEqual([
 			"tmdb: 271267",

@@ -12,7 +12,7 @@ import type {
 import { proposalKindToEntityKind } from "$lib/entities/entity-codes";
 import type { EntityCard } from "$lib/api/entities";
 import type { EntityThumbnailCard, EntityThumbnailMetaIcon } from "$lib/entities/entity-thumbnail";
-import { iconForKind } from "$lib/entities/entity-thumbnail";
+import { aspectRatioForKind, iconForKind } from "$lib/entities/entity-thumbnail";
 import {
   reviewableImages,
   reviewImagePreviewUrl,
@@ -162,9 +162,10 @@ export function relationshipCard(
 ): EntityThumbnailCard {
   const image = preferredRelationshipImage(result, selectedImages, rootProposalId, store);
   const title = proposalTitle(result);
+  const entityKind = proposalKindToEntityKind(result.targetKind);
   return {
-    entity: { id: result.proposalId, kind: proposalKindToEntityKind(result.targetKind), title, parentEntityId: null, sortOrder: null, capabilities: [], childrenByKind: [], relationships: [] },
-    aspectRatio: result.targetKind === ENTITY_KIND.studio ? "wide" : result.targetKind === ENTITY_KIND.person ? { width: 4, height: 5 } : "square",
+    entity: { id: result.proposalId, kind: entityKind, title, parentEntityId: null, sortOrder: null, capabilities: [], childrenByKind: [], relationships: [] },
+    aspectRatio: aspectRatioForKind(entityKind),
     cover: image ? { src: reviewImagePreviewUrl(image, result.targetKind), alt: title } : null,
     hover: { kind: THUMBNAIL_HOVER_KIND.none },
     subtitle: relationshipKindLabel(result.targetKind),
@@ -213,7 +214,7 @@ export function creditCard(
   const image = preferredProposalImage(credit, selectedImages, rootProposalId, store);
   return {
     entity: { id: credit.proposalId, kind: ENTITY_KIND.person, title: credit.patch?.title ?? "", parentEntityId: null, sortOrder: null, capabilities: [], childrenByKind: [], relationships: [] },
-    aspectRatio: { width: 4, height: 5 },
+    aspectRatio: aspectRatioForKind(ENTITY_KIND.person),
     cover: image ? { src: reviewImagePreviewUrl(image, credit.targetKind), alt: credit.patch?.title ?? "" } : null,
     hover: { kind: THUMBNAIL_HOVER_KIND.none } as const,
     subtitle: scopedCredit?.character ? `as ${scopedCredit.character}` : roleLabel(scopedCredit),

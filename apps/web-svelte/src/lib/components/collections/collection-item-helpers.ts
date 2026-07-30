@@ -1,35 +1,10 @@
 import { buildHrefWithFrom } from "$lib/back-navigation";
-import { ENTITY_KIND } from "$lib/entities/entity-codes";
+import { resolveEntityHref } from "$lib/entities/entity-codes";
 import type { CollectionItem } from "$lib/collections/models";
 
 export function getEntityHref(item: CollectionItem, from?: string): string {
-  let base: string;
-  switch (item.entityType) {
-    case ENTITY_KIND.movie:
-      base = `/movies/${item.entityId}`;
-      break;
-    case ENTITY_KIND.video:
-      base = `/videos/${item.entityId}`;
-      break;
-    case ENTITY_KIND.videoSeries:
-      base = `/series/${item.entityId}`;
-      break;
-    case ENTITY_KIND.gallery:
-      base = `/galleries/${item.entityId}`;
-      break;
-    case ENTITY_KIND.book:
-      base = `/books/${item.entityId}`;
-      break;
-    case ENTITY_KIND.image:
-      base = `/images/${item.entityId}`;
-      break;
-    case ENTITY_KIND.audioTrack:
-      base = `/audio/tracks/${item.entityId}`;
-      break;
-    default:
-      return "#";
-  }
-  return from ? buildHrefWithFrom(base, from) : base;
+  const base = resolveEntityHref(item.entityType, item.entityId);
+  return base ? buildHrefWithFrom(base, from ?? "") : "#";
 }
 
 export function getEntityTitle(item: CollectionItem): string {

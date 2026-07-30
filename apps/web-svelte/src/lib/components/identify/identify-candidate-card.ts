@@ -1,5 +1,9 @@
 import { EXTERNAL_ID_PROVIDER, THUMBNAIL_HOVER_KIND } from "$lib/api/generated/codes";
-import type { EntityThumbnailCard, EntityThumbnailMetaItem } from "$lib/entities/entity-thumbnail";
+import {
+  aspectRatioForKind,
+  type EntityThumbnailCard,
+  type EntityThumbnailMetaItem,
+} from "$lib/entities/entity-thumbnail";
 import type { EntityKind } from "$lib/api/generated/model";
 
 const PROVIDER_PRIORITY = [
@@ -58,12 +62,6 @@ export function identifyCandidateKey(candidate: IdentifySearchCandidateView, ind
   return `candidate:${slugTitle(candidate.title)}:${candidate.year ?? "unknown"}:${index}`;
 }
 
-function candidateAspectRatio(entityKind: string): EntityThumbnailCard["aspectRatio"] {
-  if (entityKind === "studio") return "wide";
-  if (entityKind === "person") return { width: 4, height: 5 };
-  return "poster";
-}
-
 /** Converts an identify search result into the shared list thumbnail view model. */
 export function identifyCandidateToThumbnailCard(
   candidate: IdentifySearchCandidateView,
@@ -84,7 +82,7 @@ export function identifyCandidateToThumbnailCard(
   }
 
   return {
-    aspectRatio: candidateAspectRatio(entityKind),
+    aspectRatio: aspectRatioForKind(entityKind),
     cover: candidate.posterUrl ? { src: candidate.posterUrl, alt: candidate.title } : null,
     entity: {
       id: identifyCandidateKey(candidate, index),

@@ -6,7 +6,6 @@
   import { cn } from "@prismedia/ui-svelte";
   import { assetUrl } from "$lib/api/orval-fetch";
   import { buildHrefWithFrom } from "$lib/back-navigation";
-  import { ENTITY_KIND } from "$lib/entities/entity-codes";
   import EntityThumbnail from "$lib/components/thumbnails/EntityThumbnail.svelte";
   import { entityReferenceToThumbnailCard } from "$lib/entities/entity-thumbnail";
   import type { SearchResultItem } from "$lib/search/models";
@@ -33,13 +32,11 @@
   const href = $derived(buildHrefWithFrom(item.href, currentPath ?? ""));
   const label = $derived(SEARCH_KIND_CONFIG[item.kind]?.label ?? item.kind);
   const imageUrl = $derived(assetUrl(item.imagePath));
-  const imageFit = $derived(item.kind === ENTITY_KIND.movie || item.kind === ENTITY_KIND.video || item.kind === ENTITY_KIND.gallery ? "cover" : "contain");
   const resultCard = $derived(
     entityReferenceToThumbnailCard(
       { id: item.id, kind: item.kind, title: item.title },
       {
         cover: imageUrl ? { src: imageUrl, alt: item.title } : null,
-        fit: imageFit,
         href: variant === "grid" ? href : undefined,
       },
     ),
