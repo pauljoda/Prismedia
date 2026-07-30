@@ -14,7 +14,17 @@ public sealed class BookAuthorEntityKindDefinition() : RootEntityKindDefinition<
     static root => new BookAuthor(root.Id, root.Title),
     defaultCapabilities: static () => [new CapabilityCredits()],
     enumeratesIdentifyChildren: true,
-    supportsFileDeletion: true);
+    supportsFileDeletion: true) {
+    /// <inheritdoc />
+    public override IReadOnlyList<RequestKindDescriptor> RequestKinds =>
+    [
+        new(RequestMediaKind.Author, "Author", "Authors", "book", EntityKind.Person, EntityKind.BookAuthor,
+            ProfileEntityKind: EntityKind.Book, LibraryRootMediaCapability: LibraryRootMediaCapability.ScanBooks,
+            ReviewSelection: RequestReviewSelection.DirectChildren,
+            IsContainer: true, ChildKind: RequestMediaKind.Book, Committable: true,
+            AcquisitionKind: EntityKind.Book)
+    ];
+}
 
 /// <summary>
 /// Domain model for a book author: a folder-backed grouping that gathers an author's

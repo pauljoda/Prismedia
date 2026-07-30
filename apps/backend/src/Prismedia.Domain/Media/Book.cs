@@ -22,6 +22,21 @@ public sealed class BookEntityKindDefinition() : EntityKindDefinition<Book>(
         [typeof(BookMetadataDocumentCapability), typeof(CoverSelectionDocumentCapability)];
 
     /// <inheritdoc />
+    public override IReadOnlyList<RequestKindDescriptor> RequestKinds =>
+    [
+        new(RequestMediaKind.Book, "Book", "Books", "volume", EntityKind.Book, EntityKind.Book,
+            ProfileEntityKind: EntityKind.Book, LibraryRootMediaCapability: LibraryRootMediaCapability.ScanBooks,
+            ReviewSelection: RequestReviewSelection.DirectChildrenWhenPresent,
+            IsContainer: false, ChildKind: RequestMediaKind.Book, Committable: true,
+            AcquisitionKind: EntityKind.Book, BookRendition: BookRendition.Ebook),
+        new(RequestMediaKind.Audiobook, "Audiobook", "Audiobooks", null, EntityKind.Book, EntityKind.Book,
+            ProfileEntityKind: EntityKind.Book, LibraryRootMediaCapability: LibraryRootMediaCapability.ScanBooks,
+            ReviewSelection: RequestReviewSelection.Root,
+            IsContainer: false, ChildKind: null, Committable: true,
+            AcquisitionKind: EntityKind.Book, BookRendition: BookRendition.Audiobook)
+    ];
+
+    /// <inheritdoc />
     protected override IReadOnlyList<ContractCapability> ProjectCapabilities(
         Book entity,
         EntityKindProjectionContext context) =>

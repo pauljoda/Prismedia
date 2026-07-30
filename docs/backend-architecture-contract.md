@@ -186,6 +186,8 @@ Stable string identifiers are owned by exactly one source and must not be retype
 
 - Entity-kind codes and kind-wide domain behavior live in discovered
   `EntityKindDefinition` implementations beside the concrete Entity type. The
+  definition also owns its request-flow entries; `RequestKindRegistry` is only a
+  discovered index over those entries, not a second hand-maintained table. The
   `EntityKind` enum remains the typed persisted identity. Other closed sets are
   `[Code]`-bearing enums in `Prismedia.Domain` (relationship kinds, file roles, file
   source, credit roles, job types, subtitle/playback enums, identify states).

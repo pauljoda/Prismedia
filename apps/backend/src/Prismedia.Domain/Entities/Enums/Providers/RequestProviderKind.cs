@@ -14,8 +14,8 @@ public enum RequestProviderKind {
 /// Closed set of media categories exposed by the request workflow. Prismedia fulfils requests through
 /// its own acquisition pipeline. Leaf kinds (book, movie, album) are acquired directly; container kinds
 /// (author, series, artist) surface their works as toggleable children and are created as wanted library
-/// entities that group them. Per-kind behavior lives in <c>RequestKindRegistry</c> — this enum is only
-/// the wire vocabulary.
+/// entities that group them. Per-kind behavior lives on discovered <see cref="EntityKindDefinition"/>
+/// instances; this enum is only the wire vocabulary.
 /// </summary>
 public enum RequestMediaKind {
     /// <summary>Book request target (fulfilled by Prismedia-direct acquisition).</summary>

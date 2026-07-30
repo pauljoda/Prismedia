@@ -64,6 +64,12 @@ public abstract class EntityKindDefinition {
     public bool SupportsFileDeletion { get; }
 
     /// <summary>
+    /// Request workflow entries owned by this kind. Keeping them beside the kind definition makes
+    /// request discovery automatic and permits multiple renditions to target the same Entity kind.
+    /// </summary>
+    public virtual IReadOnlyList<RequestKindDescriptor> RequestKinds => [];
+
+    /// <summary>
     /// Immutable document-capability types projected directly by this definition. Shared
     /// cross-kind capabilities are projected generically from the Entity root and attached
     /// domain capabilities.

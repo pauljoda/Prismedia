@@ -329,14 +329,14 @@ public sealed class MonitoredSearchJobHandlerTests {
 
     private sealed class NullProposalSource : Prismedia.Application.Requests.IPluginRequestProposalSource {
         public Task<Prismedia.Contracts.Requests.RequestReviewResponse?> ResolveFreshReviewAsync(
-            Prismedia.Application.Requests.RequestKindDescriptor descriptor,
+            RequestKindDescriptor descriptor,
             Prismedia.Application.Plugins.PluginIdentityRoute route,
             bool hideNsfw,
             CancellationToken cancellationToken) =>
             Task.FromResult<Prismedia.Contracts.Requests.RequestReviewResponse?>(null);
 
         public Task<Prismedia.Contracts.Plugins.EntityMetadataProposal?> ResolveFreshProposalAsync(
-            Prismedia.Application.Requests.RequestKindDescriptor descriptor,
+            RequestKindDescriptor descriptor,
             Prismedia.Application.Plugins.PluginIdentityRoute route,
             bool hideNsfw,
             bool includeChildren,
@@ -344,7 +344,7 @@ public sealed class MonitoredSearchJobHandlerTests {
             Task.FromResult<Prismedia.Contracts.Plugins.EntityMetadataProposal?>(null);
 
         public Task<Prismedia.Contracts.Plugins.EntityMetadataProposal?> ResolveProposalAsync(
-            Prismedia.Application.Requests.RequestKindDescriptor descriptor,
+            RequestKindDescriptor descriptor,
             Prismedia.Application.Plugins.PluginIdentityRoute route,
             bool hideNsfw,
             bool includeChildren,
@@ -352,7 +352,7 @@ public sealed class MonitoredSearchJobHandlerTests {
             Task.FromResult<Prismedia.Contracts.Plugins.EntityMetadataProposal?>(null);
 
         public Task<Prismedia.Application.Requests.RoutedRequestProposal?> ResolveProposalAsync(
-            Prismedia.Application.Requests.RequestKindDescriptor descriptor, ExternalIdentity identity, bool hideNsfw, bool includeChildren, CancellationToken cancellationToken) =>
+            RequestKindDescriptor descriptor, ExternalIdentity identity, bool hideNsfw, bool includeChildren, CancellationToken cancellationToken) =>
             Task.FromResult<Prismedia.Application.Requests.RoutedRequestProposal?>(null);
     }
 

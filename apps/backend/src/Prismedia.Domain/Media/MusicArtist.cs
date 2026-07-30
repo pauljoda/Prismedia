@@ -14,7 +14,18 @@ public sealed class MusicArtistEntityKindDefinition() : RootEntityKindDefinition
     static root => new MusicArtist(root.Id, root.Title),
     defaultCapabilities: static () => [new CapabilityCredits()],
     enumeratesIdentifyChildren: true,
-    supportsFileDeletion: true);
+    supportsFileDeletion: true) {
+    /// <inheritdoc />
+    public override IReadOnlyList<RequestKindDescriptor> RequestKinds =>
+    [
+        new(RequestMediaKind.Artist, "Artist", "Artists", "album", EntityKind.MusicArtist, EntityKind.MusicArtist,
+            ProfileEntityKind: EntityKind.AudioLibrary,
+            LibraryRootMediaCapability: LibraryRootMediaCapability.ScanAudio,
+            ReviewSelection: RequestReviewSelection.DirectChildren,
+            IsContainer: true, ChildKind: RequestMediaKind.Album, Committable: true,
+            AcquisitionKind: EntityKind.AudioLibrary, DeferChildPhantomHydration: true)
+    ];
+}
 
 /// <summary>
 /// Domain model for a music artist or band: a folder-backed grouping that gathers an

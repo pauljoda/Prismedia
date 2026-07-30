@@ -18,7 +18,17 @@ public sealed class MovieEntityKindDefinition() : EntityKindDefinition<Movie>(
         new CapabilitySource(),
         new CapabilityCredits()
     ],
-    supportsFileDeletion: true);
+    supportsFileDeletion: true) {
+    /// <inheritdoc />
+    public override IReadOnlyList<RequestKindDescriptor> RequestKinds =>
+    [
+        new(RequestMediaKind.Movie, "Movie", "Movies", null, EntityKind.Movie, EntityKind.Movie,
+            ProfileEntityKind: EntityKind.Movie, LibraryRootMediaCapability: LibraryRootMediaCapability.ScanVideos,
+            ReviewSelection: RequestReviewSelection.Root,
+            IsContainer: false, ChildKind: null, Committable: true,
+            AcquisitionKind: EntityKind.Movie)
+    ];
+}
 
 /// <summary>
 /// Domain model for a single-film video release with one playable video child.

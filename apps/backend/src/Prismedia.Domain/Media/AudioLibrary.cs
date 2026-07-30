@@ -13,7 +13,18 @@ public sealed class AudioLibraryEntityKindDefinition() : RootEntityKindDefinitio
     EntityStorageShape.Folder,
     static root => new AudioLibrary(root.Id, root.Title),
     enumeratesIdentifyChildren: true,
-    supportsFileDeletion: true);
+    supportsFileDeletion: true) {
+    /// <inheritdoc />
+    public override IReadOnlyList<RequestKindDescriptor> RequestKinds =>
+    [
+        new(RequestMediaKind.Album, "Album", "Albums", "track", EntityKind.AudioLibrary, EntityKind.AudioLibrary,
+            ProfileEntityKind: EntityKind.AudioLibrary,
+            LibraryRootMediaCapability: LibraryRootMediaCapability.ScanAudio,
+            ReviewSelection: RequestReviewSelection.Root,
+            IsContainer: false, ChildKind: RequestMediaKind.Track, Committable: true,
+            AcquisitionKind: EntityKind.AudioLibrary, MaterializeChildPhantoms: true)
+    ];
+}
 
 /// <summary>
 /// Domain model for an album, audiobook, podcast, or other audio grouping.

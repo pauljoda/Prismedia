@@ -20,6 +20,17 @@ public sealed class VideoSeriesEntityKindDefinition() : EntityKindDefinition<Vid
     public override IReadOnlyList<Type> ProjectedCapabilityTypes => [typeof(SeriesMetadataDocumentCapability)];
 
     /// <inheritdoc />
+    public override IReadOnlyList<RequestKindDescriptor> RequestKinds =>
+    [
+        new(RequestMediaKind.Series, "Series", "Series", "season", EntityKind.VideoSeries, EntityKind.VideoSeries,
+            ProfileEntityKind: EntityKind.VideoSeries,
+            LibraryRootMediaCapability: LibraryRootMediaCapability.ScanVideos,
+            ReviewSelection: RequestReviewSelection.DirectChildren,
+            IsContainer: true, ChildKind: RequestMediaKind.Season, Committable: true,
+            AcquisitionKind: EntityKind.VideoSeason)
+    ];
+
+    /// <inheritdoc />
     protected override IReadOnlyList<ContractCapability> ProjectCapabilities(
         VideoSeries entity,
         EntityKindProjectionContext context) =>
@@ -48,7 +59,19 @@ public sealed class VideoSeasonEntityKindDefinition() : RootEntityKindDefinition
         new CapabilityCredits()
     ],
     enumeratesIdentifyChildren: true,
-    supportsFileDeletion: true);
+    supportsFileDeletion: true) {
+    /// <inheritdoc />
+    public override IReadOnlyList<RequestKindDescriptor> RequestKinds =>
+    [
+        new(RequestMediaKind.Season, "Season", "Seasons", "episode", EntityKind.VideoSeason, EntityKind.VideoSeason,
+            ProfileEntityKind: EntityKind.VideoSeries,
+            LibraryRootMediaCapability: LibraryRootMediaCapability.ScanVideos,
+            ReviewSelection: RequestReviewSelection.Root,
+            IsContainer: false, ChildKind: RequestMediaKind.Episode, Committable: true,
+            AcquisitionKind: EntityKind.VideoSeason, Discoverable: false, AcquireFromEntity: true,
+            MaterializeChildPhantoms: true)
+    ];
+}
 
 /// <summary>
 /// Domain model for a video series grouping.

@@ -19,7 +19,18 @@ public sealed class VideoEntityKindDefinition() : EntityKindDefinition<Video>(
         new CapabilitySubtitles(),
         new CapabilityCredits()
     ],
-    supportsFileDeletion: true);
+    supportsFileDeletion: true) {
+    /// <inheritdoc />
+    public override IReadOnlyList<RequestKindDescriptor> RequestKinds =>
+    [
+        new(RequestMediaKind.Episode, "Episode", "Episodes", null, EntityKind.Video, EntityKind.Video,
+            ProfileEntityKind: EntityKind.VideoSeries,
+            LibraryRootMediaCapability: LibraryRootMediaCapability.ScanVideos,
+            ReviewSelection: RequestReviewSelection.Root,
+            IsContainer: false, ChildKind: null, Committable: true,
+            AcquisitionKind: EntityKind.Video, Discoverable: false, AcquireFromEntity: true)
+    ];
+}
 
 /// <summary>
 /// Domain model for a playable video media item.
