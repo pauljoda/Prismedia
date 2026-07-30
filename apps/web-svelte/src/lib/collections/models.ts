@@ -1,26 +1,15 @@
 import type { EntityThumbnail } from "$lib/api/generated/model";
-import { ENTITY_KIND, type EntityKindCode } from "$lib/entities/entity-codes";
+import { ENTITY_KIND, ENTITY_KIND_DEFINITIONS } from "$lib/entities/entity-codes";
 
 export type CollectionMode = "manual" | "dynamic" | "hybrid";
 export type CollectionCoverMode = "mosaic" | "custom" | "item";
 export type CollectionItemSource = "manual" | "dynamic";
 
 /**
- * Entity kind codes that can be stored as manual collection members. These mirror
- * the backend `Collection.CanContain` rule and let the UI decide which selected
- * library entities are eligible for an "Add to Collection" action.
+ * Entity kind codes that can be stored as collection members. The generated Collection
+ * definition projects the backend containment contract, so eligibility cannot drift by client.
  */
-export const COLLECTION_ENTITY_TYPES = [
-  ENTITY_KIND.video,
-  ENTITY_KIND.movie,
-  ENTITY_KIND.videoSeries,
-  ENTITY_KIND.gallery,
-  ENTITY_KIND.image,
-  ENTITY_KIND.book,
-  ENTITY_KIND.musicArtist,
-  ENTITY_KIND.audioLibrary,
-  ENTITY_KIND.audioTrack,
-] as const satisfies readonly EntityKindCode[];
+export const COLLECTION_ENTITY_TYPES = ENTITY_KIND_DEFINITIONS[ENTITY_KIND.collection].containableKinds;
 
 export type CollectionEntityType = (typeof COLLECTION_ENTITY_TYPES)[number];
 

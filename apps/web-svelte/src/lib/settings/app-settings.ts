@@ -11,7 +11,11 @@ import {
 } from "$lib/player/subtitle-types";
 
 // Setting keys are generated from the backend AppSettingKeys (see scripts/gen-codes.mjs).
-import { ENTITY_KIND, SETTING_KEYS as settingKeys, type SettingKey } from "$lib/api/generated/codes";
+import {
+  AUTO_IDENTIFY_SELECTOR_KIND,
+  SETTING_KEYS as settingKeys,
+  type SettingKey,
+} from "$lib/api/generated/codes";
 
 export { settingKeys };
 export type { SettingKey };
@@ -23,7 +27,7 @@ export const defaultLibrarySettings: LibrarySettings = {
   identifyDefaultProviders: {},
   autoIdentifyEnabled: false,
   autoIdentifyProviders: [],
-  autoIdentifyEntityKinds: [ENTITY_KIND.video, ENTITY_KIND.gallery, ENTITY_KIND.image, ENTITY_KIND.audio, ENTITY_KIND.book],
+  autoIdentifyEntityKinds: Object.values(AUTO_IDENTIFY_SELECTOR_KIND),
   autoIdentifyConfidenceThreshold: 90,
   autoIdentifyUnorganizedOnly: true,
   autoGenerateMetadata: true,

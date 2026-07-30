@@ -9,7 +9,7 @@
   } from "@lucide/svelte";
   import { cn } from "@prismedia/ui-svelte";
   import { keepFlyoutOnScreen } from "$lib/actions/keep-flyout-on-screen";
-  import { ENTITY_KIND } from "$lib/entities/entity-codes";
+  import { isTaxonomyEntityKind } from "$lib/entities/entity-codes";
   import type { EntityGridSort, EntityGridSortDir } from "$lib/entities/entity-grid";
 
   interface Props {
@@ -46,11 +46,10 @@
 
   // Reference-count sort only applies to taxonomy kinds (tags/people/studios), which are the
   // targets of relationship links; it is the default sort for those grids.
-  const TAXONOMY_KINDS = new Set<string>([ENTITY_KIND.tag, ENTITY_KIND.person, ENTITY_KIND.studio]);
   const SORT_OPTIONS = $derived<{ value: EntityGridSort; label: string }[]>([
     { value: "title", label: "Title" },
     { value: "added", label: "Date added" },
-    ...(entityKind != null && TAXONOMY_KINDS.has(entityKind)
+    ...(entityKind != null && isTaxonomyEntityKind(entityKind)
       ? [{ value: "references" as const, label: "References" }]
       : []),
     { value: "rating", label: "Rating" },

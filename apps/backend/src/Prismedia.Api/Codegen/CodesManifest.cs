@@ -51,7 +51,10 @@ public sealed record EntityKindSearchManifestEntry(int Order, bool ExpandsRelati
 /// <param name="ArtworkFit">Default artwork scaling behavior.</param>
 /// <param name="Navigation">Cross-client navigation contract, when reachable.</param>
 /// <param name="Search">Global-search behavior, when included.</param>
+/// <param name="AutoIdentifySelector">Automatic-identification selector family, when directly selectable.</param>
+/// <param name="ContainableKinds">Entity kinds accepted as direct members, when the kind is a container.</param>
 /// <param name="SupportsFileDeletion">Whether this kind may root the managed delete-files workflow.</param>
+/// <param name="SupportsManualManagement">Whether users may create and delete this kind directly.</param>
 /// <param name="SupportsRequests">Whether a committable request descriptor materializes this Entity kind.</param>
 /// <param name="EnumeratesIdentifyChildren">Whether this kind is an identify container whose local children are enumerated for cascade identify.</param>
 public sealed record EntityKindManifestEntry(
@@ -69,7 +72,10 @@ public sealed record EntityKindManifestEntry(
     string ArtworkFit,
     EntityKindNavigationManifestEntry? Navigation,
     EntityKindSearchManifestEntry? Search,
+    string? AutoIdentifySelector,
+    IReadOnlyList<string>? ContainableKinds,
     bool SupportsFileDeletion,
+    bool SupportsManualManagement,
     bool SupportsRequests,
     bool EnumeratesIdentifyChildren);
 
@@ -194,7 +200,12 @@ public sealed record CodesManifest(
                 descriptor.Search is { } search
                     ? new EntityKindSearchManifestEntry(search.Order, search.ExpandsRelationshipResults)
                     : null,
+                descriptor.AutoIdentifySelector?.ToCode(),
+                descriptor is IEntityContainmentPolicy containment
+                    ? containment.ContainableKinds.Select(kind => kind.ToCode()).ToArray()
+                    : null,
                 descriptor.SupportsFileDeletion,
+                descriptor.SupportsManualManagement,
                 requestableKinds.Contains(descriptor.Kind),
                 descriptor.EnumeratesIdentifyChildren))
             .ToArray();

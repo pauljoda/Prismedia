@@ -18,6 +18,7 @@ import {
   CAPABILITY_KIND,
   ENTITY_FILE_ROLE,
   ENTITY_KIND,
+  isTaxonomyEntityKind,
   labelForEntityKind,
 } from "./entity-codes";
 import {
@@ -731,7 +732,7 @@ export function buildCapabilityFilterOptions(
 
   // Taxonomy kinds can be filtered to the orphaned/empty entries nothing references — resolved
   // server-side so it spans the whole library, not just the loaded page.
-  if (kind === ENTITY_KIND.tag || kind === ENTITY_KIND.person || kind === ENTITY_KIND.studio) {
+  if (kind != null && isTaxonomyEntityKind(kind)) {
     addUniqueOption(options, {
       id: "taxonomy:orphaned",
       label: "Orphaned",

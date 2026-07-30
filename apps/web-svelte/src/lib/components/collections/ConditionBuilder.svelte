@@ -1,19 +1,11 @@
 <script lang="ts">
   import {
-    BookOpen,
     Calendar,
     ChevronDown,
-    Clapperboard,
-    Disc3,
-    Film,
     FolderOpen,
     Hash,
-    Image as ImageIcon,
-    Images,
     Link2,
     ListChecks,
-    MicVocal,
-    Music,
     Plus,
     ToggleRight,
     Type as TypeIcon,
@@ -22,6 +14,7 @@
   import type { Component } from "svelte";
   import { cn } from "@prismedia/ui-svelte";
   import {
+    COLLECTION_ENTITY_TYPES,
     COLLECTION_RULE_FIELDS,
     type CollectionConditionValue,
     type CollectionEntityType,
@@ -30,7 +23,8 @@
     type CollectionRuleFieldDef,
     type CollectionRuleGroup,
   } from "$lib/collections/models";
-  import { ENTITY_KIND } from "$lib/entities/entity-codes";
+  import { shortDisplayNameForEntityKind } from "$lib/entities/entity-codes";
+  import { entityKindIcon } from "$lib/entities/entity-kind-icons";
 
   interface CollectionRuleSelectOption {
     value: string;
@@ -46,17 +40,12 @@
 
   let { rule, onChange, disabled = false, libraryOptions = [] }: Props = $props();
 
-  const entityKinds: { value: CollectionEntityType; label: string; icon: Component }[] = [
-    { value: ENTITY_KIND.video, label: "Video", icon: Film },
-    { value: ENTITY_KIND.movie, label: "Movie", icon: Clapperboard },
-    { value: ENTITY_KIND.videoSeries, label: "Series", icon: FolderOpen },
-    { value: ENTITY_KIND.gallery, label: "Gallery", icon: Images },
-    { value: ENTITY_KIND.image, label: "Image", icon: ImageIcon },
-    { value: ENTITY_KIND.book, label: "Book", icon: BookOpen },
-    { value: ENTITY_KIND.musicArtist, label: "Artist", icon: MicVocal },
-    { value: ENTITY_KIND.audioLibrary, label: "Album", icon: Disc3 },
-    { value: ENTITY_KIND.audioTrack, label: "Track", icon: Music },
-  ];
+  const entityKinds: { value: CollectionEntityType; label: string; icon: Component }[] =
+    COLLECTION_ENTITY_TYPES.map((value) => ({
+      value,
+      label: shortDisplayNameForEntityKind(value),
+      icon: entityKindIcon(value),
+    }));
 
   const fieldTypeMeta: Record<
     CollectionRuleFieldDef["fieldType"],

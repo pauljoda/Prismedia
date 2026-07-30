@@ -8,16 +8,17 @@ import {
 } from "$lib/api/generated/prismedia";
 import type { EntityCreateRequest } from "$lib/api/generated/model";
 import { requestInit, unwrapGenerated, type RequestOptions } from "$lib/api/generated-response";
-import { ENTITY_KIND } from "$lib/entities/entity-codes";
+import {
+  ENTITY_KIND,
+  ENTITY_KINDS_SUPPORTING_MANUAL_MANAGEMENT,
+  type ManuallyManageableEntityKindCode,
+} from "$lib/entities/entity-codes";
 
-/** Entity kinds the user can create and delete by hand from the taxonomy grids. */
-const MANAGEABLE_KINDS = [ENTITY_KIND.tag, ENTITY_KIND.person, ENTITY_KIND.studio] as const;
-
-export type ManageableTaxonomyKind = (typeof MANAGEABLE_KINDS)[number];
+export type ManageableTaxonomyKind = ManuallyManageableEntityKindCode;
 
 /** Whether a kind code is a user-manageable taxonomy kind (tag, person, studio). */
 export function isManageableTaxonomyKind(kind: string): kind is ManageableTaxonomyKind {
-  return (MANAGEABLE_KINDS as readonly string[]).includes(kind);
+  return (ENTITY_KINDS_SUPPORTING_MANUAL_MANAGEMENT as readonly string[]).includes(kind);
 }
 
 type GeneratedResponse = { data: unknown; status: number };

@@ -189,7 +189,8 @@ async function main() {
   const entityKindFields = [
     "code", "displayName", "groupLabel", "category", "storageShape", "icon", "referenceIcon",
     "thumbnailWidth", "thumbnailHeight", "primaryAccent", "secondaryAccent", "artworkFit",
-    "navigation", "search", "supportsFileDeletion", "supportsRequests", "enumeratesIdentifyChildren",
+    "navigation", "search", "autoIdentifySelector", "containableKinds", "supportsFileDeletion",
+    "supportsManualManagement", "supportsRequests", "enumeratesIdentifyChildren",
   ];
   for (const kind of manifest.entityKinds ?? []) {
     const missing = entityKindFields.filter((field) => !Object.hasOwn(kind, field));
@@ -221,7 +222,10 @@ async function main() {
     `thumbnailHeight: ${lit(kind.thumbnailHeight)}, primaryAccent: ${lit(kind.primaryAccent)}, ` +
     `secondaryAccent: ${lit(kind.secondaryAccent)}, artworkFit: ${lit(kind.artworkFit)} }, ` +
     `navigation: ${lit(kind.navigation)}, search: ${lit(kind.search)}, ` +
-    `supportsFileDeletion: ${lit(kind.supportsFileDeletion)}, supportsRequests: ${lit(kind.supportsRequests)}, ` +
+    `autoIdentifySelector: ${lit(kind.autoIdentifySelector)}, containableKinds: ${lit(kind.containableKinds)}, ` +
+    `supportsFileDeletion: ${lit(kind.supportsFileDeletion)}, ` +
+    `supportsManualManagement: ${lit(kind.supportsManualManagement)}, ` +
+    `supportsRequests: ${lit(kind.supportsRequests)}, ` +
     `enumeratesIdentifyChildren: ${lit(kind.enumeratesIdentifyChildren)} },`
   ).join("\n");
   const searchableKinds = (manifest.entityKinds ?? [])
@@ -232,6 +236,16 @@ async function main() {
     .filter((kind) => kind.search.expandsRelationshipResults)
     .map((kind) => `  ${lit(kind.code)},`)
     .join("\n");
+  const entityKindCategories = [...new Set((manifest.entityKinds ?? []).map((kind) => kind.category))]
+    .sort((left, right) => left.localeCompare(right));
+  sections.push(
+    constBlock(
+      "ENTITY_KIND_CATEGORY",
+      "EntityKindCategoryCode",
+      entityKindCategories.map((category) => [camel(category), category]),
+      "registry EntityKindDefinitions.Category",
+    ),
+  );
   sections.push(
     `export interface EntityKindPresentationManifestEntry {\n` +
       `  icon: EntityKindIconCode;\n` +
@@ -258,17 +272,20 @@ async function main() {
       `  kind: EntityKindCode;\n` +
       `  displayName: string;\n` +
       `  groupLabel: string;\n` +
-      `  category: string;\n` +
+      `  category: EntityKindCategoryCode;\n` +
       `  storageShape: string;\n` +
       `  presentation: EntityKindPresentationManifestEntry;\n` +
       `  navigation: EntityKindNavigationManifestEntry | null;\n` +
       `  search: EntityKindSearchManifestEntry | null;\n` +
+      `  autoIdentifySelector: AutoIdentifySelectorKindCode | null;\n` +
+      `  containableKinds: readonly EntityKindCode[] | null;\n` +
       `  supportsFileDeletion: boolean;\n` +
+      `  supportsManualManagement: boolean;\n` +
       `  supportsRequests: boolean;\n` +
       `  enumeratesIdentifyChildren: boolean;\n` +
       `}\n\n` +
-      `export const ENTITY_KIND_DEFINITIONS: Record<EntityKindCode, EntityKindDefinitionManifestEntry> = {\n` +
-      `${entityKindEntries}\n};\n\n` +
+      `export const ENTITY_KIND_DEFINITIONS = {\n` +
+      `${entityKindEntries}\n} as const satisfies Record<EntityKindCode, EntityKindDefinitionManifestEntry>;\n\n` +
       `export const ENTITY_KINDS_IN_GLOBAL_SEARCH = [\n${searchKindEntries}\n] as const;\n\n` +
       `export type GlobalSearchEntityKindCode = (typeof ENTITY_KINDS_IN_GLOBAL_SEARCH)[number];\n\n` +
       `export const ENTITY_KINDS_EXPANDING_RELATED_SEARCH_RESULTS = [\n` +
@@ -325,6 +342,17 @@ async function main() {
   sections.push(
     `export const ENTITY_KINDS_SUPPORTING_FILE_DELETION = [\n${fileDeletionKinds}\n] as const;\n\n` +
       `export type FileDeletableEntityKindCode = (typeof ENTITY_KINDS_SUPPORTING_FILE_DELETION)[number];\n`,
+  );
+
+  // Entity kinds users may directly create and delete. The endpoint adapters remain client-local,
+  // while eligibility comes from each canonical Entity-kind definition.
+  const manuallyManageableKinds = (manifest.entityKinds ?? [])
+    .filter((kind) => kind.supportsManualManagement === true)
+    .map((kind) => `  ${lit(kind.code)},`)
+    .join("\n");
+  sections.push(
+    `export const ENTITY_KINDS_SUPPORTING_MANUAL_MANAGEMENT = [\n${manuallyManageableKinds}\n] as const;\n\n` +
+      `export type ManuallyManageableEntityKindCode = (typeof ENTITY_KINDS_SUPPORTING_MANUAL_MANAGEMENT)[number];\n`,
   );
 
   // Entity kinds materialized by a committable RequestKindRegistry descriptor. Shared acquisition

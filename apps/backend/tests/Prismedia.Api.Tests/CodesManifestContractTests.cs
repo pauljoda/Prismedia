@@ -93,6 +93,38 @@ public sealed class CodesManifestContractTests {
     }
 
     [Fact]
+    public void EntityKindManifestProjectsDefinitionOwnedClientPolicies() {
+        var manifest = CodesManifest.Build().EntityKinds;
+        var kinds = manifest.ToDictionary(kind => kind.Code);
+        var collectionPolicy = Assert.IsAssignableFrom<IEntityContainmentPolicy>(
+            EntityKindRegistry.Describe(EntityKind.Collection));
+
+        Assert.Equal(
+            collectionPolicy.ContainableKinds.Select(kind => kind.ToCode()),
+            kinds[EntityKind.Collection.ToCode()].ContainableKinds);
+        Assert.All(
+            manifest.Where(kind => kind.Code != EntityKind.Collection.ToCode()),
+            kind => Assert.Null(kind.ContainableKinds));
+
+        Assert.True(kinds[EntityKind.Person.ToCode()].SupportsManualManagement);
+        Assert.True(kinds[EntityKind.Studio.ToCode()].SupportsManualManagement);
+        Assert.True(kinds[EntityKind.Tag.ToCode()].SupportsManualManagement);
+        Assert.False(kinds[EntityKind.Video.ToCode()].SupportsManualManagement);
+
+        var selectors = manifest
+            .Select(kind => kind.AutoIdentifySelector)
+            .OfType<string>()
+            .Distinct(StringComparer.Ordinal)
+            .Order(StringComparer.Ordinal)
+            .ToArray();
+        Assert.Equal(
+            Enum.GetValues<AutoIdentifySelectorKind>()
+                .Select(selector => selector.ToCode())
+                .Order(StringComparer.Ordinal),
+            selectors);
+    }
+
+    [Fact]
     public void EntityKindManifestDerivesRequestSupportFromTheRequestKindRegistry() {
         var manifestKinds = CodesManifest.Build().EntityKinds
             .Where(kind => kind.SupportsRequests)
