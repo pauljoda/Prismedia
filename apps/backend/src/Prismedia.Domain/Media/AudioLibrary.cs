@@ -23,9 +23,12 @@ public sealed class AudioLibraryEntityKindDefinition() : RootEntityKindDefinitio
     new EntityKindNavigation(EntityKind.AudioLibrary, "albums", "/audio", "/audio/{id}"),
     new EntityKindSearch(10),
     static root => new AudioLibrary(root.Id, root.Title),
-    enumeratesIdentifyChildren: true,
+    identification: new(
+        AutoIdentifySelectorKind.Audio,
+        enumeratesChildren: true,
+        allowsParentedAutoIdentifyRoot: true,
+        usesParentExternalIdentityContext: true),
     supportsFileDeletion: true,
-    autoIdentifySelector: AutoIdentifySelectorKind.Audio,
     mediaQualityFamily: EntityMediaQualityFamily.Audio) {
     /// <inheritdoc />
     public override bool OwnsMetadataRelationships => true;

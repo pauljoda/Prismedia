@@ -24,9 +24,11 @@ public sealed class MusicArtistEntityKindDefinition() : RootEntityKindDefinition
     search: null,
     static root => new MusicArtist(root.Id, root.Title),
     defaultCapabilities: static () => [new CapabilityCredits()],
-    enumeratesIdentifyChildren: true,
+    identification: new(
+        AutoIdentifySelectorKind.Audio,
+        enumeratesChildren: true,
+        cascadeChildrenAutomatically: false),
     supportsFileDeletion: true,
-    autoIdentifySelector: AutoIdentifySelectorKind.Audio,
     mediaQualityFamily: EntityMediaQualityFamily.Audio) {
     /// <inheritdoc />
     public override bool OwnsMetadataRelationships => true;

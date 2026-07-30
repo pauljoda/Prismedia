@@ -33,9 +33,8 @@ public abstract class EntityKindDefinition {
         EntityKindSearch? search,
         Type? clrType = null,
         Func<IReadOnlyList<EntityCapability>>? defaultCapabilities = null,
-        bool enumeratesIdentifyChildren = false,
+        EntityIdentificationPolicy? identification = null,
         bool supportsFileDeletion = false,
-        AutoIdentifySelectorKind? autoIdentifySelector = null,
         bool supportsManualManagement = false,
         EntityMediaQualityFamily mediaQualityFamily = EntityMediaQualityFamily.None,
         bool supportsAtomicMediaUpgrade = false) {
@@ -56,9 +55,8 @@ public abstract class EntityKindDefinition {
         Search = search;
         ClrType = clrType;
         _defaultCapabilities = defaultCapabilities ?? EmptyCapabilities;
-        EnumeratesIdentifyChildren = enumeratesIdentifyChildren;
+        Identification = identification ?? EntityIdentificationPolicy.None;
         SupportsFileDeletion = supportsFileDeletion;
-        AutoIdentifySelector = autoIdentifySelector;
         SupportsManualManagement = supportsManualManagement;
         MediaQualityFamily = mediaQualityFamily;
         SupportsAtomicMediaUpgrade = supportsAtomicMediaUpgrade;
@@ -96,17 +94,11 @@ public abstract class EntityKindDefinition {
     /// <summary>Concrete domain entity type, or null for a protocol-only kind.</summary>
     public Type? ClrType { get; }
 
-    /// <summary>Whether identify cascades enumerate this kind's structural children.</summary>
-    public bool EnumeratesIdentifyChildren { get; }
+    /// <summary>Identification and provider-compatibility behavior owned by this kind.</summary>
+    public EntityIdentificationPolicy Identification { get; }
 
     /// <summary>Whether this kind can safely root managed file deletion.</summary>
     public bool SupportsFileDeletion { get; }
-
-    /// <summary>
-    /// User-selectable automatic-identification family for this kind, or null when automatic
-    /// identification reaches it only through another root or does not apply.
-    /// </summary>
-    public AutoIdentifySelectorKind? AutoIdentifySelector { get; }
 
     /// <summary>Whether users may create and delete this kind directly through entity routes.</summary>
     public bool SupportsManualManagement { get; }
@@ -116,12 +108,6 @@ public abstract class EntityKindDefinition {
 
     /// <summary>Whether one owned media file can be replaced atomically during an upgrade.</summary>
     public bool SupportsAtomicMediaUpgrade { get; }
-
-    /// <summary>
-    /// Optional compatible kind used when an identify plugin does not explicitly support this
-    /// kind. The fallback is a domain compatibility fact, not a plugin-runtime registration.
-    /// </summary>
-    public virtual EntityKind? IdentifyPluginFallbackKind => null;
 
     /// <summary>
     /// Canonical position-code precedence used to derive a structural sort order. Kinds without
@@ -238,9 +224,8 @@ public abstract class EntityKindDefinition<TEntity> : EntityKindDefinition
         EntityKindNavigation? navigation,
         EntityKindSearch? search,
         Func<IReadOnlyList<EntityCapability>>? defaultCapabilities = null,
-        bool enumeratesIdentifyChildren = false,
+        EntityIdentificationPolicy? identification = null,
         bool supportsFileDeletion = false,
-        AutoIdentifySelectorKind? autoIdentifySelector = null,
         bool supportsManualManagement = false,
         EntityMediaQualityFamily mediaQualityFamily = EntityMediaQualityFamily.None,
         bool supportsAtomicMediaUpgrade = false)
@@ -256,9 +241,8 @@ public abstract class EntityKindDefinition<TEntity> : EntityKindDefinition
             search,
             typeof(TEntity),
             defaultCapabilities,
-            enumeratesIdentifyChildren,
+            identification,
             supportsFileDeletion,
-            autoIdentifySelector,
             supportsManualManagement,
             mediaQualityFamily,
             supportsAtomicMediaUpgrade) {
@@ -435,9 +419,8 @@ public abstract class RootEntityKindDefinition<TEntity> : EntityKindDefinition<T
         EntityKindSearch? search,
         Func<EntityRootData, TEntity> factory,
         Func<IReadOnlyList<EntityCapability>>? defaultCapabilities = null,
-        bool enumeratesIdentifyChildren = false,
+        EntityIdentificationPolicy? identification = null,
         bool supportsFileDeletion = false,
-        AutoIdentifySelectorKind? autoIdentifySelector = null,
         bool supportsManualManagement = false,
         EntityMediaQualityFamily mediaQualityFamily = EntityMediaQualityFamily.None,
         bool supportsAtomicMediaUpgrade = false)
@@ -452,9 +435,8 @@ public abstract class RootEntityKindDefinition<TEntity> : EntityKindDefinition<T
             navigation,
             search,
             defaultCapabilities,
-            enumeratesIdentifyChildren,
+            identification,
             supportsFileDeletion,
-            autoIdentifySelector,
             supportsManualManagement,
             mediaQualityFamily,
             supportsAtomicMediaUpgrade) {

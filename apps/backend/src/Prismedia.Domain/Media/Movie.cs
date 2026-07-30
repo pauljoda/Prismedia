@@ -28,13 +28,12 @@ public sealed class MovieEntityKindDefinition() : EntityKindDefinition<Movie>(
         new CapabilitySource(),
         new CapabilityCredits()
     ],
+    identification: new(
+        AutoIdentifySelectorKind.Video,
+        pluginFallbackKind: EntityKind.Video),
     supportsFileDeletion: true,
-    autoIdentifySelector: AutoIdentifySelectorKind.Video,
     mediaQualityFamily: EntityMediaQualityFamily.Video,
     supportsAtomicMediaUpgrade: true) {
-    /// <inheritdoc />
-    public override EntityKind? IdentifyPluginFallbackKind => EntityKind.Video;
-
     /// <inheritdoc />
     public override bool OwnsMetadataRelationships => true;
 

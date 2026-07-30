@@ -115,7 +115,7 @@ internal static class AutoIdentifyScanEnqueue {
         }
 
         if (!EntityKindRegistry.TryDescribe(entityKind, out var definition) ||
-            definition.AutoIdentifySelector is not { } selector ||
+            definition.Identification.AutoIdentifySelector is not { } selector ||
             !kinds.Contains(selector.ToCode(), StringComparer.OrdinalIgnoreCase)) {
             return null;
         }

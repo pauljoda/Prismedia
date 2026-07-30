@@ -41,7 +41,7 @@ public sealed class BookVolumeEntityKindDefinition() : RootEntityKindDefinition<
         new CapabilitySource(),
         new CapabilityPosition()
     ],
-    enumeratesIdentifyChildren: true,
+    identification: new(enumeratesChildren: true),
     supportsFileDeletion: true) {
     /// <inheritdoc />
     public override IReadOnlyList<EntityStructuralCountDefinition> StructuralThumbnailCounts =>

@@ -19,6 +19,7 @@ import {
   METADATA_PATCH_FIELD,
   PROPOSAL_KIND,
   isEntityKindCode,
+  isTaxonomyEntityKind,
   labelForEntityKind,
 } from "$lib/entities/entity-codes";
 
@@ -693,8 +694,7 @@ function titlesForRelationship(
 }
 
 export function isRelationshipKind(kind: string): boolean {
-  const normalized = kind.toLowerCase();
-  return normalized === ENTITY_KIND.person || normalized === ENTITY_KIND.studio || normalized === ENTITY_KIND.tag;
+  return isTaxonomyEntityKind(kind.toLowerCase());
 }
 
 /** A local structural child of an entity that can be identified on its own (album, episode, track). */

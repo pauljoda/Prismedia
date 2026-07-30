@@ -48,7 +48,7 @@ public static class EntityKindRegistry {
     public static bool EnumeratesIdentifyChildren(string code) =>
         !string.IsNullOrWhiteSpace(code) &&
         ByCode.TryGetValue(code.Trim(), out var definition) &&
-        definition.EnumeratesIdentifyChildren;
+        definition.Identification.EnumeratesChildren;
 
     /// <summary>Encodes a domain entity kind to its stable storage code.</summary>
     public static string ToCode(EntityKind kind) => Describe(kind).Code;
@@ -116,9 +116,19 @@ public static class EntityKindRegistry {
         }
 
         ValidateClientContracts(definitions);
+        ValidateIdentificationPolicies(definitions);
         ValidateAcquisitionProfiles(definitions);
 
         return definitions;
+    }
+
+    private static void ValidateIdentificationPolicies(IReadOnlyList<EntityKindDefinition> definitions) {
+        foreach (var definition in definitions) {
+            if (definition.Identification.PluginFallbackKind == definition.Kind) {
+                throw new InvalidOperationException(
+                    $"Entity kind '{definition.Code}' cannot identify through itself as a plugin fallback.");
+            }
+        }
     }
 
     private static void ValidateClientContracts(IReadOnlyList<EntityKindDefinition> definitions) {

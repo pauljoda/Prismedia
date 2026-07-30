@@ -24,7 +24,7 @@ public sealed class BookAuthorEntityKindDefinition() : RootEntityKindDefinition<
     search: null,
     static root => new BookAuthor(root.Id, root.Title),
     defaultCapabilities: static () => [new CapabilityCredits()],
-    enumeratesIdentifyChildren: true,
+    identification: new(enumeratesChildren: true),
     supportsFileDeletion: true) {
     /// <inheritdoc />
     public override IReadOnlyList<EntityStructuralCountDefinition> StructuralThumbnailCounts =>

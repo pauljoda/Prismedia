@@ -27,9 +27,8 @@ public sealed class BookEntityKindDefinition() : EntityKindDefinition<Book>(
     new EntityKindNavigation(EntityKind.Book, "books", "/books", "/books/{id}"),
     new EntityKindSearch(7),
     defaultCapabilities: static () => [new CapabilityProgress(), new CapabilityPlayback()],
-    enumeratesIdentifyChildren: true,
-    supportsFileDeletion: true,
-    autoIdentifySelector: AutoIdentifySelectorKind.Book) {
+    identification: new(AutoIdentifySelectorKind.Book, enumeratesChildren: true),
+    supportsFileDeletion: true) {
     /// <inheritdoc />
     public override bool OwnsMetadataRelationships => true;
 

@@ -68,7 +68,7 @@ public sealed class EntityKindMetadataTests {
     [Fact]
     public void AutoIdentifySelectorsAreOwnedByTheirEntityKindDefinitions() {
         var selectorsInUse = EntityKindRegistry.All
-            .Select(definition => definition.AutoIdentifySelector)
+            .Select(definition => definition.Identification.AutoIdentifySelector)
             .OfType<AutoIdentifySelectorKind>()
             .Distinct()
             .Order()
@@ -77,8 +77,20 @@ public sealed class EntityKindMetadataTests {
         Assert.Equal(Enum.GetValues<AutoIdentifySelectorKind>(), selectorsInUse);
         Assert.Equal(
             AutoIdentifySelectorKind.Video,
-            EntityKindRegistry.Describe(EntityKind.Movie).AutoIdentifySelector);
-        Assert.Null(EntityKindRegistry.Describe(EntityKind.VideoSeason).AutoIdentifySelector);
+            EntityKindRegistry.Describe(EntityKind.Movie).Identification.AutoIdentifySelector);
+        Assert.Null(EntityKindRegistry.Describe(EntityKind.VideoSeason).Identification.AutoIdentifySelector);
+
+        var album = EntityKindRegistry.Describe(EntityKind.AudioLibrary).Identification;
+        Assert.True(album.AllowsParentedAutoIdentifyRoot);
+        Assert.True(album.UsesParentExternalIdentityContext);
+        Assert.True(album.CascadesChildrenAutomatically);
+
+        var artist = EntityKindRegistry.Describe(EntityKind.MusicArtist).Identification;
+        Assert.True(artist.EnumeratesChildren);
+        Assert.False(artist.CascadesChildrenAutomatically);
+
+        Assert.True(EntityKindRegistry.Describe(EntityKind.Video)
+            .Identification.AllowsDirectReconcileChildTarget);
     }
 
     [Fact]
@@ -140,8 +152,8 @@ public sealed class EntityKindMetadataTests {
         var season = EntityKindRegistry.Describe(EntityKind.VideoSeason);
         var track = EntityKindRegistry.Describe(EntityKind.AudioTrack);
 
-        Assert.Equal(EntityKind.Video, movie.IdentifyPluginFallbackKind);
-        Assert.Null(video.IdentifyPluginFallbackKind);
+        Assert.Equal(EntityKind.Video, movie.Identification.PluginFallbackKind);
+        Assert.Null(video.Identification.PluginFallbackKind);
 
         Assert.Equal([EntityPositionCodes.Episode, EntityPositionCodes.AbsoluteEpisode, EntityPositionCodes.Sort],
             video.PositionSortOrderPrecedence);

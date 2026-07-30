@@ -58,18 +58,18 @@ public sealed class AutoIdentifyRunner(
             });
         }
 
-        // Ordinary scans identify roots so provider cascades cannot race each other. An acquisition can
-        // explicitly opt one newly imported episode into direct identification; that path is deliberately
-        // exact and never emitted by broad scan planning. Audio albums remain independent identify roots.
+        if (!EntityKindRegistry.TryDescribe(entity.KindCode, out var definition) ||
+            definition.Identification.AutoIdentifySelector is not { } selector) {
+            return new AutoIdentifyResult(false, SkipReason: $"kind '{entity.KindCode}' is not auto-identifiable");
+        }
+        var identification = definition.Identification;
+
+        // Ordinary scans identify roots so provider cascades cannot race each other. Definitions
+        // explicitly opt parented independent roots or direct-reconcile targets into that work.
         if (!options.AllowChildTarget &&
             entity.ParentEntityId is not null &&
-            entity.KindCode != EntityKind.AudioLibrary.ToCode()) {
+            !identification.AllowsParentedAutoIdentifyRoot) {
             return new AutoIdentifyResult(false, SkipReason: "child entity; its parent is identified instead");
-        }
-
-        if (!EntityKindRegistry.TryDescribe(entity.KindCode, out var definition) ||
-            definition.AutoIdentifySelector is not { } selector) {
-            return new AutoIdentifyResult(false, SkipReason: $"kind '{entity.KindCode}' is not auto-identifiable");
         }
 
         var selectorKind = selector.ToCode();
@@ -101,10 +101,9 @@ public sealed class AutoIdentifyRunner(
             return new AutoIdentifyResult(false, SkipReason: "no capable provider");
         }
 
-        var parentExternalIds = await LoadParentExternalIdsForContextAsync(
-            entity.KindCode,
-            entity.ParentEntityId,
-            cancellationToken);
+        var parentExternalIds = identification.UsesParentExternalIdentityContext
+            ? await LoadParentExternalIdsForContextAsync(entity.ParentEntityId, cancellationToken)
+            : null;
 
         using var lease = gate?.TryEnterBackground()
             ?? (gate is null ? null : throw new JobRetryLaterException("Auto identify provider slot busy.", TimeSpan.FromSeconds(5)));
@@ -112,10 +111,7 @@ public sealed class AutoIdentifyRunner(
         var runToken = inactivity?.Token ?? cancellationToken;
         var progressSink = AutoIdentifyProgressSink.Create(options, inactivity);
 
-        // An artist grouping identifies for its own metadata and artwork only. Its albums are
-        // independent auto-identify roots, so cascading the artist into them would duplicate and
-        // race that per-album work.
-        var cascadeChildren = entity.KindCode != EntityKind.MusicArtist.ToCode();
+        var cascadeChildren = identification.CascadesChildrenAutomatically;
 
         foreach (var providerId in providerIds) {
             runToken.ThrowIfCancellationRequested();
@@ -221,12 +217,9 @@ public sealed class AutoIdentifyRunner(
     /// inside the artist context instead of searching every matching album title globally.
     /// </summary>
     private async Task<IReadOnlyDictionary<string, string>?> LoadParentExternalIdsForContextAsync(
-        string kindCode,
         Guid? parentEntityId,
         CancellationToken cancellationToken) {
-        // Artist-parented albums are auto-identify roots, but the provider should still be able to
-        // constrain album lookup by the already-identified artist MBID/IDs when available.
-        if (parentEntityId is not { } parentId || kindCode != EntityKind.AudioLibrary.ToCode()) {
+        if (parentEntityId is not { } parentId) {
             return null;
         }
 

@@ -131,6 +131,10 @@ public sealed class CodesManifestContractTests {
                 .Select(selector => selector.ToCode())
                 .Order(StringComparer.Ordinal),
             selectors);
+        Assert.Equal(
+            EntityKind.Video.ToCode(),
+            kinds[EntityKind.Movie.ToCode()].IdentifyPluginFallbackKind);
+        Assert.Null(kinds[EntityKind.Video.ToCode()].IdentifyPluginFallbackKind);
     }
 
     [Fact]

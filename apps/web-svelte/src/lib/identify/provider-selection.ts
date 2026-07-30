@@ -1,5 +1,6 @@
-import { ENTITY_KIND } from "$lib/api/generated/codes";
+import { ENTITY_KIND_DEFINITIONS } from "$lib/api/generated/codes";
 import type { PluginProvider } from "$lib/api/identify-types";
+import { isEntityKindCode } from "$lib/entities/entity-codes";
 
 /** Compares plugin IDs using the same case-insensitive policy as the backend catalog lookup. */
 export function providerIdsEqual(
@@ -13,13 +14,16 @@ export function providerIdsEqual(
 /** Whether an installed provider is currently usable for an entity kind. */
 export function providerCanIdentifyKind(provider: PluginProvider, kind: string): boolean {
   const normalizedKind = kind.toLowerCase();
+  const fallbackKind = isEntityKindCode(normalizedKind)
+    ? ENTITY_KIND_DEFINITIONS[normalizedKind].identifyPluginFallbackKind
+    : null;
   return provider.installed &&
     provider.enabled &&
     provider.missingAuthKeys.length === 0 &&
     provider.supports.some((support) => {
       const supportedKind = support.entityKind.toLowerCase();
       return supportedKind === normalizedKind ||
-        normalizedKind === ENTITY_KIND.movie && supportedKind === ENTITY_KIND.video;
+        fallbackKind !== null && supportedKind === fallbackKind;
     });
 }
 

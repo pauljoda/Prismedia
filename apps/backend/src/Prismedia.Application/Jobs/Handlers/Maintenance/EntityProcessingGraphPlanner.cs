@@ -122,15 +122,15 @@ public sealed class EntityProcessingGraphPlanner(
 
         if (context.Job.Type == JobType.ReconcileEntity
             && settings.AutoIdentifyEnabled
-            && EntityKindRegistry.TryGet(tree[0].KindCode, out var rootKind)) {
-            var payload = rootKind == EntityKind.Video
+            && EntityKindRegistry.TryDescribe(tree[0].KindCode, out var rootDefinition)) {
+            var payload = rootDefinition.Identification.AllowsDirectReconcileChildTarget
                 ? new AutoIdentifyJobPayload(AllowChildTarget: true, IgnoreOrganizedGate: true).ToJson()
                 : null;
             await context.AppendNodeAsync(
                 Node(
                     EnqueueJobRequest.ForEntity(
                         JobType.AutoIdentify,
-                        rootKind,
+                        rootDefinition.Kind,
                         tree[0].Id.ToString(),
                         tree[0].Title,
                         payloadJson: payload),

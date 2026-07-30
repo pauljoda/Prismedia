@@ -25,8 +25,8 @@ public sealed class AudioTrackEntityKindDefinition() : EntityKindDefinition<Audi
     new EntityKindNavigation(EntityKind.AudioTrack, "tracks", "/tracks", "/audio/tracks/{id}"),
     new EntityKindSearch(11),
     defaultCapabilities: static () => [new CapabilityPlayback()],
+    identification: new(AutoIdentifySelectorKind.Audio),
     supportsFileDeletion: true,
-    autoIdentifySelector: AutoIdentifySelectorKind.Audio,
     mediaQualityFamily: EntityMediaQualityFamily.Audio) {
     /// <inheritdoc />
     public override bool OwnsMetadataRelationships => true;

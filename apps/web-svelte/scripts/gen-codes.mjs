@@ -189,7 +189,7 @@ async function main() {
   const entityKindFields = [
     "code", "displayName", "groupLabel", "category", "storageShape", "icon", "referenceIcon",
     "thumbnailWidth", "thumbnailHeight", "primaryAccent", "secondaryAccent", "artworkFit",
-    "navigation", "search", "autoIdentifySelector", "containableKinds", "mediaQualityFamily",
+    "navigation", "search", "autoIdentifySelector", "identifyPluginFallbackKind", "containableKinds", "mediaQualityFamily",
     "supportsFileDeletion", "supportsAtomicMediaUpgrade", "supportsManualManagement",
     "supportsRequests", "enumeratesIdentifyChildren", "acquisitionProfile",
   ];
@@ -232,7 +232,9 @@ async function main() {
     `thumbnailHeight: ${lit(kind.thumbnailHeight)}, primaryAccent: ${lit(kind.primaryAccent)}, ` +
     `secondaryAccent: ${lit(kind.secondaryAccent)}, artworkFit: ${lit(kind.artworkFit)} }, ` +
     `navigation: ${lit(kind.navigation)}, search: ${lit(kind.search)}, ` +
-    `autoIdentifySelector: ${lit(kind.autoIdentifySelector)}, containableKinds: ${lit(kind.containableKinds)}, ` +
+    `autoIdentifySelector: ${lit(kind.autoIdentifySelector)}, ` +
+    `identifyPluginFallbackKind: ${lit(kind.identifyPluginFallbackKind)}, ` +
+    `containableKinds: ${lit(kind.containableKinds)}, ` +
     `mediaQualityFamily: ${lit(kind.mediaQualityFamily)}, supportsFileDeletion: ${lit(kind.supportsFileDeletion)}, ` +
     `supportsAtomicMediaUpgrade: ${lit(kind.supportsAtomicMediaUpgrade)}, ` +
     `supportsManualManagement: ${lit(kind.supportsManualManagement)}, ` +
@@ -290,6 +292,7 @@ async function main() {
       `  navigation: EntityKindNavigationManifestEntry | null;\n` +
       `  search: EntityKindSearchManifestEntry | null;\n` +
       `  autoIdentifySelector: AutoIdentifySelectorKindCode | null;\n` +
+      `  identifyPluginFallbackKind: EntityKindCode | null;\n` +
       `  containableKinds: readonly EntityKindCode[] | null;\n` +
       `  mediaQualityFamily: EntityMediaQualityFamilyCode;\n` +
       `  supportsFileDeletion: boolean;\n` +

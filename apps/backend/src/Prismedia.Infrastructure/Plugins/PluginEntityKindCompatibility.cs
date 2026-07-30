@@ -28,7 +28,7 @@ internal static class PluginEntityKindCompatibility {
     private static bool TryGetFallbackKind(string requestedKind, out EntityKind fallbackKind) {
         if (requestedKind.Equals(requestedKind.Trim(), StringComparison.Ordinal) &&
             EntityKindRegistry.TryDescribe(requestedKind, out var definition) &&
-            definition.IdentifyPluginFallbackKind is { } fallback) {
+            definition.Identification.PluginFallbackKind is { } fallback) {
             fallbackKind = fallback;
             return true;
         }

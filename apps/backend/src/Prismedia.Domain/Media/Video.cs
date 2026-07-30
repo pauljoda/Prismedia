@@ -30,8 +30,10 @@ public sealed class VideoEntityKindDefinition() : EntityKindDefinition<Video>(
         new CapabilitySubtitles(),
         new CapabilityCredits()
     ],
+    identification: new(
+        AutoIdentifySelectorKind.Video,
+        allowsDirectReconcileChildTarget: true),
     supportsFileDeletion: true,
-    autoIdentifySelector: AutoIdentifySelectorKind.Video,
     mediaQualityFamily: EntityMediaQualityFamily.Video,
     supportsAtomicMediaUpgrade: true) {
     private static readonly IReadOnlyList<string> SortOrderPrecedence = Array.AsReadOnly([

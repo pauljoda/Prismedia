@@ -1,10 +1,10 @@
 import {
-  ENTITY_KIND,
   IDENTIFY_APPLY_STATE,
   METADATA_PATCH_FIELD,
 } from "$lib/api/generated/codes";
 import type { EntityMetadataProposal, IdentifyApplyProgress } from "$lib/api/identify-types";
 import type { EntityCard } from "$lib/api/entities";
+import { isTaxonomyEntityKind } from "$lib/entities/entity-codes";
 
 const MIN_APPLY_PROGRESS_VISIBLE_MS = 650;
 
@@ -98,7 +98,7 @@ function structuralProgressChildren(proposal: EntityMetadataProposal): EntityMet
 }
 
 function isRelationshipProgressKind(kind: string): boolean {
-  return kind === ENTITY_KIND.person || kind === ENTITY_KIND.studio || kind === ENTITY_KIND.tag;
+  return isTaxonomyEntityKind(kind);
 }
 
 function proposalTitleForProgress(proposal: EntityMetadataProposal): string {

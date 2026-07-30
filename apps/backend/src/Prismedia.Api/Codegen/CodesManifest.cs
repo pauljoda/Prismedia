@@ -69,6 +69,7 @@ public sealed record AcquisitionProfileManifestEntry(
 /// <param name="Navigation">Cross-client navigation contract, when reachable.</param>
 /// <param name="Search">Global-search behavior, when included.</param>
 /// <param name="AutoIdentifySelector">Automatic-identification selector family, when directly selectable.</param>
+/// <param name="IdentifyPluginFallbackKind">Compatible kind offered to plugins that omit this concrete kind.</param>
 /// <param name="ContainableKinds">Entity kinds accepted as direct members, when the kind is a container.</param>
 /// <param name="MediaQualityFamily">Acquisition-quality ladder used by the kind.</param>
 /// <param name="SupportsFileDeletion">Whether this kind may root the managed delete-files workflow.</param>
@@ -93,6 +94,7 @@ public sealed record EntityKindManifestEntry(
     EntityKindNavigationManifestEntry? Navigation,
     EntityKindSearchManifestEntry? Search,
     string? AutoIdentifySelector,
+    string? IdentifyPluginFallbackKind,
     IReadOnlyList<string>? ContainableKinds,
     string MediaQualityFamily,
     bool SupportsFileDeletion,
@@ -223,7 +225,8 @@ public sealed record CodesManifest(
                 descriptor.Search is { } search
                     ? new EntityKindSearchManifestEntry(search.Order, search.ExpandsRelationshipResults)
                     : null,
-                descriptor.AutoIdentifySelector?.ToCode(),
+                descriptor.Identification.AutoIdentifySelector?.ToCode(),
+                descriptor.Identification.PluginFallbackKind?.ToCode(),
                 descriptor is IEntityContainmentPolicy containment
                     ? containment.ContainableKinds.Select(kind => kind.ToCode()).ToArray()
                     : null,
@@ -232,7 +235,7 @@ public sealed record CodesManifest(
                 descriptor.SupportsAtomicMediaUpgrade,
                 descriptor.SupportsManualManagement,
                 requestableKinds.Contains(descriptor.Kind),
-                descriptor.EnumeratesIdentifyChildren,
+                descriptor.Identification.EnumeratesChildren,
                 descriptor.AcquisitionProfile is { } acquisitionProfile
                     ? new AcquisitionProfileManifestEntry(
                         acquisitionProfile.Label,
