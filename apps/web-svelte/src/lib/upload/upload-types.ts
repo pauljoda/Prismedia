@@ -3,14 +3,20 @@ import type {
   GalleryListItemDto,
   LibraryRootSummaryDto,
 } from "$lib/entities/media-view-models";
+import { ENTITY_KIND } from "$lib/entities/entity-codes";
 
 export type UploadTarget =
-  | { kind: "video"; libraryRootId?: string; videoSeriesId?: string; seasonNumber?: number | null }
-  | { kind: "image"; libraryRootId?: string; galleryId?: string }
-  | { kind: "audio"; audioLibraryId?: string }
-  | { kind: "book"; libraryRootId?: string; bookId?: string };
+  | {
+      kind: typeof ENTITY_KIND.video;
+      libraryRootId?: string;
+      videoSeriesId?: string;
+      seasonNumber?: number | null;
+    }
+  | { kind: typeof ENTITY_KIND.image; libraryRootId?: string; galleryId?: string }
+  | { kind: typeof ENTITY_KIND.audio; audioLibraryId?: string }
+  | { kind: typeof ENTITY_KIND.book; libraryRootId?: string; bookId?: string };
 
-export type UploadCategory = "video" | "image" | "audio" | "book";
+export type UploadCategory = UploadTarget["kind"];
 
 export interface UploadFileProgress {
   file: File;
@@ -25,27 +31,18 @@ export interface UploadPickerState {
 }
 
 export function categoryForTarget(target: UploadTarget): UploadCategory {
-  switch (target.kind) {
-    case "video":
-      return "video";
-    case "image":
-      return "image";
-    case "audio":
-      return "audio";
-    case "book":
-      return "book";
-  }
+  return target.kind;
 }
 
 export function acceptForCategory(category: UploadCategory): string {
   switch (category) {
-    case "video":
+    case ENTITY_KIND.video:
       return "video/*,.mkv,.mp4,.mov,.webm,.avi,.m4v,.wmv,.flv,.ts,.mpg,.mpeg";
-    case "image":
+    case ENTITY_KIND.image:
       return "image/*,.jpg,.jpeg,.png,.webp,.gif,.avif,.bmp,.tif,.tiff";
-    case "audio":
+    case ENTITY_KIND.audio:
       return "audio/*,.mp3,.flac,.m4a,.aac,.ogg,.opus,.wav,.wma";
-    case "book":
+    case ENTITY_KIND.book:
       return ".zip,.cbz,application/zip,application/octet-stream";
   }
 }

@@ -4,6 +4,7 @@ import type {
   LibraryRootSummaryDto,
 } from "$lib/entities/media-view-models";
 import { fetchApi as fetchApi, uploadFile as uploadFile } from "$lib/api/orval-fetch";
+import { ENTITY_KIND } from "$lib/entities/entity-codes";
 import type { UploadFileProgress, UploadTarget } from "./upload-types";
 
 interface CreateUploaderOptions {
@@ -44,7 +45,11 @@ export class Uploader {
     if (files.length === 0) return;
     const { target } = this.options;
 
-    if (target.kind === "video" && !target.videoSeriesId && !target.libraryRootId) {
+    if (
+      target.kind === ENTITY_KIND.video &&
+      !target.videoSeriesId &&
+      !target.libraryRootId
+    ) {
       const roots = await this.loadVideoRoots(files);
       if (!roots) return;
       if (roots.length === 1) {
@@ -57,7 +62,7 @@ export class Uploader {
       return;
     }
 
-    if (target.kind === "image" && !target.galleryId && !target.libraryRootId) {
+    if (target.kind === ENTITY_KIND.image && !target.galleryId && !target.libraryRootId) {
       const roots = await this.loadImageRoots(files);
       if (!roots) return;
       if (roots.length === 1) {
@@ -70,7 +75,7 @@ export class Uploader {
       return;
     }
 
-    if (target.kind === "audio" && !target.audioLibraryId) {
+    if (target.kind === ENTITY_KIND.audio && !target.audioLibraryId) {
       const libraries = await this.loadAudioLibraries(files);
       if (!libraries) return;
       if (libraries.length === 1) {
@@ -83,7 +88,7 @@ export class Uploader {
       return;
     }
 
-    if (target.kind === "book" && !target.bookId && !target.libraryRootId) {
+    if (target.kind === ENTITY_KIND.book && !target.bookId && !target.libraryRootId) {
       const roots = await this.loadBookRoots(files);
       if (!roots) return;
       if (roots.length === 1) {
@@ -238,7 +243,7 @@ export class Uploader {
 
   private async uploadOne(file: File, explicit: ExplicitDestination) {
     const { target } = this.options;
-    if (target.kind === "video") {
+    if (target.kind === ENTITY_KIND.video) {
       if (target.videoSeriesId) {
         await uploadFile("/videos/upload", file, {
           seriesId: target.videoSeriesId,
@@ -254,7 +259,7 @@ export class Uploader {
       return;
     }
 
-    if (target.kind === "image") {
+    if (target.kind === ENTITY_KIND.image) {
       if (target.galleryId) {
         await uploadFile(`/galleries/${target.galleryId}/images/upload`, file);
         return;
@@ -265,7 +270,7 @@ export class Uploader {
       return;
     }
 
-    if (target.kind === "book") {
+    if (target.kind === ENTITY_KIND.book) {
       if (target.bookId) {
         await uploadFile(`/books/${target.bookId}/chapters/upload`, file);
         return;

@@ -1,7 +1,7 @@
 <script lang="ts">
   import { CalendarRange } from "@lucide/svelte";
   import { cn } from "@prismedia/ui-svelte";
-  import { CAPABILITY_KIND, isTaxonomyEntityKind } from "$lib/entities/entity-codes";
+  import { CAPABILITY_KIND, ENTITY_KIND, isTaxonomyEntityKind } from "$lib/entities/entity-codes";
   import {
     AVAILABILITY_FILTER_DEFS,
     BOOK_FORMAT_FILTER_DEFS,
@@ -28,7 +28,11 @@
 
   // Adaptive engagement-status labels. Reading kinds phrase the status as
   // Read/Unread/Reading; everything else uses Watched/Unwatched/In progress.
-  const READING_KINDS = new Set(["book", "book-volume", "book-chapter"]);
+  const READING_KINDS = new Set<string>([
+    ENTITY_KIND.book,
+    ENTITY_KIND.bookVolume,
+    ENTITY_KIND.bookChapter,
+  ]);
   const statusChoices = $derived(
     READING_KINDS.has(entityKind ?? "")
       ? [
@@ -65,21 +69,21 @@
   // Only kinds that record playback or reading progress get the status filter;
   // for taxonomy and standalone media it would never match. When the kind is
   // unknown (mixed surfaces) the control is shown so it stays discoverable.
-  const ENGAGEMENT_KINDS = new Set([
-    "video",
-    "video-series",
-    "video-season",
-    "audio-library",
-    "audio-track",
-    "book",
-    "book-volume",
-    "book-chapter",
+  const ENGAGEMENT_KINDS = new Set<string>([
+    ENTITY_KIND.video,
+    ENTITY_KIND.videoSeries,
+    ENTITY_KIND.videoSeason,
+    ENTITY_KIND.audioLibrary,
+    ENTITY_KIND.audioTrack,
+    ENTITY_KIND.book,
+    ENTITY_KIND.bookVolume,
+    ENTITY_KIND.bookChapter,
   ]);
   const showStatus = $derived(entityKind == null || ENGAGEMENT_KINDS.has(entityKind));
 
   // Book type/format are properties of the book detail row, so they only make sense on the
   // Books grid; the server resolves them across the whole library.
-  const showBookFilters = $derived(entityKind === "book" && !lockBookFilters);
+  const showBookFilters = $derived(entityKind === ENTITY_KIND.book && !lockBookFilters);
 
   // Taxonomy kinds (tags/people/studios) can be filtered by whether anything references them,
   // resolved server-side across the whole library. The two chips are mutually exclusive — neither

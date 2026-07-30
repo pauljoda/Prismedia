@@ -13,7 +13,7 @@
     Undo2,
   } from "@lucide/svelte";
   import { Info } from "@lucide/svelte";
-  import { FILE_ENTRY_KIND } from "$lib/api/generated/codes";
+  import { ENTITY_KIND, FILE_ENTRY_KIND } from "$lib/api/generated/codes";
   import type { FileDetail } from "$lib/api/files";
   import { fileContentUrl } from "$lib/api/files";
   import type { FileActionId } from "$lib/files/file-actions";
@@ -63,8 +63,22 @@
   const mime = $derived(entry?.mimeType ?? "");
   const previewKind = $derived(resolvePreviewKind(entry?.name ?? "", mime, isDirectory));
 
-  const containerKinds = new Set(["gallery", "audio-library", "book", "movie", "video-series", "video-season", "collection"]);
-  const leafKinds = new Set(["video", "image", "audio-track", "book-page", "book-chapter"]);
+  const containerKinds = new Set<string>([
+    ENTITY_KIND.gallery,
+    ENTITY_KIND.audioLibrary,
+    ENTITY_KIND.book,
+    ENTITY_KIND.movie,
+    ENTITY_KIND.videoSeries,
+    ENTITY_KIND.videoSeason,
+    ENTITY_KIND.collection,
+  ]);
+  const leafKinds = new Set<string>([
+    ENTITY_KIND.video,
+    ENTITY_KIND.image,
+    ENTITY_KIND.audioTrack,
+    ENTITY_KIND.bookPage,
+    ENTITY_KIND.bookChapter,
+  ]);
 
   const primaryLinked = $derived.by(() => {
     const linked = detail?.linkedEntities;

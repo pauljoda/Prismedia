@@ -49,6 +49,7 @@
   } from "./identify-review-helpers";
   import type { EntityMetadataProposal } from "$lib/api/identify-types";
   import type { EntityCard, EntityDetailCard } from "$lib/api/entities";
+  import { PROPOSAL_KIND } from "$lib/entities/entity-codes";
   import { aspectRatioForKind } from "$lib/entities/entity-thumbnail";
   import { useIdentifyStore } from "./identify-store.svelte";
 
@@ -71,12 +72,16 @@
 
   const children = $derived(structuralChildProposals(proposal));
   const relationships = $derived(relationshipProposals(proposal));
-  const credits = $derived(relationships.filter((r) => r.targetKind === "person"));
-  const nonCreditRelationships = $derived(relationships.filter((r) => r.targetKind !== "person"));
+  const credits = $derived(relationships.filter((r) => r.targetKind === PROPOSAL_KIND.person));
+  const nonCreditRelationships = $derived(
+    relationships.filter((r) => r.targetKind !== PROPOSAL_KIND.person),
+  );
   // De-duplicate tags: the tag chips key their `{#each}` on the tag string, so a
   // provider repeating a tag would crash rendering with `each_key_duplicate`.
   const tags = $derived([...new Set(proposal.patch?.tags ?? [])]);
-  const existingTagTitles = $derived(relationshipTitlesForDetail(detail, "tag"));
+  const existingTagTitles = $derived(
+    relationshipTitlesForDetail(detail, PROPOSAL_KIND.tag),
+  );
   const looseTags = $derived(tags.filter((tag) => !tagRelationshipForTitle(tag, relationships)));
   const imageGroups = $derived(groupReviewImages(proposal));
   const selectedTagCount = $derived(Object.values(selectedTags).filter(Boolean).length);
@@ -168,7 +173,7 @@
 
   function setRelationshipSelected(result: EntityMetadataProposal, selected: boolean) {
     store.setReviewProposalSelected(result.proposalId, selected);
-    if (result.targetKind === "tag") {
+    if (result.targetKind === PROPOSAL_KIND.tag) {
       setTagSelected(proposalTitle(result), selected);
     }
   }

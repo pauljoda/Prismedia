@@ -1,6 +1,6 @@
 <script lang="ts">
   import { THUMBNAIL_HOVER_KIND } from "$lib/api/generated/codes";
-  import { proposalKindToEntityKind } from "$lib/entities/entity-codes";
+  import { PROPOSAL_KIND, proposalKindToEntityKind } from "$lib/entities/entity-codes";
   import {
     Check,
     ChevronLeft,
@@ -66,14 +66,18 @@
 
   const children = $derived(structuralChildProposals(proposal));
   const relationships = $derived(relationshipProposals(proposal));
-  const credits = $derived(relationships.filter((r) => r.targetKind === "person"));
-  const nonCreditRelationships = $derived(relationships.filter((r) => r.targetKind !== "person"));
+  const credits = $derived(relationships.filter((r) => r.targetKind === PROPOSAL_KIND.person));
+  const nonCreditRelationships = $derived(
+    relationships.filter((r) => r.targetKind !== PROPOSAL_KIND.person),
+  );
   // De-duplicate tags so repeated provider tags can't crash the keyed `{#each}`.
   const tags = $derived([...new Set(proposal.patch?.tags ?? [])]);
   const currentScopeEntityId = $derived(parentProposal.targetEntityId ?? entity.id);
   const currentDetail = $derived(store.getReviewDetailForProposal(currentScopeEntityId, proposal));
   const currentDetailEntityId = $derived(store.reviewDetailEntityIdForProposal(currentScopeEntityId, proposal));
-  const existingTagTitles = $derived(relationshipTitlesForDetail(currentDetail, "tag"));
+  const existingTagTitles = $derived(
+    relationshipTitlesForDetail(currentDetail, PROPOSAL_KIND.tag),
+  );
   const looseTags = $derived(tags.filter((tag) => !tagRelationshipForTitle(tag, relationships)));
   const imageGroups = $derived(groupReviewImages(proposal));
   const localChildrenById = $derived.by(() => {
@@ -145,7 +149,7 @@
 
   function setRelationshipSelected(result: EntityMetadataProposal, selected: boolean) {
     store.setReviewProposalSelected(result.proposalId, selected);
-    if (result.targetKind === "tag") {
+    if (result.targetKind === PROPOSAL_KIND.tag) {
       setTagSelected(proposalTitle(result), selected);
     }
   }
