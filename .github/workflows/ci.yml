@@ -61,6 +61,18 @@ jobs:
         with:
           dotnet-version: 10.0.x
 
+      - name: Restore local .NET tools
+        run: dotnet tool restore
+        working-directory: apps/backend
+
+      - name: Verify EF model matches the migration snapshot
+        run: >
+          dotnet tool run dotnet-ef migrations has-pending-model-changes
+          --project src/Prismedia.Infrastructure/Prismedia.Infrastructure.csproj
+          --startup-project src/Prismedia.Api/Prismedia.Api.csproj
+          --context PrismediaDbContext
+        working-directory: apps/backend
+
       - name: Run architecture and identifier-discipline guards
         run: >
           dotnet test apps/backend/Prismedia.slnx

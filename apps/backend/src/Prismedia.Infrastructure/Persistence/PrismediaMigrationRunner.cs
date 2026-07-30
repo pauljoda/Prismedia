@@ -3,6 +3,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using Npgsql;
 
 namespace Prismedia.Infrastructure.Persistence;
 
@@ -40,6 +41,7 @@ public static class PrismediaMigrationRunner {
             async () => {
                 await using var scope = services.CreateAsyncScope();
                 var db = scope.ServiceProvider.GetRequiredService<PrismediaDbContext>();
+                await RejectUnknownMigrationsAsync(db, cancellationToken);
                 await db.Database.MigrateAsync(cancellationToken);
             },
             cancellationToken);
@@ -72,12 +74,13 @@ public static class PrismediaMigrationRunner {
                 await using var scope = services.CreateAsyncScope();
                 var db = scope.ServiceProvider.GetRequiredService<PrismediaDbContext>();
                 if (!await db.Database.CanConnectAsync(cancellationToken)) {
-                    throw new InvalidOperationException("Database is not accepting connections yet.");
+                    throw new DatabaseNotReadyException("Database is not accepting connections yet.");
                 }
 
+                await RejectUnknownMigrationsAsync(db, cancellationToken);
                 var pending = await db.Database.GetPendingMigrationsAsync(cancellationToken);
                 if (pending.Any()) {
-                    throw new InvalidOperationException(
+                    throw new DatabaseNotReadyException(
                         "Database schema has not been migrated by the API yet.");
                 }
             },
@@ -85,9 +88,9 @@ public static class PrismediaMigrationRunner {
     }
 
     /// <summary>
-    /// Runs <paramref name="action"/>, retrying on any failure with exponential backoff until it
-    /// succeeds, the cancellation token fires, or <see cref="MaxWait"/> elapses (after which the
-    /// failure propagates so a supervisor can restart the process).
+    /// Runs <paramref name="action"/>, retrying transient connection/readiness failures with
+    /// exponential backoff until it succeeds, the cancellation token fires, or
+    /// <see cref="MaxWait"/> elapses. Model, history, and schema incompatibilities fail immediately.
     /// </summary>
     private static async Task RunWithRetryAsync(
         string operation,
@@ -108,7 +111,9 @@ public static class PrismediaMigrationRunner {
                 }
                 return;
             } catch (Exception ex) when (
-                DateTimeOffset.UtcNow < deadline && !cancellationToken.IsCancellationRequested) {
+                IsTransientStartupFailure(ex) &&
+                DateTimeOffset.UtcNow < deadline &&
+                !cancellationToken.IsCancellationRequested) {
                 logger.LogWarning(
                     "Could not {Operation} (attempt {Attempt}): {Message}. Retrying in {Delay:n0}s.",
                     operation, attempt, ex.Message, delay.TotalSeconds);
@@ -117,6 +122,26 @@ public static class PrismediaMigrationRunner {
             }
         }
     }
+
+    private static async Task RejectUnknownMigrationsAsync(
+        PrismediaDbContext db,
+        CancellationToken cancellationToken) {
+        var known = db.Database.GetMigrations()
+            .ToHashSet(StringComparer.Ordinal);
+        var unknown = (await db.Database.GetAppliedMigrationsAsync(cancellationToken))
+            .Where(migration => !known.Contains(migration))
+            .Order(StringComparer.Ordinal)
+            .ToArray();
+        if (unknown.Length > 0) {
+            throw new InvalidOperationException(
+                $"Database contains migrations unknown to this Prismedia build: {string.Join(", ", unknown)}.");
+        }
+    }
+
+    private static bool IsTransientStartupFailure(Exception exception) =>
+        exception is DatabaseNotReadyException or TimeoutException ||
+        exception is NpgsqlException { IsTransient: true } ||
+        exception.InnerException is { } inner && IsTransientStartupFailure(inner);
 
     private static ILogger CreateLogger(IServiceProvider services) =>
         services.GetService<ILoggerFactory>()?.CreateLogger("Prismedia.Migrations")
@@ -132,4 +157,6 @@ public static class PrismediaMigrationRunner {
         var configured = configuration["Prismedia:ApplyMigrations"];
         return configured is null || bool.TryParse(configured, out var enabled) && enabled;
     }
+
+    private sealed class DatabaseNotReadyException(string message) : Exception(message);
 }
