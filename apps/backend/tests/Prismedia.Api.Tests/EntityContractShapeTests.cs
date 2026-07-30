@@ -161,8 +161,26 @@ public sealed class EntityContractShapeTests {
         using var document = JsonDocument.Parse(await client.GetStringAsync("/openapi/v1.json"));
         var paths = document.RootElement.GetProperty("paths");
 
-        foreach (var path in new[] { "/api/movies/{id}", "/api/books/{id}", "/api/videos/{id}" }) {
-            Assert.True(paths.GetProperty(path).GetProperty("get").GetProperty("deprecated").GetBoolean());
+        string[] aliases = [
+            "/api/audio-libraries/{id}",
+            "/api/audio-tracks/{id}",
+            "/api/book-authors/{id}",
+            "/api/books/{id}",
+            "/api/collections/{id}",
+            "/api/galleries/{id}",
+            "/api/images/{id}",
+            "/api/movies/{id}",
+            "/api/music-artists/{id}",
+            "/api/people/{id}",
+            "/api/series/{id}",
+            "/api/studios/{id}",
+            "/api/tags/{id}",
+            "/api/videos/{id}"
+        ];
+        foreach (var path in aliases) {
+            var operation = paths.GetProperty(path).GetProperty("get");
+            Assert.True(operation.GetProperty("deprecated").GetBoolean(), path);
+            Assert.Contains("/api/entities/{id}", operation.GetProperty("description").GetString());
         }
 
         Assert.False(paths.GetProperty("/api/entities/{id}").GetProperty("get").TryGetProperty("deprecated", out var canonical) && canonical.GetBoolean());

@@ -73,10 +73,10 @@ internal static class EntityKindRouteEndpoints {
             await GetKindDetailAsync(id, kind, NsfwVisibility.ShouldHide(hideNsfw, httpContext), entities, cancellationToken))
             .WithName(detailName)
             .WithSummary($"Get {tag} detail (deprecated; use GET /api/entities/{{id}}).")
-            .WithOpenApi(operation => {
+            .AddOpenApiOperationTransformer((operation, _, _) => {
                 operation.Deprecated = true;
                 operation.Description = "Deprecated compatibility alias. Use GET /api/entities/{id}.";
-                return operation;
+                return Task.CompletedTask;
             })
             .Produces<EntityCard>()
             .Produces<ApiProblem>(StatusCodes.Status404NotFound);
