@@ -10,7 +10,7 @@ public static class AudioTrackEndpoints {
     public static RouteGroupBuilder MapAudioTrackEndpoints(this IEndpointRouteBuilder routes) {
         var group = routes.MapEntityKindRoutes(
             "/api/audio-tracks",
-            EntityKindRegistry.AudioTrack.Code,
+            EntityKind.AudioTrack.ToCode(),
             "Audio",
             "ListAudioTracks",
             "GetAudioTrack");

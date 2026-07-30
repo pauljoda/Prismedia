@@ -14,12 +14,12 @@ public sealed class PluginIdentityRouterTests {
             "cinema-metadata",
             enabled: true,
             new PluginEntitySupport(
-                EntityKindRegistry.Video.Code,
+                EntityKind.Video.ToCode(),
                 [IdentifyAction.LookupId.ToCode()],
                 ["tmdb"])));
 
         var routes = await router.ResolveAsync(
-            EntityKindRegistry.Video.Code,
+            EntityKind.Video.ToCode(),
             IdentifyAction.LookupId,
             [new ExternalIdentity("tmdb", "123")],
             CancellationToken.None);
@@ -35,12 +35,12 @@ public sealed class PluginIdentityRouterTests {
             "cinema-metadata",
             enabled: true,
             new PluginEntitySupport(
-                EntityKindRegistry.Video.Code,
+                EntityKind.Video.ToCode(),
                 [IdentifyAction.LookupId.ToCode()],
                 ["tmdb", "imdb"])));
 
         var routes = await router.ResolveAsync(
-            EntityKindRegistry.Video.Code,
+            EntityKind.Video.ToCode(),
             IdentifyAction.LookupId,
             [new ExternalIdentity("imdb", "tt123"), new ExternalIdentity("tmdb", "123")],
             CancellationToken.None);
@@ -56,13 +56,13 @@ public sealed class PluginIdentityRouterTests {
             "cinema-metadata",
             enabled: true,
             new PluginEntitySupport(
-                EntityKindRegistry.VideoSeries.Code,
+                EntityKind.VideoSeries.ToCode(),
                 [IdentifyAction.LookupId.ToCode()],
                 ["tmdb"])));
         var tracking = new PluginProviderTrackingCatalog(router);
 
         var providers = await tracking.TrackableProvidersAsync(
-            EntityKindRegistry.VideoSeries.Code,
+            EntityKind.VideoSeries.ToCode(),
             [new ExternalIdentity("tmdb", "123")],
             providerIdentity: null,
             CancellationToken.None);
@@ -78,19 +78,19 @@ public sealed class PluginIdentityRouterTests {
                 "alpha-provider",
                 enabled: true,
                 new PluginEntitySupport(
-                    EntityKindRegistry.VideoSeries.Code,
+                    EntityKind.VideoSeries.ToCode(),
                     [IdentifyAction.LookupId.ToCode()],
                     [identity.Namespace])),
             Provider(
                 "zeta-provider",
                 enabled: true,
                 new PluginEntitySupport(
-                    EntityKindRegistry.VideoSeries.Code,
+                    EntityKind.VideoSeries.ToCode(),
                     [IdentifyAction.LookupId.ToCode()],
                     [identity.Namespace]))));
 
         var providers = await tracking.TrackableProvidersAsync(
-            EntityKindRegistry.VideoSeries.Code,
+            EntityKind.VideoSeries.ToCode(),
             [identity],
             providerIdentity: null,
             CancellationToken.None);
@@ -106,20 +106,20 @@ public sealed class PluginIdentityRouterTests {
                 "alpha-provider",
                 enabled: true,
                 new PluginEntitySupport(
-                    EntityKindRegistry.VideoSeries.Code,
+                    EntityKind.VideoSeries.ToCode(),
                     [IdentifyAction.LookupId.ToCode()],
                     [identity.Namespace])),
             Provider(
                 "zeta-provider",
                 enabled: true,
                 new PluginEntitySupport(
-                    EntityKindRegistry.VideoSeries.Code,
+                    EntityKind.VideoSeries.ToCode(),
                     [IdentifyAction.LookupId.ToCode()],
                     [identity.Namespace])));
         var tracking = new PluginProviderTrackingCatalog(router);
 
         var providers = await tracking.TrackableProvidersAsync(
-            EntityKindRegistry.VideoSeries.Code,
+            EntityKind.VideoSeries.ToCode(),
             [identity],
             new PluginIdentityRoute("zeta-provider", identity),
             CancellationToken.None);
@@ -134,12 +134,12 @@ public sealed class PluginIdentityRouterTests {
             "available-provider",
             enabled: true,
             new PluginEntitySupport(
-                EntityKindRegistry.VideoSeries.Code,
+                EntityKind.VideoSeries.ToCode(),
                 [IdentifyAction.LookupId.ToCode()],
                 [identity.Namespace]))));
 
         var unavailableBinding = await tracking.TrackableProvidersAsync(
-            EntityKindRegistry.VideoSeries.Code,
+            EntityKind.VideoSeries.ToCode(),
             [identity],
             new PluginIdentityRoute("removed-provider", identity),
             CancellationToken.None);
@@ -155,7 +155,7 @@ public sealed class PluginIdentityRouterTests {
             "cinema-metadata",
             enabled: true,
             new PluginEntitySupport(
-                EntityKindRegistry.VideoSeries.Code,
+                EntityKind.VideoSeries.ToCode(),
                 [IdentifyAction.LookupId.ToCode()],
                 ["tmdb"]))));
         var tracking = new PluginProviderTrackingCatalog(counting);
@@ -166,12 +166,12 @@ public sealed class PluginIdentityRouterTests {
             [
                 new ProviderTrackingQuery(
                     firstId,
-                    EntityKindRegistry.VideoSeries.Code,
+                    EntityKind.VideoSeries.ToCode(),
                     [tmdbOne],
                     new PluginIdentityRoute("cinema-metadata", tmdbOne)),
                 new ProviderTrackingQuery(
                     secondId,
-                    EntityKindRegistry.VideoSeries.Code,
+                    EntityKind.VideoSeries.ToCode(),
                     [tmdbTwo],
                     ProviderIdentity: null)
             ],
@@ -189,21 +189,21 @@ public sealed class PluginIdentityRouterTests {
                 "disabled",
                 enabled: false,
                 new PluginEntitySupport(
-                    EntityKindRegistry.Video.Code,
+                    EntityKind.Video.ToCode(),
                     [IdentifyAction.LookupId.ToCode()],
                     ["tmdb"])),
             Provider(
                 "wrong-kind",
                 enabled: true,
                 new PluginEntitySupport(
-                    EntityKindRegistry.Book.Code,
+                    EntityKind.Book.ToCode(),
                     [IdentifyAction.LookupId.ToCode()],
                     ["tmdb"])),
             Provider(
                 "search-only",
                 enabled: true,
                 new PluginEntitySupport(
-                    EntityKindRegistry.Video.Code,
+                    EntityKind.Video.ToCode(),
                     [IdentifyAction.Search.ToCode()],
                     ["tmdb"],
                     new PluginSearchDefinition(
@@ -213,12 +213,12 @@ public sealed class PluginIdentityRouterTests {
         var identity = new ExternalIdentity("tmdb", "123");
 
         var lookupRoutes = await router.ResolveAsync(
-            EntityKindRegistry.Video.Code,
+            EntityKind.Video.ToCode(),
             IdentifyAction.LookupId,
             [identity],
             CancellationToken.None);
         var searchRoutes = await router.ResolveAsync(
-            EntityKindRegistry.Video.Code,
+            EntityKind.Video.ToCode(),
             IdentifyAction.Search,
             [identity],
             CancellationToken.None);
@@ -234,26 +234,26 @@ public sealed class PluginIdentityRouterTests {
                 "zeta-provider",
                 enabled: true,
                 new PluginEntitySupport(
-                    EntityKindRegistry.Video.Code,
+                    EntityKind.Video.ToCode(),
                     [IdentifyAction.LookupId.ToCode()],
                     ["tmdb"])),
             Provider(
                 "alpha-provider",
                 enabled: true,
                 new PluginEntitySupport(
-                    EntityKindRegistry.Video.Code,
+                    EntityKind.Video.ToCode(),
                     [IdentifyAction.LookupId.ToCode()],
                     ["tmdb"]))
         };
         var identity = new ExternalIdentity("tmdb", "123");
 
         var forward = await Router(providers).ResolveAsync(
-            EntityKindRegistry.Video.Code,
+            EntityKind.Video.ToCode(),
             IdentifyAction.LookupId,
             [identity],
             CancellationToken.None);
         var reverse = await Router(providers.Reverse().ToArray()).ResolveAsync(
-            EntityKindRegistry.Video.Code,
+            EntityKind.Video.ToCode(),
             IdentifyAction.LookupId,
             [identity],
             CancellationToken.None);

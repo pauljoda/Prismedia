@@ -306,7 +306,7 @@ public sealed class ExtractSubtitlesJobHandlerTests : IDisposable {
             Progress: 0,
             Message: null,
             PayloadJson: "{}",
-            TargetEntityKind: EntityKindRegistry.Video.Code,
+            TargetEntityKind: EntityKind.Video.ToCode(),
             TargetEntityId: _entityId.ToString(),
             TargetLabel: "Movie",
             CreatedAt: DateTimeOffset.UtcNow,

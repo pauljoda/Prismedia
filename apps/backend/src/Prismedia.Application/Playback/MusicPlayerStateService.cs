@@ -121,7 +121,7 @@ public sealed class MusicPlayerStateService {
         for (var i = 0; i < stored.QueueTrackIds.Count; i++) {
             var card = await _entities.GetAsync(
                 stored.QueueTrackIds[i],
-                EntityKindRegistry.AudioTrack.Code,
+                EntityKind.AudioTrack.ToCode(),
                 hideNsfw: false,
                 cancellationToken);
             if (card is null) {

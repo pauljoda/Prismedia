@@ -17,7 +17,7 @@ internal sealed class CollectionMembershipCountContributor(PrismediaDbContext db
         ThumbnailContributions contributions,
         CancellationToken cancellationToken) {
         var collectionIds = contributions.Rows
-            .Where(row => row.KindCode == EntityKindRegistry.Collection.Code)
+            .Where(row => row.KindCode == EntityKind.Collection.ToCode())
             .Select(row => row.Id)
             .ToArray();
         if (collectionIds.Length == 0) {

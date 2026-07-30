@@ -79,9 +79,9 @@ public sealed partial class JobQueueService : IJobQueueService {
     ];
 
     private static readonly string AutoIdentifyJobTypeCode = JobType.AutoIdentify.ToCode();
-    private static readonly string TargetedAutoIdentifyKindCode = EntityKindRegistry.Video.Code;
-    private static readonly string MusicArtistKindCode = EntityKindRegistry.MusicArtist.Code;
-    private static readonly string AudioLibraryKindCode = EntityKindRegistry.AudioLibrary.Code;
+    private static readonly string TargetedAutoIdentifyKindCode = EntityKind.Video.ToCode();
+    private static readonly string MusicArtistKindCode = EntityKind.MusicArtist.ToCode();
+    private static readonly string AudioLibraryKindCode = EntityKind.AudioLibrary.ToCode();
 
     public async Task<JobRunSnapshot> EnqueueAsync(JobType type, CancellationToken cancellationToken) {
         return await EnqueueAsync(new EnqueueJobRequest(type), cancellationToken);

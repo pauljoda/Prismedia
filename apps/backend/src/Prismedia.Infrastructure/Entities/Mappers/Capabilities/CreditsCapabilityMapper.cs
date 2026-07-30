@@ -93,7 +93,7 @@ internal sealed class CreditsCapabilityMapper(PrismediaDbContext db) : IEntityCa
                 RelationshipCode = CreditsRelationshipCode,
                 Label = credit.Label ?? string.Empty,
                 TargetEntityId = credit.Person.Id,
-                TargetKindCode = EntityKindRegistry.Person.Code,
+                TargetKindCode = EntityKind.Person.ToCode(),
                 SortOrder = index,
                 MetadataJson = JsonSerializer.Serialize(new CreditMetadata(credit.Role.ToCode())),
                 CreatedAt = now,

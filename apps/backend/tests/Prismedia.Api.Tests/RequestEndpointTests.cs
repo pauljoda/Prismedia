@@ -111,7 +111,7 @@ public sealed class RequestEndpointTests {
         Assert.Equal("cinema-metadata", review.PluginId);
         Assert.Equal(identity, review.ExternalIdentity);
         Assert.Equal(entityId, identityStore.LastEntityId);
-        Assert.Equal(EntityKindRegistry.VideoSeries.Code, identityRouter.LastEntityKindCode);
+        Assert.Equal(EntityKind.VideoSeries.ToCode(), identityRouter.LastEntityKindCode);
         Assert.Equal(IdentifyAction.LookupId, identityRouter.LastAction);
         Assert.Equal([identity], identityRouter.LastIdentities);
         Assert.True(reviews.LastHideNsfw);

@@ -23,7 +23,7 @@ public sealed class EntityImageAssetMutationServiceTests : IDisposable {
     public async Task UploadImageAssetUpsertsCustomEntityFileUnderServedAssetsRoot() {
         await using var db = CreateContext();
         var entityId = Guid.Parse("16161616-1616-1616-1616-161616161616");
-        SeedEntity(db, entityId, EntityKindRegistry.Video.Code, "Video");
+        SeedEntity(db, entityId, EntityKind.Video.ToCode(), "Video");
         await db.SaveChangesAsync();
         var service = new EntityImageAssetMutationService(db, new EntityImageAssetStorageOptions(_cacheRoot), new NoopGridThumbnailService());
 
@@ -43,7 +43,7 @@ public sealed class EntityImageAssetMutationServiceTests : IDisposable {
         await using var db = CreateContext();
         var entityId = Guid.Parse("17171717-1717-1717-1717-171717171717");
         var now = DateTimeOffset.UtcNow;
-        SeedEntity(db, entityId, EntityKindRegistry.Video.Code, "Video");
+        SeedEntity(db, entityId, EntityKind.Video.ToCode(), "Video");
         db.EntityFiles.AddRange(
             new EntityFileRow {
                 Id = Guid.NewGuid(),

@@ -61,7 +61,7 @@ public sealed class VideoSourceService : IVideoSourceService {
             join technical in _db.EntityTechnical.AsNoTracking() on entity.Id equals technical.EntityId into technicalRows
             from technical in technicalRows.DefaultIfEmpty()
             where entity.Id == videoId.Value &&
-                entity.KindCode == EntityKindRegistry.Video.Code &&
+                entity.KindCode == EntityKind.Video.ToCode() &&
                 file.Role == EntityFileRole.Source
             select new {
                 File = file,
@@ -210,14 +210,14 @@ public sealed class VideoSourceService : IVideoSourceService {
             .Select(entity => entity.KindCode)
             .FirstOrDefaultAsync(cancellationToken);
 
-        if (string.Equals(kind, EntityKindRegistry.Video.Code, StringComparison.Ordinal)) {
+        if (string.Equals(kind, EntityKind.Video.ToCode(), StringComparison.Ordinal)) {
             return id;
         }
 
-        if (string.Equals(kind, EntityKindRegistry.Movie.Code, StringComparison.Ordinal)) {
+        if (string.Equals(kind, EntityKind.Movie.ToCode(), StringComparison.Ordinal)) {
             return await _db.Entities.AsNoTracking()
                 .Where(child => child.ParentEntityId == id &&
-                    child.KindCode == EntityKindRegistry.Video.Code)
+                    child.KindCode == EntityKind.Video.ToCode())
                 .OrderBy(child => child.SortOrder ?? int.MaxValue)
                 .ThenBy(child => child.Id)
                 .Select(child => (Guid?)child.Id)

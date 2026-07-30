@@ -38,7 +38,7 @@ public sealed class AudioSourceService : IAudioSourceService {
             join technical in _db.EntityTechnical.AsNoTracking() on entity.Id equals technical.EntityId into technicalRows
             from technical in technicalRows.DefaultIfEmpty()
             where entity.Id == id &&
-                entity.KindCode == EntityKindRegistry.AudioTrack.Code &&
+                entity.KindCode == EntityKind.AudioTrack.ToCode() &&
                 !entity.IsWanted &&
                 file.Role == EntityFileRole.Source
             select new {

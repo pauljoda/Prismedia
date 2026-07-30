@@ -63,7 +63,7 @@ public sealed class AutoIdentifyRunner(
         // exact and never emitted by broad scan planning. Audio albums remain independent identify roots.
         if (!options.AllowChildTarget &&
             entity.ParentEntityId is not null &&
-            entity.KindCode != EntityKindRegistry.AudioLibrary.Code) {
+            entity.KindCode != EntityKind.AudioLibrary.ToCode()) {
             return new AutoIdentifyResult(false, SkipReason: "child entity; its parent is identified instead");
         }
 
@@ -113,7 +113,7 @@ public sealed class AutoIdentifyRunner(
         // An artist grouping identifies for its own metadata and artwork only. Its albums are
         // independent auto-identify roots, so cascading the artist into them would duplicate and
         // race that per-album work.
-        var cascadeChildren = entity.KindCode != EntityKindRegistry.MusicArtist.Code;
+        var cascadeChildren = entity.KindCode != EntityKind.MusicArtist.ToCode();
 
         foreach (var providerId in providerIds) {
             runToken.ThrowIfCancellationRequested();
@@ -224,7 +224,7 @@ public sealed class AutoIdentifyRunner(
         CancellationToken cancellationToken) {
         // Artist-parented albums are auto-identify roots, but the provider should still be able to
         // constrain album lookup by the already-identified artist MBID/IDs when available.
-        if (parentEntityId is not { } parentId || kindCode != EntityKindRegistry.AudioLibrary.Code) {
+        if (parentEntityId is not { } parentId || kindCode != EntityKind.AudioLibrary.ToCode()) {
             return null;
         }
 

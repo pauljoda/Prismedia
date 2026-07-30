@@ -204,7 +204,7 @@ public sealed partial class LibraryScanPersistenceService {
         while (guard++ < 64) {
             var ancestor = await FindMutableEntityAsync(current, cancellationToken);
             if (ancestor is null ||
-                string.Equals(ancestor.KindCode, EntityKindRegistry.MusicArtist.Code, StringComparison.OrdinalIgnoreCase)) {
+                string.Equals(ancestor.KindCode, EntityKind.MusicArtist.ToCode(), StringComparison.OrdinalIgnoreCase)) {
                 return;
             }
 

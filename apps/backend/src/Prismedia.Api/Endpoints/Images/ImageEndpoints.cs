@@ -7,7 +7,7 @@ public static class ImageEndpoints {
     public static RouteGroupBuilder MapImageEndpoints(this IEndpointRouteBuilder routes) =>
         routes.MapEntityKindRoutes(
             "/api/images",
-            EntityKindRegistry.Image.Code,
+            EntityKind.Image.ToCode(),
             "Images",
             "ListImages",
             "GetImage");

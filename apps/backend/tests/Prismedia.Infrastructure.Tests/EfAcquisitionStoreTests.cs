@@ -47,13 +47,13 @@ public sealed class EfAcquisitionStoreTests {
     public async Task ListHidesFulfilledPassiveTargetsButKeepsPartialAndUpgradeWork() {
         await using var db = CreateContext();
         var now = DateTimeOffset.UtcNow;
-        var albumId = AddEntity("Complete album", EntityKindRegistry.AudioLibrary.Code, isWanted: false);
-        var trackId = AddEntity("Complete track", EntityKindRegistry.AudioTrack.Code, isWanted: false, albumId);
+        var albumId = AddEntity("Complete album", EntityKind.AudioLibrary.ToCode(), isWanted: false);
+        var trackId = AddEntity("Complete track", EntityKind.AudioTrack.ToCode(), isWanted: false, albumId);
         AddSource(trackId, "/media/complete.flac");
 
-        var partialAlbumId = AddEntity("Partial album", EntityKindRegistry.AudioLibrary.Code, isWanted: false);
-        var ownedTrackId = AddEntity("Owned track", EntityKindRegistry.AudioTrack.Code, isWanted: false, partialAlbumId);
-        _ = AddEntity("Missing track", EntityKindRegistry.AudioTrack.Code, isWanted: true, partialAlbumId);
+        var partialAlbumId = AddEntity("Partial album", EntityKind.AudioLibrary.ToCode(), isWanted: false);
+        var ownedTrackId = AddEntity("Owned track", EntityKind.AudioTrack.ToCode(), isWanted: false, partialAlbumId);
+        _ = AddEntity("Missing track", EntityKind.AudioTrack.ToCode(), isWanted: true, partialAlbumId);
         AddSource(ownedTrackId, "/media/owned.flac");
 
         var fulfilledId = Guid.NewGuid();
@@ -119,15 +119,15 @@ public sealed class EfAcquisitionStoreTests {
     public async Task EntityProjectionsHideFulfilledPassiveWorkButKeepPartialTargetsAndUpgrades() {
         await using var db = CreateContext();
         var now = DateTimeOffset.UtcNow;
-        var fulfilledTrackId = AddEntity("Fulfilled track", EntityKindRegistry.AudioTrack.Code, isWanted: false);
+        var fulfilledTrackId = AddEntity("Fulfilled track", EntityKind.AudioTrack.ToCode(), isWanted: false);
         AddSource(fulfilledTrackId, "/media/fulfilled.flac");
 
-        var upgradeTrackId = AddEntity("Upgrade track", EntityKindRegistry.AudioTrack.Code, isWanted: false);
+        var upgradeTrackId = AddEntity("Upgrade track", EntityKind.AudioTrack.ToCode(), isWanted: false);
         AddSource(upgradeTrackId, "/media/upgrade.mp3");
 
-        var partialAlbumId = AddEntity("Partial album", EntityKindRegistry.AudioLibrary.Code, isWanted: false);
-        var ownedTrackId = AddEntity("Owned track", EntityKindRegistry.AudioTrack.Code, isWanted: false, partialAlbumId);
-        _ = AddEntity("Missing track", EntityKindRegistry.AudioTrack.Code, isWanted: true, partialAlbumId);
+        var partialAlbumId = AddEntity("Partial album", EntityKind.AudioLibrary.ToCode(), isWanted: false);
+        var ownedTrackId = AddEntity("Owned track", EntityKind.AudioTrack.ToCode(), isWanted: false, partialAlbumId);
+        _ = AddEntity("Missing track", EntityKind.AudioTrack.ToCode(), isWanted: true, partialAlbumId);
         AddSource(ownedTrackId, "/media/owned.flac");
 
         var fulfilledPassiveId = Guid.NewGuid();
@@ -203,8 +203,8 @@ public sealed class EfAcquisitionStoreTests {
     [Fact]
     public async Task EntityAcquisitionListIncludesEveryBookRenditionInDeterministicNewestFirstOrder() {
         await using var db = CreateContext();
-        var entityId = AddWantedEntity(db, EntityKindRegistry.Book.Code, "A Game of Thrones");
-        var otherEntityId = AddWantedEntity(db, EntityKindRegistry.Book.Code, "A Clash of Kings");
+        var entityId = AddWantedEntity(db, EntityKind.Book.ToCode(), "A Game of Thrones");
+        var otherEntityId = AddWantedEntity(db, EntityKind.Book.ToCode(), "A Clash of Kings");
         var createdAt = DateTimeOffset.UtcNow;
         var olderEbookId = Guid.Parse("11111111-1111-1111-1111-111111111111");
         var audiobookId = Guid.Parse("22222222-2222-2222-2222-222222222222");
@@ -248,7 +248,7 @@ public sealed class EfAcquisitionStoreTests {
     [Fact]
     public async Task AudiobookRenditionRoundTripsThroughViewsSearchImportAndRetry() {
         await using var db = CreateContext();
-        var entityId = AddWantedEntity(db, EntityKindRegistry.Book.Code, "Elantris");
+        var entityId = AddWantedEntity(db, EntityKind.Book.ToCode(), "Elantris");
         await db.SaveChangesAsync();
         var store = AcquisitionTestFactory.Store(db);
 
@@ -614,8 +614,8 @@ public sealed class EfAcquisitionStoreTests {
         var now = DateTimeOffset.UtcNow;
         var importedId = Guid.NewGuid();
         var supersededId = Guid.NewGuid();
-        var importedEntityId = AddWantedEntity(db, EntityKindRegistry.AudioLibrary.Code, "Dynamite");
-        var supersededEntityId = AddWantedEntity(db, EntityKindRegistry.AudioLibrary.Code, "Dynamite");
+        var importedEntityId = AddWantedEntity(db, EntityKind.AudioLibrary.ToCode(), "Dynamite");
+        var supersededEntityId = AddWantedEntity(db, EntityKind.AudioLibrary.ToCode(), "Dynamite");
         db.Acquisitions.AddRange(
             Row(importedId, importedEntityId, AcquisitionStatus.Importing),
             Row(supersededId, supersededEntityId, AcquisitionStatus.AwaitingSelection));
@@ -672,8 +672,8 @@ public sealed class EfAcquisitionStoreTests {
     public async Task MarkImportedRetiresPassiveFulfilledChildAndKeepsStableMonitoring() {
         await using var db = CreateContext();
         var now = DateTimeOffset.UtcNow;
-        var albumId = AddWantedEntity(db, EntityKindRegistry.AudioLibrary.Code, "Album");
-        var trackId = AddWantedEntity(db, EntityKindRegistry.AudioTrack.Code, "Track", albumId);
+        var albumId = AddWantedEntity(db, EntityKind.AudioLibrary.ToCode(), "Album");
+        var trackId = AddWantedEntity(db, EntityKind.AudioTrack.ToCode(), "Track", albumId);
         Assert.Single(db.Entities.Local, entity => entity.Id == albumId).IsWanted = false;
         Assert.Single(db.Entities.Local, entity => entity.Id == trackId).IsWanted = false;
         db.EntityFiles.Add(new EntityFileRow {
@@ -775,7 +775,7 @@ public sealed class EfAcquisitionStoreTests {
     public async Task CloneForRetryPreservesSearchIdentityButDropsImportedAndTransferState() {
         await using var db = CreateContext();
         var now = DateTimeOffset.UtcNow;
-        var entityId = AddWantedEntity(db, EntityKindRegistry.VideoSeason.Code, "Season 2");
+        var entityId = AddWantedEntity(db, EntityKind.VideoSeason.ToCode(), "Season 2");
         var acquisitionId = Guid.NewGuid();
         var profileId = Guid.NewGuid();
         var rootId = Guid.NewGuid();
@@ -848,7 +848,7 @@ public sealed class EfAcquisitionStoreTests {
     public async Task ReacquireTeardownCreatesAndReturnsOneDurablyLinkedReplacement() {
         await using var db = CreateContext();
         var now = DateTimeOffset.UtcNow;
-        var entityId = AddWantedEntity(db, EntityKindRegistry.Movie.Code, "Arrival");
+        var entityId = AddWantedEntity(db, EntityKind.Movie.ToCode(), "Arrival");
         var acquisitionId = Guid.NewGuid();
         db.Acquisitions.Add(new AcquisitionRow {
             Id = acquisitionId,
@@ -1049,7 +1049,7 @@ public sealed class EfAcquisitionStoreTests {
         var entityId = Guid.NewGuid();
         db.Entities.Add(new EntityRow {
             Id = entityId,
-            KindCode = EntityKindRegistry.Book.Code,
+            KindCode = EntityKind.Book.ToCode(),
             Title = "Book",
             CreatedAt = now,
             UpdatedAt = now
@@ -1076,7 +1076,7 @@ public sealed class EfAcquisitionStoreTests {
         var entityId = Guid.NewGuid();
         db.Entities.Add(new EntityRow {
             Id = entityId,
-            KindCode = EntityKindRegistry.Book.Code,
+            KindCode = EntityKind.Book.ToCode(),
             Title = "Book",
             CreatedAt = now,
             UpdatedAt = now
@@ -1099,7 +1099,7 @@ public sealed class EfAcquisitionStoreTests {
     [Fact]
     public async Task BindWantedBookAttachesTheImportedPathAndClearsWanted() {
         await using var db = CreateContext();
-        var entityId = AddWantedEntity(db, EntityKindRegistry.Book.Code, "Elantris");
+        var entityId = AddWantedEntity(db, EntityKind.Book.ToCode(), "Elantris");
         AddHintWithEntity(db, entityId, "/media/books/Brandon Sanderson/Elantris (2005)/Elantris.epub");
         await db.SaveChangesAsync();
 
@@ -1121,7 +1121,7 @@ public sealed class EfAcquisitionStoreTests {
     [Fact]
     public async Task ResolveTargetBookReturnsOwnedEntityForEditionImport() {
         await using var db = CreateContext();
-        var entityId = AddWantedEntity(db, EntityKindRegistry.Book.Code, "Dune");
+        var entityId = AddWantedEntity(db, EntityKind.Book.ToCode(), "Dune");
         var acquisitionId = Guid.NewGuid();
         var now = DateTimeOffset.UtcNow;
         db.Acquisitions.Add(new AcquisitionRow {
@@ -1148,14 +1148,14 @@ public sealed class EfAcquisitionStoreTests {
     [Fact]
     public async Task ResolveImportedBookOwnersUsesConsumedHintsAndReturnsOnlyRequestedBookPaths() {
         await using var db = CreateContext();
-        var bookId = AddWantedEntity(db, EntityKindRegistry.Book.Code, "A Game of Thrones");
+        var bookId = AddWantedEntity(db, EntityKind.Book.ToCode(), "A Game of Thrones");
         var audioFolder = "/media/books/George R. R. Martin/A Game of Thrones (1996)";
         AddHintWithEntity(db, bookId, audioFolder);
         db.AcquisitionImportHints.Local.Single().Consumed = true;
 
-        var audioLibraryId = AddWantedEntity(db, EntityKindRegistry.AudioLibrary.Code, "Unrelated audio");
+        var audioLibraryId = AddWantedEntity(db, EntityKind.AudioLibrary.ToCode(), "Unrelated audio");
         AddHintWithEntity(db, audioLibraryId, "/media/books/Unrelated");
-        var broadBookId = AddWantedEntity(db, EntityKindRegistry.Book.Code, "Broad root hint");
+        var broadBookId = AddWantedEntity(db, EntityKind.Book.ToCode(), "Broad root hint");
         AddHintWithEntity(db, broadBookId, "/media/flat");
         await db.SaveChangesAsync();
 
@@ -1181,7 +1181,7 @@ public sealed class EfAcquisitionStoreTests {
     [Fact]
     public async Task BindWantedBookRetriesWhenAnExistingEntityIsLifecycleClaimed() {
         await using var db = CreateContext();
-        var entityId = AddWantedEntity(db, EntityKindRegistry.Book.Code, "Elantris");
+        var entityId = AddWantedEntity(db, EntityKind.Book.ToCode(), "Elantris");
         AddHintWithEntity(db, entityId, "/media/books/Author/Title/Title.epub");
         await db.SaveChangesAsync();
 
@@ -1199,7 +1199,7 @@ public sealed class EfAcquisitionStoreTests {
     [Fact]
     public async Task BindWantedBookNeverRebindsAnEntityThatAlreadyHasASource() {
         await using var db = CreateContext();
-        var entityId = AddWantedEntity(db, EntityKindRegistry.Book.Code, "Elantris");
+        var entityId = AddWantedEntity(db, EntityKind.Book.ToCode(), "Elantris");
         var now = DateTimeOffset.UtcNow;
         db.EntityFiles.Add(new EntityFileRow {
             Id = Guid.NewGuid(), EntityId = entityId, Role = EntityFileRole.Source,
@@ -1216,8 +1216,8 @@ public sealed class EfAcquisitionStoreTests {
     [Fact]
     public async Task BindWantedAuthorAttachesTheFolderToTheWantedBooksParent() {
         await using var db = CreateContext();
-        var authorId = AddWantedEntity(db, EntityKindRegistry.BookAuthor.Code, "Brandon Sanderson");
-        var bookId = AddWantedEntity(db, EntityKindRegistry.Book.Code, "Elantris", parentEntityId: authorId);
+        var authorId = AddWantedEntity(db, EntityKind.BookAuthor.ToCode(), "Brandon Sanderson");
+        var bookId = AddWantedEntity(db, EntityKind.Book.ToCode(), "Elantris", parentEntityId: authorId);
         AddHintWithEntity(db, bookId, "/media/books/Brandon Sanderson/Elantris (2005)/Elantris.epub");
         await db.SaveChangesAsync();
 
@@ -1236,12 +1236,12 @@ public sealed class EfAcquisitionStoreTests {
     [Fact]
     public async Task BindWantedParentWalksAnArbitrarilyDeepEntityHierarchy() {
         await using var db = CreateContext();
-        var authorId = AddWantedEntity(db, EntityKindRegistry.BookAuthor.Code, "Author");
-        var levelOne = AddWantedEntity(db, EntityKindRegistry.Book.Code, "Level 1", authorId);
-        var levelTwo = AddWantedEntity(db, EntityKindRegistry.Book.Code, "Level 2", levelOne);
-        var levelThree = AddWantedEntity(db, EntityKindRegistry.Book.Code, "Level 3", levelTwo);
-        var levelFour = AddWantedEntity(db, EntityKindRegistry.Book.Code, "Level 4", levelThree);
-        var leafId = AddWantedEntity(db, EntityKindRegistry.Book.Code, "Leaf", levelFour);
+        var authorId = AddWantedEntity(db, EntityKind.BookAuthor.ToCode(), "Author");
+        var levelOne = AddWantedEntity(db, EntityKind.Book.ToCode(), "Level 1", authorId);
+        var levelTwo = AddWantedEntity(db, EntityKind.Book.ToCode(), "Level 2", levelOne);
+        var levelThree = AddWantedEntity(db, EntityKind.Book.ToCode(), "Level 3", levelTwo);
+        var levelFour = AddWantedEntity(db, EntityKind.Book.ToCode(), "Level 4", levelThree);
+        var leafId = AddWantedEntity(db, EntityKind.Book.ToCode(), "Leaf", levelFour);
         AddHintWithEntity(db, leafId, "/media/books/Author/Leaf.epub");
         await db.SaveChangesAsync();
 

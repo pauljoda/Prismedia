@@ -99,7 +99,7 @@ public sealed partial class EfEntityReadService : IEntityReadService {
             : relationshipCode.Trim();
         var allEntities = _db.Entities.AsNoTracking();
         var entityQuery = kindCodes.Length == 0 ||
-            kindCodes.Contains(EntityKindRegistry.AudioTrack.Code, StringComparer.OrdinalIgnoreCase)
+            kindCodes.Contains(EntityKind.AudioTrack.ToCode(), StringComparer.OrdinalIgnoreCase)
                 ? allEntities.ExcludeBookOwnedAudioTracks(allEntities)
                 : allEntities;
 
@@ -115,7 +115,7 @@ public sealed partial class EfEntityReadService : IEntityReadService {
         // while excluding them from ordinary track lists, search, and native-client browse results.
         if (wanted is null) {
             entityQuery = entityQuery.Where(entity =>
-                entity.KindCode != EntityKindRegistry.AudioTrack.Code || !entity.IsWanted);
+                entity.KindCode != EntityKind.AudioTrack.ToCode() || !entity.IsWanted);
         }
 
         if (!string.IsNullOrWhiteSpace(query)) {
@@ -407,7 +407,7 @@ public sealed partial class EfEntityReadService : IEntityReadService {
                 ? query.Where(entity =>
                     states.Any(state => state.UserId == userId && state.EntityId == entity.Id &&
                         (state.CompletedAt != null || state.PlayCount > 0 || state.ResumeSeconds > 0)) ||
-                    (entity.KindCode == EntityKindRegistry.Movie.Code &&
+                    (entity.KindCode == EntityKind.Movie.ToCode() &&
                         entities.Any(child => child.ParentEntityId == entity.Id &&
                             states.Any(state => state.UserId == userId && state.EntityId == child.Id &&
                                 (state.CompletedAt != null || state.PlayCount > 0 || state.ResumeSeconds > 0)))) ||
@@ -416,7 +416,7 @@ public sealed partial class EfEntityReadService : IEntityReadService {
                 : query.Where(entity =>
                     !states.Any(state => state.UserId == userId && state.EntityId == entity.Id &&
                         (state.CompletedAt != null || state.PlayCount > 0 || state.ResumeSeconds > 0)) &&
-                    !(entity.KindCode == EntityKindRegistry.Movie.Code &&
+                    !(entity.KindCode == EntityKind.Movie.ToCode() &&
                         entities.Any(child => child.ParentEntityId == entity.Id &&
                             states.Any(state => state.UserId == userId && state.EntityId == child.Id &&
                                 (state.CompletedAt != null || state.PlayCount > 0 || state.ResumeSeconds > 0)))) &&
@@ -469,7 +469,7 @@ public sealed partial class EfEntityReadService : IEntityReadService {
             "watched" or "read" or "completed" or "finished" =>
                 query.Where(entity =>
                     states.Any(state => state.UserId == userId && state.EntityId == entity.Id && state.CompletedAt != null) ||
-                    (entity.KindCode == EntityKindRegistry.Movie.Code &&
+                    (entity.KindCode == EntityKind.Movie.ToCode() &&
                         entityRows.Any(child => child.ParentEntityId == entity.Id &&
                             states.Any(state => state.UserId == userId && state.EntityId == child.Id && state.CompletedAt != null))) ||
                     states.Any(state => state.UserId == userId && state.EntityId == entity.Id && state.ProgressCompletedAt != null)),
@@ -477,7 +477,7 @@ public sealed partial class EfEntityReadService : IEntityReadService {
                 query.Where(entity =>
                     !states.Any(state => state.UserId == userId && state.EntityId == entity.Id &&
                         (state.CompletedAt != null || state.PlayCount > 0 || state.ResumeSeconds > 0)) &&
-                    !(entity.KindCode == EntityKindRegistry.Movie.Code &&
+                    !(entity.KindCode == EntityKind.Movie.ToCode() &&
                         entityRows.Any(child => child.ParentEntityId == entity.Id &&
                             states.Any(state => state.UserId == userId && state.EntityId == child.Id &&
                                 (state.CompletedAt != null || state.PlayCount > 0 || state.ResumeSeconds > 0)))) &&
@@ -487,7 +487,7 @@ public sealed partial class EfEntityReadService : IEntityReadService {
                 query.Where(entity =>
                     states.Any(state => state.UserId == userId && state.EntityId == entity.Id &&
                         state.CompletedAt == null && state.ResumeSeconds > 0) ||
-                    (entity.KindCode == EntityKindRegistry.Movie.Code &&
+                    (entity.KindCode == EntityKind.Movie.ToCode() &&
                         entityRows.Any(child => child.ParentEntityId == entity.Id &&
                             states.Any(state => state.UserId == userId && state.EntityId == child.Id &&
                                 state.CompletedAt == null && state.ResumeSeconds > 0))) ||
@@ -806,14 +806,14 @@ public sealed partial class EfEntityReadService : IEntityReadService {
             .Where(profile => profile.IsDefault && !hiddenRootIds.Contains(profile.TargetLibraryRootId))
             .Select(profile => profile.Kind);
 
-        var bookCode = EntityKindRegistry.Book.Code;
-        var bookAuthorCode = EntityKindRegistry.BookAuthor.Code;
-        var movieCode = EntityKindRegistry.Movie.Code;
-        var videoSeriesCode = EntityKindRegistry.VideoSeries.Code;
-        var videoSeasonCode = EntityKindRegistry.VideoSeason.Code;
-        var videoCode = EntityKindRegistry.Video.Code;
-        var musicArtistCode = EntityKindRegistry.MusicArtist.Code;
-        var audioLibraryCode = EntityKindRegistry.AudioLibrary.Code;
+        var bookCode = EntityKind.Book.ToCode();
+        var bookAuthorCode = EntityKind.BookAuthor.ToCode();
+        var movieCode = EntityKind.Movie.ToCode();
+        var videoSeriesCode = EntityKind.VideoSeries.ToCode();
+        var videoSeasonCode = EntityKind.VideoSeason.ToCode();
+        var videoCode = EntityKind.Video.ToCode();
+        var musicArtistCode = EntityKind.MusicArtist.ToCode();
+        var audioLibraryCode = EntityKind.AudioLibrary.ToCode();
 
         var defaultProfileHiddenEntityIds = _db.Entities
             .Where(entity => entity.IsWanted &&
@@ -855,39 +855,39 @@ public sealed partial class EfEntityReadService : IEntityReadService {
             return ApplyInheritedEnabledLibraryVisibility(query, entities, hiddenLibraryEntityIds);
         }
 
-        if (KindEquals(knownKindCode, EntityKindRegistry.Movie.Code)) {
+        if (KindEquals(knownKindCode, EntityKind.Movie.ToCode())) {
             return query.Where(entity =>
                 !hiddenLibraryEntityIds.Contains(entity.Id) &&
                 (!entities.Any(child =>
                      child.ParentEntityId == entity.Id &&
-                     child.KindCode == EntityKindRegistry.Video.Code) ||
+                     child.KindCode == EntityKind.Video.ToCode()) ||
                  entities.Any(child =>
                      child.ParentEntityId == entity.Id &&
-                     child.KindCode == EntityKindRegistry.Video.Code &&
+                     child.KindCode == EntityKind.Video.ToCode() &&
                      !hiddenLibraryEntityIds.Contains(child.Id))));
         }
 
-        if (KindEquals(knownKindCode, EntityKindRegistry.VideoSeason.Code)) {
+        if (KindEquals(knownKindCode, EntityKind.VideoSeason.ToCode())) {
             return query.Where(entity =>
                 !hiddenLibraryEntityIds.Contains(entity.Id) &&
                 (!entities.Any(child =>
                      child.ParentEntityId == entity.Id &&
-                     child.KindCode == EntityKindRegistry.Video.Code) ||
+                     child.KindCode == EntityKind.Video.ToCode()) ||
                  entities.Any(child =>
                      child.ParentEntityId == entity.Id &&
-                     child.KindCode == EntityKindRegistry.Video.Code &&
+                     child.KindCode == EntityKind.Video.ToCode() &&
                      !hiddenLibraryEntityIds.Contains(child.Id))));
         }
 
-        if (KindEquals(knownKindCode, EntityKindRegistry.VideoSeries.Code)) {
+        if (KindEquals(knownKindCode, EntityKind.VideoSeries.ToCode())) {
             return query.Where(entity =>
                 !hiddenLibraryEntityIds.Contains(entity.Id) &&
                 (!entities.Any(candidate =>
-                     candidate.KindCode == EntityKindRegistry.Video.Code &&
+                     candidate.KindCode == EntityKind.Video.ToCode() &&
                      (candidate.ParentEntityId == entity.Id ||
                       entities.Any(parent => parent.Id == candidate.ParentEntityId && parent.ParentEntityId == entity.Id))) ||
                  entities.Any(candidate =>
-                     candidate.KindCode == EntityKindRegistry.Video.Code &&
+                     candidate.KindCode == EntityKind.Video.ToCode() &&
                      (candidate.ParentEntityId == entity.Id ||
                       entities.Any(parent => parent.Id == candidate.ParentEntityId && parent.ParentEntityId == entity.Id)) &&
                      !hiddenLibraryEntityIds.Contains(candidate.Id))));
@@ -910,29 +910,29 @@ public sealed partial class EfEntityReadService : IEntityReadService {
                     entities.Any(rootParent =>
                         rootParent.Id == grandparent.ParentEntityId &&
                         hiddenLibraryEntityIds.Contains(rootParent.Id)))) &&
-            (entity.KindCode != EntityKindRegistry.Movie.Code ||
+            (entity.KindCode != EntityKind.Movie.ToCode() ||
                 !entities.Any(child =>
                     child.ParentEntityId == entity.Id &&
-                    child.KindCode == EntityKindRegistry.Video.Code) ||
+                    child.KindCode == EntityKind.Video.ToCode()) ||
                 entities.Any(child =>
                     child.ParentEntityId == entity.Id &&
-                    child.KindCode == EntityKindRegistry.Video.Code &&
+                    child.KindCode == EntityKind.Video.ToCode() &&
                     !hiddenLibraryEntityIds.Contains(child.Id))) &&
-            (entity.KindCode != EntityKindRegistry.VideoSeason.Code ||
+            (entity.KindCode != EntityKind.VideoSeason.ToCode() ||
                 !entities.Any(child =>
                     child.ParentEntityId == entity.Id &&
-                    child.KindCode == EntityKindRegistry.Video.Code) ||
+                    child.KindCode == EntityKind.Video.ToCode()) ||
                 entities.Any(child =>
                     child.ParentEntityId == entity.Id &&
-                    child.KindCode == EntityKindRegistry.Video.Code &&
+                    child.KindCode == EntityKind.Video.ToCode() &&
                     !hiddenLibraryEntityIds.Contains(child.Id))) &&
-            (entity.KindCode != EntityKindRegistry.VideoSeries.Code ||
+            (entity.KindCode != EntityKind.VideoSeries.ToCode() ||
                 !entities.Any(candidate =>
-                    candidate.KindCode == EntityKindRegistry.Video.Code &&
+                    candidate.KindCode == EntityKind.Video.ToCode() &&
                     (candidate.ParentEntityId == entity.Id ||
                      entities.Any(parent => parent.Id == candidate.ParentEntityId && parent.ParentEntityId == entity.Id))) ||
                 entities.Any(candidate =>
-                    candidate.KindCode == EntityKindRegistry.Video.Code &&
+                    candidate.KindCode == EntityKind.Video.ToCode() &&
                     (candidate.ParentEntityId == entity.Id ||
                      entities.Any(parent => parent.Id == candidate.ParentEntityId && parent.ParentEntityId == entity.Id)) &&
                     !hiddenLibraryEntityIds.Contains(candidate.Id))));
@@ -940,17 +940,17 @@ public sealed partial class EfEntityReadService : IEntityReadService {
 
     private static bool KnownKindHasDirectLibraryRoot(string? kind) =>
         kind is not null && (
-            kind.Equals(EntityKindRegistry.Video.Code, StringComparison.OrdinalIgnoreCase) ||
-            kind.Equals(EntityKindRegistry.Gallery.Code, StringComparison.OrdinalIgnoreCase) ||
-            kind.Equals(EntityKindRegistry.Book.Code, StringComparison.OrdinalIgnoreCase) ||
-            kind.Equals(EntityKindRegistry.MusicArtist.Code, StringComparison.OrdinalIgnoreCase) ||
-            kind.Equals(EntityKindRegistry.AudioLibrary.Code, StringComparison.OrdinalIgnoreCase));
+            kind.Equals(EntityKind.Video.ToCode(), StringComparison.OrdinalIgnoreCase) ||
+            kind.Equals(EntityKind.Gallery.ToCode(), StringComparison.OrdinalIgnoreCase) ||
+            kind.Equals(EntityKind.Book.ToCode(), StringComparison.OrdinalIgnoreCase) ||
+            kind.Equals(EntityKind.MusicArtist.ToCode(), StringComparison.OrdinalIgnoreCase) ||
+            kind.Equals(EntityKind.AudioLibrary.ToCode(), StringComparison.OrdinalIgnoreCase));
 
     private static bool KnownKindInheritsLibraryRoot(string? kind) =>
         kind is not null && (
-            kind.Equals(EntityKindRegistry.Image.Code, StringComparison.OrdinalIgnoreCase) ||
-            kind.Equals(EntityKindRegistry.BookChapter.Code, StringComparison.OrdinalIgnoreCase) ||
-            kind.Equals(EntityKindRegistry.AudioTrack.Code, StringComparison.OrdinalIgnoreCase));
+            kind.Equals(EntityKind.Image.ToCode(), StringComparison.OrdinalIgnoreCase) ||
+            kind.Equals(EntityKind.BookChapter.ToCode(), StringComparison.OrdinalIgnoreCase) ||
+            kind.Equals(EntityKind.AudioTrack.ToCode(), StringComparison.OrdinalIgnoreCase));
 
     private static bool KindEquals(string? actual, string expected) =>
         actual is not null && actual.Equals(expected, StringComparison.OrdinalIgnoreCase);
@@ -980,8 +980,8 @@ public sealed partial class EfEntityReadService : IEntityReadService {
     private IQueryable<EntityRow> ApplyBrowseHierarchyFilter(
         IQueryable<EntityRow> query,
         IReadOnlyCollection<string> kindCodes) {
-        var includesGalleries = kindCodes.Contains(EntityKindRegistry.Gallery.Code, StringComparer.OrdinalIgnoreCase);
-        var includesBooks = kindCodes.Contains(EntityKindRegistry.Book.Code, StringComparer.OrdinalIgnoreCase);
+        var includesGalleries = kindCodes.Contains(EntityKind.Gallery.ToCode(), StringComparer.OrdinalIgnoreCase);
+        var includesBooks = kindCodes.Contains(EntityKind.Book.ToCode(), StringComparer.OrdinalIgnoreCase);
         if (!includesGalleries && !includesBooks) {
             return query;
         }
@@ -989,11 +989,11 @@ public sealed partial class EfEntityReadService : IEntityReadService {
         // Books parented to authors are still first-class browse rows, but same-kind book children
         // represent nested series/volume structure and should stay under their parent detail page.
         return query.Where(entity =>
-            (!includesGalleries || entity.KindCode != EntityKindRegistry.Gallery.Code || entity.ParentEntityId == null) &&
-            (!includesBooks || entity.KindCode != EntityKindRegistry.Book.Code || entity.ParentEntityId == null ||
+            (!includesGalleries || entity.KindCode != EntityKind.Gallery.ToCode() || entity.ParentEntityId == null) &&
+            (!includesBooks || entity.KindCode != EntityKind.Book.ToCode() || entity.ParentEntityId == null ||
                 !_db.Entities.Any(parent =>
                     parent.Id == entity.ParentEntityId &&
-                    parent.KindCode == EntityKindRegistry.Book.Code)));
+                    parent.KindCode == EntityKind.Book.ToCode())));
     }
 
     private static bool ShouldSuppressMovieChildVideos(
@@ -1003,16 +1003,16 @@ public sealed partial class EfEntityReadService : IEntityReadService {
         kindCodes.Count == 0 ||
         !string.IsNullOrWhiteSpace(query) ||
         referencedBy is not null ||
-        (kindCodes.Contains(EntityKindRegistry.Movie.Code, StringComparer.OrdinalIgnoreCase) &&
-            kindCodes.Contains(EntityKindRegistry.Video.Code, StringComparer.OrdinalIgnoreCase));
+        (kindCodes.Contains(EntityKind.Movie.ToCode(), StringComparer.OrdinalIgnoreCase) &&
+            kindCodes.Contains(EntityKind.Video.ToCode(), StringComparer.OrdinalIgnoreCase));
 
     private IQueryable<EntityRow> SuppressMovieChildVideos(IQueryable<EntityRow> query) =>
         query.Where(entity =>
-            entity.KindCode != EntityKindRegistry.Video.Code ||
+            entity.KindCode != EntityKind.Video.ToCode() ||
             entity.ParentEntityId == null ||
             !_db.Entities.Any(parent =>
                 parent.Id == entity.ParentEntityId &&
-                parent.KindCode == EntityKindRegistry.Movie.Code));
+                parent.KindCode == EntityKind.Movie.ToCode()));
 
     /// <summary>
     /// Library-visibility check for mutation/streaming guards: true when the entity
@@ -1093,7 +1093,7 @@ public sealed partial class EfEntityReadService : IEntityReadService {
         var albumExists = await _db.Entities.AsNoTracking()
             .AnyAsync(entity =>
                 entity.Id == albumId &&
-                entity.KindCode == EntityKindRegistry.AudioLibrary.Code &&
+                entity.KindCode == EntityKind.AudioLibrary.ToCode() &&
                 (!hideNsfw || !entity.IsNsfw),
                 cancellationToken);
         if (!albumExists) {
@@ -1235,7 +1235,7 @@ public sealed partial class EfEntityReadService : IEntityReadService {
         var linksQuery = _db.EntityRelationshipLinks.AsNoTracking()
             .Where(link => link.EntityId == entityId &&
                            (link.RelationshipCode == castCode || link.RelationshipCode == creditsCode) &&
-                           link.TargetKindCode == EntityKindRegistry.Person.Code);
+                           link.TargetKindCode == EntityKind.Person.ToCode());
         if (hideNsfw) {
             linksQuery = linksQuery.Where(link =>
                 !_db.Entities.Any(entity => entity.Id == link.TargetEntityId && entity.IsNsfw));

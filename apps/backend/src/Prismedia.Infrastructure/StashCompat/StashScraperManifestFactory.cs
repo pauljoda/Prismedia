@@ -17,18 +17,18 @@ public static class StashScraperManifestFactory {
     /// </summary>
     private static readonly IReadOnlyDictionary<string, (string Kind, string Action)> CapabilityMap =
         new Dictionary<string, (string, string)>(StringComparer.OrdinalIgnoreCase) {
-            [StashScraperDefinition.SceneByUrl] = (EntityKindRegistry.Video.Code, IdentifyAction.LookupUrl.ToCode()),
-            [StashScraperDefinition.SceneByName] = (EntityKindRegistry.Video.Code, IdentifyAction.Search.ToCode()),
-            [StashScraperDefinition.SceneByFragment] = (EntityKindRegistry.Video.Code, IdentifyAction.Search.ToCode()),
-            [StashScraperDefinition.SceneByQueryFragment] = (EntityKindRegistry.Video.Code, IdentifyAction.Search.ToCode()),
-            [StashScraperDefinition.MovieByUrl] = (EntityKindRegistry.Movie.Code, IdentifyAction.LookupUrl.ToCode()),
-            [StashScraperDefinition.PerformerByUrl] = (EntityKindRegistry.Person.Code, IdentifyAction.LookupUrl.ToCode()),
-            [StashScraperDefinition.PerformerByName] = (EntityKindRegistry.Person.Code, IdentifyAction.Search.ToCode()),
-            [StashScraperDefinition.StudioByUrl] = (EntityKindRegistry.Studio.Code, IdentifyAction.LookupUrl.ToCode()),
-            [StashScraperDefinition.StudioByName] = (EntityKindRegistry.Studio.Code, IdentifyAction.Search.ToCode()),
-            [StashScraperDefinition.GalleryByUrl] = (EntityKindRegistry.Gallery.Code, IdentifyAction.LookupUrl.ToCode()),
-            [StashScraperDefinition.TagByUrl] = (EntityKindRegistry.Tag.Code, IdentifyAction.LookupUrl.ToCode()),
-            [StashScraperDefinition.TagByName] = (EntityKindRegistry.Tag.Code, IdentifyAction.Search.ToCode())
+            [StashScraperDefinition.SceneByUrl] = (EntityKind.Video.ToCode(), IdentifyAction.LookupUrl.ToCode()),
+            [StashScraperDefinition.SceneByName] = (EntityKind.Video.ToCode(), IdentifyAction.Search.ToCode()),
+            [StashScraperDefinition.SceneByFragment] = (EntityKind.Video.ToCode(), IdentifyAction.Search.ToCode()),
+            [StashScraperDefinition.SceneByQueryFragment] = (EntityKind.Video.ToCode(), IdentifyAction.Search.ToCode()),
+            [StashScraperDefinition.MovieByUrl] = (EntityKind.Movie.ToCode(), IdentifyAction.LookupUrl.ToCode()),
+            [StashScraperDefinition.PerformerByUrl] = (EntityKind.Person.ToCode(), IdentifyAction.LookupUrl.ToCode()),
+            [StashScraperDefinition.PerformerByName] = (EntityKind.Person.ToCode(), IdentifyAction.Search.ToCode()),
+            [StashScraperDefinition.StudioByUrl] = (EntityKind.Studio.ToCode(), IdentifyAction.LookupUrl.ToCode()),
+            [StashScraperDefinition.StudioByName] = (EntityKind.Studio.ToCode(), IdentifyAction.Search.ToCode()),
+            [StashScraperDefinition.GalleryByUrl] = (EntityKind.Gallery.ToCode(), IdentifyAction.LookupUrl.ToCode()),
+            [StashScraperDefinition.TagByUrl] = (EntityKind.Tag.ToCode(), IdentifyAction.LookupUrl.ToCode()),
+            [StashScraperDefinition.TagByName] = (EntityKind.Tag.ToCode(), IdentifyAction.Search.ToCode())
         };
 
     /// <summary>

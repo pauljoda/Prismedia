@@ -576,7 +576,7 @@ public sealed class ScanJobHandlerTests {
         var track = Assert.Single(persistence.UpsertedAudioTracks);
         var request = Assert.Single(queue.Enqueued);
         Assert.Equal(JobType.GenerateAudioWaveform, request.Type);
-        Assert.Equal(EntityKindRegistry.AudioTrack.Code, request.TargetEntityKind);
+        Assert.Equal(EntityKind.AudioTrack.ToCode(), request.TargetEntityKind);
         Assert.Equal(track.Id.ToString(), request.TargetEntityId);
     }
 
@@ -606,7 +606,7 @@ public sealed class ScanJobHandlerTests {
                 PreviewClipDurationSeconds: 8,
                 ThumbnailQuality: 2,
                 TrickplayQuality: 2),
-            ExistingAudioTrackTargets = [new EntityRefreshTarget(trackId, EntityKindRegistry.AudioTrack.Code, "song")],
+            ExistingAudioTrackTargets = [new EntityRefreshTarget(trackId, EntityKind.AudioTrack.ToCode(), "song")],
             DownstreamNeedsById = new Dictionary<Guid, DownstreamNeeds> {
                 [trackId] = new(
                     NeedsProbe: false,
@@ -646,7 +646,7 @@ public sealed class ScanJobHandlerTests {
 
         var request = Assert.Single(queue.Enqueued);
         Assert.Equal(JobType.GenerateAudioWaveform, request.Type);
-        Assert.Equal(EntityKindRegistry.AudioTrack.Code, request.TargetEntityKind);
+        Assert.Equal(EntityKind.AudioTrack.ToCode(), request.TargetEntityKind);
         Assert.Equal(trackId.ToString(), request.TargetEntityId);
     }
 

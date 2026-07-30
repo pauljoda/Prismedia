@@ -85,8 +85,8 @@ public sealed class OpdsCatalogServiceTests : IDisposable {
             UpdatedAt = DateTimeOffset.UtcNow
         });
         db.Entities.AddRange(
-            Entity(DirectoryComicId, EntityKindRegistry.Book.Code, "Comic", false),
-            Entity(WrappedComicId, EntityKindRegistry.Book.Code, "Wrapped Comic", false));
+            Entity(DirectoryComicId, EntityKind.Book.ToCode(), "Comic", false),
+            Entity(WrappedComicId, EntityKind.Book.ToCode(), "Wrapped Comic", false));
         db.BookDetails.AddRange(
             new BookDetailRow {
                 EntityId = DirectoryComicId,
@@ -145,9 +145,9 @@ public sealed class OpdsCatalogServiceTests : IDisposable {
         await File.WriteAllTextAsync(firstPath, "first");
         await File.WriteAllTextAsync(secondPath, "second");
         db.Entities.AddRange(
-            Entity(seriesId, EntityKindRegistry.Book.Code, "A Song of Ice and Fire", false),
-            Entity(firstBookId, EntityKindRegistry.Book.Code, "A Game of Thrones", false, seriesId),
-            Entity(secondBookId, EntityKindRegistry.Book.Code, "A Clash of Kings", false, seriesId));
+            Entity(seriesId, EntityKind.Book.ToCode(), "A Song of Ice and Fire", false),
+            Entity(firstBookId, EntityKind.Book.ToCode(), "A Game of Thrones", false, seriesId),
+            Entity(secondBookId, EntityKind.Book.ToCode(), "A Clash of Kings", false, seriesId));
         db.BookDetails.AddRange(
             BookDetail(seriesId, VisibleRootId),
             BookDetail(firstBookId, VisibleRootId),
@@ -193,12 +193,12 @@ public sealed class OpdsCatalogServiceTests : IDisposable {
         Directory.CreateDirectory(Path.GetDirectoryName(pageThumbPath)!);
         await File.WriteAllTextAsync(pageThumbPath, "thumbnail");
         var now = DateTimeOffset.UtcNow;
-        var chapter = Entity(chapterId, EntityKindRegistry.BookChapter.Code, "Chapter 1", false, bookId);
+        var chapter = Entity(chapterId, EntityKind.BookChapter.ToCode(), "Chapter 1", false, bookId);
         chapter.SortOrder = 0;
-        var page = Entity(pageId, EntityKindRegistry.BookPage.Code, "Page 1", false, chapterId);
+        var page = Entity(pageId, EntityKind.BookPage.ToCode(), "Page 1", false, chapterId);
         page.SortOrder = 0;
         db.Entities.AddRange(
-            Entity(bookId, EntityKindRegistry.Book.Code, "Representative Comic", false),
+            Entity(bookId, EntityKind.Book.ToCode(), "Representative Comic", false),
             chapter,
             page);
         db.BookDetails.Add(new BookDetailRow {
@@ -266,17 +266,17 @@ public sealed class OpdsCatalogServiceTests : IDisposable {
             new LibraryRootRow { Id = VisibleRootId, Label = "Visible", Path = _tempDir, Enabled = true, ScanBooks = true, CreatedAt = now, UpdatedAt = now },
             new LibraryRootRow { Id = DisabledRootId, Label = "Disabled", Path = _tempDir, Enabled = false, ScanBooks = true, CreatedAt = now, UpdatedAt = now });
         db.Entities.AddRange(
-            Entity(VisibleBookId, EntityKindRegistry.Book.Code, "Visible Book", false),
-            Entity(HiddenBookId, EntityKindRegistry.Book.Code, "Hidden Book", true),
-            Entity(DisabledBookId, EntityKindRegistry.Book.Code, "Disabled Book", false),
-            Entity(SeriesId, EntityKindRegistry.Book.Code, "Hidden Series", true),
-            Entity(SeriesChildId, EntityKindRegistry.Book.Code, "Series Child", false, SeriesId),
-            Entity(VisibleAuthorId, EntityKindRegistry.Person.Code, "Visible Author", false),
-            Entity(HiddenAuthorId, EntityKindRegistry.Person.Code, "Hidden Author", true),
-            Entity(VisibleTagId, EntityKindRegistry.Tag.Code, "Visible Tag", false),
-            Entity(HiddenTagId, EntityKindRegistry.Tag.Code, "Hidden Tag", true),
-            Entity(VisibleCollectionId, EntityKindRegistry.Collection.Code, "Visible Collection", false),
-            Entity(HiddenCollectionId, EntityKindRegistry.Collection.Code, "Hidden Collection", true));
+            Entity(VisibleBookId, EntityKind.Book.ToCode(), "Visible Book", false),
+            Entity(HiddenBookId, EntityKind.Book.ToCode(), "Hidden Book", true),
+            Entity(DisabledBookId, EntityKind.Book.ToCode(), "Disabled Book", false),
+            Entity(SeriesId, EntityKind.Book.ToCode(), "Hidden Series", true),
+            Entity(SeriesChildId, EntityKind.Book.ToCode(), "Series Child", false, SeriesId),
+            Entity(VisibleAuthorId, EntityKind.Person.ToCode(), "Visible Author", false),
+            Entity(HiddenAuthorId, EntityKind.Person.ToCode(), "Hidden Author", true),
+            Entity(VisibleTagId, EntityKind.Tag.ToCode(), "Visible Tag", false),
+            Entity(HiddenTagId, EntityKind.Tag.ToCode(), "Hidden Tag", true),
+            Entity(VisibleCollectionId, EntityKind.Collection.ToCode(), "Visible Collection", false),
+            Entity(HiddenCollectionId, EntityKind.Collection.ToCode(), "Hidden Collection", true));
         db.BookDetails.AddRange(
             BookDetail(VisibleBookId, VisibleRootId),
             BookDetail(HiddenBookId, VisibleRootId),
@@ -291,10 +291,10 @@ public sealed class OpdsCatalogServiceTests : IDisposable {
             Source(DisabledBookId, Path.Combine(_tempDir, "disabled.epub"), MediaContentTypes.Epub),
             Source(SeriesChildId, Path.Combine(_tempDir, "series-child.epub"), MediaContentTypes.Epub));
         db.EntityRelationshipLinks.AddRange(
-            Relationship(VisibleBookId, VisibleAuthorId, EntityKindRegistry.Person.Code, RelationshipKind.Credits),
-            Relationship(HiddenBookId, HiddenAuthorId, EntityKindRegistry.Person.Code, RelationshipKind.Credits),
-            Relationship(VisibleBookId, VisibleTagId, EntityKindRegistry.Tag.Code, RelationshipKind.Tags),
-            Relationship(HiddenBookId, HiddenTagId, EntityKindRegistry.Tag.Code, RelationshipKind.Tags));
+            Relationship(VisibleBookId, VisibleAuthorId, EntityKind.Person.ToCode(), RelationshipKind.Credits),
+            Relationship(HiddenBookId, HiddenAuthorId, EntityKind.Person.ToCode(), RelationshipKind.Credits),
+            Relationship(VisibleBookId, VisibleTagId, EntityKind.Tag.ToCode(), RelationshipKind.Tags),
+            Relationship(HiddenBookId, HiddenTagId, EntityKind.Tag.ToCode(), RelationshipKind.Tags));
         db.CollectionItemDetails.AddRange(
             new CollectionItemDetailRow { Id = Guid.NewGuid(), CollectionEntityId = VisibleCollectionId, ItemEntityId = VisibleBookId, SortOrder = 0, AddedAt = now },
             new CollectionItemDetailRow { Id = Guid.NewGuid(), CollectionEntityId = HiddenCollectionId, ItemEntityId = HiddenBookId, SortOrder = 0, AddedAt = now });

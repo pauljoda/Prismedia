@@ -35,7 +35,7 @@ public sealed class RequestEntityReviewServiceTests {
         Assert.NotNull(result);
         Assert.Equal("zeta-metadata", result.PluginId);
         Assert.Equal(secondIdentity, result.ExternalIdentity);
-        Assert.Equal(EntityKindRegistry.VideoSeries.Code, router.LastEntityKindCode);
+        Assert.Equal(EntityKind.VideoSeries.ToCode(), router.LastEntityKindCode);
         Assert.Equal(IdentifyAction.LookupId, router.LastAction);
         Assert.Equal([secondIdentity, firstIdentity], router.LastIdentities);
         Assert.Equal(

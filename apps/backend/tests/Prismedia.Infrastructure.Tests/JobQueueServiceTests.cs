@@ -37,7 +37,7 @@ public sealed class JobQueueServiceTests {
         var entityId = Guid.NewGuid().ToString();
         var request = new EnqueueJobRequest(
             JobType.IdentifySearch,
-            TargetEntityKind: EntityKindRegistry.Video.Code,
+            TargetEntityKind: EntityKind.Video.ToCode(),
             TargetEntityId: entityId,
             Origin: JobGraphOrigin.Interactive);
 
@@ -59,7 +59,7 @@ public sealed class JobQueueServiceTests {
         var parent = await service.EnqueueAsync(
             new EnqueueJobRequest(
                 JobType.RefreshEntity,
-                TargetEntityKind: EntityKindRegistry.Video.Code,
+                TargetEntityKind: EntityKind.Video.ToCode(),
                 TargetEntityId: Guid.NewGuid().ToString(),
                 Origin: JobGraphOrigin.Interactive),
             CancellationToken.None);
@@ -68,7 +68,7 @@ public sealed class JobQueueServiceTests {
             parent,
             new EnqueueJobRequest(
                 JobType.ProbeVideo,
-                TargetEntityKind: EntityKindRegistry.Video.Code,
+                TargetEntityKind: EntityKind.Video.ToCode(),
                 TargetEntityId: Guid.NewGuid().ToString()),
             CancellationToken.None);
 
@@ -165,17 +165,17 @@ public sealed class JobQueueServiceTests {
 
         var first = await service.EnqueueAsync(new EnqueueJobRequest(
             JobType.AutoIdentify,
-            TargetEntityKind: EntityKindRegistry.AudioLibrary.Code,
+            TargetEntityKind: EntityKind.AudioLibrary.ToCode(),
             TargetEntityId: entityId,
             TargetLabel: "Album"), CancellationToken.None);
         var duplicate = await service.EnqueueAsync(new EnqueueJobRequest(
             JobType.AutoIdentify,
-            TargetEntityKind: EntityKindRegistry.AudioLibrary.Code,
+            TargetEntityKind: EntityKind.AudioLibrary.ToCode(),
             TargetEntityId: entityId,
             TargetLabel: "Album again"), CancellationToken.None);
         var otherType = await service.EnqueueAsync(new EnqueueJobRequest(
             JobType.GeneratePreview,
-            TargetEntityKind: EntityKindRegistry.AudioLibrary.Code,
+            TargetEntityKind: EntityKind.AudioLibrary.ToCode(),
             TargetEntityId: entityId,
             TargetLabel: "Album preview"), CancellationToken.None);
 
@@ -223,14 +223,14 @@ public sealed class JobQueueServiceTests {
         db.Entities.AddRange(
             new EntityRow {
                 Id = safeEntityId,
-                KindCode = EntityKindRegistry.Video.Code,
+                KindCode = EntityKind.Video.ToCode(),
                 Title = "Safe",
                 CreatedAt = now,
                 UpdatedAt = now
             },
             new EntityRow {
                 Id = nsfwEntityId,
-                KindCode = EntityKindRegistry.Video.Code,
+                KindCode = EntityKind.Video.ToCode(),
                 Title = "Hidden",
                 IsNsfw = true,
                 CreatedAt = now,
@@ -253,8 +253,8 @@ public sealed class JobQueueServiceTests {
                 UpdatedAt = now
             });
         db.JobRuns.AddRange(
-            NewJobRun(JobType.GeneratePreview, JobRunStatus.Queued, now, safeEntityId.ToString(), EntityKindRegistry.Video.Code),
-            NewJobRun(JobType.GeneratePreview, JobRunStatus.Queued, now.AddMinutes(1), nsfwEntityId.ToString(), EntityKindRegistry.Video.Code),
+            NewJobRun(JobType.GeneratePreview, JobRunStatus.Queued, now, safeEntityId.ToString(), EntityKind.Video.ToCode()),
+            NewJobRun(JobType.GeneratePreview, JobRunStatus.Queued, now.AddMinutes(1), nsfwEntityId.ToString(), EntityKind.Video.ToCode()),
             NewJobRun(JobType.ScanLibrary, JobRunStatus.Queued, now.AddMinutes(2), safeRootId.ToString(), "library-root"),
             NewJobRun(JobType.ScanLibrary, JobRunStatus.Queued, now.AddMinutes(3), nsfwRootId.ToString(), "library-root"));
         await db.SaveChangesAsync();
@@ -281,14 +281,14 @@ public sealed class JobQueueServiceTests {
         db.Entities.AddRange(
             new EntityRow {
                 Id = safeEntityId,
-                KindCode = EntityKindRegistry.Video.Code,
+                KindCode = EntityKind.Video.ToCode(),
                 Title = "Safe",
                 CreatedAt = now,
                 UpdatedAt = now
             },
             new EntityRow {
                 Id = nsfwEntityId,
-                KindCode = EntityKindRegistry.Video.Code,
+                KindCode = EntityKind.Video.ToCode(),
                 Title = "Hidden",
                 IsNsfw = true,
                 CreatedAt = now,
@@ -300,19 +300,19 @@ public sealed class JobQueueServiceTests {
             JobRunStatus.Queued,
             now,
             safeEntityId.ToString(),
-            EntityKindRegistry.Video.Code);
+            EntityKind.Video.ToCode());
         var hiddenQueued = NewJobRun(
             JobType.GeneratePreview,
             JobRunStatus.Queued,
             now.AddMinutes(1),
             nsfwEntityId.ToString(),
-            EntityKindRegistry.Video.Code);
+            EntityKind.Video.ToCode());
         var hiddenRunning = NewJobRun(
             JobType.FingerprintVideo,
             JobRunStatus.Running,
             now.AddMinutes(2),
             nsfwEntityId.ToString(),
-            EntityKindRegistry.Video.Code);
+            EntityKind.Video.ToCode());
         hiddenRunning.LockedAt = now.AddMinutes(3);
         hiddenRunning.LockedBy = "worker-1";
         var hiddenCompleted = NewJobRun(
@@ -320,7 +320,7 @@ public sealed class JobQueueServiceTests {
             JobRunStatus.Completed,
             now.AddMinutes(4),
             nsfwEntityId.ToString(),
-            EntityKindRegistry.Video.Code);
+            EntityKind.Video.ToCode());
 
         db.JobRuns.AddRange(safeQueued, hiddenQueued, hiddenRunning, hiddenCompleted);
         await db.SaveChangesAsync();
@@ -372,7 +372,7 @@ public sealed class JobQueueServiceTests {
         var background = await service.EnqueueAsync(JobType.Noop, CancellationToken.None);
         var interactive = await service.EnqueueAsync(new EnqueueJobRequest(
             JobType.IdentifySearch,
-            TargetEntityKind: EntityKindRegistry.Video.Code,
+            TargetEntityKind: EntityKind.Video.ToCode(),
             TargetEntityId: Guid.NewGuid().ToString(),
             Origin: JobGraphOrigin.Interactive), CancellationToken.None);
 

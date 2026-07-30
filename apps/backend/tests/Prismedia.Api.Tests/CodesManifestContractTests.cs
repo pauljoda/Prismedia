@@ -25,11 +25,11 @@ public sealed class CodesManifestContractTests {
     public void EntityKindManifestCarriesTheRegistryFileDeletionPolicy() {
         var kinds = CodesManifest.Build().EntityKinds.ToDictionary(kind => kind.Code);
 
-        Assert.True(kinds[EntityKindRegistry.Audio.Code].SupportsFileDeletion);
-        Assert.True(kinds[EntityKindRegistry.VideoSeries.Code].SupportsFileDeletion);
-        Assert.False(kinds[EntityKindRegistry.BookChapter.Code].SupportsFileDeletion);
-        Assert.False(kinds[EntityKindRegistry.BookPage.Code].SupportsFileDeletion);
-        Assert.False(kinds[EntityKindRegistry.Collection.Code].SupportsFileDeletion);
+        Assert.True(kinds[EntityKind.Audio.ToCode()].SupportsFileDeletion);
+        Assert.True(kinds[EntityKind.VideoSeries.ToCode()].SupportsFileDeletion);
+        Assert.False(kinds[EntityKind.BookChapter.ToCode()].SupportsFileDeletion);
+        Assert.False(kinds[EntityKind.BookPage.ToCode()].SupportsFileDeletion);
+        Assert.False(kinds[EntityKind.Collection.ToCode()].SupportsFileDeletion);
     }
 
     [Fact]

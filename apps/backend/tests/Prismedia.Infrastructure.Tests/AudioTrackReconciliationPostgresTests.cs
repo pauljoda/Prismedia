@@ -27,14 +27,14 @@ public sealed class AudioTrackReconciliationPostgresTests {
             setup.Entities.AddRange(
                 new EntityRow {
                     Id = albumId,
-                    KindCode = EntityKindRegistry.AudioLibrary.Code,
+                    KindCode = EntityKind.AudioLibrary.ToCode(),
                     Title = "WAR",
                     CreatedAt = now,
                     UpdatedAt = now
                 },
                 new EntityRow {
                     Id = wantedId,
-                    KindCode = EntityKindRegistry.AudioTrack.Code,
+                    KindCode = EntityKind.AudioTrack.ToCode(),
                     Title = "WAR",
                     ParentEntityId = albumId,
                     IsWanted = true,
@@ -43,7 +43,7 @@ public sealed class AudioTrackReconciliationPostgresTests {
                 },
                 new EntityRow {
                     Id = duplicateId,
-                    KindCode = EntityKindRegistry.AudioTrack.Code,
+                    KindCode = EntityKind.AudioTrack.ToCode(),
                     Title = "01 - WAR",
                     ParentEntityId = albumId,
                     CreatedAt = now,

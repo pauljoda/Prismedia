@@ -7,6 +7,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Prismedia.Application.Settings;
 using Prismedia.Contracts.Settings;
 using Prismedia.Contracts.System;
+using Prismedia.Domain.Entities;
 
 namespace Prismedia.Api.Tests;
 
@@ -64,8 +65,8 @@ public sealed class SettingsEndpointServiceTests {
         using var factory = CreateFactory();
         using var client = factory.CreateAuthenticatedClient();
         var configured = new Dictionary<string, string> {
-            [Prismedia.Domain.Entities.EntityKindRegistry.Movie.Code] = "tmdb",
-            [Prismedia.Domain.Entities.EntityKindRegistry.Book.Code] = "openlibrary",
+            [EntityKind.Movie.ToCode()] = "tmdb",
+            [EntityKind.Book.ToCode()] = "openlibrary",
         };
 
         var update = await client.PatchAsJsonAsync(

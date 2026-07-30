@@ -38,7 +38,7 @@ public sealed class CollectionCommandServiceTests {
         Assert.True(configuration.CanEdit);
 
         var entity = Assert.Single(db.Entities);
-        Assert.Equal(EntityKindRegistry.Collection.Code, entity.KindCode);
+        Assert.Equal(EntityKind.Collection.ToCode(), entity.KindCode);
         Assert.True(entity.IsNsfw);
         Assert.Equal("Pinned media", Assert.Single(db.EntityDescriptions).Value);
         var detail = Assert.Single(db.CollectionDetails);
@@ -108,7 +108,7 @@ public sealed class CollectionCommandServiceTests {
     [InlineData(CollectionMode.Hybrid)]
     public async Task CreateAsyncAcceptsValidRuleCollections(CollectionMode mode) {
         await using var db = CreateContext();
-        var matchedId = SeedEntity(db, EntityKindRegistry.Video.Code, "Rule Match");
+        var matchedId = SeedEntity(db, EntityKind.Video.ToCode(), "Rule Match");
         await db.SaveChangesAsync();
         var refreshPersistence = new FakeCollectionRefreshPersistence();
         var service = CreateService(
@@ -193,7 +193,7 @@ public sealed class CollectionCommandServiceTests {
     public async Task UpdateAsyncRefreshesDynamicRuleItemsOnSave() {
         await using var db = CreateContext();
         var collectionId = SeedCollection(db, "Watch Later", CollectionMode.Dynamic);
-        var matchedId = SeedEntity(db, EntityKindRegistry.VideoSeries.Code, "The Chair Company");
+        var matchedId = SeedEntity(db, EntityKind.VideoSeries.ToCode(), "The Chair Company");
         await db.SaveChangesAsync();
         var refreshPersistence = new FakeCollectionRefreshPersistence();
         var service = CreateService(
@@ -225,8 +225,8 @@ public sealed class CollectionCommandServiceTests {
     public async Task AddRemoveAndReorderItemsPreservesManualMembershipRules() {
         await using var db = CreateContext();
         var collectionId = SeedCollection(db, "Manual");
-        var firstId = SeedEntity(db, EntityKindRegistry.Video.Code, "First");
-        var secondId = SeedEntity(db, EntityKindRegistry.Image.Code, "Second");
+        var firstId = SeedEntity(db, EntityKind.Video.ToCode(), "First");
+        var secondId = SeedEntity(db, EntityKind.Image.ToCode(), "Second");
         await db.SaveChangesAsync();
         var service = CreateService(db);
 
@@ -269,9 +269,9 @@ public sealed class CollectionCommandServiceTests {
     public async Task AddItemsAsyncAllowsAudioContainersButRejectsNestedCollections() {
         await using var db = CreateContext();
         var collectionId = SeedCollection(db, "Manual");
-        var seriesId = SeedEntity(db, EntityKindRegistry.VideoSeries.Code, "The Chair Company");
-        var artistId = SeedEntity(db, EntityKindRegistry.MusicArtist.Code, "A Band");
-        var albumId = SeedEntity(db, EntityKindRegistry.AudioLibrary.Code, "A Record");
+        var seriesId = SeedEntity(db, EntityKind.VideoSeries.ToCode(), "The Chair Company");
+        var artistId = SeedEntity(db, EntityKind.MusicArtist.ToCode(), "A Band");
+        var albumId = SeedEntity(db, EntityKind.AudioLibrary.ToCode(), "A Record");
         var nestedCollectionId = SeedCollection(db, "Nested");
         await db.SaveChangesAsync();
         var service = CreateService(db);
@@ -301,10 +301,10 @@ public sealed class CollectionCommandServiceTests {
     public async Task AddItemsAsyncRejectsAudiobookTracksOwnedByBooks() {
         await using var db = CreateContext();
         var collectionId = SeedCollection(db, "Manual");
-        var bookId = SeedEntity(db, EntityKindRegistry.Book.Code, "Spoken Story");
+        var bookId = SeedEntity(db, EntityKind.Book.ToCode(), "Spoken Story");
         var audiobookTrackId = SeedEntity(
             db,
-            EntityKindRegistry.AudioTrack.Code,
+            EntityKind.AudioTrack.ToCode(),
             "Book Chapter",
             parentEntityId: bookId);
         await db.SaveChangesAsync();
@@ -325,7 +325,7 @@ public sealed class CollectionCommandServiceTests {
     public async Task AddItemsAsyncRejectsPureDynamicCollections() {
         await using var db = CreateContext();
         var collectionId = SeedCollection(db, "Rules", CollectionMode.Dynamic);
-        var videoId = SeedEntity(db, EntityKindRegistry.Video.Code, "Matched Video");
+        var videoId = SeedEntity(db, EntityKind.Video.ToCode(), "Matched Video");
         await db.SaveChangesAsync();
         var service = CreateService(db);
 
@@ -342,8 +342,8 @@ public sealed class CollectionCommandServiceTests {
     [Fact]
     public async Task PreviewRulesReturnsVisibleCountsAndThumbnailSample() {
         await using var db = CreateContext();
-        var visibleId = SeedEntity(db, EntityKindRegistry.Video.Code, "Visible");
-        _ = SeedEntity(db, EntityKindRegistry.Image.Code, "Hidden", isNsfw: true);
+        var visibleId = SeedEntity(db, EntityKind.Video.ToCode(), "Visible");
+        _ = SeedEntity(db, EntityKind.Image.ToCode(), "Hidden", isNsfw: true);
         await db.SaveChangesAsync();
         var ruleEngine = new FakeCollectionRuleEngine([
             new CollectionRuleMatch(EntityKind.Video, visibleId),
@@ -365,7 +365,7 @@ public sealed class CollectionCommandServiceTests {
     [Fact]
     public async Task PreviewRulesIncludesSeriesMatchesForUniversalFilters() {
         await using var db = CreateContext();
-        var seriesId = SeedEntity(db, EntityKindRegistry.VideoSeries.Code, "The Chair Company");
+        var seriesId = SeedEntity(db, EntityKind.VideoSeries.ToCode(), "The Chair Company");
         await db.SaveChangesAsync();
         var ruleEngine = new FakeCollectionRuleEngine([
             new CollectionRuleMatch(EntityKind.VideoSeries, seriesId),
@@ -389,10 +389,10 @@ public sealed class CollectionCommandServiceTests {
     [Fact]
     public async Task PreviewRulesExcludesAudiobookTracksOwnedByBooks() {
         await using var db = CreateContext();
-        var bookId = SeedEntity(db, EntityKindRegistry.Book.Code, "Spoken Story");
+        var bookId = SeedEntity(db, EntityKind.Book.ToCode(), "Spoken Story");
         var audiobookTrackId = SeedEntity(
             db,
-            EntityKindRegistry.AudioTrack.Code,
+            EntityKind.AudioTrack.ToCode(),
             "Book Chapter",
             parentEntityId: bookId);
         await db.SaveChangesAsync();
@@ -432,7 +432,7 @@ public sealed class CollectionCommandServiceTests {
         CollectionMode mode = CollectionMode.Manual,
         Guid? ownerUserId = null,
         bool isShared = false) {
-        var id = SeedEntity(db, EntityKindRegistry.Collection.Code, title);
+        var id = SeedEntity(db, EntityKind.Collection.ToCode(), title);
         db.CollectionDetails.Add(new CollectionDetailRow {
             EntityId = id,
             OwnerUserId = ownerUserId ?? TestUserContext.UserId,
@@ -509,7 +509,7 @@ public sealed class CollectionCommandServiceTests {
             }
 
             var capabilities = new List<EntityCapability>();
-            if (entity.KindCode == EntityKindRegistry.Collection.Code) {
+            if (entity.KindCode == EntityKind.Collection.ToCode()) {
                 var detail = await db.CollectionDetails.AsNoTracking()
                     .FirstAsync(row => row.EntityId == id, cancellationToken);
                 capabilities.Add(new CollectionConfigurationCapability(

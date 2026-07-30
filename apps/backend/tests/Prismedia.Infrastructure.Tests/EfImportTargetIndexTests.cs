@@ -38,7 +38,7 @@ public sealed class EfImportTargetIndexTests {
     [Fact]
     public async Task FilelessSeriesResolvesToNull() {
         await using var db = CreateContext();
-        var seriesId = AddEntity(db, EntityKindRegistry.VideoSeries.Code, parent: null, sortOrder: null);
+        var seriesId = AddEntity(db, EntityKind.VideoSeries.ToCode(), parent: null, sortOrder: null);
         await db.SaveChangesAsync();
 
         Assert.Null(await new EfImportTargetIndex(db).GetTvLayoutAsync(seriesId, CancellationToken.None));
@@ -48,8 +48,8 @@ public sealed class EfImportTargetIndexTests {
     [Fact]
     public async Task ResolvesTheMovieFolderAndOwnedFile() {
         await using var db = CreateContext();
-        var movieId = AddEntity(db, EntityKindRegistry.Movie.Code, parent: null, sortOrder: null, sourcePath: "/media/movies/Film (2020)");
-        AddEntity(db, EntityKindRegistry.Video.Code, parent: movieId, sortOrder: 1, sourcePath: "/media/movies/Film (2020)/film.mkv");
+        var movieId = AddEntity(db, EntityKind.Movie.ToCode(), parent: null, sortOrder: null, sourcePath: "/media/movies/Film (2020)");
+        AddEntity(db, EntityKind.Video.ToCode(), parent: movieId, sortOrder: 1, sourcePath: "/media/movies/Film (2020)/film.mkv");
         await db.SaveChangesAsync();
 
         var target = await new EfImportTargetIndex(db).GetMovieTargetAsync(movieId, CancellationToken.None);
@@ -62,9 +62,9 @@ public sealed class EfImportTargetIndexTests {
     [Fact]
     public async Task ResolvesAlbumAndArtistFoldersWithRelativeTracks() {
         await using var db = CreateContext();
-        var artistId = AddEntity(db, EntityKindRegistry.MusicArtist.Code, parent: null, sortOrder: null, sourcePath: "/media/music/Artist");
-        var albumId = AddEntity(db, EntityKindRegistry.AudioLibrary.Code, parent: artistId, sortOrder: null, sourcePath: "/media/music/Artist/Album");
-        AddEntity(db, EntityKindRegistry.AudioTrack.Code, parent: albumId, sortOrder: 1, sourcePath: "/media/music/Artist/Album/01 - Track.flac");
+        var artistId = AddEntity(db, EntityKind.MusicArtist.ToCode(), parent: null, sortOrder: null, sourcePath: "/media/music/Artist");
+        var albumId = AddEntity(db, EntityKind.AudioLibrary.ToCode(), parent: artistId, sortOrder: null, sourcePath: "/media/music/Artist/Album");
+        AddEntity(db, EntityKind.AudioTrack.ToCode(), parent: albumId, sortOrder: 1, sourcePath: "/media/music/Artist/Album/01 - Track.flac");
         await db.SaveChangesAsync();
 
         var target = await new EfImportTargetIndex(db).GetAlbumTargetAsync(albumId, CancellationToken.None);
@@ -78,8 +78,8 @@ public sealed class EfImportTargetIndexTests {
     [Fact]
     public async Task FilelessAlbumUnderAnOnDiskArtistKeepsTheArtistFolder() {
         await using var db = CreateContext();
-        var artistId = AddEntity(db, EntityKindRegistry.MusicArtist.Code, parent: null, sortOrder: null, sourcePath: "/media/music/Artist");
-        var albumId = AddEntity(db, EntityKindRegistry.AudioLibrary.Code, parent: artistId, sortOrder: null);
+        var artistId = AddEntity(db, EntityKind.MusicArtist.ToCode(), parent: null, sortOrder: null, sourcePath: "/media/music/Artist");
+        var albumId = AddEntity(db, EntityKind.AudioLibrary.ToCode(), parent: artistId, sortOrder: null);
         await db.SaveChangesAsync();
 
         var target = await new EfImportTargetIndex(db).GetAlbumTargetAsync(albumId, CancellationToken.None);
@@ -91,11 +91,11 @@ public sealed class EfImportTargetIndexTests {
     }
 
     private static (Guid SeriesId, Guid SeasonId, Guid EpisodeId) SeedSeries(PrismediaDbContext db, string seriesFolder) {
-        var seriesId = AddEntity(db, EntityKindRegistry.VideoSeries.Code, parent: null, sortOrder: null, sourcePath: seriesFolder);
-        var seasonId = AddEntity(db, EntityKindRegistry.VideoSeason.Code, parent: seriesId, sortOrder: 1, sourcePath: $"{seriesFolder}/S01");
-        var episodeId = AddEntity(db, EntityKindRegistry.Video.Code, parent: seasonId, sortOrder: 1, sourcePath: $"{seriesFolder}/S01/e01.mkv");
+        var seriesId = AddEntity(db, EntityKind.VideoSeries.ToCode(), parent: null, sortOrder: null, sourcePath: seriesFolder);
+        var seasonId = AddEntity(db, EntityKind.VideoSeason.ToCode(), parent: seriesId, sortOrder: 1, sourcePath: $"{seriesFolder}/S01");
+        var episodeId = AddEntity(db, EntityKind.Video.ToCode(), parent: seasonId, sortOrder: 1, sourcePath: $"{seriesFolder}/S01/e01.mkv");
         // Wanted phantom episode: no Source file row.
-        AddEntity(db, EntityKindRegistry.Video.Code, parent: seasonId, sortOrder: 2, wanted: true);
+        AddEntity(db, EntityKind.Video.ToCode(), parent: seasonId, sortOrder: 2, wanted: true);
         return (seriesId, seasonId, episodeId);
     }
 

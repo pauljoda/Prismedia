@@ -7,7 +7,7 @@ public static class BookEndpoints {
     public static RouteGroupBuilder MapBookEndpoints(this IEndpointRouteBuilder routes) =>
         routes.MapEntityKindRoutes(
             "/api/books",
-            EntityKindRegistry.Book.Code,
+            EntityKind.Book.ToCode(),
             "Books",
             "ListBooks",
             "GetBook");

@@ -10,16 +10,16 @@ namespace Prismedia.Infrastructure.Plugins;
 
 public sealed partial class EntityMetadataApplyService {
     private static readonly HashSet<string> RelationshipOwnerKindCodes = new(StringComparer.OrdinalIgnoreCase) {
-        EntityKindRegistry.Audio.Code,
-        EntityKindRegistry.AudioLibrary.Code,
-        EntityKindRegistry.AudioTrack.Code,
-        EntityKindRegistry.Book.Code,
-        EntityKindRegistry.Gallery.Code,
-        EntityKindRegistry.Image.Code,
-        EntityKindRegistry.Movie.Code,
-        EntityKindRegistry.MusicArtist.Code,
-        EntityKindRegistry.Video.Code,
-        EntityKindRegistry.VideoSeries.Code
+        EntityKind.Audio.ToCode(),
+        EntityKind.AudioLibrary.ToCode(),
+        EntityKind.AudioTrack.ToCode(),
+        EntityKind.Book.ToCode(),
+        EntityKind.Gallery.ToCode(),
+        EntityKind.Image.ToCode(),
+        EntityKind.Movie.ToCode(),
+        EntityKind.MusicArtist.ToCode(),
+        EntityKind.Video.ToCode(),
+        EntityKind.VideoSeries.ToCode()
     };
 
     private async Task ApplyScopedRelationshipFieldsAsync(

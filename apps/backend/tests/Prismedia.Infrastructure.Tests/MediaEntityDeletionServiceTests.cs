@@ -299,7 +299,7 @@ public sealed class MediaEntityDeletionServiceTests {
         var entityId = Guid.NewGuid();
         var monitorId = Guid.NewGuid();
         var sourceFileId = Guid.NewGuid();
-        db.Entities.Add(NewEntity(entityId, EntityKindRegistry.Movie.Code, "Arrival"));
+        db.Entities.Add(NewEntity(entityId, EntityKind.Movie.ToCode(), "Arrival"));
         db.EntityFiles.Add(new EntityFileRow {
             Id = sourceFileId,
             EntityId = entityId,
@@ -349,7 +349,7 @@ public sealed class MediaEntityDeletionServiceTests {
         var entityId = Guid.NewGuid();
         var monitorId = Guid.NewGuid();
         var path = "/media/movies/Arrival/Arrival.mkv";
-        db.Entities.Add(NewEntity(entityId, EntityKindRegistry.Movie.Code, "Arrival"));
+        db.Entities.Add(NewEntity(entityId, EntityKind.Movie.ToCode(), "Arrival"));
         db.EntityFiles.Add(NewSourceFile(entityId, path));
         db.Monitors.Add(new MonitorRow {
             Id = monitorId,
@@ -410,7 +410,7 @@ public sealed class MediaEntityDeletionServiceTests {
         var parentAcquisitionId = RecordingAcquisitions.AcquisitionId;
         var upgradeChildId = RecordingAcquisitions.ActiveAcquisitionId;
         var now = DateTimeOffset.UtcNow;
-        db.Entities.Add(NewEntity(entityId, EntityKindRegistry.Movie.Code, "Arrival"));
+        db.Entities.Add(NewEntity(entityId, EntityKind.Movie.ToCode(), "Arrival"));
         db.EntityFiles.Add(NewSourceFile(entityId, "/media/movies/Arrival/Arrival.mkv"));
         db.Acquisitions.AddRange(
             new AcquisitionRow {
@@ -479,7 +479,7 @@ public sealed class MediaEntityDeletionServiceTests {
         var root = new FileLibraryRoot(Guid.NewGuid(), "/media/movies", "Movies", true, true, false, false, false, false);
         var entityId = Guid.NewGuid();
         var path = "/media/movies/Arrival/Arrival.mkv";
-        db.Entities.Add(NewEntity(entityId, EntityKindRegistry.Movie.Code, "Arrival"));
+        db.Entities.Add(NewEntity(entityId, EntityKind.Movie.ToCode(), "Arrival"));
         db.EntityFiles.Add(NewSourceFile(entityId, path));
         await db.SaveChangesAsync();
         var storage = new RecordingStorage();
@@ -508,9 +508,9 @@ public sealed class MediaEntityDeletionServiceTests {
         var pageId = Guid.NewGuid();
         var archive = "/media/books/Comic/Volume 1.cbz";
         db.Entities.AddRange(
-            NewEntity(bookId, EntityKindRegistry.Book.Code, "Comic"),
-            NewEntity(chapterId, EntityKindRegistry.BookChapter.Code, "Chapter 1", bookId),
-            NewEntity(pageId, EntityKindRegistry.BookPage.Code, "Page 1", chapterId));
+            NewEntity(bookId, EntityKind.Book.ToCode(), "Comic"),
+            NewEntity(chapterId, EntityKind.BookChapter.ToCode(), "Chapter 1", bookId),
+            NewEntity(pageId, EntityKind.BookPage.ToCode(), "Page 1", chapterId));
         db.EntityFiles.AddRange(
             NewSourceFile(bookId, archive),
             NewSourceFile(chapterId, $"{archive}::chapter-1"),
@@ -539,8 +539,8 @@ public sealed class MediaEntityDeletionServiceTests {
         var movieId = Guid.NewGuid();
         var sharedFolder = "/media/mixed/shared";
         db.Entities.AddRange(
-            NewEntity(galleryId, EntityKindRegistry.Gallery.Code, "Gallery"),
-            NewEntity(movieId, EntityKindRegistry.Movie.Code, "Movie"));
+            NewEntity(galleryId, EntityKind.Gallery.ToCode(), "Gallery"),
+            NewEntity(movieId, EntityKind.Movie.ToCode(), "Movie"));
         db.EntityFiles.AddRange(
             NewSourceFile(galleryId, sharedFolder),
             NewSourceFile(movieId, $"{sharedFolder}/movie.mkv"));
@@ -585,8 +585,8 @@ public sealed class MediaEntityDeletionServiceTests {
         var galleryFolder = "/media/images/Gallery";
         var imagePath = $"{galleryFolder}/one.jpg";
         db.Entities.AddRange(
-            NewEntity(galleryId, EntityKindRegistry.Gallery.Code, "Gallery"),
-            NewEntity(imageId, EntityKindRegistry.Image.Code, "One", galleryId));
+            NewEntity(galleryId, EntityKind.Gallery.ToCode(), "Gallery"),
+            NewEntity(imageId, EntityKind.Image.ToCode(), "One", galleryId));
         db.EntityFiles.AddRange(
             NewSourceFile(galleryId, galleryFolder),
             NewSourceFile(imageId, imagePath));
@@ -618,8 +618,8 @@ public sealed class MediaEntityDeletionServiceTests {
         var seasonId = Guid.NewGuid();
         var seriesPath = "/media/tv/Show";
         db.Entities.AddRange(
-            NewEntity(seriesId, EntityKindRegistry.VideoSeries.Code, "Show"),
-            NewEntity(seasonId, EntityKindRegistry.VideoSeason.Code, "Season 1", seriesId));
+            NewEntity(seriesId, EntityKind.VideoSeries.ToCode(), "Show"),
+            NewEntity(seasonId, EntityKind.VideoSeason.ToCode(), "Season 1", seriesId));
         db.EntityFiles.AddRange(
             NewSourceFile(seriesId, seriesPath),
             NewSourceFile(seasonId, $"{seriesPath}/Season 01"));
@@ -650,8 +650,8 @@ public sealed class MediaEntityDeletionServiceTests {
         var trackId = Guid.NewGuid();
         var albumPath = "/media/music/Artist/Album";
         db.Entities.AddRange(
-            NewEntity(albumId, EntityKindRegistry.AudioLibrary.Code, "Album"),
-            NewEntity(trackId, EntityKindRegistry.AudioTrack.Code, "Track 1", albumId));
+            NewEntity(albumId, EntityKind.AudioLibrary.ToCode(), "Album"),
+            NewEntity(trackId, EntityKind.AudioTrack.ToCode(), "Track 1", albumId));
         db.EntityFiles.AddRange(
             NewSourceFile(albumId, albumPath),
             NewSourceFile(trackId, $"{albumPath}/01.flac"));
@@ -677,7 +677,7 @@ public sealed class MediaEntityDeletionServiceTests {
         var root = new FileLibraryRoot(Guid.NewGuid(), "/media/movies", "Movies", true, true, false, false, false, false);
         var movieId = Guid.NewGuid();
         var moviePath = "/media/movies/Arrival";
-        db.Entities.Add(NewEntity(movieId, EntityKindRegistry.Movie.Code, "Arrival"));
+        db.Entities.Add(NewEntity(movieId, EntityKind.Movie.ToCode(), "Arrival"));
         db.EntityFiles.Add(NewSourceFile(movieId, moviePath));
         await db.SaveChangesAsync();
         var storage = new RecordingStorage();
@@ -703,8 +703,8 @@ public sealed class MediaEntityDeletionServiceTests {
         var seasonId = Guid.NewGuid();
         var seriesPath = "/media/tv/Show";
         db.Entities.AddRange(
-            NewEntity(seriesId, EntityKindRegistry.VideoSeries.Code, "Show"),
-            NewEntity(seasonId, EntityKindRegistry.VideoSeason.Code, "Season 1", seriesId));
+            NewEntity(seriesId, EntityKind.VideoSeries.ToCode(), "Show"),
+            NewEntity(seasonId, EntityKind.VideoSeason.ToCode(), "Season 1", seriesId));
         db.EntityFiles.AddRange(
             NewSourceFile(seriesId, seriesPath),
             NewSourceFile(seasonId, $"{seriesPath}/Season 01"));
@@ -741,7 +741,7 @@ public sealed class MediaEntityDeletionServiceTests {
         var entityId = Guid.NewGuid();
         var monitorId = Guid.NewGuid();
         var path = "/media/movies/Arrival/Arrival.mkv";
-        db.Entities.Add(NewEntity(entityId, EntityKindRegistry.Movie.Code, "Arrival"));
+        db.Entities.Add(NewEntity(entityId, EntityKind.Movie.ToCode(), "Arrival"));
         db.EntityFiles.Add(NewSourceFile(entityId, path));
         db.Monitors.Add(new MonitorRow {
             Id = monitorId,
@@ -781,7 +781,7 @@ public sealed class MediaEntityDeletionServiceTests {
         await using var db = CreateContext();
         var root = new FileLibraryRoot(Guid.NewGuid(), "/media/movies", "Movies", true, true, false, false, false, false);
         var entityId = Guid.NewGuid();
-        db.Entities.Add(NewEntity(entityId, EntityKindRegistry.Movie.Code, "Arrival"));
+        db.Entities.Add(NewEntity(entityId, EntityKind.Movie.ToCode(), "Arrival"));
         db.EntityFiles.Add(NewSourceFile(entityId, "/media/movies/Arrival/Arrival.mkv"));
         db.Monitors.Add(new MonitorRow {
             Id = Guid.NewGuid(), Kind = EntityKind.Movie, EntityId = entityId,
@@ -810,7 +810,7 @@ public sealed class MediaEntityDeletionServiceTests {
         var root = new FileLibraryRoot(Guid.NewGuid(), "/media/movies", "Movies", true, true, false, false, false, false);
         var entityId = Guid.NewGuid();
         var monitorId = Guid.NewGuid();
-        db.Entities.Add(NewEntity(entityId, EntityKindRegistry.Movie.Code, "Arrival"));
+        db.Entities.Add(NewEntity(entityId, EntityKind.Movie.ToCode(), "Arrival"));
         db.EntityFiles.Add(NewSourceFile(entityId, "/media/movies/Arrival/Arrival.mkv"));
         db.Monitors.Add(new MonitorRow {
             Id = monitorId,
@@ -848,7 +848,7 @@ public sealed class MediaEntityDeletionServiceTests {
         await using var db = CreateContext();
         var root = new FileLibraryRoot(Guid.NewGuid(), "/media/movies", "Movies", true, true, false, false, false, false);
         var entityId = Guid.NewGuid();
-        db.Entities.Add(NewEntity(entityId, EntityKindRegistry.Movie.Code, "Arrival"));
+        db.Entities.Add(NewEntity(entityId, EntityKind.Movie.ToCode(), "Arrival"));
         db.EntityFiles.Add(NewSourceFile(entityId, "/media/movies/Arrival/Arrival.mkv"));
         await db.SaveChangesAsync();
         var service = new MediaEntityDeletionService(
@@ -871,7 +871,7 @@ public sealed class MediaEntityDeletionServiceTests {
         var root = new FileLibraryRoot(Guid.NewGuid(), "/media/movies", "Movies", true, true, false, false, false, false);
         var entityId = Guid.NewGuid();
         var monitorId = Guid.NewGuid();
-        db.Entities.Add(NewEntity(entityId, EntityKindRegistry.Movie.Code, "Arrival"));
+        db.Entities.Add(NewEntity(entityId, EntityKind.Movie.ToCode(), "Arrival"));
         db.EntityFiles.Add(NewSourceFile(entityId, "/media/movies/Arrival/Arrival.mkv"));
         db.Monitors.Add(new MonitorRow {
             Id = monitorId,
@@ -914,7 +914,7 @@ public sealed class MediaEntityDeletionServiceTests {
         var root = new FileLibraryRoot(Guid.NewGuid(), "/media/movies", "Movies", true, true, false, false, false, false);
         var entityId = Guid.NewGuid();
         var monitorId = Guid.NewGuid();
-        db.Entities.Add(NewEntity(entityId, EntityKindRegistry.Movie.Code, "Arrival"));
+        db.Entities.Add(NewEntity(entityId, EntityKind.Movie.ToCode(), "Arrival"));
         db.EntityFiles.Add(NewSourceFile(entityId, "/media/movies/Arrival/Arrival.mkv"));
         db.Monitors.Add(new MonitorRow {
             Id = monitorId,
@@ -968,7 +968,7 @@ public sealed class MediaEntityDeletionServiceTests {
         var root = new FileLibraryRoot(Guid.NewGuid(), "/media/movies", "Movies", true, true, false, false, false, false);
         var entityId = Guid.NewGuid();
         var monitorId = Guid.NewGuid();
-        db.Entities.Add(NewEntity(entityId, EntityKindRegistry.Movie.Code, "Arrival"));
+        db.Entities.Add(NewEntity(entityId, EntityKind.Movie.ToCode(), "Arrival"));
         db.EntityFiles.Add(NewSourceFile(entityId, "/media/movies/Arrival/Arrival.mkv"));
         db.Monitors.Add(new MonitorRow {
             Id = monitorId,
@@ -1009,7 +1009,7 @@ public sealed class MediaEntityDeletionServiceTests {
         await using var db = CreateContext();
         var entityId = Guid.NewGuid();
         var monitorId = Guid.NewGuid();
-        var entity = NewEntity(entityId, EntityKindRegistry.Movie.Code, "Arrival");
+        var entity = NewEntity(entityId, EntityKind.Movie.ToCode(), "Arrival");
         entity.IsWanted = true;
         db.Entities.Add(entity);
         db.Monitors.Add(new MonitorRow {
@@ -1050,7 +1050,7 @@ public sealed class MediaEntityDeletionServiceTests {
         var acquisitionId = Guid.NewGuid();
         var monitorId = Guid.NewGuid();
         var now = DateTimeOffset.UtcNow;
-        db.Entities.Add(NewEntity(entityId, EntityKindRegistry.Movie.Code, "Arrival"));
+        db.Entities.Add(NewEntity(entityId, EntityKind.Movie.ToCode(), "Arrival"));
         db.EntityFiles.Add(NewSourceFile(entityId, "/media/movies/Arrival/Arrival.mkv"));
         db.Acquisitions.Add(new AcquisitionRow {
             Id = acquisitionId,
@@ -1124,9 +1124,9 @@ public sealed class MediaEntityDeletionServiceTests {
         var firstMonitorId = Guid.NewGuid();
         var secondMonitorId = Guid.NewGuid();
         db.Entities.AddRange(
-            NewEntity(seriesId, EntityKindRegistry.VideoSeries.Code, "Crash Show"),
-            NewEntity(firstSeasonId, EntityKindRegistry.VideoSeason.Code, "Season 1", seriesId, 1),
-            NewEntity(secondSeasonId, EntityKindRegistry.VideoSeason.Code, "Season 2", seriesId, 2));
+            NewEntity(seriesId, EntityKind.VideoSeries.ToCode(), "Crash Show"),
+            NewEntity(firstSeasonId, EntityKind.VideoSeason.ToCode(), "Season 1", seriesId, 1),
+            NewEntity(secondSeasonId, EntityKind.VideoSeason.ToCode(), "Season 2", seriesId, 2));
         db.EntityFiles.AddRange(
             NewSourceFile(seriesId, "/media/tv/Crash Show"),
             NewSourceFile(firstSeasonId, "/media/tv/Crash Show/Season 01"),
@@ -1194,7 +1194,7 @@ public sealed class MediaEntityDeletionServiceTests {
         await using var db = CreateContext();
         var root = new FileLibraryRoot(Guid.NewGuid(), "/media/movies", "Movies", true, true, false, false, false, false);
         var entityId = Guid.NewGuid();
-        db.Entities.Add(NewEntity(entityId, EntityKindRegistry.Movie.Code, "Arrival"));
+        db.Entities.Add(NewEntity(entityId, EntityKind.Movie.ToCode(), "Arrival"));
         db.EntityFiles.Add(NewSourceFile(entityId, "/media/movies/Arrival/Arrival.mkv"));
 
         var monitor = new MonitorRow {
@@ -1414,9 +1414,9 @@ public sealed class MediaEntityDeletionServiceTests {
         var firstPath = $"{root.Path}/one.jpg";
         var secondPath = $"{root.Path}/two.jpg";
         db.Entities.AddRange(
-            NewEntity(galleryId, EntityKindRegistry.Gallery.Code, "Mixed Gallery"),
-            NewEntity(firstImageId, EntityKindRegistry.Image.Code, "One", galleryId, 1),
-            NewEntity(secondImageId, EntityKindRegistry.Image.Code, "Two", galleryId, 2));
+            NewEntity(galleryId, EntityKind.Gallery.ToCode(), "Mixed Gallery"),
+            NewEntity(firstImageId, EntityKind.Image.ToCode(), "One", galleryId, 1),
+            NewEntity(secondImageId, EntityKind.Image.ToCode(), "Two", galleryId, 2));
         db.EntityFiles.AddRange(
             NewSourceFile(firstImageId, firstPath),
             NewSourceFile(secondImageId, secondPath));
@@ -1491,7 +1491,7 @@ public sealed class MediaEntityDeletionServiceTests {
     public async Task RefusesUnknownAndNonMediaKinds() {
         await using var db = CreateContext();
         var tagId = Guid.NewGuid();
-        db.Entities.Add(NewEntity(tagId, EntityKindRegistry.Tag.Code, "Some Tag"));
+        db.Entities.Add(NewEntity(tagId, EntityKind.Tag.ToCode(), "Some Tag"));
         await db.SaveChangesAsync();
 
         var service = new MediaEntityDeletionService(
@@ -1515,7 +1515,7 @@ public sealed class MediaEntityDeletionServiceTests {
         await using var db = CreateContext();
         var entityId = Guid.NewGuid();
         var monitorId = Guid.NewGuid();
-        var entity = NewEntity(entityId, EntityKindRegistry.Movie.Code, "Arrival");
+        var entity = NewEntity(entityId, EntityKind.Movie.ToCode(), "Arrival");
         entity.IsWanted = true;
         db.Entities.Add(entity);
         db.Monitors.Add(new MonitorRow {
@@ -1557,9 +1557,9 @@ public sealed class MediaEntityDeletionServiceTests {
         var seasonId = Guid.NewGuid();
         var episodeId = Guid.NewGuid();
         db.Entities.AddRange(
-            NewEntity(seriesId, EntityKindRegistry.VideoSeries.Code, "Clifford the Big Red Dog"),
-            NewEntity(seasonId, EntityKindRegistry.VideoSeason.Code, "Season 1", seriesId),
-            NewEntity(episodeId, EntityKindRegistry.Video.Code, "Little Clifford", seasonId));
+            NewEntity(seriesId, EntityKind.VideoSeries.ToCode(), "Clifford the Big Red Dog"),
+            NewEntity(seasonId, EntityKind.VideoSeason.ToCode(), "Season 1", seriesId),
+            NewEntity(episodeId, EntityKind.Video.ToCode(), "Little Clifford", seasonId));
         db.EntityFiles.AddRange(
             NewSourceFile(seriesId, $"{basePath}/Clifford the Big Red Dog"),
             NewSourceFile(seasonId, $"{basePath}/Clifford the Big Red Dog/Season 01"),
@@ -1585,11 +1585,11 @@ public sealed class MediaEntityDeletionServiceTests {
         var unmonitoredSeasonId = Guid.NewGuid();
         var unmonitoredEpisodeId = Guid.NewGuid();
         db.Entities.AddRange(
-            NewEntity(seriesId, EntityKindRegistry.VideoSeries.Code, "Mixed Show", sortOrder: 0),
-            NewEntity(monitoredSeasonId, EntityKindRegistry.VideoSeason.Code, "Season 1", seriesId, 1),
-            NewEntity(monitoredEpisodeId, EntityKindRegistry.Video.Code, "Episode 1", monitoredSeasonId, 1),
-            NewEntity(unmonitoredSeasonId, EntityKindRegistry.VideoSeason.Code, "Season 2", seriesId, 2),
-            NewEntity(unmonitoredEpisodeId, EntityKindRegistry.Video.Code, "Episode 2", unmonitoredSeasonId, 1));
+            NewEntity(seriesId, EntityKind.VideoSeries.ToCode(), "Mixed Show", sortOrder: 0),
+            NewEntity(monitoredSeasonId, EntityKind.VideoSeason.ToCode(), "Season 1", seriesId, 1),
+            NewEntity(monitoredEpisodeId, EntityKind.Video.ToCode(), "Episode 1", monitoredSeasonId, 1),
+            NewEntity(unmonitoredSeasonId, EntityKind.VideoSeason.ToCode(), "Season 2", seriesId, 2),
+            NewEntity(unmonitoredEpisodeId, EntityKind.Video.ToCode(), "Episode 2", unmonitoredSeasonId, 1));
         db.EntityFiles.AddRange(
             NewSourceFile(seriesId, $"{basePath}/Mixed Show"),
             NewSourceFile(monitoredSeasonId, $"{basePath}/Mixed Show/Season 01"),

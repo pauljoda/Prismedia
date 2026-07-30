@@ -17,7 +17,7 @@ public sealed class MaintenancePersistenceServiceTests : IDisposable {
         var now = DateTimeOffset.UtcNow;
         db.Entities.Add(new EntityRow {
             Id = videoId,
-            KindCode = EntityKindRegistry.Video.Code,
+            KindCode = EntityKind.Video.ToCode(),
             Title = "HDR video",
             CreatedAt = now,
             UpdatedAt = now
@@ -96,7 +96,7 @@ public sealed class MaintenancePersistenceServiceTests : IDisposable {
         File.SetLastWriteTimeUtc(orphaned, DateTime.UtcNow.AddHours(-2));
         db.Entities.Add(new EntityRow {
             Id = videoId,
-            KindCode = EntityKindRegistry.Video.Code,
+            KindCode = EntityKind.Video.ToCode(),
             Title = "Subtitled video",
             CreatedAt = DateTimeOffset.UtcNow,
             UpdatedAt = DateTimeOffset.UtcNow

@@ -23,7 +23,7 @@ public sealed class CollectionItemReadService(
         var collectionExists = await db.Entities.AsNoTracking()
             .AnyAsync(entity =>
                 entity.Id == collectionId &&
-                entity.KindCode == EntityKindRegistry.Collection.Code &&
+                entity.KindCode == EntityKind.Collection.ToCode() &&
                 db.CollectionDetails.Any(detail =>
                     detail.EntityId == entity.Id &&
                     (currentUser.IsSystem ||
@@ -93,9 +93,9 @@ public sealed class CollectionItemReadService(
         // One grouped query for the whole batch: member counts and audio capability come straight
         // from the membership join — no thumbnail hydration, no per-collection round-trips.
         var audioKinds = new[] {
-            EntityKindRegistry.AudioTrack.Code,
-            EntityKindRegistry.AudioLibrary.Code,
-            EntityKindRegistry.MusicArtist.Code,
+            EntityKind.AudioTrack.ToCode(),
+            EntityKind.AudioLibrary.ToCode(),
+            EntityKind.MusicArtist.ToCode(),
         };
         var allEntities = db.Entities.AsNoTracking();
         var catalogEntities = allEntities.ExcludeBookOwnedAudioTracks(allEntities);

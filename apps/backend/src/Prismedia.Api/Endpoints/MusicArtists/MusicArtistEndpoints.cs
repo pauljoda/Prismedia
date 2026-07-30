@@ -7,7 +7,7 @@ public static class MusicArtistEndpoints {
     public static RouteGroupBuilder MapMusicArtistEndpoints(this IEndpointRouteBuilder routes) =>
         routes.MapEntityKindRoutes(
             "/api/music-artists",
-            EntityKindRegistry.MusicArtist.Code,
+            EntityKind.MusicArtist.ToCode(),
             "Artists",
             "ListMusicArtists",
             "GetMusicArtist");

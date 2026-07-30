@@ -164,7 +164,7 @@ public sealed class EfEntitySourceOwnershipReadTests {
         await db.SaveChangesAsync();
 
         var result = await CreateService(db).ListAsync(
-            EntityKindRegistry.Gallery.Code,
+            EntityKind.Gallery.ToCode(),
             query: null,
             cursor: null,
             hideNsfw: false,

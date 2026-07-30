@@ -67,7 +67,7 @@ public sealed class AudioSourceServiceTests : IDisposable {
         bool isWanted = false) {
         db.Entities.Add(new EntityRow {
             Id = trackId,
-            KindCode = EntityKindRegistry.AudioTrack.Code,
+            KindCode = EntityKind.AudioTrack.ToCode(),
             Title = "Track",
             IsWanted = isWanted,
             CreatedAt = DateTimeOffset.UtcNow,

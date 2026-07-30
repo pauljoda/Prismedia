@@ -15,12 +15,12 @@ public sealed class EntityManagementServiceTests {
         var service = new EntityManagementService(db);
 
         var result = await service.CreateAsync(
-            EntityKindRegistry.Tag.Code, new EntityCreateRequest("  Sci-Fi  "), CancellationToken.None);
+            EntityKind.Tag.ToCode(), new EntityCreateRequest("  Sci-Fi  "), CancellationToken.None);
 
         Assert.Equal(EntityCommandStatus.Created, result.Status);
         Assert.NotNull(result.Id);
         var row = await db.Entities.SingleAsync(e => e.Id == result.Id);
-        Assert.Equal(EntityKindRegistry.Tag.Code, row.KindCode);
+        Assert.Equal(EntityKind.Tag.ToCode(), row.KindCode);
         Assert.Equal("Sci-Fi", row.Title);
     }
 
@@ -30,7 +30,7 @@ public sealed class EntityManagementServiceTests {
         var service = new EntityManagementService(db);
 
         var result = await service.CreateAsync(
-            EntityKindRegistry.Person.Code, new EntityCreateRequest("   "), CancellationToken.None);
+            EntityKind.Person.ToCode(), new EntityCreateRequest("   "), CancellationToken.None);
 
         Assert.Equal(EntityCommandStatus.Invalid, result.Status);
         Assert.Empty(db.Entities);
@@ -42,7 +42,7 @@ public sealed class EntityManagementServiceTests {
         var service = new EntityManagementService(db);
 
         var result = await service.CreateAsync(
-            EntityKindRegistry.Video.Code, new EntityCreateRequest("Nope"), CancellationToken.None);
+            EntityKind.Video.ToCode(), new EntityCreateRequest("Nope"), CancellationToken.None);
 
         Assert.Equal(EntityCommandStatus.KindNotManageable, result.Status);
         Assert.Empty(db.Entities);
@@ -55,12 +55,12 @@ public sealed class EntityManagementServiceTests {
         var tagId = Guid.NewGuid();
         var videoId = Guid.NewGuid();
         db.Entities.AddRange(
-            new EntityRow { Id = tagId, KindCode = EntityKindRegistry.Tag.Code, Title = "Noir", CreatedAt = now, UpdatedAt = now },
-            new EntityRow { Id = videoId, KindCode = EntityKindRegistry.Video.Code, Title = "Film", CreatedAt = now, UpdatedAt = now });
+            new EntityRow { Id = tagId, KindCode = EntityKind.Tag.ToCode(), Title = "Noir", CreatedAt = now, UpdatedAt = now },
+            new EntityRow { Id = videoId, KindCode = EntityKind.Video.ToCode(), Title = "Film", CreatedAt = now, UpdatedAt = now });
         await db.SaveChangesAsync();
 
         var service = new EntityManagementService(db);
-        var result = await service.DeleteAsync(tagId, EntityKindRegistry.Tag.Code, CancellationToken.None);
+        var result = await service.DeleteAsync(tagId, EntityKind.Tag.ToCode(), CancellationToken.None);
 
         Assert.Equal(EntityCommandStatus.Deleted, result.Status);
         // The tag row is gone; the previously referencing media survives. The relationship-link
@@ -75,7 +75,7 @@ public sealed class EntityManagementServiceTests {
         await using var db = CreateContext();
         var service = new EntityManagementService(db);
 
-        var result = await service.DeleteAsync(Guid.NewGuid(), EntityKindRegistry.Tag.Code, CancellationToken.None);
+        var result = await service.DeleteAsync(Guid.NewGuid(), EntityKind.Tag.ToCode(), CancellationToken.None);
 
         Assert.Equal(EntityCommandStatus.NotFound, result.Status);
     }

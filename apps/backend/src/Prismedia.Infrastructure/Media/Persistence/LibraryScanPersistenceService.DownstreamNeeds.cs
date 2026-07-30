@@ -125,7 +125,7 @@ public sealed partial class LibraryScanPersistenceService {
         foreach (var id in ids) {
             entityKinds.TryGetValue(id, out var kindCode);
             var unreadable = probeFailed.Contains(id);
-            var needsPreview = string.Equals(kindCode, EntityKindRegistry.AudioTrack.Code, StringComparison.OrdinalIgnoreCase)
+            var needsPreview = string.Equals(kindCode, EntityKind.AudioTrack.ToCode(), StringComparison.OrdinalIgnoreCase)
                 ? !hasWaveform.Contains(id)
                 : !hasThumbnail.Contains(id) ||
                   (kindCode is not null && NeedsAnimatedImagePreviewClip(kindCode, id, sourcePaths, hasPreview));
@@ -223,7 +223,7 @@ public sealed partial class LibraryScanPersistenceService {
         Guid entityId,
         IReadOnlyDictionary<Guid, string> sourcePaths,
         IReadOnlySet<Guid> hasPreview) =>
-        string.Equals(kindCode, EntityKindRegistry.Image.Code, StringComparison.OrdinalIgnoreCase) &&
+        string.Equals(kindCode, EntityKind.Image.ToCode(), StringComparison.OrdinalIgnoreCase) &&
         sourcePaths.TryGetValue(entityId, out var sourcePath) &&
         AnimatedImagePreviewPolicy.RequiresPreviewClip(sourcePath) &&
         !hasPreview.Contains(entityId);
@@ -267,7 +267,7 @@ public sealed partial class LibraryScanPersistenceService {
         var targets = new Dictionary<Guid, EntityRefreshTarget>();
         if (albumIds.Count > 0) {
             var albumTracks = await _db.Entities.AsNoTracking()
-                .Where(entity => entity.KindCode == EntityKindRegistry.AudioTrack.Code &&
+                .Where(entity => entity.KindCode == EntityKind.AudioTrack.ToCode() &&
                     entity.ParentEntityId != null &&
                     albumIds.Contains(entity.ParentEntityId.Value))
                 .OrderBy(entity => entity.ParentEntityId)
@@ -290,7 +290,7 @@ public sealed partial class LibraryScanPersistenceService {
                 .Where(file => file.Role == EntityFileRole.Source)
                 .Join(
                     _db.Entities.AsNoTracking().Where(entity =>
-                        entity.KindCode == EntityKindRegistry.AudioTrack.Code &&
+                        entity.KindCode == EntityKind.AudioTrack.ToCode() &&
                         entity.ParentEntityId == null),
                     file => file.EntityId,
                     entity => entity.Id,
@@ -382,7 +382,7 @@ public sealed partial class LibraryScanPersistenceService {
             }
         }
 
-        var musicArtistCode = EntityKindRegistry.MusicArtist.Code;
+        var musicArtistCode = EntityKind.MusicArtist.ToCode();
         var roots = new Dictionary<Guid, AutoIdentifyRootTarget>();
         foreach (var id in entityIds) {
             var current = id;

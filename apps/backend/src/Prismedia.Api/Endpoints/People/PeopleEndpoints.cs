@@ -7,7 +7,7 @@ public static class PeopleEndpoints {
     public static RouteGroupBuilder MapPeopleEndpoints(this IEndpointRouteBuilder routes) =>
         routes.MapEntityKindRoutes(
             "/api/people",
-            EntityKindRegistry.Person.Code,
+            EntityKind.Person.ToCode(),
             "Taxonomy",
             "ListPeople",
             "GetPerson",

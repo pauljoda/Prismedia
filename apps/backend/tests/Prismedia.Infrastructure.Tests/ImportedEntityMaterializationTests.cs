@@ -110,7 +110,7 @@ public sealed class ImportedEntityMaterializationTests : IDisposable {
         Assert.False(entity.IsWanted);
         Assert.True(await HasSourceInSubtreeAsync(db, wantedId));
         Assert.Contains(await db.Entities.AsNoTracking().ToArrayAsync(), row =>
-            row.ParentEntityId == wantedId && row.KindCode == EntityKindRegistry.Video.Code);
+            row.ParentEntityId == wantedId && row.KindCode == EntityKind.Video.ToCode());
         Assert.True(await db.Entities.AsNoTracking().AnyAsync(row => row.Id == unrelatedId));
         Assert.DoesNotContain(queue.Enqueued, request => request.Type == JobType.ScanLibrary);
         var importedVideoId = await db.EntityFiles.AsNoTracking()
@@ -197,7 +197,7 @@ public sealed class ImportedEntityMaterializationTests : IDisposable {
         Assert.False((await db.Entities.AsNoTracking().SingleAsync(row => row.Id == albumId)).IsWanted);
         Assert.True(await HasSourceInSubtreeAsync(db, albumId));
         var tracks = await db.Entities.AsNoTracking()
-            .Where(row => row.ParentEntityId == albumId && row.KindCode == EntityKindRegistry.AudioTrack.Code)
+            .Where(row => row.ParentEntityId == albumId && row.KindCode == EntityKind.AudioTrack.ToCode())
             .ToArrayAsync();
         var retainedTrack = Assert.Single(tracks, track => track.Id == wantedTrackId);
         Assert.Equal(wantedTrackId, retainedTrack.Id);
@@ -346,7 +346,7 @@ public sealed class ImportedEntityMaterializationTests : IDisposable {
             PayloadJson = "{}",
             Attempts = 0,
             MaxAttempts = 3,
-            TargetEntityKind = EntityKindRegistry.AudioTrack.Code,
+            TargetEntityKind = EntityKind.AudioTrack.ToCode(),
             TargetEntityId = duplicateId.ToString(),
             TargetLabel = scannedTitle,
             AvailableAt = now,
@@ -371,7 +371,7 @@ public sealed class ImportedEntityMaterializationTests : IDisposable {
             0,
             null,
             new ScanRootPayload(root.Root.Id).ToJson(),
-            EntityKindRegistry.AudioLibrary.Code,
+            EntityKind.AudioLibrary.ToCode(),
             root.Root.Id.ToString(),
             root.Root.Label,
             now,
@@ -404,7 +404,7 @@ public sealed class ImportedEntityMaterializationTests : IDisposable {
         Assert.Equal("Divide Music", detail.EmbeddedArtist);
         Assert.Equal("Set It On Fire", detail.EmbeddedAlbum);
         Assert.Single(await db.Entities.AsNoTracking().Where(row =>
-            row.ParentEntityId == albumId && row.KindCode == EntityKindRegistry.AudioTrack.Code).ToArrayAsync());
+            row.ParentEntityId == albumId && row.KindCode == EntityKind.AudioTrack.ToCode()).ToArrayAsync());
         Assert.Contains(queue.Enqueued, request =>
             request.Type == JobType.GenerateAudioWaveform
             && request.TargetEntityId == wantedTrackId.ToString());

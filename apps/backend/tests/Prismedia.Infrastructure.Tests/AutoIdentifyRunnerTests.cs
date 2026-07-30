@@ -127,7 +127,7 @@ public sealed class AutoIdentifyRunnerTests {
         var entityId = await SeedVideoAsync(
             db,
             organized: false,
-            kind: EntityKindRegistry.MusicArtist.Code,
+            kind: EntityKind.MusicArtist.ToCode(),
             title: "NateWantsToBattle");
         var settings = await ConfigureAsync(db, enabled: true, providers: ["musicbrainz"], confidencePercent: 90m);
         var identify = new FakeIdentifyProvider {
@@ -148,7 +148,7 @@ public sealed class AutoIdentifyRunnerTests {
                     targetKind: ProposalKind.MusicArtist),
             },
             SupportedKindsByProvider = {
-                ["musicbrainz"] = [EntityKindRegistry.MusicArtist.Code],
+                ["musicbrainz"] = [EntityKind.MusicArtist.ToCode()],
             },
         };
         var runner = new AutoIdentifyRunner(
@@ -172,7 +172,7 @@ public sealed class AutoIdentifyRunnerTests {
         var entityId = await SeedVideoAsync(
             db,
             organized: false,
-            kind: EntityKindRegistry.AudioLibrary.Code,
+            kind: EntityKind.AudioLibrary.ToCode(),
             title: "Diddy Kong Racing Theme (2014)");
         var settings = await ConfigureAsync(db, enabled: true, providers: ["musicbrainz"], confidencePercent: 90m);
         var identify = new FakeIdentifyProvider {
@@ -193,7 +193,7 @@ public sealed class AutoIdentifyRunnerTests {
                     targetKind: ProposalKind.AudioLibrary),
             },
             SupportedKindsByProvider = {
-                ["musicbrainz"] = [EntityKindRegistry.AudioLibrary.Code],
+                ["musicbrainz"] = [EntityKind.AudioLibrary.ToCode()],
             },
         };
         var runner = new AutoIdentifyRunner(
@@ -216,7 +216,7 @@ public sealed class AutoIdentifyRunnerTests {
         var entityId = await SeedVideoAsync(
             db,
             organized: false,
-            kind: EntityKindRegistry.MusicArtist.Code,
+            kind: EntityKind.MusicArtist.ToCode(),
             title: "Don McLean");
         var settings = await ConfigureAsync(db, enabled: true, providers: ["musicbrainz"], confidencePercent: 90m);
         var identify = new FakeIdentifyProvider {
@@ -227,7 +227,7 @@ public sealed class AutoIdentifyRunnerTests {
                     ("18836d7a-2c12-4d62-9d6e-d25776d2887c", "Don McLean", (decimal?)null, null)),
             },
             SupportedKindsByProvider = {
-                ["musicbrainz"] = [EntityKindRegistry.MusicArtist.Code],
+                ["musicbrainz"] = [EntityKind.MusicArtist.ToCode()],
             },
         };
         var runner = new AutoIdentifyRunner(
@@ -492,7 +492,7 @@ public sealed class AutoIdentifyRunnerTests {
     [Fact]
     public async Task ExplicitImportTargetIdentifiesOnlyTheOrganizedEpisode() {
         await using var db = CreateContext();
-        var seriesId = await SeedVideoAsync(db, organized: false, kind: EntityKindRegistry.VideoSeries.Code);
+        var seriesId = await SeedVideoAsync(db, organized: false, kind: EntityKind.VideoSeries.ToCode());
         var episodeId = await SeedVideoAsync(db, organized: true, parentId: seriesId);
         var settings = await ConfigureAsync(db, enabled: true, providers: ["p1"], confidencePercent: 90m);
         var identify = new FakeIdentifyProvider {
@@ -570,7 +570,7 @@ public sealed class AutoIdentifyRunnerTests {
     [Fact]
     public async Task MatchesProviderCapabilityByConcreteKindSoAlbumsAutoIdentify() {
         await using var db = CreateContext();
-        var albumId = await SeedVideoAsync(db, organized: false, kind: EntityKindRegistry.AudioLibrary.Code, title: "Abbey Road");
+        var albumId = await SeedVideoAsync(db, organized: false, kind: EntityKind.AudioLibrary.ToCode(), title: "Abbey Road");
         var settings = await ConfigureAsync(db, enabled: true, providers: ["musicbrainz"], confidencePercent: 90m);
         var identify = new FakeIdentifyProvider {
             ProposalsByProvider = {
@@ -580,9 +580,9 @@ public sealed class AutoIdentifyRunnerTests {
             // capability lookup by the settings selector kind would wrongly exclude the provider.
             SupportedKindsByProvider = {
                 ["musicbrainz"] = [
-                    EntityKindRegistry.MusicArtist.Code,
-                    EntityKindRegistry.AudioLibrary.Code,
-                    EntityKindRegistry.AudioTrack.Code,
+                    EntityKind.MusicArtist.ToCode(),
+                    EntityKind.AudioLibrary.ToCode(),
+                    EntityKind.AudioTrack.ToCode(),
                 ],
             },
         };
@@ -606,13 +606,13 @@ public sealed class AutoIdentifyRunnerTests {
         var artistId = await SeedVideoAsync(
             db,
             organized: false,
-            kind: EntityKindRegistry.MusicArtist.Code,
+            kind: EntityKind.MusicArtist.ToCode(),
             title: "The Beatles");
         var albumId = await SeedVideoAsync(
             db,
             organized: false,
             parentId: artistId,
-            kind: EntityKindRegistry.AudioLibrary.Code,
+            kind: EntityKind.AudioLibrary.ToCode(),
             title: "Abbey Road");
         var settings = await ConfigureAsync(db, enabled: true, providers: ["musicbrainz"], confidencePercent: 90m);
         var identify = new FakeIdentifyProvider {
@@ -621,9 +621,9 @@ public sealed class AutoIdentifyRunnerTests {
             },
             SupportedKindsByProvider = {
                 ["musicbrainz"] = [
-                    EntityKindRegistry.MusicArtist.Code,
-                    EntityKindRegistry.AudioLibrary.Code,
-                    EntityKindRegistry.AudioTrack.Code,
+                    EntityKind.MusicArtist.ToCode(),
+                    EntityKind.AudioLibrary.ToCode(),
+                    EntityKind.AudioTrack.ToCode(),
                 ],
             },
         };
@@ -647,7 +647,7 @@ public sealed class AutoIdentifyRunnerTests {
         var artistId = await SeedVideoAsync(
             db,
             organized: true,
-            kind: EntityKindRegistry.MusicArtist.Code,
+            kind: EntityKind.MusicArtist.ToCode(),
             title: "The Beatles");
         db.EntityExternalIds.Add(new EntityExternalIdRow {
             Id = Guid.NewGuid(),
@@ -662,7 +662,7 @@ public sealed class AutoIdentifyRunnerTests {
             db,
             organized: false,
             parentId: artistId,
-            kind: EntityKindRegistry.AudioLibrary.Code,
+            kind: EntityKind.AudioLibrary.ToCode(),
             title: "Abbey Road");
         var settings = await ConfigureAsync(db, enabled: true, providers: ["musicbrainz"], confidencePercent: 90m);
         var identify = new FakeIdentifyProvider {
@@ -670,7 +670,7 @@ public sealed class AutoIdentifyRunnerTests {
                 ["musicbrainz"] = Proposal("musicbrainz", confidence: 0.95m, title: "Abbey Road", targetKind: ProposalKind.AudioLibrary),
             },
             SupportedKindsByProvider = {
-                ["musicbrainz"] = [EntityKindRegistry.AudioLibrary.Code],
+                ["musicbrainz"] = [EntityKind.AudioLibrary.ToCode()],
             },
         };
         var runner = new AutoIdentifyRunner(
@@ -694,7 +694,7 @@ public sealed class AutoIdentifyRunnerTests {
         var artistId = await SeedVideoAsync(
             db,
             organized: false,
-            kind: EntityKindRegistry.MusicArtist.Code,
+            kind: EntityKind.MusicArtist.ToCode(),
             title: "The Beatles");
         var settings = await ConfigureAsync(db, enabled: true, providers: ["musicbrainz"], confidencePercent: 90m);
         var identify = new FakeIdentifyProvider {
@@ -703,9 +703,9 @@ public sealed class AutoIdentifyRunnerTests {
             },
             SupportedKindsByProvider = {
                 ["musicbrainz"] = [
-                    EntityKindRegistry.MusicArtist.Code,
-                    EntityKindRegistry.AudioLibrary.Code,
-                    EntityKindRegistry.AudioTrack.Code,
+                    EntityKind.MusicArtist.ToCode(),
+                    EntityKind.AudioLibrary.ToCode(),
+                    EntityKind.AudioTrack.ToCode(),
                 ],
             },
         };
@@ -729,7 +729,7 @@ public sealed class AutoIdentifyRunnerTests {
     [Fact]
     public async Task MarksAppliedProposalTreeOrganizedBeforeAutoApply() {
         await using var db = CreateContext();
-        var albumId = await SeedVideoAsync(db, organized: false, kind: EntityKindRegistry.AudioLibrary.Code, title: "What You Want (2020)");
+        var albumId = await SeedVideoAsync(db, organized: false, kind: EntityKind.AudioLibrary.ToCode(), title: "What You Want (2020)");
         var trackId = Guid.NewGuid();
         var proposal = Proposal("musicbrainz", confidence: 0.95m, title: "What You Want", targetKind: ProposalKind.AudioLibrary) with {
             TargetEntityId = albumId,
@@ -743,7 +743,7 @@ public sealed class AutoIdentifyRunnerTests {
         var settings = await ConfigureAsync(db, enabled: true, providers: ["musicbrainz"], confidencePercent: 90m);
         var identify = new FakeIdentifyProvider {
             ProposalsByProvider = { ["musicbrainz"] = proposal },
-            SupportedKindsByProvider = { ["musicbrainz"] = [EntityKindRegistry.AudioLibrary.Code] },
+            SupportedKindsByProvider = { ["musicbrainz"] = [EntityKind.AudioLibrary.ToCode()] },
         };
         var runner = new AutoIdentifyRunner(
             settings,
@@ -765,14 +765,14 @@ public sealed class AutoIdentifyRunnerTests {
     [Fact]
     public async Task ThrowsRetryLaterWhenProviderReportsRateLimit() {
         await using var db = CreateContext();
-        var albumId = await SeedVideoAsync(db, organized: false, kind: EntityKindRegistry.AudioLibrary.Code, title: "Abbey Road");
+        var albumId = await SeedVideoAsync(db, organized: false, kind: EntityKind.AudioLibrary.ToCode(), title: "Abbey Road");
         var settings = await ConfigureAsync(db, enabled: true, providers: ["musicbrainz"], confidencePercent: 90m);
         var identify = new FakeIdentifyProvider {
             ErrorsByProvider = {
                 ["musicbrainz"] = "429 Too Many Requests"
             },
             SupportedKindsByProvider = {
-                ["musicbrainz"] = [EntityKindRegistry.AudioLibrary.Code],
+                ["musicbrainz"] = [EntityKind.AudioLibrary.ToCode()],
             },
         };
         var runner = new AutoIdentifyRunner(

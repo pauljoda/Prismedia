@@ -126,9 +126,9 @@ public sealed partial class JellyfinCatalogService {
         }
 
         var expected = view.Kind switch {
-            _ when view.Kind == EntityKindRegistry.Movie.Code => JellyfinProtocol.ItemTypes.Movie,
-            _ when view.Kind == EntityKindRegistry.VideoSeries.Code => JellyfinProtocol.ItemTypes.Series,
-            _ when view.Kind == EntityKindRegistry.MusicArtist.Code => JellyfinProtocol.ItemTypes.MusicArtist,
+            _ when view.Kind == EntityKind.Movie.ToCode() => JellyfinProtocol.ItemTypes.Movie,
+            _ when view.Kind == EntityKind.VideoSeries.ToCode() => JellyfinProtocol.ItemTypes.Series,
+            _ when view.Kind == EntityKind.MusicArtist.ToCode() => JellyfinProtocol.ItemTypes.MusicArtist,
             _ => null
         };
         return expected is not null &&

@@ -29,7 +29,7 @@ public sealed class UserLibraryVisibilityTests {
         var member = TestUserContext.Member(GrantedRootId);
         var service = CreateService(db, member);
 
-        var list = await service.ListAsync(EntityKindRegistry.Video.Code, null, null, null, null, CancellationToken.None);
+        var list = await service.ListAsync(EntityKind.Video.ToCode(), null, null, null, null, CancellationToken.None);
         Assert.Equal(GrantedVideoId, Assert.Single(list.Items).Id);
 
         Assert.NotNull(await service.GetAsync(GrantedVideoId, hideNsfw: false, CancellationToken.None));
@@ -48,7 +48,7 @@ public sealed class UserLibraryVisibilityTests {
         var now = DateTimeOffset.UtcNow;
         db.Entities.Add(new EntityRow {
             Id = rootlessTagId,
-            KindCode = EntityKindRegistry.Tag.Code,
+            KindCode = EntityKind.Tag.ToCode(),
             Title = "Shared taxonomy",
             CreatedAt = now,
             UpdatedAt = now
@@ -70,7 +70,7 @@ public sealed class UserLibraryVisibilityTests {
         await SeedTwoRootedVideosAsync(db);
         var service = CreateService(db, TestUserContext.Admin());
 
-        var list = await service.ListAsync(EntityKindRegistry.Video.Code, null, null, null, null, CancellationToken.None);
+        var list = await service.ListAsync(EntityKind.Video.ToCode(), null, null, null, null, CancellationToken.None);
 
         Assert.Equal(2, list.TotalCount);
     }
@@ -82,7 +82,7 @@ public sealed class UserLibraryVisibilityTests {
         var service = CreateService(db, TestUserContext.Member(GrantedRootId));
 
         var list = await service.ListAsync(
-            EntityKindRegistry.Book.Code,
+            EntityKind.Book.ToCode(),
             null,
             null,
             null,
@@ -138,7 +138,7 @@ public sealed class UserLibraryVisibilityTests {
         });
         db.Entities.Add(new EntityRow {
             Id = RestrictedWantedBookId,
-            KindCode = EntityKindRegistry.Book.Code,
+            KindCode = EntityKind.Book.ToCode(),
             Title = "The Anxious Generation",
             IsWanted = true,
             CreatedAt = now,
@@ -149,7 +149,7 @@ public sealed class UserLibraryVisibilityTests {
         var service = CreateService(db, TestUserContext.Member(GrantedRootId));
 
         var list = await service.ListAsync(
-            EntityKindRegistry.Book.Code,
+            EntityKind.Book.ToCode(),
             null,
             null,
             null,
@@ -181,9 +181,9 @@ public sealed class UserLibraryVisibilityTests {
         // playback must not surface.
         var service = CreateService(db, TestUserContext.Admin());
         var favorites = await service.ListAsync(
-            EntityKindRegistry.Video.Code, null, null, null, null, CancellationToken.None, favorite: true);
+            EntityKind.Video.ToCode(), null, null, null, null, CancellationToken.None, favorite: true);
         var thumbnails = await service.ListAsync(
-            EntityKindRegistry.Video.Code, null, null, null, null, CancellationToken.None);
+            EntityKind.Video.ToCode(), null, null, null, null, CancellationToken.None);
 
         Assert.Empty(favorites.Items);
         Assert.All(thumbnails.Items, item => Assert.False(item.IsFavorite));
@@ -202,7 +202,7 @@ public sealed class UserLibraryVisibilityTests {
         var service = CreateService(db, TestUserContext.Admin(ownerUserId));
 
         var list = await service.ListAsync(
-            EntityKindRegistry.Collection.Code,
+            EntityKind.Collection.ToCode(),
             null,
             null,
             null,
@@ -245,7 +245,7 @@ public sealed class UserLibraryVisibilityTests {
         var now = DateTimeOffset.UtcNow;
         db.Entities.Add(new EntityRow {
             Id = id,
-            KindCode = EntityKindRegistry.Collection.Code,
+            KindCode = EntityKind.Collection.ToCode(),
             Title = title,
             CreatedAt = now,
             UpdatedAt = now,
@@ -264,8 +264,8 @@ public sealed class UserLibraryVisibilityTests {
             new LibraryRootRow { Id = GrantedRootId, Path = "/media/a", Label = "A", Enabled = true, CreatedAt = now, UpdatedAt = now },
             new LibraryRootRow { Id = RestrictedRootId, Path = "/media/b", Label = "B", Enabled = true, CreatedAt = now, UpdatedAt = now });
         db.Entities.AddRange(
-            new EntityRow { Id = GrantedVideoId, KindCode = EntityKindRegistry.Video.Code, Title = "Granted", CreatedAt = now, UpdatedAt = now },
-            new EntityRow { Id = RestrictedVideoId, KindCode = EntityKindRegistry.Video.Code, Title = "Restricted", CreatedAt = now, UpdatedAt = now });
+            new EntityRow { Id = GrantedVideoId, KindCode = EntityKind.Video.ToCode(), Title = "Granted", CreatedAt = now, UpdatedAt = now },
+            new EntityRow { Id = RestrictedVideoId, KindCode = EntityKind.Video.ToCode(), Title = "Restricted", CreatedAt = now, UpdatedAt = now });
         db.VideoDetails.AddRange(
             new VideoDetailRow { EntityId = GrantedVideoId, LibraryRootId = GrantedRootId },
             new VideoDetailRow { EntityId = RestrictedVideoId, LibraryRootId = RestrictedRootId });
@@ -297,8 +297,8 @@ public sealed class UserLibraryVisibilityTests {
                 UpdatedAt = now
             });
         db.Entities.AddRange(
-            new EntityRow { Id = GrantedWantedBookId, KindCode = EntityKindRegistry.Book.Code, Title = "Granted wanted", IsWanted = true, CreatedAt = now, UpdatedAt = now },
-            new EntityRow { Id = RestrictedWantedBookId, KindCode = EntityKindRegistry.Book.Code, Title = "Restricted wanted", IsWanted = true, CreatedAt = now, UpdatedAt = now });
+            new EntityRow { Id = GrantedWantedBookId, KindCode = EntityKind.Book.ToCode(), Title = "Granted wanted", IsWanted = true, CreatedAt = now, UpdatedAt = now },
+            new EntityRow { Id = RestrictedWantedBookId, KindCode = EntityKind.Book.ToCode(), Title = "Restricted wanted", IsWanted = true, CreatedAt = now, UpdatedAt = now });
         db.BookDetails.AddRange(
             new BookDetailRow { EntityId = GrantedWantedBookId },
             new BookDetailRow { EntityId = RestrictedWantedBookId });

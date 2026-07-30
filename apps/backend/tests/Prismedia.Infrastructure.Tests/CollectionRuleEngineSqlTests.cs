@@ -176,7 +176,7 @@ public sealed class CollectionRuleEngineSqlTests {
             ]
         };
 
-        var query = new CollectionRuleEngine(null!).BuildQuery(group, EntityKindRegistry.Video.Code);
+        var query = new CollectionRuleEngine(null!).BuildQuery(group, EntityKind.Video.ToCode());
 
         Assert.NotNull(query);
         Assert.Contains("video_details", query.Value.Sql, StringComparison.Ordinal);
@@ -199,7 +199,7 @@ public sealed class CollectionRuleEngineSqlTests {
             ]
         };
 
-        var query = new CollectionRuleEngine(null!).BuildQuery(group, EntityKindRegistry.VideoSeries.Code);
+        var query = new CollectionRuleEngine(null!).BuildQuery(group, EntityKind.VideoSeries.ToCode());
 
         Assert.NotNull(query);
         Assert.Contains("series_video", query.Value.Sql, StringComparison.Ordinal);
@@ -220,7 +220,7 @@ public sealed class CollectionRuleEngineSqlTests {
             ]
         };
 
-        var query = new CollectionRuleEngine(null!).BuildQuery(group, EntityKindRegistry.AudioTrack.Code);
+        var query = new CollectionRuleEngine(null!).BuildQuery(group, EntityKind.AudioTrack.ToCode());
 
         Assert.NotNull(query);
         Assert.Contains("FROM entities parent1", query.Value.Sql, StringComparison.Ordinal);
@@ -240,13 +240,13 @@ public sealed class CollectionRuleEngineSqlTests {
             ]
         };
 
-        var query = new CollectionRuleEngine(null!).BuildQuery(group, EntityKindRegistry.AudioTrack.Code);
+        var query = new CollectionRuleEngine(null!).BuildQuery(group, EntityKind.AudioTrack.ToCode());
 
         Assert.NotNull(query);
         Assert.Contains("parent.id = e.parent_entity_id", query.Value.Sql, StringComparison.Ordinal);
         Assert.Contains(query.Value.Parameters, parameter =>
             parameter.NpgsqlDbType == NpgsqlDbType.Text &&
-            Equals(parameter.Value, EntityKindRegistry.Book.Code));
+            Equals(parameter.Value, EntityKind.Book.ToCode()));
     }
 
     [Fact]
@@ -262,8 +262,8 @@ public sealed class CollectionRuleEngineSqlTests {
             ]
         };
 
-        var videoSql = new CollectionRuleEngine(null!).BuildQuery(group, EntityKindRegistry.Video.Code);
-        var gallerySql = new CollectionRuleEngine(null!).BuildQuery(group, EntityKindRegistry.Gallery.Code);
+        var videoSql = new CollectionRuleEngine(null!).BuildQuery(group, EntityKind.Video.ToCode());
+        var gallerySql = new CollectionRuleEngine(null!).BuildQuery(group, EntityKind.Gallery.ToCode());
 
         Assert.NotNull(videoSql);
         Assert.Null(gallerySql);
@@ -302,15 +302,15 @@ public sealed class CollectionRuleEngineSqlTests {
 
     public static IEnumerable<object?[]> RepresentativeRuleCases() {
         var allKinds = new[] {
-            EntityKindRegistry.Video.Code,
-            EntityKindRegistry.Movie.Code,
-            EntityKindRegistry.VideoSeries.Code,
-            EntityKindRegistry.Gallery.Code,
-            EntityKindRegistry.Image.Code,
-            EntityKindRegistry.Book.Code,
-            EntityKindRegistry.MusicArtist.Code,
-            EntityKindRegistry.AudioLibrary.Code,
-            EntityKindRegistry.AudioTrack.Code,
+            EntityKind.Video.ToCode(),
+            EntityKind.Movie.ToCode(),
+            EntityKind.VideoSeries.ToCode(),
+            EntityKind.Gallery.ToCode(),
+            EntityKind.Image.ToCode(),
+            EntityKind.Book.ToCode(),
+            EntityKind.MusicArtist.ToCode(),
+            EntityKind.AudioLibrary.ToCode(),
+            EntityKind.AudioTrack.ToCode(),
         };
 
         foreach (var kind in allKinds) {
@@ -326,28 +326,28 @@ public sealed class CollectionRuleEngineSqlTests {
             yield return Case("createdAt", "greater_than", "2026-01-01T00:00:00Z", kind);
         }
 
-        foreach (var kind in new[] { EntityKindRegistry.Video.Code, EntityKindRegistry.Image.Code, EntityKindRegistry.AudioTrack.Code }) {
+        foreach (var kind in new[] { EntityKind.Video.ToCode(), EntityKind.Image.ToCode(), EntityKind.AudioTrack.ToCode() }) {
             yield return Case("fileSize", "greater_than", 1024, kind);
         }
 
-        foreach (var kind in new[] { EntityKindRegistry.Video.Code, EntityKindRegistry.AudioTrack.Code }) {
+        foreach (var kind in new[] { EntityKind.Video.ToCode(), EntityKind.AudioTrack.ToCode() }) {
             yield return Case("duration", "greater_than", 60, kind);
             yield return Case("playCount", "greater_equal", 1, kind);
             yield return Case("skipCount", "less_equal", 2, kind);
         }
 
-        yield return Case("resolution", "in", new[] { "1080p" }, EntityKindRegistry.Video.Code);
-        yield return Case("codec", "equals", "h264", EntityKindRegistry.Video.Code);
-        yield return Case("interactive", "is_false", null, EntityKindRegistry.Video.Code);
-        yield return Case("videoSeriesId", "equals", "The Chair Company", EntityKindRegistry.Video.Code);
-        yield return Case("galleryType", "equals", "folder", EntityKindRegistry.Gallery.Code);
-        yield return Case("imageCount", "greater_than", 3, EntityKindRegistry.Gallery.Code);
-        yield return Case("width", "greater_than", 640, EntityKindRegistry.Image.Code);
-        yield return Case("height", "greater_than", 480, EntityKindRegistry.Image.Code);
-        yield return Case("format", "equals", "jpeg", EntityKindRegistry.Image.Code);
-        yield return Case("bitRate", "greater_than", 128000, EntityKindRegistry.AudioTrack.Code);
-        yield return Case("sampleRate", "greater_than", 44100, EntityKindRegistry.AudioTrack.Code);
-        yield return Case("channels", "equals", 2, EntityKindRegistry.AudioTrack.Code);
+        yield return Case("resolution", "in", new[] { "1080p" }, EntityKind.Video.ToCode());
+        yield return Case("codec", "equals", "h264", EntityKind.Video.ToCode());
+        yield return Case("interactive", "is_false", null, EntityKind.Video.ToCode());
+        yield return Case("videoSeriesId", "equals", "The Chair Company", EntityKind.Video.ToCode());
+        yield return Case("galleryType", "equals", "folder", EntityKind.Gallery.ToCode());
+        yield return Case("imageCount", "greater_than", 3, EntityKind.Gallery.ToCode());
+        yield return Case("width", "greater_than", 640, EntityKind.Image.ToCode());
+        yield return Case("height", "greater_than", 480, EntityKind.Image.ToCode());
+        yield return Case("format", "equals", "jpeg", EntityKind.Image.ToCode());
+        yield return Case("bitRate", "greater_than", 128000, EntityKind.AudioTrack.ToCode());
+        yield return Case("sampleRate", "greater_than", 44100, EntityKind.AudioTrack.ToCode());
+        yield return Case("channels", "equals", 2, EntityKind.AudioTrack.ToCode());
     }
 
     private static object?[] Case(string field, string op, object? value, string kindCode) =>

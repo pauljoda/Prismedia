@@ -15,7 +15,7 @@ public sealed class EfFilesPersistenceTests {
         var rootPath = Path.GetFullPath("/media/safe");
         var folderPath = Path.Combine(rootPath, "Videos", "Friendship (2025)");
         var videoPath = Path.Combine(folderPath, "Friendship (2025) Bluray-1080p.mkv");
-        await AddSourceEntityAsync(db, EntityKindRegistry.Video.Code, "Friendship (2025)", videoPath, isNsfw: true);
+        await AddSourceEntityAsync(db, EntityKind.Video.ToCode(), "Friendship (2025)", videoPath, isNsfw: true);
 
         var persistence = new EfFilesPersistence(db);
 
@@ -36,8 +36,8 @@ public sealed class EfFilesPersistenceTests {
         var nsfwFolderPath = Path.Combine(videosPath, "Friendship (2025)");
         var nsfwVideoPath = Path.Combine(nsfwFolderPath, "Friendship (2025) Bluray-1080p.mkv");
         var safeVideoPath = Path.Combine(videosPath, "bbb_sunflower_2160p_60fps.mp4");
-        await AddSourceEntityAsync(db, EntityKindRegistry.Video.Code, "Friendship (2025)", nsfwVideoPath, isNsfw: true);
-        await AddSourceEntityAsync(db, EntityKindRegistry.Video.Code, "Big Buck Bunny", safeVideoPath, isNsfw: false);
+        await AddSourceEntityAsync(db, EntityKind.Video.ToCode(), "Friendship (2025)", nsfwVideoPath, isNsfw: true);
+        await AddSourceEntityAsync(db, EntityKind.Video.ToCode(), "Big Buck Bunny", safeVideoPath, isNsfw: false);
 
         var persistence = new EfFilesPersistence(db);
 
@@ -168,7 +168,7 @@ public sealed class EfFilesPersistenceTests {
         var sourceFile = Path.Combine(sourceFolder, "Movie.mkv");
         db.Entities.Add(new EntityRow {
             Id = entityId,
-            KindCode = EntityKindRegistry.Video.Code,
+            KindCode = EntityKind.Video.ToCode(),
             Title = "Movie",
             CreatedAt = now,
             UpdatedAt = now,

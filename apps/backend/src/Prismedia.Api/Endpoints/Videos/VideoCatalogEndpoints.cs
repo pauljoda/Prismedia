@@ -7,7 +7,7 @@ internal static class VideoCatalogEndpoints {
     internal static RouteGroupBuilder MapVideoCatalogEndpoints(this IEndpointRouteBuilder routes) =>
         routes.MapEntityKindRoutes(
             "/api/videos",
-            EntityKindRegistry.Video.Code,
+            EntityKind.Video.ToCode(),
             "Videos",
             "ListVideos",
             "GetVideo");

@@ -36,34 +36,34 @@ public sealed class CollectionRuleEngine(PrismediaDbContext db) : ICollectionRul
         ];
 
     private static readonly Dictionary<string, HashSet<string>> FieldTargetKinds = new(StringComparer.Ordinal) {
-        ["fileSize"] = Kinds(EntityKindRegistry.Video.Code, EntityKindRegistry.Image.Code, EntityKindRegistry.AudioTrack.Code),
-        ["duration"] = Kinds(EntityKindRegistry.Video.Code, EntityKindRegistry.AudioTrack.Code),
-        ["height"] = Kinds(EntityKindRegistry.Image.Code),
-        ["width"] = Kinds(EntityKindRegistry.Image.Code),
-        ["codec"] = Kinds(EntityKindRegistry.Video.Code),
-        ["bitRate"] = Kinds(EntityKindRegistry.AudioTrack.Code),
-        ["bit_rate"] = Kinds(EntityKindRegistry.AudioTrack.Code),
-        ["channels"] = Kinds(EntityKindRegistry.AudioTrack.Code),
-        ["sampleRate"] = Kinds(EntityKindRegistry.AudioTrack.Code),
-        ["sample_rate"] = Kinds(EntityKindRegistry.AudioTrack.Code),
-        ["playCount"] = Kinds(EntityKindRegistry.Video.Code, EntityKindRegistry.AudioTrack.Code),
-        ["skipCount"] = Kinds(EntityKindRegistry.Video.Code, EntityKindRegistry.AudioTrack.Code),
-        ["resolution"] = Kinds(EntityKindRegistry.Video.Code),
-        ["videoSeriesId"] = Kinds(EntityKindRegistry.Video.Code),
+        ["fileSize"] = Kinds(EntityKind.Video.ToCode(), EntityKind.Image.ToCode(), EntityKind.AudioTrack.ToCode()),
+        ["duration"] = Kinds(EntityKind.Video.ToCode(), EntityKind.AudioTrack.ToCode()),
+        ["height"] = Kinds(EntityKind.Image.ToCode()),
+        ["width"] = Kinds(EntityKind.Image.ToCode()),
+        ["codec"] = Kinds(EntityKind.Video.ToCode()),
+        ["bitRate"] = Kinds(EntityKind.AudioTrack.ToCode()),
+        ["bit_rate"] = Kinds(EntityKind.AudioTrack.ToCode()),
+        ["channels"] = Kinds(EntityKind.AudioTrack.ToCode()),
+        ["sampleRate"] = Kinds(EntityKind.AudioTrack.ToCode()),
+        ["sample_rate"] = Kinds(EntityKind.AudioTrack.ToCode()),
+        ["playCount"] = Kinds(EntityKind.Video.ToCode(), EntityKind.AudioTrack.ToCode()),
+        ["skipCount"] = Kinds(EntityKind.Video.ToCode(), EntityKind.AudioTrack.ToCode()),
+        ["resolution"] = Kinds(EntityKind.Video.ToCode()),
+        ["videoSeriesId"] = Kinds(EntityKind.Video.ToCode()),
         ["libraryRootId"] = Kinds(
-            EntityKindRegistry.Video.Code,
-            EntityKindRegistry.Movie.Code,
-            EntityKindRegistry.VideoSeries.Code,
-            EntityKindRegistry.Gallery.Code,
-            EntityKindRegistry.Image.Code,
-            EntityKindRegistry.Book.Code,
-            EntityKindRegistry.MusicArtist.Code,
-            EntityKindRegistry.AudioLibrary.Code,
-            EntityKindRegistry.AudioTrack.Code),
-        ["galleryType"] = Kinds(EntityKindRegistry.Gallery.Code),
-        ["imageCount"] = Kinds(EntityKindRegistry.Gallery.Code),
-        ["format"] = Kinds(EntityKindRegistry.Image.Code),
-        ["interactive"] = Kinds(EntityKindRegistry.Video.Code),
+            EntityKind.Video.ToCode(),
+            EntityKind.Movie.ToCode(),
+            EntityKind.VideoSeries.ToCode(),
+            EntityKind.Gallery.ToCode(),
+            EntityKind.Image.ToCode(),
+            EntityKind.Book.ToCode(),
+            EntityKind.MusicArtist.ToCode(),
+            EntityKind.AudioLibrary.ToCode(),
+            EntityKind.AudioTrack.ToCode()),
+        ["galleryType"] = Kinds(EntityKind.Gallery.ToCode()),
+        ["imageCount"] = Kinds(EntityKind.Gallery.ToCode()),
+        ["format"] = Kinds(EntityKind.Image.ToCode()),
+        ["interactive"] = Kinds(EntityKind.Video.ToCode()),
     };
 
     public async Task<IReadOnlyList<CollectionRuleMatch>> EvaluateAsync(
@@ -130,9 +130,9 @@ public sealed class CollectionRuleEngine(PrismediaDbContext db) : ICollectionRul
         sb.Append("WHERE e.kind_code = ");
         var kindParam = ctx.AddParam(kindCode, NpgsqlDbType.Text);
         sb.AppendLine(kindParam);
-        if (KindEquals(kindCode, EntityKindRegistry.AudioTrack.Code)) {
+        if (KindEquals(kindCode, EntityKind.AudioTrack.ToCode())) {
             // Book-owned tracks are audiobook parts, not music collection candidates.
-            var bookKindParam = ctx.AddParam(EntityKindRegistry.Book.Code, NpgsqlDbType.Text);
+            var bookKindParam = ctx.AddParam(EntityKind.Book.ToCode(), NpgsqlDbType.Text);
             sb.Append("AND NOT EXISTS (SELECT 1 FROM entities parent WHERE parent.id = e.parent_entity_id AND parent.kind_code = ");
             sb.Append(bookKindParam);
             sb.AppendLine(")");
@@ -401,7 +401,7 @@ public sealed class CollectionRuleEngine(PrismediaDbContext db) : ICollectionRul
         var predicate = TranslateVideoSeriesPredicate(condition, ctx);
         if (predicate is null) return null;
 
-        var seriesKindParam = ctx.AddParam(EntityKindRegistry.VideoSeries.Code, NpgsqlDbType.Text);
+        var seriesKindParam = ctx.AddParam(EntityKind.VideoSeries.ToCode(), NpgsqlDbType.Text);
         var subquery = $@"EXISTS (
             SELECT 1
             FROM entities series_entity
@@ -531,20 +531,20 @@ public sealed class CollectionRuleEngine(PrismediaDbContext db) : ICollectionRul
     }
 
     private static Func<Func<string, string>, string>? LibraryRootExistsBuilder(string kindCode, SqlBuildContext ctx) {
-        if (KindEquals(kindCode, EntityKindRegistry.Video.Code)) {
+        if (KindEquals(kindCode, EntityKind.Video.ToCode())) {
             return rootPredicate => DirectRootExists("video_details", "vd", rootPredicate);
         }
 
-        if (KindEquals(kindCode, EntityKindRegistry.Gallery.Code)) {
+        if (KindEquals(kindCode, EntityKind.Gallery.ToCode())) {
             return rootPredicate => DirectRootExists("gallery_details", "gd", rootPredicate);
         }
 
-        if (KindEquals(kindCode, EntityKindRegistry.Book.Code)) {
+        if (KindEquals(kindCode, EntityKind.Book.ToCode())) {
             return rootPredicate => DirectRootExists("book_details", "bd", rootPredicate);
         }
 
-        if (KindEquals(kindCode, EntityKindRegistry.Movie.Code)) {
-            var videoKindParam = ctx.AddParam(EntityKindRegistry.Video.Code, NpgsqlDbType.Text);
+        if (KindEquals(kindCode, EntityKind.Movie.ToCode())) {
+            var videoKindParam = ctx.AddParam(EntityKind.Video.ToCode(), NpgsqlDbType.Text);
             return rootPredicate => $@"EXISTS (
                 SELECT 1
                 FROM entities movie_video
@@ -555,8 +555,8 @@ public sealed class CollectionRuleEngine(PrismediaDbContext db) : ICollectionRul
             )";
         }
 
-        if (KindEquals(kindCode, EntityKindRegistry.VideoSeries.Code)) {
-            var videoKindParam = ctx.AddParam(EntityKindRegistry.Video.Code, NpgsqlDbType.Text);
+        if (KindEquals(kindCode, EntityKind.VideoSeries.ToCode())) {
+            var videoKindParam = ctx.AddParam(EntityKind.Video.ToCode(), NpgsqlDbType.Text);
             return rootPredicate => $@"EXISTS (
                 SELECT 1
                 FROM entities series_video
@@ -575,8 +575,8 @@ public sealed class CollectionRuleEngine(PrismediaDbContext db) : ICollectionRul
             )";
         }
 
-        if (KindEquals(kindCode, EntityKindRegistry.MusicArtist.Code)) {
-            var audioLibraryKindParam = ctx.AddParam(EntityKindRegistry.AudioLibrary.Code, NpgsqlDbType.Text);
+        if (KindEquals(kindCode, EntityKind.MusicArtist.ToCode())) {
+            var audioLibraryKindParam = ctx.AddParam(EntityKind.AudioLibrary.ToCode(), NpgsqlDbType.Text);
             return rootPredicate => $@"EXISTS (
                 SELECT 1
                 FROM entities artist_album
@@ -587,9 +587,9 @@ public sealed class CollectionRuleEngine(PrismediaDbContext db) : ICollectionRul
             )";
         }
 
-        if (KindEquals(kindCode, EntityKindRegistry.Image.Code) ||
-            KindEquals(kindCode, EntityKindRegistry.AudioLibrary.Code) ||
-            KindEquals(kindCode, EntityKindRegistry.AudioTrack.Code)) {
+        if (KindEquals(kindCode, EntityKind.Image.ToCode()) ||
+            KindEquals(kindCode, EntityKind.AudioLibrary.ToCode()) ||
+            KindEquals(kindCode, EntityKind.AudioTrack.ToCode())) {
             return AncestorRootExists;
         }
 

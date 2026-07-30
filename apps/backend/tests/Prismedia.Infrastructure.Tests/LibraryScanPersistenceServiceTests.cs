@@ -185,7 +185,7 @@ public sealed class LibraryScanPersistenceServiceTests {
         var galleryId = Guid.NewGuid();
         db.Entities.Add(new EntityRow {
             Id = galleryId,
-            KindCode = EntityKindRegistry.Gallery.Code,
+            KindCode = EntityKind.Gallery.ToCode(),
             Title = "Deleting gallery",
             LifecycleClaimKind = EntityLifecycleClaimKind.DeletingFiles,
             LifecycleClaimId = Guid.NewGuid(),
@@ -308,7 +308,7 @@ public sealed class LibraryScanPersistenceServiceTests {
         try {
             await using var db = CreateContext();
             var imageId = Guid.Parse("22222222-cccc-1111-1111-111111111111");
-            SeedSourceEntity(db, imageId, EntityKindRegistry.Image.Code, "/media/images/photo.jpg");
+            SeedSourceEntity(db, imageId, EntityKind.Image.ToCode(), "/media/images/photo.jpg");
             db.EntityFiles.Add(new EntityFileRow {
                 Id = Guid.NewGuid(),
                 EntityId = imageId,
@@ -332,8 +332,8 @@ public sealed class LibraryScanPersistenceServiceTests {
         await using var db = CreateContext();
         var trackWithWaveformId = Guid.Parse("aaaaaaaa-1111-1111-1111-111111111111");
         var trackWithThumbnailId = Guid.Parse("aaaaaaaa-2222-2222-2222-222222222222");
-        SeedSourceEntity(db, trackWithWaveformId, EntityKindRegistry.AudioTrack.Code, "/media/audio/with-waveform.m4a");
-        SeedSourceEntity(db, trackWithThumbnailId, EntityKindRegistry.AudioTrack.Code, "/media/audio/with-thumbnail.m4a");
+        SeedSourceEntity(db, trackWithWaveformId, EntityKind.AudioTrack.ToCode(), "/media/audio/with-waveform.m4a");
+        SeedSourceEntity(db, trackWithThumbnailId, EntityKind.AudioTrack.ToCode(), "/media/audio/with-thumbnail.m4a");
         db.EntityFiles.Add(new EntityFileRow {
             Id = Guid.NewGuid(),
             EntityId = trackWithWaveformId,
@@ -366,8 +366,8 @@ public sealed class LibraryScanPersistenceServiceTests {
         await using var db = CreateContext();
         var animatedImageId = Guid.Parse("bbbbbbbb-1111-1111-1111-111111111111");
         var stillImageId = Guid.Parse("bbbbbbbb-2222-2222-2222-222222222222");
-        SeedSourceEntity(db, animatedImageId, EntityKindRegistry.Image.Code, "/media/images/animated.webm");
-        SeedSourceEntity(db, stillImageId, EntityKindRegistry.Image.Code, "/media/images/photo.jpg");
+        SeedSourceEntity(db, animatedImageId, EntityKind.Image.ToCode(), "/media/images/animated.webm");
+        SeedSourceEntity(db, stillImageId, EntityKind.Image.ToCode(), "/media/images/photo.jpg");
         db.EntityFiles.AddRange(
             new EntityFileRow {
                 Id = Guid.NewGuid(),
@@ -847,7 +847,7 @@ public sealed class LibraryScanPersistenceServiceTests {
         var imageId = Guid.NewGuid();
         const string sharedPath = "/media/mixed/animated.webm";
         SeedVideo(db, videoId, sharedPath);
-        SeedSourceEntity(db, imageId, EntityKindRegistry.Image.Code, sharedPath);
+        SeedSourceEntity(db, imageId, EntityKind.Image.ToCode(), sharedPath);
         await db.SaveChangesAsync();
 
         var owners = await new LibraryScanPersistenceService(db).ListVideoSourceOwnersAsync(
@@ -926,7 +926,7 @@ public sealed class LibraryScanPersistenceServiceTests {
         const string sourcePath = "/media/videos/Show/episode.mkv";
         db.Entities.Add(new EntityRow {
             Id = seriesId,
-            KindCode = EntityKindRegistry.VideoSeries.Code,
+            KindCode = EntityKind.VideoSeries.ToCode(),
             Title = "Show",
             CreatedAt = DateTimeOffset.UtcNow,
             UpdatedAt = DateTimeOffset.UtcNow
@@ -934,7 +934,7 @@ public sealed class LibraryScanPersistenceServiceTests {
         SeedSourceEntity(
             db,
             videoId,
-            EntityKindRegistry.Video.Code,
+            EntityKind.Video.ToCode(),
             sourcePath,
             parentEntityId: seriesId);
         db.VideoDetails.Add(new VideoDetailRow { EntityId = videoId });
@@ -953,8 +953,8 @@ public sealed class LibraryScanPersistenceServiceTests {
         var keepId = Guid.Parse("11111111-1111-1111-1111-111111111111");
         var skipId = Guid.Parse("22222222-2222-2222-2222-222222222222");
         SeedLibraryRoot(db, RootId, "/media/videos");
-        SeedSourceEntity(db, keepId, EntityKindRegistry.Video.Code, "/media/videos/Keep/movie.mkv");
-        SeedSourceEntity(db, skipId, EntityKindRegistry.Video.Code, "/media/videos/Skip/movie.mkv");
+        SeedSourceEntity(db, keepId, EntityKind.Video.ToCode(), "/media/videos/Keep/movie.mkv");
+        SeedSourceEntity(db, skipId, EntityKind.Video.ToCode(), "/media/videos/Skip/movie.mkv");
         db.VideoDetails.Add(new VideoDetailRow { EntityId = keepId, LibraryRootId = RootId });
         db.VideoDetails.Add(new VideoDetailRow { EntityId = skipId, LibraryRootId = RootId });
         db.MediaFileIgnores.Add(new MediaFileIgnoreRow {
@@ -1001,7 +1001,7 @@ public sealed class LibraryScanPersistenceServiceTests {
         var now = DateTimeOffset.UtcNow;
         db.Entities.Add(new EntityRow {
             Id = seriesId,
-            KindCode = EntityKindRegistry.VideoSeries.Code,
+            KindCode = EntityKind.VideoSeries.ToCode(),
             Title = "The Chair Company",
             CreatedAt = now,
             UpdatedAt = now
@@ -1030,10 +1030,10 @@ public sealed class LibraryScanPersistenceServiceTests {
         ], CancellationToken.None);
 
         var videoId = Assert.Single(ids);
-        Assert.Equal(seriesId, Assert.Single(db.Entities.Where(entity => entity.KindCode == EntityKindRegistry.VideoSeries.Code)).Id);
+        Assert.Equal(seriesId, Assert.Single(db.Entities.Where(entity => entity.KindCode == EntityKind.VideoSeries.ToCode())).Id);
         Assert.Equal(4, db.UserEntityStates.Single(state => state.EntityId == seriesId).RatingValue);
 
-        var season = Assert.Single(db.Entities.Where(entity => entity.KindCode == EntityKindRegistry.VideoSeason.Code));
+        var season = Assert.Single(db.Entities.Where(entity => entity.KindCode == EntityKind.VideoSeason.ToCode()));
         Assert.Equal(1, season.SortOrder);
 
         Assert.Equal(seriesId, season.ParentEntityId);
@@ -1066,10 +1066,10 @@ public sealed class LibraryScanPersistenceServiceTests {
         const string sharedPath = "/media/The Chair Company/Season 1/The Chair Company - S01E05-E06.mkv";
         var now = DateTimeOffset.UtcNow;
         db.Entities.AddRange(
-            new EntityRow { Id = seriesId, KindCode = EntityKindRegistry.VideoSeries.Code, Title = "The Chair Company", CreatedAt = now, UpdatedAt = now },
-            new EntityRow { Id = seasonId, KindCode = EntityKindRegistry.VideoSeason.Code, Title = "Season 1", ParentEntityId = seriesId, SortOrder = 1, CreatedAt = now, UpdatedAt = now },
-            new EntityRow { Id = firstEpisodeId, KindCode = EntityKindRegistry.Video.Code, Title = "Episode 5", ParentEntityId = seasonId, SortOrder = 5, CreatedAt = now, UpdatedAt = now },
-            new EntityRow { Id = secondEpisodeId, KindCode = EntityKindRegistry.Video.Code, Title = "Episode 6", ParentEntityId = seasonId, SortOrder = 6, CreatedAt = now.AddSeconds(1), UpdatedAt = now });
+            new EntityRow { Id = seriesId, KindCode = EntityKind.VideoSeries.ToCode(), Title = "The Chair Company", CreatedAt = now, UpdatedAt = now },
+            new EntityRow { Id = seasonId, KindCode = EntityKind.VideoSeason.ToCode(), Title = "Season 1", ParentEntityId = seriesId, SortOrder = 1, CreatedAt = now, UpdatedAt = now },
+            new EntityRow { Id = firstEpisodeId, KindCode = EntityKind.Video.ToCode(), Title = "Episode 5", ParentEntityId = seasonId, SortOrder = 5, CreatedAt = now, UpdatedAt = now },
+            new EntityRow { Id = secondEpisodeId, KindCode = EntityKind.Video.ToCode(), Title = "Episode 6", ParentEntityId = seasonId, SortOrder = 6, CreatedAt = now.AddSeconds(1), UpdatedAt = now });
         db.EntityFiles.AddRange(
             new EntityFileRow { Id = Guid.NewGuid(), EntityId = firstEpisodeId, Role = EntityFileRole.Source, Path = sharedPath, CreatedAt = now, UpdatedAt = now },
             new EntityFileRow { Id = Guid.NewGuid(), EntityId = secondEpisodeId, Role = EntityFileRole.Source, Path = sharedPath, CreatedAt = now, UpdatedAt = now });
@@ -1090,7 +1090,7 @@ public sealed class LibraryScanPersistenceServiceTests {
 
         Assert.Equal(firstEpisodeId, Assert.Single(ids));
         // No third video was minted for the already-owned path.
-        Assert.Equal(2, db.Entities.Count(entity => entity.KindCode == EntityKindRegistry.Video.Code));
+        Assert.Equal(2, db.Entities.Count(entity => entity.KindCode == EntityKind.Video.ToCode()));
         // Both episodes keep their own positions — the second was not clobbered by the filename parse.
         Assert.Equal(5, (await db.Entities.FindAsync([firstEpisodeId]))!.SortOrder);
         Assert.Equal(6, (await db.Entities.FindAsync([secondEpisodeId]))!.SortOrder);
@@ -1123,7 +1123,7 @@ public sealed class LibraryScanPersistenceServiceTests {
         ], CancellationToken.None);
 
         Assert.Equal(videoId, Assert.Single(ids));
-        Assert.Single(db.Entities.Where(entity => entity.KindCode == EntityKindRegistry.Video.Code));
+        Assert.Single(db.Entities.Where(entity => entity.KindCode == EntityKind.Video.ToCode()));
         Assert.Single(db.EntityFiles.Where(file => file.Role == EntityFileRole.Source));
     }
 
@@ -1137,7 +1137,7 @@ public sealed class LibraryScanPersistenceServiceTests {
         db.Entities.AddRange(
             new EntityRow {
                 Id = seriesId,
-                KindCode = EntityKindRegistry.VideoSeries.Code,
+                KindCode = EntityKind.VideoSeries.ToCode(),
                 Title = "The Chair Company",
                 IsOrganized = true,
                 CreatedAt = now,
@@ -1145,7 +1145,7 @@ public sealed class LibraryScanPersistenceServiceTests {
             },
             new EntityRow {
                 Id = seasonId,
-                KindCode = EntityKindRegistry.VideoSeason.Code,
+                KindCode = EntityKind.VideoSeason.ToCode(),
                 Title = "Season 1",
                 ParentEntityId = seriesId,
                 SortOrder = 1,
@@ -1208,7 +1208,7 @@ public sealed class LibraryScanPersistenceServiceTests {
         ], CancellationToken.None);
 
         var videoId = Assert.Single(ids);
-        var movie = Assert.Single(db.Entities.Where(entity => entity.KindCode == EntityKindRegistry.Movie.Code));
+        var movie = Assert.Single(db.Entities.Where(entity => entity.KindCode == EntityKind.Movie.ToCode()));
         Assert.Equal("Friendship", movie.Title);
         Assert.False(movie.IsNsfw);
 
@@ -1247,8 +1247,8 @@ public sealed class LibraryScanPersistenceServiceTests {
         var rootId = Guid.Parse("55555555-5555-5555-5555-555555555555");
         var movieId = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
         var videoId = Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb");
-        SeedSourceEntity(db, movieId, EntityKindRegistry.Movie.Code, "/media/Friendship");
-        SeedSourceEntity(db, videoId, EntityKindRegistry.Video.Code, "/media/Friendship/Friendship.mp4", movieId, 0);
+        SeedSourceEntity(db, movieId, EntityKind.Movie.ToCode(), "/media/Friendship");
+        SeedSourceEntity(db, videoId, EntityKind.Video.ToCode(), "/media/Friendship/Friendship.mp4", movieId, 0);
         db.VideoDetails.Add(new VideoDetailRow { EntityId = videoId, LibraryRootId = rootId });
         await db.SaveChangesAsync();
 
@@ -1276,10 +1276,10 @@ public sealed class LibraryScanPersistenceServiceTests {
         var keepMovieId = Guid.Parse("cccccccc-cccc-cccc-cccc-cccccccccccc");
         var keepVideoId = Guid.Parse("dddddddd-dddd-dddd-dddd-dddddddddddd");
         SeedLibraryRoot(db, rootId, "/media/videos");
-        SeedSourceEntity(db, staleMovieId, EntityKindRegistry.Movie.Code, "/media/videos/Stale");
-        SeedSourceEntity(db, staleVideoId, EntityKindRegistry.Video.Code, "/media/videos/Stale/Stale.mp4", staleMovieId, 0);
-        SeedSourceEntity(db, keepMovieId, EntityKindRegistry.Movie.Code, "/media/videos/Keep");
-        SeedSourceEntity(db, keepVideoId, EntityKindRegistry.Video.Code, "/media/videos/Keep/Keep.mp4", keepMovieId, 0);
+        SeedSourceEntity(db, staleMovieId, EntityKind.Movie.ToCode(), "/media/videos/Stale");
+        SeedSourceEntity(db, staleVideoId, EntityKind.Video.ToCode(), "/media/videos/Stale/Stale.mp4", staleMovieId, 0);
+        SeedSourceEntity(db, keepMovieId, EntityKind.Movie.ToCode(), "/media/videos/Keep");
+        SeedSourceEntity(db, keepVideoId, EntityKind.Video.ToCode(), "/media/videos/Keep/Keep.mp4", keepMovieId, 0);
         await db.SaveChangesAsync();
 
         var service = new LibraryScanPersistenceService(db);
@@ -1307,12 +1307,12 @@ public sealed class LibraryScanPersistenceServiceTests {
         var orphanSeasonId = Guid.Parse("55555555-5555-5555-5555-555555555555");
         var orphanSeriesId = Guid.Parse("66666666-6666-6666-6666-666666666666");
         db.Entities.AddRange(
-            new EntityRow { Id = wantedMovieId, KindCode = EntityKindRegistry.Movie.Code, Title = "Wanted movie", IsWanted = true, CreatedAt = now, UpdatedAt = now },
-            new EntityRow { Id = wantedSeasonId, KindCode = EntityKindRegistry.VideoSeason.Code, Title = "Wanted season", IsWanted = true, CreatedAt = now, UpdatedAt = now },
-            new EntityRow { Id = wantedSeriesId, KindCode = EntityKindRegistry.VideoSeries.Code, Title = "Wanted series", IsWanted = true, CreatedAt = now, UpdatedAt = now },
-            new EntityRow { Id = orphanMovieId, KindCode = EntityKindRegistry.Movie.Code, Title = "Orphan movie", CreatedAt = now, UpdatedAt = now },
-            new EntityRow { Id = orphanSeasonId, KindCode = EntityKindRegistry.VideoSeason.Code, Title = "Orphan season", CreatedAt = now, UpdatedAt = now },
-            new EntityRow { Id = orphanSeriesId, KindCode = EntityKindRegistry.VideoSeries.Code, Title = "Orphan series", CreatedAt = now, UpdatedAt = now });
+            new EntityRow { Id = wantedMovieId, KindCode = EntityKind.Movie.ToCode(), Title = "Wanted movie", IsWanted = true, CreatedAt = now, UpdatedAt = now },
+            new EntityRow { Id = wantedSeasonId, KindCode = EntityKind.VideoSeason.ToCode(), Title = "Wanted season", IsWanted = true, CreatedAt = now, UpdatedAt = now },
+            new EntityRow { Id = wantedSeriesId, KindCode = EntityKind.VideoSeries.ToCode(), Title = "Wanted series", IsWanted = true, CreatedAt = now, UpdatedAt = now },
+            new EntityRow { Id = orphanMovieId, KindCode = EntityKind.Movie.ToCode(), Title = "Orphan movie", CreatedAt = now, UpdatedAt = now },
+            new EntityRow { Id = orphanSeasonId, KindCode = EntityKind.VideoSeason.ToCode(), Title = "Orphan season", CreatedAt = now, UpdatedAt = now },
+            new EntityRow { Id = orphanSeriesId, KindCode = EntityKind.VideoSeries.ToCode(), Title = "Orphan series", CreatedAt = now, UpdatedAt = now });
         await db.SaveChangesAsync();
 
         var removed = await new LibraryScanPersistenceService(db)
@@ -1334,8 +1334,8 @@ public sealed class LibraryScanPersistenceServiceTests {
         var monitoredMovieId = Guid.Parse("77777777-7777-7777-7777-777777777777");
         var orphanMovieId = Guid.Parse("88888888-8888-8888-8888-888888888888");
         db.Entities.AddRange(
-            new EntityRow { Id = monitoredMovieId, KindCode = EntityKindRegistry.Movie.Code, Title = "Monitored movie", CreatedAt = now, UpdatedAt = now },
-            new EntityRow { Id = orphanMovieId, KindCode = EntityKindRegistry.Movie.Code, Title = "Orphan movie", CreatedAt = now, UpdatedAt = now });
+            new EntityRow { Id = monitoredMovieId, KindCode = EntityKind.Movie.ToCode(), Title = "Monitored movie", CreatedAt = now, UpdatedAt = now },
+            new EntityRow { Id = orphanMovieId, KindCode = EntityKind.Movie.ToCode(), Title = "Orphan movie", CreatedAt = now, UpdatedAt = now });
         db.Monitors.Add(new MonitorRow {
             Id = Guid.Parse("99999999-9999-9999-9999-999999999999"),
             EntityId = monitoredMovieId,
@@ -1363,15 +1363,15 @@ public sealed class LibraryScanPersistenceServiceTests {
         var orphanTag = Guid.Parse("22222222-2222-2222-2222-222222222222");
         var videoId = Guid.Parse("33333333-3333-3333-3333-333333333333");
         db.Entities.AddRange(
-            new EntityRow { Id = referencedTag, KindCode = EntityKindRegistry.Tag.Code, Title = "Used", CreatedAt = now, UpdatedAt = now },
-            new EntityRow { Id = orphanTag, KindCode = EntityKindRegistry.Tag.Code, Title = "Unused", CreatedAt = now, UpdatedAt = now },
-            new EntityRow { Id = videoId, KindCode = EntityKindRegistry.Video.Code, Title = "Film", CreatedAt = now, UpdatedAt = now });
+            new EntityRow { Id = referencedTag, KindCode = EntityKind.Tag.ToCode(), Title = "Used", CreatedAt = now, UpdatedAt = now },
+            new EntityRow { Id = orphanTag, KindCode = EntityKind.Tag.ToCode(), Title = "Unused", CreatedAt = now, UpdatedAt = now },
+            new EntityRow { Id = videoId, KindCode = EntityKind.Video.ToCode(), Title = "Film", CreatedAt = now, UpdatedAt = now });
         db.EntityRelationshipLinks.Add(new EntityRelationshipLinkRow {
             EntityId = videoId,
             RelationshipCode = "tags",
             Label = "Tags",
             TargetEntityId = referencedTag,
-            TargetKindCode = EntityKindRegistry.Tag.Code,
+            TargetKindCode = EntityKind.Tag.ToCode(),
             CreatedAt = now,
         });
         await db.SaveChangesAsync();
@@ -1740,12 +1740,12 @@ public sealed class LibraryScanPersistenceServiceTests {
         var galleryId = Guid.Parse("eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee");
         var subfolderOrphanId = Guid.Parse("ffffffff-ffff-ffff-ffff-ffffffffffff");
         SeedLibraryRoot(db, rootId, "/media/images");
-        SeedSourceEntity(db, galleryId, EntityKindRegistry.Gallery.Code, "/media/images/Gallery");
-        SeedSourceEntity(db, staleLooseId, EntityKindRegistry.Image.Code, "/media/images/stale.jpg");
-        SeedSourceEntity(db, validLooseId, EntityKindRegistry.Image.Code, "/media/images/valid.jpg");
-        SeedSourceEntity(db, containedId, EntityKindRegistry.Image.Code, "/media/images/Gallery/contained.jpg", galleryId, 0);
-        SeedSourceEntity(db, outsideId, EntityKindRegistry.Image.Code, "/other/stale.jpg");
-        SeedSourceEntity(db, subfolderOrphanId, EntityKindRegistry.Image.Code, "/media/images/Sub/orphan.png");
+        SeedSourceEntity(db, galleryId, EntityKind.Gallery.ToCode(), "/media/images/Gallery");
+        SeedSourceEntity(db, staleLooseId, EntityKind.Image.ToCode(), "/media/images/stale.jpg");
+        SeedSourceEntity(db, validLooseId, EntityKind.Image.ToCode(), "/media/images/valid.jpg");
+        SeedSourceEntity(db, containedId, EntityKind.Image.ToCode(), "/media/images/Gallery/contained.jpg", galleryId, 0);
+        SeedSourceEntity(db, outsideId, EntityKind.Image.ToCode(), "/other/stale.jpg");
+        SeedSourceEntity(db, subfolderOrphanId, EntityKind.Image.ToCode(), "/media/images/Sub/orphan.png");
         await db.SaveChangesAsync();
 
         var service = new LibraryScanPersistenceService(db);
@@ -1773,12 +1773,12 @@ public sealed class LibraryScanPersistenceServiceTests {
         var libraryId = Guid.Parse("eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee");
         var subfolderOrphanId = Guid.Parse("ffffffff-ffff-ffff-ffff-ffffffffffff");
         SeedLibraryRoot(db, rootId, "/media/audio");
-        SeedSourceEntity(db, libraryId, EntityKindRegistry.AudioLibrary.Code, "/media/audio/Album");
-        SeedSourceEntity(db, staleLooseId, EntityKindRegistry.AudioTrack.Code, "/media/audio/stale.flac");
-        SeedSourceEntity(db, validLooseId, EntityKindRegistry.AudioTrack.Code, "/media/audio/valid.flac");
-        SeedSourceEntity(db, containedId, EntityKindRegistry.AudioTrack.Code, "/media/audio/Album/contained.flac", libraryId, 0);
-        SeedSourceEntity(db, outsideId, EntityKindRegistry.AudioTrack.Code, "/other/stale.flac");
-        SeedSourceEntity(db, subfolderOrphanId, EntityKindRegistry.AudioTrack.Code, "/media/audio/Sub/orphan.flac");
+        SeedSourceEntity(db, libraryId, EntityKind.AudioLibrary.ToCode(), "/media/audio/Album");
+        SeedSourceEntity(db, staleLooseId, EntityKind.AudioTrack.ToCode(), "/media/audio/stale.flac");
+        SeedSourceEntity(db, validLooseId, EntityKind.AudioTrack.ToCode(), "/media/audio/valid.flac");
+        SeedSourceEntity(db, containedId, EntityKind.AudioTrack.ToCode(), "/media/audio/Album/contained.flac", libraryId, 0);
+        SeedSourceEntity(db, outsideId, EntityKind.AudioTrack.ToCode(), "/other/stale.flac");
+        SeedSourceEntity(db, subfolderOrphanId, EntityKind.AudioTrack.ToCode(), "/media/audio/Sub/orphan.flac");
         await db.SaveChangesAsync();
 
         var service = new LibraryScanPersistenceService(db);
@@ -1805,8 +1805,8 @@ public sealed class LibraryScanPersistenceServiceTests {
             await using var db = CreateContext();
             var libraryId = Guid.NewGuid();
             var trackId = Guid.NewGuid();
-            SeedSourceEntity(db, libraryId, EntityKindRegistry.AudioLibrary.Code, directory);
-            SeedSourceEntity(db, trackId, EntityKindRegistry.AudioTrack.Code, sourcePath, libraryId, 0);
+            SeedSourceEntity(db, libraryId, EntityKind.AudioLibrary.ToCode(), directory);
+            SeedSourceEntity(db, trackId, EntityKind.AudioTrack.ToCode(), sourcePath, libraryId, 0);
             await db.SaveChangesAsync();
 
             var removed = await new LibraryScanPersistenceService(db).RemoveStaleAudioTracksInLibraryAsync(
@@ -2114,14 +2114,14 @@ public sealed class LibraryScanPersistenceServiceTests {
         db.Entities.AddRange(
             new EntityRow {
                 Id = bookId,
-                KindCode = EntityKindRegistry.Book.Code,
+                KindCode = EntityKind.Book.ToCode(),
                 Title = "Promised Neverland Ch.1",
                 CreatedAt = now,
                 UpdatedAt = now
             },
             new EntityRow {
                 Id = volumeId,
-                KindCode = EntityKindRegistry.BookVolume.Code,
+                KindCode = EntityKind.BookVolume.ToCode(),
                 Title = "Volume 01",
                 ParentEntityId = bookId,
                 SortOrder = 0,
@@ -2130,7 +2130,7 @@ public sealed class LibraryScanPersistenceServiceTests {
             },
             new EntityRow {
                 Id = chapterId,
-                KindCode = EntityKindRegistry.BookChapter.Code,
+                KindCode = EntityKind.BookChapter.ToCode(),
                 Title = "Promised Neverland Ch.1",
                 ParentEntityId = bookId,
                 SortOrder = 0,
@@ -2169,7 +2169,7 @@ public sealed class LibraryScanPersistenceServiceTests {
             CancellationToken.None);
 
         Assert.Equal(chapterId, result);
-        var chapter = Assert.Single(db.Entities.Where(entity => entity.KindCode == EntityKindRegistry.BookChapter.Code));
+        var chapter = Assert.Single(db.Entities.Where(entity => entity.KindCode == EntityKind.BookChapter.ToCode()));
         Assert.Equal(volumeId, chapter.ParentEntityId);
         Assert.Equal(3, chapter.SortOrder);
     }
@@ -2204,7 +2204,7 @@ public sealed class LibraryScanPersistenceServiceTests {
         var book = await db.Entities.FindAsync([bookId]);
         var seriesDetail = await db.BookDetails.FindAsync([seriesId]);
         var detail = await db.BookDetails.FindAsync([bookId]);
-        Assert.Equal(EntityKindRegistry.Book.Code, series!.KindCode);
+        Assert.Equal(EntityKind.Book.ToCode(), series!.KindCode);
         Assert.Null(series.ParentEntityId);
         Assert.Equal(BookType.Book, seriesDetail!.BookType);
         Assert.Equal(BookFormat.Pdf, seriesDetail.Format);
@@ -2270,7 +2270,7 @@ public sealed class LibraryScanPersistenceServiceTests {
         var now = DateTimeOffset.UtcNow;
         db.Entities.Add(new EntityRow {
             Id = bookId,
-            KindCode = EntityKindRegistry.Book.Code,
+            KindCode = EntityKind.Book.ToCode(),
             Title = "Always Go With the Flow",
             CreatedAt = now,
             UpdatedAt = now
@@ -2313,9 +2313,9 @@ public sealed class LibraryScanPersistenceServiceTests {
         var staleMovieId = Guid.Parse("bbbbbbbb-2222-2222-2222-222222222222");
         var staleVideoId = Guid.Parse("bbbbbbbb-3333-3333-3333-333333333333");
         SeedLibraryRoot(db, RootId, "/media/kept");
-        SeedSourceEntity(db, keptId, EntityKindRegistry.Video.Code, "/media/kept/video.mkv");
-        SeedSourceEntity(db, staleMovieId, EntityKindRegistry.Movie.Code, "/media/deleted/movie");
-        SeedSourceEntity(db, staleVideoId, EntityKindRegistry.Video.Code, "/media/deleted/movie/video.mkv", staleMovieId);
+        SeedSourceEntity(db, keptId, EntityKind.Video.ToCode(), "/media/kept/video.mkv");
+        SeedSourceEntity(db, staleMovieId, EntityKind.Movie.ToCode(), "/media/deleted/movie");
+        SeedSourceEntity(db, staleVideoId, EntityKind.Video.ToCode(), "/media/deleted/movie/video.mkv", staleMovieId);
         await db.SaveChangesAsync();
 
         var service = new LibraryScanPersistenceService(db);
@@ -2333,7 +2333,7 @@ public sealed class LibraryScanPersistenceServiceTests {
         var disabledRootId = Guid.Parse("bbbbbbbb-4444-4444-4444-444444444444");
         var disabledVideoId = Guid.Parse("bbbbbbbb-5555-5555-5555-555555555555");
         SeedLibraryRoot(db, disabledRootId, "/media/disabled");
-        SeedSourceEntity(db, disabledVideoId, EntityKindRegistry.Video.Code, "/media/disabled/video.mkv");
+        SeedSourceEntity(db, disabledVideoId, EntityKind.Video.ToCode(), "/media/disabled/video.mkv");
         await db.SaveChangesAsync();
 
         var service = new LibraryScanPersistenceService(db);
@@ -2385,7 +2385,7 @@ public sealed class LibraryScanPersistenceServiceTests {
         Assert.Contains(db.EntityRelationshipLinks, row => row.EntityId == videoId && row.RelationshipCode == "tags");
         Assert.Contains(db.EntityRelationshipLinks, row => row.EntityId == videoId && row.RelationshipCode == "studio");
         Assert.Contains(db.EntityRelationshipLinks, row => row.EntityId == videoId && row.RelationshipCode == "cast" && row.MetadataJson!.Contains("performer"));
-        Assert.Contains(db.Entities, row => row.KindCode == EntityKindRegistry.Tag.Code && row.Title == "Noir" && row.IsNsfw);
+        Assert.Contains(db.Entities, row => row.KindCode == EntityKind.Tag.ToCode() && row.Title == "Noir" && row.IsNsfw);
     }
 
     [Fact]
@@ -2394,7 +2394,7 @@ public sealed class LibraryScanPersistenceServiceTests {
         var bookId = Guid.Parse("bbbbbbbb-1111-1111-1111-111111111111");
         db.Entities.Add(new EntityRow {
             Id = bookId,
-            KindCode = EntityKindRegistry.Book.Code,
+            KindCode = EntityKind.Book.ToCode(),
             Title = "User Book Title",
             CreatedAt = DateTimeOffset.UtcNow,
             UpdatedAt = DateTimeOffset.UtcNow
@@ -2466,7 +2466,7 @@ public sealed class LibraryScanPersistenceServiceTests {
     private static void SeedVideo(PrismediaDbContext db, Guid videoId, string? sourcePath = null) {
         db.Entities.Add(new EntityRow {
             Id = videoId,
-            KindCode = EntityKindRegistry.Video.Code,
+            KindCode = EntityKind.Video.ToCode(),
             Title = "Video",
             CreatedAt = DateTimeOffset.UtcNow,
             UpdatedAt = DateTimeOffset.UtcNow

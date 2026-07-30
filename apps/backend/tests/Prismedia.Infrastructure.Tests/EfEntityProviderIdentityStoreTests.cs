@@ -139,7 +139,7 @@ public sealed class EfEntityProviderIdentityStoreTests {
         var id = Guid.NewGuid();
         db.Entities.Add(new EntityRow {
             Id = id,
-            KindCode = EntityKindRegistry.VideoSeries.Code,
+            KindCode = EntityKind.VideoSeries.ToCode(),
             Title = title,
             CreatedAt = CreatedAt,
             UpdatedAt = CreatedAt

@@ -665,7 +665,7 @@ public sealed class EfMonitorStoreTests {
         var acquisitionId = Guid.NewGuid();
         db.Entities.Add(new EntityRow {
             Id = entityId,
-            KindCode = EntityKindRegistry.AudioTrack.Code,
+            KindCode = EntityKind.AudioTrack.ToCode(),
             Title = "Dynamite",
             IsWanted = false,
             CreatedAt = now,
@@ -731,7 +731,7 @@ public sealed class EfMonitorStoreTests {
         var upgradeId = Guid.NewGuid();
         db.Entities.Add(new EntityRow {
             Id = entityId,
-            KindCode = EntityKindRegistry.AudioTrack.Code,
+            KindCode = EntityKind.AudioTrack.ToCode(),
             Title = "Lossless upgrade",
             IsWanted = false,
             CreatedAt = now,

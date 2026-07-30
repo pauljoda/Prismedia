@@ -416,7 +416,7 @@ public sealed class HlsAssetServiceTests : IDisposable {
         var videoId = Guid.Parse("55555555-5555-5555-5555-555555555555");
         db.Entities.Add(new EntityRow {
             Id = videoId,
-            KindCode = EntityKindRegistry.Video.Code,
+            KindCode = EntityKind.Video.ToCode(),
             Title = "Video",
             CreatedAt = DateTimeOffset.UtcNow,
             UpdatedAt = DateTimeOffset.UtcNow

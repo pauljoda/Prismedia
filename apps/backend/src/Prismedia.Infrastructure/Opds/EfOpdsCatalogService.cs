@@ -24,10 +24,10 @@ public sealed class EfOpdsCatalogService(
     private Guid[]? _hiddenRootIds;
     private bool _accessResolved;
 
-    private static readonly string BookKindCode = EntityKindRegistry.Book.Code;
-    private static readonly string PersonKindCode = EntityKindRegistry.Person.Code;
-    private static readonly string CollectionKindCode = EntityKindRegistry.Collection.Code;
-    private static readonly string TagKindCode = EntityKindRegistry.Tag.Code;
+    private static readonly string BookKindCode = EntityKind.Book.ToCode();
+    private static readonly string PersonKindCode = EntityKind.Person.ToCode();
+    private static readonly string CollectionKindCode = EntityKind.Collection.ToCode();
+    private static readonly string TagKindCode = EntityKind.Tag.ToCode();
     private static readonly string CastRelationshipCode = RelationshipKind.Cast.ToCode();
     private static readonly string CreditsRelationshipCode = RelationshipKind.Credits.ToCode();
     private static readonly string TagsRelationshipCode = RelationshipKind.Tags.ToCode();

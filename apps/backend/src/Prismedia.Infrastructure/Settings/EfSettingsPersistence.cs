@@ -284,9 +284,9 @@ public sealed class EfSettingsPersistence : ISettingsPersistence {
 
     private async Task RemoveOrphanMediaContainersAsync(CancellationToken cancellationToken) {
         var containerCodes = new[] {
-            EntityKindRegistry.Movie.Code,
-            EntityKindRegistry.VideoSeason.Code,
-            EntityKindRegistry.VideoSeries.Code,
+            EntityKind.Movie.ToCode(),
+            EntityKind.VideoSeason.ToCode(),
+            EntityKind.VideoSeries.ToCode(),
         };
 
         while (true) {

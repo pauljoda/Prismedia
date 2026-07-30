@@ -70,10 +70,10 @@ public sealed class PrismediaDbContextModelTests {
             .Cast<string>()
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
-        Assert.Contains(EntityKindRegistry.VideoSeason.Code, seededCodes);
-        Assert.Contains(EntityKindRegistry.BookVolume.Code, seededCodes);
-        Assert.Contains(EntityKindRegistry.BookChapter.Code, seededCodes);
-        Assert.Contains(EntityKindRegistry.BookPage.Code, seededCodes);
+        Assert.Contains(EntityKind.VideoSeason.ToCode(), seededCodes);
+        Assert.Contains(EntityKind.BookVolume.ToCode(), seededCodes);
+        Assert.Contains(EntityKind.BookChapter.ToCode(), seededCodes);
+        Assert.Contains(EntityKind.BookPage.ToCode(), seededCodes);
     }
 
     [Fact]
@@ -198,9 +198,9 @@ public sealed class PrismediaDbContextModelTests {
         var modelEntity = db.GetService<IDesignTimeModel>().Model.FindEntityType(typeof(EntityKindRow));
 
         var videoSeed = modelEntity!.GetSeedData().Single(seed =>
-            string.Equals((string)seed[nameof(EntityKindRow.Code)]!, EntityKindRegistry.Video.Code, StringComparison.Ordinal));
+            string.Equals((string)seed[nameof(EntityKindRow.Code)]!, EntityKind.Video.ToCode(), StringComparison.Ordinal));
         var seriesSeed = modelEntity.GetSeedData().Single(seed =>
-            string.Equals((string)seed[nameof(EntityKindRow.Code)]!, EntityKindRegistry.VideoSeries.Code, StringComparison.Ordinal));
+            string.Equals((string)seed[nameof(EntityKindRow.Code)]!, EntityKind.VideoSeries.ToCode(), StringComparison.Ordinal));
 
         Assert.Equal(EntityStorageShape.File.ToCode(), videoSeed[nameof(EntityKindRow.StorageShape)]);
         Assert.Equal(EntityStorageShape.Folder.ToCode(), seriesSeed[nameof(EntityKindRow.StorageShape)]);

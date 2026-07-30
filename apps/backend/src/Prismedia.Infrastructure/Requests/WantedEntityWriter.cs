@@ -735,7 +735,7 @@ public sealed class WantedEntityWriter(
         var hasSource = await HasSourceFileAsync(entityId, cancellationToken);
         bool? hasEbookSource = null;
         bool? hasAudiobookSource = null;
-        if (entity.KindCode == EntityKindRegistry.Book.Code) {
+        if (entity.KindCode == EntityKind.Book.ToCode()) {
             hasEbookSource = await HasRequestedRenditionAsync(
                 entityId, EntityKind.Book, BookRendition.Ebook, cancellationToken);
             hasAudiobookSource = await HasRequestedRenditionAsync(
@@ -857,8 +857,8 @@ public sealed class WantedEntityWriter(
             return false;
         }
 
-        var audioTrackCode = EntityKindRegistry.AudioTrack.Code;
-        var bookCode = EntityKindRegistry.Book.Code;
+        var audioTrackCode = EntityKind.AudioTrack.ToCode();
+        var bookCode = EntityKind.Book.ToCode();
         var ownsAudio = bookRendition == BookRendition.Audiobook;
         return await (
             from file in db.EntityFiles.AsNoTracking()

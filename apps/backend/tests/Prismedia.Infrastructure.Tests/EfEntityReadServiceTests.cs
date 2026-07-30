@@ -24,28 +24,28 @@ public sealed class EfEntityReadServiceTests {
         db.Entities.AddRange(
             new EntityRow {
                 Id = videoId,
-                KindCode = EntityKindRegistry.Video.Code,
+                KindCode = EntityKind.Video.ToCode(),
                 Title = "Pilot",
                 CreatedAt = now,
                 UpdatedAt = now
             },
             new EntityRow {
                 Id = personId,
-                KindCode = EntityKindRegistry.Person.Code,
+                KindCode = EntityKind.Person.ToCode(),
                 Title = "Guest Actor",
                 CreatedAt = now,
                 UpdatedAt = now
             },
             new EntityRow {
                 Id = studioId,
-                KindCode = EntityKindRegistry.Studio.Code,
+                KindCode = EntityKind.Studio.ToCode(),
                 Title = "HBO",
                 CreatedAt = now,
                 UpdatedAt = now
             },
             new EntityRow {
                 Id = tagId,
-                KindCode = EntityKindRegistry.Tag.Code,
+                KindCode = EntityKind.Tag.ToCode(),
                 Title = "Mystery",
                 CreatedAt = now,
                 UpdatedAt = now
@@ -56,7 +56,7 @@ public sealed class EfEntityReadServiceTests {
                 RelationshipCode = "cast",
                 Label = "Cast",
                 TargetEntityId = personId,
-                TargetKindCode = EntityKindRegistry.Person.Code,
+                TargetKindCode = EntityKind.Person.ToCode(),
                 SortOrder = 2,
                 MetadataJson = """{"role":"guest","character":"Visitor"}""",
                 CreatedAt = now
@@ -66,7 +66,7 @@ public sealed class EfEntityReadServiceTests {
                 RelationshipCode = "studio",
                 Label = "Studio",
                 TargetEntityId = studioId,
-                TargetKindCode = EntityKindRegistry.Studio.Code,
+                TargetKindCode = EntityKind.Studio.ToCode(),
                 SortOrder = 0,
                 CreatedAt = now
             },
@@ -75,7 +75,7 @@ public sealed class EfEntityReadServiceTests {
                 RelationshipCode = "tags",
                 Label = "Tags",
                 TargetEntityId = tagId,
-                TargetKindCode = EntityKindRegistry.Tag.Code,
+                TargetKindCode = EntityKind.Tag.ToCode(),
                 SortOrder = 1,
                 CreatedAt = now
             });
@@ -109,28 +109,28 @@ public sealed class EfEntityReadServiceTests {
         db.Entities.AddRange(
             new EntityRow {
                 Id = matchedVideoId,
-                KindCode = EntityKindRegistry.Video.Code,
+                KindCode = EntityKind.Video.ToCode(),
                 Title = "Linked Video",
                 CreatedAt = now,
                 UpdatedAt = now
             },
             new EntityRow {
                 Id = otherVideoId,
-                KindCode = EntityKindRegistry.Video.Code,
+                KindCode = EntityKind.Video.ToCode(),
                 Title = "Unlinked Video",
                 CreatedAt = now,
                 UpdatedAt = now
             },
             new EntityRow {
                 Id = relatedVideoId,
-                KindCode = EntityKindRegistry.Video.Code,
+                KindCode = EntityKind.Video.ToCode(),
                 Title = "Related Video",
                 CreatedAt = now,
                 UpdatedAt = now
             },
             new EntityRow {
                 Id = actorId,
-                KindCode = EntityKindRegistry.Person.Code,
+                KindCode = EntityKind.Person.ToCode(),
                 Title = "Guest Actor",
                 CreatedAt = now,
                 UpdatedAt = now
@@ -141,7 +141,7 @@ public sealed class EfEntityReadServiceTests {
                 RelationshipCode = "cast",
                 Label = "Cast",
                 TargetEntityId = actorId,
-                TargetKindCode = EntityKindRegistry.Person.Code,
+                TargetKindCode = EntityKind.Person.ToCode(),
                 SortOrder = 0,
                 CreatedAt = now
             },
@@ -150,7 +150,7 @@ public sealed class EfEntityReadServiceTests {
                 RelationshipCode = "related",
                 Label = "Related",
                 TargetEntityId = actorId,
-                TargetKindCode = EntityKindRegistry.Person.Code,
+                TargetKindCode = EntityKind.Person.ToCode(),
                 SortOrder = 0,
                 CreatedAt = now
             });
@@ -160,7 +160,7 @@ public sealed class EfEntityReadServiceTests {
         var service = new EfEntityReadService(db, TestUserContext.Admin(), repository, ThumbnailContributors.For(db));
 
         var result = await service.ListAsync(
-            EntityKindRegistry.Video.Code,
+            EntityKind.Video.ToCode(),
             query: null,
             cursor: null,
             hideNsfw: null,
@@ -184,14 +184,14 @@ public sealed class EfEntityReadServiceTests {
         db.Entities.AddRange(
             new EntityRow {
                 Id = authorId,
-                KindCode = EntityKindRegistry.BookAuthor.Code,
+                KindCode = EntityKind.BookAuthor.ToCode(),
                 Title = "George R. R. Martin",
                 CreatedAt = now,
                 UpdatedAt = now
             },
             new EntityRow {
                 Id = parentedBookId,
-                KindCode = EntityKindRegistry.Book.Code,
+                KindCode = EntityKind.Book.ToCode(),
                 Title = "A Game of Thrones",
                 ParentEntityId = authorId,
                 CreatedAt = now,
@@ -199,7 +199,7 @@ public sealed class EfEntityReadServiceTests {
             },
             new EntityRow {
                 Id = wantedBookId,
-                KindCode = EntityKindRegistry.Book.Code,
+                KindCode = EntityKind.Book.ToCode(),
                 Title = "The Anxious Generation",
                 IsWanted = true,
                 CreatedAt = now,
@@ -210,7 +210,7 @@ public sealed class EfEntityReadServiceTests {
             new BookDetailRow { EntityId = wantedBookId, BookType = BookType.Book, Format = BookFormat.Epub });
         await db.SaveChangesAsync();
 
-        var result = await CreateService(db).ListAsync(EntityKindRegistry.Book.Code, null, null, hideNsfw: true, null, CancellationToken.None);
+        var result = await CreateService(db).ListAsync(EntityKind.Book.ToCode(), null, null, hideNsfw: true, null, CancellationToken.None);
 
         Assert.Equal(2, result.TotalCount);
         Assert.Contains(result.Items, item => item.Id == parentedBookId && item.ParentEntityId == authorId);
@@ -226,14 +226,14 @@ public sealed class EfEntityReadServiceTests {
         db.Entities.AddRange(
             new EntityRow {
                 Id = playableTrackId,
-                KindCode = EntityKindRegistry.AudioTrack.Code,
+                KindCode = EntityKind.AudioTrack.ToCode(),
                 Title = "Playable track",
                 CreatedAt = now,
                 UpdatedAt = now
             },
             new EntityRow {
                 Id = wantedTrackId,
-                KindCode = EntityKindRegistry.AudioTrack.Code,
+                KindCode = EntityKind.AudioTrack.ToCode(),
                 Title = "Wanted track",
                 IsWanted = true,
                 CreatedAt = now,
@@ -246,14 +246,14 @@ public sealed class EfEntityReadServiceTests {
 
         var service = CreateService(db);
         var ordinary = await service.ListAsync(
-            EntityKindRegistry.AudioTrack.Code,
+            EntityKind.AudioTrack.ToCode(),
             null,
             null,
             hideNsfw: true,
             null,
             CancellationToken.None);
         var explicitlyWanted = await service.ListAsync(
-            EntityKindRegistry.AudioTrack.Code,
+            EntityKind.AudioTrack.ToCode(),
             null,
             null,
             hideNsfw: true,
@@ -274,14 +274,14 @@ public sealed class EfEntityReadServiceTests {
         db.Entities.AddRange(
             new EntityRow {
                 Id = movieId,
-                KindCode = EntityKindRegistry.Movie.Code,
+                KindCode = EntityKind.Movie.ToCode(),
                 Title = "Friendship",
                 CreatedAt = now,
                 UpdatedAt = now
             },
             new EntityRow {
                 Id = childVideoId,
-                KindCode = EntityKindRegistry.Video.Code,
+                KindCode = EntityKind.Video.ToCode(),
                 Title = "Friendship",
                 ParentEntityId = movieId,
                 SortOrder = 0,
@@ -299,7 +299,7 @@ public sealed class EfEntityReadServiceTests {
         Assert.Equal(EntityKind.Movie, searchedItem.Kind);
         Assert.Equal(1, searchResult.TotalCount);
 
-        var videoBrowseResult = await service.ListAsync(EntityKindRegistry.Video.Code, null, null, null, null, CancellationToken.None);
+        var videoBrowseResult = await service.ListAsync(EntityKind.Video.ToCode(), null, null, null, null, CancellationToken.None);
         var browsedItem = Assert.Single(videoBrowseResult.Items);
         Assert.Equal(childVideoId, browsedItem.Id);
         Assert.Equal(movieId, browsedItem.ParentEntityId);
@@ -323,13 +323,13 @@ public sealed class EfEntityReadServiceTests {
             Root(enabledRootId, enabled: true, now),
             Root(disabledRootId, enabled: false, now));
         db.Entities.AddRange(
-            new EntityRow { Id = movieId, KindCode = EntityKindRegistry.Movie.Code, Title = "Movie", CreatedAt = now, UpdatedAt = now },
-            new EntityRow { Id = movieVideoId, KindCode = EntityKindRegistry.Video.Code, Title = "Movie File", ParentEntityId = movieId, CreatedAt = now, UpdatedAt = now },
-            new EntityRow { Id = videoId, KindCode = EntityKindRegistry.Video.Code, Title = "Episode", CreatedAt = now, UpdatedAt = now },
-            new EntityRow { Id = seriesId, KindCode = EntityKindRegistry.VideoSeries.Code, Title = "Series", CreatedAt = now, UpdatedAt = now },
-            new EntityRow { Id = seasonId, KindCode = EntityKindRegistry.VideoSeason.Code, Title = "Season", ParentEntityId = seriesId, CreatedAt = now, UpdatedAt = now },
-            new EntityRow { Id = hiddenVideoId, KindCode = EntityKindRegistry.Video.Code, Title = "Hidden", CreatedAt = now, UpdatedAt = now },
-            new EntityRow { Id = bookId, KindCode = EntityKindRegistry.Book.Code, Title = "Book", CreatedAt = now, UpdatedAt = now });
+            new EntityRow { Id = movieId, KindCode = EntityKind.Movie.ToCode(), Title = "Movie", CreatedAt = now, UpdatedAt = now },
+            new EntityRow { Id = movieVideoId, KindCode = EntityKind.Video.ToCode(), Title = "Movie File", ParentEntityId = movieId, CreatedAt = now, UpdatedAt = now },
+            new EntityRow { Id = videoId, KindCode = EntityKind.Video.ToCode(), Title = "Episode", CreatedAt = now, UpdatedAt = now },
+            new EntityRow { Id = seriesId, KindCode = EntityKind.VideoSeries.ToCode(), Title = "Series", CreatedAt = now, UpdatedAt = now },
+            new EntityRow { Id = seasonId, KindCode = EntityKind.VideoSeason.ToCode(), Title = "Season", ParentEntityId = seriesId, CreatedAt = now, UpdatedAt = now },
+            new EntityRow { Id = hiddenVideoId, KindCode = EntityKind.Video.ToCode(), Title = "Hidden", CreatedAt = now, UpdatedAt = now },
+            new EntityRow { Id = bookId, KindCode = EntityKind.Book.ToCode(), Title = "Book", CreatedAt = now, UpdatedAt = now });
         db.VideoDetails.AddRange(
             new VideoDetailRow { EntityId = movieVideoId, LibraryRootId = enabledRootId },
             new VideoDetailRow { EntityId = videoId, LibraryRootId = enabledRootId },
@@ -345,10 +345,10 @@ public sealed class EfEntityReadServiceTests {
 
         var result = await CreateService(db).ListAsync(
             string.Join(',', [
-                EntityKindRegistry.Movie.Code,
-                EntityKindRegistry.Video.Code,
-                EntityKindRegistry.VideoSeries.Code,
-                EntityKindRegistry.VideoSeason.Code,
+                EntityKind.Movie.ToCode(),
+                EntityKind.Video.ToCode(),
+                EntityKind.VideoSeries.ToCode(),
+                EntityKind.VideoSeason.ToCode(),
             ]),
             null,
             null,
@@ -376,21 +376,21 @@ public sealed class EfEntityReadServiceTests {
         db.Entities.AddRange(
             new EntityRow {
                 Id = tagId,
-                KindCode = EntityKindRegistry.Tag.Code,
+                KindCode = EntityKind.Tag.ToCode(),
                 Title = "Comedy",
                 CreatedAt = now,
                 UpdatedAt = now
             },
             new EntityRow {
                 Id = movieId,
-                KindCode = EntityKindRegistry.Movie.Code,
+                KindCode = EntityKind.Movie.ToCode(),
                 Title = "Friendship",
                 CreatedAt = now,
                 UpdatedAt = now
             },
             new EntityRow {
                 Id = childVideoId,
-                KindCode = EntityKindRegistry.Video.Code,
+                KindCode = EntityKind.Video.ToCode(),
                 Title = "Friendship",
                 ParentEntityId = movieId,
                 SortOrder = 0,
@@ -403,7 +403,7 @@ public sealed class EfEntityReadServiceTests {
                 RelationshipCode = "tags",
                 Label = "Tags",
                 TargetEntityId = tagId,
-                TargetKindCode = EntityKindRegistry.Tag.Code,
+                TargetKindCode = EntityKind.Tag.ToCode(),
                 SortOrder = 0,
                 CreatedAt = now
             },
@@ -412,7 +412,7 @@ public sealed class EfEntityReadServiceTests {
                 RelationshipCode = "tags",
                 Label = "Tags",
                 TargetEntityId = tagId,
-                TargetKindCode = EntityKindRegistry.Tag.Code,
+                TargetKindCode = EntityKind.Tag.ToCode(),
                 SortOrder = 1,
                 CreatedAt = now
             });
@@ -444,7 +444,7 @@ public sealed class EfEntityReadServiceTests {
         var now = DateTimeOffset.UtcNow;
         db.Entities.Add(new EntityRow {
             Id = videoId,
-            KindCode = EntityKindRegistry.Video.Code,
+            KindCode = EntityKind.Video.ToCode(),
             Title = "Hoverable Video",
             CreatedAt = now,
             UpdatedAt = now
@@ -472,7 +472,7 @@ public sealed class EfEntityReadServiceTests {
         var repository = new EfEntityRepository(db, TestUserContext.Admin(), EntityMappers.Kinds(db), EntityMappers.Capabilities(db, TestUserContext.Admin()));
         var service = new EfEntityReadService(db, TestUserContext.Admin(), repository, ThumbnailContributors.For(db));
 
-        var result = await service.ListAsync(EntityKindRegistry.Video.Code, null, null, null, null, CancellationToken.None);
+        var result = await service.ListAsync(EntityKind.Video.ToCode(), null, null, null, null, CancellationToken.None);
         var item = Assert.Single(result.Items);
 
         Assert.Equal(ThumbnailHoverKind.Sprite, item.HoverKind);
@@ -486,7 +486,7 @@ public sealed class EfEntityReadServiceTests {
         var now = DateTimeOffset.UtcNow;
         db.Entities.Add(new EntityRow {
             Id = videoId,
-            KindCode = EntityKindRegistry.Video.Code,
+            KindCode = EntityKind.Video.ToCode(),
             Title = "Custom Poster Video",
             CreatedAt = now,
             UpdatedAt = now
@@ -515,7 +515,7 @@ public sealed class EfEntityReadServiceTests {
         var repository = new EfEntityRepository(db, TestUserContext.Admin(), EntityMappers.Kinds(db), EntityMappers.Capabilities(db, TestUserContext.Admin()));
         var service = new EfEntityReadService(db, TestUserContext.Admin(), repository, ThumbnailContributors.For(db));
 
-        var result = await service.ListAsync(EntityKindRegistry.Video.Code, null, null, null, null, CancellationToken.None);
+        var result = await service.ListAsync(EntityKind.Video.ToCode(), null, null, null, null, CancellationToken.None);
         var item = Assert.Single(result.Items);
 
         Assert.Equal("/assets/custom/artwork/15151515/poster.webp", item.CoverUrl);
@@ -532,7 +532,7 @@ public sealed class EfEntityReadServiceTests {
             var now = DateTimeOffset.UtcNow;
             db.Entities.Add(new EntityRow {
                 Id = videoId,
-                KindCode = EntityKindRegistry.Video.Code,
+                KindCode = EntityKind.Video.ToCode(),
                 Title = "Stale Poster Video",
                 CreatedAt = now,
                 UpdatedAt = now
@@ -546,7 +546,7 @@ public sealed class EfEntityReadServiceTests {
             var repository = new EfEntityRepository(db, TestUserContext.Admin(), EntityMappers.Kinds(db), EntityMappers.Capabilities(db, TestUserContext.Admin()));
             var service = new EfEntityReadService(db, TestUserContext.Admin(), repository, ThumbnailContributors.For(db), Assets(cacheRoot));
 
-            var result = await service.ListAsync(EntityKindRegistry.Video.Code, null, null, null, null, CancellationToken.None);
+            var result = await service.ListAsync(EntityKind.Video.ToCode(), null, null, null, null, CancellationToken.None);
             var item = Assert.Single(result.Items);
 
             Assert.Equal(thumbPath, item.CoverUrl);
@@ -566,7 +566,7 @@ public sealed class EfEntityReadServiceTests {
             var now = DateTimeOffset.UtcNow;
             db.Entities.Add(new EntityRow {
                 Id = videoId,
-                KindCode = EntityKindRegistry.Video.Code,
+                KindCode = EntityKind.Video.ToCode(),
                 Title = "Stale Detail Poster Video",
                 CreatedAt = now,
                 UpdatedAt = now
@@ -600,7 +600,7 @@ public sealed class EfEntityReadServiceTests {
 
         db.Entities.Add(new EntityRow {
             Id = movieId,
-            KindCode = EntityKindRegistry.Movie.Code,
+            KindCode = EntityKind.Movie.ToCode(),
             Title = "Poster Only Movie",
             CreatedAt = now,
             UpdatedAt = now
@@ -629,7 +629,7 @@ public sealed class EfEntityReadServiceTests {
 
             db.Entities.Add(new EntityRow {
                 Id = movieId,
-                KindCode = EntityKindRegistry.Movie.Code,
+                KindCode = EntityKind.Movie.ToCode(),
                 Title = "Stale Grid Movie",
                 CreatedAt = now,
                 UpdatedAt = now
@@ -669,14 +669,14 @@ public sealed class EfEntityReadServiceTests {
             db.Entities.AddRange(
                 new EntityRow {
                     Id = seriesId,
-                    KindCode = EntityKindRegistry.VideoSeries.Code,
+                    KindCode = EntityKind.VideoSeries.ToCode(),
                     Title = "Series",
                     CreatedAt = now,
                     UpdatedAt = now
                 },
                 new EntityRow {
                     Id = seasonId,
-                    KindCode = EntityKindRegistry.VideoSeason.Code,
+                    KindCode = EntityKind.VideoSeason.ToCode(),
                     Title = "Season",
                     ParentEntityId = seriesId,
                     CreatedAt = now,
@@ -684,7 +684,7 @@ public sealed class EfEntityReadServiceTests {
                 },
                 new EntityRow {
                     Id = episodeId,
-                    KindCode = EntityKindRegistry.Video.Code,
+                    KindCode = EntityKind.Video.ToCode(),
                     Title = "Episode",
                     ParentEntityId = seasonId,
                     CreatedAt = now,
@@ -715,7 +715,7 @@ public sealed class EfEntityReadServiceTests {
         var now = DateTimeOffset.UtcNow;
         db.Entities.Add(new EntityRow {
             Id = studioId,
-            KindCode = EntityKindRegistry.Studio.Code,
+            KindCode = EntityKind.Studio.ToCode(),
             Title = "GameChops",
             CreatedAt = now,
             UpdatedAt = now
@@ -744,7 +744,7 @@ public sealed class EfEntityReadServiceTests {
         var repository = new EfEntityRepository(db, TestUserContext.Admin(), EntityMappers.Kinds(db), EntityMappers.Capabilities(db, TestUserContext.Admin()));
         var service = new EfEntityReadService(db, TestUserContext.Admin(), repository, ThumbnailContributors.For(db));
 
-        var result = await service.ListAsync(EntityKindRegistry.Studio.Code, null, null, null, null, CancellationToken.None);
+        var result = await service.ListAsync(EntityKind.Studio.ToCode(), null, null, null, null, CancellationToken.None);
         var item = Assert.Single(result.Items);
 
         Assert.Equal("/assets/plugins/artwork/gamechops/logo.webp", item.CoverUrl);
@@ -757,7 +757,7 @@ public sealed class EfEntityReadServiceTests {
         var now = DateTimeOffset.UtcNow;
         db.Entities.Add(new EntityRow {
             Id = videoId,
-            KindCode = EntityKindRegistry.Video.Code,
+            KindCode = EntityKind.Video.ToCode(),
             Title = "Probed Video",
             CreatedAt = now,
             UpdatedAt = now
@@ -777,7 +777,7 @@ public sealed class EfEntityReadServiceTests {
         var repository = new EfEntityRepository(db, TestUserContext.Admin(), EntityMappers.Kinds(db), EntityMappers.Capabilities(db, TestUserContext.Admin()));
         var service = new EfEntityReadService(db, TestUserContext.Admin(), repository, ThumbnailContributors.For(db));
 
-        var result = await service.ListAsync(EntityKindRegistry.Video.Code, null, null, null, null, CancellationToken.None);
+        var result = await service.ListAsync(EntityKind.Video.ToCode(), null, null, null, null, CancellationToken.None);
         var item = Assert.Single(result.Items);
 
         Assert.Equal(
@@ -799,14 +799,14 @@ public sealed class EfEntityReadServiceTests {
         db.Entities.AddRange(
             new EntityRow {
                 Id = galleryId,
-                KindCode = EntityKindRegistry.Gallery.Code,
+                KindCode = EntityKind.Gallery.ToCode(),
                 Title = "Gallery",
                 CreatedAt = now,
                 UpdatedAt = now
             },
             new EntityRow {
                 Id = subgalleryId,
-                KindCode = EntityKindRegistry.Gallery.Code,
+                KindCode = EntityKind.Gallery.ToCode(),
                 Title = "A secondGallery",
                 ParentEntityId = galleryId,
                 SortOrder = 0,
@@ -818,7 +818,7 @@ public sealed class EfEntityReadServiceTests {
         var repository = new EfEntityRepository(db, TestUserContext.Admin(), EntityMappers.Kinds(db), EntityMappers.Capabilities(db, TestUserContext.Admin()));
         var service = new EfEntityReadService(db, TestUserContext.Admin(), repository, ThumbnailContributors.For(db));
 
-        var result = await service.ListAsync(EntityKindRegistry.Gallery.Code, null, null, null, null, CancellationToken.None);
+        var result = await service.ListAsync(EntityKind.Gallery.ToCode(), null, null, null, null, CancellationToken.None);
         var item = Assert.Single(result.Items);
 
         Assert.Equal(galleryId, item.Id);
@@ -837,21 +837,21 @@ public sealed class EfEntityReadServiceTests {
         db.Entities.AddRange(
             new EntityRow {
                 Id = artistId,
-                KindCode = EntityKindRegistry.MusicArtist.Code,
+                KindCode = EntityKind.MusicArtist.ToCode(),
                 Title = "Imagine Dragons",
                 CreatedAt = now,
                 UpdatedAt = now
             },
             new EntityRow {
                 Id = looseAlbumId,
-                KindCode = EntityKindRegistry.AudioLibrary.Code,
+                KindCode = EntityKind.AudioLibrary.ToCode(),
                 Title = "Loose Album",
                 CreatedAt = now,
                 UpdatedAt = now
             },
             new EntityRow {
                 Id = artistAlbumId,
-                KindCode = EntityKindRegistry.AudioLibrary.Code,
+                KindCode = EntityKind.AudioLibrary.ToCode(),
                 Title = "Evolve",
                 ParentEntityId = artistId,
                 SortOrder = 1,
@@ -863,7 +863,7 @@ public sealed class EfEntityReadServiceTests {
         var repository = new EfEntityRepository(db, TestUserContext.Admin(), EntityMappers.Kinds(db), EntityMappers.Capabilities(db, TestUserContext.Admin()));
         var service = new EfEntityReadService(db, TestUserContext.Admin(), repository, ThumbnailContributors.For(db));
 
-        var result = await service.ListAsync(EntityKindRegistry.AudioLibrary.Code, null, null, null, null, CancellationToken.None);
+        var result = await service.ListAsync(EntityKind.AudioLibrary.ToCode(), null, null, null, null, CancellationToken.None);
 
         Assert.Equal(2, result.TotalCount);
         Assert.Contains(result.Items, item => item.Id == looseAlbumId);
@@ -881,14 +881,14 @@ public sealed class EfEntityReadServiceTests {
         db.Entities.AddRange(
             new EntityRow {
                 Id = bookId,
-                KindCode = EntityKindRegistry.Book.Code,
+                KindCode = EntityKind.Book.ToCode(),
                 Title = "Spoken Story",
                 CreatedAt = now,
                 UpdatedAt = now
             },
             new EntityRow {
                 Id = audiobookTrackId,
-                KindCode = EntityKindRegistry.AudioTrack.Code,
+                KindCode = EntityKind.AudioTrack.ToCode(),
                 Title = "Book Chapter",
                 ParentEntityId = bookId,
                 SortOrder = 0,
@@ -897,14 +897,14 @@ public sealed class EfEntityReadServiceTests {
             },
             new EntityRow {
                 Id = albumId,
-                KindCode = EntityKindRegistry.AudioLibrary.Code,
+                KindCode = EntityKind.AudioLibrary.ToCode(),
                 Title = "Music Album",
                 CreatedAt = now,
                 UpdatedAt = now
             },
             new EntityRow {
                 Id = musicTrackId,
-                KindCode = EntityKindRegistry.AudioTrack.Code,
+                KindCode = EntityKind.AudioTrack.ToCode(),
                 Title = "Music Chapter",
                 ParentEntityId = albumId,
                 SortOrder = 0,
@@ -921,7 +921,7 @@ public sealed class EfEntityReadServiceTests {
         var service = CreateService(db);
 
         var tracks = await service.ListAsync(
-            EntityKindRegistry.AudioTrack.Code,
+            EntityKind.AudioTrack.ToCode(),
             query: null,
             cursor: null,
             hideNsfw: false,
@@ -953,7 +953,7 @@ public sealed class EfEntityReadServiceTests {
         var now = DateTimeOffset.UtcNow;
         db.Entities.Add(new EntityRow {
             Id = bookId,
-            KindCode = EntityKindRegistry.Book.Code,
+            KindCode = EntityKind.Book.ToCode(),
             Title = "Collected Manga",
             CreatedAt = now,
             UpdatedAt = now
@@ -974,7 +974,7 @@ public sealed class EfEntityReadServiceTests {
             db.Entities.AddRange(
                 new EntityRow {
                     Id = volumeId,
-                    KindCode = EntityKindRegistry.BookVolume.Code,
+                    KindCode = EntityKind.BookVolume.ToCode(),
                     Title = $"Volume {index + 1:00}",
                     ParentEntityId = bookId,
                     SortOrder = index,
@@ -983,7 +983,7 @@ public sealed class EfEntityReadServiceTests {
                 },
                 new EntityRow {
                     Id = chapterId,
-                    KindCode = EntityKindRegistry.BookChapter.Code,
+                    KindCode = EntityKind.BookChapter.ToCode(),
                     Title = $"Chapter {index + 1:00}",
                     ParentEntityId = volumeId,
                     SortOrder = 0,
@@ -992,7 +992,7 @@ public sealed class EfEntityReadServiceTests {
                 },
                 new EntityRow {
                     Id = pageId,
-                    KindCode = EntityKindRegistry.BookPage.Code,
+                    KindCode = EntityKind.BookPage.ToCode(),
                     Title = $"Page {index + 1:00}",
                     ParentEntityId = chapterId,
                     SortOrder = 0,
@@ -1014,7 +1014,7 @@ public sealed class EfEntityReadServiceTests {
         var repository = new EfEntityRepository(db, TestUserContext.Admin(), EntityMappers.Kinds(db), EntityMappers.Capabilities(db, TestUserContext.Admin()));
         var service = new EfEntityReadService(db, TestUserContext.Admin(), repository, ThumbnailContributors.For(db));
 
-        var result = await service.ListAsync(EntityKindRegistry.Book.Code, null, null, null, null, CancellationToken.None);
+        var result = await service.ListAsync(EntityKind.Book.ToCode(), null, null, null, null, CancellationToken.None);
         var item = Assert.Single(result.Items);
 
         Assert.Equal("/assets/books/custom-cover.jpg", item.CoverUrl);
@@ -1033,14 +1033,14 @@ public sealed class EfEntityReadServiceTests {
         db.Entities.AddRange(
             new EntityRow {
                 Id = bookId,
-                KindCode = EntityKindRegistry.Book.Code,
+                KindCode = EntityKind.Book.ToCode(),
                 Title = "No Custom Cover",
                 CreatedAt = now,
                 UpdatedAt = now
             },
             new EntityRow {
                 Id = chapterId,
-                KindCode = EntityKindRegistry.BookChapter.Code,
+                KindCode = EntityKind.BookChapter.ToCode(),
                 Title = "Chapter 1",
                 ParentEntityId = bookId,
                 SortOrder = 0,
@@ -1049,7 +1049,7 @@ public sealed class EfEntityReadServiceTests {
             },
             new EntityRow {
                 Id = pageId,
-                KindCode = EntityKindRegistry.BookPage.Code,
+                KindCode = EntityKind.BookPage.ToCode(),
                 Title = "Page 1",
                 ParentEntityId = chapterId,
                 SortOrder = 0,
@@ -1069,7 +1069,7 @@ public sealed class EfEntityReadServiceTests {
         var repository = new EfEntityRepository(db, TestUserContext.Admin(), EntityMappers.Kinds(db), EntityMappers.Capabilities(db, TestUserContext.Admin()));
         var service = new EfEntityReadService(db, TestUserContext.Admin(), repository, ThumbnailContributors.For(db));
 
-        var result = await service.ListAsync(EntityKindRegistry.Book.Code, null, null, null, null, CancellationToken.None);
+        var result = await service.ListAsync(EntityKind.Book.ToCode(), null, null, null, null, CancellationToken.None);
         var item = Assert.Single(result.Items);
 
         Assert.Equal("/assets/book-pages/page-1.jpg", item.CoverUrl);
@@ -1091,21 +1091,21 @@ public sealed class EfEntityReadServiceTests {
         db.Entities.AddRange(
             new EntityRow {
                 Id = collectionId,
-                KindCode = EntityKindRegistry.Collection.Code,
+                KindCode = EntityKind.Collection.ToCode(),
                 Title = "Road Trip",
                 CreatedAt = now,
                 UpdatedAt = now
             },
             new EntityRow {
                 Id = albumId,
-                KindCode = EntityKindRegistry.AudioLibrary.Code,
+                KindCode = EntityKind.AudioLibrary.ToCode(),
                 Title = "Album",
                 CreatedAt = now,
                 UpdatedAt = now
             },
             new EntityRow {
                 Id = trackId,
-                KindCode = EntityKindRegistry.AudioTrack.Code,
+                KindCode = EntityKind.AudioTrack.ToCode(),
                 Title = "Opening Track",
                 ParentEntityId = albumId,
                 CreatedAt = now,
@@ -1113,7 +1113,7 @@ public sealed class EfEntityReadServiceTests {
             },
             new EntityRow {
                 Id = secondTrackId,
-                KindCode = EntityKindRegistry.AudioTrack.Code,
+                KindCode = EntityKind.AudioTrack.ToCode(),
                 Title = "Closing Track",
                 ParentEntityId = albumId,
                 CreatedAt = now,
@@ -1121,7 +1121,7 @@ public sealed class EfEntityReadServiceTests {
             },
             new EntityRow {
                 Id = hiddenVideoId,
-                KindCode = EntityKindRegistry.Video.Code,
+                KindCode = EntityKind.Video.ToCode(),
                 Title = "Hidden Video",
                 CreatedAt = now,
                 UpdatedAt = now
@@ -1167,7 +1167,7 @@ public sealed class EfEntityReadServiceTests {
         await db.SaveChangesAsync();
 
         var result = await CreateService(db).ListAsync(
-            EntityKindRegistry.Collection.Code,
+            EntityKind.Collection.ToCode(),
             query: null,
             cursor: null,
             hideNsfw: null,
@@ -1192,14 +1192,14 @@ public sealed class EfEntityReadServiceTests {
         db.Entities.AddRange(
             new EntityRow {
                 Id = seriesId,
-                KindCode = EntityKindRegistry.Book.Code,
+                KindCode = EntityKind.Book.ToCode(),
                 Title = "Game of Thrones",
                 CreatedAt = now,
                 UpdatedAt = now
             },
             new EntityRow {
                 Id = childBookId,
-                KindCode = EntityKindRegistry.Book.Code,
+                KindCode = EntityKind.Book.ToCode(),
                 Title = "A Game of Thrones",
                 ParentEntityId = seriesId,
                 SortOrder = 0,
@@ -1208,7 +1208,7 @@ public sealed class EfEntityReadServiceTests {
             },
             new EntityRow {
                 Id = looseBookId,
-                KindCode = EntityKindRegistry.Book.Code,
+                KindCode = EntityKind.Book.ToCode(),
                 Title = "Standalone",
                 CreatedAt = now,
                 UpdatedAt = now
@@ -1222,7 +1222,7 @@ public sealed class EfEntityReadServiceTests {
         var repository = new EfEntityRepository(db, TestUserContext.Admin(), EntityMappers.Kinds(db), EntityMappers.Capabilities(db, TestUserContext.Admin()));
         var service = new EfEntityReadService(db, TestUserContext.Admin(), repository, ThumbnailContributors.For(db));
 
-        var result = await service.ListAsync(EntityKindRegistry.Book.Code, null, null, null, null, CancellationToken.None);
+        var result = await service.ListAsync(EntityKind.Book.ToCode(), null, null, null, null, CancellationToken.None);
 
         Assert.Equal(2, result.TotalCount);
         Assert.Equal([seriesId, looseBookId], result.Items.Select(item => item.Id).Order().ToArray());
@@ -1239,14 +1239,14 @@ public sealed class EfEntityReadServiceTests {
         db.Entities.AddRange(
             new EntityRow {
                 Id = bookId,
-                KindCode = EntityKindRegistry.Book.Code,
+                KindCode = EntityKind.Book.ToCode(),
                 Title = "The Promised Neverland",
                 CreatedAt = now,
                 UpdatedAt = now
             },
             new EntityRow {
                 Id = volumeId,
-                KindCode = EntityKindRegistry.BookVolume.Code,
+                KindCode = EntityKind.BookVolume.ToCode(),
                 Title = "Volume 01",
                 ParentEntityId = bookId,
                 SortOrder = 0,
@@ -1255,7 +1255,7 @@ public sealed class EfEntityReadServiceTests {
             },
             new EntityRow {
                 Id = chapterId,
-                KindCode = EntityKindRegistry.BookChapter.Code,
+                KindCode = EntityKind.BookChapter.ToCode(),
                 Title = "Chapter 1",
                 ParentEntityId = volumeId,
                 SortOrder = 0,
@@ -1264,7 +1264,7 @@ public sealed class EfEntityReadServiceTests {
             },
             new EntityRow {
                 Id = pageId,
-                KindCode = EntityKindRegistry.BookPage.Code,
+                KindCode = EntityKind.BookPage.ToCode(),
                 Title = "001",
                 ParentEntityId = chapterId,
                 SortOrder = 0,
@@ -1298,14 +1298,14 @@ public sealed class EfEntityReadServiceTests {
         db.Entities.AddRange(
             new EntityRow {
                 Id = volumeId,
-                KindCode = EntityKindRegistry.BookVolume.Code,
+                KindCode = EntityKind.BookVolume.ToCode(),
                 Title = "Volume 01",
                 CreatedAt = now,
                 UpdatedAt = now
             },
             new EntityRow {
                 Id = chapterId,
-                KindCode = EntityKindRegistry.BookChapter.Code,
+                KindCode = EntityKind.BookChapter.ToCode(),
                 Title = "Chapter 1",
                 ParentEntityId = volumeId,
                 SortOrder = 0,
@@ -1314,7 +1314,7 @@ public sealed class EfEntityReadServiceTests {
             },
             new EntityRow {
                 Id = pageId,
-                KindCode = EntityKindRegistry.BookPage.Code,
+                KindCode = EntityKind.BookPage.ToCode(),
                 Title = "001",
                 ParentEntityId = chapterId,
                 SortOrder = 0,
@@ -1345,14 +1345,14 @@ public sealed class EfEntityReadServiceTests {
         db.Entities.AddRange(
             new EntityRow {
                 Id = bookId,
-                KindCode = EntityKindRegistry.Book.Code,
+                KindCode = EntityKind.Book.ToCode(),
                 Title = "Shared Book",
                 CreatedAt = now,
                 UpdatedAt = now
             },
             new EntityRow {
                 Id = safeChapterId,
-                KindCode = EntityKindRegistry.BookChapter.Code,
+                KindCode = EntityKind.BookChapter.ToCode(),
                 Title = "Safe Chapter",
                 ParentEntityId = bookId,
                 SortOrder = 0,
@@ -1361,7 +1361,7 @@ public sealed class EfEntityReadServiceTests {
             },
             new EntityRow {
                 Id = nsfwChapterId,
-                KindCode = EntityKindRegistry.BookChapter.Code,
+                KindCode = EntityKind.BookChapter.ToCode(),
                 Title = "Hidden Chapter",
                 ParentEntityId = bookId,
                 SortOrder = 1,
@@ -1391,14 +1391,14 @@ public sealed class EfEntityReadServiceTests {
         db.Entities.AddRange(
             new EntityRow {
                 Id = bookId,
-                KindCode = EntityKindRegistry.Book.Code,
+                KindCode = EntityKind.Book.ToCode(),
                 Title = "Visible Book",
                 CreatedAt = now,
                 UpdatedAt = now
             },
             new EntityRow {
                 Id = chapterId,
-                KindCode = EntityKindRegistry.BookChapter.Code,
+                KindCode = EntityKind.BookChapter.ToCode(),
                 Title = "Hidden Chapter",
                 ParentEntityId = bookId,
                 SortOrder = 0,
@@ -1437,21 +1437,21 @@ public sealed class EfEntityReadServiceTests {
         db.Entities.AddRange(
             new EntityRow {
                 Id = videoId,
-                KindCode = EntityKindRegistry.Video.Code,
+                KindCode = EntityKind.Video.ToCode(),
                 Title = "Feature",
                 CreatedAt = now,
                 UpdatedAt = now
             },
             new EntityRow {
                 Id = safePersonId,
-                KindCode = EntityKindRegistry.Person.Code,
+                KindCode = EntityKind.Person.ToCode(),
                 Title = "Safe Person",
                 CreatedAt = now,
                 UpdatedAt = now
             },
             new EntityRow {
                 Id = nsfwPersonId,
-                KindCode = EntityKindRegistry.Person.Code,
+                KindCode = EntityKind.Person.ToCode(),
                 Title = "Hidden Person",
                 IsNsfw = true,
                 CreatedAt = now,
@@ -1463,7 +1463,7 @@ public sealed class EfEntityReadServiceTests {
                 RelationshipCode = "cast",
                 Label = "Cast",
                 TargetEntityId = safePersonId,
-                TargetKindCode = EntityKindRegistry.Person.Code,
+                TargetKindCode = EntityKind.Person.ToCode(),
                 SortOrder = 0,
                 CreatedAt = now
             },
@@ -1472,7 +1472,7 @@ public sealed class EfEntityReadServiceTests {
                 RelationshipCode = "cast",
                 Label = "Cast",
                 TargetEntityId = nsfwPersonId,
-                TargetKindCode = EntityKindRegistry.Person.Code,
+                TargetKindCode = EntityKind.Person.ToCode(),
                 SortOrder = 1,
                 CreatedAt = now
             });
@@ -1504,9 +1504,9 @@ public sealed class EfEntityReadServiceTests {
             Root(enabledRootId, enabled: true, now),
             Root(disabledRootId, enabled: false, now));
         db.Entities.AddRange(
-            new EntityRow { Id = visibleVideoId, KindCode = EntityKindRegistry.Video.Code, Title = "Shared Title", CreatedAt = now, UpdatedAt = now },
-            new EntityRow { Id = hiddenVideoId, KindCode = EntityKindRegistry.Video.Code, Title = "Shared Title Hidden", CreatedAt = now, UpdatedAt = now },
-            new EntityRow { Id = rootlessTagId, KindCode = EntityKindRegistry.Tag.Code, Title = "Rootless Tag", CreatedAt = now, UpdatedAt = now });
+            new EntityRow { Id = visibleVideoId, KindCode = EntityKind.Video.ToCode(), Title = "Shared Title", CreatedAt = now, UpdatedAt = now },
+            new EntityRow { Id = hiddenVideoId, KindCode = EntityKind.Video.ToCode(), Title = "Shared Title Hidden", CreatedAt = now, UpdatedAt = now },
+            new EntityRow { Id = rootlessTagId, KindCode = EntityKind.Tag.ToCode(), Title = "Rootless Tag", CreatedAt = now, UpdatedAt = now });
         db.VideoDetails.AddRange(
             new VideoDetailRow { EntityId = visibleVideoId, LibraryRootId = enabledRootId },
             new VideoDetailRow { EntityId = hiddenVideoId, LibraryRootId = disabledRootId });
@@ -1514,7 +1514,7 @@ public sealed class EfEntityReadServiceTests {
 
         var service = CreateService(db);
 
-        var videos = await service.ListAsync(EntityKindRegistry.Video.Code, null, null, null, null, CancellationToken.None);
+        var videos = await service.ListAsync(EntityKind.Video.ToCode(), null, null, null, null, CancellationToken.None);
         var search = await service.ListAsync(null, "Shared Title", null, null, null, CancellationToken.None);
         var hiddenCard = await service.GetAsync(hiddenVideoId, hideNsfw: false, CancellationToken.None);
         var hiddenDetail = await service.GetAsync(hiddenVideoId, hideNsfw: false, CancellationToken.None);
@@ -1534,7 +1534,7 @@ public sealed class EfEntityReadServiceTests {
         // Library visibility is memoized per request scope, so a fresh service models
         // the next request after the root was re-enabled.
         var freshService = CreateService(db);
-        var reenabled = await freshService.ListAsync(EntityKindRegistry.Video.Code, null, null, null, null, CancellationToken.None);
+        var reenabled = await freshService.ListAsync(EntityKind.Video.ToCode(), null, null, null, null, CancellationToken.None);
 
         Assert.Equal(2, reenabled.TotalCount);
         Assert.Equal([visibleVideoId, hiddenVideoId], reenabled.Items.Select(item => item.Id).Order().ToArray());
@@ -1555,11 +1555,11 @@ public sealed class EfEntityReadServiceTests {
             Root(enabledRootId, enabled: true, now),
             Root(disabledRootId, enabled: false, now));
         db.Entities.AddRange(
-            new EntityRow { Id = artistId, KindCode = EntityKindRegistry.MusicArtist.Code, Title = "Artist", CreatedAt = now, UpdatedAt = now },
-            new EntityRow { Id = visibleAlbumId, KindCode = EntityKindRegistry.AudioLibrary.Code, Title = "Visible Album", ParentEntityId = artistId, SortOrder = 0, CreatedAt = now, UpdatedAt = now },
-            new EntityRow { Id = hiddenAlbumId, KindCode = EntityKindRegistry.AudioLibrary.Code, Title = "Hidden Album", ParentEntityId = artistId, SortOrder = 1, CreatedAt = now, UpdatedAt = now },
-            new EntityRow { Id = visibleTrackId, KindCode = EntityKindRegistry.AudioTrack.Code, Title = "Visible Track", ParentEntityId = visibleAlbumId, SortOrder = 0, CreatedAt = now, UpdatedAt = now },
-            new EntityRow { Id = hiddenTrackId, KindCode = EntityKindRegistry.AudioTrack.Code, Title = "Hidden Track", ParentEntityId = hiddenAlbumId, SortOrder = 0, CreatedAt = now, UpdatedAt = now });
+            new EntityRow { Id = artistId, KindCode = EntityKind.MusicArtist.ToCode(), Title = "Artist", CreatedAt = now, UpdatedAt = now },
+            new EntityRow { Id = visibleAlbumId, KindCode = EntityKind.AudioLibrary.ToCode(), Title = "Visible Album", ParentEntityId = artistId, SortOrder = 0, CreatedAt = now, UpdatedAt = now },
+            new EntityRow { Id = hiddenAlbumId, KindCode = EntityKind.AudioLibrary.ToCode(), Title = "Hidden Album", ParentEntityId = artistId, SortOrder = 1, CreatedAt = now, UpdatedAt = now },
+            new EntityRow { Id = visibleTrackId, KindCode = EntityKind.AudioTrack.ToCode(), Title = "Visible Track", ParentEntityId = visibleAlbumId, SortOrder = 0, CreatedAt = now, UpdatedAt = now },
+            new EntityRow { Id = hiddenTrackId, KindCode = EntityKind.AudioTrack.ToCode(), Title = "Hidden Track", ParentEntityId = hiddenAlbumId, SortOrder = 0, CreatedAt = now, UpdatedAt = now });
         db.MusicArtistDetails.Add(new MusicArtistDetailRow { EntityId = artistId, LibraryRootId = enabledRootId });
         db.AudioLibraryDetails.AddRange(
             new AudioLibraryDetailRow { EntityId = visibleAlbumId, LibraryRootId = enabledRootId },
@@ -1571,7 +1571,7 @@ public sealed class EfEntityReadServiceTests {
 
         var service = CreateService(db);
 
-        var tracks = await service.ListAsync(EntityKindRegistry.AudioTrack.Code, null, null, null, null, CancellationToken.None);
+        var tracks = await service.ListAsync(EntityKind.AudioTrack.ToCode(), null, null, null, null, CancellationToken.None);
         var artist = Assert.IsType<EntityCard>(await service.GetAsync(artistId, hideNsfw: false, CancellationToken.None));
 
         Assert.Equal(1, tracks.TotalCount);
@@ -1595,10 +1595,10 @@ public sealed class EfEntityReadServiceTests {
             Root(enabledRootId, enabled: true, now),
             Root(disabledRootId, enabled: false, now));
         db.Entities.AddRange(
-            new EntityRow { Id = sourceVideoId, KindCode = EntityKindRegistry.Video.Code, Title = "Source", CreatedAt = now, UpdatedAt = now },
-            new EntityRow { Id = relatedVisibleVideoId, KindCode = EntityKindRegistry.Video.Code, Title = "Visible Related", CreatedAt = now, UpdatedAt = now },
-            new EntityRow { Id = hiddenMovieId, KindCode = EntityKindRegistry.Movie.Code, Title = "Hidden Movie", CreatedAt = now, UpdatedAt = now },
-            new EntityRow { Id = hiddenMovieVideoId, KindCode = EntityKindRegistry.Video.Code, Title = "Hidden Feature", ParentEntityId = hiddenMovieId, CreatedAt = now, UpdatedAt = now });
+            new EntityRow { Id = sourceVideoId, KindCode = EntityKind.Video.ToCode(), Title = "Source", CreatedAt = now, UpdatedAt = now },
+            new EntityRow { Id = relatedVisibleVideoId, KindCode = EntityKind.Video.ToCode(), Title = "Visible Related", CreatedAt = now, UpdatedAt = now },
+            new EntityRow { Id = hiddenMovieId, KindCode = EntityKind.Movie.ToCode(), Title = "Hidden Movie", CreatedAt = now, UpdatedAt = now },
+            new EntityRow { Id = hiddenMovieVideoId, KindCode = EntityKind.Video.ToCode(), Title = "Hidden Feature", ParentEntityId = hiddenMovieId, CreatedAt = now, UpdatedAt = now });
         db.VideoDetails.AddRange(
             new VideoDetailRow { EntityId = sourceVideoId, LibraryRootId = enabledRootId },
             new VideoDetailRow { EntityId = relatedVisibleVideoId, LibraryRootId = enabledRootId },
@@ -1612,7 +1612,7 @@ public sealed class EfEntityReadServiceTests {
 
         var source = Assert.IsType<EntityCard>(
             await service.GetAsync(sourceVideoId, hideNsfw: false, CancellationToken.None));
-        var movies = await service.ListAsync(EntityKindRegistry.Movie.Code, null, null, null, null, CancellationToken.None);
+        var movies = await service.ListAsync(EntityKind.Movie.ToCode(), null, null, null, null, CancellationToken.None);
 
         var related = Assert.Single(source.Relationships, group => group.Code == RelationshipKind.Related);
         Assert.Equal(relatedVisibleVideoId, Assert.Single(related.Entities).Id);
@@ -1625,7 +1625,7 @@ public sealed class EfEntityReadServiceTests {
                 RelationshipCode = RelationshipKind.Related.ToCode(),
                 Label = "Related",
                 TargetEntityId = target,
-                TargetKindCode = EntityKindRegistry.Video.Code,
+                TargetKindCode = EntityKind.Video.ToCode(),
                 CreatedAt = at,
             };
     }
@@ -1637,7 +1637,7 @@ public sealed class EfEntityReadServiceTests {
         for (var index = 0; index < 5; index++) {
             db.Entities.Add(new EntityRow {
                 Id = Guid.NewGuid(),
-                KindCode = EntityKindRegistry.Video.Code,
+                KindCode = EntityKind.Video.ToCode(),
                 Title = $"Video {index:00}",
                 CreatedAt = now,
                 UpdatedAt = now
@@ -1646,7 +1646,7 @@ public sealed class EfEntityReadServiceTests {
         // A non-matching entity must not be counted in the kind-scoped total.
         db.Entities.Add(new EntityRow {
             Id = Guid.NewGuid(),
-            KindCode = EntityKindRegistry.Image.Code,
+            KindCode = EntityKind.Image.ToCode(),
             Title = "Stray image",
             CreatedAt = now,
             UpdatedAt = now
@@ -1657,13 +1657,13 @@ public sealed class EfEntityReadServiceTests {
         var service = new EfEntityReadService(db, TestUserContext.Admin(), repository, ThumbnailContributors.For(db));
 
         var firstPage = await service.ListAsync(
-            EntityKindRegistry.Video.Code, query: null, cursor: null, hideNsfw: null, limit: 2, CancellationToken.None);
+            EntityKind.Video.ToCode(), query: null, cursor: null, hideNsfw: null, limit: 2, CancellationToken.None);
         Assert.Equal(2, firstPage.Items.Count);
         Assert.NotNull(firstPage.NextCursor);
         Assert.Equal(5, firstPage.TotalCount);
 
         var secondPage = await service.ListAsync(
-            EntityKindRegistry.Video.Code, query: null, cursor: firstPage.NextCursor, hideNsfw: null, limit: 2, CancellationToken.None);
+            EntityKind.Video.ToCode(), query: null, cursor: firstPage.NextCursor, hideNsfw: null, limit: 2, CancellationToken.None);
         Assert.Equal(2, secondPage.Items.Count);
         // Total is independent of cursor position — it always reflects the full filter match.
         Assert.Equal(5, secondPage.TotalCount);
@@ -1677,19 +1677,19 @@ public sealed class EfEntityReadServiceTests {
         var middle = Guid.Parse("22222222-2222-2222-2222-222222222222");
         var newest = Guid.Parse("33333333-3333-3333-3333-333333333333");
         db.Entities.AddRange(
-            new EntityRow { Id = oldest, KindCode = EntityKindRegistry.Video.Code, Title = "Zeta", CreatedAt = baseTime, UpdatedAt = baseTime },
-            new EntityRow { Id = middle, KindCode = EntityKindRegistry.Video.Code, Title = "Alpha", CreatedAt = baseTime.AddHours(1), UpdatedAt = baseTime },
-            new EntityRow { Id = newest, KindCode = EntityKindRegistry.Video.Code, Title = "Mu", CreatedAt = baseTime.AddHours(2), UpdatedAt = baseTime });
+            new EntityRow { Id = oldest, KindCode = EntityKind.Video.ToCode(), Title = "Zeta", CreatedAt = baseTime, UpdatedAt = baseTime },
+            new EntityRow { Id = middle, KindCode = EntityKind.Video.ToCode(), Title = "Alpha", CreatedAt = baseTime.AddHours(1), UpdatedAt = baseTime },
+            new EntityRow { Id = newest, KindCode = EntityKind.Video.ToCode(), Title = "Mu", CreatedAt = baseTime.AddHours(2), UpdatedAt = baseTime });
         await db.SaveChangesAsync();
 
         var service = CreateService(db);
 
         var descending = await service.ListAsync(
-            EntityKindRegistry.Video.Code, null, null, null, null, CancellationToken.None, sort: "added", sortDir: "desc");
+            EntityKind.Video.ToCode(), null, null, null, null, CancellationToken.None, sort: "added", sortDir: "desc");
         Assert.Equal(new[] { newest, middle, oldest }, descending.Items.Select(item => item.Id).ToArray());
 
         var ascending = await service.ListAsync(
-            EntityKindRegistry.Video.Code, null, null, null, null, CancellationToken.None, sort: "added", sortDir: "asc");
+            EntityKind.Video.ToCode(), null, null, null, null, CancellationToken.None, sort: "added", sortDir: "asc");
         Assert.Equal(new[] { oldest, middle, newest }, ascending.Items.Select(item => item.Id).ToArray());
     }
 
@@ -1701,9 +1701,9 @@ public sealed class EfEntityReadServiceTests {
         var lowRating = Guid.Parse("22222222-2222-2222-2222-222222222222");
         var highRating = Guid.Parse("33333333-3333-3333-3333-333333333333");
         db.Entities.AddRange(
-            new EntityRow { Id = unrated, KindCode = EntityKindRegistry.Video.Code, Title = "Unrated", CreatedAt = now, UpdatedAt = now },
-            new EntityRow { Id = lowRating, KindCode = EntityKindRegistry.Video.Code, Title = "Low", CreatedAt = now, UpdatedAt = now },
-            new EntityRow { Id = highRating, KindCode = EntityKindRegistry.Video.Code, Title = "High", CreatedAt = now, UpdatedAt = now });
+            new EntityRow { Id = unrated, KindCode = EntityKind.Video.ToCode(), Title = "Unrated", CreatedAt = now, UpdatedAt = now },
+            new EntityRow { Id = lowRating, KindCode = EntityKind.Video.ToCode(), Title = "Low", CreatedAt = now, UpdatedAt = now },
+            new EntityRow { Id = highRating, KindCode = EntityKind.Video.ToCode(), Title = "High", CreatedAt = now, UpdatedAt = now });
         db.UserEntityStates.AddRange(
             new UserEntityStateRow { UserId = TestUserContext.UserId, EntityId = lowRating, RatingValue = 2, UpdatedAt = now },
             new UserEntityStateRow { UserId = TestUserContext.UserId, EntityId = highRating, RatingValue = 5, UpdatedAt = now });
@@ -1712,7 +1712,7 @@ public sealed class EfEntityReadServiceTests {
         var service = CreateService(db);
 
         var descending = await service.ListAsync(
-            EntityKindRegistry.Video.Code, null, null, null, null, CancellationToken.None, sort: "rating", sortDir: "desc");
+            EntityKind.Video.ToCode(), null, null, null, null, CancellationToken.None, sort: "rating", sortDir: "desc");
         Assert.Equal(new[] { highRating, lowRating, unrated }, descending.Items.Select(item => item.Id).ToArray());
     }
 
@@ -1723,7 +1723,7 @@ public sealed class EfEntityReadServiceTests {
         for (var index = 0; index < 12; index++) {
             db.Entities.Add(new EntityRow {
                 Id = Guid.Parse($"00000000-0000-0000-0000-0000000000{index:D2}"),
-                KindCode = EntityKindRegistry.Video.Code,
+                KindCode = EntityKind.Video.ToCode(),
                 Title = $"Video {index:00}",
                 CreatedAt = now,
                 UpdatedAt = now
@@ -1734,11 +1734,11 @@ public sealed class EfEntityReadServiceTests {
         var service = CreateService(db);
 
         var firstPage = await service.ListAsync(
-            EntityKindRegistry.Video.Code, null, null, null, limit: 5, CancellationToken.None, sort: "random", seed: 1234);
+            EntityKind.Video.ToCode(), null, null, null, limit: 5, CancellationToken.None, sort: "random", seed: 1234);
         var secondPage = await service.ListAsync(
-            EntityKindRegistry.Video.Code, null, firstPage.NextCursor, null, limit: 5, CancellationToken.None, sort: "random", seed: 1234);
+            EntityKind.Video.ToCode(), null, firstPage.NextCursor, null, limit: 5, CancellationToken.None, sort: "random", seed: 1234);
         var firstPageAgain = await service.ListAsync(
-            EntityKindRegistry.Video.Code, null, null, null, limit: 5, CancellationToken.None, sort: "random", seed: 1234);
+            EntityKind.Video.ToCode(), null, null, null, limit: 5, CancellationToken.None, sort: "random", seed: 1234);
 
         // The same seed reproduces the same overall order, and paging never repeats a row.
         Assert.Equal(
@@ -1750,7 +1750,7 @@ public sealed class EfEntityReadServiceTests {
 
         // A different seed should generally produce a different ordering.
         var differentSeed = await service.ListAsync(
-            EntityKindRegistry.Video.Code, null, null, null, limit: 5, CancellationToken.None, sort: "random", seed: 9999);
+            EntityKind.Video.ToCode(), null, null, null, limit: 5, CancellationToken.None, sort: "random", seed: 9999);
         Assert.NotEqual(
             firstPage.Items.Select(item => item.Id).ToArray(),
             differentSeed.Items.Select(item => item.Id).ToArray());
@@ -1765,10 +1765,10 @@ public sealed class EfEntityReadServiceTests {
         var ratedThree = Guid.Parse("33333333-3333-3333-3333-333333333333");
         var unrated = Guid.Parse("44444444-4444-4444-4444-444444444444");
         db.Entities.AddRange(
-            new EntityRow { Id = favorite, KindCode = EntityKindRegistry.Video.Code, Title = "Fav", CreatedAt = now, UpdatedAt = now },
-            new EntityRow { Id = organized, KindCode = EntityKindRegistry.Video.Code, Title = "Org", IsOrganized = true, CreatedAt = now, UpdatedAt = now },
-            new EntityRow { Id = ratedThree, KindCode = EntityKindRegistry.Video.Code, Title = "Three", CreatedAt = now, UpdatedAt = now },
-            new EntityRow { Id = unrated, KindCode = EntityKindRegistry.Video.Code, Title = "None", CreatedAt = now, UpdatedAt = now });
+            new EntityRow { Id = favorite, KindCode = EntityKind.Video.ToCode(), Title = "Fav", CreatedAt = now, UpdatedAt = now },
+            new EntityRow { Id = organized, KindCode = EntityKind.Video.ToCode(), Title = "Org", IsOrganized = true, CreatedAt = now, UpdatedAt = now },
+            new EntityRow { Id = ratedThree, KindCode = EntityKind.Video.ToCode(), Title = "Three", CreatedAt = now, UpdatedAt = now },
+            new EntityRow { Id = unrated, KindCode = EntityKind.Video.ToCode(), Title = "None", CreatedAt = now, UpdatedAt = now });
         db.UserEntityStates.AddRange(
             new UserEntityStateRow { UserId = TestUserContext.UserId, EntityId = favorite, IsFavorite = true, RatingValue = 5, UpdatedAt = now },
             new UserEntityStateRow { UserId = TestUserContext.UserId, EntityId = organized, RatingValue = 1, UpdatedAt = now },
@@ -1778,22 +1778,22 @@ public sealed class EfEntityReadServiceTests {
         var service = CreateService(db);
 
         var favorites = await service.ListAsync(
-            EntityKindRegistry.Video.Code, null, null, null, null, CancellationToken.None, favorite: true);
+            EntityKind.Video.ToCode(), null, null, null, null, CancellationToken.None, favorite: true);
         Assert.Equal(favorite, Assert.Single(favorites.Items).Id);
 
         var organizedOnly = await service.ListAsync(
-            EntityKindRegistry.Video.Code, null, null, null, null, CancellationToken.None, organized: true);
+            EntityKind.Video.ToCode(), null, null, null, null, CancellationToken.None, organized: true);
         Assert.Equal(organized, Assert.Single(organizedOnly.Items).Id);
 
         var atLeastThree = await service.ListAsync(
-            EntityKindRegistry.Video.Code, null, null, null, null, CancellationToken.None, ratingMin: 3);
+            EntityKind.Video.ToCode(), null, null, null, null, CancellationToken.None, ratingMin: 3);
         Assert.Equal(
             new[] { favorite, ratedThree }.OrderBy(id => id),
             atLeastThree.Items.Select(item => item.Id).OrderBy(id => id));
         Assert.Equal(2, atLeastThree.TotalCount);
 
         var unratedOnly = await service.ListAsync(
-            EntityKindRegistry.Video.Code, null, null, null, null, CancellationToken.None, unrated: true);
+            EntityKind.Video.ToCode(), null, null, null, null, CancellationToken.None, unrated: true);
         Assert.Equal(unrated, Assert.Single(unratedOnly.Items).Id);
     }
 
@@ -1807,11 +1807,11 @@ public sealed class EfEntityReadServiceTests {
         var readBook = Guid.Parse("44444444-4444-4444-4444-444444444444");
         var inProgressBook = Guid.Parse("55555555-5555-5555-5555-555555555555");
         db.Entities.AddRange(
-            new EntityRow { Id = watchedVideo, KindCode = EntityKindRegistry.Video.Code, Title = "Watched", CreatedAt = now, UpdatedAt = now },
-            new EntityRow { Id = inProgressVideo, KindCode = EntityKindRegistry.Video.Code, Title = "Watching", CreatedAt = now, UpdatedAt = now },
-            new EntityRow { Id = unwatchedVideo, KindCode = EntityKindRegistry.Video.Code, Title = "Fresh", CreatedAt = now, UpdatedAt = now },
-            new EntityRow { Id = readBook, KindCode = EntityKindRegistry.Book.Code, Title = "Read", CreatedAt = now, UpdatedAt = now },
-            new EntityRow { Id = inProgressBook, KindCode = EntityKindRegistry.Book.Code, Title = "Reading", CreatedAt = now, UpdatedAt = now });
+            new EntityRow { Id = watchedVideo, KindCode = EntityKind.Video.ToCode(), Title = "Watched", CreatedAt = now, UpdatedAt = now },
+            new EntityRow { Id = inProgressVideo, KindCode = EntityKind.Video.ToCode(), Title = "Watching", CreatedAt = now, UpdatedAt = now },
+            new EntityRow { Id = unwatchedVideo, KindCode = EntityKind.Video.ToCode(), Title = "Fresh", CreatedAt = now, UpdatedAt = now },
+            new EntityRow { Id = readBook, KindCode = EntityKind.Book.ToCode(), Title = "Read", CreatedAt = now, UpdatedAt = now },
+            new EntityRow { Id = inProgressBook, KindCode = EntityKind.Book.ToCode(), Title = "Reading", CreatedAt = now, UpdatedAt = now });
         db.UserEntityStates.AddRange(
             new UserEntityStateRow { UserId = TestUserContext.UserId, EntityId = watchedVideo, PlayCount = 1, CompletedAt = now, UpdatedAt = now },
             new UserEntityStateRow { UserId = TestUserContext.UserId, EntityId = inProgressVideo, PlayCount = 0, ResumeSeconds = 42, UpdatedAt = now });
@@ -1823,23 +1823,23 @@ public sealed class EfEntityReadServiceTests {
         var service = CreateService(db);
 
         var watched = await service.ListAsync(
-            EntityKindRegistry.Video.Code, null, null, null, null, CancellationToken.None, status: "watched");
+            EntityKind.Video.ToCode(), null, null, null, null, CancellationToken.None, status: "watched");
         Assert.Equal(watchedVideo, Assert.Single(watched.Items).Id);
 
         var unwatched = await service.ListAsync(
-            EntityKindRegistry.Video.Code, null, null, null, null, CancellationToken.None, status: "unwatched");
+            EntityKind.Video.ToCode(), null, null, null, null, CancellationToken.None, status: "unwatched");
         Assert.Equal(unwatchedVideo, Assert.Single(unwatched.Items).Id);
 
         var watchingVideo = await service.ListAsync(
-            EntityKindRegistry.Video.Code, null, null, null, null, CancellationToken.None, status: "in-progress");
+            EntityKind.Video.ToCode(), null, null, null, null, CancellationToken.None, status: "in-progress");
         Assert.Equal(inProgressVideo, Assert.Single(watchingVideo.Items).Id);
 
         var read = await service.ListAsync(
-            EntityKindRegistry.Book.Code, null, null, null, null, CancellationToken.None, status: "read");
+            EntityKind.Book.ToCode(), null, null, null, null, CancellationToken.None, status: "read");
         Assert.Equal(readBook, Assert.Single(read.Items).Id);
 
         var reading = await service.ListAsync(
-            EntityKindRegistry.Book.Code, null, null, null, null, CancellationToken.None, status: "in-progress");
+            EntityKind.Book.ToCode(), null, null, null, null, CancellationToken.None, status: "in-progress");
         Assert.Equal(inProgressBook, Assert.Single(reading.Items).Id);
     }
 
@@ -1851,9 +1851,9 @@ public sealed class EfEntityReadServiceTests {
         var seasonId = Guid.Parse("aaaaaaaa-2222-2222-2222-222222222222");
         var episodeId = Guid.Parse("aaaaaaaa-3333-3333-3333-333333333333");
         db.Entities.AddRange(
-            new EntityRow { Id = seriesId, KindCode = EntityKindRegistry.VideoSeries.Code, Title = "Series", CreatedAt = now, UpdatedAt = now },
-            new EntityRow { Id = seasonId, KindCode = EntityKindRegistry.VideoSeason.Code, Title = "Season", ParentEntityId = seriesId, CreatedAt = now, UpdatedAt = now },
-            new EntityRow { Id = episodeId, KindCode = EntityKindRegistry.Video.Code, Title = "Episode", ParentEntityId = seasonId, CreatedAt = now, UpdatedAt = now });
+            new EntityRow { Id = seriesId, KindCode = EntityKind.VideoSeries.ToCode(), Title = "Series", CreatedAt = now, UpdatedAt = now },
+            new EntityRow { Id = seasonId, KindCode = EntityKind.VideoSeason.ToCode(), Title = "Season", ParentEntityId = seriesId, CreatedAt = now, UpdatedAt = now },
+            new EntityRow { Id = episodeId, KindCode = EntityKind.Video.ToCode(), Title = "Episode", ParentEntityId = seasonId, CreatedAt = now, UpdatedAt = now });
         db.EntityTechnical.Add(new EntityTechnicalRow {
             EntityId = episodeId,
             DurationSeconds = 100,
@@ -1878,7 +1878,7 @@ public sealed class EfEntityReadServiceTests {
         await db.SaveChangesAsync();
 
         var result = await CreateService(db).ListAsync(
-            EntityKindRegistry.VideoSeries.Code,
+            EntityKind.VideoSeries.ToCode(),
             null,
             null,
             null,
@@ -1900,10 +1900,10 @@ public sealed class EfEntityReadServiceTests {
         var unwatchedMovie = Guid.Parse("33333333-3333-3333-3333-333333333333");
         var unwatchedVideo = Guid.Parse("44444444-4444-4444-4444-444444444444");
         db.Entities.AddRange(
-            new EntityRow { Id = watchedMovie, KindCode = EntityKindRegistry.Movie.Code, Title = "Watched Movie", CreatedAt = now, UpdatedAt = now },
-            new EntityRow { Id = watchedVideo, KindCode = EntityKindRegistry.Video.Code, Title = "Watched Movie", ParentEntityId = watchedMovie, CreatedAt = now, UpdatedAt = now },
-            new EntityRow { Id = unwatchedMovie, KindCode = EntityKindRegistry.Movie.Code, Title = "Fresh Movie", CreatedAt = now, UpdatedAt = now },
-            new EntityRow { Id = unwatchedVideo, KindCode = EntityKindRegistry.Video.Code, Title = "Fresh Movie", ParentEntityId = unwatchedMovie, CreatedAt = now, UpdatedAt = now });
+            new EntityRow { Id = watchedMovie, KindCode = EntityKind.Movie.ToCode(), Title = "Watched Movie", CreatedAt = now, UpdatedAt = now },
+            new EntityRow { Id = watchedVideo, KindCode = EntityKind.Video.ToCode(), Title = "Watched Movie", ParentEntityId = watchedMovie, CreatedAt = now, UpdatedAt = now },
+            new EntityRow { Id = unwatchedMovie, KindCode = EntityKind.Movie.ToCode(), Title = "Fresh Movie", CreatedAt = now, UpdatedAt = now },
+            new EntityRow { Id = unwatchedVideo, KindCode = EntityKind.Video.ToCode(), Title = "Fresh Movie", ParentEntityId = unwatchedMovie, CreatedAt = now, UpdatedAt = now });
         db.UserEntityStates.Add(new UserEntityStateRow {
             UserId = TestUserContext.UserId,
             EntityId = watchedVideo,
@@ -1916,9 +1916,9 @@ public sealed class EfEntityReadServiceTests {
         var service = CreateService(db);
 
         var played = await service.ListAsync(
-            EntityKindRegistry.Movie.Code, null, null, null, null, CancellationToken.None, played: true);
+            EntityKind.Movie.ToCode(), null, null, null, null, CancellationToken.None, played: true);
         var unplayed = await service.ListAsync(
-            EntityKindRegistry.Movie.Code, null, null, null, null, CancellationToken.None, played: false);
+            EntityKind.Movie.ToCode(), null, null, null, null, CancellationToken.None, played: false);
         var watchedThumbnail = Assert.Single(played.Items);
 
         Assert.Equal(watchedMovie, watchedThumbnail.Id);
@@ -1933,8 +1933,8 @@ public sealed class EfEntityReadServiceTests {
         var movieId = Guid.Parse("55555555-5555-5555-5555-555555555555");
         var videoId = Guid.Parse("66666666-6666-6666-6666-666666666666");
         db.Entities.AddRange(
-            new EntityRow { Id = movieId, KindCode = EntityKindRegistry.Movie.Code, Title = "Movie", CreatedAt = now, UpdatedAt = now },
-            new EntityRow { Id = videoId, KindCode = EntityKindRegistry.Video.Code, Title = "Movie", ParentEntityId = movieId, CreatedAt = now, UpdatedAt = now });
+            new EntityRow { Id = movieId, KindCode = EntityKind.Movie.ToCode(), Title = "Movie", CreatedAt = now, UpdatedAt = now },
+            new EntityRow { Id = videoId, KindCode = EntityKind.Video.ToCode(), Title = "Movie", ParentEntityId = movieId, CreatedAt = now, UpdatedAt = now });
         db.EntityTechnical.Add(new EntityTechnicalRow {
             EntityId = videoId,
             DurationSeconds = 200,
@@ -1949,7 +1949,7 @@ public sealed class EfEntityReadServiceTests {
         await db.SaveChangesAsync();
 
         var result = await CreateService(db).ListAsync(
-            EntityKindRegistry.Movie.Code, null, null, null, null, CancellationToken.None);
+            EntityKind.Movie.ToCode(), null, null, null, null, CancellationToken.None);
 
         var thumbnail = Assert.Single(result.Items);
         Assert.Equal(50, thumbnail.ResumeSeconds);
@@ -1964,9 +1964,9 @@ public sealed class EfEntityReadServiceTests {
         var playedLastWeek = Guid.Parse("22222222-2222-2222-2222-222222222222");
         var neverPlayed = Guid.Parse("33333333-3333-3333-3333-333333333333");
         db.Entities.AddRange(
-            new EntityRow { Id = playedToday, KindCode = EntityKindRegistry.Video.Code, Title = "Today", CreatedAt = now.AddYears(-1), UpdatedAt = now },
-            new EntityRow { Id = playedLastWeek, KindCode = EntityKindRegistry.Video.Code, Title = "Last Week", CreatedAt = now, UpdatedAt = now },
-            new EntityRow { Id = neverPlayed, KindCode = EntityKindRegistry.Video.Code, Title = "Never", CreatedAt = now, UpdatedAt = now });
+            new EntityRow { Id = playedToday, KindCode = EntityKind.Video.ToCode(), Title = "Today", CreatedAt = now.AddYears(-1), UpdatedAt = now },
+            new EntityRow { Id = playedLastWeek, KindCode = EntityKind.Video.ToCode(), Title = "Last Week", CreatedAt = now, UpdatedAt = now },
+            new EntityRow { Id = neverPlayed, KindCode = EntityKind.Video.ToCode(), Title = "Never", CreatedAt = now, UpdatedAt = now });
         db.UserEntityStates.AddRange(
             new UserEntityStateRow { UserId = TestUserContext.UserId, EntityId = playedToday, PlayCount = 1, LastPlayedAt = now, UpdatedAt = now },
             new UserEntityStateRow { UserId = TestUserContext.UserId, EntityId = playedLastWeek, PlayCount = 1, LastPlayedAt = now.AddDays(-7), UpdatedAt = now.AddDays(-7) });
@@ -1975,7 +1975,7 @@ public sealed class EfEntityReadServiceTests {
         var service = CreateService(db);
 
         var result = await service.ListAsync(
-            EntityKindRegistry.Video.Code, null, null, null, null, CancellationToken.None,
+            EntityKind.Video.ToCode(), null, null, null, null, CancellationToken.None,
             sort: "last-played", sortDir: "desc");
 
         // Most recently played first, then older, with the never-played entity sorted last.
@@ -1991,10 +1991,10 @@ public sealed class EfEntityReadServiceTests {
         var novelEpub = Guid.Parse("33333333-3333-3333-3333-333333333333");
         var mangaCbz = Guid.Parse("44444444-4444-4444-4444-444444444444");
         db.Entities.AddRange(
-            new EntityRow { Id = comicCbz, KindCode = EntityKindRegistry.Book.Code, Title = "Comic Archive", CreatedAt = now, UpdatedAt = now },
-            new EntityRow { Id = comicPdf, KindCode = EntityKindRegistry.Book.Code, Title = "Comic PDF", CreatedAt = now, UpdatedAt = now },
-            new EntityRow { Id = novelEpub, KindCode = EntityKindRegistry.Book.Code, Title = "Novel EPUB", CreatedAt = now, UpdatedAt = now },
-            new EntityRow { Id = mangaCbz, KindCode = EntityKindRegistry.Book.Code, Title = "Manga Archive", CreatedAt = now, UpdatedAt = now });
+            new EntityRow { Id = comicCbz, KindCode = EntityKind.Book.ToCode(), Title = "Comic Archive", CreatedAt = now, UpdatedAt = now },
+            new EntityRow { Id = comicPdf, KindCode = EntityKind.Book.ToCode(), Title = "Comic PDF", CreatedAt = now, UpdatedAt = now },
+            new EntityRow { Id = novelEpub, KindCode = EntityKind.Book.ToCode(), Title = "Novel EPUB", CreatedAt = now, UpdatedAt = now },
+            new EntityRow { Id = mangaCbz, KindCode = EntityKind.Book.ToCode(), Title = "Manga Archive", CreatedAt = now, UpdatedAt = now });
         db.BookDetails.AddRange(
             new BookDetailRow { EntityId = comicCbz, BookType = BookType.Comic, Format = BookFormat.ImageArchive },
             new BookDetailRow { EntityId = comicPdf, BookType = BookType.Comic, Format = BookFormat.Pdf },
@@ -2006,29 +2006,29 @@ public sealed class EfEntityReadServiceTests {
 
         // Single type: only comics, regardless of format.
         var comics = await service.ListAsync(
-            EntityKindRegistry.Book.Code, null, null, null, null, CancellationToken.None, bookType: "comic");
+            EntityKind.Book.ToCode(), null, null, null, null, CancellationToken.None, bookType: "comic");
         Assert.Equal([comicCbz, comicPdf], comics.Items.Select(item => item.Id).Order().ToArray());
         Assert.Equal(2, comics.TotalCount);
 
         // Multiple types are OR-ed within the family.
         var comicsAndManga = await service.ListAsync(
-            EntityKindRegistry.Book.Code, null, null, null, null, CancellationToken.None, bookType: "comic,manga");
+            EntityKind.Book.ToCode(), null, null, null, null, CancellationToken.None, bookType: "comic,manga");
         Assert.Equal([comicCbz, comicPdf, mangaCbz], comicsAndManga.Items.Select(item => item.Id).Order().ToArray());
 
         // Single format: only PDFs.
         var pdfs = await service.ListAsync(
-            EntityKindRegistry.Book.Code, null, null, null, null, CancellationToken.None, bookFormat: "pdf");
+            EntityKind.Book.ToCode(), null, null, null, null, CancellationToken.None, bookFormat: "pdf");
         Assert.Equal(comicPdf, Assert.Single(pdfs.Items).Id);
 
         // Type and format combine with AND across families.
         var comicArchives = await service.ListAsync(
-            EntityKindRegistry.Book.Code, null, null, null, null, CancellationToken.None,
+            EntityKind.Book.ToCode(), null, null, null, null, CancellationToken.None,
             bookType: "comic", bookFormat: "image-archive");
         Assert.Equal(comicCbz, Assert.Single(comicArchives.Items).Id);
 
         // Unknown codes are ignored, leaving the result unfiltered by that family.
         var unknown = await service.ListAsync(
-            EntityKindRegistry.Book.Code, null, null, null, null, CancellationToken.None, bookType: "nonsense");
+            EntityKind.Book.ToCode(), null, null, null, null, CancellationToken.None, bookType: "nonsense");
         Assert.Equal(4, unknown.TotalCount);
     }
 
@@ -2039,7 +2039,7 @@ public sealed class EfEntityReadServiceTests {
         var comicId = Guid.Parse("55555555-5555-5555-5555-555555555555");
         db.Entities.Add(new EntityRow {
             Id = comicId,
-            KindCode = EntityKindRegistry.Book.Code,
+            KindCode = EntityKind.Book.ToCode(),
             Title = "Comic Archive",
             CreatedAt = now,
             UpdatedAt = now
@@ -2054,7 +2054,7 @@ public sealed class EfEntityReadServiceTests {
         var service = CreateService(db);
 
         var result = await service.ListAsync(
-            EntityKindRegistry.Book.Code, null, null, null, null, CancellationToken.None, bookType: "comic");
+            EntityKind.Book.ToCode(), null, null, null, null, CancellationToken.None, bookType: "comic");
         var item = Assert.Single(result.Items);
 
         Assert.Contains(new EntityThumbnailMeta("book", "Comic"), item.Meta);
@@ -2070,9 +2070,9 @@ public sealed class EfEntityReadServiceTests {
         var sfwReadingNoFile = Guid.Parse("aaaaaaaa-0000-0000-0000-000000000003");
 
         db.Entities.AddRange(
-            new EntityRow { Id = sfwUnplayedNoFile, KindCode = EntityKindRegistry.Image.Code, Title = "Alpha", IsNsfw = false, CreatedAt = now, UpdatedAt = now },
-            new EntityRow { Id = nsfwPlayedWithFile, KindCode = EntityKindRegistry.Image.Code, Title = "Bravo", IsNsfw = true, CreatedAt = now, UpdatedAt = now },
-            new EntityRow { Id = sfwReadingNoFile, KindCode = EntityKindRegistry.Image.Code, Title = "Charlie", IsNsfw = false, CreatedAt = now, UpdatedAt = now });
+            new EntityRow { Id = sfwUnplayedNoFile, KindCode = EntityKind.Image.ToCode(), Title = "Alpha", IsNsfw = false, CreatedAt = now, UpdatedAt = now },
+            new EntityRow { Id = nsfwPlayedWithFile, KindCode = EntityKind.Image.ToCode(), Title = "Bravo", IsNsfw = true, CreatedAt = now, UpdatedAt = now },
+            new EntityRow { Id = sfwReadingNoFile, KindCode = EntityKind.Image.ToCode(), Title = "Charlie", IsNsfw = false, CreatedAt = now, UpdatedAt = now });
         db.EntityFiles.Add(new EntityFileRow {
             Id = Guid.NewGuid(), EntityId = nsfwPlayedWithFile, Role = EntityFileRole.Source, Path = "/m/b.jpg", CreatedAt = now, UpdatedAt = now,
         });
@@ -2083,7 +2083,7 @@ public sealed class EfEntityReadServiceTests {
         await db.SaveChangesAsync();
 
         var service = CreateService(db);
-        var kind = EntityKindRegistry.Image.Code;
+        var kind = EntityKind.Image.ToCode();
 
         var onlyNsfw = await service.ListAsync(kind, null, null, null, null, CancellationToken.None, nsfw: true);
         Assert.Equal(1, onlyNsfw.TotalCount);
@@ -2116,8 +2116,8 @@ public sealed class EfEntityReadServiceTests {
         var failed = Guid.Parse("ac100000-0000-0000-0000-000000000002");
 
         db.Entities.AddRange(
-            new EntityRow { Id = downloaded, KindCode = EntityKindRegistry.Book.Code, Title = "Downloaded", IsWanted = true, CreatedAt = now, UpdatedAt = now },
-            new EntityRow { Id = failed, KindCode = EntityKindRegistry.Book.Code, Title = "Failed", IsWanted = false, CreatedAt = now, UpdatedAt = now });
+            new EntityRow { Id = downloaded, KindCode = EntityKind.Book.ToCode(), Title = "Downloaded", IsWanted = true, CreatedAt = now, UpdatedAt = now },
+            new EntityRow { Id = failed, KindCode = EntityKind.Book.ToCode(), Title = "Failed", IsWanted = false, CreatedAt = now, UpdatedAt = now });
         db.EntityFiles.AddRange(
             new EntityFileRow { Id = Guid.NewGuid(), EntityId = downloaded, Role = EntityFileRole.Cover, Path = "/covers/downloaded.jpg", CreatedAt = now, UpdatedAt = now },
             new EntityFileRow { Id = Guid.NewGuid(), EntityId = failed, Role = EntityFileRole.Source, Path = "/books/failed.epub", CreatedAt = now, UpdatedAt = now });
@@ -2129,7 +2129,7 @@ public sealed class EfEntityReadServiceTests {
 
         var service = CreateService(db);
         var result = await ((IEntityReadService)service).ListAsync(new EntityListQuery {
-            Kind = EntityKindRegistry.Book.Code,
+            Kind = EntityKind.Book.ToCode(),
             AcquisitionStatus = AcquisitionStatus.Downloaded,
         }, CancellationToken.None);
 
@@ -2139,7 +2139,7 @@ public sealed class EfEntityReadServiceTests {
         Assert.Equal(AcquisitionStatus.Downloaded, item.LatestAcquisitionStatus);
         Assert.Equal(AcquisitionStatus.Downloaded, item.WantedStatus);
 
-        var all = await service.ListAsync(EntityKindRegistry.Book.Code, null, null, null, null, CancellationToken.None);
+        var all = await service.ListAsync(EntityKind.Book.ToCode(), null, null, null, null, CancellationToken.None);
         var stored = Assert.Single(all.Items, candidate => candidate.Id == failed);
         Assert.True(stored.HasSourceMedia);
         Assert.Equal(AcquisitionStatus.Failed, stored.LatestAcquisitionStatus);
@@ -2196,7 +2196,7 @@ public sealed class EfEntityReadServiceTests {
         Assert.Equal([AcquisitionStatus.Downloaded], artist.AcquisitionStatuses);
 
         var downloadingSeries = await service.ListAsync(
-            EntityKindRegistry.VideoSeries.Code,
+            EntityKind.VideoSeries.ToCode(),
             null,
             null,
             false,
@@ -2207,7 +2207,7 @@ public sealed class EfEntityReadServiceTests {
         Assert.Equal(seriesId, Assert.Single(downloadingSeries.Items).Id);
 
         var failedSeries = await service.ListAsync(
-            EntityKindRegistry.VideoSeries.Code,
+            EntityKind.VideoSeries.ToCode(),
             null,
             null,
             false,
@@ -2217,7 +2217,7 @@ public sealed class EfEntityReadServiceTests {
         Assert.Equal(seriesId, Assert.Single(failedSeries.Items).Id);
 
         var obsoleteSeasonState = await service.ListAsync(
-            EntityKindRegistry.VideoSeries.Code,
+            EntityKind.VideoSeries.ToCode(),
             null,
             null,
             false,
@@ -2227,7 +2227,7 @@ public sealed class EfEntityReadServiceTests {
         Assert.Empty(obsoleteSeasonState.Items);
 
         var downloadedArtist = await service.ListAsync(
-            EntityKindRegistry.MusicArtist.Code,
+            EntityKind.MusicArtist.ToCode(),
             null,
             null,
             false,
@@ -2275,21 +2275,21 @@ public sealed class EfEntityReadServiceTests {
         var videoId = Guid.Parse("bbbbbbbb-0000-0000-0000-000000000003");
 
         db.Entities.AddRange(
-            new EntityRow { Id = referencedTag, KindCode = EntityKindRegistry.Tag.Code, Title = "Used", CreatedAt = now, UpdatedAt = now },
-            new EntityRow { Id = orphanTag, KindCode = EntityKindRegistry.Tag.Code, Title = "Unused", CreatedAt = now, UpdatedAt = now },
-            new EntityRow { Id = videoId, KindCode = EntityKindRegistry.Video.Code, Title = "Film", CreatedAt = now, UpdatedAt = now });
+            new EntityRow { Id = referencedTag, KindCode = EntityKind.Tag.ToCode(), Title = "Used", CreatedAt = now, UpdatedAt = now },
+            new EntityRow { Id = orphanTag, KindCode = EntityKind.Tag.ToCode(), Title = "Unused", CreatedAt = now, UpdatedAt = now },
+            new EntityRow { Id = videoId, KindCode = EntityKind.Video.ToCode(), Title = "Film", CreatedAt = now, UpdatedAt = now });
         db.EntityRelationshipLinks.Add(new EntityRelationshipLinkRow {
             EntityId = videoId,
             RelationshipCode = "tags",
             Label = "Tags",
             TargetEntityId = referencedTag,
-            TargetKindCode = EntityKindRegistry.Tag.Code,
+            TargetKindCode = EntityKind.Tag.ToCode(),
             CreatedAt = now,
         });
         await db.SaveChangesAsync();
 
         var service = CreateService(db);
-        var kind = EntityKindRegistry.Tag.Code;
+        var kind = EntityKind.Tag.ToCode();
 
         var orphans = await service.ListAsync(kind, null, null, null, null, CancellationToken.None, orphaned: true);
         Assert.Equal(orphanTag, Assert.Single(orphans.Items).Id);
@@ -2309,16 +2309,16 @@ public sealed class EfEntityReadServiceTests {
         var v2 = Guid.Parse("dddddddd-0000-0000-0000-000000000012");
 
         db.Entities.AddRange(
-            new EntityRow { Id = heavy, KindCode = EntityKindRegistry.Tag.Code, Title = "Heavy", CreatedAt = now, UpdatedAt = now },
-            new EntityRow { Id = light, KindCode = EntityKindRegistry.Tag.Code, Title = "Light", CreatedAt = now, UpdatedAt = now },
-            new EntityRow { Id = none, KindCode = EntityKindRegistry.Tag.Code, Title = "None", CreatedAt = now, UpdatedAt = now },
-            new EntityRow { Id = v1, KindCode = EntityKindRegistry.Video.Code, Title = "V1", CreatedAt = now, UpdatedAt = now },
-            new EntityRow { Id = v2, KindCode = EntityKindRegistry.Video.Code, Title = "V2", CreatedAt = now, UpdatedAt = now });
+            new EntityRow { Id = heavy, KindCode = EntityKind.Tag.ToCode(), Title = "Heavy", CreatedAt = now, UpdatedAt = now },
+            new EntityRow { Id = light, KindCode = EntityKind.Tag.ToCode(), Title = "Light", CreatedAt = now, UpdatedAt = now },
+            new EntityRow { Id = none, KindCode = EntityKind.Tag.ToCode(), Title = "None", CreatedAt = now, UpdatedAt = now },
+            new EntityRow { Id = v1, KindCode = EntityKind.Video.ToCode(), Title = "V1", CreatedAt = now, UpdatedAt = now },
+            new EntityRow { Id = v2, KindCode = EntityKind.Video.ToCode(), Title = "V2", CreatedAt = now, UpdatedAt = now });
         db.EntityRelationshipLinks.AddRange(Link(v1, heavy), Link(v2, heavy), Link(v1, light));
         await db.SaveChangesAsync();
 
         var service = CreateService(db);
-        var kind = EntityKindRegistry.Tag.Code;
+        var kind = EntityKind.Tag.ToCode();
 
         var desc = await service.ListAsync(kind, null, null, null, null, CancellationToken.None, sort: "references", sortDir: "desc");
         Assert.Equal(new[] { heavy, light, none }, desc.Items.Select(item => item.Id).ToArray());
@@ -2332,7 +2332,7 @@ public sealed class EfEntityReadServiceTests {
                 RelationshipCode = "tags",
                 Label = "Tags",
                 TargetEntityId = target,
-                TargetKindCode = EntityKindRegistry.Tag.Code,
+                TargetKindCode = EntityKind.Tag.ToCode(),
                 CreatedAt = DateTimeOffset.UtcNow,
             };
     }
@@ -2358,16 +2358,16 @@ public sealed class EfEntityReadServiceTests {
             Root(enabledRootId, enabled: true, now),
             Root(disabledRootId, enabled: false, now));
         db.Entities.AddRange(
-            Row(seriesId, EntityKindRegistry.VideoSeries.Code, "Series", now),
-            Row(visibleSeasonId, EntityKindRegistry.VideoSeason.Code, "Season 1", now, seriesId),
-            Row(nsfwSeasonId, EntityKindRegistry.VideoSeason.Code, "Season 2", now, seriesId, isNsfw: true),
-            Row(wantedSeasonId, EntityKindRegistry.VideoSeason.Code, "Season 3", now, seriesId, isWanted: true),
-            Row(visibleEpisodeId, EntityKindRegistry.Video.Code, "Episode 1", now, visibleSeasonId),
-            Row(directEpisodeId, EntityKindRegistry.Video.Code, "Special", now, seriesId),
-            Row(nsfwEpisodeId, EntityKindRegistry.Video.Code, "Hidden Episode", now, visibleSeasonId, isNsfw: true),
-            Row(wantedEpisodeId, EntityKindRegistry.Video.Code, "Wanted Episode", now, visibleSeasonId, isWanted: true),
-            Row(hiddenLibraryEpisodeId, EntityKindRegistry.Video.Code, "Disabled Library Episode", now, visibleSeasonId),
-            Row(episodeBelowHiddenSeasonId, EntityKindRegistry.Video.Code, "Hidden Season Episode", now, nsfwSeasonId));
+            Row(seriesId, EntityKind.VideoSeries.ToCode(), "Series", now),
+            Row(visibleSeasonId, EntityKind.VideoSeason.ToCode(), "Season 1", now, seriesId),
+            Row(nsfwSeasonId, EntityKind.VideoSeason.ToCode(), "Season 2", now, seriesId, isNsfw: true),
+            Row(wantedSeasonId, EntityKind.VideoSeason.ToCode(), "Season 3", now, seriesId, isWanted: true),
+            Row(visibleEpisodeId, EntityKind.Video.ToCode(), "Episode 1", now, visibleSeasonId),
+            Row(directEpisodeId, EntityKind.Video.ToCode(), "Special", now, seriesId),
+            Row(nsfwEpisodeId, EntityKind.Video.ToCode(), "Hidden Episode", now, visibleSeasonId, isNsfw: true),
+            Row(wantedEpisodeId, EntityKind.Video.ToCode(), "Wanted Episode", now, visibleSeasonId, isWanted: true),
+            Row(hiddenLibraryEpisodeId, EntityKind.Video.ToCode(), "Disabled Library Episode", now, visibleSeasonId),
+            Row(episodeBelowHiddenSeasonId, EntityKind.Video.ToCode(), "Hidden Season Episode", now, nsfwSeasonId));
         db.VideoDetails.AddRange(
             new VideoDetailRow { EntityId = visibleEpisodeId, LibraryRootId = enabledRootId },
             new VideoDetailRow { EntityId = directEpisodeId, LibraryRootId = enabledRootId },
@@ -2430,18 +2430,18 @@ public sealed class EfEntityReadServiceTests {
         var wantedPageId = Guid.NewGuid();
 
         db.Entities.AddRange(
-            Row(bookId, EntityKindRegistry.Book.Code, "Book", now),
-            Row(volumeId, EntityKindRegistry.BookVolume.Code, "Volume 1", now, bookId),
-            Row(nestedChapterId, EntityKindRegistry.BookChapter.Code, "Nested Chapter", now, volumeId),
-            Row(directChapterId, EntityKindRegistry.BookChapter.Code, "Direct Chapter", now, bookId),
-            Row(directPageId, EntityKindRegistry.BookPage.Code, "Loose Page", now, bookId),
-            Row(nestedPageId, EntityKindRegistry.BookPage.Code, "Nested Page", now, nestedChapterId),
-            Row(chapterPageId, EntityKindRegistry.BookPage.Code, "Direct Chapter Page", now, directChapterId),
-            Row(hiddenVolumeId, EntityKindRegistry.BookVolume.Code, "Hidden Volume", now, bookId, isNsfw: true),
-            Row(hiddenChapterId, EntityKindRegistry.BookChapter.Code, "Hidden Chapter", now, hiddenVolumeId),
-            Row(hiddenPageId, EntityKindRegistry.BookPage.Code, "Hidden Page", now, hiddenChapterId),
-            Row(wantedChapterId, EntityKindRegistry.BookChapter.Code, "Wanted Chapter", now, bookId, isWanted: true),
-            Row(wantedPageId, EntityKindRegistry.BookPage.Code, "Wanted Page", now, wantedChapterId));
+            Row(bookId, EntityKind.Book.ToCode(), "Book", now),
+            Row(volumeId, EntityKind.BookVolume.ToCode(), "Volume 1", now, bookId),
+            Row(nestedChapterId, EntityKind.BookChapter.ToCode(), "Nested Chapter", now, volumeId),
+            Row(directChapterId, EntityKind.BookChapter.ToCode(), "Direct Chapter", now, bookId),
+            Row(directPageId, EntityKind.BookPage.ToCode(), "Loose Page", now, bookId),
+            Row(nestedPageId, EntityKind.BookPage.ToCode(), "Nested Page", now, nestedChapterId),
+            Row(chapterPageId, EntityKind.BookPage.ToCode(), "Direct Chapter Page", now, directChapterId),
+            Row(hiddenVolumeId, EntityKind.BookVolume.ToCode(), "Hidden Volume", now, bookId, isNsfw: true),
+            Row(hiddenChapterId, EntityKind.BookChapter.ToCode(), "Hidden Chapter", now, hiddenVolumeId),
+            Row(hiddenPageId, EntityKind.BookPage.ToCode(), "Hidden Page", now, hiddenChapterId),
+            Row(wantedChapterId, EntityKind.BookChapter.ToCode(), "Wanted Chapter", now, bookId, isWanted: true),
+            Row(wantedPageId, EntityKind.BookPage.ToCode(), "Wanted Page", now, wantedChapterId));
         db.BookDetails.Add(new BookDetailRow { EntityId = bookId, BookType = BookType.Book });
         db.EntityTechnical.Add(new EntityTechnicalRow { EntityId = bookId, DurationSeconds = 3600, UpdatedAt = now });
         await db.SaveChangesAsync();
@@ -2511,21 +2511,21 @@ public sealed class EfEntityReadServiceTests {
         var collectionId = Guid.NewGuid();
 
         db.Entities.AddRange(
-            Row(authorId, EntityKindRegistry.BookAuthor.Code, "Author", now),
-            Row(bookId, EntityKindRegistry.Book.Code, "Published Book", now, authorId),
-            Row(wantedBookId, EntityKindRegistry.Book.Code, "Wanted Book", now, authorId, isWanted: true),
-            Row(artistId, EntityKindRegistry.MusicArtist.Code, "Artist", now),
-            Row(albumId, EntityKindRegistry.AudioLibrary.Code, "Album", now, artistId),
-            Row(wantedAlbumId, EntityKindRegistry.AudioLibrary.Code, "Wanted Album", now, artistId, isWanted: true),
-            Row(trackOneId, EntityKindRegistry.AudioTrack.Code, "Track 1", now, albumId),
-            Row(trackTwoId, EntityKindRegistry.AudioTrack.Code, "Track 2", now, albumId),
-            Row(wantedTrackId, EntityKindRegistry.AudioTrack.Code, "Wanted Track", now, albumId, isWanted: true),
-            Row(galleryId, EntityKindRegistry.Gallery.Code, "Gallery", now),
-            Row(nestedGalleryId, EntityKindRegistry.Gallery.Code, "Nested Gallery", now, galleryId),
-            Row(imageOneId, EntityKindRegistry.Image.Code, "Image 1", now, galleryId),
-            Row(imageTwoId, EntityKindRegistry.Image.Code, "Image 2", now, nestedGalleryId),
-            Row(nsfwImageId, EntityKindRegistry.Image.Code, "Hidden Image", now, galleryId, isNsfw: true),
-            Row(collectionId, EntityKindRegistry.Collection.Code, "Dynamic Collection", now));
+            Row(authorId, EntityKind.BookAuthor.ToCode(), "Author", now),
+            Row(bookId, EntityKind.Book.ToCode(), "Published Book", now, authorId),
+            Row(wantedBookId, EntityKind.Book.ToCode(), "Wanted Book", now, authorId, isWanted: true),
+            Row(artistId, EntityKind.MusicArtist.ToCode(), "Artist", now),
+            Row(albumId, EntityKind.AudioLibrary.ToCode(), "Album", now, artistId),
+            Row(wantedAlbumId, EntityKind.AudioLibrary.ToCode(), "Wanted Album", now, artistId, isWanted: true),
+            Row(trackOneId, EntityKind.AudioTrack.ToCode(), "Track 1", now, albumId),
+            Row(trackTwoId, EntityKind.AudioTrack.ToCode(), "Track 2", now, albumId),
+            Row(wantedTrackId, EntityKind.AudioTrack.ToCode(), "Wanted Track", now, albumId, isWanted: true),
+            Row(galleryId, EntityKind.Gallery.ToCode(), "Gallery", now),
+            Row(nestedGalleryId, EntityKind.Gallery.ToCode(), "Nested Gallery", now, galleryId),
+            Row(imageOneId, EntityKind.Image.ToCode(), "Image 1", now, galleryId),
+            Row(imageTwoId, EntityKind.Image.ToCode(), "Image 2", now, nestedGalleryId),
+            Row(nsfwImageId, EntityKind.Image.ToCode(), "Hidden Image", now, galleryId, isNsfw: true),
+            Row(collectionId, EntityKind.Collection.ToCode(), "Dynamic Collection", now));
         db.CollectionDetails.Add(new CollectionDetailRow {
             EntityId = collectionId,
             OwnerUserId = TestUserContext.UserId,
@@ -2610,14 +2610,14 @@ public sealed class EfEntityReadServiceTests {
         var ambiguousVideoTwoId = Guid.NewGuid();
 
         db.Entities.AddRange(
-            Row(fallbackMovieId, EntityKindRegistry.Movie.Code, "Fallback Movie", now),
-            Row(fallbackVideoId, EntityKindRegistry.Video.Code, "Fallback Movie File", now, fallbackMovieId),
-            WantedRow(wantedFallbackVideoId, EntityKindRegistry.Video.Code, "Wanted Alternate File", now, fallbackMovieId),
-            Row(ownMovieId, EntityKindRegistry.Movie.Code, "Own Movie", now),
-            Row(ownMovieVideoId, EntityKindRegistry.Video.Code, "Own Movie File", now, ownMovieId),
-            Row(ambiguousMovieId, EntityKindRegistry.Movie.Code, "Ambiguous Movie", now),
-            Row(ambiguousVideoOneId, EntityKindRegistry.Video.Code, "Part 1", now, ambiguousMovieId),
-            Row(ambiguousVideoTwoId, EntityKindRegistry.Video.Code, "Part 2", now, ambiguousMovieId));
+            Row(fallbackMovieId, EntityKind.Movie.ToCode(), "Fallback Movie", now),
+            Row(fallbackVideoId, EntityKind.Video.ToCode(), "Fallback Movie File", now, fallbackMovieId),
+            WantedRow(wantedFallbackVideoId, EntityKind.Video.ToCode(), "Wanted Alternate File", now, fallbackMovieId),
+            Row(ownMovieId, EntityKind.Movie.ToCode(), "Own Movie", now),
+            Row(ownMovieVideoId, EntityKind.Video.ToCode(), "Own Movie File", now, ownMovieId),
+            Row(ambiguousMovieId, EntityKind.Movie.ToCode(), "Ambiguous Movie", now),
+            Row(ambiguousVideoOneId, EntityKind.Video.ToCode(), "Part 1", now, ambiguousMovieId),
+            Row(ambiguousVideoTwoId, EntityKind.Video.ToCode(), "Part 2", now, ambiguousMovieId));
         db.EntityTechnical.AddRange(
             Technical(fallbackVideoId, 596, 3840, 1920, "h264", "matroska", now),
             Technical(wantedFallbackVideoId, 300, 1920, 1080, "h264", "mp4", now),
@@ -2702,12 +2702,12 @@ public sealed class EfEntityReadServiceTests {
         var wantedGallery = Guid.Parse("cccccccc-0000-0000-0000-000000000006");
 
         db.Entities.AddRange(
-            new EntityRow { Id = tagId, KindCode = EntityKindRegistry.Tag.Code, Title = "Noir", CreatedAt = now, UpdatedAt = now },
-            new EntityRow { Id = videoA, KindCode = EntityKindRegistry.Video.Code, Title = "A", CreatedAt = now, UpdatedAt = now },
-            new EntityRow { Id = videoB, KindCode = EntityKindRegistry.Video.Code, Title = "B", CreatedAt = now, UpdatedAt = now },
-            new EntityRow { Id = galleryC, KindCode = EntityKindRegistry.Gallery.Code, Title = "C", CreatedAt = now, UpdatedAt = now },
-            new EntityRow { Id = hiddenVideo, KindCode = EntityKindRegistry.Video.Code, Title = "Hidden", IsNsfw = true, CreatedAt = now, UpdatedAt = now },
-            new EntityRow { Id = wantedGallery, KindCode = EntityKindRegistry.Gallery.Code, Title = "Wanted", IsWanted = true, CreatedAt = now, UpdatedAt = now });
+            new EntityRow { Id = tagId, KindCode = EntityKind.Tag.ToCode(), Title = "Noir", CreatedAt = now, UpdatedAt = now },
+            new EntityRow { Id = videoA, KindCode = EntityKind.Video.ToCode(), Title = "A", CreatedAt = now, UpdatedAt = now },
+            new EntityRow { Id = videoB, KindCode = EntityKind.Video.ToCode(), Title = "B", CreatedAt = now, UpdatedAt = now },
+            new EntityRow { Id = galleryC, KindCode = EntityKind.Gallery.ToCode(), Title = "C", CreatedAt = now, UpdatedAt = now },
+            new EntityRow { Id = hiddenVideo, KindCode = EntityKind.Video.ToCode(), Title = "Hidden", IsNsfw = true, CreatedAt = now, UpdatedAt = now },
+            new EntityRow { Id = wantedGallery, KindCode = EntityKind.Gallery.ToCode(), Title = "Wanted", IsWanted = true, CreatedAt = now, UpdatedAt = now });
         db.EntityRelationshipLinks.AddRange(
             Link(videoA, tagId, "tags", now),
             // Same source under a second relationship code must still count once.
@@ -2740,7 +2740,7 @@ public sealed class EfEntityReadServiceTests {
                 RelationshipCode = code,
                 Label = code,
                 TargetEntityId = target,
-                TargetKindCode = EntityKindRegistry.Tag.Code,
+                TargetKindCode = EntityKind.Tag.ToCode(),
                 CreatedAt = at,
             };
     }
@@ -2755,14 +2755,14 @@ public sealed class EfEntityReadServiceTests {
         db.Entities.AddRange(
             new EntityRow {
                 Id = albumId,
-                KindCode = EntityKindRegistry.AudioLibrary.Code,
+                KindCode = EntityKind.AudioLibrary.ToCode(),
                 Title = "Album",
                 CreatedAt = now,
                 UpdatedAt = now
             },
             new EntityRow {
                 Id = trackId,
-                KindCode = EntityKindRegistry.AudioTrack.Code,
+                KindCode = EntityKind.AudioTrack.ToCode(),
                 Title = "Track",
                 ParentEntityId = albumId,
                 CreatedAt = now,
@@ -2789,14 +2789,14 @@ public sealed class EfEntityReadServiceTests {
         db.Entities.AddRange(
             new EntityRow {
                 Id = albumId,
-                KindCode = EntityKindRegistry.AudioLibrary.Code,
+                KindCode = EntityKind.AudioLibrary.ToCode(),
                 Title = "Album",
                 CreatedAt = now,
                 UpdatedAt = now
             },
             new EntityRow {
                 Id = trackId,
-                KindCode = EntityKindRegistry.AudioTrack.Code,
+                KindCode = EntityKind.AudioTrack.ToCode(),
                 Title = "Track",
                 ParentEntityId = albumId,
                 CreatedAt = now,
@@ -2826,14 +2826,14 @@ public sealed class EfEntityReadServiceTests {
         db.Entities.AddRange(
             new EntityRow {
                 Id = albumId,
-                KindCode = EntityKindRegistry.AudioLibrary.Code,
+                KindCode = EntityKind.AudioLibrary.ToCode(),
                 Title = "Album",
                 CreatedAt = now,
                 UpdatedAt = now
             },
             new EntityRow {
                 Id = trackId,
-                KindCode = EntityKindRegistry.AudioTrack.Code,
+                KindCode = EntityKind.AudioTrack.ToCode(),
                 Title = "Track",
                 ParentEntityId = albumId,
                 CreatedAt = now,
@@ -2862,14 +2862,14 @@ public sealed class EfEntityReadServiceTests {
         db.Entities.AddRange(
             new EntityRow {
                 Id = albumId,
-                KindCode = EntityKindRegistry.AudioLibrary.Code,
+                KindCode = EntityKind.AudioLibrary.ToCode(),
                 Title = "Album",
                 CreatedAt = now,
                 UpdatedAt = now
             },
             new EntityRow {
                 Id = trackId,
-                KindCode = EntityKindRegistry.AudioTrack.Code,
+                KindCode = EntityKind.AudioTrack.ToCode(),
                 Title = "Track",
                 ParentEntityId = albumId,
                 CreatedAt = now,
@@ -2898,14 +2898,14 @@ public sealed class EfEntityReadServiceTests {
         db.Entities.AddRange(
             new EntityRow {
                 Id = movieId,
-                KindCode = EntityKindRegistry.Movie.Code,
+                KindCode = EntityKind.Movie.ToCode(),
                 Title = "Parent Movie",
                 CreatedAt = now,
                 UpdatedAt = now
             },
             new EntityRow {
                 Id = videoId,
-                KindCode = EntityKindRegistry.Video.Code,
+                KindCode = EntityKind.Video.ToCode(),
                 Title = "Feature",
                 ParentEntityId = movieId,
                 CreatedAt = now,
@@ -2941,14 +2941,14 @@ public sealed class EfEntityReadServiceTests {
         db.Entities.AddRange(
             new EntityRow {
                 Id = movieId,
-                KindCode = EntityKindRegistry.Movie.Code,
+                KindCode = EntityKind.Movie.ToCode(),
                 Title = "Parent Movie",
                 CreatedAt = now,
                 UpdatedAt = now
             },
             new EntityRow {
                 Id = videoId,
-                KindCode = EntityKindRegistry.Video.Code,
+                KindCode = EntityKind.Video.ToCode(),
                 Title = "Feature",
                 ParentEntityId = movieId,
                 CreatedAt = now,
@@ -2983,14 +2983,14 @@ public sealed class EfEntityReadServiceTests {
         db.Entities.AddRange(
             new EntityRow {
                 Id = seriesId,
-                KindCode = EntityKindRegistry.VideoSeries.Code,
+                KindCode = EntityKind.VideoSeries.ToCode(),
                 Title = "Series Title",
                 CreatedAt = now,
                 UpdatedAt = now
             },
             new EntityRow {
                 Id = seasonId,
-                KindCode = EntityKindRegistry.VideoSeason.Code,
+                KindCode = EntityKind.VideoSeason.ToCode(),
                 Title = "Season One",
                 ParentEntityId = seriesId,
                 CreatedAt = now,
@@ -2998,7 +2998,7 @@ public sealed class EfEntityReadServiceTests {
             },
             new EntityRow {
                 Id = episodeId,
-                KindCode = EntityKindRegistry.Video.Code,
+                KindCode = EntityKind.Video.ToCode(),
                 Title = "Pilot",
                 ParentEntityId = seasonId,
                 CreatedAt = now,
@@ -3035,7 +3035,7 @@ public sealed class EfEntityReadServiceTests {
         db.Entities.AddRange(
             new EntityRow {
                 Id = movieId,
-                KindCode = EntityKindRegistry.Movie.Code,
+                KindCode = EntityKind.Movie.ToCode(),
                 Title = "Hidden Parent Movie",
                 IsNsfw = true,
                 CreatedAt = now,
@@ -3043,7 +3043,7 @@ public sealed class EfEntityReadServiceTests {
             },
             new EntityRow {
                 Id = videoId,
-                KindCode = EntityKindRegistry.Video.Code,
+                KindCode = EntityKind.Video.ToCode(),
                 Title = "Safe Child Feature",
                 ParentEntityId = movieId,
                 CreatedAt = now,
@@ -3074,14 +3074,14 @@ public sealed class EfEntityReadServiceTests {
         db.Entities.AddRange(
             new EntityRow {
                 Id = movieId,
-                KindCode = EntityKindRegistry.Movie.Code,
+                KindCode = EntityKind.Movie.ToCode(),
                 Title = "Disabled Library Movie",
                 CreatedAt = now,
                 UpdatedAt = now
             },
             new EntityRow {
                 Id = videoId,
-                KindCode = EntityKindRegistry.Video.Code,
+                KindCode = EntityKind.Video.ToCode(),
                 Title = "Hidden Feature",
                 ParentEntityId = movieId,
                 CreatedAt = now,

@@ -44,6 +44,6 @@ public sealed class EntityMetadataPositionRulesTests {
             ["sort"] = 99
         };
 
-        Assert.Equal(2, EntityMetadataPositionRules.SortOrderFor(EntityKindRegistry.Video.Code, positions));
+        Assert.Equal(2, EntityMetadataPositionRules.SortOrderFor(EntityKind.Video.ToCode(), positions));
     }
 }

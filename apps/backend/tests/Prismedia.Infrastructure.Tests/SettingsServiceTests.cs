@@ -147,14 +147,14 @@ public sealed class SettingsServiceTests {
         db.Entities.AddRange(
             new EntityRow {
                 Id = ownedEntityId,
-                KindCode = EntityKindRegistry.Video.Code,
+                KindCode = EntityKind.Video.ToCode(),
                 Title = "stale video",
                 CreatedAt = now,
                 UpdatedAt = now,
             },
             new EntityRow {
                 Id = unrelatedEntityId,
-                KindCode = EntityKindRegistry.Video.Code,
+                KindCode = EntityKind.Video.ToCode(),
                 Title = "other video",
                 CreatedAt = now,
                 UpdatedAt = now,

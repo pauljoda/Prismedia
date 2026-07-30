@@ -72,7 +72,7 @@ public sealed class EfIdentifyTargetEligibilityServiceTests {
         Guid? parentEntityId = null) =>
         new() {
             Id = id,
-            KindCode = EntityKindRegistry.VideoSeries.Code,
+            KindCode = EntityKind.VideoSeries.ToCode(),
             Title = id.ToString(),
             ParentEntityId = parentEntityId,
             IsWanted = isWanted,

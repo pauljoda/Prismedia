@@ -7,7 +7,7 @@ public static class StudioEndpoints {
     public static RouteGroupBuilder MapStudioEndpoints(this IEndpointRouteBuilder routes) =>
         routes.MapEntityKindRoutes(
             "/api/studios",
-            EntityKindRegistry.Studio.Code,
+            EntityKind.Studio.ToCode(),
             "Taxonomy",
             "ListStudios",
             "GetStudio",

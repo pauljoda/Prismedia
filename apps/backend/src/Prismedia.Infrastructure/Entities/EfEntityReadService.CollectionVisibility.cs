@@ -10,7 +10,7 @@ public sealed partial class EfEntityReadService {
             return query;
         }
 
-        var collectionKindCode = EntityKindRegistry.Collection.Code;
+        var collectionKindCode = EntityKind.Collection.ToCode();
         var userId = CurrentUserId;
         return query.Where(entity =>
             entity.KindCode != collectionKindCode ||
@@ -24,7 +24,7 @@ public sealed partial class EfEntityReadService {
             return Task.FromResult(true);
         }
 
-        var collectionKindCode = EntityKindRegistry.Collection.Code;
+        var collectionKindCode = EntityKind.Collection.ToCode();
         var userId = CurrentUserId;
         return _db.Entities.AsNoTracking().AnyAsync(entity =>
             entity.Id == entityId &&

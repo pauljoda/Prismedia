@@ -242,7 +242,7 @@ public sealed class VideoSubtitleAssetServiceTests : IDisposable {
     private static void SeedVideo(PrismediaDbContext db, Guid videoId, string sourcePath) {
         db.Entities.Add(new EntityRow {
             Id = videoId,
-            KindCode = EntityKindRegistry.Video.Code,
+            KindCode = EntityKind.Video.ToCode(),
             Title = "Video",
             CreatedAt = DateTimeOffset.UtcNow,
             UpdatedAt = DateTimeOffset.UtcNow

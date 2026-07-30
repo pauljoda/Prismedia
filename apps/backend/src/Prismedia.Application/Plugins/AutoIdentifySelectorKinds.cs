@@ -14,15 +14,15 @@ namespace Prismedia.Application.Plugins;
 public static class AutoIdentifySelectorKinds {
     private static readonly IReadOnlyDictionary<string, string> ByEntityKind =
         new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase) {
-            [EntityKindRegistry.Video.Code] = "video",
-            [EntityKindRegistry.Movie.Code] = "video",
-            [EntityKindRegistry.VideoSeries.Code] = "video",
-            [EntityKindRegistry.Gallery.Code] = "gallery",
-            [EntityKindRegistry.Image.Code] = "image",
-            [EntityKindRegistry.AudioTrack.Code] = "audio",
-            [EntityKindRegistry.AudioLibrary.Code] = "audio",
-            [EntityKindRegistry.MusicArtist.Code] = "audio",
-            [EntityKindRegistry.Book.Code] = "book",
+            [EntityKind.Video.ToCode()] = "video",
+            [EntityKind.Movie.ToCode()] = "video",
+            [EntityKind.VideoSeries.ToCode()] = "video",
+            [EntityKind.Gallery.ToCode()] = "gallery",
+            [EntityKind.Image.ToCode()] = "image",
+            [EntityKind.AudioTrack.ToCode()] = "audio",
+            [EntityKind.AudioLibrary.ToCode()] = "audio",
+            [EntityKind.MusicArtist.ToCode()] = "audio",
+            [EntityKind.Book.ToCode()] = "book",
         };
 
     /// <summary>

@@ -117,10 +117,10 @@ public sealed class JellyfinCatalogServiceTests {
         var videoId = Guid.NewGuid();
         var artistId = Guid.NewGuid();
         var entities = new FakeEntityReadService();
-        entities.ListByKind[EntityKindRegistry.Video.Code] = [
+        entities.ListByKind[EntityKind.Video.ToCode()] = [
             Thumb(videoId, EntityKind.Video, "Standalone Video") with { Genres = ["Adventure"] }
         ];
-        entities.ListByKind[EntityKindRegistry.MusicArtist.Code] = [
+        entities.ListByKind[EntityKind.MusicArtist.ToCode()] = [
             Thumb(artistId, EntityKind.MusicArtist, "Empty Artist")
         ];
         var catalog = new JellyfinCatalogService(entities, new FakeCollections());

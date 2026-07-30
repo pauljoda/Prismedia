@@ -14,27 +14,27 @@ namespace Prismedia.Infrastructure.Entities.Thumbnails;
 /// </summary>
 internal sealed class StructuralCountContributor : IThumbnailContributor {
     private static readonly string[] RootKindCodes = [
-        EntityKindRegistry.VideoSeries.Code,
-        EntityKindRegistry.VideoSeason.Code,
-        EntityKindRegistry.Book.Code,
-        EntityKindRegistry.BookVolume.Code,
-        EntityKindRegistry.BookChapter.Code,
-        EntityKindRegistry.BookAuthor.Code,
-        EntityKindRegistry.MusicArtist.Code,
-        EntityKindRegistry.AudioLibrary.Code,
-        EntityKindRegistry.Gallery.Code
+        EntityKind.VideoSeries.ToCode(),
+        EntityKind.VideoSeason.ToCode(),
+        EntityKind.Book.ToCode(),
+        EntityKind.BookVolume.ToCode(),
+        EntityKind.BookChapter.ToCode(),
+        EntityKind.BookAuthor.ToCode(),
+        EntityKind.MusicArtist.ToCode(),
+        EntityKind.AudioLibrary.ToCode(),
+        EntityKind.Gallery.ToCode()
     ];
 
     private static readonly string[] CountedKindCodes = [
-        EntityKindRegistry.VideoSeason.Code,
-        EntityKindRegistry.Video.Code,
-        EntityKindRegistry.Book.Code,
-        EntityKindRegistry.BookVolume.Code,
-        EntityKindRegistry.BookChapter.Code,
-        EntityKindRegistry.BookPage.Code,
-        EntityKindRegistry.AudioLibrary.Code,
-        EntityKindRegistry.AudioTrack.Code,
-        EntityKindRegistry.Image.Code
+        EntityKind.VideoSeason.ToCode(),
+        EntityKind.Video.ToCode(),
+        EntityKind.Book.ToCode(),
+        EntityKind.BookVolume.ToCode(),
+        EntityKind.BookChapter.ToCode(),
+        EntityKind.BookPage.ToCode(),
+        EntityKind.AudioLibrary.ToCode(),
+        EntityKind.AudioTrack.ToCode(),
+        EntityKind.Image.ToCode()
     ];
 
     /// <summary>Creates the contributor for the scoped persistence context.</summary>
@@ -51,12 +51,12 @@ internal sealed class StructuralCountContributor : IThumbnailContributor {
             return;
         }
 
-        var maxDepth = roots.Any(root => root.KindCode == EntityKindRegistry.Book.Code)
+        var maxDepth = roots.Any(root => root.KindCode == EntityKind.Book.ToCode())
             ? 3
             : roots.Any(root =>
-                root.KindCode == EntityKindRegistry.VideoSeries.Code ||
-                root.KindCode == EntityKindRegistry.BookVolume.Code ||
-                root.KindCode == EntityKindRegistry.MusicArtist.Code)
+                root.KindCode == EntityKind.VideoSeries.ToCode() ||
+                root.KindCode == EntityKind.BookVolume.ToCode() ||
+                root.KindCode == EntityKind.MusicArtist.ToCode())
                 ? 2
                 : 1;
         var counts = await BuildQuery(
@@ -75,29 +75,29 @@ internal sealed class StructuralCountContributor : IThumbnailContributor {
             int ThroughDepth(string kindCode, int maxDepth) =>
                 Enumerable.Range(1, maxDepth).Sum(depth => AtDepth(kindCode, depth));
 
-            if (root.KindCode == EntityKindRegistry.VideoSeries.Code) {
-                AddCount(contributions, rootId, EntityThumbnailMetaIcons.Season, AtDepth(EntityKindRegistry.VideoSeason.Code, 1));
-                AddCount(contributions, rootId, EntityThumbnailMetaIcons.Episode, ThroughDepth(EntityKindRegistry.Video.Code, 2));
-            } else if (root.KindCode == EntityKindRegistry.VideoSeason.Code) {
-                AddCount(contributions, rootId, EntityThumbnailMetaIcons.Episode, AtDepth(EntityKindRegistry.Video.Code, 1));
-            } else if (root.KindCode == EntityKindRegistry.Book.Code) {
-                AddCount(contributions, rootId, EntityThumbnailMetaIcons.Volume, AtDepth(EntityKindRegistry.BookVolume.Code, 1));
-                AddCount(contributions, rootId, EntityThumbnailMetaIcons.Chapter, ThroughDepth(EntityKindRegistry.BookChapter.Code, 2));
-                AddCount(contributions, rootId, EntityThumbnailMetaIcons.Page, ThroughDepth(EntityKindRegistry.BookPage.Code, 3));
-            } else if (root.KindCode == EntityKindRegistry.BookVolume.Code) {
-                AddCount(contributions, rootId, EntityThumbnailMetaIcons.Chapter, AtDepth(EntityKindRegistry.BookChapter.Code, 1));
-                AddCount(contributions, rootId, EntityThumbnailMetaIcons.Page, ThroughDepth(EntityKindRegistry.BookPage.Code, 2));
-            } else if (root.KindCode == EntityKindRegistry.BookChapter.Code) {
-                AddCount(contributions, rootId, EntityThumbnailMetaIcons.Page, AtDepth(EntityKindRegistry.BookPage.Code, 1));
-            } else if (root.KindCode == EntityKindRegistry.BookAuthor.Code) {
-                AddCount(contributions, rootId, EntityThumbnailMetaIcons.Book, AtDepth(EntityKindRegistry.Book.Code, 1));
-            } else if (root.KindCode == EntityKindRegistry.MusicArtist.Code) {
-                AddCount(contributions, rootId, EntityThumbnailMetaIcons.Album, AtDepth(EntityKindRegistry.AudioLibrary.Code, 1));
-                AddCount(contributions, rootId, EntityThumbnailMetaIcons.Track, ThroughDepth(EntityKindRegistry.AudioTrack.Code, 2));
-            } else if (root.KindCode == EntityKindRegistry.AudioLibrary.Code) {
-                AddCount(contributions, rootId, EntityThumbnailMetaIcons.Track, AtDepth(EntityKindRegistry.AudioTrack.Code, 1));
-            } else if (root.KindCode == EntityKindRegistry.Gallery.Code) {
-                AddCount(contributions, rootId, EntityThumbnailMetaIcons.Image, AtDepth(EntityKindRegistry.Image.Code, 1));
+            if (root.KindCode == EntityKind.VideoSeries.ToCode()) {
+                AddCount(contributions, rootId, EntityThumbnailMetaIcons.Season, AtDepth(EntityKind.VideoSeason.ToCode(), 1));
+                AddCount(contributions, rootId, EntityThumbnailMetaIcons.Episode, ThroughDepth(EntityKind.Video.ToCode(), 2));
+            } else if (root.KindCode == EntityKind.VideoSeason.ToCode()) {
+                AddCount(contributions, rootId, EntityThumbnailMetaIcons.Episode, AtDepth(EntityKind.Video.ToCode(), 1));
+            } else if (root.KindCode == EntityKind.Book.ToCode()) {
+                AddCount(contributions, rootId, EntityThumbnailMetaIcons.Volume, AtDepth(EntityKind.BookVolume.ToCode(), 1));
+                AddCount(contributions, rootId, EntityThumbnailMetaIcons.Chapter, ThroughDepth(EntityKind.BookChapter.ToCode(), 2));
+                AddCount(contributions, rootId, EntityThumbnailMetaIcons.Page, ThroughDepth(EntityKind.BookPage.ToCode(), 3));
+            } else if (root.KindCode == EntityKind.BookVolume.ToCode()) {
+                AddCount(contributions, rootId, EntityThumbnailMetaIcons.Chapter, AtDepth(EntityKind.BookChapter.ToCode(), 1));
+                AddCount(contributions, rootId, EntityThumbnailMetaIcons.Page, ThroughDepth(EntityKind.BookPage.ToCode(), 2));
+            } else if (root.KindCode == EntityKind.BookChapter.ToCode()) {
+                AddCount(contributions, rootId, EntityThumbnailMetaIcons.Page, AtDepth(EntityKind.BookPage.ToCode(), 1));
+            } else if (root.KindCode == EntityKind.BookAuthor.ToCode()) {
+                AddCount(contributions, rootId, EntityThumbnailMetaIcons.Book, AtDepth(EntityKind.Book.ToCode(), 1));
+            } else if (root.KindCode == EntityKind.MusicArtist.ToCode()) {
+                AddCount(contributions, rootId, EntityThumbnailMetaIcons.Album, AtDepth(EntityKind.AudioLibrary.ToCode(), 1));
+                AddCount(contributions, rootId, EntityThumbnailMetaIcons.Track, ThroughDepth(EntityKind.AudioTrack.ToCode(), 2));
+            } else if (root.KindCode == EntityKind.AudioLibrary.ToCode()) {
+                AddCount(contributions, rootId, EntityThumbnailMetaIcons.Track, AtDepth(EntityKind.AudioTrack.ToCode(), 1));
+            } else if (root.KindCode == EntityKind.Gallery.ToCode()) {
+                AddCount(contributions, rootId, EntityThumbnailMetaIcons.Image, AtDepth(EntityKind.Image.ToCode(), 1));
             }
         }
     }

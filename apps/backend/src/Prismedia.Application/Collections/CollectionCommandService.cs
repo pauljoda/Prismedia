@@ -304,7 +304,7 @@ public sealed class CollectionCommandService(
         CancellationToken cancellationToken) {
         var collection = await entities.GetAsync(
             collectionId,
-            EntityKindRegistry.Collection.Code,
+            EntityKind.Collection.ToCode(),
             hideNsfw: false,
             cancellationToken);
         return collection is not null

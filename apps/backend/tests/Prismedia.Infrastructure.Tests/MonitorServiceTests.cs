@@ -199,8 +199,8 @@ public sealed class MonitorServiceTests {
         var albumId = Guid.NewGuid();
         var now = DateTimeOffset.UtcNow;
         db.Entities.AddRange(
-            new EntityRow { Id = bookId, KindCode = EntityKindRegistry.Book.Code, Title = "A Book", CreatedAt = now, UpdatedAt = now },
-            new EntityRow { Id = albumId, KindCode = EntityKindRegistry.AudioLibrary.Code, Title = "An Album", CreatedAt = now, UpdatedAt = now });
+            new EntityRow { Id = bookId, KindCode = EntityKind.Book.ToCode(), Title = "A Book", CreatedAt = now, UpdatedAt = now },
+            new EntityRow { Id = albumId, KindCode = EntityKind.AudioLibrary.ToCode(), Title = "An Album", CreatedAt = now, UpdatedAt = now });
         db.EntityExternalIds.AddRange(
             new EntityExternalIdRow { Id = Guid.NewGuid(), EntityId = bookId, Provider = "openlibrary", Value = "OL1", CreatedAt = now },
             new EntityExternalIdRow { Id = Guid.NewGuid(), EntityId = albumId, Provider = "musicbrainz", Value = "album-1", CreatedAt = now });

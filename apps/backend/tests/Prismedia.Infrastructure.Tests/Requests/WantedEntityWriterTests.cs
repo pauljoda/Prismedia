@@ -29,7 +29,7 @@ public sealed class WantedEntityWriterTests {
         Assert.False(result.HasFile);
         var entity = await db.Entities.AsNoTracking().FirstAsync(row => row.Id == result.EntityId);
         Assert.True(entity.IsWanted);
-        Assert.Equal(EntityKindRegistry.Book.Code, entity.KindCode);
+        Assert.Equal(EntityKind.Book.ToCode(), entity.KindCode);
         var externalId = Assert.Single(await db.EntityExternalIds.AsNoTracking().Where(row => row.EntityId == result.EntityId).ToArrayAsync());
         Assert.Equal(("openlibrary", "W1"), (externalId.Provider, externalId.Value));
         // No library root: root-scoped stale cleanup must never remove a wanted placeholder.
@@ -39,7 +39,7 @@ public sealed class WantedEntityWriterTests {
     [Fact]
     public async Task EnsureReusesAnEntityMatchedByExternalIdAndReportsItsFile() {
         await using var db = CreateContext();
-        var entityId = AddEntity(db, EntityKindRegistry.Book.Code, "Elantris", isWanted: false);
+        var entityId = AddEntity(db, EntityKind.Book.ToCode(), "Elantris", isWanted: false);
         AddExternalId(db, entityId, "openlibrary", "W1");
         AddSourceFile(db, entityId, "/media/books/Elantris.epub");
         await db.SaveChangesAsync();
@@ -56,7 +56,7 @@ public sealed class WantedEntityWriterTests {
     [Fact]
     public async Task EnsurePromotesAFilelessProviderEntityToWantedWhenItIsRequested() {
         await using var db = CreateContext();
-        var entityId = AddEntity(db, EntityKindRegistry.Book.Code, "Elantris", isWanted: false);
+        var entityId = AddEntity(db, EntityKind.Book.ToCode(), "Elantris", isWanted: false);
         AddExternalId(db, entityId, "openlibrary", "W1");
         await db.SaveChangesAsync();
 
@@ -79,8 +79,8 @@ public sealed class WantedEntityWriterTests {
     [Fact]
     public async Task EnsureTreatsBookTextAndAudioAsIndependentOwnedRenditions() {
         await using var db = CreateContext();
-        var bookId = AddEntity(db, EntityKindRegistry.Book.Code, "Elantris", isWanted: false);
-        var trackId = AddEntity(db, EntityKindRegistry.AudioTrack.Code, "Chapter 1", isWanted: false, parentEntityId: bookId);
+        var bookId = AddEntity(db, EntityKind.Book.ToCode(), "Elantris", isWanted: false);
+        var trackId = AddEntity(db, EntityKind.AudioTrack.ToCode(), "Chapter 1", isWanted: false, parentEntityId: bookId);
         AddExternalId(db, bookId, "openlibrary", "W1");
         AddSourceFile(db, bookId, "/media/books/Elantris.epub");
         AddSourceFile(db, trackId, "/media/books/Elantris/01.m4b");
@@ -102,8 +102,8 @@ public sealed class WantedEntityWriterTests {
     [Fact]
     public async Task AudioOnlyBookDoesNotSatisfyAnEbookRequest() {
         await using var db = CreateContext();
-        var bookId = AddEntity(db, EntityKindRegistry.Book.Code, "Elantris", isWanted: false);
-        var trackId = AddEntity(db, EntityKindRegistry.AudioTrack.Code, "Chapter 1", isWanted: false, parentEntityId: bookId);
+        var bookId = AddEntity(db, EntityKind.Book.ToCode(), "Elantris", isWanted: false);
+        var trackId = AddEntity(db, EntityKind.AudioTrack.ToCode(), "Chapter 1", isWanted: false, parentEntityId: bookId);
         AddExternalId(db, bookId, "openlibrary", "W1");
         db.BookDetails.Add(new BookDetailRow {
             EntityId = bookId,
@@ -129,8 +129,8 @@ public sealed class WantedEntityWriterTests {
     [Fact]
     public async Task MovieRootReportsOnDiskWhenItsSourceFileBelongsToADescendant() {
         await using var db = CreateContext();
-        var movieId = AddEntity(db, EntityKindRegistry.Movie.Code, "Dune", isWanted: false);
-        var videoId = AddEntity(db, EntityKindRegistry.Video.Code, "Dune", isWanted: false, parentEntityId: movieId);
+        var movieId = AddEntity(db, EntityKind.Movie.ToCode(), "Dune", isWanted: false);
+        var videoId = AddEntity(db, EntityKind.Video.ToCode(), "Dune", isWanted: false, parentEntityId: movieId);
         AddExternalId(db, movieId, "tmdb", "M1");
         AddSourceFile(db, videoId, "/media/movies/Dune/Dune.mkv");
         await db.SaveChangesAsync();
@@ -155,7 +155,7 @@ public sealed class WantedEntityWriterTests {
     [Fact]
     public async Task EnsureNormalizesTheExternalIdentityBeforeResolvingAndStamping() {
         await using var db = CreateContext();
-        var entityId = AddEntity(db, EntityKindRegistry.Book.Code, "Stored title", isWanted: false);
+        var entityId = AddEntity(db, EntityKind.Book.ToCode(), "Stored title", isWanted: false);
         AddExternalId(db, entityId, "openlibrary", "W1");
         await db.SaveChangesAsync();
 
@@ -176,10 +176,10 @@ public sealed class WantedEntityWriterTests {
     [Fact]
     public async Task EnsureScopesAnExternalIdentityMatchToTheRequestedParent() {
         await using var db = CreateContext();
-        var firstAuthorId = AddEntity(db, EntityKindRegistry.BookAuthor.Code, "First author", isWanted: false);
-        var secondAuthorId = AddEntity(db, EntityKindRegistry.BookAuthor.Code, "Second author", isWanted: false);
-        var firstBookId = AddEntity(db, EntityKindRegistry.Book.Code, "Same work", isWanted: false, parentEntityId: firstAuthorId);
-        var secondBookId = AddEntity(db, EntityKindRegistry.Book.Code, "Same work", isWanted: false, parentEntityId: secondAuthorId);
+        var firstAuthorId = AddEntity(db, EntityKind.BookAuthor.ToCode(), "First author", isWanted: false);
+        var secondAuthorId = AddEntity(db, EntityKind.BookAuthor.ToCode(), "Second author", isWanted: false);
+        var firstBookId = AddEntity(db, EntityKind.Book.ToCode(), "Same work", isWanted: false, parentEntityId: firstAuthorId);
+        var secondBookId = AddEntity(db, EntityKind.Book.ToCode(), "Same work", isWanted: false, parentEntityId: secondAuthorId);
         AddExternalId(db, firstBookId, "openlibrary", "W1");
         AddExternalId(db, secondBookId, "openlibrary", "W1");
         await db.SaveChangesAsync();
@@ -199,8 +199,8 @@ public sealed class WantedEntityWriterTests {
     [Fact]
     public async Task EnsureReportsAmbiguousIdentityWithoutFallingBackToTitleOrCreating() {
         await using var db = CreateContext();
-        var firstId = AddEntity(db, EntityKindRegistry.BookAuthor.Code, "Matching title", isWanted: false);
-        var secondId = AddEntity(db, EntityKindRegistry.BookAuthor.Code, "Other title", isWanted: false);
+        var firstId = AddEntity(db, EntityKind.BookAuthor.ToCode(), "Matching title", isWanted: false);
+        var secondId = AddEntity(db, EntityKind.BookAuthor.ToCode(), "Other title", isWanted: false);
         AddExternalId(db, firstId, "openlibraryauthor", "A1");
         AddExternalId(db, secondId, "openlibraryauthor", "A1");
         await db.SaveChangesAsync();
@@ -223,7 +223,7 @@ public sealed class WantedEntityWriterTests {
         // A scanned author folder has no provider ids yet; requesting that author must reuse the
         // existing entity (title match, authors only) and stamp the id for future id-first lookups.
         await using var db = CreateContext();
-        var authorId = AddEntity(db, EntityKindRegistry.BookAuthor.Code, "Brandon Sanderson", isWanted: false);
+        var authorId = AddEntity(db, EntityKind.BookAuthor.ToCode(), "Brandon Sanderson", isWanted: false);
         await db.SaveChangesAsync();
         var writer = Writer(db);
 
@@ -238,7 +238,7 @@ public sealed class WantedEntityWriterTests {
     [Fact]
     public async Task EnsureNeverClaimsABookByBareTitleAcrossTheLibrary() {
         await using var db = CreateContext();
-        AddEntity(db, EntityKindRegistry.Book.Code, "Common Title", isWanted: false);
+        AddEntity(db, EntityKind.Book.ToCode(), "Common Title", isWanted: false);
         await db.SaveChangesAsync();
         var writer = Writer(db);
 
@@ -264,7 +264,7 @@ public sealed class WantedEntityWriterTests {
     [Fact]
     public async Task EnsureChildrenMaterializesReviewedAlbumsAsOneOrderedBatch() {
         await using var db = CreateContext();
-        var artistId = AddEntity(db, EntityKindRegistry.MusicArtist.Code, "Divide Music", isWanted: true);
+        var artistId = AddEntity(db, EntityKind.MusicArtist.ToCode(), "Divide Music", isWanted: true);
         await db.SaveChangesAsync();
         var writer = Writer(db);
         var requests = new[] {
@@ -285,7 +285,7 @@ public sealed class WantedEntityWriterTests {
         var created = await writer.EnsureChildrenAsync(artistId, requests, CancellationToken.None);
         var trackId = AddEntity(
             db,
-            EntityKindRegistry.AudioTrack.Code,
+            EntityKind.AudioTrack.ToCode(),
             "Track 1",
             isWanted: false,
             parentEntityId: created[0].EntityId);
@@ -320,12 +320,12 @@ public sealed class WantedEntityWriterTests {
         await using var db = CreateContext();
         var seriesId = AddEntity(
             db,
-            EntityKindRegistry.VideoSeries.Code,
+            EntityKind.VideoSeries.ToCode(),
             "Daniel Tiger's Neighborhood",
             isWanted: false);
         var localSeasonId = AddEntity(
             db,
-            EntityKindRegistry.VideoSeason.Code,
+            EntityKind.VideoSeason.ToCode(),
             "Season 06",
             isWanted: false,
             parentEntityId: seriesId);
@@ -351,7 +351,7 @@ public sealed class WantedEntityWriterTests {
         Assert.Single(await db.Entities.AsNoTracking()
             .Where(row =>
                 row.ParentEntityId == seriesId
-                && row.KindCode == EntityKindRegistry.VideoSeason.Code)
+                && row.KindCode == EntityKind.VideoSeason.ToCode())
             .ToArrayAsync());
     }
 
@@ -360,12 +360,12 @@ public sealed class WantedEntityWriterTests {
         await using var db = CreateContext();
         var seriesId = AddEntity(
             db,
-            EntityKindRegistry.VideoSeries.Code,
+            EntityKind.VideoSeries.ToCode(),
             "Daniel Tiger's Neighborhood",
             isWanted: false);
         var seasonId = AddEntity(
             db,
-            EntityKindRegistry.VideoSeason.Code,
+            EntityKind.VideoSeason.ToCode(),
             "Season 2",
             isWanted: false,
             parentEntityId: seriesId);
@@ -394,16 +394,16 @@ public sealed class WantedEntityWriterTests {
     [Fact]
     public async Task DeferredArtworkApplyPersistsReviewedAlbumUrlsWithoutDownloadingThem() {
         await using var db = CreateContext();
-        var artistId = AddEntity(db, EntityKindRegistry.MusicArtist.Code, "Divide Music", isWanted: true);
+        var artistId = AddEntity(db, EntityKind.MusicArtist.ToCode(), "Divide Music", isWanted: true);
         var firstId = AddEntity(
             db,
-            EntityKindRegistry.AudioLibrary.Code,
+            EntityKind.AudioLibrary.ToCode(),
             "First Album",
             isWanted: true,
             parentEntityId: artistId);
         var secondId = AddEntity(
             db,
-            EntityKindRegistry.AudioLibrary.Code,
+            EntityKind.AudioLibrary.ToCode(),
             "Second Album",
             isWanted: true,
             parentEntityId: artistId);
@@ -452,13 +452,13 @@ public sealed class WantedEntityWriterTests {
 
         var entity = await db.Entities.AsNoTracking().FirstAsync(row => row.Id == movie.EntityId);
         Assert.True(entity.IsWanted);
-        Assert.Equal(EntityKindRegistry.Movie.Code, entity.KindCode);
+        Assert.Equal(EntityKind.Movie.ToCode(), entity.KindCode);
     }
 
     [Fact]
     public async Task GetContainerReturnsCanonicalMonitorableIdentities() {
         await using var db = CreateContext();
-        var authorId = AddEntity(db, EntityKindRegistry.BookAuthor.Code, "Author", isWanted: false);
+        var authorId = AddEntity(db, EntityKind.BookAuthor.ToCode(), "Author", isWanted: false);
         AddExternalId(db, authorId, "OpenLibraryWork", " W1 ");
         await db.SaveChangesAsync();
 
@@ -474,16 +474,16 @@ public sealed class WantedEntityWriterTests {
         var artistIdentity = new ExternalIdentity("musicbrainzartist", "A1");
         var firstIdentity = new ExternalIdentity("musicbrainzreleasegroup", "RG1");
         var secondIdentity = new ExternalIdentity("musicbrainzreleasegroup", "RG2");
-        var artistId = AddEntity(db, EntityKindRegistry.MusicArtist.Code, "Artist", isWanted: true);
+        var artistId = AddEntity(db, EntityKind.MusicArtist.ToCode(), "Artist", isWanted: true);
         var firstId = AddEntity(
             db,
-            EntityKindRegistry.AudioLibrary.Code,
+            EntityKind.AudioLibrary.ToCode(),
             "First",
             isWanted: true,
             parentEntityId: artistId);
         var secondId = AddEntity(
             db,
-            EntityKindRegistry.AudioLibrary.Code,
+            EntityKind.AudioLibrary.ToCode(),
             "Second",
             isWanted: true,
             parentEntityId: artistId);
@@ -513,8 +513,8 @@ public sealed class WantedEntityWriterTests {
     [Fact]
     public async Task DeleteIfWantedPrunesAnOrphanedWantedArtistLikeAnAuthor() {
         await using var db = CreateContext();
-        var artistId = AddEntity(db, EntityKindRegistry.MusicArtist.Code, "Artist", isWanted: true);
-        var albumId = AddEntity(db, EntityKindRegistry.AudioLibrary.Code, "Album", isWanted: true, parentEntityId: artistId);
+        var artistId = AddEntity(db, EntityKind.MusicArtist.ToCode(), "Artist", isWanted: true);
+        var albumId = AddEntity(db, EntityKind.AudioLibrary.ToCode(), "Album", isWanted: true, parentEntityId: artistId);
         await db.SaveChangesAsync();
 
         Assert.True(await Writer(db).DeleteIfWantedAsync(albumId, CancellationToken.None));
@@ -525,8 +525,8 @@ public sealed class WantedEntityWriterTests {
     [Fact]
     public async Task DeleteIfWantedRemovesTheWantedBookAndPrunesItsOrphanedWantedAuthor() {
         await using var db = CreateContext();
-        var authorId = AddEntity(db, EntityKindRegistry.BookAuthor.Code, "Author", isWanted: true);
-        var bookId = AddEntity(db, EntityKindRegistry.Book.Code, "Book", isWanted: true, parentEntityId: authorId);
+        var authorId = AddEntity(db, EntityKind.BookAuthor.ToCode(), "Author", isWanted: true);
+        var bookId = AddEntity(db, EntityKind.Book.ToCode(), "Book", isWanted: true, parentEntityId: authorId);
         await db.SaveChangesAsync();
 
         Assert.True(await Writer(db).DeleteIfWantedAsync(bookId, CancellationToken.None));
@@ -537,9 +537,9 @@ public sealed class WantedEntityWriterTests {
     [Fact]
     public async Task DeleteIfWantedKeepsAnAuthorThatStillHasOtherChildren() {
         await using var db = CreateContext();
-        var authorId = AddEntity(db, EntityKindRegistry.BookAuthor.Code, "Author", isWanted: true);
-        var bookId = AddEntity(db, EntityKindRegistry.Book.Code, "Book 1", isWanted: true, parentEntityId: authorId);
-        AddEntity(db, EntityKindRegistry.Book.Code, "Book 2", isWanted: true, parentEntityId: authorId);
+        var authorId = AddEntity(db, EntityKind.BookAuthor.ToCode(), "Author", isWanted: true);
+        var bookId = AddEntity(db, EntityKind.Book.ToCode(), "Book 1", isWanted: true, parentEntityId: authorId);
+        AddEntity(db, EntityKind.Book.ToCode(), "Book 2", isWanted: true, parentEntityId: authorId);
         await db.SaveChangesAsync();
 
         Assert.True(await Writer(db).DeleteIfWantedAsync(bookId, CancellationToken.None));
@@ -550,9 +550,9 @@ public sealed class WantedEntityWriterTests {
     [Fact]
     public async Task DeleteIfWantedRefusesAnImportedOrNonWantedEntity() {
         await using var db = CreateContext();
-        var importedId = AddEntity(db, EntityKindRegistry.Book.Code, "Imported", isWanted: true);
+        var importedId = AddEntity(db, EntityKind.Book.ToCode(), "Imported", isWanted: true);
         AddSourceFile(db, importedId, "/media/books/Imported.epub"); // the import won the race
-        var ordinaryId = AddEntity(db, EntityKindRegistry.Book.Code, "Ordinary", isWanted: false);
+        var ordinaryId = AddEntity(db, EntityKind.Book.ToCode(), "Ordinary", isWanted: false);
         await db.SaveChangesAsync();
         var writer = Writer(db);
 
@@ -564,7 +564,7 @@ public sealed class WantedEntityWriterTests {
     [Fact]
     public async Task BindProviderIdentitySelectsTheExactPluginWhenTwoPluginsShareANamespace() {
         await using var db = CreateContext();
-        var entityId = AddEntity(db, EntityKindRegistry.Book.Code, "Owned title", isWanted: false);
+        var entityId = AddEntity(db, EntityKind.Book.ToCode(), "Owned title", isWanted: false);
         var identity = new ExternalIdentity("shared-books", "W1");
         AddExternalId(db, entityId, identity.Namespace, identity.Value);
         await db.SaveChangesAsync();
@@ -589,7 +589,7 @@ public sealed class WantedEntityWriterTests {
     [Fact]
     public async Task BindProviderIdentityRejectsUnroutableOrUnownedIdentityWithoutPersisting() {
         await using var db = CreateContext();
-        var entityId = AddEntity(db, EntityKindRegistry.Book.Code, "Owned title", isWanted: false);
+        var entityId = AddEntity(db, EntityKind.Book.ToCode(), "Owned title", isWanted: false);
         var ownedIdentity = new ExternalIdentity("shared-books", "W1");
         var foreignIdentity = new ExternalIdentity("shared-books", "W2");
         AddExternalId(db, entityId, ownedIdentity.Namespace, ownedIdentity.Value);
@@ -612,7 +612,7 @@ public sealed class WantedEntityWriterTests {
     [Fact]
     public async Task GetContainerCarriesAStalePersistedProviderBindingWithoutRetargeting() {
         await using var db = CreateContext();
-        var entityId = AddEntity(db, EntityKindRegistry.VideoSeries.Code, "Series", isWanted: false);
+        var entityId = AddEntity(db, EntityKind.VideoSeries.ToCode(), "Series", isWanted: false);
         AddExternalId(db, entityId, "tmdb", "82728");
         await db.SaveChangesAsync();
         var bindings = new EfEntityProviderIdentityStore(db, TimeProvider.System);

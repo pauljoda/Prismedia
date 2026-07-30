@@ -9,7 +9,7 @@ public static class SeriesEndpoints {
     public static IEndpointRouteBuilder MapSeriesEndpoints(this IEndpointRouteBuilder routes) {
         routes.MapEntityKindRoutes(
             "/api/series",
-            EntityKindRegistry.VideoSeries.Code,
+            EntityKind.VideoSeries.ToCode(),
             "Series",
             "ListVideoSeries",
             "GetVideoSeries");
@@ -23,7 +23,7 @@ public static class SeriesEndpoints {
             CancellationToken cancellationToken) =>
             await EntityKindRouteEndpoints.GetKindDetailAsync(
                 seasonId,
-                EntityKindRegistry.VideoSeason.Code,
+                EntityKind.VideoSeason.ToCode(),
                 NsfwVisibility.ShouldHide(hideNsfw, httpContext),
                 entities,
                 cancellationToken))

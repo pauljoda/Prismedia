@@ -76,7 +76,7 @@ public sealed partial class EfEntityReadService {
             .ToDictionary(group => group.Key, group => group.First().Path);
         var hoverImagesByEntity = await ProjectHoverImagesAsync(rows, hideNsfw, enforceLibraryVisibility, cancellationToken);
         var collectionRowsNeedingArtwork = rows
-            .Where(row => row.KindCode == EntityKindRegistry.Collection.Code && !coverByEntity.ContainsKey(row.Id))
+            .Where(row => row.KindCode == EntityKind.Collection.ToCode() && !coverByEntity.ContainsKey(row.Id))
             .ToArray();
         var collectionArtworkByEntity = resolveCollectionArtwork
             ? await ProjectCollectionArtworkAsync(collectionRowsNeedingArtwork, hideNsfw, enforceLibraryVisibility, cancellationToken)
@@ -85,7 +85,7 @@ public sealed partial class EfEntityReadService {
             .Where(technical => ids.Contains(technical.EntityId))
             .ToDictionaryAsync(technical => technical.EntityId, cancellationToken);
         var movieIds = rows
-            .Where(row => resolveCollectionArtwork && row.KindCode == EntityKindRegistry.Movie.Code)
+            .Where(row => resolveCollectionArtwork && row.KindCode == EntityKind.Movie.ToCode())
             .Select(row => row.Id)
             .ToArray();
         var movieIdsMissingTechnical = movieIds
@@ -100,10 +100,10 @@ public sealed partial class EfEntityReadService {
                 from child in visibleContributionEntities
                 where child.ParentEntityId != null &&
                     movieIdsMissingTechnical.Contains(child.ParentEntityId.Value) &&
-                    child.KindCode == EntityKindRegistry.Video.Code &&
+                    child.KindCode == EntityKind.Video.ToCode() &&
                     !visibleContributionEntities.Any(other =>
                         other.ParentEntityId == child.ParentEntityId &&
-                        other.KindCode == EntityKindRegistry.Video.Code &&
+                        other.KindCode == EntityKind.Video.ToCode() &&
                         other.Id != child.Id)
                 join technical in _db.EntityTechnical.AsNoTracking()
                     on child.Id equals technical.EntityId
@@ -114,12 +114,12 @@ public sealed partial class EfEntityReadService {
             row => row.Technical);
         // Section (disc) labels for audio tracks, surfaced as a thumbnail chip so album track
         // lists can group multi-disc albums and restart numbering per section.
-        var sectionByEntity = rows.Any(row => row.KindCode == EntityKindRegistry.AudioTrack.Code)
+        var sectionByEntity = rows.Any(row => row.KindCode == EntityKind.AudioTrack.ToCode())
             ? await _db.AudioTrackDetails.AsNoTracking()
                 .Where(detail => ids.Contains(detail.EntityId) && detail.SectionLabel != null)
                 .ToDictionaryAsync(detail => detail.EntityId, detail => detail.SectionLabel!, cancellationToken)
             : new Dictionary<Guid, string>();
-        var bookTypeByEntity = rows.Any(row => row.KindCode == EntityKindRegistry.Book.Code)
+        var bookTypeByEntity = rows.Any(row => row.KindCode == EntityKind.Book.ToCode())
             ? await _db.BookDetails.AsNoTracking()
                 .Where(detail => ids.Contains(detail.EntityId))
                 .ToDictionaryAsync(detail => detail.EntityId, detail => detail.BookType, cancellationToken)
@@ -231,7 +231,7 @@ public sealed partial class EfEntityReadService {
             var coverUrl = coverByEntity.GetValueOrDefault(row.Id);
             var bookType = bookTypeByEntity.TryGetValue(row.Id, out var value) ? value : (BookType?)null;
             var thumbnailTechnical = technicalByEntity.GetValueOrDefault(row.Id)
-                ?? (row.KindCode == EntityKindRegistry.Movie.Code
+                ?? (row.KindCode == EntityKind.Movie.ToCode()
                     ? movieChildTechnicalByEntity.GetValueOrDefault(row.Id)
                     : null);
             // The entity that owns the cover image this card shows. Rows that borrow another
@@ -249,7 +249,7 @@ public sealed partial class EfEntityReadService {
             }
 
             if (coverUrl is null &&
-                row.KindCode == EntityKindRegistry.Collection.Code &&
+                row.KindCode == EntityKind.Collection.ToCode() &&
                 collectionArtworkByEntity.TryGetValue(row.Id, out var collectionArtwork)) {
                 coverUrl = collectionArtwork.CoverUrl ?? collectionArtwork.HoverImages.FirstOrDefault()?.Path;
                 hoverImages = collectionArtwork.HoverImages;
@@ -381,7 +381,7 @@ public sealed partial class EfEntityReadService {
         bool enforceLibraryVisibility,
         CancellationToken cancellationToken) {
         var collectionIds = rows
-            .Where(row => row.KindCode == EntityKindRegistry.Collection.Code)
+            .Where(row => row.KindCode == EntityKind.Collection.ToCode())
             .Select(row => row.Id)
             .Distinct()
             .ToArray();
@@ -678,8 +678,8 @@ public sealed partial class EfEntityReadService {
         }
 
         Add(meta, EntityThumbnailMetaIcons.Duration, FormatDuration(technical.DurationSeconds));
-        var usesVideoTechnical = row.KindCode == EntityKindRegistry.Video.Code ||
-            row.KindCode == EntityKindRegistry.Movie.Code;
+        var usesVideoTechnical = row.KindCode == EntityKind.Video.ToCode() ||
+            row.KindCode == EntityKind.Movie.ToCode();
         if (technical.Width is { } width && technical.Height is { } height) {
             Add(
                 meta,
@@ -690,7 +690,7 @@ public sealed partial class EfEntityReadService {
         if (usesVideoTechnical) {
             Add(meta, EntityThumbnailMetaIcons.Video, technical.Codec?.ToUpperInvariant());
             Add(meta, EntityThumbnailMetaIcons.Video, technical.Container?.ToUpperInvariant());
-        } else if (row.KindCode == EntityKindRegistry.AudioTrack.Code) {
+        } else if (row.KindCode == EntityKind.AudioTrack.ToCode()) {
             Add(meta, EntityThumbnailMetaIcons.Audio, technical.Codec?.ToUpperInvariant());
         }
 
@@ -860,18 +860,18 @@ public sealed partial class EfEntityReadService {
     }
 
     private static bool UsesRepresentativeCover(string kindCode) =>
-        kindCode == EntityKindRegistry.Book.Code ||
-        kindCode == EntityKindRegistry.BookVolume.Code ||
-        kindCode == EntityKindRegistry.BookChapter.Code ||
-        kindCode == EntityKindRegistry.Gallery.Code ||
-        kindCode == EntityKindRegistry.VideoSeries.Code ||
-        kindCode == EntityKindRegistry.VideoSeason.Code;
+        kindCode == EntityKind.Book.ToCode() ||
+        kindCode == EntityKind.BookVolume.ToCode() ||
+        kindCode == EntityKind.BookChapter.ToCode() ||
+        kindCode == EntityKind.Gallery.ToCode() ||
+        kindCode == EntityKind.VideoSeries.ToCode() ||
+        kindCode == EntityKind.VideoSeason.ToCode();
 
     private static bool CanBorrowParentCover(string childKindCode, string parentKindCode) =>
-        (childKindCode == EntityKindRegistry.AudioTrack.Code &&
-            parentKindCode == EntityKindRegistry.AudioLibrary.Code) ||
-        (childKindCode == EntityKindRegistry.Video.Code &&
-            parentKindCode == EntityKindRegistry.Movie.Code);
+        (childKindCode == EntityKind.AudioTrack.ToCode() &&
+            parentKindCode == EntityKind.AudioLibrary.ToCode()) ||
+        (childKindCode == EntityKind.Video.ToCode() &&
+            parentKindCode == EntityKind.Movie.ToCode());
 
     private sealed record CollectionArtwork(
         string? CoverUrl,

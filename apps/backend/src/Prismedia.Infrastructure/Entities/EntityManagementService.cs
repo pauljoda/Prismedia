@@ -14,9 +14,9 @@ namespace Prismedia.Infrastructure.Entities;
 public sealed class EntityManagementService(PrismediaDbContext db) : IEntityManagementService {
     /// <summary>Kind codes a user may create and delete by hand from the taxonomy grids.</summary>
     private static readonly HashSet<string> ManageableKindCodes = new(StringComparer.OrdinalIgnoreCase) {
-        EntityKindRegistry.Tag.Code,
-        EntityKindRegistry.Person.Code,
-        EntityKindRegistry.Studio.Code,
+        EntityKind.Tag.ToCode(),
+        EntityKind.Person.ToCode(),
+        EntityKind.Studio.ToCode(),
     };
 
     /// <summary>Whether the given stable kind code is a user-manageable taxonomy kind.</summary>

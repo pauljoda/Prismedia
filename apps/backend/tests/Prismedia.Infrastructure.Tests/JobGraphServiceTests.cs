@@ -22,10 +22,10 @@ public sealed class JobGraphServiceTests {
                     "identify-root",
                     new EnqueueJobRequest(
                         JobType.IdentifySearch,
-                        TargetEntityKind: EntityKindRegistry.AudioLibrary.Code,
+                        TargetEntityKind: EntityKind.AudioLibrary.ToCode(),
                         TargetEntityId: entityId,
                         TargetLabel: "Album")),
-                RootEntityKind: EntityKindRegistry.AudioLibrary.Code,
+                RootEntityKind: EntityKind.AudioLibrary.ToCode(),
                 RootEntityId: entityId),
             CancellationToken.None);
 

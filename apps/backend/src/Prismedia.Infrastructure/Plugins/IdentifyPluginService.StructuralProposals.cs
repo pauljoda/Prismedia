@@ -743,7 +743,7 @@ public sealed partial class IdentifyPluginService {
             return proposal;
         }
 
-        var code = child.Entity.KindCode.Equals(EntityKindRegistry.VideoSeason.Code, StringComparison.OrdinalIgnoreCase)
+        var code = child.Entity.KindCode.Equals(EntityKind.VideoSeason.ToCode(), StringComparison.OrdinalIgnoreCase)
             ? "seasonNumber"
             : "sortOrder";
         return proposal with {
@@ -927,7 +927,7 @@ public sealed partial class IdentifyPluginService {
 
         var seasonNumber = await _db.Entities
             .AsNoTracking()
-            .Where(row => row.Id == entityId && row.KindCode == EntityKindRegistry.VideoSeason.Code)
+            .Where(row => row.Id == entityId && row.KindCode == EntityKind.VideoSeason.ToCode())
             .Select(row => row.SortOrder)
             .FirstOrDefaultAsync(cancellationToken);
         if (seasonNumber is { } value) {

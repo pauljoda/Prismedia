@@ -12,7 +12,7 @@ public sealed class PluginIdentityUrlResolverTests {
             "tmdb",
             enabled: true,
             new PluginEntitySupport(
-                EntityKindRegistry.VideoSeason.Code,
+                EntityKind.VideoSeason.ToCode(),
                 [IdentifyAction.LookupId.ToCode()],
                 ["tmdbseason"],
                 IdentityUrls:
@@ -24,7 +24,7 @@ public sealed class PluginIdentityUrlResolverTests {
                 ])));
 
         var url = await resolver.ResolveAsync(
-            EntityKindRegistry.VideoSeason.Code,
+            EntityKind.VideoSeason.ToCode(),
             new PluginIdentityRoute("TMDB", new ExternalIdentity("tmdbseason", "82728:2")),
             CancellationToken.None);
 
@@ -37,7 +37,7 @@ public sealed class PluginIdentityUrlResolverTests {
             "tmdb",
             enabled: true,
             new PluginEntitySupport(
-                EntityKindRegistry.Movie.Code,
+                EntityKind.Movie.ToCode(),
                 [IdentifyAction.LookupId.ToCode()],
                 ["tmdb"],
                 IdentityUrls:
@@ -48,7 +48,7 @@ public sealed class PluginIdentityUrlResolverTests {
                         "https://www.themoviedb.org/movie/{id}")
                 ]),
             new PluginEntitySupport(
-                EntityKindRegistry.Video.Code,
+                EntityKind.Video.ToCode(),
                 [IdentifyAction.LookupId.ToCode()],
                 ["tmdb"],
                 IdentityUrls:
@@ -60,7 +60,7 @@ public sealed class PluginIdentityUrlResolverTests {
                 ])));
 
         var url = await resolver.ResolveAsync(
-            EntityKindRegistry.Movie.Code,
+            EntityKind.Movie.ToCode(),
             new PluginIdentityRoute("tmdb", new ExternalIdentity("tmdb", "603")),
             CancellationToken.None);
 
@@ -73,7 +73,7 @@ public sealed class PluginIdentityUrlResolverTests {
             "legacy-video",
             enabled: true,
             new PluginEntitySupport(
-                EntityKindRegistry.Video.Code,
+                EntityKind.Video.ToCode(),
                 [IdentifyAction.LookupId.ToCode()],
                 ["legacy"],
                 IdentityUrls:
@@ -85,7 +85,7 @@ public sealed class PluginIdentityUrlResolverTests {
                 ])));
 
         var url = await resolver.ResolveAsync(
-            EntityKindRegistry.Movie.Code,
+            EntityKind.Movie.ToCode(),
             new PluginIdentityRoute("legacy-video", new ExternalIdentity("legacy", "42")),
             CancellationToken.None);
 
@@ -98,7 +98,7 @@ public sealed class PluginIdentityUrlResolverTests {
             "openlibrary",
             enabled: true,
             new PluginEntitySupport(
-                EntityKindRegistry.Book.Code,
+                EntityKind.Book.ToCode(),
                 [IdentifyAction.LookupId.ToCode()],
                 ["openlibrary"],
                 IdentityUrls:
@@ -110,7 +110,7 @@ public sealed class PluginIdentityUrlResolverTests {
                 ])));
 
         var url = await resolver.ResolveAsync(
-            EntityKindRegistry.Book.Code,
+            EntityKind.Book.ToCode(),
             new PluginIdentityRoute(
                 "openlibrary",
                 new ExternalIdentity("openlibrary", "series:Bluey & Friends/US")),
@@ -130,7 +130,7 @@ public sealed class PluginIdentityUrlResolverTests {
                 "disabled",
                 enabled: false,
                 new PluginEntitySupport(
-                    EntityKindRegistry.VideoSeason.Code,
+                    EntityKind.VideoSeason.ToCode(),
                     [IdentifyAction.LookupId.ToCode()],
                     ["tmdbseason"],
                     IdentityUrls: [format])),
@@ -138,25 +138,25 @@ public sealed class PluginIdentityUrlResolverTests {
                 "tmdb",
                 enabled: true,
                 new PluginEntitySupport(
-                    EntityKindRegistry.VideoSeason.Code,
+                    EntityKind.VideoSeason.ToCode(),
                     [IdentifyAction.LookupId.ToCode()],
                     ["tmdbseason"],
                     IdentityUrls: [format])));
 
         Assert.Null(await resolver.ResolveAsync(
-            EntityKindRegistry.VideoSeason.Code,
+            EntityKind.VideoSeason.ToCode(),
             new PluginIdentityRoute("disabled", new ExternalIdentity("tmdbseason", "82728:2")),
             CancellationToken.None));
         Assert.Null(await resolver.ResolveAsync(
-            EntityKindRegistry.Video.Code,
+            EntityKind.Video.ToCode(),
             new PluginIdentityRoute("tmdb", new ExternalIdentity("tmdbseason", "82728:2")),
             CancellationToken.None));
         Assert.Null(await resolver.ResolveAsync(
-            EntityKindRegistry.VideoSeason.Code,
+            EntityKind.VideoSeason.ToCode(),
             new PluginIdentityRoute("tmdb", new ExternalIdentity("tmdbseason", "82728")),
             CancellationToken.None));
         Assert.Null(await resolver.ResolveAsync(
-            EntityKindRegistry.VideoSeason.Code,
+            EntityKind.VideoSeason.ToCode(),
             new PluginIdentityRoute("missing", new ExternalIdentity("tmdbseason", "82728:2")),
             CancellationToken.None));
     }
@@ -167,7 +167,7 @@ public sealed class PluginIdentityUrlResolverTests {
             "unsafe",
             enabled: true,
             new PluginEntitySupport(
-                EntityKindRegistry.Video.Code,
+                EntityKind.Video.ToCode(),
                 [IdentifyAction.LookupId.ToCode()],
                 ["unsafe"],
                 IdentityUrls:
@@ -179,7 +179,7 @@ public sealed class PluginIdentityUrlResolverTests {
                 ])));
 
         var url = await resolver.ResolveAsync(
-            EntityKindRegistry.Video.Code,
+            EntityKind.Video.ToCode(),
             new PluginIdentityRoute("unsafe", new ExternalIdentity("unsafe", "one")),
             CancellationToken.None);
 
@@ -192,7 +192,7 @@ public sealed class PluginIdentityUrlResolverTests {
             "tmdb",
             enabled: true,
             new PluginEntitySupport(
-                EntityKindRegistry.VideoSeason.Code,
+                EntityKind.VideoSeason.ToCode(),
                 [IdentifyAction.LookupId.ToCode()],
                 ["tmdbseason"],
                 IdentityUrls:
@@ -204,7 +204,7 @@ public sealed class PluginIdentityUrlResolverTests {
                 ])));
 
         var url = await resolver.ResolveAsync(
-            EntityKindRegistry.VideoSeason.Code,
+            EntityKind.VideoSeason.ToCode(),
             new PluginIdentityRoute("tmdb", new ExternalIdentity("tmdbseason", "82728:2")),
             CancellationToken.None);
 

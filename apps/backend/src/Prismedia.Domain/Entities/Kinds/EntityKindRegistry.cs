@@ -26,27 +26,6 @@ public static class EntityKindRegistry {
     /// <summary>All discovered entity-kind definitions in enum order.</summary>
     public static IReadOnlyList<EntityKindDefinition> All => Definitions;
 
-    /// <summary>Definition for the generic audio protocol kind.</summary>
-    public static EntityKindDefinition Audio => Describe(EntityKind.Audio);
-    public static EntityKindDefinition AudioLibrary => Describe(EntityKind.AudioLibrary);
-    public static EntityKindDefinition AudioTrack => Describe(EntityKind.AudioTrack);
-    public static EntityKindDefinition Book => Describe(EntityKind.Book);
-    public static EntityKindDefinition BookAuthor => Describe(EntityKind.BookAuthor);
-    public static EntityKindDefinition BookVolume => Describe(EntityKind.BookVolume);
-    public static EntityKindDefinition BookChapter => Describe(EntityKind.BookChapter);
-    public static EntityKindDefinition BookPage => Describe(EntityKind.BookPage);
-    public static EntityKindDefinition Collection => Describe(EntityKind.Collection);
-    public static EntityKindDefinition Gallery => Describe(EntityKind.Gallery);
-    public static EntityKindDefinition Image => Describe(EntityKind.Image);
-    public static EntityKindDefinition Movie => Describe(EntityKind.Movie);
-    public static EntityKindDefinition MusicArtist => Describe(EntityKind.MusicArtist);
-    public static EntityKindDefinition Person => Describe(EntityKind.Person);
-    public static EntityKindDefinition Studio => Describe(EntityKind.Studio);
-    public static EntityKindDefinition Tag => Describe(EntityKind.Tag);
-    public static EntityKindDefinition Video => Describe(EntityKind.Video);
-    public static EntityKindDefinition VideoSeries => Describe(EntityKind.VideoSeries);
-    public static EntityKindDefinition VideoSeason => Describe(EntityKind.VideoSeason);
-
     /// <summary>Gets the canonical definition for a domain entity kind.</summary>
     public static EntityKindDefinition Describe(EntityKind kind) =>
         ByKind.TryGetValue(kind, out var definition)

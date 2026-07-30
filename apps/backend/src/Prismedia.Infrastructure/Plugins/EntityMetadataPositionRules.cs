@@ -13,11 +13,11 @@ internal static class EntityMetadataPositionRules {
     }
 
     public static int? SortOrderFor(string kindCode, IReadOnlyDictionary<string, int> positions) {
-        if (kindCode.Equals(EntityKindRegistry.VideoSeason.Code, StringComparison.OrdinalIgnoreCase)) {
+        if (kindCode.Equals(EntityKind.VideoSeason.ToCode(), StringComparison.OrdinalIgnoreCase)) {
             return PositionValue(positions, EntityPositionCodes.Season, EntityPositionCodes.Sort);
         }
 
-        if (kindCode.Equals(EntityKindRegistry.Video.Code, StringComparison.OrdinalIgnoreCase)) {
+        if (kindCode.Equals(EntityKind.Video.ToCode(), StringComparison.OrdinalIgnoreCase)) {
             return PositionValue(positions, EntityPositionCodes.Episode, EntityPositionCodes.AbsoluteEpisode, EntityPositionCodes.Sort);
         }
 

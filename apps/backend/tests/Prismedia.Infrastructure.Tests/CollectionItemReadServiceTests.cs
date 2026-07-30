@@ -19,12 +19,12 @@ public sealed class CollectionItemReadServiceTests {
         var bookId = Guid.NewGuid();
         var audiobookTrackId = Guid.NewGuid();
 
-        SeedEntity(db, collectionId, EntityKindRegistry.Collection.Code, "Favorites");
-        SeedEntity(db, firstId, EntityKindRegistry.Video.Code, "First");
-        SeedEntity(db, hiddenId, EntityKindRegistry.Image.Code, "Hidden", isNsfw: true);
-        SeedEntity(db, secondId, EntityKindRegistry.AudioTrack.Code, "Second");
-        SeedEntity(db, bookId, EntityKindRegistry.Book.Code, "Spoken Story");
-        SeedEntity(db, audiobookTrackId, EntityKindRegistry.AudioTrack.Code, "Book Chapter", parentEntityId: bookId);
+        SeedEntity(db, collectionId, EntityKind.Collection.ToCode(), "Favorites");
+        SeedEntity(db, firstId, EntityKind.Video.ToCode(), "First");
+        SeedEntity(db, hiddenId, EntityKind.Image.ToCode(), "Hidden", isNsfw: true);
+        SeedEntity(db, secondId, EntityKind.AudioTrack.ToCode(), "Second");
+        SeedEntity(db, bookId, EntityKind.Book.ToCode(), "Spoken Story");
+        SeedEntity(db, audiobookTrackId, EntityKind.AudioTrack.ToCode(), "Book Chapter", parentEntityId: bookId);
         db.CollectionDetails.Add(new CollectionDetailRow {
             EntityId = collectionId,
             OwnerUserId = TestUserContext.UserId,
@@ -64,8 +64,8 @@ public sealed class CollectionItemReadServiceTests {
         var viewerUserId = Guid.Parse("22222222-2222-4222-8222-222222222222");
         var collectionId = Guid.NewGuid();
         var itemId = Guid.NewGuid();
-        SeedEntity(db, collectionId, EntityKindRegistry.Collection.Code, "Scoped");
-        SeedEntity(db, itemId, EntityKindRegistry.Video.Code, "Item");
+        SeedEntity(db, collectionId, EntityKind.Collection.ToCode(), "Scoped");
+        SeedEntity(db, itemId, EntityKind.Video.ToCode(), "Item");
         db.CollectionDetails.Add(new CollectionDetailRow {
             EntityId = collectionId,
             OwnerUserId = ownerUserId,

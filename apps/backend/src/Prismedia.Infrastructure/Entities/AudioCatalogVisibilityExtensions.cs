@@ -12,9 +12,9 @@ internal static class AudioCatalogVisibilityExtensions {
         this IQueryable<EntityRow> query,
         IQueryable<EntityRow> entities) =>
         query.Where(entity =>
-            entity.KindCode != EntityKindRegistry.AudioTrack.Code ||
+            entity.KindCode != EntityKind.AudioTrack.ToCode() ||
             entity.ParentEntityId == null ||
             !entities.Any(parent =>
                 parent.Id == entity.ParentEntityId &&
-                parent.KindCode == EntityKindRegistry.Book.Code));
+                parent.KindCode == EntityKind.Book.ToCode()));
 }

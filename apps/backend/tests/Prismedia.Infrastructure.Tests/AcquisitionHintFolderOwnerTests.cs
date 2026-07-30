@@ -16,10 +16,10 @@ public sealed class AcquisitionHintFolderOwnerTests {
     [Fact]
     public async Task ImportedEpisodeMakesItsOrganizedSeriesEligibleForIdentifyAgain() {
         await using var db = CreateContext();
-        var seriesId = AddEntity(db, EntityKindRegistry.VideoSeries.Code, null, "/media/tv/Show", title: "Show");
+        var seriesId = AddEntity(db, EntityKind.VideoSeries.ToCode(), null, "/media/tv/Show", title: "Show");
         db.Entities.Local.Single(entity => entity.Id == seriesId).IsOrganized = true;
-        var seasonId = AddEntity(db, EntityKindRegistry.VideoSeason.Code, seriesId, "/media/tv/Show/S01");
-        var episodeId = AddEntity(db, EntityKindRegistry.Video.Code, seasonId, "/media/tv/Show/S01/E01.mkv");
+        var seasonId = AddEntity(db, EntityKind.VideoSeason.ToCode(), seriesId, "/media/tv/Show/S01");
+        var episodeId = AddEntity(db, EntityKind.Video.ToCode(), seasonId, "/media/tv/Show/S01/E01.mkv");
         AddHint(db, "/media/tv/Show", """{"tmdb":"episode-4242"}""", episodeId);
         await db.SaveChangesAsync();
 
@@ -35,11 +35,11 @@ public sealed class AcquisitionHintFolderOwnerTests {
     [Fact]
     public async Task ImportedTrackMakesItsOrganizedAlbumTheIdentifyRootInsteadOfTheArtist() {
         await using var db = CreateContext();
-        var artistId = AddEntity(db, EntityKindRegistry.MusicArtist.Code, null, "/media/music/Artist", title: "Artist");
-        var albumId = AddEntity(db, EntityKindRegistry.AudioLibrary.Code, artistId, "/media/music/Artist/Album", title: "Album");
+        var artistId = AddEntity(db, EntityKind.MusicArtist.ToCode(), null, "/media/music/Artist", title: "Artist");
+        var albumId = AddEntity(db, EntityKind.AudioLibrary.ToCode(), artistId, "/media/music/Artist/Album", title: "Album");
         db.Entities.Local.Single(entity => entity.Id == artistId).IsOrganized = true;
         db.Entities.Local.Single(entity => entity.Id == albumId).IsOrganized = true;
-        AddEntity(db, EntityKindRegistry.AudioTrack.Code, albumId, "/media/music/Artist/Album/01 - Track.flac");
+        AddEntity(db, EntityKind.AudioTrack.ToCode(), albumId, "/media/music/Artist/Album/01 - Track.flac");
         AddHint(db, "/media/music/Artist/Album", """{"musicbrainz":"album-4242"}""", albumId);
         await db.SaveChangesAsync();
 
@@ -47,7 +47,7 @@ public sealed class AcquisitionHintFolderOwnerTests {
 
         var owner = Assert.Single(owners);
         Assert.Equal(albumId, owner.TopLevelEntityId);
-        Assert.Equal(EntityKindRegistry.AudioLibrary.Code, owner.TopLevelKindCode);
+        Assert.Equal(EntityKind.AudioLibrary.ToCode(), owner.TopLevelKindCode);
         Assert.False(await db.Entities.AsNoTracking()
             .Where(entity => entity.Id == albumId)
             .Select(entity => entity.IsOrganized)
@@ -61,7 +61,7 @@ public sealed class AcquisitionHintFolderOwnerTests {
     [Fact]
     public async Task ImportedBookBecomesEligibleForIdentifyAfterItsStableIdIsStamped() {
         await using var db = CreateContext();
-        var bookId = AddEntity(db, EntityKindRegistry.Book.Code, null, "/media/books/Novel.epub", title: "Novel");
+        var bookId = AddEntity(db, EntityKind.Book.ToCode(), null, "/media/books/Novel.epub", title: "Novel");
         db.Entities.Local.Single(entity => entity.Id == bookId).IsOrganized = true;
         AddHint(db, "/media/books/Novel.epub", """{"openlibrary":"OL4242W"}""", bookId);
         await db.SaveChangesAsync();
@@ -85,8 +85,8 @@ public sealed class AcquisitionHintFolderOwnerTests {
     [Fact]
     public async Task StampsIdsOnTheSeasonOwnerAndReportsTheSeries() {
         await using var db = CreateContext();
-        var seriesId = AddEntity(db, EntityKindRegistry.VideoSeries.Code, null, "/media/tv/Show (2008)", title: "Show");
-        var seasonId = AddEntity(db, EntityKindRegistry.VideoSeason.Code, seriesId, "/media/tv/Show (2008)/S01");
+        var seriesId = AddEntity(db, EntityKind.VideoSeries.ToCode(), null, "/media/tv/Show (2008)", title: "Show");
+        var seasonId = AddEntity(db, EntityKind.VideoSeason.ToCode(), seriesId, "/media/tv/Show (2008)/S01");
         AddHint(db, "/media/tv/Show (2008)/S01", """{"tmdb":"4242"}""");
         await db.SaveChangesAsync();
 
@@ -94,7 +94,7 @@ public sealed class AcquisitionHintFolderOwnerTests {
 
         var owner = Assert.Single(owners);
         Assert.Equal(seriesId, owner.TopLevelEntityId);
-        Assert.Equal(EntityKindRegistry.VideoSeries.Code, owner.TopLevelKindCode);
+        Assert.Equal(EntityKind.VideoSeries.ToCode(), owner.TopLevelKindCode);
         Assert.Equal("Show", owner.TopLevelTitle);
         var stamped = Assert.Single(await db.EntityExternalIds.AsNoTracking().Where(row => row.EntityId == seasonId).ToArrayAsync());
         Assert.Equal("tmdb", stamped.Provider);
@@ -105,9 +105,9 @@ public sealed class AcquisitionHintFolderOwnerTests {
     [Fact]
     public async Task BroadCheckpointHintStampsTheLinkedEpisodeInsteadOfTheSeriesFolderOwner() {
         await using var db = CreateContext();
-        var seriesId = AddEntity(db, EntityKindRegistry.VideoSeries.Code, null, "/media/tv/Show", title: "Show");
-        var seasonId = AddEntity(db, EntityKindRegistry.VideoSeason.Code, seriesId, "/media/tv/Show/S01");
-        var episodeId = AddEntity(db, EntityKindRegistry.Video.Code, seasonId, "/media/tv/Show/S01/E01.mkv");
+        var seriesId = AddEntity(db, EntityKind.VideoSeries.ToCode(), null, "/media/tv/Show", title: "Show");
+        var seasonId = AddEntity(db, EntityKind.VideoSeason.ToCode(), seriesId, "/media/tv/Show/S01");
+        var episodeId = AddEntity(db, EntityKind.Video.ToCode(), seasonId, "/media/tv/Show/S01/E01.mkv");
         AddHint(db, "/media/tv/Show", """{"tmdb":"episode-4242"}""", episodeId);
         await db.SaveChangesAsync();
 
@@ -126,10 +126,10 @@ public sealed class AcquisitionHintFolderOwnerTests {
     [Fact]
     public async Task ScopedApplyIgnoresAStaleHintForAnotherEpisodeInTheSameSeries() {
         await using var db = CreateContext();
-        var seriesId = AddEntity(db, EntityKindRegistry.VideoSeries.Code, null, "/media/tv/Show", title: "Show");
-        var seasonId = AddEntity(db, EntityKindRegistry.VideoSeason.Code, seriesId, "/media/tv/Show/S01");
-        var episodeOneId = AddEntity(db, EntityKindRegistry.Video.Code, seasonId, "/media/tv/Show/S01/E01.mkv");
-        var episodeTwoId = AddEntity(db, EntityKindRegistry.Video.Code, seasonId, "/media/tv/Show/S01/E02.mkv");
+        var seriesId = AddEntity(db, EntityKind.VideoSeries.ToCode(), null, "/media/tv/Show", title: "Show");
+        var seasonId = AddEntity(db, EntityKind.VideoSeason.ToCode(), seriesId, "/media/tv/Show/S01");
+        var episodeOneId = AddEntity(db, EntityKind.Video.ToCode(), seasonId, "/media/tv/Show/S01/E01.mkv");
+        var episodeTwoId = AddEntity(db, EntityKind.Video.ToCode(), seasonId, "/media/tv/Show/S01/E02.mkv");
         var staleAcquisitionId = AddHint(db, "/media/tv/Show", """{"tmdb":"episode-1"}""", episodeOneId);
         var activeAcquisitionId = AddHint(db, "/media/tv/Show", """{"tmdb":"episode-2"}""", episodeTwoId);
         await db.SaveChangesAsync();
@@ -149,10 +149,10 @@ public sealed class AcquisitionHintFolderOwnerTests {
     [Fact]
     public async Task BroadCompleteSeriesHintBindsTheRequestedSeasonOnlyByItsPosition() {
         await using var db = CreateContext();
-        var seriesId = AddEntity(db, EntityKindRegistry.VideoSeries.Code, null, "/media/tv/Show", title: "Show");
+        var seriesId = AddEntity(db, EntityKind.VideoSeries.ToCode(), null, "/media/tv/Show", title: "Show");
         var wantedSeasonThreeId = AddWantedEntity(
             db,
-            EntityKindRegistry.VideoSeason.Code,
+            EntityKind.VideoSeason.ToCode(),
             seriesId,
             sortOrder: 3);
         var acquisitionId = AddHint(
@@ -193,7 +193,7 @@ public sealed class AcquisitionHintFolderOwnerTests {
     [Fact]
     public async Task StampingDelegatesOneCanonicalIdentitySetAndSkipsTransientLocators() {
         await using var db = CreateContext();
-        var seasonId = AddEntity(db, EntityKindRegistry.VideoSeason.Code, null, "/media/tv/Show/S01");
+        var seasonId = AddEntity(db, EntityKind.VideoSeason.ToCode(), null, "/media/tv/Show/S01");
         AddHint(db, "/media/tv/Show/S01", """{" TMDB ":" 4242 ","openlibrary":"https://openlibrary.org/works/OL1W","isbn":"   "}""");
         var hint = Assert.Single(db.AcquisitionImportHints.Local);
         hint.IdentityNamespace = "TMDB";
@@ -214,7 +214,7 @@ public sealed class AcquisitionHintFolderOwnerTests {
     [Fact]
     public async Task AddMissingPreservesAnExistingNamespaceAndAddsNewCanonicalOnes() {
         await using var db = CreateContext();
-        var movieId = AddEntity(db, EntityKindRegistry.Movie.Code, null, "/media/movies/Film");
+        var movieId = AddEntity(db, EntityKind.Movie.ToCode(), null, "/media/movies/Film");
         db.EntityExternalIds.Add(new EntityExternalIdRow {
             Id = Guid.NewGuid(), EntityId = movieId, Provider = "tmdb", Value = "old", CreatedAt = DateTimeOffset.UtcNow
         });
@@ -241,7 +241,7 @@ public sealed class AcquisitionHintFolderOwnerTests {
     [Fact]
     public async Task MultipleHintsForOneOwnerDoNotCreateDuplicateIdentityRows() {
         await using var db = CreateContext();
-        var seasonId = AddEntity(db, EntityKindRegistry.VideoSeason.Code, null, "/media/tv/Show/S01");
+        var seasonId = AddEntity(db, EntityKind.VideoSeason.ToCode(), null, "/media/tv/Show/S01");
         AddHint(db, "/media/tv/Show/S01/episode-1.mkv", """{"tmdb":"4242"}""");
         AddHint(db, "/media/tv/Show/S01/episode-2.mkv", """{"TMDB":" 4242 "}""");
         await db.SaveChangesAsync();
@@ -258,7 +258,7 @@ public sealed class AcquisitionHintFolderOwnerTests {
     [Fact]
     public async Task FileHintsResolveThroughTheParentFolderWalk() {
         await using var db = CreateContext();
-        var movieId = AddEntity(db, EntityKindRegistry.Movie.Code, null, "/media/movies/Film (2020)", title: "Film");
+        var movieId = AddEntity(db, EntityKind.Movie.ToCode(), null, "/media/movies/Film (2020)", title: "Film");
         AddHint(db, "/media/movies/Film (2020)/Film.mkv", """{"tmdb":"77"}""");
         await db.SaveChangesAsync();
 
@@ -278,8 +278,8 @@ public sealed class AcquisitionHintFolderOwnerTests {
                 Id = ids[index],
                 ParentEntityId = index == 0 ? null : ids[index - 1],
                 KindCode = index == 0
-                    ? EntityKindRegistry.VideoSeries.Code
-                    : EntityKindRegistry.Video.Code,
+                    ? EntityKind.VideoSeries.ToCode()
+                    : EntityKind.Video.ToCode(),
                 Title = index == 0 ? "Deep series" : $"Level {index}",
                 CreatedAt = now,
                 UpdatedAt = now
@@ -310,7 +310,7 @@ public sealed class AcquisitionHintFolderOwnerTests {
     [Fact]
     public async Task BookOwnersAndUnownedPathsAreLeftForTheirOwnPasses() {
         await using var db = CreateContext();
-        AddEntity(db, EntityKindRegistry.Book.Code, null, "/media/books/Novel.epub");
+        AddEntity(db, EntityKind.Book.ToCode(), null, "/media/books/Novel.epub");
         AddHint(db, "/media/books/Novel.epub", """{"openlibrary":"OL1"}""");
         AddHint(db, "/media/tv/Not Scanned Yet/S01", """{"tmdb":"1"}""");
         await db.SaveChangesAsync();

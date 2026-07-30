@@ -7,7 +7,7 @@ public static class AudioLibraryEndpoints {
     public static RouteGroupBuilder MapAudioLibraryEndpoints(this IEndpointRouteBuilder routes) =>
         routes.MapEntityKindRoutes(
             "/api/audio-libraries",
-            EntityKindRegistry.AudioLibrary.Code,
+            EntityKind.AudioLibrary.ToCode(),
             "Audio",
             "ListAudioLibraries",
             "GetAudioLibrary");

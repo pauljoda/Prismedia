@@ -52,7 +52,7 @@ public sealed class ThumbnailContributorQueryTests {
                 .Options);
         var leaf = new EntityRow {
             Id = Guid.NewGuid(),
-            KindCode = EntityKindRegistry.Image.Code,
+            KindCode = EntityKind.Image.ToCode(),
             Title = "Leaf"
         };
         var contributions = new ThumbnailContributions(

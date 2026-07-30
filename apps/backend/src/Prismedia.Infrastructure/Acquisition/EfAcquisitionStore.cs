@@ -145,8 +145,8 @@ public sealed partial class EfAcquisitionStore(PrismediaDbContext db, IAcquisiti
     /// dates are missing, so callers keep their request-time fallback.
     /// </summary>
     private async Task<int?> ResolveWorkYearAsync(Guid entityId, CancellationToken cancellationToken) {
-        var seriesCode = EntityKindRegistry.VideoSeries.Code;
-        var movieCode = EntityKindRegistry.Movie.Code;
+        var seriesCode = EntityKind.VideoSeries.ToCode();
+        var movieCode = EntityKind.Movie.ToCode();
         var currentId = (Guid?)entityId;
         var workId = entityId;
         var visited = new HashSet<Guid>();

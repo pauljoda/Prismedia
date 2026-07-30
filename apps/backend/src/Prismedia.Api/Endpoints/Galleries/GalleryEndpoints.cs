@@ -7,7 +7,7 @@ public static class GalleryEndpoints {
     public static RouteGroupBuilder MapGalleryEndpoints(this IEndpointRouteBuilder routes) =>
         routes.MapEntityKindRoutes(
             "/api/galleries",
-            EntityKindRegistry.Gallery.Code,
+            EntityKind.Gallery.ToCode(),
             "Galleries",
             "ListGalleries",
             "GetGallery");

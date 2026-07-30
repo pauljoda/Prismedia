@@ -150,8 +150,8 @@ public sealed class MovieMusicMergedImportTests : IDisposable {
         var payloadRoot = Directory.CreateDirectory(Path.Combine(_workRoot, "download-movie", "release")).FullName;
         await File.WriteAllTextAsync(Path.Combine(payloadRoot, payloadFile), "payload-bytes");
 
-        var movieId = AddEntity(db, EntityKindRegistry.Movie.Code, null, null, movieFolder);
-        AddEntity(db, EntityKindRegistry.Video.Code, movieId, 1, ownedFilePath);
+        var movieId = AddEntity(db, EntityKind.Movie.ToCode(), null, null, movieFolder);
+        AddEntity(db, EntityKind.Video.ToCode(), movieId, 1, ownedFilePath);
         var acquisitionId = await AddAcquisitionAsync(db, EntityKind.Movie, movieId, "Film", releaseTitle);
 
         var store = AcquisitionTestFactory.Store(db);
@@ -185,13 +185,13 @@ public sealed class MovieMusicMergedImportTests : IDisposable {
         var artistFolder = Directory.CreateDirectory(Path.Combine(libraryRoot, "The Artist [existing]")).FullName;
         var albumFolder = Directory.CreateDirectory(Path.Combine(artistFolder, "Album [existing]")).FullName;
 
-        var artistId = AddEntity(db, EntityKindRegistry.MusicArtist.Code, null, null, artistFolder);
-        var albumId = AddEntity(db, EntityKindRegistry.AudioLibrary.Code, artistId, null, albumFolder);
+        var artistId = AddEntity(db, EntityKind.MusicArtist.ToCode(), null, null, artistFolder);
+        var albumId = AddEntity(db, EntityKind.AudioLibrary.ToCode(), artistId, null, albumFolder);
         var position = 1;
         foreach (var track in ownedTracks) {
             var trackPath = Path.Combine(albumFolder, track);
             await File.WriteAllTextAsync(trackPath, "owned-bytes");
-            AddEntity(db, EntityKindRegistry.AudioTrack.Code, albumId, position++, trackPath);
+            AddEntity(db, EntityKind.AudioTrack.ToCode(), albumId, position++, trackPath);
         }
 
         var payloadRoot = Directory.CreateDirectory(Path.Combine(_workRoot, "download-music", "release")).FullName;

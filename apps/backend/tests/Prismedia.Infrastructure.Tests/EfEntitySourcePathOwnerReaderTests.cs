@@ -61,7 +61,7 @@ public sealed class EfEntitySourcePathOwnerReaderTests {
         var now = DateTimeOffset.UtcNow;
         db.Entities.Add(new EntityRow {
             Id = entityId,
-            KindCode = EntityKindRegistry.Video.Code,
+            KindCode = EntityKind.Video.ToCode(),
             Title = entityId.ToString("N"),
             CreatedAt = now,
             UpdatedAt = now,

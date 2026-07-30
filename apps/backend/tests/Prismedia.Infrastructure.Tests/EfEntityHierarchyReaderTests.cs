@@ -15,7 +15,7 @@ public sealed class EfEntityHierarchyReaderTests {
         for (var index = 0; index < ids.Length; index++) {
             db.Entities.Add(NewEntity(
                 ids[index],
-                index % 2 == 0 ? EntityKindRegistry.MusicArtist.Code : EntityKindRegistry.Book.Code,
+                index % 2 == 0 ? EntityKind.MusicArtist.ToCode() : EntityKind.Book.ToCode(),
                 index == 0 ? null : ids[index - 1]));
         }
         await db.SaveChangesAsync();
@@ -32,8 +32,8 @@ public sealed class EfEntityHierarchyReaderTests {
         var first = Guid.NewGuid();
         var second = Guid.NewGuid();
         db.Entities.AddRange(
-            NewEntity(first, EntityKindRegistry.VideoSeries.Code, second),
-            NewEntity(second, EntityKindRegistry.AudioLibrary.Code, first));
+            NewEntity(first, EntityKind.VideoSeries.ToCode(), second),
+            NewEntity(second, EntityKind.AudioLibrary.ToCode(), first));
         await db.SaveChangesAsync();
         var reader = new EfEntityHierarchyReader(db);
 

@@ -54,7 +54,7 @@ public sealed class TrickplayServiceTests : IDisposable {
         var itemId = Guid.Parse("44444444-4444-4444-4444-444444444444");
         db.Entities.Add(new EntityRow {
             Id = itemId,
-            KindCode = EntityKindRegistry.Video.Code,
+            KindCode = EntityKind.Video.ToCode(),
             Title = "Video",
             CreatedAt = DateTimeOffset.UtcNow,
             UpdatedAt = DateTimeOffset.UtcNow
@@ -104,7 +104,7 @@ public sealed class TrickplayServiceTests : IDisposable {
         var itemId = Guid.Parse("33333333-3333-3333-3333-333333333333");
         db.Entities.Add(new EntityRow {
             Id = itemId,
-            KindCode = EntityKindRegistry.Video.Code,
+            KindCode = EntityKind.Video.ToCode(),
             Title = "Video",
             CreatedAt = DateTimeOffset.UtcNow,
             UpdatedAt = DateTimeOffset.UtcNow

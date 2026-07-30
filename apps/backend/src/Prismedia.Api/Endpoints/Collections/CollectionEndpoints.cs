@@ -10,7 +10,7 @@ public static class CollectionEndpoints {
     public static RouteGroupBuilder MapCollectionEndpoints(this IEndpointRouteBuilder routes) {
         var group = routes.MapEntityKindRoutes(
             "/api/collections",
-            EntityKindRegistry.Collection.Code,
+            EntityKind.Collection.ToCode(),
             "Collections",
             "ListCollections",
             "GetCollection");

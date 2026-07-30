@@ -228,7 +228,7 @@ public sealed class EntityProcessingGraphPlanner(
         CancellationToken cancellationToken) {
         var targets = tree
             .Where(entity =>
-                string.Equals(entity.KindCode, EntityKindRegistry.Video.Code, StringComparison.OrdinalIgnoreCase)
+                string.Equals(entity.KindCode, EntityKind.Video.ToCode(), StringComparison.OrdinalIgnoreCase)
                 && !string.IsNullOrWhiteSpace(entity.SourcePath))
             .ToArray();
         if (targets.Length == 0) return;

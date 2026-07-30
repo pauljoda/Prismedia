@@ -14,7 +14,7 @@ namespace Prismedia.Infrastructure.Acquisition;
 public sealed class EfImportTargetIndex(PrismediaDbContext db) : IImportTargetIndex {
     /// <inheritdoc />
     public async Task<TvSeriesDiskLayout?> GetTvLayoutAsync(Guid entityId, CancellationToken cancellationToken) {
-        var seriesId = await ResolveAncestorOfKindAsync(entityId, EntityKindRegistry.VideoSeries.Code, cancellationToken);
+        var seriesId = await ResolveAncestorOfKindAsync(entityId, EntityKind.VideoSeries.ToCode(), cancellationToken);
         if (seriesId is null) {
             return null;
         }
@@ -24,7 +24,7 @@ public sealed class EfImportTargetIndex(PrismediaDbContext db) : IImportTargetIn
             return null;
         }
 
-        var seasonCode = EntityKindRegistry.VideoSeason.Code;
+        var seasonCode = EntityKind.VideoSeason.ToCode();
         var seasonRows = await (
             from season in db.Entities.AsNoTracking()
             where season.ParentEntityId == seriesId && season.KindCode == seasonCode
@@ -33,7 +33,7 @@ public sealed class EfImportTargetIndex(PrismediaDbContext db) : IImportTargetIn
             select new { season.Id, season.SortOrder, file.Path })
             .ToArrayAsync(cancellationToken);
 
-        var episodeCode = EntityKindRegistry.Video.Code;
+        var episodeCode = EntityKind.Video.ToCode();
         var seasons = new Dictionary<int, TvSeasonDiskLayout>();
         foreach (var season in seasonRows) {
             if (season.SortOrder is not { } seasonNumber || seasons.ContainsKey(seasonNumber)) {
@@ -64,12 +64,12 @@ public sealed class EfImportTargetIndex(PrismediaDbContext db) : IImportTargetIn
     /// <inheritdoc />
     public async Task<IReadOnlyList<TvEpisodeTitle>> GetSeasonEpisodeTitlesAsync(
         Guid entityId, int seasonNumber, CancellationToken cancellationToken) {
-        var seriesId = await ResolveAncestorOfKindAsync(entityId, EntityKindRegistry.VideoSeries.Code, cancellationToken);
+        var seriesId = await ResolveAncestorOfKindAsync(entityId, EntityKind.VideoSeries.ToCode(), cancellationToken);
         if (seriesId is null) {
             return [];
         }
 
-        var seasonCode = EntityKindRegistry.VideoSeason.Code;
+        var seasonCode = EntityKind.VideoSeason.ToCode();
         var seasonId = await db.Entities.AsNoTracking()
             .Where(season => season.ParentEntityId == seriesId && season.KindCode == seasonCode && season.SortOrder == seasonNumber)
             .Select(season => (Guid?)season.Id)
@@ -78,7 +78,7 @@ public sealed class EfImportTargetIndex(PrismediaDbContext db) : IImportTargetIn
             return [];
         }
 
-        var episodeCode = EntityKindRegistry.Video.Code;
+        var episodeCode = EntityKind.Video.ToCode();
         return await db.Entities.AsNoTracking()
             .Where(episode => episode.ParentEntityId == seasonId && episode.KindCode == episodeCode && episode.SortOrder != null)
             .OrderBy(episode => episode.SortOrder)
@@ -88,13 +88,13 @@ public sealed class EfImportTargetIndex(PrismediaDbContext db) : IImportTargetIn
 
     /// <inheritdoc />
     public async Task<MovieDiskTarget?> GetMovieTargetAsync(Guid entityId, CancellationToken cancellationToken) {
-        var movieId = await ResolveAncestorOfKindAsync(entityId, EntityKindRegistry.Movie.Code, cancellationToken);
+        var movieId = await ResolveAncestorOfKindAsync(entityId, EntityKind.Movie.ToCode(), cancellationToken);
         if (movieId is null || await SourcePathAsync(movieId.Value, cancellationToken) is not { } folder) {
             return null;
         }
 
         // A movie streams through its child video entity — that child owns the actual file.
-        var episodeCode = EntityKindRegistry.Video.Code;
+        var episodeCode = EntityKind.Video.ToCode();
         var ownedFile = await (
             from child in db.Entities.AsNoTracking()
             where child.ParentEntityId == movieId && child.KindCode == episodeCode
@@ -108,14 +108,14 @@ public sealed class EfImportTargetIndex(PrismediaDbContext db) : IImportTargetIn
 
     /// <inheritdoc />
     public async Task<AlbumDiskTarget?> GetAlbumTargetAsync(Guid entityId, CancellationToken cancellationToken) {
-        var albumId = await ResolveAncestorOfKindAsync(entityId, EntityKindRegistry.AudioLibrary.Code, cancellationToken);
+        var albumId = await ResolveAncestorOfKindAsync(entityId, EntityKind.AudioLibrary.ToCode(), cancellationToken);
         if (albumId is null) {
             return null;
         }
 
         var albumFolder = await SourcePathAsync(albumId.Value, cancellationToken);
 
-        var artistCode = EntityKindRegistry.MusicArtist.Code;
+        var artistCode = EntityKind.MusicArtist.ToCode();
         var artistFolder = await (
             from album in db.Entities.AsNoTracking()
             where album.Id == albumId
@@ -132,7 +132,7 @@ public sealed class EfImportTargetIndex(PrismediaDbContext db) : IImportTargetIn
 
         var existing = new HashSet<string>(FileSystemPathComparison.Comparer);
         if (albumFolder is not null) {
-            var trackCode = EntityKindRegistry.AudioTrack.Code;
+            var trackCode = EntityKind.AudioTrack.ToCode();
             var trackPaths = await (
                 from track in db.Entities.AsNoTracking()
                 where track.ParentEntityId == albumId && track.KindCode == trackCode

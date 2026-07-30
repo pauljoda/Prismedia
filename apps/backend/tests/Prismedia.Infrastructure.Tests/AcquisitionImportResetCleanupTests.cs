@@ -201,7 +201,7 @@ public sealed class AcquisitionImportResetCleanupTests {
     private static void AddEntity(PrismediaDbContext db, Guid id, bool isWanted) =>
         db.Entities.Add(new EntityRow {
             Id = id,
-            KindCode = EntityKindRegistry.Book.Code,
+            KindCode = EntityKind.Book.ToCode(),
             Title = "Title",
             IsWanted = isWanted,
             CreatedAt = DateTimeOffset.UtcNow,

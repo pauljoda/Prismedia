@@ -21,10 +21,10 @@ public sealed partial class EntityMetadataApplyService {
     /// </summary>
     private static bool IsKindCompatible(string entityKind, string expectedKind) =>
         entityKind.Equals(expectedKind, StringComparison.OrdinalIgnoreCase) ||
-        (entityKind.Equals(EntityKindRegistry.Movie.Code, StringComparison.OrdinalIgnoreCase) &&
-            (expectedKind.Equals(EntityKindRegistry.Video.Code, StringComparison.OrdinalIgnoreCase) ||
+        (entityKind.Equals(EntityKind.Movie.ToCode(), StringComparison.OrdinalIgnoreCase) &&
+            (expectedKind.Equals(EntityKind.Video.ToCode(), StringComparison.OrdinalIgnoreCase) ||
              expectedKind.Equals(LegacyMovieExpectedKind, StringComparison.OrdinalIgnoreCase))) ||
-        (entityKind.Equals(EntityKindRegistry.Video.Code, StringComparison.OrdinalIgnoreCase) &&
+        (entityKind.Equals(EntityKind.Video.ToCode(), StringComparison.OrdinalIgnoreCase) &&
             expectedKind.Equals(ProposalKind.VideoEpisode.ToCode(), StringComparison.OrdinalIgnoreCase));
 
     /// <summary>

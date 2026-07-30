@@ -14,7 +14,7 @@ public sealed class RefreshEntityJobHandlerTests {
         const string sourcePath = "/media/videos/movie.mkv";
         var signature = new string('a', 64);
         var persistence = new RecordingPersistence([
-            new EntityRefreshTarget(videoId, EntityKindRegistry.Video.Code, "Movie", sourcePath)
+            new EntityRefreshTarget(videoId, EntityKind.Video.ToCode(), "Movie", sourcePath)
         ]);
         var discovery = new StubSubtitleSidecarDiscovery([
             new VideoSubtitleSidecarDiscovery(sourcePath, [], signature, IsComplete: true)
@@ -40,7 +40,7 @@ public sealed class RefreshEntityJobHandlerTests {
         var videoId = Guid.NewGuid();
         const string sourcePath = "/media/videos/movie.mkv";
         var persistence = new RecordingPersistence([
-            new EntityRefreshTarget(videoId, EntityKindRegistry.Video.Code, "Movie", sourcePath)
+            new EntityRefreshTarget(videoId, EntityKind.Video.ToCode(), "Movie", sourcePath)
         ]);
         var discovery = new StubSubtitleSidecarDiscovery([
             new VideoSubtitleSidecarDiscovery(sourcePath, [], new string('b', 64), IsComplete: false)
@@ -64,7 +64,7 @@ public sealed class RefreshEntityJobHandlerTests {
         var acquisitionId = Guid.NewGuid();
         var ancestorId = Guid.NewGuid();
         var persistence = new RecordingPersistence([
-            new EntityRefreshTarget(videoId, EntityKindRegistry.Video.Code, "Movie")
+            new EntityRefreshTarget(videoId, EntityKind.Video.ToCode(), "Movie")
         ]) {
             AutoGenerateMetadata = true,
             NeedsProbe = true,
@@ -130,7 +130,7 @@ public sealed class RefreshEntityJobHandlerTests {
             Progress: 0,
             Message: null,
             PayloadJson: "{}",
-            TargetEntityKind: EntityKindRegistry.Video.Code,
+            TargetEntityKind: EntityKind.Video.ToCode(),
             TargetEntityId: entityId.ToString(),
             TargetLabel: "Movie",
             CreatedAt: now,

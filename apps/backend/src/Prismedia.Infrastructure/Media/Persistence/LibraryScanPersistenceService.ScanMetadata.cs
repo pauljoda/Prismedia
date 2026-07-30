@@ -170,7 +170,7 @@ public sealed partial class LibraryScanPersistenceService {
         var tagsCode = RelationshipKind.Tags.ToCode();
         var order = await NextRelationshipSortOrderAsync(entityId, tagsCode, cancellationToken);
         foreach (var name in Unique(tags)) {
-            var tag = await FindOrCreateTaxonomyEntityAsync(EntityKindRegistry.Tag.Code, name, now, markNsfw, cancellationToken);
+            var tag = await FindOrCreateTaxonomyEntityAsync(EntityKind.Tag.ToCode(), name, now, markNsfw, cancellationToken);
             if (await RelationshipExistsAsync(entityId, tagsCode, tag.Id, cancellationToken)) {
                 continue;
             }
@@ -196,7 +196,7 @@ public sealed partial class LibraryScanPersistenceService {
             return;
         }
 
-        var studio = await FindOrCreateTaxonomyEntityAsync(EntityKindRegistry.Studio.Code, studioName.Trim(), now, markNsfw, cancellationToken);
+        var studio = await FindOrCreateTaxonomyEntityAsync(EntityKind.Studio.ToCode(), studioName.Trim(), now, markNsfw, cancellationToken);
         AddRelationship(entityId, studioCode, "Studio", studio, 0, null, now);
     }
 
@@ -210,7 +210,7 @@ public sealed partial class LibraryScanPersistenceService {
         var castCode = RelationshipKind.Cast.ToCode();
         var order = await NextRelationshipSortOrderAsync(entityId, castCode, cancellationToken);
         foreach (var name in Unique(names)) {
-            var person = await FindOrCreateTaxonomyEntityAsync(EntityKindRegistry.Person.Code, name, now, markNsfw, cancellationToken);
+            var person = await FindOrCreateTaxonomyEntityAsync(EntityKind.Person.ToCode(), name, now, markNsfw, cancellationToken);
             if (await RelationshipExistsAsync(entityId, castCode, person.Id, cancellationToken)) {
                 continue;
             }

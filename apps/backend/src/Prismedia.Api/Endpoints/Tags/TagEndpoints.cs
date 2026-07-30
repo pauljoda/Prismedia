@@ -7,7 +7,7 @@ public static class TagEndpoints {
     public static RouteGroupBuilder MapTagEndpoints(this IEndpointRouteBuilder routes) =>
         routes.MapEntityKindRoutes(
             "/api/tags",
-            EntityKindRegistry.Tag.Code,
+            EntityKind.Tag.ToCode(),
             "Taxonomy",
             "ListTags",
             "GetTag",

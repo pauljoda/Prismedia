@@ -37,7 +37,7 @@ public sealed partial class LibraryScanPersistenceService {
                 pathLengths.Contains(file.Path.Length))
             .Join(
                 _db.Entities.AsNoTracking()
-                    .Where(entity => entity.KindCode == EntityKindRegistry.Video.Code),
+                    .Where(entity => entity.KindCode == EntityKind.Video.ToCode()),
                 file => file.EntityId,
                 entity => entity.Id,
                 (file, _) => new VideoSourceOwner(file.EntityId, file.Path))
@@ -194,7 +194,7 @@ public sealed partial class LibraryScanPersistenceService {
             }
 
             var id = Guid.NewGuid();
-            _db.Entities.Add(new EntityRow { Id = id, KindCode = EntityKindRegistry.Video.Code, Title = item.Title, IsNsfw = item.IsNsfw, CreatedAt = now, UpdatedAt = now });
+            _db.Entities.Add(new EntityRow { Id = id, KindCode = EntityKind.Video.ToCode(), Title = item.Title, IsNsfw = item.IsNsfw, CreatedAt = now, UpdatedAt = now });
             _db.VideoDetails.Add(new VideoDetailRow { EntityId = id, LibraryRootId = item.LibraryRootId });
             _db.EntityFiles.Add(new EntityFileRow {
                 Id = Guid.NewGuid(),
@@ -304,14 +304,14 @@ public sealed partial class LibraryScanPersistenceService {
             return cachedMovieId;
         }
 
-        var existing = await FindEntityBySourcePath(EntityKindRegistry.Movie.Code, movie.FolderPath, cancellationToken)
-            ?? await FindEntityBySourceValueAsync(EntityKindRegistry.Movie.Code, "folder", movie.FolderPath, cancellationToken);
+        var existing = await FindEntityBySourcePath(EntityKind.Movie.ToCode(), movie.FolderPath, cancellationToken)
+            ?? await FindEntityBySourceValueAsync(EntityKind.Movie.ToCode(), "folder", movie.FolderPath, cancellationToken);
         var movieId = existing?.Id ?? Guid.NewGuid();
 
         if (existing is null) {
             _db.Entities.Add(new EntityRow {
                 Id = movieId,
-                KindCode = EntityKindRegistry.Movie.Code,
+                KindCode = EntityKind.Movie.ToCode(),
                 Title = movie.Title,
                 IsNsfw = isNsfw,
                 CreatedAt = now,
@@ -369,14 +369,14 @@ public sealed partial class LibraryScanPersistenceService {
             return cachedSeriesId;
         }
 
-        var existing = await FindEntityBySourcePath(EntityKindRegistry.VideoSeries.Code, series.FolderPath, cancellationToken)
-            ?? await FindEntityBySourceValueAsync(EntityKindRegistry.VideoSeries.Code, "folder", series.FolderPath, cancellationToken);
+        var existing = await FindEntityBySourcePath(EntityKind.VideoSeries.ToCode(), series.FolderPath, cancellationToken)
+            ?? await FindEntityBySourceValueAsync(EntityKind.VideoSeries.ToCode(), "folder", series.FolderPath, cancellationToken);
         var seriesId = existing?.Id ?? Guid.NewGuid();
 
         if (existing is null) {
             _db.Entities.Add(new EntityRow {
                 Id = seriesId,
-                KindCode = EntityKindRegistry.VideoSeries.Code,
+                KindCode = EntityKind.VideoSeries.ToCode(),
                 Title = series.Title,
                 IsNsfw = isNsfw,
                 CreatedAt = now,
@@ -412,7 +412,7 @@ public sealed partial class LibraryScanPersistenceService {
 
         var localSeasonId = _db.Entities.Local
             .Where(entity => entity.ParentEntityId == seriesId
-                && entity.KindCode == EntityKindRegistry.VideoSeason.Code
+                && entity.KindCode == EntityKind.VideoSeason.ToCode()
                 && entity.SortOrder == season.SeasonNumber)
             .Select(entity => entity.Id)
             .FirstOrDefault();
@@ -420,14 +420,14 @@ public sealed partial class LibraryScanPersistenceService {
             ? _db.Entities.Local.FirstOrDefault(entity => entity.Id == localSeasonId)
             : await _db.Entities.FirstOrDefaultAsync(entity =>
                 entity.ParentEntityId == seriesId
-                && entity.KindCode == EntityKindRegistry.VideoSeason.Code
+                && entity.KindCode == EntityKind.VideoSeason.ToCode()
                 && entity.SortOrder == season.SeasonNumber, cancellationToken);
         var seasonId = existingSeasonRow?.Id ?? Guid.NewGuid();
 
         if (existingSeasonRow is null) {
             _db.Entities.Add(new EntityRow {
                 Id = seasonId,
-                KindCode = EntityKindRegistry.VideoSeason.Code,
+                KindCode = EntityKind.VideoSeason.ToCode(),
                 Title = season.Title,
                 ParentEntityId = seriesId,
                 SortOrder = season.SeasonNumber,

@@ -693,7 +693,7 @@ public sealed class PluginRuntimeServiceTests : IDisposable {
         });
         db.Entities.Add(new EntityRow {
             Id = movieId,
-            KindCode = EntityKindRegistry.Movie.Code,
+            KindCode = EntityKind.Movie.ToCode(),
             Title = "Friendship",
             CreatedAt = now,
             UpdatedAt = now

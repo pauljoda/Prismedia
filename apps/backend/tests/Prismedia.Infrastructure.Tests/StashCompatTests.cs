@@ -303,7 +303,7 @@ public sealed class StashCompatTests {
         var manifest = StashScraperManifestFactory.TryCreate(TagYaml, "/tmp/Tag Site.yml");
 
         Assert.NotNull(manifest);
-        var tag = manifest!.Supports.Single(support => support.EntityKind == EntityKindRegistry.Tag.Code);
+        var tag = manifest!.Supports.Single(support => support.EntityKind == EntityKind.Tag.ToCode());
         Assert.Contains(IdentifyAction.LookupUrl.ToCode(), tag.Actions);
         Assert.Contains(IdentifyAction.Search.ToCode(), tag.Actions);
     }
@@ -371,7 +371,7 @@ public sealed class StashCompatTests {
         var manifest = StashScraperManifestFactory.TryCreate(StudioYaml, "/tmp/Studio Site.yml");
 
         Assert.NotNull(manifest);
-        var studio = manifest!.Supports.Single(support => support.EntityKind == EntityKindRegistry.Studio.Code);
+        var studio = manifest!.Supports.Single(support => support.EntityKind == EntityKind.Studio.ToCode());
         Assert.Contains(IdentifyAction.LookupUrl.ToCode(), studio.Actions);
         Assert.Contains(IdentifyAction.Search.ToCode(), studio.Actions);
     }
@@ -612,7 +612,7 @@ public sealed class StashCompatTests {
             var manifest = StashScraperManifestFactory.TryCreate(GalleryYaml, yamlPath)!;
             // The scraper advertises gallery support, so the runner routes a gallery entity to it
             // instead of the old hard Video/Movie gate.
-            Assert.Contains(manifest.Supports, support => support.EntityKind == EntityKindRegistry.Gallery.Code);
+            Assert.Contains(manifest.Supports, support => support.EntityKind == EntityKind.Gallery.ToCode());
             var descriptor = new PluginDescriptor(manifest, yamlPath, Path.GetDirectoryName(yamlPath)!, yamlPath);
             var runner = new StashCompatRunner(new HttpClient(new FixedHtmlHandler(GalleryHtml)));
             var request = new IdentifyPluginRequest(
@@ -660,7 +660,7 @@ public sealed class StashCompatTests {
         await File.WriteAllTextAsync(yamlPath, PerformerYaml);
         try {
             var manifest = StashScraperManifestFactory.TryCreate(PerformerYaml, yamlPath)!;
-            Assert.Contains(manifest.Supports, support => support.EntityKind == EntityKindRegistry.Person.Code);
+            Assert.Contains(manifest.Supports, support => support.EntityKind == EntityKind.Person.ToCode());
             var descriptor = new PluginDescriptor(manifest, yamlPath, Path.GetDirectoryName(yamlPath)!, yamlPath);
             var runner = new StashCompatRunner(new HttpClient(new FixedHtmlHandler(PerformerHtml)));
             var request = new IdentifyPluginRequest(

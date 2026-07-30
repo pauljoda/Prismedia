@@ -148,7 +148,7 @@ public sealed class EfEntityRepository : IEntityWriteRepository {
         var pageCounts = await _db.Entities.AsNoTracking()
             .Where(row => row.ParentEntityId != null &&
                           chapterIds.Contains(row.ParentEntityId.Value) &&
-                          row.KindCode == EntityKindRegistry.BookPage.Code)
+                          row.KindCode == EntityKind.BookPage.ToCode())
             .GroupBy(row => row.ParentEntityId!.Value)
             .Select(group => new { ChapterId = group.Key, Count = group.Count() })
             .ToDictionaryAsync(group => group.ChapterId, group => group.Count, cancellationToken);
@@ -182,7 +182,7 @@ public sealed class EfEntityRepository : IEntityWriteRepository {
         Guid videoId,
         CancellationToken cancellationToken) {
         var episode = await _db.Entities.AsNoTracking()
-            .Where(row => row.Id == videoId && row.KindCode == EntityKindRegistry.Video.Code)
+            .Where(row => row.Id == videoId && row.KindCode == EntityKind.Video.ToCode())
             .Select(row => new { row.Id, row.ParentEntityId })
             .SingleOrDefaultAsync(cancellationToken);
         if (episode?.ParentEntityId is not { } parentId) {
@@ -198,7 +198,7 @@ public sealed class EfEntityRepository : IEntityWriteRepository {
         }
 
         var scopes = new List<VideoProgressScopePosition>(capacity: 2);
-        if (parent.KindCode == EntityKindRegistry.VideoSeason.Code) {
+        if (parent.KindCode == EntityKind.VideoSeason.ToCode()) {
             var seasonEpisodeIds = await LoadOrderedVideoIdsAsync(parent.Id, cancellationToken);
             AddVideoProgressScope(scopes, parent.Id, videoId, seasonEpisodeIds);
 
@@ -206,7 +206,7 @@ public sealed class EfEntityRepository : IEntityWriteRepository {
                 var seriesEpisodeIds = await LoadOrderedSeriesEpisodeIdsAsync(seriesId, cancellationToken);
                 AddVideoProgressScope(scopes, seriesId, videoId, seriesEpisodeIds);
             }
-        } else if (parent.KindCode == EntityKindRegistry.VideoSeries.Code) {
+        } else if (parent.KindCode == EntityKind.VideoSeries.ToCode()) {
             var seriesEpisodeIds = await LoadOrderedVideoIdsAsync(parent.Id, cancellationToken);
             AddVideoProgressScope(scopes, parent.Id, videoId, seriesEpisodeIds);
         }
@@ -307,11 +307,11 @@ public sealed class EfEntityRepository : IEntityWriteRepository {
             return null;
         }
 
-        if (row.KindCode == EntityKindRegistry.BookChapter.Code) {
+        if (row.KindCode == EntityKind.BookChapter.ToCode()) {
             return row.Id;
         }
 
-        if (row.KindCode == EntityKindRegistry.BookPage.Code && row.ParentEntityId is { } parentId) {
+        if (row.KindCode == EntityKind.BookPage.ToCode() && row.ParentEntityId is { } parentId) {
             return parentId;
         }
 
@@ -328,7 +328,7 @@ public sealed class EfEntityRepository : IEntityWriteRepository {
             .ThenBy(row => row.Id)
             .ToArrayAsync(cancellationToken);
         var volumeIds = directChildren
-            .Where(row => row.KindCode == EntityKindRegistry.BookVolume.Code)
+            .Where(row => row.KindCode == EntityKind.BookVolume.ToCode())
             .Select(row => row.Id)
             .ToArray();
         var volumeChapters = volumeIds.Length == 0
@@ -336,7 +336,7 @@ public sealed class EfEntityRepository : IEntityWriteRepository {
             : await _db.Entities.AsNoTracking()
                 .Where(row => row.ParentEntityId != null &&
                               volumeIds.Contains(row.ParentEntityId.Value) &&
-                              row.KindCode == EntityKindRegistry.BookChapter.Code)
+                              row.KindCode == EntityKind.BookChapter.ToCode())
                 .OrderBy(row => row.ParentEntityId)
                 .ThenBy(row => row.SortOrder)
                 .ThenBy(row => row.Title)
@@ -348,12 +348,12 @@ public sealed class EfEntityRepository : IEntityWriteRepository {
         var chapters = new List<EntityRow>();
 
         foreach (var child in directChildren) {
-            if (child.KindCode == EntityKindRegistry.BookChapter.Code) {
+            if (child.KindCode == EntityKind.BookChapter.ToCode()) {
                 chapters.Add(child);
                 continue;
             }
 
-            if (child.KindCode == EntityKindRegistry.BookVolume.Code &&
+            if (child.KindCode == EntityKind.BookVolume.ToCode() &&
                 chaptersByVolume.TryGetValue(child.Id, out var childChapters)) {
                 chapters.AddRange(childChapters);
             }
@@ -366,7 +366,7 @@ public sealed class EfEntityRepository : IEntityWriteRepository {
         Guid parentId,
         CancellationToken cancellationToken) =>
         await _db.Entities.AsNoTracking()
-            .Where(row => row.ParentEntityId == parentId && row.KindCode == EntityKindRegistry.Video.Code)
+            .Where(row => row.ParentEntityId == parentId && row.KindCode == EntityKind.Video.ToCode())
             .OrderBy(row => row.SortOrder)
             .ThenBy(row => row.CreatedAt)
             .ThenBy(row => row.Id)
@@ -377,7 +377,7 @@ public sealed class EfEntityRepository : IEntityWriteRepository {
         Guid seriesId,
         CancellationToken cancellationToken) {
         var seasonIds = await _db.Entities.AsNoTracking()
-            .Where(row => row.ParentEntityId == seriesId && row.KindCode == EntityKindRegistry.VideoSeason.Code)
+            .Where(row => row.ParentEntityId == seriesId && row.KindCode == EntityKind.VideoSeason.ToCode())
             .OrderBy(row => row.SortOrder)
             .ThenBy(row => row.CreatedAt)
             .ThenBy(row => row.Id)
@@ -390,7 +390,7 @@ public sealed class EfEntityRepository : IEntityWriteRepository {
         var episodes = await _db.Entities.AsNoTracking()
             .Where(row => row.ParentEntityId != null &&
                           seasonIds.Contains(row.ParentEntityId.Value) &&
-                          row.KindCode == EntityKindRegistry.Video.Code)
+                          row.KindCode == EntityKind.Video.ToCode())
             .OrderBy(row => row.SortOrder)
             .ThenBy(row => row.CreatedAt)
             .ThenBy(row => row.Id)

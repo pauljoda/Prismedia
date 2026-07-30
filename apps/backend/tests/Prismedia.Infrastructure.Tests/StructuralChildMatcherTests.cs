@@ -8,7 +8,7 @@ namespace Prismedia.Infrastructure.Tests;
 public sealed class StructuralChildMatcherTests {
     [Fact]
     public void NormalEpisodeMatchStillUsesPositionWhenCountsAgree() {
-        var local = Local(EntityKindRegistry.Video.Code, "Different Local Title", 1);
+        var local = Local(EntityKind.Video.ToCode(), "Different Local Title", 1);
         var provider = Proposal(ProposalKind.VideoEpisode, "Magic Xylophone", ("episodeNumber", 1));
 
         var match = StructuralChildMatcher.FindProviderChild(local, [provider], new HashSet<int>(), cautious: false);
@@ -19,10 +19,10 @@ public sealed class StructuralChildMatcherTests {
     [Fact]
     public void CountMismatchDoesNotBindBlueyTheSignToProviderSurpriseByEpisodeNumber() {
         var localChildren = Enumerable.Range(1, 48)
-            .Select(episode => Local(EntityKindRegistry.Video.Code, $"Episode {episode}", episode))
+            .Select(episode => Local(EntityKind.Video.ToCode(), $"Episode {episode}", episode))
             .Concat([
-                Local(EntityKindRegistry.Video.Code, "The Sign", 49),
-                Local(EntityKindRegistry.Video.Code, "Surprise!", 50)
+                Local(EntityKind.Video.ToCode(), "The Sign", 49),
+                Local(EntityKind.Video.ToCode(), "Surprise!", 50)
             ])
             .ToArray();
         var providerChildren = Enumerable.Range(1, 48)
@@ -52,7 +52,7 @@ public sealed class StructuralChildMatcherTests {
 
     [Fact]
     public void CountMismatchStillBindsGenericSeasonSeriesTitleByNumber() {
-        var localSeason = Local(EntityKindRegistry.VideoSeason.Code, "Season 3", 3);
+        var localSeason = Local(EntityKind.VideoSeason.ToCode(), "Season 3", 3);
         var providerSeason = Proposal(ProposalKind.VideoSeason, "Series 3", ("seasonNumber", 3));
 
         var match = StructuralChildMatcher.FindProviderChild(
@@ -66,7 +66,7 @@ public sealed class StructuralChildMatcherTests {
 
     [Fact]
     public void CountMismatchTreatsAmpersandAndAndAsEquivalentTitleTokens() {
-        var localEpisode = Local(EntityKindRegistry.Video.Code, "Show and Tell", 42);
+        var localEpisode = Local(EntityKind.Video.ToCode(), "Show and Tell", 42);
         var providerEpisode = Proposal(ProposalKind.VideoEpisode, "Show & Tell", ("episodeNumber", 42));
 
         var match = StructuralChildMatcher.FindProviderChild(
@@ -80,7 +80,7 @@ public sealed class StructuralChildMatcherTests {
 
     [Fact]
     public void CountMismatchAllowsTinySpellingDifferenceWhenEpisodeNumberMatches() {
-        var localEpisode = Local(EntityKindRegistry.Video.Code, "Safari, So Good!", 10);
+        var localEpisode = Local(EntityKind.Video.ToCode(), "Safari, So Good!", 10);
         var providerEpisode = Proposal(ProposalKind.VideoEpisode, "Safari, So Goodie", ("episodeNumber", 10));
 
         var match = StructuralChildMatcher.FindProviderChild(
@@ -94,7 +94,7 @@ public sealed class StructuralChildMatcherTests {
 
     [Fact]
     public void CountMismatchDoesNotBindAlbumTrackWhenNumberMatchesButTitleConflicts() {
-        var localTrack = Local(EntityKindRegistry.AudioTrack.Code, "Local Hidden Track", 7);
+        var localTrack = Local(EntityKind.AudioTrack.ToCode(), "Local Hidden Track", 7);
         var providerTrack = Proposal(ProposalKind.AudioTrack, "Provider Bonus Track", ("trackNumber", 7));
 
         var match = StructuralChildMatcher.FindProviderChild(
@@ -108,7 +108,7 @@ public sealed class StructuralChildMatcherTests {
 
     [Fact]
     public void CountMismatchStillBindsNumberMatchWhenTitlesAreCompatibleVariants() {
-        var localTrack = Local(EntityKindRegistry.AudioTrack.Code, "Local Episode 1", 1);
+        var localTrack = Local(EntityKind.AudioTrack.ToCode(), "Local Episode 1", 1);
         var providerTrack = Proposal(ProposalKind.AudioTrack, "Episode 1", ("trackNumber", 1));
 
         var match = StructuralChildMatcher.FindProviderChild(
@@ -122,7 +122,7 @@ public sealed class StructuralChildMatcherTests {
 
     [Fact]
     public void CountMismatchAllowsNumberMatchWhenLocalTitleIsOnlyGenericStructure() {
-        var localEpisode = Local(EntityKindRegistry.Video.Code, "Episode 1", 1);
+        var localEpisode = Local(EntityKind.Video.ToCode(), "Episode 1", 1);
         var providerEpisode = Proposal(ProposalKind.VideoEpisode, "Magic Xylophone", ("episodeNumber", 1));
 
         var match = StructuralChildMatcher.FindProviderChild(
@@ -136,7 +136,7 @@ public sealed class StructuralChildMatcherTests {
 
     [Fact]
     public void CountMismatchCanBindAlbumTrackByTitleWhenProviderNumberDiffers() {
-        var localTrack = Local(EntityKindRegistry.AudioTrack.Code, "Closer", 12);
+        var localTrack = Local(EntityKind.AudioTrack.ToCode(), "Closer", 12);
         var providerTrack = Proposal(ProposalKind.AudioTrack, "Closer", ("trackNumber", 11));
 
         var match = StructuralChildMatcher.FindProviderChild(
@@ -150,7 +150,7 @@ public sealed class StructuralChildMatcherTests {
 
     [Fact]
     public void FilenameStyleEpisodeTitleCanOverrideAMisleadingEpisodeNumber() {
-        var localEpisode = Local(EntityKindRegistry.Video.Code, "Show.Name.S03E49.The_Sign.1080p", 49);
+        var localEpisode = Local(EntityKind.Video.ToCode(), "Show.Name.S03E49.The_Sign.1080p", 49);
         var providerEpisode = Proposal(ProposalKind.VideoEpisode, "The Sign", ("episodeNumber", 50));
 
         var match = StructuralChildMatcher.FindProviderChild(
@@ -164,7 +164,7 @@ public sealed class StructuralChildMatcherTests {
 
     [Fact]
     public void FilenameStyleTrackTitleMatchesProviderDiacritics() {
-        var localTrack = Local(EntityKindRegistry.AudioTrack.Code, "01-beyonce-deja_vu", 1);
+        var localTrack = Local(EntityKind.AudioTrack.ToCode(), "01-beyonce-deja_vu", 1);
         var providerTrack = Proposal(ProposalKind.AudioTrack, "Déjà Vu", ("trackNumber", 8));
 
         var match = StructuralChildMatcher.FindProviderChild(
@@ -263,7 +263,7 @@ public sealed class StructuralChildMatcherTests {
             }
         };
         var localsByDisc = localTitlesByDisc
-            .Select(disc => disc.Select((title, track) => Local(EntityKindRegistry.AudioTrack.Code, title, track)).ToArray())
+            .Select(disc => disc.Select((title, track) => Local(EntityKind.AudioTrack.ToCode(), title, track)).ToArray())
             .ToArray();
         var providers = providerTitlesByDisc
             .SelectMany(disc => disc)

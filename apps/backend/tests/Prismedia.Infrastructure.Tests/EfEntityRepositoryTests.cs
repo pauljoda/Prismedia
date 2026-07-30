@@ -37,7 +37,7 @@ public sealed class EfEntityRepositoryTests {
                 RelationshipCode = "related",
                 Label = "Ada Person",
                 TargetEntityId = personId,
-                TargetKindCode = EntityKindRegistry.Person.Code,
+                TargetKindCode = EntityKind.Person.ToCode(),
                 CreatedAt = DateTimeOffset.UtcNow
             },
             new EntityRelationshipLinkRow {
@@ -45,7 +45,7 @@ public sealed class EfEntityRepositoryTests {
                 RelationshipCode = "credits",
                 Label = "Detective",
                 TargetEntityId = personId,
-                TargetKindCode = EntityKindRegistry.Person.Code,
+                TargetKindCode = EntityKind.Person.ToCode(),
                 SortOrder = 1,
                 MetadataJson = """{"role":"actor"}""",
                 CreatedAt = DateTimeOffset.UtcNow
@@ -56,7 +56,7 @@ public sealed class EfEntityRepositoryTests {
                 RelationshipCode = "related",
                 Label = "Noir",
                 TargetEntityId = tagId,
-                TargetKindCode = EntityKindRegistry.Tag.Code,
+                TargetKindCode = EntityKind.Tag.ToCode(),
                 CreatedAt = DateTimeOffset.UtcNow
             });
         await db.SaveChangesAsync();
@@ -371,7 +371,7 @@ public sealed class EfEntityRepositoryTests {
         Assert.Equal(new ExternalIdentity("tmdb", "603"), loaded.ProviderIdentity.Identity);
         Assert.Equal("https://cinema-metadata.example/movie/603", loaded.ProviderIdentity.Url);
         var urlCall = Assert.Single(identityUrls.Calls);
-        Assert.Equal(EntityKindRegistry.Video.Code, urlCall.EntityKindCode);
+        Assert.Equal(EntityKind.Video.ToCode(), urlCall.EntityKindCode);
         Assert.Equal(
             new PluginIdentityRoute("cinema-metadata", new ExternalIdentity("tmdb", "603")),
             urlCall.Route);
@@ -445,7 +445,7 @@ public sealed class EfEntityRepositoryTests {
         Assert.Equal(identity, loaded.ProviderIdentity?.Identity);
         Assert.Equal("https://www.themoviedb.org/movie/603", loaded.ProviderIdentity?.Url);
         var call = Assert.Single(identityUrls.Calls);
-        Assert.Equal(EntityKindRegistry.Video.Code, call.EntityKindCode);
+        Assert.Equal(EntityKind.Video.ToCode(), call.EntityKindCode);
         Assert.Equal(new PluginIdentityRoute("tmdb", identity), call.Route);
         Assert.Single(EntityCardProjector.ToCard(loaded, hasSourceBackedSubtree: false).Capabilities.OfType<ProviderIdentityCapability>());
     }

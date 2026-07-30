@@ -93,7 +93,7 @@ public sealed class ProviderIdentityHydrationCachingTests {
             Supports:
             [
                 new PluginEntitySupport(
-                    EntityKindRegistry.VideoSeries.Code,
+                    EntityKind.VideoSeries.ToCode(),
                     [IdentifyAction.LookupId.ToCode()],
                     ["tmdb"],
                     IdentityUrls:
@@ -104,7 +104,7 @@ public sealed class ProviderIdentityHydrationCachingTests {
                             "https://www.themoviedb.org/tv/{id}")
                     ]),
                 new PluginEntitySupport(
-                    EntityKindRegistry.VideoSeason.Code,
+                    EntityKind.VideoSeason.ToCode(),
                     [IdentifyAction.LookupId.ToCode()],
                     ["tmdbseason"],
                     IdentityUrls:

@@ -27,7 +27,7 @@ public sealed partial class LibraryScanPersistenceService {
             .FirstOrDefaultAsync(cancellationToken);
 
         if (!string.IsNullOrWhiteSpace(rootPath)) {
-            var videoCode = EntityKindRegistry.Video.Code;
+            var videoCode = EntityKind.Video.ToCode();
             var sourceFiles = await _db.EntityFiles.AsNoTracking()
                 .Where(file => file.Role == EntityFileRole.Source)
                 .Join(
@@ -56,7 +56,7 @@ public sealed partial class LibraryScanPersistenceService {
             return 0;
         }
 
-        var movieCode = EntityKindRegistry.Movie.Code;
+        var movieCode = EntityKind.Movie.ToCode();
         var movieSourceFiles = await _db.EntityFiles.AsNoTracking()
             .Where(file => file.Role == EntityFileRole.Source)
             .Join(
@@ -89,13 +89,13 @@ public sealed partial class LibraryScanPersistenceService {
     }
 
     public async Task<int> RemoveStaleLooseImagesInRootAsync(Guid rootId, IReadOnlySet<string> validPaths, CancellationToken cancellationToken) {
-        var imageIds = await GetLooseRootEntityIdsAsync(rootId, EntityKindRegistry.Image.Code, cancellationToken);
+        var imageIds = await GetLooseRootEntityIdsAsync(rootId, EntityKind.Image.ToCode(), cancellationToken);
         return await RemoveStaleEntitiesBySourcePath(imageIds, validPaths, cancellationToken);
     }
 
     public async Task<int> RemoveStaleImagesInGalleryAsync(Guid galleryEntityId, IReadOnlySet<string> validPaths, CancellationToken cancellationToken) {
         var childIds = await _db.Entities.AsNoTracking()
-            .Where(entity => entity.ParentEntityId == galleryEntityId && entity.KindCode == EntityKindRegistry.Image.Code)
+            .Where(entity => entity.ParentEntityId == galleryEntityId && entity.KindCode == EntityKind.Image.ToCode())
             .Select(entity => entity.Id)
             .ToListAsync(cancellationToken);
 
@@ -112,13 +112,13 @@ public sealed partial class LibraryScanPersistenceService {
     }
 
     public async Task<int> RemoveStaleLooseAudioTracksInRootAsync(Guid rootId, IReadOnlySet<string> validPaths, CancellationToken cancellationToken) {
-        var trackIds = await GetLooseRootEntityIdsAsync(rootId, EntityKindRegistry.AudioTrack.Code, cancellationToken);
+        var trackIds = await GetLooseRootEntityIdsAsync(rootId, EntityKind.AudioTrack.ToCode(), cancellationToken);
         return await RemoveStaleEntitiesBySourcePath(trackIds, validPaths, cancellationToken);
     }
 
     public async Task<int> RemoveStaleAudioTracksInLibraryAsync(Guid libraryEntityId, IReadOnlySet<string> validPaths, CancellationToken cancellationToken) {
         var childIds = await _db.Entities.AsNoTracking()
-            .Where(entity => entity.ParentEntityId == libraryEntityId && entity.KindCode == EntityKindRegistry.AudioTrack.Code)
+            .Where(entity => entity.ParentEntityId == libraryEntityId && entity.KindCode == EntityKind.AudioTrack.ToCode())
             .Select(entity => entity.Id)
             .ToListAsync(cancellationToken);
 
@@ -145,7 +145,7 @@ public sealed partial class LibraryScanPersistenceService {
 
     public async Task<int> RemoveStaleBookVolumesAsync(Guid bookEntityId, IReadOnlySet<string> validFolderPaths, CancellationToken cancellationToken) {
         var volumeIds = await _db.Entities.AsNoTracking()
-            .Where(entity => entity.ParentEntityId == bookEntityId && entity.KindCode == EntityKindRegistry.BookVolume.Code)
+            .Where(entity => entity.ParentEntityId == bookEntityId && entity.KindCode == EntityKind.BookVolume.ToCode())
             .Select(entity => entity.Id)
             .ToListAsync(cancellationToken);
 
@@ -154,7 +154,7 @@ public sealed partial class LibraryScanPersistenceService {
 
     public async Task<int> RemoveStaleBookChaptersAsync(Guid bookEntityId, IReadOnlySet<string> validArchivePaths, CancellationToken cancellationToken) {
         var chapterIds = await _db.Entities.AsNoTracking()
-            .Where(entity => entity.ParentEntityId == bookEntityId && entity.KindCode == EntityKindRegistry.BookChapter.Code)
+            .Where(entity => entity.ParentEntityId == bookEntityId && entity.KindCode == EntityKind.BookChapter.ToCode())
             .Select(entity => entity.Id)
             .ToListAsync(cancellationToken);
 
@@ -225,9 +225,9 @@ public sealed partial class LibraryScanPersistenceService {
     }
 
     public async Task<int> RemoveOrphanSeriesAndSeasonsAsync(CancellationToken cancellationToken) {
-        var movieCode = EntityKindRegistry.Movie.Code;
-        var seasonCode = EntityKindRegistry.VideoSeason.Code;
-        var seriesCode = EntityKindRegistry.VideoSeries.Code;
+        var movieCode = EntityKind.Movie.ToCode();
+        var seasonCode = EntityKind.VideoSeason.ToCode();
+        var seriesCode = EntityKind.VideoSeries.ToCode();
 
         var orphanMovies = await _db.Entities
             .Where(e => e.KindCode == movieCode
@@ -269,7 +269,7 @@ public sealed partial class LibraryScanPersistenceService {
     }
 
     public async Task<int> RemoveOrphanTagsAsync(CancellationToken cancellationToken) {
-        var tagCode = EntityKindRegistry.Tag.Code;
+        var tagCode = EntityKind.Tag.ToCode();
         var links = _db.EntityRelationshipLinks;
 
         // Orphan tags are those nothing references (no inbound relationship link) — the same

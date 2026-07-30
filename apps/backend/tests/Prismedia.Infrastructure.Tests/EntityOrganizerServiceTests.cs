@@ -23,9 +23,9 @@ public sealed class EntityOrganizerServiceTests {
         var now = DateTimeOffset.UtcNow;
 
         SeedRoot(db, rootPath);
-        SeedEntity(db, seriesId, EntityKindRegistry.VideoSeries.Code, "The Chair Company", null, null, now);
-        SeedEntity(db, seasonId, EntityKindRegistry.VideoSeason.Code, "Season 1", seriesId, 1, now);
-        SeedEntity(db, videoId, EntityKindRegistry.Video.Code, "Episode One", seasonId, 1, now);
+        SeedEntity(db, seriesId, EntityKind.VideoSeries.ToCode(), "The Chair Company", null, null, now);
+        SeedEntity(db, seasonId, EntityKind.VideoSeason.ToCode(), "Season 1", seriesId, 1, now);
+        SeedEntity(db, videoId, EntityKind.Video.ToCode(), "Episode One", seasonId, 1, now);
         SeedSource(db, seriesId, Path.Combine(rootPath, "chair"), now);
         SeedSource(db, seasonId, Path.Combine(rootPath, "chair", "s1"), now);
         SeedSource(db, videoId, Path.Combine(rootPath, "chair", "s1", "bad-name.mkv"), now);
@@ -54,7 +54,7 @@ public sealed class EntityOrganizerServiceTests {
         var now = DateTimeOffset.UtcNow;
 
         SeedRoot(db, rootPath);
-        SeedEntity(db, pageId, EntityKindRegistry.BookPage.Code, "Page 1", null, null, now);
+        SeedEntity(db, pageId, EntityKind.BookPage.ToCode(), "Page 1", null, null, now);
         SeedSource(db, pageId, Path.Combine(rootPath, "Book.cbz#page-1.jpg"), now);
         await db.SaveChangesAsync();
 
@@ -78,7 +78,7 @@ public sealed class EntityOrganizerServiceTests {
             await File.WriteAllTextAsync(sourcePath, "video");
 
             SeedRoot(db, tempRoot.FullName);
-            SeedEntity(db, videoId, EntityKindRegistry.Video.Code, "Good Name", null, null, now);
+            SeedEntity(db, videoId, EntityKind.Video.ToCode(), "Good Name", null, null, now);
             SeedSource(db, videoId, sourcePath, now);
             await db.SaveChangesAsync();
 
@@ -114,7 +114,7 @@ public sealed class EntityOrganizerServiceTests {
             await File.WriteAllTextAsync(sourcePath, "video");
 
             SeedRoot(db, tempRoot.FullName);
-            SeedEntity(db, videoId, EntityKindRegistry.Video.Code, "Good Name", null, null, now);
+            SeedEntity(db, videoId, EntityKind.Video.ToCode(), "Good Name", null, null, now);
             SeedSource(db, videoId, sourcePath, now);
             await db.SaveChangesAsync();
 
@@ -145,8 +145,8 @@ public sealed class EntityOrganizerServiceTests {
         var upperSource = Path.Combine(rootPath, "Album", "track.mp3");
         var lowerSource = Path.Combine(rootPath, "album", "track.mp3");
         var target = Path.Combine(rootPath, "Renamed");
-        SeedEntity(db, upperEntityId, EntityKindRegistry.AudioTrack.Code, "Upper", null, null, now);
-        SeedEntity(db, lowerEntityId, EntityKindRegistry.AudioTrack.Code, "Lower", null, null, now);
+        SeedEntity(db, upperEntityId, EntityKind.AudioTrack.ToCode(), "Upper", null, null, now);
+        SeedEntity(db, lowerEntityId, EntityKind.AudioTrack.ToCode(), "Lower", null, null, now);
         SeedSource(db, upperEntityId, upperSource, now);
         SeedSource(db, lowerEntityId, lowerSource, now);
         await db.SaveChangesAsync();
@@ -172,7 +172,7 @@ public sealed class EntityOrganizerServiceTests {
             var sourcePath = Path.Combine(tempRoot.FullName, "bad-name.mkv");
             await File.WriteAllTextAsync(sourcePath, "video");
             SeedRoot(db, tempRoot.FullName);
-            SeedEntity(db, videoId, EntityKindRegistry.Video.Code, "Good Name", null, null, now);
+            SeedEntity(db, videoId, EntityKind.Video.ToCode(), "Good Name", null, null, now);
             SeedSource(db, videoId, sourcePath, now);
             await db.SaveChangesAsync();
             var ownerReader = new EfEntitySourcePathOwnerReader(db);

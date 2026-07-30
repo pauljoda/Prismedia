@@ -70,7 +70,7 @@ public sealed class AcquisitionHintApplier(
         // audiobook. Path lengths bound the database projection while host-filesystem equality stays
         // in memory where the database collation cannot change its meaning.
         var requestedPathLengths = requestedPaths.Select(path => path.Length).Distinct().ToArray();
-        var bookCode = EntityKindRegistry.Book.Code;
+        var bookCode = EntityKind.Book.ToCode();
         var candidates = await db.AcquisitionImportHints.AsNoTracking()
             .Where(hint => hint.EntityId != null && requestedPathLengths.Contains(hint.SourcePath.Length))
             .Join(
@@ -366,7 +366,7 @@ public sealed class AcquisitionHintApplier(
     public async Task<IReadOnlyList<WantedAudioTrackReconciliation>> ReconcileExistingWantedAudioTracksAsync(
         Guid libraryRootId,
         CancellationToken cancellationToken) {
-        var audioTrackCode = EntityKindRegistry.AudioTrack.Code;
+        var audioTrackCode = EntityKind.AudioTrack.ToCode();
         var candidates = await db.Entities.AsNoTracking()
             .Where(track => track.KindCode == audioTrackCode
                 && !track.IsWanted
@@ -419,7 +419,7 @@ public sealed class AcquisitionHintApplier(
             return null;
         }
 
-        var audioTrackCode = EntityKindRegistry.AudioTrack.Code;
+        var audioTrackCode = EntityKind.AudioTrack.ToCode();
         var candidates = await db.Entities.AsNoTracking()
             .Where(entity => entity.ParentEntityId == audioLibraryId
                 && entity.KindCode == audioTrackCode
@@ -724,8 +724,8 @@ public sealed class AcquisitionHintApplier(
             }
 
             // Book hints keep the book scan's ApplyAsync path (which also records the owned source tier).
-            if (string.Equals(owner.KindCode, EntityKindRegistry.Book.Code, StringComparison.Ordinal)
-                || string.Equals(owner.KindCode, EntityKindRegistry.BookAuthor.Code, StringComparison.Ordinal)) {
+            if (string.Equals(owner.KindCode, EntityKind.Book.ToCode(), StringComparison.Ordinal)
+                || string.Equals(owner.KindCode, EntityKind.BookAuthor.ToCode(), StringComparison.Ordinal)) {
                 continue;
             }
 
@@ -844,7 +844,7 @@ public sealed class AcquisitionHintApplier(
                 .FirstOrDefaultAsync(cancellationToken);
             if (string.Equals(
                     parentKindCode,
-                    EntityKindRegistry.MusicArtist.Code,
+                    EntityKind.MusicArtist.ToCode(),
                     StringComparison.Ordinal)) {
                 break;
             }

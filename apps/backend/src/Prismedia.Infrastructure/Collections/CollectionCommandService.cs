@@ -22,7 +22,7 @@ public sealed class CollectionCommandPersistence(PrismediaDbContext db) : IColle
         var now = DateTimeOffset.UtcNow;
         db.Entities.Add(new EntityRow {
             Id = collection.Id,
-            KindCode = EntityKindRegistry.Collection.Code,
+            KindCode = EntityKind.Collection.ToCode(),
             Title = collection.Title,
             IsNsfw = collection.IsNsfw ?? false,
             CreatedAt = now,
@@ -52,7 +52,7 @@ public sealed class CollectionCommandPersistence(PrismediaDbContext db) : IColle
         var entity = await db.Entities
             .FirstOrDefaultAsync(row =>
                 row.Id == collection.Id &&
-                row.KindCode == EntityKindRegistry.Collection.Code &&
+                row.KindCode == EntityKind.Collection.ToCode() &&
                 db.CollectionDetails.Any(detail =>
                     detail.EntityId == row.Id &&
                     detail.OwnerUserId == ownerUserId),
@@ -88,7 +88,7 @@ public sealed class CollectionCommandPersistence(PrismediaDbContext db) : IColle
         var entity = await db.Entities
             .FirstOrDefaultAsync(row =>
                 row.Id == collectionId &&
-                row.KindCode == EntityKindRegistry.Collection.Code &&
+                row.KindCode == EntityKind.Collection.ToCode() &&
                 db.CollectionDetails.Any(detail =>
                     detail.EntityId == row.Id &&
                     detail.OwnerUserId == ownerUserId),
@@ -112,7 +112,7 @@ public sealed class CollectionCommandPersistence(PrismediaDbContext db) : IColle
         var row = await db.Entities
             .Where(entity =>
                 entity.Id == collectionId &&
-                entity.KindCode == EntityKindRegistry.Collection.Code)
+                entity.KindCode == EntityKind.Collection.ToCode())
             .Join(
                 db.CollectionDetails,
                 entity => entity.Id,

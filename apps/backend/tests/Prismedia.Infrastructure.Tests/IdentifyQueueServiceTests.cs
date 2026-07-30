@@ -1042,7 +1042,7 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
         await using var db = CreateContext();
         var entityId = Guid.NewGuid();
         var now = DateTimeOffset.UtcNow;
-        SeedEntity(db, entityId, EntityKindRegistry.VideoSeries.Code, "Old Series");
+        SeedEntity(db, entityId, EntityKind.VideoSeries.ToCode(), "Old Series");
         var proposal = ApplyRaceProposal(
             entityId,
             Guid.NewGuid(),
@@ -1315,11 +1315,11 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
         var albumId = Guid.Parse("77777777-7777-7777-7777-777777777777");
         var trackId = Guid.Parse("88888888-8888-8888-8888-888888888888");
         const string scannedFilePath = "/media/audio/album/01 scanned file.flac";
-        SeedEntity(db, albumId, EntityKindRegistry.AudioLibrary.Code, "Scanned Album");
+        SeedEntity(db, albumId, EntityKind.AudioLibrary.ToCode(), "Scanned Album");
         var track = SeedEntity(
             db,
             trackId,
-            EntityKindRegistry.AudioTrack.Code,
+            EntityKind.AudioTrack.ToCode(),
             "01 scanned file",
             attachSource: false);
         track.ParentEntityId = albumId;

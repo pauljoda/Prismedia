@@ -9,7 +9,7 @@ public static class MovieEndpoints {
     public static RouteGroupBuilder MapMovieEndpoints(this IEndpointRouteBuilder routes) =>
         routes.MapEntityKindRoutes(
             "/api/movies",
-            EntityKindRegistry.Movie.Code,
+            EntityKind.Movie.ToCode(),
             "Movies",
             "ListMovies",
             "GetMovie");

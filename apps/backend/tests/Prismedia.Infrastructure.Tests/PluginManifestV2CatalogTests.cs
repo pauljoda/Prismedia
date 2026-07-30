@@ -36,7 +36,7 @@ public sealed class PluginManifestV2CatalogTests : IDisposable {
 
         var descriptor = await catalog.FindProviderAsync(
             "musicbrainz",
-            EntityKindRegistry.AudioLibrary.Code,
+            EntityKind.AudioLibrary.ToCode(),
             CancellationToken.None);
 
         Assert.Equal(1, descriptor!.Manifest.Execution!.MaxConcurrentInvocations);

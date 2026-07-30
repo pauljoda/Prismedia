@@ -20,7 +20,7 @@ public sealed class EntityMetadataApplyServiceTests {
         var collectionId = Guid.NewGuid();
         var ownerUserId = Guid.Parse("11111111-1111-4111-8111-111111111111");
         var viewerUserId = Guid.Parse("22222222-2222-4222-8222-222222222222");
-        SeedEntity(db, collectionId, EntityKindRegistry.Collection.Code, "Shared title");
+        SeedEntity(db, collectionId, EntityKind.Collection.ToCode(), "Shared title");
         db.CollectionDetails.Add(new CollectionDetailRow {
             EntityId = collectionId,
             OwnerUserId = ownerUserId,
