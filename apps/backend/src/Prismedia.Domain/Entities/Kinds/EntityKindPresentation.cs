@@ -114,12 +114,20 @@ public sealed record EntityKindPresentation {
         int thumbnailHeight,
         EntityAccentHue primaryAccent,
         EntityAccentHue secondaryAccent,
-        EntityArtworkFit artworkFit) {
+        EntityArtworkFit artworkFit,
+        bool usesRepresentativeChildArtwork = false,
+        IEnumerable<EntityKind>? borrowArtworkFromParentKinds = null) {
         if (thumbnailWidth <= 0) {
             throw new ArgumentOutOfRangeException(nameof(thumbnailWidth), "Thumbnail width must be positive.");
         }
         if (thumbnailHeight <= 0) {
             throw new ArgumentOutOfRangeException(nameof(thumbnailHeight), "Thumbnail height must be positive.");
+        }
+        var parentKinds = borrowArtworkFromParentKinds?.ToArray() ?? [];
+        if (parentKinds.Distinct().Count() != parentKinds.Length) {
+            throw new ArgumentException(
+                "Borrowed parent artwork kinds cannot contain duplicates.",
+                nameof(borrowArtworkFromParentKinds));
         }
 
         Icon = icon;
@@ -129,6 +137,8 @@ public sealed record EntityKindPresentation {
         PrimaryAccent = primaryAccent;
         SecondaryAccent = secondaryAccent;
         ArtworkFit = artworkFit;
+        UsesRepresentativeChildArtwork = usesRepresentativeChildArtwork;
+        BorrowArtworkFromParentKinds = Array.AsReadOnly(parentKinds);
     }
 
     /// <summary>Specific semantic icon for representing an Entity of this kind.</summary>
@@ -154,4 +164,10 @@ public sealed record EntityKindPresentation {
 
     /// <summary>Default scaling behavior for artwork within the thumbnail frame.</summary>
     public EntityArtworkFit ArtworkFit { get; }
+
+    /// <summary>Whether a missing cover falls back to the first representative child image.</summary>
+    public bool UsesRepresentativeChildArtwork { get; }
+
+    /// <summary>Parent kinds whose cover may be shown when this kind has no cover of its own.</summary>
+    public IReadOnlyList<EntityKind> BorrowArtworkFromParentKinds { get; }
 }

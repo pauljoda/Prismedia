@@ -35,7 +35,7 @@ public static class AcquisitionPayloadValidation {
         int? seasonNumber = null,
         int? episodeNumber = null,
         bool completeSeriesSelected = false) {
-        if (filePaths.Count == 0 || !IsVideoKind(kind)) {
+        if (filePaths.Count == 0 || !MediaQualityLadder.IsVideoKind(kind)) {
             return null;
         }
 
@@ -114,10 +114,4 @@ public static class AcquisitionPayloadValidation {
             }
         }
     }
-
-    private static bool IsVideoKind(Domain.Entities.EntityKind kind) =>
-        kind is Domain.Entities.EntityKind.Movie
-            or Domain.Entities.EntityKind.Video
-            or Domain.Entities.EntityKind.VideoSeason
-            or Domain.Entities.EntityKind.VideoSeries;
 }

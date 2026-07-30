@@ -860,18 +860,13 @@ public sealed partial class EfEntityReadService {
     }
 
     private static bool UsesRepresentativeCover(string kindCode) =>
-        kindCode == EntityKind.Book.ToCode() ||
-        kindCode == EntityKind.BookVolume.ToCode() ||
-        kindCode == EntityKind.BookChapter.ToCode() ||
-        kindCode == EntityKind.Gallery.ToCode() ||
-        kindCode == EntityKind.VideoSeries.ToCode() ||
-        kindCode == EntityKind.VideoSeason.ToCode();
+        EntityKindRegistry.TryDescribe(kindCode, out var definition) &&
+        definition.Presentation.UsesRepresentativeChildArtwork;
 
     private static bool CanBorrowParentCover(string childKindCode, string parentKindCode) =>
-        (childKindCode == EntityKind.AudioTrack.ToCode() &&
-            parentKindCode == EntityKind.AudioLibrary.ToCode()) ||
-        (childKindCode == EntityKind.Video.ToCode() &&
-            parentKindCode == EntityKind.Movie.ToCode());
+        EntityKindRegistry.TryDescribe(childKindCode, out var child) &&
+        EntityKindRegistry.TryDescribe(parentKindCode, out var parent) &&
+        child.Presentation.BorrowArtworkFromParentKinds.Contains(parent.Kind);
 
     private sealed record CollectionArtwork(
         string? CoverUrl,

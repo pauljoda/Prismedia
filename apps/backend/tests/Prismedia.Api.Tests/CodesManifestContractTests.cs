@@ -111,6 +111,15 @@ public sealed class CodesManifestContractTests {
         Assert.True(kinds[EntityKind.Tag.ToCode()].SupportsManualManagement);
         Assert.False(kinds[EntityKind.Video.ToCode()].SupportsManualManagement);
 
+        Assert.Equal(
+            EntityMediaQualityFamily.Video.ToCode(),
+            kinds[EntityKind.VideoSeries.ToCode()].MediaQualityFamily);
+        Assert.Equal(
+            EntityMediaQualityFamily.Audio.ToCode(),
+            kinds[EntityKind.AudioLibrary.ToCode()].MediaQualityFamily);
+        Assert.True(kinds[EntityKind.Movie.ToCode()].SupportsAtomicMediaUpgrade);
+        Assert.False(kinds[EntityKind.VideoSeason.ToCode()].SupportsAtomicMediaUpgrade);
+
         var selectors = manifest
             .Select(kind => kind.AutoIdentifySelector)
             .OfType<string>()

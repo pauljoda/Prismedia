@@ -81,11 +81,11 @@ public static class AudioQualityDetection {
 public static class MediaQualityLadder {
     /// <summary>True for kinds ranked on the video ladder (movies and both TV units).</summary>
     public static bool IsVideoKind(EntityKind kind) =>
-        kind is EntityKind.Movie or EntityKind.Video or EntityKind.VideoSeason or EntityKind.VideoSeries;
+        EntityKindRegistry.Describe(kind).MediaQualityFamily == EntityMediaQualityFamily.Video;
 
     /// <summary>True for kinds ranked on the audio ladder.</summary>
     public static bool IsAudioKind(EntityKind kind) =>
-        kind is EntityKind.AudioLibrary or EntityKind.AudioTrack or EntityKind.MusicArtist;
+        EntityKindRegistry.Describe(kind).MediaQualityFamily == EntityMediaQualityFamily.Audio;
 
     /// <summary>
     /// True for the media kinds whose owned copy is a single file the upgrade loop can atomically swap in
@@ -95,7 +95,7 @@ public static class MediaQualityLadder {
     /// own upgrade path (source/format tiers) and are never routed here.
     /// </summary>
     public static bool IsUpgradeCapableKind(EntityKind kind) =>
-        kind is EntityKind.Movie or EntityKind.Video;
+        EntityKindRegistry.Describe(kind).SupportsAtomicMediaUpgrade;
 
     /// <summary>A release title's ladder position for a kind, as (code, ordinal). Ordinal 0 = unknown.</summary>
     public static (string Code, int Position) Detect(EntityKind kind, string title) {

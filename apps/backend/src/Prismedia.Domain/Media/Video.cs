@@ -18,7 +18,8 @@ public sealed class VideoEntityKindDefinition() : EntityKindDefinition<Video>(
         9,
         EntityAccentHue.Red,
         EntityAccentHue.Orange,
-        EntityArtworkFit.Cover),
+        EntityArtworkFit.Cover,
+        borrowArtworkFromParentKinds: [EntityKind.Movie]),
     new EntityKindNavigation(EntityKind.Video, "videos", "/videos", "/videos/{id}"),
     new EntityKindSearch(2),
     defaultCapabilities: static () =>
@@ -30,7 +31,9 @@ public sealed class VideoEntityKindDefinition() : EntityKindDefinition<Video>(
         new CapabilityCredits()
     ],
     supportsFileDeletion: true,
-    autoIdentifySelector: AutoIdentifySelectorKind.Video) {
+    autoIdentifySelector: AutoIdentifySelectorKind.Video,
+    mediaQualityFamily: EntityMediaQualityFamily.Video,
+    supportsAtomicMediaUpgrade: true) {
     private static readonly IReadOnlyList<string> SortOrderPrecedence = Array.AsReadOnly([
         EntityPositionCodes.Episode,
         EntityPositionCodes.AbsoluteEpisode,

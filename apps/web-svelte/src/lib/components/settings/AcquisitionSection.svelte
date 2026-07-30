@@ -2,7 +2,18 @@
   import { onMount } from "svelte";
   import { Boxes, CircleAlert, CircleCheck, Loader2, Pencil, PlugZap, Plus, Trash2 } from "@lucide/svelte";
   import { Badge, Button, Checkbox, Panel, Select, StatusLed, TextInput } from "@prismedia/ui-svelte";
-  import { INDEXER_KIND, DOWNLOAD_CLIENT_KIND, DOWNLOAD_PROTOCOL, IMPORT_MODE, BLOCKLIST_REASON, BOOK_SOURCE_TIER, BOOK_FORMAT_TIER, ENTITY_KIND, VIDEO_QUALITY, AUDIO_QUALITY, CUSTOM_FORMAT_CONDITION_TYPE, type DownloadProtocolCode } from "$lib/api/generated/codes";
+  import {
+    BLOCKLIST_REASON,
+    BOOK_FORMAT_TIER,
+    BOOK_SOURCE_TIER,
+    CUSTOM_FORMAT_CONDITION_TYPE,
+    DOWNLOAD_CLIENT_KIND,
+    DOWNLOAD_PROTOCOL,
+    ENTITY_KIND,
+    IMPORT_MODE,
+    INDEXER_KIND,
+    type DownloadProtocolCode,
+  } from "$lib/api/generated/codes";
   import { cn } from "@prismedia/ui-svelte";
   import type {
     AcquisitionBlocklistEntry,
@@ -46,33 +57,20 @@
   import AcquisitionReleaseTimingFields from "$lib/components/settings/AcquisitionReleaseTimingFields.svelte";
   import { availableDownloadProtocols } from "$lib/components/settings/acquisition-protocol-preference";
   import { profileSupportsReleaseDate, releaseTimingLabel } from "$lib/components/settings/acquisition-profile-release-timing";
+  import {
+    DEFAULT_PATH_TEMPLATE,
+    namingDefaultFor,
+    namingHintFor,
+    profileKindLabels,
+    profileKindOptions,
+    qualityLadderFor,
+    rootsForProfileKind,
+  } from "$lib/components/settings/acquisition-profile-kind";
   interface Props {
     onError: (msg: string) => void;
     onMessage: (msg: string) => void;
   }
   let { onError, onMessage }: Props = $props();
-  const DEFAULT_PATH_TEMPLATE = "{Author}/{Title} ({Year})/{Title}{ - Volume}.{ext}";
-  // Per-kind naming templates, mirroring the backend MediaNamingTemplates defaults. Books own their own
-  // template; movies/TV/music each control names within a structure the scan binding depends on.
-  const NAMING_DEFAULTS: Record<string, string> = {
-    [ENTITY_KIND.book]: DEFAULT_PATH_TEMPLATE,
-    [ENTITY_KIND.movie]: "{Title} ({Year})/{Title} ({Year}).{ext}",
-    [ENTITY_KIND.videoSeries]: "{Series}/Season {Season:00}/{Series} - S{Season:00}E{Episode:00}.{ext}",
-    [ENTITY_KIND.audioLibrary]: "{Artist}/{Album}",
-  };
-  // A short per-kind token hint shown under the naming template input.
-  const NAMING_HINTS: Record<string, string> = {
-    [ENTITY_KIND.book]: "{Author} {Title} {Year} {ext} — folder/file layout for the book payload",
-    [ENTITY_KIND.movie]: "{Title} {Year} {Quality} {ext} — 2 segments: folder/file",
-    [ENTITY_KIND.videoSeries]: "{Series} {Season} {Season:00} {Episode:00} {Quality} {ext} — 3 segments: series/season/episode",
-    [ENTITY_KIND.audioLibrary]: "{Artist} {Album} {Year} — 2 segments: artist/album folder (track files keep their release names)",
-  };
-  function namingDefaultFor(kind: string): string {
-    return NAMING_DEFAULTS[kind] ?? DEFAULT_PATH_TEMPLATE;
-  }
-  function namingHintFor(kind: string): string {
-    return NAMING_HINTS[kind] ?? "";
-  }
   let indexers = $state<IndexerConfigSummary[]>([]);
   let downloadClients = $state<DownloadClientSummary[]>([]);
   let profiles = $state<BookAcquisitionProfileView[]>([]);
@@ -95,14 +93,6 @@
   let clientTest = $state<TestResult | null>(null);
   let profileForm = $state<BookAcquisitionProfileSaveRequest | null>(null);
   let profileTerms = $state({ preferred: "", required: "", ignored: "", weighted: "", languages: "" });
-  // The quality ladders per profile kind, worst → best, for the allowed-set picker and cutoff select.
-  const videoQualityLadder = Object.values(VIDEO_QUALITY).filter((code) => code !== VIDEO_QUALITY.unknown);
-  const audioQualityLadder = Object.values(AUDIO_QUALITY).filter((code) => code !== AUDIO_QUALITY.unknown);
-  function qualityLadderFor(kind: string): string[] {
-    if (kind === ENTITY_KIND.movie || kind === ENTITY_KIND.videoSeries) return videoQualityLadder;
-    if (kind === ENTITY_KIND.audioLibrary) return audioQualityLadder;
-    return [];
-  }
   function toggleAllowedQuality(code: string) {
     if (!profileForm) return;
     const current = profileForm.allowedQualities ?? [];
@@ -131,24 +121,7 @@
     [BLOCKLIST_REASON.noImportableFiles]: "No importable files",
     [BLOCKLIST_REASON.manual]: "Manual",
   };
-  // Profiles are kind-scoped: each kind offers only the libraries that can hold its media.
-  const profileKindOptions = [
-    { value: ENTITY_KIND.book, label: "Books" },
-    { value: ENTITY_KIND.movie, label: "Movies" },
-    { value: ENTITY_KIND.videoSeries, label: "TV (series)" },
-    { value: ENTITY_KIND.audioLibrary, label: "Music (albums)" },
-  ];
-  const profileKindLabels: Record<string, string> = Object.fromEntries(
-    profileKindOptions.map((option) => [option.value, option.label]),
-  );
-  function rootsForKind(kind: string): LibraryRootSummary[] {
-    return allRoots.filter((r) =>
-      kind === ENTITY_KIND.movie || kind === ENTITY_KIND.videoSeries
-        ? r.scanVideos
-        : kind === ENTITY_KIND.audioLibrary
-          ? r.scanAudio
-          : r.scanBooks);
-  }
+  const rootsForKind = (kind: string) => rootsForProfileKind(allRoots, kind);
   const bookRoots = $derived(rootsForKind(ENTITY_KIND.book));
   const formRoots = $derived(profileForm ? rootsForKind(profileForm.kind) : []);
   const rootOptions = $derived(formRoots.map((r) => ({ value: r.id, label: r.label })));

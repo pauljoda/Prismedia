@@ -36,7 +36,15 @@ public abstract class EntityKindDefinition {
         bool enumeratesIdentifyChildren = false,
         bool supportsFileDeletion = false,
         AutoIdentifySelectorKind? autoIdentifySelector = null,
-        bool supportsManualManagement = false) {
+        bool supportsManualManagement = false,
+        EntityMediaQualityFamily mediaQualityFamily = EntityMediaQualityFamily.None,
+        bool supportsAtomicMediaUpgrade = false) {
+        if (supportsAtomicMediaUpgrade && mediaQualityFamily == EntityMediaQualityFamily.None) {
+            throw new ArgumentException(
+                "Atomic media upgrades require a media quality family.",
+                nameof(supportsAtomicMediaUpgrade));
+        }
+
         Kind = kind;
         Code = RequireText(code, nameof(code));
         DisplayName = RequireText(displayName, nameof(displayName));
@@ -52,6 +60,8 @@ public abstract class EntityKindDefinition {
         SupportsFileDeletion = supportsFileDeletion;
         AutoIdentifySelector = autoIdentifySelector;
         SupportsManualManagement = supportsManualManagement;
+        MediaQualityFamily = mediaQualityFamily;
+        SupportsAtomicMediaUpgrade = supportsAtomicMediaUpgrade;
     }
 
     /// <summary>Typed domain identity represented by this definition.</summary>
@@ -100,6 +110,12 @@ public abstract class EntityKindDefinition {
 
     /// <summary>Whether users may create and delete this kind directly through entity routes.</summary>
     public bool SupportsManualManagement { get; }
+
+    /// <summary>Quality ladder used to rank acquisition releases for this kind.</summary>
+    public EntityMediaQualityFamily MediaQualityFamily { get; }
+
+    /// <summary>Whether one owned media file can be replaced atomically during an upgrade.</summary>
+    public bool SupportsAtomicMediaUpgrade { get; }
 
     /// <summary>
     /// Optional compatible kind used when an identify plugin does not explicitly support this
@@ -218,7 +234,9 @@ public abstract class EntityKindDefinition<TEntity> : EntityKindDefinition
         bool enumeratesIdentifyChildren = false,
         bool supportsFileDeletion = false,
         AutoIdentifySelectorKind? autoIdentifySelector = null,
-        bool supportsManualManagement = false)
+        bool supportsManualManagement = false,
+        EntityMediaQualityFamily mediaQualityFamily = EntityMediaQualityFamily.None,
+        bool supportsAtomicMediaUpgrade = false)
         : base(
             kind,
             code,
@@ -234,7 +252,9 @@ public abstract class EntityKindDefinition<TEntity> : EntityKindDefinition
             enumeratesIdentifyChildren,
             supportsFileDeletion,
             autoIdentifySelector,
-            supportsManualManagement) {
+            supportsManualManagement,
+            mediaQualityFamily,
+            supportsAtomicMediaUpgrade) {
     }
 
     /// <inheritdoc />
@@ -342,7 +362,9 @@ public abstract class RootEntityKindDefinition<TEntity> : EntityKindDefinition<T
         bool enumeratesIdentifyChildren = false,
         bool supportsFileDeletion = false,
         AutoIdentifySelectorKind? autoIdentifySelector = null,
-        bool supportsManualManagement = false)
+        bool supportsManualManagement = false,
+        EntityMediaQualityFamily mediaQualityFamily = EntityMediaQualityFamily.None,
+        bool supportsAtomicMediaUpgrade = false)
         : base(
             kind,
             code,
@@ -357,7 +379,9 @@ public abstract class RootEntityKindDefinition<TEntity> : EntityKindDefinition<T
             enumeratesIdentifyChildren,
             supportsFileDeletion,
             autoIdentifySelector,
-            supportsManualManagement) {
+            supportsManualManagement,
+            mediaQualityFamily,
+            supportsAtomicMediaUpgrade) {
         _factory = factory ?? throw new ArgumentNullException(nameof(factory));
     }
 
@@ -377,6 +401,21 @@ public abstract class RootEntityKindDefinition<TEntity> : EntityKindDefinition<T
     }
 
     Entity IEntityRootFactory.Create(EntityRootData root) => Create(root);
+}
+
+/// <summary>Acquisition-quality ladder used to rank releases for an Entity kind.</summary>
+public enum EntityMediaQualityFamily {
+    /// <summary>The kind does not use the shared audio/video quality ladders.</summary>
+    [Code("none")]
+    None,
+
+    /// <summary>The kind uses source-and-resolution video quality.</summary>
+    [Code("video")]
+    Video,
+
+    /// <summary>The kind uses codec-tier audio quality.</summary>
+    [Code("audio")]
+    Audio
 }
 
 /// <summary>Broad category for an entity kind when infrastructure needs seed metadata.</summary>

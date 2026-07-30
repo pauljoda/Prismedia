@@ -21,7 +21,8 @@ public sealed class BookVolumeEntityKindDefinition() : RootEntityKindDefinition<
         3,
         EntityAccentHue.Cyan,
         EntityAccentHue.Blue,
-        EntityArtworkFit.Cover),
+        EntityArtworkFit.Cover,
+        usesRepresentativeChildArtwork: true),
     new EntityKindNavigation(
         EntityKind.Book,
         "books",
@@ -65,7 +66,8 @@ public sealed class BookChapterEntityKindDefinition() : EntityKindDefinition<Boo
         3,
         EntityAccentHue.Cyan,
         EntityAccentHue.Blue,
-        EntityArtworkFit.Cover),
+        EntityArtworkFit.Cover,
+        usesRepresentativeChildArtwork: true),
     new EntityKindNavigation(
         EntityKind.Book,
         "books",

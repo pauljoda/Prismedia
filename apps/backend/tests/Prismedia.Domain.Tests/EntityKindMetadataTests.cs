@@ -94,6 +94,27 @@ public sealed class EntityKindMetadataTests {
     }
 
     [Fact]
+    public void DefinitionsOwnQualityAndArtworkPolicies() {
+        var movie = EntityKindRegistry.Describe(EntityKind.Movie);
+        var season = EntityKindRegistry.Describe(EntityKind.VideoSeason);
+        var album = EntityKindRegistry.Describe(EntityKind.AudioLibrary);
+        var track = EntityKindRegistry.Describe(EntityKind.AudioTrack);
+
+        Assert.Equal(EntityMediaQualityFamily.Video, movie.MediaQualityFamily);
+        Assert.Equal(EntityMediaQualityFamily.Video, season.MediaQualityFamily);
+        Assert.Equal(EntityMediaQualityFamily.Audio, album.MediaQualityFamily);
+        Assert.True(movie.SupportsAtomicMediaUpgrade);
+        Assert.False(season.SupportsAtomicMediaUpgrade);
+
+        Assert.True(EntityKindRegistry.Describe(EntityKind.Book).Presentation.UsesRepresentativeChildArtwork);
+        Assert.True(season.Presentation.UsesRepresentativeChildArtwork);
+        Assert.Equal([EntityKind.AudioLibrary], track.Presentation.BorrowArtworkFromParentKinds);
+        Assert.Equal([EntityKind.Movie],
+            EntityKindRegistry.Describe(EntityKind.Video).Presentation.BorrowArtworkFromParentKinds);
+        Assert.Empty(movie.Presentation.BorrowArtworkFromParentKinds);
+    }
+
+    [Fact]
     public void DefinitionsOwnPluginFallbackPositionPrecedenceAndRelationshipScope() {
         var movie = EntityKindRegistry.Describe(EntityKind.Movie);
         var video = EntityKindRegistry.Describe(EntityKind.Video);

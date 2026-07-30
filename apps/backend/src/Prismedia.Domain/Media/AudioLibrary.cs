@@ -25,7 +25,8 @@ public sealed class AudioLibraryEntityKindDefinition() : RootEntityKindDefinitio
     static root => new AudioLibrary(root.Id, root.Title),
     enumeratesIdentifyChildren: true,
     supportsFileDeletion: true,
-    autoIdentifySelector: AutoIdentifySelectorKind.Audio) {
+    autoIdentifySelector: AutoIdentifySelectorKind.Audio,
+    mediaQualityFamily: EntityMediaQualityFamily.Audio) {
     /// <inheritdoc />
     public override bool OwnsMetadataRelationships => true;
 

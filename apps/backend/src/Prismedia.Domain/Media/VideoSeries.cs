@@ -21,13 +21,15 @@ public sealed class VideoSeriesEntityKindDefinition() : EntityKindDefinition<Vid
         3,
         EntityAccentHue.Yellow,
         EntityAccentHue.Green,
-        EntityArtworkFit.Cover),
+        EntityArtworkFit.Cover,
+        usesRepresentativeChildArtwork: true),
     new EntityKindNavigation(EntityKind.VideoSeries, "series", "/series", "/series/{id}"),
     new EntityKindSearch(1),
     defaultCapabilities: static () => [new CapabilityCredits()],
     enumeratesIdentifyChildren: true,
     supportsFileDeletion: true,
-    autoIdentifySelector: AutoIdentifySelectorKind.Video) {
+    autoIdentifySelector: AutoIdentifySelectorKind.Video,
+    mediaQualityFamily: EntityMediaQualityFamily.Video) {
     /// <inheritdoc />
     public override bool OwnsMetadataRelationships => true;
 
@@ -74,7 +76,8 @@ public sealed class VideoSeasonEntityKindDefinition() : RootEntityKindDefinition
         3,
         EntityAccentHue.Yellow,
         EntityAccentHue.Green,
-        EntityArtworkFit.Cover),
+        EntityArtworkFit.Cover,
+        usesRepresentativeChildArtwork: true),
     new EntityKindNavigation(
         EntityKind.VideoSeries,
         "series",
@@ -96,7 +99,8 @@ public sealed class VideoSeasonEntityKindDefinition() : RootEntityKindDefinition
         new CapabilityCredits()
     ],
     enumeratesIdentifyChildren: true,
-    supportsFileDeletion: true) {
+    supportsFileDeletion: true,
+    mediaQualityFamily: EntityMediaQualityFamily.Video) {
     private static readonly IReadOnlyList<string> SortOrderPrecedence = Array.AsReadOnly([
         EntityPositionCodes.Season,
         EntityPositionCodes.Sort

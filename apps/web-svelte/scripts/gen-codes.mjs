@@ -189,8 +189,9 @@ async function main() {
   const entityKindFields = [
     "code", "displayName", "groupLabel", "category", "storageShape", "icon", "referenceIcon",
     "thumbnailWidth", "thumbnailHeight", "primaryAccent", "secondaryAccent", "artworkFit",
-    "navigation", "search", "autoIdentifySelector", "containableKinds", "supportsFileDeletion",
-    "supportsManualManagement", "supportsRequests", "enumeratesIdentifyChildren",
+    "navigation", "search", "autoIdentifySelector", "containableKinds", "mediaQualityFamily",
+    "supportsFileDeletion", "supportsAtomicMediaUpgrade", "supportsManualManagement",
+    "supportsRequests", "enumeratesIdentifyChildren",
   ];
   for (const kind of manifest.entityKinds ?? []) {
     const missing = entityKindFields.filter((field) => !Object.hasOwn(kind, field));
@@ -223,7 +224,8 @@ async function main() {
     `secondaryAccent: ${lit(kind.secondaryAccent)}, artworkFit: ${lit(kind.artworkFit)} }, ` +
     `navigation: ${lit(kind.navigation)}, search: ${lit(kind.search)}, ` +
     `autoIdentifySelector: ${lit(kind.autoIdentifySelector)}, containableKinds: ${lit(kind.containableKinds)}, ` +
-    `supportsFileDeletion: ${lit(kind.supportsFileDeletion)}, ` +
+    `mediaQualityFamily: ${lit(kind.mediaQualityFamily)}, supportsFileDeletion: ${lit(kind.supportsFileDeletion)}, ` +
+    `supportsAtomicMediaUpgrade: ${lit(kind.supportsAtomicMediaUpgrade)}, ` +
     `supportsManualManagement: ${lit(kind.supportsManualManagement)}, ` +
     `supportsRequests: ${lit(kind.supportsRequests)}, ` +
     `enumeratesIdentifyChildren: ${lit(kind.enumeratesIdentifyChildren)} },`
@@ -279,7 +281,9 @@ async function main() {
       `  search: EntityKindSearchManifestEntry | null;\n` +
       `  autoIdentifySelector: AutoIdentifySelectorKindCode | null;\n` +
       `  containableKinds: readonly EntityKindCode[] | null;\n` +
+      `  mediaQualityFamily: EntityMediaQualityFamilyCode;\n` +
       `  supportsFileDeletion: boolean;\n` +
+      `  supportsAtomicMediaUpgrade: boolean;\n` +
       `  supportsManualManagement: boolean;\n` +
       `  supportsRequests: boolean;\n` +
       `  enumeratesIdentifyChildren: boolean;\n` +

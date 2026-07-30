@@ -20,12 +20,14 @@ public sealed class AudioTrackEntityKindDefinition() : EntityKindDefinition<Audi
         1,
         EntityAccentHue.Violet,
         EntityAccentHue.Magenta,
-        EntityArtworkFit.Cover),
+        EntityArtworkFit.Cover,
+        borrowArtworkFromParentKinds: [EntityKind.AudioLibrary]),
     new EntityKindNavigation(EntityKind.AudioTrack, "tracks", "/tracks", "/audio/tracks/{id}"),
     new EntityKindSearch(11),
     defaultCapabilities: static () => [new CapabilityPlayback()],
     supportsFileDeletion: true,
-    autoIdentifySelector: AutoIdentifySelectorKind.Audio) {
+    autoIdentifySelector: AutoIdentifySelectorKind.Audio,
+    mediaQualityFamily: EntityMediaQualityFamily.Audio) {
     /// <inheritdoc />
     public override bool OwnsMetadataRelationships => true;
 

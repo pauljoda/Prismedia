@@ -126,7 +126,7 @@ public sealed partial class EfAcquisitionStore(PrismediaDbContext db, IAcquisiti
         // library itself knows the work's year identity — the containing series' premiere year or the
         // movie's release year — which is what scene naming appends to disambiguate same-name works,
         // so the search gates compare against that instead.
-        var year = row.EntityId is { } entityId && IsVideoKind(row.Kind)
+        var year = row.EntityId is { } entityId && MediaQualityLadder.IsVideoKind(row.Kind)
             ? await ResolveWorkYearAsync(entityId, cancellationToken) ?? row.Year
             : row.Year;
 
@@ -134,10 +134,6 @@ public sealed partial class EfAcquisitionStore(PrismediaDbContext db, IAcquisiti
             row.Id, row.Title, row.Author, row.Kind, row.EntityId, year, row.ProfileId,
             row.Series, row.SeasonNumber, row.EpisodeNumber, row.VolumeNumber, row.BookRendition);
     }
-
-
-    private static bool IsVideoKind(EntityKind kind) =>
-        kind is EntityKind.Movie or EntityKind.Video or EntityKind.VideoSeason or EntityKind.VideoSeries;
 
     /// <summary>
     /// The year identity of the work an entity belongs to: the topmost video container's (series or
