@@ -36,6 +36,7 @@ internal sealed class CodecEnumSchemaTransformer : IOpenApiSchemaTransformer {
     private static void ApplyCodecEnum(OpenApiSchema schema, Type propertyType) {
         var type = Nullable.GetUnderlyingType(propertyType) ?? propertyType;
         if (TryCodes(type, out var codes)) {
+            schema.Type = JsonSchemaType.String;
             schema.Enum = codes;
             return;
         }
@@ -51,10 +52,9 @@ internal sealed class CodecEnumSchemaTransformer : IOpenApiSchemaTransformer {
     }
 
     private static bool TryCodes(Type type, out List<JsonNode> codes) {
-        if (type.IsEnum && CodecRegistry.TryGet(type, out var codec) && codec is not null) {
-            codes = Enum.GetValues(type)
-                .Cast<object>()
-                .Select(value => (JsonNode)JsonValue.Create(codec.EncodeObject(value))!)
+        if (CodecRegistry.TryGet(type, out var codec) && codec is not null) {
+            codes = codec.Codes
+                .Select(code => (JsonNode)JsonValue.Create(code)!)
                 .ToList();
             return true;
         }

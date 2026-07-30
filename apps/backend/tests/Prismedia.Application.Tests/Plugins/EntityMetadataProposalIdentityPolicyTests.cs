@@ -25,7 +25,7 @@ public sealed class EntityMetadataProposalIdentityPolicyTests {
             });
         var firstSeason = Proposal(
             "season:1",
-            ProposalKind.VideoSeason,
+            EntityKind.VideoSeason,
             new Dictionary<string, string> {
                 ["series-db"] = "series-42",
                 ["season-db"] = "season-1"
@@ -33,18 +33,18 @@ public sealed class EntityMetadataProposalIdentityPolicyTests {
             [firstEpisode, secondEpisode]);
         var secondSeason = Proposal(
             "season:2",
-            ProposalKind.VideoSeason,
+            EntityKind.VideoSeason,
             new Dictionary<string, string> {
                 ["series-db"] = "series-42",
                 ["season-db"] = "season-2"
             });
         var sharedPerson = Proposal(
             "person:1",
-            ProposalKind.Person,
+            EntityKind.Person,
             new Dictionary<string, string> { ["person-db"] = "person-1" });
         var root = Proposal(
             "series:42",
-            ProposalKind.VideoSeries,
+            EntityKind.VideoSeries,
             new Dictionary<string, string> { ["series-db"] = "series-42" },
             [firstSeason, secondSeason],
             [sharedPerson, sharedPerson with { ProposalId = "person:1:again" }]);
@@ -73,14 +73,14 @@ public sealed class EntityMetadataProposalIdentityPolicyTests {
     public void RemoveSharedStructuralIdentitiesIgnoresInvalidLocatorValues() {
         var child = Proposal(
             "season:1",
-            ProposalKind.VideoSeason,
+            EntityKind.VideoSeason,
             new Dictionary<string, string> {
                 ["season-db"] = "season-1",
                 ["source"] = "https://example.test/season/1"
             });
 
         var sanitized = EntityMetadataProposalIdentityPolicy.RemoveSharedStructuralIdentities(
-            Proposal("series:1", ProposalKind.VideoSeries, new Dictionary<string, string>(), [child]));
+            Proposal("series:1", EntityKind.VideoSeries, new Dictionary<string, string>(), [child]));
 
         Assert.Equal(child.Patch.ExternalIds, sanitized.Children[0].Patch.ExternalIds);
     }
@@ -89,15 +89,15 @@ public sealed class EntityMetadataProposalIdentityPolicyTests {
     public void RemoveSharedStructuralIdentitiesAllowsMissingIdentityMaps() {
         var firstSeason = Proposal(
             "season:1",
-            ProposalKind.VideoSeason,
+            EntityKind.VideoSeason,
             new Dictionary<string, string> { ["series-db"] = "series-1" });
         var secondSeason = Proposal(
             "season:2",
-            ProposalKind.VideoSeason,
+            EntityKind.VideoSeason,
             new Dictionary<string, string> { ["series-db"] = "series-1" });
         var root = Proposal(
             "series:1",
-            ProposalKind.VideoSeries,
+            EntityKind.VideoSeries,
             new Dictionary<string, string>(),
             [firstSeason, secondSeason]);
         root = root with { Patch = root.Patch with { ExternalIds = null! } };

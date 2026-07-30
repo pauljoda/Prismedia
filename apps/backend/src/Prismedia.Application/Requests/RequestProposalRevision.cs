@@ -2,13 +2,17 @@ using System.Security.Cryptography;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Prismedia.Contracts.Plugins;
+using Prismedia.Domain.Entities;
 
 namespace Prismedia.Application.Requests;
 
 /// <summary>Computes stable content revisions for complete plugin metadata proposals.</summary>
 public static class RequestProposalRevision {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web) {
-        Converters = { new JsonStringEnumConverter(JsonNamingPolicy.CamelCase) }
+        Converters = {
+            new ProposalKindRevisionConverter(),
+            new JsonStringEnumConverter(JsonNamingPolicy.CamelCase)
+        }
     };
 
     /// <summary>
@@ -56,6 +60,32 @@ public static class RequestProposalRevision {
             default:
                 element.WriteTo(writer);
                 break;
+        }
+    }
+
+    private sealed class ProposalKindRevisionConverter : JsonConverter<ProposalKind> {
+        public override ProposalKind Read(
+            ref Utf8JsonReader reader,
+            Type typeToConvert,
+            JsonSerializerOptions options) {
+            var name = reader.GetString() ?? throw new JsonException("Expected a ProposalKind name.");
+            if (name.Equals("videoEpisode", StringComparison.OrdinalIgnoreCase)) {
+                return ProposalKind.VideoEpisode;
+            }
+
+            return Enum.TryParse<EntityKind>(name, ignoreCase: true, out var entityKind)
+                ? entityKind
+                : throw new JsonException($"Unsupported ProposalKind revision name '{name}'.");
+        }
+
+        public override void Write(
+            Utf8JsonWriter writer,
+            ProposalKind value,
+            JsonSerializerOptions options) {
+            var memberName = value == ProposalKind.VideoEpisode
+                ? nameof(ProposalKind.VideoEpisode)
+                : value.ToEntityKind().ToString();
+            writer.WriteStringValue(JsonNamingPolicy.CamelCase.ConvertName(memberName));
         }
     }
 }

@@ -59,7 +59,7 @@ public sealed partial class IdentifyPluginService {
             IReadOnlyList<EntityMetadataProposal> relationships) {
             var (containers, remaining) = AdoptResolvedChildrenIntoContainers(baseChildren, structural);
             return titledProposal with {
-                TargetKind = entity.KindCode.DecodeAs<ProposalKind>(),
+                TargetKind = entity.KindCode.DecodeAs<EntityKind>(),
                 TargetEntityId = entity.Id,
                 Children = MergeStructuralChildren(containers, remaining),
                 Relationships = MergeRelationshipProposals(baseRelationships, relationships)
@@ -492,7 +492,7 @@ public sealed partial class IdentifyPluginService {
         return localChildren
             .Where(child => child.IsIdentifyEligible)
             .Any(child => manifest.Supports.Any(support =>
-                support.EntityKind.TryDecodeAs<ProposalKind>(out var supportKind) &&
+                support.EntityKind.TryDecodeAs<EntityKind>(out var supportKind) &&
                 IsCompatibleStructuralKind(child.Entity.KindCode, supportKind)));
     }
 
@@ -505,7 +505,7 @@ public sealed partial class IdentifyPluginService {
         return localChildren
             .Where(child => child.IsIdentifyEligible)
             .Where(child => manifest.Supports.Any(support =>
-                support.EntityKind.TryDecodeAs<ProposalKind>(out var supportKind) &&
+                support.EntityKind.TryDecodeAs<EntityKind>(out var supportKind) &&
                 IsCompatibleStructuralKind(child.Entity.KindCode, supportKind)))
             .Any(child => !providerChildren.Any(providerChild =>
                 providerChild.TargetEntityId == child.Entity.Id ||

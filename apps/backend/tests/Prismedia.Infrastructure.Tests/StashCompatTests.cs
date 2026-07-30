@@ -175,9 +175,9 @@ public sealed class StashCompatTests {
         };
 
         var proposal = StashResultMapper.ToProposal(
-            scene, "stash-test-site", "Test Site", ProposalKind.Video, "https://site.example/scene/123", "Matched by URL", 0.9m);
+            scene, "stash-test-site", "Test Site", EntityKind.Video, "https://site.example/scene/123", "Matched by URL", 0.9m);
 
-        Assert.Equal(ProposalKind.Video, proposal.TargetKind);
+        Assert.Equal(EntityKind.Video, proposal.TargetKind);
         Assert.Equal("Test Scene Title", proposal.Patch.Title);
         Assert.Equal("Some details here.", proposal.Patch.Description);
         Assert.Equal("2023-05-14", proposal.Patch.Dates["release"]);
@@ -193,10 +193,10 @@ public sealed class StashCompatTests {
         // Performers and the studio are also surfaced as relationship proposals (carded in review,
         // enrichable on apply), not only as flat patch fields.
         var relationshipKinds = proposal.Relationships.Select(r => r.TargetKind).ToArray();
-        Assert.Equal(["Alice", "Bob"], proposal.Relationships.Where(r => r.TargetKind == ProposalKind.Person).Select(r => r.Patch.Title!).ToArray());
-        Assert.Contains(ProposalKind.Studio, relationshipKinds);
-        Assert.Equal("Cool Studio", proposal.Relationships.Single(r => r.TargetKind == ProposalKind.Studio).Patch.Title);
-        Assert.Equal(["Tag1", "Tag2"], proposal.Relationships.Where(r => r.TargetKind == ProposalKind.Tag).Select(r => r.Patch.Title!).ToArray());
+        Assert.Equal(["Alice", "Bob"], proposal.Relationships.Where(r => r.TargetKind == EntityKind.Person).Select(r => r.Patch.Title!).ToArray());
+        Assert.Contains(EntityKind.Studio, relationshipKinds);
+        Assert.Equal("Cool Studio", proposal.Relationships.Single(r => r.TargetKind == EntityKind.Studio).Patch.Title);
+        Assert.Equal(["Tag1", "Tag2"], proposal.Relationships.Where(r => r.TargetKind == EntityKind.Tag).Select(r => r.Patch.Title!).ToArray());
         Assert.Contains("https://site.example/t/tag2", proposal.Relationships.Single(r => r.Patch.Title == "Tag2").Patch.Urls);
     }
 
@@ -216,9 +216,9 @@ public sealed class StashCompatTests {
             ]
         };
 
-        var proposal = StashResultMapper.ToProposal(scene, "stash-x", "Stash X", ProposalKind.Video, null, "Matched by URL", 0.9m);
+        var proposal = StashResultMapper.ToProposal(scene, "stash-x", "Stash X", EntityKind.Video, null, "Matched by URL", 0.9m);
 
-        var person = proposal.Relationships.Single(r => r.TargetKind == ProposalKind.Person);
+        var person = proposal.Relationships.Single(r => r.TargetKind == EntityKind.Person);
         Assert.Equal("Jane Doe", person.Patch.Title);
         Assert.Equal("poster", person.Images.Single().Kind);
         Assert.Equal("https://site.example/p/jane.jpg", person.Images.Single().Url);
@@ -226,7 +226,7 @@ public sealed class StashCompatTests {
         Assert.Equal("1990-01-02", person.Patch.Dates["birth"]);
         Assert.Contains("https://site.example/p/jane", person.Patch.Urls);
 
-        var studio = proposal.Relationships.Single(r => r.TargetKind == ProposalKind.Studio);
+        var studio = proposal.Relationships.Single(r => r.TargetKind == EntityKind.Studio);
         Assert.Equal("logo", studio.Images.Single().Kind);
         Assert.Contains("https://studio.example", studio.Patch.Urls);
     }
@@ -328,7 +328,7 @@ public sealed class StashCompatTests {
 
             Assert.True(response.Ok);
             Assert.NotNull(response.Result?.Patch);
-            Assert.Equal(ProposalKind.Tag, response.Result!.TargetKind);
+            Assert.Equal(EntityKind.Tag, response.Result!.TargetKind);
             Assert.Equal("Noir", response.Result.Patch.Title);
             Assert.Equal("Tag details", response.Result.Patch.Description);
             Assert.Contains("https://tag.example/t/noir", response.Result.Patch.Urls);
@@ -396,7 +396,7 @@ public sealed class StashCompatTests {
 
             Assert.True(response.Ok);
             Assert.NotNull(response.Result?.Patch);
-            Assert.Equal(ProposalKind.Studio, response.Result!.TargetKind);
+            Assert.Equal(EntityKind.Studio, response.Result!.TargetKind);
             Assert.Equal("Noir Studio", response.Result.Patch.Title);
             Assert.Equal("Studio details", response.Result.Patch.Description);
             Assert.Contains("https://studio.example/s/noir", response.Result.Patch.Urls);
@@ -627,7 +627,7 @@ public sealed class StashCompatTests {
 
             Assert.True(response.Ok);
             Assert.NotNull(response.Result?.Patch);
-            Assert.Equal(ProposalKind.Gallery, response.Result!.TargetKind);
+            Assert.Equal(EntityKind.Gallery, response.Result!.TargetKind);
             Assert.Equal("My Gallery", response.Result.Patch.Title);
             Assert.Equal("Gallery Studio", response.Result.Patch.Studio);
         } finally {
@@ -675,7 +675,7 @@ public sealed class StashCompatTests {
 
             Assert.True(response.Ok);
             Assert.NotNull(response.Result?.Patch);
-            Assert.Equal(ProposalKind.Person, response.Result!.TargetKind);
+            Assert.Equal(EntityKind.Person, response.Result!.TargetKind);
             Assert.Equal("Jane Doe", response.Result.Patch.Title);
             Assert.Equal("An actor.", response.Result.Patch.Description);
         } finally {
@@ -841,7 +841,7 @@ public sealed class StashCompatTests {
             Flags = new EntityMetadataFlagsPatch(null, true, null)
         };
         var proposal = new EntityMetadataProposal(
-            "stash-x:1", "Stash X", ProposalKind.Video, 0.9m, "Matched by URL", patch, [], [], [], entityId, []);
+            "stash-x:1", "Stash X", EntityKind.Video, 0.9m, "Matched by URL", patch, [], [], [], entityId, []);
 
         var apply = new EntityMetadataApplyService(db, new PluginArtworkServiceOptions(Path.GetTempPath()));
         var ok = await apply.ApplyAsync(entityId, proposal, ["title", "credits", "studio", "tags"], null, CancellationToken.None);

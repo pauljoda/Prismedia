@@ -10,6 +10,10 @@ public sealed class EntityKindCodec : ICodec<EntityKind> {
     public Type ValueType => typeof(EntityKind);
 
     /// <inheritdoc />
+    public IReadOnlyList<string> Codes { get; } =
+        Array.AsReadOnly(EntityKindRegistry.All.Select(definition => definition.Code).ToArray());
+
+    /// <inheritdoc />
     public string Encode(EntityKind value) => EntityKindRegistry.Describe(value).Code;
 
     /// <inheritdoc />

@@ -91,7 +91,7 @@ public sealed class EntityContractShapeTests {
     }
 
     [Fact]
-    public async Task OpenApiKeepsCodecEnumCollectionsTyped() {
+    public async Task OpenApiKeepsCodecClosedSetsTyped() {
         using var factory = new WebApplicationFactory<Program>();
         using var client = factory.CreateClient();
         using var document = JsonDocument.Parse(await client.GetStringAsync("/openapi/v1.json"));
@@ -110,6 +110,27 @@ public sealed class EntityContractShapeTests {
                 .Select(status => status.ToCode())
                 .Order(StringComparer.Ordinal),
             items.GetProperty("enum")
+                .EnumerateArray()
+                .Select(value => value.GetString())
+                .Order(StringComparer.Ordinal));
+
+        var proposalKind = document.RootElement
+            .GetProperty("components")
+            .GetProperty("schemas")
+            .GetProperty("EntityMetadataProposal")
+            .GetProperty("properties")
+            .GetProperty("targetKind");
+
+        var proposalKindSchema = document.RootElement
+            .GetProperty("components")
+            .GetProperty("schemas")
+            .GetProperty(nameof(ProposalKind));
+
+        Assert.Equal("#/components/schemas/ProposalKind", proposalKind.GetProperty("$ref").GetString());
+        Assert.Equal("string", proposalKindSchema.GetProperty("type").GetString());
+        Assert.Equal(
+            CodecRegistry.Get<ProposalKind>().Codes.Order(StringComparer.Ordinal),
+            proposalKindSchema.GetProperty("enum")
                 .EnumerateArray()
                 .Select(value => value.GetString())
                 .Order(StringComparer.Ordinal));

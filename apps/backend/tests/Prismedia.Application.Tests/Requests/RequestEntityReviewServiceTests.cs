@@ -84,7 +84,7 @@ public sealed class RequestEntityReviewServiceTests {
         var proposal = new EntityMetadataProposal(
             "series-root",
             request.PluginId,
-            ProposalKind.VideoSeries,
+            EntityKind.VideoSeries,
             1,
             "external-id",
             new EntityMetadataPatch(

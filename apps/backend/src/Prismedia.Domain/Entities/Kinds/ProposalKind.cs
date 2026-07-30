@@ -1,96 +1,59 @@
 namespace Prismedia.Domain.Entities;
 
 /// <summary>
-/// Closed set of entity kinds a plugin identify proposal can target. It mirrors
-/// <see cref="EntityKind"/> code-for-code and adds <see cref="VideoEpisode"/>: a plugin-protocol
-/// distinction for a leaf episode inside a series/season that Prismedia persists as an ordinary
-/// <see cref="EntityKind.Video"/>. The structural matching/dedup logic relies on keeping that
-/// distinction, so proposals carry <see cref="ProposalKind"/> rather than <see cref="EntityKind"/>.
-/// Collapse a proposal kind back to the entity kind Prismedia stores it as with
-/// <see cref="ProposalKindExtensions.ToEntityKind"/>.
+/// Identify-proposal target kind. Every persisted <see cref="EntityKind"/> is accepted through
+/// implicit conversion, so this vocabulary grows automatically with discovered Entity kinds. The
+/// only proposal-only value is <see cref="VideoEpisode"/>, which distinguishes a provider leaf
+/// episode while still persisting as <see cref="EntityKind.Video"/>.
 /// </summary>
-public enum ProposalKind {
-    /// <summary>Generic audio media root.</summary>
-    [Code("audio")]
-    Audio,
+public readonly record struct ProposalKind {
+    /// <summary>Stable proposal-only code for a leaf episode in the identify protocol.</summary>
+    public const string VideoEpisodeCode = "video-episode";
 
-    /// <summary>Audio library, album, audiobook, or podcast grouping.</summary>
-    [Code("audio-library")]
-    AudioLibrary,
+    private const byte EntityDiscriminator = 1;
+    private const byte VideoEpisodeDiscriminator = 2;
 
-    /// <summary>Playable audio track.</summary>
-    [Code("audio-track")]
-    AudioTrack,
+    private readonly EntityKind _entityKind;
+    private readonly byte _discriminator;
 
-    /// <summary>Book, comic, manga, or other page-based media item.</summary>
-    [Code("book")]
-    Book,
+    private ProposalKind(EntityKind entityKind, byte discriminator) {
+        _entityKind = entityKind;
+        _discriminator = discriminator;
+    }
 
-    /// <summary>Structural book volume.</summary>
-    [Code("book-volume")]
-    BookVolume,
+    /// <summary>Provider-only leaf episode kind, persisted by Prismedia as a Video entity.</summary>
+    public static ProposalKind VideoEpisode { get; } =
+        new(EntityKind.Video, VideoEpisodeDiscriminator);
 
-    /// <summary>Structural book chapter.</summary>
-    [Code("book-chapter")]
-    BookChapter,
+    /// <summary>Lifts any persisted Entity kind into the proposal vocabulary.</summary>
+    public static implicit operator ProposalKind(EntityKind kind) =>
+        new(kind, EntityDiscriminator);
 
-    /// <summary>Structural book page.</summary>
-    [Code("book-page")]
-    BookPage,
+    /// <summary>Returns the Entity kind Prismedia persists for this proposal target.</summary>
+    /// <exception cref="InvalidOperationException">The value is an uninitialized default.</exception>
+    public EntityKind ToPersistedEntityKind() => _discriminator switch {
+        EntityDiscriminator => _entityKind,
+        VideoEpisodeDiscriminator => EntityKind.Video,
+        _ => throw new InvalidOperationException("An uninitialized ProposalKind has no persisted Entity kind.")
+    };
 
-    /// <summary>Book author or writer grouping (mirrors <see cref="EntityKind.BookAuthor"/>).</summary>
-    [Code("book-author")]
-    BookAuthor,
+    /// <summary>Attempts to expose an entity-backed proposal kind without collapsing protocol-only values.</summary>
+    internal bool TryGetEntityKind(out EntityKind kind) {
+        if (_discriminator == EntityDiscriminator) {
+            kind = _entityKind;
+            return true;
+        }
 
-    /// <summary>User collection.</summary>
-    [Code("collection")]
-    Collection,
+        kind = default;
+        return false;
+    }
 
-    /// <summary>Image gallery.</summary>
-    [Code("gallery")]
-    Gallery,
+    /// <summary>Whether this is the proposal-only leaf-episode token.</summary>
+    internal bool IsVideoEpisode => _discriminator == VideoEpisodeDiscriminator;
 
-    /// <summary>Single image.</summary>
-    [Code("image")]
-    Image,
+    /// <summary>Whether this value was constructed through a supported path.</summary>
+    internal bool IsValid => _discriminator is EntityDiscriminator or VideoEpisodeDiscriminator;
 
-    /// <summary>Music artist or band grouping.</summary>
-    [Code("music-artist")]
-    MusicArtist,
-
-    /// <summary>Person taxonomy entity.</summary>
-    [Code("person")]
-    Person,
-
-    /// <summary>Single-film video release grouping.</summary>
-    [Code("movie")]
-    Movie,
-
-    /// <summary>Studio, publisher, label, or production group.</summary>
-    [Code("studio")]
-    Studio,
-
-    /// <summary>Tag taxonomy entity.</summary>
-    [Code("tag")]
-    Tag,
-
-    /// <summary>Playable video media item.</summary>
-    [Code("video")]
-    Video,
-
-    /// <summary>Video series grouping.</summary>
-    [Code("video-series")]
-    VideoSeries,
-
-    /// <summary>Structural video season.</summary>
-    [Code("video-season")]
-    VideoSeason,
-
-    /// <summary>
-    /// Leaf video episode within a series/season. Has no <see cref="EntityKind"/> of its own —
-    /// Prismedia stores episodes as <see cref="EntityKind.Video"/>; this kind only exists in the
-    /// identify protocol so providers can mark a child as a playable leaf rather than a container.
-    /// </summary>
-    [Code("video-episode")]
-    VideoEpisode
+    /// <inheritdoc />
+    public override string ToString() => IsValid ? this.ToCode() : nameof(ProposalKind);
 }

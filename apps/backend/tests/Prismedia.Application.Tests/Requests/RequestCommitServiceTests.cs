@@ -19,8 +19,8 @@ public sealed class RequestCommitServiceTests {
 
     [Fact]
     public async Task AuthorCommitCreatesTheWantedAuthorAndPickedBooksAndAcquiresEach() {
-        var proposal = Container(ProposalKind.Person, "Brandon Sanderson", "A1",
-            Leaf(ProposalKind.Book, "Elantris", "W1"), Leaf(ProposalKind.Book, "Warbreaker", "W2"), Leaf(ProposalKind.Book, "Skipped", "W3"));
+        var proposal = Container(EntityKind.Person, "Brandon Sanderson", "A1",
+            Leaf(EntityKind.Book, "Elantris", "W1"), Leaf(EntityKind.Book, "Warbreaker", "W2"), Leaf(EntityKind.Book, "Skipped", "W3"));
         var (service, writer, acquisitions) = Service(proposal);
 
         var response = await service.CommitAsync(
@@ -54,11 +54,11 @@ public sealed class RequestCommitServiceTests {
     [Fact]
     public async Task ChildSelectionPreservesOpaqueIdentityCaseAndColons() {
         var proposal = Container(
-            ProposalKind.Person,
+            EntityKind.Person,
             "Author",
             "A1",
-            Leaf(ProposalKind.Book, "Exact", "Work:AbC"),
-            Leaf(ProposalKind.Book, "Different case", "Work:aBc"));
+            Leaf(EntityKind.Book, "Exact", "Work:AbC"),
+            Leaf(EntityKind.Book, "Different case", "Work:aBc"));
         var (service, writer, acquisitions) = Service(proposal);
 
         var response = await service.CommitAsync(
@@ -76,8 +76,8 @@ public sealed class RequestCommitServiceTests {
 
     [Fact]
     public async Task ArtistCommitCreatesTheWantedArtistAndAlbumAcquisitions() {
-        var proposal = Container(ProposalKind.MusicArtist, "Daft Punk", "MB1",
-            Leaf(ProposalKind.AudioLibrary, "Discovery", "R1"), Leaf(ProposalKind.AudioLibrary, "Homework", "R2"));
+        var proposal = Container(EntityKind.MusicArtist, "Daft Punk", "MB1",
+            Leaf(EntityKind.AudioLibrary, "Discovery", "R1"), Leaf(EntityKind.AudioLibrary, "Homework", "R2"));
         var (service, writer, acquisitions) = Service(proposal);
 
         var response = await service.CommitAsync(
@@ -98,7 +98,7 @@ public sealed class RequestCommitServiceTests {
 
     [Fact]
     public async Task MovieCommitCreatesAWantedMovieWithItsAcquisitionLinked() {
-        var proposal = Leaf(ProposalKind.Movie, "Dune: Part Two", "M1") with {
+        var proposal = Leaf(EntityKind.Movie, "Dune: Part Two", "M1") with {
             Patch = Patch("Dune: Part Two", "M1") with { Credits = [new CreditPatch("Denis Villeneuve", "director", null, null)] }
         };
         var (service, writer, acquisitions) = Service(proposal);
@@ -122,16 +122,16 @@ public sealed class RequestCommitServiceTests {
     [Fact]
     public async Task SeriesCommitAcquiresSeasonPacksAndMaterializesEpisodePhantoms() {
         // The season node carries its episodes (a season lookup ships them); positions ride the patch.
-        var episode1 = Leaf(ProposalKind.Video, "Pilot", "E1") with {
+        var episode1 = Leaf(EntityKind.Video, "Pilot", "E1") with {
             Patch = Patch("Pilot", "E1", new Dictionary<string, int> { ["seasonNumber"] = 1, ["episodeNumber"] = 1 }),
         };
-        var episode2 = Leaf(ProposalKind.Video, "Aftermath", "E2") with {
+        var episode2 = Leaf(EntityKind.Video, "Aftermath", "E2") with {
             Patch = Patch("Aftermath", "E2", new Dictionary<string, int> { ["seasonNumber"] = 1, ["episodeNumber"] = 2 }),
         };
-        var season = Container(ProposalKind.VideoSeason, "Season 1", "S1", episode1, episode2) with {
+        var season = Container(EntityKind.VideoSeason, "Season 1", "S1", episode1, episode2) with {
             Patch = Patch("Season 1", "S1", new Dictionary<string, int> { ["seasonNumber"] = 1 }),
         };
-        var (service, writer, acquisitions) = Service(Container(ProposalKind.VideoSeries, "Andor", "TV1", season));
+        var (service, writer, acquisitions) = Service(Container(EntityKind.VideoSeries, "Andor", "TV1", season));
 
         var response = await service.CommitAsync(
             new RequestCommitRequest(RequestMediaKind.Series, $"{Provider}:TV1", [$"{Provider}:S1"]),
@@ -156,17 +156,17 @@ public sealed class RequestCommitServiceTests {
 
     [Fact]
     public async Task ExistingSeasonPickStillStartsAnAcquisitionAndMaterializesMissingEpisodes() {
-        var episode1 = Leaf(ProposalKind.Video, "Pilot", "E1") with {
+        var episode1 = Leaf(EntityKind.Video, "Pilot", "E1") with {
             Patch = Patch("Pilot", "E1", new Dictionary<string, int> { ["seasonNumber"] = 1, ["episodeNumber"] = 1 }),
         };
-        var episode2 = Leaf(ProposalKind.Video, "Aftermath", "E2") with {
+        var episode2 = Leaf(EntityKind.Video, "Aftermath", "E2") with {
             Patch = Patch("Aftermath", "E2", new Dictionary<string, int> { ["seasonNumber"] = 1, ["episodeNumber"] = 2 }),
         };
-        var season = Container(ProposalKind.VideoSeason, "Season 1", "S1", episode1, episode2) with {
+        var season = Container(EntityKind.VideoSeason, "Season 1", "S1", episode1, episode2) with {
             Patch = Patch("Season 1", "S1", new Dictionary<string, int> { ["seasonNumber"] = 1 }),
         };
         var (service, writer, acquisitions, monitors) = ServiceWithMonitors(
-            Container(ProposalKind.VideoSeries, "Andor", "TV1", season));
+            Container(EntityKind.VideoSeries, "Andor", "TV1", season));
         writer.ExistingWithFile.Add("S1"); // existing series/season folder with missing children
         writer.ExistingWithFile.Add("E1"); // episode already present; E2 is missing
 
@@ -191,17 +191,17 @@ public sealed class RequestCommitServiceTests {
 
     [Fact]
     public async Task RequestingExistingOwnedSeasonStartsSeasonMonitorAndMaterializesMissingEpisodes() {
-        var episode1 = Leaf(ProposalKind.Video, "Pilot", "E1") with {
+        var episode1 = Leaf(EntityKind.Video, "Pilot", "E1") with {
             Patch = Patch("Pilot", "E1", new Dictionary<string, int> { ["seasonNumber"] = 1, ["episodeNumber"] = 1 }),
         };
-        var episode2 = Leaf(ProposalKind.Video, "Aftermath", "E2") with {
+        var episode2 = Leaf(EntityKind.Video, "Aftermath", "E2") with {
             Patch = Patch("Aftermath", "E2", new Dictionary<string, int> { ["seasonNumber"] = 1, ["episodeNumber"] = 2 }),
         };
-        var season = Container(ProposalKind.VideoSeason, "Season 1", "S1", episode1, episode2) with {
+        var season = Container(EntityKind.VideoSeason, "Season 1", "S1", episode1, episode2) with {
             Patch = Patch("Season 1", "S1", new Dictionary<string, int> { ["seasonNumber"] = 1 }),
         };
         var (service, writer, acquisitions, monitors) = ServiceWithMonitors(
-            Container(ProposalKind.VideoSeries, "Andor", "TV1", season));
+            Container(EntityKind.VideoSeries, "Andor", "TV1", season));
         var seriesId = FakeWantedEntityWriter.EntityIdFor("TV1");
         var seasonId = FakeWantedEntityWriter.EntityIdFor("S1");
         writer.Containers[seriesId] = new MonitorableEntity(seriesId, EntityKind.VideoSeries, "Andor", [new ExternalIdentity(Provider, "TV1")]);
@@ -228,7 +228,7 @@ public sealed class RequestCommitServiceTests {
     public async Task RequestMissingChildrenRequestsEachWantedEpisodeIndividually() {
         // A season pack imported with gaps: episodes 2 and 3 remain wanted phantoms under the season.
         // The fallback requests each as its own monitored episode acquisition from the entity graph.
-        var (service, writer, acquisitions, monitors) = ServiceWithMonitors(Container(ProposalKind.VideoSeries, "Andor", "TV1"));
+        var (service, writer, acquisitions, monitors) = ServiceWithMonitors(Container(EntityKind.VideoSeries, "Andor", "TV1"));
         var seriesId = Guid.NewGuid();
         var seasonId = Guid.NewGuid();
         var episode2 = Guid.NewGuid();
@@ -262,7 +262,7 @@ public sealed class RequestCommitServiceTests {
     public async Task RequestingAWantedSeriesRequestsItsWantedSeasons() {
         // A container phantom has no acquirable unit of its own: its "Search for release" requests
         // each still-wanted child instead (the series' unrequested seasons as season packs).
-        var (service, writer, acquisitions, _) = ServiceWithMonitors(Container(ProposalKind.VideoSeries, "Andor", "TV1"));
+        var (service, writer, acquisitions, _) = ServiceWithMonitors(Container(EntityKind.VideoSeries, "Andor", "TV1"));
         var seriesId = Guid.NewGuid();
         var season1 = Guid.NewGuid();
         var season2 = Guid.NewGuid();
@@ -288,7 +288,7 @@ public sealed class RequestCommitServiceTests {
 
     [Fact]
     public async Task RequestMissingChildrenCountsAnInFlightEpisodeAsCoveredWithoutDuplicating() {
-        var (service, writer, acquisitions, _) = ServiceWithMonitors(Container(ProposalKind.VideoSeries, "Andor", "TV1"));
+        var (service, writer, acquisitions, _) = ServiceWithMonitors(Container(EntityKind.VideoSeries, "Andor", "TV1"));
         var seasonId = Guid.NewGuid();
         var episode2 = Guid.NewGuid();
         var episode3 = Guid.NewGuid();
@@ -315,8 +315,8 @@ public sealed class RequestCommitServiceTests {
 
     [Fact]
     public async Task OwnedPickIsReportedAlreadyOwnedAndNeitherAppliedNorAcquired() {
-        var proposal = Container(ProposalKind.Person, "Author", "A1",
-            Leaf(ProposalKind.Book, "Owned", "W1"), Leaf(ProposalKind.Book, "New", "W2"));
+        var proposal = Container(EntityKind.Person, "Author", "A1",
+            Leaf(EntityKind.Book, "Owned", "W1"), Leaf(EntityKind.Book, "New", "W2"));
         var (service, writer, acquisitions, monitors, suppressions, _) = ServiceWithSuppressions(proposal);
         writer.ExistingWithFile.Add("W1");
         suppressions.Suppressed.Add($"{Provider}:W1");
@@ -347,7 +347,7 @@ public sealed class RequestCommitServiceTests {
 
     [Fact]
     public async Task AudiobookRequestStartsParallelAcquisitionForAnOwnedEbook() {
-        var (service, writer, acquisitions) = Service(Leaf(ProposalKind.Book, "Elantris", "W1"));
+        var (service, writer, acquisitions) = Service(Leaf(EntityKind.Book, "Elantris", "W1"));
         writer.ExistingWithFile.Add("W1");
         writer.OwnedRenditions.Add(("W1", BookRendition.Ebook));
 
@@ -366,10 +366,10 @@ public sealed class RequestCommitServiceTests {
     [Fact]
     public async Task AllPresetRecordsDirectMonitorIntentForAnOwnedChildWithoutAcquiringIt() {
         var proposal = Container(
-            ProposalKind.Person,
+            EntityKind.Person,
             "Author",
             "A1",
-            Leaf(ProposalKind.Book, "Already here", "W1"));
+            Leaf(EntityKind.Book, "Already here", "W1"));
         var (service, writer, acquisitions, monitors) = ServiceWithMonitors(proposal);
         writer.ExistingWithFile.Add("W1");
 
@@ -394,7 +394,7 @@ public sealed class RequestCommitServiceTests {
 
     [Fact]
     public async Task InFlightWantedPickIsReportedAlreadyRequestedWithoutANewAcquisition() {
-        var proposal = Container(ProposalKind.Person, "Author", "A1", Leaf(ProposalKind.Book, "InFlight", "W1"));
+        var proposal = Container(EntityKind.Person, "Author", "A1", Leaf(EntityKind.Book, "InFlight", "W1"));
         var (service, writer, acquisitions) = Service(proposal);
         writer.ExistingWanted.Add("W1");
         acquisitions.EntitiesWithAcquisitions.Add(FakeWantedEntityWriter.EntityIdFor("W1"));
@@ -409,8 +409,8 @@ public sealed class RequestCommitServiceTests {
 
     [Fact]
     public async Task SeriesVolumePicksBecomeStandaloneWantedBooksStampedWithTheSeries() {
-        var proposal = Leaf(ProposalKind.Book, "The Stormlight Archive", "W0") with {
-            Children = [Leaf(ProposalKind.Book, "The Way of Kings", "V1"), Leaf(ProposalKind.Book, "Words of Radiance", "V2")]
+        var proposal = Leaf(EntityKind.Book, "The Stormlight Archive", "W0") with {
+            Children = [Leaf(EntityKind.Book, "The Way of Kings", "V1"), Leaf(EntityKind.Book, "Words of Radiance", "V2")]
         };
         var (service, writer, acquisitions) = Service(proposal);
 
@@ -433,7 +433,7 @@ public sealed class RequestCommitServiceTests {
 
     [Fact]
     public async Task CommitsAutoMonitorTheirAcquisitionsAndTheContainer() {
-        var proposal = Container(ProposalKind.Person, "Author", "A1", Leaf(ProposalKind.Book, "New Book", "W1"));
+        var proposal = Container(EntityKind.Person, "Author", "A1", Leaf(EntityKind.Book, "New Book", "W1"));
         var (service, _, acquisitions, monitors) = ServiceWithMonitors(proposal);
 
         var response = await service.CommitAsync(
@@ -449,8 +449,8 @@ public sealed class RequestCommitServiceTests {
 
     [Fact]
     public async Task ContainerSyncStartsTheSameMonitoredAcquisitionAsADirectChildToggle() {
-        var proposal = Container(ProposalKind.Person, "Author", "A1",
-            Leaf(ProposalKind.Book, "Known", "W1"), Leaf(ProposalKind.Book, "Brand New", "W2"));
+        var proposal = Container(EntityKind.Person, "Author", "A1",
+            Leaf(EntityKind.Book, "Known", "W1"), Leaf(EntityKind.Book, "Brand New", "W2"));
         var (service, writer, acquisitions, monitors) = ServiceWithMonitors(proposal);
         var authorEntityId = FakeWantedEntityWriter.EntityIdFor("A1");
         writer.Container = MonitoredContainer(
@@ -471,13 +471,13 @@ public sealed class RequestCommitServiceTests {
 
     [Fact]
     public async Task ContainerSyncDiscoversAWorkMissingFromTheInteractiveProposalCache() {
-        var cached = Container(ProposalKind.Person, "Author", "A1", Leaf(ProposalKind.Book, "Known", "W1"));
+        var cached = Container(EntityKind.Person, "Author", "A1", Leaf(EntityKind.Book, "Known", "W1"));
         var fresh = Container(
-            ProposalKind.Person,
+            EntityKind.Person,
             "Author",
             "A1",
-            Leaf(ProposalKind.Book, "Known", "W1"),
-            Leaf(ProposalKind.Book, "Newly published", "W2"));
+            Leaf(EntityKind.Book, "Known", "W1"),
+            Leaf(EntityKind.Book, "Newly published", "W2"));
         var source = new FakeProposalSource(cached) { FreshProposal = fresh };
         var writer = new FakeWantedEntityWriter();
         var acquisitions = new FakeAcquisitionRequestService();
@@ -508,10 +508,10 @@ public sealed class RequestCommitServiceTests {
     [Fact]
     public async Task ContainerSyncWritesNothingWhenStoppingClaimWinsDuringProviderLookup() {
         var proposal = Container(
-            ProposalKind.Person,
+            EntityKind.Person,
             "Author",
             "A1",
-            Leaf(ProposalKind.Book, "Late work", "W2"));
+            Leaf(EntityKind.Book, "Late work", "W2"));
         var source = new FakeProposalSource(proposal);
         var writer = new FakeWantedEntityWriter();
         var acquisitions = new FakeAcquisitionRequestService();
@@ -539,10 +539,10 @@ public sealed class RequestCommitServiceTests {
     [Fact]
     public async Task ContainerSyncRechecksSuppressionInsideTheMonitorMutationLease() {
         var proposal = Container(
-            ProposalKind.Person,
+            EntityKind.Person,
             "Author",
             "A1",
-            Leaf(ProposalKind.Book, "Removed while lookup ran", "W2"));
+            Leaf(EntityKind.Book, "Removed while lookup ran", "W2"));
         var (service, writer, acquisitions, monitors, suppressions, _) = ServiceWithSuppressions(proposal);
         var entityId = FakeWantedEntityWriter.EntityIdFor("A1");
         writer.Container = MonitoredContainer(
@@ -562,7 +562,7 @@ public sealed class RequestCommitServiceTests {
     [Fact]
     public async Task ContainerSyncUsesPersistentIdentityNamespaceIndependentlyFromProposalPluginId() {
         var proposal = Rekey(
-            Container(ProposalKind.Person, "Author", "A1", Leaf(ProposalKind.Book, "Brand New", "W2")),
+            Container(EntityKind.Person, "Author", "A1", Leaf(EntityKind.Book, "Brand New", "W2")),
             identityNamespace: "tmdb",
             pluginId: "metadata-aggregator");
         var (service, writer, acquisitions, monitors) = ServiceWithMonitors(proposal);
@@ -586,15 +586,15 @@ public sealed class RequestCommitServiceTests {
     [Fact]
     public async Task BoundContainerSyncKeepsTheExactPluginAndUsesDeclaredDescendantIdentityNamespaces() {
         var episode = Rekey(
-            Leaf(ProposalKind.Video, "Episode 1", "TV1:1:1"),
+            Leaf(EntityKind.Video, "Episode 1", "TV1:1:1"),
             identityNamespace: "tmdbepisode",
             pluginId: "series-metadata");
         var season = Rekey(
-            Container(ProposalKind.VideoSeason, "Season 1", "TV1:1"),
+            Container(EntityKind.VideoSeason, "Season 1", "TV1:1"),
             identityNamespace: "tmdbseason",
             pluginId: "series-metadata") with { Children = [episode] };
         var proposal = Rekey(
-            Container(ProposalKind.VideoSeries, "Series", "TV1"),
+            Container(EntityKind.VideoSeries, "Series", "TV1"),
             identityNamespace: "tmdb",
             pluginId: "series-metadata") with { Children = [season] };
         var source = new FakeProposalSource(proposal);
@@ -642,7 +642,7 @@ public sealed class RequestCommitServiceTests {
     [InlineData(MonitorPreset.All)]
     [InlineData(MonitorPreset.Future)]
     public async Task ContainerSyncWithAnAutoMonitorPresetAcquiresNewWorks(MonitorPreset preset) {
-        var proposal = Container(ProposalKind.Person, "Author", "A1", Leaf(ProposalKind.Book, "Brand New", "W2"));
+        var proposal = Container(EntityKind.Person, "Author", "A1", Leaf(EntityKind.Book, "Brand New", "W2"));
         var (service, writer, acquisitions, monitors) = ServiceWithMonitors(proposal);
         var authorEntityId = FakeWantedEntityWriter.EntityIdFor("A1");
         writer.Container = MonitoredContainer(
@@ -662,10 +662,10 @@ public sealed class RequestCommitServiceTests {
     [Fact]
     public async Task FutureDiscoveryRecordsDirectMonitorIntentForAnOwnedChildWithoutAcquiringIt() {
         var proposal = Container(
-            ProposalKind.Person,
+            EntityKind.Person,
             "Author",
             "A1",
-            Leaf(ProposalKind.Book, "Already here", "W2"));
+            Leaf(EntityKind.Book, "Already here", "W2"));
         var (service, writer, acquisitions, monitors) = ServiceWithMonitors(proposal);
         var authorEntityId = FakeWantedEntityWriter.EntityIdFor("A1");
         var ownedEntityId = FakeWantedEntityWriter.EntityIdFor("W2");
@@ -692,7 +692,7 @@ public sealed class RequestCommitServiceTests {
     [InlineData(MonitorPreset.Missing)]
     [InlineData(MonitorPreset.None)]
     public async Task ContainerSyncWithANonAutoMonitorPresetSkipsNewWorks(MonitorPreset preset) {
-        var proposal = Container(ProposalKind.Person, "Author", "A1", Leaf(ProposalKind.Book, "Brand New", "W2"));
+        var proposal = Container(EntityKind.Person, "Author", "A1", Leaf(EntityKind.Book, "Brand New", "W2"));
         var (service, writer, acquisitions, monitors) = ServiceWithMonitors(proposal);
         var authorEntityId = FakeWantedEntityWriter.EntityIdFor("A1");
         writer.Container = MonitoredContainer(
@@ -711,7 +711,7 @@ public sealed class RequestCommitServiceTests {
     [Fact]
     public async Task ContainerSyncNeverRecordsAPresetOnTheMonitor() {
         // A sync must never clobber the preset an explicit request chose — it passes null through to the store.
-        var proposal = Container(ProposalKind.Person, "Author", "A1", Leaf(ProposalKind.Book, "Brand New", "W2"));
+        var proposal = Container(EntityKind.Person, "Author", "A1", Leaf(EntityKind.Book, "Brand New", "W2"));
         var (service, writer, _, monitors) = ServiceWithMonitors(proposal);
         var authorEntityId = FakeWantedEntityWriter.EntityIdFor("A1");
         writer.Container = MonitoredContainer(
@@ -728,17 +728,17 @@ public sealed class RequestCommitServiceTests {
     public async Task ContainerCommitWithAPresetAndNoSelectionDerivesTheSelectionAndRecordsThePreset() {
         // Season 2 already owned; a Missing preset requests only the unowned seasons and records Missing on
         // the monitor so future syncs do not auto-monitor new seasons.
-        var season1 = Container(ProposalKind.VideoSeason, "Season 1", "S1") with {
+        var season1 = Container(EntityKind.VideoSeason, "Season 1", "S1") with {
             Patch = Patch("Season 1", "S1", new Dictionary<string, int> { ["seasonNumber"] = 1 }),
         };
-        var season2 = Container(ProposalKind.VideoSeason, "Season 2", "S2") with {
+        var season2 = Container(EntityKind.VideoSeason, "Season 2", "S2") with {
             Patch = Patch("Season 2", "S2", new Dictionary<string, int> { ["seasonNumber"] = 2 }),
         };
-        var season3 = Container(ProposalKind.VideoSeason, "Season 3", "S3") with {
+        var season3 = Container(EntityKind.VideoSeason, "Season 3", "S3") with {
             Patch = Patch("Season 3", "S3", new Dictionary<string, int> { ["seasonNumber"] = 3 }),
         };
         var (service, writer, acquisitions, monitors) = ServiceWithMonitors(
-            Container(ProposalKind.VideoSeries, "Andor", "TV1", season1, season2, season3));
+            Container(EntityKind.VideoSeries, "Andor", "TV1", season1, season2, season3));
         writer.ExistingWithFile.Add("S2"); // the library already owns season 2
 
         var response = await service.CommitAsync(
@@ -755,11 +755,11 @@ public sealed class RequestCommitServiceTests {
 
     [Fact]
     public async Task ContainerCommitWithAFuturePresetRequestsNothingNowButRecordsThePreset() {
-        var season1 = Container(ProposalKind.VideoSeason, "Season 1", "S1") with {
+        var season1 = Container(EntityKind.VideoSeason, "Season 1", "S1") with {
             Patch = Patch("Season 1", "S1", new Dictionary<string, int> { ["seasonNumber"] = 1 }),
         };
         var (service, _, acquisitions, monitors) = ServiceWithMonitors(
-            Container(ProposalKind.VideoSeries, "Andor", "TV1", season1));
+            Container(EntityKind.VideoSeries, "Andor", "TV1", season1));
 
         var response = await service.CommitAsync(
             new RequestCommitRequest(RequestMediaKind.Series, $"{Provider}:TV1", [], Preset: MonitorPreset.Future),
@@ -772,14 +772,14 @@ public sealed class RequestCommitServiceTests {
 
     [Fact]
     public async Task ContainerCommitWithAnExplicitSelectionStillRecordsThePresetButKeepsTheSelection() {
-        var season1 = Container(ProposalKind.VideoSeason, "Season 1", "S1") with {
+        var season1 = Container(EntityKind.VideoSeason, "Season 1", "S1") with {
             Patch = Patch("Season 1", "S1", new Dictionary<string, int> { ["seasonNumber"] = 1 }),
         };
-        var season2 = Container(ProposalKind.VideoSeason, "Season 2", "S2") with {
+        var season2 = Container(EntityKind.VideoSeason, "Season 2", "S2") with {
             Patch = Patch("Season 2", "S2", new Dictionary<string, int> { ["seasonNumber"] = 2 }),
         };
         var (service, _, acquisitions, monitors) = ServiceWithMonitors(
-            Container(ProposalKind.VideoSeries, "Andor", "TV1", season1, season2));
+            Container(EntityKind.VideoSeries, "Andor", "TV1", season1, season2));
 
         // An explicit pick of only S2 wins over the preset's derived selection; the preset is still recorded.
         var response = await service.CommitAsync(
@@ -794,7 +794,7 @@ public sealed class RequestCommitServiceTests {
 
     [Fact]
     public async Task RequestEntitySkipsNonPluginIdentifiersAndReusesTheEntity() {
-        var proposal = Leaf(ProposalKind.Book, "The Martian", "W1");
+        var proposal = Leaf(EntityKind.Book, "The Martian", "W1");
         var (service, writer, acquisitions, _) = ServiceWithMonitors(proposal);
         var phantomId = Guid.NewGuid();
         // The cascade stamps every provider identity, plugin or not — the isbn must be tried and skipped.
@@ -815,7 +815,7 @@ public sealed class RequestCommitServiceTests {
     public async Task RequestEntityTargetsTheMissingBookRenditionOnTheExistingEntity(
         BookRendition ownedRendition,
         BookRendition requestedRendition) {
-        var proposal = Leaf(ProposalKind.Book, "A Game of Thrones", "W1");
+        var proposal = Leaf(EntityKind.Book, "A Game of Thrones", "W1");
         var (service, writer, acquisitions, _) = ServiceWithMonitors(proposal);
         var entityId = FakeWantedEntityWriter.EntityIdFor("W1");
         writer.Container = new MonitorableEntity(
@@ -844,7 +844,7 @@ public sealed class RequestCommitServiceTests {
     [Fact]
     public async Task RequestEntityUsesThePersistedPluginIdentityRouteWithoutSubstitution() {
         var identity = new ExternalIdentity(Provider, "W1");
-        var source = new FakeProposalSource(Leaf(ProposalKind.Book, "The Martian", identity.Value));
+        var source = new FakeProposalSource(Leaf(EntityKind.Book, "The Martian", identity.Value));
         var writer = new FakeWantedEntityWriter();
         var acquisitions = new FakeAcquisitionRequestService();
         var entityId = Guid.NewGuid();
@@ -877,7 +877,7 @@ public sealed class RequestCommitServiceTests {
 
     [Fact]
     public async Task MissingPersistedPluginFallsBackToTheEntityGraphNotAnotherPlugin() {
-        var source = new FakeProposalSource(Leaf(ProposalKind.Book, "Different", "W2"));
+        var source = new FakeProposalSource(Leaf(EntityKind.Book, "Different", "W2"));
         var writer = new FakeWantedEntityWriter();
         var acquisitions = new FakeAcquisitionRequestService();
         var entityId = Guid.NewGuid();
@@ -915,7 +915,7 @@ public sealed class RequestCommitServiceTests {
 
     [Fact]
     public async Task CommitThreadsTheLibraryAndProfileChoicesToAcquisitionsAndTheContainerMonitor() {
-        var proposal = Container(ProposalKind.Person, "Author", "A1", Leaf(ProposalKind.Book, "Elantris", "W1"));
+        var proposal = Container(EntityKind.Person, "Author", "A1", Leaf(EntityKind.Book, "Elantris", "W1"));
         var (service, _, acquisitions, monitors) = ServiceWithMonitors(proposal);
         var rootId = Guid.NewGuid();
         var profileId = Guid.NewGuid();
@@ -935,7 +935,7 @@ public sealed class RequestCommitServiceTests {
 
     [Fact]
     public async Task RequestEntityInheritsTheFollowedContainersChoices() {
-        var proposal = Leaf(ProposalKind.Book, "New Work", "W9");
+        var proposal = Leaf(EntityKind.Book, "New Work", "W9");
         var (service, writer, acquisitions, monitors) = ServiceWithMonitors(proposal);
         var parentId = Guid.NewGuid();
         var phantomId = Guid.NewGuid();
@@ -953,7 +953,7 @@ public sealed class RequestCommitServiceTests {
 
     [Fact]
     public async Task ContainerSyncNeverClobbersTheMonitorsStoredChoices() {
-        var proposal = Container(ProposalKind.Person, "Author", "A1", Leaf(ProposalKind.Book, "Brand New", "W2"));
+        var proposal = Container(EntityKind.Person, "Author", "A1", Leaf(EntityKind.Book, "Brand New", "W2"));
         var (service, writer, _, monitors) = ServiceWithMonitors(proposal);
         var authorEntityId = FakeWantedEntityWriter.EntityIdFor("A1");
         writer.Container = MonitoredContainer(
@@ -969,7 +969,7 @@ public sealed class RequestCommitServiceTests {
 
     [Fact]
     public async Task RequestEntityRefusesContainersAndUnknownEntities() {
-        var (service, writer, _, _) = ServiceWithMonitors(Leaf(ProposalKind.Book, "Book", "W1"));
+        var (service, writer, _, _) = ServiceWithMonitors(Leaf(EntityKind.Book, "Book", "W1"));
 
         Assert.Null(await service.RequestEntityAsync(Guid.NewGuid(), hideNsfw: true, CancellationToken.None));
 
@@ -981,7 +981,7 @@ public sealed class RequestCommitServiceTests {
 
     [Fact]
     public async Task ContainerSyncFailsCleanlyWhenTheEntityOrProviderIsGone() {
-        var (service, writer, _, _) = ServiceWithMonitors(Container(ProposalKind.Person, "Author", "A1"));
+        var (service, writer, _, _) = ServiceWithMonitors(Container(EntityKind.Person, "Author", "A1"));
 
         // Entity gone entirely.
         Assert.False(await service.SyncContainerAsync(Guid.NewGuid(), CancellationToken.None));
@@ -998,7 +998,7 @@ public sealed class RequestCommitServiceTests {
 
     [Fact]
     public async Task RemoveWantedDelegatesToDurableGiveUpAndCountsThePrunedEntity() {
-        var (service, writer, acquisitions, _, suppressions, giveUp) = ServiceWithSuppressions(Leaf(ProposalKind.Book, "Book", "W1"));
+        var (service, writer, acquisitions, _, suppressions, giveUp) = ServiceWithSuppressions(Leaf(EntityKind.Book, "Book", "W1"));
         var phantomId = Guid.NewGuid();
         var acquisitionId = Guid.NewGuid();
         writer.Container = new MonitorableEntity(
@@ -1017,7 +1017,7 @@ public sealed class RequestCommitServiceTests {
     [Fact]
     public async Task RemoveWantedDoesNotCountAFailedDurableGiveUp() {
         var (service, writer, acquisitions, _, suppressions, giveUp) = ServiceWithSuppressions(
-            Leaf(ProposalKind.Book, "Book", "W1"));
+            Leaf(EntityKind.Book, "Book", "W1"));
         var entityId = Guid.NewGuid();
         writer.Container = new MonitorableEntity(
             entityId,
@@ -1041,7 +1041,7 @@ public sealed class RequestCommitServiceTests {
     [Fact]
     public async Task RemoveWantedCountsOnlyAnEntityActuallyPrunedByTheCoordinator() {
         var (service, writer, _, _, _, giveUp) = ServiceWithSuppressions(
-            Leaf(ProposalKind.Book, "Book", "W1"));
+            Leaf(EntityKind.Book, "Book", "W1"));
         var entityId = Guid.NewGuid();
         writer.Container = new MonitorableEntity(
             entityId,
@@ -1060,7 +1060,7 @@ public sealed class RequestCommitServiceTests {
 
     [Fact]
     public async Task RemoveWantedSkipsOnDiskEntities() {
-        var (service, writer, acquisitions, _, suppressions, giveUp) = ServiceWithSuppressions(Leaf(ProposalKind.Book, "Book", "W1"));
+        var (service, writer, acquisitions, _, suppressions, giveUp) = ServiceWithSuppressions(Leaf(EntityKind.Book, "Book", "W1"));
         var ownedId = Guid.NewGuid();
         writer.Container = new MonitorableEntity(
             ownedId, EntityKind.Book, "Owned", [new ExternalIdentity(Provider, "W1")], HasSourceFile: true);
@@ -1076,7 +1076,7 @@ public sealed class RequestCommitServiceTests {
 
     [Fact]
     public async Task SourceBackedLeafMaintenanceKeepsItsDirectMonitorActiveWithoutRequesting() {
-        var (service, writer, acquisitions, monitors) = ServiceWithMonitors(Leaf(ProposalKind.Book, "Book", "W1"));
+        var (service, writer, acquisitions, monitors) = ServiceWithMonitors(Leaf(EntityKind.Book, "Book", "W1"));
         var entityId = Guid.NewGuid();
         writer.Container = new MonitorableEntity(
             entityId, EntityKind.Book, "Owned book", [new ExternalIdentity(Provider, "W1")], HasSourceFile: true);
@@ -1089,7 +1089,7 @@ public sealed class RequestCommitServiceTests {
     [Fact]
     public async Task SourceBackedGraphAcquiredUnitMaintenanceRequestsItsMissingChildrenWithoutReacquiringTheUnit() {
         var (service, writer, acquisitions, monitors) = ServiceWithMonitors(
-            Leaf(ProposalKind.VideoSeason, "Season 1", "S1"));
+            Leaf(EntityKind.VideoSeason, "Season 1", "S1"));
         var entityId = Guid.NewGuid();
         var episodeId = Guid.NewGuid();
         writer.Container = new MonitorableEntity(
@@ -1118,7 +1118,7 @@ public sealed class RequestCommitServiceTests {
 
     [Fact]
     public async Task FilelessDirectlyMonitoredLeafRequestsItselfAndReusesTheNormalPipeline() {
-        var (service, writer, acquisitions, monitors) = ServiceWithMonitors(Leaf(ProposalKind.Book, "Book", "W1"));
+        var (service, writer, acquisitions, monitors) = ServiceWithMonitors(Leaf(EntityKind.Book, "Book", "W1"));
         var entityId = FakeWantedEntityWriter.EntityIdFor("W1");
         writer.Container = new MonitorableEntity(
             entityId, EntityKind.Book, "Wanted book", [new ExternalIdentity(Provider, "W1")], HasSourceFile: false);
@@ -1132,7 +1132,7 @@ public sealed class RequestCommitServiceTests {
     [Fact]
     public async Task NewlyCreatedAcquisitionIsRolledBackWhenStoppingClaimRejectsMonitorAttach() {
         var (service, writer, acquisitions, monitors) = ServiceWithMonitors(
-            Leaf(ProposalKind.Book, "Book", "W1"));
+            Leaf(EntityKind.Book, "Book", "W1"));
         var entityId = FakeWantedEntityWriter.EntityIdFor("W1");
         writer.Container = new MonitorableEntity(
             entityId, EntityKind.Book, "Wanted book", [new ExternalIdentity(Provider, "W1")]);
@@ -1147,8 +1147,8 @@ public sealed class RequestCommitServiceTests {
 
     [Fact]
     public async Task ContainerSyncNeverResurrectsASuppressedWork() {
-        var proposal = Container(ProposalKind.Person, "Author", "A1",
-            Leaf(ProposalKind.Book, "Removed", "W1"), Leaf(ProposalKind.Book, "Kept", "W2"));
+        var proposal = Container(EntityKind.Person, "Author", "A1",
+            Leaf(EntityKind.Book, "Removed", "W1"), Leaf(EntityKind.Book, "Kept", "W2"));
         var (service, writer, _, monitors, suppressions, _) = ServiceWithSuppressions(proposal);
         var authorEntityId = FakeWantedEntityWriter.EntityIdFor("A1");
         writer.Container = MonitoredContainer(
@@ -1164,7 +1164,7 @@ public sealed class RequestCommitServiceTests {
 
     [Fact]
     public async Task ExplicitRequestClearsTheSuppression() {
-        var proposal = Leaf(ProposalKind.Book, "The Martian", "W1");
+        var proposal = Leaf(EntityKind.Book, "The Martian", "W1");
         var (service, _, acquisitions, _, suppressions, _) = ServiceWithSuppressions(proposal);
         suppressions.Suppressed.Add($"{Provider}:W1");
 
@@ -1178,7 +1178,7 @@ public sealed class RequestCommitServiceTests {
 
     [Fact]
     public async Task ClaimFirstExplicitRequestLeavesSuppressionAndCreatesNoOrphanAcquisition() {
-        var proposal = Leaf(ProposalKind.Book, "The Martian", "W1");
+        var proposal = Leaf(EntityKind.Book, "The Martian", "W1");
         var (service, _, acquisitions, monitors, suppressions, _) = ServiceWithSuppressions(proposal);
         var entityId = FakeWantedEntityWriter.EntityIdFor("W1");
         monitors.DirectEntityIds.Add(entityId);
@@ -1201,7 +1201,7 @@ public sealed class RequestCommitServiceTests {
 
     [Fact]
     public async Task ExplicitRequestClearsOnlyCanonicalPersistentIdentities() {
-        var proposal = Leaf(ProposalKind.Book, "The Martian", "W1") with {
+        var proposal = Leaf(EntityKind.Book, "The Martian", "W1") with {
             Patch = Patch("The Martian", "W1") with {
                 ExternalIds = new Dictionary<string, string> {
                     [Provider] = "W1",
@@ -1224,7 +1224,7 @@ public sealed class RequestCommitServiceTests {
     [Fact]
     public async Task ReviewedCommitRejectsRevisionDriftBeforeAnyWrite() {
         var identity = new ExternalIdentity("tmdb", "603");
-        var proposal = Node("movie:603", "cinema-metadata", ProposalKind.Movie, "The Matrix", identity);
+        var proposal = Node("movie:603", "cinema-metadata", EntityKind.Movie, "The Matrix", identity);
         var current = Review(
             "cinema-metadata",
             RequestMediaKind.Movie,
@@ -1256,7 +1256,7 @@ public sealed class RequestCommitServiceTests {
     [Fact]
     public async Task ReviewedMovieCommitsOnlyTheReviewedRootProposal() {
         var identity = new ExternalIdentity("tmdb", "Movie:603");
-        var proposal = Node("movie:603", "cinema-metadata", ProposalKind.Movie, "The Matrix", identity);
+        var proposal = Node("movie:603", "cinema-metadata", EntityKind.Movie, "The Matrix", identity);
         var review = Review(
             "cinema-metadata",
             RequestMediaKind.Movie,
@@ -1295,7 +1295,7 @@ public sealed class RequestCommitServiceTests {
         var reviewedProposal = Node(
             "openlibrary:work:OL257943W:book",
             "openlibrary",
-            ProposalKind.Book,
+            EntityKind.Book,
             "A Game of Thrones",
             identity) with { TargetEntityId = Guid.NewGuid() };
         var refreshedProposal = reviewedProposal with { TargetEntityId = Guid.NewGuid() };
@@ -1340,12 +1340,12 @@ public sealed class RequestCommitServiceTests {
         var rootIdentity = new ExternalIdentity("authors", "Author:A");
         var childIdentity = new ExternalIdentity("works", "Work:AbC");
         var unselectedIdentity = new ExternalIdentity("works", "Work:aBc");
-        var selected = Node("book:Work:AbC", "books-metadata", ProposalKind.Book, "Exact", childIdentity);
-        var unselected = Node("book:Work:aBc", "books-metadata", ProposalKind.Book, "Different case", unselectedIdentity);
+        var selected = Node("book:Work:AbC", "books-metadata", EntityKind.Book, "Exact", childIdentity);
+        var unselected = Node("book:Work:aBc", "books-metadata", EntityKind.Book, "Different case", unselectedIdentity);
         var proposal = Node(
             "author:Author:A",
             "books-metadata",
-            ProposalKind.Person,
+            EntityKind.Person,
             "Author",
             rootIdentity,
             selected,
@@ -1392,8 +1392,8 @@ public sealed class RequestCommitServiceTests {
         var pluginId = "books-primary";
         var rootIdentity = new ExternalIdentity("shared-books", "Author:A");
         var childIdentity = new ExternalIdentity("shared-books", "Work:One");
-        var child = Node("book:one", pluginId, ProposalKind.Book, "Already here", childIdentity);
-        var proposal = Node("author:one", pluginId, ProposalKind.Person, "Author", rootIdentity, child);
+        var child = Node("book:one", pluginId, EntityKind.Book, "Already here", childIdentity);
+        var proposal = Node("author:one", pluginId, EntityKind.Person, "Author", rootIdentity, child);
         var review = Review(
             pluginId,
             RequestMediaKind.Author,
@@ -1431,8 +1431,8 @@ public sealed class RequestCommitServiceTests {
         var pluginId = "unavailable-books";
         var rootIdentity = new ExternalIdentity("shared-books", "Author:A");
         var childIdentity = new ExternalIdentity("shared-books", "Work:One");
-        var child = Node("book:one", pluginId, ProposalKind.Book, "Already here", childIdentity);
-        var proposal = Node("author:one", pluginId, ProposalKind.Person, "Author", rootIdentity, child);
+        var child = Node("book:one", pluginId, EntityKind.Book, "Already here", childIdentity);
+        var proposal = Node("author:one", pluginId, EntityKind.Person, "Author", rootIdentity, child);
         var review = Review(
             pluginId,
             RequestMediaKind.Author,
@@ -1475,9 +1475,9 @@ public sealed class RequestCommitServiceTests {
         var rootIdentity = new ExternalIdentity("tmdb", "series:1");
         var seasonIdentity = new ExternalIdentity("tvdb", "season:one");
         var episodeIdentity = new ExternalIdentity("episode-db", "episode:one");
-        var episode = Node("episode:one", "series-metadata", ProposalKind.Video, "Pilot", episodeIdentity);
-        var season = Node("season:one", "series-metadata", ProposalKind.VideoSeason, "Season 1", seasonIdentity, episode);
-        var proposal = Node("series:one", "series-metadata", ProposalKind.VideoSeries, "Series", rootIdentity, season);
+        var episode = Node("episode:one", "series-metadata", EntityKind.Video, "Pilot", episodeIdentity);
+        var season = Node("season:one", "series-metadata", EntityKind.VideoSeason, "Season 1", seasonIdentity, episode);
+        var proposal = Node("series:one", "series-metadata", EntityKind.VideoSeries, "Series", rootIdentity, season);
         var review = Review(
             "series-metadata",
             RequestMediaKind.Series,
@@ -1508,7 +1508,7 @@ public sealed class RequestCommitServiceTests {
     [Fact]
     public async Task ReviewedCommitRejectsDuplicateSelectionBeforeProposalResolution() {
         var identity = new ExternalIdentity("tmdb", "603");
-        var proposal = Node("movie:603", "cinema-metadata", ProposalKind.Movie, "The Matrix", identity);
+        var proposal = Node("movie:603", "cinema-metadata", EntityKind.Movie, "The Matrix", identity);
         var reviews = new FakeReviewSource(_ => throw new InvalidOperationException("Must not resolve invalid input."));
         var (service, writer, acquisitions, _, _) = ReviewedService(proposal, reviews);
 
@@ -1531,9 +1531,9 @@ public sealed class RequestCommitServiceTests {
     public async Task ReviewedCommitRejectsSameKindTargetsWithDuplicateExternalIdentityBeforeWrites() {
         var rootIdentity = new ExternalIdentity("authors", "A1");
         var sharedIdentity = new ExternalIdentity("works", "W1");
-        var first = Node("book:first", "books-metadata", ProposalKind.Book, "First", sharedIdentity);
-        var second = Node("book:second", "books-metadata", ProposalKind.Book, "Second", sharedIdentity);
-        var proposal = Node("author:one", "books-metadata", ProposalKind.Person, "Author", rootIdentity, first, second);
+        var first = Node("book:first", "books-metadata", EntityKind.Book, "First", sharedIdentity);
+        var second = Node("book:second", "books-metadata", EntityKind.Book, "Second", sharedIdentity);
+        var proposal = Node("author:one", "books-metadata", EntityKind.Person, "Author", rootIdentity, first, second);
         var review = Review(
             "books-metadata",
             RequestMediaKind.Author,
@@ -1565,8 +1565,8 @@ public sealed class RequestCommitServiceTests {
     [Fact]
     public async Task ReviewedCommitAllowsSameExternalIdentityAcrossDifferentEntityKinds() {
         var sharedIdentity = new ExternalIdentity("shared", "Item:1");
-        var book = Node("book:one", "books-metadata", ProposalKind.Book, "Book", sharedIdentity);
-        var proposal = Node("author:one", "books-metadata", ProposalKind.Person, "Author", sharedIdentity, book);
+        var book = Node("book:one", "books-metadata", EntityKind.Book, "Book", sharedIdentity);
+        var proposal = Node("author:one", "books-metadata", EntityKind.Person, "Author", sharedIdentity, book);
         var review = Review(
             "books-metadata",
             RequestMediaKind.Author,
@@ -1600,9 +1600,9 @@ public sealed class RequestCommitServiceTests {
         var rootIdentity = new ExternalIdentity("authors", "A1");
         var bookIdentity = new ExternalIdentity("works", "W1");
         var volumeIdentity = new ExternalIdentity("works", "V2");
-        var volume = Node("volume:2", "books-metadata", ProposalKind.Book, "Volume Two", volumeIdentity);
-        var book = Node("book:1", "books-metadata", ProposalKind.Book, "Volume One", bookIdentity, volume);
-        var proposal = Node("author:1", "books-metadata", ProposalKind.Person, "Author", rootIdentity, book);
+        var volume = Node("volume:2", "books-metadata", EntityKind.Book, "Volume Two", volumeIdentity);
+        var book = Node("book:1", "books-metadata", EntityKind.Book, "Volume One", bookIdentity, volume);
+        var proposal = Node("author:1", "books-metadata", EntityKind.Person, "Author", rootIdentity, book);
         var review = Review(
             "books-metadata",
             RequestMediaKind.Author,
@@ -1640,13 +1640,13 @@ public sealed class RequestCommitServiceTests {
         var album = Node(
             "album:one",
             pluginId,
-            ProposalKind.AudioLibrary,
+            EntityKind.AudioLibrary,
             "First Album",
             albumIdentity);
         var artist = Node(
             "artist:one",
             pluginId,
-            ProposalKind.MusicArtist,
+            EntityKind.MusicArtist,
             "Divide Music",
             artistIdentity,
             album);
@@ -1688,16 +1688,16 @@ public sealed class RequestCommitServiceTests {
         var artistIdentity = new ExternalIdentity("musicbrainzartist", "Artist:One");
         var firstIdentity = new ExternalIdentity("musicbrainzreleasegroup", "Album:One");
         var secondIdentity = new ExternalIdentity("musicbrainzreleasegroup", "Album:Two");
-        var first = Node("album:one", pluginId, ProposalKind.AudioLibrary, "First Album", firstIdentity) with {
+        var first = Node("album:one", pluginId, EntityKind.AudioLibrary, "First Album", firstIdentity) with {
             Images = [new ImageCandidate("cover", "https://images.test/first.jpg", pluginId, 1, null, 500, 500)]
         };
-        var second = Node("album:two", pluginId, ProposalKind.AudioLibrary, "Second Album", secondIdentity) with {
+        var second = Node("album:two", pluginId, EntityKind.AudioLibrary, "Second Album", secondIdentity) with {
             Images = [new ImageCandidate("cover", "https://images.test/second.jpg", pluginId, 1, null, 500, 500)]
         };
         var artist = Node(
             "artist:one",
             pluginId,
-            ProposalKind.MusicArtist,
+            EntityKind.MusicArtist,
             "Divide Music",
             artistIdentity,
             first,
@@ -1749,7 +1749,7 @@ public sealed class RequestCommitServiceTests {
         Assert.Empty(writer.Applied);
         var applied = Assert.Single(writer.DeferredArtworkApplied);
         var appliedAlbums = applied.Proposal.Children
-            .Where(child => child.TargetKind == ProposalKind.AudioLibrary)
+            .Where(child => child.TargetKind == EntityKind.AudioLibrary)
             .ToArray();
         Assert.Equal(2, appliedAlbums.Length);
         Assert.All(appliedAlbums, child => Assert.NotNull(child.TargetEntityId));
@@ -1765,12 +1765,12 @@ public sealed class RequestCommitServiceTests {
         var artistIdentity = new ExternalIdentity("musicbrainzartist", "Artist:One");
         var firstIdentity = new ExternalIdentity("musicbrainzreleasegroup", "Album:One");
         var secondIdentity = new ExternalIdentity("musicbrainzreleasegroup", "Album:Two");
-        var first = Node("album:one", pluginId, ProposalKind.AudioLibrary, "First Album", firstIdentity);
-        var second = Node("album:two", pluginId, ProposalKind.AudioLibrary, "Second Album", secondIdentity);
+        var first = Node("album:one", pluginId, EntityKind.AudioLibrary, "First Album", firstIdentity);
+        var second = Node("album:two", pluginId, EntityKind.AudioLibrary, "Second Album", secondIdentity);
         var artist = Node(
             "artist:one",
             pluginId,
-            ProposalKind.MusicArtist,
+            EntityKind.MusicArtist,
             "Divide Music",
             artistIdentity,
             first,
@@ -1833,13 +1833,13 @@ public sealed class RequestCommitServiceTests {
         var seasonShell = Node(
             "season:one",
             pluginId,
-            ProposalKind.VideoSeason,
+            EntityKind.VideoSeason,
             "Season 1",
             seasonIdentity,
             new Dictionary<string, int> { [EntityPositionCodes.Season] = 1 }) with {
                 TargetEntityId = matchedLocalSeasonId
             };
-        var series = Node("series:one", pluginId, ProposalKind.VideoSeries, "Series", seriesIdentity, seasonShell);
+        var series = Node("series:one", pluginId, EntityKind.VideoSeries, "Series", seriesIdentity, seasonShell);
         var seriesReview = Review(
             pluginId,
             RequestMediaKind.Series,
@@ -1853,14 +1853,14 @@ public sealed class RequestCommitServiceTests {
         var episode = Node(
             "episode:one",
             pluginId,
-            ProposalKind.Video,
+            EntityKind.Video,
             "Pilot",
             episodeIdentity,
             new Dictionary<string, int> { [EntityPositionCodes.Episode] = 1 });
         var hydratedSeason = Node(
             seasonShell.ProposalId,
             pluginId,
-            ProposalKind.VideoSeason,
+            EntityKind.VideoSeason,
             "Season 1",
             seasonIdentity,
             new Dictionary<string, int> { [EntityPositionCodes.Season] = 1 },
@@ -1929,19 +1929,19 @@ public sealed class RequestCommitServiceTests {
         var firstTrack = Node(
             "track:one",
             pluginId,
-            ProposalKind.AudioTrack,
+            EntityKind.AudioTrack,
             "First Track",
             firstTrackIdentity);
         var secondTrack = Node(
             "track:two",
             pluginId,
-            ProposalKind.AudioTrack,
+            EntityKind.AudioTrack,
             "Second Track",
             secondTrackIdentity);
         var album = Node(
             "album:hydrate",
             pluginId,
-            ProposalKind.AudioLibrary,
+            EntityKind.AudioLibrary,
             "Hydrated Album",
             albumIdentity,
             firstTrack,
@@ -1989,8 +1989,8 @@ public sealed class RequestCommitServiceTests {
         var pluginId = "series-metadata";
         var seriesIdentity = new ExternalIdentity("tmdb", "Series:Preflight");
         var seasonIdentity = new ExternalIdentity("tvdb", "Season:Preflight");
-        var season = Node("season:preflight", pluginId, ProposalKind.VideoSeason, "Season 1", seasonIdentity);
-        var series = Node("series:preflight", pluginId, ProposalKind.VideoSeries, "Series", seriesIdentity, season);
+        var season = Node("season:preflight", pluginId, EntityKind.VideoSeason, "Season 1", seasonIdentity);
+        var series = Node("series:preflight", pluginId, EntityKind.VideoSeries, "Series", seriesIdentity, season);
         var seriesReview = Review(
             pluginId,
             RequestMediaKind.Series,
@@ -2028,8 +2028,8 @@ public sealed class RequestCommitServiceTests {
     public async Task ReviewedFuturePresetCreatesContainerMonitorWithoutAcquisitions() {
         var rootIdentity = new ExternalIdentity("tmdb", "Series:Future");
         var seasonIdentity = new ExternalIdentity("tmdb", "Series:Future:S1");
-        var season = Node("season:1", "series-metadata", ProposalKind.VideoSeason, "Season 1", seasonIdentity);
-        var proposal = Node("series:future", "series-metadata", ProposalKind.VideoSeries, "Series", rootIdentity, season);
+        var season = Node("season:1", "series-metadata", EntityKind.VideoSeason, "Season 1", seasonIdentity);
+        var proposal = Node("series:future", "series-metadata", EntityKind.VideoSeries, "Series", rootIdentity, season);
         var review = Review(
             "series-metadata",
             RequestMediaKind.Series,
@@ -2064,8 +2064,8 @@ public sealed class RequestCommitServiceTests {
     public async Task ReviewedBookVolumeSelectionCreatesStandaloneWantedVolume() {
         var rootIdentity = new ExternalIdentity("openlibrary", "series:1");
         var volumeIdentity = new ExternalIdentity("openlibrary-work", "OL:Work:2");
-        var volume = Node("volume:Two", "books-metadata", ProposalKind.Book, "Volume Two", volumeIdentity);
-        var proposal = Node("series:1", "books-metadata", ProposalKind.Book, "Series", rootIdentity, volume);
+        var volume = Node("volume:Two", "books-metadata", EntityKind.Book, "Volume Two", volumeIdentity);
+        var proposal = Node("series:1", "books-metadata", EntityKind.Book, "Series", rootIdentity, volume);
         var review = Review(
             "books-metadata",
             RequestMediaKind.Book,
@@ -2097,7 +2097,7 @@ public sealed class RequestCommitServiceTests {
 
     [Fact]
     public async Task MalformedOrUnresolvableExternalIdsReturnNull() {
-        var (service, _, _) = Service(Leaf(ProposalKind.Book, "Book", "W1"));
+        var (service, _, _) = Service(Leaf(EntityKind.Book, "Book", "W1"));
 
         Assert.Null(await service.CommitAsync(
             new RequestCommitRequest(RequestMediaKind.Book, "missing-separator", []), hideNsfw: false, CancellationToken.None));

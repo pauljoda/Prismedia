@@ -123,7 +123,7 @@ public sealed class IdentifyBulkEndpointTests {
         new(
             ProposalId: "missing-target",
             Provider: "tmdb",
-            TargetKind: ProposalKind.Video,
+            TargetKind: EntityKind.Video,
             Confidence: 1m,
             MatchReason: "test",
             Patch: new EntityMetadataPatch(

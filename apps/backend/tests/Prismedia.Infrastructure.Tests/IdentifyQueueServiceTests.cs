@@ -693,7 +693,7 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
         // The item is mid-review with the seeded parent proposal (no children yet), already owned by the
         // newer cascade B.
         var seed = new EntityMetadataProposal(
-            "tmdb:series:1", "tmdb", ProposalKind.VideoSeries, 1, "external-id",
+            "tmdb:series:1", "tmdb", EntityKind.VideoSeries, 1, "external-id",
             EmptyPatch("Known Series identified"), [], [], [], TargetEntityId: seriesId, Relationships: []);
         db.IdentifyQueueItems.Add(new IdentifyQueueItemRow {
             Id = Guid.NewGuid(),
@@ -736,7 +736,7 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
         SeedProvider(db);
         SeedEntity(db, seriesId, "video-series", "Known Series");
         var seed = new EntityMetadataProposal(
-            "tmdb:series:1", "tmdb", ProposalKind.VideoSeries, 1, "external-id",
+            "tmdb:series:1", "tmdb", EntityKind.VideoSeries, 1, "external-id",
             EmptyPatch("Known Series identified"), [], [], [], TargetEntityId: seriesId, Relationships: []);
         db.IdentifyQueueItems.Add(new IdentifyQueueItemRow {
             Id = Guid.NewGuid(),
@@ -808,7 +808,7 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
         var seriesId = Guid.Parse("44444444-4444-4444-4444-444444444446");
         SeedEntity(db, seriesId, "video-series", "Old Title");
         var proposal = new EntityMetadataProposal(
-            "tmdb:series:1", "tmdb", ProposalKind.VideoSeries, 1, "external-id",
+            "tmdb:series:1", "tmdb", EntityKind.VideoSeries, 1, "external-id",
             EmptyPatch("Reviewed Title"), [], [], [], TargetEntityId: seriesId, Relationships: []);
         db.IdentifyQueueItems.Add(new IdentifyQueueItemRow {
             Id = Guid.NewGuid(),
@@ -1972,7 +1972,7 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
         new(
             "tmdb:123",
             "tmdb",
-            ProposalKind.Video,
+            EntityKind.Video,
             1,
             "external-id",
             new EntityMetadataPatch(
@@ -1997,7 +1997,7 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
         var person = new EntityMetadataProposal(
             "tmdb:person:nsfw",
             "tmdb",
-            ProposalKind.Person,
+            EntityKind.Person,
             1,
             "credit",
             EmptyPatch("NSFW Actor") with { Flags = new EntityMetadataFlagsPatch(null, true, null) },
@@ -2008,7 +2008,7 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
         var tag = new EntityMetadataProposal(
             "tmdb:tag:nsfw",
             "tmdb",
-            ProposalKind.Tag,
+            EntityKind.Tag,
             1,
             "tag",
             EmptyPatch("NSFW Tag") with { Flags = new EntityMetadataFlagsPatch(null, true, null) },
@@ -2019,7 +2019,7 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
         var season = new EntityMetadataProposal(
             "tmdb:season:1",
             "tmdb",
-            ProposalKind.VideoSeason,
+            EntityKind.VideoSeason,
             1,
             "cascade",
             EmptyPatch("Season 1") with { Flags = new EntityMetadataFlagsPatch(null, true, null) },
@@ -2032,7 +2032,7 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
         return new EntityMetadataProposal(
             "tmdb:series:1",
             "tmdb",
-            ProposalKind.VideoSeries,
+            EntityKind.VideoSeries,
             1,
             "external-id",
             EmptyPatch("Series") with {
@@ -2056,7 +2056,7 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
             new(
                 $"tmdb:season:{number}",
                 "tmdb",
-                ProposalKind.VideoSeason,
+                EntityKind.VideoSeason,
                 1,
                 "cascade",
                 EmptyPatch(title) with {
@@ -2072,7 +2072,7 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
         return new EntityMetadataProposal(
             "tmdb:series:apply-race",
             "tmdb",
-            ProposalKind.VideoSeries,
+            EntityKind.VideoSeries,
             1,
             "external-id",
             EmptyPatch("Identified Series"),
@@ -2093,7 +2093,7 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
         var track = new EntityMetadataProposal(
             "tmdb:track:1",
             "tmdb",
-            ProposalKind.AudioTrack,
+            EntityKind.AudioTrack,
             1,
             "cascade",
             EmptyPatch("Identified Song"),
@@ -2106,7 +2106,7 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
         return new EntityMetadataProposal(
             "tmdb:album:1",
             "tmdb",
-            ProposalKind.AudioLibrary,
+            EntityKind.AudioLibrary,
             1,
             "external-id",
             EmptyPatch("Identified Album"),
@@ -2321,7 +2321,7 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
                         new EntityMetadataProposal(
                             "tmdb:series-999:episode:2",
                             "tmdb",
-                            ProposalKind.Video,
+                            EntityKind.Video,
                             0.98m,
                             "parent-catalog",
                             EmptyPatch("Known Episode from parent catalog") with {
@@ -2337,7 +2337,7 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
                 return ProposalResponse(new EntityMetadataProposal(
                     "tmdb:series-999",
                     "tmdb",
-                    ProposalKind.VideoSeries,
+                    EntityKind.VideoSeries,
                     1m,
                     "external-id",
                     EmptyPatch("Known Series identified") with {
@@ -2412,7 +2412,7 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
             var proposal = new EntityMetadataProposal(
                 "tmdb:series:1",
                 "tmdb",
-                ProposalKind.VideoSeries,
+                EntityKind.VideoSeries,
                 1,
                 "external-id",
                 EmptyPatch("Known Series identified"),
@@ -2442,7 +2442,7 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
             new(
                 $"tmdb:series:1:episode:{episodeNumber}",
                 "tmdb",
-                ProposalKind.Video,
+                EntityKind.Video,
                 0.9m,
                 "cascade",
                 EmptyPatch($"Episode {episodeNumber}") with {
@@ -2469,7 +2469,7 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
             var season = new EntityMetadataProposal(
                 "tmdb:series:1:season:1",
                 "tmdb",
-                ProposalKind.VideoSeason,
+                EntityKind.VideoSeason,
                 1,
                 "provider-tree",
                 EmptyPatch("Season 1") with {
@@ -2482,7 +2482,7 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
             var proposal = new EntityMetadataProposal(
                 "tmdb:series:1",
                 "tmdb",
-                ProposalKind.VideoSeries,
+                EntityKind.VideoSeries,
                 1,
                 "external-id",
                 EmptyPatch("Known Series identified"),
@@ -2639,7 +2639,7 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
                 return ProposalResponse(new EntityMetadataProposal(
                     "tmdb:person:actor-1",
                     "tmdb",
-                    ProposalKind.Person,
+                    EntityKind.Person,
                     1,
                     "external-id",
                     EmptyPatch("Actor Shell") with {
@@ -2655,7 +2655,7 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
             var actorShell = new EntityMetadataProposal(
                 "tmdb:person:actor-1",
                 "tmdb",
-                ProposalKind.Person,
+                EntityKind.Person,
                 null,
                 "cascade",
                 EmptyPatch("Actor Shell") with {
@@ -2668,7 +2668,7 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
             return ProposalResponse(new EntityMetadataProposal(
                 "tmdb:movie:movie-1",
                 "tmdb",
-                ProposalKind.Video,
+                EntityKind.Video,
                 1,
                 "external-id",
                 EmptyPatch("Cast Heavy Movie identified") with {

@@ -4,7 +4,7 @@ using System.Reflection;
 namespace Prismedia.Domain.Entities;
 
 /// <summary>
-/// Resolves codecs for closed-set enums. Attribute-backed enums use the shared
+/// Resolves codecs for closed-set value types. Attribute-backed enums use the shared
 /// <see cref="EnumCodec{TValue}"/> automatically; exceptional roots such as
 /// <see cref="EntityKind"/> supply one discoverable custom codec whose values come from richer
 /// definitions. Neither path requires edits to this registry when a new closed set is introduced.
@@ -14,23 +14,23 @@ public static class CodecRegistry {
     private static readonly IReadOnlyDictionary<Type, ICodec> CustomCodecs = DiscoverCustomCodecs();
 
     /// <summary>
-    /// Gets the codec for a code-bearing enum type.
+    /// Gets the codec for a code-bearing closed-set value type.
     /// </summary>
-    /// <typeparam name="TValue">Enum value type to encode or decode.</typeparam>
-    /// <returns>The codec for the enum type.</returns>
+    /// <typeparam name="TValue">Value type to encode or decode.</typeparam>
+    /// <returns>The codec for the value type.</returns>
     public static ICodec<TValue> Get<TValue>()
-        where TValue : struct, Enum =>
+        where TValue : struct =>
         (ICodec<TValue>)Cache.GetOrAdd(typeof(TValue), CreateRequired);
 
     /// <summary>
-    /// Attempts to resolve the codec for a runtime enum type, succeeding when a custom codec was
+    /// Attempts to resolve the codec for a runtime value type, succeeding when a custom codec was
     /// discovered or every member declares a <see cref="CodeAttribute"/>.
     /// </summary>
-    /// <param name="valueType">Enum type to resolve a codec for.</param>
+    /// <param name="valueType">Value type to resolve a codec for.</param>
     /// <param name="codec">Resolved codec when the type opts in to codec support.</param>
     /// <returns><see langword="true" /> when a codec is available; otherwise <see langword="false" />.</returns>
     public static bool TryGet(Type valueType, out ICodec? codec) {
-        if (valueType.IsEnum && (CustomCodecs.ContainsKey(valueType) || IsCodeable(valueType))) {
+        if (CustomCodecs.ContainsKey(valueType) || valueType.IsEnum && IsCodeable(valueType)) {
             codec = Cache.GetOrAdd(valueType, CreateRequired);
             return true;
         }

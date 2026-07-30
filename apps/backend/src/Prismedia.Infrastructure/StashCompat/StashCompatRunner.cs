@@ -199,7 +199,7 @@ public sealed class StashCompatRunner : IIdentifyRunner {
                 .Select(candidate => candidate!)
                 .ToArray();
             if (candidates.Length > 0) {
-                return IdentifyPluginResponse.Candidates(ProposalKind.Studio, candidates);
+                return IdentifyPluginResponse.Candidates(EntityKind.Studio, candidates);
             }
         }
 
@@ -245,7 +245,7 @@ public sealed class StashCompatRunner : IIdentifyRunner {
                 .Select(candidate => candidate!)
                 .ToArray();
             if (candidates.Length > 0) {
-                return IdentifyPluginResponse.Candidates(ProposalKind.Tag, candidates);
+                return IdentifyPluginResponse.Candidates(EntityKind.Tag, candidates);
             }
         }
 

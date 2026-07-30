@@ -709,7 +709,7 @@ public sealed class PluginRuntimeServiceTests : IDisposable {
         Assert.Equal(EntityKind.Video, executor.CapturedRequest?.Entity.Kind);
         Assert.Equal(IdentifyAction.Search, executor.CapturedRequest?.Action);
         Assert.Equal(PluginProtocol.CurrentVersion, executor.CapturedRequest?.ProtocolVersion);
-        Assert.Equal(ProposalKind.Movie, response.Result?.TargetKind);
+        Assert.Equal(EntityKind.Movie, response.Result?.TargetKind);
         Assert.Equal(movieId, response.Result?.TargetEntityId);
     }
 
@@ -782,7 +782,7 @@ public sealed class PluginRuntimeServiceTests : IDisposable {
         Assert.True(response.Ok);
         var child = Assert.Single(response.Result!.Children);
         Assert.Null(child.TargetEntityId);
-        Assert.Equal(ProposalKind.VideoSeason, child.TargetKind);
+        Assert.Equal(EntityKind.VideoSeason, child.TargetKind);
         Assert.Equal("Season 1", child.Patch.Title);
         Assert.Equal("Generated Studio", Assert.Single(response.Result.Relationships).Patch.Title);
     }
@@ -1017,7 +1017,7 @@ public sealed class PluginRuntimeServiceTests : IDisposable {
         await db.SaveChangesAsync();
 
         var providerId = "dd87fb34-57e1-41cb-9c68-3fad83068dd5";
-        var executor = new RawIdTitleProposalProcessExecutor(ProposalKind.AudioLibrary, providerId);
+        var executor = new RawIdTitleProposalProcessExecutor(EntityKind.AudioLibrary, providerId);
         var service = CreateIdentifyService(db, executor, pluginDir);
 
         var response = await service.IdentifyAsync(albumId, "musicbrainz", null, parentExternalIds: null, hideNsfw: false, CancellationToken.None);
@@ -1584,7 +1584,7 @@ public sealed class PluginRuntimeServiceTests : IDisposable {
             var studioRelationship = new EntityMetadataProposal(
                 "tmdb:studio:generated",
                 "tmdb",
-                ProposalKind.Studio,
+                EntityKind.Studio,
                 1,
                 "studio",
                 EmptyPatch() with { Title = "Generated Studio" },
@@ -1594,7 +1594,7 @@ public sealed class PluginRuntimeServiceTests : IDisposable {
             var providerStructuralChild = new EntityMetadataProposal(
                 "tmdb:season:provider",
                 "tmdb",
-                ProposalKind.VideoSeason,
+                EntityKind.VideoSeason,
                 1,
                 "provider-tree",
                 EmptyPatch() with {
@@ -1608,7 +1608,7 @@ public sealed class PluginRuntimeServiceTests : IDisposable {
             return new EntityMetadataProposal(
                 "tmdb:series:42",
                 "tmdb",
-                ProposalKind.VideoSeries,
+                EntityKind.VideoSeries,
                 1,
                 "search",
                 EmptyPatch() with {
@@ -1679,7 +1679,7 @@ public sealed class PluginRuntimeServiceTests : IDisposable {
             return new EntityMetadataProposal(
                 $"tmdb:tv:207:season:{seasonId}",
                 "tmdb",
-                ProposalKind.VideoSeason,
+                EntityKind.VideoSeason,
                 0.9m,
                 "context",
                 EmptyPatch() with {

@@ -10,7 +10,7 @@ public sealed class ProposalApplySelectionTests {
         var proposal = new EntityMetadataProposal(
             ProposalId: "tmdb:movie:123",
             Provider: "tmdb",
-            TargetKind: ProposalKind.Movie,
+            TargetKind: EntityKind.Movie,
             Confidence: 1,
             MatchReason: "external-id",
             Patch: new EntityMetadataPatch(

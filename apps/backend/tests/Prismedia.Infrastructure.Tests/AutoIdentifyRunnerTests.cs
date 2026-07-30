@@ -102,7 +102,7 @@ public sealed class AutoIdentifyRunnerTests {
                 ["tmdb"] = CandidateShell("tmdb", "271267", "The Chair Company", confidence: 1m),
             },
             ProposalsByExternalId = {
-                ["tmdb:271267"] = Proposal("tmdb", confidence: 1m, title: "The Chair Company", targetKind: ProposalKind.VideoSeries),
+                ["tmdb:271267"] = Proposal("tmdb", confidence: 1m, title: "The Chair Company", targetKind: EntityKind.VideoSeries),
             },
         };
         var runner = new AutoIdentifyRunner(
@@ -137,7 +137,7 @@ public sealed class AutoIdentifyRunnerTests {
                     "2918ce08-196e-408b-b3cb-4ccbefe62c3a",
                     "NateWantsToBattle",
                     confidence: null,
-                    targetKind: ProposalKind.MusicArtist,
+                    targetKind: EntityKind.MusicArtist,
                     year: 1989),
             },
             ProposalsByExternalId = {
@@ -145,7 +145,7 @@ public sealed class AutoIdentifyRunnerTests {
                     "musicbrainz",
                     confidence: 0.95m,
                     title: "NateWantsToBattle",
-                    targetKind: ProposalKind.MusicArtist),
+                    targetKind: EntityKind.MusicArtist),
             },
             SupportedKindsByProvider = {
                 ["musicbrainz"] = [EntityKind.MusicArtist.ToCode()],
@@ -182,7 +182,7 @@ public sealed class AutoIdentifyRunnerTests {
                     "12e5490e-d1ab-4397-8830-dec3c4c74962",
                     "Diddy Kong Racing Theme",
                     confidence: null,
-                    targetKind: ProposalKind.AudioLibrary,
+                    targetKind: EntityKind.AudioLibrary,
                     year: 2014),
             },
             ProposalsByExternalId = {
@@ -190,7 +190,7 @@ public sealed class AutoIdentifyRunnerTests {
                     "musicbrainz",
                     confidence: 0.9m,
                     title: "Diddy Kong Racing Theme",
-                    targetKind: ProposalKind.AudioLibrary),
+                    targetKind: EntityKind.AudioLibrary),
             },
             SupportedKindsByProvider = {
                 ["musicbrainz"] = [EntityKind.AudioLibrary.ToCode()],
@@ -252,7 +252,7 @@ public sealed class AutoIdentifyRunnerTests {
         var progressReports = new List<AutoIdentifyProgress>();
         var identify = new FakeIdentifyProvider {
             ProposalsByProvider = {
-                ["tmdb"] = Proposal("tmdb", confidence: 1m, title: "King of the Hill", targetKind: ProposalKind.VideoSeries),
+                ["tmdb"] = Proposal("tmdb", confidence: 1m, title: "King of the Hill", targetKind: EntityKind.VideoSeries),
             },
             OnApplyAsync = async (_, _, _, _, progress, cancellationToken) => {
                 Assert.NotNull(progress);
@@ -297,13 +297,13 @@ public sealed class AutoIdentifyRunnerTests {
         var settings = await ConfigureAsync(db, enabled: true, providers: ["tmdb"], confidencePercent: 90m);
         var identify = new FakeIdentifyProvider {
             ProposalsByProvider = {
-                ["tmdb"] = Proposal("tmdb", confidence: 1m, title: "Stalled Series", targetKind: ProposalKind.VideoSeries),
+                ["tmdb"] = Proposal("tmdb", confidence: 1m, title: "Stalled Series", targetKind: EntityKind.VideoSeries),
             },
             OnIdentifyAsync = async (_, _, _, _, cancellationToken) => {
                 await Task.Delay(TimeSpan.FromMilliseconds(200), cancellationToken);
                 return new IdentifyPluginResponse(
                     true,
-                    Proposal("tmdb", confidence: 1m, title: "Stalled Series", targetKind: ProposalKind.VideoSeries),
+                    Proposal("tmdb", confidence: 1m, title: "Stalled Series", targetKind: EntityKind.VideoSeries),
                     null);
             }
         };
@@ -332,7 +332,7 @@ public sealed class AutoIdentifyRunnerTests {
                 ["tmdb"] = CandidateShell("tmdb", "271267", "The Chair Company", confidence: 0.5m),
             },
             ProposalsByExternalId = {
-                ["tmdb:271267"] = Proposal("tmdb", confidence: 1m, title: "The Chair Company", targetKind: ProposalKind.VideoSeries),
+                ["tmdb:271267"] = Proposal("tmdb", confidence: 1m, title: "The Chair Company", targetKind: EntityKind.VideoSeries),
             },
         };
         var runner = new AutoIdentifyRunner(
@@ -444,7 +444,7 @@ public sealed class AutoIdentifyRunnerTests {
         var proposal = new EntityMetadataProposal(
             ProposalId: Guid.NewGuid().ToString(),
             Provider: "p1",
-            TargetKind: ProposalKind.VideoSeries,
+            TargetKind: EntityKind.VideoSeries,
             Confidence: null,
             MatchReason: null,
             Patch: sparsePatch,
@@ -574,7 +574,7 @@ public sealed class AutoIdentifyRunnerTests {
         var settings = await ConfigureAsync(db, enabled: true, providers: ["musicbrainz"], confidencePercent: 90m);
         var identify = new FakeIdentifyProvider {
             ProposalsByProvider = {
-                ["musicbrainz"] = Proposal("musicbrainz", confidence: 0.95m, title: "Abbey Road", targetKind: ProposalKind.AudioLibrary),
+                ["musicbrainz"] = Proposal("musicbrainz", confidence: 0.95m, title: "Abbey Road", targetKind: EntityKind.AudioLibrary),
             },
             // Mirrors the MusicBrainz manifest: concrete kinds only, no generic "audio" kind, so a
             // capability lookup by the settings selector kind would wrongly exclude the provider.
@@ -617,7 +617,7 @@ public sealed class AutoIdentifyRunnerTests {
         var settings = await ConfigureAsync(db, enabled: true, providers: ["musicbrainz"], confidencePercent: 90m);
         var identify = new FakeIdentifyProvider {
             ProposalsByProvider = {
-                ["musicbrainz"] = Proposal("musicbrainz", confidence: 0.95m, title: "Abbey Road", targetKind: ProposalKind.AudioLibrary),
+                ["musicbrainz"] = Proposal("musicbrainz", confidence: 0.95m, title: "Abbey Road", targetKind: EntityKind.AudioLibrary),
             },
             SupportedKindsByProvider = {
                 ["musicbrainz"] = [
@@ -667,7 +667,7 @@ public sealed class AutoIdentifyRunnerTests {
         var settings = await ConfigureAsync(db, enabled: true, providers: ["musicbrainz"], confidencePercent: 90m);
         var identify = new FakeIdentifyProvider {
             ProposalsByProvider = {
-                ["musicbrainz"] = Proposal("musicbrainz", confidence: 0.95m, title: "Abbey Road", targetKind: ProposalKind.AudioLibrary),
+                ["musicbrainz"] = Proposal("musicbrainz", confidence: 0.95m, title: "Abbey Road", targetKind: EntityKind.AudioLibrary),
             },
             SupportedKindsByProvider = {
                 ["musicbrainz"] = [EntityKind.AudioLibrary.ToCode()],
@@ -699,7 +699,7 @@ public sealed class AutoIdentifyRunnerTests {
         var settings = await ConfigureAsync(db, enabled: true, providers: ["musicbrainz"], confidencePercent: 90m);
         var identify = new FakeIdentifyProvider {
             ProposalsByProvider = {
-                ["musicbrainz"] = Proposal("musicbrainz", confidence: 0.95m, title: "The Beatles", targetKind: ProposalKind.MusicArtist),
+                ["musicbrainz"] = Proposal("musicbrainz", confidence: 0.95m, title: "The Beatles", targetKind: EntityKind.MusicArtist),
             },
             SupportedKindsByProvider = {
                 ["musicbrainz"] = [
@@ -731,10 +731,10 @@ public sealed class AutoIdentifyRunnerTests {
         await using var db = CreateContext();
         var albumId = await SeedVideoAsync(db, organized: false, kind: EntityKind.AudioLibrary.ToCode(), title: "What You Want (2020)");
         var trackId = Guid.NewGuid();
-        var proposal = Proposal("musicbrainz", confidence: 0.95m, title: "What You Want", targetKind: ProposalKind.AudioLibrary) with {
+        var proposal = Proposal("musicbrainz", confidence: 0.95m, title: "What You Want", targetKind: EntityKind.AudioLibrary) with {
             TargetEntityId = albumId,
             Children = [
-                Proposal("musicbrainz", confidence: 0.95m, title: "Introduction", targetKind: ProposalKind.AudioTrack) with {
+                Proposal("musicbrainz", confidence: 0.95m, title: "Introduction", targetKind: EntityKind.AudioTrack) with {
                     TargetEntityId = trackId,
                     Images = []
                 }
@@ -875,11 +875,11 @@ public sealed class AutoIdentifyRunnerTests {
         Assert.Empty(identify.IdentifyCalls);
     }
 
-    private static EntityMetadataProposal Proposal(string provider, decimal? confidence, string title, ProposalKind targetKind = ProposalKind.Video) =>
+    private static EntityMetadataProposal Proposal(string provider, decimal? confidence, string title, ProposalKind? targetKind = null) =>
         new(
             ProposalId: Guid.NewGuid().ToString(),
             Provider: provider,
-            TargetKind: targetKind,
+            TargetKind: targetKind ?? EntityKind.Video,
             Confidence: confidence,
             MatchReason: null,
             Patch: new EntityMetadataPatch(
@@ -906,14 +906,14 @@ public sealed class AutoIdentifyRunnerTests {
         string externalId,
         string title,
         decimal? confidence,
-        ProposalKind targetKind = ProposalKind.VideoSeries,
+        ProposalKind? targetKind = null,
         int? year = 2025) =>
-        CandidateShells(provider, [(externalId, title, confidence, year)], targetKind);
+        CandidateShells(provider, [(externalId, title, confidence, year)], targetKind ?? EntityKind.VideoSeries);
 
     private static EntityMetadataProposal CandidateShells(
         string provider,
         params (string ExternalId, string Title, decimal? Confidence, int? Year)[] candidates) =>
-        CandidateShells(provider, candidates, ProposalKind.VideoSeries);
+        CandidateShells(provider, candidates, EntityKind.VideoSeries);
 
     private static EntityMetadataProposal CandidateShells(
         string provider,

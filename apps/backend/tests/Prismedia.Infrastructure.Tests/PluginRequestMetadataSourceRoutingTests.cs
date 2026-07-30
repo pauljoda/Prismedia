@@ -668,7 +668,7 @@ public sealed class PluginRequestMetadataSourceRoutingTests : IDisposable {
         new(
             $"proposal-{identity.Value}",
             pluginId,
-            ProposalKind.Movie,
+            EntityKind.Movie,
             1,
             "external-id",
             new EntityMetadataPatch(
@@ -719,7 +719,7 @@ public sealed class PluginRequestMetadataSourceRoutingTests : IDisposable {
             if (request.Action == IdentifyAction.Search) {
                 var candidateIdentity = request.Query.Fields is null ? "123" : "Movie:CaseSensitive";
                 return Task.FromResult(IdentifyPluginResponse.Candidates(
-                    ProposalKind.Movie,
+                    EntityKind.Movie,
                     [
                         new EntitySearchCandidate(
                             new Dictionary<string, string> {
@@ -743,7 +743,7 @@ public sealed class PluginRequestMetadataSourceRoutingTests : IDisposable {
             return Task.FromResult(IdentifyPluginResponse.Match(new EntityMetadataProposal(
                 $"proposal-{identity.Value}",
                 descriptor.Manifest.Id,
-                ProposalKind.Movie,
+                EntityKind.Movie,
                 1,
                 "external-id",
                 new EntityMetadataPatch(
@@ -797,7 +797,7 @@ public sealed class PluginRequestMetadataSourceRoutingTests : IDisposable {
             var season = new EntityMetadataProposal(
                 "season-one",
                 descriptor.Manifest.Id,
-                ProposalKind.VideoSeason,
+                EntityKind.VideoSeason,
                 1,
                 "cascade",
                 Patch(
@@ -819,7 +819,7 @@ public sealed class PluginRequestMetadataSourceRoutingTests : IDisposable {
             Proposal = new EntityMetadataProposal(
                 "series-root",
                 descriptor.Manifest.Id,
-                ProposalKind.VideoSeries,
+                EntityKind.VideoSeries,
                 1,
                 "external-id",
                 Patch(

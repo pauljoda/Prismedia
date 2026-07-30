@@ -268,7 +268,7 @@ public sealed partial class EntityMetadataApplyService {
             return;
         }
 
-        if (proposal.TargetKind == ProposalKind.Studio) {
+        if (proposal.TargetKind == EntityKind.Studio) {
             var logo = ImageKindRoleResolver.Pick(proposal.Images, MediaImageKind.Logo, MediaImageKind.Poster)
                 ?? proposal.Images[0];
             await _artwork.DownloadPluginImageAsync(linkedEntity, logo, EntityFileRole.Logo, now, cancellationToken);

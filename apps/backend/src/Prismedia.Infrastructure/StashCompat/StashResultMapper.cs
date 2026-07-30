@@ -136,7 +136,7 @@ public static class StashResultMapper {
             relationships.Add(RelationshipProposal(
                 $"{providerId}:studio:{studioName}",
                 providerName,
-                ProposalKind.Studio,
+                EntityKind.Studio,
                 studioName,
                 string.IsNullOrWhiteSpace(studio.Description) ? null : studio.Description!.Trim(),
                 studioUrls,
@@ -156,7 +156,7 @@ public static class StashResultMapper {
             relationships.Add(RelationshipProposal(
                 $"{providerId}:tag:{name}",
                 providerName,
-                ProposalKind.Tag,
+                EntityKind.Tag,
                 name,
                 string.IsNullOrWhiteSpace(tag.Description) ? null : tag.Description!.Trim(),
                 urls,
@@ -206,7 +206,7 @@ public static class StashResultMapper {
         return new EntityMetadataProposal(
             $"{providerId}:tag:{(string.IsNullOrWhiteSpace(tag.Url) ? name : tag.Url!.Trim())}",
             providerName,
-            ProposalKind.Tag,
+            EntityKind.Tag,
             confidence,
             matchReason,
             patch,
@@ -256,7 +256,7 @@ public static class StashResultMapper {
         return new EntityMetadataProposal(
             $"{providerId}:studio:{(string.IsNullOrWhiteSpace(studio.Url) ? name : studio.Url!.Trim())}",
             providerName,
-            ProposalKind.Studio,
+            EntityKind.Studio,
             confidence,
             matchReason,
             patch,
@@ -281,7 +281,7 @@ public static class StashResultMapper {
             dates["birth"] = performer!.Birthdate!.Trim();
         }
 
-        return RelationshipProposal($"{providerId}:person:{name}", providerName, ProposalKind.Person, name, details, urls, images, dates);
+        return RelationshipProposal($"{providerId}:person:{name}", providerName, EntityKind.Person, name, details, urls, images, dates);
     }
 
     private static EntityMetadataProposal RelationshipProposal(
@@ -361,7 +361,7 @@ public static class StashResultMapper {
         return new EntityMetadataProposal(
             $"{providerId}:person:{(string.IsNullOrWhiteSpace(performer.Url) ? name : performer.Url!.Trim())}",
             providerName,
-            ProposalKind.Person,
+            EntityKind.Person,
             confidence,
             matchReason,
             patch,

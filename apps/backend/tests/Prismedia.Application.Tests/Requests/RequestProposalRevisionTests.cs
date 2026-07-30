@@ -56,13 +56,24 @@ public sealed class RequestProposalRevisionTests {
         Assert.Equal(RequestProposalRevision.Compute(populated), RequestProposalRevision.Compute(sparse));
     }
 
+    [Fact]
+    public void EntityBackedAndProtocolOnlyKindCodesKeepTheirGoldenRevision() {
+        var proposal = Proposal(
+            new Dictionary<string, string> { ["tmdb"] = "123" },
+            new Dictionary<string, string> { ["release"] = "2024" });
+
+        Assert.Equal(
+            "14167ef4f3fc9408528fa399dfd4fa637355fcabe359894933ffcb807592f710",
+            RequestProposalRevision.Compute(proposal));
+    }
+
     private static EntityMetadataProposal Proposal(
         IReadOnlyDictionary<string, string> externalIds,
         IReadOnlyDictionary<string, string> dates) =>
         new(
             "root",
             "cinema-metadata",
-            ProposalKind.VideoSeries,
+            EntityKind.VideoSeries,
             1,
             "external-id",
             new EntityMetadataPatch(

@@ -18,6 +18,9 @@ public sealed class EnumCodec<TValue> : ICodec<TValue>
     public Type ValueType => typeof(TValue);
 
     /// <inheritdoc />
+    public IReadOnlyList<string> Codes { get; } = Array.AsReadOnly(EncodeMap.Values.ToArray());
+
+    /// <inheritdoc />
     public string Encode(TValue value) =>
         EncodeMap.TryGetValue(value, out var code)
             ? code

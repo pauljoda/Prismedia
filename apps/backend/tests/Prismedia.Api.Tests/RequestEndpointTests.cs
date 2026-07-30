@@ -422,7 +422,7 @@ public sealed class RequestEndpointTests {
             var season = new EntityMetadataProposal(
                 "season-child",
                 request.PluginId,
-                ProposalKind.VideoSeason,
+                EntityKind.VideoSeason,
                 1,
                 "cascade",
                 Patch("Season 1", "tvdb", "season:one"),
@@ -434,7 +434,7 @@ public sealed class RequestEndpointTests {
             var proposal = new EntityMetadataProposal(
                 "series-root",
                 request.PluginId,
-                ProposalKind.VideoSeries,
+                EntityKind.VideoSeries,
                 1,
                 "external-id",
                 Patch("Series", request.ExternalIdentity.Namespace, request.ExternalIdentity.Value),
@@ -525,7 +525,7 @@ public sealed class RequestEndpointTests {
             new(
                 ProposalId: "movie-603",
                 Provider: "movie-plugin",
-                TargetKind: ProposalKind.Movie,
+                TargetKind: EntityKind.Movie,
                 Confidence: 1,
                 MatchReason: "lookup-id",
                 Patch: new EntityMetadataPatch(

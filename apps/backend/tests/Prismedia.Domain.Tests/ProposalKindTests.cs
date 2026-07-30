@@ -4,23 +4,20 @@ namespace Prismedia.Domain.Tests;
 
 public sealed class ProposalKindTests {
     [Fact]
-    public void ProposalKindMirrorsEveryEntityKindCode() {
+    public void ProposalKindDerivesEveryEntityKindCode() {
         var entityCodes = Enum.GetValues<EntityKind>().Select(kind => kind.ToCode()).ToHashSet();
-        var proposalCodes = Enum.GetValues<ProposalKind>().Select(kind => kind.ToCode()).ToHashSet();
+        var proposalCodes = CodecRegistry.Get<ProposalKind>().Codes.ToHashSet();
 
-        // Every entity kind is a valid proposal target, so ProposalKind must cover them all.
         Assert.Empty(entityCodes.Except(proposalCodes));
     }
 
     [Fact]
     public void ProposalKindAddsOnlyTheVideoEpisodeToken() {
         var entityCodes = Enum.GetValues<EntityKind>().Select(kind => kind.ToCode()).ToHashSet();
-        var proposalExtras = Enum.GetValues<ProposalKind>()
-            .Select(kind => kind.ToCode())
+        var proposalExtras = CodecRegistry.Get<ProposalKind>().Codes
             .Where(code => !entityCodes.Contains(code))
             .ToArray();
 
-        // The proposal vocabulary is EntityKind plus exactly one provider-only token.
         Assert.Equal(["video-episode"], proposalExtras);
     }
 
@@ -34,22 +31,34 @@ public sealed class ProposalKindTests {
     [Fact]
     public void VideoEpisodeCollapsesToVideo() {
         Assert.Equal(EntityKind.Video, ProposalKind.VideoEpisode.ToEntityKind());
+        Assert.NotEqual(EntityKind.Video.ToProposalKind(), ProposalKind.VideoEpisode);
     }
 
-    [Theory]
-    [InlineData(ProposalKind.Person)]
-    [InlineData(ProposalKind.Studio)]
-    [InlineData(ProposalKind.Tag)]
-    public void RelationshipKindsAreClassifiedAsRelationships(ProposalKind kind) {
-        Assert.True(kind.IsRelationship());
+    [Fact]
+    public void TaxonomyEntityKindsAreClassifiedAsRelationships() {
+        Assert.All(
+            new[] { EntityKind.Person, EntityKind.Studio, EntityKind.Tag },
+            kind => Assert.True(kind.ToProposalKind().IsRelationship()));
     }
 
-    [Theory]
-    [InlineData(ProposalKind.Video)]
-    [InlineData(ProposalKind.VideoEpisode)]
-    [InlineData(ProposalKind.VideoSeason)]
-    [InlineData(ProposalKind.Book)]
-    public void StructuralAndRootKindsAreNotRelationships(ProposalKind kind) {
-        Assert.False(kind.IsRelationship());
+    [Fact]
+    public void StructuralAndRootKindsAreNotRelationships() {
+        Assert.All(
+            new[] {
+                EntityKind.Video.ToProposalKind(),
+                ProposalKind.VideoEpisode,
+                EntityKind.VideoSeason.ToProposalKind(),
+                EntityKind.Book.ToProposalKind()
+            },
+            kind => Assert.False(kind.IsRelationship()));
+    }
+
+    [Fact]
+    public void CodecRejectsUnknownBlankAndDefaultValues() {
+        var codec = CodecRegistry.Get<ProposalKind>();
+
+        Assert.False(codec.TryDecode("unknown", out _));
+        Assert.False(codec.TryDecode("  ", out _));
+        Assert.Throws<ArgumentOutOfRangeException>(() => codec.Encode(default));
     }
 }

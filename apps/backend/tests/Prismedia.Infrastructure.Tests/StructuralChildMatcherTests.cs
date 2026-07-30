@@ -53,7 +53,7 @@ public sealed class StructuralChildMatcherTests {
     [Fact]
     public void CountMismatchStillBindsGenericSeasonSeriesTitleByNumber() {
         var localSeason = Local(EntityKind.VideoSeason.ToCode(), "Season 3", 3);
-        var providerSeason = Proposal(ProposalKind.VideoSeason, "Series 3", ("seasonNumber", 3));
+        var providerSeason = Proposal(EntityKind.VideoSeason, "Series 3", ("seasonNumber", 3));
 
         var match = StructuralChildMatcher.FindProviderChild(
             localSeason,
@@ -95,7 +95,7 @@ public sealed class StructuralChildMatcherTests {
     [Fact]
     public void CountMismatchDoesNotBindAlbumTrackWhenNumberMatchesButTitleConflicts() {
         var localTrack = Local(EntityKind.AudioTrack.ToCode(), "Local Hidden Track", 7);
-        var providerTrack = Proposal(ProposalKind.AudioTrack, "Provider Bonus Track", ("trackNumber", 7));
+        var providerTrack = Proposal(EntityKind.AudioTrack, "Provider Bonus Track", ("trackNumber", 7));
 
         var match = StructuralChildMatcher.FindProviderChild(
             localTrack,
@@ -109,7 +109,7 @@ public sealed class StructuralChildMatcherTests {
     [Fact]
     public void CountMismatchStillBindsNumberMatchWhenTitlesAreCompatibleVariants() {
         var localTrack = Local(EntityKind.AudioTrack.ToCode(), "Local Episode 1", 1);
-        var providerTrack = Proposal(ProposalKind.AudioTrack, "Episode 1", ("trackNumber", 1));
+        var providerTrack = Proposal(EntityKind.AudioTrack, "Episode 1", ("trackNumber", 1));
 
         var match = StructuralChildMatcher.FindProviderChild(
             localTrack,
@@ -137,7 +137,7 @@ public sealed class StructuralChildMatcherTests {
     [Fact]
     public void CountMismatchCanBindAlbumTrackByTitleWhenProviderNumberDiffers() {
         var localTrack = Local(EntityKind.AudioTrack.ToCode(), "Closer", 12);
-        var providerTrack = Proposal(ProposalKind.AudioTrack, "Closer", ("trackNumber", 11));
+        var providerTrack = Proposal(EntityKind.AudioTrack, "Closer", ("trackNumber", 11));
 
         var match = StructuralChildMatcher.FindProviderChild(
             localTrack,
@@ -165,7 +165,7 @@ public sealed class StructuralChildMatcherTests {
     [Fact]
     public void FilenameStyleTrackTitleMatchesProviderDiacritics() {
         var localTrack = Local(EntityKind.AudioTrack.ToCode(), "01-beyonce-deja_vu", 1);
-        var providerTrack = Proposal(ProposalKind.AudioTrack, "Déjà Vu", ("trackNumber", 8));
+        var providerTrack = Proposal(EntityKind.AudioTrack, "Déjà Vu", ("trackNumber", 8));
 
         var match = StructuralChildMatcher.FindProviderChild(
             localTrack,
@@ -267,7 +267,7 @@ public sealed class StructuralChildMatcherTests {
             .ToArray();
         var providers = providerTitlesByDisc
             .SelectMany(disc => disc)
-            .Select((title, globalIndex) => Proposal(ProposalKind.AudioTrack, title, ("sortOrder", globalIndex)))
+            .Select((title, globalIndex) => Proposal(EntityKind.AudioTrack, title, ("sortOrder", globalIndex)))
             .ToArray();
         var localsInPersistedOrder = Enumerable.Range(0, 18)
             .SelectMany(track => localsByDisc.Select(disc => disc[track]))

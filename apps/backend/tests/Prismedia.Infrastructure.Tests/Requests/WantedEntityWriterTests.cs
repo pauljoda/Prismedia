@@ -412,19 +412,19 @@ public sealed class WantedEntityWriterTests {
         var secondUrl = "https://images.test/second.jpg";
         var proposal = MetadataProposal(
             "artist",
-            ProposalKind.MusicArtist,
+            EntityKind.MusicArtist,
             "Divide Music",
             artistId,
             MetadataProposal(
                 "first",
-                ProposalKind.AudioLibrary,
+                EntityKind.AudioLibrary,
                 "First Album",
                 firstId,
                 new ImageCandidate(
                     MediaImageKind.Cover.ToCode(), firstUrl, "musicbrainz", 1, null, 500, 500)),
             MetadataProposal(
                 "second",
-                ProposalKind.AudioLibrary,
+                EntityKind.AudioLibrary,
                 "Second Album",
                 secondId,
                 new ImageCandidate(
