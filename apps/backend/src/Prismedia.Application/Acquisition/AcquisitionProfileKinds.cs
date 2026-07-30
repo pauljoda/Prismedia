@@ -28,9 +28,9 @@ public static class AcquisitionProfileKinds {
     }
 
     /// <summary>The closed set of kinds a profile may be created for, in display order.</summary>
-    public static readonly IReadOnlyList<EntityKind> All = RequestKindRegistry.All
-        .Select(descriptor => descriptor.ProfileEntityKind)
-        .OfType<EntityKind>()
-        .Distinct()
+    public static readonly IReadOnlyList<EntityKind> All = EntityKindRegistry.All
+        .Where(definition => definition.AcquisitionProfile is not null)
+        .OrderBy(definition => definition.AcquisitionProfile!.DisplayOrder)
+        .Select(definition => definition.Kind)
         .ToArray();
 }

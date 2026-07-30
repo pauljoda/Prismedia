@@ -36,6 +36,23 @@ public sealed record EntityKindNavigationManifestEntry(
 /// <param name="ExpandsRelationshipResults">Whether direct matches hydrate related entities.</param>
 public sealed record EntityKindSearchManifestEntry(int Order, bool ExpandsRelationshipResults);
 
+/// <summary>Acquisition-profile policy projected from an owning Entity-kind definition.</summary>
+/// <param name="Label">User-facing profile label.</param>
+/// <param name="DisplayOrder">Stable settings-display order among acquisition profiles.</param>
+/// <param name="LibraryRootMediaCapability">Required library-root capability code.</param>
+/// <param name="SupportedReleaseDateTypes">Ordered automatic-search release milestones.</param>
+/// <param name="DefaultNamingTemplate">Default profile path template.</param>
+/// <param name="NamingHint">User-facing template guidance.</param>
+/// <param name="NamingFamily">Template renderer and validation family code.</param>
+public sealed record AcquisitionProfileManifestEntry(
+    string Label,
+    int DisplayOrder,
+    string LibraryRootMediaCapability,
+    IReadOnlyList<string> SupportedReleaseDateTypes,
+    string DefaultNamingTemplate,
+    string NamingHint,
+    string NamingFamily);
+
 /// <summary>Rich metadata for an entity kind, used to generate display labels on the frontend.</summary>
 /// <param name="Code">Stable kind code.</param>
 /// <param name="DisplayName">Singular display name.</param>
@@ -59,6 +76,7 @@ public sealed record EntityKindSearchManifestEntry(int Order, bool ExpandsRelati
 /// <param name="SupportsManualManagement">Whether users may create and delete this kind directly.</param>
 /// <param name="SupportsRequests">Whether a committable request descriptor materializes this Entity kind.</param>
 /// <param name="EnumeratesIdentifyChildren">Whether this kind is an identify container whose local children are enumerated for cascade identify.</param>
+/// <param name="AcquisitionProfile">Definition-owned acquisition-profile policy, when the kind owns profiles.</param>
 public sealed record EntityKindManifestEntry(
     string Code,
     string DisplayName,
@@ -81,7 +99,8 @@ public sealed record EntityKindManifestEntry(
     bool SupportsAtomicMediaUpgrade,
     bool SupportsManualManagement,
     bool SupportsRequests,
-    bool EnumeratesIdentifyChildren);
+    bool EnumeratesIdentifyChildren,
+    AcquisitionProfileManifestEntry? AcquisitionProfile);
 
 /// <summary>Frontend-facing request-flow metadata projected from one canonical request descriptor.</summary>
 /// <param name="Kind">Stable request-media kind code.</param>
@@ -213,7 +232,17 @@ public sealed record CodesManifest(
                 descriptor.SupportsAtomicMediaUpgrade,
                 descriptor.SupportsManualManagement,
                 requestableKinds.Contains(descriptor.Kind),
-                descriptor.EnumeratesIdentifyChildren))
+                descriptor.EnumeratesIdentifyChildren,
+                descriptor.AcquisitionProfile is { } acquisitionProfile
+                    ? new AcquisitionProfileManifestEntry(
+                        acquisitionProfile.Label,
+                        acquisitionProfile.DisplayOrder,
+                        acquisitionProfile.LibraryRootMediaCapability.ToCode(),
+                        acquisitionProfile.SupportedReleaseDateTypes.Select(type => type.ToCode()).ToArray(),
+                        acquisitionProfile.DefaultNamingTemplate,
+                        acquisitionProfile.NamingHint,
+                        acquisitionProfile.NamingFamily.ToCode())
+                    : null))
             .ToArray();
     }
 
@@ -229,7 +258,9 @@ public sealed record CodesManifest(
                 descriptor.PluginEntityKind.ToCode(),
                 descriptor.AcquisitionKind.ToCode(),
                 descriptor.ProfileEntityKind?.ToCode(),
-                descriptor.LibraryRootMediaCapability?.ToCode(),
+                descriptor.ProfileEntityKind is { } profileKind
+                    ? EntityKindRegistry.Describe(profileKind).AcquisitionProfile?.LibraryRootMediaCapability.ToCode()
+                    : null,
                 descriptor.Discoverable,
                 descriptor.ReviewSelection.ToCode()))
             .ToArray();

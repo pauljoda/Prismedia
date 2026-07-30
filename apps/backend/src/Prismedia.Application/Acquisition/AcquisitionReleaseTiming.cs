@@ -148,28 +148,11 @@ public sealed class AcquisitionReleaseTimingService(
     };
 
     /// <summary>Whether a release milestone is meaningful for a profile kind.</summary>
-    public static bool Supports(EntityKind kind, EntityDateType type) => AcquisitionProfileKinds.For(kind) switch {
-        EntityKind.Movie => type is EntityDateType.Premiere
-            or EntityDateType.TheatricalRelease
-            or EntityDateType.StreamingRelease
-            or EntityDateType.DigitalRelease
-            or EntityDateType.PhysicalRelease
-            or EntityDateType.Release,
-        EntityKind.VideoSeries => type is EntityDateType.Premiere
-            or EntityDateType.Air
-            or EntityDateType.FirstAir
-            or EntityDateType.StreamingRelease
-            or EntityDateType.DigitalRelease
-            or EntityDateType.Release,
-        EntityKind.Book => type is EntityDateType.Publication
-            or EntityDateType.DigitalRelease
-            or EntityDateType.PhysicalRelease
-            or EntityDateType.Release,
-        EntityKind.AudioLibrary => type is EntityDateType.Release
-            or EntityDateType.DigitalRelease
-            or EntityDateType.PhysicalRelease,
-        _ => false
-    };
+    public static bool Supports(EntityKind kind, EntityDateType type) =>
+        EntityKindRegistry.Describe(AcquisitionProfileKinds.For(kind))
+            .AcquisitionProfile?
+            .SupportedReleaseDateTypes
+            .Contains(type) == true;
 
     /// <summary>Last date represented by an imprecise year or month, preventing an early automatic search.</summary>
     public static DateOnly EndOfPrecision(DateOnly value, string? precision) {

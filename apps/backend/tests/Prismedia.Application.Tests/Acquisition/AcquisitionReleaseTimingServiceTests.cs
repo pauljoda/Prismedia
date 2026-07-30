@@ -85,6 +85,13 @@ public sealed class AcquisitionReleaseTimingServiceTests {
         Assert.Contains("using the digital release date", decision.Message);
     }
 
+    [Fact]
+    public void SupportedMilestonesResolveThroughTheProfileDefinition() {
+        Assert.True(AcquisitionReleaseTimingService.Supports(EntityKind.Video, EntityDateType.FirstAir));
+        Assert.True(AcquisitionReleaseTimingService.Supports(EntityKind.Book, EntityDateType.Publication));
+        Assert.False(AcquisitionReleaseTimingService.Supports(EntityKind.AudioLibrary, EntityDateType.TheatricalRelease));
+    }
+
     private static AcquisitionReleaseTimingService Create(
         AcquisitionReleaseTimingPolicy policy,
         EntityDate? date,

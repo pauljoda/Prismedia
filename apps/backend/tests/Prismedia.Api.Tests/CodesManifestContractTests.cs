@@ -134,6 +134,29 @@ public sealed class CodesManifestContractTests {
     }
 
     [Fact]
+    public void EntityKindManifestProjectsDefinitionOwnedAcquisitionProfiles() {
+        var kinds = CodesManifest.Build().EntityKinds.ToDictionary(kind => kind.Code);
+
+        var series = Assert.IsType<AcquisitionProfileManifestEntry>(
+            kinds[EntityKind.VideoSeries.ToCode()].AcquisitionProfile);
+        Assert.Equal("TV (series)", series.Label);
+        Assert.Equal(2, series.DisplayOrder);
+        Assert.Equal(LibraryRootMediaCapability.ScanVideos.ToCode(), series.LibraryRootMediaCapability);
+        Assert.Equal(
+            [
+                EntityDateType.Premiere.ToCode(),
+                EntityDateType.Air.ToCode(),
+                EntityDateType.FirstAir.ToCode(),
+                EntityDateType.StreamingRelease.ToCode(),
+                EntityDateType.DigitalRelease.ToCode(),
+                EntityDateType.Release.ToCode()
+            ],
+            series.SupportedReleaseDateTypes);
+        Assert.Equal(AcquisitionNamingFamily.Television.ToCode(), series.NamingFamily);
+        Assert.Null(kinds[EntityKind.Video.ToCode()].AcquisitionProfile);
+    }
+
+    [Fact]
     public void EntityKindManifestDerivesRequestSupportFromTheRequestKindRegistry() {
         var manifestKinds = CodesManifest.Build().EntityKinds
             .Where(kind => kind.SupportsRequests)

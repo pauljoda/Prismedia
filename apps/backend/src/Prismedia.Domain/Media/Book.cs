@@ -61,6 +61,21 @@ public sealed class BookEntityKindDefinition() : EntityKindDefinition<Book>(
     ];
 
     /// <inheritdoc />
+    public override AcquisitionProfileDefinition AcquisitionProfile { get; } = new(
+        "Books",
+        0,
+        LibraryRootMediaCapability.ScanBooks,
+        [
+            EntityDateType.Publication,
+            EntityDateType.DigitalRelease,
+            EntityDateType.PhysicalRelease,
+            EntityDateType.Release
+        ],
+        "{Author}/{Title} ({Year})/{Title}{ - Volume}.{ext}",
+        "{Author} {Title} {Year} {ext} — folder/file layout for the book payload",
+        AcquisitionNamingFamily.Book);
+
+    /// <inheritdoc />
     protected override IReadOnlyList<ContractCapability> ProjectCapabilities(
         Book entity,
         EntityKindProjectionContext context) =>

@@ -142,6 +142,13 @@ public abstract class EntityKindDefinition {
     public virtual IReadOnlyList<RequestKindDescriptor> RequestKinds => [];
 
     /// <summary>
+    /// Acquisition-profile policy for this kind, or null when the kind cannot own profiles. The
+    /// policy keeps the user-facing profile vocabulary and release/naming behavior beside the
+    /// entity kind rather than in application or client-side kind maps.
+    /// </summary>
+    public virtual AcquisitionProfileDefinition? AcquisitionProfile => null;
+
+    /// <summary>
     /// Immutable document-capability types projected directly by this definition. Shared
     /// cross-kind capabilities are projected generically from the Entity root and attached
     /// domain capabilities.
@@ -306,6 +313,75 @@ public sealed record EntityStructuralCountDefinition {
 
     /// <summary>Stable compact-thumbnail icon code.</summary>
     public string Icon { get; }
+}
+
+/// <summary>Validated policy for one Entity kind that owns acquisition profiles.</summary>
+/// <param name="Label">User-facing profile label.</param>
+/// <param name="DisplayOrder">Stable settings-display order among acquisition profiles.</param>
+/// <param name="LibraryRootMediaCapability">Library-root capability required by the profile.</param>
+/// <param name="SupportedReleaseDateTypes">Ordered release milestones that may gate automatic search.</param>
+/// <param name="DefaultNamingTemplate">Default path template stored for a new profile.</param>
+/// <param name="NamingHint">User-facing token and layout guidance for the template.</param>
+/// <param name="NamingFamily">Application renderer and validator family for the template.</param>
+public sealed record AcquisitionProfileDefinition {
+    /// <summary>Validates immutable acquisition-profile policy owned by an Entity kind definition.</summary>
+    public AcquisitionProfileDefinition(
+        string label,
+        int displayOrder,
+        LibraryRootMediaCapability libraryRootMediaCapability,
+        IReadOnlyList<EntityDateType> supportedReleaseDateTypes,
+        string defaultNamingTemplate,
+        string namingHint,
+        AcquisitionNamingFamily namingFamily) {
+        Label = RequireText(label, nameof(label));
+        DisplayOrder = displayOrder < 0
+            ? throw new ArgumentOutOfRangeException(nameof(displayOrder), "Acquisition profile display order cannot be negative.")
+            : displayOrder;
+        LibraryRootMediaCapability = libraryRootMediaCapability;
+        SupportedReleaseDateTypes = RequireDates(supportedReleaseDateTypes);
+        DefaultNamingTemplate = RequireText(defaultNamingTemplate, nameof(defaultNamingTemplate));
+        NamingHint = RequireText(namingHint, nameof(namingHint));
+        NamingFamily = namingFamily;
+    }
+
+    /// <summary>User-facing profile label.</summary>
+    public string Label { get; }
+
+    /// <summary>Stable settings-display order among acquisition profiles.</summary>
+    public int DisplayOrder { get; }
+
+    /// <summary>Library-root capability required by the profile.</summary>
+    public LibraryRootMediaCapability LibraryRootMediaCapability { get; }
+
+    /// <summary>Ordered release milestones that may gate automatic search.</summary>
+    public IReadOnlyList<EntityDateType> SupportedReleaseDateTypes { get; }
+
+    /// <summary>Default path template stored for a new profile.</summary>
+    public string DefaultNamingTemplate { get; }
+
+    /// <summary>User-facing token and layout guidance for the template.</summary>
+    public string NamingHint { get; }
+
+    /// <summary>Application renderer and validator family for the template.</summary>
+    public AcquisitionNamingFamily NamingFamily { get; }
+
+    private static string RequireText(string value, string parameterName) =>
+        string.IsNullOrWhiteSpace(value)
+            ? throw new ArgumentException("Acquisition profile definition text cannot be empty.", parameterName)
+            : value.Trim();
+
+    private static IReadOnlyList<EntityDateType> RequireDates(IReadOnlyList<EntityDateType> value) {
+        ArgumentNullException.ThrowIfNull(value);
+        if (value.Count == 0) {
+            throw new ArgumentException("An acquisition profile must support at least one release date type.", nameof(value));
+        }
+
+        if (value.Distinct().Count() != value.Count) {
+            throw new ArgumentException("An acquisition profile cannot repeat release date types.", nameof(value));
+        }
+
+        return Array.AsReadOnly(value.ToArray());
+    }
 }
 
 /// <summary>Root fields available when a kind requires no kind-specific persistence data.</summary>

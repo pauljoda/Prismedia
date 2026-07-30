@@ -47,6 +47,23 @@ public sealed class MovieEntityKindDefinition() : EntityKindDefinition<Movie>(
             IsContainer: false, ChildKind: null, Committable: true,
             AcquisitionKind: EntityKind.Movie)
     ];
+
+    /// <inheritdoc />
+    public override AcquisitionProfileDefinition AcquisitionProfile { get; } = new(
+        "Movies",
+        1,
+        LibraryRootMediaCapability.ScanVideos,
+        [
+            EntityDateType.Premiere,
+            EntityDateType.TheatricalRelease,
+            EntityDateType.StreamingRelease,
+            EntityDateType.DigitalRelease,
+            EntityDateType.PhysicalRelease,
+            EntityDateType.Release
+        ],
+        "{Title} ({Year})/{Title} ({Year}).{ext}",
+        "{Title} {Year} {Quality} {ext} — 2 segments: folder/file",
+        AcquisitionNamingFamily.Movie);
 }
 
 /// <summary>

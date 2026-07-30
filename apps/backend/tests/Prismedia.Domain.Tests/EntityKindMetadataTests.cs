@@ -115,6 +115,25 @@ public sealed class EntityKindMetadataTests {
     }
 
     [Fact]
+    public void AcquisitionProfilesAreOwnedByExactlyTheProfileEntityKinds() {
+        var profiles = EntityKindRegistry.All
+            .Where(definition => definition.AcquisitionProfile is not null)
+            .ToDictionary(definition => definition.Kind, definition => definition.AcquisitionProfile!);
+
+        Assert.Equal(
+            [EntityKind.AudioLibrary, EntityKind.Book, EntityKind.Movie, EntityKind.VideoSeries],
+            profiles.Keys.Order().ToArray());
+        Assert.Equal("TV (series)", profiles[EntityKind.VideoSeries].Label);
+        Assert.Equal(0, profiles[EntityKind.Book].DisplayOrder);
+        Assert.Equal(3, profiles[EntityKind.AudioLibrary].DisplayOrder);
+        Assert.Equal(LibraryRootMediaCapability.ScanBooks, profiles[EntityKind.Book].LibraryRootMediaCapability);
+        Assert.Equal(
+            [EntityDateType.Release, EntityDateType.DigitalRelease, EntityDateType.PhysicalRelease],
+            profiles[EntityKind.AudioLibrary].SupportedReleaseDateTypes);
+        Assert.Equal(AcquisitionNamingFamily.Book, profiles[EntityKind.Book].NamingFamily);
+    }
+
+    [Fact]
     public void DefinitionsOwnPluginFallbackPositionPrecedenceAndRelationshipScope() {
         var movie = EntityKindRegistry.Describe(EntityKind.Movie);
         var video = EntityKindRegistry.Describe(EntityKind.Video);

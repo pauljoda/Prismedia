@@ -55,6 +55,23 @@ public sealed class VideoSeriesEntityKindDefinition() : EntityKindDefinition<Vid
     ];
 
     /// <inheritdoc />
+    public override AcquisitionProfileDefinition AcquisitionProfile { get; } = new(
+        "TV (series)",
+        2,
+        LibraryRootMediaCapability.ScanVideos,
+        [
+            EntityDateType.Premiere,
+            EntityDateType.Air,
+            EntityDateType.FirstAir,
+            EntityDateType.StreamingRelease,
+            EntityDateType.DigitalRelease,
+            EntityDateType.Release
+        ],
+        "{Series}/Season {Season:00}/{Series} - S{Season:00}E{Episode:00}.{ext}",
+        "{Series} {Season} {Season:00} {Episode:00} {Quality} {ext} — 3 segments: series/season/episode",
+        AcquisitionNamingFamily.Television);
+
+    /// <inheritdoc />
     protected override IReadOnlyList<ContractCapability> ProjectCapabilities(
         VideoSeries entity,
         EntityKindProjectionContext context) =>

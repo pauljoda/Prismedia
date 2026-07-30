@@ -116,6 +116,7 @@ public static class EntityKindRegistry {
         }
 
         ValidateClientContracts(definitions);
+        ValidateAcquisitionProfiles(definitions);
 
         return definitions;
     }
@@ -162,6 +163,44 @@ public static class EntityKindRegistry {
                 throw new InvalidOperationException(
                     $"Entity kind '{definition.Code}' route requires '{requiredAncestor}', but browses through " +
                     $"'{navigation.CanonicalBrowseKind}'.");
+            }
+        }
+    }
+
+    private static void ValidateAcquisitionProfiles(IReadOnlyList<EntityKindDefinition> definitions) {
+        var profiles = definitions
+            .Where(definition => definition.AcquisitionProfile is not null)
+            .ToDictionary(definition => definition.Kind, definition => definition.AcquisitionProfile!);
+        var requestDescriptors = definitions.SelectMany(definition => definition.RequestKinds).ToArray();
+        var requestedProfileKinds = requestDescriptors
+            .Select(descriptor => descriptor.ProfileEntityKind)
+            .OfType<EntityKind>()
+            .ToHashSet();
+
+        if (!profiles.Keys.ToHashSet().SetEquals(requestedProfileKinds)) {
+            var missing = requestedProfileKinds.Except(profiles.Keys).ToArray();
+            var unreferenced = profiles.Keys.Except(requestedProfileKinds).ToArray();
+            throw new InvalidOperationException(
+                "Acquisition-profile definitions and request descriptors must name exactly the same kinds. " +
+                $"Missing definitions: [{string.Join(", ", missing)}]; " +
+                $"unreferenced definitions: [{string.Join(", ", unreferenced)}].");
+        }
+
+        var profileOrders = profiles.Values.Select(profile => profile.DisplayOrder).Order().ToArray();
+        if (!profileOrders.SequenceEqual(Enumerable.Range(0, profiles.Count))) {
+            throw new InvalidOperationException(
+                "Acquisition-profile display orders must be contiguous from zero; found " +
+                $"[{string.Join(", ", profileOrders)}].");
+        }
+
+        foreach (var descriptor in requestDescriptors.Where(descriptor => descriptor.ProfileEntityKind is not null)) {
+            var profileKind = descriptor.ProfileEntityKind!.Value;
+            var expectedCapability = profiles[profileKind].LibraryRootMediaCapability;
+            if (descriptor.LibraryRootMediaCapability != expectedCapability) {
+                throw new InvalidOperationException(
+                    $"Request kind '{descriptor.Kind}' declares root capability " +
+                    $"'{descriptor.LibraryRootMediaCapability}', but profile kind '{profileKind}' requires " +
+                    $"'{expectedCapability}'.");
             }
         }
     }

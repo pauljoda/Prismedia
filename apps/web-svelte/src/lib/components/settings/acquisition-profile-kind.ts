@@ -4,36 +4,23 @@ import {
   ENTITY_KIND_DEFINITIONS,
   ENTITY_MEDIA_QUALITY_FAMILY,
   LIBRARY_ROOT_MEDIA_CAPABILITY,
-  REQUEST_KIND_MANIFEST,
   VIDEO_QUALITY,
-  type EntityKindCode,
-  type LibraryRootMediaCapabilityCode,
 } from "$lib/api/generated/codes";
 import type { LibraryRootSummary } from "$lib/api/settings";
 import { isEntityKindCode } from "$lib/entities/entity-codes";
 
-export const DEFAULT_PATH_TEMPLATE = "{Author}/{Title} ({Year})/{Title}{ - Volume}.{ext}";
+function profileFor(kind: string) {
+  return isEntityKindCode(kind) ? ENTITY_KIND_DEFINITIONS[kind].acquisitionProfile : null;
+}
 
-const NAMING_DEFAULTS: Partial<Record<EntityKindCode, string>> = {
-  [ENTITY_KIND.book]: DEFAULT_PATH_TEMPLATE,
-  [ENTITY_KIND.movie]: "{Title} ({Year})/{Title} ({Year}).{ext}",
-  [ENTITY_KIND.videoSeries]: "{Series}/Season {Season:00}/{Series} - S{Season:00}E{Episode:00}.{ext}",
-  [ENTITY_KIND.audioLibrary]: "{Artist}/{Album}",
-};
-
-const NAMING_HINTS: Partial<Record<EntityKindCode, string>> = {
-  [ENTITY_KIND.book]: "{Author} {Title} {Year} {ext} — folder/file layout for the book payload",
-  [ENTITY_KIND.movie]: "{Title} {Year} {Quality} {ext} — 2 segments: folder/file",
-  [ENTITY_KIND.videoSeries]: "{Series} {Season} {Season:00} {Episode:00} {Quality} {ext} — 3 segments: series/season/episode",
-  [ENTITY_KIND.audioLibrary]: "{Artist} {Album} {Year} — 2 segments: artist/album folder (track files keep their release names)",
-};
+export const DEFAULT_PATH_TEMPLATE = profileFor(ENTITY_KIND.book)?.defaultNamingTemplate ?? "";
 
 export function namingDefaultFor(kind: string): string {
-  return isEntityKindCode(kind) ? NAMING_DEFAULTS[kind] ?? DEFAULT_PATH_TEMPLATE : DEFAULT_PATH_TEMPLATE;
+  return profileFor(kind)?.defaultNamingTemplate ?? DEFAULT_PATH_TEMPLATE;
 }
 
 export function namingHintFor(kind: string): string {
-  return isEntityKindCode(kind) ? NAMING_HINTS[kind] ?? "" : "";
+  return profileFor(kind)?.namingHint ?? "";
 }
 
 const videoQualityLadder = Object.values(VIDEO_QUALITY).filter((code) => code !== VIDEO_QUALITY.unknown);
@@ -51,41 +38,24 @@ export function qualityLadderFor(kind: string): string[] {
       : [];
 }
 
-const profileKinds = [...new Set(
-  REQUEST_KIND_MANIFEST
-    .map((request) => request.profileKind)
-    .filter((kind): kind is EntityKindCode => kind != null),
-)];
-const PROFILE_LABEL_OVERRIDES: Partial<Record<EntityKindCode, string>> = {
-  [ENTITY_KIND.videoSeries]: "TV (series)",
-  [ENTITY_KIND.audioLibrary]: "Music (albums)",
-};
-
-export const profileKindOptions = profileKinds.map((kind) => ({
-  value: kind,
-  label: PROFILE_LABEL_OVERRIDES[kind] ?? ENTITY_KIND_DEFINITIONS[kind].groupLabel,
-}));
+export const profileKindOptions = Object.values(ENTITY_KIND_DEFINITIONS)
+  .filter((definition) => definition.acquisitionProfile !== null)
+  .sort((left, right) => left.acquisitionProfile!.displayOrder - right.acquisitionProfile!.displayOrder)
+  .map((definition) => ({
+    value: definition.kind,
+    label: definition.acquisitionProfile!.label,
+  }));
 export const profileKindLabels: Readonly<Record<string, string>> = Object.fromEntries(
   profileKindOptions.map((option) => [option.value, option.label]),
 );
 
-function rootCapabilityFor(kind: string): LibraryRootMediaCapabilityCode | null {
-  const capabilities = new Set(
-    REQUEST_KIND_MANIFEST
-      .filter((request) => request.profileKind === kind)
-      .map((request) => request.rootFlag)
-      .filter((capability): capability is LibraryRootMediaCapabilityCode => capability != null),
-  );
-  return capabilities.size === 1 ? [...capabilities][0] : null;
-}
-
-/** Filters library roots using the request contract that owns each profile kind. */
+/** Filters library roots using the acquisition-profile facet that owns each profile kind. */
 export function rootsForProfileKind(roots: LibraryRootSummary[], kind: string): LibraryRootSummary[] {
-  const capability = rootCapabilityFor(kind);
+  const capability = profileFor(kind)?.libraryRootMediaCapability;
   return roots.filter((root) =>
     capability === LIBRARY_ROOT_MEDIA_CAPABILITY.scanVideos
       ? root.scanVideos
       : capability === LIBRARY_ROOT_MEDIA_CAPABILITY.scanAudio
         ? root.scanAudio
-        : root.scanBooks);
+        : capability === LIBRARY_ROOT_MEDIA_CAPABILITY.scanBooks && root.scanBooks);
 }

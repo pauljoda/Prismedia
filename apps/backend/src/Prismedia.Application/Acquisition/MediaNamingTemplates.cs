@@ -37,21 +37,17 @@ public sealed record MediaNamingContext(
 /// template can never break binding.
 /// </summary>
 public static partial class MediaNamingTemplates {
-    /// <summary>The movie default: <c>{Title} ({Year})/{Title} ({Year}).{ext}</c> — the historical hardcoded layout.</summary>
-    public const string MovieDefault = "{Title} ({Year})/{Title} ({Year}).{ext}";
+    /// <summary>The movie default owned by the movie acquisition-profile definition.</summary>
+    public static string MovieDefault => ProfileFor(EntityKind.Movie).DefaultNamingTemplate;
 
-    /// <summary>The TV default: <c>{Series}/Season {Season:00}/{Series} - S{Season:00}E{Episode:00}.{ext}</c> — the historical layout.</summary>
-    public const string TvDefault = "{Series}/Season {Season:00}/{Series} - S{Season:00}E{Episode:00}.{ext}";
+    /// <summary>The TV default owned by the video-series acquisition-profile definition.</summary>
+    public static string TvDefault => ProfileFor(EntityKind.VideoSeries).DefaultNamingTemplate;
 
-    /// <summary>The music default: <c>{Artist}/{Album}</c> — the album folder only (track files keep their release names).</summary>
-    public const string MusicDefault = "{Artist}/{Album}";
+    /// <summary>The music default owned by the audio-library acquisition-profile definition.</summary>
+    public static string MusicDefault => ProfileFor(EntityKind.AudioLibrary).DefaultNamingTemplate;
 
-    /// <summary>
-    /// The book default: <c>{Author}/{Title} ({Year})/{Title}{ - Volume}.{ext}</c>. Books have their own
-    /// renderer (this class does not validate book templates), but the default lives here with the other
-    /// kinds so a profileless import and a new profile row share one definition.
-    /// </summary>
-    public const string BookDefault = "{Author}/{Title} ({Year})/{Title}{ - Volume}.{ext}";
+    /// <summary>The book default owned by the book acquisition-profile definition.</summary>
+    public static string BookDefault => ProfileFor(EntityKind.Book).DefaultNamingTemplate;
 
     [GeneratedRegex(@"\{Season(?::0+)?\}|\{Season\}", RegexOptions.IgnoreCase)]
     private static partial Regex SeasonTokenRegex();
@@ -59,13 +55,13 @@ public static partial class MediaNamingTemplates {
     [GeneratedRegex(@"\{Episode(?::0+)?\}|\{Episode\}", RegexOptions.IgnoreCase)]
     private static partial Regex EpisodeTokenRegex();
 
-    /// <summary>The default naming template for a profile kind, or null for kinds without a media template (books own theirs).</summary>
-    public static string? DefaultFor(EntityKind kind) => AcquisitionProfileKinds.For(kind) switch {
-        EntityKind.Movie => MovieDefault,
-        EntityKind.VideoSeries => TvDefault,
-        EntityKind.AudioLibrary => MusicDefault,
-        _ => null,
-    };
+    /// <summary>The default naming template for a structured media profile, or null for book profiles.</summary>
+    public static string? DefaultFor(EntityKind kind) {
+        return TryProfileFor(AcquisitionProfileKinds.For(kind), out var profile) &&
+               profile.NamingFamily != AcquisitionNamingFamily.Book
+            ? profile.DefaultNamingTemplate
+            : null;
+    }
 
     /// <summary>True when <paramref name="kind"/> is a media kind this renderer governs (movie, TV, music).</summary>
     public static bool IsMediaKind(EntityKind kind) => DefaultFor(kind) is not null;
@@ -91,10 +87,14 @@ public static partial class MediaNamingTemplates {
             return "A naming template segment may not be empty.";
         }
 
-        return profileKind switch {
-            EntityKind.Movie => ValidateMovie(segments),
-            EntityKind.VideoSeries => ValidateTv(segments),
-            EntityKind.AudioLibrary => ValidateMusic(segments),
+        if (!TryProfileFor(profileKind, out var profile)) {
+            return "Naming templates apply to movies, TV, and music.";
+        }
+
+        return profile.NamingFamily switch {
+            AcquisitionNamingFamily.Movie => ValidateMovie(segments),
+            AcquisitionNamingFamily.Television => ValidateTv(segments),
+            AcquisitionNamingFamily.Music => ValidateMusic(segments),
             _ => "Naming templates apply to movies, TV, and music.",
         };
     }
@@ -249,6 +249,16 @@ public static partial class MediaNamingTemplates {
     private static string ResolveTemplate(EntityKind kind, string? template) {
         var fallback = DefaultFor(kind) ?? throw new ArgumentException($"No media naming template for kind {kind}.", nameof(kind));
         return !string.IsNullOrWhiteSpace(template) && Validate(kind, template) is null ? template : fallback;
+    }
+
+    private static AcquisitionProfileDefinition ProfileFor(EntityKind kind) =>
+        TryProfileFor(kind, out var profile)
+            ? profile
+            : throw new ArgumentException($"Entity kind '{kind}' does not own an acquisition profile.", nameof(kind));
+
+    private static bool TryProfileFor(EntityKind kind, out AcquisitionProfileDefinition profile) {
+        profile = EntityKindRegistry.Describe(kind).AcquisitionProfile!;
+        return profile is not null;
     }
 
     private static string FirstSegment(string template) => FirstSegment(template.AsSpan());

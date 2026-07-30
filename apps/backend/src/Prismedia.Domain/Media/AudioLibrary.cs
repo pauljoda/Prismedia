@@ -44,6 +44,20 @@ public sealed class AudioLibraryEntityKindDefinition() : RootEntityKindDefinitio
             IsContainer: false, ChildKind: RequestMediaKind.Track, Committable: true,
             AcquisitionKind: EntityKind.AudioLibrary, MaterializeChildPhantoms: true)
     ];
+
+    /// <inheritdoc />
+    public override AcquisitionProfileDefinition AcquisitionProfile { get; } = new(
+        "Music (albums)",
+        3,
+        LibraryRootMediaCapability.ScanAudio,
+        [
+            EntityDateType.Release,
+            EntityDateType.DigitalRelease,
+            EntityDateType.PhysicalRelease
+        ],
+        "{Artist}/{Album}",
+        "{Artist} {Album} {Year} — 2 segments: artist/album folder (track files keep their release names)",
+        AcquisitionNamingFamily.Music);
 }
 
 /// <summary>

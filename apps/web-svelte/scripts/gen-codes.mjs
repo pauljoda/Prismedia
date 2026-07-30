@@ -191,7 +191,7 @@ async function main() {
     "thumbnailWidth", "thumbnailHeight", "primaryAccent", "secondaryAccent", "artworkFit",
     "navigation", "search", "autoIdentifySelector", "containableKinds", "mediaQualityFamily",
     "supportsFileDeletion", "supportsAtomicMediaUpgrade", "supportsManualManagement",
-    "supportsRequests", "enumeratesIdentifyChildren",
+    "supportsRequests", "enumeratesIdentifyChildren", "acquisitionProfile",
   ];
   for (const kind of manifest.entityKinds ?? []) {
     const missing = entityKindFields.filter((field) => !Object.hasOwn(kind, field));
@@ -214,6 +214,15 @@ async function main() {
         throw new Error(`Entity kind '${kind.code}' search is missing: ${missingSearch.join(", ")}`);
       }
     }
+    if (kind.acquisitionProfile !== null) {
+      const missingProfile = [
+        "label", "displayOrder", "libraryRootMediaCapability", "supportedReleaseDateTypes",
+        "defaultNamingTemplate", "namingHint", "namingFamily",
+      ].filter((field) => !Object.hasOwn(kind.acquisitionProfile, field));
+      if (missingProfile.length > 0) {
+        throw new Error(`Entity kind '${kind.code}' acquisition profile is missing: ${missingProfile.join(", ")}`);
+      }
+    }
   }
   const entityKindEntries = (manifest.entityKinds ?? []).map((kind) =>
     `  ${lit(kind.code)}: { kind: ${lit(kind.code)}, displayName: ${lit(kind.displayName)}, ` +
@@ -228,7 +237,8 @@ async function main() {
     `supportsAtomicMediaUpgrade: ${lit(kind.supportsAtomicMediaUpgrade)}, ` +
     `supportsManualManagement: ${lit(kind.supportsManualManagement)}, ` +
     `supportsRequests: ${lit(kind.supportsRequests)}, ` +
-    `enumeratesIdentifyChildren: ${lit(kind.enumeratesIdentifyChildren)} },`
+    `enumeratesIdentifyChildren: ${lit(kind.enumeratesIdentifyChildren)}, ` +
+    `acquisitionProfile: ${lit(kind.acquisitionProfile)} },`
   ).join("\n");
   const searchableKinds = (manifest.entityKinds ?? [])
     .filter((kind) => kind.search !== null)
@@ -287,6 +297,7 @@ async function main() {
       `  supportsManualManagement: boolean;\n` +
       `  supportsRequests: boolean;\n` +
       `  enumeratesIdentifyChildren: boolean;\n` +
+      `  acquisitionProfile: AcquisitionProfileManifestEntry | null;\n` +
       `}\n\n` +
       `export const ENTITY_KIND_DEFINITIONS = {\n` +
       `${entityKindEntries}\n} as const satisfies Record<EntityKindCode, EntityKindDefinitionManifestEntry>;\n\n` +
@@ -294,6 +305,17 @@ async function main() {
       `export type GlobalSearchEntityKindCode = (typeof ENTITY_KINDS_IN_GLOBAL_SEARCH)[number];\n\n` +
       `export const ENTITY_KINDS_EXPANDING_RELATED_SEARCH_RESULTS = [\n` +
       `${relationshipSearchKindEntries}\n] as const satisfies readonly GlobalSearchEntityKindCode[];\n`,
+  );
+  sections.push(
+    `export interface AcquisitionProfileManifestEntry {\n` +
+      `  label: string;\n` +
+      `  displayOrder: number;\n` +
+      `  libraryRootMediaCapability: LibraryRootMediaCapabilityCode;\n` +
+      `  supportedReleaseDateTypes: readonly EntityDateTypeCode[];\n` +
+      `  defaultNamingTemplate: string;\n` +
+      `  namingHint: string;\n` +
+      `  namingFamily: AcquisitionNamingFamilyCode;\n` +
+      `}\n`,
   );
 
   // Complete frontend request-kind behavior, projected directly from RequestKindRegistry. Discover,

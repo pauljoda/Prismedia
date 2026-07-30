@@ -45,6 +45,23 @@ public sealed class MediaNamingTemplatesTests {
         Assert.Equal("Daft Punk/Discovery", folder);
     }
 
+    [Fact]
+    public void DefaultsComeFromTheirAcquisitionProfileDefinitions() {
+        Assert.Equal(
+            EntityKindRegistry.Describe(EntityKind.Movie).AcquisitionProfile!.DefaultNamingTemplate,
+            MediaNamingTemplates.MovieDefault);
+        Assert.Equal(
+            EntityKindRegistry.Describe(EntityKind.Book).AcquisitionProfile!.DefaultNamingTemplate,
+            MediaNamingTemplates.BookDefault);
+        Assert.Null(MediaNamingTemplates.DefaultFor(EntityKind.Book));
+    }
+
+    [Fact]
+    public void KindsWithoutAcquisitionProfilesDoNotHaveStructuredNamingTemplates() {
+        Assert.Null(MediaNamingTemplates.DefaultFor(EntityKind.Gallery));
+        Assert.False(MediaNamingTemplates.IsMediaKind(EntityKind.Gallery));
+    }
+
     // ── Custom templates render ────────────────────────────────────────────
     [Fact]
     public void CustomMovieTemplateRendersQualityToken() {
