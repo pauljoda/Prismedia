@@ -240,12 +240,15 @@ public sealed record AcquisitionSearchInput(
     /// </summary>
     public string WorkTitle {
         get {
-            if (Kind is EntityKind.Video or EntityKind.VideoSeason or EntityKind.VideoSeries) {
+            var namingFamily = EntityKindRegistry
+                .Describe(AcquisitionProfileKinds.For(Kind))
+                .AcquisitionProfile?
+                .NamingFamily;
+            if (namingFamily == AcquisitionNamingFamily.Television) {
                 return string.IsNullOrWhiteSpace(Series) ? Title : Series;
             }
 
-            if (Kind is EntityKind.AudioLibrary or EntityKind.AudioTrack or EntityKind.MusicArtist
-                && !string.IsNullOrWhiteSpace(Author)) {
+            if (namingFamily == AcquisitionNamingFamily.Music && !string.IsNullOrWhiteSpace(Author)) {
                 return Kind == EntityKind.AudioTrack && !string.IsNullOrWhiteSpace(Series)
                     ? AcquisitionPolicyQueries.JoinDistinct(Author, Series, Title)
                     : AcquisitionPolicyQueries.JoinDistinct(Author, Title);
