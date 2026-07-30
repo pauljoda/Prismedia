@@ -2,6 +2,7 @@ using Prismedia.Domain.Capabilities;
 using Prismedia.Domain.Entities;
 using ContractCapability = Prismedia.Contracts.Entities.EntityCapability;
 using SeriesMetadataDocumentCapability = Prismedia.Contracts.Entities.SeriesMetadataCapability;
+using ThumbnailMetaIcons = Prismedia.Contracts.Entities.EntityThumbnailMetaIcons;
 
 namespace Prismedia.Domain.Media;
 
@@ -27,6 +28,13 @@ public sealed class VideoSeriesEntityKindDefinition() : EntityKindDefinition<Vid
     autoIdentifySelector: AutoIdentifySelectorKind.Video) {
     /// <inheritdoc />
     public override bool OwnsMetadataRelationships => true;
+
+    /// <inheritdoc />
+    public override IReadOnlyList<EntityStructuralCountDefinition> StructuralThumbnailCounts =>
+    [
+        new(EntityKind.VideoSeason, 1, ThumbnailMetaIcons.Season),
+        new(EntityKind.Video, 2, ThumbnailMetaIcons.Episode)
+    ];
 
     /// <inheritdoc />
     public override IReadOnlyList<Type> ProjectedCapabilityTypes => [typeof(SeriesMetadataDocumentCapability)];
@@ -87,6 +95,10 @@ public sealed class VideoSeasonEntityKindDefinition() : RootEntityKindDefinition
 
     /// <inheritdoc />
     public override IReadOnlyList<string> PositionSortOrderPrecedence => SortOrderPrecedence;
+
+    /// <inheritdoc />
+    public override IReadOnlyList<EntityStructuralCountDefinition> StructuralThumbnailCounts =>
+        [new(EntityKind.Video, 1, ThumbnailMetaIcons.Episode)];
 
     /// <inheritdoc />
     public override IReadOnlyList<RequestKindDescriptor> RequestKinds =>

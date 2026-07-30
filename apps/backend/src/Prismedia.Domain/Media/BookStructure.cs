@@ -2,6 +2,7 @@ using Prismedia.Domain.Capabilities;
 using Prismedia.Domain.Entities;
 using ContractCapability = Prismedia.Contracts.Entities.EntityCapability;
 using CoverSelectionDocumentCapability = Prismedia.Contracts.Entities.CoverSelectionCapability;
+using ThumbnailMetaIcons = Prismedia.Contracts.Entities.EntityThumbnailMetaIcons;
 
 namespace Prismedia.Domain.Media;
 
@@ -33,7 +34,14 @@ public sealed class BookVolumeEntityKindDefinition() : RootEntityKindDefinition<
         new CapabilityPosition()
     ],
     enumeratesIdentifyChildren: true,
-    supportsFileDeletion: true);
+    supportsFileDeletion: true) {
+    /// <inheritdoc />
+    public override IReadOnlyList<EntityStructuralCountDefinition> StructuralThumbnailCounts =>
+    [
+        new(EntityKind.BookChapter, 1, ThumbnailMetaIcons.Chapter),
+        new(EntityKind.BookPage, 2, ThumbnailMetaIcons.Page)
+    ];
+}
 
 /// <summary>Defines the structural book-chapter kind and default metadata capabilities.</summary>
 public sealed class BookChapterEntityKindDefinition() : EntityKindDefinition<BookChapter>(
@@ -58,6 +66,10 @@ public sealed class BookChapterEntityKindDefinition() : EntityKindDefinition<Boo
         new CapabilitySource(),
         new CapabilityPosition()
     ]) {
+    /// <inheritdoc />
+    public override IReadOnlyList<EntityStructuralCountDefinition> StructuralThumbnailCounts =>
+        [new(EntityKind.BookPage, 1, ThumbnailMetaIcons.Page)];
+
     /// <inheritdoc />
     public override IReadOnlyList<Type> ProjectedCapabilityTypes => [typeof(CoverSelectionDocumentCapability)];
 

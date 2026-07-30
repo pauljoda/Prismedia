@@ -3,6 +3,7 @@ using Prismedia.Domain.Entities;
 using ContractCapability = Prismedia.Contracts.Entities.EntityCapability;
 using CoverSelectionDocumentCapability = Prismedia.Contracts.Entities.CoverSelectionCapability;
 using GalleryMetadataDocumentCapability = Prismedia.Contracts.Entities.GalleryMetadataCapability;
+using ThumbnailMetaIcons = Prismedia.Contracts.Entities.EntityThumbnailMetaIcons;
 
 namespace Prismedia.Domain.Media;
 
@@ -27,6 +28,10 @@ public sealed class GalleryEntityKindDefinition() : EntityKindDefinition<Gallery
     autoIdentifySelector: AutoIdentifySelectorKind.Gallery) {
     /// <inheritdoc />
     public override bool OwnsMetadataRelationships => true;
+
+    /// <inheritdoc />
+    public override IReadOnlyList<EntityStructuralCountDefinition> StructuralThumbnailCounts =>
+        [new(EntityKind.Image, 1, ThumbnailMetaIcons.Image)];
 
     /// <inheritdoc />
     public override IReadOnlyList<Type> ProjectedCapabilityTypes =>

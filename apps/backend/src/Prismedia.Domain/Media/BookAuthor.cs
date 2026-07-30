@@ -1,5 +1,6 @@
 using Prismedia.Domain.Capabilities;
 using Prismedia.Domain.Entities;
+using ThumbnailMetaIcons = Prismedia.Contracts.Entities.EntityThumbnailMetaIcons;
 
 namespace Prismedia.Domain.Media;
 
@@ -23,6 +24,10 @@ public sealed class BookAuthorEntityKindDefinition() : RootEntityKindDefinition<
     defaultCapabilities: static () => [new CapabilityCredits()],
     enumeratesIdentifyChildren: true,
     supportsFileDeletion: true) {
+    /// <inheritdoc />
+    public override IReadOnlyList<EntityStructuralCountDefinition> StructuralThumbnailCounts =>
+        [new(EntityKind.Book, 1, ThumbnailMetaIcons.Book)];
+
     /// <inheritdoc />
     public override IReadOnlyList<RequestKindDescriptor> RequestKinds =>
     [

@@ -2,33 +2,6 @@ using Prismedia.Domain.Entities;
 
 namespace Prismedia.Contracts.Entities;
 
-/// <summary>
-/// Stable icon codes used by compact thumbnail metadata. Labels remain presentation-neutral while
-/// these codes let every client choose the corresponding glyph.
-/// </summary>
-public static class EntityThumbnailMetaIcons {
-    public const string Album = "album";
-    public const string Audio = "audio";
-    public const string Book = "book";
-    public const string Calendar = "calendar";
-    public const string Chapter = "chapter";
-    public const string Collection = "collection";
-    public const string Count = "count";
-    public const string Disc = "disc";
-    public const string Duration = "duration";
-    public const string Episode = "episode";
-    public const string Gallery = "gallery";
-    public const string Image = "image";
-    public const string Page = "page";
-    public const string Person = "person";
-    public const string Season = "season";
-    public const string Studio = "studio";
-    public const string Tag = "tag";
-    public const string Track = "track";
-    public const string Video = "video";
-    public const string Volume = "volume";
-}
-
 /// <summary>Compact metadata chip displayed by generic entity thumbnails.</summary>
 /// <param name="Icon">Icon code from the shared thumbnail vocabulary.</param>
 /// <param name="Label">Short display label.</param>

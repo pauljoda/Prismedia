@@ -1,5 +1,6 @@
 using Prismedia.Domain.Capabilities;
 using Prismedia.Domain.Entities;
+using ThumbnailMetaIcons = Prismedia.Contracts.Entities.EntityThumbnailMetaIcons;
 
 namespace Prismedia.Domain.Media;
 
@@ -26,6 +27,13 @@ public sealed class MusicArtistEntityKindDefinition() : RootEntityKindDefinition
     autoIdentifySelector: AutoIdentifySelectorKind.Audio) {
     /// <inheritdoc />
     public override bool OwnsMetadataRelationships => true;
+
+    /// <inheritdoc />
+    public override IReadOnlyList<EntityStructuralCountDefinition> StructuralThumbnailCounts =>
+    [
+        new(EntityKind.AudioLibrary, 1, ThumbnailMetaIcons.Album),
+        new(EntityKind.AudioTrack, 2, ThumbnailMetaIcons.Track)
+    ];
 
     /// <inheritdoc />
     public override IReadOnlyList<RequestKindDescriptor> RequestKinds =>

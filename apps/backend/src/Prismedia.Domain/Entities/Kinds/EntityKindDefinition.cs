@@ -121,6 +121,12 @@ public abstract class EntityKindDefinition {
     public virtual IReadOnlyList<Type> ProjectedCapabilityTypes => [];
 
     /// <summary>
+    /// Compact descendant counts shown on this kind's thumbnails. Each metric names the descendant
+    /// kind, maximum structural depth, and semantic icon once beside the Entity-kind definition.
+    /// </summary>
+    public virtual IReadOnlyList<EntityStructuralCountDefinition> StructuralThumbnailCounts => [];
+
+    /// <summary>
     /// Creates fresh default domain capabilities for a newly constructed entity of this kind.
     /// Duplicate capability types are rejected so every capability remains unambiguous.
     /// </summary>
@@ -230,6 +236,41 @@ public abstract class EntityKindDefinition<TEntity> : EntityKindDefinition
 /// <summary>Caller-scoped facts available to pure Entity-kind document projection.</summary>
 /// <param name="CurrentUserId">Current caller identity, or null outside an authenticated request.</param>
 public sealed record EntityKindProjectionContext(Guid? CurrentUserId);
+
+/// <summary>
+/// Definition-owned thumbnail count for descendants of one kind through a bounded structural depth.
+/// </summary>
+/// <param name="DescendantKind">Entity kind counted below the thumbnail root.</param>
+/// <param name="MaximumDepth">Inclusive parent-link depth to aggregate.</param>
+/// <param name="Icon">Stable compact-thumbnail icon code.</param>
+public sealed record EntityStructuralCountDefinition {
+    /// <summary>Deepest structural path supported by the shared thumbnail aggregate.</summary>
+    public const int MaximumSupportedDepth = 3;
+
+    /// <summary>Creates one validated structural thumbnail count.</summary>
+    public EntityStructuralCountDefinition(EntityKind descendantKind, int maximumDepth, string icon) {
+        if (maximumDepth is <= 0 or > MaximumSupportedDepth) {
+            throw new ArgumentOutOfRangeException(
+                nameof(maximumDepth),
+                $"Structural count depth must be between 1 and {MaximumSupportedDepth}.");
+        }
+
+        DescendantKind = descendantKind;
+        MaximumDepth = maximumDepth;
+        Icon = string.IsNullOrWhiteSpace(icon)
+            ? throw new ArgumentException("Structural count icon cannot be empty.", nameof(icon))
+            : icon.Trim();
+    }
+
+    /// <summary>Entity kind counted below the thumbnail root.</summary>
+    public EntityKind DescendantKind { get; }
+
+    /// <summary>Inclusive parent-link depth to aggregate.</summary>
+    public int MaximumDepth { get; }
+
+    /// <summary>Stable compact-thumbnail icon code.</summary>
+    public string Icon { get; }
+}
 
 /// <summary>Root fields available when a kind requires no kind-specific persistence data.</summary>
 /// <param name="Id">Stable entity identifier.</param>

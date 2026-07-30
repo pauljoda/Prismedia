@@ -104,6 +104,9 @@ public static class EntityKindRegistry {
             definitions.Where(definition => definition.ClrType is not null).ToArray(),
             definition => definition.ClrType!,
             "CLR type");
+        foreach (var definition in definitions) {
+            RejectDuplicateStructuralCounts(definition);
+        }
 
         var expected = Enum.GetValues<EntityKind>();
         var missing = expected.Except(definitions.Select(definition => definition.Kind)).ToArray();
@@ -113,6 +116,24 @@ public static class EntityKindRegistry {
         }
 
         return definitions;
+    }
+
+    private static void RejectDuplicateStructuralCounts(EntityKindDefinition definition) {
+        var duplicateKinds = definition.StructuralThumbnailCounts
+            .GroupBy(metric => metric.DescendantKind)
+            .Where(group => group.Count() > 1)
+            .Select(group => group.Key)
+            .ToArray();
+        var duplicateIcons = definition.StructuralThumbnailCounts
+            .GroupBy(metric => metric.Icon, StringComparer.Ordinal)
+            .Where(group => group.Count() > 1)
+            .Select(group => group.Key)
+            .ToArray();
+        if (duplicateKinds.Length > 0 || duplicateIcons.Length > 0) {
+            throw new InvalidOperationException(
+                $"Entity kind definition '{definition.Code}' has duplicate structural thumbnail " +
+                $"count kinds [{string.Join(", ", duplicateKinds)}] or icons [{string.Join(", ", duplicateIcons)}].");
+        }
     }
 
     private static EntityKindDefinition Create(Type definitionType) =>

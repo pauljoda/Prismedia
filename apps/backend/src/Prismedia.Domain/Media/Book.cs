@@ -3,6 +3,7 @@ using Prismedia.Domain.Entities;
 using BookMetadataDocumentCapability = Prismedia.Contracts.Entities.BookMetadataCapability;
 using ContractCapability = Prismedia.Contracts.Entities.EntityCapability;
 using CoverSelectionDocumentCapability = Prismedia.Contracts.Entities.CoverSelectionCapability;
+using ThumbnailMetaIcons = Prismedia.Contracts.Entities.EntityThumbnailMetaIcons;
 
 namespace Prismedia.Domain.Media;
 
@@ -28,6 +29,14 @@ public sealed class BookEntityKindDefinition() : EntityKindDefinition<Book>(
     autoIdentifySelector: AutoIdentifySelectorKind.Book) {
     /// <inheritdoc />
     public override bool OwnsMetadataRelationships => true;
+
+    /// <inheritdoc />
+    public override IReadOnlyList<EntityStructuralCountDefinition> StructuralThumbnailCounts =>
+    [
+        new(EntityKind.BookVolume, 1, ThumbnailMetaIcons.Volume),
+        new(EntityKind.BookChapter, 2, ThumbnailMetaIcons.Chapter),
+        new(EntityKind.BookPage, 3, ThumbnailMetaIcons.Page)
+    ];
 
     /// <inheritdoc />
     public override IReadOnlyList<Type> ProjectedCapabilityTypes =>
