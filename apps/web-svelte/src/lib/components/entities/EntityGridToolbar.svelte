@@ -1,28 +1,12 @@
 <script lang="ts">
   import {
-    ArrowUpDown,
-    Check,
-    ChevronDown,
     ChevronsDownUp,
     ChevronsUpDown,
-    Grid2x2,
-    Grid3x3,
-    Image,
-    LayoutGrid,
-    List,
-    Rows3,
-    RotateCcw,
-    Search,
-    Shuffle,
     SlidersHorizontal,
-    X,
   } from "@lucide/svelte";
   import { onMount } from "svelte";
-  import { slide } from "svelte/transition";
-  import { cubicOut } from "svelte/easing";
   import { browser } from "$app/environment";
   import { cn } from "@prismedia/ui-svelte";
-  import { keepFlyoutOnScreen } from "$lib/actions/keep-flyout-on-screen";
   import type { FilterPreset } from "$lib/filter-presets";
   import { entityGridFilterFromId } from "$lib/entities/entity-grid";
   import type {
@@ -34,7 +18,10 @@
   } from "$lib/entities/entity-grid";
   import type { CollectionEntityType } from "$lib/collections/models";
   import BulkSelectionBar from "./BulkSelectionBar.svelte";
+  import EntityGridToolbarActiveFilters from "./EntityGridToolbarActiveFilters.svelte";
   import EntityGridPresetDropdown from "./EntityGridPresetDropdown.svelte";
+  import EntityGridToolbarSearch from "./EntityGridToolbarSearch.svelte";
+  import EntityGridToolbarViewControls from "./EntityGridToolbarViewControls.svelte";
 
   interface Props {
     activeFilterIds: string[];
@@ -142,34 +129,6 @@
     viewMode,
   }: Props = $props();
 
-  const SORT_LABELS: Record<EntityGridSort, string> = {
-    title: "Title",
-    added: "Date added",
-    rating: "Rating",
-    random: "Random",
-    kind: "Kind",
-    position: "Position",
-    references: "References",
-  };
-
-  // Reference-count sort only applies to taxonomy kinds (tags/people/studios), which are the
-  // targets of relationship links; it is the default sort for those grids.
-  const TAXONOMY_KINDS = new Set(["tag", "person", "studio"]);
-  const SORT_OPTIONS = $derived<{ value: EntityGridSort; label: string }[]>([
-    { value: "title", label: "Title" },
-    { value: "added", label: "Date added" },
-    ...(entityKind != null && TAXONOMY_KINDS.has(entityKind)
-      ? [{ value: "references" as const, label: "References" }]
-      : []),
-    { value: "rating", label: "Rating" },
-    { value: "random", label: "Random" },
-    { value: "kind", label: "Kind" },
-    { value: "position", label: "Position" },
-  ]);
-
-  let sortOpen = $state(false);
-  let thumbSizeOpen = $state(false);
-
   const activeFilters = $derived(
     activeFilterIds
       .map((id) => entityGridFilterFromId(id, filterOptions))
@@ -225,201 +184,35 @@
     return () => window.removeEventListener("scroll", onScroll, { capture: true });
   });
 
-  function removeFilter(id: string) {
-    onActiveFilterIdsChange(activeFilterIds.filter((filterId) => filterId !== id));
-  }
-
-  function parseScale(event: Event) {
-    onScaleChange(Number((event.currentTarget as HTMLInputElement).value));
-  }
 </script>
 
 <div class="toolbar-shell">
   <div class="toolbar-stack">
     <div class="toolbar-hero">
-    <div class="search-row">
-      <label class="search-box">
-        <Search class="search-icon" aria-hidden="true" />
-        <input
-          type="search"
-          placeholder="Search the library…"
-          value={query}
-          oninput={(event) => onQueryChange((event.currentTarget as HTMLInputElement).value)}
-        />
-        {#if query}
-          <button
-            type="button"
-            class="search-clear"
-            title="Clear search"
-            aria-label="Clear search"
-            onclick={() => onQueryChange("")}
-          >
-            <X class="h-3 w-3" />
-          </button>
-        {/if}
-      </label>
-
-      <div class="search-sort">
-        <div class="relative">
-          <button
-            type="button"
-            class="ctrl-btn ctrl-sort"
-            onclick={() => (sortOpen = !sortOpen)}
-          >
-            <ArrowUpDown class="h-3.5 w-3.5" />
-            <span class="ctrl-label">{SORT_LABELS[sortBy]}</span>
-            <ChevronDown class="h-3 w-3 text-text-disabled" />
-          </button>
-
-          {#if sortOpen}
-            <button
-              type="button"
-              class="fixed inset-0 z-40"
-              aria-label="Close sort menu"
-              onclick={() => (sortOpen = false)}
-            ></button>
-            <div class="floating-surface sort-menu sort-menu-end" use:keepFlyoutOnScreen>
-              {#each SORT_OPTIONS as opt (opt.value)}
-                <button
-                  type="button"
-                  class={cn("sort-menu-item", sortBy === opt.value && "is-active")}
-                  onclick={() => {
-                    onSortByChange(opt.value);
-                    sortOpen = false;
-                  }}
-                >
-                  <Check class={cn("h-3 w-3", sortBy === opt.value ? "opacity-100" : "opacity-0")} />
-                  {opt.label}
-                </button>
-              {/each}
-            </div>
-          {/if}
-        </div>
-
-        {#if sortBy === "random"}
-          <button
-            type="button"
-            class="ctrl-btn ctrl-icon"
-            title="Reshuffle"
-            aria-label="Reshuffle the random order"
-            onclick={() => onReshuffle()}
-          >
-            <Shuffle class="h-3.5 w-3.5" />
-          </button>
-        {:else}
-          <button
-            type="button"
-            class="ctrl-btn ctrl-icon"
-            title={sortDir === "asc" ? "Ascending — click to reverse" : "Descending — click to reverse"}
-            aria-label={`Sort direction: ${sortDir}`}
-            onclick={() => onSortDirChange(sortDir === "asc" ? "desc" : "asc")}
-          >
-            <ChevronDown class={cn("h-3.5 w-3.5 dir-arrow", sortDir === "asc" && "is-up")} />
-          </button>
-        {/if}
-      </div>
-    </div>
+      <EntityGridToolbarSearch
+        {entityKind}
+        {onQueryChange}
+        {onReshuffle}
+        {onSortByChange}
+        {onSortDirChange}
+        {query}
+        {sortBy}
+        {sortDir}
+      />
 
     <div class="controls-row">
       <div class="control-cluster">
-        <div class="view-toggle" aria-label="View mode">
-          <button
-            type="button"
-            class:is-active={viewMode === "grid"}
-            title="Grid view"
-            aria-label="Grid view"
-            aria-pressed={viewMode === "grid"}
-            onclick={() => onViewModeChange("grid")}
-          >
-            <LayoutGrid class="h-3.5 w-3.5" />
-          </button>
-          <button
-            type="button"
-            class:is-active={viewMode === "list"}
-            title="List view"
-            aria-label="List view"
-            aria-pressed={viewMode === "list"}
-            onclick={() => onViewModeChange("list")}
-          >
-            <List class="h-3.5 w-3.5" />
-          </button>
-          {#if enableFeedView}
-            <button
-              type="button"
-              class:is-active={viewMode === "feed"}
-              title="Feed view"
-              aria-label="Feed view"
-              aria-pressed={viewMode === "feed"}
-              onclick={() => onViewModeChange("feed")}
-            >
-              <Rows3 class="h-3.5 w-3.5" />
-            </button>
-          {/if}
-        </div>
-
-        {#if viewMode !== "list"}
-          <button
-            type="button"
-            class={cn("ctrl-btn ctrl-icon", mediaWall && "is-active")}
-            title="Media wall"
-            aria-label="Media wall"
-            aria-pressed={mediaWall}
-            onclick={() => onMediaWallChange(!mediaWall)}
-          >
-            <Image class="h-3.5 w-3.5" />
-          </button>
-
-          <label class="thumb-size-inline" title="Drag to change thumbnail size">
-          <Grid2x2 class="thumb-size-icon thumb-size-icon-min" aria-hidden="true" />
-          <span class="sr-only">Thumbnail columns</span>
-          <input
-            type="range"
-            aria-label="Thumbnail columns"
-            min={minScale}
-            max={maxScale}
-            step="1"
-            value={scale}
-            oninput={parseScale}
-          />
-          <Grid3x3 class="thumb-size-icon thumb-size-icon-max" aria-hidden="true" />
-        </label>
-
-        <div class="thumb-size-compact relative">
-          <button
-            type="button"
-            class={cn("ctrl-btn ctrl-icon", thumbSizeOpen && "is-active")}
-            title="Thumbnail size"
-            aria-label="Thumbnail size"
-            aria-expanded={thumbSizeOpen}
-            onclick={() => (thumbSizeOpen = !thumbSizeOpen)}
-          >
-            <LayoutGrid class="h-3.5 w-3.5" />
-          </button>
-
-          {#if thumbSizeOpen}
-            <button
-              type="button"
-              class="fixed inset-0 z-40"
-              aria-label="Close thumbnail size menu"
-              onclick={() => (thumbSizeOpen = false)}
-            ></button>
-            <div class="floating-surface thumb-size-popover" use:keepFlyoutOnScreen>
-              <Grid2x2 class="thumb-size-icon thumb-size-icon-min" aria-hidden="true" />
-              <span class="sr-only">Thumbnail columns</span>
-              <input
-                type="range"
-                aria-label="Thumbnail columns"
-                min={minScale}
-                max={maxScale}
-                step="1"
-                value={scale}
-                oninput={parseScale}
-              />
-              <Grid3x3 class="thumb-size-icon thumb-size-icon-max" aria-hidden="true" />
-            </div>
-          {/if}
-        </div>
-        {/if}
+        <EntityGridToolbarViewControls
+          {enableFeedView}
+          {maxScale}
+          {mediaWall}
+          {minScale}
+          {onMediaWallChange}
+          {onScaleChange}
+          {onViewModeChange}
+          {scale}
+          {viewMode}
+        />
       </div>
 
       <div class="control-cluster control-cluster-trailing">
@@ -467,34 +260,13 @@
     </div>
 
     {#if !barsCollapsed && (activeFilters.length > 0 || canClearFiltersAndSort)}
-    <div class="filter-row toolbar-bar" transition:slide={{ duration: 200, easing: cubicOut }}>
-      <div class="filter-scroll" aria-live="polite">
-        {#if activeFilters.length > 0}
-          <span class="filter-chip-label" aria-hidden="true">
-            <SlidersHorizontal class="h-3 w-3 shrink-0" />
-            ACTIVE
-          </span>
-          {#each activeFilters as option (option.id)}
-            <button type="button" class="filter-chip" onclick={() => removeFilter(option.id)}>
-              <span>{option.label}</span>
-              <X class="h-3 w-3" />
-            </button>
-          {/each}
-        {/if}
-      </div>
-
-      {#if canClearFiltersAndSort}
-        <button
-          type="button"
-          title="Clear filters, sort, search, and saved preferences"
-          class="ctrl-btn ctrl-clear filter-reset"
-          onclick={onClearFiltersAndSort}
-        >
-          <RotateCcw class="h-3.5 w-3.5 shrink-0" />
-          <span class="ctrl-label">Clear</span>
-        </button>
-      {/if}
-    </div>
+      <EntityGridToolbarActiveFilters
+        {activeFilterIds}
+        {activeFilters}
+        {canClearFiltersAndSort}
+        {onActiveFilterIdsChange}
+        {onClearFiltersAndSort}
+      />
     {/if}
 
     {#if selectable && !barsCollapsed}
@@ -519,28 +291,6 @@
 </div>
 
 <style>
-  /*
-   * The toolbar pins to the top of the layout's scrolling container so the
-   * search box, sort/filter controls, and the active filter chip row stay
-   * reachable as soon as the page scrolls past their natural position —
-   * mirroring how the pagination strip locks to the bottom of the same
-   * container.
-   *
-   * The shell carries an opaque base color (`--color-bg`) under the glass
-   * panel so cards scrolling behind the docked toolbar can never bleed
-   * through the blurred fill. `padding-top: 0.5rem` offsets the visible
-   * glass panel from the top edge, mirroring the pagination shell below.
-   *
-   * The interior `.toolbar-root` panel uses the same glass recipe as the
-   * pagination bar (semi-transparent surface tint + `backdrop-filter`) so
-   * the two docked strips read as one continuous floating material above
-   * the grid.
-   *
-   * Interactive controls share a single set of border / background / inset
-   * tokens defined just below, so the search box, ctrl buttons, view
-   * toggle, and thumbnail-size slider all read as the same family of
-   * material chips instead of mismatched outlines.
-   */
   .toolbar-shell {
     position: sticky;
     top: var(--prismedia-canvas-header-height, 3.5rem);
@@ -551,40 +301,22 @@
     background: transparent;
     pointer-events: none;
 
-    --ctrl-border: var(--color-border-subtle, rgba(148, 158, 178, 0.07));
-    --ctrl-border-hover: var(--color-border-accent, rgba(199, 201, 204, 0.25));
-    --ctrl-border-active: var(--color-border-accent, rgba(199, 201, 204, 0.25));
-    --ctrl-bg: var(--color-surface-2, #101420);
-    --ctrl-bg-hover: var(--color-surface-3, #151a28);
-    --ctrl-bg-active: var(--color-surface-4, #1c2235);
-    --ctrl-shadow: inset 0 2px 8px rgba(0,0,0,0.30);
-    --ctrl-shadow-hover: 0 0 0 1px rgba(199, 201, 204,0.35), 0 0 8px rgba(199, 201, 204,0.15);
-    --ctrl-shadow-active: 0 0 0 1px rgba(199, 201, 204,0.35), 0 0 8px rgba(199, 201, 204,0.15);
+    --toolbar-detail-border: var(--color-border, #1c2235);
+    --toolbar-detail-glass: rgb(12 15 21);
+    --toolbar-detail-slideout-inset: 5px;
+    --toolbar-bar-overlap: 0.5rem;
+    --toolbar-page-accent: var(--page-accent, var(--entity-accent, #739b96));
   }
 
   .toolbar-shell::before {
     display: none;
   }
 
-  /*
-   * The toolbar mirrors the EntityDetail layering: a primary "hero" panel
-   * (search + controls) with all corners rounded, then lower bars that tuck
-   * up behind it with only their bottom corners rounded so each reads as
-   * sliding out from underneath the section above. The hero keeps the highest
-   * stacking order inside the shell so the lower bars disappear behind its
-   * bottom edge.
-   */
   .toolbar-stack {
     display: flex;
     flex-direction: column;
     min-width: 0;
     pointer-events: auto;
-
-    --toolbar-detail-border: var(--color-border, #1c2235);
-    --toolbar-detail-glass: rgb(12 15 21);
-    --toolbar-detail-slideout-inset: 5px;
-    --toolbar-bar-overlap: 0.5rem;
-    --toolbar-page-accent: var(--page-accent, var(--entity-accent, #739b96));
   }
 
   .toolbar-hero {
@@ -605,19 +337,18 @@
     position: absolute;
     inset: 0 var(--radius-sm, 6px) auto var(--radius-sm, 6px);
     height: 2px;
-    background:
-      linear-gradient(
-        to right,
-        transparent 0%,
-        color-mix(in srgb, var(--toolbar-page-accent) 46%, transparent) 12%,
-        color-mix(in srgb, var(--toolbar-page-accent) 78%, #c7c9cc) 50%,
-        color-mix(in srgb, var(--toolbar-page-accent) 46%, transparent) 88%,
-        transparent 100%
-      );
+    background: linear-gradient(
+      to right,
+      transparent 0%,
+      color-mix(in srgb, var(--toolbar-page-accent) 46%, transparent) 12%,
+      color-mix(in srgb, var(--toolbar-page-accent) 78%, #c7c9cc) 50%,
+      color-mix(in srgb, var(--toolbar-page-accent) 46%, transparent) 88%,
+      transparent 100%
+    );
     pointer-events: none;
   }
 
-  .toolbar-bar {
+  .toolbar-stack :global(.toolbar-bar) {
     position: relative;
     display: flex;
     align-items: center;
@@ -630,115 +361,6 @@
     background: var(--toolbar-detail-glass);
   }
 
-  .search-row {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    min-width: 0;
-  }
-
-  /* Compact sort controls tucked to the right of the search box. */
-  .search-sort {
-    display: flex;
-    flex: 0 0 auto;
-    align-items: center;
-    gap: 0.35rem;
-  }
-
-  /* Anchor the dropdown to the right since the trigger sits near the edge. */
-  .sort-menu-end {
-    left: auto;
-    right: 0;
-  }
-
-  .search-box {
-    position: relative;
-    display: flex;
-    flex: 1 1 auto;
-    align-items: center;
-    gap: 0.55rem;
-    min-width: 0;
-    height: 2.1rem;
-    background: var(--color-surface-1, #0c0f15);
-    border: 1px solid var(--color-border-subtle, rgba(148, 158, 178, 0.07));
-    border-radius: var(--radius-xs, 4px);
-    box-shadow: inset 0 2px 8px rgba(0,0,0,0.30);
-    padding: 0 0.65rem;
-    transition:
-      border-color var(--duration-fast, 80ms) var(--ease-default, cubic-bezier(0.4, 0, 0.2, 1)),
-      box-shadow var(--duration-fast, 80ms) var(--ease-default, cubic-bezier(0.4, 0, 0.2, 1));
-  }
-
-  .search-box:focus-within {
-    border-color: var(--color-border-accent, rgba(199, 201, 204, 0.25));
-    box-shadow: inset 0 2px 8px rgba(0,0,0,0.30), 0 0 0 1px rgba(199, 201, 204,0.35), 0 0 8px rgba(199, 201, 204,0.15);
-  }
-
-  .search-box :global(.search-icon) {
-    width: 0.95rem;
-    height: 0.95rem;
-    color: var(--color-text-disabled);
-    flex-shrink: 0;
-  }
-
-  .search-box:focus-within :global(.search-icon) {
-    color: var(--color-text-accent);
-  }
-
-  .search-box input {
-    min-width: 0;
-    width: 100%;
-    border: 0;
-    background: transparent;
-    color: var(--color-text-primary);
-    font-family: var(--font-body, Inter, sans-serif);
-    font-size: 0.875rem;
-    letter-spacing: 0;
-    outline: 0;
-  }
-
-  .search-box input::placeholder {
-    color: var(--color-text-disabled);
-    font-style: italic;
-  }
-
-  /* Hide the native WebKit/Chromium search clear so it doesn't collide with our
-     own neutral accent-styled clear button. */
-  .search-box input::-webkit-search-cancel-button,
-  .search-box input::-webkit-search-decoration {
-    appearance: none;
-    -webkit-appearance: none;
-    display: none;
-  }
-
-  .search-clear {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 1.25rem;
-    height: 1.25rem;
-    border: 1px solid transparent;
-    background: transparent;
-    color: var(--color-text-disabled);
-    flex-shrink: 0;
-    transition:
-      color var(--duration-fast) var(--ease-default),
-      border-color var(--duration-fast) var(--ease-default);
-  }
-
-  .search-clear:hover {
-    color: var(--color-text-accent);
-    border-color: rgb(199 201 204 / 0.3);
-  }
-
-/*
-   * Two clusters share one wrapping row. The trailing cluster uses
-   * `margin-left: auto` so it always hugs the right edge — both when the
-   * row has spare width and when the leading cluster wraps and pushes
-   * trailing to its own line. Without this, `justify-content: space-between`
-   * collapses to `flex-start` once items wrap, leaving the trailing cluster
-   * stranded against the left edge with empty space on the right.
-   */
   .controls-row {
     display: flex;
     align-items: center;
@@ -762,7 +384,7 @@
     flex-shrink: 0;
   }
 
-  .ctrl-btn {
+  .toolbar-stack :global(.ctrl-btn) {
     display: inline-flex;
     align-items: center;
     gap: 0.4rem;
@@ -784,37 +406,31 @@
       box-shadow var(--duration-fast, 80ms) var(--ease-default, cubic-bezier(0.4, 0, 0.2, 1));
   }
 
-  .ctrl-btn:hover {
+  .toolbar-stack :global(.ctrl-btn:hover) {
     border-color: var(--color-border-accent, rgba(199, 201, 204, 0.25));
     background: var(--color-surface-3, #151a28);
     color: var(--color-text-primary);
     box-shadow: inset 0 0 0 1px var(--color-border-default);
   }
 
-  .ctrl-btn:focus-visible {
+  .toolbar-stack :global(.ctrl-btn:focus-visible) {
     outline: none;
     border-color: var(--color-border-accent, rgba(199, 201, 204, 0.25));
     box-shadow: var(--shadow-focus-accent);
   }
 
-  .ctrl-btn.is-active {
+  .toolbar-stack :global(.ctrl-btn.is-active) {
     border-color: var(--color-border-accent, rgba(199, 201, 204, 0.25));
     background: var(--color-surface-4, #1c2235);
     color: var(--color-text-accent, #c7c9cc);
     box-shadow: inset 0 -2px 0 var(--entity-accent, var(--color-accent-500));
   }
 
-  .ctrl-label {
+  .toolbar-stack :global(.ctrl-label) {
     display: none;
   }
 
-  @media (min-width: 520px) {
-    .ctrl-label {
-      display: inline;
-    }
-  }
-
-  .ctrl-icon {
+  .toolbar-stack :global(.ctrl-icon) {
     width: 2rem;
     justify-content: center;
     padding: 0;
@@ -826,50 +442,6 @@
 
   :global(.dir-arrow.is-up) {
     transform: rotate(180deg);
-  }
-
-  .sort-menu {
-    position: absolute;
-    left: 0;
-    top: calc(100% + 0.3rem);
-    z-index: 50;
-    min-width: 10rem;
-    padding: 0.3rem 0;
-    overflow: hidden;
-  }
-
-  .sort-menu-item {
-    display: flex;
-    align-items: center;
-    gap: 0.55rem;
-    width: calc(100% - 0.4rem);
-    margin: 0 0.2rem;
-    padding: 0.45rem 0.65rem;
-    border-radius: var(--radius-xs, 4px);
-    background: transparent;
-    border: 1px solid transparent;
-    color: var(--color-text-muted);
-    font-family: var(--font-mono, "JetBrains Mono", monospace);
-    font-size: 0.74rem;
-    letter-spacing: 0.04em;
-    text-align: left;
-    transition:
-      background-color var(--duration-fast) var(--ease-default),
-      border-color var(--duration-fast) var(--ease-default),
-      color var(--duration-fast) var(--ease-default);
-  }
-
-  .sort-menu-item:hover {
-    background: rgb(255 255 255 / 0.04);
-    border-color: var(--color-border-subtle, rgba(148, 158, 178, 0.07));
-    color: var(--color-text-primary);
-  }
-
-  .sort-menu-item.is-active {
-    background: var(--color-surface-2);
-    border-color: var(--color-border-default);
-    color: var(--color-text-primary);
-    box-shadow: inset 2px 0 0 var(--entity-accent, var(--color-accent-500));
   }
 
   .filter-count {
@@ -892,327 +464,12 @@
     text-shadow: none;
   }
 
-  .thumb-size-inline {
-    display: none;
-  }
-
-  .thumb-size-compact {
-    display: inline-flex;
-  }
-
   @media (min-width: 520px) {
-    .thumb-size-inline {
-      display: inline-flex;
-    }
-    .thumb-size-compact {
-      display: none;
+    .toolbar-stack :global(.ctrl-label) {
+      display: inline;
     }
   }
 
-  .thumb-size-inline {
-    align-items: center;
-    gap: 0.45rem;
-    padding: 0 0.55rem;
-    height: 2rem;
-    border: 1px solid var(--color-border-subtle, rgba(148, 158, 178, 0.07));
-    background: var(--color-surface-1, #0c0f15);
-    border-radius: var(--radius-xs, 4px);
-    box-shadow: inset 0 2px 8px rgba(0,0,0,0.30);
-    color: var(--color-text-muted);
-  }
-
-  .thumb-size-inline :global(.thumb-size-icon) {
-    color: var(--color-text-disabled);
-    flex-shrink: 0;
-  }
-
-  .thumb-size-inline :global(.thumb-size-icon-min) {
-    width: 0.78rem;
-    height: 0.78rem;
-  }
-
-  .thumb-size-inline :global(.thumb-size-icon-max) {
-    width: 0.9rem;
-    height: 0.9rem;
-    transform: rotate(180deg);
-  }
-
-  .thumb-size-inline input {
-    width: 5rem;
-    height: 14px;
-    appearance: none;
-    -webkit-appearance: none;
-    background: transparent;
-  }
-
-  .thumb-size-inline input::-webkit-slider-runnable-track {
-    height: 2px;
-    background: linear-gradient(
-      to right,
-      rgb(199 201 204 / 0.5),
-      rgb(199 201 204 / 0.05)
-    );
-    box-shadow: inset 0 0 4px rgb(0 0 0 / 0.6);
-  }
-
-  .thumb-size-inline input::-moz-range-track {
-    height: 2px;
-    background: linear-gradient(
-      to right,
-      rgb(199 201 204 / 0.5),
-      rgb(199 201 204 / 0.05)
-    );
-  }
-
-  .thumb-size-inline input::-webkit-slider-thumb {
-    width: 11px;
-    height: 11px;
-    margin-top: -4.5px;
-    appearance: none;
-    -webkit-appearance: none;
-    border: 1px solid var(--color-border-default);
-    border-radius: 50%;
-    background: var(--color-accent-500);
-    box-shadow: 0 1px 3px rgb(0 0 0 / 0.45);
-  }
-
-  .thumb-size-inline input::-moz-range-thumb {
-    width: 11px;
-    height: 11px;
-    border: 1px solid var(--color-border-default);
-    border-radius: 50%;
-    background: var(--color-accent-500);
-    box-shadow: 0 1px 3px rgb(0 0 0 / 0.45);
-  }
-
-  .thumb-size-inline input:focus-visible {
-    outline: none;
-  }
-
-  .thumb-size-inline input:focus-visible::-webkit-slider-thumb {
-    box-shadow: 0 0 0 3px rgb(199 201 204 / 0.25);
-  }
-
-  .thumb-size-popover {
-    position: absolute;
-    right: 0;
-    top: calc(100% + 0.3rem);
-    z-index: 50;
-    display: flex;
-    align-items: center;
-    gap: 0.55rem;
-    width: min(13rem, calc(100vw - 4rem));
-    padding: 0.7rem 0.8rem;
-  }
-
-  .thumb-size-popover :global(.thumb-size-icon) {
-    color: var(--color-text-disabled);
-    flex-shrink: 0;
-  }
-
-  .thumb-size-popover :global(.thumb-size-icon-min) {
-    width: 0.85rem;
-    height: 0.85rem;
-  }
-
-  .thumb-size-popover :global(.thumb-size-icon-max) {
-    width: 1rem;
-    height: 1rem;
-    transform: rotate(180deg);
-  }
-
-  .thumb-size-popover input {
-    flex: 1 1 auto;
-    min-width: 0;
-    width: auto;
-    height: 28px;
-    appearance: none;
-    -webkit-appearance: none;
-    background: transparent;
-  }
-
-  .thumb-size-popover input::-webkit-slider-runnable-track {
-    height: 3px;
-    background: linear-gradient(
-      to right,
-      rgb(199 201 204 / 0.5),
-      rgb(199 201 204 / 0.05)
-    );
-    box-shadow: inset 0 0 4px rgb(0 0 0 / 0.6);
-  }
-
-  .thumb-size-popover input::-moz-range-track {
-    height: 3px;
-    background: linear-gradient(
-      to right,
-      rgb(199 201 204 / 0.5),
-      rgb(199 201 204 / 0.05)
-    );
-  }
-
-  .thumb-size-popover input::-webkit-slider-thumb {
-    width: 18px;
-    height: 18px;
-    margin-top: -7.5px;
-    appearance: none;
-    -webkit-appearance: none;
-    border: 1px solid var(--color-border-default);
-    border-radius: 50%;
-    background: var(--color-accent-500);
-    box-shadow: 0 1px 3px rgb(0 0 0 / 0.45);
-  }
-
-  .thumb-size-popover input::-moz-range-thumb {
-    width: 18px;
-    height: 18px;
-    border: 1px solid var(--color-border-default);
-    border-radius: 50%;
-    background: var(--color-accent-500);
-    box-shadow: 0 1px 3px rgb(0 0 0 / 0.45);
-  }
-
-  .thumb-size-popover input:focus-visible {
-    outline: none;
-  }
-
-  .thumb-size-popover input:focus-visible::-webkit-slider-thumb {
-    box-shadow: 0 0 0 3px rgb(199 201 204 / 0.25);
-  }
-
-  .view-toggle {
-    display: inline-flex;
-    align-items: center;
-    height: 2rem;
-    border: 1px solid var(--color-border-subtle, rgba(148, 158, 178, 0.07));
-    background: var(--color-surface-1, #0c0f15);
-    border-radius: var(--radius-xs, 4px);
-    box-shadow: inset 0 2px 8px rgba(0,0,0,0.30);
-    overflow: hidden;
-  }
-
-  .view-toggle button {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    height: 100%;
-    width: 2rem;
-    background: transparent;
-    color: var(--color-text-muted);
-    border: 1px solid transparent;
-    border-radius: var(--radius-xs, 4px);
-    transition:
-      background var(--duration-fast, 80ms) var(--ease-default, cubic-bezier(0.4, 0, 0.2, 1)),
-      color var(--duration-fast, 80ms) var(--ease-default, cubic-bezier(0.4, 0, 0.2, 1)),
-      box-shadow var(--duration-fast, 80ms) var(--ease-default, cubic-bezier(0.4, 0, 0.2, 1));
-  }
-
-  .view-toggle button:not(:disabled):hover {
-    background: var(--color-surface-3, #151a28);
-    color: var(--color-text-primary);
-  }
-
-  .view-toggle button.is-active {
-    background: var(--color-surface-4, #1c2235);
-    color: var(--color-text-accent, #c7c9cc);
-  }
-
-  /*
-   * Active-filters / Clear bar — the first lower bar. It pulls up 1px behind
-   * the hero (border-top dropped, only bottom corners rounded) so the seam
-   * between it and the hero reads as one continuous panel, matching the
-   * EntityDetail tab strip.
-   */
-  .filter-row {
-    z-index: 1;
-    gap: 0.4rem;
-    min-height: 2.1rem;
-    padding: calc(0.4rem + var(--toolbar-bar-overlap)) 0.7rem 0.4rem;
-    pointer-events: auto;
-  }
-
-  .filter-scroll {
-    display: flex;
-    align-items: center;
-    gap: 0.4rem;
-    flex: 1 1 auto;
-    min-width: 0;
-    overflow-x: auto;
-    scrollbar-width: thin;
-  }
-
-  .filter-reset {
-    flex: 0 0 auto;
-    height: 1.6rem;
-    min-height: 1.6rem;
-    margin-left: auto;
-  }
-
-  .filter-chip-label {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.3rem;
-    flex-shrink: 0;
-    color: var(--color-text-disabled);
-    font-family: var(--font-mono, "JetBrains Mono", monospace);
-    font-size: 0.58rem;
-    font-weight: 600;
-    letter-spacing: 0.16em;
-  }
-
-  .filter-chip {
-    display: inline-flex;
-    flex: 0 0 auto;
-    align-items: center;
-    gap: 0.4rem;
-    height: 1.6rem;
-    border: 1px solid var(--color-border-subtle, rgba(148, 158, 178, 0.07));
-    background: var(--color-surface-2, #101420);
-    border-radius: var(--radius-xs, 4px);
-    box-shadow: inset 0 2px 8px rgba(0,0,0,0.30);
-    color: var(--color-text-muted);
-    font-family: var(--font-mono, "JetBrains Mono", monospace);
-    font-size: 0.66rem;
-    line-height: 1;
-    padding: 0 0.6rem;
-    transition:
-      border-color var(--duration-fast) var(--ease-default),
-      color var(--duration-fast) var(--ease-default),
-      background var(--duration-fast) var(--ease-default),
-      box-shadow var(--duration-fast) var(--ease-default);
-  }
-
-  .filter-chip:hover {
-    border-color: var(--color-error-border, rgba(168, 72, 80, 0.4));
-    background: var(--color-surface-3, #151a28);
-    color: var(--color-error-text, #cc7880);
-    box-shadow: 0 0 0 1px rgba(168, 72, 80, 0.3), 0 0 8px rgba(168, 72, 80, 0.15);
-  }
-
-  .filter-chip span {
-    max-width: 12rem;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .sr-only {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    margin: -1px;
-    padding: 0;
-    border: 0;
-    overflow: hidden;
-    clip: rect(0 0 0 0);
-    white-space: nowrap;
-  }
-
-  /*
-   * On narrow viewports labels collapse to icons (below 520px) so the row
-   * fits in one line. The trailing cluster keeps `margin-left: auto` to
-   * stay flush right — never stranded against the left edge with empty
-   * space to its right.
-   */
   @media (max-width: 520px) {
     .toolbar-hero {
       padding: 0.8rem 0.75rem;

@@ -94,7 +94,6 @@ const OVERSIZED_FILE_CEILINGS: Record<string, number> = {
   "routes/design-language/+page.svelte": 1450,
   "routes/books/[id]/+page.svelte": 1300,
   "lib/entities/entity-grid.ts": 1250,
-  "lib/components/entities/EntityGridToolbar.svelte": 1250,
   "lib/components/entities/EntityGrid.svelte": 1250,
   "lib/components/identify/identify-store.svelte.ts": 1200,
   "lib/components/AudioVidStackPlayer.svelte": 1200,
