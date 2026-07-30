@@ -26,8 +26,9 @@ public sealed class EntityCapabilityProjectionRegistryTests {
 
     [Fact]
     public void EveryContractCapabilityHasARegisteredProjection() {
-        var contractCapabilities = typeof(EntityCapability).Assembly
-            .GetTypes()
+        var contractCapabilities = new[] { typeof(EntityCapability).Assembly, typeof(RatingCapability).Assembly }
+            .Distinct()
+            .SelectMany(assembly => assembly.GetTypes())
             .Where(type => type is { IsClass: true, IsAbstract: false } &&
                            typeof(EntityCapability).IsAssignableFrom(type))
             .OrderBy(type => type.FullName, StringComparer.Ordinal)

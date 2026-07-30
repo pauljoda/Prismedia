@@ -1,5 +1,7 @@
 using Prismedia.Domain.Capabilities;
 using Prismedia.Domain.Entities;
+using ContractCapability = Prismedia.Contracts.Entities.EntityCapability;
+using PersonProfileDocumentCapability = Prismedia.Contracts.Entities.PersonProfileCapability;
 
 namespace Prismedia.Domain.Taxonomy;
 
@@ -11,7 +13,29 @@ public sealed class PersonEntityKindDefinition() : EntityKindDefinition<Person>(
     "People",
     EntityKindCategory.Taxonomy,
     EntityStorageShape.None,
-    defaultCapabilities: static () => [new CapabilityDates(), new CapabilityLifetime()]);
+    defaultCapabilities: static () => [new CapabilityDates(), new CapabilityLifetime()]) {
+    /// <inheritdoc />
+    public override IReadOnlyList<Type> ProjectedCapabilityTypes => [typeof(PersonProfileDocumentCapability)];
+
+    /// <inheritdoc />
+    protected override IReadOnlyList<ContractCapability> ProjectCapabilities(
+        Person entity,
+        EntityKindProjectionContext context) =>
+        [
+            new PersonProfileDocumentCapability(
+                entity.Disambiguation,
+                entity.Gender,
+                entity.Country,
+                entity.Ethnicity,
+                entity.EyeColor,
+                entity.HairColor,
+                entity.Height,
+                entity.Weight,
+                entity.Measurements,
+                entity.Tattoos,
+                entity.Piercings)
+        ];
+}
 
 /// <summary>
 /// Domain model for a person taxonomy entity.

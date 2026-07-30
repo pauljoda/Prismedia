@@ -1,4 +1,5 @@
 using Prismedia.Domain.Capabilities;
+using ContractCapability = Prismedia.Contracts.Entities.EntityCapability;
 
 namespace Prismedia.Domain.Entities;
 
@@ -63,6 +64,13 @@ public abstract class EntityKindDefinition {
     public bool SupportsFileDeletion { get; }
 
     /// <summary>
+    /// Immutable document-capability types projected directly by this definition. Shared
+    /// cross-kind capabilities are projected generically from the Entity root and attached
+    /// domain capabilities.
+    /// </summary>
+    public virtual IReadOnlyList<Type> ProjectedCapabilityTypes => [];
+
+    /// <summary>
     /// Creates fresh default domain capabilities for a newly constructed entity of this kind.
     /// Duplicate capability types are rejected so every capability remains unambiguous.
     /// </summary>
@@ -79,6 +87,41 @@ public abstract class EntityKindDefinition {
 
         return capabilities;
     }
+
+    /// <summary>
+    /// Projects the immutable, kind-specific document capabilities owned by this definition.
+    /// Declared and emitted capability types must match exactly, making projection completeness a
+    /// checked part of the kind contract rather than a separate registration convention.
+    /// </summary>
+    /// <param name="entity">Concrete entity governed by this definition.</param>
+    /// <param name="context">Caller facts permitted in a document projection.</param>
+    public IReadOnlyList<ContractCapability> ProjectCapabilities(
+        Entity entity,
+        EntityKindProjectionContext context) {
+        ArgumentNullException.ThrowIfNull(entity);
+        ArgumentNullException.ThrowIfNull(context);
+        if (!ReferenceEquals(entity.Definition, this)) {
+            throw new ArgumentException(
+                $"Entity '{entity.Id}' is governed by '{entity.Definition.Code}', not '{Code}'.",
+                nameof(entity));
+        }
+
+        var capabilities = ProjectCapabilitiesCore(entity, context) ??
+            throw new InvalidOperationException($"Entity kind '{Code}' returned a null document-capability collection.");
+        var actualTypes = capabilities.Select(capability => capability.GetType()).ToArray();
+        if (!ProjectedCapabilityTypes.SequenceEqual(actualTypes)) {
+            throw new InvalidOperationException(
+                $"Entity kind '{Code}' declared [{string.Join(", ", ProjectedCapabilityTypes.Select(type => type.Name))}] " +
+                $"but projected [{string.Join(", ", actualTypes.Select(type => type.Name))}].");
+        }
+
+        return capabilities;
+    }
+
+    /// <summary>Implementation hook for a concrete definition's document projection.</summary>
+    protected virtual IReadOnlyList<ContractCapability> ProjectCapabilitiesCore(
+        Entity entity,
+        EntityKindProjectionContext context) => [];
 
     private static string RequireText(string value, string parameterName) =>
         string.IsNullOrWhiteSpace(value)
@@ -115,7 +158,22 @@ public abstract class EntityKindDefinition<TEntity> : EntityKindDefinition
             enumeratesIdentifyChildren,
             supportsFileDeletion) {
     }
+
+    /// <inheritdoc />
+    protected sealed override IReadOnlyList<ContractCapability> ProjectCapabilitiesCore(
+        Entity entity,
+        EntityKindProjectionContext context) =>
+        ProjectCapabilities((TEntity)entity, context);
+
+    /// <summary>Projects kind-specific document capabilities from the strongly typed entity.</summary>
+    protected virtual IReadOnlyList<ContractCapability> ProjectCapabilities(
+        TEntity entity,
+        EntityKindProjectionContext context) => [];
 }
+
+/// <summary>Caller-scoped facts available to pure Entity-kind document projection.</summary>
+/// <param name="CurrentUserId">Current caller identity, or null outside an authenticated request.</param>
+public sealed record EntityKindProjectionContext(Guid? CurrentUserId);
 
 /// <summary>Root fields available when a kind requires no kind-specific persistence data.</summary>
 /// <param name="Id">Stable entity identifier.</param>

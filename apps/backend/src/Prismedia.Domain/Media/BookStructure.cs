@@ -1,5 +1,7 @@
 using Prismedia.Domain.Capabilities;
 using Prismedia.Domain.Entities;
+using ContractCapability = Prismedia.Contracts.Entities.EntityCapability;
+using CoverSelectionDocumentCapability = Prismedia.Contracts.Entities.CoverSelectionCapability;
 
 namespace Prismedia.Domain.Media;
 
@@ -39,7 +41,16 @@ public sealed class BookChapterEntityKindDefinition() : EntityKindDefinition<Boo
         new CapabilityStats(),
         new CapabilitySource(),
         new CapabilityPosition()
-    ]);
+    ]) {
+    /// <inheritdoc />
+    public override IReadOnlyList<Type> ProjectedCapabilityTypes => [typeof(CoverSelectionDocumentCapability)];
+
+    /// <inheritdoc />
+    protected override IReadOnlyList<ContractCapability> ProjectCapabilities(
+        BookChapter entity,
+        EntityKindProjectionContext context) =>
+        [new CoverSelectionDocumentCapability(entity.CoverPageId)];
+}
 
 /// <summary>Defines the structural book-page kind and shared-root construction.</summary>
 public sealed class BookPageEntityKindDefinition() : RootEntityKindDefinition<BookPage>(

@@ -1,5 +1,7 @@
 using Prismedia.Domain.Capabilities;
 using Prismedia.Domain.Entities;
+using ContractCapability = Prismedia.Contracts.Entities.EntityCapability;
+using TagPolicyDocumentCapability = Prismedia.Contracts.Entities.TagPolicyCapability;
 
 namespace Prismedia.Domain.Taxonomy;
 
@@ -10,7 +12,16 @@ public sealed class TagEntityKindDefinition() : EntityKindDefinition<Tag>(
     "Tag",
     "Tags",
     EntityKindCategory.Taxonomy,
-    EntityStorageShape.None);
+    EntityStorageShape.None) {
+    /// <inheritdoc />
+    public override IReadOnlyList<Type> ProjectedCapabilityTypes => [typeof(TagPolicyDocumentCapability)];
+
+    /// <inheritdoc />
+    protected override IReadOnlyList<ContractCapability> ProjectCapabilities(
+        Tag entity,
+        EntityKindProjectionContext context) =>
+        [new TagPolicyDocumentCapability(entity.IgnoreAutoTag)];
+}
 
 /// <summary>
 /// Domain model for a tag taxonomy entity.

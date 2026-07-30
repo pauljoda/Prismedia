@@ -1,5 +1,8 @@
 using Prismedia.Domain.Capabilities;
 using Prismedia.Domain.Entities;
+using BookMetadataDocumentCapability = Prismedia.Contracts.Entities.BookMetadataCapability;
+using ContractCapability = Prismedia.Contracts.Entities.EntityCapability;
+using CoverSelectionDocumentCapability = Prismedia.Contracts.Entities.CoverSelectionCapability;
 
 namespace Prismedia.Domain.Media;
 
@@ -13,7 +16,20 @@ public sealed class BookEntityKindDefinition() : EntityKindDefinition<Book>(
     EntityStorageShape.Archive,
     defaultCapabilities: static () => [new CapabilityProgress(), new CapabilityPlayback()],
     enumeratesIdentifyChildren: true,
-    supportsFileDeletion: true);
+    supportsFileDeletion: true) {
+    /// <inheritdoc />
+    public override IReadOnlyList<Type> ProjectedCapabilityTypes =>
+        [typeof(BookMetadataDocumentCapability), typeof(CoverSelectionDocumentCapability)];
+
+    /// <inheritdoc />
+    protected override IReadOnlyList<ContractCapability> ProjectCapabilities(
+        Book entity,
+        EntityKindProjectionContext context) =>
+        [
+            new BookMetadataDocumentCapability(entity.BookType, entity.Format),
+            new CoverSelectionDocumentCapability(entity.CoverPageId)
+        ];
+}
 
 /// <summary>
 /// Domain model for a book, comic, manga, or other page-based media item.

@@ -1,5 +1,7 @@
 using Prismedia.Domain.Capabilities;
 using Prismedia.Domain.Entities;
+using ContractCapability = Prismedia.Contracts.Entities.EntityCapability;
+using SeriesMetadataDocumentCapability = Prismedia.Contracts.Entities.SeriesMetadataCapability;
 
 namespace Prismedia.Domain.Media;
 
@@ -13,7 +15,16 @@ public sealed class VideoSeriesEntityKindDefinition() : EntityKindDefinition<Vid
     EntityStorageShape.Folder,
     defaultCapabilities: static () => [new CapabilityCredits()],
     enumeratesIdentifyChildren: true,
-    supportsFileDeletion: true);
+    supportsFileDeletion: true) {
+    /// <inheritdoc />
+    public override IReadOnlyList<Type> ProjectedCapabilityTypes => [typeof(SeriesMetadataDocumentCapability)];
+
+    /// <inheritdoc />
+    protected override IReadOnlyList<ContractCapability> ProjectCapabilities(
+        VideoSeries entity,
+        EntityKindProjectionContext context) =>
+        [new SeriesMetadataDocumentCapability(entity.Status)];
+}
 
 /// <summary>Defines the structural season kind and shared-root construction.</summary>
 public sealed class VideoSeasonEntityKindDefinition() : RootEntityKindDefinition<VideoSeason>(

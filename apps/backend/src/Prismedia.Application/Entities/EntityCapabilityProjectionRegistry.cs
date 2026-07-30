@@ -50,20 +50,10 @@ internal abstract class EntityCapabilityProjector<TCapability> : IEntityCapabili
         Project(context);
 }
 
-/// <summary>Typed projection contract for capabilities owned by one concrete domain entity.</summary>
-internal abstract class EntityCapabilityProjector<TEntity, TCapability> : EntityCapabilityProjector<TCapability>
-    where TEntity : Entity
-    where TCapability : ContractCapability {
-    public sealed override TCapability? Project(EntityCapabilityProjectionContext context) =>
-        context.Entity is TEntity entity ? Project(entity, context) : null;
-
-    protected abstract TCapability? Project(TEntity entity, EntityCapabilityProjectionContext context);
-}
-
 /// <summary>
-/// Discovers every typed projector in the Application assembly and applies them in deterministic
-/// attribute order. A new capability or kind-specific projection joins organically by adding one
-/// attributed implementation of <see cref="IEntityCapabilityProjector"/>.
+/// Discovers cross-kind projectors in the Application assembly and combines them with the
+/// kind-specific projection owned by the Entity's discovered definition. Shared capability logic
+/// joins by adding one attributed projector; kind logic joins at its definition with no second class.
 /// </summary>
 internal static class EntityCapabilityProjectionRegistry {
     private static readonly ProjectionRegistration[] Registrations = Discover(
@@ -71,7 +61,9 @@ internal static class EntityCapabilityProjectionRegistry {
 
     /// <summary>Contract capability types covered by discovered projection modules.</summary>
     internal static IReadOnlyList<Type> RegisteredCapabilityTypes { get; } =
-        Registrations.Select(registration => registration.Projector.CapabilityType).ToArray();
+        Registrations.Select(registration => registration.Projector.CapabilityType)
+            .Concat(EntityKindRegistry.All.SelectMany(definition => definition.ProjectedCapabilityTypes))
+            .ToArray();
 
     /// <summary>Concrete projector types found without any hand-maintained registration table.</summary>
     internal static IReadOnlyList<Type> RegisteredProjectionTypes { get; } =
@@ -88,10 +80,14 @@ internal static class EntityCapabilityProjectionRegistry {
             fileManagementState,
             currentUserId,
             projectedCreditMetadata);
-        var capabilities = Registrations
+        var sharedCapabilities = Registrations
             .Select(registration => registration.Projector.Project(context))
             .OfType<ContractCapability>()
             .ToArray();
+        var kindCapabilities = entity.Definition.ProjectCapabilities(
+            entity,
+            new EntityKindProjectionContext(currentUserId));
+        var capabilities = sharedCapabilities.Concat(kindCapabilities).ToArray();
         var duplicate = capabilities
             .GroupBy(capability => capability.GetType())
             .FirstOrDefault(group => group.Count() > 1);

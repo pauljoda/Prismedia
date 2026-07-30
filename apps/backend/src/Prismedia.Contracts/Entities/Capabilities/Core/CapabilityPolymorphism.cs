@@ -6,8 +6,9 @@ namespace Prismedia.Contracts.Entities;
 
 /// <summary>
 /// Configures System.Text.Json polymorphism for <see cref="EntityCapability" /> by reflecting
-/// over every subtype that carries a <see cref="CapabilityKindAttribute" />. Each capability
-/// declares its discriminator next to itself; this resolver wires them onto the base type.
+/// over every subtype that carries a <see cref="CapabilityKindAttribute" />. Core kind-specific
+/// document capabilities live with Domain definitions while transport-only shared capabilities
+/// live in Contracts; this resolver treats both assemblies as one polymorphic family.
 /// </summary>
 public static class CapabilityPolymorphism {
     private static readonly Lazy<IReadOnlyList<(Type Type, string Kind)>> DiscoveredCapabilities = new(Discover);
@@ -44,8 +45,9 @@ public static class CapabilityPolymorphism {
 
     private static IReadOnlyList<(Type, string)> Discover() {
         var baseType = typeof(EntityCapability);
-        var discovered = baseType.Assembly
-            .GetTypes()
+        var discovered = new[] { baseType.Assembly, typeof(CapabilityPolymorphism).Assembly }
+            .Distinct()
+            .SelectMany(assembly => assembly.GetTypes())
             .Where(type => type != baseType && baseType.IsAssignableFrom(type) && !type.IsAbstract)
             .Select(type => (Type: type, Attribute: type.GetCustomAttribute<CapabilityKindAttribute>()))
             .ToArray();

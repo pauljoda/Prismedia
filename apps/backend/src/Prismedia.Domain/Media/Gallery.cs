@@ -1,5 +1,8 @@
 using Prismedia.Domain.Capabilities;
 using Prismedia.Domain.Entities;
+using ContractCapability = Prismedia.Contracts.Entities.EntityCapability;
+using CoverSelectionDocumentCapability = Prismedia.Contracts.Entities.CoverSelectionCapability;
+using GalleryMetadataDocumentCapability = Prismedia.Contracts.Entities.GalleryMetadataCapability;
 
 namespace Prismedia.Domain.Media;
 
@@ -12,7 +15,20 @@ public sealed class GalleryEntityKindDefinition() : EntityKindDefinition<Gallery
     EntityKindCategory.Media,
     EntityStorageShape.Folder,
     defaultCapabilities: static () => [new CapabilityCredits()],
-    supportsFileDeletion: true);
+    supportsFileDeletion: true) {
+    /// <inheritdoc />
+    public override IReadOnlyList<Type> ProjectedCapabilityTypes =>
+        [typeof(GalleryMetadataDocumentCapability), typeof(CoverSelectionDocumentCapability)];
+
+    /// <inheritdoc />
+    protected override IReadOnlyList<ContractCapability> ProjectCapabilities(
+        Gallery entity,
+        EntityKindProjectionContext context) =>
+        [
+            new GalleryMetadataDocumentCapability(entity.GalleryType),
+            new CoverSelectionDocumentCapability(entity.CoverImageId)
+        ];
+}
 
 /// <summary>
 /// Domain model for an image gallery.

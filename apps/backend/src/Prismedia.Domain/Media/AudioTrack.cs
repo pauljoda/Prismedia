@@ -1,5 +1,7 @@
 using Prismedia.Domain.Capabilities;
 using Prismedia.Domain.Entities;
+using ContractCapability = Prismedia.Contracts.Entities.EntityCapability;
+using EmbeddedAudioMetadataDocumentCapability = Prismedia.Contracts.Entities.EmbeddedAudioMetadataCapability;
 
 namespace Prismedia.Domain.Media;
 
@@ -12,7 +14,16 @@ public sealed class AudioTrackEntityKindDefinition() : EntityKindDefinition<Audi
     EntityKindCategory.Media,
     EntityStorageShape.File,
     defaultCapabilities: static () => [new CapabilityPlayback()],
-    supportsFileDeletion: true);
+    supportsFileDeletion: true) {
+    /// <inheritdoc />
+    public override IReadOnlyList<Type> ProjectedCapabilityTypes => [typeof(EmbeddedAudioMetadataDocumentCapability)];
+
+    /// <inheritdoc />
+    protected override IReadOnlyList<ContractCapability> ProjectCapabilities(
+        AudioTrack entity,
+        EntityKindProjectionContext context) =>
+        [new EmbeddedAudioMetadataDocumentCapability(entity.EmbeddedArtist, entity.EmbeddedAlbum)];
+}
 
 /// <summary>
 /// Domain model for a playable audio track.

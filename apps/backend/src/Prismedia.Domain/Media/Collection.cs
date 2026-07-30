@@ -1,5 +1,8 @@
 using Prismedia.Domain.Capabilities;
 using Prismedia.Domain.Entities;
+using CollectionConfigurationDocumentCapability = Prismedia.Contracts.Entities.CollectionConfigurationCapability;
+using ContractCapability = Prismedia.Contracts.Entities.EntityCapability;
+using CoverSelectionDocumentCapability = Prismedia.Contracts.Entities.CoverSelectionCapability;
 
 namespace Prismedia.Domain.Media;
 
@@ -31,6 +34,25 @@ public sealed class CollectionEntityKindDefinition()
 
     /// <inheritdoc />
     public bool CanContain(EntityKind kind) => AllowedKinds.Contains(kind);
+
+    /// <inheritdoc />
+    public override IReadOnlyList<Type> ProjectedCapabilityTypes =>
+        [typeof(CollectionConfigurationDocumentCapability), typeof(CoverSelectionDocumentCapability)];
+
+    /// <inheritdoc />
+    protected override IReadOnlyList<ContractCapability> ProjectCapabilities(
+        Collection entity,
+        EntityKindProjectionContext context) =>
+        [
+            new CollectionConfigurationDocumentCapability(
+                entity.IsShared,
+                context.CurrentUserId is { } userId && entity.IsOwnedBy(userId),
+                entity.Mode,
+                entity.RuleTreeJson,
+                entity.CoverMode,
+                entity.LastRefreshedAt),
+            new CoverSelectionDocumentCapability(entity.CoverItemId)
+        ];
 }
 
 /// <summary>

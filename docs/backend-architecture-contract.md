@@ -96,7 +96,9 @@ Repositories are for loading and saving write models. Read-heavy screens can que
 
 ## API and DTO Rules
 
-- Every endpoint uses explicit request and response contracts from `Prismedia.Contracts`.
+- Every endpoint uses explicit request and response envelopes from `Prismedia.Contracts`.
+  Entity-document envelopes may carry immutable core capability values owned by
+  `Prismedia.Domain`; endpoints still never return mutable domain entities.
 - Do not return EF row types or domain entities from HTTP endpoints.
 - DTOs are shaped for the client and may flatten, group, omit, or rename data.
 - Generated OpenAPI TypeScript types are the frontend source of truth.
@@ -146,15 +148,19 @@ deliberate patterns exist and must not be "corrected" into uniformity:
   markers/subtitles on `Video`, progress on `Book`); the capability is the persistence
   and contract projection unit, so single-kind capabilities are acceptable and expected
   to be reused as new kinds appear.
-- **Contract projection capabilities** in `Prismedia.Contracts` may have no one-to-one
-  domain counterpart. Universal examples (`RatingCapability`, `FlagsCapability`,
+- **Entity document capabilities** are immutable projection values. Kind-specific values
+  live in `Prismedia.Domain/Entities/Documents` and are emitted by the owning
+  `EntityKindDefinition`, keeping the code, defaults, and projection contract together.
+  Universal transport projections in `Prismedia.Contracts` may have no one-to-one domain
+  counterpart. Examples (`RatingCapability`, `FlagsCapability`,
   `FilesCapability`, `LinksCapability`, `ImagesCapability`) project `Entity` properties
   (`RatingValue`, the `IsFavorite/IsNsfw/IsOrganized` flags, `EntityFiles`, `Urls` +
   `ExternalIds`). Typed metadata capabilities project concrete aggregate state such as
   book format, Person profile data, collection configuration, or embedded audio labels.
-  Shared projections such as credits and cover selection are emitted once regardless of
-  Entity kind. The contract capability set is therefore a superset of the domain set; do
-  not add domain classes solely to mirror a wire projection.
+  Cross-kind projections such as credits are emitted generically; cover selection is
+  emitted by each definition that owns a cover choice. The document capability set is
+  therefore a superset of mutable domain capabilities; do not add mutable domain behavior
+  classes solely to mirror an immutable document value.
 
 Subtitle reconciliation state (`CapabilitySubtitles.ExtractedAt`) lives on the subtitles
 capability. Its value is persisted on the `video_details.subtitles_extracted_at` column
@@ -199,7 +205,8 @@ Stable string identifiers are owned by exactly one source and must not be retype
 - `Prismedia.Domain` is persistence-ignorant and has behavior-bearing entity methods.
 - `Prismedia.Infrastructure.Entities.EfEntityRepository` hydrates bounded domain slices directly; there is no one-to-one Application repository interface.
 - `PrismediaDbContext` is the EF persistence boundary and owns row sets, mappings, and migrations.
-- API contracts live in `Prismedia.Contracts` rather than in domain classes.
+- API request/response envelopes live in `Prismedia.Contracts`; immutable kind-specific
+  document capabilities live with their Domain definitions and contain no HTTP behavior.
 - Child and relationship data is stored in explicit EF tables, which can support projections without inventing a separate graph runtime.
 
 ### Course Corrections
@@ -218,7 +225,8 @@ Backend work is done when:
 - Domain behavior lives in `Prismedia.Domain` and is covered by domain tests when it can regress.
 - Use-case orchestration lives in `Prismedia.Application` or an intentional infrastructure adapter for technical workflows.
 - EF mapping, migrations, and SQL live in `Prismedia.Infrastructure`.
-- API endpoints expose DTOs from `Prismedia.Contracts`.
+- API endpoints expose DTO envelopes from `Prismedia.Contracts`, composed with immutable
+  Domain-owned document capabilities where the Entity definition owns the projection.
 - Frontend code consumes generated API clients for HTTP contracts and keeps package-level helper types frontend-only.
 - Tests cover domain rules, application orchestration, infrastructure persistence, or API behavior according to the risk of the change.
 - The changelog includes a concise user-facing entry when the change is release-note-worthy.
