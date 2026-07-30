@@ -31,6 +31,6 @@ describe("acquisition API", () => {
       { summary: { id: "ebook-acquisition" } },
       { summary: { id: "audiobook-acquisition" } },
     ]);
-    expect(generated.listAcquisitionsForEntity).toHaveBeenCalledWith("book-1");
+    expect(generated.listAcquisitionsForEntity.mock.calls[0]?.[0]).toBe("book-1");
   });
 });

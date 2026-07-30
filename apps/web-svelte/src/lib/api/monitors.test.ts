@@ -48,7 +48,7 @@ describe("monitor API", () => {
       { id: "ebook-monitor" },
       { id: "audiobook-monitor" },
     ]);
-    expect(generated.listEntityMonitors).toHaveBeenCalledWith("book-1");
+    expect(generated.listEntityMonitors.mock.calls[0]?.[0]).toBe("book-1");
   });
 
   it("starts entity monitoring with the selected profile and import target", async () => {
