@@ -10,7 +10,7 @@ public sealed class IdentifyProviderDefaultPolicyTests {
     public void ConfiguredProviderIsFirstForEveryKnownEntityKind() {
         var providers = EntityKindRegistry.All
             .Select(descriptor => Provider(
-                $"provider-{descriptor.Value}",
+                $"provider-{descriptor.Kind}",
                 descriptor.GroupLabel,
                 descriptor.Code))
             .Reverse()
@@ -18,25 +18,25 @@ public sealed class IdentifyProviderDefaultPolicyTests {
         var settings = new IdentifyProviderSettings(
             EntityKindRegistry.All.ToDictionary(
                 descriptor => descriptor.Code,
-                descriptor => $"provider-{descriptor.Value}",
+                descriptor => $"provider-{descriptor.Kind}",
                 StringComparer.Ordinal));
 
         foreach (var descriptor in EntityKindRegistry.All) {
             var ordered = IdentifyProviderDefaultPolicy.Order(providers, descriptor.Code, settings);
 
-            Assert.Equal($"provider-{descriptor.Value}", ordered[0].Id);
+            Assert.Equal($"provider-{descriptor.Kind}", ordered[0].Id);
         }
     }
 
     [Fact]
     public void MissingDisabledUnauthenticatedUninstalledAndIncompatibleDefaultsUseCatalogOrder() {
-        var kind = EntityKindRegistry.Video.Code;
+        var kind = EntityKind.Video.ToCode();
         var fallback = Provider("alpha", "Alpha", kind);
         var invalidDefaults = new[] {
             Provider("disabled", "Zulu", kind) with { Enabled = false },
             Provider("missing-auth", "Zulu", kind) with { MissingAuthKeys = ["token"] },
             Provider("uninstalled", "Zulu", kind) with { Installed = false },
-            Provider("incompatible", "Zulu", EntityKindRegistry.Book.Code),
+            Provider("incompatible", "Zulu", EntityKind.Book.ToCode()),
         };
 
         foreach (var invalid in invalidDefaults) {
@@ -62,15 +62,15 @@ public sealed class IdentifyProviderDefaultPolicyTests {
 
     [Fact]
     public void ProviderIdsMatchCaseInsensitivelyAndMovieUsesVideoCompatibility() {
-        var provider = Provider("TMDB", "Zulu", EntityKindRegistry.Video.Code);
-        var fallback = Provider("alpha", "Alpha", EntityKindRegistry.Movie.Code);
+        var provider = Provider("TMDB", "Zulu", EntityKind.Video.ToCode());
+        var fallback = Provider("alpha", "Alpha", EntityKind.Movie.ToCode());
         var settings = new IdentifyProviderSettings(new Dictionary<string, string> {
-            [EntityKindRegistry.Movie.Code] = "tmdb",
+            [EntityKind.Movie.ToCode()] = "tmdb",
         });
 
         var ordered = IdentifyProviderDefaultPolicy.Order(
             [fallback, provider],
-            EntityKindRegistry.Movie.Code,
+            EntityKind.Movie.ToCode(),
             settings);
 
         Assert.Equal(provider.Id, ordered[0].Id);
@@ -79,11 +79,11 @@ public sealed class IdentifyProviderDefaultPolicyTests {
     [Fact]
     public void UnknownRequestedKindNeverAppliesAConfiguredDefault() {
         var providers = new[] {
-            Provider("alpha", "Alpha", EntityKindRegistry.Video.Code),
-            Provider("zulu", "Zulu", EntityKindRegistry.Video.Code),
+            Provider("alpha", "Alpha", EntityKind.Video.ToCode()),
+            Provider("zulu", "Zulu", EntityKind.Video.ToCode()),
         };
         var settings = new IdentifyProviderSettings(new Dictionary<string, string> {
-            [EntityKindRegistry.Video.Code] = "zulu",
+            [EntityKind.Video.ToCode()] = "zulu",
         });
 
         var ordered = IdentifyProviderDefaultPolicy.Order(providers, "unknown-kind", settings);

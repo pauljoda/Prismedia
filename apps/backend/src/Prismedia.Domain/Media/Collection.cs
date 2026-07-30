@@ -3,12 +3,18 @@ using Prismedia.Domain.Entities;
 
 namespace Prismedia.Domain.Media;
 
-/// <summary>
-/// Domain aggregate for a user collection plus its ordered member entities.
-/// </summary>
-public sealed class Collection : Entity {
-    private static readonly HashSet<EntityKind> ContainableKinds =
-    [
+/// <summary>Defines collection metadata and the kinds accepted as direct members.</summary>
+public sealed class CollectionEntityKindDefinition()
+    : EntityKindDefinition<Collection>(
+        EntityKind.Collection,
+        "collection",
+        "Collection",
+        "Collections",
+        EntityKindCategory.Collection,
+        EntityStorageShape.None),
+      IEntityContainmentPolicy {
+    private static readonly IReadOnlySet<EntityKind> AllowedKinds = new HashSet<EntityKind>
+    {
         EntityKind.Video,
         EntityKind.Movie,
         EntityKind.VideoSeries,
@@ -18,8 +24,19 @@ public sealed class Collection : Entity {
         EntityKind.MusicArtist,
         EntityKind.AudioLibrary,
         EntityKind.AudioTrack,
-    ];
+    };
 
+    /// <inheritdoc />
+    public IReadOnlySet<EntityKind> ContainableKinds => AllowedKinds;
+
+    /// <inheritdoc />
+    public bool CanContain(EntityKind kind) => AllowedKinds.Contains(kind);
+}
+
+/// <summary>
+/// Domain aggregate for a user collection plus its ordered member entities.
+/// </summary>
+public sealed class Collection : Entity<CollectionEntityKindDefinition> {
     public Collection(
         Guid id,
         string title,
@@ -43,7 +60,6 @@ public sealed class Collection : Entity {
         LastRefreshedAt = lastRefreshedAt;
     }
 
-    public override EntityKind Kind => EntityKind.Collection;
     public Guid OwnerUserId { get; }
     public bool IsShared { get; private set; }
     public CollectionMode Mode { get; private set; }
@@ -70,7 +86,8 @@ public sealed class Collection : Entity {
     }
 
     /// <summary>Returns whether collections may directly contain the supplied entity kind.</summary>
-    public static bool CanContain(EntityKind kind) => ContainableKinds.Contains(kind);
+    public static bool CanContain(EntityKind kind) =>
+        EntityKindRegistry.Get<CollectionEntityKindDefinition>().CanContain(kind);
 
     /// <summary>Updates the rule mode and normalized rule tree for this collection.</summary>
     public void ConfigureRules(CollectionMode mode, string? ruleTreeJson) {
@@ -98,6 +115,4 @@ public sealed class Collection : Entity {
     public void MarkRefreshed(DateTimeOffset refreshedAt) {
         LastRefreshedAt = refreshedAt;
     }
-
-    protected override IEnumerable<EntityCapability> CreateDefaultCapabilities() => [];
 }

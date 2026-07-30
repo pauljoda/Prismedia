@@ -3,10 +3,21 @@ using Prismedia.Domain.Entities;
 
 namespace Prismedia.Domain.Media;
 
+/// <summary>Defines the playable audio-track kind and its default playback capability.</summary>
+public sealed class AudioTrackEntityKindDefinition() : EntityKindDefinition<AudioTrack>(
+    EntityKind.AudioTrack,
+    "audio-track",
+    "Audio Track",
+    "Audio Tracks",
+    EntityKindCategory.Media,
+    EntityStorageShape.File,
+    defaultCapabilities: static () => [new CapabilityPlayback()],
+    supportsFileDeletion: true);
+
 /// <summary>
 /// Domain model for a playable audio track.
 /// </summary>
-public sealed class AudioTrack : Entity {
+public sealed class AudioTrack : Entity<AudioTrackEntityKindDefinition> {
     public AudioTrack(
         Guid id,
         string title,
@@ -18,7 +29,6 @@ public sealed class AudioTrack : Entity {
         EmbeddedAlbum = embeddedAlbum;
     }
 
-    public override EntityKind Kind => EntityKind.AudioTrack;
     public string? EmbeddedArtist { get; private set; }
     public string? EmbeddedAlbum { get; private set; }
 
@@ -29,9 +39,4 @@ public sealed class AudioTrack : Entity {
         var playback = RequireCapability<CapabilityPlayback>();
         playback.MarkPlayed(resumeTime, playedAt);
     }
-
-    protected override IEnumerable<EntityCapability> CreateDefaultCapabilities() =>
-    [
-        new CapabilityPlayback()
-    ];
 }

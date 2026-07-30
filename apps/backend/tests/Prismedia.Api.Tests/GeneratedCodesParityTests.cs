@@ -8,7 +8,7 @@ namespace Prismedia.Api.Tests;
 /// <c>codes.ts</c>. The full regenerate-and-diff check (<c>pnpm api:check</c>) needs a
 /// running dev API, so it only runs in the manual validate workflow; this test compares
 /// <see cref="CodesManifest.Build()"/> against the committed file by reflection alone,
-/// letting push CI catch a backend [Code] enum change that was not regenerated.
+/// letting push CI catch a backend codec or definition change that was not regenerated.
 /// </summary>
 public sealed partial class GeneratedCodesParityTests {
     private const string GeneratedCodesPath = "apps/web-svelte/src/lib/api/generated/codes.ts";

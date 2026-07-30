@@ -3,10 +3,22 @@ using Prismedia.Domain.Entities;
 
 namespace Prismedia.Domain.Media;
 
+/// <summary>Defines the book kind, storage behavior, and default reading capabilities.</summary>
+public sealed class BookEntityKindDefinition() : EntityKindDefinition<Book>(
+    EntityKind.Book,
+    "book",
+    "Book",
+    "Books",
+    EntityKindCategory.Media,
+    EntityStorageShape.Archive,
+    defaultCapabilities: static () => [new CapabilityProgress(), new CapabilityPlayback()],
+    enumeratesIdentifyChildren: true,
+    supportsFileDeletion: true);
+
 /// <summary>
 /// Domain model for a book, comic, manga, or other page-based media item.
 /// </summary>
-public sealed class Book : Entity {
+public sealed class Book : Entity<BookEntityKindDefinition> {
     public Book(
         Guid id,
         string title,
@@ -22,7 +34,6 @@ public sealed class Book : Entity {
         Format = format;
     }
 
-    public override EntityKind Kind => EntityKind.Book;
     public BookType BookType { get; private set; }
     public Guid? CoverPageId { get; private set; }
 
@@ -55,10 +66,4 @@ public sealed class Book : Entity {
         var progress = RequireCapability<CapabilityProgress>();
         progress.MarkCompleted(completedAt);
     }
-
-    protected override IEnumerable<EntityCapability> CreateDefaultCapabilities() =>
-    [
-        new CapabilityProgress(),
-        new CapabilityPlayback()
-    ];
 }

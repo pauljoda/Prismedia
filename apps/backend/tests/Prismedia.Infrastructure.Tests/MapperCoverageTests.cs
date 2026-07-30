@@ -53,7 +53,7 @@ public sealed class MapperCoverageTests {
 
         var kindsWithDomainTypes = EntityKindRegistry.All
             .Where(descriptor => descriptor.ClrType is not null)
-            .Select(descriptor => descriptor.Value)
+            .Select(definition => definition.Kind)
             .ToArray();
 
         // Every kind with a CLR type must have a mapper, explicit or convention-backed.
@@ -107,20 +107,21 @@ public sealed class MapperCoverageTests {
     }
 
     [Fact]
-    public void SimpleKindsUseConventionMapperInsteadOfOneClassPerKind() {
+    public void RootConstructableDefinitionsUseConventionMapperInsteadOfOneClassPerKind() {
         using var db = CreateInMemoryContext();
         var mappers = EntityMappers.Kinds(db);
+        var expected = EntityKindRegistry.All
+            .OfType<IEntityRootFactory>()
+            .Select(factory => factory.Definition.Kind)
+            .Order()
+            .ToArray();
+        var actual = mappers
+            .Where(mapper => mapper.GetType().Name == "ConventionEntityKindMapper")
+            .Select(mapper => mapper.Kind)
+            .Order()
+            .ToArray();
 
-        Assert.All(
-            new[] {
-                EntityKind.AudioLibrary,
-                EntityKind.BookPage,
-                EntityKind.BookVolume,
-                EntityKind.Image,
-                EntityKind.Studio,
-                EntityKind.VideoSeason
-            },
-            kind => Assert.Equal("ConventionEntityKindMapper", mappers.Single(mapper => mapper.Kind == kind).GetType().Name));
+        Assert.Equal(expected, actual);
     }
 
     // ── Reflection helpers ──────────────────────────────────────────────────────

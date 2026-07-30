@@ -178,10 +178,13 @@ return the same card. Do not add a derived `*Detail` record or per-kind projecti
 
 Stable string identifiers are owned by exactly one source and must not be retyped inline:
 
-- Closed sets are `[Code]`-bearing enums in `Prismedia.Domain` (entity kinds,
-  relationship kinds, file roles, file source, credit roles, job types, subtitle/playback
-  enums, identify states). Encode/decode through `CodecRegistry`; in EF LINQ, hoist
-  `.ToCode()` to a local first so the query translates.
+- Entity-kind codes and kind-wide domain behavior live in discovered
+  `EntityKindDefinition` implementations beside the concrete Entity type. The
+  `EntityKind` enum remains the typed persisted identity. Other closed sets are
+  `[Code]`-bearing enums in `Prismedia.Domain` (relationship kinds, file roles, file
+  source, credit roles, job types, subtitle/playback enums, identify states).
+  Encode/decode both forms through `CodecRegistry`; in EF LINQ, hoist `.ToCode()` to a
+  local first so the query translates.
 - Open-ended keys are constants classes (`ExternalIdProviders`, `MediaContentTypes`,
   `JellyfinProtocol`, Api-side `JellyfinRoutes`, `AppSettingKeys`).
 - The frontend never hand-maintains these. `GET /api/_codegen/codes.json` (Development

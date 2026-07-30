@@ -192,7 +192,7 @@ public sealed class AppSettingsRegistryTests {
         var service = new SettingsService(new EfSettingsPersistence(db));
         var configured = EntityKindRegistry.All.ToDictionary(
             descriptor => descriptor.Code,
-            descriptor => $"  provider-{descriptor.Value}  ",
+            descriptor => $"  provider-{descriptor.Kind}  ",
             StringComparer.Ordinal);
 
         var updated = await service.UpdateSettingAsync(
@@ -204,7 +204,7 @@ public sealed class AppSettingsRegistryTests {
         Assert.Equal(EntityKindRegistry.All.Count, updated.Value.EnumerateObject().Count());
         Assert.Equal(EntityKindRegistry.All.Count, snapshot.DefaultProviders.Count);
         foreach (var descriptor in EntityKindRegistry.All) {
-            Assert.Equal($"provider-{descriptor.Value}", snapshot.DefaultProviders[descriptor.Code]);
+            Assert.Equal($"provider-{descriptor.Kind}", snapshot.DefaultProviders[descriptor.Code]);
         }
 
         var row = await db.AppSettings.SingleAsync();

@@ -15,6 +15,7 @@ public abstract class Entity {
     /// <summary>
     /// Creates an entity with optional capabilities, child relationships, and non-structural relationships.
     /// </summary>
+    /// <param name="definition">Canonical definition for this concrete entity kind.</param>
     /// <param name="id">Stable entity identifier.</param>
     /// <param name="title">Primary user-facing title.</param>
     /// <param name="capabilities">Mutable behavior modules to attach to this entity.</param>
@@ -23,6 +24,7 @@ public abstract class Entity {
     /// <param name="parentEntityId">Optional structural parent identifier.</param>
     /// <param name="sortOrder">Optional structural order under the parent.</param>
     protected Entity(
+        EntityKindDefinition definition,
         Guid id,
         string title,
         IEnumerable<EntityCapability>? capabilities = null,
@@ -30,6 +32,13 @@ public abstract class Entity {
         IEnumerable<Entity>? relationships = null,
         Guid? parentEntityId = null,
         int? sortOrder = null) {
+        Definition = definition ?? throw new ArgumentNullException(nameof(definition));
+        if (definition.ClrType is not null && !definition.ClrType.IsAssignableFrom(GetType())) {
+            throw new ArgumentException(
+                $"Entity kind '{definition.Code}' expects CLR type '{definition.ClrType.Name}', not '{GetType().Name}'.",
+                nameof(definition));
+        }
+
         Id = id;
         Title = string.IsNullOrWhiteSpace(title)
             ? throw new ArgumentException("Entity title cannot be empty.", nameof(title))
@@ -37,7 +46,7 @@ public abstract class Entity {
         ParentEntityId = parentEntityId;
         SortOrder = sortOrder;
 
-        foreach (var capability in capabilities ?? CreateDefaultCapabilities()) {
+        foreach (var capability in capabilities ?? Definition.CreateDefaultCapabilities()) {
             AddCapability(capability);
         }
 
@@ -50,14 +59,17 @@ public abstract class Entity {
         }
     }
 
+    /// <summary>Canonical definition that owns this entity's kind-level behavior and metadata.</summary>
+    public EntityKindDefinition Definition { get; }
+
     /// <summary>Stable entity identifier.</summary>
     public Guid Id { get; }
 
     /// <summary>Primary user-facing title.</summary>
     public string Title { get; private set; }
 
-    /// <summary>Closed domain kind for this concrete entity.</summary>
-    public abstract EntityKind Kind { get; }
+    /// <summary>Closed domain kind supplied by <see cref="Definition"/>.</summary>
+    public EntityKind Kind => Definition.Kind;
 
     /// <summary>Structural parent entity identifier when this entity is owned by another entity.</summary>
     public Guid? ParentEntityId { get; private set; }
@@ -254,13 +266,6 @@ public abstract class Entity {
     }
 
     /// <summary>
-    /// Creates fresh default capabilities for this concrete entity type.
-    /// Implementations must not read derived instance state because this method is called from the base constructor.
-    /// </summary>
-    /// <returns>Fresh capability instances for a new entity.</returns>
-    protected abstract IEnumerable<EntityCapability> CreateDefaultCapabilities();
-
-    /// <summary>
     /// Gets an attached capability by concrete type.
     /// </summary>
     /// <typeparam name="TCapability">Concrete capability type to retrieve.</typeparam>
@@ -411,4 +416,32 @@ public abstract class Entity {
                 group => (IReadOnlyList<Entity>)group.Select(link => link.Entity).ToArray());
 
     private readonly record struct EntityLink(Entity Entity, bool Structural);
+}
+
+/// <summary>
+/// Entity root bound at compile time to one discovered kind-definition type. Concrete entities
+/// inherit this base instead of repeating a kind property and default-capability factory.
+/// </summary>
+/// <typeparam name="TDefinition">Canonical definition type for the concrete entity.</typeparam>
+public abstract class Entity<TDefinition> : Entity
+    where TDefinition : EntityKindDefinition {
+    /// <summary>Creates an entity governed by the discovered <typeparamref name="TDefinition"/>.</summary>
+    protected Entity(
+        Guid id,
+        string title,
+        IEnumerable<EntityCapability>? capabilities = null,
+        IEnumerable<Entity>? children = null,
+        IEnumerable<Entity>? relationships = null,
+        Guid? parentEntityId = null,
+        int? sortOrder = null)
+        : base(
+            EntityKindRegistry.Get<TDefinition>(),
+            id,
+            title,
+            capabilities,
+            children,
+            relationships,
+            parentEntityId,
+            sortOrder) {
+    }
 }

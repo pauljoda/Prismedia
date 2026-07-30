@@ -3,6 +3,19 @@ using Prismedia.Domain.Entities;
 
 namespace Prismedia.Domain.Media;
 
+/// <summary>Defines the music-artist grouping kind and its shared-root behavior.</summary>
+public sealed class MusicArtistEntityKindDefinition() : RootEntityKindDefinition<MusicArtist>(
+    EntityKind.MusicArtist,
+    "music-artist",
+    "Music Artist",
+    "Artists",
+    EntityKindCategory.Media,
+    EntityStorageShape.Folder,
+    static root => new MusicArtist(root.Id, root.Title),
+    defaultCapabilities: static () => [new CapabilityCredits()],
+    enumeratesIdentifyChildren: true,
+    supportsFileDeletion: true);
+
 /// <summary>
 /// Domain model for a music artist or band: a folder-backed grouping that gathers an
 /// artist's albums (<see cref="AudioLibrary"/> children) under one heading, much like a
@@ -10,7 +23,7 @@ namespace Prismedia.Domain.Media;
 /// are stored as person credits (<see cref="CapabilityCredits"/>) where the credit label
 /// holds the member's role, e.g. "Drummer" or "Composer".
 /// </summary>
-public sealed class MusicArtist : Entity {
+public sealed class MusicArtist : Entity<MusicArtistEntityKindDefinition> {
     /// <summary>
     /// Creates a music artist grouping.
     /// </summary>
@@ -21,12 +34,4 @@ public sealed class MusicArtist : Entity {
         : base(id, title, capabilities) {
     }
 
-    /// <inheritdoc />
-    public override EntityKind Kind => EntityKind.MusicArtist;
-
-    /// <inheritdoc />
-    protected override IEnumerable<EntityCapability> CreateDefaultCapabilities() =>
-    [
-        new CapabilityCredits()
-    ];
 }

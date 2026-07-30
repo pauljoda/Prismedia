@@ -1,112 +1,78 @@
 using System.Reflection;
-using System.Text.RegularExpressions;
 
 namespace Prismedia.Domain.Entities;
 
 /// <summary>
-/// Broad category for an entity kind when infrastructure needs seed metadata.
-/// </summary>
-public enum EntityKindCategory {
-    /// <summary>Playable or viewable media.</summary>
-    Media,
-
-    /// <summary>Taxonomy or organization entity.</summary>
-    Taxonomy,
-
-    /// <summary>User-curated grouping entity.</summary>
-    Collection
-}
-
-/// <summary>
-/// Resolved facts for one entity kind: its stable code, display name, plural group
-/// label, category, filesystem storage shape, and concrete domain CLR type (when one
-/// exists).
-/// </summary>
-/// <param name="Value">Domain enum value.</param>
-/// <param name="Code">Stable database/API code.</param>
-/// <param name="DisplayName">Human-readable singular display name.</param>
-/// <param name="GroupLabel">Plural display label used when grouping entities by kind.</param>
-/// <param name="Category">Broad category used by metadata rows.</param>
-/// <param name="StorageShape">Filesystem storage shape used by scan and organize rules.</param>
-/// <param name="ClrType">Concrete domain entity type, or null for kinds with no concrete type.</param>
-/// <param name="EnumeratesIdentifyChildren">Whether this kind is an identify container whose local
-/// structural children are separately identifiable works (e.g. a series' seasons, an album's tracks);
-/// leaf-content kinds such as a movie leave this false.</param>
-/// <param name="SupportsFileDeletion">
-/// Whether the kind can safely root managed file deletion for itself and its structural descendants.
-/// </param>
-public sealed record EntityKindDescriptor(
-    EntityKind Value,
-    string Code,
-    string DisplayName,
-    string GroupLabel,
-    EntityKindCategory Category,
-    EntityStorageShape StorageShape,
-    Type? ClrType,
-    bool EnumeratesIdentifyChildren,
-    bool SupportsFileDeletion) {
-    /// <summary>Allows descriptors to flow into domain-only metadata APIs.</summary>
-    public static implicit operator EntityKind(EntityKindDescriptor descriptor) => descriptor.Value;
-}
-
-/// <summary>
-/// The single registry for the entity-kind taxonomy. It builds itself by reflecting the
-/// inline <see cref="CodeAttribute"/> (via the shared codec) and
-/// <see cref="EntityKindMetaAttribute"/> on each <see cref="EntityKind"/> member, so
-/// there is no hand-maintained descriptor table — adding a kind is just the enum member
-/// plus its two attributes.
+/// Discovers the canonical <see cref="EntityKindDefinition"/> implementations in the Domain
+/// assembly and indexes them by typed kind, stable code, CLR type, and definition type. Startup
+/// fails unless every <see cref="EntityKind"/> has exactly one complete definition.
 /// </summary>
 public static class EntityKindRegistry {
-    private static readonly IReadOnlyList<EntityKindDescriptor> Descriptors =
-        Enum.GetValues<EntityKind>().Select(Build).ToArray();
+    private static readonly IReadOnlyList<EntityKindDefinition> Definitions = Discover();
 
-    private static readonly IReadOnlyDictionary<EntityKind, EntityKindDescriptor> ByKind =
-        Descriptors.ToDictionary(descriptor => descriptor.Value);
+    private static readonly IReadOnlyDictionary<EntityKind, EntityKindDefinition> ByKind =
+        Definitions.ToDictionary(definition => definition.Kind);
 
-    private static readonly IReadOnlyDictionary<string, EntityKindDescriptor> ByCode =
-        Descriptors.ToDictionary(descriptor => descriptor.Code, StringComparer.OrdinalIgnoreCase);
+    private static readonly IReadOnlyDictionary<string, EntityKindDefinition> ByCode =
+        Definitions.ToDictionary(definition => definition.Code, StringComparer.OrdinalIgnoreCase);
 
-    private static readonly IReadOnlyDictionary<Type, EntityKindDescriptor> ByType =
-        Descriptors.Where(descriptor => descriptor.ClrType is not null)
-            .ToDictionary(descriptor => descriptor.ClrType!);
+    private static readonly IReadOnlyDictionary<Type, EntityKindDefinition> ByEntityType =
+        Definitions.Where(definition => definition.ClrType is not null)
+            .ToDictionary(definition => definition.ClrType!);
 
-    /// <summary>All known entity kind descriptors.</summary>
-    public static IReadOnlyList<EntityKindDescriptor> All => Descriptors;
+    private static readonly IReadOnlyDictionary<Type, EntityKindDefinition> ByDefinitionType =
+        Definitions.ToDictionary(definition => definition.GetType());
 
-    public static EntityKindDescriptor Audio => Describe(EntityKind.Audio);
-    public static EntityKindDescriptor AudioLibrary => Describe(EntityKind.AudioLibrary);
-    public static EntityKindDescriptor AudioTrack => Describe(EntityKind.AudioTrack);
-    public static EntityKindDescriptor Book => Describe(EntityKind.Book);
-    public static EntityKindDescriptor BookAuthor => Describe(EntityKind.BookAuthor);
-    public static EntityKindDescriptor BookVolume => Describe(EntityKind.BookVolume);
-    public static EntityKindDescriptor BookChapter => Describe(EntityKind.BookChapter);
-    public static EntityKindDescriptor BookPage => Describe(EntityKind.BookPage);
-    public static EntityKindDescriptor Collection => Describe(EntityKind.Collection);
-    public static EntityKindDescriptor Gallery => Describe(EntityKind.Gallery);
-    public static EntityKindDescriptor Image => Describe(EntityKind.Image);
-    public static EntityKindDescriptor Movie => Describe(EntityKind.Movie);
-    public static EntityKindDescriptor MusicArtist => Describe(EntityKind.MusicArtist);
-    public static EntityKindDescriptor Person => Describe(EntityKind.Person);
-    public static EntityKindDescriptor Studio => Describe(EntityKind.Studio);
-    public static EntityKindDescriptor Tag => Describe(EntityKind.Tag);
-    public static EntityKindDescriptor Video => Describe(EntityKind.Video);
-    public static EntityKindDescriptor VideoSeries => Describe(EntityKind.VideoSeries);
-    public static EntityKindDescriptor VideoSeason => Describe(EntityKind.VideoSeason);
+    /// <summary>All discovered entity-kind definitions in enum order.</summary>
+    public static IReadOnlyList<EntityKindDefinition> All => Definitions;
 
-    /// <summary>Gets the full descriptor for a domain entity kind.</summary>
-    public static EntityKindDescriptor Describe(EntityKind kind) => ByKind[kind];
+    /// <summary>Definition for the generic audio protocol kind.</summary>
+    public static EntityKindDefinition Audio => Describe(EntityKind.Audio);
+    public static EntityKindDefinition AudioLibrary => Describe(EntityKind.AudioLibrary);
+    public static EntityKindDefinition AudioTrack => Describe(EntityKind.AudioTrack);
+    public static EntityKindDefinition Book => Describe(EntityKind.Book);
+    public static EntityKindDefinition BookAuthor => Describe(EntityKind.BookAuthor);
+    public static EntityKindDefinition BookVolume => Describe(EntityKind.BookVolume);
+    public static EntityKindDefinition BookChapter => Describe(EntityKind.BookChapter);
+    public static EntityKindDefinition BookPage => Describe(EntityKind.BookPage);
+    public static EntityKindDefinition Collection => Describe(EntityKind.Collection);
+    public static EntityKindDefinition Gallery => Describe(EntityKind.Gallery);
+    public static EntityKindDefinition Image => Describe(EntityKind.Image);
+    public static EntityKindDefinition Movie => Describe(EntityKind.Movie);
+    public static EntityKindDefinition MusicArtist => Describe(EntityKind.MusicArtist);
+    public static EntityKindDefinition Person => Describe(EntityKind.Person);
+    public static EntityKindDefinition Studio => Describe(EntityKind.Studio);
+    public static EntityKindDefinition Tag => Describe(EntityKind.Tag);
+    public static EntityKindDefinition Video => Describe(EntityKind.Video);
+    public static EntityKindDefinition VideoSeries => Describe(EntityKind.VideoSeries);
+    public static EntityKindDefinition VideoSeason => Describe(EntityKind.VideoSeason);
+
+    /// <summary>Gets the canonical definition for a domain entity kind.</summary>
+    public static EntityKindDefinition Describe(EntityKind kind) =>
+        ByKind.TryGetValue(kind, out var definition)
+            ? definition
+            : throw new ArgumentOutOfRangeException(nameof(kind), kind, "Unsupported entity kind.");
+
+    /// <summary>Gets one discovered definition by its concrete definition type.</summary>
+    /// <typeparam name="TDefinition">Concrete definition type.</typeparam>
+    public static TDefinition Get<TDefinition>()
+        where TDefinition : EntityKindDefinition =>
+        ByDefinitionType.TryGetValue(typeof(TDefinition), out var definition)
+            ? (TDefinition)definition
+            : throw new InvalidOperationException(
+                $"Entity kind definition '{typeof(TDefinition).Name}' was not discovered.");
 
     /// <summary>
-    /// Whether a kind (by stable code) is an identify container whose local structural children
-    /// should be separately identified during a cascade. Unknown codes are treated as leaves.
+    /// Whether a stable kind code represents an identify container whose structural children
+    /// should be identified independently. Unknown codes are treated as leaves.
     /// </summary>
     public static bool EnumeratesIdentifyChildren(string code) =>
         !string.IsNullOrWhiteSpace(code) &&
-        ByCode.TryGetValue(code, out var descriptor) &&
-        descriptor.EnumeratesIdentifyChildren;
+        ByCode.TryGetValue(code.Trim(), out var definition) &&
+        definition.EnumeratesIdentifyChildren;
 
     /// <summary>Encodes a domain entity kind to its stable storage code.</summary>
-    public static string ToCode(EntityKind kind) => ByKind[kind].Code;
+    public static string ToCode(EntityKind kind) => Describe(kind).Code;
 
     /// <summary>Decodes a storage code to a domain entity kind.</summary>
     public static EntityKind Require(string code) =>
@@ -117,15 +83,15 @@ public static class EntityKindRegistry {
     /// <summary>Gets the entity kind represented by a concrete domain entity CLR type.</summary>
     public static EntityKind RequireType(Type entityType) {
         ArgumentNullException.ThrowIfNull(entityType);
-        return ByType.TryGetValue(entityType, out var descriptor)
-            ? descriptor.Value
+        return ByEntityType.TryGetValue(entityType, out var definition)
+            ? definition.Kind
             : throw new InvalidOperationException($"Entity type '{entityType.Name}' is not registered.");
     }
 
     /// <summary>Attempts to decode a storage code to a domain entity kind.</summary>
     public static bool TryGet(string code, out EntityKind kind) {
-        if (!string.IsNullOrWhiteSpace(code) && ByCode.TryGetValue(code, out var descriptor)) {
-            kind = descriptor.Value;
+        if (!string.IsNullOrWhiteSpace(code) && ByCode.TryGetValue(code.Trim(), out var definition)) {
+            kind = definition.Kind;
             return true;
         }
 
@@ -133,21 +99,51 @@ public static class EntityKindRegistry {
         return false;
     }
 
-    private static EntityKindDescriptor Build(EntityKind value) {
-        var name = value.ToString();
-        var field = typeof(EntityKind).GetField(name)!;
-        var meta = field.GetCustomAttribute<EntityKindMetaAttribute>()
-            ?? throw new InvalidOperationException($"EntityKind.{name} is missing an [EntityKindMeta] attribute.");
+    private static IReadOnlyList<EntityKindDefinition> Discover() {
+        var definitionType = typeof(EntityKindDefinition);
+        var definitions = definitionType.Assembly.GetTypes()
+            .Where(type => type is { IsClass: true, IsAbstract: false } &&
+                           definitionType.IsAssignableFrom(type))
+            .Select(Create)
+            .OrderBy(definition => definition.Kind)
+            .ToArray();
 
-        return new EntityKindDescriptor(
-            value,
-            CodecRegistry.Get<EntityKind>().Encode(value),
-            Regex.Replace(name, "(?<=[a-z])([A-Z])", " $1"),
-            meta.GroupLabel,
-            meta.Category,
-            meta.StorageShape,
-            meta.ClrType,
-            meta.EnumeratesIdentifyChildren,
-            meta.SupportsFileDeletion);
+        RejectDuplicates(definitions, definition => definition.Kind, "kind");
+        RejectDuplicates(definitions, definition => definition.Code, "code", StringComparer.OrdinalIgnoreCase);
+        RejectDuplicates(
+            definitions.Where(definition => definition.ClrType is not null).ToArray(),
+            definition => definition.ClrType!,
+            "CLR type");
+
+        var expected = Enum.GetValues<EntityKind>();
+        var missing = expected.Except(definitions.Select(definition => definition.Kind)).ToArray();
+        if (missing.Length > 0) {
+            throw new InvalidOperationException(
+                $"Entity kinds are missing definitions: {string.Join(", ", missing)}.");
+        }
+
+        return definitions;
+    }
+
+    private static EntityKindDefinition Create(Type definitionType) =>
+        Activator.CreateInstance(definitionType, nonPublic: true) as EntityKindDefinition
+        ?? throw new InvalidOperationException(
+            $"Entity kind definition '{definitionType.FullName}' must have a parameterless constructor.");
+
+    private static void RejectDuplicates<TKey>(
+        IReadOnlyList<EntityKindDefinition> definitions,
+        Func<EntityKindDefinition, TKey> keySelector,
+        string label,
+        IEqualityComparer<TKey>? comparer = null)
+        where TKey : notnull {
+        var duplicates = definitions
+            .GroupBy(keySelector, comparer)
+            .Where(group => group.Count() > 1)
+            .Select(group => group.Key)
+            .ToArray();
+        if (duplicates.Length > 0) {
+            throw new InvalidOperationException(
+                $"Duplicate entity kind definition {label}s: {string.Join(", ", duplicates)}.");
+        }
     }
 }

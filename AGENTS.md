@@ -126,9 +126,11 @@ or runtime id, image-asset/meta-icon kind, and external wire scalar (Jellyfin, S
 has exactly one source of truth and is referenced from it.
 
 ### The source of truth
-- Backend closed sets are `[Code("...")]` enums under
-  `Prismedia.Domain/Entities/Enums/**` resolved via `EnumCodec`/`CodecRegistry`
-  (e.g. `EntityKindRegistry.Video.Code`, `RelationshipKind.Tags.ToCode()`,
+- Entity-kind codes and domain facts live in discovered `EntityKindDefinition`
+  implementations beside their concrete Entity types; the `EntityKind` enum is only the
+  typed identity. Other backend closed sets are `[Code("...")]` enums under
+  `Prismedia.Domain/Entities/Enums/**`. Both resolve through `CodecRegistry`
+  (e.g. `EntityKind.Video.ToCode()`, `RelationshipKind.Tags.ToCode()`,
   `CreditRole.Director.ToCode()`, `JobType`, `PlaybackMode`, `EntityFileRole`).
 - Cross-cutting wire/path constants live in dedicated static classes
   (e.g. `JellyfinProtocol`, `AppSettingKeys`, and — as they are introduced —
@@ -140,11 +142,12 @@ has exactly one source of truth and is referenced from it.
   any future codegen'd families. `codes.ts` is generated — never edit it by hand.
 
 ### Rules
-1. Need a closed-set string? Find its `[Code]` enum / constant class and reference it.
-   Do NOT retype the literal. The DECLARATION site (the `[Code]` attribute or the
-   const) is the only place the literal text appears.
-2. New closed set with no home? CREATE a `[Code]` enum (or a constant class for
-   non-domain wire vocab), then surface it to the frontend: add the enum to
+1. Need a closed-set string? Find its Entity-kind definition, `[Code]` enum, or
+   constant class and reference it. Do NOT retype the literal. The definition code,
+   `[Code]` attribute, or const declaration is the only place the literal text appears.
+2. A new Entity kind requires its enum identity plus one discovered definition; do not
+   edit a registry. For any other new closed set with no home, CREATE a `[Code]` enum
+   (or a constant class for non-domain wire vocab), then surface it to the frontend: add the enum to
    `ENUM_EXPORTS` in `apps/web-svelte/scripts/gen-codes.mjs` (or a constant group in
    `Prismedia.Api/Codegen/CodesManifest.cs`), and run `pnpm api:generate` with the
    dev API up. Never hand-maintain a parallel TS union of codes.
@@ -160,9 +163,9 @@ has exactly one source of truth and is referenced from it.
    CSS/Tailwind classes, ARIA labels, file paths, URLs, format strings, test
    descriptions, and standard DOM key/MIME tokens.
 
-When in doubt, grep for the literal: if it already lives in a `[Code]` enum or
-`codes.ts`, reference that. If it does not but is a closed set, you are adding the
-canonical home, not another copy. Enforcement belongs in Roslyn analyzers,
+When in doubt, grep for the literal: if it already lives in an Entity-kind definition,
+a `[Code]` enum, or `codes.ts`, reference that. If it does not but is a closed set,
+you are adding the canonical home, not another copy. Enforcement belongs in Roslyn analyzers,
 architecture tests, `codes.ts` CI parity, and a frontend `no-magic-codes` lint; do
 not bypass it.
 

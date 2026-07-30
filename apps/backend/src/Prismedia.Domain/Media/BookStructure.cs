@@ -3,10 +3,69 @@ using Prismedia.Domain.Entities;
 
 namespace Prismedia.Domain.Media;
 
+/// <summary>Defines the structural book-volume kind and shared-root construction.</summary>
+public sealed class BookVolumeEntityKindDefinition() : RootEntityKindDefinition<BookVolume>(
+    EntityKind.BookVolume,
+    "book-volume",
+    "Book Volume",
+    "Volumes",
+    EntityKindCategory.Media,
+    EntityStorageShape.None,
+    static root => new BookVolume(
+        root.Id,
+        root.Title,
+        parentEntityId: root.ParentEntityId,
+        sortOrder: root.SortOrder),
+    defaultCapabilities: static () =>
+    [
+        new CapabilityStats(),
+        new CapabilitySource(),
+        new CapabilityPosition()
+    ],
+    enumeratesIdentifyChildren: true,
+    supportsFileDeletion: true);
+
+/// <summary>Defines the structural book-chapter kind and default metadata capabilities.</summary>
+public sealed class BookChapterEntityKindDefinition() : EntityKindDefinition<BookChapter>(
+    EntityKind.BookChapter,
+    "book-chapter",
+    "Book Chapter",
+    "Chapters",
+    EntityKindCategory.Media,
+    EntityStorageShape.None,
+    defaultCapabilities: static () =>
+    [
+        new CapabilityFingerprints(),
+        new CapabilityStats(),
+        new CapabilitySource(),
+        new CapabilityPosition()
+    ]);
+
+/// <summary>Defines the structural book-page kind and shared-root construction.</summary>
+public sealed class BookPageEntityKindDefinition() : RootEntityKindDefinition<BookPage>(
+    EntityKind.BookPage,
+    "book-page",
+    "Book Page",
+    "Pages",
+    EntityKindCategory.Media,
+    EntityStorageShape.ArchiveEntry,
+    static root => new BookPage(
+        root.Id,
+        root.Title,
+        parentEntityId: root.ParentEntityId,
+        sortOrder: root.SortOrder),
+    defaultCapabilities: static () =>
+    [
+        new CapabilityFingerprints(),
+        new CapabilityTechnical(),
+        new CapabilitySource(),
+        new CapabilityPosition()
+    ]);
+
 /// <summary>
 /// Structural book volume aggregate.
 /// </summary>
-public sealed class BookVolume : Entity {
+public sealed class BookVolume : Entity<BookVolumeEntityKindDefinition> {
     public BookVolume(
         Guid id,
         string title,
@@ -16,20 +75,12 @@ public sealed class BookVolume : Entity {
         : base(id, title, capabilities, parentEntityId: parentEntityId, sortOrder: sortOrder) {
     }
 
-    public override EntityKind Kind => EntityKind.BookVolume;
-
-    protected override IEnumerable<EntityCapability> CreateDefaultCapabilities() =>
-    [
-        new CapabilityStats(),
-        new CapabilitySource(),
-        new CapabilityPosition()
-    ];
 }
 
 /// <summary>
 /// Structural book chapter aggregate.
 /// </summary>
-public sealed class BookChapter : Entity {
+public sealed class BookChapter : Entity<BookChapterEntityKindDefinition> {
     public BookChapter(
         Guid id,
         string title,
@@ -41,22 +92,13 @@ public sealed class BookChapter : Entity {
         CoverPageId = coverPageId;
     }
 
-    public override EntityKind Kind => EntityKind.BookChapter;
     public Guid? CoverPageId { get; private set; }
-
-    protected override IEnumerable<EntityCapability> CreateDefaultCapabilities() =>
-    [
-        new CapabilityFingerprints(),
-        new CapabilityStats(),
-        new CapabilitySource(),
-        new CapabilityPosition()
-    ];
 }
 
 /// <summary>
 /// Structural book page aggregate.
 /// </summary>
-public sealed class BookPage : Entity {
+public sealed class BookPage : Entity<BookPageEntityKindDefinition> {
     public BookPage(
         Guid id,
         string title,
@@ -65,14 +107,4 @@ public sealed class BookPage : Entity {
         int? sortOrder = null)
         : base(id, title, capabilities, parentEntityId: parentEntityId, sortOrder: sortOrder) {
     }
-
-    public override EntityKind Kind => EntityKind.BookPage;
-
-    protected override IEnumerable<EntityCapability> CreateDefaultCapabilities() =>
-    [
-        new CapabilityFingerprints(),
-        new CapabilityTechnical(),
-        new CapabilitySource(),
-        new CapabilityPosition()
-    ];
 }

@@ -3,25 +3,32 @@ using Prismedia.Domain.Entities;
 
 namespace Prismedia.Domain.Media;
 
-/// <summary>
-/// Domain model for a playable video media item.
-/// </summary>
-public sealed class Video : Entity {
-    public Video(
-        Guid id,
-        string title,
-        IEnumerable<EntityCapability>? capabilities = null)
-        : base(id, title, capabilities) {
-    }
-
-    public override EntityKind Kind => EntityKind.Video;
-
-    protected override IEnumerable<EntityCapability> CreateDefaultCapabilities() =>
+/// <summary>Defines the playable video kind and its default media capabilities.</summary>
+public sealed class VideoEntityKindDefinition() : EntityKindDefinition<Video>(
+    EntityKind.Video,
+    "video",
+    "Video",
+    "Videos",
+    EntityKindCategory.Media,
+    EntityStorageShape.File,
+    defaultCapabilities: static () =>
     [
         new CapabilityPlayback(),
         new CapabilityPosition(),
         new CapabilityMarkers(),
         new CapabilitySubtitles(),
         new CapabilityCredits()
-    ];
+    ],
+    supportsFileDeletion: true);
+
+/// <summary>
+/// Domain model for a playable video media item.
+/// </summary>
+public sealed class Video : Entity<VideoEntityKindDefinition> {
+    public Video(
+        Guid id,
+        string title,
+        IEnumerable<EntityCapability>? capabilities = null)
+        : base(id, title, capabilities) {
+    }
 }

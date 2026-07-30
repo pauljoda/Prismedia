@@ -488,13 +488,8 @@ public static class DependencyInjection {
             services.AddScoped(typeof(IEntityKindMapper), type);
         }
 
-        var explicitKindNames = explicitKindTypes
-            .Select(type => type.Name)
-            .ToHashSet(StringComparer.Ordinal);
-        foreach (var descriptor in EntityKindRegistry.All.Where(descriptor =>
-                     descriptor.ClrType is not null &&
-                     !explicitKindNames.Contains($"{descriptor.Value}KindMapper"))) {
-            services.AddScoped<IEntityKindMapper>(_ => new EntityMappers.ConventionEntityKindMapper(descriptor));
+        foreach (var factory in EntityKindRegistry.All.OfType<IEntityRootFactory>()) {
+            services.AddScoped<IEntityKindMapper>(_ => new EntityMappers.ConventionEntityKindMapper(factory));
         }
 
         foreach (var type in implementations.Where(type => typeof(IEntityCapabilityMapper).IsAssignableFrom(type))) {

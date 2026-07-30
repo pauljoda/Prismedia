@@ -65,8 +65,8 @@ public sealed record RequestKindManifestEntry(
 /// <summary>
 /// Serializable snapshot of every backend code registry. It is the single source the
 /// frontend code generator reads from so that TypeScript code constants are derived from
-/// the same <see cref="CodeAttribute"/> enums, capability discriminators, provider keys,
-/// and setting keys the backend uses — never hand-maintained in parallel.
+/// the same discovered codecs, capability discriminators, provider keys, and setting keys the
+/// backend uses — never hand-maintained in parallel.
 /// </summary>
 /// <param name="Enums">Code-bearing domain enums keyed by enum type name.</param>
 /// <param name="EntityKinds">Entity-kind metadata for display-label generation.</param>
@@ -99,11 +99,14 @@ public sealed record CodesManifest(
     private static IReadOnlyDictionary<string, IReadOnlyList<CodeEntry>> BuildEnums() {
         var result = new SortedDictionary<string, IReadOnlyList<CodeEntry>>(StringComparer.Ordinal);
         foreach (var enumType in CodeBearingEnums()) {
+            if (!CodecRegistry.TryGet(enumType, out var codec)) {
+                throw new InvalidOperationException($"Discovered code enum '{enumType.Name}' has no codec.");
+            }
+
             var entries = new List<CodeEntry>();
             foreach (var value in Enum.GetValues(enumType)) {
                 var name = Enum.GetName(enumType, value)!;
-                var code = enumType.GetField(name)!.GetCustomAttribute<CodeAttribute>()!.Code;
-                entries.Add(new CodeEntry(name, code));
+                entries.Add(new CodeEntry(name, codec!.EncodeObject(value!)));
             }
 
             result[enumType.Name] = entries;
@@ -115,8 +118,7 @@ public sealed record CodesManifest(
     private static IEnumerable<Type> CodeBearingEnums() =>
         typeof(EntityKind).Assembly.GetTypes()
             .Where(type => type.IsEnum)
-            .Where(type => type.GetFields(BindingFlags.Public | BindingFlags.Static)
-                .Any(field => field.GetCustomAttribute<CodeAttribute>() is not null));
+            .Where(type => CodecRegistry.TryGet(type, out _));
 
     private static IReadOnlyList<EntityKindManifestEntry> BuildEntityKinds() {
         var requestableKinds = RequestKindRegistry.All
@@ -131,7 +133,7 @@ public sealed record CodesManifest(
                 descriptor.Category.ToString(),
                 descriptor.StorageShape.ToString(),
                 descriptor.SupportsFileDeletion,
-                requestableKinds.Contains(descriptor.Value),
+                requestableKinds.Contains(descriptor.Kind),
                 descriptor.EnumeratesIdentifyChildren))
             .ToArray();
     }

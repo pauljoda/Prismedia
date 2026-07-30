@@ -3,10 +3,27 @@ using Prismedia.Domain.Entities;
 
 namespace Prismedia.Domain.Media;
 
+/// <summary>Defines the movie grouping kind and its shared metadata capabilities.</summary>
+public sealed class MovieEntityKindDefinition() : EntityKindDefinition<Movie>(
+    EntityKind.Movie,
+    "movie",
+    "Movie",
+    "Movies",
+    EntityKindCategory.Media,
+    EntityStorageShape.Folder,
+    defaultCapabilities: static () =>
+    [
+        new CapabilityDescription(),
+        new CapabilityDates(),
+        new CapabilitySource(),
+        new CapabilityCredits()
+    ],
+    supportsFileDeletion: true);
+
 /// <summary>
 /// Domain model for a single-film video release with one playable video child.
 /// </summary>
-public sealed class Movie : Entity {
+public sealed class Movie : Entity<MovieEntityKindDefinition> {
     /// <summary>
     /// Creates a movie aggregate around one or more playable video children.
     /// </summary>
@@ -25,16 +42,6 @@ public sealed class Movie : Entity {
         }
     }
 
-    public override EntityKind Kind => EntityKind.Movie;
-
     /// <summary>Playable video files that make up this movie release.</summary>
     public IReadOnlyList<Entity> Videos => ChildrenOf(EntityKind.Video);
-
-    protected override IEnumerable<EntityCapability> CreateDefaultCapabilities() =>
-    [
-        new CapabilityDescription(),
-        new CapabilityDates(),
-        new CapabilitySource(),
-        new CapabilityCredits()
-    ];
 }

@@ -3,10 +3,46 @@ using Prismedia.Domain.Entities;
 
 namespace Prismedia.Domain.Media;
 
+/// <summary>Defines the series grouping kind and its default credits capability.</summary>
+public sealed class VideoSeriesEntityKindDefinition() : EntityKindDefinition<VideoSeries>(
+    EntityKind.VideoSeries,
+    "video-series",
+    "Video Series",
+    "Series",
+    EntityKindCategory.Media,
+    EntityStorageShape.Folder,
+    defaultCapabilities: static () => [new CapabilityCredits()],
+    enumeratesIdentifyChildren: true,
+    supportsFileDeletion: true);
+
+/// <summary>Defines the structural season kind and shared-root construction.</summary>
+public sealed class VideoSeasonEntityKindDefinition() : RootEntityKindDefinition<VideoSeason>(
+    EntityKind.VideoSeason,
+    "video-season",
+    "Video Season",
+    "Seasons",
+    EntityKindCategory.Media,
+    EntityStorageShape.Folder,
+    static root => new VideoSeason(
+        root.Id,
+        root.Title,
+        root.ParentEntityId,
+        sortOrder: root.SortOrder),
+    defaultCapabilities: static () =>
+    [
+        new CapabilityDescription(),
+        new CapabilityDates(),
+        new CapabilitySource(),
+        new CapabilityPosition(),
+        new CapabilityCredits()
+    ],
+    enumeratesIdentifyChildren: true,
+    supportsFileDeletion: true);
+
 /// <summary>
 /// Domain model for a video series grouping.
 /// </summary>
-public sealed class VideoSeries : Entity {
+public sealed class VideoSeries : Entity<VideoSeriesEntityKindDefinition> {
     public VideoSeries(
         Guid id,
         string title,
@@ -26,7 +62,6 @@ public sealed class VideoSeries : Entity {
         }
     }
 
-    public override EntityKind Kind => EntityKind.VideoSeries;
     public string? Status { get; private set; }
 
     /// <summary>Direct child videos in insertion order.</summary>
@@ -40,17 +75,12 @@ public sealed class VideoSeries : Entity {
     /// </summary>
     public VideoSeriesRenderingMode RenderingMode =>
         Seasons.Count > 0 ? VideoSeriesRenderingMode.Seasons : VideoSeriesRenderingMode.Flat;
-
-    protected override IEnumerable<EntityCapability> CreateDefaultCapabilities() =>
-    [
-        new CapabilityCredits()
-    ];
 }
 
 /// <summary>
 /// Structural video-season aggregate.
 /// </summary>
-public sealed class VideoSeason : Entity {
+public sealed class VideoSeason : Entity<VideoSeasonEntityKindDefinition> {
     public VideoSeason(
         Guid id,
         string title,
@@ -69,15 +99,5 @@ public sealed class VideoSeason : Entity {
         }
     }
 
-    public override EntityKind Kind => EntityKind.VideoSeason;
     public IReadOnlyList<Entity> Videos => ChildrenOf(EntityKind.Video);
-
-    protected override IEnumerable<EntityCapability> CreateDefaultCapabilities() =>
-    [
-        new CapabilityDescription(),
-        new CapabilityDates(),
-        new CapabilitySource(),
-        new CapabilityPosition(),
-        new CapabilityCredits()
-    ];
 }

@@ -3,10 +3,20 @@ using Prismedia.Domain.Entities;
 
 namespace Prismedia.Domain.Taxonomy;
 
+/// <summary>Defines the person taxonomy kind and its lifetime metadata capabilities.</summary>
+public sealed class PersonEntityKindDefinition() : EntityKindDefinition<Person>(
+    EntityKind.Person,
+    "person",
+    "Person",
+    "People",
+    EntityKindCategory.Taxonomy,
+    EntityStorageShape.None,
+    defaultCapabilities: static () => [new CapabilityDates(), new CapabilityLifetime()]);
+
 /// <summary>
 /// Domain model for a person taxonomy entity.
 /// </summary>
-public sealed class Person : Entity {
+public sealed class Person : Entity<PersonEntityKindDefinition> {
     public Person(
         Guid id,
         string title,
@@ -36,7 +46,6 @@ public sealed class Person : Entity {
         Piercings = piercings;
     }
 
-    public override EntityKind Kind => EntityKind.Person;
     public string? Disambiguation { get; private set; }
     public string? Gender { get; private set; }
     public string? Country { get; private set; }
@@ -53,10 +62,4 @@ public sealed class Person : Entity {
     public void SetCountry(string? country) {
         Country = country;
     }
-
-    protected override IEnumerable<EntityCapability> CreateDefaultCapabilities() =>
-    [
-        new CapabilityDates(),
-        new CapabilityLifetime()
-    ];
 }

@@ -3,10 +3,21 @@ using Prismedia.Domain.Entities;
 
 namespace Prismedia.Domain.Media;
 
+/// <summary>Defines the gallery kind and its default credits capability.</summary>
+public sealed class GalleryEntityKindDefinition() : EntityKindDefinition<Gallery>(
+    EntityKind.Gallery,
+    "gallery",
+    "Gallery",
+    "Galleries",
+    EntityKindCategory.Media,
+    EntityStorageShape.Folder,
+    defaultCapabilities: static () => [new CapabilityCredits()],
+    supportsFileDeletion: true);
+
 /// <summary>
 /// Domain model for an image gallery.
 /// </summary>
-public sealed class Gallery : Entity {
+public sealed class Gallery : Entity<GalleryEntityKindDefinition> {
     public Gallery(
         Guid id,
         string title,
@@ -18,12 +29,6 @@ public sealed class Gallery : Entity {
         CoverImageId = coverImageId;
     }
 
-    public override EntityKind Kind => EntityKind.Gallery;
     public GalleryType GalleryType { get; private set; }
     public Guid? CoverImageId { get; private set; }
-
-    protected override IEnumerable<EntityCapability> CreateDefaultCapabilities() =>
-    [
-        new CapabilityCredits()
-    ];
 }

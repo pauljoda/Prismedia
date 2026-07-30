@@ -38,4 +38,14 @@ public sealed class CodecCompletenessTests {
             }
         }
     }
+
+    [Fact]
+    public void EntityKindCodecIsBackedByDiscoveredDefinitions() {
+        Assert.True(CodecRegistry.TryGet(typeof(EntityKind), out var codec));
+
+        foreach (var definition in EntityKindRegistry.All) {
+            Assert.Equal(definition.Code, codec!.EncodeObject(definition.Kind));
+            Assert.Equal(definition.Kind, codec.DecodeObject(definition.Code));
+        }
+    }
 }

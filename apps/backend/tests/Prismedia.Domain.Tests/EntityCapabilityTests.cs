@@ -175,8 +175,7 @@ public sealed class EntityCapabilityTests {
     }
 
     [Fact]
-    public void EntityRequiresConcreteTypesToProvideDefaultCapabilities() {
-        var factory = typeof(Entity).GetMethod("CreateDefaultCapabilities", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+    public void EntityUsesItsDiscoveredDefinitionForDefaultCapabilities() {
         var video = new Video(
             Guid.Parse("dddddddd-eeee-ffff-0000-111111111111"),
             "Episode 1");
@@ -184,9 +183,9 @@ public sealed class EntityCapabilityTests {
             Guid.Parse("eeeeeeee-ffff-0000-1111-222222222222"),
             "Still");
 
-        Assert.NotNull(factory);
-        Assert.True(factory!.IsAbstract);
+        Assert.Same(EntityKindRegistry.Describe(EntityKind.Video), video.Definition);
+        Assert.Same(EntityKindRegistry.Describe(EntityKind.Image), image.Definition);
         Assert.NotNull(video.Credits);
-        Assert.Null(image.RatingValue);
+        Assert.Empty(image.Capabilities);
     }
 }

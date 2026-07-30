@@ -1,6 +1,4 @@
-using System.Reflection;
 using Prismedia.Domain.Entities;
-using Prismedia.Domain.Media;
 using Prismedia.Infrastructure.Persistence;
 using Prismedia.Infrastructure.Persistence.Entities;
 
@@ -22,8 +20,9 @@ public static class EntityMappers {
         var explicitMappers = Discover<IEntityKindMapper>(db, currentUser);
         var mappedKinds = explicitMappers.Select(mapper => mapper.Kind).ToHashSet();
         var conventionMappers = EntityKindRegistry.All
-            .Where(descriptor => descriptor.ClrType is not null && !mappedKinds.Contains(descriptor.Value))
-            .Select(descriptor => new ConventionEntityKindMapper(descriptor))
+            .OfType<IEntityRootFactory>()
+            .Where(factory => !mappedKinds.Contains(factory.Definition.Kind))
+            .Select(factory => new ConventionEntityKindMapper(factory))
             .Cast<IEntityKindMapper>();
 
         return explicitMappers.Concat(conventionMappers).ToArray();
@@ -54,62 +53,17 @@ public static class EntityMappers {
             .ToArray();
     }
 
-    internal sealed class ConventionEntityKindMapper(EntityKindDescriptor descriptor) : IEntityKindMapper {
-        public EntityKind Kind => descriptor.Value;
+    internal sealed class ConventionEntityKindMapper(IEntityRootFactory factory) : IEntityKindMapper {
+        public EntityKind Kind => factory.Definition.Kind;
 
-        public Task<Entity> ConstructAsync(EntityRow row, CancellationToken cancellationToken) {
-            if (descriptor.ClrType is null) {
-                throw new InvalidOperationException($"EntityKind.{descriptor.Value} has no domain type.");
-            }
-
-            if (descriptor.ClrType == typeof(VideoSeason)) {
-                return Task.FromResult<Entity>(new VideoSeason(row.Id, row.Title, row.ParentEntityId, sortOrder: row.SortOrder));
-            }
-
-            if (FindSimpleConstructor(descriptor.ClrType) is { } ctor) {
-                var args = ctor.GetParameters()
-                    .Select(parameter => ArgumentFor(row, parameter))
-                    .ToArray();
-                return Task.FromResult((Entity)ctor.Invoke(args));
-            }
-
-            throw new InvalidOperationException(
-                $"EntityKind.{descriptor.Value} cannot be convention-hydrated; add an explicit IEntityKindMapper.");
-        }
+        public Task<Entity> ConstructAsync(EntityRow row, CancellationToken cancellationToken) =>
+            Task.FromResult(factory.Create(new EntityRootData(
+                row.Id,
+                row.Title,
+                row.ParentEntityId,
+                row.SortOrder)));
 
         public Task PersistDetailAsync(Entity entity, CancellationToken cancellationToken) =>
             Task.CompletedTask;
-
-        private static ConstructorInfo? FindSimpleConstructor(Type type) =>
-            type.GetConstructors()
-                .Where(ctor => {
-                    var parameters = ctor.GetParameters();
-                    return parameters.Length >= 2 &&
-                           parameters[0].ParameterType == typeof(Guid) &&
-                           parameters[1].ParameterType == typeof(string) &&
-                           parameters.Skip(2).All(parameter => parameter.HasDefaultValue);
-                })
-                .OrderBy(ctor => ctor.GetParameters().Length)
-                .FirstOrDefault();
-
-        private static object? ArgumentFor(EntityRow row, ParameterInfo parameter) {
-            if (parameter.ParameterType == typeof(Guid)) {
-                return row.Id;
-            }
-
-            if (parameter.ParameterType == typeof(string)) {
-                return row.Title;
-            }
-
-            if (parameter.Name == "parentEntityId" && parameter.ParameterType == typeof(Guid?)) {
-                return row.ParentEntityId;
-            }
-
-            if (parameter.Name == "sortOrder" && parameter.ParameterType == typeof(int?)) {
-                return row.SortOrder;
-            }
-
-            return parameter.DefaultValue;
-        }
     }
 }

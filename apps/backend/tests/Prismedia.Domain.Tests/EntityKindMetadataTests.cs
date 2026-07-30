@@ -1,19 +1,28 @@
-using System.Reflection;
 using Prismedia.Domain.Entities;
 
 namespace Prismedia.Domain.Tests;
 
 public sealed class EntityKindMetadataTests {
     [Fact]
-    public void EveryEntityKindDeclaresCodeAndMetaInline() {
-        foreach (var field in typeof(EntityKind).GetFields(BindingFlags.Public | BindingFlags.Static)) {
-            Assert.True(
-                field.GetCustomAttribute<CodeAttribute>() is not null,
-                $"EntityKind.{field.Name} is missing a [Code] attribute.");
-            Assert.True(
-                field.GetCustomAttribute<EntityKindMetaAttribute>() is not null,
-                $"EntityKind.{field.Name} is missing an [EntityKindMeta] attribute.");
-        }
+    public void EveryEntityKindHasExactlyOneDiscoveredDefinition() {
+        var expectedKinds = Enum.GetValues<EntityKind>();
+        var definitions = EntityKindRegistry.All;
+
+        Assert.Equal(expectedKinds.Length, definitions.Count);
+        Assert.Equal(expectedKinds, definitions.Select(definition => definition.Kind));
+        Assert.Equal(definitions.Count, definitions.Select(definition => definition.Code).Distinct(StringComparer.OrdinalIgnoreCase).Count());
+        Assert.Equal(
+            definitions.Count(definition => definition.ClrType is not null),
+            definitions.Where(definition => definition.ClrType is not null).Select(definition => definition.ClrType).Distinct().Count());
+    }
+
+    [Fact]
+    public void DefinitionsCreateFreshDefaultCapabilities() {
+        var first = EntityKindRegistry.Describe(EntityKind.Book).CreateDefaultCapabilities();
+        var second = EntityKindRegistry.Describe(EntityKind.Book).CreateDefaultCapabilities();
+
+        Assert.Equal(first.Select(capability => capability.GetType()), second.Select(capability => capability.GetType()));
+        Assert.All(first.Zip(second), pair => Assert.NotSame(pair.First, pair.Second));
     }
 
     [Theory]
