@@ -68,7 +68,7 @@ import type {
   ManualReplacementSearchResult,
   UploadAcquisitionTorrentBody,
 } from "$lib/api/generated/model";
-import { unwrapGenerated } from "$lib/api/generated-response";
+import { requestInit, unwrapGenerated, type RequestOptions } from "$lib/api/generated-response";
 import { ApiError, apiPath } from "$lib/api/orval-fetch";
 
 // ── Indexers ──────────────────────────────────────────────────
@@ -146,9 +146,12 @@ export async function fetchAcquisitionForEntity(entityId: string): Promise<Acqui
 }
 
 /** Every direct acquisition for an Entity, including parallel ebook and audiobook Book rows. */
-export async function fetchAcquisitionsForEntity(entityId: string): Promise<AcquisitionDetail[]> {
+export async function fetchAcquisitionsForEntity(
+  entityId: string,
+  options?: RequestOptions,
+): Promise<AcquisitionDetail[]> {
   return unwrapGenerated(
-    await listAcquisitionsForEntity(entityId),
+    await listAcquisitionsForEntity(entityId, requestInit(options)),
     "Failed to load the entity's acquisitions",
   );
 }

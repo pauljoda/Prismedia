@@ -1,10 +1,11 @@
 <script lang="ts">
   import { CAPABILITY_KIND, PROGRESS_UNIT, READER_MODE, type BookRenditionCode } from "$lib/api/generated/codes";
-  import { onMount } from "svelte";
-  import { afterNavigate, goto } from "$app/navigation";
+  import { onDestroy } from "svelte";
+  import { goto } from "$app/navigation";
   import { page } from "$app/state";
   import { BookOpen, CloudDownload, Headphones, Info, Play, SlidersHorizontal, Users } from "@lucide/svelte";
-  import EntityDetailSkeleton from "$lib/components/entities/EntityDetailSkeleton.svelte";
+  import EntityDetailPageState from "$lib/components/entities/EntityDetailPageState.svelte";
+  import { useEntityDetailPage } from "$lib/components/entities/entity-detail-page-controller.svelte";
   import MediaProgressPanel from "$lib/components/MediaProgressPanel.svelte";
   import BookRenditionAcquisitionCard from "$lib/components/acquisitions/BookRenditionAcquisitionCard.svelte";
   import EntityAcquisitionCard from "$lib/components/acquisitions/EntityAcquisitionCard.svelte";
@@ -17,15 +18,6 @@
   import { updateEntityProgress } from "$lib/api/playback";
   import { BookFormat, type AcquisitionDetail, type MonitorView } from "$lib/api/generated/model";
   import { fetchEntity, type EntityCardFull } from "$lib/api/entities";
-  import {
-    updateEntityFlags,
-    updateEntityMetadata,
-    updateEntityRating,
-  } from "$lib/api/entity-mutations";
-  import {
-    toggleOptimisticEntityFlag,
-    updateOptimisticEntityRating,
-  } from "$lib/entities/entity-detail-state";
   import { refreshAfterManagedFileRevert } from "$lib/entities/entity-file-management";
   import { entityCardToDetailCard, type EntityDetailCardFull, type EntityDetailCredit, type EntityDetailTag } from "$lib/entities/entity-detail";
   import {
@@ -49,19 +41,14 @@
     type EntityDetailActionButton,
     type EntityDetailSection,
     type EntityDetailTab,
-    type EntityMetadataUpdateRequest,
   } from "$lib/components/entities/EntityDetail.svelte";
   import EntityGrid from "$lib/components/entities/EntityGrid.svelte";
   import EntityGridSection from "$lib/components/entities/EntityGridSection.svelte";
   import BookCombinedProgressCard from "$lib/components/books/BookCombinedProgressCard.svelte";
   import BookChapterList from "$lib/components/books/BookChapterList.svelte";
   import { useIdentifyDetailAction } from "$lib/components/identify/use-identify-detail-action.svelte";
-  import {
-    isHiddenEntityNotFoundError,
-    redirectHiddenEntityNotFound,
-  } from "$lib/nsfw/hidden-entity";
-  import { useNsfw } from "$lib/nsfw/store.svelte";
-  import { useAppChrome, type AppBreadcrumb } from "$lib/stores/app-chrome.svelte";
+  import { isHiddenEntityNotFoundError } from "$lib/nsfw/hidden-entity";
+  import type { AppBreadcrumb } from "$lib/stores/app-chrome.svelte";
   import { useAudioPlayback } from "$lib/stores/audio-playback.svelte";
   import { numberValue } from "$lib/utils/format";
   import { entityAccentForKind } from "$lib/entities/entity-accent";
@@ -91,9 +78,6 @@
   import { acquisitionStatusDisplay } from "$lib/requests/acquisition-status-display";
   import { monitorIsActive } from "$lib/requests/monitor-status";
 
-  type LoadState = "loading" | "ready" | "error";
-  const nsfw = useNsfw();
-  const appChrome = useAppChrome();
   const playback = useAudioPlayback()!;
   interface ChapterDetail {
     detail: EntityCardFull;
@@ -101,15 +85,10 @@
     summary: BookReaderChapter;
   }
 
-  let loadState: LoadState = $state("loading");
-  let book = $state<EntityCardFull | null>(null);
   // The acquisition backing this book (wanted placeholder still searching/downloading, or the import
   // that produced it), so its state is managed right here instead of only under /request.
   // The book's parent author grouping, when scanned under an Author/ folder, for a breadcrumb back-link.
   let authorLink = $state<{ id: string; title: string } | null>(null);
-  let errorMessage: string | null = $state(null);
-  let lastNsfwMode = $state(nsfw.mode);
-  let ratingBusy = $state(false);
   let progressBusy = $state(false);
   let listeningBusy = $state(false);
   let chapterDetails = $state.raw<ChapterDetail[]>([]);
@@ -126,12 +105,27 @@
   let currentEpubChapterId = $state<string | null>(null);
   let epubContentsLoading = $state(false);
   let artworkPalette = $state.raw<ArtworkPalette | null>(null);
-  let loadedBookId: string | null = null;
   let loadedEpubKey: string | null = null;
   let epubContentsAbort: AbortController | null = null;
-  let loadToken = 0;
 
   const bookId = $derived(page.params.id ?? "");
+  const detail = useEntityDetailPage<EntityCardFull>({
+    loadKey: () => bookId,
+    load: ({ signal }) => loadBook(bookId, signal),
+    breadcrumbs: (nextBook) => {
+      const crumbs: AppBreadcrumb[] = [{ label: "Books", href: "/books" }];
+      // When the book sits under an author, surface it ("Books / Andy Weir / Project Hail Mary").
+      if (authorLink) {
+        crumbs.push({
+          label: authorLink.title,
+          href: resolveEntityHref(ENTITY_KIND.bookAuthor, authorLink.id),
+        });
+      }
+      crumbs.push({ label: nextBook.title });
+      return crumbs;
+    },
+  });
+  const book = $derived(detail.entity);
   const bookMetadata = $derived(book ? getBookMetadataCapability(book.capabilities) : undefined);
   const bookType = $derived(bookMetadata?.bookType ?? null);
   // A wanted placeholder has metadata but no file yet; reading is offered only once the file lands.
@@ -219,7 +213,12 @@
     baseChapterRows,
     bookProgress?.mode ?? READER_MODE.paged,
   ));
-  useLegacyBookProgressMigration(() => book, () => baseChapterRows, () => bookProgressMappings, loadBook);
+  useLegacyBookProgressMigration(
+    () => book,
+    () => baseChapterRows,
+    () => bookProgressMappings,
+    () => detail.reload({ showLoading: false }),
+  );
   const savedAudiobookResume = $derived(resolveBookAudioResume(
     baseChapterRows,
     bookProgressMappings,
@@ -326,7 +325,7 @@
     capabilities: () => book?.capabilities,
     childCards: () => requestableDirectChildCards(book?.id, childBookCards),
     onChanged: handleBookAcquisitionChanged,
-    onStatusChanged: () => loadBook(bookId, { showLoading: false }),
+    onStatusChanged: () => detail.reload({ showLoading: false }),
     onPruned: () => goto("/books"),
   });
   const wantedStateLabel = $derived(acquisitionStatusDisplay(acq.acquisition?.summary.status).label);
@@ -334,7 +333,7 @@
     onDeleted: () => goto("/books"),
     onReverted: () => refreshAfterManagedFileRevert(
       acq,
-      () => loadBook(bookId, { showLoading: false }),
+      () => detail.reload({ showLoading: false }),
     ),
   };
 
@@ -414,26 +413,7 @@
     ];
   });
 
-  onMount(() => {
-    loadCurrentBookIfNeeded();
-    return () => epubContentsAbort?.abort();
-  });
-
-  afterNavigate(() => {
-    loadCurrentBookIfNeeded();
-  });
-
-  function loadCurrentBookIfNeeded() {
-    if (!bookId || bookId === loadedBookId) return;
-    loadedBookId = bookId;
-    void loadBook(bookId);
-  }
-
-  $effect(() => {
-    if (nsfw.mode === lastNsfwMode) return;
-    lastNsfwMode = nsfw.mode;
-    void loadBook();
-  });
+  onDestroy(() => epubContentsAbort?.abort());
 
   $effect(() => {
     if (!bookRenditionAcquisitions.some((item) => acquisitionStatusShouldPoll(item.summary.status))) return;
@@ -441,76 +421,59 @@
     return () => clearInterval(timer);
   });
 
-  $effect(() => {
-    if (!book) return;
-    const crumbs: AppBreadcrumb[] = [{ label: "Books", href: "/books" }];
-    // When the book sits under an author, surface it ("Books / Andy Weir / Project Hail Mary").
-    if (authorLink) {
-      crumbs.push({ label: authorLink.title, href: resolveEntityHref(ENTITY_KIND.bookAuthor, authorLink.id) });
+  async function loadBook(targetBookId: string, signal: AbortSignal): Promise<EntityCardFull> {
+    const [nextBook, nextAcquisitions, nextMonitors] = await Promise.all([
+      fetchEntity(targetBookId, { signal }),
+      fetchAcquisitionsForEntity(targetBookId, { signal }).catch(() => {
+        signal.throwIfAborted();
+        return [];
+      }),
+      fetchEntityMonitors(targetBookId, { signal }).catch(() => {
+        signal.throwIfAborted();
+        return [];
+      }),
+    ]);
+    const parentId = nextBook.parentEntityId;
+    const [relationships, chapters, parentThumbs] = await Promise.all([
+      hydrateStandardRelationshipCards(nextBook, { signal }),
+      hydrateChapters(nextBook, signal),
+      parentId ? fetchOrderedEntityThumbnails([parentId], { signal }) : Promise.resolve([]),
+    ]);
+    const progressSummary = await hydrateProgressChapterSummary(nextBook, chapters, signal);
+    signal.throwIfAborted();
+
+    if (book?.id !== nextBook.id) {
+      epubContents = [];
+      currentEpubChapterId = null;
+      loadedEpubKey = null;
+      artworkPalette = null;
     }
-    crumbs.push({ label: book.title });
-    return appChrome.setBreadcrumbs(crumbs);
-  });
 
-  async function loadBook(targetBookId = bookId, options = { showLoading: true }) {
-    const token = ++loadToken;
-    // Silent for acquisition-driven refreshes: update in place instead of flashing the skeleton.
-    if (options.showLoading || !book) loadState = "loading";
-    errorMessage = null;
-    try {
-      const [nextBook, nextAcquisitions, nextMonitors] = await Promise.all([
-        fetchEntity(targetBookId),
-        fetchAcquisitionsForEntity(targetBookId).catch(() => []),
-        fetchEntityMonitors(targetBookId).catch(() => []),
-      ]);
-      const parentId = nextBook.parentEntityId;
-      const [relationships, chapters, parentThumbs] = await Promise.all([
-        hydrateStandardRelationshipCards(nextBook),
-        hydrateChapters(nextBook),
-        parentId ? fetchOrderedEntityThumbnails([parentId]) : Promise.resolve([]),
-      ]);
-      const progressSummary = await hydrateProgressChapterSummary(nextBook, chapters);
-      if (token !== loadToken) return;
+    // A book scanned under an Author/ folder is parented to a book-author; surface it as a back-link.
+    const authorThumb = parentThumbs.find((thumbnail) => thumbnail.kind === ENTITY_KIND.bookAuthor);
+    authorLink = authorThumb ? { id: authorThumb.id, title: authorThumb.title } : null;
 
-      if (book?.id !== nextBook.id) {
-        epubContents = [];
-        currentEpubChapterId = null;
-        loadedEpubKey = null;
-        artworkPalette = null;
-      }
+    chapterDetails = chapters;
+    progressChapterSummary = progressSummary;
+    childBookCards = thumbnailsToCards(orderedBookChildren(nextBook, ENTITY_KIND.book), {
+      hrefFor: (childBook) => `/books/${childBook.id}`,
+    });
+    volumeCards = thumbnailsToCards(orderedBookChildren(nextBook, ENTITY_KIND.bookVolume), {
+      hrefFor: (volume) => `/books/${nextBook.id}/volumes/${volume.id}`,
+    });
+    relationshipCredits = relationships.credits;
+    relationshipStudio = relationships.studio;
+    relationshipTags = relationships.relationshipTags;
+    bookRenditionAcquisitions = nextAcquisitions;
+    bookRenditionMonitors = nextMonitors;
 
-      // A book scanned under an Author/ folder is parented to a book-author; surface it as a back-link.
-      const authorThumb = parentThumbs.find((thumbnail) => thumbnail.kind === ENTITY_KIND.bookAuthor);
-      authorLink = authorThumb ? { id: authorThumb.id, title: authorThumb.title } : null;
-
-      book = nextBook;
-      chapterDetails = chapters;
-      progressChapterSummary = progressSummary;
-      childBookCards = thumbnailsToCards(orderedBookChildren(nextBook, ENTITY_KIND.book), {
-        hrefFor: (childBook) => `/books/${childBook.id}`,
-      });
-      volumeCards = thumbnailsToCards(orderedBookChildren(nextBook, ENTITY_KIND.bookVolume), {
-        hrefFor: (volume) => `/books/${nextBook.id}/volumes/${volume.id}`,
-      });
-      relationshipCredits = relationships.credits;
-      relationshipStudio = relationships.studio;
-      relationshipTags = relationships.relationshipTags;
-      bookRenditionAcquisitions = nextAcquisitions;
-      bookRenditionMonitors = nextMonitors;
-
-      const nextProgress = bookEntityProgressDisplay(nextBook, combineChapterSummaries(chapters, progressSummary));
-      selectedChapterId = nextProgress?.chapterId ?? chapters[0]?.detail.id ?? null;
-      loadState = "ready";
-      void hydrateEpubContents(nextBook, token);
-    } catch (err) {
-      if (token !== loadToken) return;
-      if (redirectHiddenEntityNotFound(err, nsfw.mode)) return;
-      errorMessage = err instanceof Error ? err.message : String(err);
-      loadState = "error";
-    }
+    const nextProgress = bookEntityProgressDisplay(nextBook, combineChapterSummaries(chapters, progressSummary));
+    selectedChapterId = nextProgress?.chapterId ?? chapters[0]?.detail.id ?? null;
+    void hydrateEpubContents(nextBook);
+    return nextBook;
   }
 
-  async function hydrateEpubContents(nextBook: EntityCardFull, token: number): Promise<void> {
+  async function hydrateEpubContents(nextBook: EntityCardFull): Promise<void> {
     epubContentsAbort?.abort();
     if (getBookMetadataCapability(nextBook.capabilities)?.format !== BookFormat.epub) {
       epubContents = [];
@@ -539,18 +502,20 @@
         controller.signal,
         currentFraction,
       );
-      if (controller.signal.aborted || token !== loadToken || bookId !== nextBook.id) return;
+      if (controller.signal.aborted || bookId !== nextBook.id) return;
       epubContents = contents.entries;
       currentEpubChapterId = contents.currentChapterId;
       loadedEpubKey = key;
     } catch (error) {
       if (controller.signal.aborted || (error instanceof DOMException && error.name === "AbortError")) return;
-      if (token !== loadToken || bookId !== nextBook.id) return;
+      if (bookId !== nextBook.id) return;
       epubContents = [];
       currentEpubChapterId = null;
     } finally {
-      if (epubContentsAbort === controller) epubContentsAbort = null;
-      if (token === loadToken) epubContentsLoading = false;
+      if (epubContentsAbort === controller) {
+        epubContentsAbort = null;
+        epubContentsLoading = false;
+      }
     }
   }
 
@@ -569,7 +534,7 @@
 
   async function handleBookAcquisitionChanged(): Promise<void> {
     await Promise.all([
-      loadBook(bookId, { showLoading: false }),
+      detail.reload({ showLoading: false }),
       refreshBookAcquisitionState(),
     ]);
   }
@@ -593,7 +558,10 @@
     await refreshBookAcquisitionState().catch(() => {});
   }
 
-  async function hydrateChapters(nextBook: EntityCardFull): Promise<ChapterDetail[]> {
+  async function hydrateChapters(
+    nextBook: EntityCardFull,
+    signal: AbortSignal,
+  ): Promise<ChapterDetail[]> {
     const directChapters = orderedBookChildren(nextBook, ENTITY_KIND.bookChapter).map((thumbnail, index) => ({
       thumbnail,
       sortOrder: Number(thumbnail.sortOrder ?? index),
@@ -601,7 +569,9 @@
     const chapterItems = directChapters.sort((a, b) =>
       a.sortOrder - b.sortOrder || a.thumbnail.title.localeCompare(b.thumbnail.title),
     );
-    const details = await Promise.all(chapterItems.map((item) => fetchEntity(item.thumbnail.id)));
+    const details = await Promise.all(
+      chapterItems.map((item) => fetchEntity(item.thumbnail.id, { signal })),
+    );
     return details.map((detail, index) => {
       const pages = orderedBookChildren(detail, ENTITY_KIND.bookPage);
       return {
@@ -632,6 +602,7 @@
   async function hydrateProgressChapterSummary(
     nextBook: EntityCardFull,
     chapters: ChapterDetail[],
+    signal: AbortSignal,
   ): Promise<BookReaderChapter | null> {
     const progress = getCapability(nextBook.capabilities, CAPABILITY_KIND.progress);
     if (!progress?.currentEntityId || chapters.some((chapter) => chapter.detail.id === progress.currentEntityId)) {
@@ -640,7 +611,7 @@
 
     let detail: EntityCardFull;
     try {
-      detail = await fetchEntity(progress.currentEntityId);
+      detail = await fetchEntity(progress.currentEntityId, { signal });
     } catch (err) {
       if (isHiddenEntityNotFoundError(err)) return null;
       throw err;
@@ -658,36 +629,9 @@
     };
   }
 
-  async function handleRatingChange(value: number | null) {
-    if (!book || ratingBusy) return;
-    ratingBusy = true;
-    try {
-      await updateOptimisticEntityRating(book, value, (next) => (book = next), updateEntityRating);
-    } finally {
-      ratingBusy = false;
-    }
-  }
-
-  async function handleFavoriteToggle() {
-    if (!book) return;
-    await toggleOptimisticEntityFlag(book, "isFavorite", (next) => (book = next), updateEntityFlags);
-  }
-
-  async function handleOrganizedToggle() {
-    if (!book) return;
-    await toggleOptimisticEntityFlag(book, "isOrganized", (next) => (book = next), updateEntityFlags);
-  }
-
-  async function handleMetadataSave(request: EntityMetadataUpdateRequest) {
-    if (!book) return;
-    await updateEntityMetadata(book.id, request, { kind: book.kind });
-    await loadBook();
-  }
-
-
   /** Cancel stops the download only — the wanted placeholder stays, so refresh in place. */
   function handleAcquisitionCancelled() {
-    void loadBook(bookId, { showLoading: false });
+    void detail.reload({ showLoading: false });
   }
 
   function openSelectedReader() {
@@ -874,7 +818,7 @@
         location: bookProgress.location,
         completed: listened,
       });
-      await loadBook();
+      await detail.reload({ showLoading: false });
     } finally {
       listeningBusy = false;
     }
@@ -898,7 +842,7 @@
         reset: true,
       });
       listenToBook({ startOver: true });
-      await loadBook();
+      await detail.reload({ showLoading: false });
     } finally {
       listeningBusy = false;
     }
@@ -928,7 +872,7 @@
         mode: progressDisplay.readerMode,
         completed: read,
       });
-      await loadBook();
+      await detail.reload({ showLoading: false });
     } catch {
       // best-effort; the panel reflects the last known state on failure
     } finally {
@@ -950,7 +894,7 @@
         mode: progressDisplay?.readerMode ?? READER_MODE.paged,
         reset: true,
       });
-      await loadBook();
+      await detail.reload({ showLoading: false });
     } catch {
       // best-effort
     } finally {
@@ -983,7 +927,7 @@
         location: singleFileProgressDisplay.location,
         completed: read,
       });
-      await loadBook();
+      await detail.reload({ showLoading: false });
     } catch {
       // best-effort; the panel reflects the last known state on failure
     } finally {
@@ -1005,7 +949,7 @@
         location: null,
         reset: true,
       });
-      await loadBook();
+      await detail.reload({ showLoading: false });
     } catch {
       // best-effort
     } finally {
@@ -1020,22 +964,21 @@
 </svelte:head>
 
 <div class="book-page">
-  {#if loadState === "loading"}
-    <EntityDetailSkeleton />
-  {:else if loadState === "error"}
-    <div class="error-notice">
-      <p>{errorMessage ?? "Failed to load book."}</p>
-      <button type="button" onclick={() => void loadBook()}>Retry</button>
-    </div>
-  {:else if card && book}
-    <EntityDetail
+  <EntityDetailPageState
+    loadState={detail.loadState}
+    errorMessage={detail.errorMessage}
+    fallbackError="Failed to load book."
+    onRetry={detail.retry}
+  >
+    {#if card && book}
+      <EntityDetail
       {card}
       wantedStatus={acq.acquisition?.summary.status ?? null}
-      onRatingChange={handleRatingChange}
-      onFavoriteToggle={handleFavoriteToggle}
-      onOrganizedToggle={handleOrganizedToggle}
-      onMetadataSave={handleMetadataSave}
-      {ratingBusy}
+      onRatingChange={detail.changeRating}
+      onFavoriteToggle={detail.toggleFavorite}
+      onOrganizedToggle={detail.toggleOrganized}
+      onMetadataSave={detail.saveMetadata}
+      ratingBusy={detail.ratingBusy}
       {peopleLabel}
       posterSize="large"
       tabs={detailTabs}
@@ -1082,7 +1025,7 @@
             showEntityRequestControls={false}
             showAcquisitionPanel={false}
             onCancelled={handleAcquisitionCancelled}
-            onImported={() => loadBook(bookId, { showLoading: false })}
+            onImported={() => detail.reload({ showLoading: false })}
           />
           <BookRenditionAcquisitionCard
             ownership={{
@@ -1097,7 +1040,7 @@
           />
         {/if}
       {/snippet}
-    </EntityDetail>
+      </EntityDetail>
 
     {#if hasCombinedContent}
       <BookCombinedProgressCard
@@ -1213,7 +1156,8 @@
       </EntityGridSection>
     {/if}
 
-  {/if}
+    {/if}
+  </EntityDetailPageState>
 </div>
 
 <style>
@@ -1223,46 +1167,6 @@
     padding: 0;
     max-width: none;
     margin: 0;
-  }
-
-
-  .error-notice {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 1rem;
-    padding: 1rem;
-    border: 1px solid color-mix(in srgb, #ef4444 50%, var(--color-border, #1c2235));
-    background: var(--color-surface-2, #101420);
-    color: var(--color-text-muted, #8a93a6);
-    font-size: 0.85rem;
-  }
-
-  .error-notice button {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.4rem;
-    border: 1px solid var(--color-border-default, rgba(164, 172, 185, 0.12));
-    border-radius: var(--radius-xs, 4px);
-    background:
-      linear-gradient(160deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0)),
-      var(--color-overlay-glass-light, rgba(17, 22, 29, 0.55));
-    color: var(--color-text-muted, #8a93a6);
-    padding: 0.4rem 0.8rem;
-    font-size: 0.78rem;
-    cursor: pointer;
-    box-shadow: var(--shadow-card, 0 2px 6px rgba(0, 0, 0, 0.3));
-    transition:
-      border-color var(--duration-normal, 180ms) var(--ease-mechanical, ease),
-      box-shadow var(--duration-normal, 180ms) var(--ease-mechanical, ease),
-      color var(--duration-fast, 100ms) var(--ease-default, ease),
-      background var(--duration-normal, 180ms) var(--ease-mechanical, ease);
-  }
-
-  .error-notice button:hover {
-    color: var(--color-text-accent, #c7c9cc);
-    border-color: var(--color-border-accent-strong, rgba(199, 201, 204, 0.52));
-    box-shadow: var(--shadow-card-hover, 0 8px 24px rgba(0, 0, 0, 0.4));
   }
 
   :global(.meta-item) {

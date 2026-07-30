@@ -20,7 +20,7 @@ import type {
   WantedPageView,
 } from "$lib/api/generated/model";
 import type { MonitorPresetCode } from "$lib/api/generated/codes";
-import { unwrapGenerated } from "$lib/api/generated-response";
+import { requestInit, unwrapGenerated, type RequestOptions } from "$lib/api/generated-response";
 
 const ENTITY_MONITOR_STATE_BATCH_LIMIT = 500;
 
@@ -120,8 +120,14 @@ export async function fetchEntityMonitor(entityId: string): Promise<MonitorView 
 }
 
 /** Every direct monitor for an Entity, including independent Book rendition intent. */
-export async function fetchEntityMonitors(entityId: string): Promise<MonitorView[]> {
-  return unwrapGenerated(await listEntityMonitors(entityId), "Failed to load monitoring states");
+export async function fetchEntityMonitors(
+  entityId: string,
+  options?: RequestOptions,
+): Promise<MonitorView[]> {
+  return unwrapGenerated(
+    await listEntityMonitors(entityId, requestInit(options)),
+    "Failed to load monitoring states",
+  );
 }
 
 export async function stopMonitor(monitorId: string): Promise<MonitorStopResponse> {
