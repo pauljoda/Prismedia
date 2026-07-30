@@ -17,7 +17,8 @@ public sealed class VideoEntityKindDefinition() : EntityKindDefinition<Video>(
         16,
         9,
         EntityAccentHue.Red,
-        EntityAccentHue.Orange),
+        EntityAccentHue.Orange,
+        EntityArtworkFit.Cover),
     defaultCapabilities: static () =>
     [
         new CapabilityPlayback(),

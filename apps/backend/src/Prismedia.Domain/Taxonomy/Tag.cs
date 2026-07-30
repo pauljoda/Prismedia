@@ -19,7 +19,8 @@ public sealed class TagEntityKindDefinition() : EntityKindDefinition<Tag>(
         1,
         1,
         EntityAccentHue.Green,
-        EntityAccentHue.Yellow),
+        EntityAccentHue.Yellow,
+        EntityArtworkFit.Cover),
     supportsManualManagement: true) {
     /// <inheritdoc />
     public override IReadOnlyList<Type> ProjectedCapabilityTypes => [typeof(TagPolicyDocumentCapability)];

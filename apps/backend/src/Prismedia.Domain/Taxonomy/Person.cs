@@ -19,7 +19,8 @@ public sealed class PersonEntityKindDefinition() : EntityKindDefinition<Person>(
         4,
         5,
         EntityAccentHue.Red,
-        EntityAccentHue.Violet),
+        EntityAccentHue.Violet,
+        EntityArtworkFit.Cover),
     defaultCapabilities: static () => [new CapabilityDates(), new CapabilityLifetime()],
     supportsManualManagement: true) {
     /// <inheritdoc />

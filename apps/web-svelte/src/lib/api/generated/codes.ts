@@ -293,6 +293,14 @@ export const ENTITY_ACCENT_HUE = {
 
 export type EntityAccentHueCode = (typeof ENTITY_ACCENT_HUE)[keyof typeof ENTITY_ACCENT_HUE];
 
+// source: enum EntityArtworkFit
+export const ENTITY_ARTWORK_FIT = {
+  cover: "cover",
+  contain: "contain",
+} as const;
+
+export type EntityArtworkFitCode = (typeof ENTITY_ARTWORK_FIT)[keyof typeof ENTITY_ARTWORK_FIT];
+
 // source: enum EntityDateType
 export const ENTITY_DATE_TYPE = {
   announcement: "announcement",
@@ -1202,28 +1210,29 @@ export interface EntityKindPresentationManifestEntry {
   thumbnailHeight: number;
   primaryAccent: EntityAccentHueCode;
   secondaryAccent: EntityAccentHueCode;
+  artworkFit: EntityArtworkFitCode;
 }
 
 export const ENTITY_KIND_PRESENTATION: Record<EntityKindCode, EntityKindPresentationManifestEntry> = {
-  "audio": { icon: "audio", referenceIcon: "audio", thumbnailWidth: 1, thumbnailHeight: 1, primaryAccent: "violet", secondaryAccent: "magenta" },
-  "audio-library": { icon: "album", referenceIcon: "audio", thumbnailWidth: 1, thumbnailHeight: 1, primaryAccent: "violet", secondaryAccent: "magenta" },
-  "audio-track": { icon: "track", referenceIcon: "audio", thumbnailWidth: 1, thumbnailHeight: 1, primaryAccent: "violet", secondaryAccent: "magenta" },
-  "book": { icon: "book", referenceIcon: "book", thumbnailWidth: 2, thumbnailHeight: 3, primaryAccent: "cyan", secondaryAccent: "blue" },
-  "book-volume": { icon: "volume", referenceIcon: "book", thumbnailWidth: 2, thumbnailHeight: 3, primaryAccent: "cyan", secondaryAccent: "blue" },
-  "book-chapter": { icon: "chapter", referenceIcon: "book", thumbnailWidth: 2, thumbnailHeight: 3, primaryAccent: "cyan", secondaryAccent: "blue" },
-  "book-page": { icon: "page", referenceIcon: "book", thumbnailWidth: 2, thumbnailHeight: 3, primaryAccent: "cyan", secondaryAccent: "blue" },
-  "collection": { icon: "collection", referenceIcon: "collection", thumbnailWidth: 16, thumbnailHeight: 9, primaryAccent: "magenta", secondaryAccent: "red" },
-  "gallery": { icon: "gallery", referenceIcon: "gallery", thumbnailWidth: 1, thumbnailHeight: 1, primaryAccent: "green", secondaryAccent: "cyan" },
-  "image": { icon: "image", referenceIcon: "image", thumbnailWidth: 1, thumbnailHeight: 1, primaryAccent: "blue", secondaryAccent: "violet" },
-  "music-artist": { icon: "artist", referenceIcon: "audio", thumbnailWidth: 1, thumbnailHeight: 1, primaryAccent: "violet", secondaryAccent: "magenta" },
-  "book-author": { icon: "author", referenceIcon: "book", thumbnailWidth: 2, thumbnailHeight: 3, primaryAccent: "cyan", secondaryAccent: "blue" },
-  "person": { icon: "person", referenceIcon: "person", thumbnailWidth: 4, thumbnailHeight: 5, primaryAccent: "red", secondaryAccent: "violet" },
-  "movie": { icon: "movie", referenceIcon: "video", thumbnailWidth: 2, thumbnailHeight: 3, primaryAccent: "orange", secondaryAccent: "yellow" },
-  "studio": { icon: "studio", referenceIcon: "studio", thumbnailWidth: 21, thumbnailHeight: 9, primaryAccent: "orange", secondaryAccent: "magenta" },
-  "tag": { icon: "tag", referenceIcon: "tag", thumbnailWidth: 1, thumbnailHeight: 1, primaryAccent: "green", secondaryAccent: "yellow" },
-  "video": { icon: "video", referenceIcon: "video", thumbnailWidth: 16, thumbnailHeight: 9, primaryAccent: "red", secondaryAccent: "orange" },
-  "video-series": { icon: "series", referenceIcon: "video", thumbnailWidth: 2, thumbnailHeight: 3, primaryAccent: "yellow", secondaryAccent: "green" },
-  "video-season": { icon: "season", referenceIcon: "video", thumbnailWidth: 2, thumbnailHeight: 3, primaryAccent: "yellow", secondaryAccent: "green" },
+  "audio": { icon: "audio", referenceIcon: "audio", thumbnailWidth: 1, thumbnailHeight: 1, primaryAccent: "violet", secondaryAccent: "magenta", artworkFit: "cover" },
+  "audio-library": { icon: "album", referenceIcon: "audio", thumbnailWidth: 1, thumbnailHeight: 1, primaryAccent: "violet", secondaryAccent: "magenta", artworkFit: "cover" },
+  "audio-track": { icon: "track", referenceIcon: "audio", thumbnailWidth: 1, thumbnailHeight: 1, primaryAccent: "violet", secondaryAccent: "magenta", artworkFit: "cover" },
+  "book": { icon: "book", referenceIcon: "book", thumbnailWidth: 2, thumbnailHeight: 3, primaryAccent: "cyan", secondaryAccent: "blue", artworkFit: "cover" },
+  "book-volume": { icon: "volume", referenceIcon: "book", thumbnailWidth: 2, thumbnailHeight: 3, primaryAccent: "cyan", secondaryAccent: "blue", artworkFit: "cover" },
+  "book-chapter": { icon: "chapter", referenceIcon: "book", thumbnailWidth: 2, thumbnailHeight: 3, primaryAccent: "cyan", secondaryAccent: "blue", artworkFit: "cover" },
+  "book-page": { icon: "page", referenceIcon: "book", thumbnailWidth: 2, thumbnailHeight: 3, primaryAccent: "cyan", secondaryAccent: "blue", artworkFit: "cover" },
+  "collection": { icon: "collection", referenceIcon: "collection", thumbnailWidth: 16, thumbnailHeight: 9, primaryAccent: "magenta", secondaryAccent: "red", artworkFit: "cover" },
+  "gallery": { icon: "gallery", referenceIcon: "gallery", thumbnailWidth: 1, thumbnailHeight: 1, primaryAccent: "green", secondaryAccent: "cyan", artworkFit: "cover" },
+  "image": { icon: "image", referenceIcon: "image", thumbnailWidth: 1, thumbnailHeight: 1, primaryAccent: "blue", secondaryAccent: "violet", artworkFit: "cover" },
+  "music-artist": { icon: "artist", referenceIcon: "audio", thumbnailWidth: 1, thumbnailHeight: 1, primaryAccent: "violet", secondaryAccent: "magenta", artworkFit: "cover" },
+  "book-author": { icon: "author", referenceIcon: "book", thumbnailWidth: 2, thumbnailHeight: 3, primaryAccent: "cyan", secondaryAccent: "blue", artworkFit: "cover" },
+  "person": { icon: "person", referenceIcon: "person", thumbnailWidth: 4, thumbnailHeight: 5, primaryAccent: "red", secondaryAccent: "violet", artworkFit: "cover" },
+  "movie": { icon: "movie", referenceIcon: "video", thumbnailWidth: 2, thumbnailHeight: 3, primaryAccent: "orange", secondaryAccent: "yellow", artworkFit: "cover" },
+  "studio": { icon: "studio", referenceIcon: "studio", thumbnailWidth: 21, thumbnailHeight: 9, primaryAccent: "orange", secondaryAccent: "magenta", artworkFit: "contain" },
+  "tag": { icon: "tag", referenceIcon: "tag", thumbnailWidth: 1, thumbnailHeight: 1, primaryAccent: "green", secondaryAccent: "yellow", artworkFit: "cover" },
+  "video": { icon: "video", referenceIcon: "video", thumbnailWidth: 16, thumbnailHeight: 9, primaryAccent: "red", secondaryAccent: "orange", artworkFit: "cover" },
+  "video-series": { icon: "series", referenceIcon: "video", thumbnailWidth: 2, thumbnailHeight: 3, primaryAccent: "yellow", secondaryAccent: "green", artworkFit: "cover" },
+  "video-season": { icon: "season", referenceIcon: "video", thumbnailWidth: 2, thumbnailHeight: 3, primaryAccent: "yellow", secondaryAccent: "green", artworkFit: "cover" },
 };
 
 export interface RequestKindManifestEntry {

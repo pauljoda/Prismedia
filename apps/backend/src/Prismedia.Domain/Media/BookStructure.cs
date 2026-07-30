@@ -19,7 +19,8 @@ public sealed class BookVolumeEntityKindDefinition() : RootEntityKindDefinition<
         2,
         3,
         EntityAccentHue.Cyan,
-        EntityAccentHue.Blue),
+        EntityAccentHue.Blue,
+        EntityArtworkFit.Cover),
     static root => new BookVolume(
         root.Id,
         root.Title,
@@ -48,7 +49,8 @@ public sealed class BookChapterEntityKindDefinition() : EntityKindDefinition<Boo
         2,
         3,
         EntityAccentHue.Cyan,
-        EntityAccentHue.Blue),
+        EntityAccentHue.Blue,
+        EntityArtworkFit.Cover),
     defaultCapabilities: static () =>
     [
         new CapabilityFingerprints(),
@@ -80,7 +82,8 @@ public sealed class BookPageEntityKindDefinition() : RootEntityKindDefinition<Bo
         2,
         3,
         EntityAccentHue.Cyan,
-        EntityAccentHue.Blue),
+        EntityAccentHue.Blue,
+        EntityArtworkFit.Cover),
     static root => new BookPage(
         root.Id,
         root.Title,

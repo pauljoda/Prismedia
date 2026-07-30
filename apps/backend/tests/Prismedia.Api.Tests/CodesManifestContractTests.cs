@@ -43,12 +43,17 @@ public sealed class CodesManifestContractTests {
         Assert.Equal(9, video.ThumbnailHeight);
         Assert.Equal(EntityAccentHue.Red.ToCode(), video.PrimaryAccent);
         Assert.Equal(EntityAccentHue.Orange.ToCode(), video.SecondaryAccent);
+        Assert.Equal(EntityArtworkFit.Cover.ToCode(), video.ArtworkFit);
 
         var author = kinds[EntityKind.BookAuthor.ToCode()];
         Assert.Equal(EntityKindIcon.Author.ToCode(), author.Icon);
         Assert.Equal(EntityKindIcon.Book.ToCode(), author.ReferenceIcon);
         Assert.Equal(2, author.ThumbnailWidth);
         Assert.Equal(3, author.ThumbnailHeight);
+
+        Assert.Equal(
+            EntityArtworkFit.Contain.ToCode(),
+            kinds[EntityKind.Studio.ToCode()].ArtworkFit);
     }
 
     [Fact]

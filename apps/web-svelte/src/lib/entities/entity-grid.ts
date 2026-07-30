@@ -22,6 +22,7 @@ import {
 } from "./entity-codes";
 import {
   aspectRatioForKind,
+  artworkFitForKind,
   iconForKind,
   thumbnailToEntityShell,
   type EntityThumbnailAsset,
@@ -520,7 +521,7 @@ export function entityCardToThumbnailCard(
       ...(isFullEntityCard(entity) ? entity : thumbnailToEntityShell(entity)),
       capabilities,
     },
-    fit: "cover",
+    fit: artworkFitForKind(entity.kind),
     hover,
     href,
     meta: metaForEntity(entity),

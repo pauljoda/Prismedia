@@ -17,7 +17,8 @@ public sealed class AudioEntityKindDefinition() : EntityKindDefinition(
         1,
         1,
         EntityAccentHue.Violet,
-        EntityAccentHue.Magenta),
+        EntityAccentHue.Magenta,
+        EntityArtworkFit.Cover),
     supportsFileDeletion: true) {
     /// <inheritdoc />
     public override bool OwnsMetadataRelationships => true;

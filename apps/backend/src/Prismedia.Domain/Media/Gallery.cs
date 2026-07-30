@@ -20,7 +20,8 @@ public sealed class GalleryEntityKindDefinition() : EntityKindDefinition<Gallery
         1,
         1,
         EntityAccentHue.Green,
-        EntityAccentHue.Cyan),
+        EntityAccentHue.Cyan,
+        EntityArtworkFit.Cover),
     defaultCapabilities: static () => [new CapabilityCredits()],
     supportsFileDeletion: true,
     autoIdentifySelector: AutoIdentifySelectorKind.Gallery) {

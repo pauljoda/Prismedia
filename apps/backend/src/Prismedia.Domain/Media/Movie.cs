@@ -17,7 +17,8 @@ public sealed class MovieEntityKindDefinition() : EntityKindDefinition<Movie>(
         2,
         3,
         EntityAccentHue.Orange,
-        EntityAccentHue.Yellow),
+        EntityAccentHue.Yellow,
+        EntityArtworkFit.Cover),
     defaultCapabilities: static () =>
     [
         new CapabilityDescription(),

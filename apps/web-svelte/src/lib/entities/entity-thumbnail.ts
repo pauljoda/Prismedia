@@ -190,6 +190,13 @@ export function aspectRatioForKind(kind: string): EntityThumbnailAspectRatio {
   };
 }
 
+/** Chooses the definition-owned default scaling mode for Entity artwork. */
+export function artworkFitForKind(kind: string): "contain" | "cover" {
+  return isEntityKindCode(kind)
+    ? ENTITY_KIND_PRESENTATION[kind].artworkFit
+    : "cover";
+}
+
 /** Resolves the link owned by a thumbnail card, using explicit overrides before entity defaults. */
 export function resolveEntityThumbnailHref(card: EntityThumbnailCard): string | undefined {
   return card.href ?? resolveEntityHref(card.entity.kind, card.entity.id, card.routeContext);
@@ -216,7 +223,7 @@ export function entityReferenceToThumbnailCard(
       childrenByKind: [],
       relationships: [],
     },
-    fit: options.fit ?? "cover",
+    fit: options.fit ?? artworkFitForKind(entity.kind),
     hover: options.hover ?? { kind: THUMBNAIL_HOVER_KIND.none },
     hasSourceMedia: false,
     href: options.href,

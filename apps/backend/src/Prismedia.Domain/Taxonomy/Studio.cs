@@ -17,7 +17,8 @@ public sealed class StudioEntityKindDefinition() : RootEntityKindDefinition<Stud
         21,
         9,
         EntityAccentHue.Orange,
-        EntityAccentHue.Magenta),
+        EntityAccentHue.Magenta,
+        EntityArtworkFit.Contain),
     static root => new Studio(root.Id, root.Title),
     supportsManualManagement: true);
 

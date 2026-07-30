@@ -28,6 +28,7 @@ public sealed record ConstantEntry(string Name, string Value);
 /// <param name="ThumbnailHeight">Canonical thumbnail aspect-ratio height component.</param>
 /// <param name="PrimaryAccent">Primary shared spectrum hue code.</param>
 /// <param name="SecondaryAccent">Secondary shared spectrum hue code.</param>
+/// <param name="ArtworkFit">Default artwork scaling behavior.</param>
 /// <param name="SupportsFileDeletion">Whether this kind may root the managed delete-files workflow.</param>
 /// <param name="SupportsRequests">Whether a committable request descriptor materializes this Entity kind.</param>
 /// <param name="EnumeratesIdentifyChildren">Whether this kind is an identify container whose local children are enumerated for cascade identify.</param>
@@ -43,6 +44,7 @@ public sealed record EntityKindManifestEntry(
     int ThumbnailHeight,
     string PrimaryAccent,
     string SecondaryAccent,
+    string ArtworkFit,
     bool SupportsFileDeletion,
     bool SupportsRequests,
     bool EnumeratesIdentifyChildren);
@@ -155,6 +157,7 @@ public sealed record CodesManifest(
                 descriptor.Presentation.ThumbnailHeight,
                 descriptor.Presentation.PrimaryAccent.ToCode(),
                 descriptor.Presentation.SecondaryAccent.ToCode(),
+                descriptor.Presentation.ArtworkFit.ToCode(),
                 descriptor.SupportsFileDeletion,
                 requestableKinds.Contains(descriptor.Kind),
                 descriptor.EnumeratesIdentifyChildren))

@@ -91,6 +91,15 @@ public enum EntityAccentHue {
     Magenta
 }
 
+/// <summary>Default artwork scaling behavior inside an Entity thumbnail frame.</summary>
+public enum EntityArtworkFit {
+    [Code("cover")]
+    Cover,
+
+    [Code("contain")]
+    Contain
+}
+
 /// <summary>
 /// Platform-neutral presentation facts every Entity kind must define. Exact aspect-ratio values
 /// avoid parallel client shape registries, while semantic icons and hues let each UI retain its
@@ -104,7 +113,8 @@ public sealed record EntityKindPresentation {
         int thumbnailWidth,
         int thumbnailHeight,
         EntityAccentHue primaryAccent,
-        EntityAccentHue secondaryAccent) {
+        EntityAccentHue secondaryAccent,
+        EntityArtworkFit artworkFit) {
         if (thumbnailWidth <= 0) {
             throw new ArgumentOutOfRangeException(nameof(thumbnailWidth), "Thumbnail width must be positive.");
         }
@@ -118,6 +128,7 @@ public sealed record EntityKindPresentation {
         ThumbnailHeight = thumbnailHeight;
         PrimaryAccent = primaryAccent;
         SecondaryAccent = secondaryAccent;
+        ArtworkFit = artworkFit;
     }
 
     /// <summary>Specific semantic icon for representing an Entity of this kind.</summary>
@@ -140,4 +151,7 @@ public sealed record EntityKindPresentation {
 
     /// <summary>Secondary muted spectrum hue.</summary>
     public EntityAccentHue SecondaryAccent { get; }
+
+    /// <summary>Default scaling behavior for artwork within the thumbnail frame.</summary>
+    public EntityArtworkFit ArtworkFit { get; }
 }

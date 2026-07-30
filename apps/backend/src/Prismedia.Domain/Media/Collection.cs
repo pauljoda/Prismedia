@@ -21,7 +21,8 @@ public sealed class CollectionEntityKindDefinition()
             16,
             9,
             EntityAccentHue.Magenta,
-            EntityAccentHue.Red)),
+            EntityAccentHue.Red,
+            EntityArtworkFit.Cover)),
       IEntityContainmentPolicy {
     private static readonly EntityKind[] AllowedKinds =
     [

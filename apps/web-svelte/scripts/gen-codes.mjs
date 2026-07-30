@@ -24,6 +24,7 @@ const ENUM_EXPORTS = [
   ["EntityKind", "ENTITY_KIND", "EntityKindCode"],
   ["EntityKindIcon", "ENTITY_KIND_ICON", "EntityKindIconCode"],
   ["EntityAccentHue", "ENTITY_ACCENT_HUE", "EntityAccentHueCode"],
+  ["EntityArtworkFit", "ENTITY_ARTWORK_FIT", "EntityArtworkFitCode"],
   ["ProposalKind", "PROPOSAL_KIND", "ProposalKindCode"],
   ["RelationshipKind", "RELATIONSHIP_CODE", "RelationshipCode"],
   ["EntityFileRole", "ENTITY_FILE_ROLE", "EntityFileRoleCode"],
@@ -193,6 +194,7 @@ async function main() {
   // values, so adding a kind cannot silently fall through a client-side icon/aspect/accent registry.
   const entityPresentationFields = [
     "icon", "referenceIcon", "thumbnailWidth", "thumbnailHeight", "primaryAccent", "secondaryAccent",
+    "artworkFit",
   ];
   for (const kind of manifest.entityKinds ?? []) {
     const missing = entityPresentationFields.filter((field) => !Object.hasOwn(kind, field));
@@ -203,7 +205,8 @@ async function main() {
   const presentationEntries = (manifest.entityKinds ?? []).map((kind) =>
     `  ${lit(kind.code)}: { icon: ${lit(kind.icon)}, referenceIcon: ${lit(kind.referenceIcon)}, ` +
     `thumbnailWidth: ${lit(kind.thumbnailWidth)}, thumbnailHeight: ${lit(kind.thumbnailHeight)}, ` +
-    `primaryAccent: ${lit(kind.primaryAccent)}, secondaryAccent: ${lit(kind.secondaryAccent)} },`
+    `primaryAccent: ${lit(kind.primaryAccent)}, secondaryAccent: ${lit(kind.secondaryAccent)}, ` +
+    `artworkFit: ${lit(kind.artworkFit)} },`
   ).join("\n");
   sections.push(
     `export interface EntityKindPresentationManifestEntry {\n` +
@@ -213,6 +216,7 @@ async function main() {
       `  thumbnailHeight: number;\n` +
       `  primaryAccent: EntityAccentHueCode;\n` +
       `  secondaryAccent: EntityAccentHueCode;\n` +
+      `  artworkFit: EntityArtworkFitCode;\n` +
       `}\n\n` +
       `export const ENTITY_KIND_PRESENTATION: Record<EntityKindCode, EntityKindPresentationManifestEntry> = {\n` +
       `${presentationEntries}\n};\n`,
