@@ -13,7 +13,6 @@ namespace Prismedia.Domain.Entities;
 /// <param name="PluginEntityKind">Entity kind plugins are asked to resolve.</param>
 /// <param name="WantedEntityKind">Entity kind materialized as the wanted placeholder.</param>
 /// <param name="ProfileEntityKind">Acquisition-profile kind governing downloads.</param>
-/// <param name="LibraryRootMediaCapability">Required library-root scan capability.</param>
 /// <param name="ReviewSelection">How a proposal maps to selectable commit targets.</param>
 /// <param name="IsContainer">Whether the request groups selectable works.</param>
 /// <param name="ChildKind">Request identity of exposed child options.</param>
@@ -32,7 +31,6 @@ public sealed record RequestKindDescriptor(
     EntityKind PluginEntityKind,
     EntityKind WantedEntityKind,
     EntityKind? ProfileEntityKind,
-    LibraryRootMediaCapability? LibraryRootMediaCapability,
     RequestReviewSelection ReviewSelection,
     bool IsContainer,
     RequestMediaKind? ChildKind,

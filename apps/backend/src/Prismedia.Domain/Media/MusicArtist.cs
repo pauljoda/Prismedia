@@ -45,7 +45,6 @@ public sealed class MusicArtistEntityKindDefinition() : RootEntityKindDefinition
     [
         new(RequestMediaKind.Artist, "Artist", "Artists", "album", EntityKind.MusicArtist, EntityKind.MusicArtist,
             ProfileEntityKind: EntityKind.AudioLibrary,
-            LibraryRootMediaCapability: LibraryRootMediaCapability.ScanAudio,
             ReviewSelection: RequestReviewSelection.DirectChildren,
             IsContainer: true, ChildKind: RequestMediaKind.Album, Committable: true,
             AcquisitionKind: EntityKind.AudioLibrary, DeferChildPhantomHydration: true)

@@ -39,7 +39,6 @@ public sealed class AudioTrackEntityKindDefinition() : EntityKindDefinition<Audi
     [
         new(RequestMediaKind.Track, "Track", "Tracks", null, EntityKind.AudioTrack, EntityKind.AudioTrack,
             ProfileEntityKind: EntityKind.AudioLibrary,
-            LibraryRootMediaCapability: LibraryRootMediaCapability.ScanAudio,
             ReviewSelection: RequestReviewSelection.Root,
             IsContainer: false, ChildKind: null, Committable: true,
             AcquisitionKind: EntityKind.AudioTrack, Discoverable: false, AcquireFromEntity: true)

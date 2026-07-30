@@ -42,7 +42,6 @@ public sealed class AudioLibraryEntityKindDefinition() : RootEntityKindDefinitio
     [
         new(RequestMediaKind.Album, "Album", "Albums", "track", EntityKind.AudioLibrary, EntityKind.AudioLibrary,
             ProfileEntityKind: EntityKind.AudioLibrary,
-            LibraryRootMediaCapability: LibraryRootMediaCapability.ScanAudio,
             ReviewSelection: RequestReviewSelection.Root,
             IsContainer: false, ChildKind: RequestMediaKind.Track, Committable: true,
             AcquisitionKind: EntityKind.AudioLibrary, MaterializeChildPhantoms: true)

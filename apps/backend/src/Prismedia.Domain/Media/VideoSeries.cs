@@ -47,7 +47,6 @@ public sealed class VideoSeriesEntityKindDefinition() : EntityKindDefinition<Vid
     [
         new(RequestMediaKind.Series, "Series", "Series", "season", EntityKind.VideoSeries, EntityKind.VideoSeries,
             ProfileEntityKind: EntityKind.VideoSeries,
-            LibraryRootMediaCapability: LibraryRootMediaCapability.ScanVideos,
             ReviewSelection: RequestReviewSelection.DirectChildren,
             IsContainer: true, ChildKind: RequestMediaKind.Season, Committable: true,
             AcquisitionKind: EntityKind.VideoSeason)
@@ -134,7 +133,6 @@ public sealed class VideoSeasonEntityKindDefinition() : RootEntityKindDefinition
     [
         new(RequestMediaKind.Season, "Season", "Seasons", "episode", EntityKind.VideoSeason, EntityKind.VideoSeason,
             ProfileEntityKind: EntityKind.VideoSeries,
-            LibraryRootMediaCapability: LibraryRootMediaCapability.ScanVideos,
             ReviewSelection: RequestReviewSelection.Root,
             IsContainer: false, ChildKind: RequestMediaKind.Episode, Committable: true,
             AcquisitionKind: EntityKind.VideoSeason, Discoverable: false, AcquireFromEntity: true,

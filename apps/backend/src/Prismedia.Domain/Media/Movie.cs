@@ -41,7 +41,7 @@ public sealed class MovieEntityKindDefinition() : EntityKindDefinition<Movie>(
     public override IReadOnlyList<RequestKindDescriptor> RequestKinds =>
     [
         new(RequestMediaKind.Movie, "Movie", "Movies", null, EntityKind.Movie, EntityKind.Movie,
-            ProfileEntityKind: EntityKind.Movie, LibraryRootMediaCapability: LibraryRootMediaCapability.ScanVideos,
+            ProfileEntityKind: EntityKind.Movie,
             ReviewSelection: RequestReviewSelection.Root,
             IsContainer: false, ChildKind: null, Committable: true,
             AcquisitionKind: EntityKind.Movie)

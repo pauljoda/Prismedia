@@ -53,7 +53,6 @@ public sealed class VideoEntityKindDefinition() : EntityKindDefinition<Video>(
     [
         new(RequestMediaKind.Episode, "Episode", "Episodes", null, EntityKind.Video, EntityKind.Video,
             ProfileEntityKind: EntityKind.VideoSeries,
-            LibraryRootMediaCapability: LibraryRootMediaCapability.ScanVideos,
             ReviewSelection: RequestReviewSelection.Root,
             IsContainer: false, ChildKind: null, Committable: true,
             AcquisitionKind: EntityKind.Video, Discoverable: false, AcquireFromEntity: true)

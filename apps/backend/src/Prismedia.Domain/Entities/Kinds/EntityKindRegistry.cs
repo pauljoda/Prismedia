@@ -203,16 +203,6 @@ public static class EntityKindRegistry {
                 $"[{string.Join(", ", profileOrders)}].");
         }
 
-        foreach (var descriptor in requestDescriptors.Where(descriptor => descriptor.ProfileEntityKind is not null)) {
-            var profileKind = descriptor.ProfileEntityKind!.Value;
-            var expectedCapability = profiles[profileKind].LibraryRootMediaCapability;
-            if (descriptor.LibraryRootMediaCapability != expectedCapability) {
-                throw new InvalidOperationException(
-                    $"Request kind '{descriptor.Kind}' declares root capability " +
-                    $"'{descriptor.LibraryRootMediaCapability}', but profile kind '{profileKind}' requires " +
-                    $"'{expectedCapability}'.");
-            }
-        }
     }
 
     private static void RejectDuplicateStructuralCounts(EntityKindDefinition definition) {

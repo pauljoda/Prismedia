@@ -34,7 +34,7 @@ public sealed class BookAuthorEntityKindDefinition() : RootEntityKindDefinition<
     public override IReadOnlyList<RequestKindDescriptor> RequestKinds =>
     [
         new(RequestMediaKind.Author, "Author", "Authors", "book", EntityKind.Person, EntityKind.BookAuthor,
-            ProfileEntityKind: EntityKind.Book, LibraryRootMediaCapability: LibraryRootMediaCapability.ScanBooks,
+            ProfileEntityKind: EntityKind.Book,
             ReviewSelection: RequestReviewSelection.DirectChildren,
             IsContainer: true, ChildKind: RequestMediaKind.Book, Committable: true,
             AcquisitionKind: EntityKind.Book)
