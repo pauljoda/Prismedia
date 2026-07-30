@@ -1,6 +1,8 @@
+using System.Linq.Expressions;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Prismedia.Application.Entities;
+using Prismedia.Application.Requests;
 using Prismedia.Contracts.Entities;
 using Prismedia.Domain.Entities;
 using Prismedia.Infrastructure.Media.Processing;
@@ -806,32 +808,10 @@ public sealed partial class EfEntityReadService : IEntityReadService {
             .Where(profile => profile.IsDefault && !hiddenRootIds.Contains(profile.TargetLibraryRootId))
             .Select(profile => profile.Kind);
 
-        var bookCode = EntityKind.Book.ToCode();
-        var bookAuthorCode = EntityKind.BookAuthor.ToCode();
-        var movieCode = EntityKind.Movie.ToCode();
-        var videoSeriesCode = EntityKind.VideoSeries.ToCode();
-        var videoSeasonCode = EntityKind.VideoSeason.ToCode();
-        var videoCode = EntityKind.Video.ToCode();
-        var musicArtistCode = EntityKind.MusicArtist.ToCode();
-        var audioLibraryCode = EntityKind.AudioLibrary.ToCode();
-
         var defaultProfileHiddenEntityIds = _db.Entities
             .Where(entity => entity.IsWanted &&
-                !directlyTargetedEntityIds.Contains(entity.Id) &&
-                (hiddenDefaultProfileKinds.Contains(EntityKind.Book) &&
-                    (entity.KindCode == bookCode || entity.KindCode == bookAuthorCode) ||
-                 hiddenDefaultProfileKinds.Contains(EntityKind.Movie) && entity.KindCode == movieCode ||
-                 hiddenDefaultProfileKinds.Contains(EntityKind.VideoSeries) &&
-                    (entity.KindCode == videoSeriesCode || entity.KindCode == videoSeasonCode || entity.KindCode == videoCode) ||
-                 hiddenDefaultProfileKinds.Contains(EntityKind.AudioLibrary) &&
-                    (entity.KindCode == musicArtistCode || entity.KindCode == audioLibraryCode)) &&
-                !(visibleDefaultProfileKinds.Contains(EntityKind.Book) &&
-                    (entity.KindCode == bookCode || entity.KindCode == bookAuthorCode) ||
-                  visibleDefaultProfileKinds.Contains(EntityKind.Movie) && entity.KindCode == movieCode ||
-                  visibleDefaultProfileKinds.Contains(EntityKind.VideoSeries) &&
-                    (entity.KindCode == videoSeriesCode || entity.KindCode == videoSeasonCode || entity.KindCode == videoCode) ||
-                  visibleDefaultProfileKinds.Contains(EntityKind.AudioLibrary) &&
-                    (entity.KindCode == musicArtistCode || entity.KindCode == audioLibraryCode)))
+                !directlyTargetedEntityIds.Contains(entity.Id))
+            .Where(DefaultProfileVisibilityExpression(hiddenDefaultProfileKinds, visibleDefaultProfileKinds))
             .Select(entity => entity.Id);
 
         return _db.Entities
@@ -841,6 +821,44 @@ public sealed partial class EfEntityReadService : IEntityReadService {
                 !visibleMonitorEntityIds.Contains(entity.Id))
             .Select(entity => entity.Id)
             .Concat(defaultProfileHiddenEntityIds);
+    }
+
+    internal static Expression<Func<EntityRow, bool>> DefaultProfileVisibilityExpression(
+        IQueryable<EntityKind> hiddenProfileKinds,
+        IQueryable<EntityKind> visibleProfileKinds) {
+        var entity = Expression.Parameter(typeof(EntityRow), "entity");
+        var hiddenMatch = DefaultProfileMatchExpression(entity, hiddenProfileKinds);
+        var visibleMatch = DefaultProfileMatchExpression(entity, visibleProfileKinds);
+        return Expression.Lambda<Func<EntityRow, bool>>(
+            Expression.AndAlso(hiddenMatch, Expression.Not(visibleMatch)),
+            entity);
+    }
+
+    private static Expression DefaultProfileMatchExpression(
+        ParameterExpression entity,
+        IQueryable<EntityKind> profileKinds) {
+        var kindCode = Expression.Property(entity, nameof(EntityRow.KindCode));
+        Expression match = Expression.Constant(false);
+        foreach (var (profileKind, wantedKinds) in RequestKindRegistry.WantedEntityKindsByProfile) {
+            var profileIsActive = Expression.Call(
+                typeof(Queryable),
+                nameof(Queryable.Contains),
+                [typeof(EntityKind)],
+                profileKinds.Expression,
+                Expression.Constant(profileKind));
+            var wantedKindCodes = wantedKinds.Select(kind => kind.ToCode()).ToArray();
+            var entityBelongsToProfile = Expression.Call(
+                typeof(Enumerable),
+                nameof(Enumerable.Contains),
+                [typeof(string)],
+                Expression.Constant(wantedKindCodes),
+                kindCode);
+            match = Expression.OrElse(
+                match,
+                Expression.AndAlso(profileIsActive, entityBelongsToProfile));
+        }
+
+        return match;
     }
 
     private IQueryable<EntityRow> ApplyEnabledLibraryVisibility(IQueryable<EntityRow> query, string? knownKindCode = null) {

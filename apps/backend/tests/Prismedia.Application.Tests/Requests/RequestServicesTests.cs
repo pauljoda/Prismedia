@@ -104,6 +104,9 @@ public sealed class RequestServicesTests {
             Assert.Equal(descriptor.ChildKind is not null, descriptor.ChildNoun is not null);
             if (descriptor.Committable) {
                 Assert.NotNull(descriptor.ProfileEntityKind);
+                Assert.Contains(
+                    descriptor.WantedEntityKind,
+                    RequestKindRegistry.WantedEntityKindsByProfile[descriptor.ProfileEntityKind!.Value]);
             }
 
             // A committable container must fan out into a committable child kind, or a commit could

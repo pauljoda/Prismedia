@@ -162,6 +162,85 @@ public sealed class UserLibraryVisibilityTests {
     }
 
     [Fact]
+    public async Task DefaultProfileVisibilityIncludesEveryRequestKindInTheProfileFamily() {
+        await using var db = CreateContext();
+        var wantedTrackId = Guid.NewGuid();
+        var now = DateTimeOffset.UtcNow;
+        db.LibraryRoots.AddRange(
+            new LibraryRootRow {
+                Id = GrantedRootId,
+                Path = "/media/granted",
+                Label = "Granted",
+                Enabled = true,
+                CreatedAt = now,
+                UpdatedAt = now
+            },
+            new LibraryRootRow {
+                Id = RestrictedRootId,
+                Path = "/media/audio",
+                Label = "Audio",
+                Enabled = true,
+                ScanAudio = true,
+                CreatedAt = now,
+                UpdatedAt = now
+            });
+        db.BookAcquisitionProfiles.Add(new BookAcquisitionProfileRow {
+            Id = Guid.NewGuid(),
+            Kind = EntityKind.AudioLibrary,
+            DisplayName = "Default Audio",
+            IsDefault = true,
+            TargetLibraryRootId = RestrictedRootId,
+            CreatedAt = now,
+            UpdatedAt = now
+        });
+        db.Entities.Add(new EntityRow {
+            Id = wantedTrackId,
+            KindCode = EntityKind.AudioTrack.ToCode(),
+            Title = "Future Track",
+            IsWanted = true,
+            CreatedAt = now,
+            UpdatedAt = now
+        });
+        db.AudioTrackDetails.Add(new AudioTrackDetailRow { EntityId = wantedTrackId });
+        await db.SaveChangesAsync();
+        var service = CreateService(db, TestUserContext.Member(GrantedRootId));
+
+        var list = await service.ListAsync(
+            EntityKind.AudioTrack.ToCode(),
+            null,
+            null,
+            null,
+            null,
+            CancellationToken.None,
+            wanted: true);
+
+        Assert.Empty(list.Items);
+    }
+
+    [Fact]
+    public void DefinitionDerivedDefaultProfileVisibilityTranslatesForPostgres() {
+        var options = new DbContextOptionsBuilder<PrismediaDbContext>()
+            .UseNpgsql("Host=localhost;Database=prismedia;Username=prismedia;Password=prismedia")
+            .Options;
+        using var db = new PrismediaDbContext(options);
+        var hiddenRootIds = new[] { RestrictedRootId };
+        var profiles = db.BookAcquisitionProfiles;
+        var hiddenKinds = profiles
+            .Where(profile => profile.IsDefault && hiddenRootIds.Contains(profile.TargetLibraryRootId))
+            .Select(profile => profile.Kind);
+        var visibleKinds = profiles
+            .Where(profile => profile.IsDefault && !hiddenRootIds.Contains(profile.TargetLibraryRootId))
+            .Select(profile => profile.Kind);
+
+        var sql = db.Entities
+            .Where(EfEntityReadService.DefaultProfileVisibilityExpression(hiddenKinds, visibleKinds))
+            .ToQueryString();
+
+        Assert.Contains("SELECT", sql, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(EntityKind.AudioTrack.ToCode(), sql, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task EngagementStateIsIsolatedPerUser() {
         await using var db = CreateContext();
         await SeedTwoRootedVideosAsync(db);

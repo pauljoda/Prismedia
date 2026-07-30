@@ -12,6 +12,21 @@ public static class RequestKindRegistry {
     private static readonly IReadOnlyDictionary<RequestMediaKind, RequestKindDescriptor> ByKind =
         All.ToDictionary(descriptor => descriptor.Kind);
 
+    /// <summary>
+    /// Wanted Entity kinds governed by each acquisition-profile kind. Visibility and profile-aware
+    /// projections consume this index instead of rebuilding request-family membership.
+    /// </summary>
+    public static IReadOnlyDictionary<EntityKind, IReadOnlyList<EntityKind>> WantedEntityKindsByProfile { get; } =
+        All.Where(descriptor => descriptor is { Committable: true, ProfileEntityKind: not null })
+            .GroupBy(descriptor => descriptor.ProfileEntityKind!.Value)
+            .ToDictionary(
+                group => group.Key,
+                group => (IReadOnlyList<EntityKind>)group
+                    .Select(descriptor => descriptor.WantedEntityKind)
+                    .Distinct()
+                    .Order()
+                    .ToArray());
+
     /// <summary>The descriptor for a kind, or null when the kind isn't part of the request flow (e.g. the plugin passthrough).</summary>
     public static RequestKindDescriptor? Find(RequestMediaKind kind) =>
         ByKind.GetValueOrDefault(kind);
