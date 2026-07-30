@@ -12,8 +12,9 @@
     Users,
   } from "@lucide/svelte";
   import { cn } from "@prismedia/ui-svelte";
-  import EntityDetailSkeleton from "$lib/components/entities/EntityDetailSkeleton.svelte";
+  import EntityDetailPageState from "$lib/components/entities/EntityDetailPageState.svelte";
   import EntityDetailHeroDates from "$lib/components/entities/EntityDetailHeroDates.svelte";
+  import { useEntityDetailPage } from "$lib/components/entities/entity-detail-page-controller.svelte";
   import { fetchEntity, fetchEntityThumbnails, type EntityCardFull } from "$lib/api/entities";
   import { fetchSettingsValues, type LibrarySettings } from "$lib/api/settings";
   import {
@@ -27,17 +28,8 @@
     negotiateForceTranscodeSrc,
   } from "$lib/player/playback-negotiation";
   import { durationToSeconds } from "$lib/utils/format";
-  import {
-    updateEntityRating,
-    updateEntityFlags,
-    updateEntityMetadata,
-  } from "$lib/api/entity-mutations";
   import { settingKeys, valuesToLibrarySettings } from "$lib/settings/app-settings";
   import { getCapability } from "$lib/api/capabilities";
-  import {
-    toggleOptimisticEntityFlag,
-    updateOptimisticEntityRating,
-  } from "$lib/entities/entity-detail-state";
   import { refreshAfterManagedFileRevert } from "$lib/entities/entity-file-management";
   import { useIdentifyDetailAction } from "$lib/components/identify/use-identify-detail-action.svelte";
   import type { EntityDetailCredit, EntityDetailTag } from "$lib/entities/entity-detail";
@@ -48,17 +40,14 @@
     type EntityThumbnailCard,
   } from "$lib/entities/entity-relationship-thumbnails";
   import { resolveEntityHref } from "$lib/entities/entity-routes";
-  import { CREDIT_ROLE, ENTITY_KIND, type EntityKindCode } from "$lib/entities/entity-codes";
+  import { CAPABILITY_KIND, CREDIT_ROLE, ENTITY_KIND, type EntityKindCode } from "$lib/entities/entity-codes";
   import { extractVideoPlayerProps, getPlaybackState } from "$lib/entities/video-capabilities";
-  import { useNsfw } from "$lib/nsfw/store.svelte";
-  import { useAppChrome } from "$lib/stores/app-chrome.svelte";
   import NsfwBlur from "$lib/components/nsfw/NsfwBlur.svelte";
   import { isWanted } from "$lib/api/capabilities";
   import EntityAcquisitionCard from "$lib/components/acquisitions/EntityAcquisitionCard.svelte";
   import { useEntityAcquisition } from "$lib/components/acquisitions/use-entity-acquisition.svelte";
   import EntityDetail, {
     type EntityDetailActionButton,
-    type EntityMetadataUpdateRequest,
     type EntityDetailSection,
     type EntityDetailTab,
   } from "$lib/components/entities/EntityDetail.svelte";
@@ -74,20 +63,9 @@
     writeTranscriptDockPreference,
     writeTranscriptDockWidth,
   } from "./video-page-state";
-  import { redirectHiddenEntityNotFound } from "$lib/nsfw/hidden-entity";
   import { acquisitionStatusDisplay } from "$lib/requests/acquisition-status-display";
 
-  type LoadState = "loading" | "ready" | "error";
-
-  const nsfw = useNsfw();
-  const appChrome = useAppChrome();
-
-  let loadState: LoadState = $state("loading");
-  let video = $state<EntityCardFull | null>(null);
   let playbackInfo = $state<JellyfinPlaybackInfoResponse | null>(null);
-  let errorMessage: string | null = $state(null);
-  let lastNsfwMode = $state(nsfw.mode);
-  let ratingBusy = $state(false);
   let librarySettings = $state<LibrarySettings | null>(null);
   let relationshipCredits = $state<EntityDetailCredit[]>([]);
   let relationshipStudio = $state<EntityDetailCredit | null>(null);
@@ -96,6 +74,42 @@
   // season → series parent chain) so it can be linked from the breadcrumb and the detail tab.
   let seriesCard = $state<EntityThumbnailCard | null>(null);
   let seriesRef = $state<{ id: string; title: string } | null>(null);
+
+  const detail = useEntityDetailPage<EntityCardFull>({
+    loadKey: () => page.params.id ?? "",
+    load: async ({ signal }) => {
+      const nextVideo = await fetchEntity(page.params.id ?? "", { signal });
+      if (await redirectMovieChildVideo(nextVideo, signal)) return nextVideo;
+
+      const relationshipsPromise = hydrateVideoRelationships(nextVideo, signal);
+      const playbackInfoPromise = isWanted(nextVideo.capabilities)
+        ? null
+        : loadPlaybackInfo(
+            nextVideo.id,
+            playbackInfo?.PlaySessionId,
+            selectedAudioStreamIndex,
+          );
+      const [relationships, nextPlaybackInfo] = await Promise.all([
+        relationshipsPromise,
+        playbackInfoPromise,
+      ]);
+      signal.throwIfAborted();
+
+      playbackInfo = nextPlaybackInfo;
+      relationshipCredits = relationships.credits;
+      relationshipStudio = relationships.studio;
+      relationshipTags = relationships.relationshipTags;
+      seriesCard = relationships.seriesCard;
+      seriesRef = relationships.seriesRef;
+      return nextVideo;
+    },
+    breadcrumbs: (currentVideo) => [
+      { label: "Videos", href: "/videos" },
+      ...(seriesRef ? [{ label: seriesRef.title, href: `/series/${seriesRef.id}` }] : []),
+      { label: currentVideo.title },
+    ],
+  });
+  const video = $derived(detail.entity);
 
   let playerHandle: VideoPlayerHandle | undefined = $state();
   let currentTime = $state(0);
@@ -142,14 +156,14 @@
   const acq = useEntityAcquisition({
     entityId: () => video?.id,
     capabilities: () => video?.capabilities,
-    onChanged: () => loadVideo({ showLoading: false }),
-    onStatusChanged: () => loadVideo({ showLoading: false }),
+    onChanged: () => detail.reload({ showLoading: false }),
+    onStatusChanged: () => detail.reload({ showLoading: false }),
     onPruned: () => goto(seriesRef ? `/series/${seriesRef.id}` : "/videos"),
   });
   const wantedStateLabel = $derived(acquisitionStatusDisplay(acq.acquisition?.summary.status).label);
   const fileManagement = {
     onDeleted: () => goto(seriesRef ? `/series/${seriesRef.id}` : "/videos"),
-    onReverted: () => refreshAfterManagedFileRevert(acq, () => loadVideo({ showLoading: false })),
+    onReverted: () => refreshAfterManagedFileRevert(acq, () => detail.reload({ showLoading: false })),
   };
 
   const playerProps = $derived.by(() => {
@@ -253,7 +267,7 @@
 
   const flagsNsfw = $derived.by(() => {
     if (!video) return false;
-    const cap = getCapability(video.capabilities, "flags");
+    const cap = getCapability(video.capabilities, CAPABILITY_KIND.flags);
     return cap?.isNsfw === true;
   });
 
@@ -264,7 +278,7 @@
 
   const durationSeconds = $derived.by(() => {
     if (!video) return 0;
-    return durationToSeconds(getCapability(video.capabilities, "technical")?.duration ?? null) ?? 0;
+    return durationToSeconds(getCapability(video.capabilities, CAPABILITY_KIND.technical)?.duration ?? null) ?? 0;
   });
   const initialPlaybackTime = $derived(
     playbackState && !playbackState.completedAt && playbackState.resumeSeconds > 5
@@ -340,7 +354,6 @@
   });
 
   onMount(() => {
-    void loadVideo();
     let cancelled = false;
 
     const dockPrefs = readTranscriptDockPreferences(window.localStorage);
@@ -374,12 +387,6 @@
     };
   });
 
-  $effect(() => {
-    if (nsfw.mode === lastNsfwMode) return;
-    lastNsfwMode = nsfw.mode;
-    void loadVideo();
-  });
-
   // Reset play tracking only when the video ID actually changes. A same-video metadata
   // refresh (refreshVideo via onTracksChanged) reassigns `video` but must not tear down the
   // in-flight playback session, or progress reporting would stop after the first update.
@@ -396,15 +403,6 @@
       clearInterval(playbackUpdateTimer);
       playbackUpdateTimer = null;
     }
-  });
-
-  $effect(() => {
-    if (!video) return;
-    return appChrome.setBreadcrumbs([
-      { label: "Videos", href: "/videos" },
-      ...(seriesRef ? [{ label: seriesRef.title, href: `/series/${seriesRef.id}` }] : []),
-      { label: video.title },
-    ]);
   });
 
   // Hydrate subtitle preference from localStorage.
@@ -451,58 +449,18 @@
 
   // ── Data loading ───────────────────────────────────────────────────
 
-  async function loadVideo(options = { showLoading: true }) {
-    // Silent for acquisition-driven refreshes: never flash the player page back to its skeleton.
-    if (options.showLoading || !video) loadState = "loading";
-    errorMessage = null;
-    try {
-      const nextVideo = await fetchEntity(page.params.id ?? "");
-      if (await redirectMovieChildVideo(nextVideo)) return;
-      video = nextVideo;
-      if (isWanted(nextVideo.capabilities)) {
-        // A phantom episode has no stream to prepare; the page renders its wanted surface instead.
-        playbackInfo = null;
-        await hydrateVideoRelationships(nextVideo);
-        loadState = "ready";
-        return;
-      }
-      const [nextPlaybackInfo] = await Promise.all([
-        loadPlaybackInfo(nextVideo.id),
-        hydrateVideoRelationships(nextVideo),
-      ]);
-      playbackInfo = nextPlaybackInfo;
-      loadState = "ready";
-    } catch (err) {
-      if (redirectHiddenEntityNotFound(err, nsfw.mode)) return;
-      errorMessage = err instanceof Error ? err.message : String(err);
-      loadState = "error";
-    }
+  /** Reloads the root entity without interrupting active playback. */
+  function refreshVideo(): Promise<void> {
+    return detail.reload({ showLoading: false });
   }
 
-  async function refreshVideo() {
-    try {
-      const nextVideo = await fetchEntity(video?.id ?? page.params.id ?? "");
-      video = nextVideo;
-      const [nextPlaybackInfo] = await Promise.all([
-        loadPlaybackInfo(nextVideo.id, playbackInfo?.PlaySessionId, selectedAudioStreamIndex),
-        hydrateVideoRelationships(nextVideo),
-      ]);
-      playbackInfo = nextVideo
-        ? nextPlaybackInfo
-        : null;
-    } catch {
-      // best-effort
-    }
-  }
-
-  async function hydrateVideoRelationships(nextVideo: EntityCardFull) {
-    const [relationships] = await Promise.all([
-      hydrateStandardRelationshipCards(nextVideo),
-      resolveSeries(nextVideo),
+  async function hydrateVideoRelationships(nextVideo: EntityCardFull, signal: AbortSignal) {
+    const [relationships, series] = await Promise.all([
+      hydrateStandardRelationshipCards(nextVideo, { signal }),
+      resolveSeries(nextVideo, signal),
     ]);
-    relationshipCredits = relationships.credits;
-    relationshipStudio = relationships.studio;
-    relationshipTags = relationships.relationshipTags;
+    signal.throwIfAborted();
+    return { ...relationships, ...series };
   }
 
   /**
@@ -510,24 +468,27 @@
    * (episode → season → series), so the video can link back to its series. A standalone
    * video (or a movie child, which redirects earlier) leaves the series unset.
    */
-  async function resolveSeries(nextVideo: EntityCardFull) {
-    seriesCard = null;
-    seriesRef = null;
+  async function resolveSeries(nextVideo: EntityCardFull, signal: AbortSignal) {
     const seasonId = nextVideo.parentEntityId;
-    if (!seasonId) return;
-    const [season] = await fetchEntityThumbnails([seasonId]).catch(() => []);
-    if (season?.kind !== ENTITY_KIND.videoSeason || !season.parentEntityId) return;
-    const [series] = await fetchEntityThumbnails([season.parentEntityId]).catch(() => []);
-    if (series?.kind !== ENTITY_KIND.videoSeries) return;
+    if (!seasonId) return { seriesCard: null, seriesRef: null };
+    const [season] = await fetchEntityThumbnails([seasonId], { signal }).catch(() => []);
+    signal.throwIfAborted();
+    if (season?.kind !== ENTITY_KIND.videoSeason || !season.parentEntityId) {
+      return { seriesCard: null, seriesRef: null };
+    }
+    const [series] = await fetchEntityThumbnails([season.parentEntityId], { signal }).catch(() => []);
+    signal.throwIfAborted();
+    if (series?.kind !== ENTITY_KIND.videoSeries) return { seriesCard: null, seriesRef: null };
     const href = resolveEntityHref(series.kind, series.id);
-    seriesRef = { id: series.id, title: series.title };
-    [seriesCard] = thumbnailsToCards([series], { hrefFor: () => href });
+    const [seriesCard] = thumbnailsToCards([series], { hrefFor: () => href });
+    return { seriesCard: seriesCard ?? null, seriesRef: { id: series.id, title: series.title } };
   }
 
-  async function redirectMovieChildVideo(nextVideo: EntityCardFull) {
+  async function redirectMovieChildVideo(nextVideo: EntityCardFull, signal: AbortSignal) {
     if (!nextVideo.parentEntityId) return false;
 
-    const parent = await fetchEntity(nextVideo.parentEntityId).catch(() => null);
+    const parent = await fetchEntity(nextVideo.parentEntityId, { signal }).catch(() => null);
+    signal.throwIfAborted();
     if (parent?.kind !== ENTITY_KIND.movie) return false;
 
     const movieHref = resolveEntityHref(ENTITY_KIND.movie, parent.id);
@@ -695,33 +656,6 @@
     }
   }
 
-  // ── Entity mutations ───────────────────────────────────────────────
-
-  async function handleRatingChange(value: number | null) {
-    if (!video || ratingBusy) return;
-    ratingBusy = true;
-    try {
-      await updateOptimisticEntityRating(video, value, (next) => (video = next), updateEntityRating);
-    } finally {
-      ratingBusy = false;
-    }
-  }
-
-  async function handleFavoriteToggle() {
-    if (!video) return;
-    await toggleOptimisticEntityFlag(video, "isFavorite", (next) => (video = next), updateEntityFlags);
-  }
-
-  async function handleOrganizedToggle() {
-    if (!video) return;
-    await toggleOptimisticEntityFlag(video, "isOrganized", (next) => (video = next), updateEntityFlags);
-  }
-
-  async function handleMetadataSave(request: EntityMetadataUpdateRequest) {
-    if (!video) return;
-    await updateEntityMetadata(video.id, request, { kind: video.kind });
-    await refreshVideo();
-  }
 </script>
 
 <svelte:head>
@@ -729,15 +663,18 @@
 </svelte:head>
 
 <div class="detail-page">
-  {#if loadState === "loading"}
+  {#if detail.loadState === "loading"}
     <div class="player-skeleton" aria-hidden="true"></div>
-    <EntityDetailSkeleton showHero={false} tabCount={4} />
-  {:else if loadState === "error"}
-    <div class="error-notice">
-      <p>{errorMessage ?? "Failed to load video."}</p>
-      <button type="button" onclick={() => void loadVideo()}>Retry</button>
-    </div>
-  {:else if card && video && playerProps}
+  {/if}
+  <EntityDetailPageState
+    loadState={detail.loadState}
+    errorMessage={detail.errorMessage}
+    fallbackError="Failed to load video."
+    onRetry={detail.retry}
+    showHero={false}
+    tabCount={4}
+  >
+  {#if card && video && playerProps}
     <NsfwBlur isNsfw={flagsNsfw}>
       <div class={cn(isTranscriptDocked && "lg:flex lg:items-start lg:gap-0")}>
         <div
@@ -839,11 +776,11 @@
     <EntityDetail
       {card}
       wantedStatus={acq.acquisition?.summary.status ?? null}
-      onRatingChange={handleRatingChange}
-      onFavoriteToggle={handleFavoriteToggle}
-      onOrganizedToggle={handleOrganizedToggle}
-      onMetadataSave={handleMetadataSave}
-      {ratingBusy}
+      onRatingChange={detail.changeRating}
+      onFavoriteToggle={detail.toggleFavorite}
+      onOrganizedToggle={detail.toggleOrganized}
+      onMetadataSave={detail.saveMetadata}
+      ratingBusy={detail.ratingBusy}
       showHero={false}
       posterSize="none"
       tabs={detailTabs}
@@ -865,8 +802,8 @@
             {acq}
             entity={video}
             {fileManagement}
-            onCancelled={() => void loadVideo({ showLoading: false })}
-            onImported={() => loadVideo({ showLoading: false })}
+            onCancelled={() => detail.reload({ showLoading: false })}
+            onImported={() => detail.reload({ showLoading: false })}
           />
         {:else}
           <VideoDetailSectionContent
@@ -901,6 +838,11 @@
     <EntityDetail
       {card}
       wantedStatus={acq.acquisition?.summary.status ?? null}
+      onRatingChange={detail.changeRating}
+      onFavoriteToggle={detail.toggleFavorite}
+      onOrganizedToggle={detail.toggleOrganized}
+      onMetadataSave={detail.saveMetadata}
+      ratingBusy={detail.ratingBusy}
       posterSize="medium"
       actionButtons={heroActions}
       tabs={wantedDetailTabs}
@@ -916,13 +858,14 @@
             {acq}
             entity={video}
             {fileManagement}
-            onCancelled={() => void loadVideo({ showLoading: false })}
-            onImported={() => loadVideo({ showLoading: false })}
+            onCancelled={() => detail.reload({ showLoading: false })}
+            onImported={() => detail.reload({ showLoading: false })}
           />
         {/if}
       {/snippet}
     </EntityDetail>
   {/if}
+  </EntityDetailPageState>
 </div>
 
 <style>
@@ -938,27 +881,6 @@
     aspect-ratio: 16 / 9;
     background: #050508;
     animation: pulse 1.2s ease-in-out infinite;
-  }
-
-  .error-notice {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 1rem;
-    padding: 1rem;
-    border: 1px solid color-mix(in srgb, #ef4444 50%, var(--color-border, #1c2235));
-    background: var(--color-surface-2, #101420);
-    color: var(--color-text-muted, #8a93a6);
-    font-size: 0.85rem;
-  }
-
-  .error-notice button {
-    border: 1px solid var(--color-border, #1c2235);
-    background: var(--color-surface-3, #151a28);
-    color: var(--color-text-muted, #8a93a6);
-    padding: 0.4rem 0.8rem;
-    font-size: 0.78rem;
-    cursor: pointer;
   }
 
   .player-surface {

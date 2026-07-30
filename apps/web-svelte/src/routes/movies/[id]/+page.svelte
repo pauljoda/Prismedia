@@ -14,7 +14,8 @@
   import { goto } from "$app/navigation";
   import EntityAcquisitionCard from "$lib/components/acquisitions/EntityAcquisitionCard.svelte";
   import { useEntityAcquisition } from "$lib/components/acquisitions/use-entity-acquisition.svelte";
-  import EntityDetailSkeleton from "$lib/components/entities/EntityDetailSkeleton.svelte";
+  import EntityDetailPageState from "$lib/components/entities/EntityDetailPageState.svelte";
+  import { useEntityDetailPage } from "$lib/components/entities/entity-detail-page-controller.svelte";
   import EntityDetailHeroDates from "$lib/components/entities/EntityDetailHeroDates.svelte";
   import { fetchEntity, type EntityCardFull } from "$lib/api/entities";
   import { fetchSettingsValues, type LibrarySettings } from "$lib/api/settings";
@@ -29,17 +30,8 @@
     negotiateForceTranscodeSrc,
   } from "$lib/player/playback-negotiation";
   import { durationToSeconds } from "$lib/utils/format";
-  import {
-    updateEntityRating,
-    updateEntityFlags,
-    updateEntityMetadata,
-  } from "$lib/api/entity-mutations";
   import { settingKeys, valuesToLibrarySettings } from "$lib/settings/app-settings";
   import { getCapability, isWanted } from "$lib/api/capabilities";
-  import {
-    toggleOptimisticEntityFlag,
-    updateOptimisticEntityRating,
-  } from "$lib/entities/entity-detail-state";
   import { refreshAfterManagedFileRevert } from "$lib/entities/entity-file-management";
   import { useIdentifyDetailAction } from "$lib/components/identify/use-identify-detail-action.svelte";
   import type { EntityDetailCredit, EntityDetailTag } from "$lib/entities/entity-detail";
@@ -52,12 +44,9 @@
   import { getChildIds } from "$lib/entities/entity-children";
   import { CAPABILITY_KIND, CREDIT_ROLE, ENTITY_KIND, type EntityKindCode } from "$lib/entities/entity-codes";
   import { extractVideoPlayerProps, getPlaybackState } from "$lib/entities/video-capabilities";
-  import { useNsfw } from "$lib/nsfw/store.svelte";
-  import { useAppChrome } from "$lib/stores/app-chrome.svelte";
   import NsfwBlur from "$lib/components/nsfw/NsfwBlur.svelte";
   import EntityDetail, {
     type EntityDetailActionButton,
-    type EntityMetadataUpdateRequest,
     type EntityDetailSection,
     type EntityDetailTab,
   } from "$lib/components/entities/EntityDetail.svelte";
@@ -73,23 +62,46 @@
     writeTranscriptDockPreference,
     writeTranscriptDockWidth,
   } from "../../videos/[id]/video-page-state";
-  import { redirectHiddenEntityNotFound } from "$lib/nsfw/hidden-entity";
   import { acquisitionStatusDisplay } from "$lib/requests/acquisition-status-display";
 
-  type LoadState = "loading" | "ready" | "error";
-
-  const nsfw = useNsfw();
-  const appChrome = useAppChrome();
-
-  let loadState: LoadState = $state("loading");
-  let movie = $state<EntityCardFull | null>(null);
+  const detail = useEntityDetailPage<EntityCardFull>({
+    loadKey: () => page.params.id ?? "",
+    load: async ({ signal }) => {
+      const nextMovie = await fetchEntity(page.params.id ?? "", { signal });
+      const childVideoId = getChildIds(nextMovie, ENTITY_KIND.video)[0];
+      if (!childVideoId) {
+        const relationships = await hydrateMovieRelationships(nextMovie, signal);
+        signal.throwIfAborted();
+        video = null;
+        playbackInfo = null;
+        relationshipCredits = relationships.credits;
+        relationshipStudio = relationships.studio;
+        relationshipTags = relationships.relationshipTags;
+        return nextMovie;
+      }
+      const nextVideo = await fetchEntity(childVideoId, { signal });
+      const [nextPlaybackInfo, relationships] = await Promise.all([
+        loadPlaybackInfo(nextVideo.id, playbackInfo?.PlaySessionId, selectedAudioStreamIndex),
+        hydrateMovieRelationships(nextMovie, signal),
+      ]);
+      signal.throwIfAborted();
+      video = nextVideo;
+      playbackInfo = nextPlaybackInfo;
+      relationshipCredits = relationships.credits;
+      relationshipStudio = relationships.studio;
+      relationshipTags = relationships.relationshipTags;
+      return nextMovie;
+    },
+    breadcrumbs: (currentMovie) => [
+      { label: "Movies", href: "/movies" },
+      { label: currentMovie.title },
+    ],
+  });
+  const movie = $derived(detail.entity);
   let video = $state<EntityCardFull | null>(null);
   // The acquisition backing this movie (a wanted placeholder still searching/downloading, or the
   // import that produced it), so its state is managed right here instead of only under /request.
   let playbackInfo = $state<JellyfinPlaybackInfoResponse | null>(null);
-  let errorMessage: string | null = $state(null);
-  let lastNsfwMode = $state(nsfw.mode);
-  let ratingBusy = $state(false);
   let librarySettings = $state<LibrarySettings | null>(null);
   let relationshipCredits = $state<EntityDetailCredit[]>([]);
   let relationshipStudio = $state<EntityDetailCredit | null>(null);
@@ -136,14 +148,14 @@
   const acq = useEntityAcquisition({
     entityId: () => movie?.id,
     capabilities: () => movie?.capabilities,
-    onChanged: refreshMovie,
-    onStatusChanged: refreshMovie,
+    onChanged: () => detail.reload({ showLoading: false }),
+    onStatusChanged: () => detail.reload({ showLoading: false }),
     onPruned: () => goto("/movies"),
   });
   const wantedStateLabel = $derived(acquisitionStatusDisplay(acq.acquisition?.summary.status).label);
   const fileManagement = {
     onDeleted: () => goto("/movies"),
-    onReverted: () => refreshAfterManagedFileRevert(acq, refreshMovie),
+    onReverted: () => refreshAfterManagedFileRevert(acq, () => detail.reload({ showLoading: false })),
   };
   const videoId = $derived(video?.id ?? "");
 
@@ -323,7 +335,6 @@
   // ── Lifecycle ──────────────────────────────────────────────────────
 
   onMount(() => {
-    void loadMovie();
     let cancelled = false;
 
     const dockPrefs = readTranscriptDockPreferences(window.localStorage);
@@ -357,12 +368,6 @@
     };
   });
 
-  $effect(() => {
-    if (nsfw.mode === lastNsfwMode) return;
-    lastNsfwMode = nsfw.mode;
-    void loadMovie();
-  });
-
   // Reset play tracking when video ID changes.
   $effect(() => {
     playTracked = false;
@@ -375,14 +380,6 @@
       playbackUpdateTimer = null;
     }
     video?.id;
-  });
-
-  $effect(() => {
-    if (!movie) return;
-    return appChrome.setBreadcrumbs([
-      { label: "Movies", href: "/movies" },
-      { label: movie.title },
-    ]);
   });
 
   // Hydrate subtitle preference from localStorage.
@@ -429,77 +426,20 @@
 
   // ── Data loading ───────────────────────────────────────────────────
 
-  async function loadMovie() {
-    loadState = "loading";
-    errorMessage = null;
-    try {
-      const nextMovie = await fetchEntity(page.params.id ?? "");
-      const childVideoId = getChildIds(nextMovie, ENTITY_KIND.video)[0];
-      if (!childVideoId) {
-        // A wanted movie (request placeholder) has no video child yet: render metadata plus the
-        // inline acquisition surface instead of the player.
-        movie = nextMovie;
-        video = null;
-        playbackInfo = null;
-        await hydrateMovieRelationships(nextMovie);
-        loadState = "ready";
-        return;
-      }
-      const nextVideo = await fetchEntity(childVideoId);
-      movie = nextMovie;
-      video = nextVideo;
-      const [nextPlaybackInfo] = await Promise.all([
-        loadPlaybackInfo(nextVideo.id),
-        hydrateMovieRelationships(nextMovie),
-      ]);
-      playbackInfo = nextPlaybackInfo;
-      loadState = "ready";
-    } catch (err) {
-      if (redirectHiddenEntityNotFound(err, nsfw.mode)) return;
-      errorMessage = err instanceof Error ? err.message : String(err);
-      loadState = "error";
-    }
-  }
-
   const entityWanted = $derived(!!movie && isWanted(movie.capabilities));
 
   /** Cancelling a wanted movie's request deletes the placeholder entity, so this page no longer exists. */
   function handleAcquisitionCancelled() {
     // Cancel stops the download only — the wanted placeholder stays, so the page still exists.
-    void refreshMovie();
+    void detail.reload({ showLoading: false });
   }
 
   async function refreshMovie() {
-    try {
-      const nextMovie = await fetchEntity(movie?.id ?? page.params.id ?? "");
-      const childVideoId = getChildIds(nextMovie, ENTITY_KIND.video)[0];
-      if (!childVideoId) {
-        movie = nextMovie;
-        video = null;
-        playbackInfo = null;
-        await hydrateMovieRelationships(nextMovie);
-        return;
-      }
-      const nextVideo = await fetchEntity(childVideoId);
-      movie = nextMovie;
-      video = nextVideo;
-      const [nextPlaybackInfo] = await Promise.all([
-        loadPlaybackInfo(nextVideo.id, playbackInfo?.PlaySessionId, selectedAudioStreamIndex),
-        hydrateMovieRelationships(nextMovie),
-      ]);
-      playbackInfo = nextVideo
-        ? nextPlaybackInfo
-        : null;
-    } catch {
-      // best-effort
-    }
+    await detail.reload({ showLoading: false });
   }
 
-  async function hydrateMovieRelationships(nextMovie: EntityCardFull) {
-    const relationships = await hydrateStandardRelationshipCards(nextMovie);
-    relationshipCredits = relationships.credits;
-    relationshipStudio = relationships.studio;
-    relationshipTags = relationships.relationshipTags;
+  async function hydrateMovieRelationships(nextMovie: EntityCardFull, signal: AbortSignal) {
+    return hydrateStandardRelationshipCards(nextMovie, { signal });
   }
 
   async function loadPlaybackInfo(
@@ -649,33 +589,6 @@
     }
   }
 
-  // ── Entity mutations ───────────────────────────────────────────────
-
-  async function handleRatingChange(value: number | null) {
-    if (!movie || ratingBusy) return;
-    ratingBusy = true;
-    try {
-      await updateOptimisticEntityRating(movie, value, (next) => (movie = next), updateEntityRating);
-    } finally {
-      ratingBusy = false;
-    }
-  }
-
-  async function handleFavoriteToggle() {
-    if (!movie) return;
-    await toggleOptimisticEntityFlag(movie, "isFavorite", (next) => (movie = next), updateEntityFlags);
-  }
-
-  async function handleOrganizedToggle() {
-    if (!movie) return;
-    await toggleOptimisticEntityFlag(movie, "isOrganized", (next) => (movie = next), updateEntityFlags);
-  }
-
-  async function handleMetadataSave(request: EntityMetadataUpdateRequest) {
-    if (!movie) return;
-    await updateEntityMetadata(movie.id, request, { kind: movie.kind });
-    await refreshMovie();
-  }
 </script>
 
 <svelte:head>
@@ -683,15 +596,17 @@
 </svelte:head>
 
 <div class="detail-page">
-  {#if loadState === "loading"}
+  {#if detail.loadState === "loading"}
     <div class="player-skeleton" aria-hidden="true"></div>
-    <EntityDetailSkeleton showHero tabCount={4} />
-  {:else if loadState === "error"}
-    <div class="error-notice">
-      <p>{errorMessage ?? "Failed to load movie."}</p>
-      <button type="button" onclick={() => void loadMovie()}>Retry</button>
-    </div>
-  {:else if card && videoCard && video && playerProps}
+  {/if}
+  <EntityDetailPageState
+    loadState={detail.loadState}
+    errorMessage={detail.errorMessage}
+    fallbackError="Failed to load movie."
+    onRetry={detail.retry}
+    tabCount={4}
+  >
+  {#if card && videoCard && video && playerProps}
     <NsfwBlur isNsfw={flagsNsfw}>
       <div class={cn(isTranscriptDocked && "lg:flex lg:items-start lg:gap-0")}>
         <div
@@ -793,11 +708,11 @@
     <EntityDetail
       {card}
       wantedStatus={acq.acquisition?.summary.status ?? null}
-      onRatingChange={handleRatingChange}
-      onFavoriteToggle={handleFavoriteToggle}
-      onOrganizedToggle={handleOrganizedToggle}
-      onMetadataSave={handleMetadataSave}
-      {ratingBusy}
+      onRatingChange={detail.changeRating}
+      onFavoriteToggle={detail.toggleFavorite}
+      onOrganizedToggle={detail.toggleOrganized}
+      onMetadataSave={detail.saveMetadata}
+      ratingBusy={detail.ratingBusy}
       showHero
       posterSize="large"
       tabs={detailTabs}
@@ -854,11 +769,11 @@
     <EntityDetail
       {card}
       wantedStatus={acq.acquisition?.summary.status ?? null}
-      onRatingChange={handleRatingChange}
-      onFavoriteToggle={handleFavoriteToggle}
-      onOrganizedToggle={handleOrganizedToggle}
-      onMetadataSave={handleMetadataSave}
-      {ratingBusy}
+      onRatingChange={detail.changeRating}
+      onFavoriteToggle={detail.toggleFavorite}
+      onOrganizedToggle={detail.toggleOrganized}
+      onMetadataSave={detail.saveMetadata}
+      ratingBusy={detail.ratingBusy}
       showHero
       posterSize="large"
       actionButtons={heroActions}
@@ -892,6 +807,7 @@
       {/snippet}
     </EntityDetail>
   {/if}
+  </EntityDetailPageState>
 </div>
 
 <style>
@@ -907,27 +823,6 @@
     aspect-ratio: 16 / 9;
     background: #050508;
     animation: pulse 1.2s ease-in-out infinite;
-  }
-
-  .error-notice {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 1rem;
-    padding: 1rem;
-    border: 1px solid color-mix(in srgb, #ef4444 50%, var(--color-border, #1c2235));
-    background: var(--color-surface-2, #101420);
-    color: var(--color-text-muted, #8a93a6);
-    font-size: 0.85rem;
-  }
-
-  .error-notice button {
-    border: 1px solid var(--color-border, #1c2235);
-    background: var(--color-surface-3, #151a28);
-    color: var(--color-text-muted, #8a93a6);
-    padding: 0.4rem 0.8rem;
-    font-size: 0.78rem;
-    cursor: pointer;
   }
 
   .player-surface {
