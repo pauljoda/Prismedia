@@ -308,7 +308,7 @@ public sealed class EfOpdsCatalogService(
             from parent in parentRows.DefaultIfEmpty()
             where entity.KindCode == BookKindCode &&
                   (detail.LibraryRootId == null || (root != null && root.Enabled)) &&
-                  (detail.LibraryRootId == null || !hiddenRootIds.Contains(detail.LibraryRootId.Value)) &&
+                  (detail.LibraryRootId == null || !hiddenRootIds.Contains(detail.LibraryRootId ?? Guid.Empty)) &&
                   (detail.Format == BookFormat.Epub ||
                    detail.Format == BookFormat.Pdf ||
                    detail.Format == BookFormat.ImageArchive) &&

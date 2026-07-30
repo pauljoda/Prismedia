@@ -4,17 +4,13 @@
   import { Film } from "@lucide/svelte";
   import EntityDetailSkeleton from "$lib/components/entities/EntityDetailSkeleton.svelte";
   import EntityDetailHeroDates from "$lib/components/entities/EntityDetailHeroDates.svelte";
-  import { fetchEntities } from "$lib/api/entities";
+  import { fetchEntities, fetchEntity, type EntityCardFull } from "$lib/api/entities";
   import { RELATIONSHIP_CODE } from "$lib/api/generated/codes";
   import {
     updateEntityRating,
     updateEntityFlags,
     updateEntityMetadata,
   } from "$lib/api/entity-mutations";
-  import { getStudio } from "$lib/api/generated/prismedia";
-  import type { StudioDetail } from "$lib/api/generated/model";
-  import { unwrapGenerated } from "$lib/api/generated-response";
-  import { getCapability } from "$lib/api/capabilities";
   import {
     toggleOptimisticEntityFlag,
     updateOptimisticEntityRating,
@@ -39,7 +35,7 @@
   const appChrome = useAppChrome();
 
   let loadState: LoadState = $state("loading");
-  let studio = $state<StudioDetail | null>(null);
+  let studio = $state<EntityCardFull | null>(null);
   let relatedCards = $state<EntityThumbnailCard[]>([]);
   let errorMessage: string | null = $state(null);
   let lastNsfwMode = $state(nsfw.mode);
@@ -78,7 +74,7 @@
     errorMessage = null;
     try {
       const id = page.params.id ?? "";
-      studio = unwrapGenerated<StudioDetail>(await getStudio(id), `Failed to fetch studio ${id}`);
+      studio = await fetchEntity(id);
       await loadRelated(id);
       loadState = "ready";
     } catch (err) {

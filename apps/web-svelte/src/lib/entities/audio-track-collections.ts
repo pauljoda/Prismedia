@@ -1,6 +1,6 @@
-import type { AudioLibraryDetail, MusicArtistDetail } from "$lib/api/generated/model";
+import type { EntityCard } from "$lib/api/generated/model";
 import { getCapability } from "$lib/api/capabilities";
-import { fetchAudioLibrary, fetchMusicArtist } from "$lib/api/media";
+import { fetchEntity } from "$lib/api/entities";
 import { assetUrl } from "$lib/api/orval-fetch";
 import type { CollectionItem } from "$lib/collections/models";
 import { CAPABILITY_KIND, ENTITY_KIND } from "$lib/entities/entity-codes";
@@ -14,8 +14,8 @@ export interface AudioTrackCollectionResult {
 
 interface CollectOptions {
   groupByAlbum?: boolean;
-  albumCache?: Map<string, AudioLibraryDetail | null>;
-  artistCache?: Map<string, MusicArtistDetail | null>;
+  albumCache?: Map<string, EntityCard | null>;
+  artistCache?: Map<string, EntityCard | null>;
 }
 
 export function isAudioCollectionMemberKind(kind: string): boolean {
@@ -28,7 +28,7 @@ export async function collectLibraryTracks(
   libraryId: string,
   options: CollectOptions = {},
 ): Promise<AudioTrackCollectionResult> {
-  const albumCache = options.albumCache ?? new Map<string, AudioLibraryDetail | null>();
+  const albumCache = options.albumCache ?? new Map<string, EntityCard | null>();
   const detail = await getCachedAudioLibrary(libraryId, albumCache);
   if (!detail) return { tracks: [], albumCoverUrls: {} };
 
@@ -53,8 +53,8 @@ export async function collectArtistTracks(
   artistId: string,
   options: CollectOptions = {},
 ): Promise<AudioTrackCollectionResult> {
-  const artistCache = options.artistCache ?? new Map<string, MusicArtistDetail | null>();
-  const albumCache = options.albumCache ?? new Map<string, AudioLibraryDetail | null>();
+  const artistCache = options.artistCache ?? new Map<string, EntityCard | null>();
+  const albumCache = options.albumCache ?? new Map<string, EntityCard | null>();
   const artist = await getCachedMusicArtist(artistId, artistCache);
   if (!artist) return { tracks: [], albumCoverUrls: {} };
 
@@ -78,8 +78,8 @@ export async function collectArtistTracks(
 export async function collectCollectionAudioTracks(
   items: CollectionItem[],
 ): Promise<AudioTrackCollectionResult> {
-  const albumCache = new Map<string, AudioLibraryDetail | null>();
-  const artistCache = new Map<string, MusicArtistDetail | null>();
+  const albumCache = new Map<string, EntityCard | null>();
+  const artistCache = new Map<string, EntityCard | null>();
   const tracks: AudioTrackListItemDto[] = [];
   const albumCoverUrls: Record<string, string | null | undefined> = {};
 
@@ -111,7 +111,7 @@ export async function collectCollectionAudioTracks(
 }
 
 export function tracksFromAudioLibraryDetail(
-  detail: AudioLibraryDetail,
+  detail: EntityCard,
   groupByAlbum: boolean,
 ): AudioTrackListItemDto[] {
   const trackGroup = detail.childrenByKind.find((group) => group.kind === ENTITY_KIND.audioTrack);
@@ -124,27 +124,27 @@ export function tracksFromAudioLibraryDetail(
     .sort((left, right) => left.sortOrder - right.sortOrder);
 }
 
-function audioLibraryCoverUrl(detail: AudioLibraryDetail): string | null {
+function audioLibraryCoverUrl(detail: EntityCard): string | null {
   const images = getCapability(detail.capabilities, CAPABILITY_KIND.images);
   return assetUrl(images?.coverUrl ?? images?.thumbnailUrl) || null;
 }
 
 async function getCachedAudioLibrary(
   id: string,
-  cache: Map<string, AudioLibraryDetail | null>,
-): Promise<AudioLibraryDetail | null> {
+  cache: Map<string, EntityCard | null>,
+): Promise<EntityCard | null> {
   if (cache.has(id)) return cache.get(id) ?? null;
-  const detail = await fetchAudioLibrary(id).catch(() => null);
+  const detail = await fetchEntity(id).catch(() => null);
   cache.set(id, detail);
   return detail;
 }
 
 async function getCachedMusicArtist(
   id: string,
-  cache: Map<string, MusicArtistDetail | null>,
-): Promise<MusicArtistDetail | null> {
+  cache: Map<string, EntityCard | null>,
+): Promise<EntityCard | null> {
   if (cache.has(id)) return cache.get(id) ?? null;
-  const detail = await fetchMusicArtist(id).catch(() => null);
+  const detail = await fetchEntity(id).catch(() => null);
   cache.set(id, detail);
   return detail;
 }

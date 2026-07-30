@@ -1,5 +1,5 @@
 using Prismedia.Contracts.Entities;
-using Prismedia.Contracts.Videos;
+using Prismedia.Domain.Entities;
 
 namespace Prismedia.Api.Endpoints;
 
@@ -7,10 +7,8 @@ internal static class VideoCatalogEndpoints {
     internal static RouteGroupBuilder MapVideoCatalogEndpoints(this IEndpointRouteBuilder routes) =>
         routes.MapEntityKindRoutes(
             "/api/videos",
-            "video",
+            EntityKindRegistry.Video.Code,
             "Videos",
             "ListVideos",
-            "GetVideo",
-            typeof(EntityListResponse),
-            typeof(VideoDetail));
+            "GetVideo");
 }

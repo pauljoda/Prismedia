@@ -23,6 +23,7 @@ public static class UserBootstrapRunner {
     public const string RecoveryUsernameVariable = "PRISMEDIA_RECOVERY_USERNAME";
 
     private const string DefaultRecoveryUsername = "admin";
+    private const int SingletonSecurityId = 1;
 
     public static async Task RunUserBootstrapAsync(
         IServiceProvider services,
@@ -50,7 +51,7 @@ public static class UserBootstrapRunner {
 
         var now = DateTimeOffset.UtcNow;
         db.AppSecurity.Add(new AppSecurityRow {
-            Id = 1,
+            Id = SingletonSecurityId,
             ServerId = Guid.NewGuid(),
             CreatedAt = now,
             UpdatedAt = now
@@ -68,7 +69,9 @@ public static class UserBootstrapRunner {
         IPasswordHasher hasher,
         ILogger logger,
         CancellationToken cancellationToken) {
-        var state = await db.AppSecurity.FirstAsync(cancellationToken);
+        var state = await db.AppSecurity.SingleAsync(
+            row => row.Id == SingletonSecurityId,
+            cancellationToken);
         if (state.LegacyApiKey is not { Length: > 0 } legacyKey) {
             return;
         }

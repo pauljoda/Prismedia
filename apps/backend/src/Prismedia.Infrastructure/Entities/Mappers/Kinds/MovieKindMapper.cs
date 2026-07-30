@@ -1,5 +1,3 @@
-using Prismedia.Contracts.Entities;
-using Prismedia.Contracts.Movies;
 using Prismedia.Domain.Entities;
 using Prismedia.Domain.Media;
 using Prismedia.Infrastructure.Persistence;
@@ -20,20 +18,4 @@ internal sealed class MovieKindMapper : IEntityKindMapper {
     public Task PersistDetailAsync(Entity entity, CancellationToken cancellationToken) =>
         Task.CompletedTask;
 
-    public IEntityCard ProjectDetail(
-        Entity entity,
-        EntityCard card,
-        IReadOnlyList<EntityCreditMetadata> creditMetadata) =>
-        new MovieDetail {
-            Id = card.Id,
-            Kind = card.Kind,
-            Title = card.Title,
-            ParentEntityId = card.ParentEntityId,
-            SortOrder = card.SortOrder,
-            HasSourceMedia = card.HasSourceMedia,
-            Capabilities = card.Capabilities,
-            ChildrenByKind = card.ChildrenByKind,
-            Relationships = card.Relationships,
-            CreditMetadata = creditMetadata,
-        };
 }

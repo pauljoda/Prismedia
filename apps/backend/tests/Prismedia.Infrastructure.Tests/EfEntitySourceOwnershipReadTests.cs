@@ -87,17 +87,14 @@ public sealed class EfEntitySourceOwnershipReadTests {
         Assert.False(Assert.Single(thumbnails.Items, item => item.Id == filelessMovie).HasSourceMedia);
 
         foreach (var id in sourceBackedIds) {
-            var kindCode = Assert.Single(db.Entities.Local, row => row.Id == id).KindCode;
             var detail = Assert.IsAssignableFrom<IEntityCard>(
-                await service.GetDetailAsync(id, kindCode, hideNsfw: false, CancellationToken.None));
+                await service.GetAsync(id, hideNsfw: false, CancellationToken.None));
             Assert.True(Assert.Single(detail.Capabilities.OfType<FileManagementCapability>()).CanDeleteFiles);
         }
 
         var filelessDetail = Assert.IsAssignableFrom<IEntityCard>(
-            await service.GetDetailAsync(
-                filelessMovie,
-                EntityKindRegistry.Movie.Code,
-                hideNsfw: false,
+            await service.GetAsync(
+                filelessMovie, hideNsfw: false,
                 CancellationToken.None));
         Assert.Empty(filelessDetail.Capabilities.OfType<FileManagementCapability>());
     }
@@ -130,20 +127,14 @@ public sealed class EfEntitySourceOwnershipReadTests {
         await db.SaveChangesAsync();
 
         var service = CreateService(db);
-        var claimedMovieDetail = Assert.IsAssignableFrom<IEntityCard>(await service.GetDetailAsync(
-            claimedMovieId,
-            EntityKindRegistry.Movie.Code,
-            hideNsfw: false,
+        var claimedMovieDetail = Assert.IsAssignableFrom<IEntityCard>(await service.GetAsync(
+            claimedMovieId, hideNsfw: false,
             CancellationToken.None));
-        var monitoredBookDetail = Assert.IsAssignableFrom<IEntityCard>(await service.GetDetailAsync(
-            monitoredBookId,
-            EntityKindRegistry.Book.Code,
-            hideNsfw: false,
+        var monitoredBookDetail = Assert.IsAssignableFrom<IEntityCard>(await service.GetAsync(
+            monitoredBookId, hideNsfw: false,
             CancellationToken.None));
-        var ordinaryWantedDetail = Assert.IsAssignableFrom<IEntityCard>(await service.GetDetailAsync(
-            ordinaryWantedId,
-            EntityKindRegistry.Movie.Code,
-            hideNsfw: false,
+        var ordinaryWantedDetail = Assert.IsAssignableFrom<IEntityCard>(await service.GetAsync(
+            ordinaryWantedId, hideNsfw: false,
             CancellationToken.None));
 
         Assert.False(claimedMovieDetail.HasSourceMedia);
@@ -204,15 +195,12 @@ public sealed class EfEntitySourceOwnershipReadTests {
             db,
             user,
             repository,
-            EntityMappers.Kinds(db),
             ThumbnailContributors.For(db),
             sourceOwnership: sourceOwnership);
         var mutations = new EntityCapabilityService(repository, sourceOwnership);
 
-        var detail = Assert.IsAssignableFrom<IEntityCard>(await reads.GetDetailAsync(
-            movie.RootId,
-            EntityKindRegistry.Movie.Code,
-            hideNsfw: false,
+        var detail = Assert.IsAssignableFrom<IEntityCard>(await reads.GetAsync(
+            movie.RootId, hideNsfw: false,
             CancellationToken.None));
         var rated = Assert.IsType<EntityCard>(await mutations.RateAsync(
             movie.RootId, 4, CancellationToken.None));
@@ -327,7 +315,6 @@ public sealed class EfEntitySourceOwnershipReadTests {
             db,
             user,
             repository,
-            EntityMappers.Kinds(db),
             ThumbnailContributors.For(db));
     }
 

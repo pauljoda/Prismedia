@@ -24,5 +24,8 @@ public sealed class BookAuthor : Entity {
     public override EntityKind Kind => EntityKind.BookAuthor;
 
     /// <inheritdoc />
-    protected override IEnumerable<EntityCapability> CreateDefaultCapabilities() => [];
+    protected override IEnumerable<EntityCapability> CreateDefaultCapabilities() =>
+    [
+        new CapabilityCredits()
+    ];
 }

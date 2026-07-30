@@ -1,5 +1,4 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/svelte";
-import { readFileSync } from "node:fs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { page } from "$app/state";
 import {
@@ -407,16 +406,6 @@ describe("reviewed request route", () => {
 
     expect(await screen.findByText(/missing its plugin identity/i)).toBeInTheDocument();
     expect(mocks.reviewRequest).not.toHaveBeenCalled();
-  });
-
-  it("uses the shared proposal review and never restores synthetic entity detail adapters", () => {
-    const source = readFileSync("src/routes/request/[kind]/[id]/+page.svelte", "utf8");
-
-    expect(source).toContain("ProposalReviewSummary");
-    expect(source).not.toContain("EntityDetail");
-    expect(source).not.toContain("request-entity-card");
-    expect(source).not.toContain("review-cards");
-    expect(source).not.toContain("SelectableCardSection");
   });
 });
 

@@ -315,6 +315,23 @@ public sealed class PrismediaDbContextModelTests {
         Assert.False(property.TryGetDefaultValue(out _));
     }
 
+    [Theory]
+    [InlineData(typeof(BookAcquisitionProfileRow))]
+    [InlineData(typeof(CustomFormatRow))]
+    [InlineData(typeof(AcquisitionRow))]
+    [InlineData(typeof(WantedSuppressionRow))]
+    [InlineData(typeof(AcquisitionHistoryRow))]
+    [InlineData(typeof(MonitorRow))]
+    public void AcquisitionEntityKindsCanPersistEveryValidKind(Type entityType) {
+        // EntityKind.Audio is the CLR zero value. These columns have a database default of Book,
+        // so their sentinel must sit outside the valid enum range or EF will omit an explicit Audio.
+        using var db = CreateContext();
+        var property = db.Model.FindEntityType(entityType)!.FindProperty("Kind");
+
+        Assert.NotNull(property);
+        Assert.Equal((EntityKind)(-1), property!.Sentinel);
+    }
+
     private static PrismediaDbContext CreateContext() {
         var options = new DbContextOptionsBuilder<PrismediaDbContext>()
             .UseNpgsql("Host=localhost;Database=prismedia;Username=prismedia;Password=prismedia")

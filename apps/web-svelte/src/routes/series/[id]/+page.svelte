@@ -7,7 +7,7 @@
   import EntityDetailSkeleton from "$lib/components/entities/EntityDetailSkeleton.svelte";
   import MediaProgressPanel from "$lib/components/MediaProgressPanel.svelte";
   import { PROGRESS_UNIT } from "$lib/api/generated/codes";
-  import { fetchSeason, fetchSeries, type VideoSeasonDetail, type VideoSeriesDetail } from "$lib/api/media";
+  import { fetchEntity, type EntityCardFull } from "$lib/api/entities";
   import { updateEntityProgress } from "$lib/api/playback";
   import { getCapability } from "$lib/api/capabilities";
   import {
@@ -56,7 +56,7 @@
   const appChrome = useAppChrome();
 
   let loadState: LoadState = $state("loading");
-  let series = $state<VideoSeriesDetail | null>(null);
+  let series = $state<EntityCardFull | null>(null);
   let seasonEpisodeCounts = $state<Record<string, number>>({});
   let errorMessage: string | null = $state(null);
   let lastNsfwMode = $state(nsfw.mode);
@@ -177,7 +177,7 @@
     if (showLoading || !series) loadState = "loading";
     errorMessage = null;
     try {
-      const nextSeries = await fetchSeries(page.params.id ?? "");
+      const nextSeries = await fetchEntity(page.params.id ?? "");
       await hydrateSeriesThumbnails(nextSeries);
       const episodeState = await loadSeriesEpisodes(nextSeries);
       seasonEpisodeCounts = episodeState.counts;
@@ -222,7 +222,7 @@
     await loadSeries();
   }
 
-  async function loadSeriesEpisodes(nextSeries: VideoSeriesDetail): Promise<{
+  async function loadSeriesEpisodes(nextSeries: EntityCardFull): Promise<{
     counts: Record<string, number>;
     ids: string[];
     progressCard: EntityThumbnailCard | null;
@@ -238,7 +238,7 @@
     }
 
     const details = await Promise.all(
-      seasonIds.map((id) => fetchSeason(nextSeries.id, id)),
+      seasonIds.map((id) => fetchEntity(id)),
     );
     const episodeIds = details.flatMap((detail) => getChildIds(detail, ENTITY_KIND.video));
     const progress = getCapability(nextSeries.capabilities, CAPABILITY_KIND.progress);
@@ -247,7 +247,7 @@
       : [];
 
     return {
-      counts: Object.fromEntries(details.map((detail: VideoSeasonDetail) => [
+      counts: Object.fromEntries(details.map((detail: EntityCardFull) => [
         detail.id,
         getChildIds(detail, ENTITY_KIND.video).length,
       ])),
@@ -295,7 +295,7 @@
     }
   }
 
-  async function hydrateSeriesThumbnails(nextSeries: VideoSeriesDetail) {
+  async function hydrateSeriesThumbnails(nextSeries: EntityCardFull) {
     const seasonIds = getChildIds(nextSeries, ENTITY_KIND.videoSeason);
     const childSeriesIds = getChildIds(nextSeries, ENTITY_KIND.videoSeries);
     const videoIds = getChildIds(nextSeries, ENTITY_KIND.video);

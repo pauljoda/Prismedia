@@ -245,7 +245,6 @@ public sealed class OpdsCatalogServiceTests : IDisposable {
             db,
             TestUserContext.Admin(),
             repository,
-            EntityMappers.Kinds(db),
             ThumbnailContributors.For(db),
             assets);
         return new EfOpdsCatalogService(db, assets, entityReadService, TestUserContext.Admin());

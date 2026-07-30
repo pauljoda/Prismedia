@@ -5,7 +5,6 @@
   import { page } from "$app/state";
   import { BookOpen, Check, CloudDownload, Info, Play, RotateCcw, SlidersHorizontal } from "@lucide/svelte";
   import EntityDetailSkeleton from "$lib/components/entities/EntityDetailSkeleton.svelte";
-  import { fetchBook, type BookDetail } from "$lib/api/media";
   import { fetchEntity, type EntityCardFull } from "$lib/api/entities";
   import { updateEntityMetadata } from "$lib/api/entity-mutations";
   import { updateEntityProgress } from "$lib/api/playback";
@@ -40,7 +39,7 @@
   const appChrome = useAppChrome();
 
   let loadState: LoadState = $state("loading");
-  let book = $state<BookDetail | null>(null);
+  let book = $state<EntityCardFull | null>(null);
   let volume = $state<EntityCardFull | null>(null);
   let chapterDetails = $state.raw<EntityCardFull[]>([]);
   let chapterCards = $state<EntityThumbnailCard[]>([]);
@@ -157,7 +156,7 @@
     errorMessage = null;
     try {
       const [nextBook, nextVolume] = await Promise.all([
-        fetchBook(bookId),
+        fetchEntity(bookId),
         fetchEntity(volumeId),
       ]);
       const chapterThumbnails = orderedBookChildren(nextVolume, ENTITY_KIND.bookChapter);

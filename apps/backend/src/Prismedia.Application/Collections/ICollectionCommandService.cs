@@ -1,4 +1,5 @@
 using Prismedia.Contracts.Collections;
+using Prismedia.Contracts.Entities;
 
 namespace Prismedia.Application.Collections;
 
@@ -14,13 +15,13 @@ public enum CollectionCommandStatus {
     Invalid
 }
 
-/// <summary>Result wrapper for commands that return a collection detail contract.</summary>
+/// <summary>Result wrapper for commands that return the shared collection Entity document.</summary>
 /// <param name="Status">Command outcome.</param>
 /// <param name="Collection">Updated collection detail when successful.</param>
 /// <param name="Message">Human-readable error detail when unsuccessful.</param>
 public sealed record CollectionWriteResult(
     CollectionCommandStatus Status,
-    CollectionDetail? Collection = null,
+    EntityCard? Collection = null,
     string? Message = null);
 
 /// <summary>Result wrapper for commands that return an affected row count.</summary>

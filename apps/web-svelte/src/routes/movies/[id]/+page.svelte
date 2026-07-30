@@ -16,7 +16,7 @@
   import { useEntityAcquisition } from "$lib/components/acquisitions/use-entity-acquisition.svelte";
   import EntityDetailSkeleton from "$lib/components/entities/EntityDetailSkeleton.svelte";
   import EntityDetailHeroDates from "$lib/components/entities/EntityDetailHeroDates.svelte";
-  import { fetchMovie, fetchVideo, type MovieDetail, type VideoDetail } from "$lib/api/media";
+  import { fetchEntity, type EntityCardFull } from "$lib/api/entities";
   import { fetchSettingsValues, type LibrarySettings } from "$lib/api/settings";
   import {
     markJellyfinUserPlayedItem,
@@ -82,8 +82,8 @@
   const appChrome = useAppChrome();
 
   let loadState: LoadState = $state("loading");
-  let movie = $state<MovieDetail | null>(null);
-  let video = $state<VideoDetail | null>(null);
+  let movie = $state<EntityCardFull | null>(null);
+  let video = $state<EntityCardFull | null>(null);
   // The acquisition backing this movie (a wanted placeholder still searching/downloading, or the
   // import that produced it), so its state is managed right here instead of only under /request.
   let playbackInfo = $state<JellyfinPlaybackInfoResponse | null>(null);
@@ -433,7 +433,7 @@
     loadState = "loading";
     errorMessage = null;
     try {
-      const nextMovie = await fetchMovie(page.params.id ?? "");
+      const nextMovie = await fetchEntity(page.params.id ?? "");
       const childVideoId = getChildIds(nextMovie, ENTITY_KIND.video)[0];
       if (!childVideoId) {
         // A wanted movie (request placeholder) has no video child yet: render metadata plus the
@@ -445,7 +445,7 @@
         loadState = "ready";
         return;
       }
-      const nextVideo = await fetchVideo(childVideoId);
+      const nextVideo = await fetchEntity(childVideoId);
       movie = nextMovie;
       video = nextVideo;
       const [nextPlaybackInfo] = await Promise.all([
@@ -471,7 +471,7 @@
 
   async function refreshMovie() {
     try {
-      const nextMovie = await fetchMovie(movie?.id ?? page.params.id ?? "");
+      const nextMovie = await fetchEntity(movie?.id ?? page.params.id ?? "");
       const childVideoId = getChildIds(nextMovie, ENTITY_KIND.video)[0];
       if (!childVideoId) {
         movie = nextMovie;
@@ -480,7 +480,7 @@
         await hydrateMovieRelationships(nextMovie);
         return;
       }
-      const nextVideo = await fetchVideo(childVideoId);
+      const nextVideo = await fetchEntity(childVideoId);
       movie = nextMovie;
       video = nextVideo;
       const [nextPlaybackInfo] = await Promise.all([
@@ -495,7 +495,7 @@
     }
   }
 
-  async function hydrateMovieRelationships(nextMovie: MovieDetail) {
+  async function hydrateMovieRelationships(nextMovie: EntityCardFull) {
     const relationships = await hydrateStandardRelationshipCards(nextMovie);
     relationshipCredits = relationships.credits;
     relationshipStudio = relationships.studio;

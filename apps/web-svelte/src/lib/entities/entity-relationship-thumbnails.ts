@@ -4,6 +4,7 @@ import type {
   EntityThumbnail,
 } from "$lib/api/generated/model";
 import { fetchEntityThumbnails } from "$lib/api/entities";
+import { getCreditsCapability } from "$lib/api/capabilities";
 import { getRelationshipIds } from "./entity-children";
 import type { EntityDetailCredit, EntityDetailTag } from "./entity-detail";
 import { entityCardToThumbnailCard } from "./entity-grid";
@@ -119,7 +120,7 @@ export async function hydrateStandardRelationshipThumbnails(
 }
 
 export async function hydrateStandardRelationshipCards(
-  entity: EntityRelationshipSource & { creditMetadata?: EntityCreditMetadata[] },
+  entity: EntityRelationshipSource & Pick<EntityCard, "capabilities">,
 ): Promise<{
   relationshipTags: EntityDetailTag[];
   credits: EntityDetailCredit[];
@@ -128,7 +129,10 @@ export async function hydrateStandardRelationshipCards(
   const relationships = await hydrateStandardRelationshipThumbnails(entity);
   return {
     relationshipTags: tagsFromThumbnails(relationships.tags),
-    credits: detailCreditsFromThumbnails(relationships.cast, entity.creditMetadata ?? []),
+    credits: detailCreditsFromThumbnails(
+      relationships.cast,
+      getCreditsCapability(entity.capabilities)?.items ?? [],
+    ),
     studio: detailStudioFromThumbnails(relationships.studio),
   };
 }

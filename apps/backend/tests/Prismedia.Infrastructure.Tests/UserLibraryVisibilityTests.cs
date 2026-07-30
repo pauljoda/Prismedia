@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Prismedia.Application.Security;
+using Prismedia.Contracts.Entities;
 using Prismedia.Domain.Entities;
 using Prismedia.Infrastructure.Entities;
 using Prismedia.Infrastructure.Entities.Mappers;
@@ -214,30 +215,25 @@ public sealed class UserLibraryVisibilityTests {
 
         Assert.Equal(new[] { ownedPrivateId, sharedId }.Order(), list.Items.Select(item => item.Id).Order());
         Assert.Equal(new[] { ownedPrivateId, sharedId }.Order(), thumbnails.Items.Select(item => item.Id).Order());
-        Assert.NotNull(await service.GetDetailAsync(
-            ownedPrivateId,
-            EntityKindRegistry.Collection.Code,
-            hideNsfw: false,
+        Assert.NotNull(await service.GetAsync(
+            ownedPrivateId, hideNsfw: false,
             CancellationToken.None));
-        Assert.Null(await service.GetDetailAsync(
-            otherPrivateId,
-            EntityKindRegistry.Collection.Code,
-            hideNsfw: false,
+        Assert.Null(await service.GetAsync(
+            otherPrivateId, hideNsfw: false,
             CancellationToken.None));
-        var shared = Assert.IsType<Prismedia.Contracts.Collections.CollectionDetail>(
-            await service.GetDetailAsync(
-                sharedId,
-                EntityKindRegistry.Collection.Code,
-                hideNsfw: false,
+        var shared = Assert.IsType<EntityCard>(
+            await service.GetAsync(
+                sharedId, hideNsfw: false,
                 CancellationToken.None));
-        Assert.True(shared.IsShared);
-        Assert.False(shared.CanEdit);
+        var configuration = Assert.Single(shared.Capabilities.OfType<CollectionConfigurationCapability>());
+        Assert.True(configuration.IsShared);
+        Assert.False(configuration.CanEdit);
     }
 
     private static EfEntityReadService CreateService(PrismediaDbContext db, ICurrentUserContext user) {
         var kindMappers = EntityMappers.Kinds(db, user);
         var repository = new EfEntityRepository(db, user, kindMappers, EntityMappers.Capabilities(db, user));
-        return new EfEntityReadService(db, user, repository, kindMappers, ThumbnailContributors.For(db));
+        return new EfEntityReadService(db, user, repository, ThumbnailContributors.For(db));
     }
 
     private static Guid SeedCollection(

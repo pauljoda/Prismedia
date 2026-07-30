@@ -1,6 +1,4 @@
 using Microsoft.EntityFrameworkCore;
-using Prismedia.Contracts.Entities;
-using Prismedia.Contracts.Taxonomy;
 using Prismedia.Domain.Entities;
 using Prismedia.Domain.Taxonomy;
 using Prismedia.Infrastructure.Persistence;
@@ -26,25 +24,6 @@ internal sealed class TagKindMapper(PrismediaDbContext db) : IEntityKindMapper {
             ?? Track(new TagDetailRow { EntityId = entity.Id });
         row.IgnoreAutoTag = tag.IgnoreAutoTag;
     }
-
-    public IEntityCard ProjectDetail(
-        Entity entity,
-        EntityCard card,
-        IReadOnlyList<EntityCreditMetadata> creditMetadata) =>
-        entity is Tag tag
-            ? new TagDetail {
-                Id = card.Id,
-                Kind = card.Kind,
-                Title = card.Title,
-                ParentEntityId = card.ParentEntityId,
-                SortOrder = card.SortOrder,
-                HasSourceMedia = card.HasSourceMedia,
-                Capabilities = card.Capabilities,
-                ChildrenByKind = card.ChildrenByKind,
-                Relationships = card.Relationships,
-                IgnoreAutoTag = tag.IgnoreAutoTag,
-            }
-            : card;
 
     private TagDetailRow Track(TagDetailRow row) {
         db.TagDetails.Add(row);

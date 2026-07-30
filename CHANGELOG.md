@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- Updated the HTML parser used by metadata workflows to a patched release.
 - Web Book resume now converts native EPUB locators through the shared canonical cursor instead of opening Foliate at the first page.
 - Unified Book resume now carries forward a farther pre-migration audiobook position, preserves its within-chapter offset, and treats shared chapter boundaries as the start of the later chapter.
 - Entity thumbnails now inherit canonical owning artwork where appropriate and include their visible parent title as a consistent subtitle across clients.
@@ -34,6 +35,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Release operations are now ready for channel publishing: the root package version is the source of truth, Docker builds validate the release metadata, pushes to `main` publish only the dev image, and alpha/beta/release images are published manually.
 
 ### Changed
+- Entity detail reads now use one shared document contract across the web and Apple apps; credits, cover choices, and kind-specific metadata travel as typed capabilities instead of parallel per-kind response shapes.
 - Books now keep one forward-only progress position across reading and listening. Chapter-scoped mappings translate that position between text, pages, and audiobook parts, preserving exact text positions when available and falling back to the readable cursor when an audio part cannot be matched.
 - Reading and audiobook heartbeats now contribute to activity time in Playback Stats, with separate reading and audiobook totals and a combined time-read-or-listened figure on Book details.
 - Subtitle preference terms now accept negative weights, allowing labels such as Forced or SDH to demote matching tracks while preferred languages still promote them.

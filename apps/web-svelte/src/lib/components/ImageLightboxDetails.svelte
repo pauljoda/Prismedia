@@ -1,6 +1,6 @@
 <script lang="ts">
   import { Users } from "@lucide/svelte";
-  import { fetchImage, type ImageDetail } from "$lib/api/media";
+  import { fetchEntity, type EntityCardFull } from "$lib/api/entities";
   import {
     updateEntityFlags,
     updateEntityMetadata,
@@ -30,7 +30,7 @@
 
   let loadState: LoadState = $state("loading");
   let loadedEntityId: string | null = $state(null);
-  let image = $state<ImageDetail | null>(null);
+  let image = $state<EntityCardFull | null>(null);
   let errorMessage: string | null = $state(null);
   let ratingBusy = $state(false);
 
@@ -57,7 +57,7 @@
     loadState = "loading";
     errorMessage = null;
     try {
-      const next = await fetchImage(entityId);
+      const next = await fetchEntity(entityId);
       if (loadedEntityId !== entityId) return;
       image = next;
       loadState = "ready";

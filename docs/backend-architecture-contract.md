@@ -146,13 +146,15 @@ deliberate patterns exist and must not be "corrected" into uniformity:
   markers/subtitles on `Video`, progress on `Book`); the capability is the persistence
   and contract projection unit, so single-kind capabilities are acceptable and expected
   to be reused as new kinds appear.
-- **Contract pseudo-capabilities** (`RatingCapability`, `FlagsCapability`,
-  `FilesCapability`, `LinksCapability`, `ImagesCapability` in `Prismedia.Contracts`) have
-  **no domain counterpart**. They project universal `Entity` properties
+- **Contract projection capabilities** in `Prismedia.Contracts` may have no one-to-one
+  domain counterpart. Universal examples (`RatingCapability`, `FlagsCapability`,
+  `FilesCapability`, `LinksCapability`, `ImagesCapability`) project `Entity` properties
   (`RatingValue`, the `IsFavorite/IsNsfw/IsOrganized` flags, `EntityFiles`, `Urls` +
-  `ExternalIds`) into the API as capabilities so the client sees one uniform "capability"
-  surface. The contract capability set is therefore a superset of the domain set. Do not
-  add domain classes for these.
+  `ExternalIds`). Typed metadata capabilities project concrete aggregate state such as
+  book format, Person profile data, collection configuration, or embedded audio labels.
+  Shared projections such as credits and cover selection are emitted once regardless of
+  Entity kind. The contract capability set is therefore a superset of the domain set; do
+  not add domain classes solely to mirror a wire projection.
 
 Subtitle reconciliation state (`CapabilitySubtitles.ExtractedAt`) lives on the subtitles
 capability. Its value is persisted on the `video_details.subtitles_extracted_at` column
@@ -162,11 +164,15 @@ the signature of the last successfully reconciled adjacent-sidecar set. Video sc
 include subtitle sidecars even though those files do not become Entities, so sidecar-only changes
 invalidate and retry the managed embedded/sidecar manifest.
 
-`CapabilityCredits` is a domain capability but is **not** emitted as a contract
-capability. It persists as `EntityRelationshipLinkRow` rows with relationship code
+`CapabilityCredits` is emitted as the shared `CreditsCapability` contract capability.
+It persists as `EntityRelationshipLinkRow` rows with relationship code
 `credits`/`cast`, storing only the target `Person` id plus the `CreditRole` (and optional
-character) in link metadata — never a cloned `Person`. On detail routes it is projected as
-a separate `EntityCreditMetadata` list, not as a capability DTO.
+character) in link metadata — never a cloned `Person`. The capability items carry that
+edge metadata so every client reads roles and character labels from the same Entity root.
+
+All Entity document GETs project `EntityCard`. `/api/entities/{id}` is canonical;
+kind-prefixed detail routes are compatibility aliases that validate the expected kind and
+return the same card. Do not add a derived `*Detail` record or per-kind projection mapper.
 
 ## Stable Codes and Constants
 

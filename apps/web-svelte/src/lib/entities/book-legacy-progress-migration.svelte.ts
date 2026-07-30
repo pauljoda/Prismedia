@@ -1,6 +1,6 @@
 import { CAPABILITY_KIND } from "$lib/api/generated/codes";
 import type { BookProgressTrackMapping } from "$lib/api/generated/model";
-import type { BookDetail } from "$lib/api/media";
+import type { EntityCardFull } from "$lib/api/entities";
 import { updateEntityProgress } from "$lib/api/playback";
 import { getCapability } from "$lib/api/capabilities";
 import type { BookChapterRow } from "$lib/entities/book-chapter-list";
@@ -12,7 +12,7 @@ import {
 
 /** Promotes the farther pre-unification audiobook resume cursor once mappings are available. */
 export function useLegacyBookProgressMigration(
-  getBook: () => BookDetail | null,
+  getBook: () => EntityCardFull | null,
   getRows: () => readonly BookChapterRow[],
   getMappings: () => readonly BookProgressTrackMapping[],
   refresh: (bookId: string, options: { showLoading: boolean }) => Promise<void>,

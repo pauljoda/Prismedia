@@ -184,7 +184,5 @@ public sealed class CollectionItemReadServiceTests {
             return new EntityThumbnailBatchResponse(thumbnails);
         }
 
-        public Task<IEntityCard?> GetDetailAsync(Guid id, string kind, bool hideNsfw, CancellationToken cancellationToken) =>
-            throw new NotSupportedException();
     }
 }

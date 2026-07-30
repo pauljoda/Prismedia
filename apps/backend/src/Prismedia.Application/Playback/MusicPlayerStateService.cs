@@ -119,21 +119,21 @@ public sealed class MusicPlayerStateService {
         var oldToNewIndex = new Dictionary<int, int>();
 
         for (var i = 0; i < stored.QueueTrackIds.Count; i++) {
-            var card = await _entities.GetDetailAsync(
+            var card = await _entities.GetAsync(
                 stored.QueueTrackIds[i],
                 EntityKindRegistry.AudioTrack.Code,
                 hideNsfw: false,
                 cancellationToken);
-            if (card is not AudioTrackDetail track) {
+            if (card is null) {
                 continue;
             }
 
-            if (track.Capabilities.OfType<FlagsCapability>().Any(flags => flags.IsWanted == true)) {
+            if (card.Capabilities.OfType<FlagsCapability>().Any(flags => flags.IsWanted == true)) {
                 continue;
             }
 
             oldToNewIndex[i] = tracks.Count;
-            tracks.Add(track);
+            tracks.Add(ToPlaybackTrack(card));
         }
 
         if (tracks.Count == 0) {
@@ -257,6 +257,23 @@ public sealed class MusicPlayerStateService {
             ?.Duration
             ?.TotalSeconds;
         return duration is > 0 ? Math.Min(currentTime, duration.Value) : currentTime;
+    }
+
+    private static AudioTrackDetail ToPlaybackTrack(EntityCard card) {
+        var embedded = card.Capabilities.OfType<EmbeddedAudioMetadataCapability>().SingleOrDefault();
+        return new AudioTrackDetail {
+            Id = card.Id,
+            Kind = card.Kind,
+            Title = card.Title,
+            ParentEntityId = card.ParentEntityId,
+            SortOrder = card.SortOrder,
+            HasSourceMedia = card.HasSourceMedia,
+            Capabilities = card.Capabilities,
+            ChildrenByKind = card.ChildrenByKind,
+            Relationships = card.Relationships,
+            EmbeddedArtist = embedded?.Artist,
+            EmbeddedAlbum = embedded?.Album,
+        };
     }
 
     private static double FiniteOrDefault(double value, double fallback) =>

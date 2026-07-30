@@ -4,11 +4,10 @@
  * Prismedia.Api | v1
  * OpenAPI spec version: 1.0.0
  */
-import type { EntityCapability } from './entityCapability';
-import type { EntityGroup } from './entityGroup';
-import type { EntityKind } from './entityKind';
+import type { EntityCapabilityPersonProfileCapabilityKind } from './entityCapabilityPersonProfileCapabilityKind';
 
-export interface PersonDetail {
+export interface EntityCapabilityPersonProfileCapability {
+  kind: EntityCapabilityPersonProfileCapabilityKind;
   /** @nullable */
   disambiguation: string | null;
   /** @nullable */
@@ -37,18 +36,4 @@ export interface PersonDetail {
   tattoos: string | null;
   /** @nullable */
   piercings: string | null;
-  id: string;
-  kind: EntityKind;
-  title: string;
-  /** @nullable */
-  parentEntityId: string | null;
-  /**
-     * @nullable
-     * @pattern ^-?(?:0|[1-9]\d*)$
-     */
-  sortOrder: number | string | null;
-  hasSourceMedia?: boolean;
-  capabilities: EntityCapability[];
-  childrenByKind: EntityGroup[];
-  relationships: EntityGroup[];
 }

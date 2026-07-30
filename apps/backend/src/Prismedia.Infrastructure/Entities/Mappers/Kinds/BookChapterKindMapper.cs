@@ -1,5 +1,4 @@
 using Microsoft.EntityFrameworkCore;
-using Prismedia.Contracts.Entities;
 using Prismedia.Domain.Entities;
 using Prismedia.Domain.Media;
 using Prismedia.Infrastructure.Persistence;
@@ -30,12 +29,6 @@ internal sealed class BookChapterKindMapper(PrismediaDbContext db) : IEntityKind
             ?? Track(new BookChapterDetailRow { EntityId = entity.Id });
         row.CoverPageEntityId = chapter.CoverPageId;
     }
-
-    public IEntityCard ProjectDetail(
-        Entity entity,
-        EntityCard card,
-        IReadOnlyList<EntityCreditMetadata> creditMetadata) =>
-        card;
 
     private BookChapterDetailRow Track(BookChapterDetailRow row) {
         db.BookChapterDetails.Add(row);

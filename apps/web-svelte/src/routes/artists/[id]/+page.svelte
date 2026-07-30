@@ -5,7 +5,7 @@
   import { page } from "$app/state";
   import { CloudDownload, Disc3, Info, Play, Shuffle, SlidersHorizontal, Users } from "@lucide/svelte";
   import EntityDetailSkeleton from "$lib/components/entities/EntityDetailSkeleton.svelte";
-  import { fetchMusicArtist, type MusicArtistDetail } from "$lib/api/media";
+  import { fetchEntity, type EntityCardFull } from "$lib/api/entities";
   import {
     updateEntityRating,
     updateEntityFlags,
@@ -51,7 +51,7 @@
   const playback = useAudioPlayback()!;
 
   let loadState: LoadState = $state("loading");
-  let artist = $state<MusicArtistDetail | null>(null);
+  let artist = $state<EntityCardFull | null>(null);
   let errorMessage: string | null = $state(null);
   let lastNsfwMode = $state(nsfw.mode);
   let ratingBusy = $state(false);
@@ -184,7 +184,7 @@
       errorMessage = null;
     }
     try {
-      const nextArtist = await fetchMusicArtist(page.params.id ?? "");
+      const nextArtist = await fetchEntity(page.params.id ?? "");
 
       const albumGroup = nextArtist.childrenByKind.find((g) => g.kind === ENTITY_KIND.audioLibrary);
       const albumIds = albumGroup?.entities.map((e) => e.id) ?? [];

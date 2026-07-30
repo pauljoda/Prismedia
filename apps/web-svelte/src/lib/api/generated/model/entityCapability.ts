@@ -4,25 +4,34 @@
  * Prismedia.Api | v1
  * OpenAPI spec version: 1.0.0
  */
+import type { EntityCapabilityBookMetadataCapability } from './entityCapabilityBookMetadataCapability';
 import type { EntityCapabilityClassificationCapability } from './entityCapabilityClassificationCapability';
+import type { EntityCapabilityCollectionConfigurationCapability } from './entityCapabilityCollectionConfigurationCapability';
+import type { EntityCapabilityCoverSelectionCapability } from './entityCapabilityCoverSelectionCapability';
+import type { EntityCapabilityCreditsCapability } from './entityCapabilityCreditsCapability';
 import type { EntityCapabilityDatesCapability } from './entityCapabilityDatesCapability';
 import type { EntityCapabilityDescriptionCapability } from './entityCapabilityDescriptionCapability';
+import type { EntityCapabilityEmbeddedAudioMetadataCapability } from './entityCapabilityEmbeddedAudioMetadataCapability';
 import type { EntityCapabilityFileManagementCapability } from './entityCapabilityFileManagementCapability';
 import type { EntityCapabilityFilesCapability } from './entityCapabilityFilesCapability';
 import type { EntityCapabilityFingerprintsCapability } from './entityCapabilityFingerprintsCapability';
 import type { EntityCapabilityFlagsCapability } from './entityCapabilityFlagsCapability';
+import type { EntityCapabilityGalleryMetadataCapability } from './entityCapabilityGalleryMetadataCapability';
 import type { EntityCapabilityImagesCapability } from './entityCapabilityImagesCapability';
 import type { EntityCapabilityLifetimeCapability } from './entityCapabilityLifetimeCapability';
 import type { EntityCapabilityLinksCapability } from './entityCapabilityLinksCapability';
 import type { EntityCapabilityMarkersCapability } from './entityCapabilityMarkersCapability';
+import type { EntityCapabilityPersonProfileCapability } from './entityCapabilityPersonProfileCapability';
 import type { EntityCapabilityPlaybackCapability } from './entityCapabilityPlaybackCapability';
 import type { EntityCapabilityPositionCapability } from './entityCapabilityPositionCapability';
 import type { EntityCapabilityProgressCapability } from './entityCapabilityProgressCapability';
 import type { EntityCapabilityProviderIdentityCapability } from './entityCapabilityProviderIdentityCapability';
 import type { EntityCapabilityRatingCapability } from './entityCapabilityRatingCapability';
+import type { EntityCapabilitySeriesMetadataCapability } from './entityCapabilitySeriesMetadataCapability';
 import type { EntityCapabilitySourceCapability } from './entityCapabilitySourceCapability';
 import type { EntityCapabilityStatsCapability } from './entityCapabilityStatsCapability';
 import type { EntityCapabilitySubtitlesCapability } from './entityCapabilitySubtitlesCapability';
+import type { EntityCapabilityTagPolicyCapability } from './entityCapabilityTagPolicyCapability';
 import type { EntityCapabilityTechnicalCapability } from './entityCapabilityTechnicalCapability';
 
-export type EntityCapability = EntityCapabilityClassificationCapability | EntityCapabilityDatesCapability | EntityCapabilityDescriptionCapability | EntityCapabilityFileManagementCapability | EntityCapabilityFilesCapability | EntityCapabilityFingerprintsCapability | EntityCapabilityFlagsCapability | EntityCapabilityImagesCapability | EntityCapabilityLifetimeCapability | EntityCapabilityLinksCapability | EntityCapabilityMarkersCapability | EntityCapabilityPlaybackCapability | EntityCapabilityPositionCapability | EntityCapabilityProgressCapability | EntityCapabilityProviderIdentityCapability | EntityCapabilityRatingCapability | EntityCapabilitySourceCapability | EntityCapabilityStatsCapability | EntityCapabilitySubtitlesCapability | EntityCapabilityTechnicalCapability;
+export type EntityCapability = EntityCapabilityBookMetadataCapability | EntityCapabilityClassificationCapability | EntityCapabilityCollectionConfigurationCapability | EntityCapabilityCoverSelectionCapability | EntityCapabilityCreditsCapability | EntityCapabilityDatesCapability | EntityCapabilityDescriptionCapability | EntityCapabilityEmbeddedAudioMetadataCapability | EntityCapabilityFileManagementCapability | EntityCapabilityFilesCapability | EntityCapabilityFingerprintsCapability | EntityCapabilityFlagsCapability | EntityCapabilityGalleryMetadataCapability | EntityCapabilityImagesCapability | EntityCapabilityLifetimeCapability | EntityCapabilityLinksCapability | EntityCapabilityMarkersCapability | EntityCapabilityPersonProfileCapability | EntityCapabilityPlaybackCapability | EntityCapabilityPositionCapability | EntityCapabilityProgressCapability | EntityCapabilityProviderIdentityCapability | EntityCapabilityRatingCapability | EntityCapabilitySeriesMetadataCapability | EntityCapabilitySourceCapability | EntityCapabilityStatsCapability | EntityCapabilitySubtitlesCapability | EntityCapabilityTagPolicyCapability | EntityCapabilityTechnicalCapability;

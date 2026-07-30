@@ -1,22 +1,19 @@
 import { render, waitFor } from "@testing-library/svelte";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { EntityCapability, EntityKind } from "$lib/api/generated/model";
-import { fetchImage, fetchVideo } from "$lib/api/media";
+import { fetchEntity, type EntityCardFull } from "$lib/api/entities";
 import type { EntityThumbnailCard } from "$lib/entities/entity-thumbnail";
 import EntityFeedHarness from "./EntityFeed.test-harness.svelte";
 
-vi.mock("$lib/api/media", () => ({
-  fetchImage: vi.fn(),
-  fetchVideo: vi.fn(),
+vi.mock("$lib/api/entities", () => ({
+  fetchEntity: vi.fn(),
 }));
 
-const fetchImageMock = vi.mocked(fetchImage);
-const fetchVideoMock = vi.mocked(fetchVideo);
+const fetchEntityMock = vi.mocked(fetchEntity);
 
 describe("EntityFeed animated playback", () => {
   beforeEach(() => {
-    fetchImageMock.mockReset();
-    fetchVideoMock.mockReset();
+    fetchEntityMock.mockReset();
     vi.stubGlobal("IntersectionObserver", PassiveIntersectionObserver);
   });
 
@@ -58,7 +55,7 @@ describe("EntityFeed animated playback", () => {
     });
 
     await waitFor(() => {
-      expect(fetchImageMock).toHaveBeenCalledWith("cover-img-1");
+      expect(fetchEntityMock).toHaveBeenCalledWith("cover-img-1");
     });
     await waitFor(() => {
       expect(container.querySelector<HTMLImageElement>(".feed-animated")?.getAttribute("src")).toBe(
@@ -66,7 +63,7 @@ describe("EntityFeed animated playback", () => {
       );
     });
     // The gallery container itself is never hydrated as media.
-    expect(fetchImageMock).not.toHaveBeenCalledWith("gallery-1");
+    expect(fetchEntityMock).not.toHaveBeenCalledWith("gallery-1");
   });
 
   it("uses the original source for the active image clip even when a preview is advertised", async () => {
@@ -106,7 +103,7 @@ describe("EntityFeed animated playback", () => {
     });
 
     await waitFor(() => {
-      expect(fetchVideoMock).toHaveBeenCalledWith("video-1");
+      expect(fetchEntityMock).toHaveBeenCalledWith("video-1");
     });
     await waitFor(() => {
       expect(container.querySelector<HTMLVideoElement>("video.feed-video")?.getAttribute("src")).toBe(
@@ -130,7 +127,7 @@ describe("EntityFeed animated playback", () => {
     });
 
     await waitFor(() => {
-      expect(fetchImageMock).toHaveBeenCalledWith("neighbor-1");
+      expect(fetchEntityMock).toHaveBeenCalledWith("neighbor-1");
     });
 
     // The off-center, source-only clip falls back to its original source so it
@@ -157,41 +154,40 @@ class PassiveIntersectionObserver implements IntersectionObserver {
   unobserve(_target: Element): void {}
 }
 
-type FetchImageResult = Awaited<ReturnType<typeof fetchImage>>;
-type FetchVideoResult = Awaited<ReturnType<typeof fetchVideo>>;
+type FetchEntityResult = EntityCardFull;
 
-function mockImages(images: Record<string, FetchImageResult>): void {
-  fetchImageMock.mockImplementation(async (id: string) => {
+function mockImages(images: Record<string, FetchEntityResult>): void {
+  fetchEntityMock.mockImplementation(async (id: string) => {
     const image = images[id];
     if (!image) throw new Error(`Unexpected image request: ${id}`);
     return image;
   });
 }
 
-function mockVideos(videos: Record<string, FetchVideoResult>): void {
-  fetchVideoMock.mockImplementation(async (id: string) => {
+function mockVideos(videos: Record<string, FetchEntityResult>): void {
+  fetchEntityMock.mockImplementation(async (id: string) => {
     const video = videos[id];
     if (!video) throw new Error(`Unexpected video request: ${id}`);
     return video;
   });
 }
 
-function imageDetail(id: string, title: string, capabilities: EntityCapability[]): FetchImageResult {
+function imageDetail(id: string, title: string, capabilities: EntityCapability[]): FetchEntityResult {
   return {
     id,
     kind: "image",
     title,
     capabilities,
-  } as FetchImageResult;
+  } as FetchEntityResult;
 }
 
-function videoDetail(id: string, title: string, capabilities: EntityCapability[]): FetchVideoResult {
+function videoDetail(id: string, title: string, capabilities: EntityCapability[]): FetchEntityResult {
   return {
     id,
     kind: "video",
     title,
     capabilities,
-  } as FetchVideoResult;
+  } as FetchEntityResult;
 }
 
 function filesCapability(items: Array<{ role: string; path: string; mimeType: string }>): EntityCapability {

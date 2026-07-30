@@ -6,8 +6,6 @@ using Prismedia.Contracts.Collections;
 using Prismedia.Contracts.Entities;
 using Prismedia.Contracts.Jellyfin;
 using Prismedia.Contracts.Media;
-using Prismedia.Contracts.Series;
-using Prismedia.Contracts.Videos;
 
 namespace Prismedia.Application.Jellyfin;
 

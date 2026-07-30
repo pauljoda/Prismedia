@@ -2,21 +2,14 @@ import { fireEvent, render, waitFor } from "@testing-library/svelte";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { page } from "$app/state";
 import Page from "./[id]/reader/+page.svelte";
-import type { BookDetail } from "$lib/api/media";
 import type { EntityCardFull } from "$lib/api/entities";
 import type { EntityThumbnail, EntityKind } from "$lib/api/generated/model";
 
 const mocks = vi.hoisted(() => ({
-  fetchBook: vi.fn(),
   fetchEntity: vi.fn(),
   goto: vi.fn(async () => {}),
   updateEntityProgress: vi.fn(),
 }));
-
-vi.mock("$lib/api/media", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("$lib/api/media")>();
-  return { ...actual, fetchBook: mocks.fetchBook };
-});
 
 vi.mock("$lib/api/entities", async (importOriginal) => {
   const actual = await importOriginal<typeof import("$lib/api/entities")>();
@@ -58,17 +51,14 @@ function thumbnail(id: string, kind: EntityKind, title: string, sortOrder: numbe
   };
 }
 
-function bookDetail(): BookDetail {
+function bookDetail(): EntityCardFull {
   return {
     id: "book-1",
     kind: "book",
     title: "Prismedia Book",
     parentEntityId: null,
     sortOrder: 0,
-    bookType: "comic",
-    format: "image-archive",
-    coverPageId: null,
-    capabilities: [],
+    capabilities: [{ kind: "book-metadata", bookType: "comic", format: "image-archive" }],
     childrenByKind: [
       {
         kind: "book-chapter",
@@ -83,7 +73,7 @@ function bookDetail(): BookDetail {
   };
 }
 
-function volumeBookDetail(): BookDetail {
+function volumeBookDetail(): EntityCardFull {
   return {
     ...bookDetail(),
     capabilities: [
@@ -178,7 +168,6 @@ describe("book reader next chapter navigation", () => {
 
     let activeProgressSaves = 0;
     let maxActiveProgressSaves = 0;
-    mocks.fetchBook.mockResolvedValue(book);
     mocks.fetchEntity.mockImplementation((id: string) => Promise.resolve(chapters.get(id) ?? book));
     mocks.updateEntityProgress.mockImplementation(async () => {
       activeProgressSaves++;
@@ -212,7 +201,7 @@ describe("book reader next chapter navigation", () => {
     await findByText("Prismedia Book · Chapter Two");
   });
 
-  it("opens book resume from the saved chapter without loading the whole book", async () => {
+  it("opens book resume from the saved chapter without loading unrelated siblings", async () => {
     const book = volumeBookDetail();
     const progressChapter = chapterDetail("chapter-2", "Chapter Two");
     progressChapter.parentEntityId = "volume-1";
@@ -223,8 +212,8 @@ describe("book reader next chapter navigation", () => {
       "http://localhost/books/book-1/reader?kind=book&id=book-1&returnId=book-1&command=resume",
     ) as unknown as typeof page.url;
 
-    mocks.fetchBook.mockResolvedValue(book);
     mocks.fetchEntity.mockImplementation((id: string) => {
+      if (id === "book-1") return Promise.resolve(book);
       if (id === "chapter-2") return Promise.resolve(progressChapter);
       if (id === "volume-1") return Promise.resolve(volume);
       throw new Error(`Unexpected eager entity load: ${id}`);
@@ -234,6 +223,7 @@ describe("book reader next chapter navigation", () => {
     const { findByText } = render(Page);
 
     await findByText("Prismedia Book · Chapter Two");
+    expect(mocks.fetchEntity).toHaveBeenCalledWith("book-1");
     expect(mocks.fetchEntity).toHaveBeenCalledWith("chapter-2");
     expect(mocks.fetchEntity).toHaveBeenCalledWith("volume-1");
     expect(mocks.fetchEntity).not.toHaveBeenCalledWith("chapter-1");

@@ -315,8 +315,8 @@ public sealed class EntityPatchEndpointTests {
             CancellationToken cancellationToken) =>
             throw new NotSupportedException();
 
-        public Task<IEntityCard?> GetDetailAsync(Guid id, string kind, bool hideNsfw, CancellationToken cancellationToken) =>
-            Task.FromResult<IEntityCard?>(Card(id, kind.DecodeAs<EntityKind>(), kind == "video" ? "Video Title" : "Updated Title"));
+        public Task<EntityCard?> GetAsync(Guid id, string kind, bool hideNsfw, CancellationToken cancellationToken) =>
+            Task.FromResult<EntityCard?>(Card(id, kind.DecodeAs<EntityKind>(), kind == EntityKindRegistry.Video.Code ? "Video Title" : "Updated Title"));
 
         private static EntityCard Card(Guid id, EntityKind kind, string title) =>
             new() {

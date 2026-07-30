@@ -5,7 +5,7 @@
   import { CloudDownload, Info, SlidersHorizontal } from "@lucide/svelte";
   import EntityDetailSkeleton from "$lib/components/entities/EntityDetailSkeleton.svelte";
   import EntityDetailHeroDates from "$lib/components/entities/EntityDetailHeroDates.svelte";
-  import { fetchImage, type ImageDetail } from "$lib/api/media";
+  import { fetchEntity, type EntityCardFull } from "$lib/api/entities";
   import {
     updateEntityRating,
     updateEntityFlags,
@@ -43,7 +43,7 @@
   const nsfw = useNsfw();
 
   let loadState: LoadState = $state("loading");
-  let image = $state<ImageDetail | null>(null);
+  let image = $state<EntityCardFull | null>(null);
   let errorMessage: string | null = $state(null);
   let lastNsfwMode = $state(nsfw.mode);
   let ratingBusy = $state(false);
@@ -125,7 +125,7 @@
     loadState = "loading";
     errorMessage = null;
     try {
-      const nextImage = await fetchImage(page.params.id ?? "");
+      const nextImage = await fetchEntity(page.params.id ?? "");
       const relationships = await hydrateStandardRelationshipCards(nextImage);
       image = nextImage;
       relationshipCredits = relationships.credits;

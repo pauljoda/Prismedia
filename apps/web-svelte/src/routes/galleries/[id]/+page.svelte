@@ -4,7 +4,7 @@
   import { CloudDownload, Info, Layers, SlidersHorizontal } from "@lucide/svelte";
   import EntityDetailSkeleton from "$lib/components/entities/EntityDetailSkeleton.svelte";
   import EntityDetailHeroDates from "$lib/components/entities/EntityDetailHeroDates.svelte";
-  import { fetchImage, fetchGallery, type GalleryDetail, type ImageDetail } from "$lib/api/media";
+  import { fetchEntity, type EntityCardFull } from "$lib/api/entities";
   import {
     updateEntityRating,
     updateEntityFlags,
@@ -12,6 +12,7 @@
   } from "$lib/api/entity-mutations";
   import {
     getCapability,
+    getGalleryMetadataCapability,
     getImagesCapability,
     getRatingValue,
     isNsfw as hasNsfwFlag,
@@ -58,7 +59,7 @@
   const appChrome = useAppChrome();
 
   let loadState: LoadState = $state("loading");
-  let gallery = $state<GalleryDetail | null>(null);
+  let gallery = $state<EntityCardFull | null>(null);
   let errorMessage: string | null = $state(null);
   let ratingBusy = $state(false);
   let childCards = $state<EntityThumbnailCard[]>([]);
@@ -84,6 +85,9 @@
   });
 
   const primaryStudio = $derived(relationshipStudio);
+  const galleryMetadata = $derived(
+    gallery ? getGalleryMetadataCapability(gallery.capabilities) : undefined,
+  );
 
   const dates = $derived(card?.dates ?? []);
   const acq = useEntityAcquisition({
@@ -152,7 +156,7 @@
     loadState = "loading";
     errorMessage = null;
     try {
-      const nextGallery = await fetchGallery(galleryId);
+      const nextGallery = await fetchEntity(galleryId);
       if (loadToken !== activeLoadToken) return;
       gallery = nextGallery;
       await hydrateGalleryThumbnails(nextGallery);
@@ -166,7 +170,7 @@
     }
   }
 
-  async function hydrateGalleryThumbnails(nextGallery: GalleryDetail) {
+  async function hydrateGalleryThumbnails(nextGallery: EntityCardFull) {
     const [children, relationships] = await Promise.all([
       fetchOrderedEntityThumbnails(getAllChildIds(nextGallery)),
       hydrateStandardRelationshipCards(nextGallery),
@@ -262,15 +266,15 @@
     await updateEntityRating(entityId, value);
   }
 
-  function lightboxEntityFromImageDetail(image: ImageDetail): UniversalLightboxEntity {
-    const rating = getRatingValue(image.capabilities);
+  function lightboxEntityFromEntity(entity: EntityCardFull): UniversalLightboxEntity {
+    const rating = getRatingValue(entity.capabilities);
     return {
-      id: image.id,
-      kind: image.kind,
-      title: image.title,
-      capabilities: image.capabilities,
-      coverUrl: getImagesCapability(image.capabilities)?.coverUrl ?? null,
-      isNsfw: hasNsfwFlag(image.capabilities),
+      id: entity.id,
+      kind: entity.kind,
+      title: entity.title,
+      capabilities: entity.capabilities,
+      coverUrl: getImagesCapability(entity.capabilities)?.coverUrl ?? null,
+      isNsfw: hasNsfwFlag(entity.capabilities),
       rating: rating > 0 ? rating : null,
     };
   }
@@ -279,10 +283,10 @@
     if (lightboxHydrationInFlight.includes(entityId)) return;
     lightboxHydrationInFlight = [...lightboxHydrationInFlight, entityId];
     try {
-      const image = await fetchImage(entityId);
+      const image = await fetchEntity(entityId);
       hydratedLightboxEntities = {
         ...hydratedLightboxEntities,
-        [entityId]: lightboxEntityFromImageDetail(image),
+        [entityId]: lightboxEntityFromEntity(image),
       };
     } finally {
       lightboxHydrationInFlight = lightboxHydrationInFlight.filter((id) => id !== entityId);
@@ -319,11 +323,11 @@
         {#if primaryStudio}
           <a href={resolveEntityHref(primaryStudio.kind as EntityKindCode, primaryStudio.id)} class="meta-item is-studio">{primaryStudio.title}</a>
         {/if}
-        {#if gallery?.galleryType}
+        {#if galleryMetadata?.galleryType}
           {#if primaryStudio}<span class="meta-sep"></span>{/if}
-          <span class="meta-item">{gallery.galleryType}</span>
+          <span class="meta-item">{galleryMetadata.galleryType}</span>
         {/if}
-        <EntityDetailHeroDates {dates} leadingSeparator={Boolean(primaryStudio || gallery?.galleryType)} />
+        <EntityDetailHeroDates {dates} leadingSeparator={Boolean(primaryStudio || galleryMetadata?.galleryType)} />
         {#if childCards.length > 0}
           <span class="meta-sep"></span>
           <span class="meta-item">{childCards.length} {childCards.length === 1 ? "item" : "items"}</span>
@@ -331,8 +335,8 @@
       {/snippet}
 
       {#snippet heroBadges()}
-        {#if gallery?.galleryType}
-          <span class="hero-badge">{gallery.galleryType}</span>
+        {#if galleryMetadata?.galleryType}
+          <span class="hero-badge">{galleryMetadata.galleryType}</span>
         {/if}
       {/snippet}
 

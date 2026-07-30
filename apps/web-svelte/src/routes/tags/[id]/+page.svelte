@@ -3,17 +3,14 @@
   import { page } from "$app/state";
   import { Film } from "@lucide/svelte";
   import EntityDetailSkeleton from "$lib/components/entities/EntityDetailSkeleton.svelte";
-  import { fetchEntities } from "$lib/api/entities";
+  import { fetchEntities, fetchEntity, type EntityCardFull } from "$lib/api/entities";
   import { RELATIONSHIP_CODE } from "$lib/api/generated/codes";
   import {
     updateEntityRating,
     updateEntityFlags,
     updateEntityMetadata,
   } from "$lib/api/entity-mutations";
-  import { getTag } from "$lib/api/generated/prismedia";
-  import type { TagDetail } from "$lib/api/generated/model";
-  import { unwrapGenerated } from "$lib/api/generated-response";
-  import { getCapability } from "$lib/api/capabilities";
+  import { getTagPolicyCapability } from "$lib/api/capabilities";
   import {
     toggleOptimisticEntityFlag,
     updateOptimisticEntityRating,
@@ -34,7 +31,7 @@
   const appChrome = useAppChrome();
 
   let loadState: LoadState = $state("loading");
-  let tag = $state<TagDetail | null>(null);
+  let tag = $state<EntityCardFull | null>(null);
   let relatedCards = $state<EntityThumbnailCard[]>([]);
   let errorMessage: string | null = $state(null);
   let lastNsfwMode = $state(nsfw.mode);
@@ -44,6 +41,7 @@
     if (!tag) return null;
     return entityCardToDetailCard(tag);
   });
+  const tagPolicy = $derived(tag ? getTagPolicyCapability(tag.capabilities) : undefined);
 
   onMount(() => {
     void loadTag();
@@ -68,7 +66,7 @@
     errorMessage = null;
     try {
       const id = page.params.id ?? "";
-      tag = unwrapGenerated<TagDetail>(await getTag(id), `Failed to fetch tag ${id}`);
+      tag = await fetchEntity(id);
       await loadRelated(id);
       loadState = "ready";
     } catch (err) {
@@ -142,7 +140,7 @@
         {#if relatedCards.length > 0}
           <span class="meta-item">{relatedCards.length} {relatedCards.length === 1 ? "item" : "items"}</span>
         {/if}
-        {#if tag?.ignoreAutoTag}
+        {#if tagPolicy?.ignoreAutoTag}
           {#if relatedCards.length > 0}<span class="meta-sep"></span>{/if}
           <span class="meta-item is-muted">Auto-tag ignored</span>
         {/if}

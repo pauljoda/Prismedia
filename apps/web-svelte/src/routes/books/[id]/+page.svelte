@@ -10,12 +10,11 @@
   import EntityAcquisitionCard from "$lib/components/acquisitions/EntityAcquisitionCard.svelte";
   import { useEntityAcquisition } from "$lib/components/acquisitions/use-entity-acquisition.svelte";
   import { requestableDirectChildCards } from "$lib/requests/requestable-entity-children";
-  import { getCapability, isWanted } from "$lib/api/capabilities";
+  import { getBookMetadataCapability, getCapability, isWanted } from "$lib/api/capabilities";
   import { fetchAcquisitionsForEntity } from "$lib/api/acquisitions";
   import { fetchEntityMonitors, resumeMonitor, stopMonitor } from "$lib/api/monitors";
   import { commitEntityRequest } from "$lib/api/requests";
   import { updateEntityProgress } from "$lib/api/playback";
-  import { fetchBook, type BookDetail } from "$lib/api/media";
   import { BookFormat, type AcquisitionDetail, type MonitorView } from "$lib/api/generated/model";
   import { fetchEntity, type EntityCardFull } from "$lib/api/entities";
   import {
@@ -103,7 +102,7 @@
   }
 
   let loadState: LoadState = $state("loading");
-  let book = $state<BookDetail | null>(null);
+  let book = $state<EntityCardFull | null>(null);
   // The acquisition backing this book (wanted placeholder still searching/downloading, or the import
   // that produced it), so its state is managed right here instead of only under /request.
   // The book's parent author grouping, when scanned under an Author/ folder, for a breadcrumb back-link.
@@ -133,13 +132,14 @@
   let loadToken = 0;
 
   const bookId = $derived(page.params.id ?? "");
-  const bookType = $derived(book?.bookType ?? null);
+  const bookMetadata = $derived(book ? getBookMetadataCapability(book.capabilities) : undefined);
+  const bookType = $derived(bookMetadata?.bookType ?? null);
   // A wanted placeholder has metadata but no file yet; reading is offered only once the file lands.
   // Its acquisition/monitoring surface is the Acquisition detail tab.
   const entityWanted = $derived(!!book && isWanted(book.capabilities));
   // Single-file books (EPUB/PDF) are read straight from the source file with no chapter entities.
   const isSingleFileBook = $derived(
-    !!book && (book.format === BookFormat.epub || book.format === BookFormat.pdf),
+    !!book && (bookMetadata?.format === BookFormat.epub || bookMetadata?.format === BookFormat.pdf),
   );
   const singleFileProgress = $derived(book && isSingleFileBook ? getCapability(book.capabilities, CAPABILITY_KIND.progress) : null);
   // Started once a position has been saved (EPUB and PDF both set currentEntityId to the book id).
@@ -180,7 +180,7 @@
       playback.context?.playbackOwnerEntityKind === ENTITY_KIND.book,
   );
   const readableChapters = $derived.by((): ReadableBookChapter[] => {
-    if (book?.format === BookFormat.epub) {
+    if (bookMetadata?.format === BookFormat.epub) {
       return epubContents.map((entry) => ({
         id: entry.id,
         title: entry.title,
@@ -207,7 +207,7 @@
   const baseChapterRows = $derived(buildBookChapterRows({
     readableChapters,
     audioTracks: audiobookTracks,
-    currentReadableId: book?.format === BookFormat.epub
+    currentReadableId: bookMetadata?.format === BookFormat.epub
       ? currentEpubChapterId
       : progressDisplay?.isComplete
         ? null
@@ -304,7 +304,7 @@
   );
   const hasReadableContent = $derived(
     isSingleFileBook ||
-      (book?.format === BookFormat["image-archive"] &&
+      (bookMetadata?.format === BookFormat["image-archive"] &&
         (readerPageCount > 0 || chapterDetails.length > 0 || volumeCards.length > 0)),
   );
   const card = $derived.by((): EntityDetailCardFull | null => {
@@ -459,7 +459,7 @@
     errorMessage = null;
     try {
       const [nextBook, nextAcquisitions, nextMonitors] = await Promise.all([
-        fetchBook(targetBookId),
+        fetchEntity(targetBookId),
         fetchAcquisitionsForEntity(targetBookId).catch(() => []),
         fetchEntityMonitors(targetBookId).catch(() => []),
       ]);
@@ -510,9 +510,9 @@
     }
   }
 
-  async function hydrateEpubContents(nextBook: BookDetail, token: number): Promise<void> {
+  async function hydrateEpubContents(nextBook: EntityCardFull, token: number): Promise<void> {
     epubContentsAbort?.abort();
-    if (nextBook.format !== BookFormat.epub) {
+    if (getBookMetadataCapability(nextBook.capabilities)?.format !== BookFormat.epub) {
       epubContents = [];
       currentEpubChapterId = null;
       epubContentsLoading = false;
@@ -593,7 +593,7 @@
     await refreshBookAcquisitionState().catch(() => {});
   }
 
-  async function hydrateChapters(nextBook: BookDetail): Promise<ChapterDetail[]> {
+  async function hydrateChapters(nextBook: EntityCardFull): Promise<ChapterDetail[]> {
     const directChapters = orderedBookChildren(nextBook, ENTITY_KIND.bookChapter).map((thumbnail, index) => ({
       thumbnail,
       sortOrder: Number(thumbnail.sortOrder ?? index),
@@ -630,7 +630,7 @@
   }
 
   async function hydrateProgressChapterSummary(
-    nextBook: BookDetail,
+    nextBook: EntityCardFull,
     chapters: ChapterDetail[],
   ): Promise<BookReaderChapter | null> {
     const progress = getCapability(nextBook.capabilities, CAPABILITY_KIND.progress);

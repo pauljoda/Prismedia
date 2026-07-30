@@ -22,12 +22,8 @@ import type {
   ApiProblem,
   ApplyIdentifyProposalRequest,
   ApplyIdentifyQueueItemRequest,
-  AudioLibraryDetail,
-  AudioTrackDetail,
   BookAcquisitionProfileSaveRequest,
   BookAcquisitionProfileView,
-  BookAuthorDetail,
-  BookDetail,
   BrowseLibraryPathParams,
   BrowserSessionResponse,
   BulkJobResponse,
@@ -37,7 +33,6 @@ import type {
   ClearJobFailuresParams,
   CollectionAddItemsRequest,
   CollectionDeleteResponse,
-  CollectionDetail,
   CollectionItemMutationResponse,
   CollectionItemsResponse,
   CollectionRefreshResponse,
@@ -94,7 +89,6 @@ import type {
   FileRenameRequest,
   FileRescanRequest,
   FileRootsResponse,
-  GalleryDetail,
   GetAudioLibraryParams,
   GetAudioTrackParams,
   GetBookAuthorParams,
@@ -149,7 +143,6 @@ import type {
   IdentifyQueueCandidateRequest,
   IdentifyQueueItem,
   IdentifyQueueSearchRequest,
-  ImageDetail,
   IndexerConfigSaveRequest,
   IndexerConfigSummary,
   IndexerTestRequest,
@@ -222,8 +215,6 @@ import type {
   MonitorStopResponse,
   MonitorView,
   MoveFileParams,
-  MovieDetail,
-  MusicArtistDetail,
   MusicPlayerStateResponse,
   NavLayoutDocument,
   NavLayoutResponse,
@@ -231,7 +222,6 @@ import type {
   OrganizeApplyResponse,
   OrganizePlanRequest,
   OrganizePlanResponse,
-  PersonDetail,
   PlaybackEventCreateRequest,
   PlaybackInfoRequest,
   PlaybackInfoResponse,
@@ -276,9 +266,7 @@ import type {
   SetupStatusResponse,
   StartBulkIdentifyParams,
   StashScraperListing,
-  StudioDetail,
   SubtitleProviderTestResponse,
-  TagDetail,
   TranscodeCacheStatusResponse,
   UpdateCheckResponse,
   UpdateMusicPlayerStateRequest,
@@ -291,9 +279,6 @@ import type {
   UserSessionsResponse,
   UserUpdateRequest,
   UsersResponse,
-  VideoDetail,
-  VideoSeasonDetail,
-  VideoSeriesDetail,
   WantedPageView,
   WantedRemovalRequest,
   WantedRemovalResponse,
@@ -444,7 +429,7 @@ export const getDatabaseRestoreHealth = async ( options?: RequestInit): Promise<
 
 
 export type getVideoSeasonResponse200 = {
-  data: VideoSeasonDetail
+  data: EntityCard
   status: 200
 }
 
@@ -5929,7 +5914,7 @@ export const listVideos = async (params?: ListVideosParams, options?: RequestIni
 
 
 export type getVideoResponse200 = {
-  data: VideoDetail
+  data: EntityCard
   status: 200
 }
 
@@ -5981,7 +5966,7 @@ export const getVideo = async (id: string,
 
 
 export type getVideoPatchResponse200 = {
-  data: VideoDetail
+  data: EntityCard
   status: 200
 }
 
@@ -6352,7 +6337,7 @@ export const listMovies = async (params?: ListMoviesParams, options?: RequestIni
 
 
 export type getMovieResponse200 = {
-  data: MovieDetail
+  data: EntityCard
   status: 200
 }
 
@@ -6404,7 +6389,7 @@ export const getMovie = async (id: string,
 
 
 export type getMoviePatchResponse200 = {
-  data: MovieDetail
+  data: EntityCard
   status: 200
 }
 
@@ -6497,7 +6482,7 @@ export const listVideoSeries = async (params?: ListVideoSeriesParams, options?: 
 
 
 export type getVideoSeriesResponse200 = {
-  data: VideoSeriesDetail
+  data: EntityCard
   status: 200
 }
 
@@ -6549,7 +6534,7 @@ export const getVideoSeries = async (id: string,
 
 
 export type getVideoSeriesPatchResponse200 = {
-  data: VideoSeriesDetail
+  data: EntityCard
   status: 200
 }
 
@@ -6642,7 +6627,7 @@ export const listImages = async (params?: ListImagesParams, options?: RequestIni
 
 
 export type getImageResponse200 = {
-  data: ImageDetail
+  data: EntityCard
   status: 200
 }
 
@@ -6694,7 +6679,7 @@ export const getImage = async (id: string,
 
 
 export type getImagePatchResponse200 = {
-  data: ImageDetail
+  data: EntityCard
   status: 200
 }
 
@@ -6787,7 +6772,7 @@ export const listGalleries = async (params?: ListGalleriesParams, options?: Requ
 
 
 export type getGalleryResponse200 = {
-  data: GalleryDetail
+  data: EntityCard
   status: 200
 }
 
@@ -6839,7 +6824,7 @@ export const getGallery = async (id: string,
 
 
 export type getGalleryPatchResponse200 = {
-  data: GalleryDetail
+  data: EntityCard
   status: 200
 }
 
@@ -6932,7 +6917,7 @@ export const listBooks = async (params?: ListBooksParams, options?: RequestInit)
 
 
 export type getBookResponse200 = {
-  data: BookDetail
+  data: EntityCard
   status: 200
 }
 
@@ -6984,7 +6969,7 @@ export const getBook = async (id: string,
 
 
 export type getBookPatchResponse200 = {
-  data: BookDetail
+  data: EntityCard
   status: 200
 }
 
@@ -7077,7 +7062,7 @@ export const listBookAuthors = async (params?: ListBookAuthorsParams, options?: 
 
 
 export type getBookAuthorResponse200 = {
-  data: BookAuthorDetail
+  data: EntityCard
   status: 200
 }
 
@@ -7129,7 +7114,7 @@ export const getBookAuthor = async (id: string,
 
 
 export type getBookAuthorPatchResponse200 = {
-  data: BookAuthorDetail
+  data: EntityCard
   status: 200
 }
 
@@ -7222,7 +7207,7 @@ export const listMusicArtists = async (params?: ListMusicArtistsParams, options?
 
 
 export type getMusicArtistResponse200 = {
-  data: MusicArtistDetail
+  data: EntityCard
   status: 200
 }
 
@@ -7274,7 +7259,7 @@ export const getMusicArtist = async (id: string,
 
 
 export type getMusicArtistPatchResponse200 = {
-  data: MusicArtistDetail
+  data: EntityCard
   status: 200
 }
 
@@ -7367,7 +7352,7 @@ export const listAudioLibraries = async (params?: ListAudioLibrariesParams, opti
 
 
 export type getAudioLibraryResponse200 = {
-  data: AudioLibraryDetail
+  data: EntityCard
   status: 200
 }
 
@@ -7419,7 +7404,7 @@ export const getAudioLibrary = async (id: string,
 
 
 export type getAudioLibraryPatchResponse200 = {
-  data: AudioLibraryDetail
+  data: EntityCard
   status: 200
 }
 
@@ -7512,7 +7497,7 @@ export const listAudioTracks = async (params?: ListAudioTracksParams, options?: 
 
 
 export type getAudioTrackResponse200 = {
-  data: AudioTrackDetail
+  data: EntityCard
   status: 200
 }
 
@@ -7564,7 +7549,7 @@ export const getAudioTrack = async (id: string,
 
 
 export type getAudioTrackPatchResponse200 = {
-  data: AudioTrackDetail
+  data: EntityCard
   status: 200
 }
 
@@ -7700,7 +7685,7 @@ export const listPeople = async (params?: ListPeopleParams, options?: RequestIni
 
 
 export type createPersonResponse201 = {
-  data: PersonDetail
+  data: EntityCard
   status: 201
 }
 
@@ -7787,7 +7772,7 @@ export const deletePerson = async (id: string, options?: RequestInit): Promise<d
 
 
 export type getPersonResponse200 = {
-  data: PersonDetail
+  data: EntityCard
   status: 200
 }
 
@@ -7839,7 +7824,7 @@ export const getPerson = async (id: string,
 
 
 export type getPersonPatchResponse200 = {
-  data: PersonDetail
+  data: EntityCard
   status: 200
 }
 
@@ -7932,7 +7917,7 @@ export const listStudios = async (params?: ListStudiosParams, options?: RequestI
 
 
 export type createStudioResponse201 = {
-  data: StudioDetail
+  data: EntityCard
   status: 201
 }
 
@@ -8019,7 +8004,7 @@ export const deleteStudio = async (id: string, options?: RequestInit): Promise<d
 
 
 export type getStudioResponse200 = {
-  data: StudioDetail
+  data: EntityCard
   status: 200
 }
 
@@ -8071,7 +8056,7 @@ export const getStudio = async (id: string,
 
 
 export type getStudioPatchResponse200 = {
-  data: StudioDetail
+  data: EntityCard
   status: 200
 }
 
@@ -8164,7 +8149,7 @@ export const listTags = async (params?: ListTagsParams, options?: RequestInit): 
 
 
 export type createTagResponse201 = {
-  data: TagDetail
+  data: EntityCard
   status: 201
 }
 
@@ -8251,7 +8236,7 @@ export const deleteTag = async (id: string, options?: RequestInit): Promise<dele
 
 
 export type getTagResponse200 = {
-  data: TagDetail
+  data: EntityCard
   status: 200
 }
 
@@ -8303,7 +8288,7 @@ export const getTag = async (id: string,
 
 
 export type getTagPatchResponse200 = {
-  data: TagDetail
+  data: EntityCard
   status: 200
 }
 
@@ -8396,7 +8381,7 @@ export const listCollections = async (params?: ListCollectionsParams, options?: 
 
 
 export type createCollectionResponse201 = {
-  data: CollectionDetail
+  data: EntityCard
   status: 201
 }
 
@@ -8440,7 +8425,7 @@ export const createCollection = async (collectionWriteRequest: CollectionWriteRe
 
 
 export type getCollectionResponse200 = {
-  data: CollectionDetail
+  data: EntityCard
   status: 200
 }
 
@@ -8492,7 +8477,7 @@ export const getCollection = async (id: string,
 
 
 export type getCollectionPatchResponse200 = {
-  data: CollectionDetail
+  data: EntityCard
   status: 200
 }
 
@@ -8542,7 +8527,7 @@ export const getCollectionPatch = async (id: string,
 
 
 export type updateCollectionResponse200 = {
-  data: CollectionDetail
+  data: EntityCard
   status: 200
 }
 

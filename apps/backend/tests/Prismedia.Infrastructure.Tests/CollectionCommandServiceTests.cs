@@ -32,9 +32,10 @@ public sealed class CollectionCommandServiceTests {
         Assert.Equal(CollectionCommandStatus.Succeeded, result.Status);
         Assert.NotNull(result.Collection);
         Assert.Equal("Favorites", result.Collection.Title);
-        Assert.Equal(CollectionMode.Hybrid, result.Collection.Mode);
-        Assert.False(result.Collection.IsShared);
-        Assert.True(result.Collection.CanEdit);
+        var configuration = Configuration(result.Collection);
+        Assert.Equal(CollectionMode.Hybrid, configuration.Mode);
+        Assert.False(configuration.IsShared);
+        Assert.True(configuration.CanEdit);
 
         var entity = Assert.Single(db.Entities);
         Assert.Equal(EntityKindRegistry.Collection.Code, entity.KindCode);
@@ -73,7 +74,7 @@ public sealed class CollectionCommandServiceTests {
             .UpdateAsync(collectionId, request, CancellationToken.None);
 
         Assert.Equal(CollectionCommandStatus.Succeeded, updated.Status);
-        Assert.True(updated.Collection!.IsShared);
+        Assert.True(Configuration(updated.Collection!).IsShared);
         Assert.True((await db.CollectionDetails.SingleAsync()).IsShared);
     }
 
@@ -420,7 +421,7 @@ public sealed class CollectionCommandServiceTests {
         ICurrentUserContext? user = null) =>
         new(
             new CollectionCommandPersistence(db),
-            new FakeEntityReadService(db),
+            new FakeEntityReadService(db, user ?? TestUserContext.Admin()),
             ruleEngine ?? new FakeCollectionRuleEngine([]),
             refreshPersistence ?? new FakeCollectionRefreshPersistence(),
             user ?? TestUserContext.Admin());
@@ -466,7 +467,12 @@ public sealed class CollectionCommandServiceTests {
             .UseInMemoryDatabase($"collection-commands-{Guid.NewGuid():N}")
             .Options);
 
-    private sealed class FakeEntityReadService(PrismediaDbContext db) : IEntityReadService {
+    private static CollectionConfigurationCapability Configuration(EntityCard collection) =>
+        Assert.Single(collection.Capabilities.OfType<CollectionConfigurationCapability>());
+
+    private sealed class FakeEntityReadService(
+        PrismediaDbContext db,
+        ICurrentUserContext currentUser) : IEntityReadService {
         public Task<EntityListResponse> ListAsync(
             string? kind,
             string? query,
@@ -495,8 +501,38 @@ public sealed class CollectionCommandServiceTests {
             AcquisitionStatus? acquisitionStatus = null) =>
             throw new NotSupportedException();
 
-        public Task<EntityCard?> GetAsync(Guid id, bool hideNsfw, CancellationToken cancellationToken) =>
-            throw new NotSupportedException();
+        public async Task<EntityCard?> GetAsync(Guid id, bool hideNsfw, CancellationToken cancellationToken) {
+            var entity = await db.Entities.AsNoTracking()
+                .FirstOrDefaultAsync(row => row.Id == id && (!hideNsfw || !row.IsNsfw), cancellationToken);
+            if (entity is null) {
+                return null;
+            }
+
+            var capabilities = new List<EntityCapability>();
+            if (entity.KindCode == EntityKindRegistry.Collection.Code) {
+                var detail = await db.CollectionDetails.AsNoTracking()
+                    .FirstAsync(row => row.EntityId == id, cancellationToken);
+                capabilities.Add(new CollectionConfigurationCapability(
+                    detail.IsShared,
+                    detail.OwnerUserId == currentUser.UserId,
+                    detail.Mode,
+                    detail.RuleTreeJson,
+                    detail.CoverMode,
+                    detail.LastRefreshedAt));
+                capabilities.Add(new CoverSelectionCapability(detail.CoverItemEntityId));
+            }
+
+            return new EntityCard {
+                Id = entity.Id,
+                Kind = entity.KindCode.DecodeAs<EntityKind>(),
+                Title = entity.Title,
+                ParentEntityId = entity.ParentEntityId,
+                SortOrder = entity.SortOrder,
+                Capabilities = capabilities,
+                ChildrenByKind = [],
+                Relationships = [],
+            };
+        }
 
         public async Task<EntityThumbnailBatchResponse> GetThumbnailsAsync(
             IReadOnlyList<Guid> ids,
@@ -528,31 +564,6 @@ public sealed class CollectionCommandServiceTests {
                 .ToArray());
         }
 
-        public async Task<IEntityCard?> GetDetailAsync(Guid id, string kind, bool hideNsfw, CancellationToken cancellationToken) {
-            var entity = await db.Entities.AsNoTracking()
-                .FirstOrDefaultAsync(row => row.Id == id && row.KindCode == kind, cancellationToken);
-            if (entity is null) return null;
-
-            var detail = await db.CollectionDetails.AsNoTracking()
-                .FirstAsync(row => row.EntityId == id, cancellationToken);
-            return new CollectionDetail {
-                Id = entity.Id,
-                Kind = entity.KindCode.DecodeAs<EntityKind>(),
-                Title = entity.Title,
-                ParentEntityId = entity.ParentEntityId,
-                SortOrder = entity.SortOrder,
-                Capabilities = [],
-                ChildrenByKind = [],
-                Relationships = [],
-                Mode = detail.Mode,
-                RuleTreeJson = detail.RuleTreeJson,
-                CoverMode = detail.CoverMode,
-                CoverItemId = detail.CoverItemEntityId,
-                LastRefreshedAt = detail.LastRefreshedAt,
-                IsShared = detail.IsShared,
-                CanEdit = detail.OwnerUserId == TestUserContext.UserId,
-            };
-        }
     }
 
     private sealed class FakeCollectionRuleEngine(IReadOnlyList<CollectionRuleMatch> matches) : ICollectionRuleEngine {

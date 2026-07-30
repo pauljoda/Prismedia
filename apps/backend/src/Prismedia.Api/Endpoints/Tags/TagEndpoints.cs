@@ -1,5 +1,5 @@
 using Prismedia.Contracts.Entities;
-using Prismedia.Contracts.Taxonomy;
+using Prismedia.Domain.Entities;
 
 namespace Prismedia.Api.Endpoints;
 
@@ -7,11 +7,9 @@ public static class TagEndpoints {
     public static RouteGroupBuilder MapTagEndpoints(this IEndpointRouteBuilder routes) =>
         routes.MapEntityKindRoutes(
             "/api/tags",
-            "tag",
+            EntityKindRegistry.Tag.Code,
             "Taxonomy",
             "ListTags",
             "GetTag",
-            typeof(EntityListResponse),
-            typeof(TagDetail),
             manageable: true);
 }

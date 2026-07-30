@@ -7,8 +7,6 @@ using Prismedia.Contracts.Entities;
 using Prismedia.Contracts.Jellyfin;
 using Prismedia.Domain.Entities;
 using Prismedia.Contracts.Media;
-using Prismedia.Contracts.Series;
-using Prismedia.Contracts.Videos;
 
 namespace Prismedia.Application.Jellyfin;
 
@@ -159,13 +157,7 @@ public sealed partial class JellyfinCatalogService {
     }
 
     private static IReadOnlyList<EntityCreditMetadata> CreditMetadata(IEntityCard item) =>
-        item switch {
-            VideoDetail detail => detail.CreditMetadata,
-            VideoSeriesDetail detail => detail.CreditMetadata,
-            VideoSeasonDetail detail => detail.CreditMetadata,
-            GalleryDetail detail => detail.CreditMetadata,
-            _ => []
-        };
+        item.Capabilities.OfType<CreditsCapability>().SingleOrDefault()?.Items ?? [];
 
     private static string PersonType(string? role, EntityGroup group) {
         var code = EmptyAsNull(role) ?? group.Code?.ToCode() ?? group.Label;

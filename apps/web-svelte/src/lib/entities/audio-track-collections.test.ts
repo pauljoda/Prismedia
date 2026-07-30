@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type {
-  AudioLibraryDetail,
+  EntityCard,
   EntityThumbnail,
 } from "$lib/api/generated/model";
 import type { CollectionItem } from "$lib/collections/models";
@@ -40,7 +40,7 @@ describe("audio track collections", () => {
         kind: ENTITY_KIND.audioTrack,
         entities: [track("playable"), track("wanted", true)],
       }],
-    } as AudioLibraryDetail;
+    } as EntityCard;
 
     expect(tracksFromAudioLibraryDetail(detail, false).map((item) => item.id))
       .toEqual(["playable"]);

@@ -3,9 +3,8 @@
   import { goto } from "$app/navigation";
   import { resolve } from "$app/paths";
   import { page } from "$app/state";
-  import { getCollection } from "$lib/api/generated/prismedia";
-  import type { CollectionDetail } from "$lib/api/generated/model";
-  import { unwrapGenerated } from "$lib/api/generated-response";
+  import { fetchEntity, type EntityCardFull } from "$lib/api/entities";
+  import { getCollectionConfigurationCapability } from "$lib/api/capabilities";
   import { redirectHiddenEntityNotFound } from "$lib/nsfw/hidden-entity";
   import { useNsfw } from "$lib/nsfw/store.svelte";
   import CollectionEditor from "$lib/components/collections/CollectionEditor.svelte";
@@ -14,7 +13,7 @@
 
   const nsfw = useNsfw();
   let loadState: LoadState = $state("loading");
-  let collection = $state<CollectionDetail | null>(null);
+  let collection = $state<EntityCardFull | null>(null);
   let errorMessage = $state<string | null>(null);
 
   onMount(() => {
@@ -26,11 +25,8 @@
     errorMessage = null;
     try {
       const id = page.params.id ?? "";
-      const loaded = unwrapGenerated<CollectionDetail>(
-        await getCollection(id),
-        `Failed to fetch collection ${id}`,
-      );
-      if (!loaded.canEdit) {
+      const loaded = await fetchEntity(id);
+      if (!getCollectionConfigurationCapability(loaded.capabilities)?.canEdit) {
         await goto(resolve(`/collections/${id}` as "/"), { replaceState: true });
         return;
       }

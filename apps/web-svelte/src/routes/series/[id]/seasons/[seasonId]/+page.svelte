@@ -7,7 +7,7 @@
   import EntityDetailHeroDates from "$lib/components/entities/EntityDetailHeroDates.svelte";
   import MediaProgressPanel from "$lib/components/MediaProgressPanel.svelte";
   import { PROGRESS_UNIT } from "$lib/api/generated/codes";
-  import { fetchSeason, fetchSeries, type VideoSeasonDetail, type VideoSeriesDetail } from "$lib/api/media";
+  import { fetchEntity, type EntityCardFull } from "$lib/api/entities";
   import { updateEntityProgress } from "$lib/api/playback";
   import {
     updateEntityRating,
@@ -56,8 +56,8 @@
   const appChrome = useAppChrome();
 
   let loadState: LoadState = $state("loading");
-  let parentSeries = $state<VideoSeriesDetail | null>(null);
-  let season = $state<VideoSeasonDetail | null>(null);
+  let parentSeries = $state<EntityCardFull | null>(null);
+  let season = $state<EntityCardFull | null>(null);
   let errorMessage: string | null = $state(null);
   let lastNsfwMode = $state(nsfw.mode);
   let ratingBusy = $state(false);
@@ -181,8 +181,8 @@
     errorMessage = null;
     try {
       const [seriesDetail, seasonDetail] = await Promise.all([
-        fetchSeries(seriesId),
-        fetchSeason(seriesId, seasonId),
+        fetchEntity(seriesId),
+        fetchEntity(seasonId),
       ]);
       parentSeries = seriesDetail;
       season = seasonDetail;
@@ -224,7 +224,7 @@
     await loadSeason();
   }
 
-  async function hydrateEpisodeThumbnails(seasonDetail: VideoSeasonDetail) {
+  async function hydrateEpisodeThumbnails(seasonDetail: EntityCardFull) {
     const episodeIds = getChildIds(seasonDetail, ENTITY_KIND.video);
     episodeCards = thumbnailsToCards(await fetchOrderedEntityThumbnails(episodeIds));
   }
@@ -269,8 +269,8 @@
   }
 
   async function hydrateSeasonRelationships(
-    seasonDetail: VideoSeasonDetail,
-    seriesDetail: VideoSeriesDetail,
+    seasonDetail: EntityCardFull,
+    seriesDetail: EntityCardFull,
   ) {
     let relationshipCards = await hydrateStandardRelationshipCards(seasonDetail);
     if (

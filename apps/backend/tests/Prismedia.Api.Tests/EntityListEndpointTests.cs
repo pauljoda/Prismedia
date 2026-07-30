@@ -126,11 +126,5 @@ public sealed class EntityListEndpointTests {
             CancellationToken cancellationToken) =>
             Task.FromResult(new EntityThumbnailBatchResponse([]));
 
-        public Task<IEntityCard?> GetDetailAsync(
-            Guid id,
-            string kind,
-            bool hideNsfw,
-            CancellationToken cancellationToken) =>
-            Task.FromResult<IEntityCard?>(null);
     }
 }

@@ -93,29 +93,3 @@ public sealed record CollectionItemDetail(
 /// <summary>Ordered collection item response.</summary>
 /// <param name="Items">Collection items in display order.</param>
 public sealed record CollectionItemsResponse(IReadOnlyList<CollectionItemDetail> Items);
-
-/// <summary>
-/// API-facing collection detail shape with expanded collection members.
-/// </summary>
-public sealed record CollectionDetail : EntityDetail {
-    /// <summary>Whether other household users may view the collection.</summary>
-    public required bool IsShared { get; init; }
-
-    /// <summary>Whether the current user owns and may edit the collection.</summary>
-    public required bool CanEdit { get; init; }
-
-    /// <summary>Collection membership mode.</summary>
-    public required CollectionMode? Mode { get; init; }
-
-    /// <summary>Dynamic collection rule tree JSON, when present.</summary>
-    public required string? RuleTreeJson { get; init; }
-
-    /// <summary>Collection cover selection mode.</summary>
-    public required CollectionCoverMode? CoverMode { get; init; }
-
-    /// <summary>Entity selected as the collection cover item.</summary>
-    public required Guid? CoverItemId { get; init; }
-
-    /// <summary>Last dynamic refresh timestamp, when known.</summary>
-    public required DateTimeOffset? LastRefreshedAt { get; init; }
-}

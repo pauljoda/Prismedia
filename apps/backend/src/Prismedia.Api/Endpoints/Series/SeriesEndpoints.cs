@@ -1,7 +1,7 @@
 using Prismedia.Application.Entities;
 using Prismedia.Contracts.Entities;
-using Prismedia.Contracts.Series;
 using Prismedia.Contracts.System;
+using Prismedia.Domain.Entities;
 
 namespace Prismedia.Api.Endpoints;
 
@@ -9,12 +9,10 @@ public static class SeriesEndpoints {
     public static IEndpointRouteBuilder MapSeriesEndpoints(this IEndpointRouteBuilder routes) {
         routes.MapEntityKindRoutes(
             "/api/series",
-            "video-series",
+            EntityKindRegistry.VideoSeries.Code,
             "Series",
             "ListVideoSeries",
-            "GetVideoSeries",
-            typeof(EntityListResponse),
-            typeof(VideoSeriesDetail));
+            "GetVideoSeries");
 
         routes.MapGet("/api/series/{id:guid}/seasons/{seasonId:guid}", async (
             Guid id,
@@ -25,14 +23,14 @@ public static class SeriesEndpoints {
             CancellationToken cancellationToken) =>
             await EntityKindRouteEndpoints.GetKindDetailAsync(
                 seasonId,
-                "video-season",
+                EntityKindRegistry.VideoSeason.Code,
                 NsfwVisibility.ShouldHide(hideNsfw, httpContext),
                 entities,
                 cancellationToken))
             .WithTags("Series")
             .WithName("GetVideoSeason")
             .WithSummary("Get Video Season.")
-            .Produces<VideoSeasonDetail>()
+            .Produces<EntityCard>()
             .Produces<ApiProblem>(StatusCodes.Status404NotFound);
 
         return routes;

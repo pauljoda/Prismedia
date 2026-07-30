@@ -5,6 +5,8 @@ using Prismedia.Infrastructure.Persistence.Entities;
 namespace Prismedia.Infrastructure.Persistence;
 
 internal static partial class PrismediaModelConfiguration {
+    private const EntityKind PersistedEntityKindSentinel = (EntityKind)(-1);
+
     private static void ConfigureAcquisitionTables(ModelBuilder modelBuilder) {
         modelBuilder.Entity<IndexerConfigRow>(entity => {
             entity.ToTable("indexer_configs");
@@ -110,6 +112,7 @@ internal static partial class PrismediaModelConfiguration {
                 .HasMaxLength(64)
                 .HasConversion(value => value.ToCode(), value => value.DecodeAs<EntityKind>())
                 .HasDefaultValue(EntityKind.Book)
+                .HasSentinel(PersistedEntityKindSentinel)
                 .IsRequired();
             entity.Property(row => row.DisplayName).HasColumnName("display_name").HasMaxLength(256).IsRequired();
             entity.Property(row => row.IsDefault).HasColumnName("is_default");
@@ -173,6 +176,7 @@ internal static partial class PrismediaModelConfiguration {
                 .HasMaxLength(64)
                 .HasConversion(value => value.ToCode(), value => value.DecodeAs<EntityKind>())
                 .HasDefaultValue(EntityKind.Book)
+                .HasSentinel(PersistedEntityKindSentinel)
                 .IsRequired();
             entity.Property(row => row.Name).HasColumnName("name").HasMaxLength(256).IsRequired();
             entity.Property(row => row.ConditionsJson).HasColumnName("conditions_json").HasColumnType("jsonb").HasDefaultValue("[]").IsRequired();
@@ -191,6 +195,7 @@ internal static partial class PrismediaModelConfiguration {
                 .HasMaxLength(64)
                 .HasConversion(value => value.ToCode(), value => value.DecodeAs<EntityKind>())
                 .HasDefaultValue(EntityKind.Book)
+                .HasSentinel(PersistedEntityKindSentinel)
                 .IsRequired();
             entity.Property(row => row.BookRendition)
                 .HasColumnName("book_rendition")
@@ -382,6 +387,7 @@ internal static partial class PrismediaModelConfiguration {
                 .HasMaxLength(64)
                 .HasConversion(value => value.ToCode(), value => value.DecodeAs<EntityKind>())
                 .HasDefaultValue(EntityKind.Book)
+                .HasSentinel(PersistedEntityKindSentinel)
                 .IsRequired();
             entity.Property(row => row.Title).HasColumnName("title").HasMaxLength(1024).IsRequired();
             entity.Property(row => row.CreatedAt).HasColumnName("created_at");
@@ -420,6 +426,7 @@ internal static partial class PrismediaModelConfiguration {
                 .HasMaxLength(64)
                 .HasConversion(value => value.ToCode(), value => value.DecodeAs<EntityKind>())
                 .HasDefaultValue(EntityKind.Book)
+                .HasSentinel(PersistedEntityKindSentinel)
                 .IsRequired();
             entity.Property(row => row.Event)
                 .HasColumnName("event")
@@ -452,6 +459,7 @@ internal static partial class PrismediaModelConfiguration {
                 .HasMaxLength(64)
                 .HasConversion(value => value.ToCode(), value => value.DecodeAs<EntityKind>())
                 .HasDefaultValue(EntityKind.Book)
+                .HasSentinel(PersistedEntityKindSentinel)
                 .IsRequired();
             entity.Property(row => row.BookRendition)
                 .HasColumnName("book_rendition")

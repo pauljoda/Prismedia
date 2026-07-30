@@ -212,8 +212,8 @@ public sealed class JellyfinCatalogExtrasEndpointTests {
             CancellationToken cancellationToken) =>
             Task.FromResult(new EntityThumbnailBatchResponse([]));
 
-        public Task<IEntityCard?> GetDetailAsync(Guid id, string kind, bool hideNsfw, CancellationToken cancellationToken) =>
-            Task.FromResult<IEntityCard?>(id == playlistId
+        public Task<EntityCard?> GetAsync(Guid id, string kind, bool hideNsfw, CancellationToken cancellationToken) =>
+            Task.FromResult<EntityCard?>(id == playlistId
                 ? Card(playlistId, EntityKind.Collection, "Mixtape")
                 : id == trackId
                     ? Card(trackId, EntityKind.AudioTrack, "Opening Track")

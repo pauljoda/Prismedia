@@ -1,8 +1,4 @@
 using System.Reflection;
-using Prismedia.Contracts.Entities;
-using Prismedia.Contracts.Media;
-using Prismedia.Contracts.Series;
-using Prismedia.Contracts.Taxonomy;
 using Prismedia.Domain.Entities;
 using Prismedia.Domain.Media;
 using Prismedia.Infrastructure.Persistence;
@@ -83,83 +79,6 @@ public static class EntityMappers {
 
         public Task PersistDetailAsync(Entity entity, CancellationToken cancellationToken) =>
             Task.CompletedTask;
-
-        public IEntityCard ProjectDetail(
-            Entity entity,
-            EntityCard card,
-            IReadOnlyList<EntityCreditMetadata> creditMetadata) =>
-            descriptor.Value switch {
-                EntityKind.AudioLibrary => new AudioLibraryDetail {
-                    Id = card.Id,
-                    Kind = card.Kind,
-                    Title = card.Title,
-                    ParentEntityId = card.ParentEntityId,
-                    SortOrder = card.SortOrder,
-                    HasSourceMedia = card.HasSourceMedia,
-                    Capabilities = card.Capabilities,
-                    ChildrenByKind = card.ChildrenByKind,
-                    Relationships = card.Relationships,
-                },
-                EntityKind.MusicArtist => new MusicArtistDetail {
-                    Id = card.Id,
-                    Kind = card.Kind,
-                    Title = card.Title,
-                    ParentEntityId = card.ParentEntityId,
-                    SortOrder = card.SortOrder,
-                    HasSourceMedia = card.HasSourceMedia,
-                    Capabilities = card.Capabilities,
-                    ChildrenByKind = card.ChildrenByKind,
-                    Relationships = card.Relationships,
-                    CreditMetadata = creditMetadata,
-                },
-                EntityKind.BookAuthor => new BookAuthorDetail {
-                    Id = card.Id,
-                    Kind = card.Kind,
-                    Title = card.Title,
-                    ParentEntityId = card.ParentEntityId,
-                    SortOrder = card.SortOrder,
-                    HasSourceMedia = card.HasSourceMedia,
-                    Capabilities = card.Capabilities,
-                    ChildrenByKind = card.ChildrenByKind,
-                    Relationships = card.Relationships,
-                    CreditMetadata = creditMetadata,
-                },
-                EntityKind.Image => new ImageDetail {
-                    Id = card.Id,
-                    Kind = card.Kind,
-                    Title = card.Title,
-                    ParentEntityId = card.ParentEntityId,
-                    SortOrder = card.SortOrder,
-                    HasSourceMedia = card.HasSourceMedia,
-                    Capabilities = card.Capabilities,
-                    ChildrenByKind = card.ChildrenByKind,
-                    Relationships = card.Relationships,
-                },
-                EntityKind.Studio => new StudioDetail {
-                    Id = card.Id,
-                    Kind = card.Kind,
-                    Title = card.Title,
-                    ParentEntityId = card.ParentEntityId,
-                    SortOrder = card.SortOrder,
-                    HasSourceMedia = card.HasSourceMedia,
-                    Capabilities = card.Capabilities,
-                    ChildrenByKind = card.ChildrenByKind,
-                    Relationships = card.Relationships,
-                },
-                EntityKind.VideoSeason => new VideoSeasonDetail {
-                    Id = card.Id,
-                    Kind = card.Kind,
-                    Title = card.Title,
-                    ParentEntityId = card.ParentEntityId,
-                    SortOrder = card.SortOrder,
-                    HasSourceMedia = card.HasSourceMedia,
-                    Capabilities = card.Capabilities,
-                    ChildrenByKind = card.ChildrenByKind,
-                    Relationships = card.Relationships,
-                    CreditMetadata = creditMetadata,
-                },
-                _ => card
-            };
 
         private static ConstructorInfo? FindSimpleConstructor(Type type) =>
             type.GetConstructors()

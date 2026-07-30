@@ -1,5 +1,5 @@
 using Prismedia.Contracts.Entities;
-using Prismedia.Contracts.Media;
+using Prismedia.Domain.Entities;
 
 namespace Prismedia.Api.Endpoints;
 
@@ -7,10 +7,8 @@ public static class ImageEndpoints {
     public static RouteGroupBuilder MapImageEndpoints(this IEndpointRouteBuilder routes) =>
         routes.MapEntityKindRoutes(
             "/api/images",
-            "image",
+            EntityKindRegistry.Image.Code,
             "Images",
             "ListImages",
-            "GetImage",
-            typeof(EntityListResponse),
-            typeof(ImageDetail));
+            "GetImage");
 }

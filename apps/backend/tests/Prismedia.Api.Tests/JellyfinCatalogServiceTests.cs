@@ -1110,9 +1110,9 @@ public sealed class JellyfinCatalogServiceTests {
                 .Select(item => item!)
                 .ToArray()));
 
-        public Task<IEntityCard?> GetDetailAsync(Guid id, string kind, bool hideNsfw, CancellationToken cancellationToken) {
+        public Task<EntityCard?> GetAsync(Guid id, string kind, bool hideNsfw, CancellationToken cancellationToken) {
             DetailCalls.Add(id);
-            return Task.FromResult<IEntityCard?>(Cards.GetValueOrDefault(id));
+            return Task.FromResult(Cards.GetValueOrDefault(id));
         }
 
         public sealed record ListCall(string? Kind, Guid? ReferencedBy, bool? Played);

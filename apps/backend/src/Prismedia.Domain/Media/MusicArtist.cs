@@ -25,5 +25,8 @@ public sealed class MusicArtist : Entity {
     public override EntityKind Kind => EntityKind.MusicArtist;
 
     /// <inheritdoc />
-    protected override IEnumerable<EntityCapability> CreateDefaultCapabilities() => [];
+    protected override IEnumerable<EntityCapability> CreateDefaultCapabilities() =>
+    [
+        new CapabilityCredits()
+    ];
 }

@@ -10,4 +10,6 @@ import type { EntitySubtitle } from './entitySubtitle';
 export interface EntityCapabilitySubtitlesCapability {
   kind: EntityCapabilitySubtitlesCapabilityKind;
   items: EntitySubtitle[];
+  /** @nullable */
+  extractedAt?: string | null;
 }

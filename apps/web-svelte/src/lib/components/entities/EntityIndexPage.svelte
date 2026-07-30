@@ -32,8 +32,7 @@
     isManageableTaxonomyKind,
   } from "$lib/api/taxonomy";
   import { bulkDeleteMediaEntities, isDeletableMediaKind } from "$lib/api/entity-deletion";
-  import { fetchImage, fetchVideo, type ImageDetail, type VideoDetail } from "$lib/api/media";
-  import type { EntityCard } from "$lib/api/entities";
+  import { fetchEntity, type EntityCard, type EntityCardFull } from "$lib/api/entities";
   import { entityAccentForKind } from "$lib/entities/entity-accent";
 
   interface Props {
@@ -261,28 +260,15 @@
     await updateEntityRating(entityId, rating);
   }
 
-  function lightboxEntityFromImageDetail(image: ImageDetail): UniversalLightboxEntity {
-    const rating = getRatingValue(image.capabilities);
+  function lightboxEntityFromEntity(entity: EntityCardFull): UniversalLightboxEntity {
+    const rating = getRatingValue(entity.capabilities);
     return {
-      id: image.id,
-      kind: image.kind,
-      title: image.title,
-      capabilities: image.capabilities,
-      coverUrl: getImagesCapability(image.capabilities)?.coverUrl ?? null,
-      isNsfw: hasNsfwFlag(image.capabilities),
-      rating: rating > 0 ? rating : null,
-    };
-  }
-
-  function lightboxEntityFromVideoDetail(video: VideoDetail): UniversalLightboxEntity {
-    const rating = getRatingValue(video.capabilities);
-    return {
-      id: video.id,
-      kind: video.kind,
-      title: video.title,
-      capabilities: video.capabilities,
-      coverUrl: getImagesCapability(video.capabilities)?.coverUrl ?? null,
-      isNsfw: hasNsfwFlag(video.capabilities),
+      id: entity.id,
+      kind: entity.kind,
+      title: entity.title,
+      capabilities: entity.capabilities,
+      coverUrl: getImagesCapability(entity.capabilities)?.coverUrl ?? null,
+      isNsfw: hasNsfwFlag(entity.capabilities),
       rating: rating > 0 ? rating : null,
     };
   }
@@ -295,9 +281,7 @@
 
     lightboxHydrationInFlight = [...lightboxHydrationInFlight, entityId];
     try {
-      const entity = kind === "video"
-        ? lightboxEntityFromVideoDetail(await fetchVideo(entityId))
-        : lightboxEntityFromImageDetail(await fetchImage(entityId));
+      const entity = lightboxEntityFromEntity(await fetchEntity(entityId));
       hydratedLightboxEntities = {
         ...hydratedLightboxEntities,
         [entityId]: entity,

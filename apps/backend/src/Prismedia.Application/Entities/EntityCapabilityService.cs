@@ -1,5 +1,6 @@
 using Prismedia.Contracts.Entities;
 using Prismedia.Application.Playback;
+using Prismedia.Application.Security;
 using Prismedia.Domain.Capabilities;
 using Prismedia.Domain.Entities;
 
@@ -22,6 +23,7 @@ public sealed class EntityCapabilityService {
     private readonly IEntityVisibilityChecker? _visibility;
     private readonly IPlaybackEventStore _playbackEvents;
     private readonly IEntityActivityStore _activityEvents;
+    private readonly ICurrentUserContext? _currentUser;
     private readonly TimeProvider _timeProvider;
 
     /// <summary>
@@ -41,7 +43,8 @@ public sealed class EntityCapabilityService {
         IPlaybackEventStore? playbackEvents = null,
         TimeProvider? timeProvider = null,
         IEntityFileDeletionRecoveryReader? deletionRecovery = null,
-        IEntityActivityStore? activityEvents = null) {
+        IEntityActivityStore? activityEvents = null,
+        ICurrentUserContext? currentUser = null) {
         _entities = entities;
         _sourceOwnership = sourceOwnership;
         _deletionRecovery = deletionRecovery;
@@ -49,6 +52,7 @@ public sealed class EntityCapabilityService {
         _playbackEvents = playbackEvents ?? NullPlaybackEventStore.Instance;
         _activityEvents = activityEvents ?? NullEntityActivityStore.Instance;
         _timeProvider = timeProvider ?? TimeProvider.System;
+        _currentUser = currentUser;
     }
 
     /// <summary>
@@ -545,7 +549,8 @@ public sealed class EntityCapabilityService {
             entity,
             new EntityFileManagementState(
                 sourceBackedIds.Contains(entity.Id),
-                recoverableDeletionIds.Contains(entity.Id)));
+                recoverableDeletionIds.Contains(entity.Id)),
+            _currentUser?.UserId);
     }
 
     private async Task RollUpVideoProgressAsync(

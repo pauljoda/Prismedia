@@ -1,10 +1,19 @@
 import type {
   EntityCapability,
+  EntityCapabilityBookMetadataCapability,
+  EntityCapabilityCollectionConfigurationCapability,
+  EntityCapabilityCoverSelectionCapability,
+  EntityCapabilityCreditsCapability,
   EntityCapabilityDescriptionCapability,
+  EntityCapabilityEmbeddedAudioMetadataCapability,
   EntityCapabilityFlagsCapability,
+  EntityCapabilityGalleryMetadataCapability,
   EntityCapabilityImagesCapability,
+  EntityCapabilityPersonProfileCapability,
   EntityCapabilityProviderIdentityCapability,
   EntityCapabilityRatingCapability,
+  EntityCapabilitySeriesMetadataCapability,
+  EntityCapabilityTagPolicyCapability,
   EntityCapabilityTechnicalCapability,
   ExternalIdentity,
 } from "$lib/api/generated/model";
@@ -48,6 +57,66 @@ export function getTechnicalCapability(
   return getCapability(capabilities, CAPABILITY_KIND.technical);
 }
 
+/** Book-specific format and type data, carried by the canonical Entity document. */
+export function getBookMetadataCapability(
+  capabilities: EntityCapability[],
+): EntityCapabilityBookMetadataCapability | undefined {
+  return getCapability(capabilities, CAPABILITY_KIND.bookMetadata);
+}
+
+/** Collection curation and sharing configuration carried by the Entity document. */
+export function getCollectionConfigurationCapability(
+  capabilities: EntityCapability[],
+): EntityCapabilityCollectionConfigurationCapability | undefined {
+  return getCapability(capabilities, CAPABILITY_KIND.collectionConfiguration);
+}
+
+/** Explicit cover Entity selection, when the Entity kind supports one. */
+export function getCoverSelectionCapability(
+  capabilities: EntityCapability[],
+): EntityCapabilityCoverSelectionCapability | undefined {
+  return getCapability(capabilities, CAPABILITY_KIND.coverSelection);
+}
+
+/** Cast/crew role metadata carried alongside the canonical relationship graph. */
+export function getCreditsCapability(
+  capabilities: EntityCapability[],
+): EntityCapabilityCreditsCapability | undefined {
+  return getCapability(capabilities, CAPABILITY_KIND.credits);
+}
+
+/** Embedded artist and album metadata for an audio-track Entity. */
+export function getEmbeddedAudioMetadataCapability(
+  capabilities: EntityCapability[],
+): EntityCapabilityEmbeddedAudioMetadataCapability | undefined {
+  return getCapability(capabilities, CAPABILITY_KIND.embeddedAudioMetadata);
+}
+
+export function getGalleryMetadataCapability(
+  capabilities: EntityCapability[],
+): EntityCapabilityGalleryMetadataCapability | undefined {
+  return getCapability(capabilities, CAPABILITY_KIND.galleryMetadata);
+}
+
+/** Person profile fields, kept out of the shared Entity root. */
+export function getPersonProfileCapability(
+  capabilities: EntityCapability[],
+): EntityCapabilityPersonProfileCapability | undefined {
+  return getCapability(capabilities, CAPABILITY_KIND.personProfile);
+}
+
+export function getSeriesMetadataCapability(
+  capabilities: EntityCapability[],
+): EntityCapabilitySeriesMetadataCapability | undefined {
+  return getCapability(capabilities, CAPABILITY_KIND.seriesMetadata);
+}
+
+export function getTagPolicyCapability(
+  capabilities: EntityCapability[],
+): EntityCapabilityTagPolicyCapability | undefined {
+  return getCapability(capabilities, CAPABILITY_KIND.tagPolicy);
+}
+
 export function getFlagsCapability(
   capabilities: EntityCapability[],
 ): EntityCapabilityFlagsCapability | undefined {
@@ -74,10 +143,6 @@ export function canDeleteEntityFiles(capabilities: EntityCapability[]): boolean 
 export function getRatingValue(capabilities: EntityCapability[]): number {
   const value = getRatingCapability(capabilities)?.value;
   return typeof value === "number" ? value : Number(value ?? 0);
-}
-
-export function getTags(capabilities: EntityCapability[]): string[] {
-  return [];
 }
 
 export function getThumbnailUrl(capabilities: EntityCapability[]): string | null {

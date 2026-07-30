@@ -7,8 +7,6 @@ using Prismedia.Domain.Entities;
 using Prismedia.Contracts.Entities;
 using Prismedia.Contracts.Jellyfin;
 using Prismedia.Contracts.Media;
-using Prismedia.Contracts.Series;
-using Prismedia.Contracts.Videos;
 
 namespace Prismedia.Application.Jellyfin;
 
@@ -1023,7 +1021,7 @@ public sealed partial class JellyfinCatalogService {
             return null;
         }
 
-        var detail = await _entities.GetDetailAsync(id, EntityKindRegistry.ToCode(card.Kind), visibility.HideNsfw, cancellationToken);
+        var detail = await _entities.GetAsync(id, EntityKindRegistry.ToCode(card.Kind), visibility.HideNsfw, cancellationToken);
         return detail is not null && visibility.Allows(detail) ? detail : card;
     }
 
@@ -1039,7 +1037,7 @@ public sealed partial class JellyfinCatalogService {
         EntityKind kind,
         JellyfinContentVisibility visibility,
         CancellationToken cancellationToken) {
-        var detail = await _entities.GetDetailAsync(id, EntityKindRegistry.ToCode(kind), visibility.HideNsfw, cancellationToken);
+        var detail = await _entities.GetAsync(id, EntityKindRegistry.ToCode(kind), visibility.HideNsfw, cancellationToken);
         return detail is not null && visibility.Allows(detail) ? detail : null;
     }
 

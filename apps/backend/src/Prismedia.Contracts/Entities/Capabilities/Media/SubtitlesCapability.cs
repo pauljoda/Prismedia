@@ -25,4 +25,6 @@ public sealed record EntitySubtitle(
 
 /// <summary>API-facing subtitle capability.</summary>
 [CapabilityKind("subtitles")]
-public sealed record SubtitlesCapability(IReadOnlyList<EntitySubtitle> Items) : EntityCapability;
+public sealed record SubtitlesCapability(
+    IReadOnlyList<EntitySubtitle> Items,
+    DateTimeOffset? ExtractedAt = null) : EntityCapability;

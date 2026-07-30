@@ -162,8 +162,8 @@ internal static class TestAuth {
             CancellationToken cancellationToken) =>
             Task.FromResult(new EntityThumbnailBatchResponse([]));
 
-        public Task<IEntityCard?> GetDetailAsync(Guid id, string kind, bool hideNsfw, CancellationToken cancellationToken) =>
-            Task.FromResult<IEntityCard?>(Card(id) with { Kind = kind.DecodeAs<EntityKind>() });
+        public Task<EntityCard?> GetAsync(Guid id, string kind, bool hideNsfw, CancellationToken cancellationToken) =>
+            Task.FromResult<EntityCard?>(Card(id) with { Kind = kind.DecodeAs<EntityKind>() });
 
         private static EntityCard Card(Guid id) =>
             new() {

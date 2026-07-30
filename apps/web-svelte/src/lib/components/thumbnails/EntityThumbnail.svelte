@@ -1,6 +1,6 @@
 <script lang="ts">
   import { THUMBNAIL_HOVER_KIND, THUMBNAIL_META_ICON } from "$lib/api/generated/codes";
-  import { onDestroy, type Snippet } from "svelte";
+  import { onDestroy } from "svelte";
   import {
     Album,
     BookCopy,
@@ -41,38 +41,12 @@
     type EntityThumbnailMetaIcon,
   } from "$lib/entities/entity-thumbnail";
   import { loadTrickplayFrames, type TrickplayFrame } from "@prismedia/ui-svelte";
-
-  type EntityThumbnailTitleAlign = "left" | "center" | "right";
-  type EntityThumbnailTitleSize = "default" | "compact";
-  type EntityThumbnailImageLoading = "eager" | "lazy";
-  type EntityThumbnailImageFetchPriority = "auto" | "high" | "low";
-
-  interface Props {
-    card: EntityThumbnailCard;
-    imageFetchPriority?: EntityThumbnailImageFetchPriority;
-    imageLoading?: EntityThumbnailImageLoading;
-    layout?: "grid" | "list";
-    linkable?: boolean;
-    linkTarget?: "_self" | "_blank" | "_parent" | "_top";
-    mediaOnly?: boolean;
-    hoverPreviewsEnabled?: boolean;
-    hoverPreviewSuppressed?: () => boolean;
-    interactive?: boolean;
-    onActivate?: (card: EntityThumbnailCard) => void;
-    onArtworkLoad?: (image: HTMLImageElement) => void;
-    onSelectedChange?: (selected: boolean) => void;
-    selectable?: boolean;
-    selectMode?: boolean;
-    selected?: boolean;
-    /** Show the wanted/status badge on the artwork. Off where a host surface renders status itself. */
-    showWantedBadge?: boolean;
-    subtitleContent?: Snippet<[EntityThumbnailCard]>;
-    titleAlign?: EntityThumbnailTitleAlign;
-    titleSize?: EntityThumbnailTitleSize;
-  }
+  import type { EntityThumbnailProps } from "./entity-thumbnail-props";
 
   let {
     card,
+    density = "default",
+    highlighted = false,
     imageFetchPriority = "low",
     imageLoading = "lazy",
     layout = "grid",
@@ -92,7 +66,7 @@
     subtitleContent,
     titleAlign = "left",
     titleSize = "default",
-  }: Props = $props();
+  }: EntityThumbnailProps = $props();
 
   let pointerRatio = $state<number | null>(null);
   let imageFailed = $state(false);
@@ -565,6 +539,8 @@
   tabindex={selectionTabIndex}
   class="entity-thumbnail"
   class:is-hovering={pointerRatio !== null}
+  class:is-highlighted={highlighted}
+  class:is-compact={density === "compact"}
   class:is-image-only={imageOnly}
   class:is-list={layout === "list"}
   class:is-selected={selected}
@@ -887,6 +863,12 @@
     box-shadow: inset 2px 0 0 var(--entity-accent), var(--shadow-card-hover);
   }
 
+  .entity-thumbnail.is-highlighted {
+    border-color: color-mix(in srgb, var(--entity-accent) 62%, var(--color-border-default));
+    background: color-mix(in srgb, var(--entity-accent) 10%, rgb(12 12 13 / 0.98));
+    box-shadow: inset 2px 0 0 var(--entity-accent), var(--shadow-card-hover);
+  }
+
   .entity-thumbnail.is-static {
     pointer-events: none;
   }
@@ -924,6 +906,14 @@
     border-radius: 5px 0 0 5px;
     box-shadow: none;
     border-right: 1px solid rgb(255 255 255 / 0.1);
+  }
+
+  .entity-thumbnail.is-list.is-compact {
+    min-block-size: 3.25rem;
+  }
+
+  .entity-thumbnail.is-list.is-compact .media {
+    width: 3.25rem;
   }
 
   .media {
@@ -1407,6 +1397,11 @@
     background: rgb(12 12 13 / 0.98);
     border: none;
     box-shadow: none;
+  }
+
+  .entity-thumbnail.is-list.is-compact .glass-info {
+    min-block-size: 3.25rem;
+    padding: 0.4rem 0.55rem;
   }
 
   .entity-thumbnail.is-list .selection {

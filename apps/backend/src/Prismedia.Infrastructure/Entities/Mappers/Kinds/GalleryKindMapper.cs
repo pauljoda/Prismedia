@@ -1,6 +1,4 @@
 using Microsoft.EntityFrameworkCore;
-using Prismedia.Contracts.Entities;
-using Prismedia.Contracts.Media;
 using Prismedia.Domain.Entities;
 using Prismedia.Domain.Media;
 using Prismedia.Infrastructure.Persistence;
@@ -31,27 +29,6 @@ internal sealed class GalleryKindMapper(PrismediaDbContext db) : IEntityKindMapp
         row.GalleryType = gallery.GalleryType;
         row.CoverImageEntityId = gallery.CoverImageId;
     }
-
-    public IEntityCard ProjectDetail(
-        Entity entity,
-        EntityCard card,
-        IReadOnlyList<EntityCreditMetadata> creditMetadata) =>
-        entity is Gallery gallery
-            ? new GalleryDetail {
-                Id = card.Id,
-                Kind = card.Kind,
-                Title = card.Title,
-                ParentEntityId = card.ParentEntityId,
-                SortOrder = card.SortOrder,
-                HasSourceMedia = card.HasSourceMedia,
-                Capabilities = card.Capabilities,
-                ChildrenByKind = card.ChildrenByKind,
-                Relationships = card.Relationships,
-                CreditMetadata = creditMetadata,
-                GalleryType = gallery.GalleryType.ToCode(),
-                CoverImageId = gallery.CoverImageId,
-            }
-            : card;
 
     private GalleryDetailRow Track(GalleryDetailRow row) {
         db.GalleryDetails.Add(row);

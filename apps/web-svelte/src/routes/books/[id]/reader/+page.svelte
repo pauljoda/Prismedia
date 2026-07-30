@@ -5,8 +5,7 @@
   import { page } from "$app/state";
   import { AlertTriangle, Headphones, Pause, Play } from "@lucide/svelte";
   import { Button } from "@prismedia/ui-svelte";
-  import { getCapability } from "$lib/api/capabilities";
-  import { fetchBook, type BookDetail } from "$lib/api/media";
+  import { getBookMetadataCapability, getCapability } from "$lib/api/capabilities";
   import { fetchEntity, type EntityCardFull } from "$lib/api/entities";
   import { updateEntityProgress } from "$lib/api/playback";
   import {
@@ -51,7 +50,7 @@
   const playback = useAudioPlayback()!;
 
   let loadState: LoadState = $state("loading");
-  let book = $state<BookDetail | null>(null);
+  let book = $state<EntityCardFull | null>(null);
   let context = $state.raw<BookReaderRouteContext | null>(null);
   let readerChapters = $state.raw<ReaderChapter[]>([]);
   let nextChapter = $state.raw<BookReaderChapter | null>(null);
@@ -143,13 +142,14 @@
       bookReaderContextFromUrl(url) ?? { kind: "book", id: bookId, command: "resume" };
 
     try {
-      const nextBook = await fetchBook(bookId);
+      const nextBook = await fetchEntity(bookId);
+      const metadata = getBookMetadataCapability(nextBook.capabilities);
 
-      if (nextBook.format === "epub") {
+      if (metadata?.format === "epub") {
         await loadSingleFileReader(nextBook, nextContext);
         return;
       }
-      if (nextBook.format === "pdf") {
+      if (metadata?.format === "pdf") {
         await loadPdfReader(nextBook, nextContext);
         return;
       }
@@ -171,7 +171,7 @@
     }
   }
 
-  async function loadSingleFileReader(nextBook: BookDetail, nextContext: BookReaderRouteContext) {
+  async function loadSingleFileReader(nextBook: EntityCardFull, nextContext: BookReaderRouteContext) {
     const progress = getCapability(nextBook.capabilities, CAPABILITY_KIND.progress);
     const resume = nextContext.command !== "start-over" && !progress?.completedAt;
     const launchLocation = webEpubLaunchLocation(nextContext.location);
@@ -179,7 +179,9 @@
     const persistedLocation = resume ? exactWebEpubResumeLocation(progress?.location) : null;
     singleFileBook = true;
     singleFileSource = `/entities/${nextBook.id}/files/source`;
-    singleFileContentType = nextBook.format === "pdf" ? "application/pdf" : "application/epub+zip";
+    singleFileContentType = getBookMetadataCapability(nextBook.capabilities)?.format === "pdf"
+      ? "application/pdf"
+      : "application/epub+zip";
     singleFileLocation = launchLocation ?? (launchFraction === null ? persistedLocation : null);
     singleFileInitialFraction = launchFraction
       ?? (singleFileLocation
@@ -246,7 +248,7 @@
 
   // ── PDF reader (dedicated pdf.js reader: continuous scroll, selectable text) ──
 
-  async function loadPdfReader(nextBook: BookDetail, nextContext: BookReaderRouteContext) {
+  async function loadPdfReader(nextBook: EntityCardFull, nextContext: BookReaderRouteContext) {
     const progress = getCapability(nextBook.capabilities, CAPABILITY_KIND.progress);
     const resume = nextContext.command !== "start-over" && !progress?.completedAt;
     pdfBook = true;
@@ -306,7 +308,7 @@
     await goto(returnHref);
   }
 
-  async function resolveReader(nextBook: BookDetail, nextContext: BookReaderRouteContext) {
+  async function resolveReader(nextBook: EntityCardFull, nextContext: BookReaderRouteContext) {
     if (nextContext.kind === "volume") {
       return resolveVolumeReader(nextBook, nextContext.id);
     }
@@ -316,7 +318,7 @@
     return resolveChapterReader(nextBook, nextContext);
   }
 
-  async function resolveChapterReader(nextBook: BookDetail, nextContext: BookReaderRouteContext) {
+  async function resolveChapterReader(nextBook: EntityCardFull, nextContext: BookReaderRouteContext) {
     const chapter = await fetchEntity(nextContext.id);
     const summaries = await loadChapterSummaries(nextBook, chapter);
     const progress = bookEntityProgressDisplay(nextBook, summaries);
@@ -334,7 +336,7 @@
     };
   }
 
-  async function resolveVolumeReader(nextBook: BookDetail, volumeId: string) {
+  async function resolveVolumeReader(nextBook: EntityCardFull, volumeId: string) {
     const volume = await fetchEntity(volumeId);
     const chapterDetails = await Promise.all(
       orderedBookChildren(volume, ENTITY_KIND.bookChapter).map((chapter) => fetchEntity(chapter.id)),
@@ -358,7 +360,7 @@
     };
   }
 
-  async function resolveBookReader(nextBook: BookDetail, nextContext: BookReaderRouteContext) {
+  async function resolveBookReader(nextBook: EntityCardFull, nextContext: BookReaderRouteContext) {
     const progressChapterId = getCapability(nextBook.capabilities, CAPABILITY_KIND.progress)?.currentEntityId ?? null;
     if (nextContext.command === "resume" && progressChapterId) {
       const progressChapter = await fetchEntity(progressChapterId);
@@ -372,7 +374,7 @@
   }
 
   async function resolveBookChapterReader(
-    nextBook: BookDetail,
+    nextBook: EntityCardFull,
     nextContext: BookReaderRouteContext,
     selectedChapter: EntityCardFull | null,
   ) {
@@ -396,7 +398,7 @@
     };
   }
 
-  async function loadFirstBookChapterDetail(nextBook: BookDetail): Promise<EntityCardFull | null> {
+  async function loadFirstBookChapterDetail(nextBook: EntityCardFull): Promise<EntityCardFull | null> {
     const directChapters = orderedBookChildren(nextBook, ENTITY_KIND.bookChapter);
     if (directChapters.length > 0) {
       return fetchEntity(directChapters[0].id);
@@ -411,7 +413,7 @@
   }
 
   async function loadChapterSummaries(
-    nextBook: BookDetail,
+    nextBook: EntityCardFull,
     currentChapter: EntityCardFull,
   ): Promise<BookReaderChapter[]> {
     const currentPageCount = orderedBookChildren(currentChapter, ENTITY_KIND.bookPage).length;

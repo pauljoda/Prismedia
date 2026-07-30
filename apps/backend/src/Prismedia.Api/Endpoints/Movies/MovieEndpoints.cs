@@ -1,5 +1,5 @@
 using Prismedia.Contracts.Entities;
-using Prismedia.Contracts.Movies;
+using Prismedia.Domain.Entities;
 
 namespace Prismedia.Api.Endpoints;
 
@@ -9,10 +9,8 @@ public static class MovieEndpoints {
     public static RouteGroupBuilder MapMovieEndpoints(this IEndpointRouteBuilder routes) =>
         routes.MapEntityKindRoutes(
             "/api/movies",
-            "movie",
+            EntityKindRegistry.Movie.Code,
             "Movies",
             "ListMovies",
-            "GetMovie",
-            typeof(EntityListResponse),
-            typeof(MovieDetail));
+            "GetMovie");
 }

@@ -2,7 +2,6 @@ using Microsoft.EntityFrameworkCore;
 using Prismedia.Application.Entities;
 using Prismedia.Contracts.Entities;
 using Prismedia.Contracts.Media;
-using Prismedia.Contracts.Videos;
 using Prismedia.Domain.Entities;
 using Prismedia.Infrastructure.Entities;
 using Prismedia.Infrastructure.Entities.Mappers;
@@ -15,7 +14,7 @@ namespace Prismedia.Infrastructure.Tests;
 
 public sealed class EfEntityReadServiceTests {
     [Fact]
-    public async Task GetDetailAsyncProjectsRelationshipCodesAndCastMetadata() {
+    public async Task GetAsyncProjectsRelationshipCodesAndCreditsCapability() {
         await using var db = CreateContext();
         var videoId = Guid.Parse("11111111-1111-1111-1111-111111111111");
         var personId = Guid.Parse("22222222-2222-2222-2222-222222222222");
@@ -83,17 +82,17 @@ public sealed class EfEntityReadServiceTests {
         await db.SaveChangesAsync();
 
         var repository = new EfEntityRepository(db, TestUserContext.Admin(), EntityMappers.Kinds(db), EntityMappers.Capabilities(db, TestUserContext.Admin()));
-        var service = new EfEntityReadService(db, TestUserContext.Admin(), repository, EntityMappers.Kinds(db), ThumbnailContributors.For(db));
+        var service = new EfEntityReadService(db, TestUserContext.Admin(), repository, ThumbnailContributors.For(db));
 
-        var detail = Assert.IsType<VideoDetail>(
-            await service.GetDetailAsync(videoId, EntityKindRegistry.Video.Code, hideNsfw: false, CancellationToken.None));
+        var detail = Assert.IsType<EntityCard>(
+            await service.GetAsync(videoId, hideNsfw: false, CancellationToken.None));
 
         var cast = Assert.Single(detail.Relationships, group => group.Code == RelationshipKind.Cast);
         Assert.Equal(EntityKind.Person, cast.Kind);
         Assert.Equal(personId, Assert.Single(cast.Entities).Id);
         Assert.Contains(detail.Relationships, group => group.Code == RelationshipKind.Studio && group.Kind == EntityKind.Studio);
         Assert.Contains(detail.Relationships, group => group.Code == RelationshipKind.Tags && group.Kind == EntityKind.Tag);
-        var metadata = Assert.Single(detail.CreditMetadata);
+        var metadata = Assert.Single(Assert.Single(detail.Capabilities.OfType<CreditsCapability>()).Items);
         Assert.Equal(personId, metadata.PersonId);
         Assert.Equal("guest", metadata.Role);
         Assert.Equal("Visitor", metadata.Character);
@@ -158,7 +157,7 @@ public sealed class EfEntityReadServiceTests {
         await db.SaveChangesAsync();
 
         var repository = new EfEntityRepository(db, TestUserContext.Admin(), EntityMappers.Kinds(db), EntityMappers.Capabilities(db, TestUserContext.Admin()));
-        var service = new EfEntityReadService(db, TestUserContext.Admin(), repository, EntityMappers.Kinds(db), ThumbnailContributors.For(db));
+        var service = new EfEntityReadService(db, TestUserContext.Admin(), repository, ThumbnailContributors.For(db));
 
         var result = await service.ListAsync(
             EntityKindRegistry.Video.Code,
@@ -292,7 +291,7 @@ public sealed class EfEntityReadServiceTests {
         await db.SaveChangesAsync();
 
         var repository = new EfEntityRepository(db, TestUserContext.Admin(), EntityMappers.Kinds(db), EntityMappers.Capabilities(db, TestUserContext.Admin()));
-        var service = new EfEntityReadService(db, TestUserContext.Admin(), repository, EntityMappers.Kinds(db), ThumbnailContributors.For(db));
+        var service = new EfEntityReadService(db, TestUserContext.Admin(), repository, ThumbnailContributors.For(db));
 
         var searchResult = await service.ListAsync(null, "Friendship", null, null, null, CancellationToken.None);
         var searchedItem = Assert.Single(searchResult.Items);
@@ -420,7 +419,7 @@ public sealed class EfEntityReadServiceTests {
         await db.SaveChangesAsync();
 
         var repository = new EfEntityRepository(db, TestUserContext.Admin(), EntityMappers.Kinds(db), EntityMappers.Capabilities(db, TestUserContext.Admin()));
-        var service = new EfEntityReadService(db, TestUserContext.Admin(), repository, EntityMappers.Kinds(db), ThumbnailContributors.For(db));
+        var service = new EfEntityReadService(db, TestUserContext.Admin(), repository, ThumbnailContributors.For(db));
 
         var result = await service.ListAsync(
             kind: null,
@@ -471,7 +470,7 @@ public sealed class EfEntityReadServiceTests {
         await db.SaveChangesAsync();
 
         var repository = new EfEntityRepository(db, TestUserContext.Admin(), EntityMappers.Kinds(db), EntityMappers.Capabilities(db, TestUserContext.Admin()));
-        var service = new EfEntityReadService(db, TestUserContext.Admin(), repository, EntityMappers.Kinds(db), ThumbnailContributors.For(db));
+        var service = new EfEntityReadService(db, TestUserContext.Admin(), repository, ThumbnailContributors.For(db));
 
         var result = await service.ListAsync(EntityKindRegistry.Video.Code, null, null, null, null, CancellationToken.None);
         var item = Assert.Single(result.Items);
@@ -514,7 +513,7 @@ public sealed class EfEntityReadServiceTests {
         await db.SaveChangesAsync();
 
         var repository = new EfEntityRepository(db, TestUserContext.Admin(), EntityMappers.Kinds(db), EntityMappers.Capabilities(db, TestUserContext.Admin()));
-        var service = new EfEntityReadService(db, TestUserContext.Admin(), repository, EntityMappers.Kinds(db), ThumbnailContributors.For(db));
+        var service = new EfEntityReadService(db, TestUserContext.Admin(), repository, ThumbnailContributors.For(db));
 
         var result = await service.ListAsync(EntityKindRegistry.Video.Code, null, null, null, null, CancellationToken.None);
         var item = Assert.Single(result.Items);
@@ -545,7 +544,7 @@ public sealed class EfEntityReadServiceTests {
             WriteCacheFile(cacheRoot, thumbPath);
 
             var repository = new EfEntityRepository(db, TestUserContext.Admin(), EntityMappers.Kinds(db), EntityMappers.Capabilities(db, TestUserContext.Admin()));
-            var service = new EfEntityReadService(db, TestUserContext.Admin(), repository, EntityMappers.Kinds(db), ThumbnailContributors.For(db), Assets(cacheRoot));
+            var service = new EfEntityReadService(db, TestUserContext.Admin(), repository, ThumbnailContributors.For(db), Assets(cacheRoot));
 
             var result = await service.ListAsync(EntityKindRegistry.Video.Code, null, null, null, null, CancellationToken.None);
             var item = Assert.Single(result.Items);
@@ -579,7 +578,7 @@ public sealed class EfEntityReadServiceTests {
             WriteCacheFile(cacheRoot, thumbPath);
 
             var repository = new EfEntityRepository(db, TestUserContext.Admin(), EntityMappers.Kinds(db), EntityMappers.Capabilities(db, TestUserContext.Admin()));
-            var service = new EfEntityReadService(db, TestUserContext.Admin(), repository, EntityMappers.Kinds(db), ThumbnailContributors.For(db), Assets(cacheRoot));
+            var service = new EfEntityReadService(db, TestUserContext.Admin(), repository, ThumbnailContributors.For(db), Assets(cacheRoot));
 
             var item = await service.GetAsync(videoId, hideNsfw: false, CancellationToken.None);
             var images = Assert.IsType<ImagesCapability>(Assert.Single(item!.Capabilities.OfType<ImagesCapability>()));
@@ -643,7 +642,7 @@ public sealed class EfEntityReadServiceTests {
             WriteCacheFile(cacheRoot, poster);
 
             var repository = new EfEntityRepository(db, TestUserContext.Admin(), EntityMappers.Kinds(db), EntityMappers.Capabilities(db, TestUserContext.Admin()));
-            var service = new EfEntityReadService(db, TestUserContext.Admin(), repository, EntityMappers.Kinds(db), ThumbnailContributors.For(db), Assets(cacheRoot));
+            var service = new EfEntityReadService(db, TestUserContext.Admin(), repository, ThumbnailContributors.For(db), Assets(cacheRoot));
 
             var response = await service.GetThumbnailsAsync([movieId], hideNsfw: false, CancellationToken.None);
 
@@ -698,7 +697,7 @@ public sealed class EfEntityReadServiceTests {
             WriteCacheFile(cacheRoot, episodeThumb);
 
             var repository = new EfEntityRepository(db, TestUserContext.Admin(), EntityMappers.Kinds(db), EntityMappers.Capabilities(db, TestUserContext.Admin()));
-            var service = new EfEntityReadService(db, TestUserContext.Admin(), repository, EntityMappers.Kinds(db), ThumbnailContributors.For(db), Assets(cacheRoot));
+            var service = new EfEntityReadService(db, TestUserContext.Admin(), repository, ThumbnailContributors.For(db), Assets(cacheRoot));
 
             var result = await service.GetThumbnailsAsync([seriesId], hideNsfw: false, CancellationToken.None);
             var item = Assert.Single(result.Items);
@@ -743,7 +742,7 @@ public sealed class EfEntityReadServiceTests {
         await db.SaveChangesAsync();
 
         var repository = new EfEntityRepository(db, TestUserContext.Admin(), EntityMappers.Kinds(db), EntityMappers.Capabilities(db, TestUserContext.Admin()));
-        var service = new EfEntityReadService(db, TestUserContext.Admin(), repository, EntityMappers.Kinds(db), ThumbnailContributors.For(db));
+        var service = new EfEntityReadService(db, TestUserContext.Admin(), repository, ThumbnailContributors.For(db));
 
         var result = await service.ListAsync(EntityKindRegistry.Studio.Code, null, null, null, null, CancellationToken.None);
         var item = Assert.Single(result.Items);
@@ -776,7 +775,7 @@ public sealed class EfEntityReadServiceTests {
         await db.SaveChangesAsync();
 
         var repository = new EfEntityRepository(db, TestUserContext.Admin(), EntityMappers.Kinds(db), EntityMappers.Capabilities(db, TestUserContext.Admin()));
-        var service = new EfEntityReadService(db, TestUserContext.Admin(), repository, EntityMappers.Kinds(db), ThumbnailContributors.For(db));
+        var service = new EfEntityReadService(db, TestUserContext.Admin(), repository, ThumbnailContributors.For(db));
 
         var result = await service.ListAsync(EntityKindRegistry.Video.Code, null, null, null, null, CancellationToken.None);
         var item = Assert.Single(result.Items);
@@ -817,7 +816,7 @@ public sealed class EfEntityReadServiceTests {
         await db.SaveChangesAsync();
 
         var repository = new EfEntityRepository(db, TestUserContext.Admin(), EntityMappers.Kinds(db), EntityMappers.Capabilities(db, TestUserContext.Admin()));
-        var service = new EfEntityReadService(db, TestUserContext.Admin(), repository, EntityMappers.Kinds(db), ThumbnailContributors.For(db));
+        var service = new EfEntityReadService(db, TestUserContext.Admin(), repository, ThumbnailContributors.For(db));
 
         var result = await service.ListAsync(EntityKindRegistry.Gallery.Code, null, null, null, null, CancellationToken.None);
         var item = Assert.Single(result.Items);
@@ -862,7 +861,7 @@ public sealed class EfEntityReadServiceTests {
         await db.SaveChangesAsync();
 
         var repository = new EfEntityRepository(db, TestUserContext.Admin(), EntityMappers.Kinds(db), EntityMappers.Capabilities(db, TestUserContext.Admin()));
-        var service = new EfEntityReadService(db, TestUserContext.Admin(), repository, EntityMappers.Kinds(db), ThumbnailContributors.For(db));
+        var service = new EfEntityReadService(db, TestUserContext.Admin(), repository, ThumbnailContributors.For(db));
 
         var result = await service.ListAsync(EntityKindRegistry.AudioLibrary.Code, null, null, null, null, CancellationToken.None);
 
@@ -935,10 +934,8 @@ public sealed class EfEntityReadServiceTests {
             hideNsfw: false,
             limit: null,
             CancellationToken.None);
-        var book = Assert.IsType<BookDetail>(await service.GetDetailAsync(
-            bookId,
-            EntityKindRegistry.Book.Code,
-            hideNsfw: false,
+        var book = Assert.IsType<EntityCard>(await service.GetAsync(
+            bookId, hideNsfw: false,
             CancellationToken.None));
 
         Assert.Equal(musicTrackId, Assert.Single(tracks.Items).Id);
@@ -1015,7 +1012,7 @@ public sealed class EfEntityReadServiceTests {
         await db.SaveChangesAsync();
 
         var repository = new EfEntityRepository(db, TestUserContext.Admin(), EntityMappers.Kinds(db), EntityMappers.Capabilities(db, TestUserContext.Admin()));
-        var service = new EfEntityReadService(db, TestUserContext.Admin(), repository, EntityMappers.Kinds(db), ThumbnailContributors.For(db));
+        var service = new EfEntityReadService(db, TestUserContext.Admin(), repository, ThumbnailContributors.For(db));
 
         var result = await service.ListAsync(EntityKindRegistry.Book.Code, null, null, null, null, CancellationToken.None);
         var item = Assert.Single(result.Items);
@@ -1070,7 +1067,7 @@ public sealed class EfEntityReadServiceTests {
         await db.SaveChangesAsync();
 
         var repository = new EfEntityRepository(db, TestUserContext.Admin(), EntityMappers.Kinds(db), EntityMappers.Capabilities(db, TestUserContext.Admin()));
-        var service = new EfEntityReadService(db, TestUserContext.Admin(), repository, EntityMappers.Kinds(db), ThumbnailContributors.For(db));
+        var service = new EfEntityReadService(db, TestUserContext.Admin(), repository, ThumbnailContributors.For(db));
 
         var result = await service.ListAsync(EntityKindRegistry.Book.Code, null, null, null, null, CancellationToken.None);
         var item = Assert.Single(result.Items);
@@ -1223,7 +1220,7 @@ public sealed class EfEntityReadServiceTests {
         await db.SaveChangesAsync();
 
         var repository = new EfEntityRepository(db, TestUserContext.Admin(), EntityMappers.Kinds(db), EntityMappers.Capabilities(db, TestUserContext.Admin()));
-        var service = new EfEntityReadService(db, TestUserContext.Admin(), repository, EntityMappers.Kinds(db), ThumbnailContributors.For(db));
+        var service = new EfEntityReadService(db, TestUserContext.Admin(), repository, ThumbnailContributors.For(db));
 
         var result = await service.ListAsync(EntityKindRegistry.Book.Code, null, null, null, null, CancellationToken.None);
 
@@ -1232,7 +1229,7 @@ public sealed class EfEntityReadServiceTests {
     }
 
     [Fact]
-    public async Task GetDetailAsyncProjectsOnlyDirectChildren() {
+    public async Task GetAsyncProjectsOnlyDirectBookChildren() {
         await using var db = CreateContext();
         var bookId = Guid.Parse("11111111-1111-1111-1111-111111111111");
         var volumeId = Guid.Parse("22222222-2222-2222-2222-222222222222");
@@ -1279,10 +1276,10 @@ public sealed class EfEntityReadServiceTests {
         await db.SaveChangesAsync();
 
         var repository = new EfEntityRepository(db, TestUserContext.Admin(), EntityMappers.Kinds(db), EntityMappers.Capabilities(db, TestUserContext.Admin()));
-        var service = new EfEntityReadService(db, TestUserContext.Admin(), repository, EntityMappers.Kinds(db), ThumbnailContributors.For(db));
+        var service = new EfEntityReadService(db, TestUserContext.Admin(), repository, ThumbnailContributors.For(db));
 
         var detail = Assert.IsAssignableFrom<IEntityCard>(
-            await service.GetDetailAsync(bookId, EntityKindRegistry.Book.Code, hideNsfw: false, CancellationToken.None));
+            await service.GetAsync(bookId, hideNsfw: false, CancellationToken.None));
 
         var volumes = Assert.Single(detail.ChildrenByKind);
         Assert.Equal(EntityKind.BookVolume, volumes.Kind);
@@ -1292,7 +1289,7 @@ public sealed class EfEntityReadServiceTests {
     }
 
     [Fact]
-    public async Task GetAsyncProjectsOnlyDirectChildren() {
+    public async Task GetAsyncProjectsOnlyDirectVolumeChildren() {
         await using var db = CreateContext();
         var volumeId = Guid.Parse("11111111-1111-1111-1111-111111111111");
         var chapterId = Guid.Parse("22222222-2222-2222-2222-222222222222");
@@ -1328,7 +1325,7 @@ public sealed class EfEntityReadServiceTests {
         await db.SaveChangesAsync();
 
         var repository = new EfEntityRepository(db, TestUserContext.Admin(), EntityMappers.Kinds(db), EntityMappers.Capabilities(db, TestUserContext.Admin()));
-        var service = new EfEntityReadService(db, TestUserContext.Admin(), repository, EntityMappers.Kinds(db), ThumbnailContributors.For(db));
+        var service = new EfEntityReadService(db, TestUserContext.Admin(), repository, ThumbnailContributors.For(db));
 
         var card = Assert.IsType<EntityCard>(await service.GetAsync(volumeId, hideNsfw: false, CancellationToken.None));
 
@@ -1375,7 +1372,7 @@ public sealed class EfEntityReadServiceTests {
         await db.SaveChangesAsync();
 
         var repository = new EfEntityRepository(db, TestUserContext.Admin(), EntityMappers.Kinds(db), EntityMappers.Capabilities(db, TestUserContext.Admin()));
-        var service = new EfEntityReadService(db, TestUserContext.Admin(), repository, EntityMappers.Kinds(db), ThumbnailContributors.For(db));
+        var service = new EfEntityReadService(db, TestUserContext.Admin(), repository, ThumbnailContributors.For(db));
 
         var hidden = await service.GetAsync(nsfwChapterId, hideNsfw: true, CancellationToken.None);
         var parent = Assert.IsType<EntityCard>(await service.GetAsync(bookId, hideNsfw: true, CancellationToken.None));
@@ -1386,7 +1383,7 @@ public sealed class EfEntityReadServiceTests {
     }
 
     [Fact]
-    public async Task GetDetailAsyncOmitsBookProgressWhenCurrentChapterIsHidden() {
+    public async Task GetAsyncOmitsBookProgressWhenCurrentChapterIsHidden() {
         await using var db = CreateContext();
         var bookId = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
         var chapterId = Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb");
@@ -1421,17 +1418,17 @@ public sealed class EfEntityReadServiceTests {
         await db.SaveChangesAsync();
 
         var repository = new EfEntityRepository(db, TestUserContext.Admin(), EntityMappers.Kinds(db), EntityMappers.Capabilities(db, TestUserContext.Admin()));
-        var service = new EfEntityReadService(db, TestUserContext.Admin(), repository, EntityMappers.Kinds(db), ThumbnailContributors.For(db));
+        var service = new EfEntityReadService(db, TestUserContext.Admin(), repository, ThumbnailContributors.For(db));
 
         var detail = Assert.IsAssignableFrom<IEntityCard>(
-            await service.GetDetailAsync(bookId, EntityKindRegistry.Book.Code, hideNsfw: true, CancellationToken.None));
+            await service.GetAsync(bookId, hideNsfw: true, CancellationToken.None));
 
         Assert.DoesNotContain(detail.Capabilities, capability => capability is ProgressCapability);
         Assert.Empty(detail.ChildrenByKind);
     }
 
     [Fact]
-    public async Task GetDetailAsyncFiltersHiddenRelationshipsWhenRequested() {
+    public async Task GetAsyncFiltersHiddenRelationshipsWhenRequested() {
         await using var db = CreateContext();
         var videoId = Guid.Parse("dddddddd-dddd-dddd-dddd-dddddddddddd");
         var safePersonId = Guid.Parse("eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee");
@@ -1482,14 +1479,16 @@ public sealed class EfEntityReadServiceTests {
         await db.SaveChangesAsync();
 
         var repository = new EfEntityRepository(db, TestUserContext.Admin(), EntityMappers.Kinds(db), EntityMappers.Capabilities(db, TestUserContext.Admin()));
-        var service = new EfEntityReadService(db, TestUserContext.Admin(), repository, EntityMappers.Kinds(db), ThumbnailContributors.For(db));
+        var service = new EfEntityReadService(db, TestUserContext.Admin(), repository, ThumbnailContributors.For(db));
 
-        var detail = Assert.IsType<VideoDetail>(
-            await service.GetDetailAsync(videoId, EntityKindRegistry.Video.Code, hideNsfw: true, CancellationToken.None));
+        var detail = Assert.IsType<EntityCard>(
+            await service.GetAsync(videoId, hideNsfw: true, CancellationToken.None));
 
         var cast = Assert.Single(detail.Relationships, group => group.Code == RelationshipKind.Cast);
         Assert.Equal(safePersonId, Assert.Single(cast.Entities).Id);
-        Assert.DoesNotContain(detail.CreditMetadata, credit => credit.PersonId == nsfwPersonId);
+        Assert.DoesNotContain(
+            Assert.Single(detail.Capabilities.OfType<CreditsCapability>()).Items,
+            credit => credit.PersonId == nsfwPersonId);
     }
 
     [Fact]
@@ -1518,7 +1517,7 @@ public sealed class EfEntityReadServiceTests {
         var videos = await service.ListAsync(EntityKindRegistry.Video.Code, null, null, null, null, CancellationToken.None);
         var search = await service.ListAsync(null, "Shared Title", null, null, null, CancellationToken.None);
         var hiddenCard = await service.GetAsync(hiddenVideoId, hideNsfw: false, CancellationToken.None);
-        var hiddenDetail = await service.GetDetailAsync(hiddenVideoId, EntityKindRegistry.Video.Code, hideNsfw: false, CancellationToken.None);
+        var hiddenDetail = await service.GetAsync(hiddenVideoId, hideNsfw: false, CancellationToken.None);
         var thumbnails = await service.GetThumbnailsAsync([visibleVideoId, hiddenVideoId, rootlessTagId], hideNsfw: false, CancellationToken.None);
 
         Assert.Equal(1, videos.TotalCount);
@@ -1611,8 +1610,8 @@ public sealed class EfEntityReadServiceTests {
 
         var service = CreateService(db);
 
-        var source = Assert.IsType<VideoDetail>(
-            await service.GetDetailAsync(sourceVideoId, EntityKindRegistry.Video.Code, hideNsfw: false, CancellationToken.None));
+        var source = Assert.IsType<EntityCard>(
+            await service.GetAsync(sourceVideoId, hideNsfw: false, CancellationToken.None));
         var movies = await service.ListAsync(EntityKindRegistry.Movie.Code, null, null, null, null, CancellationToken.None);
 
         var related = Assert.Single(source.Relationships, group => group.Code == RelationshipKind.Related);
@@ -1655,7 +1654,7 @@ public sealed class EfEntityReadServiceTests {
         await db.SaveChangesAsync();
 
         var repository = new EfEntityRepository(db, TestUserContext.Admin(), EntityMappers.Kinds(db), EntityMappers.Capabilities(db, TestUserContext.Admin()));
-        var service = new EfEntityReadService(db, TestUserContext.Admin(), repository, EntityMappers.Kinds(db), ThumbnailContributors.For(db));
+        var service = new EfEntityReadService(db, TestUserContext.Admin(), repository, ThumbnailContributors.For(db));
 
         var firstPage = await service.ListAsync(
             EntityKindRegistry.Video.Code, query: null, cursor: null, hideNsfw: null, limit: 2, CancellationToken.None);
@@ -2781,7 +2780,7 @@ public sealed class EfEntityReadServiceTests {
     }
 
     [Fact]
-    public async Task GetDetailAsyncUsesAlbumCoverForAudioTrackWithoutOwnCover() {
+    public async Task GetAsyncUsesAlbumCoverForAudioTrackWithoutOwnCover() {
         await using var db = CreateContext();
         var now = DateTimeOffset.UtcNow;
         var albumId = Guid.Parse("aaaaaaaa-0000-0000-0000-000000000031");
@@ -2808,8 +2807,8 @@ public sealed class EfEntityReadServiceTests {
         db.EntityFiles.Add(File(albumId, EntityFileRole.Cover, "/assets/audio-libraries/album/cover.jpg", now));
         await db.SaveChangesAsync();
 
-        var detail = Assert.IsType<AudioTrackDetail>(
-            await CreateService(db).GetDetailAsync(trackId, EntityKindRegistry.AudioTrack.Code, hideNsfw: false, CancellationToken.None));
+        var detail = Assert.IsType<EntityCard>(
+            await CreateService(db).GetAsync(trackId, hideNsfw: false, CancellationToken.None));
 
         var images = Assert.IsType<ImagesCapability>(Assert.Single(detail.Capabilities.OfType<ImagesCapability>()));
         Assert.Equal("/assets/audio-libraries/album/cover.jpg", images.CoverUrl);
@@ -3142,7 +3141,7 @@ public sealed class EfEntityReadServiceTests {
 
     private static EfEntityReadService CreateService(PrismediaDbContext db) {
         var repository = new EfEntityRepository(db, TestUserContext.Admin(), EntityMappers.Kinds(db), EntityMappers.Capabilities(db, TestUserContext.Admin()));
-        return new EfEntityReadService(db, TestUserContext.Admin(), repository, EntityMappers.Kinds(db), ThumbnailContributors.For(db));
+        return new EfEntityReadService(db, TestUserContext.Admin(), repository, ThumbnailContributors.For(db));
     }
 
     private static PrismediaDbContext CreateContext() =>

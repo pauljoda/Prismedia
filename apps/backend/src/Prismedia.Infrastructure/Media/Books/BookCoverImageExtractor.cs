@@ -20,13 +20,17 @@ public sealed class BookCoverImageExtractor : IBookCoverImageExtractor {
     }
 
     private static string? ExtractPdfCover(string sourcePath, Guid entityId, CancellationToken cancellationToken) {
+        if (!OperatingSystem.IsLinux() && !OperatingSystem.IsMacOS() && !OperatingSystem.IsWindows()) {
+            return null;
+        }
+
         try {
             cancellationToken.ThrowIfCancellationRequested();
             var tempPath = Path.Combine(Path.GetTempPath(), $"prismedia-book-cover-{entityId}.jpg");
             using var pdfStream = File.OpenRead(sourcePath);
             using var outputStream = File.Create(tempPath);
             // Render the first page (0-based) at a cover-friendly width; the thumbnail job downsizes it.
-            Conversion.SaveJpeg(outputStream, pdfStream, leaveOpen: true, password: null, page: 0,
+            Conversion.SaveJpeg(outputStream, pdfStream, page: Index.Start, leaveOpen: true, password: null,
                 options: new RenderOptions { Width = 800, WithAspectRatio = true });
             outputStream.Flush();
             return new FileInfo(tempPath).Length > 0 ? tempPath : null;

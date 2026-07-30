@@ -5,14 +5,8 @@ using Microsoft.AspNetCore.Http.Metadata;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
-using Prismedia.Contracts.Collections;
 using Prismedia.Contracts.Acquisition;
 using Prismedia.Contracts.Entities;
-using Prismedia.Contracts.Media;
-using Prismedia.Contracts.Movies;
-using Prismedia.Contracts.Series;
-using Prismedia.Contracts.Taxonomy;
-using Prismedia.Contracts.Videos;
 using Prismedia.Domain.Entities;
 
 namespace Prismedia.Api.Tests;
@@ -24,7 +18,7 @@ public sealed class EntityContractShapeTests {
         Assert.Equal([typeof(IEntitySummary)], DirectEntityContractInterfaces(typeof(IEntityDocument)));
         Assert.Equal([typeof(IEntityDocument)], DirectEntityContractInterfaces(typeof(IEntityCard)));
         Assert.Equal([typeof(IEntitySummary)], DirectEntityContractInterfaces(typeof(EntityThumbnail)));
-        Assert.Equal([typeof(IEntityCard)], DirectEntityContractInterfaces(typeof(EntityDetail)));
+        Assert.Equal([typeof(IEntityCard)], DirectEntityContractInterfaces(typeof(EntityCard)));
 
         AssertDeclaredProperties(
             typeof(IEntityRef),
@@ -45,7 +39,6 @@ public sealed class EntityContractShapeTests {
 
         Assert.True(typeof(IEntitySummary).IsAssignableFrom(typeof(EntityThumbnail)));
         Assert.False(typeof(IEntityDocument).IsAssignableFrom(typeof(EntityThumbnail)));
-        Assert.True(typeof(IEntityDocument).IsAssignableFrom(typeof(EntityDetail)));
         Assert.True(typeof(IEntityDocument).IsAssignableFrom(typeof(EntityCard)));
     }
 
@@ -64,21 +57,21 @@ public sealed class EntityContractShapeTests {
         var expectedResponses = new Dictionary<string, Type>(StringComparer.Ordinal) {
             ["ListEntities"] = typeof(EntityListResponse),
             ["GetEntity"] = typeof(EntityCard),
-            ["GetMovie"] = typeof(MovieDetail),
-            ["GetVideoSeries"] = typeof(VideoSeriesDetail),
-            ["GetVideoSeason"] = typeof(VideoSeasonDetail),
-            ["GetVideo"] = typeof(VideoDetail),
-            ["GetBook"] = typeof(BookDetail),
-            ["GetImage"] = typeof(ImageDetail),
-            ["GetGallery"] = typeof(GalleryDetail),
-            ["GetPerson"] = typeof(PersonDetail),
-            ["GetTag"] = typeof(TagDetail),
-            ["GetStudio"] = typeof(StudioDetail),
-            ["GetCollection"] = typeof(CollectionDetail),
-            ["GetAudioTrack"] = typeof(AudioTrackDetail),
-            ["GetAudioLibrary"] = typeof(AudioLibraryDetail),
-            ["GetMusicArtist"] = typeof(MusicArtistDetail),
-            ["GetBookAuthor"] = typeof(BookAuthorDetail),
+            ["GetMovie"] = typeof(EntityCard),
+            ["GetVideoSeries"] = typeof(EntityCard),
+            ["GetVideoSeason"] = typeof(EntityCard),
+            ["GetVideo"] = typeof(EntityCard),
+            ["GetBook"] = typeof(EntityCard),
+            ["GetImage"] = typeof(EntityCard),
+            ["GetGallery"] = typeof(EntityCard),
+            ["GetPerson"] = typeof(EntityCard),
+            ["GetTag"] = typeof(EntityCard),
+            ["GetStudio"] = typeof(EntityCard),
+            ["GetCollection"] = typeof(EntityCard),
+            ["GetAudioTrack"] = typeof(EntityCard),
+            ["GetAudioLibrary"] = typeof(EntityCard),
+            ["GetMusicArtist"] = typeof(EntityCard),
+            ["GetBookAuthor"] = typeof(EntityCard),
             ["GetEntityMonitorStates"] = typeof(EntityMonitorStateView[]),
         };
 

@@ -72,8 +72,8 @@ Key rules:
 read contracts form one additive projection ladder:
 
 ```text
-IEntityRef          id + kind + title
-  └─ IEntitySummary thumbnail/list context
+IEntityRef          id + kind
+  └─ IEntitySummary title + thumbnail/list context
        └─ IEntityDocument capabilities + children + relationships
 ```
 
@@ -83,6 +83,12 @@ IEntityRef          id + kind + title
 - Kind-specific pages start from the Entity document and read playback,
   description, images, positions, files, acquisition, and other behavior from
   capabilities. They do not require a parallel movie/book/show API shape.
+- `GET /api/entities/{id}` is the canonical document read. Kind-prefixed routes
+  are compatibility aliases over that same projection and return `EntityCard`;
+  they never introduce a derived wire contract.
+- Data used by several kinds, such as credits and cover selection, is one shared
+  capability. Truly kind-specific metadata, such as book format or a Person
+  profile, is still a typed capability so clients can decode one Entity envelope.
 - Search candidates and metadata proposals are intentionally not Entities. A
   candidate is an upstream choice; a proposal is a potential mutation or a
   blueprint for a Wanted Entity. UI components for those contracts render them

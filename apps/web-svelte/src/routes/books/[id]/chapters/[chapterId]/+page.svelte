@@ -5,7 +5,6 @@
   import { page } from "$app/state";
   import { BookOpen, Check, Images, Info, Play, RotateCcw, SlidersHorizontal } from "@lucide/svelte";
   import EntityDetailSkeleton from "$lib/components/entities/EntityDetailSkeleton.svelte";
-  import { fetchBook, type BookDetail } from "$lib/api/media";
   import { fetchEntity, type EntityCardFull } from "$lib/api/entities";
   import { updateEntityMetadata } from "$lib/api/entity-mutations";
   import { updateEntityProgress } from "$lib/api/playback";
@@ -35,7 +34,7 @@
   const appChrome = useAppChrome();
 
   let loadState: LoadState = $state("loading");
-  let book = $state<BookDetail | null>(null);
+  let book = $state<EntityCardFull | null>(null);
   let chapter = $state<EntityCardFull | null>(null);
   let errorMessage: string | null = $state(null);
   let lastNsfwMode = $state(nsfw.mode);
@@ -125,7 +124,7 @@
     errorMessage = null;
     try {
       const [nextBook, nextChapter] = await Promise.all([
-        fetchBook(bookId),
+        fetchEntity(bookId),
         fetchEntity(chapterId),
       ]);
       book = nextBook;
@@ -142,7 +141,7 @@
   }
 
   async function loadChapterSummaries(
-    nextBook: BookDetail,
+    nextBook: EntityCardFull,
     currentChapter: EntityCardFull,
   ): Promise<BookReaderChapter[]> {
     const currentPageCount = orderedBookChildren(currentChapter, ENTITY_KIND.bookPage).length;

@@ -2,7 +2,7 @@ using Prismedia.Domain.Entities;
 
 namespace Prismedia.Contracts.Entities;
 
-/// <summary>Credit metadata exposed by detail routes that need character or role labels.</summary>
+/// <summary>Relationship-edge metadata carried by the shared credits capability.</summary>
 /// <param name="PersonId">Referenced person entity identifier.</param>
 /// <param name="Role">Primary provider or domain role code, when known.</param>
 /// <param name="Character">Primary character, credit subtitle, or contribution label, when known.</param>
@@ -30,11 +30,10 @@ public sealed record EntityCreditMetadata(
 public interface IEntityCard : IEntityDocument;
 
 /// <summary>
-/// Abstract base for every entity detail contract. Owns the cross-cutting envelope so
-/// concrete <c>*Detail</c> records only declare their kind-specific extras.
-/// Serializes flat — derived properties merge with the base properties on the wire.
+/// Concrete shared Entity document returned by every Entity detail read. Additional
+/// readable concepts are carried in <see cref="Capabilities"/>, never derived detail roots.
 /// </summary>
-public abstract record EntityDetail : IEntityCard {
+public record EntityCard : IEntityCard {
     /// <inheritdoc />
     public required Guid Id { get; init; }
 
@@ -62,12 +61,6 @@ public abstract record EntityDetail : IEntityCard {
     /// <inheritdoc />
     public required IReadOnlyList<EntityGroup> Relationships { get; init; }
 }
-
-/// <summary>
-/// Normalized card/detail shape used across media, taxonomy, and collection routes
-/// when a route returns the shared envelope with no kind-specific extras.
-/// </summary>
-public sealed record EntityCard : EntityDetail;
 
 /// <summary>
 /// Query parameters for the shared entity list endpoint.

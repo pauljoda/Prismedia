@@ -21,15 +21,17 @@
     updateEntityFlags,
     updateEntityMetadata,
   } from "$lib/api/entity-mutations";
-  import { getCollection } from "$lib/api/generated/prismedia";
-  import type { CollectionDetail } from "$lib/api/generated/model";
   import {
     deleteCollection,
     fetchCollectionItems,
     refreshCollection,
     removeCollectionItems,
   } from "$lib/api/collections";
-  import { unwrapGenerated } from "$lib/api/generated-response";
+  import {
+    getCollectionConfigurationCapability,
+    getCoverSelectionCapability,
+  } from "$lib/api/capabilities";
+  import { fetchEntity, type EntityCardFull } from "$lib/api/entities";
   import { ENTITY_KIND } from "$lib/entities/entity-codes";
   import {
     toggleOptimisticEntityFlag,
@@ -66,7 +68,7 @@
   const playback = useAudioPlayback()!;
 
   let loadState: LoadState = $state("loading");
-  let collection = $state<CollectionDetail | null>(null);
+  let collection = $state<EntityCardFull | null>(null);
   let errorMessage: string | null = $state(null);
   let lastNsfwMode = $state(nsfw.mode);
   let ratingBusy = $state(false);
@@ -89,10 +91,13 @@
       posterCard: collectionPosterCard(detailCard),
     };
   });
-  const canEditCollection = $derived(collection?.canEdit === true);
-  const canManuallyCurate = $derived(canEditCollection && collection?.mode !== "dynamic");
+  const collectionConfiguration = $derived(
+    collection ? getCollectionConfigurationCapability(collection.capabilities) : undefined,
+  );
+  const canEditCollection = $derived(collectionConfiguration?.canEdit === true);
+  const canManuallyCurate = $derived(canEditCollection && collectionConfiguration?.mode !== "dynamic");
   const canRefreshRules = $derived(
-    canEditCollection && (collection?.mode === "dynamic" || collection?.mode === "hybrid"),
+    canEditCollection && (collectionConfiguration?.mode === "dynamic" || collectionConfiguration?.mode === "hybrid"),
   );
   const hasAudioMembers = $derived(collectionItems.some((item) => isAudioCollectionMemberKind(item.entityType)));
   // Route-level grid bulk action. Selected cards expose entity ids, so the
@@ -169,7 +174,7 @@
     errorMessage = null;
     try {
       const id = page.params.id ?? "";
-      const nextCollection = unwrapGenerated<CollectionDetail>(await getCollection(id), `Failed to fetch collection ${id}`);
+      const nextCollection = await fetchEntity(id);
       const nextItems = await fetchCollectionItems(id);
       const audio = await collectCollectionAudioTracks(nextItems);
       collection = nextCollection;
@@ -290,12 +295,13 @@
     const cardsWithCovers = itemCards.filter((item) => item.cover);
     if (cardsWithCovers.length === 0) return detailCard.posterCard;
 
-    const selectedItem = collection?.coverItemId
-      ? cardsWithCovers.find((item) => item.entity.id === collection?.coverItemId)
+    const coverSelection = collection ? getCoverSelectionCapability(collection.capabilities) : undefined;
+    const selectedItem = coverSelection?.entityId
+      ? cardsWithCovers.find((item) => item.entity.id === coverSelection.entityId)
       : null;
     const primaryItem = selectedItem ?? cardsWithCovers[0];
 
-    if (collection?.coverMode === "item") {
+    if (collectionConfiguration?.coverMode === "item") {
       return {
         ...primaryItem,
         hover: { kind: THUMBNAIL_HOVER_KIND.none },
@@ -402,20 +408,20 @@
       actionButtons={heroActions}
     >
       {#snippet heroMeta()}
-        {#if collection?.mode}
-          <span class="meta-item">{collection.mode}</span>
+        {#if collectionConfiguration?.mode}
+          <span class="meta-item">{collectionConfiguration.mode}</span>
         {/if}
         {#if itemCards.length > 0}
-          {#if collection?.mode}<span class="meta-sep"></span>{/if}
+          {#if collectionConfiguration?.mode}<span class="meta-sep"></span>{/if}
           <span class="meta-item">{itemCards.length} {itemCards.length === 1 ? "item" : "items"}</span>
         {/if}
       {/snippet}
 
       {#snippet heroBadges()}
-        {#if collection?.mode}
-          <span class="hero-badge">{collection.mode}</span>
+        {#if collectionConfiguration?.mode}
+          <span class="hero-badge">{collectionConfiguration.mode}</span>
         {/if}
-        {#if collection?.isShared}
+        {#if collectionConfiguration?.isShared}
           <span class="hero-badge">shared</span>
         {/if}
       {/snippet}

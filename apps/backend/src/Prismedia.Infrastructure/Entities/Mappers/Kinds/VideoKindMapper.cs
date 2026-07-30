@@ -1,6 +1,4 @@
 using Microsoft.EntityFrameworkCore;
-using Prismedia.Contracts.Entities;
-using Prismedia.Contracts.Videos;
 using Prismedia.Domain.Entities;
 using Prismedia.Domain.Media;
 using Prismedia.Infrastructure.Persistence;
@@ -31,24 +29,6 @@ internal sealed class VideoKindMapper(PrismediaDbContext db) : IEntityKindMapper
             Track(new VideoDetailRow { EntityId = entity.Id });
         }
     }
-
-    public IEntityCard ProjectDetail(
-        Entity entity,
-        EntityCard card,
-        IReadOnlyList<EntityCreditMetadata> creditMetadata) =>
-        new VideoDetail {
-            Id = card.Id,
-            Kind = card.Kind,
-            Title = card.Title,
-            ParentEntityId = card.ParentEntityId,
-            SortOrder = card.SortOrder,
-            HasSourceMedia = card.HasSourceMedia,
-            Capabilities = card.Capabilities,
-            ChildrenByKind = card.ChildrenByKind,
-            Relationships = card.Relationships,
-            CreditMetadata = creditMetadata,
-            SubtitlesExtractedAt = (entity as Video)?.SubtitleCapability?.ExtractedAt,
-        };
 
     private VideoDetailRow Track(VideoDetailRow row) {
         db.VideoDetails.Add(row);

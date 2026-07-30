@@ -14,8 +14,7 @@
   import { cn } from "@prismedia/ui-svelte";
   import EntityDetailSkeleton from "$lib/components/entities/EntityDetailSkeleton.svelte";
   import EntityDetailHeroDates from "$lib/components/entities/EntityDetailHeroDates.svelte";
-  import { fetchEntity, fetchEntityThumbnails } from "$lib/api/entities";
-  import { fetchVideo, type VideoDetail } from "$lib/api/media";
+  import { fetchEntity, fetchEntityThumbnails, type EntityCardFull } from "$lib/api/entities";
   import { fetchSettingsValues, type LibrarySettings } from "$lib/api/settings";
   import {
     markJellyfinUserPlayedItem,
@@ -84,7 +83,7 @@
   const appChrome = useAppChrome();
 
   let loadState: LoadState = $state("loading");
-  let video = $state<VideoDetail | null>(null);
+  let video = $state<EntityCardFull | null>(null);
   let playbackInfo = $state<JellyfinPlaybackInfoResponse | null>(null);
   let errorMessage: string | null = $state(null);
   let lastNsfwMode = $state(nsfw.mode);
@@ -457,7 +456,7 @@
     if (options.showLoading || !video) loadState = "loading";
     errorMessage = null;
     try {
-      const nextVideo = await fetchVideo(page.params.id ?? "");
+      const nextVideo = await fetchEntity(page.params.id ?? "");
       if (await redirectMovieChildVideo(nextVideo)) return;
       video = nextVideo;
       if (isWanted(nextVideo.capabilities)) {
@@ -482,7 +481,7 @@
 
   async function refreshVideo() {
     try {
-      const nextVideo = await fetchVideo(video?.id ?? page.params.id ?? "");
+      const nextVideo = await fetchEntity(video?.id ?? page.params.id ?? "");
       video = nextVideo;
       const [nextPlaybackInfo] = await Promise.all([
         loadPlaybackInfo(nextVideo.id, playbackInfo?.PlaySessionId, selectedAudioStreamIndex),
@@ -496,7 +495,7 @@
     }
   }
 
-  async function hydrateVideoRelationships(nextVideo: VideoDetail) {
+  async function hydrateVideoRelationships(nextVideo: EntityCardFull) {
     const [relationships] = await Promise.all([
       hydrateStandardRelationshipCards(nextVideo),
       resolveSeries(nextVideo),
@@ -511,7 +510,7 @@
    * (episode → season → series), so the video can link back to its series. A standalone
    * video (or a movie child, which redirects earlier) leaves the series unset.
    */
-  async function resolveSeries(nextVideo: VideoDetail) {
+  async function resolveSeries(nextVideo: EntityCardFull) {
     seriesCard = null;
     seriesRef = null;
     const seasonId = nextVideo.parentEntityId;
@@ -525,7 +524,7 @@
     [seriesCard] = thumbnailsToCards([series], { hrefFor: () => href });
   }
 
-  async function redirectMovieChildVideo(nextVideo: VideoDetail) {
+  async function redirectMovieChildVideo(nextVideo: EntityCardFull) {
     if (!nextVideo.parentEntityId) return false;
 
     const parent = await fetchEntity(nextVideo.parentEntityId).catch(() => null);

@@ -6,7 +6,7 @@
   import { CloudDownload, Info, MicVocal, Music, Play, Shuffle, SlidersHorizontal, Users } from "@lucide/svelte";
   import EntityDetailSkeleton from "$lib/components/entities/EntityDetailSkeleton.svelte";
   import EntityDetailHeroDates from "$lib/components/entities/EntityDetailHeroDates.svelte";
-  import { fetchAudioLibrary, type AudioLibraryDetail } from "$lib/api/media";
+  import { fetchEntity, type EntityCardFull } from "$lib/api/entities";
   import {
     updateEntityRating,
     updateEntityFlags,
@@ -55,7 +55,7 @@
   const playback = useAudioPlayback()!;
 
   let loadState: LoadState = $state("loading");
-  let library = $state<AudioLibraryDetail | null>(null);
+  let library = $state<EntityCardFull | null>(null);
   let errorMessage: string | null = $state(null);
   let lastNsfwMode = $state(nsfw.mode);
   let ratingBusy = $state(false);
@@ -178,7 +178,7 @@
     if (options.showLoading || !library) loadState = "loading";
     errorMessage = null;
     try {
-      const nextLibrary = await fetchAudioLibrary(page.params.id ?? "");
+      const nextLibrary = await fetchEntity(page.params.id ?? "");
 
       // Separate track children from non-track children using the entity groups
       const trackGroup = nextLibrary.childrenByKind.find((g) => g.kind === ENTITY_KIND.audioTrack);

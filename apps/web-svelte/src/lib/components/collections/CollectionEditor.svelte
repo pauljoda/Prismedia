@@ -18,9 +18,14 @@
   } from "@lucide/svelte";
   import type { Component } from "svelte";
   import { cn, Toggle } from "@prismedia/ui-svelte";
-  import type { CollectionDetail } from "$lib/api/generated/model";
+  import type { EntityCard } from "$lib/api/generated/model";
   import { createCollection, previewCollectionRules, updateCollection } from "$lib/api/collections";
-  import { getDescription, isNsfw as hasNsfw } from "$lib/api/capabilities";
+  import {
+    getCollectionConfigurationCapability,
+    getCoverSelectionCapability,
+    getDescription,
+    isNsfw as hasNsfw,
+  } from "$lib/api/capabilities";
   import { fetchLibraryRoots, type LibraryRoot } from "$lib/api/settings";
   import {
     COLLECTION_RULE_FIELDS,
@@ -44,7 +49,7 @@
   import ConditionBuilder from "./ConditionBuilder.svelte";
 
   interface Props {
-    collection?: CollectionDetail | null;
+    collection?: EntityCard | null;
     isNew?: boolean;
   }
 
@@ -191,11 +196,12 @@
 
     title = collection.title;
     description = getDescription(collection.capabilities) ?? "";
-    mode = normalizeMode(collection.mode);
-    coverMode = normalizeCoverMode(collection.coverMode);
+    const configuration = getCollectionConfigurationCapability(collection.capabilities);
+    mode = normalizeMode(configuration?.mode);
+    coverMode = normalizeCoverMode(configuration?.coverMode);
     isNsfw = hasNsfw(collection.capabilities);
-    isShared = collection.isShared;
-    ruleTree = parseRuleTree(collection.ruleTreeJson);
+    isShared = configuration?.isShared === true;
+    ruleTree = parseRuleTree(configuration?.ruleTreeJson);
   });
 
   $effect(() => {
@@ -263,7 +269,7 @@
       mode,
       ruleTreeJson: showRules ? JSON.stringify(ruleTree) : null,
       coverMode,
-      coverItemId: collection?.coverItemId ?? null,
+      coverItemId: collection ? getCoverSelectionCapability(collection.capabilities)?.entityId ?? null : null,
       isNsfw,
       isShared,
     };

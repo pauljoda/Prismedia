@@ -251,7 +251,7 @@ public sealed class MusicPlayerStateServiceTests {
     }
 
     private sealed class FakeEntityReadService : IEntityReadService {
-        private readonly IReadOnlyDictionary<Guid, AudioTrackDetail> _tracks;
+        private readonly IReadOnlyDictionary<Guid, EntityCard> _tracks;
 
         public FakeEntityReadService(params Guid[] trackIds)
             : this(new HashSet<Guid>(), trackIds) {
@@ -260,7 +260,7 @@ public sealed class MusicPlayerStateServiceTests {
         public FakeEntityReadService(IReadOnlySet<Guid> wantedTrackIds, params Guid[] trackIds) {
             _tracks = trackIds.ToDictionary(
                 id => id,
-                id => new AudioTrackDetail {
+                id => new EntityCard {
                     Id = id,
                     Kind = EntityKind.AudioTrack,
                     Title = $"Track {id:N}",
@@ -268,12 +268,11 @@ public sealed class MusicPlayerStateServiceTests {
                     SortOrder = null,
                     Capabilities = [
                         new TechnicalCapability(TimeSpan.FromSeconds(100), null, null, null, null, null, null, null, null, null),
-                        new FlagsCapability(null, null, null, wantedTrackIds.Contains(id))
+                        new FlagsCapability(null, null, null, wantedTrackIds.Contains(id)),
+                        new EmbeddedAudioMetadataCapability(null, null)
                     ],
                     ChildrenByKind = [],
                     Relationships = [],
-                    EmbeddedArtist = null,
-                    EmbeddedAlbum = null,
                 });
         }
 
@@ -306,7 +305,7 @@ public sealed class MusicPlayerStateServiceTests {
             throw new NotSupportedException();
 
         public Task<EntityCard?> GetAsync(Guid id, bool hideNsfw, CancellationToken cancellationToken) =>
-            throw new NotSupportedException();
+            Task.FromResult<EntityCard?>(_tracks.GetValueOrDefault(id));
 
         public Task<EntityThumbnailBatchResponse> GetThumbnailsAsync(
             IReadOnlyList<Guid> ids,
@@ -314,7 +313,5 @@ public sealed class MusicPlayerStateServiceTests {
             CancellationToken cancellationToken) =>
             throw new NotSupportedException();
 
-        public Task<IEntityCard?> GetDetailAsync(Guid id, string kind, bool hideNsfw, CancellationToken cancellationToken) =>
-            Task.FromResult<IEntityCard?>(_tracks.GetValueOrDefault(id));
     }
 }

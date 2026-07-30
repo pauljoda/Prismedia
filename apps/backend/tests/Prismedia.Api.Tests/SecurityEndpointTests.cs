@@ -13,7 +13,6 @@ using Prismedia.Contracts.Jellyfin;
 using Prismedia.Contracts.Media;
 using Prismedia.Contracts.Security;
 using Prismedia.Domain.Entities;
-using Prismedia.Contracts.Videos;
 using Prismedia.Infrastructure.Serialization;
 
 namespace Prismedia.Api.Tests;
@@ -590,16 +589,6 @@ public sealed class SecurityEndpointTests : IDisposable {
             CancellationToken cancellationToken) =>
             Task.FromResult(new EntityThumbnailBatchResponse([]));
 
-        public Task<IEntityCard?> GetDetailAsync(Guid id, string kind, bool hideNsfw, CancellationToken cancellationToken) {
-            if (id == NsfwVideoId && hideNsfw) {
-                return Task.FromResult<IEntityCard?>(null);
-            }
-
-            return Task.FromResult<IEntityCard?>(id == SfwVideoId ? Card(id, "Visible Movie", isNsfw: false) with { Kind = kind.DecodeAs<EntityKind>() } :
-                id == NsfwVideoId ? Card(id, "Hidden Movie", isNsfw: true) with { Kind = kind.DecodeAs<EntityKind>() } :
-                null);
-        }
-
         private static EntityCard Card(Guid id, string title, bool isNsfw) =>
             new() {
                 Id = id,
@@ -703,9 +692,6 @@ public sealed class SecurityEndpointTests : IDisposable {
             bool hideNsfw,
             CancellationToken cancellationToken) =>
             Task.FromResult(new EntityThumbnailBatchResponse(ids.Contains(EpisodeId) ? [EpisodeThumbnail()] : []));
-
-        public Task<IEntityCard?> GetDetailAsync(Guid id, string kind, bool hideNsfw, CancellationToken cancellationToken) =>
-            Task.FromResult<IEntityCard?>(id == EpisodeId ? EpisodeCard() : null);
 
         private static EntityCard SeriesCard() =>
             new() {
@@ -814,9 +800,6 @@ public sealed class SecurityEndpointTests : IDisposable {
             CancellationToken cancellationToken) =>
             Task.FromResult(new EntityThumbnailBatchResponse([]));
 
-        public Task<IEntityCard?> GetDetailAsync(Guid id, string kind, bool hideNsfw, CancellationToken cancellationToken) =>
-            Task.FromResult<IEntityCard?>(null);
-
         private static EntityCard SeriesCard() =>
             new() {
                 Id = SeriesId,
@@ -921,9 +904,6 @@ public sealed class SecurityEndpointTests : IDisposable {
             CancellationToken cancellationToken) =>
             Task.FromResult(new EntityThumbnailBatchResponse([]));
 
-        public Task<IEntityCard?> GetDetailAsync(Guid id, string kind, bool hideNsfw, CancellationToken cancellationToken) =>
-            Task.FromResult<IEntityCard?>(id == VideoId && kind == "video" ? Detail() : null);
-
         private static EntityCard Card() =>
             new() {
                 Id = VideoId,
@@ -936,28 +916,15 @@ public sealed class SecurityEndpointTests : IDisposable {
                 Relationships = Relationships()
             };
 
-        private static VideoDetail Detail() =>
-            new() {
-                Id = VideoId,
-                Kind = EntityKind.Video,
-                Title = "Rich Movie",
-                ParentEntityId = null,
-                SortOrder = null,
-                Capabilities = Capabilities(),
-                ChildrenByKind = [],
-                Relationships = Relationships(),
-                CreditMetadata = [
-                    new EntityCreditMetadata(ActorId, "actor", "Hero", ["actor"], ["Hero"]),
-                    new EntityCreditMetadata(DirectorId, "director", null, ["director"], [])
-                ],
-                SubtitlesExtractedAt = null
-            };
-
         private static IReadOnlyList<EntityCapability> Capabilities() =>
             [
                 new DescriptionCapability("A mapped Prismedia overview."),
                 new RatingCapability(4),
                 new FlagsCapability(IsFavorite: true, IsNsfw: false, IsOrganized: true),
+                new CreditsCapability([
+                    new EntityCreditMetadata(ActorId, "actor", "Hero", ["actor"], ["Hero"]),
+                    new EntityCreditMetadata(DirectorId, "director", null, ["director"], [])
+                ]),
                 new TechnicalCapability(TimeSpan.FromMinutes(95), 1920, 1080, 24, 6_000_000, null, null, "h264", "mkv", "matroska"),
                 new DatesCapability([
                     new EntityDate("release", "2024-05-04", new DateOnly(2024, 5, 4), "day")

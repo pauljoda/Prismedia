@@ -1,6 +1,8 @@
 using Prismedia.Contracts.Entities;
 using Prismedia.Domain.Capabilities;
 using Prismedia.Domain.Entities;
+using Prismedia.Domain.Media;
+using Prismedia.Domain.Taxonomy;
 using ContractCapability = Prismedia.Contracts.Entities.EntityCapability;
 using DomainEntityDate = Prismedia.Domain.Capabilities.EntityDate;
 using ContractEntityDate = Prismedia.Contracts.Entities.EntityDate;
@@ -38,15 +40,27 @@ public static class EntityCardProjector {
     /// Projects an entity using canonical source-ownership truth supplied by its read boundary. Requiring
     /// that fact prevents shallow incidental hydration from silently dropping descendant file management.
     /// </summary>
-    public static EntityCard ToCard(Entity entity, bool hasSourceBackedSubtree) =>
-        ToCard(entity, new EntityFileManagementState(hasSourceBackedSubtree, HasRecoverableDeletion: false));
+    public static EntityCard ToCard(
+        Entity entity,
+        bool hasSourceBackedSubtree,
+        Guid? currentUserId = null,
+        IReadOnlyList<EntityCreditMetadata>? creditMetadata = null) =>
+        ToCard(
+            entity,
+            new EntityFileManagementState(hasSourceBackedSubtree, HasRecoverableDeletion: false),
+            currentUserId,
+            creditMetadata);
 
     /// <summary>
     /// Projects an Entity using canonical managed-file state supplied by its read boundary. Recoverable
     /// deletion state keeps the action available after source rows are gone without reporting those rows
     /// as source media or enabling deletion for an ordinary fileless Wanted Entity.
     /// </summary>
-    public static EntityCard ToCard(Entity entity, EntityFileManagementState fileManagementState) =>
+    public static EntityCard ToCard(
+        Entity entity,
+        EntityFileManagementState fileManagementState,
+        Guid? currentUserId = null,
+        IReadOnlyList<EntityCreditMetadata>? creditMetadata = null) =>
         new() {
             Id = entity.Id,
             Kind = entity.Kind,
@@ -54,7 +68,7 @@ public static class EntityCardProjector {
             ParentEntityId = entity.ParentEntityId,
             SortOrder = entity.SortOrder,
             HasSourceMedia = fileManagementState.HasSourceBackedSubtree,
-            Capabilities = MapCapabilities(entity, fileManagementState),
+            Capabilities = MapCapabilities(entity, fileManagementState, currentUserId, creditMetadata),
             ChildrenByKind = ToGroups(entity.ChildrenByKind),
             Relationships = ToGroups(entity.RelationshipsByKind),
         };
@@ -72,7 +86,9 @@ public static class EntityCardProjector {
 
     private static IReadOnlyList<ContractCapability> MapCapabilities(
         Entity entity,
-        EntityFileManagementState fileManagementState) {
+        EntityFileManagementState fileManagementState,
+        Guid? currentUserId,
+        IReadOnlyList<EntityCreditMetadata>? projectedCreditMetadata) {
         var capabilities = new List<ContractCapability>();
 
         capabilities.Add(new RatingCapability(entity.RatingValue));
@@ -153,18 +169,25 @@ public static class EntityCardProjector {
         }
 
         if (entity.SubtitleCapability is { } subtitles) {
-            capabilities.Add(new SubtitlesCapability(subtitles.Items
-                .Select(subtitle => new ContractEntitySubtitle(
-                    subtitle.Id,
-                    subtitle.Language,
-                    subtitle.Label,
-                    subtitle.Format,
-                    subtitle.Source,
-                    subtitle.StoragePath,
-                    subtitle.SourceFormat,
-                    subtitle.SourcePath,
-                    subtitle.IsDefault))
-                .ToArray()));
+            capabilities.Add(new SubtitlesCapability(
+                subtitles.Items
+                    .Select(subtitle => new ContractEntitySubtitle(
+                        subtitle.Id,
+                        subtitle.Language,
+                        subtitle.Label,
+                        subtitle.Format,
+                        subtitle.Source,
+                        subtitle.StoragePath,
+                        subtitle.SourceFormat,
+                        subtitle.SourcePath,
+                        subtitle.IsDefault))
+                    .ToArray(),
+                subtitles.ExtractedAt));
+        }
+
+        var credits = projectedCreditMetadata ?? CreditMetadata(entity);
+        if (entity.Credits is not null || credits.Count > 0) {
+            capabilities.Add(new CreditsCapability(credits));
         }
 
         if (entity.GetCapability<CapabilityFingerprints>() is { } fingerprints) {
@@ -222,7 +245,61 @@ public static class EntityCardProjector {
             capabilities.Add(new ClassificationCapability(classification.Value, classification.System));
         }
 
+        AddEntitySpecificCapabilities(capabilities, entity, currentUserId);
+
         return capabilities;
+    }
+
+    private static void AddEntitySpecificCapabilities(
+        ICollection<ContractCapability> capabilities,
+        Entity entity,
+        Guid? currentUserId) {
+        switch (entity) {
+            case Book book:
+                capabilities.Add(new BookMetadataCapability(book.BookType, book.Format));
+                capabilities.Add(new CoverSelectionCapability(book.CoverPageId));
+                break;
+            case BookChapter chapter:
+                capabilities.Add(new CoverSelectionCapability(chapter.CoverPageId));
+                break;
+            case Gallery gallery:
+                capabilities.Add(new GalleryMetadataCapability(gallery.GalleryType));
+                capabilities.Add(new CoverSelectionCapability(gallery.CoverImageId));
+                break;
+            case Person person:
+                capabilities.Add(new PersonProfileCapability(
+                    person.Disambiguation,
+                    person.Gender,
+                    person.Country,
+                    person.Ethnicity,
+                    person.EyeColor,
+                    person.HairColor,
+                    person.Height,
+                    person.Weight,
+                    person.Measurements,
+                    person.Tattoos,
+                    person.Piercings));
+                break;
+            case AudioTrack track:
+                capabilities.Add(new EmbeddedAudioMetadataCapability(track.EmbeddedArtist, track.EmbeddedAlbum));
+                break;
+            case Tag tag:
+                capabilities.Add(new TagPolicyCapability(tag.IgnoreAutoTag));
+                break;
+            case Collection collection:
+                capabilities.Add(new CollectionConfigurationCapability(
+                    collection.IsShared,
+                    currentUserId is { } userId && collection.IsOwnedBy(userId),
+                    collection.Mode,
+                    collection.RuleTreeJson,
+                    collection.CoverMode,
+                    collection.LastRefreshedAt));
+                capabilities.Add(new CoverSelectionCapability(collection.CoverItemId));
+                break;
+            case VideoSeries series:
+                capabilities.Add(new SeriesMetadataCapability(series.Status));
+                break;
+        }
     }
 
     private static ImagesCapability? ProjectImages(Entity entity) {

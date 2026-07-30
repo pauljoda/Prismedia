@@ -4,17 +4,14 @@
   import { Film, Layers, BookOpen, Music, User } from "@lucide/svelte";
   import EntityDetailSkeleton from "$lib/components/entities/EntityDetailSkeleton.svelte";
   import EntityDetailHeroDates from "$lib/components/entities/EntityDetailHeroDates.svelte";
-  import { fetchEntities } from "$lib/api/entities";
+  import { fetchEntities, fetchEntity, type EntityCardFull } from "$lib/api/entities";
   import { RELATIONSHIP_CODE } from "$lib/api/generated/codes";
   import {
     updateEntityRating,
     updateEntityFlags,
     updateEntityMetadata,
   } from "$lib/api/entity-mutations";
-  import { getPerson } from "$lib/api/generated/prismedia";
-  import type { PersonDetail } from "$lib/api/generated/model";
-  import { unwrapGenerated } from "$lib/api/generated-response";
-  import { getCapability } from "$lib/api/capabilities";
+  import { getPersonProfileCapability } from "$lib/api/capabilities";
   import {
     toggleOptimisticEntityFlag,
     updateOptimisticEntityRating,
@@ -40,7 +37,7 @@
   const appChrome = useAppChrome();
 
   let loadState: LoadState = $state("loading");
-  let person = $state<PersonDetail | null>(null);
+  let person = $state<EntityCardFull | null>(null);
   let relatedCards = $state<EntityThumbnailCard[]>([]);
   let errorMessage: string | null = $state(null);
   let lastNsfwMode = $state(nsfw.mode);
@@ -55,22 +52,23 @@
   const heroActions = $derived.by((): EntityDetailActionButton[] => identifyAction.action ? [identifyAction.action] : []);
 
   const dates = $derived(card?.dates ?? []);
+  const profile = $derived(person ? getPersonProfileCapability(person.capabilities) : undefined);
 
   interface DetailRow { label: string; value: string }
   const bioRows = $derived.by((): DetailRow[] => {
-    if (!person) return [];
+    if (!profile) return [];
     const rows: DetailRow[] = [];
-    if (person.gender) rows.push({ label: "Gender", value: person.gender });
-    if (person.country) rows.push({ label: "Country", value: person.country });
-    if (person.ethnicity) rows.push({ label: "Ethnicity", value: person.ethnicity });
-    if (person.eyeColor) rows.push({ label: "Eyes", value: person.eyeColor });
-    if (person.hairColor) rows.push({ label: "Hair", value: person.hairColor });
-    if (person.height != null) rows.push({ label: "Height", value: `${person.height} cm` });
-    if (person.weight != null) rows.push({ label: "Weight", value: `${person.weight} kg` });
-    if (person.measurements) rows.push({ label: "Measurements", value: person.measurements });
-    if (person.tattoos) rows.push({ label: "Tattoos", value: person.tattoos });
-    if (person.piercings) rows.push({ label: "Piercings", value: person.piercings });
-    if (person.disambiguation) rows.push({ label: "Disambiguation", value: person.disambiguation });
+    if (profile.gender) rows.push({ label: "Gender", value: profile.gender });
+    if (profile.country) rows.push({ label: "Country", value: profile.country });
+    if (profile.ethnicity) rows.push({ label: "Ethnicity", value: profile.ethnicity });
+    if (profile.eyeColor) rows.push({ label: "Eyes", value: profile.eyeColor });
+    if (profile.hairColor) rows.push({ label: "Hair", value: profile.hairColor });
+    if (profile.height != null) rows.push({ label: "Height", value: `${profile.height} cm` });
+    if (profile.weight != null) rows.push({ label: "Weight", value: `${profile.weight} kg` });
+    if (profile.measurements) rows.push({ label: "Measurements", value: profile.measurements });
+    if (profile.tattoos) rows.push({ label: "Tattoos", value: profile.tattoos });
+    if (profile.piercings) rows.push({ label: "Piercings", value: profile.piercings });
+    if (profile.disambiguation) rows.push({ label: "Disambiguation", value: profile.disambiguation });
     return rows;
   });
 
@@ -97,7 +95,7 @@
     errorMessage = null;
     try {
       const id = page.params.id ?? "";
-      person = unwrapGenerated<PersonDetail>(await getPerson(id), `Failed to fetch person ${id}`);
+      person = await fetchEntity(id);
       await loadRelated(id);
       loadState = "ready";
     } catch (err) {
@@ -169,14 +167,14 @@
       actionButtons={heroActions}
     >
       {#snippet heroMeta()}
-        {#if person?.gender}
-          <span class="meta-item">{person.gender}</span>
+        {#if profile?.gender}
+          <span class="meta-item">{profile.gender}</span>
         {/if}
-        {#if person?.country}
-          {#if person.gender}<span class="meta-sep"></span>{/if}
-          <span class="meta-item">{person.country}</span>
+        {#if profile?.country}
+          {#if profile.gender}<span class="meta-sep"></span>{/if}
+          <span class="meta-item">{profile.country}</span>
         {/if}
-        <EntityDetailHeroDates {dates} leadingSeparator={Boolean(person?.gender || person?.country)} />
+        <EntityDetailHeroDates {dates} leadingSeparator={Boolean(profile?.gender || profile?.country)} />
       {/snippet}
 
 

@@ -133,7 +133,7 @@ flowchart TD
   Layout --> Chrome["Sidebar, CanvasHeader, MobileNav, CommandPalette"]
   Layout --> Routes["Svelte routes"]
   Routes --> Index["EntityIndexPage and EntityGrid"]
-  Routes --> Detail["EntityDetail and kind detail routes"]
+  Routes --> Detail["EntityDetail over the canonical Entity document"]
   Routes --> Readers["ComicReader, PdfReader, BookFileReader"]
   Routes --> Players["VideoPlayer and AudioVidStackPlayer"]
   Index --> Api["lib/api wrappers"]
@@ -176,7 +176,7 @@ Important groups currently mapped:
 
 | Group | Primary route area | Typical owner |
 | --- | --- | --- |
-| Entity browse/detail | `/api/entities`, kind aliases like `/api/videos` | `IEntityReadService`, entity projectors, generated DTOs. |
+| Entity browse/detail | `/api/entities`; kind aliases return the same document | `IEntityReadService`, `EntityCardProjector`, generated `EntityCard`. |
 | Library roots | `/api/libraries` | Settings and scan-root persistence. |
 | Files | `/api/files` | `FilesService`, managed storage, file persistence. |
 | Jobs | `/api/jobs` | `JobService`, `IJobGraphService`, `IJobQueueService`, durable graph/node/signal/resource rows. |
@@ -282,8 +282,8 @@ flowchart TD
   Fetch --> EntityList["ListEntities endpoint"]
   EntityList --> Projection["EF projection to EntityCard DTOs"]
   Projection --> Grid["EntityGrid or shelf cards"]
-  Grid --> Detail["Kind detail route"]
-  Detail --> DetailEndpoint["GetEntity or kind detail endpoint"]
+  Grid --> Detail["Entity detail route"]
+  Detail --> DetailEndpoint["GetEntity"]
   DetailEndpoint --> PlayerDecision["PlaybackInfoService"]
   PlayerDecision --> Direct["Direct play or stream source"]
   PlayerDecision --> HLS["HLS direct stream or transcode assets"]
@@ -340,7 +340,7 @@ flowchart TD
 | Change | Start here | Then inspect |
 | --- | --- | --- |
 | New library page or grid behavior | `apps/web-svelte/src/lib/components/entities/EntityIndexPage.svelte` | `EntityGrid.svelte`, `entity-grid.ts`, route page for the kind. |
-| Detail page layout or metadata editing | `EntityDetail.svelte` | `entity-detail.ts`, `entity-detail-edit.ts`, kind detail route, update endpoints. |
+| Detail page layout or metadata editing | `EntityDetail.svelte` | `entity-detail.ts`, `entity-detail-edit.ts`, canonical Entity read, update endpoints. |
 | New API route | `Prismedia.Api/Endpoints/EndpointRouteBuilderExtensions.cs` | Matching endpoint group, `Prismedia.Contracts`, generated client. |
 | New backend setting | `AppSettingKeys.cs` and `AppSettingsRegistry.cs` | Settings endpoints, generated codes, settings UI. |
 | New closed-set code | Domain `[Code]` enum or constants manifest | `CodesManifest.cs`, `scripts/gen-codes.mjs`, `codes.ts`. |

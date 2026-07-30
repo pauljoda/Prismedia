@@ -3,7 +3,6 @@ using Microsoft.EntityFrameworkCore;
 using Prismedia.Application.Entities;
 using Prismedia.Contracts.Entities;
 using Prismedia.Domain.Entities;
-using Prismedia.Infrastructure.Entities.Mappers;
 using Prismedia.Infrastructure.Media.Processing;
 using Prismedia.Infrastructure.Persistence;
 using Prismedia.Infrastructure.Persistence.Entities;
@@ -28,7 +27,6 @@ public sealed partial class EfEntityReadService : IEntityReadService {
     private readonly PrismediaDbContext _db;
     private readonly Prismedia.Application.Security.ICurrentUserContext _currentUser;
     private readonly EfEntityRepository _repository;
-    private readonly IReadOnlyDictionary<EntityKind, IEntityKindMapper> _kindMappers;
     private readonly IReadOnlyList<Thumbnails.IThumbnailContributor> _thumbnailContributors;
     private readonly IEntitySourceOwnershipReader _sourceOwnership;
     private readonly IEntityFileDeletionRecoveryReader _deletionRecovery;
@@ -50,7 +48,6 @@ public sealed partial class EfEntityReadService : IEntityReadService {
         PrismediaDbContext db,
         Prismedia.Application.Security.ICurrentUserContext currentUser,
         EfEntityRepository repository,
-        IEnumerable<IEntityKindMapper> kindMappers,
         IEnumerable<Thumbnails.IThumbnailContributor> thumbnailContributors,
         AssetPathService? assets = null,
         IEntitySourceOwnershipReader? sourceOwnership = null,
@@ -58,7 +55,6 @@ public sealed partial class EfEntityReadService : IEntityReadService {
         _db = db;
         _currentUser = currentUser;
         _repository = repository;
-        _kindMappers = kindMappers.ToDictionary(mapper => mapper.Kind);
         _thumbnailContributors = thumbnailContributors.ToArray();
         _sourceOwnershipFilter = sourceOwnership as EfEntitySourceOwnershipProjection
             ?? new EfEntitySourceOwnershipProjection(db);
@@ -543,9 +539,10 @@ public sealed partial class EfEntityReadService : IEntityReadService {
         }
 
         var fileManagementState = await ResolveFileManagementStateAsync(id, cancellationToken);
+        var creditMetadata = await ProjectCreditMetadataAsync(id, hideNsfw, cancellationToken);
         var projected = SanitizeLocalAssets(
             await EnrichAudioTrackAlbumCoverAsync(
-                EntityCardProjector.ToCard(entity, fileManagementState),
+                EntityCardProjector.ToCard(entity, fileManagementState, CurrentUserId, creditMetadata),
                 hideNsfw,
                 cancellationToken));
         var card = projected with {
@@ -604,39 +601,6 @@ public sealed partial class EfEntityReadService : IEntityReadService {
         var thumbnails = await ProjectThumbnailsAsync(rows, hideNsfw, enforceLibraryVisibility, cancellationToken);
         var byId = thumbnails.ToDictionary(item => item.Id);
         return new EntityThumbnailBatchResponse(ids.Where(byId.ContainsKey).Select(id => byId[id]).ToArray());
-    }
-
-    public async Task<IEntityCard?> GetDetailAsync(Guid id, string kind, bool hideNsfw, CancellationToken cancellationToken) {
-        var enforceLibraryVisibility = await RequiresLibraryVisibilityAsync(cancellationToken);
-        if (!await IsCollectionVisibleAsync(id, cancellationToken) ||
-            (enforceLibraryVisibility && !await IsEntityVisibleInEnabledLibraryAsync(id, cancellationToken)) ||
-            hideNsfw && await IsEntityHiddenAsync(id, cancellationToken)) {
-            return null;
-        }
-
-        var entity = await _repository.FindShallowAsync(id, cancellationToken);
-        if (entity is null) {
-            return null;
-        }
-
-        var fileManagementState = await ResolveFileManagementStateAsync(id, cancellationToken);
-        var projected = SanitizeLocalAssets(
-            await EnrichAudioTrackAlbumCoverAsync(
-                EntityCardProjector.ToCard(entity, fileManagementState),
-                hideNsfw,
-                cancellationToken));
-        var card = await EnrichBookProgressAsync(projected with {
-            ChildrenByKind = await ProjectDirectChildGroupsAsync(id, hideNsfw, enforceLibraryVisibility, cancellationToken),
-            Relationships = await ProjectRelationshipGroupsAsync(id, hideNsfw, enforceLibraryVisibility, cancellationToken)
-        }, hideNsfw, cancellationToken);
-        if (!string.Equals(EntityKindRegistry.ToCode(card.Kind), kind, StringComparison.OrdinalIgnoreCase)) {
-            return null;
-        }
-
-        var creditMetadata = await ProjectCreditMetadataAsync(id, hideNsfw, cancellationToken);
-        return _kindMappers.TryGetValue(entity.Kind, out var mapper)
-            ? mapper.ProjectDetail(entity, card, creditMetadata)
-            : card;
     }
 
     private async Task<EntityFileManagementState> ResolveFileManagementStateAsync(

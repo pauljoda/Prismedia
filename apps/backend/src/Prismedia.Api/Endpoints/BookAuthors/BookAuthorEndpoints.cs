@@ -1,5 +1,4 @@
 using Prismedia.Contracts.Entities;
-using Prismedia.Contracts.Media;
 using Prismedia.Domain.Entities;
 
 namespace Prismedia.Api.Endpoints;
@@ -11,7 +10,5 @@ public static class BookAuthorEndpoints {
             EntityKindRegistry.BookAuthor.Code,
             "Authors",
             "ListBookAuthors",
-            "GetBookAuthor",
-            typeof(EntityListResponse),
-            typeof(BookAuthorDetail));
+            "GetBookAuthor");
 }

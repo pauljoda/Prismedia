@@ -4,7 +4,7 @@
   import { page } from "$app/state";
   import { BookOpen, CloudDownload, Info, SlidersHorizontal, Users } from "@lucide/svelte";
   import EntityDetailSkeleton from "$lib/components/entities/EntityDetailSkeleton.svelte";
-  import { fetchBookAuthor, type BookAuthorDetail } from "$lib/api/media";
+  import { fetchEntity, type EntityCardFull } from "$lib/api/entities";
   import {
     updateEntityRating,
     updateEntityFlags,
@@ -45,7 +45,7 @@
   const appChrome = useAppChrome();
 
   let loadState: LoadState = $state("loading");
-  let author = $state<BookAuthorDetail | null>(null);
+  let author = $state<EntityCardFull | null>(null);
   let errorMessage: string | null = $state(null);
   let lastNsfwMode = $state(nsfw.mode);
   let ratingBusy = $state(false);
@@ -119,7 +119,7 @@
       errorMessage = null;
     }
     try {
-      const nextAuthor = await fetchBookAuthor(page.params.id ?? "");
+      const nextAuthor = await fetchEntity(page.params.id ?? "");
 
       const bookGroup = nextAuthor.childrenByKind.find((group) => group.kind === "book");
       const bookIds = bookGroup?.entities.map((entity) => entity.id) ?? [];

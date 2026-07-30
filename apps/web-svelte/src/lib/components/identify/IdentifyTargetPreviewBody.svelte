@@ -2,9 +2,8 @@
   import { onMount } from "svelte";
   import { ImageOff, Loader2 } from "@lucide/svelte";
   import EntityThumbnail from "$lib/components/thumbnails/EntityThumbnail.svelte";
-  import type { EntityCard } from "$lib/api/entities";
+  import { fetchEntity, type EntityCard } from "$lib/api/entities";
   import type { EntityThumbnail as EntityThumbnailDto } from "$lib/api/generated/model";
-  import { fetchSeason, fetchSeries } from "$lib/api/media";
   import {
     ENTITY_KIND,
     isEntityKindCode,
@@ -47,12 +46,12 @@
    */
   async function resolvePreviewIds(): Promise<string[]> {
     if (entity.kind === ENTITY_KIND.videoSeries) {
-      const series = await fetchSeries(entity.id);
+      const series = await fetchEntity(entity.id);
       let ids = getChildIds(series, ENTITY_KIND.video);
       if (ids.length === 0) {
         const seasonIds = getChildIds(series, ENTITY_KIND.videoSeason);
         if (seasonIds.length > 0) {
-          const firstSeason = await fetchSeason(entity.id, seasonIds[0]).catch(() => null);
+          const firstSeason = await fetchEntity(seasonIds[0]).catch(() => null);
           ids = getChildIds(firstSeason, ENTITY_KIND.video);
           if (ids.length === 0) ids = seasonIds;
         }
@@ -61,7 +60,7 @@
     }
 
     if (entity.kind === ENTITY_KIND.videoSeason && entity.parentEntityId) {
-      const season = await fetchSeason(entity.parentEntityId, entity.id).catch(() => null);
+      const season = await fetchEntity(entity.id).catch(() => null);
       return getChildIds(season, ENTITY_KIND.video);
     }
 

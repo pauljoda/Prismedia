@@ -1,8 +1,8 @@
 using Prismedia.Application.Audio;
 using Prismedia.Application.Entities;
 using Prismedia.Contracts.Entities;
-using Prismedia.Contracts.Media;
 using Prismedia.Contracts.System;
+using Prismedia.Domain.Entities;
 
 namespace Prismedia.Api.Endpoints;
 
@@ -10,12 +10,10 @@ public static class AudioTrackEndpoints {
     public static RouteGroupBuilder MapAudioTrackEndpoints(this IEndpointRouteBuilder routes) {
         var group = routes.MapEntityKindRoutes(
             "/api/audio-tracks",
-            "audio-track",
+            EntityKindRegistry.AudioTrack.Code,
             "Audio",
             "ListAudioTracks",
-            "GetAudioTrack",
-            typeof(EntityListResponse),
-            typeof(AudioTrackDetail));
+            "GetAudioTrack");
 
         group.MapPost("/{id:guid}/play", async (
             Guid id,

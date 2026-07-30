@@ -32,7 +32,9 @@ public static class ImageKindRoleResolver {
     /// non-role kinds (still, banner, hero, profile, thumbnail) store as <see cref="EntityFileRole.Thumbnail"/>.
     /// </summary>
     public static EntityFileRole RoleFor(string? imageKind) =>
-        imageKind.TryDecodeAs<MediaImageKind>(out var kind) ? RoleFor(kind) : EntityFileRole.Thumbnail;
+        imageKind is not null && imageKind.TryDecodeAs<MediaImageKind>(out var kind)
+            ? RoleFor(kind)
+            : EntityFileRole.Thumbnail;
 
     /// <summary>Maps a <see cref="MediaImageKind"/> to the persisted <see cref="EntityFileRole"/>.</summary>
     public static EntityFileRole RoleFor(MediaImageKind kind) => kind switch {

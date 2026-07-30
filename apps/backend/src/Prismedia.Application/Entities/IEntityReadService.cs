@@ -127,6 +127,24 @@ public interface IEntityReadService {
     Task<EntityCard?> GetAsync(Guid id, bool hideNsfw, CancellationToken cancellationToken);
 
     /// <summary>
+    /// Gets one active Entity through the shared document contract and verifies its expected kind.
+    /// Kind-specific route aliases use this overload without introducing parallel detail shapes.
+    /// </summary>
+    async Task<EntityCard?> GetAsync(
+        Guid id,
+        string expectedKind,
+        bool hideNsfw,
+        CancellationToken cancellationToken) {
+        var entity = await GetAsync(id, hideNsfw, cancellationToken);
+        return entity is not null && string.Equals(
+            EntityKindRegistry.ToCode(entity.Kind),
+            expectedKind,
+            StringComparison.OrdinalIgnoreCase)
+                ? entity
+                : null;
+    }
+
+    /// <summary>
     /// Gets thumbnails for the requested identifiers while preserving the caller's
     /// requested order.
     /// </summary>
@@ -134,12 +152,6 @@ public interface IEntityReadService {
         IReadOnlyList<Guid> ids,
         bool hideNsfw,
         CancellationToken cancellationToken);
-
-    /// <summary>
-    /// Gets one active entity as its kind-specific detail contract. Returns null when
-    /// the entity does not exist or does not match the requested kind.
-    /// </summary>
-    Task<IEntityCard?> GetDetailAsync(Guid id, string kind, bool hideNsfw, CancellationToken cancellationToken);
 
     /// <summary>
     /// Gets the folder-list context (visible child count, description, dates, lifetime, external

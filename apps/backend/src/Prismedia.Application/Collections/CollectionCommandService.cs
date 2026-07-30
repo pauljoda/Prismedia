@@ -302,13 +302,13 @@ public sealed class CollectionCommandService(
     private async Task<CollectionWriteResult> DetailResultAsync(
         Guid collectionId,
         CancellationToken cancellationToken) {
-        var collection = await entities.GetDetailAsync(
+        var collection = await entities.GetAsync(
             collectionId,
             EntityKindRegistry.Collection.Code,
             hideNsfw: false,
             cancellationToken);
-        return collection is CollectionDetail detail
-            ? new CollectionWriteResult(CollectionCommandStatus.Succeeded, detail)
+        return collection is not null
+            ? new CollectionWriteResult(CollectionCommandStatus.Succeeded, collection)
             : new CollectionWriteResult(CollectionCommandStatus.NotFound, Message: "Collection was not found after save.");
     }
 

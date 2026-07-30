@@ -12,7 +12,6 @@
     Users,
     Building2,
     Tag,
-    ChevronRight,
     Play,
     PlayCircle,
     History,
@@ -28,14 +27,11 @@
   import PrismediaLoadingMark from "$lib/components/PrismediaLoadingMark.svelte";
 
   type SectionStatus = "pending" | "loading" | "ready";
-  type SectionDisplay = "shelf" | "chips";
-
   interface SectionDef {
     kind: string;
     label: string;
     icon: typeof Film;
     href: string;
-    display: SectionDisplay;
   }
 
   interface DashboardSection extends SectionDef {
@@ -44,16 +40,16 @@
   }
 
   const SECTION_DEFS: SectionDef[] = [
-    { kind: "video", label: "Videos", icon: Film, href: "/videos", display: "shelf" },
-    { kind: "movie", label: "Movies", icon: Clapperboard, href: "/movies", display: "shelf" },
-    { kind: ENTITY_KIND.videoSeries, label: "Series", icon: FolderOpen, href: "/series", display: "shelf" },
-    { kind: "gallery", label: "Galleries", icon: Layers, href: "/galleries", display: "shelf" },
-    { kind: "book", label: "Books", icon: BookOpen, href: "/books", display: "shelf" },
-    { kind: "image", label: "Images", icon: ImageIcon, href: "/images", display: "shelf" },
-    { kind: ENTITY_KIND.audioLibrary, label: "Audio", icon: Music, href: "/audio", display: "shelf" },
-    { kind: "person", label: "People", icon: Users, href: "/people", display: "shelf" },
-    { kind: "studio", label: "Studios", icon: Building2, href: "/studios", display: "shelf" },
-    { kind: "tag", label: "Tags", icon: Tag, href: "/tags", display: "chips" },
+    { kind: ENTITY_KIND.video, label: "Videos", icon: Film, href: "/videos" },
+    { kind: ENTITY_KIND.movie, label: "Movies", icon: Clapperboard, href: "/movies" },
+    { kind: ENTITY_KIND.videoSeries, label: "Series", icon: FolderOpen, href: "/series" },
+    { kind: ENTITY_KIND.gallery, label: "Galleries", icon: Layers, href: "/galleries" },
+    { kind: ENTITY_KIND.book, label: "Books", icon: BookOpen, href: "/books" },
+    { kind: ENTITY_KIND.image, label: "Images", icon: ImageIcon, href: "/images" },
+    { kind: ENTITY_KIND.audioLibrary, label: "Audio", icon: Music, href: "/audio" },
+    { kind: ENTITY_KIND.person, label: "People", icon: Users, href: "/people" },
+    { kind: ENTITY_KIND.studio, label: "Studios", icon: Building2, href: "/studios" },
+    { kind: ENTITY_KIND.tag, label: "Tags", icon: Tag, href: "/tags" },
   ];
 
   // Cross-kind activity rows that lead the dashboard: pick up where you left off, then what you
@@ -241,35 +237,6 @@
   </section>
 {/snippet}
 
-{#snippet chipBand(label: string, Icon: typeof Film, cards: EntityThumbnailCard[], href: string)}
-  <section>
-    <div class="flex items-center justify-between mb-3 px-3">
-      <h2 class="text-lg font-semibold flex items-center gap-2">
-        <Icon class="w-4.5 h-4.5 text-accent-500" />
-        {label}
-      </h2>
-      <a
-        {href}
-        class="inline-flex items-center gap-1 text-xs text-text-muted hover:text-text-accent transition-colors"
-      >
-        View all
-        <ChevronRight class="h-3.5 w-3.5" />
-      </a>
-    </div>
-    <div class="flex flex-wrap gap-2 px-3 pb-2">
-      {#each cards as card (card.entity.id)}
-        <a
-          href={card.href}
-          class="inline-flex items-center gap-1.5 rounded-md border border-border-default bg-surface-2 px-3 py-1.5 text-sm text-text-secondary transition-colors hover:border-border-accent hover:text-text-accent"
-        >
-          <Icon class="h-3.5 w-3.5 opacity-60" />
-          {card.entity.title}
-        </a>
-      {/each}
-    </div>
-  </section>
-{/snippet}
-
 <svelte:head>
   <title>Dashboard — Prismedia</title>
 </svelte:head>
@@ -394,8 +361,6 @@
         <div use:lazySection={section.kind}>
           {@render shelfSkeleton(section.label, section.icon)}
         </div>
-      {:else if section.display === "chips"}
-        {@render chipBand(section.label, section.icon, section.cards, section.href)}
       {:else}
         <EntityShelf
           label={section.label}

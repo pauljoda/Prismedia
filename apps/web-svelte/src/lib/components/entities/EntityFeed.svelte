@@ -5,7 +5,7 @@
   import NsfwBlur from "../nsfw/NsfwBlur.svelte";
   import { getCapability, getImagesCapability, isNsfw as hasNsfwFlag } from "$lib/api/capabilities";
   import { entityFileUrl } from "$lib/api/files";
-  import { fetchImage, fetchVideo } from "$lib/api/media";
+  import { fetchEntity } from "$lib/api/entities";
   import { CAPABILITY_KIND, ENTITY_FILE_ROLE, ENTITY_KIND } from "$lib/entities/entity-codes";
   import {
     type EntityThumbnailCard,
@@ -122,9 +122,7 @@
     if (hydrated[key] || inFlight.has(key)) return;
     inFlight.add(key);
     try {
-      const entity = ref.kind === ENTITY_KIND.video
-        ? await fetchVideo(ref.id)
-        : await fetchImage(ref.id);
+      const entity = await fetchEntity(ref.id);
       hydrated = {
         ...hydrated,
         [key]: {

@@ -2,6 +2,7 @@ using Prismedia.Application.Collections;
 using Prismedia.Contracts.Collections;
 using Prismedia.Contracts.Entities;
 using Prismedia.Contracts.System;
+using Prismedia.Domain.Entities;
 
 namespace Prismedia.Api.Endpoints;
 
@@ -9,12 +10,10 @@ public static class CollectionEndpoints {
     public static RouteGroupBuilder MapCollectionEndpoints(this IEndpointRouteBuilder routes) {
         var group = routes.MapEntityKindRoutes(
             "/api/collections",
-            "collection",
+            EntityKindRegistry.Collection.Code,
             "Collections",
             "ListCollections",
-            "GetCollection",
-            typeof(EntityListResponse),
-            typeof(CollectionDetail));
+            "GetCollection");
 
         group.MapPost("/", async (
             CollectionWriteRequest request,
@@ -31,7 +30,7 @@ public static class CollectionEndpoints {
             })
             .WithName("CreateCollection")
             .WithSummary("Create Collection.")
-            .Produces<CollectionDetail>(StatusCodes.Status201Created)
+            .Produces<EntityCard>(StatusCodes.Status201Created)
             .Produces<ApiProblem>(StatusCodes.Status400BadRequest);
 
         group.MapPut("/{id:guid}", async (
@@ -42,7 +41,7 @@ public static class CollectionEndpoints {
                 ToCollectionWriteResult(await collections.UpdateAsync(id, request, cancellationToken)))
             .WithName("UpdateCollection")
             .WithSummary("Update Collection.")
-            .Produces<CollectionDetail>(StatusCodes.Status200OK)
+            .Produces<EntityCard>(StatusCodes.Status200OK)
             .Produces<ApiProblem>(StatusCodes.Status400BadRequest)
             .Produces<ApiProblem>(StatusCodes.Status404NotFound);
 

@@ -15,8 +15,6 @@ internal static class EntityKindRouteEndpoints {
         string tag,
         string listName,
         string detailName,
-        Type listResponseType,
-        Type detailResponseType,
         bool manageable = false) {
         var group = routes.MapGroup(prefix)
             .WithTags(tag);
@@ -60,10 +58,10 @@ internal static class EntityKindRouteEndpoints {
                 orphaned: orphaned)))
             .WithName(listName)
             .WithSummary($"List {tag}.")
-            .Produces(StatusCodes.Status200OK, listResponseType);
+            .Produces<EntityListResponse>();
 
         if (manageable) {
-            group.MapManagementRoutes(kind, tag, detailName, detailResponseType);
+            group.MapManagementRoutes(kind, tag, detailName);
         }
 
         group.MapGet("/{id:guid}", async (
@@ -75,7 +73,7 @@ internal static class EntityKindRouteEndpoints {
             await GetKindDetailAsync(id, kind, NsfwVisibility.ShouldHide(hideNsfw, httpContext), entities, cancellationToken))
             .WithName(detailName)
             .WithSummary($"Get {tag} detail.")
-            .Produces(StatusCodes.Status200OK, detailResponseType)
+            .Produces<EntityCard>()
             .Produces<ApiProblem>(StatusCodes.Status404NotFound);
 
         group.MapPatch("/{id:guid}", async (
@@ -88,7 +86,7 @@ internal static class EntityKindRouteEndpoints {
             .RequireAdmin()
             .WithName($"{detailName}Patch")
             .WithSummary($"Update {tag} detail.")
-            .Produces(StatusCodes.Status200OK, detailResponseType)
+            .Produces<EntityCard>()
             .Produces<ApiProblem>(StatusCodes.Status400BadRequest)
             .Produces<ApiProblem>(StatusCodes.Status404NotFound);
 
@@ -103,8 +101,7 @@ internal static class EntityKindRouteEndpoints {
         this RouteGroupBuilder group,
         string kind,
         string tag,
-        string detailName,
-        Type detailResponseType) {
+        string detailName) {
         // Derive clean operation names (GetTag -> CreateTag / DeleteTag) so the generated client
         // exposes createTag()/deleteTag() rather than awkward Get-prefixed names.
         var baseName = detailName.StartsWith("Get", StringComparison.Ordinal) ? detailName[3..] : detailName;
@@ -127,7 +124,7 @@ internal static class EntityKindRouteEndpoints {
             .RequireAdmin()
             .WithName($"Create{baseName}")
             .WithSummary($"Create {tag}.")
-            .Produces(StatusCodes.Status201Created, detailResponseType)
+            .Produces<EntityCard>(StatusCodes.Status201Created)
             .Produces<ApiProblem>(StatusCodes.Status400BadRequest);
 
         group.MapDelete("/{id:guid}", async (
@@ -155,7 +152,7 @@ internal static class EntityKindRouteEndpoints {
         HttpContext httpContext,
         IEntityReadService entities,
         CancellationToken cancellationToken) {
-        var entity = await entities.GetDetailAsync(
+        var entity = await entities.GetAsync(
             id, kind, NsfwVisibility.ShouldHide(null, httpContext), cancellationToken);
         return entity is null
             ? Results.NotFound(new ApiProblem(ApiProblemCodes.EntityNotFound, $"Entity '{id}' was not found."))
@@ -168,7 +165,7 @@ internal static class EntityKindRouteEndpoints {
         bool hideNsfw,
         IEntityReadService entities,
         CancellationToken cancellationToken) {
-        var entity = await entities.GetDetailAsync(id, kind, hideNsfw, cancellationToken);
+        var entity = await entities.GetAsync(id, kind, hideNsfw, cancellationToken);
         return entity is null
             ? Results.NotFound(new ApiProblem(ApiProblemCodes.EntityNotFound, $"Entity '{id}' was not found."))
             : Results.Ok<object>(entity);

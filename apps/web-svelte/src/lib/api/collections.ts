@@ -9,7 +9,6 @@ import {
   removeCollectionItems as removeCollectionItemsRequest,
   reorderCollectionItems as reorderCollectionItemsRequest,
   updateCollection as updateCollectionRequest,
-  getCollection,
 } from "$lib/api/generated/prismedia";
 import type {
   CollectionAddItemsRequest as GeneratedCollectionAddItemsRequest,
@@ -19,10 +18,12 @@ import type {
   CollectionRulePreviewRequest,
   CollectionRulePreviewResponse as GeneratedCollectionRulePreviewResponse,
   CollectionWriteRequest as GeneratedCollectionWriteRequest,
-  CollectionDetail,
+  EntityCard,
   EntityListResponse,
 } from "$lib/api/generated/model";
 import { requestInit, unwrapGenerated, type RequestOptions } from "$lib/api/generated-response";
+import { fetchEntity } from "$lib/api/entities";
+import { getCollectionConfigurationCapability } from "$lib/api/capabilities";
 import type {
   CollectionAddItemsRequest,
   CollectionItem,
@@ -55,13 +56,10 @@ export async function fetchEditableCollections(
   const response = await fetchCollections(options);
   const details = await Promise.all(
     response.items.map(async (item) =>
-      unwrapGenerated<CollectionDetail>(
-        await getCollection(item.id, undefined, requestInit(options)),
-        `Failed to fetch collection ${item.id}`,
-      )),
+      fetchEntity(item.id, options)),
   );
   return details
-    .filter((collection) => collection.canEdit)
+    .filter((collection) => getCollectionConfigurationCapability(collection.capabilities)?.canEdit)
     .map((collection) => ({ id: collection.id, title: collection.title }));
 }
 
@@ -79,7 +77,7 @@ export async function fetchCollectionItems(
 export function createCollection(
   request: CollectionWriteRequest,
   options?: RequestOptions,
-): Promise<CollectionDetail> {
+): Promise<EntityCard> {
   return createCollectionRequest(
     request as GeneratedCollectionWriteRequest,
     requestInit(options),
@@ -90,7 +88,7 @@ export function updateCollection(
   collectionId: string,
   request: CollectionWriteRequest,
   options?: RequestOptions,
-): Promise<CollectionDetail> {
+): Promise<EntityCard> {
   return updateCollectionRequest(
     collectionId,
     request as GeneratedCollectionWriteRequest,
