@@ -1,10 +1,11 @@
 <script lang="ts">
   import { BookOpen } from "@lucide/svelte";
   import EntityIndexPage from "$lib/components/entities/EntityIndexPage.svelte";
+  import { ENTITY_KIND } from "$lib/entities/entity-codes";
 </script>
 
 <EntityIndexPage
-  kind="book"
+  kind={ENTITY_KIND.book}
   title="Books"
   icon={BookOpen}
   prefsKey="books"

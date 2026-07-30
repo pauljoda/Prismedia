@@ -1,10 +1,11 @@
 <script lang="ts">
   import { Image as ImageIcon } from "@lucide/svelte";
   import EntityIndexPage from "$lib/components/entities/EntityIndexPage.svelte";
+  import { ENTITY_KIND } from "$lib/entities/entity-codes";
 </script>
 
 <EntityIndexPage
-  kind="image"
+  kind={ENTITY_KIND.image}
   title="Images"
   icon={ImageIcon}
   prefsKey="images"

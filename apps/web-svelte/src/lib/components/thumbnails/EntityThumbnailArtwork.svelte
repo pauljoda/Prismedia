@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { THUMBNAIL_HOVER_KIND } from "$lib/api/generated/codes";
+  import { ENTITY_FILE_ROLE, ENTITY_KIND, THUMBNAIL_HOVER_KIND } from "$lib/api/generated/codes";
   import { paletteFromImage, type ArtworkPalette } from "$lib/entities/artwork-palette";
   import {
     getThumbnailAsset,
@@ -101,7 +101,9 @@
   const asset = $derived(getThumbnailAsset(card, hoverBroken || isSpriteHover ? null : pointerRatio));
   const aspectRatio = $derived(toAspectRatioValue(card.aspectRatio));
   const imageFit = $derived(card.fit ?? "cover");
-  const isLogoLikeArtwork = $derived(card.cover?.role === "logo" || card.entity.kind === "studio");
+  const isLogoLikeArtwork = $derived(
+    card.cover?.role === ENTITY_FILE_ROLE.logo || card.entity.kind === ENTITY_KIND.studio,
+  );
   const placeholderIcon = $derived(iconForKind(card.entity.kind));
   const sequenceRestCover = $derived(
     isImageSequenceHover && !card.cover && sequenceAssets.length > 0 ? sequenceAssets[0] : null,

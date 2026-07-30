@@ -18,7 +18,7 @@
   import { refreshAfterManagedFileRevert } from "$lib/entities/entity-file-management";
   import { getAllChildIds } from "$lib/entities/entity-children";
   import type { EntityDetailCredit, EntityDetailTag } from "$lib/entities/entity-detail";
-  import type { EntityKindCode } from "$lib/entities/entity-codes";
+  import { ENTITY_KIND, type EntityKindCode } from "$lib/entities/entity-codes";
   import { entityCardToDetailCard, type EntityDetailCardFull } from "$lib/entities/entity-detail";
   import { resolveEntityHref } from "$lib/entities/entity-routes";
   import {
@@ -127,8 +127,8 @@
       : []),
   ]);
 
-  const imageChildren = $derived(childCards.filter((c) => c.entity.kind === "image"));
-  const galleryChildren = $derived(childCards.filter((c) => c.entity.kind === "gallery"));
+  const imageChildren = $derived(childCards.filter((c) => c.entity.kind === ENTITY_KIND.image));
+  const galleryChildren = $derived(childCards.filter((c) => c.entity.kind === ENTITY_KIND.gallery));
   const lightboxEntities = $derived(
     lightboxCards.map((c) => hydratedLightboxEntities[c.entity.id] ?? lightboxEntityFromCard(c)),
   );
@@ -136,7 +136,7 @@
   $effect(() => {
     if (!lightboxOpen || lightboxCards.length === 0) return;
     const currentCard = lightboxCards[lightboxIndex];
-    if (!currentCard || currentCard.entity.kind !== "image") return;
+    if (!currentCard || currentCard.entity.kind !== ENTITY_KIND.image) return;
     if (hydratedLightboxEntities[currentCard.entity.id]) return;
     void hydrateLightboxEntity(currentCard.entity.id);
   });

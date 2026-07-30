@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { BOOK_ACTIVITY_KIND, CAPABILITY_KIND, PROGRESS_UNIT, READER_MODE } from "$lib/api/generated/codes";
+  import { BOOK_ACTIVITY_KIND, BOOK_FORMAT, CAPABILITY_KIND, PROGRESS_UNIT, READER_MODE } from "$lib/api/generated/codes";
   import { onMount } from "svelte";
   import { goto } from "$app/navigation";
   import { page } from "$app/state";
@@ -145,11 +145,11 @@
       const nextBook = await fetchEntity(bookId);
       const metadata = getBookMetadataCapability(nextBook.capabilities);
 
-      if (metadata?.format === "epub") {
+      if (metadata?.format === BOOK_FORMAT.epub) {
         await loadSingleFileReader(nextBook, nextContext);
         return;
       }
-      if (metadata?.format === "pdf") {
+      if (metadata?.format === BOOK_FORMAT.pdf) {
         await loadPdfReader(nextBook, nextContext);
         return;
       }
@@ -179,7 +179,7 @@
     const persistedLocation = resume ? exactWebEpubResumeLocation(progress?.location) : null;
     singleFileBook = true;
     singleFileSource = `/entities/${nextBook.id}/files/source`;
-    singleFileContentType = getBookMetadataCapability(nextBook.capabilities)?.format === "pdf"
+    singleFileContentType = getBookMetadataCapability(nextBook.capabilities)?.format === BOOK_FORMAT.pdf
       ? "application/pdf"
       : "application/epub+zip";
     singleFileLocation = launchLocation ?? (launchFraction === null ? persistedLocation : null);

@@ -16,7 +16,7 @@
   import EntityAcquisitionCard from "$lib/components/acquisitions/EntityAcquisitionCard.svelte";
   import { useEntityAcquisition } from "$lib/components/acquisitions/use-entity-acquisition.svelte";
   import { entityCardToDetailCard, type EntityDetailCardFull, type EntityDetailCredit, type EntityDetailTag } from "$lib/entities/entity-detail";
-  import { CREDIT_ROLE } from "$lib/entities/entity-codes";
+  import { CREDIT_ROLE, ENTITY_KIND } from "$lib/entities/entity-codes";
   import { resolveEntityHref } from "$lib/entities/entity-routes";
   import { hydrateStandardRelationshipCards } from "$lib/entities/entity-relationship-thumbnails";
   import { audioTrackDetailToListItem } from "$lib/entities/audio-track-items";
@@ -153,7 +153,7 @@
     >
       {#snippet heroMeta()}
         {#if studio}
-          <a href={resolveEntityHref("studio", studio.id)} class="meta-item is-studio">{studio.title}</a>
+          <a href={resolveEntityHref(ENTITY_KIND.studio, studio.id)} class="meta-item is-studio">{studio.title}</a>
         {/if}
         <EntityDetailHeroDates {dates} leadingSeparator={Boolean(studio)} />
       {/snippet}

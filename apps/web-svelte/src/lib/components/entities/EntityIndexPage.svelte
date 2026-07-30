@@ -34,6 +34,7 @@
   import { bulkDeleteMediaEntities, isDeletableMediaKind } from "$lib/api/entity-deletion";
   import { fetchEntity, type EntityCard, type EntityCardFull } from "$lib/api/entities";
   import { entityAccentForKind } from "$lib/entities/entity-accent";
+  import { ENTITY_KIND } from "$lib/entities/entity-codes";
 
   interface Props {
     actionHref?: string;
@@ -188,7 +189,7 @@
   $effect(() => {
     if (!enableLightbox || lightboxCards.length === 0) return;
     const currentCard = lightboxCards[lightboxIndex];
-    if (!currentCard || (currentCard.entity.kind !== "image" && currentCard.entity.kind !== "video")) return;
+    if (!currentCard || (currentCard.entity.kind !== ENTITY_KIND.image && currentCard.entity.kind !== ENTITY_KIND.video)) return;
     if (hydratedLightboxEntities[currentCard.entity.id]) return;
     void hydrateLightboxEntity(currentCard.entity.id);
   });
@@ -277,7 +278,7 @@
     if (lightboxHydrationInFlight.includes(entityId)) return;
     const currentCard = lightboxCards[lightboxIndex];
     const kind = currentCard?.entity.kind;
-    if (kind !== "image" && kind !== "video") return;
+    if (kind !== ENTITY_KIND.image && kind !== ENTITY_KIND.video) return;
 
     lightboxHydrationInFlight = [...lightboxHydrationInFlight, entityId];
     try {

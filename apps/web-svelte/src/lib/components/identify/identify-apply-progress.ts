@@ -1,4 +1,8 @@
-import { IDENTIFY_APPLY_STATE } from "$lib/api/generated/codes";
+import {
+  ENTITY_KIND,
+  IDENTIFY_APPLY_STATE,
+  METADATA_PATCH_FIELD,
+} from "$lib/api/generated/codes";
 import type { EntityMetadataProposal, IdentifyApplyProgress } from "$lib/api/identify-types";
 import type { EntityCard } from "$lib/api/entities";
 
@@ -53,7 +57,11 @@ function countApplyProgressSteps(
 ): number {
   const selected = new Set(selectedFields.map((field) => field.toLowerCase()));
   let count = 1;
-  if (selected.has("credits") || selected.has("studio") || selected.has("tags")) {
+  if (
+    selected.has(METADATA_PATCH_FIELD.credits) ||
+    selected.has(METADATA_PATCH_FIELD.studio) ||
+    selected.has(METADATA_PATCH_FIELD.tags)
+  ) {
     count += relationshipProgressSteps(proposal);
   }
 
@@ -90,7 +98,7 @@ function structuralProgressChildren(proposal: EntityMetadataProposal): EntityMet
 }
 
 function isRelationshipProgressKind(kind: string): boolean {
-  return kind === "person" || kind === "studio" || kind === "tag";
+  return kind === ENTITY_KIND.person || kind === ENTITY_KIND.studio || kind === ENTITY_KIND.tag;
 }
 
 function proposalTitleForProgress(proposal: EntityMetadataProposal): string {

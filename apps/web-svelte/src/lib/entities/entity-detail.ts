@@ -20,7 +20,7 @@ import type {
   EntitySubtitle,
   EntityUrl,
 } from "$lib/api/generated/model";
-import { CAPABILITY_KIND, ENTITY_FILE_ROLE } from "./entity-codes";
+import { CAPABILITY_KIND, ENTITY_FILE_ROLE, ENTITY_KIND } from "./entity-codes";
 import { creditRoleCharacterSubtitle } from "./entity-credits";
 import { entityCardToThumbnailCard, getEntityKindLabel } from "./entity-grid";
 import {
@@ -315,7 +315,7 @@ function shouldDisplayStat(code: string): boolean {
 function formatClassificationLabel(kind: string, system: string | null | undefined): string {
   if (!system || system === "manual") return "Classification";
   if (system === "plugin") {
-    if (kind === "person") return "Known For";
+    if (kind === ENTITY_KIND.person) return "Known For";
     return "Category";
   }
 

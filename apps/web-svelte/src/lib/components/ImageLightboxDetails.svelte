@@ -7,7 +7,7 @@
     updateEntityRating,
   } from "$lib/api/entity-mutations";
   import { getCapability } from "$lib/api/capabilities";
-  import { CAPABILITY_KIND } from "$lib/entities/entity-codes";
+  import { CAPABILITY_KIND, ENTITY_KIND } from "$lib/entities/entity-codes";
   import {
     toggleOptimisticEntityFlag,
     updateOptimisticEntityRating,
@@ -117,7 +117,7 @@
     >
       {#snippet heroMeta()}
         {#if studio}
-          <a href={resolveEntityHref("studio", studio.id)} class="meta-item is-studio">{studio.title}</a>
+          <a href={resolveEntityHref(ENTITY_KIND.studio, studio.id)} class="meta-item is-studio">{studio.title}</a>
         {/if}
         {#each dates as date, i (date.code)}
           {#if studio || i > 0}
@@ -136,7 +136,7 @@
             </h2>
             <div class="credits-grid">
               {#each credits as person (person.id)}
-                <a href={resolveEntityHref("person", person.id)} class="credit-chip">
+                <a href={resolveEntityHref(ENTITY_KIND.person, person.id)} class="credit-chip">
                   {person.title}
                 </a>
               {/each}

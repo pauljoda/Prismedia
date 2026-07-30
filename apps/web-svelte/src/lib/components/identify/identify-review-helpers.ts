@@ -1,4 +1,9 @@
-import { ENTITY_KIND, THUMBNAIL_HOVER_KIND } from "$lib/api/generated/codes";
+import {
+  ENTITY_KIND,
+  MEDIA_IMAGE_KIND,
+  THUMBNAIL_HOVER_KIND,
+  THUMBNAIL_META_ICON,
+} from "$lib/api/generated/codes";
 import type {
   CreditPatch,
   EntityMetadataProposal,
@@ -31,10 +36,10 @@ export function relationshipKindLabel(kind: string): string {
 }
 
 export function relationshipIcon(kind: string): EntityThumbnailMetaIcon {
-  if (kind === "studio") return "studio";
-  if (kind === "tag") return "tag";
-  if (kind === "person") return "person";
-  return "collection";
+  if (kind === ENTITY_KIND.studio) return THUMBNAIL_META_ICON.studio;
+  if (kind === ENTITY_KIND.tag) return THUMBNAIL_META_ICON.tag;
+  if (kind === ENTITY_KIND.person) return THUMBNAIL_META_ICON.person;
+  return THUMBNAIL_META_ICON.collection;
 }
 
 export function proposalImageUrl(
@@ -55,11 +60,17 @@ export function preferredProposalImage(
   rootProposalId: string,
   store: { getReviewImageSelections: (id: string) => Record<string, string | null> | null | undefined },
 ): ImageCandidate | null {
-  const selected = selectedProposalImage(result, ["poster", "thumbnail", "cover", "logo"], selectedImages, rootProposalId, store);
+  const selected = selectedProposalImage(
+    result,
+    [MEDIA_IMAGE_KIND.poster, MEDIA_IMAGE_KIND.thumbnail, MEDIA_IMAGE_KIND.cover, MEDIA_IMAGE_KIND.logo],
+    selectedImages,
+    rootProposalId,
+    store,
+  );
   if (selected) return selected;
   const images = reviewableImages(result.images ?? [], result.targetKind);
-  return images.find((image) => image.kind === "poster") ??
-    images.find((image) => image.kind === "thumbnail") ??
+  return images.find((image) => image.kind === MEDIA_IMAGE_KIND.poster) ??
+    images.find((image) => image.kind === MEDIA_IMAGE_KIND.thumbnail) ??
     images[0] ??
     null;
 }
@@ -70,11 +81,17 @@ export function preferredRelationshipImage(
   rootProposalId: string,
   store: { getReviewImageSelections: (id: string) => Record<string, string | null> | null | undefined },
 ): ImageCandidate | null {
-  const selected = selectedProposalImage(result, ["poster", "thumbnail", "logo", "cover"], selectedImages, rootProposalId, store);
+  const selected = selectedProposalImage(
+    result,
+    [MEDIA_IMAGE_KIND.poster, MEDIA_IMAGE_KIND.thumbnail, MEDIA_IMAGE_KIND.logo, MEDIA_IMAGE_KIND.cover],
+    selectedImages,
+    rootProposalId,
+    store,
+  );
   if (selected) return selected;
-  return result.images.find((image) => image.kind === "poster") ??
-    result.images.find((image) => image.kind === "thumbnail") ??
-    result.images.find((image) => image.kind === "logo") ??
+  return result.images.find((image) => image.kind === MEDIA_IMAGE_KIND.poster) ??
+    result.images.find((image) => image.kind === MEDIA_IMAGE_KIND.thumbnail) ??
+    result.images.find((image) => image.kind === MEDIA_IMAGE_KIND.logo) ??
     result.images[0] ??
     null;
 }
@@ -149,7 +166,7 @@ export function relationshipCard(
   const title = proposalTitle(result);
   return {
     entity: { id: result.proposalId, kind: proposalKindToEntityKind(result.targetKind), title, parentEntityId: null, sortOrder: null, capabilities: [], childrenByKind: [], relationships: [] },
-    aspectRatio: result.targetKind === "studio" ? "wide" : result.targetKind === "person" ? { width: 4, height: 5 } : "square",
+    aspectRatio: result.targetKind === ENTITY_KIND.studio ? "wide" : result.targetKind === ENTITY_KIND.person ? { width: 4, height: 5 } : "square",
     cover: image ? { src: reviewImagePreviewUrl(image, result.targetKind), alt: title } : null,
     hover: { kind: THUMBNAIL_HOVER_KIND.none },
     subtitle: relationshipKindLabel(result.targetKind),
@@ -167,11 +184,11 @@ export function childMeta(child: EntityMetadataProposal): EntityThumbnailCard["m
   const sortOrder = positions.sortOrder ?? positions.sort;
   const track = positions.track ?? positions.trackNumber ?? (sortOrder != null ? sortOrder + 1 : undefined);
   if (episode) {
-    meta.push({ icon: "count", label: `E${String(episode).padStart(2, "0")}` });
+    meta.push({ icon: THUMBNAIL_META_ICON.count, label: `E${String(episode).padStart(2, "0")}` });
   } else if (child.targetKind === ENTITY_KIND.audioTrack && track) {
-    meta.push({ icon: "count", label: String(track).padStart(2, "0") });
+    meta.push({ icon: THUMBNAIL_META_ICON.count, label: String(track).padStart(2, "0") });
   } else if (season) {
-    meta.push({ icon: "count", label: `S${String(season).padStart(2, "0")}` });
+    meta.push({ icon: THUMBNAIL_META_ICON.count, label: `S${String(season).padStart(2, "0")}` });
   }
   return meta;
 }
@@ -181,7 +198,7 @@ export function tagRelationshipForTitle(
   relationships: EntityMetadataProposal[],
 ): EntityMetadataProposal | null {
   return relationships.find((relationship) =>
-    relationship.targetKind === "tag" &&
+    relationship.targetKind === ENTITY_KIND.tag &&
     proposalTitle(relationship).localeCompare(tag, undefined, { sensitivity: "accent" }) === 0,
   ) ?? null;
 }
@@ -197,13 +214,13 @@ export function creditCard(
   const scopedCredit = scopedCreditForProposal(scope, credit);
   const image = preferredProposalImage(credit, selectedImages, rootProposalId, store);
   return {
-    entity: { id: credit.proposalId, kind: "person", title: credit.patch?.title ?? "", parentEntityId: null, sortOrder: null, capabilities: [], childrenByKind: [], relationships: [] },
+    entity: { id: credit.proposalId, kind: ENTITY_KIND.person, title: credit.patch?.title ?? "", parentEntityId: null, sortOrder: null, capabilities: [], childrenByKind: [], relationships: [] },
     aspectRatio: { width: 4, height: 5 },
     cover: image ? { src: reviewImagePreviewUrl(image, credit.targetKind), alt: credit.patch?.title ?? "" } : null,
     hover: { kind: THUMBNAIL_HOVER_KIND.none } as const,
     subtitle: scopedCredit?.character ? `as ${scopedCredit.character}` : roleLabel(scopedCredit),
     custom: proposalStatusCustom(credit, existingTitles),
-    meta: [{ icon: "person" as const, label: roleLabel(scopedCredit) }],
+    meta: [{ icon: THUMBNAIL_META_ICON.person, label: roleLabel(scopedCredit) }],
   };
 }
 

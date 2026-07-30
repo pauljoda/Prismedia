@@ -1,10 +1,11 @@
 <script lang="ts">
   import { Film } from "@lucide/svelte";
   import EntityIndexPage from "$lib/components/entities/EntityIndexPage.svelte";
+  import { ENTITY_KIND } from "$lib/entities/entity-codes";
 </script>
 
 <EntityIndexPage
-  kind="video"
+  kind={ENTITY_KIND.video}
   title="Videos"
   icon={Film}
   prefsKey="videos"

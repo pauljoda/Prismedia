@@ -1,10 +1,11 @@
 <script lang="ts">
   import { Layers } from "@lucide/svelte";
   import EntityIndexPage from "$lib/components/entities/EntityIndexPage.svelte";
+  import { ENTITY_KIND } from "$lib/entities/entity-codes";
 </script>
 
 <EntityIndexPage
-  kind="gallery"
+  kind={ENTITY_KIND.gallery}
   title="Galleries"
   icon={Layers}
   prefsKey="galleries"

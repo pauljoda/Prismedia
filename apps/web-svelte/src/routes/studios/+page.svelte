@@ -1,10 +1,11 @@
 <script lang="ts">
   import { Building2 } from "@lucide/svelte";
   import EntityIndexPage from "$lib/components/entities/EntityIndexPage.svelte";
+  import { ENTITY_KIND } from "$lib/entities/entity-codes";
 </script>
 
 <EntityIndexPage
-  kind="studio"
+  kind={ENTITY_KIND.studio}
   title="Studios"
   itemNoun="studio"
   icon={Building2}
