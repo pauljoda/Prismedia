@@ -23,7 +23,7 @@ import {
 } from "@lucide/svelte";
 import {
   ENTITY_KIND_ICON,
-  ENTITY_KIND_PRESENTATION,
+  ENTITY_KIND_DEFINITIONS,
   THUMBNAIL_META_ICON,
   type EntityKindIconCode,
 } from "$lib/api/generated/codes";
@@ -54,7 +54,7 @@ const ICON_COMPONENTS: Record<EntityKindIconCode, Component> = {
 /** Resolves a shared Lucide icon for an entity kind code. */
 export function entityKindIcon(kind: string): Component {
   return isEntityKindCode(kind)
-    ? ICON_COMPONENTS[ENTITY_KIND_PRESENTATION[kind].icon]
+    ? ICON_COMPONENTS[ENTITY_KIND_DEFINITIONS[kind].presentation.icon]
     : Film;
 }
 

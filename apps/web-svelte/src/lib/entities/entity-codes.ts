@@ -4,7 +4,7 @@ import {
   ENTITY_DATE_TYPE,
   ENTITY_FILE_ROLE,
   ENTITY_KIND,
-  ENTITY_KIND_LABELS,
+  ENTITY_KIND_DEFINITIONS,
   ENTITY_KINDS_ENUMERATING_IDENTIFY_CHILDREN,
   MEDIA_IMAGE_KIND,
   METADATA_PATCH_FIELD,
@@ -33,7 +33,7 @@ export {
   ENTITY_DATE_TYPE,
   ENTITY_FILE_ROLE,
   ENTITY_KIND,
-  ENTITY_KIND_LABELS,
+  ENTITY_KIND_DEFINITIONS,
   ENTITY_KINDS_ENUMERATING_IDENTIFY_CHILDREN,
   MEDIA_IMAGE_KIND,
   METADATA_PATCH_FIELD,
@@ -108,7 +108,12 @@ export function isEntityKindCode(value: string): value is EntityKindCode {
 }
 
 export function labelForEntityKind(kind: string): string {
-  if (isEntityKindCode(kind)) return ENTITY_KIND_LABELS[kind];
+  if (isEntityKindCode(kind)) return ENTITY_KIND_DEFINITIONS[kind].groupLabel;
+  return kind.replaceAll("-", " ").replace(/\b\w/g, (value) => value.toUpperCase());
+}
+
+export function displayNameForEntityKind(kind: string): string {
+  if (isEntityKindCode(kind)) return ENTITY_KIND_DEFINITIONS[kind].displayName;
   return kind.replaceAll("-", " ").replace(/\b\w/g, (value) => value.toUpperCase());
 }
 

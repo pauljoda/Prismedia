@@ -20,7 +20,7 @@
   } from "@prismedia/ui-svelte";
   import {
     AUTO_IDENTIFY_SELECTOR_KIND,
-    ENTITY_KIND_LABELS,
+    ENTITY_KIND_DEFINITIONS,
     type AutoIdentifySelectorKindCode,
   } from "$lib/api/generated/codes";
   import {
@@ -96,11 +96,12 @@
     installed.filter((provider) => provider.missingAuthKeys.length === 0),
   );
   const configurableDefaultKinds = $derived(
-    Object.entries(ENTITY_KIND_LABELS)
+    Object.entries(ENTITY_KIND_DEFINITIONS)
       .filter(([kind]) =>
         Boolean(configuredDefaultProviders[kind]) ||
         usableDefaultProviders.some((provider) => providerCanIdentifyKind(provider, kind)),
       )
+      .map(([kind, definition]) => [kind, definition.groupLabel] as const)
       .sort((left, right) => left[1].localeCompare(right[1])),
   );
   const hasPlugins = $derived(installed.length > 0);

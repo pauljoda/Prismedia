@@ -27,6 +27,7 @@ import type {
 } from "$lib/api/identify-types";
 import type { EntityCard, EntityDetailCard } from "$lib/api/entities";
 import { entityCardToThumbnailCard } from "$lib/entities/entity-grid";
+import { labelForEntityKind } from "$lib/entities/entity-codes";
 import { resolveEntityHrefById } from "$lib/entities/entity-route-resolver";
 import { requestMainScrollTop } from "$lib/stores/main-scroll";
 import {
@@ -156,7 +157,7 @@ export class IdentifyStore {
         if (!kindMap.has(support.entityKind)) {
           kindMap.set(support.entityKind, {
             kind: support.entityKind,
-            label: entityKindLabel(support.entityKind),
+            label: labelForEntityKind(support.entityKind),
             total: 0,
             unidentified: 0,
             pending: 0,
@@ -1107,26 +1108,4 @@ function readError(err: unknown): string {
   } catch {
     return err.message;
   }
-}
-
-function entityKindLabel(kind: string): string {
-  const map: Record<string, string> = {
-    movie: "Movies",
-    video: "Videos",
-    "video-series": "Series",
-    "video-season": "Seasons",
-    book: "Books",
-    "book-volume": "Volumes",
-    "book-chapter": "Chapters",
-    "music-artist": "Artists",
-    "audio-library": "Albums",
-    "audio-track": "Tracks",
-    gallery: "Galleries",
-    image: "Images",
-    person: "People",
-    studio: "Studios",
-    collection: "Collections",
-    tag: "Tags",
-  };
-  return map[kind] ?? kind;
 }

@@ -184,29 +184,28 @@ async function main() {
     ),
   );
 
-  // Entity-kind plural display labels, keyed by kind code.
-  const labelEntries = (manifest.entityKinds ?? []).map((k) => `  ${lit(k.code)}: ${lit(k.groupLabel)},`).join("\n");
-  sections.push(
-    `export const ENTITY_KIND_LABELS: Record<EntityKindCode, string> = {\n${labelEntries}\n};\n`,
-  );
-
-  // Shared Entity presentation metadata. Each discovered EntityKind definition must provide these
-  // values, so adding a kind cannot silently fall through a client-side icon/aspect/accent registry.
-  const entityPresentationFields = [
-    "icon", "referenceIcon", "thumbnailWidth", "thumbnailHeight", "primaryAccent", "secondaryAccent",
-    "artworkFit",
+  // Complete Entity-kind definitions. One generated object carries identity, labels, storage facts,
+  // presentation, and behavior flags so clients do not rebuild parallel maps for each concern.
+  const entityKindFields = [
+    "code", "displayName", "groupLabel", "category", "storageShape", "icon", "referenceIcon",
+    "thumbnailWidth", "thumbnailHeight", "primaryAccent", "secondaryAccent", "artworkFit",
+    "supportsFileDeletion", "supportsRequests", "enumeratesIdentifyChildren",
   ];
   for (const kind of manifest.entityKinds ?? []) {
-    const missing = entityPresentationFields.filter((field) => !Object.hasOwn(kind, field));
+    const missing = entityKindFields.filter((field) => !Object.hasOwn(kind, field));
     if (missing.length > 0) {
-      throw new Error(`Entity kind '${kind.code ?? "unknown"}' presentation is missing: ${missing.join(", ")}`);
+      throw new Error(`Entity kind '${kind.code ?? "unknown"}' definition is missing: ${missing.join(", ")}`);
     }
   }
-  const presentationEntries = (manifest.entityKinds ?? []).map((kind) =>
-    `  ${lit(kind.code)}: { icon: ${lit(kind.icon)}, referenceIcon: ${lit(kind.referenceIcon)}, ` +
-    `thumbnailWidth: ${lit(kind.thumbnailWidth)}, thumbnailHeight: ${lit(kind.thumbnailHeight)}, ` +
-    `primaryAccent: ${lit(kind.primaryAccent)}, secondaryAccent: ${lit(kind.secondaryAccent)}, ` +
-    `artworkFit: ${lit(kind.artworkFit)} },`
+  const entityKindEntries = (manifest.entityKinds ?? []).map((kind) =>
+    `  ${lit(kind.code)}: { kind: ${lit(kind.code)}, displayName: ${lit(kind.displayName)}, ` +
+    `groupLabel: ${lit(kind.groupLabel)}, category: ${lit(kind.category)}, ` +
+    `storageShape: ${lit(kind.storageShape)}, presentation: { icon: ${lit(kind.icon)}, ` +
+    `referenceIcon: ${lit(kind.referenceIcon)}, thumbnailWidth: ${lit(kind.thumbnailWidth)}, ` +
+    `thumbnailHeight: ${lit(kind.thumbnailHeight)}, primaryAccent: ${lit(kind.primaryAccent)}, ` +
+    `secondaryAccent: ${lit(kind.secondaryAccent)}, artworkFit: ${lit(kind.artworkFit)} }, ` +
+    `supportsFileDeletion: ${lit(kind.supportsFileDeletion)}, supportsRequests: ${lit(kind.supportsRequests)}, ` +
+    `enumeratesIdentifyChildren: ${lit(kind.enumeratesIdentifyChildren)} },`
   ).join("\n");
   sections.push(
     `export interface EntityKindPresentationManifestEntry {\n` +
@@ -218,8 +217,19 @@ async function main() {
       `  secondaryAccent: EntityAccentHueCode;\n` +
       `  artworkFit: EntityArtworkFitCode;\n` +
       `}\n\n` +
-      `export const ENTITY_KIND_PRESENTATION: Record<EntityKindCode, EntityKindPresentationManifestEntry> = {\n` +
-      `${presentationEntries}\n};\n`,
+      `export interface EntityKindDefinitionManifestEntry {\n` +
+      `  kind: EntityKindCode;\n` +
+      `  displayName: string;\n` +
+      `  groupLabel: string;\n` +
+      `  category: string;\n` +
+      `  storageShape: string;\n` +
+      `  presentation: EntityKindPresentationManifestEntry;\n` +
+      `  supportsFileDeletion: boolean;\n` +
+      `  supportsRequests: boolean;\n` +
+      `  enumeratesIdentifyChildren: boolean;\n` +
+      `}\n\n` +
+      `export const ENTITY_KIND_DEFINITIONS: Record<EntityKindCode, EntityKindDefinitionManifestEntry> = {\n` +
+      `${entityKindEntries}\n};\n`,
   );
 
   // Complete frontend request-kind behavior, projected directly from RequestKindRegistry. Discover,

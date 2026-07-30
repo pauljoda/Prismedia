@@ -1,24 +1,16 @@
 /**
- * User-facing names for library entities. Single source of truth for
- * UI copy so the same labels can be shifted centrally if we ever
- * rename again.
+ * Compatibility aliases for recurring product copy, derived from the generated Entity-kind
+ * definitions rather than maintaining another label registry.
  */
+import { ENTITY_KIND, displayNameForEntityKind, labelForEntityKind } from "$lib/entities/entity-codes";
+
 export const entityTerms = {
-  videos: "Videos",
-  video: "Video",
-  series: "Series",
-  seriesSingular: "Series",
-  seasons: "Seasons",
-  season: "Season",
-  movies: "Movies",
-  movie: "Movie",
-  performers: "People",
-  performer: "Person",
-  studios: "Studios",
-  studio: "Studio",
-  tags: "Tags",
-  tag: "Tag",
-} as const;
+  videos: labelForEntityKind(ENTITY_KIND.video),
+  video: displayNameForEntityKind(ENTITY_KIND.video),
+  performers: labelForEntityKind(ENTITY_KIND.person),
+  studios: labelForEntityKind(ENTITY_KIND.studio),
+  tags: labelForEntityKind(ENTITY_KIND.tag),
+};
 
 export type EntityTerms = typeof entityTerms;
 

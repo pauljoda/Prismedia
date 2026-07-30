@@ -1,5 +1,5 @@
 import {
-  ENTITY_KIND_PRESENTATION,
+  ENTITY_KIND_DEFINITIONS,
   THUMBNAIL_HOVER_KIND,
   THUMBNAIL_META_ICON,
   type EntityKindIconCode,
@@ -183,7 +183,7 @@ export function toAspectRatioNumeric(ratio: EntityThumbnailAspectRatio): number 
 /** Chooses the default thumbnail frame for a referenced entity kind. */
 export function aspectRatioForKind(kind: string): EntityThumbnailAspectRatio {
   if (!isEntityKindCode(kind)) return "video";
-  const presentation = ENTITY_KIND_PRESENTATION[kind];
+  const presentation = ENTITY_KIND_DEFINITIONS[kind].presentation;
   return {
     width: presentation.thumbnailWidth,
     height: presentation.thumbnailHeight,
@@ -193,7 +193,7 @@ export function aspectRatioForKind(kind: string): EntityThumbnailAspectRatio {
 /** Chooses the definition-owned default scaling mode for Entity artwork. */
 export function artworkFitForKind(kind: string): "contain" | "cover" {
   return isEntityKindCode(kind)
-    ? ENTITY_KIND_PRESENTATION[kind].artworkFit
+    ? ENTITY_KIND_DEFINITIONS[kind].presentation.artworkFit
     : "cover";
 }
 
@@ -266,7 +266,7 @@ export function pickHoverAsset(card: EntityThumbnailCard, pointerRatio: number):
 /** Maps an entity kind code to the closest matching thumbnail meta icon for placeholder display. */
 export function iconForKind(kind: string): EntityThumbnailMetaIcon {
   return isEntityKindCode(kind)
-    ? ENTITY_KIND_PRESENTATION[kind].referenceIcon
+    ? ENTITY_KIND_DEFINITIONS[kind].presentation.referenceIcon
     : THUMBNAIL_META_ICON.collection;
 }
 

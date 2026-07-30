@@ -17,6 +17,9 @@ import {
   ENTITY_DATE_TYPE,
   MEDIA_IMAGE_KIND,
   METADATA_PATCH_FIELD,
+  PROPOSAL_KIND,
+  isEntityKindCode,
+  labelForEntityKind,
 } from "$lib/entities/entity-codes";
 
 /** Reviewable patch fields in display order ("flags" is applied, never reviewed). */
@@ -739,15 +742,8 @@ export function structuralChildEntities(
 }
 
 export function entityKindLabel(kind: string): string {
-  const normalized = kind.toLowerCase();
-  if (normalized === "person") return "People";
-  if (normalized === "studio") return "Studios";
-  if (normalized === "tag") return "Tags";
-  if (normalized.includes("episode")) return "Episodes";
-  if (normalized.includes("season")) return "Seasons";
-  if (normalized.includes("series")) return "Series";
-  if (normalized.includes("chapter")) return "Chapters";
-  if (normalized.includes("volume")) return "Volumes";
+  if (kind === PROPOSAL_KIND.videoEpisode) return "Episodes";
+  if (isEntityKindCode(kind)) return labelForEntityKind(kind);
   return "Items";
 }
 

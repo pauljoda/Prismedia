@@ -15,7 +15,6 @@
   import { useNsfw } from "$lib/nsfw/store.svelte";
   import { ALL_SEARCH_KINDS, type SearchEntityKind, type SearchResponse, type SearchResultItem } from "$lib/search/models";
   import { firstSearchResult, searchEntities } from "$lib/search/entity-search";
-  import { entityTerms } from "$lib/terminology";
   import { ENTITY_KIND } from "$lib/entities/entity-codes";
   import { entityAccentForKind } from "$lib/entities/entity-accent";
   import { SEARCH_KIND_CONFIG } from "$lib/components/search-kind-config";
@@ -134,15 +133,6 @@
     return () => window.clearTimeout(timer);
   });
 
-  function kindLabel(kind: SearchEntityKind): string {
-    if (kind === ENTITY_KIND.movie) return entityTerms.movies;
-    if (kind === ENTITY_KIND.video) return entityTerms.videos;
-    if (kind === ENTITY_KIND.person) return entityTerms.performers;
-    if (kind === ENTITY_KIND.studio) return entityTerms.studios;
-    if (kind === ENTITY_KIND.tag) return entityTerms.tags;
-    return SEARCH_KIND_CONFIG[kind].label;
-  }
-
   function toggleKind(kind: SearchEntityKind) {
     const next = new Set(activeKinds);
     if (next.has(kind)) {
@@ -251,7 +241,7 @@
           onclick={() => toggleKind(kind)}
         >
           <Icon class="h-3 w-3" color={kindAccent} aria-hidden="true" />
-          {kindLabel(kind)}
+          {config.label}
         </Button>
       {/each}
 
@@ -348,7 +338,8 @@
         {@const total = expanded[group.kind]?.total ?? group.total}
         {@const loadingMore = expanded[group.kind]?.loading ?? false}
         {@const hasMore = items.length < total}
-        {@const Icon = SEARCH_KIND_CONFIG[group.kind].icon}
+        {@const config = SEARCH_KIND_CONFIG[group.kind]}
+        {@const Icon = config.icon}
         {@const groupAccent = entityAccentForKind(group.kind).primary}
 
         <section>
@@ -356,12 +347,12 @@
             <div class="flex items-center gap-2">
               <Icon class="h-4 w-4" color={groupAccent} aria-hidden="true" />
               <span class="text-sm font-medium text-text-primary">
-                {kindLabel(group.kind)}
+                {config.label}
               </span>
               <span class="font-mono text-[0.65rem] text-text-disabled">{total}</span>
             </div>
             <a
-              href={SEARCH_KIND_CONFIG[group.kind].href}
+              href={config.href}
               class="text-[0.68rem] text-text-muted transition-colors duration-fast hover:text-text-accent"
             >
               Browse all

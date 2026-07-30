@@ -1,4 +1,4 @@
-import { ENTITY_KIND_PRESENTATION } from "$lib/api/generated/codes";
+import { ENTITY_KIND_DEFINITIONS } from "$lib/api/generated/codes";
 import { colors } from "@prismedia/ui-svelte";
 import { isEntityKindCode } from "./entity-codes";
 
@@ -45,7 +45,7 @@ const FALLBACK_HUES: EntityHuePair = ["cyan", "violet"];
 
 function huesForKind(kind: string): EntityHuePair {
   if (!isEntityKindCode(kind)) return FALLBACK_HUES;
-  const presentation = ENTITY_KIND_PRESENTATION[kind];
+  const presentation = ENTITY_KIND_DEFINITIONS[kind].presentation;
   return [presentation.primaryAccent, presentation.secondaryAccent];
 }
 
