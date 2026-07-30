@@ -91,7 +91,6 @@ const MAGIC_CODE_ALLOWLIST: Record<string, string[]> = {
 const OVERSIZED_FILE_CEILINGS: Record<string, number> = {
   "lib/components/entities/EntityDetail.svelte": 2900,
   "lib/components/VideoPlayer.svelte": 2100,
-  "lib/components/thumbnails/EntityThumbnail.svelte": 1650,
   "routes/design-language/+page.svelte": 1450,
   "routes/books/[id]/+page.svelte": 1300,
   "lib/entities/entity-grid.ts": 1250,
