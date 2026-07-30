@@ -1,25 +1,16 @@
 <script lang="ts">
-  import { ENTITY_KIND } from "$lib/entities/entity-codes";
-  import { onMount } from "svelte";
   import { goto } from "$app/navigation";
   import { page } from "$app/state";
   import { CloudDownload, Disc3, Info, Play, Shuffle, SlidersHorizontal, Users } from "@lucide/svelte";
-  import EntityDetailSkeleton from "$lib/components/entities/EntityDetailSkeleton.svelte";
+  import EntityDetailPageState from "$lib/components/entities/EntityDetailPageState.svelte";
+  import EntityGridSection from "$lib/components/entities/EntityGridSection.svelte";
+  import { useEntityDetailPage } from "$lib/components/entities/entity-detail-page-controller.svelte";
   import { fetchEntity, type EntityCardFull } from "$lib/api/entities";
-  import {
-    updateEntityRating,
-    updateEntityFlags,
-    updateEntityMetadata,
-  } from "$lib/api/entity-mutations";
   import { assetUrl } from "$lib/api/orval-fetch";
   import { getCapability } from "$lib/api/capabilities";
-  import {
-    toggleOptimisticEntityFlag,
-    updateOptimisticEntityRating,
-  } from "$lib/entities/entity-detail-state";
   import { refreshAfterManagedFileRevert } from "$lib/entities/entity-file-management";
   import { entityCardToDetailCard, type EntityDetailCardFull, type EntityDetailCredit, type EntityDetailTag } from "$lib/entities/entity-detail";
-  import { CAPABILITY_KIND, CREDIT_ROLE } from "$lib/entities/entity-codes";
+  import { CAPABILITY_KIND, CREDIT_ROLE, ENTITY_KIND } from "$lib/entities/entity-codes";
   import { resolveEntityHref } from "$lib/entities/entity-routes";
   import {
     fetchOrderedEntityThumbnails,
@@ -33,32 +24,47 @@
     type EntityDetailActionButton,
     type EntityDetailSection,
     type EntityDetailTab,
-    type EntityMetadataUpdateRequest,
   } from "$lib/components/entities/EntityDetail.svelte";
   import EntityGrid from "$lib/components/entities/EntityGrid.svelte";
   import EntityAcquisitionCard from "$lib/components/acquisitions/EntityAcquisitionCard.svelte";
   import { useEntityAcquisition } from "$lib/components/acquisitions/use-entity-acquisition.svelte";
   import { requestableDirectChildCards } from "$lib/requests/requestable-entity-children";
   import { useIdentifyDetailAction } from "$lib/components/identify/use-identify-detail-action.svelte";
-  import { redirectHiddenEntityNotFound } from "$lib/nsfw/hidden-entity";
-  import { useNsfw } from "$lib/nsfw/store.svelte";
-  import { useAppChrome } from "$lib/stores/app-chrome.svelte";
-
-  type LoadState = "loading" | "ready" | "error";
-
-  const nsfw = useNsfw();
-  const appChrome = useAppChrome();
   const playback = useAudioPlayback()!;
 
-  let loadState: LoadState = $state("loading");
-  let artist = $state<EntityCardFull | null>(null);
-  let errorMessage: string | null = $state(null);
-  let lastNsfwMode = $state(nsfw.mode);
-  let ratingBusy = $state(false);
   let albumCards = $state<EntityThumbnailCard[]>([]);
   let relationshipCredits = $state<EntityDetailCredit[]>([]);
   let relationshipTags = $state<EntityDetailTag[]>([]);
   let queueBusy = $state(false);
+
+  const detail = useEntityDetailPage<EntityCardFull>({
+    loadKey: () => page.params.id ?? "",
+    load: async ({ signal }) => {
+      const nextArtist = await fetchEntity(page.params.id ?? "", { signal });
+      const albumGroup = nextArtist.childrenByKind.find(
+        (group) => group.kind === ENTITY_KIND.audioLibrary,
+      );
+      const albumIds = albumGroup?.entities.map((entity) => entity.id) ?? [];
+      const [albums, relationships] = await Promise.all([
+        fetchOrderedEntityThumbnails(albumIds),
+        hydrateStandardRelationshipCards(nextArtist),
+      ]);
+      signal.throwIfAborted();
+
+      albumCards = thumbnailsToCards(albums, {
+        hrefFor: (thumbnail) => resolveEntityHref(ENTITY_KIND.audioLibrary, thumbnail.id),
+      });
+      relationshipCredits = relationships.credits;
+      relationshipTags = relationships.relationshipTags;
+      return nextArtist;
+    },
+    breadcrumbs: (artist) => [
+      { label: "Artists", href: "/artists" },
+      { label: artist.title },
+    ],
+  });
+
+  const artist = $derived(detail.entity);
 
   const artistCoverUrl = $derived.by(() => {
     if (!artist) return undefined;
@@ -85,12 +91,12 @@
     entityId: () => artist?.id,
     capabilities: () => artist?.capabilities,
     childCards: () => requestableDirectChildCards(artist?.id, albumCards),
-    onChanged: () => loadArtist({ showLoading: false }),
+    onChanged: () => detail.reload({ showLoading: false }),
     onPruned: () => goto("/artists"),
   });
   const fileManagement = {
     onDeleted: () => goto("/artists"),
-    onReverted: () => refreshAfterManagedFileRevert(acq, () => loadArtist({ showLoading: false })),
+    onReverted: () => refreshAfterManagedFileRevert(acq, () => detail.reload({ showLoading: false })),
   };
 
   const heroActions = $derived.by((): EntityDetailActionButton[] => {
@@ -160,80 +166,6 @@
     }
   }
 
-  onMount(() => {
-    void loadArtist();
-  });
-
-  $effect(() => {
-    if (nsfw.mode === lastNsfwMode) return;
-    lastNsfwMode = nsfw.mode;
-    void loadArtist();
-  });
-
-  $effect(() => {
-    if (!artist) return;
-    return appChrome.setBreadcrumbs([
-      { label: "Artists", href: "/artists" },
-      { label: artist.title },
-    ]);
-  });
-
-  async function loadArtist(options = { showLoading: true }) {
-    if (options.showLoading) {
-      loadState = "loading";
-      errorMessage = null;
-    }
-    try {
-      const nextArtist = await fetchEntity(page.params.id ?? "");
-
-      const albumGroup = nextArtist.childrenByKind.find((g) => g.kind === ENTITY_KIND.audioLibrary);
-      const albumIds = albumGroup?.entities.map((e) => e.id) ?? [];
-
-      const [albums, relationships] = await Promise.all([
-        fetchOrderedEntityThumbnails(albumIds),
-        hydrateStandardRelationshipCards(nextArtist),
-      ]);
-
-      artist = nextArtist;
-      albumCards = thumbnailsToCards(albums, {
-        hrefFor: (thumbnail) => resolveEntityHref(ENTITY_KIND.audioLibrary, thumbnail.id),
-      });
-      relationshipCredits = relationships.credits;
-      relationshipTags = relationships.relationshipTags;
-
-      loadState = "ready";
-    } catch (err) {
-      if (redirectHiddenEntityNotFound(err, nsfw.mode)) return;
-      errorMessage = err instanceof Error ? err.message : String(err);
-      if (options.showLoading) loadState = "error";
-    }
-  }
-
-  async function handleRatingChange(value: number | null) {
-    if (!artist || ratingBusy) return;
-    ratingBusy = true;
-    try {
-      await updateOptimisticEntityRating(artist, value, (next) => (artist = next), updateEntityRating);
-    } finally {
-      ratingBusy = false;
-    }
-  }
-
-  async function handleFavoriteToggle() {
-    if (!artist) return;
-    await toggleOptimisticEntityFlag(artist, "isFavorite", (next) => (artist = next), updateEntityFlags);
-  }
-
-  async function handleOrganizedToggle() {
-    if (!artist) return;
-    await toggleOptimisticEntityFlag(artist, "isOrganized", (next) => (artist = next), updateEntityFlags);
-  }
-
-  async function handleMetadataSave(request: EntityMetadataUpdateRequest) {
-    if (!artist) return;
-    await updateEntityMetadata(artist.id, request, { kind: artist.kind });
-    await loadArtist();
-  }
 </script>
 
 <svelte:head>
@@ -241,21 +173,21 @@
 </svelte:head>
 
 <div class="detail-page">
-  {#if loadState === "loading"}
-    <EntityDetailSkeleton posterAspect="1 / 1" />
-  {:else if loadState === "error"}
-    <div class="error-notice">
-      <p>{errorMessage ?? "Failed to load artist."}</p>
-      <button type="button" onclick={() => void loadArtist()}>Retry</button>
-    </div>
-  {:else if card && artist}
+  <EntityDetailPageState
+    loadState={detail.loadState}
+    errorMessage={detail.errorMessage}
+    fallbackError="Failed to load artist."
+    onRetry={detail.retry}
+    posterAspect="1 / 1"
+  >
+    {#if card && artist}
     <EntityDetail
       {card}
-      onRatingChange={handleRatingChange}
-      onFavoriteToggle={handleFavoriteToggle}
-      onOrganizedToggle={handleOrganizedToggle}
-      onMetadataSave={handleMetadataSave}
-      {ratingBusy}
+      onRatingChange={detail.changeRating}
+      onFavoriteToggle={detail.toggleFavorite}
+      onOrganizedToggle={detail.toggleOrganized}
+      onMetadataSave={detail.saveMetadata}
+      ratingBusy={detail.ratingBusy}
       peopleLabel="Members"
       defaultCreditRole={CREDIT_ROLE.artist}
       posterSize="large"
@@ -275,44 +207,39 @@
             {acq}
             entity={artist}
             {fileManagement}
-            onImported={() => loadArtist({ showLoading: false })}
+            onImported={() => detail.reload({ showLoading: false })}
           />
         {/if}
       {/snippet}
     </EntityDetail>
 
     {#if albumCards.length > 0}
-      <section class="content-section">
-        <h2 class="content-heading">
-          <Disc3 class="h-4 w-4" />
-          Albums
-          <span class="content-count">{albumCards.length}</span>
-        </h2>
+      <EntityGridSection
+        title="Albums"
+        count={albumCards.length}
+        icon={Disc3}
+        prefsKey={`artist-${artist.id}-albums-section`}
+      >
         <EntityGrid
           cards={albumCards}
-          prefsKey={`artist-${artist?.id}-albums`}
+          prefsKey={`artist-${artist.id}-albums`}
           emptyTitle="No albums"
           emptyMessage="No albums for this artist."
         />
-      </section>
+      </EntityGridSection>
     {:else}
       <div class="empty-children">
         <p>No albums grouped under this artist yet.</p>
       </div>
     {/if}
-  {/if}
+    {/if}
+  </EntityDetailPageState>
 </div>
 
 <style>
   .detail-page { display: grid; gap: 1.25rem; padding: 0; max-width: none; margin: 0; }
-  .error-notice { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 1rem; border: 1px solid color-mix(in srgb, #ef4444 50%, var(--color-border, #1c2235)); background: var(--color-surface-2, #101420); color: var(--color-text-muted, #8a93a6); font-size: 0.85rem; }
-  .error-notice button { border: 1px solid var(--color-border, #1c2235); background: var(--color-surface-3, #151a28); color: var(--color-text-muted, #8a93a6); padding: 0.4rem 0.8rem; font-size: 0.78rem; cursor: pointer; }
 
   :global(.meta-item) { white-space: nowrap; font-size: 0.82rem; }
-
-  .content-section { display: grid; gap: 0.75rem; }
-  .content-heading { display: flex; align-items: center; gap: 0.5rem; margin: 0; font-family: var(--font-heading, Geist, sans-serif); font-size: 1.1rem; font-weight: 600; color: var(--color-text-primary, #f2eed8); }
-  .content-count { font-family: var(--font-mono, "JetBrains Mono", monospace); font-size: 0.68rem; font-weight: 600; color: var(--color-text-muted, #8a93a6); padding: 0.1rem 0.4rem; border: 1px solid var(--color-border, #1c2235); background: var(--color-surface-3, #151a28); }
 
   .empty-children { padding: 2rem; border: 1px solid var(--color-border-subtle, #1c2235); background: var(--color-surface-1, #0c0f15); color: var(--color-text-muted, #8a93a6); text-align: center; font-size: 0.85rem; }
 
