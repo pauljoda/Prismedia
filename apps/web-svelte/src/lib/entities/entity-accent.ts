@@ -1,5 +1,6 @@
-import { ENTITY_KIND } from "$lib/api/generated/codes";
+import { ENTITY_KIND_PRESENTATION } from "$lib/api/generated/codes";
 import { colors } from "@prismedia/ui-svelte";
+import { isEntityKindCode } from "./entity-codes";
 
 export interface EntityAccent {
   primary: string;
@@ -40,44 +41,12 @@ export const PRISM_SPECTRUM_ORDER = [
  */
 type EntityHuePair = readonly [PrismSpectrumHue, PrismSpectrumHue];
 
-const VIDEO: EntityHuePair = ["red", "orange"];
-const MOVIE: EntityHuePair = ["orange", "yellow"];
-const SERIES: EntityHuePair = ["yellow", "green"];
-const GALLERY: EntityHuePair = ["green", "cyan"];
-const BOOK: EntityHuePair = ["cyan", "blue"];
-const IMAGE: EntityHuePair = ["blue", "violet"];
-const AUDIO: EntityHuePair = ["violet", "magenta"];
-const COLLECTION: EntityHuePair = ["magenta", "red"];
-const PEOPLE: EntityHuePair = ["red", "violet"];
-const STUDIOS: EntityHuePair = ["orange", "magenta"];
-const TAGS: EntityHuePair = ["green", "yellow"];
-
-const ENTITY_HUES: Readonly<Record<string, EntityHuePair>> = {
-  [ENTITY_KIND.video]: VIDEO,
-  [ENTITY_KIND.movie]: MOVIE,
-  [ENTITY_KIND.videoSeries]: SERIES,
-  [ENTITY_KIND.videoSeason]: SERIES,
-  [ENTITY_KIND.gallery]: GALLERY,
-  [ENTITY_KIND.book]: BOOK,
-  [ENTITY_KIND.bookVolume]: BOOK,
-  [ENTITY_KIND.bookChapter]: BOOK,
-  [ENTITY_KIND.bookPage]: BOOK,
-  [ENTITY_KIND.bookAuthor]: BOOK,
-  [ENTITY_KIND.image]: IMAGE,
-  [ENTITY_KIND.audio]: AUDIO,
-  [ENTITY_KIND.audioLibrary]: AUDIO,
-  [ENTITY_KIND.audioTrack]: AUDIO,
-  [ENTITY_KIND.musicArtist]: AUDIO,
-  [ENTITY_KIND.collection]: COLLECTION,
-  [ENTITY_KIND.person]: PEOPLE,
-  [ENTITY_KIND.studio]: STUDIOS,
-  [ENTITY_KIND.tag]: TAGS,
-};
-
 const FALLBACK_HUES: EntityHuePair = ["cyan", "violet"];
 
 function huesForKind(kind: string): EntityHuePair {
-  return ENTITY_HUES[kind] ?? FALLBACK_HUES;
+  if (!isEntityKindCode(kind)) return FALLBACK_HUES;
+  const presentation = ENTITY_KIND_PRESENTATION[kind];
+  return [presentation.primaryAccent, presentation.secondaryAccent];
 }
 
 /**

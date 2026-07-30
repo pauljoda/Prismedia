@@ -13,6 +13,13 @@ public sealed class VideoSeriesEntityKindDefinition() : EntityKindDefinition<Vid
     "Series",
     EntityKindCategory.Media,
     EntityStorageShape.Folder,
+    new EntityKindPresentation(
+        EntityKindIcon.Series,
+        EntityKindIcon.Video,
+        2,
+        3,
+        EntityAccentHue.Yellow,
+        EntityAccentHue.Green),
     defaultCapabilities: static () => [new CapabilityCredits()],
     enumeratesIdentifyChildren: true,
     supportsFileDeletion: true,
@@ -49,6 +56,13 @@ public sealed class VideoSeasonEntityKindDefinition() : RootEntityKindDefinition
     "Seasons",
     EntityKindCategory.Media,
     EntityStorageShape.Folder,
+    new EntityKindPresentation(
+        EntityKindIcon.Season,
+        EntityKindIcon.Video,
+        2,
+        3,
+        EntityAccentHue.Yellow,
+        EntityAccentHue.Green),
     static root => new VideoSeason(
         root.Id,
         root.Title,

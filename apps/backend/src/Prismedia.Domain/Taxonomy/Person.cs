@@ -13,6 +13,13 @@ public sealed class PersonEntityKindDefinition() : EntityKindDefinition<Person>(
     "People",
     EntityKindCategory.Taxonomy,
     EntityStorageShape.None,
+    new EntityKindPresentation(
+        EntityKindIcon.Person,
+        EntityKindIcon.Person,
+        4,
+        5,
+        EntityAccentHue.Red,
+        EntityAccentHue.Violet),
     defaultCapabilities: static () => [new CapabilityDates(), new CapabilityLifetime()],
     supportsManualManagement: true) {
     /// <inheritdoc />

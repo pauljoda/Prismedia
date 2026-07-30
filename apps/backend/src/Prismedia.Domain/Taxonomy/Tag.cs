@@ -13,6 +13,13 @@ public sealed class TagEntityKindDefinition() : EntityKindDefinition<Tag>(
     "Tags",
     EntityKindCategory.Taxonomy,
     EntityStorageShape.None,
+    new EntityKindPresentation(
+        EntityKindIcon.Tag,
+        EntityKindIcon.Tag,
+        1,
+        1,
+        EntityAccentHue.Green,
+        EntityAccentHue.Yellow),
     supportsManualManagement: true) {
     /// <inheritdoc />
     public override IReadOnlyList<Type> ProjectedCapabilityTypes => [typeof(TagPolicyDocumentCapability)];

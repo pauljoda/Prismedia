@@ -60,7 +60,7 @@ internal sealed class ReferenceCountContributor(PrismediaDbContext db) : IThumbn
             // so a card shows one count per glyph rather than several identical icons; the structured
             // counts above stay granular for compatibility layers.
             var chips = counts
-                .GroupBy(count => ChipIcon(EntityKindRegistry.ToCode(count.Kind)))
+                .GroupBy(count => EntityKindRegistry.Describe(count.Kind).Presentation.ReferenceIcon.ToCode())
                 .Select(group => new { Icon = group.Key, Count = group.Sum(count => count.Count) })
                 .OrderByDescending(chip => chip.Count)
                 .ThenBy(chip => chip.Icon, StringComparer.Ordinal);
@@ -83,26 +83,4 @@ internal sealed class ReferenceCountContributor(PrismediaDbContext db) : IThumbn
         EntityKindRegistry.TryGet(kindCode, out var kind) &&
         EntityKindRegistry.Describe(kind).Category is EntityKindCategory.Taxonomy;
 
-    /// <summary>
-    /// Maps a source kind code to a thumbnail meta icon so the count chip reads as, for example,
-    /// "10 videos". Falls back to the generic count icon for kinds without a dedicated glyph.
-    /// </summary>
-    private static string ChipIcon(string kindCode) => kindCode switch {
-        var code when code == EntityKind.Video.ToCode() => EntityThumbnailMetaIcons.Video,
-        var code when code == EntityKind.Movie.ToCode() => EntityThumbnailMetaIcons.Video,
-        var code when code == EntityKind.VideoSeries.ToCode() => EntityThumbnailMetaIcons.Video,
-        var code when code == EntityKind.VideoSeason.ToCode() => EntityThumbnailMetaIcons.Video,
-        var code when code == EntityKind.Image.ToCode() => EntityThumbnailMetaIcons.Image,
-        var code when code == EntityKind.Gallery.ToCode() => EntityThumbnailMetaIcons.Gallery,
-        var code when code == EntityKind.Audio.ToCode() => EntityThumbnailMetaIcons.Audio,
-        var code when code == EntityKind.AudioTrack.ToCode() => EntityThumbnailMetaIcons.Audio,
-        var code when code == EntityKind.AudioLibrary.ToCode() => EntityThumbnailMetaIcons.Audio,
-        var code when code == EntityKind.MusicArtist.ToCode() => EntityThumbnailMetaIcons.Audio,
-        var code when code == EntityKind.Book.ToCode() => EntityThumbnailMetaIcons.Book,
-        var code when code == EntityKind.Collection.ToCode() => EntityThumbnailMetaIcons.Collection,
-        var code when code == EntityKind.Person.ToCode() => EntityThumbnailMetaIcons.Person,
-        var code when code == EntityKind.Studio.ToCode() => EntityThumbnailMetaIcons.Studio,
-        var code when code == EntityKind.Tag.ToCode() => EntityThumbnailMetaIcons.Tag,
-        _ => EntityThumbnailMetaIcons.Count
-    };
 }

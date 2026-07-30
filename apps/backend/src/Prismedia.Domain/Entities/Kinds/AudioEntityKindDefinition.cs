@@ -11,6 +11,13 @@ public sealed class AudioEntityKindDefinition() : EntityKindDefinition(
     "Audio",
     EntityKindCategory.Media,
     EntityStorageShape.File,
+    new EntityKindPresentation(
+        EntityKindIcon.Audio,
+        EntityKindIcon.Audio,
+        1,
+        1,
+        EntityAccentHue.Violet,
+        EntityAccentHue.Magenta),
     supportsFileDeletion: true) {
     /// <inheritdoc />
     public override bool OwnsMetadataRelationships => true;

@@ -13,8 +13,15 @@ public sealed class CollectionEntityKindDefinition()
         "collection",
         "Collection",
         "Collections",
-      EntityKindCategory.Collection,
-      EntityStorageShape.None),
+        EntityKindCategory.Collection,
+        EntityStorageShape.None,
+        new EntityKindPresentation(
+            EntityKindIcon.Collection,
+            EntityKindIcon.Collection,
+            16,
+            9,
+            EntityAccentHue.Magenta,
+            EntityAccentHue.Red)),
       IEntityContainmentPolicy {
     private static readonly EntityKind[] AllowedKinds =
     [

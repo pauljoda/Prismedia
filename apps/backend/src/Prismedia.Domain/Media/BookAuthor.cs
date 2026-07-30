@@ -11,6 +11,13 @@ public sealed class BookAuthorEntityKindDefinition() : RootEntityKindDefinition<
     "Authors",
     EntityKindCategory.Media,
     EntityStorageShape.Folder,
+    new EntityKindPresentation(
+        EntityKindIcon.Author,
+        EntityKindIcon.Book,
+        2,
+        3,
+        EntityAccentHue.Cyan,
+        EntityAccentHue.Blue),
     static root => new BookAuthor(root.Id, root.Title),
     defaultCapabilities: static () => [new CapabilityCredits()],
     enumeratesIdentifyChildren: true,

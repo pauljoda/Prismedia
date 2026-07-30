@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { resolve } from "$app/paths";
   import { ENTITY_KIND } from "$lib/entities/entity-codes";
   import { onDestroy, onMount } from "svelte";
   import {
@@ -19,8 +20,9 @@
   import { buttonVariants, cn } from "@prismedia/ui-svelte";
   import { fetchEntities, type EntityCard } from "$lib/api/entities";
   import { entityCardToThumbnailCard } from "$lib/entities/entity-grid";
+  import { entityKindIcon } from "$lib/entities/entity-kind-icons";
   import { resolveEntityHref } from "$lib/entities/entity-routes";
-  import { iconForKind, type EntityThumbnailCard } from "$lib/entities/entity-thumbnail";
+  import type { EntityThumbnailCard } from "$lib/entities/entity-thumbnail";
   import { useNsfw } from "$lib/nsfw/store.svelte";
   import EntityShelf from "$lib/components/entities/EntityShelf.svelte";
   import LogoMark from "$lib/components/LogoMark.svelte";
@@ -73,29 +75,9 @@
   const continueRowCards = $derived(continueCards.slice(1));
 
   /** Lucide icon for the hero fallback backdrop, derived from the entity kind. */
-  const heroFallbackIcon = $derived.by(() => {
-    if (!heroCard) return PlayCircle;
-    switch (iconForKind(heroCard.entity.kind)) {
-      case "audio":
-        return Music;
-      case "book":
-        return BookOpen;
-      case "gallery":
-        return Layers;
-      case "image":
-        return ImageIcon;
-      case "person":
-        return Users;
-      case "studio":
-        return Building2;
-      case "tag":
-        return Tag;
-      case "collection":
-        return FolderOpen;
-      default:
-        return Film;
-    }
-  });
+  const heroFallbackIcon = $derived(
+    heroCard ? entityKindIcon(heroCard.entity.kind) : PlayCircle,
+  );
 
   const allSectionsSettled = $derived(sections.every((s) => s.status === "ready"));
   const hasAnyContent = $derived(
@@ -256,7 +238,7 @@
       your library roots and start scanning.
     </p>
     <a
-      href="/settings/libraries"
+      href={resolve("/settings/libraries")}
       class={cn(
         buttonVariants({ variant: "primary", size: "lg" }),
         "min-h-11 px-6 text-base font-semibold",
@@ -270,7 +252,7 @@
     {#if heroCard}
       <section class="px-3">
         <a
-          href={heroCard.href}
+          href={resolve(heroCard.href as "/")}
           class="group relative block overflow-hidden rounded-xl border border-border-subtle"
           style:height="clamp(280px, 38vh, 420px)"
         >

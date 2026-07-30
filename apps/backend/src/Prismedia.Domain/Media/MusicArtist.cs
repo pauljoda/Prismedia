@@ -11,6 +11,13 @@ public sealed class MusicArtistEntityKindDefinition() : RootEntityKindDefinition
     "Artists",
     EntityKindCategory.Media,
     EntityStorageShape.Folder,
+    new EntityKindPresentation(
+        EntityKindIcon.Artist,
+        EntityKindIcon.Audio,
+        1,
+        1,
+        EntityAccentHue.Violet,
+        EntityAccentHue.Magenta),
     static root => new MusicArtist(root.Id, root.Title),
     defaultCapabilities: static () => [new CapabilityCredits()],
     enumeratesIdentifyChildren: true,

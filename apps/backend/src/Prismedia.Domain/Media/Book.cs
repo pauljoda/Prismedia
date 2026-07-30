@@ -14,6 +14,13 @@ public sealed class BookEntityKindDefinition() : EntityKindDefinition<Book>(
     "Books",
     EntityKindCategory.Media,
     EntityStorageShape.Archive,
+    new EntityKindPresentation(
+        EntityKindIcon.Book,
+        EntityKindIcon.Book,
+        2,
+        3,
+        EntityAccentHue.Cyan,
+        EntityAccentHue.Blue),
     defaultCapabilities: static () => [new CapabilityProgress(), new CapabilityPlayback()],
     enumeratesIdentifyChildren: true,
     supportsFileDeletion: true,

@@ -12,6 +12,7 @@ import type {
 import { proposalKindToEntityKind } from "$lib/entities/entity-codes";
 import type { EntityCard } from "$lib/api/entities";
 import type { EntityThumbnailCard, EntityThumbnailMetaIcon } from "$lib/entities/entity-thumbnail";
+import { iconForKind } from "$lib/entities/entity-thumbnail";
 import {
   reviewableImages,
   reviewImagePreviewUrl,
@@ -36,10 +37,7 @@ export function relationshipKindLabel(kind: string): string {
 }
 
 export function relationshipIcon(kind: string): EntityThumbnailMetaIcon {
-  if (kind === ENTITY_KIND.studio) return THUMBNAIL_META_ICON.studio;
-  if (kind === ENTITY_KIND.tag) return THUMBNAIL_META_ICON.tag;
-  if (kind === ENTITY_KIND.person) return THUMBNAIL_META_ICON.person;
-  return THUMBNAIL_META_ICON.collection;
+  return iconForKind(kind);
 }
 
 export function proposalImageUrl(

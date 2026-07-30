@@ -11,6 +11,13 @@ public sealed class StudioEntityKindDefinition() : RootEntityKindDefinition<Stud
     "Studios",
     EntityKindCategory.Taxonomy,
     EntityStorageShape.None,
+    new EntityKindPresentation(
+        EntityKindIcon.Studio,
+        EntityKindIcon.Studio,
+        21,
+        9,
+        EntityAccentHue.Orange,
+        EntityAccentHue.Magenta),
     static root => new Studio(root.Id, root.Title),
     supportsManualManagement: true);
 

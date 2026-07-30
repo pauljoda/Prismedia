@@ -28,6 +28,7 @@ public abstract class EntityKindDefinition {
         string groupLabel,
         EntityKindCategory category,
         EntityStorageShape storageShape,
+        EntityKindPresentation presentation,
         Type? clrType = null,
         Func<IReadOnlyList<EntityCapability>>? defaultCapabilities = null,
         bool enumeratesIdentifyChildren = false,
@@ -40,6 +41,7 @@ public abstract class EntityKindDefinition {
         GroupLabel = RequireText(groupLabel, nameof(groupLabel));
         Category = category;
         StorageShape = storageShape;
+        Presentation = presentation ?? throw new ArgumentNullException(nameof(presentation));
         ClrType = clrType;
         _defaultCapabilities = defaultCapabilities ?? EmptyCapabilities;
         EnumeratesIdentifyChildren = enumeratesIdentifyChildren;
@@ -65,6 +67,9 @@ public abstract class EntityKindDefinition {
 
     /// <summary>Filesystem storage shape used by scan and organize rules.</summary>
     public EntityStorageShape StorageShape { get; }
+
+    /// <summary>Shared platform-neutral presentation metadata for this kind.</summary>
+    public EntityKindPresentation Presentation { get; }
 
     /// <summary>Concrete domain entity type, or null for a protocol-only kind.</summary>
     public Type? ClrType { get; }
@@ -188,6 +193,7 @@ public abstract class EntityKindDefinition<TEntity> : EntityKindDefinition
         string groupLabel,
         EntityKindCategory category,
         EntityStorageShape storageShape,
+        EntityKindPresentation presentation,
         Func<IReadOnlyList<EntityCapability>>? defaultCapabilities = null,
         bool enumeratesIdentifyChildren = false,
         bool supportsFileDeletion = false,
@@ -200,6 +206,7 @@ public abstract class EntityKindDefinition<TEntity> : EntityKindDefinition
             groupLabel,
             category,
             storageShape,
+            presentation,
             typeof(TEntity),
             defaultCapabilities,
             enumeratesIdentifyChildren,
@@ -270,6 +277,7 @@ public abstract class RootEntityKindDefinition<TEntity> : EntityKindDefinition<T
         string groupLabel,
         EntityKindCategory category,
         EntityStorageShape storageShape,
+        EntityKindPresentation presentation,
         Func<EntityRootData, TEntity> factory,
         Func<IReadOnlyList<EntityCapability>>? defaultCapabilities = null,
         bool enumeratesIdentifyChildren = false,
@@ -283,6 +291,7 @@ public abstract class RootEntityKindDefinition<TEntity> : EntityKindDefinition<T
             groupLabel,
             category,
             storageShape,
+            presentation,
             defaultCapabilities,
             enumeratesIdentifyChildren,
             supportsFileDeletion,

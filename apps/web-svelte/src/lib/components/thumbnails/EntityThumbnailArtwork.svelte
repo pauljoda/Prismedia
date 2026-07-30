@@ -9,23 +9,10 @@
     toAspectRatioValue,
     type EntityThumbnailAsset,
     type EntityThumbnailCard,
-    type EntityThumbnailMetaIcon,
   } from "$lib/entities/entity-thumbnail";
   import { loadTrickplayFrames, type TrickplayFrame } from "@prismedia/ui-svelte";
-  import {
-    BookOpen,
-    Building2,
-    Disc3,
-    Film,
-    FolderOpen,
-    Hash,
-    Image,
-    Layers,
-    Music,
-    Tag,
-    Users,
-  } from "@lucide/svelte";
   import { onDestroy } from "svelte";
+  import EntityThumbnailIcon from "./EntityThumbnailIcon.svelte";
   import EntityThumbnailOverlays from "./EntityThumbnailOverlays.svelte";
 
   interface Props {
@@ -372,7 +359,9 @@
     <img src={asset.thumbSrc ?? asset.src} srcset={coverSrcset(asset)} sizes={asset.thumbSrc ? coverSizes : undefined} alt={asset.alt} decoding="async" loading={imageLoading} fetchpriority={imageFetchPriority} referrerpolicy="no-referrer" style:object-fit={imageFit} onload={markImageLoaded} onerror={() => { imageFailed = true; if (pointerRatio !== null) { hoverBroken = true; pointerRatio = null; } }} />
   {:else}
     <div class="placeholder-glow" aria-hidden="true"></div>
-    <div class="placeholder" aria-hidden="true">{@render PlaceholderIcon({ icon: placeholderIcon })}</div>
+    <div class="placeholder" aria-hidden="true">
+      <EntityThumbnailIcon icon={placeholderIcon} variant="placeholder" />
+    </div>
   {/if}
   {#if showImageLoading}<div class="image-loading-skeleton" aria-hidden="true"></div>{/if}
   {#if activeSpriteFrame && card.hover.kind === THUMBNAIL_HOVER_KIND.sprite && spriteDims.width > 0}
@@ -383,19 +372,6 @@
   {/if}
   <EntityThumbnailOverlays {card} {onSelectedChange} {selectable} {selected} {showWantedBadge} />
 </div>
-
-{#snippet PlaceholderIcon({ icon }: { icon: EntityThumbnailMetaIcon })}
-  {#if icon === "video"}<div class="placeholder-frame"><Film class="placeholder-icon-framed" /></div>
-  {:else if icon === "audio"}<div class="placeholder-audio"><Disc3 class="placeholder-disc" /><Music class="placeholder-note" /></div>
-  {:else if icon === "person"}<Users class="placeholder-icon" />
-  {:else if icon === "book"}<BookOpen class="placeholder-icon" />
-  {:else if icon === "gallery"}<Layers class="placeholder-icon" />
-  {:else if icon === "image"}<Image class="placeholder-icon" />
-  {:else if icon === "studio"}<Building2 class="placeholder-icon" />
-  {:else if icon === "tag"}<Tag class="placeholder-icon" />
-  {:else if icon === "collection"}<FolderOpen class="placeholder-icon" />
-  {:else}<Hash class="placeholder-icon" />{/if}
-{/snippet}
 
 <style>
   .media { position: relative; z-index: 2; width: 100%; min-height: 0; overflow: hidden; touch-action: pan-x pan-y; border-radius: 5px 5px 0 0; background: radial-gradient(circle at 50% 45%, rgb(255 255 255 / 0.08), transparent 34%), linear-gradient(135deg, rgb(15 16 18 / 0.96), rgb(28 25 20 / 0.92)), #111; }
@@ -417,13 +393,6 @@
   .sequence-rail span.is-active { background: var(--entity-accent); box-shadow: none; transform: scaleY(1.35); }
   .placeholder-glow { position: absolute; inset: 0; pointer-events: none; background: radial-gradient(circle at top, rgb(245 239 213 / 0.16), transparent 38%), linear-gradient(180deg, rgb(7 8 11 / 0.06) 0%, rgb(7 8 11 / 0.55) 100%); }
   .placeholder { position: relative; display: flex; width: 100%; height: 100%; align-items: center; justify-content: center; }
-  .placeholder-frame { display: flex; width: 3.5rem; height: 3.5rem; align-items: center; justify-content: center; border: 1px solid var(--color-border-default); background: var(--color-surface-2); box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.08), 0 0 24px rgb(0 0 0 / 0.35); }
-  .placeholder :global(.placeholder-icon-framed) { width: 1.75rem; height: 1.75rem; color: var(--color-text-muted); }
-  .placeholder :global(.placeholder-icon) { width: 2rem; height: 2rem; color: rgb(255 255 255 / 0.25); }
-  .placeholder-audio { position: relative; display: flex; align-items: center; justify-content: center; }
-  .placeholder :global(.placeholder-disc) { width: 3.5rem; height: 3.5rem; color: rgb(255 255 255 / 0.15); }
-  .placeholder :global(.placeholder-note) { position: absolute; width: 1.5rem; height: 1.5rem; color: rgb(255 255 255 / 0.4); }
   @keyframes thumbnail-skeleton-shimmer { from { background-position: 180% 0, 0 0; } to { background-position: -80% 0, 0 0; } }
   @media (prefers-reduced-motion: reduce) { .image-loading-skeleton { animation: none; } }
-  @container (max-width: 112px) { .placeholder :global(.placeholder-icon) { width: 1.35rem; height: 1.35rem; } .placeholder-frame { width: 2rem; height: 2rem; } .placeholder :global(.placeholder-icon-framed) { width: 1.05rem; height: 1.05rem; } .placeholder :global(.placeholder-disc) { width: 2.1rem; height: 2.1rem; } .placeholder :global(.placeholder-note) { width: 0.95rem; height: 0.95rem; } }
 </style>

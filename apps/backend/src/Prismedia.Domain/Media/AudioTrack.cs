@@ -13,6 +13,13 @@ public sealed class AudioTrackEntityKindDefinition() : EntityKindDefinition<Audi
     "Audio Tracks",
     EntityKindCategory.Media,
     EntityStorageShape.File,
+    new EntityKindPresentation(
+        EntityKindIcon.Track,
+        EntityKindIcon.Audio,
+        1,
+        1,
+        EntityAccentHue.Violet,
+        EntityAccentHue.Magenta),
     defaultCapabilities: static () => [new CapabilityPlayback()],
     supportsFileDeletion: true,
     autoIdentifySelector: AutoIdentifySelectorKind.Audio) {

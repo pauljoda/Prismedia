@@ -22,6 +22,8 @@ const codesUrl = process.env.PRISMEDIA_CODES_URL ?? new URL("/api/_codegen/codes
 // [Code] enum can never be silently unsurfaced.
 const ENUM_EXPORTS = [
   ["EntityKind", "ENTITY_KIND", "EntityKindCode"],
+  ["EntityKindIcon", "ENTITY_KIND_ICON", "EntityKindIconCode"],
+  ["EntityAccentHue", "ENTITY_ACCENT_HUE", "EntityAccentHueCode"],
   ["ProposalKind", "PROPOSAL_KIND", "ProposalKindCode"],
   ["RelationshipKind", "RELATIONSHIP_CODE", "RelationshipCode"],
   ["EntityFileRole", "ENTITY_FILE_ROLE", "EntityFileRoleCode"],
@@ -185,6 +187,35 @@ async function main() {
   const labelEntries = (manifest.entityKinds ?? []).map((k) => `  ${lit(k.code)}: ${lit(k.groupLabel)},`).join("\n");
   sections.push(
     `export const ENTITY_KIND_LABELS: Record<EntityKindCode, string> = {\n${labelEntries}\n};\n`,
+  );
+
+  // Shared Entity presentation metadata. Each discovered EntityKind definition must provide these
+  // values, so adding a kind cannot silently fall through a client-side icon/aspect/accent registry.
+  const entityPresentationFields = [
+    "icon", "referenceIcon", "thumbnailWidth", "thumbnailHeight", "primaryAccent", "secondaryAccent",
+  ];
+  for (const kind of manifest.entityKinds ?? []) {
+    const missing = entityPresentationFields.filter((field) => !Object.hasOwn(kind, field));
+    if (missing.length > 0) {
+      throw new Error(`Entity kind '${kind.code ?? "unknown"}' presentation is missing: ${missing.join(", ")}`);
+    }
+  }
+  const presentationEntries = (manifest.entityKinds ?? []).map((kind) =>
+    `  ${lit(kind.code)}: { icon: ${lit(kind.icon)}, referenceIcon: ${lit(kind.referenceIcon)}, ` +
+    `thumbnailWidth: ${lit(kind.thumbnailWidth)}, thumbnailHeight: ${lit(kind.thumbnailHeight)}, ` +
+    `primaryAccent: ${lit(kind.primaryAccent)}, secondaryAccent: ${lit(kind.secondaryAccent)} },`
+  ).join("\n");
+  sections.push(
+    `export interface EntityKindPresentationManifestEntry {\n` +
+      `  icon: EntityKindIconCode;\n` +
+      `  referenceIcon: EntityKindIconCode;\n` +
+      `  thumbnailWidth: number;\n` +
+      `  thumbnailHeight: number;\n` +
+      `  primaryAccent: EntityAccentHueCode;\n` +
+      `  secondaryAccent: EntityAccentHueCode;\n` +
+      `}\n\n` +
+      `export const ENTITY_KIND_PRESENTATION: Record<EntityKindCode, EntityKindPresentationManifestEntry> = {\n` +
+      `${presentationEntries}\n};\n`,
   );
 
   // Complete frontend request-kind behavior, projected directly from RequestKindRegistry. Discover,

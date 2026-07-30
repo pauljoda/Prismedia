@@ -1,0 +1,143 @@
+namespace Prismedia.Domain.Entities;
+
+/// <summary>
+/// Shared semantic icon represented by an Entity kind. Clients translate these stable concepts to
+/// their platform icon libraries; definitions never name Lucide symbols, SF Symbols, or other
+/// presentation-framework details.
+/// </summary>
+public enum EntityKindIcon {
+    [Code("album")]
+    Album,
+
+    [Code("artist")]
+    Artist,
+
+    [Code("audio")]
+    Audio,
+
+    [Code("author")]
+    Author,
+
+    [Code("book")]
+    Book,
+
+    [Code("chapter")]
+    Chapter,
+
+    [Code("collection")]
+    Collection,
+
+    [Code("gallery")]
+    Gallery,
+
+    [Code("image")]
+    Image,
+
+    [Code("movie")]
+    Movie,
+
+    [Code("page")]
+    Page,
+
+    [Code("person")]
+    Person,
+
+    [Code("season")]
+    Season,
+
+    [Code("series")]
+    Series,
+
+    [Code("studio")]
+    Studio,
+
+    [Code("tag")]
+    Tag,
+
+    [Code("track")]
+    Track,
+
+    [Code("video")]
+    Video,
+
+    [Code("volume")]
+    Volume
+}
+
+/// <summary>Named hue in Prismedia's shared entity spectrum.</summary>
+public enum EntityAccentHue {
+    [Code("red")]
+    Red,
+
+    [Code("orange")]
+    Orange,
+
+    [Code("yellow")]
+    Yellow,
+
+    [Code("green")]
+    Green,
+
+    [Code("cyan")]
+    Cyan,
+
+    [Code("blue")]
+    Blue,
+
+    [Code("violet")]
+    Violet,
+
+    [Code("magenta")]
+    Magenta
+}
+
+/// <summary>
+/// Platform-neutral presentation facts every Entity kind must define. Exact aspect-ratio values
+/// avoid parallel client shape registries, while semantic icons and hues let each UI retain its
+/// native rendering implementation.
+/// </summary>
+public sealed record EntityKindPresentation {
+    /// <summary>Creates validated immutable presentation metadata.</summary>
+    public EntityKindPresentation(
+        EntityKindIcon icon,
+        EntityKindIcon referenceIcon,
+        int thumbnailWidth,
+        int thumbnailHeight,
+        EntityAccentHue primaryAccent,
+        EntityAccentHue secondaryAccent) {
+        if (thumbnailWidth <= 0) {
+            throw new ArgumentOutOfRangeException(nameof(thumbnailWidth), "Thumbnail width must be positive.");
+        }
+        if (thumbnailHeight <= 0) {
+            throw new ArgumentOutOfRangeException(nameof(thumbnailHeight), "Thumbnail height must be positive.");
+        }
+
+        Icon = icon;
+        ReferenceIcon = referenceIcon;
+        ThumbnailWidth = thumbnailWidth;
+        ThumbnailHeight = thumbnailHeight;
+        PrimaryAccent = primaryAccent;
+        SecondaryAccent = secondaryAccent;
+    }
+
+    /// <summary>Specific semantic icon for representing an Entity of this kind.</summary>
+    public EntityKindIcon Icon { get; }
+
+    /// <summary>
+    /// Broader icon used when aggregating reference counts, allowing related kinds such as movies,
+    /// series, and videos to merge into one video count chip.
+    /// </summary>
+    public EntityKindIcon ReferenceIcon { get; }
+
+    /// <summary>Canonical thumbnail width component.</summary>
+    public int ThumbnailWidth { get; }
+
+    /// <summary>Canonical thumbnail height component.</summary>
+    public int ThumbnailHeight { get; }
+
+    /// <summary>Primary muted spectrum hue.</summary>
+    public EntityAccentHue PrimaryAccent { get; }
+
+    /// <summary>Secondary muted spectrum hue.</summary>
+    public EntityAccentHue SecondaryAccent { get; }
+}

@@ -22,6 +22,12 @@ public sealed record ConstantEntry(string Name, string Value);
 /// <param name="GroupLabel">Plural grouping label.</param>
 /// <param name="Category">Broad category name.</param>
 /// <param name="StorageShape">Filesystem storage shape name.</param>
+/// <param name="Icon">Specific semantic presentation icon.</param>
+/// <param name="ReferenceIcon">Broader icon used to aggregate reference counts.</param>
+/// <param name="ThumbnailWidth">Canonical thumbnail aspect-ratio width component.</param>
+/// <param name="ThumbnailHeight">Canonical thumbnail aspect-ratio height component.</param>
+/// <param name="PrimaryAccent">Primary shared spectrum hue code.</param>
+/// <param name="SecondaryAccent">Secondary shared spectrum hue code.</param>
 /// <param name="SupportsFileDeletion">Whether this kind may root the managed delete-files workflow.</param>
 /// <param name="SupportsRequests">Whether a committable request descriptor materializes this Entity kind.</param>
 /// <param name="EnumeratesIdentifyChildren">Whether this kind is an identify container whose local children are enumerated for cascade identify.</param>
@@ -31,6 +37,12 @@ public sealed record EntityKindManifestEntry(
     string GroupLabel,
     string Category,
     string StorageShape,
+    string Icon,
+    string ReferenceIcon,
+    int ThumbnailWidth,
+    int ThumbnailHeight,
+    string PrimaryAccent,
+    string SecondaryAccent,
     bool SupportsFileDeletion,
     bool SupportsRequests,
     bool EnumeratesIdentifyChildren);
@@ -137,6 +149,12 @@ public sealed record CodesManifest(
                 descriptor.GroupLabel,
                 descriptor.Category.ToString(),
                 descriptor.StorageShape.ToString(),
+                descriptor.Presentation.Icon.ToCode(),
+                descriptor.Presentation.ReferenceIcon.ToCode(),
+                descriptor.Presentation.ThumbnailWidth,
+                descriptor.Presentation.ThumbnailHeight,
+                descriptor.Presentation.PrimaryAccent.ToCode(),
+                descriptor.Presentation.SecondaryAccent.ToCode(),
                 descriptor.SupportsFileDeletion,
                 requestableKinds.Contains(descriptor.Kind),
                 descriptor.EnumeratesIdentifyChildren))

@@ -279,6 +279,20 @@ export const DOWNLOAD_PROTOCOL = {
 
 export type DownloadProtocolCode = (typeof DOWNLOAD_PROTOCOL)[keyof typeof DOWNLOAD_PROTOCOL];
 
+// source: enum EntityAccentHue
+export const ENTITY_ACCENT_HUE = {
+  red: "red",
+  orange: "orange",
+  yellow: "yellow",
+  green: "green",
+  cyan: "cyan",
+  blue: "blue",
+  violet: "violet",
+  magenta: "magenta",
+} as const;
+
+export type EntityAccentHueCode = (typeof ENTITY_ACCENT_HUE)[keyof typeof ENTITY_ACCENT_HUE];
+
 // source: enum EntityDateType
 export const ENTITY_DATE_TYPE = {
   announcement: "announcement",
@@ -343,6 +357,31 @@ export const ENTITY_KIND = {
 } as const;
 
 export type EntityKindCode = (typeof ENTITY_KIND)[keyof typeof ENTITY_KIND];
+
+// source: enum EntityKindIcon
+export const ENTITY_KIND_ICON = {
+  album: "album",
+  artist: "artist",
+  audio: "audio",
+  author: "author",
+  book: "book",
+  chapter: "chapter",
+  collection: "collection",
+  gallery: "gallery",
+  image: "image",
+  movie: "movie",
+  page: "page",
+  person: "person",
+  season: "season",
+  series: "series",
+  studio: "studio",
+  tag: "tag",
+  track: "track",
+  video: "video",
+  volume: "volume",
+} as const;
+
+export type EntityKindIconCode = (typeof ENTITY_KIND_ICON)[keyof typeof ENTITY_KIND_ICON];
 
 // source: enum EntityLifecycleClaimKind
 export const ENTITY_LIFECYCLE_CLAIM_KIND = {
@@ -1154,6 +1193,37 @@ export const ENTITY_KIND_LABELS: Record<EntityKindCode, string> = {
   "video": "Videos",
   "video-series": "Series",
   "video-season": "Seasons",
+};
+
+export interface EntityKindPresentationManifestEntry {
+  icon: EntityKindIconCode;
+  referenceIcon: EntityKindIconCode;
+  thumbnailWidth: number;
+  thumbnailHeight: number;
+  primaryAccent: EntityAccentHueCode;
+  secondaryAccent: EntityAccentHueCode;
+}
+
+export const ENTITY_KIND_PRESENTATION: Record<EntityKindCode, EntityKindPresentationManifestEntry> = {
+  "audio": { icon: "audio", referenceIcon: "audio", thumbnailWidth: 1, thumbnailHeight: 1, primaryAccent: "violet", secondaryAccent: "magenta" },
+  "audio-library": { icon: "album", referenceIcon: "audio", thumbnailWidth: 1, thumbnailHeight: 1, primaryAccent: "violet", secondaryAccent: "magenta" },
+  "audio-track": { icon: "track", referenceIcon: "audio", thumbnailWidth: 1, thumbnailHeight: 1, primaryAccent: "violet", secondaryAccent: "magenta" },
+  "book": { icon: "book", referenceIcon: "book", thumbnailWidth: 2, thumbnailHeight: 3, primaryAccent: "cyan", secondaryAccent: "blue" },
+  "book-volume": { icon: "volume", referenceIcon: "book", thumbnailWidth: 2, thumbnailHeight: 3, primaryAccent: "cyan", secondaryAccent: "blue" },
+  "book-chapter": { icon: "chapter", referenceIcon: "book", thumbnailWidth: 2, thumbnailHeight: 3, primaryAccent: "cyan", secondaryAccent: "blue" },
+  "book-page": { icon: "page", referenceIcon: "book", thumbnailWidth: 2, thumbnailHeight: 3, primaryAccent: "cyan", secondaryAccent: "blue" },
+  "collection": { icon: "collection", referenceIcon: "collection", thumbnailWidth: 16, thumbnailHeight: 9, primaryAccent: "magenta", secondaryAccent: "red" },
+  "gallery": { icon: "gallery", referenceIcon: "gallery", thumbnailWidth: 1, thumbnailHeight: 1, primaryAccent: "green", secondaryAccent: "cyan" },
+  "image": { icon: "image", referenceIcon: "image", thumbnailWidth: 1, thumbnailHeight: 1, primaryAccent: "blue", secondaryAccent: "violet" },
+  "music-artist": { icon: "artist", referenceIcon: "audio", thumbnailWidth: 1, thumbnailHeight: 1, primaryAccent: "violet", secondaryAccent: "magenta" },
+  "book-author": { icon: "author", referenceIcon: "book", thumbnailWidth: 2, thumbnailHeight: 3, primaryAccent: "cyan", secondaryAccent: "blue" },
+  "person": { icon: "person", referenceIcon: "person", thumbnailWidth: 4, thumbnailHeight: 5, primaryAccent: "red", secondaryAccent: "violet" },
+  "movie": { icon: "movie", referenceIcon: "video", thumbnailWidth: 2, thumbnailHeight: 3, primaryAccent: "orange", secondaryAccent: "yellow" },
+  "studio": { icon: "studio", referenceIcon: "studio", thumbnailWidth: 21, thumbnailHeight: 9, primaryAccent: "orange", secondaryAccent: "magenta" },
+  "tag": { icon: "tag", referenceIcon: "tag", thumbnailWidth: 1, thumbnailHeight: 1, primaryAccent: "green", secondaryAccent: "yellow" },
+  "video": { icon: "video", referenceIcon: "video", thumbnailWidth: 16, thumbnailHeight: 9, primaryAccent: "red", secondaryAccent: "orange" },
+  "video-series": { icon: "series", referenceIcon: "video", thumbnailWidth: 2, thumbnailHeight: 3, primaryAccent: "yellow", secondaryAccent: "green" },
+  "video-season": { icon: "season", referenceIcon: "video", thumbnailWidth: 2, thumbnailHeight: 3, primaryAccent: "yellow", secondaryAccent: "green" },
 };
 
 export interface RequestKindManifestEntry {

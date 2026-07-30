@@ -11,6 +11,13 @@ public sealed class VideoEntityKindDefinition() : EntityKindDefinition<Video>(
     "Videos",
     EntityKindCategory.Media,
     EntityStorageShape.File,
+    new EntityKindPresentation(
+        EntityKindIcon.Video,
+        EntityKindIcon.Video,
+        16,
+        9,
+        EntityAccentHue.Red,
+        EntityAccentHue.Orange),
     defaultCapabilities: static () =>
     [
         new CapabilityPlayback(),

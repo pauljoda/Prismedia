@@ -1,27 +1,8 @@
 <script lang="ts">
-  import { THUMBNAIL_META_ICON } from "$lib/api/generated/codes";
   import OverflowTicker from "$lib/components/OverflowTicker.svelte";
-  import type { EntityThumbnailCard, EntityThumbnailMetaIcon } from "$lib/entities/entity-thumbnail";
-  import {
-    Album,
-    BookCopy,
-    BookOpen,
-    Building2,
-    Calendar,
-    Clapperboard,
-    Clock3,
-    Disc3,
-    FileText,
-    Film,
-    Hash,
-    Images,
-    Layers,
-    ListMusic,
-    Music,
-    Tag,
-    Users,
-  } from "@lucide/svelte";
+  import type { EntityThumbnailCard } from "$lib/entities/entity-thumbnail";
   import type { Snippet } from "svelte";
+  import EntityThumbnailIcon from "./EntityThumbnailIcon.svelte";
 
   interface Props {
     card: EntityThumbnailCard;
@@ -56,7 +37,7 @@
       <div class="chips">
         {#each card.meta as item (item.icon + item.label)}
           <span class="chip" aria-label={`${item.icon} ${item.label}`}>
-            {@render MetaIcon({ icon: item.icon })}
+            <EntityThumbnailIcon icon={item.icon} />
             {item.label}
           </span>
         {/each}
@@ -64,44 +45,6 @@
     {/if}
   </div>
 {/if}
-
-{#snippet MetaIcon({ icon }: { icon: EntityThumbnailMetaIcon })}
-  {#if icon === "audio"}
-    <Music size={12} />
-  {:else if icon === "book"}
-    <BookOpen size={12} />
-  {:else if icon === "calendar" || icon === THUMBNAIL_META_ICON.season}
-    <Calendar size={12} />
-  {:else if icon === "chapter"}
-    <Album size={12} />
-  {:else if icon === THUMBNAIL_META_ICON.episode}
-    <Clapperboard size={12} />
-  {:else if icon === THUMBNAIL_META_ICON.volume}
-    <BookCopy size={12} />
-  {:else if icon === THUMBNAIL_META_ICON.page}
-    <FileText size={12} />
-  {:else if icon === THUMBNAIL_META_ICON.album}
-    <Disc3 size={12} />
-  {:else if icon === THUMBNAIL_META_ICON.track}
-    <ListMusic size={12} />
-  {:else if icon === "collection"}
-    <Layers size={12} />
-  {:else if icon === "duration"}
-    <Clock3 size={12} />
-  {:else if icon === "gallery" || icon === "image"}
-    <Images size={12} />
-  {:else if icon === "person"}
-    <Users size={12} />
-  {:else if icon === "studio"}
-    <Building2 size={12} />
-  {:else if icon === "tag"}
-    <Tag size={12} />
-  {:else if icon === "video"}
-    <Film size={12} />
-  {:else}
-    <Hash size={12} />
-  {/if}
-{/snippet}
 
 <style>
   .glass-info {

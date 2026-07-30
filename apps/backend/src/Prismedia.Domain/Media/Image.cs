@@ -11,6 +11,13 @@ public sealed class ImageEntityKindDefinition() : RootEntityKindDefinition<Image
     "Images",
     EntityKindCategory.Media,
     EntityStorageShape.File,
+    new EntityKindPresentation(
+        EntityKindIcon.Image,
+        EntityKindIcon.Image,
+        1,
+        1,
+        EntityAccentHue.Blue,
+        EntityAccentHue.Violet),
     static root => new Image(root.Id, root.Title),
     supportsFileDeletion: true,
     autoIdentifySelector: AutoIdentifySelectorKind.Image) {

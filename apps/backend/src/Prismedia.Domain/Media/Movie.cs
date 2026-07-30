@@ -11,6 +11,13 @@ public sealed class MovieEntityKindDefinition() : EntityKindDefinition<Movie>(
     "Movies",
     EntityKindCategory.Media,
     EntityStorageShape.Folder,
+    new EntityKindPresentation(
+        EntityKindIcon.Movie,
+        EntityKindIcon.Video,
+        2,
+        3,
+        EntityAccentHue.Orange,
+        EntityAccentHue.Yellow),
     defaultCapabilities: static () =>
     [
         new CapabilityDescription(),

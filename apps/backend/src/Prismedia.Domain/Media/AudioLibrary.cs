@@ -11,6 +11,13 @@ public sealed class AudioLibraryEntityKindDefinition() : RootEntityKindDefinitio
     "Audio Libraries",
     EntityKindCategory.Media,
     EntityStorageShape.Folder,
+    new EntityKindPresentation(
+        EntityKindIcon.Album,
+        EntityKindIcon.Audio,
+        1,
+        1,
+        EntityAccentHue.Violet,
+        EntityAccentHue.Magenta),
     static root => new AudioLibrary(root.Id, root.Title),
     enumeratesIdentifyChildren: true,
     supportsFileDeletion: true,

@@ -13,6 +13,13 @@ public sealed class BookVolumeEntityKindDefinition() : RootEntityKindDefinition<
     "Volumes",
     EntityKindCategory.Media,
     EntityStorageShape.None,
+    new EntityKindPresentation(
+        EntityKindIcon.Volume,
+        EntityKindIcon.Book,
+        2,
+        3,
+        EntityAccentHue.Cyan,
+        EntityAccentHue.Blue),
     static root => new BookVolume(
         root.Id,
         root.Title,
@@ -35,6 +42,13 @@ public sealed class BookChapterEntityKindDefinition() : EntityKindDefinition<Boo
     "Chapters",
     EntityKindCategory.Media,
     EntityStorageShape.None,
+    new EntityKindPresentation(
+        EntityKindIcon.Chapter,
+        EntityKindIcon.Book,
+        2,
+        3,
+        EntityAccentHue.Cyan,
+        EntityAccentHue.Blue),
     defaultCapabilities: static () =>
     [
         new CapabilityFingerprints(),
@@ -60,6 +74,13 @@ public sealed class BookPageEntityKindDefinition() : RootEntityKindDefinition<Bo
     "Pages",
     EntityKindCategory.Media,
     EntityStorageShape.ArchiveEntry,
+    new EntityKindPresentation(
+        EntityKindIcon.Page,
+        EntityKindIcon.Book,
+        2,
+        3,
+        EntityAccentHue.Cyan,
+        EntityAccentHue.Blue),
     static root => new BookPage(
         root.Id,
         root.Title,

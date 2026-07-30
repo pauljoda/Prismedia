@@ -33,6 +33,25 @@ public sealed class CodesManifestContractTests {
     }
 
     [Fact]
+    public void EntityKindManifestProjectsDefinitionOwnedPresentation() {
+        var kinds = CodesManifest.Build().EntityKinds.ToDictionary(kind => kind.Code);
+
+        var video = kinds[EntityKind.Video.ToCode()];
+        Assert.Equal(EntityKindIcon.Video.ToCode(), video.Icon);
+        Assert.Equal(EntityKindIcon.Video.ToCode(), video.ReferenceIcon);
+        Assert.Equal(16, video.ThumbnailWidth);
+        Assert.Equal(9, video.ThumbnailHeight);
+        Assert.Equal(EntityAccentHue.Red.ToCode(), video.PrimaryAccent);
+        Assert.Equal(EntityAccentHue.Orange.ToCode(), video.SecondaryAccent);
+
+        var author = kinds[EntityKind.BookAuthor.ToCode()];
+        Assert.Equal(EntityKindIcon.Author.ToCode(), author.Icon);
+        Assert.Equal(EntityKindIcon.Book.ToCode(), author.ReferenceIcon);
+        Assert.Equal(2, author.ThumbnailWidth);
+        Assert.Equal(3, author.ThumbnailHeight);
+    }
+
+    [Fact]
     public void EntityKindManifestDerivesRequestSupportFromTheRequestKindRegistry() {
         var manifestKinds = CodesManifest.Build().EntityKinds
             .Where(kind => kind.SupportsRequests)

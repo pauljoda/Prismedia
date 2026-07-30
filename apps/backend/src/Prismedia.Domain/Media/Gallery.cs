@@ -14,6 +14,13 @@ public sealed class GalleryEntityKindDefinition() : EntityKindDefinition<Gallery
     "Galleries",
     EntityKindCategory.Media,
     EntityStorageShape.Folder,
+    new EntityKindPresentation(
+        EntityKindIcon.Gallery,
+        EntityKindIcon.Gallery,
+        1,
+        1,
+        EntityAccentHue.Green,
+        EntityAccentHue.Cyan),
     defaultCapabilities: static () => [new CapabilityCredits()],
     supportsFileDeletion: true,
     autoIdentifySelector: AutoIdentifySelectorKind.Gallery) {

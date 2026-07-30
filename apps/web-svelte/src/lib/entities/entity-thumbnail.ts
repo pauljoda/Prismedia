@@ -1,10 +1,12 @@
 import {
+  ENTITY_KIND_PRESENTATION,
   THUMBNAIL_HOVER_KIND,
   THUMBNAIL_META_ICON,
+  type EntityKindIconCode,
   type ThumbnailMetaIconCode,
 } from "$lib/api/generated/codes";
 import type { EntityCapability, EntityCard, EntityThumbnail, EntityKind } from "$lib/api/generated/model";
-import { ENTITY_KIND, resolveEntityHref, type EntityRouteContext } from "./entity-codes";
+import { isEntityKindCode, resolveEntityHref, type EntityRouteContext } from "./entity-codes";
 
 /** Standard thumbnail shapes used by global entity cards before route-specific layout chooses a size. */
 export type EntityThumbnailAspectRatio =
@@ -60,7 +62,7 @@ export type EntityThumbnailHoverPreview =
     };
 
 /** Icon vocabulary for compact thumbnail metadata chips. */
-export type EntityThumbnailMetaIcon = ThumbnailMetaIconCode;
+export type EntityThumbnailMetaIcon = ThumbnailMetaIconCode | EntityKindIconCode;
 
 /** Small count, duration, position, or classification item shown under a thumbnail. */
 export interface EntityThumbnailMetaItem {
@@ -180,13 +182,12 @@ export function toAspectRatioNumeric(ratio: EntityThumbnailAspectRatio): number 
 
 /** Chooses the default thumbnail frame for a referenced entity kind. */
 export function aspectRatioForKind(kind: string): EntityThumbnailAspectRatio {
-  if (kind === ENTITY_KIND.video) return "video";
-  if (kind === ENTITY_KIND.movie || kind === ENTITY_KIND.videoSeries || kind === ENTITY_KIND.videoSeason) return "poster";
-  if (kind === ENTITY_KIND.book || kind === ENTITY_KIND.bookAuthor || kind === ENTITY_KIND.bookChapter || kind === ENTITY_KIND.bookPage || kind === ENTITY_KIND.bookVolume) return "poster";
-  if (kind === ENTITY_KIND.person) return { width: 4, height: 5 };
-  if (kind === ENTITY_KIND.studio) return "wide";
-  if (kind === ENTITY_KIND.collection) return "video";
-  return "square";
+  if (!isEntityKindCode(kind)) return "video";
+  const presentation = ENTITY_KIND_PRESENTATION[kind];
+  return {
+    width: presentation.thumbnailWidth,
+    height: presentation.thumbnailHeight,
+  };
 }
 
 /** Resolves the link owned by a thumbnail card, using explicit overrides before entity defaults. */
@@ -257,15 +258,9 @@ export function pickHoverAsset(card: EntityThumbnailCard, pointerRatio: number):
 
 /** Maps an entity kind code to the closest matching thumbnail meta icon for placeholder display. */
 export function iconForKind(kind: string): EntityThumbnailMetaIcon {
-  if (kind === ENTITY_KIND.audio || kind === ENTITY_KIND.audioLibrary || kind === ENTITY_KIND.audioTrack) return THUMBNAIL_META_ICON.audio;
-  if (kind === ENTITY_KIND.book || kind === ENTITY_KIND.bookAuthor || kind === ENTITY_KIND.bookChapter || kind === ENTITY_KIND.bookPage || kind === ENTITY_KIND.bookVolume) return THUMBNAIL_META_ICON.book;
-  if (kind === ENTITY_KIND.movie || kind === ENTITY_KIND.video || kind === ENTITY_KIND.videoSeason || kind === ENTITY_KIND.videoSeries) return THUMBNAIL_META_ICON.video;
-  if (kind === ENTITY_KIND.gallery) return THUMBNAIL_META_ICON.gallery;
-  if (kind === ENTITY_KIND.image) return THUMBNAIL_META_ICON.image;
-  if (kind === ENTITY_KIND.person) return THUMBNAIL_META_ICON.person;
-  if (kind === ENTITY_KIND.studio) return THUMBNAIL_META_ICON.studio;
-  if (kind === ENTITY_KIND.tag) return THUMBNAIL_META_ICON.tag;
-  return THUMBNAIL_META_ICON.collection;
+  return isEntityKindCode(kind)
+    ? ENTITY_KIND_PRESENTATION[kind].referenceIcon
+    : THUMBNAIL_META_ICON.collection;
 }
 
 const PLACEHOLDER_GRADIENTS = [
