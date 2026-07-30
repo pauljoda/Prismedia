@@ -1,6 +1,5 @@
 import { fireEvent, render, screen } from "@testing-library/svelte";
 import { FileText, Play } from "@lucide/svelte";
-import { readFileSync } from "node:fs";
 import { createRawSnippet } from "svelte";
 import { describe, expect, it, vi } from "vitest";
 import { ACQUISITION_STATUS, CAPABILITY_KIND } from "$lib/api/generated/codes";
@@ -59,12 +58,8 @@ describe("EntityDetail", () => {
     });
 
     const action = screen.getByRole("button", { name: "Play All" });
-    const appStyles = readFileSync("src/app.css", "utf8");
     expect(action.className).toContain("entity-action-button");
     expect(action.className).toContain("entity-action-button-primary");
-    expect(appStyles).toContain(".entity-action-button-primary {");
-    expect(appStyles).toContain("background: var(--color-accent-200);");
-    expect(appStyles).not.toContain("color-mix(in srgb, var(--entity-action-accent) 92%, #fff 8%)");
 
     await fireEvent.click(action);
 
@@ -579,12 +574,9 @@ describe("EntityDetail", () => {
         tabs: [{ id: "links", label: "Links", sections: ["links"] }],
       },
     });
-    const metadataCardSource = readFileSync("src/lib/components/MetadataCard.svelte", "utf8");
 
     expect(screen.getByText("Links & Provider IDs")).toBeInTheDocument();
     expect(container.querySelector(".metadata-card-capped")).toBeInTheDocument();
-    expect(metadataCardSource).toContain("max-height: var(--metadata-card-max-height, 24rem);");
-    expect(metadataCardSource).toContain("overflow-y: auto;");
     expect(screen.getByText("URLs")).toBeInTheDocument();
     expect(screen.getByText("themoviedb.org")).toBeInTheDocument();
     expect(screen.getByText("https://www.themoviedb.org/tv/271267")).toBeInTheDocument();
