@@ -32,7 +32,6 @@
     LoaderCircle,
     MonitorCog,
     Pencil,
-    PencilOff,
     Play,
     Save,
     Trash2,
@@ -60,7 +59,7 @@
   import EntityDateEditRequest from "./EntityDateEditRequest.svelte";
   import EntityTagChips from "./EntityTagChips.svelte";
   import EntityCastAndCrewSection from "./EntityCastAndCrewSection.svelte";
-  import EntityActionButton from "./EntityActionButton.svelte";
+  import EntityDetailHeroControls from "./EntityDetailHeroControls.svelte";
   import MarkdownEditor from "$lib/components/forms/MarkdownEditor.svelte";
   import EntityPicker from "$lib/components/forms/EntityPicker.svelte";
   import CreditsEditor from "$lib/components/forms/CreditsEditor.svelte";
@@ -125,10 +124,6 @@
     sectionContent,
   }: Props = $props();
 
-  let favoriteAnimating = $state(false);
-  let organizedAnimating = $state(false);
-  let ratingAnim = $state<"fill" | "clear" | null>(null);
-  let ratingAnimCount = $state(0);
   let activeTabId = $state("");
   let editingTabId = $state<string | null>(null);
   let pendingTabId = $state<string | null>(null);
@@ -192,22 +187,6 @@
     }
   });
 
-  function handleFavoriteClick(e: MouseEvent) {
-    if (!onFavoriteToggle) return;
-    (e.currentTarget as HTMLElement).blur();
-    favoriteAnimating = true;
-    onFavoriteToggle();
-    setTimeout(() => (favoriteAnimating = false), 400);
-  }
-
-  function handleOrganizedClick(e: MouseEvent) {
-    if (!onOrganizedToggle) return;
-    (e.currentTarget as HTMLElement).blur();
-    organizedAnimating = true;
-    onOrganizedToggle();
-    setTimeout(() => (organizedAnimating = false), 400);
-  }
-
   type HeroMode = "image" | "poster-blur" | "gradient";
 
   const renderedDescription = $derived(renderEntityDescriptionMarkdown(card.description));
@@ -240,12 +219,6 @@
   const studioThumbnailCards = $derived(cardFull.studio ? [creditToThumbnailCard(cardFull.studio)] : []);
   const urlLinks = $derived(card.links.filter((link) => !hasProvider(link)));
   const providerIdLinks = $derived(card.links.filter(hasProvider));
-  const providerIdentityLabel = $derived(card.providerIdentity?.pluginId ?? "");
-  const providerIdentityTitle = $derived.by(() => {
-    const identity = card.providerIdentity;
-    if (!identity) return "";
-    return `Metadata and monitoring source: ${identity.pluginId}, ${identity.identityNamespace} ID ${identity.identityValue}`;
-  });
   const visibleActionButtons = $derived.by(() => actionButtons.filter((action) => !action.hidden));
   const visibleTabs = $derived.by(() => tabs.filter(tabHasContent));
   const hasTabs = $derived(visibleTabs.length > 0);
@@ -301,20 +274,6 @@
   const editValidationErrors = $derived.by(() => validateDraft(currentEditSections, editDraft, card.rating?.max ?? 5));
   const editDirty = $derived(Boolean(initialDraft && serializeDraft(initialDraft) !== serializeDraft(editDraft)));
   const saveDisabled = $derived(!editDirty || editValidationErrors.length > 0 || savingEdit);
-
-  function handleRatingClick(e: MouseEvent, value: number) {
-    if (!onRatingChange || ratingBusy || !card.rating) return;
-    (e.currentTarget as HTMLElement).blur();
-    const clearing = card.rating.value === value;
-    const nextValue = clearing ? null : value;
-
-    ratingAnim = clearing ? "clear" : "fill";
-    ratingAnimCount = clearing ? card.rating.value : value;
-    onRatingChange(nextValue);
-
-    const duration = clearing ? 350 : 80 * value + 200;
-    setTimeout(() => (ratingAnim = null), duration);
-  }
 
   function findSection(sectionId: string): EntityDetailSection | null {
     return availableSections.find((section) => section.id === sectionId) ?? null;
@@ -1218,163 +1177,26 @@
             </div>
           {/if}
 
-          {#if card.rating}
-            <div class="rating-row" role="group" aria-label="Rating">
-              {#each { length: card.rating.max } as _, i (i)}
-                {@const value = i + 1}
-                {@const filling = ratingAnim === "fill" && value <= ratingAnimCount}
-                {@const clearing = ratingAnim === "clear" && value <= ratingAnimCount}
-                <button
-                  type="button"
-                  class="rating-star"
-                  class:active={card.rating!.value >= value}
-                  class:star-fill={filling}
-                  class:star-clear={clearing}
-                  style:animation-delay={filling ? `${(value - 1) * 70}ms` : "0ms"}
-                  disabled={ratingBusy || !onRatingChange}
-                  aria-label={`Rate ${value}`}
-                  onclick={(e: MouseEvent) => handleRatingClick(e, value)}
-                >
-                  <Star class="h-5 w-5" />
-                </button>
-              {/each}
-            </div>
-          {/if}
-
-          {#if card.providerIdentity || heroBadges}
-            <div class="position-badges">
-              {#if card.providerIdentity}
-                {#if card.providerIdentity.url}
-                  <a
-                    href={card.providerIdentity.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    class="hero-badge provider-identity-chip"
-                    title={providerIdentityTitle}
-                    aria-label={`${providerIdentityTitle}. Opens provider in a new tab.`}
-                  >
-                    <span class="provider-identity-label">{providerIdentityLabel}</span>
-                    <ExternalLink class="provider-identity-link-icon h-3 w-3" aria-hidden="true" />
-                  </a>
-                {:else}
-                  <span
-                    class="hero-badge provider-identity-chip"
-                    title={providerIdentityTitle}
-                    aria-label={providerIdentityTitle}
-                  >
-                    <span class="provider-identity-label">{providerIdentityLabel}</span>
-                  </span>
-                {/if}
-              {/if}
-              {#if heroBadges}
-                {@render heroBadges()}
-              {/if}
-            </div>
-          {/if}
-
-          {#if showFlagActions || canEdit || visibleActionButtons.length > 0}
-          <div class="action-row">
-            <div class="action-badges">
-              {#if showFlagActions}
-                <button
-                  type="button"
-                  class="action-badge favorite"
-                  class:active={isFavorite}
-                  class:animating={favoriteAnimating}
-                  disabled={!onFavoriteToggle}
-                  aria-label={isFavorite ? "Remove from favorites" : "Add to favorites"}
-                  onclick={(e: MouseEvent) => handleFavoriteClick(e)}
-                >
-                  <Heart class="h-4 w-4" />
-                </button>
-
-                {#if isNsfw}
-                  <span class="action-badge nsfw active" aria-label="NSFW">
-                    <Flame class="h-4 w-4" />
-                  </span>
-                {/if}
-
-                <button
-                  type="button"
-                  class="action-badge organized"
-                  class:active={isOrganized}
-                  class:animating={organizedAnimating}
-                  disabled={!onOrganizedToggle}
-                  aria-label={isOrganized ? "Mark as unorganized" : "Mark as organized"}
-                  onclick={(e: MouseEvent) => handleOrganizedClick(e)}
-                >
-                  <CheckCircle class="h-4 w-4" />
-                </button>
-              {/if}
-            </div>
-
-            {#if canEdit || visibleActionButtons.length > 0}
-              <div class="action-group">
-                {#if canEdit}
-                  {#if isEditingActiveTab}
-                    <EntityActionButton
-                      label="Editing"
-                      icon={PencilOff}
-                      active
-                      disabled={savingEdit}
-                      ariaLabel={cancelEditActionLabel}
-                      onClick={cancelEdit}
-                    />
-                  {:else}
-                    <EntityActionButton
-                      label="Edit"
-                      icon={Pencil}
-                      ariaLabel={editActionLabel}
-                      onClick={() => startEdit(activeTab ?? undefined)}
-                    />
-                  {/if}
-                {/if}
-                {#each visibleActionButtons as action (action.id)}
-                  {#if action.href && !action.disabled}
-                    <EntityActionButton
-                      label={action.label}
-                      icon={action.icon}
-                      href={action.href}
-                      active={action.active}
-                      variant={action.variant ?? "default"}
-                      iconClass={action.iconClass}
-                      iconFill={action.iconFill}
-                      ariaLabel={action.ariaLabel ?? action.label}
-                      title={action.title ?? action.ariaLabel ?? action.label}
-                    />
-                  {:else if action.disabled && action.disabledHint}
-                    <span class="entity-action-flyout-host">
-                      <EntityActionButton
-                        label={action.label}
-                        icon={action.icon}
-                        muted
-                        ariaDisabled
-                        variant={action.variant ?? "default"}
-                        iconClass={action.iconClass}
-                        iconFill={action.iconFill}
-                        ariaLabel={action.ariaLabel ?? action.label}
-                      />
-                      <span class="entity-action-flyout" role="tooltip">{action.disabledHint}</span>
-                    </span>
-                  {:else}
-                    <EntityActionButton
-                      label={action.label}
-                      icon={action.icon}
-                      active={action.active}
-                      variant={action.variant ?? "default"}
-                      disabled={action.disabled}
-                      iconClass={action.iconClass}
-                      iconFill={action.iconFill}
-                      ariaLabel={action.ariaLabel ?? action.label}
-                      title={action.title ?? action.ariaLabel ?? action.label}
-                      onClick={action.onClick}
-                    />
-                  {/if}
-                {/each}
-              </div>
-            {/if}
-          </div>
-          {/if}
+          <EntityDetailHeroControls
+            actionButtons={visibleActionButtons}
+            {canEdit}
+            {cancelEditActionLabel}
+            {card}
+            {editActionLabel}
+            editing={isEditingActiveTab}
+            {heroBadges}
+            {isFavorite}
+            {isNsfw}
+            {isOrganized}
+            onCancelEdit={cancelEdit}
+            {onFavoriteToggle}
+            {onOrganizedToggle}
+            {onRatingChange}
+            onStartEdit={() => startEdit(activeTab ?? undefined)}
+            {ratingBusy}
+            {savingEdit}
+            {showFlagActions}
+          />
         </div>
       </div>
     {/snippet}
@@ -1931,34 +1753,6 @@
     align-self: flex-end;
   }
 
-  /* ── Action row (flags left, actions right) ──────────── */
-
-  .action-row {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: 0.5rem;
-    width: 100%;
-  }
-
-  .action-badges {
-    display: flex;
-    align-items: center;
-    gap: 0.35rem;
-  }
-
-  .action-group {
-    display: flex;
-    flex: 1 1 auto;
-    flex-wrap: wrap;
-    min-width: 0;
-    align-items: center;
-    justify-content: flex-end;
-    gap: 0.35rem;
-    margin-left: auto;
-  }
-
   @media (max-width: 480px) {
     .hero-content {
       flex-direction: column;
@@ -2003,104 +1797,6 @@
       grid-area: meta;
     }
 
-    .rating-row {
-      grid-area: rating;
-    }
-
-    .position-badges {
-      grid-area: badges;
-      justify-self: stretch;
-      justify-content: flex-start;
-      width: 100%;
-    }
-
-    .action-row {
-      grid-area: actions;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 0.35rem;
-      width: 100%;
-    }
-
-    .action-badges {
-      justify-self: start;
-    }
-
-    .action-group {
-      display: flex;
-      flex-wrap: wrap;
-      justify-content: flex-end;
-      gap: 0.25rem;
-      width: auto;
-      margin-left: auto;
-    }
-
-  }
-
-  .action-badge {
-    display: grid;
-    place-items: center;
-    width: 1.75rem;
-    height: 1.75rem;
-    padding: 0;
-    border: 1px solid var(--detail-border);
-    border-radius: var(--radius-xs, 4px);
-    background: rgba(255, 255, 255, 0.04);
-    color: var(--detail-text-disabled);
-    cursor: pointer;
-    transition: color 0.2s, border-color 0.2s, box-shadow 0.2s, transform 0.2s;
-  }
-
-  .action-badge:focus {
-    outline: none;
-  }
-
-  .action-badge:disabled {
-    cursor: default;
-    opacity: 0.5;
-  }
-
-
-  /* Favorite — red when active */
-  .action-badge.favorite.active {
-    color: #e06070;
-    border-color: rgba(224, 96, 112, 0.5);
-    box-shadow: 0 0 10px rgba(224, 96, 112, 0.2);
-  }
-
-  .action-badge.favorite.animating {
-    animation: badge-pop 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-  }
-
-  /* NSFW — red fire, display only */
-  .action-badge.nsfw {
-    cursor: default;
-    color: #e06070;
-    border-color: rgba(224, 96, 112, 0.5);
-    box-shadow: 0 0 8px rgba(224, 96, 112, 0.15);
-    user-select: none;
-    -webkit-user-select: none;
-    pointer-events: none;
-  }
-
-  /* ── Action buttons (edit, identify) use global .entity-action-button ── */
-
-  /* Organized — green when active */
-  .action-badge.organized.active {
-    color: #80b898;
-    border-color: rgba(78, 138, 98, 0.5);
-    box-shadow: 0 0 10px rgba(78, 138, 98, 0.2);
-  }
-
-  .action-badge.organized.animating {
-    animation: badge-pop 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-  }
-
-  @keyframes badge-pop {
-    0% { transform: scale(1); }
-    40% { transform: scale(1.3); }
-    100% { transform: scale(1); }
   }
 
   .hero-title {
@@ -2173,143 +1869,6 @@
     border-radius: 999px;
     background: var(--color-text-muted, #8a93a6);
     opacity: 0.5;
-  }
-
-  /* ── Rating (in hero) ──────────────────────────────────── */
-
-  .rating-row {
-    display: flex;
-    gap: 0.15rem;
-  }
-
-  .rating-star {
-    display: grid;
-    height: 1.75rem;
-    width: 1.75rem;
-    place-items: center;
-    padding: 0;
-    border: none;
-    background: transparent;
-    color: var(--detail-text-disabled);
-    cursor: pointer;
-    transition: color 0.15s, filter 0.15s;
-  }
-
-  .rating-star.active {
-    color: var(--detail-accent);
-  }
-
-  .rating-star:focus {
-    outline: none;
-  }
-
-  .rating-star.star-fill {
-    animation: star-roll-in 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275) backwards;
-  }
-
-  .rating-star.star-clear {
-    animation: star-pop-out 0.3s ease-out;
-  }
-
-  @keyframes star-roll-in {
-    0% {
-      transform: scale(0) rotate(-90deg);
-      opacity: 0;
-    }
-    60% {
-      transform: scale(1.25) rotate(10deg);
-      opacity: 1;
-    }
-    100% {
-      transform: scale(1) rotate(0deg);
-      opacity: 1;
-    }
-  }
-
-  @keyframes star-pop-out {
-    0% {
-      transform: scale(1);
-    }
-    35% {
-      transform: scale(1.35);
-    }
-    100% {
-      transform: scale(1);
-    }
-  }
-
-  .rating-star:disabled {
-    cursor: default;
-    opacity: 0.7;
-  }
-
-  .position-badges {
-    display: flex;
-    align-items: center;
-    gap: 0.45rem;
-    flex-wrap: wrap;
-  }
-
-  /* A wanted placeholder's badge: neutral accent accent, shared by every entity page. */
-  :global(.hero-badge.wanted) {
-    color: var(--color-text-accent, #c7c9cc);
-    border-color: color-mix(in srgb, var(--color-text-accent, #c7c9cc) 45%, transparent);
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-  }
-
-  :global(.hero-badge) {
-    display: inline-flex;
-    align-items: center;
-    min-height: 1.45rem;
-    padding: 0.2rem 0.62rem;
-    border: 1px solid rgba(199, 201, 204, 0.38);
-    border-radius: var(--radius-xs);
-    background:
-      linear-gradient(135deg, rgba(199, 201, 204, 0.11), rgba(255, 255, 255, 0.03)),
-      color-mix(in srgb, var(--color-surface-2) 82%, var(--color-accent-900) 18%);
-    box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.06),
-      0 0 8px rgba(199, 201, 204, 0.08);
-    color: var(--color-accent-100);
-    font-family: var(--font-mono, "JetBrains Mono", monospace);
-    font-size: 0.68rem;
-    font-weight: 700;
-    letter-spacing: 0.08em;
-    line-height: 1;
-    text-transform: uppercase;
-    text-shadow: 0 0 6px rgba(199, 201, 204, 0.16);
-  }
-
-  .provider-identity-chip {
-    gap: 0.35rem;
-    min-width: 0;
-    max-width: 100%;
-    text-decoration: none;
-    text-transform: none;
-  }
-
-  a.provider-identity-chip {
-    transition: border-color 0.15s, box-shadow 0.15s, color 0.15s;
-  }
-
-  a.provider-identity-chip:hover,
-  a.provider-identity-chip:focus-visible {
-    border-color: color-mix(in srgb, var(--detail-accent) 68%, transparent);
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
-    color: var(--detail-accent);
-    outline: none;
-  }
-
-  .provider-identity-label {
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  :global(.provider-identity-link-icon) {
-    flex: 0 0 auto;
   }
 
   /* ── Detail Body ────────────────────────────────────────── */

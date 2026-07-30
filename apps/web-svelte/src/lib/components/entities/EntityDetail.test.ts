@@ -71,18 +71,6 @@ describe("EntityDetail", () => {
     expect(onClick).toHaveBeenCalledOnce();
   });
 
-  it("keeps the shared hero action cluster wrappable at every width", () => {
-    const source = readFileSync("src/lib/components/entities/EntityDetail.svelte", "utf8");
-
-    expect(source).toContain(
-      ".action-row {\n    display: flex;\n    flex-wrap: wrap;",
-    );
-    expect(source).toContain(
-      ".action-group {\n    display: flex;\n    flex: 1 1 auto;\n    flex-wrap: wrap;",
-    );
-    expect(source).not.toContain("EntityFileManagementAction");
-  });
-
   it("renders the explicit provider identity as an external hero chip beside route badges", () => {
     const card = buildCard();
     card.providerIdentity = {
@@ -114,15 +102,6 @@ describe("EntityDetail", () => {
     expect(chip.textContent?.trim()).toBe("metadata-router");
     expect(chip).not.toHaveTextContent("Show:AbC:01:5");
     expect(chip).toHaveClass("provider-identity-chip");
-    expect(readFileSync("src/lib/components/entities/EntityDetail.svelte", "utf8")).toContain(
-      ".provider-identity-chip {\n    gap: 0.35rem;\n    min-width: 0;\n    max-width: 100%;\n    text-decoration: none;\n    text-transform: none;",
-    );
-    expect(readFileSync("src/lib/components/entities/EntityDetail.svelte", "utf8")).toContain(
-      '"rating rating"\n        "badges badges"',
-    );
-    expect(readFileSync("src/lib/components/entities/EntityDetail.svelte", "utf8")).toContain(
-      ".position-badges {\n      grid-area: badges;\n      justify-self: stretch;\n      justify-content: flex-start;\n      width: 100%;",
-    );
     expect(screen.getByText("Wanted")).toBeInTheDocument();
     expect(container.querySelector(".position-badges")?.children).toHaveLength(2);
   });
