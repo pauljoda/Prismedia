@@ -57,6 +57,42 @@ public sealed class CodesManifestContractTests {
     }
 
     [Fact]
+    public void EntityKindManifestProjectsDefinitionOwnedNavigationAndSearch() {
+        var kinds = CodesManifest.Build().EntityKinds.ToDictionary(kind => kind.Code);
+        var searchableCodes = kinds.Values
+            .Where(kind => kind.Search is not null)
+            .OrderBy(kind => kind.Search!.Order)
+            .Select(kind => kind.Code)
+            .ToArray();
+
+        Assert.Equal([
+            EntityKind.Movie.ToCode(),
+            EntityKind.VideoSeries.ToCode(),
+            EntityKind.Video.ToCode(),
+            EntityKind.Person.ToCode(),
+            EntityKind.Studio.ToCode(),
+            EntityKind.Tag.ToCode(),
+            EntityKind.Gallery.ToCode(),
+            EntityKind.Book.ToCode(),
+            EntityKind.Image.ToCode(),
+            EntityKind.Collection.ToCode(),
+            EntityKind.AudioLibrary.ToCode(),
+            EntityKind.AudioTrack.ToCode()
+        ], searchableCodes);
+
+        Assert.True(kinds[EntityKind.Person.ToCode()].Search!.ExpandsRelationshipResults);
+        Assert.False(kinds[EntityKind.Movie.ToCode()].Search!.ExpandsRelationshipResults);
+
+        var season = kinds[EntityKind.VideoSeason.ToCode()].Navigation!;
+        Assert.Equal(EntityKind.VideoSeries.ToCode(), season.CanonicalBrowseKind);
+        Assert.Equal("series", season.DestinationId);
+        Assert.Equal("/series", season.BrowsePath);
+        Assert.Equal("/series/{parentId}/seasons/{id}", season.DetailPathTemplate);
+        Assert.Equal(EntityKind.VideoSeries.ToCode(), season.RequiredAncestorKind);
+        Assert.False(season.IsTopLevel);
+    }
+
+    [Fact]
     public void EntityKindManifestDerivesRequestSupportFromTheRequestKindRegistry() {
         var manifestKinds = CodesManifest.Build().EntityKinds
             .Where(kind => kind.SupportsRequests)

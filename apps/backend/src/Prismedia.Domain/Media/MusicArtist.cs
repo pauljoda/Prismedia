@@ -20,6 +20,8 @@ public sealed class MusicArtistEntityKindDefinition() : RootEntityKindDefinition
         EntityAccentHue.Violet,
         EntityAccentHue.Magenta,
         EntityArtworkFit.Cover),
+    new EntityKindNavigation(EntityKind.MusicArtist, "artists", "/artists", "/artists/{id}"),
+    search: null,
     static root => new MusicArtist(root.Id, root.Title),
     defaultCapabilities: static () => [new CapabilityCredits()],
     enumeratesIdentifyChildren: true,

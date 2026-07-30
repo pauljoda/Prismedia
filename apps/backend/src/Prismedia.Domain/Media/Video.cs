@@ -19,6 +19,8 @@ public sealed class VideoEntityKindDefinition() : EntityKindDefinition<Video>(
         EntityAccentHue.Red,
         EntityAccentHue.Orange,
         EntityArtworkFit.Cover),
+    new EntityKindNavigation(EntityKind.Video, "videos", "/videos", "/videos/{id}"),
+    new EntityKindSearch(2),
     defaultCapabilities: static () =>
     [
         new CapabilityPlayback(),

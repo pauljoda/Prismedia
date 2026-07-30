@@ -115,7 +115,55 @@ public static class EntityKindRegistry {
                 $"Entity kinds are missing definitions: {string.Join(", ", missing)}.");
         }
 
+        ValidateClientContracts(definitions);
+
         return definitions;
+    }
+
+    private static void ValidateClientContracts(IReadOnlyList<EntityKindDefinition> definitions) {
+        var byKind = definitions.ToDictionary(definition => definition.Kind);
+        var searchable = definitions.Where(definition => definition.Search is not null).ToArray();
+        RejectDuplicates(searchable, definition => definition.Search!.Order, "global-search order");
+
+        var expectedOrders = Enumerable.Range(0, searchable.Length).ToArray();
+        var actualOrders = searchable.Select(definition => definition.Search!.Order).Order().ToArray();
+        if (!expectedOrders.SequenceEqual(actualOrders)) {
+            throw new InvalidOperationException(
+                $"Entity kind global-search orders must be contiguous from zero; found [{string.Join(", ", actualOrders)}].");
+        }
+
+        foreach (var definition in definitions) {
+            var navigation = definition.Navigation;
+            if (definition.Search is not null && (navigation is null || !navigation.IsTopLevel)) {
+                throw new InvalidOperationException(
+                    $"Searchable entity kind '{definition.Code}' must declare a top-level detail route.");
+            }
+
+            if (navigation is null) {
+                continue;
+            }
+
+            var canonical = byKind[navigation.CanonicalBrowseKind];
+            var canonicalNavigation = canonical.Navigation;
+            if (canonicalNavigation is null || canonicalNavigation.CanonicalBrowseKind != canonical.Kind) {
+                throw new InvalidOperationException(
+                    $"Entity kind '{definition.Code}' targets '{canonical.Code}', which is not a canonical browse kind.");
+            }
+
+            if (!navigation.DestinationId.Equals(canonicalNavigation.DestinationId, StringComparison.Ordinal) ||
+                !navigation.BrowsePath.Equals(canonicalNavigation.BrowsePath, StringComparison.Ordinal)) {
+                throw new InvalidOperationException(
+                    $"Entity kind '{definition.Code}' must share destination '{canonicalNavigation.DestinationId}' and " +
+                    $"browse path '{canonicalNavigation.BrowsePath}' with canonical kind '{canonical.Code}'.");
+            }
+
+            if (navigation.RequiredAncestorKind is { } requiredAncestor &&
+                requiredAncestor != navigation.CanonicalBrowseKind) {
+                throw new InvalidOperationException(
+                    $"Entity kind '{definition.Code}' route requires '{requiredAncestor}', but browses through " +
+                    $"'{navigation.CanonicalBrowseKind}'.");
+            }
+        }
     }
 
     private static void RejectDuplicateStructuralCounts(EntityKindDefinition definition) {

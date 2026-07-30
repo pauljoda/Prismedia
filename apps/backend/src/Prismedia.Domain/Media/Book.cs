@@ -23,6 +23,8 @@ public sealed class BookEntityKindDefinition() : EntityKindDefinition<Book>(
         EntityAccentHue.Cyan,
         EntityAccentHue.Blue,
         EntityArtworkFit.Cover),
+    new EntityKindNavigation(EntityKind.Book, "books", "/books", "/books/{id}"),
+    new EntityKindSearch(7),
     defaultCapabilities: static () => [new CapabilityProgress(), new CapabilityPlayback()],
     enumeratesIdentifyChildren: true,
     supportsFileDeletion: true,

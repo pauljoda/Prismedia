@@ -1,6 +1,9 @@
 import { fetchEntities, type EntityCard, type EntityListResponse } from "$lib/api/entities";
 import type { ListEntitiesParams } from "$lib/api/generated/model";
-import { ENTITY_KIND, labelForEntityKind } from "$lib/entities/entity-codes";
+import {
+  ENTITY_KINDS_EXPANDING_RELATED_SEARCH_RESULTS,
+  labelForEntityKind,
+} from "$lib/entities/entity-codes";
 import { resolveEntityHref } from "$lib/entities/entity-routes";
 import {
   ALL_SEARCH_KINDS,
@@ -15,11 +18,9 @@ const DEFAULT_DIRECT_LIMIT = 80;
 const DEFAULT_RELATED_SOURCE_LIMIT = 4;
 const DEFAULT_RELATED_LIMIT_PER_SOURCE = 30;
 
-const RELATIONSHIP_SOURCE_KINDS = new Set<SearchEntityKind>([
-  ENTITY_KIND.person,
-  ENTITY_KIND.studio,
-  ENTITY_KIND.tag,
-]);
+const RELATIONSHIP_SOURCE_KINDS = new Set<SearchEntityKind>(
+  ENTITY_KINDS_EXPANDING_RELATED_SEARCH_RESULTS,
+);
 
 export type EntitySearchFetcher = (params?: ListEntitiesParams) => Promise<EntityListResponse>;
 

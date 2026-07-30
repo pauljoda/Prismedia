@@ -21,6 +21,8 @@ public sealed class AudioTrackEntityKindDefinition() : EntityKindDefinition<Audi
         EntityAccentHue.Violet,
         EntityAccentHue.Magenta,
         EntityArtworkFit.Cover),
+    new EntityKindNavigation(EntityKind.AudioTrack, "tracks", "/tracks", "/audio/tracks/{id}"),
+    new EntityKindSearch(11),
     defaultCapabilities: static () => [new CapabilityPlayback()],
     supportsFileDeletion: true,
     autoIdentifySelector: AutoIdentifySelectorKind.Audio) {

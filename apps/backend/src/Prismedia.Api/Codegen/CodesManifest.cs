@@ -16,6 +16,26 @@ public sealed record CodeEntry(string Name, string Code);
 /// <param name="Value">Constant value.</param>
 public sealed record ConstantEntry(string Name, string Value);
 
+/// <summary>Cross-client navigation metadata owned by an Entity-kind definition.</summary>
+/// <param name="CanonicalBrowseKind">Entity kind represented by the canonical list destination.</param>
+/// <param name="DestinationId">Stable native/app-shell destination identifier.</param>
+/// <param name="BrowsePath">Canonical web browse path.</param>
+/// <param name="DetailPathTemplate">Optional web detail path template.</param>
+/// <param name="RequiredAncestorKind">Ancestor kind required to resolve a nested detail route.</param>
+/// <param name="IsTopLevel">Whether detail navigation requires no ancestor context.</param>
+public sealed record EntityKindNavigationManifestEntry(
+    string CanonicalBrowseKind,
+    string DestinationId,
+    string BrowsePath,
+    string? DetailPathTemplate,
+    string? RequiredAncestorKind,
+    bool IsTopLevel);
+
+/// <summary>Global-search behavior owned by an Entity-kind definition.</summary>
+/// <param name="Order">Stable filter and result-section order.</param>
+/// <param name="ExpandsRelationshipResults">Whether direct matches hydrate related entities.</param>
+public sealed record EntityKindSearchManifestEntry(int Order, bool ExpandsRelationshipResults);
+
 /// <summary>Rich metadata for an entity kind, used to generate display labels on the frontend.</summary>
 /// <param name="Code">Stable kind code.</param>
 /// <param name="DisplayName">Singular display name.</param>
@@ -29,6 +49,8 @@ public sealed record ConstantEntry(string Name, string Value);
 /// <param name="PrimaryAccent">Primary shared spectrum hue code.</param>
 /// <param name="SecondaryAccent">Secondary shared spectrum hue code.</param>
 /// <param name="ArtworkFit">Default artwork scaling behavior.</param>
+/// <param name="Navigation">Cross-client navigation contract, when reachable.</param>
+/// <param name="Search">Global-search behavior, when included.</param>
 /// <param name="SupportsFileDeletion">Whether this kind may root the managed delete-files workflow.</param>
 /// <param name="SupportsRequests">Whether a committable request descriptor materializes this Entity kind.</param>
 /// <param name="EnumeratesIdentifyChildren">Whether this kind is an identify container whose local children are enumerated for cascade identify.</param>
@@ -45,6 +67,8 @@ public sealed record EntityKindManifestEntry(
     string PrimaryAccent,
     string SecondaryAccent,
     string ArtworkFit,
+    EntityKindNavigationManifestEntry? Navigation,
+    EntityKindSearchManifestEntry? Search,
     bool SupportsFileDeletion,
     bool SupportsRequests,
     bool EnumeratesIdentifyChildren);
@@ -158,6 +182,18 @@ public sealed record CodesManifest(
                 descriptor.Presentation.PrimaryAccent.ToCode(),
                 descriptor.Presentation.SecondaryAccent.ToCode(),
                 descriptor.Presentation.ArtworkFit.ToCode(),
+                descriptor.Navigation is { } navigation
+                    ? new EntityKindNavigationManifestEntry(
+                        navigation.CanonicalBrowseKind.ToCode(),
+                        navigation.DestinationId,
+                        navigation.BrowsePath,
+                        navigation.DetailPathTemplate,
+                        navigation.RequiredAncestorKind?.ToCode(),
+                        navigation.IsTopLevel)
+                    : null,
+                descriptor.Search is { } search
+                    ? new EntityKindSearchManifestEntry(search.Order, search.ExpandsRelationshipResults)
+                    : null,
                 descriptor.SupportsFileDeletion,
                 requestableKinds.Contains(descriptor.Kind),
                 descriptor.EnumeratesIdentifyChildren))

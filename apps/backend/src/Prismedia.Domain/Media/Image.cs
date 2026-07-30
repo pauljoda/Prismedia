@@ -19,6 +19,8 @@ public sealed class ImageEntityKindDefinition() : RootEntityKindDefinition<Image
         EntityAccentHue.Blue,
         EntityAccentHue.Violet,
         EntityArtworkFit.Cover),
+    new EntityKindNavigation(EntityKind.Image, "images", "/images", "/images/{id}"),
+    new EntityKindSearch(8),
     static root => new Image(root.Id, root.Title),
     supportsFileDeletion: true,
     autoIdentifySelector: AutoIdentifySelectorKind.Image) {

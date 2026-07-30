@@ -29,6 +29,8 @@ public abstract class EntityKindDefinition {
         EntityKindCategory category,
         EntityStorageShape storageShape,
         EntityKindPresentation presentation,
+        EntityKindNavigation? navigation,
+        EntityKindSearch? search,
         Type? clrType = null,
         Func<IReadOnlyList<EntityCapability>>? defaultCapabilities = null,
         bool enumeratesIdentifyChildren = false,
@@ -42,6 +44,8 @@ public abstract class EntityKindDefinition {
         Category = category;
         StorageShape = storageShape;
         Presentation = presentation ?? throw new ArgumentNullException(nameof(presentation));
+        Navigation = navigation;
+        Search = search;
         ClrType = clrType;
         _defaultCapabilities = defaultCapabilities ?? EmptyCapabilities;
         EnumeratesIdentifyChildren = enumeratesIdentifyChildren;
@@ -70,6 +74,14 @@ public abstract class EntityKindDefinition {
 
     /// <summary>Shared platform-neutral presentation metadata for this kind.</summary>
     public EntityKindPresentation Presentation { get; }
+
+    /// <summary>
+    /// Cross-client navigation contract, or null when the kind has no independently reachable UI.
+    /// </summary>
+    public EntityKindNavigation? Navigation { get; }
+
+    /// <summary>Global-search exposure, or null when the kind is intentionally not searchable.</summary>
+    public EntityKindSearch? Search { get; }
 
     /// <summary>Concrete domain entity type, or null for a protocol-only kind.</summary>
     public Type? ClrType { get; }
@@ -200,6 +212,8 @@ public abstract class EntityKindDefinition<TEntity> : EntityKindDefinition
         EntityKindCategory category,
         EntityStorageShape storageShape,
         EntityKindPresentation presentation,
+        EntityKindNavigation? navigation,
+        EntityKindSearch? search,
         Func<IReadOnlyList<EntityCapability>>? defaultCapabilities = null,
         bool enumeratesIdentifyChildren = false,
         bool supportsFileDeletion = false,
@@ -213,6 +227,8 @@ public abstract class EntityKindDefinition<TEntity> : EntityKindDefinition
             category,
             storageShape,
             presentation,
+            navigation,
+            search,
             typeof(TEntity),
             defaultCapabilities,
             enumeratesIdentifyChildren,
@@ -319,6 +335,8 @@ public abstract class RootEntityKindDefinition<TEntity> : EntityKindDefinition<T
         EntityKindCategory category,
         EntityStorageShape storageShape,
         EntityKindPresentation presentation,
+        EntityKindNavigation? navigation,
+        EntityKindSearch? search,
         Func<EntityRootData, TEntity> factory,
         Func<IReadOnlyList<EntityCapability>>? defaultCapabilities = null,
         bool enumeratesIdentifyChildren = false,
@@ -333,6 +351,8 @@ public abstract class RootEntityKindDefinition<TEntity> : EntityKindDefinition<T
             category,
             storageShape,
             presentation,
+            navigation,
+            search,
             defaultCapabilities,
             enumeratesIdentifyChildren,
             supportsFileDeletion,

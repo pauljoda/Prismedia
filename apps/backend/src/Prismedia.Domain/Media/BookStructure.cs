@@ -22,6 +22,13 @@ public sealed class BookVolumeEntityKindDefinition() : RootEntityKindDefinition<
         EntityAccentHue.Cyan,
         EntityAccentHue.Blue,
         EntityArtworkFit.Cover),
+    new EntityKindNavigation(
+        EntityKind.Book,
+        "books",
+        "/books",
+        "/books/{parentId}/volumes/{id}",
+        EntityKind.Book),
+    search: null,
     static root => new BookVolume(
         root.Id,
         root.Title,
@@ -59,6 +66,13 @@ public sealed class BookChapterEntityKindDefinition() : EntityKindDefinition<Boo
         EntityAccentHue.Cyan,
         EntityAccentHue.Blue,
         EntityArtworkFit.Cover),
+    new EntityKindNavigation(
+        EntityKind.Book,
+        "books",
+        "/books",
+        "/books/{parentId}/chapters/{id}",
+        EntityKind.Book),
+    search: null,
     defaultCapabilities: static () =>
     [
         new CapabilityFingerprints(),
@@ -96,6 +110,8 @@ public sealed class BookPageEntityKindDefinition() : RootEntityKindDefinition<Bo
         EntityAccentHue.Cyan,
         EntityAccentHue.Blue,
         EntityArtworkFit.Cover),
+    new EntityKindNavigation(EntityKind.Book, "books", "/books", detailPathTemplate: null),
+    search: null,
     static root => new BookPage(
         root.Id,
         root.Title,

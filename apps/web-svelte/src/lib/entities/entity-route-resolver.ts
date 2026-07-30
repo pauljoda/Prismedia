@@ -1,5 +1,5 @@
 import { fetchEntity } from "$lib/api/entities";
-import { ENTITY_KIND, isEntityKindCode, resolveEntityHref } from "./entity-codes";
+import { ENTITY_KIND_DEFINITIONS, isEntityKindCode, resolveEntityHref } from "./entity-codes";
 
 export interface EntityRouteRecord {
   id: string;
@@ -22,37 +22,46 @@ async function resolveEntityHrefForRecord(
   fetchRecord: EntityRouteFetcher,
   seen: Set<string>,
 ): Promise<string | null> {
-  if (entity.kind === ENTITY_KIND.bookPage) {
+  if (!isEntityKindCode(entity.kind)) return null;
+  const navigation = ENTITY_KIND_DEFINITIONS[entity.kind].navigation;
+  if (!navigation) return null;
+
+  if (!navigation.detailPathTemplate) {
     const parent = await parentRecord(entity, fetchRecord, seen);
     return parent ? resolveEntityHrefForRecord(parent, fetchRecord, seen) : null;
   }
 
-  if (entity.kind === ENTITY_KIND.bookVolume) {
-    const book = await parentRecord(entity, fetchRecord, seen);
-    return book?.kind === ENTITY_KIND.book ? `/books/${book.id}/volumes/${entity.id}` : null;
+  if (!navigation.requiredAncestorKind) {
+    return resolveEntityHref(entity.kind, entity.id) ?? null;
   }
 
-  if (entity.kind === ENTITY_KIND.bookChapter) {
-    const parent = await parentRecord(entity, fetchRecord, seen);
+  const ancestor = await ancestorRecord(
+    entity,
+    navigation.requiredAncestorKind,
+    fetchRecord,
+    seen,
+  );
+  return ancestor
+    ? resolveEntityHref(entity.kind, entity.id, {
+        kind: navigation.requiredAncestorKind,
+        id: ancestor.id,
+      }) ?? null
+    : null;
+}
+
+async function ancestorRecord(
+  entity: EntityRouteRecord,
+  requiredKind: string,
+  fetchRecord: EntityRouteFetcher,
+  seen: Set<string>,
+): Promise<EntityRouteRecord | null> {
+  let current = entity;
+  while (true) {
+    const parent = await parentRecord(current, fetchRecord, seen);
     if (!parent) return null;
-    if (parent.kind === ENTITY_KIND.book) return `/books/${parent.id}/chapters/${entity.id}`;
-    if (parent.kind !== ENTITY_KIND.bookVolume) return null;
-
-    const book = await parentRecord(parent, fetchRecord, seen);
-    return book?.kind === ENTITY_KIND.book ? `/books/${book.id}/chapters/${entity.id}` : null;
+    if (parent.kind === requiredKind) return parent;
+    current = parent;
   }
-
-  if (entity.kind === ENTITY_KIND.videoSeason) {
-    const parent = await parentRecord(entity, fetchRecord, seen);
-    if (!parent) return null;
-    if (!isEntityKindCode(parent.kind)) return null;
-    return resolveEntityHref(entity.kind, entity.id, {
-      kind: parent.kind,
-      id: parent.id,
-    }) ?? null;
-  }
-
-  return resolveEntityHref(entity.kind, entity.id) ?? null;
 }
 
 async function parentRecord(

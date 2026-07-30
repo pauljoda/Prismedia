@@ -20,6 +20,8 @@ public sealed class AudioLibraryEntityKindDefinition() : RootEntityKindDefinitio
         EntityAccentHue.Violet,
         EntityAccentHue.Magenta,
         EntityArtworkFit.Cover),
+    new EntityKindNavigation(EntityKind.AudioLibrary, "albums", "/audio", "/audio/{id}"),
+    new EntityKindSearch(10),
     static root => new AudioLibrary(root.Id, root.Title),
     enumeratesIdentifyChildren: true,
     supportsFileDeletion: true,

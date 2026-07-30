@@ -20,6 +20,8 @@ public sealed class BookAuthorEntityKindDefinition() : RootEntityKindDefinition<
         EntityAccentHue.Cyan,
         EntityAccentHue.Blue,
         EntityArtworkFit.Cover),
+    new EntityKindNavigation(EntityKind.BookAuthor, "authors", "/authors", "/authors/{id}"),
+    search: null,
     static root => new BookAuthor(root.Id, root.Title),
     defaultCapabilities: static () => [new CapabilityCredits()],
     enumeratesIdentifyChildren: true,

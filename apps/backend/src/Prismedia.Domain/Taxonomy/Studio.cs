@@ -19,6 +19,8 @@ public sealed class StudioEntityKindDefinition() : RootEntityKindDefinition<Stud
         EntityAccentHue.Orange,
         EntityAccentHue.Magenta,
         EntityArtworkFit.Contain),
+    new EntityKindNavigation(EntityKind.Studio, "studios", "/studios", "/studios/{id}"),
+    new EntityKindSearch(4, expandsRelationshipResults: true),
     static root => new Studio(root.Id, root.Title),
     supportsManualManagement: true);
 

@@ -189,12 +189,28 @@ async function main() {
   const entityKindFields = [
     "code", "displayName", "groupLabel", "category", "storageShape", "icon", "referenceIcon",
     "thumbnailWidth", "thumbnailHeight", "primaryAccent", "secondaryAccent", "artworkFit",
-    "supportsFileDeletion", "supportsRequests", "enumeratesIdentifyChildren",
+    "navigation", "search", "supportsFileDeletion", "supportsRequests", "enumeratesIdentifyChildren",
   ];
   for (const kind of manifest.entityKinds ?? []) {
     const missing = entityKindFields.filter((field) => !Object.hasOwn(kind, field));
     if (missing.length > 0) {
       throw new Error(`Entity kind '${kind.code ?? "unknown"}' definition is missing: ${missing.join(", ")}`);
+    }
+    if (kind.navigation !== null) {
+      const missingNavigation = [
+        "canonicalBrowseKind", "destinationId", "browsePath", "detailPathTemplate",
+        "requiredAncestorKind", "isTopLevel",
+      ].filter((field) => !Object.hasOwn(kind.navigation, field));
+      if (missingNavigation.length > 0) {
+        throw new Error(`Entity kind '${kind.code}' navigation is missing: ${missingNavigation.join(", ")}`);
+      }
+    }
+    if (kind.search !== null) {
+      const missingSearch = ["order", "expandsRelationshipResults"]
+        .filter((field) => !Object.hasOwn(kind.search, field));
+      if (missingSearch.length > 0) {
+        throw new Error(`Entity kind '${kind.code}' search is missing: ${missingSearch.join(", ")}`);
+      }
     }
   }
   const entityKindEntries = (manifest.entityKinds ?? []).map((kind) =>
@@ -204,9 +220,18 @@ async function main() {
     `referenceIcon: ${lit(kind.referenceIcon)}, thumbnailWidth: ${lit(kind.thumbnailWidth)}, ` +
     `thumbnailHeight: ${lit(kind.thumbnailHeight)}, primaryAccent: ${lit(kind.primaryAccent)}, ` +
     `secondaryAccent: ${lit(kind.secondaryAccent)}, artworkFit: ${lit(kind.artworkFit)} }, ` +
+    `navigation: ${lit(kind.navigation)}, search: ${lit(kind.search)}, ` +
     `supportsFileDeletion: ${lit(kind.supportsFileDeletion)}, supportsRequests: ${lit(kind.supportsRequests)}, ` +
     `enumeratesIdentifyChildren: ${lit(kind.enumeratesIdentifyChildren)} },`
   ).join("\n");
+  const searchableKinds = (manifest.entityKinds ?? [])
+    .filter((kind) => kind.search !== null)
+    .sort((left, right) => left.search.order - right.search.order);
+  const searchKindEntries = searchableKinds.map((kind) => `  ${lit(kind.code)},`).join("\n");
+  const relationshipSearchKindEntries = searchableKinds
+    .filter((kind) => kind.search.expandsRelationshipResults)
+    .map((kind) => `  ${lit(kind.code)},`)
+    .join("\n");
   sections.push(
     `export interface EntityKindPresentationManifestEntry {\n` +
       `  icon: EntityKindIconCode;\n` +
@@ -217,6 +242,18 @@ async function main() {
       `  secondaryAccent: EntityAccentHueCode;\n` +
       `  artworkFit: EntityArtworkFitCode;\n` +
       `}\n\n` +
+      `export interface EntityKindNavigationManifestEntry {\n` +
+      `  canonicalBrowseKind: EntityKindCode;\n` +
+      `  destinationId: string;\n` +
+      `  browsePath: string;\n` +
+      `  detailPathTemplate: string | null;\n` +
+      `  requiredAncestorKind: EntityKindCode | null;\n` +
+      `  isTopLevel: boolean;\n` +
+      `}\n\n` +
+      `export interface EntityKindSearchManifestEntry {\n` +
+      `  order: number;\n` +
+      `  expandsRelationshipResults: boolean;\n` +
+      `}\n\n` +
       `export interface EntityKindDefinitionManifestEntry {\n` +
       `  kind: EntityKindCode;\n` +
       `  displayName: string;\n` +
@@ -224,12 +261,18 @@ async function main() {
       `  category: string;\n` +
       `  storageShape: string;\n` +
       `  presentation: EntityKindPresentationManifestEntry;\n` +
+      `  navigation: EntityKindNavigationManifestEntry | null;\n` +
+      `  search: EntityKindSearchManifestEntry | null;\n` +
       `  supportsFileDeletion: boolean;\n` +
       `  supportsRequests: boolean;\n` +
       `  enumeratesIdentifyChildren: boolean;\n` +
       `}\n\n` +
       `export const ENTITY_KIND_DEFINITIONS: Record<EntityKindCode, EntityKindDefinitionManifestEntry> = {\n` +
-      `${entityKindEntries}\n};\n`,
+      `${entityKindEntries}\n};\n\n` +
+      `export const ENTITY_KINDS_IN_GLOBAL_SEARCH = [\n${searchKindEntries}\n] as const;\n\n` +
+      `export type GlobalSearchEntityKindCode = (typeof ENTITY_KINDS_IN_GLOBAL_SEARCH)[number];\n\n` +
+      `export const ENTITY_KINDS_EXPANDING_RELATED_SEARCH_RESULTS = [\n` +
+      `${relationshipSearchKindEntries}\n] as const satisfies readonly GlobalSearchEntityKindCode[];\n`,
   );
 
   // Complete frontend request-kind behavior, projected directly from RequestKindRegistry. Discover,

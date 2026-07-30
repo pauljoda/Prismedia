@@ -19,6 +19,8 @@ public sealed class MovieEntityKindDefinition() : EntityKindDefinition<Movie>(
         EntityAccentHue.Orange,
         EntityAccentHue.Yellow,
         EntityArtworkFit.Cover),
+    new EntityKindNavigation(EntityKind.Movie, "movies", "/movies", "/movies/{id}"),
+    new EntityKindSearch(0),
     defaultCapabilities: static () =>
     [
         new CapabilityDescription(),

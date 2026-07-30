@@ -22,6 +22,8 @@ public sealed class VideoSeriesEntityKindDefinition() : EntityKindDefinition<Vid
         EntityAccentHue.Yellow,
         EntityAccentHue.Green,
         EntityArtworkFit.Cover),
+    new EntityKindNavigation(EntityKind.VideoSeries, "series", "/series", "/series/{id}"),
+    new EntityKindSearch(1),
     defaultCapabilities: static () => [new CapabilityCredits()],
     enumeratesIdentifyChildren: true,
     supportsFileDeletion: true,
@@ -73,6 +75,13 @@ public sealed class VideoSeasonEntityKindDefinition() : RootEntityKindDefinition
         EntityAccentHue.Yellow,
         EntityAccentHue.Green,
         EntityArtworkFit.Cover),
+    new EntityKindNavigation(
+        EntityKind.VideoSeries,
+        "series",
+        "/series",
+        "/series/{parentId}/seasons/{id}",
+        EntityKind.VideoSeries),
+    search: null,
     static root => new VideoSeason(
         root.Id,
         root.Title,

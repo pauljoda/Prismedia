@@ -23,6 +23,8 @@ public sealed class GalleryEntityKindDefinition() : EntityKindDefinition<Gallery
         EntityAccentHue.Green,
         EntityAccentHue.Cyan,
         EntityArtworkFit.Cover),
+    new EntityKindNavigation(EntityKind.Gallery, "galleries", "/galleries", "/galleries/{id}"),
+    new EntityKindSearch(6),
     defaultCapabilities: static () => [new CapabilityCredits()],
     supportsFileDeletion: true,
     autoIdentifySelector: AutoIdentifySelectorKind.Gallery) {

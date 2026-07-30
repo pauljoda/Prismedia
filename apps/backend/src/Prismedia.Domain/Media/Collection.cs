@@ -22,7 +22,9 @@ public sealed class CollectionEntityKindDefinition()
             9,
             EntityAccentHue.Magenta,
             EntityAccentHue.Red,
-            EntityArtworkFit.Cover)),
+            EntityArtworkFit.Cover),
+        new EntityKindNavigation(EntityKind.Collection, "collections", "/collections", "/collections/{id}"),
+        new EntityKindSearch(9)),
       IEntityContainmentPolicy {
     private static readonly EntityKind[] AllowedKinds =
     [
