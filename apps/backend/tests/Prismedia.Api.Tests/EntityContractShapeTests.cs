@@ -154,6 +154,20 @@ public sealed class EntityContractShapeTests {
         Assert.Equal("string", schema.GetProperty("type").GetString());
     }
 
+    [Fact]
+    public async Task KindSpecificDetailAliasesAreDeprecatedInOpenApi() {
+        using var factory = new WebApplicationFactory<Program>();
+        using var client = factory.CreateClient();
+        using var document = JsonDocument.Parse(await client.GetStringAsync("/openapi/v1.json"));
+        var paths = document.RootElement.GetProperty("paths");
+
+        foreach (var path in new[] { "/api/movies/{id}", "/api/books/{id}", "/api/videos/{id}" }) {
+            Assert.True(paths.GetProperty(path).GetProperty("get").GetProperty("deprecated").GetBoolean());
+        }
+
+        Assert.False(paths.GetProperty("/api/entities/{id}").GetProperty("get").TryGetProperty("deprecated", out var canonical) && canonical.GetBoolean());
+    }
+
     private static Type[] DirectEntityContractInterfaces(Type type) {
         var interfaces = type.GetInterfaces();
         var inheritedInterfaces = interfaces
