@@ -11,7 +11,8 @@ public sealed class StudioEntityKindDefinition() : RootEntityKindDefinition<Stud
     "Studios",
     EntityKindCategory.Taxonomy,
     EntityStorageShape.None,
-    static root => new Studio(root.Id, root.Title));
+    static root => new Studio(root.Id, root.Title),
+    supportsManualManagement: true);
 
 /// <summary>
 /// Domain model for studio, publisher, label, or production-group taxonomy entities.

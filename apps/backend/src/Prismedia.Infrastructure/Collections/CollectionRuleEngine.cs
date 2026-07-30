@@ -5,6 +5,7 @@ using Npgsql;
 using NpgsqlTypes;
 using Prismedia.Application.Jobs.Ports;
 using Prismedia.Domain.Entities;
+using Prismedia.Domain.Media;
 using Prismedia.Infrastructure.Persistence;
 
 namespace Prismedia.Infrastructure.Collections;
@@ -22,18 +23,8 @@ public sealed class CollectionRuleEngine(PrismediaDbContext db) : ICollectionRul
         ["480p"] = (0, 719)
     };
 
-    private static readonly EntityKind[] TargetKinds =
-        [
-            EntityKind.Video,
-            EntityKind.Movie,
-            EntityKind.VideoSeries,
-            EntityKind.Gallery,
-            EntityKind.Image,
-            EntityKind.Book,
-            EntityKind.MusicArtist,
-            EntityKind.AudioLibrary,
-            EntityKind.AudioTrack
-        ];
+    private static readonly IEntityContainmentPolicy CollectionPolicy =
+        EntityKindRegistry.Get<CollectionEntityKindDefinition>();
 
     private static readonly Dictionary<string, HashSet<string>> FieldTargetKinds = new(StringComparer.Ordinal) {
         ["fileSize"] = Kinds(EntityKind.Video.ToCode(), EntityKind.Image.ToCode(), EntityKind.AudioTrack.ToCode()),
@@ -89,7 +80,7 @@ public sealed class CollectionRuleEngine(PrismediaDbContext db) : ICollectionRul
 
         var results = new List<CollectionRuleMatch>();
 
-        foreach (var kind in TargetKinds) {
+        foreach (var kind in CollectionPolicy.ContainableKinds) {
             var kindCode = EntityKindRegistry.ToCode(kind);
             var query = BuildQuery(group, kindCode, userId, allowedRootIds);
             if (query is null) continue;

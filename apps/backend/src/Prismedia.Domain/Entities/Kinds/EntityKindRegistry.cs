@@ -69,12 +69,23 @@ public static class EntityKindRegistry {
 
     /// <summary>Attempts to decode a storage code to a domain entity kind.</summary>
     public static bool TryGet(string code, out EntityKind kind) {
-        if (!string.IsNullOrWhiteSpace(code) && ByCode.TryGetValue(code.Trim(), out var definition)) {
+        if (TryDescribe(code, out var definition)) {
             kind = definition.Kind;
             return true;
         }
 
         kind = default;
+        return false;
+    }
+
+    /// <summary>Attempts to resolve the complete definition represented by a stable kind code.</summary>
+    public static bool TryDescribe(string? code, out EntityKindDefinition definition) {
+        if (!string.IsNullOrWhiteSpace(code) && ByCode.TryGetValue(code.Trim(), out var resolved)) {
+            definition = resolved;
+            return true;
+        }
+
+        definition = null!;
         return false;
     }
 

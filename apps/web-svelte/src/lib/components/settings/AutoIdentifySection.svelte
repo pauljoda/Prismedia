@@ -18,7 +18,11 @@
     cn,
     type SelectOption,
   } from "@prismedia/ui-svelte";
-  import { ENTITY_KIND_LABELS } from "$lib/api/generated/codes";
+  import {
+    AUTO_IDENTIFY_SELECTOR_KIND,
+    ENTITY_KIND_LABELS,
+    type AutoIdentifySelectorKindCode,
+  } from "$lib/api/generated/codes";
   import {
     providerCanIdentifyKind,
     providerIdsEqual,
@@ -45,15 +49,20 @@
 
   let { catalog, onCommit }: Props = $props();
 
-  // High-level media kinds auto identify can target. Codes match the backend selector kinds.
-  const ENTITY_KINDS: ReadonlyArray<{ key: string; label: string }> = [
-    { key: "movie", label: "Movies" },
-    { key: "video", label: "Videos" },
-    { key: "gallery", label: "Galleries" },
-    { key: "image", label: "Images" },
-    { key: "audio", label: "Audio" },
-    { key: "book", label: "Books" },
-  ];
+  const AUTO_IDENTIFY_LABELS = {
+    [AUTO_IDENTIFY_SELECTOR_KIND.video]: "Videos",
+    [AUTO_IDENTIFY_SELECTOR_KIND.gallery]: "Galleries",
+    [AUTO_IDENTIFY_SELECTOR_KIND.image]: "Images",
+    [AUTO_IDENTIFY_SELECTOR_KIND.audio]: "Audio",
+    [AUTO_IDENTIFY_SELECTOR_KIND.book]: "Books",
+  } satisfies Record<AutoIdentifySelectorKindCode, string>;
+
+  // The backend owns the selectable family codes. This presentation-only label map is exhaustive,
+  // so adding a family fails type-checking here until the UI gives it a human name.
+  const ENTITY_KINDS = Object.values(AUTO_IDENTIFY_SELECTOR_KIND).map((key) => ({
+    key,
+    label: AUTO_IDENTIFY_LABELS[key],
+  }));
 
   let providers = $state<PluginProvider[]>([]);
   let loadingProviders = $state(true);

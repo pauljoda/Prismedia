@@ -14,7 +14,8 @@ public sealed class MusicArtistEntityKindDefinition() : RootEntityKindDefinition
     static root => new MusicArtist(root.Id, root.Title),
     defaultCapabilities: static () => [new CapabilityCredits()],
     enumeratesIdentifyChildren: true,
-    supportsFileDeletion: true) {
+    supportsFileDeletion: true,
+    autoIdentifySelector: AutoIdentifySelectorKind.Audio) {
     /// <inheritdoc />
     public override IReadOnlyList<RequestKindDescriptor> RequestKinds =>
     [

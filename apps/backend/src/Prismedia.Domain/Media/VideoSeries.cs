@@ -15,7 +15,8 @@ public sealed class VideoSeriesEntityKindDefinition() : EntityKindDefinition<Vid
     EntityStorageShape.Folder,
     defaultCapabilities: static () => [new CapabilityCredits()],
     enumeratesIdentifyChildren: true,
-    supportsFileDeletion: true) {
+    supportsFileDeletion: true,
+    autoIdentifySelector: AutoIdentifySelectorKind.Video) {
     /// <inheritdoc />
     public override IReadOnlyList<Type> ProjectedCapabilityTypes => [typeof(SeriesMetadataDocumentCapability)];
 

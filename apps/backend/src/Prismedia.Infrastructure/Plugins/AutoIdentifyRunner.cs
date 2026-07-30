@@ -67,10 +67,12 @@ public sealed class AutoIdentifyRunner(
             return new AutoIdentifyResult(false, SkipReason: "child entity; its parent is identified instead");
         }
 
-        if (!AutoIdentifySelectorKinds.TryMap(entity.KindCode, out var selectorKind)) {
+        if (!EntityKindRegistry.TryDescribe(entity.KindCode, out var definition) ||
+            definition.AutoIdentifySelector is not { } selector) {
             return new AutoIdentifyResult(false, SkipReason: $"kind '{entity.KindCode}' is not auto-identifiable");
         }
 
+        var selectorKind = selector.ToCode();
         var selectedKinds = config.EntityKinds.ToHashSet(StringComparer.OrdinalIgnoreCase);
         if (!selectedKinds.Contains(selectorKind)) {
             return new AutoIdentifyResult(false, SkipReason: $"kind '{selectorKind}' not selected");

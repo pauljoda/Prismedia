@@ -280,7 +280,9 @@ public sealed class SettingsServiceTests {
 
         Assert.False(settings.Enabled);
         Assert.Empty(settings.Providers);
-        Assert.Equal(["video", "gallery", "image", "audio", "book"], settings.EntityKinds);
+        Assert.Equal(
+            Enum.GetValues<AutoIdentifySelectorKind>().Select(kind => kind.ToCode()),
+            settings.EntityKinds);
         // Stored as a 0–100 percentage (default 90), surfaced to backend consumers as a 0–1 fraction.
         Assert.Equal(0.9d, settings.ConfidenceThreshold, 3);
         Assert.True(settings.UnorganizedOnly);

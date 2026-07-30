@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- Auto Identify settings now use backend-defined media families, so movies and series correctly follow the Video selection instead of exposing an ineffective Movies-only toggle.
 - Updated the HTML parser used by metadata workflows to a patched release.
 - Web Book resume now converts native EPUB locators through the shared canonical cursor instead of opening Foliate at the first page.
 - Unified Book resume now carries forward a farther pre-migration audiobook position, preserves its within-chapter offset, and treats shared chapter boundaries as the start of the later chapter.

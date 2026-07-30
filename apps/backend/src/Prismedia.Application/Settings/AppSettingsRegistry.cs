@@ -23,6 +23,9 @@ public static class AppSettingsRegistry {
     private const string Hls = "hls";
     private const string TranscodeCache = "transcodeCache";
 
+    private static readonly IReadOnlyList<string> AutoIdentifySelectorCodes =
+        Enum.GetValues<AutoIdentifySelectorKind>().Select(kind => kind.ToCode()).ToArray();
+
     private static readonly IReadOnlyDictionary<string, SettingDefinition> ByKey;
 
     static AppSettingsRegistry() {
@@ -222,7 +225,7 @@ public static class AppSettingsRegistry {
                 25,
                 "Identify these kinds",
                 "Which kinds of scanned media auto identify applies to.",
-                ["video", "gallery", "image", "audio", "book"],
+                AutoIdentifySelectorCodes,
                 30),
             Decimal(
                 AppSettingKeys.AutoIdentifyConfidenceThreshold,

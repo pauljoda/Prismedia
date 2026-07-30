@@ -18,7 +18,8 @@ public sealed class MovieEntityKindDefinition() : EntityKindDefinition<Movie>(
         new CapabilitySource(),
         new CapabilityCredits()
     ],
-    supportsFileDeletion: true) {
+    supportsFileDeletion: true,
+    autoIdentifySelector: AutoIdentifySelectorKind.Video) {
     /// <inheritdoc />
     public override IReadOnlyList<RequestKindDescriptor> RequestKinds =>
     [

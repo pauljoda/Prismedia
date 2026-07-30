@@ -12,7 +12,8 @@ public sealed class ImageEntityKindDefinition() : RootEntityKindDefinition<Image
     EntityKindCategory.Media,
     EntityStorageShape.File,
     static root => new Image(root.Id, root.Title),
-    supportsFileDeletion: true);
+    supportsFileDeletion: true,
+    autoIdentifySelector: AutoIdentifySelectorKind.Image);
 
 /// <summary>
 /// Domain model for a single image entity.

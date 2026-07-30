@@ -5949,7 +5949,9 @@ export const getGetVideoUrl = (id: string,
 }
 
 /**
- * @summary Get Videos detail.
+ * Deprecated compatibility alias. Use GET /api/entities/{id}.
+ * @deprecated
+ * @summary Get Videos detail (deprecated; use GET /api/entities/{id}).
  */
 export const getVideo = async (id: string,
     params?: GetVideoParams, options?: RequestInit): Promise<getVideoResponse> => {
@@ -6372,7 +6374,9 @@ export const getGetMovieUrl = (id: string,
 }
 
 /**
- * @summary Get Movies detail.
+ * Deprecated compatibility alias. Use GET /api/entities/{id}.
+ * @deprecated
+ * @summary Get Movies detail (deprecated; use GET /api/entities/{id}).
  */
 export const getMovie = async (id: string,
     params?: GetMovieParams, options?: RequestInit): Promise<getMovieResponse> => {
@@ -6517,7 +6521,9 @@ export const getGetVideoSeriesUrl = (id: string,
 }
 
 /**
- * @summary Get Series detail.
+ * Deprecated compatibility alias. Use GET /api/entities/{id}.
+ * @deprecated
+ * @summary Get Series detail (deprecated; use GET /api/entities/{id}).
  */
 export const getVideoSeries = async (id: string,
     params?: GetVideoSeriesParams, options?: RequestInit): Promise<getVideoSeriesResponse> => {
@@ -6662,7 +6668,9 @@ export const getGetImageUrl = (id: string,
 }
 
 /**
- * @summary Get Images detail.
+ * Deprecated compatibility alias. Use GET /api/entities/{id}.
+ * @deprecated
+ * @summary Get Images detail (deprecated; use GET /api/entities/{id}).
  */
 export const getImage = async (id: string,
     params?: GetImageParams, options?: RequestInit): Promise<getImageResponse> => {
@@ -6807,7 +6815,9 @@ export const getGetGalleryUrl = (id: string,
 }
 
 /**
- * @summary Get Galleries detail.
+ * Deprecated compatibility alias. Use GET /api/entities/{id}.
+ * @deprecated
+ * @summary Get Galleries detail (deprecated; use GET /api/entities/{id}).
  */
 export const getGallery = async (id: string,
     params?: GetGalleryParams, options?: RequestInit): Promise<getGalleryResponse> => {
@@ -6952,7 +6962,9 @@ export const getGetBookUrl = (id: string,
 }
 
 /**
- * @summary Get Books detail.
+ * Deprecated compatibility alias. Use GET /api/entities/{id}.
+ * @deprecated
+ * @summary Get Books detail (deprecated; use GET /api/entities/{id}).
  */
 export const getBook = async (id: string,
     params?: GetBookParams, options?: RequestInit): Promise<getBookResponse> => {
@@ -7097,7 +7109,9 @@ export const getGetBookAuthorUrl = (id: string,
 }
 
 /**
- * @summary Get Authors detail.
+ * Deprecated compatibility alias. Use GET /api/entities/{id}.
+ * @deprecated
+ * @summary Get Authors detail (deprecated; use GET /api/entities/{id}).
  */
 export const getBookAuthor = async (id: string,
     params?: GetBookAuthorParams, options?: RequestInit): Promise<getBookAuthorResponse> => {
@@ -7242,7 +7256,9 @@ export const getGetMusicArtistUrl = (id: string,
 }
 
 /**
- * @summary Get Artists detail.
+ * Deprecated compatibility alias. Use GET /api/entities/{id}.
+ * @deprecated
+ * @summary Get Artists detail (deprecated; use GET /api/entities/{id}).
  */
 export const getMusicArtist = async (id: string,
     params?: GetMusicArtistParams, options?: RequestInit): Promise<getMusicArtistResponse> => {
@@ -7387,7 +7403,9 @@ export const getGetAudioLibraryUrl = (id: string,
 }
 
 /**
- * @summary Get Audio detail.
+ * Deprecated compatibility alias. Use GET /api/entities/{id}.
+ * @deprecated
+ * @summary Get Audio detail (deprecated; use GET /api/entities/{id}).
  */
 export const getAudioLibrary = async (id: string,
     params?: GetAudioLibraryParams, options?: RequestInit): Promise<getAudioLibraryResponse> => {
@@ -7532,7 +7550,9 @@ export const getGetAudioTrackUrl = (id: string,
 }
 
 /**
- * @summary Get Audio detail.
+ * Deprecated compatibility alias. Use GET /api/entities/{id}.
+ * @deprecated
+ * @summary Get Audio detail (deprecated; use GET /api/entities/{id}).
  */
 export const getAudioTrack = async (id: string,
     params?: GetAudioTrackParams, options?: RequestInit): Promise<getAudioTrackResponse> => {
@@ -7807,7 +7827,9 @@ export const getGetPersonUrl = (id: string,
 }
 
 /**
- * @summary Get Taxonomy detail.
+ * Deprecated compatibility alias. Use GET /api/entities/{id}.
+ * @deprecated
+ * @summary Get Taxonomy detail (deprecated; use GET /api/entities/{id}).
  */
 export const getPerson = async (id: string,
     params?: GetPersonParams, options?: RequestInit): Promise<getPersonResponse> => {
@@ -8039,7 +8061,9 @@ export const getGetStudioUrl = (id: string,
 }
 
 /**
- * @summary Get Taxonomy detail.
+ * Deprecated compatibility alias. Use GET /api/entities/{id}.
+ * @deprecated
+ * @summary Get Taxonomy detail (deprecated; use GET /api/entities/{id}).
  */
 export const getStudio = async (id: string,
     params?: GetStudioParams, options?: RequestInit): Promise<getStudioResponse> => {
@@ -8271,7 +8295,9 @@ export const getGetTagUrl = (id: string,
 }
 
 /**
- * @summary Get Taxonomy detail.
+ * Deprecated compatibility alias. Use GET /api/entities/{id}.
+ * @deprecated
+ * @summary Get Taxonomy detail (deprecated; use GET /api/entities/{id}).
  */
 export const getTag = async (id: string,
     params?: GetTagParams, options?: RequestInit): Promise<getTagResponse> => {
@@ -8460,7 +8486,9 @@ export const getGetCollectionUrl = (id: string,
 }
 
 /**
- * @summary Get Collections detail.
+ * Deprecated compatibility alias. Use GET /api/entities/{id}.
+ * @deprecated
+ * @summary Get Collections detail (deprecated; use GET /api/entities/{id}).
  */
 export const getCollection = async (id: string,
     params?: GetCollectionParams, options?: RequestInit): Promise<getCollectionResponse> => {

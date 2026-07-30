@@ -66,6 +66,34 @@ public sealed class EntityKindMetadataTests {
     }
 
     [Fact]
+    public void AutoIdentifySelectorsAreOwnedByTheirEntityKindDefinitions() {
+        var selectorsInUse = EntityKindRegistry.All
+            .Select(definition => definition.AutoIdentifySelector)
+            .OfType<AutoIdentifySelectorKind>()
+            .Distinct()
+            .Order()
+            .ToArray();
+
+        Assert.Equal(Enum.GetValues<AutoIdentifySelectorKind>(), selectorsInUse);
+        Assert.Equal(
+            AutoIdentifySelectorKind.Video,
+            EntityKindRegistry.Describe(EntityKind.Movie).AutoIdentifySelector);
+        Assert.Null(EntityKindRegistry.Describe(EntityKind.VideoSeason).AutoIdentifySelector);
+    }
+
+    [Fact]
+    public void UserManageableKindsAreOwnedByTheirEntityKindDefinitions() {
+        var manageable = EntityKindRegistry.All
+            .Where(definition => definition.SupportsManualManagement)
+            .ToArray();
+
+        Assert.NotEmpty(manageable);
+        Assert.All(manageable, definition => Assert.Equal(EntityKindCategory.Taxonomy, definition.Category));
+        Assert.True(EntityKindRegistry.Describe(EntityKind.Person).SupportsManualManagement);
+        Assert.False(EntityKindRegistry.Describe(EntityKind.Video).SupportsManualManagement);
+    }
+
+    [Fact]
     public void RegistryRoundTripsEveryKindByCodeAndType() {
         foreach (var kind in Enum.GetValues<EntityKind>()) {
             var descriptor = EntityKindRegistry.Describe(kind);

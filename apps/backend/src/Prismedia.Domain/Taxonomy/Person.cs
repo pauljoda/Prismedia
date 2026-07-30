@@ -13,7 +13,8 @@ public sealed class PersonEntityKindDefinition() : EntityKindDefinition<Person>(
     "People",
     EntityKindCategory.Taxonomy,
     EntityStorageShape.None,
-    defaultCapabilities: static () => [new CapabilityDates(), new CapabilityLifetime()]) {
+    defaultCapabilities: static () => [new CapabilityDates(), new CapabilityLifetime()],
+    supportsManualManagement: true) {
     /// <inheritdoc />
     public override IReadOnlyList<Type> ProjectedCapabilityTypes => [typeof(PersonProfileDocumentCapability)];
 

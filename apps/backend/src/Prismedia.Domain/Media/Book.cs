@@ -16,7 +16,8 @@ public sealed class BookEntityKindDefinition() : EntityKindDefinition<Book>(
     EntityStorageShape.Archive,
     defaultCapabilities: static () => [new CapabilityProgress(), new CapabilityPlayback()],
     enumeratesIdentifyChildren: true,
-    supportsFileDeletion: true) {
+    supportsFileDeletion: true,
+    autoIdentifySelector: AutoIdentifySelectorKind.Book) {
     /// <inheritdoc />
     public override IReadOnlyList<Type> ProjectedCapabilityTypes =>
         [typeof(BookMetadataDocumentCapability), typeof(CoverSelectionDocumentCapability)];

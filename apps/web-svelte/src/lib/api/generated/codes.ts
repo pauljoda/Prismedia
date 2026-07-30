@@ -114,6 +114,17 @@ export const AUDIO_QUALITY = {
 
 export type AudioQualityCode = (typeof AUDIO_QUALITY)[keyof typeof AUDIO_QUALITY];
 
+// source: enum AutoIdentifySelectorKind
+export const AUTO_IDENTIFY_SELECTOR_KIND = {
+  video: "video",
+  gallery: "gallery",
+  image: "image",
+  audio: "audio",
+  book: "book",
+} as const;
+
+export type AutoIdentifySelectorKindCode = (typeof AUTO_IDENTIFY_SELECTOR_KIND)[keyof typeof AUTO_IDENTIFY_SELECTOR_KIND];
+
 // source: enum BlocklistReason
 export const BLOCKLIST_REASON = {
   failed: "failed",

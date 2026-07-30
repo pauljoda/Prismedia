@@ -13,11 +13,11 @@ public sealed class CollectionEntityKindDefinition()
         "collection",
         "Collection",
         "Collections",
-        EntityKindCategory.Collection,
-        EntityStorageShape.None),
+      EntityKindCategory.Collection,
+      EntityStorageShape.None),
       IEntityContainmentPolicy {
-    private static readonly IReadOnlySet<EntityKind> AllowedKinds = new HashSet<EntityKind>
-    {
+    private static readonly EntityKind[] AllowedKinds =
+    [
         EntityKind.Video,
         EntityKind.Movie,
         EntityKind.VideoSeries,
@@ -27,10 +27,10 @@ public sealed class CollectionEntityKindDefinition()
         EntityKind.MusicArtist,
         EntityKind.AudioLibrary,
         EntityKind.AudioTrack,
-    };
+    ];
 
     /// <inheritdoc />
-    public IReadOnlySet<EntityKind> ContainableKinds => AllowedKinds;
+    public IReadOnlyList<EntityKind> ContainableKinds => AllowedKinds;
 
     /// <inheritdoc />
     public bool CanContain(EntityKind kind) => AllowedKinds.Contains(kind);

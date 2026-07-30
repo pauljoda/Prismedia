@@ -1,5 +1,4 @@
 using Prismedia.Application.Jobs.Ports;
-using Prismedia.Application.Plugins;
 using Prismedia.Domain.Entities;
 
 namespace Prismedia.Application.Jobs.Handlers.Scan;
@@ -115,8 +114,9 @@ internal static class AutoIdentifyScanEnqueue {
             return null;
         }
 
-        if (!AutoIdentifySelectorKinds.TryMap(entityKind, out var selectorKind) ||
-            !kinds.Contains(selectorKind, StringComparer.OrdinalIgnoreCase)) {
+        if (!EntityKindRegistry.TryDescribe(entityKind, out var definition) ||
+            definition.AutoIdentifySelector is not { } selector ||
+            !kinds.Contains(selector.ToCode(), StringComparer.OrdinalIgnoreCase)) {
             return null;
         }
 

@@ -15,7 +15,8 @@ public sealed class GalleryEntityKindDefinition() : EntityKindDefinition<Gallery
     EntityKindCategory.Media,
     EntityStorageShape.Folder,
     defaultCapabilities: static () => [new CapabilityCredits()],
-    supportsFileDeletion: true) {
+    supportsFileDeletion: true,
+    autoIdentifySelector: AutoIdentifySelectorKind.Gallery) {
     /// <inheritdoc />
     public override IReadOnlyList<Type> ProjectedCapabilityTypes =>
         [typeof(GalleryMetadataDocumentCapability), typeof(CoverSelectionDocumentCapability)];

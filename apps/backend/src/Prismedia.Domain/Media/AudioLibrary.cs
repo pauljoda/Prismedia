@@ -13,7 +13,8 @@ public sealed class AudioLibraryEntityKindDefinition() : RootEntityKindDefinitio
     EntityStorageShape.Folder,
     static root => new AudioLibrary(root.Id, root.Title),
     enumeratesIdentifyChildren: true,
-    supportsFileDeletion: true) {
+    supportsFileDeletion: true,
+    autoIdentifySelector: AutoIdentifySelectorKind.Audio) {
     /// <inheritdoc />
     public override IReadOnlyList<RequestKindDescriptor> RequestKinds =>
     [

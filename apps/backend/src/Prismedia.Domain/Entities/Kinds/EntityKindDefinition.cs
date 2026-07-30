@@ -23,7 +23,9 @@ public abstract class EntityKindDefinition {
         Type? clrType = null,
         Func<IReadOnlyList<EntityCapability>>? defaultCapabilities = null,
         bool enumeratesIdentifyChildren = false,
-        bool supportsFileDeletion = false) {
+        bool supportsFileDeletion = false,
+        AutoIdentifySelectorKind? autoIdentifySelector = null,
+        bool supportsManualManagement = false) {
         Kind = kind;
         Code = RequireText(code, nameof(code));
         DisplayName = RequireText(displayName, nameof(displayName));
@@ -34,6 +36,8 @@ public abstract class EntityKindDefinition {
         _defaultCapabilities = defaultCapabilities ?? EmptyCapabilities;
         EnumeratesIdentifyChildren = enumeratesIdentifyChildren;
         SupportsFileDeletion = supportsFileDeletion;
+        AutoIdentifySelector = autoIdentifySelector;
+        SupportsManualManagement = supportsManualManagement;
     }
 
     /// <summary>Typed domain identity represented by this definition.</summary>
@@ -62,6 +66,15 @@ public abstract class EntityKindDefinition {
 
     /// <summary>Whether this kind can safely root managed file deletion.</summary>
     public bool SupportsFileDeletion { get; }
+
+    /// <summary>
+    /// User-selectable automatic-identification family for this kind, or null when automatic
+    /// identification reaches it only through another root or does not apply.
+    /// </summary>
+    public AutoIdentifySelectorKind? AutoIdentifySelector { get; }
+
+    /// <summary>Whether users may create and delete this kind directly through entity routes.</summary>
+    public bool SupportsManualManagement { get; }
 
     /// <summary>
     /// Request workflow entries owned by this kind. Keeping them beside the kind definition makes
@@ -151,7 +164,9 @@ public abstract class EntityKindDefinition<TEntity> : EntityKindDefinition
         EntityStorageShape storageShape,
         Func<IReadOnlyList<EntityCapability>>? defaultCapabilities = null,
         bool enumeratesIdentifyChildren = false,
-        bool supportsFileDeletion = false)
+        bool supportsFileDeletion = false,
+        AutoIdentifySelectorKind? autoIdentifySelector = null,
+        bool supportsManualManagement = false)
         : base(
             kind,
             code,
@@ -162,7 +177,9 @@ public abstract class EntityKindDefinition<TEntity> : EntityKindDefinition
             typeof(TEntity),
             defaultCapabilities,
             enumeratesIdentifyChildren,
-            supportsFileDeletion) {
+            supportsFileDeletion,
+            autoIdentifySelector,
+            supportsManualManagement) {
     }
 
     /// <inheritdoc />
@@ -205,7 +222,7 @@ public interface IEntityRootFactory {
 /// </summary>
 public interface IEntityContainmentPolicy {
     /// <summary>Entity kinds accepted as direct members.</summary>
-    IReadOnlySet<EntityKind> ContainableKinds { get; }
+    IReadOnlyList<EntityKind> ContainableKinds { get; }
 
     /// <summary>Returns whether the supplied kind may be contained directly.</summary>
     bool CanContain(EntityKind kind);
@@ -230,7 +247,9 @@ public abstract class RootEntityKindDefinition<TEntity> : EntityKindDefinition<T
         Func<EntityRootData, TEntity> factory,
         Func<IReadOnlyList<EntityCapability>>? defaultCapabilities = null,
         bool enumeratesIdentifyChildren = false,
-        bool supportsFileDeletion = false)
+        bool supportsFileDeletion = false,
+        AutoIdentifySelectorKind? autoIdentifySelector = null,
+        bool supportsManualManagement = false)
         : base(
             kind,
             code,
@@ -240,7 +259,9 @@ public abstract class RootEntityKindDefinition<TEntity> : EntityKindDefinition<T
             storageShape,
             defaultCapabilities,
             enumeratesIdentifyChildren,
-            supportsFileDeletion) {
+            supportsFileDeletion,
+            autoIdentifySelector,
+            supportsManualManagement) {
         _factory = factory ?? throw new ArgumentNullException(nameof(factory));
     }
 
