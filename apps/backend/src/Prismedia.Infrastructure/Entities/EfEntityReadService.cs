@@ -29,6 +29,14 @@ public sealed partial class EfEntityReadService : IEntityReadService {
         .Where(definition => definition.Engagement.AggregatesDirectChildPlayback)
         .Select(definition => definition.Code)
         .ToArray();
+    private static readonly string[] DefaultWantedExcludedKindCodes = EntityKindRegistry.All
+        .Where(definition => definition.Browse.ExcludesWantedByDefault)
+        .Select(definition => definition.Code)
+        .ToArray();
+    private static readonly BrowseParentRule[] AggregateParentRules = EntityKindRegistry.All
+        .SelectMany(definition => definition.Browse.AggregateParentKinds.Select(parentKind =>
+            new BrowseParentRule(definition.Code, EntityKindRegistry.Describe(parentKind).Code)))
+        .ToArray();
 
     private readonly PrismediaDbContext _db;
     private readonly Prismedia.Application.Security.ICurrentUserContext _currentUser;
@@ -116,12 +124,12 @@ public sealed partial class EfEntityReadService : IEntityReadService {
 
         entityQuery = ApplyCollectionVisibility(entityQuery);
 
-        // Wanted audio tracks are acquisition placeholders, not playable library entries. Keep them
-        // available to explicit wanted queries and parent-detail child projections for monitoring,
-        // while excluding them from ordinary track lists, search, and native-client browse results.
+        // Some wanted kinds are acquisition placeholders rather than library entries. Their
+        // definitions keep them available to explicit wanted queries and parent-detail children
+        // while excluding them from ordinary browse/search results.
         if (wanted is null) {
             entityQuery = entityQuery.Where(entity =>
-                entity.KindCode != EntityKind.AudioTrack.ToCode() || !entity.IsWanted);
+                !DefaultWantedExcludedKindCodes.Contains(entity.KindCode) || !entity.IsWanted);
         }
 
         if (!string.IsNullOrWhiteSpace(query)) {
@@ -137,9 +145,7 @@ public sealed partial class EfEntityReadService : IEntityReadService {
                     (normalizedRelationshipCode == null || link.RelationshipCode == normalizedRelationshipCode)));
         }
 
-        if (ShouldSuppressMovieChildVideos(kindCodes, query, referencedBy)) {
-            entityQuery = SuppressMovieChildVideos(entityQuery);
-        }
+        entityQuery = ApplyAggregateParentSuppression(entityQuery, kindCodes, query, referencedBy);
 
         var enforceLibraryVisibility = await RequiresLibraryVisibilityAsync(cancellationToken);
         if (enforceLibraryVisibility) {
@@ -1002,39 +1008,60 @@ public sealed partial class EfEntityReadService : IEntityReadService {
     private IQueryable<EntityRow> ApplyBrowseHierarchyFilter(
         IQueryable<EntityRow> query,
         IReadOnlyCollection<string> kindCodes) {
-        var includesGalleries = kindCodes.Contains(EntityKind.Gallery.ToCode(), StringComparer.OrdinalIgnoreCase);
-        var includesBooks = kindCodes.Contains(EntityKind.Book.ToCode(), StringComparer.OrdinalIgnoreCase);
-        if (!includesGalleries && !includesBooks) {
-            return query;
+        var selectedDefinitions = EntityKindRegistry.All
+            .Where(definition => kindCodes.Contains(definition.Code, StringComparer.OrdinalIgnoreCase))
+            .ToArray();
+        var topLevelKindCodes = selectedDefinitions
+            .Where(definition => definition.Browse.RequiresTopLevel)
+            .Select(definition => definition.Code)
+            .ToArray();
+        if (topLevelKindCodes.Length > 0) {
+            query = query.Where(entity =>
+                !topLevelKindCodes.Contains(entity.KindCode) || entity.ParentEntityId == null);
         }
 
-        // Books parented to authors are still first-class browse rows, but same-kind book children
-        // represent nested series/volume structure and should stay under their parent detail page.
-        return query.Where(entity =>
-            (!includesGalleries || entity.KindCode != EntityKind.Gallery.ToCode() || entity.ParentEntityId == null) &&
-            (!includesBooks || entity.KindCode != EntityKind.Book.ToCode() || entity.ParentEntityId == null ||
-                !_db.Entities.Any(parent =>
-                    parent.Id == entity.ParentEntityId &&
-                    parent.KindCode == EntityKind.Book.ToCode())));
+        foreach (var definition in selectedDefinitions) {
+            foreach (var parentKind in definition.Browse.HiddenParentKinds) {
+                var childCode = definition.Code;
+                var parentCode = EntityKindRegistry.Describe(parentKind).Code;
+                query = query.Where(entity =>
+                    entity.KindCode != childCode ||
+                    entity.ParentEntityId == null ||
+                    !_db.Entities.Any(parent =>
+                        parent.Id == entity.ParentEntityId &&
+                        parent.KindCode == parentCode));
+            }
+        }
+
+        return query;
     }
 
-    private static bool ShouldSuppressMovieChildVideos(
+    private IQueryable<EntityRow> ApplyAggregateParentSuppression(
+        IQueryable<EntityRow> query,
         IReadOnlyCollection<string> kindCodes,
-        string? query,
-        Guid? referencedBy) =>
-        kindCodes.Count == 0 ||
-        !string.IsNullOrWhiteSpace(query) ||
-        referencedBy is not null ||
-        (kindCodes.Contains(EntityKind.Movie.ToCode(), StringComparer.OrdinalIgnoreCase) &&
-            kindCodes.Contains(EntityKind.Video.ToCode(), StringComparer.OrdinalIgnoreCase));
+        string? searchQuery,
+        Guid? referencedBy) {
+        var appliesToEveryRule = kindCodes.Count == 0 ||
+            !string.IsNullOrWhiteSpace(searchQuery) ||
+            referencedBy is not null;
+        foreach (var rule in AggregateParentRules.Where(rule =>
+                     appliesToEveryRule ||
+                     (kindCodes.Contains(rule.ChildCode, StringComparer.OrdinalIgnoreCase) &&
+                      kindCodes.Contains(rule.ParentCode, StringComparer.OrdinalIgnoreCase)))) {
+            var childCode = rule.ChildCode;
+            var parentCode = rule.ParentCode;
+            query = query.Where(entity =>
+                entity.KindCode != childCode ||
+                entity.ParentEntityId == null ||
+                !_db.Entities.Any(parent =>
+                    parent.Id == entity.ParentEntityId &&
+                    parent.KindCode == parentCode));
+        }
 
-    private IQueryable<EntityRow> SuppressMovieChildVideos(IQueryable<EntityRow> query) =>
-        query.Where(entity =>
-            entity.KindCode != EntityKind.Video.ToCode() ||
-            entity.ParentEntityId == null ||
-            !_db.Entities.Any(parent =>
-                parent.Id == entity.ParentEntityId &&
-                parent.KindCode == EntityKind.Movie.ToCode()));
+        return query;
+    }
+
+    private readonly record struct BrowseParentRule(string ChildCode, string ParentCode);
 
     /// <summary>
     /// Library-visibility check for mutation/streaming guards: true when the entity

@@ -223,6 +223,42 @@ public sealed class EntityKindMetadataTests {
     }
 
     [Fact]
+    public void DefinitionsOwnBrowseHierarchyAndAggregateDeduplication() {
+        var defaultWantedExclusions = EntityKindRegistry.All
+            .Where(definition => definition.Browse.ExcludesWantedByDefault)
+            .Select(definition => definition.Kind)
+            .ToArray();
+        var topLevelBrowseKinds = EntityKindRegistry.All
+            .Where(definition => definition.Browse.RequiresTopLevel)
+            .Select(definition => definition.Kind)
+            .ToArray();
+
+        Assert.Equal([EntityKind.AudioTrack], defaultWantedExclusions);
+        Assert.Equal([EntityKind.Gallery], topLevelBrowseKinds);
+        Assert.Equal(
+            [EntityKind.Book],
+            EntityKindRegistry.Describe(EntityKind.Book).Browse.HiddenParentKinds);
+        Assert.Equal(
+            [EntityKind.Movie],
+            EntityKindRegistry.Describe(EntityKind.Video).Browse.AggregateParentKinds);
+        Assert.All(
+            EntityKindRegistry.All.Where(definition => definition.Kind is not (
+                EntityKind.AudioTrack or EntityKind.Book or EntityKind.Gallery or EntityKind.Video)),
+            definition => Assert.Equal(EntityBrowsePolicy.Default, definition.Browse));
+    }
+
+    [Fact]
+    public void BrowsePolicyRejectsAmbiguousAndDuplicateHierarchyRules() {
+        Assert.Throws<ArgumentException>(() =>
+            new EntityBrowsePolicy(
+                requiresTopLevel: true,
+                hiddenParentKinds: [EntityKind.Gallery]));
+        Assert.Throws<ArgumentException>(() =>
+            new EntityBrowsePolicy(
+                aggregateParentKinds: [EntityKind.Movie, EntityKind.Movie]));
+    }
+
+    [Fact]
     public void AcquisitionProfilesAreOwnedByExactlyTheProfileEntityKinds() {
         var profiles = EntityKindRegistry.All
             .Where(definition => definition.AcquisitionProfile is not null)

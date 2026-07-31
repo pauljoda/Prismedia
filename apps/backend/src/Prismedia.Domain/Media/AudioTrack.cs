@@ -32,6 +32,7 @@ public sealed class AudioTrackEntityKindDefinition() : EntityKindDefinition<Audi
             previewJobType: JobType.GenerateAudioWaveform,
             generatedFileRoles: [EntityFileRole.Waveform]),
         engagement: new(EntityEngagementMode.Playback),
+        browse: new(excludesWantedByDefault: true),
         supportsFileDeletion: true,
         mediaQualityFamily: EntityMediaQualityFamily.Audio),
     defaultCapabilities: static () => [new CapabilityPlayback()]) {

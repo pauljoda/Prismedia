@@ -28,6 +28,7 @@ public sealed class GalleryEntityKindDefinition() : EntityKindDefinition<Gallery
     new EntityKindSearch(6),
     new EntityKindBehavior(
         identification: new(AutoIdentifySelectorKind.Gallery),
+        browse: new(requiresTopLevel: true),
         supportsFileDeletion: true),
     defaultCapabilities: static () => [new CapabilityCredits()]) {
     /// <inheritdoc />

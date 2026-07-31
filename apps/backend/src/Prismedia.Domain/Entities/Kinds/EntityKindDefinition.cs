@@ -107,6 +107,9 @@ public abstract class EntityKindDefinition {
     /// <summary>Completion/filter behavior shared by persistence and clients.</summary>
     public EntityEngagementPolicy Engagement => Behavior.Engagement;
 
+    /// <summary>List hierarchy and aggregate visibility behavior owned by this kind.</summary>
+    public EntityBrowsePolicy Browse => Behavior.Browse;
+
     /// <summary>
     /// Canonical position-code precedence used to derive a structural sort order. Kinds without
     /// an override use the shared media-structure ordering.
