@@ -85,11 +85,11 @@ public sealed record BookAcquisitionRules(
 
     /// <summary>
     /// The profile kind these rules were resolved for, so <see cref="CustomFormatEvaluation"/> places a
-    /// release title on the correct quality ladder when a format carries a quality condition. Defaults to
-    /// <see cref="EntityKind.Book"/> so rules built without a profile (the permissive default) keep the
-    /// established book behavior.
+    /// release title on the correct quality ladder when a format carries a quality condition. Every rules
+    /// instance must retain its caller's acquisition kind; the static <see cref="Default"/> instance is the
+    /// explicit book-only convenience used by book-specific callers.
     /// </summary>
-    public EntityKind Kind { get; init; } = EntityKind.Book;
+    public required EntityKind Kind { get; init; }
 
     /// <summary>The independently acquired book rendition; null outside books and for legacy ad-hoc rules.</summary>
     public BookRendition? BookRendition { get; init; }
@@ -160,7 +160,9 @@ public sealed record BookAcquisitionRules(
     /// <see cref="OwnedQuality"/> — is the single source of truth for whether the upgrade gates apply, so a
     /// genuinely-unknown owned quality can never silently disable them.
     /// </summary>
-    public static BookAcquisitionRules Default { get; } = new([], [], 1, null, null, [], [], [], []);
+    public static BookAcquisitionRules Default { get; } = new([], [], 1, null, null, [], [], [], []) {
+        Kind = EntityKind.Book
+    };
 }
 
 /// <summary>A release evaluated against the rules: its accept/reject verdict, ranking score, and any rejection reasons.</summary>
@@ -184,7 +186,7 @@ public sealed record IndexerConnection(
 public sealed record IndexerQuery(
     string Text,
     IReadOnlyList<int> Categories,
-    EntityKind Kind = EntityKind.Book);
+    EntityKind Kind);
 
 /// <summary>Result of probing an indexer connection.</summary>
 public sealed record IndexerConnectionTest(bool Connected, string? Message);
@@ -208,8 +210,8 @@ public sealed record AcquisitionMetadata(
     int? Year,
     string? PosterUrl,
     ExternalIdentity? ExternalIdentity,
+    EntityKind Kind,
     string? Description = null,
-    EntityKind Kind = EntityKind.Book,
     Guid? EntityId = null,
     Guid? ProfileId = null,
     Guid? TargetLibraryRootId = null,
@@ -228,7 +230,7 @@ public sealed record AcquisitionMetadata(
 /// <param name="EpisodeNumber">Episode number for a single-episode acquisition; builds the S01E05 rungs.</param>
 /// <param name="VolumeNumber">Volume number for a volume-scoped book/comic acquisition; gates wrong-volume releases.</param>
 public sealed record AcquisitionSearchInput(
-    Guid Id, string Title, string? Author, EntityKind Kind = EntityKind.Book, Guid? EntityId = null,
+    Guid Id, string Title, string? Author, EntityKind Kind, Guid? EntityId = null,
     int? Year = null, Guid? ProfileId = null, string? Series = null, int? SeasonNumber = null, int? EpisodeNumber = null,
     int? VolumeNumber = null,
     BookRendition? BookRendition = null) {
@@ -354,9 +356,8 @@ public sealed record AcquisitionCandidateRef(Guid CandidateId, string Title, str
 /// then carries the parent Entity and the handler requests each missing child through the shared flow.
 /// </summary>
 public sealed record DueMonitor(
-    Guid MonitorId, Guid? AcquisitionId, string Title, bool IsUpgrade = false, Guid? EntityId = null,
-    bool MissingChildFallback = false, BookRendition? BookRendition = null, Guid? ProfileId = null,
-    EntityKind Kind = EntityKind.Book);
+    Guid MonitorId, Guid? AcquisitionId, string Title, EntityKind Kind, bool IsUpgrade = false, Guid? EntityId = null,
+    bool MissingChildFallback = false, BookRendition? BookRendition = null, Guid? ProfileId = null);
 
 /// <summary>
 /// The owned quality an upgrade child must beat, expressed in the vocabulary of the child's kind. A book
@@ -399,7 +400,7 @@ public sealed record UpgradeReplaceTarget(
     string? ChildContentPath,
     string? ChildClientItemId,
     Guid? ChildDownloadClientConfigId,
-    Domain.Entities.EntityKind ParentKind = Domain.Entities.EntityKind.Book,
+    Domain.Entities.EntityKind ParentKind,
     string? ParentOwnedMediaQuality = null,
     int ParentOwnedMediaRevision = 1,
     Guid? ParentProfileId = null,
@@ -441,7 +442,7 @@ public interface IOwnedFileReplacer {
         string newContentPath,
         Domain.Entities.BookFormatTier ownedFormatTier,
         CancellationToken cancellationToken,
-        Domain.Entities.EntityKind kind = Domain.Entities.EntityKind.Book,
+        Domain.Entities.EntityKind kind,
         bool allowFormatChange = false);
 
     /// <summary>
@@ -454,7 +455,7 @@ public interface IOwnedFileReplacer {
         string newContentPath,
         Domain.Entities.BookFormatTier ownedFormatTier,
         CancellationToken cancellationToken,
-        Domain.Entities.EntityKind kind = Domain.Entities.EntityKind.Book,
+        Domain.Entities.EntityKind kind,
         bool allowFormatChange = false,
         string? recoveryBackupPath = null,
         string? incomingEvidencePath = null) =>
@@ -595,8 +596,8 @@ public sealed record AcquisitionImportContext(
     string? ContentPath,
     string? ClientItemId,
     Guid? DownloadClientConfigId,
+    EntityKind Kind,
     string? Description = null,
-    EntityKind Kind = EntityKind.Book,
     Guid? TargetLibraryRootId = null,
     int? SeasonNumber = null,
     int? EpisodeNumber = null,

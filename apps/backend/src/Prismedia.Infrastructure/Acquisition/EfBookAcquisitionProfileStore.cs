@@ -13,7 +13,10 @@ public sealed class EfBookAcquisitionProfileStore(PrismediaDbContext db) : IBook
     public async Task<BookAcquisitionRules> GetRulesAsync(Guid? profileId, EntityKind kind, CancellationToken cancellationToken) {
         var row = await ResolveRowAsync(profileId, kind, cancellationToken);
         if (row is null) {
-            return BookAcquisitionRules.Default;
+            // The persisted profile is optional, but its absence must not turn a movie, television, or
+            // music search into a book-kind rules contract. Legacy persisted rows are decoded here; all
+            // application-facing rules retain the explicit requested kind.
+            return BookAcquisitionRules.Default with { Kind = kind };
         }
 
         return ToRules(row, await ResolveCustomFormatsAsync(row, cancellationToken));

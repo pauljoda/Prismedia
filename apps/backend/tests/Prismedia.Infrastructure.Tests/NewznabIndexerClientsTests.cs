@@ -72,7 +72,7 @@ public sealed class NewznabIndexerClientsTests {
     public async Task TorznabItemsMapAttributesAndTheTorrentProtocol() {
         var client = new TorznabIndexerClient(new HttpClient(new CannedHandler(uri => uri.Contains("t=caps") ? Caps : TorznabFeed)));
 
-        var releases = await client.SearchAsync(Connection(), new IndexerQuery("book", [7000]), CancellationToken.None);
+        var releases = await client.SearchAsync(Connection(), new IndexerQuery("book", [7000], EntityKind.Book), CancellationToken.None);
 
         var release = Assert.Single(releases);
         Assert.Equal("My.Book.2024.Retail.EPUB-GRP", release.Title);
@@ -91,7 +91,7 @@ public sealed class NewznabIndexerClientsTests {
     public async Task NewznabItemsUseTheEnclosureAndTheUsenetProtocol() {
         var client = new NewznabIndexerClient(new HttpClient(new CannedHandler(uri => uri.Contains("t=caps") ? Caps : NewznabFeed)));
 
-        var releases = await client.SearchAsync(Connection(), new IndexerQuery("show", [5000]), CancellationToken.None);
+        var releases = await client.SearchAsync(Connection(), new IndexerQuery("show", [5000], EntityKind.VideoSeries), CancellationToken.None);
 
         var release = Assert.Single(releases);
         Assert.Equal(DownloadProtocol.Usenet, release.Protocol);
@@ -106,7 +106,7 @@ public sealed class NewznabIndexerClientsTests {
         var client = new TorznabIndexerClient(new HttpClient(handler));
 
         // 7000 and 8000 are advertised; 5000 is not and is dropped from the search request.
-        await client.SearchAsync(Connection(), new IndexerQuery("book", [7000, 5000, 8000]), CancellationToken.None);
+        await client.SearchAsync(Connection(), new IndexerQuery("book", [7000, 5000, 8000], EntityKind.Book), CancellationToken.None);
 
         var search = handler.Requests.Single(uri => uri.Contains("t=search"));
         Assert.Contains("7000", search);
@@ -121,7 +121,7 @@ public sealed class NewznabIndexerClientsTests {
         var handler = new CannedHandler(uri => uri.Contains("t=caps") ? Caps : TorznabFeed);
         var client = new TorznabIndexerClient(new HttpClient(handler));
 
-        await client.SearchAsync(Connection(), new IndexerQuery("show", [5000, 5040]), CancellationToken.None);
+        await client.SearchAsync(Connection(), new IndexerQuery("show", [5000, 5040], EntityKind.VideoSeries), CancellationToken.None);
 
         var search = handler.Requests.Single(uri => uri.Contains("t=search"));
         Assert.Contains("5000", search);

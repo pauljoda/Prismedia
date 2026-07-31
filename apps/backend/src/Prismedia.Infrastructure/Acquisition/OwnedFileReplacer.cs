@@ -25,7 +25,7 @@ public sealed class OwnedFileReplacer(IRecycleBin recycleBin, ILogger<OwnedFileR
         string newContentPath,
         BookFormatTier ownedFormatTier,
         CancellationToken cancellationToken,
-        EntityKind kind = EntityKind.Book,
+        EntityKind kind,
         bool allowFormatChange = false) =>
         ReplaceCoreAsync(
             ownedFolder,
@@ -41,7 +41,7 @@ public sealed class OwnedFileReplacer(IRecycleBin recycleBin, ILogger<OwnedFileR
         string newContentPath,
         BookFormatTier ownedFormatTier,
         CancellationToken cancellationToken,
-        EntityKind kind = EntityKind.Book,
+        EntityKind kind,
         bool allowFormatChange = false,
         string? recoveryBackupPath = null,
         string? incomingEvidencePath = null) =>

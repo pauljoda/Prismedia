@@ -10,6 +10,19 @@ namespace Prismedia.Infrastructure.Tests;
 /// <summary>Acquisition profiles inherit visibility from the library root they import into.</summary>
 public sealed class EfBookAcquisitionProfileStoreVisibilityTests {
     [Fact]
+    public async Task MissingProfileRetainsTheRequestedAcquisitionKind() {
+        await using var db = new PrismediaDbContext(
+            new DbContextOptionsBuilder<PrismediaDbContext>()
+                .UseInMemoryDatabase($"profile-default-kind-{Guid.NewGuid():N}")
+                .Options);
+
+        var rules = await new EfBookAcquisitionProfileStore(db)
+            .GetRulesAsync(profileId: null, kind: EntityKind.Movie, cancellationToken: CancellationToken.None);
+
+        Assert.Equal(EntityKind.Movie, rules.Kind);
+    }
+
+    [Fact]
     public async Task SfwModeOmitsProfilesThatTargetNsfwLibraries() {
         await using var db = await SeedAsync();
         var store = new EfBookAcquisitionProfileStore(db);

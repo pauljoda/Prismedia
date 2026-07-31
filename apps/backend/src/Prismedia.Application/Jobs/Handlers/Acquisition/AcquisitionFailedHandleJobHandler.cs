@@ -43,9 +43,16 @@ public sealed class AcquisitionFailedHandleJobHandler(
             return;
         }
 
-        // The search input backs every history event here (title/kind/entity). Read it once up front so both
-        // the no-snapshot early return and the blocklist path can record against it.
+        // The search input is the authoritative kind-bearing acquisition contract. A concurrent hard delete
+        // after the recovery claim leaves no safe kind to use for profile or history work; never invent Book.
         var input = await acquisitions.GetSearchInputAsync(acquisitionId, cancellationToken);
+        if (input is null) {
+            logger.LogInformation(
+                "AcquisitionFailedHandle: acquisition {AcquisitionId} was removed after recovery was claimed; skipping recovery side effects.",
+                acquisitionId);
+            return;
+        }
+
         await RecordFailedAsync(acquisitionId, input, AcquisitionHistoryEvent.DownloadFailed, selected?.Title, selected?.IndexerName, failureMessage, cancellationToken);
 
         if (selected is null) {
@@ -61,7 +68,7 @@ public sealed class AcquisitionFailedHandleJobHandler(
             cancellationToken);
         await RecordFailedAsync(acquisitionId, input, AcquisitionHistoryEvent.Blocklisted, selected.Title, selected.IndexerName, $"Blocklisted ({payload.Reason.ToCode()}).", cancellationToken);
 
-        if (!await profiles.GetAutoRedownloadAsync(input?.ProfileId, input?.Kind ?? EntityKind.Book, cancellationToken)) {
+        if (!await profiles.GetAutoRedownloadAsync(input.ProfileId, input.Kind, cancellationToken)) {
             // Release blocklisted, but the profile leaves recovery to the user. This handler owns the
             // terminal Failed transition (the monitor only enqueues), so record it here.
             await KeepFailedIfOwnedAsync(acquisitionId, failureMessage, cancellationToken);
@@ -116,17 +123,17 @@ public sealed class AcquisitionFailedHandleJobHandler(
     /// <summary>
     /// Records a durable failure event (DownloadFailed or Blocklisted) against the acquisition. Best-effort:
     /// a history hiccup must never break failure recovery. Title/kind/entity come from the acquisition's
-    /// search input when it still exists; otherwise the release title stands in and the kind defaults to book.
+    /// search input, so durable history always carries the actual Entity kind rather than inferring a fallback.
     /// </summary>
     private Task RecordFailedAsync(
-        Guid acquisitionId, AcquisitionSearchInput? input, AcquisitionHistoryEvent kind,
+        Guid acquisitionId, AcquisitionSearchInput input, AcquisitionHistoryEvent kind,
         string? releaseTitle, string? indexerName, string message, CancellationToken cancellationToken) =>
         history.SafeAddAsync(logger, new AcquisitionHistoryEntry(
             acquisitionId,
-            input?.EntityId,
-            input?.Kind ?? EntityKind.Book,
+            input.EntityId,
+            input.Kind,
             kind,
-            input?.Title ?? releaseTitle ?? "(removed acquisition)",
+            input.Title,
             releaseTitle,
             indexerName,
             Message: message),

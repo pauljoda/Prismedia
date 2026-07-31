@@ -1040,7 +1040,7 @@ public sealed class TvAcquisitionImportEngineTests : IDisposable {
             string newContentPath,
             BookFormatTier ownedFormatTier,
             CancellationToken cancellationToken,
-            EntityKind kind = EntityKind.Book,
+            EntityKind kind,
             bool allowFormatChange = false) {
             var target = Path.ChangeExtension(ownedFolder, Path.GetExtension(newContentPath));
             File.Move(newContentPath, target);
@@ -1052,7 +1052,7 @@ public sealed class TvAcquisitionImportEngineTests : IDisposable {
             string newContentPath,
             BookFormatTier ownedFormatTier,
             CancellationToken cancellationToken,
-            EntityKind kind = EntityKind.Book,
+            EntityKind kind,
             bool allowFormatChange = false,
             string? recoveryBackupPath = null,
             string? incomingEvidencePath = null) {
@@ -1072,7 +1072,7 @@ public sealed class TvAcquisitionImportEngineTests : IDisposable {
             string newContentPath,
             BookFormatTier ownedFormatTier,
             CancellationToken cancellationToken,
-            EntityKind kind = EntityKind.Book,
+            EntityKind kind,
             bool allowFormatChange = false) {
             File.Move(newContentPath, OwnedFileReplacementArtifacts.StagedPath(ownedFolder));
             throw new IOException("Synthetic process failure after staging the replacement.");
@@ -1085,7 +1085,7 @@ public sealed class TvAcquisitionImportEngineTests : IDisposable {
             string newContentPath,
             BookFormatTier ownedFormatTier,
             CancellationToken cancellationToken,
-            EntityKind kind = EntityKind.Book,
+            EntityKind kind,
             bool allowFormatChange = false) =>
             Task.FromResult(OwnedFileReplaceResult.Failed("The durable overload was expected."));
 
@@ -1094,7 +1094,7 @@ public sealed class TvAcquisitionImportEngineTests : IDisposable {
             string newContentPath,
             BookFormatTier ownedFormatTier,
             CancellationToken cancellationToken,
-            EntityKind kind = EntityKind.Book,
+            EntityKind kind,
             bool allowFormatChange = false,
             string? recoveryBackupPath = null,
             string? incomingEvidencePath = null) {

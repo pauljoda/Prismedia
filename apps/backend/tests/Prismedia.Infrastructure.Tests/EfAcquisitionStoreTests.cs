@@ -1312,7 +1312,7 @@ public sealed class EfAcquisitionStoreTests {
         var store = AcquisitionTestFactory.Store(db);
         var identity = new ExternalIdentity(" TMDB ", " Series:Episode:AbC ");
         var acquisition = await store.CreateAsync(
-            new AcquisitionMetadata("Show", null, null, null, null, identity),
+            new AcquisitionMetadata("Show", null, null, null, null, identity, EntityKind.VideoSeries),
             CancellationToken.None);
 
         var context = await store.GetImportContextAsync(acquisition.Id, CancellationToken.None);

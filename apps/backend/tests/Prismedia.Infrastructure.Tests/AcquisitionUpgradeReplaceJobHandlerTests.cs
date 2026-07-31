@@ -336,7 +336,7 @@ public sealed class AcquisitionUpgradeReplaceJobHandlerTests {
     private sealed class FakeReplacer(OwnedFileReplaceResult result) : IOwnedFileReplacer {
         public bool Called { get; private set; }
         public EntityKind CalledWithKind { get; private set; }
-        public Task<OwnedFileReplaceResult> ReplaceAsync(string ownedFolder, string newContentPath, BookFormatTier ownedFormatTier, CancellationToken cancellationToken, EntityKind kind = EntityKind.Book, bool allowFormatChange = false) {
+        public Task<OwnedFileReplaceResult> ReplaceAsync(string ownedFolder, string newContentPath, BookFormatTier ownedFormatTier, CancellationToken cancellationToken, EntityKind kind, bool allowFormatChange = false) {
             Called = true;
             CalledWithKind = kind;
             return Task.FromResult(result);

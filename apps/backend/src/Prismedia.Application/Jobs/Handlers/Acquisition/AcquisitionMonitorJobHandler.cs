@@ -311,10 +311,19 @@ public sealed class AcquisitionMonitorJobHandler(
                 // verifies the new file and atomically swaps it in. Multi-file album replacements route through
                 // the music import engine, which owns their durable folder-placement plan.
                 var isUpgrade = await acquisitions.GetUpgradeOwnedQualityAsync(transfer.AcquisitionId, cancellationToken) is not null;
-                var detail = await acquisitions.GetAsync(transfer.AcquisitionId, cancellationToken);
-                var completionJob = AcquisitionCompletionService.CompletionJobType(
-                    detail?.Summary.Kind ?? EntityKind.Book,
-                    isUpgrade);
+                var detail = completion is null
+                    ? await acquisitions.GetAsync(transfer.AcquisitionId, cancellationToken)
+                    : null;
+                if (completion is null && detail is null) {
+                    logger.LogInformation(
+                        "AcquisitionMonitor: completed transfer {TransferId} no longer has an acquisition record; skipping import scheduling.",
+                        transfer.TransferId);
+                    return;
+                }
+
+                var completionJob = completion is null
+                    ? AcquisitionCompletionService.CompletionJobType(detail!.Summary.Kind, isUpgrade)
+                    : (JobType?)null;
                 if (transfer.AcquisitionStatus != AcquisitionStatus.Downloaded) {
                     if (!await acquisitions.TryTransitionStatusAsync(
                             transfer.AcquisitionId,
@@ -336,7 +345,7 @@ public sealed class AcquisitionMonitorJobHandler(
                 } else {
                     await context.EnqueueIfNeededAsync(
                         new EnqueueJobRequest(
-                            completionJob,
+                            completionJob!.Value,
                             PayloadJson: AcquisitionJobPayload.Serialize(transfer.AcquisitionId),
                             TargetEntityId: transfer.AcquisitionId.ToString(),
                             TargetLabel: isUpgrade ? "Replace with upgrade" : "Import completed download",
@@ -522,16 +531,18 @@ public sealed class AcquisitionMonitorJobHandler(
             return;
         }
 
-        await history.SafeAddAsync(logger, new AcquisitionHistoryEntry(
-            transfer.AcquisitionId,
-            input?.EntityId,
-            input?.Kind ?? EntityKind.Book,
-            AcquisitionHistoryEvent.DownloadFailed,
-            input?.Title ?? selected?.Title ?? "(removed acquisition)",
-            selected?.Title,
-            selected?.IndexerName,
-            Message: message),
-            cancellationToken);
+        if (input is not null) {
+            await history.SafeAddAsync(logger, new AcquisitionHistoryEntry(
+                transfer.AcquisitionId,
+                input.EntityId,
+                input.Kind,
+                AcquisitionHistoryEvent.DownloadFailed,
+                input.Title,
+                selected?.Title,
+                selected?.IndexerName,
+                Message: message),
+                cancellationToken);
+        }
 
         // The compare-and-swap above must precede the enqueue: a Stopping claim wins atomically and leaves
         // no stale search job behind after exact job cancellation.

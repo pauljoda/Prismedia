@@ -15,8 +15,8 @@ public sealed class MonitoredSearchJobHandlerTests {
         var a = Guid.NewGuid();
         var b = Guid.NewGuid();
         var monitors = new FakeMonitorStore([
-            new DueMonitor(Guid.NewGuid(), a, "Book A"),
-            new DueMonitor(Guid.NewGuid(), b, "Book B"),
+            new DueMonitor(Guid.NewGuid(), a, "Book A", EntityKind.Book),
+            new DueMonitor(Guid.NewGuid(), b, "Book B", EntityKind.Book),
         ]);
         var acquisitions = new FakeAcquisitionLifecycleStore(a, b);
         var queue = new RecordingJobQueue();
@@ -38,8 +38,8 @@ public sealed class MonitoredSearchJobHandlerTests {
         var a = Guid.NewGuid();
         var b = Guid.NewGuid();
         var monitors = new FakeMonitorStore([
-            new DueMonitor(Guid.NewGuid(), a, "Book A"),
-            new DueMonitor(Guid.NewGuid(), b, "Book B"),
+            new DueMonitor(Guid.NewGuid(), a, "Book A", EntityKind.Book),
+            new DueMonitor(Guid.NewGuid(), b, "Book B", EntityKind.Book),
         ]);
         var acquisitions = new FakeAcquisitionLifecycleStore(a, b);
         var queue = new RecordingJobQueue();
@@ -59,7 +59,7 @@ public sealed class MonitoredSearchJobHandlerTests {
     public async Task AcquisitionLinkedEntityMonitorUsesAcquisitionLifecycleNotEntityMaintenance() {
         var acquisitionId = Guid.NewGuid();
         var monitors = new FakeMonitorStore([
-            new DueMonitor(Guid.NewGuid(), acquisitionId, "Book", EntityId: Guid.NewGuid())
+            new DueMonitor(Guid.NewGuid(), acquisitionId, "Book", EntityKind.Book, EntityId: Guid.NewGuid())
         ]);
         var acquisitions = new FakeAcquisitionLifecycleStore(acquisitionId);
         var queue = new RecordingJobQueue();
@@ -87,7 +87,7 @@ public sealed class MonitoredSearchJobHandlerTests {
     public async Task ActiveMonitorExplicitlyRevivesCancelledBeforeEnqueueingSearch() {
         var acquisitionId = Guid.NewGuid();
         var monitors = new FakeMonitorStore([
-            new DueMonitor(Guid.NewGuid(), acquisitionId, "Book")
+            new DueMonitor(Guid.NewGuid(), acquisitionId, "Book", EntityKind.Book)
         ]);
         var acquisitions = new FakeAcquisitionLifecycleStore(acquisitionId);
         acquisitions.Statuses[acquisitionId] = AcquisitionStatus.Cancelled;
@@ -169,7 +169,7 @@ public sealed class MonitoredSearchJobHandlerTests {
     public async Task MonitorPublishesSearchingBeforeAnEnqueueFailure() {
         var acquisitionId = Guid.NewGuid();
         var monitors = new FakeMonitorStore([
-            new DueMonitor(Guid.NewGuid(), acquisitionId, "Book")
+            new DueMonitor(Guid.NewGuid(), acquisitionId, "Book", EntityKind.Book)
         ]);
         var acquisitions = new FakeAcquisitionLifecycleStore(acquisitionId);
         acquisitions.Statuses[acquisitionId] = AcquisitionStatus.Failed;
@@ -187,7 +187,7 @@ public sealed class MonitoredSearchJobHandlerTests {
     public async Task EntityMaintenanceContentionNeverPausesDurableParentIntent() {
         var monitorId = Guid.NewGuid();
         var monitors = new FakeMonitorStore([
-            new DueMonitor(monitorId, null, "Artist", EntityId: Guid.NewGuid())
+            new DueMonitor(monitorId, null, "Artist", EntityKind.MusicArtist, EntityId: Guid.NewGuid())
         ]);
 
         await Handler(monitors, new FakeAcquisitionLifecycleStore())
@@ -202,10 +202,10 @@ public sealed class MonitoredSearchJobHandlerTests {
         var targetMonitorId = Guid.NewGuid();
         var unrelatedMonitorId = Guid.NewGuid();
         var monitors = new FakeMonitorStore([
-            new DueMonitor(unrelatedMonitorId, null, "Unrelated series", EntityId: Guid.NewGuid())
+            new DueMonitor(unrelatedMonitorId, null, "Unrelated series", EntityKind.VideoSeries, EntityId: Guid.NewGuid())
         ]);
         monitors.ImmediateWork[targetEntityId] = [
-            new DueMonitor(targetMonitorId, null, "Target series", EntityId: targetEntityId)
+            new DueMonitor(targetMonitorId, null, "Target series", EntityKind.VideoSeries, EntityId: targetEntityId)
         ];
 
         await Handler(monitors, new FakeAcquisitionLifecycleStore())
@@ -230,6 +230,7 @@ public sealed class MonitoredSearchJobHandlerTests {
                 monitorId,
                 importedAcquisitionId,
                 "Movie",
+                EntityKind.Movie,
                 IsUpgrade: true,
                 EntityId: targetEntityId)
         ];
@@ -251,8 +252,8 @@ public sealed class MonitoredSearchJobHandlerTests {
         var failedAcquisitionId = Guid.NewGuid();
         var healthyAcquisitionId = Guid.NewGuid();
         var monitors = new FakeMonitorStore([
-            new DueMonitor(Guid.NewGuid(), failedAcquisitionId, "Broken"),
-            new DueMonitor(Guid.NewGuid(), healthyAcquisitionId, "Healthy"),
+            new DueMonitor(Guid.NewGuid(), failedAcquisitionId, "Broken", EntityKind.Book),
+            new DueMonitor(Guid.NewGuid(), healthyAcquisitionId, "Healthy", EntityKind.Book),
         ]);
         var queue = new RecordingJobQueue { FailTarget = failedAcquisitionId.ToString() };
 

@@ -20,7 +20,7 @@ public sealed class OwnedFileReplacerTests : IDisposable {
         var owned = WriteFile(library, "Book.epub", "old web copy");
         WriteFile(download, "Book.retail.epub", "new retail copy, larger");
 
-        var result = await _replacer.ReplaceAsync(library, download, BookFormatTier.Reflowable, CancellationToken.None);
+        var result = await _replacer.ReplaceAsync(library, download, BookFormatTier.Reflowable, CancellationToken.None, EntityKind.Book);
 
         Assert.True(result.Succeeded);
         Assert.Equal(owned, result.SwappedPath);
@@ -36,7 +36,7 @@ public sealed class OwnedFileReplacerTests : IDisposable {
         var owned = WriteFile(library, "Book.pdf", "owned pdf");
         WriteFile(download, "Book.epub", "incoming epub");
 
-        var result = await _replacer.ReplaceAsync(library, download, BookFormatTier.Fixed, CancellationToken.None);
+        var result = await _replacer.ReplaceAsync(library, download, BookFormatTier.Fixed, CancellationToken.None, EntityKind.Book);
 
         Assert.False(result.Succeeded);
         Assert.Equal("owned pdf", File.ReadAllText(owned)); // untouched
@@ -49,7 +49,7 @@ public sealed class OwnedFileReplacerTests : IDisposable {
         var download = Dir("download");
         WriteFile(download, "Book.epub", "incoming");
 
-        var result = await _replacer.ReplaceAsync(library, download, BookFormatTier.Reflowable, CancellationToken.None);
+        var result = await _replacer.ReplaceAsync(library, download, BookFormatTier.Reflowable, CancellationToken.None, EntityKind.Book);
 
         Assert.False(result.Succeeded);
     }
@@ -62,7 +62,7 @@ public sealed class OwnedFileReplacerTests : IDisposable {
         WriteFile(library, "Other.epub", "b"); // two importable files → ambiguous
         WriteFile(download, "New.epub", "c");
 
-        var result = await _replacer.ReplaceAsync(library, download, BookFormatTier.Reflowable, CancellationToken.None);
+        var result = await _replacer.ReplaceAsync(library, download, BookFormatTier.Reflowable, CancellationToken.None, EntityKind.Book);
 
         Assert.False(result.Succeeded);
     }
@@ -173,7 +173,7 @@ public sealed class OwnedFileReplacerTests : IDisposable {
 
         var bin = new CapturingBin();
         var replacer = new OwnedFileReplacer(bin, NullLogger<OwnedFileReplacer>.Instance);
-        var result = await replacer.ReplaceAsync(library, download, Prismedia.Domain.Entities.BookFormatTier.Unknown, CancellationToken.None);
+        var result = await replacer.ReplaceAsync(library, download, Prismedia.Domain.Entities.BookFormatTier.Unknown, CancellationToken.None, EntityKind.Book);
 
         Assert.True(result.Succeeded);
         Assert.Equal("new-better", await File.ReadAllTextAsync(owned));
