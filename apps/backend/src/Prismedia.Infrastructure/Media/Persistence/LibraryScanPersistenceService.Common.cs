@@ -182,6 +182,20 @@ public sealed partial class LibraryScanPersistenceService {
             .FirstOrDefaultAsync(entity => entity.KindCode == kindCode, cancellationToken);
     }
 
+    private async Task<EntityRow?> FindEntityByFolderSourcePathAsync(
+        string kindCode,
+        string folderPath,
+        CancellationToken cancellationToken) {
+        return await _db.EntitySources.AsNoTracking()
+            .Where(source => source.Code == EntitySourceCode.Folder.ToCode() && source.Value == folderPath)
+            .Join(
+                _db.Entities,
+                source => source.EntityId,
+                entity => entity.Id,
+                (source, entity) => entity)
+            .FirstOrDefaultAsync(entity => entity.KindCode == kindCode, cancellationToken);
+    }
+
     private async Task<EntityRow?> FindEntityBySourceValueAsync(
         string kindCode,
         string sourceCode,
@@ -244,11 +258,15 @@ public sealed partial class LibraryScanPersistenceService {
         return await RemoveEntitiesByIdAsync(staleIds, cancellationToken);
     }
 
-    private async Task<int> RemoveStaleContainerEntitiesBySourcePath(
+    private async Task<int> RemoveStaleContainerEntitiesByFolderSource(
         List<Guid> candidateIds, IReadOnlySet<string> validPaths, CancellationToken cancellationToken) {
         if (candidateIds.Count == 0) return 0;
 
-        var staleIds = await GetStaleEntityIdsBySourcePathAsync(candidateIds, validPaths, cancellationToken);
+        var staleIds = await GetStaleEntityIdsBySourceValueAsync(
+            candidateIds,
+            EntitySourceCode.Folder,
+            validPaths,
+            cancellationToken);
         if (staleIds.Count == 0) return 0;
 
         var idsToRemove = await ExpandContainerSubtreeIdsAsync(staleIds, validPaths, cancellationToken);

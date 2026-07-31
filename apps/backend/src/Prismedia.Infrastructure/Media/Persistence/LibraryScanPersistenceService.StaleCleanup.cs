@@ -108,7 +108,7 @@ public sealed partial class LibraryScanPersistenceService {
     public async Task<int> RemoveStaleGalleriesInRootAsync(Guid rootId, IReadOnlySet<string> validFolderPaths, CancellationToken cancellationToken) {
         var galleryIds = await DirectRootedKindIdsAsync(rootId, EntityKind.Gallery, cancellationToken);
 
-        return await RemoveStaleContainerEntitiesBySourcePath(galleryIds, validFolderPaths, cancellationToken);
+        return await RemoveStaleContainerEntitiesByFolderSource(galleryIds, validFolderPaths, cancellationToken);
     }
 
     public async Task<int> RemoveStaleLooseAudioTracksInRootAsync(Guid rootId, IReadOnlySet<string> validPaths, CancellationToken cancellationToken) {
@@ -128,13 +128,13 @@ public sealed partial class LibraryScanPersistenceService {
     public async Task<int> RemoveStaleAudioLibrariesInRootAsync(Guid rootId, IReadOnlySet<string> validFolderPaths, CancellationToken cancellationToken) {
         var libraryIds = await DirectRootedKindIdsAsync(rootId, EntityKind.AudioLibrary, cancellationToken);
 
-        return await RemoveStaleContainerEntitiesBySourcePath(libraryIds, validFolderPaths, cancellationToken);
+        return await RemoveStaleContainerEntitiesByFolderSource(libraryIds, validFolderPaths, cancellationToken);
     }
 
     public async Task<int> RemoveStaleMusicArtistsInRootAsync(Guid rootId, IReadOnlySet<string> validFolderPaths, CancellationToken cancellationToken) {
         var artistIds = await DirectRootedKindIdsAsync(rootId, EntityKind.MusicArtist, cancellationToken);
 
-        return await RemoveStaleContainerEntitiesBySourcePath(artistIds, validFolderPaths, cancellationToken);
+        return await RemoveStaleContainerEntitiesByFolderSource(artistIds, validFolderPaths, cancellationToken);
     }
 
     public async Task<int> RemoveStaleBookVolumesAsync(Guid bookEntityId, IReadOnlySet<string> validFolderPaths, CancellationToken cancellationToken) {
@@ -143,7 +143,7 @@ public sealed partial class LibraryScanPersistenceService {
             .Select(entity => entity.Id)
             .ToListAsync(cancellationToken);
 
-        return await RemoveStaleEntitiesBySourcePath(volumeIds, validFolderPaths, cancellationToken);
+        return await RemoveStaleContainerEntitiesByFolderSource(volumeIds, validFolderPaths, cancellationToken);
     }
 
     public async Task<int> RemoveStaleBookChaptersAsync(Guid bookEntityId, IReadOnlySet<string> validArchivePaths, CancellationToken cancellationToken) {
@@ -158,7 +158,20 @@ public sealed partial class LibraryScanPersistenceService {
     public async Task<int> RemoveStaleBooksInRootAsync(Guid rootId, IReadOnlySet<string> validPaths, CancellationToken cancellationToken) {
         var bookIds = await DirectRootedKindIdsAsync(rootId, EntityKind.Book, cancellationToken);
 
-        return await RemoveStaleEntitiesBySourcePath(bookIds, validPaths, cancellationToken);
+        var fileBackedBookIds = await _db.EntityFiles.AsNoTracking()
+            .Where(file => file.Role == EntityFileRole.Source && bookIds.Contains(file.EntityId))
+            .Select(file => file.EntityId)
+            .Distinct()
+            .ToListAsync(cancellationToken);
+        var folderBackedBookIds = await _db.EntitySources.AsNoTracking()
+            .Where(source => source.Code == EntitySourceCode.Folder.ToCode() && bookIds.Contains(source.EntityId))
+            .Select(source => source.EntityId)
+            .Distinct()
+            .ToListAsync(cancellationToken);
+
+        var removedFiles = await RemoveStaleEntitiesBySourcePath(fileBackedBookIds, validPaths, cancellationToken);
+        var removedFolders = await RemoveStaleContainerEntitiesByFolderSource(folderBackedBookIds, validPaths, cancellationToken);
+        return removedFiles + removedFolders;
     }
 
     public async Task<int> RemoveEntitiesOutsideLibraryRootsAsync(CancellationToken cancellationToken) {
@@ -168,10 +181,15 @@ public sealed partial class LibraryScanPersistenceService {
             .Where(path => !string.IsNullOrWhiteSpace(path))
             .ToArray();
 
-        var sourceRows = await _db.EntityFiles.AsNoTracking()
+        var fileSourceRows = await _db.EntityFiles.AsNoTracking()
             .Where(file => file.Role == EntityFileRole.Source)
             .Select(file => new { file.EntityId, file.Path })
             .ToArrayAsync(cancellationToken);
+        var folderSourceRows = await _db.EntitySources.AsNoTracking()
+            .Where(source => source.Code == EntitySourceCode.Folder.ToCode())
+            .Select(source => new { source.EntityId, Path = source.Value })
+            .ToArrayAsync(cancellationToken);
+        var sourceRows = fileSourceRows.Concat(folderSourceRows).ToArray();
 
         var validSourceIds = sourceRows
             .Where(file => rootPaths.Any(rootPath => LibraryScanPathRules.IsPathUnderRoot(file.Path, rootPath)))

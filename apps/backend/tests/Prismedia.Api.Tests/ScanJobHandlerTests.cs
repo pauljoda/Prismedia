@@ -3675,20 +3675,34 @@ public sealed class ScanJobHandlerTests {
         public Task<bool> ApplyAsync(Guid entityId, string sourcePath, CancellationToken cancellationToken) =>
             Task.FromResult(true);
 
-        public Task<bool> BindWantedEntityAsync(
+        public Task<bool> BindWantedFileAsync(
             EntityKind kind,
             string sourcePath,
             CancellationToken cancellationToken,
             Guid? acquisitionId = null,
             bool requireExactPath = false) => Task.FromResult(false);
 
-        public Task<bool> BindWantedParentAsync(
+        public Task<bool> BindWantedFolderAsync(
+            EntityKind kind,
+            string folderPath,
+            CancellationToken cancellationToken,
+            Guid? acquisitionId = null,
+            bool requireExactPath = false) => Task.FromResult(false);
+
+        public Task<bool> BindWantedParentFolderAsync(
             EntityKind parentKind,
             string folderPath,
             CancellationToken cancellationToken,
             Guid? acquisitionId = null) => Task.FromResult(false);
 
-        public Task<Guid?> BindWantedChildBySortOrderAsync(
+        public Task<Guid?> BindWantedChildFileBySortOrderAsync(
+            EntityKind childKind,
+            string parentPath,
+            int sortOrder,
+            string childPath,
+            CancellationToken cancellationToken) => Task.FromResult<Guid?>(null);
+
+        public Task<Guid?> BindWantedChildFolderBySortOrderAsync(
             EntityKind childKind,
             string parentPath,
             int sortOrder,

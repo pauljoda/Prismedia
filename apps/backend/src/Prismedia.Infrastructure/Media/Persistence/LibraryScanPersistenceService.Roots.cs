@@ -100,10 +100,15 @@ public sealed partial class LibraryScanPersistenceService {
             return 0;
         }
 
-        var sourceRows = await _db.EntityFiles.AsNoTracking()
+        var fileSourceRows = await _db.EntityFiles.AsNoTracking()
             .Where(file => file.Role == EntityFileRole.Source)
             .Select(file => new { file.EntityId, file.Path })
             .ToArrayAsync(cancellationToken);
+        var folderSourceRows = await _db.EntitySources.AsNoTracking()
+            .Where(source => source.Code == EntitySourceCode.Folder.ToCode())
+            .Select(source => new { source.EntityId, Path = source.Value })
+            .ToArrayAsync(cancellationToken);
+        var sourceRows = fileSourceRows.Concat(folderSourceRows).ToArray();
         var excludedEntityIds = sourceRows
             .Where(file => excludedPaths.Any(excluded => LibraryScanPathRules.IsPathCoveredByExclusion(file.Path, excluded)))
             .Select(file => file.EntityId)

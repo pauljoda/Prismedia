@@ -156,14 +156,6 @@ public sealed class AcquisitionHintApplier(
         await db.SaveChangesAsync(cancellationToken);
     }
 
-    public Task<bool> BindWantedEntityAsync(
-        EntityKind kind,
-        string sourcePath,
-        CancellationToken cancellationToken,
-        Guid? acquisitionId = null,
-        bool requireExactPath = false) =>
-        BindWantedFileAsync(kind, sourcePath, cancellationToken, acquisitionId, requireExactPath);
-
     public Task<bool> BindWantedFileAsync(
         EntityKind kind,
         string filePath,
@@ -234,13 +226,6 @@ public sealed class AcquisitionHintApplier(
         }
         return bound;
     }
-    public Task<bool> BindWantedParentAsync(
-        EntityKind parentKind,
-        string folderPath,
-        CancellationToken cancellationToken,
-        Guid? acquisitionId = null) =>
-        BindWantedParentFolderAsync(parentKind, folderPath, cancellationToken, acquisitionId);
-
     public async Task<bool> BindWantedParentFolderAsync(
         EntityKind parentKind,
         string folderPath,
@@ -307,19 +292,15 @@ public sealed class AcquisitionHintApplier(
         return bound;
     }
 
-    public Task<Guid?> BindWantedChildBySortOrderAsync(
-        EntityKind childKind, string parentPath, int sortOrder, string childPath, CancellationToken cancellationToken) =>
-        BindWantedChildFileBySortOrderAsync(childKind, parentPath, sortOrder, childPath, cancellationToken);
-
     public Task<Guid?> BindWantedChildFileBySortOrderAsync(
         EntityKind childKind, string parentFolderPath, int sortOrder, string filePath, CancellationToken cancellationToken) =>
-        BindWantedChildBySortOrderAsync(childKind, parentFolderPath, sortOrder, filePath, SourceBinding.File, cancellationToken);
+        BindWantedChildPathBySortOrderAsync(childKind, parentFolderPath, sortOrder, filePath, SourceBinding.File, cancellationToken);
 
     public Task<Guid?> BindWantedChildFolderBySortOrderAsync(
         EntityKind childKind, string parentFolderPath, int sortOrder, string folderPath, CancellationToken cancellationToken) =>
-        BindWantedChildBySortOrderAsync(childKind, parentFolderPath, sortOrder, folderPath, SourceBinding.Folder, cancellationToken);
+        BindWantedChildPathBySortOrderAsync(childKind, parentFolderPath, sortOrder, folderPath, SourceBinding.Folder, cancellationToken);
 
-    private async Task<Guid?> BindWantedChildBySortOrderAsync(
+    private async Task<Guid?> BindWantedChildPathBySortOrderAsync(
         EntityKind childKind,
         string parentPath,
         int sortOrder,

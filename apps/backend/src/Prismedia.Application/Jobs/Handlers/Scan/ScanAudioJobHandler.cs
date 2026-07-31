@@ -114,7 +114,7 @@ public sealed class ScanAudioJobHandler(
                     EntityKind.AudioTrack,
                     acquisitionId,
                     cancellationToken) is not null) {
-                await acquisitionHints.BindWantedEntityAsync(
+                await acquisitionHints.BindWantedFileAsync(
                     EntityKind.AudioTrack,
                     normalizedPaths[0],
                     cancellationToken,
@@ -122,7 +122,7 @@ public sealed class ScanAudioJobHandler(
             }
 
             foreach (var artist in layout.Artists) {
-                await acquisitionHints.BindWantedParentAsync(
+                await acquisitionHints.BindWantedParentFolderAsync(
                     EntityKind.MusicArtist,
                     artist.Path,
                     cancellationToken,
@@ -130,12 +130,12 @@ public sealed class ScanAudioJobHandler(
             }
 
             foreach (var album in layout.Albums) {
-                await acquisitionHints.BindWantedEntityAsync(
+                await acquisitionHints.BindWantedFolderAsync(
                     EntityKind.AudioLibrary,
                     album.Path,
                     cancellationToken,
                     acquisitionId);
-                await acquisitionHints.BindWantedParentAsync(
+                await acquisitionHints.BindWantedParentFolderAsync(
                     EntityKind.AudioLibrary,
                     album.Path,
                     cancellationToken,
@@ -250,11 +250,11 @@ public sealed class ScanAudioJobHandler(
         // them instead of creating duplicates. Must run BEFORE the artist/album upserts.
         if (acquisitionHints is not null) {
             foreach (var artist in layout.Artists) {
-                await acquisitionHints.BindWantedParentAsync(EntityKind.MusicArtist, artist.Path, cancellationToken);
+                await acquisitionHints.BindWantedParentFolderAsync(EntityKind.MusicArtist, artist.Path, cancellationToken);
             }
 
             foreach (var album in layout.Albums) {
-                await acquisitionHints.BindWantedEntityAsync(EntityKind.AudioLibrary, album.Path, cancellationToken);
+                await acquisitionHints.BindWantedFolderAsync(EntityKind.AudioLibrary, album.Path, cancellationToken);
             }
         }
 

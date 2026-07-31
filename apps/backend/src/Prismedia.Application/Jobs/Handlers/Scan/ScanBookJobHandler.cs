@@ -151,7 +151,7 @@ public sealed class ScanBookJobHandler(
             // Bind a request-created wanted entity to this path first, so the path-keyed upsert finds it
             // (attaching the imported file to the wanted entity) instead of creating a duplicate.
             if (acquisitionHints is not null) {
-                await acquisitionHints.BindWantedEntityAsync(
+                await acquisitionHints.BindWantedFileAsync(
                     EntityKind.Book, first.BookPath, cancellationToken, acquisitionId);
             }
             var bookId = await books.UpsertBookAsync(first.BookPath, first.BookTitle, root.Id, bookIsNsfw, cancellationToken);
@@ -366,7 +366,7 @@ public sealed class ScanBookJobHandler(
                 ?? folderName;
             // Bind a request-created wanted author to this folder first, so the upsert reuses that entity.
             if (acquisitionHints is not null) {
-                await acquisitionHints.BindWantedParentAsync(
+                await acquisitionHints.BindWantedParentFolderAsync(
                     EntityKind.BookAuthor, first.AuthorPath!, cancellationToken, acquisitionId);
             }
             var authorId = await books.UpsertBookAuthorAsync(
@@ -412,7 +412,7 @@ public sealed class ScanBookJobHandler(
         // Bind a request-created wanted entity to this path first, so the path-keyed upsert finds it
         // (attaching the imported file to the wanted entity) instead of creating a duplicate.
         if (acquisitionHints is not null) {
-            await acquisitionHints.BindWantedEntityAsync(
+            await acquisitionHints.BindWantedFileAsync(
                 EntityKind.Book, item.SourcePath, cancellationToken, acquisitionId);
         }
         var bookId = await books.UpsertSingleFileBookAsync(
@@ -504,7 +504,7 @@ public sealed class ScanBookJobHandler(
 
             if (!hasExistingBook) {
                 if (acquisitionHints is not null) {
-                    await acquisitionHints.BindWantedEntityAsync(
+                    await acquisitionHints.BindWantedFolderAsync(
                         EntityKind.Book, sourcePath, cancellationToken, acquisitionId);
                 }
                 bookId = await books.UpsertBookSeriesAsync(

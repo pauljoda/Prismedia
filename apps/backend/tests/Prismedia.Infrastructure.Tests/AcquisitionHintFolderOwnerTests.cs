@@ -207,7 +207,7 @@ public sealed class AcquisitionHintFolderOwnerTests {
         await db.SaveChangesAsync();
         var hints = new AcquisitionHintApplier(db);
 
-        var directWrongSeason = await hints.BindWantedEntityAsync(
+        var directWrongSeason = await hints.BindWantedFolderAsync(
             EntityKind.VideoSeason,
             "/media/tv/Show/S01",
             CancellationToken.None,

@@ -257,21 +257,6 @@ public interface IAcquisitionHintApplier {
     Task<bool> ApplyAsync(Guid entityId, string sourcePath, CancellationToken cancellationToken);
 
     /// <summary>
-    /// Binds a request-created wanted entity of <paramref name="kind"/> (a book, a movie, an album) to
-    /// the path the scan is about to upsert: when an unconsumed import hint matching
-    /// <paramref name="sourcePath"/> carries a wanted-entity link, the imported path becomes that
-    /// entity's source file and its Wanted state clears — so the scan's path-keyed upsert finds the
-    /// wanted entity instead of creating a duplicate. Call BEFORE the kind's upsert for the path.
-    /// Returns true when a wanted entity was bound.
-    /// </summary>
-    Task<bool> BindWantedEntityAsync(
-        EntityKind kind,
-        string sourcePath,
-        CancellationToken cancellationToken,
-        Guid? acquisitionId = null,
-        bool requireExactPath = false);
-
-    /// <summary>
     /// Binds a wanted Entity to a concrete payload file. New scanner/import code must choose this
     /// explicitly instead of inferring the representation from the Entity storage shape.
     /// </summary>
@@ -280,8 +265,7 @@ public interface IAcquisitionHintApplier {
         string filePath,
         CancellationToken cancellationToken,
         Guid? acquisitionId = null,
-        bool requireExactPath = false) =>
-        BindWantedEntityAsync(kind, filePath, cancellationToken, acquisitionId, requireExactPath);
+        bool requireExactPath = false);
 
     /// <summary>
     /// Binds a wanted Entity to structural folder provenance. Implementations persist this as the
@@ -292,66 +276,30 @@ public interface IAcquisitionHintApplier {
         string folderPath,
         CancellationToken cancellationToken,
         Guid? acquisitionId = null,
-        bool requireExactPath = false) =>
-        BindWantedEntityAsync(kind, folderPath, cancellationToken, acquisitionId, requireExactPath);
+        bool requireExactPath = false);
 
     /// <summary>
-    /// Binds a request-created wanted ancestor grouping of <paramref name="parentKind"/> (an author, an
-    /// artist, a series) to the folder the scan is about to upsert: when an unconsumed hint under
-    /// <paramref name="folderPath"/> links a wanted entity with a fileless ancestor of that kind, the
-    /// folder becomes the ancestor's source path and its Wanted state clears — so the scan reuses the
-    /// wanted grouping instead of creating a second one. Call BEFORE the grouping's upsert.
-    /// Returns true when a wanted ancestor was bound.
-    /// </summary>
-    Task<bool> BindWantedParentAsync(
-        EntityKind parentKind,
-        string folderPath,
-        CancellationToken cancellationToken,
-        Guid? acquisitionId = null);
-
-    /// <summary>
-    /// Binds a wanted structural ancestor to its folder provenance. The legacy parent method remains
-    /// available for adapters until each media scanner has moved to the explicit operation.
+    /// Binds a wanted structural ancestor to its folder provenance.
     /// </summary>
     Task<bool> BindWantedParentFolderAsync(
         EntityKind parentKind,
         string folderPath,
         CancellationToken cancellationToken,
-        Guid? acquisitionId = null) =>
-        BindWantedParentAsync(parentKind, folderPath, cancellationToken, acquisitionId);
-
-    /// <summary>
-    /// Binds a wanted positioned child (a phantom season under its series, a phantom episode under its
-    /// season) to the path the scan is about to upsert: when the entity whose source path is
-    /// <paramref name="parentPath"/> has a fileless wanted child of <paramref name="childKind"/> at
-    /// sibling sort order <paramref name="sortOrder"/>, <paramref name="childPath"/> becomes that
-    /// child's source path and its Wanted state clears — so the scan's upsert finds the phantom instead
-    /// of creating a duplicate. Works with or without an import hint: a monitored on-disk series
-    /// gaining new episode files binds its phantoms the same way. Call BEFORE the child's upsert.
-    /// Returns the bound phantom's Entity id, or null when no matching child was available.
-    /// </summary>
-    Task<Guid?> BindWantedChildBySortOrderAsync(
-        EntityKind childKind,
-        string parentPath,
-        int sortOrder,
-        string childPath,
-        CancellationToken cancellationToken);
+        Guid? acquisitionId = null);
 
     Task<Guid?> BindWantedChildFileBySortOrderAsync(
         EntityKind childKind,
         string parentFolderPath,
         int sortOrder,
         string filePath,
-        CancellationToken cancellationToken) =>
-        BindWantedChildBySortOrderAsync(childKind, parentFolderPath, sortOrder, filePath, cancellationToken);
+        CancellationToken cancellationToken);
 
     Task<Guid?> BindWantedChildFolderBySortOrderAsync(
         EntityKind childKind,
         string parentFolderPath,
         int sortOrder,
         string folderPath,
-        CancellationToken cancellationToken) =>
-        BindWantedChildBySortOrderAsync(childKind, parentFolderPath, sortOrder, folderPath, cancellationToken);
+        CancellationToken cancellationToken);
 
     /// <summary>
     /// Reconciles one scanned audio file with the single fileless wanted track under its album whose
