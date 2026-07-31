@@ -71,6 +71,8 @@ Commands should flow through application handlers. Read-only endpoints may use E
 - Use `AsNoTracking` for read-only queries.
 - Use explicit configuration for table names, keys, indexes, value conversions, relationships, delete behavior, and concurrency where needed.
 - Review every generated migration before committing it.
+- Follow the [database migration policy](database-migrations.md) for immutable published history and
+  the guarded two-release process required for any future baseline collapse.
 
 ## CQRS-Lite
 
