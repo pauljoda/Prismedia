@@ -44,7 +44,7 @@ public sealed class VideoContainerProgressTests {
         Assert.Equal(SeasonTwoEpisodeOneId, seasonTwoProgress!.CurrentEntityId);
         Assert.Equal(0, seasonTwoProgress.Index);
         Assert.Equal(2, seasonTwoProgress.Total);
-        Assert.Null(await fixture.ProgressAsync(SeasonOneId));
+        AssertNoProgressCursor(await fixture.ProgressAsync(SeasonOneId));
     }
 
     [Fact]
@@ -89,7 +89,7 @@ public sealed class VideoContainerProgressTests {
         Assert.Equal(SeasonOneEpisodeTwoId, seasonOneProgress!.CurrentEntityId);
         Assert.Equal(1, seasonOneProgress.Index);
         Assert.NotNull(seasonOneProgress.CompletedAt);
-        Assert.Null(await fixture.ProgressAsync(SeasonTwoId));
+        AssertNoProgressCursor(await fixture.ProgressAsync(SeasonTwoId));
     }
 
     [Fact]
@@ -163,10 +163,10 @@ public sealed class VideoContainerProgressTests {
                 Row(SeriesId, EntityKind.VideoSeries, "Series", now),
                 Row(SeasonOneId, EntityKind.VideoSeason, "Season 1", now, SeriesId, 1),
                 Row(SeasonTwoId, EntityKind.VideoSeason, "Season 2", now, SeriesId, 2),
-                Row(SeasonOneEpisodeOneId, EntityKind.Video, "S01E01", now, SeasonOneId, 1),
-                Row(SeasonOneEpisodeTwoId, EntityKind.Video, "S01E02", now, SeasonOneId, 2),
-                Row(SeasonTwoEpisodeOneId, EntityKind.Video, "S02E01", now, SeasonTwoId, 1),
-                Row(SeasonTwoEpisodeTwoId, EntityKind.Video, "S02E02", now, SeasonTwoId, 2));
+                Row(SeasonOneEpisodeOneId, EntityKind.VideoEpisode, "S01E01", now, SeasonOneId, 1),
+                Row(SeasonOneEpisodeTwoId, EntityKind.VideoEpisode, "S01E02", now, SeasonOneId, 2),
+                Row(SeasonTwoEpisodeOneId, EntityKind.VideoEpisode, "S02E01", now, SeasonTwoId, 1),
+                Row(SeasonTwoEpisodeTwoId, EntityKind.VideoEpisode, "S02E02", now, SeasonTwoId, 2));
             db.EntityTechnical.AddRange(
                 Technical(SeasonOneEpisodeOneId, now),
                 Technical(SeasonOneEpisodeTwoId, now),
@@ -215,6 +215,14 @@ public sealed class VideoContainerProgressTests {
                 DurationSeconds = 100,
                 UpdatedAt = now
             };
+    }
+
+    private static void AssertNoProgressCursor(CapabilityProgress? progress) {
+        var cursor = Assert.IsType<CapabilityProgress>(progress);
+        Assert.Null(cursor.CurrentEntityId);
+        Assert.Equal(0, cursor.Index);
+        Assert.Equal(0, cursor.Total);
+        Assert.Null(cursor.CompletedAt);
     }
 
     private sealed class FixedTimeProvider(DateTimeOffset now) : TimeProvider {
