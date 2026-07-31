@@ -89,7 +89,7 @@ public static class MediaQualityLadder {
 
     /// <summary>
     /// True for the media kinds whose owned copy is a single file the upgrade loop can atomically swap in
-    /// place — a movie and a single TV episode (<see cref="EntityKind.Video"/>). Multi-file units
+    /// place — a movie and a single TV episode. Multi-file units
     /// (<see cref="EntityKind.VideoSeason"/> season packs, <see cref="EntityKind.AudioLibrary"/> albums)
     /// fulfill on import instead: a single-file replace can't safely swap a whole pack. Books have their
     /// own upgrade path (source/format tiers) and are never routed here.

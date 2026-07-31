@@ -73,12 +73,8 @@ public sealed class MediaReleaseDecisionEnginesTests {
         Assert.Equal(["Andor S01", "Andor Season 1", "Andor complete"], policy.BuildQueries(season));
 
         var episode = new AcquisitionSearchInput(
-            Guid.NewGuid(), "Pilot", null, EntityKind.Video, Series: "Andor", SeasonNumber: 1, EpisodeNumber: 5);
+            Guid.NewGuid(), "Pilot", null, EntityKind.VideoEpisode, Series: "Andor", SeasonNumber: 1, EpisodeNumber: 5);
         Assert.Equal(["Andor S01E05", "Andor 1x05"], policy.BuildQueries(episode));
-
-        // A plain video with no unit context keeps the movie-style year ladder.
-        var video = new AcquisitionSearchInput(Guid.NewGuid(), "Some Video", null, EntityKind.Video, Year: 2020);
-        Assert.Equal(["Some Video 2020", "Some Video"], policy.BuildQueries(video));
     }
 
     [Fact]
@@ -108,7 +104,7 @@ public sealed class MediaReleaseDecisionEnginesTests {
 
     [Fact]
     public void EpisodeSearchAcceptsOnlyTheExactUnit() {
-        var engine = new TvReleaseDecisionEngine(EntityKind.Video);
+        var engine = new TvReleaseDecisionEngine(EntityKind.VideoEpisode);
         var rules = BookAcquisitionRules.Default with { SeasonNumber = 1, EpisodeNumber = 5 };
 
         var scored = engine.Evaluate([
@@ -335,7 +331,7 @@ public sealed class MediaReleaseDecisionEnginesTests {
 
     [Fact]
     public void EpisodeSearchRanksTheExactEpisodeAboveMarkerlessTitles() {
-        var engine = new TvReleaseDecisionEngine(EntityKind.Video);
+        var engine = new TvReleaseDecisionEngine(EntityKind.VideoEpisode);
         var rules = BookAcquisitionRules.Default with { SeasonNumber = 1, EpisodeNumber = 5 };
 
         var scored = engine.Evaluate([

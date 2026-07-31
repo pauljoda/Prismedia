@@ -128,7 +128,7 @@ public sealed class TvAcquisitionPolicyModule : AcquisitionPolicyModule {
         : base(TorznabCategoryRange.Tv, [
             new TvReleaseDecisionEngine(EntityKind.VideoSeries),
             new TvReleaseDecisionEngine(EntityKind.VideoSeason),
-            new TvReleaseDecisionEngine(EntityKind.Video)
+            new TvReleaseDecisionEngine(EntityKindRegistry.PlayableVideoKindFor(PlayableVideoScanPlacement.Episode))
         ]) { }
 
     /// <inheritdoc />
@@ -138,18 +138,11 @@ public sealed class TvAcquisitionPolicyModule : AcquisitionPolicyModule {
         }
 
         var tvBase = string.IsNullOrWhiteSpace(input.Series) ? input.Title : input.Series;
-        if (input.Kind == EntityKind.Video && input is { SeasonNumber: { } season, EpisodeNumber: { } episode }) {
+        var episodeKind = EntityKindRegistry.PlayableVideoKindFor(PlayableVideoScanPlacement.Episode);
+        if (input.Kind == episodeKind && input is { SeasonNumber: { } season, EpisodeNumber: { } episode }) {
             return AcquisitionPolicyQueries.Normalize([
                 AcquisitionPolicyQueries.Join(tvBase, $"S{season:00}E{episode:00}"),
                 AcquisitionPolicyQueries.Join(tvBase, $"{season}x{episode:00}")
-            ]);
-        }
-
-        // A direct video without complete TV-unit context keeps the established movie-style fallback.
-        if (input.Kind == EntityKind.Video) {
-            return AcquisitionPolicyQueries.Normalize([
-                AcquisitionPolicyQueries.Join(input.Title, input.Year?.ToString()),
-                input.Title
             ]);
         }
 

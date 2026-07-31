@@ -1226,9 +1226,10 @@ public sealed class EfAcquisitionStoreTests {
 
         Assert.True(bound);
         var author = await db.Entities.AsNoTracking().FirstAsync(row => row.Id == authorId);
-        Assert.False(author.IsWanted);
-        var file = Assert.Single(await db.EntityFiles.AsNoTracking().Where(f => f.EntityId == authorId).ToArrayAsync());
-        Assert.Equal("/media/books/Brandon Sanderson", file.Path);
+        Assert.True(author.IsWanted);
+        var folder = Assert.Single(await db.EntitySources.AsNoTracking().Where(row => row.EntityId == authorId).ToArrayAsync());
+        Assert.Equal(EntitySourceCode.Folder.ToCode(), folder.Code);
+        Assert.Equal("/media/books/Brandon Sanderson", folder.Value);
         // The book itself stays wanted until its own path binds.
         Assert.True((await db.Entities.AsNoTracking().FirstAsync(row => row.Id == bookId)).IsWanted);
     }
@@ -1251,10 +1252,10 @@ public sealed class EfAcquisitionStoreTests {
             CancellationToken.None);
 
         Assert.True(bound);
-        Assert.False((await db.Entities.AsNoTracking().SingleAsync(row => row.Id == authorId)).IsWanted);
+        Assert.True((await db.Entities.AsNoTracking().SingleAsync(row => row.Id == authorId)).IsWanted);
         Assert.Equal(
             "/media/books/Author",
-            (await db.EntityFiles.AsNoTracking().SingleAsync(row => row.EntityId == authorId)).Path);
+            (await db.EntitySources.AsNoTracking().SingleAsync(row => row.EntityId == authorId)).Value);
     }
 
     [Fact]
@@ -1372,6 +1373,22 @@ public sealed class EfAcquisitionStoreTests {
         Assert.Equal(checkpoint.Units[0].TargetAbsolutePath, unit.TargetAbsolutePath);
         Assert.Equal(checkpoint.Units[0].ReplacementBackupPath, unit.ReplacementBackupPath);
         Assert.Equal(checkpoint.Units[0].ReplacementEvidencePath, unit.ReplacementEvidencePath);
+    }
+
+    [Fact]
+    public async Task VideoEpisodeCheckpointUsesTheTelevisionRecoveryPath() {
+        await using var db = CreateContext();
+        var acquisitionId = AddCheckpointAcquisition(db, EntityKind.VideoEpisode);
+        await db.SaveChangesAsync();
+        var checkpoint = ValidTvCheckpoint();
+        var store = AcquisitionTestFactory.Store(db);
+
+        await store.SetTvImportCheckpointAsync(acquisitionId, checkpoint, CancellationToken.None);
+
+        var context = await store.GetImportContextAsync(acquisitionId, CancellationToken.None);
+        Assert.Equal(EntityKind.VideoEpisode, context!.Kind);
+        Assert.Equal(checkpoint.AttemptId, context.TvImportCheckpoint!.AttemptId);
+        Assert.Null(context.ImportPlacementCheckpoint);
     }
 
     [Fact]
@@ -1569,14 +1586,14 @@ public sealed class EfAcquisitionStoreTests {
         Assert.Contains("cannot be resumed safely", exception.Message);
     }
 
-    private static Guid AddCheckpointAcquisition(PrismediaDbContext db) {
+    private static Guid AddCheckpointAcquisition(PrismediaDbContext db, EntityKind kind = EntityKind.VideoSeason) {
         var id = Guid.NewGuid();
         var now = DateTimeOffset.UtcNow;
         db.Acquisitions.Add(new AcquisitionRow {
             Id = id,
             Status = AcquisitionStatus.Importing,
             Title = "Show",
-            Kind = EntityKind.VideoSeason,
+            Kind = kind,
             ExternalIdsJson = "{}",
             SourceUrlsJson = "[]",
             CreatedAt = now,

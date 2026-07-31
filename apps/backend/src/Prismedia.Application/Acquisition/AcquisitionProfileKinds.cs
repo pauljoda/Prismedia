@@ -27,6 +27,13 @@ public static class AcquisitionProfileKinds {
         };
     }
 
+    /// <summary>
+    /// Whether the acquisition kind is governed by the specified profile naming family. Import and
+    /// recovery flows use this rather than maintaining their own copies of the TV/film kind sets.
+    /// </summary>
+    public static bool UsesNamingFamily(EntityKind acquisitionKind, AcquisitionNamingFamily namingFamily) =>
+        EntityKindRegistry.Describe(For(acquisitionKind)).AcquisitionProfile?.NamingFamily == namingFamily;
+
     /// <summary>The closed set of kinds a profile may be created for, in display order.</summary>
     public static readonly IReadOnlyList<EntityKind> All = EntityKindRegistry.All
         .Where(definition => definition.AcquisitionProfile is not null)

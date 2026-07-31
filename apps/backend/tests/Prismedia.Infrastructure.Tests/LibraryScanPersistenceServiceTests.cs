@@ -1289,6 +1289,43 @@ public sealed class LibraryScanPersistenceServiceTests {
     }
 
     [Fact]
+    public async Task MovieFolderProvenanceReusesTheWantedMovieButOnlyThePayloadSourceFulfillsIt() {
+        await using var db = CreateContext();
+        var rootId = Guid.NewGuid();
+        var movieId = Guid.NewGuid();
+        var now = DateTimeOffset.UtcNow;
+        db.Entities.Add(new EntityRow {
+            Id = movieId,
+            KindCode = EntityKind.Movie.ToCode(),
+            Title = "Wanted film",
+            IsWanted = true,
+            CreatedAt = now,
+            UpdatedAt = now
+        });
+        db.EntitySources.Add(new EntitySourceRow {
+            EntityId = movieId,
+            Code = EntitySourceCode.Folder.ToCode(),
+            Value = "/media/Wanted film",
+            UpdatedAt = now
+        });
+        await db.SaveChangesAsync();
+
+        var ids = await new LibraryScanPersistenceService(db).UpsertVideosBatchAsync([
+            new VideoUpsertItem(
+                "/media/Wanted film/Wanted film.mkv",
+                "Wanted film",
+                rootId,
+                IsNsfw: false,
+                ScanPlacement: PlayableVideoScanPlacement.Movie,
+                Movie: new MovieScanInfo("/media/Wanted film", "Wanted film"))
+        ], CancellationToken.None);
+
+        Assert.Equal(movieId, Assert.Single(ids));
+        Assert.False((await db.Entities.FindAsync([movieId]))!.IsWanted);
+        Assert.Single(db.EntityFiles.Where(file => file.EntityId == movieId && file.Role == EntityFileRole.Source));
+    }
+
+    [Fact]
     public async Task UpsertVideosBatchMaterializesStandaloneVideoWithoutAParent() {
         await using var db = CreateContext();
         var rootId = Guid.Parse("55555555-5555-5555-5555-555555555555");

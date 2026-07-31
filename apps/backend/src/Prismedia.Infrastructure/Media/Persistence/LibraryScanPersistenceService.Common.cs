@@ -125,12 +125,23 @@ public sealed partial class LibraryScanPersistenceService {
                 CreatedAt = now,
                 UpdatedAt = now
             });
-            return;
+        } else {
+            file.Path = path;
+            file.SizeBytes = sizeBytes;
+            file.UpdatedAt = now;
         }
 
-        file.Path = path;
-        file.SizeBytes = sizeBytes;
-        file.UpdatedAt = now;
+        // A source payload, not folder provenance, is the fulfillment boundary for a wanted Entity.
+        // This runs in the scan transaction, so a failed upsert cannot leave a fileless entity marked
+        // as owned merely because its structural folder was discovered.
+        if (role == EntityFileRole.Source) {
+            var entity = _db.Entities.Local.FirstOrDefault(row => row.Id == entityId)
+                ?? await _db.Entities.FirstOrDefaultAsync(row => row.Id == entityId, cancellationToken);
+            if (entity is not null && entity.IsWanted) {
+                entity.IsWanted = false;
+                entity.UpdatedAt = now;
+            }
+        }
     }
 
     private async Task EnsureEntitySourceAsync(

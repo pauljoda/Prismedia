@@ -14,6 +14,50 @@ namespace Prismedia.Infrastructure.Tests;
 /// </summary>
 public sealed class AcquisitionHintFolderOwnerTests {
     [Fact]
+    public async Task DirectMovieFolderProvenanceDoesNotFulfillTheWantedMovieBeforeItsPayloadExists() {
+        await using var db = CreateContext();
+        var movieId = AddWantedEntity(db, EntityKind.Movie.ToCode(), parent: null, sortOrder: 0);
+        var acquisitionId = AddHint(db, "/media/movies/Film (2020)", "{}", movieId);
+        await db.SaveChangesAsync();
+
+        var bound = await new AcquisitionHintApplier(db).BindWantedFolderAsync(
+            EntityKind.Movie,
+            "/media/movies/Film (2020)",
+            CancellationToken.None,
+            acquisitionId,
+            requireExactPath: true);
+
+        Assert.True(bound);
+        Assert.True(await db.Entities.AsNoTracking().Where(row => row.Id == movieId).Select(row => row.IsWanted).SingleAsync());
+        var folder = await db.EntitySources.AsNoTracking().SingleAsync(row => row.EntityId == movieId);
+        Assert.Equal(EntitySourceCode.Folder.ToCode(), folder.Code);
+        Assert.Equal("/media/movies/Film (2020)", folder.Value);
+        Assert.False(await db.EntityFiles.AsNoTracking().AnyAsync(row => row.EntityId == movieId));
+    }
+
+    [Fact]
+    public async Task StandaloneVideoReuseBindsItsPayloadFile() {
+        await using var db = CreateContext();
+        var videoId = AddWantedEntity(db, EntityKind.Video.ToCode(), parent: null, sortOrder: 0);
+        var acquisitionId = AddHint(db, "/media/videos/Clip.mkv", "{}", videoId);
+        await db.SaveChangesAsync();
+
+        var bound = await new AcquisitionHintApplier(db).BindWantedFileAsync(
+            EntityKind.Video,
+            "/media/videos/Clip.mkv",
+            CancellationToken.None,
+            acquisitionId,
+            requireExactPath: true);
+
+        Assert.True(bound);
+        Assert.False(await db.Entities.AsNoTracking().Where(row => row.Id == videoId).Select(row => row.IsWanted).SingleAsync());
+        var file = await db.EntityFiles.AsNoTracking().SingleAsync(row => row.EntityId == videoId);
+        Assert.Equal(EntityFileRole.Source, file.Role);
+        Assert.Equal("/media/videos/Clip.mkv", file.Path);
+        Assert.False(await db.EntitySources.AsNoTracking().AnyAsync(row => row.EntityId == videoId));
+    }
+
+    [Fact]
     public async Task ImportedEpisodeMakesItsOrganizedSeriesEligibleForIdentifyAgain() {
         await using var db = CreateContext();
         var seriesId = AddEntity(db, EntityKind.VideoSeries.ToCode(), null, "/media/tv/Show", title: "Show");
@@ -169,13 +213,13 @@ public sealed class AcquisitionHintFolderOwnerTests {
             CancellationToken.None,
             acquisitionId,
             requireExactPath: true);
-        var wrongPosition = await hints.BindWantedChildBySortOrderAsync(
+        var wrongPosition = await hints.BindWantedChildFolderBySortOrderAsync(
             EntityKind.VideoSeason,
             "/media/tv/Show",
             1,
             "/media/tv/Show/S01",
             CancellationToken.None);
-        var requestedPosition = await hints.BindWantedChildBySortOrderAsync(
+        var requestedPosition = await hints.BindWantedChildFolderBySortOrderAsync(
             EntityKind.VideoSeason,
             "/media/tv/Show",
             3,
@@ -185,9 +229,10 @@ public sealed class AcquisitionHintFolderOwnerTests {
         Assert.False(directWrongSeason);
         Assert.Null(wrongPosition);
         Assert.Equal(wantedSeasonThreeId, requestedPosition);
-        var source = await db.EntityFiles.AsNoTracking()
-            .SingleAsync(row => row.EntityId == wantedSeasonThreeId && row.Role == EntityFileRole.Source);
-        Assert.Equal("/media/tv/Show/S03", source.Path);
+        Assert.True(await db.Entities.AsNoTracking().Where(row => row.Id == wantedSeasonThreeId).Select(row => row.IsWanted).SingleAsync());
+        var source = await db.EntitySources.AsNoTracking()
+            .SingleAsync(row => row.EntityId == wantedSeasonThreeId && row.Code == EntitySourceCode.Folder.ToCode());
+        Assert.Equal("/media/tv/Show/S03", source.Value);
     }
 
     [Fact]

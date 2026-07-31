@@ -37,7 +37,7 @@ public sealed class AcquisitionPolicyModuleTests {
         Assert.IsType<MusicAcquisitionPolicyModule>(registry.Get(EntityKind.MusicArtist));
         Assert.IsType<TvAcquisitionPolicyModule>(registry.Get(EntityKind.VideoSeries));
         Assert.IsType<TvAcquisitionPolicyModule>(registry.Get(EntityKind.VideoSeason));
-        Assert.IsType<TvAcquisitionPolicyModule>(registry.Get(EntityKind.Video));
+        Assert.IsType<TvAcquisitionPolicyModule>(registry.Get(EntityKind.VideoEpisode));
     }
 
     [Fact]
@@ -60,20 +60,17 @@ public sealed class AcquisitionPolicyModuleTests {
     }
 
     [Fact]
-    public void TvModuleBuildsSeasonEpisodeAndDirectVideoLadders() {
+    public void TvModuleBuildsSeasonAndEpisodeLadders() {
         var module = new TvAcquisitionPolicyModule();
         var season = new AcquisitionSearchInput(
             Guid.NewGuid(), "Season 1", null, EntityKind.VideoSeason,
             Series: "Andor", SeasonNumber: 1);
         var episode = new AcquisitionSearchInput(
-            Guid.NewGuid(), "Pilot", null, EntityKind.Video,
+            Guid.NewGuid(), "Pilot", null, EntityKind.VideoEpisode,
             Series: "Andor", SeasonNumber: 1, EpisodeNumber: 5);
-        var directVideo = new AcquisitionSearchInput(
-            Guid.NewGuid(), "Some Video", null, EntityKind.Video, Year: 2020);
 
         Assert.Equal(["Andor S01", "Andor Season 1", "Andor complete"], module.BuildQueries(season));
         Assert.Equal(["Andor S01E05", "Andor 1x05"], module.BuildQueries(episode));
-        Assert.Equal(["Some Video 2020", "Some Video"], module.BuildQueries(directVideo));
     }
 
     [Fact]
@@ -124,7 +121,7 @@ public sealed class AcquisitionPolicyModuleTests {
         Assert.Equal(EntityKind.AudioTrack, music.DecisionEngineFor(EntityKind.AudioTrack).Kind);
         Assert.Equal(EntityKind.MusicArtist, music.DecisionEngineFor(EntityKind.MusicArtist).Kind);
         Assert.Equal(EntityKind.VideoSeries, tv.DecisionEngineFor(EntityKind.VideoSeries).Kind);
-        Assert.Equal(EntityKind.Video, tv.DecisionEngineFor(EntityKind.Video).Kind);
+        Assert.Equal(EntityKind.VideoEpisode, tv.DecisionEngineFor(EntityKind.VideoEpisode).Kind);
     }
 
     private static AcquisitionPolicyRegistry BuiltInRegistry() => new([

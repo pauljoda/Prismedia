@@ -99,12 +99,12 @@ public sealed class AcquisitionPayloadValidationTests {
     public void EpisodePayloadMissingTheSoughtEpisodeIsAConflict() {
         var conflict = AcquisitionPayloadValidation.FindConflict(
             ["Show.S01E05.720p/Show.S01E05.720p.mkv"],
-            EntityKind.Video, "Show", null, seasonNumber: 1, episodeNumber: 7);
+            EntityKind.VideoEpisode, "Show", null, seasonNumber: 1, episodeNumber: 7);
         Assert.NotNull(conflict);
         // A double-episode file containing the sought half passes.
         Assert.Null(AcquisitionPayloadValidation.FindConflict(
             ["Show.S01E41E42/Show.S01E41E42.480p.mkv"],
-            EntityKind.Video, "Show", null, seasonNumber: 1, episodeNumber: 42));
+            EntityKind.VideoEpisode, "Show", null, seasonNumber: 1, episodeNumber: 42));
     }
 
     [Fact]

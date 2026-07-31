@@ -156,17 +156,39 @@ public sealed class AcquisitionHintApplier(
         await db.SaveChangesAsync(cancellationToken);
     }
 
-    public async Task<bool> BindWantedEntityAsync(
+    public Task<bool> BindWantedEntityAsync(
         EntityKind kind,
         string sourcePath,
         CancellationToken cancellationToken,
         Guid? acquisitionId = null,
-        bool requireExactPath = false) {
-        // TV callers require an exact hint path: broad checkpoint hints exist to protect structural
-        // parent/position binding and must never attach S03 to the first S01 file. Other media retain
-        // their established folder-overlap binding semantics.
+        bool requireExactPath = false) =>
+        BindWantedFileAsync(kind, sourcePath, cancellationToken, acquisitionId, requireExactPath);
+
+    public Task<bool> BindWantedFileAsync(
+        EntityKind kind,
+        string filePath,
+        CancellationToken cancellationToken,
+        Guid? acquisitionId = null,
+        bool requireExactPath = false) =>
+        BindWantedPathAsync(kind, filePath, SourceBinding.File, cancellationToken, acquisitionId, requireExactPath);
+
+    public Task<bool> BindWantedFolderAsync(
+        EntityKind kind,
+        string folderPath,
+        CancellationToken cancellationToken,
+        Guid? acquisitionId = null,
+        bool requireExactPath = false) =>
+        BindWantedPathAsync(kind, folderPath, SourceBinding.Folder, cancellationToken, acquisitionId, requireExactPath);
+
+    private async Task<bool> BindWantedPathAsync(
+        EntityKind kind,
+        string path,
+        SourceBinding binding,
+        CancellationToken cancellationToken,
+        Guid? acquisitionId,
+        bool requireExactPath) {
         var entityId = await FindWantedEntityIdForPathAsync(
-            sourcePath,
+            path,
             cancellationToken,
             acquisitionId,
             exactPath: requireExactPath);
@@ -174,9 +196,6 @@ public sealed class AcquisitionHintApplier(
             return false;
         }
 
-        // ExecuteAsync deliberately returns false for both a destructive lifecycle owner and a missing
-        // Entity. A dangling hint is an ordinary scan race (the scanner should create a fresh Entity),
-        // while a still-existing claimed target must retry after cleanup. Preserve that distinction.
         if (!await db.Entities.AsNoTracking().AnyAsync(
                 row => row.Id == entityId.Value,
                 cancellationToken)) {
@@ -188,27 +207,18 @@ public sealed class AcquisitionHintApplier(
         if (!await _lifecycle.ExecuteAsync(
                 entityId.Value,
                 async leaseCancellationToken => {
-                    // Tolerate a dangling link (the wanted entity was deleted): the scan creates fresh.
-                    // Never bind an Entity that already has a source.
                     var entity = await db.Entities.FirstOrDefaultAsync(
                         row => row.Id == entityId && row.KindCode == kindCode,
                         leaseCancellationToken);
-                    if (entity is null || await HasSourceFileAsync(entity.Id, leaseCancellationToken)) {
+                    if (entity is null || await HasBindingAsync(entity.Id, binding, leaseCancellationToken)) {
                         return;
                     }
 
                     var now = DateTimeOffset.UtcNow;
-                    db.EntityFiles.Add(new EntityFileRow {
-                        Id = Guid.NewGuid(),
-                        EntityId = entity.Id,
-                        Role = EntityFileRole.Source,
-                        Path = sourcePath,
-                        MimeType = ContentTypeForPath(sourcePath),
-                        SizeBytes = TryGetFileSize(sourcePath),
-                        CreatedAt = now,
-                        UpdatedAt = now
-                    });
-                    entity.IsWanted = false;
+                    AddBinding(entity.Id, path, binding, now);
+                    if (binding == SourceBinding.File) {
+                        entity.IsWanted = false;
+                    }
                     entity.UpdatedAt = now;
                     await db.SaveChangesAsync(leaseCancellationToken);
                     bound = true;
@@ -224,8 +234,14 @@ public sealed class AcquisitionHintApplier(
         }
         return bound;
     }
+    public Task<bool> BindWantedParentAsync(
+        EntityKind parentKind,
+        string folderPath,
+        CancellationToken cancellationToken,
+        Guid? acquisitionId = null) =>
+        BindWantedParentFolderAsync(parentKind, folderPath, cancellationToken, acquisitionId);
 
-    public async Task<bool> BindWantedParentAsync(
+    public async Task<bool> BindWantedParentFolderAsync(
         EntityKind parentKind,
         string folderPath,
         CancellationToken cancellationToken,
@@ -239,9 +255,6 @@ public sealed class AcquisitionHintApplier(
             return false;
         }
 
-        // The hint links the wanted LEAF (a book, an album, an episode); the grouping is an ancestor —
-        // walk up until the expected kind appears (an episode's series is two levels up) and bind only
-        // a fileless entity of that kind.
         var parentKindCode = parentKind.ToCode();
         var currentId = entityId;
         var visited = new HashSet<Guid>();
@@ -278,20 +291,12 @@ public sealed class AcquisitionHintApplier(
                     var current = await db.Entities.FirstOrDefaultAsync(
                         row => row.Id == container.Id && row.KindCode == parentKindCode,
                         leaseCancellationToken);
-                    if (current is null || await HasSourceFileAsync(current.Id, leaseCancellationToken)) {
+                    if (current is null || await HasBindingAsync(current.Id, SourceBinding.Folder, leaseCancellationToken)) {
                         return;
                     }
 
                     var now = DateTimeOffset.UtcNow;
-                    db.EntityFiles.Add(new EntityFileRow {
-                        Id = Guid.NewGuid(),
-                        EntityId = current.Id,
-                        Role = EntityFileRole.Source,
-                        Path = folderPath,
-                        CreatedAt = now,
-                        UpdatedAt = now
-                    });
-                    current.IsWanted = false;
+                    AddBinding(current.Id, folderPath, SourceBinding.Folder, now);
                     current.UpdatedAt = now;
                     await db.SaveChangesAsync(leaseCancellationToken);
                     bound = true;
@@ -302,18 +307,30 @@ public sealed class AcquisitionHintApplier(
         return bound;
     }
 
-    public async Task<Guid?> BindWantedChildBySortOrderAsync(
-        EntityKind childKind, string parentPath, int sortOrder, string childPath, CancellationToken cancellationToken) {
+    public Task<Guid?> BindWantedChildBySortOrderAsync(
+        EntityKind childKind, string parentPath, int sortOrder, string childPath, CancellationToken cancellationToken) =>
+        BindWantedChildFileBySortOrderAsync(childKind, parentPath, sortOrder, childPath, cancellationToken);
+
+    public Task<Guid?> BindWantedChildFileBySortOrderAsync(
+        EntityKind childKind, string parentFolderPath, int sortOrder, string filePath, CancellationToken cancellationToken) =>
+        BindWantedChildBySortOrderAsync(childKind, parentFolderPath, sortOrder, filePath, SourceBinding.File, cancellationToken);
+
+    public Task<Guid?> BindWantedChildFolderBySortOrderAsync(
+        EntityKind childKind, string parentFolderPath, int sortOrder, string folderPath, CancellationToken cancellationToken) =>
+        BindWantedChildBySortOrderAsync(childKind, parentFolderPath, sortOrder, folderPath, SourceBinding.Folder, cancellationToken);
+
+    private async Task<Guid?> BindWantedChildBySortOrderAsync(
+        EntityKind childKind,
+        string parentPath,
+        int sortOrder,
+        string childPath,
+        SourceBinding binding,
+        CancellationToken cancellationToken) {
         if (string.IsNullOrWhiteSpace(parentPath) || string.IsNullOrWhiteSpace(childPath)) {
             return null;
         }
 
-        // The parent is whichever entity owns the scanned parent folder — a wanted series bound moments
-        // earlier in this same scan, or a real on-disk one gaining new files under a monitored tree.
-        var parentId = await db.EntityFiles.AsNoTracking()
-            .Where(file => file.Role == EntityFileRole.Source && file.Path == parentPath)
-            .Select(file => (Guid?)file.EntityId)
-            .FirstOrDefaultAsync(cancellationToken);
+        var parentId = await FindFolderOwnerAsync(parentPath, cancellationToken);
         if (parentId is null) {
             return null;
         }
@@ -336,22 +353,15 @@ public sealed class AcquisitionHintApplier(
                             && row.IsWanted
                             && row.SortOrder == sortOrder,
                         leaseCancellationToken);
-                    if (current is null || await HasSourceFileAsync(current.Id, leaseCancellationToken)) {
+                    if (current is null || await HasBindingAsync(current.Id, binding, leaseCancellationToken)) {
                         return;
                     }
 
                     var now = DateTimeOffset.UtcNow;
-                    db.EntityFiles.Add(new EntityFileRow {
-                        Id = Guid.NewGuid(),
-                        EntityId = current.Id,
-                        Role = EntityFileRole.Source,
-                        Path = childPath,
-                        MimeType = ContentTypeForPath(childPath),
-                        SizeBytes = TryGetFileSize(childPath),
-                        CreatedAt = now,
-                        UpdatedAt = now
-                    });
-                    current.IsWanted = false;
+                    AddBinding(current.Id, childPath, binding, now);
+                    if (binding == SourceBinding.File) {
+                        current.IsWanted = false;
+                    }
                     current.UpdatedAt = now;
                     await db.SaveChangesAsync(leaseCancellationToken);
                     boundId = current.Id;
@@ -692,6 +702,39 @@ public sealed class AcquisitionHintApplier(
         db.EntityFiles.AsNoTracking()
             .AnyAsync(file => file.EntityId == entityId && file.Role == EntityFileRole.Source, cancellationToken);
 
+    private Task<bool> HasBindingAsync(
+        Guid entityId,
+        SourceBinding binding,
+        CancellationToken cancellationToken) =>
+        binding == SourceBinding.File
+            ? HasSourceFileAsync(entityId, cancellationToken)
+            : db.EntitySources.AsNoTracking().AnyAsync(
+                source => source.EntityId == entityId && source.Code == EntitySourceCode.Folder.ToCode(),
+                cancellationToken);
+
+    private void AddBinding(Guid entityId, string path, SourceBinding binding, DateTimeOffset now) {
+        if (binding == SourceBinding.File) {
+            db.EntityFiles.Add(new EntityFileRow {
+                Id = Guid.NewGuid(),
+                EntityId = entityId,
+                Role = EntityFileRole.Source,
+                Path = path,
+                MimeType = ContentTypeForPath(path),
+                SizeBytes = TryGetFileSize(path),
+                CreatedAt = now,
+                UpdatedAt = now
+            });
+            return;
+        }
+
+        db.EntitySources.Add(new EntitySourceRow {
+            EntityId = entityId,
+            Code = EntitySourceCode.Folder.ToCode(),
+            Value = path,
+            UpdatedAt = now
+        });
+    }
+
     public async Task<IReadOnlyList<StampedHintOwner>> ApplyToFolderOwnersAsync(
         CancellationToken cancellationToken,
         Guid? acquisitionId = null) {
@@ -707,8 +750,8 @@ public sealed class AcquisitionHintApplier(
 
         var owners = new Dictionary<Guid, StampedHintOwner>();
         foreach (var hint in hints) {
-            // The entity owning the imported path: exact Source match first (the season/album folder or
-            // the episode/movie file the scan keyed), else the nearest ancestor folder that owns one —
+            // The entity owning the imported path: exact payload-file or folder-provenance match first,
+            // else the nearest ancestor folder owner —
             // a merged import's hint may name a freshly created folder inside an existing tree.
             var entityId = await FindOwnerBySourcePathAsync(hint.SourcePath, cancellationToken);
             if (entityId is null) {
@@ -739,11 +782,16 @@ public sealed class AcquisitionHintApplier(
                 var linkedExists = await db.Entities.AsNoTracking()
                     .AnyAsync(row => row.Id == linkedEntityId, cancellationToken);
                 if (linkedExists) {
-                    var linkedPaths = await db.EntityFiles.AsNoTracking()
+                    var linkedFilePaths = await db.EntityFiles.AsNoTracking()
                         .Where(file => file.EntityId == linkedEntityId && file.Role == EntityFileRole.Source)
                         .Select(file => file.Path)
                         .ToArrayAsync(cancellationToken);
-                    if (!linkedPaths.Any(path => PathsOverlap(Normalize(path), Normalize(hint.SourcePath)))) {
+                    var linkedFolderPaths = await db.EntitySources.AsNoTracking()
+                        .Where(source => source.EntityId == linkedEntityId && source.Code == EntitySourceCode.Folder.ToCode())
+                        .Select(source => source.Value)
+                        .ToArrayAsync(cancellationToken);
+                    if (!linkedFilePaths.Concat(linkedFolderPaths)
+                        .Any(path => PathsOverlap(Normalize(path), Normalize(hint.SourcePath)))) {
                         continue;
                     }
 
@@ -777,7 +825,7 @@ public sealed class AcquisitionHintApplier(
         return owners.Values.ToArray();
     }
 
-    /// <summary>The entity owning the exact path, else the nearest ancestor folder with a Source row.</summary>
+    /// <summary>The entity owning the exact payload path, else the nearest folder provenance owner.</summary>
     private async Task<Guid?> FindOwnerBySourcePathAsync(string sourcePath, CancellationToken cancellationToken) {
         var probe = sourcePath;
         var visited = new HashSet<string>(FileSystemPathComparison.Comparer);
@@ -790,11 +838,35 @@ public sealed class AcquisitionHintApplier(
                 return owner;
             }
 
+            owner = await FindFolderOwnerAsync(probe, cancellationToken);
+            if (owner is not null) {
+                return owner;
+            }
+
             probe = Path.GetDirectoryName(probe);
         }
 
         return null;
     }
+
+    private async Task<Guid?> FindFolderOwnerAsync(string folderPath, CancellationToken cancellationToken) {
+        var folderOwner = await db.EntitySources.AsNoTracking()
+            .Where(source => source.Code == EntitySourceCode.Folder.ToCode() && source.Value == folderPath)
+            .Select(source => (Guid?)source.EntityId)
+            .FirstOrDefaultAsync(cancellationToken);
+        if (folderOwner is not null) {
+            return folderOwner;
+        }
+
+        // Read legacy folder rows until the guarded migration has normalized them. New bindings only
+        // write EntitySource(folder), keeping the payload-file and structural-provenance shapes distinct.
+        return await db.EntityFiles.AsNoTracking()
+            .Where(file => file.Role == EntityFileRole.Source && file.Path == folderPath)
+            .Select(file => (Guid?)file.EntityId)
+            .FirstOrDefaultAsync(cancellationToken);
+    }
+
+    private enum SourceBinding { File, Folder }
 
     /// <summary>Writes the hint's external/plugin ids onto the entity, skipping providers it already carries.</summary>
     private async Task StampExternalIdsAsync(Guid entityId, AcquisitionImportHintRow hint, CancellationToken cancellationToken) {

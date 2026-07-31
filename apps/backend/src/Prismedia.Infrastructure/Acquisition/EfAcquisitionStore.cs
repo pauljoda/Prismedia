@@ -376,7 +376,7 @@ public sealed partial class EfAcquisitionStore(PrismediaDbContext db, IAcquisiti
             && importResult is not null) {
             string? payloadRoot = null;
             string? libraryRoot = null;
-            if (row.Kind is EntityKind.Video or EntityKind.VideoSeason) {
+            if (AcquisitionProfileKinds.UsesNamingFamily(row.Kind, AcquisitionNamingFamily.Television)) {
                 var checkpoint = TvImportCheckpointJson.Deserialize(row.ImportCheckpointJson);
                 if (checkpoint is not null) {
                     libraryRoot = await db.LibraryRoots.Where(root => root.Id == checkpoint.LibraryRootId)
@@ -1214,7 +1214,9 @@ public sealed partial class EfAcquisitionStore(PrismediaDbContext db, IAcquisiti
             .FirstOrDefaultAsync(cancellationToken);
 
         var externalIdentity = ToExternalIdentity(row.IdentityNamespace, row.IdentityValue);
-        var isTvImport = row.Kind is EntityKind.Video or EntityKind.VideoSeason;
+        var isTvImport = AcquisitionProfileKinds.UsesNamingFamily(
+            row.Kind,
+            AcquisitionNamingFamily.Television);
         var tvImportCheckpoint = isTvImport
             ? TvImportCheckpointJson.Deserialize(row.ImportCheckpointJson)
             : null;

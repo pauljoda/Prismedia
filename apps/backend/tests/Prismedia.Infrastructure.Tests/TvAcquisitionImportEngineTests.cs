@@ -63,15 +63,14 @@ public sealed class TvAcquisitionImportEngineTests : IDisposable {
         Assert.Equal(AcquisitionStatus.Importing, await StatusOf(db, harness.Import.Id));
         Assert.False(wantedEpisode.IsWanted);
         Assert.Equal(Path.Combine(harness.SeasonFolder, "Show - S01E02.mkv"), source.Path);
-        Assert.True(await db.VideoDetails.AsNoTracking().AnyAsync(row => row.EntityId == harness.WantedEpisodeId));
         Assert.Single(await db.Entities.AsNoTracking()
-            .Where(row => row.ParentEntityId == harness.SeasonId && row.KindCode == EntityKind.Video.ToCode() && row.SortOrder == 2)
+            .Where(row => row.ParentEntityId == harness.SeasonId && row.KindCode == EntityKind.VideoEpisode.ToCode() && row.SortOrder == 2)
             .ToArrayAsync());
         Assert.DoesNotContain(harness.Queue.Enqueued, request => request.Type == JobType.ScanLibrary);
 
         Assert.DoesNotContain(harness.Queue.Enqueued, request => request.Type == JobType.ExtractSubtitles);
         var reconciliation = Assert.Single(harness.Queue.Enqueued, request => request.Type == JobType.ReconcileEntity);
-        Assert.Equal(EntityKind.Video.ToCode(), reconciliation.TargetEntityKind);
+        Assert.Equal(EntityKind.VideoEpisode.ToCode(), reconciliation.TargetEntityKind);
         Assert.Equal(harness.WantedEpisodeId.ToString(), reconciliation.TargetEntityId);
 
         Assert.DoesNotContain(harness.Queue.Enqueued, request => request.Type == JobType.AutoIdentify);
@@ -122,18 +121,20 @@ public sealed class TvAcquisitionImportEngineTests : IDisposable {
 
         var season = await db.Entities.AsNoTracking().SingleAsync(row => row.Id == harness.SeasonId);
         var episodes = await db.Entities.AsNoTracking()
-            .Where(row => row.ParentEntityId == harness.SeasonId && row.KindCode == EntityKind.Video.ToCode())
+            .Where(row => row.ParentEntityId == harness.SeasonId && row.KindCode == EntityKind.VideoEpisode.ToCode())
             .OrderBy(row => row.SortOrder)
             .ToArrayAsync();
         var episodeOne = Assert.Single(episodes, row => row.SortOrder == 1);
         var episodeTwo = Assert.Single(episodes, row => row.SortOrder == 2);
 
         Assert.Equal(AcquisitionStatus.Importing, await StatusOf(db, harness.Import.Id));
-        Assert.False(season.IsWanted);
+        Assert.True(season.IsWanted);
         Assert.True(episodeOne.IsWanted);
         Assert.False(episodeTwo.IsWanted);
-        Assert.True(await db.EntityFiles.AsNoTracking().AnyAsync(row =>
-            row.EntityId == season.Id && row.Role == EntityFileRole.Source && row.Path == harness.SeasonFolder));
+        Assert.True(await db.EntitySources.AsNoTracking().AnyAsync(row =>
+            row.EntityId == season.Id
+            && row.Code == EntitySourceCode.Folder.ToCode()
+            && row.Value == harness.SeasonFolder));
         Assert.False(await db.EntityFiles.AsNoTracking().AnyAsync(row => row.EntityId == episodeOne.Id));
         Assert.True(await db.EntityFiles.AsNoTracking().AnyAsync(row =>
             row.EntityId == episodeTwo.Id && row.Role == EntityFileRole.Source && row.Path == Path.Combine(harness.SeasonFolder, "Show - S01E02.mkv")));
@@ -220,7 +221,7 @@ public sealed class TvAcquisitionImportEngineTests : IDisposable {
 
         var readyEpisodes = await db.Entities.AsNoTracking()
             .Where(episode => episode.ParentEntityId == harness.SeasonId
-                && episode.KindCode == EntityKind.Video.ToCode()
+                && episode.KindCode == EntityKind.VideoEpisode.ToCode()
                 && episode.SortOrder >= 2
                 && episode.SortOrder <= 4)
             .OrderBy(episode => episode.SortOrder)
@@ -602,7 +603,7 @@ public sealed class TvAcquisitionImportEngineTests : IDisposable {
             CancellationToken.None);
 
         var episodes = await db.Entities.AsNoTracking()
-            .Where(row => row.ParentEntityId == harness.SeasonId && row.KindCode == EntityKind.Video.ToCode() && row.SortOrder == 1)
+            .Where(row => row.ParentEntityId == harness.SeasonId && row.KindCode == EntityKind.VideoEpisode.ToCode() && row.SortOrder == 1)
             .ToArrayAsync();
         var source = await db.EntityFiles.AsNoTracking()
             .SingleAsync(row => row.EntityId == harness.OwnedEpisodeId && row.Role == EntityFileRole.Source);
@@ -671,7 +672,7 @@ public sealed class TvAcquisitionImportEngineTests : IDisposable {
         Assert.Equal(replacementPath, source.Path);
         Assert.Single(await db.Entities.AsNoTracking()
             .Where(row => row.ParentEntityId == harness.SeasonId
-                && row.KindCode == EntityKind.Video.ToCode()
+                && row.KindCode == EntityKind.VideoEpisode.ToCode()
                 && row.SortOrder == 1)
             .ToArrayAsync());
         Assert.Equal(AcquisitionStatus.Importing, await StatusOf(db, harness.Import.Id));
@@ -808,22 +809,22 @@ public sealed class TvAcquisitionImportEngineTests : IDisposable {
 
         var now = DateTimeOffset.UtcNow;
         var jobId = Guid.NewGuid();
-        var seriesId = AddEntity(db, EntityKind.VideoSeries.ToCode(), null, null, seriesFolder);
+        var seriesId = AddFolderEntity(db, EntityKind.VideoSeries.ToCode(), null, null, seriesFolder);
         var seasonId = deletedSeason
             ? AddWantedEntity(db, EntityKind.VideoSeason.ToCode(), seriesId, 1)
-            : AddEntity(db, EntityKind.VideoSeason.ToCode(), seriesId, 1, seasonFolder);
+            : AddFolderEntity(db, EntityKind.VideoSeason.ToCode(), seriesId, 1, seasonFolder);
         Guid ownedEpisodeId;
         if (deletedSeason) {
             ownedEpisodeId = Guid.Empty;
-            AddWantedEntity(db, EntityKind.Video.ToCode(), seasonId, 1);
+            AddWantedEntity(db, EntityKind.VideoEpisode.ToCode(), seasonId, 1);
         } else {
-            ownedEpisodeId = AddEntity(db, EntityKind.Video.ToCode(), seasonId, 1, ownedEpisodePath);
+            ownedEpisodeId = AddEntity(db, EntityKind.VideoEpisode.ToCode(), seasonId, 1, ownedEpisodePath);
         }
         var wantedIds = (wantedEpisodeNumbers ?? [2])
             .Distinct()
             .ToDictionary(
                 episodeNumber => episodeNumber,
-                episodeNumber => AddWantedEntity(db, EntityKind.Video.ToCode(), seasonId, episodeNumber));
+                episodeNumber => AddWantedEntity(db, EntityKind.VideoEpisode.ToCode(), seasonId, episodeNumber));
         var wantedEpisodeId = wantedIds.GetValueOrDefault(2);
 
         var acquisitionId = Guid.NewGuid();
@@ -941,6 +942,22 @@ public sealed class TvAcquisitionImportEngineTests : IDisposable {
         db.EntityFiles.Add(new EntityFileRow {
             Id = Guid.NewGuid(), EntityId = id, Role = EntityFileRole.Source, Path = sourcePath,
             CreatedAt = now, UpdatedAt = now
+        });
+        return id;
+    }
+
+    private static Guid AddFolderEntity(PrismediaDbContext db, string kindCode, Guid? parent, int? sortOrder, string folderPath) {
+        var id = Guid.NewGuid();
+        var now = DateTimeOffset.UtcNow;
+        db.Entities.Add(new EntityRow {
+            Id = id, KindCode = kindCode, Title = kindCode, ParentEntityId = parent,
+            SortOrder = sortOrder, CreatedAt = now, UpdatedAt = now
+        });
+        db.EntitySources.Add(new EntitySourceRow {
+            EntityId = id,
+            Code = EntitySourceCode.Folder.ToCode(),
+            Value = folderPath,
+            UpdatedAt = now
         });
         return id;
     }

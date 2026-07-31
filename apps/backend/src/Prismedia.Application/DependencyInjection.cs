@@ -126,7 +126,9 @@ public static class DependencyInjection {
         services.AddScoped<IAcquisitionImportEngine>(provider =>
             ActivatorUtilities.CreateInstance<TvAcquisitionImportEngine>(provider, EntityKind.VideoSeason));
         services.AddScoped<IAcquisitionImportEngine>(provider =>
-            ActivatorUtilities.CreateInstance<TvAcquisitionImportEngine>(provider, EntityKind.Video));
+            ActivatorUtilities.CreateInstance<TvAcquisitionImportEngine>(
+                provider,
+                EntityKindRegistry.PlayableVideoKindFor(PlayableVideoScanPlacement.Episode)));
         services.AddScoped<IAcquisitionImportEngineFactory, AcquisitionImportEngineFactory>();
 
         // Probing

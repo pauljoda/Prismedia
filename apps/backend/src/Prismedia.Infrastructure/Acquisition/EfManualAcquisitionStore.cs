@@ -328,7 +328,8 @@ public sealed class EfManualAcquisitionStore(
             return (artist?.Title, null, null, null);
         }
 
-        if (kind != EntityKind.Video || entity.ParentEntityId is not { } seasonId) {
+        if (kind != EntityKindRegistry.PlayableVideoKindFor(PlayableVideoScanPlacement.Episode)
+            || entity.ParentEntityId is not { } seasonId) {
             return (null, null, null, null);
         }
 

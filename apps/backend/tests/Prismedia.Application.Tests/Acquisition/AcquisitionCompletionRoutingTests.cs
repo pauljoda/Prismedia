@@ -8,6 +8,7 @@ public sealed class AcquisitionCompletionRoutingTests {
     [InlineData(EntityKind.Book, true, JobType.AcquisitionUpgradeReplace)]
     [InlineData(EntityKind.Movie, true, JobType.AcquisitionUpgradeReplace)]
     [InlineData(EntityKind.Video, true, JobType.AcquisitionUpgradeReplace)]
+    [InlineData(EntityKind.VideoEpisode, true, JobType.AcquisitionUpgradeReplace)]
     [InlineData(EntityKind.AudioLibrary, true, JobType.AcquisitionImport)]
     [InlineData(EntityKind.AudioLibrary, false, JobType.AcquisitionImport)]
     public void RoutesSingleFileAndAlbumCompletionsToTheirOwningWorkflow(

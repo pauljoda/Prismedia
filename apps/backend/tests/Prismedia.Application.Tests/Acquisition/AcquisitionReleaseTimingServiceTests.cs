@@ -87,7 +87,7 @@ public sealed class AcquisitionReleaseTimingServiceTests {
 
     [Fact]
     public void SupportedMilestonesResolveThroughTheProfileDefinition() {
-        Assert.True(AcquisitionReleaseTimingService.Supports(EntityKind.Video, EntityDateType.FirstAir));
+        Assert.True(AcquisitionReleaseTimingService.Supports(EntityKind.VideoEpisode, EntityDateType.FirstAir));
         Assert.True(AcquisitionReleaseTimingService.Supports(EntityKind.Book, EntityDateType.Publication));
         Assert.False(AcquisitionReleaseTimingService.Supports(EntityKind.AudioLibrary, EntityDateType.TheatricalRelease));
     }

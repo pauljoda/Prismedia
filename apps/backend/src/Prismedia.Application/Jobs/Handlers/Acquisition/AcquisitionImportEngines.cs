@@ -479,6 +479,7 @@ internal static class MergedImportExecution {
     public static async Task<string?> ReplaceOwnedAsync(
         IOwnedFileReplacer replacer,
         ILogger logger,
+        EntityKind kind,
         string ownedFilePath,
         string sourceAbsolute,
         ImportMode importMode,
@@ -503,12 +504,12 @@ internal static class MergedImportExecution {
                     incoming,
                     BookFormatTier.Unknown,
                     cancellationToken,
-                    EntityKind.Video,
+                    kind,
                     allowFormatChange,
                     retainedBackupPath,
                     incomingEvidencePath)
                 : await replacer.ReplaceAsync(
-                    ownedFilePath, incoming, BookFormatTier.Unknown, cancellationToken, EntityKind.Video, allowFormatChange);
+                    ownedFilePath, incoming, BookFormatTier.Unknown, cancellationToken, kind, allowFormatChange);
             if (!result.Succeeded) {
                 logger.LogWarning("MergedImport: in-place replace of {Owned} failed: {Reason}", ownedFilePath, result.FailureReason);
             }
@@ -816,7 +817,7 @@ public sealed class MovieAcquisitionImportEngine(
         var fileName = item.TargetRelativePath.Split('/')[^1];
         var importMode = profile?.ImportMode ?? ImportMode.Move;
 
-        if (target.OwnedVideoFilePath is not { } owned || !File.Exists(owned)) {
+        if (target.OwnedSourceFilePath is not { } owned || !File.Exists(owned)) {
             // The folder exists (covers, sidecars) but owns no video yet — fill it with the template-named file.
             var units = ImportPlacementExecution.ReserveUnits(
                 payload.ContentRoot,
@@ -985,7 +986,7 @@ public sealed class MovieAcquisitionImportEngine(
 /// the wanted series, season, and episodes by folder path and position before it reports Imported, so
 /// playback never waits for a later aggregate scan. One engine class serves both
 /// TV acquisition units — season packs (<see cref="EntityKind.VideoSeason"/>) and single episodes
-/// (<see cref="EntityKind.Video"/>) — since placement rules are identical at either granularity.
+/// (<see cref="EntityKind.VideoEpisode"/>) — since placement rules are identical at either granularity.
 /// An acquisition linked to a series that already lives on disk MERGES into the existing folder tree
 /// instead: new episodes land in the real season folders, already-owned episodes follow the upgrade
 /// rules (replace strictly-better in place, reconcile byte-identical copies, drop the rest), and a
@@ -1121,7 +1122,7 @@ public sealed class TvAcquisitionImportEngine(
             importMode,
             import.AllowFormatChange,
             "Imported into the library.",
-            PreferSingleFileFinalSource: import.Kind == EntityKind.Video,
+            PreferSingleFileFinalSource: import.Kind == EntityKindRegistry.PlayableVideoKindFor(PlayableVideoScanPlacement.Episode),
             unitsPlan.Units
                 .Zip(plan.Items, static (unit, item) => new TvImportCheckpointUnit(
                     unit.SourceRelativePath,
@@ -1741,6 +1742,7 @@ public sealed class TvAcquisitionImportEngine(
         MergedImportExecution.ReplaceOwnedAsync(
             replacer,
             logger,
+            EntityKindRegistry.PlayableVideoKindFor(PlayableVideoScanPlacement.Episode),
             ownedFilePath,
             sourceAbsolute,
             importMode,

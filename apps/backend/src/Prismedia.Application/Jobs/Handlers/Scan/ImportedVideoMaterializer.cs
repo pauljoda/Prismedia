@@ -70,7 +70,7 @@ public sealed class ImportedVideoMaterializer(
                 cancellationToken,
                 request.AcquisitionId);
             foreach (var coveredEpisode in episode.CoveredEpisodeNumbers) {
-                if (await acquisitionHints.BindWantedChildBySortOrderAsync(
+                if (await acquisitionHints.BindWantedChildFileBySortOrderAsync(
                     EntityKind.VideoEpisode,
                     seasonFolder,
                     coveredEpisode,

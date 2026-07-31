@@ -8,8 +8,8 @@ namespace Prismedia.Infrastructure.Acquisition;
 
 /// <summary>
 /// Resolves an acquisition's linked entity to its existing on-disk layout by walking the entity graph
-/// (episode → season → series; track → album) and reading the Source-role file rows the scan persists
-/// for folders and files. Fileless entities resolve to null so imports keep the template placement.
+/// (episode → season → series; track → album) and reading payload files separately from structural
+/// folder provenance. Fileless entities resolve to null so imports keep the template placement.
 /// </summary>
 public sealed class EfImportTargetIndex(PrismediaDbContext db) : IImportTargetIndex {
     /// <inheritdoc />
@@ -19,7 +19,7 @@ public sealed class EfImportTargetIndex(PrismediaDbContext db) : IImportTargetIn
             return null;
         }
 
-        var seriesFolder = await SourcePathAsync(seriesId.Value, cancellationToken);
+        var seriesFolder = await FolderPathAsync(seriesId.Value, cancellationToken);
         if (seriesFolder is null) {
             return null;
         }
@@ -28,12 +28,12 @@ public sealed class EfImportTargetIndex(PrismediaDbContext db) : IImportTargetIn
         var seasonRows = await (
             from season in db.Entities.AsNoTracking()
             where season.ParentEntityId == seriesId && season.KindCode == seasonCode
-            join file in db.EntityFiles.AsNoTracking().Where(file => file.Role == EntityFileRole.Source)
-                on season.Id equals file.EntityId
-            select new { season.Id, season.SortOrder, file.Path })
+            join source in db.EntitySources.AsNoTracking().Where(source => source.Code == EntitySourceCode.Folder.ToCode())
+                on season.Id equals source.EntityId
+            select new { season.Id, season.SortOrder, Path = source.Value })
             .ToArrayAsync(cancellationToken);
 
-        var episodeCode = EntityKind.Video.ToCode();
+        var episodeCode = EntityKindRegistry.PlayableVideoKindFor(PlayableVideoScanPlacement.Episode).ToCode();
         var seasons = new Dictionary<int, TvSeasonDiskLayout>();
         foreach (var season in seasonRows) {
             if (season.SortOrder is not { } seasonNumber || seasons.ContainsKey(seasonNumber)) {
@@ -78,7 +78,7 @@ public sealed class EfImportTargetIndex(PrismediaDbContext db) : IImportTargetIn
             return [];
         }
 
-        var episodeCode = EntityKind.Video.ToCode();
+        var episodeCode = EntityKindRegistry.PlayableVideoKindFor(PlayableVideoScanPlacement.Episode).ToCode();
         return await db.Entities.AsNoTracking()
             .Where(episode => episode.ParentEntityId == seasonId && episode.KindCode == episodeCode && episode.SortOrder != null)
             .OrderBy(episode => episode.SortOrder)
@@ -89,19 +89,11 @@ public sealed class EfImportTargetIndex(PrismediaDbContext db) : IImportTargetIn
     /// <inheritdoc />
     public async Task<MovieDiskTarget?> GetMovieTargetAsync(Guid entityId, CancellationToken cancellationToken) {
         var movieId = await ResolveAncestorOfKindAsync(entityId, EntityKind.Movie.ToCode(), cancellationToken);
-        if (movieId is null || await SourcePathAsync(movieId.Value, cancellationToken) is not { } folder) {
+        if (movieId is null || await FolderPathAsync(movieId.Value, cancellationToken) is not { } folder) {
             return null;
         }
 
-        // A movie streams through its child video entity — that child owns the actual file.
-        var episodeCode = EntityKind.Video.ToCode();
-        var ownedFile = await (
-            from child in db.Entities.AsNoTracking()
-            where child.ParentEntityId == movieId && child.KindCode == episodeCode
-            join file in db.EntityFiles.AsNoTracking().Where(file => file.Role == EntityFileRole.Source)
-                on child.Id equals file.EntityId
-            select file.Path)
-            .FirstOrDefaultAsync(cancellationToken);
+        var ownedFile = await SourcePathAsync(movieId.Value, cancellationToken);
 
         return new MovieDiskTarget(movieId.Value, folder, ownedFile);
     }
@@ -178,5 +170,11 @@ public sealed class EfImportTargetIndex(PrismediaDbContext db) : IImportTargetIn
         db.EntityFiles.AsNoTracking()
             .Where(file => file.EntityId == entityId && file.Role == EntityFileRole.Source)
             .Select(file => (string?)file.Path)
+            .FirstOrDefaultAsync(cancellationToken);
+
+    private Task<string?> FolderPathAsync(Guid entityId, CancellationToken cancellationToken) =>
+        db.EntitySources.AsNoTracking()
+            .Where(source => source.EntityId == entityId && source.Code == EntitySourceCode.Folder.ToCode())
+            .Select(source => (string?)source.Value)
             .FirstOrDefaultAsync(cancellationToken);
 }

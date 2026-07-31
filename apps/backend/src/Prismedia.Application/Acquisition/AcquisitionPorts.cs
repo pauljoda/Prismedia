@@ -272,6 +272,30 @@ public interface IAcquisitionHintApplier {
         bool requireExactPath = false);
 
     /// <summary>
+    /// Binds a wanted Entity to a concrete payload file. New scanner/import code must choose this
+    /// explicitly instead of inferring the representation from the Entity storage shape.
+    /// </summary>
+    Task<bool> BindWantedFileAsync(
+        EntityKind kind,
+        string filePath,
+        CancellationToken cancellationToken,
+        Guid? acquisitionId = null,
+        bool requireExactPath = false) =>
+        BindWantedEntityAsync(kind, filePath, cancellationToken, acquisitionId, requireExactPath);
+
+    /// <summary>
+    /// Binds a wanted Entity to structural folder provenance. Implementations persist this as the
+    /// <see cref="EntitySourceCode.Folder"/> capability rather than a fake source file.
+    /// </summary>
+    Task<bool> BindWantedFolderAsync(
+        EntityKind kind,
+        string folderPath,
+        CancellationToken cancellationToken,
+        Guid? acquisitionId = null,
+        bool requireExactPath = false) =>
+        BindWantedEntityAsync(kind, folderPath, cancellationToken, acquisitionId, requireExactPath);
+
+    /// <summary>
     /// Binds a request-created wanted ancestor grouping of <paramref name="parentKind"/> (an author, an
     /// artist, a series) to the folder the scan is about to upsert: when an unconsumed hint under
     /// <paramref name="folderPath"/> links a wanted entity with a fileless ancestor of that kind, the
@@ -284,6 +308,17 @@ public interface IAcquisitionHintApplier {
         string folderPath,
         CancellationToken cancellationToken,
         Guid? acquisitionId = null);
+
+    /// <summary>
+    /// Binds a wanted structural ancestor to its folder provenance. The legacy parent method remains
+    /// available for adapters until each media scanner has moved to the explicit operation.
+    /// </summary>
+    Task<bool> BindWantedParentFolderAsync(
+        EntityKind parentKind,
+        string folderPath,
+        CancellationToken cancellationToken,
+        Guid? acquisitionId = null) =>
+        BindWantedParentAsync(parentKind, folderPath, cancellationToken, acquisitionId);
 
     /// <summary>
     /// Binds a wanted positioned child (a phantom season under its series, a phantom episode under its
@@ -301,6 +336,22 @@ public interface IAcquisitionHintApplier {
         int sortOrder,
         string childPath,
         CancellationToken cancellationToken);
+
+    Task<Guid?> BindWantedChildFileBySortOrderAsync(
+        EntityKind childKind,
+        string parentFolderPath,
+        int sortOrder,
+        string filePath,
+        CancellationToken cancellationToken) =>
+        BindWantedChildBySortOrderAsync(childKind, parentFolderPath, sortOrder, filePath, cancellationToken);
+
+    Task<Guid?> BindWantedChildFolderBySortOrderAsync(
+        EntityKind childKind,
+        string parentFolderPath,
+        int sortOrder,
+        string folderPath,
+        CancellationToken cancellationToken) =>
+        BindWantedChildBySortOrderAsync(childKind, parentFolderPath, sortOrder, folderPath, cancellationToken);
 
     /// <summary>
     /// Reconciles one scanned audio file with the single fileless wanted track under its album whose
@@ -365,7 +416,7 @@ public sealed record TvSeriesDiskLayout(
     IReadOnlyDictionary<int, TvSeasonDiskLayout> Seasons);
 
 /// <summary>An existing on-disk movie: its folder and the owned video file when one exists.</summary>
-public sealed record MovieDiskTarget(Guid MovieEntityId, string FolderPath, string? OwnedVideoFilePath);
+public sealed record MovieDiskTarget(Guid MovieEntityId, string FolderPath, string? OwnedSourceFilePath);
 
 /// <summary>
 /// An existing on-disk album target: the album folder when the album owns one, the artist folder when

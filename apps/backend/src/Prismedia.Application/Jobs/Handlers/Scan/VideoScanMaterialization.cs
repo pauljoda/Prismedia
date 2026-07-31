@@ -20,7 +20,7 @@ internal static class VideoWantedBinding {
         }
 
         if (item.Movie is { } movie) {
-            await acquisitionHints.BindWantedEntityAsync(
+            await acquisitionHints.BindWantedFolderAsync(
                 EntityKind.Movie, movie.FolderPath, cancellationToken, acquisitionId, requireExactPath: true);
         }
 
@@ -28,20 +28,20 @@ internal static class VideoWantedBinding {
             return;
         }
 
-        await acquisitionHints.BindWantedParentAsync(
+        await acquisitionHints.BindWantedParentFolderAsync(
             EntityKind.VideoSeries, seriesInfo.FolderPath, cancellationToken, acquisitionId);
         if (item.Season is { } seasonInfo) {
             // Seasons are structural children. Bind only by the parsed season position under the
             // already-bound series; a broad complete-series hint must not directly bind its requested
             // season Entity to whichever season folder happens to be processed first.
-            await acquisitionHints.BindWantedChildBySortOrderAsync(
+            await acquisitionHints.BindWantedChildFolderBySortOrderAsync(
                 EntityKind.VideoSeason,
                 seriesInfo.FolderPath,
                 seasonInfo.SeasonNumber,
                 seasonInfo.FolderPath,
                 cancellationToken);
             if (item.EpisodeNumber is { } episodeNumber) {
-                await acquisitionHints.BindWantedChildBySortOrderAsync(
+                await acquisitionHints.BindWantedChildFileBySortOrderAsync(
                     EntityKind.VideoEpisode,
                     seasonInfo.FolderPath,
                     episodeNumber,
@@ -51,7 +51,7 @@ internal static class VideoWantedBinding {
         }
 
         // A single-episode acquisition can key its hint to the exact file rather than its season.
-        await acquisitionHints.BindWantedEntityAsync(
+        await acquisitionHints.BindWantedFileAsync(
             EntityKind.VideoEpisode, item.FilePath, cancellationToken, acquisitionId, requireExactPath: true);
     }
 }

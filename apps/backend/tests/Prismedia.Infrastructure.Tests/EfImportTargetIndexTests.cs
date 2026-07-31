@@ -8,7 +8,7 @@ namespace Prismedia.Infrastructure.Tests;
 
 /// <summary>
 /// Covers resolving an acquisition's linked entity to its existing on-disk layout: the graph walk from
-/// any granularity to the container, Source-folder reads, and the phantom exclusion that keeps wanted
+/// any granularity to the container, folder-provenance reads, and the phantom exclusion that keeps wanted
 /// placeholders out of the owned-file map (they must stay bindable by the post-import scan).
 /// </summary>
 public sealed class EfImportTargetIndexTests {
@@ -48,15 +48,15 @@ public sealed class EfImportTargetIndexTests {
     [Fact]
     public async Task ResolvesTheMovieFolderAndOwnedFile() {
         await using var db = CreateContext();
-        var movieId = AddEntity(db, EntityKind.Movie.ToCode(), parent: null, sortOrder: null, sourcePath: "/media/movies/Film (2020)");
-        AddEntity(db, EntityKind.Video.ToCode(), parent: movieId, sortOrder: 1, sourcePath: "/media/movies/Film (2020)/film.mkv");
+        var movieId = AddEntity(db, EntityKind.Movie.ToCode(), parent: null, sortOrder: null, sourcePath: "/media/movies/Film (2020)/film.mkv");
+        AddFolderSource(db, movieId, "/media/movies/Film (2020)");
         await db.SaveChangesAsync();
 
         var target = await new EfImportTargetIndex(db).GetMovieTargetAsync(movieId, CancellationToken.None);
 
         Assert.NotNull(target);
         Assert.Equal("/media/movies/Film (2020)", target!.FolderPath);
-        Assert.Equal("/media/movies/Film (2020)/film.mkv", target.OwnedVideoFilePath);
+        Assert.Equal("/media/movies/Film (2020)/film.mkv", target.OwnedSourceFilePath);
     }
 
     [Fact]
@@ -91,11 +91,13 @@ public sealed class EfImportTargetIndexTests {
     }
 
     private static (Guid SeriesId, Guid SeasonId, Guid EpisodeId) SeedSeries(PrismediaDbContext db, string seriesFolder) {
-        var seriesId = AddEntity(db, EntityKind.VideoSeries.ToCode(), parent: null, sortOrder: null, sourcePath: seriesFolder);
-        var seasonId = AddEntity(db, EntityKind.VideoSeason.ToCode(), parent: seriesId, sortOrder: 1, sourcePath: $"{seriesFolder}/S01");
-        var episodeId = AddEntity(db, EntityKind.Video.ToCode(), parent: seasonId, sortOrder: 1, sourcePath: $"{seriesFolder}/S01/e01.mkv");
+        var seriesId = AddEntity(db, EntityKind.VideoSeries.ToCode(), parent: null, sortOrder: null);
+        AddFolderSource(db, seriesId, seriesFolder);
+        var seasonId = AddEntity(db, EntityKind.VideoSeason.ToCode(), parent: seriesId, sortOrder: 1);
+        AddFolderSource(db, seasonId, $"{seriesFolder}/S01");
+        var episodeId = AddEntity(db, EntityKind.VideoEpisode.ToCode(), parent: seasonId, sortOrder: 1, sourcePath: $"{seriesFolder}/S01/e01.mkv");
         // Wanted phantom episode: no Source file row.
-        AddEntity(db, EntityKind.Video.ToCode(), parent: seasonId, sortOrder: 2, wanted: true);
+        AddEntity(db, EntityKind.VideoEpisode.ToCode(), parent: seasonId, sortOrder: 2, wanted: true);
         return (seriesId, seasonId, episodeId);
     }
 
@@ -116,6 +118,14 @@ public sealed class EfImportTargetIndexTests {
 
         return id;
     }
+
+    private static void AddFolderSource(PrismediaDbContext db, Guid entityId, string folderPath) =>
+        db.EntitySources.Add(new EntitySourceRow {
+            EntityId = entityId,
+            Code = EntitySourceCode.Folder.ToCode(),
+            Value = folderPath,
+            UpdatedAt = DateTimeOffset.UtcNow
+        });
 
     private static PrismediaDbContext CreateContext() =>
         new(new DbContextOptionsBuilder<PrismediaDbContext>().UseInMemoryDatabase(Guid.NewGuid().ToString()).Options);

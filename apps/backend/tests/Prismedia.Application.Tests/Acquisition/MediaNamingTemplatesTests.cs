@@ -146,7 +146,7 @@ public sealed class MediaNamingTemplatesTests {
     [Fact]
     public void ValidateNormalizesTvAcquisitionUnitsToTheSeriesProfileKind() {
         // A single episode / season pack acquisition kind resolves to the VideoSeries profile kind.
-        Assert.Null(MediaNamingTemplates.Validate(EntityKind.Video, MediaNamingTemplates.TvDefault));
+        Assert.Null(MediaNamingTemplates.Validate(EntityKind.VideoEpisode, MediaNamingTemplates.TvDefault));
         Assert.Null(MediaNamingTemplates.Validate(EntityKind.VideoSeason, MediaNamingTemplates.TvDefault));
     }
 
