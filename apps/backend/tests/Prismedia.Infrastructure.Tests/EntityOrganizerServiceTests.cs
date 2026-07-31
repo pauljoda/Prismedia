@@ -25,7 +25,7 @@ public sealed class EntityOrganizerServiceTests {
         SeedRoot(db, rootPath);
         SeedEntity(db, seriesId, EntityKind.VideoSeries.ToCode(), "The Chair Company", null, null, now);
         SeedEntity(db, seasonId, EntityKind.VideoSeason.ToCode(), "Season 1", seriesId, 1, now);
-        SeedEntity(db, videoId, EntityKind.Video.ToCode(), "Episode One", seasonId, 1, now);
+        SeedEntity(db, videoId, EntityKind.VideoEpisode.ToCode(), "Episode One", seasonId, 1, now);
         SeedSource(db, seriesId, Path.Combine(rootPath, "chair"), now);
         SeedSource(db, seasonId, Path.Combine(rootPath, "chair", "s1"), now);
         SeedSource(db, videoId, Path.Combine(rootPath, "chair", "s1", "bad-name.mkv"), now);

@@ -52,7 +52,7 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
         await using var db = CreateContext();
         var entityId = Guid.NewGuid();
         SeedProvider(db);
-        SeedEntity(db, entityId, "video-series", "Requested Series", isWanted: true, attachSource: false);
+        SeedEntity(db, entityId, EntityKind.VideoSeries.ToCode(), "Requested Series", isWanted: true, attachSource: false);
         await db.SaveChangesAsync();
         var executor = new LookupMissSearchHitProcessExecutor();
         var identify = CreateIdentifyService(db, executor, _tempRoot);
@@ -95,7 +95,7 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
     public async Task AddAsyncCreatesDurableSearchItemForEntity() {
         await using var db = CreateContext();
         var entityId = Guid.Parse("11111111-1111-1111-1111-111111111111");
-        SeedEntity(db, entityId, "video-series", "Mystery Show");
+        SeedEntity(db, entityId, EntityKind.VideoSeries.ToCode(), "Mystery Show");
         await db.SaveChangesAsync();
         var service = CreateQueueService(db, new CandidateProcessExecutor(), _tempRoot);
 
@@ -117,7 +117,7 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
     public async Task AddAsyncRejectsWantedAndFilelessTargetsWithoutCreatingQueueState(bool isWanted) {
         await using var db = CreateContext();
         var entityId = Guid.NewGuid();
-        SeedEntity(db, entityId, "video-series", "Metadata Only", isWanted: isWanted, attachSource: false);
+        SeedEntity(db, entityId, EntityKind.VideoSeries.ToCode(), "Metadata Only", isWanted: isWanted, attachSource: false);
         await db.SaveChangesAsync();
         var service = CreateQueueService(db, new CandidateProcessExecutor(), _tempRoot);
 
@@ -396,17 +396,17 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
         var episode1Id = Guid.Parse("33333333-3333-3333-3333-333333333336");
         var episode2Id = Guid.Parse("33333333-3333-3333-3333-333333333337");
         SeedProvider(db);
-        SeedEntity(db, seriesId, "video-series", "Known Series");
-        var episode1 = SeedEntity(db, episode1Id, "video", "Local Episode 1");
+        SeedEntity(db, seriesId, EntityKind.VideoSeries.ToCode(), "Known Series");
+        var episode1 = SeedEntity(db, episode1Id, EntityKind.VideoEpisode.ToCode(), "Local Episode 1");
         episode1.ParentEntityId = seriesId;
         episode1.SortOrder = 1;
-        var episode2 = SeedEntity(db, episode2Id, "video", "Local Episode 2");
+        var episode2 = SeedEntity(db, episode2Id, EntityKind.VideoEpisode.ToCode(), "Local Episode 2");
         episode2.ParentEntityId = seriesId;
         episode2.SortOrder = 2;
         var wantedEpisode = SeedEntity(
             db,
             Guid.NewGuid(),
-            "video",
+            EntityKind.VideoEpisode.ToCode(),
             "Wanted Episode 3",
             isWanted: true,
             attachSource: false);
@@ -455,11 +455,11 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
         var seriesId = Guid.Parse("33333333-3333-3333-3333-33333333333c");
         var wantedSeasonId = Guid.Parse("33333333-3333-3333-3333-33333333333d");
         SeedProvider(db);
-        SeedEntity(db, seriesId, "video-series", "Known Series");
+        SeedEntity(db, seriesId, EntityKind.VideoSeries.ToCode(), "Known Series");
         var wantedSeason = SeedEntity(
             db,
             wantedSeasonId,
-            "video-season",
+            EntityKind.VideoSeason.ToCode(),
             "Season 1",
             isWanted: true,
             attachSource: false);
@@ -500,8 +500,8 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
         var seriesId = Guid.Parse("33333333-3333-3333-3333-333333333338");
         var episodeId = Guid.Parse("33333333-3333-3333-3333-333333333339");
         SeedProvider(db);
-        SeedEntity(db, seriesId, "video-series", "Known Series");
-        var episode = SeedEntity(db, episodeId, "video", "Local Episode 1");
+        SeedEntity(db, seriesId, EntityKind.VideoSeries.ToCode(), "Known Series");
+        var episode = SeedEntity(db, episodeId, EntityKind.VideoEpisode.ToCode(), "Local Episode 1");
         episode.ParentEntityId = seriesId;
         episode.SortOrder = 1;
         await db.SaveChangesAsync();
@@ -530,10 +530,10 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
         var secondEpisodeId = Guid.NewGuid();
         SeedProvider(db);
         SeedEntity(db, seriesId, EntityKind.VideoSeries.ToCode(), "Known Series");
-        var first = SeedEntity(db, firstEpisodeId, EntityKind.Video.ToCode(), "Episode 1");
+        var first = SeedEntity(db, firstEpisodeId, EntityKind.VideoEpisode.ToCode(), "Episode 1");
         first.ParentEntityId = seriesId;
         first.SortOrder = 1;
-        var second = SeedEntity(db, secondEpisodeId, EntityKind.Video.ToCode(), "Episode 2");
+        var second = SeedEntity(db, secondEpisodeId, EntityKind.VideoEpisode.ToCode(), "Episode 2");
         second.ParentEntityId = seriesId;
         second.SortOrder = 2;
         await db.SaveChangesAsync();
@@ -639,11 +639,11 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
         var episode1Id = Guid.Parse("55555555-5555-5555-5555-555555555551");
         var episode2Id = Guid.Parse("55555555-5555-5555-5555-555555555552");
         SeedProvider(db);
-        SeedEntity(db, seriesId, "video-series", "Known Series");
-        var episode1 = SeedEntity(db, episode1Id, "video", "Local Episode 1");
+        SeedEntity(db, seriesId, EntityKind.VideoSeries.ToCode(), "Known Series");
+        var episode1 = SeedEntity(db, episode1Id, EntityKind.VideoEpisode.ToCode(), "Local Episode 1");
         episode1.ParentEntityId = seriesId;
         episode1.SortOrder = 1;
-        var episode2 = SeedEntity(db, episode2Id, "video", "Local Episode 2");
+        var episode2 = SeedEntity(db, episode2Id, EntityKind.VideoEpisode.ToCode(), "Local Episode 2");
         episode2.ParentEntityId = seriesId;
         episode2.SortOrder = 2;
         await db.SaveChangesAsync();
@@ -683,11 +683,11 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
         var episode2Id = Guid.Parse("66666666-6666-6666-6666-666666666662");
         var supersedingJobId = Guid.Parse("66666666-6666-6666-6666-6666666666bb");
         SeedProvider(db);
-        SeedEntity(db, seriesId, "video-series", "Known Series");
-        var episode1 = SeedEntity(db, episode1Id, "video", "Local Episode 1");
+        SeedEntity(db, seriesId, EntityKind.VideoSeries.ToCode(), "Known Series");
+        var episode1 = SeedEntity(db, episode1Id, EntityKind.VideoEpisode.ToCode(), "Local Episode 1");
         episode1.ParentEntityId = seriesId;
         episode1.SortOrder = 1;
-        var episode2 = SeedEntity(db, episode2Id, "video", "Local Episode 2");
+        var episode2 = SeedEntity(db, episode2Id, EntityKind.VideoEpisode.ToCode(), "Local Episode 2");
         episode2.ParentEntityId = seriesId;
         episode2.SortOrder = 2;
         // The item is mid-review with the seeded parent proposal (no children yet), already owned by the
@@ -734,7 +734,7 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
         var seriesId = Guid.Parse("77777777-7777-7777-7777-777777777770");
         var cascadeJobId = Guid.Parse("77777777-7777-7777-7777-7777777777aa");
         SeedProvider(db);
-        SeedEntity(db, seriesId, "video-series", "Known Series");
+        SeedEntity(db, seriesId, EntityKind.VideoSeries.ToCode(), "Known Series");
         var seed = new EntityMetadataProposal(
             "tmdb:series:1", "tmdb", EntityKind.VideoSeries, 1, "external-id",
             EmptyPatch("Known Series identified"), [], [], [], TargetEntityId: seriesId, Relationships: []);
@@ -806,7 +806,7 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
         // the state machine must reject it.
         await using var db = CreateContext();
         var seriesId = Guid.Parse("44444444-4444-4444-4444-444444444446");
-        SeedEntity(db, seriesId, "video-series", "Old Title");
+        SeedEntity(db, seriesId, EntityKind.VideoSeries.ToCode(), "Old Title");
         var proposal = new EntityMetadataProposal(
             "tmdb:series:1", "tmdb", EntityKind.VideoSeries, 1, "external-id",
             EmptyPatch("Reviewed Title"), [], [], [], TargetEntityId: seriesId, Relationships: []);
@@ -897,8 +897,8 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
         var seriesId = Guid.Parse("33333333-3333-3333-3333-333333333335");
         var episodeId = Guid.Parse("33333333-3333-3333-3333-333333333336");
         SeedProvider(db);
-        SeedEntity(db, seriesId, "video-series", "Known Series");
-        var episode = SeedEntity(db, episodeId, "video", "Known Episode");
+        SeedEntity(db, seriesId, EntityKind.VideoSeries.ToCode(), "Known Series");
+        var episode = SeedEntity(db, episodeId, EntityKind.VideoEpisode.ToCode(), "Known Episode");
         episode.ParentEntityId = seriesId;
         db.EntityExternalIds.Add(new EntityExternalIdRow {
             Id = Guid.NewGuid(),
@@ -930,8 +930,8 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
         var seriesId = Guid.Parse("33333333-3333-3333-3333-33333333333c");
         var episodeId = Guid.Parse("33333333-3333-3333-3333-33333333333d");
         SeedProvider(db);
-        SeedEntity(db, seriesId, "video-series", "Known Series");
-        var episode = SeedEntity(db, episodeId, "video", "Known Episode");
+        SeedEntity(db, seriesId, EntityKind.VideoSeries.ToCode(), "Known Series");
+        var episode = SeedEntity(db, episodeId, EntityKind.VideoEpisode.ToCode(), "Known Episode");
         episode.ParentEntityId = seriesId;
         db.EntityExternalIds.Add(new EntityExternalIdRow {
             Id = Guid.NewGuid(),
@@ -968,8 +968,8 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
         var seriesId = Guid.Parse("33333333-3333-3333-3333-33333333333e");
         var episodeId = Guid.Parse("33333333-3333-3333-3333-33333333333f");
         SeedProvider(db);
-        SeedEntity(db, seriesId, "video-series", "Known Series");
-        var episode = SeedEntity(db, episodeId, "video", "Known Episode");
+        SeedEntity(db, seriesId, EntityKind.VideoSeries.ToCode(), "Known Series");
+        var episode = SeedEntity(db, episodeId, EntityKind.VideoEpisode.ToCode(), "Known Episode");
         episode.ParentEntityId = seriesId;
         episode.SortOrder = 2;
         db.EntityExternalIds.Add(new EntityExternalIdRow {
@@ -1132,8 +1132,8 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
         var seriesId = Guid.NewGuid();
         var staleSeasonId = Guid.NewGuid();
         var eligibleSeasonId = Guid.NewGuid();
-        SeedEntity(db, seriesId, "video-series", "Original Series");
-        var staleSeason = SeedEntity(db, staleSeasonId, "video-season", "Requested Season");
+        SeedEntity(db, seriesId, EntityKind.VideoSeries.ToCode(), "Original Series");
+        var staleSeason = SeedEntity(db, staleSeasonId, EntityKind.VideoSeason.ToCode(), "Requested Season");
         staleSeason.ParentEntityId = seriesId;
         staleSeason.SortOrder = 1;
         db.EntityExternalIds.Add(new EntityExternalIdRow {
@@ -1144,7 +1144,7 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
             CreatedAt = DateTimeOffset.UtcNow,
             UpdatedAt = DateTimeOffset.UtcNow
         });
-        var eligibleSeason = SeedEntity(db, eligibleSeasonId, "video-season", "Original Season 2");
+        var eligibleSeason = SeedEntity(db, eligibleSeasonId, EntityKind.VideoSeason.ToCode(), "Original Season 2");
         eligibleSeason.ParentEntityId = seriesId;
         eligibleSeason.SortOrder = 2;
         var proposal = ApplyRaceProposal(
@@ -1227,8 +1227,8 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
         await using var db = CreateContext();
         var seriesId = Guid.Parse("55555555-5555-5555-5555-555555555555");
         var seasonId = Guid.Parse("66666666-6666-6666-6666-666666666666");
-        SeedEntity(db, seriesId, "video-series", "Series");
-        var season = SeedEntity(db, seasonId, "video-season", "Season 1");
+        SeedEntity(db, seriesId, EntityKind.VideoSeries.ToCode(), "Series");
+        var season = SeedEntity(db, seasonId, EntityKind.VideoSeason.ToCode(), "Season 1");
         season.ParentEntityId = seriesId;
         season.SortOrder = 1;
         var proposal = NsfwTreeProposal(seriesId, seasonId);
@@ -1264,8 +1264,8 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
         await using var db = CreateContext();
         var seriesId = Guid.Parse("55555555-5555-5555-5555-555555555555");
         var seasonId = Guid.Parse("66666666-6666-6666-6666-666666666666");
-        SeedEntity(db, seriesId, "video-series", "Series");
-        var season = SeedEntity(db, seasonId, "video-season", "Season 1");
+        SeedEntity(db, seriesId, EntityKind.VideoSeries.ToCode(), "Series");
+        var season = SeedEntity(db, seasonId, EntityKind.VideoSeason.ToCode(), "Season 1");
         season.ParentEntityId = seriesId;
         season.SortOrder = 1;
         var proposal = NsfwTreeProposal(seriesId, seasonId);
@@ -2321,7 +2321,7 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
                         new EntityMetadataProposal(
                             "tmdb:series-999:episode:2",
                             "tmdb",
-                            EntityKind.Video,
+                            EntityKind.VideoEpisode,
                             0.98m,
                             "parent-catalog",
                             EmptyPatch("Known Episode from parent catalog") with {
@@ -2442,7 +2442,7 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
             new(
                 $"tmdb:series:1:episode:{episodeNumber}",
                 "tmdb",
-                EntityKind.Video,
+                EntityKind.VideoEpisode,
                 0.9m,
                 "cascade",
                 EmptyPatch($"Episode {episodeNumber}") with {

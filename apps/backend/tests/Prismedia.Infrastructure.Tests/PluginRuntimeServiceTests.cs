@@ -921,61 +921,6 @@ public sealed class PluginRuntimeServiceTests : IDisposable {
     }
 
     [Fact]
-    public async Task IdentifyDoesNotCascadeIntoAMovieLeafChild() {
-        // A movie is leaf content: its single playable video is the same work, so identifying the
-        // movie must not surface (or identify) that video as a structural child.
-        var pluginDir = Path.Combine(_tempRoot, "tmdb-movie");
-        Directory.CreateDirectory(pluginDir);
-        await File.WriteAllTextAsync(
-            Path.Combine(pluginDir, "manifest.json"),
-            """
-            {
-              "manifestVersion": 1,
-              "apiTags": ["prismedia"],
-              "id": "tmdb",
-              "name": "TMDB",
-              "version": "1.0.0",
-              "runtime": "dotnet-process",
-              "entry": "Prismedia.Plugin.Tmdb.dll",
-              "compat": { "pluginApiMin": "1.0.0", "pluginApiMax": null, "prismediaMin": "1.0.0", "prismediaMax": null },
-              "auth": [],
-              "supports": [
-                { "entityKind": "movie", "actions": ["search"] },
-                { "entityKind": "video", "actions": ["search"] }
-              ]
-            }
-            """);
-
-        await using var db = CreateContext();
-        var now = DateTimeOffset.UtcNow;
-        db.ProviderConfigs.Add(new ProviderConfigRow {
-            Id = Guid.NewGuid(),
-            ProviderCode = "tmdb",
-            DisplayName = "TMDB",
-            ProviderType = ProviderType.ExternalProcess,
-            Enabled = true,
-            SettingsJson = "{}",
-            CreatedAt = now,
-            UpdatedAt = now
-        });
-        var movieId = Guid.Parse("dddd4444-aaaa-4444-8888-dddddddddddd");
-        var videoId = Guid.Parse("eeee5555-aaaa-4444-8888-eeeeeeeeeeee");
-        db.Entities.AddRange(
-            new EntityRow { Id = movieId, KindCode = "movie", Title = "Friendship", CreatedAt = now, UpdatedAt = now },
-            new EntityRow { Id = videoId, KindCode = "video", Title = "Friendship", ParentEntityId = movieId, SortOrder = 0, CreatedAt = now, UpdatedAt = now });
-        await db.SaveChangesAsync();
-
-        var executor = new EchoProposalProcessExecutor();
-        var service = CreateIdentifyService(db, executor, pluginDir);
-
-        var response = await service.IdentifyAsync(movieId, "tmdb", null, parentExternalIds: null, hideNsfw: false, CancellationToken.None);
-
-        Assert.True(response.Ok);
-        Assert.Empty(response.Result!.Children);
-        Assert.Equal([movieId], executor.Requests.Select(request => request.Entity.Id).ToArray());
-    }
-
-    [Fact]
     public async Task IdentifyFallsBackToLocalTitleWhenProposalTitleIsJustTheProviderId() {
         // A provider that degrades a failed detail lookup to its raw id must not surface (or apply) a
         // bare id as the entity's name: the local title wins.

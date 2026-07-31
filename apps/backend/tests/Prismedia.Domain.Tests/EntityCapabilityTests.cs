@@ -123,18 +123,19 @@ public sealed class EntityCapabilityTests {
 
     [Fact]
     public void EntityRejectsDuplicateChildrenAndRelationships() {
-        var video = new Video(
+        var episode = new VideoEpisode(
             Guid.Parse("66666666-6666-6666-6666-666666666666"),
-            "Episode 1");
+            "Episode 1",
+            parentEntityId: null);
         var series = new VideoSeries(
             Guid.Parse("77777777-7777-7777-7777-777777777777"),
             "Series");
 
-        series.AddChild(video);
-        series.AddRelationship(video);
+        series.AddChild(episode);
+        series.AddRelationship(episode);
 
-        Assert.Throws<ArgumentException>(() => series.AddChild(video));
-        Assert.Throws<ArgumentException>(() => series.AddRelationship(video));
+        Assert.Throws<ArgumentException>(() => series.AddChild(episode));
+        Assert.Throws<ArgumentException>(() => series.AddRelationship(episode));
     }
 
     [Fact]

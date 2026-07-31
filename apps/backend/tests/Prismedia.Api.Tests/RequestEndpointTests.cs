@@ -454,7 +454,7 @@ public sealed class RequestEndpointTests {
                 [
                     new("series-root", RequestMediaKind.Series, EntityKind.VideoSeries, request.ExternalIdentity, true),
                     new("season-child", RequestMediaKind.Season, EntityKind.VideoSeason, new ExternalIdentity("tvdb", "season:one"), true, 1),
-                    new("episode-child", RequestMediaKind.Episode, EntityKind.Video, new ExternalIdentity("episode-db", "episode:one"), true, 1)
+                    new("episode-child", RequestMediaKind.Episode, EntityKind.VideoEpisode, new ExternalIdentity("episode-db", "episode:one"), true, 1)
                 ]));
         }
 

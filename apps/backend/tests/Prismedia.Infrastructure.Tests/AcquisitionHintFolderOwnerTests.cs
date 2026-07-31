@@ -63,7 +63,7 @@ public sealed class AcquisitionHintFolderOwnerTests {
         var seriesId = AddEntity(db, EntityKind.VideoSeries.ToCode(), null, "/media/tv/Show", title: "Show");
         db.Entities.Local.Single(entity => entity.Id == seriesId).IsOrganized = true;
         var seasonId = AddEntity(db, EntityKind.VideoSeason.ToCode(), seriesId, "/media/tv/Show/S01");
-        var episodeId = AddEntity(db, EntityKind.Video.ToCode(), seasonId, "/media/tv/Show/S01/E01.mkv");
+        var episodeId = AddEntity(db, EntityKind.VideoEpisode.ToCode(), seasonId, "/media/tv/Show/S01/E01.mkv");
         AddHint(db, "/media/tv/Show", """{"tmdb":"episode-4242"}""", episodeId);
         await db.SaveChangesAsync();
 
@@ -151,7 +151,7 @@ public sealed class AcquisitionHintFolderOwnerTests {
         await using var db = CreateContext();
         var seriesId = AddEntity(db, EntityKind.VideoSeries.ToCode(), null, "/media/tv/Show", title: "Show");
         var seasonId = AddEntity(db, EntityKind.VideoSeason.ToCode(), seriesId, "/media/tv/Show/S01");
-        var episodeId = AddEntity(db, EntityKind.Video.ToCode(), seasonId, "/media/tv/Show/S01/E01.mkv");
+        var episodeId = AddEntity(db, EntityKind.VideoEpisode.ToCode(), seasonId, "/media/tv/Show/S01/E01.mkv");
         AddHint(db, "/media/tv/Show", """{"tmdb":"episode-4242"}""", episodeId);
         await db.SaveChangesAsync();
 
@@ -172,8 +172,8 @@ public sealed class AcquisitionHintFolderOwnerTests {
         await using var db = CreateContext();
         var seriesId = AddEntity(db, EntityKind.VideoSeries.ToCode(), null, "/media/tv/Show", title: "Show");
         var seasonId = AddEntity(db, EntityKind.VideoSeason.ToCode(), seriesId, "/media/tv/Show/S01");
-        var episodeOneId = AddEntity(db, EntityKind.Video.ToCode(), seasonId, "/media/tv/Show/S01/E01.mkv");
-        var episodeTwoId = AddEntity(db, EntityKind.Video.ToCode(), seasonId, "/media/tv/Show/S01/E02.mkv");
+        var episodeOneId = AddEntity(db, EntityKind.VideoEpisode.ToCode(), seasonId, "/media/tv/Show/S01/E01.mkv");
+        var episodeTwoId = AddEntity(db, EntityKind.VideoEpisode.ToCode(), seasonId, "/media/tv/Show/S01/E02.mkv");
         var staleAcquisitionId = AddHint(db, "/media/tv/Show", """{"tmdb":"episode-1"}""", episodeOneId);
         var activeAcquisitionId = AddHint(db, "/media/tv/Show", """{"tmdb":"episode-2"}""", episodeTwoId);
         await db.SaveChangesAsync();

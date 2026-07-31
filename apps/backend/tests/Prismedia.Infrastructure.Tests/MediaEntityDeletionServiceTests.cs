@@ -339,7 +339,7 @@ public sealed class MediaEntityDeletionServiceTests {
         });
         db.Monitors.Add(new MonitorRow {
             Id = Guid.NewGuid(),
-            Kind = EntityKind.Video,
+            Kind = EntityKind.VideoEpisode,
             EntityId = episodeId,
             Status = MonitorStatus.Active,
             Title = "Little Clifford",
@@ -1691,7 +1691,7 @@ public sealed class MediaEntityDeletionServiceTests {
         db.Entities.AddRange(
             NewEntity(seriesId, EntityKind.VideoSeries.ToCode(), "Clifford the Big Red Dog"),
             NewEntity(seasonId, EntityKind.VideoSeason.ToCode(), "Season 1", seriesId),
-            NewEntity(episodeId, EntityKind.Video.ToCode(), "Little Clifford", seasonId));
+            NewEntity(episodeId, EntityKind.VideoEpisode.ToCode(), "Little Clifford", seasonId));
         db.EntityFiles.AddRange(
             NewSourceFile(seriesId, $"{basePath}/Clifford the Big Red Dog"),
             NewSourceFile(seasonId, $"{basePath}/Clifford the Big Red Dog/Season 01"),
@@ -1719,9 +1719,9 @@ public sealed class MediaEntityDeletionServiceTests {
         db.Entities.AddRange(
             NewEntity(seriesId, EntityKind.VideoSeries.ToCode(), "Mixed Show", sortOrder: 0),
             NewEntity(monitoredSeasonId, EntityKind.VideoSeason.ToCode(), "Season 1", seriesId, 1),
-            NewEntity(monitoredEpisodeId, EntityKind.Video.ToCode(), "Episode 1", monitoredSeasonId, 1),
+            NewEntity(monitoredEpisodeId, EntityKind.VideoEpisode.ToCode(), "Episode 1", monitoredSeasonId, 1),
             NewEntity(unmonitoredSeasonId, EntityKind.VideoSeason.ToCode(), "Season 2", seriesId, 2),
-            NewEntity(unmonitoredEpisodeId, EntityKind.Video.ToCode(), "Episode 2", unmonitoredSeasonId, 1));
+            NewEntity(unmonitoredEpisodeId, EntityKind.VideoEpisode.ToCode(), "Episode 2", unmonitoredSeasonId, 1));
         db.EntityFiles.AddRange(
             NewSourceFile(seriesId, $"{basePath}/Mixed Show"),
             NewSourceFile(monitoredSeasonId, $"{basePath}/Mixed Show/Season 01"),

@@ -476,10 +476,6 @@ public sealed class EntityKindMetadataTests {
         Assert.True(season.RequiresParent);
         Assert.Equal([EntityKind.VideoSeries], season.AllowedParentKinds);
         Assert.Equal([EntityKind.VideoEpisode], season.AllowedChildKinds);
-
-        var legacyMovie = new Prismedia.Domain.Media.Movie(Guid.NewGuid(), "Legacy movie");
-        legacyMovie.AddChild(new Prismedia.Domain.Media.Video(Guid.NewGuid(), "Legacy child"));
-        Assert.Single(legacyMovie.ChildEntities);
     }
 
     [Fact]

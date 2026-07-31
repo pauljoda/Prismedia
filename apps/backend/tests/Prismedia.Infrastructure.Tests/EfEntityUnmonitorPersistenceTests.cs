@@ -67,7 +67,7 @@ public sealed class EfEntityUnmonitorPersistenceTests {
         await using var db = CreateContext();
         var series = AddEntity(db, EntityKind.VideoSeries, "Series", wanted: false);
         var season = AddEntity(db, EntityKind.VideoSeason, "Season 1", wanted: false, series);
-        var episode = AddEntity(db, EntityKind.Video, "Wanted episode", wanted: true, season);
+        var episode = AddEntity(db, EntityKind.VideoEpisode, "Wanted episode", wanted: true, season);
         AddSource(db, season);
         AddIdentity(db, series, "tmdb", "series-1");
         AddIdentity(db, season, "tmdbseason", "series-1:1");
@@ -324,7 +324,7 @@ public sealed class EfEntityUnmonitorPersistenceTests {
         var scope = (await persistence.ResolveAsync(seasonMonitor, CancellationToken.None))!;
         Assert.True(await persistence.ClaimAsync(scope, CancellationToken.None));
 
-        var lateEpisode = AddEntity(db, EntityKind.Video, "Late provider episode", wanted: true, season);
+        var lateEpisode = AddEntity(db, EntityKind.VideoEpisode, "Late provider episode", wanted: true, season);
         await db.SaveChangesAsync();
 
         await persistence.CompleteAsync(scope, CancellationToken.None);

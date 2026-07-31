@@ -658,7 +658,7 @@ public sealed class EfEntityReadServiceTests {
                 },
                 new EntityRow {
                     Id = episodeId,
-                    KindCode = EntityKind.Video.ToCode(),
+                    KindCode = EntityKind.VideoEpisode.ToCode(),
                     Title = "Episode",
                     ParentEntityId = seasonId,
                     CreatedAt = now,
@@ -1531,10 +1531,10 @@ public sealed class EfEntityReadServiceTests {
             new EntityRow { Id = populatedParentId, KindCode = EntityKind.VideoSeries.ToCode(), Title = "Populated", CreatedAt = now, UpdatedAt = now },
             new EntityRow { Id = hiddenParentId, KindCode = EntityKind.VideoSeries.ToCode(), Title = "Hidden", IsNsfw = true, CreatedAt = now, UpdatedAt = now },
             new EntityRow { Id = imageId, KindCode = EntityKind.Image.ToCode(), Title = "Image", ParentEntityId = populatedParentId, SortOrder = 9, CreatedAt = now, UpdatedAt = now },
-            new EntityRow { Id = firstVideoId, KindCode = EntityKind.Video.ToCode(), Title = "First", ParentEntityId = populatedParentId, SortOrder = 1, CreatedAt = now, UpdatedAt = now },
-            new EntityRow { Id = secondVideoId, KindCode = EntityKind.Video.ToCode(), Title = "Second", ParentEntityId = populatedParentId, SortOrder = 2, CreatedAt = now, UpdatedAt = now },
-            new EntityRow { Id = hiddenChildId, KindCode = EntityKind.Video.ToCode(), Title = "Hidden child", ParentEntityId = populatedParentId, SortOrder = 0, IsNsfw = true, CreatedAt = now, UpdatedAt = now },
-            new EntityRow { Id = childOfHiddenParentId, KindCode = EntityKind.Video.ToCode(), Title = "Invisible subtree", ParentEntityId = hiddenParentId, CreatedAt = now, UpdatedAt = now });
+            new EntityRow { Id = firstVideoId, KindCode = EntityKind.VideoEpisode.ToCode(), Title = "First", ParentEntityId = populatedParentId, SortOrder = 1, CreatedAt = now, UpdatedAt = now },
+            new EntityRow { Id = secondVideoId, KindCode = EntityKind.VideoEpisode.ToCode(), Title = "Second", ParentEntityId = populatedParentId, SortOrder = 2, CreatedAt = now, UpdatedAt = now },
+            new EntityRow { Id = hiddenChildId, KindCode = EntityKind.VideoEpisode.ToCode(), Title = "Hidden child", ParentEntityId = populatedParentId, SortOrder = 0, IsNsfw = true, CreatedAt = now, UpdatedAt = now },
+            new EntityRow { Id = childOfHiddenParentId, KindCode = EntityKind.VideoEpisode.ToCode(), Title = "Invisible subtree", ParentEntityId = hiddenParentId, CreatedAt = now, UpdatedAt = now });
         await db.SaveChangesAsync();
 
         var response = await CreateService(db).GetChildrenAsync(
@@ -1860,7 +1860,7 @@ public sealed class EfEntityReadServiceTests {
         db.Entities.AddRange(
             new EntityRow { Id = seriesId, KindCode = EntityKind.VideoSeries.ToCode(), Title = "Series", CreatedAt = now, UpdatedAt = now },
             new EntityRow { Id = seasonId, KindCode = EntityKind.VideoSeason.ToCode(), Title = "Season", ParentEntityId = seriesId, CreatedAt = now, UpdatedAt = now },
-            new EntityRow { Id = episodeId, KindCode = EntityKind.Video.ToCode(), Title = "Episode", ParentEntityId = seasonId, CreatedAt = now, UpdatedAt = now });
+            new EntityRow { Id = episodeId, KindCode = EntityKind.VideoEpisode.ToCode(), Title = "Episode", ParentEntityId = seasonId, CreatedAt = now, UpdatedAt = now });
         db.EntityTechnical.Add(new EntityTechnicalRow {
             EntityId = episodeId,
             DurationSeconds = 100,
@@ -2138,7 +2138,7 @@ public sealed class EfEntityReadServiceTests {
         db.Entities.AddRange(
             Entity(seriesId, EntityKind.VideoSeries, "Series", parentId: null),
             Entity(seasonId, EntityKind.VideoSeason, "Season", seriesId),
-            Entity(episodeId, EntityKind.Video, "Episode", seasonId),
+            Entity(episodeId, EntityKind.VideoEpisode, "Episode", seasonId),
             Entity(unrelatedSeriesId, EntityKind.VideoSeries, "Unrelated series", parentId: null),
             Entity(artistId, EntityKind.MusicArtist, "Artist", parentId: null),
             Entity(albumId, EntityKind.AudioLibrary, "Album", artistId),
@@ -2152,9 +2152,9 @@ public sealed class EfEntityReadServiceTests {
             Acquisition(seriesAcquisitionId, EntityKind.VideoSeries, AcquisitionStatus.Imported, seriesId, now.AddMinutes(-8)),
             Acquisition(oldSeasonAcquisitionId, EntityKind.VideoSeason, AcquisitionStatus.Pending, seasonId, now.AddMinutes(-7)),
             Acquisition(seasonAcquisitionId, EntityKind.VideoSeason, AcquisitionStatus.Failed, seasonId, now.AddMinutes(-6)),
-            Acquisition(episodeAcquisitionId, EntityKind.Video, AcquisitionStatus.Imported, episodeId, now.AddMinutes(-5)),
-            Acquisition(Guid.Parse("a1200000-0000-0000-0000-000000000005"), EntityKind.Video, AcquisitionStatus.Downloading, entityId: null, now.AddMinutes(-4), episodeAcquisitionId),
-            Acquisition(Guid.Parse("a1200000-0000-0000-0000-000000000006"), EntityKind.Video, AcquisitionStatus.Cancelled, entityId: null, now.AddMinutes(-3), episodeAcquisitionId),
+            Acquisition(episodeAcquisitionId, EntityKind.VideoEpisode, AcquisitionStatus.Imported, episodeId, now.AddMinutes(-5)),
+            Acquisition(Guid.Parse("a1200000-0000-0000-0000-000000000005"), EntityKind.VideoEpisode, AcquisitionStatus.Downloading, entityId: null, now.AddMinutes(-4), episodeAcquisitionId),
+            Acquisition(Guid.Parse("a1200000-0000-0000-0000-000000000006"), EntityKind.VideoEpisode, AcquisitionStatus.Cancelled, entityId: null, now.AddMinutes(-3), episodeAcquisitionId),
             Acquisition(Guid.Parse("a1200000-0000-0000-0000-000000000007"), EntityKind.AudioLibrary, AcquisitionStatus.Downloaded, albumId, now.AddMinutes(-2)));
         await db.SaveChangesAsync();
 

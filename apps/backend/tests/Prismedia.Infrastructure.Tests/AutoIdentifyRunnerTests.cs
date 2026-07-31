@@ -95,7 +95,7 @@ public sealed class AutoIdentifyRunnerTests {
     [Fact]
     public async Task HydratesAndAppliesSingleConfidentSearchCandidate() {
         await using var db = CreateContext();
-        var entityId = await SeedVideoAsync(db, organized: false, kind: "video-series", title: "The Chair Company");
+        var entityId = await SeedVideoAsync(db, organized: false, kind: EntityKind.VideoSeries.ToCode(), title: "The Chair Company");
         var settings = await ConfigureAsync(db, enabled: true, providers: ["tmdb"], confidencePercent: 90m);
         var identify = new FakeIdentifyProvider {
             ProposalsByProvider = {
@@ -247,7 +247,7 @@ public sealed class AutoIdentifyRunnerTests {
     [Fact]
     public async Task ReportsEachAppliedEntityAsProgress() {
         await using var db = CreateContext();
-        var entityId = await SeedVideoAsync(db, organized: false, kind: "video-series", title: "King of the Hill");
+        var entityId = await SeedVideoAsync(db, organized: false, kind: EntityKind.VideoSeries.ToCode(), title: "King of the Hill");
         var settings = await ConfigureAsync(db, enabled: true, providers: ["tmdb"], confidencePercent: 90m);
         var progressReports = new List<AutoIdentifyProgress>();
         var identify = new FakeIdentifyProvider {
@@ -293,7 +293,7 @@ public sealed class AutoIdentifyRunnerTests {
     [Fact]
     public async Task CancelsProviderWhenNoCascadeProgressArrivesBeforeInactivityTimeout() {
         await using var db = CreateContext();
-        var entityId = await SeedVideoAsync(db, organized: false, kind: "video-series", title: "Stalled Series");
+        var entityId = await SeedVideoAsync(db, organized: false, kind: EntityKind.VideoSeries.ToCode(), title: "Stalled Series");
         var settings = await ConfigureAsync(db, enabled: true, providers: ["tmdb"], confidencePercent: 90m);
         var identify = new FakeIdentifyProvider {
             ProposalsByProvider = {
@@ -325,7 +325,7 @@ public sealed class AutoIdentifyRunnerTests {
     [Fact]
     public async Task LeavesSearchCandidatesForReviewWhenCandidateConfidenceIsBelowThreshold() {
         await using var db = CreateContext();
-        var entityId = await SeedVideoAsync(db, organized: false, kind: "video-series", title: "The Chair Company");
+        var entityId = await SeedVideoAsync(db, organized: false, kind: EntityKind.VideoSeries.ToCode(), title: "The Chair Company");
         var settings = await ConfigureAsync(db, enabled: true, providers: ["tmdb"], confidencePercent: 90m);
         var identify = new FakeIdentifyProvider {
             ProposalsByProvider = {
@@ -426,7 +426,7 @@ public sealed class AutoIdentifyRunnerTests {
     [Fact]
     public async Task AppliesSeriesRootWhoseRootPatchHasNullCollections() {
         await using var db = CreateContext();
-        var seriesId = await SeedVideoAsync(db, organized: false, kind: "video-series");
+        var seriesId = await SeedVideoAsync(db, organized: false, kind: EntityKind.VideoSeries.ToCode());
         var settings = await ConfigureAsync(db, enabled: true, providers: ["p1"], confidencePercent: 90m);
         // A series root often arrives with a sparse patch (null collections) and its value in Children.
         var sparsePatch = new EntityMetadataPatch(
@@ -469,8 +469,8 @@ public sealed class AutoIdentifyRunnerTests {
     [Fact]
     public async Task SkipsChildEntitiesSoOnlyTheParentIsIdentified() {
         await using var db = CreateContext();
-        var seriesId = await SeedVideoAsync(db, organized: false);
-        var episodeId = await SeedVideoAsync(db, organized: false, parentId: seriesId);
+        var seriesId = await SeedVideoAsync(db, organized: false, kind: EntityKind.VideoSeries.ToCode());
+        var episodeId = await SeedVideoAsync(db, organized: false, parentId: seriesId, kind: EntityKind.VideoEpisode.ToCode());
         var settings = await ConfigureAsync(db, enabled: true, providers: ["p1"], confidencePercent: 90m);
         var identify = new FakeIdentifyProvider {
             ProposalsByProvider = { ["p1"] = Proposal("p1", confidence: 0.99m, title: "Episode") },
@@ -493,7 +493,7 @@ public sealed class AutoIdentifyRunnerTests {
     public async Task ExplicitImportTargetIdentifiesOnlyTheOrganizedEpisode() {
         await using var db = CreateContext();
         var seriesId = await SeedVideoAsync(db, organized: false, kind: EntityKind.VideoSeries.ToCode());
-        var episodeId = await SeedVideoAsync(db, organized: true, parentId: seriesId);
+        var episodeId = await SeedVideoAsync(db, organized: true, parentId: seriesId, kind: EntityKind.VideoEpisode.ToCode());
         var settings = await ConfigureAsync(db, enabled: true, providers: ["p1"], confidencePercent: 90m);
         var identify = new FakeIdentifyProvider {
             ProposalsByProvider = { ["p1"] = Proposal("p1", confidence: 0.99m, title: "Episode") },

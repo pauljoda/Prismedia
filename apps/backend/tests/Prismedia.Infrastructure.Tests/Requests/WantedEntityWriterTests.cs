@@ -130,12 +130,11 @@ public sealed class WantedEntityWriterTests {
     }
 
     [Fact]
-    public async Task MovieRootReportsOnDiskWhenItsSourceFileBelongsToADescendant() {
+    public async Task DirectMovieReportsOnDiskWhenItOwnsItsSourceFile() {
         await using var db = CreateContext();
         var movieId = AddEntity(db, EntityKind.Movie.ToCode(), "Dune", isWanted: false);
-        var videoId = AddEntity(db, EntityKind.Video.ToCode(), "Dune", isWanted: false, parentEntityId: movieId);
         AddExternalId(db, movieId, "tmdb", "M1");
-        AddSourceFile(db, videoId, "/media/movies/Dune/Dune.mkv");
+        AddSourceFile(db, movieId, "/media/movies/Dune/Dune.mkv");
         await db.SaveChangesAsync();
         var writer = Writer(db);
 
@@ -152,7 +151,7 @@ public sealed class WantedEntityWriterTests {
         Assert.Equal(movieId, result.EntityId);
         Assert.True(result.HasFile);
         Assert.True(monitorable?.HasSourceFile);
-        Assert.Equal(2, await db.Entities.AsNoTracking().CountAsync());
+        Assert.Equal(1, await db.Entities.AsNoTracking().CountAsync());
     }
 
     [Fact]
