@@ -295,15 +295,11 @@ public sealed class EntityKindMetadataTests {
     }
 
     [Fact]
-    public void DefinitionsOwnEngagementVocabularyAndChildAggregation() {
+    public void DefinitionsOwnEngagementVocabulary() {
         var engagingKinds = EntityKindRegistry.All
             .Where(definition => definition.Engagement.Mode != EntityEngagementMode.None)
             .Select(definition => definition.Kind)
             .Order()
-            .ToArray();
-        var childAggregates = EntityKindRegistry.All
-            .Where(definition => definition.Engagement.AggregatesDirectChildPlayback)
-            .Select(definition => definition.Kind)
             .ToArray();
 
         Assert.Equal(
@@ -327,7 +323,6 @@ public sealed class EntityKindMetadataTests {
         Assert.True(EntityKindRegistry.Describe(EntityKind.Video).Engagement.DerivesCompletionFromPlaybackFraction);
         Assert.True(EntityKindRegistry.Describe(EntityKind.Movie).Engagement.DerivesCompletionFromPlaybackFraction);
         Assert.False(EntityKindRegistry.Describe(EntityKind.AudioTrack).Engagement.DerivesCompletionFromPlaybackFraction);
-        Assert.Empty(childAggregates);
     }
 
     [Fact]
@@ -354,14 +349,11 @@ public sealed class EntityKindMetadataTests {
     }
 
     [Fact]
-    public void BrowsePolicyRejectsAmbiguousAndDuplicateHierarchyRules() {
+    public void BrowsePolicyRejectsAmbiguousHierarchyRules() {
         Assert.Throws<ArgumentException>(() =>
             new EntityBrowsePolicy(
                 requiresTopLevel: true,
                 hiddenParentKinds: [EntityKind.Gallery]));
-        Assert.Throws<ArgumentException>(() =>
-            new EntityBrowsePolicy(
-                aggregateParentKinds: [EntityKind.Movie, EntityKind.Movie]));
     }
 
     [Fact]

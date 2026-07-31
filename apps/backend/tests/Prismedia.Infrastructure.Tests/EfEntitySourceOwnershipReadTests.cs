@@ -40,8 +40,8 @@ public sealed class EfEntitySourceOwnershipReadTests {
     public async Task DescendantSourceOwnershipFlowsThroughFiltersThumbnailsAndDetails() {
         await using var db = CreateContext();
         var now = DateTimeOffset.UtcNow;
-        var movie = AddHierarchy(db, now, EntityKind.Movie, EntityKind.Video);
-        var series = AddHierarchy(db, now, EntityKind.VideoSeries, EntityKind.VideoSeason, EntityKind.Video);
+        var movie = AddHierarchy(db, now, EntityKind.Movie);
+        var series = AddHierarchy(db, now, EntityKind.VideoSeries, EntityKind.VideoSeason, EntityKind.VideoEpisode);
         var book = AddHierarchy(db, now, EntityKind.Book, EntityKind.BookVolume, EntityKind.BookChapter);
         var artist = AddHierarchy(db, now, EntityKind.MusicArtist, EntityKind.AudioLibrary, EntityKind.AudioTrack);
         var album = Assert.Single(db.Entities.Local, row => row.ParentEntityId == artist.RootId);
@@ -181,7 +181,7 @@ public sealed class EfEntitySourceOwnershipReadTests {
     public async Task DetailAndCapabilityMutationsShareSourceBackedCapabilityTruth() {
         await using var db = CreateContext();
         var now = DateTimeOffset.UtcNow;
-        var movie = AddHierarchy(db, now, EntityKind.Movie, EntityKind.Video);
+        var movie = AddHierarchy(db, now, EntityKind.Movie);
         await db.SaveChangesAsync();
 
         var user = TestUserContext.Admin();
@@ -210,21 +210,7 @@ public sealed class EfEntitySourceOwnershipReadTests {
             isNsfw: null,
             isOrganized: null,
             CancellationToken.None));
-        var progressed = Assert.IsType<EntityCard>(await mutations.UpdateProgressAsync(
-            movie.RootId,
-            movie.RootId,
-            ProgressUnit.Page,
-            index: 1,
-            total: 10,
-            mode: ReaderMode.Paged,
-            completed: null,
-            reset: false,
-            location: null,
-            activitySeconds: null,
-            activityKind: null,
-            CancellationToken.None));
-
-        foreach (var card in new[] { detail, rated, flagged, progressed }) {
+        foreach (var card in new[] { detail, rated, flagged }) {
             Assert.True(Assert.Single(card.Capabilities.OfType<FileManagementCapability>()).CanDeleteFiles);
         }
     }

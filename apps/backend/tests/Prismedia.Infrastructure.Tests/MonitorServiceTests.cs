@@ -272,7 +272,7 @@ public sealed class MonitorServiceTests {
         Assert.True(season.CanRequest);
         Assert.False(season.DiscoversChildren);
         Assert.True(season.CanSearchMissingChildren);
-        Assert.Equal(EntityKind.Video, season.MissingChildEntityKind);
+        Assert.Equal(EntityKind.VideoEpisode, season.MissingChildEntityKind);
         var missing = states[3];
         Assert.False(missing.CanMonitor);
         Assert.False(missing.CanRequest);

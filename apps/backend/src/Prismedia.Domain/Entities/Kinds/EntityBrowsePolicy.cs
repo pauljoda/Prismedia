@@ -9,7 +9,6 @@ public sealed record EntityBrowsePolicy {
     public static EntityBrowsePolicy Default { get; } = new();
 
     private readonly IReadOnlyList<EntityKind> _hiddenParentKinds;
-    private readonly IReadOnlyList<EntityKind> _aggregateParentKinds;
 
     /// <summary>Creates one validated browse policy.</summary>
     /// <param name="excludesWantedByDefault">
@@ -21,16 +20,11 @@ public sealed record EntityBrowsePolicy {
     /// <param name="hiddenParentKinds">
     /// Parent kinds that hide this kind from its kind-specific browse while preserving other parents.
     /// </param>
-    /// <param name="aggregateParentKinds">
-    /// Parent kinds whose child representation is suppressed from aggregate/search results.
-    /// </param>
     public EntityBrowsePolicy(
         bool excludesWantedByDefault = false,
         bool requiresTopLevel = false,
-        IReadOnlyList<EntityKind>? hiddenParentKinds = null,
-        IReadOnlyList<EntityKind>? aggregateParentKinds = null) {
+        IReadOnlyList<EntityKind>? hiddenParentKinds = null) {
         var hiddenParents = ValidateKinds(hiddenParentKinds, nameof(hiddenParentKinds));
-        var aggregateParents = ValidateKinds(aggregateParentKinds, nameof(aggregateParentKinds));
         if (requiresTopLevel && hiddenParents.Length > 0) {
             throw new ArgumentException(
                 "A top-level-only browse cannot also declare selectively hidden parent kinds.",
@@ -40,7 +34,6 @@ public sealed record EntityBrowsePolicy {
         ExcludesWantedByDefault = excludesWantedByDefault;
         RequiresTopLevel = requiresTopLevel;
         _hiddenParentKinds = Array.AsReadOnly(hiddenParents);
-        _aggregateParentKinds = Array.AsReadOnly(aggregateParents);
     }
 
     /// <summary>Whether wanted placeholders are omitted unless wanted state is requested.</summary>
@@ -51,9 +44,6 @@ public sealed record EntityBrowsePolicy {
 
     /// <summary>Parent kinds that hide this kind from its kind-specific browse.</summary>
     public IReadOnlyList<EntityKind> HiddenParentKinds => _hiddenParentKinds;
-
-    /// <summary>Parent kinds whose child representation is omitted from aggregate/search results.</summary>
-    public IReadOnlyList<EntityKind> AggregateParentKinds => _aggregateParentKinds;
 
     private static EntityKind[] ValidateKinds(
         IReadOnlyList<EntityKind>? kinds,

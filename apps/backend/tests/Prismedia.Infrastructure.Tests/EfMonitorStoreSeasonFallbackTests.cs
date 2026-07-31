@@ -182,7 +182,7 @@ public sealed class EfMonitorStoreSeasonFallbackTests {
         });
         for (var episode = 1; episode <= wantedEpisodes; episode++) {
             db.Entities.Add(new EntityRow {
-                Id = Guid.NewGuid(), KindCode = EntityKind.Video.ToCode(), Title = $"Episode {episode}",
+                Id = Guid.NewGuid(), KindCode = EntityKind.VideoEpisode.ToCode(), Title = $"Episode {episode}",
                 ParentEntityId = seasonEntityId, IsWanted = true, SortOrder = episode,
                 CreatedAt = now, UpdatedAt = now
             });

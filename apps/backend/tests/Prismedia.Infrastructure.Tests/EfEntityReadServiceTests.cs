@@ -267,10 +267,10 @@ public sealed class EfEntityReadServiceTests {
     }
 
     [Fact]
-    public async Task ListAsyncSearchSuppressesMovieChildVideoButKeepsVideoBrowse() {
+    public async Task ListAsyncSearchReturnsDirectMovieAndStandaloneVideoEntities() {
         await using var db = CreateContext();
         var movieId = Guid.Parse("aaaaaaaa-aaaa-4444-8888-aaaaaaaaaaaa");
-        var childVideoId = Guid.Parse("bbbbbbbb-bbbb-4444-8888-bbbbbbbbbbbb");
+        var videoId = Guid.Parse("bbbbbbbb-bbbb-4444-8888-bbbbbbbbbbbb");
         var now = DateTimeOffset.UtcNow;
         db.Entities.AddRange(
             new EntityRow {
@@ -281,11 +281,9 @@ public sealed class EfEntityReadServiceTests {
                 UpdatedAt = now
             },
             new EntityRow {
-                Id = childVideoId,
+                Id = videoId,
                 KindCode = EntityKind.Video.ToCode(),
                 Title = "Friendship",
-                ParentEntityId = movieId,
-                SortOrder = 0,
                 CreatedAt = now,
                 UpdatedAt = now
             });
@@ -295,26 +293,23 @@ public sealed class EfEntityReadServiceTests {
         var service = new EfEntityReadService(db, TestUserContext.Admin(), repository, ThumbnailContributors.For(db));
 
         var searchResult = await service.ListAsync(null, "Friendship", null, null, null, CancellationToken.None);
-        var searchedItem = Assert.Single(searchResult.Items);
-        Assert.Equal(movieId, searchedItem.Id);
-        Assert.Equal(EntityKind.Movie, searchedItem.Kind);
-        Assert.Equal(1, searchResult.TotalCount);
+        Assert.Equal(2, searchResult.TotalCount);
+        Assert.Equal([movieId, videoId], searchResult.Items.Select(item => item.Id).Order().ToArray());
 
         var videoBrowseResult = await service.ListAsync(EntityKind.Video.ToCode(), null, null, null, null, CancellationToken.None);
         var browsedItem = Assert.Single(videoBrowseResult.Items);
-        Assert.Equal(childVideoId, browsedItem.Id);
-        Assert.Equal(movieId, browsedItem.ParentEntityId);
+        Assert.Equal(videoId, browsedItem.Id);
+        Assert.Null(browsedItem.ParentEntityId);
         Assert.Equal(1, videoBrowseResult.TotalCount);
     }
 
     [Fact]
-    public async Task ListAsyncFiltersMultipleVideoKindsWithoutMovieChildDuplicatesOrHiddenLibraries() {
+    public async Task ListAsyncFiltersMultiplePlayableKindsWithoutHiddenLibraries() {
         await using var db = CreateContext();
         var now = DateTimeOffset.UtcNow;
         var enabledRootId = Guid.Parse("11111111-aaaa-4444-8888-111111111111");
         var disabledRootId = Guid.Parse("22222222-aaaa-4444-8888-222222222222");
         var movieId = Guid.Parse("33333333-aaaa-4444-8888-333333333333");
-        var movieVideoId = Guid.Parse("44444444-aaaa-4444-8888-444444444444");
         var videoId = Guid.Parse("55555555-aaaa-4444-8888-555555555555");
         var seriesId = Guid.Parse("66666666-aaaa-4444-8888-666666666666");
         var seasonId = Guid.Parse("77777777-aaaa-4444-8888-777777777777");
@@ -325,18 +320,17 @@ public sealed class EfEntityReadServiceTests {
             Root(disabledRootId, enabled: false, now));
         db.Entities.AddRange(
             new EntityRow { Id = movieId, KindCode = EntityKind.Movie.ToCode(), Title = "Movie", CreatedAt = now, UpdatedAt = now },
-            new EntityRow { Id = movieVideoId, KindCode = EntityKind.Video.ToCode(), Title = "Movie File", ParentEntityId = movieId, CreatedAt = now, UpdatedAt = now },
-            new EntityRow { Id = videoId, KindCode = EntityKind.Video.ToCode(), Title = "Episode", CreatedAt = now, UpdatedAt = now },
+            new EntityRow { Id = videoId, KindCode = EntityKind.Video.ToCode(), Title = "Standalone Video", CreatedAt = now, UpdatedAt = now },
             new EntityRow { Id = seriesId, KindCode = EntityKind.VideoSeries.ToCode(), Title = "Series", CreatedAt = now, UpdatedAt = now },
             new EntityRow { Id = seasonId, KindCode = EntityKind.VideoSeason.ToCode(), Title = "Season", ParentEntityId = seriesId, CreatedAt = now, UpdatedAt = now },
             new EntityRow { Id = hiddenVideoId, KindCode = EntityKind.Video.ToCode(), Title = "Hidden", CreatedAt = now, UpdatedAt = now },
             new EntityRow { Id = bookId, KindCode = EntityKind.Book.ToCode(), Title = "Book", CreatedAt = now, UpdatedAt = now });
         db.EntityLibraryRoots.AddRange(
-            new EntityLibraryRootRow { EntityId = movieVideoId, LibraryRootId = enabledRootId  },
+            new EntityLibraryRootRow { EntityId = movieId, LibraryRootId = enabledRootId  },
             new EntityLibraryRootRow { EntityId = videoId, LibraryRootId = enabledRootId  },
             new EntityLibraryRootRow { EntityId = hiddenVideoId, LibraryRootId = disabledRootId  });
         db.UserEntityStates.AddRange(
-            new UserEntityStateRow { UserId = TestUserContext.UserId, EntityId = movieVideoId, ResumeSeconds = 10, UpdatedAt = now },
+            new UserEntityStateRow { UserId = TestUserContext.UserId, EntityId = movieId, ResumeSeconds = 10, UpdatedAt = now },
             new UserEntityStateRow { UserId = TestUserContext.UserId, EntityId = videoId, ResumeSeconds = 20, UpdatedAt = now },
             new UserEntityStateRow { UserId = TestUserContext.UserId, EntityId = seriesId, ResumeSeconds = 30, UpdatedAt = now },
             new UserEntityStateRow { UserId = TestUserContext.UserId, EntityId = seasonId, ResumeSeconds = 40, UpdatedAt = now },
@@ -362,17 +356,15 @@ public sealed class EfEntityReadServiceTests {
         Assert.Equal(
             [movieId, videoId, seriesId, seasonId],
             result.Items.Select(item => item.Id).Order().ToArray());
-        Assert.DoesNotContain(result.Items, item => item.Id == movieVideoId);
         Assert.DoesNotContain(result.Items, item => item.Id == hiddenVideoId);
         Assert.DoesNotContain(result.Items, item => item.Id == bookId);
     }
 
     [Fact]
-    public async Task ListAsyncRelatedGridSuppressesMovieChildVideo() {
+    public async Task ListAsyncRelatedGridReturnsTheDirectMovieEntity() {
         await using var db = CreateContext();
         var tagId = Guid.Parse("11111111-aaaa-4444-8888-111111111111");
         var movieId = Guid.Parse("22222222-aaaa-4444-8888-222222222222");
-        var childVideoId = Guid.Parse("33333333-aaaa-4444-8888-333333333333");
         var now = DateTimeOffset.UtcNow;
         db.Entities.AddRange(
             new EntityRow {
@@ -388,35 +380,16 @@ public sealed class EfEntityReadServiceTests {
                 Title = "Friendship",
                 CreatedAt = now,
                 UpdatedAt = now
-            },
-            new EntityRow {
-                Id = childVideoId,
-                KindCode = EntityKind.Video.ToCode(),
-                Title = "Friendship",
-                ParentEntityId = movieId,
-                SortOrder = 0,
-                CreatedAt = now,
-                UpdatedAt = now
             });
-        db.EntityRelationshipLinks.AddRange(
-            new EntityRelationshipLinkRow {
-                EntityId = movieId,
-                RelationshipCode = "tags",
-                Label = "Tags",
-                TargetEntityId = tagId,
-                TargetKindCode = EntityKind.Tag.ToCode(),
-                SortOrder = 0,
-                CreatedAt = now
-            },
-            new EntityRelationshipLinkRow {
-                EntityId = childVideoId,
-                RelationshipCode = "tags",
-                Label = "Tags",
-                TargetEntityId = tagId,
-                TargetKindCode = EntityKind.Tag.ToCode(),
-                SortOrder = 1,
-                CreatedAt = now
-            });
+        db.EntityRelationshipLinks.Add(new EntityRelationshipLinkRow {
+            EntityId = movieId,
+            RelationshipCode = RelationshipKind.Tags.ToCode(),
+            Label = "Tags",
+            TargetEntityId = tagId,
+            TargetKindCode = EntityKind.Tag.ToCode(),
+            SortOrder = 0,
+            CreatedAt = now
+        });
         await db.SaveChangesAsync();
 
         var repository = new EfEntityRepository(db, TestUserContext.Admin(), EntityMappers.Kinds(db), EntityMappers.Capabilities(db, TestUserContext.Admin()));
@@ -430,7 +403,7 @@ public sealed class EfEntityReadServiceTests {
             limit: null,
             CancellationToken.None,
             referencedBy: tagId,
-            relationshipCode: "tags");
+            relationshipCode: RelationshipKind.Tags.ToCode());
 
         var item = Assert.Single(result.Items);
         Assert.Equal(movieId, item.Id);
@@ -1618,14 +1591,13 @@ public sealed class EfEntityReadServiceTests {
     }
 
     [Fact]
-    public async Task DisabledLibraryRootHidesRelationshipTargetsAndMovieContainers() {
+    public async Task DisabledLibraryRootHidesRelationshipTargetsAndDirectMovies() {
         await using var db = CreateContext();
         var enabledRootId = Guid.Parse("33333333-0000-0000-0000-000000000001");
         var disabledRootId = Guid.Parse("33333333-0000-0000-0000-000000000002");
         var sourceVideoId = Guid.Parse("33333333-0000-0000-0000-000000000003");
         var relatedVisibleVideoId = Guid.Parse("33333333-0000-0000-0000-000000000004");
         var hiddenMovieId = Guid.Parse("33333333-0000-0000-0000-000000000005");
-        var hiddenMovieVideoId = Guid.Parse("33333333-0000-0000-0000-000000000006");
         var now = DateTimeOffset.UtcNow;
         db.LibraryRoots.AddRange(
             Root(enabledRootId, enabled: true, now),
@@ -1633,15 +1605,14 @@ public sealed class EfEntityReadServiceTests {
         db.Entities.AddRange(
             new EntityRow { Id = sourceVideoId, KindCode = EntityKind.Video.ToCode(), Title = "Source", CreatedAt = now, UpdatedAt = now },
             new EntityRow { Id = relatedVisibleVideoId, KindCode = EntityKind.Video.ToCode(), Title = "Visible Related", CreatedAt = now, UpdatedAt = now },
-            new EntityRow { Id = hiddenMovieId, KindCode = EntityKind.Movie.ToCode(), Title = "Hidden Movie", CreatedAt = now, UpdatedAt = now },
-            new EntityRow { Id = hiddenMovieVideoId, KindCode = EntityKind.Video.ToCode(), Title = "Hidden Feature", ParentEntityId = hiddenMovieId, CreatedAt = now, UpdatedAt = now });
+            new EntityRow { Id = hiddenMovieId, KindCode = EntityKind.Movie.ToCode(), Title = "Hidden Movie", CreatedAt = now, UpdatedAt = now });
         db.EntityLibraryRoots.AddRange(
             new EntityLibraryRootRow { EntityId = sourceVideoId, LibraryRootId = enabledRootId  },
             new EntityLibraryRootRow { EntityId = relatedVisibleVideoId, LibraryRootId = enabledRootId  },
-            new EntityLibraryRootRow { EntityId = hiddenMovieVideoId, LibraryRootId = disabledRootId  });
+            new EntityLibraryRootRow { EntityId = hiddenMovieId, LibraryRootId = disabledRootId  });
         db.EntityRelationshipLinks.AddRange(
-            Link(sourceVideoId, relatedVisibleVideoId, now),
-            Link(sourceVideoId, hiddenMovieVideoId, now));
+            Link(sourceVideoId, relatedVisibleVideoId, EntityKind.Video, now),
+            Link(sourceVideoId, hiddenMovieId, EntityKind.Movie, now));
         await db.SaveChangesAsync();
 
         var service = CreateService(db);
@@ -1655,13 +1626,13 @@ public sealed class EfEntityReadServiceTests {
         Assert.Empty(movies.Items);
         Assert.Equal(0, movies.TotalCount);
 
-        static EntityRelationshipLinkRow Link(Guid source, Guid target, DateTimeOffset at) =>
+        static EntityRelationshipLinkRow Link(Guid source, Guid target, EntityKind targetKind, DateTimeOffset at) =>
             new() {
                 EntityId = source,
                 RelationshipCode = RelationshipKind.Related.ToCode(),
                 Label = "Related",
                 TargetEntityId = target,
-                TargetKindCode = EntityKind.Video.ToCode(),
+                TargetKindCode = targetKind.ToCode(),
                 CreatedAt = at,
             };
     }
@@ -1928,23 +1899,23 @@ public sealed class EfEntityReadServiceTests {
     }
 
     [Fact]
-    public async Task ListAsyncTreatsMovieChildPlaybackAsMovieEngagement() {
+    public async Task ListAsyncUsesDirectMoviePlaybackForFiltersAndProgress() {
         await using var db = CreateContext();
         var now = DateTimeOffset.UtcNow;
         var watchedMovie = Guid.Parse("11111111-1111-1111-1111-111111111111");
-        var watchedVideo = Guid.Parse("22222222-2222-2222-2222-222222222222");
         var unwatchedMovie = Guid.Parse("33333333-3333-3333-3333-333333333333");
-        var unwatchedVideo = Guid.Parse("44444444-4444-4444-4444-444444444444");
         db.Entities.AddRange(
             new EntityRow { Id = watchedMovie, KindCode = EntityKind.Movie.ToCode(), Title = "Watched Movie", CreatedAt = now, UpdatedAt = now },
-            new EntityRow { Id = watchedVideo, KindCode = EntityKind.Video.ToCode(), Title = "Watched Movie", ParentEntityId = watchedMovie, CreatedAt = now, UpdatedAt = now },
-            new EntityRow { Id = unwatchedMovie, KindCode = EntityKind.Movie.ToCode(), Title = "Fresh Movie", CreatedAt = now, UpdatedAt = now },
-            new EntityRow { Id = unwatchedVideo, KindCode = EntityKind.Video.ToCode(), Title = "Fresh Movie", ParentEntityId = unwatchedMovie, CreatedAt = now, UpdatedAt = now });
+            new EntityRow { Id = unwatchedMovie, KindCode = EntityKind.Movie.ToCode(), Title = "Fresh Movie", CreatedAt = now, UpdatedAt = now });
+        db.EntityTechnical.Add(new EntityTechnicalRow {
+            EntityId = watchedMovie,
+            DurationSeconds = 200,
+            UpdatedAt = now
+        });
         db.UserEntityStates.Add(new UserEntityStateRow {
             UserId = TestUserContext.UserId,
-            EntityId = watchedVideo,
-            PlayCount = 1,
-            CompletedAt = now,
+            EntityId = watchedMovie,
+            ResumeSeconds = 50,
             UpdatedAt = now
         });
         await db.SaveChangesAsync();
@@ -1958,38 +1929,9 @@ public sealed class EfEntityReadServiceTests {
         var watchedThumbnail = Assert.Single(played.Items);
 
         Assert.Equal(watchedMovie, watchedThumbnail.Id);
-        Assert.Equal(1.0, watchedThumbnail.Progress);
+        Assert.Equal(50, watchedThumbnail.ResumeSeconds);
+        Assert.Equal(0.25, watchedThumbnail.Progress);
         Assert.Equal(unwatchedMovie, Assert.Single(unplayed.Items).Id);
-    }
-
-    [Fact]
-    public async Task ListAsyncProjectsMovieChildResumePositionAndProgress() {
-        await using var db = CreateContext();
-        var now = DateTimeOffset.UtcNow;
-        var movieId = Guid.Parse("55555555-5555-5555-5555-555555555555");
-        var videoId = Guid.Parse("66666666-6666-6666-6666-666666666666");
-        db.Entities.AddRange(
-            new EntityRow { Id = movieId, KindCode = EntityKind.Movie.ToCode(), Title = "Movie", CreatedAt = now, UpdatedAt = now },
-            new EntityRow { Id = videoId, KindCode = EntityKind.Video.ToCode(), Title = "Movie", ParentEntityId = movieId, CreatedAt = now, UpdatedAt = now });
-        db.EntityTechnical.Add(new EntityTechnicalRow {
-            EntityId = videoId,
-            DurationSeconds = 200,
-            UpdatedAt = now
-        });
-        db.UserEntityStates.Add(new UserEntityStateRow {
-            UserId = TestUserContext.UserId,
-            EntityId = videoId,
-            ResumeSeconds = 50,
-            UpdatedAt = now
-        });
-        await db.SaveChangesAsync();
-
-        var result = await CreateService(db).ListAsync(
-            EntityKind.Movie.ToCode(), null, null, null, null, CancellationToken.None);
-
-        var thumbnail = Assert.Single(result.Items);
-        Assert.Equal(50, thumbnail.ResumeSeconds);
-        Assert.Equal(0.25, thumbnail.Progress);
     }
 
     [Fact]
@@ -2398,12 +2340,12 @@ public sealed class EfEntityReadServiceTests {
             Row(visibleSeasonId, EntityKind.VideoSeason.ToCode(), "Season 1", now, seriesId),
             Row(nsfwSeasonId, EntityKind.VideoSeason.ToCode(), "Season 2", now, seriesId, isNsfw: true),
             Row(wantedSeasonId, EntityKind.VideoSeason.ToCode(), "Season 3", now, seriesId, isWanted: true),
-            Row(visibleEpisodeId, EntityKind.Video.ToCode(), "Episode 1", now, visibleSeasonId),
-            Row(directEpisodeId, EntityKind.Video.ToCode(), "Special", now, seriesId),
-            Row(nsfwEpisodeId, EntityKind.Video.ToCode(), "Hidden Episode", now, visibleSeasonId, isNsfw: true),
-            Row(wantedEpisodeId, EntityKind.Video.ToCode(), "Wanted Episode", now, visibleSeasonId, isWanted: true),
-            Row(hiddenLibraryEpisodeId, EntityKind.Video.ToCode(), "Disabled Library Episode", now, visibleSeasonId),
-            Row(episodeBelowHiddenSeasonId, EntityKind.Video.ToCode(), "Hidden Season Episode", now, nsfwSeasonId));
+            Row(visibleEpisodeId, EntityKind.VideoEpisode.ToCode(), "Episode 1", now, visibleSeasonId),
+            Row(directEpisodeId, EntityKind.VideoEpisode.ToCode(), "Special", now, seriesId),
+            Row(nsfwEpisodeId, EntityKind.VideoEpisode.ToCode(), "Hidden Episode", now, visibleSeasonId, isNsfw: true),
+            Row(wantedEpisodeId, EntityKind.VideoEpisode.ToCode(), "Wanted Episode", now, visibleSeasonId, isWanted: true),
+            Row(hiddenLibraryEpisodeId, EntityKind.VideoEpisode.ToCode(), "Disabled Library Episode", now, visibleSeasonId),
+            Row(episodeBelowHiddenSeasonId, EntityKind.VideoEpisode.ToCode(), "Hidden Season Episode", now, nsfwSeasonId));
         db.EntityLibraryRoots.AddRange(
             new EntityLibraryRootRow { EntityId = visibleEpisodeId, LibraryRootId = enabledRootId  },
             new EntityLibraryRootRow { EntityId = directEpisodeId, LibraryRootId = enabledRootId  },
@@ -2633,38 +2575,30 @@ public sealed class EfEntityReadServiceTests {
     }
 
     [Fact]
-    public async Task GetThumbnailsAsyncUsesOnlyUnambiguousMovieChildTechnicalMetadataAsFallback() {
+    public async Task GetThumbnailsAsyncUsesDirectMovieTechnicalMetadata() {
         await using var db = CreateContext();
         var now = DateTimeOffset.UtcNow;
-        var fallbackMovieId = Guid.NewGuid();
-        var fallbackVideoId = Guid.NewGuid();
-        var wantedFallbackVideoId = Guid.NewGuid();
-        var ownMovieId = Guid.NewGuid();
-        var ownMovieVideoId = Guid.NewGuid();
-        var ambiguousMovieId = Guid.NewGuid();
-        var ambiguousVideoOneId = Guid.NewGuid();
-        var ambiguousVideoTwoId = Guid.NewGuid();
-
-        db.Entities.AddRange(
-            Row(fallbackMovieId, EntityKind.Movie.ToCode(), "Fallback Movie", now),
-            Row(fallbackVideoId, EntityKind.Video.ToCode(), "Fallback Movie File", now, fallbackMovieId),
-            WantedRow(wantedFallbackVideoId, EntityKind.Video.ToCode(), "Wanted Alternate File", now, fallbackMovieId),
-            Row(ownMovieId, EntityKind.Movie.ToCode(), "Own Movie", now),
-            Row(ownMovieVideoId, EntityKind.Video.ToCode(), "Own Movie File", now, ownMovieId),
-            Row(ambiguousMovieId, EntityKind.Movie.ToCode(), "Ambiguous Movie", now),
-            Row(ambiguousVideoOneId, EntityKind.Video.ToCode(), "Part 1", now, ambiguousMovieId),
-            Row(ambiguousVideoTwoId, EntityKind.Video.ToCode(), "Part 2", now, ambiguousMovieId));
-        db.EntityTechnical.AddRange(
-            Technical(fallbackVideoId, 596, 3840, 1920, "h264", "matroska", now),
-            Technical(wantedFallbackVideoId, 300, 1920, 1080, "h264", "mp4", now),
-            Technical(ownMovieId, 60, 1280, 720, "hevc", "mp4", now),
-            Technical(ownMovieVideoId, 596, 3840, 1920, "h264", "matroska", now),
-            Technical(ambiguousVideoOneId, 120, 1920, 1080, "h264", "mp4", now),
-            Technical(ambiguousVideoTwoId, 180, 1920, 1080, "h264", "mp4", now));
+        var movieId = Guid.NewGuid();
+        db.Entities.Add(new EntityRow {
+            Id = movieId,
+            KindCode = EntityKind.Movie.ToCode(),
+            Title = "Movie",
+            CreatedAt = now,
+            UpdatedAt = now
+        });
+        db.EntityTechnical.Add(new EntityTechnicalRow {
+            EntityId = movieId,
+            DurationSeconds = 596,
+            Width = 3840,
+            Height = 1920,
+            Codec = "h264",
+            Container = "matroska",
+            UpdatedAt = now
+        });
         await db.SaveChangesAsync();
 
         var response = await CreateService(db).GetThumbnailsAsync(
-            [fallbackMovieId, ownMovieId, ambiguousMovieId],
+            [movieId],
             hideNsfw: false,
             CancellationToken.None);
 
@@ -2675,55 +2609,7 @@ public sealed class EfEntityReadServiceTests {
                 new EntityThumbnailMeta(EntityThumbnailMetaIcons.Video, "H264"),
                 new EntityThumbnailMeta(EntityThumbnailMetaIcons.Video, "MATROSKA")
             ],
-            response.Items.Single(item => item.Id == fallbackMovieId).Meta);
-        Assert.Equal(
-            [
-                new EntityThumbnailMeta(EntityThumbnailMetaIcons.Duration, "01:00"),
-                new EntityThumbnailMeta(EntityThumbnailMetaIcons.Video, "720p"),
-                new EntityThumbnailMeta(EntityThumbnailMetaIcons.Video, "HEVC"),
-                new EntityThumbnailMeta(EntityThumbnailMetaIcons.Video, "MP4")
-            ],
-            response.Items.Single(item => item.Id == ownMovieId).Meta);
-        Assert.Empty(response.Items.Single(item => item.Id == ambiguousMovieId).Meta);
-
-        static EntityRow Row(Guid id, string kind, string title, DateTimeOffset at, Guid? parentId = null) =>
-            new() {
-                Id = id,
-                KindCode = kind,
-                Title = title,
-                ParentEntityId = parentId,
-                CreatedAt = at,
-                UpdatedAt = at
-            };
-
-        static EntityRow WantedRow(Guid id, string kind, string title, DateTimeOffset at, Guid parentId) =>
-            new() {
-                Id = id,
-                KindCode = kind,
-                Title = title,
-                ParentEntityId = parentId,
-                IsWanted = true,
-                CreatedAt = at,
-                UpdatedAt = at
-            };
-
-        static EntityTechnicalRow Technical(
-            Guid id,
-            double duration,
-            int width,
-            int height,
-            string codec,
-            string container,
-            DateTimeOffset at) =>
-            new() {
-                EntityId = id,
-                DurationSeconds = duration,
-                Width = width,
-                Height = height,
-                Codec = codec,
-                Container = container,
-                UpdatedAt = at
-            };
+            Assert.Single(response.Items).Meta);
     }
 
     [Fact]
@@ -2958,90 +2844,90 @@ public sealed class EfEntityReadServiceTests {
     }
 
     [Fact]
-    public async Task GetThumbnailsAsyncUsesMovieArtworkVariantsForChildVideoWithoutOwnCover() {
+    public async Task GetThumbnailsAsyncUsesSeasonArtworkVariantsForVideoEpisodeWithoutOwnCover() {
         await using var db = CreateContext();
         var now = DateTimeOffset.UtcNow;
-        var movieId = Guid.Parse("aaaaaaaa-0000-0000-0000-000000000031");
-        var videoId = Guid.Parse("aaaaaaaa-0000-0000-0000-000000000032");
-        var movieCover = "/assets/movies/movie/cover.jpg";
-        var movieGrid = "/assets/grid-thumbs/movie.jpg";
-        var movieGrid2x = "/assets/grid-thumbs/movie@2x.jpg";
+        var seasonId = Guid.Parse("aaaaaaaa-0000-0000-0000-000000000031");
+        var episodeId = Guid.Parse("aaaaaaaa-0000-0000-0000-000000000032");
+        var seasonCover = "/assets/video-seasons/season/cover.jpg";
+        var seasonGrid = "/assets/grid-thumbs/season.jpg";
+        var seasonGrid2x = "/assets/grid-thumbs/season@2x.jpg";
 
         db.Entities.AddRange(
             new EntityRow {
-                Id = movieId,
-                KindCode = EntityKind.Movie.ToCode(),
-                Title = "Parent Movie",
+                Id = seasonId,
+                KindCode = EntityKind.VideoSeason.ToCode(),
+                Title = "Season One",
                 CreatedAt = now,
                 UpdatedAt = now
             },
             new EntityRow {
-                Id = videoId,
-                KindCode = EntityKind.Video.ToCode(),
-                Title = "Feature",
-                ParentEntityId = movieId,
+                Id = episodeId,
+                KindCode = EntityKind.VideoEpisode.ToCode(),
+                Title = "Pilot",
+                ParentEntityId = seasonId,
                 CreatedAt = now,
                 UpdatedAt = now
             });
         db.EntityFiles.AddRange(
-            File(movieId, EntityFileRole.Cover, movieCover, now),
-            File(movieId, EntityFileRole.GridThumbnail, movieGrid, now.AddSeconds(1)),
-            File(movieId, EntityFileRole.GridThumbnail2x, movieGrid2x, now.AddSeconds(2)));
+            File(seasonId, EntityFileRole.Cover, seasonCover, now),
+            File(seasonId, EntityFileRole.GridThumbnail, seasonGrid, now.AddSeconds(1)),
+            File(seasonId, EntityFileRole.GridThumbnail2x, seasonGrid2x, now.AddSeconds(2)));
         await db.SaveChangesAsync();
 
-        var response = await CreateService(db).GetThumbnailsAsync([videoId], hideNsfw: false, CancellationToken.None);
+        var response = await CreateService(db).GetThumbnailsAsync([episodeId], hideNsfw: false, CancellationToken.None);
 
-        var video = Assert.Single(response.Items);
-        Assert.Equal("Feature", video.Title);
-        Assert.Equal("Parent Movie", video.Subtitle);
-        Assert.Equal(EntityKind.Movie, video.ParentKind);
-        Assert.Equal(movieCover, video.CoverUrl);
-        Assert.Equal(movieGrid, video.CoverThumbUrl);
-        Assert.Equal(movieGrid2x, video.CoverThumb2xUrl);
+        var episode = Assert.Single(response.Items);
+        Assert.Equal("Pilot", episode.Title);
+        Assert.Equal("Season One", episode.Subtitle);
+        Assert.Equal(EntityKind.VideoSeason, episode.ParentKind);
+        Assert.Equal(seasonCover, episode.CoverUrl);
+        Assert.Equal(seasonGrid, episode.CoverThumbUrl);
+        Assert.Equal(seasonGrid2x, episode.CoverThumb2xUrl);
     }
 
     [Fact]
-    public async Task GetThumbnailsAsyncKeepsChildVideoArtworkBeforeMovieArtwork() {
+    public async Task GetThumbnailsAsyncKeepsVideoEpisodeArtworkBeforeSeasonArtwork() {
         await using var db = CreateContext();
         var now = DateTimeOffset.UtcNow;
-        var movieId = Guid.Parse("aaaaaaaa-0000-0000-0000-000000000041");
-        var videoId = Guid.Parse("aaaaaaaa-0000-0000-0000-000000000042");
-        var childCover = "/assets/videos/feature/cover.jpg";
-        var childGrid = "/assets/grid-thumbs/feature.jpg";
-        var childGrid2x = "/assets/grid-thumbs/feature@2x.jpg";
+        var seasonId = Guid.Parse("aaaaaaaa-0000-0000-0000-000000000041");
+        var episodeId = Guid.Parse("aaaaaaaa-0000-0000-0000-000000000042");
+        var episodeCover = "/assets/video-episodes/pilot/cover.jpg";
+        var episodeGrid = "/assets/grid-thumbs/pilot.jpg";
+        var episodeGrid2x = "/assets/grid-thumbs/pilot@2x.jpg";
 
         db.Entities.AddRange(
             new EntityRow {
-                Id = movieId,
-                KindCode = EntityKind.Movie.ToCode(),
-                Title = "Parent Movie",
+                Id = seasonId,
+                KindCode = EntityKind.VideoSeason.ToCode(),
+                Title = "Season One",
                 CreatedAt = now,
                 UpdatedAt = now
             },
             new EntityRow {
-                Id = videoId,
-                KindCode = EntityKind.Video.ToCode(),
-                Title = "Feature",
-                ParentEntityId = movieId,
+                Id = episodeId,
+                KindCode = EntityKind.VideoEpisode.ToCode(),
+                Title = "Pilot",
+                ParentEntityId = seasonId,
                 CreatedAt = now,
                 UpdatedAt = now
             });
         db.EntityFiles.AddRange(
-            File(movieId, EntityFileRole.Cover, "/assets/movies/movie/cover.jpg", now),
-            File(movieId, EntityFileRole.GridThumbnail, "/assets/grid-thumbs/movie.jpg", now.AddSeconds(1)),
-            File(movieId, EntityFileRole.GridThumbnail2x, "/assets/grid-thumbs/movie@2x.jpg", now.AddSeconds(2)),
-            File(videoId, EntityFileRole.Cover, childCover, now.AddSeconds(3)),
-            File(videoId, EntityFileRole.GridThumbnail, childGrid, now.AddSeconds(4)),
-            File(videoId, EntityFileRole.GridThumbnail2x, childGrid2x, now.AddSeconds(5)));
+            File(seasonId, EntityFileRole.Cover, "/assets/video-seasons/season/cover.jpg", now),
+            File(seasonId, EntityFileRole.GridThumbnail, "/assets/grid-thumbs/season.jpg", now.AddSeconds(1)),
+            File(seasonId, EntityFileRole.GridThumbnail2x, "/assets/grid-thumbs/season@2x.jpg", now.AddSeconds(2)),
+            File(episodeId, EntityFileRole.Cover, episodeCover, now.AddSeconds(3)),
+            File(episodeId, EntityFileRole.GridThumbnail, episodeGrid, now.AddSeconds(4)),
+            File(episodeId, EntityFileRole.GridThumbnail2x, episodeGrid2x, now.AddSeconds(5)));
         await db.SaveChangesAsync();
 
-        var response = await CreateService(db).GetThumbnailsAsync([videoId], hideNsfw: false, CancellationToken.None);
+        var response = await CreateService(db).GetThumbnailsAsync([episodeId], hideNsfw: false, CancellationToken.None);
 
-        var video = Assert.Single(response.Items);
-        Assert.Equal("Parent Movie", video.Subtitle);
-        Assert.Equal(childCover, video.CoverUrl);
-        Assert.Equal(childGrid, video.CoverThumbUrl);
-        Assert.Equal(childGrid2x, video.CoverThumb2xUrl);
+        var episode = Assert.Single(response.Items);
+        Assert.Equal("Season One", episode.Subtitle);
+        Assert.Equal(episodeCover, episode.CoverUrl);
+        Assert.Equal(episodeGrid, episode.CoverThumbUrl);
+        Assert.Equal(episodeGrid2x, episode.CoverThumb2xUrl);
     }
 
     [Fact]
@@ -3070,7 +2956,7 @@ public sealed class EfEntityReadServiceTests {
             },
             new EntityRow {
                 Id = episodeId,
-                KindCode = EntityKind.Video.ToCode(),
+                KindCode = EntityKind.VideoEpisode.ToCode(),
                 Title = "Pilot",
                 ParentEntityId = seasonId,
                 CreatedAt = now,
@@ -3098,72 +2984,72 @@ public sealed class EfEntityReadServiceTests {
     }
 
     [Fact]
-    public async Task GetThumbnailsAsyncDoesNotExposeHiddenMovieParentTitleOrArtwork() {
+    public async Task GetThumbnailsAsyncDoesNotExposeHiddenSeasonParentTitleOrArtwork() {
         await using var db = CreateContext();
         var now = DateTimeOffset.UtcNow;
-        var movieId = Guid.Parse("aaaaaaaa-0000-0000-0000-000000000061");
-        var videoId = Guid.Parse("aaaaaaaa-0000-0000-0000-000000000062");
+        var seasonId = Guid.Parse("aaaaaaaa-0000-0000-0000-000000000061");
+        var episodeId = Guid.Parse("aaaaaaaa-0000-0000-0000-000000000062");
 
         db.Entities.AddRange(
             new EntityRow {
-                Id = movieId,
-                KindCode = EntityKind.Movie.ToCode(),
-                Title = "Hidden Parent Movie",
+                Id = seasonId,
+                KindCode = EntityKind.VideoSeason.ToCode(),
+                Title = "Hidden Season",
                 IsNsfw = true,
                 CreatedAt = now,
                 UpdatedAt = now
             },
             new EntityRow {
-                Id = videoId,
-                KindCode = EntityKind.Video.ToCode(),
-                Title = "Safe Child Feature",
-                ParentEntityId = movieId,
+                Id = episodeId,
+                KindCode = EntityKind.VideoEpisode.ToCode(),
+                Title = "Safe Episode",
+                ParentEntityId = seasonId,
                 CreatedAt = now,
                 UpdatedAt = now
             });
-        db.EntityFiles.Add(File(movieId, EntityFileRole.Cover, "/assets/movies/hidden/cover.jpg", now));
+        db.EntityFiles.Add(File(seasonId, EntityFileRole.Cover, "/assets/video-seasons/hidden/cover.jpg", now));
         await db.SaveChangesAsync();
 
-        var response = await CreateService(db).GetThumbnailsAsync([videoId], hideNsfw: true, CancellationToken.None);
+        var response = await CreateService(db).GetThumbnailsAsync([episodeId], hideNsfw: true, CancellationToken.None);
 
-        var video = Assert.Single(response.Items);
-        Assert.Null(video.Subtitle);
-        Assert.Null(video.ParentKind);
-        Assert.Null(video.CoverUrl);
-        Assert.Null(video.CoverThumbUrl);
-        Assert.Null(video.CoverThumb2xUrl);
+        var episode = Assert.Single(response.Items);
+        Assert.Null(episode.Subtitle);
+        Assert.Null(episode.ParentKind);
+        Assert.Null(episode.CoverUrl);
+        Assert.Null(episode.CoverThumbUrl);
+        Assert.Null(episode.CoverThumb2xUrl);
     }
 
     [Fact]
-    public async Task GetThumbnailsAsyncDoesNotExposeMovieArtworkForChildInDisabledLibrary() {
+    public async Task GetThumbnailsAsyncDoesNotExposeSeasonArtworkForEpisodeInDisabledLibrary() {
         await using var db = CreateContext();
         var now = DateTimeOffset.UtcNow;
         var rootId = Guid.Parse("aaaaaaaa-0000-0000-0000-000000000071");
-        var movieId = Guid.Parse("aaaaaaaa-0000-0000-0000-000000000072");
-        var videoId = Guid.Parse("aaaaaaaa-0000-0000-0000-000000000073");
+        var seasonId = Guid.Parse("aaaaaaaa-0000-0000-0000-000000000072");
+        var episodeId = Guid.Parse("aaaaaaaa-0000-0000-0000-000000000073");
 
         db.LibraryRoots.Add(Root(rootId, enabled: false, now));
         db.Entities.AddRange(
             new EntityRow {
-                Id = movieId,
-                KindCode = EntityKind.Movie.ToCode(),
-                Title = "Disabled Library Movie",
+                Id = seasonId,
+                KindCode = EntityKind.VideoSeason.ToCode(),
+                Title = "Disabled Library Season",
                 CreatedAt = now,
                 UpdatedAt = now
             },
             new EntityRow {
-                Id = videoId,
-                KindCode = EntityKind.Video.ToCode(),
-                Title = "Hidden Feature",
-                ParentEntityId = movieId,
+                Id = episodeId,
+                KindCode = EntityKind.VideoEpisode.ToCode(),
+                Title = "Hidden Episode",
+                ParentEntityId = seasonId,
                 CreatedAt = now,
                 UpdatedAt = now
             });
-        db.EntityLibraryRoots.Add(new EntityLibraryRootRow { EntityId = videoId, LibraryRootId = rootId  });
-        db.EntityFiles.Add(File(movieId, EntityFileRole.Cover, "/assets/movies/disabled/cover.jpg", now));
+        db.EntityLibraryRoots.Add(new EntityLibraryRootRow { EntityId = episodeId, LibraryRootId = rootId  });
+        db.EntityFiles.Add(File(seasonId, EntityFileRole.Cover, "/assets/video-seasons/disabled/cover.jpg", now));
         await db.SaveChangesAsync();
 
-        var response = await CreateService(db).GetThumbnailsAsync([videoId], hideNsfw: false, CancellationToken.None);
+        var response = await CreateService(db).GetThumbnailsAsync([episodeId], hideNsfw: false, CancellationToken.None);
 
         Assert.Empty(response.Items);
     }

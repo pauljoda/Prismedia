@@ -26,17 +26,9 @@ public sealed partial class EfEntityReadService : IEntityReadService {
     private const int MaxHoverImages = 5;
     private const int MaxHoverImageSearchDepth = 3;
     private const int MaxThumbnailMeta = 5;
-    private static readonly string[] DirectChildPlaybackAggregateKindCodes = EntityKindRegistry.All
-        .Where(definition => definition.Engagement.AggregatesDirectChildPlayback)
-        .Select(definition => definition.Code)
-        .ToArray();
     private static readonly string[] DefaultWantedExcludedKindCodes = EntityKindRegistry.All
         .Where(definition => definition.Browse.ExcludesWantedByDefault)
         .Select(definition => definition.Code)
-        .ToArray();
-    private static readonly BrowseParentRule[] AggregateParentRules = EntityKindRegistry.All
-        .SelectMany(definition => definition.Browse.AggregateParentKinds.Select(parentKind =>
-            new BrowseParentRule(definition.Code, EntityKindRegistry.Describe(parentKind).Code)))
         .ToArray();
     private static readonly EntityKindDefinition[] DescendantLibraryRootDefinitions = EntityKindRegistry.All
         .Where(definition => definition.LibraryVisibility.Mode == EntityLibraryVisibilityMode.DescendantRoot)
@@ -148,8 +140,6 @@ public sealed partial class EfEntityReadService : IEntityReadService {
                     link.EntityId == entity.Id &&
                     (normalizedRelationshipCode == null || link.RelationshipCode == normalizedRelationshipCode)));
         }
-
-        entityQuery = ApplyAggregateParentSuppression(entityQuery, kindCodes, query, referencedBy);
 
         var enforceLibraryVisibility = await RequiresLibraryVisibilityAsync(cancellationToken);
         if (enforceLibraryVisibility) {
@@ -414,28 +404,18 @@ public sealed partial class EfEntityReadService : IEntityReadService {
         }
 
         if (played is { } wantsPlayed) {
-            var entities = _db.Entities;
             // "Played" means any recorded engagement for this user: a play/resume/completion
             // (videos/audio) or started/completed reading progress (books/comics). Mirrors the
-            // unwatched status logic. Definition-owned container policies can also include direct
-            // child playback (a movie is browsed as a container but streams through its video).
+            // unwatched status logic.
             query = wantsPlayed
                 ? query.Where(entity =>
                     states.Any(state => state.UserId == userId && state.EntityId == entity.Id &&
                         (state.CompletedAt != null || state.PlayCount > 0 || state.ResumeSeconds > 0)) ||
-                    (DirectChildPlaybackAggregateKindCodes.Contains(entity.KindCode) &&
-                        entities.Any(child => child.ParentEntityId == entity.Id &&
-                            states.Any(state => state.UserId == userId && state.EntityId == child.Id &&
-                                (state.CompletedAt != null || state.PlayCount > 0 || state.ResumeSeconds > 0)))) ||
                     states.Any(state => state.UserId == userId && state.EntityId == entity.Id &&
                         (state.ProgressCompletedAt != null || state.ProgressCurrentEntityId != null || state.ProgressIndex > 0)))
                 : query.Where(entity =>
                     !states.Any(state => state.UserId == userId && state.EntityId == entity.Id &&
                         (state.CompletedAt != null || state.PlayCount > 0 || state.ResumeSeconds > 0)) &&
-                    !(DirectChildPlaybackAggregateKindCodes.Contains(entity.KindCode) &&
-                        entities.Any(child => child.ParentEntityId == entity.Id &&
-                            states.Any(state => state.UserId == userId && state.EntityId == child.Id &&
-                                (state.CompletedAt != null || state.PlayCount > 0 || state.ResumeSeconds > 0)))) &&
                     !states.Any(state => state.UserId == userId && state.EntityId == entity.Id &&
                         (state.ProgressCompletedAt != null || state.ProgressCurrentEntityId != null || state.ProgressIndex > 0)));
         }
@@ -480,33 +460,21 @@ public sealed partial class EfEntityReadService : IEntityReadService {
             return query;
         }
 
-        var entityRows = _db.Entities;
         return normalizedStatus switch {
             "watched" or "read" or "completed" or "finished" =>
                 query.Where(entity =>
                     states.Any(state => state.UserId == userId && state.EntityId == entity.Id && state.CompletedAt != null) ||
-                    (DirectChildPlaybackAggregateKindCodes.Contains(entity.KindCode) &&
-                        entityRows.Any(child => child.ParentEntityId == entity.Id &&
-                            states.Any(state => state.UserId == userId && state.EntityId == child.Id && state.CompletedAt != null))) ||
                     states.Any(state => state.UserId == userId && state.EntityId == entity.Id && state.ProgressCompletedAt != null)),
             "unwatched" or "unread" or "unstarted" or "new" =>
                 query.Where(entity =>
                     !states.Any(state => state.UserId == userId && state.EntityId == entity.Id &&
                         (state.CompletedAt != null || state.PlayCount > 0 || state.ResumeSeconds > 0)) &&
-                    !(DirectChildPlaybackAggregateKindCodes.Contains(entity.KindCode) &&
-                        entityRows.Any(child => child.ParentEntityId == entity.Id &&
-                            states.Any(state => state.UserId == userId && state.EntityId == child.Id &&
-                                (state.CompletedAt != null || state.PlayCount > 0 || state.ResumeSeconds > 0)))) &&
                     !states.Any(state => state.UserId == userId && state.EntityId == entity.Id &&
                         (state.ProgressCompletedAt != null || state.ProgressCurrentEntityId != null || state.ProgressIndex > 0))),
             "in-progress" or "inprogress" or "in_progress" or "reading" or "watching" =>
                 query.Where(entity =>
                     states.Any(state => state.UserId == userId && state.EntityId == entity.Id &&
                         state.CompletedAt == null && state.ResumeSeconds > 0) ||
-                    (DirectChildPlaybackAggregateKindCodes.Contains(entity.KindCode) &&
-                        entityRows.Any(child => child.ParentEntityId == entity.Id &&
-                            states.Any(state => state.UserId == userId && state.EntityId == child.Id &&
-                                state.CompletedAt == null && state.ResumeSeconds > 0))) ||
                     states.Any(state => state.UserId == userId && state.EntityId == entity.Id &&
                         state.ProgressCompletedAt == null &&
                         (state.ProgressCurrentEntityId != null || state.ProgressIndex > 0) &&
@@ -1014,33 +982,6 @@ public sealed partial class EfEntityReadService : IEntityReadService {
 
         return query;
     }
-
-    private IQueryable<EntityRow> ApplyAggregateParentSuppression(
-        IQueryable<EntityRow> query,
-        IReadOnlyCollection<string> kindCodes,
-        string? searchQuery,
-        Guid? referencedBy) {
-        var appliesToEveryRule = kindCodes.Count == 0 ||
-            !string.IsNullOrWhiteSpace(searchQuery) ||
-            referencedBy is not null;
-        foreach (var rule in AggregateParentRules.Where(rule =>
-                     appliesToEveryRule ||
-                     (kindCodes.Contains(rule.ChildCode, StringComparer.OrdinalIgnoreCase) &&
-                      kindCodes.Contains(rule.ParentCode, StringComparer.OrdinalIgnoreCase)))) {
-            var childCode = rule.ChildCode;
-            var parentCode = rule.ParentCode;
-            query = query.Where(entity =>
-                entity.KindCode != childCode ||
-                entity.ParentEntityId == null ||
-                !_db.Entities.Any(parent =>
-                    parent.Id == entity.ParentEntityId &&
-                    parent.KindCode == parentCode));
-        }
-
-        return query;
-    }
-
-    private readonly record struct BrowseParentRule(string ChildCode, string ParentCode);
 
     /// <summary>
     /// Library-visibility check for mutation/streaming guards: true when the entity
