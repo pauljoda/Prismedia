@@ -38,7 +38,7 @@ internal static class GeneratedAssetFamilyCatalog {
         Action<string> deleteFile, Action<string> deleteDirectory) =>
         Require(family).Delete(assets, entityId, deleteFile, deleteDirectory);
 
-    public static int CleanupOrphanDirectories(AssetPathService assets, GeneratedAssetFamily family,
+    public static int CleanupOrphanedAssets(AssetPathService assets, GeneratedAssetFamily family,
         ISet<string> activeIds, CancellationToken cancellationToken) =>
         Require(family).Cleanup(assets, activeIds, cancellationToken);
 

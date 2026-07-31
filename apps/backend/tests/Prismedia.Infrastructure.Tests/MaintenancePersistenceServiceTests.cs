@@ -11,14 +11,17 @@ namespace Prismedia.Infrastructure.Tests;
 public sealed class MaintenancePersistenceServiceTests : IDisposable {
     private readonly string _dataDir = Path.Combine(Path.GetTempPath(), $"prismedia-maintenance-{Guid.NewGuid():N}");
 
-    [Fact]
-    public async Task ClearGeneratedPreviewAssetsRemovesVideoRowsAndCacheFiles() {
+    [Theory]
+    [InlineData(EntityKind.Movie)]
+    [InlineData(EntityKind.VideoEpisode)]
+    [InlineData(EntityKind.Video)]
+    public async Task ClearGeneratedPreviewAssetsRemovesVideoRowsAndCacheFiles(EntityKind kind) {
         await using var db = CreateContext();
         var videoId = Guid.NewGuid();
         var now = DateTimeOffset.UtcNow;
         db.Entities.Add(new EntityRow {
             Id = videoId,
-            KindCode = EntityKind.Video.ToCode(),
+            KindCode = kind.ToCode(),
             Title = "HDR video",
             CreatedAt = now,
             UpdatedAt = now
@@ -28,7 +31,12 @@ public sealed class MaintenancePersistenceServiceTests : IDisposable {
             FileRow(videoId, EntityFileRole.Thumbnail, "/assets/videos/thumb.jpg"),
             FileRow(videoId, EntityFileRole.Preview, "/assets/videos/preview.mp4"),
             FileRow(videoId, EntityFileRole.Trickplay, VideoPlaybackProtocol.TrickplayPlaylistPath(videoId, 320)),
-            FileRow(videoId, EntityFileRole.Hls, VideoPlaybackProtocol.HlsPath(videoId, VideoPlaybackProtocol.Hls.MasterPlaylist)));
+            FileRow(videoId, EntityFileRole.Hls, VideoPlaybackProtocol.HlsPath(videoId, VideoPlaybackProtocol.Hls.MasterPlaylist)),
+            FileRow(videoId, EntityFileRole.Thumbnail, "/custom/thumbnail.jpg", FileSourceKind.Custom.ToCode()),
+            FileRow(videoId, EntityFileRole.Poster, "/custom/poster.jpg", FileSourceKind.Custom.ToCode()),
+            FileRow(videoId, EntityFileRole.Backdrop, "/custom/backdrop.jpg", FileSourceKind.Custom.ToCode()),
+            FileRow(videoId, EntityFileRole.Logo, "/custom/logo.jpg", FileSourceKind.Custom.ToCode()),
+            FileRow(videoId, EntityFileRole.Cover, "/plugin/cover.jpg", source: "plugin"));
         db.TrickplayInfos.Add(new TrickplayInfoRow {
             EntityId = videoId,
             Width = 320,
@@ -66,10 +74,12 @@ public sealed class MaintenancePersistenceServiceTests : IDisposable {
         await File.WriteAllTextAsync(Path.Combine(hlsCache, "master.m3u8"), "old");
 
         var service = new MaintenancePersistenceService(db, new AssetPathService(_dataDir));
-        await service.ClearGeneratedPreviewAssetsAsync(EntityKind.Video, videoId, CancellationToken.None);
+        await service.ClearGeneratedPreviewAssetsAsync(kind, videoId, CancellationToken.None);
 
-        Assert.Single(db.EntityFiles, file => file.EntityId == videoId);
+        Assert.Equal(6, db.EntityFiles.Count(file => file.EntityId == videoId));
         Assert.Contains(db.EntityFiles, file => file.Role == EntityFileRole.Source);
+        Assert.Contains(db.EntityFiles, file => file.Role == EntityFileRole.Thumbnail && file.Source == FileSourceKind.Custom.ToCode());
+        Assert.Contains(db.EntityFiles, file => file.Role == EntityFileRole.Cover && file.Source == "plugin");
         Assert.Empty(db.TrickplayInfos.Where(info => info.EntityId == videoId));
         Assert.False(File.Exists(Path.Combine(videoCache, "thumb.jpg")));
         Assert.False(File.Exists(Path.Combine(videoCache, "preview.mp4")));
@@ -124,19 +134,44 @@ public sealed class MaintenancePersistenceServiceTests : IDisposable {
         Assert.True(File.Exists(recent));
     }
 
+    [Fact]
+    public async Task ClearGeneratedPreviewAssetsLeavesStructuralKindsUntouched() {
+        await using var db = CreateContext();
+        var entityId = Guid.NewGuid();
+        db.Entities.Add(new EntityRow {
+            Id = entityId,
+            KindCode = EntityKind.VideoSeries.ToCode(),
+            Title = "Series",
+            CreatedAt = DateTimeOffset.UtcNow,
+            UpdatedAt = DateTimeOffset.UtcNow
+        });
+        db.EntityFiles.Add(FileRow(entityId, EntityFileRole.Poster, "/custom/series.jpg", FileSourceKind.Custom.ToCode()));
+        await db.SaveChangesAsync();
+
+        await new MaintenancePersistenceService(db, new AssetPathService(_dataDir))
+            .ClearGeneratedPreviewAssetsAsync(EntityKind.VideoSeries, entityId, CancellationToken.None);
+
+        Assert.Single(db.EntityFiles);
+    }
+
     public void Dispose() {
         if (Directory.Exists(_dataDir)) {
             Directory.Delete(_dataDir, recursive: true);
         }
     }
 
-    private static EntityFileRow FileRow(Guid entityId, EntityFileRole role, string path) {
+    private static EntityFileRow FileRow(
+        Guid entityId,
+        EntityFileRole role,
+        string path,
+        string? source = null) {
         var now = DateTimeOffset.UtcNow;
         return new EntityFileRow {
             Id = Guid.NewGuid(),
             EntityId = entityId,
             Role = role,
             Path = path,
+            Source = source ?? FileSourceKind.Scan.ToCode(),
             CreatedAt = now,
             UpdatedAt = now
         };

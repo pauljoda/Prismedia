@@ -40,16 +40,18 @@ public sealed class GeneratePreviewJobHandler(
         }
 
         if (settings.GenerateTrickplay && duration is null or <= 0) {
-            if (EntityKindRegistry.TryDescribe(context.Job.TargetEntityKind, out var definition)
-                && definition.Processing.ProbeJobType is { } probeJobType) {
-                await context.EnqueueIfNeededAsync(
-                    EnqueueJobRequest.ForEntity(
-                        probeJobType,
-                        definition.Kind,
-                        entityId.ToString(),
-                        context.Job.TargetLabel),
-                    cancellationToken);
+            if (!EntityKindRegistry.TryDescribe(context.Job.TargetEntityKind, out var definition)
+                || definition.Processing.ProbeJobType is not { } probeJobType) {
+                throw new InvalidOperationException(
+                    "GeneratePreview requires a target kind with a technical probe job.");
             }
+            await context.EnqueueIfNeededAsync(
+                EnqueueJobRequest.ForEntity(
+                    probeJobType,
+                    definition.Kind,
+                    entityId.ToString(),
+                    context.Job.TargetLabel),
+                cancellationToken);
             // Ordinary graph planning places the probe dependency before preview generation. This
             // retry-safe fallback repairs historical graphs that predate explicit dependencies.
             throw new JobRetryLaterException(

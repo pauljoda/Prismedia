@@ -104,7 +104,7 @@ public sealed record EntityProcessingPolicy {
             ? ProbeJobType
             : null;
         var fingerprint = inputs.ShouldFingerprint ? FingerprintJobType : null;
-        var subtitles = inputs.NeedsSubtitleExtraction || inputs.HasSourcePath
+        var subtitles = inputs.NeedsSubtitleExtraction || inputs.ForceSubtitleReconciliationForOwnedSource
             ? SubtitleExtractionJobType
             : null;
         var ordinaryPreview = inputs.NeedsPreview &&
@@ -121,7 +121,7 @@ public sealed record EntityProcessingInputs(
     bool NeedsProbe,
     bool ShouldFingerprint,
     bool NeedsSubtitleExtraction,
-    bool HasSourcePath,
+    bool ForceSubtitleReconciliationForOwnedSource,
     bool NeedsPreview,
     bool NeedsTrickplay,
     bool NeedsGridThumbnail,

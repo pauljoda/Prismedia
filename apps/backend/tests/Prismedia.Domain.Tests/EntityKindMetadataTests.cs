@@ -185,7 +185,7 @@ public sealed class EntityKindMetadataTests {
         var page = EntityKindRegistry.Describe(EntityKind.BookPage).Processing;
 
         var videoPlan = video.Plan(new EntityProcessingInputs(
-            NeedsProbe: true, ShouldFingerprint: true, NeedsSubtitleExtraction: false, HasSourcePath: true,
+            NeedsProbe: true, ShouldFingerprint: true, NeedsSubtitleExtraction: false, ForceSubtitleReconciliationForOwnedSource: true,
             NeedsPreview: false, NeedsTrickplay: true, NeedsGridThumbnail: true,
             AutomaticMetadataEnabled: true, AutomaticPreviewEnabled: false, TrickplayEnabled: true));
         Assert.Equal(JobType.ProbeVideo, videoPlan.ProbeJobType);
@@ -217,6 +217,42 @@ public sealed class EntityKindMetadataTests {
         Assert.Throws<ArgumentException>(() =>
             new EntityProcessingPolicy(
                 generatedFileRoles: [EntityFileRole.Thumbnail, EntityFileRole.Thumbnail]));
+        Assert.Throws<ArgumentException>(() =>
+            new EntityProcessingPolicy(gridThumbnailJobType: JobType.GenerateGridThumbnail));
+        Assert.Throws<ArgumentException>(() =>
+            new EntityProcessingPolicy(generatedFileRoles: [EntityFileRole.Thumbnail]));
+    }
+
+    [Theory]
+    [InlineData(EntityKind.Movie)]
+    [InlineData(EntityKind.VideoEpisode)]
+    [InlineData(EntityKind.Video)]
+    public void PlayableVideoDefinitionsUseTheSharedFamilyAndCompletePlan(EntityKind kind) {
+        var processing = EntityKindRegistry.Describe(kind).Processing;
+        var fullPlan = processing.Plan(new EntityProcessingInputs(
+            NeedsProbe: true, ShouldFingerprint: true, NeedsSubtitleExtraction: true,
+            ForceSubtitleReconciliationForOwnedSource: false, NeedsPreview: true, NeedsTrickplay: true,
+            NeedsGridThumbnail: true, AutomaticMetadataEnabled: true, AutomaticPreviewEnabled: true,
+            TrickplayEnabled: true));
+        var gridPlan = processing.Plan(new EntityProcessingInputs(
+            NeedsProbe: false, ShouldFingerprint: false, NeedsSubtitleExtraction: false,
+            ForceSubtitleReconciliationForOwnedSource: false, NeedsPreview: false, NeedsTrickplay: false,
+            NeedsGridThumbnail: true, AutomaticMetadataEnabled: false, AutomaticPreviewEnabled: false,
+            TrickplayEnabled: false));
+        var gatedProbePlan = processing.Plan(new EntityProcessingInputs(
+            NeedsProbe: true, ShouldFingerprint: false, NeedsSubtitleExtraction: false,
+            ForceSubtitleReconciliationForOwnedSource: false, NeedsPreview: false, NeedsTrickplay: false,
+            NeedsGridThumbnail: false, AutomaticMetadataEnabled: false, AutomaticPreviewEnabled: false,
+            TrickplayEnabled: false));
+
+        Assert.Equal(GeneratedAssetFamily.Video, processing.AssetFamily);
+        Assert.Equal(JobType.ProbeVideo, fullPlan.ProbeJobType);
+        Assert.Equal(JobType.FingerprintVideo, fullPlan.FingerprintJobType);
+        Assert.Equal(JobType.ExtractSubtitles, fullPlan.SubtitleExtractionJobType);
+        Assert.Equal(JobType.GeneratePreview, fullPlan.PreviewJobType);
+        Assert.Equal(JobType.GenerateGridThumbnail, gridPlan.GridThumbnailJobType);
+        Assert.Null(gatedProbePlan.ProbeJobType);
+        Assert.Contains(EntityFileRole.Hls, processing.GeneratedFileRoles);
     }
 
     [Fact]

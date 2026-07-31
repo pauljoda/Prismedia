@@ -53,7 +53,7 @@ public sealed class MaintenancePersistenceService(
         IReadOnlyCollection<Guid> activeEntityIds,
         CancellationToken cancellationToken) {
         var active = new HashSet<string>(activeEntityIds.Select(id => id.ToString()), StringComparer.OrdinalIgnoreCase);
-        return Task.FromResult(GeneratedAssetFamilyCatalog.CleanupOrphanDirectories(assets, family, active, cancellationToken));
+        return Task.FromResult(GeneratedAssetFamilyCatalog.CleanupOrphanedAssets(assets, family, active, cancellationToken));
     }
 
     /// <inheritdoc />

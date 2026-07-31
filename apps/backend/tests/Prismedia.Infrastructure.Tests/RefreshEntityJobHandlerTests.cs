@@ -2,12 +2,33 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Prismedia.Application.Acquisition;
 using Prismedia.Application.Jobs;
 using Prismedia.Application.Jobs.Handlers.Maintenance;
+using Prismedia.Application.Jobs.Handlers.Scan;
 using Prismedia.Application.Jobs.Ports;
 using Prismedia.Domain.Entities;
 
 namespace Prismedia.Infrastructure.Tests;
 
 public sealed class RefreshEntityJobHandlerTests {
+    [Theory]
+    [InlineData(EntityKind.Movie)]
+    [InlineData(EntityKind.VideoEpisode)]
+    [InlineData(EntityKind.Video)]
+    public void ScanPlannerPreservesPlayableKindAndDoesNotForceSubtitleReconciliation(EntityKind kind) {
+        var entityId = Guid.NewGuid();
+        var requests = VideoDownstreamJobPlanner.Build(
+            new LibrarySettingsData(true, true, false, false, false, 10, 8, 2, 2),
+            entityId,
+            "/media/video.mkv",
+            new DownstreamNeeds(true, true, false, false, false, false, true),
+            kind);
+
+        Assert.DoesNotContain(requests, request => request.Type == JobType.ExtractSubtitles);
+        Assert.All(requests, request => Assert.Equal(kind.ToCode(), request.TargetEntityKind));
+        Assert.Contains(requests, request => request.Type == JobType.ProbeVideo);
+        Assert.Contains(requests, request => request.Type == JobType.FingerprintVideo);
+        Assert.Contains(requests, request => request.Type == JobType.GenerateGridThumbnail);
+    }
+
     [Fact]
     public async Task VideoRefreshDiscoversAndInvalidatesCurrentSidecarsBeforeQueueingExtraction() {
         var videoId = Guid.NewGuid();

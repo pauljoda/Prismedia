@@ -9,12 +9,12 @@ public static class EntityProcessingInputAdapter {
     public static EntityProcessingInputs From(
         LibrarySettingsData settings,
         DownstreamNeeds needs,
-        bool hasSourcePath) =>
+        bool forceSubtitleReconciliationForOwnedSource) =>
         new(
             needs.NeedsProbe,
             FingerprintGating.ShouldFingerprint(settings, needs),
             needs.NeedsSubtitleExtraction,
-            hasSourcePath,
+            forceSubtitleReconciliationForOwnedSource,
             needs.NeedsPreview,
             needs.NeedsTrickplay,
             needs.NeedsGridThumbnail,

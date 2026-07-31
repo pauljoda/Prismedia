@@ -71,22 +71,6 @@ internal static class VideoDownstreamJobPlanner {
             needs,
             kind);
 
-    /// <summary>
-    /// Plans the same processing graph as a scan for an exact imported entity.
-    /// </summary>
-    public static IReadOnlyList<EnqueueJobRequest> BuildForImport(
-        LibrarySettingsData settings,
-        Guid entityId,
-        string sourcePath,
-        DownstreamNeeds needs,
-        EntityKind kind) =>
-        BuildCore(
-            settings,
-            entityId,
-            sourcePath,
-            needs,
-            kind);
-
     private static IReadOnlyList<EnqueueJobRequest> BuildCore(
         LibrarySettingsData settings,
         Guid entityId,
@@ -97,7 +81,8 @@ internal static class VideoDownstreamJobPlanner {
         var entityIdText = entityId.ToString();
         var requests = new List<EnqueueJobRequest>(5);
         var processing = EntityKindRegistry.Describe(kind).Processing;
-        var plan = processing.Plan(EntityProcessingInputAdapter.From(settings, needs, hasSourcePath: true));
+        var plan = processing.Plan(EntityProcessingInputAdapter.From(
+            settings, needs, forceSubtitleReconciliationForOwnedSource: false));
 
         if (plan.ProbeJobType is { } probe) {
             requests.Add(EnqueueJobRequest.ForEntity(
