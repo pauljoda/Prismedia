@@ -96,8 +96,6 @@ public sealed class PrismediaDbContext : DbContext {
 
     public DbSet<AppSettingRow> AppSettings => Set<AppSettingRow>();
 
-    public DbSet<AppSecurityRow> AppSecurity => Set<AppSecurityRow>();
-
     public DbSet<UserRow> Users => Set<UserRow>();
 
     public DbSet<UserSessionRow> UserSessions => Set<UserSessionRow>();

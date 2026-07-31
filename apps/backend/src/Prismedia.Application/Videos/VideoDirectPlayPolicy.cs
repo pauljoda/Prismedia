@@ -4,21 +4,6 @@ using Prismedia.Domain.Entities;
 namespace Prismedia.Application.Videos;
 
 /// <summary>
-/// How the server should deliver a source file to one client for a single playback session.
-/// </summary>
-public enum VideoPlaybackMethod {
-    /// <summary>The client reads the original source file unchanged.</summary>
-    DirectPlay,
-
-    /// <summary>The video stream is copied without re-encoding; only the container (and optionally
-    /// the audio stream) is changed to a form the client accepts.</summary>
-    Remux,
-
-    /// <summary>The video stream is re-encoded, optionally with an HDR-to-SDR tone map.</summary>
-    Transcode,
-}
-
-/// <summary>
 /// The negotiated delivery strategy for one playback session, including the details a remux needs.
 /// </summary>
 /// <param name="Method">Selected delivery method.</param>
@@ -32,7 +17,7 @@ public sealed record VideoPlaybackDecision(
 /// <summary>
 /// Decides DirectPlay vs. Remux vs. Transcode for a source file and a client.
 /// <para>
-/// When the client sends a Jellyfin-style device profile (its list of directly playable
+/// When the client sends a native device profile (its list of directly playable
 /// container/codec combinations), the decision honors that profile: a capable client receives the
 /// original file (DirectPlay) or a stream-copy remux instead of an unnecessary, expensive
 /// re-encode. When no profile is supplied the policy falls back to the historical container
@@ -62,7 +47,7 @@ public static class VideoDirectPlayPolicy {
         VideoSourceFile source,
         string? selectedAudioCodec,
         VideoPlaybackRange range,
-        ClientPlaybackProfile? profile,
+        VideoPlaybackProfile? profile,
         IReadOnlyCollection<string>? supportedVideoRangeTypes,
         bool directPlayAllowed,
         bool directStreamAllowed,
@@ -78,7 +63,7 @@ public static class VideoDirectPlayPolicy {
         // native clients must normalize it through the existing HDR-to-SDR transcode path.
         if (VideoPlaybackRangePolicy.RequiresToneMappingForInvalidBitDepth(range, primaryVideoStream?.BitDepth)) {
             return clientToneMappingAllowed && directPlayAllowed
-                ? new VideoPlaybackDecision(VideoPlaybackMethod.DirectPlay)
+                ? new VideoPlaybackDecision(VideoPlaybackMethod.Direct)
                 : new VideoPlaybackDecision(VideoPlaybackMethod.Transcode);
         }
 
@@ -87,7 +72,7 @@ public static class VideoDirectPlayPolicy {
         var directPlayProfiles = profile?.DirectPlayProfiles;
         if (directPlayProfiles is not { Count: > 0 }) {
             return directPlayAllowed && rangeAllowed && source.DirectPlayable
-                ? new VideoPlaybackDecision(VideoPlaybackMethod.DirectPlay)
+                ? new VideoPlaybackDecision(VideoPlaybackMethod.Direct)
                 : new VideoPlaybackDecision(VideoPlaybackMethod.Transcode);
         }
 
@@ -104,7 +89,7 @@ public static class VideoDirectPlayPolicy {
                 ContainerMatches(candidate.Container, sourceContainer) &&
                 CodecMatches(candidate.VideoCodec, source.VideoCodec) &&
                 AudioMatches(candidate.AudioCodec, selectedAudioCodec))) {
-            return new VideoPlaybackDecision(VideoPlaybackMethod.DirectPlay);
+            return new VideoPlaybackDecision(VideoPlaybackMethod.Direct);
         }
 
         // Remux: the client can decode the video codec but needs a different container (and possibly
@@ -156,7 +141,7 @@ public static class VideoDirectPlayPolicy {
             return true;
         }
 
-        // An empty codec list in a Jellyfin DirectPlayProfile means "any codec in this container".
+        // An empty codec list means "any codec in this container".
         var tokens = Tokens(profileCodecs).ToList();
         if (tokens.Count == 0) {
             return true;

@@ -1,5 +1,17 @@
-import type { EntityCapability } from "$lib/api/generated/model";
-import type { JellyfinPlaybackInfoResponse } from "$lib/api/playback";
+import type {
+  EntityCapability,
+  VideoPlaybackPlanResponse,
+  VideoPlaybackStream,
+  VideoTranscodingInfo,
+} from "$lib/api/generated/model";
+import {
+  getGetVideoPlaybackHlsAssetUrl,
+  getGetVideoPlaybackSourceUrl,
+} from "$lib/api/generated/prismedia";
+import {
+  STREAM_KIND,
+  VIDEO_PLAYBACK_METHOD,
+} from "$lib/api/generated/codes";
 import type {
   VideoPlayerAudioTrack,
   VideoPlayerMarker,
@@ -7,13 +19,13 @@ import type {
 import type { PlayerQualityRung } from "$lib/components/video-player-types";
 import { qualityRungsForSource } from "$lib/player/quality-ladder";
 import { getCapability } from "$lib/api/capabilities";
-import { jellyfinApiPath, apiPath, assetUrl } from "$lib/api/orval-fetch";
+import { apiPath, assetUrl } from "$lib/api/orval-fetch";
 import type {
   SubtitleSource,
   SubtitleSourceFormat,
   VideoSubtitleTrack,
 } from "$lib/player/subtitle-types";
-import { positiveNumberValue } from "$lib/utils/format";
+import { numberValue, positiveNumberValue } from "$lib/utils/format";
 import {
   audioFormatBadge,
   dynamicRangeBadge,
@@ -33,8 +45,7 @@ export interface VideoPlayerProps {
   markers: VideoPlayerMarker[];
   duration: number;
   trickplayPlaylist: string;
-  playSessionId: string | null;
-  mediaSourceId: string | null;
+  sessionId: string | null;
   subtitleTracks: VideoSubtitleTrack[];
   audioTracks: VideoPlayerAudioTrack[];
   colorPipelineLabel: string | null;
@@ -48,14 +59,14 @@ export interface VideoPlayerProps {
   audioFormatLabel: string | null;
   /** The server's negotiated delivery method, before any client-side fallback. */
   streamMethod: StreamMethod;
-  /** Manual quality tiers the viewer can pin (Jellyfin-style), each a ready-to-load variant URL. */
+  /** Manual quality tiers the viewer can pin, each a ready-to-load variant URL. */
   qualityRungs: PlayerQualityRung[];
 }
 
 export function extractVideoPlayerProps(
   videoId: string,
   capabilities: EntityCapability[],
-  playbackInfo: JellyfinPlaybackInfoResponse | null = null,
+  playbackPlan: VideoPlaybackPlanResponse | null = null,
   selectedAudioStreamIndex: number | null = null,
 ): VideoPlayerProps {
   const technical = getCapability(capabilities, CAPABILITY_KIND.technical);
@@ -65,13 +76,13 @@ export function extractVideoPlayerProps(
   const subtitles = getCapability(capabilities, CAPABILITY_KIND.subtitles);
 
   const sourceFile = files?.items.find((f) => f.role === ENTITY_FILE_ROLE.source);
-  const mediaSource = playbackInfo?.MediaSources?.[0] ?? null;
-  const videoStream = mediaSource?.MediaStreams?.find((stream) => stream.Type === "Video");
-  const audioStreams = (mediaSource?.MediaStreams ?? []).filter((stream) => stream.Type === "Audio");
+  const mediaSource = playbackPlan?.source ?? null;
+  const videoStream = mediaSource?.streams.find((stream) => stream.type === STREAM_KIND.video);
+  const audioStreams = (mediaSource?.streams ?? []).filter((stream) => stream.type === STREAM_KIND.audio);
   const defaultAudioStreamIndex =
     selectedAudioStreamIndex ??
-    audioStreams.find((stream) => stream.IsDefault)?.Index ??
-    audioStreams[0]?.Index ??
+    streamIndex(audioStreams.find((stream) => stream.isDefault)) ??
+    streamIndex(audioStreams[0]) ??
     null;
   const trickplayFile = files?.items.find((f) => f.role === ENTITY_FILE_ROLE.trickplay);
   const trickplayImage = images?.items.find((asset) =>
@@ -79,25 +90,29 @@ export function extractVideoPlayerProps(
     asset.path.toLowerCase().endsWith(".m3u8")
   );
   const trickplayPath = trickplayFile?.path ?? trickplayImage?.path ?? "";
-  const trickplayPlaylist = trickplayPath ? jellyfinApiPath(trickplayPath) : "";
+  const trickplayPlaylist = trickplayPath ? apiPath(trickplayPath) : "";
   const directPlayable = isBrowserNativeVideoSource(sourceFile?.path, technical?.container);
-  const directSrc = (mediaSource?.SupportsDirectPlay ?? directPlayable)
-    ? jellyfinApiPath(`/Videos/${videoId}/stream${mediaSource?.Id ? `?MediaSourceId=${mediaSource.Id}` : ""}`)
-    : "";
-  const hlsSrc = mediaSource?.TranscodingUrl
-    ? jellyfinApiPath(mediaSource.TranscodingUrl)
-    : mediaSource?.SupportsTranscoding === false
-      ? ""
-    : jellyfinApiPath(appendAudioStreamIndex(`/Videos/${videoId}/master.m3u8`, defaultAudioStreamIndex));
+  const directSrc = mediaSource?.method === VIDEO_PLAYBACK_METHOD.direct
+    ? apiPath(mediaSource.url)
+    : !mediaSource && directPlayable
+      ? apiPath(getGetVideoPlaybackSourceUrl(videoId))
+      : "";
+  const hlsSrc = mediaSource?.supportsTranscoding === false
+    ? ""
+    : mediaSource && mediaSource.method !== VIDEO_PLAYBACK_METHOD.direct
+      ? apiPath(mediaSource.url)
+      : apiPath(getGetVideoPlaybackHlsAssetUrl(videoId, "master.m3u8", {
+          ...(defaultAudioStreamIndex == null ? {} : { audioStreamIndex: defaultAudioStreamIndex }),
+        }));
   const defaultAudioStream =
-    audioStreams.find((stream) => stream.Index === defaultAudioStreamIndex) ?? audioStreams[0] ?? null;
+    audioStreams.find((stream) => streamIndex(stream) === defaultAudioStreamIndex) ?? audioStreams[0] ?? null;
 
   return {
     src: hlsSrc,
     directSrc,
-    codec: videoStream?.Codec ?? technical?.codec ?? null,
-    sourceWidth: videoStream?.Width ?? positiveNumberValue(technical?.width),
-    sourceHeight: videoStream?.Height ?? positiveNumberValue(technical?.height),
+    codec: videoStream?.codec ?? technical?.codec ?? null,
+    sourceWidth: positiveNumberValue(videoStream?.width) ?? positiveNumberValue(technical?.width),
+    sourceHeight: positiveNumberValue(videoStream?.height) ?? positiveNumberValue(technical?.height),
     poster: assetUrl(images?.thumbnailUrl) || "",
     markers: (markers?.items ?? []).map((m) => ({
       id: m.id,
@@ -105,33 +120,36 @@ export function extractVideoPlayerProps(
       endTime: m.endSeconds == null ? null : Number(m.endSeconds),
       title: m.title,
     })),
-    duration: ticksToSeconds(mediaSource?.RunTimeTicks) || parseDotnetTimeSpan(technical?.duration),
+    duration: positiveNumberValue(mediaSource?.durationSeconds) ?? parseDotnetTimeSpan(technical?.duration),
     trickplayPlaylist,
-    playSessionId: playbackInfo?.PlaySessionId ?? null,
-    mediaSourceId: mediaSource?.Id ?? null,
-    colorPipelineLabel: colorPipelineLabel(videoStream, mediaSource?.TranscodingInfo ?? null),
+    sessionId: playbackPlan?.sessionId ?? null,
+    colorPipelineLabel: colorPipelineLabel(
+      videoStream,
+      mediaSource?.transcoding ?? null,
+      mediaSource?.method,
+    ),
     resolutionLabel: resolutionBadge(
-      videoStream?.Width ?? positiveNumberValue(technical?.width),
-      videoStream?.Height ?? positiveNumberValue(technical?.height),
+      videoStream?.width ?? positiveNumberValue(technical?.width),
+      videoStream?.height ?? positiveNumberValue(technical?.height),
     ),
     dynamicRangeLabel: dynamicRangeBadge(videoStream),
-    videoCodecLabel: videoCodecBadge(videoStream?.Codec ?? technical?.codec),
+    videoCodecLabel: videoCodecBadge(videoStream?.codec ?? technical?.codec),
     audioFormatLabel: audioFormatBadge(defaultAudioStream),
     streamMethod: resolveStreamMethod(mediaSource),
     qualityRungs: buildQualityRungs(
       videoId,
-      videoStream?.BitRate ?? positiveNumberValue(technical?.bitRate),
-      videoStream?.Height ?? positiveNumberValue(technical?.height),
-      videoStream?.Codec ?? technical?.codec,
+      positiveNumberValue(videoStream?.bitRate) ?? positiveNumberValue(technical?.bitRate),
+      positiveNumberValue(videoStream?.height) ?? positiveNumberValue(technical?.height),
+      videoStream?.codec ?? technical?.codec,
       defaultAudioStreamIndex,
-      mediaSource?.SupportsTranscoding,
+      mediaSource?.supportsTranscoding,
     ),
     audioTracks: audioStreams.map((stream) => ({
-      id: `audio-${stream.Index}`,
-      streamIndex: stream.Index,
+      id: `audio-${streamIndex(stream) ?? 0}`,
+      streamIndex: streamIndex(stream) ?? 0,
       label: audioStreamLabel(stream),
       formatLabel: audioFormatBadge(stream),
-      selected: defaultAudioStreamIndex === stream.Index,
+      selected: defaultAudioStreamIndex === streamIndex(stream),
     })),
     subtitleTracks: (subtitles?.items ?? []).map((s) =>
       mapEntitySubtitle(videoId, { ...s, source: String(s.source) }),
@@ -139,23 +157,16 @@ export function extractVideoPlayerProps(
   };
 }
 
-// Reads the server's negotiated delivery decision. SupportsDirectPlay means the raw file plays as-is;
-// otherwise the TranscodingInfo says whether the video is copied (remux) or re-encoded. The player may
-// still fall back at runtime, so this is only the starting plan.
+// Reads the server's negotiated delivery decision. The player may still fall back at runtime, so
+// this is only the starting plan.
 function resolveStreamMethod(
-  mediaSource: {
-    SupportsDirectPlay?: boolean | null;
-    TranscodingInfo?: { IsVideoDirect?: boolean | null } | null;
-  } | null | undefined,
+  mediaSource: VideoPlaybackPlanResponse["source"] | null | undefined,
 ): StreamMethod {
-  if (!mediaSource) return "transcode";
-  if (mediaSource.SupportsDirectPlay) return "direct";
-  if (mediaSource.TranscodingInfo?.IsVideoDirect) return "remux";
-  return "transcode";
+  return mediaSource?.method ?? VIDEO_PLAYBACK_METHOD.transcode;
 }
 
 // Builds the manual quality tiers for the player. Each tier points at the variant playlist the server
-// already produces (/Videos/{id}/hls/{name}/stream.m3u8), carrying the active audio so a quality switch
+// already produces, carrying the active audio so a quality switch
 // keeps the chosen track. Skipped only when the source explicitly cannot be transcoded.
 function buildQualityRungs(
   videoId: string,
@@ -170,35 +181,25 @@ function buildQualityRungs(
     name: rung.name,
     label: rung.label,
     bitrate: rung.bitrate,
-    url: jellyfinApiPath(
-      appendAudioStreamIndex(`/Videos/${videoId}/hls/${rung.name}/stream.m3u8`, audioStreamIndex),
-    ),
+    url: apiPath(getGetVideoPlaybackHlsAssetUrl(
+      videoId,
+      `v/${rung.name}/stream.m3u8`,
+      audioStreamIndex == null ? undefined : { audioStreamIndex },
+    )),
   }));
 }
 
-function appendAudioStreamIndex(path: string, audioStreamIndex: number | null): string {
-  if (audioStreamIndex == null || /(?:[?&])AudioStreamIndex=/.test(path)) return path;
-  const separator = path.includes("?") ? "&" : "?";
-  return `${path}${separator}AudioStreamIndex=${audioStreamIndex}`;
-}
-
 function colorPipelineLabel(
-  videoStream: {
-    VideoRange?: string | null;
-    VideoRangeType?: string | null;
-    DvProfile?: number | null;
-  } | null | undefined,
-  transcodingInfo: {
-    VideoCodec?: string | null;
-    IsVideoDirect?: boolean | null;
-  } | null | undefined,
+  videoStream: VideoPlaybackStream | null | undefined,
+  transcodingInfo: VideoTranscodingInfo | null | undefined,
+  method: StreamMethod | undefined,
 ): string | null {
   const sourceRange = sourceRangeLabel(videoStream);
-  if (transcodingInfo?.IsVideoDirect) {
+  if (method === VIDEO_PLAYBACK_METHOD.direct || transcodingInfo?.isVideoDirect) {
     return `${sourceRange} direct`;
   }
 
-  const outputCodec = codecLabel(transcodingInfo?.VideoCodec);
+  const outputCodec = codecLabel(transcodingInfo?.videoCodec);
   if (sourceRange === "SDR") {
     return `SDR -> ${outputCodec} SDR`;
   }
@@ -214,36 +215,28 @@ function codecLabel(codec: string | null | undefined): string {
   return codec.toUpperCase();
 }
 
-function sourceRangeLabel(
-  videoStream: {
-    VideoRange?: string | null;
-    VideoRangeType?: string | null;
-    DvProfile?: number | null;
-  } | null | undefined,
-): string {
-  const type = videoStream?.VideoRangeType?.trim();
+function sourceRangeLabel(videoStream: VideoPlaybackStream | null | undefined): string {
+  const type = videoStream?.videoRangeType?.trim();
   if (!type || type.toUpperCase() === "SDR") return "SDR";
   if (type.toUpperCase() === "DOVI") {
-    return videoStream?.DvProfile ? `DOVI P${videoStream.DvProfile}` : "DOVI";
+    return videoStream?.dvProfile ? `DOVI P${videoStream.dvProfile}` : "DOVI";
   }
   return type;
 }
 
-function audioStreamLabel(stream: {
-  Index: number;
-  Language?: string | null;
-  DisplayTitle?: string | null;
-  Channels?: number | null;
-  Codec?: string | null;
-  IsDefault?: boolean | null;
-}): string {
-  const title = stream.DisplayTitle?.trim();
-  const language = languageLabel(stream.Language);
-  const codec = stream.Codec ? stream.Codec.toUpperCase() : null;
-  const channels = stream.Channels ? `${stream.Channels}ch` : null;
-  const parts = [title || language || `Track ${stream.Index}`, codec, channels]
+function audioStreamLabel(stream: VideoPlaybackStream): string {
+  const index = streamIndex(stream) ?? 0;
+  const title = stream.displayTitle?.trim();
+  const language = languageLabel(stream.language);
+  const codec = stream.codec ? stream.codec.toUpperCase() : null;
+  const channels = positiveNumberValue(stream.channels);
+  const parts = [title || language || `Track ${index}`, codec, channels ? `${channels}ch` : null]
     .filter(Boolean);
-  return `${parts.join(" · ")}${stream.IsDefault ? " · Default" : ""}`;
+  return `${parts.join(" · ")}${stream.isDefault ? " · Default" : ""}`;
+}
+
+function streamIndex(stream: VideoPlaybackStream | null | undefined): number | null {
+  return numberValue(stream?.index);
 }
 
 function languageLabel(language: string | null | undefined): string | null {
@@ -253,12 +246,6 @@ function languageLabel(language: string | null | undefined): string | null {
   } catch {
     return language.toUpperCase();
   }
-}
-
-function ticksToSeconds(value: number | null | undefined): number {
-  return typeof value === "number" && Number.isFinite(value) && value > 0
-    ? value / 10_000_000
-    : 0;
 }
 
 function mapEntitySubtitle(

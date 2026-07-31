@@ -1,4 +1,3 @@
-using Prismedia.Api.Jellyfin;
 using Prismedia.Contracts.Media;
 using Prismedia.Contracts.Opds;
 
@@ -90,9 +89,7 @@ public static class SpaDevProxy {
 
     /// <summary>
     /// Returns whether a request should bypass the development Vite proxy and
-    /// stay in the .NET backend route table. Jellyfin-compatible routes use the
-    /// same casing behavior as API authentication so lowercase client requests
-    /// are challenged by the backend instead of being proxied to the SPA dev server.
+    /// stay in the .NET backend route table.
     /// </summary>
     public static bool ShouldPassThroughToBackend(PathString requestPath) {
         var path = requestPath.Value ?? "";
@@ -107,7 +104,7 @@ public static class SpaDevProxy {
             return true;
         }
 
-        return JellyfinRoutes.IsJellyfinRequest(path);
+        return false;
     }
 
     /// <summary>

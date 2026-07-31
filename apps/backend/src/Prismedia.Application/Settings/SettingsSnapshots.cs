@@ -106,7 +106,7 @@ public sealed record SubtitleSettings(
 /// <param name="VaapiDevice">Render device path used by VA-API transcodes.</param>
 /// <param name="EnableAdaptiveBitrate">
 /// When true the master playlist advertises the full adaptive bitrate ladder so clients can switch
-/// quality. When false (the default) it advertises a single rung, matching Jellyfin's single-stream
+/// quality. When false (the default) it advertises a single rung, matching the single-stream
 /// default — this is the primary defence against a quality switch spawning a second concurrent
 /// transcode and pinning the CPU.
 /// </param>

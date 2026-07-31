@@ -190,7 +190,7 @@ public sealed partial class EfEntityReadService {
         var acquisitionStatusesByEntity = await _acquisitionStatuses.ResolveAsync(ids, cancellationToken);
 
         // Tag names per entity, resolved through the tag relationship links and their target titles,
-        // so list rows can surface tags (used as genres on the Jellyfin surface) without a detail load.
+        // so list rows can surface tags without a detail load.
         var tagLinks = await _db.EntityRelationshipLinks.AsNoTracking()
             .Where(link => ids.Contains(link.EntityId) && link.RelationshipCode == "tags")
             .OrderBy(link => link.SortOrder)

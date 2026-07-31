@@ -1,8 +1,8 @@
 import type { PlayerQualityRung } from "$lib/components/video-player-types";
 
 /**
- * Remembers the viewer's manual quality choice per device (like Jellyfin's "remember quality"), as a
- * max video bitrate in bits per second, or the sentinels "auto"/"direct". Stored in localStorage so a
+ * Remembers the viewer's manual quality choice per device as a max video bitrate in bits per second,
+ * or the sentinels "auto"/"direct". Stored in localStorage so a
  * capped quality follows the viewer across every video on this device.
  */
 export type QualityPreference = "auto" | "direct" | number;

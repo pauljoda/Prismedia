@@ -30,7 +30,7 @@ public sealed class SecurityServiceTests {
         var session = await persistence.CreateSessionAsync(
             user.Id,
             new string('a', 64),
-            new JellyfinClientIdentity(longClient, longDeviceName, longDeviceId, longVersion),
+            new ClientIdentity(longClient, longDeviceName, longDeviceId, longVersion),
             CancellationToken.None);
 
         Assert.Equal(128, session.Client?.Length);
@@ -45,7 +45,7 @@ public sealed class SecurityServiceTests {
         var persistence = new EfSecurityPersistence(db);
         var user = await CreateUserAsync(persistence, "sliding");
         var tokenHash = new string('b', 64);
-        await persistence.CreateSessionAsync(user.Id, tokenHash, new JellyfinClientIdentity(null, null, null, null), CancellationToken.None);
+        await persistence.CreateSessionAsync(user.Id, tokenHash, new ClientIdentity(null, null, null, null), CancellationToken.None);
 
         // Fresh session: resolves without touching (last seen is brand new).
         var resolved = await persistence.ResolveSessionAsync(
@@ -77,14 +77,13 @@ public sealed class SecurityServiceTests {
         var persistence = new EfSecurityPersistence(db);
         var user = await CreateUserAsync(persistence, "disabled");
         var tokenHash = new string('e', 64);
-        await persistence.CreateSessionAsync(user.Id, tokenHash, new JellyfinClientIdentity(null, null, null, null), CancellationToken.None);
+        await persistence.CreateSessionAsync(user.Id, tokenHash, new ClientIdentity(null, null, null, null), CancellationToken.None);
 
         await persistence.UpdateUserAsync(
             user.Id,
             username: null,
             displayName: null,
             role: null,
-            allowSfw: null,
             allowNsfw: null,
             canCreateLibraries: null,
             enabled: false,
@@ -101,7 +100,6 @@ public sealed class SecurityServiceTests {
             username,
             passwordHash: "hash",
             UserRole.Member,
-            allowSfw: true,
             allowNsfw: false,
             canCreateLibraries: false,
             enabled: true,

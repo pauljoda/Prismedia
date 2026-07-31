@@ -35,5 +35,7 @@ apps/backend/data/
 # Local dev tools (host-specific binaries, e.g. jellyfin-ffmpeg for the VSCode launch configs)
 .tools/
 
-# .NET API serves the built Svelte app from wwwroot; it is produced by the web build, not committed.
-apps/backend/src/Prismedia.Api/wwwroot/
+# .NET API serves the built Svelte app from wwwroot; assets are produced by the web build,
+# while the empty root is retained because ASP.NET's static-web-assets test host requires it.
+apps/backend/src/Prismedia.Api/wwwroot/*
+!apps/backend/src/Prismedia.Api/wwwroot/.gitkeep

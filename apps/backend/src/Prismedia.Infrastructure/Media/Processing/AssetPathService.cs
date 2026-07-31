@@ -1,5 +1,6 @@
 using Prismedia.Application.Files;
 using Prismedia.Contracts.Media;
+using Prismedia.Contracts.Playback;
 
 namespace Prismedia.Infrastructure.Media.Processing;
 
@@ -190,7 +191,7 @@ public sealed class AssetPathService {
         $"{AssetPaths.AssetsUrlPrefix}{AssetPaths.Videos}/{entityId}/{AssetPaths.TrickplayVttFile}";
 
     public static string TrickplayPlaylistUrl(Guid entityId, int width) =>
-        $"/Videos/{entityId}/Trickplay/{width}/tiles.m3u8";
+        VideoPlaybackProtocol.TrickplayPlaylistPath(entityId, width);
 
     public static string ImageThumbnailUrl(Guid entityId) =>
         $"{AssetPaths.AssetsUrlPrefix}{AssetPaths.Images}/{entityId}/{AssetPaths.ThumbnailFile}";

@@ -1,5 +1,4 @@
 using Prismedia.Api.Security;
-using Prismedia.Application.Jellyfin;
 
 namespace Prismedia.Api.Endpoints;
 
@@ -24,8 +23,7 @@ public static class EndpointRouteBuilderExtensions {
         routes.MapStudioEndpoints();
         routes.MapTagEndpoints();
         routes.MapCollectionEndpoints();
-        routes.MapJellyfinCompatibilityEndpoints();
-        routes.MapJellyfinPlaybackEndpoints();
+        routes.MapVideoPlaybackEndpoints();
         routes.MapBrowserSessionEndpoints();
         routes.MapMusicPlayerEndpoints();
         routes.MapPlaybackStatisticsEndpoints();
@@ -51,7 +49,7 @@ public static class EndpointRouteBuilderExtensions {
 /// Resolves the caller's NSFW visibility preference at the HTTP edge. The user's
 /// <c>AllowNsfw</c> flag is a server-enforced ceiling. Within it, web-browser sessions
 /// (authenticated via the session cookie) opt into show mode by query or cookie, while
-/// protocol clients (Jellyfin/OPDS tokens, Basic auth) have no toggle — the permission
+/// native and OPDS clients (header/query token or Basic auth) have no toggle — the permission
 /// alone decides.
 /// </summary>
 internal static class NsfwVisibility {
@@ -80,10 +78,4 @@ internal static class NsfwVisibility {
         return !httpContext.Request.Cookies.TryGetValue(CookieName, out var mode) ||
             !string.Equals(mode, ShowMode, StringComparison.OrdinalIgnoreCase);
     }
-
-    /// <summary>Returns the caller's content visibility toggles for Jellyfin projections.</summary>
-    public static JellyfinContentVisibility JellyfinContent(HttpContext httpContext) =>
-        httpContext.GetCurrentUser() is { } user
-            ? new JellyfinContentVisibility(user.AllowSfw, !ShouldHide(null, httpContext))
-            : JellyfinContentVisibility.FromHideNsfw(ShouldHide(null, httpContext));
 }

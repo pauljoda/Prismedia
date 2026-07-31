@@ -48,8 +48,8 @@ public sealed class VideoSourceService : IVideoSourceService {
     /// <inheritdoc />
     public async Task<VideoSourceFile?> GetSourceAsync(Guid id, CancellationToken cancellationToken) {
         // A movie is a folder aggregate around one playable video child, so resolve a movie id to
-        // its child video before locating the source. This lets Jellyfin clients stream, probe
-        // playback info, and fetch HLS using the movie's own id (all three funnel through here).
+        // its child video before locating the source. This lets native clients stream, plan
+        // playback, and fetch HLS using the movie's own id (all three funnel through here).
         var videoId = await ResolvePlayableVideoIdAsync(id, cancellationToken);
         if (videoId is null) {
             return null;

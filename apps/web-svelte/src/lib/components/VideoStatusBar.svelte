@@ -1,6 +1,7 @@
 <script lang="ts">
   import { Cpu, Gauge, MonitorPlay, Radio, Volume2 } from "@lucide/svelte";
   import { cn } from "@prismedia/ui-svelte";
+  import { VIDEO_PLAYBACK_METHOD } from "$lib/api/generated/codes";
   import type { StreamMethod } from "$lib/player/media-badges";
 
   interface Props {
@@ -42,7 +43,11 @@
   }: Props = $props();
 
   const MethodIcon = $derived(
-    playbackMethod === "transcode" ? Cpu : playbackMethod === "remux" ? Radio : MonitorPlay,
+    playbackMethod === VIDEO_PLAYBACK_METHOD.transcode
+      ? Cpu
+      : playbackMethod === VIDEO_PLAYBACK_METHOD.remux
+        ? Radio
+        : MonitorPlay,
   );
   // Premium dynamic range earns the neutral accent accent the design system reserves for "special" state.
   const isPremiumRange = $derived(
@@ -68,7 +73,7 @@
       title={methodHint ?? methodLabel}
       class={cn(
         "pointer-events-auto player-method-chip flex items-center gap-1.5 px-2 py-1 text-[0.6rem] font-semibold uppercase tracking-[0.14em] sm:px-2.5 sm:text-[0.66rem]",
-        playbackMethod === "transcode" ? "is-working" : "is-direct",
+        playbackMethod === VIDEO_PLAYBACK_METHOD.transcode ? "is-working" : "is-direct",
       )}
     >
       <MethodIcon class="h-3.5 w-3.5 shrink-0" />

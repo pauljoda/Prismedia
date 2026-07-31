@@ -33,7 +33,7 @@ public interface ICollectionItemReadService {
 
     /// <summary>
     /// Resolves a representative cover image path for each requested collection so clients that
-    /// only render an entity's own artwork (e.g. Jellyfin/Infuse) still show a poster. Each
+    /// only render an entity's own artwork still show a poster. Each
     /// collection prefers its configured cover item, falling back to its first visible member's
     /// cover. Collections with no resolvable cover are omitted from the result.
     /// </summary>
@@ -50,7 +50,7 @@ public interface ICollectionItemReadService {
     /// Batched list-row context for many collections at once: the visible member count and whether any
     /// member is an audio kind (which projects the box set as an audio playlist). ONE grouped query for
     /// the whole batch — list surfaces must never hydrate per-collection membership per row (the
-    /// original Jellyfin views N+1 took a minute on large libraries). Collections with no visible
+    /// former external-catalog N+1 took a minute on large libraries). Collections with no visible
     /// members are absent from the result.
     /// </summary>
     Task<IReadOnlyDictionary<Guid, CollectionListContext>> GetListContextsAsync(

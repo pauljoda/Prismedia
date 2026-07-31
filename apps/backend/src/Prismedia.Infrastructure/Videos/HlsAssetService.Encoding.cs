@@ -253,10 +253,10 @@ public sealed partial class HlsAssetService {
         return int.TryParse(value, out var raw) ? raw : 0;
     }
 
-    private static IReadOnlyList<JellyfinQualityOption> JellyfinQualityOptions(
+    private static IReadOnlyList<PlaybackQualityOption> PlaybackQualityOptions(
         int sourceVideoBitrate,
         string? videoCodec) {
-        var options = JellyfinQualityPresetOptions();
+        var options = PlaybackQualityPresetOptions();
         if (sourceVideoBitrate <= 0) {
             return options;
         }
@@ -266,7 +266,7 @@ public sealed partial class HlsAssetService {
             comparableBitrate = (int)Math.Round(comparableBitrate * 1.5);
         }
 
-        var selected = new List<JellyfinQualityOption>();
+        var selected = new List<PlaybackQualityOption>();
         var nextHigher = options
             .Where(option => option.Bitrate > comparableBitrate)
             .LastOrDefault();
@@ -278,7 +278,7 @@ public sealed partial class HlsAssetService {
         return selected.Count > 0 ? selected : [options[^1]];
     }
 
-    private static IReadOnlyList<JellyfinQualityOption> JellyfinQualityPresetOptions() =>
+    private static IReadOnlyList<PlaybackQualityOption> PlaybackQualityPresetOptions() =>
     [
         new("120mbps", 2160, 120_000_000),
         new("80mbps", 2160, 80_000_000),
@@ -297,7 +297,7 @@ public sealed partial class HlsAssetService {
     ];
 
     private static VirtualHlsRendition RenditionForQualityOption(
-        JellyfinQualityOption option,
+        PlaybackQualityOption option,
         int sourceHeight) {
         var height = Math.Min(sourceHeight, option.MaxHeight);
         var videoBitrate = ToRate(option.Bitrate);
@@ -481,7 +481,7 @@ public sealed partial class HlsAssetService {
         string AudioBitrate,
         int Crf);
 
-    private sealed record JellyfinQualityOption(string Name, int MaxHeight, int Bitrate);
+    private sealed record PlaybackQualityOption(string Name, int MaxHeight, int Bitrate);
 
     private sealed record VirtualCacheMetadata(
         string SourcePath,

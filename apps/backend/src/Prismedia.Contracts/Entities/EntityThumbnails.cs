@@ -61,7 +61,7 @@ public sealed record EntityThumbnail(
 
     /// <summary>
     /// True for a request-created wanted placeholder: a real library entity with metadata and artwork
-    /// but no file yet. Grids badge it; external projections (Jellyfin, OPDS) exclude it.
+    /// but no file yet. Grids badge it; external projections such as OPDS exclude it.
     /// </summary>
     public bool IsWanted { get; init; }
 
@@ -96,8 +96,8 @@ public sealed record EntityThumbnail(
     public AcquisitionStatus? WantedStatus { get; init; }
 
     /// <summary>
-    /// When the entity was added to the library. Surfaced so compatibility layers (e.g. the Jellyfin
-    /// surface) can populate the always-present <c>DateCreated</c> field that clients sort by.
+    /// When the entity was added to the library. Surfaced so list projections can sort rows
+    /// without hydrating each entity's full detail graph.
     /// </summary>
     public DateTimeOffset? CreatedAt { get; init; }
 
@@ -121,8 +121,8 @@ public sealed record EntityThumbnail(
     public int? PlayCount { get; init; }
 
     /// <summary>
-    /// Tag names applied to the entity, surfaced so list-level compatibility layers (the Jellyfin
-    /// surface) can expose them as genres without fetching each entity's full detail graph.
+    /// Tag names applied to the entity, surfaced so list projections do not fetch each entity's
+    /// full detail graph.
     /// </summary>
     public IReadOnlyList<string>? Genres { get; init; }
 

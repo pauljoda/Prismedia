@@ -13,10 +13,8 @@ using Prismedia.Infrastructure.Playback;
 namespace Prismedia.Infrastructure.Tests;
 
 /// <summary>
-/// Verifies that the Jellyfin playback session path and the native entity playback path write
-/// identical playback state, now that both route through <see cref="EntityCapabilityService" />.
-/// Also guards the two bugs the unification fixed: Jellyfin "mark played" now records completion,
-/// and repeated progress reports no longer inflate the play count.
+/// Verifies that playback sessions and direct entity playback mutations write identical state.
+/// Also guards completion thresholds, resume semantics, and durable playback history.
 /// </summary>
 public sealed class PlaybackSessionServiceTests {
     private static readonly Guid VideoId = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
@@ -24,27 +22,51 @@ public sealed class PlaybackSessionServiceTests {
     private static readonly Guid AudioTrackId = Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb");
 
     [Fact]
-    public async Task JellyfinProgressAndNativeUpdateProduceIdenticalState() {
-        var jellyfinState = await RunAsync(async (sessions, _) =>
+    public async Task SessionProgressAndEntityUpdateProduceIdenticalState() {
+        var sessionState = await RunAsync(async (sessions, _) =>
             await sessions.ProgressAsync(
-                new PlaybackSessionCommand { ItemId = VideoId, PositionTicks = 90 * TimeSpan.TicksPerSecond },
+                new VideoPlaybackSessionCommand { EntityId = VideoId, PositionSeconds = 90 },
                 CancellationToken.None));
 
         var nativeState = await RunAsync(async (_, capabilities) =>
             await capabilities.UpdatePlaybackAsync(VideoId, resumeSeconds: 90, durationSeconds: null, completed: null, CancellationToken.None));
 
         // Compare the deterministic playback fields; LastPlayedAt is wall-clock "now" of each run.
-        Assert.Equal(nativeState!.PlayCount, jellyfinState!.PlayCount);
-        Assert.Equal(nativeState.PlayDuration, jellyfinState.PlayDuration);
-        Assert.Equal(nativeState.ResumeTime, jellyfinState.ResumeTime);
-        Assert.Equal(nativeState.CompletedAt, jellyfinState.CompletedAt);
-        Assert.Equal(TimeSpan.FromSeconds(90), jellyfinState.ResumeTime);
+        Assert.Equal(nativeState!.PlayCount, sessionState!.PlayCount);
+        Assert.Equal(nativeState.PlayDuration, sessionState.PlayDuration);
+        Assert.Equal(nativeState.ResumeTime, sessionState.ResumeTime);
+        Assert.Equal(nativeState.CompletedAt, sessionState.CompletedAt);
+        Assert.Equal(TimeSpan.FromSeconds(90), sessionState.ResumeTime);
     }
 
     [Fact]
-    public async Task JellyfinMarkPlayedRecordsCompletion() {
-        var state = await RunAsync(async (sessions, _) =>
-            await sessions.MarkPlayedAsync(VideoId, CancellationToken.None));
+    public async Task SessionMediaDurationDerivesCompletionWithoutInflatingTimeWatched() {
+        var (state, events) = await RunWithEventsAsync(async (sessions, _) =>
+            await sessions.ProgressAsync(
+                new VideoPlaybackSessionCommand {
+                    EntityId = VideoId,
+                    PositionSeconds = 95,
+                    DurationSeconds = 100
+                },
+                CancellationToken.None));
+
+        Assert.NotNull(state!.CompletedAt);
+        Assert.Equal(1, state.PlayCount);
+        Assert.Equal(TimeSpan.Zero, state.PlayDuration);
+        var completed = Assert.Single(events);
+        Assert.Equal(PlaybackEventKind.Completed, completed.Kind);
+        Assert.Equal(100, completed.DurationSeconds);
+    }
+
+    [Fact]
+    public async Task EntityCompletionRecordsWatchedState() {
+        var state = await RunAsync(async (_, capabilities) =>
+            await capabilities.UpdatePlaybackAsync(
+                VideoId,
+                resumeSeconds: 0,
+                durationSeconds: null,
+                completed: true,
+                CancellationToken.None));
 
         Assert.NotNull(state!.CompletedAt);
         Assert.Equal(TimeSpan.Zero, state.ResumeTime);
@@ -59,9 +81,9 @@ public sealed class PlaybackSessionServiceTests {
         const double runtimeSeconds = 1000;
         var state = await RunAsync(
             async (sessions, _) => await sessions.ProgressAsync(
-                new PlaybackSessionCommand {
-                    ItemId = VideoId,
-                    PositionTicks = (long)(runtimeSeconds * percent / 100 * TimeSpan.TicksPerSecond)
+                new VideoPlaybackSessionCommand {
+                    EntityId = VideoId,
+                    PositionSeconds = runtimeSeconds * percent / 100
                 },
                 CancellationToken.None),
             runtimeSeconds);
@@ -120,12 +142,17 @@ public sealed class PlaybackSessionServiceTests {
     public async Task ProgressAfterCompletionDoesNotClearWatchedState() {
         const double runtimeSeconds = 1000;
         var state = await RunAsync(
-            async (sessions, _) => {
-                await sessions.MarkPlayedAsync(VideoId, CancellationToken.None);
+            async (sessions, capabilities) => {
+                await capabilities.UpdatePlaybackAsync(
+                    VideoId,
+                    resumeSeconds: 0,
+                    durationSeconds: null,
+                    completed: true,
+                    CancellationToken.None);
                 await sessions.ProgressAsync(
-                    new PlaybackSessionCommand {
-                        ItemId = VideoId,
-                        PositionTicks = (long)(runtimeSeconds * 0.5 * TimeSpan.TicksPerSecond)
+                    new VideoPlaybackSessionCommand {
+                        EntityId = VideoId,
+                        PositionSeconds = runtimeSeconds * 0.5
                     },
                     CancellationToken.None);
             },
@@ -218,7 +245,7 @@ public sealed class PlaybackSessionServiceTests {
         var state = await RunAsync(async (sessions, _) => {
             for (var i = 1; i <= 5; i++) {
                 await sessions.ProgressAsync(
-                    new PlaybackSessionCommand { ItemId = VideoId, PositionTicks = i * 10L * TimeSpan.TicksPerSecond },
+                    new VideoPlaybackSessionCommand { EntityId = VideoId, PositionSeconds = i * 10 },
                     CancellationToken.None);
             }
         });
@@ -233,16 +260,15 @@ public sealed class PlaybackSessionServiceTests {
         const double runtimeSeconds = 1000;
         var state = await RunAsync(
             async (sessions, _) => {
-                // Build a resume point, then send the Start-Over signal Infuse fires: a Playing
-                // report at position 0 (it reports the real resume position when resuming).
+                // Build a resume point, then send the native start-over signal at position zero.
                 await sessions.ProgressAsync(
-                    new PlaybackSessionCommand {
-                        ItemId = VideoId,
-                        PositionTicks = (long)(runtimeSeconds * 0.5 * TimeSpan.TicksPerSecond)
+                    new VideoPlaybackSessionCommand {
+                        EntityId = VideoId,
+                        PositionSeconds = runtimeSeconds * 0.5
                     },
                     CancellationToken.None);
                 await sessions.StartAsync(
-                    new PlaybackSessionCommand { ItemId = VideoId, PositionTicks = 0 },
+                    new VideoPlaybackSessionCommand { EntityId = VideoId, PositionSeconds = 0 },
                     CancellationToken.None);
             },
             runtimeSeconds);
@@ -253,15 +279,15 @@ public sealed class PlaybackSessionServiceTests {
     [Fact]
     public async Task StartAtResumePositionKeepsResume() {
         const double runtimeSeconds = 1000;
-        var resumeTicks = (long)(runtimeSeconds * 0.5 * TimeSpan.TicksPerSecond);
+        var resumeSeconds = runtimeSeconds * 0.5;
         var state = await RunAsync(
             async (sessions, _) => {
                 await sessions.ProgressAsync(
-                    new PlaybackSessionCommand { ItemId = VideoId, PositionTicks = resumeTicks },
+                    new VideoPlaybackSessionCommand { EntityId = VideoId, PositionSeconds = resumeSeconds },
                     CancellationToken.None);
                 // Resuming (not starting over) reports the saved position — the resume must survive.
                 await sessions.StartAsync(
-                    new PlaybackSessionCommand { ItemId = VideoId, PositionTicks = resumeTicks },
+                    new VideoPlaybackSessionCommand { EntityId = VideoId, PositionSeconds = resumeSeconds },
                     CancellationToken.None);
             },
             runtimeSeconds);

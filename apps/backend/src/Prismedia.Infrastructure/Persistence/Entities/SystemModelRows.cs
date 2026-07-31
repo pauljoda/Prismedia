@@ -39,20 +39,6 @@ public sealed class AppSettingRow {
     public DateTimeOffset UpdatedAt { get; set; }
 }
 
-public sealed class AppSecurityRow {
-    public int Id { get; set; }
-    public Guid ServerId { get; set; }
-
-    /// <summary>
-    /// Pre-multi-user app API key, staged here by the auth migration so startup
-    /// bootstrap can hash it into migrated users' passwords; nulled once consumed.
-    /// </summary>
-    public string? LegacyApiKey { get; set; }
-
-    public DateTimeOffset CreatedAt { get; set; }
-    public DateTimeOffset UpdatedAt { get; set; }
-}
-
 public sealed class UserRow {
     public Guid Id { get; set; }
     public string Username { get; set; } = string.Empty;
@@ -64,7 +50,6 @@ public sealed class UserRow {
 
     public DateTimeOffset? PasswordUpdatedAt { get; set; }
     public UserRole Role { get; set; } = UserRole.Member;
-    public bool AllowSfw { get; set; } = true;
     public bool AllowNsfw { get; set; }
     public bool CanCreateLibraries { get; set; }
     public bool Enabled { get; set; } = true;

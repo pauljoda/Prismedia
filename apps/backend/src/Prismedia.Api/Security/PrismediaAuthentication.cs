@@ -1,8 +1,7 @@
 using System.Text;
-using Prismedia.Api.Jellyfin;
 using Prismedia.Application.Security;
-using Prismedia.Contracts.Jellyfin;
 using Prismedia.Contracts.Opds;
+using Prismedia.Contracts.Security;
 using Prismedia.Contracts.System;
 
 namespace Prismedia.Api.Security;
@@ -23,9 +22,6 @@ internal sealed record PrismediaAuthContext(
 internal static class PrismediaAuthentication {
     /// <summary>HttpOnly cookie carrying the web portal's session token.</summary>
     internal const string SessionCookieName = "prismedia-session";
-
-    /// <summary>Pre-multi-user api-key cookie; expired once at login for cleanup.</summary>
-    internal const string LegacyApiKeyCookieName = "prismedia-api-key";
 
     private const string AuthContextKey = "PrismediaAuth";
     private const string SecFetchSiteHeader = "Sec-Fetch-Site";
@@ -104,22 +100,6 @@ internal static class PrismediaAuthentication {
     internal static void ExpireSessionCookie(this HttpContext context) =>
         context.Response.Cookies.Delete(SessionCookieName, new CookieOptions { Path = "/" });
 
-    /// <summary>Expires the obsolete pre-multi-user api-key cookie.</summary>
-    internal static void ExpireLegacyApiKeyCookie(this HttpContext context) {
-        if (context.Request.Cookies.ContainsKey(LegacyApiKeyCookieName)) {
-            context.Response.Cookies.Delete(LegacyApiKeyCookieName, new CookieOptions { Path = "/" });
-        }
-    }
-
-    internal static JellyfinClientIdentity GetJellyfinClientIdentity(this HttpRequest request) {
-        var values = ParseJellyfinHeaderValues(request);
-        return new JellyfinClientIdentity(
-            values.GetValueOrDefault(JellyfinProtocol.AuthFields.Client),
-            values.GetValueOrDefault(JellyfinProtocol.AuthFields.Device),
-            values.GetValueOrDefault(JellyfinProtocol.AuthFields.DeviceId),
-            values.GetValueOrDefault(JellyfinProtocol.AuthFields.Version));
-    }
-
     internal static string BucketFor(HttpContext context, string? extra = null) {
         var remote = context.Connection.RemoteIpAddress?.ToString() ?? "unknown";
         return string.IsNullOrWhiteSpace(extra) ? remote : $"{remote}:{extra.Trim().ToLowerInvariant()}";
@@ -155,11 +135,7 @@ internal static class PrismediaAuthentication {
             return true;
         }
 
-        if (!IsJellyfinRequest(path)) {
-            return false;
-        }
-
-        return !IsPublicJellyfinRoute(request);
+        return false;
     }
 
     private static bool IsPublicAuthRoute(HttpRequest request) {
@@ -171,47 +147,11 @@ internal static class PrismediaAuthentication {
                  path.Equals("/api/auth/login", StringComparison.OrdinalIgnoreCase)));
     }
 
-    private static bool IsJellyfinRequest(PathString requestPath) =>
-        JellyfinRoutes.IsJellyfinRequest(requestPath.Value ?? string.Empty);
-
     private static bool IsOpdsRequest(PathString requestPath) =>
         requestPath.StartsWithSegments(OpdsProtocol.Prefix);
 
-    private static bool IsPublicJellyfinRoute(HttpRequest request) {
-        var path = request.Path.Value ?? string.Empty;
-        // Image endpoints are anonymous in real Jellyfin — clients (e.g. Manet) request artwork
-        // without a token, so requiring auth here returns 401 and the client shows no covers.
-        if (HttpMethods.IsGet(request.Method) &&
-            path.StartsWith("/Items/", StringComparison.OrdinalIgnoreCase) &&
-            path.Contains("/Images", StringComparison.OrdinalIgnoreCase)) {
-            return true;
-        }
-
-        return (HttpMethods.IsGet(request.Method) && path.Equals(JellyfinRoutes.SystemInfoPublic, StringComparison.OrdinalIgnoreCase)) ||
-            ((HttpMethods.IsGet(request.Method) || HttpMethods.IsPost(request.Method)) &&
-                path.Equals(JellyfinRoutes.SystemPing, StringComparison.OrdinalIgnoreCase)) ||
-            (HttpMethods.IsGet(request.Method) && path.Equals(JellyfinRoutes.BrandingConfiguration, StringComparison.OrdinalIgnoreCase)) ||
-            (HttpMethods.IsGet(request.Method) && (path.Equals(JellyfinRoutes.BrandingCss, StringComparison.OrdinalIgnoreCase) ||
-                path.Equals(JellyfinRoutes.BrandingCssFile, StringComparison.OrdinalIgnoreCase))) ||
-            (HttpMethods.IsGet(request.Method) && path.Equals(JellyfinRoutes.BrandingSplashscreen, StringComparison.OrdinalIgnoreCase)) ||
-            (HttpMethods.IsGet(request.Method) && path.Equals(JellyfinRoutes.QuickConnectEnabled, StringComparison.OrdinalIgnoreCase)) ||
-            (HttpMethods.IsPost(request.Method) && path.Equals(JellyfinRoutes.QuickConnectInitiate, StringComparison.OrdinalIgnoreCase)) ||
-            (HttpMethods.IsGet(request.Method) && path.Equals(JellyfinRoutes.QuickConnectConnect, StringComparison.OrdinalIgnoreCase)) ||
-            (HttpMethods.IsGet(request.Method) && path.Equals(JellyfinRoutes.UsersPublic, StringComparison.OrdinalIgnoreCase)) ||
-            (HttpMethods.IsPost(request.Method) && path.Equals(JellyfinRoutes.UsersAuthenticateByName, StringComparison.OrdinalIgnoreCase)) ||
-            (HttpMethods.IsPost(request.Method) && path.Equals(JellyfinRoutes.UsersAuthenticateWithQuickConnect, StringComparison.OrdinalIgnoreCase)) ||
-            (HttpMethods.IsPost(request.Method) &&
-                path.StartsWith(JellyfinRoutes.UsersPrefix, StringComparison.OrdinalIgnoreCase) &&
-                path.EndsWith(JellyfinRoutes.AuthenticateSuffix, StringComparison.OrdinalIgnoreCase));
-    }
-
     private static (string? Token, bool FromCookie) ExtractToken(HttpRequest request) {
-        var headerToken =
-            TokenFromAuthorizationHeader(request.Headers.Authorization.FirstOrDefault()) ??
-            TokenFromAuthorizationHeader(request.Headers[JellyfinProtocol.Headers.EmbyAuthorization].FirstOrDefault()) ??
-            request.Headers[JellyfinProtocol.Headers.EmbyToken].FirstOrDefault() ??
-            request.Headers[JellyfinProtocol.Headers.MediaBrowserToken].FirstOrDefault() ??
-            request.Headers[JellyfinProtocol.Headers.PrismediaApiKey].FirstOrDefault();
+        var headerToken = TokenFromAuthorizationHeader(request.Headers.Authorization.FirstOrDefault());
         if (!string.IsNullOrWhiteSpace(headerToken)) {
             return (headerToken, false);
         }
@@ -226,9 +166,7 @@ internal static class PrismediaAuthentication {
             return (cookieToken, true);
         }
 
-        var queryToken =
-            request.Query[JellyfinProtocol.QueryKeys.ApiKey].FirstOrDefault() ??
-            request.Query[JellyfinProtocol.QueryKeys.ApiKeySnake].FirstOrDefault();
+        var queryToken = request.Query[ApiAuthenticationProtocol.AccessTokenQuery].FirstOrDefault();
         return (queryToken, false);
     }
 
@@ -237,12 +175,10 @@ internal static class PrismediaAuthentication {
             return null;
         }
 
-        if (header.StartsWith(JellyfinProtocol.Schemes.Bearer, StringComparison.OrdinalIgnoreCase)) {
-            return header[JellyfinProtocol.Schemes.Bearer.Length..].Trim();
-        }
-
-        var values = ParseJellyfinHeaderValues(header);
-        return values.GetValueOrDefault(JellyfinProtocol.AuthFields.Token);
+        var prefix = ApiAuthenticationProtocol.BearerScheme + " ";
+        return header.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)
+            ? header[prefix.Length..].Trim()
+            : null;
     }
 
     private static bool TryExtractBasicCredentials(
@@ -279,42 +215,6 @@ internal static class PrismediaAuthentication {
         } catch (FormatException) {
             return false;
         }
-    }
-
-    private static IReadOnlyDictionary<string, string> ParseJellyfinHeaderValues(HttpRequest request) {
-        var header = request.Headers.Authorization.FirstOrDefault();
-        if (string.IsNullOrWhiteSpace(header)) {
-            header = request.Headers[JellyfinProtocol.Headers.EmbyAuthorization].FirstOrDefault();
-        }
-
-        return ParseJellyfinHeaderValues(header);
-    }
-
-    private static IReadOnlyDictionary<string, string> ParseJellyfinHeaderValues(string? header) {
-        var values = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        if (string.IsNullOrWhiteSpace(header)) {
-            return values;
-        }
-
-        var text = header.Trim();
-        if (text.StartsWith(JellyfinProtocol.Schemes.MediaBrowser, StringComparison.OrdinalIgnoreCase)) {
-            text = text[JellyfinProtocol.Schemes.MediaBrowser.Length..];
-        }
-
-        foreach (var part in text.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)) {
-            var index = part.IndexOf('=');
-            if (index <= 0) {
-                continue;
-            }
-
-            var key = part[..index].Trim();
-            var value = part[(index + 1)..].Trim().Trim('"');
-            if (key.Length > 0) {
-                values[key] = value;
-            }
-        }
-
-        return values;
     }
 
     private static async Task WriteUnauthorizedAsync(HttpContext context) {

@@ -13,8 +13,6 @@ export interface UserUpdateRequest {
   displayName?: string | null;
   role?: UserUpdateRequestRole;
   /** @nullable */
-  allowSfw?: boolean | null;
-  /** @nullable */
   allowNsfw?: boolean | null;
   /** @nullable */
   canCreateLibraries?: boolean | null;

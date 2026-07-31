@@ -5,11 +5,8 @@ namespace Prismedia.Application.Security;
 /// <summary>A user together with its stored password hash, for credential verification only.</summary>
 public sealed record UserWithPasswordHash(User User, string? PasswordHash);
 
-/// <summary>Infrastructure persistence port for users, sessions, and app security state.</summary>
+/// <summary>Infrastructure persistence port for users and sessions.</summary>
 public interface ISecurityPersistence {
-    /// <summary>Gets the singleton app security state (server identity), creating it when absent.</summary>
-    Task<AppSecurityState> EnsureAppSecurityAsync(CancellationToken cancellationToken);
-
     /// <summary>Lists user accounts ordered by username.</summary>
     Task<IReadOnlyList<User>> ListUsersAsync(bool includeDisabled, CancellationToken cancellationToken);
 
@@ -37,7 +34,6 @@ public interface ISecurityPersistence {
         string displayName,
         string? passwordHash,
         UserRole role,
-        bool allowSfw,
         bool allowNsfw,
         bool canCreateLibraries,
         bool enabled,
@@ -49,7 +45,6 @@ public interface ISecurityPersistence {
         string? username,
         string? displayName,
         UserRole? role,
-        bool? allowSfw,
         bool? allowNsfw,
         bool? canCreateLibraries,
         bool? enabled,
@@ -65,7 +60,7 @@ public interface ISecurityPersistence {
     Task<UserSession> CreateSessionAsync(
         Guid userId,
         string tokenHash,
-        JellyfinClientIdentity client,
+        ClientIdentity client,
         CancellationToken cancellationToken);
 
     /// <summary>

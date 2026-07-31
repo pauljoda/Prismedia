@@ -6,18 +6,18 @@
   import { fetchUsers } from "$lib/api/users";
   import AuthShell from "$lib/components/auth/AuthShell.svelte";
   import SetupAdminStep from "$lib/components/auth/setup/SetupAdminStep.svelte";
-  import SetupMigratedStep from "$lib/components/auth/setup/SetupMigratedStep.svelte";
+  import SetupExistingAccountsStep from "$lib/components/auth/setup/SetupExistingAccountsStep.svelte";
 
-  type Step = "welcome" | "admin" | "migrated" | "done";
+  type Step = "welcome" | "admin" | "existing-accounts" | "done";
 
   let step = $state<Step>("welcome");
   let hasExistingAccounts = $state(false);
-  let migratedUsers = $state<AuthUser[]>([]);
+  let existingUsers = $state<AuthUser[]>([]);
 
   // The wizard advances locally after the admin is created: the needs-setup flip must
   // never eject the user mid-flow, so no navigation happens until "Enter Prismedia".
   const stepNumber = $derived(
-    step === "welcome" ? 1 : step === "admin" ? 2 : step === "migrated" ? 3 : hasExistingAccounts ? 4 : 3,
+    step === "welcome" ? 1 : step === "admin" ? 2 : step === "existing-accounts" ? 3 : hasExistingAccounts ? 4 : 3,
   );
   const stepCount = $derived(hasExistingAccounts ? 4 : 3);
 
@@ -34,9 +34,9 @@
     }
 
     try {
-      // Signed in as the new admin now: list migrated member accounts for review.
-      migratedUsers = (await fetchUsers()).filter((user) => user.role !== USER_ROLE.admin);
-      step = migratedUsers.length > 0 ? "migrated" : "done";
+      // Signed in as the new admin now: list pre-existing member accounts for review.
+      existingUsers = (await fetchUsers()).filter((user) => user.role !== USER_ROLE.admin);
+      step = existingUsers.length > 0 ? "existing-accounts" : "done";
     } catch {
       step = "done";
     }
@@ -45,7 +45,7 @@
   const subtitles: Record<Step, string> = {
     welcome: "A private home for everything you keep.",
     admin: "This account manages users, libraries, and the server.",
-    migrated: "Accounts carried over from the previous setup.",
+    "existing-accounts": "Accounts already stored in this Prismedia database.",
     done: "",
   };
 </script>
@@ -59,11 +59,11 @@
     ? "Welcome to Prismedia"
     : step === "admin"
       ? "Create the administrator account"
-      : step === "migrated"
-        ? "Review migrated accounts"
+      : step === "existing-accounts"
+        ? "Review existing accounts"
         : "The stage is set"}
   subtitle={subtitles[step]}
-  wide={step === "migrated"}
+  wide={step === "existing-accounts"}
 >
   <p class="mb-6 text-center font-mono text-[0.65rem] tracking-[0.35em] text-text-disabled">
     {String(stepNumber).padStart(2, "0")} / {String(stepCount).padStart(2, "0")}
@@ -81,8 +81,8 @@
     </div>
   {:else if step === "admin"}
     <SetupAdminStep {hasExistingAccounts} onComplete={() => void onAdminCreated()} />
-  {:else if step === "migrated"}
-    <SetupMigratedStep users={migratedUsers} onContinue={() => (step = "done")} />
+  {:else if step === "existing-accounts"}
+    <SetupExistingAccountsStep users={existingUsers} onContinue={() => (step = "done")} />
   {:else}
     <div class="flex flex-col gap-6 text-center">
       <p class="text-sm leading-relaxed text-text-secondary">

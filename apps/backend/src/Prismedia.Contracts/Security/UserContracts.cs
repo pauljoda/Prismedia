@@ -11,7 +11,6 @@ public sealed record UserCreateRequest(
     string Password,
     string? DisplayName = null,
     UserRole Role = UserRole.Member,
-    bool AllowSfw = true,
     bool AllowNsfw = false,
     bool CanCreateLibraries = false,
     bool Enabled = true);
@@ -21,7 +20,6 @@ public sealed record UserUpdateRequest(
     string? Username = null,
     string? DisplayName = null,
     UserRole? Role = null,
-    bool? AllowSfw = null,
     bool? AllowNsfw = null,
     bool? CanCreateLibraries = null,
     bool? Enabled = null);

@@ -12,7 +12,6 @@ using Prismedia.Application.Organization;
 using Prismedia.Application.Opds;
 using Prismedia.Application.Settings;
 using Prismedia.Application.Health;
-using Prismedia.Application.Jellyfin;
 using Prismedia.Application.Audio;
 using Prismedia.Application.Backups;
 using Prismedia.Application.Plugins;
@@ -46,7 +45,6 @@ using Prismedia.Infrastructure.Settings;
 using Prismedia.Infrastructure.Security;
 using Prismedia.Infrastructure.StashCompat;
 using Prismedia.Infrastructure.Health;
-using Prismedia.Infrastructure.Jellyfin;
 using Prismedia.Infrastructure.Videos;
 using Prismedia.Infrastructure.Subtitles;
 
@@ -305,7 +303,7 @@ public static class DependencyInjection {
         services.AddSingleton<ITranscodeSessionService, TranscodeSessionService>();
         services.AddSingleton<ITranscodeCacheService, TranscodeCacheService>();
         services.AddScoped<IHlsAssetService, HlsAssetService>();
-        services.AddScoped<IPlaybackInfoService, PlaybackInfoService>();
+        services.AddScoped<IVideoPlaybackPlanService, VideoPlaybackPlanService>();
         services.AddScoped<IPlaybackSessionService, PlaybackSessionService>();
         services.AddScoped<IPlaybackEventStore, EfPlaybackEventStore>();
         services.AddScoped<IEntityActivityStore, EfEntityActivityStore>();
@@ -373,8 +371,6 @@ public static class DependencyInjection {
         services.AddScoped<IBrowserSessionPersistence, EfBrowserSessionPersistence>();
         services.AddScoped<ISecurityPersistence, EfSecurityPersistence>();
         services.AddSingleton<IPasswordHasher, IdentityPasswordHasher>();
-        services.AddScoped<IUserEngagementCloner, EfUserEngagementCloner>();
-        services.AddScoped<IJellyfinImageFileService, JellyfinImageFileService>();
     }
 
     private static void RegisterRequests(IServiceCollection services) {

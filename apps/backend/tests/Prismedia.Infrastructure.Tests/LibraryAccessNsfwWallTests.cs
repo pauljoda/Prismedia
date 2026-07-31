@@ -83,7 +83,7 @@ public sealed class LibraryAccessNsfwWallTests {
         var now = DateTimeOffset.UtcNow;
         return new UserRow {
             Id = id, Username = username, NormalizedUsername = username, DisplayName = username,
-            Role = UserRole.Member, AllowSfw = true, AllowNsfw = allowNsfw, Enabled = true,
+            Role = UserRole.Member, AllowNsfw = allowNsfw, Enabled = true,
             CreatedAt = now, UpdatedAt = now
         };
     }

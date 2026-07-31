@@ -12,7 +12,6 @@ export interface UserCreateRequest {
   /** @nullable */
   displayName?: string | null;
   role?: UserCreateRequestRole;
-  allowSfw?: boolean;
   allowNsfw?: boolean;
   canCreateLibraries?: boolean;
   enabled?: boolean;

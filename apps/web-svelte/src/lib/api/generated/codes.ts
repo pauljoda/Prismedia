@@ -963,6 +963,15 @@ export const USER_ROLE = {
 
 export type UserRoleCode = (typeof USER_ROLE)[keyof typeof USER_ROLE];
 
+// source: enum VideoPlaybackMethod
+export const VIDEO_PLAYBACK_METHOD = {
+  direct: "direct",
+  remux: "remux",
+  transcode: "transcode",
+} as const;
+
+export type VideoPlaybackMethodCode = (typeof VIDEO_PLAYBACK_METHOD)[keyof typeof VIDEO_PLAYBACK_METHOD];
+
 // source: enum VideoQuality
 export const VIDEO_QUALITY = {
   unknown: "unknown",
@@ -1141,14 +1150,6 @@ export const PROBLEM_CODE = {
   invalidPlaybackEventKind: "invalid_playback_event_kind",
   invalidPlaybackStatisticsWindow: "invalid_playback_statistics_window",
   invalidUpload: "invalid_upload",
-  jellyfinAudioNotFound: "jellyfin_audio_not_found",
-  jellyfinAuthFailed: "jellyfin_auth_failed",
-  jellyfinImageNotFound: "jellyfin_image_not_found",
-  jellyfinItemFileNotFound: "jellyfin_item_file_not_found",
-  jellyfinItemNotFound: "jellyfin_item_not_found",
-  jellyfinQuickConnectDisabled: "jellyfin_quick_connect_disabled",
-  jellyfinQuickConnectNotFound: "jellyfin_quick_connect_not_found",
-  jellyfinUserNotFound: "jellyfin_user_not_found",
   lastAdminRequired: "last_admin_required",
   libraryRootPathConflict: "library_root_path_conflict",
   notFound: "not_found",

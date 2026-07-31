@@ -2,20 +2,12 @@ using Prismedia.Domain.Entities;
 
 namespace Prismedia.Application.Security;
 
-/// <summary>Singleton app security state persisted by infrastructure (server identity).</summary>
-public sealed record AppSecurityState(
-    int Id,
-    Guid ServerId,
-    DateTimeOffset CreatedAt,
-    DateTimeOffset UpdatedAt);
-
 /// <summary>Application model for a Prismedia user account.</summary>
 public sealed record User(
     Guid Id,
     string Username,
     string DisplayName,
     UserRole Role,
-    bool AllowSfw,
     bool AllowNsfw,
     bool CanCreateLibraries,
     bool Enabled,
@@ -24,7 +16,7 @@ public sealed record User(
     DateTimeOffset CreatedAt,
     DateTimeOffset UpdatedAt);
 
-/// <summary>Application model for one authenticated user session (web, native, Jellyfin, or OPDS).</summary>
+/// <summary>Application model for one authenticated user session (web, native, or OPDS).</summary>
 public sealed record UserSession(
     Guid Id,
     Guid UserId,
@@ -44,14 +36,14 @@ public sealed record UserSession(
 /// </summary>
 public sealed record UserSessionResolution(UserSession Session, User User, bool Touched);
 
-/// <summary>Device/client metadata supplied during login (Jellyfin wire concept, reused for web logins).</summary>
-public sealed record JellyfinClientIdentity(
+/// <summary>Device/client metadata supplied during login.</summary>
+public sealed record ClientIdentity(
     string? Client,
     string? DeviceName,
     string? DeviceId,
     string? ApplicationVersion);
 
-/// <summary>Result for username/password authentication across web, Jellyfin, and OPDS.</summary>
+/// <summary>Result for username/password authentication across web, native, and OPDS clients.</summary>
 public sealed record UserAuthenticationResult(
     bool Succeeded,
     bool IsThrottled,

@@ -33,9 +33,6 @@ public interface ICurrentUserContext {
     /// <summary>True when the authenticated user is an admin.</summary>
     bool IsAdmin { get; }
 
-    /// <summary>Whether the user may see safe-for-work content.</summary>
-    bool AllowSfw { get; }
-
     /// <summary>Server-enforced NSFW ceiling: false means NSFW content is never visible.</summary>
     bool AllowNsfw { get; }
 

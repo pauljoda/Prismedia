@@ -2,9 +2,18 @@ using Prismedia.Domain.Entities;
 
 namespace Prismedia.Contracts.Security;
 
+/// <summary>Stable wire vocabulary shared by Prismedia authentication clients.</summary>
+public static class ApiAuthenticationProtocol {
+    /// <summary>Authorization scheme used by API session tokens.</summary>
+    public const string BearerScheme = "Bearer";
+
+    /// <summary>Query key used by media renderers that cannot attach an Authorization header.</summary>
+    public const string AccessTokenQuery = "access_token";
+}
+
 /// <summary>Whether first-run setup (creating the initial admin) is still required.</summary>
 /// <param name="NeedsSetup">True while no enabled admin account exists.</param>
-/// <param name="HasUsers">True when accounts exist (migrated installs), so the wizard can offer promoting one.</param>
+/// <param name="HasUsers">True when accounts already exist, so setup can promote an existing account.</param>
 public sealed record SetupStatusResponse(bool NeedsSetup, bool HasUsers);
 
 /// <summary>Request creating the first admin account during setup.</summary>
@@ -51,7 +60,6 @@ public sealed record UserResponse(
     string Username,
     string DisplayName,
     UserRole Role,
-    bool AllowSfw,
     bool AllowNsfw,
     bool CanCreateLibraries,
     bool Enabled,

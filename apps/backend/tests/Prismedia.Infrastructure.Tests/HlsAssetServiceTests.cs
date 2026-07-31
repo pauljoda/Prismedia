@@ -3,7 +3,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.EntityFrameworkCore;
 using Prismedia.Application.Settings;
 using Prismedia.Application.Videos;
-using Prismedia.Contracts.Jellyfin;
+using Prismedia.Contracts.Playback;
 using Prismedia.Domain.Entities;
 using Prismedia.Infrastructure.Persistence;
 using Prismedia.Infrastructure.Persistence.Entities;
@@ -96,7 +96,7 @@ public sealed class HlsAssetServiceTests : IDisposable {
         // threshold-advance rule matters. ffmpeg advances its cut threshold by exactly one segment length
         // (6 -> 12 -> 18 -> 24) and cuts at the first keyframe at/after the current threshold; it does NOT
         // jump the threshold past the keyframe that triggered the cut. Verified empirically against
-        // jellyfin-ffmpeg: keyframes [0,19,20,25] over a 30s source produce FOUR segments [19,1,5,5].
+        // Keyframes [0,19,20,25] over a 30s source produce FOUR segments [19,1,5,5].
         // (Jumping the threshold past the cut would skip the keyframe at 20 and wrongly produce [19,6,5].)
         var keyframes = new List<double> { 0.0, 19.0, 20.0, 25.0 };
 
@@ -129,7 +129,7 @@ public sealed class HlsAssetServiceTests : IDisposable {
             audioStreamIndex: 2,
             copyAudio: true);
 
-        var query = $"{JellyfinProtocol.QueryKeys.AudioStreamIndex}=2&{JellyfinProtocol.QueryKeys.CopyAudio}=true";
+        var query = $"{VideoPlaybackProtocol.AudioStreamIndexQuery}=2&{VideoPlaybackProtocol.CopyAudioQuery}=true";
         Assert.Contains($"#EXT-X-MAP:URI=\"init.mp4?{query}\"", playlist);
         Assert.Contains($"#EXTINF:6.006000,\nseg_00000.m4s?{query}", playlist);
         Assert.Contains($"#EXTINF:4.200000,\nseg_00001.m4s?{query}", playlist);
@@ -144,7 +144,7 @@ public sealed class HlsAssetServiceTests : IDisposable {
             #EXTINF:6.006000,
             seg_00000.m4s
             #EXTINF:6.006000,
-            seg_00001.m4s?AudioStreamIndex=2
+            seg_00001.m4s?audioStreamIndex=2
             """;
 
         var playlist = HlsAssetService.RewriteRemuxPlaylistUris(
@@ -152,12 +152,12 @@ public sealed class HlsAssetServiceTests : IDisposable {
             audioStreamIndex: 2,
             copyAudio: true);
 
-        var query = $"{JellyfinProtocol.QueryKeys.AudioStreamIndex}=2&{JellyfinProtocol.QueryKeys.CopyAudio}=true";
+        var query = $"{VideoPlaybackProtocol.AudioStreamIndexQuery}=2&{VideoPlaybackProtocol.CopyAudioQuery}=true";
         Assert.Contains($"#EXT-X-MAP:URI=\"init.mp4?{query}\"", playlist);
         Assert.Contains($"#EXTINF:6.006000,\nseg_00000.m4s?{query}", playlist);
         Assert.Contains($"#EXTINF:6.006000,\nseg_00001.m4s?{query}", playlist);
-        Assert.DoesNotContain("AudioStreamIndex=2?AudioStreamIndex=2", playlist);
-        Assert.DoesNotContain("AudioStreamIndex=2&AudioStreamIndex=2", playlist);
+        Assert.DoesNotContain("audioStreamIndex=2?audioStreamIndex=2", playlist);
+        Assert.DoesNotContain("audioStreamIndex=2&audioStreamIndex=2", playlist);
     }
 
     [Fact]
@@ -332,11 +332,11 @@ public sealed class HlsAssetServiceTests : IDisposable {
         // Single-variant default (adaptive bitrate off): only the top, source-capped rung is advertised,
         // matching the reference media server's single-stream default so a client quality switch cannot
         // spawn a second concurrent transcode.
-        Assert.Contains("hls/40mbps/stream.m3u8", masterPlaylist);
+        Assert.Contains("v/40mbps/stream.m3u8", masterPlaylist);
         Assert.Contains("RESOLUTION=3840x1920", masterPlaylist);
-        Assert.DoesNotContain("hls/20mbps/stream.m3u8", masterPlaylist);
-        Assert.DoesNotContain("hls/8mbps/stream.m3u8", masterPlaylist);
-        Assert.DoesNotContain("hls/720kbps/stream.m3u8", masterPlaylist);
+        Assert.DoesNotContain("v/20mbps/stream.m3u8", masterPlaylist);
+        Assert.DoesNotContain("v/8mbps/stream.m3u8", masterPlaylist);
+        Assert.DoesNotContain("v/720kbps/stream.m3u8", masterPlaylist);
         Assert.NotNull(variant);
         var playlist = await File.ReadAllTextAsync(variant.Path);
         Assert.Contains("#EXT-X-PLAYLIST-TYPE:VOD", playlist);
@@ -347,7 +347,7 @@ public sealed class HlsAssetServiceTests : IDisposable {
     }
 
     [Fact]
-    public async Task VirtualMainPlaylistReturnsJellyfinVariantPlaylist() {
+    public async Task VirtualMainPlaylistReturnsSingleVariantPlaylist() {
         var videoId = Guid.Parse("33333333-3333-3333-3333-333333333335");
         var sourcePath = Path.Combine(_cacheRoot, "source.mkv");
         await File.WriteAllTextAsync(sourcePath, "source");
@@ -367,12 +367,16 @@ public sealed class HlsAssetServiceTests : IDisposable {
             process,
             NullLogger<HlsAssetService>.Instance);
 
-        var main = await service.GetAssetAsync(videoId, JellyfinProtocol.Hls.MainPlaylist, audioStreamIndex: 2, CancellationToken.None);
+        var main = await service.GetAssetAsync(
+            videoId,
+            VideoPlaybackProtocol.Hls.MainPlaylist,
+            audioStreamIndex: 2,
+            CancellationToken.None);
 
         Assert.NotNull(main);
         var playlist = await File.ReadAllTextAsync(main.Path);
         Assert.Contains("#EXT-X-PLAYLIST-TYPE:VOD", playlist);
-        Assert.Contains("seg_00000.ts?AudioStreamIndex=2", playlist);
+        Assert.Contains("seg_00000.ts?audioStreamIndex=2", playlist);
         Assert.DoesNotContain("#EXT-X-STREAM-INF", playlist);
         Assert.False(process.WasCalled);
     }
@@ -402,10 +406,10 @@ public sealed class HlsAssetServiceTests : IDisposable {
         Assert.NotNull(master);
         var masterPlaylist = await File.ReadAllTextAsync(master.Path);
         // With adaptive bitrate enabled the full ladder is advertised so the player can switch quality.
-        Assert.Contains("hls/40mbps/stream.m3u8", masterPlaylist);
-        Assert.Contains("hls/20mbps/stream.m3u8", masterPlaylist);
-        Assert.Contains("hls/8mbps/stream.m3u8", masterPlaylist);
-        Assert.Contains("hls/720kbps/stream.m3u8", masterPlaylist);
+        Assert.Contains("v/40mbps/stream.m3u8", masterPlaylist);
+        Assert.Contains("v/20mbps/stream.m3u8", masterPlaylist);
+        Assert.Contains("v/8mbps/stream.m3u8", masterPlaylist);
+        Assert.Contains("v/720kbps/stream.m3u8", masterPlaylist);
         Assert.Contains("RESOLUTION=2880x1440", masterPlaylist);
         Assert.Contains("RESOLUTION=960x480", masterPlaylist);
     }
@@ -454,7 +458,9 @@ public sealed class HlsAssetServiceTests : IDisposable {
 
         Assert.NotNull(master);
         var content = await File.ReadAllTextAsync(master.Path);
-        Assert.Contains("#EXT-X-IMAGE-STREAM-INF:BANDWIDTH=1234,RESOLUTION=280x158,CODECS=\"jpeg\",URI=\"Trickplay/280/tiles.m3u8\"", content);
+        Assert.Contains(
+            $"#EXT-X-IMAGE-STREAM-INF:BANDWIDTH=1234,RESOLUTION=280x158,CODECS=\"jpeg\",URI=\"{VideoPlaybackProtocol.TrickplayPlaylistPath(videoId, 280)}\"",
+            content);
     }
 
     [Fact]

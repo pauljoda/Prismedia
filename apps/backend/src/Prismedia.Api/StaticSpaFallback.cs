@@ -1,12 +1,10 @@
-using Prismedia.Api.Jellyfin;
 using Prismedia.Contracts.Media;
 using Prismedia.Contracts.Opds;
 
 namespace Prismedia.Api;
 
 /// <summary>
-/// Serves the built Svelte shell for browser navigations before endpoint routing can match
-/// case-insensitive API compatibility routes that share names with lowercase SPA pages.
+/// Serves the built Svelte shell for browser navigations that are not backend routes or files.
 /// </summary>
 internal static class StaticSpaFallback {
     internal static IApplicationBuilder UseStaticSpaFallback(this IApplicationBuilder app, string staticIndexPath) =>
@@ -36,8 +34,7 @@ internal static class StaticSpaFallback {
         if (path.StartsWith("/api", StringComparison.OrdinalIgnoreCase) ||
             path.StartsWith("/assets", StringComparison.OrdinalIgnoreCase) ||
             path.StartsWith("/openapi", StringComparison.OrdinalIgnoreCase) ||
-            request.Path.StartsWithSegments(OpdsProtocol.Prefix) ||
-            JellyfinRoutes.IsJellyfinRequest(path)) {
+            request.Path.StartsWithSegments(OpdsProtocol.Prefix)) {
             return false;
         }
 

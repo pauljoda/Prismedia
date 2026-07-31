@@ -2,9 +2,9 @@ using System.Xml.Linq;
 using Microsoft.AspNetCore.Http.Extensions;
 using Prismedia.Api.Security;
 using Prismedia.Application.Opds;
-using Prismedia.Contracts.Jellyfin;
 using Prismedia.Contracts.Media;
 using Prismedia.Contracts.Opds;
+using Prismedia.Contracts.Security;
 using Prismedia.Contracts.System;
 
 namespace Prismedia.Api.Endpoints;
@@ -794,10 +794,8 @@ public static class OpdsEndpoints {
             pairs.AddRange(query.Where(pair => !string.IsNullOrWhiteSpace(pair.Value)));
         }
 
-        if (request.Query[JellyfinProtocol.QueryKeys.ApiKeySnake].FirstOrDefault() is { Length: > 0 } snakeKey) {
-            pairs.Add(new KeyValuePair<string, string?>(JellyfinProtocol.QueryKeys.ApiKeySnake, snakeKey));
-        } else if (request.Query[JellyfinProtocol.QueryKeys.ApiKey].FirstOrDefault() is { Length: > 0 } apiKey) {
-            pairs.Add(new KeyValuePair<string, string?>(JellyfinProtocol.QueryKeys.ApiKey, apiKey));
+        if (request.Query[ApiAuthenticationProtocol.AccessTokenQuery].FirstOrDefault() is { Length: > 0 } accessToken) {
+            pairs.Add(new KeyValuePair<string, string?>(ApiAuthenticationProtocol.AccessTokenQuery, accessToken));
         }
 
         return UriHelper.BuildAbsolute(

@@ -159,7 +159,7 @@
         <div>
           <h2 class="text-kicker text-text-primary">Password</h2>
           <p class="text-[0.68rem] text-text-muted">
-            Changing your password signs out every other device, including Jellyfin apps.
+            Changing your password signs out every other Prismedia session.
           </p>
         </div>
       </div>
@@ -257,7 +257,7 @@
         <div>
           <h2 class="text-kicker text-text-primary">Devices</h2>
           <p class="text-[0.68rem] text-text-muted">
-            Everywhere this account is signed in — browsers, Jellyfin apps, and readers.
+            Everywhere this account is signed in — browsers, native apps, and readers.
           </p>
         </div>
       </div>

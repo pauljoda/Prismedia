@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import type { EntityCapability } from "$lib/api/generated/model";
+import type {
+  EntityCapability,
+  VideoPlaybackPlanResponse,
+  VideoPlaybackSource,
+  VideoPlaybackStream,
+} from "$lib/api/generated/model";
+import { STREAM_KIND, VIDEO_PLAYBACK_METHOD } from "$lib/api/generated/codes";
 import { extractVideoPlayerProps, getPlaybackState } from "./video-capabilities";
 
 describe("getPlaybackState", () => {
@@ -149,7 +155,7 @@ describe("extractVideoPlayerProps", () => {
         items: [
           {
             kind: "trickplay",
-            path: "/Videos/video-1/Trickplay/280/tiles.m3u8",
+            path: "/api/playback/videos/video-1/trickplay/280/tiles.m3u8",
             mimeType: "application/vnd.apple.mpegurl",
           },
         ],
@@ -157,7 +163,7 @@ describe("extractVideoPlayerProps", () => {
     ];
 
     expect(extractVideoPlayerProps("video-1", capabilities).trickplayPlaylist).toBe(
-      "/Videos/video-1/Trickplay/280/tiles.m3u8",
+      "/api/playback/videos/video-1/trickplay/280/tiles.m3u8",
     );
   });
 
@@ -190,55 +196,14 @@ describe("extractVideoPlayerProps", () => {
     ]);
   });
 
-  it("maps Jellyfin audio streams into player audio options", () => {
-    const props = extractVideoPlayerProps("video-1", [], {
-      PlaySessionId: "session-1",
-      ErrorCode: null,
-      MediaSources: [
-        {
-          Id: "source-1",
-          Path: "/media/movie.mkv",
-          Protocol: "File",
-          Container: "mkv",
-          Size: null,
-          Name: "movie.mkv",
-          RunTimeTicks: 600_000_000,
-          SupportsDirectPlay: false,
-          SupportsDirectStream: false,
-          SupportsTranscoding: true,
-          TranscodingUrl: "/Videos/video-1/master.m3u8?AudioStreamIndex=2",
-          TranscodingSubProtocol: "hls",
-          TranscodingContainer: "ts",
-          MediaStreams: [
-            {
-              Index: 0,
-              Type: "Video",
-              Codec: "h264",
-              DisplayTitle: "Video",
-              IsDefault: true,
-            },
-            {
-              Index: 1,
-              Type: "Audio",
-              Codec: "aac",
-              Language: "spa",
-              DisplayTitle: "Spanish",
-              Channels: 2,
-              IsDefault: false,
-            },
-            {
-              Index: 2,
-              Type: "Audio",
-              Codec: "aac",
-              Language: "eng",
-              DisplayTitle: "English",
-              Channels: 2,
-              IsDefault: true,
-            },
-          ],
-        },
+  it("maps native playback streams into player audio options", () => {
+    const props = extractVideoPlayerProps("video-1", [], playbackPlan({
+      streams: [
+        playbackStream({ index: 0, type: STREAM_KIND.video, codec: "h264", displayTitle: "Video", isDefault: true }),
+        playbackStream({ index: 1, type: STREAM_KIND.audio, codec: "aac", language: "spa", displayTitle: "Spanish", channels: 2 }),
+        playbackStream({ index: 2, type: STREAM_KIND.audio, codec: "aac", language: "eng", displayTitle: "English", channels: 2, isDefault: true }),
       ],
-    }, 2);
+    }), 2);
 
     expect(props.audioTracks).toEqual([
       expect.objectContaining({
@@ -258,91 +223,32 @@ describe("extractVideoPlayerProps", () => {
   });
 
   it("carries the selected audio stream into fallback HLS URLs for direct-play sources", () => {
-    const props = extractVideoPlayerProps("video-1", [], {
-      PlaySessionId: "session-1",
-      ErrorCode: null,
-      MediaSources: [
-        {
-          Id: "source-1",
-          Path: "/media/movie.mp4",
-          Protocol: "File",
-          Container: "mp4",
-          Size: null,
-          Name: "movie.mp4",
-          RunTimeTicks: 600_000_000,
-          SupportsDirectPlay: true,
-          SupportsDirectStream: true,
-          SupportsTranscoding: true,
-          TranscodingUrl: null,
-          TranscodingSubProtocol: null,
-          TranscodingContainer: null,
-          MediaStreams: [
-            {
-              Index: 0,
-              Type: "Video",
-              Codec: "h264",
-              DisplayTitle: "Video",
-              IsDefault: true,
-            },
-            {
-              Index: 1,
-              Type: "Audio",
-              Codec: "aac",
-              Language: "ita",
-              DisplayTitle: "Italian",
-              Channels: 2,
-              IsDefault: true,
-            },
-            {
-              Index: 2,
-              Type: "Audio",
-              Codec: "aac",
-              Language: "eng",
-              DisplayTitle: "English",
-              Channels: 2,
-              IsDefault: false,
-            },
-          ],
-        },
+    const props = extractVideoPlayerProps("video-1", [], playbackPlan({
+      container: "mp4",
+      method: VIDEO_PLAYBACK_METHOD.direct,
+      url: "/api/playback/videos/video-1/stream",
+      transcoding: null,
+      streams: [
+        playbackStream({ index: 0, type: STREAM_KIND.video, codec: "h264", displayTitle: "Video", isDefault: true }),
+        playbackStream({ index: 1, type: STREAM_KIND.audio, codec: "aac", language: "ita", displayTitle: "Italian", channels: 2, isDefault: true }),
+        playbackStream({ index: 2, type: STREAM_KIND.audio, codec: "aac", language: "eng", displayTitle: "English", channels: 2 }),
       ],
-    }, 2);
+    }), 2);
 
-    expect(props.src).toBe("/Videos/video-1/master.m3u8?AudioStreamIndex=2");
+    expect(props.src).toBe("/api/playback/videos/video-1/hls/master.m3u8?audioStreamIndex=2");
+    expect(props.directSrc).toBe("/api/playback/videos/video-1/stream");
     expect(props.audioTracks.find((track) => track.streamIndex === 2)?.selected).toBe(true);
-    expect(props.qualityRungs[0]?.url).toContain("AudioStreamIndex=2");
+    expect(props.qualityRungs[0]?.url).toContain("audioStreamIndex=2");
   });
 
   it("does not synthesize HLS URLs when playback negotiation disables transcoding", () => {
-    const props = extractVideoPlayerProps("video-1", [], {
-      PlaySessionId: "session-1",
-      ErrorCode: null,
-      MediaSources: [
-        {
-          Id: "source-1",
-          Path: "/media/new-import.mkv",
-          Protocol: "File",
-          Container: "mkv",
-          Size: null,
-          Name: "new-import.mkv",
-          RunTimeTicks: null,
-          SupportsDirectPlay: false,
-          SupportsDirectStream: false,
-          SupportsTranscoding: false,
-          TranscodingUrl: null,
-          TranscodingSubProtocol: null,
-          TranscodingContainer: null,
-          MediaStreams: [
-            {
-              Index: 0,
-              Type: "Video",
-              Codec: "h264",
-              DisplayTitle: "Video",
-              IsDefault: true,
-            },
-          ],
-        },
+    const props = extractVideoPlayerProps("video-1", [], playbackPlan({
+      supportsTranscoding: false,
+      url: "",
+      streams: [
+        playbackStream({ index: 0, type: STREAM_KIND.video, codec: "h264", displayTitle: "Video", isDefault: true }),
       ],
-    });
+    }));
 
     expect(props.src).toBe("");
     expect(props.directSrc).toBe("");
@@ -374,42 +280,27 @@ describe("extractVideoPlayerProps", () => {
         container: "mp4",
         format: null,
       },
-    ], {
-      PlaySessionId: "session-1",
-      ErrorCode: null,
-      MediaSources: [
-        {
-          Id: "source-1",
-          Path: "/media/movie.mp4",
-          Protocol: "File",
-          Container: "mp4",
-          SupportsDirectPlay: false,
-          SupportsDirectStream: false,
-          SupportsTranscoding: true,
-          TranscodingUrl: "/Videos/video-1/master.m3u8",
-          TranscodingSubProtocol: "hls",
-          TranscodingContainer: "ts",
-          MediaStreams: [
-            {
-              Index: 0,
-              Type: "Video",
-              Codec: "hevc",
-              Width: 3840,
-              Height: 2160,
-              VideoRange: "HDR",
-              VideoRangeType: "HDR10",
-              ColorTransfer: "smpte2084",
-              ColorPrimaries: "bt2020",
-              ColorSpace: "bt2020nc",
-              IsDefault: true,
-            },
-          ],
-        },
+    ], playbackPlan({
+      container: "mp4",
+      streams: [
+        playbackStream({
+          index: 0,
+          type: STREAM_KIND.video,
+          codec: "hevc",
+          width: 3840,
+          height: 2160,
+          videoRange: "HDR",
+          videoRangeType: "HDR10",
+          colorTransfer: "smpte2084",
+          colorPrimaries: "bt2020",
+          colorSpace: "bt2020nc",
+          isDefault: true,
+        }),
       ],
-    });
+    }));
 
     expect(props.directSrc).toBe("");
-    expect(props.src).toBe("/Videos/video-1/master.m3u8");
+    expect(props.src).toBe("/api/playback/videos/video-1/hls/master.m3u8");
     expect(props.colorPipelineLabel).toBe("HDR10 -> SDR tone map H.264");
     expect(props.resolutionLabel).toBe("4K");
     expect(props.dynamicRangeLabel).toBe("HDR10");
@@ -418,7 +309,47 @@ describe("extractVideoPlayerProps", () => {
     expect(props.qualityRungs.length).toBeGreaterThan(0);
     expect(props.qualityRungs[0]).toMatchObject({
       name: "120mbps",
-      url: "/Videos/video-1/hls/120mbps/stream.m3u8",
+      url: "/api/playback/videos/video-1/hls/v/120mbps/stream.m3u8",
     });
   });
 });
+
+function playbackPlan(overrides: Partial<VideoPlaybackSource> = {}): VideoPlaybackPlanResponse {
+  return {
+    sessionId: "session-1",
+    source: {
+      id: "source-1",
+      container: "mkv",
+      durationSeconds: 60,
+      method: VIDEO_PLAYBACK_METHOD.transcode,
+      url: "/api/playback/videos/video-1/hls/master.m3u8",
+      supportsTranscoding: true,
+      streams: [],
+      transcoding: {
+        container: "ts",
+        videoCodec: "h264",
+        audioCodec: "aac",
+        isVideoDirect: false,
+        isAudioDirect: false,
+      },
+      ...overrides,
+    },
+  };
+}
+
+function playbackStream(overrides: Partial<VideoPlaybackStream>): VideoPlaybackStream {
+  return {
+    index: 0,
+    type: STREAM_KIND.video,
+    codec: null,
+    language: null,
+    displayTitle: null,
+    width: null,
+    height: null,
+    averageFrameRate: null,
+    bitRate: null,
+    sampleRate: null,
+    channels: null,
+    ...overrides,
+  };
+}

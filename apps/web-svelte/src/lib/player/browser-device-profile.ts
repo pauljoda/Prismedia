@@ -1,7 +1,11 @@
-import type { JellyfinDeviceProfile, JellyfinDirectPlayProfile } from "$lib/api/playback";
+import type {
+  VideoDirectPlayProfileRequest,
+  VideoPlaybackProfileRequest,
+} from "$lib/api/generated/model";
+import { STREAM_KIND } from "$lib/api/generated/codes";
 
 /**
- * Builds a Jellyfin-style device profile describing what this browser's `<video>` element can play
+ * Builds a native playback profile describing what this browser's `<video>` element can play
  * directly, so the server can decide DirectPlay vs. transcode for the actual client instead of
  * guessing from the file extension. Probing is done with `HTMLMediaElement.canPlayType`, which is
  * the only capability signal a browser exposes.
@@ -15,7 +19,7 @@ import type { JellyfinDeviceProfile, JellyfinDirectPlayProfile } from "$lib/api/
 type CanPlayType = (mime: string) => string;
 
 interface CodecProbe {
-  /** Server-facing codec token (Jellyfin convention). */
+  /** Server-facing codec token. */
   readonly codec: string;
   /** Candidate MIME strings; the codec counts as supported if any returns "probably"/"maybe". */
   readonly mimes: readonly string[];
@@ -70,39 +74,39 @@ function supportedCodecs(canPlayType: CanPlayType, probes: readonly CodecProbe[]
  * Builds a device profile from an explicit `canPlayType` probe. Exposed for testing; app code
  * should call {@link getBrowserDeviceProfile}.
  */
-export function buildBrowserDeviceProfile(canPlayType: CanPlayType): JellyfinDeviceProfile {
-  const directPlayProfiles: JellyfinDirectPlayProfile[] = [];
+export function buildBrowserDeviceProfile(canPlayType: CanPlayType): VideoPlaybackProfileRequest {
+  const directPlayProfiles: VideoDirectPlayProfileRequest[] = [];
 
   const mp4Video = supportedCodecs(canPlayType, Mp4VideoCodecs);
   if (mp4Video.length > 0) {
     directPlayProfiles.push({
-      Type: "Video",
-      Container: "mp4",
-      VideoCodec: mp4Video.join(","),
-      AudioCodec: supportedCodecs(canPlayType, Mp4AudioCodecs).join(","),
+      type: STREAM_KIND.video,
+      container: "mp4",
+      videoCodec: mp4Video.join(","),
+      audioCodec: supportedCodecs(canPlayType, Mp4AudioCodecs).join(","),
     });
   }
 
   const webmVideo = supportedCodecs(canPlayType, WebmVideoCodecs);
   if (webmVideo.length > 0) {
     directPlayProfiles.push({
-      Type: "Video",
-      Container: "webm",
-      VideoCodec: webmVideo.join(","),
-      AudioCodec: supportedCodecs(canPlayType, WebmAudioCodecs).join(","),
+      type: STREAM_KIND.video,
+      container: "webm",
+      videoCodec: webmVideo.join(","),
+      audioCodec: supportedCodecs(canPlayType, WebmAudioCodecs).join(","),
     });
   }
 
-  return { DirectPlayProfiles: directPlayProfiles };
+  return { maxStreamingBitrate: null, directPlayProfiles };
 }
 
-let cachedProfile: JellyfinDeviceProfile | null = null;
+let cachedProfile: VideoPlaybackProfileRequest | null = null;
 
 /**
  * Returns this browser's device profile, probing once and caching the result. Returns undefined
  * during SSR (no document), so callers can spread it into a request without sending an empty profile.
  */
-export function getBrowserDeviceProfile(): JellyfinDeviceProfile | undefined {
+export function getBrowserDeviceProfile(): VideoPlaybackProfileRequest | undefined {
   if (typeof document === "undefined") {
     return undefined;
   }

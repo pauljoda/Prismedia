@@ -324,8 +324,8 @@ describe("VideoPlayer", () => {
   it("uses adaptive playback instead of direct playback when backend audio tracks need selection", async () => {
     render(VideoPlayer, {
       props: {
-        src: "/Videos/video-1/master.m3u8?AudioStreamIndex=2",
-        directSrc: "/Videos/video-1/stream",
+        src: "/api/playback/videos/video-1/hls/master.m3u8?audioStreamIndex=2",
+        directSrc: "/api/playback/videos/video-1/stream",
         codec: "h264",
         defaultPlaybackMode: "direct",
         audioTrackOptions: [
@@ -520,7 +520,7 @@ describe("VideoPlayer", () => {
   it("shows a trickplay frame in the seekbar hover preview", async () => {
     vi.mocked(fetch).mockImplementation((input) => {
       const url = String(input);
-      if (url.includes("/Trickplay/320/tiles.m3u8")) {
+      if (url.includes("/trickplay/320/tiles.m3u8")) {
         return Promise.resolve(new Response(
           [
             "#EXTM3U",
@@ -545,7 +545,7 @@ describe("VideoPlayer", () => {
         src: "/api/videos/video-1/hls/master.m3u8",
         duration: 10,
         defaultPlaybackMode: "hls",
-        trickplayPlaylist: "/Videos/video-1/Trickplay/320/tiles.m3u8",
+        trickplayPlaylist: "/api/playback/videos/video-1/trickplay/320/tiles.m3u8",
       },
     });
 
@@ -566,13 +566,13 @@ describe("VideoPlayer", () => {
     });
 
     await waitFor(() => {
-      expect(fetch).toHaveBeenCalledWith("/Videos/video-1/Trickplay/320/tiles.m3u8");
+      expect(fetch).toHaveBeenCalledWith("/api/playback/videos/video-1/trickplay/320/tiles.m3u8");
     });
 
     await fireEvent.pointerMove(track, { clientX: 150 });
 
     const preview = await screen.findByTestId("timeline-trickplay-preview");
-    expect(preview.getAttribute("style")).toContain("/Videos/video-1/Trickplay/320/0.jpg");
+    expect(preview.getAttribute("style")).toContain("/api/playback/videos/video-1/trickplay/320/0.jpg");
   });
 
   it("waits for hls2 readiness before attaching the manifest to Vidstack", async () => {
@@ -632,7 +632,7 @@ describe("VideoPlayer", () => {
 
   // Phase 1 parity: when the server hands the browser a stream it cannot actually decode
   // (e.g. an optimistic HEVC/DOVI remux), a fatal media error must escalate to a re-negotiated
-  // transcode rather than dead-ending — mirroring Jellyfin's re-request-with-DirectPlay-off recovery.
+  // transcode rather than dead-ending after direct and adaptive playback fail.
   async function renderWithFatalErrorSource(
     onForceTranscode: ((atSeconds: number) => Promise<string | null>) | undefined,
   ) {

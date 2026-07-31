@@ -8,7 +8,7 @@ namespace Prismedia.Api.Endpoints;
 /// <summary>
 /// Session-based authentication for the web portal and native clients: first-run setup,
 /// login/logout, current-user info, and self-service password/profile/session management.
-/// The same session tokens authenticate Jellyfin and OPDS traffic.
+/// The same session tokens authenticate native and OPDS traffic.
 /// </summary>
 public static class AuthEndpoints {
     private const string WebClientName = "Prismedia Web";
@@ -208,7 +208,6 @@ public static class AuthEndpoints {
 
     private static IResult SignedInResult(HttpContext httpContext, UserAuthenticationResult result) {
         httpContext.AppendSessionCookie(result.AccessToken!);
-        httpContext.ExpireLegacyApiKeyCookie();
         return Results.Ok(new LoginResponse(result.AccessToken!, result.User!.ToResponse()));
     }
 
@@ -217,12 +216,12 @@ public static class AuthEndpoints {
             new ApiProblem(ApiProblemCodes.AuthRateLimited, "Too many failed authentication attempts."),
             statusCode: StatusCodes.Status429TooManyRequests);
 
-    private static JellyfinClientIdentity ClientIdentity(HttpContext httpContext, LoginRequest? request = null) {
-        var header = httpContext.Request.GetJellyfinClientIdentity();
-        return new JellyfinClientIdentity(
-            request?.Client ?? header.Client ?? WebClientName,
-            request?.DeviceName ?? header.DeviceName,
-            request?.DeviceId ?? header.DeviceId,
-            header.ApplicationVersion);
+    private static ClientIdentity ClientIdentity(HttpContext httpContext, LoginRequest? request = null) {
+        var userAgent = httpContext.Request.Headers.UserAgent.FirstOrDefault();
+        return new ClientIdentity(
+            request?.Client ?? WebClientName,
+            request?.DeviceName,
+            request?.DeviceId,
+            userAgent);
     }
 }

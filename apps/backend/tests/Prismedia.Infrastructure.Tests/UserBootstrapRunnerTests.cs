@@ -13,46 +13,6 @@ public sealed class UserBootstrapRunnerTests {
     private static readonly IdentityPasswordHasher Hasher = new();
 
     [Fact]
-    public async Task FreshInstallCreatesAppSecurityRow() {
-        await using var provider = BuildProvider(out var db);
-
-        await UserBootstrapRunner.RunUserBootstrapAsync(provider, Config());
-
-        var state = await db.AppSecurity.SingleAsync();
-        Assert.NotEqual(Guid.Empty, state.ServerId);
-        Assert.Null(state.LegacyApiKey);
-        Assert.Empty(await db.Users.ToArrayAsync());
-    }
-
-    [Fact]
-    public async Task LegacyApiKeyBecomesMigratedUsersPasswordExactlyOnce() {
-        await using var provider = BuildProvider(out var db);
-        var now = DateTimeOffset.UtcNow;
-        db.AppSecurity.Add(new AppSecurityRow {
-            Id = 1, ServerId = Guid.NewGuid(), LegacyApiKey = "fox-lima-alpha", CreatedAt = now, UpdatedAt = now
-        });
-        db.Users.Add(NewUser("migrated", passwordHash: null));
-        db.Users.Add(NewUser("already-set", passwordHash: Hasher.Hash("existing-password")));
-        await db.SaveChangesAsync();
-
-        await UserBootstrapRunner.RunUserBootstrapAsync(provider, Config());
-
-        db.ChangeTracker.Clear();
-        var migrated = await db.Users.SingleAsync(user => user.Username == "migrated");
-        Assert.NotNull(migrated.PasswordHash);
-        Assert.Equal(PasswordVerification.Success, Hasher.Verify(migrated.PasswordHash!, "fox-lima-alpha"));
-        var untouched = await db.Users.SingleAsync(user => user.Username == "already-set");
-        Assert.Equal(PasswordVerification.Success, Hasher.Verify(untouched.PasswordHash!, "existing-password"));
-        Assert.Null((await db.AppSecurity.SingleAsync()).LegacyApiKey);
-
-        // Re-running is a no-op (the staged key was consumed).
-        var hashBefore = migrated.PasswordHash;
-        await UserBootstrapRunner.RunUserBootstrapAsync(provider, Config());
-        db.ChangeTracker.Clear();
-        Assert.Equal(hashBefore, (await db.Users.SingleAsync(user => user.Username == "migrated")).PasswordHash);
-    }
-
-    [Fact]
     public async Task RecoveryPasswordResetsExistingAccountToEnabledAdminAndInvalidatesSessions() {
         await using var provider = BuildProvider(out var db);
         var user = NewUser("recovery-user", passwordHash: Hasher.Hash("forgotten"));

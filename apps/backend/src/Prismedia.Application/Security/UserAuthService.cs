@@ -12,8 +12,8 @@ public sealed record SetupStatus(bool NeedsSetup, bool HasUsers);
 public sealed record CredentialVerificationResult(bool IsThrottled, User? User);
 
 /// <summary>
-/// Authentication use cases shared by the web portal, native clients, Jellyfin
-/// emulation, and OPDS: credential verification, session issue/resolve/revoke,
+/// Authentication use cases shared by the web portal, native clients, and OPDS:
+/// credential verification, session issue/resolve/revoke,
 /// first-run setup, and self-service password/profile changes.
 /// </summary>
 public sealed class UserAuthService {
@@ -32,31 +32,23 @@ public sealed class UserAuthService {
     private readonly ISecurityPersistence _persistence;
     private readonly IPasswordHasher _hasher;
     private readonly AuthAttemptThrottle _throttle;
-    private readonly IUserEngagementCloner? _engagementCloner;
 
     public UserAuthService(
         ISecurityPersistence persistence,
         IPasswordHasher hasher,
-        AuthAttemptThrottle throttle,
-        IUserEngagementCloner? engagementCloner = null) {
+        AuthAttemptThrottle throttle) {
         _persistence = persistence;
         _hasher = hasher;
         _throttle = throttle;
-        _engagementCloner = engagementCloner;
     }
 
-    /// <summary>Gets the server identity used by Jellyfin protocol responses.</summary>
-    public Task<AppSecurityState> GetServerInfoAsync(CancellationToken cancellationToken) =>
-        _persistence.EnsureAppSecurityAsync(cancellationToken);
-
     /// <summary>
-    /// Authenticates a username/password pair and issues a session. Used by web login,
-    /// Jellyfin AuthenticateByName, and OPDS Basic auth.
+    /// Authenticates a username/password pair and issues a session for web and native clients.
     /// </summary>
     public async Task<UserAuthenticationResult> AuthenticateAsync(
         string? username,
         string? password,
-        JellyfinClientIdentity client,
+        ClientIdentity client,
         string bucket,
         CancellationToken cancellationToken) {
         if (_throttle.IsThrottled(bucket)) {
@@ -137,14 +129,14 @@ public sealed class UserAuthService {
 
     /// <summary>
     /// Creates the first admin account and signs it in. Only valid while no enabled admin
-    /// exists. When the username matches an existing (migrated) user, that user is promoted
+    /// exists. When the username matches an existing user, that user is promoted
     /// to an enabled admin with the new password and keeps its id and sessions.
     /// </summary>
     public async Task<UserAuthenticationResult> CreateFirstAdminAsync(
         string username,
         string? displayName,
         string password,
-        JellyfinClientIdentity client,
+        ClientIdentity client,
         string bucket,
         CancellationToken cancellationToken) {
         if (_throttle.IsThrottled(bucket)) {
@@ -170,7 +162,6 @@ public sealed class UserAuthService {
                 username: null,
                 displayName: resolvedDisplayName,
                 role: UserRole.Admin,
-                allowSfw: null,
                 allowNsfw: null,
                 canCreateLibraries: null,
                 enabled: true,
@@ -184,16 +175,10 @@ public sealed class UserAuthService {
                 resolvedDisplayName,
                 passwordHash,
                 UserRole.Admin,
-                allowSfw: true,
                 allowNsfw: true,
                 canCreateLibraries: true,
                 enabled: true,
                 cancellationToken);
-            if (_engagementCloner is not null) {
-                // Upgraded installs: the new admin inherits the pre-multi-user household
-                // watch state (every migrated account holds an identical copy).
-                await _engagementCloner.CloneFromAnyUserAsync(admin.Id, cancellationToken);
-            }
         }
 
         _throttle.RecordSuccess(bucket);
@@ -240,20 +225,11 @@ public sealed class UserAuthService {
             username: null,
             displayName: trimmed,
             role: null,
-            allowSfw: null,
             allowNsfw: null,
             canCreateLibraries: null,
             enabled: null,
             cancellationToken);
     }
-
-    /// <summary>Lists enabled user accounts for Jellyfin login pickers (/Users/Public).</summary>
-    public Task<IReadOnlyList<User>> ListEnabledUsersAsync(CancellationToken cancellationToken) =>
-        _persistence.ListUsersAsync(includeDisabled: false, cancellationToken);
-
-    /// <summary>Finds one user by id (Jellyfin per-user routes).</summary>
-    public Task<User?> FindUserAsync(Guid userId, CancellationToken cancellationToken) =>
-        _persistence.GetUserAsync(userId, cancellationToken);
 
     /// <summary>Lists the caller's active sessions.</summary>
     public Task<IReadOnlyList<UserSession>> ListOwnSessionsAsync(Guid userId, CancellationToken cancellationToken) =>
@@ -297,7 +273,7 @@ public sealed class UserAuthService {
 
     private async Task<UserAuthenticationResult> IssueSessionAsync(
         User user,
-        JellyfinClientIdentity client,
+        ClientIdentity client,
         CancellationToken cancellationToken) {
         var accessToken = CreateSessionToken();
         var session = await _persistence.CreateSessionAsync(user.Id, HashToken(accessToken), client, cancellationToken);

@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Prismedia.Application.Entities;
 using Prismedia.Contracts.Entities;
 using Prismedia.Contracts.Media;
+using Prismedia.Contracts.Playback;
 using Prismedia.Domain.Entities;
 using Prismedia.Infrastructure.Entities;
 using Prismedia.Infrastructure.Entities.Mappers;
@@ -462,7 +463,7 @@ public sealed class EfEntityReadServiceTests {
                 Id = Guid.NewGuid(),
                 EntityId = videoId,
                 Role = EntityFileRole.Trickplay,
-                Path = "/Videos/44444444-4444-4444-4444-444444444444/Trickplay/320/tiles.m3u8",
+                Path = VideoPlaybackProtocol.TrickplayPlaylistPath(videoId, 320),
                 MimeType = "application/vnd.apple.mpegurl",
                 CreatedAt = now,
                 UpdatedAt = now
@@ -476,7 +477,7 @@ public sealed class EfEntityReadServiceTests {
         var item = Assert.Single(result.Items);
 
         Assert.Equal(ThumbnailHoverKind.Sprite, item.HoverKind);
-        Assert.Equal("/Videos/44444444-4444-4444-4444-444444444444/Trickplay/320/tiles.m3u8", item.HoverUrl);
+        Assert.Equal(VideoPlaybackProtocol.TrickplayPlaylistPath(videoId, 320), item.HoverUrl);
     }
 
     [Fact]

@@ -50,9 +50,6 @@ public sealed class CurrentUserContextHolder : ICurrentUserContext {
     public bool IsAdmin => _user?.Role == UserRole.Admin;
 
     /// <inheritdoc />
-    public bool AllowSfw => _user?.AllowSfw ?? true;
-
-    /// <inheritdoc />
     public bool AllowNsfw => _user?.AllowNsfw ?? false;
 
     /// <inheritdoc />

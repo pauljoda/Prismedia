@@ -1,14 +1,15 @@
 using Prismedia.Application.Videos;
+using Prismedia.Domain.Entities;
 
 namespace Prismedia.Infrastructure.Tests;
 
 public sealed class VideoDirectPlayPolicyTests {
     // A client (Infuse / Apple TV class) that can directly play HEVC/H.264 and EAC3/Atmos in MKV.
-    private static readonly ClientPlaybackProfile CapableClient = new(
+    private static readonly VideoPlaybackProfile CapableClient = new(
         MaxStreamingBitrate: 200_000_000,
         DirectPlayProfiles:
         [
-            new ClientDirectPlayProfile("Video", "mkv,mp4,ts,mov", "hevc,h264,av1", "eac3,ac3,aac,truehd,dts")
+            new VideoDirectPlayProfile(StreamKind.Video.ToCode(), "mkv,mp4,ts,mov", "hevc,h264,av1", "eac3,ac3,aac,truehd,dts")
         ]);
 
     private static VideoSourceFile Source(
@@ -122,7 +123,7 @@ public sealed class VideoDirectPlayPolicyTests {
             directStreamAllowed: true,
             transcodingAllowed: true);
 
-        Assert.Equal(VideoPlaybackMethod.DirectPlay, decision.Method);
+        Assert.Equal(VideoPlaybackMethod.Direct, decision.Method);
     }
 
     [Theory]
@@ -159,7 +160,7 @@ public sealed class VideoDirectPlayPolicyTests {
             transcodingAllowed: true,
             clientToneMappingAllowed: true);
 
-        Assert.Equal(VideoPlaybackMethod.DirectPlay, decision.Method);
+        Assert.Equal(VideoPlaybackMethod.Direct, decision.Method);
     }
 
     [Fact]
@@ -176,7 +177,7 @@ public sealed class VideoDirectPlayPolicyTests {
             directStreamAllowed: true,
             transcodingAllowed: true);
 
-        Assert.Equal(VideoPlaybackMethod.DirectPlay, decision.Method);
+        Assert.Equal(VideoPlaybackMethod.Direct, decision.Method);
     }
 
     [Fact]
@@ -204,9 +205,9 @@ public sealed class VideoDirectPlayPolicyTests {
         // Profile 5 has an ICtCp base layer with no HDR10 fallback. A browser-class client decodes the
         // HEVC bitstream without Dolby Vision processing and shows a magenta/green cast, so the policy
         // must tone-map (transcode) instead of stream-copying, even though the client decodes HEVC.
-        var browserClient = new ClientPlaybackProfile(
+        var browserClient = new VideoPlaybackProfile(
             MaxStreamingBitrate: null,
-            DirectPlayProfiles: [new ClientDirectPlayProfile("Video", "mp4,webm", "hevc,h264,av1", "aac,opus")]);
+            DirectPlayProfiles: [new VideoDirectPlayProfile(StreamKind.Video.ToCode(), "mp4,webm", "hevc,h264,av1", "aac,opus")]);
         var source = DolbyVisionSource("/media/p5.mkv", dvProfile: 5, dvBlSignalCompatibilityId: 0);
 
         var decision = VideoDirectPlayPolicy.Decide(
@@ -234,9 +235,9 @@ public sealed class VideoDirectPlayPolicyTests {
             source,
             selectedAudioCodec: "eac3",
             range: VideoPlaybackRange.Dovi,
-            profile: new ClientPlaybackProfile(
+            profile: new VideoPlaybackProfile(
                 MaxStreamingBitrate: null,
-                DirectPlayProfiles: [new ClientDirectPlayProfile("Video", "mp4", "hevc", "aac")]),
+                DirectPlayProfiles: [new VideoDirectPlayProfile(StreamKind.Video.ToCode(), "mp4", "hevc", "aac")]),
             supportedVideoRangeTypes: ["DOVI", "HDR10"],
             directPlayAllowed: true,
             directStreamAllowed: true,
@@ -249,9 +250,9 @@ public sealed class VideoDirectPlayPolicyTests {
     public void DolbyVisionProfile8WithHdr10BaseLayerRemuxesToAnHevcClient() {
         // Profile 8.1 carries an HDR10-compatible base layer (compatibility id 1); a client that decodes
         // HEVC renders the copied base layer correctly as HDR10, so a stream copy stays valid.
-        var profile = new ClientPlaybackProfile(
+        var profile = new VideoPlaybackProfile(
             MaxStreamingBitrate: null,
-            DirectPlayProfiles: [new ClientDirectPlayProfile("Video", "mp4", "hevc", "aac")]);
+            DirectPlayProfiles: [new VideoDirectPlayProfile(StreamKind.Video.ToCode(), "mp4", "hevc", "aac")]);
         var source = DolbyVisionSource("/media/p8.mkv", dvProfile: 8, dvBlSignalCompatibilityId: 1);
 
         var decision = VideoDirectPlayPolicy.Decide(
@@ -273,9 +274,9 @@ public sealed class VideoDirectPlayPolicyTests {
 
         // A browser-class client that can only decode H.264 cannot copy the HEVC stream, so the only
         // option is a full transcode (which tone-maps the HDR/DV down to SDR H.264).
-        var h264OnlyClient = new ClientPlaybackProfile(
+        var h264OnlyClient = new VideoPlaybackProfile(
             MaxStreamingBitrate: null,
-            DirectPlayProfiles: [new ClientDirectPlayProfile("Video", "mp4", "h264", "aac")]);
+            DirectPlayProfiles: [new VideoDirectPlayProfile(StreamKind.Video.ToCode(), "mp4", "h264", "aac")]);
 
         var decision = VideoDirectPlayPolicy.Decide(
             source,
@@ -293,9 +294,9 @@ public sealed class VideoDirectPlayPolicyTests {
     [Fact]
     public void RemuxesWhenVideoCodecPlayableButContainerUnsupported() {
         // Client plays HEVC only in mp4 and only AAC audio.
-        var profile = new ClientPlaybackProfile(
+        var profile = new VideoPlaybackProfile(
             MaxStreamingBitrate: null,
-            DirectPlayProfiles: [new ClientDirectPlayProfile("Video", "mp4", "hevc", "aac")]);
+            DirectPlayProfiles: [new VideoDirectPlayProfile(StreamKind.Video.ToCode(), "mp4", "hevc", "aac")]);
         var source = Source("/media/clip.mkv", "matroska", "hevc", "eac3");
 
         var decision = VideoDirectPlayPolicy.Decide(
@@ -315,9 +316,9 @@ public sealed class VideoDirectPlayPolicyTests {
 
     [Fact]
     public void RemuxCopiesAudioWhenClientAlsoSupportsTheAudioCodec() {
-        var profile = new ClientPlaybackProfile(
+        var profile = new VideoPlaybackProfile(
             MaxStreamingBitrate: null,
-            DirectPlayProfiles: [new ClientDirectPlayProfile("Video", "mp4", "hevc", "aac,eac3")]);
+            DirectPlayProfiles: [new VideoDirectPlayProfile(StreamKind.Video.ToCode(), "mp4", "hevc", "aac,eac3")]);
         var source = Source("/media/clip.mkv", "matroska", "hevc", "eac3");
 
         var decision = VideoDirectPlayPolicy.Decide(
@@ -336,9 +337,9 @@ public sealed class VideoDirectPlayPolicyTests {
 
     [Fact]
     public void BitrateCeilingForcesTranscode() {
-        var profile = new ClientPlaybackProfile(
+        var profile = new VideoPlaybackProfile(
             MaxStreamingBitrate: 8_000_000,
-            DirectPlayProfiles: [new ClientDirectPlayProfile("Video", "mkv", "hevc", "eac3")]);
+            DirectPlayProfiles: [new VideoDirectPlayProfile(StreamKind.Video.ToCode(), "mkv", "hevc", "eac3")]);
         var source = Source("/media/e02.mkv", "matroska", "hevc", "eac3", bitRate: 40_000_000);
 
         var decision = VideoDirectPlayPolicy.Decide(
@@ -355,7 +356,7 @@ public sealed class VideoDirectPlayPolicyTests {
     }
 
     [Theory]
-    [InlineData(true, VideoPlaybackMethod.DirectPlay)]
+    [InlineData(true, VideoPlaybackMethod.Direct)]
     [InlineData(false, VideoPlaybackMethod.Transcode)]
     public void WithoutDeviceProfileFallsBackToContainerExtensionHeuristic(
         bool directPlayable,

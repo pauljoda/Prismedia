@@ -277,7 +277,6 @@ public sealed class InfrastructureBoundaryTests {
         ["apps/backend/src/Prismedia.Application/Jobs/Handlers/Acquisition/AcquisitionImportEngines.cs"] = 2150,
         ["apps/backend/src/Prismedia.Infrastructure/Acquisition/EfAcquisitionStore.cs"] = 1800,
         ["apps/backend/src/Prismedia.Application/Requests/RequestCommitService.cs"] = 1600,
-        ["apps/backend/src/Prismedia.Application/Jellyfin/JellyfinCatalogService.cs"] = 1500,
         ["apps/backend/src/Prismedia.Infrastructure/Entities/EfEntityReadService.cs"] = 1400,
         ["apps/backend/src/Prismedia.Infrastructure/Plugins/IdentifyQueueService.cs"] = 1350,
         ["apps/backend/src/Prismedia.Infrastructure/Acquisition/EfMonitorStore.cs"] = 1350,

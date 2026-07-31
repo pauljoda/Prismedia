@@ -9,7 +9,7 @@ using Prismedia.Infrastructure.Persistence.Entities;
 namespace Prismedia.Infrastructure.Videos;
 
 /// <summary>
-/// Filesystem-backed Jellyfin-style trickplay playlist and tile resolver.
+/// Filesystem-backed trickplay playlist and tile resolver.
 /// </summary>
 public sealed class TrickplayService : ITrickplayService {
     private const int DefaultTileColumns = 5;

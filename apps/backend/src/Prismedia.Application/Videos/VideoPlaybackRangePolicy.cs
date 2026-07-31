@@ -7,7 +7,7 @@ public static class VideoPlaybackRangePolicy {
     private static readonly StringComparer Comparer = StringComparer.OrdinalIgnoreCase;
 
     /// <summary>
-    /// Derives the Jellyfin-style video range and range type from probed stream metadata.
+    /// Derives the canonical video range and range type from probed stream metadata.
     /// </summary>
     /// <param name="stream">Primary video stream metadata, or null when unavailable.</param>
     /// <returns>Classified dynamic range values for playback negotiation and HLS planning.</returns>
@@ -22,7 +22,7 @@ public static class VideoPlaybackRangePolicy {
                 stream.Hdr10PlusPresentFlag);
 
     /// <summary>
-    /// Derives the Jellyfin-style video range and range type from raw HDR metadata fields.
+    /// Derives the canonical video range and range type from raw HDR metadata fields.
     /// This field-based overload is the single source of truth for HDR detection so that
     /// different probe/source record shapes cannot diverge in how they classify a stream.
     /// </summary>
@@ -108,7 +108,7 @@ public static class VideoPlaybackRangePolicy {
 }
 
 /// <summary>
-/// Jellyfin-style video dynamic range classification.
+/// Video dynamic-range classification shared by native playback contracts.
 /// </summary>
 /// <param name="VideoRange">Broad range family, such as SDR or HDR.</param>
 /// <param name="VideoRangeType">Specific range type, such as HDR10, HLG, HDR10Plus, or DOVI.</param>

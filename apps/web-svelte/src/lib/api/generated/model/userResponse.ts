@@ -11,7 +11,6 @@ export interface UserResponse {
   username: string;
   displayName: string;
   role: UserRole;
-  allowSfw: boolean;
   allowNsfw: boolean;
   canCreateLibraries: boolean;
   enabled: boolean;

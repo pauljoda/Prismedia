@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
 using Prismedia.Application.Entities;
 using Prismedia.Application.Videos;
+using Prismedia.Contracts.Playback;
 
 namespace Prismedia.Api.Tests;
 
@@ -22,7 +23,9 @@ public sealed class VideoHlsEndpointTests : IDisposable {
             new HlsAsset(filePath, "application/vnd.apple.mpegurl", "public, max-age=60")));
         using var client = factory.CreateAuthenticatedClient();
 
-        using var response = await client.GetAsync($"/Videos/{FakeHlsAssetService.VideoId}/master.m3u8");
+        using var response = await client.GetAsync(VideoPlaybackProtocol.HlsPath(
+            FakeHlsAssetService.VideoId,
+            VideoPlaybackProtocol.Hls.MasterPlaylist));
         var body = await response.Content.ReadAsStringAsync();
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
@@ -41,7 +44,7 @@ public sealed class VideoHlsEndpointTests : IDisposable {
 
         using var response = await client.SendAsync(new HttpRequestMessage(
             HttpMethod.Head,
-            $"/Videos/{FakeHlsAssetService.VideoId}/hls/720p/seg_00000.ts"));
+            VideoPlaybackProtocol.HlsPath(FakeHlsAssetService.VideoId, "v/720p/seg_00000.ts")));
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Equal(10, response.Content.Headers.ContentLength);
@@ -54,7 +57,8 @@ public sealed class VideoHlsEndpointTests : IDisposable {
         using var factory = CreateFactory(new FakeHlsAssetService(null));
         using var client = factory.CreateAuthenticatedClient();
 
-        using var response = await client.GetAsync($"/Videos/{FakeHlsAssetService.VideoId}/hls/720p/seg_00000.ts");
+        using var response = await client.GetAsync(
+            VideoPlaybackProtocol.HlsPath(FakeHlsAssetService.VideoId, "v/720p/seg_00000.ts"));
 
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
         Assert.Equal("application/json", response.Content.Headers.ContentType?.MediaType);

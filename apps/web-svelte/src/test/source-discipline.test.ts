@@ -56,12 +56,10 @@ const MAGIC_CODE_ALLOWLIST: Record<string, string[]> = {
   "lib/entities/thumbnail-lab-data.ts": [
     "audio-library", "audio-track", "book-chapter", "book-page", "book-volume", "video-season", "video-series",
   ],
-  "lib/entities/video-capabilities.ts": ["direct"],
   "lib/jobs/helpers.ts": ["library-maintenance"],
   "lib/jobs/jobs-dashboard.ts": [
     "acquire-subtitles", "database-backup", "extract-subtitles", "library-maintenance", "monitored-search",
   ],
-  "lib/player/media-badges.ts": ["direct"],
   "lib/player/quality-preference.ts": ["direct"],
   "lib/player/video-player-load.ts": ["direct", "hls"],
   "lib/player/video-player-source-policy.ts": ["direct", "hls"],

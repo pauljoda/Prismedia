@@ -190,7 +190,7 @@ public sealed class ThumbnailService {
     /// <summary>
     /// Extracts trickplay frames in a single ffmpeg decode pass. The file is opened and
     /// demuxed exactly once; the <c>fps=1/interval</c> filter samples one keyframe per
-    /// interval (mirroring Jellyfin's trickplay extraction). This replaces the previous
+    /// interval. This replaces the previous
     /// per-frame approach that spawned one input-seeking ffmpeg process per frame — that
     /// paid full process-startup and decode-thread-pool overhead hundreds of times per
     /// video and saturated every core. Frames are written as <c>frame-00001.jpg</c>…
@@ -279,7 +279,7 @@ public sealed class ThumbnailService {
     }
 
     /// <summary>
-    /// Composites extracted trickplay frames into numbered Jellyfin-style JPEG tile sheets.
+    /// Composites extracted trickplay frames into numbered JPEG tile sheets.
     /// Each sheet contains up to <paramref name="columns"/> × <paramref name="rows"/> thumbnails.
     /// </summary>
     public async Task<int> ComposeTiledJpegSheetsAsync(

@@ -21,7 +21,6 @@ internal static class SecurityProblemResults {
             user.Username,
             user.DisplayName,
             user.Role,
-            user.AllowSfw,
             user.AllowNsfw,
             user.CanCreateLibraries,
             user.Enabled,

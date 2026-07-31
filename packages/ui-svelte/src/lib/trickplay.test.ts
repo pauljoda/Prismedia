@@ -23,14 +23,14 @@ WEBVTT
     ]);
   });
 
-  it("expands Jellyfin image playlists into tile frames", () => {
+  it("expands image playlists into tile frames", () => {
     const frames = parseTrickplayImagePlaylist(`
 #EXTM3U
 #EXT-X-IMAGES-ONLY
 #EXT-X-TILES:RESOLUTION=320x180,LAYOUT=2x2,DURATION=5
 #EXTINF:20,
 0.jpg
-`, "http://localhost/Videos/1/Trickplay/320/tiles.m3u8");
+`, "http://localhost/api/playback/videos/11111111-1111-1111-1111-111111111111/trickplay/320/tiles.m3u8");
 
     expect(frames).toHaveLength(4);
     expect(frames[0]).toMatchObject({
@@ -40,7 +40,7 @@ WEBVTT
       y: 0,
       width: 320,
       height: 180,
-      url: "http://localhost/Videos/1/Trickplay/320/0.jpg",
+      url: "http://localhost/api/playback/videos/11111111-1111-1111-1111-111111111111/trickplay/320/0.jpg",
     });
     expect(frames[3]).toMatchObject({
       start: 15,

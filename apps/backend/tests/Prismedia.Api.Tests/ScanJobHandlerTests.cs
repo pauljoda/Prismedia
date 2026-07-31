@@ -1182,7 +1182,7 @@ public sealed class ScanJobHandlerTests {
                     NeedsGridThumbnail: false)
             }
         };
-        // Standard Radarr/Jellyfin layout: clean folder name, release-style filename that does not begin
+        // Standard media-manager layout: clean folder name, release-style filename that does not begin
         // with the folder name (accents, dot separators). It must still classify as a movie.
         var discovery = new RecordingFileDiscovery([
             "/media/videos/Pokémon - The First Movie (1998)/Pokemon.The.First.Movie.1998.DUBBED.1080p.BluRay.REMUX-DDB.mkv"

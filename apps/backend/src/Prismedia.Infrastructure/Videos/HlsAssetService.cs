@@ -4,7 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Prismedia.Application.Settings;
 using Prismedia.Application.Videos;
-using Prismedia.Contracts.Jellyfin;
+using Prismedia.Contracts.Playback;
 using Prismedia.Contracts.Media;
 using Prismedia.Domain.Entities;
 using Prismedia.Infrastructure.Media.Processing;
@@ -156,12 +156,13 @@ public sealed partial class HlsAssetService : IHlsAssetService {
         var selectedAudioStreamIndex = SelectAudioStreamIndex(source, requestedAudioStreamIndex);
         var audioCacheKey = AudioCacheKey(selectedAudioStreamIndex, copyAudio);
 
-        if (normalizedAssetPath.Equals(JellyfinProtocol.Hls.MasterPlaylist, StringComparison.OrdinalIgnoreCase)) {
+        if (normalizedAssetPath.Equals(VideoPlaybackProtocol.Hls.MasterPlaylist, StringComparison.OrdinalIgnoreCase)) {
             var trickplayStreams = await GetTrickplayStreamsAsync(id, cancellationToken);
             var transcoderOptions = await ResolveTranscoderOptionsAsync(cancellationToken);
             return await WriteTextAssetAsync(
-                VirtualPath(id, audioCacheKey, JellyfinProtocol.Hls.MasterPlaylist),
+                VirtualPath(id, audioCacheKey, VideoPlaybackProtocol.Hls.MasterPlaylist),
                 BuildVirtualMasterPlaylist(
+                    id,
                     source,
                     renditions,
                     trickplayStreams,
@@ -171,14 +172,14 @@ public sealed partial class HlsAssetService : IHlsAssetService {
                 cancellationToken);
         }
 
-        if (normalizedAssetPath.Equals(JellyfinProtocol.Hls.MainPlaylist, StringComparison.OrdinalIgnoreCase)) {
+        if (normalizedAssetPath.Equals(VideoPlaybackProtocol.Hls.MainPlaylist, StringComparison.OrdinalIgnoreCase)) {
             var rendition = renditions.FirstOrDefault();
             if (rendition is null) {
                 return null;
             }
 
             return await WriteTextAssetAsync(
-                VirtualPath(id, audioCacheKey, "v", rendition.Name, JellyfinProtocol.Hls.IndexPlaylist),
+                VirtualPath(id, audioCacheKey, "v", rendition.Name, VideoPlaybackProtocol.Hls.IndexPlaylist),
                 BuildVirtualVariantPlaylist(source.DurationSeconds.Value, selectedAudioStreamIndex),
                 ".m3u8",
                 cancellationToken);
@@ -547,8 +548,8 @@ public sealed partial class HlsAssetService : IHlsAssetService {
     }
 
     private static bool IsVirtualVariantPlaylist(string assetName) =>
-        assetName.Equals(JellyfinProtocol.Hls.IndexPlaylist, StringComparison.OrdinalIgnoreCase) ||
-        assetName.Equals(JellyfinProtocol.Hls.StreamPlaylist, StringComparison.OrdinalIgnoreCase);
+        assetName.Equals(VideoPlaybackProtocol.Hls.IndexPlaylist, StringComparison.OrdinalIgnoreCase) ||
+        assetName.Equals(VideoPlaybackProtocol.Hls.StreamPlaylist, StringComparison.OrdinalIgnoreCase);
 
     private static string? ResolveInside(string root, string assetPath) {
         var rootFullPath = Path.GetFullPath(root);
@@ -592,7 +593,7 @@ public sealed partial class HlsAssetService : IHlsAssetService {
     private static IReadOnlyList<VirtualHlsRendition> RenditionsFor(VideoSourceFile source) {
         var sourceHeight = NormalizeRenditionHeight(source.Height ?? 720);
         var sourceBitrate = SourceVideoBitrate(source);
-        return JellyfinQualityOptions(sourceBitrate, source.VideoCodec)
+        return PlaybackQualityOptions(sourceBitrate, source.VideoCodec)
             .Select(option => RenditionForQualityOption(option, sourceHeight))
             .GroupBy(rendition => rendition.Name, StringComparer.OrdinalIgnoreCase)
             .Select(group => group.First())
@@ -620,6 +621,7 @@ public sealed partial class HlsAssetService : IHlsAssetService {
     }
 
     private static string BuildVirtualMasterPlaylist(
+        Guid entityId,
         VideoSourceFile source,
         IReadOnlyList<VirtualHlsRendition> renditions,
         IReadOnlyList<VirtualTrickplayStream> trickplayStreams,
@@ -640,12 +642,14 @@ public sealed partial class HlsAssetService : IHlsAssetService {
             var bandwidth = ToBitsPerSecond(rendition.VideoBitrate);
             lines.Add(
                 $"#EXT-X-STREAM-INF:BANDWIDTH={bandwidth},AVERAGE-BANDWIDTH={bandwidth}{resolution},CODECS=\"{codecs},mp4a.40.2\"");
-            lines.Add(AppendPlaybackQuery($"hls/{rendition.Name}/{JellyfinProtocol.Hls.StreamPlaylist}", audioStreamIndex));
+            lines.Add(AppendPlaybackQuery(
+                $"v/{rendition.Name}/{VideoPlaybackProtocol.Hls.StreamPlaylist}",
+                audioStreamIndex));
         }
 
         foreach (var stream in trickplayStreams) {
             lines.Add(
-                $"#EXT-X-IMAGE-STREAM-INF:BANDWIDTH={Math.Max(0, stream.Bandwidth)},RESOLUTION={stream.Width}x{stream.Height},CODECS=\"jpeg\",URI=\"Trickplay/{stream.Width}/tiles.m3u8\"");
+                $"#EXT-X-IMAGE-STREAM-INF:BANDWIDTH={Math.Max(0, stream.Bandwidth)},RESOLUTION={stream.Width}x{stream.Height},CODECS=\"jpeg\",URI=\"{VideoPlaybackProtocol.TrickplayPlaylistPath(entityId, stream.Width)}\"");
         }
 
         lines.Add(string.Empty);
@@ -696,13 +700,13 @@ public sealed partial class HlsAssetService : IHlsAssetService {
 
     private static string AppendPlaybackQuery(string url, int? audioStreamIndex, bool copyAudio = false) {
         if (audioStreamIndex is not null &&
-            !url.Contains($"{JellyfinProtocol.QueryKeys.AudioStreamIndex}=", StringComparison.OrdinalIgnoreCase)) {
-            url = AppendQuery(url, JellyfinProtocol.QueryKeys.AudioStreamIndex, audioStreamIndex.Value.ToString());
+            !url.Contains($"{VideoPlaybackProtocol.AudioStreamIndexQuery}=", StringComparison.OrdinalIgnoreCase)) {
+            url = AppendQuery(url, VideoPlaybackProtocol.AudioStreamIndexQuery, audioStreamIndex.Value.ToString());
         }
 
         if (copyAudio &&
-            !url.Contains($"{JellyfinProtocol.QueryKeys.CopyAudio}=", StringComparison.OrdinalIgnoreCase)) {
-            url = AppendQuery(url, JellyfinProtocol.QueryKeys.CopyAudio, bool.TrueString.ToLowerInvariant());
+            !url.Contains($"{VideoPlaybackProtocol.CopyAudioQuery}=", StringComparison.OrdinalIgnoreCase)) {
+            url = AppendQuery(url, VideoPlaybackProtocol.CopyAudioQuery, bool.TrueString.ToLowerInvariant());
         }
 
         return url;

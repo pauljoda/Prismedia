@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Prismedia.Contracts.Playback;
 using Prismedia.Domain.Entities;
 using Prismedia.Infrastructure.Media.Persistence;
 using Prismedia.Infrastructure.Media.Processing;
@@ -26,8 +27,8 @@ public sealed class MaintenancePersistenceServiceTests : IDisposable {
             FileRow(videoId, EntityFileRole.Source, "/media/source.mkv"),
             FileRow(videoId, EntityFileRole.Thumbnail, "/assets/videos/thumb.jpg"),
             FileRow(videoId, EntityFileRole.Preview, "/assets/videos/preview.mp4"),
-            FileRow(videoId, EntityFileRole.Trickplay, "/Videos/trickplay.m3u8"),
-            FileRow(videoId, EntityFileRole.Hls, "/Videos/master.m3u8"));
+            FileRow(videoId, EntityFileRole.Trickplay, VideoPlaybackProtocol.TrickplayPlaylistPath(videoId, 320)),
+            FileRow(videoId, EntityFileRole.Hls, VideoPlaybackProtocol.HlsPath(videoId, VideoPlaybackProtocol.Hls.MasterPlaylist)));
         db.TrickplayInfos.Add(new TrickplayInfoRow {
             EntityId = videoId,
             Width = 320,

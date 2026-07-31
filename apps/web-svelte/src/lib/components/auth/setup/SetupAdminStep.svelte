@@ -6,7 +6,7 @@
   import { login, submitSetup } from "$lib/api/auth";
 
   interface Props {
-    /** True when migrated accounts exist and the username may match one to promote. */
+    /** True when accounts already exist and the username may match one to promote. */
     hasExistingAccounts: boolean;
     onComplete: () => void;
   }

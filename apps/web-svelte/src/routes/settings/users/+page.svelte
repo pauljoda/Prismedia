@@ -147,7 +147,7 @@
           Users
         </h1>
         <p class="mt-1 text-[0.78rem] text-text-muted">
-          Accounts for the web app, Jellyfin clients, and OPDS readers
+          Accounts for Prismedia apps and OPDS readers
         </p>
       </div>
       <Button variant="primary" onclick={openCreate}>

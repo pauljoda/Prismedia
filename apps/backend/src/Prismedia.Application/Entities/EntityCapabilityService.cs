@@ -90,9 +90,9 @@ public sealed class EntityCapabilityService {
     private const double VideoWatchedFraction = 0.95;
 
     /// <summary>
-    /// Updates the entity's playback capability using Jellyfin-compatible thresholds so the
-    /// native player and Jellyfin clients (e.g. Infuse) converge on identical state for the
-    /// same inputs. When <paramref name="completed"/> is <c>null</c> (the normal progress/stop
+    /// Updates the entity's playback capability using canonical Prismedia thresholds so all
+    /// first-party clients converge on identical state for the same inputs. When
+    /// <paramref name="completed"/> is <c>null</c> (the normal progress/stop
     /// path) video/movie watched state is derived from <paramref name="resumeSeconds"/>
     /// relative to the entity's known runtime: at or above <see cref="VideoWatchedFraction"/>
     /// the item is completed (and the play count incremented), below <see cref="StartedFraction"/>
@@ -108,6 +108,45 @@ public sealed class EntityCapabilityService {
         double? resumeSeconds,
         double? durationSeconds,
         bool? completed,
+        CancellationToken cancellationToken) =>
+        await UpdatePlaybackCoreAsync(
+            id,
+            resumeSeconds,
+            playDurationDeltaSeconds: durationSeconds,
+            mediaDurationSeconds: null,
+            completed,
+            cancellationToken);
+
+    /// <summary>
+    /// Updates video playback from a native playback session. The reported media duration is used
+    /// to derive watched state when probe metadata is unavailable; it is not accumulated as time
+    /// watched on every heartbeat.
+    /// </summary>
+    /// <param name="id">Entity identifier.</param>
+    /// <param name="positionSeconds">Current playback position in seconds.</param>
+    /// <param name="mediaDurationSeconds">Total media runtime in seconds, when known.</param>
+    /// <param name="completed">Explicit completion override.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    public async Task<EntityCard?> UpdateVideoPlaybackAsync(
+        Guid id,
+        double? positionSeconds,
+        double? mediaDurationSeconds,
+        bool? completed,
+        CancellationToken cancellationToken) =>
+        await UpdatePlaybackCoreAsync(
+            id,
+            positionSeconds,
+            playDurationDeltaSeconds: null,
+            mediaDurationSeconds,
+            completed,
+            cancellationToken);
+
+    private async Task<EntityCard?> UpdatePlaybackCoreAsync(
+        Guid id,
+        double? resumeSeconds,
+        double? playDurationDeltaSeconds,
+        double? mediaDurationSeconds,
+        bool? completed,
         CancellationToken cancellationToken) {
         var card = await MutateWithPlaybackEventAsync(id, entity => {
             var playback = entity.GetOrAddCapability(() => new CapabilityPlayback());
@@ -115,13 +154,13 @@ public sealed class EntityCapabilityService {
             PlaybackEventAppend? completedEvent = null;
             var playCountBefore = playback.Value.PlayCount;
 
-            if (durationSeconds is > 0) {
-                playback.AccumulatePlayDuration(TimeSpan.FromSeconds(durationSeconds.Value));
+            if (playDurationDeltaSeconds is > 0) {
+                playback.AccumulatePlayDuration(TimeSpan.FromSeconds(playDurationDeltaSeconds.Value));
             }
 
             // Explicit watched toggle. The completion flag is independent of the resume position:
-            // a resume value is only applied when the caller supplies one (e.g. a Jellyfin
-            // mark-played sends 0 to clear it), so the in-app toggle leaves the position untouched.
+            // a resume value is only applied when the caller supplies one, so the in-app
+            // toggle leaves the position untouched.
             if (completed is { } watched) {
                 if (resumeSeconds is { } toggleSeconds) {
                     playback.RecordResume(TimeSpan.FromSeconds(Math.Max(0, toggleSeconds)), now);
@@ -130,7 +169,11 @@ public sealed class EntityCapabilityService {
                 if (watched) {
                     playback.MarkWatched(now);
                     if (playback.Value.PlayCount > playCountBefore) {
-                        completedEvent = CompletedEvent(entity, now, resumeSeconds, durationSeconds);
+                        completedEvent = CompletedEvent(
+                            entity,
+                            now,
+                            resumeSeconds,
+                            mediaDurationSeconds ?? entity.Technical?.Duration?.TotalSeconds);
                     }
                 } else {
                     playback.MarkUnwatched(now);
@@ -144,7 +187,9 @@ public sealed class EntityCapabilityService {
             }
 
             var position = TimeSpan.FromSeconds(Math.Max(0, seconds));
-            var runtime = entity.Technical?.Duration;
+            var runtime = mediaDurationSeconds is > 0
+                ? TimeSpan.FromSeconds(mediaDurationSeconds.Value)
+                : entity.Technical?.Duration;
             if (runtime is not { } total || total <= TimeSpan.Zero) {
                 playback.RecordResume(position, now);
                 return null;
@@ -155,7 +200,7 @@ public sealed class EntityCapabilityService {
                 fraction >= VideoWatchedFraction) {
                 playback.RecordCompleted(now);
                 if (playback.Value.PlayCount > playCountBefore) {
-                    completedEvent = CompletedEvent(entity, now, position.TotalSeconds, runtime?.TotalSeconds);
+                    completedEvent = CompletedEvent(entity, now, position.TotalSeconds, total.TotalSeconds);
                 }
             } else if (fraction < StartedFraction) {
                 playback.RecordStartOver(now);
@@ -172,7 +217,6 @@ public sealed class EntityCapabilityService {
 
         return card;
     }
-
     /// <summary>
     /// Records a completed playback event from players that report a single end-of-stream signal
     /// instead of continuous position progress.

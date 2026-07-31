@@ -288,7 +288,7 @@ describe("entity grid helpers", () => {
     expect(thumbnail.fit).toBe("cover");
   });
 
-  it("maps Jellyfin image-playlist trickplay assets into sprite hover data", () => {
+  it("maps native image-playlist trickplay assets into sprite hover data", () => {
     const thumbnail = entityCardToThumbnailCard(card("5", "video", "Tiled Trickplay", [
       {
         kind: "images",
@@ -298,14 +298,14 @@ describe("entity grid helpers", () => {
         coverUrl: "/assets/videos/5/thumb.jpg",
         items: [
           { kind: "thumbnail", path: "/assets/videos/5/thumb.jpg", mimeType: "image/jpeg" },
-          { kind: "trickplay", path: "/Videos/5/Trickplay/320/tiles.m3u8", mimeType: "application/vnd.apple.mpegurl" },
+          { kind: "trickplay", path: "/api/playback/videos/5/trickplay/320/tiles.m3u8", mimeType: "application/vnd.apple.mpegurl" },
         ],
       },
     ]));
 
     expect(thumbnail.hover).toEqual({
       kind: "sprite",
-      vttUrl: "/Videos/5/Trickplay/320/tiles.m3u8",
+      vttUrl: "/api/playback/videos/5/trickplay/320/tiles.m3u8",
     });
   });
 

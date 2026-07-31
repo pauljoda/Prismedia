@@ -2,6 +2,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Prismedia.Application.Jobs;
 using Prismedia.Application.Jobs.Handlers.Generate;
 using Prismedia.Application.Jobs.Ports;
+using Prismedia.Contracts.Playback;
 using Prismedia.Domain.Entities;
 
 namespace Prismedia.Api.Tests;
@@ -253,7 +254,7 @@ public sealed class GeneratePreviewJobHandlerTests : IDisposable {
         public string VideoThumbnailUrl(Guid entityId) => $"/assets/videos/{entityId}/thumb.jpg";
         public string VideoPreviewUrl(Guid entityId) => $"/assets/videos/{entityId}/preview.mp4";
         public string VideoTrickplayVttUrl(Guid entityId) => $"/assets/videos/{entityId}/trickplay.vtt";
-        public string TrickplayPlaylistUrl(Guid entityId, int width) => $"/Videos/{entityId}/Trickplay/{width}/tiles.m3u8";
+        public string TrickplayPlaylistUrl(Guid entityId, int width) => VideoPlaybackProtocol.TrickplayPlaylistPath(entityId, width);
         public string ImageThumbnailUrl(Guid entityId) => throw new NotSupportedException();
         public string ImagePreviewUrl(Guid entityId) => throw new NotSupportedException();
         public string BookPageThumbnailUrl(Guid entityId) => throw new NotSupportedException();

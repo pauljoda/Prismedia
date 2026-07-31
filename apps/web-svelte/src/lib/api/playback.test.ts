@@ -1,9 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
-  fetchJellyfinPlaybackInfo,
-  markJellyfinUserPlayedItem,
-  postJellyfinSessionProgress,
+  createVideoPlaybackPlan,
   recordEntityPlaybackEvent,
+  reportVideoPlayback,
+  updateEntityPlayback,
   updateEntityProgress,
 } from "./playback";
 
@@ -12,19 +12,31 @@ describe("playback API", () => {
     vi.unstubAllGlobals();
   });
 
-  it("posts Jellyfin playback info requests to the root route", async () => {
-    const fetchMock = mockFetch({ PlaySessionId: "session-1", MediaSources: [] });
+  it("creates video playback plans through the native playback route", async () => {
+    const fetchMock = mockFetch({
+      sessionId: "session-1",
+      source: {
+        id: "source-1",
+        container: "mkv",
+        durationSeconds: 60,
+        method: "transcode",
+        url: "/api/playback/videos/video-1/hls/master.m3u8",
+        supportsTranscoding: true,
+        streams: [],
+        transcoding: null,
+      },
+    });
 
-    const response = await fetchJellyfinPlaybackInfo("video-1", { EnableTranscoding: true });
+    const response = await createVideoPlaybackPlan("video-1", { enableTranscoding: true });
 
     expect(fetchMock).toHaveBeenCalledWith(
-      "/Items/video-1/PlaybackInfo",
+      "/api/playback/videos/video-1/plan",
       expect.objectContaining({
         method: "POST",
-        body: JSON.stringify({ EnableTranscoding: true }),
+        body: JSON.stringify({ enableTranscoding: true }),
       }),
     );
-    expect(response.PlaySessionId).toBe("session-1");
+    expect(response.sessionId).toBe("session-1");
   });
 
   it("updates entity progress through the generated route", async () => {
@@ -60,25 +72,41 @@ describe("playback API", () => {
     );
   });
 
-  it("marks Jellyfin items played through the root (non-/api) route", async () => {
-    const fetchMock = mockFetch(undefined);
+  it("updates watched state through the entity playback route", async () => {
+    const fetchMock = mockFetch(entityCard("video-1"));
 
-    await markJellyfinUserPlayedItem("video-1", true);
+    await updateEntityPlayback("video-1", { completed: true, resumeSeconds: 0 });
 
     expect(fetchMock).toHaveBeenCalledWith(
-      "/UserPlayedItems/video-1",
-      expect.objectContaining({ method: "POST" }),
+      "/api/entities/video-1/playback",
+      expect.objectContaining({
+        method: "PATCH",
+        body: JSON.stringify({ completed: true, resumeSeconds: 0 }),
+      }),
     );
   });
 
-  it("posts Jellyfin session progress to the root (non-/api) route", async () => {
-    const fetchMock = mockFetch(undefined);
+  it("reports playback progress through the native session route", async () => {
+    const fetchMock = mockFetch(undefined, 204);
 
-    await postJellyfinSessionProgress("Playing/Progress", { ItemId: "video-1", PositionTicks: 100 });
+    await reportVideoPlayback("progress", {
+      entityId: "video-1",
+      sessionId: "session-1",
+      positionSeconds: 12.5,
+    });
 
     expect(fetchMock).toHaveBeenCalledWith(
-      "/Sessions/Playing/Progress",
-      expect.objectContaining({ method: "POST" }),
+      "/api/playback/sessions/progress",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({
+          entityId: "video-1",
+          sessionId: "session-1",
+          positionSeconds: 12.5,
+          durationSeconds: null,
+          completed: null,
+        }),
+      }),
     );
   });
 
@@ -106,10 +134,10 @@ describe("playback API", () => {
   });
 });
 
-function mockFetch(data: unknown) {
+function mockFetch(data: unknown, status = 200) {
   const fetchMock = vi.fn(async () => new Response(
-    data === undefined ? "" : JSON.stringify(data),
-    { headers: { "content-type": "application/json" }, status: 200 },
+    data === undefined ? null : JSON.stringify(data),
+    { headers: { "content-type": "application/json" }, status },
   ));
   vi.stubGlobal("fetch", fetchMock);
   return fetchMock;

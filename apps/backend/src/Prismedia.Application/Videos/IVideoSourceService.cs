@@ -23,7 +23,7 @@ public interface IVideoSourceService {
 /// <param name="DurationSeconds">Optional probed duration used to build virtual HLS playlists.</param>
 /// <param name="Width">Optional probed source width.</param>
 /// <param name="Height">Optional probed source height.</param>
-/// <param name="MediaSourceId">Optional persisted Jellyfin-style media source identifier.</param>
+/// <param name="MediaSourceId">Optional persisted media source identifier.</param>
 /// <param name="Container">Optional probed container name.</param>
 /// <param name="BitRate">Optional probed aggregate bitrate.</param>
 /// <param name="VideoCodec">Optional probed primary video codec.</param>
@@ -51,7 +51,7 @@ public sealed record VideoSourceFile(
     IReadOnlyList<VideoSourceStream>? Streams = null);
 
 /// <summary>
-/// Source stream metadata needed for HLS audio selection and Jellyfin-style playback info.
+/// Source stream metadata needed for HLS audio selection and native playback planning.
 /// </summary>
 /// <param name="StreamIndex">Absolute ffmpeg stream index within the source container.</param>
 /// <param name="Type">Stream type, such as Video or Audio.</param>

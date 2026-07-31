@@ -12,7 +12,7 @@ public sealed class EntityDescriptionRow {
 /// One user's engagement with one entity: playback state (videos/audio), reading
 /// progress (books/comics), favorite, and rating — all user opinions, kept apart from
 /// the entity's curation facts. One wide row per (user, entity) so shelves, filters,
-/// and Jellyfin UserData resolve with a single join.
+/// and native playback state resolve with a single join.
 /// </summary>
 public sealed class UserEntityStateRow {
     public Guid UserId { get; set; }

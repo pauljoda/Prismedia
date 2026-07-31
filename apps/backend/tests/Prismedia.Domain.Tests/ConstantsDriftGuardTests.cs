@@ -15,23 +15,6 @@ namespace Prismedia.Domain.Tests;
 public sealed class ConstantsDriftGuardTests {
     /// <summary>Literal value mapped to the single source file (by name) allowed to contain it.</summary>
     private static readonly IReadOnlyDictionary<string, string> OwnedLiterals = new Dictionary<string, string> {
-        // Jellyfin auth headers — owned by JellyfinProtocol.
-        ["\"X-Emby-Authorization\""] = "JellyfinProtocol.cs",
-        ["\"X-Emby-Token\""] = "JellyfinProtocol.cs",
-        ["\"X-MediaBrowser-Token\""] = "JellyfinProtocol.cs",
-        ["\"X-Prismedia-Api-Key\""] = "JellyfinProtocol.cs",
-        // Jellyfin ImageType values — owned by JellyfinProtocol.ImageTypes. Unambiguous:
-        // these PascalCase tokens appear nowhere else in the backend (lowercase asset-role
-        // spellings like "backdrop"/"logo" are a separate vocabulary and are not guarded here).
-        ["\"Primary\""] = "JellyfinProtocol.cs",
-        ["\"Backdrop\""] = "JellyfinProtocol.cs",
-        ["\"Logo\""] = "JellyfinProtocol.cs",
-        ["\"Thumb\""] = "JellyfinProtocol.cs",
-        ["\"Banner\""] = "JellyfinProtocol.cs",
-        ["\"Art\""] = "JellyfinProtocol.cs",
-        ["\"Disc\""] = "JellyfinProtocol.cs",
-        ["\"Box\""] = "JellyfinProtocol.cs",
-        ["\"Screenshot\""] = "JellyfinProtocol.cs",
         // MIME types — owned by MediaContentTypes.
         ["\"application/vnd.apple.mpegurl\""] = "MediaContentTypes.cs",
         ["\"video/mp2t\""] = "MediaContentTypes.cs",

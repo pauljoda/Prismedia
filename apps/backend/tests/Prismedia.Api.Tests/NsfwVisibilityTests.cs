@@ -8,24 +8,18 @@ namespace Prismedia.Api.Tests;
 
 public sealed class NsfwVisibilityTests {
     [Fact]
-    public void JellyfinContentHonorsBrowserNsfwCookieForAllowedUsers() {
+    public void BrowserCookieShowsNsfwForAllowedUsers() {
         var context = WebContext(AuthedUser(allowNsfw: true));
         context.Request.Headers.Cookie = "prismedia-nsfw-mode=show";
 
-        var visibility = NsfwVisibility.JellyfinContent(context);
-
-        Assert.True(visibility.AllowSfw);
-        Assert.True(visibility.AllowNsfw);
+        Assert.False(NsfwVisibility.ShouldHide(null, context));
     }
 
     [Fact]
-    public void JellyfinContentDefaultsBrowserRequestsToSfwOnlyWithoutNsfwCookie() {
+    public void BrowserDefaultsToHidingNsfwWithoutCookie() {
         var context = WebContext(AuthedUser(allowNsfw: true));
 
-        var visibility = NsfwVisibility.JellyfinContent(context);
-
-        Assert.True(visibility.AllowSfw);
-        Assert.False(visibility.AllowNsfw);
+        Assert.True(NsfwVisibility.ShouldHide(null, context));
     }
 
     [Fact]
@@ -35,16 +29,14 @@ public sealed class NsfwVisibilityTests {
         context.Request.Headers.Cookie = "prismedia-nsfw-mode=show";
 
         Assert.True(NsfwVisibility.ShouldHide(null, context));
-        Assert.False(NsfwVisibility.JellyfinContent(context).AllowNsfw);
     }
 
     [Fact]
     public void ProtocolClientsSeeNsfwWheneverTheUserAllowsIt() {
-        // Jellyfin/OPDS clients have no toggle: the permission alone decides.
+        // Native and OPDS clients have no browser toggle: the permission alone decides.
         var context = WebContext(AuthedUser(allowNsfw: true), viaCookie: false);
 
         Assert.False(NsfwVisibility.ShouldHide(null, context));
-        Assert.True(NsfwVisibility.JellyfinContent(context).AllowNsfw);
     }
 
     [Fact]
@@ -67,7 +59,6 @@ public sealed class NsfwVisibilityTests {
             "Prismedia",
             "Prismedia",
             UserRole.Member,
-            AllowSfw: true,
             AllowNsfw: allowNsfw,
             CanCreateLibraries: false,
             Enabled: true,

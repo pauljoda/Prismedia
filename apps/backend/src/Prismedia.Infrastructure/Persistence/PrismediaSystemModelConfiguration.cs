@@ -103,16 +103,6 @@ internal static partial class PrismediaModelConfiguration {
             entity.Property(row => row.UpdatedAt).HasColumnName("updated_at");
         });
 
-        modelBuilder.Entity<AppSecurityRow>(entity => {
-            entity.ToTable("app_security");
-            entity.HasKey(row => row.Id);
-            entity.Property(row => row.Id).HasColumnName("id").ValueGeneratedNever();
-            entity.Property(row => row.ServerId).HasColumnName("server_id");
-            entity.Property(row => row.LegacyApiKey).HasColumnName("legacy_api_key").HasMaxLength(128);
-            entity.Property(row => row.CreatedAt).HasColumnName("created_at");
-            entity.Property(row => row.UpdatedAt).HasColumnName("updated_at");
-        });
-
         modelBuilder.Entity<UserRow>(entity => {
             entity.ToTable("users");
             entity.HasKey(row => row.Id);
@@ -124,13 +114,12 @@ internal static partial class PrismediaModelConfiguration {
             entity.Property(row => row.PasswordUpdatedAt).HasColumnName("password_updated_at");
             // No database defaults here: UserRole.Admin is enum value 0, so a configured
             // default would make EF treat Admin as the "unset" sentinel and silently write
-            // the default instead. Role and AllowSfw are always written explicitly.
+            // the default instead. Role is always written explicitly.
             entity.Property(row => row.Role)
                 .HasColumnName("role")
                 .HasMaxLength(32)
                 .HasConversion(value => value.ToCode(), value => value.DecodeAs<UserRole>())
                 .IsRequired();
-            entity.Property(row => row.AllowSfw).HasColumnName("allow_sfw");
             entity.Property(row => row.AllowNsfw).HasColumnName("allow_nsfw");
             entity.Property(row => row.CanCreateLibraries).HasColumnName("can_create_libraries");
             entity.Property(row => row.Enabled).HasColumnName("enabled");

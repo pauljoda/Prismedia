@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
 using Prismedia.Application.Entities;
 using Prismedia.Application.Videos;
+using Prismedia.Contracts.Playback;
 
 namespace Prismedia.Api.Tests;
 
@@ -23,7 +24,7 @@ public sealed class VideoStreamEndpointTests : IDisposable {
         using var client = factory.CreateAuthenticatedClient();
         using var request = new HttpRequestMessage(
             HttpMethod.Get,
-            $"/Videos/{FakeVideoSourceService.VideoId}/stream");
+            VideoPlaybackProtocol.SourcePath(FakeVideoSourceService.VideoId));
         request.Headers.Range = new System.Net.Http.Headers.RangeHeaderValue(2, 5);
 
         using var response = await client.SendAsync(request);
@@ -45,7 +46,7 @@ public sealed class VideoStreamEndpointTests : IDisposable {
 
         using var response = await client.SendAsync(new HttpRequestMessage(
             HttpMethod.Head,
-            $"/Videos/{FakeVideoSourceService.VideoId}/stream"));
+            VideoPlaybackProtocol.SourcePath(FakeVideoSourceService.VideoId)));
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Equal(10, response.Content.Headers.ContentLength);
@@ -54,30 +55,14 @@ public sealed class VideoStreamEndpointTests : IDisposable {
     }
 
     [Fact]
-    public async Task StreamEndpointServesNonBrowserDirectPlayableSourcesForJellyfinClients() {
+    public async Task StreamEndpointServesNonBrowserDirectPlayableSourcesForNativeClients() {
         var filePath = Path.Combine(_tempDir, "source.mkv");
         await File.WriteAllTextAsync(filePath, "0123456789");
         using var factory = CreateFactory(new FakeVideoSourceService(
             new VideoSourceFile(FakeVideoSourceService.VideoId, filePath, "video/x-matroska", false)));
         using var client = factory.CreateAuthenticatedClient();
 
-        using var response = await client.GetAsync($"/Videos/{FakeVideoSourceService.VideoId}/stream");
-        var body = await response.Content.ReadAsStringAsync();
-
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        Assert.Equal("video/x-matroska", response.Content.Headers.ContentType?.MediaType);
-        Assert.Equal("0123456789", body);
-    }
-
-    [Fact]
-    public async Task StreamByContainerAliasServesDirectPlayableSourcesForNativeClients() {
-        var filePath = Path.Combine(_tempDir, "source.mkv");
-        await File.WriteAllTextAsync(filePath, "0123456789");
-        using var factory = CreateFactory(new FakeVideoSourceService(
-            new VideoSourceFile(FakeVideoSourceService.VideoId, filePath, "video/x-matroska", false)));
-        using var client = factory.CreateAuthenticatedClient();
-
-        using var response = await client.GetAsync($"/Videos/{FakeVideoSourceService.VideoId}/stream.mkv");
+        using var response = await client.GetAsync(VideoPlaybackProtocol.SourcePath(FakeVideoSourceService.VideoId));
         var body = await response.Content.ReadAsStringAsync();
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);

@@ -34,20 +34,20 @@ describe("resolutionBadge", () => {
 
 describe("dynamicRangeBadge", () => {
   it("labels Dolby Vision regardless of the base-layer compatibility", () => {
-    expect(dynamicRangeBadge({ VideoRangeType: "DOVI", DvProfile: 5 })).toBe("Dolby Vision");
-    expect(dynamicRangeBadge({ VideoRangeType: "DOVIWithHDR10" })).toBe("Dolby Vision");
-    expect(dynamicRangeBadge({ DvProfile: 8 })).toBe("Dolby Vision");
+    expect(dynamicRangeBadge({ videoRangeType: "DOVI", dvProfile: 5 })).toBe("Dolby Vision");
+    expect(dynamicRangeBadge({ videoRangeType: "DOVIWithHDR10" })).toBe("Dolby Vision");
+    expect(dynamicRangeBadge({ dvProfile: 8 })).toBe("Dolby Vision");
   });
 
   it("labels the HDR variants", () => {
-    expect(dynamicRangeBadge({ VideoRangeType: "HDR10Plus" })).toBe("HDR10+");
-    expect(dynamicRangeBadge({ VideoRangeType: "HDR10" })).toBe("HDR10");
-    expect(dynamicRangeBadge({ VideoRangeType: "HLG" })).toBe("HLG");
-    expect(dynamicRangeBadge({ Hdr10PlusPresentFlag: true, VideoRangeType: "HDR10" })).toBe("HDR10+");
+    expect(dynamicRangeBadge({ videoRangeType: "HDR10Plus" })).toBe("HDR10+");
+    expect(dynamicRangeBadge({ videoRangeType: "HDR10" })).toBe("HDR10");
+    expect(dynamicRangeBadge({ videoRangeType: "HLG" })).toBe("HLG");
+    expect(dynamicRangeBadge({ hdr10PlusPresentFlag: true, videoRangeType: "HDR10" })).toBe("HDR10+");
   });
 
   it("returns null for SDR so it earns no badge", () => {
-    expect(dynamicRangeBadge({ VideoRangeType: "SDR" })).toBeNull();
+    expect(dynamicRangeBadge({ videoRangeType: "SDR" })).toBeNull();
     expect(dynamicRangeBadge({})).toBeNull();
     expect(dynamicRangeBadge(null)).toBeNull();
   });
@@ -82,17 +82,17 @@ describe("channelLayoutLabel", () => {
 describe("audioFormatBadge", () => {
   it("surfaces object-based formats from the display title with the bed layout", () => {
     expect(
-      audioFormatBadge({ Codec: "truehd", Channels: 8, DisplayTitle: "TrueHD 7.1 Atmos" }),
+      audioFormatBadge({ codec: "truehd", channels: 8, displayTitle: "TrueHD 7.1 Atmos" }),
     ).toBe("Dolby Atmos 7.1");
     expect(
-      audioFormatBadge({ Codec: "dts", Channels: 8, DisplayTitle: "DTS-HD MA 7.1" }),
+      audioFormatBadge({ codec: "dts", channels: 8, displayTitle: "DTS-HD MA 7.1" }),
     ).toBe("DTS-HD MA 7.1");
   });
 
   it("names codecs viewers recognize with the channel layout", () => {
-    expect(audioFormatBadge({ Codec: "eac3", Channels: 6 })).toBe("Dolby Digital+ 5.1");
-    expect(audioFormatBadge({ Codec: "aac", Channels: 2 })).toBe("AAC Stereo");
-    expect(audioFormatBadge({ Codec: "flac", Channels: 6 })).toBe("FLAC 5.1");
+    expect(audioFormatBadge({ codec: "eac3", channels: 6 })).toBe("Dolby Digital+ 5.1");
+    expect(audioFormatBadge({ codec: "aac", channels: 2 })).toBe("AAC Stereo");
+    expect(audioFormatBadge({ codec: "flac", channels: 6 })).toBe("FLAC 5.1");
   });
 
   it("returns null when there is nothing to describe", () => {

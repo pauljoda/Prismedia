@@ -5,30 +5,36 @@
  * and reused by both the props extractor and the player UI.
  */
 
+import {
+  VIDEO_PLAYBACK_METHOD,
+  type VideoPlaybackMethodCode,
+} from "$lib/api/generated/codes";
+import { numberValue } from "$lib/utils/format";
+
 /** How the server is delivering the stream, in order of increasing work. */
-export type StreamMethod = "direct" | "remux" | "transcode";
+export type StreamMethod = VideoPlaybackMethodCode;
 
-/** Minimal shape of a Jellyfin video stream this module reads. */
+/** Minimal native playback-stream shape this module reads. */
 export interface VideoStreamBadgeInput {
-  Codec?: string | null;
-  Width?: number | null;
-  Height?: number | null;
-  VideoRange?: string | null;
-  VideoRangeType?: string | null;
-  DvProfile?: number | null;
-  Hdr10PlusPresentFlag?: boolean | null;
+  codec?: string | null;
+  width?: number | string | null;
+  height?: number | string | null;
+  videoRange?: string | null;
+  videoRangeType?: string | null;
+  dvProfile?: number | string | null;
+  hdr10PlusPresentFlag?: boolean | null;
 }
 
-/** Minimal shape of a Jellyfin audio stream this module reads. */
+/** Minimal native playback-stream shape this module reads. */
 export interface AudioStreamBadgeInput {
-  Codec?: string | null;
-  Channels?: number | null;
-  DisplayTitle?: string | null;
-  Profile?: string | null;
+  codec?: string | null;
+  channels?: number | string | null;
+  displayTitle?: string | null;
 }
 
-function positiveInt(value: number | null | undefined): number {
-  return typeof value === "number" && Number.isFinite(value) && value > 0 ? Math.round(value) : 0;
+function positiveInt(value: number | string | null | undefined): number {
+  const parsed = numberValue(value);
+  return parsed !== null && parsed > 0 ? Math.round(parsed) : 0;
 }
 
 /**
@@ -37,8 +43,8 @@ function positiveInt(value: number | null | undefined): number {
  * 4:3 sources are caught by height. Returns null when both dimensions are unknown.
  */
 export function resolutionBadge(
-  width: number | null | undefined,
-  height: number | null | undefined,
+  width: number | string | null | undefined,
+  height: number | string | null | undefined,
 ): string | null {
   const w = positiveInt(width);
   const h = positiveInt(height);
@@ -59,11 +65,11 @@ export function resolutionBadge(
  */
 export function dynamicRangeBadge(stream: VideoStreamBadgeInput | null | undefined): string | null {
   if (!stream) return null;
-  const type = (stream.VideoRangeType ?? stream.VideoRange ?? "").trim().toUpperCase();
-  if (stream.DvProfile != null || type.startsWith("DOVI") || type.includes("DOLBYVISION")) {
+  const type = (stream.videoRangeType ?? stream.videoRange ?? "").trim().toUpperCase();
+  if (stream.dvProfile != null || type.startsWith("DOVI") || type.includes("DOLBYVISION")) {
     return "Dolby Vision";
   }
-  if (type.includes("HDR10PLUS") || type.includes("HDR10+") || stream.Hdr10PlusPresentFlag) {
+  if (type.includes("HDR10PLUS") || type.includes("HDR10+") || stream.hdr10PlusPresentFlag) {
     return "HDR10+";
   }
   if (type.includes("HDR10")) return "HDR10";
@@ -87,7 +93,7 @@ export function videoCodecBadge(codec: string | null | undefined): string | null
 }
 
 /** Maps a channel count to a speaker-layout label ("5.1", "Stereo", …). */
-export function channelLayoutLabel(channels: number | null | undefined): string | null {
+export function channelLayoutLabel(channels: number | string | null | undefined): string | null {
   const count = positiveInt(channels);
   if (count === 0) return null;
   switch (count) {
@@ -151,20 +157,20 @@ function premiumAudioName(displayTitle: string | null | undefined): string | nul
  */
 export function audioFormatBadge(stream: AudioStreamBadgeInput | null | undefined): string | null {
   if (!stream) return null;
-  const base = premiumAudioName(stream.DisplayTitle) ?? audioCodecName(stream.Codec);
+  const base = premiumAudioName(stream.displayTitle) ?? audioCodecName(stream.codec);
   if (!base) return null;
-  const layout = channelLayoutLabel(stream.Channels);
+  const layout = channelLayoutLabel(stream.channels);
   return layout ? `${base} ${layout}` : base;
 }
 
-/** Label and one-line explanation for each delivery method, mirroring Plex/Jellyfin terminology. */
+/** Label and one-line explanation for each delivery method. */
 export function playbackMethodBadge(method: StreamMethod): { label: string; hint: string } {
   switch (method) {
-    case "direct":
+    case VIDEO_PLAYBACK_METHOD.direct:
       return { label: "Direct Play", hint: "Playing the original file as-is" };
-    case "remux":
+    case VIDEO_PLAYBACK_METHOD.remux:
       return { label: "Direct Stream", hint: "Original video, repackaged for your browser" };
-    case "transcode":
+    case VIDEO_PLAYBACK_METHOD.transcode:
       return { label: "Transcoding", hint: "Converting the video for your browser" };
   }
 }

@@ -26,8 +26,8 @@ describe("EntityThumbnail", () => {
   beforeEach(() => {
     loadTrickplayFrames.mockClear();
     loadTrickplayFrames.mockResolvedValue([
-      { start: 0, end: 10, x: 0, y: 0, width: 160, height: 90, url: "/Videos/1/Trickplay/280/0.jpg" },
-      { start: 10, end: 20, x: 160, y: 0, width: 160, height: 90, url: "/Videos/1/Trickplay/280/0.jpg" },
+      { start: 0, end: 10, x: 0, y: 0, width: 160, height: 90, url: "/api/playback/videos/1/trickplay/280/0.jpg" },
+      { start: 10, end: 20, x: 160, y: 0, width: 160, height: 90, url: "/api/playback/videos/1/trickplay/280/0.jpg" },
     ]);
     vi.stubGlobal("requestAnimationFrame", vi.fn((callback: FrameRequestCallback) => {
       callback(0);
@@ -65,7 +65,7 @@ describe("EntityThumbnail", () => {
     await vi.advanceTimersByTimeAsync(140);
 
     await waitFor(() => {
-      expect(loadTrickplayFrames).toHaveBeenCalledWith("/Videos/1/Trickplay/280/tiles.m3u8");
+      expect(loadTrickplayFrames).toHaveBeenCalledWith("/api/playback/videos/1/trickplay/280/tiles.m3u8");
       expect(container.querySelector(".sprite-overlay")).not.toBeNull();
     });
   });
@@ -113,7 +113,7 @@ describe("EntityThumbnail", () => {
 
     expect(move.defaultPrevented).toBe(true);
     const overlay = container.querySelector<HTMLElement>(".sprite-overlay");
-    expect(loadTrickplayFrames).toHaveBeenCalledWith("/Videos/1/Trickplay/280/tiles.m3u8");
+    expect(loadTrickplayFrames).toHaveBeenCalledWith("/api/playback/videos/1/trickplay/280/tiles.m3u8");
     expect(overlay?.style.backgroundPosition).toContain("100%");
   });
 
@@ -606,7 +606,7 @@ function spriteCard(): EntityThumbnailCard {
     },
     hover: {
       kind: "sprite",
-      vttUrl: "/Videos/1/Trickplay/280/tiles.m3u8",
+      vttUrl: "/api/playback/videos/1/trickplay/280/tiles.m3u8",
     },
   };
 }

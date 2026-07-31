@@ -300,15 +300,12 @@ public sealed class PrismediaDbContextModelTests {
         Assert.Equal(clrType, property.ClrType);
     }
 
-    [Theory]
-    [InlineData(nameof(UserRow.Role))]
-    [InlineData(nameof(UserRow.AllowSfw))]
-    public void UserPermissionColumnsAreAlwaysWrittenExplicitly(string propertyName) {
-        // Regression guard: UserRole.Admin is enum value 0, so a database default on these
-        // columns makes EF treat the intended value as the "unset" sentinel and skip the
-        // column on insert — the first admin was silently persisted as a member.
+    [Fact]
+    public void UserRoleIsAlwaysWrittenExplicitly() {
+        // Regression guard: UserRole.Admin is enum value 0, so a database default makes EF
+        // treat the intended value as the "unset" sentinel and skip the column on insert.
         using var db = CreateContext();
-        var property = db.Model.FindEntityType(typeof(UserRow))!.FindProperty(propertyName);
+        var property = db.Model.FindEntityType(typeof(UserRow))!.FindProperty(nameof(UserRow.Role));
 
         Assert.NotNull(property);
         Assert.Equal(ValueGenerated.Never, property!.ValueGenerated);

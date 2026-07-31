@@ -25,12 +25,11 @@ internal static class TestAuth {
 
     internal static WebApplicationFactory<Program> WithTestAuth(
         this WebApplicationFactory<Program> factory,
-        bool allowNsfw = false,
-        bool allowSfw = true) =>
+        bool allowNsfw = false) =>
         factory.WithWebHostBuilder(builder => {
             builder.ConfigureServices(services => {
                 services.RemoveAll<ISecurityPersistence>();
-                services.AddSingleton<ISecurityPersistence>(new FakeSecurityPersistence(allowSfw, allowNsfw));
+                services.AddSingleton<ISecurityPersistence>(new FakeSecurityPersistence(allowNsfw));
                 // Endpoint tests swap repositories/read services for fakes; the DB-backed
                 // library-visibility guard would otherwise 404 every mutation.
                 services.RemoveAll<IEntityVisibilityChecker>();
@@ -45,7 +44,7 @@ internal static class TestAuth {
 
     internal static HttpClient CreateAuthenticatedClient(this WebApplicationFactory<Program> factory) {
         var client = factory.CreateClient();
-        client.DefaultRequestHeaders.Add("X-Prismedia-Api-Key", Token);
+        client.DefaultRequestHeaders.Authorization = new("Bearer", Token);
         return client;
     }
 
@@ -183,7 +182,6 @@ internal static class TestAuth {
     /// <see cref="Password"/>) and one active session for <see cref="Token"/>.
     /// </summary>
     private sealed class FakeSecurityPersistence : ISecurityPersistence {
-        private static readonly Guid ServerId = Guid.Parse("99999999-9999-9999-9999-999999999999");
         internal static readonly Guid AdminUserId = Guid.Parse("88888888-8888-8888-8888-888888888888");
 
         private readonly object _gate = new();
@@ -192,14 +190,13 @@ internal static class TestAuth {
 
         private sealed record UserRow(User User, string? PasswordHash);
 
-        public FakeSecurityPersistence(bool allowSfw, bool allowNsfw) {
+        public FakeSecurityPersistence(bool allowNsfw) {
             var now = DateTimeOffset.UtcNow;
             var admin = new User(
                 AdminUserId,
                 Username,
                 Username,
                 UserRole.Admin,
-                allowSfw,
                 allowNsfw,
                 CanCreateLibraries: true,
                 Enabled: true,
@@ -220,11 +217,6 @@ internal static class TestAuth {
                 now,
                 now,
                 null);
-        }
-
-        public Task<AppSecurityState> EnsureAppSecurityAsync(CancellationToken cancellationToken) {
-            var now = DateTimeOffset.UtcNow;
-            return Task.FromResult(new AppSecurityState(1, ServerId, now, now));
         }
 
         public Task<IReadOnlyList<User>> ListUsersAsync(bool includeDisabled, CancellationToken cancellationToken) {
@@ -281,7 +273,6 @@ internal static class TestAuth {
             string displayName,
             string? passwordHash,
             UserRole role,
-            bool allowSfw,
             bool allowNsfw,
             bool canCreateLibraries,
             bool enabled,
@@ -293,7 +284,7 @@ internal static class TestAuth {
 
                 var now = DateTimeOffset.UtcNow;
                 var user = new User(
-                    Guid.NewGuid(), username, displayName, role, allowSfw, allowNsfw,
+                    Guid.NewGuid(), username, displayName, role, allowNsfw,
                     canCreateLibraries, enabled, passwordHash != null, null, now, now);
                 _users[user.Id] = new UserRow(user, passwordHash);
                 return Task.FromResult(user);
@@ -305,7 +296,6 @@ internal static class TestAuth {
             string? username,
             string? displayName,
             UserRole? role,
-            bool? allowSfw,
             bool? allowNsfw,
             bool? canCreateLibraries,
             bool? enabled,
@@ -319,7 +309,6 @@ internal static class TestAuth {
                     Username = username ?? row.User.Username,
                     DisplayName = displayName ?? row.User.DisplayName,
                     Role = role ?? row.User.Role,
-                    AllowSfw = allowSfw ?? row.User.AllowSfw,
                     AllowNsfw = allowNsfw ?? row.User.AllowNsfw,
                     CanCreateLibraries = canCreateLibraries ?? row.User.CanCreateLibraries,
                     Enabled = enabled ?? row.User.Enabled,
@@ -362,7 +351,7 @@ internal static class TestAuth {
         public Task<UserSession> CreateSessionAsync(
             Guid userId,
             string tokenHash,
-            JellyfinClientIdentity client,
+            ClientIdentity client,
             CancellationToken cancellationToken) {
             lock (_gate) {
                 var now = DateTimeOffset.UtcNow;

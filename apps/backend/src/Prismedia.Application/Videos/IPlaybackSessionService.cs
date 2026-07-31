@@ -6,10 +6,8 @@ namespace Prismedia.Application.Videos;
 /// <see cref="PlaybackSessionService"/>.
 /// </summary>
 public interface IPlaybackSessionService {
-    Task StartAsync(PlaybackSessionCommand request, CancellationToken cancellationToken);
-    Task ProgressAsync(PlaybackSessionCommand request, CancellationToken cancellationToken);
-    Task PingAsync(PlaybackSessionCommand request, CancellationToken cancellationToken);
-    Task StopAsync(PlaybackSessionCommand request, CancellationToken cancellationToken);
-    Task<UserItemDataResult?> MarkPlayedAsync(Guid itemId, CancellationToken cancellationToken);
-    Task<UserItemDataResult?> MarkUnplayedAsync(Guid itemId, CancellationToken cancellationToken);
+    Task StartAsync(VideoPlaybackSessionCommand request, CancellationToken cancellationToken);
+    Task ProgressAsync(VideoPlaybackSessionCommand request, CancellationToken cancellationToken);
+    Task PingAsync(VideoPlaybackSessionCommand request, CancellationToken cancellationToken);
+    Task StopAsync(VideoPlaybackSessionCommand request, CancellationToken cancellationToken);
 }

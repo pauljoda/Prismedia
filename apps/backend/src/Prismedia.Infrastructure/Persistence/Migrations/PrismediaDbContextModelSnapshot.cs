@@ -486,34 +486,6 @@ namespace Prismedia.Infrastructure.Persistence.Migrations
                     b.ToTable("acquisitions", (string)null);
                 });
 
-            modelBuilder.Entity("Prismedia.Infrastructure.Persistence.Entities.AppSecurityRow", b =>
-                {
-                    b.Property<int>("Id")
-                        .HasColumnType("integer")
-                        .HasColumnName("id");
-
-                    b.Property<DateTimeOffset>("CreatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("created_at");
-
-                    b.Property<string>("LegacyApiKey")
-                        .HasMaxLength(128)
-                        .HasColumnType("character varying(128)")
-                        .HasColumnName("legacy_api_key");
-
-                    b.Property<Guid>("ServerId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("server_id");
-
-                    b.Property<DateTimeOffset>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("updated_at");
-
-                    b.HasKey("Id");
-
-                    b.ToTable("app_security", (string)null);
-                });
-
             modelBuilder.Entity("Prismedia.Infrastructure.Persistence.Entities.AppSettingRow", b =>
                 {
                     b.Property<string>("Key")
@@ -3959,10 +3931,6 @@ namespace Prismedia.Infrastructure.Persistence.Migrations
                     b.Property<bool>("AllowNsfw")
                         .HasColumnType("boolean")
                         .HasColumnName("allow_nsfw");
-
-                    b.Property<bool>("AllowSfw")
-                        .HasColumnType("boolean")
-                        .HasColumnName("allow_sfw");
 
                     b.Property<bool>("CanCreateLibraries")
                         .HasColumnType("boolean")

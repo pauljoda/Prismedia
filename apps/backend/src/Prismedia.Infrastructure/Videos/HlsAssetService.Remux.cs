@@ -3,7 +3,7 @@ using System.Globalization;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using Prismedia.Application.Videos;
-using Prismedia.Contracts.Jellyfin;
+using Prismedia.Contracts.Playback;
 using Prismedia.Contracts.Media;
 using Prismedia.Domain.Entities;
 using Prismedia.Infrastructure.Processes;
@@ -75,7 +75,7 @@ public sealed partial class HlsAssetService {
         }
 
         var fileName = assetName switch {
-            JellyfinProtocol.Hls.StreamPlaylist or JellyfinProtocol.Hls.IndexPlaylist => JellyfinProtocol.Hls.IndexPlaylist,
+            VideoPlaybackProtocol.Hls.StreamPlaylist or VideoPlaybackProtocol.Hls.IndexPlaylist => VideoPlaybackProtocol.Hls.IndexPlaylist,
             "init.mp4" => "init.mp4",
             _ when assetName.StartsWith("seg_", StringComparison.OrdinalIgnoreCase) &&
                 assetName.EndsWith(".m4s", StringComparison.OrdinalIgnoreCase) => assetName,
@@ -413,10 +413,10 @@ public sealed partial class HlsAssetService {
             "2",
             // Pace the stream copy instead of writing the whole file to disk as fast as the drive allows.
             // An unthrottled copy of a long 4K source pins every core for the burst it takes to copy the
-            // entire timeline up front; Jellyfin avoids this by reading copy-remux input at a bounded rate
+            // entire timeline up front; bounded input reads avoid this while keeping generation
             // (-readrate). We read the first RemuxInitialBurstSeconds as fast as possible so playback has an
             // immediate buffer, then cap at RemuxReadRate× realtime — far above playback speed (so the copy
-            // always stays well ahead) but far below "race the whole file", keeping CPU near Jellyfin's.
+            // always well ahead) but far below "race the whole file", keeping CPU bounded.
             "-readrate_initial_burst",
             RemuxInitialBurstSeconds.ToString(CultureInfo.InvariantCulture),
             "-readrate",
@@ -760,7 +760,7 @@ public sealed partial class HlsAssetService {
     /// triggered the cut. That distinction only matters when a long GOP carries a keyframe well past the
     /// threshold: ffmpeg then leaves the threshold one step on, so the very next keyframe (which may be
     /// only a moment later) is cut immediately, producing a short segment. Verified against
-    /// jellyfin-ffmpeg: keyframes <c>[0,19,20,25]</c> over a 30s source produce <c>[19,1,5,5]</c> (four
+    /// For example, keyframes <c>[0,19,20,25]</c> over a 30s source produce <c>[19,1,5,5]</c> (four
     /// segments). Jumping the threshold past the cut instead skips the keyframe at 20 and yields
     /// <c>[19,6,5]</c> (three segments) — so the VOD playlist we hand the player would reference the same
     /// <c>seg_NNNNN</c> filenames as ffmpeg's real output but with mismatched durations, corrupting
@@ -884,7 +884,7 @@ public sealed partial class HlsAssetService {
     /// <c>isTypeSupported('…dvh1.08.06…')</c> false) rejects the buffer outright — instant failure and a
     /// fallback to a heavy transcode. With an <c>hvc1</c> tag the same browser decodes the HEVC base
     /// layer and simply ignores the Dolby Vision RPU NAL units (Profile 7/8 carry a conformant HDR10/HLG
-    /// base, so this renders correctly). This mirrors what a reference client (Jellyfin) serves to a
+    /// base, so this renders correctly). This mirrors what reference HLS clients serve to a
     /// non-Dolby-Vision browser: <c>-codec:v copy -tag:v hvc1</c>, reported as "HEVC (direct)". Tagging
     /// <c>dvh1</c> would only be correct for a client that advertised Dolby Vision support — which the
     /// browser device profile does not currently probe; until it does, <c>hvc1</c> is the right default.

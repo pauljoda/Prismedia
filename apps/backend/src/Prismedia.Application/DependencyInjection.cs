@@ -8,7 +8,6 @@ using Prismedia.Application.Jobs;
 using Prismedia.Application.Organization;
 using Prismedia.Application.Settings;
 using Prismedia.Application.Health;
-using Prismedia.Application.Jellyfin;
 using Prismedia.Application.Navigation;
 using Prismedia.Application.Jobs.Handlers;
 using Prismedia.Application.Jobs.Handlers.Generate;
@@ -48,8 +47,6 @@ public static class DependencyInjection {
         services.AddScoped<ICurrentUserContext>(sp => sp.GetRequiredService<CurrentUserContextHolder>());
         services.AddScoped<BrowserSessionService>();
         services.AddScoped<MusicPlayerStateService>();
-        services.AddSingleton<IJellyfinAudioPlaybackTracker, JellyfinAudioPlaybackTracker>();
-        services.AddScoped<JellyfinCatalogService>();
         services.AddScoped<OrganizeService>();
         services.AddScoped<FilesService>();
         services.AddScoped<EntitySourcePathMutationCoordinator>();

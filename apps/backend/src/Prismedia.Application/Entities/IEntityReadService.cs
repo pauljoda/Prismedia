@@ -60,7 +60,7 @@ public interface IEntityReadService {
     /// </param>
     /// <param name="wanted">
     /// When set, keeps only wanted placeholders (true) or excludes them (false). External projections
-    /// (Jellyfin, OPDS) pass false so fileless request placeholders never reach external clients.
+    /// such as OPDS pass false so fileless request placeholders never reach external clients.
     /// </param>
     /// <param name="acquisitionStatus">When set, keeps entities whose latest linked acquisition has this status.</param>
     Task<EntityListResponse> ListAsync(

@@ -11,9 +11,8 @@ using Prismedia.Infrastructure.Persistence.Entities;
 namespace Prismedia.Infrastructure.Security;
 
 /// <summary>
-/// One-time and per-boot user bootstrap, run by the API process right after migrations:
-/// ensures the app security row exists, hashes the staged pre-multi-user API key into
-/// migrated accounts' passwords, and applies the host recovery environment variables.
+/// Per-boot account recovery hook, run by the API process right after migrations.
+/// When configured explicitly by the host, it restores access to one administrator.
 /// </summary>
 public static class UserBootstrapRunner {
     /// <summary>New password applied to the recovery admin account on every boot while set.</summary>
@@ -23,8 +22,6 @@ public static class UserBootstrapRunner {
     public const string RecoveryUsernameVariable = "PRISMEDIA_RECOVERY_USERNAME";
 
     private const string DefaultRecoveryUsername = "admin";
-    private const int SingletonSecurityId = 1;
-
     public static async Task RunUserBootstrapAsync(
         IServiceProvider services,
         IConfiguration configuration,
@@ -39,65 +36,7 @@ public static class UserBootstrapRunner {
         var db = scope.ServiceProvider.GetRequiredService<PrismediaDbContext>();
         var hasher = scope.ServiceProvider.GetRequiredService<IPasswordHasher>();
 
-        await EnsureAppSecurityAsync(db, cancellationToken);
-        await ApplyLegacyApiKeyAsync(db, hasher, logger, cancellationToken);
         await ApplyRecoveryEnvironmentAsync(db, hasher, configuration, logger, cancellationToken);
-    }
-
-    private static async Task EnsureAppSecurityAsync(PrismediaDbContext db, CancellationToken cancellationToken) {
-        if (await db.AppSecurity.AnyAsync(cancellationToken)) {
-            return;
-        }
-
-        var now = DateTimeOffset.UtcNow;
-        db.AppSecurity.Add(new AppSecurityRow {
-            Id = SingletonSecurityId,
-            ServerId = Guid.NewGuid(),
-            CreatedAt = now,
-            UpdatedAt = now
-        });
-        await db.SaveChangesAsync(cancellationToken);
-    }
-
-    /// <summary>
-    /// Migrated installs: every former Jellyfin profile authenticated with the app API key
-    /// as its password, so that key becomes each migrated account's initial password. The
-    /// staged key is nulled once consumed, making this a one-time, idempotent step.
-    /// </summary>
-    private static async Task ApplyLegacyApiKeyAsync(
-        PrismediaDbContext db,
-        IPasswordHasher hasher,
-        ILogger logger,
-        CancellationToken cancellationToken) {
-        var state = await db.AppSecurity.SingleAsync(
-            row => row.Id == SingletonSecurityId,
-            cancellationToken);
-        if (state.LegacyApiKey is not { Length: > 0 } legacyKey) {
-            return;
-        }
-
-        var now = DateTimeOffset.UtcNow;
-        var migrated = 0;
-        var hash = hasher.Hash(legacyKey);
-        var users = await db.Users.Where(user => user.PasswordHash == null).ToArrayAsync(cancellationToken);
-        foreach (var user in users) {
-            user.PasswordHash = hash;
-            user.PasswordUpdatedAt = now;
-            user.UpdatedAt = now;
-            migrated++;
-        }
-
-        state.LegacyApiKey = null;
-        state.UpdatedAt = now;
-        await db.SaveChangesAsync(cancellationToken);
-
-        if (migrated > 0) {
-            logger.LogWarning(
-                "Migrated {Count} account(s) from the pre-multi-user API key: each keeps the old " +
-                "key as its password so existing Jellyfin/OPDS clients continue to work. Reset " +
-                "their passwords from Settings → Users.",
-                migrated);
-        }
     }
 
     /// <summary>
@@ -132,7 +71,6 @@ public static class UserBootstrapRunner {
                 NormalizedUsername = normalized,
                 DisplayName = username,
                 Role = UserRole.Admin,
-                AllowSfw = true,
                 AllowNsfw = true,
                 CanCreateLibraries = true,
                 Enabled = true,

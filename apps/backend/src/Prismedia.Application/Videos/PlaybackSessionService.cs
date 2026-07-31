@@ -3,10 +3,9 @@ using Prismedia.Application.Entities;
 namespace Prismedia.Application.Videos;
 
 /// <summary>
-/// Persists Jellyfin-compatible playback events into Prismedia's shared playback capability.
+/// Persists native playback-session progress into Prismedia's shared playback capability.
 /// Combines transcode session lifecycle (via <see cref="ITranscodeSessionService"/>) with
-/// entity-level playback state writes, which are routed through <see cref="EntityCapabilityService"/>
-/// so that Jellyfin clients and the native player produce identical playback state for the same inputs.
+/// entity-level playback state writes routed through <see cref="EntityCapabilityService"/>.
 /// </summary>
 public sealed class PlaybackSessionService : IPlaybackSessionService {
     private readonly EntityCapabilityService _capabilities;
@@ -17,86 +16,77 @@ public sealed class PlaybackSessionService : IPlaybackSessionService {
         _transcodes = transcodes;
     }
 
-    public async Task StartAsync(PlaybackSessionCommand request, CancellationToken cancellationToken) {
+    public async Task StartAsync(VideoPlaybackSessionCommand request, CancellationToken cancellationToken) {
         RegisterOrPing(request);
 
-        // Jellyfin clients report the real start position in the Playing event — the saved resume
-        // point when resuming — so a Playing at position 0 is an explicit "Start Over". Clear the
-        // resume immediately so the item no longer offers a stale resume point even if the client
-        // never reports further progress.
-        if (request.ItemId != Guid.Empty && request.PositionTicks is 0) {
-            await UpdatePlaybackAsync(request.ItemId, resumeSeconds: 0, completed: null, cancellationToken);
-        }
-    }
-
-    public async Task ProgressAsync(PlaybackSessionCommand request, CancellationToken cancellationToken) {
-        RegisterOrPing(request);
-        if (request.ItemId != Guid.Empty && request.PositionTicks is >= 0) {
+        // Starting at zero is an explicit "Start Over" signal. Clear a stale resume point even if
+        // the client never sends another progress event.
+        if (request.EntityId != Guid.Empty && request.PositionSeconds is 0) {
             await UpdatePlaybackAsync(
-                request.ItemId,
-                ToSeconds(request.PositionTicks.Value),
-                completed: null,
+                request.EntityId,
+                resumeSeconds: 0,
+                request.DurationSeconds,
+                request.Completed,
                 cancellationToken);
         }
     }
 
-    public Task PingAsync(PlaybackSessionCommand request, CancellationToken cancellationToken) {
+    public async Task ProgressAsync(VideoPlaybackSessionCommand request, CancellationToken cancellationToken) {
+        RegisterOrPing(request);
+        if (request.EntityId != Guid.Empty && request.PositionSeconds is >= 0) {
+            await UpdatePlaybackAsync(
+                request.EntityId,
+                request.PositionSeconds.Value,
+                request.DurationSeconds,
+                request.Completed,
+                cancellationToken);
+        }
+    }
+
+    public Task PingAsync(VideoPlaybackSessionCommand request, CancellationToken cancellationToken) {
         RegisterOrPing(request);
         return Task.CompletedTask;
     }
 
-    public async Task StopAsync(PlaybackSessionCommand request, CancellationToken cancellationToken) {
-        if (request.ItemId != Guid.Empty) {
+    public async Task StopAsync(VideoPlaybackSessionCommand request, CancellationToken cancellationToken) {
+        if (request.EntityId != Guid.Empty) {
             await UpdatePlaybackAsync(
-                request.ItemId,
-                request.PositionTicks is >= 0 ? ToSeconds(request.PositionTicks.Value) : 0,
-                completed: null,
+                request.EntityId,
+                request.PositionSeconds is >= 0 ? request.PositionSeconds.Value : 0,
+                request.DurationSeconds,
+                request.Completed,
                 cancellationToken);
         }
 
-        if (!string.IsNullOrWhiteSpace(request.PlaySessionId)) {
-            await _transcodes.CancelAsync(request.PlaySessionId!, cancellationToken);
+        if (!string.IsNullOrWhiteSpace(request.SessionId)) {
+            await _transcodes.CancelAsync(request.SessionId!, cancellationToken);
         }
-    }
-
-    public async Task<UserItemDataResult?> MarkPlayedAsync(Guid itemId, CancellationToken cancellationToken) {
-        return await UpdatePlaybackAsync(itemId, resumeSeconds: 0, completed: true, cancellationToken)
-            ? new UserItemDataResult(Played: true, PlaybackPositionTicks: 0)
-            : null;
-    }
-
-    public async Task<UserItemDataResult?> MarkUnplayedAsync(Guid itemId, CancellationToken cancellationToken) {
-        return await UpdatePlaybackAsync(itemId, resumeSeconds: 0, completed: false, cancellationToken)
-            ? new UserItemDataResult(Played: false, PlaybackPositionTicks: 0)
-            : null;
     }
 
     private async Task<bool> UpdatePlaybackAsync(
         Guid itemId,
         double resumeSeconds,
+        double? durationSeconds,
         bool? completed,
         CancellationToken cancellationToken) =>
-        await _capabilities.UpdatePlaybackAsync(
+        await _capabilities.UpdateVideoPlaybackAsync(
             itemId,
             resumeSeconds,
-            durationSeconds: null,
+            durationSeconds,
             completed,
             cancellationToken) is not null;
 
-    private void RegisterOrPing(PlaybackSessionCommand request) {
-        if (string.IsNullOrWhiteSpace(request.PlaySessionId)) {
+    private void RegisterOrPing(VideoPlaybackSessionCommand request) {
+        if (string.IsNullOrWhiteSpace(request.SessionId)) {
             return;
         }
 
-        if (request.ItemId == Guid.Empty) {
-            _transcodes.Ping(request.PlaySessionId!);
+        if (request.EntityId == Guid.Empty) {
+            _transcodes.Ping(request.SessionId!);
             return;
         }
 
-        _transcodes.Register(request.PlaySessionId!, request.ItemId);
-        _transcodes.Ping(request.PlaySessionId!);
+        _transcodes.Register(request.SessionId!, request.EntityId);
+        _transcodes.Ping(request.SessionId!);
     }
-
-    private static double ToSeconds(long ticks) =>
-        Math.Max(0, ticks / (double)TimeSpan.TicksPerSecond);
 }

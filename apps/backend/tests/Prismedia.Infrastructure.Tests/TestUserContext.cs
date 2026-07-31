@@ -40,7 +40,6 @@ internal static class TestUserContext {
                 "test-user",
                 "Test User",
                 role,
-                AllowSfw: true,
                 AllowNsfw: true,
                 CanCreateLibraries: role == UserRole.Admin,
                 Enabled: true,

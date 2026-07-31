@@ -6,9 +6,8 @@ using Prismedia.Infrastructure.Persistence.Entities;
 
 namespace Prismedia.Infrastructure.Security;
 
-/// <summary>EF-backed persistence for users, sessions, and app security state.</summary>
+/// <summary>EF-backed persistence for users and sessions.</summary>
 public sealed class EfSecurityPersistence : ISecurityPersistence {
-    private const int SingletonSecurityId = 1;
     private const int ClientMaxLength = 128;
     private const int DeviceNameMaxLength = 128;
     private const int DeviceIdMaxLength = 256;
@@ -18,24 +17,6 @@ public sealed class EfSecurityPersistence : ISecurityPersistence {
 
     public EfSecurityPersistence(PrismediaDbContext db) {
         _db = db;
-    }
-
-    /// <inheritdoc />
-    public async Task<AppSecurityState> EnsureAppSecurityAsync(CancellationToken cancellationToken) {
-        var state = await _db.AppSecurity.FirstOrDefaultAsync(row => row.Id == SingletonSecurityId, cancellationToken);
-        if (state is null) {
-            var now = DateTimeOffset.UtcNow;
-            state = new AppSecurityRow {
-                Id = SingletonSecurityId,
-                ServerId = Guid.NewGuid(),
-                CreatedAt = now,
-                UpdatedAt = now
-            };
-            _db.AppSecurity.Add(state);
-            await _db.SaveChangesAsync(cancellationToken);
-        }
-
-        return ToState(state);
     }
 
     /// <inheritdoc />
@@ -94,7 +75,6 @@ public sealed class EfSecurityPersistence : ISecurityPersistence {
         string displayName,
         string? passwordHash,
         UserRole role,
-        bool allowSfw,
         bool allowNsfw,
         bool canCreateLibraries,
         bool enabled,
@@ -113,7 +93,6 @@ public sealed class EfSecurityPersistence : ISecurityPersistence {
             PasswordHash = passwordHash,
             PasswordUpdatedAt = passwordHash is null ? null : now,
             Role = role,
-            AllowSfw = allowSfw,
             AllowNsfw = allowNsfw,
             CanCreateLibraries = canCreateLibraries,
             Enabled = enabled,
@@ -131,7 +110,6 @@ public sealed class EfSecurityPersistence : ISecurityPersistence {
         string? username,
         string? displayName,
         UserRole? role,
-        bool? allowSfw,
         bool? allowNsfw,
         bool? canCreateLibraries,
         bool? enabled,
@@ -160,10 +138,6 @@ public sealed class EfSecurityPersistence : ISecurityPersistence {
 
         if (role is { } newRole) {
             row.Role = newRole;
-        }
-
-        if (allowSfw is { } allowSafe) {
-            row.AllowSfw = allowSafe;
         }
 
         if (allowNsfw is { } allow) {
@@ -228,7 +202,7 @@ public sealed class EfSecurityPersistence : ISecurityPersistence {
     public async Task<UserSession> CreateSessionAsync(
         Guid userId,
         string tokenHash,
-        JellyfinClientIdentity client,
+        ClientIdentity client,
         CancellationToken cancellationToken) {
         var now = DateTimeOffset.UtcNow;
         var row = new UserSessionRow {
@@ -339,16 +313,12 @@ public sealed class EfSecurityPersistence : ISecurityPersistence {
             ? value.Length <= maxLength ? value : value[..maxLength]
             : value;
 
-    private static AppSecurityState ToState(AppSecurityRow row) =>
-        new(row.Id, row.ServerId, row.CreatedAt, row.UpdatedAt);
-
     private static User ToUser(UserRow row) =>
         new(
             row.Id,
             row.Username,
             row.DisplayName,
             row.Role,
-            row.AllowSfw,
             row.AllowNsfw,
             row.CanCreateLibraries,
             row.Enabled,

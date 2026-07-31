@@ -1,7 +1,7 @@
 namespace Prismedia.Application.Videos;
 
 /// <summary>
-/// Serves Jellyfin-style HLS image playlists and tiled JPEG sheets for timeline scrubbing.
+/// Serves HLS image playlists and tiled JPEG sheets for timeline scrubbing.
 /// </summary>
 public interface ITrickplayService {
     Task<TrickplayPlaylist?> GetPlaylistAsync(Guid itemId, int width, CancellationToken cancellationToken);
@@ -17,7 +17,7 @@ public sealed record TrickplayPlaylist(
     string CacheControl);
 
 /// <summary>
-/// JPEG tile-sheet asset used by a Jellyfin-style trickplay playlist.
+/// JPEG tile-sheet asset used by a trickplay playlist.
 /// </summary>
 public sealed record TrickplayTile(
     string Path,

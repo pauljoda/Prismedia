@@ -18,13 +18,12 @@
   import { fetchEntity, fetchEntityThumbnails, type EntityCardFull } from "$lib/api/entities";
   import { fetchSettingsValues, type LibrarySettings } from "$lib/api/settings";
   import {
-    markJellyfinUserPlayedItem,
-    postJellyfinSessionProgress,
+    reportVideoPlayback,
     updateEntityPlayback,
-    type JellyfinPlaybackInfoResponse,
   } from "$lib/api/playback";
+  import type { VideoPlaybackPlanResponse } from "$lib/api/generated/model";
   import {
-    loadPlaybackInfo as loadPlaybackInfoRequest,
+    loadPlaybackPlan as loadPlaybackPlanRequest,
     negotiateForceTranscodeSrc,
   } from "$lib/player/playback-negotiation";
   import { durationToSeconds } from "$lib/utils/format";
@@ -65,7 +64,7 @@
   } from "./video-page-state";
   import { acquisitionStatusDisplay } from "$lib/requests/acquisition-status-display";
 
-  let playbackInfo = $state<JellyfinPlaybackInfoResponse | null>(null);
+  let playbackPlan = $state.raw<VideoPlaybackPlanResponse | null>(null);
   let librarySettings = $state<LibrarySettings | null>(null);
   let relationshipCredits = $state<EntityDetailCredit[]>([]);
   let relationshipStudio = $state<EntityDetailCredit | null>(null);
@@ -82,20 +81,20 @@
       if (await redirectMovieChildVideo(nextVideo, signal)) return nextVideo;
 
       const relationshipsPromise = hydrateVideoRelationships(nextVideo, signal);
-      const playbackInfoPromise = isWanted(nextVideo.capabilities)
+      const playbackPlanPromise = isWanted(nextVideo.capabilities)
         ? null
-        : loadPlaybackInfo(
+        : loadPlaybackPlan(
             nextVideo.id,
-            playbackInfo?.PlaySessionId,
+            playbackPlan?.sessionId,
             selectedAudioStreamIndex,
           );
-      const [relationships, nextPlaybackInfo] = await Promise.all([
+      const [relationships, nextPlaybackPlan] = await Promise.all([
         relationshipsPromise,
-        playbackInfoPromise,
+        playbackPlanPromise,
       ]);
       signal.throwIfAborted();
 
-      playbackInfo = nextPlaybackInfo;
+      playbackPlan = nextPlaybackPlan;
       relationshipCredits = relationships.credits;
       relationshipStudio = relationships.studio;
       relationshipTags = relationships.relationshipTags;
@@ -168,7 +167,7 @@
 
   const playerProps = $derived.by(() => {
     if (!video || entityWanted) return null;
-    return extractVideoPlayerProps(video.id, video.capabilities, playbackInfo, selectedAudioStreamIndex);
+    return extractVideoPlayerProps(video.id, video.capabilities, playbackPlan, selectedAudioStreamIndex);
   });
 
   const primaryStudio = $derived(relationshipStudio);
@@ -311,8 +310,7 @@
   }
 
   /**
-   * Resets playback to the beginning. Reporting position 0 routes through the same start-over
-   * behaviour a Jellyfin client triggers (a sub-5% progress report clears resume and completion).
+   * Resets playback to the beginning through the shared playback capability.
    */
   async function handleStartOver() {
     if (!video || playbackBusy) return;
@@ -498,13 +496,13 @@
     return true;
   }
 
-  async function loadPlaybackInfo(
+  async function loadPlaybackPlan(
     videoId: string,
-    playSessionId?: string | null,
+    sessionId?: string | null,
     audioStreamIndex?: number | null,
   ) {
-    return await loadPlaybackInfoRequest(videoId, {
-      playSessionId,
+    return await loadPlaybackPlanRequest(videoId, {
+      sessionId,
       audioStreamIndex,
     });
   }
@@ -512,7 +510,7 @@
   // Player callback: re-negotiate a guaranteed-playable transcode after a fatal decode error.
   async function forceTranscodeFallback(): Promise<string | null> {
     if (!video) return null;
-    return negotiateForceTranscodeSrc(video, selectedAudioStreamIndex, playbackInfo?.PlaySessionId);
+    return negotiateForceTranscodeSrc(video, selectedAudioStreamIndex, playbackPlan?.sessionId);
   }
 
   // ── Player event handlers ──────────────────────────────────────────
@@ -540,11 +538,11 @@
    */
   function flushPlaybackPosition() {
     if (!playTracked || !video || !playerProps || currentTime <= 0) return;
-    void postJellyfinSessionProgress("Playing/Stopped", {
-      ItemId: video.id,
-      MediaSourceId: playerProps.mediaSourceId,
-      PlaySessionId: playerProps.playSessionId,
-      PositionTicks: Math.round(currentTime * 10_000_000),
+    void reportVideoPlayback("stop", {
+      entityId: video.id,
+      sessionId: playerProps.sessionId,
+      positionSeconds: currentTime,
+      durationSeconds: playerProps.duration,
     }).catch(() => {});
   }
 
@@ -553,11 +551,11 @@
     playTracked = true;
 
     try {
-      await postJellyfinSessionProgress("Playing", {
-        ItemId: video.id,
-        MediaSourceId: playerProps.mediaSourceId,
-        PlaySessionId: playerProps.playSessionId,
-        PositionTicks: Math.round(currentTime * 10_000_000),
+      await reportVideoPlayback("start", {
+        entityId: video.id,
+        sessionId: playerProps.sessionId,
+        positionSeconds: currentTime,
+        durationSeconds: playerProps.duration,
       });
     } catch {
       // best-effort
@@ -568,11 +566,11 @@
       playbackUpdateTimer = setInterval(() => {
         if (currentTime > 0 && Math.abs(currentTime - lastReportedTime) > 3) {
           lastReportedTime = currentTime;
-          void postJellyfinSessionProgress("Playing/Progress", {
-            ItemId: videoId,
-            MediaSourceId: playerProps.mediaSourceId,
-            PlaySessionId: playerProps.playSessionId,
-            PositionTicks: Math.round(currentTime * 10_000_000),
+          void reportVideoPlayback("progress", {
+            entityId: videoId,
+            sessionId: playerProps.sessionId,
+            positionSeconds: currentTime,
+            durationSeconds: playerProps.duration,
           }).catch(() => {});
         }
       }, 10_000);
@@ -588,13 +586,13 @@
     try {
       // Report the real end position so the backend derives completion (and tears
       // down the transcode session), then explicitly mark played as a guarantee.
-      await postJellyfinSessionProgress("Playing/Stopped", {
-        ItemId: video.id,
-        MediaSourceId: playerProps.mediaSourceId,
-        PlaySessionId: playerProps.playSessionId,
-        PositionTicks: Math.round(currentTime * 10_000_000),
+      await reportVideoPlayback("stop", {
+        entityId: video.id,
+        sessionId: playerProps.sessionId,
+        positionSeconds: currentTime,
+        durationSeconds: playerProps.duration,
+        completed: true,
       });
-      await markJellyfinUserPlayedItem(video.id, true);
     } catch {
       // best-effort
     }
@@ -611,7 +609,7 @@
   async function handleAudioTrackChange(streamIndex: number) {
     if (!video) return;
     selectedAudioStreamIndex = streamIndex;
-    playbackInfo = await loadPlaybackInfo(video.id, playbackInfo?.PlaySessionId, streamIndex);
+    playbackPlan = await loadPlaybackPlan(video.id, playbackPlan?.sessionId, streamIndex);
   }
 
   function handleSeek(time: number) {

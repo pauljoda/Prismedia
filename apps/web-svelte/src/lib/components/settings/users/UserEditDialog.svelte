@@ -131,7 +131,7 @@
         <h2 class="text-kicker text-text-primary">{isCreate ? "Add user" : "Edit user"}</h2>
         <p class="text-[0.68rem] text-text-muted">
           {isCreate
-            ? "The same credentials work in the web app, Jellyfin clients, and OPDS readers."
+            ? "The same credentials work in Prismedia apps and OPDS readers."
             : user?.username}
         </p>
       </div>

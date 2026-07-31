@@ -1,7 +1,7 @@
 namespace Prismedia.Contracts.Entities;
 
 /// <summary>
-/// Batched folder-row context for external catalog listings (Jellyfin series/season rows): the
+/// Batched folder-row context for projected catalog listings (series/season rows): the
 /// metadata a list row needs beyond the thumbnail projection, loadable for a whole page of ids with
 /// one grouped query per collection instead of a full per-row detail hydration.
 /// </summary>

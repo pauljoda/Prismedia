@@ -7,7 +7,7 @@ using Prismedia.Domain.Entities;
 namespace Prismedia.Application.Jobs.Handlers.Generate;
 
 /// <summary>
-/// Generates video thumbnails, preview clips, and Jellyfin-style trickplay tiles via ffmpeg.
+/// Generates video thumbnails, preview clips, and trickplay tiles via ffmpeg.
 /// Optimized for throughput: uses batch trickplay extraction (single ffmpeg pass)
 /// and combined thumbnail+preview generation.
 /// </summary>

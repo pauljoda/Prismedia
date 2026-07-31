@@ -41,7 +41,6 @@ public sealed class PlaybackStatisticsEndpointTests {
                 "stats-member",
                 TestAuth.Password,
                 Role: UserRole.Member,
-                AllowSfw: true,
                 AllowNsfw: false),
             CodecJson);
         createResponse.EnsureSuccessStatusCode();

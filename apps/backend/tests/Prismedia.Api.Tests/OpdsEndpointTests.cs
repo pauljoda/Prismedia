@@ -3,19 +3,25 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text;
+using System.Text.Json;
 using System.Xml.Linq;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Prismedia.Application.Opds;
-using Prismedia.Contracts.Jellyfin;
 using Prismedia.Contracts.Media;
 using Prismedia.Contracts.Opds;
+using Prismedia.Contracts.Playback;
+using Prismedia.Contracts.Security;
 using Prismedia.Domain.Entities;
+using Prismedia.Infrastructure.Serialization;
 
 namespace Prismedia.Api.Tests;
 
 public sealed class OpdsEndpointTests : IDisposable {
+    private static readonly JsonSerializerOptions CodecJson =
+        new(JsonSerializerDefaults.Web) { Converters = { new CodecJsonConverterFactory() } };
+
     private static readonly Guid VisibleBookId = Guid.Parse("11111111-1111-1111-1111-111111111111");
     private static readonly Guid HiddenBookId = Guid.Parse("22222222-2222-2222-2222-222222222222");
     private static readonly Guid PdfBookId = Guid.Parse("33333333-3333-3333-3333-333333333333");
@@ -39,7 +45,7 @@ public sealed class OpdsEndpointTests : IDisposable {
     }
 
     [Fact]
-    public async Task OpdsRootAcceptsApiKeyAndReturnsNavigationFeed() {
+    public async Task OpdsRootAcceptsBearerSessionAndReturnsNavigationFeed() {
         using var factory = CreateFactory();
         using var client = factory.CreateAuthenticatedClient();
 
@@ -76,10 +82,10 @@ public sealed class OpdsEndpointTests : IDisposable {
     }
 
     [Fact]
-    public async Task OpdsAcceptsBearerJellyfinSessionTokens() {
+    public async Task OpdsAcceptsBearerSessionTokens() {
         using var factory = CreateFactory();
         using var client = factory.CreateClient();
-        var auth = await AuthenticateAsync(client);
+        var auth = await LoginAsync(client);
         using var request = new HttpRequestMessage(HttpMethod.Get, OpdsProtocol.Prefix);
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", auth.AccessToken);
 
@@ -93,14 +99,14 @@ public sealed class OpdsEndpointTests : IDisposable {
         using var factory = CreateFactory();
         using var client = factory.CreateClient();
 
-        using var response = await client.GetAsync($"{OpdsProtocol.Routes.OpenSearch}?api_key={TestAuth.Token}");
+        using var response = await client.GetAsync($"{OpdsProtocol.Routes.OpenSearch}?{ApiAuthenticationProtocol.AccessTokenQuery}={TestAuth.Token}");
         var document = await ReadXmlAsync(response);
         var url = Assert.Single(document.Descendants(XName.Get("Url", OpdsProtocol.OpenSearchNamespace)));
         var template = (string?)url.Attribute("template");
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Equal(OpdsProtocol.ContentTypes.OpenSearch, response.Content.Headers.ContentType?.MediaType);
-        Assert.Contains("api_key=", template);
+        Assert.Contains($"{ApiAuthenticationProtocol.AccessTokenQuery}=", template);
         Assert.Contains("q={searchTerms}", template);
         Assert.DoesNotContain("%7BsearchTerms%7D", template);
     }
@@ -272,15 +278,12 @@ public sealed class OpdsEndpointTests : IDisposable {
     private static AuthenticationHeaderValue Basic(string password) =>
         new("Basic", Convert.ToBase64String(Encoding.UTF8.GetBytes($"Prismedia:{password}")));
 
-    private static async Task<JellyfinAuthenticationResult> AuthenticateAsync(HttpClient client) {
+    private static async Task<LoginResponse> LoginAsync(HttpClient client) {
         using var response = await client.PostAsJsonAsync(
-            "/Users/AuthenticateByName",
-            new JellyfinAuthenticateByNameRequest {
-                Username = "Prismedia",
-                Password = TestAuth.Password
-            });
+            "/api/auth/login",
+            new LoginRequest(TestAuth.Username, TestAuth.Password));
         response.EnsureSuccessStatusCode();
-        var result = await response.Content.ReadFromJsonAsync<JellyfinAuthenticationResult>();
+        var result = await response.Content.ReadFromJsonAsync<LoginResponse>(CodecJson);
         Assert.NotNull(result);
         return result;
     }

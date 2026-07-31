@@ -157,30 +157,6 @@ public static class ApiProblemCodes {
     /// <summary>Problem code <c>invalid_upload</c>.</summary>
     public const string InvalidUpload = "invalid_upload";
 
-    /// <summary>Problem code <c>jellyfin_audio_not_found</c>.</summary>
-    public const string JellyfinAudioNotFound = "jellyfin_audio_not_found";
-
-    /// <summary>Problem code <c>jellyfin_auth_failed</c>.</summary>
-    public const string JellyfinAuthFailed = "jellyfin_auth_failed";
-
-    /// <summary>Problem code <c>jellyfin_image_not_found</c>.</summary>
-    public const string JellyfinImageNotFound = "jellyfin_image_not_found";
-
-    /// <summary>Problem code <c>jellyfin_item_file_not_found</c>.</summary>
-    public const string JellyfinItemFileNotFound = "jellyfin_item_file_not_found";
-
-    /// <summary>Problem code <c>jellyfin_item_not_found</c>.</summary>
-    public const string JellyfinItemNotFound = "jellyfin_item_not_found";
-
-    /// <summary>Problem code <c>jellyfin_quick_connect_disabled</c>.</summary>
-    public const string JellyfinQuickConnectDisabled = "jellyfin_quick_connect_disabled";
-
-    /// <summary>Problem code <c>jellyfin_quick_connect_not_found</c>.</summary>
-    public const string JellyfinQuickConnectNotFound = "jellyfin_quick_connect_not_found";
-
-    /// <summary>Problem code <c>jellyfin_user_not_found</c>.</summary>
-    public const string JellyfinUserNotFound = "jellyfin_user_not_found";
-
     /// <summary>Problem code <c>last_admin_required</c>.</summary>
     public const string LastAdminRequired = "last_admin_required";
 

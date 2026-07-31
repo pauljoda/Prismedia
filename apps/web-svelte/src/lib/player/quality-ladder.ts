@@ -1,18 +1,18 @@
 /**
- * Builds the manual quality tiers the player offers, the way Jellyfin's web client does: a fixed list
- * of bitrate presets, capped to what the source actually contains, each mapping to a server rendition
- * the user can pin instead of letting the server pick. Picking a tier streams that specific rung
+ * Builds the manual quality tiers the player offers: a fixed list of bitrate presets capped to what
+ * the source actually contains, each mapping to a server rendition the user can pin instead of
+ * letting the server pick. Picking a tier streams that specific rung
  * (a single transcode at that bitrate/resolution) — useful for capping quality on a weak connection.
  *
  * The preset names MUST stay in sync with the server's rendition names
- * (`JellyfinQualityPresetOptions` in HlsAssetService.Encoding.cs), because a tier resolves to the
- * variant playlist `/Videos/{id}/hls/{name}/stream.m3u8`. The capping logic mirrors the server's
- * `JellyfinQualityOptions`, so the client only ever offers rungs the server will actually produce.
+ * (`PlaybackQualityPresetOptions` in HlsAssetService.Encoding.cs), because a tier resolves to the
+ * native rendition route. The capping logic mirrors the server's `PlaybackQualityOptions`, so the
+ * client only ever offers rungs the server will actually produce.
  */
 
 /** One selectable streaming quality tier. */
 export interface QualityRung {
-  /** Server rendition name (e.g. "8mbps"); maps to /Videos/{id}/hls/{name}/stream.m3u8. */
+  /** Server rendition name (e.g. "8mbps"); maps to a native HLS rendition route. */
   name: string;
   /** Effective encoded height for this source (min of source height and the preset's cap). */
   height: number;

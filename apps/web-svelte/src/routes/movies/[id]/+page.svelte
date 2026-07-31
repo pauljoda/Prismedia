@@ -20,13 +20,12 @@
   import { fetchEntity, type EntityCardFull } from "$lib/api/entities";
   import { fetchSettingsValues, type LibrarySettings } from "$lib/api/settings";
   import {
-    markJellyfinUserPlayedItem,
-    postJellyfinSessionProgress,
+    reportVideoPlayback,
     updateEntityPlayback,
-    type JellyfinPlaybackInfoResponse,
   } from "$lib/api/playback";
+  import type { VideoPlaybackPlanResponse } from "$lib/api/generated/model";
   import {
-    loadPlaybackInfo as loadPlaybackInfoRequest,
+    loadPlaybackPlan as loadPlaybackPlanRequest,
     negotiateForceTranscodeSrc,
   } from "$lib/player/playback-negotiation";
   import { durationToSeconds } from "$lib/utils/format";
@@ -73,20 +72,20 @@
         const relationships = await hydrateMovieRelationships(nextMovie, signal);
         signal.throwIfAborted();
         video = null;
-        playbackInfo = null;
+        playbackPlan = null;
         relationshipCredits = relationships.credits;
         relationshipStudio = relationships.studio;
         relationshipTags = relationships.relationshipTags;
         return nextMovie;
       }
       const nextVideo = await fetchEntity(childVideoId, { signal });
-      const [nextPlaybackInfo, relationships] = await Promise.all([
-        loadPlaybackInfo(nextVideo.id, playbackInfo?.PlaySessionId, selectedAudioStreamIndex),
+      const [nextPlaybackPlan, relationships] = await Promise.all([
+        loadPlaybackPlan(nextVideo.id, playbackPlan?.sessionId, selectedAudioStreamIndex),
         hydrateMovieRelationships(nextMovie, signal),
       ]);
       signal.throwIfAborted();
       video = nextVideo;
-      playbackInfo = nextPlaybackInfo;
+      playbackPlan = nextPlaybackPlan;
       relationshipCredits = relationships.credits;
       relationshipStudio = relationships.studio;
       relationshipTags = relationships.relationshipTags;
@@ -101,7 +100,7 @@
   let video = $state<EntityCardFull | null>(null);
   // The acquisition backing this movie (a wanted placeholder still searching/downloading, or the
   // import that produced it), so its state is managed right here instead of only under /request.
-  let playbackInfo = $state<JellyfinPlaybackInfoResponse | null>(null);
+  let playbackPlan = $state.raw<VideoPlaybackPlanResponse | null>(null);
   let librarySettings = $state<LibrarySettings | null>(null);
   let relationshipCredits = $state<EntityDetailCredit[]>([]);
   let relationshipStudio = $state<EntityDetailCredit | null>(null);
@@ -161,7 +160,7 @@
 
   const playerProps = $derived.by(() => {
     if (!video) return null;
-    return extractVideoPlayerProps(video.id, video.capabilities, playbackInfo, selectedAudioStreamIndex);
+    return extractVideoPlayerProps(video.id, video.capabilities, playbackPlan, selectedAudioStreamIndex);
   });
 
   const primaryStudio = $derived(relationshipStudio);
@@ -298,8 +297,7 @@
   }
 
   /**
-   * Resets playback to the beginning. Reporting position 0 routes through the same start-over
-   * behaviour a Jellyfin client triggers (a sub-5% progress report clears resume and completion).
+   * Resets playback to the beginning through the shared playback capability.
    */
   async function handleStartOver() {
     if (!video || playbackBusy) return;
@@ -442,13 +440,13 @@
     return hydrateStandardRelationshipCards(nextMovie, { signal });
   }
 
-  async function loadPlaybackInfo(
+  async function loadPlaybackPlan(
     videoId: string,
-    playSessionId?: string | null,
+    sessionId?: string | null,
     audioStreamIndex?: number | null,
   ) {
-    return await loadPlaybackInfoRequest(videoId, {
-      playSessionId,
+    return await loadPlaybackPlanRequest(videoId, {
+      sessionId,
       audioStreamIndex,
     });
   }
@@ -456,7 +454,7 @@
   // Player callback: re-negotiate a guaranteed-playable transcode after a fatal decode error.
   async function forceTranscodeFallback(): Promise<string | null> {
     if (!video) return null;
-    return negotiateForceTranscodeSrc(video, selectedAudioStreamIndex, playbackInfo?.PlaySessionId);
+    return negotiateForceTranscodeSrc(video, selectedAudioStreamIndex, playbackPlan?.sessionId);
   }
 
   // ── Player event handlers ──────────────────────────────────────────
@@ -482,11 +480,11 @@
     playTracked = true;
 
     try {
-      await postJellyfinSessionProgress("Playing", {
-        ItemId: video.id,
-        MediaSourceId: playerProps.mediaSourceId,
-        PlaySessionId: playerProps.playSessionId,
-        PositionTicks: Math.round(currentTime * 10_000_000),
+      await reportVideoPlayback("start", {
+        entityId: video.id,
+        sessionId: playerProps.sessionId,
+        positionSeconds: currentTime,
+        durationSeconds: playerProps.duration,
       });
     } catch {
       // best-effort
@@ -497,11 +495,11 @@
       playbackUpdateTimer = setInterval(() => {
         if (currentTime > 0 && Math.abs(currentTime - lastReportedTime) > 3) {
           lastReportedTime = currentTime;
-          void postJellyfinSessionProgress("Playing/Progress", {
-            ItemId: videoId,
-            MediaSourceId: playerProps.mediaSourceId,
-            PlaySessionId: playerProps.playSessionId,
-            PositionTicks: Math.round(currentTime * 10_000_000),
+          void reportVideoPlayback("progress", {
+            entityId: videoId,
+            sessionId: playerProps.sessionId,
+            positionSeconds: currentTime,
+            durationSeconds: playerProps.duration,
           }).catch(() => {});
         }
       }, 10_000);
@@ -515,13 +513,13 @@
       playbackUpdateTimer = null;
     }
     try {
-      await postJellyfinSessionProgress("Playing/Stopped", {
-        ItemId: video.id,
-        MediaSourceId: playerProps.mediaSourceId,
-        PlaySessionId: playerProps.playSessionId,
-        PositionTicks: 0,
+      await reportVideoPlayback("stop", {
+        entityId: video.id,
+        sessionId: playerProps.sessionId,
+        positionSeconds: currentTime,
+        durationSeconds: playerProps.duration,
+        completed: true,
       });
-      await markJellyfinUserPlayedItem(video.id, true);
     } catch {
       // best-effort
     }
@@ -538,7 +536,7 @@
   async function handleAudioTrackChange(streamIndex: number) {
     if (!video) return;
     selectedAudioStreamIndex = streamIndex;
-    playbackInfo = await loadPlaybackInfo(video.id, playbackInfo?.PlaySessionId, streamIndex);
+    playbackPlan = await loadPlaybackPlan(video.id, playbackPlan?.sessionId, streamIndex);
   }
 
   function handleSeek(time: number) {

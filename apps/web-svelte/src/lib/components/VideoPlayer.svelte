@@ -46,7 +46,10 @@
     type VideoSubtitleTrack,
   } from "$lib/player/subtitle-types";
   import { fetchVideoSubtitleCues } from "$lib/player/video-subtitles";
-  import type { PlaybackModeCode } from "$lib/api/generated/codes";
+  import {
+    VIDEO_PLAYBACK_METHOD,
+    type PlaybackModeCode,
+  } from "$lib/api/generated/codes";
   import {
     enterMediaFullscreen,
     exitDocumentFullscreen,
@@ -123,7 +126,7 @@
     audioFormatLabel?: string | null;
     /** The server's negotiated delivery method, before any client-side fallback. */
     streamMethod?: StreamMethod;
-    /** Manual quality tiers the viewer can pin (Jellyfin-style), each a ready-to-load variant URL. */
+    /** Manual quality tiers the viewer can pin, each a ready-to-load variant URL. */
     qualityRungs?: PlayerQualityRung[];
     poster?: string;
     /** Title of the playing media, published to the OS media controls via the Media Session API. */
@@ -156,10 +159,9 @@
     /**
      * Last-resort recovery for a fatal decode/MSE error. Invoked after direct↔HLS
      * fallback is exhausted (e.g. the server remuxed a stream the browser cannot
-     * actually decode). Should re-negotiate PlaybackInfo with direct play and
-     * stream-copy disabled and return a guaranteed-playable transcode URL, or null
-     * if no compatible stream is available. Mirrors Jellyfin's re-request-with-
-     * DirectPlay-off recovery so anything that fails to decode escalates to H.264.
+     * actually decode). Should request a new plan with direct play and stream-copy
+     * disabled and return a guaranteed-playable transcode URL, or null if no compatible
+     * stream is available. Anything that fails to decode escalates to H.264.
      */
     onForceTranscode?: (atSeconds: number) => Promise<string | null>;
     showCastControls?: boolean;
@@ -183,7 +185,7 @@
     dynamicRangeLabel = null,
     videoCodecLabel = null,
     audioFormatLabel = null,
-    streamMethod = "transcode",
+    streamMethod = VIDEO_PLAYBACK_METHOD.transcode,
     qualityRungs = [],
     poster,
     mediaTitle,
@@ -366,18 +368,18 @@
   // while the player is on HLS still means the picture is copied (stream-copy), i.e. "Direct Stream".
   const playbackMethod = $derived<StreamMethod>(
     forcedTranscodeSrc
-      ? "transcode"
+      ? VIDEO_PLAYBACK_METHOD.transcode
       : effectiveMode === "direct"
-        ? "direct"
-        : streamMethod === "direct"
-          ? "remux"
+        ? VIDEO_PLAYBACK_METHOD.direct
+        : streamMethod === VIDEO_PLAYBACK_METHOD.direct
+          ? VIDEO_PLAYBACK_METHOD.remux
           : streamMethod,
   );
   const playbackMethodLabel = $derived(playbackMethodBadge(playbackMethod).label);
   const playbackMethodHint = $derived(playbackMethodBadge(playbackMethod).hint);
   // When transcoding, show the output the viewer is getting (quality, and SDR when tone-mapped).
   const playbackMethodDetail = $derived.by(() => {
-    if (playbackMethod !== "transcode") return null;
+    if (playbackMethod !== VIDEO_PLAYBACK_METHOD.transcode) return null;
     // The server always transcodes to H.264, tone-mapping HDR down to SDR; show that real output.
     const parts: string[] = [];
     if (activeQualityResolutionLabel) parts.push(activeQualityResolutionLabel);

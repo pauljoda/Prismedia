@@ -144,6 +144,13 @@ app.MapPrismediaEndpoints();
 
 if (File.Exists(staticIndexPath)) {
     app.MapFallback(async (HttpContext context) => {
+        if (!StaticSpaFallback.ShouldServeSpaShell(context.Request)) {
+            await Results.NotFound(new ApiProblem(
+                ApiProblemCodes.NotFound,
+                "The requested Prismedia route was not found.")).ExecuteAsync(context);
+            return;
+        }
+
         SetSpaShellCacheHeaders(context.Response);
         context.Response.ContentType = MediaContentTypes.Html;
         await context.Response.SendFileAsync(staticIndexPath, context.RequestAborted);

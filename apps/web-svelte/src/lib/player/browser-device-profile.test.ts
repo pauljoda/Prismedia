@@ -14,13 +14,13 @@ describe("buildBrowserDeviceProfile", () => {
       canPlayTypeFor(["avc1", "mp4a.40.2", "vp9", 'webm; codecs="opus"']),
     );
 
-    const mp4 = profile.DirectPlayProfiles?.find((p) => p.Container === "mp4");
-    expect(mp4?.VideoCodec).toBe("h264");
-    expect(mp4?.AudioCodec).toBe("aac");
+    const mp4 = profile.directPlayProfiles?.find((p) => p.container === "mp4");
+    expect(mp4?.videoCodec).toBe("h264");
+    expect(mp4?.audioCodec).toBe("aac");
 
-    const webm = profile.DirectPlayProfiles?.find((p) => p.Container === "webm");
-    expect(webm?.VideoCodec).toBe("vp9");
-    expect(webm?.AudioCodec).toBe("opus");
+    const webm = profile.directPlayProfiles?.find((p) => p.container === "webm");
+    expect(webm?.videoCodec).toBe("vp9");
+    expect(webm?.audioCodec).toBe("opus");
   });
 
   it("includes HEVC and AV1 when the browser supports them", () => {
@@ -28,13 +28,13 @@ describe("buildBrowserDeviceProfile", () => {
       canPlayTypeFor(["avc1", "hvc1", "av01", "mp4a.40.2"]),
     );
 
-    const mp4 = profile.DirectPlayProfiles?.find((p) => p.Container === "mp4");
-    expect(mp4?.VideoCodec).toBe("h264,hevc,av1");
+    const mp4 = profile.directPlayProfiles?.find((p) => p.container === "mp4");
+    expect(mp4?.videoCodec).toBe("h264,hevc,av1");
   });
 
   it("never advertises MKV, so Matroska sources always transcode", () => {
     const profile = buildBrowserDeviceProfile(canPlayTypeFor(["avc1", "hvc1", "mp4a.40.2"]));
-    const containers = profile.DirectPlayProfiles?.map((p) => p.Container) ?? [];
+    const containers = profile.directPlayProfiles?.map((p) => p.container) ?? [];
     expect(containers).not.toContain("mkv");
     expect(containers).not.toContain("matroska");
   });
@@ -42,7 +42,7 @@ describe("buildBrowserDeviceProfile", () => {
   it("omits a container entirely when no video codec is supported there", () => {
     // Only mp4/H.264 — no webm video codecs supported.
     const profile = buildBrowserDeviceProfile(canPlayTypeFor(["avc1", "mp4a.40.2"]));
-    expect(profile.DirectPlayProfiles?.some((p) => p.Container === "webm")).toBe(false);
-    expect(profile.DirectPlayProfiles?.some((p) => p.Container === "mp4")).toBe(true);
+    expect(profile.directPlayProfiles?.some((p) => p.container === "webm")).toBe(false);
+    expect(profile.directPlayProfiles?.some((p) => p.container === "mp4")).toBe(true);
   });
 });
