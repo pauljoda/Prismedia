@@ -316,6 +316,9 @@ public sealed class EntityKindMetadataTests {
             ],
             inheritedRoots);
         Assert.Equal(
+            (EntityKind.Book, 1),
+            (descendantRoots[EntityKind.BookAuthor].DescendantKind, descendantRoots[EntityKind.BookAuthor].MaximumDepth));
+        Assert.Equal(
             (EntityKind.Video, 1),
             (descendantRoots[EntityKind.Movie].DescendantKind, descendantRoots[EntityKind.Movie].MaximumDepth));
         Assert.Equal(
@@ -324,7 +327,11 @@ public sealed class EntityKindMetadataTests {
         Assert.Equal(
             (EntityKind.Video, 2),
             (descendantRoots[EntityKind.VideoSeries].DescendantKind, descendantRoots[EntityKind.VideoSeries].MaximumDepth));
-        Assert.Equal(3, descendantRoots.Count);
+        Assert.Equal(4, descendantRoots.Count);
+        Assert.All(descendantRoots.Values, policy =>
+            Assert.Equal(
+                EntityLibraryVisibilityMode.DirectRoot,
+                EntityKindRegistry.Describe(policy.DescendantKind!.Value).LibraryVisibility.Mode));
     }
 
     [Fact]

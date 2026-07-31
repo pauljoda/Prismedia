@@ -25,6 +25,7 @@ public sealed class BookAuthorEntityKindDefinition() : RootEntityKindDefinition<
     static root => new BookAuthor(root.Id, root.Title),
     behavior: new EntityKindBehavior(
         identification: new(enumeratesChildren: true),
+        libraryVisibility: EntityLibraryVisibilityPolicy.FromDescendants(EntityKind.Book, 1),
         supportsFileDeletion: true),
     defaultCapabilities: static () => [new CapabilityCredits()]) {
     /// <inheritdoc />

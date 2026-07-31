@@ -119,8 +119,22 @@ public static class EntityKindRegistry {
         ValidateIdentificationPolicies(definitions);
         ValidateManualAcquisitionPolicies(definitions);
         ValidateAcquisitionProfiles(definitions);
+        ValidateLibraryVisibilityPolicies(definitions);
 
         return definitions;
+    }
+
+    private static void ValidateLibraryVisibilityPolicies(IReadOnlyList<EntityKindDefinition> definitions) {
+        var byKind = definitions.ToDictionary(definition => definition.Kind);
+        foreach (var definition in definitions.Where(candidate =>
+                     candidate.LibraryVisibility.Mode == EntityLibraryVisibilityMode.DescendantRoot)) {
+            var descendant = byKind[definition.LibraryVisibility.DescendantKind!.Value];
+            if (descendant.LibraryVisibility.Mode != EntityLibraryVisibilityMode.DirectRoot) {
+                throw new InvalidOperationException(
+                    $"Entity kind '{definition.Code}' derives library visibility from '{descendant.Code}', " +
+                    "which must own a direct library root.");
+            }
+        }
     }
 
     private static void ValidateIdentificationPolicies(IReadOnlyList<EntityKindDefinition> definitions) {

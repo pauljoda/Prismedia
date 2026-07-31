@@ -1,8 +1,10 @@
 using System.Text.Json;
+using Microsoft.EntityFrameworkCore;
 using NpgsqlTypes;
 using Prismedia.Application.Jobs.Ports;
 using Prismedia.Domain.Entities;
 using Prismedia.Infrastructure.Collections;
+using Prismedia.Infrastructure.Persistence;
 
 namespace Prismedia.Infrastructure.Tests;
 
@@ -202,9 +204,30 @@ public sealed class CollectionRuleEngineSqlTests {
         var query = new CollectionRuleEngine(null!).BuildQuery(group, EntityKind.VideoSeries.ToCode());
 
         Assert.NotNull(query);
-        Assert.Contains("series_video", query.Value.Sql, StringComparison.Ordinal);
-        Assert.Contains("INNER JOIN video_details vd", query.Value.Sql, StringComparison.Ordinal);
-        Assert.Contains("parent_entity.parent_entity_id = e.id", query.Value.Sql, StringComparison.Ordinal);
+        Assert.Contains("FROM entities rooted_descendant", query.Value.Sql, StringComparison.Ordinal);
+        Assert.Contains("INNER JOIN video_details rooted_detail", query.Value.Sql, StringComparison.Ordinal);
+        Assert.Contains("rooted_parent_1.parent_entity_id = e.id", query.Value.Sql, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void DirectLibraryRootPoliciesResolveConventionalPersistenceRows() {
+        var options = new DbContextOptionsBuilder<PrismediaDbContext>()
+            .UseNpgsql("Host=localhost;Database=collection_rule_model;Username=unused;Password=unused")
+            .Options;
+        using var db = new PrismediaDbContext(options);
+
+        var directDefinitions = EntityKindRegistry.All
+            .Where(definition => definition.LibraryVisibility.Mode == EntityLibraryVisibilityMode.DirectRoot)
+            .ToArray();
+        Assert.NotEmpty(directDefinitions);
+
+        foreach (var definition in directDefinitions) {
+            var tableName = CollectionRuleEngine.DirectLibraryRootTableName(definition);
+            Assert.Contains(db.Model.GetEntityTypes(), entityType =>
+                entityType.GetTableName() == tableName &&
+                entityType.FindProperty("EntityId") is not null &&
+                entityType.FindProperty("LibraryRootId") is not null);
+        }
     }
 
     [Fact]
