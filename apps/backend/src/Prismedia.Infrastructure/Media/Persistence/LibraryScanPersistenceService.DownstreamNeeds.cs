@@ -320,8 +320,14 @@ public sealed partial class LibraryScanPersistenceService {
         var entityIds = new List<Guid>();
 
         if (categories.Contains(MediaCategory.Video)) {
-            var videoIds = await DirectRootedKindIdsAsync(libraryRootId, EntityKind.Video, cancellationToken);
-            entityIds.AddRange(videoIds);
+            var playableVideoKindCodes = EntityKindRegistry.All
+                .OfType<IPlayableVideoKindDefinition>()
+                .Select(definition => definition.Kind.ToCode())
+                .ToArray();
+            entityIds.AddRange(await DirectRootedKindIdsAsync(
+                libraryRootId,
+                playableVideoKindCodes,
+                cancellationToken));
         }
 
         if (categories.Contains(MediaCategory.Image)) {
@@ -403,6 +409,19 @@ public sealed partial class LibraryScanPersistenceService {
             .Where(root => root.LibraryRootId == libraryRootId)
             .Join(
                 _db.Entities.AsNoTracking().Where(entity => entity.KindCode == kind.ToCode()),
+                root => root.EntityId,
+                entity => entity.Id,
+                (root, entity) => entity.Id)
+            .ToListAsync(cancellationToken);
+
+    private Task<List<Guid>> DirectRootedKindIdsAsync(
+        Guid libraryRootId,
+        IReadOnlyCollection<string> kindCodes,
+        CancellationToken cancellationToken) =>
+        _db.EntityLibraryRoots.AsNoTracking()
+            .Where(root => root.LibraryRootId == libraryRootId)
+            .Join(
+                _db.Entities.AsNoTracking().Where(entity => kindCodes.Contains(entity.KindCode)),
                 root => root.EntityId,
                 entity => entity.Id,
                 (root, entity) => entity.Id)

@@ -185,6 +185,28 @@ public sealed class JobQueueServiceTests {
     }
 
     [Fact]
+    public async Task DirectPlayableEpisodeAutoIdentifyCanRunWhilePrerequisiteWorkIsPending() {
+        await using var db = CreateContext();
+        var service = new JobQueueService(db);
+        var prerequisite = await service.EnqueueAsync(JobType.ProbeVideo, CancellationToken.None);
+        var prerequisiteRow = await db.JobRuns.SingleAsync(run => run.Id == prerequisite.Id);
+        prerequisiteRow.Status = JobRunStatus.Running;
+        await db.SaveChangesAsync();
+        var episode = await service.EnqueueAsync(new EnqueueJobRequest(
+            JobType.AutoIdentify,
+            TargetEntityKind: EntityKind.VideoEpisode.ToCode(),
+            TargetEntityId: Guid.NewGuid().ToString()), CancellationToken.None);
+
+        var claimed = await service.ClaimNextGraphNodeAsync(
+            "worker",
+            JobGraphOrigin.Background,
+            CancellationToken.None);
+
+        Assert.NotNull(claimed);
+        Assert.Equal(episode.Id, claimed.Id);
+    }
+
+    [Fact]
     public async Task ListKeepsActiveAndFailedRunsVisibleWhenBacklogExceedsRecentLimit() {
         await using var db = CreateContext();
         var service = new JobQueueService(db);

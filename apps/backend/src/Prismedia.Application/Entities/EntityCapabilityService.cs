@@ -653,7 +653,7 @@ public sealed class EntityCapabilityService {
         Guid videoId,
         EntityCard videoCard,
         CancellationToken cancellationToken) {
-        if (videoCard.Kind != EntityKind.Video) {
+        if (EntityKindRegistry.Describe(videoCard.Kind) is not IPlayableVideoKindDefinition { IsEpisodic: true }) {
             return;
         }
 

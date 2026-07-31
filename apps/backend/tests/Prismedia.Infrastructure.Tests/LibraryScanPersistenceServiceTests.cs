@@ -2497,6 +2497,35 @@ public sealed class LibraryScanPersistenceServiceTests {
         return new PrismediaDbContext(options);
     }
 
+    [Fact]
+    public async Task VideoAutoIdentifyRootsIncludeEveryDirectPlayableSourceOwner() {
+        await using var db = CreateContext();
+        var rootId = Guid.NewGuid();
+        var movieId = Guid.NewGuid();
+        var videoId = Guid.NewGuid();
+        var seriesId = Guid.NewGuid();
+        var episodeId = Guid.NewGuid();
+        var now = DateTimeOffset.UtcNow;
+        SeedLibraryRoot(db, rootId, "/media/videos");
+        db.Entities.AddRange(
+            new EntityRow { Id = movieId, KindCode = EntityKind.Movie.ToCode(), Title = "Movie", CreatedAt = now, UpdatedAt = now },
+            new EntityRow { Id = videoId, KindCode = EntityKind.Video.ToCode(), Title = "Video", CreatedAt = now, UpdatedAt = now },
+            new EntityRow { Id = seriesId, KindCode = EntityKind.VideoSeries.ToCode(), Title = "Series", CreatedAt = now, UpdatedAt = now },
+            new EntityRow { Id = episodeId, KindCode = EntityKind.VideoEpisode.ToCode(), Title = "Episode", ParentEntityId = seriesId, CreatedAt = now, UpdatedAt = now });
+        db.EntityLibraryRoots.AddRange(
+            new EntityLibraryRootRow { EntityId = movieId, LibraryRootId = rootId },
+            new EntityLibraryRootRow { EntityId = videoId, LibraryRootId = rootId },
+            new EntityLibraryRootRow { EntityId = episodeId, LibraryRootId = rootId });
+        await db.SaveChangesAsync();
+
+        var roots = await new LibraryScanPersistenceService(db)
+            .ResolveAutoIdentifyRootsForLibraryRootAsync(rootId, [MediaCategory.Video], CancellationToken.None);
+
+        Assert.Equal(
+            new[] { movieId, seriesId, videoId }.OrderBy(id => id),
+            roots.Select(root => root.Id).OrderBy(id => id));
+    }
+
     private static void SeedVideo(PrismediaDbContext db, Guid videoId, string? sourcePath = null) {
         db.Entities.Add(new EntityRow {
             Id = videoId,

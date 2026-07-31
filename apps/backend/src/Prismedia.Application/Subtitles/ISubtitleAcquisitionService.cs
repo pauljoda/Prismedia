@@ -7,9 +7,11 @@ namespace Prismedia.Application.Subtitles;
 /// Implementations own external-provider and persistence details.
 /// </summary>
 public interface ISubtitleAcquisitionService {
-    /// <summary>Resolves a playable video kind for metadata retained behind the video route surface.</summary>
-    Task<EntityKind> ResolvePlayableVideoKindAsync(Guid videoId, CancellationToken cancellationToken) =>
-        Task.FromResult(EntityKind.Video);
+    /// <summary>
+    /// Resolves the concrete directly playable Entity kind addressed by a video-route request.
+    /// Implementations must reject missing or non-playable entities rather than guessing Video.
+    /// </summary>
+    Task<EntityKind> ResolvePlayableVideoKindAsync(Guid videoId, CancellationToken cancellationToken);
 
     Task<OpenSubtitlesConfiguration> GetOpenSubtitlesConfigurationAsync(CancellationToken cancellationToken);
 

@@ -319,6 +319,25 @@ public sealed class EntityCapabilityServiceProgressTests {
         Assert.Equal(TimeSpan.FromSeconds(10), entity.PlaybackCapability?.Value.ResumeTime);
     }
 
+    [Theory]
+    [InlineData(EntityKind.Movie, 0)]
+    [InlineData(EntityKind.Video, 0)]
+    [InlineData(EntityKind.VideoEpisode, 1)]
+    public async Task OnlyEpisodicPlayableKindsResolveContainerProgressScopes(EntityKind kind, int expectedScopeCalls) {
+        var entity = CreatePlayableVideo(kind);
+        var repository = new SingleEntityWriteRepository(entity);
+        var service = new EntityCapabilityService(repository, new NoSourceOwnershipReader());
+
+        await service.UpdateVideoPlaybackAsync(
+            entity.Id,
+            positionSeconds: 90,
+            mediaDurationSeconds: 100,
+            completed: true,
+            CancellationToken.None);
+
+        Assert.Equal(expectedScopeCalls, repository.VideoProgressScopeCalls);
+    }
+
     [Fact]
     public async Task MissingMarkerUpdateAndDeleteDoNotAttachAnEmptyCapability() {
         var movie = new Movie(Guid.NewGuid(), "Movie", capabilities: []);
@@ -396,6 +415,7 @@ public sealed class EntityCapabilityServiceProgressTests {
 
     private sealed class SingleEntityWriteRepository(Entity entity) : IEntityWriteRepository {
         public int SaveCount { get; private set; }
+        public int VideoProgressScopeCalls { get; private set; }
 
         public Task<Entity?> FindAsync(Guid id, CancellationToken cancellationToken) =>
             Task.FromResult(id == entity.Id ? entity : null);
@@ -416,8 +436,10 @@ public sealed class EntityCapabilityServiceProgressTests {
 
         public Task<IReadOnlyList<VideoProgressScopePosition>> ResolveVideoProgressScopesAsync(
             Guid videoId,
-            CancellationToken cancellationToken) =>
-            Task.FromResult<IReadOnlyList<VideoProgressScopePosition>>([]);
+            CancellationToken cancellationToken) {
+            VideoProgressScopeCalls++;
+            return Task.FromResult<IReadOnlyList<VideoProgressScopePosition>>([]);
+        }
 
         public Task SaveAsync(Entity savedEntity, CancellationToken cancellationToken) {
             Assert.Same(entity, savedEntity);

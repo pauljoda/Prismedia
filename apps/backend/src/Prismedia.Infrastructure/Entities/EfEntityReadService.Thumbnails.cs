@@ -26,7 +26,7 @@ public sealed partial class EfEntityReadService {
         }
 
         var ids = rows.Select(entity => entity.Id).ToArray();
-        // Contributors and owning-child technical fallback aggregate only over entities the caller
+        // Contributors aggregate only over entities the caller
         // can see. Wanted placeholders are intentionally excluded from membership facts, matching
         // direct child projections that reserve wanted rows for explicit acquisition surfaces.
         var visibleContributionEntities = _db.Entities.AsNoTracking()
@@ -84,34 +84,6 @@ public sealed partial class EfEntityReadService {
         var technicalByEntity = await _db.EntityTechnical.AsNoTracking()
             .Where(technical => ids.Contains(technical.EntityId))
             .ToDictionaryAsync(technical => technical.EntityId, cancellationToken);
-        var movieIds = rows
-            .Where(row => resolveCollectionArtwork && row.KindCode == EntityKind.Movie.ToCode())
-            .Select(row => row.Id)
-            .ToArray();
-        var movieIdsMissingTechnical = movieIds
-            .Where(movieId => !technicalByEntity.ContainsKey(movieId))
-            .ToArray();
-        // A movie owns exactly one playable video in the canonical model. When that single visible
-        // child holds the probe row, project it onto the movie without hydrating the child. NOT EXISTS
-        // enforces unambiguous ownership in one batched query; an own movie technical row still wins.
-        var movieChildTechnicalRows = movieIdsMissingTechnical.Length == 0
-            ? []
-            : await (
-                from child in visibleContributionEntities
-                where child.ParentEntityId != null &&
-                    movieIdsMissingTechnical.Contains(child.ParentEntityId.Value) &&
-                    child.KindCode == EntityKind.Video.ToCode() &&
-                    !visibleContributionEntities.Any(other =>
-                        other.ParentEntityId == child.ParentEntityId &&
-                        other.KindCode == EntityKind.Video.ToCode() &&
-                        other.Id != child.Id)
-                join technical in _db.EntityTechnical.AsNoTracking()
-                    on child.Id equals technical.EntityId
-                select new { MovieId = child.ParentEntityId!.Value, Technical = technical })
-                .ToArrayAsync(cancellationToken);
-        var movieChildTechnicalByEntity = movieChildTechnicalRows.ToDictionary(
-            row => row.MovieId,
-            row => row.Technical);
         // Section (disc) labels for audio tracks, surfaced as a thumbnail chip so album track
         // lists can group multi-disc albums and restart numbering per section.
         var sectionByEntity = rows.Any(row => row.KindCode == EntityKind.AudioTrack.ToCode())
@@ -170,18 +142,6 @@ public sealed partial class EfEntityReadService {
             : await _db.EntityTechnical.AsNoTracking()
                 .Where(technical => progressCurrentIds.Contains(technical.EntityId))
                 .ToDictionaryAsync(technical => technical.EntityId, cancellationToken);
-        var childStateByMovie = movieIds.Length == 0 || currentUserId == Guid.Empty
-            ? new Dictionary<Guid, UserEntityStateRow>()
-            : await LoadMovieChildStateAsync(movieIds, cancellationToken);
-        var movieChildStateIds = childStateByMovie.Values
-            .Select(state => state.EntityId)
-            .Distinct()
-            .ToArray();
-        var technicalByMovieChild = movieChildStateIds.Length == 0
-            ? new Dictionary<Guid, EntityTechnicalRow>()
-            : await _db.EntityTechnical.AsNoTracking()
-                .Where(technical => movieChildStateIds.Contains(technical.EntityId))
-                .ToDictionaryAsync(technical => technical.EntityId, cancellationToken);
 
         // Compact availability facts for this page: physical source-media truth plus acquisition state
         // projected through every structural subtree. The singular direct status remains for the existing
@@ -213,13 +173,8 @@ public sealed partial class EfEntityReadService {
 
         var baseThumbnails = rows.Select(row => {
             stateByEntity.TryGetValue(row.Id, out var ownState);
-            childStateByMovie.TryGetValue(row.Id, out var childState);
-            var playbackState = ownState is not null && Mappers.Capabilities.UserEntityStateColumns.HasPlayback(ownState)
-                ? ownState
-                : childState ?? ownState;
-            var playbackDurationSeconds = playbackState is not null && playbackState.EntityId != row.Id
-                ? technicalByMovieChild.GetValueOrDefault(playbackState.EntityId)?.DurationSeconds
-                : technicalByEntity.GetValueOrDefault(row.Id)?.DurationSeconds;
+            var playbackState = ownState;
+            var playbackDurationSeconds = technicalByEntity.GetValueOrDefault(row.Id)?.DurationSeconds;
             var progressState = ownState?.ProgressCurrentEntityId is { } progressEntityId
                 ? progressStateByEntity.GetValueOrDefault(progressEntityId)
                 : null;
@@ -230,10 +185,7 @@ public sealed partial class EfEntityReadService {
             var hoverImages = hoverImagesByEntity.GetValueOrDefault(row.Id) ?? [];
             var coverUrl = coverByEntity.GetValueOrDefault(row.Id);
             var bookType = bookTypeByEntity.TryGetValue(row.Id, out var value) ? value : (BookType?)null;
-            var thumbnailTechnical = technicalByEntity.GetValueOrDefault(row.Id)
-                ?? (row.KindCode == EntityKind.Movie.ToCode()
-                    ? movieChildTechnicalByEntity.GetValueOrDefault(row.Id)
-                    : null);
+            var thumbnailTechnical = technicalByEntity.GetValueOrDefault(row.Id);
             // The entity that owns the cover image this card shows. Rows that borrow another
             // entity's cover borrow that entity's grid variants too, so the srcset pair keeps
             // matching the picture the card actually displays.
@@ -343,36 +295,6 @@ public sealed partial class EfEntityReadService {
                 : extraMeta.Concat(thumbnail.Meta).Take(MaxThumbnailMeta).ToArray();
             return thumbnail with { Meta = meta, ReferenceCounts = referenceCounts };
         }).ToArray();
-    }
-
-    private async Task<Dictionary<Guid, UserEntityStateRow>> LoadMovieChildStateAsync(
-        IReadOnlyCollection<Guid> movieIds,
-        CancellationToken cancellationToken) {
-        var childRows = await _db.Entities.AsNoTracking()
-            .Where(child => child.ParentEntityId != null && movieIds.Contains(child.ParentEntityId.Value))
-            .Select(child => new { child.Id, ParentId = child.ParentEntityId!.Value })
-            .ToArrayAsync(cancellationToken);
-        if (childRows.Length == 0) {
-            return new Dictionary<Guid, UserEntityStateRow>();
-        }
-
-        var parentByChild = childRows.ToDictionary(child => child.Id, child => child.ParentId);
-        var childIds = parentByChild.Keys.ToArray();
-        var userId = CurrentUserId;
-        var stateRows = await _db.UserEntityStates.AsNoTracking()
-            .Where(state => state.UserId == userId && childIds.Contains(state.EntityId))
-            .ToArrayAsync(cancellationToken);
-
-        return stateRows
-            .Where(Mappers.Capabilities.UserEntityStateColumns.HasPlayback)
-            .GroupBy(state => parentByChild[state.EntityId])
-            .ToDictionary(
-                group => group.Key,
-                group => group
-                    .OrderByDescending(state => state.CompletedAt is not null)
-                    .ThenByDescending(state => state.PlayCount)
-                    .ThenByDescending(state => state.ResumeSeconds)
-                    .First());
     }
 
     private async Task<IReadOnlyDictionary<Guid, CollectionArtwork>> ProjectCollectionArtworkAsync(
@@ -678,8 +600,8 @@ public sealed partial class EfEntityReadService {
         }
 
         Add(meta, EntityThumbnailMetaIcons.Duration, FormatDuration(technical.DurationSeconds));
-        var usesVideoTechnical = row.KindCode == EntityKind.Video.ToCode() ||
-            row.KindCode == EntityKind.Movie.ToCode();
+        var usesVideoTechnical = EntityKindRegistry.TryDescribe(row.KindCode, out var definition) &&
+            definition is IPlayableVideoKindDefinition;
         if (technical.Width is { } width && technical.Height is { } height) {
             Add(
                 meta,

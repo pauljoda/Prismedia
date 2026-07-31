@@ -22,6 +22,11 @@ namespace Prismedia.Infrastructure.Entities;
 /// </summary>
 public sealed class EfEntityRepository : IEntityWriteRepository {
     private static readonly string RelatedRelationshipCode = RelationshipKind.Related.ToCode();
+    private static readonly IReadOnlySet<string> EpisodicPlayableKindCodes = EntityKindRegistry.All
+        .OfType<IPlayableVideoKindDefinition>()
+        .Where(definition => definition.IsEpisodic)
+        .Select(definition => definition.Kind.ToCode())
+        .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
     private readonly PrismediaDbContext _db;
     private readonly Prismedia.Application.Security.ICurrentUserContext _currentUser;
@@ -182,7 +187,7 @@ public sealed class EfEntityRepository : IEntityWriteRepository {
         Guid videoId,
         CancellationToken cancellationToken) {
         var episode = await _db.Entities.AsNoTracking()
-            .Where(row => row.Id == videoId && row.KindCode == EntityKind.Video.ToCode())
+            .Where(row => row.Id == videoId && EpisodicPlayableKindCodes.Contains(row.KindCode))
             .Select(row => new { row.Id, row.ParentEntityId })
             .SingleOrDefaultAsync(cancellationToken);
         if (episode?.ParentEntityId is not { } parentId) {
@@ -199,7 +204,7 @@ public sealed class EfEntityRepository : IEntityWriteRepository {
 
         var scopes = new List<VideoProgressScopePosition>(capacity: 2);
         if (parent.KindCode == EntityKind.VideoSeason.ToCode()) {
-            var seasonEpisodeIds = await LoadOrderedVideoIdsAsync(parent.Id, cancellationToken);
+            var seasonEpisodeIds = await LoadOrderedEpisodeIdsAsync(parent.Id, cancellationToken);
             AddVideoProgressScope(scopes, parent.Id, videoId, seasonEpisodeIds);
 
             if (parent.ParentEntityId is { } seriesId) {
@@ -207,7 +212,7 @@ public sealed class EfEntityRepository : IEntityWriteRepository {
                 AddVideoProgressScope(scopes, seriesId, videoId, seriesEpisodeIds);
             }
         } else if (parent.KindCode == EntityKind.VideoSeries.ToCode()) {
-            var seriesEpisodeIds = await LoadOrderedVideoIdsAsync(parent.Id, cancellationToken);
+            var seriesEpisodeIds = await LoadOrderedEpisodeIdsAsync(parent.Id, cancellationToken);
             AddVideoProgressScope(scopes, parent.Id, videoId, seriesEpisodeIds);
         }
 
@@ -362,11 +367,11 @@ public sealed class EfEntityRepository : IEntityWriteRepository {
         return chapters;
     }
 
-    private async Task<IReadOnlyList<Guid>> LoadOrderedVideoIdsAsync(
+    private async Task<IReadOnlyList<Guid>> LoadOrderedEpisodeIdsAsync(
         Guid parentId,
         CancellationToken cancellationToken) =>
         await _db.Entities.AsNoTracking()
-            .Where(row => row.ParentEntityId == parentId && row.KindCode == EntityKind.Video.ToCode())
+            .Where(row => row.ParentEntityId == parentId && EpisodicPlayableKindCodes.Contains(row.KindCode))
             .OrderBy(row => row.SortOrder)
             .ThenBy(row => row.CreatedAt)
             .ThenBy(row => row.Id)
@@ -384,13 +389,13 @@ public sealed class EfEntityRepository : IEntityWriteRepository {
             .Select(row => row.Id)
             .ToArrayAsync(cancellationToken);
         if (seasonIds.Length == 0) {
-            return await LoadOrderedVideoIdsAsync(seriesId, cancellationToken);
+            return await LoadOrderedEpisodeIdsAsync(seriesId, cancellationToken);
         }
 
         var episodes = await _db.Entities.AsNoTracking()
             .Where(row => row.ParentEntityId != null &&
                           seasonIds.Contains(row.ParentEntityId.Value) &&
-                          row.KindCode == EntityKind.Video.ToCode())
+                          EpisodicPlayableKindCodes.Contains(row.KindCode))
             .OrderBy(row => row.SortOrder)
             .ThenBy(row => row.CreatedAt)
             .ThenBy(row => row.Id)

@@ -59,7 +59,7 @@ public sealed class SubtitleAcquisitionEndpointTests {
 
     [Fact]
     public async Task DownloadQueuesAnInteractiveEntityGraphWithoutCallingTheProviderInTheRequest() {
-        var service = new FakeSubtitleAcquisitionService();
+        var service = new FakeSubtitleAcquisitionService { PlayableKind = EntityKind.VideoEpisode };
         var jobs = new RecordingJobQueue();
         using var factory = CreateFactory(service, jobs);
         using var client = factory.CreateAuthenticatedClient();
@@ -72,7 +72,7 @@ public sealed class SubtitleAcquisitionEndpointTests {
         Assert.Equal(HttpStatusCode.Accepted, response.StatusCode);
         var graph = Assert.IsType<AcquireVideoSubtitleResponse>(body).Graph;
         Assert.Equal(JobGraphOrigin.Interactive, graph.Origin);
-        Assert.Equal(EntityKind.Video.ToCode(), graph.RootEntityKind);
+        Assert.Equal(EntityKind.VideoEpisode.ToCode(), graph.RootEntityKind);
         Assert.Equal(VideoId.ToString(), graph.RootEntityId);
         Assert.Equal(JobType.AcquireSubtitle, graph.InitialNode.Type);
         Assert.Equal(JobResourceKeys.Entity(VideoId.ToString()), jobs.LastRequest?.ResourceKey);
@@ -148,6 +148,10 @@ public sealed class SubtitleAcquisitionEndpointTests {
         public IReadOnlyList<SubtitleSearchResult> SearchResults { get; init; } = [];
         public SubtitleSearchRequest? SearchRequest { get; private set; }
         public int AcquireCalls { get; private set; }
+        public EntityKind PlayableKind { get; init; } = EntityKind.Video;
+
+        public Task<EntityKind> ResolvePlayableVideoKindAsync(Guid videoId, CancellationToken cancellationToken) =>
+            Task.FromResult(PlayableKind);
 
         public Task<OpenSubtitlesConfiguration> GetOpenSubtitlesConfigurationAsync(
             CancellationToken cancellationToken) => Task.FromResult(Configuration);

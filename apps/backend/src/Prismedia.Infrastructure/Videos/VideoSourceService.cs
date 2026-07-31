@@ -47,11 +47,9 @@ public sealed class VideoSourceService : IVideoSourceService {
 
     /// <inheritdoc />
     public async Task<VideoSourceFile?> GetSourceAsync(Guid id, CancellationToken cancellationToken) {
-        // A movie is a folder aggregate around one playable video child, so resolve a movie id to
-        // its child video before locating the source. This lets native clients stream, plan
-        // playback, and fetch HLS using the movie's own id (all three funnel through here).
-        var videoId = await ResolvePlayableVideoIdAsync(id, cancellationToken);
-        if (videoId is null) {
+        // All playable kinds directly own their payload file. Route naming stays video-oriented,
+        // but a movie, episode, or standalone video is resolved as the requested Entity itself.
+        if (!await IsPlayableVideoAsync(id, cancellationToken)) {
             return null;
         }
 
@@ -60,8 +58,7 @@ public sealed class VideoSourceService : IVideoSourceService {
             join file in _db.EntityFiles.AsNoTracking() on entity.Id equals file.EntityId
             join technical in _db.EntityTechnical.AsNoTracking() on entity.Id equals technical.EntityId into technicalRows
             from technical in technicalRows.DefaultIfEmpty()
-            where entity.Id == videoId.Value &&
-                entity.KindCode == EntityKind.Video.ToCode() &&
+            where entity.Id == id &&
                 file.Role == EntityFileRole.Source
             select new {
                 File = file,
@@ -74,7 +71,7 @@ public sealed class VideoSourceService : IVideoSourceService {
         }
 
         var mediaSource = await _db.MediaSources.AsNoTracking()
-            .Where(row => row.EntityId == videoId.Value && row.Path == source.File.Path)
+            .Where(row => row.EntityId == id && row.Path == source.File.Path)
             .OrderByDescending(row => row.UpdatedAt)
             .FirstOrDefaultAsync(cancellationToken);
         List<VideoSourceStream> streams = mediaSource is null
@@ -182,7 +179,7 @@ public sealed class VideoSourceService : IVideoSourceService {
         }
 
         return new VideoSourceFile(
-            videoId.Value,
+            id,
             source.File.Path,
             source.File.MimeType ?? MimeForExtension(extension),
             directPlayable,
@@ -201,30 +198,18 @@ public sealed class VideoSourceService : IVideoSourceService {
     }
 
     /// <summary>
-    /// Resolves the id whose source file should be streamed: a video id maps to itself, a movie id
-    /// maps to its single playable video child, and anything else (or a missing entity) yields null.
+    /// Determines whether the requested entity is one of the discovered kinds that directly owns a
+    /// playable video source. Containers are rejected before any source-file lookup.
     /// </summary>
-    private async Task<Guid?> ResolvePlayableVideoIdAsync(Guid id, CancellationToken cancellationToken) {
+    private async Task<bool> IsPlayableVideoAsync(Guid id, CancellationToken cancellationToken) {
         var kind = await _db.Entities.AsNoTracking()
             .Where(entity => entity.Id == id)
             .Select(entity => entity.KindCode)
             .FirstOrDefaultAsync(cancellationToken);
 
-        if (string.Equals(kind, EntityKind.Video.ToCode(), StringComparison.Ordinal)) {
-            return id;
-        }
-
-        if (string.Equals(kind, EntityKind.Movie.ToCode(), StringComparison.Ordinal)) {
-            return await _db.Entities.AsNoTracking()
-                .Where(child => child.ParentEntityId == id &&
-                    child.KindCode == EntityKind.Video.ToCode())
-                .OrderBy(child => child.SortOrder ?? int.MaxValue)
-                .ThenBy(child => child.Id)
-                .Select(child => (Guid?)child.Id)
-                .FirstOrDefaultAsync(cancellationToken);
-        }
-
-        return null;
+        return !string.IsNullOrWhiteSpace(kind) &&
+            EntityKindRegistry.TryDescribe(kind, out var definition) &&
+            definition is IPlayableVideoKindDefinition;
     }
 
     private static string MimeForExtension(string extension) {

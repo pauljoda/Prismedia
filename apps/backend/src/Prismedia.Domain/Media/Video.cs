@@ -82,6 +82,9 @@ public sealed class VideoEpisodeEntityKindDefinition() : PlayableVideoEntityKind
     ]);
 
     /// <inheritdoc />
+    public override bool IsEpisodic => true;
+
+    /// <inheritdoc />
     public override IReadOnlyList<string> PositionSortOrderPrecedence => SortOrderPrecedence;
 
     /// <inheritdoc />

@@ -34,6 +34,41 @@ public sealed class VideoSourceServiceTests : IDisposable {
         Assert.True(source.DirectPlayable);
     }
 
+    [Theory]
+    [InlineData(EntityKind.Movie)]
+    [InlineData(EntityKind.VideoEpisode)]
+    [InlineData(EntityKind.Video)]
+    public async Task GetsSourceForEveryDirectPlayableEntityKind(EntityKind kind) {
+        await using var db = CreateContext();
+        var entityId = Guid.NewGuid();
+        var filePath = Path.Combine(_tempDir, $"{kind.ToCode()}.mp4");
+        await File.WriteAllTextAsync(filePath, "video-bytes");
+        SeedVideoSource(db, entityId, filePath, "video/mp4", kind);
+        await db.SaveChangesAsync();
+
+        var source = await new VideoSourceService(db).GetSourceAsync(entityId, CancellationToken.None);
+
+        Assert.NotNull(source);
+        Assert.Equal(entityId, source.EntityId);
+        Assert.Equal(filePath, source.Path);
+    }
+
+    [Theory]
+    [InlineData(EntityKind.VideoSeries)]
+    [InlineData(EntityKind.VideoSeason)]
+    public async Task DoesNotResolveSourceForVideoContainers(EntityKind kind) {
+        await using var db = CreateContext();
+        var entityId = Guid.NewGuid();
+        var filePath = Path.Combine(_tempDir, $"{kind.ToCode()}.mp4");
+        await File.WriteAllTextAsync(filePath, "video-bytes");
+        SeedVideoSource(db, entityId, filePath, "video/mp4", kind);
+        await db.SaveChangesAsync();
+
+        var source = await new VideoSourceService(db).GetSourceAsync(entityId, CancellationToken.None);
+
+        Assert.Null(source);
+    }
+
     [Fact]
     public async Task MarksKnownTranscodeContainersAsNotDirectPlayable() {
         await using var db = CreateContext();
@@ -392,10 +427,11 @@ public sealed class VideoSourceServiceTests : IDisposable {
         PrismediaDbContext db,
         Guid videoId,
         string path,
-        string? mimeType) {
+        string? mimeType,
+        EntityKind kind = EntityKind.Video) {
         db.Entities.Add(new EntityRow {
             Id = videoId,
-            KindCode = EntityKind.Video.ToCode(),
+            KindCode = kind.ToCode(),
             Title = "Source",
             CreatedAt = DateTimeOffset.UtcNow,
             UpdatedAt = DateTimeOffset.UtcNow

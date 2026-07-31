@@ -79,7 +79,12 @@ public sealed partial class JobQueueService : IJobQueueService {
     ];
 
     private static readonly string AutoIdentifyJobTypeCode = JobType.AutoIdentify.ToCode();
-    private static readonly string TargetedAutoIdentifyKindCode = EntityKind.Video.ToCode();
+    private static readonly string[] TargetedAutoIdentifyKindCodes = EntityKindRegistry.All
+        .OfType<IPlayableVideoKindDefinition>()
+        .Select(definition => definition.Kind.ToCode())
+        .ToArray();
+    private static readonly IReadOnlySet<string> TargetedAutoIdentifyKindCodeSet =
+        TargetedAutoIdentifyKindCodes.ToHashSet(StringComparer.OrdinalIgnoreCase);
     private static readonly string MusicArtistKindCode = EntityKind.MusicArtist.ToCode();
     private static readonly string AudioLibraryKindCode = EntityKind.AudioLibrary.ToCode();
 
@@ -421,7 +426,7 @@ public sealed partial class JobQueueService : IJobQueueService {
                           OR (candidate.resource_class = 'standard-cpu' AND {3})
                           OR (candidate.resource_class = 'heavy-cpu' AND {4})
                       )
-                      AND ({5} = FALSE OR candidate.type <> {6} OR COALESCE(candidate.target_entity_kind, '') = {7})
+                      AND ({5} = FALSE OR candidate.type <> {6} OR COALESCE(candidate.target_entity_kind, '') = ANY({7}))
                       AND ({8} = FALSE OR candidate.type <> {6} OR COALESCE(candidate.target_entity_kind, '') <> {9})
                       AND (
                           candidate.resource_key IS NULL
@@ -472,7 +477,7 @@ public sealed partial class JobQueueService : IJobQueueService {
                 allowHeavyCpu,
                 autoIdentifyBlocked,
                 AutoIdentifyJobTypeCode,
-                TargetedAutoIdentifyKindCode,
+                TargetedAutoIdentifyKindCodes,
                 audioLibraryAutoIdentifyBlocked,
                 AudioLibraryKindCode).ToListAsync(cancellationToken);
             claimedId = claimed.Count == 0 ? null : claimed[0];
@@ -533,7 +538,7 @@ public sealed partial class JobQueueService : IJobQueueService {
             if (autoIdentifyBlocked) {
                 candidates = candidates.Where(candidate =>
                     candidate.Run.Type != JobType.AutoIdentify ||
-                    candidate.Run.TargetEntityKind == TargetedAutoIdentifyKindCode);
+                    TargetedAutoIdentifyKindCodeSet.Contains(candidate.Run.TargetEntityKind ?? string.Empty));
             }
             if (audioLibraryAutoIdentifyBlocked) {
                 candidates = candidates.Where(candidate =>
