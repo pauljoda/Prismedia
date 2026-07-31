@@ -37,6 +37,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Release operations are now ready for channel publishing: the root package version is the source of truth, Docker builds validate the release metadata, pushes to `main` publish only the dev image, and alpha/beta/release images are published manually.
 
 ### Changed
+- Movies and TV episodes now own their playable files directly. Upgrades preserve unambiguous legacy Movie and episode identities, references, folder provenance, subtitles, and custom artwork, while stopping safely for ambiguous or active data.
 - Entity detail reads now use one shared document contract across the web and Apple apps; credits, cover choices, and kind-specific metadata travel as typed capabilities instead of parallel per-kind response shapes.
 - Books now keep one forward-only progress position across reading and listening. Chapter-scoped mappings translate that position between text, pages, and audiobook parts, preserving exact text positions when available and falling back to the readable cursor when an audio part cannot be matched.
 - Reading and audiobook heartbeats now contribute to activity time in Playback Stats, with separate reading and audiobook totals and a combined time-read-or-listened figure on Book details.

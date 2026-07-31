@@ -39,6 +39,15 @@ public static class AssetPaths {
     /// <summary>Generated subtitle files under a video's asset directory.</summary>
     public const string Subtitles = "subtitles";
 
+    /// <summary>User-uploaded cache assets.</summary>
+    public const string Custom = "custom";
+
+    /// <summary>Plugin-managed cache assets.</summary>
+    public const string Plugins = "plugins";
+
+    /// <summary>Artwork directory nested beneath custom and plugin cache roots.</summary>
+    public const string Artwork = "artwork";
+
     /// <summary>Adaptive transcode + remux HLS cache root.</summary>
     public const string Hlsv = "hlsv";
 

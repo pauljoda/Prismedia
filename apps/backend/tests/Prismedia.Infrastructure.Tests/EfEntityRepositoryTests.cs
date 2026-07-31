@@ -614,9 +614,6 @@ public sealed class EfEntityRepositoryTests {
         await using var db = CreateContext();
         var id = Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb");
         SeedEntity(db, id, EntityKind.Video, "Missing subtitle");
-        db.VideoDetails.Add(new VideoDetailRow {
-            EntityId = id
-        });
         db.EntitySubtitles.Add(new EntitySubtitleRow {
             Id = Guid.NewGuid(),
             EntityId = id,

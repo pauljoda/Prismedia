@@ -102,14 +102,5 @@ internal static class EntityAttachmentModelConfiguration {
                 .OnDelete(DeleteBehavior.Cascade);
         });
 
-        modelBuilder.Entity<VideoDetailRow>(entity => {
-            entity.ToTable("video_details");
-            entity.HasKey(row => row.EntityId);
-            entity.Property(row => row.EntityId).HasColumnName("entity_id");
-            entity.HasOne<EntityRow>()
-                .WithOne()
-                .HasForeignKey<VideoDetailRow>(row => row.EntityId)
-                .OnDelete(DeleteBehavior.Cascade);
-        });
     }
 }

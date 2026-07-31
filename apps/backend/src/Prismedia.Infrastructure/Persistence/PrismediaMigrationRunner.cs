@@ -1,9 +1,12 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Npgsql;
+using Prismedia.Infrastructure.Media.Processing;
 
 namespace Prismedia.Infrastructure.Persistence;
 
@@ -41,10 +44,79 @@ public static class PrismediaMigrationRunner {
             async () => {
                 await using var scope = services.CreateAsyncScope();
                 var db = scope.ServiceProvider.GetRequiredService<PrismediaDbContext>();
-                await RejectUnknownMigrationsAsync(db, cancellationToken);
-                await db.Database.MigrateAsync(cancellationToken);
+                var migrator = db.GetService<IMigrator>();
+                await ApplyMigrationsUnderSessionLockAsync(
+                    db,
+                    migrator,
+                    scope.ServiceProvider.GetRequiredService<AssetPathService>(),
+                    cancellationToken);
             },
             cancellationToken);
+    }
+
+    private static async Task ApplyMigrationsUnderSessionLockAsync(
+        PrismediaDbContext db,
+        IMigrator migrator,
+        AssetPathService assets,
+        CancellationToken cancellationToken) {
+        await ExecuteUnderSessionLockAsync(
+            db,
+            async () => {
+                await ValidateMigrationHistoryAsync(db, cancellationToken);
+                var pending = (await db.Database.GetPendingMigrationsAsync(cancellationToken))
+                    .ToHashSet(StringComparer.Ordinal);
+                if (pending.Contains(DirectPlayableMigrationAssetPreparer.MigrationId)) {
+                    await migrator.MigrateAsync(
+                        DirectPlayableMigrationAssetPreparer.PreviousMigrationId,
+                        cancellationToken);
+                    await ValidateMigrationHistoryAsync(db, cancellationToken);
+                    var pendingAfterPrefixMigration = (await db.Database.GetPendingMigrationsAsync(cancellationToken))
+                        .ToHashSet(StringComparer.Ordinal);
+                    if (!pendingAfterPrefixMigration.Contains(DirectPlayableMigrationAssetPreparer.MigrationId)) {
+                        throw new InvalidOperationException(
+                            $"Migration history changed while preparing {DirectPlayableMigrationAssetPreparer.MigrationId}.");
+                    }
+
+                    await DirectPlayableMigrationAssetPreparer.PrepareAsync(db, assets, cancellationToken);
+                }
+
+                await migrator.MigrateAsync(targetMigration: null, cancellationToken);
+            },
+            cancellationToken);
+    }
+
+    private static async Task ExecuteUnderSessionLockAsync(
+        PrismediaDbContext db,
+        Func<Task> action,
+        CancellationToken cancellationToken) {
+        await db.Database.OpenConnectionAsync(cancellationToken);
+        var connection = (NpgsqlConnection)db.Database.GetDbConnection();
+        var lockAcquired = false;
+        try {
+            await ExecuteAdvisoryLockAsync(connection, acquire: true, cancellationToken);
+            lockAcquired = true;
+            await action();
+        } finally {
+            try {
+                if (lockAcquired) {
+                    await ExecuteAdvisoryLockAsync(connection, acquire: false, CancellationToken.None);
+                }
+            } finally {
+                await db.Database.CloseConnectionAsync();
+            }
+        }
+    }
+
+    private static async Task ExecuteAdvisoryLockAsync(
+        NpgsqlConnection connection,
+        bool acquire,
+        CancellationToken cancellationToken) {
+        var operation = acquire ? "pg_advisory_lock" : "pg_advisory_unlock";
+        await using var command = new NpgsqlCommand(
+            $"SELECT {operation}(hashtextextended(@lock_name, 0))",
+            connection);
+        command.Parameters.AddWithValue("lock_name", DirectPlayableMigrationAssetPreparer.AdvisoryLockName);
+        await command.ExecuteScalarAsync(cancellationToken);
     }
 
     /// <summary>
@@ -77,12 +149,17 @@ public static class PrismediaMigrationRunner {
                     throw new DatabaseNotReadyException("Database is not accepting connections yet.");
                 }
 
-                await RejectUnknownMigrationsAsync(db, cancellationToken);
-                var pending = await db.Database.GetPendingMigrationsAsync(cancellationToken);
-                if (pending.Any()) {
-                    throw new DatabaseNotReadyException(
-                        "Database schema has not been migrated by the API yet.");
-                }
+                await ExecuteUnderSessionLockAsync(
+                    db,
+                    async () => {
+                        await ValidateMigrationHistoryAsync(db, cancellationToken);
+                        var pending = await db.Database.GetPendingMigrationsAsync(cancellationToken);
+                        if (pending.Any()) {
+                            throw new DatabaseNotReadyException(
+                                "Database schema has not been migrated by the API yet.");
+                        }
+                    },
+                    cancellationToken);
             },
             cancellationToken);
     }
@@ -123,18 +200,24 @@ public static class PrismediaMigrationRunner {
         }
     }
 
-    private static async Task RejectUnknownMigrationsAsync(
+    private static async Task ValidateMigrationHistoryAsync(
         PrismediaDbContext db,
         CancellationToken cancellationToken) {
-        var known = db.Database.GetMigrations()
-            .ToHashSet(StringComparer.Ordinal);
-        var unknown = (await db.Database.GetAppliedMigrationsAsync(cancellationToken))
-            .Where(migration => !known.Contains(migration))
+        var known = db.Database.GetMigrations().ToArray();
+        var knownSet = known.ToHashSet(StringComparer.Ordinal);
+        var applied = (await db.Database.GetAppliedMigrationsAsync(cancellationToken)).ToArray();
+        var unknown = applied
+            .Where(migration => !knownSet.Contains(migration))
             .Order(StringComparer.Ordinal)
             .ToArray();
         if (unknown.Length > 0) {
             throw new InvalidOperationException(
                 $"Database contains migrations unknown to this Prismedia build: {string.Join(", ", unknown)}.");
+        }
+
+        if (!applied.SequenceEqual(known.Take(applied.Length), StringComparer.Ordinal)) {
+            throw new InvalidOperationException(
+                "Database migration history is not a prefix of the migrations known to this Prismedia build.");
         }
     }
 

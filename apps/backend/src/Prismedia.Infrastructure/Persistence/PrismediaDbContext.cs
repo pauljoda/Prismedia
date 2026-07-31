@@ -68,8 +68,6 @@ public sealed class PrismediaDbContext : DbContext {
 
     public DbSet<EntityLifetimeRow> EntityLifetimes => Set<EntityLifetimeRow>();
 
-    public DbSet<VideoDetailRow> VideoDetails => Set<VideoDetailRow>();
-
     public DbSet<VideoSeriesDetailRow> VideoSeriesDetails => Set<VideoSeriesDetailRow>();
 
     public DbSet<GalleryDetailRow> GalleryDetails => Set<GalleryDetailRow>();

@@ -758,7 +758,6 @@ public sealed class LibraryScanPersistenceServiceTests {
         video.LifecycleClaimKind = EntityLifecycleClaimKind.DeletingFiles;
         video.LifecycleClaimId = Guid.NewGuid();
         video.LifecycleClaimedAt = DateTimeOffset.UtcNow;
-        db.VideoDetails.Add(new VideoDetailRow { EntityId = videoId });
         await db.SaveChangesAsync();
 
         var service = new LibraryScanPersistenceService(db);
@@ -783,7 +782,6 @@ public sealed class LibraryScanPersistenceServiceTests {
         var videoId = Guid.NewGuid();
         SeedLibraryRoot(db, RootId, "/media/videos");
         SeedVideo(db, videoId, "/media/videos/movie.mkv");
-        db.VideoDetails.Add(new VideoDetailRow { EntityId = videoId });
         db.EntitySubtitleStates.Add(new EntitySubtitleStateRow {
             EntityId = videoId,
             SubtitleSidecarSignature = "old",
@@ -903,12 +901,6 @@ public sealed class LibraryScanPersistenceServiceTests {
         db.EntityLibraryRoots.AddRange(
             new EntityLibraryRootRow { EntityId = assignedId, LibraryRootId = RootId  },
             new EntityLibraryRootRow { EntityId = assignedElsewhereId, LibraryRootId = otherRootId  });
-        db.VideoDetails.AddRange(
-            new VideoDetailRow { EntityId = assignedId },
-            new VideoDetailRow { EntityId = pathCoveredId },
-            new VideoDetailRow { EntityId = snapshotCoveredId },
-            new VideoDetailRow { EntityId = unrelatedId },
-            new VideoDetailRow { EntityId = assignedElsewhereId });
         db.ScannedFiles.Add(new ScannedFileRow {
             LibraryRootId = RootId,
             ScanKind = JobType.ScanLibrary.ToCode(),
@@ -934,7 +926,6 @@ public sealed class LibraryScanPersistenceServiceTests {
         var ids = Enumerable.Range(0, 75).Select(_ => Guid.NewGuid()).ToArray();
         foreach (var id in ids) {
             SeedVideo(db, id, $"/media/videos/{id:N}.mkv");
-            db.VideoDetails.Add(new VideoDetailRow { EntityId = id });
             db.EntityLibraryRoots.Add(new EntityLibraryRootRow { EntityId = id, LibraryRootId = RootId  });
         }
         await db.SaveChangesAsync();
@@ -965,7 +956,6 @@ public sealed class LibraryScanPersistenceServiceTests {
             EntityKind.Video.ToCode(),
             sourcePath,
             parentEntityId: seriesId);
-        db.VideoDetails.Add(new VideoDetailRow { EntityId = videoId });
         await db.SaveChangesAsync();
 
         var tree = await new LibraryScanPersistenceService(db)

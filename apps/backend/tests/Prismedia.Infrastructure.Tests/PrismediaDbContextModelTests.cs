@@ -28,7 +28,6 @@ public sealed class PrismediaDbContextModelTests {
     [InlineData(typeof(EntityPositionRow), "entity_positions")]
     [InlineData(typeof(EntityClassificationRow), "entity_classifications")]
     [InlineData(typeof(EntityFileFingerprintRow), "entity_file_fingerprints")]
-    [InlineData(typeof(VideoDetailRow), "video_details")]
     [InlineData(typeof(EntityLibraryRootRow), "entity_library_roots")]
     [InlineData(typeof(EntitySubtitleStateRow), "entity_subtitle_states")]
     [InlineData(typeof(VideoSeriesDetailRow), "video_series_details")]
@@ -73,6 +72,7 @@ public sealed class PrismediaDbContextModelTests {
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
         Assert.Contains(EntityKind.VideoSeason.ToCode(), seededCodes);
+        Assert.Contains(EntityKind.VideoEpisode.ToCode(), seededCodes);
         Assert.Contains(EntityKind.BookVolume.ToCode(), seededCodes);
         Assert.Contains(EntityKind.BookChapter.ToCode(), seededCodes);
         Assert.Contains(EntityKind.BookPage.ToCode(), seededCodes);
@@ -196,17 +196,16 @@ public sealed class PrismediaDbContextModelTests {
 
     [Fact]
     public void LegacyDetailRowsDoNotCarrySharedRootOrSubtitleState() {
-        Assert.Null(typeof(VideoDetailRow).GetProperty("LibraryRootId"));
-        Assert.Null(typeof(VideoDetailRow).GetProperty("SubtitlesExtractedAt"));
-        Assert.Null(typeof(VideoDetailRow).GetProperty("SubtitleSidecarSignature"));
         Assert.Null(typeof(BookDetailRow).GetProperty("LibraryRootId"));
         Assert.Null(typeof(GalleryDetailRow).GetProperty("LibraryRootId"));
+        Assert.Null(typeof(PrismediaDbContext).GetProperty("VideoDetails"));
         Assert.Null(typeof(PrismediaDbContext).GetProperty("AudioLibraryDetails"));
         Assert.Null(typeof(PrismediaDbContext).GetProperty("MusicArtistDetails"));
 
         using var db = CreateContext();
         Assert.NotNull(db.Model.FindEntityType(typeof(EntityLibraryRootRow)));
         Assert.NotNull(db.Model.FindEntityType(typeof(EntitySubtitleStateRow)));
+        Assert.Null(db.Model.FindEntityType("Prismedia.Infrastructure.Persistence.Entities.VideoDetailRow"));
         Assert.Null(db.Model.FindEntityType("Prismedia.Infrastructure.Persistence.Entities.AudioLibraryDetailRow"));
         Assert.Null(db.Model.FindEntityType("Prismedia.Infrastructure.Persistence.Entities.MusicArtistDetailRow"));
     }
@@ -218,10 +217,16 @@ public sealed class PrismediaDbContextModelTests {
 
         var videoSeed = modelEntity!.GetSeedData().Single(seed =>
             string.Equals((string)seed[nameof(EntityKindRow.Code)]!, EntityKind.Video.ToCode(), StringComparison.Ordinal));
+        var movieSeed = modelEntity.GetSeedData().Single(seed =>
+            string.Equals((string)seed[nameof(EntityKindRow.Code)]!, EntityKind.Movie.ToCode(), StringComparison.Ordinal));
+        var episodeSeed = modelEntity.GetSeedData().Single(seed =>
+            string.Equals((string)seed[nameof(EntityKindRow.Code)]!, EntityKind.VideoEpisode.ToCode(), StringComparison.Ordinal));
         var seriesSeed = modelEntity.GetSeedData().Single(seed =>
             string.Equals((string)seed[nameof(EntityKindRow.Code)]!, EntityKind.VideoSeries.ToCode(), StringComparison.Ordinal));
 
         Assert.Equal(EntityStorageShape.File.ToCode(), videoSeed[nameof(EntityKindRow.StorageShape)]);
+        Assert.Equal(EntityStorageShape.File.ToCode(), movieSeed[nameof(EntityKindRow.StorageShape)]);
+        Assert.Equal(EntityStorageShape.File.ToCode(), episodeSeed[nameof(EntityKindRow.StorageShape)]);
         Assert.Equal(EntityStorageShape.Folder.ToCode(), seriesSeed[nameof(EntityKindRow.StorageShape)]);
     }
 
