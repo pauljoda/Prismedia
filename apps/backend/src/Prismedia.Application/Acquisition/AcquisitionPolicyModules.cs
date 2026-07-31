@@ -3,21 +3,18 @@ using Prismedia.Domain.Entities;
 namespace Prismedia.Application.Acquisition;
 
 /// <summary>
-/// Owns every release-search policy that varies by acquisition kind: query construction, Torznab
-/// category routing, and release evaluation. A module may serve multiple entity kinds when they share
-/// one upstream release vocabulary, such as TV series, season packs, and episodes.
+/// Owns every release-search policy that varies by acquisition naming family: query construction,
+/// Torznab category routing, and release evaluation. Participating acquisition kinds are derived from
+/// their Entity definitions; modules only declare the shared family algorithm they implement.
 /// </summary>
 public interface IAcquisitionPolicyModule {
-    /// <summary>The entity kinds whose release searches this module owns.</summary>
-    IReadOnlyCollection<EntityKind> SupportedKinds { get; }
-
     /// <summary>Builds the ordered, most-specific-first query ladder for one acquisition.</summary>
     IReadOnlyList<string> BuildQueries(AcquisitionSearchInput input);
 
     /// <summary>Narrows an indexer's configured Torznab categories to this module's media range.</summary>
     IReadOnlyList<int> RouteCategories(AcquisitionSearchInput input, IReadOnlyList<int> configuredCategories);
 
-    /// <summary>Returns the release decision engine bound to the requested supported kind.</summary>
+    /// <summary>Returns the release decision engine specialized to the requested family-owned kind.</summary>
     IAcquisitionDecisionEngine DecisionEngineFor(EntityKind kind);
 }
 
@@ -28,28 +25,14 @@ public interface IAcquisitionPolicyRegistry {
 }
 
 /// <summary>
-/// Deterministic registry over acquisition policy modules. Registration order never changes resolution;
-/// duplicate kind ownership is rejected at construction so adding a module cannot silently replace policy.
+/// Deterministic registry over acquisition policy modules. Entity-kind definitions and request descriptors
+/// derive the kind-to-family map; decorated modules provide exactly one policy per resulting family.
 /// </summary>
 public sealed class AcquisitionPolicyRegistry : IAcquisitionPolicyRegistry {
     private readonly IReadOnlyDictionary<EntityKind, IAcquisitionPolicyModule> _byKind;
 
-    public AcquisitionPolicyRegistry(IEnumerable<IAcquisitionPolicyModule> modules) {
-        var byKind = new Dictionary<EntityKind, IAcquisitionPolicyModule>();
-        foreach (var module in modules.OrderBy(ModuleName, StringComparer.Ordinal)) {
-            foreach (var kind in module.SupportedKinds.OrderBy(candidate => candidate.ToCode(), StringComparer.Ordinal)) {
-                if (byKind.TryGetValue(kind, out var existing)) {
-                    throw new InvalidOperationException(
-                        $"Acquisition policy kind '{kind.ToCode()}' is registered by both " +
-                        $"'{ModuleName(existing)}' and '{ModuleName(module)}'.");
-                }
-
-                byKind.Add(kind, module);
-            }
-        }
-
-        _byKind = byKind;
-    }
+    public AcquisitionPolicyRegistry(IEnumerable<IAcquisitionPolicyModule> modules) =>
+        _byKind = AcquisitionStrategyRegistration.ResolveByAcquisitionKind(modules, "search policy");
 
     /// <inheritdoc />
     public IAcquisitionPolicyModule Get(EntityKind kind) =>
@@ -58,15 +41,13 @@ public sealed class AcquisitionPolicyRegistry : IAcquisitionPolicyRegistry {
             : throw new InvalidOperationException(
                 $"No acquisition policy module is registered for kind '{kind.ToCode()}'.");
 
-    private static string ModuleName(IAcquisitionPolicyModule module) =>
-        module.GetType().FullName ?? module.GetType().Name;
 }
 
 /// <summary>Release-search policy for books and comics.</summary>
 [AcquisitionStrategy(AcquisitionNamingFamily.Book)]
 public sealed class BookAcquisitionPolicyModule : AcquisitionPolicyModule {
     public BookAcquisitionPolicyModule()
-        : base(TorznabCategoryRange.Books, [new BookReleaseDecisionEngine()]) { }
+        : base(TorznabCategoryRange.Books, static kind => new BookReleaseDecisionEngine(kind)) { }
 
     /// <inheritdoc />
     public override IReadOnlyList<string> BuildQueries(AcquisitionSearchInput input) =>
@@ -90,7 +71,7 @@ public sealed class BookAcquisitionPolicyModule : AcquisitionPolicyModule {
 [AcquisitionStrategy(AcquisitionNamingFamily.Movie)]
 public sealed class MovieAcquisitionPolicyModule : AcquisitionPolicyModule {
     public MovieAcquisitionPolicyModule()
-        : base(TorznabCategoryRange.Movies, [new MovieReleaseDecisionEngine()]) { }
+        : base(TorznabCategoryRange.Movies, static kind => new MovieReleaseDecisionEngine(kind)) { }
 
     /// <inheritdoc />
     public override IReadOnlyList<string> BuildQueries(AcquisitionSearchInput input) =>
@@ -104,15 +85,11 @@ public sealed class MovieAcquisitionPolicyModule : AcquisitionPolicyModule {
 [AcquisitionStrategy(AcquisitionNamingFamily.Music)]
 public sealed class MusicAcquisitionPolicyModule : AcquisitionPolicyModule {
     public MusicAcquisitionPolicyModule()
-        : base(TorznabCategoryRange.Audio, [
-            new MusicReleaseDecisionEngine(EntityKind.AudioLibrary),
-            new MusicReleaseDecisionEngine(EntityKind.AudioTrack),
-            new MusicReleaseDecisionEngine(EntityKind.MusicArtist)
-        ]) { }
+        : base(TorznabCategoryRange.Audio, static kind => new MusicReleaseDecisionEngine(kind)) { }
 
     /// <inheritdoc />
     public override IReadOnlyList<string> BuildQueries(AcquisitionSearchInput input) =>
-        AcquisitionPolicyQueries.FromTitle(input, input.Kind == EntityKind.AudioTrack
+        AcquisitionPolicyQueries.FromTitle(input, IsFileUnit(input.Kind)
             ? [
                 AcquisitionPolicyQueries.JoinDistinct(input.Author, input.Series, input.Title),
                 AcquisitionPolicyQueries.JoinDistinct(input.Series, input.Title),
@@ -129,11 +106,7 @@ public sealed class MusicAcquisitionPolicyModule : AcquisitionPolicyModule {
 [AcquisitionStrategy(AcquisitionNamingFamily.Television)]
 public sealed class TvAcquisitionPolicyModule : AcquisitionPolicyModule {
     public TvAcquisitionPolicyModule()
-        : base(TorznabCategoryRange.Tv, [
-            new TvReleaseDecisionEngine(EntityKind.VideoSeries),
-            new TvReleaseDecisionEngine(EntityKind.VideoSeason),
-            new TvReleaseDecisionEngine(EntityKindRegistry.PlayableVideoKindFor(PlayableVideoScanPlacement.Episode))
-        ]) { }
+        : base(TorznabCategoryRange.Tv, static kind => new TvReleaseDecisionEngine(kind)) { }
 
     /// <inheritdoc />
     public override IReadOnlyList<string> BuildQueries(AcquisitionSearchInput input) {
@@ -142,15 +115,14 @@ public sealed class TvAcquisitionPolicyModule : AcquisitionPolicyModule {
         }
 
         var tvBase = string.IsNullOrWhiteSpace(input.Series) ? input.Title : input.Series;
-        var episodeKind = EntityKindRegistry.PlayableVideoKindFor(PlayableVideoScanPlacement.Episode);
-        if (input.Kind == episodeKind && input is { SeasonNumber: { } season, EpisodeNumber: { } episode }) {
+        if (IsFileUnit(input.Kind) && input is { SeasonNumber: { } season, EpisodeNumber: { } episode }) {
             return AcquisitionPolicyQueries.Normalize([
                 AcquisitionPolicyQueries.Join(tvBase, $"S{season:00}E{episode:00}"),
                 AcquisitionPolicyQueries.Join(tvBase, $"{season}x{episode:00}")
             ]);
         }
 
-        if (input.Kind == EntityKind.VideoSeason && input.SeasonNumber is { } seasonNumber) {
+        if (IsNestedContainer(input.Kind) && input.SeasonNumber is { } seasonNumber) {
             return AcquisitionPolicyQueries.Normalize([
                 AcquisitionPolicyQueries.Join(tvBase, $"S{seasonNumber:00}"),
                 AcquisitionPolicyQueries.Join(tvBase, $"Season {seasonNumber}"),
@@ -165,21 +137,17 @@ public sealed class TvAcquisitionPolicyModule : AcquisitionPolicyModule {
     }
 }
 
-/// <summary>Shared mechanics for modules whose supported kinds are defined by their decision engines.</summary>
+/// <summary>Shared mechanics for family-owned policy modules.</summary>
 public abstract class AcquisitionPolicyModule : IAcquisitionPolicyModule {
-    private readonly IReadOnlyDictionary<EntityKind, IAcquisitionDecisionEngine> _decisionEngines;
     private readonly TorznabCategoryRange _categoryRange;
+    private readonly Func<EntityKind, IAcquisitionDecisionEngine> _decisionEngineFactory;
 
     private protected AcquisitionPolicyModule(
         TorznabCategoryRange categoryRange,
-        IEnumerable<IAcquisitionDecisionEngine> decisionEngines) {
+        Func<EntityKind, IAcquisitionDecisionEngine> decisionEngineFactory) {
         _categoryRange = categoryRange;
-        _decisionEngines = decisionEngines.ToDictionary(engine => engine.Kind);
-        SupportedKinds = _decisionEngines.Keys.ToArray();
+        _decisionEngineFactory = decisionEngineFactory;
     }
-
-    /// <inheritdoc />
-    public IReadOnlyCollection<EntityKind> SupportedKinds { get; }
 
     /// <inheritdoc />
     public abstract IReadOnlyList<string> BuildQueries(AcquisitionSearchInput input);
@@ -191,11 +159,34 @@ public abstract class AcquisitionPolicyModule : IAcquisitionPolicyModule {
         _categoryRange.Route(configuredCategories);
 
     /// <inheritdoc />
-    public IAcquisitionDecisionEngine DecisionEngineFor(EntityKind kind) =>
-        _decisionEngines.TryGetValue(kind, out var engine)
-            ? engine
-            : throw new InvalidOperationException(
-                $"Acquisition policy module '{GetType().Name}' does not support kind '{kind.ToCode()}'.");
+    public IAcquisitionDecisionEngine DecisionEngineFor(EntityKind kind) {
+        var family = AcquisitionStrategyRegistration.TryGetNamingFamily(kind);
+        var ownedFamily = AcquisitionStrategyRegistration.FamilyOf(this);
+        if (family != ownedFamily) {
+            throw new InvalidOperationException(
+                $"Acquisition policy module '{GetType().Name}' serves family '{ownedFamily.ToCode()}', " +
+                $"not kind '{kind.ToCode()}' (family '{family?.ToCode() ?? "none"}').");
+        }
+
+        var engine = _decisionEngineFactory(kind);
+        if (engine.Kind != kind) {
+            throw new InvalidOperationException(
+                $"Acquisition policy module '{GetType().Name}' returned decision engine '{engine.GetType().Name}' " +
+                $"for '{engine.Kind.ToCode()}', not requested kind '{kind.ToCode()}'.");
+        }
+
+        return engine;
+    }
+
+    /// <summary>Whether a family acquisition unit is represented by one physical file.</summary>
+    protected static bool IsFileUnit(EntityKind kind) =>
+        EntityKindRegistry.Describe(kind).StorageShape == EntityStorageShape.File;
+
+    /// <summary>Whether a family acquisition unit is a structural container beneath another entity.</summary>
+    protected static bool IsNestedContainer(EntityKind kind) {
+        var definition = EntityKindRegistry.Describe(kind);
+        return definition.StorageShape == EntityStorageShape.Folder && definition.StructurePolicy.RequiresParent;
+    }
 }
 
 /// <summary>One Torznab top-level category range and its configured-category routing behavior.</summary>

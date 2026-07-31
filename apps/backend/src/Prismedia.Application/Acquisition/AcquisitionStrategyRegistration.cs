@@ -80,7 +80,8 @@ public static class AcquisitionStrategyRegistration {
             $"Acquisition strategy '{StrategyName(strategy)}' must declare {nameof(AcquisitionStrategyAttribute)}.");
 
     private static IReadOnlyList<EntityKind> AcquisitionKinds { get; } = RequestKindRegistry.All
-        .Select(descriptor => descriptor.AcquisitionKind)
+        .SelectMany(descriptor => new[] { descriptor.AcquisitionKind, descriptor.ProfileEntityKind })
+        .OfType<EntityKind>()
         .Distinct()
         .OrderBy(kind => kind.ToCode(), StringComparer.Ordinal)
         .ToArray();

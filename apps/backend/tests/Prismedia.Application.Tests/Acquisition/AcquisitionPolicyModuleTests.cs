@@ -1,29 +1,36 @@
 using Prismedia.Application.Acquisition;
+using Prismedia.Application.Requests;
 using Prismedia.Domain.Entities;
 
 namespace Prismedia.Application.Tests.Acquisition;
 
-/// <summary>Pins the deterministic per-kind policy registry and each module's search policy.</summary>
+/// <summary>Pins the deterministic definition-family policy registry and its family search behavior.</summary>
 public sealed class AcquisitionPolicyModuleTests {
     [Fact]
-    public void RegistryRejectsTwoModulesForTheSameKind() {
-        var first = new FakePolicyModule(EntityKind.Book);
-        var second = new FakePolicyModule(EntityKind.Book);
+    public void RegistryRejectsTwoModulesForTheSameDefinitionFamily() {
+        var first = new FakePolicyModule();
+        var second = new FakePolicyModule();
 
         var error = Assert.Throws<InvalidOperationException>(() =>
-            new AcquisitionPolicyRegistry([first, second]));
+            new AcquisitionPolicyRegistry([
+                first,
+                second,
+                new MovieAcquisitionPolicyModule(),
+                new MusicAcquisitionPolicyModule(),
+                new TvAcquisitionPolicyModule()
+            ]));
 
-        Assert.Contains(EntityKind.Book.ToCode(), error.Message, StringComparison.Ordinal);
+        Assert.Contains(AcquisitionNamingFamily.Book.ToCode(), error.Message, StringComparison.Ordinal);
         Assert.Contains(nameof(FakePolicyModule), error.Message, StringComparison.Ordinal);
     }
 
     [Fact]
-    public void RegistryRejectsAKindWithoutARegisteredModule() {
-        var registry = new AcquisitionPolicyRegistry([new BookAcquisitionPolicyModule()]);
+    public void RegistryRejectsAnIncompleteDefinitionFamilySet() {
+        var error = Assert.Throws<InvalidOperationException>(() =>
+            new AcquisitionPolicyRegistry([new BookAcquisitionPolicyModule()]));
 
-        var error = Assert.Throws<InvalidOperationException>(() => registry.Get(EntityKind.Movie));
-
-        Assert.Contains(EntityKind.Movie.ToCode(), error.Message, StringComparison.Ordinal);
+        Assert.Contains(EntityKind.AudioLibrary.ToCode(), error.Message, StringComparison.Ordinal);
+        Assert.Contains(AcquisitionNamingFamily.Music.ToCode(), error.Message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -34,7 +41,6 @@ public sealed class AcquisitionPolicyModuleTests {
         Assert.IsType<MovieAcquisitionPolicyModule>(registry.Get(EntityKind.Movie));
         Assert.IsType<MusicAcquisitionPolicyModule>(registry.Get(EntityKind.AudioLibrary));
         Assert.IsType<MusicAcquisitionPolicyModule>(registry.Get(EntityKind.AudioTrack));
-        Assert.IsType<MusicAcquisitionPolicyModule>(registry.Get(EntityKind.MusicArtist));
         Assert.IsType<TvAcquisitionPolicyModule>(registry.Get(EntityKind.VideoSeries));
         Assert.IsType<TvAcquisitionPolicyModule>(registry.Get(EntityKind.VideoSeason));
         Assert.IsType<TvAcquisitionPolicyModule>(registry.Get(EntityKind.VideoEpisode));
@@ -43,7 +49,7 @@ public sealed class AcquisitionPolicyModuleTests {
     [Fact]
     public void ModulesBuildTheExistingContextRichQueryLadders() {
         var registry = BuiltInRegistry();
-        var book = new AcquisitionSearchInput(Guid.NewGuid(), "Book", "Author");
+        var book = new AcquisitionSearchInput(Guid.NewGuid(), "Book", "Author", EntityKind.Book);
         var album = new AcquisitionSearchInput(
             Guid.NewGuid(), "Discovery", "Daft Punk", EntityKind.AudioLibrary);
         var series = new AcquisitionSearchInput(
@@ -97,8 +103,8 @@ public sealed class AcquisitionPolicyModuleTests {
         var music = new MusicAcquisitionPolicyModule();
         var tv = new TvAcquisitionPolicyModule();
 
-        Assert.Equal([7020], book.RouteCategories(new AcquisitionSearchInput(Guid.NewGuid(), "Book", null, BookRendition: BookRendition.Ebook), [7000, 7020, 7030, 3030]));
-        Assert.Equal([3030], book.RouteCategories(new AcquisitionSearchInput(Guid.NewGuid(), "Book", null, BookRendition: BookRendition.Audiobook), [3000, 3030, 7020]));
+        Assert.Equal([7020], book.RouteCategories(new AcquisitionSearchInput(Guid.NewGuid(), "Book", null, EntityKind.Book, BookRendition: BookRendition.Ebook), [7000, 7020, 7030, 3030]));
+        Assert.Equal([3030], book.RouteCategories(new AcquisitionSearchInput(Guid.NewGuid(), "Book", null, EntityKind.Book, BookRendition: BookRendition.Audiobook), [3000, 3030, 7020]));
         Assert.Equal([2000], movie.RouteCategories(new AcquisitionSearchInput(Guid.NewGuid(), "Movie", null, EntityKind.Movie), [7000, 7030]));
         Assert.Equal([3000], music.RouteCategories(new AcquisitionSearchInput(Guid.NewGuid(), "Album", null, EntityKind.AudioLibrary), []));
         Assert.Equal([5000], tv.RouteCategories(new AcquisitionSearchInput(Guid.NewGuid(), "Series", null, EntityKind.VideoSeries), [7000]));
@@ -106,7 +112,7 @@ public sealed class AcquisitionPolicyModuleTests {
 
     [Fact]
     public void ModulesPreserveConfiguredOtherRangeCategories() {
-        var ebook = new AcquisitionSearchInput(Guid.NewGuid(), "Book", null, BookRendition: BookRendition.Ebook);
+        var ebook = new AcquisitionSearchInput(Guid.NewGuid(), "Book", null, EntityKind.Book, BookRendition: BookRendition.Ebook);
         Assert.Equal([7020, 8000], new BookAcquisitionPolicyModule().RouteCategories(ebook, [7000, 7020, 8000]));
         Assert.Equal([2000, 8010], new MovieAcquisitionPolicyModule().RouteCategories(new AcquisitionSearchInput(Guid.NewGuid(), "Movie", null, EntityKind.Movie), [2000, 7000, 8010]));
         Assert.Equal([7020, 8000], new BookAcquisitionPolicyModule().RouteCategories(ebook, [8000]));
@@ -114,14 +120,26 @@ public sealed class AcquisitionPolicyModuleTests {
     }
 
     [Fact]
-    public void MultiKindModulesReturnAnEngineBoundToTheRequestedKind() {
-        var music = new MusicAcquisitionPolicyModule();
-        var tv = new TvAcquisitionPolicyModule();
+    public void FamilyModulesCreateDecisionEnginesForEveryDefinitionDerivedAcquisitionUnit() {
+        var registry = BuiltInRegistry();
 
-        Assert.Equal(EntityKind.AudioTrack, music.DecisionEngineFor(EntityKind.AudioTrack).Kind);
-        Assert.Equal(EntityKind.MusicArtist, music.DecisionEngineFor(EntityKind.MusicArtist).Kind);
-        Assert.Equal(EntityKind.VideoSeries, tv.DecisionEngineFor(EntityKind.VideoSeries).Kind);
-        Assert.Equal(EntityKind.VideoEpisode, tv.DecisionEngineFor(EntityKind.VideoEpisode).Kind);
+        foreach (var kind in RequestKindRegistry.All
+                     .Select(descriptor => descriptor.AcquisitionKind)
+                     .Distinct()) {
+            Assert.Equal(kind, registry.Get(kind).DecisionEngineFor(kind).Kind);
+        }
+    }
+
+    [Fact]
+    public void MusicAndTvFamiliesResolveTheirDescriptorDerivedUnitsWithoutModuleKindLists() {
+        var registry = BuiltInRegistry();
+        var musicKinds = AcquisitionKindsFor(AcquisitionNamingFamily.Music);
+        var televisionKinds = AcquisitionKindsFor(AcquisitionNamingFamily.Television);
+
+        Assert.Equal([EntityKind.AudioLibrary, EntityKind.AudioTrack], musicKinds);
+        Assert.Equal([EntityKind.VideoEpisode, EntityKind.VideoSeason, EntityKind.VideoSeries], televisionKinds);
+        Assert.All(musicKinds, kind => Assert.IsType<MusicAcquisitionPolicyModule>(registry.Get(kind)));
+        Assert.All(televisionKinds, kind => Assert.IsType<TvAcquisitionPolicyModule>(registry.Get(kind)));
     }
 
     private static AcquisitionPolicyRegistry BuiltInRegistry() => new([
@@ -131,9 +149,17 @@ public sealed class AcquisitionPolicyModuleTests {
         new TvAcquisitionPolicyModule()
     ]);
 
+    private static EntityKind[] AcquisitionKindsFor(AcquisitionNamingFamily family) =>
+        RequestKindRegistry.All
+            .SelectMany(descriptor => new[] { descriptor.AcquisitionKind, descriptor.ProfileEntityKind })
+            .OfType<EntityKind>()
+            .Distinct()
+            .Where(kind => AcquisitionStrategyRegistration.TryGetNamingFamily(kind) == family)
+            .OrderBy(kind => kind.ToCode(), StringComparer.Ordinal)
+            .ToArray();
+
     [AcquisitionStrategy(AcquisitionNamingFamily.Book)]
-    private sealed class FakePolicyModule(params EntityKind[] supportedKinds) : IAcquisitionPolicyModule {
-        public IReadOnlyCollection<EntityKind> SupportedKinds { get; } = supportedKinds;
+    private sealed class FakePolicyModule : IAcquisitionPolicyModule {
 
         public IReadOnlyList<string> BuildQueries(AcquisitionSearchInput input) => [input.Title];
 

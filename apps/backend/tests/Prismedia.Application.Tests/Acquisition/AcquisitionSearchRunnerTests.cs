@@ -44,7 +44,7 @@ public sealed class AcquisitionSearchRunnerTests {
             Policies(new BookAcquisitionPolicyModule()),
             Settings());
 
-        var outcome = await runner.RunAsync(new AcquisitionSearchInput(Guid.NewGuid(), "Book", null), CancellationToken.None);
+        var outcome = await runner.RunAsync(new AcquisitionSearchInput(Guid.NewGuid(), "Book", null, EntityKind.Book), CancellationToken.None);
 
         var blockedResult = outcome.Candidates.Single(candidate => candidate.Release.Title == "Blocked Book (epub)");
         var cleanResult = outcome.Candidates.Single(candidate => candidate.Release.Title == "Clean Book (epub)");
@@ -69,7 +69,7 @@ public sealed class AcquisitionSearchRunnerTests {
                 new IndexerQueryWindow(),
                 Policies(new BookAcquisitionPolicyModule()),
                 Settings());
-            var outcome = await runner.RunAsync(new AcquisitionSearchInput(Guid.NewGuid(), "Book", null), CancellationToken.None);
+            var outcome = await runner.RunAsync(new AcquisitionSearchInput(Guid.NewGuid(), "Book", null, EntityKind.Book), CancellationToken.None);
             return outcome.Candidates;
         }
 
@@ -98,7 +98,7 @@ public sealed class AcquisitionSearchRunnerTests {
         });
         var runner = Runner(client, Settings(), DownloadProtocol.Torrent, DownloadProtocol.Usenet);
 
-        var outcome = await runner.RunAsync(new AcquisitionSearchInput(Guid.NewGuid(), "Book", "Author"), CancellationToken.None);
+        var outcome = await runner.RunAsync(new AcquisitionSearchInput(Guid.NewGuid(), "Book", "Author", EntityKind.Book), CancellationToken.None);
 
         Assert.Equal(["Book Author", "Book"], client.Queries);
         Assert.Equal(DownloadProtocol.Usenet, outcome.Candidates.First(candidate => candidate.Accepted).Release.Protocol);
@@ -113,7 +113,7 @@ public sealed class AcquisitionSearchRunnerTests {
         });
         var runner = Runner(client, Settings(), DownloadProtocol.Torrent, DownloadProtocol.Usenet);
 
-        var outcome = await runner.RunAsync(new AcquisitionSearchInput(Guid.NewGuid(), "Book", "Author"), CancellationToken.None);
+        var outcome = await runner.RunAsync(new AcquisitionSearchInput(Guid.NewGuid(), "Book", "Author", EntityKind.Book), CancellationToken.None);
 
         Assert.Equal(["Book Author", "Book"], client.Queries);
         Assert.Equal(DownloadProtocol.Torrent, outcome.Candidates.First(candidate => candidate.Accepted).Release.Protocol);
@@ -127,7 +127,7 @@ public sealed class AcquisitionSearchRunnerTests {
         });
         var runner = Runner(client, Settings(DownloadProtocol.Usenet), DownloadProtocol.Torrent);
 
-        var outcome = await runner.RunAsync(new AcquisitionSearchInput(Guid.NewGuid(), "Book", "Author"), CancellationToken.None);
+        var outcome = await runner.RunAsync(new AcquisitionSearchInput(Guid.NewGuid(), "Book", "Author", EntityKind.Book), CancellationToken.None);
 
         Assert.Equal(["Book Author"], client.Queries);
         Assert.Equal(DownloadProtocol.Torrent, Assert.Single(outcome.Candidates).Release.Protocol);
@@ -152,7 +152,7 @@ public sealed class AcquisitionSearchRunnerTests {
             Policies(new BookAcquisitionPolicyModule()),
             Settings());
 
-        var outcome = await runner.RunAsync(new AcquisitionSearchInput(Guid.NewGuid(), "Book", "Author"), CancellationToken.None);
+        var outcome = await runner.RunAsync(new AcquisitionSearchInput(Guid.NewGuid(), "Book", "Author", EntityKind.Book), CancellationToken.None);
 
         Assert.Equal(["Book Author", "Book"], client.Queries.ToArray());
         Assert.Single(outcome.Candidates, candidate => candidate.Accepted);
@@ -176,7 +176,7 @@ public sealed class AcquisitionSearchRunnerTests {
             Policies(new BookAcquisitionPolicyModule()),
             Settings());
 
-        await runner.RunAsync(new AcquisitionSearchInput(Guid.NewGuid(), "Book", "Author"), CancellationToken.None);
+        await runner.RunAsync(new AcquisitionSearchInput(Guid.NewGuid(), "Book", "Author", EntityKind.Book), CancellationToken.None);
 
         Assert.Equal(["Book Author"], client.Queries.ToArray());
     }
@@ -236,7 +236,7 @@ public sealed class AcquisitionSearchRunnerTests {
         var runner = Runner(new CallerCancelledIndexerSearchClient(), Settings(), DownloadProtocol.Torrent);
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => runner.RunAsync(
-            new AcquisitionSearchInput(Guid.NewGuid(), "Book", null),
+            new AcquisitionSearchInput(Guid.NewGuid(), "Book", null, EntityKind.Book),
             cancellation.Token));
     }
 
@@ -249,7 +249,7 @@ public sealed class AcquisitionSearchRunnerTests {
         var runner = Runner(client, Settings(), DownloadProtocol.Torrent);
 
         await runner.RunAsync(
-            new AcquisitionSearchInput(Guid.NewGuid(), "Book", "Author"),
+            new AcquisitionSearchInput(Guid.NewGuid(), "Book", "Author", EntityKind.Book),
             CancellationToken.None,
             customQuery: "  author preferred translation  ");
 
@@ -263,7 +263,7 @@ public sealed class AcquisitionSearchRunnerTests {
             new MovieAcquisitionPolicyModule(),
             new MusicAcquisitionPolicyModule(),
             new TvAcquisitionPolicyModule());
-        var book = new AcquisitionSearchInput(Guid.NewGuid(), "Book", "Author");
+        var book = new AcquisitionSearchInput(Guid.NewGuid(), "Book", "Author", EntityKind.Book);
         var album = new AcquisitionSearchInput(Guid.NewGuid(), "Discovery", "Daft Punk", EntityKind.AudioLibrary);
         var series = new AcquisitionSearchInput(Guid.NewGuid(), "Game of Thrones", null, EntityKind.VideoSeries);
         var movie = new AcquisitionSearchInput(Guid.NewGuid(), "Dune", null, EntityKind.Movie, Year: 2021);
@@ -369,8 +369,23 @@ public sealed class AcquisitionSearchRunnerTests {
             Policies(new BookAcquisitionPolicyModule()),
             settings);
 
-    private static AcquisitionPolicyRegistry Policies(params IAcquisitionPolicyModule[] modules) =>
-        new(modules);
+    private static AcquisitionPolicyRegistry Policies(params IAcquisitionPolicyModule[] modules) {
+        // The production registry now verifies complete definition-family coverage at construction.
+        // Tests override only the family under examination and inherit the real modules for the rest.
+        var suppliedFamilies = modules
+            .Select(AcquisitionStrategyRegistration.FamilyOf)
+            .ToHashSet();
+        IAcquisitionPolicyModule[] defaults = [
+            new BookAcquisitionPolicyModule(),
+            new MovieAcquisitionPolicyModule(),
+            new MusicAcquisitionPolicyModule(),
+            new TvAcquisitionPolicyModule()
+        ];
+        return new AcquisitionPolicyRegistry([
+            .. modules,
+            .. defaults.Where(module => !suppliedFamilies.Contains(AcquisitionStrategyRegistration.FamilyOf(module)))
+        ]);
+    }
 
     private sealed class FakeSettingsPersistence(IReadOnlyDictionary<string, string> overrides) : ISettingsPersistence {
         public Task<IReadOnlyDictionary<string, string>> LoadSettingOverridesAsync(CancellationToken cancellationToken) =>

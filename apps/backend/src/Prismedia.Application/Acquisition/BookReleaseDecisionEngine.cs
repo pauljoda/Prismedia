@@ -327,8 +327,8 @@ public interface IAcquisitionDecisionEngine {
 }
 
 /// <summary>Default book decision engine: runs every specification, then ranks accepted releases by a seeder-weighted score.</summary>
-public sealed class BookReleaseDecisionEngine : IAcquisitionDecisionEngine {
-    public EntityKind Kind => EntityKind.Book;
+public sealed class BookReleaseDecisionEngine(EntityKind kind = EntityKind.Book) : IAcquisitionDecisionEngine {
+    public EntityKind Kind => kind;
 
     private static readonly IReleaseSpecification[] Specifications = [
         new DangerousContentSpecification(),

@@ -8,10 +8,10 @@ namespace Prismedia.Application.Acquisition;
 /// the shared rules record — the format/quality gates are book vocabulary and don't apply here; a
 /// movie-specific profile (cutoffs, resolution floors) lands with the movie import workstream.
 /// </summary>
-public sealed class MovieReleaseDecisionEngine : IAcquisitionDecisionEngine {
-    public EntityKind Kind => EntityKind.Movie;
+public sealed class MovieReleaseDecisionEngine(EntityKind kind = EntityKind.Movie) : IAcquisitionDecisionEngine {
+    public EntityKind Kind => kind;
 
-    private static readonly IReleaseSpecification[] Specifications = [
+    private readonly IReleaseSpecification[] _specifications = [
         new DangerousContentSpecification(),
         new TitleIdentitySpecification(),
         new MediaYearSpecification(),
@@ -22,16 +22,16 @@ public sealed class MovieReleaseDecisionEngine : IAcquisitionDecisionEngine {
         new RequiredTermsSpecification(),
         new IgnoredTermsSpecification(),
         new LanguageSpecification(),
-        new MediaQualityAllowedSpecification(EntityKind.Movie),
+        new MediaQualityAllowedSpecification(kind),
         new MinFormatScoreSpecification(),
-        new MediaUpgradeSpecification(EntityKind.Movie)
+        new MediaUpgradeSpecification(kind)
     ];
 
     public IReadOnlyList<ScoredRelease> Evaluate(
         IReadOnlyList<(IndexerRelease Release, Guid? IndexerConfigId, string IndexerName)> releases,
         BookAcquisitionRules rules,
         IReadOnlySet<string>? blocklistedIdentities = null) =>
-        MediaReleaseEvaluation.Evaluate(releases, rules, blocklistedIdentities, Specifications, MovieScore);
+        MediaReleaseEvaluation.Evaluate(releases, rules, blocklistedIdentities, _specifications, MovieScore);
 
     /// <summary>Profile preference (terms, custom weights, language) outranks everything; then resolution, then source provenance, then seeders.</summary>
     private static double MovieScore(IndexerRelease release, BookAcquisitionRules rules) =>
