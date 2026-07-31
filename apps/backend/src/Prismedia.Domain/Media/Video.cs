@@ -35,7 +35,8 @@ public sealed class VideoEntityKindDefinition() : EntityKindDefinition<Video>(
         allowsDirectReconcileChildTarget: true),
     supportsFileDeletion: true,
     mediaQualityFamily: EntityMediaQualityFamily.Video,
-    supportsAtomicMediaUpgrade: true) {
+    supportsAtomicMediaUpgrade: true,
+    engagement: new(EntityEngagementMode.Playback)) {
     private static readonly IReadOnlyList<string> SortOrderPrecedence = Array.AsReadOnly([
         EntityPositionCodes.Episode,
         EntityPositionCodes.AbsoluteEpisode,

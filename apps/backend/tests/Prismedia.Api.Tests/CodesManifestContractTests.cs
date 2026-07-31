@@ -119,6 +119,14 @@ public sealed class CodesManifestContractTests {
             kinds[EntityKind.AudioLibrary.ToCode()].MediaQualityFamily);
         Assert.True(kinds[EntityKind.Movie.ToCode()].SupportsAtomicMediaUpgrade);
         Assert.False(kinds[EntityKind.VideoSeason.ToCode()].SupportsAtomicMediaUpgrade);
+        Assert.Equal(
+            EntityEngagementMode.Reading.ToCode(),
+            kinds[EntityKind.Book.ToCode()].EngagementMode);
+        Assert.Equal(
+            EntityEngagementMode.Playback.ToCode(),
+            kinds[EntityKind.AudioLibrary.ToCode()].EngagementMode);
+        Assert.True(kinds[EntityKind.Movie.ToCode()].AggregatesDirectChildPlayback);
+        Assert.False(kinds[EntityKind.Video.ToCode()].AggregatesDirectChildPlayback);
 
         var selectors = manifest
             .Select(kind => kind.AutoIdentifySelector)

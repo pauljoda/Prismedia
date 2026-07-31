@@ -37,7 +37,8 @@ public abstract class EntityKindDefinition {
         bool supportsFileDeletion = false,
         bool supportsManualManagement = false,
         EntityMediaQualityFamily mediaQualityFamily = EntityMediaQualityFamily.None,
-        bool supportsAtomicMediaUpgrade = false) {
+        bool supportsAtomicMediaUpgrade = false,
+        EntityEngagementPolicy? engagement = null) {
         if (supportsAtomicMediaUpgrade && mediaQualityFamily == EntityMediaQualityFamily.None) {
             throw new ArgumentException(
                 "Atomic media upgrades require a media quality family.",
@@ -60,6 +61,7 @@ public abstract class EntityKindDefinition {
         SupportsManualManagement = supportsManualManagement;
         MediaQualityFamily = mediaQualityFamily;
         SupportsAtomicMediaUpgrade = supportsAtomicMediaUpgrade;
+        Engagement = engagement ?? EntityEngagementPolicy.None;
     }
 
     /// <summary>Typed domain identity represented by this definition.</summary>
@@ -108,6 +110,9 @@ public abstract class EntityKindDefinition {
 
     /// <summary>Whether one owned media file can be replaced atomically during an upgrade.</summary>
     public bool SupportsAtomicMediaUpgrade { get; }
+
+    /// <summary>Completion/filter behavior shared by persistence and clients.</summary>
+    public EntityEngagementPolicy Engagement { get; }
 
     /// <summary>
     /// Canonical position-code precedence used to derive a structural sort order. Kinds without
@@ -228,7 +233,8 @@ public abstract class EntityKindDefinition<TEntity> : EntityKindDefinition
         bool supportsFileDeletion = false,
         bool supportsManualManagement = false,
         EntityMediaQualityFamily mediaQualityFamily = EntityMediaQualityFamily.None,
-        bool supportsAtomicMediaUpgrade = false)
+        bool supportsAtomicMediaUpgrade = false,
+        EntityEngagementPolicy? engagement = null)
         : base(
             kind,
             code,
@@ -245,7 +251,8 @@ public abstract class EntityKindDefinition<TEntity> : EntityKindDefinition
             supportsFileDeletion,
             supportsManualManagement,
             mediaQualityFamily,
-            supportsAtomicMediaUpgrade) {
+            supportsAtomicMediaUpgrade,
+            engagement) {
     }
 
     /// <inheritdoc />
@@ -423,7 +430,8 @@ public abstract class RootEntityKindDefinition<TEntity> : EntityKindDefinition<T
         bool supportsFileDeletion = false,
         bool supportsManualManagement = false,
         EntityMediaQualityFamily mediaQualityFamily = EntityMediaQualityFamily.None,
-        bool supportsAtomicMediaUpgrade = false)
+        bool supportsAtomicMediaUpgrade = false,
+        EntityEngagementPolicy? engagement = null)
         : base(
             kind,
             code,
@@ -439,7 +447,8 @@ public abstract class RootEntityKindDefinition<TEntity> : EntityKindDefinition<T
             supportsFileDeletion,
             supportsManualManagement,
             mediaQualityFamily,
-            supportsAtomicMediaUpgrade) {
+            supportsAtomicMediaUpgrade,
+            engagement) {
         _factory = factory ?? throw new ArgumentNullException(nameof(factory));
     }
 

@@ -127,6 +127,38 @@ public sealed class EntityKindMetadataTests {
     }
 
     [Fact]
+    public void DefinitionsOwnEngagementVocabularyAndChildAggregation() {
+        var engagingKinds = EntityKindRegistry.All
+            .Where(definition => definition.Engagement.Mode != EntityEngagementMode.None)
+            .Select(definition => definition.Kind)
+            .Order()
+            .ToArray();
+        var childAggregates = EntityKindRegistry.All
+            .Where(definition => definition.Engagement.AggregatesDirectChildPlayback)
+            .Select(definition => definition.Kind)
+            .ToArray();
+
+        Assert.Equal(
+            [
+                EntityKind.AudioLibrary,
+                EntityKind.AudioTrack,
+                EntityKind.Book,
+                EntityKind.BookVolume,
+                EntityKind.BookChapter,
+                EntityKind.Movie,
+                EntityKind.Video,
+                EntityKind.VideoSeries,
+                EntityKind.VideoSeason
+            ],
+            engagingKinds);
+        Assert.Equal(EntityEngagementMode.Reading,
+            EntityKindRegistry.Describe(EntityKind.Book).Engagement.Mode);
+        Assert.Equal(EntityEngagementMode.Playback,
+            EntityKindRegistry.Describe(EntityKind.AudioLibrary).Engagement.Mode);
+        Assert.Equal([EntityKind.Movie], childAggregates);
+    }
+
+    [Fact]
     public void AcquisitionProfilesAreOwnedByExactlyTheProfileEntityKinds() {
         var profiles = EntityKindRegistry.All
             .Where(definition => definition.AcquisitionProfile is not null)

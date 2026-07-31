@@ -191,6 +191,7 @@ async function main() {
     "thumbnailWidth", "thumbnailHeight", "primaryAccent", "secondaryAccent", "artworkFit",
     "navigation", "search", "autoIdentifySelector", "identifyPluginFallbackKind", "containableKinds", "mediaQualityFamily",
     "supportsFileDeletion", "supportsAtomicMediaUpgrade", "supportsManualManagement",
+    "engagementMode", "aggregatesDirectChildPlayback",
     "supportsRequests", "enumeratesIdentifyChildren", "acquisitionProfile",
   ];
   for (const kind of manifest.entityKinds ?? []) {
@@ -238,6 +239,8 @@ async function main() {
     `mediaQualityFamily: ${lit(kind.mediaQualityFamily)}, supportsFileDeletion: ${lit(kind.supportsFileDeletion)}, ` +
     `supportsAtomicMediaUpgrade: ${lit(kind.supportsAtomicMediaUpgrade)}, ` +
     `supportsManualManagement: ${lit(kind.supportsManualManagement)}, ` +
+    `engagementMode: ${lit(kind.engagementMode)}, ` +
+    `aggregatesDirectChildPlayback: ${lit(kind.aggregatesDirectChildPlayback)}, ` +
     `supportsRequests: ${lit(kind.supportsRequests)}, ` +
     `enumeratesIdentifyChildren: ${lit(kind.enumeratesIdentifyChildren)}, ` +
     `acquisitionProfile: ${lit(kind.acquisitionProfile)} },`
@@ -298,6 +301,8 @@ async function main() {
       `  supportsFileDeletion: boolean;\n` +
       `  supportsAtomicMediaUpgrade: boolean;\n` +
       `  supportsManualManagement: boolean;\n` +
+      `  engagementMode: EntityEngagementModeCode;\n` +
+      `  aggregatesDirectChildPlayback: boolean;\n` +
       `  supportsRequests: boolean;\n` +
       `  enumeratesIdentifyChildren: boolean;\n` +
       `  acquisitionProfile: AcquisitionProfileManifestEntry | null;\n` +

@@ -75,6 +75,8 @@ public sealed record AcquisitionProfileManifestEntry(
 /// <param name="SupportsFileDeletion">Whether this kind may root the managed delete-files workflow.</param>
 /// <param name="SupportsAtomicMediaUpgrade">Whether one owned file can be replaced atomically.</param>
 /// <param name="SupportsManualManagement">Whether users may create and delete this kind directly.</param>
+/// <param name="EngagementMode">Completion/filter vocabulary exposed by the kind.</param>
+/// <param name="AggregatesDirectChildPlayback">Whether direct-child playback contributes to container engagement.</param>
 /// <param name="SupportsRequests">Whether a committable request descriptor materializes this Entity kind.</param>
 /// <param name="EnumeratesIdentifyChildren">Whether this kind is an identify container whose local children are enumerated for cascade identify.</param>
 /// <param name="AcquisitionProfile">Definition-owned acquisition-profile policy, when the kind owns profiles.</param>
@@ -100,6 +102,8 @@ public sealed record EntityKindManifestEntry(
     bool SupportsFileDeletion,
     bool SupportsAtomicMediaUpgrade,
     bool SupportsManualManagement,
+    string EngagementMode,
+    bool AggregatesDirectChildPlayback,
     bool SupportsRequests,
     bool EnumeratesIdentifyChildren,
     AcquisitionProfileManifestEntry? AcquisitionProfile);
@@ -234,6 +238,8 @@ public sealed record CodesManifest(
                 descriptor.SupportsFileDeletion,
                 descriptor.SupportsAtomicMediaUpgrade,
                 descriptor.SupportsManualManagement,
+                descriptor.Engagement.Mode.ToCode(),
+                descriptor.Engagement.AggregatesDirectChildPlayback,
                 requestableKinds.Contains(descriptor.Kind),
                 descriptor.Identification.EnumeratesChildren,
                 descriptor.AcquisitionProfile is { } acquisitionProfile

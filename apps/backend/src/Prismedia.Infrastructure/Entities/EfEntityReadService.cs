@@ -25,6 +25,10 @@ public sealed partial class EfEntityReadService : IEntityReadService {
     private const int MaxHoverImages = 5;
     private const int MaxHoverImageSearchDepth = 3;
     private const int MaxThumbnailMeta = 5;
+    private static readonly string[] DirectChildPlaybackAggregateKindCodes = EntityKindRegistry.All
+        .Where(definition => definition.Engagement.AggregatesDirectChildPlayback)
+        .Select(definition => definition.Code)
+        .ToArray();
 
     private readonly PrismediaDbContext _db;
     private readonly Prismedia.Application.Security.ICurrentUserContext _currentUser;
@@ -403,13 +407,13 @@ public sealed partial class EfEntityReadService : IEntityReadService {
             var entities = _db.Entities;
             // "Played" means any recorded engagement for this user: a play/resume/completion
             // (videos/audio) or started/completed reading progress (books/comics). Mirrors the
-            // unwatched status logic. Movies also honor direct child playback because a Prismedia
-            // movie is browsed as the movie entity but can stream through its child video entity.
+            // unwatched status logic. Definition-owned container policies can also include direct
+            // child playback (a movie is browsed as a container but streams through its video).
             query = wantsPlayed
                 ? query.Where(entity =>
                     states.Any(state => state.UserId == userId && state.EntityId == entity.Id &&
                         (state.CompletedAt != null || state.PlayCount > 0 || state.ResumeSeconds > 0)) ||
-                    (entity.KindCode == EntityKind.Movie.ToCode() &&
+                    (DirectChildPlaybackAggregateKindCodes.Contains(entity.KindCode) &&
                         entities.Any(child => child.ParentEntityId == entity.Id &&
                             states.Any(state => state.UserId == userId && state.EntityId == child.Id &&
                                 (state.CompletedAt != null || state.PlayCount > 0 || state.ResumeSeconds > 0)))) ||
@@ -418,7 +422,7 @@ public sealed partial class EfEntityReadService : IEntityReadService {
                 : query.Where(entity =>
                     !states.Any(state => state.UserId == userId && state.EntityId == entity.Id &&
                         (state.CompletedAt != null || state.PlayCount > 0 || state.ResumeSeconds > 0)) &&
-                    !(entity.KindCode == EntityKind.Movie.ToCode() &&
+                    !(DirectChildPlaybackAggregateKindCodes.Contains(entity.KindCode) &&
                         entities.Any(child => child.ParentEntityId == entity.Id &&
                             states.Any(state => state.UserId == userId && state.EntityId == child.Id &&
                                 (state.CompletedAt != null || state.PlayCount > 0 || state.ResumeSeconds > 0)))) &&
@@ -471,7 +475,7 @@ public sealed partial class EfEntityReadService : IEntityReadService {
             "watched" or "read" or "completed" or "finished" =>
                 query.Where(entity =>
                     states.Any(state => state.UserId == userId && state.EntityId == entity.Id && state.CompletedAt != null) ||
-                    (entity.KindCode == EntityKind.Movie.ToCode() &&
+                    (DirectChildPlaybackAggregateKindCodes.Contains(entity.KindCode) &&
                         entityRows.Any(child => child.ParentEntityId == entity.Id &&
                             states.Any(state => state.UserId == userId && state.EntityId == child.Id && state.CompletedAt != null))) ||
                     states.Any(state => state.UserId == userId && state.EntityId == entity.Id && state.ProgressCompletedAt != null)),
@@ -479,7 +483,7 @@ public sealed partial class EfEntityReadService : IEntityReadService {
                 query.Where(entity =>
                     !states.Any(state => state.UserId == userId && state.EntityId == entity.Id &&
                         (state.CompletedAt != null || state.PlayCount > 0 || state.ResumeSeconds > 0)) &&
-                    !(entity.KindCode == EntityKind.Movie.ToCode() &&
+                    !(DirectChildPlaybackAggregateKindCodes.Contains(entity.KindCode) &&
                         entityRows.Any(child => child.ParentEntityId == entity.Id &&
                             states.Any(state => state.UserId == userId && state.EntityId == child.Id &&
                                 (state.CompletedAt != null || state.PlayCount > 0 || state.ResumeSeconds > 0)))) &&
@@ -489,7 +493,7 @@ public sealed partial class EfEntityReadService : IEntityReadService {
                 query.Where(entity =>
                     states.Any(state => state.UserId == userId && state.EntityId == entity.Id &&
                         state.CompletedAt == null && state.ResumeSeconds > 0) ||
-                    (entity.KindCode == EntityKind.Movie.ToCode() &&
+                    (DirectChildPlaybackAggregateKindCodes.Contains(entity.KindCode) &&
                         entityRows.Any(child => child.ParentEntityId == entity.Id &&
                             states.Any(state => state.UserId == userId && state.EntityId == child.Id &&
                                 state.CompletedAt == null && state.ResumeSeconds > 0))) ||

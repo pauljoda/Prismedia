@@ -28,7 +28,8 @@ public sealed class VideoSeriesEntityKindDefinition() : EntityKindDefinition<Vid
     defaultCapabilities: static () => [new CapabilityCredits()],
     identification: new(AutoIdentifySelectorKind.Video, enumeratesChildren: true),
     supportsFileDeletion: true,
-    mediaQualityFamily: EntityMediaQualityFamily.Video) {
+    mediaQualityFamily: EntityMediaQualityFamily.Video,
+    engagement: new(EntityEngagementMode.Playback)) {
     /// <inheritdoc />
     public override bool OwnsMetadataRelationships => true;
 
@@ -115,7 +116,8 @@ public sealed class VideoSeasonEntityKindDefinition() : RootEntityKindDefinition
     ],
     identification: new(enumeratesChildren: true),
     supportsFileDeletion: true,
-    mediaQualityFamily: EntityMediaQualityFamily.Video) {
+    mediaQualityFamily: EntityMediaQualityFamily.Video,
+    engagement: new(EntityEngagementMode.Playback)) {
     private static readonly IReadOnlyList<string> SortOrderPrecedence = Array.AsReadOnly([
         EntityPositionCodes.Season,
         EntityPositionCodes.Sort

@@ -33,7 +33,8 @@ public sealed class MovieEntityKindDefinition() : EntityKindDefinition<Movie>(
         pluginFallbackKind: EntityKind.Video),
     supportsFileDeletion: true,
     mediaQualityFamily: EntityMediaQualityFamily.Video,
-    supportsAtomicMediaUpgrade: true) {
+    supportsAtomicMediaUpgrade: true,
+    engagement: new(EntityEngagementMode.Playback, aggregatesDirectChildPlayback: true)) {
     /// <inheritdoc />
     public override bool OwnsMetadataRelationships => true;
 

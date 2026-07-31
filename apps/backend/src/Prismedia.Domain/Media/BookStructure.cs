@@ -42,7 +42,8 @@ public sealed class BookVolumeEntityKindDefinition() : RootEntityKindDefinition<
         new CapabilityPosition()
     ],
     identification: new(enumeratesChildren: true),
-    supportsFileDeletion: true) {
+    supportsFileDeletion: true,
+    engagement: new(EntityEngagementMode.Reading)) {
     /// <inheritdoc />
     public override IReadOnlyList<EntityStructuralCountDefinition> StructuralThumbnailCounts =>
     [
@@ -81,7 +82,8 @@ public sealed class BookChapterEntityKindDefinition() : EntityKindDefinition<Boo
         new CapabilityStats(),
         new CapabilitySource(),
         new CapabilityPosition()
-    ]) {
+    ],
+    engagement: new(EntityEngagementMode.Reading)) {
     /// <inheritdoc />
     public override IReadOnlyList<EntityStructuralCountDefinition> StructuralThumbnailCounts =>
         [new(EntityKind.BookPage, 1, ThumbnailMetaIcons.Page)];

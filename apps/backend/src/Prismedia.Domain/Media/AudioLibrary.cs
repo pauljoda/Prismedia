@@ -29,7 +29,8 @@ public sealed class AudioLibraryEntityKindDefinition() : RootEntityKindDefinitio
         allowsParentedAutoIdentifyRoot: true,
         usesParentExternalIdentityContext: true),
     supportsFileDeletion: true,
-    mediaQualityFamily: EntityMediaQualityFamily.Audio) {
+    mediaQualityFamily: EntityMediaQualityFamily.Audio,
+    engagement: new(EntityEngagementMode.Playback)) {
     /// <inheritdoc />
     public override bool OwnsMetadataRelationships => true;
 
