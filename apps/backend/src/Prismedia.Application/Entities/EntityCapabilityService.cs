@@ -149,7 +149,11 @@ public sealed class EntityCapabilityService {
         bool? completed,
         CancellationToken cancellationToken) {
         var card = await MutateWithPlaybackEventAsync(id, entity => {
-            var playback = entity.GetOrAddCapability(() => new CapabilityPlayback());
+            var playback = GetOrAddDefaultCapability<CapabilityPlayback>(entity);
+            if (playback is null) {
+                return PlaybackMutationResult.Rejected;
+            }
+
             var now = _timeProvider.GetUtcNow();
             PlaybackEventAppend? completedEvent = null;
             var playCountBefore = playback.Value.PlayCount;
@@ -179,11 +183,11 @@ public sealed class EntityCapabilityService {
                     playback.MarkUnwatched(now);
                 }
 
-                return completedEvent;
+                return PlaybackMutationResult.Applied(completedEvent);
             }
 
             if (resumeSeconds is not { } seconds) {
-                return null;
+                return PlaybackMutationResult.Applied();
             }
 
             var position = TimeSpan.FromSeconds(Math.Max(0, seconds));
@@ -192,7 +196,7 @@ public sealed class EntityCapabilityService {
                 : entity.Technical?.Duration;
             if (runtime is not { } total || total <= TimeSpan.Zero) {
                 playback.RecordResume(position, now);
-                return null;
+                return PlaybackMutationResult.Applied();
             }
 
             var fraction = position.TotalSeconds / total.TotalSeconds;
@@ -208,7 +212,7 @@ public sealed class EntityCapabilityService {
                 playback.RecordResume(position, now);
             }
 
-            return completedEvent;
+            return PlaybackMutationResult.Applied(completedEvent);
         }, cancellationToken);
 
         if (card is not null) {
@@ -226,9 +230,14 @@ public sealed class EntityCapabilityService {
     public async Task<EntityCard?> RecordCompletedPlaybackAsync(Guid id, CancellationToken cancellationToken) {
         var now = _timeProvider.GetUtcNow();
         var card = await MutateWithPlaybackEventAsync(id, entity => {
-            var playback = entity.GetOrAddCapability(() => new CapabilityPlayback());
+            var playback = GetOrAddDefaultCapability<CapabilityPlayback>(entity);
+            if (playback is null) {
+                return PlaybackMutationResult.Rejected;
+            }
+
             playback.RecordCompletedPlay(now);
-            return CompletedEvent(entity, now, positionSeconds: null, durationSeconds: entity.Technical?.Duration?.TotalSeconds);
+            return PlaybackMutationResult.Applied(
+                CompletedEvent(entity, now, positionSeconds: null, durationSeconds: entity.Technical?.Duration?.TotalSeconds));
         }, cancellationToken);
 
         return card;
@@ -270,9 +279,14 @@ public sealed class EntityCapabilityService {
         double? durationSeconds,
         CancellationToken cancellationToken) {
         var card = await MutateWithPlaybackEventAsync(id, entity => {
-            var playback = entity.GetOrAddCapability(() => new CapabilityPlayback());
+            var playback = GetOrAddDefaultCapability<CapabilityPlayback>(entity);
+            if (playback is null) {
+                return PlaybackMutationResult.Rejected;
+            }
+
             playback.RecordCompletedPlay(occurredAt);
-            return CompletedEvent(entity, occurredAt, positionSeconds, durationSeconds ?? entity.Technical?.Duration?.TotalSeconds);
+            return PlaybackMutationResult.Applied(
+                CompletedEvent(entity, occurredAt, positionSeconds, durationSeconds ?? entity.Technical?.Duration?.TotalSeconds));
         }, cancellationToken);
 
         return card;
@@ -288,14 +302,18 @@ public sealed class EntityCapabilityService {
         double? durationSeconds,
         CancellationToken cancellationToken) {
         var card = await MutateWithPlaybackEventAsync(id, entity => {
-            var playback = entity.GetOrAddCapability(() => new CapabilityPlayback());
+            var playback = GetOrAddDefaultCapability<CapabilityPlayback>(entity);
+            if (playback is null) {
+                return PlaybackMutationResult.Rejected;
+            }
+
             playback.RecordSkipped(occurredAt);
-            return new PlaybackEventAppend(
+            return PlaybackMutationResult.Applied(new PlaybackEventAppend(
                 entity.Id,
                 PlaybackEventKind.Skipped,
                 occurredAt,
                 positionSeconds,
-                durationSeconds ?? entity.Technical?.Duration?.TotalSeconds);
+                durationSeconds ?? entity.Technical?.Duration?.TotalSeconds));
         }, cancellationToken);
 
         return card;
@@ -323,7 +341,11 @@ public sealed class EntityCapabilityService {
             return null;
         }
 
-        var progress = entity.GetOrAddCapability(() => new CapabilityProgress());
+        if (!entity.Definition.SupportsDefaultCapability<CapabilityProgress>()) {
+            return null;
+        }
+
+        var progress = GetOrAddDefaultCapability<CapabilityProgress>(entity)!;
         var now = _timeProvider.GetUtcNow();
         var hasActivity = await AccumulateBookActivityAsync(
             entity,
@@ -414,10 +436,12 @@ public sealed class EntityCapabilityService {
 
         PlaybackEventAppend? completedEvent = null;
         if (completed == true) {
-            var playback = entity.GetOrAddCapability(() => new CapabilityPlayback());
-            playback.RecordCompletedPlay(now);
             progress.MarkCompleted(now);
-            completedEvent = CompletedEvent(entity, now, positionSeconds: null, durationSeconds: null);
+            var playback = GetOrAddDefaultCapability<CapabilityPlayback>(entity);
+            if (playback is not null) {
+                playback.RecordCompletedPlay(now);
+                completedEvent = CompletedEvent(entity, now, positionSeconds: null, durationSeconds: null);
+            }
         }
 
         if (completedEvent is not null) {
@@ -443,8 +467,12 @@ public sealed class EntityCapabilityService {
         }
 
         var boundedSeconds = Math.Min(reportedSeconds, MaxBookActivityHeartbeatSeconds);
-        entity.GetOrAddCapability(() => new CapabilityPlayback())
-            .AccumulatePlayDuration(TimeSpan.FromSeconds(boundedSeconds));
+        var playback = GetOrAddDefaultCapability<CapabilityPlayback>(entity);
+        if (playback is null) {
+            return false;
+        }
+
+        playback.AccumulatePlayDuration(TimeSpan.FromSeconds(boundedSeconds));
         await _activityEvents.StageAsync(
             new EntityActivityAppend(entity.Id, activityKind.Value, occurredAt, boundedSeconds),
             cancellationToken);
@@ -479,7 +507,12 @@ public sealed class EntityCapabilityService {
         double? endSeconds,
         CancellationToken cancellationToken) =>
         MutateAsync(id, entity => {
-            entity.GetOrAddCapability(() => new CapabilityMarkers()).Add(title, seconds, endSeconds);
+            var markers = GetOrAddDefaultCapability<CapabilityMarkers>(entity);
+            if (markers is null) {
+                return false;
+            }
+
+            markers.Add(title, seconds, endSeconds);
             return true;
         }, cancellationToken);
 
@@ -493,9 +526,9 @@ public sealed class EntityCapabilityService {
         double seconds,
         double? endSeconds,
         CancellationToken cancellationToken) =>
-        MutateAsync(id, entity =>
-            entity.GetOrAddCapability(() => new CapabilityMarkers())
-                .Update(markerId, title, seconds, endSeconds),
+        MutateAsync(id, entity => MutateExistingDefaultCapability<CapabilityMarkers>(
+            entity,
+            markers => markers.Update(markerId, title, seconds, endSeconds)),
             cancellationToken);
 
     /// <summary>
@@ -505,8 +538,9 @@ public sealed class EntityCapabilityService {
         Guid id,
         Guid markerId,
         CancellationToken cancellationToken) =>
-        MutateAsync(id, entity =>
-            entity.GetOrAddCapability(() => new CapabilityMarkers()).Delete(markerId),
+        MutateAsync(id, entity => MutateExistingDefaultCapability<CapabilityMarkers>(
+            entity,
+            markers => markers.Delete(markerId)),
             cancellationToken);
 
     /// <summary>Maximum optimistic-concurrency retries for a single user-state mutation.</summary>
@@ -542,7 +576,7 @@ public sealed class EntityCapabilityService {
 
     private async Task<EntityCard?> MutateWithPlaybackEventAsync(
         Guid id,
-        Func<Entity, PlaybackEventAppend?> mutate,
+        Func<Entity, PlaybackMutationResult> mutate,
         CancellationToken cancellationToken) {
         if (_visibility is not null && !await _visibility.IsVisibleAsync(id, cancellationToken)) {
             return null;
@@ -556,11 +590,14 @@ public sealed class EntityCapabilityService {
                 return null;
             }
 
-            var playbackEvent = mutate(entity);
+            var result = mutate(entity);
+            if (!result.WasApplied) {
+                return null;
+            }
 
             try {
-                if (playbackEvent is not null) {
-                    await _playbackEvents.StageAsync(playbackEvent, cancellationToken);
+                if (result.Event is not null) {
+                    await _playbackEvents.StageAsync(result.Event, cancellationToken);
                 }
 
                 await _entities.SaveAsync(entity, cancellationToken);
@@ -582,6 +619,20 @@ public sealed class EntityCapabilityService {
             occurredAt,
             positionSeconds,
             durationSeconds ?? entity.Technical?.Duration?.TotalSeconds);
+
+    private static TCapability? GetOrAddDefaultCapability<TCapability>(Entity entity)
+        where TCapability : Prismedia.Domain.Capabilities.EntityCapability =>
+        entity.Definition.SupportsDefaultCapability<TCapability>()
+            ? entity.GetOrAddCapability(entity.Definition.CreateDefaultCapability<TCapability>)
+            : null;
+
+    private static bool MutateExistingDefaultCapability<TCapability>(
+        Entity entity,
+        Func<TCapability, bool> mutate)
+        where TCapability : Prismedia.Domain.Capabilities.EntityCapability =>
+        entity.Definition.SupportsDefaultCapability<TCapability>() &&
+        entity.GetCapability<TCapability>() is { } capability &&
+        mutate(capability);
 
     private async Task<EntityCard> ProjectCardAsync(
         Entity entity,
@@ -635,7 +686,10 @@ public sealed class EntityCapabilityService {
                 return;
             }
 
-            var progress = owner.GetOrAddCapability(() => new CapabilityProgress());
+            var progress = GetOrAddDefaultCapability<CapabilityProgress>(owner);
+            if (progress is null) {
+                return;
+            }
             if (progress.CurrentEntityId is not null &&
                 (progress.Index > targetIndex ||
                  progress.CompletedAt is not null && !scopeCompleted && progress.Index >= targetIndex)) {
@@ -706,5 +760,12 @@ public sealed class EntityCapabilityService {
         }
 
         return null;
+    }
+
+    private sealed record PlaybackMutationResult(bool WasApplied, PlaybackEventAppend? Event) {
+        public static PlaybackMutationResult Rejected { get; } = new(false, null);
+
+        public static PlaybackMutationResult Applied(PlaybackEventAppend? playbackEvent = null) =>
+            new(true, playbackEvent);
     }
 }

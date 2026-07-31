@@ -209,6 +209,24 @@ public abstract class EntityKindDefinition {
     }
 
     /// <summary>
+    /// Creates one fresh instance of a capability declared by this definition.
+    /// </summary>
+    /// <typeparam name="TCapability">Concrete default capability type to create.</typeparam>
+    /// <returns>A fresh capability instance produced by this definition's default factory.</returns>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown when this definition does not declare <typeparamref name="TCapability"/>.
+    /// </exception>
+    public TCapability CreateDefaultCapability<TCapability>()
+        where TCapability : EntityCapability {
+        if (!SupportsDefaultCapability<TCapability>()) {
+            throw new InvalidOperationException(
+                $"Entity kind '{Code}' does not declare default capability '{typeof(TCapability).Name}'.");
+        }
+
+        return CreateDefaultCapabilities().OfType<TCapability>().Single();
+    }
+
+    /// <summary>
     /// Projects the immutable, kind-specific document capabilities owned by this definition.
     /// Declared and emitted capability types must match exactly, making projection completeness a
     /// checked part of the kind contract rather than a separate registration convention.
