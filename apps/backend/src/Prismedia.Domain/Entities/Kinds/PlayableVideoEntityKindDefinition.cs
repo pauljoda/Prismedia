@@ -7,6 +7,8 @@ namespace Prismedia.Domain.Entities;
 /// Consumers query this facet through definition discovery instead of maintaining kind lists.
 /// </summary>
 public interface IPlayableVideoKindDefinition {
+    /// <summary>Typed identity of the playable definition.</summary>
+    EntityKind Kind { get; }
 }
 
 /// <summary>
@@ -57,6 +59,7 @@ public abstract class PlayableVideoEntityKindDefinition<TEntity> : RootEntityKin
     }
 
     private static EntityProcessingPolicy VideoProcessing { get; } = new(
+        assetFamily: GeneratedAssetFamily.Video,
         probeJobType: JobType.ProbeVideo,
         probeRequiresAutomaticMetadata: true,
         fingerprintJobType: JobType.FingerprintVideo,
@@ -64,6 +67,7 @@ public abstract class PlayableVideoEntityKindDefinition<TEntity> : RootEntityKin
         previewRequiresAutomaticGeneration: true,
         supportsTrickplayGeneration: true,
         subtitleExtractionJobType: JobType.ExtractSubtitles,
+        gridThumbnailJobType: JobType.GenerateGridThumbnail,
         generatedFileRoles: [
             EntityFileRole.Thumbnail,
             EntityFileRole.GridThumbnail,

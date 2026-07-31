@@ -13,6 +13,7 @@ public sealed record EntityProcessingPolicy {
 
     /// <summary>Creates one validated processing policy.</summary>
     public EntityProcessingPolicy(
+        GeneratedAssetFamily assetFamily = GeneratedAssetFamily.None,
         JobType? probeJobType = null,
         bool probeRequiresAutomaticMetadata = false,
         JobType? fingerprintJobType = null,
@@ -20,6 +21,7 @@ public sealed record EntityProcessingPolicy {
         bool previewRequiresAutomaticGeneration = false,
         bool supportsTrickplayGeneration = false,
         JobType? subtitleExtractionJobType = null,
+        JobType? gridThumbnailJobType = null,
         IReadOnlyList<EntityFileRole>? generatedFileRoles = null) {
         if (probeRequiresAutomaticMetadata && probeJobType is null) {
             throw new ArgumentException(
@@ -33,6 +35,12 @@ public sealed record EntityProcessingPolicy {
                 nameof(previewJobType));
         }
 
+        if (gridThumbnailJobType is not null && assetFamily == GeneratedAssetFamily.None) {
+            throw new ArgumentException(
+                "A grid-thumbnail job requires a generated asset family.",
+                nameof(gridThumbnailJobType));
+        }
+
         var roles = generatedFileRoles?.ToArray() ?? [];
         if (roles.Distinct().Count() != roles.Length) {
             throw new ArgumentException(
@@ -40,6 +48,14 @@ public sealed record EntityProcessingPolicy {
                 nameof(generatedFileRoles));
         }
 
+        if (assetFamily == GeneratedAssetFamily.None &&
+            (previewJobType is not null || generatedFileRoles is { Count: > 0 })) {
+            throw new ArgumentException(
+                "Generated jobs and file roles require a generated asset family.",
+                nameof(assetFamily));
+        }
+
+        AssetFamily = assetFamily;
         ProbeJobType = probeJobType;
         ProbeRequiresAutomaticMetadata = probeRequiresAutomaticMetadata;
         FingerprintJobType = fingerprintJobType;
@@ -47,11 +63,15 @@ public sealed record EntityProcessingPolicy {
         PreviewRequiresAutomaticGeneration = previewRequiresAutomaticGeneration;
         SupportsTrickplayGeneration = supportsTrickplayGeneration;
         SubtitleExtractionJobType = subtitleExtractionJobType;
+        GridThumbnailJobType = gridThumbnailJobType;
         _generatedFileRoles = Array.AsReadOnly(roles);
     }
 
     /// <summary>Required technical-probe job, when this kind has one.</summary>
     public JobType? ProbeJobType { get; }
+
+    /// <summary>Conventional generated-asset family owned by this definition.</summary>
+    public GeneratedAssetFamily AssetFamily { get; }
 
     /// <summary>Whether probing is enabled only with automatic metadata generation.</summary>
     public bool ProbeRequiresAutomaticMetadata { get; }
@@ -71,36 +91,48 @@ public sealed record EntityProcessingPolicy {
     /// <summary>Best-effort subtitle reconciliation job, when applicable.</summary>
     public JobType? SubtitleExtractionJobType { get; }
 
+    /// <summary>Fallback grid-thumbnail job used when the preview branch is not selected.</summary>
+    public JobType? GridThumbnailJobType { get; }
+
     /// <summary>Generated Entity-file roles invalidated before this kind is rebuilt.</summary>
     public IReadOnlyList<EntityFileRole> GeneratedFileRoles => _generatedFileRoles;
 
-    /// <summary>Resolves required probing from current downstream state and server settings.</summary>
-    public JobType? ResolveProbe(bool needsProbe, bool automaticMetadataEnabled) =>
-        needsProbe && (!ProbeRequiresAutomaticMetadata || automaticMetadataEnabled)
+    /// <summary>Builds the complete processing plan for one entity from immutable current state.</summary>
+    public EntityProcessingPlan Plan(EntityProcessingInputs inputs) {
+        var probe = inputs.NeedsProbe &&
+            (!ProbeRequiresAutomaticMetadata || inputs.AutomaticMetadataEnabled)
             ? ProbeJobType
             : null;
-
-    /// <summary>Resolves best-effort fingerprinting after the shared fingerprint gate passes.</summary>
-    public JobType? ResolveFingerprint(bool shouldFingerprint) =>
-        shouldFingerprint ? FingerprintJobType : null;
-
-    /// <summary>Resolves subtitle reconciliation for missing state or an owned source path.</summary>
-    public JobType? ResolveSubtitleExtraction(bool needsExtraction, bool hasSourcePath) =>
-        needsExtraction || hasSourcePath ? SubtitleExtractionJobType : null;
-
-    /// <summary>Resolves preview generation from ordinary-preview and trickplay needs.</summary>
-    public JobType? ResolvePreview(
-        bool needsPreview,
-        bool needsTrickplay,
-        bool automaticPreviewEnabled,
-        bool trickplayEnabled) {
-        if (PreviewJobType is null) {
-            return null;
-        }
-
-        var ordinaryPreview = needsPreview &&
-            (!PreviewRequiresAutomaticGeneration || automaticPreviewEnabled);
-        var trickplay = SupportsTrickplayGeneration && needsTrickplay && trickplayEnabled;
-        return ordinaryPreview || trickplay ? PreviewJobType : null;
+        var fingerprint = inputs.ShouldFingerprint ? FingerprintJobType : null;
+        var subtitles = inputs.NeedsSubtitleExtraction || inputs.HasSourcePath
+            ? SubtitleExtractionJobType
+            : null;
+        var ordinaryPreview = inputs.NeedsPreview &&
+            (!PreviewRequiresAutomaticGeneration || inputs.AutomaticPreviewEnabled);
+        var trickplay = SupportsTrickplayGeneration && inputs.NeedsTrickplay && inputs.TrickplayEnabled;
+        var preview = ordinaryPreview || trickplay ? PreviewJobType : null;
+        var gridThumbnail = preview is null && inputs.NeedsGridThumbnail ? GridThumbnailJobType : null;
+        return new EntityProcessingPlan(probe, fingerprint, subtitles, preview, gridThumbnail);
     }
 }
+
+/// <summary>Immutable settings and downstream state used to plan one entity's processing jobs.</summary>
+public sealed record EntityProcessingInputs(
+    bool NeedsProbe,
+    bool ShouldFingerprint,
+    bool NeedsSubtitleExtraction,
+    bool HasSourcePath,
+    bool NeedsPreview,
+    bool NeedsTrickplay,
+    bool NeedsGridThumbnail,
+    bool AutomaticMetadataEnabled,
+    bool AutomaticPreviewEnabled,
+    bool TrickplayEnabled);
+
+/// <summary>Typed required and best-effort jobs chosen by <see cref="EntityProcessingPolicy.Plan"/>.</summary>
+public sealed record EntityProcessingPlan(
+    JobType? ProbeJobType,
+    JobType? FingerprintJobType,
+    JobType? SubtitleExtractionJobType,
+    JobType? PreviewJobType,
+    JobType? GridThumbnailJobType);

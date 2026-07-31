@@ -264,7 +264,8 @@ public sealed class ScanLibraryJobHandler(
                             settings,
                             entityId,
                             batchTargets[i].FilePath,
-                            entityNeeds));
+                            entityNeeds,
+                            EntityKind.Video));
                     }
                 }
             }
@@ -418,7 +419,7 @@ public sealed class ScanLibraryJobHandler(
         var requests = new List<EnqueueJobRequest>();
         foreach (var target in targets) {
             requests.AddRange(VideoDownstreamJobPlanner.Build(
-                settings, target.Id, target.SourcePath, target.Needs));
+                settings, target.Id, target.SourcePath, target.Needs, EntityKind.Video));
         }
 
         if (requests.Count > 0) {

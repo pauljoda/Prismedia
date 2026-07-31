@@ -84,13 +84,20 @@ public static class VideoEndpoints {
         Guid id,
         AcquireVideoSubtitleRequest request,
         IJobQueueService jobs,
+        ISubtitleAcquisitionService subtitles,
         CancellationToken cancellationToken) {
+        EntityKind kind;
+        try {
+            kind = await subtitles.ResolvePlayableVideoKindAsync(id, cancellationToken);
+        } catch (KeyNotFoundException exception) {
+            return Results.NotFound(new ApiProblem(ApiProblemCodes.EntityNotFound, exception.Message));
+        }
         var payload = new ManualSubtitleAcquisitionPayload(id, request.Provider, request.CandidateId);
         var job = await jobs.EnqueueAsync(
             new EnqueueJobRequest(
                 JobType.AcquireSubtitle,
                 payload.ToJson(),
-                TargetEntityKind: EntityKind.Video.ToCode(),
+                TargetEntityKind: kind.ToCode(),
                 TargetEntityId: id.ToString(),
                 Origin: JobGraphOrigin.Interactive,
                 ResourceKey: JobResourceKeys.Entity(id.ToString())),

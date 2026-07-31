@@ -25,6 +25,7 @@ public sealed class ImageEntityKindDefinition() : RootEntityKindDefinition<Image
     behavior: new EntityKindBehavior(
         identification: new(AutoIdentifySelectorKind.Image),
         processing: new EntityProcessingPolicy(
+            assetFamily: GeneratedAssetFamily.Image,
             fingerprintJobType: JobType.FingerprintImage,
             previewJobType: JobType.GenerateImageThumbnail,
             generatedFileRoles: [EntityFileRole.Thumbnail, EntityFileRole.Preview]),

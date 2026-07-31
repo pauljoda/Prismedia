@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging;
 using Prismedia.Application.Acquisition;
 using Prismedia.Application.Files;
+using Prismedia.Application.Jobs.Handlers;
 using Prismedia.Application.Jobs.Ports;
 using Prismedia.Domain.Entities;
 
@@ -64,8 +65,10 @@ public sealed class EntityProcessingGraphPlanner(
             }
 
             var processing = EntityKindRegistry.Describe(kind).Processing;
+            var plan = processing.Plan(EntityProcessingInputAdapter.From(
+                settings, entityNeeds, !string.IsNullOrWhiteSpace(entity.SourcePath)));
             var baseDependency = context.Job.Id;
-            if (processing.ResolveProbe(entityNeeds.NeedsProbe, settings.AutoGenerateMetadata) is { } probeType) {
+            if (plan.ProbeJobType is { } probeType) {
                 var probe = await AppendAsync(
                     context,
                     Request(probeType, entity),
@@ -76,7 +79,7 @@ public sealed class EntityProcessingGraphPlanner(
                 requiredReadiness.Add(probe.Id);
             }
 
-            foreach (var request in BestEffortRequests(processing, entity, entityNeeds, settings)) {
+            foreach (var request in BestEffortRequests(plan, entity)) {
                 bestEffort.Add(Node(
                     request,
                     [baseDependency],
@@ -156,26 +159,22 @@ public sealed class EntityProcessingGraphPlanner(
     }
 
     private static IEnumerable<EnqueueJobRequest> BestEffortRequests(
-        EntityProcessingPolicy processing,
-        EntityRefreshTarget entity,
-        DownstreamNeeds entityNeeds,
-        LibrarySettingsData settings) {
-        if (processing.ResolveFingerprint(FingerprintGating.ShouldFingerprint(settings, entityNeeds)) is { } fingerprint) {
+        EntityProcessingPlan plan,
+        EntityRefreshTarget entity) {
+        if (plan.FingerprintJobType is { } fingerprint) {
             yield return Request(fingerprint, entity);
         }
 
-        if (processing.ResolveSubtitleExtraction(
-                entityNeeds.NeedsSubtitleExtraction,
-                !string.IsNullOrWhiteSpace(entity.SourcePath)) is { } subtitles) {
+        if (plan.SubtitleExtractionJobType is { } subtitles) {
             yield return Request(subtitles, entity);
         }
 
-        if (processing.ResolvePreview(
-                entityNeeds.NeedsPreview,
-                entityNeeds.NeedsTrickplay,
-                settings.AutoGeneratePreview,
-                settings.GenerateTrickplay) is { } preview) {
+        if (plan.PreviewJobType is { } preview) {
             yield return Request(preview, entity);
+        }
+
+        if (plan.GridThumbnailJobType is { } gridThumbnail) {
+            yield return Request(gridThumbnail, entity);
         }
     }
 

@@ -1,4 +1,5 @@
 using Prismedia.Application.Acquisition;
+using Prismedia.Application.Jobs.Handlers;
 using Prismedia.Application.Jobs.Ports;
 using Prismedia.Domain.Entities;
 
@@ -61,12 +62,14 @@ internal static class VideoDownstreamJobPlanner {
         LibrarySettingsData settings,
         Guid entityId,
         string sourcePath,
-        DownstreamNeeds needs) =>
+        DownstreamNeeds needs,
+        EntityKind kind) =>
         BuildCore(
             settings,
             entityId,
             sourcePath,
-            needs);
+            needs,
+            kind);
 
     /// <summary>
     /// Plans the same processing graph as a scan for an exact imported entity.
@@ -75,45 +78,48 @@ internal static class VideoDownstreamJobPlanner {
         LibrarySettingsData settings,
         Guid entityId,
         string sourcePath,
-        DownstreamNeeds needs) =>
+        DownstreamNeeds needs,
+        EntityKind kind) =>
         BuildCore(
             settings,
             entityId,
             sourcePath,
-            needs);
+            needs,
+            kind);
 
     private static IReadOnlyList<EnqueueJobRequest> BuildCore(
         LibrarySettingsData settings,
         Guid entityId,
         string sourcePath,
-        DownstreamNeeds needs) {
+        DownstreamNeeds needs,
+        EntityKind kind) {
         var label = Path.GetFileNameWithoutExtension(sourcePath);
         var entityIdText = entityId.ToString();
         var requests = new List<EnqueueJobRequest>(5);
+        var processing = EntityKindRegistry.Describe(kind).Processing;
+        var plan = processing.Plan(EntityProcessingInputAdapter.From(settings, needs, hasSourcePath: true));
 
-        if (settings.AutoGenerateMetadata && needs.NeedsProbe) {
+        if (plan.ProbeJobType is { } probe) {
             requests.Add(EnqueueJobRequest.ForEntity(
-                JobType.ProbeVideo, EntityKind.Video, entityIdText, label));
+                probe, kind, entityIdText, label));
         }
 
-        if (FingerprintGating.ShouldFingerprint(settings, needs)) {
+        if (plan.FingerprintJobType is { } fingerprint) {
             requests.Add(EnqueueJobRequest.ForEntity(
-                JobType.FingerprintVideo, EntityKind.Video, entityIdText, label));
+                fingerprint, kind, entityIdText, label));
         }
 
-        if (needs.NeedsSubtitleExtraction) {
+        if (plan.SubtitleExtractionJobType is { } subtitles) {
             requests.Add(EnqueueJobRequest.ForEntity(
-                JobType.ExtractSubtitles, EntityKind.Video, entityIdText, label));
+                subtitles, kind, entityIdText, label));
         }
 
-        var shouldGeneratePreview = settings.AutoGeneratePreview && needs.NeedsPreview;
-        var shouldGenerateTrickplay = settings.GenerateTrickplay && needs.NeedsTrickplay;
-        if (shouldGeneratePreview || shouldGenerateTrickplay) {
+        if (plan.PreviewJobType is { } preview) {
             requests.Add(EnqueueJobRequest.ForEntity(
-                JobType.GeneratePreview, EntityKind.Video, entityIdText, label));
-        } else if (needs.NeedsGridThumbnail) {
+                preview, kind, entityIdText, label));
+        } else if (plan.GridThumbnailJobType is { } gridThumbnail) {
             requests.Add(EnqueueJobRequest.ForEntity(
-                JobType.GenerateGridThumbnail, EntityKind.Video, entityIdText, label));
+                gridThumbnail, kind, entityIdText, label));
         }
 
         return requests;

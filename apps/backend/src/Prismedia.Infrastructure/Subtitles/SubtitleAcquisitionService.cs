@@ -26,6 +26,12 @@ internal sealed class SubtitleAcquisitionService(
     IConfiguration configuration) : ISubtitleAcquisitionService {
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 
+    public async Task<EntityKind> ResolvePlayableVideoKindAsync(Guid videoId, CancellationToken cancellationToken) {
+        var entity = await db.Entities.AsNoTracking().SingleOrDefaultAsync(row => row.Id == videoId, cancellationToken)
+            ?? throw new KeyNotFoundException($"Video '{videoId}' was not found.");
+        return RequirePlayableDefinition(entity.KindCode, videoId).Kind;
+    }
+
     public async Task<OpenSubtitlesConfiguration> GetOpenSubtitlesConfigurationAsync(
         CancellationToken cancellationToken) {
         var stored = await LoadStoredConfigurationAsync(cancellationToken);
@@ -88,6 +94,9 @@ internal sealed class SubtitleAcquisitionService(
         string provider,
         string candidateId,
         CancellationToken cancellationToken) {
+        var entity = await db.Entities.AsNoTracking().SingleOrDefaultAsync(row => row.Id == videoId, cancellationToken)
+            ?? throw new KeyNotFoundException($"Video '{videoId}' was not found.");
+        RequirePlayableDefinition(entity.KindCode, videoId);
         if (!string.Equals(provider, SubtitleProviderCodes.OpenSubtitles, StringComparison.Ordinal)) {
             throw new ArgumentOutOfRangeException(nameof(provider), provider, "Unknown subtitle provider.");
         }
@@ -161,6 +170,9 @@ internal sealed class SubtitleAcquisitionService(
     public async Task<AutomaticSubtitleAcquisitionResult> AcquireMissingPreferredAsync(
         Guid videoId,
         CancellationToken cancellationToken) {
+        var entity = await db.Entities.AsNoTracking().SingleOrDefaultAsync(row => row.Id == videoId, cancellationToken)
+            ?? throw new KeyNotFoundException($"Video '{videoId}' was not found.");
+        RequirePlayableDefinition(entity.KindCode, videoId);
         var subtitleSettings = await settings.GetSubtitleSettingsAsync(cancellationToken);
         if (!subtitleSettings.AutoDownloadEnabled) {
             return new AutomaticSubtitleAcquisitionResult(0, [], "Automatic subtitle acquisition is disabled.");
@@ -224,9 +236,7 @@ internal sealed class SubtitleAcquisitionService(
         CancellationToken cancellationToken) {
         var entity = await db.Entities.AsNoTracking().SingleOrDefaultAsync(row => row.Id == videoId, cancellationToken)
             ?? throw new KeyNotFoundException($"Video '{videoId}' was not found.");
-        if (!string.Equals(entity.KindCode, EntityKind.Video.ToCode(), StringComparison.Ordinal)) {
-            throw new KeyNotFoundException($"Entity '{videoId}' is not a video.");
-        }
+        RequirePlayableDefinition(entity.KindCode, videoId);
 
         var source = await db.EntityFiles.AsNoTracking()
             .Where(file => file.EntityId == videoId && file.Role == EntityFileRole.Source)
@@ -299,6 +309,14 @@ internal sealed class SubtitleAcquisitionService(
             parentId = parent.ParentEntityId;
         }
         return rows;
+    }
+
+    private static IPlayableVideoKindDefinition RequirePlayableDefinition(string kindCode, Guid entityId) {
+        if (!EntityKindRegistry.TryDescribe(kindCode, out var definition)
+            || definition is not IPlayableVideoKindDefinition playable) {
+            throw new KeyNotFoundException($"Entity '{entityId}' is not a playable video.");
+        }
+        return playable;
     }
 
     private async Task<OpenSubtitlesConnection?> GetConnectionAsync(

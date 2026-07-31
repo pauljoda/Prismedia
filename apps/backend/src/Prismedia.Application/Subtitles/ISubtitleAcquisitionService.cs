@@ -1,3 +1,5 @@
+using Prismedia.Domain.Entities;
+
 namespace Prismedia.Application.Subtitles;
 
 /// <summary>
@@ -5,6 +7,10 @@ namespace Prismedia.Application.Subtitles;
 /// Implementations own external-provider and persistence details.
 /// </summary>
 public interface ISubtitleAcquisitionService {
+    /// <summary>Resolves a playable video kind for metadata retained behind the video route surface.</summary>
+    Task<EntityKind> ResolvePlayableVideoKindAsync(Guid videoId, CancellationToken cancellationToken) =>
+        Task.FromResult(EntityKind.Video);
+
     Task<OpenSubtitlesConfiguration> GetOpenSubtitlesConfigurationAsync(CancellationToken cancellationToken);
 
     Task<OpenSubtitlesConfiguration> SaveOpenSubtitlesConfigurationAsync(

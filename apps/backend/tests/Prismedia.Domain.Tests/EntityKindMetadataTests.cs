@@ -184,15 +184,20 @@ public sealed class EntityKindMetadataTests {
         var audio = EntityKindRegistry.Describe(EntityKind.AudioTrack).Processing;
         var page = EntityKindRegistry.Describe(EntityKind.BookPage).Processing;
 
-        Assert.Equal(JobType.ProbeVideo, video.ResolveProbe(needsProbe: true, automaticMetadataEnabled: true));
-        Assert.Null(video.ResolveProbe(needsProbe: true, automaticMetadataEnabled: false));
-        Assert.Equal(JobType.FingerprintVideo, video.ResolveFingerprint(shouldFingerprint: true));
-        Assert.Equal(JobType.ExtractSubtitles, video.ResolveSubtitleExtraction(false, hasSourcePath: true));
-        Assert.Equal(JobType.GeneratePreview, video.ResolvePreview(false, true, false, true));
+        var videoPlan = video.Plan(new EntityProcessingInputs(
+            NeedsProbe: true, ShouldFingerprint: true, NeedsSubtitleExtraction: false, HasSourcePath: true,
+            NeedsPreview: false, NeedsTrickplay: true, NeedsGridThumbnail: true,
+            AutomaticMetadataEnabled: true, AutomaticPreviewEnabled: false, TrickplayEnabled: true));
+        Assert.Equal(JobType.ProbeVideo, videoPlan.ProbeJobType);
+        Assert.Equal(JobType.FingerprintVideo, videoPlan.FingerprintJobType);
+        Assert.Equal(JobType.ExtractSubtitles, videoPlan.SubtitleExtractionJobType);
+        Assert.Equal(JobType.GeneratePreview, videoPlan.PreviewJobType);
+        Assert.Null(videoPlan.GridThumbnailJobType);
         Assert.Contains(EntityFileRole.Hls, video.GeneratedFileRoles);
 
         Assert.Equal(JobType.GenerateImageThumbnail, image.PreviewJobType);
-        Assert.Equal(JobType.ProbeAudio, audio.ResolveProbe(needsProbe: true, automaticMetadataEnabled: false));
+        Assert.Equal(JobType.ProbeAudio, audio.Plan(new EntityProcessingInputs(
+            true, false, false, false, false, false, false, false, false, false)).ProbeJobType);
         Assert.Equal([EntityFileRole.Waveform], audio.GeneratedFileRoles);
         Assert.Equal(JobType.GenerateBookPageThumbnail, page.PreviewJobType);
         Assert.Equal(

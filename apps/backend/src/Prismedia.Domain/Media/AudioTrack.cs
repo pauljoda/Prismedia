@@ -27,6 +27,7 @@ public sealed class AudioTrackEntityKindDefinition() : EntityKindDefinition<Audi
     new EntityKindBehavior(
         identification: new(AutoIdentifySelectorKind.Audio),
         processing: new EntityProcessingPolicy(
+            assetFamily: GeneratedAssetFamily.AudioTrack,
             probeJobType: JobType.ProbeAudio,
             fingerprintJobType: JobType.FingerprintAudio,
             previewJobType: JobType.GenerateAudioWaveform,

@@ -25,10 +25,15 @@ public sealed class AutomaticSubtitleAcquisitionScheduler(
             return;
         }
 
+        if (!EntityKindRegistry.TryDescribe(context.Job.TargetEntityKind, out var definition)
+            || definition is not IPlayableVideoKindDefinition) {
+            throw new InvalidOperationException("Automatic subtitles require a playable video entity kind.");
+        }
+
         await context.EnqueueIfNeededAsync(
             EnqueueJobRequest.ForEntity(
                 JobType.AcquireSubtitles,
-                EntityKind.Video,
+                definition.Kind,
                 videoId.ToString(),
                 label),
             cancellationToken);
