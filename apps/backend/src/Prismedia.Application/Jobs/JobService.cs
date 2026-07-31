@@ -168,13 +168,9 @@ public sealed class JobService {
     /// maintenance action.
     /// </summary>
     public async Task<BulkJobResponse> RebuildPreviewsAsync(CancellationToken cancellationToken) {
-        var previewKinds = new (EntityKind Kind, JobType JobType)[]
-        {
-            (EntityKind.Video, JobType.GeneratePreview),
-            (EntityKind.Image, JobType.GenerateImageThumbnail),
-            (EntityKind.BookPage, JobType.GenerateBookPageThumbnail),
-            (EntityKind.AudioTrack, JobType.GenerateAudioWaveform),
-        };
+        var previewKinds = EntityKindRegistry.All
+            .Where(definition => definition.Processing.PreviewJobType is not null)
+            .Select(definition => (definition.Kind, definition.Processing.PreviewJobType!.Value));
 
         int enqueued = 0, skipped = 0;
         var graphs = new List<JobGraphReference>();
@@ -216,12 +212,9 @@ public sealed class JobService {
             return new BulkJobResponse(0, 0, []);
         }
 
-        var fingerprintKinds = new (EntityKind Kind, JobType JobType)[]
-        {
-            (EntityKind.Video, JobType.FingerprintVideo),
-            (EntityKind.Image, JobType.FingerprintImage),
-            (EntityKind.AudioTrack, JobType.FingerprintAudio),
-        };
+        var fingerprintKinds = EntityKindRegistry.All
+            .Where(definition => definition.Processing.FingerprintJobType is not null)
+            .Select(definition => (definition.Kind, definition.Processing.FingerprintJobType!.Value));
 
         int enqueued = 0, skipped = 0;
         var graphs = new List<JobGraphReference>();
