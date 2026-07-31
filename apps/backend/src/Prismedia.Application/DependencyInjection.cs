@@ -78,7 +78,7 @@ public static class DependencyInjection {
         services.AddScoped<Acquisition.EntityUnmonitorService>();
         services.AddScoped<Acquisition.IEntityGiveUpService>(
             provider => provider.GetRequiredService<Acquisition.EntityUnmonitorService>());
-        Acquisition.AcquisitionStrategyRegistration.Register(services);
+        Acquisition.AcquisitionStrategyRegistration.RegisterApplicationStrategies(services);
         services.AddSingleton<Acquisition.IAcquisitionPolicyRegistry, Acquisition.AcquisitionPolicyRegistry>();
         services.AddSingleton<VideoScanConcurrencyGate>();
         services.AddScoped<IAudioStreamService, AudioStreamService>();
@@ -106,6 +106,7 @@ public static class DependencyInjection {
 
         // Import execution is worker-only. Policies reuse the concrete scan handlers above so every
         // first-party kind materializes exact placed files before its acquisition reports Imported.
+        Acquisition.AcquisitionStrategyRegistration.RegisterWorkerStrategies(services);
         services.AddScoped<IImportedVideoMaterializer, ImportedVideoMaterializer>();
         services.AddScoped<IImportedEntityMaterializer, ImportedEntityMaterializer>();
         services.AddScoped<ImportedTorrentRemover>();

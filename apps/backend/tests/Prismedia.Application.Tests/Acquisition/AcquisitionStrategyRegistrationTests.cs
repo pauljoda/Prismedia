@@ -1,6 +1,8 @@
+using Microsoft.Extensions.DependencyInjection;
 using Prismedia.Application.Acquisition;
 using Prismedia.Application.Jobs;
 using Prismedia.Application.Jobs.Handlers;
+using Prismedia.Application.Jobs.Handlers.Scan;
 using Prismedia.Application.Requests;
 using Prismedia.Domain.Entities;
 
@@ -11,6 +13,25 @@ public sealed class AcquisitionStrategyRegistrationTests {
     [Fact]
     public void DiscoveredStrategiesCoverEveryRequestAcquisitionKindExactlyOnce() {
         AcquisitionStrategyRegistration.ValidateCoverage();
+    }
+
+    [Fact]
+    public void ProcessRegistrationsKeepWorkerOnlyStrategiesOutOfTheApiGraph() {
+        var application = new ServiceCollection();
+        AcquisitionStrategyRegistration.RegisterApplicationStrategies(application);
+
+        Assert.Contains(application, service => service.ServiceType == typeof(IAcquisitionPolicyModule));
+        Assert.DoesNotContain(application, service => service.ServiceType == typeof(IAcquisitionImportEngine));
+        Assert.DoesNotContain(application, service =>
+            service.ServiceType == typeof(IImportedEntityMaterializationPolicy));
+
+        var worker = new ServiceCollection();
+        AcquisitionStrategyRegistration.RegisterWorkerStrategies(worker);
+
+        Assert.Contains(worker, service => service.ServiceType == typeof(IAcquisitionImportEngine));
+        Assert.Contains(worker, service =>
+            service.ServiceType == typeof(IImportedEntityMaterializationPolicy));
+        Assert.DoesNotContain(worker, service => service.ServiceType == typeof(IAcquisitionPolicyModule));
     }
 
     [Fact]

@@ -19,11 +19,21 @@ public sealed class AcquisitionStrategyAttribute(AcquisitionNamingFamily namingF
 /// each applicable execution stage. Entity definitions remain the source of the kind-to-family mapping.
 /// </summary>
 public static class AcquisitionStrategyRegistration {
-    /// <summary>Registers all concrete, family-declared acquisition strategies in this application assembly.</summary>
-    public static void Register(IServiceCollection services) {
+    /// <summary>
+    /// Registers family-declared search policies needed by both the API and worker processes.
+    /// Import and materialization strategies remain worker-only because their constructors depend
+    /// on scan handlers and transfer services that the API deliberately does not host.
+    /// </summary>
+    public static void RegisterApplicationStrategies(IServiceCollection services) {
         var strategies = Discover();
         ValidateCoverage(strategies);
         Register<IAcquisitionPolicyModule>(services, strategies, ServiceLifetime.Singleton);
+    }
+
+    /// <summary>Registers family-declared import and materialization strategies for the worker process.</summary>
+    public static void RegisterWorkerStrategies(IServiceCollection services) {
+        var strategies = Discover();
+        ValidateCoverage(strategies);
         Register<IAcquisitionImportEngine>(services, strategies, ServiceLifetime.Scoped);
         Register<IImportedEntityMaterializationPolicy>(services, strategies, ServiceLifetime.Scoped);
     }
