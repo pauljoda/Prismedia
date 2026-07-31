@@ -15,8 +15,19 @@ namespace Prismedia.Infrastructure.Media.Persistence;
 public sealed partial class LibraryScanPersistenceService {
     // ── Stale entity cleanup ──
 
-    public async Task<int> RemoveStaleVideosByRootAsync(Guid rootId, IReadOnlySet<string> validPaths, CancellationToken cancellationToken) {
-        var videoIds = await DirectRootedKindIdsAsync(rootId, EntityKind.Video, cancellationToken);
+    public async Task<int> RemoveStalePlayableVideosByRootAsync(Guid rootId, IReadOnlySet<string> validPaths, CancellationToken cancellationToken) {
+        var playableCodes = EntityKindRegistry.All
+            .OfType<IPlayableVideoKindDefinition>()
+            .Select(definition => definition.Kind.ToCode())
+            .ToArray();
+        var videoIds = await _db.EntityLibraryRoots.AsNoTracking()
+            .Where(root => root.LibraryRootId == rootId)
+            .Join(
+                _db.Entities.AsNoTracking().Where(entity => playableCodes.Contains(entity.KindCode)),
+                root => root.EntityId,
+                entity => entity.Id,
+                (root, entity) => entity.Id)
+            .ToListAsync(cancellationToken);
 
         var rootPath = await _db.LibraryRoots.AsNoTracking()
             .Where(root => root.Id == rootId)
@@ -24,11 +35,10 @@ public sealed partial class LibraryScanPersistenceService {
             .FirstOrDefaultAsync(cancellationToken);
 
         if (!string.IsNullOrWhiteSpace(rootPath)) {
-            var videoCode = EntityKind.Video.ToCode();
             var sourceFiles = await _db.EntityFiles.AsNoTracking()
                 .Where(file => file.Role == EntityFileRole.Source)
                 .Join(
-                    _db.Entities.AsNoTracking().Where(entity => entity.KindCode == videoCode),
+                    _db.Entities.AsNoTracking().Where(entity => playableCodes.Contains(entity.KindCode)),
                     file => file.EntityId,
                     entity => entity.Id,
                     (file, entity) => new { file.EntityId, file.Path })
@@ -53,33 +63,29 @@ public sealed partial class LibraryScanPersistenceService {
             return 0;
         }
 
-        var movieCode = EntityKind.Movie.ToCode();
-        var movieSourceFiles = await _db.EntityFiles.AsNoTracking()
-            .Where(file => file.Role == EntityFileRole.Source)
+        var movieCode = EntityKindRegistry
+            .PlayableVideoKindFor(PlayableVideoScanPlacement.Movie)
+            .ToCode();
+        var movieSources = await _db.EntitySources.AsNoTracking()
+            .Where(source => source.Code == EntitySourceCode.Folder.ToCode())
             .Join(
                 _db.Entities.AsNoTracking().Where(entity => entity.KindCode == movieCode),
-                file => file.EntityId,
+                source => source.EntityId,
                 entity => entity.Id,
-                (file, entity) => new { file.EntityId, file.Path })
+                (source, entity) => new { source.EntityId, source.Value })
             .ToListAsync(cancellationToken);
-        var movieIds = movieSourceFiles
-            .Where(file => LibraryScanPathRules.IsPathUnderRoot(file.Path, rootPath))
-            .Select(file => file.EntityId)
+        var movieIds = movieSources
+            .Where(source => LibraryScanPathRules.IsPathUnderRoot(source.Value, rootPath))
+            .Select(source => source.EntityId)
             .ToList();
 
-        var staleMovieIds = await GetStaleEntityIdsBySourcePathAsync(movieIds, validFolderPaths, cancellationToken);
+        var staleMovieIds = await GetStaleEntityIdsBySourceValueAsync(
+            movieIds,
+            EntitySourceCode.Folder,
+            validFolderPaths,
+            cancellationToken);
         if (staleMovieIds.Count == 0) {
             return 0;
-        }
-
-        var now = DateTimeOffset.UtcNow;
-        var children = await _db.Entities
-            .Where(entity => entity.ParentEntityId != null && staleMovieIds.Contains(entity.ParentEntityId.Value))
-            .ToListAsync(cancellationToken);
-        foreach (var child in children) {
-            child.ParentEntityId = null;
-            child.SortOrder = null;
-            child.UpdatedAt = now;
         }
 
         return await RemoveEntitiesByIdAsync(staleMovieIds, cancellationToken);

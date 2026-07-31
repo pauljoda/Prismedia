@@ -9,6 +9,25 @@ namespace Prismedia.Domain.Entities;
 public interface IPlayableVideoKindDefinition {
     /// <summary>Typed identity of the playable definition.</summary>
     EntityKind Kind { get; }
+
+    /// <summary>
+    /// Structural placement this definition owns when a library scan materializes a video file.
+    /// The scan parses filesystem layout in Application, then resolves the concrete kind through
+    /// this declaration rather than maintaining a second kind map.
+    /// </summary>
+    PlayableVideoScanPlacement ScanPlacement { get; }
+}
+
+/// <summary>Structural placement of one playable video file discovered by a library scan.</summary>
+public enum PlayableVideoScanPlacement {
+    /// <summary>A parentless, independently browsable video.</summary>
+    Standalone,
+
+    /// <summary>A directly playable movie whose folder is provenance, not an Entity file.</summary>
+    Movie,
+
+    /// <summary>An episode structurally owned by a series or season.</summary>
+    Episode
 }
 
 /// <summary>
@@ -28,6 +47,7 @@ public abstract class PlayableVideoEntityKindDefinition<TEntity> : RootEntityKin
         EntityKindPresentation presentation,
         EntityKindNavigation navigation,
         EntityKindSearch? search,
+        PlayableVideoScanPlacement scanPlacement,
         Func<EntityRootData, TEntity> factory,
         EntityIdentificationPolicy? identification,
         EntityManualAcquisitionPolicy? manualAcquisition,
@@ -56,7 +76,11 @@ public abstract class PlayableVideoEntityKindDefinition<TEntity> : RootEntityKin
                 mediaQualityFamily: EntityMediaQualityFamily.Video,
                 supportsAtomicMediaUpgrade: true),
             () => CreateDefaultCapabilities(additionalDefaultCapabilities)) {
+        ScanPlacement = scanPlacement;
     }
+
+    /// <inheritdoc />
+    public PlayableVideoScanPlacement ScanPlacement { get; }
 
     private static EntityProcessingPolicy VideoProcessing { get; } = new(
         assetFamily: GeneratedAssetFamily.Video,

@@ -160,9 +160,10 @@ public sealed class ScanLibraryJobHandler(
             seriesSeasonFolders = BuildSeriesSeasonFolderIndex(root.Path, files);
         }
         var allEntityIds = new List<Guid>(files.Count);
-        // Parallel to allEntityIds: the source path behind each persisted entity id. Files whose
-        // persistence failed are skipped, so downstream label lookups cannot index `files` directly.
-        var scannedPaths = new List<string>(files.Count);
+        // Parallel to allEntityIds: the classified source item behind each persisted entity id.
+        // Files whose persistence failed are skipped, so downstream target kinds cannot index `files`
+        // directly or silently fall back to the legacy Video kind.
+        var persistedScanItems = new List<VideoUpsertItem>(files.Count);
         var failedPaths = new List<string>();
         var validPaths = new HashSet<string>(files.Count, FileSystemPathComparison.Comparer);
         var validMovieFolders = new HashSet<string>(FileSystemPathComparison.Comparer);
@@ -222,7 +223,7 @@ public sealed class ScanLibraryJobHandler(
                 }
             }
             allEntityIds.AddRange(entityIds);
-            scannedPaths.AddRange(persistedItems.Select(item => item.FilePath));
+            persistedScanItems.AddRange(persistedItems);
 
             using (timer.Phase("progress-write")) {
                 await context.ReportProgressAsync(
@@ -231,11 +232,11 @@ public sealed class ScanLibraryJobHandler(
             }
         }
 
-        List<VideoSourceOwner> downstreamTargets;
+        List<PlayableVideoSourceOwner> downstreamTargets;
         using (timer.Phase("resolve-owners")) {
-            downstreamTargets = await ResolveVideoSourceOwnersAsync(
+            downstreamTargets = await ResolvePlayableVideoSourceOwnersAsync(
                 allEntityIds,
-                scannedPaths,
+                persistedScanItems,
                 files,
                 cancellationToken);
         }
@@ -265,7 +266,7 @@ public sealed class ScanLibraryJobHandler(
                             entityId,
                             batchTargets[i].FilePath,
                             entityNeeds,
-                            EntityKind.Video));
+                            batchTargets[i].Kind));
                     }
                 }
             }
@@ -317,7 +318,7 @@ public sealed class ScanLibraryJobHandler(
         int excluded;
         int orphans;
         using (timer.Phase("cleanup-stale-videos")) {
-            removed = await videos.RemoveStaleVideosByRootAsync(root.Id, validPaths, cancellationToken);
+            removed = await videos.RemoveStalePlayableVideosByRootAsync(root.Id, validPaths, cancellationToken);
             if (removed > 0)
                 logger.LogInformation("ScanLibrary: removed {Count} stale video entities from {Label}", removed, root.Label);
         }
@@ -354,16 +355,16 @@ public sealed class ScanLibraryJobHandler(
         return failedPaths.Count == 0 ? ScanRootOutcome.Success : new ScanRootOutcome(failedPaths);
     }
 
-    private async Task<List<VideoSourceOwner>> ResolveVideoSourceOwnersAsync(
+    private async Task<List<PlayableVideoSourceOwner>> ResolvePlayableVideoSourceOwnersAsync(
         IReadOnlyList<Guid> positionalEntityIds,
-        IReadOnlyList<string> positionalPaths,
+        IReadOnlyList<VideoUpsertItem> positionalItems,
         IReadOnlyList<string> ownerLookupPaths,
         CancellationToken cancellationToken) {
-        var persistedOwners = await videos.ListVideoSourceOwnersAsync(
+        var persistedOwners = await videos.ListPlayableVideoSourceOwnersAsync(
             ownerLookupPaths.Distinct(FileSystemPathComparison.Comparer).ToArray(),
             cancellationToken);
         var positionalOwners = positionalEntityIds
-            .Zip(positionalPaths, (id, path) => new VideoSourceOwner(id, path));
+            .Zip(positionalItems, (id, item) => new PlayableVideoSourceOwner(id, item.FilePath, item.MaterializedKind));
 
         // Query every discovered source path, including files whose upsert failed. An existing owner
         // still needs sidecar invalidation/queueing on a sidecar-only delta; otherwise the sidecar
@@ -380,7 +381,7 @@ public sealed class ScanLibraryJobHandler(
     }
 
     private async Task InvalidateChangedSidecarsAsync(
-        IReadOnlyList<VideoSourceOwner> targets,
+        IReadOnlyList<PlayableVideoSourceOwner> targets,
         CancellationToken cancellationToken) {
         if (subtitleSidecars is null || targets.Count == 0) {
             return;
@@ -410,7 +411,7 @@ public sealed class ScanLibraryJobHandler(
         JobContext context,
         LibraryRootData root,
         CancellationToken cancellationToken) {
-        var targets = await videos.GetVideoRecoveryTargetsInRootAsync(root.Id, cancellationToken);
+        var targets = await videos.GetPlayableVideoRecoveryTargetsInRootAsync(root.Id, cancellationToken);
         if (targets.Count == 0) {
             return;
         }
@@ -419,7 +420,7 @@ public sealed class ScanLibraryJobHandler(
         var requests = new List<EnqueueJobRequest>();
         foreach (var target in targets) {
             requests.AddRange(VideoDownstreamJobPlanner.Build(
-                settings, target.Id, target.SourcePath, target.Needs, EntityKind.Video));
+                settings, target.Id, target.SourcePath, target.Needs, target.Kind));
         }
 
         if (requests.Count > 0) {
@@ -472,113 +473,158 @@ public sealed class ScanLibraryJobHandler(
         VideoSidecarMetadata? metadata = null) {
         var fallbackTitle = Path.GetFileNameWithoutExtension(filePath);
         var title = string.IsNullOrWhiteSpace(metadata?.Title) ? fallbackTitle : metadata.Title.Trim();
-        var episodeToken = ParseEpisodeToken(fallbackTitle);
-        var parentFolder = Path.GetDirectoryName(filePath);
+        var context = new VideoScanClassificationContext(
+            filePath,
+            title,
+            root,
+            allFiles,
+            seriesSeasonFolders,
+            metadata,
+            ParseEpisodeToken(fallbackTitle),
+            Path.GetDirectoryName(filePath));
+        return VideoLayoutRules
+            .Select(rule => rule(context))
+            .FirstOrDefault(item => item is not null)
+            ?? context.CreateStandalone();
+    }
 
-        if (!string.IsNullOrWhiteSpace(parentFolder)) {
-            if (TryGetMovieFolderInfo(filePath, root.Path, allFiles, out var movieFolderPath, out var movieFolderName)) {
-                return new VideoUpsertItem(
-                    filePath,
-                    title,
-                    root.Id,
-                    root.IsNsfw,
-                    Series: null,
-                    Season: null,
-                    EpisodeNumber: null,
-                    AbsoluteEpisodeNumber: null,
-                    Metadata: metadata,
-                    Movie: new MovieScanInfo(movieFolderPath, string.IsNullOrWhiteSpace(metadata?.Title) ? movieFolderName : metadata.Title.Trim()));
-            }
+    // Ordered and intentionally local to Application: physical directory layout is an ingress concern,
+    // while the direct Entity kind is resolved later through the definition-owned scan placement.
+    private static readonly Func<VideoScanClassificationContext, VideoUpsertItem?>[] VideoLayoutRules =
+    [
+        ClassifyMovieFolder,
+        ClassifyCanonicalSeasonFolder,
+        ClassifyEpisodeTokenSeasonFolder,
+        ClassifyIndexedSeasonFolder,
+        ClassifyDirectSeriesEpisode,
+        ClassifyLooseFolderSeries
+    ];
 
-            var parentFolderName = Path.GetFileName(parentFolder);
-            if (TryParseSeasonFolder(parentFolderName, out var seasonNumber)) {
-                var seriesFolder = Path.GetDirectoryName(parentFolder);
-                if (!string.IsNullOrWhiteSpace(seriesFolder) && !SamePath(seriesFolder, root.Path)) {
-                    return new VideoUpsertItem(
-                        filePath,
-                        title,
-                        root.Id,
-                        root.IsNsfw,
-                        new VideoSeriesScanInfo(seriesFolder, Path.GetFileName(seriesFolder)),
-                        new VideoSeasonScanInfo(parentFolder, parentFolderName, seasonNumber),
-                        episodeToken?.EpisodeNumber,
-                        AbsoluteEpisodeNumber: null,
-                        Metadata: metadata);
-                }
-            }
+    private static VideoUpsertItem? ClassifyMovieFolder(VideoScanClassificationContext context) {
+        return TryGetMovieFolderInfo(
+            context.FilePath,
+            context.Root.Path,
+            context.AllFiles,
+            out var folderPath,
+            out var folderName)
+            ? context.CreateMovie(folderPath, folderName)
+            : null;
+    }
 
-            var grandparentFolder = Path.GetDirectoryName(parentFolder);
-            if (episodeToken is not null &&
-                !string.IsNullOrWhiteSpace(grandparentFolder) &&
-                !SamePath(grandparentFolder, root.Path)) {
-                return new VideoUpsertItem(
-                    filePath,
-                    title,
-                    root.Id,
-                    root.IsNsfw,
-                    new VideoSeriesScanInfo(grandparentFolder, Path.GetFileName(grandparentFolder)),
-                    new VideoSeasonScanInfo(parentFolder, parentFolderName, episodeToken.SeasonNumber),
-                    episodeToken.EpisodeNumber,
-                    AbsoluteEpisodeNumber: null,
-                    Metadata: metadata);
-            }
-
-            // Once any sibling folder establishes the parent as a series root, every direct content
-            // folder beneath it is a season. Named folders without season tokens are ordered after the
-            // highest detected season instead of being promoted into unrelated leaf-level series.
-            if (seriesSeasonFolders.TryGetValue(parentFolder, out var groupedSeason)) {
-                return new VideoUpsertItem(
-                    filePath,
-                    title,
-                    root.Id,
-                    root.IsNsfw,
-                    new VideoSeriesScanInfo(
-                        groupedSeason.SeriesFolderPath,
-                        Path.GetFileName(groupedSeason.SeriesFolderPath)),
-                    new VideoSeasonScanInfo(
-                        parentFolder,
-                        parentFolderName,
-                        groupedSeason.SeasonNumber),
-                    EpisodeNumber: null,
-                    AbsoluteEpisodeNumber: null,
-                    Metadata: metadata);
-            }
-
-            if (episodeToken is not null && !SamePath(parentFolder, root.Path)) {
-                return new VideoUpsertItem(
-                    filePath,
-                    title,
-                    root.Id,
-                    root.IsNsfw,
-                    new VideoSeriesScanInfo(parentFolder, parentFolderName),
-                    Season: null,
-                    episodeToken.EpisodeNumber,
-                    AbsoluteEpisodeNumber: null,
-                    Metadata: metadata);
-            }
-
-            // A non-root folder holding more than one video, with no season folders or episode tokens, is
-            // treated as a series: each loose video becomes an episode ordered by filename. This mirrors the
-            // single-video movie rule above — a lone video in a folder is a movie, so a folder with several
-            // videos is the series counterpart. Without this, such folders fall through to ungrouped loose
-            // videos.
-            if (!SamePath(parentFolder, root.Path) &&
-                TryGetFolderSeriesPosition(filePath, parentFolder, allFiles, out var folderSortOrder)) {
-                return new VideoUpsertItem(
-                    filePath,
-                    title,
-                    root.Id,
-                    root.IsNsfw,
-                    new VideoSeriesScanInfo(parentFolder, parentFolderName),
-                    Season: null,
-                    EpisodeNumber: null,
-                    AbsoluteEpisodeNumber: null,
-                    Metadata: metadata,
-                    FolderSortOrder: folderSortOrder);
-            }
+    private static VideoUpsertItem? ClassifyCanonicalSeasonFolder(VideoScanClassificationContext context) {
+        if (context.ParentFolder is not { } parentFolder ||
+            !TryParseSeasonFolder(context.ParentFolderName, out var seasonNumber) ||
+            Path.GetDirectoryName(parentFolder) is not { } seriesFolder ||
+            SamePath(seriesFolder, context.Root.Path)) {
+            return null;
         }
 
-        return new VideoUpsertItem(filePath, title, root.Id, root.IsNsfw, Metadata: metadata);
+        return context.CreateEpisode(
+            new VideoSeriesScanInfo(seriesFolder, Path.GetFileName(seriesFolder)),
+            new VideoSeasonScanInfo(parentFolder, context.ParentFolderName, seasonNumber),
+            context.EpisodeToken?.EpisodeNumber);
+    }
+
+    private static VideoUpsertItem? ClassifyEpisodeTokenSeasonFolder(VideoScanClassificationContext context) {
+        if (context.ParentFolder is not { } parentFolder ||
+            context.EpisodeToken is not { } token ||
+            Path.GetDirectoryName(parentFolder) is not { } seriesFolder ||
+            SamePath(seriesFolder, context.Root.Path)) {
+            return null;
+        }
+
+        return context.CreateEpisode(
+            new VideoSeriesScanInfo(seriesFolder, Path.GetFileName(seriesFolder)),
+            new VideoSeasonScanInfo(parentFolder, context.ParentFolderName, token.SeasonNumber),
+            token.EpisodeNumber);
+    }
+
+    private static VideoUpsertItem? ClassifyIndexedSeasonFolder(VideoScanClassificationContext context) {
+        if (context.ParentFolder is not { } parentFolder ||
+            !context.SeriesSeasonFolders.TryGetValue(parentFolder, out var groupedSeason)) {
+            return null;
+        }
+
+        return context.CreateEpisode(
+            new VideoSeriesScanInfo(
+                groupedSeason.SeriesFolderPath,
+                Path.GetFileName(groupedSeason.SeriesFolderPath)),
+            new VideoSeasonScanInfo(parentFolder, context.ParentFolderName, groupedSeason.SeasonNumber),
+            episodeNumber: null);
+    }
+
+    private static VideoUpsertItem? ClassifyDirectSeriesEpisode(VideoScanClassificationContext context) {
+        if (context.ParentFolder is not { } parentFolder ||
+            context.EpisodeToken is not { } token ||
+            SamePath(parentFolder, context.Root.Path)) {
+            return null;
+        }
+
+        return context.CreateEpisode(
+            new VideoSeriesScanInfo(parentFolder, context.ParentFolderName),
+            season: null,
+            episodeNumber: token.EpisodeNumber);
+    }
+
+    private static VideoUpsertItem? ClassifyLooseFolderSeries(VideoScanClassificationContext context) {
+        if (context.ParentFolder is not { } parentFolder ||
+            SamePath(parentFolder, context.Root.Path) ||
+            !TryGetFolderSeriesPosition(context.FilePath, parentFolder, context.AllFiles, out var folderSortOrder)) {
+            return null;
+        }
+
+        return context.CreateEpisode(
+            new VideoSeriesScanInfo(parentFolder, context.ParentFolderName),
+            season: null,
+            episodeNumber: null,
+            folderSortOrder: folderSortOrder);
+    }
+
+    private sealed record VideoScanClassificationContext(
+        string FilePath,
+        string Title,
+        LibraryRootData Root,
+        IReadOnlyList<string> AllFiles,
+        IReadOnlyDictionary<string, SeriesSeasonFolderInfo> SeriesSeasonFolders,
+        VideoSidecarMetadata? Metadata,
+        EpisodeToken? EpisodeToken,
+        string? ParentFolder) {
+        public string ParentFolderName => ParentFolder is null ? string.Empty : Path.GetFileName(ParentFolder);
+
+        public VideoUpsertItem CreateMovie(string folderPath, string folderName) => new(
+            FilePath,
+            Title,
+            Root.Id,
+            Root.IsNsfw,
+            Metadata: Metadata,
+            Movie: new MovieScanInfo(
+                folderPath,
+                string.IsNullOrWhiteSpace(Metadata?.Title) ? folderName : Metadata.Title.Trim()),
+            ScanPlacement: PlayableVideoScanPlacement.Movie);
+
+        public VideoUpsertItem CreateEpisode(
+            VideoSeriesScanInfo series,
+            VideoSeasonScanInfo? season,
+            int? episodeNumber,
+            int? folderSortOrder = null) => new(
+            FilePath,
+            Title,
+            Root.Id,
+            Root.IsNsfw,
+            Series: series,
+            Season: season,
+            EpisodeNumber: episodeNumber,
+            Metadata: Metadata,
+            FolderSortOrder: folderSortOrder,
+            ScanPlacement: PlayableVideoScanPlacement.Episode);
+
+        public VideoUpsertItem CreateStandalone() => new(
+            FilePath,
+            Title,
+            Root.Id,
+            Root.IsNsfw,
+            Metadata: Metadata,
+            ScanPlacement: PlayableVideoScanPlacement.Standalone);
     }
 
     /// <summary>

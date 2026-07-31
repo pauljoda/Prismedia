@@ -60,8 +60,7 @@ public sealed record ImportedEntityReadyScope(
 
 /// <summary>Video scan persistence operations for discovered files and stale cleanup.</summary>
 public interface IVideoScanPersistence {
-    Task<Guid> UpsertVideoAsync(string filePath, string title, Guid libraryRootId, bool isNsfw, CancellationToken cancellationToken);
-    Task<int> RemoveStaleVideosByRootAsync(Guid rootId, IReadOnlySet<string> validPaths, CancellationToken cancellationToken);
+    Task<int> RemoveStalePlayableVideosByRootAsync(Guid rootId, IReadOnlySet<string> validPaths, CancellationToken cancellationToken);
     Task<int> RemoveStaleMoviesByRootAsync(Guid rootId, IReadOnlySet<string> validFolderPaths, CancellationToken cancellationToken);
     Task<int> RemoveOrphanSeriesAndSeasonsAsync(CancellationToken cancellationToken);
 
@@ -84,7 +83,7 @@ public interface IVideoScanPersistence {
     /// user state even though the file extension—and therefore its stable source path—changed.
     /// Returns every existing owner whose byte-derived state was invalidated.
     /// </summary>
-    Task<IReadOnlyList<Guid>> RebindVideoSourceAsync(
+    Task<IReadOnlyList<Guid>> RebindPlayableVideoSourceAsync(
         string previousPath,
         string replacementPath,
         CancellationToken cancellationToken) => Task.FromResult<IReadOnlyList<Guid>>([]);
@@ -93,9 +92,9 @@ public interface IVideoScanPersistence {
     /// Returns every Entity owning each requested Source path. Unlike the positional batch-upsert
     /// result, this preserves all co-owners of a multi-episode physical file.
     /// </summary>
-    Task<IReadOnlyList<VideoSourceOwner>> ListVideoSourceOwnersAsync(
+    Task<IReadOnlyList<PlayableVideoSourceOwner>> ListPlayableVideoSourceOwnersAsync(
         IReadOnlyCollection<string> filePaths,
-        CancellationToken cancellationToken) => Task.FromResult<IReadOnlyList<VideoSourceOwner>>([]);
+        CancellationToken cancellationToken) => Task.FromResult<IReadOnlyList<PlayableVideoSourceOwner>>([]);
 
     /// <summary>
     /// Marks subtitle extraction incomplete for video owners whose successfully reconciled sidecar
@@ -110,35 +109,40 @@ public interface IVideoScanPersistence {
     /// Lists every source-backed video under a library root so an unchanged scan can recover subtitle
     /// extraction work that was cancelled or exhausted its retries after the detailed scan.
     /// </summary>
-    Task<IReadOnlyList<VideoRefreshSourceTarget>> GetVideoTargetsInRootAsync(
+    Task<IReadOnlyList<PlayableVideoRefreshSourceTarget>> GetPlayableVideoTargetsInRootAsync(
         Guid rootId,
-        CancellationToken cancellationToken) => Task.FromResult<IReadOnlyList<VideoRefreshSourceTarget>>([]);
+        CancellationToken cancellationToken) => Task.FromResult<IReadOnlyList<PlayableVideoRefreshSourceTarget>>([]);
 
     /// <summary>
     /// Loads every existing video under a root together with its downstream recovery state. The
     /// persistence implementation evaluates the root as one set so unchanged scans do not repeat
     /// the downstream-state query group for each materialization-sized batch.
     /// </summary>
-    Task<IReadOnlyList<VideoRecoveryTarget>> GetVideoRecoveryTargetsInRootAsync(
+    Task<IReadOnlyList<PlayableVideoRecoveryTarget>> GetPlayableVideoRecoveryTargetsInRootAsync(
         Guid rootId,
         CancellationToken cancellationToken);
 }
 
 /// <summary>One video Entity and the exact shared-or-exclusive Source path it owns.</summary>
-public sealed record VideoSourceOwner(Guid EntityId, string FilePath);
+public sealed record PlayableVideoSourceOwner(Guid EntityId, string FilePath, EntityKind Kind);
 
 /// <summary>Current sidecar-set signature for one video Entity owner.</summary>
 public sealed record VideoSubtitleSidecarState(Guid EntityId, string Signature);
 
 /// <summary>Existing source-backed video considered by an unchanged scan.</summary>
-public sealed record VideoRefreshSourceTarget(Guid Id, string Title, string SourcePath);
-
-/// <summary>Existing source-backed video and the downstream work an unchanged scan must recover.</summary>
-public sealed record VideoRecoveryTarget(
+public sealed record PlayableVideoRefreshSourceTarget(
     Guid Id,
     string Title,
     string SourcePath,
-    DownstreamNeeds Needs);
+    EntityKind Kind);
+
+/// <summary>Existing source-backed video and the downstream work an unchanged scan must recover.</summary>
+public sealed record PlayableVideoRecoveryTarget(
+    Guid Id,
+    string Title,
+    string SourcePath,
+    DownstreamNeeds Needs,
+    EntityKind Kind);
 
 /// <summary>Image and gallery scan persistence operations for discovered files and stale cleanup.</summary>
 public interface IImageGalleryScanPersistence {
@@ -549,18 +553,32 @@ public sealed record LibrarySettingsData(
 /// multiple loose videos (no season folders or episode tokens). Used to order such episodes
 /// alphabetically when no real episode number exists.
 /// </param>
+/// <param name="ScanPlacement">
+/// Definition-owned structural role selected by Application's filesystem layout classifier. The
+/// concrete playable Entity kind is resolved through the discovered definition contract.
+/// </param>
 public sealed record VideoUpsertItem(
     string FilePath,
     string Title,
     Guid LibraryRootId,
     bool IsNsfw,
+    PlayableVideoScanPlacement ScanPlacement,
     VideoSeriesScanInfo? Series = null,
     VideoSeasonScanInfo? Season = null,
     int? EpisodeNumber = null,
     int? AbsoluteEpisodeNumber = null,
     VideoSidecarMetadata? Metadata = null,
     MovieScanInfo? Movie = null,
-    int? FolderSortOrder = null);
+    int? FolderSortOrder = null) {
+    /// <summary>Final direct Entity kind selected by the discovered playable definition.</summary>
+    public EntityKind MaterializedKind => EntityKindRegistry.PlayableVideoKindFor(ScanPlacement);
+
+    /// <summary>
+    /// Stable structural ordinal used to distinguish co-owned multi-episode source files during a
+    /// rescan. Episode placement always persists this as the Entity structural sort order.
+    /// </summary>
+    public int StructuralSortOrder => EpisodeNumber ?? AbsoluteEpisodeNumber ?? FolderSortOrder ?? 0;
+}
 
 /// <summary>One TV file placed by an acquisition, with the structural episode identity used by scanning.</summary>
 /// <param name="FilePath">Final absolute library path of the playable file.</param>

@@ -40,7 +40,7 @@ public sealed partial class LibraryScanPersistenceService {
     }
 
     /// <inheritdoc />
-    public async Task<IReadOnlyList<VideoRefreshSourceTarget>> GetVideoTargetsInRootAsync(
+    public async Task<IReadOnlyList<PlayableVideoRefreshSourceTarget>> GetPlayableVideoTargetsInRootAsync(
         Guid rootId,
         CancellationToken cancellationToken) {
         var root = await _db.LibraryRoots.AsNoTracking()
@@ -56,19 +56,19 @@ public sealed partial class LibraryScanPersistenceService {
                     row.LibraryRootId == rootId &&
                     row.ScanKind == JobType.ScanLibrary.ToCode())
                 .Select(row => row.Path)
-                .ToListAsync(cancellationToken))
+            .ToListAsync(cancellationToken))
             .ToHashSet(FileSystemPathComparison.Comparer);
-        var candidates = await _db.VideoDetails.AsNoTracking()
-            .Join(
-                _db.Entities.AsNoTracking(),
-                detail => detail.EntityId,
-                entity => entity.Id,
-                (detail, entity) => new { Detail = detail, Entity = entity })
+        var playableCodes = EntityKindRegistry.All
+            .OfType<IPlayableVideoKindDefinition>()
+            .Select(definition => definition.Kind.ToCode())
+            .ToArray();
+        var candidates = await _db.Entities.AsNoTracking()
+            .Where(entity => playableCodes.Contains(entity.KindCode))
             .GroupJoin(
                 _db.EntityLibraryRoots.AsNoTracking(),
-                joined => joined.Entity.Id,
+                entity => entity.Id,
                 root => root.EntityId,
-                (joined, roots) => new { joined.Detail, joined.Entity, Root = roots.FirstOrDefault() })
+                (entity, roots) => new { Entity = entity, Root = roots.FirstOrDefault() })
             .Join(
                 _db.EntityFiles.AsNoTracking().Where(file => file.Role == EntityFileRole.Source),
                 joined => joined.Entity.Id,
@@ -77,6 +77,7 @@ public sealed partial class LibraryScanPersistenceService {
                     LibraryRootId = joined.Root == null ? (Guid?)null : joined.Root.LibraryRootId,
                     joined.Entity.Id,
                     joined.Entity.Title,
+                    joined.Entity.KindCode,
                     SourcePath = file.Path
                 })
             .ToListAsync(cancellationToken);
@@ -86,7 +87,11 @@ public sealed partial class LibraryScanPersistenceService {
                 target.LibraryRootId == rootId ||
                 target.LibraryRootId is null &&
                 (scannedPaths.Contains(target.SourcePath) || IsSourcePathCoveredByRoot(target.SourcePath, root.Path, root.Recursive)))
-            .Select(target => new VideoRefreshSourceTarget(target.Id, target.Title, target.SourcePath))
+            .Select(target => new PlayableVideoRefreshSourceTarget(
+                target.Id,
+                target.Title,
+                target.SourcePath,
+                EntityKindRegistry.Require(target.KindCode)))
             .DistinctBy(target => (target.Id, target.SourcePath))
             .OrderBy(target => target.SourcePath)
             .ThenBy(target => target.Id)
@@ -94,10 +99,10 @@ public sealed partial class LibraryScanPersistenceService {
     }
 
     /// <inheritdoc />
-    public async Task<IReadOnlyList<VideoRecoveryTarget>> GetVideoRecoveryTargetsInRootAsync(
+    public async Task<IReadOnlyList<PlayableVideoRecoveryTarget>> GetPlayableVideoRecoveryTargetsInRootAsync(
         Guid rootId,
         CancellationToken cancellationToken) {
-        var targets = await GetVideoTargetsInRootAsync(rootId, cancellationToken);
+        var targets = await GetPlayableVideoTargetsInRootAsync(rootId, cancellationToken);
         if (targets.Count == 0) {
             return [];
         }
@@ -107,11 +112,12 @@ public sealed partial class LibraryScanPersistenceService {
             cancellationToken);
         return targets
             .Where(target => needs.ContainsKey(target.Id))
-            .Select(target => new VideoRecoveryTarget(
+            .Select(target => new PlayableVideoRecoveryTarget(
                 target.Id,
                 target.Title,
                 target.SourcePath,
-                needs[target.Id]))
+                needs[target.Id],
+                target.Kind))
             .ToArray();
     }
 

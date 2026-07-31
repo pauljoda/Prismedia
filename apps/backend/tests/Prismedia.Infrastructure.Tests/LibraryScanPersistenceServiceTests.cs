@@ -799,7 +799,7 @@ public sealed class LibraryScanPersistenceServiceTests {
         var detail = await db.EntitySubtitleStates.FindAsync([videoId]);
         Assert.Null(detail!.SubtitlesExtractedAt);
         Assert.Equal("old", detail.SubtitleSidecarSignature);
-        var target = Assert.Single(await service.GetVideoTargetsInRootAsync(RootId, CancellationToken.None));
+        var target = Assert.Single(await service.GetPlayableVideoTargetsInRootAsync(RootId, CancellationToken.None));
         Assert.Equal(videoId, target.Id);
         Assert.Equal("/media/videos/movie.mkv", target.SourcePath);
     }
@@ -829,7 +829,7 @@ public sealed class LibraryScanPersistenceServiceTests {
         });
         await db.SaveChangesAsync();
 
-        var owners = await new LibraryScanPersistenceService(db).RebindVideoSourceAsync(
+        var owners = await new LibraryScanPersistenceService(db).RebindPlayableVideoSourceAsync(
             previousPath,
             replacementPath,
             CancellationToken.None);
@@ -842,7 +842,7 @@ public sealed class LibraryScanPersistenceServiceTests {
     }
 
     [Fact]
-    public async Task VideoSourceOwnersExcludeNonVideoEntitiesSharingTheSameFile() {
+    public async Task PlayableVideoSourceOwnersExcludeNonVideoEntitiesSharingTheSameFile() {
         await using var db = CreateContext();
         var videoId = Guid.NewGuid();
         var imageId = Guid.NewGuid();
@@ -851,13 +851,36 @@ public sealed class LibraryScanPersistenceServiceTests {
         SeedSourceEntity(db, imageId, EntityKind.Image.ToCode(), sharedPath);
         await db.SaveChangesAsync();
 
-        var owners = await new LibraryScanPersistenceService(db).ListVideoSourceOwnersAsync(
+        var owners = await new LibraryScanPersistenceService(db).ListPlayableVideoSourceOwnersAsync(
             [sharedPath],
             CancellationToken.None);
 
         var owner = Assert.Single(owners);
         Assert.Equal(videoId, owner.EntityId);
         Assert.Equal(sharedPath, owner.FilePath);
+    }
+
+    [Fact]
+    public async Task RebindingPlayableVideoSourceLeavesNonPlayableCoOwnersUntouched() {
+        await using var db = CreateContext();
+        var playableId = Guid.NewGuid();
+        var imageId = Guid.NewGuid();
+        const string previousPath = "/media/mixed/animated.webm";
+        const string replacementPath = "/media/mixed/animated.mp4";
+        SeedVideo(db, playableId, previousPath);
+        SeedSourceEntity(db, imageId, EntityKind.Image.ToCode(), previousPath);
+        await db.SaveChangesAsync();
+
+        var rebound = await new LibraryScanPersistenceService(db).RebindPlayableVideoSourceAsync(
+            previousPath,
+            replacementPath,
+            CancellationToken.None);
+
+        Assert.Equal([playableId], rebound);
+        Assert.Equal(replacementPath, (await db.EntityFiles
+            .SingleAsync(file => file.EntityId == playableId && file.Role == EntityFileRole.Source)).Path);
+        Assert.Equal(previousPath, (await db.EntityFiles
+            .SingleAsync(file => file.EntityId == imageId && file.Role == EntityFileRole.Source)).Path);
     }
 
     [Fact]
@@ -897,7 +920,7 @@ public sealed class LibraryScanPersistenceServiceTests {
         await db.SaveChangesAsync();
 
         var service = new LibraryScanPersistenceService(db);
-        var targets = await service.GetVideoTargetsInRootAsync(RootId, CancellationToken.None);
+        var targets = await service.GetPlayableVideoTargetsInRootAsync(RootId, CancellationToken.None);
 
         Assert.Equal(
             new[] { assignedId, pathCoveredId, snapshotCoveredId }.Order().ToArray(),
@@ -917,7 +940,7 @@ public sealed class LibraryScanPersistenceServiceTests {
         await db.SaveChangesAsync();
 
         var service = new LibraryScanPersistenceService(db);
-        var targets = await service.GetVideoRecoveryTargetsInRootAsync(RootId, CancellationToken.None);
+        var targets = await service.GetPlayableVideoRecoveryTargetsInRootAsync(RootId, CancellationToken.None);
 
         Assert.Equal(ids.Order().ToArray(), targets.Select(target => target.Id).Order().ToArray());
         Assert.All(targets, target => Assert.True(target.Needs.NeedsSubtitleExtraction));
@@ -1013,7 +1036,7 @@ public sealed class LibraryScanPersistenceServiceTests {
         });
         db.EntitySources.Add(new EntitySourceRow {
             EntityId = seriesId,
-            Code = "folder",
+            Code = EntitySourceCode.Folder.ToCode(),
             Value = "/media/The Chair Company",
             UpdatedAt = now
         });
@@ -1028,6 +1051,7 @@ public sealed class LibraryScanPersistenceServiceTests {
                 "Life goes by too fast",
                 rootId,
                 IsNsfw: false,
+                ScanPlacement: PlayableVideoScanPlacement.Episode,
                 new VideoSeriesScanInfo("/media/The Chair Company", "The Chair Company"),
                 new VideoSeasonScanInfo("/media/The Chair Company/Season 1", "Season 1", 1),
                 EpisodeNumber: 1,
@@ -1044,15 +1068,22 @@ public sealed class LibraryScanPersistenceServiceTests {
         Assert.Equal(seriesId, season.ParentEntityId);
         Assert.Equal(1, season.SortOrder);
         var video = Assert.Single(db.Entities.Where(entity => entity.Id == videoId));
+        Assert.Equal(EntityKind.VideoEpisode.ToCode(), video.KindCode);
         Assert.Equal(season.Id, video.ParentEntityId);
         Assert.Equal(1, video.SortOrder);
+        Assert.Contains(db.EntitySources, source =>
+            source.EntityId == seriesId && source.Code == EntitySourceCode.Folder.ToCode());
+        Assert.Contains(db.EntitySources, source =>
+            source.EntityId == season.Id && source.Code == EntitySourceCode.Folder.ToCode());
+        Assert.DoesNotContain(db.EntityFiles, file =>
+            file.Role == EntityFileRole.Source && (file.EntityId == seriesId || file.EntityId == season.Id));
         Assert.Contains(db.EntityPositions, position =>
             position.EntityId == season.Id &&
-            position.Code == "season" &&
+            position.Code == EntityPositionCodes.Season &&
             position.Value == 1);
         Assert.Contains(db.EntityPositions, position =>
             position.EntityId == videoId &&
-            position.Code == "episode" &&
+            position.Code == EntityPositionCodes.Episode &&
             position.Value == 1);
     }
 
@@ -1073,8 +1104,8 @@ public sealed class LibraryScanPersistenceServiceTests {
         db.Entities.AddRange(
             new EntityRow { Id = seriesId, KindCode = EntityKind.VideoSeries.ToCode(), Title = "The Chair Company", CreatedAt = now, UpdatedAt = now },
             new EntityRow { Id = seasonId, KindCode = EntityKind.VideoSeason.ToCode(), Title = "Season 1", ParentEntityId = seriesId, SortOrder = 1, CreatedAt = now, UpdatedAt = now },
-            new EntityRow { Id = firstEpisodeId, KindCode = EntityKind.Video.ToCode(), Title = "Episode 5", ParentEntityId = seasonId, SortOrder = 5, CreatedAt = now, UpdatedAt = now },
-            new EntityRow { Id = secondEpisodeId, KindCode = EntityKind.Video.ToCode(), Title = "Episode 6", ParentEntityId = seasonId, SortOrder = 6, CreatedAt = now.AddSeconds(1), UpdatedAt = now });
+            new EntityRow { Id = firstEpisodeId, KindCode = EntityKind.VideoEpisode.ToCode(), Title = "Episode 5", ParentEntityId = seasonId, SortOrder = 5, CreatedAt = now, UpdatedAt = now },
+            new EntityRow { Id = secondEpisodeId, KindCode = EntityKind.VideoEpisode.ToCode(), Title = "Episode 6", ParentEntityId = seasonId, SortOrder = 6, CreatedAt = now.AddSeconds(1), UpdatedAt = now });
         db.EntityFiles.AddRange(
             new EntityFileRow { Id = Guid.NewGuid(), EntityId = firstEpisodeId, Role = EntityFileRole.Source, Path = sharedPath, CreatedAt = now, UpdatedAt = now },
             new EntityFileRow { Id = Guid.NewGuid(), EntityId = secondEpisodeId, Role = EntityFileRole.Source, Path = sharedPath, CreatedAt = now, UpdatedAt = now });
@@ -1087,21 +1118,32 @@ public sealed class LibraryScanPersistenceServiceTests {
                 "The Chair Company - S01E05-E06",
                 rootId,
                 IsNsfw: false,
+                ScanPlacement: PlayableVideoScanPlacement.Episode,
                 new VideoSeriesScanInfo("/media/The Chair Company", "The Chair Company"),
                 new VideoSeasonScanInfo("/media/The Chair Company/Season 1", "Season 1", 1),
                 EpisodeNumber: 5,
+                AbsoluteEpisodeNumber: null),
+            new VideoUpsertItem(
+                sharedPath,
+                "The Chair Company - S01E05-E06",
+                rootId,
+                IsNsfw: false,
+                ScanPlacement: PlayableVideoScanPlacement.Episode,
+                new VideoSeriesScanInfo("/media/The Chair Company", "The Chair Company"),
+                new VideoSeasonScanInfo("/media/The Chair Company/Season 1", "Season 1", 1),
+                EpisodeNumber: 6,
                 AbsoluteEpisodeNumber: null)
         ], CancellationToken.None);
 
-        Assert.Equal(firstEpisodeId, Assert.Single(ids));
+        Assert.Equal([firstEpisodeId, secondEpisodeId], ids);
         // No third video was minted for the already-owned path.
-        Assert.Equal(2, db.Entities.Count(entity => entity.KindCode == EntityKind.Video.ToCode()));
+        Assert.Equal(2, db.Entities.Count(entity => entity.KindCode == EntityKind.VideoEpisode.ToCode()));
         // Both episodes keep their own positions — the second was not clobbered by the filename parse.
         Assert.Equal(5, (await db.Entities.FindAsync([firstEpisodeId]))!.SortOrder);
         Assert.Equal(6, (await db.Entities.FindAsync([secondEpisodeId]))!.SortOrder);
-        // Both owners were backfilled with their library-root association.
-        Assert.NotNull(await db.VideoDetails.FindAsync([firstEpisodeId]));
-        Assert.NotNull(await db.VideoDetails.FindAsync([secondEpisodeId]));
+        // Both owners retain their direct source association without legacy VideoDetail rows.
+        Assert.NotNull(await db.EntityLibraryRoots.FindAsync([firstEpisodeId]));
+        Assert.NotNull(await db.EntityLibraryRoots.FindAsync([secondEpisodeId]));
     }
 
     [Fact]
@@ -1124,7 +1166,8 @@ public sealed class LibraryScanPersistenceServiceTests {
                 discoveredPath,
                 "Arrival",
                 rootId,
-                IsNsfw: false)
+                IsNsfw: false,
+                ScanPlacement: PlayableVideoScanPlacement.Standalone)
         ], CancellationToken.None);
 
         Assert.Equal(videoId, Assert.Single(ids));
@@ -1158,12 +1201,10 @@ public sealed class LibraryScanPersistenceServiceTests {
                 CreatedAt = now,
                 UpdatedAt = now
             });
-        db.EntityFiles.Add(new EntityFileRow {
-            Id = Guid.NewGuid(),
+        db.EntitySources.Add(new EntitySourceRow {
             EntityId = seriesId,
-            Role = EntityFileRole.Source,
-            Path = "/media/The Chair Company",
-            CreatedAt = now,
+            Code = EntitySourceCode.Folder.ToCode(),
+            Value = "/media/The Chair Company",
             UpdatedAt = now
         });
         await db.SaveChangesAsync();
@@ -1175,6 +1216,7 @@ public sealed class LibraryScanPersistenceServiceTests {
                 "The man upstairs",
                 rootId,
                 IsNsfw: false,
+                ScanPlacement: PlayableVideoScanPlacement.Episode,
                 new VideoSeriesScanInfo("/media/The Chair Company", "The Chair Company"),
                 new VideoSeasonScanInfo("/media/The Chair Company/Season 1", "Season 1", 1),
                 EpisodeNumber: 2,
@@ -1190,7 +1232,7 @@ public sealed class LibraryScanPersistenceServiceTests {
     }
 
     [Fact]
-    public async Task UpsertVideosBatchMaterializesMovieHierarchy() {
+    public async Task UpsertVideosBatchMaterializesMovieAsTheDirectPlayableSourceOwner() {
         await using var db = CreateContext();
         var rootId = Guid.Parse("33333333-3333-3333-3333-333333333333");
         var service = new LibraryScanPersistenceService(db);
@@ -1201,6 +1243,7 @@ public sealed class LibraryScanPersistenceServiceTests {
                 "Friendship",
                 rootId,
                 IsNsfw: false,
+                ScanPlacement: PlayableVideoScanPlacement.Movie,
                 Metadata: new VideoSidecarMetadata {
                     Title = "Friendship",
                     Description = "Movie description",
@@ -1212,79 +1255,71 @@ public sealed class LibraryScanPersistenceServiceTests {
                 Movie: new MovieScanInfo("/media/Friendship", "Friendship"))
         ], CancellationToken.None);
 
-        var videoId = Assert.Single(ids);
+        var movieId = Assert.Single(ids);
         var movie = Assert.Single(db.Entities.Where(entity => entity.KindCode == EntityKind.Movie.ToCode()));
+        Assert.Equal(movieId, movie.Id);
         Assert.Equal("Friendship", movie.Title);
         Assert.False(movie.IsNsfw);
-
-        var video = await db.Entities.SingleAsync(entity => entity.Id == videoId);
-        Assert.Equal(movie.Id, video.ParentEntityId);
-        Assert.Equal(0, video.SortOrder);
         Assert.Contains(db.EntityFiles, file =>
             file.EntityId == movie.Id &&
             file.Role == EntityFileRole.Source &&
-            file.Path == "/media/Friendship");
+            file.Path == "/media/Friendship/Friendship.mp4");
+        Assert.DoesNotContain(db.Entities, entity =>
+            entity.KindCode == EntityKind.Video.ToCode() && entity.ParentEntityId == movie.Id);
         Assert.Contains(db.EntitySources, source =>
             source.EntityId == movie.Id &&
-            source.Code == "folder" &&
+            source.Code == EntitySourceCode.Folder.ToCode() &&
             source.Value == "/media/Friendship");
         Assert.Equal("Movie description", (await db.EntityDescriptions.FindAsync([movie.Id]))?.Value);
         Assert.False(db.UserEntityStates.Any(state => state.EntityId == movie.Id));
         Assert.Contains(db.EntityDates, date =>
             date.EntityId == movie.Id &&
-            date.Code == "release" &&
+            date.Code == EntityDateType.Release.ToCode() &&
             date.Value == "2025-05-09");
         Assert.Contains(db.EntityRelationshipLinks, relationship =>
             relationship.EntityId == movie.Id &&
-            relationship.RelationshipCode == "studio");
+            relationship.RelationshipCode == RelationshipKind.Studio.ToCode());
         Assert.Contains(db.EntityRelationshipLinks, relationship =>
             relationship.EntityId == movie.Id &&
-            relationship.RelationshipCode == "tags");
+            relationship.RelationshipCode == RelationshipKind.Tags.ToCode());
         Assert.Equal(2, db.EntityRelationshipLinks.Count(relationship =>
             relationship.EntityId == movie.Id &&
-            relationship.RelationshipCode == "cast" &&
+            relationship.RelationshipCode == RelationshipKind.Cast.ToCode() &&
             relationship.MetadataJson!.Contains("performer")));
     }
 
     [Fact]
-    public async Task UpsertVideosBatchClearsMovieParentWhenFileNoLongerClassifiesAsMovie() {
+    public async Task UpsertVideosBatchMaterializesStandaloneVideoWithoutAParent() {
         await using var db = CreateContext();
         var rootId = Guid.Parse("55555555-5555-5555-5555-555555555555");
-        var movieId = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
-        var videoId = Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb");
-        SeedSourceEntity(db, movieId, EntityKind.Movie.ToCode(), "/media/Friendship");
-        SeedSourceEntity(db, videoId, EntityKind.Video.ToCode(), "/media/Friendship/Friendship.mp4", movieId, 0);
-        db.EntityLibraryRoots.Add(new EntityLibraryRootRow { EntityId = videoId, LibraryRootId = rootId  });
-        await db.SaveChangesAsync();
-
         var service = new LibraryScanPersistenceService(db);
         var ids = await service.UpsertVideosBatchAsync([
             new VideoUpsertItem(
                 "/media/Friendship/Friendship.mp4",
                 "Friendship",
                 rootId,
-                IsNsfw: false)
+                IsNsfw: false,
+                ScanPlacement: PlayableVideoScanPlacement.Standalone)
         ], CancellationToken.None);
 
-        Assert.Equal(videoId, Assert.Single(ids));
-        var video = await db.Entities.FindAsync([videoId]);
+        var video = await db.Entities.FindAsync([Assert.Single(ids)]);
+        Assert.Equal(EntityKind.Video.ToCode(), video?.KindCode);
         Assert.Null(video?.ParentEntityId);
         Assert.Null(video?.SortOrder);
     }
 
     [Fact]
-    public async Task RemoveStaleMoviesByRootRemovesMissingMovieShells() {
+    public async Task RemoveStaleMoviesByRootUsesFolderProvenanceWithoutProxyChildren() {
         await using var db = CreateContext();
         var rootId = Guid.Parse("44444444-4444-4444-4444-444444444444");
         var staleMovieId = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
-        var staleVideoId = Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb");
         var keepMovieId = Guid.Parse("cccccccc-cccc-cccc-cccc-cccccccccccc");
-        var keepVideoId = Guid.Parse("dddddddd-dddd-dddd-dddd-dddddddddddd");
         SeedLibraryRoot(db, rootId, "/media/videos");
-        SeedSourceEntity(db, staleMovieId, EntityKind.Movie.ToCode(), "/media/videos/Stale");
-        SeedSourceEntity(db, staleVideoId, EntityKind.Video.ToCode(), "/media/videos/Stale/Stale.mp4", staleMovieId, 0);
-        SeedSourceEntity(db, keepMovieId, EntityKind.Movie.ToCode(), "/media/videos/Keep");
-        SeedSourceEntity(db, keepVideoId, EntityKind.Video.ToCode(), "/media/videos/Keep/Keep.mp4", keepMovieId, 0);
+        SeedSourceEntity(db, staleMovieId, EntityKind.Movie.ToCode(), "/media/videos/Stale/Stale.mp4");
+        SeedSourceEntity(db, keepMovieId, EntityKind.Movie.ToCode(), "/media/videos/Keep/Keep.mp4");
+        db.EntitySources.AddRange(
+            new EntitySourceRow { EntityId = staleMovieId, Code = EntitySourceCode.Folder.ToCode(), Value = "/media/videos/Stale", UpdatedAt = DateTimeOffset.UtcNow },
+            new EntitySourceRow { EntityId = keepMovieId, Code = EntitySourceCode.Folder.ToCode(), Value = "/media/videos/Keep", UpdatedAt = DateTimeOffset.UtcNow });
         await db.SaveChangesAsync();
 
         var service = new LibraryScanPersistenceService(db);
@@ -1295,10 +1330,7 @@ public sealed class LibraryScanPersistenceServiceTests {
 
         Assert.Equal(1, removed);
         Assert.False(await db.Entities.AnyAsync(entity => entity.Id == staleMovieId));
-        Assert.True(await db.Entities.AnyAsync(entity => entity.Id == staleVideoId));
-        Assert.Null((await db.Entities.FindAsync([staleVideoId]))?.ParentEntityId);
         Assert.True(await db.Entities.AnyAsync(entity => entity.Id == keepMovieId));
-        Assert.True(await db.Entities.AnyAsync(entity => entity.Id == keepVideoId));
     }
 
     [Fact]
@@ -1323,11 +1355,11 @@ public sealed class LibraryScanPersistenceServiceTests {
         var removed = await new LibraryScanPersistenceService(db)
             .RemoveOrphanSeriesAndSeasonsAsync(CancellationToken.None);
 
-        Assert.Equal(3, removed);
+        Assert.Equal(2, removed);
         Assert.True(await db.Entities.AnyAsync(entity => entity.Id == wantedMovieId));
         Assert.True(await db.Entities.AnyAsync(entity => entity.Id == wantedSeasonId));
         Assert.True(await db.Entities.AnyAsync(entity => entity.Id == wantedSeriesId));
-        Assert.False(await db.Entities.AnyAsync(entity => entity.Id == orphanMovieId));
+        Assert.True(await db.Entities.AnyAsync(entity => entity.Id == orphanMovieId));
         Assert.False(await db.Entities.AnyAsync(entity => entity.Id == orphanSeasonId));
         Assert.False(await db.Entities.AnyAsync(entity => entity.Id == orphanSeriesId));
     }
@@ -1355,9 +1387,9 @@ public sealed class LibraryScanPersistenceServiceTests {
         var removed = await new LibraryScanPersistenceService(db)
             .RemoveOrphanSeriesAndSeasonsAsync(CancellationToken.None);
 
-        Assert.Equal(1, removed);
+        Assert.Equal(0, removed);
         Assert.True(await db.Entities.AnyAsync(entity => entity.Id == monitoredMovieId));
-        Assert.False(await db.Entities.AnyAsync(entity => entity.Id == orphanMovieId));
+        Assert.True(await db.Entities.AnyAsync(entity => entity.Id == orphanMovieId));
     }
 
     [Fact]
@@ -1409,7 +1441,7 @@ public sealed class LibraryScanPersistenceServiceTests {
         await db.SaveChangesAsync();
 
         var service = new LibraryScanPersistenceService(db);
-        var removed = await service.RemoveStaleVideosByRootAsync(rootId, new HashSet<string>(), CancellationToken.None);
+        var removed = await service.RemoveStalePlayableVideosByRootAsync(rootId, new HashSet<string>(), CancellationToken.None);
 
         Assert.Equal(1, removed);
         Assert.False(await db.Entities.AnyAsync(entity => entity.Id == videoId));

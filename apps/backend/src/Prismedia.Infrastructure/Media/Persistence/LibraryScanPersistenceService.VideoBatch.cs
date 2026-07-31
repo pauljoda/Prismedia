@@ -23,7 +23,7 @@ public sealed partial class LibraryScanPersistenceService {
         return Task.CompletedTask;
     }
 
-    public async Task<IReadOnlyList<VideoSourceOwner>> ListVideoSourceOwnersAsync(
+    public async Task<IReadOnlyList<PlayableVideoSourceOwner>> ListPlayableVideoSourceOwnersAsync(
         IReadOnlyCollection<string> filePaths,
         CancellationToken cancellationToken) {
         if (filePaths.Count == 0) {
@@ -32,26 +32,45 @@ public sealed partial class LibraryScanPersistenceService {
 
         var paths = filePaths.Distinct(FileSystemPathComparison.Comparer).ToArray();
         var pathLengths = paths.Select(path => path.Length).Distinct().ToArray();
+        var playableCodes = EntityKindRegistry.All
+            .OfType<IPlayableVideoKindDefinition>()
+            .Select(definition => definition.Kind.ToCode())
+            .ToArray();
         var candidates = await _db.EntityFiles.AsNoTracking()
             .Where(file => file.Role == EntityFileRole.Source &&
                 pathLengths.Contains(file.Path.Length))
             .Join(
                 _db.Entities.AsNoTracking()
-                    .Where(entity => entity.KindCode == EntityKind.Video.ToCode()),
+                    .Where(entity => playableCodes.Contains(entity.KindCode)),
                 file => file.EntityId,
                 entity => entity.Id,
-                (file, _) => new VideoSourceOwner(file.EntityId, file.Path))
+                (file, entity) => new { file.EntityId, file.Path, entity.KindCode })
             .ToArrayAsync(cancellationToken);
-        return candidates.Where(owner => paths.Contains(owner.FilePath, FileSystemPathComparison.Comparer)).ToArray();
+        return candidates
+            .Where(owner => paths.Contains(owner.Path, FileSystemPathComparison.Comparer))
+            .Select(owner => new PlayableVideoSourceOwner(
+                owner.EntityId,
+                owner.Path,
+                EntityKindRegistry.Require(owner.KindCode)))
+            .ToArray();
     }
 
-    public async Task<IReadOnlyList<Guid>> RebindVideoSourceAsync(
+    public async Task<IReadOnlyList<Guid>> RebindPlayableVideoSourceAsync(
         string previousPath,
         string replacementPath,
         CancellationToken cancellationToken) {
+        var playableCodes = EntityKindRegistry.All
+            .OfType<IPlayableVideoKindDefinition>()
+            .Select(definition => definition.Kind.ToCode())
+            .ToArray();
         var previousOwnerCandidates = await _db.EntityFiles
             .Where(file => file.Role == EntityFileRole.Source
                 && file.Path.Length == previousPath.Length)
+            .Join(
+                _db.Entities.Where(entity => playableCodes.Contains(entity.KindCode)),
+                file => file.EntityId,
+                entity => entity.Id,
+                (file, _) => file)
             .ToArrayAsync(cancellationToken);
         var previousOwners = previousOwnerCandidates
             .Where(file => FileSystemPathComparison.Equals(file.Path, previousPath))
@@ -66,6 +85,11 @@ public sealed partial class LibraryScanPersistenceService {
                 .Where(file => file.Role == EntityFileRole.Source
                     && file.Path.Length == replacementPath.Length
                     && !ownerIds.Contains(file.EntityId))
+                .Join(
+                    _db.Entities.AsNoTracking().Where(entity => playableCodes.Contains(entity.KindCode)),
+                    file => file.EntityId,
+                    entity => entity.Id,
+                    (file, _) => file)
                 .Select(file => file.Path)
                 .ToArrayAsync(cancellationToken);
             var conflictingOwner = replacementCandidates.Any(path =>
@@ -175,6 +199,9 @@ public sealed partial class LibraryScanPersistenceService {
             .Distinct(FileSystemPathComparison.Comparer)
             .ToArray();
         var filePathLengths = filePaths.Select(path => path.Length).Distinct().ToArray();
+        var itemCountsByPath = items
+            .GroupBy(item => item.FilePath, FileSystemPathComparison.Comparer)
+            .ToDictionary(group => group.Key, group => group.Count(), FileSystemPathComparison.Comparer);
         var movieCache = new Dictionary<string, Guid>(FileSystemPathComparison.Comparer);
         var seriesCache = new Dictionary<string, Guid>(FileSystemPathComparison.Comparer);
         var seasonCache = new Dictionary<(Guid SeriesId, int SeasonNumber), Guid>();
@@ -187,66 +214,97 @@ public sealed partial class LibraryScanPersistenceService {
             .Where(f => f.Role == EntityFileRole.Source
                 && filePathLengths.Contains(f.Path.Length))
             .Join(_db.Entities, f => f.EntityId, e => e.Id,
-                (f, e) => new { f.Path, e.Id, Entity = e })
+                (f, e) => new ExistingPlayableSourceOwner(f.Path, e.Id, e.KindCode, e.CreatedAt, e.SortOrder))
             .ToListAsync(cancellationToken))
             .Where(row => filePaths.Contains(row.Path, FileSystemPathComparison.Comparer))
             .GroupBy(x => x.Path, FileSystemPathComparison.Comparer)
             .ToDictionary(
                 g => g.Key,
-                g => g.OrderBy(x => x.Entity.CreatedAt).ThenBy(x => x.Id).ToList(),
+                g => g.OrderBy(x => x.CreatedAt).ThenBy(x => x.Id).ToList(),
                 FileSystemPathComparison.Comparer);
 
         var now = DateTimeOffset.UtcNow;
         var results = new List<Guid>(items.Count);
 
         foreach (var item in items) {
-            if (existingEntities.TryGetValue(item.FilePath, out var owners)) {
-                foreach (var existing in owners) {
-                    var tracked = await _db.Entities.FindAsync([existing.Id], cancellationToken);
-                    if (tracked is not null) tracked.UpdatedAt = now;
-                    // A found video may predate its shared attachments (a request-created wanted episode binds the
-                    // file path before this upsert) — backfill so it carries its library-root association.
-                    if (await _db.VideoDetails.FindAsync([existing.Id], cancellationToken) is null) {
-                        _db.VideoDetails.Add(new VideoDetailRow { EntityId = existing.Id });
-                    }
-                    await SetEntityLibraryRootAsync(existing.Id, item.LibraryRootId, cancellationToken);
+            Guid? movieId = null;
+            if (item.ScanPlacement == PlayableVideoScanPlacement.Movie) {
+                if (item.Movie is not { } movie) {
+                    throw new InvalidOperationException("Movie scan placement requires movie folder context.");
                 }
-                if (owners.Count == 1) {
-                    await MaterializeVideoHierarchyAsync(
-                        owners[0].Id,
-                        item,
-                        now,
-                        movieCache,
-                        seriesCache,
-                        seasonCache,
-                        cancellationToken);
-                }
-                // A shared file's episodes keep their provider-bound hierarchy: one filename cannot
-                // describe two episodes, so re-materializing from its parse would clobber the second
-                // episode's position and sort order with the first's.
-                // Results are positional (one id per item) — report the file under its first owner.
-                results.Add(owners[0].Id);
-                continue;
+
+                movieId = await ResolveMovieFromScanAsync(
+                    movie,
+                    item.Metadata,
+                    item.IsNsfw,
+                    now,
+                    movieCache,
+                    cancellationToken);
             }
 
-            var id = Guid.NewGuid();
-            _db.Entities.Add(new EntityRow { Id = id, KindCode = EntityKind.Video.ToCode(), Title = item.Title, IsNsfw = item.IsNsfw, CreatedAt = now, UpdatedAt = now });
-            _db.VideoDetails.Add(new VideoDetailRow { EntityId = id });
-            _db.EntityLibraryRoots.Add(new EntityLibraryRootRow { EntityId = id, LibraryRootId = item.LibraryRootId });
-            _db.EntityFiles.Add(new EntityFileRow {
-                Id = Guid.NewGuid(),
-                EntityId = id,
-                Role = EntityFileRole.Source,
-                Path = item.FilePath,
-                SizeBytes = LibraryScanFileSystem.TryGetFileSize(item.FilePath),
-                CreatedAt = now,
-                UpdatedAt = now
-            });
-            await MaterializeVideoHierarchyAsync(
+            if (existingEntities.TryGetValue(item.FilePath, out var owners)) {
+                var expectedOwners = owners
+                    .Where(owner => owner.KindCode == item.MaterializedKind.ToCode())
+                    .ToArray();
+                var ownerIds = movieId is { } resolvedMovieId
+                    ? [resolvedMovieId]
+                    : ResolveExistingOwnerIds(item, expectedOwners, itemCountsByPath[item.FilePath]);
+                if (ownerIds.Length == 0) {
+                    // A physical file can legitimately satisfy several episode positions. A row of a
+                    // different direct playable kind is not a substitute for this item's identity.
+                    ownerIds = [];
+                }
+
+                if (ownerIds.Length > 0) {
+                    foreach (var ownerId in ownerIds) {
+                        var tracked = await _db.Entities.FindAsync([ownerId], cancellationToken);
+                        if (tracked is not null) tracked.UpdatedAt = now;
+                        await EnsureEntityFileAsync(
+                            ownerId,
+                            EntityFileRole.Source,
+                            item.FilePath,
+                            LibraryScanFileSystem.TryGetFileSize(item.FilePath),
+                            now,
+                            cancellationToken);
+                        await SetEntityLibraryRootAsync(ownerId, item.LibraryRootId, cancellationToken);
+                    }
+                    if (ownerIds.Length == 1) {
+                        await MaterializePlayableStructureAsync(
+                            ownerIds[0],
+                            item,
+                            now,
+                            seriesCache,
+                            seasonCache,
+                            cancellationToken);
+                    }
+                    results.Add(ownerIds[0]);
+                    continue;
+                }
+            }
+
+            var id = movieId ?? Guid.NewGuid();
+            if (movieId is null) {
+                _db.Entities.Add(new EntityRow {
+                    Id = id,
+                    KindCode = item.MaterializedKind.ToCode(),
+                    Title = item.Title,
+                    IsNsfw = item.IsNsfw,
+                    CreatedAt = now,
+                    UpdatedAt = now
+                });
+            }
+            await SetEntityLibraryRootAsync(id, item.LibraryRootId, cancellationToken);
+            await EnsureEntityFileAsync(
+                id,
+                EntityFileRole.Source,
+                item.FilePath,
+                LibraryScanFileSystem.TryGetFileSize(item.FilePath),
+                now,
+                cancellationToken);
+            await MaterializePlayableStructureAsync(
                 id,
                 item,
                 now,
-                movieCache,
                 seriesCache,
                 seasonCache,
                 cancellationToken);
@@ -257,53 +315,93 @@ public sealed partial class LibraryScanPersistenceService {
         return results;
     }
 
-    private async Task MaterializeVideoHierarchyAsync(
-        Guid videoId,
+    private static Guid[] ResolveExistingOwnerIds(
+        VideoUpsertItem item,
+        IReadOnlyList<ExistingPlayableSourceOwner> expectedOwners,
+        int itemsForSourcePath) {
+        if (item.ScanPlacement != PlayableVideoScanPlacement.Episode ||
+            itemsForSourcePath == 1 ||
+            expectedOwners.Count <= 1) {
+            return expectedOwners.Select(owner => (Guid)owner.Id).ToArray();
+        }
+
+        var matches = expectedOwners
+            .Where(owner => owner.SortOrder == item.StructuralSortOrder)
+            .Select(owner => owner.Id)
+            .ToArray();
+        if (matches.Length <= 1) {
+            return matches;
+        }
+
+        throw new InvalidOperationException(
+            $"Cannot rescan multi-episode source '{item.FilePath}' because multiple '{item.MaterializedKind.ToCode()}' owners share structural order {item.StructuralSortOrder}.");
+    }
+
+    private sealed record ExistingPlayableSourceOwner(
+        string Path,
+        Guid Id,
+        string KindCode,
+        DateTimeOffset CreatedAt,
+        int? SortOrder);
+
+    private async Task MaterializePlayableStructureAsync(
+        Guid entityId,
         VideoUpsertItem item,
         DateTimeOffset now,
-        Dictionary<string, Guid> movieCache,
         Dictionary<string, Guid> seriesCache,
         Dictionary<(Guid SeriesId, int SeasonNumber), Guid> seasonCache,
         CancellationToken cancellationToken) {
+        switch (item.ScanPlacement) {
+            case PlayableVideoScanPlacement.Movie:
+                if (item.Movie is not { } movie) {
+                    throw new InvalidOperationException("Movie scan placement requires movie folder context.");
+                }
+                await EnsureEntitySourceAsync(entityId, EntitySourceCode.Folder.ToCode(), movie.FolderPath, now, cancellationToken);
+                await ClearStructuralChildLinkAsync(entityId, now, cancellationToken);
+                return;
+
+            case PlayableVideoScanPlacement.Standalone:
+                await ClearStructuralChildLinkAsync(entityId, now, cancellationToken);
+                return;
+
+            case PlayableVideoScanPlacement.Episode:
+                await MaterializeEpisodeStructureAsync(
+                    entityId, item, now, seriesCache, seasonCache, cancellationToken);
+                return;
+
+            default:
+                throw new ArgumentOutOfRangeException(nameof(item), item.ScanPlacement, "Unsupported playable scan placement.");
+        }
+    }
+
+    private async Task MaterializeEpisodeStructureAsync(
+        Guid entityId,
+        VideoUpsertItem item,
+        DateTimeOffset now,
+        Dictionary<string, Guid> seriesCache,
+        Dictionary<(Guid SeriesId, int SeasonNumber), Guid> seasonCache,
+        CancellationToken cancellationToken) {
+        if (item.Series is not { } series) {
+            throw new InvalidOperationException("Episode scan placement requires series context.");
+        }
+
         if (item.EpisodeNumber is { } episodeNumber) {
-            await UpsertPositionAsync(videoId, EntityPositionCodes.Episode, episodeNumber, episodeNumber.ToString(), now, cancellationToken);
+            await UpsertPositionAsync(entityId, EntityPositionCodes.Episode, episodeNumber, episodeNumber.ToString(), now, cancellationToken);
         }
 
         if (item.AbsoluteEpisodeNumber is { } absoluteEpisodeNumber) {
-            await UpsertPositionAsync(videoId, EntityPositionCodes.AbsoluteEpisode, absoluteEpisodeNumber, absoluteEpisodeNumber.ToString(), now, cancellationToken);
-        }
-
-        if (item.Movie is { } movie) {
-            var movieId = await UpsertMovieFromScanAsync(
-                movie,
-                item.Metadata,
-                item.IsNsfw,
-                now,
-                movieCache,
-                cancellationToken);
-            await UpsertStructuralChildLinkAsync(
-                movieId,
-                videoId,
-                sortOrder: 0,
-                now,
-                cancellationToken);
-            return;
-        }
-
-        if (item.Series is null) {
-            await ClearStructuralChildLinkAsync(videoId, now, cancellationToken);
-            return;
+            await UpsertPositionAsync(entityId, EntityPositionCodes.AbsoluteEpisode, absoluteEpisodeNumber, absoluteEpisodeNumber.ToString(), now, cancellationToken);
         }
 
         var seriesId = await UpsertVideoSeriesFromScanAsync(
-            item.Series,
+            series,
             item.IsNsfw,
             now,
             seriesCache,
             cancellationToken);
 
         if (item.Season is { } season) {
-            await UpsertPositionAsync(videoId, EntityPositionCodes.Season, season.SeasonNumber, season.SeasonNumber.ToString(), now, cancellationToken);
+            await UpsertPositionAsync(entityId, EntityPositionCodes.Season, season.SeasonNumber, season.SeasonNumber.ToString(), now, cancellationToken);
             var seasonId = await UpsertVideoSeasonFromScanAsync(
                 seriesId,
                 season,
@@ -312,25 +410,15 @@ public sealed partial class LibraryScanPersistenceService {
                 seasonCache,
                 cancellationToken);
             var episodeSortOrder = item.EpisodeNumber ?? item.AbsoluteEpisodeNumber ?? 0;
-            await UpsertStructuralChildLinkAsync(
-                seasonId,
-                videoId,
-                episodeSortOrder,
-                now,
-                cancellationToken);
+            await UpsertStructuralChildLinkAsync(seasonId, entityId, episodeSortOrder, now, cancellationToken);
             return;
         }
 
         var sortOrder = item.EpisodeNumber ?? item.AbsoluteEpisodeNumber ?? item.FolderSortOrder ?? 0;
-        await UpsertStructuralChildLinkAsync(
-            seriesId,
-            videoId,
-            sortOrder,
-            now,
-            cancellationToken);
+        await UpsertStructuralChildLinkAsync(seriesId, entityId, sortOrder, now, cancellationToken);
     }
 
-    private async Task<Guid> UpsertMovieFromScanAsync(
+    private async Task<Guid> ResolveMovieFromScanAsync(
         MovieScanInfo movie,
         VideoSidecarMetadata? metadata,
         bool isNsfw,
@@ -341,8 +429,8 @@ public sealed partial class LibraryScanPersistenceService {
             return cachedMovieId;
         }
 
-        var existing = await FindEntityBySourcePath(EntityKind.Movie.ToCode(), movie.FolderPath, cancellationToken)
-            ?? await FindEntityBySourceValueAsync(EntityKind.Movie.ToCode(), "folder", movie.FolderPath, cancellationToken);
+        var existing = await FindEntityBySourceValueAsync(
+            EntityKind.Movie.ToCode(), EntitySourceCode.Folder.ToCode(), movie.FolderPath, cancellationToken);
         var movieId = existing?.Id ?? Guid.NewGuid();
 
         if (existing is null) {
@@ -363,10 +451,8 @@ public sealed partial class LibraryScanPersistenceService {
             }
         }
 
-        await EnsureEntityFileAsync(movieId, EntityFileRole.Source, movie.FolderPath, sizeBytes: null, now, cancellationToken);
-        await EnsureEntitySourceAsync(movieId, "folder", movie.FolderPath, now, cancellationToken);
+        await EnsureEntitySourceAsync(movieId, EntitySourceCode.Folder.ToCode(), movie.FolderPath, now, cancellationToken);
         await ApplyMovieSidecarMetadataAsync(movieId, metadata, isNsfw, now, cancellationToken);
-
         movieCache[movie.FolderPath] = movieId;
         return movieId;
     }
@@ -406,8 +492,8 @@ public sealed partial class LibraryScanPersistenceService {
             return cachedSeriesId;
         }
 
-        var existing = await FindEntityBySourcePath(EntityKind.VideoSeries.ToCode(), series.FolderPath, cancellationToken)
-            ?? await FindEntityBySourceValueAsync(EntityKind.VideoSeries.ToCode(), "folder", series.FolderPath, cancellationToken);
+        var existing = await FindEntityBySourceValueAsync(
+            EntityKind.VideoSeries.ToCode(), EntitySourceCode.Folder.ToCode(), series.FolderPath, cancellationToken);
         var seriesId = existing?.Id ?? Guid.NewGuid();
 
         if (existing is null) {
@@ -427,8 +513,7 @@ public sealed partial class LibraryScanPersistenceService {
             }
         }
 
-        await EnsureEntityFileAsync(seriesId, EntityFileRole.Source, series.FolderPath, sizeBytes: null, now, cancellationToken);
-        await EnsureEntitySourceAsync(seriesId, "folder", series.FolderPath, now, cancellationToken);
+        await EnsureEntitySourceAsync(seriesId, EntitySourceCode.Folder.ToCode(), series.FolderPath, now, cancellationToken);
         await EnsureVideoSeriesDetailAsync(seriesId, cancellationToken);
 
         seriesCache[series.FolderPath] = seriesId;
@@ -484,8 +569,7 @@ public sealed partial class LibraryScanPersistenceService {
             }
         }
 
-        await EnsureEntityFileAsync(seasonId, EntityFileRole.Source, season.FolderPath, sizeBytes: null, now, cancellationToken);
-        await EnsureEntitySourceAsync(seasonId, "folder", season.FolderPath, now, cancellationToken);
+        await EnsureEntitySourceAsync(seasonId, EntitySourceCode.Folder.ToCode(), season.FolderPath, now, cancellationToken);
         await UpsertPositionAsync(seasonId, EntityPositionCodes.Season, season.SeasonNumber, season.SeasonNumber.ToString(), now, cancellationToken);
         await UpsertStructuralChildLinkAsync(
             seriesId,

@@ -272,14 +272,7 @@ public sealed class RefreshEntityJobHandlerTests {
         public Task<bool> HasSubtitlesExtractedAsync(Guid entityId, CancellationToken cancellationToken) =>
             throw new NotSupportedException();
 
-        public Task<Guid> UpsertVideoAsync(
-            string filePath,
-            string title,
-            Guid libraryRootId,
-            bool isNsfw,
-            CancellationToken cancellationToken) => throw new NotSupportedException();
-
-        public Task<int> RemoveStaleVideosByRootAsync(
+        public Task<int> RemoveStalePlayableVideosByRootAsync(
             Guid rootId,
             IReadOnlySet<string> validPaths,
             CancellationToken cancellationToken) => throw new NotSupportedException();
@@ -299,7 +292,7 @@ public sealed class RefreshEntityJobHandlerTests {
         public Task DiscardPendingScanChangesAsync(CancellationToken cancellationToken) =>
             throw new NotSupportedException();
 
-        public Task<IReadOnlyList<VideoRecoveryTarget>> GetVideoRecoveryTargetsInRootAsync(
+        public Task<IReadOnlyList<PlayableVideoRecoveryTarget>> GetPlayableVideoRecoveryTargetsInRootAsync(
             Guid rootId,
             CancellationToken cancellationToken) => throw new NotSupportedException();
 

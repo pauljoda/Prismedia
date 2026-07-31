@@ -46,7 +46,7 @@ public sealed class ImportedVideoMaterializer(
             if (!string.IsNullOrWhiteSpace(episode.PreviousFilePath)) {
                 var previousFilePath = Path.GetFullPath(episode.PreviousFilePath);
                 replacementPaths.Add(filePath);
-                foreach (var ownerId in await videos.RebindVideoSourceAsync(
+                foreach (var ownerId in await videos.RebindPlayableVideoSourceAsync(
                              previousFilePath,
                              filePath,
                              cancellationToken)) {
@@ -62,7 +62,8 @@ public sealed class ImportedVideoMaterializer(
                 request.Root.IsNsfw,
                 Series: new VideoSeriesScanInfo(seriesFolder, Path.GetFileName(seriesFolder)),
                 Season: new VideoSeasonScanInfo(seasonFolder, Path.GetFileName(seasonFolder), episode.SeasonNumber),
-                EpisodeNumber: episode.EpisodeNumber);
+                EpisodeNumber: episode.EpisodeNumber,
+                ScanPlacement: PlayableVideoScanPlacement.Episode);
             await VideoWantedBinding.BindAsync(
                 acquisitionHints,
                 item,
@@ -70,7 +71,7 @@ public sealed class ImportedVideoMaterializer(
                 request.AcquisitionId);
             foreach (var coveredEpisode in episode.CoveredEpisodeNumbers) {
                 if (await acquisitionHints.BindWantedChildBySortOrderAsync(
-                    EntityKind.Video,
+                    EntityKind.VideoEpisode,
                     seasonFolder,
                     coveredEpisode,
                     filePath,
@@ -102,7 +103,7 @@ public sealed class ImportedVideoMaterializer(
         // several episode Entities. Reload every owner after the commit so every covered episode gets
         // downstream readiness work. This also recovers replacement owners on a retry after Rebind
         // committed but the first batch upsert failed.
-        foreach (var owner in await videos.ListVideoSourceOwnersAsync(
+        foreach (var owner in await videos.ListPlayableVideoSourceOwnersAsync(
                      items.Select(item => item.FilePath).ToArray(),
                      cancellationToken)) {
             var sourcePath = Path.GetFullPath(owner.FilePath);
@@ -115,7 +116,7 @@ public sealed class ImportedVideoMaterializer(
         if (maintenance is not null) {
             foreach (var ownerId in replacementOwnerIds) {
                 await maintenance.ClearGeneratedPreviewAssetsAsync(
-                    EntityKind.Video,
+                    EntityKind.VideoEpisode,
                     ownerId,
                     cancellationToken);
             }
@@ -150,7 +151,7 @@ public sealed class ImportedVideoMaterializer(
             entityIds.Count,
             seriesFolder);
         return new ImportedEntityMaterializationResult(
-            readyEntityIds.Select(entityId => new ImportedEntityReference(entityId, EntityKind.Video)).ToArray(),
+            readyEntityIds.Select(entityId => new ImportedEntityReference(entityId, EntityKind.VideoEpisode)).ToArray(),
             touchedAncestors.ToArray(),
             items.Select(item => item.FilePath).ToArray(),
             request.Episodes

@@ -42,7 +42,7 @@ internal static class VideoWantedBinding {
                 cancellationToken);
             if (item.EpisodeNumber is { } episodeNumber) {
                 await acquisitionHints.BindWantedChildBySortOrderAsync(
-                    EntityKind.Video,
+                    EntityKind.VideoEpisode,
                     seasonInfo.FolderPath,
                     episodeNumber,
                     item.FilePath,
@@ -52,7 +52,7 @@ internal static class VideoWantedBinding {
 
         // A single-episode acquisition can key its hint to the exact file rather than its season.
         await acquisitionHints.BindWantedEntityAsync(
-            EntityKind.Video, item.FilePath, cancellationToken, acquisitionId, requireExactPath: true);
+            EntityKind.VideoEpisode, item.FilePath, cancellationToken, acquisitionId, requireExactPath: true);
     }
 }
 

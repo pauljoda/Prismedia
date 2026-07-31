@@ -104,9 +104,9 @@ public sealed class ScanJobHandlerTests {
                 ThumbnailQuality: 2,
                 TrickplayQuality: 2),
             UpsertedVideoIds = [firstOwner],
-            VideoSourceOwners = [
-                new VideoSourceOwner(firstOwner, sourcePath),
-                new VideoSourceOwner(secondOwner, sourcePath)
+            PlayableVideoSourceOwners = [
+                new PlayableVideoSourceOwner(firstOwner, sourcePath, EntityKind.Video),
+                new PlayableVideoSourceOwner(secondOwner, sourcePath, EntityKind.Video)
             ],
             DownstreamNeedsById = new Dictionary<Guid, DownstreamNeeds> {
                 [firstOwner] = needsSubtitles,
@@ -157,7 +157,7 @@ public sealed class ScanJobHandlerTests {
                 PreviewClipDurationSeconds: 8,
                 ThumbnailQuality: 2,
                 TrickplayQuality: 2),
-            ExistingVideoTargets = [new VideoRefreshSourceTarget(videoId, "Movie", sourcePath)],
+            ExistingVideoTargets = [new PlayableVideoRefreshSourceTarget(videoId, "Movie", sourcePath, EntityKind.Movie)],
             DownstreamNeedsById = new Dictionary<Guid, DownstreamNeeds> {
                 [videoId] = new(
                     NeedsProbe: false,
@@ -186,7 +186,7 @@ public sealed class ScanJobHandlerTests {
         var request = Assert.Single(queue.Enqueued);
         Assert.Equal(JobType.ExtractSubtitles, request.Type);
         Assert.Equal(videoId.ToString(), request.TargetEntityId);
-        Assert.Equal(1, persistence.VideoRecoveryTargetCalls);
+        Assert.Equal(1, persistence.PlayableVideoRecoveryTargetCalls);
         Assert.Equal(0, persistence.DownstreamNeedsChecks);
     }
 
@@ -2790,7 +2790,7 @@ public sealed class ScanJobHandlerTests {
         var videoId = Guid.NewGuid();
         var persistence = new FakeScanPersistence([root]) {
             UpsertedVideoIds = [videoId],
-            VideoSourceOwners = [new VideoSourceOwner(videoId, videoPath)]
+            PlayableVideoSourceOwners = [new PlayableVideoSourceOwner(videoId, videoPath, EntityKind.Video)]
         };
         var snapshots = new FakeScanSnapshotStore();
         snapshots.Seed(root.Id, JobType.ScanLibrary.ToCode(), [videoPath]);
@@ -2836,7 +2836,7 @@ public sealed class ScanJobHandlerTests {
         var persistence = new FakeScanPersistence([root]) {
             Settings = DisabledGeneratedWorkSettings,
             VideoUpsertException = new IOException("existing row could not be updated"),
-            VideoSourceOwners = [new VideoSourceOwner(videoId, videoPath)],
+            PlayableVideoSourceOwners = [new PlayableVideoSourceOwner(videoId, videoPath, EntityKind.Video)],
             DownstreamNeedsById = new Dictionary<Guid, DownstreamNeeds> {
                 [videoId] = new(
                     NeedsProbe: false,
@@ -3119,10 +3119,10 @@ public sealed class ScanJobHandlerTests {
             TrickplayQuality: 2);
         public IReadOnlyList<Guid> UpsertedVideoIds { get; init; } = [];
         public Exception? VideoUpsertException { get; init; }
-        public IReadOnlyList<VideoSourceOwner> VideoSourceOwners { get; init; } = [];
-        public IReadOnlyList<VideoRefreshSourceTarget> ExistingVideoTargets { get; init; } = [];
+        public IReadOnlyList<PlayableVideoSourceOwner> PlayableVideoSourceOwners { get; init; } = [];
+        public IReadOnlyList<PlayableVideoRefreshSourceTarget> ExistingVideoTargets { get; init; } = [];
         public List<VideoSubtitleSidecarState> InvalidatedSubtitleStates { get; } = [];
-        public int VideoRecoveryTargetCalls { get; private set; }
+        public int PlayableVideoRecoveryTargetCalls { get; private set; }
         public int DownstreamNeedsChecks { get; private set; }
         public bool HasTechnical { get; init; }
         public IReadOnlyList<EntityRefreshTarget> ExistingAudioTrackTargets { get; init; } = [];
@@ -3195,9 +3195,6 @@ public sealed class ScanJobHandlerTests {
 
         public Task<int> RemoveEntitiesOutsideLibraryRootsAsync(CancellationToken cancellationToken) =>
             Task.FromResult(0);
-
-        public Task<Guid> UpsertVideoAsync(string filePath, string title, Guid libraryRootId, bool isNsfw, CancellationToken cancellationToken) =>
-            throw new NotSupportedException();
 
         public Task<Guid> UpsertImageAsync(string filePath, string title, Guid? galleryEntityId, long? sizeBytes, int sortOrder, bool isNsfw, CancellationToken cancellationToken) {
             var id = IdFor($"image:{filePath}");
@@ -3396,7 +3393,7 @@ public sealed class ScanJobHandlerTests {
             return ids;
         }
 
-        public Task<int> RemoveStaleVideosByRootAsync(Guid rootId, IReadOnlySet<string> validPaths, CancellationToken cancellationToken) =>
+        public Task<int> RemoveStalePlayableVideosByRootAsync(Guid rootId, IReadOnlySet<string> validPaths, CancellationToken cancellationToken) =>
             Task.FromResult(0);
 
         public Task<int> RemoveStaleMoviesByRootAsync(Guid rootId, IReadOnlySet<string> validFolderPaths, CancellationToken cancellationToken) {
@@ -3475,10 +3472,10 @@ public sealed class ScanJobHandlerTests {
                 : Task.FromException<IReadOnlyList<Guid>>(VideoUpsertException);
         }
 
-        public Task<IReadOnlyList<VideoSourceOwner>> ListVideoSourceOwnersAsync(
+        public Task<IReadOnlyList<PlayableVideoSourceOwner>> ListPlayableVideoSourceOwnersAsync(
             IReadOnlyCollection<string> filePaths,
-            CancellationToken cancellationToken) => Task.FromResult<IReadOnlyList<VideoSourceOwner>>(
-                VideoSourceOwners
+            CancellationToken cancellationToken) => Task.FromResult<IReadOnlyList<PlayableVideoSourceOwner>>(
+                PlayableVideoSourceOwners
                     .Where(owner => filePaths.Contains(owner.FilePath, StringComparer.OrdinalIgnoreCase))
                     .ToArray());
 
@@ -3489,21 +3486,22 @@ public sealed class ScanJobHandlerTests {
             return Task.CompletedTask;
         }
 
-        public Task<IReadOnlyList<VideoRefreshSourceTarget>> GetVideoTargetsInRootAsync(
+        public Task<IReadOnlyList<PlayableVideoRefreshSourceTarget>> GetPlayableVideoTargetsInRootAsync(
             Guid rootId,
             CancellationToken cancellationToken) => Task.FromResult(ExistingVideoTargets);
 
-        public Task<IReadOnlyList<VideoRecoveryTarget>> GetVideoRecoveryTargetsInRootAsync(
+        public Task<IReadOnlyList<PlayableVideoRecoveryTarget>> GetPlayableVideoRecoveryTargetsInRootAsync(
             Guid rootId,
             CancellationToken cancellationToken) {
-            VideoRecoveryTargetCalls++;
-            return Task.FromResult<IReadOnlyList<VideoRecoveryTarget>>(ExistingVideoTargets
+            PlayableVideoRecoveryTargetCalls++;
+            return Task.FromResult<IReadOnlyList<PlayableVideoRecoveryTarget>>(ExistingVideoTargets
                 .Where(target => DownstreamNeedsById.ContainsKey(target.Id))
-                .Select(target => new VideoRecoveryTarget(
+                .Select(target => new PlayableVideoRecoveryTarget(
                     target.Id,
                     target.Title,
                     target.SourcePath,
-                    DownstreamNeedsById[target.Id]))
+                    DownstreamNeedsById[target.Id],
+                    target.Kind))
                 .ToArray());
         }
 

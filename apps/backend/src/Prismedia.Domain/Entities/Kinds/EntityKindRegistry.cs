@@ -23,6 +23,9 @@ public static class EntityKindRegistry {
     private static readonly IReadOnlyDictionary<Type, EntityKindDefinition> ByDefinitionType =
         Definitions.ToDictionary(definition => definition.GetType());
 
+    private static readonly IReadOnlyDictionary<PlayableVideoScanPlacement, IPlayableVideoKindDefinition>
+        PlayableVideoByScanPlacement = BuildPlayableVideoByScanPlacement(Definitions);
+
     /// <summary>All discovered entity-kind definitions in enum order.</summary>
     public static IReadOnlyList<EntityKindDefinition> All => Definitions;
 
@@ -40,6 +43,16 @@ public static class EntityKindRegistry {
             ? (TDefinition)definition
             : throw new InvalidOperationException(
                 $"Entity kind definition '{typeof(TDefinition).Name}' was not discovered.");
+
+    /// <summary>
+    /// Resolves the one directly playable Entity kind declared for a scan placement. Discovery
+    /// validates this mapping during startup, so scanner ingress cannot silently fall back to a
+    /// legacy generic video kind.
+    /// </summary>
+    public static EntityKind PlayableVideoKindFor(PlayableVideoScanPlacement placement) =>
+        PlayableVideoByScanPlacement.TryGetValue(placement, out var definition)
+            ? definition.Kind
+            : throw new ArgumentOutOfRangeException(nameof(placement), placement, "Unsupported playable scan placement.");
 
     /// <summary>
     /// Whether a stable kind code represents an identify container whose structural children
@@ -128,6 +141,22 @@ public static class EntityKindRegistry {
         ValidateStructurePolicies(definitions);
 
         return definitions;
+    }
+
+    private static IReadOnlyDictionary<PlayableVideoScanPlacement, IPlayableVideoKindDefinition>
+        BuildPlayableVideoByScanPlacement(IReadOnlyList<EntityKindDefinition> definitions) {
+        var playableDefinitions = definitions.OfType<IPlayableVideoKindDefinition>().ToArray();
+        var expectedPlacements = Enum.GetValues<PlayableVideoScanPlacement>();
+        var grouped = playableDefinitions.GroupBy(definition => definition.ScanPlacement).ToArray();
+        var duplicates = grouped.Where(group => group.Count() != 1).Select(group => group.Key).ToArray();
+        var missing = expectedPlacements.Except(grouped.Select(group => group.Key)).ToArray();
+        if (duplicates.Length > 0 || missing.Length > 0) {
+            throw new InvalidOperationException(
+                "Playable video scan placements must be declared exactly once. " +
+                $"Duplicate: [{string.Join(", ", duplicates)}]; missing: [{string.Join(", ", missing)}].");
+        }
+
+        return grouped.ToDictionary(group => group.Key, group => group.Single());
     }
 
     private static void ValidateLibraryVisibilityPolicies(IReadOnlyList<EntityKindDefinition> definitions) {

@@ -19,6 +19,7 @@ public sealed class VideoEntityKindDefinition() : PlayableVideoEntityKindDefinit
         EntityArtworkFit.Cover),
     new EntityKindNavigation(EntityKind.Video, "videos", "/videos", "/videos/{id}"),
     new EntityKindSearch(2),
+    PlayableVideoScanPlacement.Standalone,
     static root => new Video(root.Id, root.Title),
     identification: new(AutoIdentifySelectorKind.Video),
     manualAcquisition: EntityManualAcquisitionPolicy.UploadAndReplacement,
@@ -64,6 +65,7 @@ public sealed class VideoEpisodeEntityKindDefinition() : PlayableVideoEntityKind
         borrowArtworkFromParentKinds: [EntityKind.VideoSeries, EntityKind.VideoSeason]),
     new EntityKindNavigation(EntityKind.Video, "videos", "/videos", "/videos/{id}"),
     search: null,
+    scanPlacement: PlayableVideoScanPlacement.Episode,
     static root => new VideoEpisode(root.Id, root.Title, root.ParentEntityId, sortOrder: root.SortOrder),
     identification: new(
         AutoIdentifySelectorKind.Video,

@@ -261,6 +261,23 @@ public sealed partial class LibraryScanPersistenceService {
             .ToList();
     }
 
+    private async Task<List<Guid>> GetStaleEntityIdsBySourceValueAsync(
+        List<Guid> candidateIds,
+        EntitySourceCode sourceCode,
+        IReadOnlySet<string> validValues,
+        CancellationToken cancellationToken) {
+        var sourceValues = await _db.EntitySources.AsNoTracking()
+            .Where(source => candidateIds.Contains(source.EntityId) && source.Code == sourceCode.ToCode())
+            .Select(source => new { source.EntityId, source.Value })
+            .ToListAsync(cancellationToken);
+
+        return sourceValues
+            .Where(source => !validValues.Contains(source.Value) && !SourcePathExists(source.Value))
+            .Select(source => source.EntityId)
+            .Distinct()
+            .ToList();
+    }
+
     private static bool SourcePathExists(string path) => File.Exists(path) || Directory.Exists(path);
 
     private async Task<List<Guid>> ExpandContainerSubtreeIdsAsync(

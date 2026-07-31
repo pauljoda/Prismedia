@@ -19,6 +19,7 @@ public sealed class MovieEntityKindDefinition() : PlayableVideoEntityKindDefinit
         EntityArtworkFit.Cover),
     new EntityKindNavigation(EntityKind.Movie, "movies", "/movies", "/movies/{id}"),
     new EntityKindSearch(0),
+    PlayableVideoScanPlacement.Movie,
     static root => new Movie(root.Id, root.Title),
     identification: new(
         AutoIdentifySelectorKind.Video,

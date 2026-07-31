@@ -16,34 +16,6 @@ namespace Prismedia.Infrastructure.Media.Persistence;
 public sealed partial class LibraryScanPersistenceService {
     // ── Entity upsert ──
 
-    public async Task<Guid> UpsertVideoAsync(string filePath, string title, Guid libraryRootId, bool isNsfw, CancellationToken cancellationToken) {
-        var existing = await FindEntityBySourcePath(EntityKind.Video.ToCode(), filePath, cancellationToken);
-        if (existing is not null) {
-            existing.UpdatedAt = DateTimeOffset.UtcNow;
-            await SaveChangesWithLifecycleAsync(cancellationToken);
-            return existing.Id;
-        }
-
-        var now = DateTimeOffset.UtcNow;
-        var id = Guid.NewGuid();
-
-        _db.Entities.Add(new EntityRow { Id = id, KindCode = EntityKind.Video.ToCode(), Title = title, IsNsfw = isNsfw, CreatedAt = now, UpdatedAt = now });
-        _db.VideoDetails.Add(new VideoDetailRow { EntityId = id });
-        _db.EntityLibraryRoots.Add(new EntityLibraryRootRow { EntityId = id, LibraryRootId = libraryRootId });
-        _db.EntityFiles.Add(new EntityFileRow {
-            Id = Guid.NewGuid(),
-            EntityId = id,
-            Role = EntityFileRole.Source,
-            Path = filePath,
-            SizeBytes = LibraryScanFileSystem.TryGetFileSize(filePath),
-            CreatedAt = now,
-            UpdatedAt = now
-        });
-
-        await SaveChangesWithLifecycleAsync(cancellationToken);
-        return id;
-    }
-
     public async Task<Guid> UpsertImageAsync(string filePath, string title, Guid? galleryEntityId, long? sizeBytes, int sortOrder, bool isNsfw, CancellationToken cancellationToken) {
         var id = await UpsertImageCoreAsync(
             new ImageUpsertItem(filePath, title, galleryEntityId, sizeBytes, sortOrder, isNsfw),
