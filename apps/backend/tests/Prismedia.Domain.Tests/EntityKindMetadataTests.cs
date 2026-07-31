@@ -242,6 +242,9 @@ public sealed class EntityKindMetadataTests {
             EntityKindRegistry.Describe(EntityKind.Book).Engagement.Mode);
         Assert.Equal(EntityEngagementMode.Playback,
             EntityKindRegistry.Describe(EntityKind.AudioLibrary).Engagement.Mode);
+        Assert.True(EntityKindRegistry.Describe(EntityKind.Video).Engagement.DerivesCompletionFromPlaybackFraction);
+        Assert.True(EntityKindRegistry.Describe(EntityKind.Movie).Engagement.DerivesCompletionFromPlaybackFraction);
+        Assert.False(EntityKindRegistry.Describe(EntityKind.AudioTrack).Engagement.DerivesCompletionFromPlaybackFraction);
         Assert.Equal([EntityKind.Movie], childAggregates);
     }
 

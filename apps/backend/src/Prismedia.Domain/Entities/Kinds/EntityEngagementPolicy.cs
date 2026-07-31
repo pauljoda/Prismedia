@@ -14,17 +14,28 @@ public sealed record EntityEngagementPolicy {
     /// <param name="aggregatesDirectChildPlayback">
     /// Whether direct-child playback also represents engagement with this container.
     /// </param>
+    /// <param name="derivesCompletionFromPlaybackFraction">
+    /// Whether ordinary playback progress may infer completion from the current position and runtime.
+    /// </param>
     public EntityEngagementPolicy(
         EntityEngagementMode mode,
-        bool aggregatesDirectChildPlayback = false) {
+        bool aggregatesDirectChildPlayback = false,
+        bool derivesCompletionFromPlaybackFraction = false) {
         if (aggregatesDirectChildPlayback && mode != EntityEngagementMode.Playback) {
             throw new ArgumentException(
                 "Direct-child playback aggregation requires playback engagement mode.",
                 nameof(aggregatesDirectChildPlayback));
         }
 
+        if (derivesCompletionFromPlaybackFraction && mode != EntityEngagementMode.Playback) {
+            throw new ArgumentException(
+                "Playback-fraction completion requires playback engagement mode.",
+                nameof(derivesCompletionFromPlaybackFraction));
+        }
+
         Mode = mode;
         AggregatesDirectChildPlayback = aggregatesDirectChildPlayback;
+        DerivesCompletionFromPlaybackFraction = derivesCompletionFromPlaybackFraction;
     }
 
     /// <summary>Vocabulary and state family exposed for the kind.</summary>
@@ -32,4 +43,7 @@ public sealed record EntityEngagementPolicy {
 
     /// <summary>Whether playback on a direct child contributes to this container's state.</summary>
     public bool AggregatesDirectChildPlayback { get; }
+
+    /// <summary>Whether position/runtime progress may infer completion for this kind.</summary>
+    public bool DerivesCompletionFromPlaybackFraction { get; }
 }

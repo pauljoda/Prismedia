@@ -44,7 +44,9 @@ public sealed class VideoEntityKindDefinition() : EntityKindDefinition<Video>(
                 EntityFileRole.Trickplay,
                 EntityFileRole.Hls
             ]),
-        engagement: new(EntityEngagementMode.Playback),
+        engagement: new(
+            EntityEngagementMode.Playback,
+            derivesCompletionFromPlaybackFraction: true),
         browse: new(aggregateParentKinds: [EntityKind.Movie]),
         libraryVisibility: EntityLibraryVisibilityPolicy.DirectRoot,
         supportsFileDeletion: true,

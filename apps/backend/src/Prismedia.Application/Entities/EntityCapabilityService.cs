@@ -151,7 +151,8 @@ public sealed class EntityCapabilityService {
             }
 
             var fraction = position.TotalSeconds / total.TotalSeconds;
-            if (CanDeriveVideoCompletion(entity) && fraction >= VideoWatchedFraction) {
+            if (entity.Definition.Engagement.DerivesCompletionFromPlaybackFraction &&
+                fraction >= VideoWatchedFraction) {
                 playback.RecordCompleted(now);
                 if (playback.Value.PlayCount > playCountBefore) {
                     completedEvent = CompletedEvent(entity, now, position.TotalSeconds, runtime?.TotalSeconds);
@@ -617,9 +618,6 @@ public sealed class EntityCapabilityService {
             }
         }
     }
-
-    private static bool CanDeriveVideoCompletion(Entity entity) =>
-        entity.Kind is EntityKind.Video or EntityKind.Movie;
 
     private async Task<Guid> ResolveProgressOwnerIdAsync(
         Guid requestedId,
