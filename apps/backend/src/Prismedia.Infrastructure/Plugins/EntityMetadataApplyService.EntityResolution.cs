@@ -21,11 +21,16 @@ public sealed partial class EntityMetadataApplyService {
     /// </summary>
     private static bool IsKindCompatible(string entityKind, string expectedKind) =>
         entityKind.Equals(expectedKind, StringComparison.OrdinalIgnoreCase) ||
+        IsDefinitionCompatible(entityKind, expectedKind) ||
         (entityKind.Equals(EntityKind.Movie.ToCode(), StringComparison.OrdinalIgnoreCase) &&
-            (expectedKind.Equals(EntityKind.Video.ToCode(), StringComparison.OrdinalIgnoreCase) ||
-             expectedKind.Equals(LegacyMovieExpectedKind, StringComparison.OrdinalIgnoreCase))) ||
+            expectedKind.Equals(LegacyMovieExpectedKind, StringComparison.OrdinalIgnoreCase)) ||
         (entityKind.Equals(EntityKind.Video.ToCode(), StringComparison.OrdinalIgnoreCase) &&
             expectedKind.Equals(ProposalKind.VideoEpisode.ToCode(), StringComparison.OrdinalIgnoreCase));
+
+    private static bool IsDefinitionCompatible(string entityKind, string expectedKind) =>
+        EntityKindRegistry.TryDescribe(entityKind, out var definition) &&
+        EntityKindRegistry.TryGet(expectedKind, out var pluginKind) &&
+        definition.AcceptsPluginKind(pluginKind);
 
     /// <summary>
     /// Resolves an existing entity for a proposal using one consistent rule across the whole apply

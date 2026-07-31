@@ -94,6 +94,16 @@ public sealed class EntityKindMetadataTests {
     }
 
     [Fact]
+    public void DefinitionsResolveTheirOwnPluginKindCompatibility() {
+        Assert.All(
+            EntityKindRegistry.All,
+            definition => Assert.True(definition.AcceptsPluginKind(definition.Kind)));
+        Assert.True(EntityKindRegistry.Describe(EntityKind.Movie).AcceptsPluginKind(EntityKind.Video));
+        Assert.False(EntityKindRegistry.Describe(EntityKind.Video).AcceptsPluginKind(EntityKind.Movie));
+        Assert.False(EntityKindRegistry.Describe(EntityKind.Book).AcceptsPluginKind(EntityKind.Video));
+    }
+
+    [Fact]
     public void UserManageableKindsAreOwnedByTheirEntityKindDefinitions() {
         var manageable = EntityKindRegistry.All
             .Where(definition => definition.SupportsManualManagement)

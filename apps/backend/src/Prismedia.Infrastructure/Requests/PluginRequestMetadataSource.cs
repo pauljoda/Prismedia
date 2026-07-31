@@ -602,8 +602,7 @@ public sealed class PluginRequestMetadataSource(
 
     private static bool IsCompatibleTarget(RequestKindDescriptor descriptor, ProposalKind proposalKind) {
         var actualKind = proposalKind.ToEntityKind();
-        return actualKind == descriptor.PluginEntityKind
-            || descriptor.PluginEntityKind == EntityKind.Movie && actualKind == EntityKind.Video;
+        return EntityKindRegistry.Describe(descriptor.PluginEntityKind).AcceptsPluginKind(actualKind);
     }
 
     private static IReadOnlyList<string> DeclaredLookupNamespaces(PluginProvider provider, string kindCode) =>

@@ -86,6 +86,13 @@ public abstract class EntityKindDefinition {
     /// <summary>Identification and provider-compatibility behavior owned by this kind.</summary>
     public EntityIdentificationPolicy Identification => Behavior.Identification;
 
+    /// <summary>
+    /// Whether a plugin payload addressed to <paramref name="pluginKind"/> may represent this kind.
+    /// Exact kinds always match; definitions may opt into one compatible provider fallback kind.
+    /// </summary>
+    public bool AcceptsPluginKind(EntityKind pluginKind) =>
+        pluginKind == Kind || Identification.PluginFallbackKind == pluginKind;
+
     /// <summary>Whether this kind can safely root managed file deletion.</summary>
     public bool SupportsFileDeletion => Behavior.SupportsFileDeletion;
 
