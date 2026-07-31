@@ -22,6 +22,32 @@ public sealed class VideoEntityKindDefinition() : EntityKindDefinition<Video>(
         borrowArtworkFromParentKinds: [EntityKind.Movie]),
     new EntityKindNavigation(EntityKind.Video, "videos", "/videos", "/videos/{id}"),
     new EntityKindSearch(2),
+    new EntityKindBehavior(
+        identification: new(
+            AutoIdentifySelectorKind.Video,
+            allowsDirectReconcileChildTarget: true),
+        manualAcquisition: EntityManualAcquisitionPolicy.UploadAndReplacement,
+        processing: new EntityProcessingPolicy(
+            probeJobType: JobType.ProbeVideo,
+            probeRequiresAutomaticMetadata: true,
+            fingerprintJobType: JobType.FingerprintVideo,
+            previewJobType: JobType.GeneratePreview,
+            previewRequiresAutomaticGeneration: true,
+            supportsTrickplayGeneration: true,
+            subtitleExtractionJobType: JobType.ExtractSubtitles,
+            generatedFileRoles: [
+                EntityFileRole.Thumbnail,
+                EntityFileRole.GridThumbnail,
+                EntityFileRole.GridThumbnail2x,
+                EntityFileRole.Preview,
+                EntityFileRole.Sprite,
+                EntityFileRole.Trickplay,
+                EntityFileRole.Hls
+            ]),
+        engagement: new(EntityEngagementMode.Playback),
+        supportsFileDeletion: true,
+        mediaQualityFamily: EntityMediaQualityFamily.Video,
+        supportsAtomicMediaUpgrade: true),
     defaultCapabilities: static () =>
     [
         new CapabilityPlayback(),
@@ -29,32 +55,7 @@ public sealed class VideoEntityKindDefinition() : EntityKindDefinition<Video>(
         new CapabilityMarkers(),
         new CapabilitySubtitles(),
         new CapabilityCredits()
-    ],
-    identification: new(
-        AutoIdentifySelectorKind.Video,
-        allowsDirectReconcileChildTarget: true),
-    supportsFileDeletion: true,
-    manualAcquisition: EntityManualAcquisitionPolicy.UploadAndReplacement,
-    processing: new EntityProcessingPolicy(
-        probeJobType: JobType.ProbeVideo,
-        probeRequiresAutomaticMetadata: true,
-        fingerprintJobType: JobType.FingerprintVideo,
-        previewJobType: JobType.GeneratePreview,
-        previewRequiresAutomaticGeneration: true,
-        supportsTrickplayGeneration: true,
-        subtitleExtractionJobType: JobType.ExtractSubtitles,
-        generatedFileRoles: [
-            EntityFileRole.Thumbnail,
-            EntityFileRole.GridThumbnail,
-            EntityFileRole.GridThumbnail2x,
-            EntityFileRole.Preview,
-            EntityFileRole.Sprite,
-            EntityFileRole.Trickplay,
-            EntityFileRole.Hls
-        ]),
-    mediaQualityFamily: EntityMediaQualityFamily.Video,
-    supportsAtomicMediaUpgrade: true,
-    engagement: new(EntityEngagementMode.Playback)) {
+    ]) {
     private static readonly IReadOnlyList<string> SortOrderPrecedence = Array.AsReadOnly([
         EntityPositionCodes.Episode,
         EntityPositionCodes.AbsoluteEpisode,

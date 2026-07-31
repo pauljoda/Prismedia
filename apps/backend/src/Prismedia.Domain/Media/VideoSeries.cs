@@ -25,13 +25,12 @@ public sealed class VideoSeriesEntityKindDefinition() : EntityKindDefinition<Vid
         usesRepresentativeChildArtwork: true),
     new EntityKindNavigation(EntityKind.VideoSeries, "series", "/series", "/series/{id}"),
     new EntityKindSearch(1),
-    EntityManualAcquisitionPolicy.None,
-    EntityProcessingPolicy.None,
-    defaultCapabilities: static () => [new CapabilityCredits()],
-    identification: new(AutoIdentifySelectorKind.Video, enumeratesChildren: true),
-    supportsFileDeletion: true,
-    mediaQualityFamily: EntityMediaQualityFamily.Video,
-    engagement: new(EntityEngagementMode.Playback)) {
+    new EntityKindBehavior(
+        identification: new(AutoIdentifySelectorKind.Video, enumeratesChildren: true),
+        engagement: new(EntityEngagementMode.Playback),
+        supportsFileDeletion: true,
+        mediaQualityFamily: EntityMediaQualityFamily.Video),
+    defaultCapabilities: static () => [new CapabilityCredits()]) {
     /// <inheritdoc />
     public override bool OwnsMetadataRelationships => true;
 
@@ -108,6 +107,12 @@ public sealed class VideoSeasonEntityKindDefinition() : RootEntityKindDefinition
         root.Title,
         root.ParentEntityId,
         sortOrder: root.SortOrder),
+    behavior: new EntityKindBehavior(
+        identification: new(enumeratesChildren: true),
+        manualAcquisition: EntityManualAcquisitionPolicy.Upload,
+        engagement: new(EntityEngagementMode.Playback),
+        supportsFileDeletion: true,
+        mediaQualityFamily: EntityMediaQualityFamily.Video),
     defaultCapabilities: static () =>
     [
         new CapabilityDescription(),
@@ -115,13 +120,7 @@ public sealed class VideoSeasonEntityKindDefinition() : RootEntityKindDefinition
         new CapabilitySource(),
         new CapabilityPosition(),
         new CapabilityCredits()
-    ],
-    identification: new(enumeratesChildren: true),
-    supportsFileDeletion: true,
-    manualAcquisition: EntityManualAcquisitionPolicy.Upload,
-    processing: EntityProcessingPolicy.None,
-    mediaQualityFamily: EntityMediaQualityFamily.Video,
-    engagement: new(EntityEngagementMode.Playback)) {
+    ]) {
     private static readonly IReadOnlyList<string> SortOrderPrecedence = Array.AsReadOnly([
         EntityPositionCodes.Season,
         EntityPositionCodes.Sort

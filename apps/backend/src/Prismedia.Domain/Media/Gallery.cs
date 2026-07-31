@@ -26,11 +26,10 @@ public sealed class GalleryEntityKindDefinition() : EntityKindDefinition<Gallery
         usesRepresentativeChildArtwork: true),
     new EntityKindNavigation(EntityKind.Gallery, "galleries", "/galleries", "/galleries/{id}"),
     new EntityKindSearch(6),
-    EntityManualAcquisitionPolicy.None,
-    EntityProcessingPolicy.None,
-    defaultCapabilities: static () => [new CapabilityCredits()],
-    identification: new(AutoIdentifySelectorKind.Gallery),
-    supportsFileDeletion: true) {
+    new EntityKindBehavior(
+        identification: new(AutoIdentifySelectorKind.Gallery),
+        supportsFileDeletion: true),
+    defaultCapabilities: static () => [new CapabilityCredits()]) {
     /// <inheritdoc />
     public override bool OwnsMetadataRelationships => true;
 

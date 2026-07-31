@@ -26,12 +26,12 @@ public sealed class BookEntityKindDefinition() : EntityKindDefinition<Book>(
         usesRepresentativeChildArtwork: true),
     new EntityKindNavigation(EntityKind.Book, "books", "/books", "/books/{id}"),
     new EntityKindSearch(7),
-    defaultCapabilities: static () => [new CapabilityProgress(), new CapabilityPlayback()],
-    identification: new(AutoIdentifySelectorKind.Book, enumeratesChildren: true),
-    supportsFileDeletion: true,
-    manualAcquisition: EntityManualAcquisitionPolicy.UploadAndReplacement,
-    processing: EntityProcessingPolicy.None,
-    engagement: new(EntityEngagementMode.Reading)) {
+    new EntityKindBehavior(
+        identification: new(AutoIdentifySelectorKind.Book, enumeratesChildren: true),
+        manualAcquisition: EntityManualAcquisitionPolicy.UploadAndReplacement,
+        engagement: new(EntityEngagementMode.Reading),
+        supportsFileDeletion: true),
+    defaultCapabilities: static () => [new CapabilityProgress(), new CapabilityPlayback()]) {
     /// <inheritdoc />
     public override bool OwnsMetadataRelationships => true;
 

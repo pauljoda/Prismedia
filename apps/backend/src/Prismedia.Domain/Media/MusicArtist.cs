@@ -23,15 +23,14 @@ public sealed class MusicArtistEntityKindDefinition() : RootEntityKindDefinition
     new EntityKindNavigation(EntityKind.MusicArtist, "artists", "/artists", "/artists/{id}"),
     search: null,
     static root => new MusicArtist(root.Id, root.Title),
-    manualAcquisition: EntityManualAcquisitionPolicy.None,
-    processing: EntityProcessingPolicy.None,
-    defaultCapabilities: static () => [new CapabilityCredits()],
-    identification: new(
-        AutoIdentifySelectorKind.Audio,
-        enumeratesChildren: true,
-        cascadeChildrenAutomatically: false),
-    supportsFileDeletion: true,
-    mediaQualityFamily: EntityMediaQualityFamily.Audio) {
+    behavior: new EntityKindBehavior(
+        identification: new(
+            AutoIdentifySelectorKind.Audio,
+            enumeratesChildren: true,
+            cascadeChildrenAutomatically: false),
+        supportsFileDeletion: true,
+        mediaQualityFamily: EntityMediaQualityFamily.Audio),
+    defaultCapabilities: static () => [new CapabilityCredits()]) {
     /// <inheritdoc />
     public override bool OwnsMetadataRelationships => true;
 

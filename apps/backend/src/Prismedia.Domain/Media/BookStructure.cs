@@ -35,17 +35,16 @@ public sealed class BookVolumeEntityKindDefinition() : RootEntityKindDefinition<
         root.Title,
         parentEntityId: root.ParentEntityId,
         sortOrder: root.SortOrder),
-    manualAcquisition: EntityManualAcquisitionPolicy.None,
-    processing: EntityProcessingPolicy.None,
+    behavior: new EntityKindBehavior(
+        identification: new(enumeratesChildren: true),
+        engagement: new(EntityEngagementMode.Reading),
+        supportsFileDeletion: true),
     defaultCapabilities: static () =>
     [
         new CapabilityStats(),
         new CapabilitySource(),
         new CapabilityPosition()
-    ],
-    identification: new(enumeratesChildren: true),
-    supportsFileDeletion: true,
-    engagement: new(EntityEngagementMode.Reading)) {
+    ]) {
     /// <inheritdoc />
     public override IReadOnlyList<EntityStructuralCountDefinition> StructuralThumbnailCounts =>
     [
@@ -78,16 +77,14 @@ public sealed class BookChapterEntityKindDefinition() : EntityKindDefinition<Boo
         "/books/{parentId}/chapters/{id}",
         EntityKind.Book),
     search: null,
-    manualAcquisition: EntityManualAcquisitionPolicy.None,
-    processing: EntityProcessingPolicy.None,
+    behavior: new EntityKindBehavior(engagement: new(EntityEngagementMode.Reading)),
     defaultCapabilities: static () =>
     [
         new CapabilityFingerprints(),
         new CapabilityStats(),
         new CapabilitySource(),
         new CapabilityPosition()
-    ],
-    engagement: new(EntityEngagementMode.Reading)) {
+    ]) {
     /// <inheritdoc />
     public override IReadOnlyList<EntityStructuralCountDefinition> StructuralThumbnailCounts =>
         [new(EntityKind.BookPage, 1, ThumbnailMetaIcons.Page)];
@@ -125,10 +122,10 @@ public sealed class BookPageEntityKindDefinition() : RootEntityKindDefinition<Bo
         root.Title,
         parentEntityId: root.ParentEntityId,
         sortOrder: root.SortOrder),
-    manualAcquisition: EntityManualAcquisitionPolicy.None,
-    processing: new EntityProcessingPolicy(
-        previewJobType: JobType.GenerateBookPageThumbnail,
-        generatedFileRoles: [EntityFileRole.Thumbnail]),
+    behavior: new EntityKindBehavior(
+        processing: new EntityProcessingPolicy(
+            previewJobType: JobType.GenerateBookPageThumbnail,
+            generatedFileRoles: [EntityFileRole.Thumbnail])),
     defaultCapabilities: static () =>
     [
         new CapabilityFingerprints(),

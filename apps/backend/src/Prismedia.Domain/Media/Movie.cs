@@ -21,22 +21,22 @@ public sealed class MovieEntityKindDefinition() : EntityKindDefinition<Movie>(
         EntityArtworkFit.Cover),
     new EntityKindNavigation(EntityKind.Movie, "movies", "/movies", "/movies/{id}"),
     new EntityKindSearch(0),
+    new EntityKindBehavior(
+        identification: new(
+            AutoIdentifySelectorKind.Video,
+            pluginFallbackKind: EntityKind.Video),
+        manualAcquisition: EntityManualAcquisitionPolicy.UploadAndReplacement,
+        engagement: new(EntityEngagementMode.Playback, aggregatesDirectChildPlayback: true),
+        supportsFileDeletion: true,
+        mediaQualityFamily: EntityMediaQualityFamily.Video,
+        supportsAtomicMediaUpgrade: true),
     defaultCapabilities: static () =>
     [
         new CapabilityDescription(),
         new CapabilityDates(),
         new CapabilitySource(),
         new CapabilityCredits()
-    ],
-    identification: new(
-        AutoIdentifySelectorKind.Video,
-        pluginFallbackKind: EntityKind.Video),
-    supportsFileDeletion: true,
-    manualAcquisition: EntityManualAcquisitionPolicy.UploadAndReplacement,
-    processing: EntityProcessingPolicy.None,
-    mediaQualityFamily: EntityMediaQualityFamily.Video,
-    supportsAtomicMediaUpgrade: true,
-    engagement: new(EntityEngagementMode.Playback, aggregatesDirectChildPlayback: true)) {
+    ]) {
     /// <inheritdoc />
     public override bool OwnsMetadataRelationships => true;
 

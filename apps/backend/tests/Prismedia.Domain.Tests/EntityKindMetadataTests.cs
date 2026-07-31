@@ -186,6 +186,8 @@ public sealed class EntityKindMetadataTests {
         Assert.Equal([EntityKind.Movie],
             EntityKindRegistry.Describe(EntityKind.Video).Presentation.BorrowArtworkFromParentKinds);
         Assert.Empty(movie.Presentation.BorrowArtworkFromParentKinds);
+        Assert.Throws<ArgumentException>(() =>
+            new EntityKindBehavior(supportsAtomicMediaUpgrade: true));
     }
 
     [Fact]

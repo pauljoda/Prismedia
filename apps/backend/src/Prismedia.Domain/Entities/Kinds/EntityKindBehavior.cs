@@ -1,0 +1,61 @@
+namespace Prismedia.Domain.Entities;
+
+/// <summary>
+/// Complete opt-in behavior contract for one Entity kind. Every definition supplies exactly one
+/// instance, keeping cross-cutting kind policy together while preserving focused immutable policy
+/// objects for acquisition, identification, processing, and engagement.
+/// </summary>
+public sealed record EntityKindBehavior {
+    /// <summary>Explicit behavior contract for a kind with no opt-in behavior.</summary>
+    public static EntityKindBehavior None { get; } = new();
+
+    /// <summary>Creates one validated Entity-kind behavior contract.</summary>
+    public EntityKindBehavior(
+        EntityIdentificationPolicy? identification = null,
+        EntityManualAcquisitionPolicy? manualAcquisition = null,
+        EntityProcessingPolicy? processing = null,
+        EntityEngagementPolicy? engagement = null,
+        bool supportsFileDeletion = false,
+        bool supportsManualManagement = false,
+        EntityMediaQualityFamily mediaQualityFamily = EntityMediaQualityFamily.None,
+        bool supportsAtomicMediaUpgrade = false) {
+        if (supportsAtomicMediaUpgrade && mediaQualityFamily == EntityMediaQualityFamily.None) {
+            throw new ArgumentException(
+                "Atomic media upgrades require a media quality family.",
+                nameof(supportsAtomicMediaUpgrade));
+        }
+
+        Identification = identification ?? EntityIdentificationPolicy.None;
+        ManualAcquisition = manualAcquisition ?? EntityManualAcquisitionPolicy.None;
+        Processing = processing ?? EntityProcessingPolicy.None;
+        Engagement = engagement ?? EntityEngagementPolicy.None;
+        SupportsFileDeletion = supportsFileDeletion;
+        SupportsManualManagement = supportsManualManagement;
+        MediaQualityFamily = mediaQualityFamily;
+        SupportsAtomicMediaUpgrade = supportsAtomicMediaUpgrade;
+    }
+
+    /// <summary>Identification and provider-compatibility behavior.</summary>
+    public EntityIdentificationPolicy Identification { get; }
+
+    /// <summary>Browser upload and reviewed-replacement behavior.</summary>
+    public EntityManualAcquisitionPolicy ManualAcquisition { get; }
+
+    /// <summary>Derived-media processing behavior.</summary>
+    public EntityProcessingPolicy Processing { get; }
+
+    /// <summary>Completion/filter behavior.</summary>
+    public EntityEngagementPolicy Engagement { get; }
+
+    /// <summary>Whether this kind can safely root managed file deletion.</summary>
+    public bool SupportsFileDeletion { get; }
+
+    /// <summary>Whether users may create and delete this kind directly.</summary>
+    public bool SupportsManualManagement { get; }
+
+    /// <summary>Quality ladder used to rank acquisition releases.</summary>
+    public EntityMediaQualityFamily MediaQualityFamily { get; }
+
+    /// <summary>Whether one owned media file can be replaced atomically during an upgrade.</summary>
+    public bool SupportsAtomicMediaUpgrade { get; }
+}

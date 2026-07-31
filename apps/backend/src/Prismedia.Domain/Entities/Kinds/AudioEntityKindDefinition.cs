@@ -21,9 +21,7 @@ public sealed class AudioEntityKindDefinition() : EntityKindDefinition(
         EntityArtworkFit.Cover),
     navigation: null,
     search: null,
-    manualAcquisition: EntityManualAcquisitionPolicy.None,
-    processing: EntityProcessingPolicy.None,
-    supportsFileDeletion: true) {
+    behavior: new EntityKindBehavior(supportsFileDeletion: true)) {
     /// <inheritdoc />
     public override bool OwnsMetadataRelationships => true;
 }

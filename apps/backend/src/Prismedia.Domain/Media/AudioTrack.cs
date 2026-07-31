@@ -24,17 +24,17 @@ public sealed class AudioTrackEntityKindDefinition() : EntityKindDefinition<Audi
         borrowArtworkFromParentKinds: [EntityKind.AudioLibrary]),
     new EntityKindNavigation(EntityKind.AudioTrack, "tracks", "/tracks", "/audio/tracks/{id}"),
     new EntityKindSearch(11),
-    EntityManualAcquisitionPolicy.None,
-    new EntityProcessingPolicy(
-        probeJobType: JobType.ProbeAudio,
-        fingerprintJobType: JobType.FingerprintAudio,
-        previewJobType: JobType.GenerateAudioWaveform,
-        generatedFileRoles: [EntityFileRole.Waveform]),
-    defaultCapabilities: static () => [new CapabilityPlayback()],
-    identification: new(AutoIdentifySelectorKind.Audio),
-    supportsFileDeletion: true,
-    mediaQualityFamily: EntityMediaQualityFamily.Audio,
-    engagement: new(EntityEngagementMode.Playback)) {
+    new EntityKindBehavior(
+        identification: new(AutoIdentifySelectorKind.Audio),
+        processing: new EntityProcessingPolicy(
+            probeJobType: JobType.ProbeAudio,
+            fingerprintJobType: JobType.FingerprintAudio,
+            previewJobType: JobType.GenerateAudioWaveform,
+            generatedFileRoles: [EntityFileRole.Waveform]),
+        engagement: new(EntityEngagementMode.Playback),
+        supportsFileDeletion: true,
+        mediaQualityFamily: EntityMediaQualityFamily.Audio),
+    defaultCapabilities: static () => [new CapabilityPlayback()]) {
     /// <inheritdoc />
     public override bool OwnsMetadataRelationships => true;
 

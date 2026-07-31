@@ -23,10 +23,8 @@ public sealed class PersonEntityKindDefinition() : EntityKindDefinition<Person>(
         EntityArtworkFit.Cover),
     new EntityKindNavigation(EntityKind.Person, "people", "/people", "/people/{id}"),
     new EntityKindSearch(3, expandsRelationshipResults: true),
-    EntityManualAcquisitionPolicy.None,
-    EntityProcessingPolicy.None,
-    defaultCapabilities: static () => [new CapabilityDates(), new CapabilityLifetime()],
-    supportsManualManagement: true) {
+    new EntityKindBehavior(supportsManualManagement: true),
+    defaultCapabilities: static () => [new CapabilityDates(), new CapabilityLifetime()]) {
     /// <inheritdoc />
     public override IReadOnlyList<Type> ProjectedCapabilityTypes => [typeof(PersonProfileDocumentCapability)];
 

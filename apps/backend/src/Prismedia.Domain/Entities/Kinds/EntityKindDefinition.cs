@@ -31,22 +31,9 @@ public abstract class EntityKindDefinition {
         EntityKindPresentation presentation,
         EntityKindNavigation? navigation,
         EntityKindSearch? search,
-        EntityManualAcquisitionPolicy manualAcquisition,
-        EntityProcessingPolicy processing,
+        EntityKindBehavior behavior,
         Type? clrType = null,
-        Func<IReadOnlyList<EntityCapability>>? defaultCapabilities = null,
-        EntityIdentificationPolicy? identification = null,
-        bool supportsFileDeletion = false,
-        bool supportsManualManagement = false,
-        EntityMediaQualityFamily mediaQualityFamily = EntityMediaQualityFamily.None,
-        bool supportsAtomicMediaUpgrade = false,
-        EntityEngagementPolicy? engagement = null) {
-        if (supportsAtomicMediaUpgrade && mediaQualityFamily == EntityMediaQualityFamily.None) {
-            throw new ArgumentException(
-                "Atomic media upgrades require a media quality family.",
-                nameof(supportsAtomicMediaUpgrade));
-        }
-
+        Func<IReadOnlyList<EntityCapability>>? defaultCapabilities = null) {
         Kind = kind;
         Code = RequireText(code, nameof(code));
         DisplayName = RequireText(displayName, nameof(displayName));
@@ -56,16 +43,9 @@ public abstract class EntityKindDefinition {
         Presentation = presentation ?? throw new ArgumentNullException(nameof(presentation));
         Navigation = navigation;
         Search = search;
+        Behavior = behavior ?? throw new ArgumentNullException(nameof(behavior));
         ClrType = clrType;
         _defaultCapabilities = defaultCapabilities ?? EmptyCapabilities;
-        Identification = identification ?? EntityIdentificationPolicy.None;
-        SupportsFileDeletion = supportsFileDeletion;
-        SupportsManualManagement = supportsManualManagement;
-        ManualAcquisition = manualAcquisition ?? throw new ArgumentNullException(nameof(manualAcquisition));
-        Processing = processing ?? throw new ArgumentNullException(nameof(processing));
-        MediaQualityFamily = mediaQualityFamily;
-        SupportsAtomicMediaUpgrade = supportsAtomicMediaUpgrade;
-        Engagement = engagement ?? EntityEngagementPolicy.None;
     }
 
     /// <summary>Typed domain identity represented by this definition.</summary>
@@ -100,29 +80,32 @@ public abstract class EntityKindDefinition {
     /// <summary>Concrete domain entity type, or null for a protocol-only kind.</summary>
     public Type? ClrType { get; }
 
+    /// <summary>Complete opt-in behavior contract supplied by this definition.</summary>
+    public EntityKindBehavior Behavior { get; }
+
     /// <summary>Identification and provider-compatibility behavior owned by this kind.</summary>
-    public EntityIdentificationPolicy Identification { get; }
+    public EntityIdentificationPolicy Identification => Behavior.Identification;
 
     /// <summary>Whether this kind can safely root managed file deletion.</summary>
-    public bool SupportsFileDeletion { get; }
+    public bool SupportsFileDeletion => Behavior.SupportsFileDeletion;
 
     /// <summary>Whether users may create and delete this kind directly through entity routes.</summary>
-    public bool SupportsManualManagement { get; }
+    public bool SupportsManualManagement => Behavior.SupportsManualManagement;
 
     /// <summary>Browser upload and reviewed-replacement behavior owned by this kind.</summary>
-    public EntityManualAcquisitionPolicy ManualAcquisition { get; }
+    public EntityManualAcquisitionPolicy ManualAcquisition => Behavior.ManualAcquisition;
 
     /// <summary>Derived-media processing behavior owned by this kind.</summary>
-    public EntityProcessingPolicy Processing { get; }
+    public EntityProcessingPolicy Processing => Behavior.Processing;
 
     /// <summary>Quality ladder used to rank acquisition releases for this kind.</summary>
-    public EntityMediaQualityFamily MediaQualityFamily { get; }
+    public EntityMediaQualityFamily MediaQualityFamily => Behavior.MediaQualityFamily;
 
     /// <summary>Whether one owned media file can be replaced atomically during an upgrade.</summary>
-    public bool SupportsAtomicMediaUpgrade { get; }
+    public bool SupportsAtomicMediaUpgrade => Behavior.SupportsAtomicMediaUpgrade;
 
     /// <summary>Completion/filter behavior shared by persistence and clients.</summary>
-    public EntityEngagementPolicy Engagement { get; }
+    public EntityEngagementPolicy Engagement => Behavior.Engagement;
 
     /// <summary>
     /// Canonical position-code precedence used to derive a structural sort order. Kinds without
@@ -238,15 +221,8 @@ public abstract class EntityKindDefinition<TEntity> : EntityKindDefinition
         EntityKindPresentation presentation,
         EntityKindNavigation? navigation,
         EntityKindSearch? search,
-        EntityManualAcquisitionPolicy manualAcquisition,
-        EntityProcessingPolicy processing,
-        Func<IReadOnlyList<EntityCapability>>? defaultCapabilities = null,
-        EntityIdentificationPolicy? identification = null,
-        bool supportsFileDeletion = false,
-        bool supportsManualManagement = false,
-        EntityMediaQualityFamily mediaQualityFamily = EntityMediaQualityFamily.None,
-        bool supportsAtomicMediaUpgrade = false,
-        EntityEngagementPolicy? engagement = null)
+        EntityKindBehavior behavior,
+        Func<IReadOnlyList<EntityCapability>>? defaultCapabilities = null)
         : base(
             kind,
             code,
@@ -257,16 +233,9 @@ public abstract class EntityKindDefinition<TEntity> : EntityKindDefinition
             presentation,
             navigation,
             search,
-            manualAcquisition,
-            processing,
+            behavior,
             typeof(TEntity),
-            defaultCapabilities,
-            identification,
-            supportsFileDeletion,
-            supportsManualManagement,
-            mediaQualityFamily,
-            supportsAtomicMediaUpgrade,
-            engagement) {
+            defaultCapabilities) {
     }
 
     /// <inheritdoc />
@@ -439,15 +408,8 @@ public abstract class RootEntityKindDefinition<TEntity> : EntityKindDefinition<T
         EntityKindNavigation? navigation,
         EntityKindSearch? search,
         Func<EntityRootData, TEntity> factory,
-        EntityManualAcquisitionPolicy manualAcquisition,
-        EntityProcessingPolicy processing,
-        Func<IReadOnlyList<EntityCapability>>? defaultCapabilities = null,
-        EntityIdentificationPolicy? identification = null,
-        bool supportsFileDeletion = false,
-        bool supportsManualManagement = false,
-        EntityMediaQualityFamily mediaQualityFamily = EntityMediaQualityFamily.None,
-        bool supportsAtomicMediaUpgrade = false,
-        EntityEngagementPolicy? engagement = null)
+        EntityKindBehavior behavior,
+        Func<IReadOnlyList<EntityCapability>>? defaultCapabilities = null)
         : base(
             kind,
             code,
@@ -458,15 +420,8 @@ public abstract class RootEntityKindDefinition<TEntity> : EntityKindDefinition<T
             presentation,
             navigation,
             search,
-            manualAcquisition,
-            processing,
-            defaultCapabilities,
-            identification,
-            supportsFileDeletion,
-            supportsManualManagement,
-            mediaQualityFamily,
-            supportsAtomicMediaUpgrade,
-            engagement) {
+            behavior,
+            defaultCapabilities) {
         _factory = factory ?? throw new ArgumentNullException(nameof(factory));
     }
 

@@ -23,11 +23,10 @@ public sealed class BookAuthorEntityKindDefinition() : RootEntityKindDefinition<
     new EntityKindNavigation(EntityKind.BookAuthor, "authors", "/authors", "/authors/{id}"),
     search: null,
     static root => new BookAuthor(root.Id, root.Title),
-    manualAcquisition: EntityManualAcquisitionPolicy.None,
-    processing: EntityProcessingPolicy.None,
-    defaultCapabilities: static () => [new CapabilityCredits()],
-    identification: new(enumeratesChildren: true),
-    supportsFileDeletion: true) {
+    behavior: new EntityKindBehavior(
+        identification: new(enumeratesChildren: true),
+        supportsFileDeletion: true),
+    defaultCapabilities: static () => [new CapabilityCredits()]) {
     /// <inheritdoc />
     public override IReadOnlyList<EntityStructuralCountDefinition> StructuralThumbnailCounts =>
         [new(EntityKind.Book, 1, ThumbnailMetaIcons.Book)];
