@@ -49,6 +49,36 @@ internal static class EntityAttachmentModelConfiguration {
                 .OnDelete(DeleteBehavior.Cascade);
         });
 
+        modelBuilder.Entity<EntitySubtitleStateRow>(entity => {
+            entity.ToTable("entity_subtitle_states");
+            entity.HasKey(row => row.EntityId);
+            entity.Property(row => row.EntityId).HasColumnName("entity_id");
+            entity.Property(row => row.SubtitlesExtractedAt).HasColumnName("subtitles_extracted_at");
+            entity.Property(row => row.SubtitleSidecarSignature)
+                .HasColumnName("subtitle_sidecar_signature")
+                .HasMaxLength(64);
+            entity.HasOne<EntityRow>()
+                .WithOne()
+                .HasForeignKey<EntitySubtitleStateRow>(row => row.EntityId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<EntityLibraryRootRow>(entity => {
+            entity.ToTable("entity_library_roots");
+            entity.HasKey(row => row.EntityId);
+            entity.Property(row => row.EntityId).HasColumnName("entity_id");
+            entity.Property(row => row.LibraryRootId).HasColumnName("library_root_id");
+            entity.HasIndex(row => row.LibraryRootId);
+            entity.HasOne<EntityRow>()
+                .WithOne()
+                .HasForeignKey<EntityLibraryRootRow>(row => row.EntityId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne<LibraryRootRow>()
+                .WithMany()
+                .HasForeignKey(row => row.LibraryRootId)
+                .OnDelete(DeleteBehavior.SetNull);
+        });
+
         modelBuilder.Entity<EntityFileRow>(entity => {
             entity.ToTable("entity_files");
             entity.HasKey(row => row.Id);
@@ -76,19 +106,10 @@ internal static class EntityAttachmentModelConfiguration {
             entity.ToTable("video_details");
             entity.HasKey(row => row.EntityId);
             entity.Property(row => row.EntityId).HasColumnName("entity_id");
-            entity.Property(row => row.LibraryRootId).HasColumnName("library_root_id");
-            entity.Property(row => row.SubtitlesExtractedAt).HasColumnName("subtitles_extracted_at");
-            entity.Property(row => row.SubtitleSidecarSignature)
-                .HasColumnName("subtitle_sidecar_signature")
-                .HasMaxLength(64);
             entity.HasOne<EntityRow>()
                 .WithOne()
                 .HasForeignKey<VideoDetailRow>(row => row.EntityId)
                 .OnDelete(DeleteBehavior.Cascade);
-            entity.HasOne<LibraryRootRow>()
-                .WithMany()
-                .HasForeignKey(row => row.LibraryRootId)
-                .OnDelete(DeleteBehavior.SetNull);
         });
     }
 }

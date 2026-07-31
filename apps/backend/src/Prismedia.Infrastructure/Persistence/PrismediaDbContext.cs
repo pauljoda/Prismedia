@@ -34,6 +34,16 @@ public sealed class PrismediaDbContext : DbContext {
 
     public DbSet<EntitySubtitleRow> EntitySubtitles => Set<EntitySubtitleRow>();
 
+    public DbSet<EntitySubtitleStateRow> EntitySubtitleStates => Set<EntitySubtitleStateRow>();
+
+    public DbSet<EntityLibraryRootRow> EntityLibraryRoots => Set<EntityLibraryRootRow>();
+
+    [Obsolete("Use EntityLibraryRoots.")]
+    public DbSet<EntityLibraryRootRow> AudioLibraryDetails => EntityLibraryRoots;
+
+    [Obsolete("Use EntityLibraryRoots.")]
+    public DbSet<EntityLibraryRootRow> MusicArtistDetails => EntityLibraryRoots;
+
     public DbSet<EntityFileRow> EntityFiles => Set<EntityFileRow>();
 
     public DbSet<EntityFileFingerprintRow> EntityFileFingerprints => Set<EntityFileFingerprintRow>();
@@ -73,10 +83,6 @@ public sealed class PrismediaDbContext : DbContext {
     public DbSet<BookDetailRow> BookDetails => Set<BookDetailRow>();
 
     public DbSet<BookChapterDetailRow> BookChapterDetails => Set<BookChapterDetailRow>();
-
-    public DbSet<MusicArtistDetailRow> MusicArtistDetails => Set<MusicArtistDetailRow>();
-
-    public DbSet<AudioLibraryDetailRow> AudioLibraryDetails => Set<AudioLibraryDetailRow>();
 
     public DbSet<AudioTrackDetailRow> AudioTrackDetails => Set<AudioTrackDetailRow>();
 

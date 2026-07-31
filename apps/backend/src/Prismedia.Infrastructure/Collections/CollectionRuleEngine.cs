@@ -523,7 +523,7 @@ public sealed class CollectionRuleEngine(PrismediaDbContext db) : ICollectionRul
 
         return definition.LibraryVisibility.Mode switch {
             EntityLibraryVisibilityMode.DirectRoot => rootPredicate =>
-                DirectRootExists(definition, "direct_root", "e.id", rootPredicate),
+                DirectRootExists("direct_root", "e.id", rootPredicate),
             EntityLibraryVisibilityMode.AncestorRoot => AncestorRootExists,
             EntityLibraryVisibilityMode.DescendantRoot => rootPredicate =>
                 DescendantRootExists(definition, rootPredicate, ctx),
@@ -574,13 +574,12 @@ public sealed class CollectionRuleEngine(PrismediaDbContext db) : ICollectionRul
     }
 
     private static string DirectRootExists(
-        EntityKindDefinition definition,
         string alias,
         string entityIdExpression,
         Func<string, string> rootPredicate) =>
         $@"EXISTS (
             SELECT 1
-            FROM {DirectLibraryRootTableName(definition)} {alias}
+            FROM entity_library_roots {alias}
             WHERE {alias}.entity_id = {entityIdExpression}
                 AND {rootPredicate($"{alias}.library_root_id")}
         )";
@@ -599,7 +598,7 @@ public sealed class CollectionRuleEngine(PrismediaDbContext db) : ICollectionRul
         return $@"EXISTS (
             SELECT 1
             FROM entities rooted_descendant
-            INNER JOIN {DirectLibraryRootTableName(descendant)} rooted_detail
+            INNER JOIN entity_library_roots rooted_detail
                 ON rooted_detail.entity_id = rooted_descendant.id
             WHERE rooted_descendant.kind_code = {descendantKindParam}
                 AND ({string.Join(" OR ", ownerMatches)})
@@ -643,32 +642,9 @@ public sealed class CollectionRuleEngine(PrismediaDbContext db) : ICollectionRul
         $@"(
             {string.Join(
                 $"{Environment.NewLine}            OR ",
-                DirectLibraryRootDefinitions.Select((definition, index) =>
-                    DirectRootExists(definition, $"root_{suffix}_{index}", entityIdExpression, rootPredicate)))}
+                DirectLibraryRootDefinitions.Select((_, index) =>
+                    DirectRootExists($"root_{suffix}_{index}", entityIdExpression, rootPredicate)))}
         )";
-
-    /// <summary>
-    /// Derives the conventional detail table for a kind that directly owns a library root. The
-    /// definition's stable code is the source of truth; persistence uses snake_case detail tables.
-    /// </summary>
-    internal static string DirectLibraryRootTableName(EntityKindDefinition definition) {
-        if (definition.LibraryVisibility.Mode != EntityLibraryVisibilityMode.DirectRoot) {
-            throw new ArgumentException(
-                $"Entity kind '{definition.Code}' does not own a direct library root.",
-                nameof(definition));
-        }
-
-        var stem = definition.Code.Replace('-', '_');
-        if (stem.Any(character =>
-                character is not (>= 'a' and <= 'z') &&
-                character is not (>= '0' and <= '9') &&
-                character != '_')) {
-            throw new InvalidOperationException(
-                $"Entity kind code '{definition.Code}' cannot form a safe SQL identifier.");
-        }
-
-        return $"{stem}_details";
-    }
 
     // ── Helpers ──
 

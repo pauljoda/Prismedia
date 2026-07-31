@@ -4,7 +4,7 @@ using Prismedia.Domain.Entities;
 namespace Prismedia.Domain.Media;
 
 /// <summary>Defines the playable video kind and its default media capabilities.</summary>
-public sealed class VideoEntityKindDefinition() : EntityKindDefinition<Video>(
+public sealed class VideoEntityKindDefinition() : RootEntityKindDefinition<Video>(
     EntityKind.Video,
     "video",
     "Video",
@@ -22,6 +22,7 @@ public sealed class VideoEntityKindDefinition() : EntityKindDefinition<Video>(
         borrowArtworkFromParentKinds: [EntityKind.Movie]),
     new EntityKindNavigation(EntityKind.Video, "videos", "/videos", "/videos/{id}"),
     new EntityKindSearch(2),
+    static root => new Video(root.Id, root.Title),
     new EntityKindBehavior(
         identification: new(
             AutoIdentifySelectorKind.Video,

@@ -104,10 +104,10 @@ public sealed partial class LibraryScanPersistenceService {
         _db.EntitySubtitles.RemoveRange(await _db.EntitySubtitles
             .Where(subtitle => ownerIds.Contains(subtitle.EntityId))
             .ToArrayAsync(cancellationToken));
-        var videoDetails = await _db.VideoDetails
+        var subtitleStates = await _db.EntitySubtitleStates
             .Where(detail => ownerIds.Contains(detail.EntityId))
             .ToArrayAsync(cancellationToken);
-        foreach (var detail in videoDetails) {
+        foreach (var detail in subtitleStates) {
             detail.SubtitlesExtractedAt = null;
             detail.SubtitleSidecarSignature = null;
         }
@@ -169,11 +169,12 @@ public sealed partial class LibraryScanPersistenceService {
                 foreach (var existing in owners) {
                     var tracked = await _db.Entities.FindAsync([existing.Id], cancellationToken);
                     if (tracked is not null) tracked.UpdatedAt = now;
-                    // A found video may predate its detail row (a request-created wanted episode binds the
+                    // A found video may predate its shared attachments (a request-created wanted episode binds the
                     // file path before this upsert) — backfill so it carries its library-root association.
                     if (await _db.VideoDetails.FindAsync([existing.Id], cancellationToken) is null) {
-                        _db.VideoDetails.Add(new VideoDetailRow { EntityId = existing.Id, LibraryRootId = item.LibraryRootId });
+                        _db.VideoDetails.Add(new VideoDetailRow { EntityId = existing.Id });
                     }
+                    await SetEntityLibraryRootAsync(existing.Id, item.LibraryRootId, cancellationToken);
                 }
                 if (owners.Count == 1) {
                     await MaterializeVideoHierarchyAsync(
@@ -195,7 +196,8 @@ public sealed partial class LibraryScanPersistenceService {
 
             var id = Guid.NewGuid();
             _db.Entities.Add(new EntityRow { Id = id, KindCode = EntityKind.Video.ToCode(), Title = item.Title, IsNsfw = item.IsNsfw, CreatedAt = now, UpdatedAt = now });
-            _db.VideoDetails.Add(new VideoDetailRow { EntityId = id, LibraryRootId = item.LibraryRootId });
+            _db.VideoDetails.Add(new VideoDetailRow { EntityId = id });
+            _db.EntityLibraryRoots.Add(new EntityLibraryRootRow { EntityId = id, LibraryRootId = item.LibraryRootId });
             _db.EntityFiles.Add(new EntityFileRow {
                 Id = Guid.NewGuid(),
                 EntityId = id,

@@ -23,9 +23,7 @@ internal static partial class PrismediaModelConfiguration {
                 .HasMaxLength(64)
                 .HasConversion(value => value.ToCode(), value => value.DecodeAs<GalleryType>());
             entity.Property(row => row.CoverImageEntityId).HasColumnName("cover_image_entity_id");
-            entity.Property(row => row.LibraryRootId).HasColumnName("library_root_id");
             entity.HasOne<EntityRow>().WithOne().HasForeignKey<GalleryDetailRow>(row => row.EntityId).OnDelete(DeleteBehavior.Cascade);
-            entity.HasOne<LibraryRootRow>().WithMany().HasForeignKey(row => row.LibraryRootId).OnDelete(DeleteBehavior.SetNull);
         });
 
         ConfigureBooks(modelBuilder);
@@ -52,9 +50,7 @@ internal static partial class PrismediaModelConfiguration {
                 .HasDefaultValue(BookSourceTier.Unknown)
                 .IsRequired();
             entity.Property(row => row.CoverPageEntityId).HasColumnName("cover_page_entity_id");
-            entity.Property(row => row.LibraryRootId).HasColumnName("library_root_id");
             entity.HasOne<EntityRow>().WithOne().HasForeignKey<BookDetailRow>(row => row.EntityId).OnDelete(DeleteBehavior.Cascade);
-            entity.HasOne<LibraryRootRow>().WithMany().HasForeignKey(row => row.LibraryRootId).OnDelete(DeleteBehavior.SetNull);
         });
 
         modelBuilder.Entity<BookChapterDetailRow>(entity => {
@@ -68,24 +64,6 @@ internal static partial class PrismediaModelConfiguration {
     }
 
     private static void ConfigureAudio(ModelBuilder modelBuilder) {
-        modelBuilder.Entity<MusicArtistDetailRow>(entity => {
-            entity.ToTable("music_artist_details");
-            entity.HasKey(row => row.EntityId);
-            entity.Property(row => row.EntityId).HasColumnName("entity_id");
-            entity.Property(row => row.LibraryRootId).HasColumnName("library_root_id");
-            entity.HasOne<EntityRow>().WithOne().HasForeignKey<MusicArtistDetailRow>(row => row.EntityId).OnDelete(DeleteBehavior.Cascade);
-            entity.HasOne<LibraryRootRow>().WithMany().HasForeignKey(row => row.LibraryRootId).OnDelete(DeleteBehavior.SetNull);
-        });
-
-        modelBuilder.Entity<AudioLibraryDetailRow>(entity => {
-            entity.ToTable("audio_library_details");
-            entity.HasKey(row => row.EntityId);
-            entity.Property(row => row.EntityId).HasColumnName("entity_id");
-            entity.Property(row => row.LibraryRootId).HasColumnName("library_root_id");
-            entity.HasOne<EntityRow>().WithOne().HasForeignKey<AudioLibraryDetailRow>(row => row.EntityId).OnDelete(DeleteBehavior.Cascade);
-            entity.HasOne<LibraryRootRow>().WithMany().HasForeignKey(row => row.LibraryRootId).OnDelete(DeleteBehavior.SetNull);
-        });
-
         modelBuilder.Entity<AudioTrackDetailRow>(entity => {
             entity.ToTable("audio_track_details");
             entity.HasKey(row => row.EntityId);

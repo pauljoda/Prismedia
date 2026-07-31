@@ -377,7 +377,7 @@ public sealed class AcquisitionHintApplier(
                 file => file.EntityId,
                 (track, file) => new { Track = track, SourcePath = file.Path })
             .Join(
-                db.AudioLibraryDetails.AsNoTracking().Where(detail => detail.LibraryRootId == libraryRootId),
+                db.EntityLibraryRoots.AsNoTracking().Where(detail => detail.LibraryRootId == libraryRootId),
                 candidate => candidate.Track.ParentEntityId,
                 detail => detail.EntityId,
                 (candidate, _) => new {

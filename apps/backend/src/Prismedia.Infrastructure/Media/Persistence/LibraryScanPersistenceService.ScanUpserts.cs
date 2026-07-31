@@ -28,7 +28,8 @@ public sealed partial class LibraryScanPersistenceService {
         var id = Guid.NewGuid();
 
         _db.Entities.Add(new EntityRow { Id = id, KindCode = EntityKind.Video.ToCode(), Title = title, IsNsfw = isNsfw, CreatedAt = now, UpdatedAt = now });
-        _db.VideoDetails.Add(new VideoDetailRow { EntityId = id, LibraryRootId = libraryRootId });
+        _db.VideoDetails.Add(new VideoDetailRow { EntityId = id });
+        _db.EntityLibraryRoots.Add(new EntityLibraryRootRow { EntityId = id, LibraryRootId = libraryRootId });
         _db.EntityFiles.Add(new EntityFileRow {
             Id = Guid.NewGuid(),
             EntityId = id,
@@ -161,8 +162,8 @@ public sealed partial class LibraryScanPersistenceService {
             }
 
             var detail = await _db.GalleryDetails.FindAsync([existing.Id], cancellationToken);
-            if (detail is not null) detail.LibraryRootId = libraryRootId;
-            else _db.GalleryDetails.Add(new GalleryDetailRow { EntityId = existing.Id, GalleryType = GalleryType.Folder, LibraryRootId = libraryRootId });
+            if (detail is null) _db.GalleryDetails.Add(new GalleryDetailRow { EntityId = existing.Id, GalleryType = GalleryType.Folder });
+            await SetEntityLibraryRootAsync(existing.Id, libraryRootId, cancellationToken);
             return existing.Id;
         }
 
@@ -170,7 +171,8 @@ public sealed partial class LibraryScanPersistenceService {
         var id = Guid.NewGuid();
 
         _db.Entities.Add(new EntityRow { Id = id, KindCode = EntityKind.Gallery.ToCode(), Title = title, ParentEntityId = parentGalleryEntityId, SortOrder = sortOrder, IsNsfw = isNsfw, CreatedAt = now, UpdatedAt = now });
-        _db.GalleryDetails.Add(new GalleryDetailRow { EntityId = id, GalleryType = GalleryType.Folder, LibraryRootId = libraryRootId });
+        _db.GalleryDetails.Add(new GalleryDetailRow { EntityId = id, GalleryType = GalleryType.Folder });
+        _db.EntityLibraryRoots.Add(new EntityLibraryRootRow { EntityId = id, LibraryRootId = libraryRootId });
         _db.EntityFiles.Add(new EntityFileRow {
             Id = Guid.NewGuid(),
             EntityId = id,
@@ -301,9 +303,7 @@ public sealed partial class LibraryScanPersistenceService {
                 }
             }
 
-            var detail = await _db.AudioLibraryDetails.FindAsync([existing.Id], cancellationToken);
-            if (detail is not null) detail.LibraryRootId = libraryRootId;
-            else _db.AudioLibraryDetails.Add(new AudioLibraryDetailRow { EntityId = existing.Id, LibraryRootId = libraryRootId });
+            await SetEntityLibraryRootAsync(existing.Id, libraryRootId, cancellationToken);
             return existing.Id;
         }
 
@@ -311,7 +311,7 @@ public sealed partial class LibraryScanPersistenceService {
         var id = Guid.NewGuid();
 
         _db.Entities.Add(new EntityRow { Id = id, KindCode = EntityKind.AudioLibrary.ToCode(), Title = title, ParentEntityId = parentEntityId, SortOrder = sortOrder, IsNsfw = isNsfw, CreatedAt = now, UpdatedAt = now });
-        _db.AudioLibraryDetails.Add(new AudioLibraryDetailRow { EntityId = id, LibraryRootId = libraryRootId });
+        _db.EntityLibraryRoots.Add(new EntityLibraryRootRow { EntityId = id, LibraryRootId = libraryRootId });
         _db.EntityFiles.Add(new EntityFileRow {
             Id = Guid.NewGuid(),
             EntityId = id,
@@ -366,9 +366,7 @@ public sealed partial class LibraryScanPersistenceService {
                 if (isNsfw) tracked.IsNsfw = true;
             }
 
-            var detail = await _db.MusicArtistDetails.FindAsync([existing.Id], cancellationToken);
-            if (detail is not null) detail.LibraryRootId = libraryRootId;
-            else _db.MusicArtistDetails.Add(new MusicArtistDetailRow { EntityId = existing.Id, LibraryRootId = libraryRootId });
+            await SetEntityLibraryRootAsync(existing.Id, libraryRootId, cancellationToken);
             return existing.Id;
         }
 
@@ -376,7 +374,7 @@ public sealed partial class LibraryScanPersistenceService {
         var id = Guid.NewGuid();
 
         _db.Entities.Add(new EntityRow { Id = id, KindCode = EntityKind.MusicArtist.ToCode(), Title = title, ParentEntityId = null, SortOrder = sortOrder, IsNsfw = isNsfw, CreatedAt = now, UpdatedAt = now });
-        _db.MusicArtistDetails.Add(new MusicArtistDetailRow { EntityId = id, LibraryRootId = libraryRootId });
+        _db.EntityLibraryRoots.Add(new EntityLibraryRootRow { EntityId = id, LibraryRootId = libraryRootId });
         _db.EntityFiles.Add(new EntityFileRow {
             Id = Guid.NewGuid(),
             EntityId = id,
@@ -451,12 +449,12 @@ public sealed partial class LibraryScanPersistenceService {
             }
             var detail = await _db.BookDetails.FindAsync([existing.Id], cancellationToken);
             if (detail is not null) {
-                detail.LibraryRootId = libraryRootId;
                 detail.BookType = BookType.Comic;
                 detail.Format = BookFormat.ImageArchive;
             } else {
-                _db.BookDetails.Add(new BookDetailRow { EntityId = existing.Id, BookType = BookType.Comic, Format = BookFormat.ImageArchive, LibraryRootId = libraryRootId });
+                _db.BookDetails.Add(new BookDetailRow { EntityId = existing.Id, BookType = BookType.Comic, Format = BookFormat.ImageArchive });
             }
+            await SetEntityLibraryRootAsync(existing.Id, libraryRootId, cancellationToken);
             await SaveChangesWithLifecycleAsync(cancellationToken);
             return existing.Id;
         }
@@ -465,7 +463,8 @@ public sealed partial class LibraryScanPersistenceService {
         var id = Guid.NewGuid();
 
         _db.Entities.Add(new EntityRow { Id = id, KindCode = EntityKind.Book.ToCode(), Title = title, IsNsfw = isNsfw, CreatedAt = now, UpdatedAt = now });
-        _db.BookDetails.Add(new BookDetailRow { EntityId = id, BookType = BookType.Comic, Format = BookFormat.ImageArchive, LibraryRootId = libraryRootId });
+        _db.BookDetails.Add(new BookDetailRow { EntityId = id, BookType = BookType.Comic, Format = BookFormat.ImageArchive });
+        _db.EntityLibraryRoots.Add(new EntityLibraryRootRow { EntityId = id, LibraryRootId = libraryRootId });
         _db.EntityFiles.Add(new EntityFileRow {
             Id = Guid.NewGuid(),
             EntityId = id,
@@ -500,12 +499,12 @@ public sealed partial class LibraryScanPersistenceService {
             }
             var detail = await _db.BookDetails.FindAsync([existing.Id], cancellationToken);
             if (detail is not null) {
-                detail.LibraryRootId = libraryRootId;
                 detail.BookType = bookType;
                 detail.Format = format;
             } else {
-                _db.BookDetails.Add(new BookDetailRow { EntityId = existing.Id, BookType = bookType, Format = format, LibraryRootId = libraryRootId });
+                _db.BookDetails.Add(new BookDetailRow { EntityId = existing.Id, BookType = bookType, Format = format });
             }
+            await SetEntityLibraryRootAsync(existing.Id, libraryRootId, cancellationToken);
             await ReparentSingleFileBooksUnderSeriesAsync(existing.Id, folderPath, libraryRootId, DateTimeOffset.UtcNow, cancellationToken);
             await SaveChangesWithLifecycleAsync(cancellationToken);
             return existing.Id;
@@ -515,7 +514,8 @@ public sealed partial class LibraryScanPersistenceService {
         var id = Guid.NewGuid();
 
         _db.Entities.Add(new EntityRow { Id = id, KindCode = EntityKind.Book.ToCode(), Title = title, IsNsfw = isNsfw, CreatedAt = now, UpdatedAt = now });
-        _db.BookDetails.Add(new BookDetailRow { EntityId = id, BookType = bookType, Format = format, LibraryRootId = libraryRootId });
+        _db.BookDetails.Add(new BookDetailRow { EntityId = id, BookType = bookType, Format = format });
+        _db.EntityLibraryRoots.Add(new EntityLibraryRootRow { EntityId = id, LibraryRootId = libraryRootId });
         _db.EntityFiles.Add(new EntityFileRow {
             Id = Guid.NewGuid(),
             EntityId = id,
@@ -543,7 +543,9 @@ public sealed partial class LibraryScanPersistenceService {
                 _db.BookDetails,
                 file => file.EntityId,
                 detail => detail.EntityId,
-                (file, detail) => new { file.EntityId, file.Path, detail.LibraryRootId, detail.Format })
+                (file, detail) => new { file.EntityId, file.Path, detail.Format })
+            .Join(_db.EntityLibraryRoots, candidate => candidate.EntityId, root => root.EntityId,
+                (candidate, root) => new { candidate.EntityId, candidate.Path, candidate.Format, root.LibraryRootId })
             .Where(candidate => candidate.LibraryRootId == libraryRootId && candidate.Format != BookFormat.ImageArchive)
             .ToArrayAsync(cancellationToken);
         var childCandidates = candidates
@@ -612,10 +614,10 @@ public sealed partial class LibraryScanPersistenceService {
             }
             var detail = await _db.BookDetails.FindAsync([existing.Id], cancellationToken);
             if (detail is not null) {
-                detail.LibraryRootId = libraryRootId;
                 detail.BookType = bookType;
                 detail.Format = format;
             }
+            await SetEntityLibraryRootAsync(existing.Id, libraryRootId, cancellationToken);
             await SaveChangesWithLifecycleAsync(cancellationToken);
             return existing.Id;
         }
@@ -624,7 +626,8 @@ public sealed partial class LibraryScanPersistenceService {
         var id = Guid.NewGuid();
 
         _db.Entities.Add(new EntityRow { Id = id, KindCode = EntityKind.Book.ToCode(), Title = title, ParentEntityId = parentBookEntityId, SortOrder = sortOrder, IsNsfw = isNsfw, CreatedAt = now, UpdatedAt = now });
-        _db.BookDetails.Add(new BookDetailRow { EntityId = id, BookType = bookType, Format = format, LibraryRootId = libraryRootId });
+        _db.BookDetails.Add(new BookDetailRow { EntityId = id, BookType = bookType, Format = format });
+        _db.EntityLibraryRoots.Add(new EntityLibraryRootRow { EntityId = id, LibraryRootId = libraryRootId });
         _db.EntityFiles.Add(new EntityFileRow {
             Id = Guid.NewGuid(),
             EntityId = id,

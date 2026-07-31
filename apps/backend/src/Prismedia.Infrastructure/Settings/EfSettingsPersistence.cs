@@ -205,43 +205,18 @@ public sealed class EfSettingsPersistence : ISettingsPersistence {
         var entityIds = new HashSet<Guid>();
         var containerIds = new HashSet<Guid>();
 
-        foreach (var entityId in await _db.VideoDetails.AsNoTracking()
+        var rootedEntities = await _db.EntityLibraryRoots.AsNoTracking()
             .Where(detail => detail.LibraryRootId == root.Id)
-            .Select(detail => detail.EntityId)
-            .ToArrayAsync(cancellationToken)) {
-            entityIds.Add(entityId);
-        }
-
-        foreach (var entityId in await _db.GalleryDetails.AsNoTracking()
-            .Where(detail => detail.LibraryRootId == root.Id)
-            .Select(detail => detail.EntityId)
-            .ToArrayAsync(cancellationToken)) {
-            entityIds.Add(entityId);
-            containerIds.Add(entityId);
-        }
-
-        foreach (var entityId in await _db.BookDetails.AsNoTracking()
-            .Where(detail => detail.LibraryRootId == root.Id)
-            .Select(detail => detail.EntityId)
-            .ToArrayAsync(cancellationToken)) {
-            entityIds.Add(entityId);
-            containerIds.Add(entityId);
-        }
-
-        foreach (var entityId in await _db.MusicArtistDetails.AsNoTracking()
-            .Where(detail => detail.LibraryRootId == root.Id)
-            .Select(detail => detail.EntityId)
-            .ToArrayAsync(cancellationToken)) {
-            entityIds.Add(entityId);
-            containerIds.Add(entityId);
-        }
-
-        foreach (var entityId in await _db.AudioLibraryDetails.AsNoTracking()
-            .Where(detail => detail.LibraryRootId == root.Id)
-            .Select(detail => detail.EntityId)
-            .ToArrayAsync(cancellationToken)) {
-            entityIds.Add(entityId);
-            containerIds.Add(entityId);
+            .Join(_db.Entities.AsNoTracking(), root => root.EntityId, entity => entity.Id,
+                (root, entity) => new { entity.Id, entity.KindCode })
+            .ToArrayAsync(cancellationToken);
+        foreach (var entity in rootedEntities) {
+            entityIds.Add(entity.Id);
+            if (entity.KindCode is var kind &&
+                (kind == EntityKind.Gallery.ToCode() || kind == EntityKind.Book.ToCode() ||
+                 kind == EntityKind.MusicArtist.ToCode() || kind == EntityKind.AudioLibrary.ToCode())) {
+                containerIds.Add(entity.Id);
+            }
         }
 
         if (!string.IsNullOrWhiteSpace(root.Path)) {

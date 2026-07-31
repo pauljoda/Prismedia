@@ -754,25 +754,13 @@ public sealed partial class EfEntityReadService : IEntityReadService {
     }
 
     private IQueryable<Guid> HiddenLibraryTargetedEntityIds() {
-        // Materialized set (tiny) so PostgreSQL probes the detail LibraryRootId indexes
+        // Materialized set (tiny) so PostgreSQL probes the shared LibraryRootId index
         // with = ANY(@hiddenRootIds) instead of correlating a roots subquery.
         var hiddenRootIds = _hiddenRootIds ?? [];
 
-        var rootedEntityIds = _db.VideoDetails
-            .Where(detail => detail.LibraryRootId != null && hiddenRootIds.Contains(detail.LibraryRootId.Value))
-            .Select(detail => detail.EntityId)
-            .Concat(_db.GalleryDetails
-                .Where(detail => detail.LibraryRootId != null && hiddenRootIds.Contains(detail.LibraryRootId.Value))
-                .Select(detail => detail.EntityId))
-            .Concat(_db.BookDetails
-                .Where(detail => detail.LibraryRootId != null && hiddenRootIds.Contains(detail.LibraryRootId.Value))
-                .Select(detail => detail.EntityId))
-            .Concat(_db.MusicArtistDetails
-                .Where(detail => detail.LibraryRootId != null && hiddenRootIds.Contains(detail.LibraryRootId.Value))
-                .Select(detail => detail.EntityId))
-            .Concat(_db.AudioLibraryDetails
-                .Where(detail => detail.LibraryRootId != null && hiddenRootIds.Contains(detail.LibraryRootId.Value))
-                .Select(detail => detail.EntityId));
+        var rootedEntityIds = _db.EntityLibraryRoots
+            .Where(root => root.LibraryRootId != null && hiddenRootIds.Contains(root.LibraryRootId.Value))
+            .Select(root => root.EntityId);
 
         return rootedEntityIds.Concat(HiddenRequestTargetedWantedEntityIds(hiddenRootIds));
     }

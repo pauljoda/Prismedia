@@ -4,7 +4,7 @@ using Prismedia.Domain.Entities;
 namespace Prismedia.Domain.Media;
 
 /// <summary>Defines the movie grouping kind and its shared metadata capabilities.</summary>
-public sealed class MovieEntityKindDefinition() : EntityKindDefinition<Movie>(
+public sealed class MovieEntityKindDefinition() : RootEntityKindDefinition<Movie>(
     EntityKind.Movie,
     "movie",
     "Movie",
@@ -21,6 +21,7 @@ public sealed class MovieEntityKindDefinition() : EntityKindDefinition<Movie>(
         EntityArtworkFit.Cover),
     new EntityKindNavigation(EntityKind.Movie, "movies", "/movies", "/movies/{id}"),
     new EntityKindSearch(0),
+    static root => new Movie(root.Id, root.Title),
     new EntityKindBehavior(
         identification: new(
             AutoIdentifySelectorKind.Video,

@@ -12,6 +12,8 @@ internal sealed class SubtitlesCapabilityMapper(PrismediaDbContext db) : IEntity
     private readonly Dictionary<Guid, HashSet<Guid>> _hydratedWritableTrackIdsByEntity = [];
 
     public async Task HydrateAsync(Entity entity, CancellationToken cancellationToken) {
+        var subtitleState = await db.EntitySubtitleStates.AsNoTracking()
+            .SingleOrDefaultAsync(row => row.EntityId == entity.Id, cancellationToken);
         var rows = await db.EntitySubtitles.AsNoTracking()
             .Where(r => r.EntityId == entity.Id)
             .OrderBy(r => r.CreatedAt)
@@ -22,16 +24,16 @@ internal sealed class SubtitlesCapabilityMapper(PrismediaDbContext db) : IEntity
             .Where(row => !IsPipelineManaged(row.Source))
             .Select(row => row.Id)
             .ToHashSet();
-        if (rows.Length == 0) {
-            return;
-        }
-
-        // Mutate the existing capability in place so its ExtractedAt (set by the Video kind
-        // mapper from video_details) is preserved across track hydration.
+        // The lifecycle attachment and track rows are both owned by this capability.
         var capability = entity.GetCapability<CapabilitySubtitles>();
         if (capability is null) {
             capability = new CapabilitySubtitles();
             entity.AddCapability(capability);
+        }
+
+        capability.MarkExtracted(subtitleState?.SubtitlesExtractedAt);
+        if (rows.Length == 0) {
+            return;
         }
 
         capability.Hydrate(rows.Select(r => new CapabilitySubtitles.Item(
@@ -60,9 +62,15 @@ internal sealed class SubtitlesCapabilityMapper(PrismediaDbContext db) : IEntity
         db.EntitySubtitles.RemoveRange(hydratedRows);
     }
 
-    public Task PersistAsync(Entity entity, CancellationToken cancellationToken) {
+    public async Task PersistAsync(Entity entity, CancellationToken cancellationToken) {
         if (entity.SubtitleCapability is not { } subtitles) {
-            return Task.CompletedTask;
+            return;
+        }
+
+        // Extraction and sidecar reconciliation own lifecycle mutations. A generic entity save may
+        // carry an older hydrated timestamp, so it may establish but never overwrite this attachment.
+        if (await db.EntitySubtitleStates.FindAsync([entity.Id], cancellationToken) is null) {
+            db.EntitySubtitleStates.Add(new EntitySubtitleStateRow { EntityId = entity.Id });
         }
 
         var now = DateTimeOffset.UtcNow;
@@ -87,7 +95,6 @@ internal sealed class SubtitlesCapabilityMapper(PrismediaDbContext db) : IEntity
             });
         }
 
-        return Task.CompletedTask;
     }
 
     private static bool IsHydratable(EntitySubtitleRow row) =>

@@ -181,7 +181,7 @@ public sealed class CollectionRuleEngineSqlTests {
         var query = new CollectionRuleEngine(null!).BuildQuery(group, EntityKind.Video.ToCode());
 
         Assert.NotNull(query);
-        Assert.Contains("video_details", query.Value.Sql, StringComparison.Ordinal);
+        Assert.Contains("entity_library_roots", query.Value.Sql, StringComparison.Ordinal);
         Assert.Contains(query.Value.Parameters, parameter =>
             parameter.NpgsqlDbType == NpgsqlDbType.Uuid &&
             parameter.Value is Guid value &&
@@ -205,12 +205,12 @@ public sealed class CollectionRuleEngineSqlTests {
 
         Assert.NotNull(query);
         Assert.Contains("FROM entities rooted_descendant", query.Value.Sql, StringComparison.Ordinal);
-        Assert.Contains("INNER JOIN video_details rooted_detail", query.Value.Sql, StringComparison.Ordinal);
+        Assert.Contains("INNER JOIN entity_library_roots rooted_detail", query.Value.Sql, StringComparison.Ordinal);
         Assert.Contains("rooted_parent_1.parent_entity_id = e.id", query.Value.Sql, StringComparison.Ordinal);
     }
 
     [Fact]
-    public void DirectLibraryRootPoliciesResolveConventionalPersistenceRows() {
+    public void DirectLibraryRootPoliciesResolveSharedPersistenceRows() {
         var options = new DbContextOptionsBuilder<PrismediaDbContext>()
             .UseNpgsql("Host=localhost;Database=collection_rule_model;Username=unused;Password=unused")
             .Options;
@@ -221,13 +221,12 @@ public sealed class CollectionRuleEngineSqlTests {
             .ToArray();
         Assert.NotEmpty(directDefinitions);
 
-        foreach (var definition in directDefinitions) {
-            var tableName = CollectionRuleEngine.DirectLibraryRootTableName(definition);
-            Assert.Contains(db.Model.GetEntityTypes(), entityType =>
-                entityType.GetTableName() == tableName &&
-                entityType.FindProperty("EntityId") is not null &&
-                entityType.FindProperty("LibraryRootId") is not null);
-        }
+        Assert.All(directDefinitions, definition =>
+            Assert.Equal(EntityLibraryVisibilityMode.DirectRoot, definition.LibraryVisibility.Mode));
+        Assert.Contains(db.Model.GetEntityTypes(), entityType =>
+            entityType.GetTableName() == "entity_library_roots" &&
+            entityType.FindProperty("EntityId") is not null &&
+            entityType.FindProperty("LibraryRootId") is not null);
     }
 
     [Fact]
@@ -247,7 +246,7 @@ public sealed class CollectionRuleEngineSqlTests {
 
         Assert.NotNull(query);
         Assert.Contains("FROM entities parent1", query.Value.Sql, StringComparison.Ordinal);
-        Assert.Contains("audio_library_details", query.Value.Sql, StringComparison.Ordinal);
+        Assert.Contains("entity_library_roots", query.Value.Sql, StringComparison.Ordinal);
     }
 
     [Fact]

@@ -16,6 +16,22 @@ namespace Prismedia.Infrastructure.Media.Persistence;
 public sealed partial class LibraryScanPersistenceService {
     // ── Library roots & settings ──
 
+    private async Task SetEntityLibraryRootAsync(
+        Guid entityId,
+        Guid? libraryRootId,
+        CancellationToken cancellationToken) {
+        var row = await _db.EntityLibraryRoots.FindAsync([entityId], cancellationToken);
+        if (row is null) {
+            _db.EntityLibraryRoots.Add(new EntityLibraryRootRow {
+                EntityId = entityId,
+                LibraryRootId = libraryRootId
+            });
+            return;
+        }
+
+        row.LibraryRootId = libraryRootId;
+    }
+
     public async Task<LibraryRootData?> GetLibraryRootAsync(Guid rootId, CancellationToken cancellationToken) {
         var row = await _db.LibraryRoots.AsNoTracking()
             .FirstOrDefaultAsync(r => r.Id == rootId, cancellationToken);

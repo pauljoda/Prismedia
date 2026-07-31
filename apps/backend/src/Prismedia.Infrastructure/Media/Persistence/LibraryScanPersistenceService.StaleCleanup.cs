@@ -16,10 +16,7 @@ public sealed partial class LibraryScanPersistenceService {
     // ── Stale entity cleanup ──
 
     public async Task<int> RemoveStaleVideosByRootAsync(Guid rootId, IReadOnlySet<string> validPaths, CancellationToken cancellationToken) {
-        var videoIds = await _db.VideoDetails.AsNoTracking()
-            .Where(vd => vd.LibraryRootId == rootId)
-            .Select(vd => vd.EntityId)
-            .ToListAsync(cancellationToken);
+        var videoIds = await DirectRootedKindIdsAsync(rootId, EntityKind.Video, cancellationToken);
 
         var rootPath = await _db.LibraryRoots.AsNoTracking()
             .Where(root => root.Id == rootId)
@@ -103,10 +100,7 @@ public sealed partial class LibraryScanPersistenceService {
     }
 
     public async Task<int> RemoveStaleGalleriesInRootAsync(Guid rootId, IReadOnlySet<string> validFolderPaths, CancellationToken cancellationToken) {
-        var galleryIds = await _db.GalleryDetails.AsNoTracking()
-            .Where(gd => gd.LibraryRootId == rootId)
-            .Select(gd => gd.EntityId)
-            .ToListAsync(cancellationToken);
+        var galleryIds = await DirectRootedKindIdsAsync(rootId, EntityKind.Gallery, cancellationToken);
 
         return await RemoveStaleContainerEntitiesBySourcePath(galleryIds, validFolderPaths, cancellationToken);
     }
@@ -126,19 +120,13 @@ public sealed partial class LibraryScanPersistenceService {
     }
 
     public async Task<int> RemoveStaleAudioLibrariesInRootAsync(Guid rootId, IReadOnlySet<string> validFolderPaths, CancellationToken cancellationToken) {
-        var libraryIds = await _db.AudioLibraryDetails.AsNoTracking()
-            .Where(ald => ald.LibraryRootId == rootId)
-            .Select(ald => ald.EntityId)
-            .ToListAsync(cancellationToken);
+        var libraryIds = await DirectRootedKindIdsAsync(rootId, EntityKind.AudioLibrary, cancellationToken);
 
         return await RemoveStaleContainerEntitiesBySourcePath(libraryIds, validFolderPaths, cancellationToken);
     }
 
     public async Task<int> RemoveStaleMusicArtistsInRootAsync(Guid rootId, IReadOnlySet<string> validFolderPaths, CancellationToken cancellationToken) {
-        var artistIds = await _db.MusicArtistDetails.AsNoTracking()
-            .Where(mad => mad.LibraryRootId == rootId)
-            .Select(mad => mad.EntityId)
-            .ToListAsync(cancellationToken);
+        var artistIds = await DirectRootedKindIdsAsync(rootId, EntityKind.MusicArtist, cancellationToken);
 
         return await RemoveStaleContainerEntitiesBySourcePath(artistIds, validFolderPaths, cancellationToken);
     }
@@ -162,10 +150,7 @@ public sealed partial class LibraryScanPersistenceService {
     }
 
     public async Task<int> RemoveStaleBooksInRootAsync(Guid rootId, IReadOnlySet<string> validPaths, CancellationToken cancellationToken) {
-        var bookIds = await _db.BookDetails.AsNoTracking()
-            .Where(bd => bd.LibraryRootId == rootId)
-            .Select(bd => bd.EntityId)
-            .ToListAsync(cancellationToken);
+        var bookIds = await DirectRootedKindIdsAsync(rootId, EntityKind.Book, cancellationToken);
 
         return await RemoveStaleEntitiesBySourcePath(bookIds, validPaths, cancellationToken);
     }

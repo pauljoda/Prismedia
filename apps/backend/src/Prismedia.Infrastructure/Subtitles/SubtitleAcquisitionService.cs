@@ -224,7 +224,7 @@ internal sealed class SubtitleAcquisitionService(
         CancellationToken cancellationToken) {
         var entity = await db.Entities.AsNoTracking().SingleOrDefaultAsync(row => row.Id == videoId, cancellationToken)
             ?? throw new KeyNotFoundException($"Video '{videoId}' was not found.");
-        if (!await db.VideoDetails.AsNoTracking().AnyAsync(row => row.EntityId == videoId, cancellationToken)) {
+        if (!string.Equals(entity.KindCode, EntityKind.Video.ToCode(), StringComparison.Ordinal)) {
             throw new KeyNotFoundException($"Entity '{videoId}' is not a video.");
         }
 

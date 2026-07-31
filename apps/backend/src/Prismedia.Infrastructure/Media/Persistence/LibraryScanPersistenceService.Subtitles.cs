@@ -18,7 +18,7 @@ public sealed partial class LibraryScanPersistenceService {
             .GroupBy(state => state.EntityId)
             .ToDictionary(group => group.Key, group => group.Last().Signature);
         var ids = signatures.Keys.ToArray();
-        var details = await _db.VideoDetails
+        var details = await _db.EntitySubtitleStates
             .Where(detail => ids.Contains(detail.EntityId))
             .ToListAsync(cancellationToken);
         var changed = false;
@@ -59,18 +59,22 @@ public sealed partial class LibraryScanPersistenceService {
                 .ToListAsync(cancellationToken))
             .ToHashSet(FileSystemPathComparison.Comparer);
         var candidates = await _db.VideoDetails.AsNoTracking()
-            .Where(detail => detail.LibraryRootId == rootId || detail.LibraryRootId == null)
             .Join(
                 _db.Entities.AsNoTracking(),
                 detail => detail.EntityId,
                 entity => entity.Id,
                 (detail, entity) => new { Detail = detail, Entity = entity })
+            .GroupJoin(
+                _db.EntityLibraryRoots.AsNoTracking(),
+                joined => joined.Entity.Id,
+                root => root.EntityId,
+                (joined, roots) => new { joined.Detail, joined.Entity, Root = roots.FirstOrDefault() })
             .Join(
                 _db.EntityFiles.AsNoTracking().Where(file => file.Role == EntityFileRole.Source),
                 joined => joined.Entity.Id,
                 file => file.EntityId,
                 (joined, file) => new {
-                    joined.Detail.LibraryRootId,
+                    LibraryRootId = joined.Root == null ? (Guid?)null : joined.Root.LibraryRootId,
                     joined.Entity.Id,
                     joined.Entity.Title,
                     SourcePath = file.Path

@@ -503,15 +503,8 @@ public sealed class WantedEntityWriter(
                 db.BookDetails.Add(new BookDetailRow {
                     EntityId = entityId,
                     BookType = BookType.Novel,
-                    Format = BookFormat.Epub,
-                    LibraryRootId = null
+                    Format = BookFormat.Epub
                 });
-                break;
-            case EntityKind.AudioLibrary:
-                db.AudioLibraryDetails.Add(new AudioLibraryDetailRow { EntityId = entityId, LibraryRootId = null });
-                break;
-            case EntityKind.MusicArtist:
-                db.MusicArtistDetails.Add(new MusicArtistDetailRow { EntityId = entityId, LibraryRootId = null });
                 break;
             default:
                 // Movie / series and other kinds carry no request-relevant detail row today.

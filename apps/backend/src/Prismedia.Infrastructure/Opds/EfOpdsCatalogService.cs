@@ -301,14 +301,16 @@ public sealed class EfOpdsCatalogService(
         return
             from entity in db.Entities.AsNoTracking()
             join detail in db.BookDetails.AsNoTracking() on entity.Id equals detail.EntityId
+            join libraryMembership in db.EntityLibraryRoots.AsNoTracking() on entity.Id equals libraryMembership.EntityId into membershipRows
+            from membership in membershipRows.DefaultIfEmpty()
             join source in sourceRows on entity.Id equals source.EntityId
-            join rootCandidate in db.LibraryRoots.AsNoTracking() on detail.LibraryRootId equals rootCandidate.Id into rootRows
+            join rootCandidate in db.LibraryRoots.AsNoTracking() on membership.LibraryRootId equals rootCandidate.Id into rootRows
             from root in rootRows.DefaultIfEmpty()
             join parentCandidate in db.Entities.AsNoTracking() on entity.ParentEntityId equals parentCandidate.Id into parentRows
             from parent in parentRows.DefaultIfEmpty()
             where entity.KindCode == BookKindCode &&
-                  (detail.LibraryRootId == null || (root != null && root.Enabled)) &&
-                  (detail.LibraryRootId == null || !hiddenRootIds.Contains(detail.LibraryRootId ?? Guid.Empty)) &&
+                  (membership == null || membership.LibraryRootId == null || (root != null && root.Enabled)) &&
+                  (membership == null || membership.LibraryRootId == null || !hiddenRootIds.Contains(membership.LibraryRootId ?? Guid.Empty)) &&
                   (detail.Format == BookFormat.Epub ||
                    detail.Format == BookFormat.Pdf ||
                    detail.Format == BookFormat.ImageArchive) &&
@@ -329,7 +331,7 @@ public sealed class EfOpdsCatalogService(
                 UpdatedAt = entity.UpdatedAt,
                 BookType = detail.BookType,
                 Format = detail.Format,
-                LibraryRootId = detail.LibraryRootId,
+                LibraryRootId = membership == null ? null : membership.LibraryRootId,
                 SourcePath = source.Path,
                 SourceMimeType = source.MimeType,
                 SizeBytes = source.SizeBytes

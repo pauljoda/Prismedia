@@ -91,7 +91,7 @@ public sealed partial class LibraryScanPersistenceService {
             .Select(row => row.EntityId)
             .ToHashSet();
 
-        var subtitlesExtracted = (await _db.VideoDetails.AsNoTracking()
+        var subtitlesExtracted = (await _db.EntitySubtitleStates.AsNoTracking()
             .Where(v => ids.Contains(v.EntityId) && v.SubtitlesExtractedAt != null)
             .Select(v => v.EntityId)
             .ToListAsync(cancellationToken)).ToHashSet();
@@ -229,21 +229,24 @@ public sealed partial class LibraryScanPersistenceService {
         !hasPreview.Contains(entityId);
 
     public async Task<bool> HasSubtitlesExtractedAsync(Guid entityId, CancellationToken cancellationToken) {
-        var detail = await _db.VideoDetails.AsNoTracking()
+        var detail = await _db.EntitySubtitleStates.AsNoTracking()
             .FirstOrDefaultAsync(v => v.EntityId == entityId, cancellationToken);
         return detail?.SubtitlesExtractedAt is not null;
     }
 
     public async Task<IReadOnlyList<EntityRefreshTarget>> GetAudioContainerTargetsInRootAsync(
         Guid rootId, CancellationToken cancellationToken) {
-        var albumIds = await _db.AudioLibraryDetails.AsNoTracking()
+        var rootedAudioIds = await _db.EntityLibraryRoots.AsNoTracking()
             .Where(detail => detail.LibraryRootId == rootId)
             .Select(detail => detail.EntityId)
             .ToListAsync(cancellationToken);
-        var artistIds = await _db.MusicArtistDetails.AsNoTracking()
-            .Where(detail => detail.LibraryRootId == rootId)
-            .Select(detail => detail.EntityId)
+        var audioContainers = await _db.Entities.AsNoTracking()
+            .Where(entity => rootedAudioIds.Contains(entity.Id) &&
+                (entity.KindCode == EntityKind.AudioLibrary.ToCode() || entity.KindCode == EntityKind.MusicArtist.ToCode()))
+            .Select(entity => new { entity.Id, entity.KindCode })
             .ToListAsync(cancellationToken);
+        var albumIds = audioContainers.Where(entity => entity.KindCode == EntityKind.AudioLibrary.ToCode()).Select(entity => entity.Id).ToList();
+        var artistIds = audioContainers.Where(entity => entity.KindCode == EntityKind.MusicArtist.ToCode()).Select(entity => entity.Id).ToList();
 
         var containerIds = albumIds.Concat(artistIds).Distinct().ToArray();
         if (containerIds.Length == 0) {
@@ -259,9 +262,10 @@ public sealed partial class LibraryScanPersistenceService {
 
     public async Task<IReadOnlyList<EntityRefreshTarget>> GetAudioTrackTargetsInRootAsync(
         Guid rootId, CancellationToken cancellationToken) {
-        var albumIds = await _db.AudioLibraryDetails.AsNoTracking()
+        var albumIds = await _db.EntityLibraryRoots.AsNoTracking()
             .Where(detail => detail.LibraryRootId == rootId)
-            .Select(detail => detail.EntityId)
+            .Join(_db.Entities.AsNoTracking().Where(entity => entity.KindCode == EntityKind.AudioLibrary.ToCode()),
+                root => root.EntityId, entity => entity.Id, (root, entity) => entity.Id)
             .ToListAsync(cancellationToken);
 
         var targets = new Dictionary<Guid, EntityRefreshTarget>();
@@ -316,18 +320,12 @@ public sealed partial class LibraryScanPersistenceService {
         var entityIds = new List<Guid>();
 
         if (categories.Contains(MediaCategory.Video)) {
-            var videoIds = await _db.VideoDetails.AsNoTracking()
-                .Where(detail => detail.LibraryRootId == libraryRootId)
-                .Select(detail => detail.EntityId)
-                .ToListAsync(cancellationToken);
+            var videoIds = await DirectRootedKindIdsAsync(libraryRootId, EntityKind.Video, cancellationToken);
             entityIds.AddRange(videoIds);
         }
 
         if (categories.Contains(MediaCategory.Image)) {
-            var galleryIds = await _db.GalleryDetails.AsNoTracking()
-                .Where(detail => detail.LibraryRootId == libraryRootId)
-                .Select(detail => detail.EntityId)
-                .ToListAsync(cancellationToken);
+            var galleryIds = await DirectRootedKindIdsAsync(libraryRootId, EntityKind.Gallery, cancellationToken);
             entityIds.AddRange(galleryIds);
         }
 
@@ -335,24 +333,15 @@ public sealed partial class LibraryScanPersistenceService {
             // Preserve the full-scan queue ordering: artists first, then albums. When an artist
             // identifies successfully, later album jobs can use the saved artist external IDs as
             // provider context.
-            var artistIds = await _db.MusicArtistDetails.AsNoTracking()
-                .Where(detail => detail.LibraryRootId == libraryRootId)
-                .Select(detail => detail.EntityId)
-                .ToListAsync(cancellationToken);
+            var artistIds = await DirectRootedKindIdsAsync(libraryRootId, EntityKind.MusicArtist, cancellationToken);
             entityIds.AddRange(artistIds);
 
-            var albumIds = await _db.AudioLibraryDetails.AsNoTracking()
-                .Where(detail => detail.LibraryRootId == libraryRootId)
-                .Select(detail => detail.EntityId)
-                .ToListAsync(cancellationToken);
+            var albumIds = await DirectRootedKindIdsAsync(libraryRootId, EntityKind.AudioLibrary, cancellationToken);
             entityIds.AddRange(albumIds);
         }
 
         if (categories.Contains(MediaCategory.ComicArchive) || categories.Contains(MediaCategory.Book)) {
-            var bookIds = await _db.BookDetails.AsNoTracking()
-                .Where(detail => detail.LibraryRootId == libraryRootId)
-                .Select(detail => detail.EntityId)
-                .ToListAsync(cancellationToken);
+            var bookIds = await DirectRootedKindIdsAsync(libraryRootId, EntityKind.Book, cancellationToken);
             entityIds.AddRange(bookIds);
         }
 
@@ -405,5 +394,18 @@ public sealed partial class LibraryScanPersistenceService {
 
         return roots.Values.ToList();
     }
+
+    private Task<List<Guid>> DirectRootedKindIdsAsync(
+        Guid libraryRootId,
+        EntityKind kind,
+        CancellationToken cancellationToken) =>
+        _db.EntityLibraryRoots.AsNoTracking()
+            .Where(root => root.LibraryRootId == libraryRootId)
+            .Join(
+                _db.Entities.AsNoTracking().Where(entity => entity.KindCode == kind.ToCode()),
+                root => root.EntityId,
+                entity => entity.Id,
+                (root, entity) => entity.Id)
+            .ToListAsync(cancellationToken);
 
 }

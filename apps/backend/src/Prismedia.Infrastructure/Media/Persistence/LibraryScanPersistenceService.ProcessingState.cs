@@ -227,11 +227,13 @@ public sealed partial class LibraryScanPersistenceService {
     }
 
     public async Task MarkSubtitlesExtractedAsync(Guid entityId, CancellationToken cancellationToken) {
-        var detail = await _db.VideoDetails.FindAsync([entityId], cancellationToken);
-        if (detail is not null) {
-            detail.SubtitlesExtractedAt = DateTimeOffset.UtcNow;
-            await SaveChangesWithLifecycleAsync(cancellationToken);
+        var state = await _db.EntitySubtitleStates.FindAsync([entityId], cancellationToken);
+        if (state is null) {
+            state = new EntitySubtitleStateRow { EntityId = entityId };
+            _db.EntitySubtitleStates.Add(state);
         }
+        state.SubtitlesExtractedAt = DateTimeOffset.UtcNow;
+        await SaveChangesWithLifecycleAsync(cancellationToken);
     }
 
     public async Task UpsertSubtitleAsync(Guid entityId, string language, string? label, string format,
@@ -349,10 +351,13 @@ public sealed partial class LibraryScanPersistenceService {
             _db.EntitySubtitles.Remove(stale);
         }
 
-        var detail = await _db.VideoDetails.FindAsync([entityId], cancellationToken)
-            ?? throw new InvalidOperationException($"Video detail '{entityId}' was not found.");
-        detail.SubtitleSidecarSignature = isComplete ? sidecarSignature : null;
-        detail.SubtitlesExtractedAt = isComplete ? DateTimeOffset.UtcNow : null;
+        var state = await _db.EntitySubtitleStates.FindAsync([entityId], cancellationToken);
+        if (state is null) {
+            state = new EntitySubtitleStateRow { EntityId = entityId };
+            _db.EntitySubtitleStates.Add(state);
+        }
+        state.SubtitleSidecarSignature = isComplete ? sidecarSignature : null;
+        state.SubtitlesExtractedAt = isComplete ? DateTimeOffset.UtcNow : null;
 
         await SaveChangesWithLifecycleAsync(cancellationToken);
         obsoletePaths.ExceptWith(retainedPaths);
@@ -461,7 +466,7 @@ public sealed partial class LibraryScanPersistenceService {
         var sourceEntityIds = await GetSourceEntityIdsForPathsAsync(sourcePaths, cancellationToken);
         if (sourceEntityIds.Length == 0) return;
 
-        var rows = await _db.VideoDetails
+        var rows = await _db.EntitySubtitleStates
             .Where(detail => sourceEntityIds.Contains(detail.EntityId) &&
                 detail.SubtitlesExtractedAt != null)
             .ToListAsync(cancellationToken);
