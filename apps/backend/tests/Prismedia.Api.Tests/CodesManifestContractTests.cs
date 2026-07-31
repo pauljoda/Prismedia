@@ -7,6 +7,31 @@ namespace Prismedia.Api.Tests;
 
 public sealed class CodesManifestContractTests {
     [Fact]
+    public void EveryCodeFamilyOwnsUniqueGeneratedClientNames() {
+        var manifest = CodesManifest.Build();
+
+        Assert.Equal(
+            manifest.Enums.Keys.Order(StringComparer.Ordinal),
+            manifest.CodeFamilies.Keys.Order(StringComparer.Ordinal));
+        Assert.Equal(
+            manifest.CodeFamilies.Count,
+            manifest.CodeFamilies.Values.Select(family => family.ConstantName).Distinct(StringComparer.Ordinal).Count());
+        Assert.Equal(
+            manifest.CodeFamilies.Count,
+            manifest.CodeFamilies.Values.Select(family => family.TypeName).Distinct(StringComparer.Ordinal).Count());
+
+        Assert.Equal(
+            new CodeFamilyManifestEntry("RELATIONSHIP_CODE", "RelationshipCode"),
+            manifest.CodeFamilies[nameof(RelationshipKind)]);
+        Assert.Equal(
+            new CodeFamilyManifestEntry("SUBTITLE_SOURCE", "SubtitleSourceCode"),
+            manifest.CodeFamilies[nameof(EntitySubtitleSource)]);
+        Assert.Equal(
+            new CodeFamilyManifestEntry("ENTITY_KIND", "EntityKindCode"),
+            manifest.CodeFamilies[nameof(EntityKind)]);
+    }
+
+    [Fact]
     public void ThumbnailMetaIconManifestCarriesExactStructuralUnits() {
         var icons = CodesManifest.Build().ThumbnailMetaIcons
             .Select(icon => icon.Value)

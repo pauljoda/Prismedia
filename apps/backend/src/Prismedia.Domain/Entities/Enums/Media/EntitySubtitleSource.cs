@@ -3,6 +3,7 @@ namespace Prismedia.Domain.Entities;
 /// <summary>
 /// Closed set of subtitle discovery or generation sources.
 /// </summary>
+[CodeFamily("SUBTITLE_SOURCE", "SubtitleSourceCode")]
 public enum EntitySubtitleSource {
     /// <summary>User supplied subtitle file.</summary>
     [Code("manual")]

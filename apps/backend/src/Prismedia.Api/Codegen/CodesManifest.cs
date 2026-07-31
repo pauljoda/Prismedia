@@ -16,6 +16,11 @@ public sealed record CodeEntry(string Name, string Code);
 /// <param name="Value">Constant value.</param>
 public sealed record ConstantEntry(string Name, string Value);
 
+/// <summary>Generated-client symbol names owned by one backend code-bearing type.</summary>
+/// <param name="ConstantName">Generated constant object name.</param>
+/// <param name="TypeName">Generated code union type name.</param>
+public sealed record CodeFamilyManifestEntry(string ConstantName, string TypeName);
+
 /// <summary>Cross-client navigation metadata owned by an Entity-kind definition.</summary>
 /// <param name="CanonicalBrowseKind">Entity kind represented by the canonical list destination.</param>
 /// <param name="DestinationId">Stable native/app-shell destination identifier.</param>
@@ -142,6 +147,7 @@ public sealed record RequestKindManifestEntry(
 /// backend uses — never hand-maintained in parallel.
 /// </summary>
 /// <param name="Enums">Code-bearing domain enums keyed by enum type name.</param>
+/// <param name="CodeFamilies">Generated-client names keyed by code-bearing type name.</param>
 /// <param name="EntityKinds">Entity-kind metadata for display-label generation.</param>
 /// <param name="RequestKinds">Request-flow metadata projected from <see cref="RequestKindRegistry"/>.</param>
 /// <param name="CapabilityKinds">Capability discriminator codes.</param>
@@ -151,6 +157,7 @@ public sealed record RequestKindManifestEntry(
 /// <param name="ThumbnailMetaIcons">Stable compact-thumbnail metadata icon codes.</param>
 public sealed record CodesManifest(
     IReadOnlyDictionary<string, IReadOnlyList<CodeEntry>> Enums,
+    IReadOnlyDictionary<string, CodeFamilyManifestEntry> CodeFamilies,
     IReadOnlyList<EntityKindManifestEntry> EntityKinds,
     IReadOnlyList<RequestKindManifestEntry> RequestKinds,
     IReadOnlyList<string> CapabilityKinds,
@@ -159,15 +166,19 @@ public sealed record CodesManifest(
     IReadOnlyList<ConstantEntry> ProblemCodes,
     IReadOnlyList<ConstantEntry> ThumbnailMetaIcons) {
     /// <summary>Reflects the current backend registries into a fresh manifest.</summary>
-    public static CodesManifest Build() => new(
-        BuildEnums(),
-        BuildEntityKinds(),
-        BuildRequestKinds(),
-        CapabilityPolymorphism.DiscriminatorKinds,
-        ReflectConstants(typeof(Contracts.Entities.ExternalIdProviders)),
-        ReflectConstants(typeof(AppSettingKeys)),
-        ReflectConstants(typeof(Contracts.System.ApiProblemCodes)),
-        ReflectConstants(typeof(EntityThumbnailMetaIcons)));
+    public static CodesManifest Build() {
+        var enums = BuildEnums();
+        return new(
+            enums,
+            BuildCodeFamilies(enums.Keys),
+            BuildEntityKinds(),
+            BuildRequestKinds(),
+            CapabilityPolymorphism.DiscriminatorKinds,
+            ReflectConstants(typeof(Contracts.Entities.ExternalIdProviders)),
+            ReflectConstants(typeof(AppSettingKeys)),
+            ReflectConstants(typeof(Contracts.System.ApiProblemCodes)),
+            ReflectConstants(typeof(EntityThumbnailMetaIcons)));
+    }
 
     private static IReadOnlyDictionary<string, IReadOnlyList<CodeEntry>> BuildEnums() {
         var result = new SortedDictionary<string, IReadOnlyList<CodeEntry>>(StringComparer.Ordinal);
@@ -197,6 +208,51 @@ public sealed record CodesManifest(
         typeof(EntityKind).Assembly.GetTypes()
             .Where(type => type.IsEnum)
             .Where(type => CodecRegistry.TryGet(type, out _));
+
+    private static IReadOnlyDictionary<string, CodeFamilyManifestEntry> BuildCodeFamilies(
+        IEnumerable<string> familyNames) {
+        var knownTypes = CodeBearingEnums()
+            .Append(typeof(ProposalKind))
+            .ToDictionary(type => type.Name, StringComparer.Ordinal);
+        var result = familyNames.ToDictionary(
+            name => name,
+            name => DescribeCodeFamily(knownTypes[name]),
+            StringComparer.Ordinal);
+
+        var duplicateConstants = result
+            .GroupBy(pair => pair.Value.ConstantName, StringComparer.Ordinal)
+            .FirstOrDefault(group => group.Count() > 1);
+        var duplicateTypes = result
+            .GroupBy(pair => pair.Value.TypeName, StringComparer.Ordinal)
+            .FirstOrDefault(group => group.Count() > 1);
+        if (duplicateConstants is not null || duplicateTypes is not null) {
+            throw new InvalidOperationException(
+                $"Generated code-family names must be unique; constant '{duplicateConstants?.Key}' or type '{duplicateTypes?.Key}' is duplicated.");
+        }
+
+        return result;
+    }
+
+    private static CodeFamilyManifestEntry DescribeCodeFamily(Type valueType) {
+        var declared = valueType.GetCustomAttribute<CodeFamilyAttribute>();
+        return declared is null
+            ? new CodeFamilyManifestEntry(ToScreamingSnake(valueType.Name), $"{valueType.Name}Code")
+            : new CodeFamilyManifestEntry(declared.ConstantName, declared.TypeName);
+    }
+
+    private static string ToScreamingSnake(string name) {
+        var result = new System.Text.StringBuilder(name.Length + 8);
+        for (var index = 0; index < name.Length; index++) {
+            var current = name[index];
+            if (index > 0 && char.IsUpper(current) &&
+                (char.IsLower(name[index - 1]) || char.IsDigit(name[index - 1]) ||
+                 index + 1 < name.Length && char.IsLower(name[index + 1]))) {
+                result.Append('_');
+            }
+            result.Append(char.ToUpperInvariant(current));
+        }
+        return result.ToString();
+    }
 
     private static IReadOnlyList<EntityKindManifestEntry> BuildEntityKinds() {
         var requestableKinds = RequestKindRegistry.All

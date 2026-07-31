@@ -16,71 +16,6 @@ const OUTPUT = resolve(__dirname, "../src/lib/api/generated/codes.ts");
 const openApiUrl = process.env.PRISMEDIA_OPENAPI_URL ?? "http://127.0.0.1:8008/openapi/v1.json";
 const codesUrl = process.env.PRISMEDIA_CODES_URL ?? new URL("/api/_codegen/codes.json", openApiUrl).toString();
 
-// Backend enum type name -> [exported const name, exported type name] for families whose
-// exported names predate the mechanical derivation below. Every OTHER manifest enum is
-// exported automatically as SCREAMING_SNAKE(name) / `${name}Code`, so a new backend
-// [Code] enum can never be silently unsurfaced.
-const ENUM_EXPORTS = [
-  ["EntityKind", "ENTITY_KIND", "EntityKindCode"],
-  ["EntityKindIcon", "ENTITY_KIND_ICON", "EntityKindIconCode"],
-  ["EntityAccentHue", "ENTITY_ACCENT_HUE", "EntityAccentHueCode"],
-  ["EntityArtworkFit", "ENTITY_ARTWORK_FIT", "EntityArtworkFitCode"],
-  ["ProposalKind", "PROPOSAL_KIND", "ProposalKindCode"],
-  ["RelationshipKind", "RELATIONSHIP_CODE", "RelationshipCode"],
-  ["EntityFileRole", "ENTITY_FILE_ROLE", "EntityFileRoleCode"],
-  ["CreditRole", "CREDIT_ROLE", "CreditRoleCode"],
-  ["JobType", "JOB_TYPE", "JobTypeCode"],
-  ["VideoQuality", "VIDEO_QUALITY", "VideoQualityCode"],
-  ["AudioQuality", "AUDIO_QUALITY", "AudioQualityCode"],
-  ["JobRunStatus", "JOB_RUN_STATUS", "JobRunStatusCode"],
-  ["DatabaseBackupStatus", "DATABASE_BACKUP_STATUS", "DatabaseBackupStatusCode"],
-  ["PlaybackMode", "PLAYBACK_MODE", "PlaybackModeCode"],
-  ["PlaybackEventKind", "PLAYBACK_EVENT_KIND", "PlaybackEventKindCode"],
-  ["MusicPlayerRepeatMode", "MUSIC_PLAYER_REPEAT_MODE", "MusicPlayerRepeatModeCode"],
-  ["MusicPlayerMiniSide", "MUSIC_PLAYER_MINI_SIDE", "MusicPlayerMiniSideCode"],
-  ["EntitySubtitleSource", "SUBTITLE_SOURCE", "SubtitleSourceCode"],
-  ["SubtitleStyle", "SUBTITLE_STYLE", "SubtitleStyleCode"],
-  ["IdentifyAction", "IDENTIFY_ACTION", "IdentifyActionCode"],
-  ["IdentifyQueueState", "IDENTIFY_QUEUE_STATE", "IdentifyQueueStateCode"],
-  ["IdentifyResultStatus", "IDENTIFY_RESULT_STATUS", "IdentifyResultStatusCode"],
-  ["IdentifyApplyState", "IDENTIFY_APPLY_STATE", "IdentifyApplyStateCode"],
-  ["PluginSearchFieldType", "PLUGIN_SEARCH_FIELD_TYPE", "PluginSearchFieldTypeCode"],
-  ["FileSourceKind", "FILE_SOURCE_KIND", "FileSourceKindCode"],
-  ["FileEntryKind", "FILE_ENTRY_KIND", "FileEntryKindCode"],
-  ["ThumbnailHoverKind", "THUMBNAIL_HOVER_KIND", "ThumbnailHoverKindCode"],
-  ["ProgressUnit", "PROGRESS_UNIT", "ProgressUnitCode"],
-  ["ReaderMode", "READER_MODE", "ReaderModeCode"],
-  ["RequestProviderKind", "REQUEST_PROVIDER_KIND", "RequestProviderKindCode"],
-  ["RequestMediaKind", "REQUEST_MEDIA_KIND", "RequestMediaKindCode"],
-  ["RequestReviewSelection", "REQUEST_REVIEW_SELECTION", "RequestReviewSelectionCode"],
-  ["LibraryRootMediaCapability", "LIBRARY_ROOT_MEDIA_CAPABILITY", "LibraryRootMediaCapabilityCode"],
-  ["RequestCommitOutcome", "REQUEST_COMMIT_OUTCOME", "RequestCommitOutcomeCode"],
-  ["IndexerKind", "INDEXER_KIND", "IndexerKindCode"],
-  ["DownloadClientKind", "DOWNLOAD_CLIENT_KIND", "DownloadClientKindCode"],
-  ["DownloadProtocol", "DOWNLOAD_PROTOCOL", "DownloadProtocolCode"],
-  ["AcquisitionStatus", "ACQUISITION_STATUS", "AcquisitionStatusCode"],
-  ["AcquisitionTeardownIntent", "ACQUISITION_TEARDOWN_INTENT", "AcquisitionTeardownIntentCode"],
-  ["EntityLifecycleClaimKind", "ENTITY_LIFECYCLE_CLAIM_KIND", "EntityLifecycleClaimKindCode"],
-  ["AcquisitionHistoryEvent", "ACQUISITION_HISTORY_EVENT", "AcquisitionHistoryEventCode"],
-  ["ReleaseRejectionReason", "RELEASE_REJECTION_REASON", "ReleaseRejectionReasonCode"],
-  ["CustomFormatConditionType", "CUSTOM_FORMAT_CONDITION_TYPE", "CustomFormatConditionTypeCode"],
-  ["ImportMode", "IMPORT_MODE", "ImportModeCode"],
-  ["BlocklistReason", "BLOCKLIST_REASON", "BlocklistReasonCode"],
-  ["MonitorStatus", "MONITOR_STATUS", "MonitorStatusCode"],
-  ["MonitorPreset", "MONITOR_PRESET", "MonitorPresetCode"],
-  ["BookRendition", "BOOK_RENDITION", "BookRenditionCode"],
-  ["BookFormatTier", "BOOK_FORMAT_TIER", "BookFormatTierCode"],
-  ["BookSourceTier", "BOOK_SOURCE_TIER", "BookSourceTierCode"],
-  ["ProperDownloadPolicy", "PROPER_DOWNLOAD_POLICY", "ProperDownloadPolicyCode"],
-  ["UserRole", "USER_ROLE", "UserRoleCode"],
-];
-
-const screamingSnake = (name) =>
-  name
-    .replace(/([a-z0-9])([A-Z])/g, "$1_$2")
-    .replace(/([A-Z]+)([A-Z][a-z])/g, "$1_$2")
-    .toUpperCase();
-
 const camel = (name) => {
   const joined = name.replace(/[^A-Za-z0-9_$]+([A-Za-z0-9_$])/g, (_, next) => next.toUpperCase());
   const key = joined.length === 0 ? joined : joined[0].toLowerCase() + joined.slice(1);
@@ -112,24 +47,24 @@ async function main() {
 
   const sections = [];
 
-  const explicitNames = new Map(ENUM_EXPORTS.map(([enumName, constName, typeName]) => [enumName, [constName, typeName]]));
-  const usedConstNames = new Set(ENUM_EXPORTS.map(([, constName]) => constName));
-  for (const [enumName] of ENUM_EXPORTS) {
-    if (!manifest.enums?.[enumName]) {
-      throw new Error(`Manifest is missing enum '${enumName}'. Is the backend up to date?`);
-    }
-  }
-
-  // Every manifest enum is exported: explicitly-named families first, then the rest with
-  // mechanically derived names. Nothing in the backend code registry can stay unsurfaced.
+  const usedConstNames = new Set();
+  const usedTypeNames = new Set();
+  // Every manifest enum carries its generated symbols from the backend. A new code family cannot
+  // be silently omitted, and exceptional public names live as annotations on their defining type.
   for (const enumName of Object.keys(manifest.enums ?? {}).sort()) {
-    const [constName, typeName] = explicitNames.get(enumName) ?? [screamingSnake(enumName), `${enumName}Code`];
-    if (!explicitNames.has(enumName)) {
-      if (usedConstNames.has(constName)) {
-        throw new Error(`Derived const name '${constName}' for enum '${enumName}' collides with an explicit export`);
-      }
-      usedConstNames.add(constName);
+    const family = manifest.codeFamilies?.[enumName];
+    if (!family) {
+      throw new Error(`Manifest enum '${enumName}' is missing its code-family names`);
     }
+    const { constantName: constName, typeName } = family;
+    if (!/^[A-Z][A-Z0-9_]*$/.test(constName) || !/^[A-Za-z_$][A-Za-z0-9_$]*$/.test(typeName)) {
+      throw new Error(`Manifest enum '${enumName}' has invalid generated symbols '${constName}'/'${typeName}'`);
+    }
+    if (usedConstNames.has(constName) || usedTypeNames.has(typeName)) {
+      throw new Error(`Manifest enum '${enumName}' duplicates generated symbols '${constName}'/'${typeName}'`);
+    }
+    usedConstNames.add(constName);
+    usedTypeNames.add(typeName);
     const members = manifest.enums[enumName];
     sections.push(constBlock(constName, typeName, members.map((m) => [camel(m.name), m.code]), `enum ${enumName}`));
   }

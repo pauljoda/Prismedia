@@ -13,6 +13,7 @@ namespace Prismedia.Domain.Entities;
 /// the Stash <c>performer</c> input) are normalized to one of these codes at the
 /// integration boundary rather than being added as members here.
 /// </remarks>
+[CodeFamily("RELATIONSHIP_CODE", "RelationshipCode")]
 public enum RelationshipKind {
     /// <summary>People credited on the entity (cast and crew); role detail lives in link metadata.</summary>
     [Code("cast")]
