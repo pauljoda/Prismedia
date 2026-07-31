@@ -122,7 +122,7 @@ describe("EntityGrid pagination", () => {
   });
 
   it("lets the docked pagination bar choose page size and move pages", async () => {
-    const cards = Array.from({ length: 600 }, (_, index) => card(index));
+    const cards = Array.from({ length: 150 }, (_, index) => card(index));
     const { container } = render(EntityGrid, {
       props: {
         cards,
@@ -135,14 +135,14 @@ describe("EntityGrid pagination", () => {
 
     await waitFor(() => {
       expect(container.querySelectorAll(".entity-thumbnail").length).toBe(100);
-      expect(screen.getByText("Page 1 / 6")).toBeInTheDocument();
+      expect(screen.getByText("Page 1 / 2")).toBeInTheDocument();
     });
 
     await fireEvent.click(screen.getByLabelText("Next page"));
 
     await waitFor(() => {
-      expect(screen.getByText("101–200")).toBeInTheDocument();
-      expect(screen.getByText("Page 2 / 6")).toBeInTheDocument();
+      expect(screen.getByText("101–150")).toBeInTheDocument();
+      expect(screen.getByText("Page 2 / 2")).toBeInTheDocument();
     });
   });
 
