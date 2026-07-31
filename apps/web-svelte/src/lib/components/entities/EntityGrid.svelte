@@ -29,6 +29,10 @@
   import EntityGridPagination from "./EntityGridPagination.svelte";
   import EntityGridTabs from "./EntityGridTabs.svelte";
   import EntityGridToolbar from "./EntityGridToolbar.svelte";
+  import {
+    EntityGridPaginationController,
+    normalizeEntityGridPageSize,
+  } from "./entity-grid-pagination-controller.svelte";
   import { computeContainedScrollHeight } from "./entity-grid-viewport.svelte";
   import { useNsfw } from "$lib/nsfw/store.svelte";
   import type { NsfwMode } from "$lib/nsfw/cookie";
@@ -164,11 +168,6 @@
     return Math.min(maxScale, Math.max(minScale, value));
   }
 
-  function normalizePageSize(value: number): number {
-    const numeric = Math.floor(value);
-    return Number.isFinite(numeric) && numeric > 0 ? numeric : DEFAULT_PAGE_SIZE;
-  }
-
   // localStorage-backed view-state store for this grid, built once from the
   // stable prefsKey. Dropping an EntityGrid on any page with a prefsKey makes its
   // filters, sort, card size, media wall, page size, and active preset persist
@@ -180,7 +179,7 @@
         sortDir: initialSortDir,
         mediaWall: initialMediaWall,
         scale: defaultScale(),
-        pageSize: normalizePageSize(initialPageSize),
+        pageSize: normalizeEntityGridPageSize(initialPageSize),
       })
     : null;
   const persistedPrefs: EntityGridPrefs | null = prefsStore ? prefsStore.load() : null;
@@ -197,10 +196,6 @@
   let includeNsfw = $state(persistedPrefs?.includeNsfw ?? true);
   let presets = $state<FilterPreset[]>([]);
   let query = $state(persistedPrefs?.query ?? "");
-  let pageIndex = $state(0);
-  // svelte-ignore state_referenced_locally
-  let pageSize = $state(persistedPrefs?.pageSize ?? normalizePageSize(initialPageSize));
-  let pendingAdvanceAfterLoad = $state(false);
   // svelte-ignore state_referenced_locally
   let scale = $state(persistedPrefs ? clampScale(persistedPrefs.scale) : defaultScale());
   // svelte-ignore state_referenced_locally
@@ -262,6 +257,22 @@
       serverResolvedFilters: Boolean(onRequestChange),
     }),
   );
+  // svelte-ignore state_referenced_locally
+  const pagination = new EntityGridPaginationController({
+    initialPageSize: persistedPrefs?.pageSize ?? normalizeEntityGridPageSize(initialPageSize),
+    pageSizeOptions: () => pageSizeOptions,
+    sourceCount: () => cards.length,
+    visibleCount: () => visibleCards.length,
+    hasMore: () => hasMore,
+    loading: () => loading,
+    loadingMore: () => loadingMore,
+    loadMoreError: () => loadMoreError,
+    remoteTotalCount: () => remoteTotalCount,
+    showPagination: () => showPagination,
+    onLoadMore: () => onLoadMore,
+    onPageSizeChange: () => onPageSizeChange,
+    onNavigate: scrollPageToTop,
+  });
   const selectedCount = $derived(selectedIds.length);
   const selectedCards = $derived(
     selectedCount > 0
@@ -289,54 +300,7 @@
     dockControls ? scrollMaxHeight === undefined ? measuredScrollMaxHeight : scrollMaxHeight : null,
   );
   const containsScroll = $derived(dockControls && scrollMaxHeight !== null);
-  const normalizedPageSizeOptions = $derived(
-    Array.from(new Set([...pageSizeOptions, pageSize].map(normalizePageSize))).sort((a, b) => a - b),
-  );
-  const paginationThreshold = $derived(normalizedPageSizeOptions[0] ?? normalizePageSize(initialPageSize));
-  /**
-   * Server total reflects what's matched by remote filters (kind, hideNsfw). When
-   * the grid additionally applies a local search/capability filter we fall back to
-   * the locally visible count so the pagination strip reads honestly. When no
-   * remote count is supplied (e.g. test harness, non-paged grids), we use the
-   * loaded card count plus a "+1" sentinel if more pages remain.
-   */
-  const isLocallyFiltered = $derived(visibleCards.length !== cards.length);
-  const knownRemoteTotal = $derived(remoteTotalCount != null && remoteTotalCount >= 0 ? remoteTotalCount : null);
-  const effectiveTotal = $derived(
-    isLocallyFiltered
-      ? visibleCards.length
-      : knownRemoteTotal != null
-        ? knownRemoteTotal
-        : cards.length + (hasMore ? 1 : 0),
-  );
-  /**
-   * True when the readout total is exact (server-confirmed full count of items in
-   * scope). When false we render the count with a trailing `+` so the user
-   * understands more results may exist beyond what's been loaded.
-   */
-  const totalIsExact = $derived(isLocallyFiltered ? !hasMore : knownRemoteTotal != null);
-  const pageCount = $derived(Math.max(1, Math.ceil(effectiveTotal / pageSize)));
-  const currentPageIndex = $derived(Math.min(pageIndex, pageCount - 1));
-  const pageStart = $derived(effectiveTotal === 0 ? 0 : currentPageIndex * pageSize);
-  const pageEnd = $derived(Math.min(effectiveTotal, pageStart + pageSize));
-  const pagedCards = $derived(visibleCards.slice(pageStart, Math.min(visibleCards.length, pageStart + pageSize)));
-  const canPageBack = $derived(currentPageIndex > 0);
-  const canPageForward = $derived(currentPageIndex < pageCount - 1 || Boolean(hasMore && onLoadMore));
-  const canSeekToEnd = $derived(currentPageIndex < pageCount - 1);
-  const shouldRenderPagination = $derived(
-    showPagination &&
-      !loading &&
-      visibleCards.length > 0 &&
-      (effectiveTotal > paginationThreshold ||
-        pageCount > 1 ||
-        currentPageIndex > 0 ||
-        Boolean(hasMore) ||
-        Boolean(loadMoreError)),
-  );
-  /** Widest possible string for the readout, used to reserve a stable layout slot. */
-  const readoutPlaceholderWidth = $derived(
-    Math.max(String(effectiveTotal).length, String(pageStart + 1).length, String(pageEnd).length) * 2 + 4,
-  );
+  const pagedCards = $derived(pagination.page(visibleCards));
 
   interface EntityGridSnapshot {
     query: string;
@@ -369,7 +333,7 @@
 
   onMount(() => {
     if (mediaWall && viewMode === "list") viewMode = "grid";
-    onPageSizeChange?.(pageSize);
+    pagination.notifyPageSize();
     const key = presetStorageKey();
     if (key) presets = createFilterPresets(key).load();
 
@@ -387,8 +351,8 @@
         mediaWall,
         selectedIds: [...selectedIds],
         scale,
-        pageIndex: currentPageIndex,
-        pageSize,
+        pageIndex: pagination.currentPageIndex,
+        pageSize: pagination.pageSize,
       }),
       restore: (snapshot) => {
         query = snapshot.query;
@@ -403,9 +367,10 @@
         if (mediaWall && viewMode === "list") viewMode = "grid";
         selectedIds = snapshot.selectedIds;
         scale = snapshot.scale;
-        pageSize = normalizePageSize(snapshot.pageSize ?? pageSize);
-        pageIndex = Math.max(0, snapshot.pageIndex ?? 0);
-        onPageSizeChange?.(pageSize);
+        pagination.restore(
+          snapshot.pageIndex ?? 0,
+          snapshot.pageSize ?? pagination.pageSize,
+        );
         onSelectionChange?.(selectedIds);
       },
     });
@@ -517,7 +482,7 @@
       viewMode,
       mediaWall,
       scale,
-      pageSize,
+      pageSize: pagination.pageSize,
       activePresetId,
       barsCollapsed,
     };
@@ -546,7 +511,7 @@
   function setActiveKind(kind: string) {
     activeKind = kind;
     activePresetId = null;
-    pageIndex = 0;
+    pagination.resetPage();
     selectedIds = [];
     onSelectionChange?.(selectedIds);
   }
@@ -554,13 +519,13 @@
   function setFilterIds(ids: string[]) {
     filterIds = ids;
     activePresetId = null;
-    pageIndex = 0;
+    pagination.resetPage();
   }
 
   function setIncludeNsfw(value: boolean) {
     includeNsfw = value;
     activePresetId = null;
-    pageIndex = 0;
+    pagination.resetPage();
     selectedIds = [];
     onSelectionChange?.(selectedIds);
   }
@@ -568,7 +533,7 @@
   function setQuery(value: string) {
     query = value;
     activePresetId = null;
-    pageIndex = 0;
+    pagination.resetPage();
   }
 
   /** Generates a fresh, non-zero seed for the random shuffle. */
@@ -580,7 +545,7 @@
     // Re-selecting Random reshuffles; selecting it for the first time seeds it.
     if (value === "random") {
       randomSeed = nextRandomSeed();
-      pageIndex = 0;
+      pagination.resetPage();
     }
     sortBy = value;
     activePresetId = null;
@@ -589,7 +554,7 @@
   /** Reshuffles the current random ordering with a new seed. */
   function reshuffle() {
     randomSeed = nextRandomSeed();
-    pageIndex = 0;
+    pagination.resetPage();
   }
 
   function setSortDir(value: EntityGridSortDir) {
@@ -644,7 +609,7 @@
     if (sortBy === "random") randomSeed = nextRandomSeed();
     sortDir = preset.sortDir;
     activePresetId = preset.id;
-    pageIndex = 0;
+    pagination.resetPage();
   }
 
   function savePreset(name: string) {
@@ -677,7 +642,7 @@
     sortDir = initialSortDir;
     viewMode = "grid";
     mediaWall = initialMediaWall;
-    pageIndex = 0;
+    pagination.resetPage();
     onSelectionChange?.(selectedIds);
   }
 
@@ -778,76 +743,6 @@
     });
   }
 
-  function setPageIndex(next: number) {
-    pageIndex = Math.max(0, Math.min(pageCount - 1, next));
-    queueMicrotask(scrollPageToTop);
-  }
-
-  function setPageSize(value: number) {
-    pageSize = normalizePageSize(value);
-    pageIndex = 0;
-    onPageSizeChange?.(pageSize);
-    queueMicrotask(scrollPageToTop);
-  }
-
-  /** Load enough remote pages to make the target page index renderable. */
-  async function ensurePageLoaded(targetPage: number) {
-    if (!hasMore || !onLoadMore) return;
-    const targetStart = targetPage * pageSize;
-    while (visibleCards.length <= targetStart && hasMore) {
-      const previousCount = visibleCards.length;
-      await onLoadMore();
-      if (visibleCards.length <= previousCount) break;
-    }
-  }
-
-  async function goToNextPage() {
-    if (currentPageIndex < pageCount - 1) {
-      // If the next page exists locally, just jump. If it doesn't (we know the
-      // total but haven't buffered enough rows yet), buffer enough cursor pages
-      // to render it before advancing.
-      const targetPage = currentPageIndex + 1;
-      if (visibleCards.length > targetPage * pageSize || !hasMore) {
-        setPageIndex(targetPage);
-        return;
-      }
-      pendingAdvanceAfterLoad = true;
-      try {
-        await ensurePageLoaded(targetPage);
-        setPageIndex(targetPage);
-      } finally {
-        pendingAdvanceAfterLoad = false;
-      }
-      return;
-    }
-
-    if (!hasMore || !onLoadMore || loadingMore) return;
-    const targetPage = currentPageIndex + 1;
-    pendingAdvanceAfterLoad = true;
-    try {
-      await ensurePageLoaded(targetPage);
-      setPageIndex(targetPage);
-    } finally {
-      pendingAdvanceAfterLoad = false;
-    }
-  }
-
-  async function goToLastPage() {
-    const lastPage = pageCount - 1;
-    if (lastPage <= currentPageIndex) return;
-    // If we already have the data, just jump.
-    if (visibleCards.length > lastPage * pageSize || !hasMore) {
-      setPageIndex(lastPage);
-      return;
-    }
-    pendingAdvanceAfterLoad = true;
-    try {
-      await ensurePageLoaded(lastPage);
-      setPageIndex(Math.min(lastPage, pageCount - 1));
-    } finally {
-      pendingAdvanceAfterLoad = false;
-    }
-  }
 </script>
 
 <section
@@ -964,29 +859,29 @@
     />
   </div>
 
-  {#if shouldRenderPagination}
+  {#if pagination.shouldRender}
     <EntityGridPagination
-      {canPageBack}
-      {canPageForward}
-      {canSeekToEnd}
-      {currentPageIndex}
-      {effectiveTotal}
+      canPageBack={pagination.canPageBack}
+      canPageForward={pagination.canPageForward}
+      canSeekToEnd={pagination.canSeekToEnd}
+      currentPageIndex={pagination.currentPageIndex}
+      effectiveTotal={pagination.effectiveTotal}
       {loadMoreError}
       {loadingMore}
-      {normalizedPageSizeOptions}
-      onFirstPage={() => setPageIndex(0)}
-      onLastPage={goToLastPage}
+      normalizedPageSizeOptions={pagination.normalizedPageSizeOptions}
+      onFirstPage={() => pagination.setPageIndex(0)}
+      onLastPage={pagination.goToLastPage}
       {onLoadMore}
-      onNextPage={goToNextPage}
-      onPageSizeChange={setPageSize}
-      onPreviousPage={() => setPageIndex(currentPageIndex - 1)}
-      {pageCount}
-      {pageEnd}
-      {pageSize}
-      {pageStart}
-      {pendingAdvanceAfterLoad}
-      {readoutPlaceholderWidth}
-      {totalIsExact}
+      onNextPage={pagination.goToNextPage}
+      onPageSizeChange={pagination.setPageSize}
+      onPreviousPage={() => pagination.setPageIndex(pagination.currentPageIndex - 1)}
+      pageCount={pagination.pageCount}
+      pageEnd={pagination.pageEnd}
+      pageSize={pagination.pageSize}
+      pageStart={pagination.pageStart}
+      pendingAdvanceAfterLoad={pagination.pendingAdvanceAfterLoad}
+      readoutPlaceholderWidth={pagination.readoutPlaceholderWidth}
+      totalIsExact={pagination.totalIsExact}
     />
   {/if}
 </section>
