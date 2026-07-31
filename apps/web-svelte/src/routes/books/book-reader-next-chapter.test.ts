@@ -7,13 +7,18 @@ import type { EntityThumbnail, EntityKind } from "$lib/api/generated/model";
 
 const mocks = vi.hoisted(() => ({
   fetchEntity: vi.fn(),
+  fetchEntityChildren: vi.fn(),
   goto: vi.fn(async () => {}),
   updateEntityProgress: vi.fn(),
 }));
 
 vi.mock("$lib/api/entities", async (importOriginal) => {
   const actual = await importOriginal<typeof import("$lib/api/entities")>();
-  return { ...actual, fetchEntity: mocks.fetchEntity };
+  return {
+    ...actual,
+    fetchEntity: mocks.fetchEntity,
+    fetchEntityChildren: mocks.fetchEntityChildren,
+  };
 });
 
 vi.mock("$lib/api/playback", async (importOriginal) => {
@@ -215,9 +220,18 @@ describe("book reader next chapter navigation", () => {
     mocks.fetchEntity.mockImplementation((id: string) => {
       if (id === "book-1") return Promise.resolve(book);
       if (id === "chapter-2") return Promise.resolve(progressChapter);
-      if (id === "volume-1") return Promise.resolve(volume);
       throw new Error(`Unexpected eager entity load: ${id}`);
     });
+    mocks.fetchEntityChildren.mockResolvedValue([
+      {
+        parentId: "volume-1",
+        items: volume.childrenByKind[0]?.entities ?? [],
+      },
+      {
+        parentId: "volume-2",
+        items: [],
+      },
+    ]);
     mocks.updateEntityProgress.mockResolvedValue(undefined);
 
     const { findByText } = render(Page);
@@ -225,7 +239,8 @@ describe("book reader next chapter navigation", () => {
     await findByText("Prismedia Book · Chapter Two");
     expect(mocks.fetchEntity).toHaveBeenCalledWith("book-1");
     expect(mocks.fetchEntity).toHaveBeenCalledWith("chapter-2");
-    expect(mocks.fetchEntity).toHaveBeenCalledWith("volume-1");
+    expect(mocks.fetchEntityChildren).toHaveBeenCalledWith(["volume-1", "volume-2"], undefined);
+    expect(mocks.fetchEntity).not.toHaveBeenCalledWith("volume-1");
     expect(mocks.fetchEntity).not.toHaveBeenCalledWith("chapter-1");
     expect(mocks.fetchEntity).not.toHaveBeenCalledWith("chapter-3");
     expect(mocks.fetchEntity).not.toHaveBeenCalledWith("volume-2");
