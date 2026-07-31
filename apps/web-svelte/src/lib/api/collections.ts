@@ -2,6 +2,7 @@ import {
   addCollectionItems as addCollectionItemsRequest,
   createCollection as createCollectionRequest,
   deleteCollection as deleteCollectionRequest,
+  listCollectionMembershipOptions,
   listCollectionItems,
   listCollections as listCollectionsRequest,
   previewCollectionRules as previewCollectionRulesRequest,
@@ -13,6 +14,8 @@ import {
 import type {
   CollectionAddItemsRequest as GeneratedCollectionAddItemsRequest,
   CollectionItemsResponse,
+  CollectionMembershipOption,
+  CollectionMembershipOptionsResponse,
   CollectionRemoveItemsRequest,
   CollectionReorderItemsRequest,
   CollectionRulePreviewRequest,
@@ -22,8 +25,6 @@ import type {
   EntityListResponse,
 } from "$lib/api/generated/model";
 import { requestInit, unwrapGenerated, type RequestOptions } from "$lib/api/generated-response";
-import { fetchEntity } from "$lib/api/entities";
-import { getCollectionConfigurationCapability } from "$lib/api/capabilities";
 import type {
   CollectionAddItemsRequest,
   CollectionItem,
@@ -52,15 +53,15 @@ export async function fetchCollections(
 /** Lists only collections the current user owns and can mutate. */
 export async function fetchEditableCollections(
   options?: RequestOptions,
-): Promise<{ id: string; title: string }[]> {
-  const response = await fetchCollections(options);
-  const details = await Promise.all(
-    response.items.map(async (item) =>
-      fetchEntity(item.id, options)),
+): Promise<CollectionMembershipOption[]> {
+  const response = await listCollectionMembershipOptions(
+    undefined,
+    requestInit(options),
   );
-  return details
-    .filter((collection) => getCollectionConfigurationCapability(collection.capabilities)?.canEdit)
-    .map((collection) => ({ id: collection.id, title: collection.title }));
+  return unwrapGenerated<CollectionMembershipOptionsResponse>(
+    response,
+    "Failed to fetch editable collections",
+  ).items;
 }
 
 export async function fetchCollectionItems(

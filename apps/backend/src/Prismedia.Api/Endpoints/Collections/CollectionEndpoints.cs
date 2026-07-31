@@ -94,6 +94,18 @@ public static class CollectionEndpoints {
             .WithSummary("List Collection Items.")
             .Produces<CollectionItemsResponse>(StatusCodes.Status200OK);
 
+        group.MapGet("/membership-options", async (
+            bool? hideNsfw,
+            HttpContext httpContext,
+            ICollectionItemReadService collections,
+            CancellationToken cancellationToken) =>
+            Results.Ok(await collections.ListMembershipOptionsAsync(
+                NsfwVisibility.ShouldHide(hideNsfw, httpContext),
+                cancellationToken)))
+            .WithName("ListCollectionMembershipOptions")
+            .WithSummary("List collections that can receive manual membership changes.")
+            .Produces<CollectionMembershipOptionsResponse>(StatusCodes.Status200OK);
+
         group.MapPost("/{id:guid}/items", async (
             Guid id,
             CollectionAddItemsRequest request,

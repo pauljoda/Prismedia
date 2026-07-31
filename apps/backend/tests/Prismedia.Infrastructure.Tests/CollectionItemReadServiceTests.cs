@@ -10,6 +10,31 @@ namespace Prismedia.Infrastructure.Tests;
 
 public sealed class CollectionItemReadServiceTests {
     [Fact]
+    public async Task ListMembershipOptionsAsyncReturnsOnlyOwnedMutableVisibleCollections() {
+        await using var db = CreateContext();
+        var ownerId = Guid.Parse("11111111-1111-4111-8111-111111111111");
+        var otherOwnerId = Guid.Parse("22222222-2222-4222-8222-222222222222");
+        var manualId = SeedCollection(db, "Zulu", ownerId, CollectionMode.Manual);
+        var hybridId = SeedCollection(db, "Alpha", ownerId, CollectionMode.Hybrid);
+        _ = SeedCollection(db, "Rules", ownerId, CollectionMode.Dynamic);
+        _ = SeedCollection(db, "Shared", otherOwnerId, CollectionMode.Manual, isShared: true);
+        _ = SeedCollection(db, "Private", otherOwnerId, CollectionMode.Manual);
+        var nsfwId = SeedCollection(db, "Hidden", ownerId, CollectionMode.Manual, isNsfw: true);
+        await db.SaveChangesAsync();
+
+        var service = new CollectionItemReadService(
+            db,
+            new FakeEntityReadService(db),
+            TestUserContext.MemberAs(ownerId));
+
+        var safe = await service.ListMembershipOptionsAsync(hideNsfw: true, CancellationToken.None);
+        Assert.Equal([hybridId, manualId], safe.Items.Select(item => item.Id));
+
+        var all = await service.ListMembershipOptionsAsync(hideNsfw: false, CancellationToken.None);
+        Assert.Equal([hybridId, nsfwId, manualId], all.Items.Select(item => item.Id));
+    }
+
+    [Fact]
     public async Task ListItemsAsyncReturnsOrderedVisibleCollectionItems() {
         await using var db = CreateContext();
         var collectionId = Guid.NewGuid();
@@ -97,6 +122,24 @@ public sealed class CollectionItemReadServiceTests {
             SortOrder = sortOrder,
             AddedAt = DateTimeOffset.UtcNow
         };
+
+    private static Guid SeedCollection(
+        PrismediaDbContext db,
+        string title,
+        Guid ownerUserId,
+        CollectionMode mode,
+        bool isShared = false,
+        bool isNsfw = false) {
+        var id = Guid.NewGuid();
+        SeedEntity(db, id, EntityKind.Collection.ToCode(), title, isNsfw);
+        db.CollectionDetails.Add(new CollectionDetailRow {
+            EntityId = id,
+            OwnerUserId = ownerUserId,
+            Mode = mode,
+            IsShared = isShared,
+        });
+        return id;
+    }
 
     private static void SeedEntity(
         PrismediaDbContext db,

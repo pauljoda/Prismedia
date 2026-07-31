@@ -93,3 +93,12 @@ public sealed record CollectionItemDetail(
 /// <summary>Ordered collection item response.</summary>
 /// <param name="Items">Collection items in display order.</param>
 public sealed record CollectionItemsResponse(IReadOnlyList<CollectionItemDetail> Items);
+
+/// <summary>A collection that may receive manual membership changes from the current caller.</summary>
+/// <param name="Id">Collection entity identifier.</param>
+/// <param name="Title">User-facing collection title.</param>
+public sealed record CollectionMembershipOption(Guid Id, string Title);
+
+/// <summary>Collections available as targets for add-to-collection actions.</summary>
+/// <param name="Items">Owned manual or hybrid collections in title order.</param>
+public sealed record CollectionMembershipOptionsResponse(IReadOnlyList<CollectionMembershipOption> Items);

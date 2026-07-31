@@ -20,6 +20,18 @@ public interface ICollectionItemReadService {
         CancellationToken cancellationToken);
 
     /// <summary>
+    /// Lists collections owned by the current caller whose manual membership can be changed. Shared
+    /// collections owned by another user and rule-only dynamic collections are intentionally omitted.
+    /// </summary>
+    /// <param name="hideNsfw">When true, NSFW collections are omitted.</param>
+    /// <param name="cancellationToken">Cancellation token for the read operation.</param>
+    /// <returns>Small collection options suitable for add-to-collection controls.</returns>
+    Task<CollectionMembershipOptionsResponse> ListMembershipOptionsAsync(
+        bool hideNsfw,
+        CancellationToken cancellationToken) =>
+        Task.FromResult(new CollectionMembershipOptionsResponse([]));
+
+    /// <summary>
     /// Resolves a representative cover image path for each requested collection so clients that
     /// only render an entity's own artwork (e.g. Jellyfin/Infuse) still show a poster. Each
     /// collection prefers its configured cover item, falling back to its first visible member's

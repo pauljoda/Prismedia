@@ -35,6 +35,7 @@ import type {
   CollectionDeleteResponse,
   CollectionItemMutationResponse,
   CollectionItemsResponse,
+  CollectionMembershipOptionsResponse,
   CollectionRefreshResponse,
   CollectionRemoveItemsRequest,
   CollectionReorderItemsRequest,
@@ -186,6 +187,7 @@ import type {
   ListBookAuthorsParams,
   ListBooksParams,
   ListCollectionItemsParams,
+  ListCollectionMembershipOptionsParams,
   ListCollectionsParams,
   ListCutoffUnmetWantedParams,
   ListEntitiesParams,
@@ -8844,6 +8846,49 @@ export const addCollectionItems = async (id: string,
     headers: { 'Content-Type': 'application/json', ...options?.headers },
     body: JSON.stringify(
       collectionAddItemsRequest,)
+  }
+);}
+
+
+
+export type listCollectionMembershipOptionsResponse200 = {
+  data: CollectionMembershipOptionsResponse
+  status: 200
+}
+
+export type listCollectionMembershipOptionsResponseSuccess = (listCollectionMembershipOptionsResponse200) & {
+  headers: Headers;
+};
+;
+
+export type listCollectionMembershipOptionsResponse = (listCollectionMembershipOptionsResponseSuccess)
+
+export const getListCollectionMembershipOptionsUrl = (params?: ListCollectionMembershipOptionsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/collections/membership-options?${stringifiedParams}` : `/api/collections/membership-options`
+}
+
+/**
+ * @summary List collections that can receive manual membership changes.
+ */
+export const listCollectionMembershipOptions = async (params?: ListCollectionMembershipOptionsParams, options?: RequestInit): Promise<listCollectionMembershipOptionsResponse> => {
+
+  return orvalFetch<listCollectionMembershipOptionsResponse>(getListCollectionMembershipOptionsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
   }
 );}
 

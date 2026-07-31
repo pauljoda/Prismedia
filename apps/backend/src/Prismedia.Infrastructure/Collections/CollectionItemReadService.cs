@@ -16,6 +16,23 @@ public sealed class CollectionItemReadService(
     PrismediaDbContext db,
     IEntityReadService entities,
     ICurrentUserContext currentUser) : ICollectionItemReadService {
+    public async Task<CollectionMembershipOptionsResponse> ListMembershipOptionsAsync(
+        bool hideNsfw,
+        CancellationToken cancellationToken) {
+        var userId = currentUser.UserId;
+        var items = await (
+            from detail in db.CollectionDetails.AsNoTracking()
+            join entity in db.Entities.AsNoTracking() on detail.EntityId equals entity.Id
+            where (currentUser.IsSystem || detail.OwnerUserId == userId) &&
+                  detail.Mode != CollectionMode.Dynamic &&
+                  (!hideNsfw || !entity.IsNsfw)
+            orderby entity.Title, entity.Id
+            select new CollectionMembershipOption(entity.Id, entity.Title))
+            .ToArrayAsync(cancellationToken);
+
+        return new CollectionMembershipOptionsResponse(items);
+    }
+
     public async Task<CollectionItemsResponse> ListItemsAsync(
         Guid collectionId,
         bool hideNsfw,
