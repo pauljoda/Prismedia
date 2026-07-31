@@ -76,7 +76,7 @@ public sealed class ImportedEntityMaterializationTests : IDisposable {
     }
 
     [Fact]
-    public async Task MovieImportBindsWantedWrapperWithoutQueueingAFullLibraryScan() {
+    public async Task MovieImportBindsTheDirectPlayableMovieWithoutQueueingAFullLibraryScan() {
         await using var db = CreateContext();
         var rootPath = Directory.CreateDirectory(Path.Combine(_workRoot, "movies")).FullName;
         var payloadPath = Directory.CreateDirectory(Path.Combine(_workRoot, "movie-download")).FullName;
@@ -109,16 +109,17 @@ public sealed class ImportedEntityMaterializationTests : IDisposable {
         var entity = await db.Entities.AsNoTracking().SingleAsync(row => row.Id == wantedId);
         Assert.False(entity.IsWanted);
         Assert.True(await HasSourceInSubtreeAsync(db, wantedId));
-        Assert.Contains(await db.Entities.AsNoTracking().ToArrayAsync(), row =>
+        Assert.DoesNotContain(await db.Entities.AsNoTracking().ToArrayAsync(), row =>
             row.ParentEntityId == wantedId && row.KindCode == EntityKind.Video.ToCode());
         Assert.True(await db.Entities.AsNoTracking().AnyAsync(row => row.Id == unrelatedId));
         Assert.DoesNotContain(queue.Enqueued, request => request.Type == JobType.ScanLibrary);
-        var importedVideoId = await db.EntityFiles.AsNoTracking()
+        var importedMovieId = await db.EntityFiles.AsNoTracking()
             .Where(file => file.Role == EntityFileRole.Source && file.Path.EndsWith("Film (2020).mkv"))
             .Select(file => file.EntityId)
             .SingleAsync();
+        Assert.Equal(wantedId, importedMovieId);
         Assert.Contains(queue.Enqueued, request =>
-            request.Type == JobType.ReconcileEntity && request.TargetEntityId == importedVideoId.ToString());
+            request.Type == JobType.ReconcileEntity && request.TargetEntityId == importedMovieId.ToString());
         Assert.True(await db.ScannedFiles.AsNoTracking().AnyAsync(row =>
             row.LibraryRootId == root.Root.Id
             && row.ScanKind == JobType.ScanLibrary.ToCode()
@@ -193,7 +194,10 @@ public sealed class ImportedEntityMaterializationTests : IDisposable {
         var queue = new MergedImportTestSupport.RecordingJobQueue();
         await engine.ImportAsync(JobContext(db, import.Id, queue), import, CancellationToken.None);
 
-        Assert.False((await db.Entities.AsNoTracking().SingleAsync(row => row.Id == artistId)).IsWanted);
+        // Structural folders locate the artist/album but do not themselves fulfill a wanted Entity.
+        // The imported payload fulfills the concrete track; the album acquisition is completed by
+        // its source-backed subtree after the materializer validates it.
+        Assert.True((await db.Entities.AsNoTracking().SingleAsync(row => row.Id == artistId)).IsWanted);
         Assert.False((await db.Entities.AsNoTracking().SingleAsync(row => row.Id == albumId)).IsWanted);
         Assert.True(await HasSourceInSubtreeAsync(db, albumId));
         var tracks = await db.Entities.AsNoTracking()
@@ -262,8 +266,10 @@ public sealed class ImportedEntityMaterializationTests : IDisposable {
 
         await engine.ImportAsync(JobContext(db, import.Id), import, CancellationToken.None);
 
-        Assert.False((await db.Entities.AsNoTracking().SingleAsync(row => row.Id == artistId)).IsWanted);
-        Assert.False((await db.Entities.AsNoTracking().SingleAsync(row => row.Id == albumId)).IsWanted);
+        // The request targets the track. Its inferred structural containers may also be independently
+        // requested later, so their folder provenance and one child payload must not fulfill them.
+        Assert.True((await db.Entities.AsNoTracking().SingleAsync(row => row.Id == artistId)).IsWanted);
+        Assert.True((await db.Entities.AsNoTracking().SingleAsync(row => row.Id == albumId)).IsWanted);
         var track = await db.Entities.AsNoTracking().SingleAsync(row => row.Id == trackId);
         Assert.False(track.IsWanted);
         Assert.True(await HasSourceInSubtreeAsync(db, trackId));

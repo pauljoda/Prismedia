@@ -150,8 +150,10 @@ public sealed class MovieMusicMergedImportTests : IDisposable {
         var payloadRoot = Directory.CreateDirectory(Path.Combine(_workRoot, "download-movie", "release")).FullName;
         await File.WriteAllTextAsync(Path.Combine(payloadRoot, payloadFile), "payload-bytes");
 
-        var movieId = AddEntity(db, EntityKind.Movie.ToCode(), null, null, movieFolder);
-        AddEntity(db, EntityKind.Video.ToCode(), movieId, 1, ownedFilePath);
+        // A movie owns both its folder provenance and its playable payload directly. The old
+        // Movie -> Video wrapper fixture hid the direct playable topology this import exercises.
+        var movieId = AddFolderEntity(db, EntityKind.Movie.ToCode(), null, null, movieFolder);
+        AddSourceFile(db, movieId, ownedFilePath);
         var acquisitionId = await AddAcquisitionAsync(db, EntityKind.Movie, movieId, "Film", releaseTitle);
 
         var store = AcquisitionTestFactory.Store(db);
@@ -185,13 +187,14 @@ public sealed class MovieMusicMergedImportTests : IDisposable {
         var artistFolder = Directory.CreateDirectory(Path.Combine(libraryRoot, "The Artist [existing]")).FullName;
         var albumFolder = Directory.CreateDirectory(Path.Combine(artistFolder, "Album [existing]")).FullName;
 
-        var artistId = AddEntity(db, EntityKind.MusicArtist.ToCode(), null, null, artistFolder);
-        var albumId = AddEntity(db, EntityKind.AudioLibrary.ToCode(), artistId, null, albumFolder);
+        var artistId = AddFolderEntity(db, EntityKind.MusicArtist.ToCode(), null, null, artistFolder);
+        var albumId = AddFolderEntity(db, EntityKind.AudioLibrary.ToCode(), artistId, null, albumFolder);
         var position = 1;
         foreach (var track in ownedTracks) {
             var trackPath = Path.Combine(albumFolder, track);
             await File.WriteAllTextAsync(trackPath, "owned-bytes");
-            AddEntity(db, EntityKind.AudioTrack.ToCode(), albumId, position++, trackPath);
+            var trackId = AddEntity(db, EntityKind.AudioTrack.ToCode(), albumId, position++);
+            AddSourceFile(db, trackId, trackPath);
         }
 
         var payloadRoot = Directory.CreateDirectory(Path.Combine(_workRoot, "download-music", "release")).FullName;
@@ -239,18 +242,38 @@ public sealed class MovieMusicMergedImportTests : IDisposable {
         return acquisitionId;
     }
 
-    private static Guid AddEntity(PrismediaDbContext db, string kindCode, Guid? parent, int? sortOrder, string sourcePath) {
+    private static Guid AddEntity(PrismediaDbContext db, string kindCode, Guid? parent, int? sortOrder) {
         var id = Guid.NewGuid();
         var now = DateTimeOffset.UtcNow;
         db.Entities.Add(new EntityRow {
             Id = id, KindCode = kindCode, Title = kindCode, ParentEntityId = parent,
             SortOrder = sortOrder, CreatedAt = now, UpdatedAt = now
         });
-        db.EntityFiles.Add(new EntityFileRow {
-            Id = Guid.NewGuid(), EntityId = id, Role = EntityFileRole.Source, Path = sourcePath,
-            CreatedAt = now, UpdatedAt = now
+        return id;
+    }
+
+    private static Guid AddFolderEntity(
+        PrismediaDbContext db,
+        string kindCode,
+        Guid? parent,
+        int? sortOrder,
+        string folderPath) {
+        var id = AddEntity(db, kindCode, parent, sortOrder);
+        db.EntitySources.Add(new EntitySourceRow {
+            EntityId = id,
+            Code = EntitySourceCode.Folder.ToCode(),
+            Value = folderPath,
+            UpdatedAt = DateTimeOffset.UtcNow
         });
         return id;
+    }
+
+    private static void AddSourceFile(PrismediaDbContext db, Guid entityId, string sourcePath) {
+        var now = DateTimeOffset.UtcNow;
+        db.EntityFiles.Add(new EntityFileRow {
+            Id = Guid.NewGuid(), EntityId = entityId, Role = EntityFileRole.Source, Path = sourcePath,
+            CreatedAt = now, UpdatedAt = now
+        });
     }
 
     private static JobContext JobContextFor(PrismediaDbContext db, Guid acquisitionId, JobType type) {

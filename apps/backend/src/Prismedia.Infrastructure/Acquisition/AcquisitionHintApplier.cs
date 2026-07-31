@@ -788,6 +788,9 @@ public sealed class AcquisitionHintApplier(
                         identifyRoot = await ResolveAutoIdentifyRootAsync(
                             identityOwnerId,
                             leaseCancellationToken);
+                        await MarkWantedFulfilledWhenSourceBackedAsync(
+                            identityOwnerId,
+                            leaseCancellationToken);
                         await MarkReadyForPostImportIdentifyAsync(
                             identifyRoot.TopLevelEntityId,
                             leaseCancellationToken);
@@ -804,6 +807,38 @@ public sealed class AcquisitionHintApplier(
         }
 
         return owners.Values.ToArray();
+    }
+
+    /// <summary>
+    /// Clears Wanted only for a definition that explicitly treats a source-backed subtree as its
+    /// fulfillment boundary. Folder provenance alone intentionally does not fulfill a request.
+    /// </summary>
+    private async Task MarkWantedFulfilledWhenSourceBackedAsync(
+        Guid entityId,
+        CancellationToken cancellationToken) {
+        var entity = db.Entities.Local.FirstOrDefault(row => row.Id == entityId)
+            ?? await db.Entities.FirstOrDefaultAsync(row => row.Id == entityId, cancellationToken);
+        if (entity is null || !entity.IsWanted) {
+            return;
+        }
+
+        if (!EntityKindRegistry.TryDescribe(entity.KindCode, out var definition) ||
+            !definition.IsFulfilledBySourceBackedSubtree) {
+            return;
+        }
+
+        var subtreeIds = await new EfEntityHierarchyReader(db)
+            .ListSubtreeIdsAsync(entityId, cancellationToken);
+        var hasSourcePayload = subtreeIds.Count > 0 && await db.EntityFiles.AsNoTracking()
+            .AnyAsync(
+                file => subtreeIds.Contains(file.EntityId) && file.Role == EntityFileRole.Source,
+                cancellationToken);
+        if (!hasSourcePayload) {
+            return;
+        }
+
+        entity.IsWanted = false;
+        entity.UpdatedAt = DateTimeOffset.UtcNow;
     }
 
     /// <summary>The entity owning the exact payload path, else the nearest folder provenance owner.</summary>

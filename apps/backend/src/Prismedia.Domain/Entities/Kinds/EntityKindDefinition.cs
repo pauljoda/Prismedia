@@ -118,6 +118,13 @@ public abstract class EntityKindDefinition {
     /// <summary>Whether an inactive derived shell should be removed after its last child disappears.</summary>
     public bool PrunesWhenEmpty => Behavior.PrunesWhenEmpty;
 
+    /// <summary>
+    /// Whether this requested kind becomes fulfilled when a physical source payload is owned by
+    /// its structural subtree. Most structural kinds remain wanted until their own request policy
+    /// resolves them; kinds that represent a multi-file acquisition opt in beside their definition.
+    /// </summary>
+    public virtual bool IsFulfilledBySourceBackedSubtree => false;
+
     /// <summary>Browser upload and reviewed-replacement behavior owned by this kind.</summary>
     public EntityManualAcquisitionPolicy ManualAcquisition => Behavior.ManualAcquisition;
 

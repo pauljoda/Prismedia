@@ -821,9 +821,10 @@ public sealed class WantedEntityWriter(
     }
 
     /// <summary>
-    /// Whether this Entity's canonical subtree owns source media. Containers and root wrappers often own
-    /// files only through descendants (Movie → Video, Series → Season → Episode), so a direct-row check
-    /// would falsely mark an on-disk item as requestable and create duplicate acquisition work.
+    /// Whether this Entity's canonical subtree owns source media. Structural containers can own files
+    /// through descendants (Series → Season → VideoEpisode), so a direct-row check would falsely mark
+    /// an on-disk item as requestable and create duplicate acquisition work. Direct playable movies
+    /// own their source payload on the movie Entity itself.
     /// </summary>
     private async Task<bool> HasSourceFileAsync(Guid entityId, CancellationToken cancellationToken) {
         var subtreeIds = await hierarchy.ListSubtreeIdsAsync(entityId, cancellationToken);
