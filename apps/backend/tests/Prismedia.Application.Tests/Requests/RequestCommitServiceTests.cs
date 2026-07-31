@@ -2105,6 +2105,86 @@ public sealed class RequestCommitServiceTests {
             new RequestCommitRequest(RequestMediaKind.Book, $"{Provider}:W404", []), hideNsfw: false, CancellationToken.None));
     }
 
+    [Fact]
+    public async Task GraphAcquisitionDerivesCreatorAndSeriesFromDefinitionOwnedAncestorRoles() {
+        var (service, writer, acquisitions, _, _, _) = ServiceWithSuppressions(Leaf(EntityKind.Book, "Unused", "U1"));
+
+        var authorId = Guid.NewGuid();
+        var bookId = Guid.NewGuid();
+        writer.Containers[bookId] = MonitoredContainer(
+            bookId,
+            EntityKind.Book,
+            "Book",
+            new ExternalIdentity(Provider, "B1")) with { ParentEntityId = authorId };
+        writer.Containers[authorId] = new MonitorableEntity(
+            authorId,
+            EntityKind.BookAuthor,
+            "Author",
+            []);
+
+        var artistId = Guid.NewGuid();
+        var albumId = Guid.NewGuid();
+        var trackId = Guid.NewGuid();
+        writer.Containers[trackId] = MonitoredContainer(
+            trackId,
+            EntityKind.AudioTrack,
+            "Track",
+            new ExternalIdentity(Provider, "T1")) with { ParentEntityId = albumId };
+        writer.Containers[albumId] = new MonitorableEntity(
+            albumId,
+            EntityKind.AudioLibrary,
+            "Album",
+            [],
+            ParentEntityId: artistId);
+        writer.Containers[artistId] = new MonitorableEntity(
+            artistId,
+            EntityKind.MusicArtist,
+            "Artist",
+            []);
+
+        var seriesId = Guid.NewGuid();
+        var seasonId = Guid.NewGuid();
+        var episodeId = Guid.NewGuid();
+        writer.Containers[episodeId] = MonitoredContainer(
+            episodeId,
+            EntityKind.VideoEpisode,
+            "Episode",
+            new ExternalIdentity(Provider, "E1")) with { ParentEntityId = seasonId };
+        writer.Containers[seasonId] = new MonitorableEntity(
+            seasonId,
+            EntityKind.VideoSeason,
+            "Season 1",
+            [],
+            ParentEntityId: seriesId);
+        writer.Containers[seriesId] = new MonitorableEntity(
+            seriesId,
+            EntityKind.VideoSeries,
+            "Series",
+            []);
+
+        await service.RequestEntityFromGraphAsync(bookId, hideNsfw: false, CancellationToken.None);
+        await service.RequestEntityFromGraphAsync(trackId, hideNsfw: false, CancellationToken.None);
+        await service.RequestEntityFromGraphAsync(episodeId, hideNsfw: false, CancellationToken.None);
+
+        Assert.Collection(
+            acquisitions.Created,
+            book => {
+                Assert.Equal(EntityKind.Book, book.Kind);
+                Assert.Equal("Author", book.Author);
+                Assert.Null(book.Series);
+            },
+            track => {
+                Assert.Equal(EntityKind.AudioTrack, track.Kind);
+                Assert.Equal("Artist", track.Author);
+                Assert.Equal("Album", track.Series);
+            },
+            episode => {
+                Assert.Equal(EntityKind.VideoEpisode, episode.Kind);
+                Assert.Null(episode.Author);
+                Assert.Equal("Series", episode.Series);
+            });
+    }
+
     private static (RequestCommitService Service, FakeWantedEntityWriter Writer, FakeAcquisitionRequestService Acquisitions, FakeMonitorStore Monitors) ServiceWithMonitors(
         EntityMetadataProposal proposal) {
         var (service, writer, acquisitions, monitors, _, _) = ServiceWithSuppressions(proposal);

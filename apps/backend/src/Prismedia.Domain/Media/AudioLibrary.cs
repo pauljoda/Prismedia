@@ -35,6 +35,10 @@ public sealed class AudioLibraryEntityKindDefinition() : RootEntityKindDefinitio
         supportsFileDeletion: true,
         mediaQualityFamily: EntityMediaQualityFamily.Audio)) {
     /// <inheritdoc />
+    public override AcquisitionAncestorContextRole AcquisitionAncestorContextRole =>
+        AcquisitionAncestorContextRole.Series;
+
+    /// <inheritdoc />
     public override bool IsFulfilledBySourceBackedSubtree => true;
 
     /// <inheritdoc />

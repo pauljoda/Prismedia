@@ -29,6 +29,10 @@ public sealed class BookAuthorEntityKindDefinition() : RootEntityKindDefinition<
         supportsFileDeletion: true),
     defaultCapabilities: static () => [new CapabilityCredits()]) {
     /// <inheritdoc />
+    public override AcquisitionAncestorContextRole AcquisitionAncestorContextRole =>
+        AcquisitionAncestorContextRole.Creator;
+
+    /// <inheritdoc />
     public override IReadOnlyList<EntityStructuralCountDefinition> StructuralThumbnailCounts =>
         [new(EntityKind.Book, 1, ThumbnailMetaIcons.Book)];
 

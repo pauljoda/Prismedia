@@ -34,6 +34,10 @@ public sealed class VideoSeriesEntityKindDefinition() : EntityKindDefinition<Vid
         mediaQualityFamily: EntityMediaQualityFamily.Video),
     defaultCapabilities: static () => [new CapabilityCredits(), new CapabilityProgress()]) {
     /// <inheritdoc />
+    public override AcquisitionAncestorContextRole AcquisitionAncestorContextRole =>
+        AcquisitionAncestorContextRole.Series;
+
+    /// <inheritdoc />
     public override bool OwnsMetadataRelationships => true;
 
     /// <inheritdoc />

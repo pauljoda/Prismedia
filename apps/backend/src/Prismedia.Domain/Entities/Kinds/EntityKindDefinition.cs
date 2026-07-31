@@ -190,6 +190,12 @@ public abstract class EntityKindDefinition {
     public virtual AcquisitionProfileDefinition? AcquisitionProfile => null;
 
     /// <summary>
+    /// Search-context contribution made when this kind is encountered as an ancestor of a graph-backed
+    /// acquisition. Definitions own the meaning so request traversal never maintains a parallel kind list.
+    /// </summary>
+    public virtual AcquisitionAncestorContextRole AcquisitionAncestorContextRole => AcquisitionAncestorContextRole.None;
+
+    /// <summary>
     /// Immutable document-capability types projected directly by this definition. Shared
     /// cross-kind capabilities are projected generically from the Entity root and attached
     /// domain capabilities.

@@ -48,6 +48,18 @@ public sealed class EntityKindMetadataTests {
     }
 
     [Theory]
+    [InlineData(EntityKind.BookAuthor, AcquisitionAncestorContextRole.Creator)]
+    [InlineData(EntityKind.MusicArtist, AcquisitionAncestorContextRole.Creator)]
+    [InlineData(EntityKind.AudioLibrary, AcquisitionAncestorContextRole.Series)]
+    [InlineData(EntityKind.VideoSeries, AcquisitionAncestorContextRole.Series)]
+    [InlineData(EntityKind.VideoSeason, AcquisitionAncestorContextRole.None)]
+    public void AcquisitionAncestorContextIsOwnedByEachEntityKindDefinition(
+        EntityKind kind,
+        AcquisitionAncestorContextRole expected) {
+        Assert.Equal(expected, EntityKindRegistry.Describe(kind).AcquisitionAncestorContextRole);
+    }
+
+    [Theory]
     [InlineData("video-series", true)]
     [InlineData("video-season", true)]
     [InlineData("audio-library", true)]

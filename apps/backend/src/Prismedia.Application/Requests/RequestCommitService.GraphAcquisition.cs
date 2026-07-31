@@ -142,8 +142,19 @@ public sealed partial class RequestCommitService {
                 break;
             }
 
-            creator ??= ancestor.Kind is EntityKind.BookAuthor or EntityKind.MusicArtist ? ancestor.Title : null;
-            series ??= ancestor.Kind is EntityKind.VideoSeries or EntityKind.AudioLibrary ? ancestor.Title : null;
+            switch (EntityKindRegistry.Describe(ancestor.Kind).AcquisitionAncestorContextRole) {
+                case AcquisitionAncestorContextRole.Creator:
+                    creator ??= ancestor.Title;
+                    break;
+                case AcquisitionAncestorContextRole.Series:
+                    series ??= ancestor.Title;
+                    break;
+                case AcquisitionAncestorContextRole.None:
+                    break;
+                default:
+                    throw new InvalidOperationException(
+                        $"Entity kind '{ancestor.Kind.ToCode()}' declares an unsupported acquisition ancestor context role.");
+            }
             parentId = ancestor.ParentEntityId;
         }
 
