@@ -139,8 +139,8 @@ public sealed partial class EntityMetadataApplyService {
 
         var order = 0;
         foreach (var name in tags.Where(value => !string.IsNullOrWhiteSpace(value)).Select(value => value.Trim()).Distinct(StringComparer.OrdinalIgnoreCase)) {
-            var tag = await FindEntityByTitleAsync("tag", name, parentEntityId: null, cancellationToken)
-                ?? CreateEntity("tag", name, now);
+            var tag = await FindEntityByTitleAsync(EntityKind.Tag.ToCode(), name, parentEntityId: null, cancellationToken)
+                ?? CreateEntity(EntityKind.Tag.ToCode(), name, now);
             MarkNsfwIfRequested(tag, markNsfw, now);
             AddRelationship(entityId, RelationshipKind.Tags.ToCode(), "Tags", tag.Id, tag.KindCode, order++, null, now);
         }
@@ -163,13 +163,13 @@ public sealed partial class EntityMetadataApplyService {
         foreach (var credit in credits.Where(credit => !string.IsNullOrWhiteSpace(credit.Name))) {
             var personName = credit.Name.Trim();
             if (!resolvedPeople.TryGetValue(personName, out var person)) {
-                person = await FindEntityByTitleAsync("person", personName, parentEntityId: null, cancellationToken)
-                    ?? CreateEntity("person", personName, now);
+                person = await FindEntityByTitleAsync(EntityKind.Person.ToCode(), personName, parentEntityId: null, cancellationToken)
+                    ?? CreateEntity(EntityKind.Person.ToCode(), personName, now);
                 MarkNsfwIfRequested(person, markNsfw, now);
                 resolvedPeople[personName] = person;
             }
 
-            var role = string.IsNullOrWhiteSpace(credit.Role) ? "person" : credit.Role.Trim();
+            var role = string.IsNullOrWhiteSpace(credit.Role) ? CreditRole.Person.ToCode() : credit.Role.Trim();
             var character = string.IsNullOrWhiteSpace(credit.Character) ? null : credit.Character.Trim();
             var fallbackSortOrder = order++;
             var sortOrder = credit.SortOrder ?? fallbackSortOrder;

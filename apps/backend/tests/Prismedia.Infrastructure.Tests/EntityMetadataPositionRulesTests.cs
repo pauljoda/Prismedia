@@ -7,26 +7,26 @@ public sealed class EntityMetadataPositionRulesTests {
     [Fact]
     public void NormalizeMapsProviderAliasesToCanonicalCodes() {
         var positions = EntityMetadataPositionRules.Normalize(new Dictionary<string, int> {
-            ["seasonNumber"] = 1,
-            ["episodeNumber"] = 2,
-            ["absoluteEpisodeNumber"] = 14,
-            ["trackNumber"] = 3,
-            ["sortOrder"] = 9
+            [PluginPositionField.SeasonNumber] = 1,
+            [PluginPositionField.EpisodeNumber] = 2,
+            [PluginPositionField.AbsoluteEpisodeNumber] = 14,
+            [PluginPositionField.TrackNumber] = 3,
+            [PluginPositionField.SortOrder] = 9
         });
 
-        Assert.Equal(1, positions["season"]);
-        Assert.Equal(2, positions["episode"]);
-        Assert.Equal(14, positions["absolute-episode"]);
-        Assert.Equal(3, positions["track"]);
-        Assert.Equal(9, positions["sort"]);
-        Assert.False(positions.ContainsKey("episodeNumber"));
+        Assert.Equal(1, positions[EntityPositionCodes.Season]);
+        Assert.Equal(2, positions[EntityPositionCodes.Episode]);
+        Assert.Equal(14, positions[EntityPositionCodes.AbsoluteEpisode]);
+        Assert.Equal(3, positions[EntityPositionCodes.Track]);
+        Assert.Equal(9, positions[EntityPositionCodes.Sort]);
+        Assert.False(positions.ContainsKey(PluginPositionField.EpisodeNumber));
     }
 
     [Theory]
     [InlineData("video-season", "season", 3)]
     [InlineData("video-season", "sort", 4)]
-    [InlineData("video", "episode", 5)]
-    [InlineData("video", "absolute-episode", 6)]
+    [InlineData("video-episode", "episode", 5)]
+    [InlineData("video-episode", "absolute-episode", 6)]
     [InlineData("audio-track", "track", 7)]
     [InlineData("book-page", "page", 8)]
     public void SortOrderUsesKindSpecificPositionPriority(string kindCode, string positionCode, int expected) {
@@ -38,12 +38,12 @@ public sealed class EntityMetadataPositionRulesTests {
     }
 
     [Fact]
-    public void SortOrderPrefersEpisodeBeforeFallbackSortForVideos() {
+    public void SortOrderPrefersEpisodeBeforeFallbackSortForEpisodes() {
         var positions = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase) {
             ["episode"] = 2,
             ["sort"] = 99
         };
 
-        Assert.Equal(2, EntityMetadataPositionRules.SortOrderFor(EntityKind.Video.ToCode(), positions));
+        Assert.Equal(2, EntityMetadataPositionRules.SortOrderFor(EntityKind.VideoEpisode.ToCode(), positions));
     }
 }

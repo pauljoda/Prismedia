@@ -16,6 +16,11 @@ public sealed class CollectionItemReadService(
     PrismediaDbContext db,
     IEntityReadService entities,
     ICurrentUserContext currentUser) : ICollectionItemReadService {
+    private static readonly IReadOnlySet<string> AudioKindCodes = EntityKindRegistry.All
+        .Where(definition => definition.MediaQualityFamily == EntityMediaQualityFamily.Audio)
+        .Select(definition => definition.Code)
+        .ToHashSet(StringComparer.Ordinal);
+
     public async Task<CollectionMembershipOptionsResponse> ListMembershipOptionsAsync(
         bool hideNsfw,
         CancellationToken cancellationToken) {
@@ -109,11 +114,6 @@ public sealed class CollectionItemReadService(
 
         // One grouped query for the whole batch: member counts and audio capability come straight
         // from the membership join — no thumbnail hydration, no per-collection round-trips.
-        var audioKinds = new[] {
-            EntityKind.AudioTrack.ToCode(),
-            EntityKind.AudioLibrary.ToCode(),
-            EntityKind.MusicArtist.ToCode(),
-        };
         var allEntities = db.Entities.AsNoTracking();
         var catalogEntities = allEntities.ExcludeBookOwnedAudioTracks(allEntities);
         var rows = await (
@@ -125,7 +125,7 @@ public sealed class CollectionItemReadService(
             select new {
                 CollectionId = members.Key,
                 Count = members.Count(),
-                HasAudio = members.Any(kind => audioKinds.Contains(kind))
+                HasAudio = members.Any(kind => AudioKindCodes.Contains(kind))
             }).ToArrayAsync(cancellationToken);
 
         return rows.ToDictionary(

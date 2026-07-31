@@ -739,8 +739,8 @@ public sealed partial class IdentifyPluginService {
         }
 
         var code = child.Entity.KindCode.Equals(EntityKind.VideoSeason.ToCode(), StringComparison.OrdinalIgnoreCase)
-            ? "seasonNumber"
-            : "sortOrder";
+            ? PluginPositionField.SeasonNumber
+            : PluginPositionField.SortOrder;
         return proposal with {
             Patch = proposal.Patch with {
                 Positions = new Dictionary<string, int> { [code] = sortOrder }
@@ -909,7 +909,7 @@ public sealed partial class IdentifyPluginService {
         CancellationToken cancellationToken) {
         var positions = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         if (parentSortOrder is { } sortOrder) {
-            positions["sortOrder"] = sortOrder;
+            positions[PluginPositionField.SortOrder] = sortOrder;
         }
 
         var persisted = await _db.EntityPositions
@@ -926,7 +926,7 @@ public sealed partial class IdentifyPluginService {
             .Select(row => row.SortOrder)
             .FirstOrDefaultAsync(cancellationToken);
         if (seasonNumber is { } value) {
-            positions["seasonNumber"] = value;
+            positions[PluginPositionField.SeasonNumber] = value;
         }
 
         return positions;

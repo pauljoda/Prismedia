@@ -113,6 +113,32 @@ public sealed class CollectionItemReadServiceTests {
         Assert.Equal(itemId, Assert.Single(visible.Items).EntityId);
     }
 
+    [Fact]
+    public async Task GetListContextsAsyncDetectsAudioThroughDiscoveredQualityFamily() {
+        await using var db = CreateContext();
+        var collectionId = Guid.NewGuid();
+        var audioLibraryId = Guid.NewGuid();
+        var videoId = Guid.NewGuid();
+        SeedEntity(db, collectionId, EntityKind.Collection.ToCode(), "Mixed media");
+        SeedEntity(db, audioLibraryId, EntityKind.AudioLibrary.ToCode(), "Album");
+        SeedEntity(db, videoId, EntityKind.Video.ToCode(), "Movie");
+        db.CollectionItemDetails.AddRange(
+            Item(collectionId, audioLibraryId, 0),
+            Item(collectionId, videoId, 1));
+        await db.SaveChangesAsync();
+
+        var service = new CollectionItemReadService(
+            db,
+            new FakeEntityReadService(db),
+            TestUserContext.Admin());
+
+        var contexts = await service.GetListContextsAsync([collectionId], hideNsfw: false, CancellationToken.None);
+
+        var context = Assert.Single(contexts).Value;
+        Assert.Equal(2, context.ChildCount);
+        Assert.True(context.HasAudio);
+    }
+
     private static CollectionItemDetailRow Item(Guid collectionId, Guid itemId, int sortOrder) =>
         new() {
             Id = Guid.NewGuid(),
