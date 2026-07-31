@@ -33,6 +33,138 @@ public sealed class MediaEntityDeletionServiceTests {
     }
 
     [Fact]
+    public async Task DirectMovieDeletesItsFolderProvenanceInsteadOfRepeatingItsPayloadFile() {
+        await using var db = CreateContext();
+        var root = new FileLibraryRoot(Guid.NewGuid(), "/media/movies", "Movies", true, true, false, false, false, false);
+        var movieId = Guid.NewGuid();
+        db.Entities.Add(NewEntity(movieId, EntityKind.Movie.ToCode(), "Arrival"));
+        db.EntityFiles.Add(NewSourceFile(movieId, "/media/movies/Arrival/Arrival.mkv"));
+        db.EntitySources.Add(NewFolderSource(movieId, "/media/movies/Arrival"));
+        await db.SaveChangesAsync();
+
+        var storage = new RecordingStorage();
+        var service = CreateDeletionService(db, root, storage);
+
+        var result = await service.DeleteAsync(movieId, deleteFiles: true, CancellationToken.None);
+
+        Assert.True(result.Deleted);
+        Assert.Equal(["/media/movies/Arrival"], storage.DeletedPaths);
+        Assert.Equal(1, result.FilesDeleted);
+    }
+
+    [Fact]
+    public async Task SeriesAndSeasonFolderProvenanceSelectTheTopLevelManagedFolder() {
+        await using var db = CreateContext();
+        var root = new FileLibraryRoot(Guid.NewGuid(), "/media/tv", "TV", true, true, false, false, false, false);
+        var seriesId = Guid.NewGuid();
+        var seasonId = Guid.NewGuid();
+        var episodeId = Guid.NewGuid();
+        db.Entities.AddRange(
+            NewEntity(seriesId, EntityKind.VideoSeries.ToCode(), "Example Show"),
+            NewEntity(seasonId, EntityKind.VideoSeason.ToCode(), "Season 1", seriesId),
+            NewEntity(episodeId, EntityKind.VideoEpisode.ToCode(), "Episode 1", seasonId));
+        db.EntitySources.AddRange(
+            NewFolderSource(seriesId, "/media/tv/Example Show"),
+            NewFolderSource(seasonId, "/media/tv/Example Show/Season 01"));
+        db.EntityFiles.Add(NewSourceFile(episodeId, "/media/tv/Example Show/Season 01/Example Show S01E01.mkv"));
+        await db.SaveChangesAsync();
+
+        var storage = new RecordingStorage();
+        var service = CreateDeletionService(db, root, storage);
+
+        var result = await service.DeleteAsync(seriesId, deleteFiles: true, CancellationToken.None);
+
+        Assert.True(result.Deleted);
+        Assert.Equal(["/media/tv/Example Show"], storage.DeletedPaths);
+    }
+
+    [Fact]
+    public async Task EmptyManagedFolderRemainsExplicitlyDeletable() {
+        await using var db = CreateContext();
+        var root = new FileLibraryRoot(Guid.NewGuid(), "/media/tv", "TV", true, true, false, false, false, false);
+        var seriesId = Guid.NewGuid();
+        db.Entities.Add(NewEntity(seriesId, EntityKind.VideoSeries.ToCode(), "Empty Show"));
+        db.EntitySources.Add(NewFolderSource(seriesId, "/media/tv/Empty Show"));
+        await db.SaveChangesAsync();
+
+        var storage = new RecordingStorage();
+        var service = CreateDeletionService(db, root, storage);
+
+        var result = await service.DeleteAsync(seriesId, deleteFiles: true, CancellationToken.None);
+
+        Assert.True(result.Deleted);
+        Assert.Equal(["/media/tv/Empty Show"], storage.DeletedPaths);
+    }
+
+    [Fact]
+    public async Task UnrelatedPayloadOrFolderWithinManagedFolderBlocksDeletion() {
+        await using var db = CreateContext();
+        var root = new FileLibraryRoot(Guid.NewGuid(), "/media/movies", "Movies", true, true, false, false, false, false);
+        var movieId = Guid.NewGuid();
+        var unrelatedId = Guid.NewGuid();
+        db.Entities.AddRange(
+            NewEntity(movieId, EntityKind.Movie.ToCode(), "Arrival"),
+            NewEntity(unrelatedId, EntityKind.Video.ToCode(), "Unrelated"));
+        db.EntityFiles.AddRange(
+            NewSourceFile(movieId, "/media/movies/Arrival/Arrival.mkv"),
+            NewSourceFile(unrelatedId, "/media/movies/Arrival/Extras/featurette.mkv"));
+        db.EntitySources.AddRange(
+            NewFolderSource(movieId, "/media/movies/Arrival"),
+            NewFolderSource(unrelatedId, "/media/movies/Arrival/Extras"));
+        await db.SaveChangesAsync();
+
+        var storage = new RecordingStorage();
+        var service = CreateDeletionService(db, root, storage);
+
+        var result = await service.DeleteAsync(movieId, deleteFiles: true, CancellationToken.None);
+
+        Assert.False(result.Deleted);
+        Assert.Equal(MediaEntityDeleteFailureKind.Conflict, result.FailureKind);
+        Assert.Empty(storage.AttemptedPaths);
+        Assert.NotNull(await db.Entities.SingleOrDefaultAsync(row => row.Id == movieId));
+    }
+
+    [Fact]
+    public async Task AncestorFolderProvenanceDoesNotBlockDeletingSelectedDescendantPayload() {
+        await using var db = CreateContext();
+        var root = new FileLibraryRoot(Guid.NewGuid(), "/media/tv", "TV", true, true, false, false, false, false);
+        var seriesId = Guid.NewGuid();
+        var episodeId = Guid.NewGuid();
+        db.Entities.AddRange(
+            NewEntity(seriesId, EntityKind.VideoSeries.ToCode(), "Example Show"),
+            NewEntity(episodeId, EntityKind.VideoEpisode.ToCode(), "Episode 1", seriesId));
+        db.EntitySources.Add(NewFolderSource(seriesId, "/media/tv/Example Show"));
+        db.EntityFiles.Add(NewSourceFile(episodeId, "/media/tv/Example Show/Example Show S01E01.mkv"));
+        await db.SaveChangesAsync();
+
+        var storage = new RecordingStorage();
+        var service = CreateDeletionService(db, root, storage);
+
+        var result = await service.DeleteAsync(episodeId, deleteFiles: true, CancellationToken.None);
+
+        Assert.True(result.Deleted);
+        Assert.Equal(["/media/tv/Example Show/Example Show S01E01.mkv"], storage.DeletedPaths);
+        Assert.NotNull(await db.Entities.SingleOrDefaultAsync(row => row.Id == seriesId));
+    }
+
+    [Fact]
+    public async Task FolderProvenanceDoesNotMakeAnEntitySourceBackedOrFulfilled() {
+        await using var db = CreateContext();
+        var entityId = Guid.NewGuid();
+        db.Entities.Add(NewEntity(entityId, EntityKind.Movie.ToCode(), "Folder only"));
+        db.EntitySources.Add(NewFolderSource(entityId, "/media/movies/Folder only"));
+        await db.SaveChangesAsync();
+
+        var sourceBacked = await new EfEntitySourceOwnershipProjection(db).ResolveAsync(
+            [entityId], CancellationToken.None);
+        var fulfilled = await new EfEntityFulfillmentProjection(db).ResolveAsync(
+            [entityId], CancellationToken.None);
+
+        Assert.Empty(sourceBacked);
+        Assert.Empty(fulfilled);
+    }
+
+    [Fact]
     public async Task DeletesTheTreeItsFilesAndTearsDownAcquisitionState() {
         await using var db = CreateContext();
         var root = new FileLibraryRoot(Guid.NewGuid(), "/media/tv", "TV", true, true, false, false, false, false);
@@ -1651,6 +1783,28 @@ public sealed class MediaEntityDeletionServiceTests {
         Id = Guid.NewGuid(), EntityId = entityId, Role = EntityFileRole.Source, Path = path,
         CreatedAt = DateTimeOffset.UtcNow, UpdatedAt = DateTimeOffset.UtcNow
     };
+
+    private static EntitySourceRow NewFolderSource(Guid entityId, string path) => new() {
+        EntityId = entityId,
+        Code = EntitySourceCode.Folder.ToCode(),
+        Value = path,
+        UpdatedAt = DateTimeOffset.UtcNow
+    };
+
+    private static MediaEntityDeletionService CreateDeletionService(
+        PrismediaDbContext db,
+        FileLibraryRoot root,
+        RecordingStorage storage) =>
+        new(
+            db,
+            new FakeRoots(root),
+            storage,
+            new RecordingSuppressions(),
+            new RecordingAcquisitions([]),
+            new NullJobQueue(),
+            new Prismedia.Infrastructure.Media.Processing.AssetPathService(System.IO.Path.GetTempPath()),
+            new EfEntityHierarchyReader(db),
+            NullLogger<MediaEntityDeletionService>.Instance);
 
     private static PrismediaDbContext CreateContext() =>
         new(new DbContextOptionsBuilder<PrismediaDbContext>().UseInMemoryDatabase(Guid.NewGuid().ToString()).Options);

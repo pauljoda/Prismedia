@@ -34,6 +34,7 @@ public sealed class MediaEntityDeletionService(
     EntityAssetCleanupService? sharedAssetCleanup = null) : IMediaEntityDeletionService {
     private readonly EntityAssetCleanupService entityAssetCleanup =
         sharedAssetCleanup ?? new EntityAssetCleanupService(assets, logger);
+    private readonly EfEntityPhysicalManagedPathProjection physicalManagedPaths = new(db);
 
     /// <summary>Whether the given kind code may be deleted (with files) through this service.</summary>
     public static bool IsDeletableKind(string? kind) =>
@@ -119,9 +120,7 @@ public sealed class MediaEntityDeletionService(
         }
 
         var ids = (await hierarchy.ListSubtreeIdsAsync(id, cancellationToken)).ToArray();
-        var hasManagedSource = await db.EntityFiles.AsNoTracking().AnyAsync(
-            file => ids.Contains(file.EntityId) && file.Role == EntityFileRole.Source,
-            cancellationToken);
+        var hasManagedPhysicalPath = (await physicalManagedPaths.ListAsync(ids, cancellationToken)).Count > 0;
         var hasDeletingFilesMonitor = await db.Monitors.AsNoTracking().AnyAsync(
             monitor => monitor.EntityId != null
                 && ids.Contains(monitor.EntityId.Value)
@@ -139,7 +138,7 @@ public sealed class MediaEntityDeletionService(
         var resumesManagedDeletion = hasEntityDeletionClaim
             || hasDeletingFilesMonitor
             || hasStoppingAcquisition;
-        if (!hasManagedSource && !resumesManagedDeletion) {
+        if (!hasManagedPhysicalPath && !resumesManagedDeletion) {
             return new MediaEntityDeleteResult(
                 false,
                 "This Entity has no managed source files, so there is nothing on disk to delete.",
@@ -821,16 +820,15 @@ public sealed class MediaEntityDeletionService(
         IReadOnlyCollection<Guid> ids,
         CancellationToken cancellationToken) {
         var entityIds = ids.ToArray();
-        var paths = await db.EntityFiles.AsNoTracking()
-            .Where(file => entityIds.Contains(file.EntityId) && file.Role == EntityFileRole.Source)
-            .Select(file => file.Path)
+        var paths = (await physicalManagedPaths.ListAsync(entityIds, cancellationToken))
+            .Select(path => path.Path)
             .Distinct()
-            .ToListAsync(cancellationToken);
+            .ToList();
         if (paths.Count == 0) {
             return PhysicalDeletionPreparation.Success(PhysicalDeletionPlan.Empty);
         }
 
-        var deletionPaths = TopLevelPaths(paths.Select(EntitySourcePath.PhysicalOwner).Distinct().ToArray()).ToArray();
+        var deletionPaths = TopLevelPaths(paths).ToArray();
         var allRoots = await roots.ListRootsAsync(cancellationToken);
         var targets = new List<PhysicalDeletionTarget>();
         var rootFailures = new List<PhysicalDeletionFailure>();
@@ -855,16 +853,15 @@ public sealed class MediaEntityDeletionService(
         // Load only the identity columns but do not SQL-prefix-filter them. PostgreSQL comparison is
         // always case-sensitive while a Windows media filesystem is not; filtering in SQL could omit a
         // case-variant outside owner and make destructive validation unsafe. The bounded in-memory pass
-        // below applies the host's canonical FileSystemPathComparison to every Source owner.
-        var outsideSources = await db.EntityFiles.AsNoTracking()
-            .Where(file => !entityIds.Contains(file.EntityId) && file.Role == EntityFileRole.Source)
-            .Select(file => new { file.EntityId, file.Path })
-            .ToArrayAsync(cancellationToken);
+        // below applies the host's canonical FileSystemPathComparison to every physical managed-path
+        // owner. Folder provenance is intentionally included here only: it must protect destructive disk
+        // cleanup without turning a container into source-backed or fulfilled media.
+        var outsideSources = await physicalManagedPaths.ListOutsideAsync(entityIds, cancellationToken);
         var ancestorIds = (await hierarchy.ListAncestorIdsAsync(targetEntityId, cancellationToken)).ToHashSet();
         var ownershipConflicts = new List<PhysicalDeletionFailure>();
         foreach (var deletionPath in deletionPaths) {
             foreach (var outside in outsideSources) {
-                var outsidePath = EntitySourcePath.PhysicalOwner(outside.Path);
+                var outsidePath = outside.Path;
                 if (IsUnder(deletionPath, outsidePath)) {
                     ownershipConflicts.Add(new PhysicalDeletionFailure(
                         deletionPath,
