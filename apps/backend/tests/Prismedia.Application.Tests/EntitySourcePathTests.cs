@@ -45,6 +45,14 @@ public sealed class EntitySourcePathTests {
     }
 
     [Fact]
+    public void DescendantComparisonAcceptsChildrenOfTheFilesystemRoot() {
+        var root = Path.GetPathRoot(Path.GetTempPath())!;
+        var child = Path.Combine(root, "prismedia", "Movie.mkv");
+
+        Assert.True(FileSystemPathComparison.IsSameOrDescendant(root, child));
+    }
+
+    [Fact]
     public void PhysicalPrefixMovePreservesArchiveMemberSuffix() {
         var sourceArchive = Path.Combine(Path.GetTempPath(), "Incoming", "Volume.cbz");
         var targetArchive = Path.Combine(Path.GetTempPath(), "Books", "Volume.cbz");

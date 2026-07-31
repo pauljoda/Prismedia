@@ -146,7 +146,7 @@ public sealed record PlayableVideoRecoveryTarget(
 
 /// <summary>Image and gallery scan persistence operations for discovered files and stale cleanup.</summary>
 public interface IImageGalleryScanPersistence {
-    Task<Guid> UpsertImageAsync(string filePath, string title, Guid? galleryEntityId, long? sizeBytes, int sortOrder, bool isNsfw, CancellationToken cancellationToken);
+    Task<Guid> UpsertImageAsync(string filePath, string title, Guid libraryRootId, Guid? galleryEntityId, long? sizeBytes, int sortOrder, bool isNsfw, CancellationToken cancellationToken);
     Task<Guid> UpsertGalleryAsync(string folderPath, string title, Guid libraryRootId, Guid? parentGalleryEntityId, int sortOrder, bool isNsfw, CancellationToken cancellationToken);
 
     /// <summary>
@@ -176,7 +176,7 @@ public interface IAudioScanPersistence {
     /// is the album-global ordinal (sections concatenated in section order, then file order)
     /// so play-all ordering is preserved.
     /// </summary>
-    Task<Guid> UpsertAudioTrackAsync(string filePath, string title, Guid? audioLibraryId, int sortOrder, string? sectionLabel, int sectionOrder, bool isNsfw, CancellationToken cancellationToken);
+    Task<Guid> UpsertAudioTrackAsync(string filePath, string title, Guid libraryRootId, Guid? audioLibraryId, int sortOrder, string? sectionLabel, int sectionOrder, bool isNsfw, CancellationToken cancellationToken);
 
     /// <summary>
     /// Upserts an album folder. <paramref name="parentEntityId"/> is the owning
@@ -620,6 +620,7 @@ public interface IImportedVideoMaterializer {
 /// </summary>
 /// <param name="FilePath">Absolute file path used as the source identity.</param>
 /// <param name="Title">Display title inferred from the file name.</param>
+/// <param name="LibraryRootId">Library root that discovered the file.</param>
 /// <param name="GalleryEntityId">Optional owning gallery entity ID.</param>
 /// <param name="SizeBytes">Observed file size when available.</param>
 /// <param name="SortOrder">Position within the owning gallery.</param>
@@ -627,6 +628,7 @@ public interface IImportedVideoMaterializer {
 public sealed record ImageUpsertItem(
     string FilePath,
     string Title,
+    Guid LibraryRootId,
     Guid? GalleryEntityId,
     long? SizeBytes,
     int SortOrder,
@@ -654,6 +656,7 @@ public sealed record GalleryUpsertItem(
 /// </summary>
 /// <param name="FilePath">Absolute file path used as the source identity.</param>
 /// <param name="Title">Display title inferred from the file name.</param>
+/// <param name="LibraryRootId">Library root that discovered the file.</param>
 /// <param name="AudioLibraryId">Optional album entity ID.</param>
 /// <param name="SortOrder">Album-global position, spanning disc sections.</param>
 /// <param name="SectionLabel">Optional disc/section label.</param>
@@ -662,6 +665,7 @@ public sealed record GalleryUpsertItem(
 public sealed record AudioTrackUpsertItem(
     string FilePath,
     string Title,
+    Guid LibraryRootId,
     Guid? AudioLibraryId,
     int SortOrder,
     string? SectionLabel,

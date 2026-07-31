@@ -135,6 +135,7 @@ public sealed class ImportedEntityMaterializationTests : IDisposable {
         var payloadPath = Directory.CreateDirectory(Path.Combine(_workRoot, "album-download")).FullName;
         await File.WriteAllTextAsync(Path.Combine(payloadPath, "04 Pharrell Williams - Happy.flac"), "audio-bytes");
         var root = new RootPersistence(rootPath, scanAudio: true, autoGenerateMetadata: true);
+        AddLibraryRoot(db, root.Root);
         var unrelatedFolder = Directory.CreateDirectory(Path.Combine(rootPath, "Other Artist", "Other Album")).FullName;
         var unrelatedPath = Path.Combine(unrelatedFolder, "01 - Other.flac");
         await File.WriteAllTextAsync(unrelatedPath, "existing-audio");
@@ -230,6 +231,7 @@ public sealed class ImportedEntityMaterializationTests : IDisposable {
         var payloadPath = Directory.CreateDirectory(Path.Combine(_workRoot, "track-download")).FullName;
         await File.WriteAllTextAsync(Path.Combine(payloadPath, "01 - Had Enough.mp3"), "audio-bytes");
         var root = new RootPersistence(rootPath, scanAudio: true);
+        AddLibraryRoot(db, root.Root);
         var artistId = AddWantedEntity(db, EntityKind.MusicArtist, "Divide Music");
         var albumId = AddWantedEntity(db, EntityKind.AudioLibrary, "Had Enough", artistId);
         var trackId = AddWantedEntity(db, EntityKind.AudioTrack, "Had Enough", albumId);
@@ -284,6 +286,7 @@ public sealed class ImportedEntityMaterializationTests : IDisposable {
         var artistPath = Directory.CreateDirectory(Path.Combine(rootPath, "Divide Music")).FullName;
         var albumPath = Directory.CreateDirectory(Path.Combine(artistPath, "Set It On Fire")).FullName;
         var root = new RootPersistence(rootPath, scanAudio: true);
+        AddLibraryRoot(db, root.Root);
         var artistId = AddSourceEntity(db, EntityKind.MusicArtist, "Divide Music", artistPath);
         var albumId = AddSourceEntity(db, EntityKind.AudioLibrary, "Set It On Fire", albumPath, artistId);
         db.EntityLibraryRoots.Add(new EntityLibraryRootRow {
@@ -424,6 +427,7 @@ public sealed class ImportedEntityMaterializationTests : IDisposable {
         var artistPath = Directory.CreateDirectory(Path.Combine(rootPath, "Divide Music")).FullName;
         var albumPath = Directory.CreateDirectory(Path.Combine(artistPath, "Who's Standing Now")).FullName;
         var root = new RootPersistence(rootPath, scanAudio: true);
+        AddLibraryRoot(db, root.Root);
         var artistId = AddSourceEntity(db, EntityKind.MusicArtist, "Divide Music", artistPath);
         var albumId = AddSourceEntity(db, EntityKind.AudioLibrary, "Who's Standing Now", albumPath, artistId);
         db.EntityLibraryRoots.Add(new EntityLibraryRootRow {
@@ -493,6 +497,7 @@ public sealed class ImportedEntityMaterializationTests : IDisposable {
         await File.WriteAllTextAsync(Path.Combine(payloadPath, "01 - Track.flac"), "audio-bytes");
         await File.WriteAllTextAsync(Path.Combine(payloadPath, "cover.jpg"), "cover-bytes");
         var root = new RootPersistence(rootPath, scanAudio: true);
+        AddLibraryRoot(db, root.Root);
         var albumId = await SeedWantedAcquisitionAsync(db, EntityKind.AudioLibrary, "Album");
         var store = AcquisitionTestFactory.Store(db);
         var engine = new MusicAcquisitionImportEngine(
@@ -672,6 +677,23 @@ public sealed class ImportedEntityMaterializationTests : IDisposable {
             persistence,
             acquisitionHints: hints);
         return Materializer(db, new ImportedBookMaterializationPolicy(scan));
+    }
+
+    private static void AddLibraryRoot(PrismediaDbContext db, LibraryRootData root) {
+        db.LibraryRoots.Add(new LibraryRootRow {
+            Id = root.Id,
+            Path = root.Path,
+            Label = root.Label,
+            Enabled = root.Enabled,
+            Recursive = root.Recursive,
+            ScanVideos = root.ScanVideos,
+            ScanImages = root.ScanImages,
+            ScanAudio = root.ScanAudio,
+            ScanBooks = root.ScanBooks,
+            IsNsfw = root.IsNsfw,
+            CreatedAt = DateTimeOffset.UtcNow,
+            UpdatedAt = DateTimeOffset.UtcNow
+        });
     }
 
     private static IImportedEntityMaterializer MovieMaterializer(

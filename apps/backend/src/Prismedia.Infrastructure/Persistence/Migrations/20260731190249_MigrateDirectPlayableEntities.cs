@@ -37,6 +37,8 @@ public partial class MigrateDirectPlayableEntities : Migration {
 
         LOCK TABLE
             entities,
+            library_roots,
+            entity_library_roots,
             entity_files,
             entity_sources,
             entity_relationship_links,
@@ -334,6 +336,94 @@ public partial class MigrateDirectPlayableEntities : Migration {
             END IF;
         END
         $prismedia$;
+
+        DO $prismedia$
+        BEGIN
+            IF (SELECT count(*) FROM pg_temp.__MANIFEST_TABLE__ WHERE subject = '__LIBRARY_ROOT_SNAPSHOT_SUBJECT__')
+               <> (SELECT count(*) FROM library_roots)
+               OR EXISTS (
+                    SELECT 1
+                    FROM pg_temp.__MANIFEST_TABLE__ AS manifest
+                    LEFT JOIN library_roots AS root ON root.id = manifest.row_id
+                    WHERE manifest.subject = '__LIBRARY_ROOT_SNAPSHOT_SUBJECT__'
+                      AND (
+                          manifest.column_name <> 'path'
+                          OR manifest.old_entity_id <> manifest.row_id
+                          OR manifest.new_entity_id <> manifest.row_id
+                          OR root.id IS NULL
+                          OR root.path IS DISTINCT FROM manifest.old_value
+                          OR manifest.new_value IS DISTINCT FROM manifest.old_value)
+               )
+               OR EXISTS (
+                    SELECT 1
+                    FROM library_roots AS root
+                    WHERE NOT EXISTS (
+                        SELECT 1
+                        FROM pg_temp.__MANIFEST_TABLE__ AS manifest
+                        WHERE manifest.subject = '__LIBRARY_ROOT_SNAPSHOT_SUBJECT__'
+                          AND manifest.row_id = root.id)
+               ) THEN
+                RAISE EXCEPTION 'Direct-playable migration library-root snapshot no longer matches configured roots';
+            END IF;
+
+            IF EXISTS (
+                SELECT 1
+                FROM pg_temp.__MANIFEST_TABLE__ AS manifest
+                LEFT JOIN entities AS entity ON entity.id = manifest.row_id
+                LEFT JOIN entity_library_roots AS direct_root ON direct_root.entity_id = entity.id
+                WHERE manifest.subject = '__LIBRARY_ROOT_BACKFILL_SUBJECT__'
+                      AND (
+                          manifest.column_name <> 'library_root_id'
+                          OR manifest.old_entity_id <> manifest.row_id
+                          OR manifest.new_entity_id <> manifest.row_id
+                          OR entity.id IS NULL
+                          OR entity.kind_code NOT IN ('__IMAGE_KIND__', '__AUDIO_TRACK_KIND__')
+                      OR direct_root.library_root_id IS NOT NULL
+                      OR (SELECT count(*)
+                          FROM entity_files AS source
+                          WHERE source.entity_id = manifest.row_id
+                            AND source.role = '__SOURCE_ROLE__') <> 1
+                      OR NOT EXISTS (
+                          SELECT 1
+                          FROM entity_files AS source
+                          WHERE source.entity_id = manifest.row_id
+                            AND source.role = '__SOURCE_ROLE__'
+                            AND source.path = manifest.old_value)
+                      OR NOT EXISTS (
+                          SELECT 1
+                          FROM library_roots AS root
+                          WHERE root.id = manifest.new_value::uuid)
+                  )
+            ) THEN
+                RAISE EXCEPTION 'Direct-playable migration library-root manifest no longer matches source-backed media';
+            END IF;
+
+            IF EXISTS (
+                SELECT entity.id
+                FROM entities AS entity
+                INNER JOIN entity_files AS source
+                    ON source.entity_id = entity.id AND source.role = '__SOURCE_ROLE__'
+                LEFT JOIN entity_library_roots AS direct_root ON direct_root.entity_id = entity.id
+                LEFT JOIN pg_temp.__MANIFEST_TABLE__ AS manifest
+                    ON manifest.subject = '__LIBRARY_ROOT_BACKFILL_SUBJECT__'
+                   AND manifest.row_id = entity.id
+                WHERE entity.kind_code IN ('__IMAGE_KIND__', '__AUDIO_TRACK_KIND__')
+                  AND direct_root.library_root_id IS NULL
+                GROUP BY entity.id, manifest.row_id
+                HAVING count(source.id) <> 1 OR manifest.row_id IS NULL
+            ) THEN
+                RAISE EXCEPTION 'Direct-playable migration requires a complete library-root backfill manifest';
+            END IF;
+        END
+        $prismedia$;
+
+        INSERT INTO entity_library_roots (entity_id, library_root_id)
+        SELECT manifest.row_id, manifest.new_value::uuid
+        FROM pg_temp.__MANIFEST_TABLE__ AS manifest
+        WHERE manifest.subject = '__LIBRARY_ROOT_BACKFILL_SUBJECT__'
+        ON CONFLICT (entity_id) DO UPDATE
+        SET library_root_id = EXCLUDED.library_root_id
+        WHERE entity_library_roots.library_root_id IS NULL;
 
         INSERT INTO entity_kinds (code, display_name, category, storage_shape)
         VALUES ('__VIDEO_EPISODE_KIND__', 'Video Episode', '__MEDIA_CATEGORY__', '__FILE_SHAPE__')
@@ -1299,6 +1389,8 @@ public partial class MigrateDirectPlayableEntities : Migration {
         .Replace("__SOURCE_CLASSIFICATION_SUBJECT__", DirectPlayableMigrationAssetPreparer.SourceClassificationSubject, StringComparison.Ordinal)
         .Replace("__SUBTITLE_SUBJECT__", DirectPlayableMigrationAssetPreparer.SubtitleSubject, StringComparison.Ordinal)
         .Replace("__ENTITY_FILE_SUBJECT__", DirectPlayableMigrationAssetPreparer.EntityFileSubject, StringComparison.Ordinal)
+        .Replace("__LIBRARY_ROOT_BACKFILL_SUBJECT__", DirectPlayableMigrationAssetPreparer.LibraryRootBackfillSubject, StringComparison.Ordinal)
+        .Replace("__LIBRARY_ROOT_SNAPSHOT_SUBJECT__", DirectPlayableMigrationAssetPreparer.LibraryRootSnapshotSubject, StringComparison.Ordinal)
         .Replace("__FILE_CLASS__", DirectPlayableMigrationAssetPreparer.FileClassification, StringComparison.Ordinal)
         .Replace("__FOLDER_CLASS__", DirectPlayableMigrationAssetPreparer.FolderClassification, StringComparison.Ordinal)
         .Replace("__VIDEO_KIND__", EntityKind.Video.ToCode(), StringComparison.Ordinal)
@@ -1307,6 +1399,8 @@ public partial class MigrateDirectPlayableEntities : Migration {
         .Replace("__VIDEO_SERIES_KIND__", EntityKind.VideoSeries.ToCode(), StringComparison.Ordinal)
         .Replace("__VIDEO_SEASON_KIND__", EntityKind.VideoSeason.ToCode(), StringComparison.Ordinal)
         .Replace("__GALLERY_KIND__", EntityKind.Gallery.ToCode(), StringComparison.Ordinal)
+        .Replace("__IMAGE_KIND__", EntityKind.Image.ToCode(), StringComparison.Ordinal)
+        .Replace("__AUDIO_TRACK_KIND__", EntityKind.AudioTrack.ToCode(), StringComparison.Ordinal)
         .Replace("__AUDIO_LIBRARY_KIND__", EntityKind.AudioLibrary.ToCode(), StringComparison.Ordinal)
         .Replace("__MUSIC_ARTIST_KIND__", EntityKind.MusicArtist.ToCode(), StringComparison.Ordinal)
         .Replace("__BOOK_AUTHOR_KIND__", EntityKind.BookAuthor.ToCode(), StringComparison.Ordinal)

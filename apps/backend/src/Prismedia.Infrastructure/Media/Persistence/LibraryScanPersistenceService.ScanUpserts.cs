@@ -16,9 +16,9 @@ namespace Prismedia.Infrastructure.Media.Persistence;
 public sealed partial class LibraryScanPersistenceService {
     // ── Entity upsert ──
 
-    public async Task<Guid> UpsertImageAsync(string filePath, string title, Guid? galleryEntityId, long? sizeBytes, int sortOrder, bool isNsfw, CancellationToken cancellationToken) {
+    public async Task<Guid> UpsertImageAsync(string filePath, string title, Guid libraryRootId, Guid? galleryEntityId, long? sizeBytes, int sortOrder, bool isNsfw, CancellationToken cancellationToken) {
         var id = await UpsertImageCoreAsync(
-            new ImageUpsertItem(filePath, title, galleryEntityId, sizeBytes, sortOrder, isNsfw),
+            new ImageUpsertItem(filePath, title, libraryRootId, galleryEntityId, sizeBytes, sortOrder, isNsfw),
             cancellationToken);
         await SaveChangesWithLifecycleAsync(cancellationToken);
         return id;
@@ -39,7 +39,11 @@ public sealed partial class LibraryScanPersistenceService {
 
     private async Task<Guid> UpsertImageCoreAsync(
         ImageUpsertItem item, CancellationToken cancellationToken) {
-        var (filePath, title, galleryEntityId, sizeBytes, sortOrder, isNsfw) = item;
+        var (filePath, title, libraryRootId, galleryEntityId, sizeBytes, sortOrder, isNsfw) = item;
+        var owningLibraryRootId = await ResolveSourceLibraryRootAsync(
+            filePath,
+            libraryRootId,
+            cancellationToken);
         var existing = await FindEntityBySourcePath(EntityKind.Image.ToCode(), filePath, cancellationToken);
         if (existing is not null) {
             var updatedAt = DateTimeOffset.UtcNow;
@@ -56,6 +60,7 @@ public sealed partial class LibraryScanPersistenceService {
                 }
             }
 
+            await SetEntityLibraryRootAsync(existing.Id, owningLibraryRootId, cancellationToken);
             await SaveChangesWithLifecycleAsync(cancellationToken);
             return existing.Id;
         }
@@ -64,6 +69,10 @@ public sealed partial class LibraryScanPersistenceService {
         var id = Guid.NewGuid();
 
         _db.Entities.Add(new EntityRow { Id = id, KindCode = EntityKind.Image.ToCode(), Title = title, ParentEntityId = galleryEntityId, SortOrder = galleryEntityId is null ? null : sortOrder, IsNsfw = isNsfw, CreatedAt = now, UpdatedAt = now });
+        _db.EntityLibraryRoots.Add(new EntityLibraryRootRow {
+            EntityId = id,
+            LibraryRootId = owningLibraryRootId
+        });
         _db.EntityFiles.Add(new EntityFileRow {
             Id = Guid.NewGuid(),
             EntityId = id,
@@ -156,9 +165,9 @@ public sealed partial class LibraryScanPersistenceService {
         return id;
     }
 
-    public async Task<Guid> UpsertAudioTrackAsync(string filePath, string title, Guid? audioLibraryId, int sortOrder, string? sectionLabel, int sectionOrder, bool isNsfw, CancellationToken cancellationToken) {
+    public async Task<Guid> UpsertAudioTrackAsync(string filePath, string title, Guid libraryRootId, Guid? audioLibraryId, int sortOrder, string? sectionLabel, int sectionOrder, bool isNsfw, CancellationToken cancellationToken) {
         var id = await UpsertAudioTrackCoreAsync(
-            new AudioTrackUpsertItem(filePath, title, audioLibraryId, sortOrder, sectionLabel, sectionOrder, isNsfw),
+            new AudioTrackUpsertItem(filePath, title, libraryRootId, audioLibraryId, sortOrder, sectionLabel, sectionOrder, isNsfw),
             cancellationToken);
         await SaveChangesWithLifecycleAsync(cancellationToken);
         return id;
@@ -179,7 +188,11 @@ public sealed partial class LibraryScanPersistenceService {
 
     private async Task<Guid> UpsertAudioTrackCoreAsync(
         AudioTrackUpsertItem item, CancellationToken cancellationToken) {
-        var (filePath, title, audioLibraryId, sortOrder, sectionLabel, sectionOrder, isNsfw) = item;
+        var (filePath, title, libraryRootId, audioLibraryId, sortOrder, sectionLabel, sectionOrder, isNsfw) = item;
+        var owningLibraryRootId = await ResolveSourceLibraryRootAsync(
+            filePath,
+            libraryRootId,
+            cancellationToken);
         var existing = await FindEntityBySourcePath(EntityKind.AudioTrack.ToCode(), filePath, cancellationToken);
         if (existing is not null) {
             var updatedAt = DateTimeOffset.UtcNow;
@@ -202,6 +215,7 @@ public sealed partial class LibraryScanPersistenceService {
             }
 
             await EnsureAudioTrackDetailAsync(existing.Id, sectionLabel, sectionOrder, cancellationToken);
+            await SetEntityLibraryRootAsync(existing.Id, owningLibraryRootId, cancellationToken);
             return existing.Id;
         }
 
@@ -210,6 +224,10 @@ public sealed partial class LibraryScanPersistenceService {
 
         _db.Entities.Add(new EntityRow { Id = id, KindCode = EntityKind.AudioTrack.ToCode(), Title = title, ParentEntityId = audioLibraryId, SortOrder = audioLibraryId is null ? null : sortOrder, IsNsfw = isNsfw, CreatedAt = now, UpdatedAt = now });
         _db.AudioTrackDetails.Add(new AudioTrackDetailRow { EntityId = id, SectionLabel = sectionLabel, SectionOrder = sectionOrder });
+        _db.EntityLibraryRoots.Add(new EntityLibraryRootRow {
+            EntityId = id,
+            LibraryRootId = owningLibraryRootId
+        });
         _db.EntityFiles.Add(new EntityFileRow {
             Id = Guid.NewGuid(),
             EntityId = id,

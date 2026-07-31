@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Prismedia.Application.Entities;
+using Prismedia.Application.Files;
 using Prismedia.Application.Jobs.Ports;
 using Prismedia.Application.Settings;
 using Prismedia.Domain.Entities;
@@ -29,6 +30,7 @@ public sealed partial class LibraryScanPersistenceService(
     IScanMetadataPersistence {
     private readonly PrismediaDbContext _db = db;
     private readonly AssetPathService? _assets = assets;
+    private IReadOnlyList<LibraryRootPathCandidate>? _libraryRootOwnershipCandidates;
     private readonly EntityStructurePlacementValidator _structurePlacement = new(db);
     private readonly IEntityLifecycleMutationLease _lifecycle =
         lifecycle ?? new EfEntityLifecycleMutationLease(db, new EfEntityHierarchyReader(db));

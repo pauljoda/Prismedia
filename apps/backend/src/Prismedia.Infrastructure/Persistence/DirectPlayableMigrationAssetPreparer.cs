@@ -22,8 +22,13 @@ internal static class DirectPlayableMigrationAssetPreparer {
     internal const string MoviePayloadSubject = "movie-payload";
     internal const string SubtitleSubject = "entity-subtitle";
     internal const string EntityFileSubject = "entity-file";
+    internal const string LibraryRootBackfillSubject = "library-root-backfill";
+    internal const string LibraryRootSnapshotSubject = "library-root-snapshot";
     internal const string FileClassification = "file";
     internal const string FolderClassification = "folder";
+    private const string AncestorConfirmedClassification = "ancestor-confirmed";
+    private const string FilesystemClassification = "filesystem";
+    private const string FilesystemOverrideClassification = "filesystem-override";
 
     /// <summary>
     /// Classifies legacy structural source paths and copies managed child assets to the Movie id
@@ -47,6 +52,7 @@ internal static class DirectPlayableMigrationAssetPreparer {
         var payloads = await ValidateMoviePayloadSourcesAsync(connection, mappings, cancellationToken);
         var classifications = await ClassifyStructuralSourcesAsync(connection, cancellationToken);
         classifications.AddRange(payloads);
+        classifications.AddRange(await ReadLibraryRootBackfillsAsync(connection, cancellationToken));
         var relocations = await ReadSubtitleRelocationsAsync(
             connection,
             mappings,
@@ -68,6 +74,108 @@ internal static class DirectPlayableMigrationAssetPreparer {
         }
 
         await WriteManifestAsync(connection, mappings, classifications, relocations, cancellationToken);
+    }
+
+    private static async Task<List<ManifestEntry>> ReadLibraryRootBackfillsAsync(
+        NpgsqlConnection connection,
+        CancellationToken cancellationToken) {
+        var roots = new List<LibraryRootPathCandidate>();
+        await using (var rootsCommand = new NpgsqlCommand(
+            "SELECT id, path FROM library_roots ORDER BY id",
+            connection)) {
+            await using var rootsReader = await rootsCommand.ExecuteReaderAsync(cancellationToken);
+            while (await rootsReader.ReadAsync(cancellationToken)) {
+                roots.Add(new LibraryRootPathCandidate(rootsReader.GetGuid(0), rootsReader.GetString(1)));
+            }
+        }
+
+        await using var command = new NpgsqlCommand(
+            """
+            SELECT
+                entity.id,
+                entity.kind_code,
+                array_agg(file.id ORDER BY file.id) AS source_ids,
+                array_agg(file.path ORDER BY file.id) AS source_paths,
+                (
+                    WITH RECURSIVE ancestors(id, depth) AS (
+                        SELECT entity.parent_entity_id, 1
+                        WHERE entity.parent_entity_id IS NOT NULL
+                        UNION ALL
+                        SELECT parent.parent_entity_id, ancestors.depth + 1
+                        FROM ancestors
+                        INNER JOIN entities AS parent ON parent.id = ancestors.id
+                        WHERE parent.parent_entity_id IS NOT NULL
+                    )
+                    SELECT rooted.library_root_id
+                    FROM ancestors
+                    INNER JOIN entity_library_roots AS rooted ON rooted.entity_id = ancestors.id
+                    WHERE rooted.library_root_id IS NOT NULL
+                    ORDER BY ancestors.depth
+                    LIMIT 1
+                ) AS nearest_ancestor_root_id
+            FROM entities AS entity
+            INNER JOIN entity_files AS file
+                ON file.entity_id = entity.id AND file.role = @source_role
+            LEFT JOIN entity_library_roots AS direct_root ON direct_root.entity_id = entity.id
+            WHERE entity.kind_code = ANY(@kind_codes)
+              AND direct_root.library_root_id IS NULL
+            GROUP BY entity.id, entity.kind_code, entity.parent_entity_id
+            ORDER BY entity.id
+            """,
+            connection);
+        command.Parameters.AddWithValue("source_role", EntityFileRole.Source.ToCode());
+        command.Parameters.AddWithValue("kind_codes", new[] {
+            EntityKind.Image.ToCode(),
+            EntityKind.AudioTrack.ToCode()
+        });
+
+        var candidates = new List<LibraryRootBackfillCandidate>();
+        await using (var reader = await command.ExecuteReaderAsync(cancellationToken)) {
+            while (await reader.ReadAsync(cancellationToken)) {
+                candidates.Add(new LibraryRootBackfillCandidate(
+                    reader.GetGuid(0),
+                    reader.GetString(1),
+                    reader.GetFieldValue<Guid[]>(2),
+                    reader.GetFieldValue<string[]>(3),
+                    reader.IsDBNull(4) ? null : reader.GetGuid(4)));
+            }
+        }
+
+        var entries = roots.Select(root => new ManifestEntry(
+                LibraryRootSnapshotSubject,
+                root.Id,
+                "path",
+                root.Id,
+                root.Id,
+                root.Path,
+                root.Path,
+                Classification: null))
+            .ToList();
+        foreach (var candidate in candidates) {
+            if (candidate.SourceIds.Length != 1 || candidate.SourcePaths.Length != 1) {
+                throw new InvalidOperationException(
+                    $"Source-backed {candidate.KindCode} Entity {candidate.EntityId} must own exactly one source file before library-root backfill.");
+            }
+
+            var sourcePath = candidate.SourcePaths[0];
+            var resolvedRootId = LibraryRootOwnershipResolver.Resolve(sourcePath, roots);
+            var classification = candidate.NearestAncestorRootId == resolvedRootId
+                ? AncestorConfirmedClassification
+                : candidate.NearestAncestorRootId is null
+                    ? FilesystemClassification
+                    : FilesystemOverrideClassification;
+            entries.Add(new ManifestEntry(
+                LibraryRootBackfillSubject,
+                candidate.EntityId,
+                "library_root_id",
+                candidate.EntityId,
+                candidate.EntityId,
+                sourcePath,
+                resolvedRootId.ToString(),
+                classification));
+        }
+
+        return entries;
     }
 
     private static async Task<List<ManifestEntry>> ValidateMoviePayloadSourcesAsync(
@@ -663,6 +771,13 @@ internal static class DirectPlayableMigrationAssetPreparer {
         string OldValue,
         string NewValue,
         string? Classification);
+
+    private sealed record LibraryRootBackfillCandidate(
+        Guid EntityId,
+        string KindCode,
+        Guid[] SourceIds,
+        string[] SourcePaths,
+        Guid? NearestAncestorRootId);
 
     private sealed record AssetRelocation(
         string Subject,

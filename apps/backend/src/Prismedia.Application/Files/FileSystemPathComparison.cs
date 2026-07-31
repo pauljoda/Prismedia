@@ -24,9 +24,10 @@ public static class FileSystemPathComparison {
     public static bool IsSameOrDescendant(string parent, string path) {
         var normalizedParent = Path.TrimEndingDirectorySeparator(Path.GetFullPath(parent));
         var normalizedPath = Path.TrimEndingDirectorySeparator(Path.GetFullPath(path));
+        var descendantPrefix = Path.EndsInDirectorySeparator(normalizedParent)
+            ? normalizedParent
+            : normalizedParent + Path.DirectorySeparatorChar;
         return Equals(normalizedPath, normalizedParent)
-            || normalizedPath.StartsWith(
-                normalizedParent + Path.DirectorySeparatorChar,
-                Comparison);
+            || normalizedPath.StartsWith(descendantPrefix, Comparison);
     }
 }

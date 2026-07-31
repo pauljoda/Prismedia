@@ -3196,9 +3196,9 @@ public sealed class ScanJobHandlerTests {
         public Task<int> RemoveEntitiesOutsideLibraryRootsAsync(CancellationToken cancellationToken) =>
             Task.FromResult(0);
 
-        public Task<Guid> UpsertImageAsync(string filePath, string title, Guid? galleryEntityId, long? sizeBytes, int sortOrder, bool isNsfw, CancellationToken cancellationToken) {
+        public Task<Guid> UpsertImageAsync(string filePath, string title, Guid libraryRootId, Guid? galleryEntityId, long? sizeBytes, int sortOrder, bool isNsfw, CancellationToken cancellationToken) {
             var id = IdFor($"image:{filePath}");
-            UpsertedImages.Add(new ImageRecord(id, filePath, title, galleryEntityId, sortOrder));
+            UpsertedImages.Add(new ImageRecord(id, filePath, title, libraryRootId, galleryEntityId, sortOrder));
             return Task.FromResult(id);
         }
 
@@ -3228,9 +3228,9 @@ public sealed class ScanJobHandlerTests {
             return ids;
         }
 
-        public Task<Guid> UpsertAudioTrackAsync(string filePath, string title, Guid? audioLibraryId, int sortOrder, string? sectionLabel, int sectionOrder, bool isNsfw, CancellationToken cancellationToken) {
+        public Task<Guid> UpsertAudioTrackAsync(string filePath, string title, Guid libraryRootId, Guid? audioLibraryId, int sortOrder, string? sectionLabel, int sectionOrder, bool isNsfw, CancellationToken cancellationToken) {
             var id = IdFor($"audio-track:{filePath}");
-            UpsertedAudioTracks.Add(new AudioTrackRecord(id, filePath, title, audioLibraryId, sortOrder, sectionLabel, sectionOrder));
+            UpsertedAudioTracks.Add(new AudioTrackRecord(id, filePath, title, libraryRootId, audioLibraryId, sortOrder, sectionLabel, sectionOrder));
             return Task.FromResult(id);
         }
 
@@ -3241,6 +3241,7 @@ public sealed class ScanJobHandlerTests {
                 ids.Add(await UpsertImageAsync(
                     item.FilePath,
                     item.Title,
+                    item.LibraryRootId,
                     item.GalleryEntityId,
                     item.SizeBytes,
                     item.SortOrder,
@@ -3264,6 +3265,7 @@ public sealed class ScanJobHandlerTests {
                 ids.Add(await UpsertAudioTrackAsync(
                     item.FilePath,
                     item.Title,
+                    item.LibraryRootId,
                     item.AudioLibraryId,
                     item.SortOrder,
                     item.SectionLabel,
@@ -3591,9 +3593,9 @@ public sealed class ScanJobHandlerTests {
         }
     }
 
-    private sealed record ImageRecord(Guid Id, string FilePath, string Title, Guid? GalleryEntityId, int SortOrder);
+    private sealed record ImageRecord(Guid Id, string FilePath, string Title, Guid LibraryRootId, Guid? GalleryEntityId, int SortOrder);
     private sealed record GalleryRecord(Guid Id, string FolderPath, string Title, Guid LibraryRootId, Guid? ParentGalleryEntityId, int SortOrder);
-    private sealed record AudioTrackRecord(Guid Id, string FilePath, string Title, Guid? AudioLibraryEntityId, int SortOrder, string? SectionLabel, int SectionOrder);
+    private sealed record AudioTrackRecord(Guid Id, string FilePath, string Title, Guid LibraryRootId, Guid? AudioLibraryEntityId, int SortOrder, string? SectionLabel, int SectionOrder);
     private sealed record AudioLibraryRecord(Guid Id, string FolderPath, string Title, Guid LibraryRootId, Guid? ParentAudioLibraryEntityId, int SortOrder);
     private sealed record MusicArtistRecord(Guid Id, string FolderPath, string Title, Guid LibraryRootId, int SortOrder);
     private sealed record BookRecord(Guid Id, string SourcePath, string Title, Guid LibraryRootId, Guid? ParentEntityId, int? SortOrder);

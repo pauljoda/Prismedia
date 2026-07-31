@@ -183,6 +183,8 @@ public sealed class LibraryScanPersistenceServiceTests {
     public async Task NewScannerChildRejectsClaimedExistingParentAcrossEntityKinds() {
         await using var db = CreateContext();
         var galleryId = Guid.NewGuid();
+        var rootId = Guid.NewGuid();
+        SeedLibraryRoot(db, rootId, "/media/deleting-gallery");
         db.Entities.Add(new EntityRow {
             Id = galleryId,
             KindCode = EntityKind.Gallery.ToCode(),
@@ -201,6 +203,7 @@ public sealed class LibraryScanPersistenceServiceTests {
             service.UpsertImageAsync(
                 "/media/deleting-gallery/new-image.jpg",
                 "New image",
+                rootId,
                 galleryId,
                 42,
                 1,
@@ -1538,18 +1541,20 @@ public sealed class LibraryScanPersistenceServiceTests {
     [Fact]
     public async Task StructuralFolderUpsertsUseFolderSourcesWhilePayloadUpsertsUseSourceFiles() {
         await using var db = CreateContext();
-        var service = new LibraryScanPersistenceService(db);
         var rootId = Guid.NewGuid();
+        SeedLibraryRoot(db, rootId, "/media");
+        await db.SaveChangesAsync();
+        var service = new LibraryScanPersistenceService(db);
         var galleryId = await service.UpsertGalleryAsync(
             "/media/images/Gallery", "Gallery", rootId, null, 0, false, CancellationToken.None);
         var imageId = await service.UpsertImageAsync(
-            "/media/images/Gallery/page.jpg", "page", galleryId, 1, 0, false, CancellationToken.None);
+            "/media/images/Gallery/page.jpg", "page", rootId, galleryId, 1, 0, false, CancellationToken.None);
         var artistId = await service.UpsertMusicArtistAsync(
             "/media/audio/Artist", "Artist", rootId, 0, false, CancellationToken.None);
         var libraryId = await service.UpsertAudioLibraryAsync(
             "/media/audio/Artist/Album", "Album", rootId, artistId, 0, false, CancellationToken.None);
         var trackId = await service.UpsertAudioTrackAsync(
-            "/media/audio/Artist/Album/track.flac", "track", libraryId, 0, null, 0, false, CancellationToken.None);
+            "/media/audio/Artist/Album/track.flac", "track", rootId, libraryId, 0, null, 0, false, CancellationToken.None);
         var authorId = await service.UpsertBookAuthorAsync(
             "/media/books/Author", "Author", null, false, CancellationToken.None);
         var bookId = await service.UpsertBookSeriesAsync(
@@ -1573,13 +1578,71 @@ public sealed class LibraryScanPersistenceServiceTests {
     }
 
     [Fact]
+    public async Task DirectSourceUpsertsUseMostSpecificDisabledRootForNewImageAndAudioTrack() {
+        await using var db = CreateContext();
+        var outerRootId = Guid.Parse("10101010-1010-1010-1010-101010101010");
+        var nestedRootId = Guid.Parse("20202020-2020-2020-2020-202020202020");
+        SeedLibraryRoot(db, outerRootId, "/media");
+        SeedLibraryRoot(db, nestedRootId, "/media/private");
+        var nestedRoot = db.LibraryRoots.Local.Single(row => row.Id == nestedRootId);
+        nestedRoot.Enabled = false;
+        nestedRoot.ScanImages = false;
+        nestedRoot.ScanAudio = false;
+        await db.SaveChangesAsync();
+
+        var service = new LibraryScanPersistenceService(db);
+        var imageId = await service.UpsertImageAsync(
+            "/media/private/image.jpg", "image", outerRootId, null, 12, 0, false, CancellationToken.None);
+        var trackId = await service.UpsertAudioTrackAsync(
+            "/media/private/track.flac", "track", outerRootId, null, 0, null, 0, false, CancellationToken.None);
+
+        var ownership = await db.EntityLibraryRoots.AsNoTracking()
+            .Where(row => row.EntityId == imageId || row.EntityId == trackId)
+            .ToDictionaryAsync(row => row.EntityId, row => row.LibraryRootId);
+        Assert.Equal(nestedRootId, ownership[imageId]);
+        Assert.Equal(nestedRootId, ownership[trackId]);
+    }
+
+    [Fact]
+    public async Task DirectSourceUpsertsRepairExistingImageAndAudioTrackOwnership() {
+        await using var db = CreateContext();
+        var rootId = Guid.Parse("30303030-3030-3030-3030-303030303030");
+        var imageId = Guid.Parse("40404040-4040-4040-4040-404040404040");
+        var trackId = Guid.Parse("50505050-5050-5050-5050-505050505050");
+        SeedLibraryRoot(db, rootId, "/media");
+        SeedSourceEntity(db, imageId, EntityKind.Image.ToCode(), "/media/image.jpg");
+        SeedSourceEntity(db, trackId, EntityKind.AudioTrack.ToCode(), "/media/track.flac");
+        db.EntityLibraryRoots.AddRange(
+            new EntityLibraryRootRow { EntityId = imageId },
+            new EntityLibraryRootRow { EntityId = trackId });
+        await db.SaveChangesAsync();
+
+        var service = new LibraryScanPersistenceService(db);
+        var rescannedImageId = await service.UpsertImageAsync(
+            "/media/image.jpg", "image", rootId, null, 12, 0, false, CancellationToken.None);
+        var rescannedTrackId = await service.UpsertAudioTrackAsync(
+            "/media/track.flac", "track", rootId, null, 0, null, 0, false, CancellationToken.None);
+
+        Assert.Equal(imageId, rescannedImageId);
+        Assert.Equal(trackId, rescannedTrackId);
+        Assert.All(
+            await db.EntityLibraryRoots.AsNoTracking()
+                .Where(row => row.EntityId == imageId || row.EntityId == trackId)
+                .ToArrayAsync(),
+            row => Assert.Equal(rootId, row.LibraryRootId));
+    }
+
+    [Fact]
     public async Task UpsertImageCanRelinkExistingImageBackToLooseRootFile() {
         await using var db = CreateContext();
+        var rootId = Guid.Parse("33333333-3333-3333-3333-333333333333");
+        SeedLibraryRoot(db, rootId, "/media/images");
+        await db.SaveChangesAsync();
         var service = new LibraryScanPersistenceService(db);
         var galleryId = await service.UpsertGalleryAsync(
             "/media/images/Gallery",
             "Gallery",
-            Guid.Parse("33333333-3333-3333-3333-333333333333"),
+            rootId,
             parentGalleryEntityId: null,
             sortOrder: 0,
             isNsfw: false,
@@ -1587,6 +1650,7 @@ public sealed class LibraryScanPersistenceServiceTests {
         var imageId = await service.UpsertImageAsync(
             "/media/images/cover.jpg",
             "cover",
+            rootId,
             galleryId,
             sizeBytes: 12,
             sortOrder: 4,
@@ -1596,6 +1660,7 @@ public sealed class LibraryScanPersistenceServiceTests {
         var relinkedId = await service.UpsertImageAsync(
             "/media/images/cover.jpg",
             "cover",
+            libraryRootId: rootId,
             galleryEntityId: null,
             sizeBytes: 12,
             sortOrder: 0,
@@ -1611,11 +1676,14 @@ public sealed class LibraryScanPersistenceServiceTests {
     [Fact]
     public async Task UpsertAudioTrackCanRelinkExistingTrackBackToLooseRootFile() {
         await using var db = CreateContext();
+        var rootId = Guid.Parse("44444444-4444-4444-4444-444444444444");
+        SeedLibraryRoot(db, rootId, "/media/audio");
+        await db.SaveChangesAsync();
         var service = new LibraryScanPersistenceService(db);
         var libraryId = await service.UpsertAudioLibraryAsync(
             "/media/audio/Album",
             "Album",
-            Guid.Parse("44444444-4444-4444-4444-444444444444"),
+            rootId,
             parentEntityId: null,
             sortOrder: 0,
             isNsfw: false,
@@ -1623,6 +1691,7 @@ public sealed class LibraryScanPersistenceServiceTests {
         var trackId = await service.UpsertAudioTrackAsync(
             "/media/audio/song.flac",
             "song",
+            rootId,
             libraryId,
             sortOrder: 2,
             sectionLabel: null,
@@ -1633,6 +1702,7 @@ public sealed class LibraryScanPersistenceServiceTests {
         var relinkedId = await service.UpsertAudioTrackAsync(
             "/media/audio/song.flac",
             "song",
+            libraryRootId: rootId,
             audioLibraryId: null,
             sortOrder: 0,
             sectionLabel: null,
@@ -1682,10 +1752,14 @@ public sealed class LibraryScanPersistenceServiceTests {
     [Fact]
     public async Task UpsertAudioTrackPreservesOrganizedTitleOnRescan() {
         await using var db = CreateContext();
+        var rootId = Guid.NewGuid();
+        SeedLibraryRoot(db, rootId, "/media/audio");
+        await db.SaveChangesAsync();
         var service = new LibraryScanPersistenceService(db);
         var trackId = await service.UpsertAudioTrackAsync(
             "/media/audio/song.flac",
             "song",
+            libraryRootId: rootId,
             audioLibraryId: null,
             sortOrder: 0,
             sectionLabel: null,
@@ -1700,6 +1774,7 @@ public sealed class LibraryScanPersistenceServiceTests {
         var rescannedId = await service.UpsertAudioTrackAsync(
             "/media/audio/song.flac",
             "song",
+            libraryRootId: rootId,
             audioLibraryId: null,
             sortOrder: 0,
             sectionLabel: "Disc 1",
@@ -1720,11 +1795,14 @@ public sealed class LibraryScanPersistenceServiceTests {
     [Fact]
     public async Task UpsertAudioTrackLeavesOrganizedAlbumAloneWhenExistingTrackIsRescanned() {
         await using var db = CreateContext();
+        var rootId = Guid.NewGuid();
+        SeedLibraryRoot(db, rootId, "/media/audio");
+        await db.SaveChangesAsync();
         var service = new LibraryScanPersistenceService(db);
         var albumId = await service.UpsertAudioLibraryAsync(
             "/media/audio/Album",
             "Album",
-            Guid.NewGuid(),
+            rootId,
             parentEntityId: null,
             sortOrder: 0,
             isNsfw: false,
@@ -1732,6 +1810,7 @@ public sealed class LibraryScanPersistenceServiceTests {
         var trackId = await service.UpsertAudioTrackAsync(
             "/media/audio/Album/song.flac",
             "song",
+            rootId,
             albumId,
             sortOrder: 0,
             sectionLabel: null,
@@ -1745,6 +1824,7 @@ public sealed class LibraryScanPersistenceServiceTests {
         var rescannedId = await service.UpsertAudioTrackAsync(
             "/media/audio/Album/song.flac",
             "song",
+            rootId,
             albumId,
             sortOrder: 0,
             sectionLabel: null,
@@ -1759,18 +1839,21 @@ public sealed class LibraryScanPersistenceServiceTests {
     [Fact]
     public async Task UpsertAudioTrackMarksOrganizedAlbumUnorganizedWhenNewTrackIsDiscovered() {
         await using var db = CreateContext();
+        var rootId = Guid.NewGuid();
+        SeedLibraryRoot(db, rootId, "/media/audio");
+        await db.SaveChangesAsync();
         var service = new LibraryScanPersistenceService(db);
         var artistId = await service.UpsertMusicArtistAsync(
             "/media/audio/Artist",
             "Artist",
-            Guid.NewGuid(),
+            rootId,
             sortOrder: 0,
             isNsfw: false,
             CancellationToken.None);
         var albumId = await service.UpsertAudioLibraryAsync(
             "/media/audio/Artist/Album",
             "Album",
-            Guid.NewGuid(),
+            rootId,
             artistId,
             sortOrder: 0,
             isNsfw: false,
@@ -1784,6 +1867,7 @@ public sealed class LibraryScanPersistenceServiceTests {
         var trackId = await service.UpsertAudioTrackAsync(
             "/media/audio/Artist/Album/new-song.flac",
             "new-song",
+            rootId,
             albumId,
             sortOrder: 1,
             sectionLabel: null,
@@ -1801,10 +1885,14 @@ public sealed class LibraryScanPersistenceServiceTests {
     [Fact]
     public async Task UpsertAudioTrackUpdatesUnorganizedTitleOnRescan() {
         await using var db = CreateContext();
+        var rootId = Guid.NewGuid();
+        SeedLibraryRoot(db, rootId, "/media/audio");
+        await db.SaveChangesAsync();
         var service = new LibraryScanPersistenceService(db);
         var trackId = await service.UpsertAudioTrackAsync(
             "/media/audio/song.flac",
             "song",
+            libraryRootId: rootId,
             audioLibraryId: null,
             sortOrder: 0,
             sectionLabel: null,
@@ -1815,6 +1903,7 @@ public sealed class LibraryScanPersistenceServiceTests {
         await service.UpsertAudioTrackAsync(
             "/media/audio/song.flac",
             "Better Tag Title",
+            libraryRootId: rootId,
             audioLibraryId: null,
             sortOrder: 0,
             sectionLabel: null,
@@ -1922,8 +2011,10 @@ public sealed class LibraryScanPersistenceServiceTests {
     [Fact]
     public async Task RemoveStaleGalleriesInRootRemovesStaleFolderSubtree() {
         await using var db = CreateContext();
-        var service = new LibraryScanPersistenceService(db);
         var rootId = Guid.Parse("77777777-7777-7777-7777-777777777777");
+        SeedLibraryRoot(db, rootId, "/media/images");
+        await db.SaveChangesAsync();
+        var service = new LibraryScanPersistenceService(db);
 
         var staleGalleryId = await service.UpsertGalleryAsync(
             "/media/images/Set",
@@ -1936,6 +2027,7 @@ public sealed class LibraryScanPersistenceServiceTests {
         var staleImageId = await service.UpsertImageAsync(
             "/media/images/Set/stale.jpg",
             "stale",
+            rootId,
             staleGalleryId,
             sizeBytes: 12,
             sortOrder: 0,
@@ -1952,6 +2044,7 @@ public sealed class LibraryScanPersistenceServiceTests {
         var nestedImageId = await service.UpsertImageAsync(
             "/media/images/Set/Chapter 01/nested.jpg",
             "nested",
+            rootId,
             nestedGalleryId,
             sizeBytes: 34,
             sortOrder: 0,
@@ -1968,6 +2061,7 @@ public sealed class LibraryScanPersistenceServiceTests {
         var validImageId = await service.UpsertImageAsync(
             "/media/images/Keep/valid.jpg",
             "valid",
+            rootId,
             validGalleryId,
             sizeBytes: 56,
             sortOrder: 0,
@@ -1991,8 +2085,10 @@ public sealed class LibraryScanPersistenceServiceTests {
     [Fact]
     public async Task RescanMigratesSingleImageGalleryByReparentingThenRemovingGallery() {
         await using var db = CreateContext();
-        var service = new LibraryScanPersistenceService(db);
         var rootId = Guid.Parse("a1a1a1a1-a1a1-a1a1-a1a1-a1a1a1a1a1a1");
+        SeedLibraryRoot(db, rootId, "/media/images");
+        await db.SaveChangesAsync();
+        var service = new LibraryScanPersistenceService(db);
 
         // Seed the library as it was scanned under the old rule: "Solo" is a one-image gallery nested
         // under the surviving "Set" gallery.
@@ -2001,12 +2097,12 @@ public sealed class LibraryScanPersistenceServiceTests {
         var soloGalleryId = await service.UpsertGalleryAsync(
             "/media/images/Set/Solo", "Solo", rootId, setGalleryId, sortOrder: 0, isNsfw: false, CancellationToken.None);
         var soloImageId = await service.UpsertImageAsync(
-            "/media/images/Set/Solo/only.jpg", "only", soloGalleryId, sizeBytes: 12, sortOrder: 0, isNsfw: false, CancellationToken.None);
+            "/media/images/Set/Solo/only.jpg", "only", rootId, soloGalleryId, sizeBytes: 12, sortOrder: 0, isNsfw: false, CancellationToken.None);
 
         // The new scan reparents the lone image to the survivor first, then drops the collapsed folder
         // from the valid gallery set.
         await service.UpsertImageAsync(
-            "/media/images/Set/Solo/only.jpg", "only", setGalleryId, sizeBytes: 12, sortOrder: 1, isNsfw: false, CancellationToken.None);
+            "/media/images/Set/Solo/only.jpg", "only", rootId, setGalleryId, sizeBytes: 12, sortOrder: 1, isNsfw: false, CancellationToken.None);
         var removed = await service.RemoveStaleGalleriesInRootAsync(
             rootId,
             new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "/media/images/Set" },
@@ -2022,18 +2118,20 @@ public sealed class LibraryScanPersistenceServiceTests {
     [Fact]
     public async Task RescanMigratesSingleImageGalleryToLooseImage() {
         await using var db = CreateContext();
-        var service = new LibraryScanPersistenceService(db);
         var rootId = Guid.Parse("b2b2b2b2-b2b2-b2b2-b2b2-b2b2b2b2b2b2");
+        SeedLibraryRoot(db, rootId, "/media/images");
+        await db.SaveChangesAsync();
+        var service = new LibraryScanPersistenceService(db);
 
         // Seed a one-image gallery directly under the root with no surviving ancestor.
         var soloGalleryId = await service.UpsertGalleryAsync(
             "/media/images/Solo", "Solo", rootId, parentGalleryEntityId: null, sortOrder: 0, isNsfw: false, CancellationToken.None);
         var soloImageId = await service.UpsertImageAsync(
-            "/media/images/Solo/only.jpg", "only", soloGalleryId, sizeBytes: 12, sortOrder: 0, isNsfw: false, CancellationToken.None);
+            "/media/images/Solo/only.jpg", "only", rootId, soloGalleryId, sizeBytes: 12, sortOrder: 0, isNsfw: false, CancellationToken.None);
 
         // The new scan makes the image loose, then removes the now-empty gallery folder.
         await service.UpsertImageAsync(
-            "/media/images/Solo/only.jpg", "only", galleryEntityId: null, sizeBytes: 12, sortOrder: 0, isNsfw: false, CancellationToken.None);
+            "/media/images/Solo/only.jpg", "only", libraryRootId: rootId, galleryEntityId: null, sizeBytes: 12, sortOrder: 0, isNsfw: false, CancellationToken.None);
         var removed = await service.RemoveStaleGalleriesInRootAsync(
             rootId,
             new HashSet<string>(StringComparer.OrdinalIgnoreCase),
@@ -2048,8 +2146,10 @@ public sealed class LibraryScanPersistenceServiceTests {
     [Fact]
     public async Task RemoveStaleAudioLibrariesInRootRemovesStaleFolderSubtree() {
         await using var db = CreateContext();
-        var service = new LibraryScanPersistenceService(db);
         var rootId = Guid.Parse("88888888-8888-8888-8888-888888888888");
+        SeedLibraryRoot(db, rootId, "/media/audio");
+        await db.SaveChangesAsync();
+        var service = new LibraryScanPersistenceService(db);
 
         var staleLibraryId = await service.UpsertAudioLibraryAsync(
             "/media/audio/Album",
@@ -2062,6 +2162,7 @@ public sealed class LibraryScanPersistenceServiceTests {
         var staleTrackId = await service.UpsertAudioTrackAsync(
             "/media/audio/Album/stale.flac",
             "stale",
+            rootId,
             staleLibraryId,
             sortOrder: 0,
             sectionLabel: null,
@@ -2079,6 +2180,7 @@ public sealed class LibraryScanPersistenceServiceTests {
         var nestedTrackId = await service.UpsertAudioTrackAsync(
             "/media/audio/Album/Disc 02/nested.flac",
             "nested",
+            rootId,
             nestedLibraryId,
             sortOrder: 0,
             sectionLabel: null,
@@ -2096,6 +2198,7 @@ public sealed class LibraryScanPersistenceServiceTests {
         var validTrackId = await service.UpsertAudioTrackAsync(
             "/media/audio/Keep/valid.flac",
             "valid",
+            rootId,
             validLibraryId,
             sortOrder: 0,
             sectionLabel: null,
@@ -2120,8 +2223,10 @@ public sealed class LibraryScanPersistenceServiceTests {
     [Fact]
     public async Task RemoveStaleGalleriesInRootRemovesOldRootGalleryWithMissingChild() {
         await using var db = CreateContext();
-        var service = new LibraryScanPersistenceService(db);
         var rootId = Guid.Parse("99999999-9999-9999-9999-999999999999");
+        SeedLibraryRoot(db, rootId, "/media/images");
+        await db.SaveChangesAsync();
+        var service = new LibraryScanPersistenceService(db);
         var oldRootGalleryId = await service.UpsertGalleryAsync(
             "/media/images",
             "images",
@@ -2133,6 +2238,7 @@ public sealed class LibraryScanPersistenceServiceTests {
         var missingImageId = await service.UpsertImageAsync(
             "/media/images/missing.jpg",
             "missing",
+            rootId,
             oldRootGalleryId,
             sizeBytes: 12,
             sortOrder: 0,
@@ -2141,6 +2247,7 @@ public sealed class LibraryScanPersistenceServiceTests {
         var validLooseImageId = await service.UpsertImageAsync(
             "/media/images/valid.jpg",
             "valid",
+            libraryRootId: rootId,
             galleryEntityId: null,
             sizeBytes: 34,
             sortOrder: 0,
@@ -2161,8 +2268,10 @@ public sealed class LibraryScanPersistenceServiceTests {
     [Fact]
     public async Task RemoveStaleAudioLibrariesInRootRemovesOldRootLibraryWithMissingChild() {
         await using var db = CreateContext();
-        var service = new LibraryScanPersistenceService(db);
         var rootId = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
+        SeedLibraryRoot(db, rootId, "/media/audio");
+        await db.SaveChangesAsync();
+        var service = new LibraryScanPersistenceService(db);
         var oldRootLibraryId = await service.UpsertAudioLibraryAsync(
             "/media/audio",
             "audio",
@@ -2174,6 +2283,7 @@ public sealed class LibraryScanPersistenceServiceTests {
         var missingTrackId = await service.UpsertAudioTrackAsync(
             "/media/audio/missing.flac",
             "missing",
+            rootId,
             oldRootLibraryId,
             sortOrder: 0,
             sectionLabel: null,
@@ -2183,6 +2293,7 @@ public sealed class LibraryScanPersistenceServiceTests {
         var validLooseTrackId = await service.UpsertAudioTrackAsync(
             "/media/audio/valid.flac",
             "valid",
+            libraryRootId: rootId,
             audioLibraryId: null,
             sortOrder: 0,
             sectionLabel: null,

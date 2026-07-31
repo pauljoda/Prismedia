@@ -32,6 +32,24 @@ public sealed partial class LibraryScanPersistenceService {
         row.LibraryRootId = libraryRootId;
     }
 
+    private async Task<Guid> ResolveSourceLibraryRootAsync(
+        string sourcePath,
+        Guid callerRootId,
+        CancellationToken cancellationToken) {
+        _libraryRootOwnershipCandidates ??=
+            await LoadLibraryRootOwnershipCandidatesAsync(cancellationToken);
+        return LibraryRootOwnershipResolver.Resolve(
+            sourcePath,
+            _libraryRootOwnershipCandidates,
+            callerRootId);
+    }
+
+    private async Task<IReadOnlyList<LibraryRootPathCandidate>> LoadLibraryRootOwnershipCandidatesAsync(
+        CancellationToken cancellationToken) =>
+        await _db.LibraryRoots.AsNoTracking()
+            .Select(root => new LibraryRootPathCandidate(root.Id, root.Path))
+            .ToArrayAsync(cancellationToken);
+
     public async Task<LibraryRootData?> GetLibraryRootAsync(Guid rootId, CancellationToken cancellationToken) {
         var row = await _db.LibraryRoots.AsNoTracking()
             .FirstOrDefaultAsync(r => r.Id == rootId, cancellationToken);

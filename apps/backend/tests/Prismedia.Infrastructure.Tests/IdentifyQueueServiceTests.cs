@@ -1314,7 +1314,15 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
         await using var db = CreateContext();
         var albumId = Guid.Parse("77777777-7777-7777-7777-777777777777");
         var trackId = Guid.Parse("88888888-8888-8888-8888-888888888888");
+        var rootId = Guid.Parse("99999999-9999-9999-9999-999999999999");
         const string scannedFilePath = "/media/audio/album/01 scanned file.flac";
+        db.LibraryRoots.Add(new LibraryRootRow {
+            Id = rootId,
+            Path = "/media/audio",
+            Label = "Audio",
+            CreatedAt = DateTimeOffset.UtcNow,
+            UpdatedAt = DateTimeOffset.UtcNow
+        });
         SeedEntity(db, albumId, EntityKind.AudioLibrary.ToCode(), "Scanned Album");
         var track = SeedEntity(
             db,
@@ -1363,6 +1371,7 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
         await new LibraryScanPersistenceService(db).UpsertAudioTrackAsync(
             scannedFilePath,
             "01 scanned file",
+            rootId,
             albumId,
             sortOrder: 1,
             sectionLabel: null,

@@ -127,7 +127,7 @@ public sealed class ScanGalleryJobHandler(
                 try { size = new FileInfo(filePath).Length; } catch { }
 
                 var sortOrder = targetGalleryPath is null ? i : NextSortOrder(nextSortOrderByGalleryPath, targetGalleryPath);
-                imageItems.Add(new ImageUpsertItem(filePath, title, galleryId, size, sortOrder, root.IsNsfw));
+                imageItems.Add(new ImageUpsertItem(filePath, title, root.Id, galleryId, size, sortOrder, root.IsNsfw));
             }
 
             processedDirs++;

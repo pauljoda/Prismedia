@@ -702,6 +702,170 @@ public sealed class DirectPlayableEntityMigrationPostgresTests {
 
     [Fact]
     [Trait("Category", "PostgreSQL")]
+    public async Task RunnerBackfillsSourceOwnershipToMostSpecificConfiguredRoot() {
+        await using var database = await PostgresTestDatabase.CreateAsync(PreviousMigration);
+        using var files = MigrationFiles.Create();
+        var outerRootId = Guid.NewGuid();
+        var nestedDisabledRootId = Guid.NewGuid();
+        var parentGalleryId = Guid.NewGuid();
+        var nestedImageId = Guid.NewGuid();
+        var looseTrackId = Guid.NewGuid();
+        var preservedImageId = Guid.NewGuid();
+        var outerPath = files.CreateFolder("ownership");
+        var nestedPath = files.CreateFolder("ownership/private");
+        var nestedImagePath = files.CreateFile("ownership/private/nested.jpg", "image");
+        var looseTrackPath = files.CreateFile("ownership/private/loose.flac", "audio");
+        var preservedImagePath = files.CreateFile("ownership/private/preserved.jpg", "preserved");
+
+        await using (var connection = await database.OpenConnectionAsync()) {
+            await ExecuteAsync(
+                connection,
+                """
+                INSERT INTO library_roots
+                    (id, path, label, enabled, recursive, scan_videos, scan_images, scan_audio,
+                     scan_books, is_nsfw, auto_identify, created_at, updated_at)
+                VALUES
+                    (@outer_root_id, @outer_path, 'Outer', TRUE, TRUE, FALSE, TRUE, TRUE,
+                     FALSE, FALSE, FALSE, now(), now()),
+                    (@nested_root_id, @nested_path, 'Nested disabled', FALSE, TRUE, FALSE, FALSE, FALSE,
+                     FALSE, FALSE, FALSE, now(), now());
+
+                INSERT INTO entities
+                    (id, kind_code, title, parent_entity_id, is_nsfw, is_organized, is_wanted,
+                     created_at, updated_at)
+                VALUES
+                    (@gallery_id, @gallery_kind, 'Outer Gallery', NULL, FALSE, FALSE, FALSE, now(), now()),
+                    (@image_id, @image_kind, 'Nested Image', @gallery_id, FALSE, FALSE, FALSE, now(), now()),
+                    (@track_id, @track_kind, 'Loose Track', NULL, FALSE, FALSE, FALSE, now(), now()),
+                    (@preserved_image_id, @image_kind, 'Preserved Image', NULL, FALSE, FALSE, FALSE, now(), now());
+
+                INSERT INTO audio_track_details (entity_id) VALUES (@track_id);
+                INSERT INTO entity_library_roots (entity_id, library_root_id)
+                VALUES
+                    (@gallery_id, @outer_root_id),
+                    (@preserved_image_id, @outer_root_id);
+                INSERT INTO entity_files (id, entity_id, role, path, source, created_at, updated_at)
+                VALUES
+                    (@image_file_id, @image_id, @source_role, @image_path, @scan_source, now(), now()),
+                    (@track_file_id, @track_id, @source_role, @track_path, @scan_source, now(), now()),
+                    (@preserved_file_id, @preserved_image_id, @source_role, @preserved_path, @scan_source, now(), now());
+                """,
+                ("outer_root_id", outerRootId),
+                ("outer_path", outerPath),
+                ("nested_root_id", nestedDisabledRootId),
+                ("nested_path", nestedPath),
+                ("gallery_id", parentGalleryId),
+                ("gallery_kind", EntityKind.Gallery.ToCode()),
+                ("image_id", nestedImageId),
+                ("preserved_image_id", preservedImageId),
+                ("image_kind", EntityKind.Image.ToCode()),
+                ("track_id", looseTrackId),
+                ("track_kind", EntityKind.AudioTrack.ToCode()),
+                ("image_file_id", Guid.NewGuid()),
+                ("track_file_id", Guid.NewGuid()),
+                ("preserved_file_id", Guid.NewGuid()),
+                ("source_role", EntityFileRole.Source.ToCode()),
+                ("scan_source", FileSourceKind.Scan.ToCode()),
+                ("image_path", nestedImagePath),
+                ("track_path", looseTrackPath),
+                ("preserved_path", preservedImagePath));
+        }
+
+        await database.RunMigrationRunnerAsync(files.Assets);
+
+        await using var verify = await database.OpenConnectionAsync();
+        Assert.Equal(nestedDisabledRootId, await ScalarAsync<Guid>(
+            verify, "SELECT library_root_id FROM entity_library_roots WHERE entity_id = @id", nestedImageId));
+        Assert.Equal(nestedDisabledRootId, await ScalarAsync<Guid>(
+            verify, "SELECT library_root_id FROM entity_library_roots WHERE entity_id = @id", looseTrackId));
+        Assert.Equal(outerRootId, await ScalarAsync<Guid>(
+            verify, "SELECT library_root_id FROM entity_library_roots WHERE entity_id = @id", preservedImageId));
+    }
+
+    [Fact]
+    [Trait("Category", "PostgreSQL")]
+    public async Task RunnerRejectsSourceOutsideConfiguredRootsBeforeApplyingMigration() {
+        await using var database = await PostgresTestDatabase.CreateAsync(PreviousMigration);
+        using var files = MigrationFiles.Create();
+        var rootId = Guid.NewGuid();
+        var imageId = Guid.NewGuid();
+        var rootPath = files.CreateFolder("configured-root");
+        var sourcePath = files.CreateFile("outside-root/image.jpg", "image");
+        await using (var connection = await database.OpenConnectionAsync()) {
+            await ExecuteAsync(
+                connection,
+                """
+                INSERT INTO library_roots
+                    (id, path, label, enabled, recursive, scan_videos, scan_images, scan_audio,
+                     scan_books, is_nsfw, auto_identify, created_at, updated_at)
+                VALUES (@root_id, @root_path, 'Root', TRUE, TRUE, FALSE, TRUE, FALSE,
+                        FALSE, FALSE, FALSE, now(), now());
+                INSERT INTO entities
+                    (id, kind_code, title, is_nsfw, is_organized, is_wanted, created_at, updated_at)
+                VALUES (@image_id, @image_kind, 'Outside root', FALSE, FALSE, FALSE, now(), now());
+                INSERT INTO entity_files (id, entity_id, role, path, source, created_at, updated_at)
+                VALUES (@file_id, @image_id, @source_role, @source_path, @scan_source, now(), now());
+                """,
+                ("root_id", rootId),
+                ("root_path", rootPath),
+                ("image_id", imageId),
+                ("image_kind", EntityKind.Image.ToCode()),
+                ("file_id", Guid.NewGuid()),
+                ("source_role", EntityFileRole.Source.ToCode()),
+                ("scan_source", FileSourceKind.Scan.ToCode()),
+                ("source_path", sourcePath));
+        }
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            database.RunMigrationRunnerAsync(files.Assets));
+
+        Assert.Contains("outside every configured library root", exception.Message, StringComparison.Ordinal);
+        await using var verify = await database.OpenConnectionAsync();
+        Assert.False(await ExistsAsync(
+            verify,
+            "SELECT EXISTS (SELECT 1 FROM \"__EFMigrationsHistory\" WHERE \"MigrationId\" = @id)",
+            MigrationUnderTest));
+        Assert.False(await ExistsAsync(
+            verify,
+            "SELECT EXISTS (SELECT 1 FROM entity_library_roots WHERE entity_id = @id)",
+            imageId));
+    }
+
+    [Fact]
+    [Trait("Category", "PostgreSQL")]
+    public async Task MigrationRejectsLibraryRootChangesAfterManifestPreparation() {
+        await using var database = await PostgresTestDatabase.CreateAsync(PreviousMigration);
+        using var files = MigrationFiles.Create();
+        var rootId = Guid.NewGuid();
+        var originalPath = files.CreateFolder("snapshot-original");
+        var changedPath = files.CreateFolder("snapshot-changed");
+        await using (var connection = await database.OpenConnectionAsync()) {
+            await ExecuteAsync(
+                connection,
+                """
+                INSERT INTO library_roots
+                    (id, path, label, enabled, recursive, scan_videos, scan_images, scan_audio,
+                     scan_books, is_nsfw, auto_identify, created_at, updated_at)
+                VALUES (@root_id, @root_path, 'Root', TRUE, TRUE, FALSE, TRUE, TRUE,
+                        FALSE, FALSE, FALSE, now(), now());
+                """,
+                ("root_id", rootId),
+                ("root_path", originalPath));
+        }
+
+        var exception = await Assert.ThrowsAsync<PostgresException>(() =>
+            database.PrepareChangeRootAndMigrateAsync(files.Assets, rootId, changedPath));
+
+        Assert.Contains("library-root snapshot", exception.Message, StringComparison.Ordinal);
+        await using var verify = await database.OpenConnectionAsync();
+        Assert.False(await ExistsAsync(
+            verify,
+            "SELECT EXISTS (SELECT 1 FROM \"__EFMigrationsHistory\" WHERE \"MigrationId\" = @id)",
+            MigrationUnderTest));
+    }
+
+    [Fact]
+    [Trait("Category", "PostgreSQL")]
     public async Task RunnerRejectsUnknownMigrationHistoryBeforeApplyingPendingMigrations() {
         await using var database = await PostgresTestDatabase.CreateAsync(PreviousMigration);
         using var files = MigrationFiles.Create();
@@ -1098,6 +1262,21 @@ public sealed class DirectPlayableEntityMigrationPostgresTests {
             await PrismediaMigrationRunner.ApplyPrismediaMigrationsAsync(
                 provider,
                 new ConfigurationBuilder().Build());
+        }
+
+        public async Task PrepareChangeRootAndMigrateAsync(
+            AssetPathService assets,
+            Guid rootId,
+            string changedPath) {
+            await using var context = CreateContext();
+            await context.Database.OpenConnectionAsync();
+            await DirectPlayableMigrationAssetPreparer.PrepareAsync(
+                context,
+                assets,
+                CancellationToken.None);
+            await context.Database.ExecuteSqlInterpolatedAsync(
+                $"UPDATE library_roots SET path = {changedPath}, updated_at = now() WHERE id = {rootId}");
+            await context.GetService<IMigrator>().MigrateAsync(MigrationUnderTest);
         }
 
         public static async Task<PostgresTestDatabase> CreateAsync(string targetMigration) {

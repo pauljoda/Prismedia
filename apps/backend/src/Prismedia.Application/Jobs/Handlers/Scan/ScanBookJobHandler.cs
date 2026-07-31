@@ -529,6 +529,7 @@ public sealed class ScanBookJobHandler(
                 .Select((path, index) => new AudioTrackUpsertItem(
                     path,
                     Path.GetFileNameWithoutExtension(path),
+                    root.Id,
                     bookId,
                     index,
                     SectionLabel: null,

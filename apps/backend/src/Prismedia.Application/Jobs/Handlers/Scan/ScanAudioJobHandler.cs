@@ -186,6 +186,7 @@ public sealed class ScanAudioJobHandler(
                     trackItems.Add(new AudioTrackUpsertItem(
                         filePath,
                         Path.GetFileNameWithoutExtension(filePath),
+                        root.Id,
                         albumIdsByPath[album.Path],
                         globalIndex++,
                         section.Label,
@@ -323,6 +324,7 @@ public sealed class ScanAudioJobHandler(
                         new AudioTrackUpsertItem(
                             filePath,
                             title,
+                            root.Id,
                             albumId,
                             globalIndex++,
                             section.Label,
@@ -366,6 +368,7 @@ public sealed class ScanAudioJobHandler(
                     new AudioTrackUpsertItem(
                         filePath,
                         title,
+                        root.Id,
                         AudioLibraryId: null,
                         SortOrder: index++,
                         SectionLabel: null,

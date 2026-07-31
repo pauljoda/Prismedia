@@ -61,6 +61,9 @@ Key rules:
 
 - Domain entities express library behavior and invariants.
 - Physical files should remain modelable independently from canonical asset identity.
+- Source-backed images and audio tracks persist direct library-root ownership. When roots overlap,
+  the most-specific configured filesystem root owns the source regardless of scan order, enabled
+  state, or media-kind scan flags.
 - EF Core persists entity records, capability/detail rows, child links, relationship links, media files, playback state, settings, and jobs.
 - Child and relationship links are persistence structures, not a global `EntityGraph` runtime.
 - Imported stash data is normalized into Prismedia-owned records.
