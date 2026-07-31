@@ -99,6 +99,9 @@ public abstract class EntityKindDefinition {
     /// <summary>Whether users may create and delete this kind directly through entity routes.</summary>
     public bool SupportsManualManagement => Behavior.SupportsManualManagement;
 
+    /// <summary>Whether an inactive derived shell should be removed after its last child disappears.</summary>
+    public bool PrunesWhenEmpty => Behavior.PrunesWhenEmpty;
+
     /// <summary>Browser upload and reviewed-replacement behavior owned by this kind.</summary>
     public EntityManualAcquisitionPolicy ManualAcquisition => Behavior.ManualAcquisition;
 

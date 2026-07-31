@@ -282,26 +282,11 @@ public sealed class EfSettingsPersistence : ISettingsPersistence {
         await RemoveOrphanMediaContainersAsync(cancellationToken);
     }
 
-    private async Task RemoveOrphanMediaContainersAsync(CancellationToken cancellationToken) {
-        var containerCodes = new[] {
-            EntityKind.Movie.ToCode(),
-            EntityKind.VideoSeason.ToCode(),
-            EntityKind.VideoSeries.ToCode(),
-        };
-
-        while (true) {
-            var orphanContainers = await _db.Entities
-                .Where(entity => containerCodes.Contains(entity.KindCode)
-                    && !_db.Entities.Any(child => child.ParentEntityId == entity.Id))
-                .ToArrayAsync(cancellationToken);
-            if (orphanContainers.Length == 0) {
-                return;
-            }
-
-            _db.Entities.RemoveRange(orphanContainers);
-            await _db.SaveChangesAsync(cancellationToken);
-        }
-    }
+    private async Task RemoveOrphanMediaContainersAsync(CancellationToken cancellationToken) =>
+        _ = await DerivedEntityContainerPruner.PruneAsync(
+            _db,
+            async token => { await _db.SaveChangesAsync(token); },
+            cancellationToken);
 
     private async Task<Dictionary<Guid, Guid[]>> LoadChildrenByParentIdAsync(CancellationToken cancellationToken) {
         var childRows = await _db.Entities.AsNoTracking()

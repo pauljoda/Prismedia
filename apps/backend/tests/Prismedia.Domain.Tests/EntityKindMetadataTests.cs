@@ -201,6 +201,19 @@ public sealed class EntityKindMetadataTests {
     }
 
     [Fact]
+    public void DefinitionsOwnEmptyContainerPruningPolicy() {
+        var prunableKinds = EntityKindRegistry.All
+            .Where(definition => definition.PrunesWhenEmpty)
+            .Select(definition => definition.Kind)
+            .Order()
+            .ToArray();
+
+        Assert.Equal(
+            [EntityKind.Movie, EntityKind.VideoSeries, EntityKind.VideoSeason],
+            prunableKinds);
+    }
+
+    [Fact]
     public void DefinitionsOwnEngagementVocabularyAndChildAggregation() {
         var engagingKinds = EntityKindRegistry.All
             .Where(definition => definition.Engagement.Mode != EntityEngagementMode.None)

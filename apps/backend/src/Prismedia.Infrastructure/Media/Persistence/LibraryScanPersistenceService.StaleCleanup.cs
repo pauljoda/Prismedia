@@ -224,49 +224,8 @@ public sealed partial class LibraryScanPersistenceService {
         return removed + await RemoveOrphanSeriesAndSeasonsAsync(cancellationToken);
     }
 
-    public async Task<int> RemoveOrphanSeriesAndSeasonsAsync(CancellationToken cancellationToken) {
-        var movieCode = EntityKind.Movie.ToCode();
-        var seasonCode = EntityKind.VideoSeason.ToCode();
-        var seriesCode = EntityKind.VideoSeries.ToCode();
-
-        var orphanMovies = await _db.Entities
-            .Where(e => e.KindCode == movieCode
-                && !e.IsWanted
-                && !_db.Monitors.Any(monitor =>
-                    monitor.EntityId == e.Id && monitor.Status == MonitorStatus.Active)
-                && !_db.Entities.Any(child => child.ParentEntityId == e.Id))
-            .ToListAsync(cancellationToken);
-        _db.Entities.RemoveRange(orphanMovies);
-
-        if (orphanMovies.Count > 0)
-            await SaveChangesWithLifecycleAsync(cancellationToken);
-
-        var orphanSeasons = await _db.Entities
-            .Where(e => e.KindCode == seasonCode
-                && !e.IsWanted
-                && !_db.Monitors.Any(monitor =>
-                    monitor.EntityId == e.Id && monitor.Status == MonitorStatus.Active)
-                && !_db.Entities.Any(child => child.ParentEntityId == e.Id))
-            .ToListAsync(cancellationToken);
-        _db.Entities.RemoveRange(orphanSeasons);
-
-        if (orphanSeasons.Count > 0)
-            await SaveChangesWithLifecycleAsync(cancellationToken);
-
-        var orphanSeries = await _db.Entities
-            .Where(e => e.KindCode == seriesCode
-                && !e.IsWanted
-                && !_db.Monitors.Any(monitor =>
-                    monitor.EntityId == e.Id && monitor.Status == MonitorStatus.Active)
-                && !_db.Entities.Any(child => child.ParentEntityId == e.Id))
-            .ToListAsync(cancellationToken);
-        _db.Entities.RemoveRange(orphanSeries);
-
-        if (orphanSeries.Count > 0)
-            await SaveChangesWithLifecycleAsync(cancellationToken);
-
-        return orphanMovies.Count + orphanSeasons.Count + orphanSeries.Count;
-    }
+    public Task<int> RemoveOrphanSeriesAndSeasonsAsync(CancellationToken cancellationToken) =>
+        DerivedEntityContainerPruner.PruneAsync(_db, SaveChangesWithLifecycleAsync, cancellationToken);
 
     public async Task<int> RemoveOrphanTagsAsync(CancellationToken cancellationToken) {
         var tagCode = EntityKind.Tag.ToCode();

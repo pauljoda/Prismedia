@@ -19,6 +19,7 @@ public sealed record EntityKindBehavior {
         EntityLibraryVisibilityPolicy? libraryVisibility = null,
         bool supportsFileDeletion = false,
         bool supportsManualManagement = false,
+        bool prunesWhenEmpty = false,
         EntityMediaQualityFamily mediaQualityFamily = EntityMediaQualityFamily.None,
         bool supportsAtomicMediaUpgrade = false) {
         if (supportsAtomicMediaUpgrade && mediaQualityFamily == EntityMediaQualityFamily.None) {
@@ -35,6 +36,7 @@ public sealed record EntityKindBehavior {
         LibraryVisibility = libraryVisibility ?? EntityLibraryVisibilityPolicy.Unscoped;
         SupportsFileDeletion = supportsFileDeletion;
         SupportsManualManagement = supportsManualManagement;
+        PrunesWhenEmpty = prunesWhenEmpty;
         MediaQualityFamily = mediaQualityFamily;
         SupportsAtomicMediaUpgrade = supportsAtomicMediaUpgrade;
     }
@@ -62,6 +64,12 @@ public sealed record EntityKindBehavior {
 
     /// <summary>Whether users may create and delete this kind directly.</summary>
     public bool SupportsManualManagement { get; }
+
+    /// <summary>
+    /// Whether an unrequested, unmonitored instance is a derived structural shell that should be
+    /// removed after its last child disappears.
+    /// </summary>
+    public bool PrunesWhenEmpty { get; }
 
     /// <summary>Quality ladder used to rank acquisition releases.</summary>
     public EntityMediaQualityFamily MediaQualityFamily { get; }

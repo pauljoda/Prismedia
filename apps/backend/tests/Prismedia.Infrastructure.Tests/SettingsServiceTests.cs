@@ -189,6 +189,72 @@ public sealed class SettingsServiceTests {
     }
 
     [Fact]
+    public async Task DeleteLibraryRootPreservesWantedAndMonitoredEmptyContainers() {
+        await using var db = CreateContext();
+        var rootId = Guid.NewGuid();
+        var ownedEntityId = Guid.NewGuid();
+        var wantedMovieId = Guid.NewGuid();
+        var monitoredSeriesId = Guid.NewGuid();
+        var now = DateTimeOffset.UtcNow;
+        db.LibraryRoots.Add(new LibraryRootRow {
+            Id = rootId,
+            Path = "/media/removed",
+            Label = "Removed",
+            Enabled = true,
+            Recursive = true,
+            ScanVideos = true,
+            ScanImages = false,
+            ScanAudio = false,
+            ScanBooks = false,
+            IsNsfw = false,
+            AutoIdentify = true,
+            CreatedAt = now,
+            UpdatedAt = now,
+        });
+        db.Entities.AddRange(
+            new EntityRow {
+                Id = ownedEntityId,
+                KindCode = EntityKind.Video.ToCode(),
+                Title = "Removed video",
+                CreatedAt = now,
+                UpdatedAt = now,
+            },
+            new EntityRow {
+                Id = wantedMovieId,
+                KindCode = EntityKind.Movie.ToCode(),
+                Title = "Wanted movie",
+                IsWanted = true,
+                CreatedAt = now,
+                UpdatedAt = now,
+            },
+            new EntityRow {
+                Id = monitoredSeriesId,
+                KindCode = EntityKind.VideoSeries.ToCode(),
+                Title = "Monitored series",
+                CreatedAt = now,
+                UpdatedAt = now,
+            });
+        db.VideoDetails.Add(new VideoDetailRow { EntityId = ownedEntityId, LibraryRootId = rootId });
+        db.Monitors.Add(new MonitorRow {
+            Id = Guid.NewGuid(),
+            EntityId = monitoredSeriesId,
+            Kind = EntityKind.VideoSeries,
+            Status = MonitorStatus.Active,
+            Title = "Monitored series",
+            CreatedAt = now,
+            UpdatedAt = now,
+        });
+        await db.SaveChangesAsync();
+        var service = new SettingsService(new EfSettingsPersistence(db));
+
+        var deleted = await service.DeleteLibraryRootAsync(rootId, CancellationToken.None);
+
+        Assert.True(deleted);
+        Assert.True(await db.Entities.AnyAsync(entity => entity.Id == wantedMovieId));
+        Assert.True(await db.Entities.AnyAsync(entity => entity.Id == monitoredSeriesId));
+    }
+
+    [Fact]
     public async Task CatalogUsesRegistryDefaultsWithoutCreatingRows() {
         await using var db = CreateContext();
         var service = new SettingsService(new EfSettingsPersistence(db));
