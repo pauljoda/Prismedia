@@ -6,7 +6,7 @@
   import { BookOpen, Check, CloudDownload, Info, Play, RotateCcw, SlidersHorizontal } from "@lucide/svelte";
   import EntityDetailPageState from "$lib/components/entities/EntityDetailPageState.svelte";
   import { useEntityDetailPage } from "$lib/components/entities/entity-detail-page-controller.svelte";
-  import { fetchEntity, type EntityCardFull } from "$lib/api/entities";
+  import { fetchEntity, fetchEntityChildren, type EntityCardFull } from "$lib/api/entities";
   import { updateEntityProgress } from "$lib/api/playback";
   import { entityCardToDetailCard, type EntityDetailCardFull } from "$lib/entities/entity-detail";
   import { refreshAfterManagedFileRevert } from "$lib/entities/entity-file-management";
@@ -20,6 +20,7 @@
   import { thumbnailsToCards } from "$lib/entities/entity-relationship-thumbnails";
   import { ENTITY_KIND } from "$lib/entities/entity-codes";
   import type { EntityThumbnailCard } from "$lib/entities/entity-thumbnail";
+  import type { EntityThumbnail } from "$lib/api/generated/model";
   import EntityDetail, {
     type EntityDetailActionButton,
     type EntityDetailSection,
@@ -30,7 +31,12 @@
   import { useEntityAcquisition } from "$lib/components/acquisitions/use-entity-acquisition.svelte";
 
   let book = $state<EntityCardFull | null>(null);
-  let chapterDetails = $state.raw<EntityCardFull[]>([]);
+  interface ChapterProjection {
+    thumbnail: EntityThumbnail;
+    pages: EntityThumbnail[];
+  }
+
+  let chapterProjections = $state.raw<ChapterProjection[]>([]);
   let chapterCards = $state<EntityThumbnailCard[]>([]);
 
   const bookId = $derived(page.params.id ?? "");
@@ -43,10 +49,15 @@
         fetchEntity(volumeId, { signal }),
       ]);
       const chapterThumbnails = orderedBookChildren(nextVolume, ENTITY_KIND.bookChapter);
-      const details = await Promise.all(chapterThumbnails.map((chapter) => fetchEntity(chapter.id, { signal })));
+      const childGroups = await fetchEntityChildren(chapterThumbnails.map((chapter) => chapter.id), { signal });
+      const pagesByChapter = new Map(childGroups.map((group) => [group.parentId, group.items]));
       signal.throwIfAborted();
       book = nextBook;
-      chapterDetails = details;
+      chapterProjections = chapterThumbnails.map((thumbnail) => ({
+        thumbnail,
+        pages: (pagesByChapter.get(thumbnail.id) ?? [])
+          .filter((child) => child.kind === ENTITY_KIND.bookPage),
+      }));
       chapterCards = thumbnailsToCards(chapterThumbnails, {
         hrefFor: (chapter) => `/books/${nextBook.id}/chapters/${chapter.id}`,
       });
@@ -61,19 +72,21 @@
   const volume = $derived(detail.entity);
   const bookTitle = $derived(book?.title ?? "Book");
   const card = $derived(volume ? entityCardToDetailCard(volume) as EntityDetailCardFull : null);
-  const chapterSummaries = $derived(chapterDetails.map((chapter, index): BookReaderChapter => ({
-    id: chapter.id,
-    title: chapter.title,
-    sortOrder: Number(chapter.sortOrder ?? index),
-    pageCount: orderedBookChildren(chapter, ENTITY_KIND.bookPage).length,
+  const chapterSummaries = $derived(chapterProjections.map((chapter, index): BookReaderChapter => ({
+    id: chapter.thumbnail.id,
+    title: chapter.thumbnail.title,
+    sortOrder: Number(chapter.thumbnail.sortOrder ?? index),
+    pageCount: chapter.pages.length,
   })));
   const volumePages = $derived(
-    chapterDetails.flatMap((chapter) => orderedBookChildren(chapter, ENTITY_KIND.bookPage)),
+    chapterProjections.flatMap((chapter) => chapter.pages),
   );
   const readerPages = $derived(volumePages.map(entityPageToReaderImage));
   const progressDisplay = $derived(bookEntityProgressDisplay(book, chapterSummaries));
   const progressChapterIndex = $derived(
-    progressDisplay ? chapterDetails.findIndex((chapter) => chapter.id === progressDisplay.chapterId) : -1,
+    progressDisplay
+      ? chapterProjections.findIndex((chapter) => chapter.thumbnail.id === progressDisplay.chapterId)
+      : -1,
   );
   const volumeProgress = $derived(progressChapterIndex >= 0 ? progressDisplay : null);
   const primaryReadLabel = $derived(
@@ -145,19 +158,19 @@
 
   function positionForReaderIndex(index: number) {
     let offset = 0;
-    for (const chapter of chapterDetails) {
-      const pages = orderedBookChildren(chapter, ENTITY_KIND.bookPage);
+    for (const chapter of chapterProjections) {
+      const pages = chapter.pages;
       const nextOffset = offset + pages.length;
       if (index < nextOffset) {
-        return { chapter, pageIndex: index - offset, pageCount: pages.length };
+        return { chapter: chapter.thumbnail, pageIndex: index - offset, pageCount: pages.length };
       }
       offset = nextOffset;
     }
-    const chapter = chapterDetails.at(-1) ?? null;
+    const chapter = chapterProjections.at(-1) ?? null;
     return {
-      chapter,
-      pageIndex: Math.max(0, (chapter ? orderedBookChildren(chapter, ENTITY_KIND.bookPage).length : 1) - 1),
-      pageCount: chapter ? orderedBookChildren(chapter, ENTITY_KIND.bookPage).length : 0,
+      chapter: chapter?.thumbnail ?? null,
+      pageIndex: Math.max(0, (chapter?.pages.length ?? 1) - 1),
+      pageCount: chapter?.pages.length ?? 0,
     };
   }
 
@@ -232,7 +245,7 @@
         {#snippet heroMeta()}
           <span class="meta-item">{bookTitle}</span>
           <span class="meta-sep"></span>
-          <span class="meta-item">{chapterDetails.length} chapters</span>
+          <span class="meta-item">{chapterProjections.length} chapters</span>
           <span class="meta-sep"></span>
           <span class="meta-item">{readerPages.length} pages</span>
         {/snippet}

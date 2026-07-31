@@ -16,8 +16,8 @@
   import { fetchEntityMonitors, resumeMonitor, stopMonitor } from "$lib/api/monitors";
   import { commitEntityRequest } from "$lib/api/requests";
   import { updateEntityProgress } from "$lib/api/playback";
-  import { BookFormat, type AcquisitionDetail, type MonitorView } from "$lib/api/generated/model";
-  import { fetchEntity, type EntityCardFull } from "$lib/api/entities";
+  import { BookFormat, type AcquisitionDetail, type EntityThumbnail, type MonitorView } from "$lib/api/generated/model";
+  import { fetchEntity, fetchEntityChildren, type EntityCardFull } from "$lib/api/entities";
   import { refreshAfterManagedFileRevert } from "$lib/entities/entity-file-management";
   import { entityCardToDetailCard, type EntityDetailCardFull, type EntityDetailCredit, type EntityDetailTag } from "$lib/entities/entity-detail";
   import {
@@ -80,8 +80,8 @@
 
   const playback = useAudioPlayback()!;
   interface ChapterDetail {
-    detail: EntityCardFull;
-    pages: ReturnType<typeof orderedBookChildren>;
+    thumbnail: EntityThumbnail;
+    pages: EntityThumbnail[];
     summary: BookReaderChapter;
   }
 
@@ -148,10 +148,10 @@
   const chapterSummaries = $derived(combineChapterSummaries(chapterDetails, progressChapterSummary));
   const progressDisplay = $derived(bookEntityProgressDisplay(book, chapterSummaries));
   const selectedChapter = $derived(
-    chapterDetails.find((chapter) => chapter.detail.id === selectedChapterId) ?? chapterDetails[0] ?? null,
+    chapterDetails.find((chapter) => chapter.thumbnail.id === selectedChapterId) ?? chapterDetails[0] ?? null,
   );
   const selectedProgress = $derived(
-    progressDisplay?.chapterId === selectedChapter?.detail.id ? progressDisplay : null,
+    progressDisplay?.chapterId === selectedChapter?.thumbnail.id ? progressDisplay : null,
   );
   const readerPageCount = $derived(selectedChapter?.pages.length ?? 0);
   // Started/completed come straight from the progress capability (same source the grid card uses),
@@ -190,11 +190,11 @@
       }));
     }
     return chapterDetails.map((chapter, index) => ({
-      id: chapter.detail.id,
-      title: chapter.detail.title,
+      id: chapter.thumbnail.id,
+      title: chapter.thumbnail.title,
       order: index,
       depth: 0,
-      target: { kind: "entity-chapter", chapterId: chapter.detail.id },
+      target: { kind: "entity-chapter", chapterId: chapter.thumbnail.id },
       pageCount: chapter.pages.length,
     }));
   });
@@ -468,7 +468,7 @@
     bookRenditionMonitors = nextMonitors;
 
     const nextProgress = bookEntityProgressDisplay(nextBook, combineChapterSummaries(chapters, progressSummary));
-    selectedChapterId = nextProgress?.chapterId ?? chapters[0]?.detail.id ?? null;
+    selectedChapterId = nextProgress?.chapterId ?? chapters[0]?.thumbnail.id ?? null;
     void hydrateEpubContents(nextBook);
     return nextBook;
   }
@@ -569,17 +569,20 @@
     const chapterItems = directChapters.sort((a, b) =>
       a.sortOrder - b.sortOrder || a.thumbnail.title.localeCompare(b.thumbnail.title),
     );
-    const details = await Promise.all(
-      chapterItems.map((item) => fetchEntity(item.thumbnail.id, { signal })),
+    const childGroups = await fetchEntityChildren(
+      chapterItems.map((item) => item.thumbnail.id),
+      { signal },
     );
-    return details.map((detail, index) => {
-      const pages = orderedBookChildren(detail, ENTITY_KIND.bookPage);
+    const pagesByChapter = new Map(childGroups.map((group) => [group.parentId, group.items]));
+    return chapterItems.map(({ thumbnail }, index) => {
+      const pages = (pagesByChapter.get(thumbnail.id) ?? [])
+        .filter((child) => child.kind === ENTITY_KIND.bookPage);
       return {
-        detail,
+        thumbnail,
         pages,
         summary: {
-          id: detail.id,
-          title: detail.title,
+          id: thumbnail.id,
+          title: thumbnail.title,
           sortOrder: index,
           pageCount: pages.length,
         },
@@ -605,7 +608,7 @@
     signal: AbortSignal,
   ): Promise<BookReaderChapter | null> {
     const progress = getCapability(nextBook.capabilities, CAPABILITY_KIND.progress);
-    if (!progress?.currentEntityId || chapters.some((chapter) => chapter.detail.id === progress.currentEntityId)) {
+    if (!progress?.currentEntityId || chapters.some((chapter) => chapter.thumbnail.id === progress.currentEntityId)) {
       return null;
     }
 
@@ -653,7 +656,7 @@
       void goto(bookReaderHref({
         bookId: book.id,
         kind: "chapter",
-        id: selectedChapter.detail.id,
+        id: selectedChapter.thumbnail.id,
         returnId: book.id,
       }));
       return;

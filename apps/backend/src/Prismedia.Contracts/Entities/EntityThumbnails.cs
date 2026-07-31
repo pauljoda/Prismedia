@@ -155,3 +155,19 @@ public sealed record EntityThumbnailBatchRequest(IReadOnlyList<Guid> Ids);
 /// <summary>Batch thumbnail response body.</summary>
 /// <param name="Items">Resolved thumbnails in requested order where possible.</param>
 public sealed record EntityThumbnailBatchResponse(IReadOnlyList<EntityThumbnail> Items);
+
+/// <summary>Batch request for direct children of multiple Entity roots.</summary>
+/// <param name="ParentIds">Parent Entity identifiers to resolve in caller order.</param>
+public sealed record EntityChildrenBatchRequest(IReadOnlyList<Guid> ParentIds) {
+    /// <summary>Largest parent batch accepted by the shared child projection.</summary>
+    public const int MaximumParentIds = 250;
+}
+
+/// <summary>Ordered direct children resolved for one visible Entity parent.</summary>
+/// <param name="ParentId">Visible parent Entity identifier.</param>
+/// <param name="Items">Direct child thumbnails in stable structural order.</param>
+public sealed record EntityChildrenBatchGroup(Guid ParentId, IReadOnlyList<EntityThumbnail> Items);
+
+/// <summary>Batch response preserving the requested order of visible parents.</summary>
+/// <param name="Groups">One group per visible, existing requested parent, including empty groups.</param>
+public sealed record EntityChildrenBatchResponse(IReadOnlyList<EntityChildrenBatchGroup> Groups);

@@ -6,7 +6,7 @@
   import { AlertTriangle, Headphones, Pause, Play } from "@lucide/svelte";
   import { Button } from "@prismedia/ui-svelte";
   import { getBookMetadataCapability, getCapability } from "$lib/api/capabilities";
-  import { fetchEntity, type EntityCardFull } from "$lib/api/entities";
+  import { fetchEntity, fetchEntityChildren, type EntityCardFull } from "$lib/api/entities";
   import { updateEntityProgress } from "$lib/api/playback";
   import {
     bookEntityProgressDisplay,
@@ -34,6 +34,7 @@
     exactWebEpubResumeLocation,
     webEpubLaunchLocation,
   } from "$lib/entities/epub-contents";
+  import { fetchBookChapterSummaries } from "$lib/entities/book-chapter-hydration";
 
   type ReaderFlow = "paginated" | "scrolled";
 
@@ -41,7 +42,8 @@
   type ReaderMode = typeof READER_MODE.paged | typeof READER_MODE.webtoon;
 
   interface ReaderChapter {
-    detail: EntityCardFull;
+    id: string;
+    title: string;
     pages: EntityThumbnail[];
     summary: BookReaderChapter;
   }
@@ -320,7 +322,7 @@
 
   async function resolveChapterReader(nextBook: EntityCardFull, nextContext: BookReaderRouteContext) {
     const chapter = await fetchEntity(nextContext.id);
-    const summaries = await loadChapterSummaries(nextBook, chapter);
+    const summaries = await fetchBookChapterSummaries(nextBook, chapter);
     const progress = bookEntityProgressDisplay(nextBook, summaries);
     const chapterIndex = summaries.findIndex((item) => item.id === chapter.id);
     const pages = orderedBookChildren(chapter, ENTITY_KIND.bookPage);
@@ -338,11 +340,15 @@
 
   async function resolveVolumeReader(nextBook: EntityCardFull, volumeId: string) {
     const volume = await fetchEntity(volumeId);
-    const chapterDetails = await Promise.all(
-      orderedBookChildren(volume, ENTITY_KIND.bookChapter).map((chapter) => fetchEntity(chapter.id)),
-    );
-    const chapters = chapterDetails.map((chapter, index) =>
-      readerChapter(chapter, orderedBookChildren(chapter, ENTITY_KIND.bookPage), index),
+    const chapterThumbnails = orderedBookChildren(volume, ENTITY_KIND.bookChapter);
+    const childGroups = await fetchEntityChildren(chapterThumbnails.map((chapter) => chapter.id));
+    const pagesByChapter = new Map(childGroups.map((group) => [group.parentId, group.items]));
+    const chapters = chapterThumbnails.map((chapter, index) =>
+      readerChapter(
+        chapter,
+        (pagesByChapter.get(chapter.id) ?? []).filter((child) => child.kind === ENTITY_KIND.bookPage),
+        index,
+      ),
     );
     const summaries = chapters.map((chapter) => chapter.summary);
     const progress = bookEntityProgressDisplay(nextBook, summaries);
@@ -378,7 +384,9 @@
     nextContext: BookReaderRouteContext,
     selectedChapter: EntityCardFull | null,
   ) {
-    const summaries = selectedChapter ? await loadChapterSummaries(nextBook, selectedChapter) : [];
+    const summaries = selectedChapter
+      ? await fetchBookChapterSummaries(nextBook, selectedChapter)
+      : [];
     const progress = bookEntityProgressDisplay(nextBook, summaries);
     const selectedIndex = selectedChapter
       ? Math.max(0, summaries.findIndex((chapter) => chapter.id === selectedChapter.id))
@@ -412,62 +420,14 @@
     return firstVolumeChapter ? fetchEntity(firstVolumeChapter.id) : null;
   }
 
-  async function loadChapterSummaries(
-    nextBook: EntityCardFull,
-    currentChapter: EntityCardFull,
-  ): Promise<BookReaderChapter[]> {
-    const currentPageCount = orderedBookChildren(currentChapter, ENTITY_KIND.bookPage).length;
-    const volumeThumbnails = orderedBookChildren(nextBook, ENTITY_KIND.bookVolume);
-    let parentVolumeIndex = volumeThumbnails.findIndex((volume) => volume.id === currentChapter.parentEntityId);
-    let currentVolume: EntityCardFull | null = null;
-
-    if (parentVolumeIndex >= 0) {
-      currentVolume = await fetchEntity(volumeThumbnails[parentVolumeIndex].id);
-    } else {
-      for (const [index, volumeThumbnail] of volumeThumbnails.entries()) {
-        const volume = await fetchEntity(volumeThumbnail.id);
-        if (orderedBookChildren(volume, ENTITY_KIND.bookChapter).some((child) => child.id === currentChapter.id)) {
-          parentVolumeIndex = index;
-          currentVolume = volume;
-          break;
-        }
-      }
-    }
-
-    if (parentVolumeIndex >= 0 && currentVolume) {
-      let chapterThumbnails = orderedBookChildren(currentVolume, ENTITY_KIND.bookChapter);
-      const currentIndex = chapterThumbnails.findIndex((chapter) => chapter.id === currentChapter.id);
-
-      if (currentIndex === chapterThumbnails.length - 1) {
-        const nextVolume = volumeThumbnails[parentVolumeIndex + 1];
-        if (nextVolume) {
-          const nextVolumeDetail = await fetchEntity(nextVolume.id);
-          chapterThumbnails = [
-            ...chapterThumbnails,
-            ...orderedBookChildren(nextVolumeDetail, ENTITY_KIND.bookChapter),
-          ];
-        }
-      }
-
-      return chapterThumbnails.map((thumbnail, index) => ({
-        id: thumbnail.id,
-        title: thumbnail.title,
-        sortOrder: index,
-        pageCount: thumbnail.id === currentChapter.id ? currentPageCount : 0,
-      }));
-    }
-
-    return orderedBookChildren(nextBook, ENTITY_KIND.bookChapter).map((thumbnail, index) => ({
-      id: thumbnail.id,
-      title: thumbnail.title,
-      sortOrder: index,
-      pageCount: thumbnail.id === currentChapter.id ? currentPageCount : 0,
-    }));
-  }
-
-  function readerChapter(detail: EntityCardFull, pages: EntityThumbnail[], index: number): ReaderChapter {
+  function readerChapter(
+    detail: Pick<EntityCardFull, "id" | "title">,
+    pages: EntityThumbnail[],
+    index: number,
+  ): ReaderChapter {
     return {
-      detail,
+      id: detail.id,
+      title: detail.title,
       pages,
       summary: {
         id: detail.id,
@@ -491,7 +451,7 @@
   function pageOffsetForChapter(chapters: ReaderChapter[], chapterId: string) {
     let offset = 0;
     for (const chapter of chapters) {
-      if (chapter.detail.id === chapterId) return offset;
+      if (chapter.id === chapterId) return offset;
       offset += chapter.pages.length;
     }
     return 0;
@@ -524,7 +484,7 @@
     const position = positionForReaderIndex(index);
     if (!position.chapter) return;
     await updateEntityProgress(book.id, {
-      currentEntityId: position.chapter.detail.id,
+      currentEntityId: position.chapter.id,
       unit: PROGRESS_UNIT.page,
       index: Math.max(0, Math.min(position.pageIndex, Math.max(0, position.pageCount - 1))),
       total: position.pageCount,

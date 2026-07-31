@@ -17,6 +17,7 @@
   import { bookReaderHref, type BookReaderHrefOptions } from "$lib/entities/book-reader-route";
   import { thumbnailsToCards } from "$lib/entities/entity-relationship-thumbnails";
   import { ENTITY_KIND } from "$lib/entities/entity-codes";
+  import { fetchBookChapterSummaries } from "$lib/entities/book-chapter-hydration";
   import type { EntityThumbnailCard } from "$lib/entities/entity-thumbnail";
   import EntityDetail, {
     type EntityDetailActionButton,
@@ -37,7 +38,7 @@
         fetchEntity(bookId, { signal }),
         fetchEntity(chapterId, { signal }),
       ]);
-      const nextChapterSummaries = await loadChapterSummaries(nextBook, nextChapter, signal);
+      const nextChapterSummaries = await fetchBookChapterSummaries(nextBook, nextChapter, { signal });
       signal.throwIfAborted();
       book = nextBook;
       chapterSummaries = nextChapterSummaries;
@@ -107,61 +108,6 @@
 
     return tabs;
   });
-
-  async function loadChapterSummaries(
-    nextBook: EntityCardFull,
-    currentChapter: EntityCardFull,
-    signal: AbortSignal,
-  ): Promise<BookReaderChapter[]> {
-    const currentPageCount = orderedBookChildren(currentChapter, ENTITY_KIND.bookPage).length;
-    const volumeThumbnails = orderedBookChildren(nextBook, ENTITY_KIND.bookVolume);
-    let parentVolumeIndex = volumeThumbnails.findIndex((volume) => volume.id === currentChapter.parentEntityId);
-    let currentVolume: EntityCardFull | null = null;
-
-    if (parentVolumeIndex >= 0) {
-      currentVolume = await fetchEntity(volumeThumbnails[parentVolumeIndex].id, { signal });
-    } else {
-      for (const [index, volumeThumbnail] of volumeThumbnails.entries()) {
-        const volume = await fetchEntity(volumeThumbnail.id, { signal });
-        if (orderedBookChildren(volume, ENTITY_KIND.bookChapter).some((child) => child.id === currentChapter.id)) {
-          parentVolumeIndex = index;
-          currentVolume = volume;
-          break;
-        }
-      }
-    }
-
-    if (parentVolumeIndex >= 0 && currentVolume) {
-      let chapterThumbnails = orderedBookChildren(currentVolume, ENTITY_KIND.bookChapter);
-      const currentIndex = chapterThumbnails.findIndex((chapter) => chapter.id === currentChapter.id);
-
-      if (currentIndex === chapterThumbnails.length - 1) {
-        const nextVolume = volumeThumbnails[parentVolumeIndex + 1];
-        if (nextVolume) {
-          const nextVolumeDetail = await fetchEntity(nextVolume.id, { signal });
-          chapterThumbnails = [
-            ...chapterThumbnails,
-            ...orderedBookChildren(nextVolumeDetail, ENTITY_KIND.bookChapter),
-          ];
-        }
-      }
-
-      return chapterThumbnails.map((thumbnail, index) => ({
-        id: thumbnail.id,
-        title: thumbnail.title,
-        sortOrder: index,
-        pageCount: thumbnail.id === currentChapter.id ? currentPageCount : 0,
-      }));
-    }
-
-    const directChapters = orderedBookChildren(nextBook, ENTITY_KIND.bookChapter);
-    return directChapters.map((thumbnail, index) => ({
-      id: thumbnail.id,
-      title: thumbnail.title,
-      sortOrder: index,
-      pageCount: thumbnail.id === currentChapter.id ? currentPageCount : 0,
-    }));
-  }
 
   function openReaderAt(index: number) {
     if (!book || !chapter) return;

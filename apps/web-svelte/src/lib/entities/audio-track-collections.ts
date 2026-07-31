@@ -1,6 +1,6 @@
-import type { EntityCard } from "$lib/api/generated/model";
+import type { EntityCard, EntityThumbnail } from "$lib/api/generated/model";
 import { getCapability } from "$lib/api/capabilities";
-import { fetchEntity } from "$lib/api/entities";
+import { fetchEntity, fetchEntityChildren } from "$lib/api/entities";
 import { assetUrl } from "$lib/api/orval-fetch";
 import type { CollectionItem } from "$lib/collections/models";
 import { CAPABILITY_KIND, ENTITY_KIND } from "$lib/entities/entity-codes";
@@ -59,18 +59,28 @@ export async function collectArtistTracks(
   const artist = await getCachedMusicArtist(artistId, artistCache, options.signal);
   if (!artist) return { tracks: [], albumCoverUrls: {} };
 
-  const albumIds = artist.childrenByKind
+  const albums = artist.childrenByKind
     .filter((group) => group.kind === ENTITY_KIND.audioLibrary)
     .flatMap((group) => group.entities)
-    .sort((left, right) => Number(left.sortOrder ?? 0) - Number(right.sortOrder ?? 0) || left.title.localeCompare(right.title))
-    .map((album) => album.id);
+    .sort((left, right) => Number(left.sortOrder ?? 0) - Number(right.sortOrder ?? 0) || left.title.localeCompare(right.title));
+  const childGroups = await fetchEntityChildren(
+    albums.map((album) => album.id),
+    { signal: options.signal },
+  );
+  const childrenByAlbum = new Map(childGroups.map((group) => [group.parentId, group.items]));
   const tracks: AudioTrackListItemDto[] = [];
   const albumCoverUrls: Record<string, string | null | undefined> = {};
 
-  for (const albumId of albumIds) {
-    const album = await collectLibraryTracks(albumId, { ...options, albumCache, artistCache });
-    tracks.push(...album.tracks);
-    Object.assign(albumCoverUrls, album.albumCoverUrls);
+  for (const album of albums) {
+    const children = childrenByAlbum.get(album.id) ?? [];
+    tracks.push(...tracksFromAudioLibraryChildren(album, children, options.groupByAlbum === true));
+    albumCoverUrls[album.id] = audioLibraryThumbnailCoverUrl(album);
+
+    for (const nestedLibrary of children.filter((child) => child.kind === ENTITY_KIND.audioLibrary)) {
+      const nested = await collectLibraryTracks(nestedLibrary.id, { ...options, albumCache, artistCache });
+      tracks.push(...nested.tracks);
+      Object.assign(albumCoverUrls, nested.albumCoverUrls);
+    }
   }
 
   return { tracks, albumCoverUrls };
@@ -139,9 +149,27 @@ export function tracksFromAudioLibraryDetail(
     .sort((left, right) => left.sortOrder - right.sortOrder);
 }
 
+export function tracksFromAudioLibraryChildren(
+  library: Pick<EntityThumbnail, "id" | "title">,
+  children: EntityThumbnail[],
+  groupByAlbum: boolean,
+): AudioTrackListItemDto[] {
+  return children
+    .filter((child) => child.kind === ENTITY_KIND.audioTrack && child.isWanted !== true)
+    .map((child) => entityThumbnailToTrackItem(child, library.id, {
+      sectionLabel: groupByAlbum ? library.title : undefined,
+      sectionKey: groupByAlbum ? albumSectionKey(library.id) : undefined,
+    }))
+    .sort((left, right) => left.sortOrder - right.sortOrder);
+}
+
 function audioLibraryCoverUrl(detail: EntityCard): string | null {
   const images = getCapability(detail.capabilities, CAPABILITY_KIND.images);
   return assetUrl(images?.coverUrl ?? images?.thumbnailUrl) || null;
+}
+
+function audioLibraryThumbnailCoverUrl(thumbnail: EntityThumbnail): string | null {
+  return assetUrl(thumbnail.coverUrl ?? thumbnail.coverThumbUrl) || null;
 }
 
 async function getCachedAudioLibrary(

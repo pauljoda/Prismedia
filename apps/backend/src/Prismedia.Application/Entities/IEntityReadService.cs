@@ -154,6 +154,16 @@ public interface IEntityReadService {
         CancellationToken cancellationToken);
 
     /// <summary>
+    /// Gets direct child thumbnails for multiple visible Entity parents through one bounded read
+    /// projection. Parent groups and children retain deterministic caller/display order.
+    /// </summary>
+    Task<EntityChildrenBatchResponse> GetChildrenAsync(
+        IReadOnlyList<Guid> parentIds,
+        bool hideNsfw,
+        CancellationToken cancellationToken) =>
+        Task.FromResult(new EntityChildrenBatchResponse([]));
+
+    /// <summary>
     /// Gets the folder-list context (visible child count, description, dates, lifetime, external
     /// ids) for a batch of container entities. Sized for external catalog list pages: one grouped
     /// query per collection across the whole batch, never a full detail hydration per row.

@@ -6,6 +6,7 @@ import type {
 import type { CollectionItem } from "$lib/collections/models";
 import {
   collectCollectionAudioTracks,
+  tracksFromAudioLibraryChildren,
   tracksFromAudioLibraryDetail,
 } from "$lib/entities/audio-track-collections";
 import { ENTITY_KIND } from "$lib/entities/entity-codes";
@@ -52,5 +53,19 @@ describe("audio track collections", () => {
     const result = await collectCollectionAudioTracks([item]);
 
     expect(result.tracks).toEqual([]);
+  });
+
+  it("projects batched album children with the same wanted and ordering rules", () => {
+    const later = { ...track("later"), sortOrder: 2 };
+    const earlier = { ...track("earlier"), sortOrder: 1 };
+
+    const result = tracksFromAudioLibraryChildren(
+      { id: "album-1", title: "Album" },
+      [later, track("wanted", true), earlier],
+      true,
+    );
+
+    expect(result.map((item) => item.id)).toEqual(["earlier", "later"]);
+    expect(result.every((item) => item.sectionLabel === "Album")).toBe(true);
   });
 });

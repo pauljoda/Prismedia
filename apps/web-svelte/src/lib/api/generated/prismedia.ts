@@ -63,6 +63,8 @@ import type {
   DownloadQueueItemView,
   EntityBulkDeleteRequest,
   EntityCard,
+  EntityChildrenBatchRequest,
+  EntityChildrenBatchResponse,
   EntityCreateRequest,
   EntityDeleteResponse,
   EntityFlagsUpdateRequest,
@@ -94,6 +96,7 @@ import type {
   GetBookAuthorParams,
   GetBookParams,
   GetCollectionParams,
+  GetEntityChildrenParams,
   GetEntityParams,
   GetEntityThumbnailsParams,
   GetFileContentParams,
@@ -5230,6 +5233,58 @@ export const getEntityThumbnails = async (entityThumbnailBatchRequest: EntityThu
     headers: { 'Content-Type': 'application/json', ...options?.headers },
     body: JSON.stringify(
       entityThumbnailBatchRequest,)
+  }
+);}
+
+
+
+export type getEntityChildrenResponse200 = {
+  data: EntityChildrenBatchResponse
+  status: 200
+}
+
+export type getEntityChildrenResponse400 = {
+  data: ApiProblem
+  status: 400
+}
+
+export type getEntityChildrenResponseSuccess = (getEntityChildrenResponse200) & {
+  headers: Headers;
+};
+export type getEntityChildrenResponseError = (getEntityChildrenResponse400) & {
+  headers: Headers;
+};
+
+export type getEntityChildrenResponse = (getEntityChildrenResponseSuccess | getEntityChildrenResponseError)
+
+export const getGetEntityChildrenUrl = (params?: GetEntityChildrenParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/entities/children?${stringifiedParams}` : `/api/entities/children`
+}
+
+/**
+ * @summary Get direct child Entity thumbnails for multiple parents.
+ */
+export const getEntityChildren = async (entityChildrenBatchRequest: EntityChildrenBatchRequest,
+    params?: GetEntityChildrenParams, options?: RequestInit): Promise<getEntityChildrenResponse> => {
+
+  return orvalFetch<getEntityChildrenResponse>(getGetEntityChildrenUrl(params),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      entityChildrenBatchRequest,)
   }
 );}
 

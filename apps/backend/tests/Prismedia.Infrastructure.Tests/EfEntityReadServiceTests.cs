@@ -1541,6 +1541,41 @@ public sealed class EfEntityReadServiceTests {
     }
 
     [Fact]
+    public async Task GetChildrenAsyncBatchesParentsWithStableOrderingAndVisibility() {
+        await using var db = CreateContext();
+        var now = DateTimeOffset.UtcNow;
+        var emptyParentId = Guid.Parse("11111111-1000-0000-0000-000000000001");
+        var populatedParentId = Guid.Parse("11111111-1000-0000-0000-000000000002");
+        var hiddenParentId = Guid.Parse("11111111-1000-0000-0000-000000000003");
+        var imageId = Guid.Parse("11111111-1000-0000-0000-000000000004");
+        var firstVideoId = Guid.Parse("11111111-1000-0000-0000-000000000005");
+        var secondVideoId = Guid.Parse("11111111-1000-0000-0000-000000000006");
+        var hiddenChildId = Guid.Parse("11111111-1000-0000-0000-000000000007");
+        var childOfHiddenParentId = Guid.Parse("11111111-1000-0000-0000-000000000008");
+        db.Entities.AddRange(
+            new EntityRow { Id = emptyParentId, KindCode = EntityKind.VideoSeries.ToCode(), Title = "Empty", CreatedAt = now, UpdatedAt = now },
+            new EntityRow { Id = populatedParentId, KindCode = EntityKind.VideoSeries.ToCode(), Title = "Populated", CreatedAt = now, UpdatedAt = now },
+            new EntityRow { Id = hiddenParentId, KindCode = EntityKind.VideoSeries.ToCode(), Title = "Hidden", IsNsfw = true, CreatedAt = now, UpdatedAt = now },
+            new EntityRow { Id = imageId, KindCode = EntityKind.Image.ToCode(), Title = "Image", ParentEntityId = populatedParentId, SortOrder = 9, CreatedAt = now, UpdatedAt = now },
+            new EntityRow { Id = firstVideoId, KindCode = EntityKind.Video.ToCode(), Title = "First", ParentEntityId = populatedParentId, SortOrder = 1, CreatedAt = now, UpdatedAt = now },
+            new EntityRow { Id = secondVideoId, KindCode = EntityKind.Video.ToCode(), Title = "Second", ParentEntityId = populatedParentId, SortOrder = 2, CreatedAt = now, UpdatedAt = now },
+            new EntityRow { Id = hiddenChildId, KindCode = EntityKind.Video.ToCode(), Title = "Hidden child", ParentEntityId = populatedParentId, SortOrder = 0, IsNsfw = true, CreatedAt = now, UpdatedAt = now },
+            new EntityRow { Id = childOfHiddenParentId, KindCode = EntityKind.Video.ToCode(), Title = "Invisible subtree", ParentEntityId = hiddenParentId, CreatedAt = now, UpdatedAt = now });
+        await db.SaveChangesAsync();
+
+        var response = await CreateService(db).GetChildrenAsync(
+            [emptyParentId, populatedParentId, populatedParentId, hiddenParentId, Guid.NewGuid()],
+            hideNsfw: true,
+            CancellationToken.None);
+
+        Assert.Equal([emptyParentId, populatedParentId], response.Groups.Select(group => group.ParentId));
+        Assert.Empty(response.Groups[0].Items);
+        Assert.Equal(
+            [imageId, firstVideoId, secondVideoId],
+            response.Groups[1].Items.Select(item => item.Id));
+    }
+
+    [Fact]
     public async Task DisabledLibraryRootHidesInheritedAudioTrackAndDirectChildren() {
         await using var db = CreateContext();
         var enabledRootId = Guid.Parse("22222222-0000-0000-0000-000000000001");

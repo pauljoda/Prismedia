@@ -7,7 +7,7 @@
   import { useEntityDetailPage } from "$lib/components/entities/entity-detail-page-controller.svelte";
   import MediaProgressPanel from "$lib/components/MediaProgressPanel.svelte";
   import { PROGRESS_UNIT } from "$lib/api/generated/codes";
-  import { fetchEntity, type EntityCardFull } from "$lib/api/entities";
+  import { fetchEntity, fetchEntityChildren, type EntityCardFull } from "$lib/api/entities";
   import { updateEntityProgress } from "$lib/api/playback";
   import { getCapability } from "$lib/api/capabilities";
   import { refreshAfterManagedFileRevert } from "$lib/entities/entity-file-management";
@@ -181,19 +181,21 @@
       };
     }
 
-    const details = await Promise.all(
-      seasonIds.map((id) => fetchEntity(id, { signal })),
+    const seasonChildren = await fetchEntityChildren(seasonIds, { signal });
+    const episodeIds = seasonChildren.flatMap((group) =>
+      group.items
+        .filter((child) => child.kind === ENTITY_KIND.video)
+        .map((child) => child.id),
     );
-    const episodeIds = details.flatMap((detail) => getChildIds(detail, ENTITY_KIND.video));
     const progress = getCapability(nextSeries.capabilities, CAPABILITY_KIND.progress);
     const progressCards = progress?.currentEntityId && episodeIds.includes(progress.currentEntityId)
       ? thumbnailsToCards(await fetchOrderedEntityThumbnails([progress.currentEntityId], { signal }))
       : [];
 
     return {
-      counts: Object.fromEntries(details.map((detail: EntityCardFull) => [
-        detail.id,
-        getChildIds(detail, ENTITY_KIND.video).length,
+      counts: Object.fromEntries(seasonChildren.map((group) => [
+        group.parentId,
+        group.items.filter((child) => child.kind === ENTITY_KIND.video).length,
       ])),
       ids: episodeIds,
       progressCard: progressCards[0] ?? null,
