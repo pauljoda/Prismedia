@@ -473,6 +473,14 @@ public sealed class EntityKindMetadataTests {
     }
 
     [Fact]
+    public void MusicArtistDefinitionStopsAlbumIdentifyRootTraversal() {
+        Assert.True(EntityKindRegistry.Describe(EntityKind.MusicArtist)
+            .Identification.StopsDescendantAutoIdentifyRootTraversal);
+        Assert.False(EntityKindRegistry.Describe(EntityKind.VideoSeries)
+            .Identification.StopsDescendantAutoIdentifyRootTraversal);
+    }
+
+    [Fact]
     public void VideoStructurePoliciesDeclareTheEnforcedTargetGraph() {
         var movie = EntityKindRegistry.Describe(EntityKind.Movie).StructurePolicy;
         var video = EntityKindRegistry.Describe(EntityKind.Video).StructurePolicy;

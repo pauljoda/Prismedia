@@ -17,6 +17,9 @@ public sealed record EntityIdentificationPolicy {
     /// <param name="cascadeChildrenAutomatically">Whether automatic identification asks the provider to cascade into structural children.</param>
     /// <param name="usesParentExternalIdentityContext">Whether automatic identification supplies the structural parent's external identities.</param>
     /// <param name="allowsDirectReconcileChildTarget">Whether direct reconciliation may automatically identify a parented target.</param>
+    /// <param name="stopsDescendantAutoIdentifyRootTraversal">
+    /// Whether descendants stop at the child immediately below this kind when selecting their automatic-identification root.
+    /// </param>
     public EntityIdentificationPolicy(
         AutoIdentifySelectorKind? autoIdentifySelector = null,
         bool enumeratesChildren = false,
@@ -24,7 +27,8 @@ public sealed record EntityIdentificationPolicy {
         bool allowsParentedAutoIdentifyRoot = false,
         bool? cascadeChildrenAutomatically = null,
         bool usesParentExternalIdentityContext = false,
-        bool allowsDirectReconcileChildTarget = false) {
+        bool allowsDirectReconcileChildTarget = false,
+        bool stopsDescendantAutoIdentifyRootTraversal = false) {
         if (autoIdentifySelector is null &&
             (allowsParentedAutoIdentifyRoot ||
              cascadeChildrenAutomatically is not null ||
@@ -49,6 +53,7 @@ public sealed record EntityIdentificationPolicy {
             (cascadeChildrenAutomatically ?? true);
         UsesParentExternalIdentityContext = usesParentExternalIdentityContext;
         AllowsDirectReconcileChildTarget = allowsDirectReconcileChildTarget;
+        StopsDescendantAutoIdentifyRootTraversal = stopsDescendantAutoIdentifyRootTraversal;
     }
 
     /// <summary>User-facing automatic-identification selector family, when supported.</summary>
@@ -71,4 +76,9 @@ public sealed record EntityIdentificationPolicy {
 
     /// <summary>Whether direct reconciliation may automatically identify a parented target.</summary>
     public bool AllowsDirectReconcileChildTarget { get; }
+
+    /// <summary>
+    /// Whether a descendant's automatic-identification root stops at the entity directly below this kind.
+    /// </summary>
+    public bool StopsDescendantAutoIdentifyRootTraversal { get; }
 }

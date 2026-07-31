@@ -27,7 +27,8 @@ public sealed class MusicArtistEntityKindDefinition() : RootEntityKindDefinition
         identification: new(
             AutoIdentifySelectorKind.Audio,
             enumeratesChildren: true,
-            cascadeChildrenAutomatically: false),
+            cascadeChildrenAutomatically: false,
+            stopsDescendantAutoIdentifyRootTraversal: true),
         libraryVisibility: EntityLibraryVisibilityPolicy.DirectRoot,
         supportsFileDeletion: true,
         mediaQualityFamily: EntityMediaQualityFamily.Audio),

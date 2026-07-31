@@ -632,10 +632,9 @@ public sealed partial class AcquisitionHintApplier(
                 .Where(row => row.Id == parentId)
                 .Select(row => row.KindCode)
                 .FirstOrDefaultAsync(cancellationToken);
-            if (string.Equals(
-                    parentKindCode,
-                    EntityKind.MusicArtist.ToCode(),
-                    StringComparison.Ordinal)) {
+            if (parentKindCode is not null &&
+                EntityKindRegistry.TryDescribe(parentKindCode, out var parentDefinition) &&
+                parentDefinition.Identification.StopsDescendantAutoIdentifyRootTraversal) {
                 break;
             }
 
