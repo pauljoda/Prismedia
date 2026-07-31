@@ -28,6 +28,9 @@ public sealed class CollectionEntityKindDefinition()
         EntityKindBehavior.None),
       IEntityContainmentPolicy {
     /// <inheritdoc />
+    public override EntityProgressTopology ProgressTopology => EntityProgressTopology.None;
+
+    /// <inheritdoc />
     public override EntityStructurePolicy StructurePolicy => EntityStructurePolicy.RootOnly;
 
     private static readonly EntityKind[] AllowedKinds =

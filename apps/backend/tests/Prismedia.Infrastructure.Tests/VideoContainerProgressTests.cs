@@ -183,6 +183,7 @@ public sealed class VideoContainerProgressTests {
             var capabilities = new EntityCapabilityService(
                 repository,
                 new EfEntitySourceOwnershipProjection(db),
+                new EfEntityProgressTopologyResolver(db),
                 timeProvider: new FixedTimeProvider(now));
             return new Fixture(db, repository, capabilities);
         }

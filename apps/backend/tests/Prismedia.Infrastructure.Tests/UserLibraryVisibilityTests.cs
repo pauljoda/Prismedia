@@ -356,7 +356,7 @@ public sealed class UserLibraryVisibilityTests {
     private static EfEntityReadService CreateService(PrismediaDbContext db, ICurrentUserContext user) {
         var kindMappers = EntityMappers.Kinds(db, user);
         var repository = new EfEntityRepository(db, user, kindMappers, EntityMappers.Capabilities(db, user));
-        return new EfEntityReadService(db, user, repository, ThumbnailContributors.For(db));
+        return new EfEntityReadService(db, user, repository, ThumbnailContributors.For(db), new EfEntityProgressTopologyResolver(db));
     }
 
     private static Guid SeedCollection(

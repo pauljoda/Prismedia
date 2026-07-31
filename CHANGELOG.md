@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- Progress cursors now follow definition-declared work and ordered-container topology, preventing unrelated or inaccessible entities from redirecting reading state while preserving book and episodic rollups.
 - Images and audio tracks now retain deterministic direct library ownership, including in nested or disabled library roots, so access rules do not depend on scan order or folder ancestry.
 - Rebuilding generated media now preserves custom artwork and subtitles while safely clearing stale video cache assets for movies, episodes, and standalone videos.
 - Auto Identify settings now use backend-defined media families, so movies and series correctly follow the Video selection instead of exposing an ineffective Movies-only toggle.

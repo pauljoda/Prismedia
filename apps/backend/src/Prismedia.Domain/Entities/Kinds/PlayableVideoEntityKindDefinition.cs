@@ -44,6 +44,9 @@ public enum PlayableVideoScanPlacement {
 /// <typeparam name="TEntity">Concrete directly playable video entity.</typeparam>
 public abstract class PlayableVideoEntityKindDefinition<TEntity> : RootEntityKindDefinition<TEntity>, IPlayableVideoKindDefinition
     where TEntity : Entity {
+    /// <inheritdoc />
+    public abstract override EntityProgressTopology ProgressTopology { get; }
+
     /// <summary>Creates a directly playable video definition with optional kind-specific defaults.</summary>
     protected PlayableVideoEntityKindDefinition(
         EntityKind kind,

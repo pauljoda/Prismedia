@@ -221,6 +221,7 @@ public sealed class PlaybackSessionServiceTests {
         var capabilities = new EntityCapabilityService(
             repository,
             new EfEntitySourceOwnershipProjection(db),
+            new EfEntityProgressTopologyResolver(db),
             playbackEvents: new EfPlaybackEventStore(db, TestUserContext.Admin()));
 
         await capabilities.RecordPlaybackEventAsync(
@@ -332,6 +333,7 @@ public sealed class PlaybackSessionServiceTests {
         var capabilities = new EntityCapabilityService(
             repository,
             new EfEntitySourceOwnershipProjection(db),
+            new EfEntityProgressTopologyResolver(db),
             playbackEvents: events);
         var sessions = new PlaybackSessionService(capabilities, new NoOpTranscodeSessionService());
 

@@ -39,6 +39,11 @@ public sealed class AudioTrackEntityKindDefinition() : EntityKindDefinition<Audi
         mediaQualityFamily: EntityMediaQualityFamily.Audio),
     defaultCapabilities: static () => [new CapabilityPlayback()]) {
     /// <inheritdoc />
+    public override EntityProgressTopology ProgressTopology => EntityProgressTopology.Work(
+        EntityKind.Book,
+        fallsBackToDirect: true);
+
+    /// <inheritdoc />
     public override EntityStructurePolicy StructurePolicy { get; } =
         EntityStructurePolicy.RootOrChildOf(EntityKind.AudioLibrary, EntityKind.Book);
 

@@ -27,6 +27,9 @@ public sealed class VideoEntityKindDefinition() : PlayableVideoEntityKindDefinit
     libraryVisibility: EntityLibraryVisibilityPolicy.DirectRoot) {
 
     /// <inheritdoc />
+    public override EntityProgressTopology ProgressTopology => EntityProgressTopology.Direct;
+
+    /// <inheritdoc />
     public override bool OwnsMetadataRelationships => true;
 
     /// <inheritdoc />
@@ -72,6 +75,12 @@ public sealed class VideoEpisodeEntityKindDefinition() : PlayableVideoEntityKind
     browse: null,
     libraryVisibility: EntityLibraryVisibilityPolicy.DirectRoot,
     additionalDefaultCapabilities: static () => [new CapabilityPosition()]) {
+    /// <inheritdoc />
+    public override EntityProgressTopology ProgressTopology => EntityProgressTopology.OrderedRollup(
+        EntityKind.VideoEpisode,
+        EntityKind.VideoSeason,
+        EntityKind.VideoSeries);
+
     private static readonly IReadOnlyList<string> SortOrderPrecedence = Array.AsReadOnly([
         EntityPositionCodes.Episode,
         EntityPositionCodes.AbsoluteEpisode,

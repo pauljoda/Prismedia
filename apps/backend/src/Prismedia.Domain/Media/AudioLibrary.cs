@@ -35,6 +35,9 @@ public sealed class AudioLibraryEntityKindDefinition() : RootEntityKindDefinitio
         supportsFileDeletion: true,
         mediaQualityFamily: EntityMediaQualityFamily.Audio)) {
     /// <inheritdoc />
+    public override EntityProgressTopology ProgressTopology => EntityProgressTopology.None;
+
+    /// <inheritdoc />
     public override EntityStructurePolicy StructurePolicy { get; } =
         EntityStructurePolicy.RootOrChildOf(EntityKind.MusicArtist, EntityKind.AudioLibrary);
 

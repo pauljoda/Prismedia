@@ -26,6 +26,9 @@ public sealed class PersonEntityKindDefinition() : EntityKindDefinition<Person>(
     new EntityKindBehavior(supportsManualManagement: true),
     defaultCapabilities: static () => [new CapabilityDates(), new CapabilityLifetime()]) {
     /// <inheritdoc />
+    public override EntityProgressTopology ProgressTopology => EntityProgressTopology.None;
+
+    /// <inheritdoc />
     public override EntityStructurePolicy StructurePolicy => EntityStructurePolicy.RootOnly;
 
     /// <inheritdoc />

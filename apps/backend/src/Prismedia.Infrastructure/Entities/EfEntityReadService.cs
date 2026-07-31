@@ -32,6 +32,7 @@ public sealed partial class EfEntityReadService : IEntityReadService {
     private readonly PrismediaDbContext _db;
     private readonly Prismedia.Application.Security.ICurrentUserContext _currentUser;
     private readonly EfEntityRepository _repository;
+    private readonly IEntityProgressTopologyResolver _progressTopology;
     private readonly IReadOnlyList<Thumbnails.IThumbnailContributor> _thumbnailContributors;
     private readonly IEntitySourceOwnershipReader _sourceOwnership;
     private readonly IEntityFileDeletionRecoveryReader _deletionRecovery;
@@ -45,6 +46,7 @@ public sealed partial class EfEntityReadService : IEntityReadService {
         Prismedia.Application.Security.ICurrentUserContext currentUser,
         EfEntityRepository repository,
         IEnumerable<Thumbnails.IThumbnailContributor> thumbnailContributors,
+        IEntityProgressTopologyResolver progressTopology,
         AssetPathService? assets = null,
         IEntitySourceOwnershipReader? sourceOwnership = null,
         IEntityFileDeletionRecoveryReader? deletionRecovery = null,
@@ -52,6 +54,7 @@ public sealed partial class EfEntityReadService : IEntityReadService {
         _db = db;
         _currentUser = currentUser;
         _repository = repository;
+        _progressTopology = progressTopology;
         _thumbnailContributors = thumbnailContributors.ToArray();
         _sourceOwnershipFilter = sourceOwnership as EfEntitySourceOwnershipProjection
             ?? new EfEntitySourceOwnershipProjection(db);
@@ -522,7 +525,7 @@ public sealed partial class EfEntityReadService : IEntityReadService {
             ChildrenByKind = await ProjectDirectChildGroupsAsync(id, hideNsfw, enforceLibraryVisibility, cancellationToken),
             Relationships = await ProjectRelationshipGroupsAsync(id, hideNsfw, enforceLibraryVisibility, cancellationToken)
         };
-        return await EnrichBookProgressAsync(card, hideNsfw, cancellationToken);
+        return await EnrichProgressAsync(card, hideNsfw, cancellationToken);
     }
 
     private EntityCard SanitizeLocalAssets(EntityCard card) {
@@ -723,28 +726,36 @@ public sealed partial class EfEntityReadService : IEntityReadService {
         await ApplyEnabledLibraryVisibility(_db.Entities.AsNoTracking())
             .AnyAsync(entity => entity.Id == id, cancellationToken);
 
-    private async Task<EntityCard> EnrichBookProgressAsync(
+    private async Task<EntityCard> EnrichProgressAsync(
         EntityCard card,
         bool hideNsfw,
         CancellationToken cancellationToken) {
-        if (card.Kind != EntityKind.Book) {
-            return card;
-        }
-
         var progress = card.Capabilities.OfType<ProgressCapability>().FirstOrDefault();
         if (progress?.CurrentEntityId is not { } currentEntityId) {
             return card;
         }
 
-        if (hideNsfw && await IsEntityHiddenAsync(currentEntityId, cancellationToken)) {
-            return card with {
-                Capabilities = card.Capabilities
-                    .Where(capability => capability is not ProgressCapability)
-                    .ToArray()
-            };
+        var owner = await _progressTopology.ResolveOwnerAsync(card.Id, cancellationToken);
+        if (owner is null || owner.OwnerId != card.Id) {
+            return RemoveProgress(card);
         }
 
-        var position = await _repository.ResolveBookProgressPositionAsync(
+        var cursorVisible = !hideNsfw || !await IsEntityHiddenAsync(currentEntityId, cancellationToken);
+        if (cursorVisible && await RequiresLibraryVisibilityAsync(cancellationToken)) {
+            cursorVisible = await ApplyEnabledLibraryVisibility(_db.Entities.AsNoTracking())
+                .AnyAsync(entity => entity.Id == currentEntityId, cancellationToken);
+        }
+
+        if (!cursorVisible) {
+            return RemoveProgress(card);
+        }
+
+        var cursor = await _progressTopology.ResolveCursorAsync(card.Id, currentEntityId, cancellationToken);
+        if (cursor is null) {
+            return RemoveProgress(card);
+        }
+
+        var position = await _progressTopology.ResolveWorkPositionAsync(
             card.Id,
             currentEntityId,
             progress.Index,
@@ -764,6 +775,10 @@ public sealed partial class EfEntityReadService : IEntityReadService {
                     : capability).ToArray()
         };
     }
+
+    private static EntityCard RemoveProgress(EntityCard card) => card with {
+        Capabilities = card.Capabilities.Where(capability => capability is not ProgressCapability).ToArray()
+    };
 
     private async Task<EntityCard> EnrichBorrowedParentCoverAsync(
         EntityCard card,

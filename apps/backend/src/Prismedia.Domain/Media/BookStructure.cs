@@ -47,6 +47,9 @@ public sealed class BookVolumeEntityKindDefinition() : RootEntityKindDefinition<
         new CapabilityPosition()
     ]) {
     /// <inheritdoc />
+    public override EntityProgressTopology ProgressTopology => EntityProgressTopology.Work(EntityKind.Book);
+
+    /// <inheritdoc />
     public override EntityStructurePolicy StructurePolicy { get; } = EntityStructurePolicy.ChildOf(EntityKind.Book);
 
     /// <inheritdoc />
@@ -91,6 +94,9 @@ public sealed class BookChapterEntityKindDefinition() : EntityKindDefinition<Boo
         new CapabilitySource(),
         new CapabilityPosition()
     ]) {
+    /// <inheritdoc />
+    public override EntityProgressTopology ProgressTopology => EntityProgressTopology.Work(EntityKind.Book);
+
     /// <inheritdoc />
     public override EntityStructurePolicy StructurePolicy { get; } =
         EntityStructurePolicy.ChildOf(EntityKind.Book, EntityKind.BookVolume);
@@ -145,6 +151,9 @@ public sealed class BookPageEntityKindDefinition() : RootEntityKindDefinition<Bo
         new CapabilitySource(),
         new CapabilityPosition()
     ]) {
+    /// <inheritdoc />
+    public override EntityProgressTopology ProgressTopology => EntityProgressTopology.Work(EntityKind.Book);
+
     /// <inheritdoc />
     public override EntityStructurePolicy StructurePolicy { get; } = EntityStructurePolicy.ChildOf(EntityKind.BookChapter);
 }

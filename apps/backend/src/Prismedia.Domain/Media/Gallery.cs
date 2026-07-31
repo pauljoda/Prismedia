@@ -33,6 +33,9 @@ public sealed class GalleryEntityKindDefinition() : EntityKindDefinition<Gallery
         supportsFileDeletion: true),
     defaultCapabilities: static () => [new CapabilityCredits()]) {
     /// <inheritdoc />
+    public override EntityProgressTopology ProgressTopology => EntityProgressTopology.None;
+
+    /// <inheritdoc />
     public override EntityStructurePolicy StructurePolicy { get; } = EntityStructurePolicy.RootOrChildOf(EntityKind.Gallery);
 
     /// <inheritdoc />

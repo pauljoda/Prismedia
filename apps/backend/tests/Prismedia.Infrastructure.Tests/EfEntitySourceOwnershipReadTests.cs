@@ -195,9 +195,9 @@ public sealed class EfEntitySourceOwnershipReadTests {
             db,
             user,
             repository,
-            ThumbnailContributors.For(db),
+            ThumbnailContributors.For(db), new EfEntityProgressTopologyResolver(db),
             sourceOwnership: sourceOwnership);
-        var mutations = new EntityCapabilityService(repository, sourceOwnership);
+        var mutations = new EntityCapabilityService(repository, sourceOwnership, new EfEntityProgressTopologyResolver(db));
 
         var detail = Assert.IsAssignableFrom<IEntityCard>(await reads.GetAsync(
             movie.RootId, hideNsfw: false,
@@ -301,7 +301,7 @@ public sealed class EfEntitySourceOwnershipReadTests {
             db,
             user,
             repository,
-            ThumbnailContributors.For(db));
+            ThumbnailContributors.For(db), new EfEntityProgressTopologyResolver(db));
     }
 
     private static PrismediaDbContext CreateContext() =>

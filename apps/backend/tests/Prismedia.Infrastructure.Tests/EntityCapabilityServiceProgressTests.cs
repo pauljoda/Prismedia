@@ -11,6 +11,7 @@ public sealed class EntityCapabilityServiceProgressTests {
     private static readonly Guid BookId = Guid.Parse("11111111-1111-1111-1111-111111111111");
     private static readonly Guid ChapterOneId = Guid.Parse("22222222-2222-2222-2222-222222222222");
     private static readonly Guid ChapterTwoId = Guid.Parse("33333333-3333-3333-3333-333333333333");
+    private static readonly Guid OtherBookId = Guid.Parse("44444444-4444-4444-4444-444444444444");
 
     [Fact]
     public async Task BookProgressCanMoveForwardFromCompletedEarlierChapter() {
@@ -23,7 +24,7 @@ public sealed class EntityCapabilityServiceProgressTests {
             mode: ReaderMode.Paged,
             completedAt: completedAt,
             updatedAt: completedAt));
-        var service = new EntityCapabilityService(repository, new NoSourceOwnershipReader());
+        var service = new EntityCapabilityService(repository, new NoSourceOwnershipReader(), new TestProgressTopologyResolver());
 
         await service.UpdateProgressAsync(
             BookId,
@@ -57,7 +58,7 @@ public sealed class EntityCapabilityServiceProgressTests {
             mode: ReaderMode.Paged,
             completedAt: completedAt,
             updatedAt: completedAt));
-        var service = new EntityCapabilityService(repository, new NoSourceOwnershipReader());
+        var service = new EntityCapabilityService(repository, new NoSourceOwnershipReader(), new TestProgressTopologyResolver());
 
         await service.UpdateProgressAsync(
             BookId,
@@ -79,6 +80,59 @@ public sealed class EntityCapabilityServiceProgressTests {
     }
 
     [Fact]
+    public async Task BookProgressRejectsAnUnrelatedCursorWithoutSaving() {
+        var repository = new FakeEntityWriteRepository(new CapabilityProgress());
+        var service = new EntityCapabilityService(repository, new NoSourceOwnershipReader(), new TestProgressTopologyResolver());
+
+        var result = await service.UpdateProgressAsync(
+            BookId,
+            OtherBookId,
+            ProgressUnit.Page,
+            index: 1,
+            total: 4,
+            mode: ReaderMode.Paged,
+            completed: null,
+            reset: false,
+            location: null,
+            activitySeconds: null,
+            activityKind: null,
+            CancellationToken.None);
+
+        Assert.Null(result);
+        Assert.Null(repository.SavedEntity);
+        Assert.Null(repository.Book.Progress!.CurrentEntityId);
+    }
+
+    [Fact]
+    public async Task BookProgressReplacesAnInvalidStoredCursor() {
+        var repository = new FakeEntityWriteRepository(new CapabilityProgress(
+            currentEntityId: OtherBookId,
+            unit: ProgressUnit.Page,
+            index: 1,
+            total: 4,
+            mode: ReaderMode.Paged,
+            updatedAt: DateTimeOffset.UtcNow.AddMinutes(-5)));
+        var service = new EntityCapabilityService(repository, new NoSourceOwnershipReader(), new TestProgressTopologyResolver());
+
+        var result = await service.UpdateProgressAsync(
+            BookId,
+            ChapterOneId,
+            ProgressUnit.Page,
+            index: 0,
+            total: 2,
+            mode: ReaderMode.Paged,
+            completed: null,
+            reset: false,
+            location: null,
+            activitySeconds: null,
+            activityKind: null,
+            CancellationToken.None);
+
+        Assert.NotNull(result);
+        Assert.Equal(ChapterOneId, Assert.IsType<Book>(repository.SavedEntity).Progress!.CurrentEntityId);
+    }
+
+    [Fact]
     public async Task SingleFileBookProgressDoesNotMoveBackwardWithinTheCanonicalCursor() {
         var updatedAt = DateTimeOffset.UtcNow.AddMinutes(-5);
         var repository = new FakeEntityWriteRepository(new CapabilityProgress(
@@ -89,7 +143,7 @@ public sealed class EntityCapabilityServiceProgressTests {
             mode: ReaderMode.Paged,
             updatedAt: updatedAt,
             location: "epubcfi(/6/12!/4/2)"));
-        var service = new EntityCapabilityService(repository, new NoSourceOwnershipReader());
+        var service = new EntityCapabilityService(repository, new NoSourceOwnershipReader(), new TestProgressTopologyResolver());
 
         await service.UpdateProgressAsync(
             BookId,
@@ -124,6 +178,7 @@ public sealed class EntityCapabilityServiceProgressTests {
         var service = new EntityCapabilityService(
             repository,
             new NoSourceOwnershipReader(),
+            new TestProgressTopologyResolver(),
             activityEvents: activities);
 
         await service.UpdateProgressAsync(
@@ -161,6 +216,7 @@ public sealed class EntityCapabilityServiceProgressTests {
         var service = new EntityCapabilityService(
             repository,
             new NoSourceOwnershipReader(),
+            new TestProgressTopologyResolver(),
             activityEvents: activities);
 
         await service.UpdateProgressAsync(
@@ -192,6 +248,7 @@ public sealed class EntityCapabilityServiceProgressTests {
         var service = new EntityCapabilityService(
             repository,
             new NoSourceOwnershipReader(),
+            new TestProgressTopologyResolver(),
             playbackEvents: playbackEvents,
             activityEvents: activityEvents);
         var occurredAt = DateTimeOffset.UtcNow;
@@ -235,7 +292,7 @@ public sealed class EntityCapabilityServiceProgressTests {
     public async Task BookPlaybackAndProgressRemainSupported() {
         var book = new Book(Guid.NewGuid(), "Book", BookType.Comic, coverPageId: null);
         var repository = new SingleEntityWriteRepository(book);
-        var service = new EntityCapabilityService(repository, new NoSourceOwnershipReader());
+        var service = new EntityCapabilityService(repository, new NoSourceOwnershipReader(), new TestProgressTopologyResolver());
 
         var playback = await service.UpdatePlaybackAsync(
             book.Id,
@@ -272,6 +329,7 @@ public sealed class EntityCapabilityServiceProgressTests {
         var service = new EntityCapabilityService(
             repository,
             new NoSourceOwnershipReader(),
+            new TestProgressTopologyResolver(),
             playbackEvents: playbackEvents);
 
         var result = await service.UpdateProgressAsync(
@@ -302,7 +360,7 @@ public sealed class EntityCapabilityServiceProgressTests {
     public async Task PlayableVideoDefinitionsAllowMarkerAndPlaybackMutations(EntityKind kind) {
         var entity = CreatePlayableVideo(kind);
         var repository = new SingleEntityWriteRepository(entity);
-        var service = new EntityCapabilityService(repository, new NoSourceOwnershipReader());
+        var service = new EntityCapabilityService(repository, new NoSourceOwnershipReader(), new TestProgressTopologyResolver());
 
         var marker = await service.AddMarkerAsync(entity.Id, "Opening", 0, null, CancellationToken.None);
         var playback = await service.UpdatePlaybackAsync(
@@ -319,30 +377,11 @@ public sealed class EntityCapabilityServiceProgressTests {
         Assert.Equal(TimeSpan.FromSeconds(10), entity.PlaybackCapability?.Value.ResumeTime);
     }
 
-    [Theory]
-    [InlineData(EntityKind.Movie, 0)]
-    [InlineData(EntityKind.Video, 0)]
-    [InlineData(EntityKind.VideoEpisode, 1)]
-    public async Task OnlyEpisodicPlayableKindsResolveContainerProgressScopes(EntityKind kind, int expectedScopeCalls) {
-        var entity = CreatePlayableVideo(kind);
-        var repository = new SingleEntityWriteRepository(entity);
-        var service = new EntityCapabilityService(repository, new NoSourceOwnershipReader());
-
-        await service.UpdateVideoPlaybackAsync(
-            entity.Id,
-            positionSeconds: 90,
-            mediaDurationSeconds: 100,
-            completed: true,
-            CancellationToken.None);
-
-        Assert.Equal(expectedScopeCalls, repository.VideoProgressScopeCalls);
-    }
-
     [Fact]
     public async Task MissingMarkerUpdateAndDeleteDoNotAttachAnEmptyCapability() {
         var movie = new Movie(Guid.NewGuid(), "Movie", capabilities: []);
         var repository = new SingleEntityWriteRepository(movie);
-        var service = new EntityCapabilityService(repository, new NoSourceOwnershipReader());
+        var service = new EntityCapabilityService(repository, new NoSourceOwnershipReader(), new TestProgressTopologyResolver());
         var markerId = Guid.NewGuid();
 
         var updated = await service.UpdateMarkerAsync(movie.Id, markerId, "Opening", 0, null, CancellationToken.None);
@@ -375,6 +414,7 @@ public sealed class EntityCapabilityServiceProgressTests {
         }
 
         public Book Book { get; }
+        public Book OtherBook { get; } = new(OtherBookId, "Other comic", BookType.Comic, coverPageId: null);
         public Entity? SavedEntity { get; private set; }
 
         public Task<Entity?> FindAsync(Guid id, CancellationToken cancellationToken) =>
@@ -386,36 +426,20 @@ public sealed class EntityCapabilityServiceProgressTests {
         public Task<Guid?> FindParentIdAsync(Guid id, CancellationToken cancellationToken) =>
             Task.FromResult(Find(id)?.ParentEntityId);
 
-        public Task<BookProgressPosition?> ResolveBookProgressPositionAsync(
-            Guid bookId,
-            Guid currentEntityId,
-            int index,
-            int total,
-            CancellationToken cancellationToken) =>
-            Task.FromResult<BookProgressPosition?>(
-                bookId == BookId && currentEntityId == ChapterOneId
-                    ? new BookProgressPosition(ChapterOneId, index, Total: 4)
-                    : bookId == BookId && currentEntityId == ChapterTwoId
-                        ? new BookProgressPosition(ChapterTwoId, index + 2, Total: 4)
-                        : null);
-
-        public Task<IReadOnlyList<VideoProgressScopePosition>> ResolveVideoProgressScopesAsync(
-            Guid videoId,
-            CancellationToken cancellationToken) =>
-            Task.FromResult<IReadOnlyList<VideoProgressScopePosition>>([]);
-
         public Task SaveAsync(Entity entity, CancellationToken cancellationToken) {
             SavedEntity = entity;
             return Task.CompletedTask;
         }
 
         private Entity? Find(Guid id) =>
-            id == BookId ? Book : id == ChapterOneId ? _chapterOne : id == ChapterTwoId ? _chapterTwo : null;
+            id == BookId ? Book :
+            id == OtherBookId ? OtherBook :
+            id == ChapterOneId ? _chapterOne :
+            id == ChapterTwoId ? _chapterTwo : null;
     }
 
     private sealed class SingleEntityWriteRepository(Entity entity) : IEntityWriteRepository {
         public int SaveCount { get; private set; }
-        public int VideoProgressScopeCalls { get; private set; }
 
         public Task<Entity?> FindAsync(Guid id, CancellationToken cancellationToken) =>
             Task.FromResult(id == entity.Id ? entity : null);
@@ -425,21 +449,6 @@ public sealed class EntityCapabilityServiceProgressTests {
 
         public Task<Guid?> FindParentIdAsync(Guid id, CancellationToken cancellationToken) =>
             Task.FromResult(id == entity.Id ? entity.ParentEntityId : null);
-
-        public Task<BookProgressPosition?> ResolveBookProgressPositionAsync(
-            Guid bookId,
-            Guid currentEntityId,
-            int index,
-            int total,
-            CancellationToken cancellationToken) =>
-            Task.FromResult<BookProgressPosition?>(null);
-
-        public Task<IReadOnlyList<VideoProgressScopePosition>> ResolveVideoProgressScopesAsync(
-            Guid videoId,
-            CancellationToken cancellationToken) {
-            VideoProgressScopeCalls++;
-            return Task.FromResult<IReadOnlyList<VideoProgressScopePosition>>([]);
-        }
 
         public Task SaveAsync(Entity savedEntity, CancellationToken cancellationToken) {
             Assert.Same(entity, savedEntity);
@@ -453,6 +462,26 @@ public sealed class EntityCapabilityServiceProgressTests {
             IReadOnlyCollection<Guid> entityIds,
             CancellationToken cancellationToken) =>
             Task.FromResult<IReadOnlySet<Guid>>(new HashSet<Guid>());
+    }
+
+    private sealed class TestProgressTopologyResolver : IEntityProgressTopologyResolver {
+        public Task<ProgressOwnerResolution?> ResolveOwnerAsync(Guid requestedEntityId, CancellationToken cancellationToken) =>
+            Task.FromResult<ProgressOwnerResolution?>(new(requestedEntityId));
+
+        public Task<ProgressCursorResolution?> ResolveCursorAsync(Guid ownerId, Guid cursorId, CancellationToken cancellationToken) {
+            var valid = ownerId != BookId || cursorId == BookId || cursorId == ChapterOneId || cursorId == ChapterTwoId;
+            return Task.FromResult<ProgressCursorResolution?>(valid ? new(cursorId, cursorId) : null);
+        }
+
+        public Task<ProgressWorkPosition?> ResolveWorkPositionAsync(Guid ownerId, Guid cursorId, int index, int total, CancellationToken cancellationToken) =>
+            Task.FromResult<ProgressWorkPosition?>(ownerId == BookId && cursorId == ChapterOneId
+                ? new ProgressWorkPosition(ChapterOneId, index, 4)
+                : ownerId == BookId && cursorId == ChapterTwoId
+                    ? new ProgressWorkPosition(ChapterTwoId, index + 2, 4)
+                    : null);
+
+        public Task<IReadOnlyList<OrderedProgressScope>> ResolveOrderedScopesAsync(Guid itemId, CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<OrderedProgressScope>>([]);
     }
 
     private sealed class RecordingEntityActivityStore : IEntityActivityStore {

@@ -23,6 +23,9 @@ public sealed class AudioEntityKindDefinition() : EntityKindDefinition(
     search: null,
     behavior: new EntityKindBehavior(supportsFileDeletion: true)) {
     /// <inheritdoc />
+    public override EntityProgressTopology ProgressTopology => EntityProgressTopology.None;
+
+    /// <inheritdoc />
     public override EntityStructurePolicy StructurePolicy => EntityStructurePolicy.RootOnly;
 
     /// <inheritdoc />

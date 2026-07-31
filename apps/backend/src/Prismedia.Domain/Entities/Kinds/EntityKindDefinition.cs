@@ -67,6 +67,9 @@ public abstract class EntityKindDefinition {
     /// <summary>Typed domain identity represented by this definition.</summary>
     public EntityKind Kind { get; }
 
+    /// <summary>Explicit user-progress ownership and roll-up topology for this kind.</summary>
+    public abstract EntityProgressTopology ProgressTopology { get; }
+
     /// <summary>Stable database and API code.</summary>
     public string Code { get; }
 
@@ -318,6 +321,9 @@ public abstract class EntityKindDefinition {
 /// <typeparam name="TEntity">Concrete domain entity owned by the definition.</typeparam>
 public abstract class EntityKindDefinition<TEntity> : EntityKindDefinition
     where TEntity : Entity {
+    /// <inheritdoc />
+    public abstract override EntityProgressTopology ProgressTopology { get; }
+
     /// <summary>Creates a typed entity-kind definition.</summary>
     protected EntityKindDefinition(
         EntityKind kind,

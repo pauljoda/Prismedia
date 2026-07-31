@@ -32,6 +32,9 @@ public sealed class ImageEntityKindDefinition() : RootEntityKindDefinition<Image
         libraryVisibility: EntityLibraryVisibilityPolicy.AncestorRoot,
         supportsFileDeletion: true)) {
     /// <inheritdoc />
+    public override EntityProgressTopology ProgressTopology => EntityProgressTopology.None;
+
+    /// <inheritdoc />
     public override EntityStructurePolicy StructurePolicy { get; } = EntityStructurePolicy.RootOrChildOf(EntityKind.Gallery);
 
     /// <inheritdoc />

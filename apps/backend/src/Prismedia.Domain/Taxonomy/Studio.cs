@@ -24,6 +24,9 @@ public sealed class StudioEntityKindDefinition() : RootEntityKindDefinition<Stud
     static root => new Studio(root.Id, root.Title),
     behavior: new EntityKindBehavior(supportsManualManagement: true)) {
     /// <inheritdoc />
+    public override EntityProgressTopology ProgressTopology => EntityProgressTopology.None;
+
+    /// <inheritdoc />
     public override EntityStructurePolicy StructurePolicy => EntityStructurePolicy.RootOnly;
 }
 

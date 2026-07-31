@@ -29,6 +29,9 @@ public sealed class BookAuthorEntityKindDefinition() : RootEntityKindDefinition<
         supportsFileDeletion: true),
     defaultCapabilities: static () => [new CapabilityCredits()]) {
     /// <inheritdoc />
+    public override EntityProgressTopology ProgressTopology => EntityProgressTopology.None;
+
+    /// <inheritdoc />
     public override EntityStructurePolicy StructurePolicy => EntityStructurePolicy.RootOnly;
 
     /// <inheritdoc />

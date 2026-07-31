@@ -157,6 +157,7 @@ public static class EntityKindRegistry {
         ValidateAcquisitionProfiles(definitions);
         ValidateLibraryVisibilityPolicies(definitions);
         ValidateStructurePolicies(definitions);
+        ValidateProgressTopologies(definitions);
 
         return definitions;
     }
@@ -210,6 +211,82 @@ public static class EntityKindRegistry {
                 }
             }
         }
+    }
+
+    private static void ValidateProgressTopologies(IReadOnlyList<EntityKindDefinition> definitions) {
+        var byKind = definitions.ToDictionary(definition => definition.Kind);
+        foreach (var definition in definitions) {
+            switch (definition.ProgressTopology) {
+                case EntityProgressTopology.NoneTopology or EntityProgressTopology.DirectTopology:
+                    break;
+                case EntityProgressTopology.WorkTopology work:
+                    RequireProgressKind(byKind, definition, work.WorkKind, "work owner");
+                    if (byKind[work.WorkKind].ProgressTopology is not EntityProgressTopology.WorkTopology ownerWork ||
+                        ownerWork.WorkKind != work.WorkKind ||
+                        !CanReachStructuralAncestor(definition.Kind, work.WorkKind, byKind, new HashSet<EntityKind>())) {
+                        throw new InvalidOperationException(
+                            $"Entity kind '{definition.Code}' declares work owner '{work.WorkKind}', which must be a reachable matching work topology.");
+                    }
+                    break;
+                case EntityProgressTopology.OrderedContainerTopology container:
+                    RequireProgressKind(byKind, definition, container.ItemKind, "ordered item");
+                    if (byKind[container.ItemKind].ProgressTopology is not EntityProgressTopology.OrderedRollupTopology itemRollup ||
+                        itemRollup.ItemKind != container.ItemKind ||
+                        !itemRollup.ContainerKinds.Contains(definition.Kind)) {
+                        throw new InvalidOperationException(
+                            $"Entity kind '{definition.Code}' must be named by its ordered item's matching roll-up topology.");
+                    }
+                    break;
+                case EntityProgressTopology.OrderedRollupTopology rollup:
+                    if (rollup.ItemKind != definition.Kind || rollup.ContainerKinds.Count == 0 ||
+                        rollup.ContainerKinds.Distinct().Count() != rollup.ContainerKinds.Count) {
+                        throw new InvalidOperationException(
+                            $"Entity kind '{definition.Code}' must declare itself once as an ordered item with one or more distinct containers.");
+                    }
+
+                    foreach (var containerKind in rollup.ContainerKinds) {
+                        RequireProgressKind(byKind, definition, containerKind, "ordered container");
+                        if (byKind[containerKind].ProgressTopology is not EntityProgressTopology.OrderedContainerTopology containerTopology ||
+                            containerTopology.ItemKind != rollup.ItemKind ||
+                            !CanReachStructuralAncestor(definition.Kind, containerKind, byKind, new HashSet<EntityKind>())) {
+                            throw new InvalidOperationException(
+                                $"Entity kind '{definition.Code}' declares unreachable or incompatible ordered container '{containerKind}'.");
+                        }
+                    }
+                    break;
+                default:
+                    throw new InvalidOperationException($"Entity kind '{definition.Code}' has an unsupported progress topology.");
+            }
+        }
+    }
+
+    private static void RequireProgressKind(
+        IReadOnlyDictionary<EntityKind, EntityKindDefinition> byKind,
+        EntityKindDefinition definition,
+        EntityKind referencedKind,
+        string role) {
+        if (!byKind.ContainsKey(referencedKind)) {
+            throw new InvalidOperationException(
+                $"Entity kind '{definition.Code}' declares unknown {role} '{referencedKind}'.");
+        }
+    }
+
+    private static bool CanReachStructuralAncestor(
+        EntityKind childKind,
+        EntityKind ancestorKind,
+        IReadOnlyDictionary<EntityKind, EntityKindDefinition> byKind,
+        ISet<EntityKind> seen) {
+        if (childKind == ancestorKind) {
+            return true;
+        }
+        if (!seen.Add(childKind)) {
+            return false;
+        }
+
+        var reachable = byKind[childKind].StructurePolicy.AllowedParentKinds.Any(parentKind =>
+            byKind.ContainsKey(parentKind) && CanReachStructuralAncestor(parentKind, ancestorKind, byKind, seen));
+        seen.Remove(childKind);
+        return reachable;
     }
 
     private static void ValidateClientContracts(IReadOnlyList<EntityKindDefinition> definitions) {

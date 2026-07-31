@@ -47,6 +47,9 @@ public sealed class MovieEntityKindDefinition() : PlayableVideoEntityKindDefinit
     ];
 
     /// <inheritdoc />
+    public override EntityProgressTopology ProgressTopology => EntityProgressTopology.Direct;
+
+    /// <inheritdoc />
     public override EntityStructurePolicy StructurePolicy => EntityStructurePolicy.RootOnly;
 
     /// <inheritdoc />

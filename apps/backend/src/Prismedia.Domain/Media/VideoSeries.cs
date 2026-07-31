@@ -34,6 +34,9 @@ public sealed class VideoSeriesEntityKindDefinition() : EntityKindDefinition<Vid
         mediaQualityFamily: EntityMediaQualityFamily.Video),
     defaultCapabilities: static () => [new CapabilityCredits(), new CapabilityProgress()]) {
     /// <inheritdoc />
+    public override EntityProgressTopology ProgressTopology => EntityProgressTopology.OrderedContainer(EntityKind.VideoEpisode);
+
+    /// <inheritdoc />
     public override AcquisitionAncestorContextRole AcquisitionAncestorContextRole =>
         AcquisitionAncestorContextRole.Series;
 
@@ -134,6 +137,9 @@ public sealed class VideoSeasonEntityKindDefinition() : RootEntityKindDefinition
         new CapabilityCredits(),
         new CapabilityProgress()
     ]) {
+    /// <inheritdoc />
+    public override EntityProgressTopology ProgressTopology => EntityProgressTopology.OrderedContainer(EntityKind.VideoEpisode);
+
     private static readonly IReadOnlyList<string> SortOrderPrecedence = Array.AsReadOnly([
         EntityPositionCodes.Season,
         EntityPositionCodes.Sort

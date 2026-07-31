@@ -250,7 +250,7 @@ public sealed class OpdsCatalogServiceTests : IDisposable {
             db,
             TestUserContext.Admin(),
             repository,
-            ThumbnailContributors.For(db),
+            ThumbnailContributors.For(db), new EfEntityProgressTopologyResolver(db),
             assets);
         return new EfOpdsCatalogService(db, assets, entityReadService, TestUserContext.Admin());
     }

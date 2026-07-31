@@ -81,6 +81,7 @@ flowchart TD
   Kind --> Presentation["Presentation<br/>icons, aspect ratio, accents, artwork fit"]
   Kind --> Navigation["Client policy<br/>browse route, detail template, search order"]
   Kind --> Behavior["Domain policy<br/>identify, browse, engagement, deletion, pruning"]
+  Kind --> Progress["Progress topology<br/>direct, work-owned, ordered rollup, or none"]
   Kind --> Acquisition["Workflow policy<br/>requests, upload, replacement, profiles, quality"]
   Kind --> Composition["Composition<br/>default capabilities, structural placement and counts"]
   Kind --> Construction["Construction<br/>shared-root factory when no detail data exists"]
@@ -90,8 +91,8 @@ flowchart TD
 For example, `BookEntityKindDefinition` owns the stable `book` code, labels,
 archive storage shape, thumbnail presentation, routes, identify policy, default
 progress/playback capabilities, structural counts, request descriptors, allowed
-root/parent placement, acquisition profile, and the projection of `BookType`,
-`Format`, and cover choice.
+root/parent placement, work-owned progress topology, acquisition profile, and the
+projection of `BookType`, `Format`, and cover choice.
 The `Book` object owns the actual values and reading behavior for one book.
 
 Definitions use two construction forms:
@@ -224,6 +225,10 @@ Important details:
   in-memory global Entity graph.
 - Every kind explicitly declares whether it may be a root and which direct parent
   kinds it accepts. Parent declarations are canonical; inverse child lists are derived.
+- Every kind explicitly declares its progress topology. The shared resolver interprets
+  direct cursors, work-owned descendants, and ordered container rollups from those
+  definitions and persisted parent links; routes and repositories do not maintain
+  separate Book or episodic registries.
 - `Entity.AddChild`, repository hydration/save, wanted materialization, provider
   structure application, and scan persistence enforce the same discovered policy.
 - Non-structural relationships and credit edge metadata live in explicit link
@@ -529,6 +534,7 @@ These areas deserve scrutiny as the architecture continues to converge:
 | Where is one real example? | `apps/backend/src/Prismedia.Domain/Media/Book.cs` |
 | How are definitions found and checked? | `apps/backend/src/Prismedia.Domain/Entities/Kinds/EntityKindRegistry.cs` |
 | How is a domain Entity composed? | `apps/backend/src/Prismedia.Domain/Entities/Entity.cs` |
+| How is progress ownership resolved? | `apps/backend/src/Prismedia.Domain/Entities/Kinds/EntityProgressTopology.cs` and `apps/backend/src/Prismedia.Infrastructure/Entities/EfEntityProgressTopologyResolver.cs` |
 | How is it hydrated and saved? | `apps/backend/src/Prismedia.Infrastructure/Entities/EfEntityRepository.cs` |
 | How do mappers join automatically? | `apps/backend/src/Prismedia.Infrastructure/Entities/Mappers/EntityMappers.cs` and `DependencyInjection.cs` |
 | How does detail projection work? | `apps/backend/src/Prismedia.Application/Entities/EntityCardProjector.cs` |

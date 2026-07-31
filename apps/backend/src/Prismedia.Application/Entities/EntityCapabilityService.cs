@@ -18,6 +18,7 @@ namespace Prismedia.Application.Entities;
 /// </summary>
 public sealed class EntityCapabilityService {
     private readonly IEntityWriteRepository _entities;
+    private readonly IEntityProgressTopologyResolver _progressTopology;
     private readonly IEntitySourceOwnershipReader _sourceOwnership;
     private readonly IEntityFileDeletionRecoveryReader? _deletionRecovery;
     private readonly IEntityVisibilityChecker? _visibility;
@@ -30,7 +31,7 @@ public sealed class EntityCapabilityService {
     /// Maximum active duration accepted from one reader/player heartbeat. This bounds time inflation
     /// after suspended tabs or stale clients resume and report one oversized wall-clock interval.
     /// </summary>
-    private const double MaxBookActivityHeartbeatSeconds = 60;
+    private const double MaxReadingActivityHeartbeatSeconds = 60;
 
     /// <summary>
     /// Creates the service over the entity write port.
@@ -39,6 +40,7 @@ public sealed class EntityCapabilityService {
     public EntityCapabilityService(
         IEntityWriteRepository entities,
         IEntitySourceOwnershipReader sourceOwnership,
+        IEntityProgressTopologyResolver progressTopology,
         IEntityVisibilityChecker? visibility = null,
         IPlaybackEventStore? playbackEvents = null,
         TimeProvider? timeProvider = null,
@@ -46,6 +48,7 @@ public sealed class EntityCapabilityService {
         IEntityActivityStore? activityEvents = null,
         ICurrentUserContext? currentUser = null) {
         _entities = entities;
+        _progressTopology = progressTopology;
         _sourceOwnership = sourceOwnership;
         _deletionRecovery = deletionRecovery;
         _visibility = visibility;
@@ -216,7 +219,7 @@ public sealed class EntityCapabilityService {
         }, cancellationToken);
 
         if (card is not null) {
-            await RollUpVideoProgressAsync(id, card, cancellationToken);
+            await RollUpOrderedProgressAsync(id, card, cancellationToken);
         }
 
         return card;
@@ -335,8 +338,38 @@ public sealed class EntityCapabilityService {
         double? activitySeconds,
         BookActivityKind? activityKind,
         CancellationToken cancellationToken) {
-        var ownerId = await ResolveProgressOwnerIdAsync(id, currentEntityId, cancellationToken);
-        var entity = await _entities.FindShallowAsync(ownerId, cancellationToken);
+        // Progress ownership is derived from the requested entity only. A cursor is data within
+        // that owner tree; it must never be allowed to redirect this mutation to another work.
+        if (_visibility is not null &&
+            (!await _visibility.IsVisibleAsync(id, cancellationToken) ||
+             !await _visibility.IsVisibleAsync(currentEntityId, cancellationToken))) {
+            return null;
+        }
+
+        var owner = await _progressTopology.ResolveOwnerAsync(id, cancellationToken);
+        if (owner is null) {
+            return null;
+        }
+        if (_visibility is not null && !await _visibility.IsVisibleAsync(owner.OwnerId, cancellationToken)) {
+            return null;
+        }
+
+        var requested = await _entities.FindShallowAsync(id, cancellationToken);
+        if (requested is null) {
+            return null;
+        }
+
+        var proposedCursor = await _progressTopology.ResolveCursorAsync(
+            owner.OwnerId,
+            currentEntityId,
+            cancellationToken);
+        if (proposedCursor is null) {
+            return null;
+        }
+
+        var entity = owner.OwnerId == requested.Id
+            ? requested
+            : await _entities.FindShallowAsync(owner.OwnerId, cancellationToken);
         if (entity is null) {
             return null;
         }
@@ -346,8 +379,21 @@ public sealed class EntityCapabilityService {
         }
 
         var progress = GetOrAddDefaultCapability<CapabilityProgress>(entity)!;
+        ProgressCursorResolution? existingCursor = null;
+        if (progress.CurrentEntityId is { } existingCurrentId) {
+            var existingCursorVisible = _visibility is null ||
+                await _visibility.IsVisibleAsync(existingCurrentId, cancellationToken);
+            if (existingCursorVisible) {
+                existingCursor = await _progressTopology.ResolveCursorAsync(
+                    owner.OwnerId,
+                    existingCurrentId,
+                    cancellationToken);
+            }
+            // Invalid legacy or newly inaccessible stored cursors are treated as absent so a
+            // valid mutation can repair the user's progress instead of becoming permanently stuck.
+        }
         var now = _timeProvider.GetUtcNow();
-        var hasActivity = await AccumulateBookActivityAsync(
+        var hasActivity = await AccumulateReadingActivityAsync(
             entity,
             activitySeconds,
             activityKind,
@@ -366,34 +412,32 @@ public sealed class EntityCapabilityService {
         var normalizedIndex = normalizedTotal == 0
             ? 0
             : Math.Clamp(index, 0, normalizedTotal - 1);
-        var proposedPosition = entity.Kind == EntityKind.Book
-            ? await _entities.ResolveBookProgressPositionAsync(
-                ownerId,
-                currentEntityId,
-                normalizedIndex,
-                normalizedTotal,
-                cancellationToken)
-            : null;
+        var proposedPosition = await _progressTopology.ResolveWorkPositionAsync(
+            owner.OwnerId,
+            currentEntityId,
+            normalizedIndex,
+            normalizedTotal,
+            cancellationToken);
 
-        var targetChapterId = proposedPosition?.ChapterId ?? currentEntityId;
+        var targetCursorId = proposedPosition?.CursorId ?? proposedCursor.NormalizedCursorId;
         var normalizedLocation = string.IsNullOrWhiteSpace(location) ? null : location.Trim();
 
         // Explicit "start over": jump to the requested (start) position and clear completion,
         // bypassing the forward-only guard. MoveTo resets the completion flag.
         if (reset) {
-            progress.MoveTo(targetChapterId, unit, normalizedIndex, normalizedTotal, mode, now, normalizedLocation);
+            progress.MoveTo(targetCursorId, unit, normalizedIndex, normalizedTotal, mode, now, normalizedLocation);
             await _entities.SaveAsync(entity, cancellationToken);
             return await ProjectCardAsync(entity, cancellationToken);
         }
 
-        var existingPosition = progress.CurrentEntityId is { } existingCurrentId && entity.Kind == EntityKind.Book
-            ? await _entities.ResolveBookProgressPositionAsync(
-                ownerId,
-                existingCurrentId,
+        var existingPosition = existingCursor is null
+            ? null
+            : await _progressTopology.ResolveWorkPositionAsync(
+                owner.OwnerId,
+                existingCursor.CursorId,
                 progress.Index,
                 progress.Total,
-                cancellationToken)
-            : null;
+                cancellationToken);
 
         if (proposedPosition is not null &&
             existingPosition is not null &&
@@ -406,7 +450,7 @@ public sealed class EntityCapabilityService {
 
         if (proposedPosition is null &&
             existingPosition is null &&
-            IsEarlierComparableCursor(progress, targetChapterId, unit, normalizedIndex, normalizedTotal)) {
+            IsEarlierComparableCursor(progress, targetCursorId, unit, normalizedIndex, normalizedTotal)) {
             if (hasActivity) {
                 await _entities.SaveAsync(entity, cancellationToken);
             }
@@ -432,7 +476,7 @@ public sealed class EntityCapabilityService {
             return await ProjectCardAsync(entity, cancellationToken);
         }
 
-        progress.MoveTo(targetChapterId, unit, normalizedIndex, normalizedTotal, mode, now, normalizedLocation);
+        progress.MoveTo(targetCursorId, unit, normalizedIndex, normalizedTotal, mode, now, normalizedLocation);
 
         PlaybackEventAppend? completedEvent = null;
         if (completed == true) {
@@ -452,13 +496,13 @@ public sealed class EntityCapabilityService {
         return await ProjectCardAsync(entity, cancellationToken);
     }
 
-    private async Task<bool> AccumulateBookActivityAsync(
+    private async Task<bool> AccumulateReadingActivityAsync(
         Entity entity,
         double? activitySeconds,
         BookActivityKind? activityKind,
         DateTimeOffset occurredAt,
         CancellationToken cancellationToken) {
-        if (entity.Kind != EntityKind.Book ||
+        if (entity.Definition.Engagement.Mode != EntityEngagementMode.Reading ||
             activityKind is null ||
             activitySeconds is not { } reportedSeconds ||
             !double.IsFinite(reportedSeconds) ||
@@ -466,7 +510,7 @@ public sealed class EntityCapabilityService {
             return false;
         }
 
-        var boundedSeconds = Math.Min(reportedSeconds, MaxBookActivityHeartbeatSeconds);
+        var boundedSeconds = Math.Min(reportedSeconds, MaxReadingActivityHeartbeatSeconds);
         var playback = GetOrAddDefaultCapability<CapabilityPlayback>(entity);
         if (playback is null) {
             return false;
@@ -649,36 +693,32 @@ public sealed class EntityCapabilityService {
             _currentUser?.UserId);
     }
 
-    private async Task RollUpVideoProgressAsync(
-        Guid videoId,
-        EntityCard videoCard,
+    private async Task RollUpOrderedProgressAsync(
+        Guid playableId,
+        EntityCard playableCard,
         CancellationToken cancellationToken) {
-        if (EntityKindRegistry.Describe(videoCard.Kind) is not IPlayableVideoKindDefinition { IsEpisodic: true }) {
-            return;
-        }
-
-        var playback = videoCard.Capabilities.OfType<PlaybackCapability>().SingleOrDefault();
+        var playback = playableCard.Capabilities.OfType<PlaybackCapability>().SingleOrDefault();
         if (playback is null || playback.ResumeSeconds <= 0 && playback.CompletedAt is null) {
             return;
         }
 
-        var scopes = await _entities.ResolveVideoProgressScopesAsync(videoId, cancellationToken);
+        var scopes = await _progressTopology.ResolveOrderedScopesAsync(playableId, cancellationToken);
         foreach (var scope in scopes) {
-            await UpdateVideoProgressScopeAsync(scope, playback.CompletedAt is not null, cancellationToken);
+            await UpdateOrderedProgressScopeAsync(scope, playback.CompletedAt is not null, cancellationToken);
         }
     }
 
-    private async Task UpdateVideoProgressScopeAsync(
-        VideoProgressScopePosition scope,
-        bool episodeCompleted,
+    private async Task UpdateOrderedProgressScopeAsync(
+        OrderedProgressScope scope,
+        bool itemCompleted,
         CancellationToken cancellationToken) {
-        var targetEpisodeId = episodeCompleted && scope.NextEpisodeId is { } nextEpisodeId
-            ? nextEpisodeId
-            : scope.CurrentEpisodeId;
-        var targetIndex = episodeCompleted && scope.NextEpisodeId is not null
+        var targetItemId = itemCompleted && scope.NextItemId is { } nextItemId
+            ? nextItemId
+            : scope.CurrentItemId;
+        var targetIndex = itemCompleted && scope.NextItemId is not null
             ? scope.Index + 1
             : scope.Index;
-        var scopeCompleted = episodeCompleted && scope.NextEpisodeId is null;
+        var scopeCompleted = itemCompleted && scope.NextItemId is null;
 
         for (var attempt = 0; ; attempt++) {
             var owner = await _entities.FindShallowAsync(scope.OwnerId, cancellationToken);
@@ -698,7 +738,7 @@ public sealed class EntityCapabilityService {
 
             var now = _timeProvider.GetUtcNow();
             progress.MoveTo(
-                targetEpisodeId,
+                targetItemId,
                 ProgressUnit.Item,
                 targetIndex,
                 scope.Total,
@@ -717,55 +757,11 @@ public sealed class EntityCapabilityService {
         }
     }
 
-    private async Task<Guid> ResolveProgressOwnerIdAsync(
-        Guid requestedId,
-        Guid currentEntityId,
-        CancellationToken cancellationToken) {
-        var requestedOwner = await FindBookAncestorIdAsync(requestedId, cancellationToken);
-        if (requestedOwner is { } ownerId) {
-            return ownerId;
-        }
-
-        if (currentEntityId != requestedId) {
-            var currentOwner = await FindBookAncestorIdAsync(currentEntityId, cancellationToken);
-            if (currentOwner is { } currentOwnerId) {
-                return currentOwnerId;
-            }
-        }
-
-        return requestedId;
-    }
-
-    private async Task<Guid?> FindBookAncestorIdAsync(Guid startId, CancellationToken cancellationToken) {
-        var visited = new HashSet<Guid>();
-        var currentId = startId;
-
-        while (visited.Add(currentId)) {
-            var entity = await _entities.FindShallowAsync(currentId, cancellationToken);
-            if (entity is null) {
-                return null;
-            }
-
-            if (entity.Kind == EntityKind.Book) {
-                return entity.Id;
-            }
-
-            var parentId = entity.ParentEntityId
-                ?? await _entities.FindParentIdAsync(entity.Id, cancellationToken);
-            if (parentId is not { } resolvedParentId) {
-                return null;
-            }
-
-            currentId = resolvedParentId;
-        }
-
-        return null;
-    }
-
     private sealed record PlaybackMutationResult(bool WasApplied, PlaybackEventAppend? Event) {
         public static PlaybackMutationResult Rejected { get; } = new(false, null);
 
         public static PlaybackMutationResult Applied(PlaybackEventAppend? playbackEvent = null) =>
             new(true, playbackEvent);
     }
+
 }

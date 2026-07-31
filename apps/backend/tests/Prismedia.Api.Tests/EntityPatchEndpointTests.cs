@@ -254,6 +254,8 @@ public sealed class EntityPatchEndpointTests {
                         provider.GetRequiredService<FakeEntityWriteRepository>());
                     services.AddScoped<IPlaybackEventStore>(provider =>
                         provider.GetRequiredService<RecordingPlaybackEventStore>());
+                    services.RemoveAll<IEntityProgressTopologyResolver>();
+                    services.AddSingleton<IEntityProgressTopologyResolver>(new FakeProgressTopologyResolver());
                     services.RemoveAll<IEntitySourceOwnershipReader>();
                     services.AddSingleton<IEntitySourceOwnershipReader>(new NoEntityOwnershipReader());
                     services.RemoveAll<IEntityFileDeletionRecoveryReader>();
@@ -340,6 +342,41 @@ public sealed class EntityPatchEndpointTests {
             Task.FromResult<IReadOnlySet<Guid>>(new HashSet<Guid>());
     }
 
+    private sealed class FakeProgressTopologyResolver : IEntityProgressTopologyResolver {
+        public Task<ProgressOwnerResolution?> ResolveOwnerAsync(
+            Guid requestedEntityId,
+            CancellationToken cancellationToken) =>
+            Task.FromResult<ProgressOwnerResolution?>(
+                (requestedEntityId == EntityId || requestedEntityId == VolumeId || requestedEntityId == ChapterId)
+                    ? new ProgressOwnerResolution(EntityId)
+                    : null);
+
+        public Task<ProgressCursorResolution?> ResolveCursorAsync(
+            Guid ownerId,
+            Guid cursorId,
+            CancellationToken cancellationToken) =>
+            Task.FromResult<ProgressCursorResolution?>(
+                ownerId == EntityId && (cursorId == EntityId || cursorId == VolumeId || cursorId == ChapterId)
+                    ? new ProgressCursorResolution(cursorId, cursorId)
+                    : null);
+
+        public Task<ProgressWorkPosition?> ResolveWorkPositionAsync(
+            Guid ownerId,
+            Guid cursorId,
+            int index,
+            int total,
+            CancellationToken cancellationToken) =>
+            Task.FromResult<ProgressWorkPosition?>(
+                ownerId == EntityId && cursorId == ChapterId
+                    ? new ProgressWorkPosition(ChapterId, index, total)
+                    : null);
+
+        public Task<IReadOnlyList<OrderedProgressScope>> ResolveOrderedScopesAsync(
+            Guid itemId,
+            CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<OrderedProgressScope>>([]);
+    }
+
     private sealed class FakeEntityWriteRepository : IEntityWriteRepository {
         private readonly Book _entity = new(
             EntityId,
@@ -376,22 +413,6 @@ public sealed class EntityPatchEndpointTests {
             Entity? entity = id == EntityId ? _entity : id == VolumeId ? _volume : id == ChapterId ? _chapter : null;
             return Task.FromResult(entity?.ParentEntityId);
         }
-
-        public Task<BookProgressPosition?> ResolveBookProgressPositionAsync(
-            Guid bookId,
-            Guid currentEntityId,
-            int index,
-            int total,
-            CancellationToken cancellationToken) =>
-            Task.FromResult<BookProgressPosition?>(
-                bookId == EntityId && currentEntityId == ChapterId
-                    ? new BookProgressPosition(ChapterId, index, total)
-                    : null);
-
-        public Task<IReadOnlyList<VideoProgressScopePosition>> ResolveVideoProgressScopesAsync(
-            Guid videoId,
-            CancellationToken cancellationToken) =>
-            Task.FromResult<IReadOnlyList<VideoProgressScopePosition>>([]);
 
         public Task SaveAsync(Entity entity, CancellationToken cancellationToken) {
             SavedEntity = entity;
