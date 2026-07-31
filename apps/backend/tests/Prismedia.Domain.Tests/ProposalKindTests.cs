@@ -12,13 +12,13 @@ public sealed class ProposalKindTests {
     }
 
     [Fact]
-    public void ProposalKindAddsOnlyTheVideoEpisodeToken() {
+    public void ProposalKindHasNoProtocolOnlyTokens() {
         var entityCodes = Enum.GetValues<EntityKind>().Select(kind => kind.ToCode()).ToHashSet();
         var proposalExtras = CodecRegistry.Get<ProposalKind>().Codes
             .Where(code => !entityCodes.Contains(code))
             .ToArray();
 
-        Assert.Equal(["video-episode"], proposalExtras);
+        Assert.Empty(proposalExtras);
     }
 
     [Fact]
@@ -29,9 +29,9 @@ public sealed class ProposalKindTests {
     }
 
     [Fact]
-    public void VideoEpisodeCollapsesToVideo() {
-        Assert.Equal(EntityKind.Video, ProposalKind.VideoEpisode.ToEntityKind());
-        Assert.NotEqual(EntityKind.Video.ToProposalKind(), ProposalKind.VideoEpisode);
+    public void VideoEpisodePersistsAsItsOwnEntityKind() {
+        Assert.Equal(EntityKind.VideoEpisode, ProposalKind.VideoEpisode.ToEntityKind());
+        Assert.Equal(EntityKind.VideoEpisode.ToProposalKind(), ProposalKind.VideoEpisode);
     }
 
     [Fact]

@@ -3,14 +3,12 @@ using Prismedia.Domain.Entities;
 
 namespace Prismedia.Domain.Media;
 
-/// <summary>Defines the movie grouping kind and its shared metadata capabilities.</summary>
-public sealed class MovieEntityKindDefinition() : RootEntityKindDefinition<Movie>(
+/// <summary>Defines the directly playable movie kind and its release metadata capabilities.</summary>
+public sealed class MovieEntityKindDefinition() : PlayableVideoEntityKindDefinition<Movie>(
     EntityKind.Movie,
     "movie",
     "Movie",
     "Movies",
-    EntityKindCategory.Media,
-    EntityStorageShape.Folder,
     new EntityKindPresentation(
         EntityKindIcon.Movie,
         EntityKindIcon.Video,
@@ -22,26 +20,17 @@ public sealed class MovieEntityKindDefinition() : RootEntityKindDefinition<Movie
     new EntityKindNavigation(EntityKind.Movie, "movies", "/movies", "/movies/{id}"),
     new EntityKindSearch(0),
     static root => new Movie(root.Id, root.Title),
-    new EntityKindBehavior(
-        identification: new(
-            AutoIdentifySelectorKind.Video,
-            pluginFallbackKind: EntityKind.Video),
-        manualAcquisition: EntityManualAcquisitionPolicy.UploadAndReplacement,
-        engagement: new(
-            EntityEngagementMode.Playback,
-            aggregatesDirectChildPlayback: true,
-            derivesCompletionFromPlaybackFraction: true),
-        libraryVisibility: EntityLibraryVisibilityPolicy.FromDescendants(EntityKind.Video, 1),
-        supportsFileDeletion: true,
-        prunesWhenEmpty: true,
-        mediaQualityFamily: EntityMediaQualityFamily.Video,
-        supportsAtomicMediaUpgrade: true),
-    defaultCapabilities: static () =>
+    identification: new(
+        AutoIdentifySelectorKind.Video,
+        pluginFallbackKind: EntityKind.Video),
+    manualAcquisition: EntityManualAcquisitionPolicy.UploadAndReplacement,
+    browse: null,
+    libraryVisibility: EntityLibraryVisibilityPolicy.DirectRoot,
+    additionalDefaultCapabilities: static () =>
     [
         new CapabilityDescription(),
         new CapabilityDates(),
-        new CapabilitySource(),
-        new CapabilityCredits()
+        new CapabilitySource()
     ]) {
     /// <inheritdoc />
     public override bool OwnsMetadataRelationships => true;
@@ -55,6 +44,12 @@ public sealed class MovieEntityKindDefinition() : RootEntityKindDefinition<Movie
             IsContainer: false, ChildKind: null, Committable: true,
             AcquisitionKind: EntityKind.Movie)
     ];
+
+    /// <inheritdoc />
+    public override EntityStructurePolicy StructurePolicy { get; } = new(
+        requiresParent: false,
+        allowedParentKinds: [],
+        allowedChildKinds: []);
 
     /// <inheritdoc />
     public override AcquisitionProfileDefinition AcquisitionProfile { get; } = new(
@@ -75,27 +70,17 @@ public sealed class MovieEntityKindDefinition() : RootEntityKindDefinition<Movie
 }
 
 /// <summary>
-/// Domain model for a single-film video release with one playable video child.
+/// Domain model for a directly playable single-film video release.
 /// </summary>
 public sealed class Movie : Entity<MovieEntityKindDefinition> {
-    /// <summary>
-    /// Creates a movie aggregate around one or more playable video children.
-    /// </summary>
+    /// <summary>Creates a directly playable movie.</summary>
     /// <param name="id">Stable entity identifier.</param>
     /// <param name="title">Display title for the movie release.</param>
-    /// <param name="videos">Playable video children that belong to this movie.</param>
     /// <param name="capabilities">Optional capability overrides loaded from persistence.</param>
     public Movie(
         Guid id,
         string title,
-        IEnumerable<Entity>? videos = null,
         IEnumerable<EntityCapability>? capabilities = null)
         : base(id, title, capabilities) {
-        foreach (var video in videos ?? []) {
-            AddChild(video);
-        }
     }
-
-    /// <summary>Playable video files that make up this movie release.</summary>
-    public IReadOnlyList<Entity> Videos => ChildrenOf(EntityKind.Video);
 }

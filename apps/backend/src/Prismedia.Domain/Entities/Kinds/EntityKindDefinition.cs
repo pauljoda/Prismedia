@@ -19,6 +19,7 @@ public abstract class EntityKindDefinition {
         EntityPositionCodes.Sort
     ]);
     private readonly Func<IReadOnlyList<EntityCapability>> _defaultCapabilities;
+    private readonly IReadOnlyList<Type> _defaultCapabilityTypes;
 
     /// <summary>Creates one immutable kind definition.</summary>
     protected EntityKindDefinition(
@@ -46,6 +47,21 @@ public abstract class EntityKindDefinition {
         Behavior = behavior ?? throw new ArgumentNullException(nameof(behavior));
         ClrType = clrType;
         _defaultCapabilities = defaultCapabilities ?? EmptyCapabilities;
+        var firstCapabilities = ValidateDefaultCapabilities(_defaultCapabilities(), "declared");
+        var secondCapabilities = ValidateDefaultCapabilities(_defaultCapabilities(), "declared");
+        var firstTypes = firstCapabilities.Select(capability => capability.GetType()).ToArray();
+        var secondTypes = secondCapabilities.Select(capability => capability.GetType()).ToArray();
+        if (!firstTypes.SequenceEqual(secondTypes)) {
+            throw new InvalidOperationException(
+                $"Entity kind '{Code}' default capability factory returned inconsistent type sequences.");
+        }
+
+        if (firstCapabilities.Any(first => secondCapabilities.Any(second => ReferenceEquals(first, second)))) {
+            throw new InvalidOperationException(
+                $"Entity kind '{Code}' default capability factory must return fresh instances.");
+        }
+
+        _defaultCapabilityTypes = Array.AsReadOnly(firstTypes);
     }
 
     /// <summary>Typed domain identity represented by this definition.</summary>
@@ -124,6 +140,21 @@ public abstract class EntityKindDefinition {
     public EntityLibraryVisibilityPolicy LibraryVisibility => Behavior.LibraryVisibility;
 
     /// <summary>
+    /// Declared structural topology for this kind. Policies are declarative in this cutover and
+    /// intentionally do not yet constrain legacy relationship hydration or mutation.
+    /// </summary>
+    public virtual EntityStructurePolicy StructurePolicy => EntityStructurePolicy.Unspecified;
+
+    /// <summary>Concrete domain-capability types supplied for newly constructed entities.</summary>
+    public IReadOnlyList<Type> DefaultCapabilityTypes => _defaultCapabilityTypes;
+
+    /// <summary>Whether this kind supplies a default capability of the requested concrete type.</summary>
+    /// <typeparam name="TCapability">Concrete domain capability type.</typeparam>
+    public bool SupportsDefaultCapability<TCapability>()
+        where TCapability : EntityCapability =>
+        _defaultCapabilityTypes.Contains(typeof(TCapability));
+
+    /// <summary>
     /// Canonical position-code precedence used to derive a structural sort order. Kinds without
     /// an override use the shared media-structure ordering.
     /// </summary>
@@ -166,14 +197,12 @@ public abstract class EntityKindDefinition {
     /// Duplicate capability types are rejected so every capability remains unambiguous.
     /// </summary>
     public IReadOnlyList<EntityCapability> CreateDefaultCapabilities() {
-        var capabilities = _defaultCapabilities() ??
-            throw new InvalidOperationException($"Entity kind '{Code}' returned a null default-capability collection.");
-        var duplicate = capabilities
-            .GroupBy(capability => capability.GetType())
-            .FirstOrDefault(group => group.Count() > 1);
-        if (duplicate is not null) {
+        var capabilities = ValidateDefaultCapabilities(_defaultCapabilities(), "returned");
+        var actualTypes = capabilities.Select(capability => capability.GetType()).ToArray();
+        if (!_defaultCapabilityTypes.SequenceEqual(actualTypes)) {
             throw new InvalidOperationException(
-                $"Entity kind '{Code}' declares default capability '{duplicate.Key.Name}' more than once.");
+                $"Entity kind '{Code}' declared [{string.Join(", ", _defaultCapabilityTypes.Select(type => type.Name))}] " +
+                $"but returned [{string.Join(", ", actualTypes.Select(type => type.Name))}].");
         }
 
         return capabilities;
@@ -220,6 +249,28 @@ public abstract class EntityKindDefinition {
             : value.Trim();
 
     private static IReadOnlyList<EntityCapability> EmptyCapabilities() => [];
+
+    private IReadOnlyList<EntityCapability> ValidateDefaultCapabilities(
+        IReadOnlyList<EntityCapability>? capabilities,
+        string source) {
+        if (capabilities is null) {
+            throw new InvalidOperationException($"Entity kind '{Code}' returned a null {source} default-capability collection.");
+        }
+
+        if (capabilities.Any(capability => capability is null)) {
+            throw new InvalidOperationException($"Entity kind '{Code}' returned a null default capability.");
+        }
+
+        var duplicate = capabilities
+            .GroupBy(capability => capability.GetType())
+            .FirstOrDefault(group => group.Count() > 1);
+        if (duplicate is not null) {
+            throw new InvalidOperationException(
+                $"Entity kind '{Code}' declares default capability '{duplicate.Key.Name}' more than once.");
+        }
+
+        return capabilities;
+    }
 }
 
 /// <summary>Definition base that binds a kind to exactly one concrete domain entity type.</summary>

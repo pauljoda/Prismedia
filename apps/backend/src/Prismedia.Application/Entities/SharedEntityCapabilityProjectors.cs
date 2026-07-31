@@ -74,6 +74,15 @@ internal sealed class PlaybackCapabilityProjector : EntityCapabilityProjector<Pl
             : null;
 }
 
+[EntityCapabilityProjector(65)]
+internal sealed class PlayableVideoCapabilityProjector : EntityCapabilityProjector<PlayableVideoCapability> {
+    public override PlayableVideoCapability? Project(EntityCapabilityProjectionContext context) =>
+        context.Entity.Definition is IPlayableVideoKindDefinition &&
+        context.Entity.EntityFiles.Any(file => file.Role == EntityFileRole.Source)
+            ? new PlayableVideoCapability()
+            : null;
+}
+
 [EntityCapabilityProjector(70)]
 internal sealed class MarkersCapabilityProjector : EntityCapabilityProjector<MarkersCapability> {
     public override MarkersCapability? Project(EntityCapabilityProjectionContext context) =>

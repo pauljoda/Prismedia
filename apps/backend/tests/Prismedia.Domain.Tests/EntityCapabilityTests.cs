@@ -82,9 +82,10 @@ public sealed class EntityCapabilityTests {
             Guid.Parse("ffffffff-ffff-ffff-ffff-ffffffffffff"),
             "Season 1",
             parentEntityId: null);
-        var episode = new Video(
+        var episode = new VideoEpisode(
             Guid.Parse("11111111-1111-1111-1111-111111111111"),
-            "Episode 1");
+            "Episode 1",
+            parentEntityId: null);
         var series = new VideoSeries(
             Guid.Parse("22222222-2222-2222-2222-222222222222"),
             "Series");
@@ -93,10 +94,10 @@ public sealed class EntityCapabilityTests {
         series.AddChild(episode);
 
         Assert.Same(season, Assert.Single(series.ChildrenOf<VideoSeason>()));
-        Assert.Same(episode, Assert.Single(series.ChildrenOf<Video>()));
+        Assert.Same(episode, Assert.Single(series.ChildrenOf<VideoEpisode>()));
         Assert.Equal([season, episode], series.ChildEntities);
         Assert.Equal([season], series.ChildrenByKind[EntityKind.VideoSeason]);
-        Assert.Equal([episode], series.ChildrenByKind[EntityKind.Video]);
+        Assert.Equal([episode], series.ChildrenByKind[EntityKind.VideoEpisode]);
     }
 
     [Fact]
@@ -187,5 +188,19 @@ public sealed class EntityCapabilityTests {
         Assert.Same(EntityKindRegistry.Describe(EntityKind.Image), image.Definition);
         Assert.NotNull(video.Credits);
         Assert.Empty(image.Capabilities);
+    }
+
+    [Fact]
+    public void VideoSeriesRetainsDirectEpisodesWhenItAlsoHasSeasons() {
+        var series = new VideoSeries(Guid.NewGuid(), "Series");
+        var season = new VideoSeason(Guid.NewGuid(), "Season 1", series.Id);
+        var directEpisode = new VideoEpisode(Guid.NewGuid(), "Special", series.Id);
+
+        series.AddChild(season);
+        series.AddChild(directEpisode);
+
+        Assert.Equal(VideoSeriesRenderingMode.Mixed, series.RenderingMode);
+        Assert.Same(directEpisode, Assert.Single(series.Episodes));
+        Assert.Same(season, Assert.Single(series.Seasons));
     }
 }

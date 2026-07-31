@@ -2,6 +2,7 @@ using Prismedia.Api.Codegen;
 using Prismedia.Application.Requests;
 using Prismedia.Contracts.Entities;
 using Prismedia.Domain.Entities;
+using System.Reflection;
 
 namespace Prismedia.Api.Tests;
 
@@ -29,6 +30,16 @@ public sealed class CodesManifestContractTests {
         Assert.Equal(
             new CodeFamilyManifestEntry("ENTITY_KIND", "EntityKindCode"),
             manifest.CodeFamilies[nameof(EntityKind)]);
+    }
+
+    [Fact]
+    public void CapabilityManifestDiscoversPlayableVideoMarker() {
+        var capabilityKinds = CodesManifest.Build().CapabilityKinds;
+        var playableVideoKind = typeof(PlayableVideoCapability)
+            .GetCustomAttribute<CapabilityKindAttribute>()!
+            .Kind;
+
+        Assert.Contains(playableVideoKind, capabilityKinds);
     }
 
     [Fact]
@@ -155,7 +166,7 @@ public sealed class CodesManifestContractTests {
         Assert.Equal(
             EntityEngagementMode.Playback.ToCode(),
             kinds[EntityKind.AudioLibrary.ToCode()].EngagementMode);
-        Assert.True(kinds[EntityKind.Movie.ToCode()].AggregatesDirectChildPlayback);
+        Assert.False(kinds[EntityKind.Movie.ToCode()].AggregatesDirectChildPlayback);
         Assert.False(kinds[EntityKind.Video.ToCode()].AggregatesDirectChildPlayback);
 
         var selectors = manifest
@@ -240,7 +251,7 @@ public sealed class CodesManifestContractTests {
         var episode = Assert.Single(manifest, kind => kind.Kind == RequestMediaKind.Episode.ToCode());
         Assert.False(episode.Discoverable);
         Assert.Null(episode.ChildNoun);
-        Assert.Equal(EntityKind.Video.ToCode(), episode.AcquisitionKind);
+        Assert.Equal(EntityKind.VideoEpisode.ToCode(), episode.AcquisitionKind);
         Assert.Equal(EntityKind.VideoSeries.ToCode(), episode.ProfileKind);
         Assert.Equal(LibraryRootMediaCapability.ScanVideos.ToCode(), episode.RootFlag);
         Assert.Equal(RequestReviewSelection.Root.ToCode(), episode.ReviewSelection);

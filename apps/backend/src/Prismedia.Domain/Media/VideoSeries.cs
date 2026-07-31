@@ -28,11 +28,11 @@ public sealed class VideoSeriesEntityKindDefinition() : EntityKindDefinition<Vid
     new EntityKindBehavior(
         identification: new(AutoIdentifySelectorKind.Video, enumeratesChildren: true),
         engagement: new(EntityEngagementMode.Playback),
-        libraryVisibility: EntityLibraryVisibilityPolicy.FromDescendants(EntityKind.Video, 2),
+        libraryVisibility: EntityLibraryVisibilityPolicy.FromDescendants(EntityKind.VideoEpisode, 2),
         supportsFileDeletion: true,
         prunesWhenEmpty: true,
         mediaQualityFamily: EntityMediaQualityFamily.Video),
-    defaultCapabilities: static () => [new CapabilityCredits()]) {
+    defaultCapabilities: static () => [new CapabilityCredits(), new CapabilityProgress()]) {
     /// <inheritdoc />
     public override bool OwnsMetadataRelationships => true;
 
@@ -40,7 +40,7 @@ public sealed class VideoSeriesEntityKindDefinition() : EntityKindDefinition<Vid
     public override IReadOnlyList<EntityStructuralCountDefinition> StructuralThumbnailCounts =>
     [
         new(EntityKind.VideoSeason, 1, ThumbnailMetaIcons.Season),
-        new(EntityKind.Video, 2, ThumbnailMetaIcons.Episode)
+        new(EntityKind.VideoEpisode, 2, ThumbnailMetaIcons.Episode)
     ];
 
     /// <inheritdoc />
@@ -55,6 +55,12 @@ public sealed class VideoSeriesEntityKindDefinition() : EntityKindDefinition<Vid
             IsContainer: true, ChildKind: RequestMediaKind.Season, Committable: true,
             AcquisitionKind: EntityKind.VideoSeason)
     ];
+
+    /// <inheritdoc />
+    public override EntityStructurePolicy StructurePolicy { get; } = new(
+        requiresParent: false,
+        allowedParentKinds: [],
+        allowedChildKinds: [EntityKind.VideoSeason, EntityKind.VideoEpisode]);
 
     /// <inheritdoc />
     public override AcquisitionProfileDefinition AcquisitionProfile { get; } = new(
@@ -113,7 +119,7 @@ public sealed class VideoSeasonEntityKindDefinition() : RootEntityKindDefinition
         identification: new(enumeratesChildren: true),
         manualAcquisition: EntityManualAcquisitionPolicy.Upload,
         engagement: new(EntityEngagementMode.Playback),
-        libraryVisibility: EntityLibraryVisibilityPolicy.FromDescendants(EntityKind.Video, 1),
+        libraryVisibility: EntityLibraryVisibilityPolicy.FromDescendants(EntityKind.VideoEpisode, 1),
         supportsFileDeletion: true,
         prunesWhenEmpty: true,
         mediaQualityFamily: EntityMediaQualityFamily.Video),
@@ -123,7 +129,8 @@ public sealed class VideoSeasonEntityKindDefinition() : RootEntityKindDefinition
         new CapabilityDates(),
         new CapabilitySource(),
         new CapabilityPosition(),
-        new CapabilityCredits()
+        new CapabilityCredits(),
+        new CapabilityProgress()
     ]) {
     private static readonly IReadOnlyList<string> SortOrderPrecedence = Array.AsReadOnly([
         EntityPositionCodes.Season,
@@ -135,7 +142,7 @@ public sealed class VideoSeasonEntityKindDefinition() : RootEntityKindDefinition
 
     /// <inheritdoc />
     public override IReadOnlyList<EntityStructuralCountDefinition> StructuralThumbnailCounts =>
-        [new(EntityKind.Video, 1, ThumbnailMetaIcons.Episode)];
+        [new(EntityKind.VideoEpisode, 1, ThumbnailMetaIcons.Episode)];
 
     /// <inheritdoc />
     public override IReadOnlyList<RequestKindDescriptor> RequestKinds =>
@@ -147,6 +154,12 @@ public sealed class VideoSeasonEntityKindDefinition() : RootEntityKindDefinition
             AcquisitionKind: EntityKind.VideoSeason, Discoverable: false, AcquireFromEntity: true,
             MaterializeChildPhantoms: true)
     ];
+
+    /// <inheritdoc />
+    public override EntityStructurePolicy StructurePolicy { get; } = new(
+        requiresParent: true,
+        allowedParentKinds: [EntityKind.VideoSeries],
+        allowedChildKinds: [EntityKind.VideoEpisode]);
 }
 
 /// <summary>
@@ -158,7 +171,7 @@ public sealed class VideoSeries : Entity<VideoSeriesEntityKindDefinition> {
         string title,
         string? status = null,
         IEnumerable<Entity>? children = null,
-        IEnumerable<Entity>? videos = null,
+        IEnumerable<Entity>? episodes = null,
         IEnumerable<EntityCapability>? capabilities = null)
         : base(id, title, capabilities) {
         Status = status;
@@ -167,24 +180,28 @@ public sealed class VideoSeries : Entity<VideoSeriesEntityKindDefinition> {
             AddChild(child);
         }
 
-        foreach (var video in videos ?? []) {
-            AddChild(video);
+        foreach (var episode in episodes ?? []) {
+            AddChild(episode);
         }
     }
 
     public string? Status { get; private set; }
 
-    /// <summary>Direct child videos in insertion order.</summary>
-    public IReadOnlyList<Entity> Videos => ChildrenOf(EntityKind.Video);
+    /// <summary>Direct child episodes in insertion order.</summary>
+    public IReadOnlyList<Entity> Episodes => ChildrenOf(EntityKind.VideoEpisode);
 
     /// <summary>Child seasons in insertion order.</summary>
     public IReadOnlyList<Entity> Seasons => ChildrenOf(EntityKind.VideoSeason);
 
     /// <summary>
-    /// Layout for the series detail view, derived from whether the series has season children.
+    /// Layout for the series detail view, preserving both direct episodes and season groups when
+    /// the target series topology contains both.
     /// </summary>
-    public VideoSeriesRenderingMode RenderingMode =>
-        Seasons.Count > 0 ? VideoSeriesRenderingMode.Seasons : VideoSeriesRenderingMode.Flat;
+    public VideoSeriesRenderingMode RenderingMode => (Episodes.Count > 0, Seasons.Count > 0) switch {
+        (true, true) => VideoSeriesRenderingMode.Mixed,
+        (false, true) => VideoSeriesRenderingMode.Seasons,
+        _ => VideoSeriesRenderingMode.Flat
+    };
 }
 
 /// <summary>
@@ -196,7 +213,7 @@ public sealed class VideoSeason : Entity<VideoSeasonEntityKindDefinition> {
         string title,
         Guid? parentEntityId,
         IEnumerable<EntityCapability>? capabilities = null,
-        IEnumerable<Entity>? videos = null,
+        IEnumerable<Entity>? episodes = null,
         int? sortOrder = null)
         : base(
             id,
@@ -204,10 +221,11 @@ public sealed class VideoSeason : Entity<VideoSeasonEntityKindDefinition> {
             capabilities,
             parentEntityId: parentEntityId,
             sortOrder: sortOrder) {
-        foreach (var video in videos ?? []) {
-            AddChild(video);
+        foreach (var episode in episodes ?? []) {
+            AddChild(episode);
         }
     }
 
-    public IReadOnlyList<Entity> Videos => ChildrenOf(EntityKind.Video);
+    /// <summary>Direct child episodes in insertion order.</summary>
+    public IReadOnlyList<Entity> Episodes => ChildrenOf(EntityKind.VideoEpisode);
 }

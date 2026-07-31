@@ -25,9 +25,7 @@ public sealed class EntityCardProjectorContractTests {
     [Fact]
     public void ProjectsFileManagementOnlyForSourceBackedSafeManagedTreeRoots() {
         var emptyMovie = EntityCardProjector.ToCard(new Movie(Guid.NewGuid(), "Wanted Arrival"), hasSourceBackedSubtree: false);
-        var video = new Video(Guid.NewGuid(), "Arrival");
-        video.AttachFile(EntityFileRole.Source, "/media/movies/Arrival/Arrival.mkv", "video/x-matroska");
-        var sourceBackedMovie = EntityCardProjector.ToCard(new Movie(Guid.NewGuid(), "Arrival", [video]), hasSourceBackedSubtree: true);
+        var sourceBackedMovie = EntityCardProjector.ToCard(new Movie(Guid.NewGuid(), "Arrival"), hasSourceBackedSubtree: true);
         var archiveChapter = new BookChapter(Guid.NewGuid(), "Chapter 1", coverPageId: null);
         archiveChapter.AttachFile(EntityFileRole.Source, "/media/books/Arrival.cbz::001.jpg", "image/jpeg");
         var archivePage = new BookPage(Guid.NewGuid(), "Page 1");
@@ -41,6 +39,24 @@ public sealed class EntityCardProjectorContractTests {
         Assert.Empty(EntityCardProjector.ToCard(archiveChapter, hasSourceBackedSubtree: true).Capabilities.OfType<FileManagementCapability>());
         Assert.Empty(EntityCardProjector.ToCard(archivePage, hasSourceBackedSubtree: true).Capabilities.OfType<FileManagementCapability>());
         Assert.Empty(studio.Capabilities.OfType<FileManagementCapability>());
+    }
+
+    [Fact]
+    public void ProjectsPlayableVideoOnlyForPlayableDefinitionsWithTheirOwnSourceFile() {
+        var movie = new Movie(Guid.NewGuid(), "Arrival");
+        movie.AttachFile(EntityFileRole.Source, "/media/movies/Arrival.mkv", "video/x-matroska");
+        var standalone = new Video(Guid.NewGuid(), "Clip");
+        standalone.AttachFile(EntityFileRole.Source, "/media/videos/Clip.mkv", "video/x-matroska");
+        var episode = new VideoEpisode(Guid.NewGuid(), "Pilot", Guid.NewGuid());
+        episode.AttachFile(EntityFileRole.Source, "/media/tv/Pilot.mkv", "video/x-matroska");
+        var series = new VideoSeries(Guid.NewGuid(), "Series");
+        series.AttachFile(EntityFileRole.Source, "/media/tv/Series.mkv", "video/x-matroska");
+
+        AssertCapability<PlayableVideoCapability>(EntityCardProjector.ToCard(movie, hasSourceBackedSubtree: true));
+        AssertCapability<PlayableVideoCapability>(EntityCardProjector.ToCard(standalone, hasSourceBackedSubtree: true));
+        AssertCapability<PlayableVideoCapability>(EntityCardProjector.ToCard(episode, hasSourceBackedSubtree: true));
+        Assert.Empty(EntityCardProjector.ToCard(series, hasSourceBackedSubtree: true)
+            .Capabilities.OfType<PlayableVideoCapability>());
     }
 
     [Fact]

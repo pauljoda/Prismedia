@@ -176,6 +176,16 @@ the signature of the last successfully reconciled adjacent-sidecar set. Video sc
 include subtitle sidecars even though those files do not become Entities, so sidecar-only changes
 invalidate and retry the managed embedded/sidecar manifest.
 
+Directly playable video is a definition facet, not a kind switch. `Movie`, standalone
+`Video`, and `VideoEpisode` opt into `IPlayableVideoKindDefinition`, which supplies the
+shared probe/fingerprint/preview/trickplay/subtitle processing contract, direct playback
+defaults, and file-management capabilities. `PlayableVideoCapability` is a document marker
+emitted only when one of those entities directly owns a `source` file; it is deliberately
+distinct from user-state `PlaybackCapability`. The declared target video structure is
+`VideoSeries -> (VideoSeason | VideoEpisode)`, `VideoSeason -> VideoEpisode`, with `Movie`
+and standalone `Video` as root leaves. Definition discovery validates the declarations, but
+relationship mutation and persistence do not enforce them until legacy rows are migrated.
+
 `CapabilityCredits` is emitted as the shared `CreditsCapability` contract capability.
 It persists as `EntityRelationshipLinkRow` rows with relationship code
 `credits`/`cast`, storing only the target `Person` id plus the `CreditRole` (and optional

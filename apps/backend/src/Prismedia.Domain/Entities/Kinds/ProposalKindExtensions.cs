@@ -7,14 +7,13 @@ namespace Prismedia.Domain.Entities;
 public static class ProposalKindExtensions {
     /// <summary>
     /// Maps a proposal kind to the entity kind Prismedia persists it as. Every proposal kind shares
-    /// its code with an <see cref="EntityKind"/> except <see cref="ProposalKind.VideoEpisode"/>,
-    /// which collapses to <see cref="EntityKind.Video"/>.
+/// its code with an <see cref="EntityKind"/>.
     /// </summary>
     public static EntityKind ToEntityKind(this ProposalKind kind) => kind.ToPersistedEntityKind();
 
     /// <summary>
-    /// Lifts an entity kind into the proposal vocabulary. The mapping is identity by code; no entity
-    /// kind maps to <see cref="ProposalKind.VideoEpisode"/> (that token is provider-only).
+    /// Lifts an entity kind into the proposal vocabulary. Every entity kind maps to the proposal
+    /// value with the same persisted kind and code.
     /// </summary>
     public static ProposalKind ToProposalKind(this EntityKind kind) => kind;
 

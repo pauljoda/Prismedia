@@ -53,7 +53,7 @@ public enum EntityKind {
     /// <summary>Person taxonomy entity.</summary>
     Person,
 
-    /// <summary>Single-film video release grouping with one playable video child.</summary>
+    /// <summary>Directly playable single-film video release.</summary>
     Movie,
 
     /// <summary>Studio, publisher, label, or production group.</summary>
@@ -64,6 +64,9 @@ public enum EntityKind {
 
     /// <summary>Playable video media item.</summary>
     Video,
+
+    /// <summary>Directly playable episodic video file.</summary>
+    VideoEpisode,
 
     /// <summary>Video series grouping.</summary>
     VideoSeries,

@@ -207,7 +207,6 @@ public sealed record CodesManifest(
 
         result[nameof(ProposalKind)] = EntityKindRegistry.All
             .Select(definition => new CodeEntry(definition.Kind.ToString(), definition.Code))
-            .Append(new CodeEntry(nameof(ProposalKind.VideoEpisode), ProposalKind.VideoEpisodeCode))
             .ToArray();
 
         return result;

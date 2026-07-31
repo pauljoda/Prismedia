@@ -117,9 +117,9 @@ public static class EntityKindRegistry {
 
         ValidateClientContracts(definitions);
         ValidateIdentificationPolicies(definitions);
-        ValidateManualAcquisitionPolicies(definitions);
         ValidateAcquisitionProfiles(definitions);
         ValidateLibraryVisibilityPolicies(definitions);
+        ValidateStructurePolicies(definitions);
 
         return definitions;
     }
@@ -146,13 +146,31 @@ public static class EntityKindRegistry {
         }
     }
 
-    private static void ValidateManualAcquisitionPolicies(IReadOnlyList<EntityKindDefinition> definitions) {
-        foreach (var definition in definitions.Where(candidate => candidate.ManualAcquisition.SupportsUpload)) {
-            if (!definition.RequestKinds.Any(descriptor =>
-                    descriptor.Committable && descriptor.AcquisitionKind == definition.Kind)) {
+    private static void ValidateStructurePolicies(IReadOnlyList<EntityKindDefinition> definitions) {
+        var byKind = definitions.ToDictionary(definition => definition.Kind);
+        foreach (var definition in definitions.Where(definition => definition.StructurePolicy.IsDeclared)) {
+            var policy = definition.StructurePolicy;
+            if (policy.AllowedParentKinds.Contains(definition.Kind) ||
+                policy.AllowedChildKinds.Contains(definition.Kind)) {
                 throw new InvalidOperationException(
-                    $"Entity kind '{definition.Code}' exposes manual upload without a committable " +
-                    "request descriptor for the same acquisition kind.");
+                    $"Entity kind '{definition.Code}' cannot declare itself as a structural parent or child.");
+            }
+
+            foreach (var parentKind in policy.AllowedParentKinds) {
+                var parent = byKind[parentKind];
+                if (!parent.StructurePolicy.IsDeclared || !parent.StructurePolicy.AllowedChildKinds.Contains(definition.Kind)) {
+                    throw new InvalidOperationException(
+                        $"Entity kind '{definition.Code}' declares parent '{parent.Code}', but the parent does not reciprocally allow it as a child.");
+                }
+            }
+
+            foreach (var childKind in policy.AllowedChildKinds) {
+                var child = byKind[childKind];
+                if (!child.StructurePolicy.IsDeclared || !child.StructurePolicy.RequiresParent ||
+                    !child.StructurePolicy.AllowedParentKinds.Contains(definition.Kind)) {
+                    throw new InvalidOperationException(
+                        $"Entity kind '{definition.Code}' declares child '{child.Code}', but the child does not reciprocally require it as a parent.");
+                }
             }
         }
     }

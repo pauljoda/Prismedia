@@ -1,3 +1,4 @@
+using Prismedia.Domain.Capabilities;
 using Prismedia.Domain.Entities;
 
 namespace Prismedia.Domain.Tests;
@@ -23,6 +24,27 @@ public sealed class EntityKindMetadataTests {
 
         Assert.Equal(first.Select(capability => capability.GetType()), second.Select(capability => capability.GetType()));
         Assert.All(first.Zip(second), pair => Assert.NotSame(pair.First, pair.Second));
+    }
+
+    [Fact]
+    public void PlayableVideoDefinitionsShareTheFacetAndDeclaredDefaults() {
+        var playableKinds = EntityKindRegistry.All
+            .Where(definition => definition is IPlayableVideoKindDefinition)
+            .Select(definition => definition.Kind)
+            .Order()
+            .ToArray();
+
+        Assert.Equal([EntityKind.Movie, EntityKind.Video, EntityKind.VideoEpisode], playableKinds);
+        foreach (var kind in playableKinds) {
+            var definition = EntityKindRegistry.Describe(kind);
+            Assert.True(definition.SupportsDefaultCapability<CapabilityPlayback>());
+            Assert.True(definition.SupportsDefaultCapability<CapabilityMarkers>());
+            Assert.True(definition.SupportsDefaultCapability<CapabilitySubtitles>());
+            Assert.True(definition.SupportsDefaultCapability<CapabilityCredits>());
+        }
+
+        Assert.False(EntityKindRegistry.Describe(EntityKind.Video).SupportsDefaultCapability<CapabilityPosition>());
+        Assert.True(EntityKindRegistry.Describe(EntityKind.VideoEpisode).SupportsDefaultCapability<CapabilityPosition>());
     }
 
     [Theory]
@@ -54,6 +76,7 @@ public sealed class EntityKindMetadataTests {
     [InlineData(EntityKind.Movie, true)]
     [InlineData(EntityKind.MusicArtist, true)]
     [InlineData(EntityKind.Video, true)]
+    [InlineData(EntityKind.VideoEpisode, true)]
     [InlineData(EntityKind.VideoSeason, true)]
     [InlineData(EntityKind.VideoSeries, true)]
     [InlineData(EntityKind.BookPage, false)]
@@ -89,7 +112,7 @@ public sealed class EntityKindMetadataTests {
         Assert.True(artist.EnumeratesChildren);
         Assert.False(artist.CascadesChildrenAutomatically);
 
-        Assert.True(EntityKindRegistry.Describe(EntityKind.Video)
+        Assert.True(EntityKindRegistry.Describe(EntityKind.VideoEpisode)
             .Identification.AllowsDirectReconcileChildTarget);
     }
 
@@ -140,6 +163,15 @@ public sealed class EntityKindMetadataTests {
     }
 
     [Fact]
+    public void StandaloneVideoUploadDoesNotRequireARequestDescriptor() {
+        var video = EntityKindRegistry.Describe(EntityKind.Video);
+
+        Assert.True(video.ManualAcquisition.SupportsUpload);
+        Assert.True(video.ManualAcquisition.SupportsReplacement);
+        Assert.Empty(video.RequestKinds);
+    }
+
+    [Fact]
     public void ManualAcquisitionPolicyRejectsReplacementWithoutUpload() {
         Assert.Throws<ArgumentException>(() =>
             new EntityManualAcquisitionPolicy(supportsReplacement: true));
@@ -163,7 +195,12 @@ public sealed class EntityKindMetadataTests {
         Assert.Equal(JobType.ProbeAudio, audio.ResolveProbe(needsProbe: true, automaticMetadataEnabled: false));
         Assert.Equal([EntityFileRole.Waveform], audio.GeneratedFileRoles);
         Assert.Equal(JobType.GenerateBookPageThumbnail, page.PreviewJobType);
-        Assert.Empty(EntityKindRegistry.Describe(EntityKind.Movie).Processing.GeneratedFileRoles);
+        Assert.Equal(
+            EntityKindRegistry.Describe(EntityKind.Video).Processing.GeneratedFileRoles,
+            EntityKindRegistry.Describe(EntityKind.Movie).Processing.GeneratedFileRoles);
+        Assert.Equal(
+            EntityKindRegistry.Describe(EntityKind.Video).Processing.GeneratedFileRoles,
+            EntityKindRegistry.Describe(EntityKind.VideoEpisode).Processing.GeneratedFileRoles);
     }
 
     [Fact]
@@ -193,8 +230,7 @@ public sealed class EntityKindMetadataTests {
         Assert.True(EntityKindRegistry.Describe(EntityKind.Book).Presentation.UsesRepresentativeChildArtwork);
         Assert.True(season.Presentation.UsesRepresentativeChildArtwork);
         Assert.Equal([EntityKind.AudioLibrary], track.Presentation.BorrowArtworkFromParentKinds);
-        Assert.Equal([EntityKind.Movie],
-            EntityKindRegistry.Describe(EntityKind.Video).Presentation.BorrowArtworkFromParentKinds);
+        Assert.Empty(EntityKindRegistry.Describe(EntityKind.Video).Presentation.BorrowArtworkFromParentKinds);
         Assert.Empty(movie.Presentation.BorrowArtworkFromParentKinds);
         Assert.Throws<ArgumentException>(() =>
             new EntityKindBehavior(supportsAtomicMediaUpgrade: true));
@@ -209,7 +245,7 @@ public sealed class EntityKindMetadataTests {
             .ToArray();
 
         Assert.Equal(
-            [EntityKind.Movie, EntityKind.VideoSeries, EntityKind.VideoSeason],
+            [EntityKind.VideoSeries, EntityKind.VideoSeason],
             prunableKinds);
     }
 
@@ -234,6 +270,7 @@ public sealed class EntityKindMetadataTests {
                 EntityKind.BookChapter,
                 EntityKind.Movie,
                 EntityKind.Video,
+                EntityKind.VideoEpisode,
                 EntityKind.VideoSeries,
                 EntityKind.VideoSeason
             ],
@@ -245,7 +282,7 @@ public sealed class EntityKindMetadataTests {
         Assert.True(EntityKindRegistry.Describe(EntityKind.Video).Engagement.DerivesCompletionFromPlaybackFraction);
         Assert.True(EntityKindRegistry.Describe(EntityKind.Movie).Engagement.DerivesCompletionFromPlaybackFraction);
         Assert.False(EntityKindRegistry.Describe(EntityKind.AudioTrack).Engagement.DerivesCompletionFromPlaybackFraction);
-        Assert.Equal([EntityKind.Movie], childAggregates);
+        Assert.Empty(childAggregates);
     }
 
     [Fact]
@@ -264,12 +301,10 @@ public sealed class EntityKindMetadataTests {
         Assert.Equal(
             [EntityKind.Book],
             EntityKindRegistry.Describe(EntityKind.Book).Browse.HiddenParentKinds);
-        Assert.Equal(
-            [EntityKind.Movie],
-            EntityKindRegistry.Describe(EntityKind.Video).Browse.AggregateParentKinds);
+        Assert.Equal(EntityBrowsePolicy.Default, EntityKindRegistry.Describe(EntityKind.Video).Browse);
         Assert.All(
             EntityKindRegistry.All.Where(definition => definition.Kind is not (
-                EntityKind.AudioTrack or EntityKind.Book or EntityKind.Gallery or EntityKind.Video)),
+                EntityKind.AudioTrack or EntityKind.Book or EntityKind.Gallery)),
             definition => Assert.Equal(EntityBrowsePolicy.Default, definition.Browse));
     }
 
@@ -306,7 +341,9 @@ public sealed class EntityKindMetadataTests {
                 EntityKind.Book,
                 EntityKind.Gallery,
                 EntityKind.MusicArtist,
-                EntityKind.Video
+                EntityKind.Movie,
+                EntityKind.Video,
+                EntityKind.VideoEpisode
             ],
             directRoots);
         Assert.Equal(
@@ -322,15 +359,12 @@ public sealed class EntityKindMetadataTests {
             (EntityKind.Book, 1),
             (descendantRoots[EntityKind.BookAuthor].DescendantKind, descendantRoots[EntityKind.BookAuthor].MaximumDepth));
         Assert.Equal(
-            (EntityKind.Video, 1),
-            (descendantRoots[EntityKind.Movie].DescendantKind, descendantRoots[EntityKind.Movie].MaximumDepth));
-        Assert.Equal(
-            (EntityKind.Video, 1),
+            (EntityKind.VideoEpisode, 1),
             (descendantRoots[EntityKind.VideoSeason].DescendantKind, descendantRoots[EntityKind.VideoSeason].MaximumDepth));
         Assert.Equal(
-            (EntityKind.Video, 2),
+            (EntityKind.VideoEpisode, 2),
             (descendantRoots[EntityKind.VideoSeries].DescendantKind, descendantRoots[EntityKind.VideoSeries].MaximumDepth));
-        Assert.Equal(4, descendantRoots.Count);
+        Assert.Equal(3, descendantRoots.Count);
         Assert.All(descendantRoots.Values, policy =>
             Assert.Equal(
                 EntityLibraryVisibilityMode.DirectRoot,
@@ -368,14 +402,17 @@ public sealed class EntityKindMetadataTests {
     public void DefinitionsOwnPluginFallbackPositionPrecedenceAndRelationshipScope() {
         var movie = EntityKindRegistry.Describe(EntityKind.Movie);
         var video = EntityKindRegistry.Describe(EntityKind.Video);
+        var episode = EntityKindRegistry.Describe(EntityKind.VideoEpisode);
         var season = EntityKindRegistry.Describe(EntityKind.VideoSeason);
         var track = EntityKindRegistry.Describe(EntityKind.AudioTrack);
 
         Assert.Equal(EntityKind.Video, movie.Identification.PluginFallbackKind);
         Assert.Null(video.Identification.PluginFallbackKind);
 
+        Assert.Equal(EntityKind.Video, episode.Identification.PluginFallbackKind);
         Assert.Equal([EntityPositionCodes.Episode, EntityPositionCodes.AbsoluteEpisode, EntityPositionCodes.Sort],
-            video.PositionSortOrderPrecedence);
+            episode.PositionSortOrderPrecedence);
+        Assert.Equal(EntityKindDefinition.DefaultPositionSortOrderPrecedence, video.PositionSortOrderPrecedence);
         Assert.Equal([EntityPositionCodes.Season, EntityPositionCodes.Sort],
             season.PositionSortOrderPrecedence);
         Assert.Equal([EntityPositionCodes.Track, EntityPositionCodes.Page, EntityPositionCodes.Chapter,
@@ -384,6 +421,44 @@ public sealed class EntityKindMetadataTests {
         Assert.True(movie.OwnsMetadataRelationships);
         Assert.True(EntityKindRegistry.Describe(EntityKind.MusicArtist).OwnsMetadataRelationships);
         Assert.False(season.OwnsMetadataRelationships);
+    }
+
+    [Fact]
+    public void VideoStructurePoliciesDeclareTheTargetGraphWithoutEnforcingItOnEntities() {
+        var movie = EntityKindRegistry.Describe(EntityKind.Movie).StructurePolicy;
+        var video = EntityKindRegistry.Describe(EntityKind.Video).StructurePolicy;
+        var episode = EntityKindRegistry.Describe(EntityKind.VideoEpisode).StructurePolicy;
+        var series = EntityKindRegistry.Describe(EntityKind.VideoSeries).StructurePolicy;
+        var season = EntityKindRegistry.Describe(EntityKind.VideoSeason).StructurePolicy;
+
+        Assert.Equal([], movie.AllowedChildKinds);
+        Assert.Equal([], video.AllowedChildKinds);
+        Assert.True(episode.RequiresParent);
+        Assert.Equal([EntityKind.VideoSeries, EntityKind.VideoSeason], episode.AllowedParentKinds);
+        Assert.Equal([EntityKind.VideoSeason, EntityKind.VideoEpisode], series.AllowedChildKinds);
+        Assert.True(season.RequiresParent);
+        Assert.Equal([EntityKind.VideoSeries], season.AllowedParentKinds);
+        Assert.Equal([EntityKind.VideoEpisode], season.AllowedChildKinds);
+
+        var legacyMovie = new Prismedia.Domain.Media.Movie(Guid.NewGuid(), "Legacy movie");
+        legacyMovie.AddChild(new Prismedia.Domain.Media.Video(Guid.NewGuid(), "Legacy child"));
+        Assert.Single(legacyMovie.ChildEntities);
+    }
+
+    [Fact]
+    public void StructurePolicyRejectsDuplicateOrInconsistentParentDeclarations() {
+        Assert.Throws<ArgumentException>(() => new EntityStructurePolicy(
+            requiresParent: true,
+            allowedParentKinds: [EntityKind.VideoSeries, EntityKind.VideoSeries],
+            allowedChildKinds: []));
+        Assert.Throws<ArgumentException>(() => new EntityStructurePolicy(
+            requiresParent: true,
+            allowedParentKinds: [],
+            allowedChildKinds: []));
+        Assert.Throws<ArgumentException>(() => new EntityStructurePolicy(
+            requiresParent: false,
+            allowedParentKinds: [EntityKind.VideoSeries],
+            allowedChildKinds: []));
     }
 
     [Fact]
@@ -399,7 +474,8 @@ public sealed class EntityKindMetadataTests {
 
     [Theory]
     [InlineData(EntityKind.Audio, "audio", "Audio", EntityKindCategory.Media, EntityStorageShape.File, null)]
-    [InlineData(EntityKind.Movie, "movie", "Movie", EntityKindCategory.Media, EntityStorageShape.Folder, typeof(Prismedia.Domain.Media.Movie))]
+    [InlineData(EntityKind.Movie, "movie", "Movie", EntityKindCategory.Media, EntityStorageShape.File, typeof(Prismedia.Domain.Media.Movie))]
+    [InlineData(EntityKind.VideoEpisode, "video-episode", "Video Episode", EntityKindCategory.Media, EntityStorageShape.File, typeof(Prismedia.Domain.Media.VideoEpisode))]
     [InlineData(EntityKind.VideoSeries, "video-series", "Video Series", EntityKindCategory.Media, EntityStorageShape.Folder, typeof(Prismedia.Domain.Media.VideoSeries))]
     [InlineData(EntityKind.BookPage, "book-page", "Book Page", EntityKindCategory.Media, EntityStorageShape.ArchiveEntry, typeof(Prismedia.Domain.Media.BookPage))]
     [InlineData(EntityKind.Person, "person", "Person", EntityKindCategory.Taxonomy, EntityStorageShape.None, typeof(Prismedia.Domain.Taxonomy.Person))]

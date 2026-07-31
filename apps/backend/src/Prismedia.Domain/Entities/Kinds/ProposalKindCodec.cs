@@ -1,16 +1,13 @@
 namespace Prismedia.Domain.Entities;
 
 /// <summary>
-/// Derives the identify-proposal vocabulary from every discovered <see cref="EntityKindDefinition"/>
-/// plus the single proposal-only leaf-episode token. Adding an Entity kind therefore cannot omit
-/// it from proposal decoding, serialization, schema generation, or frontend code generation.
+/// Derives the identify-proposal vocabulary from every discovered <see cref="EntityKindDefinition"/>.
+/// Adding an Entity kind therefore cannot omit it from proposal decoding, serialization, schema
+/// generation, or frontend code generation.
 /// </summary>
 public sealed class ProposalKindCodec : ICodec<ProposalKind> {
     private static readonly IReadOnlyList<string> KnownCodes = Array.AsReadOnly(
-        EntityKindRegistry.All
-            .Select(definition => definition.Code)
-            .Append(ProposalKind.VideoEpisodeCode)
-            .ToArray());
+        EntityKindRegistry.All.Select(definition => definition.Code).ToArray());
 
     /// <inheritdoc />
     public Type ValueType => typeof(ProposalKind);
@@ -20,10 +17,6 @@ public sealed class ProposalKindCodec : ICodec<ProposalKind> {
 
     /// <inheritdoc />
     public string Encode(ProposalKind value) {
-        if (value.IsVideoEpisode) {
-            return ProposalKind.VideoEpisodeCode;
-        }
-
         if (value.TryGetEntityKind(out var kind)) {
             return EntityKindRegistry.ToCode(kind);
         }
@@ -45,11 +38,6 @@ public sealed class ProposalKindCodec : ICodec<ProposalKind> {
         }
 
         var normalized = code.Trim();
-        if (normalized.Equals(ProposalKind.VideoEpisodeCode, StringComparison.OrdinalIgnoreCase)) {
-            value = ProposalKind.VideoEpisode;
-            return true;
-        }
-
         if (EntityKindRegistry.TryGet(normalized, out var entityKind)) {
             value = entityKind;
             return true;
