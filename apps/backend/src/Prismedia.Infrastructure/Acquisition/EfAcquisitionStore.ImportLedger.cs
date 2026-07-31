@@ -64,6 +64,7 @@ public sealed partial class EfAcquisitionStore {
         if (row is null) {
             return;
         }
+        RequireCheckpointProtocol(row.Kind, AcquisitionCheckpointProtocol.Television);
 
         row.ImportCheckpointJson = checkpoint is null ? null : TvImportCheckpointJson.Serialize(checkpoint);
         if (checkpoint is not null) {
@@ -90,6 +91,13 @@ public sealed partial class EfAcquisitionStore {
         Guid acquisitionId,
         TvImportCheckpoint checkpoint,
         CancellationToken cancellationToken) {
+        if (!await UsesCheckpointProtocolAsync(
+                acquisitionId,
+                AcquisitionCheckpointProtocol.Television,
+                cancellationToken)) {
+            return false;
+        }
+
         var checkpointJson = TvImportCheckpointJson.Serialize(checkpoint);
         var libraryRootPath = await ResolveTvLedgerRootAsync(checkpoint, cancellationToken);
         var resultJson = AcquisitionImportFileLedgerJson.Serialize(
@@ -151,5 +159,28 @@ public sealed partial class EfAcquisitionStore {
         // Checkpoint-only tests and legacy recovery records can predate the captured root. Falling back to
         // the series parent remains privacy-safe; production-created checkpoints always use the exact root.
         return Path.GetDirectoryName(checkpoint.SeriesFolderPath) ?? checkpoint.SeriesFolderPath;
+    }
+
+    private async Task<bool> UsesCheckpointProtocolAsync(
+        Guid acquisitionId,
+        AcquisitionCheckpointProtocol protocol,
+        CancellationToken cancellationToken) {
+        var kind = await db.Acquisitions
+            .AsNoTracking()
+            .Where(row => row.Id == acquisitionId)
+            .Select(row => (EntityKind?)row.Kind)
+            .SingleOrDefaultAsync(cancellationToken);
+        return kind is { } value
+            && AcquisitionProfileKinds.CheckpointProtocolFor(value) == protocol;
+    }
+
+    private static void RequireCheckpointProtocol(
+        EntityKind acquisitionKind,
+        AcquisitionCheckpointProtocol expected) {
+        var actual = AcquisitionProfileKinds.CheckpointProtocolFor(acquisitionKind);
+        if (actual != expected) {
+            throw new InvalidOperationException(
+                $"Acquisition kind '{acquisitionKind}' uses {actual}, not the {expected} checkpoint protocol.");
+        }
     }
 }

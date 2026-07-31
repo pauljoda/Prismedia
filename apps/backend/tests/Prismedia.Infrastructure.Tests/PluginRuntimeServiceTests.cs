@@ -921,6 +921,60 @@ public sealed class PluginRuntimeServiceTests : IDisposable {
     }
 
     [Fact]
+    public async Task IdentifyUsesDefinitionOwnedSeasonFallbackForUnadvertisedStructuralChildren() {
+        var pluginDir = Path.Combine(_tempRoot, "tmdb-structural-fallback");
+        Directory.CreateDirectory(pluginDir);
+        await File.WriteAllTextAsync(
+            Path.Combine(pluginDir, "manifest.json"),
+            """
+            {
+              "manifestVersion": 1,
+              "apiTags": ["prismedia"],
+              "id": "tmdb",
+              "name": "TMDB",
+              "version": "1.0.0",
+              "runtime": "dotnet-process",
+              "entry": "Prismedia.Plugin.Tmdb.dll",
+              "compat": { "pluginApiMin": "1.0.0", "pluginApiMax": null, "prismediaMin": "1.0.0", "prismediaMax": null },
+              "auth": [],
+              "supports": [
+                { "entityKind": "video-series", "actions": ["search"] },
+                { "entityKind": "video-season", "actions": ["search"] }
+              ]
+            }
+            """);
+
+        await using var db = CreateContext();
+        var now = DateTimeOffset.UtcNow;
+        var seriesId = Guid.NewGuid();
+        var seasonId = Guid.NewGuid();
+        db.ProviderConfigs.Add(new ProviderConfigRow {
+            Id = Guid.NewGuid(),
+            ProviderCode = "tmdb",
+            DisplayName = "TMDB",
+            ProviderType = ProviderType.ExternalProcess,
+            Enabled = true,
+            SettingsJson = "{}",
+            CreatedAt = now,
+            UpdatedAt = now
+        });
+        db.Entities.AddRange(
+            new EntityRow { Id = seriesId, KindCode = EntityKind.VideoSeries.ToCode(), Title = "Series", CreatedAt = now, UpdatedAt = now },
+            new EntityRow { Id = seasonId, KindCode = EntityKind.VideoSeason.ToCode(), Title = "Season 2", ParentEntityId = seriesId, SortOrder = 2, CreatedAt = now, UpdatedAt = now });
+        await db.SaveChangesAsync();
+
+        var service = CreateIdentifyService(db, new EchoProposalProcessExecutor(), pluginDir);
+
+        var response = await service.IdentifyAsync(seriesId, "tmdb", null, parentExternalIds: null, hideNsfw: false, CancellationToken.None);
+
+        Assert.True(response.Ok);
+        var season = Assert.Single(response.Result!.Children);
+        Assert.Equal(seasonId, season.TargetEntityId);
+        Assert.Equal(2, season.Patch.Positions[PluginPositionField.SeasonNumber]);
+        Assert.DoesNotContain(PluginPositionField.SortOrder, season.Patch.Positions.Keys);
+    }
+
+    [Fact]
     public async Task IdentifyFallsBackToLocalTitleWhenProposalTitleIsJustTheProviderId() {
         // A provider that degrades a failed detail lookup to its raw id must not surface (or apply) a
         // bare id as the entity's name: the local title wins.
@@ -1058,7 +1112,12 @@ public sealed class PluginRuntimeServiceTests : IDisposable {
         var response = await service.IdentifyAsync(seasonId, "tmdb", null, parentExternalIds: null, hideNsfw: false, CancellationToken.None);
 
         Assert.True(response.Ok);
-        Assert.Equal([seasonId], executor.Requests.Select(request => request.Entity.Id).ToArray());
+        var request = Assert.Single(executor.Requests);
+        Assert.Equal(seasonId, request.Entity.Id);
+        Assert.NotNull(request.StructuralContext);
+        Assert.Equal(1, request.StructuralContext.Positions[PluginPositionField.SeasonNumber]);
+        Assert.Equal(1, request.StructuralContext.Positions[EntityPositionCodes.Season]);
+        Assert.DoesNotContain(PluginPositionField.SortOrder, request.StructuralContext.Positions.Keys);
         Assert.Equal(26, response.Result!.Children.Count);
         Assert.Equal(
             episodeIds.Select(id => (Guid?)id).ToArray(),
@@ -1657,9 +1716,12 @@ public sealed class PluginRuntimeServiceTests : IDisposable {
             Requests.Add(request);
 
             var kindCode = request.Entity.Kind.ToCode();
+            var provider = request.Entity.Kind is EntityKind.Video or EntityKind.VideoSeries or EntityKind.VideoSeason
+                ? "tmdb"
+                : "musicbrainz";
             var proposal = new EntityMetadataProposal(
                 $"echo:{kindCode}:{request.Entity.Id}",
-                request.Entity.Kind == EntityKind.Video ? "tmdb" : "musicbrainz",
+                provider,
                 request.Entity.Kind,
                 0.9m,
                 "external-id",

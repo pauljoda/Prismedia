@@ -266,7 +266,11 @@ public sealed partial class IdentifyPluginService : IIdentifyProviderService {
 
         var resolvedHints = await _hints.ResolveAsync(parent.Id, descriptor.Manifest.Id, cancellationToken);
         var ancestors = await LoadAncestorSnapshotsAsync(parent, descriptor.Manifest.Id, cancellationToken);
-        var positions = await ResolveStructuralPositionsAsync(parent.Id, parent.SortOrder, cancellationToken);
+        var positions = await ResolveStructuralPositionsAsync(
+            parent.Id,
+            parent.KindCode,
+            parent.SortOrder,
+            cancellationToken);
         var structuralContext = ancestors.Count > 0 || positions.Count > 0
             ? new IdentifyStructuralContext(ancestors, positions)
             : null;
@@ -566,7 +570,11 @@ public sealed partial class IdentifyPluginService : IIdentifyProviderService {
                 Urls = []
             }
             : resolvedHints;
-        var positions = await ResolveStructuralPositionsAsync(entity.Id, parentSortOrder, cancellationToken);
+        var positions = await ResolveStructuralPositionsAsync(
+            entity.Id,
+            entity.KindCode,
+            parentSortOrder,
+            cancellationToken);
         var structuralContext = ancestors.Count > 0 || positions.Count > 0
             ? new IdentifyStructuralContext(ancestors, positions)
             : null;

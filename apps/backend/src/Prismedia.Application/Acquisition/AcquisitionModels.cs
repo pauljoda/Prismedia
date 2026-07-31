@@ -607,6 +607,42 @@ public sealed record AcquisitionImportContext(
     ImportPlacementCheckpoint? ImportPlacementCheckpoint = null,
     BookRendition? BookRendition = null,
     Guid? UpgradeOfAcquisitionId = null) {
+    /// <summary>Checkpoint protocol selected by this acquisition's governing profile definition.</summary>
+    public AcquisitionCheckpointProtocol CheckpointProtocol => AcquisitionProfileKinds.CheckpointProtocolFor(Kind);
+
+    /// <summary>
+    /// Returns the dedicated television checkpoint when the profile selected the television protocol.
+    /// Accessing it for another protocol is an application routing error rather than a silent null path.
+    /// </summary>
+    public TvImportCheckpoint? TelevisionCheckpoint =>
+        CheckpointProtocol == AcquisitionCheckpointProtocol.Television
+            ? TvImportCheckpoint
+            : throw new InvalidOperationException(
+                $"Acquisition kind '{Kind}' uses {CheckpointProtocol}, not the television checkpoint protocol.");
+
+    /// <summary>
+    /// Returns the exact placement checkpoint when the profile selected the placement protocol.
+    /// Accessing it for another protocol is an application routing error rather than a silent null path.
+    /// </summary>
+    public ImportPlacementCheckpoint? PlacementCheckpoint =>
+        CheckpointProtocol == AcquisitionCheckpointProtocol.Placement
+            ? ImportPlacementCheckpoint
+            : throw new InvalidOperationException(
+                $"Acquisition kind '{Kind}' uses {CheckpointProtocol}, not the placement checkpoint protocol.");
+
+    /// <summary>Rejects a context carrying a checkpoint shape incompatible with its definition-owned protocol.</summary>
+    public void EnsureCheckpointApplicability() {
+        var incompatible = CheckpointProtocol switch {
+            AcquisitionCheckpointProtocol.Placement => TvImportCheckpoint is not null,
+            AcquisitionCheckpointProtocol.Television => ImportPlacementCheckpoint is not null,
+            _ => throw new InvalidOperationException($"Unknown acquisition checkpoint protocol '{CheckpointProtocol}'.")
+        };
+        if (incompatible) {
+            throw new InvalidDataException(
+                $"Acquisition kind '{Kind}' has a checkpoint incompatible with its {CheckpointProtocol} protocol.");
+        }
+    }
+
     /// <summary>
     /// The user's explicit "import anyway": an upgrade that changes the file extension — normally held
     /// for manual import — replaces the owned file across formats. Carried by the manual retry-import

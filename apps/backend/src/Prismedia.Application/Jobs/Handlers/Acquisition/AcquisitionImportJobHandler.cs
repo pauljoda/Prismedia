@@ -39,9 +39,21 @@ public sealed class AcquisitionImportJobHandler(
         if (import is null) {
             return;
         }
+        import.EnsureCheckpointApplicability();
 
-        var tvCheckpoint = import.TvImportCheckpoint;
-        var placementCheckpoint = import.ImportPlacementCheckpoint;
+        TvImportCheckpoint? tvCheckpoint = null;
+        ImportPlacementCheckpoint? placementCheckpoint = null;
+        switch (import.CheckpointProtocol) {
+            case AcquisitionCheckpointProtocol.Television:
+                tvCheckpoint = import.TelevisionCheckpoint;
+                break;
+            case AcquisitionCheckpointProtocol.Placement:
+                placementCheckpoint = import.PlacementCheckpoint;
+                break;
+            default:
+                throw new InvalidOperationException(
+                    $"Unknown acquisition checkpoint protocol '{import.CheckpointProtocol}'.");
+        }
         var claimed = false;
         async Task ClaimImportAsync(CancellationToken leaseCancellationToken) {
             if (tvCheckpoint is not null) {
@@ -92,12 +104,15 @@ public sealed class AcquisitionImportJobHandler(
             return;
         }
 
-        if (tvCheckpoint is not null) {
-            tvCheckpoint = tvCheckpoint with { ClaimJobId = context.Job.Id };
-            import = import with { TvImportCheckpoint = tvCheckpoint };
-        } else if (placementCheckpoint is not null) {
-            placementCheckpoint = placementCheckpoint with { ClaimJobId = context.Job.Id };
-            import = import with { ImportPlacementCheckpoint = placementCheckpoint };
+        switch (import.CheckpointProtocol) {
+            case AcquisitionCheckpointProtocol.Television when tvCheckpoint is not null:
+                tvCheckpoint = tvCheckpoint with { ClaimJobId = context.Job.Id };
+                import = import with { TvImportCheckpoint = tvCheckpoint };
+                break;
+            case AcquisitionCheckpointProtocol.Placement when placementCheckpoint is not null:
+                placementCheckpoint = placementCheckpoint with { ClaimJobId = context.Job.Id };
+                import = import with { ImportPlacementCheckpoint = placementCheckpoint };
+                break;
         }
 
         if (payload.AllowFormatChange) {
@@ -130,8 +145,13 @@ public sealed class AcquisitionImportJobHandler(
         // A durable placement checkpoint was created only after the ORIGINAL complete payload passed this
         // validation. Move-mode resumes intentionally see a partial download directory, so re-validating
         // that remainder can manufacture a false wrong-season conflict and strand a valid checkpoint.
-        if (import.TvImportCheckpoint is null
-            && import.ImportPlacementCheckpoint is null
+        var hasDurableCheckpoint = import.CheckpointProtocol switch {
+            AcquisitionCheckpointProtocol.Television => tvCheckpoint is not null,
+            AcquisitionCheckpointProtocol.Placement => placementCheckpoint is not null,
+            _ => throw new InvalidOperationException(
+                $"Unknown acquisition checkpoint protocol '{import.CheckpointProtocol}'.")
+        };
+        if (!hasDurableCheckpoint
             && !payload.ManualRetry
             && await FindPayloadConflictAsync(payload.AcquisitionId, import, payloadFiles, cancellationToken) is { } conflict) {
             logger.LogWarning("AcquisitionImport: wrong content held for acquisition {Id}: {Conflict}", payload.AcquisitionId, conflict);

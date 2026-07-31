@@ -34,6 +34,15 @@ public static class AcquisitionProfileKinds {
     public static bool UsesNamingFamily(EntityKind acquisitionKind, AcquisitionNamingFamily namingFamily) =>
         EntityKindRegistry.Describe(For(acquisitionKind)).AcquisitionProfile?.NamingFamily == namingFamily;
 
+    /// <summary>
+    /// Returns the durable import checkpoint protocol selected by the acquisition's governing profile
+    /// definition. This is deliberately independent from naming-template behavior.
+    /// </summary>
+    public static AcquisitionCheckpointProtocol CheckpointProtocolFor(EntityKind acquisitionKind) =>
+        EntityKindRegistry.Describe(For(acquisitionKind)).AcquisitionProfile?.CheckpointProtocol
+        ?? throw new InvalidOperationException(
+            $"Acquisition kind '{acquisitionKind}' does not have a governing acquisition profile.");
+
     /// <summary>The closed set of kinds a profile may be created for, in display order.</summary>
     public static readonly IReadOnlyList<EntityKind> All = EntityKindRegistry.All
         .Where(definition => definition.AcquisitionProfile is not null)

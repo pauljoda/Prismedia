@@ -1,4 +1,5 @@
 using Prismedia.Application.Jobs.Scanning;
+using Prismedia.Domain.Entities;
 
 namespace Prismedia.Application.Acquisition;
 
@@ -18,11 +19,15 @@ public static class ImportCheckpointLifecycle {
         AcquisitionImportContext import,
         CancellationToken cancellationToken,
         VideoScanConcurrencyGate? scanGate = null) {
-        if (import.ImportPlacementCheckpoint is null) {
-            return await TvImportCheckpointLifecycle.CanAbandonAsync(import, cancellationToken, scanGate);
-        }
-
-        return CanAbandon(import.ImportPlacementCheckpoint);
+        import.EnsureCheckpointApplicability();
+        return import.CheckpointProtocol switch {
+            AcquisitionCheckpointProtocol.Placement =>
+                import.PlacementCheckpoint is not { } checkpoint || CanAbandon(checkpoint),
+            AcquisitionCheckpointProtocol.Television =>
+                await TvImportCheckpointLifecycle.CanAbandonAsync(import, cancellationToken, scanGate),
+            _ => throw new InvalidOperationException(
+                $"Unknown acquisition checkpoint protocol '{import.CheckpointProtocol}'.")
+        };
     }
 
     /// <summary>
@@ -34,22 +39,31 @@ public static class ImportCheckpointLifecycle {
         AcquisitionImportContext import,
         CancellationToken cancellationToken,
         VideoScanConcurrencyGate? scanGate = null) {
-        if (import.ImportPlacementCheckpoint is not { } checkpoint) {
-            return await TvImportCheckpointLifecycle.TryAbandonAsync(
-                acquisitions,
-                import,
-                cancellationToken,
-                scanGate);
-        }
+        import.EnsureCheckpointApplicability();
+        switch (import.CheckpointProtocol) {
+            case AcquisitionCheckpointProtocol.Placement:
+                if (import.PlacementCheckpoint is not { } checkpoint) {
+                    return true;
+                }
 
-        if (!CanAbandon(checkpoint)) {
-            return false;
-        }
+                if (!CanAbandon(checkpoint)) {
+                    return false;
+                }
 
-        return await acquisitions.TryClearImportPlacementCheckpointAsync(
-            import.Id,
-            checkpoint,
-            cancellationToken);
+                return await acquisitions.TryClearImportPlacementCheckpointAsync(
+                    import.Id,
+                    checkpoint,
+                    cancellationToken);
+            case AcquisitionCheckpointProtocol.Television:
+                return await TvImportCheckpointLifecycle.TryAbandonAsync(
+                    acquisitions,
+                    import,
+                    cancellationToken,
+                    scanGate);
+            default:
+                throw new InvalidOperationException(
+                    $"Unknown acquisition checkpoint protocol '{import.CheckpointProtocol}'.");
+        }
     }
 
     private static bool CanAbandon(ImportPlacementCheckpoint checkpoint) =>

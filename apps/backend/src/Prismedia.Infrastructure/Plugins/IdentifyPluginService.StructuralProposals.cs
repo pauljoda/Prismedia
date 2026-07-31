@@ -738,9 +738,7 @@ public sealed partial class IdentifyPluginService {
             return proposal;
         }
 
-        var code = child.Entity.KindCode.Equals(EntityKind.VideoSeason.ToCode(), StringComparison.OrdinalIgnoreCase)
-            ? PluginPositionField.SeasonNumber
-            : PluginPositionField.SortOrder;
+        var code = EntityMetadataPositionRules.StructuralFallbackPluginFieldFor(child.Entity.KindCode);
         return proposal with {
             Patch = proposal.Patch with {
                 Positions = new Dictionary<string, int> { [code] = sortOrder }
@@ -905,11 +903,12 @@ public sealed partial class IdentifyPluginService {
 
     private async Task<IReadOnlyDictionary<string, int>> ResolveStructuralPositionsAsync(
         Guid entityId,
+        string entityKindCode,
         int? parentSortOrder,
         CancellationToken cancellationToken) {
         var positions = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         if (parentSortOrder is { } sortOrder) {
-            positions[PluginPositionField.SortOrder] = sortOrder;
+            positions[EntityMetadataPositionRules.StructuralFallbackPluginFieldFor(entityKindCode)] = sortOrder;
         }
 
         var persisted = await _db.EntityPositions
@@ -918,15 +917,6 @@ public sealed partial class IdentifyPluginService {
             .ToArrayAsync(cancellationToken);
         foreach (var row in persisted) {
             positions[row.Code] = row.Value;
-        }
-
-        var seasonNumber = await _db.Entities
-            .AsNoTracking()
-            .Where(row => row.Id == entityId && row.KindCode == EntityKind.VideoSeason.ToCode())
-            .Select(row => row.SortOrder)
-            .FirstOrDefaultAsync(cancellationToken);
-        if (seasonNumber is { } value) {
-            positions[PluginPositionField.SeasonNumber] = value;
         }
 
         return positions;

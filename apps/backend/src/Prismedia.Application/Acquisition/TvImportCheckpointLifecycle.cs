@@ -24,14 +24,16 @@ public static class TvImportCheckpointLifecycle {
         AcquisitionImportContext import,
         CancellationToken cancellationToken,
         VideoScanConcurrencyGate? scanGate = null) {
-        if (import.TvImportCheckpoint is null) {
+        import.EnsureCheckpointApplicability();
+        var checkpoint = import.TelevisionCheckpoint;
+        if (checkpoint is null) {
             return true;
         }
 
         await using var scanLease = scanGate is null
             ? null
             : await scanGate.EnterAsync(cancellationToken);
-        return CanAbandon(import);
+        return CanAbandon(import, checkpoint);
     }
 
     /// <summary>
@@ -43,7 +45,8 @@ public static class TvImportCheckpointLifecycle {
         AcquisitionImportContext import,
         CancellationToken cancellationToken,
         VideoScanConcurrencyGate? scanGate = null) {
-        if (import.TvImportCheckpoint is not { } checkpoint) {
+        import.EnsureCheckpointApplicability();
+        if (import.TelevisionCheckpoint is not { } checkpoint) {
             return true;
         }
 
@@ -51,7 +54,7 @@ public static class TvImportCheckpointLifecycle {
             ? null
             : await scanGate.EnterAsync(cancellationToken);
 
-        if (!CanAbandon(import)) {
+        if (!CanAbandon(import, checkpoint)) {
             return false;
         }
 
@@ -61,9 +64,8 @@ public static class TvImportCheckpointLifecycle {
             cancellationToken);
     }
 
-    private static bool CanAbandon(AcquisitionImportContext import) =>
-        import.TvImportCheckpoint is not { } checkpoint
-        || checkpoint.Units.All(unit => !MutationMayHaveStarted(import, unit));
+    private static bool CanAbandon(AcquisitionImportContext import, TvImportCheckpoint checkpoint) =>
+        checkpoint.Units.All(unit => !MutationMayHaveStarted(import, unit));
 
     private static bool MutationMayHaveStarted(
         AcquisitionImportContext import,

@@ -376,16 +376,24 @@ public sealed partial class EfAcquisitionStore(PrismediaDbContext db, IAcquisiti
             && importResult is not null) {
             string? payloadRoot = null;
             string? libraryRoot = null;
-            if (AcquisitionProfileKinds.UsesNamingFamily(row.Kind, AcquisitionNamingFamily.Television)) {
-                var checkpoint = TvImportCheckpointJson.Deserialize(row.ImportCheckpointJson);
-                if (checkpoint is not null) {
-                    libraryRoot = await db.LibraryRoots.Where(root => root.Id == checkpoint.LibraryRootId)
-                        .Select(root => root.Path).SingleOrDefaultAsync(cancellationToken);
+            switch (AcquisitionProfileKinds.CheckpointProtocolFor(row.Kind)) {
+                case AcquisitionCheckpointProtocol.Television: {
+                    var checkpoint = TvImportCheckpointJson.Deserialize(row.ImportCheckpointJson);
+                    if (checkpoint is not null) {
+                        libraryRoot = await db.LibraryRoots.Where(root => root.Id == checkpoint.LibraryRootId)
+                            .Select(root => root.Path).SingleOrDefaultAsync(cancellationToken);
+                    }
+
+                    break;
                 }
-            } else {
-                var checkpoint = ImportPlacementCheckpointJson.Deserialize(row.ImportCheckpointJson);
-                payloadRoot = checkpoint?.PayloadRootPath;
-                libraryRoot = checkpoint?.LibraryRootPath;
+                case AcquisitionCheckpointProtocol.Placement: {
+                    var checkpoint = ImportPlacementCheckpointJson.Deserialize(row.ImportCheckpointJson);
+                    payloadRoot = checkpoint?.PayloadRootPath;
+                    libraryRoot = checkpoint?.LibraryRootPath;
+                    break;
+                }
+                default:
+                    throw new InvalidOperationException($"Unknown acquisition checkpoint protocol for '{row.Kind}'.");
             }
             var safeError = AcquisitionImportErrorSanitizer.Sanitize(message, payloadRoot, libraryRoot);
             row.ImportResultJson = AcquisitionImportFileLedgerJson.Serialize(importResult.Fail(safeError));
@@ -1214,21 +1222,21 @@ public sealed partial class EfAcquisitionStore(PrismediaDbContext db, IAcquisiti
             .FirstOrDefaultAsync(cancellationToken);
 
         var externalIdentity = ToExternalIdentity(row.IdentityNamespace, row.IdentityValue);
-        var isTvImport = AcquisitionProfileKinds.UsesNamingFamily(
-            row.Kind,
-            AcquisitionNamingFamily.Television);
-        var tvImportCheckpoint = isTvImport
+        var checkpointProtocol = AcquisitionProfileKinds.CheckpointProtocolFor(row.Kind);
+        var tvImportCheckpoint = checkpointProtocol == AcquisitionCheckpointProtocol.Television
             ? TvImportCheckpointJson.Deserialize(row.ImportCheckpointJson)
             : null;
-        var importPlacementCheckpoint = isTvImport
-            ? null
-            : ImportPlacementCheckpointJson.Deserialize(row.ImportCheckpointJson);
+        var importPlacementCheckpoint = checkpointProtocol == AcquisitionCheckpointProtocol.Placement
+            ? ImportPlacementCheckpointJson.Deserialize(row.ImportCheckpointJson)
+            : null;
 
-        return new AcquisitionImportContext(
+        var context = new AcquisitionImportContext(
             row.Id, row.Title, row.Author, row.Series, row.Year, row.PosterUrl, externalIdentity,
             row.ProfileId, transfer?.ContentPath, transfer?.ClientItemId, transfer?.DownloadClientConfigId, row.Kind,
             row.Description, row.TargetLibraryRootId, row.SeasonNumber, row.EpisodeNumber, row.EntityId, row.FinalSourcePath,
             tvImportCheckpoint, importPlacementCheckpoint, row.BookRendition, row.UpgradeOfAcquisitionId);
+        context.EnsureCheckpointApplicability();
+        return context;
     }
 
     public async Task<bool> TryClaimTvImportCheckpointAsync(
@@ -1236,6 +1244,13 @@ public sealed partial class EfAcquisitionStore(PrismediaDbContext db, IAcquisiti
         TvImportCheckpoint checkpoint,
         Guid claimJobId,
         CancellationToken cancellationToken) {
+        if (!await UsesCheckpointProtocolAsync(
+                acquisitionId,
+                AcquisitionCheckpointProtocol.Television,
+                cancellationToken)) {
+            return false;
+        }
+
         var expectedJson = TvImportCheckpointJson.Serialize(checkpoint);
         var claimedCheckpoint = checkpoint with { ClaimJobId = claimJobId };
         var claimedJson = TvImportCheckpointJson.Serialize(claimedCheckpoint);
@@ -1286,6 +1301,13 @@ public sealed partial class EfAcquisitionStore(PrismediaDbContext db, IAcquisiti
         Guid acquisitionId,
         TvImportCheckpoint checkpoint,
         CancellationToken cancellationToken) {
+        if (!await UsesCheckpointProtocolAsync(
+                acquisitionId,
+                AcquisitionCheckpointProtocol.Television,
+                cancellationToken)) {
+            return false;
+        }
+
         var expectedJson = TvImportCheckpointJson.Serialize(checkpoint);
         var supersedable = new[] {
             AcquisitionStatus.AwaitingSelection,
@@ -1334,6 +1356,13 @@ public sealed partial class EfAcquisitionStore(PrismediaDbContext db, IAcquisiti
         Guid acquisitionId,
         TvImportCheckpoint checkpoint,
         CancellationToken cancellationToken) {
+        if (!await UsesCheckpointProtocolAsync(
+                acquisitionId,
+                AcquisitionCheckpointProtocol.Television,
+                cancellationToken)) {
+            return false;
+        }
+
         var expectedJson = TvImportCheckpointJson.Serialize(checkpoint);
         return await db.Acquisitions.AsNoTracking().AnyAsync(row =>
             row.Id == acquisitionId
@@ -1347,6 +1376,7 @@ public sealed partial class EfAcquisitionStore(PrismediaDbContext db, IAcquisiti
         Guid acquisitionId,
         ImportPlacementCheckpoint checkpoint,
         CancellationToken cancellationToken) {
+        RequireCheckpointProtocol(checkpoint.Kind, AcquisitionCheckpointProtocol.Placement);
         var checkpointJson = ImportPlacementCheckpointJson.Serialize(checkpoint);
         var resultJson = AcquisitionImportFileLedgerJson.Serialize(
             AcquisitionImportFileLedger.Synchronize(
@@ -1395,6 +1425,7 @@ public sealed partial class EfAcquisitionStore(PrismediaDbContext db, IAcquisiti
         ImportPlacementCheckpoint expected,
         ImportPlacementCheckpoint advanced,
         CancellationToken cancellationToken) {
+        RequireCheckpointProtocol(expected.Kind, AcquisitionCheckpointProtocol.Placement);
         if (!ImportPlacementCheckpointJson.IsValidAdvance(expected, advanced)) {
             throw new InvalidOperationException("An import placement checkpoint may only complete one immutable unit at a time.");
         }
@@ -1441,6 +1472,7 @@ public sealed partial class EfAcquisitionStore(PrismediaDbContext db, IAcquisiti
         ImportPlacementCheckpoint checkpoint,
         Guid claimJobId,
         CancellationToken cancellationToken) {
+        RequireCheckpointProtocol(checkpoint.Kind, AcquisitionCheckpointProtocol.Placement);
         var expectedJson = ImportPlacementCheckpointJson.Serialize(checkpoint);
         var claimedCheckpoint = checkpoint with { ClaimJobId = claimJobId };
         var claimedJson = ImportPlacementCheckpointJson.Serialize(claimedCheckpoint);
@@ -1493,6 +1525,7 @@ public sealed partial class EfAcquisitionStore(PrismediaDbContext db, IAcquisiti
         Guid acquisitionId,
         ImportPlacementCheckpoint checkpoint,
         CancellationToken cancellationToken) {
+        RequireCheckpointProtocol(checkpoint.Kind, AcquisitionCheckpointProtocol.Placement);
         var expectedJson = ImportPlacementCheckpointJson.Serialize(checkpoint);
         var supersedable = new[] {
             AcquisitionStatus.AwaitingSelection,
@@ -1544,6 +1577,7 @@ public sealed partial class EfAcquisitionStore(PrismediaDbContext db, IAcquisiti
         Guid acquisitionId,
         ImportPlacementCheckpoint checkpoint,
         CancellationToken cancellationToken) {
+        RequireCheckpointProtocol(checkpoint.Kind, AcquisitionCheckpointProtocol.Placement);
         var expectedJson = ImportPlacementCheckpointJson.Serialize(checkpoint);
         return await db.Acquisitions.AsNoTracking().AnyAsync(row =>
             row.Id == acquisitionId

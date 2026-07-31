@@ -60,6 +60,16 @@ public sealed class EntityKindMetadataTests {
     }
 
     [Theory]
+    [InlineData(EntityKind.VideoSeason, EntityPositionCodes.Season)]
+    [InlineData(EntityKind.VideoEpisode, EntityPositionCodes.Sort)]
+    [InlineData(EntityKind.AudioTrack, EntityPositionCodes.Sort)]
+    public void StructuralFallbackPositionIsOwnedByEachEntityKindDefinition(
+        EntityKind kind,
+        string expected) {
+        Assert.Equal(expected, EntityKindRegistry.Describe(kind).StructuralFallbackPositionCode);
+    }
+
+    [Theory]
     [InlineData("video-series", true)]
     [InlineData("video-season", true)]
     [InlineData("audio-library", true)]
@@ -441,6 +451,10 @@ public sealed class EntityKindMetadataTests {
         Assert.Equal(0, profiles[EntityKind.Book].DisplayOrder);
         Assert.Equal(3, profiles[EntityKind.AudioLibrary].DisplayOrder);
         Assert.Equal(LibraryRootMediaCapability.ScanBooks, profiles[EntityKind.Book].LibraryRootMediaCapability);
+        Assert.Equal(AcquisitionCheckpointProtocol.Placement, profiles[EntityKind.Book].CheckpointProtocol);
+        Assert.Equal(AcquisitionCheckpointProtocol.Placement, profiles[EntityKind.Movie].CheckpointProtocol);
+        Assert.Equal(AcquisitionCheckpointProtocol.Placement, profiles[EntityKind.AudioLibrary].CheckpointProtocol);
+        Assert.Equal(AcquisitionCheckpointProtocol.Television, profiles[EntityKind.VideoSeries].CheckpointProtocol);
         Assert.Equal(
             [EntityDateType.Release, EntityDateType.DigitalRelease, EntityDateType.PhysicalRelease],
             profiles[EntityKind.AudioLibrary].SupportedReleaseDateTypes);

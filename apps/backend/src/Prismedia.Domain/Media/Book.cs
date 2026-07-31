@@ -78,7 +78,8 @@ public sealed class BookEntityKindDefinition() : EntityKindDefinition<Book>(
         ],
         "{Author}/{Title} ({Year})/{Title}{ - Volume}.{ext}",
         "{Author} {Title} {Year} {ext} — folder/file layout for the book payload",
-        AcquisitionNamingFamily.Book);
+        AcquisitionNamingFamily.Book,
+        AcquisitionCheckpointProtocol.Placement);
 
     /// <inheritdoc />
     protected override IReadOnlyList<ContractCapability> ProjectCapabilities(

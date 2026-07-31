@@ -23,6 +23,27 @@ public sealed class EntityMetadataPositionRulesTests {
     }
 
     [Theory]
+    [InlineData(EntityPositionCodes.Season, PluginPositionField.SeasonNumber)]
+    [InlineData(EntityPositionCodes.Episode, PluginPositionField.EpisodeNumber)]
+    [InlineData(EntityPositionCodes.AbsoluteEpisode, PluginPositionField.AbsoluteEpisodeNumber)]
+    [InlineData(EntityPositionCodes.Volume, PluginPositionField.VolumeNumber)]
+    [InlineData(EntityPositionCodes.Chapter, PluginPositionField.ChapterNumber)]
+    [InlineData(EntityPositionCodes.Page, PluginPositionField.PageNumber)]
+    [InlineData(EntityPositionCodes.Track, PluginPositionField.TrackNumber)]
+    [InlineData(EntityPositionCodes.Sort, PluginPositionField.SortOrder)]
+    public void PluginFieldMappingIsTheInverseOfTheCanonicalPositionBoundary(string code, string expectedField) {
+        Assert.Equal(expectedField, EntityMetadataPositionRules.PluginFieldFor(code));
+    }
+
+    [Theory]
+    [InlineData("video-season", PluginPositionField.SeasonNumber)]
+    [InlineData("video-episode", PluginPositionField.SortOrder)]
+    [InlineData("unknown-kind", PluginPositionField.SortOrder)]
+    public void StructuralFallbackFieldComesFromTheDefinitionOrGenericSort(string kindCode, string expectedField) {
+        Assert.Equal(expectedField, EntityMetadataPositionRules.StructuralFallbackPluginFieldFor(kindCode));
+    }
+
+    [Theory]
     [InlineData("video-season", "season", 3)]
     [InlineData("video-season", "sort", 4)]
     [InlineData("video-episode", "episode", 5)]

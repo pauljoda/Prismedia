@@ -70,7 +70,8 @@ public sealed class AudioLibraryEntityKindDefinition() : RootEntityKindDefinitio
         ],
         "{Artist}/{Album}",
         "{Artist} {Album} {Year} — 2 segments: artist/album folder (track files keep their release names)",
-        AcquisitionNamingFamily.Music);
+        AcquisitionNamingFamily.Music,
+        AcquisitionCheckpointProtocol.Placement);
 }
 
 /// <summary>

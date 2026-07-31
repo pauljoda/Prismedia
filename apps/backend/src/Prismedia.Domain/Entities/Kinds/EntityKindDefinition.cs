@@ -150,8 +150,8 @@ public abstract class EntityKindDefinition {
     public EntityLibraryVisibilityPolicy LibraryVisibility => Behavior.LibraryVisibility;
 
     /// <summary>
-    /// Declared structural topology for this kind. Policies are declarative in this cutover and
-    /// intentionally do not yet constrain legacy relationship hydration or mutation.
+    /// Declared structural topology for this kind. The Entity domain and persistence boundary enforce
+    /// these parent/child constraints during construction, hydration, and structural mutation.
     /// </summary>
     public virtual EntityStructurePolicy StructurePolicy => EntityStructurePolicy.Unspecified;
 
@@ -169,6 +169,13 @@ public abstract class EntityKindDefinition {
     /// an override use the shared media-structure ordering.
     /// </summary>
     public virtual IReadOnlyList<string> PositionSortOrderPrecedence => DefaultPositionSortOrderPrecedence;
+
+    /// <summary>
+    /// Canonical position code used when structural traversal only knows the persisted sibling sort
+    /// order. This is intentionally independent from <see cref="PositionSortOrderPrecedence"/>: a kind
+    /// must opt in explicitly when that fallback has a semantic position such as a season number.
+    /// </summary>
+    public virtual string StructuralFallbackPositionCode => EntityPositionCodes.Sort;
 
     /// <summary>
     /// Whether metadata relationships applied to this kind belong directly to it. When false,
@@ -398,6 +405,7 @@ public sealed record EntityStructuralCountDefinition {
 /// <param name="DefaultNamingTemplate">Default path template stored for a new profile.</param>
 /// <param name="NamingHint">User-facing token and layout guidance for the template.</param>
 /// <param name="NamingFamily">Application renderer and validator family for the template.</param>
+/// <param name="CheckpointProtocol">Durable import checkpoint shape selected by this profile.</param>
 public sealed record AcquisitionProfileDefinition {
     /// <summary>Validates immutable acquisition-profile policy owned by an Entity kind definition.</summary>
     public AcquisitionProfileDefinition(
@@ -407,7 +415,8 @@ public sealed record AcquisitionProfileDefinition {
         IReadOnlyList<EntityDateType> supportedReleaseDateTypes,
         string defaultNamingTemplate,
         string namingHint,
-        AcquisitionNamingFamily namingFamily) {
+        AcquisitionNamingFamily namingFamily,
+        AcquisitionCheckpointProtocol checkpointProtocol) {
         Label = RequireText(label, nameof(label));
         DisplayOrder = displayOrder < 0
             ? throw new ArgumentOutOfRangeException(nameof(displayOrder), "Acquisition profile display order cannot be negative.")
@@ -417,6 +426,7 @@ public sealed record AcquisitionProfileDefinition {
         DefaultNamingTemplate = RequireText(defaultNamingTemplate, nameof(defaultNamingTemplate));
         NamingHint = RequireText(namingHint, nameof(namingHint));
         NamingFamily = namingFamily;
+        CheckpointProtocol = checkpointProtocol;
     }
 
     /// <summary>User-facing profile label.</summary>
@@ -439,6 +449,9 @@ public sealed record AcquisitionProfileDefinition {
 
     /// <summary>Application renderer and validator family for the template.</summary>
     public AcquisitionNamingFamily NamingFamily { get; }
+
+    /// <summary>Durable import checkpoint shape selected by this acquisition profile.</summary>
+    public AcquisitionCheckpointProtocol CheckpointProtocol { get; }
 
     private static string RequireText(string value, string parameterName) =>
         string.IsNullOrWhiteSpace(value)

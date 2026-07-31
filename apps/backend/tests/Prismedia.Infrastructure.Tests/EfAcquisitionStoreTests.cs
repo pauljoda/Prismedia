@@ -1373,6 +1373,103 @@ public sealed class EfAcquisitionStoreTests {
         Assert.Equal(checkpoint.Units[0].TargetAbsolutePath, unit.TargetAbsolutePath);
         Assert.Equal(checkpoint.Units[0].ReplacementBackupPath, unit.ReplacementBackupPath);
         Assert.Equal(checkpoint.Units[0].ReplacementEvidencePath, unit.ReplacementEvidencePath);
+        Assert.Equal(AcquisitionCheckpointProtocol.Television, context!.CheckpointProtocol);
+        Assert.Equal(checkpoint.AttemptId, context.TelevisionCheckpoint!.AttemptId);
+        Assert.Throws<InvalidOperationException>(() => _ = context.PlacementCheckpoint);
+    }
+
+    [Fact]
+    public async Task MovieCheckpointUsesTheProfileDefinedPlacementProtocol() {
+        await using var db = CreateContext();
+        var acquisitionId = Guid.NewGuid();
+        var claimJobId = Guid.NewGuid();
+        var now = DateTimeOffset.UtcNow;
+        db.Acquisitions.Add(new AcquisitionRow {
+            Id = acquisitionId,
+            Kind = EntityKind.Movie,
+            Status = AcquisitionStatus.Importing,
+            Title = "Film",
+            ImportClaimJobId = claimJobId,
+            ExternalIdsJson = "{}",
+            SourceUrlsJson = "[]",
+            CreatedAt = now,
+            UpdatedAt = now,
+        });
+        await db.SaveChangesAsync();
+        var checkpoint = new ImportPlacementCheckpoint(
+            EntityKind.Movie,
+            Guid.NewGuid(),
+            "/library/movies",
+            "/downloads/film",
+            ImportMode.Copy,
+            "/library/movies",
+            "/library/movies",
+            "Imported.",
+            [new ImportPlacementCheckpointUnit(
+                "Film.mkv",
+                "/downloads/film/Film.mkv",
+                "/library/movies/Film.mkv",
+                IsMedia: true)],
+            AttemptId: Guid.NewGuid(),
+            ClaimJobId: claimJobId);
+        var store = AcquisitionTestFactory.Store(db);
+
+        Assert.True(await store.TryCreateImportPlacementCheckpointAsync(
+            acquisitionId,
+            checkpoint,
+            CancellationToken.None));
+
+        var context = await store.GetImportContextAsync(acquisitionId, CancellationToken.None);
+
+        Assert.Equal(AcquisitionCheckpointProtocol.Placement, context!.CheckpointProtocol);
+        Assert.Equal(checkpoint.AttemptId, context.PlacementCheckpoint!.AttemptId);
+        Assert.Throws<InvalidOperationException>(() => _ = context.TelevisionCheckpoint);
+    }
+
+    [Fact]
+    public async Task MovieRejectsTelevisionCheckpointJsonInsteadOfInferringItsProtocolFromThePayloadShape() {
+        await using var db = CreateContext();
+        var now = DateTimeOffset.UtcNow;
+        var acquisitionId = Guid.NewGuid();
+        db.Acquisitions.Add(new AcquisitionRow {
+            Id = acquisitionId,
+            Status = AcquisitionStatus.Importing,
+            Title = "Film",
+            Kind = EntityKind.Movie,
+            ImportCheckpointJson = TvImportCheckpointJson.Serialize(ValidTvCheckpoint()),
+            ExternalIdsJson = "{}",
+            SourceUrlsJson = "[]",
+            CreatedAt = now,
+            UpdatedAt = now,
+        });
+        await db.SaveChangesAsync();
+
+        await Assert.ThrowsAsync<InvalidDataException>(() =>
+            AcquisitionTestFactory.Store(db).GetImportContextAsync(acquisitionId, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task TelevisionCheckpointStoreApiRejectsAMovieAcquisition() {
+        await using var db = CreateContext();
+        var now = DateTimeOffset.UtcNow;
+        var acquisitionId = Guid.NewGuid();
+        db.Acquisitions.Add(new AcquisitionRow {
+            Id = acquisitionId,
+            Status = AcquisitionStatus.Importing,
+            Title = "Film",
+            Kind = EntityKind.Movie,
+            ExternalIdsJson = "{}",
+            SourceUrlsJson = "[]",
+            CreatedAt = now,
+            UpdatedAt = now,
+        });
+        await db.SaveChangesAsync();
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            AcquisitionTestFactory.Store(db).SetTvImportCheckpointAsync(
+                acquisitionId,
+                ValidTvCheckpoint(),
+                CancellationToken.None));
     }
 
     [Fact]

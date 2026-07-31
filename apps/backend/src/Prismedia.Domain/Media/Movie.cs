@@ -67,7 +67,8 @@ public sealed class MovieEntityKindDefinition() : PlayableVideoEntityKindDefinit
         ],
         "{Title} ({Year})/{Title} ({Year}).{ext}",
         "{Title} {Year} {Quality} {ext} — 2 segments: folder/file",
-        AcquisitionNamingFamily.Movie);
+        AcquisitionNamingFamily.Movie,
+        AcquisitionCheckpointProtocol.Placement);
 }
 
 /// <summary>

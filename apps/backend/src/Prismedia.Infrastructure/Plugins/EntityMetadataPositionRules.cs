@@ -33,6 +33,32 @@ internal static class PluginPositionField {
 }
 
 internal static class EntityMetadataPositionRules {
+    /// <summary>Gets the plugin wire field for one canonical Prismedia position code.</summary>
+    public static string PluginFieldFor(string positionCode) => positionCode switch {
+        EntityPositionCodes.Season => PluginPositionField.SeasonNumber,
+        EntityPositionCodes.Episode => PluginPositionField.EpisodeNumber,
+        EntityPositionCodes.AbsoluteEpisode => PluginPositionField.AbsoluteEpisodeNumber,
+        EntityPositionCodes.Volume => PluginPositionField.VolumeNumber,
+        EntityPositionCodes.Chapter => PluginPositionField.ChapterNumber,
+        EntityPositionCodes.Page => PluginPositionField.PageNumber,
+        EntityPositionCodes.Track => PluginPositionField.TrackNumber,
+        EntityPositionCodes.Sort => PluginPositionField.SortOrder,
+        _ => positionCode
+    };
+
+    /// <summary>
+    /// Gets the plugin field used when a structural traversal has only the persisted sibling sort
+    /// order. The Entity-kind definition declares any semantic override; unknown kinds safely use
+    /// the generic sort code rather than inferring from their sort precedence.
+    /// </summary>
+    public static string StructuralFallbackPluginFieldFor(string kindCode) {
+        var positionCode = kindCode.Equals(kindCode.Trim(), StringComparison.Ordinal) &&
+            EntityKindRegistry.TryDescribe(kindCode, out var definition)
+            ? definition.StructuralFallbackPositionCode
+            : EntityPositionCodes.Sort;
+        return PluginFieldFor(positionCode);
+    }
+
     public static IReadOnlyDictionary<string, int> Normalize(IReadOnlyDictionary<string, int> positions) {
         var normalized = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         foreach (var (code, value) in positions) {

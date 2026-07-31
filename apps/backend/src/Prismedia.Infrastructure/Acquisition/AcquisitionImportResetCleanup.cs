@@ -22,9 +22,17 @@ public sealed class AcquisitionImportResetCleanup(
         CancellationToken cancellationToken) {
         await using var scanLease = await scanGate.EnterAsync(cancellationToken);
 
-        var catalogChanges = import.ImportPlacementCheckpoint is { } placement
-            ? CleanupPlacementFiles(placement, cancellationToken)
-            : CleanupTvFiles(import, cancellationToken);
+        import.EnsureCheckpointApplicability();
+        var catalogChanges = import.CheckpointProtocol switch {
+            AcquisitionCheckpointProtocol.Placement => import.PlacementCheckpoint is { } placement
+                ? CleanupPlacementFiles(placement, cancellationToken)
+                : EmptyCatalogChanges(),
+            AcquisitionCheckpointProtocol.Television => CleanupTvFiles(
+                import.TelevisionCheckpoint,
+                cancellationToken),
+            _ => throw new InvalidOperationException(
+                $"Unknown acquisition checkpoint protocol '{import.CheckpointProtocol}'.")
+        };
 
         await ReconcileCatalogAsync(import.EntityId, catalogChanges, cancellationToken);
     }
@@ -48,12 +56,10 @@ public sealed class AcquisitionImportResetCleanup(
     }
 
     private CatalogChanges CleanupTvFiles(
-        AcquisitionImportContext import,
+        TvImportCheckpoint? checkpoint,
         CancellationToken cancellationToken) {
-        if (import.TvImportCheckpoint is not { } checkpoint) {
-            return new CatalogChanges(
-                new HashSet<string>(FileSystemPathComparison.Comparer),
-                new Dictionary<string, string>(FileSystemPathComparison.Comparer));
+        if (checkpoint is null) {
+            return EmptyCatalogChanges();
         }
 
         var removedTargets = new HashSet<string>(FileSystemPathComparison.Comparer);
@@ -86,6 +92,10 @@ public sealed class AcquisitionImportResetCleanup(
 
         return new CatalogChanges(removedTargets, restoredTargets);
     }
+
+    private static CatalogChanges EmptyCatalogChanges() => new(
+        new HashSet<string>(FileSystemPathComparison.Comparer),
+        new Dictionary<string, string>(FileSystemPathComparison.Comparer));
 
     private void RestorePreviousFile(TvImportCheckpointUnit unit, string target, string previous) {
         var backup = unit.ReplacementBackupPath;

@@ -81,7 +81,8 @@ public sealed class VideoSeriesEntityKindDefinition() : EntityKindDefinition<Vid
         ],
         "{Series}/Season {Season:00}/{Series} - S{Season:00}E{Episode:00}.{ext}",
         "{Series} {Season} {Season:00} {Episode:00} {Quality} {ext} — 3 segments: series/season/episode",
-        AcquisitionNamingFamily.Television);
+        AcquisitionNamingFamily.Television,
+        AcquisitionCheckpointProtocol.Television);
 
     /// <inheritdoc />
     protected override IReadOnlyList<ContractCapability> ProjectCapabilities(
@@ -143,6 +144,9 @@ public sealed class VideoSeasonEntityKindDefinition() : RootEntityKindDefinition
 
     /// <inheritdoc />
     public override IReadOnlyList<string> PositionSortOrderPrecedence => SortOrderPrecedence;
+
+    /// <inheritdoc />
+    public override string StructuralFallbackPositionCode => EntityPositionCodes.Season;
 
     /// <inheritdoc />
     public override IReadOnlyList<EntityStructuralCountDefinition> StructuralThumbnailCounts =>
