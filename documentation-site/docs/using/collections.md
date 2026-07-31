@@ -28,4 +28,4 @@ Use **Add to Collection** from any library grid: turn on selection, pick one or 
 
 ## Cover art
 
-A collection shows its own cover, or falls back to a configured cover item or the first item — including in Jellyfin clients, where box-set tiles render a poster rather than a blank folder.
+A collection shows its own cover, or falls back to a configured cover item or the first item.

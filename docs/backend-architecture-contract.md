@@ -200,7 +200,7 @@ Stable string identifiers are owned by exactly one source and must not be retype
   Encode/decode both forms through `CodecRegistry`; in EF LINQ, hoist `.ToCode()` to a
   local first so the query translates.
 - Open-ended keys are constants classes (`ExternalIdProviders`, `MediaContentTypes`,
-  `JellyfinProtocol`, Api-side `JellyfinRoutes`, `AppSettingKeys`).
+  `AppSettingKeys`, and protocol-specific constants at their integration boundaries).
 - The frontend never hand-maintains these. `GET /api/_codegen/codes.json` (Development
   only) publishes them and `pnpm api:generate` regenerates
   `apps/web-svelte/src/lib/api/generated/codes.ts`. Frontend modules re-export the

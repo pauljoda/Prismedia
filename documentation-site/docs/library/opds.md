@@ -36,7 +36,7 @@ After saving the catalog, browse **Libraries**, **Recently Added**, **Authors**,
 Some OPDS clients authenticate the catalog request but then fetch cover or download links without the `Authorization` header. If covers or downloads fail while the catalog loads, put a session token query parameter on the catalog URL (get one by signing in with `POST /api/auth/login` — see [Authentication & User Accounts](../deployment/authentication.md#direct-api-access)):
 
 ```text
-https://prismedia.example.com/opds?ApiKey=YOUR_SESSION_TOKEN
+https://prismedia.example.com/opds?access_token=YOUR_SESSION_TOKEN
 ```
 
 Prismedia will carry that existing token query parameter into OPDS cover and acquisition links. Treat the full URL as a secret.
@@ -84,14 +84,12 @@ Most reader apps should use HTTP Basic Auth:
 | Username | Your Prismedia username. |
 | Password | Your Prismedia password. |
 
-OPDS also accepts the same session-token transports documented in [Authentication & User Accounts](../deployment/authentication.md):
+OPDS also accepts Prismedia session tokens documented in [Authentication & User Accounts](../deployment/authentication.md):
 
 - `Authorization: Bearer <token>`
-- `X-Prismedia-Api-Key: <token>`
-- Jellyfin token headers
-- `?ApiKey=<token>` or `?api_key=<token>`
+- `?access_token=<token>`
 
-Some reader apps drop auth headers when they fetch covers or acquisition links. If that happens, configure the app to include a session-token query parameter on the OPDS base URL, for example `https://prismedia.example.com/opds?ApiKey=...`. Treat URLs containing tokens as secrets.
+Some reader apps drop auth headers when they fetch covers or acquisition links. If that happens, configure the app to include a session-token query parameter on the OPDS base URL, for example `https://prismedia.example.com/opds?access_token=...`. Treat URLs containing tokens as secrets.
 
 ## NSFW filtering
 
@@ -110,15 +108,15 @@ Hidden books do not contribute authors, tags, collections, series, counts, cover
 | --- | --- |
 | The app shows an SSO login page or cannot add the catalog. | Bypass proxy/forward-auth for `/opds([/?].*)?$` and retry. A request without OPDS credentials should return Prismedia `401`, not an IdP HTML page. |
 | The catalog authenticates but shows no books. | Confirm the source directory is a Prismedia library root with **Scan books** enabled, the root is enabled, the scan completed, and the files are EPUB/PDF/CBZ/CBR-compatible. |
-| Covers or downloads fail but browsing works. | Use Basic Auth if available. If the reader still drops auth on linked resources, add `?ApiKey=YOUR_SESSION_TOKEN` to the OPDS base URL. |
+| Covers or downloads fail but browsing works. | Use Basic Auth if available. If the reader still drops auth on linked resources, add `?access_token=YOUR_SESSION_TOKEN` to the OPDS base URL. |
 | A reader still shows old entries after a fix or rescan. | Refresh/re-sync the OPDS catalog in the app, or remove and re-add the OPDS server. Many readers cache feeds aggressively. |
 | NSFW items are missing. | Sign in as a user whose account allows NSFW content. |
 
 ## Reverse proxies
 
-If your reverse proxy uses SSO or forward auth, bypass that proxy auth for `/opds([/?].*)?$` the same way Jellyfin client routes bypass it. The OPDS routes still require Prismedia auth, but reader apps cannot complete an interactive SSO redirect.
+If your reverse proxy uses SSO or forward auth, bypass that proxy auth for `/opds([/?].*)?$`. The OPDS routes still require Prismedia authentication, but reader apps cannot complete an interactive SSO redirect.
 
-See [Reverse Proxy & Auth Middleware](../deployment/reverse-proxy.md) for Authelia, Authentik, Traefik, and Nginx examples.
+See [Reverse Proxy](../deployment/reverse-proxy.md) for Authelia, Authentik, Traefik, and Nginx examples.
 
 ## Known limitations
 

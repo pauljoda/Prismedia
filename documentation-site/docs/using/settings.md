@@ -37,7 +37,7 @@ How files become entities is covered in [Library & Scanning](../library/overview
 
 NSFW visibility is a **per-user permission**: an administrator grants **Allow NSFW** per account in **Settings → Users**. A permitted user chooses whether restricted content currently shows from their **Account** page (the choice is remembered per browser); users without the permission never see NSFW content, in the web app or any connected client.
 
-Visibility applies across browse pages, search, files, identify, plugin providers, relationship surfaces, Jellyfin clients, and OPDS — see [Users & NSFW Servers](../jellyfin/profiles.md).
+Visibility applies across browse pages, search, files, identify, plugin providers, relationship surfaces, playback, and OPDS.
 
 ## Playback
 
@@ -100,7 +100,7 @@ Worker settings include concurrency and scheduling behavior. Higher concurrency 
 
 ## Users
 
-Manage user accounts: create, edit, disable, or delete users, reset passwords, set roles, grant NSFW visibility and library-creation rights, and choose which libraries each member can see. The same credentials sign in to the web app, Jellyfin clients, and OPDS readers. See [Authentication & User Accounts](../deployment/authentication.md) and [Users & NSFW Servers](../jellyfin/profiles.md).
+Manage user accounts: create, edit, disable, or delete users, reset passwords, set roles, grant NSFW visibility and library-creation rights, and choose which libraries each member can see. Web and native API sessions belong to these accounts, and OPDS readers use the same credentials. See [Authentication & User Accounts](../deployment/authentication.md).
 
 ## Diagnostics
 

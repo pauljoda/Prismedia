@@ -21,7 +21,7 @@ It ships as one Docker image. PostgreSQL 16, ffmpeg, the .NET API, the .NET work
 - Running local background work for scans, probes, thumbnails, sprites, waveforms, HLS, subtitles, identify, and imports.
 - Identifying and enriching metadata through native plugins and wrapped Stash community scrapers, while keeping Prismedia's schema independent.
 - Requesting new movies, series, and music through connected **Radarr, Sonarr, and Lidarr** instances, with request history and live download status.
-- Optionally serving your library to **Jellyfin client apps** (Infuse, Manet, and similar) for video and audio playback.
+- Playing video and audio through Prismedia's browser and native playback APIs, with per-user progress and history.
 
 ## Main workspaces
 
@@ -47,14 +47,14 @@ The design language is documented in [Design Language](./developers/design-langu
 ## Runtime model
 
 ```text
-Browser / LAN / Jellyfin client
+Browser / native client / LAN
     │
     │ HTTP :8008
     ▼
 .NET API
     ├─ serves /api/*
     ├─ serves the built Svelte app
-    ├─ serves Jellyfin-compatible routes (/Items, /Videos, /Audio, …)
+    ├─ serves native playback routes under /api/playback
     ├─ streams direct files and HLS assets
     └─ applies EF Core migrations
     │
@@ -72,4 +72,4 @@ The frontend is a client only. Public HTTP contracts live in the .NET backend, a
 - [Your First Library & Scan](./getting-started/first-library.md) walks through the first scan.
 - [Identify & Enrich Your Media](./getting-started/identify-walkthrough.md) adds metadata and artwork.
 - [Library & Scanning](./library/overview.md) explains exactly how folder layout becomes media.
-- [Jellyfin Compatibility](./jellyfin/overview.md) connects Infuse, Manet, and other clients.
+- [Playback And Reading](./using/playback.md) covers video, audio, books, progress, and resume state.

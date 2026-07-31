@@ -51,7 +51,7 @@ the database to be reachable and migrated before it begins claiming work.
 | Web app | `apps/web-svelte` | Svelte routes, app chrome, stores, generated API client, entity grids/details, media players, readers. |
 | API host | `apps/backend/src/Prismedia.Api` | Minimal API endpoint composition, auth, OpenAPI, static frontend hosting, codegen manifest, HTTP result mapping. |
 | Contracts | `apps/backend/src/Prismedia.Contracts` | Public .NET request/response DTOs consumed by OpenAPI generation. |
-| Application | `apps/backend/src/Prismedia.Application` | Use-case services, job handlers, ports, settings, security, playback policy, Jellyfin catalog projection. |
+| Application | `apps/backend/src/Prismedia.Application` | Use-case services, job handlers, ports, settings, security, and playback policy. |
 | Domain | `apps/backend/src/Prismedia.Domain` | Entity kinds, behavior-bearing entities, capabilities, coded enums, taxonomy concepts. |
 | Infrastructure | `apps/backend/src/Prismedia.Infrastructure` | EF Core, row models, migrations, repositories/read services, media tools, plugins, requests, queue storage. |
 | Worker | `apps/backend/src/Prismedia.Worker` | Hosted process that registers worker services and runs queue/scheduler hosted services. |
@@ -168,7 +168,7 @@ flowchart TD
   Program --> Endpoints["MapPrismediaEndpoints"]
   Endpoints --> EntityRoutes["Entities, media kinds, taxonomy, collections"]
   Endpoints --> OpsRoutes["Jobs, files, settings, nav, plugins, identify, requests"]
-  Endpoints --> PlaybackRoutes["Playback, music player, Jellyfin-compatible routes"]
+  Endpoints --> PlaybackRoutes["Native playback and music-player routes"]
   Endpoints --> SystemRoutes["Health, changelog, update check, dev codegen"]
 ```
 
@@ -185,7 +185,7 @@ Important groups currently mapped:
 | Jobs | `/api/jobs` | `JobService`, `IJobGraphService`, `IJobQueueService`, durable graph/node/signal/resource rows. |
 | Identify | `/api/identify` | Plugin services, identify queues, cascade runners. |
 | Requests | `/api/requests` | Radarr, Sonarr, Lidarr clients and history stores. |
-| Playback | `/api/playback`, `/api/music-player`, Jellyfin routes | Playback services, HLS assets, stream sources. |
+| Playback | `/api/playback`, `/api/music-player` | Playback planning and sessions, HLS assets, stream sources. |
 | Settings/auth | `/api/settings`, `/api/auth`, `/api/users` | Settings registry, user authentication, and user administration services. |
 
 ## Durable Job Flow
@@ -284,7 +284,7 @@ flowchart TD
   Projection --> Grid["EntityGrid or shelf cards"]
   Grid --> Detail["Entity detail route"]
   Detail --> DetailEndpoint["GetEntity"]
-  DetailEndpoint --> PlayerDecision["PlaybackInfoService"]
+  DetailEndpoint --> PlayerDecision["VideoPlaybackPlanService"]
   PlayerDecision --> Direct["Direct play or stream source"]
   PlayerDecision --> HLS["HLS direct stream or transcode assets"]
   Direct --> Player["VideoPlayer or audio player"]
@@ -348,7 +348,7 @@ flowchart TD
 | New closed-set code | Domain `[Code]` enum or constants manifest | `CodesManifest.cs`, `scripts/gen-codes.mjs`, `codes.ts`. |
 | New media scan behavior | Scan handler for that family | `LibraryScanPersistenceService.*`, file classifier/parsing helpers, downstream job needs. |
 | New worker job | `Prismedia.Application/Jobs/DependencyInjection.cs` | `JobType`, handler, queue tests, Jobs UI if surfaced. |
-| Playback negotiation change | `PlaybackInfoService.cs` | `VideoDirectPlayPolicy`, `HlsAssetService*`, `VideoPlayer.svelte`, Jellyfin endpoints. |
+| Playback negotiation change | `VideoPlaybackPlanService.cs` | `VideoDirectPlayPolicy`, `HlsAssetService*`, `/api/playback` endpoints, `VideoPlayer.svelte`. |
 | Plugin/identify behavior | `IdentifyPluginService*` or identify job handlers | Queue store, proposal traversal, apply service, identify UI store. |
 | Request integration | `RequestEndpoints.cs` and request services | Arr clients, request contracts, settings UI, history tests. |
 
@@ -392,7 +392,6 @@ instead of adding one-off branches.
 | Frontend grids | `EntityGrid.svelte`, `EntityGridToolbar.svelte`, `EntityThumbnail.svelte` | Shared browsing behavior, filtering, selection, thumbnails, previews, and mobile ergonomics. |
 | Identify UI | `identify-store.svelte.ts`, identify review components | Long-running async state, provider selection, review/apply progress, and refresh survival. |
 | API wrapper | `apps/web-svelte/src/lib/api/prismedia.ts` | Transitional wrapper around generated clients; useful but should not become a second contract layer. |
-| Backend Jellyfin | `JellyfinCatalogService*`, Jellyfin endpoints | Compatibility surface with many legacy route shapes and client expectations. |
 | Backend identify | `IdentifyQueueService`, `IdentifyPluginService*` | Async matching, provider behavior, queue state, cascade and apply paths. |
 | Backend playback | `HlsAssetService*`, playback policy services | Direct play, direct stream, transcode, cache, seek, and process lifecycle all interact. |
 | Backend scanning | `LibraryScanPersistenceService.*`, scan handlers | Converts files into canonical entities and downstream job work. |

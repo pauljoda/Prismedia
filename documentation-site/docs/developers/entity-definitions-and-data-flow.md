@@ -487,7 +487,7 @@ The following are high-signal smells:
 - a test asserting source text, CSS details, mapper assignments, or a one-off patch
   instead of an invariant or user-visible behavior.
 
-Some branching is legitimate. A filesystem classifier, Jellyfin/Stash adapter,
+Some branching is legitimate. A filesystem classifier, Stash adapter,
 media codec boundary, SQL projection, or SF Symbol mapping may be platform- or
 protocol-specific. The test is whether the branch translates an external concern,
 or secretly re-declares a fact already owned by the Entity definition.

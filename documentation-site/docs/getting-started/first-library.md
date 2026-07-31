@@ -73,7 +73,7 @@ Use **Files** to inspect the source folder layout, linked entities, exclusions, 
 
 Prismedia is designed for private LAN use, but some libraries may still contain content you do not want shown by default. Mark roots or entities as NSFW where appropriate and control visibility from **Settings → Content Visibility**.
 
-Visibility is enforced across browse pages, search, files, identify, jobs context, relationship rails, and Jellyfin clients. See [Settings](../using/settings.md).
+Visibility is enforced across browse pages, search, files, identify, jobs context, relationship rails, playback, and OPDS. See [Settings](../using/settings.md).
 
 ## 6. Identify metadata
 

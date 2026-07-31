@@ -122,7 +122,7 @@ docs/                  Architecture and design language docs.
 Closed-set string identifiers are NEVER written as bare literals. Every kind code,
 relationship/credit/file-role code, job type, capability key, setting key, problem
 code, sort/filter/status/position/progress/date code, playback/stream mode, provider
-or runtime id, image-asset/meta-icon kind, and external wire scalar (Jellyfin, Stash)
+or runtime id, image-asset/meta-icon kind, and external wire scalar (Stash, ffprobe)
 has exactly one source of truth and is referenced from it.
 
 ### The source of truth
@@ -133,7 +133,7 @@ has exactly one source of truth and is referenced from it.
   (e.g. `EntityKind.Video.ToCode()`, `RelationshipKind.Tags.ToCode()`,
   `CreditRole.Director.ToCode()`, `JobType`, `PlaybackMode`, `EntityFileRole`).
 - Cross-cutting wire/path constants live in dedicated static classes
-  (e.g. `JellyfinProtocol`, `AppSettingKeys`, and — as they are introduced —
+  (e.g. `AppSettingKeys` and — as they are introduced —
   `ApiProblemCodes`, `AssetPaths`, `MediaCodecs`, `MediaContainers`).
 - The frontend consumes code values ONLY from `src/lib/api/generated/codes.ts`
   (re-exported via `$lib/entities/entity-codes.ts`): `ENTITY_KIND`,
@@ -153,7 +153,7 @@ has exactly one source of truth and is referenced from it.
    dev API up. Never hand-maintain a parallel TS union of codes.
 3. Frontend types for codes come from orval-generated models or `codes.ts` — never a
    hand-written `"a" | "b"` union that duplicates a backend set.
-4. External wire vocab (Jellyfin, Stash, ffprobe) belongs in its protocol/constant
+4. External wire vocab (Stash, ffprobe) belongs in its protocol/constant
    class, referenced — not retyped. External decode-boundary field names may stay
    inline ONLY at the single parse site, annotated `// prism-vocab: external`.
 5. Problem/error codes: throwers and HTTP mappers both reference the shared

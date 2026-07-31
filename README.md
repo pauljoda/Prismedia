@@ -136,7 +136,7 @@ Mount `/media` read-only if Prismedia should only scan and play files. Mount it 
 
 ### Access
 
-Prismedia has real user accounts: a first-run wizard creates your administrator, and every household member gets their own username and password. The same credentials sign in to the web app, Jellyfin clients, and OPDS readers, and all `/api/*` routes require a signed-in user — so no reverse-proxy auth middleware is needed. Admins control per-user library access and NSFW visibility. See [Authentication & User Accounts](https://pauljoda.github.io/Prismedia/docs/deployment/authentication).
+Prismedia has real user accounts: a first-run wizard creates your administrator, and every household member gets their own username and password. The web app and native API use per-user sessions, OPDS readers use the same account credentials, and protected `/api/*` routes require a signed-in user. Admins control per-user library access and NSFW visibility. See [Authentication & User Accounts](https://pauljoda.github.io/Prismedia/docs/deployment/authentication).
 
 ### Image Tags
 
@@ -207,10 +207,6 @@ Request is Prismedia's first-party acquisition workspace. Search for books, auth
   <img src="docs/screenshots/request-detail.png" alt="Request detail" width="49%" />
 </p>
 
-### Jellyfin Clients (Experimental)
-
-A Jellyfin-compatible API lets client apps discover Prismedia, sign in, and stream — tested with **Infuse** (video + audio) and music clients like **Manet**, **Finamp**, and **Symfonium**. Clients sign in with your Prismedia user accounts, and each user carries their own library access and NSFW visibility, so you can run separate SFW and NSFW "servers" in your client. Resume position and play counts sync both ways, per user. See [Jellyfin Compatibility](https://pauljoda.github.io/Prismedia/docs/jellyfin/overview).
-
 ### Web And Native Apple Apps
 
 The responsive web app is the complete library workspace: browse every medium, request and identify items, manage files, tune settings, and inspect background work from one interface.
@@ -259,8 +255,7 @@ The design language lives in [docs/design-language.md](docs/design-language.md) 
 - [Identify & Enrich Your Media](https://pauljoda.github.io/Prismedia/docs/getting-started/identify-walkthrough)
 - [Library & Scanning](https://pauljoda.github.io/Prismedia/docs/library/overview)
 - [Requests (Radarr / Sonarr / Lidarr)](https://pauljoda.github.io/Prismedia/docs/using/requests)
-- [Jellyfin Compatibility](https://pauljoda.github.io/Prismedia/docs/jellyfin/overview)
-- [Reverse Proxy & Auth Middleware](https://pauljoda.github.io/Prismedia/docs/deployment/reverse-proxy)
+- [Reverse Proxy](https://pauljoda.github.io/Prismedia/docs/deployment/reverse-proxy)
 - [Architecture](https://pauljoda.github.io/Prismedia/docs/developers/architecture)
 
 ## Development

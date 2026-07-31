@@ -77,14 +77,14 @@ Most installs need **no** environment variables. The container generates everyth
 | `PRISMEDIA_VAAPI_DEVICE` | `/dev/dri/renderD128` | VAAPI render node for hardware transcoding. |
 
 :::note
-There is no `PUBLIC_ORIGIN` variable. When Prismedia runs behind a reverse proxy you configure the proxy, not Prismedia — see [Reverse Proxy & Auth Middleware](../deployment/reverse-proxy.md).
+There is no `PUBLIC_ORIGIN` variable. When Prismedia runs behind a reverse proxy you configure the proxy, not Prismedia — see [Reverse Proxy](../deployment/reverse-proxy.md).
 :::
 
 `DATABASE_URL`, `PRISMEDIA_DATA_DIR`, and `PRISMEDIA_CACHE_DIR` are managed by the unified image's entrypoint and point at the embedded PostgreSQL and the `/data` volume. You only set these when running the API/worker outside the unified image (see [Contributing](../developers/contributing.md)).
 
 ## User accounts
 
-The first visit to `http://host:8008` shows a **setup wizard** that creates your administrator account and signs you in — complete it promptly after starting the container. After that, everything requires a signed-in user: the web app has a login page (sessions persist per browser), and Jellyfin clients, OPDS readers, and direct `/api/*` calls authenticate with the same per-user credentials. Add household members and control their library access and NSFW visibility in **Settings → Users**. See [Authentication & User Accounts](../deployment/authentication.md).
+The first visit to `http://host:8008` shows a **setup wizard** that creates your administrator account and signs you in — complete it promptly after starting the container. After that, the web app and protected `/api/*` calls require a per-user session; OPDS readers authenticate with the same account credentials. Add household members and control their library access and NSFW visibility in **Settings → Users**. See [Authentication & User Accounts](../deployment/authentication.md).
 
 ## Image tags
 
@@ -104,7 +104,7 @@ See [Upgrading & Rollback](../deployment/upgrading.md) for channel and migration
 | Process | Purpose |
 | --- | --- |
 | PostgreSQL 16 | Application data and durable job state (local-only, on `/data/postgres`). |
-| .NET API | `/api/*`, the static Svelte app, Jellyfin-compatible routes, file streaming, HLS assets, migrations. |
+| .NET API | `/api/*`, the static Svelte app, native playback and file streaming, HLS assets, migrations. |
 | .NET worker | Scans, probes, thumbnails, sprites, waveforms, HLS, subtitles, identify, imports. The entrypoint supervises and auto-restarts it. |
 | ffmpeg | Media probing, thumbnailing, HLS, subtitle extraction (bundled jellyfin-ffmpeg). |
 

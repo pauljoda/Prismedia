@@ -11,8 +11,8 @@ The .NET backend owns all server behavior.
 ## HTTP API
 
 API routes live in `apps/backend/src/Prismedia.Api/Endpoints` and are exposed
-under `/api/*` or Jellyfin-compatible playback roots such as `/Videos` and
-`/Items`.
+under Prismedia-owned `/api/*` paths. Video planning, source streaming, HLS,
+trickplay, and playback-session reporting live under `/api/playback`.
 
 The Svelte frontend should call the API through:
 

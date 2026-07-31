@@ -28,7 +28,7 @@ You can also side-load a scraper you've packaged yourself — see [Stash Compati
 
 ## NSFW handling
 
-Stash scrapers are treated as **always NSFW**: every entity they create or touch is marked NSFW, and the scrapers themselves are hidden from the Plugins page, the Auto Identify picker, and the identify provider options while you browse in SFW mode. Reveal NSFW content (signed in as a user whose account [allows NSFW](../jellyfin/profiles.md)) to use them.
+Stash scrapers are treated as **always NSFW**: every entity they create or touch is marked NSFW, and the scrapers themselves are hidden from the Plugins page, the Auto Identify picker, and the identify provider options while you browse in SFW mode. Reveal NSFW content while signed in as a user whose account allows NSFW to use them; see [Settings](../using/settings.md#users).
 
 ## Limitations
 

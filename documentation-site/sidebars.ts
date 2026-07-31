@@ -43,16 +43,6 @@ const sidebars: SidebarsConfig = {
     },
     {
       type: 'category',
-      label: 'Jellyfin Clients',
-      collapsed: false,
-      items: [
-        'jellyfin/overview',
-        'jellyfin/profiles',
-        'jellyfin/clients',
-      ],
-    },
-    {
-      type: 'category',
       label: 'Deployment & Security',
       collapsed: false,
       items: [

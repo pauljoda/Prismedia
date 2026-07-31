@@ -85,4 +85,4 @@ Audio plays through a single **persistent player bar** that keeps playing as you
 
 Video, audio, and book/comic progress are all tracked so you can resume where you stopped. Finishing an item marks it watched/read and counts the play.
 
-User progress is **library state, not file metadata** — rescans don't erase it. For Jellyfin clients, resume position, completion, and play counts sync both ways (see [Jellyfin Compatibility](../jellyfin/overview.md)).
+User progress is **library state, not file metadata** — rescans do not erase it. Prismedia's web and native playback sessions update the same per-account resume position, completion state, and play counts.
