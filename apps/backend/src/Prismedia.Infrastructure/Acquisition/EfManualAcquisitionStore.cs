@@ -348,15 +348,14 @@ public sealed class EfManualAcquisitionStore(
                 FormatScore: parent.OwnedFormatScore);
 
     private static bool TryDecodeReplaceableKind(string code, out EntityKind kind) {
-        try {
-            kind = code.DecodeAs<EntityKind>();
-            return kind == EntityKind.Book
-                || kind == EntityKind.AudioLibrary
-                || MediaQualityLadder.IsUpgradeCapableKind(kind);
-        } catch (ArgumentException) {
-            kind = default;
-            return false;
+        if (EntityKindRegistry.TryDescribe(code, out var definition) &&
+            definition.ManualAcquisition.SupportsReplacement) {
+            kind = definition.Kind;
+            return true;
         }
+
+        kind = default;
+        return false;
     }
 
     private static bool PathExists(string? path) =>

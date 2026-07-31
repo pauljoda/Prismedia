@@ -41,6 +41,13 @@ public sealed record EntityKindNavigationManifestEntry(
 /// <param name="ExpandsRelationshipResults">Whether direct matches hydrate related entities.</param>
 public sealed record EntityKindSearchManifestEntry(int Order, bool ExpandsRelationshipResults);
 
+/// <summary>Manual acquisition behavior owned by an Entity-kind definition.</summary>
+/// <param name="SupportsUpload">Whether this kind is a concrete browser upload/import unit.</param>
+/// <param name="SupportsReplacement">Whether existing owned content may be replaced after review.</param>
+public sealed record EntityManualAcquisitionManifestEntry(
+    bool SupportsUpload,
+    bool SupportsReplacement);
+
 /// <summary>Acquisition-profile policy projected from an owning Entity-kind definition.</summary>
 /// <param name="Label">User-facing profile label.</param>
 /// <param name="DisplayOrder">Stable settings-display order among acquisition profiles.</param>
@@ -80,6 +87,7 @@ public sealed record AcquisitionProfileManifestEntry(
 /// <param name="SupportsFileDeletion">Whether this kind may root the managed delete-files workflow.</param>
 /// <param name="SupportsAtomicMediaUpgrade">Whether one owned file can be replaced atomically.</param>
 /// <param name="SupportsManualManagement">Whether users may create and delete this kind directly.</param>
+/// <param name="ManualAcquisition">Definition-owned browser upload and replacement behavior.</param>
 /// <param name="EngagementMode">Completion/filter vocabulary exposed by the kind.</param>
 /// <param name="AggregatesDirectChildPlayback">Whether direct-child playback contributes to container engagement.</param>
 /// <param name="SupportsRequests">Whether a committable request descriptor materializes this Entity kind.</param>
@@ -107,6 +115,7 @@ public sealed record EntityKindManifestEntry(
     bool SupportsFileDeletion,
     bool SupportsAtomicMediaUpgrade,
     bool SupportsManualManagement,
+    EntityManualAcquisitionManifestEntry ManualAcquisition,
     string EngagementMode,
     bool AggregatesDirectChildPlayback,
     bool SupportsRequests,
@@ -294,6 +303,9 @@ public sealed record CodesManifest(
                 descriptor.SupportsFileDeletion,
                 descriptor.SupportsAtomicMediaUpgrade,
                 descriptor.SupportsManualManagement,
+                new EntityManualAcquisitionManifestEntry(
+                    descriptor.ManualAcquisition.SupportsUpload,
+                    descriptor.ManualAcquisition.SupportsReplacement),
                 descriptor.Engagement.Mode.ToCode(),
                 descriptor.Engagement.AggregatesDirectChildPlayback,
                 requestableKinds.Contains(descriptor.Kind),

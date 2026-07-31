@@ -126,6 +126,7 @@ async function main() {
     "thumbnailWidth", "thumbnailHeight", "primaryAccent", "secondaryAccent", "artworkFit",
     "navigation", "search", "autoIdentifySelector", "identifyPluginFallbackKind", "containableKinds", "mediaQualityFamily",
     "supportsFileDeletion", "supportsAtomicMediaUpgrade", "supportsManualManagement",
+    "manualAcquisition",
     "engagementMode", "aggregatesDirectChildPlayback",
     "supportsRequests", "enumeratesIdentifyChildren", "acquisitionProfile",
   ];
@@ -149,6 +150,11 @@ async function main() {
       if (missingSearch.length > 0) {
         throw new Error(`Entity kind '${kind.code}' search is missing: ${missingSearch.join(", ")}`);
       }
+    }
+    const missingManualAcquisition = ["supportsUpload", "supportsReplacement"]
+      .filter((field) => !Object.hasOwn(kind.manualAcquisition, field));
+    if (missingManualAcquisition.length > 0) {
+      throw new Error(`Entity kind '${kind.code}' manual acquisition is missing: ${missingManualAcquisition.join(", ")}`);
     }
     if (kind.acquisitionProfile !== null) {
       const missingProfile = [
@@ -174,6 +180,7 @@ async function main() {
     `mediaQualityFamily: ${lit(kind.mediaQualityFamily)}, supportsFileDeletion: ${lit(kind.supportsFileDeletion)}, ` +
     `supportsAtomicMediaUpgrade: ${lit(kind.supportsAtomicMediaUpgrade)}, ` +
     `supportsManualManagement: ${lit(kind.supportsManualManagement)}, ` +
+    `manualAcquisition: ${lit(kind.manualAcquisition)}, ` +
     `engagementMode: ${lit(kind.engagementMode)}, ` +
     `aggregatesDirectChildPlayback: ${lit(kind.aggregatesDirectChildPlayback)}, ` +
     `supportsRequests: ${lit(kind.supportsRequests)}, ` +
@@ -220,6 +227,10 @@ async function main() {
       `  order: number;\n` +
       `  expandsRelationshipResults: boolean;\n` +
       `}\n\n` +
+      `export interface EntityManualAcquisitionManifestEntry {\n` +
+      `  supportsUpload: boolean;\n` +
+      `  supportsReplacement: boolean;\n` +
+      `}\n\n` +
       `export interface EntityKindDefinitionManifestEntry {\n` +
       `  kind: EntityKindCode;\n` +
       `  displayName: string;\n` +
@@ -236,6 +247,7 @@ async function main() {
       `  supportsFileDeletion: boolean;\n` +
       `  supportsAtomicMediaUpgrade: boolean;\n` +
       `  supportsManualManagement: boolean;\n` +
+      `  manualAcquisition: EntityManualAcquisitionManifestEntry;\n` +
       `  engagementMode: EntityEngagementModeCode;\n` +
       `  aggregatesDirectChildPlayback: boolean;\n` +
       `  supportsRequests: boolean;\n` +

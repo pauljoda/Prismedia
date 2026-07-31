@@ -24,6 +24,7 @@ public sealed class AudioTrackEntityKindDefinition() : EntityKindDefinition<Audi
         borrowArtworkFromParentKinds: [EntityKind.AudioLibrary]),
     new EntityKindNavigation(EntityKind.AudioTrack, "tracks", "/tracks", "/audio/tracks/{id}"),
     new EntityKindSearch(11),
+    EntityManualAcquisitionPolicy.None,
     defaultCapabilities: static () => [new CapabilityPlayback()],
     identification: new(AutoIdentifySelectorKind.Audio),
     supportsFileDeletion: true,

@@ -106,6 +106,36 @@ public sealed class EntityKindMetadataTests {
     }
 
     [Fact]
+    public void DefinitionsOwnManualAcquisitionSupportWithoutAParallelKindRegistry() {
+        var replaceableKinds = EntityKindRegistry.All
+            .Where(definition => definition.ManualAcquisition.SupportsReplacement)
+            .Select(definition => definition.Kind)
+            .Order()
+            .ToArray();
+        var uploadableKinds = EntityKindRegistry.All
+            .Where(definition => definition.ManualAcquisition.SupportsUpload)
+            .Select(definition => definition.Kind)
+            .Order()
+            .ToArray();
+
+        Assert.Equal(
+            [EntityKind.AudioLibrary, EntityKind.Book, EntityKind.Movie, EntityKind.Video],
+            replaceableKinds);
+        Assert.Equal(
+            [EntityKind.AudioLibrary, EntityKind.Book, EntityKind.Movie, EntityKind.Video, EntityKind.VideoSeason],
+            uploadableKinds);
+        Assert.All(
+            EntityKindRegistry.All.Where(definition => definition.ManualAcquisition.SupportsReplacement),
+            definition => Assert.True(definition.ManualAcquisition.SupportsUpload));
+    }
+
+    [Fact]
+    public void ManualAcquisitionPolicyRejectsReplacementWithoutUpload() {
+        Assert.Throws<ArgumentException>(() =>
+            new EntityManualAcquisitionPolicy(supportsReplacement: true));
+    }
+
+    [Fact]
     public void DefinitionsOwnQualityAndArtworkPolicies() {
         var movie = EntityKindRegistry.Describe(EntityKind.Movie);
         var season = EntityKindRegistry.Describe(EntityKind.VideoSeason);

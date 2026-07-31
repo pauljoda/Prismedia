@@ -23,6 +23,7 @@ public sealed class MusicArtistEntityKindDefinition() : RootEntityKindDefinition
     new EntityKindNavigation(EntityKind.MusicArtist, "artists", "/artists", "/artists/{id}"),
     search: null,
     static root => new MusicArtist(root.Id, root.Title),
+    manualAcquisition: EntityManualAcquisitionPolicy.None,
     defaultCapabilities: static () => [new CapabilityCredits()],
     identification: new(
         AutoIdentifySelectorKind.Audio,

@@ -35,6 +35,7 @@ public sealed class BookVolumeEntityKindDefinition() : RootEntityKindDefinition<
         root.Title,
         parentEntityId: root.ParentEntityId,
         sortOrder: root.SortOrder),
+    manualAcquisition: EntityManualAcquisitionPolicy.None,
     defaultCapabilities: static () =>
     [
         new CapabilityStats(),
@@ -76,6 +77,7 @@ public sealed class BookChapterEntityKindDefinition() : EntityKindDefinition<Boo
         "/books/{parentId}/chapters/{id}",
         EntityKind.Book),
     search: null,
+    manualAcquisition: EntityManualAcquisitionPolicy.None,
     defaultCapabilities: static () =>
     [
         new CapabilityFingerprints(),
@@ -121,6 +123,7 @@ public sealed class BookPageEntityKindDefinition() : RootEntityKindDefinition<Bo
         root.Title,
         parentEntityId: root.ParentEntityId,
         sortOrder: root.SortOrder),
+    manualAcquisition: EntityManualAcquisitionPolicy.None,
     defaultCapabilities: static () =>
     [
         new CapabilityFingerprints(),

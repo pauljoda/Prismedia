@@ -117,6 +117,7 @@ public static class EntityKindRegistry {
 
         ValidateClientContracts(definitions);
         ValidateIdentificationPolicies(definitions);
+        ValidateManualAcquisitionPolicies(definitions);
         ValidateAcquisitionProfiles(definitions);
 
         return definitions;
@@ -127,6 +128,17 @@ public static class EntityKindRegistry {
             if (definition.Identification.PluginFallbackKind == definition.Kind) {
                 throw new InvalidOperationException(
                     $"Entity kind '{definition.Code}' cannot identify through itself as a plugin fallback.");
+            }
+        }
+    }
+
+    private static void ValidateManualAcquisitionPolicies(IReadOnlyList<EntityKindDefinition> definitions) {
+        foreach (var definition in definitions.Where(candidate => candidate.ManualAcquisition.SupportsUpload)) {
+            if (!definition.RequestKinds.Any(descriptor =>
+                    descriptor.Committable && descriptor.AcquisitionKind == definition.Kind)) {
+                throw new InvalidOperationException(
+                    $"Entity kind '{definition.Code}' exposes manual upload without a committable " +
+                    "request descriptor for the same acquisition kind.");
             }
         }
     }

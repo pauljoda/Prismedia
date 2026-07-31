@@ -9,7 +9,7 @@
    */
   import { RefreshCw, Search } from "@lucide/svelte";
   import { Button } from "@prismedia/ui-svelte";
-  import { ACQUISITION_STATUS, ENTITY_KIND } from "$lib/api/generated/codes";
+  import { ACQUISITION_STATUS, ENTITY_KIND, ENTITY_KIND_DEFINITIONS } from "$lib/api/generated/codes";
   import type { EntityCapability } from "$lib/api/generated/model";
   import AcquisitionPanel from "$lib/components/acquisitions/AcquisitionPanel.svelte";
   import ManualAcquisitionActions from "$lib/components/acquisitions/ManualAcquisitionActions.svelte";
@@ -24,6 +24,7 @@
     requestKindForEntityKind,
     requestKindInfo,
   } from "$lib/requests/request-helpers";
+  import { isEntityKindCode } from "$lib/entities/entity-codes";
 
   let {
     acq,
@@ -74,16 +75,14 @@
     acq.acquisition?.summary.status === ACQUISITION_STATUS.failed
       && activeChildAcquisitionCount > 0,
   );
-  const replaceableKind = $derived(
-    entity?.kind === ENTITY_KIND.book
-      || entity?.kind === ENTITY_KIND.movie
-      || entity?.kind === ENTITY_KIND.video
-      || entity?.kind === ENTITY_KIND.audioLibrary,
+  const kindDefinition = $derived(
+    entity?.kind && isEntityKindCode(entity.kind)
+      ? ENTITY_KIND_DEFINITIONS[entity.kind]
+      : null,
   );
+  const replaceableKind = $derived(kindDefinition?.manualAcquisition.supportsReplacement === true);
   const uploadableAcquisitionKind = $derived(
-    replaceableKind
-      || entity?.kind === ENTITY_KIND.audioLibrary
-      || entity?.kind === ENTITY_KIND.videoSeason,
+    kindDefinition?.manualAcquisition.supportsUpload === true,
   );
   const monitorKindInfo = $derived.by(() => {
     const kind = entity?.kind ? requestKindForEntityKind(entity.kind) : null;

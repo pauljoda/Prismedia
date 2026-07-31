@@ -22,6 +22,7 @@ public sealed class ImageEntityKindDefinition() : RootEntityKindDefinition<Image
     new EntityKindNavigation(EntityKind.Image, "images", "/images", "/images/{id}"),
     new EntityKindSearch(8),
     static root => new Image(root.Id, root.Title),
+    manualAcquisition: EntityManualAcquisitionPolicy.None,
     identification: new(AutoIdentifySelectorKind.Image),
     supportsFileDeletion: true) {
     /// <inheritdoc />

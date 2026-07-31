@@ -144,6 +144,11 @@ public sealed class CodesManifestContractTests {
             kinds[EntityKind.AudioLibrary.ToCode()].MediaQualityFamily);
         Assert.True(kinds[EntityKind.Movie.ToCode()].SupportsAtomicMediaUpgrade);
         Assert.False(kinds[EntityKind.VideoSeason.ToCode()].SupportsAtomicMediaUpgrade);
+        Assert.True(kinds[EntityKind.Book.ToCode()].ManualAcquisition.SupportsReplacement);
+        Assert.True(kinds[EntityKind.AudioLibrary.ToCode()].ManualAcquisition.SupportsReplacement);
+        Assert.False(kinds[EntityKind.VideoSeason.ToCode()].ManualAcquisition.SupportsReplacement);
+        Assert.True(kinds[EntityKind.VideoSeason.ToCode()].ManualAcquisition.SupportsUpload);
+        Assert.False(kinds[EntityKind.VideoSeries.ToCode()].ManualAcquisition.SupportsUpload);
         Assert.Equal(
             EntityEngagementMode.Reading.ToCode(),
             kinds[EntityKind.Book.ToCode()].EngagementMode);

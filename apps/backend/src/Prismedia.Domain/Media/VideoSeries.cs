@@ -25,6 +25,7 @@ public sealed class VideoSeriesEntityKindDefinition() : EntityKindDefinition<Vid
         usesRepresentativeChildArtwork: true),
     new EntityKindNavigation(EntityKind.VideoSeries, "series", "/series", "/series/{id}"),
     new EntityKindSearch(1),
+    EntityManualAcquisitionPolicy.None,
     defaultCapabilities: static () => [new CapabilityCredits()],
     identification: new(AutoIdentifySelectorKind.Video, enumeratesChildren: true),
     supportsFileDeletion: true,
@@ -116,6 +117,7 @@ public sealed class VideoSeasonEntityKindDefinition() : RootEntityKindDefinition
     ],
     identification: new(enumeratesChildren: true),
     supportsFileDeletion: true,
+    manualAcquisition: EntityManualAcquisitionPolicy.Upload,
     mediaQualityFamily: EntityMediaQualityFamily.Video,
     engagement: new(EntityEngagementMode.Playback)) {
     private static readonly IReadOnlyList<string> SortOrderPrecedence = Array.AsReadOnly([

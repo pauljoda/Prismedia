@@ -34,6 +34,7 @@ public sealed class VideoEntityKindDefinition() : EntityKindDefinition<Video>(
         AutoIdentifySelectorKind.Video,
         allowsDirectReconcileChildTarget: true),
     supportsFileDeletion: true,
+    manualAcquisition: EntityManualAcquisitionPolicy.UploadAndReplacement,
     mediaQualityFamily: EntityMediaQualityFamily.Video,
     supportsAtomicMediaUpgrade: true,
     engagement: new(EntityEngagementMode.Playback)) {
