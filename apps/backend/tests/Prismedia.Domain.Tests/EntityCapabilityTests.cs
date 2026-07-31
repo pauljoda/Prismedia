@@ -139,6 +139,38 @@ public sealed class EntityCapabilityTests {
     }
 
     [Fact]
+    public void DeclaredStructurePoliciesRejectInvalidKindsAndReparenting() {
+        var series = new VideoSeries(Guid.NewGuid(), "Series");
+        var season = new VideoSeason(Guid.NewGuid(), "Season 1", series.Id);
+        var otherSeries = new VideoSeries(Guid.NewGuid(), "Other Series");
+        var movie = new Movie(Guid.NewGuid(), "Movie");
+
+        Assert.Throws<ArgumentException>(() => series.AddChild(movie));
+        Assert.Throws<ArgumentException>(() => movie.AddChild(season));
+        Assert.Throws<ArgumentException>(() => otherSeries.AddChild(season));
+    }
+
+    [Fact]
+    public void UnspecifiedStructurePoliciesRemainPermissiveWithOneAnother() {
+        var person = new Person(Guid.NewGuid(), "Parent");
+        var book = new Book(Guid.NewGuid(), "Child", BookType.Novel, null, BookFormat.Epub);
+
+        person.AddChild(book);
+
+        Assert.Same(book, Assert.Single(person.ChildEntities));
+        Assert.Equal(person.Id, book.ParentEntityId);
+    }
+
+    [Fact]
+    public void HydrationEnforcesDeclaredParentPresence() {
+        var episode = new VideoEpisode(Guid.NewGuid(), "Episode", parentEntityId: null);
+        var movie = new Movie(Guid.NewGuid(), "Movie");
+
+        Assert.Throws<InvalidOperationException>(() => episode.HydrateStructuralPlacement(null, null));
+        Assert.Throws<InvalidOperationException>(() => movie.HydrateStructuralPlacement(Guid.NewGuid(), null));
+    }
+
+    [Fact]
     public void CreditsCapabilityReferencesTheSamePersonInstance() {
         var person = new Person(
             Guid.Parse("88888888-8888-8888-8888-888888888888"),

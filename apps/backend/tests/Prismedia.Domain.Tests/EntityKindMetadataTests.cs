@@ -461,7 +461,7 @@ public sealed class EntityKindMetadataTests {
     }
 
     [Fact]
-    public void VideoStructurePoliciesDeclareTheTargetGraphWithoutEnforcingItOnEntities() {
+    public void VideoStructurePoliciesDeclareTheEnforcedTargetGraph() {
         var movie = EntityKindRegistry.Describe(EntityKind.Movie).StructurePolicy;
         var video = EntityKindRegistry.Describe(EntityKind.Video).StructurePolicy;
         var episode = EntityKindRegistry.Describe(EntityKind.VideoEpisode).StructurePolicy;

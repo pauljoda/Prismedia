@@ -1,9 +1,9 @@
 namespace Prismedia.Domain.Entities;
 
 /// <summary>
-/// Definition-owned declaration of one kind's permitted structural placement. The policy is
-/// validated at definition discovery but is not yet enforced by <see cref="Entity.AddChild"/>
-/// so legacy persisted structures can be migrated independently.
+/// Definition-owned declaration of one kind's permitted structural placement. Discovery validates
+/// reciprocal declarations, while <see cref="Entity.AddChild"/> and persistence hydration enforce
+/// declared policies at runtime. Kinds that have not declared a policy remain permissive with one another.
 /// </summary>
 public sealed record EntityStructurePolicy {
     /// <summary>Default for kinds whose topology has not yet been declared.</summary>

@@ -207,6 +207,14 @@ public abstract class Entity {
     /// <param name="parentEntityId">Persisted parent entity identifier, if any.</param>
     /// <param name="sortOrder">Persisted order within the parent, if any.</param>
     public void HydrateStructuralPlacement(Guid? parentEntityId, int? sortOrder) {
+        var policy = Definition.StructurePolicy;
+        if (policy.IsDeclared && policy.RequiresParent != parentEntityId.HasValue) {
+            var expectation = policy.RequiresParent ? "requires a structural parent" : "must be a structural root";
+            throw new InvalidOperationException(
+                $"Entity kind '{Definition.Code}' {expectation}, but persisted entity '{Id}' has " +
+                (parentEntityId.HasValue ? $"parent '{parentEntityId}'." : "no parent."));
+        }
+
         ParentEntityId = parentEntityId;
         SortOrder = sortOrder;
     }
@@ -348,8 +356,33 @@ public abstract class Entity {
     /// <param name="sortOrder">Optional child order.</param>
     public void AddChild(Entity child, int? sortOrder = null) {
         ArgumentNullException.ThrowIfNull(child);
+        if (child.Id == Id) {
+            throw new ArgumentException($"Entity '{Id}' cannot be its own structural child.", nameof(child));
+        }
+
         if (_links.Any(link => link.Structural && link.Entity.Id == child.Id)) {
             throw new ArgumentException($"Entity '{Id}' already has child '{child.Id}'.", nameof(child));
+        }
+
+        var parentPolicy = Definition.StructurePolicy;
+        if (parentPolicy.IsDeclared && !parentPolicy.AllowedChildKinds.Contains(child.Kind)) {
+            throw new ArgumentException(
+                $"Entity kind '{Definition.Code}' does not allow structural child kind '{child.Definition.Code}'.",
+                nameof(child));
+        }
+
+        var childPolicy = child.Definition.StructurePolicy;
+        if (childPolicy.IsDeclared &&
+            (!childPolicy.RequiresParent || !childPolicy.AllowedParentKinds.Contains(Kind))) {
+            throw new ArgumentException(
+                $"Entity kind '{child.Definition.Code}' does not allow structural parent kind '{Definition.Code}'.",
+                nameof(child));
+        }
+
+        if (child.ParentEntityId is { } existingParentId && existingParentId != Id) {
+            throw new ArgumentException(
+                $"Entity '{child.Id}' already belongs to structural parent '{existingParentId}' and cannot be reparented to '{Id}'.",
+                nameof(child));
         }
 
         child.ParentEntityId = Id;
