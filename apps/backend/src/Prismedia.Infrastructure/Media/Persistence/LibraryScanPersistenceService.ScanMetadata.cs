@@ -20,11 +20,16 @@ public sealed partial class LibraryScanPersistenceService {
 
         ApplyTitleIfScannedFallback(entity, metadata.Title, fallbackTitle, now);
         await UpsertDescriptionIfMissingAsync(entityId, metadata.Description, now, cancellationToken);
-        await UpsertDateIfMissingAsync(entityId, "release", metadata.Date, now, cancellationToken);
+        await UpsertDateIfMissingAsync(
+            entityId,
+            EntityDateType.Release.ToCode(),
+            metadata.Date,
+            now,
+            cancellationToken);
         await AddUrlsAsync(entityId, metadata.Urls, now, cancellationToken);
         await AddTagsAsync(entityId, metadata.Tags, now, markNsfw, cancellationToken);
         await SetStudioIfMissingAsync(entityId, metadata.Studio, now, markNsfw, cancellationToken);
-        await AddCreditsAsync(entityId, metadata.Performers, "performer", now, markNsfw, cancellationToken);
+        await AddCreditsAsync(entityId, metadata.Performers, CreditRole.Actor, now, markNsfw, cancellationToken);
 
         entity.UpdatedAt = now;
         await SaveChangesWithLifecycleAsync(cancellationToken);
@@ -42,11 +47,16 @@ public sealed partial class LibraryScanPersistenceService {
         }
 
         await UpsertDescriptionIfMissingAsync(bookEntityId, metadata.Summary, now, cancellationToken);
-        await UpsertDateIfMissingAsync(bookEntityId, "release", metadata.Date, now, cancellationToken);
+        await UpsertDateIfMissingAsync(
+            bookEntityId,
+            EntityDateType.Release.ToCode(),
+            metadata.Date,
+            now,
+            cancellationToken);
         await AddUrlsAsync(bookEntityId, metadata.Urls, now, cancellationToken);
         await AddTagsAsync(bookEntityId, metadata.Tags, now, markNsfw, cancellationToken);
         await SetStudioIfMissingAsync(bookEntityId, metadata.Publisher, now, markNsfw, cancellationToken);
-        await AddCreditsAsync(bookEntityId, metadata.Creators, "creator", now, markNsfw, cancellationToken);
+        await AddCreditsAsync(bookEntityId, metadata.Creators, CreditRole.Creator, now, markNsfw, cancellationToken);
 
         if (markNsfw && !entity.IsNsfw) {
             entity.IsNsfw = true;
@@ -203,11 +213,12 @@ public sealed partial class LibraryScanPersistenceService {
     private async Task AddCreditsAsync(
         Guid entityId,
         IReadOnlyList<string> names,
-        string role,
+        CreditRole role,
         DateTimeOffset now,
         bool markNsfw,
         CancellationToken cancellationToken) {
         var castCode = RelationshipKind.Cast.ToCode();
+        var roleCode = role.ToCode();
         var order = await NextRelationshipSortOrderAsync(entityId, castCode, cancellationToken);
         foreach (var name in Unique(names)) {
             var person = await FindOrCreateTaxonomyEntityAsync(EntityKind.Person.ToCode(), name, now, markNsfw, cancellationToken);
@@ -215,7 +226,14 @@ public sealed partial class LibraryScanPersistenceService {
                 continue;
             }
 
-            AddRelationship(entityId, castCode, "Cast", person, order++, $$"""{"role":"{{role}}","roles":["{{role}}"]}""", now);
+            AddRelationship(
+                entityId,
+                castCode,
+                "Cast",
+                person,
+                order++,
+                $$"""{"role":"{{roleCode}}","roles":["{{roleCode}}"]}""",
+                now);
         }
     }
 

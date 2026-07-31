@@ -151,8 +151,9 @@ public sealed partial class EfEntityReadService {
 
         // Tag names per entity, resolved through the tag relationship links and their target titles,
         // so list rows can surface tags without a detail load.
+        var tagsCode = RelationshipKind.Tags.ToCode();
         var tagLinks = await _db.EntityRelationshipLinks.AsNoTracking()
-            .Where(link => ids.Contains(link.EntityId) && link.RelationshipCode == "tags")
+            .Where(link => ids.Contains(link.EntityId) && link.RelationshipCode == tagsCode)
             .OrderBy(link => link.SortOrder)
             .Select(link => new { link.EntityId, link.TargetEntityId })
             .ToArrayAsync(cancellationToken);

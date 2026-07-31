@@ -84,7 +84,7 @@ public static class FilesEndpoints {
         var problem = new ApiProblem(error.Code, error.Message);
         return error switch {
             FileConflictException => Results.Conflict(problem),
-            _ when error.Code == "root_not_found" || error.Code == "not_found" => Results.NotFound(problem),
+            _ when error.Code is ApiProblemCodes.RootNotFound or ApiProblemCodes.NotFound => Results.NotFound(problem),
             _ => Results.BadRequest(problem),
         };
     }

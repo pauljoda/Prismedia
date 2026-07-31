@@ -475,11 +475,16 @@ public sealed partial class LibraryScanPersistenceService {
         }
 
         await UpsertDescriptionIfMissingAsync(movieId, metadata.Description, now, cancellationToken);
-        await UpsertDateIfMissingAsync(movieId, "release", metadata.Date, now, cancellationToken);
+        await UpsertDateIfMissingAsync(
+            movieId,
+            EntityDateType.Release.ToCode(),
+            metadata.Date,
+            now,
+            cancellationToken);
         await AddUrlsAsync(movieId, metadata.Urls, now, cancellationToken);
         await AddTagsAsync(movieId, metadata.Tags, now, markNsfw, cancellationToken);
         await SetStudioIfMissingAsync(movieId, metadata.Studio, now, markNsfw, cancellationToken);
-        await AddCreditsAsync(movieId, metadata.Performers, "performer", now, markNsfw, cancellationToken);
+        await AddCreditsAsync(movieId, metadata.Performers, CreditRole.Actor, now, markNsfw, cancellationToken);
     }
 
     private async Task<Guid> UpsertVideoSeriesFromScanAsync(

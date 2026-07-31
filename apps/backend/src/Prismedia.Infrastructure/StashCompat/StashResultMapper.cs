@@ -7,7 +7,7 @@ namespace Prismedia.Infrastructure.StashCompat;
 /// <summary>
 /// Maps a scraped Stash scene into a Prismedia <see cref="EntityMetadataProposal"/> that the
 /// existing apply pipeline consumes directly: performers become credits, the studio name and
-/// tag names become relationship fields, the date becomes a <c>release</c> date, and the cover
+/// tag names become relationship fields, the date becomes the canonical release date, and the cover
 /// becomes a poster image candidate.
 /// </summary>
 public static class StashResultMapper {
@@ -46,19 +46,26 @@ public static class StashResultMapper {
 
         var dates = new Dictionary<string, string>();
         if (!string.IsNullOrWhiteSpace(scene.Date)) {
-            dates["release"] = scene.Date.Trim();
+            dates[EntityDateType.Release.ToCode()] = scene.Date.Trim();
         }
 
-        // Performers become "performer" credits; a director, when present, becomes a "director"
-        // credit so the crew is captured too.
+        // Stash performers map to Prismedia's actor/performer role; directors keep their distinct role.
         var performers = scene.Performers
             .Where(performer => !string.IsNullOrWhiteSpace(performer.Name))
             .ToArray();
         var credits = new List<CreditPatch>();
         credits.AddRange(performers
-            .Select((performer, index) => new CreditPatch(performer.Name!.Trim(), "performer", null, index)));
+            .Select((performer, index) => new CreditPatch(
+                performer.Name!.Trim(),
+                CreditRole.Actor.ToCode(),
+                null,
+                index)));
         if (!string.IsNullOrWhiteSpace(scene.Director)) {
-            credits.Add(new CreditPatch(scene.Director.Trim(), "director", null, credits.Count));
+            credits.Add(new CreditPatch(
+                scene.Director.Trim(),
+                CreditRole.Director.ToCode(),
+                null,
+                credits.Count));
         }
 
         var tags = TagNames(scene.Tags)
@@ -278,7 +285,7 @@ public static class StashResultMapper {
         var details = string.IsNullOrWhiteSpace(performer?.Details) ? null : performer!.Details!.Trim();
         var dates = new Dictionary<string, string>();
         if (!string.IsNullOrWhiteSpace(performer?.Birthdate)) {
-            dates["birth"] = performer!.Birthdate!.Trim();
+            dates[EntityDateType.Birth.ToCode()] = performer!.Birthdate!.Trim();
         }
 
         return RelationshipProposal($"{providerId}:person:{name}", providerName, EntityKind.Person, name, details, urls, images, dates);
@@ -338,7 +345,7 @@ public static class StashResultMapper {
 
         var dates = new Dictionary<string, string>();
         if (!string.IsNullOrWhiteSpace(performer.Birthdate)) {
-            dates["birth"] = performer.Birthdate!.Trim();
+            dates[EntityDateType.Birth.ToCode()] = performer.Birthdate!.Trim();
         }
 
         var images = string.IsNullOrWhiteSpace(performer.Image)

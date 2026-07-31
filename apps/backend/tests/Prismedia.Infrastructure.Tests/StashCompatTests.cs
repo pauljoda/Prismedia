@@ -180,15 +180,15 @@ public sealed class StashCompatTests {
         Assert.Equal(EntityKind.Video, proposal.TargetKind);
         Assert.Equal("Test Scene Title", proposal.Patch.Title);
         Assert.Equal("Some details here.", proposal.Patch.Description);
-        Assert.Equal("2023-05-14", proposal.Patch.Dates["release"]);
+        Assert.Equal("2023-05-14", proposal.Patch.Dates[EntityDateType.Release.ToCode()]);
         Assert.Equal("Cool Studio", proposal.Patch.Studio);
         Assert.Equal(["Tag1", "Tag2"], proposal.Patch.Tags);
         Assert.Equal(["Alice", "Bob"], proposal.Patch.Credits.Select(credit => credit.Name).ToArray());
-        Assert.All(proposal.Patch.Credits, credit => Assert.Equal("performer", credit.Role));
+        Assert.All(proposal.Patch.Credits, credit => Assert.Equal(CreditRole.Actor.ToCode(), credit.Role));
         Assert.Equal("ABC-123", proposal.Patch.ExternalIds["stash-test-site"]);
         Assert.Contains("https://site.example/scene/123", proposal.Patch.Urls);
         Assert.Single(proposal.Images);
-        Assert.Equal("thumbnail", proposal.Images[0].Kind);
+        Assert.Equal(MediaImageKind.Thumbnail.ToCode(), proposal.Images[0].Kind);
 
         // Performers and the studio are also surfaced as relationship proposals (carded in review,
         // enrichable on apply), not only as flat patch fields.
@@ -836,7 +836,7 @@ public sealed class StashCompatTests {
         var patch = new EntityMetadataPatch(
             "Adult Scene", null,
             new Dictionary<string, string>(), [], ["Hardcore"], "Adult Studio",
-            [new CreditPatch("Alice", "performer", null, 0)],
+            [new CreditPatch("Alice", CreditRole.Actor.ToCode(), null, 0)],
             new Dictionary<string, string>(), new Dictionary<string, int>(), new Dictionary<string, int>(), null) {
             Flags = new EntityMetadataFlagsPatch(null, true, null)
         };

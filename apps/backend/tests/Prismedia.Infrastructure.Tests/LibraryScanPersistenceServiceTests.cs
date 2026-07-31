@@ -1285,7 +1285,7 @@ public sealed class LibraryScanPersistenceServiceTests {
         Assert.Equal(2, db.EntityRelationshipLinks.Count(relationship =>
             relationship.EntityId == movie.Id &&
             relationship.RelationshipCode == RelationshipKind.Cast.ToCode() &&
-            relationship.MetadataJson!.Contains("performer")));
+            relationship.MetadataJson!.Contains(CreditRole.Actor.ToCode())));
     }
 
     [Fact]
@@ -1543,6 +1543,43 @@ public sealed class LibraryScanPersistenceServiceTests {
         Assert.Equal(parentId, child.ParentEntityId);
         Assert.Equal(3, child.SortOrder);
         Assert.Equal(rootId, detail.LibraryRootId);
+    }
+
+    [Fact]
+    public async Task StructuralFolderUpsertsUseFolderSourcesWhilePayloadUpsertsUseSourceFiles() {
+        await using var db = CreateContext();
+        var service = new LibraryScanPersistenceService(db);
+        var rootId = Guid.NewGuid();
+        var galleryId = await service.UpsertGalleryAsync(
+            "/media/images/Gallery", "Gallery", rootId, null, 0, false, CancellationToken.None);
+        var imageId = await service.UpsertImageAsync(
+            "/media/images/Gallery/page.jpg", "page", galleryId, 1, 0, false, CancellationToken.None);
+        var artistId = await service.UpsertMusicArtistAsync(
+            "/media/audio/Artist", "Artist", rootId, 0, false, CancellationToken.None);
+        var libraryId = await service.UpsertAudioLibraryAsync(
+            "/media/audio/Artist/Album", "Album", rootId, artistId, 0, false, CancellationToken.None);
+        var trackId = await service.UpsertAudioTrackAsync(
+            "/media/audio/Artist/Album/track.flac", "track", libraryId, 0, null, 0, false, CancellationToken.None);
+        var authorId = await service.UpsertBookAuthorAsync(
+            "/media/books/Author", "Author", null, false, CancellationToken.None);
+        var bookId = await service.UpsertBookSeriesAsync(
+            "/media/books/Series", "Series", rootId, false, BookType.Novel, BookFormat.Audio, CancellationToken.None);
+        var volumeId = await service.UpsertBookVolumeAsync(
+            "/media/books/Series/Volume 1", "Volume 1", bookId, 0, false, CancellationToken.None);
+
+        var structuralIds = new HashSet<Guid> { galleryId, artistId, libraryId, authorId, bookId, volumeId };
+        var folderSources = await db.EntitySources.AsNoTracking()
+            .Where(source => structuralIds.Contains(source.EntityId))
+            .ToArrayAsync();
+        var payloadFiles = await db.EntityFiles.AsNoTracking()
+            .Where(file => new[] { imageId, trackId }.Contains(file.EntityId))
+            .ToArrayAsync();
+
+        Assert.Equal(structuralIds.Count, folderSources.Length);
+        Assert.All(folderSources, source => Assert.Equal(EntitySourceCode.Folder.ToCode(), source.Code));
+        Assert.DoesNotContain(db.EntityFiles, file => structuralIds.Contains(file.EntityId) && file.Role == EntityFileRole.Source);
+        Assert.Equal(2, payloadFiles.Length);
+        Assert.All(payloadFiles, file => Assert.Equal(EntityFileRole.Source, file.Role));
     }
 
     [Fact]
@@ -2415,6 +2452,28 @@ public sealed class LibraryScanPersistenceServiceTests {
     }
 
     [Fact]
+    public async Task RemoveEntitiesOutsideLibraryRootsUsesFolderProvenanceForStructuralEntities() {
+        await using var db = CreateContext();
+        var keptGalleryId = Guid.NewGuid();
+        var staleGalleryId = Guid.NewGuid();
+        SeedLibraryRoot(db, RootId, "/media/kept");
+        db.Entities.AddRange(
+            new EntityRow { Id = keptGalleryId, KindCode = EntityKind.Gallery.ToCode(), Title = "Kept", CreatedAt = DateTimeOffset.UtcNow, UpdatedAt = DateTimeOffset.UtcNow },
+            new EntityRow { Id = staleGalleryId, KindCode = EntityKind.Gallery.ToCode(), Title = "Stale", CreatedAt = DateTimeOffset.UtcNow, UpdatedAt = DateTimeOffset.UtcNow });
+        db.EntitySources.AddRange(
+            new EntitySourceRow { EntityId = keptGalleryId, Code = EntitySourceCode.Folder.ToCode(), Value = "/media/kept/Gallery", UpdatedAt = DateTimeOffset.UtcNow },
+            new EntitySourceRow { EntityId = staleGalleryId, Code = EntitySourceCode.Folder.ToCode(), Value = "/media/deleted/Gallery", UpdatedAt = DateTimeOffset.UtcNow });
+        await db.SaveChangesAsync();
+
+        var removed = await new LibraryScanPersistenceService(db)
+            .RemoveEntitiesOutsideLibraryRootsAsync(CancellationToken.None);
+
+        Assert.Equal(1, removed);
+        Assert.NotNull(await db.Entities.FindAsync([keptGalleryId]));
+        Assert.Null(await db.Entities.FindAsync([staleGalleryId]));
+    }
+
+    [Fact]
     public async Task ApplyVideoSidecarMetadataFillsMissingFieldsAndKeepsExistingDescription() {
         await using var db = CreateContext();
         var videoId = Guid.Parse("aaaaaaaa-1111-1111-1111-111111111111");
@@ -2449,13 +2508,18 @@ public sealed class LibraryScanPersistenceServiceTests {
         Assert.Equal("Sidecar Title", video.Title);
         Assert.Equal(4, db.UserEntityStates.Single(state => state.EntityId == videoId).RatingValue);
         Assert.Equal("User description", (await db.EntityDescriptions.FindAsync([videoId]))?.Value);
-        var release = await db.EntityDates.FindAsync([videoId, "release"]);
+        var release = await db.EntityDates.FindAsync([videoId, EntityDateType.Release.ToCode()]);
         Assert.Equal("2026-05-01", release?.Value);
         Assert.Equal(new DateOnly(2026, 5, 1), release?.SortableValue);
         Assert.Equal(["https://example.test/video"], db.EntityUrls.Where(row => row.EntityId == videoId).Select(row => row.Url).ToArray());
-        Assert.Contains(db.EntityRelationshipLinks, row => row.EntityId == videoId && row.RelationshipCode == "tags");
-        Assert.Contains(db.EntityRelationshipLinks, row => row.EntityId == videoId && row.RelationshipCode == "studio");
-        Assert.Contains(db.EntityRelationshipLinks, row => row.EntityId == videoId && row.RelationshipCode == "cast" && row.MetadataJson!.Contains("performer"));
+        Assert.Contains(db.EntityRelationshipLinks, row =>
+            row.EntityId == videoId && row.RelationshipCode == RelationshipKind.Tags.ToCode());
+        Assert.Contains(db.EntityRelationshipLinks, row =>
+            row.EntityId == videoId && row.RelationshipCode == RelationshipKind.Studio.ToCode());
+        Assert.Contains(db.EntityRelationshipLinks, row =>
+            row.EntityId == videoId &&
+            row.RelationshipCode == RelationshipKind.Cast.ToCode() &&
+            row.MetadataJson!.Contains(CreditRole.Actor.ToCode()));
         Assert.Contains(db.Entities, row => row.KindCode == EntityKind.Tag.ToCode() && row.Title == "Noir" && row.IsNsfw);
     }
 
@@ -2496,11 +2560,18 @@ public sealed class LibraryScanPersistenceServiceTests {
         Assert.Equal("User Book Title", book!.Title);
         Assert.True(book.IsNsfw);
         Assert.Equal("ComicInfo summary", (await db.EntityDescriptions.FindAsync([bookId]))?.Value);
-        Assert.Equal("2026-05", (await db.EntityDates.FindAsync([bookId, "release"]))?.Value);
+        Assert.Equal(
+            "2026-05",
+            (await db.EntityDates.FindAsync([bookId, EntityDateType.Release.ToCode()]))?.Value);
         Assert.Equal(["https://example.test/comic"], db.EntityUrls.Where(row => row.EntityId == bookId).Select(row => row.Url).ToArray());
-        Assert.Contains(db.EntityRelationshipLinks, row => row.EntityId == bookId && row.RelationshipCode == "tags");
-        Assert.Contains(db.EntityRelationshipLinks, row => row.EntityId == bookId && row.RelationshipCode == "studio");
-        Assert.Contains(db.EntityRelationshipLinks, row => row.EntityId == bookId && row.RelationshipCode == "cast" && row.MetadataJson!.Contains("creator"));
+        Assert.Contains(db.EntityRelationshipLinks, row =>
+            row.EntityId == bookId && row.RelationshipCode == RelationshipKind.Tags.ToCode());
+        Assert.Contains(db.EntityRelationshipLinks, row =>
+            row.EntityId == bookId && row.RelationshipCode == RelationshipKind.Studio.ToCode());
+        Assert.Contains(db.EntityRelationshipLinks, row =>
+            row.EntityId == bookId &&
+            row.RelationshipCode == RelationshipKind.Cast.ToCode() &&
+            row.MetadataJson!.Contains(CreditRole.Creator.ToCode()));
     }
 
     private static string CreateCacheRoot() {
