@@ -2,6 +2,10 @@
 
 This contract adapts "Clean .NET Domain + EF Core Infrastructure Guidelines" version 1.0, prepared May 18, 2026, for Prismedia. It is the backend direction for new work unless a later architecture decision explicitly replaces it.
 
+For the concrete object-by-object map, discovery diagrams, persistence/read
+sequences, and Svelte/Swift client flow, see the
+[Entity definitions and data flow guide](../documentation-site/docs/developers/entity-definitions-and-data-flow.md).
+
 ## Baseline
 
 Prismedia backend work follows:

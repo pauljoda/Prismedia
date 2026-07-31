@@ -15,9 +15,10 @@ namespace Prismedia.Infrastructure.Entities;
 /// EF Core adapter for <see cref="IEntityReadService"/>. Card and detail reads flow
 /// through the hydrated domain entity and <see cref="EntityCardProjector"/>; the
 /// browse and thumbnail path stays a deliberate row-optimized projection so list
-/// pages do not pay the full hydration cost. Kind-specific detail DTO projection is
-/// delegated to <see cref="IEntityKindMapper.ProjectDetail"/> so this service stays a
-/// coordinator and never branches on a concrete entity kind.
+/// pages do not pay the full hydration cost. Kind-specific construction is delegated
+/// to discovered entity mappers, while immutable kind-specific document capabilities
+/// are projected by the Entity's definition. This service stays the coordinator for
+/// visibility, bounded related-Entity queries, and final document enrichment.
 /// </summary>
 public sealed partial class EfEntityReadService : IEntityReadService {
     private const int DefaultPageSize = 250;

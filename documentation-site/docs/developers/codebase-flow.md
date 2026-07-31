@@ -10,8 +10,6 @@ This page is for a new developer who needs to understand how Prismedia moves fro
 screen to API to domain behavior to database and back again. It is a codebase map,
 not an exhaustive component catalog.
 
-Snapshot date: June 16, 2026.
-
 ## Read This First
 
 Prismedia has three big rules that explain most of the repo:
@@ -22,6 +20,8 @@ Prismedia has three big rules that explain most of the repo:
    generated OpenAPI clients and local presentation helpers.
 3. Long-running media work is durable job work. It moves through PostgreSQL job
    rows and the .NET worker, not a TypeScript worker or browser process.
+4. The native SwiftUI app is a separate client repository. It consumes the same
+   canonical Entity routes and the same generated backend code manifest as Svelte.
 
 ## Runtime Shape
 
@@ -56,11 +56,8 @@ the database to be reachable and migrated before it begins claiming work.
 | Infrastructure | `apps/backend/src/Prismedia.Infrastructure` | EF Core, row models, migrations, repositories/read services, media tools, plugins, requests, queue storage. |
 | Worker | `apps/backend/src/Prismedia.Worker` | Hosted process that registers worker services and runs queue/scheduler hosted services. |
 | Shared UI | `packages/ui-svelte` | Domain-free Svelte primitives, composed UI pieces, tokens, motion helpers. |
+| Native app | `Prismedia-SwiftUI/PrismediaShared` in the sibling native repository | Swift Entity transport models, feature services/state, shared SwiftUI Entity detail and thumbnail presentation. |
 | Documentation site | `documentation-site` | Docusaurus docs published separately from the app shell. |
-
-Current repository scale from `rg --files`: `apps/web-svelte` has about 889 files,
-backend source has about 611 files, backend tests have about 110 files, and the
-repo has about 261 test files across C# and TypeScript.
 
 ## Dependency Direction
 
@@ -155,6 +152,12 @@ the product surface:
 - Route pages usually choose kind-specific configuration and delegate to shared
   scaffolds instead of rebuilding layouts from scratch.
 
+The SwiftUI app follows the same Entity API root through `PrismediaAPIClient`,
+`PrismediaEntityDetailLoader`, feature-owned service/state, and shared native
+detail/thumbnail presentation. See
+[Entity Definitions and Data Flow](./entity-definitions-and-data-flow.md) for the
+object-level backend, Svelte, and Swift diagrams.
+
 ## API Surface Flow
 
 ```mermaid
@@ -226,31 +229,24 @@ Registered handler families:
 
 ```mermaid
 flowchart LR
-  FileSystem["Watched files"] --> Scan["Scan handlers"]
-  Scan --> DomainEntity["Domain Entity and kind-specific types"]
-  DomainEntity --> Capabilities["Domain capabilities"]
-  Capabilities --> Rows["EF rows: entity, files, relationships, details, capabilities"]
-  Rows --> ReadServices["Read services and projections"]
-  ReadServices --> Contracts["Contract DTOs"]
-  Contracts --> Generated["Generated TS models and codes.ts"]
-  Generated --> UI["Entity grids, detail pages, players, readers"]
+  Definition["Discovered Entity-kind definition"] --> DomainEntity["Concrete domain Entity"]
+  FileSystem["Scan, import, request, provider"] --> Rows["EF root, detail, capability, file and relationship rows"]
+  Rows <--> Mappers["Discovered EF mappers"]
+  Mappers <--> DomainEntity
+  DomainEntity --> Projection["Shared projectors + definition projection"]
+  Projection --> Contracts["EntityCard document"]
+  Rows --> Thumbnails["Row-optimized EntityThumbnail lists"]
+  Contracts --> Clients["Svelte and Swift clients"]
+  Thumbnails --> Clients
+  Clients --> UI["Shared grids, details, players and readers"]
 ```
 
-Conceptually, an `Entity` is the canonical library object. Its kind, files,
-relationships, children, image assets, source ids, progress, classification,
-technical metadata, and playback state are attached through bounded domain
-capabilities and EF row structures.
-
-Two capability patterns matter:
-
-- Domain capabilities are real domain state, persisted and projected where
-  appropriate.
-- Contract pseudo-capabilities project universal entity properties into the API
-  so the frontend sees a uniform capability surface.
-
-Do not introduce a global entity graph runtime. Structural children and
-relationship links are persistence structures and read projections, not a
-cross-app object graph to hydrate everywhere.
+Conceptually, a definition describes a kind, a domain `Entity` carries one
+instance's behavior/state, EF rows persist it, and `EntityCard` projects one
+shared detail document. Mutable domain capabilities, immutable document
+capabilities, and application projector modules are different concerns. The
+[focused Entity guide](./entity-definitions-and-data-flow.md) documents their
+construction, registration, persistence, and review rules in detail.
 
 ## Generated Client And Code Constants
 
@@ -263,14 +259,18 @@ flowchart TD
   Orval --> GeneratedModels["src/lib/api/generated/model"]
   Orval --> GeneratedOps["src/lib/api/generated/prismedia.ts"]
   GenCodes --> CodesTs["src/lib/api/generated/codes.ts"]
+  CodeManifest --> SwiftGen["Swift manifest generators"]
+  SwiftGen --> SwiftCodes["Generated native codes, kind definitions, requests"]
   GeneratedModels --> ApiWrappers["src/lib/api wrappers"]
   CodesTs --> EntityCodes["src/lib/entities/entity-codes.ts"]
   ApiWrappers --> UI["Svelte routes and components"]
+  SwiftCodes --> NativeUI["Swift transport and presentation"]
 ```
 
-Any backend contract, OpenAPI operation, or `[Code]` enum change must be followed
-by regenerating the frontend client with the dev API running. `pnpm api:check`
-guards this by regenerating and failing if committed generated files are stale.
+Any backend contract, OpenAPI operation, definition, or coded-enum change must be
+followed by regenerating the affected clients with the dev API running.
+`pnpm api:check` guards Svelte parity; the native repository's
+`Scripts/check-contract-codes.py` validates its generated manifest surfaces.
 
 ## Main User Journey Maps
 
@@ -280,7 +280,7 @@ guards this by regenerating and failing if committed generated files are stale.
 flowchart TD
   Dashboard["Dashboard or library route"] --> Fetch["fetchEntities with kind, filters, sort"]
   Fetch --> EntityList["ListEntities endpoint"]
-  EntityList --> Projection["EF projection to EntityCard DTOs"]
+  EntityList --> Projection["EF projection to EntityThumbnail DTOs"]
   Projection --> Grid["EntityGrid or shelf cards"]
   Grid --> Detail["Entity detail route"]
   Detail --> DetailEndpoint["GetEntity"]
@@ -300,7 +300,7 @@ flowchart TD
   ScanJob --> Discovery["FileDiscoveryService"]
   Discovery --> Classifier["Folder/file classifier"]
   Classifier --> Upsert["LibraryScanPersistenceService"]
-  Upsert --> EntityRows["Entity, file, child, relationship rows"]
+  Upsert --> EntityRows["Entity placement, detail, file and relationship rows"]
   Upsert --> Downstream["Append probe, fingerprint, thumbnail, preview, identify nodes"]
   Downstream --> Workers["Worker handlers"]
   Workers --> GeneratedAssets["Thumbnails, waveforms, previews, subtitles"]
@@ -341,6 +341,8 @@ flowchart TD
 | --- | --- | --- |
 | New library page or grid behavior | `apps/web-svelte/src/lib/components/entities/EntityIndexPage.svelte` | `EntityGrid.svelte`, `entity-grid.ts`, route page for the kind. |
 | Detail page layout or metadata editing | `EntityDetail.svelte` | `entity-detail.ts`, `entity-detail-edit.ts`, canonical Entity read, update endpoints. |
+| New Entity kind or kind-wide policy | Concrete Entity file and `EntityKindDefinition` | `EntityKindRegistry`, mapper only when detail state persists, code manifest, both generated clients. |
+| New Entity capability | Domain or document capability beside its owner | Capability mapper/projector, polymorphism discovery, generated clients and native decoder. |
 | New API route | `Prismedia.Api/Endpoints/EndpointRouteBuilderExtensions.cs` | Matching endpoint group, `Prismedia.Contracts`, generated client. |
 | New backend setting | `AppSettingKeys.cs` and `AppSettingsRegistry.cs` | Settings endpoints, generated codes, settings UI. |
 | New closed-set code | Domain `[Code]` enum or constants manifest | `CodesManifest.cs`, `scripts/gen-codes.mjs`, `codes.ts`. |
@@ -360,6 +362,8 @@ flowchart TD
   separate projects with mostly inward dependencies.
 - The Svelte client has a generated OpenAPI layer and a generated closed-code
   manifest layer.
+- The native client generates closed codes, complete Entity-kind definitions, and
+  request definitions from that same backend manifest.
 - Tests exist across domain, infrastructure, API endpoints, frontend view-model
   helpers, Svelte components, and shared packages.
 - `pnpm validate` ties together version/changelog checks, generated-client drift,
@@ -367,19 +371,13 @@ flowchart TD
 - Generated migrations and generated API files are isolated enough that large file
   size does not automatically imply hand-maintained complexity.
 
-### Current Architecture Audit
+### Architecture Audits
 
-The mechanical .NET architecture audit currently reports two medium findings:
-
-| Severity | Location | Meaning |
-| --- | --- | --- |
-| Medium | `apps/backend/src/Prismedia.Api/Endpoints/Requests/RequestEndpoints.cs` | The endpoint imports `Prismedia.Domain.Entities` to decode request provider/media code enums. |
-| Medium | `apps/backend/tests/Prismedia.Api.Tests/RequestEndpointTests.cs` | Tests use the same domain-coded request enums. |
-
-This is a bounded issue rather than a broad layering collapse. Before release,
-either document it as an intentional code-decoding boundary or move the request
-decode surface behind API/contract-owned helpers so endpoint contracts do not
-directly depend on domain namespaces.
+Do not preserve a dated analyzer result in this page. Run the current architecture
+tests and validation against the commit being reviewed, then inspect each result
+against the dependency rules above. Test-only references, generated contracts,
+and external adapter boundaries may need different treatment from production
+layer violations.
 
 ### Hand-Maintained Hotspots
 

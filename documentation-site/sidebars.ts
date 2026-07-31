@@ -69,6 +69,7 @@ const sidebars: SidebarsConfig = {
       items: [
         'developers/architecture',
         'developers/codebase-flow',
+        'developers/entity-definitions-and-data-flow',
         'developers/monorepo',
         'developers/database',
         'developers/api-and-jobs',
