@@ -11,8 +11,6 @@ public sealed class GalleryDetailRow {
     public Guid EntityId { get; set; }
     public GalleryType GalleryType { get; set; } = GalleryType.Virtual;
     public Guid? CoverImageEntityId { get; set; }
-    [System.ComponentModel.DataAnnotations.Schema.NotMapped]
-    public Guid? LibraryRootId { get; set; }
 }
 
 public sealed class BookDetailRow {
@@ -28,8 +26,6 @@ public sealed class BookDetailRow {
     public BookSourceTier SourceTier { get; set; } = BookSourceTier.Unknown;
 
     public Guid? CoverPageEntityId { get; set; }
-    [System.ComponentModel.DataAnnotations.Schema.NotMapped]
-    public Guid? LibraryRootId { get; set; }
 }
 
 public sealed class BookChapterDetailRow {

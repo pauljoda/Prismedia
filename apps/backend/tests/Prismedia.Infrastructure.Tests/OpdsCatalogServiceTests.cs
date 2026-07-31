@@ -91,15 +91,16 @@ public sealed class OpdsCatalogServiceTests : IDisposable {
             new BookDetailRow {
                 EntityId = DirectoryComicId,
                 BookType = BookType.Comic,
-                Format = BookFormat.ImageArchive,
-                LibraryRootId = VisibleRootId
+                Format = BookFormat.ImageArchive
             },
             new BookDetailRow {
                 EntityId = WrappedComicId,
                 BookType = BookType.Comic,
-                Format = BookFormat.ImageArchive,
-                LibraryRootId = VisibleRootId
+                Format = BookFormat.ImageArchive
             });
+        db.EntityLibraryRoots.AddRange(
+            RootMembership(DirectoryComicId, VisibleRootId),
+            RootMembership(WrappedComicId, VisibleRootId));
         var comicDirectory = Path.Combine(_tempDir, "comic-folder");
         Directory.CreateDirectory(comicDirectory);
         await File.WriteAllTextAsync(Path.Combine(comicDirectory, "001.jpg"), "page");
@@ -149,9 +150,13 @@ public sealed class OpdsCatalogServiceTests : IDisposable {
             Entity(firstBookId, EntityKind.Book.ToCode(), "A Game of Thrones", false, seriesId),
             Entity(secondBookId, EntityKind.Book.ToCode(), "A Clash of Kings", false, seriesId));
         db.BookDetails.AddRange(
-            BookDetail(seriesId, VisibleRootId),
-            BookDetail(firstBookId, VisibleRootId),
-            BookDetail(secondBookId, VisibleRootId));
+            BookDetail(seriesId),
+            BookDetail(firstBookId),
+            BookDetail(secondBookId));
+        db.EntityLibraryRoots.AddRange(
+            RootMembership(seriesId, VisibleRootId),
+            RootMembership(firstBookId, VisibleRootId),
+            RootMembership(secondBookId, VisibleRootId));
         db.EntityFiles.AddRange(
             Source(seriesId, seriesDirectory, null),
             Source(firstBookId, firstPath, MediaContentTypes.Epub),
@@ -204,9 +209,9 @@ public sealed class OpdsCatalogServiceTests : IDisposable {
         db.BookDetails.Add(new BookDetailRow {
             EntityId = bookId,
             BookType = BookType.Comic,
-            Format = BookFormat.ImageArchive,
-            LibraryRootId = VisibleRootId
+            Format = BookFormat.ImageArchive
         });
+        db.EntityLibraryRoots.Add(RootMembership(bookId, VisibleRootId));
         db.EntityFiles.AddRange(
             Source(bookId, comicDirectory, null),
             new EntityFileRow {
@@ -278,10 +283,15 @@ public sealed class OpdsCatalogServiceTests : IDisposable {
             Entity(VisibleCollectionId, EntityKind.Collection.ToCode(), "Visible Collection", false),
             Entity(HiddenCollectionId, EntityKind.Collection.ToCode(), "Hidden Collection", true));
         db.BookDetails.AddRange(
-            BookDetail(VisibleBookId, VisibleRootId),
-            BookDetail(HiddenBookId, VisibleRootId),
-            BookDetail(DisabledBookId, DisabledRootId),
-            BookDetail(SeriesChildId, VisibleRootId));
+            BookDetail(VisibleBookId),
+            BookDetail(HiddenBookId),
+            BookDetail(DisabledBookId),
+            BookDetail(SeriesChildId));
+        db.EntityLibraryRoots.AddRange(
+            RootMembership(VisibleBookId, VisibleRootId),
+            RootMembership(HiddenBookId, VisibleRootId),
+            RootMembership(DisabledBookId, DisabledRootId),
+            RootMembership(SeriesChildId, VisibleRootId));
         db.CollectionDetails.AddRange(
             new CollectionDetailRow { EntityId = VisibleCollectionId, OwnerUserId = TestUserContext.UserId },
             new CollectionDetailRow { EntityId = HiddenCollectionId, OwnerUserId = TestUserContext.UserId });
@@ -314,11 +324,16 @@ public sealed class OpdsCatalogServiceTests : IDisposable {
         };
     }
 
-    private static BookDetailRow BookDetail(Guid entityId, Guid rootId) =>
+    private static BookDetailRow BookDetail(Guid entityId) =>
         new() {
             EntityId = entityId,
             BookType = BookType.Novel,
-            Format = BookFormat.Epub,
+            Format = BookFormat.Epub
+        };
+
+    private static EntityLibraryRootRow RootMembership(Guid entityId, Guid rootId) =>
+        new() {
+            EntityId = entityId,
             LibraryRootId = rootId
         };
 

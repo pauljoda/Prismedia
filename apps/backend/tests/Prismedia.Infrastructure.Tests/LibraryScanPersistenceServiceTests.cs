@@ -114,7 +114,7 @@ public sealed class LibraryScanPersistenceServiceTests {
         var videoId = Guid.Parse("77777777-7777-7777-7777-777777777772");
         const string sourcePath = "/media/shows/corrupt-episode.mp4";
         SeedVideo(db, videoId, sourcePath);
-        db.VideoDetails.Add(new VideoDetailRow {
+        db.EntitySubtitleStates.Add(new EntitySubtitleStateRow {
             EntityId = videoId,
             SubtitlesExtractedAt = DateTimeOffset.UtcNow,
             SubtitleSidecarSignature = new string('a', 64)
@@ -134,7 +134,7 @@ public sealed class LibraryScanPersistenceServiceTests {
         var restored = await service.CheckDownstreamNeedsBatchAsync([videoId], CancellationToken.None);
         Assert.True(restored[videoId].NeedsProbe);
         Assert.True(restored[videoId].NeedsSubtitleExtraction);
-        var detail = await db.VideoDetails.FindAsync([videoId]);
+        var detail = await db.EntitySubtitleStates.FindAsync([videoId]);
         Assert.Null(detail!.SubtitlesExtractedAt);
         Assert.Equal(new string('a', 64), detail.SubtitleSidecarSignature);
     }
@@ -401,7 +401,7 @@ public sealed class LibraryScanPersistenceServiceTests {
         await using var db = CreateContext();
         var videoId = Guid.Parse("33333333-3333-3333-3333-333333333333");
         SeedVideo(db, videoId);
-        db.VideoDetails.Add(new VideoDetailRow {
+        db.EntitySubtitleStates.Add(new EntitySubtitleStateRow {
             EntityId = videoId,
             SubtitlesExtractedAt = DateTimeOffset.UtcNow
         });
@@ -428,7 +428,7 @@ public sealed class LibraryScanPersistenceServiceTests {
         await using var db = CreateContext();
         var videoId = Guid.NewGuid();
         SeedVideo(db, videoId);
-        db.VideoDetails.Add(new VideoDetailRow {
+        db.EntitySubtitleStates.Add(new EntitySubtitleStateRow {
             EntityId = videoId,
             SubtitlesExtractedAt = DateTimeOffset.UtcNow
         });
@@ -464,7 +464,7 @@ public sealed class LibraryScanPersistenceServiceTests {
             var storagePath = Path.Combine(subtitleDir, "sidecar-test.vtt");
             await File.WriteAllTextAsync(storagePath, "WEBVTT\n\n");
             SeedVideo(db, videoId);
-            db.VideoDetails.Add(new VideoDetailRow {
+            db.EntitySubtitleStates.Add(new EntitySubtitleStateRow {
                 EntityId = videoId,
                 SubtitlesExtractedAt = DateTimeOffset.UtcNow
             });
@@ -629,7 +629,7 @@ public sealed class LibraryScanPersistenceServiceTests {
         var sidecarId = Guid.NewGuid();
         var manualId = Guid.NewGuid();
         SeedVideo(db, videoId);
-        db.VideoDetails.Add(new VideoDetailRow {
+        db.EntitySubtitleStates.Add(new EntitySubtitleStateRow {
             EntityId = videoId,
             SubtitleSidecarSignature = "previous",
             SubtitlesExtractedAt = DateTimeOffset.UtcNow.AddDays(-1)
@@ -700,7 +700,7 @@ public sealed class LibraryScanPersistenceServiceTests {
         Assert.Contains("/cache/old-one.vtt", result.ObsoleteAssetPaths);
         Assert.Contains("/cache/old-one.ass", result.ObsoleteAssetPaths);
         Assert.Contains("/cache/stale-embedded.vtt", result.ObsoleteAssetPaths);
-        var detail = await db.VideoDetails.FindAsync([videoId]);
+        var detail = await db.EntitySubtitleStates.FindAsync([videoId]);
         Assert.Equal(new string('a', 64), detail!.SubtitleSidecarSignature);
         Assert.NotNull(detail.SubtitlesExtractedAt);
     }
@@ -710,7 +710,7 @@ public sealed class LibraryScanPersistenceServiceTests {
         await using var db = CreateContext();
         var videoId = Guid.NewGuid();
         SeedVideo(db, videoId);
-        db.VideoDetails.Add(new VideoDetailRow {
+        db.EntitySubtitleStates.Add(new EntitySubtitleStateRow {
             EntityId = videoId,
             SubtitleSidecarSignature = new string('0', 64),
             SubtitlesExtractedAt = DateTimeOffset.UtcNow.AddDays(-1)
@@ -741,7 +741,7 @@ public sealed class LibraryScanPersistenceServiceTests {
         var rows = await db.EntitySubtitles.Where(row => row.EntityId == videoId).ToListAsync();
         Assert.Single(rows);
         Assert.Equal("stream:3", rows[0].SourceKey);
-        var detail = await db.VideoDetails.FindAsync([videoId]);
+        var detail = await db.EntitySubtitleStates.FindAsync([videoId]);
         Assert.Null(detail!.SubtitleSidecarSignature);
         Assert.Null(detail.SubtitlesExtractedAt);
 
@@ -774,7 +774,7 @@ public sealed class LibraryScanPersistenceServiceTests {
 
         db.ChangeTracker.Clear();
         Assert.Empty(await db.EntitySubtitles.Where(row => row.EntityId == videoId).ToListAsync());
-        Assert.Null((await db.VideoDetails.FindAsync([videoId]))!.SubtitleSidecarSignature);
+        Assert.Null(await db.EntitySubtitleStates.FindAsync([videoId]));
     }
 
     [Fact]
@@ -783,19 +783,20 @@ public sealed class LibraryScanPersistenceServiceTests {
         var videoId = Guid.NewGuid();
         SeedLibraryRoot(db, RootId, "/media/videos");
         SeedVideo(db, videoId, "/media/videos/movie.mkv");
-        db.VideoDetails.Add(new VideoDetailRow {
+        db.VideoDetails.Add(new VideoDetailRow { EntityId = videoId });
+        db.EntitySubtitleStates.Add(new EntitySubtitleStateRow {
             EntityId = videoId,
-            LibraryRootId = RootId,
             SubtitleSidecarSignature = "old",
             SubtitlesExtractedAt = DateTimeOffset.UtcNow
         });
+        db.EntityLibraryRoots.Add(new EntityLibraryRootRow { EntityId = videoId, LibraryRootId = RootId });
         await db.SaveChangesAsync();
 
         var service = new LibraryScanPersistenceService(db);
         await service.InvalidateSubtitleStateAsync(
             [new VideoSubtitleSidecarState(videoId, "new")], CancellationToken.None);
 
-        var detail = await db.VideoDetails.FindAsync([videoId]);
+        var detail = await db.EntitySubtitleStates.FindAsync([videoId]);
         Assert.Null(detail!.SubtitlesExtractedAt);
         Assert.Equal("old", detail.SubtitleSidecarSignature);
         var target = Assert.Single(await service.GetVideoTargetsInRootAsync(RootId, CancellationToken.None));
@@ -810,7 +811,7 @@ public sealed class LibraryScanPersistenceServiceTests {
         const string previousPath = "/media/videos/movie.mkv";
         const string replacementPath = "/media/videos/movie.mp4";
         SeedVideo(db, videoId, previousPath);
-        db.VideoDetails.Add(new VideoDetailRow {
+        db.EntitySubtitleStates.Add(new EntitySubtitleStateRow {
             EntityId = videoId,
             SubtitleSidecarSignature = new string('a', 64),
             SubtitlesExtractedAt = DateTimeOffset.UtcNow
@@ -835,7 +836,7 @@ public sealed class LibraryScanPersistenceServiceTests {
 
         Assert.Equal([videoId], owners);
         Assert.Empty(await db.EntitySubtitles.Where(row => row.EntityId == videoId).ToArrayAsync());
-        var detail = await db.VideoDetails.FindAsync([videoId]);
+        var detail = await db.EntitySubtitleStates.FindAsync([videoId]);
         Assert.Null(detail!.SubtitlesExtractedAt);
         Assert.Null(detail.SubtitleSidecarSignature);
     }
@@ -876,12 +877,15 @@ public sealed class LibraryScanPersistenceServiceTests {
         SeedVideo(db, snapshotCoveredId, snapshotPath);
         SeedVideo(db, unrelatedId, "/media/unrelated/movie.mkv");
         SeedVideo(db, assignedElsewhereId, "/media/videos/owned-by-other-root.mkv");
+        db.EntityLibraryRoots.AddRange(
+            new EntityLibraryRootRow { EntityId = assignedId, LibraryRootId = RootId  },
+            new EntityLibraryRootRow { EntityId = assignedElsewhereId, LibraryRootId = otherRootId  });
         db.VideoDetails.AddRange(
-            new VideoDetailRow { EntityId = assignedId, LibraryRootId = RootId },
+            new VideoDetailRow { EntityId = assignedId },
             new VideoDetailRow { EntityId = pathCoveredId },
             new VideoDetailRow { EntityId = snapshotCoveredId },
             new VideoDetailRow { EntityId = unrelatedId },
-            new VideoDetailRow { EntityId = assignedElsewhereId, LibraryRootId = otherRootId });
+            new VideoDetailRow { EntityId = assignedElsewhereId });
         db.ScannedFiles.Add(new ScannedFileRow {
             LibraryRootId = RootId,
             ScanKind = JobType.ScanLibrary.ToCode(),
@@ -907,7 +911,8 @@ public sealed class LibraryScanPersistenceServiceTests {
         var ids = Enumerable.Range(0, 75).Select(_ => Guid.NewGuid()).ToArray();
         foreach (var id in ids) {
             SeedVideo(db, id, $"/media/videos/{id:N}.mkv");
-            db.VideoDetails.Add(new VideoDetailRow { EntityId = id, LibraryRootId = RootId });
+            db.VideoDetails.Add(new VideoDetailRow { EntityId = id });
+            db.EntityLibraryRoots.Add(new EntityLibraryRootRow { EntityId = id, LibraryRootId = RootId  });
         }
         await db.SaveChangesAsync();
 
@@ -955,8 +960,8 @@ public sealed class LibraryScanPersistenceServiceTests {
         SeedLibraryRoot(db, RootId, "/media/videos");
         SeedSourceEntity(db, keepId, EntityKind.Video.ToCode(), "/media/videos/Keep/movie.mkv");
         SeedSourceEntity(db, skipId, EntityKind.Video.ToCode(), "/media/videos/Skip/movie.mkv");
-        db.VideoDetails.Add(new VideoDetailRow { EntityId = keepId, LibraryRootId = RootId });
-        db.VideoDetails.Add(new VideoDetailRow { EntityId = skipId, LibraryRootId = RootId });
+        db.EntityLibraryRoots.Add(new EntityLibraryRootRow { EntityId = keepId, LibraryRootId = RootId  });
+        db.EntityLibraryRoots.Add(new EntityLibraryRootRow { EntityId = skipId, LibraryRootId = RootId  });
         db.MediaFileIgnores.Add(new MediaFileIgnoreRow {
             LibraryRootId = RootId,
             Path = "Skip",
@@ -1249,7 +1254,7 @@ public sealed class LibraryScanPersistenceServiceTests {
         var videoId = Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb");
         SeedSourceEntity(db, movieId, EntityKind.Movie.ToCode(), "/media/Friendship");
         SeedSourceEntity(db, videoId, EntityKind.Video.ToCode(), "/media/Friendship/Friendship.mp4", movieId, 0);
-        db.VideoDetails.Add(new VideoDetailRow { EntityId = videoId, LibraryRootId = rootId });
+        db.EntityLibraryRoots.Add(new EntityLibraryRootRow { EntityId = videoId, LibraryRootId = rootId  });
         await db.SaveChangesAsync();
 
         var service = new LibraryScanPersistenceService(db);
@@ -1400,10 +1405,7 @@ public sealed class LibraryScanPersistenceServiceTests {
             UpdatedAt = now
         });
         SeedVideo(db, videoId, "/media/videos/004.mkv");
-        db.VideoDetails.Add(new VideoDetailRow {
-            EntityId = videoId,
-            LibraryRootId = null
-        });
+        db.EntityLibraryRoots.Add(new EntityLibraryRootRow { EntityId = videoId });
         await db.SaveChangesAsync();
 
         var service = new LibraryScanPersistenceService(db);
@@ -1437,7 +1439,7 @@ public sealed class LibraryScanPersistenceServiceTests {
             CancellationToken.None);
 
         var child = await db.Entities.SingleAsync(entity => entity.Id == childId);
-        var detail = await db.GalleryDetails.SingleAsync(row => row.EntityId == childId);
+        var detail = await db.EntityLibraryRoots.SingleAsync(row => row.EntityId == childId);
         Assert.Equal(parentId, child.ParentEntityId);
         Assert.Equal(7, child.SortOrder);
         Assert.Equal(rootId, detail.LibraryRootId);
@@ -1468,7 +1470,7 @@ public sealed class LibraryScanPersistenceServiceTests {
             CancellationToken.None);
 
         var child = await db.Entities.SingleAsync(entity => entity.Id == childId);
-        var detail = await db.AudioLibraryDetails.SingleAsync(row => row.EntityId == childId);
+        var detail = await db.EntityLibraryRoots.SingleAsync(row => row.EntityId == childId);
         Assert.Equal(parentId, child.ParentEntityId);
         Assert.Equal(3, child.SortOrder);
         Assert.Equal(rootId, detail.LibraryRootId);
@@ -2303,7 +2305,7 @@ public sealed class LibraryScanPersistenceServiceTests {
         Assert.Equal("Always Go With the Flow!", book!.Title);
         Assert.Equal(BookType.Comic, detail!.BookType);
         Assert.Equal(BookFormat.ImageArchive, detail.Format);
-        Assert.Equal(RootId, detail.LibraryRootId);
+        Assert.Equal(RootId, (await db.EntityLibraryRoots.FindAsync([bookId]))!.LibraryRootId);
     }
 
     [Fact]

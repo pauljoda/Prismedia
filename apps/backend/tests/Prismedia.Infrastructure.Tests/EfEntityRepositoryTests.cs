@@ -76,6 +76,33 @@ public sealed class EfEntityRepositoryTests {
     }
 
     [Fact]
+    public async Task SubtitleHydrationOnlyAttachesStateToSupportedOrPersistedEntities() {
+        await using var db = CreateContext();
+        var tagId = Guid.NewGuid();
+        var videoId = Guid.NewGuid();
+        SeedEntity(db, tagId, EntityKind.Tag, "No subtitle capability");
+        SeedEntity(db, videoId, EntityKind.Video, "Playable video");
+        db.EntitySubtitleStates.Add(new EntitySubtitleStateRow {
+            EntityId = videoId,
+            SubtitlesExtractedAt = DateTimeOffset.UtcNow
+        });
+        await db.SaveChangesAsync();
+
+        var repository = new EfEntityRepository(
+            db,
+            TestUserContext.Admin(),
+            EntityMappers.Kinds(db),
+            EntityMappers.Capabilities(db, TestUserContext.Admin()));
+
+        var tag = await repository.RequireAsync<Tag>(tagId, CancellationToken.None);
+        var video = await repository.RequireAsync<Video>(videoId, CancellationToken.None);
+
+        Assert.Null(tag.GetCapability<CapabilitySubtitles>());
+        Assert.NotNull(video.SubtitleCapability);
+        Assert.NotNull(video.SubtitleCapability!.ExtractedAt);
+    }
+
+    [Fact]
     public async Task SaveAsyncPersistsBasicFieldsRelationshipMapsAndCredits() {
         await using var db = CreateContext();
         var series = new VideoSeries(Guid.Parse("55555555-5555-5555-5555-555555555555"), "Series");
@@ -186,7 +213,7 @@ public sealed class EfEntityRepositoryTests {
             var videoId = Guid.NewGuid();
             var subtitleId = Guid.NewGuid();
             SeedEntity(db, videoId, EntityKind.Video, "Stable subtitles");
-            db.VideoDetails.Add(new VideoDetailRow {
+            db.EntitySubtitleStates.Add(new EntitySubtitleStateRow {
                 EntityId = videoId,
                 SubtitlesExtractedAt = DateTimeOffset.UtcNow
             });
@@ -240,7 +267,7 @@ public sealed class EfEntityRepositoryTests {
             var originalTimestamp = DateTimeOffset.UtcNow.AddHours(-2);
             await using (var setup = CreateContext(databaseName)) {
                 SeedEntity(setup, videoId, EntityKind.Video, "Concurrent subtitles");
-                setup.VideoDetails.Add(new VideoDetailRow {
+                setup.EntitySubtitleStates.Add(new EntitySubtitleStateRow {
                     EntityId = videoId,
                     SubtitlesExtractedAt = originalTimestamp,
                     SubtitleSidecarSignature = new string('a', 64)
@@ -269,7 +296,7 @@ public sealed class EfEntityRepositoryTests {
             var staleVideo = await staleRepository.RequireAsync<Video>(videoId, CancellationToken.None);
 
             await using (var pipeline = CreateContext(databaseName)) {
-                var detail = await pipeline.VideoDetails.FindAsync([videoId]);
+                var detail = await pipeline.EntitySubtitleStates.FindAsync([videoId]);
                 detail!.SubtitlesExtractedAt = null;
                 var embedded = await pipeline.EntitySubtitles.FindAsync([embeddedId]);
                 embedded!.StoragePath = newPath;
@@ -291,7 +318,7 @@ public sealed class EfEntityRepositoryTests {
             await staleRepository.SaveAsync(staleVideo, CancellationToken.None);
 
             await using var verification = CreateContext(databaseName);
-            var currentDetail = await verification.VideoDetails.AsNoTracking()
+            var currentDetail = await verification.EntitySubtitleStates.AsNoTracking()
                 .SingleAsync(row => row.EntityId == videoId);
             Assert.Null(currentDetail.SubtitlesExtractedAt);
             Assert.Equal(new string('a', 64), currentDetail.SubtitleSidecarSignature);

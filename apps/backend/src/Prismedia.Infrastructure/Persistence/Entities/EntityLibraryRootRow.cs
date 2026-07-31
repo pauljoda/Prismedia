@@ -6,11 +6,3 @@ public class EntityLibraryRootRow {
 
     public Guid? LibraryRootId { get; set; }
 }
-
-/// <summary>Legacy test-data alias for the shared direct-root attachment.</summary>
-[Obsolete("Use EntityLibraryRootRow.")]
-public sealed class AudioLibraryDetailRow : EntityLibraryRootRow;
-
-/// <summary>Legacy test-data alias for the shared direct-root attachment.</summary>
-[Obsolete("Use EntityLibraryRootRow.")]
-public sealed class MusicArtistDetailRow : EntityLibraryRootRow;

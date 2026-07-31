@@ -33,7 +33,10 @@ public sealed class WantedEntityWriterTests {
         var externalId = Assert.Single(await db.EntityExternalIds.AsNoTracking().Where(row => row.EntityId == result.EntityId).ToArrayAsync());
         Assert.Equal(("openlibrary", "W1"), (externalId.Provider, externalId.Value));
         // No library root: root-scoped stale cleanup must never remove a wanted placeholder.
-        Assert.Null((await db.BookDetails.AsNoTracking().FirstAsync(row => row.EntityId == result.EntityId)).LibraryRootId);
+        Assert.Null(await db.EntityLibraryRoots.AsNoTracking()
+            .Where(row => row.EntityId == result.EntityId)
+            .Select(row => row.LibraryRootId)
+            .FirstOrDefaultAsync());
     }
 
     [Fact]
@@ -256,8 +259,8 @@ public sealed class WantedEntityWriterTests {
         var artist = await writer.EnsureAsync(EntityKind.MusicArtist, new ExternalIdentity("musicbrainz", "MB1"), "Daft Punk", null, matchTitleKindWide: true, CancellationToken.None);
         var album = await writer.EnsureAsync(EntityKind.AudioLibrary, new ExternalIdentity("musicbrainz", "R1"), "Discovery", artist.EntityId, matchTitleKindWide: false, CancellationToken.None);
 
-        Assert.Null((await db.MusicArtistDetails.AsNoTracking().FirstAsync(row => row.EntityId == artist.EntityId)).LibraryRootId);
-        Assert.Null((await db.AudioLibraryDetails.AsNoTracking().FirstAsync(row => row.EntityId == album.EntityId)).LibraryRootId);
+        Assert.False(await db.EntityLibraryRoots.AsNoTracking().AnyAsync(row => row.EntityId == artist.EntityId));
+        Assert.False(await db.EntityLibraryRoots.AsNoTracking().AnyAsync(row => row.EntityId == album.EntityId));
         Assert.Equal(artist.EntityId, (await db.Entities.AsNoTracking().FirstAsync(row => row.Id == album.EntityId)).ParentEntityId);
     }
 
@@ -301,7 +304,7 @@ public sealed class WantedEntityWriterTests {
         Assert.False(reused[1].HasFile);
         Assert.False(reused[2].HasFile);
         Assert.Equal(3, created.Select(result => result.EntityId).Distinct().Count());
-        Assert.Equal(3, await db.AudioLibraryDetails.AsNoTracking().CountAsync());
+        Assert.Equal(0, await db.EntityLibraryRoots.AsNoTracking().CountAsync());
         var albums = await db.Entities.AsNoTracking()
             .Where(row => row.ParentEntityId == artistId)
             .ToArrayAsync();

@@ -26,10 +26,6 @@ public sealed class CollectionRuleEngine(PrismediaDbContext db) : ICollectionRul
     private static readonly IEntityContainmentPolicy CollectionPolicy =
         EntityKindRegistry.Get<CollectionEntityKindDefinition>();
 
-    private static readonly EntityKindDefinition[] DirectLibraryRootDefinitions = EntityKindRegistry.All
-        .Where(definition => definition.LibraryVisibility.Mode == EntityLibraryVisibilityMode.DirectRoot)
-        .ToArray();
-
     private static readonly Dictionary<string, HashSet<string>> FieldTargetKinds = new(StringComparer.Ordinal) {
         ["fileSize"] = Kinds(EntityKind.Video.ToCode(), EntityKind.Image.ToCode(), EntityKind.AudioTrack.ToCode()),
         ["duration"] = Kinds(EntityKind.Video.ToCode(), EntityKind.AudioTrack.ToCode()),
@@ -639,12 +635,7 @@ public sealed class CollectionRuleEngine(PrismediaDbContext db) : ICollectionRul
         string entityIdExpression,
         string suffix,
         Func<string, string> rootPredicate) =>
-        $@"(
-            {string.Join(
-                $"{Environment.NewLine}            OR ",
-                DirectLibraryRootDefinitions.Select((_, index) =>
-                    DirectRootExists($"root_{suffix}_{index}", entityIdExpression, rootPredicate)))}
-        )";
+        DirectRootExists($"root_{suffix}", entityIdExpression, rootPredicate);
 
     // ── Helpers ──
 

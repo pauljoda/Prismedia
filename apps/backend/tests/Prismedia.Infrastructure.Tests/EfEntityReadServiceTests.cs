@@ -331,10 +331,10 @@ public sealed class EfEntityReadServiceTests {
             new EntityRow { Id = seasonId, KindCode = EntityKind.VideoSeason.ToCode(), Title = "Season", ParentEntityId = seriesId, CreatedAt = now, UpdatedAt = now },
             new EntityRow { Id = hiddenVideoId, KindCode = EntityKind.Video.ToCode(), Title = "Hidden", CreatedAt = now, UpdatedAt = now },
             new EntityRow { Id = bookId, KindCode = EntityKind.Book.ToCode(), Title = "Book", CreatedAt = now, UpdatedAt = now });
-        db.VideoDetails.AddRange(
-            new VideoDetailRow { EntityId = movieVideoId, LibraryRootId = enabledRootId },
-            new VideoDetailRow { EntityId = videoId, LibraryRootId = enabledRootId },
-            new VideoDetailRow { EntityId = hiddenVideoId, LibraryRootId = disabledRootId });
+        db.EntityLibraryRoots.AddRange(
+            new EntityLibraryRootRow { EntityId = movieVideoId, LibraryRootId = enabledRootId  },
+            new EntityLibraryRootRow { EntityId = videoId, LibraryRootId = enabledRootId  },
+            new EntityLibraryRootRow { EntityId = hiddenVideoId, LibraryRootId = disabledRootId  });
         db.UserEntityStates.AddRange(
             new UserEntityStateRow { UserId = TestUserContext.UserId, EntityId = movieVideoId, ResumeSeconds = 10, UpdatedAt = now },
             new UserEntityStateRow { UserId = TestUserContext.UserId, EntityId = videoId, ResumeSeconds = 20, UpdatedAt = now },
@@ -913,7 +913,7 @@ public sealed class EfEntityReadServiceTests {
                 UpdatedAt = now
             });
         db.BookDetails.Add(new BookDetailRow { EntityId = bookId, BookType = BookType.Book });
-        db.AudioLibraryDetails.Add(new AudioLibraryDetailRow { EntityId = albumId });
+        db.EntityLibraryRoots.Add(new EntityLibraryRootRow { EntityId = albumId });
         db.AudioTrackDetails.AddRange(
             new AudioTrackDetailRow { EntityId = audiobookTrackId },
             new AudioTrackDetailRow { EntityId = musicTrackId });
@@ -1132,11 +1132,11 @@ public sealed class EfEntityReadServiceTests {
             OwnerUserId = TestUserContext.UserId,
             CoverMode = CollectionCoverMode.Mosaic
         });
-        db.AudioLibraryDetails.Add(new AudioLibraryDetailRow { EntityId = albumId });
+        db.EntityLibraryRoots.Add(new EntityLibraryRootRow { EntityId = albumId });
         db.AudioTrackDetails.AddRange(
             new AudioTrackDetailRow { EntityId = trackId },
             new AudioTrackDetailRow { EntityId = secondTrackId });
-        db.VideoDetails.Add(new VideoDetailRow { EntityId = hiddenVideoId, LibraryRootId = disabledRootId });
+        db.EntityLibraryRoots.Add(new EntityLibraryRootRow { EntityId = hiddenVideoId, LibraryRootId = disabledRootId  });
         db.CollectionItemDetails.AddRange(
             new CollectionItemDetailRow {
                 Id = Guid.NewGuid(),
@@ -1508,9 +1508,9 @@ public sealed class EfEntityReadServiceTests {
             new EntityRow { Id = visibleVideoId, KindCode = EntityKind.Video.ToCode(), Title = "Shared Title", CreatedAt = now, UpdatedAt = now },
             new EntityRow { Id = hiddenVideoId, KindCode = EntityKind.Video.ToCode(), Title = "Shared Title Hidden", CreatedAt = now, UpdatedAt = now },
             new EntityRow { Id = rootlessTagId, KindCode = EntityKind.Tag.ToCode(), Title = "Rootless Tag", CreatedAt = now, UpdatedAt = now });
-        db.VideoDetails.AddRange(
-            new VideoDetailRow { EntityId = visibleVideoId, LibraryRootId = enabledRootId },
-            new VideoDetailRow { EntityId = hiddenVideoId, LibraryRootId = disabledRootId });
+        db.EntityLibraryRoots.AddRange(
+            new EntityLibraryRootRow { EntityId = visibleVideoId, LibraryRootId = enabledRootId  },
+            new EntityLibraryRootRow { EntityId = hiddenVideoId, LibraryRootId = disabledRootId  });
         await db.SaveChangesAsync();
 
         var service = CreateService(db);
@@ -1596,10 +1596,10 @@ public sealed class EfEntityReadServiceTests {
             new EntityRow { Id = hiddenAlbumId, KindCode = EntityKind.AudioLibrary.ToCode(), Title = "Hidden Album", ParentEntityId = artistId, SortOrder = 1, CreatedAt = now, UpdatedAt = now },
             new EntityRow { Id = visibleTrackId, KindCode = EntityKind.AudioTrack.ToCode(), Title = "Visible Track", ParentEntityId = visibleAlbumId, SortOrder = 0, CreatedAt = now, UpdatedAt = now },
             new EntityRow { Id = hiddenTrackId, KindCode = EntityKind.AudioTrack.ToCode(), Title = "Hidden Track", ParentEntityId = hiddenAlbumId, SortOrder = 0, CreatedAt = now, UpdatedAt = now });
-        db.MusicArtistDetails.Add(new MusicArtistDetailRow { EntityId = artistId, LibraryRootId = enabledRootId });
-        db.AudioLibraryDetails.AddRange(
-            new AudioLibraryDetailRow { EntityId = visibleAlbumId, LibraryRootId = enabledRootId },
-            new AudioLibraryDetailRow { EntityId = hiddenAlbumId, LibraryRootId = disabledRootId });
+        db.EntityLibraryRoots.Add(new EntityLibraryRootRow { EntityId = artistId, LibraryRootId = enabledRootId });
+        db.EntityLibraryRoots.AddRange(
+            new EntityLibraryRootRow { EntityId = visibleAlbumId, LibraryRootId = enabledRootId },
+            new EntityLibraryRootRow { EntityId = hiddenAlbumId, LibraryRootId = disabledRootId });
         db.AudioTrackDetails.AddRange(
             new AudioTrackDetailRow { EntityId = visibleTrackId },
             new AudioTrackDetailRow { EntityId = hiddenTrackId });
@@ -1635,10 +1635,10 @@ public sealed class EfEntityReadServiceTests {
             new EntityRow { Id = relatedVisibleVideoId, KindCode = EntityKind.Video.ToCode(), Title = "Visible Related", CreatedAt = now, UpdatedAt = now },
             new EntityRow { Id = hiddenMovieId, KindCode = EntityKind.Movie.ToCode(), Title = "Hidden Movie", CreatedAt = now, UpdatedAt = now },
             new EntityRow { Id = hiddenMovieVideoId, KindCode = EntityKind.Video.ToCode(), Title = "Hidden Feature", ParentEntityId = hiddenMovieId, CreatedAt = now, UpdatedAt = now });
-        db.VideoDetails.AddRange(
-            new VideoDetailRow { EntityId = sourceVideoId, LibraryRootId = enabledRootId },
-            new VideoDetailRow { EntityId = relatedVisibleVideoId, LibraryRootId = enabledRootId },
-            new VideoDetailRow { EntityId = hiddenMovieVideoId, LibraryRootId = disabledRootId });
+        db.EntityLibraryRoots.AddRange(
+            new EntityLibraryRootRow { EntityId = sourceVideoId, LibraryRootId = enabledRootId  },
+            new EntityLibraryRootRow { EntityId = relatedVisibleVideoId, LibraryRootId = enabledRootId  },
+            new EntityLibraryRootRow { EntityId = hiddenMovieVideoId, LibraryRootId = disabledRootId  });
         db.EntityRelationshipLinks.AddRange(
             Link(sourceVideoId, relatedVisibleVideoId, now),
             Link(sourceVideoId, hiddenMovieVideoId, now));
@@ -2404,13 +2404,13 @@ public sealed class EfEntityReadServiceTests {
             Row(wantedEpisodeId, EntityKind.Video.ToCode(), "Wanted Episode", now, visibleSeasonId, isWanted: true),
             Row(hiddenLibraryEpisodeId, EntityKind.Video.ToCode(), "Disabled Library Episode", now, visibleSeasonId),
             Row(episodeBelowHiddenSeasonId, EntityKind.Video.ToCode(), "Hidden Season Episode", now, nsfwSeasonId));
-        db.VideoDetails.AddRange(
-            new VideoDetailRow { EntityId = visibleEpisodeId, LibraryRootId = enabledRootId },
-            new VideoDetailRow { EntityId = directEpisodeId, LibraryRootId = enabledRootId },
-            new VideoDetailRow { EntityId = nsfwEpisodeId, LibraryRootId = enabledRootId },
-            new VideoDetailRow { EntityId = wantedEpisodeId, LibraryRootId = enabledRootId },
-            new VideoDetailRow { EntityId = hiddenLibraryEpisodeId, LibraryRootId = disabledRootId },
-            new VideoDetailRow { EntityId = episodeBelowHiddenSeasonId, LibraryRootId = enabledRootId });
+        db.EntityLibraryRoots.AddRange(
+            new EntityLibraryRootRow { EntityId = visibleEpisodeId, LibraryRootId = enabledRootId  },
+            new EntityLibraryRootRow { EntityId = directEpisodeId, LibraryRootId = enabledRootId  },
+            new EntityLibraryRootRow { EntityId = nsfwEpisodeId, LibraryRootId = enabledRootId  },
+            new EntityLibraryRootRow { EntityId = wantedEpisodeId, LibraryRootId = enabledRootId  },
+            new EntityLibraryRootRow { EntityId = hiddenLibraryEpisodeId, LibraryRootId = disabledRootId  },
+            new EntityLibraryRootRow { EntityId = episodeBelowHiddenSeasonId, LibraryRootId = enabledRootId  });
         await db.SaveChangesAsync();
 
         var response = await CreateService(db).GetThumbnailsAsync(
@@ -2804,7 +2804,7 @@ public sealed class EfEntityReadServiceTests {
                 CreatedAt = now,
                 UpdatedAt = now
             });
-        db.AudioLibraryDetails.Add(new AudioLibraryDetailRow { EntityId = albumId });
+        db.EntityLibraryRoots.Add(new EntityLibraryRootRow { EntityId = albumId });
         db.AudioTrackDetails.Add(new AudioTrackDetailRow { EntityId = trackId });
         db.EntityFiles.Add(File(albumId, EntityFileRole.Cover, "/assets/audio-libraries/album/cover.jpg", now));
         await db.SaveChangesAsync();
@@ -2838,7 +2838,7 @@ public sealed class EfEntityReadServiceTests {
                 CreatedAt = now,
                 UpdatedAt = now
             });
-        db.AudioLibraryDetails.Add(new AudioLibraryDetailRow { EntityId = albumId });
+        db.EntityLibraryRoots.Add(new EntityLibraryRootRow { EntityId = albumId });
         db.AudioTrackDetails.Add(new AudioTrackDetailRow { EntityId = trackId });
         db.EntityFiles.Add(File(albumId, EntityFileRole.Cover, "/assets/audio-libraries/album/cover.jpg", now));
         await db.SaveChangesAsync();
@@ -2875,7 +2875,7 @@ public sealed class EfEntityReadServiceTests {
                 CreatedAt = now,
                 UpdatedAt = now
             });
-        db.AudioLibraryDetails.Add(new AudioLibraryDetailRow { EntityId = albumId });
+        db.EntityLibraryRoots.Add(new EntityLibraryRootRow { EntityId = albumId });
         db.AudioTrackDetails.Add(new AudioTrackDetailRow { EntityId = trackId });
         db.EntityFiles.AddRange(
             File(albumId, EntityFileRole.Cover, "/assets/audio-libraries/album/cover.jpg", now),
@@ -2911,7 +2911,7 @@ public sealed class EfEntityReadServiceTests {
                 CreatedAt = now,
                 UpdatedAt = now
             });
-        db.AudioLibraryDetails.Add(new AudioLibraryDetailRow { EntityId = albumId });
+        db.EntityLibraryRoots.Add(new EntityLibraryRootRow { EntityId = albumId });
         db.AudioTrackDetails.Add(new AudioTrackDetailRow { EntityId = trackId });
         await db.SaveChangesAsync();
 
@@ -3123,7 +3123,7 @@ public sealed class EfEntityReadServiceTests {
                 CreatedAt = now,
                 UpdatedAt = now
             });
-        db.VideoDetails.Add(new VideoDetailRow { EntityId = videoId, LibraryRootId = rootId });
+        db.EntityLibraryRoots.Add(new EntityLibraryRootRow { EntityId = videoId, LibraryRootId = rootId  });
         db.EntityFiles.Add(File(movieId, EntityFileRole.Cover, "/assets/movies/disabled/cover.jpg", now));
         await db.SaveChangesAsync();
 

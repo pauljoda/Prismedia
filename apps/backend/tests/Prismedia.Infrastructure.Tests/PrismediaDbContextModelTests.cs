@@ -195,6 +195,23 @@ public sealed class PrismediaDbContextModelTests {
     }
 
     [Fact]
+    public void LegacyDetailRowsDoNotCarrySharedRootOrSubtitleState() {
+        Assert.Null(typeof(VideoDetailRow).GetProperty("LibraryRootId"));
+        Assert.Null(typeof(VideoDetailRow).GetProperty("SubtitlesExtractedAt"));
+        Assert.Null(typeof(VideoDetailRow).GetProperty("SubtitleSidecarSignature"));
+        Assert.Null(typeof(BookDetailRow).GetProperty("LibraryRootId"));
+        Assert.Null(typeof(GalleryDetailRow).GetProperty("LibraryRootId"));
+        Assert.Null(typeof(PrismediaDbContext).GetProperty("AudioLibraryDetails"));
+        Assert.Null(typeof(PrismediaDbContext).GetProperty("MusicArtistDetails"));
+
+        using var db = CreateContext();
+        Assert.NotNull(db.Model.FindEntityType(typeof(EntityLibraryRootRow)));
+        Assert.NotNull(db.Model.FindEntityType(typeof(EntitySubtitleStateRow)));
+        Assert.Null(db.Model.FindEntityType("Prismedia.Infrastructure.Persistence.Entities.AudioLibraryDetailRow"));
+        Assert.Null(db.Model.FindEntityType("Prismedia.Infrastructure.Persistence.Entities.MusicArtistDetailRow"));
+    }
+
+    [Fact]
     public void EntityKindsSeedStorageMetadata() {
         using var db = CreateContext();
         var modelEntity = db.GetService<IDesignTimeModel>().Model.FindEntityType(typeof(EntityKindRow));

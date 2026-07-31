@@ -281,7 +281,7 @@ public sealed class ImportedEntityMaterializationTests : IDisposable {
         var root = new RootPersistence(rootPath, scanAudio: true);
         var artistId = AddSourceEntity(db, EntityKind.MusicArtist, "Divide Music", artistPath);
         var albumId = AddSourceEntity(db, EntityKind.AudioLibrary, "Set It On Fire", albumPath, artistId);
-        db.AudioLibraryDetails.Add(new AudioLibraryDetailRow {
+        db.EntityLibraryRoots.Add(new EntityLibraryRootRow {
             EntityId = albumId,
             LibraryRootId = root.Root.Id
         });
@@ -421,7 +421,7 @@ public sealed class ImportedEntityMaterializationTests : IDisposable {
         var root = new RootPersistence(rootPath, scanAudio: true);
         var artistId = AddSourceEntity(db, EntityKind.MusicArtist, "Divide Music", artistPath);
         var albumId = AddSourceEntity(db, EntityKind.AudioLibrary, "Who's Standing Now", albumPath, artistId);
-        db.AudioLibraryDetails.Add(new AudioLibraryDetailRow {
+        db.EntityLibraryRoots.Add(new EntityLibraryRootRow {
             EntityId = albumId,
             LibraryRootId = root.Root.Id
         });

@@ -159,7 +159,7 @@ public sealed class SettingsServiceTests {
                 CreatedAt = now,
                 UpdatedAt = now,
             });
-        db.VideoDetails.Add(new VideoDetailRow { EntityId = ownedEntityId, LibraryRootId = rootId });
+        db.EntityLibraryRoots.Add(new EntityLibraryRootRow { EntityId = ownedEntityId, LibraryRootId = rootId  });
         db.EntityFiles.AddRange(
             new EntityFileRow {
                 Id = Guid.NewGuid(),
@@ -234,7 +234,7 @@ public sealed class SettingsServiceTests {
                 CreatedAt = now,
                 UpdatedAt = now,
             });
-        db.VideoDetails.Add(new VideoDetailRow { EntityId = ownedEntityId, LibraryRootId = rootId });
+        db.EntityLibraryRoots.Add(new EntityLibraryRootRow { EntityId = ownedEntityId, LibraryRootId = rootId  });
         db.Monitors.Add(new MonitorRow {
             Id = Guid.NewGuid(),
             EntityId = monitoredSeriesId,

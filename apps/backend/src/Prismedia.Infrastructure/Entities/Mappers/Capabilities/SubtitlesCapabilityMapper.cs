@@ -26,6 +26,9 @@ internal sealed class SubtitlesCapabilityMapper(PrismediaDbContext db) : IEntity
             .ToHashSet();
         // The lifecycle attachment and track rows are both owned by this capability.
         var capability = entity.GetCapability<CapabilitySubtitles>();
+        if (capability is null && subtitleState is null && rows.Length == 0) {
+            return;
+        }
         if (capability is null) {
             capability = new CapabilitySubtitles();
             entity.AddCapability(capability);

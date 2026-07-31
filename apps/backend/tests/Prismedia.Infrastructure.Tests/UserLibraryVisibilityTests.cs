@@ -345,9 +345,9 @@ public sealed class UserLibraryVisibilityTests {
         db.Entities.AddRange(
             new EntityRow { Id = GrantedVideoId, KindCode = EntityKind.Video.ToCode(), Title = "Granted", CreatedAt = now, UpdatedAt = now },
             new EntityRow { Id = RestrictedVideoId, KindCode = EntityKind.Video.ToCode(), Title = "Restricted", CreatedAt = now, UpdatedAt = now });
-        db.VideoDetails.AddRange(
-            new VideoDetailRow { EntityId = GrantedVideoId, LibraryRootId = GrantedRootId },
-            new VideoDetailRow { EntityId = RestrictedVideoId, LibraryRootId = RestrictedRootId });
+        db.EntityLibraryRoots.AddRange(
+            new EntityLibraryRootRow { EntityId = GrantedVideoId, LibraryRootId = GrantedRootId  },
+            new EntityLibraryRootRow { EntityId = RestrictedVideoId, LibraryRootId = RestrictedRootId  });
         await db.SaveChangesAsync();
     }
 

@@ -38,12 +38,6 @@ public sealed class PrismediaDbContext : DbContext {
 
     public DbSet<EntityLibraryRootRow> EntityLibraryRoots => Set<EntityLibraryRootRow>();
 
-    [Obsolete("Use EntityLibraryRoots.")]
-    public DbSet<EntityLibraryRootRow> AudioLibraryDetails => EntityLibraryRoots;
-
-    [Obsolete("Use EntityLibraryRoots.")]
-    public DbSet<EntityLibraryRootRow> MusicArtistDetails => EntityLibraryRoots;
-
     public DbSet<EntityFileRow> EntityFiles => Set<EntityFileRow>();
 
     public DbSet<EntityFileFingerprintRow> EntityFileFingerprints => Set<EntityFileFingerprintRow>();
