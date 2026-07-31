@@ -21,7 +21,7 @@ public interface IPlayableVideoKindDefinition {
     /// Whether playback of this kind advances a structural episodic cursor on its containing
     /// series or season. Standalone videos and movies intentionally do not participate.
     /// </summary>
-    bool IsEpisodic { get; }
+    bool IsEpisodic => ScanPlacement == PlayableVideoScanPlacement.Episode;
 }
 
 /// <summary>Structural placement of one playable video file discovered by a library scan.</summary>
@@ -87,9 +87,6 @@ public abstract class PlayableVideoEntityKindDefinition<TEntity> : RootEntityKin
 
     /// <inheritdoc />
     public PlayableVideoScanPlacement ScanPlacement { get; }
-
-    /// <inheritdoc />
-    public virtual bool IsEpisodic => false;
 
     private static EntityProcessingPolicy VideoProcessing { get; } = new(
         assetFamily: GeneratedAssetFamily.Video,
