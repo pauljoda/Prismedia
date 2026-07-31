@@ -62,6 +62,27 @@ export interface EntityMetadataUpdateRequest {
   patch: EntityMetadataPatch;
 }
 
+/** Creates the stable empty shape used before an entity edit session begins. */
+export function createEmptyEntityDetailEditDraft(): EntityDetailEditDraft {
+  return {
+    title: "",
+    description: "",
+    externalIds: [],
+    links: [],
+    tagPicks: [],
+    studioPick: [],
+    credits: [],
+    dates: [],
+    stats: [],
+    positions: [],
+    classification: "",
+    ratingText: "",
+    isFavorite: false,
+    isNsfw: false,
+    isOrganized: false,
+  };
+}
+
 export interface EditableSection {
   id: string;
   editable?: boolean;

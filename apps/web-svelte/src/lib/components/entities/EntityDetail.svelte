@@ -77,14 +77,9 @@
   import { useNsfw } from "$lib/nsfw/store.svelte";
   import { CREDIT_ROLE, ENTITY_FILE_ROLE, type EntityFileRoleCode } from "$lib/entities/entity-codes";
   import {
-    draftFromCard,
-    serializeDraft,
-    buildMetadataUpdate,
-    validateDraft,
     validateUrl,
     hasProvider,
     externalIdValue,
-    type EntityDetailEditDraft,
   } from "$lib/entities/entity-detail-edit";
   import { searchTags, searchPeople, searchStudios } from "$lib/entities/entity-detail-search";
   import type {
@@ -94,6 +89,7 @@
   } from "./entity-detail-types";
   import { entityAccentForKind } from "$lib/entities/entity-accent";
   import { paletteFromImage, type ArtworkPalette } from "$lib/entities/artwork-palette";
+  import { EntityDetailEditController } from "./entity-detail-edit-controller.svelte";
 
   type Props = EntityDetailProps;
 
@@ -125,34 +121,12 @@
   }: Props = $props();
 
   let activeTabId = $state("");
-  let editingTabId = $state<string | null>(null);
-  let pendingTabId = $state<string | null>(null);
-  let savingEdit = $state(false);
-  let editError = $state<string | null>(null);
   let assetError = $state<string | null>(null);
   let assetBusyRole = $state<EntityFileRoleCode | null>(null);
   let posterInput: HTMLInputElement | null = $state(null);
   let headerInput: HTMLInputElement | null = $state(null);
   let localPosterAsset = $state<{ src: string | null; empty: boolean } | null>(null);
   let localHeaderAsset = $state<{ src: string | null; empty: boolean } | null>(null);
-  let initialDraft = $state<EntityDetailEditDraft | null>(null);
-  let editDraft = $state<EntityDetailEditDraft>({
-    title: "",
-    description: "",
-    externalIds: [],
-    links: [],
-    tagPicks: [],
-    studioPick: [],
-    credits: [],
-    dates: [],
-    stats: [],
-    positions: [],
-    classification: "",
-    ratingText: "",
-    isFavorite: false,
-    isNsfw: false,
-    isOrganized: false,
-  });
   let paletteState = $state<{ entityId: string; palette: ArtworkPalette } | null>(null);
 
   const isFavorite = $derived(card.flags.find((f) => f.code === "favorite")?.active ?? false);
@@ -230,9 +204,23 @@
       .filter((section): section is EntityDetailSection => Boolean(section))
       .filter(sectionHasContent),
   );
-  const isEditingActiveTab = $derived(
-    hasTabs ? Boolean(activeTab && editingTabId === activeTab.id) : editingTabId === "__standalone__",
-  );
+  const edit = new EntityDetailEditController({
+    card: () => card,
+    flags: () => ({ isFavorite, isNsfw, isOrganized }),
+    hasTabs: () => hasTabs,
+    activeTab: () => activeTab,
+    activeTabSections: () => activeTabSections.filter(sectionEditable),
+    standaloneSections: () => standaloneEditSections,
+    ratingMax: () => card.rating?.max ?? 5,
+    save: () => onMetadataSave,
+    activateTab: (tabId) => (activeTabId = tabId),
+    onStart: () => (assetError = null),
+  });
+  const editDraft = edit.draft;
+  const isEditingActiveTab = $derived(edit.isEditingActiveTab);
+  const pendingTabId = $derived(edit.pendingTabId);
+  const savingEdit = $derived(edit.saving);
+  const editError = $derived(edit.error);
   const effectiveShowHero = $derived(showHero || isEditingActiveTab);
   const displayHero = $derived.by(() => {
     if (localHeaderAsset) return localHeaderAsset.empty || !localHeaderAsset.src ? null : { src: localHeaderAsset.src, alt: "Header" };
@@ -266,14 +254,8 @@
       .filter((section): section is EntityDetailSection => Boolean(section))
       .filter(sectionEditable);
   });
-  // Only editable sections feed the save request: a displayed-but-read-only section (e.g.
-  // inherited series cast on a season) must never widen the patch's field scope.
-  const currentEditSections = $derived(
-    hasTabs ? activeTabSections.filter(sectionEditable) : standaloneEditSections,
-  );
-  const editValidationErrors = $derived.by(() => validateDraft(currentEditSections, editDraft, card.rating?.max ?? 5));
-  const editDirty = $derived(Boolean(initialDraft && serializeDraft(initialDraft) !== serializeDraft(editDraft)));
-  const saveDisabled = $derived(!editDirty || editValidationErrors.length > 0 || savingEdit);
+  const editValidationErrors = $derived(edit.validationErrors);
+  const saveDisabled = $derived(edit.saveDisabled);
 
   function findSection(sectionId: string): EntityDetailSection | null {
     return availableSections.find((section) => section.id === sectionId) ?? null;
@@ -377,55 +359,12 @@
     }
   }
 
-  function startEdit(tab?: EntityDetailTab) {
-    const nextDraft = draftFromCard(card, { isFavorite, isNsfw, isOrganized });
-    initialDraft = { ...nextDraft };
-    editDraft = { ...nextDraft };
-    editingTabId = tab?.id ?? "__standalone__";
-    editError = null;
-    assetError = null;
-  }
-
-  function cancelEdit() {
-    editingTabId = null;
-    initialDraft = null;
-    editError = null;
-  }
-
-  function requestTab(tabId: string) {
-    if (tabId === activeTab?.id) return;
-    if (editDirty) {
-      pendingTabId = tabId;
-      return;
-    }
-    activeTabId = tabId;
-    cancelEdit();
-  }
-
-  function stayOnDirtyTab() {
-    pendingTabId = null;
-  }
-
-  function discardDirtyTab() {
-    if (pendingTabId) activeTabId = pendingTabId;
-    pendingTabId = null;
-    cancelEdit();
-  }
-
-
-  async function saveEdit() {
-    if (!onMetadataSave || saveDisabled) return;
-    savingEdit = true;
-    editError = null;
-    try {
-      await onMetadataSave(buildMetadataUpdate(currentEditSections, editDraft));
-      cancelEdit();
-    } catch (err) {
-      editError = err instanceof Error ? err.message : String(err);
-    } finally {
-      savingEdit = false;
-    }
-  }
+  const startEdit = edit.start;
+  const cancelEdit = edit.cancel;
+  const requestTab = edit.requestTab;
+  const stayOnDirtyTab = edit.stayOnDirtyTab;
+  const discardDirtyTab = edit.discardDirtyTab;
+  const saveEdit = edit.save;
 
   function posterCardForDisplay(): EntityThumbnailCard | null {
     const withWantedStatus = (posterCard: EntityThumbnailCard): EntityThumbnailCard =>
