@@ -557,9 +557,10 @@ public sealed partial class EfEntityReadService : IEntityReadService {
         var fileManagementState = await ResolveFileManagementStateAsync(id, cancellationToken);
         var creditMetadata = await ProjectCreditMetadataAsync(id, hideNsfw, cancellationToken);
         var projected = SanitizeLocalAssets(
-            await EnrichAudioTrackAlbumCoverAsync(
+            await EnrichBorrowedParentCoverAsync(
                 EntityCardProjector.ToCard(entity, fileManagementState, CurrentUserId, creditMetadata),
                 hideNsfw,
+                enforceLibraryVisibility,
                 cancellationToken));
         var card = projected with {
             ChildrenByKind = await ProjectDirectChildGroupsAsync(id, hideNsfw, enforceLibraryVisibility, cancellationToken),
@@ -1103,37 +1104,38 @@ public sealed partial class EfEntityReadService : IEntityReadService {
         };
     }
 
-    private async Task<EntityCard> EnrichAudioTrackAlbumCoverAsync(
+    private async Task<EntityCard> EnrichBorrowedParentCoverAsync(
         EntityCard card,
         bool hideNsfw,
+        bool enforceLibraryVisibility,
         CancellationToken cancellationToken) {
-        if (card.Kind != EntityKind.AudioTrack ||
-            card.ParentEntityId is not { } albumId) {
+        if (card.ParentEntityId is not { } parentId) {
             return card;
         }
 
-        var trackCovers = await LoadCoverPathsAsync([card.Id], cancellationToken);
-        if (trackCovers.ContainsKey(card.Id)) {
+        var ownCovers = await LoadCoverPathsAsync([card.Id], cancellationToken);
+        if (ownCovers.ContainsKey(card.Id)) {
             return card;
         }
 
-        var albumExists = await _db.Entities.AsNoTracking()
-            .AnyAsync(entity =>
-                entity.Id == albumId &&
-                entity.KindCode == EntityKind.AudioLibrary.ToCode() &&
-                (!hideNsfw || !entity.IsNsfw),
-                cancellationToken);
-        if (!albumExists) {
+        var parentQuery = _db.Entities.AsNoTracking()
+            .Where(entity => entity.Id == parentId);
+        if (enforceLibraryVisibility) {
+            parentQuery = ApplyEnabledLibraryVisibility(parentQuery);
+        }
+        parentQuery = ApplyNsfwVisibility(parentQuery, hideNsfw);
+        var parent = await parentQuery.SingleOrDefaultAsync(cancellationToken);
+        if (parent is null || !CanBorrowParentCover(card.Kind.ToCode(), parent.KindCode)) {
             return card;
         }
 
-        var albumCovers = await LoadCoverPathsAsync([albumId], cancellationToken);
-        if (!albumCovers.TryGetValue(albumId, out var albumCover)) {
+        var parentCovers = await LoadCoverPathsAsync([parentId], cancellationToken);
+        if (!parentCovers.TryGetValue(parentId, out var parentCover)) {
             return card;
         }
 
         return card with {
-            Capabilities = WithImageCoverFallback(card.Capabilities, albumCover)
+            Capabilities = WithImageCoverFallback(card.Capabilities, parentCover)
         };
     }
 

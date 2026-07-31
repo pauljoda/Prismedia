@@ -97,7 +97,7 @@ public sealed partial class EfEntityReadService {
                 .ToDictionaryAsync(detail => detail.EntityId, detail => detail.BookType, cancellationToken)
             : new Dictionary<Guid, BookType>();
         // Grid variants are loaded for the page's entities plus every entity whose cover a
-        // row can borrow (owning album/movie parents and representative-cover children for
+        // row can borrow (definition-approved parents and representative-cover children for
         // galleries and collections), so a card that inherits another entity's cover also
         // inherits that entity's small variants instead of downloading the full original.
         var borrowableCoverSourceIds = ids

@@ -2853,6 +2853,42 @@ public sealed class EfEntityReadServiceTests {
     }
 
     [Fact]
+    public async Task GetAsyncUsesDefinitionApprovedParentCoverForVideoEpisode() {
+        await using var db = CreateContext();
+        var now = DateTimeOffset.UtcNow;
+        var seriesId = Guid.Parse("aaaaaaaa-0000-0000-0000-000000000041");
+        var episodeId = Guid.Parse("aaaaaaaa-0000-0000-0000-000000000042");
+
+        db.Entities.AddRange(
+            new EntityRow {
+                Id = seriesId,
+                KindCode = EntityKind.VideoSeries.ToCode(),
+                Title = "Series",
+                CreatedAt = now,
+                UpdatedAt = now
+            },
+            new EntityRow {
+                Id = episodeId,
+                KindCode = EntityKind.VideoEpisode.ToCode(),
+                Title = "Episode",
+                ParentEntityId = seriesId,
+                CreatedAt = now,
+                UpdatedAt = now
+            });
+        db.EntityLibraryRoots.Add(new EntityLibraryRootRow { EntityId = seriesId });
+        db.EntityFiles.Add(File(seriesId, EntityFileRole.Cover, "/assets/series/show/cover.jpg", now));
+        await db.SaveChangesAsync();
+
+        var detail = Assert.IsType<EntityCard>(
+            await CreateService(db).GetAsync(episodeId, hideNsfw: false, CancellationToken.None));
+
+        var images = Assert.IsType<ImagesCapability>(Assert.Single(detail.Capabilities.OfType<ImagesCapability>()));
+        Assert.Equal("/assets/series/show/cover.jpg", images.CoverUrl);
+        Assert.Equal("/assets/series/show/cover.jpg", images.ThumbnailUrl);
+        Assert.Empty(images.Items);
+    }
+
+    [Fact]
     public async Task GetThumbnailsAsyncKeepsAudioTrackOwnCoverBeforeAlbumCover() {
         await using var db = CreateContext();
         var now = DateTimeOffset.UtcNow;
