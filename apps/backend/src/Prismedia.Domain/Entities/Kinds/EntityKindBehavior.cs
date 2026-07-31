@@ -16,6 +16,7 @@ public sealed record EntityKindBehavior {
         EntityProcessingPolicy? processing = null,
         EntityEngagementPolicy? engagement = null,
         EntityBrowsePolicy? browse = null,
+        EntityLibraryVisibilityPolicy? libraryVisibility = null,
         bool supportsFileDeletion = false,
         bool supportsManualManagement = false,
         EntityMediaQualityFamily mediaQualityFamily = EntityMediaQualityFamily.None,
@@ -31,6 +32,7 @@ public sealed record EntityKindBehavior {
         Processing = processing ?? EntityProcessingPolicy.None;
         Engagement = engagement ?? EntityEngagementPolicy.None;
         Browse = browse ?? EntityBrowsePolicy.Default;
+        LibraryVisibility = libraryVisibility ?? EntityLibraryVisibilityPolicy.Unscoped;
         SupportsFileDeletion = supportsFileDeletion;
         SupportsManualManagement = supportsManualManagement;
         MediaQualityFamily = mediaQualityFamily;
@@ -51,6 +53,9 @@ public sealed record EntityKindBehavior {
 
     /// <summary>List hierarchy and aggregate visibility behavior.</summary>
     public EntityBrowsePolicy Browse { get; }
+
+    /// <summary>Library-root visibility topology.</summary>
+    public EntityLibraryVisibilityPolicy LibraryVisibility { get; }
 
     /// <summary>Whether this kind can safely root managed file deletion.</summary>
     public bool SupportsFileDeletion { get; }

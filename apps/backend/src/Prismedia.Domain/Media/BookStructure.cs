@@ -38,6 +38,7 @@ public sealed class BookVolumeEntityKindDefinition() : RootEntityKindDefinition<
     behavior: new EntityKindBehavior(
         identification: new(enumeratesChildren: true),
         engagement: new(EntityEngagementMode.Reading),
+        libraryVisibility: EntityLibraryVisibilityPolicy.AncestorRoot,
         supportsFileDeletion: true),
     defaultCapabilities: static () =>
     [
@@ -77,7 +78,9 @@ public sealed class BookChapterEntityKindDefinition() : EntityKindDefinition<Boo
         "/books/{parentId}/chapters/{id}",
         EntityKind.Book),
     search: null,
-    behavior: new EntityKindBehavior(engagement: new(EntityEngagementMode.Reading)),
+    behavior: new EntityKindBehavior(
+        engagement: new(EntityEngagementMode.Reading),
+        libraryVisibility: EntityLibraryVisibilityPolicy.AncestorRoot),
     defaultCapabilities: static () =>
     [
         new CapabilityFingerprints(),
@@ -125,7 +128,8 @@ public sealed class BookPageEntityKindDefinition() : RootEntityKindDefinition<Bo
     behavior: new EntityKindBehavior(
         processing: new EntityProcessingPolicy(
             previewJobType: JobType.GenerateBookPageThumbnail,
-            generatedFileRoles: [EntityFileRole.Thumbnail])),
+            generatedFileRoles: [EntityFileRole.Thumbnail]),
+        libraryVisibility: EntityLibraryVisibilityPolicy.AncestorRoot),
     defaultCapabilities: static () =>
     [
         new CapabilityFingerprints(),

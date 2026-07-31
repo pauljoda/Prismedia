@@ -27,6 +27,7 @@ public sealed class MovieEntityKindDefinition() : EntityKindDefinition<Movie>(
             pluginFallbackKind: EntityKind.Video),
         manualAcquisition: EntityManualAcquisitionPolicy.UploadAndReplacement,
         engagement: new(EntityEngagementMode.Playback, aggregatesDirectChildPlayback: true),
+        libraryVisibility: EntityLibraryVisibilityPolicy.FromDescendants(EntityKind.Video, 1),
         supportsFileDeletion: true,
         mediaQualityFamily: EntityMediaQualityFamily.Video,
         supportsAtomicMediaUpgrade: true),

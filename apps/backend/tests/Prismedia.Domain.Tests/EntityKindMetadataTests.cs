@@ -259,6 +259,60 @@ public sealed class EntityKindMetadataTests {
     }
 
     [Fact]
+    public void DefinitionsOwnLibraryRootVisibilityTopology() {
+        var directRoots = EntityKindRegistry.All
+            .Where(definition => definition.LibraryVisibility.Mode == EntityLibraryVisibilityMode.DirectRoot)
+            .Select(definition => definition.Kind)
+            .Order()
+            .ToArray();
+        var inheritedRoots = EntityKindRegistry.All
+            .Where(definition => definition.LibraryVisibility.Mode == EntityLibraryVisibilityMode.AncestorRoot)
+            .Select(definition => definition.Kind)
+            .Order()
+            .ToArray();
+        var descendantRoots = EntityKindRegistry.All
+            .Where(definition => definition.LibraryVisibility.Mode == EntityLibraryVisibilityMode.DescendantRoot)
+            .ToDictionary(definition => definition.Kind, definition => definition.LibraryVisibility);
+
+        Assert.Equal(
+            [
+                EntityKind.AudioLibrary,
+                EntityKind.Book,
+                EntityKind.Gallery,
+                EntityKind.MusicArtist,
+                EntityKind.Video
+            ],
+            directRoots);
+        Assert.Equal(
+            [
+                EntityKind.AudioTrack,
+                EntityKind.BookVolume,
+                EntityKind.BookChapter,
+                EntityKind.BookPage,
+                EntityKind.Image
+            ],
+            inheritedRoots);
+        Assert.Equal(
+            (EntityKind.Video, 1),
+            (descendantRoots[EntityKind.Movie].DescendantKind, descendantRoots[EntityKind.Movie].MaximumDepth));
+        Assert.Equal(
+            (EntityKind.Video, 1),
+            (descendantRoots[EntityKind.VideoSeason].DescendantKind, descendantRoots[EntityKind.VideoSeason].MaximumDepth));
+        Assert.Equal(
+            (EntityKind.Video, 2),
+            (descendantRoots[EntityKind.VideoSeries].DescendantKind, descendantRoots[EntityKind.VideoSeries].MaximumDepth));
+        Assert.Equal(3, descendantRoots.Count);
+    }
+
+    [Fact]
+    public void DescendantLibraryVisibilityRequiresABoundedDepth() {
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            EntityLibraryVisibilityPolicy.FromDescendants(EntityKind.Video, maximumDepth: 0));
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            EntityLibraryVisibilityPolicy.FromDescendants(EntityKind.Video, maximumDepth: 4));
+    }
+
+    [Fact]
     public void AcquisitionProfilesAreOwnedByExactlyTheProfileEntityKinds() {
         var profiles = EntityKindRegistry.All
             .Where(definition => definition.AcquisitionProfile is not null)

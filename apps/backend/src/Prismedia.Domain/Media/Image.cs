@@ -28,6 +28,7 @@ public sealed class ImageEntityKindDefinition() : RootEntityKindDefinition<Image
             fingerprintJobType: JobType.FingerprintImage,
             previewJobType: JobType.GenerateImageThumbnail,
             generatedFileRoles: [EntityFileRole.Thumbnail, EntityFileRole.Preview]),
+        libraryVisibility: EntityLibraryVisibilityPolicy.AncestorRoot,
         supportsFileDeletion: true)) {
     /// <inheritdoc />
     public override bool OwnsMetadataRelationships => true;

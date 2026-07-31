@@ -28,6 +28,7 @@ public sealed class VideoSeriesEntityKindDefinition() : EntityKindDefinition<Vid
     new EntityKindBehavior(
         identification: new(AutoIdentifySelectorKind.Video, enumeratesChildren: true),
         engagement: new(EntityEngagementMode.Playback),
+        libraryVisibility: EntityLibraryVisibilityPolicy.FromDescendants(EntityKind.Video, 2),
         supportsFileDeletion: true,
         mediaQualityFamily: EntityMediaQualityFamily.Video),
     defaultCapabilities: static () => [new CapabilityCredits()]) {
@@ -111,6 +112,7 @@ public sealed class VideoSeasonEntityKindDefinition() : RootEntityKindDefinition
         identification: new(enumeratesChildren: true),
         manualAcquisition: EntityManualAcquisitionPolicy.Upload,
         engagement: new(EntityEngagementMode.Playback),
+        libraryVisibility: EntityLibraryVisibilityPolicy.FromDescendants(EntityKind.Video, 1),
         supportsFileDeletion: true,
         mediaQualityFamily: EntityMediaQualityFamily.Video),
     defaultCapabilities: static () =>

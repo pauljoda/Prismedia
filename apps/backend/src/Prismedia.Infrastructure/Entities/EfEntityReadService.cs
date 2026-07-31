@@ -37,6 +37,9 @@ public sealed partial class EfEntityReadService : IEntityReadService {
         .SelectMany(definition => definition.Browse.AggregateParentKinds.Select(parentKind =>
             new BrowseParentRule(definition.Code, EntityKindRegistry.Describe(parentKind).Code)))
         .ToArray();
+    private static readonly EntityKindDefinition[] DescendantLibraryRootDefinitions = EntityKindRegistry.All
+        .Where(definition => definition.LibraryVisibility.Mode == EntityLibraryVisibilityMode.DescendantRoot)
+        .ToArray();
 
     private readonly PrismediaDbContext _db;
     private readonly Prismedia.Application.Security.ICurrentUserContext _currentUser;
@@ -875,113 +878,99 @@ public sealed partial class EfEntityReadService : IEntityReadService {
         var entities = _db.Entities;
         var hiddenLibraryEntityIds = _hiddenLibraryEntityIds ?? [];
 
-        if (KnownKindHasDirectLibraryRoot(knownKindCode)) {
-            return query.Where(entity => !hiddenLibraryEntityIds.Contains(entity.Id));
+        if (!EntityKindRegistry.TryDescribe(knownKindCode, out var definition)) {
+            return ApplyMixedEnabledLibraryVisibility(query, entities, hiddenLibraryEntityIds);
         }
 
-        if (KnownKindInheritsLibraryRoot(knownKindCode)) {
-            return ApplyInheritedEnabledLibraryVisibility(query, entities, hiddenLibraryEntityIds);
-        }
-
-        if (KindEquals(knownKindCode, EntityKind.Movie.ToCode())) {
-            return query.Where(entity =>
-                !hiddenLibraryEntityIds.Contains(entity.Id) &&
-                (!entities.Any(child =>
-                     child.ParentEntityId == entity.Id &&
-                     child.KindCode == EntityKind.Video.ToCode()) ||
-                 entities.Any(child =>
-                     child.ParentEntityId == entity.Id &&
-                     child.KindCode == EntityKind.Video.ToCode() &&
-                     !hiddenLibraryEntityIds.Contains(child.Id))));
-        }
-
-        if (KindEquals(knownKindCode, EntityKind.VideoSeason.ToCode())) {
-            return query.Where(entity =>
-                !hiddenLibraryEntityIds.Contains(entity.Id) &&
-                (!entities.Any(child =>
-                     child.ParentEntityId == entity.Id &&
-                     child.KindCode == EntityKind.Video.ToCode()) ||
-                 entities.Any(child =>
-                     child.ParentEntityId == entity.Id &&
-                     child.KindCode == EntityKind.Video.ToCode() &&
-                     !hiddenLibraryEntityIds.Contains(child.Id))));
-        }
-
-        if (KindEquals(knownKindCode, EntityKind.VideoSeries.ToCode())) {
-            return query.Where(entity =>
-                !hiddenLibraryEntityIds.Contains(entity.Id) &&
-                (!entities.Any(candidate =>
-                     candidate.KindCode == EntityKind.Video.ToCode() &&
-                     (candidate.ParentEntityId == entity.Id ||
-                      entities.Any(parent => parent.Id == candidate.ParentEntityId && parent.ParentEntityId == entity.Id))) ||
-                 entities.Any(candidate =>
-                     candidate.KindCode == EntityKind.Video.ToCode() &&
-                     (candidate.ParentEntityId == entity.Id ||
-                      entities.Any(parent => parent.Id == candidate.ParentEntityId && parent.ParentEntityId == entity.Id)) &&
-                     !hiddenLibraryEntityIds.Contains(candidate.Id))));
-        }
-
-        return query.Where(entity =>
-            !hiddenLibraryEntityIds.Contains(entity.Id) &&
-            !entities.Any(parent =>
-                parent.Id == entity.ParentEntityId &&
-                hiddenLibraryEntityIds.Contains(parent.Id)) &&
-            !entities.Any(parent =>
-                parent.Id == entity.ParentEntityId &&
-                entities.Any(grandparent =>
-                    grandparent.Id == parent.ParentEntityId &&
-                    hiddenLibraryEntityIds.Contains(grandparent.Id))) &&
-            !entities.Any(parent =>
-                parent.Id == entity.ParentEntityId &&
-                entities.Any(grandparent =>
-                    grandparent.Id == parent.ParentEntityId &&
-                    entities.Any(rootParent =>
-                        rootParent.Id == grandparent.ParentEntityId &&
-                        hiddenLibraryEntityIds.Contains(rootParent.Id)))) &&
-            (entity.KindCode != EntityKind.Movie.ToCode() ||
-                !entities.Any(child =>
-                    child.ParentEntityId == entity.Id &&
-                    child.KindCode == EntityKind.Video.ToCode()) ||
-                entities.Any(child =>
-                    child.ParentEntityId == entity.Id &&
-                    child.KindCode == EntityKind.Video.ToCode() &&
-                    !hiddenLibraryEntityIds.Contains(child.Id))) &&
-            (entity.KindCode != EntityKind.VideoSeason.ToCode() ||
-                !entities.Any(child =>
-                    child.ParentEntityId == entity.Id &&
-                    child.KindCode == EntityKind.Video.ToCode()) ||
-                entities.Any(child =>
-                    child.ParentEntityId == entity.Id &&
-                    child.KindCode == EntityKind.Video.ToCode() &&
-                    !hiddenLibraryEntityIds.Contains(child.Id))) &&
-            (entity.KindCode != EntityKind.VideoSeries.ToCode() ||
-                !entities.Any(candidate =>
-                    candidate.KindCode == EntityKind.Video.ToCode() &&
-                    (candidate.ParentEntityId == entity.Id ||
-                     entities.Any(parent => parent.Id == candidate.ParentEntityId && parent.ParentEntityId == entity.Id))) ||
-                entities.Any(candidate =>
-                    candidate.KindCode == EntityKind.Video.ToCode() &&
-                    (candidate.ParentEntityId == entity.Id ||
-                     entities.Any(parent => parent.Id == candidate.ParentEntityId && parent.ParentEntityId == entity.Id)) &&
-                    !hiddenLibraryEntityIds.Contains(candidate.Id))));
+        return definition.LibraryVisibility.Mode switch {
+            EntityLibraryVisibilityMode.DirectRoot =>
+                query.Where(entity => !hiddenLibraryEntityIds.Contains(entity.Id)),
+            EntityLibraryVisibilityMode.AncestorRoot =>
+                ApplyInheritedEnabledLibraryVisibility(query, entities, hiddenLibraryEntityIds),
+            EntityLibraryVisibilityMode.DescendantRoot =>
+                ApplyDescendantEnabledLibraryVisibility(
+                    query,
+                    entities,
+                    hiddenLibraryEntityIds,
+                    definition,
+                    applyOnlyToKind: false),
+            _ => ApplyMixedEnabledLibraryVisibility(query, entities, hiddenLibraryEntityIds)
+        };
     }
 
-    private static bool KnownKindHasDirectLibraryRoot(string? kind) =>
-        kind is not null && (
-            kind.Equals(EntityKind.Video.ToCode(), StringComparison.OrdinalIgnoreCase) ||
-            kind.Equals(EntityKind.Gallery.ToCode(), StringComparison.OrdinalIgnoreCase) ||
-            kind.Equals(EntityKind.Book.ToCode(), StringComparison.OrdinalIgnoreCase) ||
-            kind.Equals(EntityKind.MusicArtist.ToCode(), StringComparison.OrdinalIgnoreCase) ||
-            kind.Equals(EntityKind.AudioLibrary.ToCode(), StringComparison.OrdinalIgnoreCase));
+    private IQueryable<EntityRow> ApplyMixedEnabledLibraryVisibility(
+        IQueryable<EntityRow> query,
+        IQueryable<EntityRow> entities,
+        Guid[] hiddenLibraryEntityIds) {
+        query = ApplyInheritedEnabledLibraryVisibility(query, entities, hiddenLibraryEntityIds);
+        foreach (var definition in DescendantLibraryRootDefinitions) {
+            query = ApplyDescendantEnabledLibraryVisibility(
+                query,
+                entities,
+                hiddenLibraryEntityIds,
+                definition,
+                applyOnlyToKind: true);
+        }
 
-    private static bool KnownKindInheritsLibraryRoot(string? kind) =>
-        kind is not null && (
-            kind.Equals(EntityKind.Image.ToCode(), StringComparison.OrdinalIgnoreCase) ||
-            kind.Equals(EntityKind.BookChapter.ToCode(), StringComparison.OrdinalIgnoreCase) ||
-            kind.Equals(EntityKind.AudioTrack.ToCode(), StringComparison.OrdinalIgnoreCase));
+        return query;
+    }
 
-    private static bool KindEquals(string? actual, string expected) =>
-        actual is not null && actual.Equals(expected, StringComparison.OrdinalIgnoreCase);
+    private static IQueryable<EntityRow> ApplyDescendantEnabledLibraryVisibility(
+        IQueryable<EntityRow> query,
+        IQueryable<EntityRow> entities,
+        Guid[] hiddenLibraryEntityIds,
+        EntityKindDefinition definition,
+        bool applyOnlyToKind) {
+        var policy = definition.LibraryVisibility;
+        var descendantCode = EntityKindRegistry.Describe(policy.DescendantKind!.Value).Code;
+        var descendantOwnerIds = BuildDescendantOwnerIds(
+            entities,
+            descendantCode,
+            policy.MaximumDepth,
+            hiddenLibraryEntityIds,
+            visibleOnly: false);
+        var visibleDescendantOwnerIds = BuildDescendantOwnerIds(
+            entities,
+            descendantCode,
+            policy.MaximumDepth,
+            hiddenLibraryEntityIds,
+            visibleOnly: true);
+
+        if (!applyOnlyToKind) {
+            return query.Where(entity =>
+                !hiddenLibraryEntityIds.Contains(entity.Id) &&
+                (!descendantOwnerIds.Contains(entity.Id) || visibleDescendantOwnerIds.Contains(entity.Id)));
+        }
+
+        var ownerCode = definition.Code;
+        return query.Where(entity =>
+            entity.KindCode != ownerCode ||
+            (!descendantOwnerIds.Contains(entity.Id) || visibleDescendantOwnerIds.Contains(entity.Id)));
+    }
+
+    private static IQueryable<Guid> BuildDescendantOwnerIds(
+        IQueryable<EntityRow> entities,
+        string descendantCode,
+        int maximumDepth,
+        Guid[] hiddenLibraryEntityIds,
+        bool visibleOnly) {
+        var descendants = entities.Where(entity =>
+            entity.KindCode == descendantCode &&
+            (!visibleOnly || !hiddenLibraryEntityIds.Contains(entity.Id)));
+        var frontier = descendants
+            .Where(entity => entity.ParentEntityId != null)
+            .Select(entity => entity.ParentEntityId!.Value);
+        var ownerIds = frontier;
+        for (var depth = 2; depth <= maximumDepth; depth++) {
+            var previousFrontier = frontier;
+            frontier = entities
+                .Where(entity => previousFrontier.Contains(entity.Id) && entity.ParentEntityId != null)
+                .Select(entity => entity.ParentEntityId!.Value);
+            ownerIds = ownerIds.Concat(frontier);
+        }
+
+        return ownerIds;
+    }
 
     private static IQueryable<EntityRow> ApplyInheritedEnabledLibraryVisibility(
         IQueryable<EntityRow> query,

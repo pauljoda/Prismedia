@@ -31,6 +31,7 @@ public sealed class BookEntityKindDefinition() : EntityKindDefinition<Book>(
         manualAcquisition: EntityManualAcquisitionPolicy.UploadAndReplacement,
         engagement: new(EntityEngagementMode.Reading),
         browse: new(hiddenParentKinds: [EntityKind.Book]),
+        libraryVisibility: EntityLibraryVisibilityPolicy.DirectRoot,
         supportsFileDeletion: true),
     defaultCapabilities: static () => [new CapabilityProgress(), new CapabilityPlayback()]) {
     /// <inheritdoc />

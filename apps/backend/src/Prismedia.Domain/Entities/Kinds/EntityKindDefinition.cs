@@ -110,6 +110,9 @@ public abstract class EntityKindDefinition {
     /// <summary>List hierarchy and aggregate visibility behavior owned by this kind.</summary>
     public EntityBrowsePolicy Browse => Behavior.Browse;
 
+    /// <summary>Library-root visibility topology owned by this kind.</summary>
+    public EntityLibraryVisibilityPolicy LibraryVisibility => Behavior.LibraryVisibility;
+
     /// <summary>
     /// Canonical position-code precedence used to derive a structural sort order. Kinds without
     /// an override use the shared media-structure ordering.

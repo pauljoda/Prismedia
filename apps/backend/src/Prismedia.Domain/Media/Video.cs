@@ -46,6 +46,7 @@ public sealed class VideoEntityKindDefinition() : EntityKindDefinition<Video>(
             ]),
         engagement: new(EntityEngagementMode.Playback),
         browse: new(aggregateParentKinds: [EntityKind.Movie]),
+        libraryVisibility: EntityLibraryVisibilityPolicy.DirectRoot,
         supportsFileDeletion: true,
         mediaQualityFamily: EntityMediaQualityFamily.Video,
         supportsAtomicMediaUpgrade: true),
