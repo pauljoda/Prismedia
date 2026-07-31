@@ -203,35 +203,33 @@ public sealed class EfSettingsPersistence : ISettingsPersistence {
 
     private async Task DeleteEntitiesForLibraryRootAsync(LibraryRootRow root, CancellationToken cancellationToken) {
         var entityIds = new HashSet<Guid>();
-        var containerIds = new HashSet<Guid>();
 
         var rootedEntities = await _db.EntityLibraryRoots.AsNoTracking()
             .Where(detail => detail.LibraryRootId == root.Id)
-            .Join(_db.Entities.AsNoTracking(), root => root.EntityId, entity => entity.Id,
-                (root, entity) => new { entity.Id, entity.KindCode })
+            .Select(detail => detail.EntityId)
             .ToArrayAsync(cancellationToken);
-        foreach (var entity in rootedEntities) {
-            entityIds.Add(entity.Id);
-            if (entity.KindCode is var kind &&
-                (kind == EntityKind.Gallery.ToCode() || kind == EntityKind.Book.ToCode() ||
-                 kind == EntityKind.MusicArtist.ToCode() || kind == EntityKind.AudioLibrary.ToCode())) {
-                containerIds.Add(entity.Id);
-            }
+        foreach (var entityId in rootedEntities) {
+            entityIds.Add(entityId);
         }
 
         if (!string.IsNullOrWhiteSpace(root.Path)) {
-            var sourceFiles = await _db.EntityFiles.AsNoTracking()
+            var fileSources = await _db.EntityFiles.AsNoTracking()
                 .Where(file => file.Role == EntityFileRole.Source)
                 .Select(file => new { file.EntityId, file.Path })
                 .ToArrayAsync(cancellationToken);
-            foreach (var file in sourceFiles.Where(file => LibraryScanPathRules.IsPathUnderRoot(file.Path, root.Path))) {
-                entityIds.Add(file.EntityId);
+            var folderSources = await _db.EntitySources.AsNoTracking()
+                .Where(source => source.Code == EntitySourceCode.Folder.ToCode())
+                .Select(source => new { source.EntityId, Path = source.Value })
+                .ToArrayAsync(cancellationToken);
+            foreach (var source in fileSources.Concat(folderSources)
+                .Where(source => LibraryScanPathRules.IsPathUnderRoot(source.Path, root.Path))) {
+                entityIds.Add(source.EntityId);
             }
         }
 
-        if (containerIds.Count > 0) {
+        if (entityIds.Count > 0) {
             var childrenByParentId = await LoadChildrenByParentIdAsync(cancellationToken);
-            var pending = new Queue<Guid>(containerIds);
+            var pending = new Queue<Guid>(entityIds);
             while (pending.Count > 0) {
                 var parentId = pending.Dequeue();
                 if (!childrenByParentId.TryGetValue(parentId, out var childIds)) {

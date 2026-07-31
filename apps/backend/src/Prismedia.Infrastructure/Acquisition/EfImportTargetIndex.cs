@@ -105,7 +105,7 @@ public sealed class EfImportTargetIndex(PrismediaDbContext db) : IImportTargetIn
             return null;
         }
 
-        var albumFolder = await SourcePathAsync(albumId.Value, cancellationToken);
+        var albumFolder = await FolderPathAsync(albumId.Value, cancellationToken);
 
         var artistCode = EntityKind.MusicArtist.ToCode();
         var artistFolder = await (
@@ -113,9 +113,10 @@ public sealed class EfImportTargetIndex(PrismediaDbContext db) : IImportTargetIn
             where album.Id == albumId
             join artist in db.Entities.AsNoTracking().Where(row => row.KindCode == artistCode)
                 on album.ParentEntityId equals artist.Id
-            join file in db.EntityFiles.AsNoTracking().Where(file => file.Role == EntityFileRole.Source)
-                on artist.Id equals file.EntityId
-            select file.Path)
+            join source in db.EntitySources.AsNoTracking()
+                    .Where(source => source.Code == EntitySourceCode.Folder.ToCode())
+                on artist.Id equals source.EntityId
+            select source.Value)
             .FirstOrDefaultAsync(cancellationToken);
 
         if (albumFolder is null && artistFolder is null) {

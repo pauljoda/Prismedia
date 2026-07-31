@@ -62,8 +62,10 @@ public sealed class EfImportTargetIndexTests {
     [Fact]
     public async Task ResolvesAlbumAndArtistFoldersWithRelativeTracks() {
         await using var db = CreateContext();
-        var artistId = AddEntity(db, EntityKind.MusicArtist.ToCode(), parent: null, sortOrder: null, sourcePath: "/media/music/Artist");
-        var albumId = AddEntity(db, EntityKind.AudioLibrary.ToCode(), parent: artistId, sortOrder: null, sourcePath: "/media/music/Artist/Album");
+        var artistId = AddEntity(db, EntityKind.MusicArtist.ToCode(), parent: null, sortOrder: null);
+        AddFolderSource(db, artistId, "/media/music/Artist");
+        var albumId = AddEntity(db, EntityKind.AudioLibrary.ToCode(), parent: artistId, sortOrder: null);
+        AddFolderSource(db, albumId, "/media/music/Artist/Album");
         AddEntity(db, EntityKind.AudioTrack.ToCode(), parent: albumId, sortOrder: 1, sourcePath: "/media/music/Artist/Album/01 - Track.flac");
         await db.SaveChangesAsync();
 
@@ -78,7 +80,8 @@ public sealed class EfImportTargetIndexTests {
     [Fact]
     public async Task FilelessAlbumUnderAnOnDiskArtistKeepsTheArtistFolder() {
         await using var db = CreateContext();
-        var artistId = AddEntity(db, EntityKind.MusicArtist.ToCode(), parent: null, sortOrder: null, sourcePath: "/media/music/Artist");
+        var artistId = AddEntity(db, EntityKind.MusicArtist.ToCode(), parent: null, sortOrder: null);
+        AddFolderSource(db, artistId, "/media/music/Artist");
         var albumId = AddEntity(db, EntityKind.AudioLibrary.ToCode(), parent: artistId, sortOrder: null);
         await db.SaveChangesAsync();
 

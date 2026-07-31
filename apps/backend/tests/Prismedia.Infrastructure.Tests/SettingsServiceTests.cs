@@ -189,6 +189,70 @@ public sealed class SettingsServiceTests {
     }
 
     [Fact]
+    public async Task DeleteLibraryRootUsesFolderProvenanceAndRemovesTheWholeEntitySubtree() {
+        await using var db = CreateContext();
+        var rootId = Guid.NewGuid();
+        var authorId = Guid.NewGuid();
+        var bookId = Guid.NewGuid();
+        var chapterId = Guid.NewGuid();
+        var now = DateTimeOffset.UtcNow;
+        db.LibraryRoots.Add(new LibraryRootRow {
+            Id = rootId,
+            Path = "/media/books",
+            Label = "Books",
+            Enabled = true,
+            Recursive = true,
+            ScanVideos = false,
+            ScanImages = false,
+            ScanAudio = false,
+            ScanBooks = true,
+            IsNsfw = false,
+            AutoIdentify = true,
+            CreatedAt = now,
+            UpdatedAt = now,
+        });
+        db.Entities.AddRange(
+            new EntityRow {
+                Id = authorId,
+                KindCode = EntityKind.BookAuthor.ToCode(),
+                Title = "Author",
+                CreatedAt = now,
+                UpdatedAt = now,
+            },
+            new EntityRow {
+                Id = bookId,
+                KindCode = EntityKind.Book.ToCode(),
+                Title = "Book",
+                ParentEntityId = authorId,
+                CreatedAt = now,
+                UpdatedAt = now,
+            },
+            new EntityRow {
+                Id = chapterId,
+                KindCode = EntityKind.BookChapter.ToCode(),
+                Title = "Chapter",
+                ParentEntityId = bookId,
+                CreatedAt = now,
+                UpdatedAt = now,
+            });
+        db.EntitySources.Add(new EntitySourceRow {
+            EntityId = authorId,
+            Code = EntitySourceCode.Folder.ToCode(),
+            Value = "/media/books/Author",
+            UpdatedAt = now,
+        });
+        await db.SaveChangesAsync();
+
+        var deleted = await new SettingsService(new EfSettingsPersistence(db))
+            .DeleteLibraryRootAsync(rootId, CancellationToken.None);
+
+        Assert.True(deleted);
+        Assert.Empty(await db.Entities.Where(entity =>
+            entity.Id == authorId || entity.Id == bookId || entity.Id == chapterId).ToArrayAsync());
+        Assert.False(await db.LibraryRoots.AnyAsync(root => root.Id == rootId));
+    }
+
+    [Fact]
     public async Task DeleteLibraryRootPreservesWantedAndMonitoredEmptyContainers() {
         await using var db = CreateContext();
         var rootId = Guid.NewGuid();
