@@ -153,7 +153,7 @@ public abstract class EntityKindDefinition {
     /// Declared structural topology for this kind. The Entity domain and persistence boundary enforce
     /// these parent/child constraints during construction, hydration, and structural mutation.
     /// </summary>
-    public virtual EntityStructurePolicy StructurePolicy => EntityStructurePolicy.Unspecified;
+    public abstract EntityStructurePolicy StructurePolicy { get; }
 
     /// <summary>Concrete domain-capability types supplied for newly constructed entities.</summary>
     public IReadOnlyList<Type> DefaultCapabilityTypes => _defaultCapabilityTypes;

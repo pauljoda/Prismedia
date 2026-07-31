@@ -23,11 +23,29 @@ public static class EntityKindRegistry {
     private static readonly IReadOnlyDictionary<Type, EntityKindDefinition> ByDefinitionType =
         Definitions.ToDictionary(definition => definition.GetType());
 
+    private static readonly IReadOnlyDictionary<EntityKind, IReadOnlyList<EntityKind>> AllowedChildKindsByParent =
+        Definitions.ToDictionary(
+            definition => definition.Kind,
+            definition => (IReadOnlyList<EntityKind>)Definitions
+                .Where(candidate => candidate.StructurePolicy.AllowsParent(definition.Kind))
+                .Select(candidate => candidate.Kind)
+                .ToArray());
+
     private static readonly IReadOnlyDictionary<PlayableVideoScanPlacement, IPlayableVideoKindDefinition>
         PlayableVideoByScanPlacement = BuildPlayableVideoByScanPlacement(Definitions);
 
     /// <summary>All discovered entity-kind definitions in enum order.</summary>
     public static IReadOnlyList<EntityKindDefinition> All => Definitions;
+
+    /// <summary>Gets the kinds that derive this kind as an allowed direct structural parent.</summary>
+    public static IReadOnlyList<EntityKind> AllowedChildKinds(EntityKind parentKind) =>
+        AllowedChildKindsByParent.TryGetValue(parentKind, out var childKinds)
+            ? childKinds
+            : throw new ArgumentOutOfRangeException(nameof(parentKind), parentKind, "Unsupported entity kind.");
+
+    /// <summary>Whether the supplied parent/child kinds form a declared structural edge.</summary>
+    public static bool AllowsStructuralChild(EntityKind parentKind, EntityKind childKind) =>
+        Describe(childKind).StructurePolicy.AllowsParent(parentKind);
 
     /// <summary>Gets the canonical definition for a domain entity kind.</summary>
     public static EntityKindDefinition Describe(EntityKind kind) =>
@@ -183,28 +201,12 @@ public static class EntityKindRegistry {
 
     private static void ValidateStructurePolicies(IReadOnlyList<EntityKindDefinition> definitions) {
         var byKind = definitions.ToDictionary(definition => definition.Kind);
-        foreach (var definition in definitions.Where(definition => definition.StructurePolicy.IsDeclared)) {
+        foreach (var definition in definitions) {
             var policy = definition.StructurePolicy;
-            if (policy.AllowedParentKinds.Contains(definition.Kind) ||
-                policy.AllowedChildKinds.Contains(definition.Kind)) {
-                throw new InvalidOperationException(
-                    $"Entity kind '{definition.Code}' cannot declare itself as a structural parent or child.");
-            }
-
             foreach (var parentKind in policy.AllowedParentKinds) {
-                var parent = byKind[parentKind];
-                if (!parent.StructurePolicy.IsDeclared || !parent.StructurePolicy.AllowedChildKinds.Contains(definition.Kind)) {
+                if (!byKind.TryGetValue(parentKind, out var parent)) {
                     throw new InvalidOperationException(
-                        $"Entity kind '{definition.Code}' declares parent '{parent.Code}', but the parent does not reciprocally allow it as a child.");
-                }
-            }
-
-            foreach (var childKind in policy.AllowedChildKinds) {
-                var child = byKind[childKind];
-                if (!child.StructurePolicy.IsDeclared || !child.StructurePolicy.RequiresParent ||
-                    !child.StructurePolicy.AllowedParentKinds.Contains(definition.Kind)) {
-                    throw new InvalidOperationException(
-                        $"Entity kind '{definition.Code}' declares child '{child.Code}', but the child does not reciprocally require it as a parent.");
+                        $"Entity kind '{definition.Code}' declares unknown structural parent '{parentKind}'.");
                 }
             }
         }

@@ -36,6 +36,10 @@ public sealed class BookEntityKindDefinition() : EntityKindDefinition<Book>(
         upgradeMode: EntityUpgradeMode.AtomicBookFile),
     defaultCapabilities: static () => [new CapabilityProgress(), new CapabilityPlayback()]) {
     /// <inheritdoc />
+    public override EntityStructurePolicy StructurePolicy { get; } =
+        EntityStructurePolicy.RootOrChildOf(EntityKind.BookAuthor, EntityKind.Book);
+
+    /// <inheritdoc />
     public override bool OwnsMetadataRelationships => true;
 
     /// <inheritdoc />

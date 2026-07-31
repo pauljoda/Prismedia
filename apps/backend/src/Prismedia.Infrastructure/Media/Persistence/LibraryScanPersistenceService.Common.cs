@@ -80,6 +80,13 @@ public sealed partial class LibraryScanPersistenceService {
             return;
         }
 
+        await _structurePlacement.ValidateAsync(
+            EntityKindRegistry.Require(child.KindCode),
+            child.Id,
+            parentId,
+            child.ParentEntityId,
+            null,
+            cancellationToken);
         var shouldMarkAncestors = ShouldMarkAutoIdentifyAncestors(child, parentId);
         child.ParentEntityId = parentId;
         child.SortOrder = sortOrder;
@@ -100,6 +107,13 @@ public sealed partial class LibraryScanPersistenceService {
             return;
         }
 
+        await _structurePlacement.ValidateAsync(
+            EntityKindRegistry.Require(child.KindCode),
+            child.Id,
+            null,
+            child.ParentEntityId,
+            null,
+            cancellationToken);
         child.ParentEntityId = null;
         child.SortOrder = null;
         child.UpdatedAt = now;

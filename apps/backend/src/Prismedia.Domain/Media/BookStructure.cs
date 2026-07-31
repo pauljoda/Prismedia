@@ -47,6 +47,9 @@ public sealed class BookVolumeEntityKindDefinition() : RootEntityKindDefinition<
         new CapabilityPosition()
     ]) {
     /// <inheritdoc />
+    public override EntityStructurePolicy StructurePolicy { get; } = EntityStructurePolicy.ChildOf(EntityKind.Book);
+
+    /// <inheritdoc />
     public override IReadOnlyList<EntityStructuralCountDefinition> StructuralThumbnailCounts =>
     [
         new(EntityKind.BookChapter, 1, ThumbnailMetaIcons.Chapter),
@@ -88,6 +91,10 @@ public sealed class BookChapterEntityKindDefinition() : EntityKindDefinition<Boo
         new CapabilitySource(),
         new CapabilityPosition()
     ]) {
+    /// <inheritdoc />
+    public override EntityStructurePolicy StructurePolicy { get; } =
+        EntityStructurePolicy.ChildOf(EntityKind.Book, EntityKind.BookVolume);
+
     /// <inheritdoc />
     public override IReadOnlyList<EntityStructuralCountDefinition> StructuralThumbnailCounts =>
         [new(EntityKind.BookPage, 1, ThumbnailMetaIcons.Page)];
@@ -137,7 +144,10 @@ public sealed class BookPageEntityKindDefinition() : RootEntityKindDefinition<Bo
         new CapabilityTechnical(),
         new CapabilitySource(),
         new CapabilityPosition()
-    ]);
+    ]) {
+    /// <inheritdoc />
+    public override EntityStructurePolicy StructurePolicy { get; } = EntityStructurePolicy.ChildOf(EntityKind.BookChapter);
+}
 
 /// <summary>
 /// Structural book volume aggregate.

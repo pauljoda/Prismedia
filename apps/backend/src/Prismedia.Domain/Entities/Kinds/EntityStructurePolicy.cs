@@ -1,51 +1,46 @@
 namespace Prismedia.Domain.Entities;
 
 /// <summary>
-/// Definition-owned declaration of one kind's permitted structural placement. Discovery validates
-/// reciprocal declarations, while <see cref="Entity.AddChild"/> and persistence hydration enforce
-/// declared policies at runtime. Kinds that have not declared a policy remain permissive with one another.
+/// Definition-owned declaration of the structural placements accepted by one entity kind. Parent
+/// declarations are the single source of truth; the registry derives the inverse child view.
 /// </summary>
 public sealed record EntityStructurePolicy {
-    /// <summary>Default for kinds whose topology has not yet been declared.</summary>
-    public static EntityStructurePolicy Unspecified { get; } = new(isDeclared: false, requiresParent: false, [], []);
-
-    /// <summary>Creates one explicit structure declaration.</summary>
-    public EntityStructurePolicy(
-        bool requiresParent,
-        IReadOnlyList<EntityKind> allowedParentKinds,
-        IReadOnlyList<EntityKind> allowedChildKinds)
-        : this(isDeclared: true, requiresParent, allowedParentKinds, allowedChildKinds) {
-    }
-
-    private EntityStructurePolicy(
-        bool isDeclared,
-        bool requiresParent,
-        IReadOnlyList<EntityKind> allowedParentKinds,
-        IReadOnlyList<EntityKind> allowedChildKinds) {
-        IsDeclared = isDeclared;
-        RequiresParent = requiresParent;
+    private EntityStructurePolicy(bool allowsRoot, IReadOnlyList<EntityKind> allowedParentKinds) {
+        AllowsRoot = allowsRoot;
         AllowedParentKinds = RequireDistinct(allowedParentKinds, nameof(allowedParentKinds));
-        AllowedChildKinds = RequireDistinct(allowedChildKinds, nameof(allowedChildKinds));
-        if (requiresParent && AllowedParentKinds.Count == 0) {
-            throw new ArgumentException("A required-parent policy must name at least one allowed parent.", nameof(allowedParentKinds));
-        }
-
-        if (!requiresParent && AllowedParentKinds.Count > 0) {
-            throw new ArgumentException("Optional-parent policies are not supported; either require a parent or declare a root kind.", nameof(requiresParent));
-        }
     }
 
-    /// <summary>Whether this definition has opted into explicit graph validation.</summary>
-    public bool IsDeclared { get; }
+    /// <summary>Policy for kinds that can only appear as top-level roots.</summary>
+    public static EntityStructurePolicy RootOnly { get; } = new(allowsRoot: true, []);
+
+    /// <summary>Creates a policy for a kind that can be either a root or a child of the supplied kinds.</summary>
+    public static EntityStructurePolicy RootOrChildOf(params EntityKind[] parentKinds) =>
+        new(allowsRoot: true, RequireParents(parentKinds));
+
+    /// <summary>Creates a policy for a kind that must be a child of one of the supplied kinds.</summary>
+    public static EntityStructurePolicy ChildOf(params EntityKind[] parentKinds) =>
+        new(allowsRoot: false, RequireParents(parentKinds));
+
+    /// <summary>Whether an entity of this kind may exist without a structural parent.</summary>
+    public bool AllowsRoot { get; }
 
     /// <summary>Whether entities of this kind must have one structural parent.</summary>
-    public bool RequiresParent { get; }
+    public bool RequiresParent => !AllowsRoot;
 
-    /// <summary>Direct parent kinds permitted when <see cref="RequiresParent"/> is true.</summary>
+    /// <summary>Direct parent kinds permitted when this entity is structurally nested.</summary>
     public IReadOnlyList<EntityKind> AllowedParentKinds { get; }
 
-    /// <summary>Direct child kinds permitted below this kind.</summary>
-    public IReadOnlyList<EntityKind> AllowedChildKinds { get; }
+    /// <summary>Whether the supplied kind can be this entity's direct structural parent.</summary>
+    public bool AllowsParent(EntityKind kind) => AllowedParentKinds.Contains(kind);
+
+    private static IReadOnlyList<EntityKind> RequireParents(IReadOnlyList<EntityKind>? kinds) {
+        ArgumentNullException.ThrowIfNull(kinds);
+        if (kinds.Count == 0) {
+            throw new ArgumentException("A child placement policy must name at least one allowed parent.", nameof(kinds));
+        }
+
+        return kinds;
+    }
 
     private static IReadOnlyList<EntityKind> RequireDistinct(
         IReadOnlyList<EntityKind>? kinds,

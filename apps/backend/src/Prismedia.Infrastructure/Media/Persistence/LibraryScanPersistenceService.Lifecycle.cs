@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Prismedia.Application.Entities;
+using Prismedia.Domain.Entities;
 using Prismedia.Infrastructure.Persistence.Entities;
 
 namespace Prismedia.Infrastructure.Media.Persistence;
@@ -11,7 +12,9 @@ public sealed partial class LibraryScanPersistenceService {
     /// an entirely new root needs no lease because destructive ownership cannot reference it yet.
     /// </summary>
     private async Task SaveChangesWithLifecycleAsync(CancellationToken cancellationToken) {
+        _structurePlacement.Reset();
         _db.ChangeTracker.DetectChanges();
+        await ValidatePendingStructuralPlacementsAsync(cancellationToken);
 
         var addedEntities = _db.ChangeTracker.Entries<EntityRow>()
             .Where(entry => entry.State == EntityState.Added)
@@ -80,6 +83,34 @@ public sealed partial class LibraryScanPersistenceService {
             cancellationToken);
         if (!executed) {
             throw new EntityLifecycleMutationConflictException(lifecycleEntityIds.Order().First());
+        }
+    }
+
+    /// <summary>
+    /// Scanner ingress is intentionally centralized here rather than in a DbContext interceptor:
+    /// every scan upsert commits through this method, while unrelated EF callers retain their own
+    /// explicit boundary. The scoped validator memoizes each existing parent/ancestor lookup.
+    /// </summary>
+    private async Task ValidatePendingStructuralPlacementsAsync(CancellationToken cancellationToken) {
+        foreach (var entry in _db.ChangeTracker.Entries<EntityRow>()) {
+            if (entry.State is not (EntityState.Added or EntityState.Modified)) {
+                continue;
+            }
+
+            var parentProperty = entry.Property(nameof(EntityRow.ParentEntityId));
+            if (entry.State != EntityState.Added && !parentProperty.IsModified) {
+                continue;
+            }
+
+            await _structurePlacement.ValidateAsync(
+                EntityKindRegistry.Require(entry.Entity.KindCode),
+                entry.Entity.Id,
+                entry.Entity.ParentEntityId,
+                entry.State == EntityState.Added
+                    ? null
+                    : parentProperty.OriginalValue is Guid originalParentId ? originalParentId : null,
+                null,
+                cancellationToken);
         }
     }
 }

@@ -61,10 +61,7 @@ public sealed class VideoSeriesEntityKindDefinition() : EntityKindDefinition<Vid
     ];
 
     /// <inheritdoc />
-    public override EntityStructurePolicy StructurePolicy { get; } = new(
-        requiresParent: false,
-        allowedParentKinds: [],
-        allowedChildKinds: [EntityKind.VideoSeason, EntityKind.VideoEpisode]);
+    public override EntityStructurePolicy StructurePolicy => EntityStructurePolicy.RootOnly;
 
     /// <inheritdoc />
     public override AcquisitionProfileDefinition AcquisitionProfile { get; } = new(
@@ -164,10 +161,7 @@ public sealed class VideoSeasonEntityKindDefinition() : RootEntityKindDefinition
     ];
 
     /// <inheritdoc />
-    public override EntityStructurePolicy StructurePolicy { get; } = new(
-        requiresParent: true,
-        allowedParentKinds: [EntityKind.VideoSeries],
-        allowedChildKinds: [EntityKind.VideoEpisode]);
+    public override EntityStructurePolicy StructurePolicy { get; } = EntityStructurePolicy.ChildOf(EntityKind.VideoSeries);
 }
 
 /// <summary>

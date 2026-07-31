@@ -33,11 +33,15 @@ public sealed class AudioTrackEntityKindDefinition() : EntityKindDefinition<Audi
             previewJobType: JobType.GenerateAudioWaveform,
             generatedFileRoles: [EntityFileRole.Waveform]),
         engagement: new(EntityEngagementMode.Playback),
-        browse: new(excludesWantedByDefault: true),
+        browse: new(excludesWantedByDefault: true, hiddenParentKinds: [EntityKind.Book]),
         libraryVisibility: EntityLibraryVisibilityPolicy.AncestorRoot,
         supportsFileDeletion: true,
         mediaQualityFamily: EntityMediaQualityFamily.Audio),
     defaultCapabilities: static () => [new CapabilityPlayback()]) {
+    /// <inheritdoc />
+    public override EntityStructurePolicy StructurePolicy { get; } =
+        EntityStructurePolicy.RootOrChildOf(EntityKind.AudioLibrary, EntityKind.Book);
+
     /// <inheritdoc />
     public override bool OwnsMetadataRelationships => true;
 

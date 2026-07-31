@@ -22,7 +22,10 @@ public sealed class StudioEntityKindDefinition() : RootEntityKindDefinition<Stud
     new EntityKindNavigation(EntityKind.Studio, "studios", "/studios", "/studios/{id}"),
     new EntityKindSearch(4, expandsRelationshipResults: true),
     static root => new Studio(root.Id, root.Title),
-    behavior: new EntityKindBehavior(supportsManualManagement: true));
+    behavior: new EntityKindBehavior(supportsManualManagement: true)) {
+    /// <inheritdoc />
+    public override EntityStructurePolicy StructurePolicy => EntityStructurePolicy.RootOnly;
+}
 
 /// <summary>
 /// Domain model for studio, publisher, label, or production-group taxonomy entities.

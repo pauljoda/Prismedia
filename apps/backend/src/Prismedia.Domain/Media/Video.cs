@@ -30,10 +30,7 @@ public sealed class VideoEntityKindDefinition() : PlayableVideoEntityKindDefinit
     public override bool OwnsMetadataRelationships => true;
 
     /// <inheritdoc />
-    public override EntityStructurePolicy StructurePolicy { get; } = new(
-        requiresParent: false,
-        allowedParentKinds: [],
-        allowedChildKinds: []);
+    public override EntityStructurePolicy StructurePolicy => EntityStructurePolicy.RootOnly;
 }
 
 /// <summary>
@@ -98,10 +95,8 @@ public sealed class VideoEpisodeEntityKindDefinition() : PlayableVideoEntityKind
     ];
 
     /// <inheritdoc />
-    public override EntityStructurePolicy StructurePolicy { get; } = new(
-        requiresParent: true,
-        allowedParentKinds: [EntityKind.VideoSeries, EntityKind.VideoSeason],
-        allowedChildKinds: []);
+    public override EntityStructurePolicy StructurePolicy { get; } =
+        EntityStructurePolicy.ChildOf(EntityKind.VideoSeries, EntityKind.VideoSeason);
 }
 
 /// <summary>Domain model for a directly playable episodic video file.</summary>

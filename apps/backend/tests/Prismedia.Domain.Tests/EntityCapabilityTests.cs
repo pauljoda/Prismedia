@@ -151,14 +151,11 @@ public sealed class EntityCapabilityTests {
     }
 
     [Fact]
-    public void UnspecifiedStructurePoliciesRemainPermissiveWithOneAnother() {
+    public void StructurePoliciesRejectUndeclaredParentChildEdges() {
         var person = new Person(Guid.NewGuid(), "Parent");
         var book = new Book(Guid.NewGuid(), "Child", BookType.Novel, null, BookFormat.Epub);
 
-        person.AddChild(book);
-
-        Assert.Same(book, Assert.Single(person.ChildEntities));
-        Assert.Equal(person.Id, book.ParentEntityId);
+        Assert.Throws<ArgumentException>(() => person.AddChild(book));
     }
 
     [Fact]
@@ -168,6 +165,37 @@ public sealed class EntityCapabilityTests {
 
         Assert.Throws<InvalidOperationException>(() => episode.HydrateStructuralPlacement(null, null));
         Assert.Throws<InvalidOperationException>(() => movie.HydrateStructuralPlacement(Guid.NewGuid(), null));
+    }
+
+    [Fact]
+    public void OptionalRootKindsCanRemainRootsOrBeNestedUnderTheirDeclaredParents() {
+        var gallery = new Gallery(Guid.NewGuid(), "Gallery", GalleryType.Folder, null);
+        var image = new Image(Guid.NewGuid(), "Loose image");
+        var book = new Book(Guid.NewGuid(), "Book", BookType.Novel, null, BookFormat.Epub);
+        var nestedBook = new Book(Guid.NewGuid(), "Nested book", BookType.Novel, null, BookFormat.Epub);
+
+        image.HydrateStructuralPlacement(null, null);
+        gallery.AddChild(image);
+        book.AddChild(nestedBook);
+
+        Assert.Equal(gallery.Id, image.ParentEntityId);
+        Assert.Equal(book.Id, nestedBook.ParentEntityId);
+    }
+
+    [Fact]
+    public void RecursiveBookAndGalleryTreesAreAllowedButSubtreeCyclesAreRejected() {
+        var rootBook = new Book(Guid.NewGuid(), "Collection", BookType.Novel, null, BookFormat.Epub);
+        var nestedBook = new Book(Guid.NewGuid(), "Volume", BookType.Novel, null, BookFormat.Epub);
+        var leafBook = new Book(Guid.NewGuid(), "Issue", BookType.Novel, null, BookFormat.Epub);
+        rootBook.AddChild(nestedBook);
+        nestedBook.AddChild(leafBook);
+
+        var rootGallery = new Gallery(Guid.NewGuid(), "Root", GalleryType.Folder, null);
+        var nestedGallery = new Gallery(Guid.NewGuid(), "Nested", GalleryType.Folder, null);
+        rootGallery.AddChild(nestedGallery);
+
+        Assert.Throws<ArgumentException>(() => leafBook.AddChild(rootBook));
+        Assert.Throws<ArgumentException>(() => nestedGallery.AddChild(rootGallery));
     }
 
     [Fact]

@@ -36,6 +36,7 @@ public sealed class EfEntityRepository : IEntityWriteRepository {
     private readonly IPluginIdentityUrlResolver? _identityUrls;
     private readonly IReadOnlyDictionary<EntityKind, IEntityKindMapper> _kindMappers;
     private readonly IReadOnlyList<IEntityCapabilityMapper> _capabilityMappers;
+    private readonly EntityStructurePlacementValidator _structurePlacement;
 
     public EfEntityRepository(
         PrismediaDbContext db,
@@ -73,6 +74,7 @@ public sealed class EfEntityRepository : IEntityWriteRepository {
         _identityUrls = identityUrls;
         _kindMappers = kindMappers.ToDictionary(mapper => mapper.Kind);
         _capabilityMappers = capabilityMappers.ToArray();
+        _structurePlacement = new EntityStructurePlacementValidator(db);
     }
 
     internal EfEntityRepository(
@@ -91,6 +93,7 @@ public sealed class EfEntityRepository : IEntityWriteRepository {
     /// Finds an active entity and hydrates its domain relationships plus mutable state capabilities.
     /// </summary>
     public async Task<Entity?> FindAsync(Guid id, CancellationToken cancellationToken) {
+        _structurePlacement.Reset();
         var row = await _db.Entities.AsNoTracking()
             .FirstOrDefaultAsync(entity => entity.Id == id, cancellationToken);
         if (row is null) {
@@ -98,7 +101,7 @@ public sealed class EfEntityRepository : IEntityWriteRepository {
         }
 
         var context = new EntityHydrationContext();
-        return await HydrateAsync(row, context, cancellationToken);
+        return await HydrateAsync(row, context, null, cancellationToken);
     }
 
     /// <summary>
@@ -116,6 +119,7 @@ public sealed class EfEntityRepository : IEntityWriteRepository {
     /// batch-load their thumbnail rows separately through read-optimized queries.
     /// </summary>
     public async Task<Entity?> FindShallowAsync(Guid id, CancellationToken cancellationToken) {
+        _structurePlacement.Reset();
         var row = await _db.Entities.AsNoTracking()
             .FirstOrDefaultAsync(entity => entity.Id == id, cancellationToken);
         if (row is null) {
@@ -123,6 +127,7 @@ public sealed class EfEntityRepository : IEntityWriteRepository {
         }
 
         var entity = await ConstructEntityAsync(row, cancellationToken);
+        await ValidateRowPlacementAsync(row, null, cancellationToken);
         await HydrateUniversalPropertiesAsync(entity, row, cancellationToken);
         foreach (var mapper in _capabilityMappers) {
             await mapper.HydrateAsync(entity, cancellationToken);
@@ -239,6 +244,7 @@ public sealed class EfEntityRepository : IEntityWriteRepository {
     /// </summary>
     public async Task SaveAsync(Entity entity, CancellationToken cancellationToken) {
         ArgumentNullException.ThrowIfNull(entity);
+        _structurePlacement.Reset();
 
         // The capability save flushes stale rows before re-adding them (see the intermediate
         // SaveChanges in SaveEntityAsync), so the write spans two SaveChanges calls. Wrap both in a
@@ -261,6 +267,7 @@ public sealed class EfEntityRepository : IEntityWriteRepository {
             // application services can reload and retry without referencing EF Core. Detach the stale
             // tracked entries so a retry on the same DbContext re-reads current rows.
             _db.ChangeTracker.Clear();
+            _structurePlacement.Reset();
             throw new EntityConcurrencyConflictException(
                 $"Concurrent modification of entity '{entity.Id}'.",
                 ex);
@@ -276,12 +283,14 @@ public sealed class EfEntityRepository : IEntityWriteRepository {
     private async Task<Entity> HydrateAsync(
         EntityRow row,
         EntityHydrationContext context,
+        EntityKind? knownParentKind,
         CancellationToken cancellationToken) {
         if (context.TryGet(row.Id, out var existing)) {
             return existing;
         }
 
         var entity = await ConstructEntityAsync(row, cancellationToken);
+        await ValidateRowPlacementAsync(row, knownParentKind, cancellationToken);
         context.Add(entity);
         await HydrateUniversalPropertiesAsync(entity, row, cancellationToken);
         await HydrateChildrenAsync(entity, context, cancellationToken);
@@ -447,7 +456,7 @@ public sealed class EfEntityRepository : IEntityWriteRepository {
             .ThenBy(row => row.Id)
             .ToArrayAsync(cancellationToken);
         foreach (var childRow in childRows) {
-            var child = await HydrateAsync(childRow, context, cancellationToken);
+            var child = await HydrateAsync(childRow, context, entity.Kind, cancellationToken);
             if (!entity.ChildEntities.Any(existing => existing.Id == child.Id)) {
                 entity.AddChild(child, childRow.SortOrder);
             }
@@ -472,7 +481,7 @@ public sealed class EfEntityRepository : IEntityWriteRepository {
                 continue;
             }
 
-            var target = await HydrateAsync(targetRow, context, cancellationToken);
+            var target = await HydrateAsync(targetRow, context, null, cancellationToken);
             if (!entity.Relationships.Any(existing => existing.Id == target.Id)) {
                 entity.AddRelationship(target);
             }
@@ -539,6 +548,13 @@ public sealed class EfEntityRepository : IEntityWriteRepository {
 
     private async Task UpsertEntityRowAsync(Entity entity, CancellationToken cancellationToken) {
         var row = await _db.Entities.FindAsync([entity.Id], cancellationToken);
+        await _structurePlacement.ValidateAsync(
+            entity.Kind,
+            entity.Id,
+            entity.ParentEntityId,
+            row?.ParentEntityId,
+            knownParentKind: null,
+            cancellationToken);
         var now = DateTimeOffset.UtcNow;
         if (row is null) {
             _db.Entities.Add(new EntityRow {
@@ -565,6 +581,19 @@ public sealed class EfEntityRepository : IEntityWriteRepository {
         }
 
         await UpsertUserOpinionAsync(entity, cancellationToken);
+    }
+
+    private async Task ValidateRowPlacementAsync(
+        EntityRow row,
+        EntityKind? knownParentKind,
+        CancellationToken cancellationToken) {
+        await _structurePlacement.ValidateAsync(
+            EntityKindRegistry.Require(row.KindCode),
+            row.Id,
+            row.ParentEntityId,
+            row.ParentEntityId,
+            knownParentKind,
+            cancellationToken);
     }
 
     /// <summary>

@@ -35,6 +35,7 @@ public sealed class WantedEntityWriter(
     IEntityHierarchyReader hierarchy,
     IEntitySourceOwnershipReader sourceOwnership,
     IEntityLifecycleMutationLease? lifecycle = null) : IWantedEntityWriter {
+    private readonly EntityStructurePlacementValidator _structurePlacement = new(db);
     private readonly IEntityLifecycleMutationLease lifecycleLease =
         lifecycle ?? new EfEntityLifecycleMutationLease(db, hierarchy);
     /// <summary>Wanted container kinds whose empty placeholders are pruned with their last child (from the request registry).</summary>
@@ -56,6 +57,11 @@ public sealed class WantedEntityWriter(
     public async Task<WantedEntityResult> EnsureAsync(
         EntityKind kind, ExternalIdentity identity, string title, Guid? parentEntityId, bool matchTitleKindWide,
         CancellationToken cancellationToken, BookRendition? bookRendition) {
+        _structurePlacement.Reset();
+        EntityKind? parentKind = parentEntityId is { } parentId
+            ? await _structurePlacement.RequireParentKindAsync(parentId, cancellationToken)
+            : null;
+        EntityStructurePlacementValidator.ValidatePlacement(kind, parentKind);
         var kindCode = kind.ToCode();
         var resolution = await externalIdentities.ResolveAsync(kind, [identity], parentEntityId, cancellationToken);
         if (resolution.Status == ExternalIdentityResolutionStatus.Ambiguous) {
@@ -101,6 +107,13 @@ public sealed class WantedEntityWriter(
                         && current.IsWanted
                         && !hasFile) {
                         await ThrowIfLifecycleClaimedAsync(parent, leaseCancellationToken);
+                        await _structurePlacement.ValidateAsync(
+                            kind,
+                            current.Id,
+                            parent,
+                            current.ParentEntityId,
+                            parentKind,
+                            leaseCancellationToken);
                         current.ParentEntityId = parent;
                         current.UpdatedAt = now;
                     }
@@ -115,6 +128,13 @@ public sealed class WantedEntityWriter(
 
         WantedEntityResult? created = null;
         async Task CreateAsync(CancellationToken leaseCancellationToken) {
+            await _structurePlacement.ValidateAsync(
+                kind,
+                Guid.Empty,
+                parentEntityId,
+                currentParentId: null,
+                parentKind,
+                leaseCancellationToken);
             entity = new EntityRow {
                 Id = Guid.NewGuid(),
                 KindCode = kindCode,
@@ -133,8 +153,8 @@ public sealed class WantedEntityWriter(
                 entity.Id, Created: true, HasFile: false, RequestedRenditionOwned: false);
         }
 
-        if (parentEntityId is { } parentId) {
-            await ExecuteIfLifecycleMutableAsync(parentId, CreateAsync, cancellationToken);
+        if (parentEntityId is { } lifecycleParentId) {
+            await ExecuteIfLifecycleMutableAsync(lifecycleParentId, CreateAsync, cancellationToken);
         } else {
             await CreateAsync(cancellationToken);
         }
@@ -146,6 +166,7 @@ public sealed class WantedEntityWriter(
         Guid parentEntityId,
         IReadOnlyList<WantedEntityEnsureRequest> requests,
         CancellationToken cancellationToken) {
+        _structurePlacement.Reset();
         if (requests.Count == 0) {
             return [];
         }
@@ -154,6 +175,8 @@ public sealed class WantedEntityWriter(
         if (requests.Any(request => request.Kind != kind)) {
             throw new ArgumentException("A reviewed child batch must contain one Entity kind.", nameof(requests));
         }
+        var parentKind = await _structurePlacement.RequireParentKindAsync(parentEntityId, cancellationToken);
+        EntityStructurePlacementValidator.ValidatePlacement(kind, parentKind);
         if (requests.Select(request => request.Identity).Distinct().Count() != requests.Count) {
             throw new ArgumentException("A reviewed child batch cannot contain duplicate external identities.", nameof(requests));
         }
@@ -287,6 +310,13 @@ public sealed class WantedEntityWriter(
                         CreatedAt = now,
                         UpdatedAt = now
                     };
+                    await _structurePlacement.ValidateAsync(
+                        kind,
+                        entity.Id,
+                        parentEntityId,
+                        currentParentId: null,
+                        parentKind,
+                        leaseCancellationToken);
                     db.Entities.Add(entity);
                     AddDetailRowFor(kind, entity.Id);
                     db.EntityExternalIds.Add(new EntityExternalIdRow {

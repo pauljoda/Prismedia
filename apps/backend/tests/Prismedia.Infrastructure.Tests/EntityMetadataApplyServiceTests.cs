@@ -555,6 +555,113 @@ public sealed class EntityMetadataApplyServiceTests {
     }
 
     [Fact]
+    public async Task ApplyDoesNotMaterializeContainersForStaleOrForeignNestedTargets() {
+        await using var db = CreateContext();
+        var bookId = Guid.NewGuid();
+        var otherBookId = Guid.NewGuid();
+        var foreignChapterId = Guid.NewGuid();
+        SeedEntity(db, bookId, EntityKind.Book.ToCode(), "Book");
+        SeedEntity(db, otherBookId, EntityKind.Book.ToCode(), "Other book");
+        SeedEntity(db, foreignChapterId, EntityKind.BookChapter.ToCode(), "Foreign chapter", otherBookId);
+        await db.SaveChangesAsync();
+
+        EntityMetadataProposal Chapter(Guid target, string title) => new(
+            $"provider:chapter:{target:N}", "provider", EntityKind.BookChapter, 1, "structural-child",
+            EmptyPatch() with { Title = title, Description = "Must not apply." }, [], [], [], target);
+        EntityMetadataProposal Volume(string id, EntityMetadataProposal chapter) => new(
+            $"provider:volume:{id}", "provider", EntityKind.BookVolume, 1, "structural-child",
+            EmptyPatch() with { Title = $"Volume {id}" }, [], [chapter], []);
+
+        var proposal = new EntityMetadataProposal(
+            "provider:book", "provider", EntityKind.Book, 1, "exact", EmptyPatch(), [],
+            [
+                Volume("stale", Chapter(Guid.NewGuid(), "Stale chapter")),
+                Volume("foreign", Chapter(foreignChapterId, "Provider foreign chapter"))
+            ],
+            [], bookId);
+
+        var service = new EntityMetadataApplyService(db, new PluginArtworkServiceOptions(Path.GetTempPath()));
+        await service.ApplyAsync(bookId, proposal, [MetadataPatchField.Title.ToCode()], selectedImages: null, CancellationToken.None);
+
+        Assert.False(await db.Entities.AnyAsync(row => row.KindCode == EntityKind.BookVolume.ToCode()));
+        var foreign = await db.Entities.SingleAsync(row => row.Id == foreignChapterId);
+        Assert.Equal(otherBookId, foreign.ParentEntityId);
+        Assert.Equal("Foreign chapter", foreign.Title);
+        Assert.Null(await db.EntityDescriptions.FindAsync([foreignChapterId]));
+    }
+
+    [Fact]
+    public async Task ApplyDoesNotMaterializeContainersForTargetsMarkedForDeletion() {
+        await using var db = CreateContext();
+        var bookId = Guid.NewGuid();
+        var chapterId = Guid.NewGuid();
+        SeedEntity(db, bookId, EntityKind.Book.ToCode(), "Book");
+        SeedEntity(db, chapterId, EntityKind.BookChapter.ToCode(), "Chapter", bookId);
+        await db.SaveChangesAsync();
+
+        db.Remove(await db.Entities.SingleAsync(row => row.Id == chapterId));
+        var proposal = new EntityMetadataProposal(
+            "provider:book", "provider", EntityKind.Book, 1, "exact", EmptyPatch(), [],
+            [new EntityMetadataProposal(
+                "provider:volume", "provider", EntityKind.BookVolume, 1, "structural-child",
+                EmptyPatch() with { Title = "Volume" }, [],
+                [new EntityMetadataProposal(
+                    "provider:chapter", "provider", EntityKind.BookChapter, 1, "structural-child",
+                    EmptyPatch() with { Title = "Chapter" }, [], [], [], chapterId)],
+                [])],
+            [], bookId);
+
+        var service = new EntityMetadataApplyService(db, new PluginArtworkServiceOptions(Path.GetTempPath()));
+        await service.ApplyAsync(bookId, proposal, [MetadataPatchField.Title.ToCode()], selectedImages: null, CancellationToken.None);
+
+        Assert.False(await db.Entities.AnyAsync(row => row.KindCode == EntityKind.BookVolume.ToCode()));
+    }
+
+    [Fact]
+    public async Task ApplyIgnoresProviderStructuralEdgesThatAreInvalidOrDoNotMatchTheirTargetEntity() {
+        await using var db = CreateContext();
+        var videoId = Guid.NewGuid();
+        var seriesId = Guid.NewGuid();
+        var movieId = Guid.NewGuid();
+        SeedEntity(db, videoId, EntityKind.Video.ToCode(), "Standalone video");
+        SeedEntity(db, seriesId, EntityKind.VideoSeries.ToCode(), "Series");
+        SeedEntity(db, movieId, EntityKind.Movie.ToCode(), "Forged target");
+        await db.SaveChangesAsync();
+
+        EntityMetadataProposal Season(Guid target) => new(
+            ProposalId: $"provider:season:{target:N}",
+            Provider: "provider",
+            TargetKind: EntityKind.VideoSeason,
+            Confidence: 1,
+            MatchReason: "provider-structure",
+            Patch: EmptyPatch() with { Title = "Should not apply" },
+            Images: [],
+            Children: [],
+            Candidates: [],
+            TargetEntityId: target);
+
+        var service = new EntityMetadataApplyService(db, new PluginArtworkServiceOptions(Path.GetTempPath()));
+        await service.ApplyAsync(
+            videoId,
+            new EntityMetadataProposal(
+                "provider:video", "provider", EntityKind.Video, 1, "exact", EmptyPatch(), [], [Season(movieId)], [], videoId),
+            [MetadataPatchField.Title.ToCode()],
+            selectedImages: null,
+            CancellationToken.None);
+        await service.ApplyAsync(
+            seriesId,
+            new EntityMetadataProposal(
+                "provider:series", "provider", EntityKind.VideoSeries, 1, "exact", EmptyPatch(), [], [Season(movieId)], [], seriesId),
+            [MetadataPatchField.Title.ToCode()],
+            selectedImages: null,
+            CancellationToken.None);
+
+        var movie = await db.Entities.SingleAsync(row => row.Id == movieId);
+        Assert.Equal("Forged target", movie.Title);
+        Assert.Null(movie.ParentEntityId);
+    }
+
+    [Fact]
     public async Task ApplyNeverReparentsAcrossTrees() {
         await using var db = CreateContext();
         var bookId = Guid.Parse("25252525-2525-2525-2525-252525252521");
@@ -574,7 +681,12 @@ public sealed class EntityMetadataApplyServiceTests {
         var volume = new EntityMetadataProposal(
             "mangadex:m3:volume:1", "mangadex", EntityKind.BookVolume, 0.8m, "volume-map",
             EmptyPatch() with { Title = "Volume 1" }, [],
-            [Chapter(foreignChapterId, "Foreign Chapter"), Chapter(localChapterId, "Local Chapter")],
+            [
+                Chapter(foreignChapterId, "Provider Foreign Chapter") with {
+                    Patch = EmptyPatch() with { Title = "Provider Foreign Chapter", Description = "Must stay foreign." }
+                },
+                Chapter(localChapterId, "Local Chapter")
+            ],
             []);
 
         var proposal = new EntityMetadataProposal(
@@ -585,9 +697,63 @@ public sealed class EntityMetadataApplyServiceTests {
         await service.ApplyAsync(bookId, proposal, ["title"], selectedImages: null, CancellationToken.None);
 
         var volumeRow = await db.Entities.SingleAsync(row => row.KindCode == "book-volume");
-        // The in-tree chapter moves under the new volume; the foreign book's chapter stays put.
+        // The in-tree chapter moves under the new volume; the foreign book's chapter is untouched.
         Assert.Equal(volumeRow.Id, (await db.Entities.SingleAsync(row => row.Id == localChapterId)).ParentEntityId);
-        Assert.Equal(otherBookId, (await db.Entities.SingleAsync(row => row.Id == foreignChapterId)).ParentEntityId);
+        var foreignChapter = await db.Entities.SingleAsync(row => row.Id == foreignChapterId);
+        Assert.Equal(otherBookId, foreignChapter.ParentEntityId);
+        Assert.Equal("Foreign Chapter", foreignChapter.Title);
+        Assert.Null(await db.EntityDescriptions.FindAsync([foreignChapterId]));
+    }
+
+    [Fact]
+    public async Task ApplyDoesNotSilentlyAdoptParentlessOptionalRootTargets() {
+        await using var db = CreateContext();
+        var parentId = Guid.NewGuid();
+        var childId = Guid.NewGuid();
+        SeedEntity(db, parentId, EntityKind.Gallery.ToCode(), "Parent gallery");
+        SeedEntity(db, childId, EntityKind.Gallery.ToCode(), "Loose gallery");
+        await db.SaveChangesAsync();
+
+        var proposal = new EntityMetadataProposal(
+            "provider:gallery", "provider", EntityKind.Gallery, 1, "exact", EmptyPatch(), [],
+            [new EntityMetadataProposal(
+                "provider:gallery:child", "provider", EntityKind.Gallery, 1, "structural-child",
+                EmptyPatch() with { Title = "Should remain loose", Description = "Should not apply." }, [], [], [], childId)],
+            [], parentId);
+
+        var service = new EntityMetadataApplyService(db, new PluginArtworkServiceOptions(Path.GetTempPath()));
+        await service.ApplyAsync(parentId, proposal, [MetadataPatchField.Title.ToCode()], selectedImages: null, CancellationToken.None);
+
+        var child = await db.Entities.SingleAsync(row => row.Id == childId);
+        Assert.Null(child.ParentEntityId);
+        Assert.Equal("Loose gallery", child.Title);
+        Assert.Null(await db.EntityDescriptions.FindAsync([childId]));
+    }
+
+    [Fact]
+    public async Task ApplyDoesNotMaterializeWhenAnExplicitStructuralTargetIsStale() {
+        await using var db = CreateContext();
+        var bookId = Guid.NewGuid();
+        var chapterId = Guid.NewGuid();
+        SeedEntity(db, bookId, EntityKind.Book.ToCode(), "Book");
+        SeedEntity(db, chapterId, EntityKind.BookChapter.ToCode(), "Chapter", parentEntityId: bookId);
+        await db.SaveChangesAsync();
+
+        var proposal = new EntityMetadataProposal(
+            "provider:book", "provider", EntityKind.Book, 1, "exact", EmptyPatch(), [],
+            [new EntityMetadataProposal(
+                "provider:book:volume", "provider", EntityKind.BookVolume, 1, "structural-child",
+                EmptyPatch() with { Title = "Stale volume" }, [],
+                [new EntityMetadataProposal(
+                    "provider:book:chapter", "provider", EntityKind.BookChapter, 1, "structural-child",
+                    EmptyPatch() with { Title = "Chapter" }, [], [], [], chapterId)],
+                [], Guid.NewGuid())],
+            [], bookId);
+
+        var service = new EntityMetadataApplyService(db, new PluginArtworkServiceOptions(Path.GetTempPath()));
+        await service.ApplyAsync(bookId, proposal, [MetadataPatchField.Title.ToCode()], selectedImages: null, CancellationToken.None);
+
+        Assert.False(await db.Entities.AnyAsync(row => row.KindCode == EntityKind.BookVolume.ToCode()));
     }
 
     [Fact]
@@ -1040,7 +1206,7 @@ public sealed class EntityMetadataApplyServiceTests {
         var grandchildId = Guid.Parse("77777777-7777-7777-7777-777777777777");
         SeedEntity(db, parentId, "video-series", "Old Series");
         SeedEntity(db, childId, "video-season", "Old Season", parentEntityId: parentId, sortOrder: 1);
-        SeedEntity(db, grandchildId, "video", "Old Episode", parentEntityId: childId, sortOrder: 1);
+        SeedEntity(db, grandchildId, "video-episode", "Old Episode", parentEntityId: childId, sortOrder: 1);
         await db.SaveChangesAsync();
 
         var proposal = new EntityMetadataProposal(

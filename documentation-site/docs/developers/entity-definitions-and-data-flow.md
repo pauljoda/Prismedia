@@ -82,15 +82,16 @@ flowchart TD
   Kind --> Navigation["Client policy<br/>browse route, detail template, search order"]
   Kind --> Behavior["Domain policy<br/>identify, browse, engagement, deletion, pruning"]
   Kind --> Acquisition["Workflow policy<br/>requests, upload, replacement, profiles, quality"]
-  Kind --> Composition["Composition<br/>default capabilities, containment, structural counts"]
+  Kind --> Composition["Composition<br/>default capabilities, structural placement and counts"]
   Kind --> Construction["Construction<br/>shared-root factory when no detail data exists"]
   Kind --> Projection["Projection<br/>declared kind capability types + typed projector"]
 ```
 
 For example, `BookEntityKindDefinition` owns the stable `book` code, labels,
 archive storage shape, thumbnail presentation, routes, identify policy, default
-progress/playback capabilities, structural counts, request descriptors,
-acquisition profile, and the projection of `BookType`, `Format`, and cover choice.
+progress/playback capabilities, structural counts, request descriptors, allowed
+root/parent placement, acquisition profile, and the projection of `BookType`,
+`Format`, and cover choice.
 The `Book` object owns the actual values and reading behavior for one book.
 
 Definitions use two construction forms:
@@ -140,6 +141,7 @@ At startup, the system rejects:
   capability discriminators;
 - invalid navigation topology or non-contiguous search ordering;
 - inconsistent request/acquisition-profile policy;
+- missing or invalid structural-placement policy;
 - a definition that declares one set/order of kind capabilities but projects
   another;
 - duplicate capability types in defaults or in one projected document.
@@ -185,7 +187,10 @@ flowchart LR
 Scans and imports are high-volume technical workflows. They often upsert
 `EntityRow`, detail, file, and relationship rows directly because their job is to
 materialize discovered storage truth, not execute an aggregate business behavior.
-The next domain read constructs the concrete Entity from those rows.
+The next domain read constructs the concrete Entity from those rows. These focused
+writers still pass structural assignments through `EntityStructurePlacementValidator`,
+which resolves the actual parent kind and rejects cycles only when placement changes.
+It is an invariant boundary, not a universal repository or global change-tracker hook.
 
 User mutations and business operations load an Entity through
 `EfEntityRepository`, call behavior, and persist it through the discovered
@@ -217,6 +222,10 @@ Important details:
 
 - Structural hierarchy is `EntityRow.ParentEntityId`; there is no required
   in-memory global Entity graph.
+- Every kind explicitly declares whether it may be a root and which direct parent
+  kinds it accepts. Parent declarations are canonical; inverse child lists are derived.
+- `Entity.AddChild`, repository hydration/save, wanted materialization, provider
+  structure application, and scan persistence enforce the same discovered policy.
 - Non-structural relationships and credit edge metadata live in explicit link
   rows.
 - Rating, favorite, playback, and reading progress are per-user facts in

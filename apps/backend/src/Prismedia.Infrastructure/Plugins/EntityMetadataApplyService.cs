@@ -39,6 +39,7 @@ public sealed partial class EntityMetadataApplyService : IEntityMetadataPatchSer
     private readonly IGridThumbnailService? _gridThumbnails;
     private readonly ICurrentUserContext? _currentUser;
     private readonly IAcquisitionReleaseDateChangeHandler? _releaseDateChanges;
+    private readonly EntityStructurePlacementValidator _structurePlacement;
 
     /// <summary>
     /// Creates an apply service over EF Core rows and optional artwork downloading.
@@ -76,6 +77,7 @@ public sealed partial class EntityMetadataApplyService : IEntityMetadataPatchSer
         _gridThumbnails = gridThumbnails;
         _currentUser = currentUser;
         _releaseDateChanges = releaseDateChanges;
+        _structurePlacement = new EntityStructurePlacementValidator(db);
     }
 
     /// <summary>
@@ -117,6 +119,7 @@ public sealed partial class EntityMetadataApplyService : IEntityMetadataPatchSer
         CancellationToken cancellationToken) {
         ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(request.Patch);
+        _structurePlacement.Reset();
 
         var fields = EntityMetadataPatchValidator.NormalizeFieldSet(request.Fields);
         EntityMetadataPatchValidator.Validate(fields, request.Patch);
@@ -201,6 +204,7 @@ public sealed partial class EntityMetadataApplyService : IEntityMetadataPatchSer
                 fields.Contains(MetadataPatchField.Credits.ToCode()) || fields.Contains(MetadataPatchField.Studio.ToCode()) || fields.Contains(MetadataPatchField.Tags.ToCode());
             await ApplyChildNodesAsync(
                 entity.Id,
+                entity.KindCode.DecodeAs<EntityKind>(),
                 request.Children ?? [],
                 request.Relationships ?? [],
                 relationshipFieldsApplied,
@@ -340,6 +344,7 @@ public sealed partial class EntityMetadataApplyService : IEntityMetadataPatchSer
         CancellationToken cancellationToken) {
         ArgumentNullException.ThrowIfNull(proposal);
         ArgumentNullException.ThrowIfNull(selectedFields);
+        _structurePlacement.Reset();
         proposal = EntityMetadataProposalIdentityPolicy.RemoveSharedStructuralIdentities(proposal);
 
         await _artwork.StageAsync(
@@ -462,6 +467,7 @@ public sealed partial class EntityMetadataApplyService : IEntityMetadataPatchSer
             selected.Contains(MetadataPatchField.Credits.ToCode()) || selected.Contains(MetadataPatchField.Studio.ToCode()) || selected.Contains(MetadataPatchField.Tags.ToCode());
         await ApplyChildNodesAsync(
             entity.Id,
+            entity.KindCode.DecodeAs<EntityKind>(),
             EntityMetadataProposalTraversal.StructuralChildren(proposal),
             EntityMetadataProposalTraversal.Relationships(proposal),
             rootRelationshipFieldsApplied,

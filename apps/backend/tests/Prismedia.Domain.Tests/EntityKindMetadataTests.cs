@@ -495,37 +495,43 @@ public sealed class EntityKindMetadataTests {
     }
 
     [Fact]
-    public void VideoStructurePoliciesDeclareTheEnforcedTargetGraph() {
-        var movie = EntityKindRegistry.Describe(EntityKind.Movie).StructurePolicy;
-        var video = EntityKindRegistry.Describe(EntityKind.Video).StructurePolicy;
-        var episode = EntityKindRegistry.Describe(EntityKind.VideoEpisode).StructurePolicy;
-        var series = EntityKindRegistry.Describe(EntityKind.VideoSeries).StructurePolicy;
-        var season = EntityKindRegistry.Describe(EntityKind.VideoSeason).StructurePolicy;
+    public void StructurePoliciesDeriveChildKindsFromDiscoveredParentDeclarations() {
+        foreach (var definition in EntityKindRegistry.All) {
+            var policy = definition.StructurePolicy;
+            Assert.Equal(!policy.AllowsRoot, policy.RequiresParent);
+            foreach (var parentKind in policy.AllowedParentKinds) {
+                Assert.Contains(definition.Kind, EntityKindRegistry.AllowedChildKinds(parentKind));
+            }
+        }
 
-        Assert.Equal([], movie.AllowedChildKinds);
-        Assert.Equal([], video.AllowedChildKinds);
-        Assert.True(episode.RequiresParent);
+        var episode = EntityKindRegistry.Describe(EntityKind.VideoEpisode).StructurePolicy;
+        Assert.False(episode.AllowsRoot);
         Assert.Equal([EntityKind.VideoSeries, EntityKind.VideoSeason], episode.AllowedParentKinds);
-        Assert.Equal([EntityKind.VideoSeason, EntityKind.VideoEpisode], series.AllowedChildKinds);
-        Assert.True(season.RequiresParent);
-        Assert.Equal([EntityKind.VideoSeries], season.AllowedParentKinds);
-        Assert.Equal([EntityKind.VideoEpisode], season.AllowedChildKinds);
+        Assert.Equal([EntityKind.VideoEpisode, EntityKind.VideoSeason], EntityKindRegistry.AllowedChildKinds(EntityKind.VideoSeries));
+        Assert.Equal([EntityKind.VideoEpisode], EntityKindRegistry.AllowedChildKinds(EntityKind.VideoSeason));
+
+        var book = EntityKindRegistry.Describe(EntityKind.Book).StructurePolicy;
+        Assert.True(book.AllowsRoot);
+        Assert.Equal([EntityKind.BookAuthor, EntityKind.Book], book.AllowedParentKinds);
+        Assert.Equal([EntityKind.AudioTrack, EntityKind.Book, EntityKind.BookVolume, EntityKind.BookChapter],
+            EntityKindRegistry.AllowedChildKinds(EntityKind.Book));
+
+        var audioLibrary = EntityKindRegistry.Describe(EntityKind.AudioLibrary).StructurePolicy;
+        Assert.True(audioLibrary.AllowsRoot);
+        Assert.Equal([EntityKind.MusicArtist, EntityKind.AudioLibrary], audioLibrary.AllowedParentKinds);
+        Assert.Contains(EntityKind.AudioLibrary, EntityKindRegistry.AllowedChildKinds(EntityKind.AudioLibrary));
+
+        Assert.True(EntityKindRegistry.Describe(EntityKind.Gallery).StructurePolicy.AllowsRoot);
+        Assert.True(EntityKindRegistry.Describe(EntityKind.Image).StructurePolicy.AllowsRoot);
+        Assert.Contains(EntityKind.Book,
+            EntityKindRegistry.Describe(EntityKind.AudioTrack).Browse.HiddenParentKinds);
     }
 
     [Fact]
-    public void StructurePolicyRejectsDuplicateOrInconsistentParentDeclarations() {
-        Assert.Throws<ArgumentException>(() => new EntityStructurePolicy(
-            requiresParent: true,
-            allowedParentKinds: [EntityKind.VideoSeries, EntityKind.VideoSeries],
-            allowedChildKinds: []));
-        Assert.Throws<ArgumentException>(() => new EntityStructurePolicy(
-            requiresParent: true,
-            allowedParentKinds: [],
-            allowedChildKinds: []));
-        Assert.Throws<ArgumentException>(() => new EntityStructurePolicy(
-            requiresParent: false,
-            allowedParentKinds: [EntityKind.VideoSeries],
-            allowedChildKinds: []));
+    public void StructurePolicyFactoriesRejectIncompleteOrDuplicateParentDeclarations() {
+        Assert.Throws<ArgumentException>(() => EntityStructurePolicy.ChildOf());
+        Assert.Throws<ArgumentException>(() => EntityStructurePolicy.RootOrChildOf());
+        Assert.Throws<ArgumentException>(() => EntityStructurePolicy.ChildOf(EntityKind.VideoSeries, EntityKind.VideoSeries));
     }
 
     [Fact]

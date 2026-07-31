@@ -27,6 +27,9 @@ public sealed class CollectionEntityKindDefinition()
         new EntityKindSearch(9),
         EntityKindBehavior.None),
       IEntityContainmentPolicy {
+    /// <inheritdoc />
+    public override EntityStructurePolicy StructurePolicy => EntityStructurePolicy.RootOnly;
+
     private static readonly EntityKind[] AllowedKinds =
     [
         EntityKind.Video,

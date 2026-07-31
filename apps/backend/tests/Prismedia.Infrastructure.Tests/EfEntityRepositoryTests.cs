@@ -160,6 +160,25 @@ public sealed class EfEntityRepositoryTests {
     }
 
     [Fact]
+    public async Task FindShallowAsyncRejectsAnOptionalRootWithTheWrongPersistedParentKind() {
+        await using var db = CreateContext();
+        var bookId = Guid.NewGuid();
+        var imageId = Guid.NewGuid();
+        SeedEntity(db, bookId, EntityKind.Book, "Book");
+        SeedEntity(db, imageId, EntityKind.Image, "Wrong parent", bookId);
+        await db.SaveChangesAsync();
+
+        var repository = new EfEntityRepository(
+            db,
+            TestUserContext.Admin(),
+            EntityMappers.Kinds(db),
+            EntityMappers.Capabilities(db, TestUserContext.Admin()));
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            repository.FindShallowAsync(imageId, CancellationToken.None));
+    }
+
+    [Fact]
     public async Task SaveThenFindRoundTripsEveryPersistedCapabilityWithoutLoss() {
         await using var db = CreateContext();
         var id = Guid.Parse("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee");

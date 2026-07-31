@@ -208,11 +208,14 @@ public abstract class Entity {
     /// <param name="sortOrder">Persisted order within the parent, if any.</param>
     public void HydrateStructuralPlacement(Guid? parentEntityId, int? sortOrder) {
         var policy = Definition.StructurePolicy;
-        if (policy.IsDeclared && policy.RequiresParent != parentEntityId.HasValue) {
-            var expectation = policy.RequiresParent ? "requires a structural parent" : "must be a structural root";
+        if (!policy.AllowsRoot && !parentEntityId.HasValue) {
             throw new InvalidOperationException(
-                $"Entity kind '{Definition.Code}' {expectation}, but persisted entity '{Id}' has " +
-                (parentEntityId.HasValue ? $"parent '{parentEntityId}'." : "no parent."));
+                $"Entity kind '{Definition.Code}' requires a structural parent, but persisted entity '{Id}' has no parent.");
+        }
+
+        if (policy.AllowedParentKinds.Count == 0 && parentEntityId.HasValue) {
+            throw new InvalidOperationException(
+                $"Entity kind '{Definition.Code}' must be a structural root, but persisted entity '{Id}' has parent '{parentEntityId}'.");
         }
 
         ParentEntityId = parentEntityId;
@@ -356,24 +359,18 @@ public abstract class Entity {
     /// <param name="sortOrder">Optional child order.</param>
     public void AddChild(Entity child, int? sortOrder = null) {
         ArgumentNullException.ThrowIfNull(child);
-        if (child.Id == Id) {
-            throw new ArgumentException($"Entity '{Id}' cannot be its own structural child.", nameof(child));
+        if (child.ContainsStructuralEntityId(Id)) {
+            throw new ArgumentException(
+                $"Entity '{child.Id}' already contains '{Id}' in its structural subtree and cannot be adopted without creating a cycle.",
+                nameof(child));
         }
 
         if (_links.Any(link => link.Structural && link.Entity.Id == child.Id)) {
             throw new ArgumentException($"Entity '{Id}' already has child '{child.Id}'.", nameof(child));
         }
 
-        var parentPolicy = Definition.StructurePolicy;
-        if (parentPolicy.IsDeclared && !parentPolicy.AllowedChildKinds.Contains(child.Kind)) {
-            throw new ArgumentException(
-                $"Entity kind '{Definition.Code}' does not allow structural child kind '{child.Definition.Code}'.",
-                nameof(child));
-        }
-
         var childPolicy = child.Definition.StructurePolicy;
-        if (childPolicy.IsDeclared &&
-            (!childPolicy.RequiresParent || !childPolicy.AllowedParentKinds.Contains(Kind))) {
+        if (!childPolicy.AllowsParent(Kind)) {
             throw new ArgumentException(
                 $"Entity kind '{child.Definition.Code}' does not allow structural parent kind '{Definition.Code}'.",
                 nameof(child));
@@ -388,6 +385,27 @@ public abstract class Entity {
         child.ParentEntityId = Id;
         child.SortOrder = sortOrder;
         _links.Add(new EntityLink(child, Structural: true));
+    }
+
+    private bool ContainsStructuralEntityId(Guid entityId) {
+        var pending = new Stack<Entity>();
+        var visited = new HashSet<Guid>();
+        pending.Push(this);
+        while (pending.TryPop(out var entity)) {
+            if (!visited.Add(entity.Id)) {
+                continue;
+            }
+
+            if (entity.Id == entityId) {
+                return true;
+            }
+
+            foreach (var child in entity._links.Where(link => link.Structural).Select(link => link.Entity)) {
+                pending.Push(child);
+            }
+        }
+
+        return false;
     }
 
     /// <summary>

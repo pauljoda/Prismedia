@@ -20,6 +20,7 @@ public sealed partial class LibraryScanPersistenceService {
         // A failed SaveChanges leaves the poisoned entries tracked; they would be re-attempted
         // (and re-fail) on the next save in this scan's scope, so drop them entirely.
         _db.ChangeTracker.Clear();
+        _structurePlacement.Reset();
         return Task.CompletedTask;
     }
 

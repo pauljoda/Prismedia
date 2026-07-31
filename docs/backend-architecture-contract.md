@@ -169,10 +169,9 @@ deliberate patterns exist and must not be "corrected" into uniformity:
   classes solely to mirror an immutable document value.
 
 Subtitle reconciliation state (`CapabilitySubtitles.ExtractedAt`) lives on the subtitles
-capability. Its value is persisted on the `video_details.subtitles_extracted_at` column
-(owned by the Video kind mapper) rather than a dedicated capability table; the scan
-pipeline still queries that column directly for extraction gating. The same detail row stores
-the signature of the last successfully reconciled adjacent-sidecar set. Video scan snapshots
+capability. Its value and the last successfully reconciled adjacent-sidecar signature are
+persisted in `entity_subtitle_states` through the subtitles capability mapper. The scan
+pipeline queries the same capability table directly for extraction gating. Video scan snapshots
 include subtitle sidecars even though those files do not become Entities, so sidecar-only changes
 invalidate and retry the managed embedded/sidecar manifest.
 
@@ -183,8 +182,11 @@ defaults, and file-management capabilities. `PlayableVideoCapability` is a docum
 emitted only when one of those entities directly owns a `source` file; it is deliberately
 distinct from user-state `PlaybackCapability`. The declared target video structure is
 `VideoSeries -> (VideoSeason | VideoEpisode)`, `VideoSeason -> VideoEpisode`, with `Movie`
-and standalone `Video` as root leaves. Definition discovery validates the declarations, but
-relationship mutation and persistence do not enforce them until legacy rows are migrated.
+and standalone `Video` as root leaves. Every kind declares an `EntityStructurePolicy`; each
+child definition is the single source of truth for whether it may be a root and which parent
+kinds it accepts. The registry derives the inverse child view. `Entity.AddChild` and the focused
+EF writer/materialization boundaries enforce those declarations and reject structural cycles;
+there is deliberately no global Entity graph or catch-all `SaveChanges` interceptor.
 
 `CapabilityCredits` is emitted as the shared `CreditsCapability` contract capability.
 It persists as `EntityRelationshipLinkRow` rows with relationship code

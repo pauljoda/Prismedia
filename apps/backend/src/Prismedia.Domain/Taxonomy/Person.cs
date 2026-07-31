@@ -26,6 +26,9 @@ public sealed class PersonEntityKindDefinition() : EntityKindDefinition<Person>(
     new EntityKindBehavior(supportsManualManagement: true),
     defaultCapabilities: static () => [new CapabilityDates(), new CapabilityLifetime()]) {
     /// <inheritdoc />
+    public override EntityStructurePolicy StructurePolicy => EntityStructurePolicy.RootOnly;
+
+    /// <inheritdoc />
     public override IReadOnlyList<Type> ProjectedCapabilityTypes => [typeof(PersonProfileDocumentCapability)];
 
     /// <inheritdoc />

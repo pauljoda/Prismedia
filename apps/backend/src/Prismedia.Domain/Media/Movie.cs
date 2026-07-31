@@ -47,10 +47,7 @@ public sealed class MovieEntityKindDefinition() : PlayableVideoEntityKindDefinit
     ];
 
     /// <inheritdoc />
-    public override EntityStructurePolicy StructurePolicy { get; } = new(
-        requiresParent: false,
-        allowedParentKinds: [],
-        allowedChildKinds: []);
+    public override EntityStructurePolicy StructurePolicy => EntityStructurePolicy.RootOnly;
 
     /// <inheritdoc />
     public override AcquisitionProfileDefinition AcquisitionProfile { get; } = new(
