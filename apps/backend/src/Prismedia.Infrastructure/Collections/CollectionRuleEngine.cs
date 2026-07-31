@@ -6,6 +6,7 @@ using NpgsqlTypes;
 using Prismedia.Application.Jobs.Ports;
 using Prismedia.Domain.Entities;
 using Prismedia.Domain.Media;
+using Prismedia.Infrastructure.Entities;
 using Prismedia.Infrastructure.Persistence;
 
 namespace Prismedia.Infrastructure.Collections;
@@ -15,7 +16,9 @@ namespace Prismedia.Infrastructure.Collections;
 /// Translates a <see cref="CollectionRuleGroup"/> tree into parameterized SQL
 /// queries per entity kind, then returns all matching entity references.
 /// </summary>
-public sealed class CollectionRuleEngine(PrismediaDbContext db) : ICollectionRuleEngine {
+public sealed class CollectionRuleEngine(
+    PrismediaDbContext db,
+    EfEntityLibraryVisibilityFilter libraryVisibility) : ICollectionRuleEngine {
     private static readonly Dictionary<string, (int Min, int Max)> ResolutionMap = new() {
         ["4K"] = (2160, 99999),
         ["1080p"] = (1080, 2159),
@@ -79,47 +82,40 @@ public sealed class CollectionRuleEngine(PrismediaDbContext db) : ICollectionRul
             .FirstOrDefaultAsync(cancellationToken);
         if (owner is null) return [];
 
-        IReadOnlySet<Guid>? allowedRootIds = null;
-        if (owner.Role != UserRole.Admin) {
-            allowedRootIds = await db.UserLibraryAccess.AsNoTracking()
-                .Where(access => access.UserId == userId)
-                .Select(access => access.LibraryRootId)
-                .ToHashSetAsync(cancellationToken);
-        }
-
-        var results = new List<CollectionRuleMatch>();
+        var candidates = new List<CollectionRuleMatch>();
 
         foreach (var kind in CollectionPolicy.ContainableKinds) {
             var kindCode = EntityKindRegistry.ToCode(kind);
-            var query = BuildQuery(group, kindCode, userId, allowedRootIds);
+            var query = BuildQuery(group, kindCode, userId);
             if (query is null) continue;
 
             var ids = await ExecuteQueryAsync(query.Value.Sql, query.Value.Parameters, cancellationToken);
-
-            foreach (var id in ids)
-                results.Add(new CollectionRuleMatch(kind, id));
+            candidates.AddRange(ids.Select(id => new CollectionRuleMatch(kind, id)));
         }
 
-        return results;
+        var visibleIds = await libraryVisibility.FilterVisibleIdsAsync(
+            candidates.Select(candidate => candidate.EntityId).ToHashSet(),
+            userId,
+            owner.Role,
+            cancellationToken);
+
+        return candidates.Where(candidate => visibleIds.Contains(candidate.EntityId)).ToArray();
     }
 
     internal (string Sql, List<NpgsqlParameter> Parameters)? BuildQuery(
         CollectionRuleGroup group,
         string kindCode,
-        Guid userId = default,
-        IReadOnlySet<Guid>? allowedRootIds = null) {
+        Guid userId = default) {
         var ctx = new SqlBuildContext(userId);
         var whereFragment = TranslateNode(group, kindCode, ctx);
         if (whereFragment is null) return null;
 
-        var libraryScope = BuildLibraryScope(kindCode, allowedRootIds, ctx);
-        return (BuildSql(kindCode, whereFragment, libraryScope, ctx), ctx.Parameters);
+        return (BuildSql(kindCode, whereFragment, ctx), ctx.Parameters);
     }
 
     private static string BuildSql(
         string kindCode,
         string whereFragment,
-        string? libraryScope,
         SqlBuildContext ctx) {
         var sb = new System.Text.StringBuilder();
         sb.AppendLine("SELECT DISTINCT e.id FROM entities e");
@@ -140,12 +136,6 @@ public sealed class CollectionRuleEngine(PrismediaDbContext db) : ICollectionRul
         sb.Append("AND (");
         sb.Append(whereFragment);
         sb.AppendLine(")");
-        if (libraryScope is not null) {
-            sb.Append("AND (");
-            sb.Append(libraryScope);
-            sb.AppendLine(")");
-        }
-
         return sb.ToString();
     }
 
@@ -557,32 +547,6 @@ public sealed class CollectionRuleEngine(PrismediaDbContext db) : ICollectionRul
             : QuantifyLibraryRootMatch(condition, op, existsBuilder, ctx);
     }
 
-    private static string? BuildLibraryScope(
-        string kindCode,
-        IReadOnlySet<Guid>? allowedRootIds,
-        SqlBuildContext ctx) {
-        if (allowedRootIds is null) {
-            return null;
-        }
-
-        var existsBuilder = LibraryRootExistsBuilder(kindCode, ctx);
-        if (existsBuilder is null) {
-            return null;
-        }
-
-        if (allowedRootIds.Count == 0) {
-            return "false";
-        }
-
-        var parameters = allowedRootIds
-            .Order()
-            .Select(id => ctx.AddParam(id, NpgsqlDbType.Uuid))
-            .ToArray();
-        return existsBuilder(column => parameters.Length == 1
-            ? $"{column} = {parameters[0]}"
-            : $"{column} IN ({string.Join(", ", parameters)})");
-    }
-
     private static Func<Func<string, string>, string>? LibraryRootExistsBuilder(string kindCode, SqlBuildContext ctx) {
         if (!EntityKindRegistry.TryDescribe(kindCode, out var definition)) return null;
 
@@ -693,7 +657,7 @@ public sealed class CollectionRuleEngine(PrismediaDbContext db) : ICollectionRul
     }
 
     private static string AncestorRootExists(Func<string, string> rootPredicate) =>
-        $@"EXISTS (
+        $@"({RootedEntityMatches("e.id", "self", rootPredicate)} OR EXISTS (
             SELECT 1
             FROM entities parent1
             LEFT JOIN entities parent2 ON parent2.id = parent1.parent_entity_id
@@ -704,7 +668,7 @@ public sealed class CollectionRuleEngine(PrismediaDbContext db) : ICollectionRul
                     OR {RootedEntityMatches("parent2.id", "p2", rootPredicate)}
                     OR {RootedEntityMatches("parent3.id", "p3", rootPredicate)}
                 )
-        )";
+        ))";
 
     private static string RootedEntityMatches(
         string entityIdExpression,

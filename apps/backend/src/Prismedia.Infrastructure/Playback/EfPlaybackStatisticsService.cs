@@ -13,21 +13,27 @@ namespace Prismedia.Infrastructure.Playback;
 /// EF Core read projection for playback statistics, scoped to the requested user's events
 /// unless an administrator has explicitly requested the all-users projection.
 /// </summary>
-public sealed class EfPlaybackStatisticsService(PrismediaDbContext db, ICurrentUserContext currentUser) : IPlaybackStatisticsService {
+public sealed class EfPlaybackStatisticsService(
+    PrismediaDbContext db,
+    ICurrentUserContext currentUser,
+    EfEntityLibraryVisibilityFilter? libraryVisibility = null) : IPlaybackStatisticsService {
     private const int TopEntityLimit = 12;
     private const int RecentEventLimit = 30;
 
     /// <summary>Largest wall-clock offset from UTC any real time zone uses, in minutes.</summary>
     private const int MaxUtcOffsetMinutes = 16 * 60;
+    private readonly EfEntityLibraryVisibilityFilter _libraryVisibility =
+        libraryVisibility ?? new EfEntityLibraryVisibilityFilter(db, currentUser);
 
     /// <inheritdoc />
     public async Task<PlaybackStatisticsResponse> GetAsync(
         PlaybackStatisticsQuery query,
         CancellationToken cancellationToken) {
         var offset = TimeSpan.FromMinutes(Math.Clamp(query.UtcOffsetMinutes, -MaxUtcOffsetMinutes, MaxUtcOffsetMinutes));
-        var eventRows = await QueryRows(query).ToArrayAsync(cancellationToken);
+        var enforceLibraryVisibility = await _libraryVisibility.RequiresCurrentUserVisibilityAsync(cancellationToken);
+        var eventRows = await QueryRows(query, enforceLibraryVisibility).ToArrayAsync(cancellationToken);
         var activityRows = query.EventKind is null
-            ? await QueryActivityRows(query).ToArrayAsync(cancellationToken)
+            ? await QueryActivityRows(query, enforceLibraryVisibility).ToArrayAsync(cancellationToken)
             : [];
         var foldRows = eventRows
             .Select(row => new PlaybackStatisticsFoldRow(
@@ -177,7 +183,7 @@ public sealed class EfPlaybackStatisticsService(PrismediaDbContext db, ICurrentU
             : position;
     }
 
-    private IQueryable<ActivityStatisticsRow> QueryActivityRows(PlaybackStatisticsQuery query) {
+    private IQueryable<ActivityStatisticsRow> QueryActivityRows(PlaybackStatisticsQuery query, bool enforceLibraryVisibility) {
         var activities = db.EntityActivityEvents.AsNoTracking()
             .Where(evt => evt.OccurredAt >= query.From && evt.OccurredAt < query.To);
         if (!query.AllUsers) {
@@ -185,9 +191,13 @@ public sealed class EfPlaybackStatisticsService(PrismediaDbContext db, ICurrentU
             activities = activities.Where(evt => evt.UserId == userId);
         }
 
+        var visibleEntities = db.Entities.AsNoTracking();
+        if (enforceLibraryVisibility) {
+            visibleEntities = _libraryVisibility.ApplyCurrentUserVisibility(visibleEntities);
+        }
         var rows =
             from activity in activities
-            join entity in db.Entities.AsNoTracking() on activity.EntityId equals entity.Id
+            join entity in visibleEntities on activity.EntityId equals entity.Id
             where !query.HideNsfw || !entity.IsNsfw
             select new ActivityStatisticsRow {
                 EntityId = activity.EntityId,
@@ -206,7 +216,7 @@ public sealed class EfPlaybackStatisticsService(PrismediaDbContext db, ICurrentU
         return rows;
     }
 
-    private IQueryable<PlaybackStatisticsRow> QueryRows(PlaybackStatisticsQuery query) {
+    private IQueryable<PlaybackStatisticsRow> QueryRows(PlaybackStatisticsQuery query, bool enforceLibraryVisibility) {
         var events = db.EntityPlaybackEvents.AsNoTracking()
             .Where(evt => evt.OccurredAt >= query.From && evt.OccurredAt < query.To);
         if (!query.AllUsers) {
@@ -220,6 +230,9 @@ public sealed class EfPlaybackStatisticsService(PrismediaDbContext db, ICurrentU
 
         var allEntities = db.Entities.AsNoTracking();
         var catalogEntities = allEntities.ExcludeBookOwnedAudioTracks(allEntities);
+        if (enforceLibraryVisibility) {
+            catalogEntities = _libraryVisibility.ApplyCurrentUserVisibility(catalogEntities);
+        }
         var rows =
             from evt in events
             join entity in catalogEntities on evt.EntityId equals entity.Id

@@ -217,6 +217,52 @@ public sealed class PlaybackStatisticsServiceTests {
         Assert.Empty(statistics.RecentEvents);
     }
 
+    [Fact]
+    public async Task StatisticsExcludeRestrictedAndDisabledLibraryEntitiesForEventsAndActivity() {
+        await using var db = CreateContext();
+        var now = DateTimeOffset.Parse("2026-06-18T12:00:00Z");
+        var visibleRootId = Guid.NewGuid();
+        var restrictedRootId = Guid.NewGuid();
+        var disabledRootId = Guid.NewGuid();
+        var visibleBookId = Guid.NewGuid();
+        var restrictedBookId = Guid.NewGuid();
+        var disabledBookId = Guid.NewGuid();
+
+        db.LibraryRoots.AddRange(
+            new LibraryRootRow { Id = visibleRootId, Path = "/media/visible", Label = "Visible", Enabled = true, CreatedAt = now, UpdatedAt = now },
+            new LibraryRootRow { Id = restrictedRootId, Path = "/media/restricted", Label = "Restricted", Enabled = true, CreatedAt = now, UpdatedAt = now },
+            new LibraryRootRow { Id = disabledRootId, Path = "/media/disabled", Label = "Disabled", Enabled = false, CreatedAt = now, UpdatedAt = now });
+        db.Entities.AddRange(
+            Entity(visibleBookId, EntityKind.Book, "Visible Book", isNsfw: false, now),
+            Entity(restrictedBookId, EntityKind.Book, "Restricted Book", isNsfw: false, now),
+            Entity(disabledBookId, EntityKind.Book, "Disabled Book", isNsfw: false, now));
+        db.EntityLibraryRoots.AddRange(
+            new EntityLibraryRootRow { EntityId = visibleBookId, LibraryRootId = visibleRootId },
+            new EntityLibraryRootRow { EntityId = restrictedBookId, LibraryRootId = restrictedRootId },
+            new EntityLibraryRootRow { EntityId = disabledBookId, LibraryRootId = disabledRootId });
+        db.EntityPlaybackEvents.AddRange(
+            Event(visibleBookId, PlaybackEventKind.Completed, now.AddMinutes(-3), 30, TestUserContext.UserId),
+            Event(restrictedBookId, PlaybackEventKind.Completed, now.AddMinutes(-2), 30, TestUserContext.UserId),
+            Event(disabledBookId, PlaybackEventKind.Completed, now.AddMinutes(-1), 30, TestUserContext.UserId));
+        db.EntityActivityEvents.AddRange(
+            Activity(visibleBookId, BookActivityKind.Reading, now.AddMinutes(-3), 10),
+            Activity(restrictedBookId, BookActivityKind.Reading, now.AddMinutes(-2), 10),
+            Activity(disabledBookId, BookActivityKind.Reading, now.AddMinutes(-1), 10));
+        await db.SaveChangesAsync();
+
+        var service = new EfPlaybackStatisticsService(db, TestUserContext.Member(visibleRootId));
+        var statistics = await service.GetAsync(
+            new PlaybackStatisticsQuery(now.AddDays(-1), now.AddSeconds(1), null, null, HideNsfw: true),
+            CancellationToken.None);
+
+        Assert.Equal(1, statistics.TotalEvents);
+        Assert.Equal(1, statistics.DistinctEntityCount);
+        Assert.Equal(40, statistics.WatchSeconds);
+        Assert.Equal(10, statistics.ReadingSeconds);
+        Assert.Equal(visibleBookId, Assert.Single(statistics.TopEntities).Id);
+        Assert.Equal(visibleBookId, Assert.Single(statistics.RecentEvents).EntityId);
+    }
+
     private static void Seed(PrismediaDbContext db, DateTimeOffset now) {
         db.Entities.AddRange(
             Entity(VideoId, EntityKind.Video, "Visible Video", isNsfw: false, now),

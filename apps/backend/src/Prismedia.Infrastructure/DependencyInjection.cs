@@ -255,8 +255,8 @@ public static class DependencyInjection {
         services.AddScoped<IEntityFileDeletionRecoveryReader, EfEntityFileDeletionRecoveryProjection>();
         services.AddScoped<EfEntityRepository>();
         services.AddScoped<IEntityWriteRepository>(provider => provider.GetRequiredService<EfEntityRepository>());
-        // Concrete registration shared by the interface alias and the visibility checker so all
-        // three see the same per-request hidden-roots memoization.
+        // Read, statistics, and collection projections share this scoped hidden-roots memoization.
+        services.AddScoped<EfEntityLibraryVisibilityFilter>();
         services.AddScoped<EfEntityReadService>();
         services.AddScoped<IEntityReadService>(provider => provider.GetRequiredService<EfEntityReadService>());
         services.AddScoped<IEntityVisibilityChecker, EfEntityVisibilityChecker>();

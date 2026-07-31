@@ -41,6 +41,50 @@ public sealed class UserLibraryVisibilityTests {
     }
 
     [Fact]
+    public async Task ExplicitMemberVisibilityFiltersGrantedRestrictedAndDisabledRoots() {
+        await using var db = CreateContext();
+        await SeedTwoRootedVideosAsync(db);
+        var memberId = Guid.NewGuid();
+        var disabledRootId = Guid.NewGuid();
+        var disabledVideoId = Guid.NewGuid();
+        var now = DateTimeOffset.UtcNow;
+        db.LibraryRoots.Add(new LibraryRootRow {
+            Id = disabledRootId,
+            Path = "/media/disabled",
+            Label = "Disabled",
+            Enabled = false,
+            CreatedAt = now,
+            UpdatedAt = now
+        });
+        db.Entities.Add(new EntityRow {
+            Id = disabledVideoId,
+            KindCode = EntityKind.Video.ToCode(),
+            Title = "Disabled",
+            CreatedAt = now,
+            UpdatedAt = now
+        });
+        db.EntityLibraryRoots.Add(new EntityLibraryRootRow {
+            EntityId = disabledVideoId,
+            LibraryRootId = disabledRootId
+        });
+        db.UserLibraryAccess.Add(new UserLibraryAccessRow {
+            UserId = memberId,
+            LibraryRootId = GrantedRootId,
+            CreatedAt = now
+        });
+        await db.SaveChangesAsync();
+
+        var filter = new EfEntityLibraryVisibilityFilter(db, TestUserContext.Admin());
+        var visibleIds = await filter.FilterVisibleIdsAsync(
+            [GrantedVideoId, RestrictedVideoId, disabledVideoId],
+            memberId,
+            UserRole.Member,
+            CancellationToken.None);
+
+        Assert.Equal([GrantedVideoId], visibleIds.Order().ToArray());
+    }
+
+    [Fact]
     public async Task MemberMixedKindListsKeepRootlessTaxonomyAndExcludeRestrictedMedia() {
         await using var db = CreateContext();
         await SeedTwoRootedVideosAsync(db);
@@ -233,7 +277,7 @@ public sealed class UserLibraryVisibilityTests {
             .Select(profile => profile.Kind);
 
         var sql = db.Entities
-            .Where(EfEntityReadService.DefaultProfileVisibilityExpression(hiddenKinds, visibleKinds))
+            .Where(EfEntityLibraryVisibilityFilter.DefaultProfileVisibilityExpression(hiddenKinds, visibleKinds))
             .ToQueryString();
 
         Assert.Contains("SELECT", sql, StringComparison.OrdinalIgnoreCase);

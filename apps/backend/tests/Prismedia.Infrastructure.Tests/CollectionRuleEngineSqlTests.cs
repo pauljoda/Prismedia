@@ -29,7 +29,7 @@ public sealed class CollectionRuleEngineSqlTests {
             ]
         };
 
-        var query = new CollectionRuleEngine(null!).BuildQuery(group, kindCode);
+        var query = new CollectionRuleEngine(null!, null!).BuildQuery(group, kindCode);
 
         Assert.NotNull(query);
         Assert.Contains("WHERE e.kind_code =", query.Value.Sql, StringComparison.Ordinal);
@@ -54,7 +54,7 @@ public sealed class CollectionRuleEngineSqlTests {
             ]
         };
 
-        var query = new CollectionRuleEngine(null!).BuildQuery(group, EntityKind.Video.ToCode());
+        var query = new CollectionRuleEngine(null!, null!).BuildQuery(group, EntityKind.Video.ToCode());
 
         Assert.NotNull(query);
         var sql = query.Value.Sql;
@@ -83,7 +83,7 @@ public sealed class CollectionRuleEngineSqlTests {
             ]
         };
 
-        var query = new CollectionRuleEngine(null!).BuildQuery(group, EntityKind.Video.ToCode());
+        var query = new CollectionRuleEngine(null!, null!).BuildQuery(group, EntityKind.Video.ToCode());
 
         Assert.NotNull(query);
         Assert.Contains("ed.sortable_value > @p", query.Value.Sql, StringComparison.Ordinal);
@@ -105,7 +105,7 @@ public sealed class CollectionRuleEngineSqlTests {
             ]
         };
 
-        var query = new CollectionRuleEngine(null!).BuildQuery(group, EntityKind.VideoEpisode.ToCode());
+        var query = new CollectionRuleEngine(null!, null!).BuildQuery(group, EntityKind.VideoEpisode.ToCode());
 
         Assert.NotNull(query);
         Assert.Contains("series_entity.title", query.Value.Sql, StringComparison.Ordinal);
@@ -129,7 +129,7 @@ public sealed class CollectionRuleEngineSqlTests {
             ]
         };
 
-        var query = new CollectionRuleEngine(null!).BuildQuery(group, EntityKind.VideoEpisode.ToCode());
+        var query = new CollectionRuleEngine(null!, null!).BuildQuery(group, EntityKind.VideoEpisode.ToCode());
 
         Assert.NotNull(query);
         Assert.Contains(query.Value.Parameters, parameter =>
@@ -152,7 +152,7 @@ public sealed class CollectionRuleEngineSqlTests {
             ]
         };
 
-        var query = new CollectionRuleEngine(null!).BuildQuery(group, EntityKind.Video.ToCode(), ownerUserId);
+        var query = new CollectionRuleEngine(null!, null!).BuildQuery(group, EntityKind.Video.ToCode(), ownerUserId);
 
         Assert.NotNull(query);
         Assert.Contains("pb.user_id =", query.Value.Sql, StringComparison.Ordinal);
@@ -179,7 +179,7 @@ public sealed class CollectionRuleEngineSqlTests {
             ]
         };
 
-        var query = new CollectionRuleEngine(null!).BuildQuery(group, EntityKind.Video.ToCode());
+        var query = new CollectionRuleEngine(null!, null!).BuildQuery(group, EntityKind.Video.ToCode());
 
         Assert.NotNull(query);
         Assert.Contains("entity_library_roots", query.Value.Sql, StringComparison.Ordinal);
@@ -187,6 +187,26 @@ public sealed class CollectionRuleEngineSqlTests {
             parameter.NpgsqlDbType == NpgsqlDbType.Uuid &&
             parameter.Value is Guid value &&
             value == rootId);
+    }
+
+    [Fact]
+    public void AncestorLibraryRootRulesAlsoMatchTheEntityItself() {
+        var group = new CollectionRuleGroup {
+            Operator = "and",
+            Children = [
+                new CollectionRuleCondition {
+                    Field = CollectionRuleField.LibraryRootId.ToCode(),
+                    Operator = "equals",
+                    Value = JsonSerializer.SerializeToElement(Guid.NewGuid().ToString("D"))
+                }
+            ]
+        };
+
+        var query = new CollectionRuleEngine(null!, null!).BuildQuery(group, EntityKind.AudioTrack.ToCode());
+
+        Assert.NotNull(query);
+        Assert.Contains("root_self", query.Value.Sql, StringComparison.Ordinal);
+        Assert.Contains("root_self.entity_id = e.id", query.Value.Sql, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -202,7 +222,7 @@ public sealed class CollectionRuleEngineSqlTests {
             ]
         };
 
-        var query = new CollectionRuleEngine(null!).BuildQuery(group, EntityKind.VideoSeries.ToCode());
+        var query = new CollectionRuleEngine(null!, null!).BuildQuery(group, EntityKind.VideoSeries.ToCode());
 
         Assert.NotNull(query);
         Assert.Contains("FROM entities rooted_descendant", query.Value.Sql, StringComparison.Ordinal);
@@ -243,7 +263,7 @@ public sealed class CollectionRuleEngineSqlTests {
             ]
         };
 
-        var query = new CollectionRuleEngine(null!).BuildQuery(group, EntityKind.AudioTrack.ToCode());
+        var query = new CollectionRuleEngine(null!, null!).BuildQuery(group, EntityKind.AudioTrack.ToCode());
 
         Assert.NotNull(query);
         Assert.Contains("FROM entities parent1", query.Value.Sql, StringComparison.Ordinal);
@@ -263,7 +283,7 @@ public sealed class CollectionRuleEngineSqlTests {
             ]
         };
 
-        var query = new CollectionRuleEngine(null!).BuildQuery(group, EntityKind.AudioTrack.ToCode());
+        var query = new CollectionRuleEngine(null!, null!).BuildQuery(group, EntityKind.AudioTrack.ToCode());
 
         Assert.NotNull(query);
         Assert.Contains("parent.id = e.parent_entity_id", query.Value.Sql, StringComparison.Ordinal);
@@ -285,8 +305,8 @@ public sealed class CollectionRuleEngineSqlTests {
             ]
         };
 
-        var videoSql = new CollectionRuleEngine(null!).BuildQuery(group, EntityKind.Video.ToCode());
-        var gallerySql = new CollectionRuleEngine(null!).BuildQuery(group, EntityKind.Gallery.ToCode());
+        var videoSql = new CollectionRuleEngine(null!, null!).BuildQuery(group, EntityKind.Video.ToCode());
+        var gallerySql = new CollectionRuleEngine(null!, null!).BuildQuery(group, EntityKind.Gallery.ToCode());
 
         Assert.NotNull(videoSql);
         Assert.Null(gallerySql);
@@ -316,7 +336,7 @@ public sealed class CollectionRuleEngineSqlTests {
                 ? CollectionRuleOperator.IsTrue
                 : CollectionRuleOperator.GreaterThan;
             foreach (var kind in playableKinds) {
-                var query = new CollectionRuleEngine(null!).BuildQuery(
+                var query = new CollectionRuleEngine(null!, null!).BuildQuery(
                     Rule(field, op, 1),
                     kind.ToCode());
                 Assert.NotNull(query);
@@ -330,7 +350,7 @@ public sealed class CollectionRuleEngineSqlTests {
             CollectionRuleField.VideoSeriesId,
             CollectionRuleOperator.Equals,
             "The Chair Company");
-        var engine = new CollectionRuleEngine(null!);
+        var engine = new CollectionRuleEngine(null!, null!);
 
         Assert.NotNull(engine.BuildQuery(group, EntityKind.VideoEpisode.ToCode()));
         Assert.Null(engine.BuildQuery(group, EntityKind.Movie.ToCode()));
@@ -345,7 +365,7 @@ public sealed class CollectionRuleEngineSqlTests {
 
     [Fact]
     public void ImageAndAudioRulesRetainTheirExistingApplicability() {
-        var engine = new CollectionRuleEngine(null!);
+        var engine = new CollectionRuleEngine(null!, null!);
 
         Assert.NotNull(engine.BuildQuery(
             Rule(CollectionRuleField.FileSize, CollectionRuleOperator.GreaterThan, 1024),
@@ -372,7 +392,7 @@ public sealed class CollectionRuleEngineSqlTests {
                 }
             ]
         };
-        var videoSql = new CollectionRuleEngine(null!).BuildQuery(topLevel, EntityKind.Video.ToCode());
+        var videoSql = new CollectionRuleEngine(null!, null!).BuildQuery(topLevel, EntityKind.Video.ToCode());
         Assert.NotNull(videoSql);
         Assert.DoesNotContain("deleted_at", videoSql.Value.Sql, StringComparison.Ordinal);
 
@@ -388,7 +408,7 @@ public sealed class CollectionRuleEngineSqlTests {
                 }
             ]
         };
-        var gallerySql = new CollectionRuleEngine(null!).BuildQuery(childCount, EntityKind.Gallery.ToCode());
+        var gallerySql = new CollectionRuleEngine(null!, null!).BuildQuery(childCount, EntityKind.Gallery.ToCode());
         Assert.NotNull(gallerySql);
         Assert.DoesNotContain("deleted_at", gallerySql.Value.Sql, StringComparison.Ordinal);
     }
