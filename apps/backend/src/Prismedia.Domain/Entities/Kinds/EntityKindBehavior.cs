@@ -21,11 +21,12 @@ public sealed record EntityKindBehavior {
         bool supportsManualManagement = false,
         bool prunesWhenEmpty = false,
         EntityMediaQualityFamily mediaQualityFamily = EntityMediaQualityFamily.None,
-        bool supportsAtomicMediaUpgrade = false) {
-        if (supportsAtomicMediaUpgrade && mediaQualityFamily == EntityMediaQualityFamily.None) {
+        EntityUpgradeMode upgradeMode = EntityUpgradeMode.Import) {
+        if (upgradeMode == EntityUpgradeMode.AtomicMediaFile &&
+            mediaQualityFamily == EntityMediaQualityFamily.None) {
             throw new ArgumentException(
                 "Atomic media upgrades require a media quality family.",
-                nameof(supportsAtomicMediaUpgrade));
+                nameof(upgradeMode));
         }
 
         Identification = identification ?? EntityIdentificationPolicy.None;
@@ -38,7 +39,7 @@ public sealed record EntityKindBehavior {
         SupportsManualManagement = supportsManualManagement;
         PrunesWhenEmpty = prunesWhenEmpty;
         MediaQualityFamily = mediaQualityFamily;
-        SupportsAtomicMediaUpgrade = supportsAtomicMediaUpgrade;
+        UpgradeMode = upgradeMode;
     }
 
     /// <summary>Identification and provider-compatibility behavior.</summary>
@@ -74,6 +75,9 @@ public sealed record EntityKindBehavior {
     /// <summary>Quality ladder used to rank acquisition releases.</summary>
     public EntityMediaQualityFamily MediaQualityFamily { get; }
 
-    /// <summary>Whether one owned media file can be replaced atomically during an upgrade.</summary>
-    public bool SupportsAtomicMediaUpgrade { get; }
+    /// <summary>How a completed upgrade is applied for this kind.</summary>
+    public EntityUpgradeMode UpgradeMode { get; }
+
+    /// <summary>Whether one owned media file uses the media-quality atomic replacement path.</summary>
+    public bool SupportsAtomicMediaUpgrade => UpgradeMode == EntityUpgradeMode.AtomicMediaFile;
 }

@@ -80,7 +80,7 @@ public abstract class PlayableVideoEntityKindDefinition<TEntity> : RootEntityKin
                 libraryVisibility: libraryVisibility,
                 supportsFileDeletion: true,
                 mediaQualityFamily: EntityMediaQualityFamily.Video,
-                supportsAtomicMediaUpgrade: true),
+                upgradeMode: EntityUpgradeMode.AtomicMediaFile),
             () => CreateDefaultCapabilities(additionalDefaultCapabilities)) {
         ScanPlacement = scanPlacement;
     }

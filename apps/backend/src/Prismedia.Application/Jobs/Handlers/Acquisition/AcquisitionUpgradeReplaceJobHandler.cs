@@ -99,12 +99,21 @@ public sealed class AcquisitionUpgradeReplaceJobHandler(
             return;
         }
 
-        // The parent kind decides which quality vocabulary the dominance check and the owned-quality update
-        // speak. A movie or single episode compares ladder positions; every other kind uses the book path.
-        if (MediaQualityLadder.IsUpgradeCapableKind(target.ParentKind)) {
-            await HandleMediaAsync(context, target, childId, cancellationToken);
-        } else {
-            await HandleBookAsync(context, target, childId, cancellationToken);
+        // The parent definition owns the destructive replacement contract. Never infer Book merely because
+        // a kind is absent from the media ladder: structural and multi-file kinds must use family import.
+        switch (EntityKindRegistry.Describe(target.ParentKind).UpgradeMode) {
+            case EntityUpgradeMode.AtomicMediaFile:
+                await HandleMediaAsync(context, target, childId, cancellationToken);
+                break;
+            case EntityUpgradeMode.AtomicBookFile:
+                await HandleBookAsync(context, target, childId, cancellationToken);
+                break;
+            default:
+                await AbortAsync(
+                    childId,
+                    $"Entity kind '{target.ParentKind.ToCode()}' does not support atomic file replacement.",
+                    cancellationToken);
+                break;
         }
     }
 

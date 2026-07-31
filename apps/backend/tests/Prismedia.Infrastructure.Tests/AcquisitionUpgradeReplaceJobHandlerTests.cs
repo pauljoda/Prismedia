@@ -152,6 +152,28 @@ public sealed class AcquisitionUpgradeReplaceJobHandlerTests {
     }
 
     [Fact]
+    public async Task UnexpectedNonAtomicKindAbortsBeforeTouchingFiles() {
+        await using var db = CreateContext();
+        var (_, childId, monitorId) = await SeedMediaAsync(
+            db,
+            EntityKind.VideoSeason,
+            ownedCode: "webdl-720p",
+            childSelectedTitle: "Show S01 1080p BluRay");
+        var replacer = new FakeReplacer(
+            OwnedFileReplaceResult.Ok("/library/Show/Season 01", BookFormatTier.Unknown));
+
+        await RunAsync(db, new RecordingJobQueue(), replacer, childId);
+
+        Assert.False(replacer.Called);
+        var child = await db.Acquisitions.AsNoTracking().SingleAsync(row => row.Id == childId);
+        Assert.Equal(AcquisitionStatus.Failed, child.Status);
+        Assert.Contains("does not support atomic file replacement", child.StatusMessage);
+        var monitor = await db.Monitors.AsNoTracking().SingleAsync(row => row.Id == monitorId);
+        Assert.Null(monitor.UpgradeChildAcquisitionId);
+        Assert.Equal(1, monitor.BarrenSearches);
+    }
+
+    [Fact]
     public async Task EntityDeletionClaimMakesAStaleReplaceJobNoOpBeforeFilesystemMutation() {
         await using var db = CreateContext();
         var (parentId, childId, monitorId) = await SeedAsync(

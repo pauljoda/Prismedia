@@ -127,6 +127,9 @@ public abstract class EntityKindDefinition {
     /// <summary>Quality ladder used to rank acquisition releases for this kind.</summary>
     public EntityMediaQualityFamily MediaQualityFamily => Behavior.MediaQualityFamily;
 
+    /// <summary>How a completed upgrade is applied for this kind.</summary>
+    public EntityUpgradeMode UpgradeMode => Behavior.UpgradeMode;
+
     /// <summary>Whether one owned media file can be replaced atomically during an upgrade.</summary>
     public bool SupportsAtomicMediaUpgrade => Behavior.SupportsAtomicMediaUpgrade;
 

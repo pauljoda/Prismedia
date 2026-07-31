@@ -265,6 +265,10 @@ public sealed class EntityKindMetadataTests {
         Assert.Equal(EntityMediaQualityFamily.Video, movie.MediaQualityFamily);
         Assert.Equal(EntityMediaQualityFamily.Video, season.MediaQualityFamily);
         Assert.Equal(EntityMediaQualityFamily.Audio, album.MediaQualityFamily);
+        Assert.Equal(EntityUpgradeMode.AtomicBookFile, EntityKindRegistry.Describe(EntityKind.Book).UpgradeMode);
+        Assert.Equal(EntityUpgradeMode.AtomicMediaFile, movie.UpgradeMode);
+        Assert.Equal(EntityUpgradeMode.Import, season.UpgradeMode);
+        Assert.Equal(EntityUpgradeMode.Import, album.UpgradeMode);
         Assert.True(movie.SupportsAtomicMediaUpgrade);
         Assert.False(season.SupportsAtomicMediaUpgrade);
 
@@ -274,7 +278,7 @@ public sealed class EntityKindMetadataTests {
         Assert.Empty(EntityKindRegistry.Describe(EntityKind.Video).Presentation.BorrowArtworkFromParentKinds);
         Assert.Empty(movie.Presentation.BorrowArtworkFromParentKinds);
         Assert.Throws<ArgumentException>(() =>
-            new EntityKindBehavior(supportsAtomicMediaUpgrade: true));
+            new EntityKindBehavior(upgradeMode: EntityUpgradeMode.AtomicMediaFile));
     }
 
     [Fact]

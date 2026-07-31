@@ -63,11 +63,11 @@ public sealed class AcquisitionCompletionService(
     }
 
     /// <summary>
-    /// Single-file upgrades use the atomic replace handler. A reviewed album is also an upgrade child,
-    /// but its multi-file folder replacement belongs to the music import engine's durable placement plan.
+    /// Entity definitions decide whether an upgrade can atomically replace one owned file. Multi-file
+    /// and structural units continue through their family import engine's durable placement plan.
     /// </summary>
     public static JobType CompletionJobType(EntityKind kind, bool isUpgrade) =>
-        isUpgrade && kind != EntityKind.AudioLibrary
+        isUpgrade && EntityKindRegistry.Describe(kind).UpgradeMode != EntityUpgradeMode.Import
             ? JobType.AcquisitionUpgradeReplace
             : JobType.AcquisitionImport;
 }
