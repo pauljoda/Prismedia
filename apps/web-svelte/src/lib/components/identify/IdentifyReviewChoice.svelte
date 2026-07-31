@@ -9,7 +9,7 @@
     PLUGIN_SEARCH_PAGE_SIZE,
   } from "$lib/components/plugins/plugin-search-paging";
   import UniversalLightbox from "$lib/components/UniversalLightbox.svelte";
-  import { IDENTIFY_QUEUE_STATE } from "$lib/api/generated/codes";
+  import { IDENTIFY_QUEUE_STATE, THUMBNAIL_META_ICON } from "$lib/api/generated/codes";
   import type { EntitySearchCandidate } from "$lib/api/identify-types";
   import type { EntityCard } from "$lib/api/entities";
   import type { UniversalLightboxEntity } from "$lib/components/universal-lightbox-media";
@@ -41,7 +41,9 @@
 
   const store = useIdentifyStore();
   const entityTypeLabel = $derived(
-    entity.meta.find((item) => item.icon === "book" && /^(book|comic|manga|novel)$/i.test(item.label))?.label ?? entity.kind,
+    entity.meta.find(
+      (item) => item.icon === THUMBNAIL_META_ICON.book && /^(book|comic|manga|novel)$/i.test(item.label),
+    )?.label ?? entity.kind,
   );
   let searchValuesBySchema = $state<Record<string, Record<string, string>>>({});
   let selectedProviderId = $state<string | null>(null);

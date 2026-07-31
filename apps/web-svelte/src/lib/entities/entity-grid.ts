@@ -1,4 +1,10 @@
-import { ACQUISITION_STATUS, THUMBNAIL_HOVER_KIND } from "$lib/api/generated/codes";
+import {
+  ACQUISITION_STATUS,
+  BOOK_FORMAT,
+  BOOK_TYPE,
+  THUMBNAIL_HOVER_KIND,
+  THUMBNAIL_META_ICON,
+} from "$lib/api/generated/codes";
 import {
   getCapability,
   getImagesCapability,
@@ -324,13 +330,18 @@ function metaForEntity(entity: EntityGridSourceEntity): EntityThumbnailCard["met
   const positions = getCapability(entity.capabilities, CAPABILITY_KIND.position)?.items ?? [];
   const customOverlay = customOverlayForEntity(entity);
 
-  if (duration) meta.push({ icon: "duration", label: duration });
-  if (width && height) meta.push({ icon: entity.kind === ENTITY_KIND.video ? "video" : "image", label: formatResolutionLabelFull(width, height) });
+  if (duration) meta.push({ icon: THUMBNAIL_META_ICON.duration, label: duration });
+  if (width && height) {
+    meta.push({
+      icon: entity.kind === ENTITY_KIND.video ? THUMBNAIL_META_ICON.video : THUMBNAIL_META_ICON.image,
+      label: formatResolutionLabelFull(width, height),
+    });
+  }
   if (entity.kind === ENTITY_KIND.video && technical?.codec) {
-    meta.push({ icon: "video", label: technical.codec.toUpperCase() });
+    meta.push({ icon: THUMBNAIL_META_ICON.video, label: technical.codec.toUpperCase() });
   }
   if (entity.kind === ENTITY_KIND.video && technical?.container) {
-    meta.push({ icon: "video", label: technical.container.toUpperCase() });
+    meta.push({ icon: THUMBNAIL_META_ICON.video, label: technical.container.toUpperCase() });
   }
   // Stat codes are an open provider vocabulary, so this filters wire strings rather
   // than a closed code set. prism-vocab: external
@@ -585,17 +596,17 @@ const STATUS_VALUE_BY_ID = new Map<string, string>(STATUS_FILTER_DEFS.map((def) 
  * client-side pass in {@link applyEntityGridState}.
  */
 export const BOOK_TYPE_FILTER_DEFS = [
-  { id: "book-type:book", code: "book", label: "Book" },
-  { id: "book-type:comic", code: "comic", label: "Comic" },
-  { id: "book-type:manga", code: "manga", label: "Manga" },
-  { id: "book-type:novel", code: "novel", label: "Novel" },
+  { id: "book-type:book", code: BOOK_TYPE.book, label: "Book" },
+  { id: "book-type:comic", code: BOOK_TYPE.comic, label: "Comic" },
+  { id: "book-type:manga", code: BOOK_TYPE.manga, label: "Manga" },
+  { id: "book-type:novel", code: BOOK_TYPE.novel, label: "Novel" },
 ] as const;
 
 /** Book format filter options (the {@link BookFormat} closed set). Server-resolved like the types. */
 export const BOOK_FORMAT_FILTER_DEFS = [
-  { id: "book-format:image-archive", code: "image-archive", label: "Comic Archive" },
-  { id: "book-format:epub", code: "epub", label: "EPUB" },
-  { id: "book-format:pdf", code: "pdf", label: "PDF" },
+  { id: "book-format:image-archive", code: BOOK_FORMAT.imageArchive, label: "Comic Archive" },
+  { id: "book-format:epub", code: BOOK_FORMAT.epub, label: "EPUB" },
+  { id: "book-format:pdf", code: BOOK_FORMAT.pdf, label: "PDF" },
 ] as const;
 
 const BOOK_TYPE_LABEL_BY_ID = new Map<string, { id: string; code: string; label: string }>(

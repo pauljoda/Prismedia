@@ -1,5 +1,6 @@
 import type { AudioTrackDetail, EntityThumbnail } from "$lib/api/generated/model";
 import { getCapability } from "$lib/api/capabilities";
+import { THUMBNAIL_META_ICON } from "$lib/api/generated/codes";
 import { CAPABILITY_KIND, ENTITY_FILE_ROLE } from "$lib/entities/entity-codes";
 import type { AudioTrackListItemDto } from "$lib/entities/media-view-models";
 
@@ -47,9 +48,9 @@ export function entityThumbnailToTrackItem(
   libraryId: string | null,
   options: EntityThumbnailTrackItemOptions = {},
 ): AudioTrackListItemDto {
-  const durationMeta = thumb.meta.find((m) => m.icon === "duration");
-  const codecMeta = thumb.meta.find((m) => m.icon === "audio");
-  const sectionMeta = thumb.meta.find((m) => m.icon === "disc");
+  const durationMeta = thumb.meta.find((m) => m.icon === THUMBNAIL_META_ICON.duration);
+  const codecMeta = thumb.meta.find((m) => m.icon === THUMBNAIL_META_ICON.audio);
+  const sectionMeta = thumb.meta.find((m) => m.icon === THUMBNAIL_META_ICON.disc);
 
   return {
     id: thumb.id,
