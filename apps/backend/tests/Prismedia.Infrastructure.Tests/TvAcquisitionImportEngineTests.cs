@@ -892,7 +892,6 @@ public sealed class TvAcquisitionImportEngineTests : IDisposable {
             IImportedVideoMaterializer importedVideoMaterializer,
             IImportFileMover importFileMover,
             IOwnedFileReplacer ownedFileReplacer) => new(
-            EntityKind.VideoSeason,
             store,
             new EfBookAcquisitionProfileStore(db),
             rootPersistence,

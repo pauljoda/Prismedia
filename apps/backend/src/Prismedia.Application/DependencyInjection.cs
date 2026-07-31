@@ -78,10 +78,7 @@ public static class DependencyInjection {
         services.AddScoped<Acquisition.EntityUnmonitorService>();
         services.AddScoped<Acquisition.IEntityGiveUpService>(
             provider => provider.GetRequiredService<Acquisition.EntityUnmonitorService>());
-        services.AddSingleton<Acquisition.IAcquisitionPolicyModule, Acquisition.BookAcquisitionPolicyModule>();
-        services.AddSingleton<Acquisition.IAcquisitionPolicyModule, Acquisition.MovieAcquisitionPolicyModule>();
-        services.AddSingleton<Acquisition.IAcquisitionPolicyModule, Acquisition.MusicAcquisitionPolicyModule>();
-        services.AddSingleton<Acquisition.IAcquisitionPolicyModule, Acquisition.TvAcquisitionPolicyModule>();
+        Acquisition.AcquisitionStrategyRegistration.Register(services);
         services.AddSingleton<Acquisition.IAcquisitionPolicyRegistry, Acquisition.AcquisitionPolicyRegistry>();
         services.AddSingleton<VideoScanConcurrencyGate>();
         services.AddScoped<IAudioStreamService, AudioStreamService>();
@@ -110,25 +107,8 @@ public static class DependencyInjection {
         // Import execution is worker-only. Policies reuse the concrete scan handlers above so every
         // first-party kind materializes exact placed files before its acquisition reports Imported.
         services.AddScoped<IImportedVideoMaterializer, ImportedVideoMaterializer>();
-        services.AddScoped<IImportedEntityMaterializationPolicy, ImportedBookMaterializationPolicy>();
-        services.AddScoped<IImportedEntityMaterializationPolicy, ImportedMovieMaterializationPolicy>();
-        services.AddScoped<IImportedEntityMaterializationPolicy, ImportedAlbumMaterializationPolicy>();
-        services.AddScoped<IImportedEntityMaterializationPolicy>(provider =>
-            ActivatorUtilities.CreateInstance<ImportedAlbumMaterializationPolicy>(provider, EntityKind.AudioTrack));
         services.AddScoped<IImportedEntityMaterializer, ImportedEntityMaterializer>();
         services.AddScoped<ImportedTorrentRemover>();
-        services.AddScoped<IAcquisitionImportEngine, BookAcquisitionImportEngine>();
-        services.AddScoped<IAcquisitionImportEngine, MovieAcquisitionImportEngine>();
-        services.AddScoped<IAcquisitionImportEngine, MusicAcquisitionImportEngine>();
-        services.AddScoped<IAcquisitionImportEngine>(provider =>
-            ActivatorUtilities.CreateInstance<MusicAcquisitionImportEngine>(provider, EntityKind.AudioTrack));
-        // One TV engine class serves both acquisition units: season packs and single episodes.
-        services.AddScoped<IAcquisitionImportEngine>(provider =>
-            ActivatorUtilities.CreateInstance<TvAcquisitionImportEngine>(provider, EntityKind.VideoSeason));
-        services.AddScoped<IAcquisitionImportEngine>(provider =>
-            ActivatorUtilities.CreateInstance<TvAcquisitionImportEngine>(
-                provider,
-                EntityKindRegistry.PlayableVideoKindFor(PlayableVideoScanPlacement.Episode)));
         services.AddScoped<IAcquisitionImportEngineFactory, AcquisitionImportEngineFactory>();
 
         // Probing

@@ -131,6 +131,7 @@ public sealed class AcquisitionPolicyModuleTests {
         new TvAcquisitionPolicyModule()
     ]);
 
+    [AcquisitionStrategy(AcquisitionNamingFamily.Book)]
     private sealed class FakePolicyModule(params EntityKind[] supportedKinds) : IAcquisitionPolicyModule {
         public IReadOnlyCollection<EntityKind> SupportedKinds { get; } = supportedKinds;
 

@@ -12,13 +12,10 @@ namespace Prismedia.Application.Jobs.Handlers;
 /// <summary>
 /// Imports a completed download for one media kind: places the payload's files into the right library
 /// root, writes the path-keyed identify hint, materializes exact Entities, and appends scoped reconciliation.
-/// Resolved per <see cref="Kind"/> through <see cref="IAcquisitionImportEngineFactory"/>, mirroring the
-/// decision-engine factory, so adding a medium's import never touches the job handler.
+/// Resolved by the owning acquisition profile naming family through <see cref="IAcquisitionImportEngineFactory"/>,
+/// so adding a request kind normally does not touch the job handler or dependency registration.
 /// </summary>
 public interface IAcquisitionImportEngine {
-    /// <summary>The media kind this engine imports.</summary>
-    EntityKind Kind { get; }
-
     /// <summary>
     /// Runs the import for a completed download. The engine owns the terminal status transitions
     /// (Imported / ManualImportRequired / Failed-with-reason); the caller has already set Importing and
@@ -32,10 +29,10 @@ public interface IAcquisitionImportEngineFactory {
     IAcquisitionImportEngine? Find(EntityKind kind);
 }
 
-/// <summary>Dispatches to the registered <see cref="IAcquisitionImportEngine"/> for a kind (one engine per kind).</summary>
+/// <summary>Dispatches to the registered <see cref="IAcquisitionImportEngine"/> for a kind (one engine per family).</summary>
 public sealed class AcquisitionImportEngineFactory(IEnumerable<IAcquisitionImportEngine> engines) : IAcquisitionImportEngineFactory {
     private readonly IReadOnlyDictionary<EntityKind, IAcquisitionImportEngine> _byKind =
-        engines.ToDictionary(engine => engine.Kind);
+        AcquisitionStrategyRegistration.ResolveByAcquisitionKind(engines, "import engine");
 
     public IAcquisitionImportEngine? Find(EntityKind kind) => _byKind.GetValueOrDefault(kind);
 }
@@ -250,6 +247,7 @@ public sealed class ImportedTorrentRemover(
 /// root and path template, move them, capture the owned quality for the upgrade loop, write the identify
 /// hint, and chain a book scan. Ambiguous payloads stop at manual-import-required instead of guessing.
 /// </summary>
+[AcquisitionStrategy(AcquisitionNamingFamily.Book)]
 public sealed class BookAcquisitionImportEngine(
     IAcquisitionStore acquisitions,
     IBookAcquisitionProfileStore profiles,
@@ -259,7 +257,6 @@ public sealed class BookAcquisitionImportEngine(
     IImportedEntityMaterializer materializer,
     ImportedTorrentRemover torrents,
     ILogger<BookAcquisitionImportEngine> logger) : IAcquisitionImportEngine {
-    public EntityKind Kind => EntityKind.Book;
 
     public async Task ImportAsync(JobContext context, AcquisitionImportContext import, CancellationToken cancellationToken) {
         var profile = await profiles.GetImportProfileAsync(import.ProfileId, EntityKind.Book, cancellationToken);
@@ -628,6 +625,7 @@ internal static class ImportRootResolution {
 /// wanted Movie entity via the acquisition hint. The profile's import mode controls whether the payload is
 /// moved, copied, or hardlinked before the completed download is cleaned up or left to seed.
 /// </summary>
+[AcquisitionStrategy(AcquisitionNamingFamily.Movie)]
 public sealed class MovieAcquisitionImportEngine(
     IAcquisitionStore acquisitions,
     IBookAcquisitionProfileStore profiles,
@@ -640,7 +638,6 @@ public sealed class MovieAcquisitionImportEngine(
     IAcquisitionHistoryStore history,
     IImportedEntityMaterializer materializer,
     ILogger<MovieAcquisitionImportEngine> logger) : IAcquisitionImportEngine {
-    public EntityKind Kind => EntityKind.Movie;
 
     public async Task ImportAsync(JobContext context, AcquisitionImportContext import, CancellationToken cancellationToken) {
         var profile = await profiles.GetImportProfileAsync(import.ProfileId, EntityKind.Movie, cancellationToken);
@@ -992,8 +989,8 @@ public sealed class MovieAcquisitionImportEngine(
 /// rules (replace strictly-better in place, reconcile byte-identical copies, drop the rest), and a
 /// payload with nothing usable fails with the release blocklisted.
 /// </summary>
+[AcquisitionStrategy(AcquisitionNamingFamily.Television)]
 public sealed class TvAcquisitionImportEngine(
-    EntityKind kind,
     IAcquisitionStore acquisitions,
     IBookAcquisitionProfileStore profiles,
     ILibraryScanRootPersistence roots,
@@ -1007,7 +1004,6 @@ public sealed class TvAcquisitionImportEngine(
     IImportedVideoMaterializer materializer,
     VideoScanConcurrencyGate scanGate,
     ILogger<TvAcquisitionImportEngine> logger) : IAcquisitionImportEngine {
-    public EntityKind Kind => kind;
 
     public async Task ImportAsync(JobContext context, AcquisitionImportContext import, CancellationToken cancellationToken) {
         var profile = await profiles.GetImportProfileAsync(import.ProfileId, import.Kind, cancellationToken);

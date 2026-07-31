@@ -63,6 +63,7 @@ public sealed class AcquisitionPolicyRegistry : IAcquisitionPolicyRegistry {
 }
 
 /// <summary>Release-search policy for books and comics.</summary>
+[AcquisitionStrategy(AcquisitionNamingFamily.Book)]
 public sealed class BookAcquisitionPolicyModule : AcquisitionPolicyModule {
     public BookAcquisitionPolicyModule()
         : base(TorznabCategoryRange.Books, [new BookReleaseDecisionEngine()]) { }
@@ -86,6 +87,7 @@ public sealed class BookAcquisitionPolicyModule : AcquisitionPolicyModule {
 }
 
 /// <summary>Release-search policy for movies.</summary>
+[AcquisitionStrategy(AcquisitionNamingFamily.Movie)]
 public sealed class MovieAcquisitionPolicyModule : AcquisitionPolicyModule {
     public MovieAcquisitionPolicyModule()
         : base(TorznabCategoryRange.Movies, [new MovieReleaseDecisionEngine()]) { }
@@ -99,6 +101,7 @@ public sealed class MovieAcquisitionPolicyModule : AcquisitionPolicyModule {
 }
 
 /// <summary>Release-search policy shared by albums, tracks, and artists.</summary>
+[AcquisitionStrategy(AcquisitionNamingFamily.Music)]
 public sealed class MusicAcquisitionPolicyModule : AcquisitionPolicyModule {
     public MusicAcquisitionPolicyModule()
         : base(TorznabCategoryRange.Audio, [
@@ -123,6 +126,7 @@ public sealed class MusicAcquisitionPolicyModule : AcquisitionPolicyModule {
 }
 
 /// <summary>Release-search policy shared by TV series, season packs, and episodes.</summary>
+[AcquisitionStrategy(AcquisitionNamingFamily.Television)]
 public sealed class TvAcquisitionPolicyModule : AcquisitionPolicyModule {
     public TvAcquisitionPolicyModule()
         : base(TorznabCategoryRange.Tv, [

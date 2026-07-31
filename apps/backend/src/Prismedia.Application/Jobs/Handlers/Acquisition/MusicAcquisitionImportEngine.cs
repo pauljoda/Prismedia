@@ -13,6 +13,7 @@ namespace Prismedia.Application.Jobs.Handlers;
 /// and artist folders to their wanted entities via the acquisition hint. The profile's import mode controls
 /// whether the payload is moved, copied, or hardlinked before cleanup or seeding watch.
 /// </summary>
+[AcquisitionStrategy(AcquisitionNamingFamily.Music)]
 public sealed partial class MusicAcquisitionImportEngine(
     IAcquisitionStore acquisitions,
     IBookAcquisitionProfileStore profiles,
@@ -25,9 +26,7 @@ public sealed partial class MusicAcquisitionImportEngine(
     IAcquisitionHistoryStore history,
     IImportedEntityMaterializer materializer,
     ILogger<MusicAcquisitionImportEngine> logger,
-    IMonitorStore? monitors = null,
-    EntityKind kind = EntityKind.AudioLibrary) : IAcquisitionImportEngine {
-    public EntityKind Kind => kind;
+    IMonitorStore? monitors = null) : IAcquisitionImportEngine {
 
     public async Task ImportAsync(JobContext context, AcquisitionImportContext import, CancellationToken cancellationToken) {
         var profile = await profiles.GetImportProfileAsync(import.ProfileId, EntityKind.AudioLibrary, cancellationToken);

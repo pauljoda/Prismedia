@@ -592,7 +592,8 @@ public sealed class AcquisitionImportJobHandlerCheckpointTests : IDisposable {
     }
 
     private sealed class SingleEngineFactory(IAcquisitionImportEngine? engine) : IAcquisitionImportEngineFactory {
-        public IAcquisitionImportEngine? Find(EntityKind kind) => engine is not null && kind == engine.Kind ? engine : null;
+        public IAcquisitionImportEngine? Find(EntityKind kind) =>
+            engine is RecordingEngine recording && kind == recording.Kind ? recording : null;
     }
 
     private sealed class RecordingLifecycleLease(bool allow = true)

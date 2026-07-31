@@ -231,7 +231,7 @@ public sealed class ImportedEntityMaterializationTests : IDisposable {
         var trackId = AddWantedEntity(db, EntityKind.AudioTrack, "Had Enough", albumId);
         var acquisitionId = await AddAcquisitionAsync(db, EntityKind.AudioTrack, trackId, "Had Enough");
         var store = AcquisitionTestFactory.Store(db);
-        var materializer = AlbumMaterializer(db, root, EntityKind.AudioTrack);
+        var materializer = AlbumMaterializer(db, root);
         var engine = new MusicAcquisitionImportEngine(
             store,
             new EfBookAcquisitionProfileStore(db),
@@ -243,8 +243,7 @@ public sealed class ImportedEntityMaterializationTests : IDisposable {
             new EfAcquisitionBlocklistStore(db),
             new EfAcquisitionHistoryStore(db),
             materializer,
-            NullLogger<MusicAcquisitionImportEngine>.Instance,
-            kind: EntityKind.AudioTrack);
+            NullLogger<MusicAcquisitionImportEngine>.Instance);
         var import = new AcquisitionImportContext(
             acquisitionId,
             "Had Enough",
@@ -687,8 +686,7 @@ public sealed class ImportedEntityMaterializationTests : IDisposable {
 
     private static IImportedEntityMaterializer AlbumMaterializer(
         PrismediaDbContext db,
-        RootPersistence root,
-        EntityKind kind = EntityKind.AudioLibrary) {
+        RootPersistence root) {
         var persistence = new LibraryScanPersistenceService(db);
         var hints = new AcquisitionHintApplier(db);
         var scan = new ScanAudioJobHandler(
@@ -698,7 +696,7 @@ public sealed class ImportedEntityMaterializationTests : IDisposable {
             persistence,
             persistence,
             acquisitionHints: hints);
-        return Materializer(db, new ImportedAlbumMaterializationPolicy(scan, kind));
+        return Materializer(db, new ImportedAlbumMaterializationPolicy(scan));
     }
 
     private static IImportedEntityMaterializer Materializer(
