@@ -69,11 +69,7 @@
   import FormField from "$lib/components/forms/FormField.svelte";
   import ToggleChip from "$lib/components/forms/ToggleChip.svelte";
   import TextField from "$lib/components/forms/TextField.svelte";
-  import {
-    getImagesCapability,
-    isNsfw as hasNsfwCapability,
-  } from "$lib/api/capabilities";
-  import { clearEntityImageAsset, uploadEntityImageAsset } from "$lib/api/entity-mutations";
+  import { isNsfw as hasNsfwCapability } from "$lib/api/capabilities";
   import { useNsfw } from "$lib/nsfw/store.svelte";
   import { CREDIT_ROLE, ENTITY_FILE_ROLE, type EntityFileRoleCode } from "$lib/entities/entity-codes";
   import {
@@ -89,6 +85,7 @@
   } from "./entity-detail-types";
   import { entityAccentForKind } from "$lib/entities/entity-accent";
   import { paletteFromImage, type ArtworkPalette } from "$lib/entities/artwork-palette";
+  import { EntityDetailArtworkController } from "./entity-detail-artwork-controller.svelte";
   import { EntityDetailEditController } from "./entity-detail-edit-controller.svelte";
 
   type Props = EntityDetailProps;
@@ -121,12 +118,8 @@
   }: Props = $props();
 
   let activeTabId = $state("");
-  let assetError = $state<string | null>(null);
-  let assetBusyRole = $state<EntityFileRoleCode | null>(null);
   let posterInput: HTMLInputElement | null = $state(null);
   let headerInput: HTMLInputElement | null = $state(null);
-  let localPosterAsset = $state<{ src: string | null; empty: boolean } | null>(null);
-  let localHeaderAsset = $state<{ src: string | null; empty: boolean } | null>(null);
   let paletteState = $state<{ entityId: string; palette: ArtworkPalette } | null>(null);
 
   const isFavorite = $derived(card.flags.find((f) => f.code === "favorite")?.active ?? false);
@@ -204,6 +197,12 @@
       .filter((section): section is EntityDetailSection => Boolean(section))
       .filter(sectionHasContent),
   );
+  const artwork = new EntityDetailArtworkController({
+    card: () => card,
+    metadataSave: () => onMetadataSave,
+    upload: () => onImageAssetUpload,
+    clear: () => onImageAssetClear,
+  });
   const edit = new EntityDetailEditController({
     card: () => card,
     flags: () => ({ isFavorite, isNsfw, isOrganized }),
@@ -214,7 +213,7 @@
     ratingMax: () => card.rating?.max ?? 5,
     save: () => onMetadataSave,
     activateTab: (tabId) => (activeTabId = tabId),
-    onStart: () => (assetError = null),
+    onStart: artwork.clearError,
   });
   const editDraft = edit.draft;
   const isEditingActiveTab = $derived(edit.isEditingActiveTab);
@@ -222,14 +221,8 @@
   const savingEdit = $derived(edit.saving);
   const editError = $derived(edit.error);
   const effectiveShowHero = $derived(showHero || isEditingActiveTab);
-  const displayHero = $derived.by(() => {
-    if (localHeaderAsset) return localHeaderAsset.empty || !localHeaderAsset.src ? null : { src: localHeaderAsset.src, alt: "Header" };
-    return card.hero;
-  });
-  const displayPoster = $derived.by(() => {
-    if (localPosterAsset) return localPosterAsset.empty || !localPosterAsset.src ? null : { src: localPosterAsset.src, alt: "Poster" };
-    return card.poster;
-  });
+  const displayHero = $derived(artwork.displayHeader);
+  const displayPoster = $derived(artwork.displayPoster);
   const heroMode = $derived.by((): HeroMode => {
     if (!effectiveShowHero) return "gradient";
     if (displayHero) return "image";
@@ -242,8 +235,7 @@
   const posterVisible = $derived(effectivePosterSize !== "none" && (posterCard !== null || isEditingActiveTab));
   const posterHasAsset = $derived(Boolean(displayPoster));
   const headerHasAsset = $derived(Boolean(displayHero));
-  const imagesCapability = $derived(getImagesCapability(card.entity.capabilities));
-  const canManageImages = $derived(Boolean(onMetadataSave || onImageAssetUpload || onImageAssetClear));
+  const canManageImages = $derived(artwork.canManage);
   const canEdit = $derived(Boolean(onMetadataSave));
   const editActionLabel = $derived(activeTab ? `Edit ${activeTab.label}` : "Edit details");
   const cancelEditActionLabel = $derived(activeTab ? `Cancel ${activeTab.label}` : "Cancel editing");
@@ -256,6 +248,7 @@
   });
   const editValidationErrors = $derived(edit.validationErrors);
   const saveDisabled = $derived(edit.saveDisabled);
+  const assetError = $derived(artwork.error);
 
   function findSection(sectionId: string): EntityDetailSection | null {
     return availableSections.find((section) => section.id === sectionId) ?? null;
@@ -388,8 +381,7 @@
   }
 
   function roleSupported(role: EntityFileRoleCode): boolean {
-    const supportedKinds = imagesCapability?.supportedKinds ?? [];
-    return supportedKinds.length === 0 || supportedKinds.includes(role);
+    return artwork.supports(role);
   }
 
   function inputForRole(role: EntityFileRoleCode): HTMLInputElement | null {
@@ -419,47 +411,15 @@
   }
 
   async function uploadAsset(role: EntityFileRoleCode, file: File) {
-    if (assetBusyRole) return;
-    assetBusyRole = role;
-    assetError = null;
-    try {
-      await (onImageAssetUpload
-        ? onImageAssetUpload(role, file)
-        : uploadEntityImageAsset(card.entity.id, role, file));
-      applyImageAssetResult(role, URL.createObjectURL(file));
-    } catch (err) {
-      assetError = err instanceof Error ? err.message : String(err);
-    } finally {
-      assetBusyRole = null;
-    }
+    await artwork.uploadAsset(role, file);
   }
 
   async function clearAsset(role: EntityFileRoleCode) {
-    if (assetBusyRole) return;
-    assetBusyRole = role;
-    assetError = null;
-    try {
-      await (onImageAssetClear
-        ? onImageAssetClear(role)
-        : clearEntityImageAsset(card.entity.id, role));
-      applyImageAssetResult(role, null);
-    } catch (err) {
-      assetError = err instanceof Error ? err.message : String(err);
-    } finally {
-      assetBusyRole = null;
-    }
-  }
-
-  function applyImageAssetResult(role: EntityFileRoleCode, nextAsset: string | null) {
-    if (role === ENTITY_FILE_ROLE.backdrop) {
-      localHeaderAsset = nextAsset ? { src: nextAsset, empty: false } : { src: null, empty: true };
-    } else {
-      localPosterAsset = nextAsset ? { src: nextAsset, empty: false } : { src: null, empty: true };
-    }
+    await artwork.clearAsset(role);
   }
 
   function assetBusy(role: EntityFileRoleCode): boolean {
-    return assetBusyRole === role;
+    return artwork.isBusy(role);
   }
 </script>
 
