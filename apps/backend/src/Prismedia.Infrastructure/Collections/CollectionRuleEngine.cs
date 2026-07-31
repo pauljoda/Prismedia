@@ -26,30 +26,44 @@ public sealed class CollectionRuleEngine(PrismediaDbContext db) : ICollectionRul
     private static readonly IEntityContainmentPolicy CollectionPolicy =
         EntityKindRegistry.Get<CollectionEntityKindDefinition>();
 
-    private static readonly Dictionary<string, HashSet<string>> FieldTargetKinds = new(StringComparer.Ordinal) {
-        ["fileSize"] = Kinds(EntityKind.Video.ToCode(), EntityKind.Image.ToCode(), EntityKind.AudioTrack.ToCode()),
-        ["duration"] = Kinds(EntityKind.Video.ToCode(), EntityKind.AudioTrack.ToCode()),
-        ["height"] = Kinds(EntityKind.Image.ToCode()),
-        ["width"] = Kinds(EntityKind.Image.ToCode()),
-        ["codec"] = Kinds(EntityKind.Video.ToCode()),
-        ["bitRate"] = Kinds(EntityKind.AudioTrack.ToCode()),
-        ["bit_rate"] = Kinds(EntityKind.AudioTrack.ToCode()),
-        ["channels"] = Kinds(EntityKind.AudioTrack.ToCode()),
-        ["sampleRate"] = Kinds(EntityKind.AudioTrack.ToCode()),
-        ["sample_rate"] = Kinds(EntityKind.AudioTrack.ToCode()),
-        ["playCount"] = Kinds(EntityKind.Video.ToCode(), EntityKind.AudioTrack.ToCode()),
-        ["skipCount"] = Kinds(EntityKind.Video.ToCode(), EntityKind.AudioTrack.ToCode()),
-        ["resolution"] = Kinds(EntityKind.Video.ToCode()),
-        ["videoSeriesId"] = Kinds(EntityKind.Video.ToCode()),
-        ["libraryRootId"] = Kinds(CollectionPolicy.ContainableKinds
+    private static readonly IReadOnlySet<string> PlayableVideoKinds = EntityKindRegistry.All
+        .Where(definition => definition is IPlayableVideoKindDefinition)
+        .Select(definition => definition.Code)
+        .ToHashSet(StringComparer.Ordinal);
+
+    private static readonly IReadOnlySet<string> EpisodicPlayableVideoKinds = EntityKindRegistry.All
+        .Where(definition => definition is IPlayableVideoKindDefinition)
+        .Where(definition => definition.StructurePolicy.RequiresParent)
+        .Where(definition => definition.StructurePolicy.AllowedParentKinds.Any(parentKind =>
+            parentKind is EntityKind.VideoSeries or EntityKind.VideoSeason))
+        .Select(definition => definition.Code)
+        .ToHashSet(StringComparer.Ordinal);
+
+    private static readonly IReadOnlyDictionary<CollectionRuleField, IReadOnlySet<string>> FieldTargetKinds =
+        new Dictionary<CollectionRuleField, IReadOnlySet<string>> {
+        [CollectionRuleField.FileSize] = Kinds(PlayableVideoKinds, EntityKind.Image, EntityKind.AudioTrack),
+        [CollectionRuleField.Duration] = Kinds(PlayableVideoKinds, EntityKind.AudioTrack),
+        [CollectionRuleField.Height] = Kinds(EntityKind.Image),
+        [CollectionRuleField.Width] = Kinds(EntityKind.Image),
+        [CollectionRuleField.Codec] = PlayableVideoKinds,
+        [CollectionRuleField.BitRate] = Kinds(EntityKind.AudioTrack),
+        [CollectionRuleField.BitRateLegacy] = Kinds(EntityKind.AudioTrack),
+        [CollectionRuleField.Channels] = Kinds(EntityKind.AudioTrack),
+        [CollectionRuleField.SampleRate] = Kinds(EntityKind.AudioTrack),
+        [CollectionRuleField.SampleRateLegacy] = Kinds(EntityKind.AudioTrack),
+        [CollectionRuleField.PlayCount] = Kinds(PlayableVideoKinds, EntityKind.AudioTrack),
+        [CollectionRuleField.SkipCount] = Kinds(PlayableVideoKinds, EntityKind.AudioTrack),
+        [CollectionRuleField.Resolution] = PlayableVideoKinds,
+        [CollectionRuleField.VideoSeriesId] = EpisodicPlayableVideoKinds,
+        [CollectionRuleField.LibraryRootId] = Kinds(CollectionPolicy.ContainableKinds
             .Select(EntityKindRegistry.Describe)
             .Where(definition => definition.LibraryVisibility.Mode != EntityLibraryVisibilityMode.Unscoped)
             .Select(definition => definition.Code)
             .ToArray()),
-        ["galleryType"] = Kinds(EntityKind.Gallery.ToCode()),
-        ["imageCount"] = Kinds(EntityKind.Gallery.ToCode()),
-        ["format"] = Kinds(EntityKind.Image.ToCode()),
-        ["interactive"] = Kinds(EntityKind.Video.ToCode()),
+        [CollectionRuleField.GalleryType] = Kinds(EntityKind.Gallery),
+        [CollectionRuleField.ImageCount] = Kinds(EntityKind.Gallery),
+        [CollectionRuleField.Format] = Kinds(EntityKind.Image),
+        [CollectionRuleField.Interactive] = PlayableVideoKinds,
     };
 
     public async Task<IReadOnlyList<CollectionRuleMatch>> EvaluateAsync(
@@ -165,6 +179,10 @@ public sealed class CollectionRuleEngine(PrismediaDbContext db) : ICollectionRul
     }
 
     private string? TranslateGroup(CollectionRuleGroup group, string kindCode, SqlBuildContext ctx) {
+        if (!group.Operator.TryDecodeAs<CollectionRuleGroupOperator>(out var op)) {
+            return null;
+        }
+
         var fragments = new List<string>();
         foreach (var child in group.Children) {
             var fragment = TranslateNode(child, kindCode, ctx);
@@ -174,10 +192,10 @@ public sealed class CollectionRuleEngine(PrismediaDbContext db) : ICollectionRul
 
         if (fragments.Count == 0) return null;
 
-        return group.Operator switch {
-            "and" => fragments.Count == 1 ? fragments[0] : $"({string.Join(" AND ", fragments)})",
-            "or" => fragments.Count == 1 ? fragments[0] : $"({string.Join(" OR ", fragments)})",
-            "not" => fragments.Count == 1
+        return op switch {
+            CollectionRuleGroupOperator.And => fragments.Count == 1 ? fragments[0] : $"({string.Join(" AND ", fragments)})",
+            CollectionRuleGroupOperator.Or => fragments.Count == 1 ? fragments[0] : $"({string.Join(" OR ", fragments)})",
+            CollectionRuleGroupOperator.Not => fragments.Count == 1
                 ? $"NOT ({fragments[0]})"
                 : $"NOT ({string.Join(" AND ", fragments)})",
             _ => null
@@ -185,39 +203,41 @@ public sealed class CollectionRuleEngine(PrismediaDbContext db) : ICollectionRul
     }
 
     private string? TranslateCondition(CollectionRuleCondition condition, string kindCode, SqlBuildContext ctx) {
-        if (!FieldAppliesToKind(condition.Field, kindCode))
+        if (!condition.Field.TryDecodeAs<CollectionRuleField>(out var field) ||
+            !condition.Operator.TryDecodeAs<CollectionRuleOperator>(out var op) ||
+            !FieldAppliesToKind(field, kindCode))
             return null;
 
         if (condition.EntityTypes.Count > 0 && !ConditionAppliesToKind(condition.EntityTypes, kindCode))
             return null;
 
-        return condition.Field switch {
-            "title" => TranslateScalar("e.title", condition.Operator, condition.Value, ctx),
-            "rating" => TranslateScalar("e.rating_value", condition.Operator, condition.Value, ctx),
-            "date" => TranslateDateField(condition, ctx),
-            "organized" => TranslateFlag("is_organized", condition.Operator),
-            "isNsfw" => TranslateFlag("is_nsfw", condition.Operator),
-            "tags" => TranslateRelation(RelationshipKind.Tags.ToCode(), "tag", condition, ctx),
-            "performers" => TranslateRelation(RelationshipKind.Cast.ToCode(), "person", condition, ctx),
-            "studio" => TranslateStudioRelation(condition, ctx),
-            "fileSize" => TranslateFileSize(condition, ctx),
-            "duration" => TranslateTechnical("duration_seconds", condition, ctx),
-            "height" => TranslateTechnical("height", condition, ctx),
-            "width" => TranslateTechnical("width", condition, ctx),
-            "codec" => TranslateTechnical("codec", condition, ctx),
-            "bitRate" or "bit_rate" => TranslateTechnical("bit_rate", condition, ctx),
-            "channels" => TranslateTechnical("channels", condition, ctx),
-            "sampleRate" or "sample_rate" => TranslateTechnical("sample_rate", condition, ctx),
-            "playCount" => TranslatePlayback("play_count", condition, ctx),
-            "skipCount" => TranslatePlayback("skip_count", condition, ctx),
-            "resolution" => TranslateResolution(condition, ctx),
-            "videoSeriesId" => TranslateVideoSeries(condition, kindCode, ctx),
-            "libraryRootId" => TranslateLibraryRoot(condition, kindCode, ctx),
-            "galleryType" => TranslateGalleryType(condition, kindCode, ctx),
-            "imageCount" => TranslateChildCount(condition, kindCode, ctx),
-            "format" => TranslateTechnical("format", condition, ctx),
-            "createdAt" => TranslateDateTimeScalar("e.created_at", condition.Operator, condition.Value, ctx),
-            "interactive" => TranslateFlag("is_favorite", condition.Operator),
+        return field switch {
+            CollectionRuleField.Title => TranslateScalar("e.title", op, condition.Value, ctx),
+            CollectionRuleField.Rating => TranslateScalar("e.rating_value", op, condition.Value, ctx),
+            CollectionRuleField.Date => TranslateDateField(condition, op, ctx),
+            CollectionRuleField.Organized => TranslateFlag("is_organized", op),
+            CollectionRuleField.IsNsfw => TranslateFlag("is_nsfw", op),
+            CollectionRuleField.Tags => TranslateRelation(RelationshipKind.Tags.ToCode(), EntityKind.Tag.ToCode(), condition, op, ctx),
+            CollectionRuleField.Performers => TranslateRelation(RelationshipKind.Cast.ToCode(), EntityKind.Person.ToCode(), condition, op, ctx),
+            CollectionRuleField.Studio => TranslateStudioRelation(condition, op, ctx),
+            CollectionRuleField.FileSize => TranslateFileSize(condition, op, ctx),
+            CollectionRuleField.Duration => TranslateTechnical("duration_seconds", condition, op, ctx),
+            CollectionRuleField.Height => TranslateTechnical("height", condition, op, ctx),
+            CollectionRuleField.Width => TranslateTechnical("width", condition, op, ctx),
+            CollectionRuleField.Codec => TranslateTechnical("codec", condition, op, ctx),
+            CollectionRuleField.BitRate or CollectionRuleField.BitRateLegacy => TranslateTechnical("bit_rate", condition, op, ctx),
+            CollectionRuleField.Channels => TranslateTechnical("channels", condition, op, ctx),
+            CollectionRuleField.SampleRate or CollectionRuleField.SampleRateLegacy => TranslateTechnical("sample_rate", condition, op, ctx),
+            CollectionRuleField.PlayCount => TranslatePlayback("play_count", condition, op, ctx),
+            CollectionRuleField.SkipCount => TranslatePlayback("skip_count", condition, op, ctx),
+            CollectionRuleField.Resolution => TranslateResolution(condition, op, ctx),
+            CollectionRuleField.VideoSeriesId => TranslateVideoSeries(condition, op, ctx),
+            CollectionRuleField.LibraryRootId => TranslateLibraryRoot(condition, op, kindCode, ctx),
+            CollectionRuleField.GalleryType => TranslateGalleryType(condition, op, kindCode, ctx),
+            CollectionRuleField.ImageCount => TranslateChildCount(condition, op, kindCode, ctx),
+            CollectionRuleField.Format => TranslateTechnical("format", condition, op, ctx),
+            CollectionRuleField.CreatedAt => TranslateDateTimeScalar("e.created_at", op, condition.Value, ctx),
+            CollectionRuleField.Interactive => TranslateFlag("is_favorite", op),
             _ => null
         };
     }
@@ -225,68 +245,93 @@ public sealed class CollectionRuleEngine(PrismediaDbContext db) : ICollectionRul
     private static bool ConditionAppliesToKind(IReadOnlyList<string> entityTypes, string kindCode) =>
         entityTypes.Any(entityType => KindEquals(entityType, kindCode));
 
-    private static bool FieldAppliesToKind(string field, string kindCode) =>
+    private static bool FieldAppliesToKind(CollectionRuleField field, string kindCode) =>
         !FieldTargetKinds.TryGetValue(field, out var kinds) || kinds.Contains(kindCode);
 
     private static bool KindEquals(string actual, string expected) =>
         actual.Equals(expected, StringComparison.OrdinalIgnoreCase);
 
-    private static HashSet<string> Kinds(params string[] kindCodes) =>
-        new(kindCodes, StringComparer.Ordinal);
+    private static IReadOnlySet<string> Kinds(params EntityKind[] kinds) =>
+        new HashSet<string>(kinds.Select(EntityKindRegistry.ToCode), StringComparer.Ordinal);
+
+    private static IReadOnlySet<string> Kinds(IReadOnlySet<string> initialKinds, params EntityKind[] kinds) {
+        var kindCodes = new HashSet<string>(initialKinds, StringComparer.Ordinal);
+        kindCodes.UnionWith(kinds.Select(EntityKindRegistry.ToCode));
+        return kindCodes;
+    }
+
+    private static IReadOnlySet<string> Kinds(params string[] kindCodes) =>
+        new HashSet<string>(kindCodes, StringComparer.Ordinal);
 
     // ── Scalar field translation ──
 
-    private static string? TranslateScalar(string column, string op, JsonElement? value, SqlBuildContext ctx) {
+    private static string? TranslateScalar(string column, CollectionRuleOperator op, JsonElement? value, SqlBuildContext ctx) {
         return op switch {
-            "equals" => $"{column} = {ctx.AddJsonParam(value)}",
-            "not_equals" => $"{column} != {ctx.AddJsonParam(value)}",
-            "contains" => $"{column} ILIKE {ctx.AddParam($"%{value?.GetString()}%", NpgsqlDbType.Text)}",
-            "not_contains" => $"NOT ({column} ILIKE {ctx.AddParam($"%{value?.GetString()}%", NpgsqlDbType.Text)})",
-            "greater_than" => $"{column} > {ctx.AddJsonParam(value)}",
-            "less_than" => $"{column} < {ctx.AddJsonParam(value)}",
-            "greater_equal" => $"{column} >= {ctx.AddJsonParam(value)}",
-            "less_equal" => $"{column} <= {ctx.AddJsonParam(value)}",
-            "between" when value?.ValueKind == JsonValueKind.Array =>
+            CollectionRuleOperator.Equals => $"{column} = {ctx.AddJsonParam(value)}",
+            CollectionRuleOperator.NotEquals => $"{column} != {ctx.AddJsonParam(value)}",
+            CollectionRuleOperator.Contains => $"{column} ILIKE {ctx.AddParam($"%{value?.GetString()}%", NpgsqlDbType.Text)}",
+            CollectionRuleOperator.NotContains => $"NOT ({column} ILIKE {ctx.AddParam($"%{value?.GetString()}%", NpgsqlDbType.Text)})",
+            CollectionRuleOperator.GreaterThan => $"{column} > {ctx.AddJsonParam(value)}",
+            CollectionRuleOperator.LessThan => $"{column} < {ctx.AddJsonParam(value)}",
+            CollectionRuleOperator.GreaterEqual => $"{column} >= {ctx.AddJsonParam(value)}",
+            CollectionRuleOperator.LessEqual => $"{column} <= {ctx.AddJsonParam(value)}",
+            CollectionRuleOperator.Between when value?.ValueKind == JsonValueKind.Array =>
                 $"{column} BETWEEN {ctx.AddJsonParam(value?.EnumerateArray().ElementAt(0))} AND {ctx.AddJsonParam(value?.EnumerateArray().ElementAt(1))}",
-            "in" when value?.ValueKind == JsonValueKind.Array =>
+            CollectionRuleOperator.In when value?.ValueKind == JsonValueKind.Array =>
                 $"{column} IN ({string.Join(", ", value.Value.EnumerateArray().Select(v => ctx.AddJsonParam(v)))})",
-            "not_in" when value?.ValueKind == JsonValueKind.Array =>
+            CollectionRuleOperator.NotIn when value?.ValueKind == JsonValueKind.Array =>
                 $"{column} NOT IN ({string.Join(", ", value.Value.EnumerateArray().Select(v => ctx.AddJsonParam(v)))})",
-            "is_null" => $"{column} IS NULL",
-            "is_not_null" => $"{column} IS NOT NULL",
-            "is_true" => $"{column} = true",
-            "is_false" => $"{column} = false",
+            CollectionRuleOperator.IsNull => $"{column} IS NULL",
+            CollectionRuleOperator.IsNotNull => $"{column} IS NOT NULL",
+            CollectionRuleOperator.IsTrue => $"{column} = true",
+            CollectionRuleOperator.IsFalse => $"{column} = false",
             _ => null
         };
     }
 
-    private string? TranslateTechnical(string column, CollectionRuleCondition condition, SqlBuildContext ctx) {
+    private string? TranslateTechnical(
+        string column,
+        CollectionRuleCondition condition,
+        CollectionRuleOperator op,
+        SqlBuildContext ctx) {
         ctx.EnsureJoin("LEFT JOIN entity_technical t ON t.entity_id = e.id");
-        return TranslateScalar($"t.{column}", condition.Operator, condition.Value, ctx);
+        return TranslateScalar($"t.{column}", op, condition.Value, ctx);
     }
 
-    private string? TranslatePlayback(string column, CollectionRuleCondition condition, SqlBuildContext ctx) {
+    private string? TranslatePlayback(
+        string column,
+        CollectionRuleCondition condition,
+        CollectionRuleOperator op,
+        SqlBuildContext ctx) {
         ctx.EnsureJoin(
             $"LEFT JOIN user_entity_states pb ON pb.entity_id = e.id AND pb.user_id = {ctx.UserIdParameter}");
-        return TranslateScalar($"COALESCE(pb.{column}, 0)", condition.Operator, condition.Value, ctx);
+        return TranslateScalar($"COALESCE(pb.{column}, 0)", op, condition.Value, ctx);
     }
 
-    private static string? TranslateFlag(string column, string op) {
+    private static string? TranslateFlag(string column, CollectionRuleOperator op) {
         return op switch {
-            "is_true" => $"e.{column} = true",
-            "is_false" => $"e.{column} = false",
+            CollectionRuleOperator.IsTrue => $"e.{column} = true",
+            CollectionRuleOperator.IsFalse => $"e.{column} = false",
             _ => null
         };
     }
 
-    private string? TranslateDateField(CollectionRuleCondition condition, SqlBuildContext ctx) {
-        ctx.EnsureJoin("LEFT JOIN entity_dates ed ON ed.entity_id = e.id AND ed.code IN ('release', 'air')");
-        return TranslateDateScalar("ed.sortable_value", condition.Operator, condition.Value, ctx);
+    private string? TranslateDateField(
+        CollectionRuleCondition condition,
+        CollectionRuleOperator op,
+        SqlBuildContext ctx) {
+        ctx.EnsureJoin(
+            $"LEFT JOIN entity_dates ed ON ed.entity_id = e.id AND ed.code IN ('{EntityDateType.Release.ToCode()}', '{EntityDateType.Air.ToCode()}')");
+        return TranslateDateScalar("ed.sortable_value", op, condition.Value, ctx);
     }
 
-    private string? TranslateFileSize(CollectionRuleCondition condition, SqlBuildContext ctx) {
-        ctx.EnsureJoin("LEFT JOIN entity_files ef_src ON ef_src.entity_id = e.id AND ef_src.role = 'source'");
-        return TranslateScalar("ef_src.size_bytes", condition.Operator, condition.Value, ctx);
+    private string? TranslateFileSize(
+        CollectionRuleCondition condition,
+        CollectionRuleOperator op,
+        SqlBuildContext ctx) {
+        ctx.EnsureJoin(
+            $"LEFT JOIN entity_files ef_src ON ef_src.entity_id = e.id AND ef_src.role = '{EntityFileRole.Source.ToCode()}'");
+        return TranslateScalar("ef_src.size_bytes", op, condition.Value, ctx);
     }
 
     // ── Relation fields (tags, performers) ──
@@ -294,7 +339,9 @@ public sealed class CollectionRuleEngine(PrismediaDbContext db) : ICollectionRul
     private string? TranslateRelation(
         string relationshipCode,
         string taxonomyKindCode,
-        CollectionRuleCondition condition, SqlBuildContext ctx) {
+        CollectionRuleCondition condition,
+        CollectionRuleOperator op,
+        SqlBuildContext ctx) {
         var names = GetStringArray(condition.Value);
         if (names.Count == 0) return "false";
 
@@ -311,19 +358,22 @@ public sealed class CollectionRuleEngine(PrismediaDbContext db) : ICollectionRul
                 AND te.title IN ({nameParams})
         )";
 
-        return condition.Operator switch {
-            "in" => subquery,
-            "not_in" => $"NOT ({subquery})",
+        return op switch {
+            CollectionRuleOperator.In => subquery,
+            CollectionRuleOperator.NotIn => $"NOT ({subquery})",
             _ => null
         };
     }
 
-    private string? TranslateStudioRelation(CollectionRuleCondition condition, SqlBuildContext ctx) {
+    private string? TranslateStudioRelation(
+        CollectionRuleCondition condition,
+        CollectionRuleOperator op,
+        SqlBuildContext ctx) {
         var relationshipParam = ctx.AddParam(RelationshipKind.Studio.ToCode(), NpgsqlDbType.Text);
-        if (condition.Operator is "is_null") {
+        if (op is CollectionRuleOperator.IsNull) {
             return $"NOT EXISTS (SELECT 1 FROM entity_relationship_links sl WHERE sl.entity_id = e.id AND sl.relationship_code = {relationshipParam})";
         }
-        if (condition.Operator is "is_not_null") {
+        if (op is CollectionRuleOperator.IsNotNull) {
             return $"EXISTS (SELECT 1 FROM entity_relationship_links sl WHERE sl.entity_id = e.id AND sl.relationship_code = {relationshipParam})";
         }
 
@@ -331,7 +381,7 @@ public sealed class CollectionRuleEngine(PrismediaDbContext db) : ICollectionRul
         if (names.Count == 0) return "false";
 
         var nameParams = string.Join(", ", names.Select(n => ctx.AddParam(n, NpgsqlDbType.Text)));
-        var kindParam = ctx.AddParam("studio", NpgsqlDbType.Text);
+        var kindParam = ctx.AddParam(EntityKind.Studio.ToCode(), NpgsqlDbType.Text);
 
         var subquery = $@"e.id IN (
             SELECT sl.entity_id FROM entity_relationship_links sl
@@ -342,16 +392,19 @@ public sealed class CollectionRuleEngine(PrismediaDbContext db) : ICollectionRul
                 AND se.title IN ({nameParams})
         )";
 
-        return condition.Operator switch {
-            "in" => subquery,
-            "not_in" => $"NOT ({subquery})",
+        return op switch {
+            CollectionRuleOperator.In => subquery,
+            CollectionRuleOperator.NotIn => $"NOT ({subquery})",
             _ => null
         };
     }
 
     // ── Resolution (maps named tiers to height ranges) ──
 
-    private string? TranslateResolution(CollectionRuleCondition condition, SqlBuildContext ctx) {
+    private string? TranslateResolution(
+        CollectionRuleCondition condition,
+        CollectionRuleOperator op,
+        SqlBuildContext ctx) {
         ctx.EnsureJoin("LEFT JOIN entity_technical t ON t.entity_id = e.id");
 
         var values = GetStringArray(condition.Value);
@@ -367,19 +420,20 @@ public sealed class CollectionRuleEngine(PrismediaDbContext db) : ICollectionRul
         if (rangeClauses.Count == 0) return "false";
 
         var combined = string.Join(" OR ", rangeClauses);
-        return condition.Operator switch {
-            "in" => $"({combined})",
-            "not_in" => $"NOT ({combined})",
+        return op switch {
+            CollectionRuleOperator.In => $"({combined})",
+            CollectionRuleOperator.NotIn => $"NOT ({combined})",
             _ => null
         };
     }
 
-    // ── Video series (structural walk: video -> season -> series) ──
+    // ── Video series (structural walk: episode -> season -> series) ──
 
-    private string? TranslateVideoSeries(CollectionRuleCondition condition, string kindCode, SqlBuildContext ctx) {
-        if (kindCode != "video") return null;
-
-        var predicate = TranslateVideoSeriesPredicate(condition, ctx);
+    private string? TranslateVideoSeries(
+        CollectionRuleCondition condition,
+        CollectionRuleOperator op,
+        SqlBuildContext ctx) {
+        var predicate = TranslateVideoSeriesPredicate(condition, op, ctx);
         if (predicate is null) return null;
 
         var seriesKindParam = ctx.AddParam(EntityKind.VideoSeries.ToCode(), NpgsqlDbType.Text);
@@ -399,11 +453,14 @@ public sealed class CollectionRuleEngine(PrismediaDbContext db) : ICollectionRul
               AND ({predicate})
         )";
 
-        return condition.Operator is "not_in" ? $"NOT ({subquery})" : subquery;
+        return op is CollectionRuleOperator.NotIn ? $"NOT ({subquery})" : subquery;
     }
 
-    private static string? TranslateVideoSeriesPredicate(CollectionRuleCondition condition, SqlBuildContext ctx) {
-        if (condition.Operator is "equals") {
+    private static string? TranslateVideoSeriesPredicate(
+        CollectionRuleCondition condition,
+        CollectionRuleOperator op,
+        SqlBuildContext ctx) {
+        if (op is CollectionRuleOperator.Equals) {
             if (condition.Value?.ValueKind != JsonValueKind.String) {
                 return "false";
             }
@@ -418,7 +475,7 @@ public sealed class CollectionRuleEngine(PrismediaDbContext db) : ICollectionRul
                 : $"series_entity.title = {ctx.AddParam(value, NpgsqlDbType.Text)}";
         }
 
-        if (condition.Operator is not ("in" or "not_in") ||
+        if (op is not (CollectionRuleOperator.In or CollectionRuleOperator.NotIn) ||
             condition.Value?.ValueKind != JsonValueKind.Array) {
             return null;
         }
@@ -461,31 +518,43 @@ public sealed class CollectionRuleEngine(PrismediaDbContext db) : ICollectionRul
 
     // ── Gallery type (from detail table) ──
 
-    private string? TranslateGalleryType(CollectionRuleCondition condition, string kindCode, SqlBuildContext ctx) {
+    private string? TranslateGalleryType(
+        CollectionRuleCondition condition,
+        CollectionRuleOperator op,
+        string kindCode,
+        SqlBuildContext ctx) {
         if (!KindEquals(kindCode, EntityKind.Gallery.ToCode())) return null;
         ctx.EnsureJoin("LEFT JOIN gallery_details gd ON gd.entity_id = e.id");
-        return TranslateScalar("gd.gallery_type", condition.Operator, condition.Value, ctx);
+        return TranslateScalar("gd.gallery_type", op, condition.Value, ctx);
     }
 
     // ── Child count (count generic structural children) ──
 
-    private string? TranslateChildCount(CollectionRuleCondition condition, string kindCode, SqlBuildContext ctx) {
+    private string? TranslateChildCount(
+        CollectionRuleCondition condition,
+        CollectionRuleOperator op,
+        string kindCode,
+        SqlBuildContext ctx) {
         if (!KindEquals(kindCode, EntityKind.Gallery.ToCode()) &&
             !KindEquals(kindCode, EntityKind.Book.ToCode())) {
             return null;
         }
 
         var countExpr = "(SELECT COUNT(*) FROM entities child_count WHERE child_count.parent_entity_id = e.id)";
-        return TranslateScalar(countExpr, condition.Operator, condition.Value, ctx);
+        return TranslateScalar(countExpr, op, condition.Value, ctx);
     }
 
     // ── Library root membership ──
 
-    private static string? TranslateLibraryRoot(CollectionRuleCondition condition, string kindCode, SqlBuildContext ctx) {
+    private static string? TranslateLibraryRoot(
+        CollectionRuleCondition condition,
+        CollectionRuleOperator op,
+        string kindCode,
+        SqlBuildContext ctx) {
         var existsBuilder = LibraryRootExistsBuilder(kindCode, ctx);
         return existsBuilder is null
             ? null
-            : QuantifyLibraryRootMatch(condition, existsBuilder, ctx);
+            : QuantifyLibraryRootMatch(condition, op, existsBuilder, ctx);
     }
 
     private static string? BuildLibraryScope(
@@ -529,32 +598,38 @@ public sealed class CollectionRuleEngine(PrismediaDbContext db) : ICollectionRul
 
     private static string? QuantifyLibraryRootMatch(
         CollectionRuleCondition condition,
+        CollectionRuleOperator op,
         Func<Func<string, string>, string> existsBuilder,
         SqlBuildContext ctx) {
         static string NonNullRoot(string column) => $"{column} IS NOT NULL";
 
-        if (condition.Operator is "is_null") {
+        if (op is CollectionRuleOperator.IsNull) {
             return $"NOT ({existsBuilder(NonNullRoot)})";
         }
 
-        if (condition.Operator is "is_not_null") {
+        if (op is CollectionRuleOperator.IsNotNull) {
             return existsBuilder(NonNullRoot);
         }
 
-        var selectedRoot = BuildSelectedLibraryRootPredicate(condition, ctx);
+        var selectedRoot = BuildSelectedLibraryRootPredicate(condition, op, ctx);
         if (selectedRoot is null) return null;
 
-        return condition.Operator switch {
-            "equals" or "in" => existsBuilder(selectedRoot),
-            "not_equals" or "not_in" => $"({existsBuilder(NonNullRoot)} AND NOT ({existsBuilder(selectedRoot)}))",
+        return op switch {
+            CollectionRuleOperator.Equals or CollectionRuleOperator.In => existsBuilder(selectedRoot),
+            CollectionRuleOperator.NotEquals or CollectionRuleOperator.NotIn => $"({existsBuilder(NonNullRoot)} AND NOT ({existsBuilder(selectedRoot)}))",
             _ => null
         };
     }
 
     private static Func<string, string>? BuildSelectedLibraryRootPredicate(
         CollectionRuleCondition condition,
+        CollectionRuleOperator op,
         SqlBuildContext ctx) {
-        if (condition.Operator is not ("equals" or "not_equals" or "in" or "not_in")) {
+        if (op is not (
+                CollectionRuleOperator.Equals or
+                CollectionRuleOperator.NotEquals or
+                CollectionRuleOperator.In or
+                CollectionRuleOperator.NotIn)) {
             return null;
         }
 
@@ -639,34 +714,42 @@ public sealed class CollectionRuleEngine(PrismediaDbContext db) : ICollectionRul
 
     // ── Helpers ──
 
-    private static string? TranslateDateScalar(string column, string op, JsonElement? value, SqlBuildContext ctx) {
+    private static string? TranslateDateScalar(
+        string column,
+        CollectionRuleOperator op,
+        JsonElement? value,
+        SqlBuildContext ctx) {
         return op switch {
-            "equals" => $"{column} = {ctx.AddDateParam(value)}",
-            "not_equals" => $"{column} != {ctx.AddDateParam(value)}",
-            "greater_than" => $"{column} > {ctx.AddDateParam(value)}",
-            "less_than" => $"{column} < {ctx.AddDateParam(value)}",
-            "greater_equal" => $"{column} >= {ctx.AddDateParam(value)}",
-            "less_equal" => $"{column} <= {ctx.AddDateParam(value)}",
-            "between" when value?.ValueKind == JsonValueKind.Array =>
+            CollectionRuleOperator.Equals => $"{column} = {ctx.AddDateParam(value)}",
+            CollectionRuleOperator.NotEquals => $"{column} != {ctx.AddDateParam(value)}",
+            CollectionRuleOperator.GreaterThan => $"{column} > {ctx.AddDateParam(value)}",
+            CollectionRuleOperator.LessThan => $"{column} < {ctx.AddDateParam(value)}",
+            CollectionRuleOperator.GreaterEqual => $"{column} >= {ctx.AddDateParam(value)}",
+            CollectionRuleOperator.LessEqual => $"{column} <= {ctx.AddDateParam(value)}",
+            CollectionRuleOperator.Between when value?.ValueKind == JsonValueKind.Array =>
                 $"{column} BETWEEN {ctx.AddDateParam(value?.EnumerateArray().ElementAt(0))} AND {ctx.AddDateParam(value?.EnumerateArray().ElementAt(1))}",
-            "is_null" => $"{column} IS NULL",
-            "is_not_null" => $"{column} IS NOT NULL",
+            CollectionRuleOperator.IsNull => $"{column} IS NULL",
+            CollectionRuleOperator.IsNotNull => $"{column} IS NOT NULL",
             _ => null
         };
     }
 
-    private static string? TranslateDateTimeScalar(string column, string op, JsonElement? value, SqlBuildContext ctx) {
+    private static string? TranslateDateTimeScalar(
+        string column,
+        CollectionRuleOperator op,
+        JsonElement? value,
+        SqlBuildContext ctx) {
         return op switch {
-            "equals" => $"{column} = {ctx.AddDateTimeParam(value)}",
-            "not_equals" => $"{column} != {ctx.AddDateTimeParam(value)}",
-            "greater_than" => $"{column} > {ctx.AddDateTimeParam(value)}",
-            "less_than" => $"{column} < {ctx.AddDateTimeParam(value)}",
-            "greater_equal" => $"{column} >= {ctx.AddDateTimeParam(value)}",
-            "less_equal" => $"{column} <= {ctx.AddDateTimeParam(value)}",
-            "between" when value?.ValueKind == JsonValueKind.Array =>
+            CollectionRuleOperator.Equals => $"{column} = {ctx.AddDateTimeParam(value)}",
+            CollectionRuleOperator.NotEquals => $"{column} != {ctx.AddDateTimeParam(value)}",
+            CollectionRuleOperator.GreaterThan => $"{column} > {ctx.AddDateTimeParam(value)}",
+            CollectionRuleOperator.LessThan => $"{column} < {ctx.AddDateTimeParam(value)}",
+            CollectionRuleOperator.GreaterEqual => $"{column} >= {ctx.AddDateTimeParam(value)}",
+            CollectionRuleOperator.LessEqual => $"{column} <= {ctx.AddDateTimeParam(value)}",
+            CollectionRuleOperator.Between when value?.ValueKind == JsonValueKind.Array =>
                 $"{column} BETWEEN {ctx.AddDateTimeParam(value?.EnumerateArray().ElementAt(0))} AND {ctx.AddDateTimeParam(value?.EnumerateArray().ElementAt(1))}",
-            "is_null" => $"{column} IS NULL",
-            "is_not_null" => $"{column} IS NOT NULL",
+            CollectionRuleOperator.IsNull => $"{column} IS NULL",
+            CollectionRuleOperator.IsNotNull => $"{column} IS NOT NULL",
             _ => null
         };
     }

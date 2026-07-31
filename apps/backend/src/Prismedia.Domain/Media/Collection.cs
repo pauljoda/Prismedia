@@ -30,6 +30,7 @@ public sealed class CollectionEntityKindDefinition()
     private static readonly EntityKind[] AllowedKinds =
     [
         EntityKind.Video,
+        EntityKind.VideoEpisode,
         EntityKind.Movie,
         EntityKind.VideoSeries,
         EntityKind.Gallery,

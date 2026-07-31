@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using NpgsqlTypes;
 using Prismedia.Application.Jobs.Ports;
 using Prismedia.Domain.Entities;
+using Prismedia.Domain.Media;
 using Prismedia.Infrastructure.Collections;
 using Prismedia.Infrastructure.Persistence;
 
@@ -40,20 +41,20 @@ public sealed class CollectionRuleEngineSqlTests {
             Operator = "and",
             Children = [
                 new CollectionRuleCondition {
-                    EntityTypes = ["video"],
-                    Field = "isNsfw",
+                    EntityTypes = [EntityKind.Video.ToCode()],
+                    Field = CollectionRuleField.IsNsfw.ToCode(),
                     Operator = "is_true"
                 },
                 new CollectionRuleCondition {
-                    EntityTypes = ["video"],
-                    Field = "rating",
+                    EntityTypes = [EntityKind.Video.ToCode()],
+                    Field = CollectionRuleField.Rating.ToCode(),
                     Operator = "greater_equal",
                     Value = JsonSerializer.SerializeToElement(3)
                 }
             ]
         };
 
-        var query = new CollectionRuleEngine(null!).BuildQuery(group, "video");
+        var query = new CollectionRuleEngine(null!).BuildQuery(group, EntityKind.Video.ToCode());
 
         Assert.NotNull(query);
         var sql = query.Value.Sql;
@@ -70,19 +71,19 @@ public sealed class CollectionRuleEngineSqlTests {
             Operator = "and",
             Children = [
                 new CollectionRuleCondition {
-                    Field = "date",
+                    Field = CollectionRuleField.Date.ToCode(),
                     Operator = "greater_than",
                     Value = JsonSerializer.SerializeToElement("2026-06-01")
                 },
                 new CollectionRuleCondition {
-                    Field = "createdAt",
+                    Field = CollectionRuleField.CreatedAt.ToCode(),
                     Operator = "less_than",
                     Value = JsonSerializer.SerializeToElement("2026-06-06T00:00:00Z")
                 }
             ]
         };
 
-        var query = new CollectionRuleEngine(null!).BuildQuery(group, "video");
+        var query = new CollectionRuleEngine(null!).BuildQuery(group, EntityKind.Video.ToCode());
 
         Assert.NotNull(query);
         Assert.Contains("ed.sortable_value > @p", query.Value.Sql, StringComparison.Ordinal);
@@ -97,14 +98,14 @@ public sealed class CollectionRuleEngineSqlTests {
             Operator = "and",
             Children = [
                 new CollectionRuleCondition {
-                    Field = "videoSeriesId",
+                    Field = CollectionRuleField.VideoSeriesId.ToCode(),
                     Operator = "equals",
                     Value = JsonSerializer.SerializeToElement("The Chair Company")
                 }
             ]
         };
 
-        var query = new CollectionRuleEngine(null!).BuildQuery(group, "video");
+        var query = new CollectionRuleEngine(null!).BuildQuery(group, EntityKind.VideoEpisode.ToCode());
 
         Assert.NotNull(query);
         Assert.Contains("series_entity.title", query.Value.Sql, StringComparison.Ordinal);
@@ -121,14 +122,14 @@ public sealed class CollectionRuleEngineSqlTests {
             Operator = "and",
             Children = [
                 new CollectionRuleCondition {
-                    Field = "videoSeriesId",
+                    Field = CollectionRuleField.VideoSeriesId.ToCode(),
                     Operator = "equals",
                     Value = JsonSerializer.SerializeToElement(seriesId.ToString("D"))
                 }
             ]
         };
 
-        var query = new CollectionRuleEngine(null!).BuildQuery(group, "video");
+        var query = new CollectionRuleEngine(null!).BuildQuery(group, EntityKind.VideoEpisode.ToCode());
 
         Assert.NotNull(query);
         Assert.Contains(query.Value.Parameters, parameter =>
@@ -144,14 +145,14 @@ public sealed class CollectionRuleEngineSqlTests {
             Operator = "and",
             Children = [
                 new CollectionRuleCondition {
-                    Field = "skipCount",
+                    Field = CollectionRuleField.SkipCount.ToCode(),
                     Operator = "greater_equal",
                     Value = JsonSerializer.SerializeToElement(2)
                 }
             ]
         };
 
-        var query = new CollectionRuleEngine(null!).BuildQuery(group, "video", ownerUserId);
+        var query = new CollectionRuleEngine(null!).BuildQuery(group, EntityKind.Video.ToCode(), ownerUserId);
 
         Assert.NotNull(query);
         Assert.Contains("pb.user_id =", query.Value.Sql, StringComparison.Ordinal);
@@ -171,7 +172,7 @@ public sealed class CollectionRuleEngineSqlTests {
             Operator = "and",
             Children = [
                 new CollectionRuleCondition {
-                    Field = "libraryRootId",
+                    Field = CollectionRuleField.LibraryRootId.ToCode(),
                     Operator = "equals",
                     Value = JsonSerializer.SerializeToElement(rootId.ToString("D"))
                 }
@@ -194,7 +195,7 @@ public sealed class CollectionRuleEngineSqlTests {
             Operator = "and",
             Children = [
                 new CollectionRuleCondition {
-                    Field = "libraryRootId",
+                    Field = CollectionRuleField.LibraryRootId.ToCode(),
                     Operator = "equals",
                     Value = JsonSerializer.SerializeToElement(Guid.NewGuid().ToString("D"))
                 }
@@ -235,7 +236,7 @@ public sealed class CollectionRuleEngineSqlTests {
             Operator = "and",
             Children = [
                 new CollectionRuleCondition {
-                    Field = "libraryRootId",
+                    Field = CollectionRuleField.LibraryRootId.ToCode(),
                     Operator = "equals",
                     Value = JsonSerializer.SerializeToElement(Guid.NewGuid().ToString("D"))
                 }
@@ -255,7 +256,7 @@ public sealed class CollectionRuleEngineSqlTests {
             Operator = "and",
             Children = [
                 new CollectionRuleCondition {
-                    Field = "title",
+                    Field = CollectionRuleField.Title.ToCode(),
                     Operator = "contains",
                     Value = JsonSerializer.SerializeToElement("Chapter")
                 }
@@ -277,7 +278,7 @@ public sealed class CollectionRuleEngineSqlTests {
             Operator = "and",
             Children = [
                 new CollectionRuleCondition {
-                    Field = "skipCount",
+                    Field = CollectionRuleField.SkipCount.ToCode(),
                     Operator = "less_equal",
                     Value = JsonSerializer.SerializeToElement(2)
                 }
@@ -292,16 +293,86 @@ public sealed class CollectionRuleEngineSqlTests {
     }
 
     [Fact]
+    public void SharedVideoFieldsApplyToEveryDiscoveredPlayableVideoKind() {
+        var playableKinds = EntityKindRegistry.All
+            .Where(definition => definition is IPlayableVideoKindDefinition)
+            .Select(definition => definition.Kind)
+            .ToArray();
+
+        Assert.Contains(EntityKind.Movie, playableKinds);
+        Assert.Contains(EntityKind.Video, playableKinds);
+        Assert.Contains(EntityKind.VideoEpisode, playableKinds);
+
+        foreach (var field in new[] {
+                     CollectionRuleField.FileSize,
+                     CollectionRuleField.Duration,
+                     CollectionRuleField.Codec,
+                     CollectionRuleField.PlayCount,
+                     CollectionRuleField.SkipCount,
+                     CollectionRuleField.Resolution,
+                     CollectionRuleField.Interactive
+                 }) {
+            var op = field == CollectionRuleField.Interactive
+                ? CollectionRuleOperator.IsTrue
+                : CollectionRuleOperator.GreaterThan;
+            foreach (var kind in playableKinds) {
+                var query = new CollectionRuleEngine(null!).BuildQuery(
+                    Rule(field, op, 1),
+                    kind.ToCode());
+                Assert.NotNull(query);
+            }
+        }
+    }
+
+    [Fact]
+    public void VideoSeriesRulesApplyOnlyToStructurallyEpisodicPlayableKinds() {
+        var group = Rule(
+            CollectionRuleField.VideoSeriesId,
+            CollectionRuleOperator.Equals,
+            "The Chair Company");
+        var engine = new CollectionRuleEngine(null!);
+
+        Assert.NotNull(engine.BuildQuery(group, EntityKind.VideoEpisode.ToCode()));
+        Assert.Null(engine.BuildQuery(group, EntityKind.Movie.ToCode()));
+        Assert.Null(engine.BuildQuery(group, EntityKind.Video.ToCode()));
+    }
+
+    [Fact]
+    public void CollectionsCanContainVideoEpisodes() {
+        Assert.True(Collection.CanContain(EntityKind.VideoEpisode));
+        Assert.True(Collection.CanContain(EntityKind.Video));
+    }
+
+    [Fact]
+    public void ImageAndAudioRulesRetainTheirExistingApplicability() {
+        var engine = new CollectionRuleEngine(null!);
+
+        Assert.NotNull(engine.BuildQuery(
+            Rule(CollectionRuleField.FileSize, CollectionRuleOperator.GreaterThan, 1024),
+            EntityKind.Image.ToCode()));
+        Assert.NotNull(engine.BuildQuery(
+            Rule(CollectionRuleField.Duration, CollectionRuleOperator.GreaterThan, 60),
+            EntityKind.AudioTrack.ToCode()));
+        Assert.Null(engine.BuildQuery(
+            Rule(CollectionRuleField.Duration, CollectionRuleOperator.GreaterThan, 60),
+            EntityKind.Image.ToCode()));
+    }
+
+    [Fact]
     public void GeneratedSqlNeverReferencesDroppedDeletedAtColumn() {
         // The entities.deleted_at column was dropped (migration DropEntityDeletedAt);
         // Prismedia is hard-delete only, so any deleted_at predicate is invalid SQL.
         var topLevel = new CollectionRuleGroup {
             Operator = "and",
             Children = [
-                new CollectionRuleCondition { EntityTypes = ["video"], Field = "rating", Operator = "is_not_null" }
+                new CollectionRuleCondition {
+                    EntityTypes = [EntityKind.Video.ToCode()],
+                    Field = CollectionRuleField.Rating.ToCode(),
+                    Operator = "is_not_null"
+                }
             ]
         };
-        var videoSql = new CollectionRuleEngine(null!).BuildQuery(topLevel, "video");
+        var videoSql = new CollectionRuleEngine(null!).BuildQuery(topLevel, EntityKind.Video.ToCode());
         Assert.NotNull(videoSql);
         Assert.DoesNotContain("deleted_at", videoSql.Value.Sql, StringComparison.Ordinal);
 
@@ -310,14 +381,14 @@ public sealed class CollectionRuleEngineSqlTests {
             Operator = "and",
             Children = [
                 new CollectionRuleCondition {
-                    EntityTypes = ["gallery"],
-                    Field = "imageCount",
+                    EntityTypes = [EntityKind.Gallery.ToCode()],
+                    Field = CollectionRuleField.ImageCount.ToCode(),
                     Operator = "greater_than",
                     Value = JsonSerializer.SerializeToElement(5)
                 }
             ]
         };
-        var gallerySql = new CollectionRuleEngine(null!).BuildQuery(childCount, "gallery");
+        var gallerySql = new CollectionRuleEngine(null!).BuildQuery(childCount, EntityKind.Gallery.ToCode());
         Assert.NotNull(gallerySql);
         Assert.DoesNotContain("deleted_at", gallerySql.Value.Sql, StringComparison.Ordinal);
     }
@@ -325,6 +396,7 @@ public sealed class CollectionRuleEngineSqlTests {
     public static IEnumerable<object?[]> RepresentativeRuleCases() {
         var allKinds = new[] {
             EntityKind.Video.ToCode(),
+            EntityKind.VideoEpisode.ToCode(),
             EntityKind.Movie.ToCode(),
             EntityKind.VideoSeries.ToCode(),
             EntityKind.Gallery.ToCode(),
@@ -361,7 +433,7 @@ public sealed class CollectionRuleEngineSqlTests {
         yield return Case("resolution", "in", new[] { "1080p" }, EntityKind.Video.ToCode());
         yield return Case("codec", "equals", "h264", EntityKind.Video.ToCode());
         yield return Case("interactive", "is_false", null, EntityKind.Video.ToCode());
-        yield return Case("videoSeriesId", "equals", "The Chair Company", EntityKind.Video.ToCode());
+        yield return Case("videoSeriesId", "equals", "The Chair Company", EntityKind.VideoEpisode.ToCode());
         yield return Case("galleryType", "equals", "folder", EntityKind.Gallery.ToCode());
         yield return Case("imageCount", "greater_than", 3, EntityKind.Gallery.ToCode());
         yield return Case("width", "greater_than", 640, EntityKind.Image.ToCode());
@@ -374,4 +446,17 @@ public sealed class CollectionRuleEngineSqlTests {
 
     private static object?[] Case(string field, string op, object? value, string kindCode) =>
         [field, op, value, kindCode];
+
+    private static CollectionRuleGroup Rule(
+        CollectionRuleField field,
+        CollectionRuleOperator op,
+        object? value) =>
+        new() {
+            Operator = CollectionRuleGroupOperator.And.ToCode(),
+            Children = [new CollectionRuleCondition {
+                Field = field.ToCode(),
+                Operator = op.ToCode(),
+                Value = value is null ? null : JsonSerializer.SerializeToElement(value, value.GetType())
+            }]
+        };
 }

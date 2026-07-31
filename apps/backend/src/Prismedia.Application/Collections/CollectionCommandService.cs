@@ -21,55 +21,8 @@ public sealed class CollectionCommandService(
     ICollectionRefreshPersistence refreshPersistence,
     ICurrentUserContext currentUser) : ICollectionCommandService {
     private const int PreviewSampleSize = 24;
-    private const string EmptyRuleJson = """{"type":"group","operator":"and","children":[]}""";
-    private static readonly HashSet<string> RuleFields = new(StringComparer.Ordinal) {
-        "title",
-        "rating",
-        "date",
-        "organized",
-        "isNsfw",
-        "tags",
-        "performers",
-        "studio",
-        "libraryRootId",
-        "fileSize",
-        "duration",
-        "height",
-        "width",
-        "codec",
-        "bitRate",
-        "bit_rate",
-        "channels",
-        "sampleRate",
-        "sample_rate",
-        "playCount",
-        "skipCount",
-        "resolution",
-        "videoSeriesId",
-        "galleryType",
-        "imageCount",
-        "format",
-        "createdAt",
-        "interactive",
-    };
-
-    private static readonly HashSet<string> RuleOperators = new(StringComparer.Ordinal) {
-        "equals",
-        "not_equals",
-        "contains",
-        "not_contains",
-        "greater_than",
-        "less_than",
-        "greater_equal",
-        "less_equal",
-        "between",
-        "in",
-        "not_in",
-        "is_null",
-        "is_not_null",
-        "is_true",
-        "is_false",
-    };
+    private static readonly string EmptyRuleJson =
+        $$"""{"type":"group","operator":"{{CollectionRuleGroupOperator.And.ToCode()}}","children":[]}""";
 
     /// <inheritdoc />
     public async Task<CollectionWriteResult> CreateAsync(
@@ -410,7 +363,7 @@ public sealed class CollectionCommandService(
 
     private static bool ValidateRuleGroup(CollectionRuleGroup group, out string message) {
         message = string.Empty;
-        if (group.Operator is not ("and" or "or" or "not")) {
+        if (!group.Operator.TryDecodeAs<CollectionRuleGroupOperator>(out _)) {
             message = "Collection rule group has an unsupported operator.";
             return false;
         }
@@ -445,17 +398,18 @@ public sealed class CollectionCommandService(
             }
         }
 
-        if (!RuleFields.Contains(condition.Field)) {
+        if (!condition.Field.TryDecodeAs<CollectionRuleField>(out var field)) {
             message = $"Collection rule condition field '{condition.Field}' is not supported.";
             return false;
         }
 
-        if (!RuleOperators.Contains(condition.Operator)) {
+        if (!condition.Operator.TryDecodeAs<CollectionRuleOperator>(out var op)) {
             message = $"Collection rule condition operator '{condition.Operator}' is not supported.";
             return false;
         }
 
-        if (condition.Operator is "is_null" or "is_not_null" or "is_true" or "is_false") {
+        if (op is CollectionRuleOperator.IsNull or CollectionRuleOperator.IsNotNull or
+            CollectionRuleOperator.IsTrue or CollectionRuleOperator.IsFalse) {
             return true;
         }
 
@@ -466,12 +420,12 @@ public sealed class CollectionCommandService(
         }
 
         var value = condition.Value.Value;
-        if (condition.Operator is "between") {
-            return ValidateBetweenValue(condition.Field, value, out message);
+        if (op is CollectionRuleOperator.Between) {
+            return ValidateBetweenValue(field, value, out message);
         }
 
-        if (condition.Operator is "in" or "not_in") {
-            return ValidateArrayValue(condition.Field, value, out message);
+        if (op is CollectionRuleOperator.In or CollectionRuleOperator.NotIn) {
+            return ValidateArrayValue(field, value, out message);
         }
 
         if (value.ValueKind is JsonValueKind.Object or JsonValueKind.Array) {
@@ -479,10 +433,10 @@ public sealed class CollectionCommandService(
             return false;
         }
 
-        return ValidateTypedScalarValue(condition.Field, value, out message);
+        return ValidateTypedScalarValue(field, value, out message);
     }
 
-    private static bool ValidateBetweenValue(string field, JsonElement value, out string message) {
+    private static bool ValidateBetweenValue(CollectionRuleField field, JsonElement value, out string message) {
         message = string.Empty;
         if (value.ValueKind != JsonValueKind.Array) {
             message = "Collection rule between value must be an array.";
@@ -504,15 +458,15 @@ public sealed class CollectionCommandService(
         }
 
         return field switch {
-            "date" => value.EnumerateArray().All(IsDateValue) ||
+            CollectionRuleField.Date => value.EnumerateArray().All(IsDateValue) ||
                 InvalidRule("Collection rule date values must be valid dates.", out message),
-            "createdAt" => value.EnumerateArray().All(IsDateTimeValue) ||
+            CollectionRuleField.CreatedAt => value.EnumerateArray().All(IsDateTimeValue) ||
                 InvalidRule("Collection rule added-date values must be valid timestamps.", out message),
             _ => true
         };
     }
 
-    private static bool ValidateArrayValue(string field, JsonElement value, out string message) {
+    private static bool ValidateArrayValue(CollectionRuleField field, JsonElement value, out string message) {
         message = string.Empty;
         if (value.ValueKind != JsonValueKind.Array) {
             message = "Collection rule list value must be an array.";
@@ -526,7 +480,7 @@ public sealed class CollectionCommandService(
             }
         }
 
-        if (field == "libraryRootId" && !value.EnumerateArray().All(IsGuidValue)) {
+        if (field == CollectionRuleField.LibraryRootId && !value.EnumerateArray().All(IsGuidValue)) {
             message = "Collection rule library values must be valid IDs.";
             return false;
         }
@@ -534,14 +488,14 @@ public sealed class CollectionCommandService(
         return true;
     }
 
-    private static bool ValidateTypedScalarValue(string field, JsonElement value, out string message) {
+    private static bool ValidateTypedScalarValue(CollectionRuleField field, JsonElement value, out string message) {
         message = string.Empty;
         return field switch {
-            "date" when !IsDateValue(value) =>
+            CollectionRuleField.Date when !IsDateValue(value) =>
                 InvalidRule("Collection rule date value must be a valid date.", out message),
-            "createdAt" when !IsDateTimeValue(value) =>
+            CollectionRuleField.CreatedAt when !IsDateTimeValue(value) =>
                 InvalidRule("Collection rule added-date value must be a valid timestamp.", out message),
-            "libraryRootId" when !IsGuidValue(value) =>
+            CollectionRuleField.LibraryRootId when !IsGuidValue(value) =>
                 InvalidRule("Collection rule library value must be a valid ID.", out message),
             _ => true
         };
