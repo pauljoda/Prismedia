@@ -35,6 +35,23 @@ public sealed class VideoEntityKindDefinition() : EntityKindDefinition<Video>(
         allowsDirectReconcileChildTarget: true),
     supportsFileDeletion: true,
     manualAcquisition: EntityManualAcquisitionPolicy.UploadAndReplacement,
+    processing: new EntityProcessingPolicy(
+        probeJobType: JobType.ProbeVideo,
+        probeRequiresAutomaticMetadata: true,
+        fingerprintJobType: JobType.FingerprintVideo,
+        previewJobType: JobType.GeneratePreview,
+        previewRequiresAutomaticGeneration: true,
+        supportsTrickplayGeneration: true,
+        subtitleExtractionJobType: JobType.ExtractSubtitles,
+        generatedFileRoles: [
+            EntityFileRole.Thumbnail,
+            EntityFileRole.GridThumbnail,
+            EntityFileRole.GridThumbnail2x,
+            EntityFileRole.Preview,
+            EntityFileRole.Sprite,
+            EntityFileRole.Trickplay,
+            EntityFileRole.Hls
+        ]),
     mediaQualityFamily: EntityMediaQualityFamily.Video,
     supportsAtomicMediaUpgrade: true,
     engagement: new(EntityEngagementMode.Playback)) {

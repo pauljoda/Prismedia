@@ -16,20 +16,6 @@ public sealed class MaintenancePersistenceService(
     PrismediaDbContext db,
     AssetPathService assets) : IMaintenancePersistence {
     private static readonly TimeSpan SubtitleOrphanGracePeriod = TimeSpan.FromHours(1);
-    private static readonly EntityFileRole[] GeneratedVideoPreviewRoles =
-    [
-        EntityFileRole.Thumbnail,
-        EntityFileRole.GridThumbnail,
-        EntityFileRole.GridThumbnail2x,
-        EntityFileRole.Preview,
-        EntityFileRole.Sprite,
-        EntityFileRole.Trickplay,
-        EntityFileRole.Hls
-    ];
-
-    private static readonly EntityFileRole[] GeneratedImagePreviewRoles = [EntityFileRole.Thumbnail, EntityFileRole.Preview];
-    private static readonly EntityFileRole[] GeneratedAudioPreviewRoles = [EntityFileRole.Waveform];
-
     public async Task<IReadOnlyList<Guid>> GetActiveEntityIdsByKindAsync(EntityKind kind, CancellationToken cancellationToken) =>
         await db.Entities
             .Where(e => e.KindCode == EntityKindRegistry.ToCode(kind))
@@ -104,7 +90,7 @@ public sealed class MaintenancePersistenceService(
         EntityKind kind,
         Guid entityId,
         CancellationToken cancellationToken) {
-        var roles = GeneratedPreviewRoles(kind);
+        var roles = EntityKindRegistry.Describe(kind).Processing.GeneratedFileRoles.ToArray();
         if (roles.Length > 0) {
             var files = await db.EntityFiles
                 .Where(file => file.EntityId == entityId && roles.Contains(file.Role))
@@ -122,14 +108,6 @@ public sealed class MaintenancePersistenceService(
         await db.SaveChangesAsync(cancellationToken);
         DeleteGeneratedPreviewFiles(kind, entityId);
     }
-
-    private static EntityFileRole[] GeneratedPreviewRoles(EntityKind kind) =>
-        kind switch {
-            EntityKind.Video => GeneratedVideoPreviewRoles,
-            EntityKind.Image or EntityKind.BookPage => GeneratedImagePreviewRoles,
-            EntityKind.AudioTrack => GeneratedAudioPreviewRoles,
-            _ => []
-        };
 
     private static void AddRootedPath(string? path, ISet<string> paths) {
         if (string.IsNullOrWhiteSpace(path) || !Path.IsPathRooted(path)) {

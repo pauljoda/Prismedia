@@ -27,6 +27,7 @@ public sealed class GalleryEntityKindDefinition() : EntityKindDefinition<Gallery
     new EntityKindNavigation(EntityKind.Gallery, "galleries", "/galleries", "/galleries/{id}"),
     new EntityKindSearch(6),
     EntityManualAcquisitionPolicy.None,
+    EntityProcessingPolicy.None,
     defaultCapabilities: static () => [new CapabilityCredits()],
     identification: new(AutoIdentifySelectorKind.Gallery),
     supportsFileDeletion: true) {

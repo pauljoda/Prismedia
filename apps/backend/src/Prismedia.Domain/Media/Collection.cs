@@ -25,7 +25,8 @@ public sealed class CollectionEntityKindDefinition()
             EntityArtworkFit.Cover),
         new EntityKindNavigation(EntityKind.Collection, "collections", "/collections", "/collections/{id}"),
         new EntityKindSearch(9),
-        EntityManualAcquisitionPolicy.None),
+        EntityManualAcquisitionPolicy.None,
+        EntityProcessingPolicy.None),
       IEntityContainmentPolicy {
     private static readonly EntityKind[] AllowedKinds =
     [

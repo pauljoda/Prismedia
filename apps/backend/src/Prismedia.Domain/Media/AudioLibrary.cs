@@ -30,6 +30,7 @@ public sealed class AudioLibraryEntityKindDefinition() : RootEntityKindDefinitio
         usesParentExternalIdentityContext: true),
     supportsFileDeletion: true,
     manualAcquisition: EntityManualAcquisitionPolicy.UploadAndReplacement,
+    processing: EntityProcessingPolicy.None,
     mediaQualityFamily: EntityMediaQualityFamily.Audio,
     engagement: new(EntityEngagementMode.Playback)) {
     /// <inheritdoc />

@@ -24,6 +24,7 @@ public sealed class PersonEntityKindDefinition() : EntityKindDefinition<Person>(
     new EntityKindNavigation(EntityKind.Person, "people", "/people", "/people/{id}"),
     new EntityKindSearch(3, expandsRelationshipResults: true),
     EntityManualAcquisitionPolicy.None,
+    EntityProcessingPolicy.None,
     defaultCapabilities: static () => [new CapabilityDates(), new CapabilityLifetime()],
     supportsManualManagement: true) {
     /// <inheritdoc />

@@ -25,6 +25,11 @@ public sealed class AudioTrackEntityKindDefinition() : EntityKindDefinition<Audi
     new EntityKindNavigation(EntityKind.AudioTrack, "tracks", "/tracks", "/audio/tracks/{id}"),
     new EntityKindSearch(11),
     EntityManualAcquisitionPolicy.None,
+    new EntityProcessingPolicy(
+        probeJobType: JobType.ProbeAudio,
+        fingerprintJobType: JobType.FingerprintAudio,
+        previewJobType: JobType.GenerateAudioWaveform,
+        generatedFileRoles: [EntityFileRole.Waveform]),
     defaultCapabilities: static () => [new CapabilityPlayback()],
     identification: new(AutoIdentifySelectorKind.Audio),
     supportsFileDeletion: true,

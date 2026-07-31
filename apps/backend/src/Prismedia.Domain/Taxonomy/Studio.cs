@@ -23,6 +23,7 @@ public sealed class StudioEntityKindDefinition() : RootEntityKindDefinition<Stud
     new EntityKindSearch(4, expandsRelationshipResults: true),
     static root => new Studio(root.Id, root.Title),
     manualAcquisition: EntityManualAcquisitionPolicy.None,
+    processing: EntityProcessingPolicy.None,
     supportsManualManagement: true);
 
 /// <summary>

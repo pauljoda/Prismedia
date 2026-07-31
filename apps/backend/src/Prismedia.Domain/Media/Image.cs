@@ -23,6 +23,10 @@ public sealed class ImageEntityKindDefinition() : RootEntityKindDefinition<Image
     new EntityKindSearch(8),
     static root => new Image(root.Id, root.Title),
     manualAcquisition: EntityManualAcquisitionPolicy.None,
+    processing: new EntityProcessingPolicy(
+        fingerprintJobType: JobType.FingerprintImage,
+        previewJobType: JobType.GenerateImageThumbnail,
+        generatedFileRoles: [EntityFileRole.Thumbnail, EntityFileRole.Preview]),
     identification: new(AutoIdentifySelectorKind.Image),
     supportsFileDeletion: true) {
     /// <inheritdoc />

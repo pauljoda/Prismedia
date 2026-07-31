@@ -18,6 +18,10 @@ public sealed class EntityProcessingGraphPlanner(
     IMaintenancePersistence maintenance,
     ISubtitleSidecarDiscovery subtitleSidecars,
     IVideoScanPersistence videos) {
+    private static readonly HashSet<string> SubtitleProcessingKindCodes = EntityKindRegistry.All
+        .Where(definition => definition.Processing.SubtitleExtractionJobType is not null)
+        .Select(definition => definition.Code)
+        .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
     /// Appends required readiness work first, an optional acquisition finalizer behind every required node,
@@ -59,8 +63,9 @@ public sealed class EntityProcessingGraphPlanner(
                 continue;
             }
 
+            var processing = EntityKindRegistry.Describe(kind).Processing;
             var baseDependency = context.Job.Id;
-            if (RequiredProbe(kind, settings, entityNeeds) is { } probeType) {
+            if (processing.ResolveProbe(entityNeeds.NeedsProbe, settings.AutoGenerateMetadata) is { } probeType) {
                 var probe = await AppendAsync(
                     context,
                     Request(probeType, entity),
@@ -71,7 +76,7 @@ public sealed class EntityProcessingGraphPlanner(
                 requiredReadiness.Add(probe.Id);
             }
 
-            foreach (var request in BestEffortRequests(kind, entity, entityNeeds, settings)) {
+            foreach (var request in BestEffortRequests(processing, entity, entityNeeds, settings)) {
                 bestEffort.Add(Node(
                     request,
                     [baseDependency],
@@ -150,46 +155,27 @@ public sealed class EntityProcessingGraphPlanner(
             cancellationToken);
     }
 
-    private static JobType? RequiredProbe(
-        EntityKind kind,
-        LibrarySettingsData settings,
-        DownstreamNeeds entityNeeds) =>
-        kind switch {
-            EntityKind.Video when settings.AutoGenerateMetadata && entityNeeds.NeedsProbe => JobType.ProbeVideo,
-            EntityKind.AudioTrack when entityNeeds.NeedsProbe => JobType.ProbeAudio,
-            _ => null
-        };
-
     private static IEnumerable<EnqueueJobRequest> BestEffortRequests(
-        EntityKind kind,
+        EntityProcessingPolicy processing,
         EntityRefreshTarget entity,
         DownstreamNeeds entityNeeds,
         LibrarySettingsData settings) {
-        switch (kind) {
-            case EntityKind.Video:
-                if (FingerprintGating.ShouldFingerprint(settings, entityNeeds))
-                    yield return Request(JobType.FingerprintVideo, entity);
-                if (entityNeeds.NeedsSubtitleExtraction || !string.IsNullOrWhiteSpace(entity.SourcePath))
-                    yield return Request(JobType.ExtractSubtitles, entity);
-                if ((settings.AutoGeneratePreview && entityNeeds.NeedsPreview)
-                    || (settings.GenerateTrickplay && entityNeeds.NeedsTrickplay))
-                    yield return Request(JobType.GeneratePreview, entity);
-                break;
-            case EntityKind.Image:
-                if (FingerprintGating.ShouldFingerprint(settings, entityNeeds))
-                    yield return Request(JobType.FingerprintImage, entity);
-                if (entityNeeds.NeedsPreview)
-                    yield return Request(JobType.GenerateImageThumbnail, entity);
-                break;
-            case EntityKind.AudioTrack:
-                if (FingerprintGating.ShouldFingerprint(settings, entityNeeds))
-                    yield return Request(JobType.FingerprintAudio, entity);
-                if (entityNeeds.NeedsPreview)
-                    yield return Request(JobType.GenerateAudioWaveform, entity);
-                break;
-            case EntityKind.BookPage when entityNeeds.NeedsPreview:
-                yield return Request(JobType.GenerateBookPageThumbnail, entity);
-                break;
+        if (processing.ResolveFingerprint(FingerprintGating.ShouldFingerprint(settings, entityNeeds)) is { } fingerprint) {
+            yield return Request(fingerprint, entity);
+        }
+
+        if (processing.ResolveSubtitleExtraction(
+                entityNeeds.NeedsSubtitleExtraction,
+                !string.IsNullOrWhiteSpace(entity.SourcePath)) is { } subtitles) {
+            yield return Request(subtitles, entity);
+        }
+
+        if (processing.ResolvePreview(
+                entityNeeds.NeedsPreview,
+                entityNeeds.NeedsTrickplay,
+                settings.AutoGeneratePreview,
+                settings.GenerateTrickplay) is { } preview) {
+            yield return Request(preview, entity);
         }
     }
 
@@ -228,7 +214,7 @@ public sealed class EntityProcessingGraphPlanner(
         CancellationToken cancellationToken) {
         var targets = tree
             .Where(entity =>
-                string.Equals(entity.KindCode, EntityKind.Video.ToCode(), StringComparison.OrdinalIgnoreCase)
+                SubtitleProcessingKindCodes.Contains(entity.KindCode)
                 && !string.IsNullOrWhiteSpace(entity.SourcePath))
             .ToArray();
         if (targets.Length == 0) return;

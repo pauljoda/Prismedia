@@ -24,6 +24,7 @@ public sealed class BookAuthorEntityKindDefinition() : RootEntityKindDefinition<
     search: null,
     static root => new BookAuthor(root.Id, root.Title),
     manualAcquisition: EntityManualAcquisitionPolicy.None,
+    processing: EntityProcessingPolicy.None,
     defaultCapabilities: static () => [new CapabilityCredits()],
     identification: new(enumeratesChildren: true),
     supportsFileDeletion: true) {

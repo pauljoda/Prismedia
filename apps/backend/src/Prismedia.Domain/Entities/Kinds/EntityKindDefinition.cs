@@ -32,6 +32,7 @@ public abstract class EntityKindDefinition {
         EntityKindNavigation? navigation,
         EntityKindSearch? search,
         EntityManualAcquisitionPolicy manualAcquisition,
+        EntityProcessingPolicy processing,
         Type? clrType = null,
         Func<IReadOnlyList<EntityCapability>>? defaultCapabilities = null,
         EntityIdentificationPolicy? identification = null,
@@ -61,6 +62,7 @@ public abstract class EntityKindDefinition {
         SupportsFileDeletion = supportsFileDeletion;
         SupportsManualManagement = supportsManualManagement;
         ManualAcquisition = manualAcquisition ?? throw new ArgumentNullException(nameof(manualAcquisition));
+        Processing = processing ?? throw new ArgumentNullException(nameof(processing));
         MediaQualityFamily = mediaQualityFamily;
         SupportsAtomicMediaUpgrade = supportsAtomicMediaUpgrade;
         Engagement = engagement ?? EntityEngagementPolicy.None;
@@ -109,6 +111,9 @@ public abstract class EntityKindDefinition {
 
     /// <summary>Browser upload and reviewed-replacement behavior owned by this kind.</summary>
     public EntityManualAcquisitionPolicy ManualAcquisition { get; }
+
+    /// <summary>Derived-media processing behavior owned by this kind.</summary>
+    public EntityProcessingPolicy Processing { get; }
 
     /// <summary>Quality ladder used to rank acquisition releases for this kind.</summary>
     public EntityMediaQualityFamily MediaQualityFamily { get; }
@@ -234,6 +239,7 @@ public abstract class EntityKindDefinition<TEntity> : EntityKindDefinition
         EntityKindNavigation? navigation,
         EntityKindSearch? search,
         EntityManualAcquisitionPolicy manualAcquisition,
+        EntityProcessingPolicy processing,
         Func<IReadOnlyList<EntityCapability>>? defaultCapabilities = null,
         EntityIdentificationPolicy? identification = null,
         bool supportsFileDeletion = false,
@@ -252,6 +258,7 @@ public abstract class EntityKindDefinition<TEntity> : EntityKindDefinition
             navigation,
             search,
             manualAcquisition,
+            processing,
             typeof(TEntity),
             defaultCapabilities,
             identification,
@@ -433,6 +440,7 @@ public abstract class RootEntityKindDefinition<TEntity> : EntityKindDefinition<T
         EntityKindSearch? search,
         Func<EntityRootData, TEntity> factory,
         EntityManualAcquisitionPolicy manualAcquisition,
+        EntityProcessingPolicy processing,
         Func<IReadOnlyList<EntityCapability>>? defaultCapabilities = null,
         EntityIdentificationPolicy? identification = null,
         bool supportsFileDeletion = false,
@@ -451,6 +459,7 @@ public abstract class RootEntityKindDefinition<TEntity> : EntityKindDefinition<T
             navigation,
             search,
             manualAcquisition,
+            processing,
             defaultCapabilities,
             identification,
             supportsFileDeletion,

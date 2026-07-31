@@ -136,6 +136,38 @@ public sealed class EntityKindMetadataTests {
     }
 
     [Fact]
+    public void DefinitionsOwnDerivedMediaProcessingPolicy() {
+        var video = EntityKindRegistry.Describe(EntityKind.Video).Processing;
+        var image = EntityKindRegistry.Describe(EntityKind.Image).Processing;
+        var audio = EntityKindRegistry.Describe(EntityKind.AudioTrack).Processing;
+        var page = EntityKindRegistry.Describe(EntityKind.BookPage).Processing;
+
+        Assert.Equal(JobType.ProbeVideo, video.ResolveProbe(needsProbe: true, automaticMetadataEnabled: true));
+        Assert.Null(video.ResolveProbe(needsProbe: true, automaticMetadataEnabled: false));
+        Assert.Equal(JobType.FingerprintVideo, video.ResolveFingerprint(shouldFingerprint: true));
+        Assert.Equal(JobType.ExtractSubtitles, video.ResolveSubtitleExtraction(false, hasSourcePath: true));
+        Assert.Equal(JobType.GeneratePreview, video.ResolvePreview(false, true, false, true));
+        Assert.Contains(EntityFileRole.Hls, video.GeneratedFileRoles);
+
+        Assert.Equal(JobType.GenerateImageThumbnail, image.PreviewJobType);
+        Assert.Equal(JobType.ProbeAudio, audio.ResolveProbe(needsProbe: true, automaticMetadataEnabled: false));
+        Assert.Equal([EntityFileRole.Waveform], audio.GeneratedFileRoles);
+        Assert.Equal(JobType.GenerateBookPageThumbnail, page.PreviewJobType);
+        Assert.Empty(EntityKindRegistry.Describe(EntityKind.Movie).Processing.GeneratedFileRoles);
+    }
+
+    [Fact]
+    public void ProcessingPolicyRejectsGatesWithoutTheirJobs() {
+        Assert.Throws<ArgumentException>(() =>
+            new EntityProcessingPolicy(probeRequiresAutomaticMetadata: true));
+        Assert.Throws<ArgumentException>(() =>
+            new EntityProcessingPolicy(supportsTrickplayGeneration: true));
+        Assert.Throws<ArgumentException>(() =>
+            new EntityProcessingPolicy(
+                generatedFileRoles: [EntityFileRole.Thumbnail, EntityFileRole.Thumbnail]));
+    }
+
+    [Fact]
     public void DefinitionsOwnQualityAndArtworkPolicies() {
         var movie = EntityKindRegistry.Describe(EntityKind.Movie);
         var season = EntityKindRegistry.Describe(EntityKind.VideoSeason);

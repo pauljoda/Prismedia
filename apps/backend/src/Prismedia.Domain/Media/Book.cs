@@ -30,6 +30,7 @@ public sealed class BookEntityKindDefinition() : EntityKindDefinition<Book>(
     identification: new(AutoIdentifySelectorKind.Book, enumeratesChildren: true),
     supportsFileDeletion: true,
     manualAcquisition: EntityManualAcquisitionPolicy.UploadAndReplacement,
+    processing: EntityProcessingPolicy.None,
     engagement: new(EntityEngagementMode.Reading)) {
     /// <inheritdoc />
     public override bool OwnsMetadataRelationships => true;
