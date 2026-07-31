@@ -12,10 +12,22 @@ public interface IMaintenancePersistence {
     /// </summary>
     Task<IReadOnlyList<Guid>> GetActiveEntityIdsByKindAsync(EntityKind kind, CancellationToken cancellationToken);
 
-    /// <summary>
-    /// Returns the base cache directory path (e.g. /data/cache).
-    /// </summary>
-    string GetCacheBasePath();
+    /// <summary>Returns active IDs across an entity-kind group in one persistence query.</summary>
+    Task<IReadOnlyList<Guid>> GetActiveEntityIdsByKindsAsync(
+        IReadOnlyCollection<EntityKind> kinds,
+        CancellationToken cancellationToken);
+
+    /// <summary>Validates conventional generated files owned by one asset family.</summary>
+    Task<int> ValidateGeneratedAssetsAsync(
+        GeneratedAssetFamily family,
+        IReadOnlyCollection<Guid> activeEntityIds,
+        CancellationToken cancellationToken);
+
+    /// <summary>Removes conventional orphan cache entries for one asset family.</summary>
+    Task<int> CleanupOrphanedGeneratedAssetsAsync(
+        GeneratedAssetFamily family,
+        IReadOnlyCollection<Guid> activeEntityIds,
+        CancellationToken cancellationToken);
 
     /// <summary>
     /// Removes generated preview/cache records and files for an entity so a rebuild job

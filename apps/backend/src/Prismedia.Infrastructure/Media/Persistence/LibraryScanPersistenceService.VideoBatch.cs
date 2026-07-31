@@ -112,24 +112,59 @@ public sealed partial class LibraryScanPersistenceService {
             detail.SubtitleSidecarSignature = null;
         }
 
-        var generatedRoles = new[] {
-            EntityFileRole.Thumbnail,
-            EntityFileRole.GridThumbnail,
-            EntityFileRole.GridThumbnail2x,
-            EntityFileRole.Preview,
-            EntityFileRole.Sprite,
-            EntityFileRole.Trickplay,
-            EntityFileRole.Hls,
-        };
-        _db.EntityFiles.RemoveRange(await _db.EntityFiles
-            .Where(file => ownerIds.Contains(file.EntityId) && generatedRoles.Contains(file.Role))
-            .ToArrayAsync(cancellationToken));
+        var generatedRolesByEntity = entities
+            .Where(entity => EntityKindRegistry.TryDescribe(entity.KindCode, out _))
+            .ToDictionary(
+                entity => entity.Id,
+                entity => EntityKindRegistry.TryDescribe(entity.KindCode, out var definition)
+                    ? definition.Processing.GeneratedFileRoles.ToHashSet()
+                    : new HashSet<EntityFileRole>());
+        var generatedFiles = await _db.EntityFiles
+            .Where(file => ownerIds.Contains(file.EntityId) && file.Source == FileSourceKind.Scan.ToCode())
+            .ToArrayAsync(cancellationToken);
+        _db.EntityFiles.RemoveRange(generatedFiles.Where(file =>
+            generatedRolesByEntity.TryGetValue(file.EntityId, out var roles) && roles.Contains(file.Role)));
+        var videoOwnerIds = entities
+            .Where(entity => EntityKindRegistry.TryDescribe(entity.KindCode, out var definition)
+                && definition.Processing.AssetFamily == GeneratedAssetFamily.Video)
+            .Select(entity => entity.Id)
+            .ToArray();
         _db.TrickplayInfos.RemoveRange(await _db.TrickplayInfos
-            .Where(info => ownerIds.Contains(info.EntityId))
+            .Where(info => videoOwnerIds.Contains(info.EntityId))
             .ToArrayAsync(cancellationToken));
 
+        var protectedPaths = (await _db.EntityFiles.AsNoTracking()
+            .Where(file => ownerIds.Contains(file.EntityId) && file.Source != FileSourceKind.Scan.ToCode())
+            .Select(file => file.Path)
+            .ToArrayAsync(cancellationToken))
+            .ToHashSet(FileSystemPathComparison.Comparer);
+
         await SaveChangesWithLifecycleAsync(cancellationToken);
+        if (_assets is not null) {
+            foreach (var entity in entities) {
+                if (!EntityKindRegistry.TryDescribe(entity.KindCode, out var definition)) continue;
+                if (definition.Processing.AssetFamily == GeneratedAssetFamily.None) continue;
+                GeneratedAssetFamilyCatalog.DeleteGeneratedAssets(
+                    _assets,
+                    definition.Processing.AssetFamily,
+                    entity.Id,
+                    path => { if (!protectedPaths.Contains(path)) DeleteGeneratedFile(path); },
+                    DeleteGeneratedDirectory);
+            }
+        }
         return ownerIds;
+    }
+
+    private static void DeleteGeneratedFile(string path) {
+        try {
+            if (File.Exists(path)) File.Delete(path);
+        } catch (IOException) { } catch (UnauthorizedAccessException) { }
+    }
+
+    private static void DeleteGeneratedDirectory(string path) {
+        try {
+            if (Directory.Exists(path)) Directory.Delete(path, recursive: true);
+        } catch (IOException) { } catch (UnauthorizedAccessException) { }
     }
 
     public async Task<IReadOnlyList<Guid>> UpsertVideosBatchAsync(

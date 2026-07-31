@@ -286,7 +286,19 @@ public sealed class RefreshEntityJobHandlerTests {
             EntityKind kind,
             CancellationToken cancellationToken) => throw new NotSupportedException();
 
-        public string GetCacheBasePath() => throw new NotSupportedException();
+        public Task<IReadOnlyList<Guid>> GetActiveEntityIdsByKindsAsync(
+            IReadOnlyCollection<EntityKind> kinds,
+            CancellationToken cancellationToken) => throw new NotSupportedException();
+
+        public Task<int> ValidateGeneratedAssetsAsync(
+            GeneratedAssetFamily family,
+            IReadOnlyCollection<Guid> activeEntityIds,
+            CancellationToken cancellationToken) => throw new NotSupportedException();
+
+        public Task<int> CleanupOrphanedGeneratedAssetsAsync(
+            GeneratedAssetFamily family,
+            IReadOnlyCollection<Guid> activeEntityIds,
+            CancellationToken cancellationToken) => throw new NotSupportedException();
     }
 
     private sealed class RecordingJobQueue : IJobQueueService {

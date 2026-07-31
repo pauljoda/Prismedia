@@ -22,7 +22,39 @@ public sealed class MaintenancePersistenceService(
             .Select(e => e.Id)
             .ToListAsync(cancellationToken);
 
-    public string GetCacheBasePath() => assets.CacheRoot;
+    public async Task<IReadOnlyList<Guid>> GetActiveEntityIdsByKindsAsync(
+        IReadOnlyCollection<EntityKind> kinds,
+        CancellationToken cancellationToken) {
+        var codes = kinds.Select(EntityKindRegistry.ToCode).ToArray();
+        return await db.Entities
+            .Where(entity => codes.Contains(entity.KindCode))
+            .Select(entity => entity.Id)
+            .ToListAsync(cancellationToken);
+    }
+
+    public Task<int> ValidateGeneratedAssetsAsync(
+        GeneratedAssetFamily family,
+        IReadOnlyCollection<Guid> activeEntityIds,
+        CancellationToken cancellationToken) {
+        var missing = 0;
+        foreach (var id in activeEntityIds) {
+            cancellationToken.ThrowIfCancellationRequested();
+            foreach (var path in GeneratedAssetFamilyCatalog.ExpectedPaths(assets, family, id)) {
+                if (!File.Exists(path)) {
+                    missing++;
+                }
+            }
+        }
+        return Task.FromResult(missing);
+    }
+
+    public Task<int> CleanupOrphanedGeneratedAssetsAsync(
+        GeneratedAssetFamily family,
+        IReadOnlyCollection<Guid> activeEntityIds,
+        CancellationToken cancellationToken) {
+        var active = new HashSet<string>(activeEntityIds.Select(id => id.ToString()), StringComparer.OrdinalIgnoreCase);
+        return Task.FromResult(GeneratedAssetFamilyCatalog.CleanupOrphanDirectories(assets, family, active, cancellationToken));
+    }
 
     /// <inheritdoc />
     public async Task<int> CleanupOrphanedSubtitleAssetsAsync(CancellationToken cancellationToken) {
@@ -93,12 +125,13 @@ public sealed class MaintenancePersistenceService(
         var roles = EntityKindRegistry.Describe(kind).Processing.GeneratedFileRoles.ToArray();
         if (roles.Length > 0) {
             var files = await db.EntityFiles
-                .Where(file => file.EntityId == entityId && roles.Contains(file.Role))
+                .Where(file => file.EntityId == entityId && roles.Contains(file.Role)
+                    && file.Source == FileSourceKind.Scan.ToCode())
                 .ToListAsync(cancellationToken);
             db.EntityFiles.RemoveRange(files);
         }
 
-        if (kind == EntityKind.Video) {
+        if (EntityKindRegistry.Describe(kind).Processing.AssetFamily == GeneratedAssetFamily.Video) {
             var trickplayInfos = await db.TrickplayInfos
                 .Where(info => info.EntityId == entityId)
                 .ToListAsync(cancellationToken);
@@ -106,7 +139,18 @@ public sealed class MaintenancePersistenceService(
         }
 
         await db.SaveChangesAsync(cancellationToken);
-        DeleteGeneratedPreviewFiles(kind, entityId);
+        var family = EntityKindRegistry.Describe(kind).Processing.AssetFamily;
+        if (family != GeneratedAssetFamily.None) {
+            var protectedPaths = (await db.EntityFiles.AsNoTracking()
+                .Where(file => file.EntityId == entityId && file.Source != FileSourceKind.Scan.ToCode())
+                .Select(file => file.Path)
+                .ToArrayAsync(cancellationToken))
+                .ToHashSet(FileSystemPathComparison.Comparer);
+            GeneratedAssetFamilyCatalog.DeleteGeneratedAssets(
+                assets, family, entityId,
+                path => { if (!protectedPaths.Contains(path)) DeleteFileIfExists(path); },
+                DeleteDirectoryIfExists);
+        }
     }
 
     private static void AddRootedPath(string? path, ISet<string> paths) {
@@ -148,37 +192,6 @@ public sealed class MaintenancePersistenceService(
         } catch (Exception exception) when (
             exception is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException) {
             return [];
-        }
-    }
-
-    private void DeleteGeneratedPreviewFiles(EntityKind kind, Guid entityId) {
-        var cacheBase = GetCacheBasePath();
-        var id = entityId.ToString();
-        switch (kind) {
-            case EntityKind.Video:
-                HlsAssetService.CancelActiveGenerationsForItem(entityId);
-                DeleteFileIfExists(Path.Combine(cacheBase, AssetPaths.Videos, id, AssetPaths.ThumbnailFile));
-                DeleteFileIfExists(Path.Combine(cacheBase, AssetPaths.Videos, id, AssetPaths.PreviewFile));
-                DeleteFileIfExists(Path.Combine(cacheBase, AssetPaths.Videos, id, AssetPaths.SpriteFile));
-                DeleteFileIfExists(Path.Combine(cacheBase, AssetPaths.GridThumbs, id + ".jpg"));
-                DeleteFileIfExists(Path.Combine(cacheBase, AssetPaths.GridThumbs, id + "@2x.jpg"));
-                DeleteFileIfExists(Path.Combine(cacheBase, AssetPaths.Videos, id, AssetPaths.TrickplayVttFile));
-                DeleteDirectoryIfExists(Path.Combine(cacheBase, AssetPaths.Videos, id, AssetPaths.TrickplayFrames));
-                DeleteDirectoryIfExists(Path.Combine(cacheBase, AssetPaths.Trickplay, id));
-                DeleteDirectoryIfExists(Path.Combine(cacheBase, AssetPaths.Hlsv, id));
-                DeleteDirectoryIfExists(Path.Combine(cacheBase, AssetPaths.Hls2, id));
-                DeleteDirectoryIfExists(Path.Combine(cacheBase, AssetPaths.Hls, id));
-                break;
-            case EntityKind.Image:
-                DeleteFileIfExists(Path.Combine(cacheBase, AssetPaths.Images, id, AssetPaths.ThumbnailFile));
-                DeleteFileIfExists(Path.Combine(cacheBase, AssetPaths.Images, id, AssetPaths.PreviewFile));
-                break;
-            case EntityKind.BookPage:
-                DeleteFileIfExists(Path.Combine(cacheBase, AssetPaths.BookPages, id, AssetPaths.ThumbnailFile));
-                break;
-            case EntityKind.AudioTrack:
-                DeleteFileIfExists(Path.Combine(cacheBase, AssetPaths.AudioTracks, id, AssetPaths.WaveformFile));
-                break;
         }
     }
 
