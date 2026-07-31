@@ -1090,7 +1090,7 @@ public sealed class PluginRuntimeServiceTests : IDisposable {
         for (var episodeNumber = 1; episodeNumber <= 26; episodeNumber++) {
             db.Entities.Add(new EntityRow {
                 Id = episodeIds[episodeNumber - 1],
-                KindCode = "video",
+                KindCode = "video-episode",
                 Title = episodeNumber == 1
                     ? "Bear in the Big Blue House - S01E01 - Home is Where the Bear Is SDTV"
                     : $"Episode {episodeNumber:00}",
@@ -1335,7 +1335,7 @@ public sealed class PluginRuntimeServiceTests : IDisposable {
         db.Entities.AddRange(
             new EntityRow { Id = seriesId, KindCode = "video-series", Title = "Parent Series", CreatedAt = now, UpdatedAt = now },
             new EntityRow { Id = seasonId, KindCode = "video-season", Title = "Season 2", ParentEntityId = seriesId, SortOrder = 2, CreatedAt = now, UpdatedAt = now },
-            new EntityRow { Id = episodeId, KindCode = "video", Title = "Episode 3", ParentEntityId = seasonId, SortOrder = 3, CreatedAt = now, UpdatedAt = now });
+            new EntityRow { Id = episodeId, KindCode = "video-episode", Title = "Episode 3", ParentEntityId = seasonId, SortOrder = 3, CreatedAt = now, UpdatedAt = now });
         db.EntityExternalIds.Add(new EntityExternalIdRow {
             Id = Guid.NewGuid(),
             EntityId = seriesId,
@@ -1536,7 +1536,7 @@ public sealed class PluginRuntimeServiceTests : IDisposable {
             var proposal = new EntityMetadataProposal(
                 $"tmdb:{kindCode}:{request.Entity.Id}",
                 "tmdb",
-                request.Entity.Kind.ToProposalKind(),
+                request.Entity.Kind,
                 request.StructuralContext?.Ancestors.Count > 0 ? 0.9m : 1m,
                 request.StructuralContext?.Ancestors.Count > 0 ? "structural-child" : "title-search",
                 new EntityMetadataPatch(
@@ -1626,7 +1626,7 @@ public sealed class PluginRuntimeServiceTests : IDisposable {
             new(
                 $"tmdb:season:{seasonId}",
                 "tmdb",
-                request.Entity.Kind.ToProposalKind(),
+                request.Entity.Kind,
                 1,
                 "child-context",
                 EmptyPatch() with { Title = "Season From Child Request" },
@@ -1657,7 +1657,7 @@ public sealed class PluginRuntimeServiceTests : IDisposable {
                 .Select(number => new EntityMetadataProposal(
                     $"tmdb:tv:207:s1:e{number}",
                     "tmdb",
-                    ProposalKind.VideoEpisode,
+                    EntityKind.VideoEpisode,
                     0.9m,
                     "cascade",
                     EmptyPatch() with {
@@ -1715,7 +1715,7 @@ public sealed class PluginRuntimeServiceTests : IDisposable {
             var proposal = new EntityMetadataProposal(
                 $"echo:{kindCode}:{request.Entity.Id}",
                 request.Entity.Kind == EntityKind.Video ? "tmdb" : "musicbrainz",
-                request.Entity.Kind.ToProposalKind(),
+                request.Entity.Kind,
                 0.9m,
                 "external-id",
                 EmptyPatch() with {
@@ -1729,7 +1729,7 @@ public sealed class PluginRuntimeServiceTests : IDisposable {
         }
     }
 
-    private sealed class RawIdTitleProposalProcessExecutor(ProposalKind kind, string providerId) : ProcessExecutor {
+    private sealed class RawIdTitleProposalProcessExecutor(EntityKind kind, string providerId) : ProcessExecutor {
         public override async Task<ProcessExecutionResult> RunAsync(
             string fileName,
             IReadOnlyList<string> arguments,

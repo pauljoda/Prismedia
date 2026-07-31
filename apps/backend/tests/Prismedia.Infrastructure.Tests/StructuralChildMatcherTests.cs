@@ -8,8 +8,8 @@ namespace Prismedia.Infrastructure.Tests;
 public sealed class StructuralChildMatcherTests {
     [Fact]
     public void NormalEpisodeMatchStillUsesPositionWhenCountsAgree() {
-        var local = Local(EntityKind.Video.ToCode(), "Different Local Title", 1);
-        var provider = Proposal(ProposalKind.VideoEpisode, "Magic Xylophone", ("episodeNumber", 1));
+        var local = Local(EntityKind.VideoEpisode.ToCode(), "Different Local Title", 1);
+        var provider = Proposal(EntityKind.VideoEpisode, "Magic Xylophone", ("episodeNumber", 1));
 
         var match = StructuralChildMatcher.FindProviderChild(local, [provider], new HashSet<int>(), cautious: false);
 
@@ -19,17 +19,17 @@ public sealed class StructuralChildMatcherTests {
     [Fact]
     public void CountMismatchDoesNotBindBlueyTheSignToProviderSurpriseByEpisodeNumber() {
         var localChildren = Enumerable.Range(1, 48)
-            .Select(episode => Local(EntityKind.Video.ToCode(), $"Episode {episode}", episode))
+            .Select(episode => Local(EntityKind.VideoEpisode.ToCode(), $"Episode {episode}", episode))
             .Concat([
-                Local(EntityKind.Video.ToCode(), "The Sign", 49),
-                Local(EntityKind.Video.ToCode(), "Surprise!", 50)
+                Local(EntityKind.VideoEpisode.ToCode(), "The Sign", 49),
+                Local(EntityKind.VideoEpisode.ToCode(), "Surprise!", 50)
             ])
             .ToArray();
         var providerChildren = Enumerable.Range(1, 48)
-            .Select(episode => Proposal(ProposalKind.VideoEpisode, $"Episode {episode}", ("episodeNumber", episode)))
+            .Select(episode => Proposal(EntityKind.VideoEpisode, $"Episode {episode}", ("episodeNumber", episode)))
             .Concat([
                 Proposal(
-                    ProposalKind.VideoEpisode,
+                    EntityKind.VideoEpisode,
                     "Surprise!",
                     ("episodeNumber", 49),
                     new Dictionary<string, string> { [ExternalIdProviders.Tmdb] = "4215673" })
@@ -66,8 +66,8 @@ public sealed class StructuralChildMatcherTests {
 
     [Fact]
     public void CountMismatchTreatsAmpersandAndAndAsEquivalentTitleTokens() {
-        var localEpisode = Local(EntityKind.Video.ToCode(), "Show and Tell", 42);
-        var providerEpisode = Proposal(ProposalKind.VideoEpisode, "Show & Tell", ("episodeNumber", 42));
+        var localEpisode = Local(EntityKind.VideoEpisode.ToCode(), "Show and Tell", 42);
+        var providerEpisode = Proposal(EntityKind.VideoEpisode, "Show & Tell", ("episodeNumber", 42));
 
         var match = StructuralChildMatcher.FindProviderChild(
             localEpisode,
@@ -80,8 +80,8 @@ public sealed class StructuralChildMatcherTests {
 
     [Fact]
     public void CountMismatchAllowsTinySpellingDifferenceWhenEpisodeNumberMatches() {
-        var localEpisode = Local(EntityKind.Video.ToCode(), "Safari, So Good!", 10);
-        var providerEpisode = Proposal(ProposalKind.VideoEpisode, "Safari, So Goodie", ("episodeNumber", 10));
+        var localEpisode = Local(EntityKind.VideoEpisode.ToCode(), "Safari, So Good!", 10);
+        var providerEpisode = Proposal(EntityKind.VideoEpisode, "Safari, So Goodie", ("episodeNumber", 10));
 
         var match = StructuralChildMatcher.FindProviderChild(
             localEpisode,
@@ -122,8 +122,8 @@ public sealed class StructuralChildMatcherTests {
 
     [Fact]
     public void CountMismatchAllowsNumberMatchWhenLocalTitleIsOnlyGenericStructure() {
-        var localEpisode = Local(EntityKind.Video.ToCode(), "Episode 1", 1);
-        var providerEpisode = Proposal(ProposalKind.VideoEpisode, "Magic Xylophone", ("episodeNumber", 1));
+        var localEpisode = Local(EntityKind.VideoEpisode.ToCode(), "Episode 1", 1);
+        var providerEpisode = Proposal(EntityKind.VideoEpisode, "Magic Xylophone", ("episodeNumber", 1));
 
         var match = StructuralChildMatcher.FindProviderChild(
             localEpisode,
@@ -150,8 +150,8 @@ public sealed class StructuralChildMatcherTests {
 
     [Fact]
     public void FilenameStyleEpisodeTitleCanOverrideAMisleadingEpisodeNumber() {
-        var localEpisode = Local(EntityKind.Video.ToCode(), "Show.Name.S03E49.The_Sign.1080p", 49);
-        var providerEpisode = Proposal(ProposalKind.VideoEpisode, "The Sign", ("episodeNumber", 50));
+        var localEpisode = Local(EntityKind.VideoEpisode.ToCode(), "Show.Name.S03E49.The_Sign.1080p", 49);
+        var providerEpisode = Proposal(EntityKind.VideoEpisode, "The Sign", ("episodeNumber", 50));
 
         var match = StructuralChildMatcher.FindProviderChild(
             localEpisode,
@@ -310,7 +310,7 @@ public sealed class StructuralChildMatcherTests {
         new(Guid.NewGuid(), kindCode, title, sortOrder);
 
     private static EntityMetadataProposal Proposal(
-        ProposalKind kind,
+        EntityKind kind,
         string title,
         (string Code, int Value) position,
         IReadOnlyDictionary<string, string>? externalIds = null) =>

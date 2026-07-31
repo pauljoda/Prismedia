@@ -741,7 +741,7 @@ public sealed class EntityMetadataApplyServiceTests {
         var episodeId = Guid.Parse("44444444-4444-4444-4444-444444444444");
         SeedEntity(db, seriesId, "video-series", "Old Series");
         SeedEntity(db, seasonId, "video-season", "Old Season", parentEntityId: seriesId, sortOrder: 1);
-        SeedEntity(db, episodeId, "video", "Old Episode", parentEntityId: seasonId, sortOrder: 1);
+        SeedEntity(db, episodeId, "video-episode", "Old Episode", parentEntityId: seasonId, sortOrder: 1);
         db.EntityPositions.Add(new EntityPositionRow {
             EntityId = episodeId,
             Code = "episodeNumber",
@@ -790,7 +790,7 @@ public sealed class EntityMetadataApplyServiceTests {
                         new EntityMetadataProposal(
                             ProposalId: "tmdb:tv:12:s1:e1",
                             Provider: "tmdb",
-                            TargetKind: ProposalKind.VideoEpisode,
+                            TargetKind: EntityKind.VideoEpisode,
                             TargetEntityId: episodeId,
                             Confidence: 0.9m,
                             MatchReason: "cascade",
@@ -1072,7 +1072,7 @@ public sealed class EntityMetadataApplyServiceTests {
                         new EntityMetadataProposal(
                             ProposalId: "provider:episode:1",
                             Provider: "provider",
-                            TargetKind: EntityKind.Video,
+                            TargetKind: EntityKind.VideoEpisode,
                             TargetEntityId: grandchildId,
                             Confidence: 1,
                             MatchReason: "structural-child",
@@ -1284,7 +1284,7 @@ public sealed class EntityMetadataApplyServiceTests {
         var episodeId = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
         SeedEntity(db, seriesId, "video-series", "Series");
         SeedEntity(db, seasonId, "video-season", "Season", parentEntityId: seriesId, sortOrder: 1);
-        SeedEntity(db, episodeId, "video", "Episode", parentEntityId: seasonId, sortOrder: 1);
+        SeedEntity(db, episodeId, "video-episode", "Episode", parentEntityId: seasonId, sortOrder: 1);
         await db.SaveChangesAsync();
 
         var proposal = new EntityMetadataProposal(
@@ -1315,7 +1315,7 @@ public sealed class EntityMetadataApplyServiceTests {
                         new EntityMetadataProposal(
                             ProposalId: "provider:episode:2",
                             Provider: "provider",
-                            TargetKind: EntityKind.Video,
+                            TargetKind: EntityKind.VideoEpisode,
                             TargetEntityId: episodeId,
                             Confidence: 1,
                             MatchReason: "structural-child",
@@ -1349,7 +1349,7 @@ public sealed class EntityMetadataApplyServiceTests {
         var episodeId = Guid.Parse("cccccccc-cccc-cccc-cccc-cccccccccccc");
         var personId = Guid.Parse("dddddddd-dddd-dddd-dddd-dddddddddddd");
         SeedEntity(db, seriesId, "video-series", "Series");
-        SeedEntity(db, episodeId, "video", "Episode", parentEntityId: seriesId, sortOrder: 1);
+        SeedEntity(db, episodeId, "video-episode", "Episode", parentEntityId: seriesId, sortOrder: 1);
         SeedEntity(db, personId, "person", "Returning Actor");
         await db.SaveChangesAsync();
 
@@ -1367,7 +1367,7 @@ public sealed class EntityMetadataApplyServiceTests {
                 new EntityMetadataProposal(
                     ProposalId: "provider:episode:credits",
                     Provider: "provider",
-                    TargetKind: EntityKind.Video,
+                    TargetKind: EntityKind.VideoEpisode,
                     TargetEntityId: episodeId,
                     Confidence: 1,
                     MatchReason: "structural-child",
@@ -1401,7 +1401,7 @@ public sealed class EntityMetadataApplyServiceTests {
         var episodeId = Guid.Parse("ffffffff-ffff-ffff-ffff-ffffffffffff");
         var personId = Guid.Parse("12121212-1212-1212-1212-121212121212");
         SeedEntity(db, seriesId, "video-series", "Series");
-        SeedEntity(db, episodeId, "video", "Episode", parentEntityId: seriesId, sortOrder: 1);
+        SeedEntity(db, episodeId, "video-episode", "Episode", parentEntityId: seriesId, sortOrder: 1);
         SeedEntity(db, personId, "person", "Returning Actor");
         await db.SaveChangesAsync();
 
@@ -1437,7 +1437,7 @@ public sealed class EntityMetadataApplyServiceTests {
                 new EntityMetadataProposal(
                     ProposalId: "provider:episode:artwork",
                     Provider: "provider",
-                    TargetKind: EntityKind.Video,
+                    TargetKind: EntityKind.VideoEpisode,
                     TargetEntityId: episodeId,
                     Confidence: 1,
                     MatchReason: "structural-child",
@@ -1468,7 +1468,7 @@ public sealed class EntityMetadataApplyServiceTests {
         var seriesId = Guid.Parse("13131313-1313-1313-1313-131313131313");
         var episodeId = Guid.Parse("14141414-1414-1414-1414-141414141414");
         SeedEntity(db, seriesId, "video-series", "The Chair Company");
-        SeedEntity(db, episodeId, "video", "Old Episode", parentEntityId: seriesId, sortOrder: 1);
+        SeedEntity(db, episodeId, "video-episode", "Old Episode", parentEntityId: seriesId, sortOrder: 1);
         await db.SaveChangesAsync();
 
         var personRelationship = new EntityMetadataProposal(
@@ -1495,7 +1495,7 @@ public sealed class EntityMetadataApplyServiceTests {
                 new EntityMetadataProposal(
                     ProposalId: "tmdb:tv:the-chair-company:s1:e1",
                     Provider: "tmdb",
-                    TargetKind: EntityKind.Video,
+                    TargetKind: EntityKind.VideoEpisode,
                     TargetEntityId: episodeId,
                     Confidence: 1,
                     MatchReason: "structural-child",
@@ -2079,13 +2079,13 @@ public sealed class EntityMetadataApplyServiceTests {
     public async Task ApplyMergesMultipleCreditRolesForSamePersonIntoOneRelationship() {
         await using var db = CreateContext();
         var episodeId = Guid.Parse("17171717-1717-1717-1717-171717171717");
-        SeedEntity(db, episodeId, "video", "Old Episode");
+        SeedEntity(db, episodeId, "video-episode", "Old Episode");
         await db.SaveChangesAsync();
 
         var proposal = new EntityMetadataProposal(
             ProposalId: "tmdb:tv:chair:s1:e1",
             Provider: "tmdb",
-            TargetKind: EntityKind.Video,
+            TargetKind: EntityKind.VideoEpisode,
             TargetEntityId: episodeId,
             Confidence: 1,
             MatchReason: "external-id",

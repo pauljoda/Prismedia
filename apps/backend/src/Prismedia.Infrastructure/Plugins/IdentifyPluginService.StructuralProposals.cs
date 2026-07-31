@@ -262,7 +262,7 @@ public sealed partial class IdentifyPluginService {
         IReadOnlyList<IdentifyEntitySnapshot> ancestorPath,
         bool includeNsfw,
         CancellationToken cancellationToken) {
-        var kind = container.TargetKind.ToEntityKind();
+        var kind = container.TargetKind;
         var request = new IdentifyPluginRequest(
             ProtocolVersion: PluginProtocol.CurrentVersion,
             Action: IdentifyAction.LookupId,
@@ -290,14 +290,14 @@ public sealed partial class IdentifyPluginService {
         IReadOnlyDictionary<string, string> auth,
         bool includeNsfw,
         CancellationToken cancellationToken) {
-        if (!SupportsKind(descriptor.Manifest, relationship.TargetKind.ToEntityKind().ToCode())) {
+        if (!SupportsKind(descriptor.Manifest, relationship.TargetKind.ToCode())) {
             return relationship;
         }
 
         var patch = relationship.Patch;
         var externalIds = patch.ExternalIds ?? new Dictionary<string, string>();
         var urls = patch.Urls ?? [];
-        var title = patch.Title?.Trim() ?? relationship.TargetKind.ToEntityKind().ToCode();
+        var title = patch.Title?.Trim() ?? relationship.TargetKind.ToCode();
         var action = externalIds.Count > 0
             ? IdentifyAction.LookupId
             : urls.Count > 0
@@ -314,7 +314,7 @@ public sealed partial class IdentifyPluginService {
             Auth: auth,
             Entity: new IdentifyEntitySnapshot(
                 Guid.Empty,
-                relationship.TargetKind.ToEntityKind(),
+                relationship.TargetKind,
                 title,
                 externalIds,
                 urls),
@@ -402,7 +402,7 @@ public sealed partial class IdentifyPluginService {
             if (IsLocalUnmatchedProposal(proposal) && proposal.TargetEntityId is { } targetId) {
                 yield return new RelocatableLocalChild(
                     targetId,
-                    proposal.TargetKind.ToEntityKind().ToCode(),
+                    proposal.TargetKind.ToCode(),
                     proposal.Patch.Title ?? string.Empty,
                     StructuralSortOrder(proposal));
             }
@@ -606,25 +606,20 @@ public sealed partial class IdentifyPluginService {
 
         var sortOrder = StructuralSortOrder(child);
         if (sortOrder is not null) {
-            return $"position:{StructuralKindKey(child.TargetKind)}:{sortOrder}";
+            return $"position:{child.TargetKind.ToCode()}:{sortOrder}";
         }
 
         if (!string.IsNullOrWhiteSpace(child.ProposalId)) {
             return $"proposal:{child.ProposalId}";
         }
 
-        return $"title:{StructuralKindKey(child.TargetKind)}:{child.Patch.Title?.Trim()}";
+        return $"title:{child.TargetKind.ToCode()}:{child.Patch.Title?.Trim()}";
     }
 
     private static int? StructuralSortOrder(EntityMetadataProposal child) =>
         EntityMetadataPositionRules.SortOrderFor(
-            child.TargetKind.ToEntityKind().ToCode(),
+            child.TargetKind.ToCode(),
             EntityMetadataPositionRules.Normalize(child.Patch.Positions));
-
-    // The structural key collapses a proposal kind to the entity kind it persists as, so a
-    // provider's "video-episode" leaf and a local "video" sort/dedup into the same bucket.
-    private static string StructuralKindKey(ProposalKind kind) =>
-        kind.ToEntityKind().ToCode();
 
     private static bool IsSameStructuralChild(EntityMetadataProposal left, EntityMetadataProposal right) =>
         StructuralChildMatcher.IsSameProposalChild(left, right);
@@ -720,17 +715,17 @@ public sealed partial class IdentifyPluginService {
             StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
-    /// Whether a proposal kind persists as an identify-container entity kind (volume, season,
+    /// Whether a proposal targets an identify-container entity kind (volume, season,
     /// album, …) — structure a provider may legitimately introduce around existing local media,
     /// as opposed to a playable leaf that must come from a scanned file.
     /// </summary>
-    private static bool IsStructuralContainerKind(ProposalKind kind) =>
-        EntityKindRegistry.EnumeratesIdentifyChildren(kind.ToEntityKind().ToCode());
+    private static bool IsStructuralContainerKind(EntityKind kind) =>
+        EntityKindRegistry.EnumeratesIdentifyChildren(kind.ToCode());
 
     private static bool IsSameStructuralChild(StructuralChild localChild, EntityMetadataProposal proposal, bool cautious = false) =>
         StructuralChildMatcher.IsSameLocalAndProviderChild(ToMatchInput(localChild), proposal, cautious);
 
-    private static bool IsCompatibleStructuralKind(string localKind, ProposalKind proposalKind) =>
+    private static bool IsCompatibleStructuralKind(string localKind, EntityKind proposalKind) =>
         StructuralChildMatcher.IsCompatibleStructuralKind(localKind, proposalKind);
 
     private static bool ShouldUseCautiousStructuralMatching(
@@ -757,7 +752,7 @@ public sealed partial class IdentifyPluginService {
         new(
             ProposalId: $"local-unmatched:{child.Entity.Id}",
             Provider: provider,
-            TargetKind: child.Entity.KindCode.DecodeAs<EntityKind>().ToProposalKind(),
+            TargetKind: child.Entity.KindCode.DecodeAs<EntityKind>(),
             Confidence: null,
             MatchReason: "local-unmatched",
             Patch: new EntityMetadataPatch(

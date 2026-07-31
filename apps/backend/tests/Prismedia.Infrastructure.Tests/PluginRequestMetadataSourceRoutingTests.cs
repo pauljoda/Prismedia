@@ -509,7 +509,7 @@ public sealed class PluginRequestMetadataSourceRoutingTests : IDisposable {
             target => {
                 Assert.Equal("episode-one", target.ProposalId);
                 Assert.Equal(RequestMediaKind.Episode, target.Kind);
-                Assert.Equal(EntityKind.Video, target.EntityKind);
+                Assert.Equal(EntityKind.VideoEpisode, target.EntityKind);
                 Assert.Equal(new ExternalIdentity("episode-db", "Episode:One"), target.ExternalIdentity);
                 Assert.Equal(1, target.Position);
             });
@@ -779,7 +779,7 @@ public sealed class PluginRequestMetadataSourceRoutingTests : IDisposable {
             var episode = new EntityMetadataProposal(
                 "episode-one",
                 descriptor.Manifest.Id,
-                ProposalKind.VideoEpisode,
+                EntityKind.VideoEpisode,
                 1,
                 "cascade",
                 Patch(

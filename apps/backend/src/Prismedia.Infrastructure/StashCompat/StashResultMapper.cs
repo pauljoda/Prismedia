@@ -26,7 +26,7 @@ public static class StashResultMapper {
         StashScrapedScene scene,
         string providerId,
         string providerName,
-        ProposalKind targetKind,
+        EntityKind targetKind,
         string? inputUrl,
         string matchReason,
         decimal confidence) {
@@ -287,7 +287,7 @@ public static class StashResultMapper {
     private static EntityMetadataProposal RelationshipProposal(
         string proposalId,
         string providerName,
-        ProposalKind targetKind,
+        EntityKind targetKind,
         string title,
         string? description,
         IReadOnlyList<string> urls,

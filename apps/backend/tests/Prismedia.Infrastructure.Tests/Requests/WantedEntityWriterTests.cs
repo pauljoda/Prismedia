@@ -702,7 +702,7 @@ public sealed class WantedEntityWriterTests {
 
     private static EntityMetadataProposal MetadataProposal(
         string proposalId,
-        ProposalKind kind,
+        EntityKind kind,
         string title,
         Guid targetEntityId,
         params object[] childrenOrImages) =>

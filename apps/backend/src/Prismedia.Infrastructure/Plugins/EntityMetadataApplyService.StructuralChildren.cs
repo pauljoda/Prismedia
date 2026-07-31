@@ -38,7 +38,7 @@ public sealed partial class EntityMetadataApplyService {
                 }
 
                 var linked = await FindEntityByTitleAsync(
-                    relation.TargetKind.ToEntityKind().ToCode(), relation.Patch.Title.Trim(), parentEntityId: null, cancellationToken);
+                    relation.TargetKind.ToCode(), relation.Patch.Title.Trim(), parentEntityId: null, cancellationToken);
                 if (linked is null || linked.Id == parentEntityId || !visited.Add(linked.Id)) {
                     continue;
                 }
@@ -99,7 +99,7 @@ public sealed partial class EntityMetadataApplyService {
     /// the sole source of playable items.
     /// </summary>
     private EntityRow? MaterializeStructuralContainer(Guid parentEntityId, EntityMetadataProposal child, DateTimeOffset now) {
-        var kindCode = child.TargetKind.ToEntityKind().ToCode();
+        var kindCode = child.TargetKind.ToCode();
         if (!EntityKindRegistry.EnumeratesIdentifyChildren(kindCode) ||
             string.IsNullOrWhiteSpace(child.Patch.Title) ||
             !HasBoundStructuralDescendant(child)) {
@@ -210,7 +210,7 @@ public sealed partial class EntityMetadataApplyService {
         EntityMetadataProposal child,
         CancellationToken cancellationToken) =>
         FindEntityAsync(
-            child.TargetKind.ToEntityKind().ToCode(),
+            child.TargetKind.ToCode(),
             child.Patch.ExternalIds,
             child.Patch.Title,
             parentEntityId,

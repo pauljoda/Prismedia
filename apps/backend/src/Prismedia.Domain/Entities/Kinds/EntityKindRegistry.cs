@@ -50,6 +50,12 @@ public static class EntityKindRegistry {
         ByCode.TryGetValue(code.Trim(), out var definition) &&
         definition.Identification.EnumeratesChildren;
 
+    /// <summary>
+    /// Whether a kind represents a taxonomy relationship rather than a structural media entity.
+    /// </summary>
+    public static bool IsRelationship(this EntityKind kind) =>
+        Describe(kind).Category == EntityKindCategory.Taxonomy;
+
     /// <summary>Encodes a domain entity kind to its stable storage code.</summary>
     public static string ToCode(EntityKind kind) => Describe(kind).Code;
 

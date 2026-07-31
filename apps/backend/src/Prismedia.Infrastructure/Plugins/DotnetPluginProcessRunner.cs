@@ -71,7 +71,7 @@ public sealed class DotnetPluginProcessRunner : IIdentifyRunner {
 
             var wire = JsonSerializer.Deserialize<PluginWireResponse>(result.StandardOutput, JsonOptions);
             return wire is not null
-                ? ConvertWireResponse(wire, descriptor.Manifest.Name, request.Entity.Kind.ToProposalKind())
+                ? ConvertWireResponse(wire, descriptor.Manifest.Name, request.Entity.Kind)
                 : new IdentifyPluginResponse(false, null, "Plugin returned an empty response.");
         } catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested) {
             return new IdentifyPluginResponse(false, null, $"Plugin timed out after {_identifyTimeout.TotalSeconds:0} seconds.");
@@ -111,7 +111,7 @@ public sealed class DotnetPluginProcessRunner : IIdentifyRunner {
         decimal? Confidence,
         string? MatchReason);
 
-    private static IdentifyPluginResponse ConvertWireResponse(PluginWireResponse wire, string providerName, ProposalKind targetKind) {
+    private static IdentifyPluginResponse ConvertWireResponse(PluginWireResponse wire, string providerName, EntityKind targetKind) {
         if (!wire.Ok || wire.Result is null) {
             return new IdentifyPluginResponse(wire.Ok, null, wire.Error);
         }

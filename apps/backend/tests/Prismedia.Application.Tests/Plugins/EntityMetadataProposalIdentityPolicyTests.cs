@@ -9,7 +9,7 @@ public sealed class EntityMetadataProposalIdentityPolicyTests {
     public void RemoveSharedStructuralIdentitiesKeepsOnlyNodeUniqueEvidence() {
         var firstEpisode = Proposal(
             "episode:1",
-            ProposalKind.VideoEpisode,
+            EntityKind.VideoEpisode,
             new Dictionary<string, string> {
                 ["series-db"] = "series-42",
                 ["season-db"] = "season-1",
@@ -17,7 +17,7 @@ public sealed class EntityMetadataProposalIdentityPolicyTests {
             });
         var secondEpisode = Proposal(
             "episode:2",
-            ProposalKind.VideoEpisode,
+            EntityKind.VideoEpisode,
             new Dictionary<string, string> {
                 ["series-db"] = "series-42",
                 ["season-db"] = "season-1",
@@ -110,7 +110,7 @@ public sealed class EntityMetadataProposalIdentityPolicyTests {
 
     private static EntityMetadataProposal Proposal(
         string proposalId,
-        ProposalKind kind,
+        EntityKind kind,
         IReadOnlyDictionary<string, string> externalIds,
         IReadOnlyList<EntityMetadataProposal>? children = null,
         IReadOnlyList<EntityMetadataProposal>? relationships = null) =>

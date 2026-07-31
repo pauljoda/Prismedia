@@ -122,10 +122,10 @@ public sealed class RequestCommitServiceTests {
     [Fact]
     public async Task SeriesCommitAcquiresSeasonPacksAndMaterializesEpisodePhantoms() {
         // The season node carries its episodes (a season lookup ships them); positions ride the patch.
-        var episode1 = Leaf(EntityKind.Video, "Pilot", "E1") with {
+        var episode1 = Leaf(EntityKind.VideoEpisode, "Pilot", "E1") with {
             Patch = Patch("Pilot", "E1", new Dictionary<string, int> { ["seasonNumber"] = 1, ["episodeNumber"] = 1 }),
         };
-        var episode2 = Leaf(EntityKind.Video, "Aftermath", "E2") with {
+        var episode2 = Leaf(EntityKind.VideoEpisode, "Aftermath", "E2") with {
             Patch = Patch("Aftermath", "E2", new Dictionary<string, int> { ["seasonNumber"] = 1, ["episodeNumber"] = 2 }),
         };
         var season = Container(EntityKind.VideoSeason, "Season 1", "S1", episode1, episode2) with {
@@ -148,7 +148,7 @@ public sealed class RequestCommitServiceTests {
 
         // The picked season's episodes materialize as wanted phantoms beneath it — never acquisitions.
         var seasonEntityId = Assert.Single(writer.Ensured, call => call.Kind == EntityKind.VideoSeason);
-        var episodes = writer.Ensured.Where(call => call.Kind == EntityKind.Video).ToArray();
+        var episodes = writer.Ensured.Where(call => call.Kind == EntityKind.VideoEpisode).ToArray();
         Assert.Equal(["E1", "E2"], episodes.Select(call => call.ItemId).ToArray());
         Assert.All(episodes, call => Assert.Equal(
             FakeWantedEntityWriter.EntityIdFor("S1"), call.ParentEntityId));
@@ -156,10 +156,10 @@ public sealed class RequestCommitServiceTests {
 
     [Fact]
     public async Task ExistingSeasonPickStillStartsAnAcquisitionAndMaterializesMissingEpisodes() {
-        var episode1 = Leaf(EntityKind.Video, "Pilot", "E1") with {
+        var episode1 = Leaf(EntityKind.VideoEpisode, "Pilot", "E1") with {
             Patch = Patch("Pilot", "E1", new Dictionary<string, int> { ["seasonNumber"] = 1, ["episodeNumber"] = 1 }),
         };
-        var episode2 = Leaf(EntityKind.Video, "Aftermath", "E2") with {
+        var episode2 = Leaf(EntityKind.VideoEpisode, "Aftermath", "E2") with {
             Patch = Patch("Aftermath", "E2", new Dictionary<string, int> { ["seasonNumber"] = 1, ["episodeNumber"] = 2 }),
         };
         var season = Container(EntityKind.VideoSeason, "Season 1", "S1", episode1, episode2) with {
@@ -182,7 +182,7 @@ public sealed class RequestCommitServiceTests {
         Assert.Equal(1, created.SeasonNumber);
         Assert.Single(monitors.AcquisitionMonitors);
 
-        Assert.Contains(writer.Ensured, call => call.Kind == EntityKind.Video && call.ItemId == "E2");
+        Assert.Contains(writer.Ensured, call => call.Kind == EntityKind.VideoEpisode && call.ItemId == "E2");
         Assert.Contains(writer.Applied, call =>
             call.EntityId == FakeWantedEntityWriter.EntityIdFor("S1") &&
             call.Proposal.Children.Any(child => child.Patch?.ExternalIds.GetValueOrDefault(Provider) == "E2") &&
@@ -191,10 +191,10 @@ public sealed class RequestCommitServiceTests {
 
     [Fact]
     public async Task RequestingExistingOwnedSeasonStartsSeasonMonitorAndMaterializesMissingEpisodes() {
-        var episode1 = Leaf(EntityKind.Video, "Pilot", "E1") with {
+        var episode1 = Leaf(EntityKind.VideoEpisode, "Pilot", "E1") with {
             Patch = Patch("Pilot", "E1", new Dictionary<string, int> { ["seasonNumber"] = 1, ["episodeNumber"] = 1 }),
         };
-        var episode2 = Leaf(EntityKind.Video, "Aftermath", "E2") with {
+        var episode2 = Leaf(EntityKind.VideoEpisode, "Aftermath", "E2") with {
             Patch = Patch("Aftermath", "E2", new Dictionary<string, int> { ["seasonNumber"] = 1, ["episodeNumber"] = 2 }),
         };
         var season = Container(EntityKind.VideoSeason, "Season 1", "S1", episode1, episode2) with {
@@ -221,7 +221,7 @@ public sealed class RequestCommitServiceTests {
         Assert.Equal("Andor", created.Series);
         Assert.Equal(1, created.SeasonNumber);
         Assert.Single(monitors.AcquisitionMonitors);
-        Assert.Contains(writer.Ensured, call => call.Kind == EntityKind.Video && call.ItemId == "E2" && call.ParentEntityId == seasonId);
+        Assert.Contains(writer.Ensured, call => call.Kind == EntityKind.VideoEpisode && call.ItemId == "E2" && call.ParentEntityId == seasonId);
     }
 
     [Fact]
@@ -239,10 +239,10 @@ public sealed class RequestCommitServiceTests {
             HasSourceFile: true, ParentEntityId: seriesId,
             Positions: new Dictionary<string, int> { [EntityPositionCodes.Season] = 1 });
         writer.Containers[episode2] = new MonitorableEntity(
-            episode2, EntityKind.Video, "Aftermath", [], ParentEntityId: seasonId,
+            episode2, EntityKind.VideoEpisode, "Aftermath", [], ParentEntityId: seasonId,
             Positions: new Dictionary<string, int> { [EntityPositionCodes.Season] = 1, [EntityPositionCodes.Episode] = 2 });
         writer.Containers[episode3] = new MonitorableEntity(
-            episode3, EntityKind.Video, "Reckoning", [], ParentEntityId: seasonId,
+            episode3, EntityKind.VideoEpisode, "Reckoning", [], ParentEntityId: seasonId,
             Positions: new Dictionary<string, int> { [EntityPositionCodes.Season] = 1, [EntityPositionCodes.Episode] = 3 });
         writer.WantedChildren[seasonId] = [episode2, episode3];
 
@@ -251,7 +251,7 @@ public sealed class RequestCommitServiceTests {
         Assert.Equal(2, missing);
         Assert.Equal(2, covered);
         Assert.Equal(2, acquisitions.Created.Count);
-        Assert.All(acquisitions.Created, request => Assert.Equal(EntityKind.Video, request.Kind));
+        Assert.All(acquisitions.Created, request => Assert.Equal(EntityKind.VideoEpisode, request.Kind));
         Assert.All(acquisitions.Created, request => Assert.Equal("Andor", request.Series));
         Assert.All(acquisitions.Created, request => Assert.Equal(1, request.SeasonNumber));
         Assert.Equal([2, 3], acquisitions.Created.Select(request => request.EpisodeNumber).ToArray());
@@ -297,10 +297,10 @@ public sealed class RequestCommitServiceTests {
             HasSourceFile: true,
             Positions: new Dictionary<string, int> { [EntityPositionCodes.Season] = 1 });
         writer.Containers[episode2] = new MonitorableEntity(
-            episode2, EntityKind.Video, "Aftermath", [], ParentEntityId: seasonId,
+            episode2, EntityKind.VideoEpisode, "Aftermath", [], ParentEntityId: seasonId,
             Positions: new Dictionary<string, int> { [EntityPositionCodes.Season] = 1, [EntityPositionCodes.Episode] = 2 });
         writer.Containers[episode3] = new MonitorableEntity(
-            episode3, EntityKind.Video, "Reckoning", [], ParentEntityId: seasonId,
+            episode3, EntityKind.VideoEpisode, "Reckoning", [], ParentEntityId: seasonId,
             Positions: new Dictionary<string, int> { [EntityPositionCodes.Season] = 1, [EntityPositionCodes.Episode] = 3 });
         writer.WantedChildren[seasonId] = [episode2, episode3];
         acquisitions.EntitiesWithAcquisitions.Add(episode2); // already chasing this gap
@@ -586,7 +586,7 @@ public sealed class RequestCommitServiceTests {
     [Fact]
     public async Task BoundContainerSyncKeepsTheExactPluginAndUsesDeclaredDescendantIdentityNamespaces() {
         var episode = Rekey(
-            Leaf(EntityKind.Video, "Episode 1", "TV1:1:1"),
+            Leaf(EntityKind.VideoEpisode, "Episode 1", "TV1:1:1"),
             identityNamespace: "tmdbepisode",
             pluginId: "series-metadata");
         var season = Rekey(
@@ -631,7 +631,7 @@ public sealed class RequestCommitServiceTests {
         Assert.Empty(source.ExactRoutes);
         Assert.Empty(source.IdentityOnlyLookups);
         Assert.Contains(writer.Ensured, call =>
-            call.Kind == EntityKind.Video && call.ItemId == "TV1:1:1");
+            call.Kind == EntityKind.VideoEpisode && call.ItemId == "TV1:1:1");
         var acquisition = Assert.Single(acquisitions.Created);
         Assert.Equal(EntityKind.VideoSeason, acquisition.Kind);
         Assert.Equal(("tmdbseason", "TV1:1"), (acquisition.IdentityNamespace, acquisition.IdentityValue));
@@ -1097,7 +1097,7 @@ public sealed class RequestCommitServiceTests {
             Positions: new Dictionary<string, int> { [EntityPositionCodes.Season] = 1 });
         writer.Containers[episodeId] = new MonitorableEntity(
             episodeId,
-            EntityKind.Video,
+            EntityKind.VideoEpisode,
             "Episode 2",
             [],
             HasSourceFile: false,
@@ -1112,7 +1112,7 @@ public sealed class RequestCommitServiceTests {
         Assert.True(await service.MaintainAsync(entityId, CancellationToken.None));
         var acquisition = Assert.Single(acquisitions.Created);
         Assert.Equal(episodeId, acquisition.EntityId);
-        Assert.Equal(EntityKind.Video, acquisition.Kind);
+        Assert.Equal(EntityKind.VideoEpisode, acquisition.Kind);
         Assert.Equal(2, acquisition.EpisodeNumber);
     }
 
@@ -1475,7 +1475,7 @@ public sealed class RequestCommitServiceTests {
         var rootIdentity = new ExternalIdentity("tmdb", "series:1");
         var seasonIdentity = new ExternalIdentity("tvdb", "season:one");
         var episodeIdentity = new ExternalIdentity("episode-db", "episode:one");
-        var episode = Node("episode:one", "series-metadata", EntityKind.Video, "Pilot", episodeIdentity);
+        var episode = Node("episode:one", "series-metadata", EntityKind.VideoEpisode, "Pilot", episodeIdentity);
         var season = Node("season:one", "series-metadata", EntityKind.VideoSeason, "Season 1", seasonIdentity, episode);
         var proposal = Node("series:one", "series-metadata", EntityKind.VideoSeries, "Series", rootIdentity, season);
         var review = Review(
@@ -1853,7 +1853,7 @@ public sealed class RequestCommitServiceTests {
         var episode = Node(
             "episode:one",
             pluginId,
-            EntityKind.Video,
+            EntityKind.VideoEpisode,
             "Pilot",
             episodeIdentity,
             new Dictionary<string, int> { [EntityPositionCodes.Episode] = 1 });
@@ -1898,7 +1898,7 @@ public sealed class RequestCommitServiceTests {
             matchedLocalSeasonId,
             Assert.Single(writer.EnsuredChildren, request => request.Kind == EntityKind.VideoSeason)
                 .PreferredEntityId);
-        var episodeCall = Assert.Single(writer.Ensured, call => call.Kind == EntityKind.Video);
+        var episodeCall = Assert.Single(writer.Ensured, call => call.Kind == EntityKind.VideoEpisode);
         Assert.Equal("episode-db", episodeCall.IdentityNamespace);
         Assert.Equal("Episode:One", episodeCall.ItemId);
         Assert.Equal(FakeWantedEntityWriter.EntityIdFor("Season:One"), episodeCall.ParentEntityId);
@@ -2162,10 +2162,10 @@ public sealed class RequestCommitServiceTests {
             [identity],
             ProviderIdentity: new PluginIdentityRoute(pluginId ?? Provider, identity));
 
-    private static EntityMetadataProposal Container(ProposalKind kind, string title, string itemId, params EntityMetadataProposal[] works) =>
+    private static EntityMetadataProposal Container(EntityKind kind, string title, string itemId, params EntityMetadataProposal[] works) =>
         new($"p-{itemId}", Provider, kind, null, null, Patch(title, itemId), [], works, [], null, []);
 
-    private static EntityMetadataProposal Leaf(ProposalKind kind, string title, string workId) =>
+    private static EntityMetadataProposal Leaf(EntityKind kind, string title, string workId) =>
         new($"p-{workId}", Provider, kind, null, null, Patch(title, workId), [], [], [], null, []);
 
     private static EntityMetadataPatch Patch(string title, string workId, IReadOnlyDictionary<string, int>? positions = null) =>
@@ -2175,7 +2175,7 @@ public sealed class RequestCommitServiceTests {
     private static EntityMetadataProposal Node(
         string proposalId,
         string pluginId,
-        ProposalKind kind,
+        EntityKind kind,
         string title,
         ExternalIdentity identity,
         params EntityMetadataProposal[] children) =>
@@ -2184,7 +2184,7 @@ public sealed class RequestCommitServiceTests {
     private static EntityMetadataProposal Node(
         string proposalId,
         string pluginId,
-        ProposalKind kind,
+        EntityKind kind,
         string title,
         ExternalIdentity identity,
         IReadOnlyDictionary<string, int> positions,
@@ -2222,7 +2222,7 @@ public sealed class RequestCommitServiceTests {
         new(
             proposal.ProposalId,
             kind,
-            entityKind ?? proposal.TargetKind.ToEntityKind(),
+            entityKind ?? proposal.TargetKind,
             identity,
             Requestable: true,
             Position: position);
@@ -2236,7 +2236,7 @@ public sealed class RequestCommitServiceTests {
         new(
             pluginId,
             rootIdentity,
-            proposal.TargetKind.ToEntityKind(),
+            proposal.TargetKind,
             kind,
             proposal,
             RequestProposalRevision.Compute(proposal),
@@ -2347,7 +2347,7 @@ public sealed class RequestCommitServiceTests {
             return new RequestReviewResponse(
                 route.PluginId,
                 route.Identity,
-                resolved.TargetKind.ToEntityKind(),
+                resolved.TargetKind,
                 descriptor.Kind,
                 resolved,
                 RequestProposalRevision.Compute(resolved),
@@ -2363,7 +2363,7 @@ public sealed class RequestCommitServiceTests {
                 node,
                 descriptor.Kind,
                 identity,
-                node.TargetKind.ToEntityKind(),
+                node.TargetKind,
                 RequestProposalReading.ChildNumberOf(descriptor.Kind, node.Patch!)));
             var childDescriptor = RequestKindRegistry.ChildOf(descriptor);
             if (childDescriptor is null) {

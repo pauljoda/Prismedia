@@ -10,7 +10,7 @@ namespace Prismedia.Application.Requests;
 public static class RequestProposalRevision {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web) {
         Converters = {
-            new ProposalKindRevisionConverter(),
+            new EntityKindRevisionConverter(),
             new JsonStringEnumConverter(JsonNamingPolicy.CamelCase)
         }
     };
@@ -63,29 +63,25 @@ public static class RequestProposalRevision {
         }
     }
 
-    private sealed class ProposalKindRevisionConverter : JsonConverter<ProposalKind> {
-        public override ProposalKind Read(
+    private sealed class EntityKindRevisionConverter : JsonConverter<EntityKind> {
+        public override EntityKind Read(
             ref Utf8JsonReader reader,
             Type typeToConvert,
             JsonSerializerOptions options) {
-            var name = reader.GetString() ?? throw new JsonException("Expected a ProposalKind name.");
-            if (name.Equals("videoEpisode", StringComparison.OrdinalIgnoreCase)) {
-                return ProposalKind.VideoEpisode;
+            var value = reader.GetString() ?? throw new JsonException("Expected an EntityKind name.");
+            if (Enum.TryParse<EntityKind>(value, ignoreCase: true, out var entityKind) ||
+                EntityKindRegistry.TryGet(value, out entityKind)) {
+                return entityKind;
             }
 
-            return Enum.TryParse<EntityKind>(name, ignoreCase: true, out var entityKind)
-                ? entityKind
-                : throw new JsonException($"Unsupported ProposalKind revision name '{name}'.");
+            throw new JsonException($"Unsupported EntityKind revision name '{value}'.");
         }
 
         public override void Write(
             Utf8JsonWriter writer,
-            ProposalKind value,
+            EntityKind value,
             JsonSerializerOptions options) {
-            var memberName = value == ProposalKind.VideoEpisode
-                ? nameof(ProposalKind.VideoEpisode)
-                : value.ToEntityKind().ToString();
-            writer.WriteStringValue(JsonNamingPolicy.CamelCase.ConvertName(memberName));
+            writer.WriteStringValue(JsonNamingPolicy.CamelCase.ConvertName(value.ToString()));
         }
     }
 }

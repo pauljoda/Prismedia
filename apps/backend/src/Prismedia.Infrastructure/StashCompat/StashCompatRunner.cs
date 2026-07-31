@@ -93,7 +93,7 @@ public sealed class StashCompatRunner : IIdentifyRunner {
         IdentifyPluginRequest request,
         StashScrapeInput input,
         CancellationToken cancellationToken) {
-        var targetKind = request.Entity.Kind.ToProposalKind();
+        var targetKind = request.Entity.Kind;
         var isLookup = request.Action is IdentifyAction.LookupUrl or IdentifyAction.LookupId;
 
         if (isLookup && !string.IsNullOrWhiteSpace(input.Url)) {
@@ -263,7 +263,7 @@ public sealed class StashCompatRunner : IIdentifyRunner {
         PluginDescriptor descriptor,
         string capability,
         StashScrapeInput input,
-        ProposalKind targetKind,
+        EntityKind targetKind,
         CancellationToken cancellationToken) {
         var scene = await engine.ScrapeSceneAsync(definition, descriptor.EntryPath, capability, input, cancellationToken);
         if (scene is not { HasData: true }) {

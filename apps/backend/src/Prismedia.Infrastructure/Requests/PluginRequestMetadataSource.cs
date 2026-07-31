@@ -245,7 +245,7 @@ public sealed class PluginRequestMetadataSource(
         if (proposal?.Patch is null
             || !IsCompatibleTarget(descriptor, proposal.TargetKind)
             || !MatchesExplicitRoute(proposal, route)
-            || !DeclaresLookupIdentity(provider, proposal.TargetKind.ToEntityKind().ToCode(), route.Identity.Namespace)
+            || !DeclaresLookupIdentity(provider, proposal.TargetKind.ToCode(), route.Identity.Namespace)
             || !HasUniqueStructuralProposalIds(proposal)) {
             return null;
         }
@@ -258,7 +258,7 @@ public sealed class PluginRequestMetadataSource(
         return new RequestReviewResponse(
             PluginId: provider.Id,
             ExternalIdentity: route.Identity,
-            EntityKind: proposal.TargetKind.ToEntityKind(),
+            EntityKind: proposal.TargetKind,
             Kind: descriptor.Kind,
             Proposal: proposal,
             Revision: RequestProposalRevision.Compute(proposal),
@@ -562,7 +562,7 @@ public sealed class PluginRequestMetadataSource(
         targets.Add(new RequestReviewTarget(
             ProposalId: proposal.ProposalId,
             Kind: descriptor.Kind,
-            EntityKind: proposal.TargetKind.ToEntityKind(),
+            EntityKind: proposal.TargetKind,
             ExternalIdentity: identity,
             Requestable: descriptor.Committable,
             Position: RequestProposalReading.ChildNumberOf(descriptor.Kind, proposal.Patch),
@@ -577,7 +577,7 @@ public sealed class PluginRequestMetadataSource(
             return null;
         }
 
-        var kindCode = proposal.TargetKind.ToEntityKind().ToCode();
+        var kindCode = proposal.TargetKind.ToCode();
         var namespaces = DeclaredLookupNamespaces(provider, kindCode);
         foreach (var identityNamespace in namespaces) {
             var value = proposal.Patch.ExternalIds
@@ -600,8 +600,8 @@ public sealed class PluginRequestMetadataSource(
     private static bool DeclaresLookupIdentity(PluginProvider provider, string kindCode, string identityNamespace) =>
         DeclaredLookupNamespaces(provider, kindCode).Contains(identityNamespace, StringComparer.Ordinal);
 
-    private static bool IsCompatibleTarget(RequestKindDescriptor descriptor, ProposalKind proposalKind) {
-        var actualKind = proposalKind.ToEntityKind();
+    private static bool IsCompatibleTarget(RequestKindDescriptor descriptor, EntityKind proposalKind) {
+        var actualKind = proposalKind;
         return EntityKindRegistry.Describe(descriptor.PluginEntityKind).AcceptsPluginKind(actualKind);
     }
 

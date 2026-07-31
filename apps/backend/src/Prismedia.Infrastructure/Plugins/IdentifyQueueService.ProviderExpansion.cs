@@ -179,7 +179,7 @@ public sealed partial class IdentifyQueueService {
                 continue;
             }
 
-            var kindCode = relationship.TargetKind.ToEntityKind().ToCode();
+            var kindCode = relationship.TargetKind.ToCode();
             if (!supportByKind.TryGetValue(kindCode, out var supportsKind)) {
                 var providers = await _identify.ListProvidersAsync(kindCode, cancellationToken);
                 supportsKind = providers.Any(candidate =>

@@ -205,10 +205,6 @@ public sealed record CodesManifest(
             result[enumType.Name] = entries;
         }
 
-        result[nameof(ProposalKind)] = EntityKindRegistry.All
-            .Select(definition => new CodeEntry(definition.Kind.ToString(), definition.Code))
-            .ToArray();
-
         return result;
     }
 
@@ -220,7 +216,6 @@ public sealed record CodesManifest(
     private static IReadOnlyDictionary<string, CodeFamilyManifestEntry> BuildCodeFamilies(
         IEnumerable<string> familyNames) {
         var knownTypes = CodeBearingEnums()
-            .Append(typeof(ProposalKind))
             .ToDictionary(type => type.Name, StringComparer.Ordinal);
         var result = familyNames.ToDictionary(
             name => name,

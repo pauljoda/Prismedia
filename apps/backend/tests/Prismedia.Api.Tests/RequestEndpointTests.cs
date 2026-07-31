@@ -410,7 +410,7 @@ public sealed class RequestEndpointTests {
             var episode = new EntityMetadataProposal(
                 "episode-child",
                 request.PluginId,
-                ProposalKind.VideoEpisode,
+                EntityKind.VideoEpisode,
                 1,
                 "cascade",
                 Patch("Episode", "episode-db", "episode:one"),

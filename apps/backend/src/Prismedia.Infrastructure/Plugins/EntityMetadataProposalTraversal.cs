@@ -15,6 +15,6 @@ internal static class EntityMetadataProposalTraversal {
             .Select(group => group.First())
             .ToArray();
 
-    public static bool IsRelationshipKind(ProposalKind kind) =>
-        kind.IsRelationship();
+    public static bool IsRelationshipKind(EntityKind kind) =>
+        EntityKindRegistry.IsRelationship(kind);
 }

@@ -73,7 +73,7 @@ public static class EntityMetadataProposalIdentityPolicy {
     }
 
     private static bool IsShared(
-        ProposalKind kind,
+        EntityKind kind,
         KeyValuePair<string, string> pair,
         IReadOnlySet<StructuralIdentity> shared) =>
         TryIdentity(pair, out var identity) &&
@@ -103,5 +103,5 @@ public static class EntityMetadataProposalIdentityPolicy {
         }
     }
 
-    private sealed record StructuralIdentity(ProposalKind Kind, ExternalIdentity Identity);
+    private sealed record StructuralIdentity(EntityKind Kind, ExternalIdentity Identity);
 }

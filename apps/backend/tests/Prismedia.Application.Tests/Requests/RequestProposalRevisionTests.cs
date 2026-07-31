@@ -57,7 +57,7 @@ public sealed class RequestProposalRevisionTests {
     }
 
     [Fact]
-    public void EntityBackedAndProtocolOnlyKindCodesKeepTheirGoldenRevision() {
+    public void EntityKindMembersKeepTheirGoldenRevision() {
         var proposal = Proposal(
             new Dictionary<string, string> { ["tmdb"] = "123" },
             new Dictionary<string, string> { ["release"] = "2024" });
@@ -93,7 +93,7 @@ public sealed class RequestProposalRevisionTests {
                 new EntityMetadataProposal(
                     "child",
                     "cinema-metadata",
-                    ProposalKind.VideoEpisode,
+                    EntityKind.VideoEpisode,
                     1,
                     "cascade",
                     new EntityMetadataPatch(

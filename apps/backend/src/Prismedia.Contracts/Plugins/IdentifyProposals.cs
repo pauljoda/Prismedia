@@ -81,7 +81,7 @@ public sealed record CreditPatch(string Name, string Role, string? Character, in
 public sealed record EntityMetadataProposal(
     string ProposalId,
     string Provider,
-    ProposalKind TargetKind,
+    EntityKind TargetKind,
     decimal? Confidence,
     string? MatchReason,
     EntityMetadataPatch Patch,
@@ -107,7 +107,7 @@ public sealed record IdentifyPluginResponse(bool Ok, EntityMetadataProposal? Res
     /// carrying no patch. This is the single place the candidate shell is constructed.
     /// </summary>
     public static IdentifyPluginResponse Candidates(
-        ProposalKind targetKind,
+        EntityKind targetKind,
         IReadOnlyList<EntitySearchCandidate> candidates,
         string? error = null) =>
         new(

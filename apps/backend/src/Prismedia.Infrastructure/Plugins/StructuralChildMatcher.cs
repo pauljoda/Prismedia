@@ -67,7 +67,7 @@ internal static class StructuralChildMatcher {
         ScoreLocalToProvider(localChild, providerChild, cautious) > 0;
 
     public static bool IsSameProposalChild(EntityMetadataProposal left, EntityMetadataProposal right) {
-        if (!AreCompatibleProposalKinds(left.TargetKind, right.TargetKind)) {
+        if (left.TargetKind != right.TargetKind) {
             return false;
         }
 
@@ -88,14 +88,11 @@ internal static class StructuralChildMatcher {
 
     public static int? StructuralSortOrder(EntityMetadataProposal child) =>
         EntityMetadataPositionRules.SortOrderFor(
-            child.TargetKind.ToEntityKind().ToCode(),
+            child.TargetKind.ToCode(),
             EntityMetadataPositionRules.Normalize(child.Patch.Positions));
 
-    public static bool AreCompatibleProposalKinds(ProposalKind leftKind, ProposalKind rightKind) =>
-        leftKind.ToEntityKind() == rightKind.ToEntityKind();
-
-    public static bool IsCompatibleStructuralKind(string localKind, ProposalKind proposalKind) =>
-        localKind == proposalKind.ToEntityKind().ToCode();
+    public static bool IsCompatibleStructuralKind(string localKind, EntityKind proposalKind) =>
+        localKind == proposalKind.ToCode();
 
     private static int ScoreLocalToProvider(
         StructuralLocalChild localChild,

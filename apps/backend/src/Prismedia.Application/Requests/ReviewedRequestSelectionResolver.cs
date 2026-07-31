@@ -40,7 +40,7 @@ internal static class ReviewedRequestSelectionResolver {
 
         if (!targets.TryGetValue(review.Proposal.ProposalId, out var rootTarget)
             || rootTarget.Kind != descriptor.Kind
-            || rootTarget.EntityKind != review.Proposal.TargetKind.ToEntityKind()
+            || rootTarget.EntityKind != review.Proposal.TargetKind
             || rootTarget.ExternalIdentity != review.ExternalIdentity
             || !rootTarget.Requestable) {
             throw new RequestCommitValidationException("The reviewed root is not a valid request target.");
@@ -131,7 +131,7 @@ internal static class ReviewedRequestSelectionResolver {
         IReadOnlyDictionary<string, RequestReviewTarget> targets) {
         if (!targets.TryGetValue(node.ProposalId, out var target)
             || target.Kind != expectedDescriptor.Kind
-            || target.EntityKind != node.TargetKind.ToEntityKind()
+            || target.EntityKind != node.TargetKind
             || !target.Requestable) {
             throw new RequestCommitValidationException(
                 $"Proposal '{node.ProposalId}' is not a requestable '{expectedDescriptor.Kind.ToCode()}' target.");

@@ -16,16 +16,13 @@ public sealed partial class EntityMetadataApplyService {
     /// <summary>
     /// Whether an entity of <paramref name="entityKind"/> may be patched through a route or
     /// proposal addressed at <paramref name="expectedKind"/>. Beyond exact kind matches, a
-    /// Movie accepts the generic video code (and the legacy movie alias), and a Video accepts
-    /// the identify flow's provider-only leaf-episode token (<see cref="ProposalKind.VideoEpisode"/>).
+    /// Movie accepts the generic video code (and the legacy movie alias).
     /// </summary>
     private static bool IsKindCompatible(string entityKind, string expectedKind) =>
         entityKind.Equals(expectedKind, StringComparison.OrdinalIgnoreCase) ||
         IsDefinitionCompatible(entityKind, expectedKind) ||
         (entityKind.Equals(EntityKind.Movie.ToCode(), StringComparison.OrdinalIgnoreCase) &&
-            expectedKind.Equals(LegacyMovieExpectedKind, StringComparison.OrdinalIgnoreCase)) ||
-        (entityKind.Equals(EntityKind.Video.ToCode(), StringComparison.OrdinalIgnoreCase) &&
-            expectedKind.Equals(ProposalKind.VideoEpisode.ToCode(), StringComparison.OrdinalIgnoreCase));
+            expectedKind.Equals(LegacyMovieExpectedKind, StringComparison.OrdinalIgnoreCase));
 
     private static bool IsDefinitionCompatible(string entityKind, string expectedKind) =>
         EntityKindRegistry.TryDescribe(entityKind, out var definition) &&

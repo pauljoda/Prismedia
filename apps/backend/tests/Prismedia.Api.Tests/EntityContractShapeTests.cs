@@ -124,12 +124,12 @@ public sealed class EntityContractShapeTests {
         var proposalKindSchema = document.RootElement
             .GetProperty("components")
             .GetProperty("schemas")
-            .GetProperty(nameof(ProposalKind));
+            .GetProperty(nameof(EntityKind));
 
-        Assert.Equal("#/components/schemas/ProposalKind", proposalKind.GetProperty("$ref").GetString());
+        Assert.Equal("#/components/schemas/EntityKind", proposalKind.GetProperty("$ref").GetString());
         Assert.Equal("string", proposalKindSchema.GetProperty("type").GetString());
         Assert.Equal(
-            CodecRegistry.Get<ProposalKind>().Codes.Order(StringComparer.Ordinal),
+            CodecRegistry.Get<EntityKind>().Codes.Order(StringComparer.Ordinal),
             proposalKindSchema.GetProperty("enum")
                 .EnumerateArray()
                 .Select(value => value.GetString())

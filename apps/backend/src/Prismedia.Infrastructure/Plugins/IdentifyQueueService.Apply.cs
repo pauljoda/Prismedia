@@ -61,8 +61,8 @@ public sealed partial class IdentifyQueueService {
         if (!string.Equals(proposal.ProposalId, storedProposal.ProposalId, StringComparison.Ordinal)) {
             throw new InvalidOperationException("Only the root identify proposal can be applied to a queue item.");
         }
-        if (proposal.TargetKind.ToEntityKind() != entity.KindCode.DecodeAs<EntityKind>()) {
-            throw new InvalidOperationException("Identify proposal kind does not match the queued entity.");
+        if (proposal.TargetKind != entity.KindCode.DecodeAs<EntityKind>()) {
+            throw new InvalidOperationException("Identify proposal target kind does not match the queued entity.");
         }
 
         var payload = new IdentifyApplyPayload(entityId, request);
@@ -139,8 +139,8 @@ public sealed partial class IdentifyQueueService {
         if (!string.Equals(proposal.ProposalId, storedProposal.ProposalId, StringComparison.Ordinal)) {
             throw new InvalidOperationException("Only the root identify proposal can be applied to a queue item.");
         }
-        if (proposal.TargetKind.ToEntityKind() != entity.KindCode.DecodeAs<EntityKind>()) {
-            throw new InvalidOperationException("Identify proposal kind does not match the queued entity.");
+        if (proposal.TargetKind != entity.KindCode.DecodeAs<EntityKind>()) {
+            throw new InvalidOperationException("Identify proposal target kind does not match the queued entity.");
         }
         var preparedProposal = await _identify.PrepareApplyProposalAsync(
             entityId,

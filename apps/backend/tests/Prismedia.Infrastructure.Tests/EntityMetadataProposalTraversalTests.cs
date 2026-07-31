@@ -49,7 +49,7 @@ public sealed class EntityMetadataProposalTraversalTests {
         new(
             ProposalId: id,
             Provider: "test",
-            TargetKind: targetKind.DecodeAs<ProposalKind>(),
+            TargetKind: targetKind.DecodeAs<EntityKind>(),
             Confidence: null,
             MatchReason: null,
             Patch: new EntityMetadataPatch(

@@ -10,10 +10,10 @@ public sealed class CodecJsonConverterFactoryTests {
     };
 
     [Fact]
-    public void EveryProposalKindRoundTripsWithItsExistingWireCode() {
-        foreach (var code in CodecRegistry.Get<ProposalKind>().Codes) {
+    public void EveryEntityKindRoundTripsWithItsExistingWireCode() {
+        foreach (var code in CodecRegistry.Get<EntityKind>().Codes) {
             var json = JsonSerializer.Serialize(code);
-            var kind = JsonSerializer.Deserialize<ProposalKind>(json, Options);
+            var kind = JsonSerializer.Deserialize<EntityKind>(json, Options);
 
             Assert.Equal(json, JsonSerializer.Serialize(kind, Options));
         }

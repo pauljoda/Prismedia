@@ -875,7 +875,7 @@ public sealed class AutoIdentifyRunnerTests {
         Assert.Empty(identify.IdentifyCalls);
     }
 
-    private static EntityMetadataProposal Proposal(string provider, decimal? confidence, string title, ProposalKind? targetKind = null) =>
+    private static EntityMetadataProposal Proposal(string provider, decimal? confidence, string title, EntityKind? targetKind = null) =>
         new(
             ProposalId: Guid.NewGuid().ToString(),
             Provider: provider,
@@ -906,7 +906,7 @@ public sealed class AutoIdentifyRunnerTests {
         string externalId,
         string title,
         decimal? confidence,
-        ProposalKind? targetKind = null,
+        EntityKind? targetKind = null,
         int? year = 2025) =>
         CandidateShells(provider, [(externalId, title, confidence, year)], targetKind ?? EntityKind.VideoSeries);
 
@@ -918,7 +918,7 @@ public sealed class AutoIdentifyRunnerTests {
     private static EntityMetadataProposal CandidateShells(
         string provider,
         (string ExternalId, string Title, decimal? Confidence, int? Year)[] candidates,
-        ProposalKind targetKind) =>
+        EntityKind targetKind) =>
         new(
             ProposalId: null!,
             Provider: provider,
