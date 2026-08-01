@@ -252,6 +252,16 @@ public sealed class PrismediaDbContextModelTests {
     }
 
     [Fact]
+    public void CurrentModelMatchesLatestMigrationSnapshot() {
+        using var db = CreateContext();
+
+        Assert.False(
+            db.Database.HasPendingModelChanges(),
+            "The Prismedia persistence model changed without a corresponding EF migration. " +
+            "Generate and review a migration before merging the model change.");
+    }
+
+    [Fact]
     public void ReleaseCandidateDownloadLocatorsUseUnboundedText() {
         using var db = CreateContext();
         var property = db.Model
