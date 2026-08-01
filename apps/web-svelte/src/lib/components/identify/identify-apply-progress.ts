@@ -41,8 +41,8 @@ export function initialApplyProgress(
     currentIndex: 0,
     total: countApplyProgressSteps(proposal, selectedFields),
     // Optimistic progress is for the root entity being applied, so its real kind
-    // is the entity's own kind. (The proposal target vocabulary can carry
-    // non-entity tokens like "video-episode", which this typed field must not.)
+    // is the entity's own kind. Proposal targets may also come from newer backend
+    // entity vocabularies, which this existing entity field must not invent.
     currentKind: entity.kind,
     currentTitle: title,
     currentPath: [title],

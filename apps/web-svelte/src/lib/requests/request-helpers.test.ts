@@ -32,7 +32,7 @@ describe("request helpers", () => {
     expect(requestKindForEntityKind(ENTITY_KIND.audioLibrary)).toBe(REQUEST_MEDIA_KIND.album);
     expect(requestKindForEntityKind(ENTITY_KIND.movie)).toBe(REQUEST_MEDIA_KIND.movie);
     expect(requestKindForEntityKind(ENTITY_KIND.videoSeason)).toBe(REQUEST_MEDIA_KIND.season);
-    expect(requestKindForEntityKind(ENTITY_KIND.video)).toBe(REQUEST_MEDIA_KIND.episode);
+    expect(requestKindForEntityKind(ENTITY_KIND.videoEpisode)).toBe(REQUEST_MEDIA_KIND.episode);
     expect(requestKindForEntityKind(ENTITY_KIND.gallery)).toBeNull();
   });
 

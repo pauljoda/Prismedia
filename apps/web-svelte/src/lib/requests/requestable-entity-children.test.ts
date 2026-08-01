@@ -20,9 +20,9 @@ describe("requestableDirectChildCards", () => {
     const cards = [
       card("season-1", ENTITY_KIND.videoSeason, "series-1"),
       card("sub-series", ENTITY_KIND.videoSeries, "series-1"),
-      card("special-1", ENTITY_KIND.video, "series-1"),
+      card("special-1", ENTITY_KIND.videoEpisode, "series-1"),
       card("movie-1", ENTITY_KIND.movie, "series-1"),
-      card("nested-episode", ENTITY_KIND.video, "season-1"),
+      card("nested-episode", ENTITY_KIND.videoEpisode, "season-1"),
     ];
 
     expect(requestableDirectChildCards("series-1", cards).map((item) => item.entity.id))

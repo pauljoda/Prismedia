@@ -46,10 +46,7 @@
     type VideoSubtitleTrack,
   } from "$lib/player/subtitle-types";
   import { fetchVideoSubtitleCues } from "$lib/player/video-subtitles";
-  import {
-    VIDEO_PLAYBACK_METHOD,
-    type PlaybackModeCode,
-  } from "$lib/api/generated/codes";
+  import { VIDEO_PLAYBACK_METHOD, type PlaybackModeCode } from "$lib/api/generated/codes";
   import {
     enterMediaFullscreen,
     exitDocumentFullscreen,
