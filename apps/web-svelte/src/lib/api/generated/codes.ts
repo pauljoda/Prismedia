@@ -2,6 +2,14 @@
 // Do not edit by hand. Run `pnpm api:generate` (with the dev API running) to refresh.
 /* eslint-disable */
 
+// source: enum AcquisitionCheckpointProtocol
+export const ACQUISITION_CHECKPOINT_PROTOCOL = {
+  placement: "placement",
+  television: "television",
+} as const;
+
+export type AcquisitionCheckpointProtocolCode = (typeof ACQUISITION_CHECKPOINT_PROTOCOL)[keyof typeof ACQUISITION_CHECKPOINT_PROTOCOL];
+
 // source: enum AcquisitionHistoryEvent
 export const ACQUISITION_HISTORY_EVENT = {
   grabbed: "grabbed",
@@ -227,6 +235,70 @@ export const COLLECTION_MODE = {
 
 export type CollectionModeCode = (typeof COLLECTION_MODE)[keyof typeof COLLECTION_MODE];
 
+// source: enum CollectionRuleField
+export const COLLECTION_RULE_FIELD = {
+  title: "title",
+  rating: "rating",
+  date: "date",
+  organized: "organized",
+  isNsfw: "isNsfw",
+  tags: "tags",
+  performers: "performers",
+  studio: "studio",
+  libraryRootId: "libraryRootId",
+  fileSize: "fileSize",
+  duration: "duration",
+  height: "height",
+  width: "width",
+  codec: "codec",
+  bitRate: "bitRate",
+  bitRateLegacy: "bit_rate",
+  channels: "channels",
+  sampleRate: "sampleRate",
+  sampleRateLegacy: "sample_rate",
+  playCount: "playCount",
+  skipCount: "skipCount",
+  resolution: "resolution",
+  videoSeriesId: "videoSeriesId",
+  galleryType: "galleryType",
+  imageCount: "imageCount",
+  format: "format",
+  createdAt: "createdAt",
+  interactive: "interactive",
+} as const;
+
+export type CollectionRuleFieldCode = (typeof COLLECTION_RULE_FIELD)[keyof typeof COLLECTION_RULE_FIELD];
+
+// source: enum CollectionRuleGroupOperator
+export const COLLECTION_RULE_GROUP_OPERATOR = {
+  and: "and",
+  or: "or",
+  not: "not",
+} as const;
+
+export type CollectionRuleGroupOperatorCode = (typeof COLLECTION_RULE_GROUP_OPERATOR)[keyof typeof COLLECTION_RULE_GROUP_OPERATOR];
+
+// source: enum CollectionRuleOperator
+export const COLLECTION_RULE_OPERATOR = {
+  equals: "equals",
+  notEquals: "not_equals",
+  contains: "contains",
+  notContains: "not_contains",
+  greaterThan: "greater_than",
+  lessThan: "less_than",
+  greaterEqual: "greater_equal",
+  lessEqual: "less_equal",
+  between: "between",
+  in: "in",
+  notIn: "not_in",
+  isNull: "is_null",
+  isNotNull: "is_not_null",
+  isTrue: "is_true",
+  isFalse: "is_false",
+} as const;
+
+export type CollectionRuleOperatorCode = (typeof COLLECTION_RULE_OPERATOR)[keyof typeof COLLECTION_RULE_OPERATOR];
+
 // source: enum CreditRole
 export const CREDIT_ROLE = {
   person: "person",
@@ -379,6 +451,7 @@ export const ENTITY_KIND = {
   studio: "studio",
   tag: "tag",
   video: "video",
+  videoEpisode: "video-episode",
   videoSeries: "video-series",
   videoSeason: "video-season",
 } as const;
@@ -425,6 +498,13 @@ export const ENTITY_MEDIA_QUALITY_FAMILY = {
 } as const;
 
 export type EntityMediaQualityFamilyCode = (typeof ENTITY_MEDIA_QUALITY_FAMILY)[keyof typeof ENTITY_MEDIA_QUALITY_FAMILY];
+
+// source: enum EntitySourceCode
+export const ENTITY_SOURCE_CODE = {
+  folder: "folder",
+} as const;
+
+export type EntitySourceCodeCode = (typeof ENTITY_SOURCE_CODE)[keyof typeof ENTITY_SOURCE_CODE];
 
 // source: enum EntityStorageShape
 export const ENTITY_STORAGE_SHAPE = {
@@ -489,6 +569,17 @@ export const GALLERY_TYPE = {
 } as const;
 
 export type GalleryTypeCode = (typeof GALLERY_TYPE)[keyof typeof GALLERY_TYPE];
+
+// source: enum GeneratedAssetFamily
+export const GENERATED_ASSET_FAMILY = {
+  none: "none",
+  video: "video",
+  image: "image",
+  bookPage: "book-page",
+  audioTrack: "audio-track",
+} as const;
+
+export type GeneratedAssetFamilyCode = (typeof GENERATED_ASSET_FAMILY)[keyof typeof GENERATED_ASSET_FAMILY];
 
 // source: enum IdentifyAction
 export const IDENTIFY_ACTION = {
@@ -755,6 +846,17 @@ export const MUSIC_PLAYER_REPEAT_MODE = {
 
 export type MusicPlayerRepeatModeCode = (typeof MUSIC_PLAYER_REPEAT_MODE)[keyof typeof MUSIC_PLAYER_REPEAT_MODE];
 
+// source: enum OrganizeItemStatus
+export const ORGANIZE_ITEM_STATUS = {
+  ready: "ready",
+  unchanged: "unchanged",
+  skipped: "skipped",
+  applied: "applied",
+  failed: "failed",
+} as const;
+
+export type OrganizeItemStatusCode = (typeof ORGANIZE_ITEM_STATUS)[keyof typeof ORGANIZE_ITEM_STATUS];
+
 // source: enum PlaybackEventKind
 export const PLAYBACK_EVENT_KIND = {
   completed: "completed",
@@ -800,32 +902,6 @@ export const PROPER_DOWNLOAD_POLICY = {
 } as const;
 
 export type ProperDownloadPolicyCode = (typeof PROPER_DOWNLOAD_POLICY)[keyof typeof PROPER_DOWNLOAD_POLICY];
-
-// source: enum ProposalKind
-export const PROPOSAL_KIND = {
-  audio: "audio",
-  audioLibrary: "audio-library",
-  audioTrack: "audio-track",
-  book: "book",
-  bookVolume: "book-volume",
-  bookChapter: "book-chapter",
-  bookPage: "book-page",
-  collection: "collection",
-  gallery: "gallery",
-  image: "image",
-  musicArtist: "music-artist",
-  bookAuthor: "book-author",
-  person: "person",
-  movie: "movie",
-  studio: "studio",
-  tag: "tag",
-  video: "video",
-  videoSeries: "video-series",
-  videoSeason: "video-season",
-  videoEpisode: "video-episode",
-} as const;
-
-export type ProposalKindCode = (typeof PROPOSAL_KIND)[keyof typeof PROPOSAL_KIND];
 
 // source: enum ProviderType
 export const PROVIDER_TYPE = {
@@ -999,6 +1075,7 @@ export type VideoQualityCode = (typeof VIDEO_QUALITY)[keyof typeof VIDEO_QUALITY
 export const VIDEO_SERIES_RENDERING_MODE = {
   flat: "flat",
   seasons: "seasons",
+  mixed: "mixed",
 } as const;
 
 export type VideoSeriesRenderingModeCode = (typeof VIDEO_SERIES_RENDERING_MODE)[keyof typeof VIDEO_SERIES_RENDERING_MODE];
@@ -1023,6 +1100,7 @@ export const CAPABILITY_KIND = {
   links: "links",
   markers: "markers",
   personProfile: "person-profile",
+  playableVideo: "playable-video",
   playback: "playback",
   position: "position",
   progress: "progress",
@@ -1266,32 +1344,32 @@ export interface EntityKindDefinitionManifestEntry {
   supportsManualManagement: boolean;
   manualAcquisition: EntityManualAcquisitionManifestEntry;
   engagementMode: EntityEngagementModeCode;
-  aggregatesDirectChildPlayback: boolean;
   supportsRequests: boolean;
   enumeratesIdentifyChildren: boolean;
   acquisitionProfile: AcquisitionProfileManifestEntry | null;
 }
 
 export const ENTITY_KIND_DEFINITIONS = {
-  "audio": { kind: "audio", displayName: "Audio", groupLabel: "Audio", category: "Media", storageShape: "File", presentation: { icon: "audio", referenceIcon: "audio", thumbnailWidth: 1, thumbnailHeight: 1, primaryAccent: "violet", secondaryAccent: "magenta", artworkFit: "cover" }, navigation: null, search: null, autoIdentifySelector: null, identifyPluginFallbackKind: null, containableKinds: null, mediaQualityFamily: "none", supportsFileDeletion: true, supportsAtomicMediaUpgrade: false, supportsManualManagement: false, manualAcquisition: {"supportsUpload":false,"supportsReplacement":false}, engagementMode: "none", aggregatesDirectChildPlayback: false, supportsRequests: false, enumeratesIdentifyChildren: false, acquisitionProfile: null },
-  "audio-library": { kind: "audio-library", displayName: "Audio Library", groupLabel: "Audio Libraries", category: "Media", storageShape: "Folder", presentation: { icon: "album", referenceIcon: "audio", thumbnailWidth: 1, thumbnailHeight: 1, primaryAccent: "violet", secondaryAccent: "magenta", artworkFit: "cover" }, navigation: {"canonicalBrowseKind":"audio-library","destinationId":"albums","browsePath":"/audio","detailPathTemplate":"/audio/{id}","requiredAncestorKind":null,"isTopLevel":true}, search: {"order":10,"expandsRelationshipResults":false}, autoIdentifySelector: "audio", identifyPluginFallbackKind: null, containableKinds: null, mediaQualityFamily: "audio", supportsFileDeletion: true, supportsAtomicMediaUpgrade: false, supportsManualManagement: false, manualAcquisition: {"supportsUpload":true,"supportsReplacement":true}, engagementMode: "playback", aggregatesDirectChildPlayback: false, supportsRequests: true, enumeratesIdentifyChildren: true, acquisitionProfile: {"label":"Music (albums)","displayOrder":3,"libraryRootMediaCapability":"scanAudio","supportedReleaseDateTypes":["release","digital-release","physical-release"],"defaultNamingTemplate":"{Artist}/{Album}","namingHint":"{Artist} {Album} {Year} — 2 segments: artist/album folder (track files keep their release names)","namingFamily":"music"} },
-  "audio-track": { kind: "audio-track", displayName: "Audio Track", groupLabel: "Audio Tracks", category: "Media", storageShape: "File", presentation: { icon: "track", referenceIcon: "audio", thumbnailWidth: 1, thumbnailHeight: 1, primaryAccent: "violet", secondaryAccent: "magenta", artworkFit: "cover" }, navigation: {"canonicalBrowseKind":"audio-track","destinationId":"tracks","browsePath":"/tracks","detailPathTemplate":"/audio/tracks/{id}","requiredAncestorKind":null,"isTopLevel":true}, search: {"order":11,"expandsRelationshipResults":false}, autoIdentifySelector: "audio", identifyPluginFallbackKind: null, containableKinds: null, mediaQualityFamily: "audio", supportsFileDeletion: true, supportsAtomicMediaUpgrade: false, supportsManualManagement: false, manualAcquisition: {"supportsUpload":false,"supportsReplacement":false}, engagementMode: "playback", aggregatesDirectChildPlayback: false, supportsRequests: true, enumeratesIdentifyChildren: false, acquisitionProfile: null },
-  "book": { kind: "book", displayName: "Book", groupLabel: "Books", category: "Media", storageShape: "Archive", presentation: { icon: "book", referenceIcon: "book", thumbnailWidth: 2, thumbnailHeight: 3, primaryAccent: "cyan", secondaryAccent: "blue", artworkFit: "cover" }, navigation: {"canonicalBrowseKind":"book","destinationId":"books","browsePath":"/books","detailPathTemplate":"/books/{id}","requiredAncestorKind":null,"isTopLevel":true}, search: {"order":7,"expandsRelationshipResults":false}, autoIdentifySelector: "book", identifyPluginFallbackKind: null, containableKinds: null, mediaQualityFamily: "none", supportsFileDeletion: true, supportsAtomicMediaUpgrade: false, supportsManualManagement: false, manualAcquisition: {"supportsUpload":true,"supportsReplacement":true}, engagementMode: "reading", aggregatesDirectChildPlayback: false, supportsRequests: true, enumeratesIdentifyChildren: true, acquisitionProfile: {"label":"Books","displayOrder":0,"libraryRootMediaCapability":"scanBooks","supportedReleaseDateTypes":["publication","digital-release","physical-release","release"],"defaultNamingTemplate":"{Author}/{Title} ({Year})/{Title}{ - Volume}.{ext}","namingHint":"{Author} {Title} {Year} {ext} — folder/file layout for the book payload","namingFamily":"book"} },
-  "book-volume": { kind: "book-volume", displayName: "Book Volume", groupLabel: "Volumes", category: "Media", storageShape: "None", presentation: { icon: "volume", referenceIcon: "book", thumbnailWidth: 2, thumbnailHeight: 3, primaryAccent: "cyan", secondaryAccent: "blue", artworkFit: "cover" }, navigation: {"canonicalBrowseKind":"book","destinationId":"books","browsePath":"/books","detailPathTemplate":"/books/{parentId}/volumes/{id}","requiredAncestorKind":"book","isTopLevel":false}, search: null, autoIdentifySelector: null, identifyPluginFallbackKind: null, containableKinds: null, mediaQualityFamily: "none", supportsFileDeletion: true, supportsAtomicMediaUpgrade: false, supportsManualManagement: false, manualAcquisition: {"supportsUpload":false,"supportsReplacement":false}, engagementMode: "reading", aggregatesDirectChildPlayback: false, supportsRequests: false, enumeratesIdentifyChildren: true, acquisitionProfile: null },
-  "book-chapter": { kind: "book-chapter", displayName: "Book Chapter", groupLabel: "Chapters", category: "Media", storageShape: "None", presentation: { icon: "chapter", referenceIcon: "book", thumbnailWidth: 2, thumbnailHeight: 3, primaryAccent: "cyan", secondaryAccent: "blue", artworkFit: "cover" }, navigation: {"canonicalBrowseKind":"book","destinationId":"books","browsePath":"/books","detailPathTemplate":"/books/{parentId}/chapters/{id}","requiredAncestorKind":"book","isTopLevel":false}, search: null, autoIdentifySelector: null, identifyPluginFallbackKind: null, containableKinds: null, mediaQualityFamily: "none", supportsFileDeletion: false, supportsAtomicMediaUpgrade: false, supportsManualManagement: false, manualAcquisition: {"supportsUpload":false,"supportsReplacement":false}, engagementMode: "reading", aggregatesDirectChildPlayback: false, supportsRequests: false, enumeratesIdentifyChildren: false, acquisitionProfile: null },
-  "book-page": { kind: "book-page", displayName: "Book Page", groupLabel: "Pages", category: "Media", storageShape: "ArchiveEntry", presentation: { icon: "page", referenceIcon: "book", thumbnailWidth: 2, thumbnailHeight: 3, primaryAccent: "cyan", secondaryAccent: "blue", artworkFit: "cover" }, navigation: {"canonicalBrowseKind":"book","destinationId":"books","browsePath":"/books","detailPathTemplate":null,"requiredAncestorKind":null,"isTopLevel":false}, search: null, autoIdentifySelector: null, identifyPluginFallbackKind: null, containableKinds: null, mediaQualityFamily: "none", supportsFileDeletion: false, supportsAtomicMediaUpgrade: false, supportsManualManagement: false, manualAcquisition: {"supportsUpload":false,"supportsReplacement":false}, engagementMode: "none", aggregatesDirectChildPlayback: false, supportsRequests: false, enumeratesIdentifyChildren: false, acquisitionProfile: null },
-  "collection": { kind: "collection", displayName: "Collection", groupLabel: "Collections", category: "Collection", storageShape: "None", presentation: { icon: "collection", referenceIcon: "collection", thumbnailWidth: 16, thumbnailHeight: 9, primaryAccent: "magenta", secondaryAccent: "red", artworkFit: "cover" }, navigation: {"canonicalBrowseKind":"collection","destinationId":"collections","browsePath":"/collections","detailPathTemplate":"/collections/{id}","requiredAncestorKind":null,"isTopLevel":true}, search: {"order":9,"expandsRelationshipResults":false}, autoIdentifySelector: null, identifyPluginFallbackKind: null, containableKinds: ["video","movie","video-series","gallery","image","book","music-artist","audio-library","audio-track"], mediaQualityFamily: "none", supportsFileDeletion: false, supportsAtomicMediaUpgrade: false, supportsManualManagement: false, manualAcquisition: {"supportsUpload":false,"supportsReplacement":false}, engagementMode: "none", aggregatesDirectChildPlayback: false, supportsRequests: false, enumeratesIdentifyChildren: false, acquisitionProfile: null },
-  "gallery": { kind: "gallery", displayName: "Gallery", groupLabel: "Galleries", category: "Media", storageShape: "Folder", presentation: { icon: "gallery", referenceIcon: "gallery", thumbnailWidth: 1, thumbnailHeight: 1, primaryAccent: "green", secondaryAccent: "cyan", artworkFit: "cover" }, navigation: {"canonicalBrowseKind":"gallery","destinationId":"galleries","browsePath":"/galleries","detailPathTemplate":"/galleries/{id}","requiredAncestorKind":null,"isTopLevel":true}, search: {"order":6,"expandsRelationshipResults":false}, autoIdentifySelector: "gallery", identifyPluginFallbackKind: null, containableKinds: null, mediaQualityFamily: "none", supportsFileDeletion: true, supportsAtomicMediaUpgrade: false, supportsManualManagement: false, manualAcquisition: {"supportsUpload":false,"supportsReplacement":false}, engagementMode: "none", aggregatesDirectChildPlayback: false, supportsRequests: false, enumeratesIdentifyChildren: false, acquisitionProfile: null },
-  "image": { kind: "image", displayName: "Image", groupLabel: "Images", category: "Media", storageShape: "File", presentation: { icon: "image", referenceIcon: "image", thumbnailWidth: 1, thumbnailHeight: 1, primaryAccent: "blue", secondaryAccent: "violet", artworkFit: "cover" }, navigation: {"canonicalBrowseKind":"image","destinationId":"images","browsePath":"/images","detailPathTemplate":"/images/{id}","requiredAncestorKind":null,"isTopLevel":true}, search: {"order":8,"expandsRelationshipResults":false}, autoIdentifySelector: "image", identifyPluginFallbackKind: null, containableKinds: null, mediaQualityFamily: "none", supportsFileDeletion: true, supportsAtomicMediaUpgrade: false, supportsManualManagement: false, manualAcquisition: {"supportsUpload":false,"supportsReplacement":false}, engagementMode: "none", aggregatesDirectChildPlayback: false, supportsRequests: false, enumeratesIdentifyChildren: false, acquisitionProfile: null },
-  "music-artist": { kind: "music-artist", displayName: "Music Artist", groupLabel: "Artists", category: "Media", storageShape: "Folder", presentation: { icon: "artist", referenceIcon: "audio", thumbnailWidth: 1, thumbnailHeight: 1, primaryAccent: "violet", secondaryAccent: "magenta", artworkFit: "cover" }, navigation: {"canonicalBrowseKind":"music-artist","destinationId":"artists","browsePath":"/artists","detailPathTemplate":"/artists/{id}","requiredAncestorKind":null,"isTopLevel":true}, search: null, autoIdentifySelector: "audio", identifyPluginFallbackKind: null, containableKinds: null, mediaQualityFamily: "audio", supportsFileDeletion: true, supportsAtomicMediaUpgrade: false, supportsManualManagement: false, manualAcquisition: {"supportsUpload":false,"supportsReplacement":false}, engagementMode: "none", aggregatesDirectChildPlayback: false, supportsRequests: true, enumeratesIdentifyChildren: true, acquisitionProfile: null },
-  "book-author": { kind: "book-author", displayName: "Book Author", groupLabel: "Authors", category: "Media", storageShape: "Folder", presentation: { icon: "author", referenceIcon: "book", thumbnailWidth: 2, thumbnailHeight: 3, primaryAccent: "cyan", secondaryAccent: "blue", artworkFit: "cover" }, navigation: {"canonicalBrowseKind":"book-author","destinationId":"authors","browsePath":"/authors","detailPathTemplate":"/authors/{id}","requiredAncestorKind":null,"isTopLevel":true}, search: null, autoIdentifySelector: null, identifyPluginFallbackKind: null, containableKinds: null, mediaQualityFamily: "none", supportsFileDeletion: true, supportsAtomicMediaUpgrade: false, supportsManualManagement: false, manualAcquisition: {"supportsUpload":false,"supportsReplacement":false}, engagementMode: "none", aggregatesDirectChildPlayback: false, supportsRequests: true, enumeratesIdentifyChildren: true, acquisitionProfile: null },
-  "person": { kind: "person", displayName: "Person", groupLabel: "People", category: "Taxonomy", storageShape: "None", presentation: { icon: "person", referenceIcon: "person", thumbnailWidth: 4, thumbnailHeight: 5, primaryAccent: "red", secondaryAccent: "violet", artworkFit: "cover" }, navigation: {"canonicalBrowseKind":"person","destinationId":"people","browsePath":"/people","detailPathTemplate":"/people/{id}","requiredAncestorKind":null,"isTopLevel":true}, search: {"order":3,"expandsRelationshipResults":true}, autoIdentifySelector: null, identifyPluginFallbackKind: null, containableKinds: null, mediaQualityFamily: "none", supportsFileDeletion: false, supportsAtomicMediaUpgrade: false, supportsManualManagement: true, manualAcquisition: {"supportsUpload":false,"supportsReplacement":false}, engagementMode: "none", aggregatesDirectChildPlayback: false, supportsRequests: false, enumeratesIdentifyChildren: false, acquisitionProfile: null },
-  "movie": { kind: "movie", displayName: "Movie", groupLabel: "Movies", category: "Media", storageShape: "Folder", presentation: { icon: "movie", referenceIcon: "video", thumbnailWidth: 2, thumbnailHeight: 3, primaryAccent: "orange", secondaryAccent: "yellow", artworkFit: "cover" }, navigation: {"canonicalBrowseKind":"movie","destinationId":"movies","browsePath":"/movies","detailPathTemplate":"/movies/{id}","requiredAncestorKind":null,"isTopLevel":true}, search: {"order":0,"expandsRelationshipResults":false}, autoIdentifySelector: "video", identifyPluginFallbackKind: "video", containableKinds: null, mediaQualityFamily: "video", supportsFileDeletion: true, supportsAtomicMediaUpgrade: true, supportsManualManagement: false, manualAcquisition: {"supportsUpload":true,"supportsReplacement":true}, engagementMode: "playback", aggregatesDirectChildPlayback: true, supportsRequests: true, enumeratesIdentifyChildren: false, acquisitionProfile: {"label":"Movies","displayOrder":1,"libraryRootMediaCapability":"scanVideos","supportedReleaseDateTypes":["premiere","theatrical-release","streaming-release","digital-release","physical-release","release"],"defaultNamingTemplate":"{Title} ({Year})/{Title} ({Year}).{ext}","namingHint":"{Title} {Year} {Quality} {ext} — 2 segments: folder/file","namingFamily":"movie"} },
-  "studio": { kind: "studio", displayName: "Studio", groupLabel: "Studios", category: "Taxonomy", storageShape: "None", presentation: { icon: "studio", referenceIcon: "studio", thumbnailWidth: 21, thumbnailHeight: 9, primaryAccent: "orange", secondaryAccent: "magenta", artworkFit: "contain" }, navigation: {"canonicalBrowseKind":"studio","destinationId":"studios","browsePath":"/studios","detailPathTemplate":"/studios/{id}","requiredAncestorKind":null,"isTopLevel":true}, search: {"order":4,"expandsRelationshipResults":true}, autoIdentifySelector: null, identifyPluginFallbackKind: null, containableKinds: null, mediaQualityFamily: "none", supportsFileDeletion: false, supportsAtomicMediaUpgrade: false, supportsManualManagement: true, manualAcquisition: {"supportsUpload":false,"supportsReplacement":false}, engagementMode: "none", aggregatesDirectChildPlayback: false, supportsRequests: false, enumeratesIdentifyChildren: false, acquisitionProfile: null },
-  "tag": { kind: "tag", displayName: "Tag", groupLabel: "Tags", category: "Taxonomy", storageShape: "None", presentation: { icon: "tag", referenceIcon: "tag", thumbnailWidth: 1, thumbnailHeight: 1, primaryAccent: "green", secondaryAccent: "yellow", artworkFit: "cover" }, navigation: {"canonicalBrowseKind":"tag","destinationId":"tags","browsePath":"/tags","detailPathTemplate":"/tags/{id}","requiredAncestorKind":null,"isTopLevel":true}, search: {"order":5,"expandsRelationshipResults":true}, autoIdentifySelector: null, identifyPluginFallbackKind: null, containableKinds: null, mediaQualityFamily: "none", supportsFileDeletion: false, supportsAtomicMediaUpgrade: false, supportsManualManagement: true, manualAcquisition: {"supportsUpload":false,"supportsReplacement":false}, engagementMode: "none", aggregatesDirectChildPlayback: false, supportsRequests: false, enumeratesIdentifyChildren: false, acquisitionProfile: null },
-  "video": { kind: "video", displayName: "Video", groupLabel: "Videos", category: "Media", storageShape: "File", presentation: { icon: "video", referenceIcon: "video", thumbnailWidth: 16, thumbnailHeight: 9, primaryAccent: "red", secondaryAccent: "orange", artworkFit: "cover" }, navigation: {"canonicalBrowseKind":"video","destinationId":"videos","browsePath":"/videos","detailPathTemplate":"/videos/{id}","requiredAncestorKind":null,"isTopLevel":true}, search: {"order":2,"expandsRelationshipResults":false}, autoIdentifySelector: "video", identifyPluginFallbackKind: null, containableKinds: null, mediaQualityFamily: "video", supportsFileDeletion: true, supportsAtomicMediaUpgrade: true, supportsManualManagement: false, manualAcquisition: {"supportsUpload":true,"supportsReplacement":true}, engagementMode: "playback", aggregatesDirectChildPlayback: false, supportsRequests: true, enumeratesIdentifyChildren: false, acquisitionProfile: null },
-  "video-series": { kind: "video-series", displayName: "Video Series", groupLabel: "Series", category: "Media", storageShape: "Folder", presentation: { icon: "series", referenceIcon: "video", thumbnailWidth: 2, thumbnailHeight: 3, primaryAccent: "yellow", secondaryAccent: "green", artworkFit: "cover" }, navigation: {"canonicalBrowseKind":"video-series","destinationId":"series","browsePath":"/series","detailPathTemplate":"/series/{id}","requiredAncestorKind":null,"isTopLevel":true}, search: {"order":1,"expandsRelationshipResults":false}, autoIdentifySelector: "video", identifyPluginFallbackKind: null, containableKinds: null, mediaQualityFamily: "video", supportsFileDeletion: true, supportsAtomicMediaUpgrade: false, supportsManualManagement: false, manualAcquisition: {"supportsUpload":false,"supportsReplacement":false}, engagementMode: "playback", aggregatesDirectChildPlayback: false, supportsRequests: true, enumeratesIdentifyChildren: true, acquisitionProfile: {"label":"TV (series)","displayOrder":2,"libraryRootMediaCapability":"scanVideos","supportedReleaseDateTypes":["premiere","air","first-air","streaming-release","digital-release","release"],"defaultNamingTemplate":"{Series}/Season {Season:00}/{Series} - S{Season:00}E{Episode:00}.{ext}","namingHint":"{Series} {Season} {Season:00} {Episode:00} {Quality} {ext} — 3 segments: series/season/episode","namingFamily":"television"} },
-  "video-season": { kind: "video-season", displayName: "Video Season", groupLabel: "Seasons", category: "Media", storageShape: "Folder", presentation: { icon: "season", referenceIcon: "video", thumbnailWidth: 2, thumbnailHeight: 3, primaryAccent: "yellow", secondaryAccent: "green", artworkFit: "cover" }, navigation: {"canonicalBrowseKind":"video-series","destinationId":"series","browsePath":"/series","detailPathTemplate":"/series/{parentId}/seasons/{id}","requiredAncestorKind":"video-series","isTopLevel":false}, search: null, autoIdentifySelector: null, identifyPluginFallbackKind: null, containableKinds: null, mediaQualityFamily: "video", supportsFileDeletion: true, supportsAtomicMediaUpgrade: false, supportsManualManagement: false, manualAcquisition: {"supportsUpload":true,"supportsReplacement":false}, engagementMode: "playback", aggregatesDirectChildPlayback: false, supportsRequests: true, enumeratesIdentifyChildren: true, acquisitionProfile: null },
+  "audio": { kind: "audio", displayName: "Audio", groupLabel: "Audio", category: "Media", storageShape: "File", presentation: { icon: "audio", referenceIcon: "audio", thumbnailWidth: 1, thumbnailHeight: 1, primaryAccent: "violet", secondaryAccent: "magenta", artworkFit: "cover" }, navigation: null, search: null, autoIdentifySelector: null, identifyPluginFallbackKind: null, containableKinds: null, mediaQualityFamily: "none", supportsFileDeletion: true, supportsAtomicMediaUpgrade: false, supportsManualManagement: false, manualAcquisition: {"supportsUpload":false,"supportsReplacement":false}, engagementMode: "none", supportsRequests: false, enumeratesIdentifyChildren: false, acquisitionProfile: null },
+  "audio-library": { kind: "audio-library", displayName: "Audio Library", groupLabel: "Audio Libraries", category: "Media", storageShape: "Folder", presentation: { icon: "album", referenceIcon: "audio", thumbnailWidth: 1, thumbnailHeight: 1, primaryAccent: "violet", secondaryAccent: "magenta", artworkFit: "cover" }, navigation: {"canonicalBrowseKind":"audio-library","destinationId":"albums","browsePath":"/audio","detailPathTemplate":"/audio/{id}","requiredAncestorKind":null,"isTopLevel":true}, search: {"order":10,"expandsRelationshipResults":false}, autoIdentifySelector: "audio", identifyPluginFallbackKind: null, containableKinds: null, mediaQualityFamily: "audio", supportsFileDeletion: true, supportsAtomicMediaUpgrade: false, supportsManualManagement: false, manualAcquisition: {"supportsUpload":true,"supportsReplacement":true}, engagementMode: "playback", supportsRequests: true, enumeratesIdentifyChildren: true, acquisitionProfile: {"label":"Music (albums)","displayOrder":3,"libraryRootMediaCapability":"scanAudio","supportedReleaseDateTypes":["release","digital-release","physical-release"],"defaultNamingTemplate":"{Artist}/{Album}","namingHint":"{Artist} {Album} {Year} — 2 segments: artist/album folder (track files keep their release names)","namingFamily":"music"} },
+  "audio-track": { kind: "audio-track", displayName: "Audio Track", groupLabel: "Audio Tracks", category: "Media", storageShape: "File", presentation: { icon: "track", referenceIcon: "audio", thumbnailWidth: 1, thumbnailHeight: 1, primaryAccent: "violet", secondaryAccent: "magenta", artworkFit: "cover" }, navigation: {"canonicalBrowseKind":"audio-track","destinationId":"tracks","browsePath":"/tracks","detailPathTemplate":"/audio/tracks/{id}","requiredAncestorKind":null,"isTopLevel":true}, search: {"order":11,"expandsRelationshipResults":false}, autoIdentifySelector: "audio", identifyPluginFallbackKind: null, containableKinds: null, mediaQualityFamily: "audio", supportsFileDeletion: true, supportsAtomicMediaUpgrade: false, supportsManualManagement: false, manualAcquisition: {"supportsUpload":false,"supportsReplacement":false}, engagementMode: "playback", supportsRequests: true, enumeratesIdentifyChildren: false, acquisitionProfile: null },
+  "book": { kind: "book", displayName: "Book", groupLabel: "Books", category: "Media", storageShape: "Archive", presentation: { icon: "book", referenceIcon: "book", thumbnailWidth: 2, thumbnailHeight: 3, primaryAccent: "cyan", secondaryAccent: "blue", artworkFit: "cover" }, navigation: {"canonicalBrowseKind":"book","destinationId":"books","browsePath":"/books","detailPathTemplate":"/books/{id}","requiredAncestorKind":null,"isTopLevel":true}, search: {"order":7,"expandsRelationshipResults":false}, autoIdentifySelector: "book", identifyPluginFallbackKind: null, containableKinds: null, mediaQualityFamily: "none", supportsFileDeletion: true, supportsAtomicMediaUpgrade: false, supportsManualManagement: false, manualAcquisition: {"supportsUpload":true,"supportsReplacement":true}, engagementMode: "reading", supportsRequests: true, enumeratesIdentifyChildren: true, acquisitionProfile: {"label":"Books","displayOrder":0,"libraryRootMediaCapability":"scanBooks","supportedReleaseDateTypes":["publication","digital-release","physical-release","release"],"defaultNamingTemplate":"{Author}/{Title} ({Year})/{Title}{ - Volume}.{ext}","namingHint":"{Author} {Title} {Year} {ext} — folder/file layout for the book payload","namingFamily":"book"} },
+  "book-volume": { kind: "book-volume", displayName: "Book Volume", groupLabel: "Volumes", category: "Media", storageShape: "None", presentation: { icon: "volume", referenceIcon: "book", thumbnailWidth: 2, thumbnailHeight: 3, primaryAccent: "cyan", secondaryAccent: "blue", artworkFit: "cover" }, navigation: {"canonicalBrowseKind":"book","destinationId":"books","browsePath":"/books","detailPathTemplate":"/books/{parentId}/volumes/{id}","requiredAncestorKind":"book","isTopLevel":false}, search: null, autoIdentifySelector: null, identifyPluginFallbackKind: null, containableKinds: null, mediaQualityFamily: "none", supportsFileDeletion: true, supportsAtomicMediaUpgrade: false, supportsManualManagement: false, manualAcquisition: {"supportsUpload":false,"supportsReplacement":false}, engagementMode: "reading", supportsRequests: false, enumeratesIdentifyChildren: true, acquisitionProfile: null },
+  "book-chapter": { kind: "book-chapter", displayName: "Book Chapter", groupLabel: "Chapters", category: "Media", storageShape: "None", presentation: { icon: "chapter", referenceIcon: "book", thumbnailWidth: 2, thumbnailHeight: 3, primaryAccent: "cyan", secondaryAccent: "blue", artworkFit: "cover" }, navigation: {"canonicalBrowseKind":"book","destinationId":"books","browsePath":"/books","detailPathTemplate":"/books/{parentId}/chapters/{id}","requiredAncestorKind":"book","isTopLevel":false}, search: null, autoIdentifySelector: null, identifyPluginFallbackKind: null, containableKinds: null, mediaQualityFamily: "none", supportsFileDeletion: false, supportsAtomicMediaUpgrade: false, supportsManualManagement: false, manualAcquisition: {"supportsUpload":false,"supportsReplacement":false}, engagementMode: "reading", supportsRequests: false, enumeratesIdentifyChildren: false, acquisitionProfile: null },
+  "book-page": { kind: "book-page", displayName: "Book Page", groupLabel: "Pages", category: "Media", storageShape: "ArchiveEntry", presentation: { icon: "page", referenceIcon: "book", thumbnailWidth: 2, thumbnailHeight: 3, primaryAccent: "cyan", secondaryAccent: "blue", artworkFit: "cover" }, navigation: {"canonicalBrowseKind":"book","destinationId":"books","browsePath":"/books","detailPathTemplate":null,"requiredAncestorKind":null,"isTopLevel":false}, search: null, autoIdentifySelector: null, identifyPluginFallbackKind: null, containableKinds: null, mediaQualityFamily: "none", supportsFileDeletion: false, supportsAtomicMediaUpgrade: false, supportsManualManagement: false, manualAcquisition: {"supportsUpload":false,"supportsReplacement":false}, engagementMode: "none", supportsRequests: false, enumeratesIdentifyChildren: false, acquisitionProfile: null },
+  "collection": { kind: "collection", displayName: "Collection", groupLabel: "Collections", category: "Collection", storageShape: "None", presentation: { icon: "collection", referenceIcon: "collection", thumbnailWidth: 16, thumbnailHeight: 9, primaryAccent: "magenta", secondaryAccent: "red", artworkFit: "cover" }, navigation: {"canonicalBrowseKind":"collection","destinationId":"collections","browsePath":"/collections","detailPathTemplate":"/collections/{id}","requiredAncestorKind":null,"isTopLevel":true}, search: {"order":9,"expandsRelationshipResults":false}, autoIdentifySelector: null, identifyPluginFallbackKind: null, containableKinds: ["video","video-episode","movie","video-series","gallery","image","book","music-artist","audio-library","audio-track"], mediaQualityFamily: "none", supportsFileDeletion: false, supportsAtomicMediaUpgrade: false, supportsManualManagement: false, manualAcquisition: {"supportsUpload":false,"supportsReplacement":false}, engagementMode: "none", supportsRequests: false, enumeratesIdentifyChildren: false, acquisitionProfile: null },
+  "gallery": { kind: "gallery", displayName: "Gallery", groupLabel: "Galleries", category: "Media", storageShape: "Folder", presentation: { icon: "gallery", referenceIcon: "gallery", thumbnailWidth: 1, thumbnailHeight: 1, primaryAccent: "green", secondaryAccent: "cyan", artworkFit: "cover" }, navigation: {"canonicalBrowseKind":"gallery","destinationId":"galleries","browsePath":"/galleries","detailPathTemplate":"/galleries/{id}","requiredAncestorKind":null,"isTopLevel":true}, search: {"order":6,"expandsRelationshipResults":false}, autoIdentifySelector: "gallery", identifyPluginFallbackKind: null, containableKinds: null, mediaQualityFamily: "none", supportsFileDeletion: true, supportsAtomicMediaUpgrade: false, supportsManualManagement: false, manualAcquisition: {"supportsUpload":false,"supportsReplacement":false}, engagementMode: "none", supportsRequests: false, enumeratesIdentifyChildren: false, acquisitionProfile: null },
+  "image": { kind: "image", displayName: "Image", groupLabel: "Images", category: "Media", storageShape: "File", presentation: { icon: "image", referenceIcon: "image", thumbnailWidth: 1, thumbnailHeight: 1, primaryAccent: "blue", secondaryAccent: "violet", artworkFit: "cover" }, navigation: {"canonicalBrowseKind":"image","destinationId":"images","browsePath":"/images","detailPathTemplate":"/images/{id}","requiredAncestorKind":null,"isTopLevel":true}, search: {"order":8,"expandsRelationshipResults":false}, autoIdentifySelector: "image", identifyPluginFallbackKind: null, containableKinds: null, mediaQualityFamily: "none", supportsFileDeletion: true, supportsAtomicMediaUpgrade: false, supportsManualManagement: false, manualAcquisition: {"supportsUpload":false,"supportsReplacement":false}, engagementMode: "none", supportsRequests: false, enumeratesIdentifyChildren: false, acquisitionProfile: null },
+  "music-artist": { kind: "music-artist", displayName: "Music Artist", groupLabel: "Artists", category: "Media", storageShape: "Folder", presentation: { icon: "artist", referenceIcon: "audio", thumbnailWidth: 1, thumbnailHeight: 1, primaryAccent: "violet", secondaryAccent: "magenta", artworkFit: "cover" }, navigation: {"canonicalBrowseKind":"music-artist","destinationId":"artists","browsePath":"/artists","detailPathTemplate":"/artists/{id}","requiredAncestorKind":null,"isTopLevel":true}, search: null, autoIdentifySelector: "audio", identifyPluginFallbackKind: null, containableKinds: null, mediaQualityFamily: "audio", supportsFileDeletion: true, supportsAtomicMediaUpgrade: false, supportsManualManagement: false, manualAcquisition: {"supportsUpload":false,"supportsReplacement":false}, engagementMode: "none", supportsRequests: true, enumeratesIdentifyChildren: true, acquisitionProfile: null },
+  "book-author": { kind: "book-author", displayName: "Book Author", groupLabel: "Authors", category: "Media", storageShape: "Folder", presentation: { icon: "author", referenceIcon: "book", thumbnailWidth: 2, thumbnailHeight: 3, primaryAccent: "cyan", secondaryAccent: "blue", artworkFit: "cover" }, navigation: {"canonicalBrowseKind":"book-author","destinationId":"authors","browsePath":"/authors","detailPathTemplate":"/authors/{id}","requiredAncestorKind":null,"isTopLevel":true}, search: null, autoIdentifySelector: null, identifyPluginFallbackKind: null, containableKinds: null, mediaQualityFamily: "none", supportsFileDeletion: true, supportsAtomicMediaUpgrade: false, supportsManualManagement: false, manualAcquisition: {"supportsUpload":false,"supportsReplacement":false}, engagementMode: "none", supportsRequests: true, enumeratesIdentifyChildren: true, acquisitionProfile: null },
+  "person": { kind: "person", displayName: "Person", groupLabel: "People", category: "Taxonomy", storageShape: "None", presentation: { icon: "person", referenceIcon: "person", thumbnailWidth: 4, thumbnailHeight: 5, primaryAccent: "red", secondaryAccent: "violet", artworkFit: "cover" }, navigation: {"canonicalBrowseKind":"person","destinationId":"people","browsePath":"/people","detailPathTemplate":"/people/{id}","requiredAncestorKind":null,"isTopLevel":true}, search: {"order":3,"expandsRelationshipResults":true}, autoIdentifySelector: null, identifyPluginFallbackKind: null, containableKinds: null, mediaQualityFamily: "none", supportsFileDeletion: false, supportsAtomicMediaUpgrade: false, supportsManualManagement: true, manualAcquisition: {"supportsUpload":false,"supportsReplacement":false}, engagementMode: "none", supportsRequests: false, enumeratesIdentifyChildren: false, acquisitionProfile: null },
+  "movie": { kind: "movie", displayName: "Movie", groupLabel: "Movies", category: "Media", storageShape: "File", presentation: { icon: "movie", referenceIcon: "video", thumbnailWidth: 2, thumbnailHeight: 3, primaryAccent: "orange", secondaryAccent: "yellow", artworkFit: "cover" }, navigation: {"canonicalBrowseKind":"movie","destinationId":"movies","browsePath":"/movies","detailPathTemplate":"/movies/{id}","requiredAncestorKind":null,"isTopLevel":true}, search: {"order":0,"expandsRelationshipResults":false}, autoIdentifySelector: "video", identifyPluginFallbackKind: "video", containableKinds: null, mediaQualityFamily: "video", supportsFileDeletion: true, supportsAtomicMediaUpgrade: true, supportsManualManagement: false, manualAcquisition: {"supportsUpload":true,"supportsReplacement":true}, engagementMode: "playback", supportsRequests: true, enumeratesIdentifyChildren: false, acquisitionProfile: {"label":"Movies","displayOrder":1,"libraryRootMediaCapability":"scanVideos","supportedReleaseDateTypes":["premiere","theatrical-release","streaming-release","digital-release","physical-release","release"],"defaultNamingTemplate":"{Title} ({Year})/{Title} ({Year}).{ext}","namingHint":"{Title} {Year} {Quality} {ext} — 2 segments: folder/file","namingFamily":"movie"} },
+  "studio": { kind: "studio", displayName: "Studio", groupLabel: "Studios", category: "Taxonomy", storageShape: "None", presentation: { icon: "studio", referenceIcon: "studio", thumbnailWidth: 21, thumbnailHeight: 9, primaryAccent: "orange", secondaryAccent: "magenta", artworkFit: "contain" }, navigation: {"canonicalBrowseKind":"studio","destinationId":"studios","browsePath":"/studios","detailPathTemplate":"/studios/{id}","requiredAncestorKind":null,"isTopLevel":true}, search: {"order":4,"expandsRelationshipResults":true}, autoIdentifySelector: null, identifyPluginFallbackKind: null, containableKinds: null, mediaQualityFamily: "none", supportsFileDeletion: false, supportsAtomicMediaUpgrade: false, supportsManualManagement: true, manualAcquisition: {"supportsUpload":false,"supportsReplacement":false}, engagementMode: "none", supportsRequests: false, enumeratesIdentifyChildren: false, acquisitionProfile: null },
+  "tag": { kind: "tag", displayName: "Tag", groupLabel: "Tags", category: "Taxonomy", storageShape: "None", presentation: { icon: "tag", referenceIcon: "tag", thumbnailWidth: 1, thumbnailHeight: 1, primaryAccent: "green", secondaryAccent: "yellow", artworkFit: "cover" }, navigation: {"canonicalBrowseKind":"tag","destinationId":"tags","browsePath":"/tags","detailPathTemplate":"/tags/{id}","requiredAncestorKind":null,"isTopLevel":true}, search: {"order":5,"expandsRelationshipResults":true}, autoIdentifySelector: null, identifyPluginFallbackKind: null, containableKinds: null, mediaQualityFamily: "none", supportsFileDeletion: false, supportsAtomicMediaUpgrade: false, supportsManualManagement: true, manualAcquisition: {"supportsUpload":false,"supportsReplacement":false}, engagementMode: "none", supportsRequests: false, enumeratesIdentifyChildren: false, acquisitionProfile: null },
+  "video": { kind: "video", displayName: "Video", groupLabel: "Videos", category: "Media", storageShape: "File", presentation: { icon: "video", referenceIcon: "video", thumbnailWidth: 16, thumbnailHeight: 9, primaryAccent: "red", secondaryAccent: "orange", artworkFit: "cover" }, navigation: {"canonicalBrowseKind":"video","destinationId":"videos","browsePath":"/videos","detailPathTemplate":"/videos/{id}","requiredAncestorKind":null,"isTopLevel":true}, search: {"order":2,"expandsRelationshipResults":false}, autoIdentifySelector: "video", identifyPluginFallbackKind: null, containableKinds: null, mediaQualityFamily: "video", supportsFileDeletion: true, supportsAtomicMediaUpgrade: true, supportsManualManagement: false, manualAcquisition: {"supportsUpload":true,"supportsReplacement":true}, engagementMode: "playback", supportsRequests: false, enumeratesIdentifyChildren: false, acquisitionProfile: null },
+  "video-episode": { kind: "video-episode", displayName: "Video Episode", groupLabel: "Episodes", category: "Media", storageShape: "File", presentation: { icon: "video", referenceIcon: "video", thumbnailWidth: 16, thumbnailHeight: 9, primaryAccent: "red", secondaryAccent: "orange", artworkFit: "cover" }, navigation: {"canonicalBrowseKind":"video","destinationId":"videos","browsePath":"/videos","detailPathTemplate":"/videos/{id}","requiredAncestorKind":null,"isTopLevel":true}, search: null, autoIdentifySelector: "video", identifyPluginFallbackKind: "video", containableKinds: null, mediaQualityFamily: "video", supportsFileDeletion: true, supportsAtomicMediaUpgrade: true, supportsManualManagement: false, manualAcquisition: {"supportsUpload":false,"supportsReplacement":false}, engagementMode: "playback", supportsRequests: true, enumeratesIdentifyChildren: false, acquisitionProfile: null },
+  "video-series": { kind: "video-series", displayName: "Video Series", groupLabel: "Series", category: "Media", storageShape: "Folder", presentation: { icon: "series", referenceIcon: "video", thumbnailWidth: 2, thumbnailHeight: 3, primaryAccent: "yellow", secondaryAccent: "green", artworkFit: "cover" }, navigation: {"canonicalBrowseKind":"video-series","destinationId":"series","browsePath":"/series","detailPathTemplate":"/series/{id}","requiredAncestorKind":null,"isTopLevel":true}, search: {"order":1,"expandsRelationshipResults":false}, autoIdentifySelector: "video", identifyPluginFallbackKind: null, containableKinds: null, mediaQualityFamily: "video", supportsFileDeletion: true, supportsAtomicMediaUpgrade: false, supportsManualManagement: false, manualAcquisition: {"supportsUpload":false,"supportsReplacement":false}, engagementMode: "playback", supportsRequests: true, enumeratesIdentifyChildren: true, acquisitionProfile: {"label":"TV (series)","displayOrder":2,"libraryRootMediaCapability":"scanVideos","supportedReleaseDateTypes":["premiere","air","first-air","streaming-release","digital-release","release"],"defaultNamingTemplate":"{Series}/Season {Season:00}/{Series} - S{Season:00}E{Episode:00}.{ext}","namingHint":"{Series} {Season} {Season:00} {Episode:00} {Quality} {ext} — 3 segments: series/season/episode","namingFamily":"television"} },
+  "video-season": { kind: "video-season", displayName: "Video Season", groupLabel: "Seasons", category: "Media", storageShape: "Folder", presentation: { icon: "season", referenceIcon: "video", thumbnailWidth: 2, thumbnailHeight: 3, primaryAccent: "yellow", secondaryAccent: "green", artworkFit: "cover" }, navigation: {"canonicalBrowseKind":"video-series","destinationId":"series","browsePath":"/series","detailPathTemplate":"/series/{parentId}/seasons/{id}","requiredAncestorKind":"video-series","isTopLevel":false}, search: null, autoIdentifySelector: null, identifyPluginFallbackKind: null, containableKinds: null, mediaQualityFamily: "video", supportsFileDeletion: true, supportsAtomicMediaUpgrade: false, supportsManualManagement: false, manualAcquisition: {"supportsUpload":true,"supportsReplacement":false}, engagementMode: "playback", supportsRequests: true, enumeratesIdentifyChildren: true, acquisitionProfile: null },
 } as const satisfies Record<EntityKindCode, EntityKindDefinitionManifestEntry>;
 
 export const ENTITY_KINDS_IN_GLOBAL_SEARCH = [
@@ -1349,7 +1427,7 @@ export const REQUEST_KIND_MANIFEST = [
   { kind: "movie", label: "Movie", plural: "Movies", committable: true, childNoun: null, entityKind: "movie", pluginEntityKind: "movie", acquisitionKind: "movie", profileKind: "movie", rootFlag: "scanVideos", discoverable: true, reviewSelection: "root" },
   { kind: "series", label: "Series", plural: "Series", committable: true, childNoun: "season", entityKind: "video-series", pluginEntityKind: "video-series", acquisitionKind: "video-season", profileKind: "video-series", rootFlag: "scanVideos", discoverable: true, reviewSelection: "direct-children" },
   { kind: "season", label: "Season", plural: "Seasons", committable: true, childNoun: "episode", entityKind: "video-season", pluginEntityKind: "video-season", acquisitionKind: "video-season", profileKind: "video-series", rootFlag: "scanVideos", discoverable: false, reviewSelection: "root" },
-  { kind: "episode", label: "Episode", plural: "Episodes", committable: true, childNoun: null, entityKind: "video", pluginEntityKind: "video", acquisitionKind: "video", profileKind: "video-series", rootFlag: "scanVideos", discoverable: false, reviewSelection: "root" },
+  { kind: "episode", label: "Episode", plural: "Episodes", committable: true, childNoun: null, entityKind: "video-episode", pluginEntityKind: "video-episode", acquisitionKind: "video-episode", profileKind: "video-series", rootFlag: "scanVideos", discoverable: false, reviewSelection: "root" },
   { kind: "artist", label: "Artist", plural: "Artists", committable: true, childNoun: "album", entityKind: "music-artist", pluginEntityKind: "music-artist", acquisitionKind: "audio-library", profileKind: "audio-library", rootFlag: "scanAudio", discoverable: true, reviewSelection: "direct-children" },
   { kind: "album", label: "Album", plural: "Albums", committable: true, childNoun: "track", entityKind: "audio-library", pluginEntityKind: "audio-library", acquisitionKind: "audio-library", profileKind: "audio-library", rootFlag: "scanAudio", discoverable: true, reviewSelection: "root" },
   { kind: "track", label: "Track", plural: "Tracks", committable: true, childNoun: null, entityKind: "audio-track", pluginEntityKind: "audio-track", acquisitionKind: "audio-track", profileKind: "audio-library", rootFlag: "scanAudio", discoverable: false, reviewSelection: "root" },
@@ -1367,6 +1445,7 @@ export const ENTITY_KINDS_SUPPORTING_FILE_DELETION = [
   "book-author",
   "movie",
   "video",
+  "video-episode",
   "video-series",
   "video-season",
 ] as const;
@@ -1388,7 +1467,7 @@ export const ENTITY_KINDS_SUPPORTING_REQUESTS = [
   "music-artist",
   "book-author",
   "movie",
-  "video",
+  "video-episode",
   "video-series",
   "video-season",
 ] as const;
