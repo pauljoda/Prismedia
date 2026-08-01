@@ -16,20 +16,13 @@ public static class LibraryScanJobs {
     /// <summary>
     /// Yields the scan job type that covers each media kind enabled on a library root.
     /// </summary>
-    /// <param name="scanVideos">Whether the root scans for video files.</param>
-    /// <param name="scanImages">Whether the root scans for image galleries.</param>
-    /// <param name="scanAudio">Whether the root scans for audio tracks.</param>
-    /// <param name="scanBooks">Whether the root scans for book and comic archives.</param>
+    /// <param name="selection">The media families included in the scan.</param>
     /// <returns>The scan job types to enqueue, one per enabled kind.</returns>
-    public static IEnumerable<JobType> ScanJobTypesFor(
-        bool scanVideos,
-        bool scanImages,
-        bool scanAudio,
-        bool scanBooks) {
-        if (scanVideos) yield return JobType.ScanLibrary;
-        if (scanImages) yield return JobType.ScanGallery;
-        if (scanAudio) yield return JobType.ScanAudio;
-        if (scanBooks) yield return JobType.ScanBook;
+    public static IEnumerable<JobType> ScanJobTypesFor(LibraryScanSelection selection) {
+        if (selection.Videos) yield return JobType.ScanLibrary;
+        if (selection.Images) yield return JobType.ScanGallery;
+        if (selection.Audio) yield return JobType.ScanAudio;
+        if (selection.Books) yield return JobType.ScanBook;
     }
 
     /// <summary>
@@ -39,22 +32,16 @@ public static class LibraryScanJobs {
     /// and its duplicate dropped. The next scheduler tick or library change re-triggers it.
     /// </summary>
     /// <param name="queue">Durable job queue.</param>
-    /// <param name="scanVideos">Whether to enqueue a video scan.</param>
-    /// <param name="scanImages">Whether to enqueue an image/gallery scan.</param>
-    /// <param name="scanAudio">Whether to enqueue an audio scan.</param>
-    /// <param name="scanBooks">Whether to enqueue a book/comic scan.</param>
+    /// <param name="selection">The media families whose scans should be enqueued.</param>
     /// <param name="cancellationToken">Token to cancel the operation.</param>
     /// <returns>The number of scan jobs that were newly enqueued.</returns>
     public static async Task<int> QueueScansForKindsAsync(
         IJobQueueService queue,
-        bool scanVideos,
-        bool scanImages,
-        bool scanAudio,
-        bool scanBooks,
+        LibraryScanSelection selection,
         CancellationToken cancellationToken) {
         var queued = 0;
 
-        foreach (var type in ScanJobTypesFor(scanVideos, scanImages, scanAudio, scanBooks)) {
+        foreach (var type in ScanJobTypesFor(selection)) {
             // Drop the duplicate when a scan of this kind is already in flight. The queue enforces the
             // same singleton, so this is also the accurate "did we add one" signal for callers.
             if (await queue.HasPendingAsync(type, null, cancellationToken)) {

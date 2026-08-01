@@ -796,12 +796,16 @@ public sealed class MediaEntityDeletionService(
             // Everything destructive has already committed. Caller cancellation or a transient queue
             // failure cannot truthfully turn the completed deletion into a failed HTTP operation; the
             // regular scan schedule can reconcile later, while the user receives the real success state.
+            var selection = scanRoots.Aggregate(
+                LibraryScanSelection.None,
+                (current, root) => current.Union(new LibraryScanSelection(
+                    Videos: root.ScanVideos,
+                    Images: root.ScanImages,
+                    Audio: root.ScanAudio,
+                    Books: root.ScanBooks)));
             await LibraryScanJobs.QueueScansForKindsAsync(
                 jobs,
-                scanRoots.Any(root => root.ScanVideos),
-                scanRoots.Any(root => root.ScanImages),
-                scanRoots.Any(root => root.ScanAudio),
-                scanRoots.Any(root => root.ScanBooks),
+                selection,
                 CancellationToken.None);
         } catch (Exception exception) {
             logger.LogWarning(

@@ -408,12 +408,16 @@ public sealed class FilesService(
 
         // Scans are per-kind singletons covering every enabled root, so a file change in any affected
         // root enqueues at most one scan per kind across all of them.
+        var selection = uniqueRoots.Aggregate(
+            LibraryScanSelection.None,
+            (current, root) => current.Union(new LibraryScanSelection(
+                Videos: root.ScanVideos,
+                Images: root.ScanImages,
+                Audio: root.ScanAudio,
+                Books: root.ScanBooks)));
         return await LibraryScanJobs.QueueScansForKindsAsync(
             jobs,
-            uniqueRoots.Any(root => root.ScanVideos),
-            uniqueRoots.Any(root => root.ScanImages),
-            uniqueRoots.Any(root => root.ScanAudio),
-            uniqueRoots.Any(root => root.ScanBooks),
+            selection,
             cancellationToken);
     }
 

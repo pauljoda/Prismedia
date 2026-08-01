@@ -100,10 +100,11 @@ public sealed partial class SettingsService {
         if (created.Enabled && _jobs is not null) {
             var queued = await LibraryScanJobs.QueueScansForKindsAsync(
                 _jobs,
-                created.ScanVideos,
-                created.ScanImages,
-                created.ScanAudio,
-                created.ScanBooks,
+                new LibraryScanSelection(
+                    Videos: created.ScanVideos,
+                    Images: created.ScanImages,
+                    Audio: created.ScanAudio,
+                    Books: created.ScanBooks),
                 cancellationToken);
             _logger?.LogInformation(
                 "Queued {Count} scan job(s) after adding library root '{Label}'.",

@@ -67,10 +67,7 @@ public sealed class JobScheduler(
         // Collect the kinds that have at least one enabled root due for a scan. Each scan job is a
         // per-kind singleton that covers every enabled root of that kind, so a single aggregate scan
         // per due kind replaces the previous per-root fan-out.
-        var scanVideos = false;
-        var scanImages = false;
-        var scanAudio = false;
-        var scanBooks = false;
+        var selection = LibraryScanSelection.None;
         var dueRootIds = new List<Guid>();
 
         foreach (var root in roots) {
@@ -78,11 +75,12 @@ public sealed class JobScheduler(
                 continue;
             }
 
-            if (!LibraryScanJobs.ScanJobTypesFor(
-                root.ScanVideos,
-                root.ScanImages,
-                root.ScanAudio,
-                root.ScanBooks).Any()) {
+            var rootSelection = new LibraryScanSelection(
+                Videos: root.ScanVideos,
+                Images: root.ScanImages,
+                Audio: root.ScanAudio,
+                Books: root.ScanBooks);
+            if (rootSelection.IsEmpty) {
                 continue;
             }
 
@@ -90,10 +88,7 @@ public sealed class JobScheduler(
                 continue;
             }
 
-            scanVideos |= root.ScanVideos;
-            scanImages |= root.ScanImages;
-            scanAudio |= root.ScanAudio;
-            scanBooks |= root.ScanBooks;
+            selection = selection.Union(rootSelection);
             dueRootIds.Add(root.Id);
         }
 
@@ -102,7 +97,7 @@ public sealed class JobScheduler(
         }
 
         var queued = await LibraryScanJobs.QueueScansForKindsAsync(
-            queue, scanVideos, scanImages, scanAudio, scanBooks, cancellationToken);
+            queue, selection, cancellationToken);
 
         foreach (var rootId in dueRootIds) {
             await settings.MarkLibraryRootScanTriggeredAsync(rootId, now, cancellationToken);
