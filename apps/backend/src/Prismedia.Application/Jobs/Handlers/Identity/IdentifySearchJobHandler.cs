@@ -11,6 +11,7 @@ namespace Prismedia.Application.Jobs.Handlers;
 /// Shares the process-wide identify provider slot with auto identify, entering on the interactive
 /// side so background work yields the slot to it.
 /// </summary>
+[JobDefinition(JobType.IdentifySearch)]
 public sealed class IdentifySearchJobHandler(
     IIdentifySearchRunner runner,
     AutoIdentifyConcurrencyGate gate,
@@ -18,8 +19,6 @@ public sealed class IdentifySearchJobHandler(
     TimeSpan? identifyTimeout = null) : IJobHandler {
     private static readonly TimeSpan DefaultIdentifyTimeout = TimeSpan.FromSeconds(90);
     private readonly TimeSpan _identifyTimeout = identifyTimeout ?? DefaultIdentifyTimeout;
-
-    public JobType Type => JobType.IdentifySearch;
 
     public async Task HandleAsync(JobContext context, CancellationToken cancellationToken) {
         var payload = IdentifySearchPayload.Parse(context.Job.PayloadJson);

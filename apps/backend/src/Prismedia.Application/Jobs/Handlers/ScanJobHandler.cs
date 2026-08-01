@@ -32,7 +32,6 @@ public abstract class ScanJobHandler(
     ILibraryScanRootPersistence roots,
     IScanSnapshotStore? snapshots = null,
     IMediaProcessingStatePersistence? processingState = null) : IJobHandler {
-    public abstract JobType Type { get; }
 
     public async Task HandleAsync(JobContext context, CancellationToken cancellationToken) {
         var timer = new JobPhaseTimer();
@@ -47,7 +46,7 @@ public abstract class ScanJobHandler(
             }
             var eligible = enabledRoots.Where(IsEligibleRoot).ToList();
             scannedRoots = eligible.Count;
-            logger.LogInformation("{JobType}: scanning {Count} eligible roots", Type.ToCode(), eligible.Count);
+            logger.LogInformation("{JobType}: scanning {Count} eligible roots", context.Job.Type.ToCode(), eligible.Count);
 
             for (var i = 0; i < eligible.Count; i++) {
                 var listedRoot = eligible[i];
@@ -58,11 +57,11 @@ public abstract class ScanJobHandler(
                 if (currentRoot is null) {
                     logger.LogInformation(
                         "{JobType}: skipping library root {RootId} because it no longer exists",
-                        Type.ToCode(), listedRoot.Id);
+                        context.Job.Type.ToCode(), listedRoot.Id);
                 } else if (!currentRoot.Enabled || !IsEligibleRoot(currentRoot)) {
                     logger.LogInformation(
                         "{JobType}: skipping library root {RootId} because it is no longer enabled for this scan",
-                        Type.ToCode(), listedRoot.Id);
+                        context.Job.Type.ToCode(), listedRoot.Id);
                 } else {
                     // One broken library must not freeze the others: record the failure, keep
                     // scanning the remaining roots, and fail the job at the end.
@@ -76,7 +75,7 @@ public abstract class ScanJobHandler(
                     } catch (OperationCanceledException) {
                         throw;
                     } catch (Exception ex) {
-                        logger.LogError(ex, "{JobType}: scanning library root {RootId} failed", Type.ToCode(), currentRoot.Id);
+                        logger.LogError(ex, "{JobType}: scanning library root {RootId} failed", context.Job.Type.ToCode(), currentRoot.Id);
                         rootFailures++;
                         firstRootError ??= ex.Message;
                     }
@@ -98,8 +97,8 @@ public abstract class ScanJobHandler(
                 root = await roots.GetLibraryRootAsync(payload.RootId, cancellationToken);
             }
             if (root is null) {
-                logger.LogWarning("{JobType}: root {RootId} not found", Type.ToCode(), payload.RootId);
-                LogJobMetrics(scannedRoots, rootFailures, timer.Finish());
+                logger.LogWarning("{JobType}: root {RootId} not found", context.Job.Type.ToCode(), payload.RootId);
+                LogJobMetrics(context.Job.Type, scannedRoots, rootFailures, timer.Finish());
                 return;
             }
 
@@ -120,13 +119,13 @@ public abstract class ScanJobHandler(
         // file changes (e.g. deleted library roots and orphaned taxonomy) still happens on an
         // otherwise no-op rescan.
         using (timer.Phase("cleanup-outside-roots")) {
-            await RemoveEntitiesOutsideConfiguredRootsAsync(cancellationToken);
+            await RemoveEntitiesOutsideConfiguredRootsAsync(context.Job.Type, cancellationToken);
         }
         using (timer.Phase("cleanup-orphan-tags")) {
-            await RemoveOrphanTagsIfEnabledAsync(cancellationToken);
+            await RemoveOrphanTagsIfEnabledAsync(context.Job.Type, cancellationToken);
         }
 
-        LogJobMetrics(scannedRoots, rootFailures, timer.Finish());
+        LogJobMetrics(context.Job.Type, scannedRoots, rootFailures, timer.Finish());
 
         if (rootFailures > 0) {
             throw new InvalidOperationException(
@@ -134,10 +133,10 @@ public abstract class ScanJobHandler(
         }
     }
 
-    private void LogJobMetrics(int scannedRoots, int rootFailures, JobTimingReport report) {
+    private void LogJobMetrics(JobType jobType, int scannedRoots, int rootFailures, JobTimingReport report) {
         logger.LogInformation(
             "[METRICS] scan-job {JobType} — roots={RootCount} failures={FailureCount} — {Timing}",
-            Type.ToCode(),
+            jobType.ToCode(),
             scannedRoots,
             rootFailures,
             report.ToLogString());
@@ -173,11 +172,11 @@ public abstract class ScanJobHandler(
                     outcome = await ScanRootCoreAsync(context, root, cancellationToken);
                 }
                 ThrowIfFilesFailed(outcome);
-                LogRootMetrics(root, mode, currentCount, previousCount, delta, timer.Finish());
+                LogRootMetrics(context.Job.Type, root, mode, currentCount, previousCount, delta, timer.Finish());
                 return;
             }
 
-            var scanKind = Type.ToCode();
+            var scanKind = context.Job.Type.ToCode();
             IReadOnlySet<string> excluded;
             using (timer.Phase("excluded-paths")) {
                 excluded = await roots.GetExcludedPathsForRootAsync(root.Id, cancellationToken);
@@ -211,7 +210,7 @@ public abstract class ScanJobHandler(
                 using (timer.Phase("unchanged-followup")) {
                     await OnNoFileChangesAsync(context, root, cancellationToken);
                 }
-                LogRootMetrics(root, mode, currentCount, previousCount, delta, timer.Finish());
+                LogRootMetrics(context.Job.Type, root, mode, currentCount, previousCount, delta, timer.Finish());
                 return;
             }
 
@@ -249,17 +248,18 @@ public abstract class ScanJobHandler(
                     cancellationToken);
             }
             ThrowIfFilesFailed(detailedOutcome);
-            LogRootMetrics(root, mode, currentCount, previousCount, delta, timer.Finish());
+            LogRootMetrics(context.Job.Type, root, mode, currentCount, previousCount, delta, timer.Finish());
         } catch (OperationCanceledException) {
-            LogRootMetrics(root, "cancelled", currentCount, previousCount, delta, timer.Finish());
+            LogRootMetrics(context.Job.Type, root, "cancelled", currentCount, previousCount, delta, timer.Finish());
             throw;
         } catch (Exception) {
-            LogRootMetrics(root, $"{mode}-failed", currentCount, previousCount, delta, timer.Finish());
+            LogRootMetrics(context.Job.Type, root, $"{mode}-failed", currentCount, previousCount, delta, timer.Finish());
             throw;
         }
     }
 
     private void LogRootMetrics(
+        JobType jobType,
         LibraryRootData root,
         string mode,
         int currentCount,
@@ -268,7 +268,7 @@ public abstract class ScanJobHandler(
         JobTimingReport report) {
         logger.LogInformation(
             "[METRICS] scan-root {JobType} {Label} — mode={Mode} current={CurrentCount} previous={PreviousCount} +{Added} -{Removed} ~{Changed} — {Timing}",
-            Type.ToCode(),
+            jobType.ToCode(),
             root.Label,
             mode,
             currentCount,
@@ -368,12 +368,12 @@ public abstract class ScanJobHandler(
     /// catches leftovers from older library-root deletions even when this scan's detailed per-root
     /// pass was skipped by the snapshot fast path.
     /// </summary>
-    private async Task RemoveEntitiesOutsideConfiguredRootsAsync(CancellationToken cancellationToken) {
+    private async Task RemoveEntitiesOutsideConfiguredRootsAsync(JobType jobType, CancellationToken cancellationToken) {
         var removed = await roots.RemoveEntitiesOutsideLibraryRootsAsync(cancellationToken);
         if (removed > 0) {
             logger.LogInformation(
                 "{JobType}: removed {Count} media entries outside configured library roots",
-                Type.ToCode(), removed);
+                jobType.ToCode(), removed);
         }
     }
 
@@ -384,7 +384,7 @@ public abstract class ScanJobHandler(
     /// deleting media, which changes no files, so this runs even when the incremental fast path
     /// skipped every root's detailed pass.
     /// </summary>
-    private async Task RemoveOrphanTagsIfEnabledAsync(CancellationToken cancellationToken) {
+    private async Task RemoveOrphanTagsIfEnabledAsync(JobType jobType, CancellationToken cancellationToken) {
         var settings = await roots.GetSettingsAsync(cancellationToken);
         if (!settings.RemoveOrphanTags) {
             return;
@@ -392,7 +392,7 @@ public abstract class ScanJobHandler(
 
         var removed = await roots.RemoveOrphanTagsAsync(cancellationToken);
         if (removed > 0) {
-            logger.LogInformation("{JobType}: removed {Count} orphan tags with no references", Type.ToCode(), removed);
+            logger.LogInformation("{JobType}: removed {Count} orphan tags with no references", jobType.ToCode(), removed);
         }
     }
 

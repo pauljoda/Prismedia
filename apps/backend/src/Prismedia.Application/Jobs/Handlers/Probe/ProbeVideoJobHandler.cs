@@ -9,12 +9,11 @@ namespace Prismedia.Application.Jobs.Handlers.Probe;
 /// Probes a video file via ffprobe to extract duration, dimensions, codec, bitrate, and container
 /// metadata, then stores the results in the entity's technical capability row.
 /// </summary>
+[JobDefinition(JobType.ProbeVideo, ResourceClass = JobResourceClass.StandardCpu, BlocksAutoIdentify = true)]
 public sealed class ProbeVideoJobHandler(
     ILogger<ProbeVideoJobHandler> logger,
     IMediaProbe mediaProbe,
     IMediaProcessingStatePersistence persistence) : EntityFileJobHandler(logger, persistence) {
-    public override JobType Type => JobType.ProbeVideo;
-
     protected override async Task ExecuteAsync(
         JobContext context, Guid entityId, string filePath, CancellationToken cancellationToken) {
         var timer = new JobPhaseTimer();

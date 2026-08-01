@@ -8,11 +8,10 @@ namespace Prismedia.Application.Jobs.Handlers.Maintenance;
 /// Performs library maintenance: validates generated cache assets exist on disk
 /// and removes orphaned cache directories whose entities no longer exist.
 /// </summary>
+[JobDefinition(JobType.LibraryMaintenance)]
 public sealed class LibraryMaintenanceJobHandler(
     ILogger<LibraryMaintenanceJobHandler> logger,
     IMaintenancePersistence persistence) : IJobHandler {
-    public JobType Type => JobType.LibraryMaintenance;
-
     public async Task HandleAsync(JobContext context, CancellationToken cancellationToken) {
         await context.ReportProgressAsync(5, "Starting maintenance", cancellationToken);
 

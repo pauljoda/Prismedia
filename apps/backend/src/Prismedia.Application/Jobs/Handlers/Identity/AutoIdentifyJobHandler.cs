@@ -10,14 +10,13 @@ namespace Prismedia.Application.Jobs.Handlers;
 /// confident match. Enqueued per entity by the library scan handlers when auto identify is enabled.
 /// All provider selection, confidence gating, and apply logic lives in <see cref="IAutoIdentifyRunner"/>.
 /// </summary>
+[JobDefinition(JobType.AutoIdentify, Importance = JobNodeImportance.BestEffort)]
 public sealed class AutoIdentifyJobHandler(
     IAutoIdentifyRunner runner,
     ILogger<AutoIdentifyJobHandler> logger,
     TimeSpan? identifyTimeout = null) : IJobHandler {
     private static readonly TimeSpan DefaultIdentifyInactivityTimeout = TimeSpan.FromSeconds(90);
     private readonly TimeSpan _identifyInactivityTimeout = identifyTimeout ?? DefaultIdentifyInactivityTimeout;
-
-    public JobType Type => JobType.AutoIdentify;
 
     public async Task HandleAsync(JobContext context, CancellationToken cancellationToken) {
         if (!Guid.TryParse(context.Job.TargetEntityId, out var entityId)) {

@@ -11,14 +11,13 @@ namespace Prismedia.Application.Jobs.Handlers.Generate;
 /// Optimized for throughput: uses batch trickplay extraction (single ffmpeg pass)
 /// and combined thumbnail+preview generation.
 /// </summary>
+[JobDefinition(JobType.GeneratePreview, ResourceClass = JobResourceClass.HeavyCpu, Importance = JobNodeImportance.BestEffort, BlocksAutoIdentify = true)]
 public sealed class GeneratePreviewJobHandler(
     ILogger<GeneratePreviewJobHandler> logger,
     IMediaAssetGenerator assets,
     IMediaProcessingStatePersistence persistence,
     ILibraryScanRootPersistence roots,
     IGridThumbnailService gridThumbnails) : EntityFileJobHandler(logger, persistence) {
-    public override JobType Type => JobType.GeneratePreview;
-
     protected override async Task ExecuteAsync(
         JobContext context, Guid entityId, string filePath, CancellationToken cancellationToken) {
         var timer = new JobPhaseTimer();

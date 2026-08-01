@@ -1,21 +1,17 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
-using Microsoft.Extensions.Logging;
 using Prismedia.Application.Entities;
 using Prismedia.Application.Audio;
 using Prismedia.Application.Files;
 using Prismedia.Application.Jobs;
+using Prismedia.Application.Jobs.Handlers;
+using Prismedia.Application.Jobs.Handlers.Identity;
+using Prismedia.Application.Jobs.Handlers.Maintenance;
+using Prismedia.Application.Jobs.Handlers.Scan;
 using Prismedia.Application.Organization;
 using Prismedia.Application.Settings;
 using Prismedia.Application.Health;
 using Prismedia.Application.Navigation;
-using Prismedia.Application.Jobs.Handlers;
-using Prismedia.Application.Jobs.Handlers.Generate;
-using Prismedia.Application.Jobs.Handlers.Identity;
-using Prismedia.Application.Jobs.Handlers.Import;
-using Prismedia.Application.Jobs.Handlers.Maintenance;
-using Prismedia.Application.Jobs.Handlers.Probe;
-using Prismedia.Application.Jobs.Handlers.Scan;
 using Prismedia.Application.Jobs.Ports;
 using Prismedia.Application.Jobs.Scanning;
 using Prismedia.Domain.Entities;
@@ -92,17 +88,11 @@ public static class DependencyInjection {
     /// Adds application job handlers, the hosted queue worker, scan scheduler, and history pruner.
     /// </summary>
     public static IServiceCollection AddPrismediaWorkerApplication(this IServiceCollection services) {
-        // Utility handlers
-        services.AddTransient<IJobHandler, NoOpJobHandler>();
-
-        // Scanning
-        services.AddTransient<ScanLibraryJobHandler>();
-        services.AddTransient<IJobHandler>(provider => provider.GetRequiredService<ScanLibraryJobHandler>());
-        services.AddTransient<IJobHandler, ScanGalleryJobHandler>();
-        services.AddTransient<ScanBookJobHandler>();
-        services.AddTransient<IJobHandler>(provider => provider.GetRequiredService<ScanBookJobHandler>());
-        services.AddTransient<ScanAudioJobHandler>();
-        services.AddTransient<IJobHandler>(provider => provider.GetRequiredService<ScanAudioJobHandler>());
+        foreach (var handlerType in JobDefinitionRegistry.All
+                     .Select(definition => definition.HandlerType)
+                     .Distinct()) {
+            services.AddTransient(handlerType);
+        }
 
         // Import execution is worker-only. Policies reuse the concrete scan handlers above so every
         // first-party kind materializes exact placed files before its acquisition reports Imported.
@@ -112,72 +102,9 @@ public static class DependencyInjection {
         services.AddScoped<ImportedTorrentRemover>();
         services.AddScoped<IAcquisitionImportEngineFactory, AcquisitionImportEngineFactory>();
 
-        // Probing
-        services.AddTransient<IJobHandler, ProbeVideoJobHandler>();
-        services.AddTransient<IJobHandler, ProbeAudioJobHandler>();
-
-        // Fingerprinting (single handler, registered per job type)
-        services.AddTransient<IJobHandler>(sp => new FingerprintJobHandler(
-            JobType.FingerprintVideo,
-            sp.GetRequiredService<ILogger<FingerprintJobHandler>>(),
-            sp.GetRequiredService<IMediaHashing>(),
-            sp.GetRequiredService<ILibraryScanRootPersistence>(),
-            sp.GetRequiredService<IMediaProcessingStatePersistence>()));
-        services.AddTransient<IJobHandler>(sp => new FingerprintJobHandler(
-            JobType.FingerprintImage,
-            sp.GetRequiredService<ILogger<FingerprintJobHandler>>(),
-            sp.GetRequiredService<IMediaHashing>(),
-            sp.GetRequiredService<ILibraryScanRootPersistence>(),
-            sp.GetRequiredService<IMediaProcessingStatePersistence>()));
-        services.AddTransient<IJobHandler>(sp => new FingerprintJobHandler(
-            JobType.FingerprintAudio,
-            sp.GetRequiredService<ILogger<FingerprintJobHandler>>(),
-            sp.GetRequiredService<IMediaHashing>(),
-            sp.GetRequiredService<ILibraryScanRootPersistence>(),
-            sp.GetRequiredService<IMediaProcessingStatePersistence>()));
-
-        // Preview / asset generation
-        services.AddTransient<IJobHandler, GeneratePreviewJobHandler>();
-        services.AddTransient<IJobHandler, GenerateGridThumbnailJobHandler>();
-        services.AddTransient<IJobHandler, GridThumbnailSweepJobHandler>();
-        services.AddTransient<IJobHandler, GenerateImageThumbnailJobHandler>();
-        services.AddTransient<IJobHandler, GenerateBookPageThumbnailJobHandler>();
-        services.AddTransient<IJobHandler, GenerateBookCoverThumbnailJobHandler>();
-        services.AddTransient<IJobHandler, GenerateAudioWaveformJobHandler>();
-        services.AddTransient<IJobHandler, ExtractSubtitlesJobHandler>();
-        services.AddTransient<IJobHandler, AutoAcquireSubtitlesJobHandler>();
-        services.AddTransient<IJobHandler, AcquireSubtitleJobHandler>();
-
-        // Metadata / collections / maintenance
-        services.AddTransient<IJobHandler, ImportMetadataJobHandler>();
-        services.AddTransient<IJobHandler, RefreshCollectionJobHandler>();
         services.AddTransient<EntityProcessingGraphPlanner>();
-        services.AddTransient<RefreshEntityJobHandler>();
-        services.AddTransient<IJobHandler>(provider => provider.GetRequiredService<RefreshEntityJobHandler>());
-        services.AddTransient<IJobHandler, ReconcileEntityJobHandler>();
-        services.AddTransient<IJobHandler, LibraryMaintenanceJobHandler>();
-        services.AddTransient<IJobHandler, DatabaseBackupJobHandler>();
 
-        // Identify
         services.AddSingleton<AutoIdentifyConcurrencyGate>();
-        services.AddTransient<IJobHandler, IdentifySearchJobHandler>();
-        services.AddTransient<IJobHandler, IdentifyProviderCallJobHandler>();
-        services.AddTransient<IJobHandler, IdentifyApplyJobHandler>();
-        services.AddTransient<IJobHandler, BulkIdentifyJobHandler>();
-        services.AddTransient<IJobHandler, AutoIdentifyJobHandler>();
-        services.AddTransient<IJobHandler, IdentifyCascadeJobHandler>();
-
-        // Acquisition
-        services.AddTransient<IJobHandler, AcquisitionSearchJobHandler>();
-        services.AddTransient<IJobHandler, AcquisitionMonitorJobHandler>();
-        services.AddTransient<IJobHandler, AcquisitionImportJobHandler>();
-        services.AddTransient<IJobHandler, AcquisitionFinalizeJobHandler>();
-        services.AddTransient<IJobHandler, RecycleBinCleanupJobHandler>();
-        services.AddTransient<IJobHandler, AcquisitionFailedHandleJobHandler>();
-        services.AddTransient<IJobHandler, MonitoredSearchJobHandler>();
-        services.AddTransient<IJobHandler, AcquisitionUpgradeReplaceJobHandler>();
-        services.AddTransient<IJobHandler, AcquisitionEnrichJobHandler>();
-        services.AddTransient<IJobHandler, RequestAcquisitionFanoutJobHandler>();
 
         // Background services
         services.AddSingleton<WorkerRuntimeIdentity>();

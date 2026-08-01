@@ -13,6 +13,7 @@ namespace Prismedia.Application.Jobs.Handlers;
 /// re-scan, cleans up the transfer source, and releases any monitor upgrade slot. The owned file is the only
 /// library file mutated, and only after every safety gate passes.
 /// </summary>
+[JobDefinition(JobType.AcquisitionUpgradeReplace)]
 public sealed class AcquisitionUpgradeReplaceJobHandler(
     IAcquisitionStore acquisitions,
     IMonitorStore monitors,
@@ -24,8 +25,6 @@ public sealed class AcquisitionUpgradeReplaceJobHandler(
     ILogger<AcquisitionUpgradeReplaceJobHandler> logger,
     IEntityLifecycleMutationLease? entityLifecycle = null,
     IAcquisitionUploadStorage? uploads = null) : IJobHandler {
-    public JobType Type => JobType.AcquisitionUpgradeReplace;
-
     public async Task HandleAsync(JobContext context, CancellationToken cancellationToken) {
         var payload = AcquisitionJobPayload.Parse(context.Job.PayloadJson);
         var childId = payload.AcquisitionId;

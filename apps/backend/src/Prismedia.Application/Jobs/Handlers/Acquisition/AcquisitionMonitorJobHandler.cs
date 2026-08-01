@@ -11,6 +11,7 @@ namespace Prismedia.Application.Jobs.Handlers;
 /// the exact same release so a lost client response cannot strand an acquisition in Preparing. Enqueued
 /// as a singleton by the scheduler whenever active transfers exist, so a single pass covers all of them.
 /// </summary>
+[JobDefinition(JobType.AcquisitionMonitor)]
 public sealed class AcquisitionMonitorJobHandler(
     IAcquisitionStore acquisitions,
     IAcquisitionQueueService queueService,
@@ -22,8 +23,6 @@ public sealed class AcquisitionMonitorJobHandler(
     ILogger<AcquisitionMonitorJobHandler> logger,
     AcquisitionCompletionService? completion = null,
     IJobGraphService? graphs = null) : IJobHandler {
-    public JobType Type => JobType.AcquisitionMonitor;
-
     /// <summary>
     /// How long a torrent may stay absent from the download client's listing before the acquisition is
     /// treated as removed. Presence is checked against the client's full listing (see

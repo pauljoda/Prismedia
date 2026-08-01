@@ -11,6 +11,7 @@ namespace Prismedia.Application.Jobs.Handlers;
 /// next-best accepted candidate that is not itself blocklisted. With auto-redownload off, or when no
 /// alternative remains, the acquisition is left <see cref="AcquisitionStatus.Failed"/> for manual retry.
 /// </summary>
+[JobDefinition(JobType.AcquisitionFailedHandle)]
 public sealed class AcquisitionFailedHandleJobHandler(
     IAcquisitionStore acquisitions,
     IAcquisitionBlocklistStore blocklist,
@@ -20,8 +21,6 @@ public sealed class AcquisitionFailedHandleJobHandler(
     IDownloadClientConfigStore downloadClients,
     SettingsService settings,
     ILogger<AcquisitionFailedHandleJobHandler> logger) : IJobHandler {
-    public JobType Type => JobType.AcquisitionFailedHandle;
-
     public async Task HandleAsync(JobContext context, CancellationToken cancellationToken) {
         var payload = AcquisitionFailedPayload.Parse(context.Job.PayloadJson);
         var acquisitionId = payload.AcquisitionId;

@@ -10,11 +10,10 @@ namespace Prismedia.Application.Jobs.Handlers;
 /// wire-compatible with historical cascades, while the distinct job type makes new graph work explicit
 /// and leaves <see cref="JobType.IdentifyCascade"/> as a decode-only compatibility path.
 /// </summary>
+[JobDefinition(JobType.IdentifyProviderCall)]
 public sealed class IdentifyProviderCallJobHandler(
     IIdentifyProviderCallRunner runner,
     ILogger<IdentifyProviderCallJobHandler> logger) : IJobHandler {
-    public JobType Type => JobType.IdentifyProviderCall;
-
     public async Task HandleAsync(JobContext context, CancellationToken cancellationToken) {
         var payload = IdentifyProviderCallPayload.Parse(context.Job.PayloadJson);
         await context.ReportProgressAsync(10, "Resolving provider metadata", cancellationToken);

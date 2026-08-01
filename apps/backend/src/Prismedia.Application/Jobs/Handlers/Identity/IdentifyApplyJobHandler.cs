@@ -5,11 +5,10 @@ using Prismedia.Domain.Entities;
 namespace Prismedia.Application.Jobs.Handlers;
 
 /// <summary>Applies a reviewed proposal as a required node in the originating interactive graph.</summary>
+[JobDefinition(JobType.IdentifyApply)]
 public sealed class IdentifyApplyJobHandler(
     IIdentifyApplyRunner runner,
     ILogger<IdentifyApplyJobHandler> logger) : IJobHandler {
-    public JobType Type => JobType.IdentifyApply;
-
     public async Task HandleAsync(JobContext context, CancellationToken cancellationToken) {
         var payload = IdentifyApplyPayload.Parse(context.Job.PayloadJson);
         var graphId = context.Job.GraphId

@@ -8,11 +8,10 @@ namespace Prismedia.Application.Jobs.Handlers;
 /// predecessors have completed. Re-execution is safe because the acquisition store performs one idempotent
 /// terminal update and clears the import claim in the same commit.
 /// </summary>
+[JobDefinition(JobType.AcquisitionFinalize)]
 public sealed class AcquisitionFinalizeJobHandler(
     IAcquisitionStore acquisitions,
     IMonitorStore monitors) : IJobHandler {
-    public JobType Type => JobType.AcquisitionFinalize;
-
     public async Task HandleAsync(JobContext context, CancellationToken cancellationToken) {
         var payload = AcquisitionFinalizeJobPayload.Parse(context.Job.PayloadJson);
         if (payload.UpgradeParentAcquisitionId is not null) {

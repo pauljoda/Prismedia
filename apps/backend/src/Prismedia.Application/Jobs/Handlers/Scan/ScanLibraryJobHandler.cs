@@ -14,6 +14,7 @@ namespace Prismedia.Application.Jobs.Handlers.Scan;
 /// removes stale entries, and chains downstream probe/fingerprint/preview jobs.
 /// Optimized for throughput: batch entity upserts, batch downstream checks, batch job enqueues.
 /// </summary>
+[JobDefinition(JobType.ScanLibrary, SingletonBehavior = JobSingletonBehavior.QueueWide, BlocksAutoIdentify = true)]
 public sealed class ScanLibraryJobHandler(
     ILogger<ScanLibraryJobHandler> logger,
     IFileDiscovery fileDiscovery,
@@ -38,8 +39,6 @@ public sealed class ScanLibraryJobHandler(
     private static readonly Regex GeneratedVideoArtifactDirectoryPattern = new(
         @"(?:^|[-._\s])(?:trickplay)$",
         RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
-
-    public override JobType Type => JobType.ScanLibrary;
 
     protected override bool IsEligibleRoot(LibraryRootData root) => root.ScanVideos;
 

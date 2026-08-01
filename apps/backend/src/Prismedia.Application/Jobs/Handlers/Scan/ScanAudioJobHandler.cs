@@ -15,6 +15,7 @@ namespace Prismedia.Application.Jobs.Handlers.Scan;
 /// artist folder is created as a grouping (<see cref="EntityKind.MusicArtist"/>) for its albums.
 /// Track, album, and artist entities are upserted and downstream probe/fingerprint jobs chained.
 /// </summary>
+[JobDefinition(JobType.ScanAudio, SingletonBehavior = JobSingletonBehavior.QueueWide, BlocksAutoIdentify = true)]
 public sealed class ScanAudioJobHandler(
     ILogger<ScanAudioJobHandler> logger,
     IFileDiscovery fileDiscovery,
@@ -25,8 +26,6 @@ public sealed class ScanAudioJobHandler(
     IAcquisitionHintApplier? acquisitionHints = null,
     IMediaProcessingStatePersistence? processingState = null)
     : ScanJobHandler(logger, fileDiscovery, roots, snapshots, processingState) {
-    public override JobType Type => JobType.ScanAudio;
-
     protected override bool IsEligibleRoot(LibraryRootData root) => root.ScanAudio;
 
     protected override IReadOnlyList<MediaCategory> ScanCategories => [MediaCategory.Audio];

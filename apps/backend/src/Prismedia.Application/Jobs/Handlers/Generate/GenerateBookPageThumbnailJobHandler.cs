@@ -13,13 +13,12 @@ namespace Prismedia.Application.Jobs.Handlers.Generate;
 /// archive and scaling it through the shared image resizer (in-process SkiaSharp, with an
 /// ffmpeg fallback for exotic formats).
 /// </summary>
+[JobDefinition(JobType.GenerateBookPageThumbnail, ResourceClass = JobResourceClass.HeavyCpu, Importance = JobNodeImportance.BestEffort, BlocksAutoIdentify = true)]
 public sealed class GenerateBookPageThumbnailJobHandler(
     ILogger<GenerateBookPageThumbnailJobHandler> logger,
     IMediaAssetGenerator assets,
     IImageThumbnailGenerator imageThumbnails,
     IMediaProcessingStatePersistence persistence) : EntityFileJobHandler(logger, persistence) {
-    public override JobType Type => JobType.GenerateBookPageThumbnail;
-
     protected override bool ValidateFilePath(string filePath) {
         return EntitySourcePath.TrySplitArchiveMember(filePath, out var archivePath, out _)
             && File.Exists(archivePath);

@@ -13,6 +13,7 @@ namespace Prismedia.Application.Jobs.Handlers;
 /// The enqueuer publishes Searching first; that durable state distinguishes intentional work from an
 /// at-least-once redelivery of an old job.
 /// </summary>
+[JobDefinition(JobType.AcquisitionSearch)]
 public sealed class AcquisitionSearchJobHandler(
     IAcquisitionStore store,
     AcquisitionSearchRunner runner,
@@ -23,8 +24,6 @@ public sealed class AcquisitionSearchJobHandler(
     AcquisitionMissingChildFallback missingChildren,
     ILogger<AcquisitionSearchJobHandler> logger,
     IJobGraphService? graphs = null) : IJobHandler {
-    public JobType Type => JobType.AcquisitionSearch;
-
     /// <summary>
     /// States from which an explicit API or monitor action may publish a fresh Searching intent. This is a
     /// scheduling policy only; the job handler itself consumes Searching exclusively.

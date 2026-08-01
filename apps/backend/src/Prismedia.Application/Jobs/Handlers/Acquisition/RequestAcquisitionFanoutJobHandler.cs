@@ -10,12 +10,11 @@ namespace Prismedia.Application.Jobs.Handlers;
 /// container request already committed. Each child is idempotent: redelivery observes open work or
 /// newly imported media and skips it, while provider enrichment remains in the acquisition job chain.
 /// </summary>
+[JobDefinition(JobType.RequestAcquisitionFanout)]
 public sealed class RequestAcquisitionFanoutJobHandler(
     IRequestGraphAcquisitionStarter requests,
     IRequestChildHydrator childHydrator,
     ILogger<RequestAcquisitionFanoutJobHandler> logger) : IJobHandler {
-    public JobType Type => JobType.RequestAcquisitionFanout;
-
     public async Task HandleAsync(JobContext context, CancellationToken cancellationToken) {
         var payload = RequestAcquisitionFanoutPayload.Parse(context.Job.PayloadJson);
         var targeting = new AcquisitionTargeting(payload.TargetLibraryRootId, payload.ProfileId);

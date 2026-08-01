@@ -1,18 +1,19 @@
 using Microsoft.Extensions.DependencyInjection;
-using Prismedia.Application.Jobs.Handlers.Maintenance;
-
+using Prismedia.Application.Jobs;
 namespace Prismedia.Application.Tests.Jobs;
 
 public sealed class WorkerDependencyInjectionTests {
     [Fact]
-    public void WorkerCompositionRegistersTheSharedEntityProcessingPlanner() {
+    public void WorkerCompositionRegistersEveryDiscoveredHandlerByConcreteType() {
         var services = new ServiceCollection();
 
         services.AddPrismediaWorkerApplication();
 
-        Assert.Contains(services, descriptor =>
-            descriptor.ServiceType == typeof(EntityProcessingGraphPlanner) &&
-            descriptor.ImplementationType == typeof(EntityProcessingGraphPlanner) &&
-            descriptor.Lifetime == ServiceLifetime.Transient);
+        foreach (var handlerType in JobDefinitionRegistry.All.Select(definition => definition.HandlerType).Distinct()) {
+            Assert.Contains(services, descriptor =>
+                descriptor.ServiceType == handlerType &&
+                descriptor.ImplementationType == handlerType &&
+                descriptor.Lifetime == ServiceLifetime.Transient);
+        }
     }
 }

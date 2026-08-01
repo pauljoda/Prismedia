@@ -10,12 +10,11 @@ namespace Prismedia.Application.Jobs.Handlers.Generate;
 /// Generates audio waveform peak data by decoding to PCM via ffmpeg and computing
 /// min/max sample pairs at 20 pixels per second.
 /// </summary>
+[JobDefinition(JobType.GenerateAudioWaveform, ResourceClass = JobResourceClass.HeavyCpu, Importance = JobNodeImportance.BestEffort, BlocksAutoIdentify = true)]
 public sealed class GenerateAudioWaveformJobHandler(
     ILogger<GenerateAudioWaveformJobHandler> logger,
     IMediaAssetGenerator assets,
     IMediaProcessingStatePersistence persistence) : EntityFileJobHandler(logger, persistence) {
-    public override JobType Type => JobType.GenerateAudioWaveform;
-
     protected override async Task ExecuteAsync(
         JobContext context, Guid entityId, string filePath, CancellationToken cancellationToken) {
         await context.ReportProgressAsync(10, "Generating waveform data", cancellationToken);

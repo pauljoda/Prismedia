@@ -8,8 +8,8 @@ namespace Prismedia.Application.Jobs.Handlers;
 /// Daily recycle-bin purge: deletes binned files older than the configured cleanup window and drops
 /// emptied dated subfolders. Scheduled only while a recycle-bin folder is configured.
 /// </summary>
+[JobDefinition(JobType.RecycleBinCleanup)]
 public sealed class RecycleBinCleanupJobHandler(IRecycleBin recycleBin, ILogger<RecycleBinCleanupJobHandler> logger) : IJobHandler {
-    public JobType Type => JobType.RecycleBinCleanup;
 
     public async Task HandleAsync(JobContext context, CancellationToken cancellationToken) {
         var removed = await recycleBin.CleanupAsync(cancellationToken);

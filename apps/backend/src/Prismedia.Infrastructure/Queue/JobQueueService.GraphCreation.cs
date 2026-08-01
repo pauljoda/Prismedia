@@ -65,7 +65,7 @@ public sealed partial class JobQueueService {
             return $"{request.Type.ToCode()}:{request.TargetEntityId}";
         }
 
-        return SingletonJobTypes.Contains(request.Type)
+        return JobDefinitionRegistry.IsQueueWideSingleton(request.Type, hasTarget: false)
             ? request.Type.ToCode()
             : null;
     }

@@ -213,8 +213,8 @@ public sealed class QueueWorker(
     private async Task ProcessJobAsync(JobRunSnapshot job, CancellationToken stoppingToken) {
         await using var scope = scopeFactory.CreateAsyncScope();
         var queue = scope.ServiceProvider.GetRequiredService<IJobQueueService>();
-        var handlers = scope.ServiceProvider.GetServices<IJobHandler>();
-        var handler = handlers.FirstOrDefault(h => h.Type == job.Type);
+        var definition = JobDefinitionRegistry.Get(job.Type);
+        var handler = scope.ServiceProvider.GetService(definition.HandlerType) as IJobHandler;
 
         if (handler is null) {
             logger.LogWarning("No handler registered for job type '{JobType}'.", job.Type.ToCode());

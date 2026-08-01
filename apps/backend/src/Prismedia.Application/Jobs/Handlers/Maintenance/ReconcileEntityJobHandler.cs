@@ -7,8 +7,8 @@ namespace Prismedia.Application.Jobs.Handlers.Maintenance;
 /// Runs the canonical entity-scoped processing planner after an import or source revision. It shares
 /// the refresh implementation so import engines never duplicate kind-specific downstream policy.
 /// </summary>
+[JobDefinition(JobType.ReconcileEntity)]
 public sealed class ReconcileEntityJobHandler(EntityProcessingGraphPlanner planner) : IJobHandler {
-    public JobType Type => JobType.ReconcileEntity;
 
     public Task HandleAsync(JobContext context, CancellationToken cancellationToken) {
         var finalization = context.Job.PayloadJson is { Length: > 2 }

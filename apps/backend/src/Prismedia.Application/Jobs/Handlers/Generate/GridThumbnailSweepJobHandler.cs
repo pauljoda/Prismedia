@@ -10,12 +10,10 @@ namespace Prismedia.Application.Jobs.Handlers.Generate;
 /// and regenerates them. Scheduled at worker startup and daily thereafter so
 /// libraries whose artwork predates grid thumbnails converge without user action.
 /// </summary>
+[JobDefinition(JobType.GridThumbnailSweep, SingletonBehavior = JobSingletonBehavior.QueueWide)]
 public sealed class GridThumbnailSweepJobHandler(
     ILogger<GridThumbnailSweepJobHandler> logger,
     IGridThumbnailService gridThumbnails) : IJobHandler {
-    /// <inheritdoc />
-    public JobType Type => JobType.GridThumbnailSweep;
-
     /// <inheritdoc />
     public async Task HandleAsync(JobContext context, CancellationToken cancellationToken) {
         var needed = await gridThumbnails.ListEntitiesNeedingRefreshAsync(cancellationToken);

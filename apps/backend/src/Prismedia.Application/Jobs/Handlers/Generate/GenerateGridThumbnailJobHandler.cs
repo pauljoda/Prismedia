@@ -9,12 +9,10 @@ namespace Prismedia.Application.Jobs.Handlers.Generate;
 /// cover. Enqueued by the library scan to backfill libraries whose covers predate
 /// grid thumbnails; new entities get theirs as part of <see cref="GeneratePreviewJobHandler"/>.
 /// </summary>
+[JobDefinition(JobType.GenerateGridThumbnail, ResourceClass = JobResourceClass.StandardCpu, Importance = JobNodeImportance.BestEffort, BlocksAutoIdentify = true)]
 public sealed class GenerateGridThumbnailJobHandler(
     ILogger<GenerateGridThumbnailJobHandler> logger,
     IGridThumbnailService gridThumbnails) : IJobHandler {
-    /// <inheritdoc />
-    public JobType Type => JobType.GenerateGridThumbnail;
-
     /// <inheritdoc />
     public async Task HandleAsync(JobContext context, CancellationToken cancellationToken) {
         if (!Guid.TryParse(context.Job.TargetEntityId, out var entityId)) {

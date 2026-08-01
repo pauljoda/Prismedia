@@ -5,11 +5,10 @@ using Prismedia.Domain.Entities;
 namespace Prismedia.Application.Jobs.Handlers.Identity;
 
 /// <summary>Acquires missing configured languages using strict provider identity policy.</summary>
+[JobDefinition(JobType.AcquireSubtitles, Importance = JobNodeImportance.BestEffort)]
 public sealed class AutoAcquireSubtitlesJobHandler(
     ISubtitleAcquisitionService subtitles,
     ILogger<AutoAcquireSubtitlesJobHandler> logger) : IJobHandler {
-    public JobType Type => JobType.AcquireSubtitles;
-
     public async Task HandleAsync(JobContext context, CancellationToken cancellationToken) {
         if (!Guid.TryParse(context.Job.TargetEntityId, out var videoId)) {
             logger.LogWarning(

@@ -16,6 +16,7 @@ namespace Prismedia.Application.Jobs.Handlers;
 /// sync instead, surfacing missing works as wanted phantoms without downloading
 /// anything on its own. The store reconciles fulfilled/orphaned monitors as part of listing the due set.
 /// </summary>
+[JobDefinition(JobType.MonitoredSearch, SingletonBehavior = JobSingletonBehavior.QueueWideWhenUntargeted)]
 public sealed class MonitoredSearchJobHandler(
     IMonitorStore monitors,
     IAcquisitionLifecycleStore acquisitions,
@@ -24,8 +25,6 @@ public sealed class MonitoredSearchJobHandler(
     ILogger<MonitoredSearchJobHandler> logger,
     IJobQueueService? jobs = null,
     IAcquisitionReleaseTimingService? releaseTiming = null) : IJobHandler {
-    public JobType Type => JobType.MonitoredSearch;
-
     public async Task HandleAsync(JobContext context, CancellationToken cancellationToken) {
         var due = await ResolveWorkAsync(context.Job, cancellationToken);
         if (due.Count == 0) {

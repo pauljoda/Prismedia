@@ -9,14 +9,13 @@ namespace Prismedia.Application.Jobs.Handlers.Probe;
 /// Probes an audio file via ffprobe to extract duration, codec, bitrate, sample rate, channels,
 /// and embedded tags (artist, album, title), then chains waveform generation if enabled.
 /// </summary>
+[JobDefinition(JobType.ProbeAudio, ResourceClass = JobResourceClass.StandardCpu, BlocksAutoIdentify = true)]
 public sealed class ProbeAudioJobHandler(
     ILogger<ProbeAudioJobHandler> logger,
     IMediaProbe mediaProbe,
     IMediaProcessingStatePersistence persistence,
     ILibraryScanRootPersistence roots,
     IDownstreamNeedsPersistence downstreamNeeds) : EntityFileJobHandler(logger, persistence) {
-    public override JobType Type => JobType.ProbeAudio;
-
     protected override async Task ExecuteAsync(
         JobContext context, Guid entityId, string filePath, CancellationToken cancellationToken) {
         await context.ReportProgressAsync(10, "Probing audio metadata", cancellationToken);

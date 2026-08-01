@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Prismedia.Application.Backups;
 using Prismedia.Application.Health;
 using Prismedia.Application.Jobs;
+using Prismedia.Application.Jobs.Handlers;
 using Prismedia.Application.Settings;
 using Prismedia.Contracts.Settings;
 using Prismedia.Domain.Entities;
@@ -24,7 +25,7 @@ public sealed class QueueWorkerTests {
         services.AddSingleton<IJobQueueService>(queue);
         services.AddSingleton<ISettingsPersistence>(settings);
         services.AddScoped<SettingsService>();
-        services.AddSingleton<IJobHandler>(handler);
+        services.AddSingleton<NoOpJobHandler>(handler);
         await using var provider = services.BuildServiceProvider();
 
         var worker = new QueueWorker(
@@ -58,7 +59,7 @@ public sealed class QueueWorkerTests {
         services.AddSingleton<IJobQueueService>(queue);
         services.AddSingleton<ISettingsPersistence>(settings);
         services.AddScoped<SettingsService>();
-        services.AddSingleton<IJobHandler>(handler);
+        services.AddSingleton<NoOpJobHandler>(handler);
         await using var provider = services.BuildServiceProvider();
 
         var worker = new QueueWorker(
@@ -95,7 +96,7 @@ public sealed class QueueWorkerTests {
         services.AddSingleton<IJobQueueService>(queue);
         services.AddSingleton<ISettingsPersistence>(settings);
         services.AddScoped<SettingsService>();
-        services.AddSingleton<IJobHandler>(handler);
+        services.AddSingleton<NoOpJobHandler>(handler);
         await using var provider = services.BuildServiceProvider();
 
         var worker = new QueueWorker(
@@ -136,7 +137,7 @@ public sealed class QueueWorkerTests {
         services.AddSingleton<IJobQueueService>(queue);
         services.AddSingleton<ISettingsPersistence>(settings);
         services.AddScoped<SettingsService>();
-        services.AddSingleton<IJobHandler>(handler);
+        services.AddSingleton<NoOpJobHandler>(handler);
         await using var provider = services.BuildServiceProvider();
 
         var worker = new QueueWorker(
@@ -169,7 +170,7 @@ public sealed class QueueWorkerTests {
         services.AddSingleton<IJobQueueService>(queue);
         services.AddSingleton<ISettingsPersistence>(settings);
         services.AddScoped<SettingsService>();
-        services.AddSingleton<IJobHandler>(handler);
+        services.AddSingleton<NoOpJobHandler>(handler);
         await using var provider = services.BuildServiceProvider();
 
         var worker = new QueueWorker(
@@ -203,7 +204,7 @@ public sealed class QueueWorkerTests {
         services.AddSingleton<IJobQueueService>(queue);
         services.AddSingleton<ISettingsPersistence>(settings);
         services.AddScoped<SettingsService>();
-        services.AddSingleton<IJobHandler>(handler);
+        services.AddSingleton<NoOpJobHandler>(handler);
         services.AddSingleton<IDatabaseBackupService>(backups);
         await using var provider = services.BuildServiceProvider();
 
@@ -253,7 +254,7 @@ public sealed class QueueWorkerTests {
         services.AddScoped<SettingsService>();
         services.AddScoped<ScopedRecordingJobQueueService>();
         services.AddScoped<IJobQueueService>(provider => provider.GetRequiredService<ScopedRecordingJobQueueService>());
-        services.AddScoped<IJobHandler, ScopedThrowingJobHandler>();
+        services.AddScoped<NoOpJobHandler, ScopedThrowingJobHandler>();
         await using var provider = services.BuildServiceProvider();
 
         var worker = new QueueWorker(
@@ -292,13 +293,11 @@ public sealed class QueueWorkerTests {
             GraphId: Guid.NewGuid(),
             GraphOrigin: origin);
 
-    private sealed class BlockingJobHandler : IJobHandler {
+    private sealed class BlockingJobHandler : NoOpJobHandler {
         private readonly TaskCompletionSource _release = new(TaskCreationOptions.RunContinuationsAsynchronously);
         private readonly ConcurrentDictionary<Guid, JobGraphOrigin> _started = new();
         private int _active;
         private int _maxActive;
-
-        public JobType Type => JobType.Noop;
 
         public int MaxActive => Volatile.Read(ref _maxActive);
 
@@ -306,7 +305,7 @@ public sealed class QueueWorkerTests {
 
         public IReadOnlyCollection<JobGraphOrigin> StartedOrigins => _started.Values.ToArray();
 
-        public async Task HandleAsync(JobContext context, CancellationToken cancellationToken) {
+        public override async Task HandleAsync(JobContext context, CancellationToken cancellationToken) {
             _started[context.Job.Id] = context.Job.GraphOrigin ?? JobGraphOrigin.Background;
             var active = Interlocked.Increment(ref _active);
             var observedMax = _maxActive;
@@ -332,13 +331,11 @@ public sealed class QueueWorkerTests {
         }
     }
 
-    private sealed class CancellableJobHandler : IJobHandler {
+    private sealed class CancellableJobHandler : NoOpJobHandler {
         private readonly TaskCompletionSource _started = new(TaskCreationOptions.RunContinuationsAsynchronously);
         private readonly TaskCompletionSource _cancelled = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
-        public JobType Type => JobType.Noop;
-
-        public async Task HandleAsync(JobContext context, CancellationToken cancellationToken) {
+        public override async Task HandleAsync(JobContext context, CancellationToken cancellationToken) {
             _started.TrySetResult();
             try {
                 await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
@@ -465,10 +462,9 @@ public sealed class QueueWorkerTests {
 
     private sealed class ScopedThrowingJobHandler(
         ScopedQueueState state,
-        ScopedRecordingJobQueueService queue) : IJobHandler {
-        public JobType Type => JobType.Noop;
+        ScopedRecordingJobQueueService queue) : NoOpJobHandler {
 
-        public Task HandleAsync(JobContext context, CancellationToken cancellationToken) {
+        public override Task HandleAsync(JobContext context, CancellationToken cancellationToken) {
             state.RecordHandlerScope(queue.ScopeId);
             throw new InvalidOperationException("handler left its scoped persistence context unusable");
         }

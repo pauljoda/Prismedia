@@ -13,6 +13,7 @@ namespace Prismedia.Application.Jobs.Handlers;
 /// registered engine stays Downloaded (files intact in the client) with an honest status instead of being
 /// pushed through the wrong pipeline.
 /// </summary>
+[JobDefinition(JobType.AcquisitionImport)]
 public sealed class AcquisitionImportJobHandler(
     IAcquisitionStore acquisitions,
     IAcquisitionImportEngineFactory engines,
@@ -20,8 +21,6 @@ public sealed class AcquisitionImportJobHandler(
     IAcquisitionHistoryStore history,
     ILogger<AcquisitionImportJobHandler> logger,
     IEntityLifecycleMutationLease? lifecycle = null) : IJobHandler {
-    public JobType Type => JobType.AcquisitionImport;
-
     public async Task HandleAsync(JobContext context, CancellationToken cancellationToken) {
         var payload = AcquisitionJobPayload.Parse(context.Job.PayloadJson);
         AcquisitionImportContext? import;

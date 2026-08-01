@@ -9,6 +9,7 @@ namespace Prismedia.Application.Jobs.Handlers.Generate;
 /// Generates the cover thumbnail for a single-file book (EPUB/PDF) by extracting the cover or
 /// first page through the format-specific extractor and scaling it via the shared image resizer.
 /// </summary>
+[JobDefinition(JobType.GenerateBookCoverThumbnail, ResourceClass = JobResourceClass.StandardCpu, Importance = JobNodeImportance.BestEffort, BlocksAutoIdentify = true)]
 public sealed class GenerateBookCoverThumbnailJobHandler(
     ILogger<GenerateBookCoverThumbnailJobHandler> logger,
     IMediaAssetGenerator assets,
@@ -16,8 +17,6 @@ public sealed class GenerateBookCoverThumbnailJobHandler(
     IBookCoverImageExtractor coverExtractor,
     IMediaProcessingStatePersistence persistence,
     IGridThumbnailService gridThumbnails) : EntityFileJobHandler(logger, persistence) {
-    public override JobType Type => JobType.GenerateBookCoverThumbnail;
-
     protected override async Task ExecuteAsync(
         JobContext context, Guid entityId, string filePath, CancellationToken cancellationToken) {
         var format = BookFormatFor(filePath);

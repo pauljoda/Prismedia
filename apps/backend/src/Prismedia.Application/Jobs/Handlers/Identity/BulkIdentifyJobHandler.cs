@@ -11,11 +11,10 @@ namespace Prismedia.Application.Jobs.Handlers;
 /// Explodes the old batch payload into one identify-search request per entity (the current model)
 /// and completes; new bulk requests never create this job type.
 /// </summary>
+[JobDefinition(JobType.BulkIdentify)]
 public sealed class BulkIdentifyJobHandler(
     IIdentifyQueueService queue,
     ILogger<BulkIdentifyJobHandler> logger) : IJobHandler {
-    public JobType Type => JobType.BulkIdentify;
-
     public async Task HandleAsync(JobContext context, CancellationToken cancellationToken) {
         var payload = BulkIdentifyPayload.Parse(context.Job.PayloadJson);
         logger.LogInformation(

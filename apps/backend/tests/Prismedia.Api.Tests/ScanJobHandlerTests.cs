@@ -3112,8 +3112,6 @@ public sealed class ScanJobHandlerTests {
         : ScanJobHandler(NullLogger<RecordingScanHandler>.Instance, discovery ?? new NoopFileDiscovery(), persistence, snapshots) {
         public List<Guid> ScannedRootIds { get; } = [];
 
-        public override JobType Type => JobType.ScanLibrary;
-
         protected override bool IsEligibleRoot(LibraryRootData root) => root.ScanVideos;
 
         protected override IReadOnlyList<MediaCategory> ScanCategories => [MediaCategory.Video];

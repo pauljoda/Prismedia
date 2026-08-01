@@ -10,6 +10,7 @@ namespace Prismedia.Application.Jobs.Handlers.Identity;
 /// <summary>
 /// Reconciles embedded text streams and adjacent subtitle sidecars into app-owned subtitle assets.
 /// </summary>
+[JobDefinition(JobType.ExtractSubtitles, ResourceClass = JobResourceClass.HeavyCpu, Importance = JobNodeImportance.BestEffort, BlocksAutoIdentify = true)]
 public sealed class ExtractSubtitlesJobHandler(
     ILogger<ExtractSubtitlesJobHandler> logger,
     IMediaProbe mediaProbe,
@@ -17,8 +18,6 @@ public sealed class ExtractSubtitlesJobHandler(
     IMediaProcessingStatePersistence persistence,
     ISubtitleSidecarDiscovery sidecars,
     IAutomaticSubtitleAcquisitionScheduler? acquisitionScheduler = null) : EntityFileJobHandler(logger, persistence) {
-    public override JobType Type => JobType.ExtractSubtitles;
-
     protected override async Task ExecuteAsync(
         JobContext context, Guid entityId, string filePath, CancellationToken cancellationToken) {
         await context.ReportProgressAsync(5, "Discovering subtitle files", cancellationToken);

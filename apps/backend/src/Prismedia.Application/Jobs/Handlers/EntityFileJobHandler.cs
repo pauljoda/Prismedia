@@ -12,7 +12,6 @@ namespace Prismedia.Application.Jobs.Handlers;
 public abstract class EntityFileJobHandler(
     ILogger logger,
     IMediaProcessingStatePersistence persistence) : IJobHandler {
-    public abstract JobType Type { get; }
 
     public async Task HandleAsync(JobContext context, CancellationToken cancellationToken) {
         var entityId = ParseEntityId(context.Job.TargetEntityId);
@@ -20,7 +19,7 @@ public abstract class EntityFileJobHandler(
 
         var filePath = await persistence.GetSourceFilePathAsync(entityId.Value, cancellationToken);
         if (filePath is null || !ValidateFilePath(filePath)) {
-            logger.LogWarning("{JobType}: source file not found for {EntityId}", Type.ToCode(), entityId);
+            logger.LogWarning("{JobType}: source file not found for {EntityId}", context.Job.Type.ToCode(), entityId);
             await OnSourceFileNotFoundAsync(entityId.Value, cancellationToken);
             return;
         }

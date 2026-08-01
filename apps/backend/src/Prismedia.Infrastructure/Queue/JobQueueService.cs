@@ -45,38 +45,10 @@ public sealed partial class JobQueueService : IJobQueueService {
             .ToList();
     }
 
-    /// <summary>
-    /// Queue-wide singleton job types. Each scan covers every enabled root of its kind, so only one of each
-    /// may be queued or running at a time. The recurring monitored-search sweep is likewise global, while
-    /// an explicitly targeted monitored search remains independent from that sweep and other Entity targets.
-    /// </summary>
-    private static readonly JobType[] SingletonJobTypes =
-        [JobType.ScanLibrary, JobType.ScanGallery, JobType.ScanBook, JobType.ScanAudio, JobType.DatabaseBackup, JobType.MonitoredSearch, JobType.GridThumbnailSweep];
-
-    /// <summary>
-    /// Work that must drain before background Auto Identify starts. This keeps first scans focused on
-    /// creating entities, importing local/technical metadata, and generating browseable artwork before
-    /// slower provider identification begins.
-    /// </summary>
-    private static readonly JobType[] AutoIdentifyPrerequisiteJobTypes = [
-        JobType.ScanLibrary,
-        JobType.ScanGallery,
-        JobType.ScanBook,
-        JobType.ScanAudio,
-        JobType.ProbeVideo,
-        JobType.ProbeAudio,
-        JobType.FingerprintVideo,
-        JobType.FingerprintImage,
-        JobType.FingerprintAudio,
-        JobType.GeneratePreview,
-        JobType.GenerateImageThumbnail,
-        JobType.GenerateGridThumbnail,
-        JobType.GenerateBookPageThumbnail,
-        JobType.GenerateBookCoverThumbnail,
-        JobType.GenerateAudioWaveform,
-        JobType.ExtractSubtitles,
-        JobType.ImportMetadata
-    ];
+    private static readonly JobType[] AutoIdentifyBarrierJobTypes = JobDefinitionRegistry.All
+        .Where(definition => definition.BlocksAutoIdentify)
+        .Select(definition => definition.Type)
+        .ToArray();
 
     private static readonly string AutoIdentifyJobTypeCode = JobType.AutoIdentify.ToCode();
     private static readonly string[] TargetedAutoIdentifyKindCodes = EntityKindRegistry.All
@@ -96,12 +68,14 @@ public sealed partial class JobQueueService : IJobQueueService {
         // Some jobs are queue-wide singletons: scans already walk every enabled root of their kind,
         // and database backups should never overlap. When one is already queued or running, return
         // the in-flight job instead of stacking another.
-        var isQueueWideSingleton = SingletonJobTypes.Contains(request.Type)
-            && (request.Type != JobType.MonitoredSearch || request.TargetEntityId is null);
+        var definition = JobDefinitionRegistry.Get(request.Type);
+        var isQueueWideSingleton = JobDefinitionRegistry.IsQueueWideSingleton(
+            request.Type,
+            hasTarget: request.TargetEntityId is not null);
         if (isQueueWideSingleton) {
             var existing = await _db.JobRuns.AsNoTracking()
                 .Where(job => job.Type == request.Type &&
-                              (request.Type != JobType.MonitoredSearch || job.TargetEntityId == null) &&
+                              (definition.SingletonBehavior != JobSingletonBehavior.QueueWideWhenUntargeted || job.TargetEntityId == null) &&
                               (job.Status == JobRunStatus.Queued || job.Status == JobRunStatus.Running))
                 .OrderBy(job => job.CreatedAt)
                 .FirstOrDefaultAsync(cancellationToken);
@@ -595,7 +569,7 @@ public sealed partial class JobQueueService : IJobQueueService {
 
     private Task<bool> HasPendingAutoIdentifyPrerequisiteAsync(CancellationToken cancellationToken) =>
         _db.JobRuns.AsNoTracking().AnyAsync(job =>
-            AutoIdentifyPrerequisiteJobTypes.Contains(job.Type) &&
+            AutoIdentifyBarrierJobTypes.Contains(job.Type) &&
             (job.Status == JobRunStatus.Queued || job.Status == JobRunStatus.Running),
             cancellationToken);
 

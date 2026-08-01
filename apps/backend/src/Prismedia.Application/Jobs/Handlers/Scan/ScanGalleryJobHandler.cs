@@ -12,6 +12,7 @@ namespace Prismedia.Application.Jobs.Handlers.Scan;
 /// Discovers image files organized by directory, creates gallery and image entities,
 /// and chains downstream thumbnail/fingerprint jobs.
 /// </summary>
+[JobDefinition(JobType.ScanGallery, SingletonBehavior = JobSingletonBehavior.QueueWide, BlocksAutoIdentify = true)]
 public sealed class ScanGalleryJobHandler(
     ILogger<ScanGalleryJobHandler> logger,
     IFileDiscovery fileDiscovery,
@@ -19,8 +20,6 @@ public sealed class ScanGalleryJobHandler(
     IImageGalleryScanPersistence images,
     IDownstreamNeedsPersistence downstreamNeeds,
     IScanSnapshotStore? snapshots = null) : ScanJobHandler(logger, fileDiscovery, roots, snapshots) {
-    public override JobType Type => JobType.ScanGallery;
-
     protected override bool IsEligibleRoot(LibraryRootData root) => root.ScanImages;
 
     protected override IReadOnlyList<MediaCategory> ScanCategories => [MediaCategory.Image];

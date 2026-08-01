@@ -7,11 +7,10 @@ namespace Prismedia.Application.Jobs.Handlers.Maintenance;
 /// <summary>
 /// Creates the retained daily database backup from the background queue.
 /// </summary>
+[JobDefinition(JobType.DatabaseBackup, SingletonBehavior = JobSingletonBehavior.QueueWide)]
 public sealed class DatabaseBackupJobHandler(
     IDatabaseBackupService backups,
     ILogger<DatabaseBackupJobHandler> logger) : IJobHandler {
-    public JobType Type => JobType.DatabaseBackup;
-
     public async Task HandleAsync(JobContext context, CancellationToken cancellationToken) {
         await context.ReportProgressAsync(5, "Starting database backup", cancellationToken);
         var backup = await backups.CreateAutomaticBackupAsync(cancellationToken);

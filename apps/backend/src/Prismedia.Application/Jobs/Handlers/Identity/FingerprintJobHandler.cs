@@ -8,16 +8,16 @@ namespace Prismedia.Application.Jobs.Handlers.Identity;
 /// <summary>
 /// Computes the fingerprints enabled in generation settings (oshash and/or MD5) for an entity's
 /// source file and stores them as entity file fingerprint records. oshash is cheap (head + tail
-/// read); MD5 streams the whole file, so it is only computed when explicitly enabled. Registered
-/// once per media type via factory DI.
+/// read); MD5 streams the whole file, so it is only computed when explicitly enabled.
 /// </summary>
+[JobDefinition(JobType.FingerprintVideo, ResourceClass = JobResourceClass.StandardCpu, Importance = JobNodeImportance.BestEffort, BlocksAutoIdentify = true)]
+[JobDefinition(JobType.FingerprintImage, ResourceClass = JobResourceClass.StandardCpu, Importance = JobNodeImportance.BestEffort, BlocksAutoIdentify = true)]
+[JobDefinition(JobType.FingerprintAudio, ResourceClass = JobResourceClass.StandardCpu, Importance = JobNodeImportance.BestEffort, BlocksAutoIdentify = true)]
 public sealed class FingerprintJobHandler(
-    JobType jobType,
     ILogger<FingerprintJobHandler> logger,
     IMediaHashing hashing,
     ILibraryScanRootPersistence roots,
     IMediaProcessingStatePersistence persistence) : EntityFileJobHandler(logger, persistence) {
-    public override JobType Type => jobType;
 
     protected override async Task ExecuteAsync(
         JobContext context, Guid entityId, string filePath, CancellationToken cancellationToken) {
@@ -49,7 +49,7 @@ public sealed class FingerprintJobHandler(
         var report = timer.Finish();
         logger.LogInformation(
             "[METRICS] {JobType} {Label} — oshash={Oshash} md5={Md5} — {Timing}",
-            Type.ToCode(), context.Job.TargetLabel, hashes.Oshash,
+            context.Job.Type.ToCode(), context.Job.TargetLabel, hashes.Oshash,
             hashes.Md5 is null ? "skipped" : hashes.Md5[..8], report.ToLogString());
 
         await context.ReportProgressAsync(100, "Fingerprint complete", cancellationToken);

@@ -15,6 +15,7 @@ namespace Prismedia.Application.Jobs.Handlers;
 /// prompt is now appropriate while the request remains WaitingForRelease. A transient provider error remains retryable. Import still runs authoritative
 /// auto-identify.
 /// </summary>
+[JobDefinition(JobType.AcquisitionEnrich)]
 public sealed class AcquisitionEnrichJobHandler(
     IAcquisitionStore acquisitions,
     IRequestMetadataEnricher enricher,
@@ -23,8 +24,6 @@ public sealed class AcquisitionEnrichJobHandler(
     IEntityMetadataPatchService? entityMetadata = null,
     IMonitorStore? monitors = null,
     IAcquisitionReleaseTimingService? releaseTiming = null) : IJobHandler {
-    public JobType Type => JobType.AcquisitionEnrich;
-
     public async Task HandleAsync(JobContext context, CancellationToken cancellationToken) {
         var payload = AcquisitionJobPayload.Parse(context.Job.PayloadJson);
         var import = await acquisitions.GetImportContextAsync(payload.AcquisitionId, cancellationToken);

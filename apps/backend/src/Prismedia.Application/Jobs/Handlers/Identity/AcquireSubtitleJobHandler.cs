@@ -5,11 +5,10 @@ using Prismedia.Domain.Entities;
 namespace Prismedia.Application.Jobs.Handlers.Identity;
 
 /// <summary>Downloads one user-selected subtitle candidate inside its interactive entity lane.</summary>
+[JobDefinition(JobType.AcquireSubtitle)]
 public sealed class AcquireSubtitleJobHandler(
     ISubtitleAcquisitionService subtitles,
     ILogger<AcquireSubtitleJobHandler> logger) : IJobHandler {
-    public JobType Type => JobType.AcquireSubtitle;
-
     public async Task HandleAsync(JobContext context, CancellationToken cancellationToken) {
         var payload = ManualSubtitleAcquisitionPayload.Parse(context.Job.PayloadJson);
         await context.ReportProgressAsync(10, "Downloading selected subtitle", cancellationToken);

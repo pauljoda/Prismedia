@@ -10,11 +10,10 @@ namespace Prismedia.Application.Jobs.Handlers;
 /// after a candidate is picked and the root proposal is seeded; the actual walk and streaming live in
 /// <see cref="IIdentifyCascadeRunner"/>, which persists the growing proposal onto the queue item.
 /// </summary>
+[JobDefinition(JobType.IdentifyCascade)]
 public sealed class IdentifyCascadeJobHandler(
     IIdentifyCascadeRunner runner,
     ILogger<IdentifyCascadeJobHandler> logger) : IJobHandler {
-    public JobType Type => JobType.IdentifyCascade;
-
     public async Task HandleAsync(JobContext context, CancellationToken cancellationToken) {
         var payload = IdentifyCascadePayload.Parse(context.Job.PayloadJson);
 

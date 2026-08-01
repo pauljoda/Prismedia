@@ -8,12 +8,11 @@ namespace Prismedia.Application.Jobs.Handlers.Maintenance;
 /// Re-evaluates dynamic collection rules and replaces membership with newly resolved entities.
 /// Manual items are preserved; dynamic items are replaced atomically.
 /// </summary>
+[JobDefinition(JobType.RefreshCollection)]
 public sealed class RefreshCollectionJobHandler(
     ILogger<RefreshCollectionJobHandler> logger,
     ICollectionRefreshPersistence persistence,
     ICollectionRuleEngine ruleEngine) : IJobHandler {
-    public JobType Type => JobType.RefreshCollection;
-
     public async Task HandleAsync(JobContext context, CancellationToken cancellationToken) {
         var collectionId = ParseEntityId(context.Job.TargetEntityId);
         if (collectionId is null) {
