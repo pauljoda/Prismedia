@@ -99,14 +99,20 @@ public sealed partial class EfEntityReadService : IEntityReadService {
             ? null
             : relationshipCode.Trim();
         var allEntities = _db.Entities.AsNoTracking();
-        var entityQuery = kindCodes.Length == 0 ||
-            kindCodes.Contains(EntityKind.AudioTrack.ToCode(), StringComparer.OrdinalIgnoreCase)
-                ? allEntities.ExcludeBookOwnedAudioTracks(allEntities)
-                : allEntities;
+        var entityQuery = allEntities;
 
         if (kindCodes.Length > 0) {
             entityQuery = entityQuery.Where(entity => kindCodes.Contains(entity.KindCode));
-            entityQuery = ApplyBrowseHierarchyFilter(entityQuery, kindCodes);
+            entityQuery = EntityCatalogQueryPolicy.Apply(
+                entityQuery,
+                allEntities,
+                EntityCatalogSurface.KindBrowse,
+                kindCodes);
+        } else {
+            entityQuery = EntityCatalogQueryPolicy.Apply(
+                entityQuery,
+                allEntities,
+                EntityCatalogSurface.Discovery);
         }
 
         entityQuery = ApplyCollectionVisibility(entityQuery);
@@ -674,37 +680,6 @@ public sealed partial class EfEntityReadService : IEntityReadService {
         IQueryable<EntityRow> query,
         string? knownKindCode = null) =>
         _libraryVisibility.ApplyCurrentUserVisibility(query, knownKindCode);
-
-    private IQueryable<EntityRow> ApplyBrowseHierarchyFilter(
-        IQueryable<EntityRow> query,
-        IReadOnlyCollection<string> kindCodes) {
-        var selectedDefinitions = EntityKindRegistry.All
-            .Where(definition => kindCodes.Contains(definition.Code, StringComparer.OrdinalIgnoreCase))
-            .ToArray();
-        var topLevelKindCodes = selectedDefinitions
-            .Where(definition => definition.Browse.RequiresTopLevel)
-            .Select(definition => definition.Code)
-            .ToArray();
-        if (topLevelKindCodes.Length > 0) {
-            query = query.Where(entity =>
-                !topLevelKindCodes.Contains(entity.KindCode) || entity.ParentEntityId == null);
-        }
-
-        foreach (var definition in selectedDefinitions) {
-            foreach (var parentKind in definition.Browse.HiddenParentKinds) {
-                var childCode = definition.Code;
-                var parentCode = EntityKindRegistry.Describe(parentKind).Code;
-                query = query.Where(entity =>
-                    entity.KindCode != childCode ||
-                    entity.ParentEntityId == null ||
-                    !_db.Entities.Any(parent =>
-                        parent.Id == entity.ParentEntityId &&
-                        parent.KindCode == parentCode));
-            }
-        }
-
-        return query;
-    }
 
     /// <summary>
     /// Library-visibility check for mutation/streaming guards: true when the entity

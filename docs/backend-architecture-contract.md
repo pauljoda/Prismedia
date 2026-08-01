@@ -188,6 +188,14 @@ kinds it accepts. The registry derives the inverse child view. `Entity.AddChild`
 EF writer/materialization boundaries enforce those declarations and reject structural cycles;
 there is deliberately no global Entity graph or catch-all `SaveChanges` interceptor.
 
+Catalog hierarchy visibility is also definition-owned. Each kind's
+`EntityCatalogVisibilityPolicy` declares whether it is top-level-only or hidden beneath specific
+parent kinds on discovery, kind-browse, collection, and statistics surfaces. Infrastructure turns
+those declarations into cached `EntityCatalogQueryPolicy` plans shared by EF projections and raw
+collection-rule SQL. Direct Entity lookup, structural child projection, playback/progress, file
+access, and OPDS traversal do not apply catalog filtering: those paths address a known Entity or
+an intentionally bounded hierarchy rather than a catalog entry.
+
 `CapabilityCredits` is emitted as the shared `CreditsCapability` contract capability.
 It persists as `EntityRelationshipLinkRow` rows with relationship code
 `credits`/`cast`, storing only the target `Person` id plus the `CreditRole` (and optional
@@ -195,8 +203,8 @@ character) in link metadata — never a cloned `Person`. The capability items ca
 edge metadata so every client reads roles and character labels from the same Entity root.
 
 All Entity document GETs project `EntityCard`. `/api/entities/{id}` is canonical;
-kind-prefixed detail routes are compatibility aliases that validate the expected kind and
-return the same card. Do not add a derived `*Detail` record or per-kind projection mapper.
+kind-prefixed detail routes are deprecated compatibility aliases that validate the expected kind
+and return the same card. Do not add a derived `*Detail` record or per-kind projection mapper.
 
 ## Stable Codes and Constants
 

@@ -157,6 +157,7 @@ public static class EntityKindRegistry {
         ValidateAcquisitionProfiles(definitions);
         ValidateLibraryVisibilityPolicies(definitions);
         ValidateStructurePolicies(definitions);
+        ValidateCatalogVisibilityPolicies(definitions);
         ValidateProgressTopologies(definitions);
 
         return definitions;
@@ -209,6 +210,18 @@ public static class EntityKindRegistry {
                     throw new InvalidOperationException(
                         $"Entity kind '{definition.Code}' declares unknown structural parent '{parentKind}'.");
                 }
+            }
+        }
+    }
+
+    private static void ValidateCatalogVisibilityPolicies(IReadOnlyList<EntityKindDefinition> definitions) {
+        foreach (var definition in definitions) {
+            try {
+                definition.CatalogVisibility.ValidateFor(definition.StructurePolicy);
+            } catch (ArgumentException exception) {
+                throw new InvalidOperationException(
+                    $"Entity kind '{definition.Code}' has an invalid catalog visibility policy.",
+                    exception);
             }
         }
     }

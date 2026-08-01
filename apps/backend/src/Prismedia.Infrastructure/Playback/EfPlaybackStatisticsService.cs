@@ -191,7 +191,11 @@ public sealed class EfPlaybackStatisticsService(
             activities = activities.Where(evt => evt.UserId == userId);
         }
 
-        var visibleEntities = db.Entities.AsNoTracking();
+        var allEntities = db.Entities.AsNoTracking();
+        var visibleEntities = EntityCatalogQueryPolicy.Apply(
+            allEntities,
+            allEntities,
+            EntityCatalogSurface.Statistics);
         if (enforceLibraryVisibility) {
             visibleEntities = _libraryVisibility.ApplyCurrentUserVisibility(visibleEntities);
         }
@@ -229,7 +233,10 @@ public sealed class EfPlaybackStatisticsService(
         }
 
         var allEntities = db.Entities.AsNoTracking();
-        var catalogEntities = allEntities.ExcludeBookOwnedAudioTracks(allEntities);
+        var catalogEntities = EntityCatalogQueryPolicy.Apply(
+            allEntities,
+            allEntities,
+            EntityCatalogSurface.Statistics);
         if (enforceLibraryVisibility) {
             catalogEntities = _libraryVisibility.ApplyCurrentUserVisibility(catalogEntities);
         }

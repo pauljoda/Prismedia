@@ -1157,6 +1157,71 @@ public sealed class EfEntityReadServiceTests {
     }
 
     [Fact]
+    public async Task CollectionArtworkFallsBackWhenConfiguredCoverIsHidden() {
+        await using var db = CreateContext();
+        var now = DateTimeOffset.UtcNow;
+        var collectionId = Guid.NewGuid();
+        var configuredCoverId = Guid.NewGuid();
+        var visibleMemberId = Guid.NewGuid();
+        db.Entities.AddRange(
+            new EntityRow {
+                Id = collectionId,
+                KindCode = EntityKind.Collection.ToCode(),
+                Title = "Collection",
+                CreatedAt = now,
+                UpdatedAt = now
+            },
+            new EntityRow {
+                Id = configuredCoverId,
+                KindCode = EntityKind.Video.ToCode(),
+                Title = "Hidden configured cover",
+                IsNsfw = true,
+                CreatedAt = now,
+                UpdatedAt = now
+            },
+            new EntityRow {
+                Id = visibleMemberId,
+                KindCode = EntityKind.AudioLibrary.ToCode(),
+                Title = "Visible fallback",
+                CreatedAt = now,
+                UpdatedAt = now
+            });
+        db.CollectionDetails.Add(new CollectionDetailRow {
+            EntityId = collectionId,
+            OwnerUserId = TestUserContext.UserId,
+            CoverMode = CollectionCoverMode.Item,
+            CoverItemEntityId = configuredCoverId
+        });
+        db.CollectionItemDetails.Add(new CollectionItemDetailRow {
+            Id = Guid.NewGuid(),
+            CollectionEntityId = collectionId,
+            ItemEntityId = visibleMemberId,
+            Source = CollectionItemSource.Manual,
+            SortOrder = 0,
+            AddedAt = now
+        });
+        db.EntityFiles.Add(new EntityFileRow {
+            Id = Guid.NewGuid(),
+            EntityId = visibleMemberId,
+            Role = EntityFileRole.Cover,
+            Path = "/assets/audio-libraries/fallback/cover.jpg",
+            CreatedAt = now,
+            UpdatedAt = now
+        });
+        await db.SaveChangesAsync();
+
+        var result = await CreateService(db).ListAsync(
+            EntityKind.Collection.ToCode(),
+            null,
+            null,
+            hideNsfw: true,
+            null,
+            CancellationToken.None);
+
+        Assert.Equal("/assets/audio-libraries/fallback/cover.jpg", Assert.Single(result.Items).CoverUrl);
+    }
+
+    [Fact]
     public async Task ListAsyncShowsOnlyTopLevelBooksWhenBooksHaveChildBooks() {
         await using var db = CreateContext();
         var seriesId = Guid.Parse("aaaaaaaa-1111-1111-1111-111111111111");
@@ -1200,6 +1265,43 @@ public sealed class EfEntityReadServiceTests {
 
         Assert.Equal(2, result.TotalCount);
         Assert.Equal([seriesId, looseBookId], result.Items.Select(item => item.Id).Order().ToArray());
+    }
+
+    [Fact]
+    public async Task DiscoveryKeepsNestedBooksAndGalleriesWhileTheirTypedBrowseHidesThem() {
+        await using var db = CreateContext();
+        var bookId = Guid.NewGuid();
+        var nestedBookId = Guid.NewGuid();
+        var galleryId = Guid.NewGuid();
+        var nestedGalleryId = Guid.NewGuid();
+        var now = DateTimeOffset.UtcNow;
+        db.Entities.AddRange(
+            Row(bookId, EntityKind.Book, "Book"),
+            Row(nestedBookId, EntityKind.Book, "Nested book", bookId),
+            Row(galleryId, EntityKind.Gallery, "Gallery"),
+            Row(nestedGalleryId, EntityKind.Gallery, "Nested gallery", galleryId));
+        await db.SaveChangesAsync();
+
+        var service = CreateService(db);
+        var discovery = await service.ListAsync(null, "Nested", null, null, null, CancellationToken.None);
+        var books = await service.ListAsync(EntityKind.Book.ToCode(), null, null, null, null, CancellationToken.None);
+        var galleries = await service.ListAsync(EntityKind.Gallery.ToCode(), null, null, null, null, CancellationToken.None);
+
+        Assert.Equal(
+            new[] { nestedBookId, nestedGalleryId }.Order(),
+            discovery.Items.Select(item => item.Id).Order());
+        Assert.DoesNotContain(books.Items, item => item.Id == nestedBookId);
+        Assert.DoesNotContain(galleries.Items, item => item.Id == nestedGalleryId);
+
+        EntityRow Row(Guid id, EntityKind kind, string title, Guid? parentId = null) =>
+            new() {
+                Id = id,
+                KindCode = kind.ToCode(),
+                Title = title,
+                ParentEntityId = parentId,
+                CreatedAt = now,
+                UpdatedAt = now
+            };
     }
 
     [Fact]

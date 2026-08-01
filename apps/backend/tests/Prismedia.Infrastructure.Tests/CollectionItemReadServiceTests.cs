@@ -139,6 +139,34 @@ public sealed class CollectionItemReadServiceTests {
         Assert.True(context.HasAudio);
     }
 
+    [Fact]
+    public async Task ResolveCoverPathsAsyncFallsBackWhenConfiguredCoverIsNotCatalogEligible() {
+        await using var db = CreateContext();
+        var collectionId = Guid.NewGuid();
+        var bookId = Guid.NewGuid();
+        var hiddenConfiguredTrackId = Guid.NewGuid();
+        var visibleMemberId = Guid.NewGuid();
+        SeedEntity(db, collectionId, EntityKind.Collection.ToCode(), "Collection");
+        SeedEntity(db, bookId, EntityKind.Book.ToCode(), "Book");
+        SeedEntity(db, hiddenConfiguredTrackId, EntityKind.AudioTrack.ToCode(), "Audiobook", parentEntityId: bookId);
+        SeedEntity(db, visibleMemberId, EntityKind.Video.ToCode(), "Fallback");
+        db.CollectionDetails.Add(new CollectionDetailRow {
+            EntityId = collectionId,
+            OwnerUserId = TestUserContext.UserId,
+            CoverItemEntityId = hiddenConfiguredTrackId
+        });
+        db.CollectionItemDetails.Add(Item(collectionId, visibleMemberId, 0));
+        await db.SaveChangesAsync();
+
+        var covers = await new CollectionItemReadService(
+                db,
+                new FakeEntityReadService(db),
+                TestUserContext.Admin())
+            .ResolveCoverPathsAsync([collectionId], hideNsfw: false, CancellationToken.None);
+
+        Assert.Equal($"/assets/test/{visibleMemberId:N}.jpg", Assert.Single(covers).Value);
+    }
+
     private static CollectionItemDetailRow Item(Guid collectionId, Guid itemId, int sortOrder) =>
         new() {
             Id = Guid.NewGuid(),
@@ -239,7 +267,7 @@ public sealed class CollectionItemReadServiceTests {
                     row.Title,
                     row.ParentEntityId,
                     row.SortOrder,
-                    null,
+                    $"/assets/test/{row.Id:N}.jpg",
                     null,
                     ThumbnailHoverKind.None,
                     null,

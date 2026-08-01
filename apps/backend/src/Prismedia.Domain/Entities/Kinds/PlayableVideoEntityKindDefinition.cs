@@ -60,7 +60,6 @@ public abstract class PlayableVideoEntityKindDefinition<TEntity> : RootEntityKin
         Func<EntityRootData, TEntity> factory,
         EntityIdentificationPolicy? identification,
         EntityManualAcquisitionPolicy? manualAcquisition,
-        EntityBrowsePolicy? browse,
         EntityLibraryVisibilityPolicy libraryVisibility,
         Func<IReadOnlyList<EntityCapability>>? additionalDefaultCapabilities = null)
         : base(
@@ -79,7 +78,6 @@ public abstract class PlayableVideoEntityKindDefinition<TEntity> : RootEntityKin
                 manualAcquisition: manualAcquisition,
                 processing: VideoProcessing,
                 engagement: VideoEngagement,
-                browse: browse,
                 libraryVisibility: libraryVisibility,
                 supportsFileDeletion: true,
                 mediaQualityFamily: EntityMediaQualityFamily.Video,

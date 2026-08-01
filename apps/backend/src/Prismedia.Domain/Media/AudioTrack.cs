@@ -33,7 +33,13 @@ public sealed class AudioTrackEntityKindDefinition() : EntityKindDefinition<Audi
             previewJobType: JobType.GenerateAudioWaveform,
             generatedFileRoles: [EntityFileRole.Waveform]),
         engagement: new(EntityEngagementMode.Playback),
-        browse: new(excludesWantedByDefault: true, hiddenParentKinds: [EntityKind.Book]),
+        browse: new(excludesWantedByDefault: true),
+        catalogVisibility: new(
+            parentExclusions: [new(EntityKind.Book,
+                EntityCatalogSurface.Discovery |
+                EntityCatalogSurface.KindBrowse |
+                EntityCatalogSurface.Collection |
+                EntityCatalogSurface.Statistics)]),
         libraryVisibility: EntityLibraryVisibilityPolicy.AncestorRoot,
         supportsFileDeletion: true,
         mediaQualityFamily: EntityMediaQualityFamily.Audio),

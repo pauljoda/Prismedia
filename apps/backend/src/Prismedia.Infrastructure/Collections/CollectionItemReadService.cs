@@ -58,7 +58,10 @@ public sealed class CollectionItemReadService(
         }
 
         var allEntities = db.Entities.AsNoTracking();
-        var catalogEntities = allEntities.ExcludeBookOwnedAudioTracks(allEntities);
+        var catalogEntities = EntityCatalogQueryPolicy.Apply(
+            allEntities,
+            allEntities,
+            EntityCatalogSurface.Collection);
         var rows = await (
             from item in db.CollectionItemDetails.AsNoTracking()
             join entity in catalogEntities on item.ItemEntityId equals entity.Id
@@ -115,7 +118,10 @@ public sealed class CollectionItemReadService(
         // One grouped query for the whole batch: member counts and audio capability come straight
         // from the membership join — no thumbnail hydration, no per-collection round-trips.
         var allEntities = db.Entities.AsNoTracking();
-        var catalogEntities = allEntities.ExcludeBookOwnedAudioTracks(allEntities);
+        var catalogEntities = EntityCatalogQueryPolicy.Apply(
+            allEntities,
+            allEntities,
+            EntityCatalogSurface.Collection);
         var rows = await (
             from item in db.CollectionItemDetails.AsNoTracking()
             join entity in catalogEntities on item.ItemEntityId equals entity.Id
@@ -145,13 +151,19 @@ public sealed class CollectionItemReadService(
 
         // Configured cover item wins; capture it per collection so it can override the
         // first-member fallback resolved below.
-        var coverItemByCollection = await db.CollectionDetails.AsNoTracking()
-            .Where(detail => ids.Contains(detail.EntityId) && detail.CoverItemEntityId != null)
-            .ToDictionaryAsync(detail => detail.EntityId, detail => detail.CoverItemEntityId!.Value, cancellationToken);
-
         // First visible member per collection, in collection sort order, as the fallback cover.
         var allEntities = db.Entities.AsNoTracking();
-        var catalogEntities = allEntities.ExcludeBookOwnedAudioTracks(allEntities);
+        var catalogEntities = EntityCatalogQueryPolicy.Apply(
+            allEntities,
+            allEntities,
+            EntityCatalogSurface.Collection);
+        var coverItemByCollection = await (
+            from detail in db.CollectionDetails.AsNoTracking()
+            join entity in catalogEntities on detail.CoverItemEntityId equals entity.Id
+            where ids.Contains(detail.EntityId) && detail.CoverItemEntityId != null &&
+                  (!hideNsfw || !entity.IsNsfw)
+            select new { detail.EntityId, CoverItemEntityId = entity.Id })
+            .ToDictionaryAsync(row => row.EntityId, row => row.CoverItemEntityId, cancellationToken);
         var memberRows = await (
             from item in db.CollectionItemDetails.AsNoTracking()
             join entity in catalogEntities on item.ItemEntityId equals entity.Id

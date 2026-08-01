@@ -271,7 +271,7 @@ public sealed class CollectionRuleEngineSqlTests {
     }
 
     [Fact]
-    public void AudioTrackRulesExcludeTracksOwnedByBooks() {
+    public void CollectionCatalogPlanExcludesBookOwnedAudioTracksInGenericSql() {
         var group = new CollectionRuleGroup {
             Operator = "and",
             Children = [

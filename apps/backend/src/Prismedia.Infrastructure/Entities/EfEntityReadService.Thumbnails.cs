@@ -29,7 +29,11 @@ public sealed partial class EfEntityReadService {
         // Contributors aggregate only over entities the caller
         // can see. Wanted placeholders are intentionally excluded from membership facts, matching
         // direct child projections that reserve wanted rows for explicit acquisition surfaces.
-        var visibleContributionEntities = _db.Entities.AsNoTracking()
+        var allContributionEntities = _db.Entities.AsNoTracking();
+        var visibleContributionEntities = EntityCatalogQueryPolicy.Apply(
+                allContributionEntities,
+                allContributionEntities,
+                EntityCatalogSurface.Collection)
             .Where(entity => !entity.IsWanted);
         if (enforceLibraryVisibility) {
             visibleContributionEntities = ApplyEnabledLibraryVisibility(visibleContributionEntities);
@@ -328,7 +332,12 @@ public sealed partial class EfEntityReadService {
         var representativeByCollection = ResolveCollectionRepresentatives(
             collectionIds,
             detailsByCollection,
-            visibleMembers);
+            visibleMembers,
+            await LoadCatalogEligibleConfiguredCoverIdsAsync(
+                detailsByCollection,
+                hideNsfw,
+                enforceLibraryVisibility,
+                cancellationToken));
         var thumbnailIds = representativeByCollection.Values
             .Concat(sampledMembersByCollection.Values.SelectMany(members => members.Select(member => member.ItemEntityId)))
             .Distinct()
@@ -387,8 +396,10 @@ public sealed partial class EfEntityReadService {
             .Distinct()
             .ToArray();
         var allEntities = _db.Entities.AsNoTracking();
-        var candidateEntities = await allEntities
-            .ExcludeBookOwnedAudioTracks(allEntities)
+        var candidateEntities = await EntityCatalogQueryPolicy.Apply(
+                allEntities,
+                allEntities,
+                EntityCatalogSurface.Collection)
             .Where(entity => memberIds.Contains(entity.Id))
             .Select(entity => new { entity.Id, entity.KindCode, entity.Title })
             .ToArrayAsync(cancellationToken);
@@ -438,17 +449,47 @@ public sealed partial class EfEntityReadService {
         return await query.ToArrayAsync(cancellationToken);
     }
 
+    private async Task<IReadOnlySet<Guid>> LoadCatalogEligibleConfiguredCoverIdsAsync(
+        IReadOnlyDictionary<Guid, CollectionDetailRow> detailsByCollection,
+        bool hideNsfw,
+        bool enforceLibraryVisibility,
+        CancellationToken cancellationToken) {
+        var configuredCoverIds = detailsByCollection.Values
+            .Select(detail => detail.CoverItemEntityId)
+            .OfType<Guid>()
+            .Distinct()
+            .ToArray();
+        if (configuredCoverIds.Length == 0) {
+            return new HashSet<Guid>();
+        }
+
+        var allEntities = _db.Entities.AsNoTracking();
+        var query = EntityCatalogQueryPolicy.Apply(
+                allEntities,
+                allEntities,
+                EntityCatalogSurface.Collection)
+            .Where(entity => configuredCoverIds.Contains(entity.Id));
+        if (enforceLibraryVisibility) {
+            query = ApplyEnabledLibraryVisibility(query);
+        }
+        query = ApplyNsfwVisibility(query, hideNsfw);
+        return (await query.Select(entity => entity.Id).ToArrayAsync(cancellationToken))
+            .ToHashSet();
+    }
+
     private static IReadOnlyDictionary<Guid, Guid> ResolveCollectionRepresentatives(
         IReadOnlyCollection<Guid> collectionIds,
         IReadOnlyDictionary<Guid, CollectionDetailRow> detailsByCollection,
-        IReadOnlyList<CollectionMemberRow> visibleMembers) {
+        IReadOnlyList<CollectionMemberRow> visibleMembers,
+        IReadOnlySet<Guid> catalogEligibleConfiguredCoverIds) {
         var firstMemberByCollection = visibleMembers
             .GroupBy(row => row.CollectionEntityId)
             .ToDictionary(group => group.Key, group => group.First().ItemEntityId);
         var representatives = new Dictionary<Guid, Guid>();
         foreach (var collectionId in collectionIds) {
             if (detailsByCollection.TryGetValue(collectionId, out var detail) &&
-                detail.CoverItemEntityId is { } coverItemId) {
+                detail.CoverItemEntityId is { } coverItemId &&
+                catalogEligibleConfiguredCoverIds.Contains(coverItemId)) {
                 representatives[collectionId] = coverItemId;
                 continue;
             }

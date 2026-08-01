@@ -16,6 +16,7 @@ public sealed record EntityKindBehavior {
         EntityProcessingPolicy? processing = null,
         EntityEngagementPolicy? engagement = null,
         EntityBrowsePolicy? browse = null,
+        EntityCatalogVisibilityPolicy? catalogVisibility = null,
         EntityLibraryVisibilityPolicy? libraryVisibility = null,
         bool supportsFileDeletion = false,
         bool supportsManualManagement = false,
@@ -34,6 +35,7 @@ public sealed record EntityKindBehavior {
         Processing = processing ?? EntityProcessingPolicy.None;
         Engagement = engagement ?? EntityEngagementPolicy.None;
         Browse = browse ?? EntityBrowsePolicy.Default;
+        CatalogVisibility = catalogVisibility ?? EntityCatalogVisibilityPolicy.Default;
         LibraryVisibility = libraryVisibility ?? EntityLibraryVisibilityPolicy.Unscoped;
         SupportsFileDeletion = supportsFileDeletion;
         SupportsManualManagement = supportsManualManagement;
@@ -54,8 +56,11 @@ public sealed record EntityKindBehavior {
     /// <summary>Completion/filter behavior.</summary>
     public EntityEngagementPolicy Engagement { get; }
 
-    /// <summary>List hierarchy and aggregate visibility behavior.</summary>
+    /// <summary>Wanted-placeholder filtering behavior.</summary>
     public EntityBrowsePolicy Browse { get; }
+
+    /// <summary>Catalog-surface hierarchy visibility behavior.</summary>
+    public EntityCatalogVisibilityPolicy CatalogVisibility { get; }
 
     /// <summary>Library-root visibility topology.</summary>
     public EntityLibraryVisibilityPolicy LibraryVisibility { get; }

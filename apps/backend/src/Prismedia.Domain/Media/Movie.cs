@@ -25,7 +25,6 @@ public sealed class MovieEntityKindDefinition() : PlayableVideoEntityKindDefinit
         AutoIdentifySelectorKind.Video,
         pluginFallbackKind: EntityKind.Video),
     manualAcquisition: EntityManualAcquisitionPolicy.UploadAndReplacement,
-    browse: null,
     libraryVisibility: EntityLibraryVisibilityPolicy.DirectRoot,
     additionalDefaultCapabilities: static () =>
     [

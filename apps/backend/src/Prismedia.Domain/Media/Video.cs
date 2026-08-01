@@ -23,7 +23,6 @@ public sealed class VideoEntityKindDefinition() : PlayableVideoEntityKindDefinit
     static root => new Video(root.Id, root.Title),
     identification: new(AutoIdentifySelectorKind.Video),
     manualAcquisition: EntityManualAcquisitionPolicy.UploadAndReplacement,
-    browse: null,
     libraryVisibility: EntityLibraryVisibilityPolicy.DirectRoot) {
 
     /// <inheritdoc />
@@ -72,7 +71,6 @@ public sealed class VideoEpisodeEntityKindDefinition() : PlayableVideoEntityKind
         pluginFallbackKind: EntityKind.Video,
         allowsDirectReconcileChildTarget: true),
     manualAcquisition: null,
-    browse: null,
     libraryVisibility: EntityLibraryVisibilityPolicy.DirectRoot,
     additionalDefaultCapabilities: static () => [new CapabilityPosition()]) {
     /// <inheritdoc />

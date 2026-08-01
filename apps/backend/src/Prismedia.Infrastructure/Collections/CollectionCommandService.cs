@@ -129,8 +129,10 @@ public sealed class CollectionCommandPersistence(PrismediaDbContext db) : IColle
         IReadOnlyList<Guid> entityIds,
         CancellationToken cancellationToken) {
         var allEntities = db.Entities.AsNoTracking();
-        var rows = await allEntities
-            .ExcludeBookOwnedAudioTracks(allEntities)
+        var rows = await EntityCatalogQueryPolicy.Apply(
+                allEntities,
+                allEntities,
+                EntityCatalogSurface.Collection)
             .Where(row => entityIds.Contains(row.Id))
             .Select(row => new { row.Id, row.KindCode })
             .ToArrayAsync(cancellationToken);
@@ -252,7 +254,10 @@ public sealed class CollectionCommandPersistence(PrismediaDbContext db) : IColle
         }
 
         var allEntities = db.Entities.AsNoTracking();
-        var catalogEntities = allEntities.ExcludeBookOwnedAudioTracks(allEntities);
+        var catalogEntities = EntityCatalogQueryPolicy.Apply(
+            allEntities,
+            allEntities,
+            EntityCatalogSurface.Collection);
         return await (
             from item in db.CollectionItemDetails.AsNoTracking()
             join entity in catalogEntities on item.ItemEntityId equals entity.Id
@@ -272,8 +277,10 @@ public sealed class CollectionCommandPersistence(PrismediaDbContext db) : IColle
         }
 
         var allEntities = db.Entities.AsNoTracking();
-        var query = allEntities
-            .ExcludeBookOwnedAudioTracks(allEntities)
+        var query = EntityCatalogQueryPolicy.Apply(
+                allEntities,
+                allEntities,
+                EntityCatalogSurface.Collection)
             .Where(row => ids.Contains(row.Id));
         if (hideNsfw) {
             query = query.Where(row => !row.IsNsfw);

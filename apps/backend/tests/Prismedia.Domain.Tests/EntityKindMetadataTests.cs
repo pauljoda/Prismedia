@@ -348,34 +348,72 @@ public sealed class EntityKindMetadataTests {
     }
 
     [Fact]
-    public void DefinitionsOwnBrowseHierarchyAndAggregateDeduplication() {
+    public void DefinitionsOwnWantedFilteringAndCatalogVisibility() {
         var defaultWantedExclusions = EntityKindRegistry.All
             .Where(definition => definition.Browse.ExcludesWantedByDefault)
             .Select(definition => definition.Kind)
             .ToArray();
-        var topLevelBrowseKinds = EntityKindRegistry.All
-            .Where(definition => definition.Browse.RequiresTopLevel)
-            .Select(definition => definition.Kind)
-            .ToArray();
 
         Assert.Equal([EntityKind.AudioTrack], defaultWantedExclusions);
-        Assert.Equal([EntityKind.Gallery], topLevelBrowseKinds);
-        Assert.Equal(
-            [EntityKind.Book],
-            EntityKindRegistry.Describe(EntityKind.Book).Browse.HiddenParentKinds);
+        var trackVisibility = EntityKindRegistry.Describe(EntityKind.AudioTrack).CatalogVisibility;
+        Assert.All(
+            [
+                EntityCatalogSurface.Discovery,
+                EntityCatalogSurface.KindBrowse,
+                EntityCatalogSurface.Collection,
+                EntityCatalogSurface.Statistics
+            ],
+            surface => Assert.True(trackVisibility.ExcludesParent(surface, EntityKind.Book)));
+        Assert.False(trackVisibility.ExcludesParent(EntityCatalogSurface.KindBrowse, EntityKind.AudioLibrary));
+
+        var bookVisibility = EntityKindRegistry.Describe(EntityKind.Book).CatalogVisibility;
+        Assert.True(bookVisibility.ExcludesParent(EntityCatalogSurface.KindBrowse, EntityKind.Book));
+        Assert.All(
+            [EntityCatalogSurface.Discovery, EntityCatalogSurface.Collection, EntityCatalogSurface.Statistics],
+            surface => Assert.False(bookVisibility.ExcludesParent(surface, EntityKind.Book)));
+
+        var galleryVisibility = EntityKindRegistry.Describe(EntityKind.Gallery).CatalogVisibility;
+        Assert.True(galleryVisibility.RequiresTopLevel(EntityCatalogSurface.KindBrowse));
+        Assert.All(
+            [EntityCatalogSurface.Discovery, EntityCatalogSurface.Collection, EntityCatalogSurface.Statistics],
+            surface => Assert.False(galleryVisibility.RequiresTopLevel(surface)));
         Assert.Equal(EntityBrowsePolicy.Default, EntityKindRegistry.Describe(EntityKind.Video).Browse);
         Assert.All(
             EntityKindRegistry.All.Where(definition => definition.Kind is not (
                 EntityKind.AudioTrack or EntityKind.Book or EntityKind.Gallery)),
-            definition => Assert.Equal(EntityBrowsePolicy.Default, definition.Browse));
+            definition => Assert.Equal(EntityCatalogVisibilityPolicy.Default, definition.CatalogVisibility));
     }
 
     [Fact]
-    public void BrowsePolicyRejectsAmbiguousHierarchyRules() {
-        Assert.Throws<ArgumentException>(() =>
-            new EntityBrowsePolicy(
-                requiresTopLevel: true,
-                hiddenParentKinds: [EntityKind.Gallery]));
+    public void CatalogVisibilityPolicyRejectsInvalidOrAmbiguousHierarchyRules() {
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            new EntityCatalogVisibilityPolicy(topLevelOnlySurfaces: (EntityCatalogSurface)16));
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            new EntityCatalogParentExclusion(EntityKind.Book, EntityCatalogSurface.None));
+        Assert.Throws<ArgumentException>(() => new EntityCatalogVisibilityPolicy(
+            parentExclusions:
+            [
+                new(EntityKind.Book, EntityCatalogSurface.Discovery | EntityCatalogSurface.KindBrowse),
+                new(EntityKind.Book, EntityCatalogSurface.KindBrowse)
+            ]));
+        Assert.Throws<ArgumentException>(() => new EntityCatalogVisibilityPolicy(
+            topLevelOnlySurfaces: EntityCatalogSurface.KindBrowse,
+            parentExclusions: [new(EntityKind.Book, EntityCatalogSurface.KindBrowse)]));
+        var splitParentExclusions = new EntityCatalogVisibilityPolicy(
+            parentExclusions:
+            [
+                new(EntityKind.Book, EntityCatalogSurface.Discovery),
+                new(EntityKind.Book, EntityCatalogSurface.KindBrowse)
+            ]);
+        Assert.True(splitParentExclusions.ExcludesParent(
+            EntityCatalogSurface.Discovery | EntityCatalogSurface.KindBrowse,
+            EntityKind.Book));
+        Assert.Throws<ArgumentException>(() => new EntityCatalogVisibilityPolicy(
+            parentExclusions: [new(EntityKind.Book, EntityCatalogSurface.KindBrowse)])
+            .ValidateFor(EntityStructurePolicy.RootOnly));
+        Assert.Throws<ArgumentException>(() => new EntityCatalogVisibilityPolicy(
+            topLevelOnlySurfaces: EntityCatalogSurface.KindBrowse)
+            .ValidateFor(EntityStructurePolicy.ChildOf(EntityKind.Book)));
     }
 
     [Fact]
@@ -523,8 +561,8 @@ public sealed class EntityKindMetadataTests {
 
         Assert.True(EntityKindRegistry.Describe(EntityKind.Gallery).StructurePolicy.AllowsRoot);
         Assert.True(EntityKindRegistry.Describe(EntityKind.Image).StructurePolicy.AllowsRoot);
-        Assert.Contains(EntityKind.Book,
-            EntityKindRegistry.Describe(EntityKind.AudioTrack).Browse.HiddenParentKinds);
+        Assert.True(EntityKindRegistry.Describe(EntityKind.AudioTrack).CatalogVisibility
+            .ExcludesParent(EntityCatalogSurface.Discovery, EntityKind.Book));
     }
 
     [Fact]

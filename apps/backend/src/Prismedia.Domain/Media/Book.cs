@@ -30,7 +30,8 @@ public sealed class BookEntityKindDefinition() : EntityKindDefinition<Book>(
         identification: new(AutoIdentifySelectorKind.Book, enumeratesChildren: true),
         manualAcquisition: EntityManualAcquisitionPolicy.UploadAndReplacement,
         engagement: new(EntityEngagementMode.Reading),
-        browse: new(hiddenParentKinds: [EntityKind.Book]),
+        catalogVisibility: new(
+            parentExclusions: [new(EntityKind.Book, EntityCatalogSurface.KindBrowse)]),
         libraryVisibility: EntityLibraryVisibilityPolicy.DirectRoot,
         supportsFileDeletion: true,
         upgradeMode: EntityUpgradeMode.AtomicBookFile),

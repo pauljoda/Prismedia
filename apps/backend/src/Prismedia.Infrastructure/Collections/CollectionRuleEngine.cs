@@ -126,11 +126,14 @@ public sealed class CollectionRuleEngine(
         sb.Append("WHERE e.kind_code = ");
         var kindParam = ctx.AddParam(kindCode, NpgsqlDbType.Text);
         sb.AppendLine(kindParam);
-        if (KindEquals(kindCode, EntityKind.AudioTrack.ToCode())) {
-            // Book-owned tracks are audiobook parts, not music collection candidates.
-            var bookKindParam = ctx.AddParam(EntityKind.Book.ToCode(), NpgsqlDbType.Text);
+        var catalogPlan = EntityCatalogQueryPolicy.PlanFor(EntityCatalogSurface.Collection, kindCode);
+        if (catalogPlan.RequiresTopLevel) {
+            sb.AppendLine("AND e.parent_entity_id IS NULL");
+        }
+        foreach (var hiddenParentKindCode in catalogPlan.HiddenParentKindCodes) {
+            var parentKindParam = ctx.AddParam(hiddenParentKindCode, NpgsqlDbType.Text);
             sb.Append("AND NOT EXISTS (SELECT 1 FROM entities parent WHERE parent.id = e.parent_entity_id AND parent.kind_code = ");
-            sb.Append(bookKindParam);
+            sb.Append(parentKindParam);
             sb.AppendLine(")");
         }
         sb.Append("AND (");
