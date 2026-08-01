@@ -98,7 +98,7 @@ public sealed record PluginExecutionPolicy(
 /// <param name="Id">Stable provider/plugin code such as tmdb.</param>
 /// <param name="Name">Human-readable plugin name.</param>
 /// <param name="Version">Plugin artifact semantic version.</param>
-/// <param name="Runtime">Runtime code; supports dotnet-process.</param>
+/// <param name="Runtime">Runtime code claimed by the runner that executes this artifact.</param>
 /// <param name="Entry">Entry assembly or executable path, relative to the manifest directory when not rooted.</param>
 /// <param name="Compat">Compatibility bounds for plugin protocol and Prismedia versions.</param>
 /// <param name="Auth">Credential fields requested by the plugin.</param>
@@ -127,7 +127,7 @@ public sealed record PluginManifest(
 /// <param name="Date">Publication date string from the community index.</param>
 /// <param name="Path">Relative artifact path in the plugin repository or index root.</param>
 /// <param name="Sha256">SHA-256 checksum for packaged artifacts.</param>
-/// <param name="Runtime">Runtime code; supports dotnet-process.</param>
+/// <param name="Runtime">Runtime code claimed by the runner that executes this artifact.</param>
 /// <param name="IsNsfw">Whether this plugin can return NSFW metadata by default.</param>
 /// <param name="ManifestVersion">Manifest schema version; supports 1 and 2.</param>
 /// <param name="ApiTags">Tags used to gate plugin generations, including Prismedia.</param>

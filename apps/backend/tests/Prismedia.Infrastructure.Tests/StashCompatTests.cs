@@ -259,7 +259,7 @@ public sealed class StashCompatTests {
         var manifest = StashScraperManifestFactory.TryCreate(SampleYaml, "/tmp/Test Site.yml");
 
         Assert.NotNull(manifest);
-        Assert.Equal("stash-compat", manifest!.Runtime);
+        Assert.Equal(StashCompatRunner.Code, manifest!.Runtime);
         Assert.Equal("stash-test-site", manifest.Id);
         Assert.True(manifest.IsNsfw);
 
@@ -704,7 +704,7 @@ public sealed class StashCompatTests {
 
             var descriptor = await catalog.FindProviderAsync("stash-test-site", "video", CancellationToken.None);
             Assert.NotNull(descriptor);
-            Assert.Equal("stash-compat", descriptor!.Manifest.Runtime);
+            Assert.Equal(StashCompatRunner.Code, descriptor!.Manifest.Runtime);
 
             var config = db.ProviderConfigs.Single(row => row.ProviderCode == "stash-test-site");
             Assert.Equal(Prismedia.Domain.Entities.ProviderType.StashCompat, config.ProviderType);

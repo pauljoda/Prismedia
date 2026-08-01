@@ -9,7 +9,7 @@ public static class PluginCompatibilityResolver {
     private static readonly Version CurrentProtocolVersion = Version.Parse(PluginProtocol.CurrentSemanticVersion);
 
     /// <summary>
-    /// Finds the newest dotnet-process artifact for a plugin that supports the current app version.
+    /// Finds the newest .NET process artifact for a plugin that supports the current app version.
     /// </summary>
     /// <param name="entries">Community index entries to search.</param>
     /// <param name="pluginId">Plugin identifier requested by the app.</param>
@@ -50,12 +50,12 @@ public static class PluginCompatibilityResolver {
 
     private static bool IsDotnetProcess(PluginIndexEntry entry) =>
         PluginManifestContract.IsValid(entry) &&
-        string.Equals(entry.Runtime, "dotnet-process", StringComparison.OrdinalIgnoreCase) &&
+        string.Equals(entry.Runtime, DotnetPluginProcessRunner.Code, StringComparison.OrdinalIgnoreCase) &&
         entry.ApiTags.Any(tag => string.Equals(tag, "prismedia", StringComparison.OrdinalIgnoreCase));
 
     private static bool IsDotnetProcess(PluginManifest manifest) =>
         PluginManifestContract.IsValid(manifest) &&
-        string.Equals(manifest.Runtime, "dotnet-process", StringComparison.OrdinalIgnoreCase) &&
+        string.Equals(manifest.Runtime, DotnetPluginProcessRunner.Code, StringComparison.OrdinalIgnoreCase) &&
         manifest.ApiTags.Any(tag => string.Equals(tag, "prismedia", StringComparison.OrdinalIgnoreCase));
 
     private static bool SupportsProtocolVersion(PluginCompatibility compatibility) {

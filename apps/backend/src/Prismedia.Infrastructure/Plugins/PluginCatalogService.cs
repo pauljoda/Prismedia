@@ -177,7 +177,7 @@ public sealed partial class PluginCatalogService : IPluginCatalogService {
         }
 
         config.DisplayName = descriptor.Manifest.Name;
-        config.ProviderType = descriptor.Manifest.Runtime.Equals("stash-compat", StringComparison.OrdinalIgnoreCase)
+        config.ProviderType = descriptor.Manifest.Runtime.Equals(StashCompatRunner.Code, StringComparison.OrdinalIgnoreCase)
             ? ProviderType.StashCompat
             : ProviderType.ExternalProcess;
         config.SettingsJson = JsonSerializer.Serialize(new InstalledPluginSettings(

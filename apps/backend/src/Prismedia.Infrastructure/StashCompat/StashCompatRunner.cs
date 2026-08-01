@@ -11,8 +11,8 @@ namespace Prismedia.Infrastructure.StashCompat;
 /// XPath/JSON engine, and returns an <see cref="EntityMetadataProposal"/>.
 /// </summary>
 public sealed class StashCompatRunner : IIdentifyRunner {
-    /// <summary>Runtime code claimed by this runner.</summary>
-    public const string RuntimeCode = "stash-compat";
+    /// <summary>Manifest runtime code owned by this runner.</summary>
+    public const string Code = "stash-compat";
 
     private readonly HttpClient _http;
     private readonly StashScriptExecutor? _scripts;
@@ -28,8 +28,7 @@ public sealed class StashCompatRunner : IIdentifyRunner {
     }
 
     /// <inheritdoc />
-    public bool CanRun(PluginDescriptor descriptor) =>
-        descriptor.Manifest.Runtime.Equals(RuntimeCode, StringComparison.OrdinalIgnoreCase);
+    public string RuntimeCode => Code;
 
     /// <inheritdoc />
     public async Task<IdentifyPluginResponse> IdentifyAsync(

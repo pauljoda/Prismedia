@@ -10,8 +10,6 @@ namespace Prismedia.Infrastructure.StashCompat;
 /// NSFW default are derived from the YAML definition and its file name.
 /// </summary>
 public static class StashScraperManifestFactory {
-    private const string Runtime = "stash-compat";
-
     /// <summary>
     /// Maps each Stash capability to the Prismedia entity kind and identify action it supports.
     /// </summary>
@@ -56,7 +54,7 @@ public static class StashScraperManifestFactory {
             Id: id,
             Name: definition.Name,
             Version: "1.0.0",
-            Runtime: Runtime,
+            Runtime: StashCompatRunner.Code,
             Entry: yamlPath,
             Compat: new PluginCompatibility("1.0.0", null, "1.0.0", null),
             Auth: [],

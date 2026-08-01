@@ -10,11 +10,9 @@ namespace Prismedia.Infrastructure.Plugins;
 /// </summary>
 public interface IIdentifyRunner {
     /// <summary>
-    /// Indicates whether this runner can execute the supplied provider artifact.
+    /// Gets the manifest runtime code exclusively owned by this runner.
     /// </summary>
-    /// <param name="descriptor">Resolved provider artifact, including its manifest runtime.</param>
-    /// <returns>True when this runner owns the descriptor's runtime.</returns>
-    bool CanRun(PluginDescriptor descriptor);
+    string RuntimeCode { get; }
 
     /// <summary>
     /// Runs one identify request and returns the provider's proposal or candidate response.

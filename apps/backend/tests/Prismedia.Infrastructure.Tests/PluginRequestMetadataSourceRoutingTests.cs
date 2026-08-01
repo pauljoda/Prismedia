@@ -693,7 +693,7 @@ public sealed class PluginRequestMetadataSourceRoutingTests : IDisposable {
         Func<PluginDescriptor, IdentifyPluginRequest, int, EntityMetadataProposal> proposal) : IIdentifyRunner {
         public List<(PluginDescriptor Descriptor, IdentifyPluginRequest Request)> Calls { get; } = [];
 
-        public bool CanRun(PluginDescriptor descriptor) => descriptor.Manifest.Runtime == "dotnet-process";
+        public string RuntimeCode => DotnetPluginProcessRunner.Code;
 
         public Task<IdentifyPluginResponse> IdentifyAsync(
             PluginDescriptor descriptor,
@@ -709,7 +709,7 @@ public sealed class PluginRequestMetadataSourceRoutingTests : IDisposable {
 
         public List<Call> Calls { get; } = [];
 
-        public bool CanRun(PluginDescriptor descriptor) => descriptor.Manifest.Runtime == "dotnet-process";
+        public string RuntimeCode => DotnetPluginProcessRunner.Code;
 
         public Task<IdentifyPluginResponse> IdentifyAsync(
             PluginDescriptor descriptor,
@@ -769,7 +769,7 @@ public sealed class PluginRequestMetadataSourceRoutingTests : IDisposable {
     private sealed class NestedSeriesRunner(bool duplicateSeasonIdentity = false) : IIdentifyRunner {
         public EntityMetadataProposal? Proposal { get; private set; }
 
-        public bool CanRun(PluginDescriptor descriptor) => descriptor.Manifest.Runtime == "dotnet-process";
+        public string RuntimeCode => DotnetPluginProcessRunner.Code;
 
         public Task<IdentifyPluginResponse> IdentifyAsync(
             PluginDescriptor descriptor,

@@ -35,7 +35,7 @@ internal static class PluginIndexParser {
             Date: GetString(entry, "date"),
             Path: GetString(entry, "path", "downloadUrl"),
             Sha256: GetString(entry, "sha256"),
-            Runtime: GetString(entry, "runtime", fallback: "dotnet-process"),
+            Runtime: GetString(entry, "runtime", fallback: DotnetPluginProcessRunner.Code),
             IsNsfw: GetBool(entry, "isNsfw"),
             ManifestVersion: manifestVersion,
             ApiTags: GetStringArray(entry, "apiTags", ["prismedia"]),
@@ -484,7 +484,7 @@ internal static class PluginIndexParser {
         public string Date { get; set; } = string.Empty;
         public string Path { get; set; } = string.Empty;
         public string Sha256 { get; set; } = string.Empty;
-        public string Runtime { get; set; } = "dotnet-process";
+        public string Runtime { get; set; } = DotnetPluginProcessRunner.Code;
         public bool IsNsfw { get; set; }
         public int ManifestVersion { get; set; } = 1;
         public List<string> ApiTags { get; } = [];
