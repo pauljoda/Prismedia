@@ -17,7 +17,7 @@ public sealed class LibraryScanPersistenceServiceTests {
     private static readonly Guid RootId = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
 
     [Fact]
-    public async Task SuccessfulAudioProbePersistsACompleteMediaSourceAndStopsFutureProbeScheduling() {
+    public async Task SuccessfulFirstAudioProbePersistsMediaSourceAndSchedulesDefinitionPreview() {
         var sourcePath = Path.Combine(Path.GetTempPath(), $"prismedia-audio-probe-{Guid.NewGuid():N}.flac");
         await File.WriteAllBytesAsync(sourcePath, [0x66, 0x4c, 0x61, 0x43]);
         try {
@@ -47,9 +47,8 @@ public sealed class LibraryScanPersistenceServiceTests {
                 DateTimeOffset.UtcNow,
                 null);
 
-            await handler.HandleAsync(
-                new JobContext(job, new MergedImportTestSupport.RecordingJobQueue()),
-                CancellationToken.None);
+            var queue = new MergedImportTestSupport.RecordingJobQueue();
+            await handler.HandleAsync(new JobContext(job, queue), CancellationToken.None);
 
             var source = await db.MediaSources.AsNoTracking().SingleAsync(row => row.EntityId == trackId);
             Assert.Equal(sourcePath, source.Path);
@@ -59,6 +58,13 @@ public sealed class LibraryScanPersistenceServiceTests {
             Assert.Equal("flac", stream.Codec);
             var needs = await persistence.CheckDownstreamNeedsBatchAsync([trackId], CancellationToken.None);
             Assert.False(needs[trackId].NeedsProbe);
+            Assert.Collection(queue.Enqueued, request => {
+                Assert.Equal(
+                    EntityKindRegistry.Describe(EntityKind.AudioTrack).Processing.PreviewJobType,
+                    request.Type);
+                Assert.Equal(EntityKind.AudioTrack.ToCode(), request.TargetEntityKind);
+                Assert.Equal(trackId.ToString(), request.TargetEntityId);
+            });
         } finally {
             File.Delete(sourcePath);
         }

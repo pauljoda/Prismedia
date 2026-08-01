@@ -142,6 +142,7 @@ public sealed class BookPageEntityKindDefinition() : RootEntityKindDefinition<Bo
         processing: new EntityProcessingPolicy(
             assetFamily: GeneratedAssetFamily.BookPage,
             previewJobType: JobType.GenerateBookPageThumbnail,
+            previewRequiresAutomaticGeneration: true,
             generatedFileRoles: [EntityFileRole.Thumbnail]),
         libraryVisibility: EntityLibraryVisibilityPolicy.AncestorRoot),
     defaultCapabilities: static () =>

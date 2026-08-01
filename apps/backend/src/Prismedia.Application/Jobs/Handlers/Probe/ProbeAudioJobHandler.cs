@@ -71,10 +71,18 @@ public sealed class ProbeAudioJobHandler(
         }
 
         var settings = await roots.GetSettingsAsync(cancellationToken);
-        if (settings.AutoGeneratePreview && !await downstreamNeeds.HasEntityFileAsync(entityId, EntityFileRole.Waveform, cancellationToken)) {
+        var needs = await downstreamNeeds.CheckDownstreamNeedsBatchAsync([entityId], cancellationToken);
+        var processing = EntityKindRegistry.Describe(EntityKind.AudioTrack).Processing;
+        var plan = needs.TryGetValue(entityId, out var entityNeeds)
+            ? processing.Plan(EntityProcessingInputAdapter.From(
+                settings,
+                entityNeeds,
+                forceSubtitleReconciliationForOwnedSource: false))
+            : null;
+        if (plan?.PreviewJobType is { } previewJobType) {
             await context.EnqueueIfNeededAsync(
                 EnqueueJobRequest.ForEntity(
-                    JobType.GenerateAudioWaveform,
+                    previewJobType,
                     EntityKind.AudioTrack,
                     entityId.ToString(),
                     context.Job.TargetLabel),

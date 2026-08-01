@@ -28,6 +28,7 @@ public sealed class ImageEntityKindDefinition() : RootEntityKindDefinition<Image
             assetFamily: GeneratedAssetFamily.Image,
             fingerprintJobType: JobType.FingerprintImage,
             previewJobType: JobType.GenerateImageThumbnail,
+            previewRequiresAutomaticGeneration: true,
             generatedFileRoles: [EntityFileRole.Thumbnail, EntityFileRole.Preview]),
         libraryVisibility: EntityLibraryVisibilityPolicy.AncestorRoot,
         supportsFileDeletion: true)) {

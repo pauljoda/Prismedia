@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- Automatic audio probing and generated previews now consistently honor library settings through each Entity kind's processing policy.
 - Collection membership now observes each viewer's library grants across add, count, list, and artwork selection, so restricted media cannot leak through shared collections.
 - Entity discovery, collections, artwork, and playback statistics now share each Entity kind's catalog visibility rules, keeping audiobook parts from appearing as standalone music and nested containers from duplicating kind indexes.
 - Concurrent Entity edits — flags, markers, ratings, playback, and reading updates — now merge safely, keeping the latest user state and recording each completed or reading activity event exactly once.

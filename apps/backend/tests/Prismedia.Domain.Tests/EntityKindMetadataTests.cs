@@ -200,11 +200,9 @@ public sealed class EntityKindMetadataTests {
     }
 
     [Fact]
-    public void DefinitionsOwnDerivedMediaProcessingPolicy() {
+    public void DefinitionsOwnDerivedMediaProcessingContracts() {
         var video = EntityKindRegistry.Describe(EntityKind.Video).Processing;
-        var image = EntityKindRegistry.Describe(EntityKind.Image).Processing;
         var audio = EntityKindRegistry.Describe(EntityKind.AudioTrack).Processing;
-        var page = EntityKindRegistry.Describe(EntityKind.BookPage).Processing;
 
         var videoPlan = video.Plan(new EntityProcessingInputs(
             NeedsProbe: true, ShouldFingerprint: true, NeedsSubtitleExtraction: false, ForceSubtitleReconciliationForOwnedSource: true,
@@ -217,17 +215,46 @@ public sealed class EntityKindMetadataTests {
         Assert.Null(videoPlan.GridThumbnailJobType);
         Assert.Contains(EntityFileRole.Hls, video.GeneratedFileRoles);
 
-        Assert.Equal(JobType.GenerateImageThumbnail, image.PreviewJobType);
-        Assert.Equal(JobType.ProbeAudio, audio.Plan(new EntityProcessingInputs(
-            true, false, false, false, false, false, false, false, false, false)).ProbeJobType);
         Assert.Equal([EntityFileRole.Waveform], audio.GeneratedFileRoles);
-        Assert.Equal(JobType.GenerateBookPageThumbnail, page.PreviewJobType);
         Assert.Equal(
             EntityKindRegistry.Describe(EntityKind.Video).Processing.GeneratedFileRoles,
             EntityKindRegistry.Describe(EntityKind.Movie).Processing.GeneratedFileRoles);
         Assert.Equal(
             EntityKindRegistry.Describe(EntityKind.Video).Processing.GeneratedFileRoles,
             EntityKindRegistry.Describe(EntityKind.VideoEpisode).Processing.GeneratedFileRoles);
+    }
+
+    [Fact]
+    public void AudioTrackProcessingPlanGatesProbeOnAutomaticMetadata() {
+        var processing = EntityKindRegistry.Describe(EntityKind.AudioTrack).Processing;
+
+        var disabledPlan = processing.Plan(ProcessingInputs(needsProbe: true));
+        var enabledPlan = processing.Plan(ProcessingInputs(
+            needsProbe: true,
+            automaticMetadataEnabled: true));
+
+        Assert.True(processing.ProbeRequiresAutomaticMetadata);
+        Assert.Null(disabledPlan.ProbeJobType);
+        Assert.Equal(JobType.ProbeAudio, enabledPlan.ProbeJobType);
+    }
+
+    [Theory]
+    [InlineData(EntityKind.AudioTrack, JobType.GenerateAudioWaveform)]
+    [InlineData(EntityKind.Image, JobType.GenerateImageThumbnail)]
+    [InlineData(EntityKind.BookPage, JobType.GenerateBookPageThumbnail)]
+    public void DefinitionOwnedAutomaticPreviewJobsRespectTheSetting(
+        EntityKind kind,
+        JobType expectedPreviewJobType) {
+        var processing = EntityKindRegistry.Describe(kind).Processing;
+
+        var disabledPlan = processing.Plan(ProcessingInputs(needsPreview: true));
+        var enabledPlan = processing.Plan(ProcessingInputs(
+            needsPreview: true,
+            automaticPreviewEnabled: true));
+
+        Assert.True(processing.PreviewRequiresAutomaticGeneration);
+        Assert.Null(disabledPlan.PreviewJobType);
+        Assert.Equal(expectedPreviewJobType, enabledPlan.PreviewJobType);
     }
 
     [Fact]
@@ -606,4 +633,21 @@ public sealed class EntityKindMetadataTests {
         Assert.Equal(storageShape, descriptor.StorageShape);
         Assert.Equal(clrType, descriptor.ClrType);
     }
+
+    private static EntityProcessingInputs ProcessingInputs(
+        bool needsProbe = false,
+        bool needsPreview = false,
+        bool automaticMetadataEnabled = false,
+        bool automaticPreviewEnabled = false) =>
+        new(
+            NeedsProbe: needsProbe,
+            ShouldFingerprint: false,
+            NeedsSubtitleExtraction: false,
+            ForceSubtitleReconciliationForOwnedSource: false,
+            NeedsPreview: needsPreview,
+            NeedsTrickplay: false,
+            NeedsGridThumbnail: false,
+            AutomaticMetadataEnabled: automaticMetadataEnabled,
+            AutomaticPreviewEnabled: automaticPreviewEnabled,
+            TrickplayEnabled: false);
 }
