@@ -58,7 +58,11 @@
     aria-label={playing ? "Pause" : "Play"}
   >
     {#if buffering}
-      <Loader class="h-4 w-4 animate-spin" />
+      <Loader
+        class="h-4 w-4 animate-spin"
+        role="status"
+        aria-label="Loading video"
+      />
     {:else if playing}
       <Pause class="h-4 w-4" fill="currentColor" />
     {:else}

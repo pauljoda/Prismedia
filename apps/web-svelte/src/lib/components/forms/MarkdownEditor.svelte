@@ -2,7 +2,6 @@
   import { onMount, onDestroy, type Component } from "svelte";
   import { Editor } from "@tiptap/core";
   import StarterKit from "@tiptap/starter-kit";
-  import Link from "@tiptap/extension-link";
   import Placeholder from "@tiptap/extension-placeholder";
   import { Markdown } from "tiptap-markdown";
   import {
@@ -61,10 +60,10 @@
       extensions: [
         StarterKit.configure({
           heading: { levels: [2, 3] },
-        }),
-        Link.configure({
-          openOnClick: false,
-          HTMLAttributes: { class: "editor-link" },
+          link: {
+            openOnClick: false,
+            HTMLAttributes: { class: "editor-link" },
+          },
         }),
         Placeholder.configure({ placeholder }),
         Markdown.configure({

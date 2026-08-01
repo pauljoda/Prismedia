@@ -576,9 +576,7 @@
                   class="lightbox-video-shell"
                   class:has-natural-ratio={Boolean(currentVideoFit)}
                   class:is-ready={videoReady}
-                  style={currentVideoFit
-                    ? `--lightbox-video-aspect-ratio: ${currentVideoFit.aspectRatio}; --lightbox-video-width-ratio: ${currentVideoFit.widthToHeightRatio};`
-                    : undefined}
+                  style={`--lightbox-video-aspect-ratio: ${currentVideoFit?.aspectRatio ?? "16 / 9"}; --lightbox-video-width-ratio: ${currentVideoFit?.widthToHeightRatio ?? 1.7777777778};`}
                 >
                   {#if fallbackPoster}
                     <img class="lightbox-video-poster" src={fallbackPoster} alt="" aria-hidden="true" />

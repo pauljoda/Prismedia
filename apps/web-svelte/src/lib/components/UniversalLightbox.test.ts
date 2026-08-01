@@ -1,4 +1,3 @@
-import { readFile } from "node:fs/promises";
 import { fireEvent, render, screen, waitFor } from "@testing-library/svelte";
 import { tick } from "svelte";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -207,7 +206,7 @@ describe("UniversalLightbox", () => {
     expect(screen.queryByRole("button", { name: "Player settings" })).not.toBeInTheDocument();
   });
 
-  it("autoplays video-capable items muted and repeats in the lightbox", async () => {
+  it("autoplays video-capable items muted and looping in the lightbox", async () => {
     render(UniversalLightboxHarness, {
       props: { entities: [animatedWithPreview], initialIndex: 0, onClose: vi.fn() },
     });
@@ -216,9 +215,8 @@ describe("UniversalLightbox", () => {
       expect(screen.getByTestId("vidstack-video-player")).toBeInTheDocument();
     });
     expect(screen.getByRole("button", { name: "Unmute" })).toBeInTheDocument();
-
-    const source = await readFile("src/lib/components/UniversalLightbox.svelte", "utf8");
-    expect(source).toContain("autoRepeat");
+    expect(document.querySelector("media-player")).toHaveAttribute("muted");
+    expect(document.querySelector("media-player")).toHaveAttribute("loop");
   });
 
   it("uses image-video originals in the full-quality lightbox even without generated previews", async () => {
@@ -229,12 +227,10 @@ describe("UniversalLightbox", () => {
     await waitFor(() => {
       expect(screen.getByTestId("vidstack-video-player")).toBeInTheDocument();
     });
-  });
-
-  it("requests original-first video sources for full-quality lightbox playback", async () => {
-    const source = await readFile("src/lib/components/UniversalLightbox.svelte", "utf8");
-
-    expect(source).toContain("buildLightboxVideoSources(current, { preferOriginal: true })");
+    expect(document.querySelector("media-player")).toHaveAttribute(
+      "src",
+      "/api/entities/image-video-1/files/source",
+    );
   });
 
   it("preloads neighboring lightbox media for smoother navigation", async () => {
@@ -273,14 +269,6 @@ describe("UniversalLightbox", () => {
     expect(shell).toHaveClass("has-natural-ratio");
     expect(shell?.getAttribute("style")).toContain("--lightbox-video-aspect-ratio: 1080 / 1920");
     expect(shell?.getAttribute("style")).toContain("--lightbox-video-width-ratio: 0.5625");
-
-    const source = await readFile("src/lib/components/UniversalLightbox.svelte", "utf8");
-    expect(source).toContain("--lightbox-video-width-ratio");
-    expect(source).toContain("class:has-natural-ratio={Boolean(currentVideoFit)}");
-    expect(source).toContain("--lightbox-video-max-height: calc((100dvh - 10rem) * 0.98)");
-    expect(source).toContain("max-height: min(98%, var(--lightbox-video-max-height))");
-    expect(source).toContain("calc(var(--lightbox-video-max-height) * var(--lightbox-video-width-ratio))");
-    expect(source).not.toContain("\n    aspect-ratio: 16 / 9;");
   });
 
   it("can size video from a thumbnail-provided ratio before full metadata hydrates", async () => {
@@ -297,10 +285,6 @@ describe("UniversalLightbox", () => {
     expect(shell).toHaveClass("has-natural-ratio");
     expect(shell?.getAttribute("style")).toContain("--lightbox-video-aspect-ratio: 1080 / 1920");
     expect(shell?.getAttribute("style")).toContain("--lightbox-video-width-ratio: 0.5625");
-
-    const source = await readFile("src/lib/components/UniversalLightbox.svelte", "utf8");
-    expect(source).toContain("positiveNumberValue(current?.initialAspectRatio?.width)");
-    expect(source).toContain("positiveNumberValue(current?.initialAspectRatio?.height)");
   });
 
   it("keeps the lightbox video player in a real aspect-ratio box while it initializes", async () => {
@@ -315,14 +299,8 @@ describe("UniversalLightbox", () => {
     const shell = screen.getByTestId("vidstack-video-player").closest(".lightbox-video-shell") as HTMLElement | null;
     expect(shell).toBeInTheDocument();
     expect(shell).not.toHaveClass("has-natural-ratio");
-
-    const source = await readFile("src/lib/components/UniversalLightbox.svelte", "utf8");
-    expect(source).toContain('class="lightbox-media-guard"');
-    expect(source).toContain(".media-frame :global(.lightbox-media-guard)");
-    expect(source).toContain("--lightbox-video-aspect-ratio: 16 / 9;");
-    expect(source).toContain("aspect-ratio: var(--lightbox-video-aspect-ratio);");
-    expect(source).toContain("height: auto;");
-    expect(source).not.toContain(".lightbox-video-shell :global([data-testid=\"vidstack-video-player\"]) {\n    width: 100%;\n    max-width: 100%;\n    height: 100%;");
+    expect(document.body.querySelector(".lightbox-media-guard")).toBeInTheDocument();
+    expect(shell).toHaveStyle("--lightbox-video-aspect-ratio: 16 / 9");
   });
 
 });

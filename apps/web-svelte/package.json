@@ -24,7 +24,6 @@
     "@pierre/trees": "1.0.0-beta.4",
     "@prismedia/ui-svelte": "workspace:*",
     "@tiptap/core": "^3.23.6",
-    "@tiptap/extension-link": "^3.23.6",
     "@tiptap/extension-placeholder": "^3.23.6",
     "@tiptap/pm": "^3.23.6",
     "@tiptap/starter-kit": "^3.23.6",

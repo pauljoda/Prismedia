@@ -10,6 +10,7 @@
   import VideoTranscriptPanel from "$lib/components/VideoTranscriptPanel.svelte";
   import VideoPlaybackStatus from "./VideoPlaybackStatus.svelte";
   import { Tv } from "@lucide/svelte";
+  import { Button } from "@prismedia/ui-svelte";
 
   interface Props {
     section: EntityDetailSection;
@@ -98,7 +99,14 @@
             ? "Transcript is docked next to the video."
             : "Transcript is docked under the video."}
         </span>
-        <button type="button" onclick={onTranscriptDockToggle}>Move it back here</button>
+        <Button
+          variant="ghost"
+          size="sm"
+          class="font-mono uppercase tracking-[0.04em]"
+          onclick={onTranscriptDockToggle}
+        >
+          Move it back here
+        </Button>
       </div>
       <VideoTranscriptPanel
         {videoId}
@@ -146,17 +154,6 @@
     background: var(--color-surface-2, #101420);
     color: var(--color-text-muted, #8a93a6);
     font-size: 0.82rem;
-  }
-
-  .tab-inline-notice button {
-    border: 0;
-    background: transparent;
-    color: var(--color-text-accent, #c7c9cc);
-    cursor: pointer;
-    font-family: var(--font-mono, "JetBrains Mono", monospace);
-    font-size: 0.72rem;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
   }
 
   @media (max-width: 640px) {

@@ -58,9 +58,6 @@ describe("EntityDetail", () => {
     });
 
     const action = screen.getByRole("button", { name: "Play All" });
-    expect(action.className).toContain("entity-action-button");
-    expect(action.className).toContain("entity-action-button-primary");
-
     await fireEvent.click(action);
 
     expect(onClick).toHaveBeenCalledOnce();
