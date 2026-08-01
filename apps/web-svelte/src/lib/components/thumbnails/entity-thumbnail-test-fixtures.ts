@@ -1,10 +1,16 @@
+import {
+  CAPABILITY_KIND,
+  ENTITY_KIND,
+  THUMBNAIL_HOVER_KIND,
+  THUMBNAIL_META_ICON,
+} from "$lib/api/generated/codes";
 import type { EntityThumbnailCard } from "$lib/entities/entity-thumbnail";
 
 export function spriteCard(): EntityThumbnailCard {
   return {
     entity: {
       id: "video-1",
-      kind: "video",
+      kind: ENTITY_KIND.video,
       title: "Video",
       parentEntityId: null,
       sortOrder: null,
@@ -18,7 +24,7 @@ export function spriteCard(): EntityThumbnailCard {
       src: "/assets/videos/1/thumb.jpg",
     },
     hover: {
-      kind: "sprite",
+      kind: THUMBNAIL_HOVER_KIND.sprite,
       vttUrl: "/api/playback/videos/1/trickplay/280/tiles.m3u8",
     },
   };
@@ -28,7 +34,7 @@ export function imageSequenceCard(): EntityThumbnailCard {
   return {
     entity: {
       id: "book-1",
-      kind: "book",
+      kind: ENTITY_KIND.book,
       title: "Book",
       parentEntityId: null,
       sortOrder: null,
@@ -39,7 +45,7 @@ export function imageSequenceCard(): EntityThumbnailCard {
     aspectRatio: "poster",
     cover: null,
     hover: {
-      kind: "image-sequence",
+      kind: THUMBNAIL_HOVER_KIND.imageSequence,
       assets: [
         { alt: "Page 1", src: "/assets/pages/1.jpg" },
         { alt: "Page 2", src: "/assets/pages/2.jpg" },
@@ -53,7 +59,7 @@ export function personCard(): EntityThumbnailCard {
   return {
     entity: {
       id: "person-1",
-      kind: "person",
+      kind: ENTITY_KIND.person,
       title: "Tim Robinson",
       parentEntityId: null,
       sortOrder: null,
@@ -64,7 +70,7 @@ export function personCard(): EntityThumbnailCard {
     aspectRatio: "portrait",
     cover: null,
     hover: {
-      kind: "none",
+      kind: THUMBNAIL_HOVER_KIND.none,
     },
   };
 }
@@ -73,7 +79,7 @@ export function galleryCard(): EntityThumbnailCard {
   return {
     entity: {
       id: "gallery-2",
-      kind: "gallery",
+      kind: ENTITY_KIND.gallery,
       title: "A secondGallery",
       parentEntityId: "gallery-1",
       sortOrder: 0,
@@ -87,7 +93,7 @@ export function galleryCard(): EntityThumbnailCard {
       src: "/assets/galleries/2/thumb.jpg",
     },
     hover: {
-      kind: "none",
+      kind: THUMBNAIL_HOVER_KIND.none,
     },
   };
 }
@@ -105,18 +111,18 @@ export function episodeCard(): EntityThumbnailCard {
       ...spriteCard().entity,
       capabilities: [
         {
-          kind: "flags",
+          kind: CAPABILITY_KIND.flags,
           isFavorite: false,
           isNsfw: true,
           isOrganized: true,
         },
         {
-          kind: "rating",
+          kind: CAPABILITY_KIND.rating,
           value: 4,
         },
       ],
     },
-    meta: [{ icon: "video", label: "1080p" }],
+    meta: [{ icon: THUMBNAIL_META_ICON.video, label: "1080p" }],
   };
 }
 
@@ -124,7 +130,7 @@ export function bookPageCard(): EntityThumbnailCard {
   return {
     entity: {
       id: "page-12",
-      kind: "book-page",
+      kind: ENTITY_KIND.bookPage,
       title: "Page 12",
       parentEntityId: "chapter-1",
       sortOrder: 12,
@@ -138,9 +144,9 @@ export function bookPageCard(): EntityThumbnailCard {
       src: "/assets/pages/page-12.jpg",
     },
     hover: {
-      kind: "none",
+      kind: THUMBNAIL_HOVER_KIND.none,
     },
-    meta: [{ icon: "book", label: "Page 12" }],
+    meta: [{ icon: THUMBNAIL_META_ICON.book, label: "Page 12" }],
   };
 }
 
