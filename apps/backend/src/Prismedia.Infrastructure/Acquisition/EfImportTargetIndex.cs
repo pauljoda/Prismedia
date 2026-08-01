@@ -88,14 +88,16 @@ public sealed class EfImportTargetIndex(PrismediaDbContext db) : IImportTargetIn
 
     /// <inheritdoc />
     public async Task<MovieDiskTarget?> GetMovieTargetAsync(Guid entityId, CancellationToken cancellationToken) {
-        var movieId = await ResolveAncestorOfKindAsync(entityId, EntityKind.Movie.ToCode(), cancellationToken);
-        if (movieId is null || await FolderPathAsync(movieId.Value, cancellationToken) is not { } folder) {
+        var movieCode = EntityKind.Movie.ToCode();
+        var isMovie = await db.Entities.AsNoTracking()
+            .AnyAsync(row => row.Id == entityId && row.KindCode == movieCode, cancellationToken);
+        if (!isMovie || await FolderPathAsync(entityId, cancellationToken) is not { } folder) {
             return null;
         }
 
-        var ownedFile = await SourcePathAsync(movieId.Value, cancellationToken);
+        var ownedFile = await SourcePathAsync(entityId, cancellationToken);
 
-        return new MovieDiskTarget(movieId.Value, folder, ownedFile);
+        return new MovieDiskTarget(entityId, folder, ownedFile);
     }
 
     /// <inheritdoc />

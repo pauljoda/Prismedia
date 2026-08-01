@@ -60,6 +60,24 @@ public sealed class EfImportTargetIndexTests {
     }
 
     [Fact]
+    public async Task DoesNotResolveMovieTargetsFromVideoChildrenOrUnrelatedVideos() {
+        await using var db = CreateContext();
+        var movieId = AddEntity(db, EntityKind.Movie.ToCode(), parent: null, sortOrder: null,
+            sourcePath: "/media/movies/Film (2020)/film.mkv");
+        AddFolderSource(db, movieId, "/media/movies/Film (2020)");
+        var childVideoId = AddEntity(db, EntityKind.Video.ToCode(), parent: movieId, sortOrder: null,
+            sourcePath: "/media/movies/Film (2020)/bonus.mkv");
+        var unrelatedVideoId = AddEntity(db, EntityKind.Video.ToCode(), parent: null, sortOrder: null,
+            sourcePath: "/media/videos/Unrelated.mkv");
+        await db.SaveChangesAsync();
+
+        var index = new EfImportTargetIndex(db);
+
+        Assert.Null(await index.GetMovieTargetAsync(childVideoId, CancellationToken.None));
+        Assert.Null(await index.GetMovieTargetAsync(unrelatedVideoId, CancellationToken.None));
+    }
+
+    [Fact]
     public async Task ResolvesAlbumAndArtistFoldersWithRelativeTracks() {
         await using var db = CreateContext();
         var artistId = AddEntity(db, EntityKind.MusicArtist.ToCode(), parent: null, sortOrder: null);

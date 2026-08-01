@@ -592,7 +592,7 @@ public sealed class ImportedEntityMaterializationTests : IDisposable {
     }
 
     [Fact]
-    public async Task ReadinessRejectsExpectedPathOwnedOutsideLinkedSubtreeEvenWhenSubtreeHasOtherSource() {
+    public async Task ReadinessRejectsExpectedPathOwnedOutsideLinkedMovieEvenWhenItHasAnotherSource() {
         await using var db = CreateContext();
         var linkedId = AddWantedEntity(db, EntityKind.Movie, "Linked");
         db.Entities.Local.Single(entity => entity.Id == linkedId).IsWanted = false;
@@ -600,7 +600,7 @@ public sealed class ImportedEntityMaterializationTests : IDisposable {
         var expectedOutsidePath = Path.Combine(_workRoot, "outside-owner.mkv");
         await File.WriteAllTextAsync(unrelatedInsidePath, "inside");
         await File.WriteAllTextAsync(expectedOutsidePath, "outside");
-        AddSourceEntity(db, EntityKind.Video, "Unrelated child", unrelatedInsidePath, linkedId);
+        AddSourceFile(db, linkedId, unrelatedInsidePath);
         AddSourceEntity(db, EntityKind.Video, "Outside owner", expectedOutsidePath);
         await db.SaveChangesAsync();
 
@@ -626,7 +626,7 @@ public sealed class ImportedEntityMaterializationTests : IDisposable {
         var actualPath = Path.Combine(_workRoot, "case-sensitive.mkv");
         var differentCasePath = Path.Combine(_workRoot, "CASE-SENSITIVE.mkv");
         await File.WriteAllTextAsync(actualPath, "video");
-        AddSourceEntity(db, EntityKind.Video, "Case-sensitive child", actualPath, linkedId);
+        AddSourceFile(db, linkedId, actualPath);
         await db.SaveChangesAsync();
 
         var readiness = new EfImportedEntityReadinessPersistence(
@@ -651,7 +651,7 @@ public sealed class ImportedEntityMaterializationTests : IDisposable {
         var actualPath = Path.Combine(_workRoot, "case-insensitive.mkv");
         var differentCasePath = Path.Combine(_workRoot, "CASE-INSENSITIVE.mkv");
         await File.WriteAllTextAsync(actualPath, "video");
-        AddSourceEntity(db, EntityKind.Video, "Case-insensitive child", actualPath, linkedId);
+        AddSourceFile(db, linkedId, actualPath);
         await db.SaveChangesAsync();
 
         var readiness = new EfImportedEntityReadinessPersistence(
@@ -796,6 +796,18 @@ public sealed class ImportedEntityMaterializationTests : IDisposable {
             UpdatedAt = now
         });
         return id;
+    }
+
+    private static void AddSourceFile(PrismediaDbContext db, Guid entityId, string sourcePath) {
+        var now = DateTimeOffset.UtcNow;
+        db.EntityFiles.Add(new EntityFileRow {
+            Id = Guid.NewGuid(),
+            EntityId = entityId,
+            Role = EntityFileRole.Source,
+            Path = sourcePath,
+            CreatedAt = now,
+            UpdatedAt = now
+        });
     }
 
     private static async Task<Guid> AddAcquisitionAsync(

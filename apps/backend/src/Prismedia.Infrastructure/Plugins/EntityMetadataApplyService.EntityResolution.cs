@@ -7,22 +7,13 @@ namespace Prismedia.Infrastructure.Plugins;
 
 public sealed partial class EntityMetadataApplyService {
     /// <summary>
-    /// Legacy patch-boundary alias accepted for Movie entities in addition to canonical
-    /// <see cref="EntityKind"/> codes. Nothing in the app produces it today; it is tolerated
-    /// for older clients/plugins that addressed movies by this token. prism-vocab: external
-    /// </summary>
-    private const string LegacyMovieExpectedKind = "video-movie";
-
-    /// <summary>
     /// Whether an entity of <paramref name="entityKind"/> may be patched through a route or
     /// proposal addressed at <paramref name="expectedKind"/>. Beyond exact kind matches, a
-    /// Movie accepts the generic video code (and the legacy movie alias).
+    /// Movie accepts the generic video code through its definition model.
     /// </summary>
     private static bool IsKindCompatible(string entityKind, string expectedKind) =>
         entityKind.Equals(expectedKind, StringComparison.OrdinalIgnoreCase) ||
-        IsDefinitionCompatible(entityKind, expectedKind) ||
-        (entityKind.Equals(EntityKind.Movie.ToCode(), StringComparison.OrdinalIgnoreCase) &&
-            expectedKind.Equals(LegacyMovieExpectedKind, StringComparison.OrdinalIgnoreCase));
+        IsDefinitionCompatible(entityKind, expectedKind);
 
     private static bool IsDefinitionCompatible(string entityKind, string expectedKind) =>
         EntityKindRegistry.TryDescribe(entityKind, out var definition) &&

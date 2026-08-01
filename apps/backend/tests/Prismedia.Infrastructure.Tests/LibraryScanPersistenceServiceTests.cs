@@ -2530,7 +2530,7 @@ public sealed class LibraryScanPersistenceServiceTests {
         SeedLibraryRoot(db, RootId, "/media/kept");
         SeedSourceEntity(db, keptId, EntityKind.Video.ToCode(), "/media/kept/video.mkv");
         SeedSourceEntity(db, staleMovieId, EntityKind.Movie.ToCode(), "/media/deleted/movie");
-        SeedSourceEntity(db, staleVideoId, EntityKind.Video.ToCode(), "/media/deleted/movie/video.mkv", staleMovieId);
+        SeedSourceEntity(db, staleVideoId, EntityKind.Video.ToCode(), "/media/deleted/video.mkv");
         await db.SaveChangesAsync();
 
         var service = new LibraryScanPersistenceService(db);

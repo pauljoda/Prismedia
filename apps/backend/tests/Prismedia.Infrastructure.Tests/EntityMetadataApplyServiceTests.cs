@@ -447,6 +447,24 @@ public sealed class EntityMetadataApplyServiceTests {
     }
 
     [Fact]
+    public async Task ApplyPatchAcceptsGenericVideoKindForMovieThroughItsDefinition() {
+        await using var db = CreateContext();
+        var entityId = Guid.NewGuid();
+        SeedEntity(db, entityId, EntityKind.Movie.ToCode(), "Original Title");
+        await db.SaveChangesAsync();
+
+        var result = await new EntityMetadataApplyService(db, new PluginArtworkServiceOptions(Path.GetTempPath()))
+            .ApplyPatchAsync(
+                entityId,
+                new EntityMetadataUpdateRequest(Fields: ["title"], Patch: EmptyPatch() with { Title = "Updated Movie" }),
+                expectedKind: EntityKind.Video.ToCode(),
+                CancellationToken.None);
+
+        Assert.Equal(EntityMetadataPatchResult.Applied, result);
+        Assert.Equal("Updated Movie", (await db.Entities.FindAsync([entityId]))?.Title);
+    }
+
+    [Fact]
     public async Task ApplyMaterializesProviderContainerAndAdoptsFlatChildren() {
         await using var db = CreateContext();
         var bookId = Guid.Parse("23232323-2323-2323-2323-232323232321");
