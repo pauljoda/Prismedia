@@ -1,9 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { ENTITY_KIND } from "$lib/api/generated/codes";
+import { ENTITY_KIND, ENTITY_KIND_ICON, THUMBNAIL_META_ICON } from "$lib/api/generated/codes";
 import {
   entityAccentForKind,
   entityEmittedAccentForKind,
   entitySpectrumIndex,
+  thumbnailMetaAccentForIcon,
 } from "./entity-accent";
 
 describe("entityAccentForKind", () => {
@@ -57,5 +58,18 @@ describe("entitySpectrumIndex", () => {
     ].map((kind) => entitySpectrumIndex(kind));
 
     expect(ordered).toEqual([0, 1, 2, 3, 4, 5, 6, 7]);
+  });
+});
+
+describe("thumbnailMetaAccentForIcon", () => {
+  it("matches native metadata chips to the represented media family", () => {
+    expect(thumbnailMetaAccentForIcon(THUMBNAIL_META_ICON.episode))
+      .toBe(entityAccentForKind(ENTITY_KIND.video).primary);
+    expect(thumbnailMetaAccentForIcon(THUMBNAIL_META_ICON.gallery))
+      .toBe(entityAccentForKind(ENTITY_KIND.image).primary);
+    expect(thumbnailMetaAccentForIcon(ENTITY_KIND_ICON.author))
+      .toBe(entityAccentForKind(ENTITY_KIND.book).primary);
+    expect(thumbnailMetaAccentForIcon(ENTITY_KIND_ICON.movie))
+      .toBe("var(--color-text-muted, #8a93a6)");
   });
 });

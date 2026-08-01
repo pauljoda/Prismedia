@@ -1,6 +1,13 @@
-import { ENTITY_KIND_DEFINITIONS } from "$lib/api/generated/codes";
+import {
+  ENTITY_KIND,
+  ENTITY_KIND_DEFINITIONS,
+  ENTITY_KIND_ICON,
+  THUMBNAIL_META_ICON,
+  type EntityKindCode,
+} from "$lib/api/generated/codes";
 import { colors } from "@prismedia/ui-svelte";
 import { isEntityKindCode } from "./entity-codes";
+import type { EntityThumbnailMetaIcon } from "./entity-thumbnail";
 
 export interface EntityAccent {
   primary: string;
@@ -42,6 +49,28 @@ export const PRISM_SPECTRUM_ORDER = [
 type EntityHuePair = readonly [PrismSpectrumHue, PrismSpectrumHue];
 
 const FALLBACK_HUES: EntityHuePair = ["cyan", "violet"];
+const THUMBNAIL_META_FAMILY_BY_ICON: Partial<Record<EntityThumbnailMetaIcon, EntityKindCode>> = {
+  [THUMBNAIL_META_ICON.video]: ENTITY_KIND.video,
+  [THUMBNAIL_META_ICON.season]: ENTITY_KIND.video,
+  [THUMBNAIL_META_ICON.episode]: ENTITY_KIND.video,
+  [THUMBNAIL_META_ICON.image]: ENTITY_KIND.image,
+  [THUMBNAIL_META_ICON.gallery]: ENTITY_KIND.image,
+  [THUMBNAIL_META_ICON.audio]: ENTITY_KIND.audio,
+  [THUMBNAIL_META_ICON.album]: ENTITY_KIND.audio,
+  [THUMBNAIL_META_ICON.track]: ENTITY_KIND.audio,
+  [THUMBNAIL_META_ICON.disc]: ENTITY_KIND.audio,
+  [ENTITY_KIND_ICON.artist]: ENTITY_KIND.audio,
+  [THUMBNAIL_META_ICON.book]: ENTITY_KIND.book,
+  [THUMBNAIL_META_ICON.volume]: ENTITY_KIND.book,
+  [THUMBNAIL_META_ICON.chapter]: ENTITY_KIND.book,
+  [THUMBNAIL_META_ICON.page]: ENTITY_KIND.book,
+  [ENTITY_KIND_ICON.author]: ENTITY_KIND.book,
+  [THUMBNAIL_META_ICON.collection]: ENTITY_KIND.collection,
+  [THUMBNAIL_META_ICON.count]: ENTITY_KIND.collection,
+  [THUMBNAIL_META_ICON.person]: ENTITY_KIND.person,
+  [THUMBNAIL_META_ICON.studio]: ENTITY_KIND.studio,
+  [THUMBNAIL_META_ICON.tag]: ENTITY_KIND.tag,
+};
 
 function huesForKind(kind: string): EntityHuePair {
   if (!isEntityKindCode(kind)) return FALLBACK_HUES;
@@ -59,6 +88,14 @@ export function entityAccentForKind(kind: string): EntityAccent {
     primary: PRISM_MATERIAL_SPECTRUM[primary],
     secondary: PRISM_MATERIAL_SPECTRUM[secondary],
   };
+}
+
+/** Matches native thumbnail chips by tinting metadata through its represented entity family. */
+export function thumbnailMetaAccentForIcon(icon: EntityThumbnailMetaIcon): string {
+  const family = THUMBNAIL_META_FAMILY_BY_ICON[icon];
+  return family
+    ? entityAccentForKind(family).primary
+    : "var(--color-text-muted, #8a93a6)";
 }
 
 /**

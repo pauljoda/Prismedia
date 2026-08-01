@@ -1,6 +1,7 @@
 <script lang="ts">
   import OverflowTicker from "$lib/components/OverflowTicker.svelte";
   import type { EntityThumbnailCard } from "$lib/entities/entity-thumbnail";
+  import { thumbnailMetaAccentForIcon } from "$lib/entities/entity-accent";
   import type { Snippet } from "svelte";
   import EntityThumbnailIcon from "./EntityThumbnailIcon.svelte";
 
@@ -35,8 +36,12 @@
 
     {#if card.meta?.length}
       <div class="chips">
-        {#each card.meta as item (item.icon + item.label)}
-          <span class="chip" aria-label={`${item.icon} ${item.label}`}>
+        {#each card.meta.slice(0, 5) as item (item.icon + item.label)}
+          <span
+            class="chip"
+            style:--thumbnail-meta-accent={thumbnailMetaAccentForIcon(item.icon)}
+            aria-label={`${item.icon} ${item.label}`}
+          >
             <EntityThumbnailIcon icon={item.icon} />
             {item.label}
           </span>
@@ -87,7 +92,7 @@
     overflow: hidden;
     margin: 0;
     color: rgb(196 201 212 / 0.82);
-    font-family: var(--font-mono, "JetBrains Mono", monospace);
+    font-family: var(--font-body, Inter, sans-serif);
     font-size: 0.6875rem;
     line-height: 1.25;
     text-overflow: ellipsis;
@@ -110,9 +115,9 @@
     max-width: 100%;
     min-height: 1.15rem;
     overflow: hidden;
-    border: 1px solid color-mix(in srgb, var(--entity-accent) 32%, rgb(255 255 255 / 0.12));
+    border: 1px solid color-mix(in srgb, var(--thumbnail-meta-accent) 32%, transparent);
     border-radius: var(--radius-sm, 6px);
-    background: color-mix(in srgb, var(--entity-accent) 11%, transparent);
+    background: color-mix(in srgb, var(--thumbnail-meta-accent) 11%, transparent);
     color: rgb(224 228 236 / 0.84);
     font-family: var(--font-mono, "JetBrains Mono", monospace);
     font-size: 0.625rem;
@@ -123,7 +128,7 @@
     text-shadow: 0 1px 2px rgb(0 0 0 / 0.5);
     white-space: nowrap;
   }
-  .chip :global(svg) { flex: 0 0 auto; color: var(--color-text-muted); }
+  .chip :global(svg) { flex: 0 0 auto; color: var(--thumbnail-meta-accent); }
 
   :global(.entity-thumbnail.is-list) .thumbnail-caption {
     flex: 1 1 0;
