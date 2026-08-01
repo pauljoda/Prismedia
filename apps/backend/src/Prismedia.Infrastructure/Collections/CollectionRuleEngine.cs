@@ -35,11 +35,9 @@ public sealed class CollectionRuleEngine(
         .ToHashSet(StringComparer.Ordinal);
 
     private static readonly IReadOnlySet<string> EpisodicPlayableVideoKinds = EntityKindRegistry.All
-        .Where(definition => definition is IPlayableVideoKindDefinition)
-        .Where(definition => definition.StructurePolicy.RequiresParent)
-        .Where(definition => definition.StructurePolicy.AllowedParentKinds.Any(parentKind =>
-            parentKind is EntityKind.VideoSeries or EntityKind.VideoSeason))
-        .Select(definition => definition.Code)
+        .OfType<IPlayableVideoKindDefinition>()
+        .Where(definition => definition.IsEpisodic)
+        .Select(definition => EntityKindRegistry.ToCode(definition.Kind))
         .ToHashSet(StringComparer.Ordinal);
 
     private static readonly IReadOnlyDictionary<CollectionRuleField, IReadOnlySet<string>> FieldTargetKinds =

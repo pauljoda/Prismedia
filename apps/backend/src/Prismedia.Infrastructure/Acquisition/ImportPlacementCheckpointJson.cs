@@ -86,8 +86,8 @@ internal static class ImportPlacementCheckpointJson {
     }
 
     private static void Validate(ImportPlacementCheckpoint checkpoint) {
-        if (checkpoint.Kind is not (EntityKind.Book or EntityKind.Movie or EntityKind.AudioLibrary or EntityKind.AudioTrack)) {
-            Invalid("Kind must be book, movie, audio library, or audio track.");
+        if (!UsesPlacementCheckpointProtocol(checkpoint.Kind)) {
+            Invalid("Kind must use the placement import checkpoint protocol.");
         }
         if (checkpoint.LibraryRootId == Guid.Empty) {
             Invalid("LibraryRootId must be non-empty.");
@@ -155,6 +155,14 @@ internal static class ImportPlacementCheckpointJson {
                     Invalid($"Units[{index}].FinalPath must exactly match TargetAbsolutePath.");
                 }
             }
+        }
+    }
+
+    private static bool UsesPlacementCheckpointProtocol(EntityKind kind) {
+        try {
+            return AcquisitionProfileKinds.CheckpointProtocolFor(kind) == AcquisitionCheckpointProtocol.Placement;
+        } catch (Exception ex) when (ex is ArgumentOutOfRangeException or InvalidOperationException) {
+            return false;
         }
     }
 

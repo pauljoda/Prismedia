@@ -164,6 +164,60 @@ public sealed class ImportPlacementExecutionTests : IDisposable {
         Assert.Equal(EntityKind.AudioTrack, decoded.Kind);
     }
 
+    [Theory]
+    [MemberData(nameof(PlacementCheckpointProfileKinds))]
+    public void CheckpointCodecAcceptsEveryDefinitionDeclaredPlacementProtocol(EntityKind kind) {
+        var payloadRoot = Path.GetFullPath(Path.Combine(_workRoot, $"{kind}-profile-payload"));
+        var libraryRoot = Path.GetFullPath(Path.Combine(_workRoot, $"{kind}-profile-library"));
+        var source = Path.Combine(payloadRoot, "media.bin");
+        var target = Path.Combine(libraryRoot, "media.bin");
+        var checkpoint = new ImportPlacementCheckpoint(
+            kind,
+            Guid.NewGuid(),
+            libraryRoot,
+            payloadRoot,
+            ImportMode.Move,
+            libraryRoot,
+            libraryRoot,
+            "Imported.",
+            [new ImportPlacementCheckpointUnit("media.bin", source, target, IsMedia: true)],
+            AttemptId: Guid.NewGuid(),
+            ClaimJobId: Guid.NewGuid());
+
+        var decoded = Assert.IsType<ImportPlacementCheckpoint>(
+            ImportPlacementCheckpointJson.Deserialize(ImportPlacementCheckpointJson.Serialize(checkpoint)));
+
+        Assert.Equal(kind, decoded.Kind);
+    }
+
+    [Fact]
+    public void CheckpointCodecRejectsKindsWithAnotherDefinitionDeclaredProtocol() {
+        var payloadRoot = Path.GetFullPath(Path.Combine(_workRoot, "television-payload"));
+        var libraryRoot = Path.GetFullPath(Path.Combine(_workRoot, "television-library"));
+        var checkpoint = new ImportPlacementCheckpoint(
+            EntityKind.VideoSeason,
+            Guid.NewGuid(),
+            libraryRoot,
+            payloadRoot,
+            ImportMode.Move,
+            libraryRoot,
+            libraryRoot,
+            "Imported.",
+            [new ImportPlacementCheckpointUnit(
+                "episode.mkv",
+                Path.Combine(payloadRoot, "episode.mkv"),
+                Path.Combine(libraryRoot, "episode.mkv"),
+                IsMedia: true)],
+            AttemptId: Guid.NewGuid(),
+            ClaimJobId: Guid.NewGuid());
+
+        Assert.Throws<InvalidDataException>(() => ImportPlacementCheckpointJson.Serialize(checkpoint));
+    }
+
+    public static IEnumerable<object[]> PlacementCheckpointProfileKinds() => EntityKindRegistry.All
+        .Where(definition => definition.AcquisitionProfile?.CheckpointProtocol == AcquisitionCheckpointProtocol.Placement)
+        .Select(definition => new object[] { definition.Kind });
+
     private static PrismediaDbContext CreateContext() => new(
         new DbContextOptionsBuilder<PrismediaDbContext>()
             .UseInMemoryDatabase(Guid.NewGuid().ToString())

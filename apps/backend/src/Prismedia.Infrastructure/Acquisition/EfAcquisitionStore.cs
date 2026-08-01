@@ -136,15 +136,14 @@ public sealed partial class EfAcquisitionStore(PrismediaDbContext db, IAcquisiti
     }
 
     /// <summary>
-    /// The year identity of the work an entity belongs to: the topmost video container's (series or
-    /// movie, within its cycle-safe ancestor walk) first premiere/release date year. Null when the graph or
-    /// dates are missing, so callers keep their request-time fallback.
+    /// The year identity of the work an entity belongs to: the first ancestor that owns an acquisition
+    /// profile, within a cycle-safe ancestor walk. Null when the graph or dates are missing, so callers keep
+    /// their request-time fallback.
     /// </summary>
     private async Task<int?> ResolveWorkYearAsync(Guid entityId, CancellationToken cancellationToken) {
-        var seriesCode = EntityKind.VideoSeries.ToCode();
-        var movieCode = EntityKind.Movie.ToCode();
         var currentId = (Guid?)entityId;
         var workId = entityId;
+        AcquisitionProfileDefinition? workProfile = null;
         var visited = new HashSet<Guid>();
         while (currentId is { } id && visited.Add(id)) {
             var current = await db.Entities.AsNoTracking()
@@ -155,21 +154,28 @@ public sealed partial class EfAcquisitionStore(PrismediaDbContext db, IAcquisiti
                 break;
             }
 
-            if (current.KindCode == seriesCode || current.KindCode == movieCode) {
+            if (EntityKindRegistry.TryDescribe(current.KindCode, out var definition)
+                && definition.AcquisitionProfile is { } acquisitionProfile) {
                 workId = id;
+                workProfile = acquisitionProfile;
                 break;
             }
 
             currentId = current.ParentEntityId;
         }
 
-        // Provider date vocabulary ladder (same order identify uses): the work's première/release date.
+        if (workProfile is null) {
+            return null;
+        }
+
         var dates = await db.EntityDates.AsNoTracking()
             .Where(date => date.EntityId == workId && date.SortableValue != null)
             .Select(date => new { date.Code, date.SortableValue })
             .ToArrayAsync(cancellationToken);
-        foreach (var code in (string[])["firstAir", "release", "airDate", "date"]) {
-            var match = dates.FirstOrDefault(date => date.Code == code);
+        foreach (var dateType in workProfile.SupportedReleaseDateTypes) {
+            var canonicalCode = dateType.ToCode();
+            var match = dates.FirstOrDefault(date => date.Code == canonicalCode)
+                ?? dates.FirstOrDefault(date => EntityDateTypeRegistry.Decode(date.Code) == dateType);
             if (match?.SortableValue is { } sortable) {
                 return sortable.Year;
             }

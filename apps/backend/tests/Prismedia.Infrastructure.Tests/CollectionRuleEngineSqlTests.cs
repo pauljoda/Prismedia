@@ -139,6 +139,31 @@ public sealed class CollectionRuleEngineSqlTests {
     }
 
     [Fact]
+    public void SeriesRuleTargetsExactlyTheDefinitionsMarkedEpisodic() {
+        var group = new CollectionRuleGroup {
+            Operator = "and",
+            Children = [
+                new CollectionRuleCondition {
+                    Field = CollectionRuleField.VideoSeriesId.ToCode(),
+                    Operator = "equals",
+                    Value = JsonSerializer.SerializeToElement(Guid.NewGuid().ToString("D"))
+                }
+            ]
+        };
+        var engine = new CollectionRuleEngine(null!, null!);
+
+        foreach (var definition in EntityKindRegistry.All.OfType<IPlayableVideoKindDefinition>()) {
+            var query = engine.BuildQuery(group, EntityKindRegistry.ToCode(definition.Kind));
+
+            if (definition.IsEpisodic) {
+                Assert.NotNull(query);
+            } else {
+                Assert.Null(query);
+            }
+        }
+    }
+
+    [Fact]
     public void SkipCountRulesUsePlaybackState() {
         var ownerUserId = Guid.Parse("33333333-3333-4333-8333-333333333333");
         var group = new CollectionRuleGroup {
