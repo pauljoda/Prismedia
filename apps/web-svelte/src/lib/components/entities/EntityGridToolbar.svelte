@@ -5,7 +5,6 @@
     SlidersHorizontal,
   } from "@lucide/svelte";
   import { onMount } from "svelte";
-  import { browser } from "$app/environment";
   import { cn } from "@prismedia/ui-svelte";
   import type { FilterPreset } from "$lib/filter-presets";
   import { entityGridFilterFromId } from "$lib/entities/entity-grid";
@@ -22,6 +21,7 @@
   import EntityGridPresetDropdown from "./EntityGridPresetDropdown.svelte";
   import EntityGridToolbarSearch from "./EntityGridToolbarSearch.svelte";
   import EntityGridToolbarViewControls from "./EntityGridToolbarViewControls.svelte";
+  import { EntityGridToolbarCollapseController } from "./entity-grid-toolbar-collapse-controller.svelte";
 
   interface Props {
     activeFilterIds: string[];
@@ -142,47 +142,15 @@
     selectable || activeFilters.length > 0 || canClearFiltersAndSort,
   );
 
-  // Seed from the persisted preference. A saved collapsed state is treated as a
-  // manual choice, so it starts pinned and scrolling won't immediately undo it.
+  // A persisted value seeds this mount; later prop changes must not overwrite a
+  // manual in-session choice or the controller's scroll-driven compact state.
   // svelte-ignore state_referenced_locally
-  let barsCollapsed = $state(initialBarsCollapsed);
-  // Once the user collapses/expands by hand, scrolling stops driving the state.
-  // svelte-ignore state_referenced_locally
-  let collapsePinned = $state(initialBarsCollapsed);
+  const collapse = new EntityGridToolbarCollapseController(
+    initialBarsCollapsed,
+    (collapsed) => onBarsCollapsedChange?.(collapsed),
+  );
 
-  function toggleBars() {
-    barsCollapsed = !barsCollapsed;
-    collapsePinned = true;
-    // Only manual toggles persist; scroll-driven collapse stays ephemeral.
-    onBarsCollapsedChange?.(barsCollapsed);
-  }
-
-  // Collapse the secondary rows once the user scrolls down into the content, and
-  // then leave them alone. Scrolling up deliberately does NOT bring them back —
-  // the earlier auto re-expand fought the user and stuttered the bars in and out
-  // as scroll direction wavered. The rows stay hidden until the user taps the
-  // (accented) toggle, and any manual toggle pins the state so scrolling stops
-  // touching it entirely.
-  onMount(() => {
-    if (!browser) return;
-    let lastY = window.scrollY;
-
-    function scrollTopOf(target: EventTarget | null): number {
-      if (target instanceof HTMLElement) return target.scrollTop;
-      return window.scrollY;
-    }
-
-    function onScroll(event: Event) {
-      if (collapsePinned || barsCollapsed) return;
-      const y = scrollTopOf(event.target);
-      const delta = y - lastY;
-      lastY = y;
-      if (delta > 8 && y > 48) barsCollapsed = true;
-    }
-
-    window.addEventListener("scroll", onScroll, { capture: true, passive: true });
-    return () => window.removeEventListener("scroll", onScroll, { capture: true });
-  });
+  onMount(() => collapse.connectScroll());
 
 </script>
 
@@ -242,13 +210,13 @@
           <button
             type="button"
             class="ctrl-btn ctrl-icon collapse-toggle"
-            class:is-active={barsCollapsed}
-            title={barsCollapsed ? "Show filter and selection rows" : "Hide filter and selection rows"}
-            aria-label={barsCollapsed ? "Show filter and selection rows" : "Hide filter and selection rows"}
-            aria-expanded={!barsCollapsed}
-            onclick={toggleBars}
+            class:is-active={collapse.barsCollapsed}
+            title={collapse.barsCollapsed ? "Show filter and selection rows" : "Hide filter and selection rows"}
+            aria-label={collapse.barsCollapsed ? "Show filter and selection rows" : "Hide filter and selection rows"}
+            aria-expanded={!collapse.barsCollapsed}
+            onclick={() => collapse.toggle()}
           >
-            {#if barsCollapsed}
+            {#if collapse.barsCollapsed}
               <ChevronsUpDown class="h-3.5 w-3.5" />
             {:else}
               <ChevronsDownUp class="h-3.5 w-3.5" />
@@ -259,7 +227,7 @@
     </div>
     </div>
 
-    {#if !barsCollapsed && (activeFilters.length > 0 || canClearFiltersAndSort)}
+    {#if !collapse.barsCollapsed && (activeFilters.length > 0 || canClearFiltersAndSort)}
       <EntityGridToolbarActiveFilters
         {activeFilterIds}
         {activeFilters}
@@ -269,7 +237,7 @@
       />
     {/if}
 
-    {#if selectable && !barsCollapsed}
+    {#if selectable && !collapse.barsCollapsed}
       <BulkSelectionBar
         {allSelectedNsfw}
         {allSelectedWanted}
