@@ -3,11 +3,9 @@
     ArrowUpDown,
     Check,
     ChevronDown,
-    Search,
     Shuffle,
-    X,
   } from "@lucide/svelte";
-  import { cn } from "@prismedia/ui-svelte";
+  import { cn, SearchInput } from "@prismedia/ui-svelte";
   import { keepFlyoutOnScreen } from "$lib/actions/keep-flyout-on-screen";
   import { isTaxonomyEntityKind } from "$lib/entities/entity-codes";
   import type { EntityGridSort, EntityGridSortDir } from "$lib/entities/entity-grid";
@@ -62,26 +60,17 @@
 </script>
 
 <div class="search-row">
-  <label class="search-box">
-    <Search class="search-icon" aria-hidden="true" />
-    <input
-      type="search"
-      placeholder="Search the library…"
-      value={query}
-      oninput={(event) => onQueryChange((event.currentTarget as HTMLInputElement).value)}
-    />
-    {#if query}
-      <button
-        type="button"
-        class="search-clear"
-        title="Clear search"
-        aria-label="Clear search"
-        onclick={() => onQueryChange("")}
-      >
-        <X class="h-3 w-3" />
-      </button>
-    {/if}
-  </label>
+  <SearchInput
+    value={query}
+    ariaLabel="Search the library"
+    placeholder="Search the library…"
+    class="search-box"
+    searchIconClass="search-icon"
+    clearButtonClass="search-clear"
+    clearIconClass="search-clear-icon"
+    oninput={(event) => onQueryChange((event.currentTarget as HTMLInputElement).value)}
+    onClear={() => onQueryChange("")}
+  />
 
   <div class="search-sort">
     <div class="relative">
@@ -166,7 +155,7 @@
     right: 0;
   }
 
-  .search-box {
+  .search-row :global(.search-box) {
     position: relative;
     display: flex;
     flex: 1 1 auto;
@@ -184,23 +173,23 @@
       box-shadow var(--duration-fast, 80ms) var(--ease-default, cubic-bezier(0.4, 0, 0.2, 1));
   }
 
-  .search-box:focus-within {
+  .search-row :global(.search-box:focus-within) {
     border-color: var(--color-border-accent, rgba(199, 201, 204, 0.25));
     box-shadow: inset 0 2px 8px rgba(0,0,0,0.30), 0 0 0 1px rgba(199, 201, 204,0.35), 0 0 8px rgba(199, 201, 204,0.15);
   }
 
-  .search-box :global(.search-icon) {
+  .search-row :global(.search-box .search-icon) {
     width: 0.95rem;
     height: 0.95rem;
     color: var(--color-text-disabled);
     flex-shrink: 0;
   }
 
-  .search-box:focus-within :global(.search-icon) {
+  .search-row :global(.search-box:focus-within .search-icon) {
     color: var(--color-text-accent);
   }
 
-  .search-box input {
+  .search-row :global(.search-box input) {
     min-width: 0;
     width: 100%;
     border: 0;
@@ -212,21 +201,21 @@
     outline: 0;
   }
 
-  .search-box input::placeholder {
+  .search-row :global(.search-box input::placeholder) {
     color: var(--color-text-disabled);
     font-style: italic;
   }
 
   /* Hide the native WebKit/Chromium search clear so it doesn't collide with our
      own neutral accent-styled clear button. */
-  .search-box input::-webkit-search-cancel-button,
-  .search-box input::-webkit-search-decoration {
+  .search-row :global(.search-box input::-webkit-search-cancel-button),
+  .search-row :global(.search-box input::-webkit-search-decoration) {
     appearance: none;
     -webkit-appearance: none;
     display: none;
   }
 
-  .search-clear {
+  .search-row :global(.search-clear) {
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -241,9 +230,14 @@
       border-color var(--duration-fast) var(--ease-default);
   }
 
-  .search-clear:hover {
+  .search-row :global(.search-clear:hover) {
     color: var(--color-text-accent);
     border-color: rgb(199 201 204 / 0.3);
+  }
+
+  .search-row :global(.search-clear-icon) {
+    width: 0.75rem;
+    height: 0.75rem;
   }
 
   .sort-menu {
