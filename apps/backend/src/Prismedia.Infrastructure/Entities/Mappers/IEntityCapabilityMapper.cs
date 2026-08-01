@@ -1,12 +1,12 @@
+using Prismedia.Domain.Capabilities;
 using Prismedia.Domain.Entities;
 
 namespace Prismedia.Infrastructure.Entities.Mappers;
 
 /// <summary>
-/// Per-capability persistence mapper. One implementation per domain capability owns the
-/// row-shape, hydrate, and persist behavior for that capability so <see cref="EfEntityRepository"/>
-/// can stay a coordinator over a discovered list of mappers. Adding a new capability means
-/// adding one mapper next to the row class, not editing the repository.
+/// Per-capability hydration mapper. One implementation per domain capability owns its row
+/// shape and domain reconstruction so <see cref="EfEntityRepository"/> can stay a coordinator
+/// over a discovered list of mappers.
 /// </summary>
 public interface IEntityCapabilityMapper {
     /// <summary>
@@ -16,24 +16,27 @@ public interface IEntityCapabilityMapper {
     /// </summary>
     Task HydrateAsync(Entity entity, CancellationToken cancellationToken);
 
-    /// <summary>
-    /// Queues removal of all stale rows owned by this mapper for <paramref name="entity"/>.
-    /// The repository invokes <see cref="ClearAsync"/> for every mapper, flushes the
-    /// removals in one <c>SaveChanges</c>, and then calls <see cref="PersistAsync"/> to
-    /// queue the new rows. Splitting clear from persist keeps both phases idempotent on
-    /// EntityId-keyed rows without per-mapper saves and works on the EF Core InMemory
-    /// provider used by tests.
-    ///
-    /// A mapper may legitimately implement this as a no-op when its <see cref="PersistAsync"/>
-    /// upserts in place (matching existing rows by a stable key and updating them) rather than
-    /// deleting and re-adding. In that case the clear-then-add contract does not apply and a
-    /// no-op clear is correct; such mappers must document why on their override. See the
-    /// playback and marker mappers for the two current cases.
-    /// </summary>
-    Task ClearAsync(Entity entity, CancellationToken cancellationToken);
+}
 
-    /// <summary>
-    /// Queues the capability's current state on <paramref name="entity"/> as new rows.
-    /// </summary>
+/// <summary>
+/// Persistence mapper for one explicitly mutable capability. Unlike hydration mappers, these
+/// are invoked only when the application names their <see cref="CapabilityType"/> in a mutation; they
+/// must upsert their own rows and must not clear unrelated capability state.
+/// </summary>
+public interface IEntityMutableStateMapper {
+    /// <summary>Exact domain capability type this mapper owns.</summary>
+    Type CapabilityType { get; }
+
+    /// <summary>Persists the selected mutable capability state for <paramref name="entity"/>.</summary>
     Task PersistAsync(Entity entity, CancellationToken cancellationToken);
+}
+
+/// <summary>
+/// Strongly typed mutable-capability mapper contract. Implementing this interface declares the
+/// owned capability type directly, so registration never needs a parallel type property or list.
+/// </summary>
+/// <typeparam name="TCapability">Domain capability whose mutable rows the mapper owns.</typeparam>
+public interface IEntityMutableStateMapper<TCapability> : IEntityMutableStateMapper
+    where TCapability : EntityCapability {
+    Type IEntityMutableStateMapper.CapabilityType => typeof(TCapability);
 }

@@ -6,7 +6,9 @@ using Prismedia.Infrastructure.Persistence.Entities;
 
 namespace Prismedia.Infrastructure.Entities.Mappers.Capabilities;
 
-internal sealed class MarkersCapabilityMapper(PrismediaDbContext db) : IEntityCapabilityMapper {
+internal sealed class MarkersCapabilityMapper(PrismediaDbContext db) :
+    IEntityCapabilityMapper,
+    IEntityMutableStateMapper<CapabilityMarkers> {
     public async Task HydrateAsync(Entity entity, CancellationToken cancellationToken) {
         var rows = await db.EntityMarkers.AsNoTracking()
             .Where(r => r.EntityId == entity.Id)
@@ -20,11 +22,6 @@ internal sealed class MarkersCapabilityMapper(PrismediaDbContext db) : IEntityCa
         entity.AddCapability(new CapabilityMarkers(rows.Select(r =>
             new CapabilityMarkers.Item(r.Id, r.Title, r.Seconds, r.EndSeconds)).ToArray()));
     }
-
-    // No-op by design: PersistAsync reconciles markers by their stable ids (update matched, remove
-    // stale, add new), so a blanket clear is unnecessary and would needlessly delete then recreate
-    // every marker row on each entity re-save.
-    public Task ClearAsync(Entity entity, CancellationToken cancellationToken) => Task.CompletedTask;
 
     public async Task PersistAsync(Entity entity, CancellationToken cancellationToken) {
         if (entity.MarkerCapability is not { } markers) {

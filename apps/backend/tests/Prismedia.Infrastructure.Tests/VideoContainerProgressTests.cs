@@ -4,6 +4,7 @@ using Prismedia.Domain.Capabilities;
 using Prismedia.Domain.Entities;
 using Prismedia.Infrastructure.Entities;
 using Prismedia.Infrastructure.Entities.Mappers;
+using Prismedia.Infrastructure.Entities.Thumbnails;
 using Prismedia.Infrastructure.Persistence;
 using Prismedia.Infrastructure.Persistence.Entities;
 
@@ -182,7 +183,12 @@ public sealed class VideoContainerProgressTests {
                 EntityMappers.Capabilities(db, user));
             var capabilities = new EntityCapabilityService(
                 repository,
-                new EfEntitySourceOwnershipProjection(db),
+                new EfEntityReadService(
+                    db,
+                    user,
+                    repository,
+                    ThumbnailContributors.For(db),
+                    new EfEntityProgressTopologyResolver(db)),
                 new EfEntityProgressTopologyResolver(db),
                 timeProvider: new FixedTimeProvider(now));
             return new Fixture(db, repository, capabilities);

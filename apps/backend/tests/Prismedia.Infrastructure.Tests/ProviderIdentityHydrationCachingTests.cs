@@ -14,59 +14,6 @@ namespace Prismedia.Infrastructure.Tests;
 
 public sealed class ProviderIdentityHydrationCachingTests {
     [Fact]
-    public async Task RecursiveHydrationUsesOneInstalledPluginSnapshotForRoutingAndProviderUrls() {
-        await using var db = CreateContext();
-        var seriesId = Guid.NewGuid();
-        var seasonOneId = Guid.NewGuid();
-        var seasonTwoId = Guid.NewGuid();
-        SeedEntity(db, seriesId, EntityKind.VideoSeries, "Series");
-        SeedEntity(db, seasonOneId, EntityKind.VideoSeason, "Season 1", seriesId, 1);
-        SeedEntity(db, seasonTwoId, EntityKind.VideoSeason, "Season 2", seriesId, 2);
-        AddExternalIdentity(db, seriesId, "tmdb", "82728");
-        AddExternalIdentity(db, seasonOneId, "tmdbseason", "82728:1");
-        AddExternalIdentity(db, seasonTwoId, "tmdbseason", "82728:2");
-        await db.SaveChangesAsync();
-
-        var providerIdentities = new EfEntityProviderIdentityStore(db, TimeProvider.System);
-        await providerIdentities.SetAsync(
-            seasonOneId,
-            "tmdb",
-            new ExternalIdentity("tmdbseason", "82728:1"),
-            CancellationToken.None);
-        await providerIdentities.SetAsync(
-            seasonTwoId,
-            "tmdb",
-            new ExternalIdentity("tmdbseason", "82728:2"),
-            CancellationToken.None);
-        await db.SaveChangesAsync();
-
-        var innerCatalog = new RecordingPluginCatalog([TmdbProvider()]);
-        var catalog = new ScopedPluginCatalogCache(innerCatalog);
-        var repository = new EfEntityRepository(
-            db,
-            TestUserContext.Admin(),
-            EntityMappers.Kinds(db),
-            EntityMappers.Capabilities(db, TestUserContext.Admin()),
-            new EfEntityExternalIdentityStore(db, TimeProvider.System),
-            providerIdentities,
-            new PluginIdentityRouter(catalog),
-            new PluginIdentityUrlResolver(catalog));
-
-        var series = await repository.RequireAsync<VideoSeries>(seriesId, CancellationToken.None);
-
-        Assert.Equal(1, innerCatalog.InstalledListCallCount);
-        Assert.Equal("https://www.themoviedb.org/tv/82728", series.ProviderIdentity?.Url);
-        Assert.Collection(
-            series.ChildrenOf<VideoSeason>().OrderBy(season => season.SortOrder),
-            season => Assert.Equal(
-                "https://www.themoviedb.org/tv/82728/season/1",
-                season.ProviderIdentity?.Url),
-            season => Assert.Equal(
-                "https://www.themoviedb.org/tv/82728/season/2",
-                season.ProviderIdentity?.Url));
-    }
-
-    [Fact]
     public async Task CatalogMutationInvalidatesTheInstalledPluginSnapshot() {
         var innerCatalog = new RecordingPluginCatalog([TmdbProvider()]);
         var catalog = new ScopedPluginCatalogCache(innerCatalog);

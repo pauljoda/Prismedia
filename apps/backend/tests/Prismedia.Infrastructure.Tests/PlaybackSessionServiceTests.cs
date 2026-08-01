@@ -7,6 +7,7 @@ using Prismedia.Domain.Entities;
 using Prismedia.Domain.Media;
 using Prismedia.Infrastructure.Entities;
 using Prismedia.Infrastructure.Entities.Mappers;
+using Prismedia.Infrastructure.Entities.Thumbnails;
 using Prismedia.Infrastructure.Persistence;
 using Prismedia.Infrastructure.Playback;
 
@@ -220,7 +221,12 @@ public sealed class PlaybackSessionServiceTests {
         var repository = new EfEntityRepository(db, TestUserContext.Admin(), EntityMappers.Kinds(db), EntityMappers.Capabilities(db, TestUserContext.Admin()));
         var capabilities = new EntityCapabilityService(
             repository,
-            new EfEntitySourceOwnershipProjection(db),
+            new EfEntityReadService(
+                db,
+                TestUserContext.Admin(),
+                repository,
+                ThumbnailContributors.For(db),
+                new EfEntityProgressTopologyResolver(db)),
             new EfEntityProgressTopologyResolver(db),
             playbackEvents: new EfPlaybackEventStore(db, TestUserContext.Admin()));
 
@@ -232,7 +238,7 @@ public sealed class PlaybackSessionServiceTests {
             durationSeconds: 120,
             CancellationToken.None);
 
-        var entity = await repository.FindAsync(AudioTrackId, CancellationToken.None);
+        var entity = await repository.FindShallowAsync(AudioTrackId, CancellationToken.None);
         var evt = await db.EntityPlaybackEvents.SingleAsync();
 
         Assert.Equal(1, entity!.RequireCapability<CapabilityPlayback>().Value.SkipCount);
@@ -332,14 +338,19 @@ public sealed class PlaybackSessionServiceTests {
         var events = new RecordingPlaybackEventStore();
         var capabilities = new EntityCapabilityService(
             repository,
-            new EfEntitySourceOwnershipProjection(db),
+            new EfEntityReadService(
+                db,
+                TestUserContext.Admin(),
+                repository,
+                ThumbnailContributors.For(db),
+                new EfEntityProgressTopologyResolver(db)),
             new EfEntityProgressTopologyResolver(db),
             playbackEvents: events);
         var sessions = new PlaybackSessionService(capabilities, new NoOpTranscodeSessionService());
 
         await act(sessions, capabilities);
 
-        var entity = await repository.FindAsync(id, CancellationToken.None);
+        var entity = await repository.FindShallowAsync(id, CancellationToken.None);
         return (entity?.GetCapability<CapabilityPlayback>()?.Value, events.Events);
     }
 

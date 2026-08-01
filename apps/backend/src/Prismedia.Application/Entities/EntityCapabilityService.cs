@@ -1,6 +1,5 @@
 using Prismedia.Contracts.Entities;
 using Prismedia.Application.Playback;
-using Prismedia.Application.Security;
 using Prismedia.Domain.Capabilities;
 using Prismedia.Domain.Entities;
 
@@ -18,13 +17,11 @@ namespace Prismedia.Application.Entities;
 /// </summary>
 public sealed class EntityCapabilityService {
     private readonly IEntityWriteRepository _entities;
+    private readonly IEntityReadService _entityReads;
     private readonly IEntityProgressTopologyResolver _progressTopology;
-    private readonly IEntitySourceOwnershipReader _sourceOwnership;
-    private readonly IEntityFileDeletionRecoveryReader? _deletionRecovery;
     private readonly IEntityVisibilityChecker? _visibility;
     private readonly IPlaybackEventStore _playbackEvents;
     private readonly IEntityActivityStore _activityEvents;
-    private readonly ICurrentUserContext? _currentUser;
     private readonly TimeProvider _timeProvider;
 
     /// <summary>
@@ -39,23 +36,19 @@ public sealed class EntityCapabilityService {
     /// <param name="entities">Entity write repository implemented by Infrastructure.</param>
     public EntityCapabilityService(
         IEntityWriteRepository entities,
-        IEntitySourceOwnershipReader sourceOwnership,
+        IEntityReadService entityReads,
         IEntityProgressTopologyResolver progressTopology,
         IEntityVisibilityChecker? visibility = null,
         IPlaybackEventStore? playbackEvents = null,
         TimeProvider? timeProvider = null,
-        IEntityFileDeletionRecoveryReader? deletionRecovery = null,
-        IEntityActivityStore? activityEvents = null,
-        ICurrentUserContext? currentUser = null) {
+        IEntityActivityStore? activityEvents = null) {
         _entities = entities;
+        _entityReads = entityReads;
         _progressTopology = progressTopology;
-        _sourceOwnership = sourceOwnership;
-        _deletionRecovery = deletionRecovery;
         _visibility = visibility;
         _playbackEvents = playbackEvents ?? NullPlaybackEventStore.Instance;
         _activityEvents = activityEvents ?? NullEntityActivityStore.Instance;
         _timeProvider = timeProvider ?? TimeProvider.System;
-        _currentUser = currentUser;
     }
 
     /// <summary>
@@ -68,9 +61,8 @@ public sealed class EntityCapabilityService {
             } else {
                 entity.ClearRating();
             }
-
             return true;
-        }, cancellationToken);
+        }, new EntityMutableStateChange(userOpinionChanged: true), cancellationToken);
 
     /// <summary>
     /// Patches the entity's flags. Any null argument leaves the corresponding flag unchanged.
@@ -84,7 +76,9 @@ public sealed class EntityCapabilityService {
         MutateAsync(id, entity => {
             entity.PatchFlags(isFavorite, isNsfw, isOrganized);
             return true;
-        }, cancellationToken);
+        }, new EntityMutableStateChange(
+            userOpinionChanged: isFavorite.HasValue,
+            curationFlagsChanged: isNsfw.HasValue || isOrganized.HasValue), cancellationToken);
 
     /// <summary>Fraction of the runtime below which an item is treated as not started.</summary>
     private const double StartedFraction = 0.05;
@@ -451,9 +445,9 @@ public sealed class EntityCapabilityService {
         // newer completion.
         if (!reset && completed == false) {
             if (progress.TryMarkIncomplete(occurredAt) || hasActivity) {
-                await _entities.SaveAsync(entity, cancellationToken);
+                await SaveProgressStateAsync(entity, cancellationToken);
             }
-            return await ProjectCardAsync(entity, cancellationToken);
+            return await ReadCardAsync(entity, cancellationToken);
         }
 
         var normalizedTotal = Math.Max(0, total);
@@ -475,9 +469,9 @@ public sealed class EntityCapabilityService {
         // historical reset cannot replace a newer cursor.
         if (reset) {
             if (progress.TryMoveTo(targetCursorId, unit, normalizedIndex, normalizedTotal, mode, occurredAt, normalizedLocation) || hasActivity) {
-                await _entities.SaveAsync(entity, cancellationToken);
+                await SaveProgressStateAsync(entity, cancellationToken);
             }
-            return await ProjectCardAsync(entity, cancellationToken);
+            return await ReadCardAsync(entity, cancellationToken);
         }
 
         var existingPosition = existingCursor is null
@@ -493,27 +487,27 @@ public sealed class EntityCapabilityService {
             existingPosition is not null &&
             proposedPosition.Index < existingPosition.Index) {
             if (hasActivity) {
-                await _entities.SaveAsync(entity, cancellationToken);
+                await SaveProgressStateAsync(entity, cancellationToken);
             }
-            return await ProjectCardAsync(entity, cancellationToken);
+            return await ReadCardAsync(entity, cancellationToken);
         }
 
         if (proposedPosition is null &&
             existingPosition is null &&
             IsEarlierComparableCursor(progress, targetCursorId, unit, normalizedIndex, normalizedTotal)) {
             if (hasActivity) {
-                await _entities.SaveAsync(entity, cancellationToken);
+                await SaveProgressStateAsync(entity, cancellationToken);
             }
-            return await ProjectCardAsync(entity, cancellationToken);
+            return await ReadCardAsync(entity, cancellationToken);
         }
 
         // A readable cursor is the safe source of truth when an unmatched audiobook part cannot be
         // mapped into that chapter. A later readable heartbeat may always replace an audio-only one.
         if (unit == ProgressUnit.Second && progress.Unit is ProgressUnit.Page or ProgressUnit.Cfi) {
             if (hasActivity) {
-                await _entities.SaveAsync(entity, cancellationToken);
+                await SaveProgressStateAsync(entity, cancellationToken);
             }
-            return await ProjectCardAsync(entity, cancellationToken);
+            return await ReadCardAsync(entity, cancellationToken);
         }
 
         if (progress.CompletedAt is not null &&
@@ -521,9 +515,9 @@ public sealed class EntityCapabilityService {
              existingPosition is null ||
              proposedPosition.Index <= existingPosition.Index)) {
             if (hasActivity) {
-                await _entities.SaveAsync(entity, cancellationToken);
+                await SaveProgressStateAsync(entity, cancellationToken);
             }
-            return await ProjectCardAsync(entity, cancellationToken);
+            return await ReadCardAsync(entity, cancellationToken);
         }
 
         if (!progress.TryMoveTo(
@@ -536,9 +530,9 @@ public sealed class EntityCapabilityService {
                 normalizedLocation,
                 completed: completed == true)) {
             if (hasActivity) {
-                await _entities.SaveAsync(entity, cancellationToken);
+                await SaveProgressStateAsync(entity, cancellationToken);
             }
-            return await ProjectCardAsync(entity, cancellationToken);
+            return await ReadCardAsync(entity, cancellationToken);
         }
 
         PlaybackEventAppend? completedEvent = null;
@@ -553,9 +547,9 @@ public sealed class EntityCapabilityService {
         if (completedEvent is not null) {
             await _playbackEvents.StageAsync(completedEvent, cancellationToken);
         }
-        await _entities.SaveAsync(entity, cancellationToken);
+        await SaveProgressStateAsync(entity, cancellationToken);
 
-        return await ProjectCardAsync(entity, cancellationToken);
+        return await ReadCardAsync(entity, cancellationToken);
     }
 
     private async Task<bool> AccumulateReadingActivityAsync(
@@ -584,6 +578,13 @@ public sealed class EntityCapabilityService {
             cancellationToken);
         return true;
     }
+
+    private Task SaveProgressStateAsync(Entity entity, CancellationToken cancellationToken) =>
+        _entities.SaveMutableStateAsync(
+            entity,
+            new EntityMutableStateChange(
+                changedCapabilityTypes: [typeof(CapabilityProgress), typeof(CapabilityPlayback)]),
+            cancellationToken);
 
     private static bool IsEarlierComparableCursor(
         CapabilityProgress current,
@@ -620,7 +621,7 @@ public sealed class EntityCapabilityService {
 
             markers.Add(title, seconds, endSeconds);
             return true;
-        }, cancellationToken);
+        }, new EntityMutableStateChange(changedCapabilityTypes: [typeof(CapabilityMarkers)]), cancellationToken);
 
     /// <summary>
     /// Updates one existing marker on the entity. Returns the entity card only when the marker exists.
@@ -635,6 +636,7 @@ public sealed class EntityCapabilityService {
         MutateAsync(id, entity => MutateExistingDefaultCapability<CapabilityMarkers>(
             entity,
             markers => markers.Update(markerId, title, seconds, endSeconds)),
+            new EntityMutableStateChange(changedCapabilityTypes: [typeof(CapabilityMarkers)]),
             cancellationToken);
 
     /// <summary>
@@ -647,6 +649,7 @@ public sealed class EntityCapabilityService {
         MutateAsync(id, entity => MutateExistingDefaultCapability<CapabilityMarkers>(
             entity,
             markers => markers.Delete(markerId)),
+            new EntityMutableStateChange(changedCapabilityTypes: [typeof(CapabilityMarkers)]),
             cancellationToken);
 
     /// <summary>Maximum optimistic-concurrency retries for a single user-state mutation.</summary>
@@ -676,6 +679,7 @@ public sealed class EntityCapabilityService {
     private async Task<EntityCard?> MutateAsync(
         Guid id,
         Func<Entity, bool> mutate,
+        EntityMutableStateChange change,
         CancellationToken cancellationToken) {
         // Entities hidden from the current user (library access, disabled roots) must be
         // unmutatable and indistinguishable from missing ones.
@@ -693,8 +697,8 @@ public sealed class EntityCapabilityService {
                     return null;
                 }
 
-                await _entities.SaveAsync(entity, attemptCancellationToken);
-                return await ProjectCardAsync(entity, attemptCancellationToken);
+                await _entities.SaveMutableStateAsync(entity, change, attemptCancellationToken);
+                return await ReadCardAsync(entity, attemptCancellationToken);
             },
             cancellationToken);
     }
@@ -725,8 +729,11 @@ public sealed class EntityCapabilityService {
                     await _playbackEvents.StageAsync(result.Event, attemptCancellationToken);
                 }
 
-                await _entities.SaveAsync(entity, attemptCancellationToken);
-                return await ProjectCardAsync(entity, attemptCancellationToken);
+                await _entities.SaveMutableStateAsync(
+                    entity,
+                    new EntityMutableStateChange(changedCapabilityTypes: [typeof(CapabilityPlayback)]),
+                    attemptCancellationToken);
+                return await ReadCardAsync(entity, attemptCancellationToken);
             },
             cancellationToken);
     }
@@ -762,19 +769,11 @@ public sealed class EntityCapabilityService {
         entity.GetCapability<TCapability>() is { } capability &&
         mutate(capability);
 
-    private async Task<EntityCard> ProjectCardAsync(
+    private async Task<EntityCard> ReadCardAsync(
         Entity entity,
         CancellationToken cancellationToken) {
-        var sourceBackedIds = await _sourceOwnership.ResolveAsync([entity.Id], cancellationToken);
-        var recoverableDeletionIds = _deletionRecovery is null
-            ? new HashSet<Guid>()
-            : await _deletionRecovery.ResolveAsync([entity.Id], cancellationToken);
-        return EntityCardProjector.ToCard(
-            entity,
-            new EntityFileManagementState(
-                sourceBackedIds.Contains(entity.Id),
-                recoverableDeletionIds.Contains(entity.Id)),
-            _currentUser?.UserId);
+        return await _entityReads.GetAsync(entity.Id, hideNsfw: false, cancellationToken)
+            ?? throw new InvalidOperationException($"Mutated entity '{entity.Id}' is no longer readable.");
     }
 
     private async Task RollUpOrderedProgressAsync(
@@ -833,7 +832,10 @@ public sealed class EntityCapabilityService {
                     return false;
                 }
 
-                await _entities.SaveAsync(owner, attemptCancellationToken);
+                await _entities.SaveMutableStateAsync(
+                    owner,
+                    new EntityMutableStateChange(changedCapabilityTypes: [typeof(CapabilityProgress)]),
+                    attemptCancellationToken);
                 return true;
             },
             cancellationToken);

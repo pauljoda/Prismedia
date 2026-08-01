@@ -18,20 +18,4 @@ internal sealed class DescriptionCapabilityMapper(PrismediaDbContext db) : IEnti
         entity.AddCapability(new CapabilityDescription(row.Value));
     }
 
-    public Task ClearAsync(Entity entity, CancellationToken cancellationToken) {
-        db.EntityDescriptions.RemoveRange(db.EntityDescriptions.Where(r => r.EntityId == entity.Id));
-        return Task.CompletedTask;
-    }
-
-    public Task PersistAsync(Entity entity, CancellationToken cancellationToken) {
-        if (entity.Description is { } description && !string.IsNullOrEmpty(description.Value)) {
-            db.EntityDescriptions.Add(new EntityDescriptionRow {
-                EntityId = entity.Id,
-                Value = description.Value,
-                UpdatedAt = DateTimeOffset.UtcNow,
-            });
-        }
-
-        return Task.CompletedTask;
-    }
 }

@@ -3,9 +3,10 @@ using Prismedia.Domain.Entities;
 namespace Prismedia.Application.Entities;
 
 /// <summary>
-/// Application port that loads a hydrated domain <see cref="Entity"/> for mutation and
-/// persists it back. The implementation lives in Infrastructure (EF Core) and owns the
-/// row-to-domain hydration and unit-of-work boundary.
+/// Application port that loads the bounded domain state needed for a user mutation and
+/// persists only that state. The implementation owns the EF unit-of-work boundary, but it
+/// deliberately is not an aggregate graph writer: capability actions must never replace
+/// files, relationships, credits, or metadata that they did not change.
 /// </summary>
 public interface IEntityWriteRepository {
     /// <summary>
@@ -20,14 +21,6 @@ public interface IEntityWriteRepository {
     /// such as playback and activity events before a retry.
     /// </remarks>
     IEntityWriteAttempt BeginAttempt() => NoOpEntityWriteAttempt.Instance;
-
-    /// <summary>
-    /// Finds an active entity and hydrates its domain relationships plus mutable state capabilities.
-    /// Returns null when no active entity exists for the given identifier.
-    /// </summary>
-    /// <param name="id">Entity identifier.</param>
-    /// <param name="cancellationToken">Token used to cancel the operation.</param>
-    Task<Entity?> FindAsync(Guid id, CancellationToken cancellationToken);
 
     /// <summary>
     /// Finds an active entity and hydrates only its own mutable state, excluding children
@@ -46,12 +39,45 @@ public interface IEntityWriteRepository {
     Task<Guid?> FindParentIdAsync(Guid id, CancellationToken cancellationToken);
 
     /// <summary>
-    /// Persists one hydrated domain entity slice, including structural links, relationships,
-    /// and mutable capabilities. Commits as a single unit of work.
+    /// Persists the explicit mutable slice of a shallow entity. The entity row is touched only
+    /// for its optimistic-concurrency token, timestamp, and requested curation fields; only
+    /// the requested user-state and capability mappers may write dependent rows.
     /// </summary>
     /// <param name="entity">Entity to persist.</param>
     /// <param name="cancellationToken">Token used to cancel the operation.</param>
-    Task SaveAsync(Entity entity, CancellationToken cancellationToken);
+    Task SaveMutableStateAsync(
+        Entity entity,
+        EntityMutableStateChange change,
+        CancellationToken cancellationToken);
+}
+
+/// <summary>
+/// Explicit persistence ownership for one Entity mutation. Domain capability types travel with
+/// the mutation so Infrastructure can discover the mapper that owns them; no central list needs
+/// editing when a new mutable capability is introduced.
+/// </summary>
+public sealed class EntityMutableStateChange {
+    /// <summary>Creates a bounded mutation selection.</summary>
+    public EntityMutableStateChange(
+        bool userOpinionChanged = false,
+        bool curationFlagsChanged = false,
+        params Type[] changedCapabilityTypes) {
+        UserOpinionChanged = userOpinionChanged;
+        CurationFlagsChanged = curationFlagsChanged;
+        ChangedCapabilityTypes = new HashSet<Type>(changedCapabilityTypes);
+    }
+
+    /// <summary>Whether the current user's favorite/rating fields changed.</summary>
+    public bool UserOpinionChanged { get; }
+
+    /// <summary>Whether the Entity's NSFW or organized fields changed.</summary>
+    public bool CurationFlagsChanged { get; }
+
+    /// <summary>Exact domain capability types whose persistence mappers may run.</summary>
+    public IReadOnlySet<Type> ChangedCapabilityTypes { get; }
+
+    /// <summary>Whether this selection has a persistent effect.</summary>
+    public bool HasChanges => UserOpinionChanged || CurationFlagsChanged || ChangedCapabilityTypes.Count > 0;
 }
 
 /// <summary>
@@ -79,7 +105,7 @@ internal sealed class NoOpEntityWriteAttempt : IEntityWriteAttempt {
 }
 
 /// <summary>
-/// Raised by <see cref="IEntityWriteRepository.SaveAsync"/> when a concurrent writer modified the
+/// Raised by <see cref="IEntityWriteRepository.SaveMutableStateAsync"/> when a concurrent writer modified the
 /// same entity between load and save (optimistic concurrency conflict). Callers that own the
 /// mutation can reload and re-apply it. This is a persistence-agnostic abstraction so the
 /// application layer can retry without depending on EF Core's <c>DbUpdateConcurrencyException</c>.

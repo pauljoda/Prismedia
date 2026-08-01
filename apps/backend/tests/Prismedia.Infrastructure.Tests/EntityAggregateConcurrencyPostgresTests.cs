@@ -121,7 +121,10 @@ public sealed class EntityAggregateConcurrencyPostgresTests {
         await TouchStateAsync(database, userId, entityId, CancellationToken.None);
 
         await Assert.ThrowsAsync<EntityConcurrencyConflictException>(() =>
-            repository.SaveAsync(target, CancellationToken.None));
+            repository.SaveMutableStateAsync(
+                target,
+                new EntityMutableStateChange(userOpinionChanged: true),
+                CancellationToken.None));
         await attempt.RollbackAsync(CancellationToken.None);
 
         Assert.Equal(EntityState.Deleted, context.Entry(unrelated).State);
@@ -150,7 +153,10 @@ public sealed class EntityAggregateConcurrencyPostgresTests {
         await TouchStateAsync(database, userId, entityId, CancellationToken.None);
 
         await Assert.ThrowsAsync<EntityConcurrencyConflictException>(() =>
-            repository.SaveAsync(target, CancellationToken.None));
+            repository.SaveMutableStateAsync(
+                target,
+                new EntityMutableStateChange(userOpinionChanged: true),
+                CancellationToken.None));
         await attempt.RollbackAsync(CancellationToken.None);
 
         await using (var siblingUpdate = database.CreateContext()) {

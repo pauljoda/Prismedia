@@ -252,6 +252,8 @@ public sealed class EntityPatchEndpointTests {
                     services.AddSingleton(new RecordingPlaybackEventStore());
                     services.AddScoped<IEntityWriteRepository>(provider =>
                         provider.GetRequiredService<FakeEntityWriteRepository>());
+                    services.RemoveAll<IEntityReadService>();
+                    services.AddScoped<IEntityReadService, FakeEntityReadService>();
                     services.AddScoped<IPlaybackEventStore>(provider =>
                         provider.GetRequiredService<RecordingPlaybackEventStore>());
                     services.RemoveAll<IEntityProgressTopologyResolver>();
@@ -380,7 +382,10 @@ public sealed class EntityPatchEndpointTests {
             return Task.FromResult(entity?.ParentEntityId);
         }
 
-        public Task SaveAsync(Entity entity, CancellationToken cancellationToken) {
+        public Task SaveMutableStateAsync(
+            Entity entity,
+            EntityMutableStateChange change,
+            CancellationToken cancellationToken) {
             SavedEntity = entity;
             return Task.CompletedTask;
         }

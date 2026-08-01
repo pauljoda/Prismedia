@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- Ratings, flags, playback, reading progress, and markers now update only their own Entity state, preserving linked people, files, identities, relationships, and metadata during concurrent use.
 - Video acquisition searches now derive work years from normalized series and movie release dates, preserving accurate title-and-year matching.
 - Automatic audio probing and generated previews now consistently honor library settings through each Entity kind's processing policy.
 - Collection membership now observes each viewer's library grants across add, count, list, and artwork selection, so restricted media cannot leak through shared collections.

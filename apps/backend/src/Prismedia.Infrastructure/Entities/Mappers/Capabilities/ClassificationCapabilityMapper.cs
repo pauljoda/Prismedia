@@ -18,22 +18,4 @@ internal sealed class ClassificationCapabilityMapper(PrismediaDbContext db) : IE
         entity.AddCapability(new CapabilityClassification(row.Value, row.System));
     }
 
-    public Task ClearAsync(Entity entity, CancellationToken cancellationToken) {
-        db.EntityClassifications.RemoveRange(db.EntityClassifications.Where(r => r.EntityId == entity.Id));
-        return Task.CompletedTask;
-    }
-
-    public Task PersistAsync(Entity entity, CancellationToken cancellationToken) {
-        if (entity.Classification is { } classification &&
-            (classification.Value is not null || classification.System is not null)) {
-            db.EntityClassifications.Add(new EntityClassificationRow {
-                EntityId = entity.Id,
-                Value = classification.Value,
-                System = classification.System,
-                UpdatedAt = DateTimeOffset.UtcNow,
-            });
-        }
-
-        return Task.CompletedTask;
-    }
 }

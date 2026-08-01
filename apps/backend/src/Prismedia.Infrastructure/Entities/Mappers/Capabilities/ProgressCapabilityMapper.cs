@@ -10,7 +10,9 @@ namespace Prismedia.Infrastructure.Entities.Mappers.Capabilities;
 /// <c>user_entity_states</c> row. Without an authenticated user the capability hydrates
 /// empty and persists nothing.
 /// </summary>
-internal sealed class ProgressCapabilityMapper(PrismediaDbContext db, ICurrentUserContext currentUser) : IEntityCapabilityMapper {
+internal sealed class ProgressCapabilityMapper(PrismediaDbContext db, ICurrentUserContext currentUser) :
+    IEntityCapabilityMapper,
+    IEntityMutableStateMapper<CapabilityProgress> {
     public async Task HydrateAsync(Entity entity, CancellationToken cancellationToken) {
         var userId = currentUser.UserId;
         if (userId == Guid.Empty) {
@@ -36,10 +38,6 @@ internal sealed class ProgressCapabilityMapper(PrismediaDbContext db, ICurrentUs
             row.ProgressUpdatedAt ?? row.UpdatedAt,
             row.ProgressLocation));
     }
-
-    // No-op by design: PersistAsync upserts the user-state row in place; clearing would wipe
-    // the row's playback/favorite columns that other mappers own.
-    public Task ClearAsync(Entity entity, CancellationToken cancellationToken) => Task.CompletedTask;
 
     public async Task PersistAsync(Entity entity, CancellationToken cancellationToken) {
         var userId = currentUser.UserId;

@@ -5,6 +5,7 @@ using Prismedia.Application.Security;
 using Prismedia.Domain.Entities;
 using Prismedia.Infrastructure.Entities;
 using Prismedia.Infrastructure.Entities.Mappers;
+using Prismedia.Infrastructure.Entities.Thumbnails;
 using Prismedia.Infrastructure.Persistence;
 using Prismedia.Infrastructure.Persistence.Entities;
 using Prismedia.Infrastructure.Playback;
@@ -19,9 +20,15 @@ internal static class EntityConcurrencyTestSupport {
         IEntityWriteRepository repository,
         TimeProvider? timeProvider = null) {
         var user = TestUserContext.Admin(userId);
+        var reads = new EfEntityReadService(
+            db,
+            user,
+            CreateRepository(db, userId),
+            ThumbnailContributors.For(db),
+            new EfEntityProgressTopologyResolver(db));
         return new EntityCapabilityService(
             repository,
-            new NoSourceOwnershipReader(),
+            reads,
             new EfEntityProgressTopologyResolver(db),
             playbackEvents: new EfPlaybackEventStore(db, user),
             activityEvents: new EfEntityActivityStore(db, user),
@@ -132,18 +139,18 @@ internal static class EntityConcurrencyTestSupport {
         SaveBarrier gate) : IEntityWriteRepository {
         public IEntityWriteAttempt BeginAttempt() => inner.BeginAttempt();
 
-        public Task<Entity?> FindAsync(Guid id, CancellationToken cancellationToken) =>
-            inner.FindAsync(id, cancellationToken);
-
         public Task<Entity?> FindShallowAsync(Guid id, CancellationToken cancellationToken) =>
             inner.FindShallowAsync(id, cancellationToken);
 
         public Task<Guid?> FindParentIdAsync(Guid id, CancellationToken cancellationToken) =>
             inner.FindParentIdAsync(id, cancellationToken);
 
-        public async Task SaveAsync(Entity entity, CancellationToken cancellationToken) {
+        public async Task SaveMutableStateAsync(
+            Entity entity,
+            EntityMutableStateChange change,
+            CancellationToken cancellationToken) {
             await gate.WaitForFirstSaveAsync(cancellationToken);
-            await inner.SaveAsync(entity, cancellationToken);
+            await inner.SaveMutableStateAsync(entity, change, cancellationToken);
         }
     }
 
@@ -154,21 +161,21 @@ internal static class EntityConcurrencyTestSupport {
 
         public IEntityWriteAttempt BeginAttempt() => inner.BeginAttempt();
 
-        public Task<Entity?> FindAsync(Guid id, CancellationToken cancellationToken) =>
-            inner.FindAsync(id, cancellationToken);
-
         public Task<Entity?> FindShallowAsync(Guid id, CancellationToken cancellationToken) =>
             inner.FindShallowAsync(id, cancellationToken);
 
         public Task<Guid?> FindParentIdAsync(Guid id, CancellationToken cancellationToken) =>
             inner.FindParentIdAsync(id, cancellationToken);
 
-        public async Task SaveAsync(Entity entity, CancellationToken cancellationToken) {
+        public async Task SaveMutableStateAsync(
+            Entity entity,
+            EntityMutableStateChange change,
+            CancellationToken cancellationToken) {
             if (Interlocked.Exchange(ref _hasForcedConflict, 1) == 0) {
                 await beforeFirstSaveAsync(cancellationToken);
             }
 
-            await inner.SaveAsync(entity, cancellationToken);
+            await inner.SaveMutableStateAsync(entity, change, cancellationToken);
         }
     }
 
@@ -179,21 +186,21 @@ internal static class EntityConcurrencyTestSupport {
 
         public IEntityWriteAttempt BeginAttempt() => inner.BeginAttempt();
 
-        public Task<Entity?> FindAsync(Guid id, CancellationToken cancellationToken) =>
-            inner.FindAsync(id, cancellationToken);
-
         public Task<Entity?> FindShallowAsync(Guid id, CancellationToken cancellationToken) =>
             inner.FindShallowAsync(id, cancellationToken);
 
         public Task<Guid?> FindParentIdAsync(Guid id, CancellationToken cancellationToken) =>
             inner.FindParentIdAsync(id, cancellationToken);
 
-        public async Task SaveAsync(Entity entity, CancellationToken cancellationToken) {
+        public async Task SaveMutableStateAsync(
+            Entity entity,
+            EntityMutableStateChange change,
+            CancellationToken cancellationToken) {
             if (Interlocked.Exchange(ref _hasPaused, 1) == 0) {
                 await pause.PauseAsync(cancellationToken);
             }
 
-            await inner.SaveAsync(entity, cancellationToken);
+            await inner.SaveMutableStateAsync(entity, change, cancellationToken);
         }
     }
 

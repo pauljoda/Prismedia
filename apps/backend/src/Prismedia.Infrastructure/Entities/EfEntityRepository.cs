@@ -24,8 +24,6 @@ namespace Prismedia.Infrastructure.Entities;
 /// those mappers and never branches on a concrete entity kind or capability itself.
 /// </summary>
 public sealed class EfEntityRepository : IEntityWriteRepository {
-    private static readonly string RelatedRelationshipCode = RelationshipKind.Related.ToCode();
-
     private readonly PrismediaDbContext _db;
     private readonly Prismedia.Application.Security.ICurrentUserContext _currentUser;
     private readonly IEntityExternalIdentityStore _externalIdentities;
@@ -34,6 +32,7 @@ public sealed class EfEntityRepository : IEntityWriteRepository {
     private readonly IPluginIdentityUrlResolver? _identityUrls;
     private readonly IReadOnlyDictionary<EntityKind, IEntityKindMapper> _kindMappers;
     private readonly IReadOnlyList<IEntityCapabilityMapper> _capabilityMappers;
+    private readonly IReadOnlyDictionary<Type, IEntityMutableStateMapper> _mutableStateMappers;
     private readonly EntityStructurePlacementValidator _structurePlacement;
 
     public EfEntityRepository(
@@ -72,6 +71,9 @@ public sealed class EfEntityRepository : IEntityWriteRepository {
         _identityUrls = identityUrls;
         _kindMappers = kindMappers.ToDictionary(mapper => mapper.Kind);
         _capabilityMappers = capabilityMappers.ToArray();
+        _mutableStateMappers = _capabilityMappers
+            .OfType<IEntityMutableStateMapper>()
+            .ToDictionary(mapper => mapper.CapabilityType);
         _structurePlacement = new EntityStructurePlacementValidator(db);
     }
 
@@ -92,24 +94,6 @@ public sealed class EfEntityRepository : IEntityWriteRepository {
         new EfEntityWriteAttempt(_db, _structurePlacement.Reset);
 
     /// <summary>
-    /// Finds an active entity and hydrates its domain relationships plus mutable state capabilities.
-    /// </summary>
-    public async Task<Entity?> FindAsync(Guid id, CancellationToken cancellationToken) {
-        _structurePlacement.Reset();
-        // This is a write repository: retain the EntityRow (and PostgreSQL xmin) observed while
-        // the domain aggregate is hydrated. Loading it only when Save begins would let a delayed
-        // writer attach the newer version while persisting stale flags or marker collections.
-        var row = await _db.Entities
-            .FirstOrDefaultAsync(entity => entity.Id == id, cancellationToken);
-        if (row is null) {
-            return null;
-        }
-
-        var context = new EntityHydrationContext();
-        return await HydrateAsync(row, context, null, cancellationToken);
-    }
-
-    /// <summary>
     /// Finds an active entity's persisted parent identifier without hydrating the domain slice.
     /// </summary>
     public async Task<Guid?> FindParentIdAsync(Guid id, CancellationToken cancellationToken) =>
@@ -125,7 +109,7 @@ public sealed class EfEntityRepository : IEntityWriteRepository {
     /// </summary>
     public async Task<Entity?> FindShallowAsync(Guid id, CancellationToken cancellationToken) {
         _structurePlacement.Reset();
-        // Keep the observed aggregate-root concurrency token tracked through SaveAsync.
+        // Keep the observed aggregate-root concurrency token tracked through the bounded save.
         var row = await _db.Entities
             .FirstOrDefaultAsync(entity => entity.Id == id, cancellationToken);
         if (row is null) {
@@ -142,63 +126,34 @@ public sealed class EfEntityRepository : IEntityWriteRepository {
     }
 
     /// <summary>
-    /// Finds an active entity and returns it only when it matches the requested concrete domain type.
+    /// Finds a shallow entity when it matches the requested concrete type. This is retained for
+    /// focused persistence tests and callers that need a typed mutable slice; it never hydrates a
+    /// structural graph.
     /// </summary>
     public async Task<TEntity?> FindAsync<TEntity>(Guid id, CancellationToken cancellationToken)
         where TEntity : Entity =>
-        await FindAsync(id, cancellationToken) is TEntity entity ? entity : null;
+        await FindShallowAsync(id, cancellationToken) is TEntity entity ? entity : null;
 
-    /// <summary>
-    /// Finds a required active entity of the requested concrete domain type.
-    /// </summary>
+    /// <summary>Finds a required shallow Entity of the requested concrete type.</summary>
     public async Task<TEntity> RequireAsync<TEntity>(Guid id, CancellationToken cancellationToken)
         where TEntity : Entity =>
         await FindAsync<TEntity>(id, cancellationToken)
             ?? throw new InvalidOperationException($"Entity '{id}' was not found as {typeof(TEntity).Name}.");
 
-    /// <summary>
-    /// Persists one hydrated domain entity slice, including structural links, relationships, and mutable capabilities.
-    /// </summary>
-    public async Task SaveAsync(Entity entity, CancellationToken cancellationToken) {
+    /// <inheritdoc />
+    public async Task SaveMutableStateAsync(
+        Entity entity,
+        EntityMutableStateChange change,
+        CancellationToken cancellationToken) {
         ArgumentNullException.ThrowIfNull(entity);
-        _structurePlacement.Reset();
+        ArgumentNullException.ThrowIfNull(change);
+        if (!change.HasChanges) {
+            return;
+        }
 
-        // The capability save flushes stale rows before re-adding them (see the intermediate
-        // SaveChanges in SaveEntityAsync), so the write spans two SaveChanges calls. Wrap both in a
-        // single transaction so a failure between them cannot leave an entity with its capabilities
-        // cleared but not re-persisted, which would matter when a failed job is retried. The save is
-        // pure database work with no file IO between the flushes, so the transaction stays short.
-        // The in-memory test provider has no transaction support. If a caller already opened a
-        // transaction, one enclosing savepoint keeps both SaveChanges phases atomic for retries.
         try {
-            if (!_db.Database.IsRelational()) {
-                await SaveCoreAsync(entity, cancellationToken);
-                return;
-            }
-
-            if (_db.Database.CurrentTransaction is { } ambientTransaction) {
-                if (!ambientTransaction.SupportsSavepoints) {
-                    throw new InvalidOperationException(
-                        "Entity aggregate writes inside an existing transaction require savepoint support.");
-                }
-
-                var savepoint = $"entity_write_{Guid.NewGuid():N}";
-                await ambientTransaction.CreateSavepointAsync(savepoint, cancellationToken);
-                try {
-                    await SaveCoreAsync(entity, cancellationToken);
-                    await ambientTransaction.ReleaseSavepointAsync(savepoint, cancellationToken);
-                } catch {
-                    // The application retry restores the tracker; this savepoint restores every
-                    // database mutation flushed by either phase of this attempt.
-                    await ambientTransaction.RollbackToSavepointAsync(savepoint, CancellationToken.None);
-                    throw;
-                }
-                return;
-            }
-
-            await using var transaction = await _db.Database.BeginTransactionAsync(cancellationToken);
-            await SaveCoreAsync(entity, cancellationToken);
-            await transaction.CommitAsync(cancellationToken);
+            await ApplyMutableStateAsync(entity, change, cancellationToken);
+            await _db.SaveChangesAsync(cancellationToken);
         } catch (DbUpdateConcurrencyException ex) {
             // Translate EF's optimistic-concurrency failure into a persistence-agnostic conflict so
             // application services can reload and retry without referencing EF Core. The owning
@@ -234,33 +189,6 @@ public sealed class EfEntityRepository : IEntityWriteRepository {
                 .SequenceEqual([nameof(UserEntityStateRow.EntityId), nameof(UserEntityStateRow.UserId)]));
     }
 
-    private async Task SaveCoreAsync(Entity entity, CancellationToken cancellationToken) {
-        var visited = new HashSet<Guid>();
-        await SaveEntityAsync(entity, visited, cancellationToken);
-        await _db.SaveChangesAsync(cancellationToken);
-    }
-
-    private async Task<Entity> HydrateAsync(
-        EntityRow row,
-        EntityHydrationContext context,
-        EntityKind? knownParentKind,
-        CancellationToken cancellationToken) {
-        if (context.TryGet(row.Id, out var existing)) {
-            return existing;
-        }
-
-        var entity = await ConstructEntityAsync(row, cancellationToken);
-        await ValidateRowPlacementAsync(row, knownParentKind, cancellationToken);
-        context.Add(entity);
-        await HydrateUniversalPropertiesAsync(entity, row, cancellationToken);
-        await HydrateChildrenAsync(entity, context, cancellationToken);
-        await HydrateRelationshipsAsync(entity, context, cancellationToken);
-        foreach (var mapper in _capabilityMappers) {
-            await mapper.HydrateAsync(entity, cancellationToken);
-        }
-        return entity;
-    }
-
     private async Task<Entity> ConstructEntityAsync(EntityRow row, CancellationToken cancellationToken) {
         var kind = EntityKindRegistry.Require(row.KindCode);
         if (!_kindMappers.TryGetValue(kind, out var mapper)) {
@@ -272,142 +200,35 @@ public sealed class EfEntityRepository : IEntityWriteRepository {
         return entity;
     }
 
-    private async Task HydrateChildrenAsync(
+    private async Task ApplyMutableStateAsync(
         Entity entity,
-        EntityHydrationContext context,
+        EntityMutableStateChange change,
         CancellationToken cancellationToken) {
-        var childRows = await _db.Entities
-            .Where(row => row.ParentEntityId == entity.Id)
-            .OrderBy(row => row.SortOrder)
-            .ThenBy(row => row.CreatedAt)
-            .ThenBy(row => row.Id)
-            .ToArrayAsync(cancellationToken);
-        foreach (var childRow in childRows) {
-            var child = await HydrateAsync(childRow, context, entity.Kind, cancellationToken);
-            if (!entity.ChildEntities.Any(existing => existing.Id == child.Id)) {
-                entity.AddChild(child, childRow.SortOrder);
-            }
+        var row = await _db.Entities.FindAsync([entity.Id], cancellationToken);
+        if (row is null) {
+            throw new InvalidOperationException($"Entity '{entity.Id}' no longer exists.");
         }
-    }
 
-    private async Task HydrateRelationshipsAsync(
-        Entity entity,
-        EntityHydrationContext context,
-        CancellationToken cancellationToken) {
-        var links = await _db.EntityRelationshipLinks.AsNoTracking()
-            .Where(link => link.EntityId == entity.Id &&
-                           link.RelationshipCode == RelatedRelationshipCode)
-            .OrderBy(link => link.SortOrder)
-            .ToArrayAsync(cancellationToken);
-        var targetIds = links.Select(link => link.TargetEntityId).ToArray();
-        var targetRows = await _db.Entities
-            .Where(row => targetIds.Contains(row.Id))
-            .ToDictionaryAsync(row => row.Id, cancellationToken);
-        foreach (var link in links) {
-            if (!targetRows.TryGetValue(link.TargetEntityId, out var targetRow)) {
-                continue;
+        // Updating the root timestamp retains its xmin as the optimistic-concurrency gate for
+        // every user-state mapper without rewriting any structural or metadata columns.
+        row.UpdatedAt = DateTimeOffset.UtcNow;
+        if (change.CurationFlagsChanged) {
+            row.IsNsfw = entity.IsNsfw ?? row.IsNsfw;
+            row.IsOrganized = entity.IsOrganized ?? row.IsOrganized;
+        }
+
+        if (change.UserOpinionChanged) {
+            await UpsertUserOpinionAsync(entity, cancellationToken);
+        }
+
+        foreach (var capabilityType in change.ChangedCapabilityTypes) {
+            if (!_mutableStateMappers.TryGetValue(capabilityType, out var mapper)) {
+                throw new InvalidOperationException(
+                    $"No mutable-state mapper is registered for capability '{capabilityType.Name}'.");
             }
 
-            var target = await HydrateAsync(targetRow, context, null, cancellationToken);
-            if (!entity.Relationships.Any(existing => existing.Id == target.Id)) {
-                entity.AddRelationship(target);
-            }
-        }
-    }
-
-    private async Task SaveEntityAsync(Entity entity, ISet<Guid> visited, CancellationToken cancellationToken) {
-        if (!visited.Add(entity.Id)) {
-            return;
-        }
-
-        await UpsertEntityRowAsync(entity, cancellationToken);
-        await UpsertUserOpinionAsync(entity, cancellationToken);
-
-        foreach (var child in entity.ChildEntities) {
-            await SaveEntityAsync(child, visited, cancellationToken);
-        }
-
-        foreach (var relationship in entity.Relationships) {
-            await SaveEntityAsync(relationship, visited, cancellationToken);
-        }
-
-        foreach (var credit in entity.Credits?.Credits ?? Array.Empty<CapabilityCredits.Item>()) {
-            await SaveEntityAsync(credit.Person, visited, cancellationToken);
-        }
-
-        _db.EntityRelationshipLinks.RemoveRange(
-            _db.EntityRelationshipLinks.Where(link =>
-                link.EntityId == entity.Id &&
-                link.RelationshipCode == RelatedRelationshipCode));
-        ClearUniversalCollections(entity);
-        foreach (var mapper in _capabilityMappers) {
-            await mapper.ClearAsync(entity, cancellationToken);
-        }
-
-        // Flush all stale rows before re-queueing the new state. The intermediate save is
-        // here because rows keyed by EntityId (description, classification, …) would
-        // otherwise collide with their re-added counterparts in the same change tracker.
-        await _db.SaveChangesAsync(cancellationToken);
-
-        var now = DateTimeOffset.UtcNow;
-        var relationshipIndex = 0;
-        foreach (var relationship in entity.Relationships) {
-            _db.EntityRelationshipLinks.Add(new EntityRelationshipLinkRow {
-                EntityId = entity.Id,
-                RelationshipCode = RelatedRelationshipCode,
-                Label = relationship.Title,
-                TargetEntityId = relationship.Id,
-                TargetKindCode = EntityKindRegistry.ToCode(relationship.Kind),
-                SortOrder = relationshipIndex,
-                CreatedAt = now,
-            });
-            relationshipIndex++;
-        }
-
-        await PersistUniversalCollectionsAsync(entity, cancellationToken);
-        foreach (var mapper in _capabilityMappers) {
             await mapper.PersistAsync(entity, cancellationToken);
         }
-
-        if (_kindMappers.TryGetValue(entity.Kind, out var kindMapper)) {
-            await kindMapper.PersistDetailAsync(entity, cancellationToken);
-        }
-    }
-
-    private async Task UpsertEntityRowAsync(Entity entity, CancellationToken cancellationToken) {
-        var row = await _db.Entities.FindAsync([entity.Id], cancellationToken);
-        await _structurePlacement.ValidateAsync(
-            entity.Kind,
-            entity.Id,
-            entity.ParentEntityId,
-            row?.ParentEntityId,
-            knownParentKind: null,
-            cancellationToken);
-        var now = DateTimeOffset.UtcNow;
-        if (row is null) {
-            _db.Entities.Add(new EntityRow {
-                Id = entity.Id,
-                KindCode = EntityKindRegistry.ToCode(entity.Kind),
-                Title = entity.Title,
-                ParentEntityId = entity.ParentEntityId,
-                SortOrder = entity.SortOrder,
-                IsNsfw = entity.IsNsfw ?? false,
-                IsOrganized = entity.IsOrganized ?? false,
-                IsWanted = entity.IsWanted ?? false,
-                CreatedAt = now,
-                UpdatedAt = now,
-            });
-        } else {
-            row.KindCode = EntityKindRegistry.ToCode(entity.Kind);
-            row.Title = entity.Title;
-            row.ParentEntityId = entity.ParentEntityId;
-            row.SortOrder = entity.SortOrder;
-            row.IsNsfw = entity.IsNsfw ?? false;
-            row.IsOrganized = entity.IsOrganized ?? false;
-            row.IsWanted = entity.IsWanted ?? false;
-            row.UpdatedAt = now;
-        }
-
     }
 
     private async Task ValidateRowPlacementAsync(
@@ -536,60 +357,10 @@ public sealed class EfEntityRepository : IEntityWriteRepository {
         return new EntityProviderIdentity(route.PluginId, route.Identity, url);
     }
 
-    private async Task PersistUniversalCollectionsAsync(Entity entity, CancellationToken cancellationToken) {
-        var now = DateTimeOffset.UtcNow;
-        var order = 0;
-        foreach (var url in entity.Urls) {
-            _db.EntityUrls.Add(new EntityUrlRow {
-                Id = Guid.NewGuid(),
-                EntityId = entity.Id,
-                Url = url.Value,
-                Label = url.Label,
-                SortOrder = order++,
-                CreatedAt = now,
-            });
-        }
-
-        await _externalIdentities.WriteAsync(
-            entity.Id,
-            entity.ExternalIds,
-            ExternalIdentityWriteMode.ReplaceAll,
-            cancellationToken);
-
-        foreach (var file in entity.EntityFiles) {
-            _db.EntityFiles.Add(new EntityFileRow {
-                Id = Guid.NewGuid(),
-                EntityId = entity.Id,
-                Role = file.Role,
-                Path = file.Path,
-                MimeType = file.MimeType,
-                CreatedAt = now,
-                UpdatedAt = now,
-            });
-        }
-
-    }
-
-    private void ClearUniversalCollections(Entity entity) {
-        _db.EntityUrls.RemoveRange(
-            _db.EntityUrls.Where(r => r.EntityId == entity.Id));
-        _db.EntityFiles.RemoveRange(
-            _db.EntityFiles.Where(r => r.EntityId == entity.Id));
-    }
-
-    private sealed class EntityHydrationContext {
-        private readonly Dictionary<Guid, Entity> _entities = [];
-
-        public bool TryGet(Guid id, out Entity entity) => _entities.TryGetValue(id, out entity!);
-
-        public void Add(Entity entity) => _entities.Add(entity.Id, entity);
-    }
-
     /// <summary>
-    /// Captures the request DbContext state before one capability-service attempt. A failed save
-    /// may have flushed intermediate entity rows inside a transaction, so retry cleanup must
-    /// remove all entries owned by that attempt (including staged events) without clearing work
-    /// that another use case had already staged in the same request scope.
+    /// Captures request DbContext state before one capability-service attempt. Retry cleanup removes
+    /// failed mutation rows and staged events without clearing unrelated work that another use case
+    /// had already staged in the same request scope.
     /// </summary>
     private sealed class EfEntityWriteAttempt : IEntityWriteAttempt {
         private readonly PrismediaDbContext _db;
@@ -616,12 +387,8 @@ public sealed class EfEntityRepository : IEntityWriteRepository {
 
         public Task RollbackAsync(CancellationToken cancellationToken) {
             cancellationToken.ThrowIfCancellationRequested();
-            // SaveEntityAsync accepts its intermediate SaveChanges while the database transaction
-            // is still open. EF detaches entries deleted before this attempt, but the transaction
-            // rollback restores their database rows. Re-track every baseline entity (including
-            // entries no longer visible in ChangeTracker) so unrelated request work survives. A
-            // complete clear removes failed-insert identity-map entries before the next hydrate;
-            // every pre-attempt entry is restored from the snapshot immediately afterwards.
+            // A complete clear removes failed-insert identity-map entries before the next hydrate;
+            // every pre-attempt entry is restored immediately so unrelated request work survives.
             _db.ChangeTracker.Clear();
             foreach (var snapshot in _baseline.Values) {
                 var entry = _db.Entry(snapshot.Entity);

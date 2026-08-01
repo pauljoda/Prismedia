@@ -197,7 +197,7 @@ public sealed class EfEntitySourceOwnershipReadTests {
             repository,
             ThumbnailContributors.For(db), new EfEntityProgressTopologyResolver(db),
             sourceOwnership: sourceOwnership);
-        var mutations = new EntityCapabilityService(repository, sourceOwnership, new EfEntityProgressTopologyResolver(db));
+        var mutations = new EntityCapabilityService(repository, reads, new EfEntityProgressTopologyResolver(db));
 
         var detail = Assert.IsAssignableFrom<IEntityCard>(await reads.GetAsync(
             movie.RootId, hideNsfw: false,

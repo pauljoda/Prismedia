@@ -24,7 +24,7 @@ public sealed class EntityCapabilityServiceProgressTests {
             mode: ReaderMode.Paged,
             completedAt: completedAt,
             updatedAt: completedAt));
-        var service = new EntityCapabilityService(repository, new NoSourceOwnershipReader(), new TestProgressTopologyResolver());
+        var service = new EntityCapabilityService(repository, new CanonicalEntityReadStub(), new TestProgressTopologyResolver());
 
         await service.UpdateProgressAsync(
             BookId,
@@ -58,7 +58,7 @@ public sealed class EntityCapabilityServiceProgressTests {
             mode: ReaderMode.Paged,
             completedAt: completedAt,
             updatedAt: completedAt));
-        var service = new EntityCapabilityService(repository, new NoSourceOwnershipReader(), new TestProgressTopologyResolver());
+        var service = new EntityCapabilityService(repository, new CanonicalEntityReadStub(), new TestProgressTopologyResolver());
 
         await service.UpdateProgressAsync(
             BookId,
@@ -82,7 +82,7 @@ public sealed class EntityCapabilityServiceProgressTests {
     [Fact]
     public async Task BookProgressRejectsAnUnrelatedCursorWithoutSaving() {
         var repository = new FakeEntityWriteRepository(new CapabilityProgress());
-        var service = new EntityCapabilityService(repository, new NoSourceOwnershipReader(), new TestProgressTopologyResolver());
+        var service = new EntityCapabilityService(repository, new CanonicalEntityReadStub(), new TestProgressTopologyResolver());
 
         var result = await service.UpdateProgressAsync(
             BookId,
@@ -112,7 +112,7 @@ public sealed class EntityCapabilityServiceProgressTests {
             total: 4,
             mode: ReaderMode.Paged,
             updatedAt: DateTimeOffset.UtcNow.AddMinutes(-5)));
-        var service = new EntityCapabilityService(repository, new NoSourceOwnershipReader(), new TestProgressTopologyResolver());
+        var service = new EntityCapabilityService(repository, new CanonicalEntityReadStub(), new TestProgressTopologyResolver());
 
         var result = await service.UpdateProgressAsync(
             BookId,
@@ -143,7 +143,7 @@ public sealed class EntityCapabilityServiceProgressTests {
             mode: ReaderMode.Paged,
             updatedAt: updatedAt,
             location: "epubcfi(/6/12!/4/2)"));
-        var service = new EntityCapabilityService(repository, new NoSourceOwnershipReader(), new TestProgressTopologyResolver());
+        var service = new EntityCapabilityService(repository, new CanonicalEntityReadStub(), new TestProgressTopologyResolver());
 
         await service.UpdateProgressAsync(
             BookId,
@@ -177,7 +177,7 @@ public sealed class EntityCapabilityServiceProgressTests {
         var activities = new RecordingEntityActivityStore();
         var service = new EntityCapabilityService(
             repository,
-            new NoSourceOwnershipReader(),
+            new CanonicalEntityReadStub(),
             new TestProgressTopologyResolver(),
             activityEvents: activities);
 
@@ -215,7 +215,7 @@ public sealed class EntityCapabilityServiceProgressTests {
         var activities = new RecordingEntityActivityStore();
         var service = new EntityCapabilityService(
             repository,
-            new NoSourceOwnershipReader(),
+            new CanonicalEntityReadStub(),
             new TestProgressTopologyResolver(),
             activityEvents: activities);
 
@@ -247,7 +247,7 @@ public sealed class EntityCapabilityServiceProgressTests {
         var activityEvents = new RecordingEntityActivityStore();
         var service = new EntityCapabilityService(
             repository,
-            new NoSourceOwnershipReader(),
+            new CanonicalEntityReadStub(),
             new TestProgressTopologyResolver(),
             playbackEvents: playbackEvents,
             activityEvents: activityEvents);
@@ -292,7 +292,7 @@ public sealed class EntityCapabilityServiceProgressTests {
     public async Task BookPlaybackAndProgressRemainSupported() {
         var book = new Book(Guid.NewGuid(), "Book", BookType.Comic, coverPageId: null);
         var repository = new SingleEntityWriteRepository(book);
-        var service = new EntityCapabilityService(repository, new NoSourceOwnershipReader(), new TestProgressTopologyResolver());
+        var service = new EntityCapabilityService(repository, new CanonicalEntityReadStub(), new TestProgressTopologyResolver());
 
         var playback = await service.UpdatePlaybackAsync(
             book.Id,
@@ -328,7 +328,7 @@ public sealed class EntityCapabilityServiceProgressTests {
         var playbackEvents = new RecordingPlaybackEventStore();
         var service = new EntityCapabilityService(
             repository,
-            new NoSourceOwnershipReader(),
+            new CanonicalEntityReadStub(),
             new TestProgressTopologyResolver(),
             playbackEvents: playbackEvents);
 
@@ -360,7 +360,7 @@ public sealed class EntityCapabilityServiceProgressTests {
     public async Task PlayableVideoDefinitionsAllowMarkerAndPlaybackMutations(EntityKind kind) {
         var entity = CreatePlayableVideo(kind);
         var repository = new SingleEntityWriteRepository(entity);
-        var service = new EntityCapabilityService(repository, new NoSourceOwnershipReader(), new TestProgressTopologyResolver());
+        var service = new EntityCapabilityService(repository, new CanonicalEntityReadStub(), new TestProgressTopologyResolver());
 
         var marker = await service.AddMarkerAsync(entity.Id, "Opening", 0, null, CancellationToken.None);
         var playback = await service.UpdatePlaybackAsync(
@@ -381,7 +381,7 @@ public sealed class EntityCapabilityServiceProgressTests {
     public async Task MissingMarkerUpdateAndDeleteDoNotAttachAnEmptyCapability() {
         var movie = new Movie(Guid.NewGuid(), "Movie", capabilities: []);
         var repository = new SingleEntityWriteRepository(movie);
-        var service = new EntityCapabilityService(repository, new NoSourceOwnershipReader(), new TestProgressTopologyResolver());
+        var service = new EntityCapabilityService(repository, new CanonicalEntityReadStub(), new TestProgressTopologyResolver());
         var markerId = Guid.NewGuid();
 
         var updated = await service.UpdateMarkerAsync(movie.Id, markerId, "Opening", 0, null, CancellationToken.None);
@@ -426,7 +426,10 @@ public sealed class EntityCapabilityServiceProgressTests {
         public Task<Guid?> FindParentIdAsync(Guid id, CancellationToken cancellationToken) =>
             Task.FromResult(Find(id)?.ParentEntityId);
 
-        public Task SaveAsync(Entity entity, CancellationToken cancellationToken) {
+        public Task SaveMutableStateAsync(
+            Entity entity,
+            EntityMutableStateChange change,
+            CancellationToken cancellationToken) {
             SavedEntity = entity;
             return Task.CompletedTask;
         }
@@ -450,18 +453,23 @@ public sealed class EntityCapabilityServiceProgressTests {
         public Task<Guid?> FindParentIdAsync(Guid id, CancellationToken cancellationToken) =>
             Task.FromResult(id == entity.Id ? entity.ParentEntityId : null);
 
-        public Task SaveAsync(Entity savedEntity, CancellationToken cancellationToken) {
+        public Task SaveMutableStateAsync(
+            Entity savedEntity,
+            EntityMutableStateChange change,
+            CancellationToken cancellationToken) {
             Assert.Same(entity, savedEntity);
             SaveCount++;
             return Task.CompletedTask;
         }
     }
 
-    private sealed class NoSourceOwnershipReader : IEntitySourceOwnershipReader {
-        public Task<IReadOnlySet<Guid>> ResolveAsync(
-            IReadOnlyCollection<Guid> entityIds,
-            CancellationToken cancellationToken) =>
-            Task.FromResult<IReadOnlySet<Guid>>(new HashSet<Guid>());
+    private sealed class CanonicalEntityReadStub : IEntityReadService {
+        public Task<EntityListResponse> ListAsync(string? kind, string? query, string? cursor, bool? hideNsfw, int? limit, CancellationToken cancellationToken, Guid? referencedBy = null, string? relationshipCode = null, string? sort = null, string? sortDir = null, int? seed = null, bool? favorite = null, bool? organized = null, int? ratingMin = null, int? ratingMax = null, bool? unrated = null, string? status = null, string? bookType = null, string? bookFormat = null, bool? nsfw = null, bool? hasFile = null, bool? played = null, bool? orphaned = null, bool? wanted = null, AcquisitionStatus? acquisitionStatus = null) => Task.FromResult(new EntityListResponse([], null, 0));
+
+        public Task<EntityCard?> GetAsync(Guid id, bool hideNsfw, CancellationToken cancellationToken) =>
+            Task.FromResult<EntityCard?>(new EntityCard { Id = id, Kind = EntityKind.Book, Title = "Canonical", ParentEntityId = null, SortOrder = null, Capabilities = [], ChildrenByKind = [], Relationships = [] });
+
+        public Task<EntityThumbnailBatchResponse> GetThumbnailsAsync(IReadOnlyList<Guid> ids, bool hideNsfw, CancellationToken cancellationToken) => Task.FromResult(new EntityThumbnailBatchResponse([]));
     }
 
     private sealed class TestProgressTopologyResolver : IEntityProgressTopologyResolver {
