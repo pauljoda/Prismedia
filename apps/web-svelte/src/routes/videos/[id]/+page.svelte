@@ -28,7 +28,7 @@
   } from "$lib/player/playback-negotiation";
   import { durationToSeconds } from "$lib/utils/format";
   import { settingKeys, valuesToLibrarySettings } from "$lib/settings/app-settings";
-  import { getCapability } from "$lib/api/capabilities";
+  import { getCapability, isPlayableVideo } from "$lib/api/capabilities";
   import { refreshAfterManagedFileRevert } from "$lib/entities/entity-file-management";
   import { useIdentifyDetailAction } from "$lib/components/identify/use-identify-detail-action.svelte";
   import type { EntityDetailCredit, EntityDetailTag } from "$lib/entities/entity-detail";
@@ -78,16 +78,15 @@
     loadKey: () => page.params.id ?? "",
     load: async ({ signal }) => {
       const nextVideo = await fetchEntity(page.params.id ?? "", { signal });
-      if (await redirectMovieChildVideo(nextVideo, signal)) return nextVideo;
 
       const relationshipsPromise = hydrateVideoRelationships(nextVideo, signal);
-      const playbackPlanPromise = isWanted(nextVideo.capabilities)
-        ? null
-        : loadPlaybackPlan(
+      const playbackPlanPromise = isPlayableVideo(nextVideo.capabilities)
+        ? loadPlaybackPlan(
             nextVideo.id,
             playbackPlan?.sessionId,
             selectedAudioStreamIndex,
-          );
+          )
+        : null;
       const [relationships, nextPlaybackPlan] = await Promise.all([
         relationshipsPromise,
         playbackPlanPromise,
@@ -464,7 +463,7 @@
   /**
    * Resolves the series an episode belongs to by walking the parent chain
    * (episode → season → series), so the video can link back to its series. A standalone
-   * video (or a movie child, which redirects earlier) leaves the series unset.
+   * video leaves the series unset.
    */
   async function resolveSeries(nextVideo: EntityCardFull, signal: AbortSignal) {
     const seasonId = nextVideo.parentEntityId;
@@ -480,20 +479,6 @@
     const href = resolveEntityHref(series.kind, series.id);
     const [seriesCard] = thumbnailsToCards([series], { hrefFor: () => href });
     return { seriesCard: seriesCard ?? null, seriesRef: { id: series.id, title: series.title } };
-  }
-
-  async function redirectMovieChildVideo(nextVideo: EntityCardFull, signal: AbortSignal) {
-    if (!nextVideo.parentEntityId) return false;
-
-    const parent = await fetchEntity(nextVideo.parentEntityId, { signal }).catch(() => null);
-    signal.throwIfAborted();
-    if (parent?.kind !== ENTITY_KIND.movie) return false;
-
-    const movieHref = resolveEntityHref(ENTITY_KIND.movie, parent.id);
-    if (!movieHref) return false;
-
-    await goto(movieHref, { replaceState: true });
-    return true;
   }
 
   async function loadPlaybackPlan(

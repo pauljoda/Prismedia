@@ -30,7 +30,7 @@
   } from "$lib/player/playback-negotiation";
   import { durationToSeconds } from "$lib/utils/format";
   import { settingKeys, valuesToLibrarySettings } from "$lib/settings/app-settings";
-  import { getCapability, isWanted } from "$lib/api/capabilities";
+  import { getCapability, isPlayableVideo, isWanted } from "$lib/api/capabilities";
   import { refreshAfterManagedFileRevert } from "$lib/entities/entity-file-management";
   import { useIdentifyDetailAction } from "$lib/components/identify/use-identify-detail-action.svelte";
   import type { EntityDetailCredit, EntityDetailTag } from "$lib/entities/entity-detail";
@@ -40,8 +40,7 @@
     type EntityThumbnailCard,
   } from "$lib/entities/entity-relationship-thumbnails";
   import { resolveEntityHref } from "$lib/entities/entity-routes";
-  import { getChildIds } from "$lib/entities/entity-children";
-  import { CAPABILITY_KIND, CREDIT_ROLE, ENTITY_KIND, type EntityKindCode } from "$lib/entities/entity-codes";
+  import { CAPABILITY_KIND, CREDIT_ROLE, type EntityKindCode } from "$lib/entities/entity-codes";
   import { extractVideoPlayerProps, getPlaybackState } from "$lib/entities/video-capabilities";
   import NsfwBlur from "$lib/components/nsfw/NsfwBlur.svelte";
   import EntityDetail, {
@@ -67,20 +66,11 @@
     loadKey: () => page.params.id ?? "",
     load: async ({ signal }) => {
       const nextMovie = await fetchEntity(page.params.id ?? "", { signal });
-      const childVideoId = getChildIds(nextMovie, ENTITY_KIND.video)[0];
-      if (!childVideoId) {
-        const relationships = await hydrateMovieRelationships(nextMovie, signal);
-        signal.throwIfAborted();
-        video = null;
-        playbackPlan = null;
-        relationshipCredits = relationships.credits;
-        relationshipStudio = relationships.studio;
-        relationshipTags = relationships.relationshipTags;
-        return nextMovie;
-      }
-      const nextVideo = await fetchEntity(childVideoId, { signal });
+      const nextVideo = isPlayableVideo(nextMovie.capabilities) ? nextMovie : null;
       const [nextPlaybackPlan, relationships] = await Promise.all([
-        loadPlaybackPlan(nextVideo.id, playbackPlan?.sessionId, selectedAudioStreamIndex),
+        nextVideo
+          ? loadPlaybackPlan(nextVideo.id, playbackPlan?.sessionId, selectedAudioStreamIndex)
+          : null,
         hydrateMovieRelationships(nextMovie, signal),
       ]);
       signal.throwIfAborted();

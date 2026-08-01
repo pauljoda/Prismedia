@@ -6,6 +6,7 @@ import {
   firstExternalIdentity,
   getProviderIdentityCapability,
   hasSourceMedia,
+  isPlayableVideo,
 } from "./capabilities";
 
 describe("entity capability identities", () => {
@@ -57,6 +58,11 @@ describe("entity capability identities", () => {
 });
 
 describe("entity source media", () => {
+  it("uses the playable-video capability as the playback contract", () => {
+    expect(isPlayableVideo([{ kind: CAPABILITY_KIND.playableVideo }])).toBe(true);
+    expect(isPlayableVideo([])).toBe(false);
+  });
+
   it("requires a direct Source file rather than generated media assets", () => {
     const capabilities: EntityCapability[] = [{
       kind: CAPABILITY_KIND.files,

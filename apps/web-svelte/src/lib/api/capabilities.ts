@@ -162,6 +162,11 @@ export function isWanted(capabilities: EntityCapability[]): boolean {
   return getFlagsCapability(capabilities)?.isWanted === true;
 }
 
+/** True when the Entity itself owns a source that can use the shared video playback routes. */
+export function isPlayableVideo(capabilities: EntityCapability[]): boolean {
+  return getCapability(capabilities, CAPABILITY_KIND.playableVideo) !== undefined;
+}
+
 /** True when the Entity owns a direct source file, excluding generated previews and cache assets. */
 export function hasSourceMedia(capabilities: EntityCapability[]): boolean {
   const files = getCapability(capabilities, CAPABILITY_KIND.files);
