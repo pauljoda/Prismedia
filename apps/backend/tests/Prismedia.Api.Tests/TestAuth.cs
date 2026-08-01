@@ -123,45 +123,11 @@ internal static class TestAuth {
         public Task RevokeNsfwAccessAsync(Guid userId, CancellationToken cancellationToken) => Task.CompletedTask;
     }
 
-    internal sealed class VisibleEntityReadService : IEntityReadService {
-        public Task<EntityListResponse> ListAsync(
-            string? kind,
-            string? query,
-            string? cursor,
-            bool? hideNsfw,
-            int? limit,
-            CancellationToken cancellationToken,
-            Guid? referencedBy = null,
-            string? relationshipCode = null,
-            string? sort = null,
-            string? sortDir = null,
-            int? seed = null,
-            bool? favorite = null,
-            bool? organized = null,
-            int? ratingMin = null,
-            int? ratingMax = null,
-            bool? unrated = null,
-            string? status = null,
-            string? bookType = null,
-            string? bookFormat = null,
-            bool? nsfw = null,
-            bool? hasFile = null,
-            bool? played = null,
-            bool? orphaned = null,
-            bool? wanted = null,
-            AcquisitionStatus? acquisitionStatus = null) =>
-            Task.FromResult(new EntityListResponse([], null, 0));
-
-        public Task<EntityCard?> GetAsync(Guid id, bool hideNsfw, CancellationToken cancellationToken) =>
+    internal sealed class VisibleEntityReadService : EntityReadServiceStub {
+        public override Task<EntityCard?> GetAsync(Guid id, bool hideNsfw, CancellationToken cancellationToken) =>
             Task.FromResult<EntityCard?>(Card(id));
 
-        public Task<EntityThumbnailBatchResponse> GetThumbnailsAsync(
-            IReadOnlyList<Guid> ids,
-            bool hideNsfw,
-            CancellationToken cancellationToken) =>
-            Task.FromResult(new EntityThumbnailBatchResponse([]));
-
-        public Task<EntityCard?> GetAsync(Guid id, string kind, bool hideNsfw, CancellationToken cancellationToken) =>
+        public override Task<EntityCard?> GetAsync(Guid id, string kind, bool hideNsfw, CancellationToken cancellationToken) =>
             Task.FromResult<EntityCard?>(Card(id) with { Kind = kind.DecodeAs<EntityKind>() });
 
         private static EntityCard Card(Guid id) =>

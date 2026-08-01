@@ -39,47 +39,10 @@ public sealed class EntityChildrenEndpointTests {
             })
             .WithTestAuth();
 
-    private sealed class CapturingEntityReadService : IEntityReadService {
+    private sealed class CapturingEntityReadService : EntityReadServiceStub {
         public int CallCount { get; private set; }
 
-        public Task<EntityListResponse> ListAsync(
-            string? kind,
-            string? query,
-            string? cursor,
-            bool? hideNsfw,
-            int? limit,
-            CancellationToken cancellationToken,
-            Guid? referencedBy = null,
-            string? relationshipCode = null,
-            string? sort = null,
-            string? sortDir = null,
-            int? seed = null,
-            bool? favorite = null,
-            bool? organized = null,
-            int? ratingMin = null,
-            int? ratingMax = null,
-            bool? unrated = null,
-            string? status = null,
-            string? bookType = null,
-            string? bookFormat = null,
-            bool? nsfw = null,
-            bool? hasFile = null,
-            bool? played = null,
-            bool? orphaned = null,
-            bool? wanted = null,
-            Prismedia.Domain.Entities.AcquisitionStatus? acquisitionStatus = null) =>
-            Task.FromResult(new EntityListResponse([], null, 0));
-
-        public Task<EntityCard?> GetAsync(Guid id, bool hideNsfw, CancellationToken cancellationToken) =>
-            Task.FromResult<EntityCard?>(null);
-
-        public Task<EntityThumbnailBatchResponse> GetThumbnailsAsync(
-            IReadOnlyList<Guid> ids,
-            bool hideNsfw,
-            CancellationToken cancellationToken) =>
-            Task.FromResult(new EntityThumbnailBatchResponse([]));
-
-        public Task<EntityChildrenBatchResponse> GetChildrenAsync(
+        public override Task<EntityChildrenBatchResponse> GetChildrenAsync(
             IReadOnlyList<Guid> parentIds,
             bool hideNsfw,
             CancellationToken cancellationToken) {

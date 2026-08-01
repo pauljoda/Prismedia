@@ -78,13 +78,13 @@ public sealed class EntityListEndpointTests {
             })
             .WithTestAuth();
 
-    private sealed class CapturingEntityReadService : IEntityReadService {
+    private sealed class CapturingEntityReadService : EntityReadServiceStub {
         public string? Kind { get; private set; }
         public int ListCallCount { get; private set; }
         public bool? Wanted { get; private set; }
         public AcquisitionStatus? AcquisitionStatus { get; private set; }
 
-        public Task<EntityListResponse> ListAsync(
+        public override Task<EntityListResponse> ListAsync(
             string? kind,
             string? query,
             string? cursor,
@@ -116,15 +116,6 @@ public sealed class EntityListEndpointTests {
             AcquisitionStatus = acquisitionStatus;
             return Task.FromResult(new EntityListResponse([], null, 0));
         }
-
-        public Task<EntityCard?> GetAsync(Guid id, bool hideNsfw, CancellationToken cancellationToken) =>
-            Task.FromResult<EntityCard?>(null);
-
-        public Task<EntityThumbnailBatchResponse> GetThumbnailsAsync(
-            IReadOnlyList<Guid> ids,
-            bool hideNsfw,
-            CancellationToken cancellationToken) =>
-            Task.FromResult(new EntityThumbnailBatchResponse([]));
 
     }
 }

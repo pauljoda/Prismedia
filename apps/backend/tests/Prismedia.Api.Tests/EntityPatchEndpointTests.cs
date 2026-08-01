@@ -279,45 +279,11 @@ public sealed class EntityPatchEndpointTests {
         }
     }
 
-    private sealed class FakeEntityReadService : IEntityReadService {
-        public Task<EntityListResponse> ListAsync(
-            string? kind,
-            string? query,
-            string? cursor,
-            bool? hideNsfw,
-            int? limit,
-            CancellationToken cancellationToken,
-            Guid? referencedBy = null,
-            string? relationshipCode = null,
-            string? sort = null,
-            string? sortDir = null,
-            int? seed = null,
-            bool? favorite = null,
-            bool? organized = null,
-            int? ratingMin = null,
-            int? ratingMax = null,
-            bool? unrated = null,
-            string? status = null,
-            string? bookType = null,
-            string? bookFormat = null,
-            bool? nsfw = null,
-            bool? hasFile = null,
-            bool? played = null,
-            bool? orphaned = null,
-            bool? wanted = null,
-            AcquisitionStatus? acquisitionStatus = null) =>
-            throw new NotSupportedException();
-
-        public Task<EntityCard?> GetAsync(Guid id, bool hideNsfw, CancellationToken cancellationToken) =>
+    private sealed class FakeEntityReadService : EntityReadServiceStub {
+        public override Task<EntityCard?> GetAsync(Guid id, bool hideNsfw, CancellationToken cancellationToken) =>
             Task.FromResult<EntityCard?>(Card(id, EntityKind.Video, "Updated Title"));
 
-        public Task<EntityThumbnailBatchResponse> GetThumbnailsAsync(
-            IReadOnlyList<Guid> ids,
-            bool hideNsfw,
-            CancellationToken cancellationToken) =>
-            throw new NotSupportedException();
-
-        public Task<EntityCard?> GetAsync(Guid id, string kind, bool hideNsfw, CancellationToken cancellationToken) =>
+        public override Task<EntityCard?> GetAsync(Guid id, string kind, bool hideNsfw, CancellationToken cancellationToken) =>
             Task.FromResult<EntityCard?>(Card(id, kind.DecodeAs<EntityKind>(), kind == EntityKind.Video.ToCode() ? "Video Title" : "Updated Title"));
 
         private static EntityCard Card(Guid id, EntityKind kind, string title) =>
