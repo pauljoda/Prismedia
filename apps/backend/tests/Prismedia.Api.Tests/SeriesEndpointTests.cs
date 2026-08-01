@@ -1,0 +1,90 @@
+using System.Net;
+using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
+using Prismedia.Application.Entities;
+using Prismedia.Contracts.Entities;
+using Prismedia.Domain.Entities;
+
+namespace Prismedia.Api.Tests;
+
+public sealed class SeriesEndpointTests {
+    [Fact]
+    public async Task VideoSeasonAliasRequiresTheDirectSeriesParent() {
+        var seriesId = Guid.NewGuid();
+        var otherSeriesId = Guid.NewGuid();
+        var seasonId = Guid.NewGuid();
+        var season = new EntityCard {
+            Id = seasonId,
+            Kind = EntityKind.VideoSeason,
+            Title = "Season 1",
+            ParentEntityId = seriesId,
+            SortOrder = 1,
+            Capabilities = [],
+            ChildrenByKind = [],
+            Relationships = []
+        };
+        using var factory = CreateFactory(season);
+        using var client = factory.CreateAuthenticatedClient();
+
+        using var wrongParent = await client.GetAsync($"/api/series/{otherSeriesId}/seasons/{seasonId}");
+        using var canonical = await client.GetAsync($"/api/entities/{seasonId}");
+        using var matchingParent = await client.GetAsync($"/api/series/{seriesId}/seasons/{seasonId}");
+
+        Assert.Equal(HttpStatusCode.NotFound, wrongParent.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, canonical.StatusCode);
+        Assert.Equal(canonical.StatusCode, matchingParent.StatusCode);
+        Assert.Equal(
+            await canonical.Content.ReadAsStringAsync(),
+            await matchingParent.Content.ReadAsStringAsync());
+    }
+
+    private static WebApplicationFactory<Program> CreateFactory(EntityCard season) =>
+        new WebApplicationFactory<Program>()
+            .WithWebHostBuilder(builder => {
+                builder.ConfigureServices(services => {
+                    services.RemoveAll<IEntityReadService>();
+                    services.AddSingleton<IEntityReadService>(new SeasonReadService(season));
+                });
+            })
+            .WithTestAuth();
+
+    private sealed class SeasonReadService(EntityCard season) : IEntityReadService {
+        public Task<EntityListResponse> ListAsync(
+            string? kind,
+            string? query,
+            string? cursor,
+            bool? hideNsfw,
+            int? limit,
+            CancellationToken cancellationToken,
+            Guid? referencedBy = null,
+            string? relationshipCode = null,
+            string? sort = null,
+            string? sortDir = null,
+            int? seed = null,
+            bool? favorite = null,
+            bool? organized = null,
+            int? ratingMin = null,
+            int? ratingMax = null,
+            bool? unrated = null,
+            string? status = null,
+            string? bookType = null,
+            string? bookFormat = null,
+            bool? nsfw = null,
+            bool? hasFile = null,
+            bool? played = null,
+            bool? orphaned = null,
+            bool? wanted = null,
+            AcquisitionStatus? acquisitionStatus = null) =>
+            Task.FromResult(new EntityListResponse([], null, 0));
+
+        public Task<EntityCard?> GetAsync(Guid id, bool hideNsfw, CancellationToken cancellationToken) =>
+            Task.FromResult<EntityCard?>(id == season.Id ? season : null);
+
+        public Task<EntityThumbnailBatchResponse> GetThumbnailsAsync(
+            IReadOnlyList<Guid> ids,
+            bool hideNsfw,
+            CancellationToken cancellationToken) =>
+            Task.FromResult(new EntityThumbnailBatchResponse([]));
+    }
+}

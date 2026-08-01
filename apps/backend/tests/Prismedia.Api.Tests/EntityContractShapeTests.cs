@@ -194,6 +194,7 @@ public sealed class EntityContractShapeTests {
             "/api/music-artists/{id}",
             "/api/people/{id}",
             "/api/series/{id}",
+            "/api/series/{id}/seasons/{seasonId}",
             "/api/studios/{id}",
             "/api/tags/{id}",
             "/api/videos/{id}"
