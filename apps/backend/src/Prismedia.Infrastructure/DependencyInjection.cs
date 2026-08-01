@@ -259,6 +259,7 @@ public static class DependencyInjection {
         services.AddScoped<IEntityProgressTopologyResolver>(provider => provider.GetRequiredService<EfEntityProgressTopologyResolver>());
         // Read, statistics, and collection projections share this scoped hidden-roots memoization.
         services.AddScoped<EfEntityLibraryVisibilityFilter>();
+        services.AddScoped<EfEntityCatalogQuery>();
         services.AddScoped<EfEntityReadService>();
         services.AddScoped<IEntityReadService>(provider => provider.GetRequiredService<EfEntityReadService>());
         services.AddScoped<IEntityVisibilityChecker, EfEntityVisibilityChecker>();

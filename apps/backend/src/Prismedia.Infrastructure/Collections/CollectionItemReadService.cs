@@ -15,7 +15,8 @@ namespace Prismedia.Infrastructure.Collections;
 public sealed class CollectionItemReadService(
     PrismediaDbContext db,
     IEntityReadService entities,
-    ICurrentUserContext currentUser) : ICollectionItemReadService {
+    ICurrentUserContext currentUser,
+    EfEntityCatalogQuery catalogQuery) : ICollectionItemReadService {
     private static readonly IReadOnlySet<string> AudioKindCodes = EntityKindRegistry.All
         .Where(definition => definition.MediaQualityFamily == EntityMediaQualityFamily.Audio)
         .Select(definition => definition.Code)
@@ -57,11 +58,9 @@ public sealed class CollectionItemReadService(
             return new CollectionItemsResponse([]);
         }
 
-        var allEntities = db.Entities.AsNoTracking();
-        var catalogEntities = EntityCatalogQueryPolicy.Apply(
-            allEntities,
-            allEntities,
-            EntityCatalogSurface.Collection);
+        var catalogEntities = await catalogQuery.ForCurrentUserAsync(
+            EntityCatalogSurface.Collection,
+            cancellationToken);
         var rows = await (
             from item in db.CollectionItemDetails.AsNoTracking()
             join entity in catalogEntities on item.ItemEntityId equals entity.Id
@@ -117,11 +116,9 @@ public sealed class CollectionItemReadService(
 
         // One grouped query for the whole batch: member counts and audio capability come straight
         // from the membership join — no thumbnail hydration, no per-collection round-trips.
-        var allEntities = db.Entities.AsNoTracking();
-        var catalogEntities = EntityCatalogQueryPolicy.Apply(
-            allEntities,
-            allEntities,
-            EntityCatalogSurface.Collection);
+        var catalogEntities = await catalogQuery.ForCurrentUserAsync(
+            EntityCatalogSurface.Collection,
+            cancellationToken);
         var rows = await (
             from item in db.CollectionItemDetails.AsNoTracking()
             join entity in catalogEntities on item.ItemEntityId equals entity.Id
@@ -152,11 +149,9 @@ public sealed class CollectionItemReadService(
         // Configured cover item wins; capture it per collection so it can override the
         // first-member fallback resolved below.
         // First visible member per collection, in collection sort order, as the fallback cover.
-        var allEntities = db.Entities.AsNoTracking();
-        var catalogEntities = EntityCatalogQueryPolicy.Apply(
-            allEntities,
-            allEntities,
-            EntityCatalogSurface.Collection);
+        var catalogEntities = await catalogQuery.ForCurrentUserAsync(
+            EntityCatalogSurface.Collection,
+            cancellationToken);
         var coverItemByCollection = await (
             from detail in db.CollectionDetails.AsNoTracking()
             join entity in catalogEntities on detail.CoverItemEntityId equals entity.Id

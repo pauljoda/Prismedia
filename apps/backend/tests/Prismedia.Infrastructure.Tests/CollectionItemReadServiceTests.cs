@@ -1,8 +1,10 @@
 using Microsoft.EntityFrameworkCore;
 using Prismedia.Application.Entities;
+using Prismedia.Application.Security;
 using Prismedia.Contracts.Entities;
 using Prismedia.Domain.Entities;
 using Prismedia.Infrastructure.Collections;
+using Prismedia.Infrastructure.Entities;
 using Prismedia.Infrastructure.Persistence;
 using Prismedia.Infrastructure.Persistence.Entities;
 
@@ -22,10 +24,7 @@ public sealed class CollectionItemReadServiceTests {
         var nsfwId = SeedCollection(db, "Hidden", ownerId, CollectionMode.Manual, isNsfw: true);
         await db.SaveChangesAsync();
 
-        var service = new CollectionItemReadService(
-            db,
-            new FakeEntityReadService(db),
-            TestUserContext.MemberAs(ownerId));
+        var service = CreateService(db, TestUserContext.MemberAs(ownerId));
 
         var safe = await service.ListMembershipOptionsAsync(hideNsfw: true, CancellationToken.None);
         Assert.Equal([hybridId, manualId], safe.Items.Select(item => item.Id));
@@ -61,10 +60,7 @@ public sealed class CollectionItemReadServiceTests {
             Item(collectionId, firstId, 0));
         await db.SaveChangesAsync();
 
-        var service = new CollectionItemReadService(
-            db,
-            new FakeEntityReadService(db),
-            TestUserContext.Admin());
+        var service = CreateService(db, TestUserContext.Admin());
 
         var result = await service.ListItemsAsync(collectionId, hideNsfw: true, CancellationToken.None);
 
@@ -98,10 +94,7 @@ public sealed class CollectionItemReadServiceTests {
         });
         db.CollectionItemDetails.Add(Item(collectionId, itemId, 0));
         await db.SaveChangesAsync();
-        var service = new CollectionItemReadService(
-            db,
-            new FakeEntityReadService(db),
-            TestUserContext.MemberAs(viewerUserId));
+        var service = CreateService(db, TestUserContext.MemberAs(viewerUserId));
 
         var hidden = await service.ListItemsAsync(collectionId, hideNsfw: false, CancellationToken.None);
         Assert.Empty(hidden.Items);
@@ -127,16 +120,49 @@ public sealed class CollectionItemReadServiceTests {
             Item(collectionId, videoId, 1));
         await db.SaveChangesAsync();
 
-        var service = new CollectionItemReadService(
-            db,
-            new FakeEntityReadService(db),
-            TestUserContext.Admin());
+        var service = CreateService(db, TestUserContext.Admin());
 
         var contexts = await service.GetListContextsAsync([collectionId], hideNsfw: false, CancellationToken.None);
 
         var context = Assert.Single(contexts).Value;
         Assert.Equal(2, context.ChildCount);
         Assert.True(context.HasAudio);
+    }
+
+    [Fact]
+    public async Task ListItemsAndContextsExcludeMembersOutsideViewersLibraries() {
+        await using var db = CreateContext();
+        var collectionId = Guid.NewGuid();
+        var visibleRootId = Guid.NewGuid();
+        var restrictedRootId = Guid.NewGuid();
+        var visibleVideoId = Guid.NewGuid();
+        var restrictedAudioId = Guid.NewGuid();
+        SeedEntity(db, collectionId, EntityKind.Collection.ToCode(), "Scoped collection");
+        SeedEntity(db, visibleVideoId, EntityKind.Video.ToCode(), "Visible video");
+        SeedEntity(db, restrictedAudioId, EntityKind.AudioTrack.ToCode(), "Restricted audio");
+        SeedRoot(db, visibleRootId, "Visible");
+        SeedRoot(db, restrictedRootId, "Restricted");
+        db.EntityLibraryRoots.AddRange(
+            new EntityLibraryRootRow { EntityId = visibleVideoId, LibraryRootId = visibleRootId },
+            new EntityLibraryRootRow { EntityId = restrictedAudioId, LibraryRootId = restrictedRootId });
+        db.CollectionDetails.Add(new CollectionDetailRow {
+            EntityId = collectionId,
+            OwnerUserId = TestUserContext.UserId,
+        });
+        db.CollectionItemDetails.AddRange(
+            Item(collectionId, visibleVideoId, 0),
+            Item(collectionId, restrictedAudioId, 1));
+        await db.SaveChangesAsync();
+
+        var service = CreateService(db, TestUserContext.Member(visibleRootId));
+
+        var items = await service.ListItemsAsync(collectionId, hideNsfw: false, CancellationToken.None);
+        var contexts = await service.GetListContextsAsync([collectionId], hideNsfw: false, CancellationToken.None);
+
+        Assert.Equal(visibleVideoId, Assert.Single(items.Items).EntityId);
+        var context = Assert.Single(contexts).Value;
+        Assert.Equal(1, context.ChildCount);
+        Assert.False(context.HasAudio);
     }
 
     [Fact]
@@ -158,10 +184,39 @@ public sealed class CollectionItemReadServiceTests {
         db.CollectionItemDetails.Add(Item(collectionId, visibleMemberId, 0));
         await db.SaveChangesAsync();
 
-        var covers = await new CollectionItemReadService(
-                db,
-                new FakeEntityReadService(db),
-                TestUserContext.Admin())
+        var covers = await CreateService(db, TestUserContext.Admin())
+            .ResolveCoverPathsAsync([collectionId], hideNsfw: false, CancellationToken.None);
+
+        Assert.Equal($"/assets/test/{visibleMemberId:N}.jpg", Assert.Single(covers).Value);
+    }
+
+    [Fact]
+    public async Task ResolveCoverPathsAsyncFallsBackWhenConfiguredCoverIsOutsideViewersLibraries() {
+        await using var db = CreateContext();
+        var collectionId = Guid.NewGuid();
+        var visibleRootId = Guid.NewGuid();
+        var restrictedRootId = Guid.NewGuid();
+        var restrictedCoverId = Guid.NewGuid();
+        var visibleMemberId = Guid.NewGuid();
+        SeedEntity(db, collectionId, EntityKind.Collection.ToCode(), "Collection");
+        SeedEntity(db, restrictedCoverId, EntityKind.Video.ToCode(), "Restricted cover");
+        SeedEntity(db, visibleMemberId, EntityKind.Video.ToCode(), "Visible fallback");
+        SeedRoot(db, visibleRootId, "Visible");
+        SeedRoot(db, restrictedRootId, "Restricted");
+        db.EntityLibraryRoots.AddRange(
+            new EntityLibraryRootRow { EntityId = restrictedCoverId, LibraryRootId = restrictedRootId },
+            new EntityLibraryRootRow { EntityId = visibleMemberId, LibraryRootId = visibleRootId });
+        db.CollectionDetails.Add(new CollectionDetailRow {
+            EntityId = collectionId,
+            OwnerUserId = TestUserContext.UserId,
+            CoverItemEntityId = restrictedCoverId,
+        });
+        db.CollectionItemDetails.AddRange(
+            Item(collectionId, restrictedCoverId, 0),
+            Item(collectionId, visibleMemberId, 1));
+        await db.SaveChangesAsync();
+
+        var covers = await CreateService(db, TestUserContext.Member(visibleRootId))
             .ResolveCoverPathsAsync([collectionId], hideNsfw: false, CancellationToken.None);
 
         Assert.Equal($"/assets/test/{visibleMemberId:N}.jpg", Assert.Single(covers).Value);
@@ -212,6 +267,29 @@ public sealed class CollectionItemReadServiceTests {
             UpdatedAt = DateTimeOffset.UtcNow
         });
     }
+
+    private static void SeedRoot(PrismediaDbContext db, Guid id, string label) {
+        var now = DateTimeOffset.UtcNow;
+        db.LibraryRoots.Add(new LibraryRootRow {
+            Id = id,
+            Path = $"/media/{id:N}",
+            Label = label,
+            Enabled = true,
+            CreatedAt = now,
+            UpdatedAt = now,
+        });
+    }
+
+    private static CollectionItemReadService CreateService(
+        PrismediaDbContext db,
+        ICurrentUserContext currentUser) =>
+        new(
+            db,
+            new FakeEntityReadService(db),
+            currentUser,
+            new EfEntityCatalogQuery(
+                db,
+                new EfEntityLibraryVisibilityFilter(db, currentUser)));
 
     private static PrismediaDbContext CreateContext() =>
         new(new DbContextOptionsBuilder<PrismediaDbContext>()

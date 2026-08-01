@@ -13,7 +13,9 @@ namespace Prismedia.Infrastructure.Collections;
 /// EF-backed persistence adapter for collection command use cases. Application owns
 /// orchestration and domain decisions; this adapter only reads and writes row state.
 /// </summary>
-public sealed class CollectionCommandPersistence(PrismediaDbContext db) : ICollectionCommandPersistence {
+public sealed class CollectionCommandPersistence(
+    PrismediaDbContext db,
+    EfEntityCatalogQuery catalogQuery) : ICollectionCommandPersistence {
     /// <inheritdoc />
     public async Task<Guid> CreateAsync(
         Collection collection,
@@ -128,11 +130,10 @@ public sealed class CollectionCommandPersistence(PrismediaDbContext db) : IColle
     public async Task<IReadOnlyDictionary<Guid, CollectionItemCandidate>> GetActiveItemsAsync(
         IReadOnlyList<Guid> entityIds,
         CancellationToken cancellationToken) {
-        var allEntities = db.Entities.AsNoTracking();
-        var rows = await EntityCatalogQueryPolicy.Apply(
-                allEntities,
-                allEntities,
-                EntityCatalogSurface.Collection)
+        var visibleEntities = await catalogQuery.ForCurrentUserAsync(
+            EntityCatalogSurface.Collection,
+            cancellationToken);
+        var rows = await visibleEntities
             .Where(row => entityIds.Contains(row.Id))
             .Select(row => new { row.Id, row.KindCode })
             .ToArrayAsync(cancellationToken);
@@ -253,11 +254,9 @@ public sealed class CollectionCommandPersistence(PrismediaDbContext db) : IColle
             return 0;
         }
 
-        var allEntities = db.Entities.AsNoTracking();
-        var catalogEntities = EntityCatalogQueryPolicy.Apply(
-            allEntities,
-            allEntities,
-            EntityCatalogSurface.Collection);
+        var catalogEntities = await catalogQuery.ForCurrentUserAsync(
+            EntityCatalogSurface.Collection,
+            cancellationToken);
         return await (
             from item in db.CollectionItemDetails.AsNoTracking()
             join entity in catalogEntities on item.ItemEntityId equals entity.Id
@@ -276,11 +275,9 @@ public sealed class CollectionCommandPersistence(PrismediaDbContext db) : IColle
             return [];
         }
 
-        var allEntities = db.Entities.AsNoTracking();
-        var query = EntityCatalogQueryPolicy.Apply(
-                allEntities,
-                allEntities,
-                EntityCatalogSurface.Collection)
+        var query = (await catalogQuery.ForCurrentUserAsync(
+                EntityCatalogSurface.Collection,
+                cancellationToken))
             .Where(row => ids.Contains(row.Id));
         if (hideNsfw) {
             query = query.Where(row => !row.IsNsfw);

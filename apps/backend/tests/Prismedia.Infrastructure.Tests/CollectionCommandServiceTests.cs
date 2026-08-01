@@ -7,6 +7,7 @@ using Prismedia.Contracts.Collections;
 using Prismedia.Contracts.Entities;
 using Prismedia.Domain.Entities;
 using Prismedia.Infrastructure.Collections;
+using Prismedia.Infrastructure.Entities;
 using Prismedia.Infrastructure.Persistence;
 using Prismedia.Infrastructure.Persistence.Entities;
 
@@ -322,6 +323,59 @@ public sealed class CollectionCommandServiceTests {
     }
 
     [Fact]
+    public async Task AddItemsAsyncRejectsEntitiesOutsideTheViewersLibraries() {
+        await using var db = CreateContext();
+        var visibleRootId = Guid.NewGuid();
+        var restrictedRootId = Guid.NewGuid();
+        var collectionId = SeedCollection(db, "Manual");
+        var restrictedVideoId = SeedEntity(db, EntityKind.Video.ToCode(), "Restricted");
+        SeedRoot(db, visibleRootId, "Visible");
+        SeedRoot(db, restrictedRootId, "Restricted");
+        db.EntityLibraryRoots.Add(new EntityLibraryRootRow {
+            EntityId = restrictedVideoId,
+            LibraryRootId = restrictedRootId,
+        });
+        await db.SaveChangesAsync();
+        var service = CreateService(db, user: TestUserContext.Member(visibleRootId));
+
+        var result = await service.AddItemsAsync(
+            collectionId,
+            new CollectionAddItemsRequest([
+                new CollectionItemReference(EntityKind.Video, restrictedVideoId),
+            ]),
+            CancellationToken.None);
+
+        Assert.Equal(CollectionCommandStatus.Invalid, result.Status);
+        Assert.Empty(db.CollectionItemDetails);
+    }
+
+    [Fact]
+    public async Task RefreshAsyncCountsOnlyMembersVisibleToTheViewer() {
+        await using var db = CreateContext();
+        var visibleRootId = Guid.NewGuid();
+        var restrictedRootId = Guid.NewGuid();
+        var collectionId = SeedCollection(db, "Manual");
+        var visibleVideoId = SeedEntity(db, EntityKind.Video.ToCode(), "Visible");
+        var restrictedVideoId = SeedEntity(db, EntityKind.Video.ToCode(), "Restricted");
+        SeedRoot(db, visibleRootId, "Visible");
+        SeedRoot(db, restrictedRootId, "Restricted");
+        db.EntityLibraryRoots.AddRange(
+            new EntityLibraryRootRow { EntityId = visibleVideoId, LibraryRootId = visibleRootId },
+            new EntityLibraryRootRow { EntityId = restrictedVideoId, LibraryRootId = restrictedRootId });
+        db.CollectionItemDetails.AddRange(
+            Item(collectionId, visibleVideoId, 0),
+            Item(collectionId, restrictedVideoId, 1));
+        await db.SaveChangesAsync();
+        var service = CreateService(db, user: TestUserContext.Member(visibleRootId));
+
+        var refresh = await service.RefreshAsync(collectionId, CancellationToken.None);
+
+        Assert.NotNull(refresh);
+        Assert.False(refresh.Refreshed);
+        Assert.Equal(1, refresh.ItemCount);
+    }
+
+    [Fact]
     public async Task AddItemsAsyncRejectsPureDynamicCollections() {
         await using var db = CreateContext();
         var collectionId = SeedCollection(db, "Rules", CollectionMode.Dynamic);
@@ -418,13 +472,19 @@ public sealed class CollectionCommandServiceTests {
         PrismediaDbContext db,
         ICollectionRuleEngine? ruleEngine = null,
         ICollectionRefreshPersistence? refreshPersistence = null,
-        ICurrentUserContext? user = null) =>
-        new(
-            new CollectionCommandPersistence(db),
-            new FakeEntityReadService(db, user ?? TestUserContext.Admin()),
+        ICurrentUserContext? user = null) {
+        var currentUser = user ?? TestUserContext.Admin();
+        return new(
+            new CollectionCommandPersistence(
+                db,
+                new EfEntityCatalogQuery(
+                    db,
+                    new EfEntityLibraryVisibilityFilter(db, currentUser))),
+            new FakeEntityReadService(db, currentUser),
             ruleEngine ?? new FakeCollectionRuleEngine([]),
             refreshPersistence ?? new FakeCollectionRefreshPersistence(),
-            user ?? TestUserContext.Admin());
+            currentUser);
+    }
 
     private static Guid SeedCollection(
         PrismediaDbContext db,
@@ -460,6 +520,28 @@ public sealed class CollectionCommandServiceTests {
             UpdatedAt = DateTimeOffset.UtcNow
         });
         return id;
+    }
+
+    private static CollectionItemDetailRow Item(Guid collectionId, Guid itemId, int sortOrder) =>
+        new() {
+            Id = Guid.NewGuid(),
+            CollectionEntityId = collectionId,
+            ItemEntityId = itemId,
+            Source = CollectionItemSource.Manual,
+            SortOrder = sortOrder,
+            AddedAt = DateTimeOffset.UtcNow,
+        };
+
+    private static void SeedRoot(PrismediaDbContext db, Guid id, string label) {
+        var now = DateTimeOffset.UtcNow;
+        db.LibraryRoots.Add(new LibraryRootRow {
+            Id = id,
+            Path = $"/media/{id:N}",
+            Label = label,
+            Enabled = true,
+            CreatedAt = now,
+            UpdatedAt = now,
+        });
     }
 
     private static PrismediaDbContext CreateContext() =>

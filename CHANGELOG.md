@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- Collection membership now observes each viewer's library grants across add, count, list, and artwork selection, so restricted media cannot leak through shared collections.
 - Entity discovery, collections, artwork, and playback statistics now share each Entity kind's catalog visibility rules, keeping audiobook parts from appearing as standalone music and nested containers from duplicating kind indexes.
 - Concurrent Entity edits — flags, markers, ratings, playback, and reading updates — now merge safely, keeping the latest user state and recording each completed or reading activity event exactly once.
 - Progress cursors now follow definition-declared work and ordered-container topology, preventing unrelated or inaccessible entities from redirecting reading state while preserving book and episodic rollups.
