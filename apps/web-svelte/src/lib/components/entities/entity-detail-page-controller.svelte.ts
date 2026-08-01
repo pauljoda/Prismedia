@@ -35,7 +35,11 @@ export interface EntityDetailPageMutations {
 }
 
 export interface EntityDetailPageOptions<T extends EntityDetailPageEntity> {
-  breadcrumbs: (entity: T) => AppBreadcrumb[];
+  /**
+   * Publishes page-specific breadcrumbs after an entity has loaded. Omit this
+   * for routes that intentionally preserve the surrounding chrome state.
+   */
+  breadcrumbs?: (entity: T) => AppBreadcrumb[];
   load: (context: EntityDetailPageLoadContext) => Promise<T>;
   loadKey: () => string;
   mutations?: Partial<EntityDetailPageMutations>;
@@ -192,7 +196,7 @@ export function useEntityDetailPage<T extends EntityDetailPageEntity>(
 
   $effect(() => {
     const entity = controller.entity;
-    if (!entity) return;
+    if (!entity || !options.breadcrumbs) return;
     return appChrome.setBreadcrumbs(options.breadcrumbs(entity));
   });
 
