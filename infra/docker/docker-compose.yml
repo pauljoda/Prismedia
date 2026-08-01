@@ -6,7 +6,8 @@ services:
       target: builder
     command: pnpm --filter @prismedia/web-svelte dev
     env_file:
-      - ../../.env.example
+      - path: ../../.env.example
+        required: false
     environment:
       DATABASE_URL: postgresql://prismedia:prismedia@postgres:5432/prismedia
       PRISMEDIA_CACHE_DIR: /data/cache
