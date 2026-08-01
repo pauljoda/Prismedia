@@ -19,6 +19,9 @@ namespace Prismedia.Infrastructure.Entities.Thumbnails;
 /// </summary>
 internal sealed class ReferenceCountContributor(PrismediaDbContext db) : IThumbnailContributor {
     /// <inheritdoc />
+    public int MetaPriority => -100;
+
+    /// <inheritdoc />
     public async Task ContributeAsync(
         ThumbnailContributions contributions,
         CancellationToken cancellationToken) {

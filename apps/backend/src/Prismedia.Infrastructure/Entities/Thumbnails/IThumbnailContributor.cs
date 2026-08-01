@@ -9,6 +9,13 @@ namespace Prismedia.Infrastructure.Entities.Thumbnails;
 /// </summary>
 public interface IThumbnailContributor {
     /// <summary>
+    /// Relative position for meta chips contributed by this implementation. Contributors with lower
+    /// values lead the final card metadata; this makes a structural count intentionally precede a
+    /// kind-specific descriptive chip without introducing a central contributor registry.
+    /// </summary>
+    int MetaPriority => 0;
+
+    /// <summary>
     /// Inspects the page's rows and writes any extra meta chips or reference counts onto
     /// <paramref name="contributions"/>. Implementations must be a no-op when none of the rows are
     /// relevant to keep media-only pages free of extra queries.

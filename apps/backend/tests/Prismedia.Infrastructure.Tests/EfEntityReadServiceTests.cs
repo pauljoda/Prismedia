@@ -765,6 +765,66 @@ public sealed class EfEntityReadServiceTests {
     }
 
     [Fact]
+    public async Task GetThumbnailsAsyncProjectsAudioSectionAndAudioFamilyCodecMetadata() {
+        await using var db = CreateContext();
+        var albumId = Guid.Parse("99999999-9999-9999-9999-999999999991");
+        var trackId = Guid.Parse("99999999-9999-9999-9999-999999999992");
+        var now = DateTimeOffset.UtcNow;
+        db.Entities.AddRange(
+            new EntityRow {
+                Id = albumId,
+                KindCode = EntityKind.AudioLibrary.ToCode(),
+                Title = "Album",
+                CreatedAt = now,
+                UpdatedAt = now
+            },
+            new EntityRow {
+                Id = trackId,
+                KindCode = EntityKind.AudioTrack.ToCode(),
+                Title = "Track",
+                ParentEntityId = albumId,
+                CreatedAt = now,
+                UpdatedAt = now
+            });
+        db.AudioTrackDetails.Add(new AudioTrackDetailRow {
+            EntityId = trackId,
+            SectionLabel = "Disc 2"
+        });
+        db.EntityTechnical.AddRange(
+            new EntityTechnicalRow {
+                EntityId = albumId,
+                DurationSeconds = 180,
+                Codec = "aac",
+                UpdatedAt = now
+            },
+            new EntityTechnicalRow {
+                EntityId = trackId,
+                DurationSeconds = 200,
+                Codec = "flac",
+                UpdatedAt = now
+            });
+        await db.SaveChangesAsync();
+
+        var response = await CreateService(db).GetThumbnailsAsync(
+            [albumId, trackId], hideNsfw: false, CancellationToken.None);
+
+        Assert.Equal(
+            [
+                new EntityThumbnailMeta(EntityThumbnailMetaIcons.Track, "1"),
+                new EntityThumbnailMeta(EntityThumbnailMetaIcons.Duration, "03:00"),
+                new EntityThumbnailMeta(EntityThumbnailMetaIcons.Audio, "AAC")
+            ],
+            response.Items.Single(item => item.Id == albumId).Meta);
+        Assert.Equal(
+            [
+                new EntityThumbnailMeta(EntityThumbnailMetaIcons.Disc, "Disc 2"),
+                new EntityThumbnailMeta(EntityThumbnailMetaIcons.Duration, "03:20"),
+                new EntityThumbnailMeta(EntityThumbnailMetaIcons.Audio, "FLAC")
+            ],
+            response.Items.Single(item => item.Id == trackId).Meta);
+    }
+
+    [Fact]
     public async Task ListAsyncReturnsOnlyTopLevelGalleriesForGalleryBrowse() {
         await using var db = CreateContext();
         var galleryId = Guid.Parse("11111111-1111-1111-1111-111111111111");

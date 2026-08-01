@@ -88,18 +88,6 @@ public sealed partial class EfEntityReadService {
         var technicalByEntity = await _db.EntityTechnical.AsNoTracking()
             .Where(technical => ids.Contains(technical.EntityId))
             .ToDictionaryAsync(technical => technical.EntityId, cancellationToken);
-        // Section (disc) labels for audio tracks, surfaced as a thumbnail chip so album track
-        // lists can group multi-disc albums and restart numbering per section.
-        var sectionByEntity = rows.Any(row => row.KindCode == EntityKind.AudioTrack.ToCode())
-            ? await _db.AudioTrackDetails.AsNoTracking()
-                .Where(detail => ids.Contains(detail.EntityId) && detail.SectionLabel != null)
-                .ToDictionaryAsync(detail => detail.EntityId, detail => detail.SectionLabel!, cancellationToken)
-            : new Dictionary<Guid, string>();
-        var bookTypeByEntity = rows.Any(row => row.KindCode == EntityKind.Book.ToCode())
-            ? await _db.BookDetails.AsNoTracking()
-                .Where(detail => ids.Contains(detail.EntityId))
-                .ToDictionaryAsync(detail => detail.EntityId, detail => detail.BookType, cancellationToken)
-            : new Dictionary<Guid, BookType>();
         // Grid variants are loaded for the page's entities plus every entity whose cover a
         // row can borrow (definition-approved parents and representative-cover children for
         // galleries and collections), so a card that inherits another entity's cover also
@@ -189,7 +177,6 @@ public sealed partial class EfEntityReadService {
             var hoverUrl = hoverByEntity.GetValueOrDefault(row.Id);
             var hoverImages = hoverImagesByEntity.GetValueOrDefault(row.Id) ?? [];
             var coverUrl = coverByEntity.GetValueOrDefault(row.Id);
-            var bookType = bookTypeByEntity.TryGetValue(row.Id, out var value) ? value : (BookType?)null;
             var thumbnailTechnical = technicalByEntity.GetValueOrDefault(row.Id);
             // The entity that owns the cover image this card shows. Rows that borrow another
             // entity's cover borrow that entity's grid variants too, so the srcset pair keeps
@@ -234,9 +221,7 @@ public sealed partial class EfEntityReadService {
                 hoverImages,
                 ProjectThumbnailMeta(
                     row,
-                    thumbnailTechnical,
-                    sectionByEntity.GetValueOrDefault(row.Id),
-                    bookType),
+                    thumbnailTechnical),
                 ownState?.RatingValue,
                 ownState?.IsFavorite ?? false,
                 row.IsNsfw,
@@ -284,7 +269,9 @@ public sealed partial class EfEntityReadService {
         // they share the scoped DbContext so they run sequentially. Contributed identity/count chips
         // lead lower-value technical chips so useful counts survive the five-chip cap.
         var contributions = new ThumbnailContributions(rows, visibleContributionEntities);
-        foreach (var contributor in _thumbnailContributors) {
+        foreach (var contributor in _thumbnailContributors
+                     .OrderBy(contributor => contributor.MetaPriority)
+                     .ThenBy(contributor => contributor.GetType().FullName, StringComparer.Ordinal)) {
             await contributor.ContributeAsync(contributions, cancellationToken);
         }
 
@@ -629,21 +616,16 @@ public sealed partial class EfEntityReadService {
 
     private static IReadOnlyList<EntityThumbnailMeta> ProjectThumbnailMeta(
         EntityRow row,
-        EntityTechnicalRow? technical,
-        string? sectionLabel = null,
-        BookType? bookType = null) {
+        EntityTechnicalRow? technical) {
         var meta = new List<EntityThumbnailMeta>(MaxThumbnailMeta);
-        // Lead with the disc/section chip so it survives the meta cap and clients can group tracks.
-        Add(meta, EntityThumbnailMetaIcons.Disc, sectionLabel);
-        Add(meta, EntityThumbnailMetaIcons.Book, FormatBookType(bookType));
 
         if (technical is null) {
             return meta;
         }
 
         Add(meta, EntityThumbnailMetaIcons.Duration, FormatDuration(technical.DurationSeconds));
-        var usesVideoTechnical = EntityKindRegistry.TryDescribe(row.KindCode, out var definition) &&
-            definition is IPlayableVideoKindDefinition;
+        EntityKindRegistry.TryDescribe(row.KindCode, out var definition);
+        var usesVideoTechnical = definition is IPlayableVideoKindDefinition;
         if (technical.Width is { } width && technical.Height is { } height) {
             Add(
                 meta,
@@ -654,21 +636,12 @@ public sealed partial class EfEntityReadService {
         if (usesVideoTechnical) {
             Add(meta, EntityThumbnailMetaIcons.Video, technical.Codec?.ToUpperInvariant());
             Add(meta, EntityThumbnailMetaIcons.Video, technical.Container?.ToUpperInvariant());
-        } else if (row.KindCode == EntityKind.AudioTrack.ToCode()) {
+        } else if (definition?.MediaQualityFamily == EntityMediaQualityFamily.Audio) {
             Add(meta, EntityThumbnailMetaIcons.Audio, technical.Codec?.ToUpperInvariant());
         }
 
         return meta.Take(MaxThumbnailMeta).ToArray();
     }
-
-    private static string? FormatBookType(BookType? bookType) =>
-        bookType switch {
-            BookType.Book => "Book",
-            BookType.Comic => "Comic",
-            BookType.Manga => "Manga",
-            BookType.Novel => "Novel",
-            _ => null
-        };
 
     private static void Add(List<EntityThumbnailMeta> meta, string icon, string? label) {
         if (!string.IsNullOrWhiteSpace(label)) {

@@ -30,6 +30,9 @@ internal sealed class StructuralCountContributor : IThumbnailContributor {
     public StructuralCountContributor(PrismediaDbContext db) => ArgumentNullException.ThrowIfNull(db);
 
     /// <inheritdoc />
+    public int MetaPriority => -100;
+
+    /// <inheritdoc />
     public async Task ContributeAsync(
         ThumbnailContributions contributions,
         CancellationToken cancellationToken) {
