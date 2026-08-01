@@ -1,6 +1,7 @@
 <script lang="ts">
   import { browser } from "$app/environment";
   import { onMount } from "svelte";
+  import { SvelteMap } from "svelte/reactivity";
   import { isNsfw, isWanted, withFlagCapability } from "$lib/api/capabilities";
   import { removeWantedEntities } from "$lib/api/requests";
   import type { EntityCapability } from "$lib/api/generated/model";
@@ -37,11 +38,7 @@
     EntityGridPaginationController,
     normalizeEntityGridPageSize,
   } from "./entity-grid-pagination-controller.svelte";
-  import {
-    computeContainedScrollHeight,
-    entityGridScrollContainerBottom,
-    findEntityGridScrollAncestor,
-  } from "./entity-grid-viewport.svelte";
+  import { EntityGridViewportController } from "./entity-grid-viewport-controller.svelte";
   import { useNsfw } from "$lib/nsfw/store.svelte";
   import type { NsfwMode } from "$lib/nsfw/cookie";
 
@@ -188,7 +185,7 @@
     : null;
   const persistedPrefs: EntityGridPrefs | null = prefsStore ? prefsStore.load() : null;
 
-  let capabilityOverrides = $state(new Map<string, EntityCapability[]>());
+  const capabilityOverrides = new SvelteMap<string, EntityCapability[]>();
   /** Wanted placeholders the server confirmed removed during this session. */
   let removedIds = $state(new Set<string>());
   /** Actionable durable-teardown failures for wanted cards that remain selected. */
@@ -200,7 +197,6 @@
   let includeNsfw = $state(persistedPrefs?.includeNsfw ?? true);
   let presets = $state<FilterPreset[]>([]);
   let query = $state(persistedPrefs?.query ?? "");
-  // svelte-ignore state_referenced_locally
   let scale = $state(persistedPrefs ? clampScale(persistedPrefs.scale) : defaultScale());
   // svelte-ignore state_referenced_locally
   let mediaWall = $state(persistedPrefs?.mediaWall ?? initialMediaWall);
@@ -210,11 +206,6 @@
   // mode and turn the whole card surface into the checkbox.
   // svelte-ignore state_referenced_locally
   let selectionActive = $state(initialSelectionActive);
-  let viewportEl: HTMLDivElement | undefined = $state();
-  let sectionEl: HTMLElement | undefined = $state();
-  let measuredScrollMaxHeight = $state<string | null>(null);
-  let measuredFillHeight = $state<string | null>(null);
-  let hoverPreviewsResumeAt = 0;
   // svelte-ignore state_referenced_locally
   let sortBy = $state<EntityGridSort>(persistedPrefs?.sortBy ?? initialSortBy);
   // svelte-ignore state_referenced_locally
@@ -261,6 +252,12 @@
       serverResolvedFilters: Boolean(onRequestChange),
     }),
   );
+  const viewport = new EntityGridViewportController({
+    dockControls: () => dockControls,
+    scrollBottomPadding: () => scrollBottomPadding,
+    scrollMaxHeight: () => scrollMaxHeight,
+    scrollMinHeight: () => scrollMinHeight,
+  });
   // svelte-ignore state_referenced_locally
   const pagination = new EntityGridPaginationController({
     initialPageSize: persistedPrefs?.pageSize ?? normalizeEntityGridPageSize(initialPageSize),
@@ -275,7 +272,7 @@
     showPagination: () => showPagination,
     onLoadMore: () => onLoadMore,
     onPageSizeChange: () => onPageSizeChange,
-    onNavigate: scrollPageToTop,
+    onNavigate: viewport.scrollPageToTop,
   });
   const selectedCount = $derived(selectedIds.length);
   const selectedCards = $derived(
@@ -300,10 +297,6 @@
       .map((c) => ({ entityType: c.entity.kind as CollectionEntityType, entityId: c.entity.id })),
   );
   const request = $derived(entityGridRequestFromState(gridState, filterOptions));
-  const effectiveScrollMaxHeight = $derived(
-    dockControls ? scrollMaxHeight === undefined ? measuredScrollMaxHeight : scrollMaxHeight : null,
-  );
-  const containsScroll = $derived(dockControls && scrollMaxHeight !== null);
   const pagedCards = $derived(pagination.page(visibleCards));
 
   interface EntityGridSnapshot {
@@ -369,77 +362,7 @@
     });
   });
 
-  onMount(() => {
-    let raf: number | null = null;
-    let observer: ResizeObserver | null = null;
-
-    function measureViewport() {
-      if (!dockControls || !viewportEl || scrollMaxHeight !== undefined) {
-        measuredScrollMaxHeight = null;
-        measuredFillHeight = null;
-        return;
-      }
-
-      const containerBottom = entityGridScrollContainerBottom(viewportEl);
-
-      measuredScrollMaxHeight = computeContainedScrollHeight({
-        bottomPadding: scrollBottomPadding,
-        minHeight: scrollMinHeight,
-        top: viewportEl.getBoundingClientRect().top,
-        viewportHeight: containerBottom,
-      });
-
-      /*
-       * Total fill height for the entity-grid flex column. We anchor against
-       * the section's top edge (rather than the inner viewport's) so the
-       * toolbar/tabs above the viewport are included in the fill area without
-       * inflating the card viewport with empty scrollable space.
-       */
-      if (sectionEl) {
-        const sectionTop = sectionEl.getBoundingClientRect().top;
-        const fill = Math.max(0, Math.floor(containerBottom - sectionTop - scrollBottomPadding));
-        measuredFillHeight = `${fill}px`;
-      } else {
-        measuredFillHeight = null;
-      }
-    }
-
-    function scheduleMeasure() {
-      if (raf !== null) return;
-      raf = requestAnimationFrame(() => {
-        raf = null;
-        measureViewport();
-      });
-    }
-
-    observer = new ResizeObserver(scheduleMeasure);
-    if (viewportEl) observer.observe(viewportEl);
-    if (sectionEl) observer.observe(sectionEl);
-    window.addEventListener("resize", scheduleMeasure, { passive: true });
-    queueMicrotask(measureViewport);
-
-    return () => {
-      observer?.disconnect();
-      window.removeEventListener("resize", scheduleMeasure);
-      if (raf !== null) cancelAnimationFrame(raf);
-    };
-  });
-
-  function areHoverPreviewsSuppressed() {
-    return browser && performance.now() < hoverPreviewsResumeAt;
-  }
-
-  function markScrolling() {
-    hoverPreviewsResumeAt = performance.now() + 220;
-  }
-
-  onMount(() => {
-    window.addEventListener("scroll", markScrolling, { capture: true, passive: true });
-
-    return () => {
-      window.removeEventListener("scroll", markScrolling, { capture: true });
-    };
-  });
+  onMount(viewport.connect);
 
   $effect(() => {
     onRequestChange?.(request);
@@ -689,41 +612,25 @@
   function toggleNsfwFlag(markNsfw: boolean) {
     if (selectedCards.length === 0) return;
     const targets = [...selectedCards];
-    const next = new Map(capabilityOverrides);
     for (const card of targets) {
-      next.set(card.entity.id, withFlagCapability(card.entity.capabilities, "isNsfw", markNsfw));
+      capabilityOverrides.set(
+        card.entity.id,
+        withFlagCapability(card.entity.capabilities, "isNsfw", markNsfw),
+      );
     }
-    capabilityOverrides = next;
     for (const card of targets) {
       void updateEntityFlags(card.entity.id, { isNsfw: markNsfw });
     }
   }
 
-  function scrollPageToTop() {
-    if (!browser || !viewportEl) return;
-    const scrollAncestor = findEntityGridScrollAncestor(viewportEl);
-    if (scrollAncestor instanceof HTMLElement) {
-      const ancestorRect = scrollAncestor.getBoundingClientRect();
-      const viewportRect = viewportEl.getBoundingClientRect();
-      scrollAncestor.scrollTo({
-        top: scrollAncestor.scrollTop + viewportRect.top - ancestorRect.top,
-      });
-      return;
-    }
-
-    window.scrollTo({
-      top: window.scrollY + viewportEl.getBoundingClientRect().top,
-    });
-  }
-
 </script>
 
 <section
-  bind:this={sectionEl}
+  bind:this={viewport.sectionEl}
   class="entity-grid"
   class:is-static={!dockControls}
   style:--col-count={scale}
-  style:--entity-grid-fill-height={measuredFillHeight ?? undefined}
+  style:--entity-grid-fill-height={viewport.measuredFillHeight ?? undefined}
 >
   <EntityGridToolbar
     activeFilterIds={filterIds}
@@ -809,10 +716,10 @@
   />
 
   <div
-    bind:this={viewportEl}
-    class={["grid-viewport", containsScroll && "is-contained"]}
-    style:--entity-grid-scroll-max-height={effectiveScrollMaxHeight ?? undefined}
-    onwheel={markScrolling}
+    bind:this={viewport.viewportEl}
+    class={["grid-viewport", viewport.containsScroll && "is-contained"]}
+    style:--entity-grid-scroll-max-height={viewport.effectiveScrollMaxHeight ?? undefined}
+    onwheel={viewport.markScrolling}
   >
     <EntityGridContent
       {cardLinks}
@@ -820,7 +727,7 @@
       {emptyMessage}
       {emptyTitle}
       hasVisibleCards={visibleCards.length > 0}
-      hoverPreviewSuppressed={areHoverPreviewsSuppressed}
+      hoverPreviewSuppressed={viewport.areHoverPreviewsSuppressed}
       {loading}
       {mediaWall}
       {onCardActivate}

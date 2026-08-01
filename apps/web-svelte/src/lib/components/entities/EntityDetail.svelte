@@ -14,6 +14,7 @@
 <script lang="ts">
   import { THUMBNAIL_HOVER_KIND } from "$lib/api/generated/codes";
   import { goto } from "$app/navigation";
+  import { resolve } from "$app/paths";
   import {
     Badge,
     BarChart3,
@@ -25,7 +26,6 @@
     Heart,
     Flame,
     CheckCircle,
-    ExternalLink,
     Image as ImageIcon,
     Link,
     ListOrdered,
@@ -41,7 +41,6 @@
   import type { EntityDetailCard, EntityDetailCardFull } from "$lib/entities/entity-detail";
   import { renderEntityDescriptionMarkdown } from "$lib/entities/entity-detail-markdown";
   import {
-    creditToThumbnailCard,
     hasHero,
     hasPoster,
     DEFAULT_STANDALONE_METADATA_SECTION_IDS,
@@ -53,26 +52,20 @@
     type EntityThumbnailCard,
   } from "$lib/entities/entity-thumbnail";
   import EntityThumbnail from "$lib/components/thumbnails/EntityThumbnail.svelte";
-  import MetadataCard from "$lib/components/MetadataCard.svelte";
   import MetadataCardGrid from "$lib/components/MetadataCardGrid.svelte";
   import EntityDateEditRequest from "./EntityDateEditRequest.svelte";
   import EntityTagChips from "./EntityTagChips.svelte";
-  import EntityCastAndCrewSection from "./EntityCastAndCrewSection.svelte";
   import EntityDetailHeroControls from "./EntityDetailHeroControls.svelte";
   import MarkdownEditor from "$lib/components/forms/MarkdownEditor.svelte";
   import EntityPicker from "$lib/components/forms/EntityPicker.svelte";
-  import CreditsEditor from "$lib/components/forms/CreditsEditor.svelte";
-  import EntityDatesEditor from "$lib/components/forms/EntityDatesEditor.svelte";
-  import ListEditor from "$lib/components/forms/ListEditor.svelte";
-  import KeyValueEditor from "$lib/components/forms/KeyValueEditor.svelte";
   import FormField from "$lib/components/forms/FormField.svelte";
   import ToggleChip from "$lib/components/forms/ToggleChip.svelte";
   import TextField from "$lib/components/forms/TextField.svelte";
   import { isNsfw as hasNsfwCapability } from "$lib/api/capabilities";
   import { useNsfw } from "$lib/nsfw/store.svelte";
   import { CREDIT_ROLE, ENTITY_FILE_ROLE, type EntityFileRoleCode } from "$lib/entities/entity-codes";
-  import { validateUrl } from "$lib/entities/entity-detail-edit";
-  import { searchTags, searchPeople, searchStudios } from "$lib/entities/entity-detail-search";
+  import type { EntityDetailEditDraft } from "$lib/entities/entity-detail-edit";
+  import { searchTags } from "$lib/entities/entity-detail-search";
   import type {
     EntityDetailProps,
     EntityDetailSection,
@@ -83,7 +76,7 @@
   import { EntityDetailArtworkController } from "./entity-detail-artwork-controller.svelte";
   import EntityDetailDirtyTabDialog from "./EntityDetailDirtyTabDialog.svelte";
   import EntityDetailEditControls from "./EntityDetailEditControls.svelte";
-  import EntityDetailLinks from "./EntityDetailLinks.svelte";
+  import EntityDetailMetadataSection from "./EntityDetailMetadataSection.svelte";
   import { EntityDetailEditController } from "./entity-detail-edit-controller.svelte";
 
   type Props = EntityDetailProps;
@@ -148,7 +141,7 @@
 
   $effect(() => {
     if (nsfw.mode === "off" && isNsfw) {
-      void goto("/", { replaceState: true });
+      void goto(resolve("/"), { replaceState: true });
     }
   });
 
@@ -178,10 +171,6 @@
   // label or flags (e.g. credits labeled "Members" on artists) by re-declaring its id.
   const availableSections = $derived([...sections, ...coreSections]);
   const cardFull = $derived(card as EntityDetailCard & Partial<EntityDetailCardFull>);
-  // Built once per credits/studio change rather than on every detail re-render
-  // (favorite toggle, tab switch, edit-mode flip) — the display snippets read these.
-  const creditThumbnailCards = $derived((cardFull.credits ?? []).map(creditToThumbnailCard));
-  const studioThumbnailCards = $derived(cardFull.studio ? [creditToThumbnailCard(cardFull.studio)] : []);
   const visibleActionButtons = $derived.by(() => actionButtons.filter((action) => !action.hidden));
   const visibleTabs = $derived.by(() => tabs.filter(tabHasContent));
   const hasTabs = $derived(visibleTabs.length > 0);
@@ -246,6 +235,13 @@
   const editErrors = $derived.by(() =>
     [...editValidationErrors, edit.error, artwork.error].filter((error): error is string => Boolean(error)),
   );
+
+  function updateEditDraft<Key extends keyof EntityDetailEditDraft>(
+    key: Key,
+    value: EntityDetailEditDraft[Key],
+  ): void {
+    editDraft[key] = value;
+  }
 
   function findSection(sectionId: string): EntityDetailSection | null {
     return availableSections.find((section) => section.id === sectionId) ?? null;
@@ -463,10 +459,6 @@
   </div>
 {/snippet}
 
-{#snippet linksSection()}
-  <EntityDetailLinks links={card.links} />
-{/snippet}
-
 {#snippet descriptionEditSection()}
   <section class="detail-section edit-section">
     <TextField
@@ -519,329 +511,27 @@
   </section>
 {/snippet}
 
-{#snippet studioEditSection()}
-  <section class="detail-section edit-section">
-    <EntityPicker
-      values={editDraft.studioPick}
-      onChange={(v) => {
-        editDraft.studioPick = v;
-      }}
-      onSearch={searchStudios}
-      label="Studio"
-      placeholder="Search studios…"
-      canAddNew={true}
-      addNewLabel="studio"
-      mode="single"
-    />
-  </section>
-{/snippet}
-
-{#snippet creditsEditSection(section: EntityDetailSection)}
-  <section class="detail-section edit-section">
-    <CreditsEditor
-      credits={editDraft.credits}
-      onChange={(v) => {
-        editDraft.credits = v;
-      }}
-      onSearch={searchPeople}
-      label={section.label ?? peopleLabel}
-      defaultRole={defaultCreditRole}
-    />
-  </section>
-{/snippet}
-
-{#snippet linksEditSection()}
-  <section class="detail-section edit-section">
-    <ListEditor
-      values={editDraft.links}
-      onChange={(v) => (editDraft.links = v)}
-      label="Links"
-      placeholder="https://example.com"
-      icon={Link}
-      validate={validateUrl}
-    />
-    <KeyValueEditor
-      values={editDraft.externalIds}
-      onChange={(v) => (editDraft.externalIds = v)}
-      label="External IDs"
-      icon={ExternalLink}
-      keyPlaceholder="provider"
-      valuePlaceholder="id"
-      keyLabel="Provider"
-      valueLabel="ID"
-    />
-  </section>
-{/snippet}
-
-{#snippet datesEditSection()}
-  <section id="entity-dates-editor" class="detail-section edit-section">
-    <EntityDatesEditor
-      entityKind={card.entity.kind}
-      values={editDraft.dates}
-      onChange={(v) => (editDraft.dates = v)}
-    />
-  </section>
-{/snippet}
-
-{#snippet statsEditSection()}
-  <section class="detail-section edit-section">
-    <KeyValueEditor
-      values={editDraft.stats}
-      onChange={(v) => (editDraft.stats = v)}
-      label="Stats"
-      icon={BarChart3}
-      keyPlaceholder="count"
-      valuePlaceholder="12"
-      keyLabel="Stat"
-      valueLabel="Value"
-      valueInputMode="decimal"
-      validateValue={(v) => Number.isFinite(Number(v)) ? null : "Must be a number"}
-    />
-  </section>
-{/snippet}
-
-{#snippet positionsEditSection()}
-  <section class="detail-section edit-section">
-    <KeyValueEditor
-      values={editDraft.positions}
-      onChange={(v) => (editDraft.positions = v)}
-      label="Positions"
-      icon={ListOrdered}
-      keyPlaceholder="sort"
-      valuePlaceholder="1"
-      keyLabel="Position"
-      valueLabel="Value"
-      valueInputMode="decimal"
-      validateValue={(v) => Number.isFinite(Number(v)) ? null : "Must be a number"}
-    />
-  </section>
-{/snippet}
-
-{#snippet classificationEditSection()}
-  <section class="detail-section edit-section">
-    <TextField
-      value={editDraft.classification}
-      onChange={(v) => (editDraft.classification = v)}
-      label="Classification"
-      icon={Badge}
-      placeholder="e.g. complete, draft, archived"
-      helper="Empty clears the value"
-    />
-  </section>
-{/snippet}
-
-{#snippet ratingEditSection()}
-  <section class="detail-section edit-section">
-    <TextField
-      value={editDraft.ratingText}
-      onChange={(v) => (editDraft.ratingText = v)}
-      label="Rating"
-      icon={Star}
-      helper="0 to {card.rating?.max ?? 5}; empty clears"
-      type="number"
-      min="0"
-      max={card.rating?.max ?? 5}
-    />
-  </section>
-{/snippet}
-
-{#snippet flagsEditSection()}
-  <section class="detail-section edit-section">
-    <FormField label="Flags">
-      <div class="edit-flag-chips">
-        <ToggleChip value={editDraft.isFavorite} onChange={(v) => (editDraft.isFavorite = v)} onLabel="Favorite" icon={Heart} />
-        <ToggleChip value={editDraft.isNsfw} onChange={(v) => (editDraft.isNsfw = v)} onLabel="NSFW" variant="warning" icon={Flame} />
-        <ToggleChip value={editDraft.isOrganized} onChange={(v) => (editDraft.isOrganized = v)} onLabel="Organized" icon={CheckCircle} />
-      </div>
-    </FormField>
-  </section>
-{/snippet}
-
-{#snippet studioSection(section: EntityDetailSection)}
-  {#if studioThumbnailCards.length > 0}
-    <section class="detail-section" aria-label={section.label ?? "Studio"}>
-      <EntityCastAndCrewSection
-        studioCards={studioThumbnailCards}
-        studioLabel={section.label ?? "Studio"}
-      />
-    </section>
-  {/if}
-{/snippet}
-
-{#snippet creditsSection(section: EntityDetailSection)}
-  {#if creditThumbnailCards.length > 0}
-    <section class="detail-section" aria-label={section.label ?? peopleLabel}>
-      <EntityCastAndCrewSection
-        creditCards={creditThumbnailCards}
-        castLabel={section.label ?? peopleLabel}
-      />
-    </section>
-  {/if}
-{/snippet}
-
-{#snippet statsSection()}
-  {#if (cardFull.stats?.length ?? 0) > 0}
-    <MetadataCard
-      title="Stats"
-      icon={BarChart3}
-      rows={(cardFull.stats ?? []).map((r) => ({ label: r.label, value: r.value }))}
-    />
-  {/if}
-{/snippet}
-
-{#snippet datesSection()}
-  {#if (cardFull.dates?.length ?? 0) > 0}
-    <MetadataCard
-      title="Dates"
-      icon={Calendar}
-      rows={(cardFull.dates ?? []).map((r) => ({ label: r.label, value: r.display }))}
-    />
-  {/if}
-{/snippet}
-
-{#snippet technicalSection()}
-  {#if (cardFull.technical?.length ?? 0) > 0}
-    <MetadataCard
-      title="Technical"
-      icon={MonitorCog}
-      rows={(cardFull.technical ?? []).map((r) => ({ label: r.label, value: r.value }))}
-    />
-  {/if}
-{/snippet}
-
-{#snippet progressSection()}
-  {#if cardFull.progress}
-    {@const rows = [
-      { label: "Progress", value: `${cardFull.progress.index} / ${cardFull.progress.total} ${cardFull.progress.unit}` },
-      { label: "Percent", value: `${cardFull.progress.percent}%` },
-      ...(cardFull.progress.mode ? [{ label: "Mode", value: cardFull.progress.mode }] : []),
-    ]}
-    <MetadataCard title="Progress" icon={Play} {rows} />
-  {/if}
-{/snippet}
-
-{#snippet positionsSection()}
-  {#if (cardFull.positions?.length ?? 0) > 0}
-    <MetadataCard
-      title="Positions"
-      icon={ListOrdered}
-      rows={(cardFull.positions ?? []).map((r) => ({ label: r.code, value: r.label }))}
-    />
-  {/if}
-{/snippet}
-
-{#snippet classificationSection()}
-  {#if cardFull.classification}
-    <MetadataCard
-      title="Classification"
-      icon={Badge}
-      rows={[{ label: cardFull.classification.label, value: cardFull.classification.value }]}
-    />
-  {/if}
-{/snippet}
-
-{#snippet sourceSection()}
-  {#if (cardFull.sources?.length ?? 0) > 0 || (cardFull.fingerprints?.length ?? 0) > 0}
-    <MetadataCard title="Source" icon={Database}
-      rows={[
-        ...(cardFull.sources ?? []).map((s) => ({ label: s.code, value: s.value })),
-        ...(cardFull.fingerprints ?? []).map((f) => ({ label: String(f.algorithm), value: f.value })),
-      ]}
-    />
-  {/if}
-{/snippet}
-
-{#snippet sourcesSection()}
-  {#if (cardFull.sources?.length ?? 0) > 0}
-    <MetadataCard
-      title="Sources"
-      icon={Database}
-      rows={(cardFull.sources ?? []).map((s) => ({ label: s.code, value: s.value }))}
-    />
-  {/if}
-{/snippet}
-
-{#snippet fingerprintsSection()}
-  {#if (cardFull.fingerprints?.length ?? 0) > 0}
-    <MetadataCard
-      title="Fingerprints"
-      icon={Fingerprint}
-      rows={(cardFull.fingerprints ?? []).map((r) => ({ label: String(r.algorithm), value: r.value }))}
-    />
-  {/if}
-{/snippet}
-
-{#snippet customSection(section: EntityDetailSection)}
-  {#if sectionContent}
-    <section class="detail-section custom-detail-section" aria-label={section.label ?? section.id}>
-      {#if section.label}
-        {@const SectionIcon = section.icon}
-        <h2 class="section-label">
-          {#if SectionIcon}
-            <SectionIcon class="h-4 w-4" />
-          {/if}
-          {section.label}
-        </h2>
-      {/if}
-      {@render sectionContent(section)}
-    </section>
-  {/if}
-{/snippet}
-
 {#snippet renderDetailSection(section: EntityDetailSection)}
   {@const editingSection = isEditingActiveTab && sectionEditable(section)}
   {#if editingSection && section.id === "description"}
     {@render descriptionEditSection()}
   {:else if editingSection && section.id === "tags"}
     {@render tagsEditSection()}
-  {:else if editingSection && section.id === "links"}
-    {@render linksEditSection()}
-  {:else if editingSection && section.id === "dates"}
-    {@render datesEditSection()}
-  {:else if editingSection && section.id === "stats"}
-    {@render statsEditSection()}
-  {:else if editingSection && section.id === "positions"}
-    {@render positionsEditSection()}
-  {:else if editingSection && section.id === "classification"}
-    {@render classificationEditSection()}
-  {:else if editingSection && section.id === "rating"}
-    {@render ratingEditSection()}
-  {:else if editingSection && section.id === "flags"}
-    {@render flagsEditSection()}
-  {:else if editingSection && section.id === "studio"}
-    {@render studioEditSection()}
-  {:else if editingSection && section.id === "credits"}
-    {@render creditsEditSection(section)}
   {:else if section.id === "description"}
     {@render descriptionSection()}
   {:else if section.id === "tags"}
     {@render tagsSection()}
-  {:else if section.id === "links"}
-    {@render linksSection()}
-  {:else if section.id === "studio"}
-    {@render studioSection(section)}
-  {:else if section.id === "credits"}
-    {@render creditsSection(section)}
-  {:else if section.id === "stats"}
-    {@render statsSection()}
-  {:else if section.id === "dates"}
-    {@render datesSection()}
-  {:else if section.id === "technical"}
-    {@render technicalSection()}
-  {:else if section.id === "progress"}
-    {@render progressSection()}
-  {:else if section.id === "positions"}
-    {@render positionsSection()}
-  {:else if section.id === "classification"}
-    {@render classificationSection()}
-  {:else if section.id === "source"}
-    {@render sourceSection()}
-  {:else if section.id === "sources"}
-    {@render sourcesSection()}
-  {:else if section.id === "fingerprints"}
-    {@render fingerprintsSection()}
   {:else}
-    {@render customSection(section)}
+    <EntityDetailMetadataSection
+      {card}
+      {defaultCreditRole}
+      draft={editDraft}
+      editing={editingSection}
+      onDraftChange={updateEditDraft}
+      {peopleLabel}
+      {section}
+      {sectionContent}
+    />
   {/if}
 {/snippet}
 
@@ -1769,10 +1459,6 @@
     border-bottom: none;
   }
 
-  .custom-detail-section {
-    min-width: 0;
-  }
-
   .detail-body {
     display: grid;
     gap: 0;
@@ -1939,19 +1625,6 @@
 
   .edit-flag-chips :global(button) {
     min-height: 2.55rem;
-  }
-
-  .section-label {
-    display: flex;
-    align-items: center;
-    gap: 0.45rem;
-    margin: 0 0 0.75rem;
-    font-family: var(--font-mono, "JetBrains Mono", monospace);
-    font-size: 0.68rem;
-    font-weight: 600;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-    color: var(--detail-text-muted);
   }
 
   /* ── Shared ─────────────────────────────────────────────── */
