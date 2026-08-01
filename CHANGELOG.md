@@ -13,6 +13,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- Prepared folder downloads now become ready only after their ZIP footer has been fully written, preventing intermittent corrupt archives.
 - Acquisition queue failures now remain visible while the page refreshes the durable server state.
 - Acquisition detail pages now remain usable when their configured download client is offline, falling back from unavailable live transfer telemetry instead of failing the request.
 - Direct-playable upgrades now handle large libraries and temporarily unavailable media mounts while still stopping for conflicting or ambiguous source metadata.

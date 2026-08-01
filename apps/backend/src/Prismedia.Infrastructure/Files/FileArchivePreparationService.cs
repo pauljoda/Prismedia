@@ -66,40 +66,44 @@ public sealed class FileArchivePreparationService : IFileArchivePreparationServi
         state.ArchivePath = Path.Combine(_workingDirectory, $"{state.Id:N}.zip");
         try
         {
-            await using var output = new FileStream(
+            await using (var output = new FileStream(
                 state.ArchivePath,
                 FileMode.CreateNew,
                 FileAccess.Write,
                 FileShare.None,
                 bufferSize: 81920,
-                useAsync: true);
-            using (var archive = new ZipArchive(output, ZipArchiveMode.Create, leaveOpen: true))
+                useAsync: true))
             {
-                var totalBytes = plan.Entries.Where(entry => !entry.IsDirectory).Sum(entry => entry.SizeBytes);
-                long processedBytes = 0;
-                foreach (var item in plan.Entries)
+                using (var archive = new ZipArchive(output, ZipArchiveMode.Create, leaveOpen: true))
                 {
-                    if (item.IsDirectory)
+                    var totalBytes = plan.Entries.Where(entry => !entry.IsDirectory).Sum(entry => entry.SizeBytes);
+                    long processedBytes = 0;
+                    foreach (var item in plan.Entries)
                     {
-                        archive.CreateEntry($"{item.ArchivePath.TrimEnd('/')}/");
-                        continue;
-                    }
+                        if (item.IsDirectory)
+                        {
+                            archive.CreateEntry($"{item.ArchivePath.TrimEnd('/')}/");
+                            continue;
+                        }
 
-                    var entry = archive.CreateEntry(item.ArchivePath, CompressionLevel.Fastest);
-                    await using var source = new FileStream(
-                        item.AbsolutePath,
-                        FileMode.Open,
-                        FileAccess.Read,
-                        FileShare.Read,
-                        bufferSize: 81920,
-                        useAsync: true);
-                    await using var destination = entry.Open();
-                    processedBytes += await CopyWithProgressAsync(
-                        source,
-                        destination,
-                        bytes => state.UpdateProgress(processedBytes + bytes, totalBytes));
-                    state.FileCompleted(processedBytes, totalBytes);
+                        var entry = archive.CreateEntry(item.ArchivePath, CompressionLevel.Fastest);
+                        await using var source = new FileStream(
+                            item.AbsolutePath,
+                            FileMode.Open,
+                            FileAccess.Read,
+                            FileShare.Read,
+                            bufferSize: 81920,
+                            useAsync: true);
+                        await using var destination = entry.Open();
+                        processedBytes += await CopyWithProgressAsync(
+                            source,
+                            destination,
+                            bytes => state.UpdateProgress(processedBytes + bytes, totalBytes));
+                        state.FileCompleted(processedBytes, totalBytes);
+                    }
                 }
+
+                await output.FlushAsync();
             }
 
             state.Complete();
