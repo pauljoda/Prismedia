@@ -14,8 +14,6 @@
     buildCapabilityFilterOptions,
     buildEntityKindTabs,
     entityGridRequestFromState,
-    entityGridFilterFromId,
-    normalizeEntityGridFilterIds,
     type EntityGridRequest,
     type EntityGridSort,
     type EntityGridSortDir,
@@ -30,10 +28,20 @@
   import EntityGridTabs from "./EntityGridTabs.svelte";
   import EntityGridToolbar from "./EntityGridToolbar.svelte";
   import {
+    createEntityGridPreset,
+    createEntityGridPresetId,
+    entityGridPresetStorageKey,
+    readEntityGridPreset,
+  } from "./entity-grid-filter-presets";
+  import {
     EntityGridPaginationController,
     normalizeEntityGridPageSize,
   } from "./entity-grid-pagination-controller.svelte";
-  import { computeContainedScrollHeight } from "./entity-grid-viewport.svelte";
+  import {
+    computeContainedScrollHeight,
+    entityGridScrollContainerBottom,
+    findEntityGridScrollAncestor,
+  } from "./entity-grid-viewport.svelte";
   import { useNsfw } from "$lib/nsfw/store.svelte";
   import type { NsfwMode } from "$lib/nsfw/cookie";
 
@@ -146,10 +154,6 @@
     initialSelectionActive = false,
     cardLinks = true,
   }: Props = $props();
-
-  function presetStorageKey(): string | null {
-    return prefsKey ? `prismedia:entity-grid-presets:${prefsKey}` : null;
-  }
 
   function isMobileThumbnailViewport(): boolean {
     return browser &&
@@ -320,21 +324,10 @@
 
   const pageSnapshots = usePageSnapshots();
 
-  function findScrollAncestor(el: Element): Element | null {
-    let current: Element | null = el.parentElement;
-    while (current && current !== document.body && current !== document.documentElement) {
-      const cs = getComputedStyle(current);
-      const overflows = cs.overflowY === "auto" || cs.overflowY === "scroll";
-      if (overflows) return current;
-      current = current.parentElement;
-    }
-    return null;
-  }
-
   onMount(() => {
     if (mediaWall && viewMode === "list") viewMode = "grid";
     pagination.notifyPageSize();
-    const key = presetStorageKey();
+    const key = entityGridPresetStorageKey(prefsKey);
     if (key) presets = createFilterPresets(key).load();
 
     if (!prefsKey) return;
@@ -380,21 +373,6 @@
     let raf: number | null = null;
     let observer: ResizeObserver | null = null;
 
-    function findScrollAncestorBottom(el: Element): number {
-      // Walk up to the nearest scrolling ancestor (e.g. the layout's <main>)
-      // and clip the available height there. window.innerHeight overshoots on
-      // mobile because the layout reserves a band at the bottom for the fixed
-      // MobileNav — anchoring against the scrolling container keeps the
-      // pagination strip above that band instead of behind it.
-      const scrollAncestor = findScrollAncestor(el);
-      if (!scrollAncestor) return window.innerHeight;
-      // Subtract the ancestor's bottom padding (the layout reserves it for the
-      // floating audio player) so the grid fills to just above that space rather
-      // than under it — and never stacks an extra empty band beneath itself.
-      const padBottom = parseFloat(getComputedStyle(scrollAncestor).paddingBottom) || 0;
-      return scrollAncestor.getBoundingClientRect().bottom - padBottom;
-    }
-
     function measureViewport() {
       if (!dockControls || !viewportEl || scrollMaxHeight !== undefined) {
         measuredScrollMaxHeight = null;
@@ -402,7 +380,7 @@
         return;
       }
 
-      const containerBottom = findScrollAncestorBottom(viewportEl);
+      const containerBottom = entityGridScrollContainerBottom(viewportEl);
 
       measuredScrollMaxHeight = computeContainedScrollHeight({
         bottomPadding: scrollBottomPadding,
@@ -578,43 +556,30 @@
 
   function savePresets(next: FilterPreset[]) {
     presets = next;
-    const key = presetStorageKey();
+    const key = entityGridPresetStorageKey(prefsKey);
     if (key) createFilterPresets(key).save(next);
   }
 
-  function filterToPresetEntry(id: string) {
-    const option = entityGridFilterFromId(id, filterOptions);
-    return {
-      label: option?.label ?? id,
-      type: option?.capabilityKind ?? "capability",
-      value: id,
-    };
-  }
-
-  function currentPresetShape(id: string, name: string): FilterPreset {
-    return {
-      id,
-      name,
-      filters: filterIds.map(filterToPresetEntry),
-      sortBy,
-      sortDir,
-    };
-  }
-
   function applyPreset(preset: FilterPreset) {
-    filterIds = normalizeEntityGridFilterIds(preset.filters.map((filter) => filter.value))
-      .filter((id) => Boolean(entityGridFilterFromId(id, filterOptions)));
-    const presetSorts: EntityGridSort[] = ["title", "kind", "rating", "position", "added", "random"];
-    sortBy = (presetSorts as string[]).includes(preset.sortBy) ? (preset.sortBy as EntityGridSort) : initialSortBy;
+    const next = readEntityGridPreset({
+      preset,
+      filterOptions,
+      fallbackSortBy: initialSortBy,
+    });
+    filterIds = next.filterIds;
+    sortBy = next.sortBy;
     if (sortBy === "random") randomSeed = nextRandomSeed();
-    sortDir = preset.sortDir;
+    sortDir = next.sortDir;
     activePresetId = preset.id;
     pagination.resetPage();
   }
 
   function savePreset(name: string) {
-    const id = `entity-grid-preset-${Date.now().toString(36)}`;
-    const next = [currentPresetShape(id, name), ...presets].slice(0, 20);
+    const id = createEntityGridPresetId();
+    const next = [
+      createEntityGridPreset({ id, name, filterIds, filterOptions, sortBy, sortDir }),
+      ...presets,
+    ].slice(0, 20);
     activePresetId = id;
     savePresets(next);
   }
@@ -622,7 +587,15 @@
   function overwritePreset(id: string) {
     const existing = presets.find((preset) => preset.id === id);
     if (!existing) return;
-    savePresets(presets.map((preset) => (preset.id === id ? currentPresetShape(id, existing.name) : preset)));
+    const next = createEntityGridPreset({
+      id,
+      name: existing.name,
+      filterIds,
+      filterOptions,
+      sortBy,
+      sortDir,
+    });
+    savePresets(presets.map((preset) => (preset.id === id ? next : preset)));
     activePresetId = id;
   }
 
@@ -728,7 +701,7 @@
 
   function scrollPageToTop() {
     if (!browser || !viewportEl) return;
-    const scrollAncestor = findScrollAncestor(viewportEl);
+    const scrollAncestor = findEntityGridScrollAncestor(viewportEl);
     if (scrollAncestor instanceof HTMLElement) {
       const ancestorRect = scrollAncestor.getBoundingClientRect();
       const viewportRect = viewportEl.getBoundingClientRect();
