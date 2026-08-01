@@ -32,6 +32,12 @@ public sealed class UserEntityStateRow {
     public string? ProgressMode { get; set; }
     public string? ProgressLocation { get; set; }
     public DateTimeOffset? ProgressCompletedAt { get; set; }
+
+    /// <summary>
+    /// Timestamp of the latest reading-progress signal. This is intentionally independent from
+    /// <see cref="UpdatedAt"/>, which records any change to the shared user-state row.
+    /// </summary>
+    public DateTimeOffset? ProgressUpdatedAt { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }
 }
 

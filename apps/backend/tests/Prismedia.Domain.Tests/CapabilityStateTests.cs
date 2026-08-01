@@ -1,4 +1,5 @@
 using Prismedia.Domain.Capabilities;
+using Prismedia.Domain.Entities;
 using Prismedia.Domain.Media;
 
 namespace Prismedia.Domain.Tests;
@@ -120,6 +121,48 @@ public sealed class CapabilityStateTests {
         Assert.Equal(1, playback.Value.SkipCount);
         Assert.Equal(completedAt, playback.Value.CompletedAt);
         Assert.Equal(skippedAt, playback.Value.LastPlayedAt);
+    }
+
+    [Fact]
+    public void HistoricalCompletedAndSkippedEventsIncreaseCountersWithoutRegressingNewerPlaybackState() {
+        var playback = new CapabilityPlayback();
+        var historicalAt = DateTimeOffset.Parse("2026-05-19T10:00:00Z");
+        var newerAt = historicalAt.AddMinutes(5);
+        playback.RecordResume(TimeSpan.FromSeconds(120), newerAt);
+
+        playback.RecordCompletedPlay(historicalAt);
+        playback.RecordSkipped(historicalAt.AddMinutes(1));
+
+        Assert.Equal(1, playback.Value.PlayCount);
+        Assert.Equal(1, playback.Value.SkipCount);
+        Assert.Equal(TimeSpan.FromSeconds(120), playback.Value.ResumeTime);
+        Assert.Equal(newerAt, playback.Value.LastPlayedAt);
+        Assert.Null(playback.Value.CompletedAt);
+    }
+
+    [Fact]
+    public void HistoricalProgressResetAndUnreadSignalsDoNotRegressNewerProgress() {
+        var newerAt = DateTimeOffset.Parse("2026-05-19T10:05:00Z");
+        var progress = new CapabilityProgress(
+            currentEntityId: Guid.NewGuid(),
+            unit: ProgressUnit.Page,
+            index: 4,
+            total: 10,
+            mode: ReaderMode.Paged,
+            completedAt: newerAt,
+            updatedAt: newerAt);
+
+        Assert.False(progress.TryMoveTo(
+            Guid.NewGuid(),
+            ProgressUnit.Page,
+            index: 0,
+            total: 10,
+            mode: ReaderMode.Paged,
+            updatedAt: newerAt.AddMinutes(-1)));
+        Assert.False(progress.TryMarkIncomplete(newerAt.AddMinutes(-1)));
+        Assert.Equal(4, progress.Index);
+        Assert.Equal(newerAt, progress.UpdatedAt);
+        Assert.Equal(newerAt, progress.CompletedAt);
     }
 
     [Fact]

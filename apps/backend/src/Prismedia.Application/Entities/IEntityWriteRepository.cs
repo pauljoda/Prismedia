@@ -9,6 +9,19 @@ namespace Prismedia.Application.Entities;
 /// </summary>
 public interface IEntityWriteRepository {
     /// <summary>
+    /// Opens a retry attempt for one logical entity mutation. If a save conflicts, the caller
+    /// must roll back the attempt before reloading and applying the action again; this removes
+    /// only work staged by that attempt and leaves unrelated work in the request unit of work
+    /// intact.
+    /// </summary>
+    /// <remarks>
+    /// Implementations that do not share a unit of work with staged side effects can use the
+    /// default no-op attempt. EF-backed implementations use this to detach failed-attempt rows
+    /// such as playback and activity events before a retry.
+    /// </remarks>
+    IEntityWriteAttempt BeginAttempt() => NoOpEntityWriteAttempt.Instance;
+
+    /// <summary>
     /// Finds an active entity and hydrates its domain relationships plus mutable state capabilities.
     /// Returns null when no active entity exists for the given identifier.
     /// </summary>
@@ -39,6 +52,30 @@ public interface IEntityWriteRepository {
     /// <param name="entity">Entity to persist.</param>
     /// <param name="cancellationToken">Token used to cancel the operation.</param>
     Task SaveAsync(Entity entity, CancellationToken cancellationToken);
+}
+
+/// <summary>
+/// Owns the staged persistence work for one logical entity mutation attempt.
+/// </summary>
+public interface IEntityWriteAttempt : IDisposable {
+    /// <summary>
+    /// Reverts the entries introduced or changed by this attempt after an optimistic-concurrency
+    /// conflict, so a subsequent attempt starts from a freshly loaded persistence state.
+    /// </summary>
+    /// <param name="cancellationToken">Token used to cancel the rollback.</param>
+    Task RollbackAsync(CancellationToken cancellationToken);
+}
+
+internal sealed class NoOpEntityWriteAttempt : IEntityWriteAttempt {
+    internal static NoOpEntityWriteAttempt Instance { get; } = new();
+
+    private NoOpEntityWriteAttempt() {
+    }
+
+    public void Dispose() {
+    }
+
+    public Task RollbackAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 }
 
 /// <summary>

@@ -395,7 +395,7 @@ public sealed class MediaEntityDeletionService(
                 var locked = db.Database.IsRelational()
                     && db.Database.ProviderName?.Contains("Npgsql", StringComparison.OrdinalIgnoreCase) == true
                     ? await db.Entities
-                        .FromSqlInterpolated($"SELECT * FROM entities WHERE id = {lifecycleEntityId} FOR UPDATE")
+                        .FromSqlInterpolated($"SELECT *, xmin FROM entities WHERE id = {lifecycleEntityId} FOR UPDATE")
                         .SingleOrDefaultAsync(cancellationToken)
                     : await db.Entities.FirstOrDefaultAsync(
                         row => row.Id == lifecycleEntityId,

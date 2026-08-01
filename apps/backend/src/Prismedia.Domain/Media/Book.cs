@@ -126,28 +126,4 @@ public sealed class Book : Entity<BookEntityKindDefinition> {
     /// </summary>
     public BookFormat Format { get; private set; }
 
-    /// <summary>
-    /// Moves the reading cursor to a chapter and page.
-    /// </summary>
-    public void MoveReaderToChapter(Guid chapterId, int pageIndex, int pageCount, ReaderMode readerMode) {
-        var progress = RequireCapability<CapabilityProgress>();
-        var normalizedPageCount = Math.Max(0, pageCount);
-        var normalizedPageIndex = normalizedPageCount == 0
-            ? 0
-            : Math.Clamp(pageIndex, 0, normalizedPageCount - 1);
-
-        progress.MoveTo(
-            chapterId,
-            ProgressUnit.Page,
-            normalizedPageIndex,
-            normalizedPageCount,
-            readerMode,
-            DateTimeOffset.UtcNow);
-    }
-
-    /// <summary>Marks the book as completed at the supplied time.</summary>
-    public void MarkCompleted(DateTimeOffset completedAt) {
-        var progress = RequireCapability<CapabilityProgress>();
-        progress.MarkCompleted(completedAt);
-    }
 }

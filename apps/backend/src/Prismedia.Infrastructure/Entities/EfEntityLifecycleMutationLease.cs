@@ -118,7 +118,10 @@ public sealed class EfEntityLifecycleMutationLease(
         db.Database.IsRelational()
         && db.Database.ProviderName?.Contains("Npgsql", StringComparison.OrdinalIgnoreCase) == true
             ? db.Entities
-                .FromSqlInterpolated($"SELECT * FROM entities WHERE id = {entityId} FOR UPDATE")
+                // The entity model maps PostgreSQL's xmin system column for optimistic
+                // concurrency. FromSql is composed as a subquery, so project xmin explicitly;
+                // SELECT * alone does not expose PostgreSQL system columns to that outer query.
+                .FromSqlInterpolated($"SELECT *, xmin FROM entities WHERE id = {entityId} FOR UPDATE")
                 .AsNoTracking()
                 .SingleOrDefaultAsync(cancellationToken)
             : db.Entities.FirstOrDefaultAsync(row => row.Id == entityId, cancellationToken);

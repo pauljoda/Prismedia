@@ -1,10 +1,13 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Microsoft.Extensions.DependencyInjection;
+using Npgsql;
 using Prismedia.Application.Entities;
 using Prismedia.Application.Plugins;
 using Prismedia.Domain.Capabilities;
 using Prismedia.Domain.Entities;
 using Prismedia.Infrastructure.Entities.Mappers;
+using Prismedia.Infrastructure.Entities.Mappers.Capabilities;
 using Prismedia.Infrastructure.Persistence;
 using Prismedia.Infrastructure.Persistence.Entities;
 
@@ -84,12 +87,19 @@ public sealed class EfEntityRepository : IEntityWriteRepository {
             capabilityMappers,
             new EfEntityExternalIdentityStore(db, TimeProvider.System)) { }
 
+    /// <inheritdoc />
+    public IEntityWriteAttempt BeginAttempt() =>
+        new EfEntityWriteAttempt(_db, _structurePlacement.Reset);
+
     /// <summary>
     /// Finds an active entity and hydrates its domain relationships plus mutable state capabilities.
     /// </summary>
     public async Task<Entity?> FindAsync(Guid id, CancellationToken cancellationToken) {
         _structurePlacement.Reset();
-        var row = await _db.Entities.AsNoTracking()
+        // This is a write repository: retain the EntityRow (and PostgreSQL xmin) observed while
+        // the domain aggregate is hydrated. Loading it only when Save begins would let a delayed
+        // writer attach the newer version while persisting stale flags or marker collections.
+        var row = await _db.Entities
             .FirstOrDefaultAsync(entity => entity.Id == id, cancellationToken);
         if (row is null) {
             return null;
@@ -115,7 +125,8 @@ public sealed class EfEntityRepository : IEntityWriteRepository {
     /// </summary>
     public async Task<Entity?> FindShallowAsync(Guid id, CancellationToken cancellationToken) {
         _structurePlacement.Reset();
-        var row = await _db.Entities.AsNoTracking()
+        // Keep the observed aggregate-root concurrency token tracked through SaveAsync.
+        var row = await _db.Entities
             .FirstOrDefaultAsync(entity => entity.Id == id, cancellationToken);
         if (row is null) {
             return null;
@@ -157,11 +168,31 @@ public sealed class EfEntityRepository : IEntityWriteRepository {
         // single transaction so a failure between them cannot leave an entity with its capabilities
         // cleared but not re-persisted, which would matter when a failed job is retried. The save is
         // pure database work with no file IO between the flushes, so the transaction stays short.
-        // The in-memory test provider has no transaction support, and if a caller already opened a
-        // transaction we participate in it rather than nesting.
+        // The in-memory test provider has no transaction support. If a caller already opened a
+        // transaction, one enclosing savepoint keeps both SaveChanges phases atomic for retries.
         try {
-            if (!_db.Database.IsRelational() || _db.Database.CurrentTransaction is not null) {
+            if (!_db.Database.IsRelational()) {
                 await SaveCoreAsync(entity, cancellationToken);
+                return;
+            }
+
+            if (_db.Database.CurrentTransaction is { } ambientTransaction) {
+                if (!ambientTransaction.SupportsSavepoints) {
+                    throw new InvalidOperationException(
+                        "Entity aggregate writes inside an existing transaction require savepoint support.");
+                }
+
+                var savepoint = $"entity_write_{Guid.NewGuid():N}";
+                await ambientTransaction.CreateSavepointAsync(savepoint, cancellationToken);
+                try {
+                    await SaveCoreAsync(entity, cancellationToken);
+                    await ambientTransaction.ReleaseSavepointAsync(savepoint, cancellationToken);
+                } catch {
+                    // The application retry restores the tracker; this savepoint restores every
+                    // database mutation flushed by either phase of this attempt.
+                    await ambientTransaction.RollbackToSavepointAsync(savepoint, CancellationToken.None);
+                    throw;
+                }
                 return;
             }
 
@@ -170,14 +201,37 @@ public sealed class EfEntityRepository : IEntityWriteRepository {
             await transaction.CommitAsync(cancellationToken);
         } catch (DbUpdateConcurrencyException ex) {
             // Translate EF's optimistic-concurrency failure into a persistence-agnostic conflict so
-            // application services can reload and retry without referencing EF Core. Detach the stale
-            // tracked entries so a retry on the same DbContext re-reads current rows.
-            _db.ChangeTracker.Clear();
-            _structurePlacement.Reset();
+            // application services can reload and retry without referencing EF Core. The owning
+            // attempt rolls back just its tracked work; never clear the request DbContext here.
             throw new EntityConcurrencyConflictException(
                 $"Concurrent modification of entity '{entity.Id}'.",
                 ex);
+        } catch (DbUpdateException ex) when (IsConcurrentUserEntityStateInsert(ex)) {
+            // A missing user-state row can be concurrently created by another request. The only
+            // unique violation that has the same retry semantics as xmin is this exact composite
+            // primary-key insert; other constraints remain real errors for their callers.
+            throw new EntityConcurrencyConflictException(
+                $"Concurrent creation of user state for entity '{entity.Id}'.",
+                ex);
         }
+    }
+
+    private static bool IsConcurrentUserEntityStateInsert(DbUpdateException exception) {
+        if (exception.InnerException is not PostgresException {
+            SqlState: PostgresErrorCodes.UniqueViolation,
+            TableName: "user_entity_states",
+            ConstraintName: "PK_user_entity_states"
+        }) {
+            return false;
+        }
+
+        return exception.Entries.Any(entry =>
+            entry.State == EntityState.Added &&
+            entry.Entity is UserEntityStateRow &&
+            entry.Metadata.FindPrimaryKey() is { Properties.Count: 2 } key &&
+            key.Properties.Select(property => property.Name)
+                .OrderBy(name => name, StringComparer.Ordinal)
+                .SequenceEqual([nameof(UserEntityStateRow.EntityId), nameof(UserEntityStateRow.UserId)]));
     }
 
     private async Task SaveCoreAsync(Entity entity, CancellationToken cancellationToken) {
@@ -222,7 +276,7 @@ public sealed class EfEntityRepository : IEntityWriteRepository {
         Entity entity,
         EntityHydrationContext context,
         CancellationToken cancellationToken) {
-        var childRows = await _db.Entities.AsNoTracking()
+        var childRows = await _db.Entities
             .Where(row => row.ParentEntityId == entity.Id)
             .OrderBy(row => row.SortOrder)
             .ThenBy(row => row.CreatedAt)
@@ -246,7 +300,7 @@ public sealed class EfEntityRepository : IEntityWriteRepository {
             .OrderBy(link => link.SortOrder)
             .ToArrayAsync(cancellationToken);
         var targetIds = links.Select(link => link.TargetEntityId).ToArray();
-        var targetRows = await _db.Entities.AsNoTracking()
+        var targetRows = await _db.Entities
             .Where(row => targetIds.Contains(row.Id))
             .ToDictionaryAsync(row => row.Id, cancellationToken);
         foreach (var link in links) {
@@ -267,6 +321,7 @@ public sealed class EfEntityRepository : IEntityWriteRepository {
         }
 
         await UpsertEntityRowAsync(entity, cancellationToken);
+        await UpsertUserOpinionAsync(entity, cancellationToken);
 
         foreach (var child in entity.ChildEntities) {
             await SaveEntityAsync(child, visited, cancellationToken);
@@ -353,7 +408,6 @@ public sealed class EfEntityRepository : IEntityWriteRepository {
             row.UpdatedAt = now;
         }
 
-        await UpsertUserOpinionAsync(entity, cancellationToken);
     }
 
     private async Task ValidateRowPlacementAsync(
@@ -381,7 +435,7 @@ public sealed class EfEntityRepository : IEntityWriteRepository {
 
         var isFavorite = entity.IsFavorite ?? false;
         var rating = entity.RatingValue;
-        var state = await _db.UserEntityStates.FindAsync([userId, entity.Id], cancellationToken);
+        var state = await UserEntityStateColumns.FindAsync(_db, userId, entity.Id, cancellationToken);
         if (state is null) {
             if (!isFavorite && rating is null) {
                 return;
@@ -423,8 +477,7 @@ public sealed class EfEntityRepository : IEntityWriteRepository {
         var userId = _currentUser.UserId;
         var state = userId == Guid.Empty
             ? null
-            : await _db.UserEntityStates.AsNoTracking()
-                .FirstOrDefaultAsync(s => s.UserId == userId && s.EntityId == entity.Id, cancellationToken);
+            : await UserEntityStateColumns.FindAsync(_db, userId, entity.Id, cancellationToken);
 
         entity.HydrateUniversalProperties(
             state?.RatingValue,
@@ -530,5 +583,75 @@ public sealed class EfEntityRepository : IEntityWriteRepository {
         public bool TryGet(Guid id, out Entity entity) => _entities.TryGetValue(id, out entity!);
 
         public void Add(Entity entity) => _entities.Add(entity.Id, entity);
+    }
+
+    /// <summary>
+    /// Captures the request DbContext state before one capability-service attempt. A failed save
+    /// may have flushed intermediate entity rows inside a transaction, so retry cleanup must
+    /// remove all entries owned by that attempt (including staged events) without clearing work
+    /// that another use case had already staged in the same request scope.
+    /// </summary>
+    private sealed class EfEntityWriteAttempt : IEntityWriteAttempt {
+        private readonly PrismediaDbContext _db;
+        private readonly Action _resetStructurePlacement;
+        private readonly Dictionary<object, EntrySnapshot> _baseline;
+
+        internal EfEntityWriteAttempt(PrismediaDbContext db, Action resetStructurePlacement) {
+            _db = db;
+            _resetStructurePlacement = resetStructurePlacement;
+            _baseline = db.ChangeTracker.Entries()
+                .ToDictionary(
+                    entry => entry.Entity,
+                    entry => new EntrySnapshot(
+                        entry.Entity,
+                        entry.State,
+                        entry.CurrentValues.Clone(),
+                        entry.OriginalValues.Clone(),
+                        entry.Properties
+                            .Where(property => property.IsModified)
+                            .Select(property => property.Metadata.Name)
+                            .ToHashSet(StringComparer.Ordinal)),
+                    ReferenceEqualityComparer.Instance);
+        }
+
+        public Task RollbackAsync(CancellationToken cancellationToken) {
+            cancellationToken.ThrowIfCancellationRequested();
+            // SaveEntityAsync accepts its intermediate SaveChanges while the database transaction
+            // is still open. EF detaches entries deleted before this attempt, but the transaction
+            // rollback restores their database rows. Re-track every baseline entity (including
+            // entries no longer visible in ChangeTracker) so unrelated request work survives. A
+            // complete clear removes failed-insert identity-map entries before the next hydrate;
+            // every pre-attempt entry is restored from the snapshot immediately afterwards.
+            _db.ChangeTracker.Clear();
+            foreach (var snapshot in _baseline.Values) {
+                var entry = _db.Entry(snapshot.Entity);
+                entry.State = EntityState.Unchanged;
+                entry.CurrentValues.SetValues(snapshot.CurrentValues);
+                entry.OriginalValues.SetValues(snapshot.OriginalValues);
+                if (snapshot.State == EntityState.Modified) {
+                    // Restoring EntityState.Modified directly marks every writable property as
+                    // modified. Preserve the original mask so retry cleanup cannot turn an
+                    // unrelated one-column patch into a stale full-row overwrite.
+                    foreach (var property in entry.Properties) {
+                        property.IsModified = snapshot.ModifiedProperties.Contains(property.Metadata.Name);
+                    }
+                } else {
+                    entry.State = snapshot.State;
+                }
+            }
+
+            _resetStructurePlacement();
+            return Task.CompletedTask;
+        }
+
+        public void Dispose() {
+        }
+
+        private sealed record EntrySnapshot(
+            object Entity,
+            EntityState State,
+            PropertyValues CurrentValues,
+            PropertyValues OriginalValues,
+            IReadOnlySet<string> ModifiedProperties);
     }
 }

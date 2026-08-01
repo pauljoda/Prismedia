@@ -35,6 +35,7 @@ internal static partial class PrismediaModelConfiguration {
             entity.Property(row => row.ProgressMode).HasColumnName("progress_mode").HasMaxLength(64);
             entity.Property(row => row.ProgressLocation).HasColumnName("progress_location");
             entity.Property(row => row.ProgressCompletedAt).HasColumnName("progress_completed_at");
+            entity.Property(row => row.ProgressUpdatedAt).HasColumnName("progress_updated_at");
             entity.Property(row => row.UpdatedAt).HasColumnName("updated_at");
             // Continue-watching shelves: one user's engagement ordered by recency.
             entity.HasIndex(row => new { row.UserId, row.LastPlayedAt })

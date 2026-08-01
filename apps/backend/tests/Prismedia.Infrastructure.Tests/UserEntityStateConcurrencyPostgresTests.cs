@@ -1,0 +1,289 @@
+using Microsoft.EntityFrameworkCore;
+using Prismedia.Application.Playback;
+using Prismedia.Application.Security;
+using Prismedia.Domain.Entities;
+using Prismedia.Infrastructure.Entities;
+using Prismedia.Infrastructure.Entities.Mappers;
+using static Prismedia.Infrastructure.Tests.EntityConcurrencyTestSupport;
+
+namespace Prismedia.Infrastructure.Tests;
+
+/// <summary>
+/// PostgreSQL regressions for the single wide user-state row shared by ratings, playback, and
+/// reading progress. These tests require the real xmin system column; the in-memory provider
+/// cannot exercise the update predicates or concurrent first-insert path.
+/// </summary>
+public sealed class UserEntityStateConcurrencyPostgresTests {
+    [Fact]
+    [Trait("Category", "PostgreSQL")]
+    public async Task ConcurrentUpdatesPreserveSiblingFieldsAndTheLatestResumeSignal() {
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        var userId = Guid.NewGuid();
+        var entityId = Guid.NewGuid();
+        await SeedAsync(database, userId, entityId, EntityKind.Video, includeState: true);
+
+        await using var ratingContext = database.CreateContext();
+        await using var earlierPlaybackContext = database.CreateContext();
+        await using var laterPlaybackContext = database.CreateContext();
+        var gate = new SaveBarrier(3);
+        var earlierReportAt = DateTimeOffset.Parse("2026-07-31T18:00:00Z");
+        var laterReportAt = earlierReportAt.AddSeconds(1);
+        var ratingService = CreateService(
+            ratingContext,
+            userId,
+            new GatedEntityWriteRepository(CreateRepository(ratingContext, userId), gate));
+        var earlierPlaybackService = CreateService(
+            earlierPlaybackContext,
+            userId,
+            new GatedEntityWriteRepository(CreateRepository(earlierPlaybackContext, userId), gate),
+            new FixedTimeProvider(earlierReportAt));
+        var laterPlaybackService = CreateService(
+            laterPlaybackContext,
+            userId,
+            new GatedEntityWriteRepository(CreateRepository(laterPlaybackContext, userId), gate),
+            new FixedTimeProvider(laterReportAt));
+
+        await Task.WhenAll(
+            ratingService.RateAsync(entityId, 5, CancellationToken.None),
+            earlierPlaybackService.UpdatePlaybackAsync(entityId, 60, null, null, CancellationToken.None),
+            laterPlaybackService.UpdatePlaybackAsync(entityId, 90, null, null, CancellationToken.None));
+
+        await using var verification = database.CreateContext();
+        var state = await verification.UserEntityStates.SingleAsync(row =>
+            row.UserId == userId && row.EntityId == entityId);
+        Assert.Equal(5, state.RatingValue);
+        Assert.Equal(90, state.ResumeSeconds);
+    }
+
+    [Fact]
+    [Trait("Category", "PostgreSQL")]
+    public async Task ConcurrentFirstStateInsertIsMappedAndRetriedAsOneMergedRow() {
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        var userId = Guid.NewGuid();
+        var entityId = Guid.NewGuid();
+        await SeedAsync(database, userId, entityId, EntityKind.Video, includeState: false);
+
+        await using var ratingContext = database.CreateContext();
+        await using var playbackContext = database.CreateContext();
+        var gate = new SaveBarrier(2);
+        var ratingService = CreateService(
+            ratingContext,
+            userId,
+            new GatedEntityWriteRepository(CreateRepository(ratingContext, userId), gate));
+        var playbackService = CreateService(
+            playbackContext,
+            userId,
+            new GatedEntityWriteRepository(CreateRepository(playbackContext, userId), gate));
+
+        await Task.WhenAll(
+            ratingService.RateAsync(entityId, 4, CancellationToken.None),
+            playbackService.UpdatePlaybackAsync(entityId, 75, null, null, CancellationToken.None));
+
+        await using var verification = database.CreateContext();
+        var states = await verification.UserEntityStates
+            .Where(row => row.UserId == userId && row.EntityId == entityId)
+            .ToArrayAsync();
+        var state = Assert.Single(states);
+        Assert.Equal(4, state.RatingValue);
+        Assert.Equal(75, state.ResumeSeconds);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    [Trait("Category", "PostgreSQL")]
+    public async Task RetriedCompletionConflictCommitsExactlyOnePlaybackEvent(bool useAmbientTransaction) {
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        var userId = Guid.NewGuid();
+        var entityId = Guid.NewGuid();
+        await SeedAsync(database, userId, entityId, EntityKind.Video, includeState: true);
+        var newerSignalAt = DateTimeOffset.Parse("2026-07-31T18:00:00Z");
+        var historicalCompletionAt = newerSignalAt.AddMinutes(-5);
+        await SetPlaybackStateAsync(
+            database,
+            userId,
+            entityId,
+            resumeSeconds: 120,
+            lastPlayedAt: newerSignalAt,
+            completedAt: null);
+
+        await using var context = database.CreateContext();
+        await using var ambientTransaction = useAmbientTransaction
+            ? await context.Database.BeginTransactionAsync()
+            : null;
+        var repository = new ConflictOnceEntityWriteRepository(
+            CreateRepository(context, userId),
+            cancellationToken => TouchStateAsync(database, userId, entityId, cancellationToken));
+        var service = CreateService(context, userId, repository);
+
+        await service.RecordCompletedPlaybackAsync(
+            entityId,
+            historicalCompletionAt,
+            positionSeconds: null,
+            durationSeconds: null,
+            CancellationToken.None);
+        if (ambientTransaction is not null) {
+            await ambientTransaction.CommitAsync();
+        }
+
+        await using var verification = database.CreateContext();
+        var completedEvent = Assert.Single(await verification.EntityPlaybackEvents
+            .Where(row => row.UserId == userId && row.EntityId == entityId &&
+                          row.Kind == PlaybackEventKind.Completed)
+            .ToArrayAsync());
+        Assert.Equal(historicalCompletionAt, completedEvent.OccurredAt);
+        var state = await verification.UserEntityStates.SingleAsync(row =>
+            row.UserId == userId && row.EntityId == entityId);
+        Assert.Equal(1, state.PlayCount);
+        Assert.Equal(120, state.ResumeSeconds);
+        Assert.Equal(newerSignalAt, state.LastPlayedAt);
+        Assert.Null(state.CompletedAt);
+    }
+
+    [Fact]
+    [Trait("Category", "PostgreSQL")]
+    public async Task AmbientTransactionRollsBackBothSavePhasesBeforeRetry() {
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        var userId = Guid.NewGuid();
+        var entityId = Guid.NewGuid();
+        var occurredAt = DateTimeOffset.Parse("2026-07-31T18:00:00Z");
+        await SeedAsync(database, userId, entityId, EntityKind.Video, includeState: true);
+
+        await using var context = database.CreateContext();
+        await using var transaction = await context.Database.BeginTransactionAsync();
+        var user = TestUserContext.Admin(userId);
+        var repository = new EfEntityRepository(
+            context,
+            user,
+            EntityMappers.Kinds(context, user),
+            EntityMappers.Capabilities(context, user)
+                .Append(new SecondPhaseConflictOnceMapper(context)));
+        var service = CreateService(context, userId, repository);
+
+        await service.RecordCompletedPlaybackAsync(
+            entityId,
+            occurredAt,
+            positionSeconds: null,
+            durationSeconds: null,
+            CancellationToken.None);
+        await transaction.CommitAsync();
+
+        await using var verification = database.CreateContext();
+        Assert.Single(await verification.EntityPlaybackEvents
+            .Where(row => row.UserId == userId && row.EntityId == entityId &&
+                          row.Kind == PlaybackEventKind.Completed)
+            .ToArrayAsync());
+        var state = await verification.UserEntityStates.SingleAsync(row =>
+            row.UserId == userId && row.EntityId == entityId);
+        Assert.Equal(1, state.PlayCount);
+        Assert.Equal(occurredAt, state.CompletedAt);
+    }
+
+    [Fact]
+    [Trait("Category", "PostgreSQL")]
+    public async Task RetriedReadingActivityConflictCommitsExactlyOneActivityEvent() {
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        var userId = Guid.NewGuid();
+        var entityId = Guid.NewGuid();
+        await SeedAsync(database, userId, entityId, EntityKind.Book, includeState: true);
+        var newerProgressAt = DateTimeOffset.Parse("2026-07-31T18:00:00Z");
+        var historicalResetAt = newerProgressAt.AddMinutes(-5);
+        await SetProgressStateAsync(
+            database,
+            userId,
+            entityId,
+            index: 4,
+            total: 10,
+            updatedAt: newerProgressAt,
+            completedAt: newerProgressAt);
+
+        await using var context = database.CreateContext();
+        var repository = new ConflictOnceEntityWriteRepository(
+            CreateRepository(context, userId),
+            cancellationToken => TouchStateAsync(database, userId, entityId, cancellationToken));
+        var service = CreateService(context, userId, repository, new FixedTimeProvider(historicalResetAt));
+
+        await service.UpdateProgressAsync(
+            entityId,
+            entityId,
+            ProgressUnit.Page,
+            index: 0,
+            total: 10,
+            mode: ReaderMode.Paged,
+            completed: null,
+            reset: true,
+            location: "chapter-1",
+            activitySeconds: 15,
+            activityKind: BookActivityKind.Reading,
+            CancellationToken.None);
+
+        await using var verification = database.CreateContext();
+        var activity = Assert.Single(await verification.EntityActivityEvents
+            .Where(row => row.UserId == userId && row.EntityId == entityId)
+            .ToArrayAsync());
+        Assert.Equal(BookActivityKind.Reading, activity.Kind);
+        Assert.Equal(15, activity.DurationSeconds);
+        var state = await verification.UserEntityStates.SingleAsync(row =>
+            row.UserId == userId && row.EntityId == entityId);
+        Assert.Equal(15, state.PlayDurationSeconds);
+        Assert.Equal(4, state.ProgressIndex);
+        Assert.Equal(newerProgressAt, state.ProgressUpdatedAt);
+        Assert.Equal(newerProgressAt, state.ProgressCompletedAt);
+    }
+
+    [Fact]
+    [Trait("Category", "PostgreSQL")]
+    public async Task ProgressOrderingUsesItsDedicatedTimestampInsteadOfSiblingStateRecency() {
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        var userId = Guid.NewGuid();
+        var entityId = Guid.NewGuid();
+        await SeedAsync(database, userId, entityId, EntityKind.Book, includeState: true);
+        var progressAt = DateTimeOffset.Parse("2026-07-31T12:00:00Z");
+        var progressSignalAt = progressAt.AddMinutes(1);
+        await SetProgressStateAsync(
+            database,
+            userId,
+            entityId,
+            index: 1,
+            total: 10,
+            updatedAt: progressAt,
+            completedAt: null);
+        await using (var siblingUpdate = database.CreateContext()) {
+            var siblingState = await siblingUpdate.UserEntityStates.FindAsync([userId, entityId]);
+            Assert.NotNull(siblingState);
+            siblingState!.RatingValue = 5;
+            siblingState.LastPlayedAt = progressAt.AddHours(1);
+            siblingState.UpdatedAt = progressAt.AddHours(1);
+            await siblingUpdate.SaveChangesAsync();
+        }
+
+        await using var context = database.CreateContext();
+        var service = CreateService(
+            context,
+            userId,
+            CreateRepository(context, userId),
+            new FixedTimeProvider(progressSignalAt));
+        await service.UpdateProgressAsync(
+            entityId,
+            entityId,
+            ProgressUnit.Page,
+            index: 2,
+            total: 10,
+            mode: ReaderMode.Paged,
+            completed: null,
+            reset: false,
+            location: "page-2",
+            activitySeconds: null,
+            activityKind: null,
+            CancellationToken.None);
+
+        await using var verification = database.CreateContext();
+        var state = await verification.UserEntityStates.SingleAsync(row =>
+            row.UserId == userId && row.EntityId == entityId);
+        Assert.Equal(2, state.ProgressIndex);
+        Assert.Equal(progressSignalAt, state.ProgressUpdatedAt);
+        Assert.Equal(5, state.RatingValue);
+        Assert.Equal(progressAt.AddHours(1), state.LastPlayedAt);
+    }
+
+}

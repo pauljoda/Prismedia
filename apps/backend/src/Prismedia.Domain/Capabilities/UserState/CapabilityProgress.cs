@@ -44,8 +44,24 @@ public sealed class CapabilityProgress : EntityCapability {
     /// </summary>
     public string? Location { get; private set; }
 
-    /// <summary>Moves the progress cursor to a specific entity and index.</summary>
-    public void MoveTo(Guid currentEntityId, ProgressUnit unit, int index, int total, ReaderMode? mode, DateTimeOffset updatedAt, string? location = null) {
+    /// <summary>
+    /// Moves the cursor only when this is not an older reading-progress signal.
+    /// Optionally marks the same accepted signal as completed.
+    /// </summary>
+    /// <returns><see langword="true"/> when the cursor was updated.</returns>
+    public bool TryMoveTo(
+        Guid currentEntityId,
+        ProgressUnit unit,
+        int index,
+        int total,
+        ReaderMode? mode,
+        DateTimeOffset updatedAt,
+        string? location = null,
+        bool completed = false) {
+        if (!AcceptsProgressSignal(updatedAt)) {
+            return false;
+        }
+
         CurrentEntityId = currentEntityId;
         Unit = unit;
         Index = index;
@@ -54,17 +70,26 @@ public sealed class CapabilityProgress : EntityCapability {
         Location = location;
         CompletedAt = null;
         UpdatedAt = updatedAt;
+        if (completed) {
+            CompletedAt = updatedAt;
+        }
+        return true;
     }
 
-    /// <summary>Marks the progress as completed.</summary>
-    public void MarkCompleted(DateTimeOffset completedAt) {
-        CompletedAt = completedAt;
-        UpdatedAt = completedAt;
-    }
+    /// <summary>
+    /// Clears completion only when this is not an older reading-progress signal.
+    /// </summary>
+    /// <returns><see langword="true"/> when the completion state was cleared.</returns>
+    public bool TryMarkIncomplete(DateTimeOffset updatedAt) {
+        if (!AcceptsProgressSignal(updatedAt)) {
+            return false;
+        }
 
-    /// <summary>Clears the completion flag while leaving the current position untouched.</summary>
-    public void MarkIncomplete(DateTimeOffset updatedAt) {
         CompletedAt = null;
         UpdatedAt = updatedAt;
+        return true;
     }
+
+    private bool AcceptsProgressSignal(DateTimeOffset updatedAt) =>
+        UpdatedAt is null || updatedAt >= UpdatedAt;
 }

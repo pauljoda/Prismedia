@@ -24,7 +24,20 @@ internal static class UserEntityStateColumns {
         row.ProgressIndex != 0 ||
         row.ProgressTotal != 0 ||
         row.ProgressLocation is not null ||
-        row.ProgressCompletedAt is not null;
+        row.ProgressCompletedAt is not null ||
+        row.ProgressUpdatedAt is not null;
+
+    /// <summary>
+    /// Finds the state row through EF's identity map. Hydration deliberately keeps this row
+    /// tracked until save so PostgreSQL's xmin concurrency token remains the version that was
+    /// observed while the domain capability was built.
+    /// </summary>
+    internal static Task<UserEntityStateRow?> FindAsync(
+        PrismediaDbContext db,
+        Guid userId,
+        Guid entityId,
+        CancellationToken cancellationToken) =>
+        db.UserEntityStates.FindAsync([userId, entityId], cancellationToken).AsTask();
 
     /// <summary>
     /// Finds the (user, entity) state row — preferring one already tracked in this unit of
@@ -35,14 +48,7 @@ internal static class UserEntityStateColumns {
         Guid userId,
         Guid entityId,
         CancellationToken cancellationToken) {
-        var tracked = db.ChangeTracker.Entries<UserEntityStateRow>()
-            .FirstOrDefault(entry => entry.Entity.UserId == userId && entry.Entity.EntityId == entityId)
-            ?.Entity;
-        if (tracked is not null) {
-            return tracked;
-        }
-
-        var row = await db.UserEntityStates.FindAsync([userId, entityId], cancellationToken);
+        var row = await FindAsync(db, userId, entityId, cancellationToken);
         if (row is not null) {
             return row;
         }

@@ -151,13 +151,15 @@ public sealed class EntityCapabilityService {
         double? mediaDurationSeconds,
         bool? completed,
         CancellationToken cancellationToken) {
+        // One logical player report retains one timestamp across optimistic-concurrency retries.
+        // This keeps completed/history semantics deterministic when a racing heartbeat wins first.
+        var occurredAt = _timeProvider.GetUtcNow();
         var card = await MutateWithPlaybackEventAsync(id, entity => {
             var playback = GetOrAddDefaultCapability<CapabilityPlayback>(entity);
             if (playback is null) {
                 return PlaybackMutationResult.Rejected;
             }
 
-            var now = _timeProvider.GetUtcNow();
             PlaybackEventAppend? completedEvent = null;
             var playCountBefore = playback.Value.PlayCount;
 
@@ -165,25 +167,30 @@ public sealed class EntityCapabilityService {
                 playback.AccumulatePlayDuration(TimeSpan.FromSeconds(playDurationDeltaSeconds.Value));
             }
 
+            // Position and completion reports are timestamped user observations. A retry may
+            // reapply an older heartbeat after a newer one committed, so only the newest signal
+            // may change cursor/completion state. Reported duration remains additive above.
+            var acceptsSignal = AcceptsPlaybackSignal(playback, occurredAt);
+
             // Explicit watched toggle. The completion flag is independent of the resume position:
             // a resume value is only applied when the caller supplies one, so the in-app
             // toggle leaves the position untouched.
             if (completed is { } watched) {
-                if (resumeSeconds is { } toggleSeconds) {
-                    playback.RecordResume(TimeSpan.FromSeconds(Math.Max(0, toggleSeconds)), now);
+                if (acceptsSignal && resumeSeconds is { } toggleSeconds) {
+                    playback.RecordResume(TimeSpan.FromSeconds(Math.Max(0, toggleSeconds)), occurredAt);
                 }
 
-                if (watched) {
-                    playback.MarkWatched(now);
+                if (acceptsSignal && watched) {
+                    playback.MarkWatched(occurredAt);
                     if (playback.Value.PlayCount > playCountBefore) {
                         completedEvent = CompletedEvent(
                             entity,
-                            now,
+                            occurredAt,
                             resumeSeconds,
                             mediaDurationSeconds ?? entity.Technical?.Duration?.TotalSeconds);
                     }
-                } else {
-                    playback.MarkUnwatched(now);
+                } else if (acceptsSignal) {
+                    playback.MarkUnwatched(occurredAt);
                 }
 
                 return PlaybackMutationResult.Applied(completedEvent);
@@ -198,21 +205,25 @@ public sealed class EntityCapabilityService {
                 ? TimeSpan.FromSeconds(mediaDurationSeconds.Value)
                 : entity.Technical?.Duration;
             if (runtime is not { } total || total <= TimeSpan.Zero) {
-                playback.RecordResume(position, now);
+                if (acceptsSignal) {
+                    playback.RecordResume(position, occurredAt);
+                }
                 return PlaybackMutationResult.Applied();
             }
 
             var fraction = position.TotalSeconds / total.TotalSeconds;
             if (entity.Definition.Engagement.DerivesCompletionFromPlaybackFraction &&
-                fraction >= VideoWatchedFraction) {
-                playback.RecordCompleted(now);
+                fraction >= VideoWatchedFraction && acceptsSignal) {
+                playback.RecordCompleted(occurredAt);
                 if (playback.Value.PlayCount > playCountBefore) {
-                    completedEvent = CompletedEvent(entity, now, position.TotalSeconds, total.TotalSeconds);
+                    completedEvent = CompletedEvent(entity, occurredAt, position.TotalSeconds, total.TotalSeconds);
                 }
-            } else if (fraction < StartedFraction) {
-                playback.RecordStartOver(now);
-            } else {
-                playback.RecordResume(position, now);
+            } else if (fraction < StartedFraction && acceptsSignal) {
+                playback.RecordStartOver(occurredAt);
+            } else if (acceptsSignal) {
+                // A later player report may intentionally seek backward; only an older report
+                // loses to the already persisted signal above.
+                playback.RecordResume(position, occurredAt);
             }
 
             return PlaybackMutationResult.Applied(completedEvent);
@@ -338,6 +349,41 @@ public sealed class EntityCapabilityService {
         double? activitySeconds,
         BookActivityKind? activityKind,
         CancellationToken cancellationToken) {
+        // A reader heartbeat is one action even if it races another client. Keep its timestamp
+        // stable while every retry reloads topology and forward-only state from the database.
+        var occurredAt = _timeProvider.GetUtcNow();
+        return await ExecuteWriteAttemptAsync(
+            attemptCancellationToken => UpdateProgressAttemptAsync(
+                id,
+                currentEntityId,
+                unit,
+                index,
+                total,
+                mode,
+                completed,
+                reset,
+                location,
+                activitySeconds,
+                activityKind,
+                occurredAt,
+                attemptCancellationToken),
+            cancellationToken);
+    }
+
+    private async Task<EntityCard?> UpdateProgressAttemptAsync(
+        Guid id,
+        Guid currentEntityId,
+        ProgressUnit unit,
+        int index,
+        int total,
+        ReaderMode? mode,
+        bool? completed,
+        bool reset,
+        string? location,
+        double? activitySeconds,
+        BookActivityKind? activityKind,
+        DateTimeOffset occurredAt,
+        CancellationToken cancellationToken) {
         // Progress ownership is derived from the requested entity only. A cursor is data within
         // that owner tree; it must never be allowed to redirect this mutation to another work.
         if (_visibility is not null &&
@@ -392,19 +438,21 @@ public sealed class EntityCapabilityService {
             // Invalid legacy or newly inaccessible stored cursors are treated as absent so a
             // valid mutation can repair the user's progress instead of becoming permanently stuck.
         }
-        var now = _timeProvider.GetUtcNow();
         var hasActivity = await AccumulateReadingActivityAsync(
             entity,
             activitySeconds,
             activityKind,
-            now,
+            occurredAt,
             cancellationToken);
 
         // Explicit "mark unread": clear completion in place, independent of the cursor. Bypasses the
-        // forward-only guard so a finished item can be reopened without losing the page position.
+        // forward-only position guard so a finished item can be reopened without losing the page
+        // position. It still obeys the latest-signal timestamp so an old client cannot reopen a
+        // newer completion.
         if (!reset && completed == false) {
-            progress.MarkIncomplete(now);
-            await _entities.SaveAsync(entity, cancellationToken);
+            if (progress.TryMarkIncomplete(occurredAt) || hasActivity) {
+                await _entities.SaveAsync(entity, cancellationToken);
+            }
             return await ProjectCardAsync(entity, cancellationToken);
         }
 
@@ -423,10 +471,12 @@ public sealed class EntityCapabilityService {
         var normalizedLocation = string.IsNullOrWhiteSpace(location) ? null : location.Trim();
 
         // Explicit "start over": jump to the requested (start) position and clear completion,
-        // bypassing the forward-only guard. MoveTo resets the completion flag.
+        // bypassing the forward-only position guard. MoveTo resets the completion flag, but a
+        // historical reset cannot replace a newer cursor.
         if (reset) {
-            progress.MoveTo(targetCursorId, unit, normalizedIndex, normalizedTotal, mode, now, normalizedLocation);
-            await _entities.SaveAsync(entity, cancellationToken);
+            if (progress.TryMoveTo(targetCursorId, unit, normalizedIndex, normalizedTotal, mode, occurredAt, normalizedLocation) || hasActivity) {
+                await _entities.SaveAsync(entity, cancellationToken);
+            }
             return await ProjectCardAsync(entity, cancellationToken);
         }
 
@@ -476,15 +526,27 @@ public sealed class EntityCapabilityService {
             return await ProjectCardAsync(entity, cancellationToken);
         }
 
-        progress.MoveTo(targetCursorId, unit, normalizedIndex, normalizedTotal, mode, now, normalizedLocation);
+        if (!progress.TryMoveTo(
+                targetCursorId,
+                unit,
+                normalizedIndex,
+                normalizedTotal,
+                mode,
+                occurredAt,
+                normalizedLocation,
+                completed: completed == true)) {
+            if (hasActivity) {
+                await _entities.SaveAsync(entity, cancellationToken);
+            }
+            return await ProjectCardAsync(entity, cancellationToken);
+        }
 
         PlaybackEventAppend? completedEvent = null;
         if (completed == true) {
-            progress.MarkCompleted(now);
             var playback = GetOrAddDefaultCapability<CapabilityPlayback>(entity);
             if (playback is not null) {
-                playback.RecordCompletedPlay(now);
-                completedEvent = CompletedEvent(entity, now, positionSeconds: null, durationSeconds: null);
+                playback.RecordCompletedPlay(occurredAt);
+                completedEvent = CompletedEvent(entity, occurredAt, positionSeconds: null, durationSeconds: null);
             }
         }
 
@@ -590,6 +652,27 @@ public sealed class EntityCapabilityService {
     /// <summary>Maximum optimistic-concurrency retries for a single user-state mutation.</summary>
     private const int MaxConcurrencyRetries = 4;
 
+    /// <summary>
+    /// Executes one complete user-state mutation attempt. The callback must load fresh state and
+    /// reapply its action; this method owns attempt cleanup so a conflict never leaves stale rows
+    /// or staged playback/activity events in the shared request unit of work.
+    /// </summary>
+    private async Task<TResult> ExecuteWriteAttemptAsync<TResult>(
+        Func<CancellationToken, Task<TResult>> executeAttemptAsync,
+        CancellationToken cancellationToken) {
+        for (var attempt = 0; ; attempt++) {
+            using var writeAttempt = _entities.BeginAttempt();
+            try {
+                return await executeAttemptAsync(cancellationToken);
+            } catch (EntityConcurrencyConflictException) {
+                await writeAttempt.RollbackAsync(cancellationToken);
+                if (attempt >= MaxConcurrencyRetries) {
+                    throw;
+                }
+            }
+        }
+    }
+
     private async Task<EntityCard?> MutateAsync(
         Guid id,
         Func<Entity, bool> mutate,
@@ -603,19 +686,17 @@ public sealed class EntityCapabilityService {
         // Reload-and-reapply on conflict: rapid playback reports (Infuse fires pause/unpause within
         // milliseconds) race to write the same entity's state, and a lost optimistic-concurrency
         // write must be retried against the latest row rather than surfaced as a 500.
-        for (var attempt = 0; ; attempt++) {
-            var entity = await _entities.FindShallowAsync(id, cancellationToken);
-            if (entity is null || !mutate(entity)) {
-                return null;
-            }
+        return await ExecuteWriteAttemptAsync(
+            async attemptCancellationToken => {
+                var entity = await _entities.FindShallowAsync(id, attemptCancellationToken);
+                if (entity is null || !mutate(entity)) {
+                    return null;
+                }
 
-            try {
-                await _entities.SaveAsync(entity, cancellationToken);
-                return await ProjectCardAsync(entity, cancellationToken);
-            } catch (EntityConcurrencyConflictException) when (attempt < MaxConcurrencyRetries) {
-                // Re-read the current row and apply the mutation again on the next loop iteration.
-            }
-        }
+                await _entities.SaveAsync(entity, attemptCancellationToken);
+                return await ProjectCardAsync(entity, attemptCancellationToken);
+            },
+            cancellationToken);
     }
 
     private async Task<EntityCard?> MutateWithPlaybackEventAsync(
@@ -628,28 +709,26 @@ public sealed class EntityCapabilityService {
 
         // Playback counters and playback history describe the same user action. Stage the
         // event before saving so EF persists both inside the entity repository transaction.
-        for (var attempt = 0; ; attempt++) {
-            var entity = await _entities.FindShallowAsync(id, cancellationToken);
-            if (entity is null) {
-                return null;
-            }
-
-            var result = mutate(entity);
-            if (!result.WasApplied) {
-                return null;
-            }
-
-            try {
-                if (result.Event is not null) {
-                    await _playbackEvents.StageAsync(result.Event, cancellationToken);
+        return await ExecuteWriteAttemptAsync(
+            async attemptCancellationToken => {
+                var entity = await _entities.FindShallowAsync(id, attemptCancellationToken);
+                if (entity is null) {
+                    return null;
                 }
 
-                await _entities.SaveAsync(entity, cancellationToken);
-                return await ProjectCardAsync(entity, cancellationToken);
-            } catch (EntityConcurrencyConflictException) when (attempt < MaxConcurrencyRetries) {
-                // Re-read the current row and apply the mutation again on the next loop iteration.
-            }
-        }
+                var result = mutate(entity);
+                if (!result.WasApplied) {
+                    return null;
+                }
+
+                if (result.Event is not null) {
+                    await _playbackEvents.StageAsync(result.Event, attemptCancellationToken);
+                }
+
+                await _entities.SaveAsync(entity, attemptCancellationToken);
+                return await ProjectCardAsync(entity, attemptCancellationToken);
+            },
+            cancellationToken);
     }
 
     private static PlaybackEventAppend CompletedEvent(
@@ -663,6 +742,11 @@ public sealed class EntityCapabilityService {
             occurredAt,
             positionSeconds,
             durationSeconds ?? entity.Technical?.Duration?.TotalSeconds);
+
+    private static bool AcceptsPlaybackSignal(
+        CapabilityPlayback playback,
+        DateTimeOffset occurredAt) =>
+        playback.Value.LastPlayedAt is null || occurredAt >= playback.Value.LastPlayedAt;
 
     private static TCapability? GetOrAddDefaultCapability<TCapability>(Entity entity)
         where TCapability : Prismedia.Domain.Capabilities.EntityCapability =>
@@ -719,42 +803,40 @@ public sealed class EntityCapabilityService {
             ? scope.Index + 1
             : scope.Index;
         var scopeCompleted = itemCompleted && scope.NextItemId is null;
+        var occurredAt = _timeProvider.GetUtcNow();
 
-        for (var attempt = 0; ; attempt++) {
-            var owner = await _entities.FindShallowAsync(scope.OwnerId, cancellationToken);
-            if (owner is null) {
-                return;
-            }
+        await ExecuteWriteAttemptAsync(
+            async attemptCancellationToken => {
+                var owner = await _entities.FindShallowAsync(scope.OwnerId, attemptCancellationToken);
+                if (owner is null) {
+                    return false;
+                }
 
-            var progress = GetOrAddDefaultCapability<CapabilityProgress>(owner);
-            if (progress is null) {
-                return;
-            }
-            if (progress.CurrentEntityId is not null &&
-                (progress.Index > targetIndex ||
-                 progress.CompletedAt is not null && !scopeCompleted && progress.Index >= targetIndex)) {
-                return;
-            }
+                var progress = GetOrAddDefaultCapability<CapabilityProgress>(owner);
+                if (progress is null) {
+                    return false;
+                }
+                if (progress.CurrentEntityId is not null &&
+                    (progress.Index > targetIndex ||
+                     progress.CompletedAt is not null && !scopeCompleted && progress.Index >= targetIndex)) {
+                    return false;
+                }
 
-            var now = _timeProvider.GetUtcNow();
-            progress.MoveTo(
-                targetItemId,
-                ProgressUnit.Item,
-                targetIndex,
-                scope.Total,
-                mode: null,
-                now);
-            if (scopeCompleted) {
-                progress.MarkCompleted(now);
-            }
+                if (!progress.TryMoveTo(
+                        targetItemId,
+                        ProgressUnit.Item,
+                        targetIndex,
+                        scope.Total,
+                        mode: null,
+                        occurredAt,
+                        completed: scopeCompleted)) {
+                    return false;
+                }
 
-            try {
-                await _entities.SaveAsync(owner, cancellationToken);
-                return;
-            } catch (EntityConcurrencyConflictException) when (attempt < MaxConcurrencyRetries) {
-                // Re-read the container cursor and preserve the farther position on retry.
-            }
-        }
+                await _entities.SaveAsync(owner, attemptCancellationToken);
+                return true;
+            },
+            cancellationToken);
     }
 
     private sealed record PlaybackMutationResult(bool WasApplied, PlaybackEventAppend? Event) {

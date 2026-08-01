@@ -1,10 +1,8 @@
 using Microsoft.EntityFrameworkCore;
-using Npgsql;
 using Prismedia.Application.Jobs;
 using Prismedia.Domain.Entities;
 using Prismedia.Infrastructure.Persistence;
 using Prismedia.Infrastructure.Queue;
-using Xunit.Sdk;
 
 namespace Prismedia.Infrastructure.Tests;
 
@@ -203,65 +201,5 @@ public sealed class JobResourcePostgresTests {
         Assert.Equal(33, nodes.Length);
         Assert.Equal(33, nodes.Select(node => node.NodeKey).Distinct().Count());
         Assert.Equal(33, nodes.Select(node => node.Sequence).Distinct().Count());
-    }
-
-    private sealed class PostgresTestDatabase(
-        string databaseName,
-        string adminConnectionString,
-        string connectionString) : IAsyncDisposable {
-        public PrismediaDbContext CreateContext() =>
-            new(new DbContextOptionsBuilder<PrismediaDbContext>()
-                .UseNpgsql(connectionString)
-                .Options);
-
-        public static async Task<PostgresTestDatabase> CreateAsync() {
-            var configured = Environment.GetEnvironmentVariable("PRISMEDIA_TEST_DATABASE_URL")
-                ?? "Host=localhost;Port=5432;Database=postgres;Username=prismedia;Password=prismedia";
-            var adminBuilder = new NpgsqlConnectionStringBuilder(configured) {
-                Database = "postgres",
-                Pooling = false
-            };
-            try {
-                await using var probe = new NpgsqlConnection(adminBuilder.ConnectionString);
-                await probe.OpenAsync();
-            } catch (Exception exception) when (exception is NpgsqlException or TimeoutException) {
-                throw SkipException.ForSkip(
-                    $"PostgreSQL job-resource test requires PRISMEDIA_TEST_DATABASE_URL or the local dev database: {exception.Message}");
-            }
-
-            var name = $"prismedia_job_resource_{Guid.NewGuid():N}";
-            await using (var admin = new NpgsqlConnection(adminBuilder.ConnectionString)) {
-                await admin.OpenAsync();
-                await using var create = new NpgsqlCommand($"CREATE DATABASE \"{name}\"", admin);
-                await create.ExecuteNonQueryAsync();
-            }
-
-            var testBuilder = new NpgsqlConnectionStringBuilder(adminBuilder.ConnectionString) {
-                Database = name,
-                Pooling = false
-            };
-            var database = new PostgresTestDatabase(
-                name,
-                adminBuilder.ConnectionString,
-                testBuilder.ConnectionString);
-            try {
-                await using var context = database.CreateContext();
-                await context.Database.MigrateAsync();
-                return database;
-            } catch {
-                await database.DisposeAsync();
-                throw;
-            }
-        }
-
-        public async ValueTask DisposeAsync() {
-            NpgsqlConnection.ClearAllPools();
-            await using var admin = new NpgsqlConnection(adminConnectionString);
-            await admin.OpenAsync();
-            await using var drop = new NpgsqlCommand(
-                $"DROP DATABASE IF EXISTS \"{databaseName}\" WITH (FORCE)",
-                admin);
-            await drop.ExecuteNonQueryAsync();
-        }
     }
 }

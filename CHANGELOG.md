@@ -9,6 +9,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 ### Fixed
 
 - Entity discovery, collections, artwork, and playback statistics now share each Entity kind's catalog visibility rules, keeping audiobook parts from appearing as standalone music and nested containers from duplicating kind indexes.
+- Concurrent Entity edits — flags, markers, ratings, playback, and reading updates — now merge safely, keeping the latest user state and recording each completed or reading activity event exactly once.
 - Progress cursors now follow definition-declared work and ordered-container topology, preventing unrelated or inaccessible entities from redirecting reading state while preserving book and episodic rollups.
 - Images and audio tracks now retain deterministic direct library ownership, including in nested or disabled library roots, so access rules do not depend on scan order or folder ancestry.
 - Rebuilding generated media now preserves custom artwork and subtitles while safely clearing stale video cache assets for movies, episodes, and standalone videos.

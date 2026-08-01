@@ -182,6 +182,12 @@ public sealed class PrismediaDbContext : DbContext {
             modelBuilder.Entity<JobResourceStateRow>()
                 .Property<uint>("Version")
                 .IsRowVersion();
+            modelBuilder.Entity<EntityRow>()
+                .Property<uint>("Version")
+                .IsRowVersion();
+            modelBuilder.Entity<UserEntityStateRow>()
+                .Property<uint>("Version")
+                .IsRowVersion();
         }
     }
 }

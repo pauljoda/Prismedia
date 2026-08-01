@@ -95,27 +95,35 @@ public sealed class CapabilityPlayback : EntityCapability {
     /// <summary>
     /// Records a discrete completed playback event from a player that only reports once at end of
     /// stream. Unlike threshold progress, each call represents a completed session and advances the
-    /// play count even when the entity was already marked completed.
+    /// play count even when the entity was already marked completed. Historical events still advance
+    /// their counter, but do not overwrite a newer resume or completion signal.
     /// </summary>
     /// <param name="at">Timestamp of the completed play event.</param>
     public void RecordCompletedPlay(DateTimeOffset at) {
-        Value = Value with {
-            PlayCount = Value.PlayCount + 1,
-            ResumeTime = TimeSpan.Zero,
-            CompletedAt = at,
-            LastPlayedAt = at
-        };
+        var next = Value with { PlayCount = Value.PlayCount + 1 };
+        if (AcceptsPlaybackSignal(at)) {
+            next = next with {
+                ResumeTime = TimeSpan.Zero,
+                CompletedAt = at,
+                LastPlayedAt = at
+            };
+        }
+
+        Value = next;
     }
 
     /// <summary>
     /// Records a likely skip/quick-abandon event without changing resume or completion state.
+    /// Historical skips increment their counter without replacing a newer playback timestamp.
     /// </summary>
     /// <param name="at">Timestamp of the skip event.</param>
     public void RecordSkipped(DateTimeOffset at) {
-        Value = Value with {
-            SkipCount = Value.SkipCount + 1,
-            LastPlayedAt = at
-        };
+        var next = Value with { SkipCount = Value.SkipCount + 1 };
+        if (AcceptsPlaybackSignal(at)) {
+            next = next with { LastPlayedAt = at };
+        }
+
+        Value = next;
     }
 
     /// <summary>
@@ -155,4 +163,7 @@ public sealed class CapabilityPlayback : EntityCapability {
 
         Value = Value with { PlayDuration = Value.PlayDuration + delta };
     }
+
+    private bool AcceptsPlaybackSignal(DateTimeOffset at) =>
+        Value.LastPlayedAt is null || at >= Value.LastPlayedAt;
 }

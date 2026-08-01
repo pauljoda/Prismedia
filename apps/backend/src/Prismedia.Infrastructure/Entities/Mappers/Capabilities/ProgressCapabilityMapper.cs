@@ -1,4 +1,3 @@
-using Microsoft.EntityFrameworkCore;
 using Prismedia.Application.Security;
 using Prismedia.Domain.Capabilities;
 using Prismedia.Domain.Entities;
@@ -18,8 +17,7 @@ internal sealed class ProgressCapabilityMapper(PrismediaDbContext db, ICurrentUs
             return;
         }
 
-        var row = await db.UserEntityStates.AsNoTracking()
-            .FirstOrDefaultAsync(r => r.UserId == userId && r.EntityId == entity.Id, cancellationToken);
+        var row = await UserEntityStateColumns.FindAsync(db, userId, entity.Id, cancellationToken);
         if (row is null || !UserEntityStateColumns.HasProgress(row)) {
             return;
         }
@@ -35,7 +33,7 @@ internal sealed class ProgressCapabilityMapper(PrismediaDbContext db, ICurrentUs
             row.ProgressTotal,
             row.ProgressMode is not null && row.ProgressMode.TryDecodeAs<ReaderMode>(out var mode) ? mode : null,
             row.ProgressCompletedAt,
-            row.UpdatedAt,
+            row.ProgressUpdatedAt ?? row.UpdatedAt,
             row.ProgressLocation));
     }
 
@@ -59,6 +57,8 @@ internal sealed class ProgressCapabilityMapper(PrismediaDbContext db, ICurrentUs
         row.ProgressMode = progress.Mode?.ToCode();
         row.ProgressLocation = progress.Location;
         row.ProgressCompletedAt = progress.CompletedAt;
-        row.UpdatedAt = progress.UpdatedAt ?? DateTimeOffset.UtcNow;
+        var now = DateTimeOffset.UtcNow;
+        row.ProgressUpdatedAt = progress.UpdatedAt ?? row.ProgressUpdatedAt ?? now;
+        row.UpdatedAt = now;
     }
 }

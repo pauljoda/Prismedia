@@ -304,7 +304,7 @@ public sealed partial class EfEntityReadService : IEntityReadService {
                 .Where(state => state.UserId == userId && state.EntityId == entity.Id)
                 .Select(state => state.LastPlayedAt ??
                     (state.ProgressCurrentEntityId != null || state.ProgressIndex > 0 || state.ProgressCompletedAt != null
-                        ? (DateTimeOffset?)state.UpdatedAt
+                        ? state.ProgressUpdatedAt ?? state.UpdatedAt
                         : null))
                 .FirstOrDefault()
         });
