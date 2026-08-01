@@ -1,7 +1,6 @@
 <script lang="ts">
   import {
     Calendar,
-    ChevronDown,
     FolderOpen,
     Hash,
     Link2,
@@ -12,7 +11,7 @@
     X,
   } from "@lucide/svelte";
   import type { Component } from "svelte";
-  import { cn } from "@prismedia/ui-svelte";
+  import { Button, Select, TextInput, cn, type SelectOption } from "@prismedia/ui-svelte";
   import {
     COLLECTION_ENTITY_TYPES,
     COLLECTION_RULE_FIELDS,
@@ -65,6 +64,11 @@
     { value: "or", label: "Any" },
     { value: "not", label: "None" },
   ];
+
+  const fieldOptions: SelectOption[] = COLLECTION_RULE_FIELDS.map((field) => ({
+    value: field.field,
+    label: field.label,
+  }));
 
   const conditions = $derived(
     rule.children.filter((child): child is CollectionRuleCondition => child.type === "condition"),
@@ -194,21 +198,7 @@
       .filter(Boolean);
   }
 
-  const controlClasses = cn(
-    "min-w-0 w-full appearance-none rounded-xs border border-border-subtle bg-surface-2",
-    "h-8 px-2 pr-6 text-[0.75rem] text-text-primary",
-    "shadow-[inset_0_1px_4px_rgba(0,0,0,0.25)] outline-none transition-colors",
-    "focus:border-border-accent focus:shadow-[inset_0_1px_4px_rgba(0,0,0,0.25),0_0_0_1px_rgba(199, 201, 204,0.2)]",
-    "disabled:cursor-not-allowed disabled:opacity-50",
-  );
-
-  const valueClasses = cn(
-    "min-w-0 w-full rounded-xs border border-border-subtle bg-surface-2",
-    "h-8 px-2 text-[0.75rem] text-text-primary",
-    "shadow-[inset_0_1px_4px_rgba(0,0,0,0.25)] outline-none transition-colors placeholder:text-text-disabled",
-    "focus:border-border-accent focus:shadow-[inset_0_1px_4px_rgba(0,0,0,0.25),0_0_0_1px_rgba(199, 201, 204,0.2)]",
-    "disabled:cursor-not-allowed disabled:opacity-50",
-  );
+  const compactControlClass = "bg-surface-2 border-border-subtle px-2 text-[0.75rem]";
 </script>
 
 <div class="flex flex-col gap-3">
@@ -222,14 +212,16 @@
     >
       {#each logicOptions as opt (opt.value)}
         {@const active = rule.operator === opt.value}
-        <button
+        <Button
           type="button"
+          variant="ghost"
+          size="sm"
           role="radio"
           aria-checked={active}
           {disabled}
           onclick={() => updateGroup({ operator: opt.value })}
           class={cn(
-            "rounded-xs px-3 py-1 text-[0.7rem] font-semibold uppercase tracking-[0.12em] transition-all",
+            "h-auto rounded-xs px-3 py-1 text-[0.7rem] font-semibold uppercase tracking-[0.12em] transition-all",
             "disabled:cursor-not-allowed disabled:opacity-50",
             active
               ? "bg-gradient-to-b from-accent-900/60 to-accent-950/60 text-text-accent shadow-[inset_0_0_0_1px_rgba(199, 201, 204,0.45),0_0_12px_rgba(199, 201, 204,0.18)]"
@@ -237,7 +229,7 @@
           )}
         >
           {opt.label}
-        </button>
+        </Button>
       {/each}
     </div>
     <span>of these conditions</span>
@@ -276,36 +268,29 @@
             <!-- Field + operator + value -->
             <div class="grid grid-cols-1 sm:grid-cols-[1.1fr_0.75fr_1.4fr] gap-1.5 flex-1 min-w-0 items-start">
               <!-- Field selector -->
-              <div class="relative">
-                <select
-                  aria-label="Rule field"
-                  value={condition.field}
-                  {disabled}
-                  onchange={(e) => setField(i, (e.currentTarget as HTMLSelectElement).value)}
-                  class={controlClasses}
-                >
-                  {#each COLLECTION_RULE_FIELDS as option (option.field)}
-                    <option value={option.field}>{option.label}</option>
-                  {/each}
-                </select>
-                <ChevronDown class="pointer-events-none absolute right-1.5 top-1/2 -translate-y-1/2 h-2.5 w-2.5 text-text-muted" />
-              </div>
+              <Select
+                ariaLabel="Rule field"
+                options={fieldOptions}
+                value={condition.field}
+                size="sm"
+                {disabled}
+                onchange={(value) => setField(i, value)}
+                class={compactControlClass}
+              />
 
               <!-- Operator selector -->
-              <div class="relative">
-                <select
-                  aria-label="Rule operator"
-                  value={condition.operator}
-                  {disabled}
-                  onchange={(e) => setOperator(i, (e.currentTarget as HTMLSelectElement).value)}
-                  class={controlClasses}
-                >
-                  {#each field.operators as operator (operator)}
-                    <option value={operator}>{operator.replaceAll("_", " ")}</option>
-                  {/each}
-                </select>
-                <ChevronDown class="pointer-events-none absolute right-1.5 top-1/2 -translate-y-1/2 h-2.5 w-2.5 text-text-muted" />
-              </div>
+              <Select
+                ariaLabel="Rule operator"
+                options={field.operators.map((operator) => ({
+                  value: operator,
+                  label: operator.replaceAll("_", " "),
+                }))}
+                value={condition.operator}
+                size="sm"
+                {disabled}
+                onchange={(value) => setOperator(i, value)}
+                class={compactControlClass}
+              />
 
               <!-- Value editor (contextual) -->
               {#if isNullary}
@@ -315,7 +300,7 @@
               {:else if isBetween}
                 {@const [minVal, maxVal] = getBetweenValues(condition.value)}
                 <div class="grid grid-cols-[1fr_auto_1fr] items-center gap-1.5">
-                  <input
+                  <TextInput
                     aria-label="Range minimum"
                     type={field.fieldType === "date" ? "date" : "number"}
                     value={minVal}
@@ -325,10 +310,11 @@
                       const next = (e.currentTarget as HTMLInputElement).value;
                       updateCondition(i, { value: parseBetween(field, next, maxVal) });
                     }}
-                    class={valueClasses}
+                    size="sm"
+                    class={compactControlClass}
                   />
                   <span class="text-[0.65rem] font-mono uppercase text-text-disabled select-none">to</span>
-                  <input
+                  <TextInput
                     aria-label="Range maximum"
                     type={field.fieldType === "date" ? "date" : "number"}
                     value={maxVal}
@@ -338,11 +324,12 @@
                       const next = (e.currentTarget as HTMLInputElement).value;
                       updateCondition(i, { value: parseBetween(field, minVal, next) });
                     }}
-                    class={valueClasses}
+                    size="sm"
+                    class={compactControlClass}
                   />
                 </div>
               {:else if isMulti}
-                <input
+                <TextInput
                   aria-label="Multi value (comma separated)"
                   value={getMultiValues(condition.value)}
                   placeholder={field.enumValues ? field.enumValues.join(", ") : "value, value, …"}
@@ -351,20 +338,22 @@
                     updateCondition(i, {
                       value: parseMultiValue((e.currentTarget as HTMLInputElement).value),
                     })}
-                  class={valueClasses}
+                  size="sm"
+                  class={compactControlClass}
                 />
               {:else if field.fieldType === "date"}
-                <input
+                <TextInput
                   aria-label="Date value"
                   type="date"
                   value={getStringValue(condition.value)}
                   {disabled}
                   oninput={(e) =>
                     updateCondition(i, { value: (e.currentTarget as HTMLInputElement).value })}
-                  class={valueClasses}
+                  size="sm"
+                  class={compactControlClass}
                 />
               {:else if field.fieldType === "number"}
-                <input
+                <TextInput
                   aria-label="Number value"
                   type="number"
                   value={getNumberValue(condition.value)}
@@ -375,44 +364,33 @@
                     const num = Number(raw);
                     updateCondition(i, { value: Number.isFinite(num) ? num : 0 });
                   }}
-                  class={valueClasses}
+                  size="sm"
+                  class={compactControlClass}
                 />
               {:else if field.fieldType === "enum" && field.enumValues}
-                <div class="relative">
-                  <select
-                    aria-label="Enum value"
-                    value={getStringValue(condition.value)}
-                    {disabled}
-                    onchange={(e) =>
-                      updateCondition(i, { value: (e.currentTarget as HTMLSelectElement).value })}
-                    class={controlClasses}
-                  >
-                    <option value="" disabled>Select…</option>
-                    {#each field.enumValues as enumVal (enumVal)}
-                      <option value={enumVal}>{enumVal}</option>
-                    {/each}
-                  </select>
-                  <ChevronDown class="pointer-events-none absolute right-1.5 top-1/2 -translate-y-1/2 h-2.5 w-2.5 text-text-muted" />
-                </div>
+                <Select
+                  ariaLabel="Enum value"
+                  options={field.enumValues.map((value) => ({ value, label: value }))}
+                  value={getStringValue(condition.value)}
+                  placeholder="Select…"
+                  size="sm"
+                  {disabled}
+                  onchange={(value) => updateCondition(i, { value })}
+                  class={compactControlClass}
+                />
               {:else if field.fieldType === "library"}
-                <div class="relative">
-                  <select
-                    aria-label="Library value"
-                    value={getStringValue(condition.value)}
-                    disabled={disabled || libraryOptions.length === 0}
-                    onchange={(e) =>
-                      updateCondition(i, { value: (e.currentTarget as HTMLSelectElement).value })}
-                    class={controlClasses}
-                  >
-                    <option value="" disabled>{libraryOptions.length > 0 ? "Choose library" : "No visible libraries"}</option>
-                    {#each libraryOptions as option (option.value)}
-                      <option value={option.value}>{option.label}</option>
-                    {/each}
-                  </select>
-                  <ChevronDown class="pointer-events-none absolute right-1.5 top-1/2 -translate-y-1/2 h-2.5 w-2.5 text-text-muted" />
-                </div>
+                <Select
+                  ariaLabel="Library value"
+                  options={libraryOptions}
+                  value={getStringValue(condition.value)}
+                  placeholder={libraryOptions.length > 0 ? "Choose library" : "No visible libraries"}
+                  size="sm"
+                  disabled={disabled || libraryOptions.length === 0}
+                  onchange={(value) => updateCondition(i, { value })}
+                  class={compactControlClass}
+                />
               {:else}
-                <input
+                <TextInput
                   aria-label="Text value"
                   type="text"
                   value={getStringValue(condition.value)}
@@ -420,26 +398,25 @@
                   {disabled}
                   oninput={(e) =>
                     updateCondition(i, { value: (e.currentTarget as HTMLInputElement).value })}
-                  class={valueClasses}
+                  size="sm"
+                  class={compactControlClass}
                 />
               {/if}
             </div>
 
             <!-- Remove button -->
-            <button
+            <Button
               type="button"
+              variant="ghost"
+              size="icon"
               aria-label="Remove condition"
               title="Remove condition"
               {disabled}
               onclick={() => removeCondition(i)}
-              class={cn(
-                "shrink-0 self-start inline-flex items-center justify-center w-8 h-8 rounded-xs text-text-disabled/50 transition-colors",
-                "hover:text-error-text hover:bg-error-muted/10",
-                "disabled:cursor-not-allowed disabled:opacity-50",
-              )}
+              class="shrink-0 self-start rounded-xs text-text-disabled/50 hover:text-error-text hover:bg-error-muted/10"
             >
               <X class="h-3.5 w-3.5" />
-            </button>
+            </Button>
           </div>
 
           <!-- Entity type toggles -->
@@ -456,15 +433,17 @@
                 {@const kindSupported = fieldSupportsKind(field, kind.value)}
                 {@const active = kindSupported && (condition.entityTypes.length === 0 || condition.entityTypes.includes(kind.value))}
                 {@const KindIcon = kind.icon}
-                <button
+                <Button
                   type="button"
+                  variant="ghost"
+                  size="sm"
                   disabled={disabled || !kindSupported}
                   aria-pressed={active}
                   aria-disabled={!kindSupported}
                   title={kind.label}
                   onclick={() => toggleEntityType(i, kind.value)}
                   class={cn(
-                    "inline-flex shrink-0 items-center gap-1 rounded-xs px-1.5 py-0.5 text-[0.58rem] font-semibold uppercase tracking-wider border transition-all",
+                    "h-auto shrink-0 gap-1 rounded-xs px-1.5 py-0.5 text-[0.58rem] font-semibold uppercase tracking-wider border transition-all",
                     "disabled:cursor-not-allowed disabled:opacity-50",
                     !kindSupported
                       ? "border-transparent bg-transparent text-text-disabled/35"
@@ -475,7 +454,7 @@
                 >
                   <KindIcon class="h-2.5 w-2.5" />
                   <span>{kind.label}</span>
-                </button>
+                </Button>
               {/each}
             </div>
           </div>
@@ -490,17 +469,15 @@
   {/if}
 
   <!-- Add condition -->
-  <button
+  <Button
     type="button"
+    variant="ghost"
+    size="sm"
     {disabled}
     onclick={addCondition}
-    class={cn(
-      "self-start inline-flex items-center gap-1.5 rounded-sm border border-dashed border-border-subtle bg-transparent px-3 py-1.5 text-[0.72rem] text-text-muted transition-all",
-      "hover:border-border-accent hover:text-text-accent hover:bg-accent-950/10",
-      "disabled:cursor-not-allowed disabled:opacity-50",
-    )}
+    class="self-start h-auto gap-1.5 border border-dashed border-border-subtle bg-transparent px-3 py-1.5 text-[0.72rem] text-text-muted hover:border-border-accent hover:text-text-accent hover:bg-accent-950/10"
   >
     <Plus class="h-3 w-3" />
     Add condition
-  </button>
+  </Button>
 </div>
