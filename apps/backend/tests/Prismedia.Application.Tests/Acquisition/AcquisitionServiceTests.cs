@@ -68,6 +68,31 @@ public sealed class AcquisitionServiceTests {
     }
 
     [Fact]
+    public async Task TransferTelemetryDegradesWhenTheDownloadClientIsUnreachable() {
+        var harness = Harness(TransferInfo(RecordedClientId));
+        harness.Downloads.GetFailure = new HttpRequestException("connection refused");
+
+        var transfer = await harness.Service.GetTransferAsync(AcquisitionId, CancellationToken.None);
+
+        Assert.Null(transfer);
+    }
+
+    [Fact]
+    public async Task TransferTelemetryKeepsStatusWhenOptionalEnrichmentFails() {
+        var harness = Harness(TransferInfo(RecordedClientId));
+        harness.Downloads.PropertiesFailure = new HttpRequestException("properties unavailable");
+        harness.Downloads.PiecesFailure = new HttpRequestException("piece map unavailable");
+
+        var transfer = await harness.Service.GetTransferAsync(AcquisitionId, CancellationToken.None);
+
+        Assert.NotNull(transfer);
+        Assert.Equal(0.5, transfer.Progress);
+        Assert.Equal("downloading", transfer.State);
+        Assert.Equal(0, transfer.TotalSizeBytes);
+        Assert.Empty(transfer.PieceStates);
+    }
+
+    [Fact]
     public async Task CreateNormalizesTheNamespaceAndPreservesAnOpaqueColonIdentityValue() {
         var harness = Harness(TransferInfo(RecordedClientId));
 
@@ -1761,6 +1786,8 @@ public sealed class AcquisitionServiceTests {
         public IReadOnlyList<CancellationToken> RemovalCancellationTokens => _client.RemovalCancellationTokens;
         public int AddCount => _client.AddCount;
         public Exception? GetFailure { set => _client.GetFailure = value; }
+        public Exception? PropertiesFailure { set => _client.PropertiesFailure = value; }
+        public Exception? PiecesFailure { set => _client.PiecesFailure = value; }
         public Exception? RemoveFailure { get => _client.RemoveFailure; set => _client.RemoveFailure = value; }
         public bool ItemExists { set => _client.ItemExists = value; }
         public Exception? AddFailure { set => _client.AddFailure = value; }
@@ -1775,6 +1802,8 @@ public sealed class AcquisitionServiceTests {
         public List<(Guid ClientId, string ClientItemId, bool DeleteData)> Removals { get; } = [];
         public List<CancellationToken> RemovalCancellationTokens { get; } = [];
         public Exception? GetFailure { get; set; }
+        public Exception? PropertiesFailure { get; set; }
+        public Exception? PiecesFailure { get; set; }
         public Exception? RemoveFailure { get; set; }
         public bool ItemExists { get; set; } = true;
         public Action? OnAdd { get; set; }
@@ -1828,8 +1857,14 @@ public sealed class AcquisitionServiceTests {
             Task.FromResult<IReadOnlyList<DownloadItemStatus>>(Items.ToArray());
         public Task<IReadOnlyList<DownloadItemFile>> GetFilesAsync(DownloadClientConnection connection, string clientItemId, CancellationToken cancellationToken) =>
             Task.FromResult<IReadOnlyList<DownloadItemFile>>(Files.ToArray());
-        public Task<DownloadItemProperties?> GetPropertiesAsync(DownloadClientConnection connection, string clientItemId, CancellationToken cancellationToken) => throw new NotSupportedException();
-        public Task<byte[]> GetPieceStatesAsync(DownloadClientConnection connection, string clientItemId, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<DownloadItemProperties?> GetPropertiesAsync(DownloadClientConnection connection, string clientItemId, CancellationToken cancellationToken) =>
+            PropertiesFailure is null
+                ? Task.FromResult<DownloadItemProperties?>(null)
+                : Task.FromException<DownloadItemProperties?>(PropertiesFailure);
+        public Task<byte[]> GetPieceStatesAsync(DownloadClientConnection connection, string clientItemId, CancellationToken cancellationToken) =>
+            PiecesFailure is null
+                ? Task.FromResult(Array.Empty<byte>())
+                : Task.FromException<byte[]>(PiecesFailure);
         public Task<DownloadClientConnectionTest> TestAsync(DownloadClientConnection connection, CancellationToken cancellationToken) => throw new NotSupportedException();
     }
 

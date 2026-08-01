@@ -327,13 +327,53 @@ public sealed partial class AcquisitionService(
         // torrents/properties adds speed/seeds/eta once the transfer is underway. Surface whatever is
         // available so early stages (e.g. fetching metadata) still show what's happening rather than a
         // bare "waiting" placeholder. Only when the torrent is gone entirely do we report no transfer.
-        var status = await download.GetItemAsync(connection, clientItemId, cancellationToken);
-        var properties = await download.GetPropertiesAsync(connection, clientItemId, cancellationToken);
+        DownloadItemStatus? status;
+        try {
+            status = await download.GetItemAsync(connection, clientItemId, cancellationToken);
+        } catch (OperationCanceledException) {
+            throw;
+        } catch (Exception ex) {
+            // Live telemetry is read-only enrichment. An unavailable external client must not turn an
+            // otherwise usable acquisition detail page into an API failure.
+            logger.LogDebug(
+                ex,
+                "Download client {Client} unreachable while reading transfer {TransferId}.",
+                client.DisplayName,
+                clientItemId);
+            return null;
+        }
+
+        DownloadItemProperties? properties = null;
+        try {
+            properties = await download.GetPropertiesAsync(connection, clientItemId, cancellationToken);
+        } catch (OperationCanceledException) {
+            throw;
+        } catch (Exception ex) {
+            // Properties are optional enrichment; status alone is enough to render useful progress.
+            logger.LogDebug(
+                ex,
+                "Download client {Client} did not return properties for transfer {TransferId}.",
+                client.DisplayName,
+                clientItemId);
+        }
         if (status is null && properties is null) {
             return null;
         }
 
-        var pieces = await download.GetPieceStatesAsync(connection, clientItemId, cancellationToken);
+        byte[] pieces;
+        try {
+            pieces = await download.GetPieceStatesAsync(connection, clientItemId, cancellationToken);
+        } catch (OperationCanceledException) {
+            throw;
+        } catch (Exception ex) {
+            // Piece state is a torrent-only visualization and must never gate the transfer summary.
+            logger.LogDebug(
+                ex,
+                "Download client {Client} did not return piece state for transfer {TransferId}.",
+                client.DisplayName,
+                clientItemId);
+            pieces = [];
+        }
         return new AcquisitionTransferView(
             status?.Progress ?? 0,
             status?.State,
