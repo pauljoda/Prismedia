@@ -16,25 +16,25 @@ public sealed class AppSettingsRegistryTests {
         Assert.NotEmpty(definitions);
         Assert.Equal(definitions.Count, definitions.Select(definition => definition.Key).Distinct(StringComparer.Ordinal).Count());
         Assert.Contains(definitions, definition =>
-            definition.Key == AppSettingKeys.VisibilityDefaultMode &&
+            definition.Key == AppSettings.Visibility.DefaultMode.Key &&
             definition.Type == SettingValueType.Select &&
             definition.DefaultValue.GetString() == "off");
         Assert.Contains(definitions, definition =>
-            definition.Key == AppSettingKeys.JobsBackgroundConcurrency &&
+            definition.Key == AppSettings.Jobs.BackgroundConcurrency.Key &&
             definition.Type == SettingValueType.Integer &&
             definition.Constraints?.Min == 1 &&
             definition.Constraints?.Max == 32);
         Assert.Contains(definitions, definition =>
-            definition.Key == AppSettingKeys.CollectionsAutoRefreshEnabled &&
+            definition.Key == AppSettings.Collections.AutoRefreshEnabled.Key &&
             definition.Type == SettingValueType.Boolean &&
             definition.DefaultValue.GetBoolean());
         Assert.Contains(definitions, definition =>
-            definition.Key == AppSettingKeys.IdentifyDefaultProviders &&
+            definition.Key == AppSettings.Identify.DefaultProviders.Key &&
             definition.Type == SettingValueType.StringMap &&
             definition.DefaultValue.ValueKind == JsonValueKind.Object &&
             !definition.DefaultValue.EnumerateObject().Any());
         Assert.Contains(definitions, definition =>
-            definition.Key == AppSettingKeys.SubtitlesPreferredLanguages &&
+            definition.Key == AppSettings.Subtitles.PreferredLanguages.Key &&
             definition.Type == SettingValueType.WeightedTermList &&
             definition.Constraints?.Min == -100 &&
             definition.Constraints?.Max == 100);
@@ -51,15 +51,15 @@ public sealed class AppSettingsRegistryTests {
         var service = new SettingsService(new EfSettingsPersistence(db));
 
         var defaults = await service.GetValuesAsync(
-            new[] { AppSettingKeys.VisibilityDefaultMode, AppSettingKeys.JobsBackgroundConcurrency },
+            new[] { AppSettings.Visibility.DefaultMode.Key, AppSettings.Jobs.BackgroundConcurrency.Key },
             CancellationToken.None);
 
-        Assert.Equal("off", defaults.Values[AppSettingKeys.VisibilityDefaultMode].GetString());
-        Assert.Equal(4, defaults.Values[AppSettingKeys.JobsBackgroundConcurrency].GetInt32());
+        Assert.Equal("off", defaults.Values[AppSettings.Visibility.DefaultMode.Key].GetString());
+        Assert.Equal(4, defaults.Values[AppSettings.Jobs.BackgroundConcurrency.Key].GetInt32());
         Assert.Empty(await db.AppSettings.ToArrayAsync());
 
         var updated = await service.UpdateSettingAsync(
-            AppSettingKeys.JobsBackgroundConcurrency,
+            AppSettings.Jobs.BackgroundConcurrency.Key,
             JsonSerializer.SerializeToElement(8),
             CancellationToken.None);
 
@@ -74,11 +74,11 @@ public sealed class AppSettingsRegistryTests {
         var service = new SettingsService(new EfSettingsPersistence(db));
 
         await service.UpdateSettingAsync(
-            AppSettingKeys.PlaybackDefaultMode,
+            AppSettings.Playback.DefaultMode.Key,
             JsonSerializer.SerializeToElement("hls"),
             CancellationToken.None);
 
-        var reset = await service.ResetSettingAsync(AppSettingKeys.PlaybackDefaultMode, CancellationToken.None);
+        var reset = await service.ResetSettingAsync(AppSettings.Playback.DefaultMode.Key, CancellationToken.None);
 
         Assert.Equal("direct", reset.Value.GetString());
         Assert.True(reset.IsDefault);
@@ -92,11 +92,11 @@ public sealed class AppSettingsRegistryTests {
 
         var ex = await Assert.ThrowsAsync<SettingValidationException>(() =>
             service.UpdateSettingAsync(
-                AppSettingKeys.JobsBackgroundConcurrency,
+                AppSettings.Jobs.BackgroundConcurrency.Key,
                 JsonSerializer.SerializeToElement(99),
                 CancellationToken.None));
 
-        Assert.Equal(AppSettingKeys.JobsBackgroundConcurrency, ex.Key);
+        Assert.Equal(AppSettings.Jobs.BackgroundConcurrency.Key, ex.Key);
         Assert.Contains("between 1 and 32", ex.Message, StringComparison.OrdinalIgnoreCase);
     }
 
@@ -106,7 +106,7 @@ public sealed class AppSettingsRegistryTests {
         var service = new SettingsService(new EfSettingsPersistence(db));
 
         var legacy = await service.UpdateSettingAsync(
-            AppSettingKeys.SubtitlesPreferredLanguages,
+            AppSettings.Subtitles.PreferredLanguages.Key,
             JsonSerializer.SerializeToElement(new[] { "Forced", "English", "Eng" }),
             CancellationToken.None);
         var legacyTerms = legacy.Value.Deserialize<SubtitlePreferenceTerm[]>();
@@ -121,7 +121,7 @@ public sealed class AppSettingsRegistryTests {
             legacyTerms);
 
         var weighted = await service.UpdateSettingAsync(
-            AppSettingKeys.SubtitlesPreferredLanguages,
+            AppSettings.Subtitles.PreferredLanguages.Key,
             JsonSerializer.SerializeToElement(new[] {
                 new SubtitlePreferenceTerm("Forced", -80),
                 new SubtitlePreferenceTerm("English", 55),
@@ -154,11 +154,11 @@ public sealed class AppSettingsRegistryTests {
 
         var exception = await Assert.ThrowsAsync<SettingValidationException>(() =>
             service.UpdateSettingAsync(
-                AppSettingKeys.SubtitlesPreferredLanguages,
+                AppSettings.Subtitles.PreferredLanguages.Key,
                 document.RootElement,
                 CancellationToken.None));
 
-        Assert.Equal(AppSettingKeys.SubtitlesPreferredLanguages, exception.Key);
+        Assert.Equal(AppSettings.Subtitles.PreferredLanguages.Key, exception.Key);
     }
 
     [Fact]
@@ -168,10 +168,10 @@ public sealed class AppSettingsRegistryTests {
 
         await service.UpdateSettingsAsync(
             new Dictionary<string, JsonElement> {
-                [AppSettingKeys.ScanAutoScanEnabled] = JsonSerializer.SerializeToElement(true),
-                [AppSettingKeys.ScanIntervalMinutes] = JsonSerializer.SerializeToElement(15),
-                [AppSettingKeys.CollectionsAutoRefreshEnabled] = JsonSerializer.SerializeToElement(false),
-                [AppSettingKeys.PlaybackAudioPreferredLanguages] =
+                [AppSettings.Scan.AutoScanEnabled.Key] = JsonSerializer.SerializeToElement(true),
+                [AppSettings.Scan.IntervalMinutes.Key] = JsonSerializer.SerializeToElement(15),
+                [AppSettings.Collections.AutoRefreshEnabled.Key] = JsonSerializer.SerializeToElement(false),
+                [AppSettings.Playback.AudioPreferredLanguages.Key] =
                     JsonSerializer.SerializeToElement(new[] { "ja", "jpn" }),
             },
             CancellationToken.None);
@@ -196,7 +196,7 @@ public sealed class AppSettingsRegistryTests {
             StringComparer.Ordinal);
 
         var updated = await service.UpdateSettingAsync(
-            AppSettingKeys.IdentifyDefaultProviders,
+            AppSettings.Identify.DefaultProviders.Key,
             JsonSerializer.SerializeToElement(configured),
             CancellationToken.None);
         var snapshot = await service.GetIdentifyProviderSettingsAsync(CancellationToken.None);
@@ -208,7 +208,7 @@ public sealed class AppSettingsRegistryTests {
         }
 
         var row = await db.AppSettings.SingleAsync();
-        Assert.Equal(AppSettingKeys.IdentifyDefaultProviders, row.Key);
+        Assert.Equal(AppSettings.Identify.DefaultProviders.Key, row.Key);
         Assert.Equal(JsonValueKind.Object, JsonDocument.Parse(row.ValueJson).RootElement.ValueKind);
     }
 
@@ -223,11 +223,11 @@ public sealed class AppSettingsRegistryTests {
 
         var exception = await Assert.ThrowsAsync<SettingValidationException>(() =>
             service.UpdateSettingAsync(
-                AppSettingKeys.IdentifyDefaultProviders,
+                AppSettings.Identify.DefaultProviders.Key,
                 document.RootElement,
                 CancellationToken.None));
 
-        Assert.Equal(AppSettingKeys.IdentifyDefaultProviders, exception.Key);
+        Assert.Equal(AppSettings.Identify.DefaultProviders.Key, exception.Key);
         Assert.Empty(await db.AppSettings.ToArrayAsync());
     }
 

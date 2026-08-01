@@ -79,7 +79,7 @@ public sealed class DirectPlayableEntityMigrationPostgresTests {
             Assert.Contains(EntityKind.Video.ToCode(), rule, StringComparison.Ordinal);
             Assert.Contains(EntityKind.VideoEpisode.ToCode(), rule, StringComparison.Ordinal);
             Assert.Contains(EntityKind.Movie.ToCode(), rule, StringComparison.Ordinal);
-            var providers = await ScalarAsync<string>(connection, "SELECT value_json::text FROM app_settings WHERE key = @id", AppSettingKeys.IdentifyDefaultProviders);
+            var providers = await ScalarAsync<string>(connection, "SELECT value_json::text FROM app_settings WHERE key = @id", AppSettings.Identify.DefaultProviders.Key);
             Assert.Contains($"\"{EntityKind.VideoEpisode.ToCode()}\": \"fixture-provider\"", providers, StringComparison.Ordinal);
 
             Assert.Equal(fixture.MovieId.ToString(), await ScalarAsync<string>(connection, "SELECT target_entity_id FROM job_runs WHERE id = @id", fixture.JobRunId));
@@ -1413,7 +1413,7 @@ public sealed class DirectPlayableEntityMigrationPostgresTests {
             ("collection_cover_mode", CollectionCoverMode.Item.ToCode()),
             ("collection_item_source", CollectionItemSource.Dynamic.ToCode()),
             ("collection_rule", $"{{\"condition\":{{\"entityTypes\":[\"{EntityKind.Video.ToCode()}\",\"{EntityKind.Book.ToCode()}\",\"{EntityKind.Video.ToCode()}\"]}}}}"),
-            ("default_providers_key", AppSettingKeys.IdentifyDefaultProviders),
+            ("default_providers_key", AppSettings.Identify.DefaultProviders.Key),
             ("default_providers", $"{{\"{EntityKind.Video.ToCode()}\":\"fixture-provider\"}}"),
             ("job_graph_id", JobGraphId), ("job_run_id", JobRunId), ("movie_video_id_text", LegacyMovieVideoId.ToString()),
             ("mixed_job_run_id", MixedJobRunId),

@@ -345,10 +345,10 @@ public sealed class AcquisitionSearchRunnerTests {
     private static SettingsService Settings(DownloadProtocol? preferredProtocol, ProperDownloadPolicy? policy) {
         var overrides = new Dictionary<string, string>(StringComparer.Ordinal);
         if (policy is { } chosen) {
-            overrides[AppSettingKeys.AcquisitionDownloadPropers] = System.Text.Json.JsonSerializer.Serialize(chosen.ToCode());
+            overrides[AppSettings.Acquisition.DownloadPropers.Key] = System.Text.Json.JsonSerializer.Serialize(chosen.ToCode());
         }
         if (preferredProtocol is { } preferred) {
-            overrides[AppSettingKeys.AcquisitionPreferredProtocol] = System.Text.Json.JsonSerializer.Serialize(preferred.ToCode());
+            overrides[AppSettings.Acquisition.PreferredProtocol.Key] = System.Text.Json.JsonSerializer.Serialize(preferred.ToCode());
         }
 
         return new SettingsService(new FakeSettingsPersistence(overrides));

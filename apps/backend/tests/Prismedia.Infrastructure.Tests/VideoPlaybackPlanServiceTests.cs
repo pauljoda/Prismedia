@@ -382,7 +382,7 @@ public sealed class VideoPlaybackPlanServiceTests {
         public Task<IReadOnlyDictionary<string, string>> LoadSettingOverridesAsync(CancellationToken cancellationToken) =>
             Task.FromResult<IReadOnlyDictionary<string, string>>(
                 new Dictionary<string, string> {
-                    [AppSettingKeys.PlaybackAudioPreferredLanguages] =
+                    [AppSettings.Playback.AudioPreferredLanguages.Key] =
                         JsonSerializer.Serialize(_audioPreferredLanguages),
                 });
 

@@ -380,11 +380,11 @@ public sealed class JobSchedulerTests {
 
         public Task<IReadOnlyDictionary<string, string>> LoadSettingOverridesAsync(CancellationToken cancellationToken) =>
             Task.FromResult<IReadOnlyDictionary<string, string>>(new Dictionary<string, string> {
-                [AppSettingKeys.ScanAutoScanEnabled] = JsonSerializer.Serialize(true),
-                [AppSettingKeys.ScanIntervalMinutes] = JsonSerializer.Serialize(60),
-                [AppSettingKeys.CollectionsAutoRefreshEnabled] = JsonSerializer.Serialize(collectionAutoRefreshEnabled),
-                [AppSettingKeys.MonitoringSearchEnabled] = JsonSerializer.Serialize(monitoringSearchEnabled),
-                [AppSettingKeys.MonitoringIntervalMinutes] = JsonSerializer.Serialize(360),
+                [AppSettings.Scan.AutoScanEnabled.Key] = JsonSerializer.Serialize(true),
+                [AppSettings.Scan.IntervalMinutes.Key] = JsonSerializer.Serialize(60),
+                [AppSettings.Collections.AutoRefreshEnabled.Key] = JsonSerializer.Serialize(collectionAutoRefreshEnabled),
+                [AppSettings.Monitoring.SearchEnabled.Key] = JsonSerializer.Serialize(monitoringSearchEnabled),
+                [AppSettings.Monitoring.IntervalMinutes.Key] = JsonSerializer.Serialize(360),
             });
 
         public Task SaveSettingOverrideAsync(string key, string valueJson, CancellationToken cancellationToken) =>

@@ -649,9 +649,9 @@ public sealed class HlsAssetServiceTests : IDisposable {
         var sourcePath = Path.Combine(_cacheRoot, "source.mkv");
         await File.WriteAllTextAsync(sourcePath, "source");
         db.AppSettings.AddRange(
-            SettingRow(AppSettingKeys.HlsTranscoderProfile, "Vaapi"),
-            SettingRow(AppSettingKeys.HlsFfmpegPath, "/usr/local/bin/ffmpeg-gpu"),
-            SettingRow(AppSettingKeys.HlsVaapiDevice, "/dev/dri/renderD129"));
+            SettingRow(AppSettings.Hls.TranscoderProfile.Key, "Vaapi"),
+            SettingRow(AppSettings.Hls.FfmpegPath.Key, "/usr/local/bin/ffmpeg-gpu"),
+            SettingRow(AppSettings.Hls.VaapiDevice.Key, "/dev/dri/renderD129"));
         await db.SaveChangesAsync();
         var process = new ManifestWritingProcessExecutor();
         var service = new HlsAssetService(

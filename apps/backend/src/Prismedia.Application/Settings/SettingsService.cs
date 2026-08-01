@@ -149,51 +149,37 @@ public sealed partial class SettingsService {
     /// Returns app-global visibility defaults.
     /// </summary>
     public async Task<VisibilitySettings> GetVisibilitySettingsAsync(CancellationToken cancellationToken) {
-        var values = await GetValueMapAsync([
-            AppSettingKeys.VisibilityDefaultMode,
-        ], cancellationToken);
-
-        return new VisibilitySettings(
-            GetString(values, AppSettingKeys.VisibilityDefaultMode));
+        var values = await GetValueMapAsync([AppSettings.Visibility.DefaultMode], cancellationToken);
+        return new VisibilitySettings(Read(values, AppSettings.Visibility.DefaultMode));
     }
 
     /// <summary>
     /// Returns scan scheduling settings.
     /// </summary>
     public async Task<ScanSettings> GetScanSettingsAsync(CancellationToken cancellationToken) {
-        var values = await GetValueMapAsync([
-            AppSettingKeys.ScanAutoScanEnabled,
-            AppSettingKeys.ScanIntervalMinutes,
-        ], cancellationToken);
-
-        return new ScanSettings(
-            GetBoolean(values, AppSettingKeys.ScanAutoScanEnabled),
-            GetInt(values, AppSettingKeys.ScanIntervalMinutes));
+        var values = await GetValueMapAsync([AppSettings.Scan.AutoScanEnabled, AppSettings.Scan.IntervalMinutes], cancellationToken);
+        return new ScanSettings(Read(values, AppSettings.Scan.AutoScanEnabled), Read(values, AppSettings.Scan.IntervalMinutes));
     }
 
     /// <summary>Returns the cadence settings for re-searching monitored items.</summary>
     public async Task<MonitoredSearchSettings> GetMonitoredSearchSettingsAsync(CancellationToken cancellationToken) {
-        var values = await GetValueMapAsync([
-            AppSettingKeys.MonitoringSearchEnabled,
-            AppSettingKeys.MonitoringIntervalMinutes,
-        ], cancellationToken);
-
+        var values = await GetValueMapAsync(
+            [AppSettings.Monitoring.SearchEnabled, AppSettings.Monitoring.IntervalMinutes],
+            cancellationToken);
         return new MonitoredSearchSettings(
-            GetBoolean(values, AppSettingKeys.MonitoringSearchEnabled),
-            GetInt(values, AppSettingKeys.MonitoringIntervalMinutes));
+            Read(values, AppSettings.Monitoring.SearchEnabled),
+            Read(values, AppSettings.Monitoring.IntervalMinutes));
     }
 
     /// <summary>Returns the acquisition recycle-bin settings (a blank path disables the bin).</summary>
     public async Task<RecycleBinSettings> GetRecycleBinSettingsAsync(CancellationToken cancellationToken) {
-        var values = await GetValueMapAsync([
-            AppSettingKeys.AcquisitionRecycleBinPath,
-            AppSettingKeys.AcquisitionRecycleBinCleanupDays,
-        ], cancellationToken);
-
-        var path = GetString(values, AppSettingKeys.AcquisitionRecycleBinPath);
+        var values = await GetValueMapAsync(
+            [AppSettings.Acquisition.RecycleBinPath, AppSettings.Acquisition.RecycleBinCleanupDays],
+            cancellationToken);
+        var path = Read(values, AppSettings.Acquisition.RecycleBinPath);
         return new RecycleBinSettings(
             string.IsNullOrWhiteSpace(path) ? null : path.Trim(),
-            GetInt(values, AppSettingKeys.AcquisitionRecycleBinCleanupDays));
+            Read(values, AppSettings.Acquisition.RecycleBinCleanupDays));
     }
 
     /// <summary>
@@ -202,8 +188,8 @@ public sealed partial class SettingsService {
     /// <see cref="ProperDownloadPolicy.PreferAndUpgrade"/> when the value is missing or unknown.
     /// </summary>
     public async Task<ProperDownloadSettings> GetProperDownloadSettingsAsync(CancellationToken cancellationToken) {
-        var values = await GetValueMapAsync([AppSettingKeys.AcquisitionDownloadPropers], cancellationToken);
-        var code = GetString(values, AppSettingKeys.AcquisitionDownloadPropers);
+        var values = await GetValueMapAsync([AppSettings.Acquisition.DownloadPropers], cancellationToken);
+        var code = Read(values, AppSettings.Acquisition.DownloadPropers);
         var policy = code.TryDecodeAs<ProperDownloadPolicy>(out var decoded) ? decoded : ProperDownloadPolicy.PreferAndUpgrade;
         return new ProperDownloadSettings(policy);
     }
@@ -213,8 +199,8 @@ public sealed partial class SettingsService {
     /// persisted value is missing or unknown. Capability resolution remains the search runner's job.
     /// </summary>
     public async Task<PreferredDownloadProtocolSettings> GetPreferredDownloadProtocolSettingsAsync(CancellationToken cancellationToken) {
-        var values = await GetValueMapAsync([AppSettingKeys.AcquisitionPreferredProtocol], cancellationToken);
-        var code = GetString(values, AppSettingKeys.AcquisitionPreferredProtocol);
+        var values = await GetValueMapAsync([AppSettings.Acquisition.PreferredProtocol], cancellationToken);
+        var code = Read(values, AppSettings.Acquisition.PreferredProtocol);
         var protocol = code.TryDecodeAs<DownloadProtocol>(out var decoded) ? decoded : DownloadProtocol.Usenet;
         return new PreferredDownloadProtocolSettings(protocol);
     }
@@ -223,8 +209,8 @@ public sealed partial class SettingsService {
     /// Returns recurring collection refresh settings.
     /// </summary>
     public async Task<CollectionRefreshSettings> GetCollectionRefreshSettingsAsync(CancellationToken cancellationToken) {
-        var values = await GetValueMapAsync([AppSettingKeys.CollectionsAutoRefreshEnabled], cancellationToken);
-        return new CollectionRefreshSettings(GetBoolean(values, AppSettingKeys.CollectionsAutoRefreshEnabled));
+        var values = await GetValueMapAsync([AppSettings.Collections.AutoRefreshEnabled], cancellationToken);
+        return new CollectionRefreshSettings(Read(values, AppSettings.Collections.AutoRefreshEnabled));
     }
 
     /// <summary>
@@ -233,8 +219,8 @@ public sealed partial class SettingsService {
     /// each id is currently installed, enabled, authenticated, and compatible.
     /// </summary>
     public async Task<IdentifyProviderSettings> GetIdentifyProviderSettingsAsync(CancellationToken cancellationToken) {
-        var values = await GetValueMapAsync([AppSettingKeys.IdentifyDefaultProviders], cancellationToken);
-        return new IdentifyProviderSettings(GetStringMap(values, AppSettingKeys.IdentifyDefaultProviders));
+        var values = await GetValueMapAsync([AppSettings.Identify.DefaultProviders], cancellationToken);
+        return new IdentifyProviderSettings(Read(values, AppSettings.Identify.DefaultProviders));
     }
 
     /// <summary>
@@ -242,139 +228,157 @@ public sealed partial class SettingsService {
     /// The stored confidence threshold is a 0–100 percentage and is returned here as a 0–1 fraction.
     /// </summary>
     public async Task<AutoIdentifySettings> GetAutoIdentifySettingsAsync(CancellationToken cancellationToken) {
-        var values = await GetValueMapAsync([
-            AppSettingKeys.AutoIdentifyEnabled,
-            AppSettingKeys.AutoIdentifyProviders,
-            AppSettingKeys.AutoIdentifyEntityKinds,
-            AppSettingKeys.AutoIdentifyConfidenceThreshold,
-            AppSettingKeys.AutoIdentifyUnorganizedOnly,
-        ], cancellationToken);
-
-        var percent = GetFloat(values, AppSettingKeys.AutoIdentifyConfidenceThreshold);
+        var values = await GetValueMapAsync(
+            [
+                AppSettings.AutoIdentify.Enabled,
+                AppSettings.AutoIdentify.Providers,
+                AppSettings.AutoIdentify.EntityKinds,
+                AppSettings.AutoIdentify.ConfidenceThreshold,
+                AppSettings.AutoIdentify.UnorganizedOnly
+            ],
+            cancellationToken);
+        var percent = (double)Read(values, AppSettings.AutoIdentify.ConfidenceThreshold);
         return new AutoIdentifySettings(
-            GetBoolean(values, AppSettingKeys.AutoIdentifyEnabled),
-            GetStringList(values, AppSettingKeys.AutoIdentifyProviders),
-            GetStringList(values, AppSettingKeys.AutoIdentifyEntityKinds),
+            Read(values, AppSettings.AutoIdentify.Enabled),
+            Read(values, AppSettings.AutoIdentify.Providers),
+            Read(values, AppSettings.AutoIdentify.EntityKinds),
             Math.Clamp(percent / 100d, 0d, 1d),
-            GetBoolean(values, AppSettingKeys.AutoIdentifyUnorganizedOnly));
+            Read(values, AppSettings.AutoIdentify.UnorganizedOnly));
     }
 
     /// <summary>
     /// Returns whether library scans should delete tags that nothing references.
     /// </summary>
     public async Task<bool> GetRemoveOrphanTagsAsync(CancellationToken cancellationToken) {
-        var values = await GetValueMapAsync([AppSettingKeys.TaxonomyRemoveOrphanTags], cancellationToken);
-        return GetBoolean(values, AppSettingKeys.TaxonomyRemoveOrphanTags);
+        var values = await GetValueMapAsync([AppSettings.Taxonomy.RemoveOrphanTags], cancellationToken);
+        return Read(values, AppSettings.Taxonomy.RemoveOrphanTags);
     }
 
     /// <summary>
     /// Returns generation-pipeline settings used by scan and maintenance jobs.
     /// </summary>
     public async Task<GenerationSettings> GetGenerationSettingsAsync(CancellationToken cancellationToken) {
-        var values = await GetValueMapAsync([
-            AppSettingKeys.GenerationAutoGenerateMetadata,
-            AppSettingKeys.GenerationAutoGenerateOshash,
-            AppSettingKeys.GenerationAutoGenerateMd5,
-            AppSettingKeys.GenerationAutoGeneratePreview,
-            AppSettingKeys.GenerationGenerateTrickplay,
-            AppSettingKeys.GenerationTrickplayIntervalSeconds,
-            AppSettingKeys.GenerationPreviewClipDurationSeconds,
-            AppSettingKeys.GenerationThumbnailQuality,
-            AppSettingKeys.GenerationTrickplayQuality,
-            AppSettingKeys.GenerationMetadataStorageDedicated,
-        ], cancellationToken);
+        var values = await GetValueMapAsync(
+            [
+                AppSettings.Generation.AutoGenerateMetadata,
+                AppSettings.Generation.AutoGenerateOshash,
+                AppSettings.Generation.AutoGenerateMd5,
+                AppSettings.Generation.AutoGeneratePreview,
+                AppSettings.Generation.GenerateTrickplay,
+                AppSettings.Generation.TrickplayIntervalSeconds,
+                AppSettings.Generation.PreviewClipDurationSeconds,
+                AppSettings.Generation.ThumbnailQuality,
+                AppSettings.Generation.TrickplayQuality,
+                AppSettings.Generation.MetadataStorageDedicated
+            ],
+            cancellationToken);
 
         return new GenerationSettings(
-            GetBoolean(values, AppSettingKeys.GenerationAutoGenerateMetadata),
-            GetBoolean(values, AppSettingKeys.GenerationAutoGenerateOshash),
-            GetBoolean(values, AppSettingKeys.GenerationAutoGenerateMd5),
-            GetBoolean(values, AppSettingKeys.GenerationAutoGeneratePreview),
-            GetBoolean(values, AppSettingKeys.GenerationGenerateTrickplay),
-            GetInt(values, AppSettingKeys.GenerationTrickplayIntervalSeconds),
-            GetInt(values, AppSettingKeys.GenerationPreviewClipDurationSeconds),
-            GetSelectInt(values, AppSettingKeys.GenerationThumbnailQuality, 2),
-            GetSelectInt(values, AppSettingKeys.GenerationTrickplayQuality, 2),
-            GetBoolean(values, AppSettingKeys.GenerationMetadataStorageDedicated));
+            Read(values, AppSettings.Generation.AutoGenerateMetadata),
+            Read(values, AppSettings.Generation.AutoGenerateOshash),
+            Read(values, AppSettings.Generation.AutoGenerateMd5),
+            Read(values, AppSettings.Generation.AutoGeneratePreview),
+            Read(values, AppSettings.Generation.GenerateTrickplay),
+            Read(values, AppSettings.Generation.TrickplayIntervalSeconds),
+            Read(values, AppSettings.Generation.PreviewClipDurationSeconds),
+            SelectInt(Read(values, AppSettings.Generation.ThumbnailQuality), 2),
+            SelectInt(Read(values, AppSettings.Generation.TrickplayQuality), 2),
+            Read(values, AppSettings.Generation.MetadataStorageDedicated));
     }
 
     /// <summary>
     /// Returns worker throughput settings.
     /// </summary>
     public async Task<WorkerSettings> GetWorkerSettingsAsync(CancellationToken cancellationToken) {
-        var values = await GetValueMapAsync([AppSettingKeys.JobsBackgroundConcurrency], cancellationToken);
-        return new WorkerSettings(GetInt(values, AppSettingKeys.JobsBackgroundConcurrency));
+        var values = await GetValueMapAsync([AppSettings.Jobs.BackgroundConcurrency], cancellationToken);
+        return new WorkerSettings(Read(values, AppSettings.Jobs.BackgroundConcurrency));
     }
 
     /// <summary>
     /// Returns playback defaults.
     /// </summary>
     public async Task<PlaybackSettings> GetPlaybackSettingsAsync(CancellationToken cancellationToken) {
-        var values = await GetValueMapAsync([
-            AppSettingKeys.PlaybackDefaultMode,
-            AppSettingKeys.PlaybackShowCastControls,
-            AppSettingKeys.PlaybackAudioPreferredLanguages,
-        ], cancellationToken);
-
+        var values = await GetValueMapAsync(
+            [
+                AppSettings.Playback.DefaultMode,
+                AppSettings.Playback.ShowCastControls,
+                AppSettings.Playback.AudioPreferredLanguages
+            ],
+            cancellationToken);
         return new PlaybackSettings(
-            GetString(values, AppSettingKeys.PlaybackDefaultMode),
-            GetBoolean(values, AppSettingKeys.PlaybackShowCastControls),
-            GetStringList(values, AppSettingKeys.PlaybackAudioPreferredLanguages));
+            Read(values, AppSettings.Playback.DefaultMode),
+            Read(values, AppSettings.Playback.ShowCastControls),
+            Read(values, AppSettings.Playback.AudioPreferredLanguages));
     }
 
     /// <summary>
     /// Returns subtitle behavior and appearance defaults.
     /// </summary>
     public async Task<SubtitleSettings> GetSubtitleSettingsAsync(CancellationToken cancellationToken) {
-        var values = await GetValueMapAsync([
-            AppSettingKeys.SubtitlesAutoEnable,
-            AppSettingKeys.SubtitlesPreferredLanguages,
-            AppSettingKeys.SubtitlesAutoDownloadEnabled,
-            AppSettingKeys.SubtitlesAutoDownloadLanguages,
-            AppSettingKeys.SubtitlesAutoDownloadMinimumConfidence,
-            AppSettingKeys.SubtitlesStyle,
-            AppSettingKeys.SubtitlesFontScale,
-            AppSettingKeys.SubtitlesPositionPercent,
-            AppSettingKeys.SubtitlesOpacity,
-        ], cancellationToken);
+        var values = await GetValueMapAsync(
+            [
+                AppSettings.Subtitles.AutoEnable,
+                AppSettings.Subtitles.PreferredLanguages,
+                AppSettings.Subtitles.AutoDownloadEnabled,
+                AppSettings.Subtitles.AutoDownloadLanguages,
+                AppSettings.Subtitles.AutoDownloadMinimumConfidence,
+                AppSettings.Subtitles.Style,
+                AppSettings.Subtitles.FontScale,
+                AppSettings.Subtitles.PositionPercent,
+                AppSettings.Subtitles.Opacity
+            ],
+            cancellationToken);
 
         return new SubtitleSettings(
-            GetBoolean(values, AppSettingKeys.SubtitlesAutoEnable),
-            GetWeightedTerms(values, AppSettingKeys.SubtitlesPreferredLanguages),
-            GetBoolean(values, AppSettingKeys.SubtitlesAutoDownloadEnabled),
-            GetStringList(values, AppSettingKeys.SubtitlesAutoDownloadLanguages),
-            GetInt(values, AppSettingKeys.SubtitlesAutoDownloadMinimumConfidence),
-            GetString(values, AppSettingKeys.SubtitlesStyle),
-            GetFloat(values, AppSettingKeys.SubtitlesFontScale),
-            GetFloat(values, AppSettingKeys.SubtitlesPositionPercent),
-            GetFloat(values, AppSettingKeys.SubtitlesOpacity));
+            Read(values, AppSettings.Subtitles.AutoEnable),
+            Read(values, AppSettings.Subtitles.PreferredLanguages),
+            Read(values, AppSettings.Subtitles.AutoDownloadEnabled),
+            Read(values, AppSettings.Subtitles.AutoDownloadLanguages),
+            Read(values, AppSettings.Subtitles.AutoDownloadMinimumConfidence),
+            Read(values, AppSettings.Subtitles.Style),
+            (float)Read(values, AppSettings.Subtitles.FontScale),
+            (float)Read(values, AppSettings.Subtitles.PositionPercent),
+            (float)Read(values, AppSettings.Subtitles.Opacity));
     }
 
     /// <summary>
     /// Returns HLS transcoder and ffmpeg settings.
     /// </summary>
     public async Task<HlsSettings> GetHlsSettingsAsync(CancellationToken cancellationToken) {
-        var values = await GetValueMapAsync([
-            AppSettingKeys.HlsTranscoderProfile,
-            AppSettingKeys.HlsFfmpegPath,
-            AppSettingKeys.HlsVaapiDevice,
-            AppSettingKeys.HlsEnableAdaptiveBitrate,
-            AppSettingKeys.HlsEncodingThreadCount,
-            AppSettingKeys.HlsMaxCacheSizeGb,
-        ], cancellationToken);
+        var values = await GetValueMapAsync(
+            [
+                AppSettings.Hls.TranscoderProfile,
+                AppSettings.Hls.FfmpegPath,
+                AppSettings.Hls.VaapiDevice,
+                AppSettings.Hls.EnableAdaptiveBitrate,
+                AppSettings.Hls.EncodingThreadCount,
+                AppSettings.Hls.MaxCacheSizeGb
+            ],
+            cancellationToken);
 
         return new HlsSettings(
-            GetString(values, AppSettingKeys.HlsTranscoderProfile),
-            GetString(values, AppSettingKeys.HlsFfmpegPath),
-            GetString(values, AppSettingKeys.HlsVaapiDevice),
-            GetBoolean(values, AppSettingKeys.HlsEnableAdaptiveBitrate),
-            GetInt(values, AppSettingKeys.HlsEncodingThreadCount),
-            GetInt(values, AppSettingKeys.HlsMaxCacheSizeGb));
+            Read(values, AppSettings.Hls.TranscoderProfile),
+            Read(values, AppSettings.Hls.FfmpegPath),
+            Read(values, AppSettings.Hls.VaapiDevice),
+            Read(values, AppSettings.Hls.EnableAdaptiveBitrate),
+            Read(values, AppSettings.Hls.EncodingThreadCount),
+            Read(values, AppSettings.Hls.MaxCacheSizeGb));
     }
 
-    private async Task<IReadOnlyDictionary<string, JsonElement>> GetValueMapAsync(
-        IEnumerable<string> keys,
-        CancellationToken cancellationToken) =>
-        (await GetValuesAsync(keys, cancellationToken)).Values;
+    private async Task<IReadOnlyDictionary<SettingDefinition, JsonElement>> GetValueMapAsync(
+        IEnumerable<SettingDefinition> definitions,
+        CancellationToken cancellationToken) {
+        var requested = definitions.ToArray();
+        var values = (await GetValuesAsync(requested.Select(definition => definition.Key), cancellationToken)).Values;
+        return requested.ToDictionary(definition => definition, definition => values[definition.Key]);
+    }
+
+    private static T Read<T>(
+        IReadOnlyDictionary<SettingDefinition, JsonElement> values,
+        SettingDefinition<T> definition) =>
+        definition.Read(values[definition]);
+
+    private static int SelectInt(string value, int fallback) => int.TryParse(value, out var parsed) ? parsed : fallback;
 
     private (JsonElement Value, bool IsDefault) ResolveEffectiveValue(
         SettingDefinition definition,
@@ -442,44 +446,4 @@ public sealed partial class SettingsService {
         public int GetHashCode(JsonElement obj) => obj.GetRawText().GetHashCode(StringComparison.Ordinal);
     }
 
-    private static bool GetBoolean(IReadOnlyDictionary<string, JsonElement> values, string key) => values[key].GetBoolean();
-
-    private static int GetInt(IReadOnlyDictionary<string, JsonElement> values, string key) => values[key].GetInt32();
-
-    /// <summary>
-    /// Reads a Select-type setting whose option values are numeric strings.
-    /// </summary>
-    private static int GetSelectInt(IReadOnlyDictionary<string, JsonElement> values, string key, int fallback) {
-        var element = values[key];
-        if (element.ValueKind == JsonValueKind.Number)
-            return element.GetInt32();
-        var raw = element.GetString();
-        return int.TryParse(raw, out var result) ? result : fallback;
-    }
-
-    private static float GetFloat(IReadOnlyDictionary<string, JsonElement> values, string key) =>
-        (float)values[key].GetDouble();
-
-    private static string GetString(IReadOnlyDictionary<string, JsonElement> values, string key) =>
-        values[key].GetString() ?? string.Empty;
-
-    private static IReadOnlyList<string> GetStringList(IReadOnlyDictionary<string, JsonElement> values, string key) =>
-        values[key].EnumerateArray()
-            .Select(item => item.GetString() ?? string.Empty)
-            .Where(item => !string.IsNullOrWhiteSpace(item))
-            .ToArray();
-
-    private static IReadOnlyDictionary<string, string> GetStringMap(
-        IReadOnlyDictionary<string, JsonElement> values,
-        string key) =>
-        values[key].EnumerateObject()
-            .ToDictionary(
-                property => property.Name,
-                property => property.Value.GetString() ?? string.Empty,
-                StringComparer.OrdinalIgnoreCase);
-
-    private static IReadOnlyList<SubtitlePreferenceTerm> GetWeightedTerms(
-        IReadOnlyDictionary<string, JsonElement> values,
-        string key) =>
-        values[key].Deserialize<SubtitlePreferenceTerm[]>() ?? [];
 }

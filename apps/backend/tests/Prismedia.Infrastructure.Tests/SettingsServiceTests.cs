@@ -326,10 +326,10 @@ public sealed class SettingsServiceTests {
         var catalog = await service.GetCatalogAsync(CancellationToken.None);
         var castControls = catalog.Groups
             .SelectMany(group => group.Settings)
-            .Single(setting => setting.Key == AppSettingKeys.PlaybackShowCastControls);
+            .Single(setting => setting.Key == AppSettings.Playback.ShowCastControls.Key);
         var hlsTranscoder = catalog.Groups
             .SelectMany(group => group.Settings)
-            .Single(setting => setting.Key == AppSettingKeys.HlsTranscoderProfile);
+            .Single(setting => setting.Key == AppSettings.Hls.TranscoderProfile.Key);
 
         Assert.True(castControls.Value.GetBoolean());
         Assert.True(castControls.IsDefault);
@@ -344,12 +344,12 @@ public sealed class SettingsServiceTests {
         var service = new SettingsService(new EfSettingsPersistence(db));
 
         await service.UpdateSettingAsync(
-            AppSettingKeys.HlsTranscoderProfile,
+            AppSettings.Hls.TranscoderProfile.Key,
             JsonSerializer.SerializeToElement("VideoToolbox"),
             CancellationToken.None);
 
         var row = await db.AppSettings.SingleAsync();
-        Assert.Equal(AppSettingKeys.HlsTranscoderProfile, row.Key);
+        Assert.Equal(AppSettings.Hls.TranscoderProfile.Key, row.Key);
         Assert.Equal("\"VideoToolbox\"", row.ValueJson);
     }
 
@@ -360,9 +360,9 @@ public sealed class SettingsServiceTests {
 
         await service.UpdateSettingsAsync(
             new Dictionary<string, JsonElement> {
-                [AppSettingKeys.PlaybackAudioPreferredLanguages] =
+                [AppSettings.Playback.AudioPreferredLanguages.Key] =
                     JsonSerializer.SerializeToElement(new[] { "ja", "jpn" }),
-                [AppSettingKeys.HlsFfmpegPath] =
+                [AppSettings.Hls.FfmpegPath.Key] =
                     JsonSerializer.SerializeToElement("/opt/homebrew/bin/ffmpeg"),
             },
             CancellationToken.None);
@@ -381,23 +381,23 @@ public sealed class SettingsServiceTests {
         var service = new SettingsService(new EfSettingsPersistence(db));
 
         await service.UpdateSettingAsync(
-            AppSettingKeys.PlaybackDefaultMode,
+            AppSettings.Playback.DefaultMode.Key,
             JsonSerializer.SerializeToElement("hls"),
             CancellationToken.None);
         await service.UpdateSettingAsync(
-            AppSettingKeys.HlsFfmpegPath,
+            AppSettings.Hls.FfmpegPath.Key,
             JsonSerializer.SerializeToElement("/usr/bin/ffmpeg"),
             CancellationToken.None);
 
         await service.UpdateSettingsAsync(
             new Dictionary<string, JsonElement> {
-                [AppSettingKeys.PlaybackDefaultMode] = JsonSerializer.SerializeToElement("direct"),
-                [AppSettingKeys.HlsFfmpegPath] = JsonSerializer.SerializeToElement("/opt/homebrew/bin/ffmpeg"),
+                [AppSettings.Playback.DefaultMode.Key] = JsonSerializer.SerializeToElement("direct"),
+                [AppSettings.Hls.FfmpegPath.Key] = JsonSerializer.SerializeToElement("/opt/homebrew/bin/ffmpeg"),
             },
             CancellationToken.None);
 
         var row = await db.AppSettings.SingleAsync();
-        Assert.Equal(AppSettingKeys.HlsFfmpegPath, row.Key);
+        Assert.Equal(AppSettings.Hls.FfmpegPath.Key, row.Key);
         Assert.Equal("\"/opt/homebrew/bin/ffmpeg\"", row.ValueJson);
     }
 
@@ -426,13 +426,13 @@ public sealed class SettingsServiceTests {
 
         await service.UpdateSettingsAsync(
             new Dictionary<string, JsonElement> {
-                [AppSettingKeys.AutoIdentifyEnabled] = JsonSerializer.SerializeToElement(true),
-                [AppSettingKeys.AutoIdentifyConfidenceThreshold] = JsonSerializer.SerializeToElement(75m),
-                [AppSettingKeys.AutoIdentifyProviders] =
+                [AppSettings.AutoIdentify.Enabled.Key] = JsonSerializer.SerializeToElement(true),
+                [AppSettings.AutoIdentify.ConfidenceThreshold.Key] = JsonSerializer.SerializeToElement(75m),
+                [AppSettings.AutoIdentify.Providers.Key] =
                     JsonSerializer.SerializeToElement(new[] { "tmdb", "stash-erome" }),
-                [AppSettingKeys.AutoIdentifyEntityKinds] =
+                [AppSettings.AutoIdentify.EntityKinds.Key] =
                     JsonSerializer.SerializeToElement(new[] { "video" }),
-                [AppSettingKeys.AutoIdentifyUnorganizedOnly] = JsonSerializer.SerializeToElement(false),
+                [AppSettings.AutoIdentify.UnorganizedOnly.Key] = JsonSerializer.SerializeToElement(false),
             },
             CancellationToken.None);
 
@@ -451,11 +451,11 @@ public sealed class SettingsServiceTests {
         var service = new SettingsService(new EfSettingsPersistence(db));
 
         await service.UpdateSettingAsync(
-            AppSettingKeys.SubtitlesOpacity,
+            AppSettings.Subtitles.Opacity.Key,
             JsonSerializer.SerializeToElement(0.8m),
             CancellationToken.None);
         var reset = await service.UpdateSettingAsync(
-            AppSettingKeys.SubtitlesOpacity,
+            AppSettings.Subtitles.Opacity.Key,
             JsonSerializer.SerializeToElement(1.0m),
             CancellationToken.None);
 

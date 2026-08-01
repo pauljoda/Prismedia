@@ -19,15 +19,15 @@ public sealed class SettingsEndpointServiceTests {
 
         var catalog = await client.GetFromJsonAsync<SettingsCatalogResponse>("/api/settings");
         var updatedResponse = await client.PatchAsJsonAsync(
-            $"/api/settings/{AppSettingKeys.JobsBackgroundConcurrency}",
+            $"/api/settings/{AppSettings.Jobs.BackgroundConcurrency.Key}",
             new SettingUpdateRequest(JsonSerializer.SerializeToElement(6)));
         var updated = await updatedResponse.Content.ReadFromJsonAsync<SettingDescriptor>();
         var values = await client.GetFromJsonAsync<SettingsValuesResponse>(
-            $"/api/settings/values?keys={Uri.EscapeDataString(AppSettingKeys.JobsBackgroundConcurrency)}");
+            $"/api/settings/values?keys={Uri.EscapeDataString(AppSettings.Jobs.BackgroundConcurrency.Key)}");
 
         Assert.NotNull(catalog);
         Assert.Contains(catalog.Groups.SelectMany(group => group.Settings), setting =>
-            setting.Key == AppSettingKeys.VisibilityDefaultMode &&
+            setting.Key == AppSettings.Visibility.DefaultMode.Key &&
             setting.Value.GetString() == "off" &&
             setting.IsDefault);
         Assert.True(updatedResponse.IsSuccessStatusCode);
@@ -35,7 +35,7 @@ public sealed class SettingsEndpointServiceTests {
         Assert.Equal(6, updated.Value.GetInt32());
         Assert.False(updated.IsDefault);
         Assert.NotNull(values);
-        Assert.Equal(6, values.Values[AppSettingKeys.JobsBackgroundConcurrency].GetInt32());
+        Assert.Equal(6, values.Values[AppSettings.Jobs.BackgroundConcurrency.Key].GetInt32());
     }
 
     [Fact]
@@ -46,11 +46,11 @@ public sealed class SettingsEndpointServiceTests {
         var batch = await client.PatchAsJsonAsync(
             "/api/settings",
             new SettingsBatchUpdateRequest(new Dictionary<string, JsonElement> {
-                [AppSettingKeys.PlaybackDefaultMode] = JsonSerializer.SerializeToElement("hls"),
-                [AppSettingKeys.PlaybackAudioPreferredLanguages] =
+                [AppSettings.Playback.DefaultMode.Key] = JsonSerializer.SerializeToElement("hls"),
+                [AppSettings.Playback.AudioPreferredLanguages.Key] =
                     JsonSerializer.SerializeToElement(new[] { "ja", "jpn" }),
             }));
-        var reset = await client.DeleteAsync($"/api/settings/{AppSettingKeys.PlaybackDefaultMode}");
+        var reset = await client.DeleteAsync($"/api/settings/{AppSettings.Playback.DefaultMode.Key}");
         var defaulted = await reset.Content.ReadFromJsonAsync<SettingDescriptor>();
 
         Assert.True(batch.IsSuccessStatusCode);
@@ -70,11 +70,11 @@ public sealed class SettingsEndpointServiceTests {
         };
 
         var update = await client.PatchAsJsonAsync(
-            $"/api/settings/{AppSettingKeys.IdentifyDefaultProviders}",
+            $"/api/settings/{AppSettings.Identify.DefaultProviders.Key}",
             new SettingUpdateRequest(JsonSerializer.SerializeToElement(configured)));
         var descriptor = await update.Content.ReadFromJsonAsync<SettingDescriptor>();
         var values = await client.GetFromJsonAsync<SettingsValuesResponse>(
-            $"/api/settings/values?keys={Uri.EscapeDataString(AppSettingKeys.IdentifyDefaultProviders)}");
+            $"/api/settings/values?keys={Uri.EscapeDataString(AppSettings.Identify.DefaultProviders.Key)}");
 
         Assert.True(update.IsSuccessStatusCode);
         Assert.NotNull(descriptor);
@@ -82,7 +82,7 @@ public sealed class SettingsEndpointServiceTests {
         Assert.Equal(configured, descriptor.Value.Deserialize<Dictionary<string, string>>());
         Assert.Empty(descriptor.DefaultValue.EnumerateObject());
         Assert.NotNull(values);
-        var defaults = values.Values[AppSettingKeys.IdentifyDefaultProviders]
+        var defaults = values.Values[AppSettings.Identify.DefaultProviders.Key]
             .Deserialize<Dictionary<string, string>>();
         Assert.Equal(configured, defaults);
     }
@@ -94,7 +94,7 @@ public sealed class SettingsEndpointServiceTests {
 
         var unknown = await client.GetAsync("/api/settings/not.real");
         var invalid = await client.PatchAsJsonAsync(
-            $"/api/settings/{AppSettingKeys.JobsBackgroundConcurrency}",
+            $"/api/settings/{AppSettings.Jobs.BackgroundConcurrency.Key}",
             new SettingUpdateRequest(JsonSerializer.SerializeToElement(99)));
         var unknownJson = await unknown.Content.ReadFromJsonAsync<JsonElement>();
         var invalidJson = await invalid.Content.ReadFromJsonAsync<JsonElement>();

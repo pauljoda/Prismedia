@@ -182,7 +182,10 @@ public sealed record CodesManifest(
             BuildRequestKinds(),
             CapabilityPolymorphism.DiscriminatorKinds,
             ReflectConstants(typeof(Contracts.Entities.ExternalIdProviders)),
-            ReflectConstants(typeof(AppSettingKeys)),
+            AppSettingsRegistry.DefinitionsByClientName
+                .OrderBy(entry => entry.Key, StringComparer.Ordinal)
+                .Select(entry => new ConstantEntry(entry.Key, entry.Value.Key))
+                .ToArray(),
             ReflectConstants(typeof(Contracts.System.ApiProblemCodes)),
             ReflectConstants(typeof(EntityThumbnailMetaIcons)));
     }

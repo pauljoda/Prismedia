@@ -1,5 +1,6 @@
 using Prismedia.Api.Codegen;
 using Prismedia.Application.Requests;
+using Prismedia.Application.Settings;
 using Prismedia.Contracts.Entities;
 using Prismedia.Domain.Entities;
 using System.Reflection;
@@ -7,6 +8,15 @@ using System.Reflection;
 namespace Prismedia.Api.Tests;
 
 public sealed class CodesManifestContractTests {
+    [Fact]
+    public void SettingsManifestUsesExactlyTheDiscoveredDefinitions() {
+        var expected = AppSettingsRegistry.DefinitionsByClientName
+            .OrderBy(entry => entry.Key, StringComparer.Ordinal)
+            .Select(entry => new ConstantEntry(entry.Key, entry.Value.Key));
+
+        Assert.Equal(expected, CodesManifest.Build().SettingKeys);
+    }
+
     [Fact]
     public void EveryCodeFamilyOwnsUniqueGeneratedClientNames() {
         var manifest = CodesManifest.Build();

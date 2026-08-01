@@ -1422,7 +1422,7 @@ public partial class MigrateDirectPlayableEntities : Migration {
         .Replace("__ACTOR_ROLE__", CreditRole.Actor.ToCode(), StringComparison.Ordinal)
         .Replace("__CAST_RELATIONSHIP__", RelationshipKind.Cast.ToCode(), StringComparison.Ordinal)
         .Replace("__CREDITS_RELATIONSHIP__", RelationshipKind.Credits.ToCode(), StringComparison.Ordinal)
-        .Replace("__DEFAULT_PROVIDERS_KEY__", AppSettingKeys.IdentifyDefaultProviders, StringComparison.Ordinal)
+        .Replace("__DEFAULT_PROVIDERS_KEY__", AppSettings.Identify.DefaultProviders.Key, StringComparison.Ordinal)
         .Replace("__IDENTIFY_DONE__", IdentifyQueueState.Done.ToCode(), StringComparison.Ordinal)
         .Replace("__IDENTIFY_DELETED__", IdentifyQueueState.Deleted.ToCode(), StringComparison.Ordinal)
         .Replace("__ACQUISITION_SEARCHING__", AcquisitionStatus.Searching.ToCode(), StringComparison.Ordinal)

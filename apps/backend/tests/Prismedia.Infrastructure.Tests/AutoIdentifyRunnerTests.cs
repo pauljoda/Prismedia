@@ -987,9 +987,9 @@ public sealed class AutoIdentifyRunnerTests {
         var service = new SettingsService(new EfSettingsPersistence(db));
         await service.UpdateSettingsAsync(
             new Dictionary<string, JsonElement> {
-                [AppSettingKeys.AutoIdentifyEnabled] = JsonSerializer.SerializeToElement(enabled),
-                [AppSettingKeys.AutoIdentifyProviders] = JsonSerializer.SerializeToElement(providers),
-                [AppSettingKeys.AutoIdentifyConfidenceThreshold] = JsonSerializer.SerializeToElement(confidencePercent),
+                [AppSettings.AutoIdentify.Enabled.Key] = JsonSerializer.SerializeToElement(enabled),
+                [AppSettings.AutoIdentify.Providers.Key] = JsonSerializer.SerializeToElement(providers),
+                [AppSettings.AutoIdentify.ConfidenceThreshold.Key] = JsonSerializer.SerializeToElement(confidencePercent),
             },
             CancellationToken.None);
         return service;
