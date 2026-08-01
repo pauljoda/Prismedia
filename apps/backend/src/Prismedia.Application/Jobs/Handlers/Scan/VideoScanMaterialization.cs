@@ -78,35 +78,6 @@ internal static class VideoDownstreamJobPlanner {
         DownstreamNeeds needs,
         EntityKind kind) {
         var label = Path.GetFileNameWithoutExtension(sourcePath);
-        var entityIdText = entityId.ToString();
-        var requests = new List<EnqueueJobRequest>(5);
-        var processing = EntityKindRegistry.Describe(kind).Processing;
-        var plan = processing.Plan(EntityProcessingInputAdapter.From(
-            settings, needs, forceSubtitleReconciliationForOwnedSource: false));
-
-        if (plan.ProbeJobType is { } probe) {
-            requests.Add(EnqueueJobRequest.ForEntity(
-                probe, kind, entityIdText, label));
-        }
-
-        if (plan.FingerprintJobType is { } fingerprint) {
-            requests.Add(EnqueueJobRequest.ForEntity(
-                fingerprint, kind, entityIdText, label));
-        }
-
-        if (plan.SubtitleExtractionJobType is { } subtitles) {
-            requests.Add(EnqueueJobRequest.ForEntity(
-                subtitles, kind, entityIdText, label));
-        }
-
-        if (plan.PreviewJobType is { } preview) {
-            requests.Add(EnqueueJobRequest.ForEntity(
-                preview, kind, entityIdText, label));
-        } else if (plan.GridThumbnailJobType is { } gridThumbnail) {
-            requests.Add(EnqueueJobRequest.ForEntity(
-                gridThumbnail, kind, entityIdText, label));
-        }
-
-        return requests;
+        return EntityProcessingPlanRequests.ForEntity(kind, entityId, label, settings, needs);
     }
 }

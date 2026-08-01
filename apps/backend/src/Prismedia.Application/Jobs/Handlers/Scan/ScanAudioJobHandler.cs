@@ -442,36 +442,19 @@ public sealed class ScanAudioJobHandler(
         Guid trackId,
         string title,
         CancellationToken cancellationToken) {
-        var hasTechnical = await downstreamNeeds.HasEntityTechnicalAsync(trackId, cancellationToken);
-        if (settings.AutoGenerateMetadata && !hasTechnical) {
-            await context.EnqueueIfNeededAsync(
-                EnqueueJobRequest.ForEntity(
-                    JobType.ProbeAudio,
-                    EntityKind.AudioTrack,
-                    trackId.ToString(),
-                    title),
-                cancellationToken);
+        var needs = await downstreamNeeds.CheckDownstreamNeedsBatchAsync([trackId], cancellationToken);
+        if (!needs.TryGetValue(trackId, out var trackNeeds)) {
+            return;
         }
 
-        if (await FingerprintGating.ShouldFingerprintAsync(downstreamNeeds, settings, trackId, cancellationToken)) {
-            await context.EnqueueIfNeededAsync(
-                EnqueueJobRequest.ForEntity(
-                    JobType.FingerprintAudio,
-                    EntityKind.AudioTrack,
-                    trackId.ToString(),
-                    title),
-                cancellationToken);
-        }
-
-        if (settings.AutoGeneratePreview && hasTechnical &&
-            !await downstreamNeeds.HasEntityFileAsync(trackId, EntityFileRole.Waveform, cancellationToken)) {
-            await context.EnqueueIfNeededAsync(
-                EnqueueJobRequest.ForEntity(
-                    JobType.GenerateAudioWaveform,
-                    EntityKind.AudioTrack,
-                    trackId.ToString(),
-                    title),
-                cancellationToken);
+        foreach (var request in EntityProcessingPlanRequests.ForEntity(
+                     EntityKind.AudioTrack,
+                     trackId,
+                     title,
+                     settings,
+                     trackNeeds,
+                     deferPreviewUntilProbeCompletes: true)) {
+            await context.EnqueueIfNeededAsync(request, cancellationToken);
         }
     }
 
@@ -506,30 +489,13 @@ public sealed class ScanAudioJobHandler(
                 continue;
             }
 
-            var id = track.Id.ToString();
-            if (settings.AutoGenerateMetadata && entityNeeds.NeedsProbe) {
-                requests.Add(EnqueueJobRequest.ForEntity(
-                    JobType.ProbeAudio,
-                    EntityKind.AudioTrack,
-                    id,
-                    track.Title));
-            }
-
-            if (FingerprintGating.ShouldFingerprint(settings, entityNeeds)) {
-                requests.Add(EnqueueJobRequest.ForEntity(
-                    JobType.FingerprintAudio,
-                    EntityKind.AudioTrack,
-                    id,
-                    track.Title));
-            }
-
-            if (settings.AutoGeneratePreview && !entityNeeds.NeedsProbe && entityNeeds.NeedsPreview) {
-                requests.Add(EnqueueJobRequest.ForEntity(
-                    JobType.GenerateAudioWaveform,
-                    EntityKind.AudioTrack,
-                    id,
-                    track.Title));
-            }
+            requests.AddRange(EntityProcessingPlanRequests.ForEntity(
+                EntityKind.AudioTrack,
+                track.Id,
+                track.Title,
+                settings,
+                entityNeeds,
+                deferPreviewUntilProbeCompletes: true));
         }
 
         if (requests.Count > 0) {

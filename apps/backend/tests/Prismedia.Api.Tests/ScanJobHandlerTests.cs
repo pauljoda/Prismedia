@@ -523,8 +523,10 @@ public sealed class ScanJobHandlerTests {
         Assert.Empty(queue.Enqueued);
     }
 
-    [Fact]
-    public async Task AudioScanEnqueuesWaveformForAlreadyProbedTrackMissingWaveform() {
+    [Theory]
+    [InlineData(false, JobType.GenerateAudioWaveform)]
+    [InlineData(true, JobType.ProbeAudio)]
+    public async Task AudioScanPlansReadinessBeforeWaveform(bool needsProbe, JobType expectedJob) {
         var root = new LibraryRootData(
             Guid.Parse("11111111-1111-1111-1111-111111111111"),
             "/media/music",
@@ -548,7 +550,14 @@ public sealed class ScanJobHandlerTests {
                 PreviewClipDurationSeconds: 8,
                 ThumbnailQuality: 2,
                 TrickplayQuality: 2),
-            HasTechnical = true
+            DefaultDownstreamNeeds = new(
+                NeedsProbe: needsProbe,
+                MissingOshash: false,
+                MissingMd5: false,
+                NeedsPreview: true,
+                NeedsTrickplay: false,
+                NeedsSubtitleExtraction: false,
+                NeedsGridThumbnail: false)
         };
         var queue = new RecordingJobQueue();
         var handler = new ScanAudioJobHandler(
@@ -575,7 +584,7 @@ public sealed class ScanJobHandlerTests {
 
         var track = Assert.Single(persistence.UpsertedAudioTracks);
         var request = Assert.Single(queue.Enqueued);
-        Assert.Equal(JobType.GenerateAudioWaveform, request.Type);
+        Assert.Equal(expectedJob, request.Type);
         Assert.Equal(EntityKind.AudioTrack.ToCode(), request.TargetEntityKind);
         Assert.Equal(track.Id.ToString(), request.TargetEntityId);
     }
@@ -1696,6 +1705,49 @@ public sealed class ScanJobHandlerTests {
     }
 
     [Fact]
+    public async Task GalleryScanUsesImageProcessingPolicyForFingerprintAndThumbnail() {
+        var root = new LibraryRootData(
+            Guid.NewGuid(), "/media/images", "Images",
+            Enabled: true, Recursive: true,
+            ScanVideos: false, ScanImages: true, ScanAudio: false, ScanBooks: false, IsNsfw: false);
+        var persistence = new FakeScanPersistence([root]) {
+            Settings = new LibrarySettingsData(
+                AutoGenerateMetadata: false,
+                AutoGenerateOshash: true,
+                AutoGenerateMd5: false,
+                AutoGeneratePreview: true,
+                GenerateTrickplay: false,
+                TrickplayIntervalSeconds: 10,
+                PreviewClipDurationSeconds: 8,
+                ThumbnailQuality: 2,
+                TrickplayQuality: 2),
+            DefaultDownstreamNeeds = new(
+                NeedsProbe: false,
+                MissingOshash: true,
+                MissingMd5: false,
+                NeedsPreview: true,
+                NeedsTrickplay: false,
+                NeedsSubtitleExtraction: false,
+                NeedsGridThumbnail: false)
+        };
+        var queue = new RecordingJobQueue();
+        var handler = new ScanGalleryJobHandler(
+            NullLogger<ScanGalleryJobHandler>.Instance,
+            new RecordingFileDiscovery(directoryGroups: new Dictionary<string, IReadOnlyList<string>> {
+                [root.Path] = ["/media/images/cover.png"]
+            }),
+            persistence,
+            persistence,
+            persistence);
+
+        await handler.HandleAsync(new JobContext(GalleryJob(root), queue), CancellationToken.None);
+
+        Assert.Collection(queue.Enqueued,
+            request => Assert.Equal(JobType.FingerprintImage, request.Type),
+            request => Assert.Equal(JobType.GenerateImageThumbnail, request.Type));
+    }
+
+    [Fact]
     public async Task GalleryScanCollapsesSingleImageLeafIntoParentGallery() {
         var root = new LibraryRootData(
             Guid.Parse("11111111-1111-1111-1111-111111111111"),
@@ -2019,12 +2071,20 @@ public sealed class ScanJobHandlerTests {
                     AutoGenerateMetadata: false,
                     AutoGenerateOshash: false,
                     AutoGenerateMd5: false,
-                    AutoGeneratePreview: false,
+                    AutoGeneratePreview: true,
                     GenerateTrickplay: false,
                     TrickplayIntervalSeconds: 10,
                     PreviewClipDurationSeconds: 8,
                     ThumbnailQuality: 2,
-                    TrickplayQuality: 2)
+                    TrickplayQuality: 2),
+                DefaultDownstreamNeeds = new(
+                    NeedsProbe: false,
+                    MissingOshash: false,
+                    MissingMd5: false,
+                    NeedsPreview: true,
+                    NeedsTrickplay: false,
+                    NeedsSubtitleExtraction: false,
+                    NeedsGridThumbnail: false)
             };
             var handler = new ScanBookJobHandler(
                 NullLogger<ScanBookJobHandler>.Instance,
@@ -2046,7 +2106,8 @@ public sealed class ScanJobHandlerTests {
                 StartedAt: DateTimeOffset.UtcNow,
                 FinishedAt: null);
 
-            await handler.HandleAsync(new JobContext(job, new RecordingJobQueue()), CancellationToken.None);
+            var queue = new RecordingJobQueue();
+            await handler.HandleAsync(new JobContext(job, queue), CancellationToken.None);
 
             var book = Assert.Single(persistence.UpsertedBooks);
             Assert.Equal(Path.Combine(rootPath, "Promised Neverland"), book.SourcePath);
@@ -2084,6 +2145,7 @@ public sealed class ScanJobHandlerTests {
                 persistence.UpsertedBookPages.Select(page => page.SourcePath).ToArray());
             Assert.All(persistence.UpsertedBookPages, page => Assert.Equal(book.Id, page.BookEntityId));
             Assert.Equal(2, persistence.BookPageBatchCalls);
+            Assert.Equal(3, queue.Enqueued.Count(request => request.Type == JobType.GenerateBookPageThumbnail));
             Assert.Equal([Path.Combine(rootPath, "Promised Neverland")], persistence.ValidBookPaths);
             Assert.Equal([volumePath], persistence.ValidBookVolumePaths);
             Assert.Equal([chapterOnePath, chapterTwoPath], persistence.ValidBookChapterPaths);
@@ -3128,6 +3190,7 @@ public sealed class ScanJobHandlerTests {
         public IReadOnlyList<EntityRefreshTarget> ExistingAudioTrackTargets { get; init; } = [];
         public IReadOnlyDictionary<Guid, DownstreamNeeds> DownstreamNeedsById { get; init; } =
             new Dictionary<Guid, DownstreamNeeds>();
+        public DownstreamNeeds? DefaultDownstreamNeeds { get; init; }
         public IReadOnlyList<AutoIdentifyRootTarget>? AutoIdentifyRootTargets { get; init; }
         public IReadOnlySet<string> OrganizedSourcePaths { get; init; } = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         private readonly HashSet<Guid> _organizedEntityIds = [];
@@ -3511,7 +3574,12 @@ public sealed class ScanJobHandlerTests {
 
         public Task<IReadOnlyDictionary<Guid, DownstreamNeeds>> CheckDownstreamNeedsBatchAsync(IReadOnlyList<Guid> entityIds, CancellationToken cancellationToken) {
             DownstreamNeedsChecks++;
-            return Task.FromResult(DownstreamNeedsById);
+            IReadOnlyDictionary<Guid, DownstreamNeeds> needs = DefaultDownstreamNeeds is null
+                ? DownstreamNeedsById
+                : entityIds.ToDictionary(
+                    id => id,
+                    id => DownstreamNeedsById.GetValueOrDefault(id) ?? DefaultDownstreamNeeds!);
+            return Task.FromResult(needs);
         }
 
         // The fake models a flat video library unless a test supplies explicit root metadata.

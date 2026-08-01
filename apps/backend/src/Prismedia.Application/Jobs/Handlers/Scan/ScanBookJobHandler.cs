@@ -572,28 +572,19 @@ public sealed class ScanBookJobHandler(
         Guid trackId,
         string title,
         CancellationToken cancellationToken) {
-        var hasTechnical = await downstreamNeeds.HasEntityTechnicalAsync(trackId, cancellationToken);
-        if (settings.AutoGenerateMetadata && !hasTechnical) {
-            await context.EnqueueIfNeededAsync(
-                EnqueueJobRequest.ForEntity(
-                    JobType.ProbeAudio, EntityKind.AudioTrack, trackId.ToString(), title),
-                cancellationToken);
+        var needs = await downstreamNeeds.CheckDownstreamNeedsBatchAsync([trackId], cancellationToken);
+        if (!needs.TryGetValue(trackId, out var trackNeeds)) {
+            return;
         }
 
-        if (await FingerprintGating.ShouldFingerprintAsync(
-                downstreamNeeds, settings, trackId, cancellationToken)) {
-            await context.EnqueueIfNeededAsync(
-                EnqueueJobRequest.ForEntity(
-                    JobType.FingerprintAudio, EntityKind.AudioTrack, trackId.ToString(), title),
-                cancellationToken);
-        }
-
-        if (settings.AutoGeneratePreview && hasTechnical &&
-            !await downstreamNeeds.HasEntityFileAsync(trackId, EntityFileRole.Waveform, cancellationToken)) {
-            await context.EnqueueIfNeededAsync(
-                EnqueueJobRequest.ForEntity(
-                    JobType.GenerateAudioWaveform, EntityKind.AudioTrack, trackId.ToString(), title),
-                cancellationToken);
+        foreach (var request in EntityProcessingPlanRequests.ForEntity(
+                     EntityKind.AudioTrack,
+                     trackId,
+                     title,
+                     settings,
+                     trackNeeds,
+                     deferPreviewUntilProbeCompletes: true)) {
+            await context.EnqueueIfNeededAsync(request, cancellationToken);
         }
     }
 
@@ -667,20 +658,23 @@ public sealed class ScanBookJobHandler(
         IReadOnlyList<BookPageUpsertItem> pageItems,
         IReadOnlyList<Guid> pageIds,
         CancellationToken cancellationToken) {
+        var needs = pageIds.Count == 0
+            ? new Dictionary<Guid, DownstreamNeeds>()
+            : await downstreamNeeds.CheckDownstreamNeedsBatchAsync(pageIds, cancellationToken);
+        var requests = new List<EnqueueJobRequest>();
         for (var index = 0; index < pageItems.Count && index < pageIds.Count; index++) {
-            if (!settings.AutoGeneratePreview ||
-                await downstreamNeeds.HasEntityFileAsync(
-                    pageIds[index], EntityFileRole.Thumbnail, cancellationToken)) {
-                continue;
-            }
-
-            await context.EnqueueIfNeededAsync(
-                EnqueueJobRequest.ForEntity(
-                    JobType.GenerateBookPageThumbnail,
+            if (needs.TryGetValue(pageIds[index], out var pageNeeds)) {
+                requests.AddRange(EntityProcessingPlanRequests.ForEntity(
                     EntityKind.BookPage,
-                    pageIds[index].ToString(),
-                    pageItems[index].Title),
-                cancellationToken);
+                    pageIds[index],
+                    pageItems[index].Title,
+                    settings,
+                    pageNeeds));
+            }
+        }
+
+        if (requests.Count > 0) {
+            await context.EnqueueBatchAsync(requests, cancellationToken);
         }
     }
 

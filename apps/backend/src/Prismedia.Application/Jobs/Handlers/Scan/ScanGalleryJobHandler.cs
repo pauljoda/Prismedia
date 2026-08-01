@@ -139,28 +139,20 @@ public sealed class ScanGalleryJobHandler(
         }
 
         var imageIds = await images.UpsertImagesBatchAsync(imageItems, cancellationToken);
+        var needs = imageIds.Count == 0
+            ? new Dictionary<Guid, DownstreamNeeds>()
+            : await downstreamNeeds.CheckDownstreamNeedsBatchAsync(imageIds, cancellationToken);
+        var downstreamRequests = new List<EnqueueJobRequest>();
         for (var i = 0; i < imageItems.Count && i < imageIds.Count; i++) {
             var item = imageItems[i];
             var imageId = imageIds[i];
-
-            if (settings.AutoGeneratePreview && await NeedsPreviewAsync(imageId, item.FilePath, cancellationToken)) {
-                await context.EnqueueIfNeededAsync(
-                    EnqueueJobRequest.ForEntity(
-                        JobType.GenerateImageThumbnail,
-                        EntityKind.Image,
-                        imageId.ToString(),
-                        item.Title),
-                    cancellationToken);
-            }
-
-            if (await FingerprintGating.ShouldFingerprintAsync(downstreamNeeds, settings, imageId, cancellationToken)) {
-                await context.EnqueueIfNeededAsync(
-                    EnqueueJobRequest.ForEntity(
-                        JobType.FingerprintImage,
-                        EntityKind.Image,
-                        imageId.ToString(),
-                        item.Title),
-                    cancellationToken);
+            if (needs.TryGetValue(imageId, out var imageNeeds)) {
+                downstreamRequests.AddRange(EntityProcessingPlanRequests.ForEntity(
+                    EntityKind.Image,
+                    imageId,
+                    item.Title,
+                    settings,
+                    imageNeeds));
             }
 
             // Loose images (no owning gallery) are their own auto-identify roots; images inside a
@@ -168,6 +160,10 @@ public sealed class ScanGalleryJobHandler(
             if (item.GalleryEntityId is null) {
                 autoIdentifyIds.Add(imageId);
             }
+        }
+
+        if (downstreamRequests.Count > 0) {
+            await context.EnqueueBatchAsync(downstreamRequests, cancellationToken);
         }
 
         await images.RemoveStaleLooseImagesInRootAsync(root.Id, validLooseImagePaths, cancellationToken);
@@ -195,15 +191,6 @@ public sealed class ScanGalleryJobHandler(
 
     private static string NormalizePath(string path) =>
         Path.GetFullPath(path).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-
-    private async Task<bool> NeedsPreviewAsync(Guid imageId, string filePath, CancellationToken cancellationToken) {
-        if (!await downstreamNeeds.HasEntityFileAsync(imageId, EntityFileRole.Thumbnail, cancellationToken)) {
-            return true;
-        }
-
-        return AnimatedImagePreviewPolicy.RequiresPreviewClip(filePath) &&
-               !await downstreamNeeds.HasEntityFileAsync(imageId, EntityFileRole.Preview, cancellationToken);
-    }
 
     /// <summary>
     /// Identifies folders that should be collapsed instead of becoming galleries: a folder that
