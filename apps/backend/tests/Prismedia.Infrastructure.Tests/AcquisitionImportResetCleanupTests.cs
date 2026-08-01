@@ -26,7 +26,7 @@ public sealed class AcquisitionImportResetCleanupTests {
             await using var db = CreateContext();
             var entityId = Guid.NewGuid();
             var rootId = Guid.NewGuid();
-            AddEntity(db, entityId, isWanted: false);
+            AddEntity(db, entityId, EntityKind.Book, isWanted: false);
             db.EntityFiles.Add(SourceFile(entityId, target));
             db.ScannedFiles.Add(new ScannedFileRow {
                 LibraryRootId = rootId,
@@ -50,7 +50,7 @@ public sealed class AcquisitionImportResetCleanupTests {
                 [new ImportPlacementCheckpointUnit("Dune.epub", source, target, true, target)],
                 AttemptId: Guid.NewGuid(),
                 ClaimJobId: Guid.NewGuid());
-            var import = Context(entityId, payloadRoot, checkpoint);
+            var import = Context(entityId, payloadRoot, placementCheckpoint: checkpoint);
 
             await Cleaner(db).CleanupAsync(import, CancellationToken.None);
 
@@ -84,7 +84,7 @@ public sealed class AcquisitionImportResetCleanupTests {
 
             await using var db = CreateContext();
             var entityId = Guid.NewGuid();
-            AddEntity(db, entityId, isWanted: false);
+            AddEntity(db, entityId, EntityKind.VideoEpisode, isWanted: false);
             db.EntityFiles.Add(SourceFile(entityId, previous));
             await db.SaveChangesAsync();
 
@@ -108,7 +108,11 @@ public sealed class AcquisitionImportResetCleanupTests {
                     ReplacementEvidencePath: evidence)],
                 AttemptId: attemptId,
                 ClaimJobId: Guid.NewGuid());
-            var import = Context(entityId, payloadRoot, tvCheckpoint: checkpoint);
+            var import = Context(
+                entityId,
+                payloadRoot,
+                acquisitionKind: EntityKind.VideoEpisode,
+                tvCheckpoint: checkpoint);
 
             await Cleaner(db).CleanupAsync(import, CancellationToken.None);
 
@@ -138,7 +142,7 @@ public sealed class AcquisitionImportResetCleanupTests {
 
             await using var db = CreateContext();
             var entityId = Guid.NewGuid();
-            AddEntity(db, entityId, isWanted: false);
+            AddEntity(db, entityId, EntityKind.VideoEpisode, isWanted: false);
             db.EntityFiles.Add(SourceFile(entityId, target));
             await db.SaveChangesAsync();
 
@@ -160,7 +164,11 @@ public sealed class AcquisitionImportResetCleanupTests {
                     AdoptedExistingTarget: true)],
                 AttemptId: Guid.NewGuid(),
                 ClaimJobId: Guid.NewGuid());
-            var import = Context(entityId, payloadRoot, tvCheckpoint: checkpoint);
+            var import = Context(
+                entityId,
+                payloadRoot,
+                acquisitionKind: EntityKind.VideoEpisode,
+                tvCheckpoint: checkpoint);
 
             await Cleaner(db).CleanupAsync(import, CancellationToken.None);
 
@@ -179,6 +187,7 @@ public sealed class AcquisitionImportResetCleanupTests {
     private static AcquisitionImportContext Context(
         Guid entityId,
         string contentPath,
+        EntityKind? acquisitionKind = null,
         ImportPlacementCheckpoint? placementCheckpoint = null,
         TvImportCheckpoint? tvCheckpoint = null) =>
         new(
@@ -193,15 +202,20 @@ public sealed class AcquisitionImportResetCleanupTests {
             ContentPath: contentPath,
             ClientItemId: "client-item",
             DownloadClientConfigId: Guid.NewGuid(),
-            Kind: placementCheckpoint?.Kind ?? EntityKind.Video,
+            Kind: placementCheckpoint?.Kind ?? acquisitionKind
+                ?? throw new ArgumentException("A test import context requires an acquisition kind."),
             EntityId: entityId,
             TvImportCheckpoint: tvCheckpoint,
             ImportPlacementCheckpoint: placementCheckpoint);
 
-    private static void AddEntity(PrismediaDbContext db, Guid id, bool isWanted) =>
+    private static void AddEntity(
+        PrismediaDbContext db,
+        Guid id,
+        EntityKind kind,
+        bool isWanted) =>
         db.Entities.Add(new EntityRow {
             Id = id,
-            KindCode = EntityKind.Book.ToCode(),
+            KindCode = kind.ToCode(),
             Title = "Title",
             IsWanted = isWanted,
             CreatedAt = DateTimeOffset.UtcNow,
