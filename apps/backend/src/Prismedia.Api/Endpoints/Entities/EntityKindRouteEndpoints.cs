@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Mvc;
 using Prismedia.Application.Entities;
 using Prismedia.Contracts.Entities;
 using Prismedia.Contracts.System;
@@ -19,45 +20,20 @@ internal static class EntityKindRouteEndpoints {
             .WithTags(tag);
 
         group.MapGet("/", async (
-            string? query,
-            string? cursor,
-            bool? hideNsfw,
-            int? limit,
-            string? sort,
-            string? sortDir,
-            int? seed,
-            bool? favorite,
-            bool? organized,
-            int? ratingMin,
-            int? ratingMax,
-            bool? unrated,
-            string? status,
-            bool? orphaned,
+            [AsParameters] EntityListParameters request,
             HttpContext httpContext,
             IEntityReadService entities,
             CancellationToken cancellationToken) =>
-            Results.Ok(await entities.ListAsync(
-                kind,
-                query,
-                cursor,
-                NsfwVisibility.ShouldHide(hideNsfw, httpContext),
-                limit,
+            await EntityListEndpoint.ListAsync(
+                request,
+                httpContext,
+                entities,
                 cancellationToken,
-                referencedBy: null,
-                relationshipCode: null,
-                sort: sort,
-                sortDir: sortDir,
-                seed: seed,
-                favorite: favorite,
-                organized: organized,
-                ratingMin: ratingMin,
-                ratingMax: ratingMax,
-                unrated: unrated,
-                status: status,
-                orphaned: orphaned)))
+                requiredKind: kind))
             .WithName(listName)
             .WithSummary($"List {tag}.")
-            .Produces<EntityListResponse>();
+            .Produces<EntityListResponse>()
+            .Produces<ApiProblem>(StatusCodes.Status400BadRequest);
 
         if (EntityKindRegistry.TryDescribe(kind, out var definition) && definition.SupportsManualManagement) {
             group.MapManagementRoutes(kind, tag, detailName);

@@ -68,6 +68,21 @@ public sealed class EntityListEndpointTests {
         Assert.Equal(expected, entityReadService.AcquisitionStatus);
     }
 
+    [Fact]
+    public async Task KindSpecificListUsesCanonicalFiltersAndForcesItsRouteKind() {
+        var entityReadService = new CapturingEntityReadService();
+        using var factory = CreateFactory(entityReadService);
+        using var client = factory.CreateAuthenticatedClient();
+
+        using var response = await client.GetAsync(
+            "/api/movies?kind=video&wanted=true&acquisitionStatus=downloaded");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal(EntityKind.Movie.ToCode(), entityReadService.Kind);
+        Assert.True(entityReadService.Wanted);
+        Assert.Equal(AcquisitionStatus.Downloaded, entityReadService.AcquisitionStatus);
+    }
+
     private static WebApplicationFactory<Program> CreateFactory(IEntityReadService entityReadService) =>
         new WebApplicationFactory<Program>()
             .WithWebHostBuilder(builder => {

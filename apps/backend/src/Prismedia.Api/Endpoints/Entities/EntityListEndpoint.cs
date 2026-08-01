@@ -12,28 +12,37 @@ internal static class EntityListEndpoint {
             [AsParameters] EntityListParameters request,
             HttpContext httpContext,
             IEntityReadService entities,
-            CancellationToken cancellationToken) => {
-                if (!TryGetKinds(request.Kind, out var resolvedKinds, out var error)) {
-                    return error;
-                }
-
-                if (!TryGetAcquisitionStatus(request.AcquisitionStatus, out var acquisitionStatus, out error)) {
-                    return error;
-                }
-
-                return Results.Ok(await entities.ListAsync(
-                    request.ToQuery(
-                        resolvedKinds,
-                        NsfwVisibility.ShouldHide(request.HideNsfw, httpContext),
-                        acquisitionStatus),
-                    cancellationToken));
-            })
+            CancellationToken cancellationToken) =>
+            await ListAsync(request, httpContext, entities, cancellationToken))
             .WithName("ListEntities")
             .WithSummary("List Entities.")
             .Produces<EntityListResponse>()
             .Produces<ApiProblem>(StatusCodes.Status400BadRequest);
 
         return group;
+    }
+
+    internal static async Task<IResult> ListAsync(
+        EntityListParameters request,
+        HttpContext httpContext,
+        IEntityReadService entities,
+        CancellationToken cancellationToken,
+        string? requiredKind = null) {
+        var resolvedKinds = requiredKind;
+        if (resolvedKinds is null && !TryGetKinds(request.Kind, out resolvedKinds, out var error)) {
+            return error;
+        }
+
+        if (!TryGetAcquisitionStatus(request.AcquisitionStatus, out var acquisitionStatus, out var statusError)) {
+            return statusError;
+        }
+
+        return Results.Ok(await entities.ListAsync(
+            request.ToQuery(
+                resolvedKinds,
+                NsfwVisibility.ShouldHide(request.HideNsfw, httpContext),
+                acquisitionStatus),
+            cancellationToken));
     }
 
     private static bool TryGetKinds(string? value, out string? kinds, out IResult error) {
