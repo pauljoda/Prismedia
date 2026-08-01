@@ -1,6 +1,5 @@
 <script lang="ts">
-  import { THUMBNAIL_HOVER_KIND } from "$lib/api/generated/codes";
-  import { PROPOSAL_KIND, proposalKindToEntityKind } from "$lib/entities/entity-codes";
+  import { ENTITY_KIND, THUMBNAIL_HOVER_KIND } from "$lib/api/generated/codes";
   import {
     Check,
     ChevronLeft,
@@ -66,9 +65,9 @@
 
   const children = $derived(structuralChildProposals(proposal));
   const relationships = $derived(relationshipProposals(proposal));
-  const credits = $derived(relationships.filter((r) => r.targetKind === PROPOSAL_KIND.person));
+  const credits = $derived(relationships.filter((r) => r.targetKind === ENTITY_KIND.person));
   const nonCreditRelationships = $derived(
-    relationships.filter((r) => r.targetKind !== PROPOSAL_KIND.person),
+    relationships.filter((r) => r.targetKind !== ENTITY_KIND.person),
   );
   // De-duplicate tags so repeated provider tags can't crash the keyed `{#each}`.
   const tags = $derived([...new Set(proposal.patch?.tags ?? [])]);
@@ -76,7 +75,7 @@
   const currentDetail = $derived(store.getReviewDetailForProposal(currentScopeEntityId, proposal));
   const currentDetailEntityId = $derived(store.reviewDetailEntityIdForProposal(currentScopeEntityId, proposal));
   const existingTagTitles = $derived(
-    relationshipTitlesForDetail(currentDetail, PROPOSAL_KIND.tag),
+    relationshipTitlesForDetail(currentDetail, ENTITY_KIND.tag),
   );
   const looseTags = $derived(tags.filter((tag) => !tagRelationshipForTitle(tag, relationships)));
   const imageGroups = $derived(groupReviewImages(proposal));
@@ -130,7 +129,7 @@
   function currentEntityFallback(): EntityCard {
     return {
       id: currentDetailEntityId ?? proposal.targetEntityId ?? proposal.proposalId,
-      kind: proposalKindToEntityKind(proposal.targetKind),
+      kind: proposal.targetKind,
       title: currentDetail?.title ?? "",
       parentEntityId: null,
       sortOrder: null,
@@ -149,7 +148,7 @@
 
   function setRelationshipSelected(result: EntityMetadataProposal, selected: boolean) {
     store.setReviewProposalSelected(result.proposalId, selected);
-    if (result.targetKind === PROPOSAL_KIND.tag) {
+    if (result.targetKind === ENTITY_KIND.tag) {
       setTagSelected(proposalTitle(result), selected);
     }
   }

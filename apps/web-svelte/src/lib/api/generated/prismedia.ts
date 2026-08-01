@@ -446,7 +446,9 @@ export const getGetVideoSeasonUrl = (id: string,
 }
 
 /**
- * @summary Get Video Season.
+ * Deprecated compatibility alias. Use GET /api/entities/{id}.
+ * @deprecated
+ * @summary Get Video Season (deprecated; use GET /api/entities/{id}).
  */
 export const getVideoSeason = async (id: string,
     seasonId: string,

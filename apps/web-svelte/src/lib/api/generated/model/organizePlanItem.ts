@@ -5,15 +5,17 @@
  * OpenAPI spec version: 1.0.0
  */
 import type { EntityKind } from './entityKind';
+import type { EntityStorageShape } from './entityStorageShape';
+import type { OrganizeItemStatus } from './organizeItemStatus';
 
 export interface OrganizePlanItem {
   entityId: string;
   kind: EntityKind;
   title: string;
-  storageShape: string;
+  storageShape: EntityStorageShape;
   sourcePath: string;
   targetPath: string;
-  status: string;
+  status: OrganizeItemStatus;
   /** @nullable */
   reason: string | null;
 }

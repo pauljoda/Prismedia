@@ -1,4 +1,12 @@
-import { PROGRESS_UNIT, READER_MODE, type ProgressUnitCode, type ReaderModeCode } from "$lib/api/generated/codes";
+import {
+  CAPABILITY_KIND,
+  ENTITY_FILE_ROLE,
+  PROGRESS_UNIT,
+  READER_MODE,
+  type EntityFileRoleCode,
+  type ProgressUnitCode,
+  type ReaderModeCode,
+} from "$lib/api/generated/codes";
 import type { EntityCapability, EntitySubtitleSource, EntityKind } from "$lib/api/generated/model";
 import type { EntityDetailCardFull } from "./entity-detail";
 import { entityCardToDetailCard } from "./entity-detail";
@@ -22,14 +30,14 @@ function images(
   posterSrc?: string,
 ): EntityCapability {
   return {
-    kind: "images",
-    supportedKinds: ["cover", "poster", "thumbnail"],
+    kind: CAPABILITY_KIND.images,
+    supportedKinds: [ENTITY_FILE_ROLE.cover, ENTITY_FILE_ROLE.poster, ENTITY_FILE_ROLE.thumbnail],
     thumbnailUrl: posterSrc ?? coverSrc,
     thumbnail2xUrl: null,
     coverUrl: coverSrc,
     items: [
-      { kind: "cover", path: coverSrc, mimeType: "image/svg+xml" },
-      ...(posterSrc ? [{ kind: "poster", path: posterSrc, mimeType: "image/svg+xml" }] : []),
+      { kind: ENTITY_FILE_ROLE.cover, path: coverSrc, mimeType: "image/svg+xml" },
+      ...(posterSrc ? [{ kind: ENTITY_FILE_ROLE.poster, path: posterSrc, mimeType: "image/svg+xml" }] : []),
     ],
   };
 }
@@ -73,9 +81,9 @@ function links(
   };
 }
 
-function files(items: Array<{ role: string; path: string; mimeType?: string }>): EntityCapability {
+function files(items: Array<{ role: EntityFileRoleCode; path: string; mimeType?: string }>): EntityCapability {
   return {
-    kind: "files",
+    kind: CAPABILITY_KIND.files,
     items: items.map((f) => ({ role: f.role, path: f.path, mimeType: f.mimeType ?? null })),
   };
 }

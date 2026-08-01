@@ -6,7 +6,6 @@ import {
   EXTERNAL_ID_PROVIDER,
   MONITOR_PRESET,
   PROBLEM_CODE,
-  PROPOSAL_KIND,
   REQUEST_COMMIT_OUTCOME,
   REQUEST_MEDIA_KIND,
   REQUEST_REVIEW_SELECTION,
@@ -417,13 +416,13 @@ function setRoute(kind: string, value: string, query: string) {
 }
 
 function seriesReview(): RequestReviewResponse {
-  const episode = proposal("episode-1", PROPOSAL_KIND.videoEpisode, "Episode 1", [], {
+  const episode = proposal("episode-1", ENTITY_KIND.videoEpisode, "Episode 1", [], {
     seasonNumber: 1,
     episodeNumber: 1,
   });
-  const seasonOne = proposal("season-1", PROPOSAL_KIND.videoSeason, "Season 1", [episode], { seasonNumber: 1 });
-  const seasonTwo = proposal("season-2", PROPOSAL_KIND.videoSeason, "Season 2", [], { seasonNumber: 2 });
-  const root = proposal("series-root", PROPOSAL_KIND.videoSeries, "Andor", [seasonOne, seasonTwo]);
+  const seasonOne = proposal("season-1", ENTITY_KIND.videoSeason, "Season 1", [episode], { seasonNumber: 1 });
+  const seasonTwo = proposal("season-2", ENTITY_KIND.videoSeason, "Season 2", [], { seasonNumber: 2 });
+  const root = proposal("series-root", ENTITY_KIND.videoSeries, "Andor", [seasonOne, seasonTwo]);
   const externalIdentity = { namespace: EXTERNAL_ID_PROVIDER.tmdb, value: "Show:AbC:01" };
 
   return {
@@ -460,7 +459,7 @@ function seriesReview(): RequestReviewResponse {
       {
         proposalId: episode.proposalId,
         kind: REQUEST_MEDIA_KIND.episode,
-        entityKind: ENTITY_KIND.video,
+        entityKind: ENTITY_KIND.videoEpisode,
         externalIdentity: { namespace: EXTERNAL_ID_PROVIDER.tmdb, value: "Show:AbC:01:1:1" },
         requestable: true,
         position: 1,
@@ -470,8 +469,8 @@ function seriesReview(): RequestReviewResponse {
 }
 
 function movieReview(): RequestReviewResponse {
-  const trailer = proposal("trailer-metadata", PROPOSAL_KIND.video, "Official Trailer");
-  const root = proposal("movie-root", PROPOSAL_KIND.movie, "Arrival", [trailer]);
+  const trailer = proposal("trailer-metadata", ENTITY_KIND.video, "Official Trailer");
+  const root = proposal("movie-root", ENTITY_KIND.movie, "Arrival", [trailer]);
   const externalIdentity = { namespace: EXTERNAL_ID_PROVIDER.tmdb, value: "Movie:Part:Case" };
   return {
     pluginId: "cinema-metadata",
@@ -511,7 +510,7 @@ function seasonReview(season: EntityMetadataProposal): RequestReviewResponse {
       {
         proposalId: "episode-1",
         kind: REQUEST_MEDIA_KIND.episode,
-        entityKind: ENTITY_KIND.video,
+        entityKind: ENTITY_KIND.videoEpisode,
         externalIdentity: { namespace: EXTERNAL_ID_PROVIDER.tmdb, value: "Show:AbC:01:1:1" },
         requestable: true,
         position: 1,
@@ -521,7 +520,7 @@ function seasonReview(season: EntityMetadataProposal): RequestReviewResponse {
 }
 
 function audiobookReview(): RequestReviewResponse {
-  const root = proposal("audiobook-root", PROPOSAL_KIND.book, "Project Hail Mary");
+  const root = proposal("audiobook-root", ENTITY_KIND.book, "Project Hail Mary");
   const externalIdentity = { namespace: "openlibrary", value: "works/OL:Project:Hail:Mary" };
   return {
     pluginId: "open-library",
@@ -541,9 +540,9 @@ function audiobookReview(): RequestReviewResponse {
 }
 
 function bookSiblingReview(): RequestReviewResponse {
-  const volumeOne = proposal("book-volume-1", PROPOSAL_KIND.book, "Volume 1");
-  const volumeTwo = proposal("book-volume-2", PROPOSAL_KIND.book, "Volume 2");
-  const root = proposal("book-series-root", PROPOSAL_KIND.book, "A Book Series", [volumeOne, volumeTwo]);
+  const volumeOne = proposal("book-volume-1", ENTITY_KIND.book, "Volume 1");
+  const volumeTwo = proposal("book-volume-2", ENTITY_KIND.book, "Volume 2");
+  const root = proposal("book-series-root", ENTITY_KIND.book, "A Book Series", [volumeOne, volumeTwo]);
   const externalIdentity = { namespace: "openlibrary", value: "works/OL:Series:Case" };
   return {
     pluginId: "open-library",

@@ -2,7 +2,6 @@
   import { Check } from "@lucide/svelte";
   import { Checkbox, cn } from "@prismedia/ui-svelte";
   import type { EntityMetadataProposal } from "$lib/api/identify-types";
-  import { proposalKindToEntityKind } from "$lib/entities/entity-codes";
   import { entityKindIcon } from "$lib/entities/entity-kind-icons";
   import { entityAccentForKind } from "$lib/entities/entity-accent";
   import { aspectRatioForKind, toAspectRatioValue } from "$lib/entities/entity-thumbnail";
@@ -39,7 +38,7 @@
 <div class="proposal-node-grid">
   {#each nodes as node (node.proposalId)}
     {@const title = proposalTitle(node)}
-    {@const entityKind = proposalKindToEntityKind(node.targetKind)}
+    {@const entityKind = node.targetKind}
     {@const NodeIcon = entityKindIcon(entityKind)}
     {@const nodeAccent = entityAccentForKind(entityKind).primary}
     {@const coverUrl = imageUrl(node)}

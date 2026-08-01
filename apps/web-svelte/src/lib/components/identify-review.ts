@@ -17,7 +17,6 @@ import {
   ENTITY_DATE_TYPE,
   MEDIA_IMAGE_KIND,
   METADATA_PATCH_FIELD,
-  PROPOSAL_KIND,
   isEntityKindCode,
   isTaxonomyEntityKind,
   labelForEntityKind,
@@ -742,7 +741,7 @@ export function structuralChildEntities(
 }
 
 export function entityKindLabel(kind: string): string {
-  if (kind === PROPOSAL_KIND.videoEpisode) return "Episodes";
+  if (kind === ENTITY_KIND.videoEpisode) return "Episodes";
   if (isEntityKindCode(kind)) return labelForEntityKind(kind);
   return "Items";
 }

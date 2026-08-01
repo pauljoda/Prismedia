@@ -4,9 +4,10 @@
  * Prismedia.Api | v1
  * OpenAPI spec version: 1.0.0
  */
+import type { EntityFileRole } from './entityFileRole';
 
 export interface EntityFile {
-  role: string;
+  role: EntityFileRole;
   path: string;
   /** @nullable */
   mimeType: string | null;

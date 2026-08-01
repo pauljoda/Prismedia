@@ -1,4 +1,4 @@
-import type { EntityKind, ProposalKind } from "$lib/api/generated/model";
+import type { EntityKind } from "$lib/api/generated/model";
 import type { PluginSearchDefinition } from "$lib/api/generated/model";
 import type {
   EntityDateTypeCode,
@@ -96,7 +96,7 @@ export interface EntityMetadataPatch {
 export interface EntityMetadataProposal {
   proposalId: string;
   provider: string;
-  targetKind: ProposalKind;
+  targetKind: EntityKind;
   confidence?: number | null;
   matchReason?: string | null;
   patch: EntityMetadataPatch;

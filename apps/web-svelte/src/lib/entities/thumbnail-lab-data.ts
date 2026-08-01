@@ -1,4 +1,9 @@
-import { CAPABILITY_KIND, THUMBNAIL_HOVER_KIND } from "$lib/api/generated/codes";
+import {
+  CAPABILITY_KIND,
+  ENTITY_FILE_ROLE,
+  THUMBNAIL_HOVER_KIND,
+  type EntityFileRoleCode,
+} from "$lib/api/generated/codes";
 import type { EntityCapability, EntityKind } from "$lib/api/generated/model";
 import type {
   EntityThumbnailAsset,
@@ -45,10 +50,10 @@ function sequence(
 }
 
 function images(
-  supportedKinds: string[],
+  supportedKinds: EntityFileRoleCode[],
   cover: EntityThumbnailAsset,
   extraAssets: EntityThumbnailAsset[] = [],
-  extraRole = "preview",
+  extraRole: EntityFileRoleCode = ENTITY_FILE_ROLE.preview,
 ): EntityCapability {
   return {
     kind: "images",
@@ -57,9 +62,11 @@ function images(
     thumbnail2xUrl: null,
     coverUrl: cover.src,
     items: [
-      { kind: "cover", path: cover.src, mimeType: "image/svg+xml" },
+      { kind: ENTITY_FILE_ROLE.cover, path: cover.src, mimeType: "image/svg+xml" },
       ...extraAssets.map((item, index) => ({
-        kind: supportedKinds.includes(extraRole) ? extraRole : (supportedKinds[index % supportedKinds.length] ?? "preview"),
+        kind: supportedKinds.includes(extraRole)
+          ? extraRole
+          : (supportedKinds[index % supportedKinds.length] ?? ENTITY_FILE_ROLE.preview),
         path: item.src,
         mimeType: "image/svg+xml",
       })),
@@ -81,7 +88,7 @@ function card(options: {
   aspectRatio: EntityThumbnailCard["aspectRatio"];
   cover: EntityThumbnailAsset;
   hover?: EntityThumbnailCard["hover"];
-  supportedImageKinds?: string[];
+  supportedImageKinds?: EntityFileRoleCode[];
   flagOptions?: Parameters<typeof flags>[0];
   capabilities?: EntityCapability[];
   custom?: EntityThumbnailCard["custom"];
@@ -89,10 +96,15 @@ function card(options: {
 }): EntityThumbnailCard {
   const hover = options.hover ?? { kind: THUMBNAIL_HOVER_KIND.none };
   const hoverAssets = hover.kind === THUMBNAIL_HOVER_KIND.none || hover.kind === THUMBNAIL_HOVER_KIND.sprite ? [] : hover.assets;
-  const hoverRole = hover.kind === THUMBNAIL_HOVER_KIND.trickplay ? "trickplay" : "preview";
+  const hoverRole = hover.kind === THUMBNAIL_HOVER_KIND.trickplay
+    ? ENTITY_FILE_ROLE.trickplay
+    : ENTITY_FILE_ROLE.preview;
   const supportedImageKinds =
     options.supportedImageKinds ??
-    Array.from(new Set(["cover", ...(hoverAssets.length > 0 ? [hoverRole] : [])]));
+    Array.from(new Set([
+      ENTITY_FILE_ROLE.cover,
+      ...(hoverAssets.length > 0 ? [hoverRole] : []),
+    ]));
   return {
     entity: {
       id: options.id,

@@ -9,7 +9,6 @@ import type {
   EntityMetadataProposal,
   ImageCandidate,
 } from "$lib/api/identify-types";
-import { proposalKindToEntityKind } from "$lib/entities/entity-codes";
 import type { EntityCard } from "$lib/api/entities";
 import type { EntityThumbnailCard, EntityThumbnailMetaIcon } from "$lib/entities/entity-thumbnail";
 import { aspectRatioForKind, iconForKind } from "$lib/entities/entity-thumbnail";
@@ -162,7 +161,7 @@ export function relationshipCard(
 ): EntityThumbnailCard {
   const image = preferredRelationshipImage(result, selectedImages, rootProposalId, store);
   const title = proposalTitle(result);
-  const entityKind = proposalKindToEntityKind(result.targetKind);
+  const entityKind = result.targetKind;
   return {
     entity: { id: result.proposalId, kind: entityKind, title, parentEntityId: null, sortOrder: null, capabilities: [], childrenByKind: [], relationships: [] },
     aspectRatio: aspectRatioForKind(entityKind),
@@ -236,7 +235,7 @@ export function childCard(
   const childImage = preferredProposalImage(child, selectedImages, rootProposalId, store);
   const localCover = localChild?.coverUrl;
   return {
-    entity: { id: child.proposalId, kind: proposalKindToEntityKind(child.targetKind), title: child.patch?.title ?? `${defaultLabel} ${index + 1}`, parentEntityId: null, sortOrder: index, capabilities: [], childrenByKind: [], relationships: [] },
+    entity: { id: child.proposalId, kind: child.targetKind, title: child.patch?.title ?? `${defaultLabel} ${index + 1}`, parentEntityId: null, sortOrder: index, capabilities: [], childrenByKind: [], relationships: [] },
     aspectRatio,
     cover: childImage
       ? { src: reviewImagePreviewUrl(childImage, child.targetKind), alt: child.patch?.title ?? "" }

@@ -5,11 +5,12 @@
  * OpenAPI spec version: 1.0.0
  */
 import type { EntityKind } from './entityKind';
+import type { IdentifyApplyState } from './identifyApplyState';
 
 export interface IdentifyApplyProgress {
   id: string;
   entityId: string;
-  state: string;
+  state: IdentifyApplyState;
   /** @pattern ^-?(?:0|[1-9]\d*)$ */
   currentIndex: number | string;
   /** @pattern ^-?(?:0|[1-9]\d*)$ */

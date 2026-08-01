@@ -26,6 +26,7 @@ export const AcquisitionCreateRequestKind = {
   studio: 'studio',
   tag: 'tag',
   video: 'video',
+  'video-episode': 'video-episode',
   'video-series': 'video-series',
   'video-season': 'video-season',
 } as const;

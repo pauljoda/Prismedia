@@ -5,11 +5,12 @@
  * OpenAPI spec version: 1.0.0
  */
 import type { EntityCapabilityImagesCapabilityKind } from './entityCapabilityImagesCapabilityKind';
+import type { EntityCapabilityImagesCapabilitySupportedKindsItem } from './entityCapabilityImagesCapabilitySupportedKindsItem';
 import type { EntityImageAsset } from './entityImageAsset';
 
 export interface EntityCapabilityImagesCapability {
   kind: EntityCapabilityImagesCapabilityKind;
-  supportedKinds: string[];
+  supportedKinds: EntityCapabilityImagesCapabilitySupportedKindsItem[];
   items: EntityImageAsset[];
   /** @nullable */
   thumbnailUrl: string | null;

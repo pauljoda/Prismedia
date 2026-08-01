@@ -7,7 +7,9 @@
 import type { EntityKind } from './entityKind';
 import type { EntityMetadataProposal } from './entityMetadataProposal';
 import type { EntitySearchCandidate } from './entitySearchCandidate';
+import type { IdentifyAction } from './identifyAction';
 import type { IdentifyQuery } from './identifyQuery';
+import type { IdentifyQueueState } from './identifyQueueState';
 
 export interface IdentifyQueueItem {
   id: string;
@@ -15,10 +17,10 @@ export interface IdentifyQueueItem {
   entityKind: EntityKind;
   title: string;
   isNsfw: boolean;
-  state: string;
+  state: IdentifyQueueState;
   /** @nullable */
   provider: string | null;
-  action: string;
+  action: IdentifyAction;
   query: null | IdentifyQuery;
   candidates: EntitySearchCandidate[];
   proposal: null | EntityMetadataProposal;
