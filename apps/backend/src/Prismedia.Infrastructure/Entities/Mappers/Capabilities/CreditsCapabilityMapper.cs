@@ -17,8 +17,7 @@ namespace Prismedia.Infrastructure.Entities.Mappers.Capabilities;
 ///
 /// Hydration constructs <see cref="Person"/> entities from the target entity row and
 /// person detail row so the credit list is self-contained without requiring the full
-/// recursive entity hydration pipeline. The repository still handles recursive graph
-/// saving of <c>credit.Person</c> entities for FK integrity.
+/// recursive entity hydration pipeline.
 /// </summary>
 internal sealed class CreditsCapabilityMapper(PrismediaDbContext db) : IEntityCapabilityMapper {
     private static readonly string CreditsRelationshipCode = RelationshipKind.Credits.ToCode();
@@ -70,38 +69,6 @@ internal sealed class CreditsCapabilityMapper(PrismediaDbContext db) : IEntityCa
         }
 
         entity.AddCapability(credits);
-    }
-
-    public Task ClearAsync(Entity entity, CancellationToken cancellationToken) {
-        db.EntityRelationshipLinks.RemoveRange(
-            db.EntityRelationshipLinks.Where(link =>
-                link.EntityId == entity.Id &&
-                link.RelationshipCode == CreditsRelationshipCode));
-        return Task.CompletedTask;
-    }
-
-    public Task PersistAsync(Entity entity, CancellationToken cancellationToken) {
-        if (entity.Credits is not { } credits) {
-            return Task.CompletedTask;
-        }
-
-        var now = DateTimeOffset.UtcNow;
-        var index = 0;
-        foreach (var credit in credits.Credits) {
-            db.EntityRelationshipLinks.Add(new EntityRelationshipLinkRow {
-                EntityId = entity.Id,
-                RelationshipCode = CreditsRelationshipCode,
-                Label = credit.Label ?? string.Empty,
-                TargetEntityId = credit.Person.Id,
-                TargetKindCode = EntityKind.Person.ToCode(),
-                SortOrder = index,
-                MetadataJson = JsonSerializer.Serialize(new CreditMetadata(credit.Role.ToCode())),
-                CreatedAt = now,
-            });
-            index++;
-        }
-
-        return Task.CompletedTask;
     }
 
     /// <summary>

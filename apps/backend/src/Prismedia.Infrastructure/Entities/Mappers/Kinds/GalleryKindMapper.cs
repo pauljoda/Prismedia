@@ -19,19 +19,4 @@ internal sealed class GalleryKindMapper(PrismediaDbContext db) : IEntityKindMapp
             detail?.CoverImageEntityId);
     }
 
-    public async Task PersistDetailAsync(Entity entity, CancellationToken cancellationToken) {
-        if (entity is not Gallery gallery) {
-            return;
-        }
-
-        var row = await db.GalleryDetails.FindAsync([entity.Id], cancellationToken)
-            ?? Track(new GalleryDetailRow { EntityId = entity.Id });
-        row.GalleryType = gallery.GalleryType;
-        row.CoverImageEntityId = gallery.CoverImageId;
-    }
-
-    private GalleryDetailRow Track(GalleryDetailRow row) {
-        db.GalleryDetails.Add(row);
-        return row;
-    }
 }

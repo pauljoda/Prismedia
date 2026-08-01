@@ -2,7 +2,6 @@ using Microsoft.EntityFrameworkCore;
 using Prismedia.Domain.Capabilities;
 using Prismedia.Domain.Entities;
 using Prismedia.Infrastructure.Persistence;
-using Prismedia.Infrastructure.Persistence.Entities;
 
 namespace Prismedia.Infrastructure.Entities.Mappers.Capabilities;
 
@@ -24,37 +23,6 @@ internal sealed class LifetimeCapabilityMapper(PrismediaDbContext db) : IEntityC
             start: ToEntityDate(row.StartCode, row.StartValue, row.StartSortableValue, row.StartPrecision),
             end: ToEntityDate(row.EndCode, row.EndValue, row.EndSortableValue, row.EndPrecision),
             label: row.Label));
-    }
-
-    public Task ClearAsync(Entity entity, CancellationToken cancellationToken) {
-        db.EntityLifetimes.RemoveRange(db.EntityLifetimes.Where(r => r.EntityId == entity.Id));
-        return Task.CompletedTask;
-    }
-
-    public Task PersistAsync(Entity entity, CancellationToken cancellationToken) {
-        if (entity.Lifetime is not { } lifetime) {
-            return Task.CompletedTask;
-        }
-
-        if (lifetime.Start is null && lifetime.End is null && lifetime.Label is null) {
-            return Task.CompletedTask;
-        }
-
-        db.EntityLifetimes.Add(new EntityLifetimeRow {
-            EntityId = entity.Id,
-            StartCode = lifetime.Start?.Code,
-            StartValue = lifetime.Start?.Value,
-            StartSortableValue = lifetime.Start?.SortableValue,
-            StartPrecision = lifetime.Start?.Precision,
-            EndCode = lifetime.End?.Code,
-            EndValue = lifetime.End?.Value,
-            EndSortableValue = lifetime.End?.SortableValue,
-            EndPrecision = lifetime.End?.Precision,
-            Label = lifetime.Label,
-            UpdatedAt = DateTimeOffset.UtcNow,
-        });
-
-        return Task.CompletedTask;
     }
 
     /// <summary>

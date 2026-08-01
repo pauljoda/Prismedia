@@ -1,4 +1,3 @@
-using Microsoft.EntityFrameworkCore;
 using Prismedia.Application.Entities;
 using Prismedia.Application.Playback;
 using Prismedia.Application.Security;
@@ -230,34 +229,6 @@ internal static class EntityConcurrencyTestSupport {
             _paused.Task.WaitAsync(TimeSpan.FromSeconds(10));
 
         internal void Release() => _release.TrySetResult();
-    }
-
-    /// <summary>Forces a stale root token only after the intermediate SaveChanges.</summary>
-    internal sealed class SecondPhaseConflictOnceMapper(PrismediaDbContext db) : IEntityCapabilityMapper {
-        private int _hasForcedConflict;
-
-        public Task HydrateAsync(Entity entity, CancellationToken cancellationToken) => Task.CompletedTask;
-
-        public Task ClearAsync(Entity entity, CancellationToken cancellationToken) => Task.CompletedTask;
-
-        public Task PersistAsync(Entity entity, CancellationToken cancellationToken) {
-            if (Interlocked.Exchange(ref _hasForcedConflict, 1) != 0) {
-                return Task.CompletedTask;
-            }
-
-            var entry = db.ChangeTracker.Entries<EntityRow>()
-                .Single(candidate => candidate.Entity.Id == entity.Id);
-            entry.Entity.Title = $"{entry.Entity.Title} stale attempt";
-            entry.Property<uint>("Version").OriginalValue = uint.MaxValue;
-            return Task.CompletedTask;
-        }
-    }
-
-    private sealed class NoSourceOwnershipReader : IEntitySourceOwnershipReader {
-        public Task<IReadOnlySet<Guid>> ResolveAsync(
-            IReadOnlyCollection<Guid> entityIds,
-            CancellationToken cancellationToken) =>
-            Task.FromResult<IReadOnlySet<Guid>>(new HashSet<Guid>());
     }
 
     internal sealed class FixedTimeProvider(DateTimeOffset now) : TimeProvider {

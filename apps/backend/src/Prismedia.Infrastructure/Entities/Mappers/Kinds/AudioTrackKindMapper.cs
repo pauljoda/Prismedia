@@ -15,19 +15,4 @@ internal sealed class AudioTrackKindMapper(PrismediaDbContext db) : IEntityKindM
         return new AudioTrack(row.Id, row.Title, detail?.EmbeddedArtist, detail?.EmbeddedAlbum);
     }
 
-    public async Task PersistDetailAsync(Entity entity, CancellationToken cancellationToken) {
-        if (entity is not AudioTrack track) {
-            return;
-        }
-
-        var row = await db.AudioTrackDetails.FindAsync([entity.Id], cancellationToken)
-            ?? Track(new AudioTrackDetailRow { EntityId = entity.Id });
-        row.EmbeddedArtist = track.EmbeddedArtist;
-        row.EmbeddedAlbum = track.EmbeddedAlbum;
-    }
-
-    private AudioTrackDetailRow Track(AudioTrackDetailRow row) {
-        db.AudioTrackDetails.Add(row);
-        return row;
-    }
 }

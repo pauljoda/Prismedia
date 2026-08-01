@@ -22,20 +22,4 @@ internal sealed class BookKindMapper(PrismediaDbContext db) : IEntityKindMapper 
             sortOrder: row.SortOrder);
     }
 
-    public async Task PersistDetailAsync(Entity entity, CancellationToken cancellationToken) {
-        if (entity is not Book book) {
-            return;
-        }
-
-        var row = await db.BookDetails.FindAsync([entity.Id], cancellationToken)
-            ?? Track(new BookDetailRow { EntityId = entity.Id });
-        row.BookType = book.BookType;
-        row.Format = book.Format;
-        row.CoverPageEntityId = book.CoverPageId;
-    }
-
-    private BookDetailRow Track(BookDetailRow row) {
-        db.BookDetails.Add(row);
-        return row;
-    }
 }

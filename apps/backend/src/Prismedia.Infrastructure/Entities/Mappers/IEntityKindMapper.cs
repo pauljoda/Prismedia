@@ -4,8 +4,8 @@ using Prismedia.Infrastructure.Persistence.Entities;
 namespace Prismedia.Infrastructure.Entities.Mappers;
 
 /// <summary>
-/// Per-kind persistence + projection mapper. One implementation per <see cref="EntityKind"/>
-/// owns the concrete domain constructor wiring and per-kind detail row read/write so
+/// Per-kind projection mapper. One implementation per <see cref="EntityKind"/>
+/// owns the concrete domain constructor wiring and per-kind detail row reads so
 /// <see cref="EfEntityRepository"/> can stay a coordinator over a discovered set of mappers.
 /// Adding a new kind means adding one mapper next to the row, not editing the repository or
 /// the read service.
@@ -19,11 +19,5 @@ public interface IEntityKindMapper {
     /// <paramref name="row"/>, reading any kind-specific detail row as needed.
     /// </summary>
     Task<Entity> ConstructAsync(EntityRow row, CancellationToken cancellationToken);
-
-    /// <summary>
-    /// Writes the kind-specific detail row(s) for <paramref name="entity"/>. No-op when
-    /// the kind has no detail table.
-    /// </summary>
-    Task PersistDetailAsync(Entity entity, CancellationToken cancellationToken);
 
 }

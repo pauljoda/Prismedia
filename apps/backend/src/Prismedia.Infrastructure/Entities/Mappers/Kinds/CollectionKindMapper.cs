@@ -26,24 +26,4 @@ internal sealed class CollectionKindMapper(PrismediaDbContext db) : IEntityKindM
                 detail.IsShared);
     }
 
-    public async Task PersistDetailAsync(Entity entity, CancellationToken cancellationToken) {
-        if (entity is not Collection collection) {
-            return;
-        }
-
-        var row = await db.CollectionDetails.FindAsync([entity.Id], cancellationToken)
-            ?? Track(new CollectionDetailRow { EntityId = entity.Id });
-        row.Mode = collection.Mode;
-        row.OwnerUserId = collection.OwnerUserId;
-        row.IsShared = collection.IsShared;
-        row.RuleTreeJson = collection.RuleTreeJson;
-        row.CoverMode = collection.CoverMode;
-        row.CoverItemEntityId = collection.CoverItemId;
-        row.LastRefreshedAt = collection.LastRefreshedAt;
-    }
-
-    private CollectionDetailRow Track(CollectionDetailRow row) {
-        db.CollectionDetails.Add(row);
-        return row;
-    }
 }

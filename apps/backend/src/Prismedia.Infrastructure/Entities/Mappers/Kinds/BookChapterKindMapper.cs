@@ -20,18 +20,4 @@ internal sealed class BookChapterKindMapper(PrismediaDbContext db) : IEntityKind
             sortOrder: row.SortOrder);
     }
 
-    public async Task PersistDetailAsync(Entity entity, CancellationToken cancellationToken) {
-        if (entity is not BookChapter chapter) {
-            return;
-        }
-
-        var row = await db.BookChapterDetails.FindAsync([entity.Id], cancellationToken)
-            ?? Track(new BookChapterDetailRow { EntityId = entity.Id });
-        row.CoverPageEntityId = chapter.CoverPageId;
-    }
-
-    private BookChapterDetailRow Track(BookChapterDetailRow row) {
-        db.BookChapterDetails.Add(row);
-        return row;
-    }
 }

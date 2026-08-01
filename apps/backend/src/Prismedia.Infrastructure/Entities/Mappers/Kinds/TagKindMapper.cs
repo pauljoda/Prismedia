@@ -15,18 +15,4 @@ internal sealed class TagKindMapper(PrismediaDbContext db) : IEntityKindMapper {
         return new Tag(row.Id, row.Title, detail?.IgnoreAutoTag ?? false);
     }
 
-    public async Task PersistDetailAsync(Entity entity, CancellationToken cancellationToken) {
-        if (entity is not Tag tag) {
-            return;
-        }
-
-        var row = await db.TagDetails.FindAsync([entity.Id], cancellationToken)
-            ?? Track(new TagDetailRow { EntityId = entity.Id });
-        row.IgnoreAutoTag = tag.IgnoreAutoTag;
-    }
-
-    private TagDetailRow Track(TagDetailRow row) {
-        db.TagDetails.Add(row);
-        return row;
-    }
 }

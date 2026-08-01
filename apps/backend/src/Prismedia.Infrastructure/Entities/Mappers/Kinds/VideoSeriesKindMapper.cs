@@ -15,18 +15,4 @@ internal sealed class VideoSeriesKindMapper(PrismediaDbContext db) : IEntityKind
         return new VideoSeries(row.Id, row.Title, detail?.Status);
     }
 
-    public async Task PersistDetailAsync(Entity entity, CancellationToken cancellationToken) {
-        if (entity is not VideoSeries series) {
-            return;
-        }
-
-        var row = await db.VideoSeriesDetails.FindAsync([entity.Id], cancellationToken)
-            ?? Track(new VideoSeriesDetailRow { EntityId = entity.Id });
-        row.Status = series.Status;
-    }
-
-    private VideoSeriesDetailRow Track(VideoSeriesDetailRow row) {
-        db.VideoSeriesDetails.Add(row);
-        return row;
-    }
 }

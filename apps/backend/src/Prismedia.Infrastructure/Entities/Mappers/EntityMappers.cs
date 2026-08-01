@@ -62,8 +62,5 @@ public static class EntityMappers {
                 row.Title,
                 row.ParentEntityId,
                 row.SortOrder)));
-
-        public Task PersistDetailAsync(Entity entity, CancellationToken cancellationToken) =>
-            Task.CompletedTask;
     }
 }

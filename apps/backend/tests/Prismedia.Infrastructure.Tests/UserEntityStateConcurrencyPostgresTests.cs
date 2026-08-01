@@ -142,45 +142,6 @@ public sealed class UserEntityStateConcurrencyPostgresTests {
 
     [Fact]
     [Trait("Category", "PostgreSQL")]
-    public async Task AmbientTransactionRollsBackBothSavePhasesBeforeRetry() {
-        await using var database = await PostgresTestDatabase.CreateAsync();
-        var userId = Guid.NewGuid();
-        var entityId = Guid.NewGuid();
-        var occurredAt = DateTimeOffset.Parse("2026-07-31T18:00:00Z");
-        await SeedAsync(database, userId, entityId, EntityKind.Video, includeState: true);
-
-        await using var context = database.CreateContext();
-        await using var transaction = await context.Database.BeginTransactionAsync();
-        var user = TestUserContext.Admin(userId);
-        var repository = new EfEntityRepository(
-            context,
-            user,
-            EntityMappers.Kinds(context, user),
-            EntityMappers.Capabilities(context, user)
-                .Append(new SecondPhaseConflictOnceMapper(context)));
-        var service = CreateService(context, userId, repository);
-
-        await service.RecordCompletedPlaybackAsync(
-            entityId,
-            occurredAt,
-            positionSeconds: null,
-            durationSeconds: null,
-            CancellationToken.None);
-        await transaction.CommitAsync();
-
-        await using var verification = database.CreateContext();
-        Assert.Single(await verification.EntityPlaybackEvents
-            .Where(row => row.UserId == userId && row.EntityId == entityId &&
-                          row.Kind == PlaybackEventKind.Completed)
-            .ToArrayAsync());
-        var state = await verification.UserEntityStates.SingleAsync(row =>
-            row.UserId == userId && row.EntityId == entityId);
-        Assert.Equal(1, state.PlayCount);
-        Assert.Equal(occurredAt, state.CompletedAt);
-    }
-
-    [Fact]
-    [Trait("Category", "PostgreSQL")]
     public async Task RetriedReadingActivityConflictCommitsExactlyOneActivityEvent() {
         await using var database = await PostgresTestDatabase.CreateAsync();
         var userId = Guid.NewGuid();
