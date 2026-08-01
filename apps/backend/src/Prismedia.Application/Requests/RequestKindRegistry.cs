@@ -12,6 +12,14 @@ public static class RequestKindRegistry {
     private static readonly IReadOnlyDictionary<RequestMediaKind, RequestKindDescriptor> ByKind =
         All.ToDictionary(descriptor => descriptor.Kind);
 
+    private static readonly IReadOnlyDictionary<EntityKind, IReadOnlyList<RequestKindDescriptor>>
+        CommittableLeavesByEntityKind = All
+            .Where(descriptor => descriptor is { IsContainer: false, Committable: true })
+            .GroupBy(descriptor => descriptor.WantedEntityKind)
+            .ToDictionary(
+                group => group.Key,
+                group => (IReadOnlyList<RequestKindDescriptor>)group.ToArray());
+
     /// <summary>
     /// Wanted Entity kinds governed by each acquisition-profile kind. Visibility and profile-aware
     /// projections consume this index instead of rebuilding request-family membership.
@@ -30,6 +38,33 @@ public static class RequestKindRegistry {
     /// <summary>The descriptor for a kind, or null when the kind isn't part of the request flow (e.g. the plugin passthrough).</summary>
     public static RequestKindDescriptor? Find(RequestMediaKind kind) =>
         ByKind.GetValueOrDefault(kind);
+
+    /// <summary>
+    /// Resolves the committable leaf request for an existing Entity. A supplied rendition selects its
+    /// matching rendition-aware descriptor; otherwise the Entity definition's default request entry is
+    /// used. Non-rendition kinds deliberately ignore a rendition value inherited from a broader caller.
+    /// </summary>
+    public static RequestKindDescriptor? FindCommittableEntityRequest(
+        EntityKind entityKind,
+        BookRendition? bookRendition = null) {
+        if (!CommittableLeavesByEntityKind.TryGetValue(entityKind, out var candidates)) {
+            return null;
+        }
+
+        if (bookRendition is { } requestedRendition) {
+            var rendition = candidates.FirstOrDefault(candidate =>
+                candidate.BookRendition == requestedRendition);
+            if (rendition is not null) {
+                return rendition;
+            }
+
+            if (candidates.Any(candidate => candidate.BookRendition is not null)) {
+                return null;
+            }
+        }
+
+        return candidates.Single(candidate => candidate.IsDefaultEntityRequest);
+    }
 
     /// <summary>
     /// The child descriptor a container fans out into (an author's books, an artist's albums), or null
@@ -89,6 +124,17 @@ public static class RequestKindRegistry {
         if (missing.Length > 0) {
             throw new InvalidOperationException(
                 $"Request kinds are missing Entity definitions: {string.Join(", ", missing)}.");
+        }
+
+        var invalidDefaults = descriptors
+            .Where(descriptor => descriptor is { IsContainer: false, Committable: true })
+            .GroupBy(descriptor => descriptor.WantedEntityKind)
+            .Where(group => group.Count(descriptor => descriptor.IsDefaultEntityRequest) != 1)
+            .Select(group => group.Key)
+            .ToArray();
+        if (invalidDefaults.Length > 0) {
+            throw new InvalidOperationException(
+                $"Committable Entity request leaves must declare exactly one default: {string.Join(", ", invalidDefaults)}.");
         }
 
         return descriptors;

@@ -569,11 +569,7 @@ public sealed partial class RequestCommitService(
             return null;
         }
 
-        var descriptor = RequestKindRegistry.All.FirstOrDefault(candidate =>
-            candidate is { IsContainer: false, Committable: true }
-            && candidate.WantedEntityKind == entity.Kind
-            && (entity.Kind != EntityKind.Book
-                || candidate.BookRendition == (bookRendition ?? BookRendition.Ebook)));
+        var descriptor = RequestKindRegistry.FindCommittableEntityRequest(entity.Kind, bookRendition);
         if (descriptor is null) {
             // A container phantom (a wanted series) has no acquirable unit of its own — requesting it
             // means requesting each of its still-wanted children (the series' unrequested seasons).
@@ -733,11 +729,7 @@ public sealed partial class RequestCommitService(
                 continue;
             }
 
-            var descriptor = RequestKindRegistry.All.FirstOrDefault(candidate =>
-                candidate is { Committable: true, IsContainer: false }
-                && candidate.WantedEntityKind == entity.Kind
-                && (entity.Kind != EntityKind.Book
-                    || candidate.BookRendition == (bookRendition ?? BookRendition.Ebook)));
+            var descriptor = RequestKindRegistry.FindCommittableEntityRequest(entity.Kind, bookRendition);
             if (descriptor is not null
                 && await RequestEntityAsync(
                     entityId, hideNsfw: true, cancellationToken, bookRendition: bookRendition) is not null) {
@@ -884,11 +876,15 @@ public sealed partial class RequestCommitService(
         CancellationToken cancellationToken) {
         var child = RequestKindRegistry.ChildOf(descriptor)!;
         var containerTitle = TitleOr(proposal.Patch.Title, rootIdentity.Value);
-        // The container's title is the child acquisitions' search context — creator context for an
-        // author's books or an artist's albums, series context for a series' season packs.
-        var (creatorContext, seriesContext) = descriptor.WantedEntityKind == EntityKind.VideoSeries
-            ? ((string?)null, (string?)containerTitle)
-            : (containerTitle, null);
+        // The container's definition decides how its title contributes to child acquisition searches.
+        var (creatorContext, seriesContext) = EntityKindRegistry.Describe(descriptor.WantedEntityKind)
+            .AcquisitionAncestorContextRole switch {
+                AcquisitionAncestorContextRole.Creator => (containerTitle, (string?)null),
+                AcquisitionAncestorContextRole.Series => ((string?)null, containerTitle),
+                AcquisitionAncestorContextRole.None => ((string?)null, (string?)null),
+                _ => throw new InvalidOperationException(
+                    $"Entity kind '{descriptor.WantedEntityKind.ToCode()}' declares an unsupported acquisition ancestor context role.")
+            };
         var container = await wanted.EnsureAsync(
             descriptor.WantedEntityKind, rootIdentity, containerTitle,
             parentEntityId: null, matchTitleKindWide: true, cancellationToken);

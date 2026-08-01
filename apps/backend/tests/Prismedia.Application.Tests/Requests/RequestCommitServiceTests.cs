@@ -1125,7 +1125,7 @@ public sealed class RequestCommitServiceTests {
         monitors.DirectEntityIds.Add(entityId);
 
         Assert.True(await service.RequestIfMonitoredAndFilelessAsync(entityId, CancellationToken.None));
-        Assert.Single(acquisitions.Created);
+        Assert.Equal(BookRendition.Ebook, Assert.Single(acquisitions.Created).BookRendition);
         Assert.Single(monitors.AcquisitionMonitors);
     }
 
@@ -2162,7 +2162,11 @@ public sealed class RequestCommitServiceTests {
             "Series",
             []);
 
-        await service.RequestEntityFromGraphAsync(bookId, hideNsfw: false, CancellationToken.None);
+        await service.RequestEntityFromGraphAsync(
+            bookId,
+            hideNsfw: false,
+            CancellationToken.None,
+            bookRendition: BookRendition.Audiobook);
         await service.RequestEntityFromGraphAsync(trackId, hideNsfw: false, CancellationToken.None);
         await service.RequestEntityFromGraphAsync(episodeId, hideNsfw: false, CancellationToken.None);
 
@@ -2172,6 +2176,7 @@ public sealed class RequestCommitServiceTests {
                 Assert.Equal(EntityKind.Book, book.Kind);
                 Assert.Equal("Author", book.Author);
                 Assert.Null(book.Series);
+                Assert.Equal(BookRendition.Audiobook, book.BookRendition);
             },
             track => {
                 Assert.Equal(EntityKind.AudioTrack, track.Kind);

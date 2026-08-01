@@ -77,11 +77,7 @@ public sealed partial class RequestCommitService {
             return null;
         }
 
-        var descriptor = RequestKindRegistry.All.FirstOrDefault(candidate =>
-            candidate is { IsContainer: false, Committable: true }
-            && candidate.WantedEntityKind == entity.Kind
-            && (entity.Kind != EntityKind.Book
-                || candidate.BookRendition == (bookRendition ?? BookRendition.Ebook)));
+        var descriptor = RequestKindRegistry.FindCommittableEntityRequest(entity.Kind, bookRendition);
         if (descriptor is null) {
             return null;
         }

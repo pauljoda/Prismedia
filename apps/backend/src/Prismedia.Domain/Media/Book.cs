@@ -70,7 +70,8 @@ public sealed class BookEntityKindDefinition() : EntityKindDefinition<Book>(
             ProfileEntityKind: EntityKind.Book,
             ReviewSelection: RequestReviewSelection.Root,
             IsContainer: false, ChildKind: null, Committable: true,
-            AcquisitionKind: EntityKind.Book, BookRendition: BookRendition.Audiobook)
+            AcquisitionKind: EntityKind.Book, BookRendition: BookRendition.Audiobook,
+            IsDefaultEntityRequest: false)
     ];
 
     /// <inheritdoc />

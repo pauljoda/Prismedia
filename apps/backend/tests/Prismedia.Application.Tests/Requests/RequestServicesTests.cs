@@ -20,6 +20,11 @@ public sealed class RequestServicesTests {
         Assert.Equal(EntityKind.Book, audiobook?.WantedEntityKind);
         Assert.Equal(EntityKind.Book, audiobook?.AcquisitionKind);
         Assert.True(audiobook?.Discoverable);
+        Assert.True(ebook?.IsDefaultEntityRequest);
+        Assert.False(audiobook?.IsDefaultEntityRequest);
+        Assert.Same(ebook, RequestKindRegistry.FindCommittableEntityRequest(EntityKind.Book));
+        Assert.Same(ebook, RequestKindRegistry.FindCommittableEntityRequest(EntityKind.Book, BookRendition.Ebook));
+        Assert.Same(audiobook, RequestKindRegistry.FindCommittableEntityRequest(EntityKind.Book, BookRendition.Audiobook));
     }
 
     [Fact]
@@ -107,6 +112,12 @@ public sealed class RequestServicesTests {
                 Assert.Contains(
                     descriptor.WantedEntityKind,
                     RequestKindRegistry.WantedEntityKindsByProfile[descriptor.ProfileEntityKind!.Value]);
+            }
+
+            if (descriptor is { IsContainer: false, Committable: true, IsDefaultEntityRequest: true }) {
+                Assert.Same(
+                    descriptor,
+                    RequestKindRegistry.FindCommittableEntityRequest(descriptor.WantedEntityKind));
             }
 
             // A committable container must fan out into a committable child kind, or a commit could

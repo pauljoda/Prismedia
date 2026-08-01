@@ -23,6 +23,7 @@ namespace Prismedia.Domain.Entities;
 /// <param name="MaterializeChildPhantoms">Whether acquisition hydrates structural child placeholders.</param>
 /// <param name="DeferChildPhantomHydration">Whether selected child expansion runs after commit.</param>
 /// <param name="BookRendition">Requested book rendition, or null for non-book entries.</param>
+/// <param name="IsDefaultEntityRequest">Whether this descriptor handles an Entity request when no specific rendition is selected.</param>
 public sealed record RequestKindDescriptor(
     RequestMediaKind Kind,
     string Label,
@@ -40,7 +41,8 @@ public sealed record RequestKindDescriptor(
     bool AcquireFromEntity = false,
     bool MaterializeChildPhantoms = false,
     bool DeferChildPhantomHydration = false,
-    BookRendition? BookRendition = null) {
+    BookRendition? BookRendition = null,
+    bool IsDefaultEntityRequest = true) {
     /// <summary>The plugin-protocol code for <see cref="PluginEntityKind"/>.</summary>
     public string PluginKindCode => PluginEntityKind.ToCode();
 }
