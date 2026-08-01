@@ -6,6 +6,7 @@
  */
 
 export type ListVideoSeriesParams = {
+kind?: string;
 query?: string;
 cursor?: string;
 hideNsfw?: boolean;
@@ -13,6 +14,8 @@ hideNsfw?: boolean;
  * @pattern ^-?(?:0|[1-9]\d*)$
  */
 limit?: number | string;
+referencedBy?: string;
+relationshipCode?: string;
 sort?: string;
 sortDir?: string;
 /**
@@ -31,5 +34,12 @@ ratingMin?: number | string;
 ratingMax?: number | string;
 unrated?: boolean;
 status?: string;
+bookType?: string;
+bookFormat?: string;
+nsfw?: boolean;
+hasFile?: boolean;
+played?: boolean;
 orphaned?: boolean;
+wanted?: boolean;
+acquisitionStatus?: string;
 };

@@ -1,17 +1,19 @@
-import { listAudioTracks } from "$lib/api/generated/prismedia";
+import { listEntities } from "$lib/api/generated/prismedia";
 import type {
   EntityListResponse,
   EntityThumbnail,
-  ListAudioTracksParams,
+  ListEntitiesParams,
 } from "$lib/api/generated/model";
 import { requestInit, unwrapGenerated } from "$lib/api/generated-response";
 import { fetchEntityThumbnails } from "$lib/api/entities";
 import { assetUrl } from "$lib/api/orval-fetch";
 import { entityThumbnailToTrackItem } from "$lib/entities/audio-track-items";
+import { ENTITY_KIND } from "$lib/entities/entity-codes";
 import type { AudioTrackListItemDto } from "$lib/entities/media-view-models";
 
 const AUDIO_TRACK_PAGE_SIZE = 1_000;
 const THUMBNAIL_BATCH_SIZE = 250;
+type AudioTrackListParams = Omit<ListEntitiesParams, "kind">;
 
 export interface AudioTrackLibraryResult {
   tracks: AudioTrackListItemDto[];
@@ -25,7 +27,7 @@ interface LoadAudioTrackLibraryOptions {
 
 interface AudioTrackLibraryDependencies {
   listPage?: (
-    params: ListAudioTracksParams,
+    params: AudioTrackListParams,
     signal?: AbortSignal,
   ) => Promise<EntityListResponse>;
   fetchThumbnails?: (
@@ -35,10 +37,13 @@ interface AudioTrackLibraryDependencies {
 }
 
 async function listPage(
-  params: ListAudioTracksParams,
+  params: AudioTrackListParams,
   signal?: AbortSignal,
 ): Promise<EntityListResponse> {
-  const response = await listAudioTracks(params, requestInit({ signal }));
+  const response = await listEntities(
+    { ...params, kind: ENTITY_KIND.audioTrack },
+    requestInit({ signal }),
+  );
   return unwrapGenerated(response, "Failed to load tracks");
 }
 

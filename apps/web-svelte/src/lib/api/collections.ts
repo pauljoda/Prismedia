@@ -2,9 +2,9 @@ import {
   addCollectionItems as addCollectionItemsRequest,
   createCollection as createCollectionRequest,
   deleteCollection as deleteCollectionRequest,
+  listEntities,
   listCollectionMembershipOptions,
   listCollectionItems,
-  listCollections as listCollectionsRequest,
   previewCollectionRules as previewCollectionRulesRequest,
   refreshCollection as refreshCollectionRequest,
   removeCollectionItems as removeCollectionItemsRequest,
@@ -25,6 +25,7 @@ import type {
   EntityListResponse,
 } from "$lib/api/generated/model";
 import { requestInit, unwrapGenerated, type RequestOptions } from "$lib/api/generated-response";
+import { ENTITY_KIND } from "$lib/entities/entity-codes";
 import type {
   CollectionAddItemsRequest,
   CollectionItem,
@@ -45,7 +46,7 @@ export async function fetchCollections(
   options?: RequestOptions,
 ): Promise<EntityListResponse> {
   return unwrapGenerated<EntityListResponse>(
-    await listCollectionsRequest(undefined, requestInit(options)),
+    await listEntities({ kind: ENTITY_KIND.collection }, requestInit(options)),
     "Failed to fetch collections",
   );
 }

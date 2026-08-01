@@ -3235,12 +3235,19 @@ export type listVideosResponse200 = {
   status: 200
 }
 
+export type listVideosResponse400 = {
+  data: ApiProblem
+  status: 400
+}
+
 export type listVideosResponseSuccess = (listVideosResponse200) & {
   headers: Headers;
 };
-;
+export type listVideosResponseError = (listVideosResponse400) & {
+  headers: Headers;
+};
 
-export type listVideosResponse = (listVideosResponseSuccess)
+export type listVideosResponse = (listVideosResponseSuccess | listVideosResponseError)
 
 export const getListVideosUrl = (params?: ListVideosParams,) => {
   const normalizedParams = new URLSearchParams();
@@ -3660,12 +3667,19 @@ export type listMoviesResponse200 = {
   status: 200
 }
 
+export type listMoviesResponse400 = {
+  data: ApiProblem
+  status: 400
+}
+
 export type listMoviesResponseSuccess = (listMoviesResponse200) & {
   headers: Headers;
 };
-;
+export type listMoviesResponseError = (listMoviesResponse400) & {
+  headers: Headers;
+};
 
-export type listMoviesResponse = (listMoviesResponseSuccess)
+export type listMoviesResponse = (listMoviesResponseSuccess | listMoviesResponseError)
 
 export const getListMoviesUrl = (params?: ListMoviesParams,) => {
   const normalizedParams = new URLSearchParams();
@@ -3807,12 +3821,19 @@ export type listVideoSeriesResponse200 = {
   status: 200
 }
 
+export type listVideoSeriesResponse400 = {
+  data: ApiProblem
+  status: 400
+}
+
 export type listVideoSeriesResponseSuccess = (listVideoSeriesResponse200) & {
   headers: Headers;
 };
-;
+export type listVideoSeriesResponseError = (listVideoSeriesResponse400) & {
+  headers: Headers;
+};
 
-export type listVideoSeriesResponse = (listVideoSeriesResponseSuccess)
+export type listVideoSeriesResponse = (listVideoSeriesResponseSuccess | listVideoSeriesResponseError)
 
 export const getListVideoSeriesUrl = (params?: ListVideoSeriesParams,) => {
   const normalizedParams = new URLSearchParams();
@@ -3954,12 +3975,19 @@ export type listImagesResponse200 = {
   status: 200
 }
 
+export type listImagesResponse400 = {
+  data: ApiProblem
+  status: 400
+}
+
 export type listImagesResponseSuccess = (listImagesResponse200) & {
   headers: Headers;
 };
-;
+export type listImagesResponseError = (listImagesResponse400) & {
+  headers: Headers;
+};
 
-export type listImagesResponse = (listImagesResponseSuccess)
+export type listImagesResponse = (listImagesResponseSuccess | listImagesResponseError)
 
 export const getListImagesUrl = (params?: ListImagesParams,) => {
   const normalizedParams = new URLSearchParams();
@@ -4101,12 +4129,19 @@ export type listGalleriesResponse200 = {
   status: 200
 }
 
+export type listGalleriesResponse400 = {
+  data: ApiProblem
+  status: 400
+}
+
 export type listGalleriesResponseSuccess = (listGalleriesResponse200) & {
   headers: Headers;
 };
-;
+export type listGalleriesResponseError = (listGalleriesResponse400) & {
+  headers: Headers;
+};
 
-export type listGalleriesResponse = (listGalleriesResponseSuccess)
+export type listGalleriesResponse = (listGalleriesResponseSuccess | listGalleriesResponseError)
 
 export const getListGalleriesUrl = (params?: ListGalleriesParams,) => {
   const normalizedParams = new URLSearchParams();
@@ -4248,12 +4283,19 @@ export type listBooksResponse200 = {
   status: 200
 }
 
+export type listBooksResponse400 = {
+  data: ApiProblem
+  status: 400
+}
+
 export type listBooksResponseSuccess = (listBooksResponse200) & {
   headers: Headers;
 };
-;
+export type listBooksResponseError = (listBooksResponse400) & {
+  headers: Headers;
+};
 
-export type listBooksResponse = (listBooksResponseSuccess)
+export type listBooksResponse = (listBooksResponseSuccess | listBooksResponseError)
 
 export const getListBooksUrl = (params?: ListBooksParams,) => {
   const normalizedParams = new URLSearchParams();
@@ -4395,12 +4437,19 @@ export type listBookAuthorsResponse200 = {
   status: 200
 }
 
+export type listBookAuthorsResponse400 = {
+  data: ApiProblem
+  status: 400
+}
+
 export type listBookAuthorsResponseSuccess = (listBookAuthorsResponse200) & {
   headers: Headers;
 };
-;
+export type listBookAuthorsResponseError = (listBookAuthorsResponse400) & {
+  headers: Headers;
+};
 
-export type listBookAuthorsResponse = (listBookAuthorsResponseSuccess)
+export type listBookAuthorsResponse = (listBookAuthorsResponseSuccess | listBookAuthorsResponseError)
 
 export const getListBookAuthorsUrl = (params?: ListBookAuthorsParams,) => {
   const normalizedParams = new URLSearchParams();
@@ -4542,12 +4591,19 @@ export type listMusicArtistsResponse200 = {
   status: 200
 }
 
+export type listMusicArtistsResponse400 = {
+  data: ApiProblem
+  status: 400
+}
+
 export type listMusicArtistsResponseSuccess = (listMusicArtistsResponse200) & {
   headers: Headers;
 };
-;
+export type listMusicArtistsResponseError = (listMusicArtistsResponse400) & {
+  headers: Headers;
+};
 
-export type listMusicArtistsResponse = (listMusicArtistsResponseSuccess)
+export type listMusicArtistsResponse = (listMusicArtistsResponseSuccess | listMusicArtistsResponseError)
 
 export const getListMusicArtistsUrl = (params?: ListMusicArtistsParams,) => {
   const normalizedParams = new URLSearchParams();
@@ -4689,12 +4745,19 @@ export type listAudioLibrariesResponse200 = {
   status: 200
 }
 
+export type listAudioLibrariesResponse400 = {
+  data: ApiProblem
+  status: 400
+}
+
 export type listAudioLibrariesResponseSuccess = (listAudioLibrariesResponse200) & {
   headers: Headers;
 };
-;
+export type listAudioLibrariesResponseError = (listAudioLibrariesResponse400) & {
+  headers: Headers;
+};
 
-export type listAudioLibrariesResponse = (listAudioLibrariesResponseSuccess)
+export type listAudioLibrariesResponse = (listAudioLibrariesResponseSuccess | listAudioLibrariesResponseError)
 
 export const getListAudioLibrariesUrl = (params?: ListAudioLibrariesParams,) => {
   const normalizedParams = new URLSearchParams();
@@ -4836,12 +4899,19 @@ export type listAudioTracksResponse200 = {
   status: 200
 }
 
+export type listAudioTracksResponse400 = {
+  data: ApiProblem
+  status: 400
+}
+
 export type listAudioTracksResponseSuccess = (listAudioTracksResponse200) & {
   headers: Headers;
 };
-;
+export type listAudioTracksResponseError = (listAudioTracksResponse400) & {
+  headers: Headers;
+};
 
-export type listAudioTracksResponse = (listAudioTracksResponseSuccess)
+export type listAudioTracksResponse = (listAudioTracksResponseSuccess | listAudioTracksResponseError)
 
 export const getListAudioTracksUrl = (params?: ListAudioTracksParams,) => {
   const normalizedParams = new URLSearchParams();
@@ -5026,12 +5096,19 @@ export type listPeopleResponse200 = {
   status: 200
 }
 
+export type listPeopleResponse400 = {
+  data: ApiProblem
+  status: 400
+}
+
 export type listPeopleResponseSuccess = (listPeopleResponse200) & {
   headers: Headers;
 };
-;
+export type listPeopleResponseError = (listPeopleResponse400) & {
+  headers: Headers;
+};
 
-export type listPeopleResponse = (listPeopleResponseSuccess)
+export type listPeopleResponse = (listPeopleResponseSuccess | listPeopleResponseError)
 
 export const getListPeopleUrl = (params?: ListPeopleParams,) => {
   const normalizedParams = new URLSearchParams();
@@ -5260,12 +5337,19 @@ export type listStudiosResponse200 = {
   status: 200
 }
 
+export type listStudiosResponse400 = {
+  data: ApiProblem
+  status: 400
+}
+
 export type listStudiosResponseSuccess = (listStudiosResponse200) & {
   headers: Headers;
 };
-;
+export type listStudiosResponseError = (listStudiosResponse400) & {
+  headers: Headers;
+};
 
-export type listStudiosResponse = (listStudiosResponseSuccess)
+export type listStudiosResponse = (listStudiosResponseSuccess | listStudiosResponseError)
 
 export const getListStudiosUrl = (params?: ListStudiosParams,) => {
   const normalizedParams = new URLSearchParams();
@@ -5494,12 +5578,19 @@ export type listTagsResponse200 = {
   status: 200
 }
 
+export type listTagsResponse400 = {
+  data: ApiProblem
+  status: 400
+}
+
 export type listTagsResponseSuccess = (listTagsResponse200) & {
   headers: Headers;
 };
-;
+export type listTagsResponseError = (listTagsResponse400) & {
+  headers: Headers;
+};
 
-export type listTagsResponse = (listTagsResponseSuccess)
+export type listTagsResponse = (listTagsResponseSuccess | listTagsResponseError)
 
 export const getListTagsUrl = (params?: ListTagsParams,) => {
   const normalizedParams = new URLSearchParams();
@@ -5728,12 +5819,19 @@ export type listCollectionsResponse200 = {
   status: 200
 }
 
+export type listCollectionsResponse400 = {
+  data: ApiProblem
+  status: 400
+}
+
 export type listCollectionsResponseSuccess = (listCollectionsResponse200) & {
   headers: Headers;
 };
-;
+export type listCollectionsResponseError = (listCollectionsResponse400) & {
+  headers: Headers;
+};
 
-export type listCollectionsResponse = (listCollectionsResponseSuccess)
+export type listCollectionsResponse = (listCollectionsResponseSuccess | listCollectionsResponseError)
 
 export const getListCollectionsUrl = (params?: ListCollectionsParams,) => {
   const normalizedParams = new URLSearchParams();
