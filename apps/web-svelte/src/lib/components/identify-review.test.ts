@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ENTITY_DATE_TYPE, METADATA_PATCH_FIELD } from "$lib/entities/entity-codes";
+import { ENTITY_DATE_TYPE, ENTITY_KIND, METADATA_PATCH_FIELD } from "$lib/entities/entity-codes";
 import type { EntityMetadataProposal } from "$lib/api/identify-types";
 import type { EntityCard as EntityDetailCard, EntityKind } from "$lib/api/generated/model";
 import {
@@ -154,9 +154,9 @@ describe("identify review helpers", () => {
   it("deduplicates structural child proposals by provider proposal id", () => {
     const root = proposal("season-1", "video-season", {
       children: [
-        proposal("episode-8", "video", { title: "Episode 8" }),
-        proposal("episode-8", "video", { title: "Episode 8 duplicate" }),
-        proposal("episode-9", "video", { title: "Episode 9" }),
+        proposal("episode-8", ENTITY_KIND.videoEpisode, { title: "Episode 8" }),
+        proposal("episode-8", ENTITY_KIND.videoEpisode, { title: "Episode 8 duplicate" }),
+        proposal("episode-9", ENTITY_KIND.videoEpisode, { title: "Episode 9" }),
         proposal("person-1", "person", { title: "Guest Actor" }),
       ],
     });
@@ -173,7 +173,7 @@ describe("identify review helpers", () => {
       imageKind: "poster",
       imageUrl: "https://example.test/guest.jpg",
     });
-    const episode = proposal("episode-2", "video", {
+    const episode = proposal("episode-2", ENTITY_KIND.videoEpisode, {
       title: "The Chair Company S01E02",
       credits: [{ name: "Guest Actor", role: "guest", character: "Visitor", sortOrder: 0 }],
       relationships: [guest],
@@ -378,7 +378,7 @@ describe("identify review helpers", () => {
   });
 
   it("carries walked child field and artwork choices into the root apply payload", () => {
-    const episode = proposal("episode-1", "video", {
+    const episode = proposal("episode-1", ENTITY_KIND.videoEpisode, {
       title: "Episode 1",
       imageKind: "poster",
       imageUrl: "https://example.test/episode-poster.jpg",
@@ -461,9 +461,9 @@ describe("identify review helpers", () => {
 
   it("describes season and episode positions as sort-order changes", () => {
     expect(reviewPositionValue({ seasonNumber: 1 }, "video-season")).toBe("Sort order: Season 1");
-    expect(reviewPositionValue({ episodeNumber: 2 }, "video")).toBe("Sort order: Episode 2");
+    expect(reviewPositionValue({ episodeNumber: 2 }, ENTITY_KIND.videoEpisode)).toBe("Sort order: Episode 2");
     expect(reviewPositionValue({ sortOrder: 3 }, "video-season")).toBe("Sort order: Season 3");
-    expect(reviewPositionValue({ seasonNumber: 1, episodeNumber: 2 }, "video")).toBe("Season: Season 1, Sort order: Episode 2");
+    expect(reviewPositionValue({ seasonNumber: 1, episodeNumber: 2 }, ENTITY_KIND.videoEpisode)).toBe("Season: Season 1, Sort order: Episode 2");
 
     const season = proposal("season-1", "video-season");
     season.patch.positions = { seasonNumber: 1 };
@@ -505,7 +505,7 @@ describe("identify review helpers", () => {
   it("reads current values from a walked child entity detail", () => {
     const detail: EntityDetailCard = {
       id: "episode-1",
-      kind: "video",
+      kind: ENTITY_KIND.videoEpisode,
       title: "Existing episode",
       parentEntityId: "season-1",
       sortOrder: 1,
@@ -522,10 +522,10 @@ describe("identify review helpers", () => {
       ],
     };
 
-    expect(currentFieldValueForReview(thumbnail("episode-1", "video", "Fallback title"), detail, "title")).toBe("Existing episode");
-    expect(currentFieldValueForReview(thumbnail("episode-1", "video", "Fallback title"), detail, "description")).toBe("Current description");
-    expect(currentFieldValueForReview(thumbnail("episode-1", "video", "Fallback title"), detail, "studio")).toBe("Existing Studio");
-    expect(currentFieldValueForReview(thumbnail("episode-1", "video", "Fallback title"), detail, "images")).toBe("poster, backdrop");
+    expect(currentFieldValueForReview(thumbnail("episode-1", ENTITY_KIND.videoEpisode, "Fallback title"), detail, "title")).toBe("Existing episode");
+    expect(currentFieldValueForReview(thumbnail("episode-1", ENTITY_KIND.videoEpisode, "Fallback title"), detail, "description")).toBe("Current description");
+    expect(currentFieldValueForReview(thumbnail("episode-1", ENTITY_KIND.videoEpisode, "Fallback title"), detail, "studio")).toBe("Existing Studio");
+    expect(currentFieldValueForReview(thumbnail("episode-1", ENTITY_KIND.videoEpisode, "Fallback title"), detail, "images")).toBe("poster, backdrop");
   });
 });
 

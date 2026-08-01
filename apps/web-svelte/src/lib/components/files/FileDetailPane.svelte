@@ -74,6 +74,7 @@
   ]);
   const leafKinds = new Set<string>([
     ENTITY_KIND.video,
+    ENTITY_KIND.videoEpisode,
     ENTITY_KIND.image,
     ENTITY_KIND.audioTrack,
     ENTITY_KIND.bookPage,

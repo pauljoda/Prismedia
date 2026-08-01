@@ -47,12 +47,12 @@
   async function resolvePreviewIds(): Promise<string[]> {
     if (entity.kind === ENTITY_KIND.videoSeries) {
       const series = await fetchEntity(entity.id);
-      let ids = getChildIds(series, ENTITY_KIND.video);
+      let ids = getChildIds(series, ENTITY_KIND.videoEpisode);
       if (ids.length === 0) {
         const seasonIds = getChildIds(series, ENTITY_KIND.videoSeason);
         if (seasonIds.length > 0) {
           const firstSeason = await fetchEntity(seasonIds[0]).catch(() => null);
-          ids = getChildIds(firstSeason, ENTITY_KIND.video);
+          ids = getChildIds(firstSeason, ENTITY_KIND.videoEpisode);
           if (ids.length === 0) ids = seasonIds;
         }
       }
@@ -61,7 +61,7 @@
 
     if (entity.kind === ENTITY_KIND.videoSeason && entity.parentEntityId) {
       const season = await fetchEntity(entity.id).catch(() => null);
-      return getChildIds(season, ENTITY_KIND.video);
+      return getChildIds(season, ENTITY_KIND.videoEpisode);
     }
 
     // Other entity kinds preview through their own shared thumbnail shell.

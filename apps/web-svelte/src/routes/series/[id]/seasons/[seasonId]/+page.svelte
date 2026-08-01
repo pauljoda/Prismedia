@@ -165,7 +165,7 @@
     seasonDetail: EntityCardFull,
     signal: AbortSignal,
   ): Promise<EntityThumbnailCard[]> {
-    const episodeIds = getChildIds(seasonDetail, ENTITY_KIND.video);
+    const episodeIds = getChildIds(seasonDetail, ENTITY_KIND.videoEpisode);
     return thumbnailsToCards(await fetchOrderedEntityThumbnails(episodeIds, { signal }));
   }
 

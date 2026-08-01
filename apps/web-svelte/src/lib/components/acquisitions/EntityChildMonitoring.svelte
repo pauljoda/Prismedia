@@ -73,7 +73,7 @@
     return kinds.size === 1 && cards[0] ? cards[0].entity.kind : null;
   });
   const sectionTitle = $derived(
-    childKind === ENTITY_KIND.video
+    childKind === ENTITY_KIND.videoEpisode
       ? "Episode activity"
       : childKind === ENTITY_KIND.audioTrack
         ? "Track activity"
@@ -82,7 +82,7 @@
         : "Child activity",
   );
   const childLabel = $derived.by(() => {
-    return childKind === ENTITY_KIND.video
+    return childKind === ENTITY_KIND.videoEpisode
       ? "Episodes"
       : childKind === ENTITY_KIND.audioTrack
         ? "Tracks"

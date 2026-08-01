@@ -214,7 +214,7 @@ function isIndeterminate(status: AcquisitionStatusCode): boolean {
  * or artist, and the year is appended when known ("Bluey (2018)", "Andy Weir").
  */
 function composeSubtitle(kind: EntityKindCode, author: string | null | undefined, series: string | null | undefined, year: number | null | undefined): string | null {
-  const isTv = kind === ENTITY_KIND.videoSeason || kind === ENTITY_KIND.video || kind === ENTITY_KIND.videoSeries;
+  const isTv = kind === ENTITY_KIND.videoSeason || kind === ENTITY_KIND.videoEpisode || kind === ENTITY_KIND.videoSeries;
   const creator = ((isTv ? series : author) ?? author ?? series)?.trim() || null;
   const yearLabel = year ? `(${year})` : null;
   return creator && yearLabel ? `${creator} ${yearLabel}` : creator ?? yearLabel;

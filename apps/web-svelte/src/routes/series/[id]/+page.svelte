@@ -39,7 +39,7 @@
   let seasonEpisodeCounts = $state<Record<string, number>>({});
   let seasonCards = $state<EntityThumbnailCard[]>([]);
   let childSeriesCards = $state<EntityThumbnailCard[]>([]);
-  let videoCards = $state<EntityThumbnailCard[]>([]);
+  let episodeCards = $state<EntityThumbnailCard[]>([]);
   let orderedSeriesEpisodeIds = $state<string[]>([]);
   let seriesProgressEpisodeCard = $state<EntityThumbnailCard | null>(null);
   let relationshipCredits = $state<EntityDetailCredit[]>([]);
@@ -78,7 +78,7 @@
     capabilities: () => series?.capabilities,
     childCards: () => requestableDirectChildCards(
       series?.id,
-      [...seasonCards, ...childSeriesCards, ...videoCards],
+      [...seasonCards, ...childSeriesCards, ...episodeCards],
     ),
     onChanged: refreshSeries,
     onPruned: () => goto("/series"),
@@ -95,10 +95,10 @@
 
   const hasSeasons = $derived(seasonCards.length > 0);
   const hasChildSeries = $derived(childSeriesCards.length > 0);
-  const hasVideos = $derived(videoCards.length > 0);
+  const hasEpisodes = $derived(episodeCards.length > 0);
   const seasonCount = $derived(seasonCards.length);
   const totalEpisodeCount = $derived(
-    videoCards.length + Object.values(seasonEpisodeCounts).reduce((total, count) => total + count, 0),
+    episodeCards.length + Object.values(seasonEpisodeCounts).reduce((total, count) => total + count, 0),
   );
   const seriesProgress = $derived(
     series ? getCapability(series.capabilities, CAPABILITY_KIND.progress) : undefined,
@@ -143,12 +143,12 @@
   async function loadSeries(signal: AbortSignal): Promise<EntityCardFull> {
     const nextSeries = await fetchEntity(page.params.id ?? "", { signal });
     const hydration = await hydrateSeriesThumbnails(nextSeries, signal);
-    const episodeState = await loadSeriesEpisodes(nextSeries, hydration.videoCards, signal);
+    const episodeState = await loadSeriesEpisodes(nextSeries, hydration.episodeCards, signal);
     signal.throwIfAborted();
 
     seasonCards = hydration.seasonCards;
     childSeriesCards = hydration.childSeriesCards;
-    videoCards = hydration.videoCards;
+    episodeCards = hydration.episodeCards;
     relationshipCredits = hydration.relationshipCredits;
     relationshipStudio = hydration.relationshipStudio;
     relationshipTags = hydration.relationshipTags;
@@ -164,7 +164,7 @@
 
   async function loadSeriesEpisodes(
     nextSeries: EntityCardFull,
-    directVideoCards: EntityThumbnailCard[],
+    directEpisodeCards: EntityThumbnailCard[],
     signal: AbortSignal,
   ): Promise<{
     counts: Record<string, number>;
@@ -176,15 +176,15 @@
       const progress = getCapability(nextSeries.capabilities, CAPABILITY_KIND.progress);
       return {
         counts: {},
-        ids: directVideoCards.map((card) => card.entity.id),
-        progressCard: directVideoCards.find((card) => card.entity.id === progress?.currentEntityId) ?? null,
+        ids: directEpisodeCards.map((card) => card.entity.id),
+        progressCard: directEpisodeCards.find((card) => card.entity.id === progress?.currentEntityId) ?? null,
       };
     }
 
     const seasonChildren = await fetchEntityChildren(seasonIds, { signal });
     const episodeIds = seasonChildren.flatMap((group) =>
       group.items
-        .filter((child) => child.kind === ENTITY_KIND.video)
+        .filter((child) => child.kind === ENTITY_KIND.videoEpisode)
         .map((child) => child.id),
     );
     const progress = getCapability(nextSeries.capabilities, CAPABILITY_KIND.progress);
@@ -195,7 +195,7 @@
     return {
       counts: Object.fromEntries(seasonChildren.map((group) => [
         group.parentId,
-        group.items.filter((child) => child.kind === ENTITY_KIND.video).length,
+        group.items.filter((child) => child.kind === ENTITY_KIND.videoEpisode).length,
       ])),
       ids: episodeIds,
       progressCard: progressCards[0] ?? null,
@@ -244,17 +244,17 @@
   async function hydrateSeriesThumbnails(nextSeries: EntityCardFull, signal: AbortSignal) {
     const seasonIds = getChildIds(nextSeries, ENTITY_KIND.videoSeason);
     const childSeriesIds = getChildIds(nextSeries, ENTITY_KIND.videoSeries);
-    const videoIds = getChildIds(nextSeries, ENTITY_KIND.video);
+    const episodeIds = getChildIds(nextSeries, ENTITY_KIND.videoEpisode);
 
     const [
       seasons,
       childSeries,
-      videos,
+      episodes,
       relationshipCards,
     ] = await Promise.all([
       fetchOrderedEntityThumbnails(seasonIds, { signal }),
       fetchOrderedEntityThumbnails(childSeriesIds, { signal }),
-      fetchOrderedEntityThumbnails(videoIds, { signal }),
+      fetchOrderedEntityThumbnails(episodeIds, { signal }),
       hydrateStandardRelationshipCards(nextSeries, { signal }),
     ]);
 
@@ -263,7 +263,7 @@
         hrefFor: (thumbnail) => `/series/${nextSeries.id}/seasons/${thumbnail.id}`,
       }),
       childSeriesCards: thumbnailsToCards(childSeries),
-      videoCards: thumbnailsToCards(videos),
+      episodeCards: thumbnailsToCards(episodes),
       relationshipCredits: relationshipCards.credits,
       relationshipStudio: relationshipCards.studio,
       relationshipTags: relationshipCards.relationshipTags,
@@ -382,23 +382,23 @@
       </EntityGridSection>
     {/if}
 
-    {#if hasVideos}
+    {#if hasEpisodes}
       <EntityGridSection
         title={hasSeasons ? "Specials" : "Episodes"}
-        count={videoCards.length}
+        count={episodeCards.length}
         prefsKey={`series-${series?.id}-videos-section`}
       >
         <EntityGrid
-          cards={videoCards}
+          cards={episodeCards}
           prefsKey={`series-${series?.id}-videos`}
           initialSortBy="position"
           emptyTitle={hasSeasons ? "No specials" : "No episodes"}
-          emptyMessage="No loose videos in this series."
+          emptyMessage="No loose episodes in this series."
         />
       </EntityGridSection>
     {/if}
 
-    {#if !hasSeasons && !hasChildSeries && !hasVideos}
+    {#if !hasSeasons && !hasChildSeries && !hasEpisodes}
       <div class="empty-children">
         <p>No seasons, episodes, or sub-series linked to this series yet.</p>
       </div>

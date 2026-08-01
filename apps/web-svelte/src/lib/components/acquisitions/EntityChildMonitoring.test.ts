@@ -46,7 +46,7 @@ describe("EntityChildMonitoring", () => {
   });
 
   it("opens episode activity and shows an active download even when monitoring is off", async () => {
-    const episode = childCard("episode-1", ENTITY_KIND.video, "Jet-Assisted Chevy", true);
+    const episode = childCard("episode-1", ENTITY_KIND.videoEpisode, "Jet-Assisted Chevy", true);
     episode.latestAcquisitionStatus = ACQUISITION_STATUS.downloading;
     mocks.fetchEntityMonitorStates.mockResolvedValue([
       entityState("episode-1", {
@@ -136,7 +136,7 @@ describe("EntityChildMonitoring", () => {
     render(EntityChildMonitoring, {
       cards: [
         childCard("season-1", ENTITY_KIND.videoSeason, "Season 1", false, true),
-        childCard("special-1", ENTITY_KIND.video, "Special", false, true),
+        childCard("special-1", ENTITY_KIND.videoEpisode, "Special", false, true),
       ],
     });
 

@@ -227,7 +227,7 @@ describe("Identify review surfaces", () => {
         proposal: proposal("root", {
           children: [
             proposal("episode-1-proposal", {
-              targetKind: "video-episode",
+              targetKind: ENTITY_KIND.videoEpisode,
               title: "Episode One",
               targetEntityId: "episode-1",
               images: [],
@@ -274,7 +274,7 @@ describe("Identify review surfaces", () => {
           targetEntityId: "season-1",
           children: [
             proposal("episode-1-proposal", {
-              targetKind: "video-episode",
+              targetKind: ENTITY_KIND.videoEpisode,
               title: "Episode One",
               targetEntityId: "episode-1",
               images: [],
@@ -292,8 +292,8 @@ describe("Identify review surfaces", () => {
   });
 
   it("bulk-selects and deselects nested child proposals", async () => {
-    const childOne = proposal("episode-1-proposal", { targetKind: "video-episode", title: "Episode One" });
-    const childTwo = proposal("episode-2-proposal", { targetKind: "video-episode", title: "Episode Two" });
+    const childOne = proposal("episode-1-proposal", { targetKind: ENTITY_KIND.videoEpisode, title: "Episode One" });
+    const childTwo = proposal("episode-2-proposal", { targetKind: ENTITY_KIND.videoEpisode, title: "Episode Two" });
 
     render(IdentifyReviewChild, {
       props: {
@@ -322,14 +322,14 @@ describe("Identify review surfaces", () => {
         entity: entity(),
         detail: detail({
           childrenByKind: [{
-            kind: "video",
+            kind: ENTITY_KIND.videoEpisode,
             label: "Episodes",
-            entities: [entity({ id: "episode-1", kind: "video", title: "Local Episode" })],
+            entities: [entity({ id: "episode-1", kind: ENTITY_KIND.videoEpisode, title: "Local Episode" })],
           }],
         }),
         proposal: proposal("root", {
           children: [proposal("episode-1-proposal", {
-            targetKind: "video-episode",
+            targetKind: ENTITY_KIND.videoEpisode,
             title: "Episode One",
             targetEntityId: "episode-1",
           })],

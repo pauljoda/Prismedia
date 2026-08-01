@@ -232,7 +232,7 @@ function aspectRatioForEntity(entity: EntityGridSourceEntity): EntityThumbnailCa
   const width = numberValue(technical?.width);
   const height = numberValue(technical?.height);
 
-  if ((entity.kind === ENTITY_KIND.image || entity.kind === ENTITY_KIND.video) && width && height) {
+  if ((entity.kind === ENTITY_KIND.image || entity.kind === ENTITY_KIND.video || entity.kind === ENTITY_KIND.videoEpisode) && width && height) {
     return { width, height };
   }
   return aspectRatioForKind(entity.kind);
@@ -334,14 +334,16 @@ function metaForEntity(entity: EntityGridSourceEntity): EntityThumbnailCard["met
   if (duration) meta.push({ icon: THUMBNAIL_META_ICON.duration, label: duration });
   if (width && height) {
     meta.push({
-      icon: entity.kind === ENTITY_KIND.video ? THUMBNAIL_META_ICON.video : THUMBNAIL_META_ICON.image,
+      icon: entity.kind === ENTITY_KIND.video || entity.kind === ENTITY_KIND.videoEpisode
+        ? THUMBNAIL_META_ICON.video
+        : THUMBNAIL_META_ICON.image,
       label: formatResolutionLabelFull(width, height),
     });
   }
-  if (entity.kind === ENTITY_KIND.video && technical?.codec) {
+  if ((entity.kind === ENTITY_KIND.video || entity.kind === ENTITY_KIND.videoEpisode) && technical?.codec) {
     meta.push({ icon: THUMBNAIL_META_ICON.video, label: technical.codec.toUpperCase() });
   }
-  if (entity.kind === ENTITY_KIND.video && technical?.container) {
+  if ((entity.kind === ENTITY_KIND.video || entity.kind === ENTITY_KIND.videoEpisode) && technical?.container) {
     meta.push({ icon: THUMBNAIL_META_ICON.video, label: technical.container.toUpperCase() });
   }
   // Stat codes are an open provider vocabulary, so this filters wire strings rather
@@ -377,7 +379,7 @@ function customOverlayForEntity(entity: EntityGridSourceEntity): EntityThumbnail
   const season = positionValue(entity, "season");
   const episode = positionValue(entity, "episode") ?? positionValue(entity, "absolute-episode");
 
-  if (entity.kind === ENTITY_KIND.video && season && episode) {
+  if (entity.kind === ENTITY_KIND.videoEpisode && season && episode) {
     return {
       bottomLeft: {
         label: `S${season} E${episode}`,
@@ -386,7 +388,7 @@ function customOverlayForEntity(entity: EntityGridSourceEntity): EntityThumbnail
     };
   }
 
-  if (entity.kind === ENTITY_KIND.video && episode) {
+  if (entity.kind === ENTITY_KIND.videoEpisode && episode) {
     return {
       bottomLeft: {
         label: `E${episode}`,
@@ -1160,7 +1162,7 @@ export function applyEntityGridState(
     if (card.custom?.bottomLeft) return card;
     const sortNum = numberValue(card.entity.sortOrder);
     if (!sortNum) return card;
-    if (card.entity.kind === ENTITY_KIND.video) {
+    if (card.entity.kind === ENTITY_KIND.videoEpisode) {
       return { ...card, custom: { ...card.custom, bottomLeft: { label: `E${sortNum}`, title: `Episode ${sortNum}` } } };
     }
     if (card.entity.kind === ENTITY_KIND.videoSeason) {

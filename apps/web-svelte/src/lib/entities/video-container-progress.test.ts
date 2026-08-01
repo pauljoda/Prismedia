@@ -60,7 +60,7 @@ describe("videoContainerProgressDisplay", () => {
       hover: { kind: THUMBNAIL_HOVER_KIND.none },
       entity: {
         id: "episode-3",
-        kind: ENTITY_KIND.video,
+        kind: ENTITY_KIND.videoEpisode,
         title: "Episode Three",
         parentEntityId: null,
         sortOrder: 3,

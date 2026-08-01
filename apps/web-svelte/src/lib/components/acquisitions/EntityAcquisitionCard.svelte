@@ -93,7 +93,7 @@
   );
   const hasOwnedContent = $derived(acq.showFileManagement || hasImportedBaseline);
   const activeChildLabel = $derived(
-    acq.childCards.every((card) => card.entity.kind === ENTITY_KIND.video)
+    acq.childCards.every((card) => card.entity.kind === ENTITY_KIND.videoEpisode)
       ? activeChildAcquisitionCount === 1 ? "episode" : "episodes"
       : acq.childCards.every((card) => card.entity.kind === ENTITY_KIND.audioTrack)
         ? activeChildAcquisitionCount === 1 ? "track" : "tracks"

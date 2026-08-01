@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { IdentifyStore } from "./identify-store.svelte";
 import type { EntityMetadataProposal, PluginProvider } from "$lib/api/identify-types";
 import type { EntityCard, EntityDetailCard } from "$lib/api/entities";
+import { ENTITY_KIND } from "$lib/entities/entity-codes";
 import { MAIN_SCROLL_TOP_EVENT } from "$lib/stores/main-scroll";
 
 const fetchPluginProviders = vi.fn();
@@ -212,7 +213,7 @@ describe("IdentifyStore", () => {
     store.navigateTo({
       kind: "review-child",
       entity: entity("series-1"),
-      proposal: proposal("child-proposal", { targetKind: "video-episode", title: "Episode" }),
+      proposal: proposal("child-proposal", { targetKind: ENTITY_KIND.videoEpisode, title: "Episode" }),
       parentProposal: proposal("parent-proposal"),
       ancestors: [proposal("parent-proposal")],
     });

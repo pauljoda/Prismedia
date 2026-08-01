@@ -136,7 +136,7 @@ const PERSON_DATES = [
 export function entityDateFieldsForKind(kind: string): EntityDateFieldDefinition[] {
   const codes: readonly EntityDateTypeCode[] = kind === ENTITY_KIND.movie
     ? MOVIE_DATES
-    : kind === ENTITY_KIND.videoSeries || kind === ENTITY_KIND.videoSeason || kind === ENTITY_KIND.video
+    : kind === ENTITY_KIND.videoSeries || kind === ENTITY_KIND.videoSeason || kind === ENTITY_KIND.videoEpisode || kind === ENTITY_KIND.video
       ? TELEVISION_DATES
       : kind === ENTITY_KIND.book || kind === ENTITY_KIND.bookVolume || kind === ENTITY_KIND.bookChapter
         ? BOOK_DATES

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { ACQUISITION_STATUS, BOOK_FORMAT, BOOK_TYPE } from "$lib/api/generated/codes";
 import type { EntityCapability, EntityCard, EntityThumbnail, EntityKind } from "$lib/api/generated/model";
+import { ENTITY_KIND } from "$lib/entities/entity-codes";
 import {
   AVAILABILITY_FILTER_DEFS,
   BOOK_FORMAT_FILTER_DEFS,
@@ -144,8 +145,8 @@ describe("entity grid helpers", () => {
 
   it("sorts videos by episode position when position sorting is selected", () => {
     const visible = applyEntityGridState([
-      entityCardToThumbnailCard(card("episode-10", "video", "Episode Ten", [position([{ code: "episode", value: 10 }])])),
-      entityCardToThumbnailCard(card("episode-2", "video", "Episode Two", [position([{ code: "episode", value: 2 }])])),
+      entityCardToThumbnailCard(card("episode-10", ENTITY_KIND.videoEpisode, "Episode Ten", [position([{ code: "episode", value: 10 }])])),
+      entityCardToThumbnailCard(card("episode-2", ENTITY_KIND.videoEpisode, "Episode Two", [position([{ code: "episode", value: 2 }])])),
       entityCardToThumbnailCard(card("special", "video", "Behind the Scenes", [])),
     ], {
       activeKind: ENTITY_GRID_ALL_KINDS,
@@ -162,8 +163,8 @@ describe("entity grid helpers", () => {
 
   it("preserves incoming order for duplicate position values", () => {
     const visible = applyEntityGridState([
-      entityCardToThumbnailCard(card("first-added", "video", "Z Title", [position([{ code: "episode", value: 2 }])])),
-      entityCardToThumbnailCard(card("second-added", "video", "A Title", [position([{ code: "episode", value: 2 }])])),
+      entityCardToThumbnailCard(card("first-added", ENTITY_KIND.videoEpisode, "Z Title", [position([{ code: "episode", value: 2 }])])),
+      entityCardToThumbnailCard(card("second-added", ENTITY_KIND.videoEpisode, "A Title", [position([{ code: "episode", value: 2 }])])),
     ], {
       activeKind: ENTITY_GRID_ALL_KINDS,
       filterIds: [],
@@ -200,7 +201,7 @@ describe("entity grid helpers", () => {
   });
 
   it("maps video season and episode numbers into the bottom-left custom slot", () => {
-    const thumbnail = entityCardToThumbnailCard(card("4", "video", "Episode", [
+    const thumbnail = entityCardToThumbnailCard(card("4", ENTITY_KIND.videoEpisode, "Episode", [
       flags(false),
       technical(),
       position([
@@ -274,7 +275,7 @@ describe("entity grid helpers", () => {
 
   it("carries the backend-projected hierarchy subtitle from lightweight thumbnails", () => {
     const thumbnail = entityCardToThumbnailCard({
-      ...thumbnailEntity("episode-1", "video", "Pilot"),
+      ...thumbnailEntity("episode-1", ENTITY_KIND.videoEpisode, "Pilot"),
       subtitle: "Season One",
     });
 
@@ -329,7 +330,7 @@ describe("entity grid helpers", () => {
 
   it("filters bitrate labels from lightweight API thumbnail metadata", () => {
     const thumbnail = entityCardToThumbnailCard({
-      ...thumbnailEntity("video-1", "video", "Episode"),
+      ...thumbnailEntity("video-1", ENTITY_KIND.videoEpisode, "Episode"),
       meta: [
         { icon: "duration", label: "10:35" },
         { icon: "video", label: "4K" },

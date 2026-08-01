@@ -635,7 +635,7 @@ function normalizePositionCodeForReview(code: string): string {
 function structuralPositionScope(targetKind?: string | null): "season" | "episode" | null {
   const normalized = targetKind?.toLowerCase() ?? "";
   if (normalized.includes("season")) return "season";
-  if (normalized.includes("episode") || normalized === ENTITY_KIND.video) return "episode";
+  if (normalized.includes("episode")) return "episode";
   return null;
 }
 

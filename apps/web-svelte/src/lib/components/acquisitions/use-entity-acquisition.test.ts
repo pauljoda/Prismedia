@@ -327,7 +327,7 @@ describe("useEntityAcquisition", () => {
       trackableProviders: ["tmdb"],
       discoversChildren: false,
       canSearchMissingChildren: true,
-      missingChildEntityKind: ENTITY_KIND.video,
+      missingChildEntityKind: ENTITY_KIND.videoEpisode,
     });
 
     render(Harness, { entityId: "season-1" });
@@ -351,7 +351,7 @@ describe("useEntityAcquisition", () => {
       childCards: [
         wantedChild("season-1", ENTITY_KIND.videoSeason, "series-1"),
         wantedChild("sub-series", ENTITY_KIND.videoSeries, "series-1"),
-        wantedChild("special-1", ENTITY_KIND.video, "series-1"),
+        wantedChild("special-1", ENTITY_KIND.videoEpisode, "series-1"),
       ],
     });
 
