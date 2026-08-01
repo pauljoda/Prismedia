@@ -17,7 +17,7 @@
     hydrateStandardRelationshipCards,
     thumbnailsToCards,
   } from "$lib/entities/entity-relationship-thumbnails";
-  import { collectLibraryTracks } from "$lib/entities/audio-track-collections";
+  import { collectLibraryTrackGroups } from "$lib/entities/audio-track-collections";
   import type { EntityThumbnailCard } from "$lib/entities/entity-thumbnail";
   import { useAudioPlayback, type PlaybackContext } from "$lib/stores/audio-playback.svelte";
   import EntityDetail, {
@@ -157,8 +157,7 @@
     queueBusy = true;
     try {
       const albumIds = albumCards.map((c) => c.entity.id);
-      const tracks = (await Promise.all(albumIds.map((id) => collectLibraryTracks(id))))
-        .flatMap((result) => result.tracks);
+      const tracks = (await collectLibraryTrackGroups(albumIds)).tracks;
       if (tracks.length === 0) return;
       playback.play(tracks, shuffle ? undefined : tracks[0].id, artistContext(), { shuffle });
     } finally {
