@@ -1099,6 +1099,33 @@ public partial class MigrateDirectPlayableEntities : Migration {
         END
         $function$;
 
+        -- Every payload rewrite, including legacy kind inference, requires an exact mapped UUID.
+        -- The text probe can over-select harmlessly, then each candidate is transformed only once.
+        CREATE TEMP TABLE prismedia_job_payload_retargets (
+            id uuid PRIMARY KEY,
+            source_payload_json jsonb NOT NULL,
+            retargeted_payload_json jsonb NOT NULL
+        ) ON COMMIT DROP;
+
+        WITH payloads AS MATERIALIZED (
+            SELECT run.id,
+                   run.payload_json,
+                   run.payload_json::text AS payload_text
+            FROM job_runs AS run
+        )
+        INSERT INTO pg_temp.prismedia_job_payload_retargets (
+            id,
+            source_payload_json,
+            retargeted_payload_json)
+        SELECT payload.id,
+               payload.payload_json,
+               pg_temp.prismedia_retarget_job_json(payload.payload_json)
+        FROM payloads AS payload
+        WHERE EXISTS (
+            SELECT 1
+            FROM pg_temp.prismedia_playable_map AS map
+            WHERE strpos(payload.payload_text, map.old_id::text) > 0);
+
         CREATE TEMP TABLE prismedia_affected_job_runs (id uuid PRIMARY KEY) ON COMMIT DROP;
         INSERT INTO pg_temp.prismedia_affected_job_runs (id)
         SELECT run.id
@@ -1108,7 +1135,11 @@ public partial class MigrateDirectPlayableEntities : Migration {
                   WHERE run.target_entity_id = map.old_id::text
                      OR run.resource_key = '__ENTITY_RESOURCE_PREFIX__' || map.old_id::text
                      OR run.node_key = run.type || ':' || map.old_id::text)
-           OR run.payload_json IS DISTINCT FROM pg_temp.prismedia_retarget_job_json(run.payload_json);
+           OR EXISTS (
+                  SELECT 1
+                  FROM pg_temp.prismedia_job_payload_retargets AS payload
+                  WHERE payload.id = run.id
+                    AND payload.source_payload_json IS DISTINCT FROM payload.retargeted_payload_json);
 
         CREATE TEMP TABLE prismedia_affected_job_graphs (id uuid PRIMARY KEY) ON COMMIT DROP;
         INSERT INTO pg_temp.prismedia_affected_job_graphs (id)
@@ -1123,8 +1154,9 @@ public partial class MigrateDirectPlayableEntities : Migration {
         DO $prismedia$
         BEGIN
             IF EXISTS (
-                SELECT 1 FROM job_runs
-                WHERE pg_temp.prismedia_job_json_has_ambiguous_kind(payload_json)
+                SELECT 1
+                FROM pg_temp.prismedia_job_payload_retargets AS payload
+                WHERE pg_temp.prismedia_job_json_has_ambiguous_kind(payload.source_payload_json)
             ) THEN
                 RAISE EXCEPTION 'Direct-playable migration found a job payload whose legacy Video kind spans mixed direct-playable identities';
             END IF;
@@ -1137,7 +1169,11 @@ public partial class MigrateDirectPlayableEntities : Migration {
                            SELECT 1 FROM pg_temp.prismedia_playable_map AS map
                            WHERE run.target_entity_id = map.old_id::text
                               OR run.resource_key = '__ENTITY_RESOURCE_PREFIX__' || map.old_id::text)
-                       OR run.payload_json IS DISTINCT FROM pg_temp.prismedia_retarget_job_json(run.payload_json))
+                       OR EXISTS (
+                           SELECT 1
+                           FROM pg_temp.prismedia_job_payload_retargets AS payload
+                           WHERE payload.id = run.id
+                             AND payload.source_payload_json IS DISTINCT FROM payload.retargeted_payload_json))
             ) OR EXISTS (
                 SELECT 1
                 FROM job_graphs AS graph
@@ -1198,7 +1234,11 @@ public partial class MigrateDirectPlayableEntities : Migration {
         $prismedia$;
 
         UPDATE job_runs AS run
-        SET payload_json = pg_temp.prismedia_retarget_job_json(run.payload_json),
+        SET payload_json = COALESCE((
+                SELECT payload.retargeted_payload_json
+                FROM pg_temp.prismedia_job_payload_retargets AS payload
+                WHERE payload.id = run.id
+            ), run.payload_json),
             target_entity_id = map.new_id::text,
             target_entity_kind = map.new_kind,
             node_key = CASE
@@ -1210,8 +1250,10 @@ public partial class MigrateDirectPlayableEntities : Migration {
         WHERE run.target_entity_id = map.old_id::text;
 
         UPDATE job_runs AS run
-        SET payload_json = pg_temp.prismedia_retarget_job_json(run.payload_json)
-        WHERE run.payload_json IS DISTINCT FROM pg_temp.prismedia_retarget_job_json(run.payload_json);
+        SET payload_json = payload.retargeted_payload_json
+        FROM pg_temp.prismedia_job_payload_retargets AS payload
+        WHERE payload.id = run.id
+          AND run.payload_json IS DISTINCT FROM payload.retargeted_payload_json;
 
         UPDATE job_runs AS run
         SET node_key = run.type || ':' || map.new_id::text
@@ -1269,7 +1311,11 @@ public partial class MigrateDirectPlayableEntities : Migration {
                     WHERE (map.mode = 'collapse' AND run.target_entity_id = map.old_id::text)
                        OR (map.mode = 'collapse' AND run.resource_key = '__ENTITY_RESOURCE_PREFIX__' || map.old_id::text)
                        OR (map.mode = 'collapse' AND run.node_key = run.type || ':' || map.old_id::text))
-                   OR run.payload_json IS DISTINCT FROM pg_temp.prismedia_retarget_job_json(run.payload_json)
+                   OR EXISTS (
+                       SELECT 1
+                       FROM pg_temp.prismedia_job_payload_retargets AS payload
+                       WHERE payload.id = run.id
+                         AND run.payload_json IS DISTINCT FROM payload.retargeted_payload_json)
                    OR EXISTS (
                        SELECT 1
                        FROM pg_temp.prismedia_playable_map AS map

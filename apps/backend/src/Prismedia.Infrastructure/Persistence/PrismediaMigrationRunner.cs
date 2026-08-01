@@ -20,6 +20,7 @@ public static class PrismediaMigrationRunner {
     private static readonly TimeSpan InitialDelay = TimeSpan.FromSeconds(1);
     private static readonly TimeSpan MaxDelay = TimeSpan.FromSeconds(10);
     private static readonly TimeSpan MaxWait = TimeSpan.FromMinutes(5);
+    private const int MigrationCommandTimeoutSeconds = 600;
 
     /// <summary>
     /// Applies pending EF Core migrations. This is the single schema owner path (the API).
@@ -44,6 +45,9 @@ public static class PrismediaMigrationRunner {
             async () => {
                 await using var scope = services.CreateAsyncScope();
                 var db = scope.ServiceProvider.GetRequiredService<PrismediaDbContext>();
+                // Schema rewrites are bounded startup work, but can legitimately exceed EF's
+                // 30-second request-oriented default on an established library.
+                db.Database.SetCommandTimeout(MigrationCommandTimeoutSeconds);
                 var migrator = db.GetService<IMigrator>();
                 await ApplyMigrationsUnderSessionLockAsync(
                     db,

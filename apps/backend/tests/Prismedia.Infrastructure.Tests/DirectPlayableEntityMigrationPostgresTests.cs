@@ -303,7 +303,7 @@ public sealed class DirectPlayableEntityMigrationPostgresTests {
 
     [Fact]
     [Trait("Category", "PostgreSQL")]
-    public async Task PreparerRequiresOneExistingOrdinaryMoviePayloadFile() {
+    public async Task PreparerRequiresOneOrdinaryMoviePayloadSourceRow() {
         await using var database = await PostgresTestDatabase.CreateAsync(PreviousMigration);
         using var files = MigrationFiles.Create();
         var movieId = Guid.NewGuid();
@@ -331,7 +331,97 @@ public sealed class DirectPlayableEntityMigrationPostgresTests {
         }
 
         var directory = await Assert.ThrowsAsync<InvalidOperationException>(() => database.RunMigrationRunnerAsync(files.Assets));
-        Assert.Contains("source is not an existing file", directory.Message, StringComparison.Ordinal);
+        Assert.Contains("source is a directory instead of a file", directory.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    [Trait("Category", "PostgreSQL")]
+    public async Task RunnerPreservesMissingLegacyStructuralFoldersAndMoviePayloadWithoutMountingPaths() {
+        await using var database = await PostgresTestDatabase.CreateAsync(PreviousMigration);
+        using var files = MigrationFiles.Create();
+        var movieId = Guid.NewGuid();
+        var childId = Guid.NewGuid();
+        var seriesId = Guid.NewGuid();
+        var missingMovieFolder = Path.Combine(files.Root, "unmounted", "movies", "Movie");
+        var missingSeriesFolder = Path.Combine(files.Root, "unmounted", "series", "Series");
+        var missingVideoPath = Path.Combine(files.Root, "unmounted", "movies", "Movie", "movie.mkv");
+        await SeedMinimalMovieAsync(database, movieId, childId, missingMovieFolder, missingVideoPath);
+        await using (var connection = await database.OpenConnectionAsync()) {
+            await ExecuteAsync(
+                connection,
+                """
+                INSERT INTO entities
+                    (id, kind_code, title, is_nsfw, is_organized, is_wanted, created_at, updated_at)
+                VALUES (@id, @kind, 'Series', FALSE, FALSE, FALSE, now(), now());
+                INSERT INTO entity_files (id, entity_id, role, path, source, created_at, updated_at)
+                VALUES (@file_id, @id, @role, @path, @source, now(), now());
+                """,
+                ("id", seriesId),
+                ("kind", EntityKind.VideoSeries.ToCode()),
+                ("file_id", Guid.NewGuid()),
+                ("role", EntityFileRole.Source.ToCode()),
+                ("path", missingSeriesFolder),
+                ("source", FileSourceKind.Scan.ToCode()));
+        }
+
+        await database.RunMigrationRunnerAsync(files.Assets);
+
+        await using var verify = await database.OpenConnectionAsync();
+        Assert.Equal(missingMovieFolder, await ScalarAsync<string>(
+            verify,
+            "SELECT value FROM entity_sources WHERE entity_id = @id AND code = @code",
+            movieId,
+            ("code", EntitySourceCode.Folder.ToCode())));
+        Assert.Equal(missingSeriesFolder, await ScalarAsync<string>(
+            verify,
+            "SELECT value FROM entity_sources WHERE entity_id = @id AND code = @code",
+            seriesId,
+            ("code", EntitySourceCode.Folder.ToCode())));
+        Assert.False(await ExistsAsync(
+            verify,
+            "SELECT EXISTS (SELECT 1 FROM entity_files WHERE entity_id = @id AND role = @role)",
+            seriesId,
+            ("role", EntityFileRole.Source.ToCode())));
+        Assert.Equal(movieId, await ScalarAsync<Guid>(
+            verify,
+            "SELECT entity_id FROM entity_files WHERE path = @id",
+            missingVideoPath));
+    }
+
+    [Fact]
+    [Trait("Category", "PostgreSQL")]
+    public async Task PreparerStillRejectsMissingStructuralSourceWithoutUnambiguousMetadata() {
+        await using var database = await PostgresTestDatabase.CreateAsync(PreviousMigration);
+        using var files = MigrationFiles.Create();
+        var bookId = Guid.NewGuid();
+        var missingBookPath = Path.Combine(files.Root, "unmounted", "ambiguous-book-source");
+        await using (var connection = await database.OpenConnectionAsync()) {
+            await ExecuteAsync(
+                connection,
+                """
+                INSERT INTO entities
+                    (id, kind_code, title, is_nsfw, is_organized, is_wanted, created_at, updated_at)
+                VALUES (@id, @kind, 'Ambiguous Book', FALSE, FALSE, FALSE, now(), now());
+                INSERT INTO entity_files (id, entity_id, role, path, source, created_at, updated_at)
+                VALUES (@file_id, @id, @role, @path, @source, now(), now());
+                """,
+                ("id", bookId),
+                ("kind", EntityKind.Book.ToCode()),
+                ("file_id", Guid.NewGuid()),
+                ("role", EntityFileRole.Source.ToCode()),
+                ("path", missingBookPath),
+                ("source", FileSourceKind.Scan.ToCode()));
+        }
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            database.RunMigrationRunnerAsync(files.Assets));
+
+        Assert.Contains("Cannot infer legacy source", exception.Message, StringComparison.Ordinal);
+        await using var verify = await database.OpenConnectionAsync();
+        Assert.False(await ExistsAsync(
+            verify,
+            "SELECT EXISTS (SELECT 1 FROM \"__EFMigrationsHistory\" WHERE \"MigrationId\" = @id)",
+            MigrationUnderTest));
     }
 
     [Fact]

@@ -215,11 +215,14 @@ internal static class DirectPlayableMigrationAssetPreparer {
             }
 
             var source = entitySources[0];
-            if (!File.Exists(source.Path) || Directory.Exists(source.Path)) {
+            // The wrapper topology makes this row a file even when its media mount is offline. Only
+            // observable contradictions are unsafe; absence alone must not block a schema upgrade.
+            if (Directory.Exists(source.Path)) {
                 throw new InvalidOperationException(
-                    $"Legacy Movie Video {mapping.Key} source is not an existing file: {source.Path}");
+                    $"Legacy Movie Video {mapping.Key} source is a directory instead of a file: {source.Path}");
             }
-            if (File.GetAttributes(source.Path).HasFlag(FileAttributes.ReparsePoint)) {
+            if (TryGetExistingAttributes(source.Path, out var attributes)
+                && attributes.HasFlag(FileAttributes.ReparsePoint)) {
                 throw new InvalidOperationException(
                     $"Legacy Movie Video {mapping.Key} source must be an ordinary file: {source.Path}");
             }
@@ -321,7 +324,9 @@ internal static class DirectPlayableMigrationAssetPreparer {
     private static async Task<List<ManifestEntry>> ClassifyStructuralSourcesAsync(
         NpgsqlConnection connection,
         CancellationToken cancellationToken) {
-        var structuralKinds = new[] {
+        // At the previous schema version these kinds used Source rows only as folder provenance.
+        // Their persisted meaning is therefore authoritative when the old mount is unavailable.
+        var folderOnlyKinds = new[] {
             EntityKind.Movie.ToCode(),
             EntityKind.VideoSeries.ToCode(),
             EntityKind.VideoSeason.ToCode(),
@@ -329,31 +334,83 @@ internal static class DirectPlayableMigrationAssetPreparer {
             EntityKind.AudioLibrary.ToCode(),
             EntityKind.MusicArtist.ToCode(),
             EntityKind.BookAuthor.ToCode(),
-            EntityKind.Book.ToCode(),
             EntityKind.BookVolume.ToCode()
         };
+        var structuralKinds = folderOnlyKinds
+            .Append(EntityKind.Book.ToCode())
+            .ToArray();
         await using var command = new NpgsqlCommand(
             """
-            SELECT file.id, file.entity_id, file.path
+            SELECT
+                file.id,
+                file.entity_id,
+                file.path,
+                entity.kind_code,
+                EXISTS (
+                    SELECT 1
+                    FROM entity_sources AS source
+                    WHERE source.entity_id = entity.id
+                      AND source.code = @folder_source_code
+                      AND source.value = file.path
+                ) AS has_folder_provenance,
+                EXISTS (
+                    SELECT 1 FROM entity_file_fingerprints AS fingerprint
+                    WHERE fingerprint.entity_file_id = file.id
+                    UNION ALL
+                    SELECT 1 FROM media_sources AS media_source
+                    WHERE media_source.entity_file_id = file.id
+                ) AS has_playable_file_reference,
+                detail.format AS book_format
             FROM entity_files AS file
             INNER JOIN entities AS entity ON entity.id = file.entity_id
+            LEFT JOIN book_details AS detail ON detail.entity_id = entity.id
             WHERE file.role = @source_role AND entity.kind_code = ANY(@structural_kinds)
             ORDER BY file.id
             """,
             connection);
         command.Parameters.AddWithValue("source_role", EntityFileRole.Source.ToCode());
         command.Parameters.AddWithValue("structural_kinds", structuralKinds);
+        command.Parameters.AddWithValue("folder_source_code", EntitySourceCode.Folder.ToCode());
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         var entries = new List<ManifestEntry>();
         while (await reader.ReadAsync(cancellationToken)) {
             var fileId = reader.GetGuid(0);
             var entityId = reader.GetGuid(1);
             var path = reader.GetString(2);
+            var kindCode = reader.GetString(3);
+            var hasFolderProvenance = reader.GetBoolean(4);
+            var hasPlayableFileReference = reader.GetBoolean(5);
+            var bookFormat = reader.IsDBNull(6) ? null : reader.GetString(6);
+            var isKnownFolder = folderOnlyKinds.Contains(kindCode, StringComparer.Ordinal)
+                || hasFolderProvenance
+                || kindCode == EntityKind.Book.ToCode()
+                && bookFormat is not null
+                && (bookFormat == BookFormat.Audio.ToCode()
+                    || bookFormat == BookFormat.ImageArchive.ToCode()
+                    && !SupportedExtensions.ComicArchive.Contains(Path.GetExtension(path)));
+            var isKnownFile = hasPlayableFileReference
+                || kindCode == EntityKind.Book.ToCode()
+                && bookFormat is not null
+                && (bookFormat == BookFormat.Epub.ToCode()
+                    || bookFormat == BookFormat.Pdf.ToCode()
+                    || bookFormat == BookFormat.ImageArchive.ToCode()
+                    && SupportedExtensions.ComicArchive.Contains(Path.GetExtension(path)));
+            if (isKnownFolder && isKnownFile) {
+                throw new InvalidOperationException(
+                    $"Legacy source '{path}' for {kindCode} Entity {entityId} has conflicting persisted ownership metadata.");
+            }
+
             var isFile = File.Exists(path);
             var isFolder = Directory.Exists(path);
-            if (isFile == isFolder) {
+            if ((isFile && isKnownFolder) || (isFolder && isKnownFile)) {
                 throw new InvalidOperationException(
-                    $"Cannot classify legacy source '{path}' for Entity {entityId}: expected exactly one existing file or directory.");
+                    $"Legacy source '{path}' for {kindCode} Entity {entityId} contradicts its persisted storage semantics.");
+            }
+            isKnownFile |= isFile;
+            isKnownFolder |= isFolder;
+            if (isKnownFolder == isKnownFile) {
+                throw new InvalidOperationException(
+                    $"Cannot infer legacy source '{path}' for {kindCode} Entity {entityId} from persisted ownership metadata.");
             }
 
             entries.Add(new ManifestEntry(
@@ -364,10 +421,23 @@ internal static class DirectPlayableMigrationAssetPreparer {
                 entityId,
                 path,
                 path,
-                isFile ? FileClassification : FolderClassification));
+                isKnownFile ? FileClassification : FolderClassification));
         }
 
         return entries;
+    }
+
+    private static bool TryGetExistingAttributes(string path, out FileAttributes attributes) {
+        try {
+            attributes = File.GetAttributes(path);
+            return true;
+        } catch (FileNotFoundException) {
+            attributes = default;
+            return false;
+        } catch (DirectoryNotFoundException) {
+            attributes = default;
+            return false;
+        }
     }
 
     private static async Task<List<AssetRelocation>> ReadSubtitleRelocationsAsync(
