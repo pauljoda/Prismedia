@@ -202,9 +202,10 @@ It persists as `EntityRelationshipLinkRow` rows with relationship code
 character) in link metadata — never a cloned `Person`. The capability items carry that
 edge metadata so every client reads roles and character labels from the same Entity root.
 
-All Entity document GETs project `EntityCard`. `/api/entities/{id}` is canonical;
-kind-prefixed detail routes are deprecated compatibility aliases that validate the expected kind
-and return the same card. Do not add a derived `*Detail` record or per-kind projection mapper.
+All Entity document GETs project `EntityCard`. `/api/entities/{id}` is the only Entity detail
+read; kind-prefixed detail GET aliases were removed in 3.0. Kind-specific writes, structural child
+operations, and playback routes remain where their use cases require them. Do not add a derived
+`*Detail` record or per-kind projection mapper.
 
 ## Stable Codes and Constants
 
