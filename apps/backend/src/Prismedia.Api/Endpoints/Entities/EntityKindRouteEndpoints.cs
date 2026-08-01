@@ -15,7 +15,7 @@ internal static class EntityKindRouteEndpoints {
         string kind,
         string tag,
         string listName,
-        string detailName) {
+        string kindOperationName) {
         var group = routes.MapGroup(prefix)
             .WithTags(tag);
 
@@ -36,25 +36,8 @@ internal static class EntityKindRouteEndpoints {
             .Produces<ApiProblem>(StatusCodes.Status400BadRequest);
 
         if (EntityKindRegistry.TryDescribe(kind, out var definition) && definition.SupportsManualManagement) {
-            group.MapManagementRoutes(kind, tag, detailName);
+            group.MapManagementRoutes(kind, tag, kindOperationName);
         }
-
-        group.MapGet("/{id:guid}", async (
-            Guid id,
-            bool? hideNsfw,
-            HttpContext httpContext,
-            IEntityReadService entities,
-            CancellationToken cancellationToken) =>
-            await GetKindDetailAsync(id, kind, NsfwVisibility.ShouldHide(hideNsfw, httpContext), entities, cancellationToken))
-            .WithName(detailName)
-            .WithSummary($"Get {tag} detail (deprecated; use GET /api/entities/{{id}}).")
-            .AddOpenApiOperationTransformer((operation, _, _) => {
-                operation.Deprecated = true;
-                operation.Description = "Deprecated compatibility alias. Use GET /api/entities/{id}.";
-                return Task.CompletedTask;
-            })
-            .Produces<EntityCard>()
-            .Produces<ApiProblem>(StatusCodes.Status404NotFound);
 
         group.MapPatch("/{id:guid}", async (
             Guid id,
@@ -64,7 +47,7 @@ internal static class EntityKindRouteEndpoints {
             CancellationToken cancellationToken) =>
             await EntityDetailEndpoint.PatchEntityAsync(id, kind, request, metadata, entities, cancellationToken))
             .RequireAdmin()
-            .WithName($"{detailName}Patch")
+            .WithName($"{kindOperationName}Patch")
             .WithSummary($"Update {tag} detail.")
             .Produces<EntityCard>()
             .Produces<ApiProblem>(StatusCodes.Status400BadRequest)
@@ -81,10 +64,12 @@ internal static class EntityKindRouteEndpoints {
         this RouteGroupBuilder group,
         string kind,
         string tag,
-        string detailName) {
+        string kindOperationName) {
         // Derive clean operation names (GetTag -> CreateTag / DeleteTag) so the generated client
         // exposes createTag()/deleteTag() rather than awkward Get-prefixed names.
-        var baseName = detailName.StartsWith("Get", StringComparison.Ordinal) ? detailName[3..] : detailName;
+        var baseName = kindOperationName.StartsWith("Get", StringComparison.Ordinal)
+            ? kindOperationName[3..]
+            : kindOperationName;
 
         group.MapPost("/", async (
             EntityCreateRequest request,
@@ -139,15 +124,4 @@ internal static class EntityKindRouteEndpoints {
             : Results.Created($"/api/entities/{id}", (object)entity);
     }
 
-    internal static async Task<IResult> GetKindDetailAsync(
-        Guid id,
-        string kind,
-        bool hideNsfw,
-        IEntityReadService entities,
-        CancellationToken cancellationToken) {
-        var entity = await entities.GetAsync(id, kind, hideNsfw, cancellationToken);
-        return entity is null
-            ? Results.NotFound(new ApiProblem(ApiProblemCodes.EntityNotFound, $"Entity '{id}' was not found."))
-            : Results.Ok<object>(entity);
-    }
 }

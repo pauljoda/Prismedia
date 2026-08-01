@@ -5,7 +5,7 @@ namespace Prismedia.Api.Endpoints;
 
 /// <summary>Maps movie catalog endpoints for first-class movie entities.</summary>
 public static class MovieEndpoints {
-    /// <summary>Registers list and detail routes for movies.</summary>
+    /// <summary>Registers catalog and management routes for movies.</summary>
     public static RouteGroupBuilder MapMovieEndpoints(this IEndpointRouteBuilder routes) =>
         routes.MapEntityKindRoutes(
             "/api/movies",

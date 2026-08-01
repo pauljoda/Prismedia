@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+### Removed
+
+- Deprecated kind-specific Entity detail reads have been removed; use `GET /api/entities/{id}` for every Entity kind.
+
 ### Fixed
 
 - Direct-playable upgrades now handle large libraries and temporarily unavailable media mounts while still stopping for conflicting or ambiguous source metadata.

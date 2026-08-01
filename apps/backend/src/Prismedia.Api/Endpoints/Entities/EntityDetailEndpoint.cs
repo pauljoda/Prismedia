@@ -72,6 +72,6 @@ internal static class EntityDetailEndpoint {
 
         return expectedKind is null
             ? await EntityEndpointResults.GetEntityAsync(id, false, entities, cancellationToken)
-            : await EntityKindRouteEndpoints.GetKindDetailAsync(id, expectedKind, false, entities, cancellationToken);
+            : await EntityEndpointResults.GetEntityAsync(id, expectedKind, false, entities, cancellationToken);
     }
 }

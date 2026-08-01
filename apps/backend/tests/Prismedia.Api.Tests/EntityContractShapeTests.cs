@@ -47,7 +47,7 @@ public sealed class EntityContractShapeTests {
     }
 
     [Fact]
-    public void EntityListAndDetailEndpointsAdvertiseConcreteWireDtos() {
+    public void EntityListAndCanonicalDetailEndpointsAdvertiseConcreteWireDtos() {
         using var factory = new WebApplicationFactory<Program>();
         _ = factory.Server;
         var endpointDataSource = factory.Services.GetRequiredService<EndpointDataSource>();
@@ -61,21 +61,6 @@ public sealed class EntityContractShapeTests {
         var expectedResponses = new Dictionary<string, Type>(StringComparer.Ordinal) {
             ["ListEntities"] = typeof(EntityListResponse),
             ["GetEntity"] = typeof(EntityCard),
-            ["GetMovie"] = typeof(EntityCard),
-            ["GetVideoSeries"] = typeof(EntityCard),
-            ["GetVideoSeason"] = typeof(EntityCard),
-            ["GetVideo"] = typeof(EntityCard),
-            ["GetBook"] = typeof(EntityCard),
-            ["GetImage"] = typeof(EntityCard),
-            ["GetGallery"] = typeof(EntityCard),
-            ["GetPerson"] = typeof(EntityCard),
-            ["GetTag"] = typeof(EntityCard),
-            ["GetStudio"] = typeof(EntityCard),
-            ["GetCollection"] = typeof(EntityCard),
-            ["GetAudioTrack"] = typeof(EntityCard),
-            ["GetAudioLibrary"] = typeof(EntityCard),
-            ["GetMusicArtist"] = typeof(EntityCard),
-            ["GetBookAuthor"] = typeof(EntityCard),
             ["GetEntityMonitorStates"] = typeof(EntityMonitorStateView[]),
         };
 
@@ -228,7 +213,7 @@ public sealed class EntityContractShapeTests {
     }
 
     [Fact]
-    public async Task KindSpecificDetailAliasesAreDeprecatedInOpenApi() {
+    public async Task OpenApiExposesOnlyTheCanonicalEntityDetailGet() {
         using var factory = new WebApplicationFactory<Program>();
         using var client = factory.CreateClient();
         using var document = JsonDocument.Parse(await client.GetStringAsync("/openapi/v1.json"));
@@ -252,9 +237,9 @@ public sealed class EntityContractShapeTests {
             "/api/videos/{id}"
         ];
         foreach (var path in aliases) {
-            var operation = paths.GetProperty(path).GetProperty("get");
-            Assert.True(operation.GetProperty("deprecated").GetBoolean(), path);
-            Assert.Contains("/api/entities/{id}", operation.GetProperty("description").GetString());
+            Assert.False(
+                paths.TryGetProperty(path, out var pathItem) && pathItem.TryGetProperty("get", out _),
+                path);
         }
 
         Assert.False(
