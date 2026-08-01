@@ -142,22 +142,22 @@
     position: relative;
     display: flex;
     flex-direction: column;
+    gap: 0.5rem;
     container-type: inline-size;
     min-width: 0;
-    overflow: hidden;
-    border: 1px solid var(--color-border-subtle, rgb(255 255 255 / 0.08));
-    border-radius: 6px;
     color: var(--color-text, #f4efe6);
     text-decoration: none;
-    box-shadow: var(--shadow-card);
-    transition: transform 200ms var(--ease-default, cubic-bezier(0.4, 0, 0.2, 1)), border-color 200ms var(--ease-default, cubic-bezier(0.4, 0, 0.2, 1)), box-shadow 200ms var(--ease-default, cubic-bezier(0.4, 0, 0.2, 1));
   }
-  .entity-thumbnail:is(:hover, :focus-visible) { border-color: var(--color-border-default); box-shadow: var(--shadow-card-hover); transform: translateY(-1px); }
-  .entity-thumbnail.is-selected { border-color: var(--color-border-default); box-shadow: inset 2px 0 0 var(--entity-accent), var(--shadow-card-hover); }
-  .entity-thumbnail.is-highlighted { border-color: color-mix(in srgb, var(--entity-accent) 62%, var(--color-border-default)); background: color-mix(in srgb, var(--entity-accent) 10%, rgb(12 12 13 / 0.98)); box-shadow: inset 2px 0 0 var(--entity-accent), var(--shadow-card-hover); }
+  .entity-thumbnail:not(.is-list):is(:hover, :focus-visible) :global(.media) { border-color: var(--color-border-default); box-shadow: var(--shadow-card-hover); transform: translateY(-1px); }
+  .entity-thumbnail:not(.is-list).is-selected :global(.media) { border-color: var(--color-border-default); box-shadow: inset 2px 0 0 var(--entity-accent), var(--shadow-card-hover); }
+  .entity-thumbnail:not(.is-list).is-highlighted :global(.media) { border-color: color-mix(in srgb, var(--entity-accent) 62%, var(--color-border-default)); box-shadow: inset 2px 0 0 var(--entity-accent), var(--shadow-card-hover); }
   .entity-thumbnail.is-static { pointer-events: none; }
-  .entity-thumbnail.is-static:is(:hover, :focus-visible) { border-color: var(--color-border-subtle, rgb(255 255 255 / 0.08)); box-shadow: var(--shadow-card); transform: none; }
-  .entity-thumbnail.is-list { flex-direction: row; inline-size: 100%; min-block-size: 5.25rem; border: 1px solid rgb(255 255 255 / 0.08); background: rgb(12 12 13 / 0.92); box-shadow: inset 0 0 0 1px rgb(0 0 0 / 0.5), 0 2px 6px rgb(0 0 0 / 0.32); }
+  .entity-thumbnail.is-static:not(.is-list):is(:hover, :focus-visible) :global(.media) { border-color: var(--color-border-subtle, rgb(255 255 255 / 0.08)); box-shadow: var(--shadow-card); transform: none; }
+  .entity-thumbnail.is-image-only { gap: 0; }
+  .entity-thumbnail.is-list { flex-direction: row; gap: 0; inline-size: 100%; min-block-size: 5.25rem; overflow: hidden; border: 1px solid rgb(255 255 255 / 0.08); border-radius: 6px; background: rgb(12 12 13 / 0.92); box-shadow: inset 0 0 0 1px rgb(0 0 0 / 0.5), 0 2px 6px rgb(0 0 0 / 0.32); transition: transform 200ms var(--ease-default, cubic-bezier(0.4, 0, 0.2, 1)), border-color 200ms var(--ease-default, cubic-bezier(0.4, 0, 0.2, 1)), box-shadow 200ms var(--ease-default, cubic-bezier(0.4, 0, 0.2, 1)); }
+  .entity-thumbnail.is-list:is(:hover, :focus-visible) { border-color: var(--color-border-default); box-shadow: var(--shadow-card-hover); transform: translateY(-1px); }
+  .entity-thumbnail.is-list.is-selected { border-color: var(--color-border-default); box-shadow: inset 2px 0 0 var(--entity-accent), var(--shadow-card-hover); }
+  .entity-thumbnail.is-list.is-highlighted { border-color: color-mix(in srgb, var(--entity-accent) 62%, var(--color-border-default)); background: color-mix(in srgb, var(--entity-accent) 10%, rgb(12 12 13 / 0.98)); box-shadow: inset 2px 0 0 var(--entity-accent), var(--shadow-card-hover); }
   .entity-thumbnail.is-list.is-compact { min-block-size: 3.25rem; }
-  @media (prefers-reduced-motion: reduce) { .entity-thumbnail { transition: none; } .entity-thumbnail:is(:hover, :focus-visible) { transform: none; } }
+  @media (prefers-reduced-motion: reduce) { .entity-thumbnail.is-list { transition: none; } .entity-thumbnail:is(:hover, :focus-visible), .entity-thumbnail:not(.is-list):is(:hover, :focus-visible) :global(.media) { transform: none; } }
 </style>

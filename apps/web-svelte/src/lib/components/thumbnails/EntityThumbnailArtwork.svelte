@@ -374,10 +374,10 @@
 </div>
 
 <style>
-  .media { position: relative; z-index: 2; width: 100%; min-height: 0; overflow: hidden; touch-action: pan-x pan-y; border-radius: 5px 5px 0 0; background: radial-gradient(circle at 50% 45%, rgb(255 255 255 / 0.08), transparent 34%), linear-gradient(135deg, rgb(15 16 18 / 0.96), rgb(28 25 20 / 0.92)), #111; }
-  .media.is-list { flex: 0 0 auto; width: clamp(5.5rem, 30%, 7.5rem); border-right: 1px solid rgb(255 255 255 / 0.1); border-radius: 5px 0 0 5px; box-shadow: none; }
+  .media { position: relative; z-index: 2; box-sizing: border-box; width: 100%; min-height: 0; overflow: hidden; touch-action: pan-x pan-y; border: 1px solid var(--color-border-subtle, rgb(255 255 255 / 0.08)); border-radius: var(--radius-sm, 6px); background: radial-gradient(circle at 50% 45%, rgb(255 255 255 / 0.08), transparent 34%), linear-gradient(135deg, rgb(15 16 18 / 0.96), rgb(28 25 20 / 0.92)), #111; box-shadow: var(--shadow-card); transition: transform 200ms var(--ease-default, cubic-bezier(0.4, 0, 0.2, 1)), border-color 200ms var(--ease-default, cubic-bezier(0.4, 0, 0.2, 1)), box-shadow 200ms var(--ease-default, cubic-bezier(0.4, 0, 0.2, 1)); }
+  .media.is-list { flex: 0 0 auto; width: clamp(5.5rem, 30%, 7.5rem); border: 0; border-right: 1px solid rgb(255 255 255 / 0.1); border-radius: 5px 0 0 5px; box-shadow: none; transition: none; }
   .media.is-list.is-compact { width: 3.25rem; }
-  .media.is-image-only { border-radius: 5px; }
+  .media.is-image-only { border-radius: var(--radius-sm, 6px); }
   .media.is-image-loading { background: linear-gradient(110deg, rgb(255 255 255 / 0.035) 8%, rgb(255 255 255 / 0.085) 18%, rgb(255 255 255 / 0.035) 33%), radial-gradient(circle at 50% 45%, rgb(255 255 255 / 0.08), transparent 34%), linear-gradient(135deg, rgb(15 16 18 / 0.96), rgb(28 25 20 / 0.92)), #111; background-size: 220% 100%, auto, auto, auto; }
   .media.has-logo-art { background: radial-gradient(circle at 34% 24%, rgb(255 255 255 / 0.32), transparent 34%), linear-gradient(135deg, rgb(232 221 190 / 0.92) 0%, rgb(150 134 96 / 0.72) 45%, rgb(22 25 29 / 0.94) 100%), #b7aa86; }
   .media img, .placeholder { width: 100%; height: 100%; }
@@ -394,5 +394,5 @@
   .placeholder-glow { position: absolute; inset: 0; pointer-events: none; background: radial-gradient(circle at top, rgb(245 239 213 / 0.16), transparent 38%), linear-gradient(180deg, rgb(7 8 11 / 0.06) 0%, rgb(7 8 11 / 0.55) 100%); }
   .placeholder { position: relative; display: flex; width: 100%; height: 100%; align-items: center; justify-content: center; }
   @keyframes thumbnail-skeleton-shimmer { from { background-position: 180% 0, 0 0; } to { background-position: -80% 0, 0 0; } }
-  @media (prefers-reduced-motion: reduce) { .image-loading-skeleton { animation: none; } }
+  @media (prefers-reduced-motion: reduce) { .media { transition: none; } .image-loading-skeleton { animation: none; } }
 </style>

@@ -208,13 +208,13 @@ describe("EntityGrid pagination", () => {
       },
     });
 
-    expect(container.querySelector(".glass-info")).not.toBeNull();
+    expect(container.querySelector(".thumbnail-caption")).not.toBeNull();
 
     await fireEvent.click(screen.getByRole("button", { name: "Media wall" }));
 
     await waitFor(() => {
       expect(container.querySelector(".cards")?.classList.contains("is-media-wall")).toBe(true);
-      expect(container.querySelector(".glass-info")).toBeNull();
+      expect(container.querySelector(".thumbnail-caption")).toBeNull();
     });
   });
 
@@ -230,7 +230,7 @@ describe("EntityGrid pagination", () => {
 
     await waitFor(() => {
       expect(container.querySelector(".cards")?.classList.contains("is-media-wall")).toBe(true);
-      expect(container.querySelector(".glass-info")).toBeNull();
+      expect(container.querySelector(".thumbnail-caption")).toBeNull();
     });
   });
 
@@ -277,7 +277,7 @@ describe("EntityGrid pagination", () => {
 
     await waitFor(() => {
       expect(container.querySelector(".cards")?.classList.contains("is-media-wall")).toBe(false);
-      expect(container.querySelector(".glass-info")).not.toBeNull();
+      expect(container.querySelector(".thumbnail-caption")).not.toBeNull();
     });
   });
 

@@ -503,7 +503,7 @@ describe("EntityThumbnail", () => {
     expect(container.querySelector(".sprite-overlay")).toBeNull();
   });
 
-  it("renders card titles as wrapping static text", () => {
+  it("renders a native-style caption below the artwork surface", () => {
     const { container } = render(EntityThumbnail, {
       props: {
         card: personCard(),
@@ -511,6 +511,7 @@ describe("EntityThumbnail", () => {
     });
 
     expect(container.querySelector("h3")?.textContent).toContain("Tim Robinson");
+    expect(container.querySelector(".media")?.nextElementSibling).toHaveClass("thumbnail-caption");
     expect(container.querySelector(".ticker-shell")).toBeNull();
     expect(container.querySelector(".ticker-title")).toBeNull();
   });
@@ -539,7 +540,7 @@ describe("EntityThumbnail", () => {
       },
     });
 
-    expect(container.querySelector(".glass-info")).not.toBeNull();
+    expect(container.querySelector(".thumbnail-caption")).not.toBeNull();
     expect(container.querySelector(".chips")?.textContent).toContain("Page 12");
   });
 
