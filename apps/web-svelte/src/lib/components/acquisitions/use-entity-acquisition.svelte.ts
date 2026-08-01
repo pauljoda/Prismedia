@@ -47,8 +47,8 @@ export interface UseEntityAcquisitionOptions {
  * card lives in, which the card itself could never drive from inside a lazily-mounted tab panel.
  */
 export interface EntityAcquisition {
-  /** The entity's latest acquisition; writable because AcquisitionPanel binds its detail back up. */
-  acquisition: AcquisitionDetail | null;
+  /** The entity's latest acquisition, owned by this controller. */
+  readonly acquisition: AcquisitionDetail | null;
   readonly monitor: MonitorView | null;
   readonly monitorActive: boolean;
   /** Durable server-side cleanup is in progress; it may only retry stop, never resume. */
@@ -83,6 +83,8 @@ export interface EntityAcquisition {
   refresh(): Promise<void>;
   /** Immediately forgets an acquisition that the server deleted, unmounting every stale-id surface. */
   clearAcquisition(): void;
+  /** Commits acquisition detail emitted by a child management surface. */
+  setAcquisition(value: AcquisitionDetail | null): void;
   toggleMonitor(targeting?: EntityMonitorTargeting): Promise<void>;
   /** Persists new acquisition choices on an already-active monitor and schedules a fresh pass. */
   updateMonitorTargeting(targeting: EntityMonitorTargeting): Promise<void>;
@@ -386,9 +388,6 @@ export function useEntityAcquisition(options: UseEntityAcquisitionOptions): Enti
     get acquisition() {
       return acquisition;
     },
-    set acquisition(value: AcquisitionDetail | null) {
-      acquisition = value;
-    },
     get monitor() {
       return monitor;
     },
@@ -452,6 +451,9 @@ export function useEntityAcquisition(options: UseEntityAcquisitionOptions): Enti
     refresh: () => refresh(),
     clearAcquisition: () => {
       acquisition = null;
+    },
+    setAcquisition: (value) => {
+      acquisition = value;
     },
     toggleMonitor,
     updateMonitorTargeting,

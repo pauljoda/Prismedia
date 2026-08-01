@@ -3,7 +3,9 @@
   import { CalendarClock, CloudDownload, FileText, History, Loader2, PencilLine, RefreshCw, RotateCcw, Search, SearchX, Upload, X } from "@lucide/svelte";
   import { Badge, Button, SearchInput } from "@prismedia/ui-svelte";
   import { goto } from "$app/navigation";
+  import { resolve } from "$app/paths";
   import { page } from "$app/state";
+  import type { PathnameWithSearchOrHash } from "$app/types";
   import AcquisitionHistoryList from "$lib/components/acquisitions/AcquisitionHistoryList.svelte";
   import ConfirmDialog from "$lib/components/entities/ConfirmDialog.svelte";
   import PieceStateBar from "$lib/components/acquisitions/PieceStateBar.svelte";
@@ -47,14 +49,17 @@
    */
   let {
     acquisitionId,
-    detail = $bindable(null),
+    detail = null,
+    onDetailChange,
     onCancelled,
     onImported,
     onReset,
   }: {
     acquisitionId: string;
-    /** The loaded acquisition, bound up so a host page can drive its own hero/badges from it. */
+    /** The latest acquisition state supplied by the owning page controller. */
     detail?: AcquisitionDetail | null;
+    /** Publishes panel loads and mutations without mutating the owner's state through a bound prop. */
+    onDetailChange?: (detail: AcquisitionDetail | null) => void;
     /**
      * Called after a successful cancel. A wanted entity's page must navigate away here — cancelling
      * a request deletes its wanted placeholder, so the page it sat on no longer exists.
@@ -135,7 +140,13 @@
   let pollFailures = 0;
   /** Guards the owner refresh when a late interval tick or manual load observes Imported again. */
   let importedNotificationSent = false;
-  let lastObservedStatus: AcquisitionDetail["summary"]["status"] | null = detail?.summary.status ?? null;
+  let statusObservationInitialized = false;
+  let lastObservedStatus: AcquisitionDetail["summary"]["status"] | null = null;
+
+  function commitDetail(nextDetail: AcquisitionDetail | null) {
+    detail = nextDetail;
+    onDetailChange?.(nextDetail);
+  }
 
   async function notifyOwnerWhenImported(
     previousStatus: AcquisitionDetail["summary"]["status"] | null,
@@ -147,11 +158,16 @@
     await onImported?.();
   }
 
-  // `detail` is bindable: either this panel's 3-second poll or the owning Entity's shared poll can
-  // advance it. Observe the bound value itself so an external Importing/Downloaded → Imported update
+  // Either this panel's 3-second poll or the owning Entity's shared poll can advance `detail`.
+  // Observe the prop value itself so an external Importing/Downloaded → Imported update
   // cannot bypass the in-place page refresh.
   $effect(() => {
     const nextStatus = detail?.summary.status ?? null;
+    if (!statusObservationInitialized) {
+      statusObservationInitialized = true;
+      lastObservedStatus = nextStatus;
+      return;
+    }
     const previousStatus = lastObservedStatus;
     lastObservedStatus = nextStatus;
     if (nextStatus) void notifyOwnerWhenImported(previousStatus, nextStatus);
@@ -168,7 +184,7 @@
     loading = true;
     try {
       const nextDetail = await fetchAcquisition(acquisitionId);
-      detail = nextDetail;
+      commitDetail(nextDetail);
       // Pull the status-appropriate detail.
       if (isDownloading) {
         transfer = await fetchAcquisitionTransfer(acquisitionId);
@@ -179,7 +195,7 @@
         files = await fetchAcquisitionFiles(acquisitionId);
       }
       pollFailures = 0;
-      error = null;
+      if (!background) error = null;
     } catch (err) {
       if (background) {
         pollFailures += 1;
@@ -205,72 +221,80 @@
   }
 
   async function queue(candidate: ReleaseCandidateView) {
-    if (busy) return;
-    busy = true;
-    try {
-      detail = await queueAcquisitionCandidate(acquisitionId, candidate.id);
-    } catch (err) {
-      error = err instanceof Error ? err.message : "Failed to queue release";
-    } finally {
-      busy = false;
-    }
+    await runDetailAction(
+      () => queueAcquisitionCandidate(acquisitionId, candidate.id),
+      "Failed to queue release",
+      { refreshOnFailure: true },
+    );
   }
 
   async function blocklist(candidate: ReleaseCandidateView) {
-    if (busy) return;
-    busy = true;
-    try {
-      detail = await blocklistAcquisitionCandidate(acquisitionId, candidate.id);
-    } catch (err) {
-      error = err instanceof Error ? err.message : "Failed to blocklist release";
-    } finally {
-      busy = false;
-    }
+    await runDetailAction(
+      () => blocklistAcquisitionCandidate(acquisitionId, candidate.id),
+      "Failed to blocklist release",
+    );
   }
 
   async function cancel() {
-    if (busy) return;
-    busy = true;
-    try {
-      detail = await cancelAcquisition(acquisitionId);
-      onCancelled?.();
-    } catch (err) {
-      error = err instanceof Error ? err.message : "Failed to cancel";
-    } finally {
-      busy = false;
-    }
+    await runDetailAction(
+      () => cancelAcquisition(acquisitionId),
+      "Failed to cancel",
+      { afterSuccess: onCancelled },
+    );
   }
 
   // Re-run the release search on demand (manual counterpart to monitoring).
   async function reSearch(query?: string) {
-    if (busy) return;
-    busy = true;
-    try {
-      detail = await reSearchAcquisition(acquisitionId, query);
-    } catch (err) {
-      error = err instanceof Error ? err.message : "Failed to re-search";
-    } finally {
-      busy = false;
-    }
+    await runDetailAction(
+      () => reSearchAcquisition(acquisitionId, query),
+      "Failed to re-search",
+    );
   }
 
   function openDateEditor() {
     const target = new URL(page.url);
     target.searchParams.set(EDIT_QUERY_KEY, METADATA_PATCH_FIELD.dates);
     target.hash = "entity-dates-editor";
-    void goto(`${target.pathname}${target.search}${target.hash}`);
+    const targetPath = `${target.pathname}${target.search}${target.hash}` as PathnameWithSearchOrHash;
+    // Every member of PathnameWithSearchOrHash is a valid one-argument resolve call. Adapt the
+    // generated generic overload so TypeScript accepts the runtime union of current route paths.
+    void goto((resolve as (path: PathnameWithSearchOrHash) => string)(targetPath));
   }
 
   // Re-run a held import. A manual hold carries explicit format-change consent; a failed durable
   // checkpoint simply resumes its already-persisted plan without broadening that consent.
   async function retryImport(allowFormatChange: boolean) {
+    await runDetailAction(
+      () => retryAcquisitionImport(acquisitionId, allowFormatChange),
+      "Failed to import",
+      {
+        // Bridge-poll so the importing → imported transition lands without a refresh.
+        afterSuccess: () => {
+          bridgePolls = 8;
+        },
+      },
+    );
+  }
+
+  async function runDetailAction(
+    action: () => Promise<AcquisitionDetail>,
+    fallbackError: string,
+    options: {
+      afterSuccess?: () => void | Promise<void>;
+      refreshOnFailure?: boolean;
+    } = {},
+  ) {
     if (busy) return;
     busy = true;
+    error = null;
     try {
-      detail = await retryAcquisitionImport(acquisitionId, allowFormatChange);
-      bridgePolls = 8; // bridge-poll so the importing → imported transition lands without a refresh
+      commitDetail(await action());
+      await options.afterSuccess?.();
     } catch (err) {
-      error = err instanceof Error ? err.message : "Failed to import";
+      error = err instanceof Error ? err.message : fallbackError;
+      // A failed remote-client handoff can still change durable server state. Re-read it while
+      // retaining the actionable error instead of leaving a stale card or flashing the error away.
+      if (options.refreshOnFailure) await load(true);
     } finally {
       busy = false;
     }
@@ -279,9 +303,10 @@
   async function startOver() {
     if (busy) return;
     busy = true;
+    error = null;
     try {
       await deleteAcquisition(acquisitionId);
-      detail = null;
+      commitDetail(null);
       await onReset?.();
     } catch (err) {
       error = err instanceof Error ? err.message : "Failed to start acquisition over";
@@ -295,15 +320,11 @@
     const input = event.currentTarget as HTMLInputElement;
     const file = input.files?.[0];
     if (!file || busy) return;
-    busy = true;
-    try {
-      detail = await uploadManualTorrent(acquisitionId, file);
-    } catch (err) {
-      error = err instanceof Error ? err.message : "Failed to upload torrent";
-    } finally {
-      busy = false;
-      input.value = "";
-    }
+    await runDetailAction(
+      () => uploadManualTorrent(acquisitionId, file),
+      "Failed to upload torrent",
+    );
+    input.value = "";
   }
 
   // Waiting-for-release renders its own explicit Manual search action. The toolbar action remains for
@@ -346,7 +367,7 @@
 </script>
 
 {#if error}
-  <div class="surface-panel border-l-2 border-error px-4 py-2.5 text-sm text-error-text">{error}</div>
+  <div role="alert" class="surface-panel border-l-2 border-error px-4 py-2.5 text-sm text-error-text">{error}</div>
 {/if}
 
 {#if !detail}

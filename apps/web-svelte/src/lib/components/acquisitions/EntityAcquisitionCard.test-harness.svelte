@@ -41,9 +41,6 @@
     get acquisition() {
       return acquisition;
     },
-    set acquisition(value) {
-      acquisition = value;
-    },
     get monitor() {
       return monitorStopping || monitorDeletingFiles || monitorUnknownStatus ? ({} as never) : null;
     },
@@ -82,6 +79,9 @@
     missingResult: null,
     clearAcquisition() {
       acquisition = null;
+    },
+    setAcquisition(value) {
+      acquisition = value;
     },
     refresh: () => refresh(),
     async toggleMonitor() {

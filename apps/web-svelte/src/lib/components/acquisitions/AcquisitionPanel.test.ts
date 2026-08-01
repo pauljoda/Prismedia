@@ -2,9 +2,10 @@ import { cleanup, fireEvent, render, waitFor, within } from "@testing-library/sv
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   ACQUISITION_STATUS,
+  DOWNLOAD_PROTOCOL,
   ENTITY_KIND,
 } from "$lib/api/generated/codes";
-import type { AcquisitionDetail } from "$lib/api/generated/model";
+import type { AcquisitionDetail, ReleaseCandidateView } from "$lib/api/generated/model";
 import AcquisitionPanel from "./AcquisitionPanel.svelte";
 
 const mocks = vi.hoisted(() => ({
@@ -13,11 +14,13 @@ const mocks = vi.hoisted(() => ({
   fetchAcquisitionHistory: vi.fn(),
   retryAcquisitionImport: vi.fn(),
   reSearchAcquisition: vi.fn(),
+  queueAcquisitionCandidate: vi.fn(),
   deleteAcquisition: vi.fn(),
   goto: vi.fn(),
 }));
 
 vi.mock("$app/navigation", () => ({ goto: mocks.goto }));
+vi.mock("$app/paths", () => ({ resolve: (path: string) => path }));
 
 vi.mock("$lib/api/acquisitions", () => ({
   blocklistAcquisitionCandidate: vi.fn(),
@@ -27,7 +30,7 @@ vi.mock("$lib/api/acquisitions", () => ({
   fetchAcquisitionFiles: mocks.fetchAcquisitionFiles,
   fetchAcquisitionHistory: mocks.fetchAcquisitionHistory,
   fetchAcquisitionTransfer: vi.fn(),
-  queueAcquisitionCandidate: vi.fn(),
+  queueAcquisitionCandidate: mocks.queueAcquisitionCandidate,
   reSearchAcquisition: mocks.reSearchAcquisition,
   retryAcquisitionImport: mocks.retryAcquisitionImport,
   uploadManualTorrent: vi.fn(),
@@ -271,6 +274,31 @@ describe("AcquisitionPanel", () => {
     expect(mocks.reSearchAcquisition).toHaveBeenCalledWith("acquisition-1", "director cut remux");
   });
 
+  it("keeps a queue failure visible after refreshing the durable server state", async () => {
+    const cancelled = acquisition(ACQUISITION_STATUS.cancelled);
+    cancelled.candidates = [candidate()];
+    mocks.fetchAcquisition.mockResolvedValue(cancelled);
+    mocks.queueAcquisitionCandidate.mockRejectedValue(
+      new Error("SABnzbd could not be reached at localhost:8090"),
+    );
+
+    const view = render(AcquisitionPanel, {
+      acquisitionId: "acquisition-1",
+      detail: cancelled,
+    });
+
+    await waitFor(() => expect(mocks.fetchAcquisition).toHaveBeenCalledOnce());
+    await fireEvent.click(view.getAllByRole("button", { name: "Download" })[0]);
+
+    expect(await view.findByRole("alert")).toHaveTextContent(
+      "SABnzbd could not be reached at localhost:8090",
+    );
+    await waitFor(() => expect(mocks.fetchAcquisition).toHaveBeenCalledTimes(2));
+    expect(view.getByRole("alert")).toHaveTextContent(
+      "SABnzbd could not be reached at localhost:8090",
+    );
+  });
+
 });
 
 function acquisition(
@@ -295,5 +323,22 @@ function acquisition(
       hasResumableImport,
     },
     candidates: [],
+  };
+}
+
+function candidate(): ReleaseCandidateView {
+  return {
+    id: "release-1",
+    indexerName: "Prowlarr",
+    title: "Avatar: The Last Airbender",
+    sizeBytes: 2_500_000_000,
+    seeders: 4,
+    peers: 2,
+    protocol: DOWNLOAD_PROTOCOL.usenet,
+    accepted: true,
+    score: 100,
+    rejections: [],
+    infoUrl: null,
+    publishedAt: null,
   };
 }

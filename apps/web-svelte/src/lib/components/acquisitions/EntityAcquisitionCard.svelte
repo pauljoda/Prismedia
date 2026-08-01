@@ -197,7 +197,7 @@
           canReplace={hasOwnedContent && replaceableKind}
           canUpload={Boolean(acq.acquisition) || (hasOwnedContent && replaceableKind)}
           onStarted={async (detail) => {
-            acq.acquisition = detail;
+            acq.setAcquisition(detail);
             await acq.refresh();
           }}
         />
@@ -225,7 +225,8 @@
               {#key acq.acquisition.summary.id}
                 <AcquisitionPanel
                   acquisitionId={acq.acquisition.summary.id}
-                  bind:detail={acq.acquisition}
+                  detail={acq.acquisition}
+                  onDetailChange={acq.setAcquisition}
                   {onCancelled}
                   {onImported}
                   onReset={acq.refresh}
@@ -237,7 +238,8 @@
             {#key acq.acquisition.summary.id}
               <AcquisitionPanel
                 acquisitionId={acq.acquisition.summary.id}
-                bind:detail={acq.acquisition}
+                detail={acq.acquisition}
+                onDetailChange={acq.setAcquisition}
                 {onCancelled}
                 {onImported}
                 onReset={acq.refresh}
