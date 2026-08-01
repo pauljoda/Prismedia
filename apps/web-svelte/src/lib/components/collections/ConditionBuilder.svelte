@@ -22,7 +22,7 @@
     type CollectionRuleFieldDef,
     type CollectionRuleGroup,
   } from "$lib/collections/models";
-  import { shortDisplayNameForEntityKind } from "$lib/entities/entity-codes";
+  import { displayNameForEntityKind } from "$lib/entities/entity-codes";
   import { entityKindIcon } from "$lib/entities/entity-kind-icons";
 
   interface CollectionRuleSelectOption {
@@ -42,7 +42,7 @@
   const entityKinds: { value: CollectionEntityType; label: string; icon: Component }[] =
     COLLECTION_ENTITY_TYPES.map((value) => ({
       value,
-      label: shortDisplayNameForEntityKind(value),
+      label: displayNameForEntityKind(value),
       icon: entityKindIcon(value),
     }));
 
