@@ -24,10 +24,10 @@ public sealed record OrganizePlanItem(
     Guid EntityId,
     EntityKind Kind,
     string Title,
-    string StorageShape,
+    EntityStorageShape StorageShape,
     string SourcePath,
     string TargetPath,
-    string Status,
+    OrganizeItemStatus Status,
     string? Reason);
 
 /// <summary>

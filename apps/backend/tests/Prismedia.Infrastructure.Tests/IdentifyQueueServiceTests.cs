@@ -104,7 +104,7 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
         Assert.Equal(entityId, item.EntityId);
         Assert.Equal(EntityKind.VideoSeries, item.EntityKind);
         Assert.Equal("Mystery Show", item.Title);
-        Assert.Equal("search", item.State);
+        Assert.Equal(IdentifyQueueState.Search, item.State);
         Assert.Null(item.Provider);
         Assert.Empty(item.Candidates);
         Assert.Null(item.Proposal);
@@ -142,7 +142,7 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
 
         var item = await SearchToCompletionAsync(service, db, entityId, new IdentifyQueueSearchRequest("tmdb", new IdentifyQuery("Ambiguous", null, null)), hideNsfw: false, CancellationToken.None);
 
-        Assert.Equal("search", item.State);
+        Assert.Equal(IdentifyQueueState.Search, item.State);
         Assert.Equal("tmdb", item.Provider);
         Assert.Null(item.Proposal);
         var candidate = Assert.Single(item.Candidates);
@@ -184,7 +184,7 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
 
         var item = await SearchToCompletionAsync(service, db, entityId, new IdentifyQueueSearchRequest("tmdb", new IdentifyQuery(null, null, new Dictionary<string, string> { ["tmdb"] = "123" })), hideNsfw: false, CancellationToken.None);
 
-        Assert.Equal("proposal", item.State);
+        Assert.Equal(IdentifyQueueState.Proposal, item.State);
         Assert.Equal("tmdb", item.Provider);
         Assert.Empty(item.Candidates);
         Assert.NotNull(item.Proposal);
@@ -226,9 +226,9 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
             hideNsfw: false,
             CancellationToken.None);
 
-        Assert.Equal("proposal", item.State);
+        Assert.Equal(IdentifyQueueState.Proposal, item.State);
         Assert.Equal("tmdb", item.Provider);
-        Assert.Equal("lookup-id", item.Action);
+        Assert.Equal(IdentifyAction.LookupId, item.Action);
         Assert.Empty(item.Candidates);
         Assert.NotNull(item.Proposal);
         Assert.Equal("Auto-resolved title", item.Proposal!.Patch.Title);
@@ -274,7 +274,7 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
             "Search:Video:False:False",
             "LookupId:Video:False:False"
         ], executor.Requests.Select(request => $"{request.Action}:{request.Entity.Kind}:{request.IncludeRelationshipDetails}:{request.IncludeStructuralChildren}").ToArray());
-        Assert.Equal("proposal", item.State);
+        Assert.Equal(IdentifyQueueState.Proposal, item.State);
         Assert.NotNull(item.Proposal);
         var baseActor = Assert.Single(item.Proposal!.Relationships ?? []);
         Assert.Equal("Actor Shell", baseActor.Patch.Title);
@@ -343,7 +343,7 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
             new ApplyIdentifyQueueItemRequest(item.Proposal, ["title"], null),
             CancellationToken.None);
 
-        Assert.Equal("done", applied.State);
+        Assert.Equal(IdentifyQueueState.Done, applied.State);
         Assert.Equal("Cast Heavy Movie identified", (await db.Entities.SingleAsync(row => row.Id == entityId)).Title);
     }
 
@@ -609,7 +609,7 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
 
         var queued = await service.ApplyAsync(entityId, request, CancellationToken.None);
 
-        Assert.Equal(IdentifyQueueState.Applying.ToCode(), queued.State);
+        Assert.Equal(IdentifyQueueState.Applying, queued.State);
         Assert.Equal("Old Title", (await db.Entities.AsNoTracking().SingleAsync(entity => entity.Id == entityId)).Title);
         var applyNode = await db.JobRuns.AsNoTracking()
             .SingleAsync(job => job.GraphId == row.JobGraphId && job.Type == JobType.IdentifyApply);
@@ -626,7 +626,7 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
             CancellationToken.None);
 
         var completed = await service.GetAsync(entityId, CancellationToken.None);
-        Assert.Equal(IdentifyQueueState.Done.ToCode(), completed!.State);
+        Assert.Equal(IdentifyQueueState.Done, completed!.State);
         Assert.Equal(proposal.Patch.Title, (await db.Entities.AsNoTracking().SingleAsync(entity => entity.Id == entityId)).Title);
         Assert.Contains(await db.JobRuns.AsNoTracking().Where(job => job.GraphId == row.JobGraphId).ToArrayAsync(),
             job => job.Type == JobType.ReconcileEntity);
@@ -850,7 +850,7 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
             hideNsfw: false,
             CancellationToken.None);
 
-        Assert.Equal("search", item.State);
+        Assert.Equal(IdentifyQueueState.Search, item.State);
         Assert.Null(item.Proposal);
         var candidate = Assert.Single(item.Candidates);
         Assert.Equal("Known Movie identified", candidate.Title);
@@ -885,7 +885,7 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
             hideNsfw: false,
             CancellationToken.None);
 
-        Assert.Equal("search", item.State);
+        Assert.Equal(IdentifyQueueState.Search, item.State);
         Assert.Null(item.Proposal);
         var candidate = Assert.Single(item.Candidates);
         Assert.Equal("Ambiguous Movie (2005)", candidate.Title);
@@ -918,7 +918,7 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
             hideNsfw: false,
             CancellationToken.None);
 
-        Assert.Equal("search", item.State);
+        Assert.Equal(IdentifyQueueState.Search, item.State);
         Assert.Null(item.Proposal);
         var candidate = Assert.Single(item.Candidates);
         Assert.Equal("Ambiguous Movie (2005)", candidate.Title);
@@ -952,7 +952,7 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
             hideNsfw: false,
             CancellationToken.None);
 
-        Assert.Equal("search", item.State);
+        Assert.Equal(IdentifyQueueState.Search, item.State);
         Assert.Null(item.Proposal);
         var candidate = Assert.Single(item.Candidates);
         Assert.Equal("Direct candidate", candidate.Title);
@@ -991,7 +991,7 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
             hideNsfw: false,
             CancellationToken.None);
 
-        Assert.Equal("proposal", item.State);
+        Assert.Equal(IdentifyQueueState.Proposal, item.State);
         Assert.NotNull(item.Proposal);
         Assert.Equal(episodeId, item.Proposal.TargetEntityId);
         Assert.Equal("Known Episode from parent catalog", item.Proposal.Patch.Title);
@@ -1031,7 +1031,7 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
                 null),
             CancellationToken.None);
 
-        Assert.Equal("done", applied.State);
+        Assert.Equal(IdentifyQueueState.Done, applied.State);
         Assert.NotNull(applied.CompletedAt);
         Assert.Equal("Reviewed Title", (await db.Entities.SingleAsync(row => row.Id == entityId)).Title);
         Assert.Empty(await service.ListAsync(includeCompleted: false, hideNsfw: false, CancellationToken.None));
@@ -1183,7 +1183,7 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
                 seriesId,
                 new ApplyIdentifyQueueItemRequest(proposal, ["title"], null, progressId),
                 CancellationToken.None);
-            Assert.Equal("done", result.State);
+            Assert.Equal(IdentifyQueueState.Done, result.State);
             var appliedChildren = Assert.IsType<EntityMetadataProposal>(result.Proposal).Children;
             Assert.Equal(
                 [eligibleSeasonId],
@@ -1460,7 +1460,7 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
         var item = await service.RequestSearchAsync(
             entityId, new IdentifyQueueSearchRequest("tmdb", null), hideNsfw: false, CancellationToken.None);
 
-        Assert.Equal("queued", item.State);
+        Assert.Equal(IdentifyQueueState.Queued, item.State);
         Assert.Equal("tmdb", item.Provider);
         var job = Assert.Single(queue.Enqueued);
         Assert.Equal(JobType.IdentifySearch, job.Type);
@@ -1673,7 +1673,7 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
             new IdentifySearchPayload(entityId, null, null, false), searchJobId, isFinalAttempt: true, CancellationToken.None);
 
         var item = (await service.GetAsync(entityId, CancellationToken.None))!;
-        Assert.Equal("proposal", item.State);
+        Assert.Equal(IdentifyQueueState.Proposal, item.State);
         Assert.Equal("tmdb", item.Provider);
         var row = await db.IdentifyQueueItems.AsNoTracking().SingleAsync();
         Assert.Null(row.SearchJobId);
@@ -1750,7 +1750,7 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
 
         var item = await service.DeleteAsync(entityId, CancellationToken.None);
 
-        Assert.Equal("deleted", item!.State);
+        Assert.Equal(IdentifyQueueState.Deleted, item!.State);
         Assert.Empty(queue.Pending);
         var row = await db.IdentifyQueueItems.AsNoTracking().SingleAsync();
         Assert.Null(row.SearchJobId);
@@ -1775,7 +1775,7 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
 
         var item = await service.GetAsync(entityId, CancellationToken.None);
 
-        Assert.Equal("error", item!.State);
+        Assert.Equal(IdentifyQueueState.Error, item!.State);
         Assert.Contains("no longer running", item.Error);
         var row = await db.IdentifyQueueItems.AsNoTracking().SingleAsync();
         Assert.Equal(IdentifyQueueState.Error, row.State);
@@ -1800,7 +1800,7 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
 
         var item = await service.GetAsync(entityId, CancellationToken.None);
 
-        Assert.Equal(IdentifyQueueState.Error.ToCode(), item!.State);
+        Assert.Equal(IdentifyQueueState.Error, item!.State);
         Assert.Contains("no longer running", item.Error);
         Assert.Equal(IdentifyQueueState.Error,
             (await db.IdentifyQueueItems.AsNoTracking().SingleAsync()).State);

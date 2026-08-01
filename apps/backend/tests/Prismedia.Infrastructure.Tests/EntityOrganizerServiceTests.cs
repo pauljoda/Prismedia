@@ -35,14 +35,14 @@ public sealed class EntityOrganizerServiceTests {
         var plan = await service.PlanAsync(new OrganizePlanRequest(null, null), CancellationToken.None);
 
         var series = Assert.Single(plan.Items, item => item.EntityId == seriesId);
-        Assert.Equal("folder", series.StorageShape);
+        Assert.Equal(EntityStorageShape.Folder, series.StorageShape);
         Assert.Equal(Path.Combine(rootPath, "The Chair Company"), series.TargetPath);
 
         var season = Assert.Single(plan.Items, item => item.EntityId == seasonId);
         Assert.Equal(Path.Combine(rootPath, "The Chair Company", "Season 1"), season.TargetPath);
 
         var video = Assert.Single(plan.Items, item => item.EntityId == videoId);
-        Assert.Equal("file", video.StorageShape);
+        Assert.Equal(EntityStorageShape.File, video.StorageShape);
         Assert.Equal(Path.Combine(rootPath, "The Chair Company", "Season 1", "Episode One.mkv"), video.TargetPath);
     }
 
@@ -62,8 +62,8 @@ public sealed class EntityOrganizerServiceTests {
         var plan = await service.PlanAsync(new OrganizePlanRequest(pageId, null), CancellationToken.None);
 
         var item = Assert.Single(plan.Items);
-        Assert.Equal("archive-entry", item.StorageShape);
-        Assert.Equal("skipped", item.Status);
+        Assert.Equal(EntityStorageShape.ArchiveEntry, item.StorageShape);
+        Assert.Equal(OrganizeItemStatus.Skipped, item.Status);
         Assert.Equal("Archive entries are not moved independently.", item.Reason);
     }
 
@@ -86,7 +86,7 @@ public sealed class EntityOrganizerServiceTests {
             var result = await service.ApplyAsync(new OrganizePlanRequest(videoId, null), CancellationToken.None);
 
             var item = Assert.Single(result.Items);
-            Assert.Equal("applied", item.Status);
+            Assert.Equal(OrganizeItemStatus.Applied, item.Status);
             Assert.Equal(1, result.Applied);
             Assert.False(File.Exists(sourcePath));
             Assert.True(File.Exists(Path.Combine(tempRoot.FullName, "Good Name.mkv")));
@@ -123,7 +123,7 @@ public sealed class EntityOrganizerServiceTests {
                 CancellationToken.None);
 
             var item = Assert.Single(result.Items);
-            Assert.Equal("ready", item.Status);
+            Assert.Equal(OrganizeItemStatus.Ready, item.Status);
             Assert.Equal(targetPath, item.TargetPath);
             Assert.True(File.Exists(sourcePath));
         } finally {
@@ -186,7 +186,7 @@ public sealed class EntityOrganizerServiceTests {
                 CancellationToken.None);
 
             var item = Assert.Single(result.Items);
-            Assert.Equal("failed", item.Status);
+            Assert.Equal(OrganizeItemStatus.Failed, item.Status);
             Assert.True(File.Exists(sourcePath));
             Assert.False(File.Exists(Path.Combine(tempRoot.FullName, "Good Name.mkv")));
             Assert.Equal(0, result.Applied);

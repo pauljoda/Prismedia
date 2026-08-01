@@ -10,7 +10,7 @@ namespace Prismedia.Contracts.Plugins;
 /// <param name="EntityKind">Entity kind code for provider filtering and UI grouping.</param>
 /// <param name="Title">Current entity title.</param>
 /// <param name="IsNsfw">Whether the queued entity is flagged as NSFW.</param>
-/// <param name="State">Queue state code: queued, searching, search (candidates ready), proposal, done, deleted, or error.</param>
+/// <param name="State">Queue state.</param>
 /// <param name="Provider">Provider code used by the latest search, when selected.</param>
 /// <param name="Action">Provider action used by the latest search.</param>
 /// <param name="Query">Latest user/provider query used for the search.</param>
@@ -29,9 +29,9 @@ public sealed record IdentifyQueueItem(
     EntityKind EntityKind,
     string Title,
     bool IsNsfw,
-    string State,
+    IdentifyQueueState State,
     string? Provider,
-    string Action,
+    IdentifyAction Action,
     IdentifyQuery? Query,
     IReadOnlyList<EntitySearchCandidate> Candidates,
     EntityMetadataProposal? Proposal,
@@ -47,7 +47,7 @@ public sealed record IdentifyQueueItem(
 /// </summary>
 /// <param name="Id">Client-supplied operation identifier.</param>
 /// <param name="EntityId">Root entity whose proposal is being applied.</param>
-/// <param name="State">Progress state code: running, succeeded, or failed.</param>
+/// <param name="State">Progress state.</param>
 /// <param name="CurrentIndex">One-based index for the entity currently being applied.</param>
 /// <param name="Total">Estimated number of entity-level apply steps.</param>
 /// <param name="CurrentKind">Entity kind currently being applied, when work has started.</param>
@@ -58,7 +58,7 @@ public sealed record IdentifyQueueItem(
 public sealed record IdentifyApplyProgress(
     Guid Id,
     Guid EntityId,
-    string State,
+    IdentifyApplyState State,
     int CurrentIndex,
     int Total,
     EntityKind? CurrentKind,

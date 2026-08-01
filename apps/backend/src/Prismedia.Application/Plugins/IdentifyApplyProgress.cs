@@ -99,7 +99,7 @@ public sealed class InMemoryIdentifyApplyProgressStore : IIdentifyApplyProgressS
         var snapshot = new IdentifyApplyProgress(
             operationId,
             entityId,
-            IdentifyApplyState.Running.ToCode(),
+            IdentifyApplyState.Running,
             0,
             Math.Max(total, 1),
             null,
@@ -118,7 +118,7 @@ public sealed class InMemoryIdentifyApplyProgressStore : IIdentifyApplyProgressS
             _ => new IdentifyApplyProgress(
                 operationId,
                 Guid.Empty,
-                IdentifyApplyState.Running.ToCode(),
+                IdentifyApplyState.Running,
                 1,
                 1,
                 step.Kind,
@@ -127,7 +127,7 @@ public sealed class InMemoryIdentifyApplyProgressStore : IIdentifyApplyProgressS
                 null,
                 DateTimeOffset.UtcNow),
             (_, current) => current with {
-                State = IdentifyApplyState.Running.ToCode(),
+                State = IdentifyApplyState.Running,
                 CurrentIndex = Math.Min(current.CurrentIndex + 1, current.Total),
                 CurrentKind = step.Kind,
                 CurrentTitle = step.Title,
@@ -166,7 +166,7 @@ public sealed class InMemoryIdentifyApplyProgressStore : IIdentifyApplyProgressS
             _ => new IdentifyApplyProgress(
                 operationId,
                 Guid.Empty,
-                state.ToCode(),
+                state,
                 1,
                 1,
                 null,
@@ -175,7 +175,7 @@ public sealed class InMemoryIdentifyApplyProgressStore : IIdentifyApplyProgressS
                 error,
                 DateTimeOffset.UtcNow),
             (_, current) => current with {
-                State = state.ToCode(),
+                State = state,
                 CurrentIndex = state == IdentifyApplyState.Succeeded ? current.Total : current.CurrentIndex,
                 Error = error,
                 UpdatedAt = DateTimeOffset.UtcNow

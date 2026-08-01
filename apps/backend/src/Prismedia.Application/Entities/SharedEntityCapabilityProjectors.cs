@@ -126,7 +126,7 @@ internal sealed class FilesCapabilityProjector : EntityCapabilityProjector<Files
     public override FilesCapability? Project(EntityCapabilityProjectionContext context) =>
         context.Entity.EntityFiles.Count > 0
             ? new FilesCapability(context.Entity.EntityFiles
-                .Select(file => new ContractEntityFile(file.Role.ToCode(), file.Path, file.MimeType))
+                .Select(file => new ContractEntityFile(file.Role, file.Path, file.MimeType))
                 .ToArray())
             : null;
 }

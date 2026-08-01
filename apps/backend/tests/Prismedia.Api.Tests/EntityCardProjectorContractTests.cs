@@ -19,7 +19,7 @@ public sealed class EntityCardProjectorContractTests {
 
         Assert.Equal("/assets/plugins/artwork/gamechops/logo.webp", images.CoverUrl);
         Assert.Equal("/assets/plugins/artwork/gamechops/logo.webp", images.ThumbnailUrl);
-        Assert.Equal(["logo", "backdrop"], images.Items.Select(item => item.Kind));
+        Assert.Equal([EntityFileRole.Logo, EntityFileRole.Backdrop], images.Items.Select(item => item.Kind));
     }
 
     [Fact]

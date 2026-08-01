@@ -22,7 +22,7 @@ internal static class EntityArtworkProjection {
     /// <summary>Projects the entity's ordered artwork and derived thumbnail URLs.</summary>
     internal static ImagesCapability Project(Entity entity) {
         var assets = OrderedArtworkFiles(entity)
-            .Select(file => new ContractEntityImageAsset(file.Role.ToCode(), file.Path, file.MimeType))
+            .Select(file => new ContractEntityImageAsset(file.Role, file.Path, file.MimeType))
             .ToArray();
         var gridThumbnail = entity.EntityFiles
             .FirstOrDefault(file => file.Role == EntityFileRole.GridThumbnail)?.Path;
@@ -31,7 +31,7 @@ internal static class EntityArtworkProjection {
             .FirstOrDefault(file => file.Role == EntityFileRole.GridThumbnail2x)?.Path;
 
         return new ImagesCapability(
-            SupportedManualImageRoles.Select(role => role.ToCode()).ToArray(),
+            SupportedManualImageRoles,
             assets,
             thumbnailUrl,
             thumbnail2xUrl,

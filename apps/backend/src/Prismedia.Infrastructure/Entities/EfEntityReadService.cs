@@ -812,11 +812,11 @@ public sealed partial class EfEntityReadService : IEntityReadService {
         return result
             .Append(new ImagesCapability(
                 [
-                    EntityFileRole.Thumbnail.ToCode(),
-                    EntityFileRole.Poster.ToCode(),
-                    EntityFileRole.Backdrop.ToCode(),
-                    EntityFileRole.Cover.ToCode(),
-                    EntityFileRole.Logo.ToCode()
+                    EntityFileRole.Thumbnail,
+                    EntityFileRole.Poster,
+                    EntityFileRole.Backdrop,
+                    EntityFileRole.Cover,
+                    EntityFileRole.Logo
                 ],
                 [],
                 coverUrl,

@@ -7,7 +7,11 @@ using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
 using Prismedia.Contracts.Acquisition;
 using Prismedia.Contracts.Entities;
+using Prismedia.Contracts.Organize;
+using Prismedia.Contracts.Plugins;
 using Prismedia.Domain.Entities;
+using ContractEntityFile = Prismedia.Contracts.Entities.EntityFile;
+using ContractEntityImageAsset = Prismedia.Contracts.Entities.EntityImageAsset;
 
 namespace Prismedia.Api.Tests;
 
@@ -95,36 +99,20 @@ public sealed class EntityContractShapeTests {
         using var factory = new WebApplicationFactory<Program>();
         using var client = factory.CreateClient();
         using var document = JsonDocument.Parse(await client.GetStringAsync("/openapi/v1.json"));
-
-        var items = document.RootElement
+        var schemas = document.RootElement
             .GetProperty("components")
-            .GetProperty("schemas")
-            .GetProperty(nameof(EntityThumbnail))
-            .GetProperty("properties")
-            .GetProperty("acquisitionStatuses")
-            .GetProperty("items");
+            .GetProperty("schemas");
 
-        Assert.Equal("string", items.GetProperty("type").GetString());
-        Assert.Equal(
-            Enum.GetValues<Prismedia.Domain.Entities.AcquisitionStatus>()
-                .Select(status => status.ToCode())
-                .Order(StringComparer.Ordinal),
-            items.GetProperty("enum")
-                .EnumerateArray()
-                .Select(value => value.GetString())
-                .Order(StringComparer.Ordinal));
+        AssertArrayEnum<AcquisitionStatus>(
+            schemas.GetProperty(nameof(EntityThumbnail)),
+            "acquisitionStatuses");
 
-        var proposalKind = document.RootElement
-            .GetProperty("components")
-            .GetProperty("schemas")
+        var proposalKind = schemas
             .GetProperty("EntityMetadataProposal")
             .GetProperty("properties")
             .GetProperty("targetKind");
 
-        var proposalKindSchema = document.RootElement
-            .GetProperty("components")
-            .GetProperty("schemas")
-            .GetProperty(nameof(EntityKind));
+        var proposalKindSchema = schemas.GetProperty(nameof(EntityKind));
 
         Assert.Equal("#/components/schemas/EntityKind", proposalKind.GetProperty("$ref").GetString());
         Assert.Equal("string", proposalKindSchema.GetProperty("type").GetString());
@@ -134,6 +122,70 @@ public sealed class EntityContractShapeTests {
                 .EnumerateArray()
                 .Select(value => value.GetString())
                 .Order(StringComparer.Ordinal));
+
+        var queueSchema = schemas.GetProperty(nameof(IdentifyQueueItem));
+        var progressSchema = schemas.GetProperty(nameof(IdentifyApplyProgress));
+
+        AssertPropertyReference(queueSchema, "state", nameof(IdentifyQueueState));
+        AssertPropertyReference(queueSchema, "action", nameof(IdentifyAction));
+        AssertPropertyReference(progressSchema, "state", nameof(IdentifyApplyState));
+        AssertPropertyReference(
+            schemas.GetProperty(typeof(ContractEntityFile).Name),
+            "role",
+            nameof(EntityFileRole));
+        AssertPropertyReference(
+            schemas.GetProperty(typeof(ContractEntityImageAsset).Name),
+            "kind",
+            nameof(EntityFileRole));
+        AssertArrayEnum<EntityFileRole>(
+            GetCapabilitySchema(schemas, typeof(ImagesCapability)),
+            "supportedKinds");
+        AssertPropertyReference(
+            schemas.GetProperty(nameof(OrganizePlanItem)),
+            "storageShape",
+            nameof(EntityStorageShape));
+        AssertPropertyReference(
+            schemas.GetProperty(nameof(OrganizePlanItem)),
+            "status",
+            nameof(OrganizeItemStatus));
+    }
+
+    private static void AssertPropertyReference(
+        JsonElement schema,
+        string propertyName,
+        string referencedSchema) {
+        Assert.Equal(
+            $"#/components/schemas/{referencedSchema}",
+            schema.GetProperty("properties").GetProperty(propertyName).GetProperty("$ref").GetString());
+    }
+
+    private static void AssertArrayEnum<TValue>(
+        JsonElement schema,
+        string propertyName)
+        where TValue : struct {
+        var items = schema.GetProperty("properties")
+            .GetProperty(propertyName)
+            .GetProperty("items");
+
+        Assert.Equal("string", items.GetProperty("type").GetString());
+        Assert.Equal(
+            CodecRegistry.Get<TValue>().Codes.Order(StringComparer.Ordinal),
+            items.GetProperty("enum")
+                .EnumerateArray()
+                .Select(value => value.GetString())
+                .Order(StringComparer.Ordinal));
+    }
+
+    private static JsonElement GetCapabilitySchema(JsonElement schemas, Type capabilityType) {
+        var kind = capabilityType.GetCustomAttribute<CapabilityKindAttribute>()?.Kind ??
+            throw new InvalidOperationException($"{capabilityType.Name} has no capability kind.");
+        var reference = schemas.GetProperty(nameof(EntityCapability))
+            .GetProperty("discriminator")
+            .GetProperty("mapping")
+            .GetProperty(kind)
+            .GetString() ?? throw new InvalidOperationException($"{capabilityType.Name} has no schema mapping.");
+
+        return schemas.GetProperty(reference[(reference.LastIndexOf('/') + 1)..]);
     }
 
     [Fact]
@@ -205,7 +257,11 @@ public sealed class EntityContractShapeTests {
             Assert.Contains("/api/entities/{id}", operation.GetProperty("description").GetString());
         }
 
-        Assert.False(paths.GetProperty("/api/entities/{id}").GetProperty("get").TryGetProperty("deprecated", out var canonical) && canonical.GetBoolean());
+        Assert.False(
+            paths.GetProperty("/api/entities/{id}")
+                .GetProperty("get")
+                .TryGetProperty("deprecated", out var canonical) &&
+            canonical.GetBoolean());
     }
 
     private static Type[] DirectEntityContractInterfaces(Type type) {

@@ -11,12 +11,6 @@ namespace Prismedia.Application.Organization;
 /// path rewrite are delegated to <see cref="IOrganizePersistence"/>.
 /// </summary>
 public sealed class OrganizeService {
-    private const string Ready = "ready";
-    private const string Unchanged = "unchanged";
-    private const string Skipped = "skipped";
-    private const string Applied = "applied";
-    private const string Failed = "failed";
-
     private readonly IOrganizePersistence _persistence;
     private readonly EntitySourcePathMutationCoordinator _sourcePathMutations;
 
@@ -50,7 +44,7 @@ public sealed class OrganizeService {
         CancellationToken cancellationToken) {
         var plan = await BuildPlanAsync(request, cancellationToken);
         var ancestorMoveSources = plan
-            .Where(item => item.Status == Ready)
+            .Where(item => item.Status == OrganizeItemStatus.Ready)
             .Select(item => item.SourcePath)
             .OrderBy(path => path.Length)
             .ToArray();
@@ -60,7 +54,7 @@ public sealed class OrganizeService {
         foreach (var item in plan) {
             cancellationToken.ThrowIfCancellationRequested();
 
-            if (item.Status != Ready) {
+            if (item.Status != OrganizeItemStatus.Ready) {
                 results.Add(item);
                 continue;
             }
@@ -69,7 +63,7 @@ public sealed class OrganizeService {
                     !SamePath(path, item.SourcePath) &&
                     IsSubPathOf(item.SourcePath, path))) {
                 results.Add(item with {
-                    Status = Skipped,
+                    Status = OrganizeItemStatus.Skipped,
                     Reason = "A parent folder is being moved first. Run organize again to apply child renames.",
                 });
                 continue;
@@ -86,16 +80,16 @@ public sealed class OrganizeService {
                     cancellationToken);
                 if (!executed) {
                     results.Add(item with {
-                        Status = Failed,
+                        Status = OrganizeItemStatus.Failed,
                         Reason = "The linked Entity changed while the organization plan was being applied.",
                     });
                     continue;
                 }
 
-                results.Add(item with { Status = Applied });
+                results.Add(item with { Status = OrganizeItemStatus.Applied });
                 applied++;
             } catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) {
-                results.Add(item with { Status = Failed, Reason = ex.Message });
+                results.Add(item with { Status = OrganizeItemStatus.Failed, Reason = ex.Message });
             }
         }
 
@@ -146,7 +140,7 @@ public sealed class OrganizeService {
         var storageShape = EntityKindRegistry.Describe(kind).StorageShape;
         var sourcePath = Normalize(sourceFile.Path);
         if (storageShape is EntityStorageShape.None or EntityStorageShape.ArchiveEntry) {
-            var skipped = NewItem(entity, storageShape, sourcePath, sourcePath, Skipped,
+            var skipped = NewItem(entity, storageShape, sourcePath, sourcePath, OrganizeItemStatus.Skipped,
                 storageShape == EntityStorageShape.ArchiveEntry
                     ? "Archive entries are not moved independently."
                     : "This entity kind has no direct filesystem storage.");
@@ -156,7 +150,7 @@ public sealed class OrganizeService {
 
         var targetContainer = ResolveTargetContainer(entity, entityById, sourceByEntityId, rootPaths, memo);
         if (targetContainer is null) {
-            var skipped = NewItem(entity, storageShape, sourcePath, sourcePath, Skipped,
+            var skipped = NewItem(entity, storageShape, sourcePath, sourcePath, OrganizeItemStatus.Skipped,
                 "No library root contains the entity source path.");
             memo[entityId] = skipped;
             return skipped;
@@ -170,7 +164,9 @@ public sealed class OrganizeService {
             _ => sourcePath,
         };
 
-        var status = SamePath(sourcePath, targetPath) ? Unchanged : Ready;
+        var status = SamePath(sourcePath, targetPath)
+            ? OrganizeItemStatus.Unchanged
+            : OrganizeItemStatus.Ready;
         var item = NewItem(entity, storageShape, sourcePath, Normalize(targetPath), status, null);
         memo[entityId] = item;
         return item;
@@ -210,13 +206,13 @@ public sealed class OrganizeService {
         EntityStorageShape storageShape,
         string sourcePath,
         string targetPath,
-        string status,
+        OrganizeItemStatus status,
         string? reason) =>
         new(
             entity.Id,
             entity.KindCode.DecodeAs<EntityKind>(),
             entity.Title,
-            storageShape.ToCode(),
+            storageShape,
             sourcePath,
             targetPath,
             status,
