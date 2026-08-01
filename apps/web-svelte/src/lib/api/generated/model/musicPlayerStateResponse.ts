@@ -4,13 +4,13 @@
  * Prismedia.Api | v1
  * OpenAPI spec version: 1.0.0
  */
-import type { AudioTrackDetail } from './audioTrackDetail';
+import type { EntityCard } from './entityCard';
 import type { MusicPlayerContext } from './musicPlayerContext';
 import type { MusicPlayerMiniSide } from './musicPlayerMiniSide';
 import type { MusicPlayerRepeatMode } from './musicPlayerRepeatMode';
 
 export interface MusicPlayerStateResponse {
-  tracks: AudioTrackDetail[];
+  tracks: EntityCard[];
   order: (number | string)[];
   /** @pattern ^-?(?:0|[1-9]\d*)$ */
   position: number | string;

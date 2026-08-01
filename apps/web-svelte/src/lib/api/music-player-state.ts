@@ -7,7 +7,7 @@ import type {
   MusicPlayerStateResponse,
   UpdateMusicPlayerStateRequest,
 } from "$lib/api/generated/model";
-import { audioTrackDetailToListItem } from "$lib/entities/audio-track-items";
+import { entityCardToAudioTrackListItem } from "$lib/entities/audio-track-items";
 import type { AudioTrackListItemDto } from "$lib/entities/media-view-models";
 import type { MiniPlayerSide, PlaybackContext, RepeatMode } from "$lib/stores/audio-playback.svelte";
 
@@ -56,7 +56,7 @@ function albumCoverUrlsForWire(
 
 function fromResponse(response: MusicPlayerStateResponse): RestoredMusicPlayerState {
   return {
-    queue: response.tracks.map(audioTrackDetailToListItem),
+    queue: response.tracks.map(entityCardToAudioTrackListItem),
     order: response.order.map(numberValue),
     position: numberValue(response.position),
     currentTime: numberValue(response.currentTime),

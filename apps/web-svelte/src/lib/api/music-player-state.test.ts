@@ -11,7 +11,7 @@ vi.mock("$lib/api/generated/prismedia", () => ({
 }));
 
 vi.mock("$lib/entities/audio-track-items", () => ({
-  audioTrackDetailToListItem: (track: { id: string; title: string }) => ({
+  entityCardToAudioTrackListItem: (track: { id: string; title: string }) => ({
     id: track.id,
     title: track.title,
     duration: 120,

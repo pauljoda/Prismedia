@@ -1,5 +1,5 @@
-import type { AudioTrackDetail, EntityThumbnail } from "$lib/api/generated/model";
-import { getCapability } from "$lib/api/capabilities";
+import type { EntityCard, EntityThumbnail } from "$lib/api/generated/model";
+import { getCapability, getEmbeddedAudioMetadataCapability } from "$lib/api/capabilities";
 import { THUMBNAIL_META_ICON } from "$lib/api/generated/codes";
 import { CAPABILITY_KIND, ENTITY_FILE_ROLE } from "$lib/entities/entity-codes";
 import type { AudioTrackListItemDto } from "$lib/entities/media-view-models";
@@ -41,7 +41,7 @@ function toNumber(value: number | string | null | undefined): number | null {
 
 /**
  * Build a lightweight track list item from an entity thumbnail summary.
- * Avoids the N+1 fetch pattern of calling fetchAudioTrack() per track.
+ * Avoids the N+1 pattern of hydrating one full Entity document per track.
  */
 export function entityThumbnailToTrackItem(
   thumb: EntityThumbnail,
@@ -86,12 +86,14 @@ export function entityThumbnailToTrackItem(
   };
 }
 
-export function audioTrackDetailToListItem(detail: AudioTrackDetail): AudioTrackListItemDto {
+/** Builds a playable track item from the canonical Entity document and its audio capability. */
+export function entityCardToAudioTrackListItem(detail: EntityCard): AudioTrackListItemDto {
   const technical = getCapability(detail.capabilities, CAPABILITY_KIND.technical);
   const playback = getCapability(detail.capabilities, CAPABILITY_KIND.playback);
   const rating = getCapability(detail.capabilities, CAPABILITY_KIND.rating);
   const flags = getCapability(detail.capabilities, CAPABILITY_KIND.flags);
   const files = getCapability(detail.capabilities, CAPABILITY_KIND.files);
+  const embeddedAudio = getEmbeddedAudioMetadataCapability(detail.capabilities);
 
   const waveformFile = files?.items.find(
     (file) => file.role === ENTITY_FILE_ROLE.waveform,
@@ -114,8 +116,8 @@ export function audioTrackDetailToListItem(detail: AudioTrackDetail): AudioTrack
     channels: toNumber(technical?.channels) ?? null,
     codec: technical?.codec ?? null,
     fileSize: null,
-    embeddedArtist: detail.embeddedArtist ?? null,
-    embeddedAlbum: detail.embeddedAlbum ?? null,
+    embeddedArtist: embeddedAudio?.artist ?? null,
+    embeddedAlbum: embeddedAudio?.album ?? null,
     trackNumber: toNumber(detail.sortOrder) ?? null,
     sectionLabel: null,
     sectionKey: null,

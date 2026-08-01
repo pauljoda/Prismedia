@@ -1,4 +1,4 @@
-using Prismedia.Contracts.Media;
+using Prismedia.Contracts.Entities;
 using Prismedia.Domain.Entities;
 
 namespace Prismedia.Contracts.Playback;
@@ -69,7 +69,7 @@ public sealed record MusicPlayerContext(
 /// <param name="CollapsedSide">Horizontal side used by the mini player.</param>
 /// <param name="Context">Optional now-playing context labels and artwork.</param>
 public sealed record MusicPlayerStateResponse(
-    IReadOnlyList<AudioTrackDetail> Tracks,
+    IReadOnlyList<EntityCard> Tracks,
     IReadOnlyList<int> Order,
     int Position,
     double CurrentTime,

@@ -2,7 +2,6 @@ using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using Prismedia.Application.Entities;
 using Prismedia.Contracts.Entities;
-using Prismedia.Contracts.Media;
 using Prismedia.Contracts.Playback;
 using Prismedia.Domain.Entities;
 
@@ -115,7 +114,7 @@ public sealed class MusicPlayerStateService {
         StoredMusicPlayerPlaybackState stored,
         StoredMusicPlayerOutput output,
         CancellationToken cancellationToken) {
-        var tracks = new List<AudioTrackDetail>();
+        var tracks = new List<EntityCard>();
         var oldToNewIndex = new Dictionary<int, int>();
 
         for (var i = 0; i < stored.QueueTrackIds.Count; i++) {
@@ -133,7 +132,7 @@ public sealed class MusicPlayerStateService {
             }
 
             oldToNewIndex[i] = tracks.Count;
-            tracks.Add(ToPlaybackTrack(card));
+            tracks.Add(card);
         }
 
         if (tracks.Count == 0) {
@@ -237,7 +236,7 @@ public sealed class MusicPlayerStateService {
 
     private static double ClampCurrentTime(
         double value,
-        IReadOnlyList<AudioTrackDetail> tracks,
+        IReadOnlyList<EntityCard> tracks,
         IReadOnlyList<int> order,
         int position) {
         var currentTime = Math.Max(0, FiniteOrDefault(value, 0));
@@ -257,23 +256,6 @@ public sealed class MusicPlayerStateService {
             ?.Duration
             ?.TotalSeconds;
         return duration is > 0 ? Math.Min(currentTime, duration.Value) : currentTime;
-    }
-
-    private static AudioTrackDetail ToPlaybackTrack(EntityCard card) {
-        var embedded = card.Capabilities.OfType<EmbeddedAudioMetadataCapability>().SingleOrDefault();
-        return new AudioTrackDetail {
-            Id = card.Id,
-            Kind = card.Kind,
-            Title = card.Title,
-            ParentEntityId = card.ParentEntityId,
-            SortOrder = card.SortOrder,
-            HasSourceMedia = card.HasSourceMedia,
-            Capabilities = card.Capabilities,
-            ChildrenByKind = card.ChildrenByKind,
-            Relationships = card.Relationships,
-            EmbeddedArtist = embedded?.Artist,
-            EmbeddedAlbum = embedded?.Album,
-        };
     }
 
     private static double FiniteOrDefault(double value, double fallback) =>

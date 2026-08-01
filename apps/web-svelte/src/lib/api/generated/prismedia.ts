@@ -92,21 +92,12 @@ import type {
   FileRenameRequest,
   FileRescanRequest,
   FileRootsResponse,
-  GetAudioLibraryParams,
-  GetAudioTrackParams,
-  GetBookAuthorParams,
-  GetBookParams,
-  GetCollectionParams,
   GetEntityChildrenParams,
   GetEntityParams,
   GetEntityThumbnailsParams,
   GetFileContentParams,
   GetFileDetailParams,
-  GetGalleryParams,
-  GetImageParams,
   GetJobGraphParams,
-  GetMovieParams,
-  GetMusicArtistParams,
   GetOpdsAuthorBooksParams,
   GetOpdsAuthorsParams,
   GetOpdsCollectionBooksParams,
@@ -119,16 +110,10 @@ import type {
   GetOpdsTagBooksParams,
   GetOpdsTagsParams,
   GetOrganizePlanParams,
-  GetPersonParams,
   GetPlaybackStatisticsParams,
   GetSettingValuesParams,
-  GetStudioParams,
-  GetTagParams,
   GetUpdateCheckParams,
-  GetVideoParams,
   GetVideoPlaybackHlsAssetParams,
-  GetVideoSeasonParams,
-  GetVideoSeriesParams,
   HeadFileContentParams,
   HealthResponse,
   IdentifyApplyProgress,
@@ -399,62 +384,6 @@ export const getGetDatabaseRestoreHealthUrl = () => {
 export const getDatabaseRestoreHealth = async ( options?: RequestInit): Promise<getDatabaseRestoreHealthResponse> => {
 
   return orvalFetch<getDatabaseRestoreHealthResponse>(getGetDatabaseRestoreHealthUrl(),
-  {
-    ...options,
-    method: 'GET'
-
-
-  }
-);}
-
-
-
-export type getVideoSeasonResponse200 = {
-  data: EntityCard
-  status: 200
-}
-
-export type getVideoSeasonResponse404 = {
-  data: ApiProblem
-  status: 404
-}
-
-export type getVideoSeasonResponseSuccess = (getVideoSeasonResponse200) & {
-  headers: Headers;
-};
-export type getVideoSeasonResponseError = (getVideoSeasonResponse404) & {
-  headers: Headers;
-};
-
-export type getVideoSeasonResponse = (getVideoSeasonResponseSuccess | getVideoSeasonResponseError)
-
-export const getGetVideoSeasonUrl = (id: string,
-    seasonId: string,
-    params?: GetVideoSeasonParams,) => {
-  const normalizedParams = new URLSearchParams();
-
-  Object.entries(params || {}).forEach(([key, value]) => {
-
-    if (value !== undefined) {
-      normalizedParams.append(key, value === null ? 'null' : value.toString())
-    }
-  });
-
-  const stringifiedParams = normalizedParams.toString();
-
-  return stringifiedParams.length > 0 ? `/api/series/${id}/seasons/${seasonId}?${stringifiedParams}` : `/api/series/${id}/seasons/${seasonId}`
-}
-
-/**
- * Deprecated compatibility alias. Use GET /api/entities/{id}.
- * @deprecated
- * @summary Get Video Season (deprecated; use GET /api/entities/{id}).
- */
-export const getVideoSeason = async (id: string,
-    seasonId: string,
-    params?: GetVideoSeasonParams, options?: RequestInit): Promise<getVideoSeasonResponse> => {
-
-  return orvalFetch<getVideoSeasonResponse>(getGetVideoSeasonUrl(id,seasonId,params),
   {
     ...options,
     method: 'GET'
@@ -3280,60 +3209,6 @@ export const listVideos = async (params?: ListVideosParams, options?: RequestIni
 
 
 
-export type getVideoResponse200 = {
-  data: EntityCard
-  status: 200
-}
-
-export type getVideoResponse404 = {
-  data: ApiProblem
-  status: 404
-}
-
-export type getVideoResponseSuccess = (getVideoResponse200) & {
-  headers: Headers;
-};
-export type getVideoResponseError = (getVideoResponse404) & {
-  headers: Headers;
-};
-
-export type getVideoResponse = (getVideoResponseSuccess | getVideoResponseError)
-
-export const getGetVideoUrl = (id: string,
-    params?: GetVideoParams,) => {
-  const normalizedParams = new URLSearchParams();
-
-  Object.entries(params || {}).forEach(([key, value]) => {
-
-    if (value !== undefined) {
-      normalizedParams.append(key, value === null ? 'null' : value.toString())
-    }
-  });
-
-  const stringifiedParams = normalizedParams.toString();
-
-  return stringifiedParams.length > 0 ? `/api/videos/${id}?${stringifiedParams}` : `/api/videos/${id}`
-}
-
-/**
- * Deprecated compatibility alias. Use GET /api/entities/{id}.
- * @deprecated
- * @summary Get Videos detail (deprecated; use GET /api/entities/{id}).
- */
-export const getVideo = async (id: string,
-    params?: GetVideoParams, options?: RequestInit): Promise<getVideoResponse> => {
-
-  return orvalFetch<getVideoResponse>(getGetVideoUrl(id,params),
-  {
-    ...options,
-    method: 'GET'
-
-
-  }
-);}
-
-
-
 export type getVideoPatchResponse200 = {
   data: EntityCard
   status: 200
@@ -3712,60 +3587,6 @@ export const listMovies = async (params?: ListMoviesParams, options?: RequestIni
 
 
 
-export type getMovieResponse200 = {
-  data: EntityCard
-  status: 200
-}
-
-export type getMovieResponse404 = {
-  data: ApiProblem
-  status: 404
-}
-
-export type getMovieResponseSuccess = (getMovieResponse200) & {
-  headers: Headers;
-};
-export type getMovieResponseError = (getMovieResponse404) & {
-  headers: Headers;
-};
-
-export type getMovieResponse = (getMovieResponseSuccess | getMovieResponseError)
-
-export const getGetMovieUrl = (id: string,
-    params?: GetMovieParams,) => {
-  const normalizedParams = new URLSearchParams();
-
-  Object.entries(params || {}).forEach(([key, value]) => {
-
-    if (value !== undefined) {
-      normalizedParams.append(key, value === null ? 'null' : value.toString())
-    }
-  });
-
-  const stringifiedParams = normalizedParams.toString();
-
-  return stringifiedParams.length > 0 ? `/api/movies/${id}?${stringifiedParams}` : `/api/movies/${id}`
-}
-
-/**
- * Deprecated compatibility alias. Use GET /api/entities/{id}.
- * @deprecated
- * @summary Get Movies detail (deprecated; use GET /api/entities/{id}).
- */
-export const getMovie = async (id: string,
-    params?: GetMovieParams, options?: RequestInit): Promise<getMovieResponse> => {
-
-  return orvalFetch<getMovieResponse>(getGetMovieUrl(id,params),
-  {
-    ...options,
-    method: 'GET'
-
-
-  }
-);}
-
-
-
 export type getMoviePatchResponse200 = {
   data: EntityCard
   status: 200
@@ -3856,60 +3677,6 @@ export const getListVideoSeriesUrl = (params?: ListVideoSeriesParams,) => {
 export const listVideoSeries = async (params?: ListVideoSeriesParams, options?: RequestInit): Promise<listVideoSeriesResponse> => {
 
   return orvalFetch<listVideoSeriesResponse>(getListVideoSeriesUrl(params),
-  {
-    ...options,
-    method: 'GET'
-
-
-  }
-);}
-
-
-
-export type getVideoSeriesResponse200 = {
-  data: EntityCard
-  status: 200
-}
-
-export type getVideoSeriesResponse404 = {
-  data: ApiProblem
-  status: 404
-}
-
-export type getVideoSeriesResponseSuccess = (getVideoSeriesResponse200) & {
-  headers: Headers;
-};
-export type getVideoSeriesResponseError = (getVideoSeriesResponse404) & {
-  headers: Headers;
-};
-
-export type getVideoSeriesResponse = (getVideoSeriesResponseSuccess | getVideoSeriesResponseError)
-
-export const getGetVideoSeriesUrl = (id: string,
-    params?: GetVideoSeriesParams,) => {
-  const normalizedParams = new URLSearchParams();
-
-  Object.entries(params || {}).forEach(([key, value]) => {
-
-    if (value !== undefined) {
-      normalizedParams.append(key, value === null ? 'null' : value.toString())
-    }
-  });
-
-  const stringifiedParams = normalizedParams.toString();
-
-  return stringifiedParams.length > 0 ? `/api/series/${id}?${stringifiedParams}` : `/api/series/${id}`
-}
-
-/**
- * Deprecated compatibility alias. Use GET /api/entities/{id}.
- * @deprecated
- * @summary Get Series detail (deprecated; use GET /api/entities/{id}).
- */
-export const getVideoSeries = async (id: string,
-    params?: GetVideoSeriesParams, options?: RequestInit): Promise<getVideoSeriesResponse> => {
-
-  return orvalFetch<getVideoSeriesResponse>(getGetVideoSeriesUrl(id,params),
   {
     ...options,
     method: 'GET'
@@ -4020,60 +3787,6 @@ export const listImages = async (params?: ListImagesParams, options?: RequestIni
 
 
 
-export type getImageResponse200 = {
-  data: EntityCard
-  status: 200
-}
-
-export type getImageResponse404 = {
-  data: ApiProblem
-  status: 404
-}
-
-export type getImageResponseSuccess = (getImageResponse200) & {
-  headers: Headers;
-};
-export type getImageResponseError = (getImageResponse404) & {
-  headers: Headers;
-};
-
-export type getImageResponse = (getImageResponseSuccess | getImageResponseError)
-
-export const getGetImageUrl = (id: string,
-    params?: GetImageParams,) => {
-  const normalizedParams = new URLSearchParams();
-
-  Object.entries(params || {}).forEach(([key, value]) => {
-
-    if (value !== undefined) {
-      normalizedParams.append(key, value === null ? 'null' : value.toString())
-    }
-  });
-
-  const stringifiedParams = normalizedParams.toString();
-
-  return stringifiedParams.length > 0 ? `/api/images/${id}?${stringifiedParams}` : `/api/images/${id}`
-}
-
-/**
- * Deprecated compatibility alias. Use GET /api/entities/{id}.
- * @deprecated
- * @summary Get Images detail (deprecated; use GET /api/entities/{id}).
- */
-export const getImage = async (id: string,
-    params?: GetImageParams, options?: RequestInit): Promise<getImageResponse> => {
-
-  return orvalFetch<getImageResponse>(getGetImageUrl(id,params),
-  {
-    ...options,
-    method: 'GET'
-
-
-  }
-);}
-
-
-
 export type getImagePatchResponse200 = {
   data: EntityCard
   status: 200
@@ -4164,60 +3877,6 @@ export const getListGalleriesUrl = (params?: ListGalleriesParams,) => {
 export const listGalleries = async (params?: ListGalleriesParams, options?: RequestInit): Promise<listGalleriesResponse> => {
 
   return orvalFetch<listGalleriesResponse>(getListGalleriesUrl(params),
-  {
-    ...options,
-    method: 'GET'
-
-
-  }
-);}
-
-
-
-export type getGalleryResponse200 = {
-  data: EntityCard
-  status: 200
-}
-
-export type getGalleryResponse404 = {
-  data: ApiProblem
-  status: 404
-}
-
-export type getGalleryResponseSuccess = (getGalleryResponse200) & {
-  headers: Headers;
-};
-export type getGalleryResponseError = (getGalleryResponse404) & {
-  headers: Headers;
-};
-
-export type getGalleryResponse = (getGalleryResponseSuccess | getGalleryResponseError)
-
-export const getGetGalleryUrl = (id: string,
-    params?: GetGalleryParams,) => {
-  const normalizedParams = new URLSearchParams();
-
-  Object.entries(params || {}).forEach(([key, value]) => {
-
-    if (value !== undefined) {
-      normalizedParams.append(key, value === null ? 'null' : value.toString())
-    }
-  });
-
-  const stringifiedParams = normalizedParams.toString();
-
-  return stringifiedParams.length > 0 ? `/api/galleries/${id}?${stringifiedParams}` : `/api/galleries/${id}`
-}
-
-/**
- * Deprecated compatibility alias. Use GET /api/entities/{id}.
- * @deprecated
- * @summary Get Galleries detail (deprecated; use GET /api/entities/{id}).
- */
-export const getGallery = async (id: string,
-    params?: GetGalleryParams, options?: RequestInit): Promise<getGalleryResponse> => {
-
-  return orvalFetch<getGalleryResponse>(getGetGalleryUrl(id,params),
   {
     ...options,
     method: 'GET'
@@ -4328,60 +3987,6 @@ export const listBooks = async (params?: ListBooksParams, options?: RequestInit)
 
 
 
-export type getBookResponse200 = {
-  data: EntityCard
-  status: 200
-}
-
-export type getBookResponse404 = {
-  data: ApiProblem
-  status: 404
-}
-
-export type getBookResponseSuccess = (getBookResponse200) & {
-  headers: Headers;
-};
-export type getBookResponseError = (getBookResponse404) & {
-  headers: Headers;
-};
-
-export type getBookResponse = (getBookResponseSuccess | getBookResponseError)
-
-export const getGetBookUrl = (id: string,
-    params?: GetBookParams,) => {
-  const normalizedParams = new URLSearchParams();
-
-  Object.entries(params || {}).forEach(([key, value]) => {
-
-    if (value !== undefined) {
-      normalizedParams.append(key, value === null ? 'null' : value.toString())
-    }
-  });
-
-  const stringifiedParams = normalizedParams.toString();
-
-  return stringifiedParams.length > 0 ? `/api/books/${id}?${stringifiedParams}` : `/api/books/${id}`
-}
-
-/**
- * Deprecated compatibility alias. Use GET /api/entities/{id}.
- * @deprecated
- * @summary Get Books detail (deprecated; use GET /api/entities/{id}).
- */
-export const getBook = async (id: string,
-    params?: GetBookParams, options?: RequestInit): Promise<getBookResponse> => {
-
-  return orvalFetch<getBookResponse>(getGetBookUrl(id,params),
-  {
-    ...options,
-    method: 'GET'
-
-
-  }
-);}
-
-
-
 export type getBookPatchResponse200 = {
   data: EntityCard
   status: 200
@@ -4472,60 +4077,6 @@ export const getListBookAuthorsUrl = (params?: ListBookAuthorsParams,) => {
 export const listBookAuthors = async (params?: ListBookAuthorsParams, options?: RequestInit): Promise<listBookAuthorsResponse> => {
 
   return orvalFetch<listBookAuthorsResponse>(getListBookAuthorsUrl(params),
-  {
-    ...options,
-    method: 'GET'
-
-
-  }
-);}
-
-
-
-export type getBookAuthorResponse200 = {
-  data: EntityCard
-  status: 200
-}
-
-export type getBookAuthorResponse404 = {
-  data: ApiProblem
-  status: 404
-}
-
-export type getBookAuthorResponseSuccess = (getBookAuthorResponse200) & {
-  headers: Headers;
-};
-export type getBookAuthorResponseError = (getBookAuthorResponse404) & {
-  headers: Headers;
-};
-
-export type getBookAuthorResponse = (getBookAuthorResponseSuccess | getBookAuthorResponseError)
-
-export const getGetBookAuthorUrl = (id: string,
-    params?: GetBookAuthorParams,) => {
-  const normalizedParams = new URLSearchParams();
-
-  Object.entries(params || {}).forEach(([key, value]) => {
-
-    if (value !== undefined) {
-      normalizedParams.append(key, value === null ? 'null' : value.toString())
-    }
-  });
-
-  const stringifiedParams = normalizedParams.toString();
-
-  return stringifiedParams.length > 0 ? `/api/book-authors/${id}?${stringifiedParams}` : `/api/book-authors/${id}`
-}
-
-/**
- * Deprecated compatibility alias. Use GET /api/entities/{id}.
- * @deprecated
- * @summary Get Authors detail (deprecated; use GET /api/entities/{id}).
- */
-export const getBookAuthor = async (id: string,
-    params?: GetBookAuthorParams, options?: RequestInit): Promise<getBookAuthorResponse> => {
-
-  return orvalFetch<getBookAuthorResponse>(getGetBookAuthorUrl(id,params),
   {
     ...options,
     method: 'GET'
@@ -4636,60 +4187,6 @@ export const listMusicArtists = async (params?: ListMusicArtistsParams, options?
 
 
 
-export type getMusicArtistResponse200 = {
-  data: EntityCard
-  status: 200
-}
-
-export type getMusicArtistResponse404 = {
-  data: ApiProblem
-  status: 404
-}
-
-export type getMusicArtistResponseSuccess = (getMusicArtistResponse200) & {
-  headers: Headers;
-};
-export type getMusicArtistResponseError = (getMusicArtistResponse404) & {
-  headers: Headers;
-};
-
-export type getMusicArtistResponse = (getMusicArtistResponseSuccess | getMusicArtistResponseError)
-
-export const getGetMusicArtistUrl = (id: string,
-    params?: GetMusicArtistParams,) => {
-  const normalizedParams = new URLSearchParams();
-
-  Object.entries(params || {}).forEach(([key, value]) => {
-
-    if (value !== undefined) {
-      normalizedParams.append(key, value === null ? 'null' : value.toString())
-    }
-  });
-
-  const stringifiedParams = normalizedParams.toString();
-
-  return stringifiedParams.length > 0 ? `/api/music-artists/${id}?${stringifiedParams}` : `/api/music-artists/${id}`
-}
-
-/**
- * Deprecated compatibility alias. Use GET /api/entities/{id}.
- * @deprecated
- * @summary Get Artists detail (deprecated; use GET /api/entities/{id}).
- */
-export const getMusicArtist = async (id: string,
-    params?: GetMusicArtistParams, options?: RequestInit): Promise<getMusicArtistResponse> => {
-
-  return orvalFetch<getMusicArtistResponse>(getGetMusicArtistUrl(id,params),
-  {
-    ...options,
-    method: 'GET'
-
-
-  }
-);}
-
-
-
 export type getMusicArtistPatchResponse200 = {
   data: EntityCard
   status: 200
@@ -4790,60 +4287,6 @@ export const listAudioLibraries = async (params?: ListAudioLibrariesParams, opti
 
 
 
-export type getAudioLibraryResponse200 = {
-  data: EntityCard
-  status: 200
-}
-
-export type getAudioLibraryResponse404 = {
-  data: ApiProblem
-  status: 404
-}
-
-export type getAudioLibraryResponseSuccess = (getAudioLibraryResponse200) & {
-  headers: Headers;
-};
-export type getAudioLibraryResponseError = (getAudioLibraryResponse404) & {
-  headers: Headers;
-};
-
-export type getAudioLibraryResponse = (getAudioLibraryResponseSuccess | getAudioLibraryResponseError)
-
-export const getGetAudioLibraryUrl = (id: string,
-    params?: GetAudioLibraryParams,) => {
-  const normalizedParams = new URLSearchParams();
-
-  Object.entries(params || {}).forEach(([key, value]) => {
-
-    if (value !== undefined) {
-      normalizedParams.append(key, value === null ? 'null' : value.toString())
-    }
-  });
-
-  const stringifiedParams = normalizedParams.toString();
-
-  return stringifiedParams.length > 0 ? `/api/audio-libraries/${id}?${stringifiedParams}` : `/api/audio-libraries/${id}`
-}
-
-/**
- * Deprecated compatibility alias. Use GET /api/entities/{id}.
- * @deprecated
- * @summary Get Audio detail (deprecated; use GET /api/entities/{id}).
- */
-export const getAudioLibrary = async (id: string,
-    params?: GetAudioLibraryParams, options?: RequestInit): Promise<getAudioLibraryResponse> => {
-
-  return orvalFetch<getAudioLibraryResponse>(getGetAudioLibraryUrl(id,params),
-  {
-    ...options,
-    method: 'GET'
-
-
-  }
-);}
-
-
-
 export type getAudioLibraryPatchResponse200 = {
   data: EntityCard
   status: 200
@@ -4934,60 +4377,6 @@ export const getListAudioTracksUrl = (params?: ListAudioTracksParams,) => {
 export const listAudioTracks = async (params?: ListAudioTracksParams, options?: RequestInit): Promise<listAudioTracksResponse> => {
 
   return orvalFetch<listAudioTracksResponse>(getListAudioTracksUrl(params),
-  {
-    ...options,
-    method: 'GET'
-
-
-  }
-);}
-
-
-
-export type getAudioTrackResponse200 = {
-  data: EntityCard
-  status: 200
-}
-
-export type getAudioTrackResponse404 = {
-  data: ApiProblem
-  status: 404
-}
-
-export type getAudioTrackResponseSuccess = (getAudioTrackResponse200) & {
-  headers: Headers;
-};
-export type getAudioTrackResponseError = (getAudioTrackResponse404) & {
-  headers: Headers;
-};
-
-export type getAudioTrackResponse = (getAudioTrackResponseSuccess | getAudioTrackResponseError)
-
-export const getGetAudioTrackUrl = (id: string,
-    params?: GetAudioTrackParams,) => {
-  const normalizedParams = new URLSearchParams();
-
-  Object.entries(params || {}).forEach(([key, value]) => {
-
-    if (value !== undefined) {
-      normalizedParams.append(key, value === null ? 'null' : value.toString())
-    }
-  });
-
-  const stringifiedParams = normalizedParams.toString();
-
-  return stringifiedParams.length > 0 ? `/api/audio-tracks/${id}?${stringifiedParams}` : `/api/audio-tracks/${id}`
-}
-
-/**
- * Deprecated compatibility alias. Use GET /api/entities/{id}.
- * @deprecated
- * @summary Get Audio detail (deprecated; use GET /api/entities/{id}).
- */
-export const getAudioTrack = async (id: string,
-    params?: GetAudioTrackParams, options?: RequestInit): Promise<getAudioTrackResponse> => {
-
-  return orvalFetch<getAudioTrackResponse>(getGetAudioTrackUrl(id,params),
   {
     ...options,
     method: 'GET'
@@ -5228,60 +4617,6 @@ export const deletePerson = async (id: string, options?: RequestInit): Promise<d
 
 
 
-export type getPersonResponse200 = {
-  data: EntityCard
-  status: 200
-}
-
-export type getPersonResponse404 = {
-  data: ApiProblem
-  status: 404
-}
-
-export type getPersonResponseSuccess = (getPersonResponse200) & {
-  headers: Headers;
-};
-export type getPersonResponseError = (getPersonResponse404) & {
-  headers: Headers;
-};
-
-export type getPersonResponse = (getPersonResponseSuccess | getPersonResponseError)
-
-export const getGetPersonUrl = (id: string,
-    params?: GetPersonParams,) => {
-  const normalizedParams = new URLSearchParams();
-
-  Object.entries(params || {}).forEach(([key, value]) => {
-
-    if (value !== undefined) {
-      normalizedParams.append(key, value === null ? 'null' : value.toString())
-    }
-  });
-
-  const stringifiedParams = normalizedParams.toString();
-
-  return stringifiedParams.length > 0 ? `/api/people/${id}?${stringifiedParams}` : `/api/people/${id}`
-}
-
-/**
- * Deprecated compatibility alias. Use GET /api/entities/{id}.
- * @deprecated
- * @summary Get Taxonomy detail (deprecated; use GET /api/entities/{id}).
- */
-export const getPerson = async (id: string,
-    params?: GetPersonParams, options?: RequestInit): Promise<getPersonResponse> => {
-
-  return orvalFetch<getPersonResponse>(getGetPersonUrl(id,params),
-  {
-    ...options,
-    method: 'GET'
-
-
-  }
-);}
-
-
-
 export type getPersonPatchResponse200 = {
   data: EntityCard
   status: 200
@@ -5462,60 +4797,6 @@ export const deleteStudio = async (id: string, options?: RequestInit): Promise<d
   {
     ...options,
     method: 'DELETE'
-
-
-  }
-);}
-
-
-
-export type getStudioResponse200 = {
-  data: EntityCard
-  status: 200
-}
-
-export type getStudioResponse404 = {
-  data: ApiProblem
-  status: 404
-}
-
-export type getStudioResponseSuccess = (getStudioResponse200) & {
-  headers: Headers;
-};
-export type getStudioResponseError = (getStudioResponse404) & {
-  headers: Headers;
-};
-
-export type getStudioResponse = (getStudioResponseSuccess | getStudioResponseError)
-
-export const getGetStudioUrl = (id: string,
-    params?: GetStudioParams,) => {
-  const normalizedParams = new URLSearchParams();
-
-  Object.entries(params || {}).forEach(([key, value]) => {
-
-    if (value !== undefined) {
-      normalizedParams.append(key, value === null ? 'null' : value.toString())
-    }
-  });
-
-  const stringifiedParams = normalizedParams.toString();
-
-  return stringifiedParams.length > 0 ? `/api/studios/${id}?${stringifiedParams}` : `/api/studios/${id}`
-}
-
-/**
- * Deprecated compatibility alias. Use GET /api/entities/{id}.
- * @deprecated
- * @summary Get Taxonomy detail (deprecated; use GET /api/entities/{id}).
- */
-export const getStudio = async (id: string,
-    params?: GetStudioParams, options?: RequestInit): Promise<getStudioResponse> => {
-
-  return orvalFetch<getStudioResponse>(getGetStudioUrl(id,params),
-  {
-    ...options,
-    method: 'GET'
 
 
   }
@@ -5710,60 +4991,6 @@ export const deleteTag = async (id: string, options?: RequestInit): Promise<dele
 
 
 
-export type getTagResponse200 = {
-  data: EntityCard
-  status: 200
-}
-
-export type getTagResponse404 = {
-  data: ApiProblem
-  status: 404
-}
-
-export type getTagResponseSuccess = (getTagResponse200) & {
-  headers: Headers;
-};
-export type getTagResponseError = (getTagResponse404) & {
-  headers: Headers;
-};
-
-export type getTagResponse = (getTagResponseSuccess | getTagResponseError)
-
-export const getGetTagUrl = (id: string,
-    params?: GetTagParams,) => {
-  const normalizedParams = new URLSearchParams();
-
-  Object.entries(params || {}).forEach(([key, value]) => {
-
-    if (value !== undefined) {
-      normalizedParams.append(key, value === null ? 'null' : value.toString())
-    }
-  });
-
-  const stringifiedParams = normalizedParams.toString();
-
-  return stringifiedParams.length > 0 ? `/api/tags/${id}?${stringifiedParams}` : `/api/tags/${id}`
-}
-
-/**
- * Deprecated compatibility alias. Use GET /api/entities/{id}.
- * @deprecated
- * @summary Get Taxonomy detail (deprecated; use GET /api/entities/{id}).
- */
-export const getTag = async (id: string,
-    params?: GetTagParams, options?: RequestInit): Promise<getTagResponse> => {
-
-  return orvalFetch<getTagResponse>(getGetTagUrl(id,params),
-  {
-    ...options,
-    method: 'GET'
-
-
-  }
-);}
-
-
-
 export type getTagPatchResponse200 = {
   data: EntityCard
   status: 200
@@ -5903,60 +5130,6 @@ export const createCollection = async (collectionWriteRequest: CollectionWriteRe
     headers: { 'Content-Type': 'application/json', ...options?.headers },
     body: JSON.stringify(
       collectionWriteRequest,)
-  }
-);}
-
-
-
-export type getCollectionResponse200 = {
-  data: EntityCard
-  status: 200
-}
-
-export type getCollectionResponse404 = {
-  data: ApiProblem
-  status: 404
-}
-
-export type getCollectionResponseSuccess = (getCollectionResponse200) & {
-  headers: Headers;
-};
-export type getCollectionResponseError = (getCollectionResponse404) & {
-  headers: Headers;
-};
-
-export type getCollectionResponse = (getCollectionResponseSuccess | getCollectionResponseError)
-
-export const getGetCollectionUrl = (id: string,
-    params?: GetCollectionParams,) => {
-  const normalizedParams = new URLSearchParams();
-
-  Object.entries(params || {}).forEach(([key, value]) => {
-
-    if (value !== undefined) {
-      normalizedParams.append(key, value === null ? 'null' : value.toString())
-    }
-  });
-
-  const stringifiedParams = normalizedParams.toString();
-
-  return stringifiedParams.length > 0 ? `/api/collections/${id}?${stringifiedParams}` : `/api/collections/${id}`
-}
-
-/**
- * Deprecated compatibility alias. Use GET /api/entities/{id}.
- * @deprecated
- * @summary Get Collections detail (deprecated; use GET /api/entities/{id}).
- */
-export const getCollection = async (id: string,
-    params?: GetCollectionParams, options?: RequestInit): Promise<getCollectionResponse> => {
-
-  return orvalFetch<getCollectionResponse>(getGetCollectionUrl(id,params),
-  {
-    ...options,
-    method: 'GET'
-
-
   }
 );}
 

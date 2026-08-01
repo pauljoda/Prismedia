@@ -5,7 +5,7 @@
   import EntityDetailPageState from "$lib/components/entities/EntityDetailPageState.svelte";
   import EntityDetailHeroDates from "$lib/components/entities/EntityDetailHeroDates.svelte";
   import { useEntityDetailPage } from "$lib/components/entities/entity-detail-page-controller.svelte";
-  import { fetchAudioTrack, type AudioTrackDetail } from "$lib/api/media";
+  import { fetchEntity, type EntityCardFull } from "$lib/api/entities";
   import { getCapability, isWanted } from "$lib/api/capabilities";
   import { refreshAfterManagedFileRevert } from "$lib/entities/entity-file-management";
   import EntityDetail, {
@@ -19,7 +19,7 @@
   import { CREDIT_ROLE, ENTITY_KIND } from "$lib/entities/entity-codes";
   import { resolveEntityHref } from "$lib/entities/entity-routes";
   import { hydrateStandardRelationshipCards } from "$lib/entities/entity-relationship-thumbnails";
-  import { audioTrackDetailToListItem } from "$lib/entities/audio-track-items";
+  import { entityCardToAudioTrackListItem } from "$lib/entities/audio-track-items";
   import { useAudioPlayback } from "$lib/stores/audio-playback.svelte";
 
   const playback = useAudioPlayback()!;
@@ -28,10 +28,10 @@
   let relationshipStudio = $state<EntityDetailCredit | null>(null);
   let relationshipTags = $state<EntityDetailTag[]>([]);
 
-  const detail = useEntityDetailPage<AudioTrackDetail>({
+  const detail = useEntityDetailPage<EntityCardFull>({
     loadKey: () => page.params.id ?? "",
     load: async ({ signal }) => {
-      const nextTrack = await fetchAudioTrack(page.params.id ?? "", { signal });
+      const nextTrack = await fetchEntity(page.params.id ?? "", { signal });
       const relationships = await hydrateStandardRelationshipCards(nextTrack, { signal });
       signal.throwIfAborted();
 
@@ -62,7 +62,7 @@
 
   const dates = $derived(card?.dates ?? []);
 
-  const trackItem = $derived(track ? audioTrackDetailToListItem(track) : null);
+  const trackItem = $derived(track ? entityCardToAudioTrackListItem(track) : null);
   const wanted = $derived(track ? isWanted(track.capabilities) : false);
   const coverUrl = $derived(card?.posterCard?.cover?.src ?? card?.poster?.src ?? null);
 
