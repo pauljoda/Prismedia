@@ -24,8 +24,13 @@
 
   $effect(() => {
     if (!dialogRef) return;
-    if (open && !dialogRef.open) dialogRef.showModal();
-    else if (!open && dialogRef.open) dialogRef.close();
+    if (open && !dialogRef.open) {
+      if (typeof dialogRef.showModal === "function") dialogRef.showModal();
+      else dialogRef.setAttribute("open", "");
+    } else if (!open && dialogRef.open) {
+      if (typeof dialogRef.close === "function") dialogRef.close();
+      else dialogRef.removeAttribute("open");
+    }
   });
 
   function requestClose() {

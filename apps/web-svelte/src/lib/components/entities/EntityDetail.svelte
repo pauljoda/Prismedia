@@ -33,12 +33,11 @@
     MonitorCog,
     Pencil,
     Play,
-    Save,
     Trash2,
     Upload,
     Users,
-    X,
   } from "@lucide/svelte";
+  import { Button } from "@prismedia/ui-svelte";
   import type { EntityDetailCard, EntityDetailCardFull, EntityDetailLink } from "$lib/entities/entity-detail";
   import { renderEntityDescriptionMarkdown } from "$lib/entities/entity-detail-markdown";
   import {
@@ -86,6 +85,8 @@
   import { entityAccentForKind } from "$lib/entities/entity-accent";
   import { paletteFromImage, type ArtworkPalette } from "$lib/entities/artwork-palette";
   import { EntityDetailArtworkController } from "./entity-detail-artwork-controller.svelte";
+  import EntityDetailDirtyTabDialog from "./EntityDetailDirtyTabDialog.svelte";
+  import EntityDetailEditControls from "./EntityDetailEditControls.svelte";
   import { EntityDetailEditController } from "./entity-detail-edit-controller.svelte";
 
   type Props = EntityDetailProps;
@@ -219,7 +220,6 @@
   const isEditingActiveTab = $derived(edit.isEditingActiveTab);
   const pendingTabId = $derived(edit.pendingTabId);
   const savingEdit = $derived(edit.saving);
-  const editError = $derived(edit.error);
   const effectiveShowHero = $derived(showHero || isEditingActiveTab);
   const displayHero = $derived(artwork.displayHeader);
   const displayPoster = $derived(artwork.displayPoster);
@@ -248,7 +248,9 @@
   });
   const editValidationErrors = $derived(edit.validationErrors);
   const saveDisabled = $derived(edit.saveDisabled);
-  const assetError = $derived(artwork.error);
+  const editErrors = $derived.by(() =>
+    [...editValidationErrors, edit.error, artwork.error].filter((error): error is string => Boolean(error)),
+  );
 
   function findSection(sectionId: string): EntityDetailSection | null {
     return availableSections.find((section) => section.id === sectionId) ?? null;
@@ -928,31 +930,15 @@
   {#if isEditingActiveTab || hasStandaloneBodyContent || afterBody || standaloneMetadataSections.length > 0 || extraSections}
     <div class="detail-content-card detail-content-card--standalone">
       {#if isEditingActiveTab}
-        <div class="detail-edit-toolbar">
-          <div class="detail-edit-actions">
-            <button type="button" class="edit-action secondary" onclick={cancelEdit} disabled={savingEdit} aria-label="Cancel editing">
-              <X class="h-3.5 w-3.5" />
-              Cancel
-            </button>
-            <button type="button" class="edit-action primary" onclick={() => void saveEdit()} disabled={saveDisabled} aria-label="Save changes">
-              <Save class="h-3.5 w-3.5" />
-              {savingEdit ? "Saving…" : "Save"}
-            </button>
-          </div>
-        </div>
-        {#if editValidationErrors.length > 0 || editError || assetError}
-          <div class="edit-errors" aria-live="polite">
-            {#each editValidationErrors as error (error)}
-              <p>{error}</p>
-            {/each}
-            {#if editError}
-              <p>{editError}</p>
-            {/if}
-            {#if assetError}
-              <p>{assetError}</p>
-            {/if}
-          </div>
-        {/if}
+        <EntityDetailEditControls
+          cancelLabel="Cancel editing"
+          errors={editErrors}
+          onCancel={cancelEdit}
+          onSave={() => void saveEdit()}
+          {saveDisabled}
+          saveLabel="Save changes"
+          saving={savingEdit}
+        />
       {/if}
 
       {#if isEditingActiveTab}
@@ -1193,31 +1179,15 @@
           aria-labelledby={`entity-detail-tab-${activeTab.id}`}
         >
           {#if isEditingActiveTab}
-            <div class="detail-edit-toolbar">
-              <div class="detail-edit-actions">
-                <button type="button" class="edit-action secondary" onclick={cancelEdit} disabled={savingEdit} aria-label={`Cancel ${activeTab.label}`}>
-                  <X class="h-3.5 w-3.5" />
-                  Cancel
-                </button>
-                <button type="button" class="edit-action primary" onclick={() => void saveEdit()} disabled={saveDisabled} aria-label={`Save ${activeTab.label}`}>
-                  <Save class="h-3.5 w-3.5" />
-                  {savingEdit ? "Saving…" : "Save"}
-                </button>
-              </div>
-            </div>
-            {#if isEditingActiveTab && (editValidationErrors.length > 0 || editError || assetError)}
-              <div class="edit-errors" aria-live="polite">
-                {#each editValidationErrors as error (error)}
-                  <p>{error}</p>
-                {/each}
-                {#if editError}
-                  <p>{editError}</p>
-                {/if}
-                {#if assetError}
-                  <p>{assetError}</p>
-                {/if}
-              </div>
-            {/if}
+            <EntityDetailEditControls
+              cancelLabel={`Cancel ${activeTab.label}`}
+              errors={editErrors}
+              onCancel={cancelEdit}
+              onSave={() => void saveEdit()}
+              {saveDisabled}
+              saveLabel={`Save ${activeTab.label}`}
+              saving={savingEdit}
+            />
           {/if}
           {#key activeTab.id}
             <div class="detail-tab-sections">
@@ -1225,10 +1195,16 @@
                 <div class="tab-empty-state">
                   <p>No {activeTab.label.toLowerCase()} yet.</p>
                   {#if canEdit}
-                    <button type="button" class="edit-action secondary" onclick={() => startEdit(activeTab ?? undefined)}>
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="sm"
+                      class="font-mono text-[0.68rem] font-bold uppercase tracking-[0.04em]"
+                      onclick={() => startEdit(activeTab ?? undefined)}
+                    >
                       <Pencil class="h-3.5 w-3.5" />
                       Edit {activeTab.label}
-                    </button>
+                    </Button>
                   {/if}
                 </div>
               {:else}
@@ -1248,18 +1224,7 @@
   {/if}
 </article>
 
-{#if pendingTabId}
-  <div class="app-overlay-backdrop edit-confirm-backdrop">
-    <div class="app-dialog-surface edit-confirm" role="dialog" aria-modal="true" aria-label="Discard unsaved edits?">
-      <h2>Discard unsaved edits?</h2>
-      <p>Changing tabs will leave the current edit session.</p>
-      <div class="edit-confirm-actions">
-        <button type="button" class="edit-action secondary" onclick={stayOnDirtyTab}>Stay here</button>
-        <button type="button" class="edit-action primary" onclick={discardDirtyTab}>Discard changes</button>
-      </div>
-    </div>
-  </div>
-{/if}
+<EntityDetailDirtyTabDialog open={Boolean(pendingTabId)} onStay={stayOnDirtyTab} onDiscard={discardDirtyTab} />
 
 <style>
   /* ── Layout ─────────────────────────────────────────────── */
@@ -1857,79 +1822,6 @@
     margin: -1px var(--detail-slideout-inset) 0;
   }
 
-  .detail-edit-toolbar {
-    display: flex;
-    align-items: center;
-    justify-content: flex-end;
-    gap: 0.5rem;
-    padding: 0.5rem 1.5rem;
-    border-bottom: 1px solid var(--detail-border);
-    background: var(--detail-glass);
-    backdrop-filter: blur(var(--detail-glass-blur));
-    -webkit-backdrop-filter: blur(var(--detail-glass-blur));
-  }
-
-  .detail-edit-actions,
-  .edit-confirm-actions {
-    display: flex;
-    align-items: center;
-    justify-content: end;
-    gap: 0.5rem;
-    flex-wrap: wrap;
-  }
-
-  .edit-action {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: 0.4rem;
-    min-height: 2rem;
-    border: 1px solid var(--detail-border);
-    border-radius: var(--radius-xs, 4px);
-    padding: 0.35rem 0.7rem;
-    background: var(--detail-surface-raised);
-    color: var(--detail-text-secondary);
-    cursor: pointer;
-    font-family: var(--font-mono, "JetBrains Mono", monospace);
-    font-size: 0.68rem;
-    font-weight: 700;
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
-    transition: color 0.15s, border-color 0.15s, background 0.15s, box-shadow 0.15s, opacity 0.15s;
-  }
-
-  .edit-action.primary {
-    color: var(--detail-text);
-    border-color: var(--color-border-default);
-    background: var(--detail-surface-raised);
-    box-shadow: inset 2px 0 0 color-mix(in srgb, var(--detail-accent) 72%, #c7c9cc);
-  }
-
-  .edit-action.secondary {
-    color: var(--detail-text-muted);
-  }
-
-  .edit-action:disabled {
-    cursor: not-allowed;
-    opacity: 0.45;
-    box-shadow: none;
-  }
-
-  .edit-errors {
-    display: grid;
-    gap: 0.25rem;
-    padding: 0.65rem 1.5rem;
-    border-bottom: 1px solid color-mix(in srgb, #ef4444 45%, var(--detail-border));
-    border-radius: var(--radius-xs, 4px);
-    background: color-mix(in srgb, #ef4444 8%, var(--detail-surface));
-    color: #fca5a5;
-    font-size: 0.78rem;
-  }
-
-  .edit-errors p {
-    margin: 0;
-  }
-
   .detail-tab-sections {
     min-width: 0;
     padding: 1rem 1.5rem 1.5rem;
@@ -2128,35 +2020,6 @@
 
   .edit-flag-chips :global(button) {
     min-height: 2.55rem;
-  }
-
-  .edit-confirm-backdrop {
-    position: fixed;
-    inset: 0;
-    z-index: 80;
-    display: grid;
-    place-items: center;
-    padding: 1rem;
-  }
-
-  .edit-confirm {
-    width: min(100%, 24rem);
-    color: var(--detail-text-secondary, #c4c9d4);
-    padding: 1rem;
-  }
-
-  .edit-confirm h2 {
-    margin: 0;
-    color: var(--detail-text, #f2eed8);
-    font-family: var(--font-heading, Geist, sans-serif);
-    font-size: 1rem;
-    letter-spacing: 0;
-  }
-
-  .edit-confirm p {
-    margin: 0.45rem 0 1rem;
-    color: var(--detail-text-muted, #8a93a6);
-    font-size: 0.82rem;
   }
 
   .section-label {

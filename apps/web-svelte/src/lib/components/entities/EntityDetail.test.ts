@@ -499,6 +499,13 @@ describe("EntityDetail", () => {
     expect(screen.getByRole("dialog", { name: "Discard unsaved edits?" })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Links" })).toHaveAttribute("aria-selected", "true");
 
+    await fireEvent.click(screen.getByRole("button", { name: "Stay here" }));
+
+    expect(screen.queryByRole("dialog", { name: "Discard unsaved edits?" })).not.toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Links" })).toHaveAttribute("aria-selected", "true");
+
+    await fireEvent.click(screen.getByRole("tab", { name: "Details" }));
+
     await fireEvent.click(screen.getByRole("button", { name: "Discard changes" }));
 
     expect(screen.getByRole("tab", { name: "Details" })).toHaveAttribute("aria-selected", "true");
