@@ -10,6 +10,5 @@ public static class StudioEndpoints {
             EntityKind.Studio.ToCode(),
             "Taxonomy",
             "ListStudios",
-            "GetStudio",
-            manageable: true);
+            "GetStudio");
 }

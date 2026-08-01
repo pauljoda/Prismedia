@@ -14,8 +14,7 @@ internal static class EntityKindRouteEndpoints {
         string kind,
         string tag,
         string listName,
-        string detailName,
-        bool manageable = false) {
+        string detailName) {
         var group = routes.MapGroup(prefix)
             .WithTags(tag);
 
@@ -60,7 +59,7 @@ internal static class EntityKindRouteEndpoints {
             .WithSummary($"List {tag}.")
             .Produces<EntityListResponse>();
 
-        if (manageable) {
+        if (EntityKindRegistry.TryDescribe(kind, out var definition) && definition.SupportsManualManagement) {
             group.MapManagementRoutes(kind, tag, detailName);
         }
 

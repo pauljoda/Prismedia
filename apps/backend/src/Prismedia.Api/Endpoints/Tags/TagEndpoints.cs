@@ -10,6 +10,5 @@ public static class TagEndpoints {
             EntityKind.Tag.ToCode(),
             "Taxonomy",
             "ListTags",
-            "GetTag",
-            manageable: true);
+            "GetTag");
 }

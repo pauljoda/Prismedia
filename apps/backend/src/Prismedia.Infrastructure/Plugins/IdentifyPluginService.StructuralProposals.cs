@@ -106,9 +106,9 @@ public sealed partial class IdentifyPluginService {
         // down (its freshly-identified external ids as an ancestor, plus the child's structural
         // position such as a season number). This is the recursive full-tree cascade: a series fills
         // its seasons and episodes, a book fills its volumes and chapters, etc. Only identify-container
-        // kinds cascade — a leaf-content kind (a movie wrapping a single video) is one work and never
-        // walks into its own media file. Child recursions never flush (sink: null) so only the root
-        // streams; each child's full subtree is resolved before it is merged into the root.
+        // kinds cascade — a leaf-content kind (such as a directly playable movie) is one work and never
+        // walks into a child Entity for its own media file. Child recursions never flush (sink: null), so
+        // only the root streams; each child's full subtree is resolved before it is merged into the root.
         var structuralChildren = new List<EntityMetadataProposal>();
         if (cascadeChildren && EntityKindRegistry.EnumeratesIdentifyChildren(entity.KindCode)) {
             var persistedChildren = await LoadStructuralChildrenAsync(entity.Id, cancellationToken);

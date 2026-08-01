@@ -10,6 +10,5 @@ public static class PeopleEndpoints {
             EntityKind.Person.ToCode(),
             "Taxonomy",
             "ListPeople",
-            "GetPerson",
-            manageable: true);
+            "GetPerson");
 }
