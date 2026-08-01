@@ -527,9 +527,14 @@ public sealed partial class EfEntityReadService : IEntityReadService {
                 hideNsfw,
                 enforceLibraryVisibility,
                 cancellationToken));
+        var detailGroups = await ProjectDetailGroupsAsync(
+            id,
+            hideNsfw,
+            enforceLibraryVisibility,
+            cancellationToken);
         var card = projected with {
-            ChildrenByKind = await ProjectDirectChildGroupsAsync(id, hideNsfw, enforceLibraryVisibility, cancellationToken),
-            Relationships = await ProjectRelationshipGroupsAsync(id, hideNsfw, enforceLibraryVisibility, cancellationToken)
+            ChildrenByKind = detailGroups.Children,
+            Relationships = detailGroups.Relationships
         };
         return await EnrichProgressAsync(card, hideNsfw, cancellationToken);
     }
@@ -820,68 +825,77 @@ public sealed partial class EfEntityReadService : IEntityReadService {
             .ToArray();
     }
 
-    private async Task<IReadOnlyList<EntityGroup>> ProjectDirectChildGroupsAsync(
+    /// <summary>
+    /// Hydrates the structural children and relationship targets for one detail document through a
+    /// single thumbnail page. Detail documents often contain several kinds in each section; sending
+    /// each group through the thumbnail pipeline separately multiplied its batched contributor and
+    /// asset queries by the number of groups.
+    /// </summary>
+    private async Task<(IReadOnlyList<EntityGroup> Children, IReadOnlyList<EntityGroup> Relationships)> ProjectDetailGroupsAsync(
         Guid entityId,
         bool hideNsfw,
         bool enforceLibraryVisibility,
         CancellationToken cancellationToken) {
-        var query = _db.Entities.AsNoTracking()
+        var childQuery = _db.Entities.AsNoTracking()
             .Where(row => row.ParentEntityId == entityId);
         if (enforceLibraryVisibility) {
-            query = ApplyEnabledLibraryVisibility(query);
+            childQuery = ApplyEnabledLibraryVisibility(childQuery);
         }
-        query = ApplyNsfwVisibility(query, hideNsfw);
-        var childRows = await query
+        childQuery = ApplyNsfwVisibility(childQuery, hideNsfw);
+        var childRows = await childQuery
             .OrderBy(row => row.KindCode)
             .ThenBy(row => row.SortOrder)
             .ThenBy(row => row.Title)
             .ThenBy(row => row.Id)
             .ToArrayAsync(cancellationToken);
-        if (childRows.Length == 0) {
-            return [];
-        }
-
-        var groups = new List<EntityGroup>();
-        foreach (var group in childRows.GroupBy(row => row.KindCode)) {
-            if (!group.Key.TryDecodeAs<EntityKind>(out var childKind)) {
-                continue;
-            }
-
-            groups.Add(new EntityGroup(
-                childKind,
-                EntityKindRegistry.Describe(childKind).GroupLabel,
-                await ProjectThumbnailsAsync(group.ToArray(), hideNsfw, enforceLibraryVisibility, cancellationToken)));
-        }
-
-        return groups;
-    }
-
-    private async Task<IReadOnlyList<EntityGroup>> ProjectRelationshipGroupsAsync(
-        Guid entityId,
-        bool hideNsfw,
-        bool enforceLibraryVisibility,
-        CancellationToken cancellationToken) {
         var links = await _db.EntityRelationshipLinks.AsNoTracking()
             .Where(link => link.EntityId == entityId)
             .OrderBy(link => link.RelationshipCode)
             .ThenBy(link => link.SortOrder)
             .ThenBy(link => link.TargetEntityId)
             .ToArrayAsync(cancellationToken);
-        if (links.Length == 0) {
-            return [];
-        }
-
         var targetIds = links.Select(link => link.TargetEntityId).Distinct().ToArray();
-        var targetQuery = _db.Entities.AsNoTracking()
-            .Where(entity => targetIds.Contains(entity.Id));
-        if (enforceLibraryVisibility) {
-            targetQuery = ApplyEnabledLibraryVisibility(targetQuery);
+        var targetRows = new Dictionary<Guid, EntityRow>();
+        if (targetIds.Length > 0) {
+            var targetQuery = _db.Entities.AsNoTracking()
+                .Where(entity => targetIds.Contains(entity.Id));
+            if (enforceLibraryVisibility) {
+                targetQuery = ApplyEnabledLibraryVisibility(targetQuery);
+            }
+            targetQuery = ApplyNsfwVisibility(targetQuery, hideNsfw);
+            targetRows = await targetQuery.ToDictionaryAsync(entity => entity.Id, cancellationToken);
         }
-        targetQuery = ApplyNsfwVisibility(targetQuery, hideNsfw);
-        var targetRows = await targetQuery
-            .ToDictionaryAsync(entity => entity.Id, cancellationToken);
 
-        var groups = new List<EntityGroup>();
+        var relationshipRows = links
+            .Select(link => targetRows.GetValueOrDefault(link.TargetEntityId))
+            .Where(row => row is not null)
+            .Select(row => row!);
+        var thumbnailRows = childRows
+            .Concat(relationshipRows)
+            .DistinctBy(row => row.Id)
+            .ToArray();
+        var thumbnailsById = thumbnailRows.Length == 0
+            ? new Dictionary<Guid, EntityThumbnail>()
+            : (await ProjectThumbnailsAsync(
+                    thumbnailRows,
+                    hideNsfw,
+                    enforceLibraryVisibility,
+                    cancellationToken))
+                .ToDictionary(thumbnail => thumbnail.Id);
+
+        var children = new List<EntityGroup>();
+        foreach (var group in childRows.GroupBy(row => row.KindCode)) {
+            if (!group.Key.TryDecodeAs<EntityKind>(out var childKind)) {
+                continue;
+            }
+
+            children.Add(new EntityGroup(
+                childKind,
+                EntityKindRegistry.Describe(childKind).GroupLabel,
+                MapProjectedThumbnails(group, thumbnailsById)));
+        }
+
+        var relationships = new List<EntityGroup>();
         foreach (var group in links.GroupBy(link => new { link.RelationshipCode, link.TargetKindCode })) {
             var orderedRows = group
                 .Select(link => targetRows.GetValueOrDefault(link.TargetEntityId))
@@ -892,10 +906,10 @@ public sealed partial class EfEntityReadService : IEntityReadService {
                 continue;
             }
 
-            groups.Add(new EntityGroup(
+            relationships.Add(new EntityGroup(
                 group.Key.TargetKindCode.DecodeAs<EntityKind>(),
                 RelationshipLabel(group.Key.RelationshipCode),
-                await ProjectThumbnailsAsync(orderedRows, hideNsfw, enforceLibraryVisibility, cancellationToken)) {
+                MapProjectedThumbnails(orderedRows, thumbnailsById)) {
                 Code = group.Key.RelationshipCode is { Length: > 0 } relationshipCode
                     && relationshipCode.TryDecodeAs<RelationshipKind>(out var relationshipKind)
                         ? relationshipKind
@@ -903,8 +917,16 @@ public sealed partial class EfEntityReadService : IEntityReadService {
             });
         }
 
-        return groups;
+        return (children, relationships);
     }
+
+    private static IReadOnlyList<EntityThumbnail> MapProjectedThumbnails(
+        IEnumerable<EntityRow> rows,
+        IReadOnlyDictionary<Guid, EntityThumbnail> thumbnailsById) =>
+        rows.Select(row => thumbnailsById.GetValueOrDefault(row.Id))
+            .Where(thumbnail => thumbnail is not null)
+            .Select(thumbnail => thumbnail!)
+            .ToArray();
 
     private async Task<IReadOnlyList<EntityCreditMetadata>> ProjectCreditMetadataAsync(
         Guid entityId,
