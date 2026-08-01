@@ -19,6 +19,12 @@
   import type { Component } from "svelte";
   import { cn, Toggle } from "@prismedia/ui-svelte";
   import type { EntityCard } from "$lib/api/generated/model";
+  import {
+    COLLECTION_COVER_MODE,
+    COLLECTION_MODE,
+    type CollectionCoverModeCode,
+    type CollectionModeCode,
+  } from "$lib/api/generated/codes";
   import { createCollection, previewCollectionRules, updateCollection } from "$lib/api/collections";
   import {
     getCollectionConfigurationCapability,
@@ -31,8 +37,6 @@
     COLLECTION_RULE_FIELDS,
     EMPTY_COLLECTION_RULE,
     type CollectionConditionValue,
-    type CollectionCoverMode,
-    type CollectionMode,
     type CollectionOperator,
     type CollectionRuleCondition,
     type CollectionRuleFieldDef,
@@ -57,22 +61,22 @@
 
   const appChrome = useAppChrome();
   const nsfw = useNsfw();
-  const modes: { value: CollectionMode; label: string; desc: string; icon: Component }[] = [
-    { value: "manual", label: "Manual", desc: "Hand-pick and order items", icon: List },
-    { value: "dynamic", label: "Dynamic", desc: "Auto-populate from rules", icon: Zap },
-    { value: "hybrid", label: "Hybrid", desc: "Rules plus manual pins", icon: Layers },
+  const modes: { value: CollectionModeCode; label: string; desc: string; icon: Component }[] = [
+    { value: COLLECTION_MODE.manual, label: "Manual", desc: "Hand-pick and order items", icon: List },
+    { value: COLLECTION_MODE.dynamic, label: "Dynamic", desc: "Auto-populate from rules", icon: Zap },
+    { value: COLLECTION_MODE.hybrid, label: "Hybrid", desc: "Rules plus manual pins", icon: Layers },
   ];
 
-  const coverModes: { value: CollectionCoverMode; label: string }[] = [
-    { value: "mosaic", label: "Mosaic" },
-    { value: "item", label: "Standard" },
+  const coverModes: { value: CollectionCoverModeCode; label: string }[] = [
+    { value: COLLECTION_COVER_MODE.mosaic, label: "Mosaic" },
+    { value: COLLECTION_COVER_MODE.item, label: "Standard" },
   ];
 
   let hydratedId = $state<string | null>(null);
   let title = $state("");
   let description = $state("");
-  let mode = $state<CollectionMode>("manual");
-  let coverMode = $state<CollectionCoverMode>("mosaic");
+  let mode = $state<CollectionModeCode>(COLLECTION_MODE.manual);
+  let coverMode = $state<CollectionCoverModeCode>(COLLECTION_COVER_MODE.mosaic);
   let isNsfw = $state(false);
   let isShared = $state(false);
   let ruleTree = $state<CollectionRuleGroup>({ ...EMPTY_COLLECTION_RULE, children: [] });
@@ -86,7 +90,7 @@
   let libraryRoots = $state<LibraryRoot[]>([]);
   let previewToken = 0;
 
-  const showRules = $derived(mode === "dynamic" || mode === "hybrid");
+  const showRules = $derived(mode === COLLECTION_MODE.dynamic || mode === COLLECTION_MODE.hybrid);
   const canSave = $derived(title.trim().length > 0 && !saving);
   const hasConditions = $derived(ruleTree.children.length > 0);
   const rulesReady = $derived(allConditionsRunnable(ruleTree));
@@ -185,8 +189,8 @@
     if (!collection) {
       title = "";
       description = "";
-      mode = "manual";
-      coverMode = "mosaic";
+      mode = COLLECTION_MODE.manual;
+      coverMode = COLLECTION_COVER_MODE.mosaic;
       isNsfw = false;
       isShared = false;
       ruleTree = { ...EMPTY_COLLECTION_RULE, children: [] };
@@ -224,12 +228,16 @@
     return () => clearTimeout(timer);
   });
 
-  function normalizeMode(value: string | null | undefined): CollectionMode {
-    return value === "dynamic" || value === "hybrid" ? value : "manual";
+  function normalizeMode(value: string | null | undefined): CollectionModeCode {
+    return value === COLLECTION_MODE.dynamic || value === COLLECTION_MODE.hybrid
+      ? value
+      : COLLECTION_MODE.manual;
   }
 
-  function normalizeCoverMode(value: string | null | undefined): CollectionCoverMode {
-    return value === "custom" || value === "item" ? value : "mosaic";
+  function normalizeCoverMode(value: string | null | undefined): CollectionCoverModeCode {
+    return value === COLLECTION_COVER_MODE.custom || value === COLLECTION_COVER_MODE.item
+      ? value
+      : COLLECTION_COVER_MODE.mosaic;
   }
 
   function parseRuleTree(raw: string | null | undefined): CollectionRuleGroup {

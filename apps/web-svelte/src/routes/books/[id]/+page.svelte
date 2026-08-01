@@ -1,5 +1,12 @@
 <script lang="ts">
-  import { CAPABILITY_KIND, PROGRESS_UNIT, READER_MODE, type BookRenditionCode } from "$lib/api/generated/codes";
+  import {
+    BOOK_FORMAT,
+    BOOK_TYPE,
+    CAPABILITY_KIND,
+    PROGRESS_UNIT,
+    READER_MODE,
+    type BookRenditionCode,
+  } from "$lib/api/generated/codes";
   import { onDestroy } from "svelte";
   import { goto } from "$app/navigation";
   import { page } from "$app/state";
@@ -16,7 +23,7 @@
   import { fetchEntityMonitors, resumeMonitor, stopMonitor } from "$lib/api/monitors";
   import { commitEntityRequest } from "$lib/api/requests";
   import { updateEntityProgress } from "$lib/api/playback";
-  import { BookFormat, type AcquisitionDetail, type EntityThumbnail, type MonitorView } from "$lib/api/generated/model";
+  import type { AcquisitionDetail, EntityThumbnail, MonitorView } from "$lib/api/generated/model";
   import { fetchEntity, fetchEntityChildren, type EntityCardFull } from "$lib/api/entities";
   import { refreshAfterManagedFileRevert } from "$lib/entities/entity-file-management";
   import { entityCardToDetailCard, type EntityDetailCardFull, type EntityDetailCredit, type EntityDetailTag } from "$lib/entities/entity-detail";
@@ -133,16 +140,18 @@
   const entityWanted = $derived(!!book && isWanted(book.capabilities));
   // Single-file books (EPUB/PDF) are read straight from the source file with no chapter entities.
   const isSingleFileBook = $derived(
-    !!book && (bookMetadata?.format === BookFormat.epub || bookMetadata?.format === BookFormat.pdf),
+    !!book && (bookMetadata?.format === BOOK_FORMAT.epub || bookMetadata?.format === BOOK_FORMAT.pdf),
   );
   const singleFileProgress = $derived(book && isSingleFileBook ? getCapability(book.capabilities, CAPABILITY_KIND.progress) : null);
   // Started once a position has been saved (EPUB and PDF both set currentEntityId to the book id).
   const singleFileInProgress = $derived(!!singleFileProgress?.currentEntityId && !singleFileProgress?.completedAt);
   // Single-file books have no chapter entities, so they need their own progress-panel display.
   const singleFileProgressDisplay = $derived(isSingleFileBook ? singleFileBookProgressDisplay(book) : null);
-  const peopleLabel = $derived(bookType === "comic" || bookType === "manga" ? "Artists" : "People");
+  const peopleLabel = $derived(
+    bookType === BOOK_TYPE.comic || bookType === BOOK_TYPE.manga ? "Artists" : "People",
+  );
   const defaultCreditRole = $derived(
-    bookType === "comic" || bookType === "manga" ? CREDIT_ROLE.artist : CREDIT_ROLE.writer,
+    bookType === BOOK_TYPE.comic || bookType === BOOK_TYPE.manga ? CREDIT_ROLE.artist : CREDIT_ROLE.writer,
   );
   const bookTitle = $derived(book?.title ?? "Book");
   const chapterSummaries = $derived(combineChapterSummaries(chapterDetails, progressChapterSummary));
@@ -174,7 +183,7 @@
       playback.context?.playbackOwnerEntityKind === ENTITY_KIND.book,
   );
   const readableChapters = $derived.by((): ReadableBookChapter[] => {
-    if (bookMetadata?.format === BookFormat.epub) {
+    if (bookMetadata?.format === BOOK_FORMAT.epub) {
       return epubContents.map((entry) => ({
         id: entry.id,
         title: entry.title,
@@ -201,7 +210,7 @@
   const baseChapterRows = $derived(buildBookChapterRows({
     readableChapters,
     audioTracks: audiobookTracks,
-    currentReadableId: bookMetadata?.format === BookFormat.epub
+    currentReadableId: bookMetadata?.format === BOOK_FORMAT.epub
       ? currentEpubChapterId
       : progressDisplay?.isComplete
         ? null
@@ -303,7 +312,7 @@
   );
   const hasReadableContent = $derived(
     isSingleFileBook ||
-      (bookMetadata?.format === BookFormat["image-archive"] &&
+      (bookMetadata?.format === BOOK_FORMAT.imageArchive &&
         (readerPageCount > 0 || chapterDetails.length > 0 || volumeCards.length > 0)),
   );
   const card = $derived.by((): EntityDetailCardFull | null => {
@@ -475,7 +484,7 @@
 
   async function hydrateEpubContents(nextBook: EntityCardFull): Promise<void> {
     epubContentsAbort?.abort();
-    if (getBookMetadataCapability(nextBook.capabilities)?.format !== BookFormat.epub) {
+    if (getBookMetadataCapability(nextBook.capabilities)?.format !== BOOK_FORMAT.epub) {
       epubContents = [];
       currentEpubChapterId = null;
       epubContentsLoading = false;

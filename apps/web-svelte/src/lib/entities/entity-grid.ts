@@ -4,6 +4,8 @@ import {
   BOOK_TYPE,
   THUMBNAIL_HOVER_KIND,
   THUMBNAIL_META_ICON,
+  type BookFormatCode,
+  type BookTypeCode,
 } from "$lib/api/generated/codes";
 import {
   getCapability,
@@ -595,28 +597,34 @@ const STATUS_VALUE_BY_ID = new Map<string, string>(STATUS_FILTER_DEFS.map((def) 
  * the type — so they are surfaced only on the Books grid and skipped by the
  * client-side pass in {@link applyEntityGridState}.
  */
+function bookTypeFilterDef(code: BookTypeCode, label: string) {
+  return { id: `book-type:${code}`, code, label } as const;
+}
+
+function bookFormatFilterDef(code: BookFormatCode, label: string) {
+  return { id: `book-format:${code}`, code, label } as const;
+}
+
 export const BOOK_TYPE_FILTER_DEFS = [
-  { id: "book-type:book", code: BOOK_TYPE.book, label: "Book" },
-  { id: "book-type:comic", code: BOOK_TYPE.comic, label: "Comic" },
-  { id: "book-type:manga", code: BOOK_TYPE.manga, label: "Manga" },
-  { id: "book-type:novel", code: BOOK_TYPE.novel, label: "Novel" },
+  bookTypeFilterDef(BOOK_TYPE.book, "Book"),
+  bookTypeFilterDef(BOOK_TYPE.comic, "Comic"),
+  bookTypeFilterDef(BOOK_TYPE.manga, "Manga"),
+  bookTypeFilterDef(BOOK_TYPE.novel, "Novel"),
 ] as const;
 
 /** Book format filter options (the {@link BookFormat} closed set). Server-resolved like the types. */
 export const BOOK_FORMAT_FILTER_DEFS = [
-  { id: "book-format:image-archive", code: BOOK_FORMAT.imageArchive, label: "Comic Archive" },
-  { id: "book-format:epub", code: BOOK_FORMAT.epub, label: "EPUB" },
-  { id: "book-format:pdf", code: BOOK_FORMAT.pdf, label: "PDF" },
+  bookFormatFilterDef(BOOK_FORMAT.imageArchive, "Comic Archive"),
+  bookFormatFilterDef(BOOK_FORMAT.epub, "EPUB"),
+  bookFormatFilterDef(BOOK_FORMAT.pdf, "PDF"),
 ] as const;
 
-const BOOK_TYPE_LABEL_BY_ID = new Map<string, { id: string; code: string; label: string }>(
+const BOOK_TYPE_BY_FILTER_ID = new Map<string, (typeof BOOK_TYPE_FILTER_DEFS)[number]>(
   BOOK_TYPE_FILTER_DEFS.map((def) => [def.id, def]),
 );
-const BOOK_FORMAT_LABEL_BY_ID = new Map<string, { id: string; code: string; label: string }>(
+const BOOK_FORMAT_BY_FILTER_ID = new Map<string, (typeof BOOK_FORMAT_FILTER_DEFS)[number]>(
   BOOK_FORMAT_FILTER_DEFS.map((def) => [def.id, def]),
 );
-const BOOK_TYPE_PREFIX = "book-type:";
-const BOOK_FORMAT_PREFIX = "book-format:";
 
 /**
  * Filter IDs whose effect is resolved by the list endpoint across the whole
@@ -643,8 +651,8 @@ export function isServerResolvedFilterId(id: string): boolean {
     id.startsWith("rating:min:") ||
     id.startsWith("rating:max:") ||
     id.startsWith("status:") ||
-    id.startsWith(BOOK_TYPE_PREFIX) ||
-    id.startsWith(BOOK_FORMAT_PREFIX)
+    BOOK_TYPE_BY_FILTER_ID.has(id) ||
+    BOOK_FORMAT_BY_FILTER_ID.has(id)
   );
 }
 
@@ -696,10 +704,10 @@ export function buildServerQueryFromFilters(filterIds: string[]): EntityGridServ
       if (Number.isFinite(value)) server.ratingMax = Math.min(numberValue(server.ratingMax) ?? value, value);
     } else if (STATUS_VALUE_BY_ID.has(id)) {
       server.status = STATUS_VALUE_BY_ID.get(id);
-    } else if (id.startsWith(BOOK_TYPE_PREFIX)) {
-      bookTypes.push(id.slice(BOOK_TYPE_PREFIX.length));
-    } else if (id.startsWith(BOOK_FORMAT_PREFIX)) {
-      bookFormats.push(id.slice(BOOK_FORMAT_PREFIX.length));
+    } else if (BOOK_TYPE_BY_FILTER_ID.has(id)) {
+      bookTypes.push(BOOK_TYPE_BY_FILTER_ID.get(id)!.code);
+    } else if (BOOK_FORMAT_BY_FILTER_ID.has(id)) {
+      bookFormats.push(BOOK_FORMAT_BY_FILTER_ID.get(id)!.code);
     }
   }
   // The book families OR within themselves (any selected type/format matches) and
@@ -1004,11 +1012,11 @@ export function entityGridFilterFromId(
   if (statusDef) {
     return { id, count: 0, label: statusDef.defaultLabel, capabilityKind: CAPABILITY_KIND.progress, value: statusDef.value };
   }
-  const bookTypeDef = BOOK_TYPE_LABEL_BY_ID.get(id);
+  const bookTypeDef = BOOK_TYPE_BY_FILTER_ID.get(id);
   if (bookTypeDef) {
     return { id, count: 0, label: bookTypeDef.label, capabilityKind: CAPABILITY_KIND.classification, value: bookTypeDef.code };
   }
-  const bookFormatDef = BOOK_FORMAT_LABEL_BY_ID.get(id);
+  const bookFormatDef = BOOK_FORMAT_BY_FILTER_ID.get(id);
   if (bookFormatDef) {
     return { id, count: 0, label: bookFormatDef.label, capabilityKind: CAPABILITY_KIND.classification, value: bookFormatDef.code };
   }

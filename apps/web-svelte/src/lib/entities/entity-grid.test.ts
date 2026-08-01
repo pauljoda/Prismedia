@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { ACQUISITION_STATUS } from "$lib/api/generated/codes";
+import { ACQUISITION_STATUS, BOOK_FORMAT, BOOK_TYPE } from "$lib/api/generated/codes";
 import type { EntityCapability, EntityCard, EntityThumbnail, EntityKind } from "$lib/api/generated/model";
 import {
   AVAILABILITY_FILTER_DEFS,
+  BOOK_FORMAT_FILTER_DEFS,
+  BOOK_TYPE_FILTER_DEFS,
   ENTITY_GRID_ALL_KINDS,
   applyEntityGridState,
   buildCapabilityFilterOptions,
@@ -522,17 +524,21 @@ describe("server-resolved filters and sorting", () => {
 
   it("folds book type and format filters into comma-separated server params", () => {
     const server = buildServerQueryFromFilters([
-      "book-type:comic",
-      "book-type:manga",
-      "book-format:pdf",
+      BOOK_TYPE_FILTER_DEFS.find((definition) => definition.code === BOOK_TYPE.comic)!.id,
+      BOOK_TYPE_FILTER_DEFS.find((definition) => definition.code === BOOK_TYPE.manga)!.id,
+      BOOK_FORMAT_FILTER_DEFS.find((definition) => definition.code === BOOK_FORMAT.pdf)!.id,
     ]);
-    expect(server.bookType).toBe("comic,manga");
-    expect(server.bookFormat).toBe("pdf");
+    expect(server.bookType).toBe([BOOK_TYPE.comic, BOOK_TYPE.manga].join(","));
+    expect(server.bookFormat).toBe(BOOK_FORMAT.pdf);
   });
 
   it("treats book type and format filters as server-resolved", () => {
-    expect(isServerResolvedFilterId("book-type:comic")).toBe(true);
-    expect(isServerResolvedFilterId("book-format:epub")).toBe(true);
+    expect(isServerResolvedFilterId(
+      BOOK_TYPE_FILTER_DEFS.find((definition) => definition.code === BOOK_TYPE.comic)!.id,
+    )).toBe(true);
+    expect(isServerResolvedFilterId(
+      BOOK_FORMAT_FILTER_DEFS.find((definition) => definition.code === BOOK_FORMAT.epub)!.id,
+    )).toBe(true);
   });
 
   it("does not re-filter the loaded page on book type/format filters", () => {
@@ -541,7 +547,9 @@ describe("server-resolved filters and sorting", () => {
       entityCardToThumbnailCard(thumbnailEntity("b", "book", "Novel B")),
     ];
     // Thumbnails carry no book type, so the server result must pass through untouched.
-    const visible = applyEntityGridState(cards, gridState({ filterIds: ["book-type:comic"] }));
+    const visible = applyEntityGridState(cards, gridState({
+      filterIds: [BOOK_TYPE_FILTER_DEFS.find((definition) => definition.code === BOOK_TYPE.comic)!.id],
+    }));
     expect(visible.map((card) => card.entity.id).sort()).toEqual(["a", "b"]);
   });
 

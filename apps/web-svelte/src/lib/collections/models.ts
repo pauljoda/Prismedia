@@ -1,9 +1,14 @@
 import type { EntityThumbnail } from "$lib/api/generated/model";
+import type {
+  CollectionCoverModeCode,
+  CollectionItemSourceCode,
+  CollectionModeCode,
+} from "$lib/api/generated/codes";
 import { ENTITY_KIND, ENTITY_KIND_DEFINITIONS } from "$lib/entities/entity-codes";
 
-export type CollectionMode = "manual" | "dynamic" | "hybrid";
-export type CollectionCoverMode = "mosaic" | "custom" | "item";
-export type CollectionItemSource = "manual" | "dynamic";
+export type CollectionMode = CollectionModeCode;
+export type CollectionCoverMode = CollectionCoverModeCode;
+export type CollectionItemSource = CollectionItemSourceCode;
 
 /**
  * Entity kind codes that can be stored as collection members. The generated Collection
