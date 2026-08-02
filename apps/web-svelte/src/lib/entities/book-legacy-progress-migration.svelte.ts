@@ -22,13 +22,13 @@ export function useLegacyBookProgressMigration(
   $effect(() => {
     const book = getBook();
     if (!book) return;
-    const playback = getCapability(book.capabilities, CAPABILITY_KIND.playback);
+    const consumption = getCapability(book.capabilities, CAPABILITY_KIND.consumption);
     const progress = getCapability(book.capabilities, CAPABILITY_KIND.progress);
     const mappings = getMappings();
     const promotion = legacyBookProgressPromotion(
       getRows(),
       mappings,
-      Number(playback?.resumeSeconds ?? 0),
+      Number(consumption?.resumeSeconds ?? 0),
     );
     if (progress?.completedAt || !shouldPromoteLegacyBookProgress(
       mappings,

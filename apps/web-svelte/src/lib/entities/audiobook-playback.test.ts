@@ -102,7 +102,7 @@ function thumbnail(id: string, title: string, sortOrder: number, duration: strin
     isOrganized: true,
     isNsfw: false,
     rating: null,
-    playCount: 0,
+    accessCount: 0,
     meta: [{ icon: "duration", label: duration }],
   };
 }

@@ -9,6 +9,7 @@ export type EntityProgressUpdateRequestActivityKind = typeof EntityProgressUpdat
 
 
 export const EntityProgressUpdateRequestActivityKind = {
-  reading: 'reading',
+  viewing: 'viewing',
   listening: 'listening',
+  reading: 'reading',
 } as const;

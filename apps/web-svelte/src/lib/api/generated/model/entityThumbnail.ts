@@ -66,7 +66,7 @@ export interface EntityThumbnail {
      * @nullable
      * @pattern ^-?(?:0|[1-9]\d*)$
      */
-  playCount?: number | string | null;
+  accessCount?: number | string | null;
   /** @nullable */
   genres?: string[] | null;
   /** @nullable */

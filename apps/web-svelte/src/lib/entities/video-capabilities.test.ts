@@ -5,29 +5,33 @@ import type {
   VideoPlaybackSource,
   VideoPlaybackStream,
 } from "$lib/api/generated/model";
-import { STREAM_KIND, VIDEO_PLAYBACK_METHOD } from "$lib/api/generated/codes";
-import { extractVideoPlayerProps, getPlaybackState } from "./video-capabilities";
+import { CAPABILITY_KIND, STREAM_KIND, VIDEO_PLAYBACK_METHOD } from "$lib/api/generated/codes";
+import { extractVideoPlayerProps, getConsumptionState } from "./video-capabilities";
 
-describe("getPlaybackState", () => {
+describe("getConsumptionState", () => {
   it("maps the generated playback capability into resume state", () => {
     const capabilities: EntityCapability[] = [
       {
-        kind: "playback",
-        playCount: 3,
+        kind: CAPABILITY_KIND.consumption,
+        accessCount: 3,
+        completionCount: 2,
         skipCount: 1,
-        playDurationSeconds: 120,
+        activeSeconds: 120,
         resumeSeconds: 42,
-        lastPlayedAt: "2026-05-15T10:00:00Z",
+        lastAccessedAt: "2026-05-15T09:00:00Z",
+        lastActiveAt: "2026-05-15T10:00:00Z",
         completedAt: null,
       },
     ];
 
-    expect(getPlaybackState(capabilities)).toEqual({
-      playCount: 3,
+    expect(getConsumptionState(capabilities)).toEqual({
+      accessCount: 3,
+      completionCount: 2,
       skipCount: 1,
-      playDurationSeconds: 120,
+      activeSeconds: 120,
       resumeSeconds: 42,
-      lastPlayedAt: "2026-05-15T10:00:00Z",
+      lastAccessedAt: "2026-05-15T09:00:00Z",
+      lastActiveAt: "2026-05-15T10:00:00Z",
       completedAt: null,
     });
   });
@@ -46,7 +50,7 @@ describe("getPlaybackState", () => {
       },
     ];
 
-    expect(getPlaybackState(capabilities)).toBeNull();
+    expect(getConsumptionState(capabilities)).toBeNull();
   });
 });
 

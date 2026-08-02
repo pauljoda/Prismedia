@@ -1,3 +1,5 @@
+import type { AudioTrack, VideoQuality } from "vidstack";
+
 export function formatTime(seconds: number): string {
   const safe = Number.isFinite(seconds) ? Math.max(0, seconds) : 0;
   const h = Math.floor(safe / 3600);
@@ -28,6 +30,18 @@ export function formatDimensions(
     : null;
   if (safeWidth && safeHeight) return `${safeWidth}x${safeHeight}`;
   return null;
+}
+
+export function qualityLabel(quality: VideoQuality, index: number): string {
+  if (quality.bitrate) return formatBandwidth(quality.bitrate);
+  return `Level ${index + 1}`;
+}
+
+export function audioTrackLabel(track: AudioTrack, index: number): string {
+  const label = track.label || track.language || track.kind || `Track ${index + 1}`;
+  return track.language && !label.toLowerCase().includes(track.language.toLowerCase())
+    ? `${label} · ${track.language}`
+    : label;
 }
 
 export function languageLabel(language: string): string {

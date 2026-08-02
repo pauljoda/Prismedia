@@ -4,10 +4,10 @@
  * Prismedia.Api | v1
  * OpenAPI spec version: 1.0.0
  */
-import type { PlaybackEventKind } from './playbackEventKind';
+import type { ConsumptionEventKind } from './consumptionEventKind';
 
 export interface PlaybackEventCreateRequest {
-  kind: PlaybackEventKind;
+  kind: ConsumptionEventKind;
   /** @nullable */
   occurredAt: string | null;
   /**
@@ -20,4 +20,6 @@ export interface PlaybackEventCreateRequest {
      * @pattern ^-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?$
      */
   durationSeconds: number | string | null;
+  /** @nullable */
+  sessionId?: string | null;
 }

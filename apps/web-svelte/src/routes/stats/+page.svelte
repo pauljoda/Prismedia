@@ -36,10 +36,10 @@
   } from "$lib/entities/entity-thumbnail";
   import {
     ENTITY_KIND,
-    PLAYBACK_EVENT_KIND,
+    CONSUMPTION_EVENT_KIND,
     resolveEntityHref,
     type EntityKindCode,
-    type PlaybackEventKindCode,
+    type ConsumptionEventKindCode,
   } from "$lib/entities/entity-codes";
   import {
     buildDailySeries,
@@ -48,7 +48,7 @@
     completionRate,
     formatDayKey,
     formatDayShort,
-    formatWatchDuration,
+    formatActiveDuration,
     localUtcOffsetMinutes,
     statNumber,
     summarizeCadence,
@@ -67,7 +67,7 @@
 
   type TimeframeKey = "30d" | "90d" | "year" | "all";
   type KindFilter = typeof ALL_FILTER | EntityKindCode;
-  type EventFilter = typeof ALL_FILTER | PlaybackEventKindCode;
+  type EventFilter = typeof ALL_FILTER | ConsumptionEventKindCode;
 
   interface TimeframeOption {
     key: TimeframeKey;
@@ -84,8 +84,9 @@
 
   const EVENT_FILTERS: ReadonlyArray<{ value: EventFilter; label: string }> = [
     { value: ALL_FILTER, label: "All" },
-    { value: PLAYBACK_EVENT_KIND.completed, label: "Plays" },
-    { value: PLAYBACK_EVENT_KIND.skipped, label: "Skips" },
+    { value: CONSUMPTION_EVENT_KIND.accessed, label: "Opened" },
+    { value: CONSUMPTION_EVENT_KIND.completed, label: "Completed" },
+    { value: CONSUMPTION_EVENT_KIND.skipped, label: "Skips" },
   ];
 
   const nsfw = useNsfw();
@@ -109,10 +110,12 @@
   const utcOffsetMinutes = localUtcOffsetMinutes();
 
   const totalEvents = $derived(statNumber(stats?.totalEvents));
+  const accessedCount = $derived(statNumber(stats?.accessedCount));
   const completedCount = $derived(statNumber(stats?.completedCount));
   const skippedCount = $derived(statNumber(stats?.skippedCount));
   const distinctEntityCount = $derived(statNumber(stats?.distinctEntityCount));
-  const watchSeconds = $derived(statNumber(stats?.watchSeconds));
+  const activeSeconds = $derived(statNumber(stats?.activeSeconds));
+  const viewingSeconds = $derived(statNumber(stats?.viewingSeconds));
   const readingSeconds = $derived(statNumber(stats?.readingSeconds));
   const listeningSeconds = $derived(statNumber(stats?.listeningSeconds));
 
@@ -127,9 +130,16 @@
   const topEntities = $derived(stats?.topEntities ?? []);
   const recentEvents = $derived(stats?.recentEvents ?? []);
 
-  const showCompleted = $derived(eventFilter !== PLAYBACK_EVENT_KIND.skipped);
-  const showSkipped = $derived(eventFilter !== PLAYBACK_EVENT_KIND.completed);
-  const showEmpty = $derived(!loading && !error && totalEvents === 0 && watchSeconds === 0);
+  const showAccessed = $derived(
+    eventFilter === ALL_FILTER || eventFilter === CONSUMPTION_EVENT_KIND.accessed,
+  );
+  const showCompleted = $derived(
+    eventFilter === ALL_FILTER || eventFilter === CONSUMPTION_EVENT_KIND.completed,
+  );
+  const showSkipped = $derived(
+    eventFilter === ALL_FILTER || eventFilter === CONSUMPTION_EVENT_KIND.skipped,
+  );
+  const showEmpty = $derived(!loading && !error && totalEvents === 0 && activeSeconds === 0);
 
   const windowLabel = $derived.by(() => {
     if (!stats || dailySeries.length === 0) return "";
@@ -164,7 +174,7 @@
         scopeError = null;
       })
       .catch((err) => {
-        scopeError = err instanceof Error ? err.message : "Failed to load playback scopes";
+        scopeError = err instanceof Error ? err.message : "Failed to load consumption scopes";
       });
   });
 
@@ -193,7 +203,7 @@
         if (requestId !== activeRequest || isAbortError(err)) return;
         stats = null;
         thumbnailCardsById = new Map();
-        error = err instanceof Error ? err.message : "Failed to load playback statistics";
+        error = err instanceof Error ? err.message : "Failed to load consumption statistics";
       })
       .finally(() => {
         if (requestId === activeRequest) loading = false;
@@ -250,9 +260,7 @@
     const option = TIMEFRAMES.find((item) => item.key === selectedTimeframe);
     if (!option || option.days == null) return new Date("1970-01-01T00:00:00.000Z");
 
-    const from = new Date(to);
-    from.setUTCDate(from.getUTCDate() - option.days);
-    return from;
+    return new Date(to.getTime() - option.days * 24 * 60 * 60 * 1000);
   }
 
   function isAbortError(err: unknown): boolean {
@@ -312,14 +320,14 @@
     selectedDate = null;
   }
 
-  function eventsPerActiveDayLabel(): string {
+  function opensPerActiveDayLabel(): string {
     if (cadence.activeDays === 0) return "No activity yet";
-    return `${(totalEvents / cadence.activeDays).toFixed(1)} per active day`;
+    return `${(accessedCount / cadence.activeDays).toFixed(1)} per active day`;
   }
 </script>
 
 <svelte:head>
-  <title>Playback Stats · Prismedia</title>
+  <title>Consumption Stats · Prismedia</title>
 </svelte:head>
 
 <section class="space-y-3 pb-6">
@@ -327,16 +335,16 @@
     <div class="min-w-0">
       <h1 class="stats-title">
         <Activity class="h-5 w-5 text-text-muted" aria-hidden="true" />
-        Playback Stats
+        Consumption Stats
       </h1>
       <p class="stats-subtitle">
         {#if loading && !stats}
-          Reading playback history
+          Reading consumption history
         {:else if windowLabel}
           {windowLabel} · {totalEvents.toLocaleString()} events across {cadence.activeDays.toLocaleString()} active
           {cadence.activeDays === 1 ? "day" : "days"}
         {:else}
-          No playback history in this window
+          No consumption history in this window
         {/if}
       </p>
     </div>
@@ -350,7 +358,7 @@
             class="min-w-36 border-0 bg-transparent shadow-none"
             value={selectedScope}
             options={scopeOptions}
-            ariaLabel="Playback statistics user scope"
+            ariaLabel="Consumption statistics user scope"
             onchange={selectScope}
           />
         </div>
@@ -399,14 +407,14 @@
   {#if loading && !stats}
     <div class="surface-panel flex min-h-72 items-center justify-center">
       <Loader2 class="h-5 w-5 animate-spin text-accent-300" aria-hidden="true" />
-      <span class="sr-only">Loading playback statistics</span>
+      <span class="sr-only">Loading consumption statistics</span>
     </div>
   {:else if showEmpty}
     <div class="surface-panel flex min-h-72 flex-col items-center justify-center px-4 text-center">
       <History class="h-6 w-6 text-text-muted" aria-hidden="true" />
-      <h2 class="mt-2 font-heading text-base text-text-primary">No playback history yet</h2>
+      <h2 class="mt-2 font-heading text-base text-text-primary">No consumption history yet</h2>
       <p class="mt-1 max-w-md text-sm text-text-muted">
-        Completed and skipped events appear here as you watch, listen, and read. Adjust the
+        Opens, completions, skips, and active time appear here as you watch, listen, and read. Adjust the
         timeframe or filters above if you expected to see something.
       </p>
       {#if kindFilter !== ALL_FILTER || eventFilter !== ALL_FILTER}
@@ -425,7 +433,7 @@
     </div>
   {:else}
     <!--
-      The dispersion is this page's single accent moment: one library of playback entering the
+      The dispersion is this page's single accent moment: one library of consumption entering the
       prism and separating into its media families. Everything below it stays neutral.
     -->
     <section class={cn("surface-panel overflow-hidden", loading && "stats-refreshing")}>
@@ -438,7 +446,7 @@
           <p class="panel-subtitle">
             {dispersionBands.length === 1
               ? "Filtered to one media family"
-              : `Playback separated across ${dispersionBands.length} media families`} · select a
+              : `Consumption separated across ${dispersionBands.length} media families`} · select a
             family to filter the page
           </p>
         </div>
@@ -457,37 +465,44 @@
       <div class="stats-figures">
         <StatFigure
           label="Activity time"
-          value={formatWatchDuration(watchSeconds)}
+          value={formatActiveDuration(activeSeconds)}
           hint={cadence.activeDays > 0
-            ? `${formatWatchDuration(cadence.watchSecondsPerActiveDay)} per active day`
+            ? `${formatActiveDuration(cadence.activeSecondsPerActiveDay)} per active day`
             : undefined}
           icon={Timer}
           emphasis
         />
+        {#if viewingSeconds > 0}
+          <StatFigure
+            label="Watching"
+            value={formatActiveDuration(viewingSeconds)}
+            icon={Clock3}
+          />
+        {/if}
         {#if readingSeconds > 0}
           <StatFigure
             label="Reading"
-            value={formatWatchDuration(readingSeconds)}
+            value={formatActiveDuration(readingSeconds)}
             icon={BookOpen}
           />
         {/if}
         {#if listeningSeconds > 0}
           <StatFigure
             label="Audiobooks"
-            value={formatWatchDuration(listeningSeconds)}
+            value={formatActiveDuration(listeningSeconds)}
             icon={Headphones}
           />
         {/if}
         <StatFigure
-          label="Events"
-          value={totalEvents.toLocaleString()}
-          hint={eventsPerActiveDayLabel()}
+          label="Opened"
+          value={accessedCount.toLocaleString()}
+          hint={opensPerActiveDayLabel()}
           icon={Activity}
         />
         <StatFigure
           label="Completion"
           value={`${Math.round(completion * 100)}%`}
-          hint={`${completedCount.toLocaleString()} played · ${skippedCount.toLocaleString()} skipped`}
+          hint={`${completedCount.toLocaleString()} completed · ${skippedCount.toLocaleString()} skipped`}
           icon={Gauge}
           ratio={completion}
         />
@@ -508,7 +523,7 @@
           label="Busiest day"
           value={cadence.busiestDay ? formatDayShort(cadence.busiestDay.date) : "—"}
           hint={cadence.busiestDay
-            ? `${cadence.busiestDay.totalEvents.toLocaleString()} events · ${formatWatchDuration(cadence.busiestDay.watchSeconds)}`
+            ? `${cadence.busiestDay.totalEvents.toLocaleString()} events · ${formatActiveDuration(cadence.busiestDay.activeSeconds)}`
             : "No activity yet"}
           icon={CalendarRange}
         />
@@ -525,6 +540,7 @@
       <div class="px-3 py-3 sm:px-4">
         <ActivityTimeline
           series={dailySeries}
+          {showAccessed}
           {showCompleted}
           {showSkipped}
           {selectedDate}
@@ -554,9 +570,9 @@
           <div>
             <h2 class="panel-title">
               <Trophy class="h-3.5 w-3.5 text-text-muted" aria-hidden="true" />
-              Most played
+              Most active
             </h2>
-            <p class="panel-subtitle">Ranked by events in this window</p>
+            <p class="panel-subtitle">Ranked by opens, outcomes, and active time in this window</p>
           </div>
         </div>
         <TopEntityBoard entities={topEntities} thumbnailFor={topEntityThumbnail} />
@@ -570,7 +586,7 @@
             <History class="h-3.5 w-3.5 text-text-muted" aria-hidden="true" />
             History
           </h2>
-          <p class="panel-subtitle">The most recent playback events</p>
+          <p class="panel-subtitle">The most recent consumption events</p>
         </div>
       </div>
       <RecentEventTimeline

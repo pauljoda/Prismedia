@@ -18,4 +18,9 @@ export interface PlaybackUpdateRequest {
   durationSeconds: number | string | null;
   /** @nullable */
   completed: boolean | null;
+  /**
+     * @nullable
+     * @pattern ^-?(?:0|[1-9]\d*)$
+     */
+  utcOffsetMinutes?: number | string | null;
 }

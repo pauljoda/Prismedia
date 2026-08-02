@@ -3,7 +3,6 @@
   import { PRISM_HEAT_STOPS, prismHeatColor } from "$lib/stats/prism-scale";
   import {
     formatHourLabel,
-    formatWatchDuration,
     weekdayLabels,
     type PlaybackRhythm,
     type PlaybackRhythmCell,
@@ -32,7 +31,7 @@
 
   /**
    * A superlinear curve is what makes a long window readable: over a year almost every hour
-   * collects some playback, so a linear ramp flattens the grid into one flat field.
+   * collects some consumption events, so a linear ramp flattens the grid into one flat field.
    */
   function shaped(intensity: number): number {
     return intensity <= 0 ? 0 : intensity ** 1.45;
@@ -109,11 +108,10 @@
       </span>
       <span>
         {readoutCell.totalEvents.toLocaleString()} {readoutCell.totalEvents === 1 ? "event" : "events"}
-        · {formatWatchDuration(readoutCell.watchSeconds)}
         {#if readoutCell === rhythm.peak && !hoveredCell}· busiest hour of the week{/if}
       </span>
     {:else}
-      <span>No playback recorded in this window.</span>
+      <span>No consumption recorded in this window.</span>
     {/if}
   </p>
 </div>

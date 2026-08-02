@@ -40,7 +40,8 @@
   } from "$lib/entities/entity-relationship-thumbnails";
   import { resolveEntityHref } from "$lib/entities/entity-routes";
   import { CAPABILITY_KIND, CREDIT_ROLE, ENTITY_KIND, type EntityKindCode } from "$lib/entities/entity-codes";
-  import { extractVideoPlayerProps, getPlaybackState } from "$lib/entities/video-capabilities";
+  import { extractVideoPlayerProps, getConsumptionState } from "$lib/entities/video-capabilities";
+  import { ConsumptionActivityClock } from "$lib/entities/consumption-activity-clock";
   import NsfwBlur from "$lib/components/nsfw/NsfwBlur.svelte";
   import { isWanted } from "$lib/api/capabilities";
   import EntityAcquisitionCard from "$lib/components/acquisitions/EntityAcquisitionCard.svelte";
@@ -119,6 +120,7 @@
   let resumeApplied = false;
   let playbackUpdateTimer: ReturnType<typeof setInterval> | null = null;
   let lastReportedTime = 0;
+  const viewingActivityClock = new ConsumptionActivityClock();
   // Tracks which video id the playback session belongs to. Used so a same-video metadata
   // refresh (e.g. onTracksChanged) does not reset playback tracking and kill the update timer.
   let trackedVideoId: string | null = null;
@@ -271,7 +273,7 @@
 
   const playbackState = $derived.by(() => {
     if (!video) return null;
-    return getPlaybackState(video.capabilities);
+    return getConsumptionState(video.capabilities);
   });
 
   const durationSeconds = $derived.by(() => {
@@ -380,6 +382,7 @@
     return () => {
       cancelled = true;
       mq.removeEventListener("change", updateViewport);
+      flushPlaybackPosition();
       if (playbackUpdateTimer) clearInterval(playbackUpdateTimer);
     };
   });
@@ -523,11 +526,13 @@
    */
   function flushPlaybackPosition() {
     if (!playTracked || !video || !playerProps || currentTime <= 0) return;
+    const activitySeconds = viewingActivityClock.stop();
     void reportVideoPlayback("stop", {
       entityId: video.id,
       sessionId: playerProps.sessionId,
       positionSeconds: currentTime,
       durationSeconds: playerProps.duration,
+      activitySeconds,
     }).catch(() => {});
   }
 
@@ -551,15 +556,34 @@
       playbackUpdateTimer = setInterval(() => {
         if (currentTime > 0 && Math.abs(currentTime - lastReportedTime) > 3) {
           lastReportedTime = currentTime;
+          const activitySeconds = viewingActivityClock.take();
           void reportVideoPlayback("progress", {
             entityId: videoId,
             sessionId: playerProps.sessionId,
             positionSeconds: currentTime,
             durationSeconds: playerProps.duration,
+            activitySeconds,
           }).catch(() => {});
         }
       }, 10_000);
     }
+  }
+
+  function handlePlaybackActive() {
+    viewingActivityClock.start();
+  }
+
+  function handlePlaybackPaused() {
+    if (!playTracked || !video || !playerProps) return;
+    const activitySeconds = viewingActivityClock.stop();
+    if (!activitySeconds) return;
+    void reportVideoPlayback("progress", {
+      entityId: video.id,
+      sessionId: playerProps.sessionId,
+      positionSeconds: currentTime,
+      durationSeconds: playerProps.duration,
+      activitySeconds,
+    }).catch(() => {});
   }
 
   async function handleVideoEnded() {
@@ -568,6 +592,7 @@
       clearInterval(playbackUpdateTimer);
       playbackUpdateTimer = null;
     }
+    const activitySeconds = viewingActivityClock.stop();
     try {
       // Report the real end position so the backend derives completion (and tears
       // down the transcode session), then explicitly mark played as a guarantee.
@@ -577,6 +602,7 @@
         positionSeconds: currentTime,
         durationSeconds: playerProps.duration,
         completed: true,
+        activitySeconds,
       });
     } catch {
       // best-effort
@@ -686,6 +712,8 @@
             duration={playerProps.duration || undefined}
             initialTime={initialPlaybackTime}
             onPlayStarted={handlePlayStarted}
+            onPlaybackActive={handlePlaybackActive}
+            onPlaybackPaused={handlePlaybackPaused}
             onTimeUpdate={handleTimeUpdate}
             trickplayPlaylist={playerProps.trickplayPlaylist}
             subtitleTracks={playerProps.subtitleTracks}

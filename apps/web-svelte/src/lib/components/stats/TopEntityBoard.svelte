@@ -5,7 +5,7 @@
   import { entityAccentForKind } from "$lib/entities/entity-accent";
   import { labelForEntityKind, resolveEntityHref } from "$lib/entities/entity-codes";
   import type { EntityThumbnailCard } from "$lib/entities/entity-thumbnail";
-  import { formatWatchDuration, statNumber } from "$lib/stats/playback-stats";
+  import { formatActiveDuration, statNumber } from "$lib/stats/playback-stats";
   import { formatRelativeTime } from "$lib/utils/format";
 
   interface Props {
@@ -20,7 +20,7 @@
   const leaderEvents = $derived(
     Math.max(
       1,
-      ...entities.map((entity) => statNumber(entity.completedCount) + statNumber(entity.skippedCount)),
+      ...entities.map((entity) => statNumber(entity.accessedCount)),
     ),
   );
 
@@ -35,9 +35,9 @@
 
 <ol class={cn("board", className)}>
   {#each entities as entity, index (entity.id)}
+    {@const accessed = statNumber(entity.accessedCount)}
     {@const completed = statNumber(entity.completedCount)}
     {@const skipped = statNumber(entity.skippedCount)}
-    {@const total = completed + skipped}
     {@const accent = entityAccentForKind(entity.kind)}
     {@const href = resolveEntityHref(entity.kind, entity.id)}
     {@const card = thumbnailFor(entity)}
@@ -61,14 +61,14 @@
             {labelForEntityKind(entity.kind)} · {formatRelativeTime(entity.lastEventAt, true)}
           </span>
           <span class="board-rail" aria-hidden="true">
-            <span class="board-rail-fill" style:width={`${(total / leaderEvents) * 100}%`}></span>
+            <span class="board-rail-fill" style:width={`${(accessed / leaderEvents) * 100}%`}></span>
           </span>
         </span>
 
         <span class="board-figures">
-          <span class="board-watch">{formatWatchDuration(statNumber(entity.watchSeconds))}</span>
+          <span class="board-watch">{formatActiveDuration(statNumber(entity.activeSeconds))}</span>
           <span class="board-counts">
-            {completed.toLocaleString()} played{#if skipped > 0} · {skipped.toLocaleString()} skipped{/if}
+            {accessed.toLocaleString()} opened · {completed.toLocaleString()} completed{#if skipped > 0} · {skipped.toLocaleString()} skipped{/if}
           </span>
         </span>
       </svelte:element>

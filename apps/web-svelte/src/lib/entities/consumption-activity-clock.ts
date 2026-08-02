@@ -1,5 +1,5 @@
-/** Tracks active reading/listening time between progress heartbeats. */
-export class BookActivityClock {
+/** Tracks bounded active-consumption time between player or reader heartbeats. */
+export class ConsumptionActivityClock {
   readonly #maxSeconds: number;
   #startedAtMs: number | null = null;
 

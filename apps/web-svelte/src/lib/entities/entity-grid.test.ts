@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ACQUISITION_STATUS, BOOK_FORMAT, BOOK_TYPE } from "$lib/api/generated/codes";
+import { ACQUISITION_STATUS, BOOK_FORMAT, BOOK_TYPE, CAPABILITY_KIND } from "$lib/api/generated/codes";
 import type { EntityCapability, EntityCard, EntityThumbnail, EntityKind } from "$lib/api/generated/model";
 import { ENTITY_KIND } from "$lib/entities/entity-codes";
 import {
@@ -232,18 +232,18 @@ describe("entity grid helpers", () => {
 
   it("derives a progress fraction from playback and reading-progress capabilities", () => {
     const completed = entityCardToThumbnailCard(card("c-done", "video", "Watched", [
-      { kind: "playback", playCount: 1, skipCount: 0, playDurationSeconds: 0, resumeSeconds: 0, lastPlayedAt: null, completedAt: "2026-05-01T00:00:00Z" },
+      { kind: CAPABILITY_KIND.consumption, accessCount: 1, completionCount: 1, skipCount: 0, activeSeconds: 0, resumeSeconds: 0, lastAccessedAt: "2026-05-01T00:00:00Z", lastActiveAt: null, completedAt: "2026-05-01T00:00:00Z" },
     ]));
     const resuming = entityCardToThumbnailCard(card("c-mid", "video", "Mid", [
-      { kind: "playback", playCount: 0, skipCount: 0, playDurationSeconds: 0, resumeSeconds: 75, lastPlayedAt: null, completedAt: null },
+      { kind: CAPABILITY_KIND.consumption, accessCount: 0, completionCount: 0, skipCount: 0, activeSeconds: 0, resumeSeconds: 75, lastAccessedAt: null, lastActiveAt: null, completedAt: null },
       technical(), // 00:02:30 == 150s
     ]));
     const reading = entityCardToThumbnailCard(card("c-book", "book", "Reading", [
-      { kind: "progress", currentEntityId: null, unit: "page", index: 5, total: 10, mode: null, completedAt: null, updatedAt: null },
+      { kind: "progress", currentEntityId: null, unit: "page", index: 5, total: 10, mode: null, completedAt: null, updatedAt: null, consumedCount: 5, consumedTotal: 10, consumedPercent: 0.5 },
     ]));
     const readingAndListening = entityCardToThumbnailCard(card("c-book-both", "book", "Reading and listening", [
-      { kind: "playback", playCount: 0, skipCount: 0, playDurationSeconds: 0, resumeSeconds: 75, lastPlayedAt: null, completedAt: null },
-      { kind: "progress", currentEntityId: null, unit: "page", index: 2, total: 10, mode: null, completedAt: null, updatedAt: null },
+      { kind: CAPABILITY_KIND.consumption, accessCount: 0, completionCount: 0, skipCount: 0, activeSeconds: 0, resumeSeconds: 75, lastAccessedAt: null, lastActiveAt: null, completedAt: null },
+      { kind: "progress", currentEntityId: null, unit: "page", index: 2, total: 10, mode: null, completedAt: null, updatedAt: null, consumedCount: 2, consumedTotal: 10, consumedPercent: 0.2 },
       technical(),
     ]));
     const noProgress = entityCardToThumbnailCard(card("c-none", "video", "Fresh", [flags(false)]));

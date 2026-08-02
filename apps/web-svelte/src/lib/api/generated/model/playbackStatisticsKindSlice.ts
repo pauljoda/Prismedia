@@ -11,11 +11,13 @@ export interface PlaybackStatisticsKindSlice {
   /** @pattern ^-?(?:0|[1-9]\d*)$ */
   totalEvents: number | string;
   /** @pattern ^-?(?:0|[1-9]\d*)$ */
+  accessedCount: number | string;
+  /** @pattern ^-?(?:0|[1-9]\d*)$ */
   completedCount: number | string;
   /** @pattern ^-?(?:0|[1-9]\d*)$ */
   skippedCount: number | string;
   /** @pattern ^-?(?:0|[1-9]\d*)$ */
   distinctEntityCount: number | string;
   /** @pattern ^-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?$ */
-  watchSeconds: number | string;
+  activeSeconds: number | string;
 }

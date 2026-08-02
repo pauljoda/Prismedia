@@ -76,7 +76,7 @@
     type BookReadingPosition,
   } from "$lib/entities/book-combined-progress";
   import { useLegacyBookProgressMigration } from "$lib/entities/book-legacy-progress-migration.svelte";
-  import { formatWatchDuration } from "$lib/stats/playback-stats";
+  import { formatActiveDuration } from "$lib/stats/playback-stats";
   import {
     loadEpubContents,
     type EpubContentsEntry,
@@ -172,8 +172,8 @@
     comicCompleted ? "Re-read" : comicStarted ? "Resume" : "Read",
   );
   const audiobookTracks = $derived(book ? audiobookTrackItems(book) : []);
-  const audiobookPlayback = $derived(
-    book ? getCapability(book.capabilities, CAPABILITY_KIND.playback) : undefined,
+  const bookConsumption = $derived(
+    book ? getCapability(book.capabilities, CAPABILITY_KIND.consumption) : undefined,
   );
   const bookProgress = $derived(
     book ? getCapability(book.capabilities, CAPABILITY_KIND.progress) : undefined,
@@ -247,6 +247,8 @@
     if (canonicalCompleted) return 100;
     if (singleFileProgressDisplay) return singleFileProgressDisplay.percent;
     if (progressDisplay) return progressDisplay.percent;
+    const consumedPercent = numberValue(bookProgress?.consumedPercent);
+    if (consumedPercent != null) return Math.round(Math.max(0, Math.min(1, consumedPercent)) * 100);
     const total = numberValue(bookProgress?.total) ?? 0;
     const index = numberValue(bookProgress?.index) ?? 0;
     return total > 0 ? Math.max(0, Math.min(100, Math.round((index / total) * 100))) : 0;
@@ -258,9 +260,9 @@
       ?? progressDisplay?.pageLabel
       ?? (savedAudiobookResume ? `${canonicalPercent}% of book` : null),
   );
-  const bookActivitySeconds = $derived(numberValue(audiobookPlayback?.playDurationSeconds) ?? 0);
+  const bookActivitySeconds = $derived(numberValue(bookConsumption?.activeSeconds) ?? 0);
   const bookActivityLabel = $derived(
-    bookActivitySeconds > 0 ? `${formatWatchDuration(bookActivitySeconds)} read or listened` : null,
+    bookActivitySeconds > 0 ? `${formatActiveDuration(bookActivitySeconds)} read or listened` : null,
   );
   const bookReadingPosition = $derived.by((): BookReadingPosition | null => {
     if (singleFileProgressDisplay && !singleFileProgressDisplay.isComplete && currentEpubChapterId) {

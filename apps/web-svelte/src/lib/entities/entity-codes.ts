@@ -13,7 +13,7 @@ import {
   ENTITY_KINDS_SUPPORTING_MANUAL_MANAGEMENT,
   MEDIA_IMAGE_KIND,
   METADATA_PATCH_FIELD,
-  PLAYBACK_EVENT_KIND,
+  CONSUMPTION_EVENT_KIND,
   RELATIONSHIP_CODE,
   type CapabilityKindCode,
   type CreditRoleCode,
@@ -27,7 +27,7 @@ import {
   type ManuallyManageableEntityKindCode,
   type MediaImageKindCode,
   type MetadataPatchFieldCode,
-  type PlaybackEventKindCode,
+  type ConsumptionEventKindCode,
   type RelationshipCode,
 } from "$lib/api/generated/codes";
 
@@ -49,7 +49,7 @@ export {
   ENTITY_KINDS_SUPPORTING_MANUAL_MANAGEMENT,
   MEDIA_IMAGE_KIND,
   METADATA_PATCH_FIELD,
-  PLAYBACK_EVENT_KIND,
+  CONSUMPTION_EVENT_KIND,
   RELATIONSHIP_CODE,
 };
 export type {
@@ -65,7 +65,7 @@ export type {
   ManuallyManageableEntityKindCode,
   MediaImageKindCode,
   MetadataPatchFieldCode,
-  PlaybackEventKindCode,
+  ConsumptionEventKindCode,
   RelationshipCode,
 };
 

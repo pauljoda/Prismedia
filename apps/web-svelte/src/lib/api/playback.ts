@@ -1,6 +1,6 @@
 import type {
-  BookActivityKindCode,
-  PlaybackEventKindCode,
+  ConsumptionActivityKindCode,
+  ConsumptionEventKindCode,
   ProgressUnitCode,
   ReaderModeCode,
 } from "$lib/api/generated/codes";
@@ -33,6 +33,8 @@ export interface VideoPlaybackSessionPayload {
   positionSeconds?: number | null;
   durationSeconds?: number | null;
   completed?: boolean | null;
+  activitySeconds?: number | null;
+  utcOffsetMinutes?: number | null;
 }
 
 type PlaybackSessionRequest = (
@@ -69,6 +71,8 @@ export async function reportVideoPlayback(
     positionSeconds: request.positionSeconds ?? null,
     durationSeconds: request.durationSeconds ?? null,
     completed: request.completed ?? null,
+    activitySeconds: request.activitySeconds ?? null,
+    utcOffsetMinutes: request.utcOffsetMinutes ?? localUtcOffsetMinutes(),
   };
   return unwrapGenerated(
     await playbackSessionRequests[event](payload, requestInit(options)),
@@ -79,11 +83,20 @@ export async function reportVideoPlayback(
 
 export async function updateEntityPlayback(
   id: string,
-  payload: { resumeSeconds?: number | null; durationSeconds?: number | null; completed?: boolean | null },
+  payload: {
+    resumeSeconds?: number | null;
+    durationSeconds?: number | null;
+    completed?: boolean | null;
+    utcOffsetMinutes?: number | null;
+  },
   options?: RequestOptions,
 ): Promise<EntityCard> {
   return unwrapGenerated(
-    await updateEntityPlaybackRequest(id, payload as PlaybackUpdateRequest, requestInit(options)),
+    await updateEntityPlaybackRequest(
+      id,
+      { ...payload, utcOffsetMinutes: payload.utcOffsetMinutes ?? localUtcOffsetMinutes() } as PlaybackUpdateRequest,
+      requestInit(options),
+    ),
     `Failed to update playback for ${id}`,
   );
 }
@@ -100,7 +113,8 @@ export async function updateEntityProgress(
     reset?: boolean;
     location?: string | null;
     activitySeconds?: number | null;
-    activityKind?: BookActivityKindCode;
+    activityKind?: ConsumptionActivityKindCode;
+    utcOffsetMinutes?: number | null;
   },
   options?: RequestOptions,
 ): Promise<EntityCard> {
@@ -118,6 +132,7 @@ export async function updateEntityProgress(
         location: payload.location ?? null,
         activitySeconds: payload.activitySeconds ?? null,
         activityKind: payload.activityKind,
+        utcOffsetMinutes: payload.utcOffsetMinutes ?? localUtcOffsetMinutes(),
       } as EntityProgressUpdateRequest,
       requestInit(options),
     ),
@@ -138,10 +153,11 @@ export async function recordAudioTrackPlay(
 export async function recordEntityPlaybackEvent(
   id: string,
   payload: {
-    kind: PlaybackEventKindCode;
+    kind: ConsumptionEventKindCode;
     occurredAt?: string | null;
     positionSeconds?: number | null;
     durationSeconds?: number | null;
+    sessionId?: string | null;
   },
   options?: RequestOptions,
 ): Promise<EntityCard> {
@@ -153,9 +169,14 @@ export async function recordEntityPlaybackEvent(
         occurredAt: payload.occurredAt ?? null,
         positionSeconds: payload.positionSeconds ?? null,
         durationSeconds: payload.durationSeconds ?? null,
+        sessionId: payload.sessionId ?? null,
       } as PlaybackEventCreateRequest,
       requestInit(options),
     ),
     `Failed to record playback event for ${id}`,
   );
+}
+
+function localUtcOffsetMinutes(): number {
+  return typeof Date === "undefined" ? 0 : -new Date().getTimezoneOffset();
 }

@@ -413,7 +413,8 @@ function customOverlayForEntity(entity: EntityGridSourceEntity): EntityThumbnail
  * Resolves the 0..1 progress meter fraction for a thumbnail. Lightweight browse rows carry a
  * precomputed `progress` field; full entity cards derive it from the shared playback capability
  * (videos: completed → 1, else resume position over known runtime) or progress capability
- * (books: completed → 1, else current index over total). Returns null when there is nothing to show.
+ * (books and ordered containers: completed → 1, else independent consumed coverage). Returns null
+ * when there is nothing to show.
  */
 function progressForEntity(entity: EntityGridSourceEntity): number | null {
   const clamp01 = (value: number): number => Math.min(1, Math.max(0, value));
@@ -430,21 +431,25 @@ function progressForEntity(entity: EntityGridSourceEntity): number | null {
   // the Book page so adding an audiobook never silently replaces the reader's saved position.
   if (entity.kind === ENTITY_KIND.book && progress) {
     if (progress.completedAt) return 1;
+    const consumedPercent = numberValue(progress.consumedPercent);
+    if (consumedPercent != null && consumedPercent > 0) return clamp01(consumedPercent);
     const total = numberValue(progress.total) ?? 0;
     const index = numberValue(progress.index) ?? 0;
     return total > 0 && index > 0 ? clamp01(index / total) : null;
   }
 
-  const playback = getCapability(capabilities, CAPABILITY_KIND.playback);
-  if (playback) {
-    if (playback.completedAt) return 1;
-    const resumeSeconds = numberValue(playback.resumeSeconds) ?? 0;
+  const consumption = getCapability(capabilities, CAPABILITY_KIND.consumption);
+  if (consumption) {
+    if (consumption.completedAt) return 1;
+    const resumeSeconds = numberValue(consumption.resumeSeconds) ?? 0;
     const durationSeconds = durationToSeconds(getTechnicalCapability(capabilities)?.duration ?? null) ?? 0;
     return resumeSeconds > 0 && durationSeconds > 0 ? clamp01(resumeSeconds / durationSeconds) : null;
   }
 
   if (progress) {
     if (progress.completedAt) return 1;
+    const consumedPercent = numberValue(progress.consumedPercent);
+    if (consumedPercent != null && consumedPercent > 0) return clamp01(consumedPercent);
     const total = numberValue(progress.total) ?? 0;
     const index = numberValue(progress.index) ?? 0;
     return total > 0 && index > 0 ? clamp01(index / total) : null;

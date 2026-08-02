@@ -352,26 +352,30 @@ function parseDotnetTimeSpan(value: string | null | undefined): number {
   return days * 86400 + hours * 3600 + minutes * 60 + seconds + frac;
 }
 
-export interface PlaybackState {
-  playCount: number;
+export interface ConsumptionState {
+  accessCount: number;
+  completionCount: number;
   skipCount: number;
-  playDurationSeconds: number;
+  activeSeconds: number;
   resumeSeconds: number;
-  lastPlayedAt: string | null;
+  lastAccessedAt: string | null;
+  lastActiveAt: string | null;
   completedAt: string | null;
 }
 
-export function getPlaybackState(
+export function getConsumptionState(
   capabilities: EntityCapability[],
-): PlaybackState | null {
-  const cap = getCapability(capabilities, CAPABILITY_KIND.playback);
+): ConsumptionState | null {
+  const cap = getCapability(capabilities, CAPABILITY_KIND.consumption);
   if (!cap) return null;
   return {
-    playCount: positiveNumberValue(cap.playCount) ?? 0,
+    accessCount: positiveNumberValue(cap.accessCount) ?? 0,
+    completionCount: positiveNumberValue(cap.completionCount) ?? 0,
     skipCount: positiveNumberValue(cap.skipCount) ?? 0,
-    playDurationSeconds: positiveNumberValue(cap.playDurationSeconds) ?? 0,
+    activeSeconds: positiveNumberValue(cap.activeSeconds) ?? 0,
     resumeSeconds: positiveNumberValue(cap.resumeSeconds) ?? 0,
-    lastPlayedAt: cap.lastPlayedAt,
+    lastAccessedAt: cap.lastAccessedAt,
+    lastActiveAt: cap.lastActiveAt,
     completedAt: cap.completedAt,
   };
 }

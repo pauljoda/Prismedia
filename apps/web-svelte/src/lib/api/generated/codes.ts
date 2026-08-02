@@ -154,14 +154,6 @@ export const BLOCKLIST_REASON = {
 
 export type BlocklistReasonCode = (typeof BLOCKLIST_REASON)[keyof typeof BLOCKLIST_REASON];
 
-// source: enum BookActivityKind
-export const BOOK_ACTIVITY_KIND = {
-  reading: "reading",
-  listening: "listening",
-} as const;
-
-export type BookActivityKindCode = (typeof BOOK_ACTIVITY_KIND)[keyof typeof BOOK_ACTIVITY_KIND];
-
 // source: enum BookFormat
 export const BOOK_FORMAT = {
   imageArchive: "image-archive",
@@ -256,7 +248,7 @@ export const COLLECTION_RULE_FIELD = {
   channels: "channels",
   sampleRate: "sampleRate",
   sampleRateLegacy: "sample_rate",
-  playCount: "playCount",
+  accessCount: "accessCount",
   skipCount: "skipCount",
   resolution: "resolution",
   videoSeriesId: "videoSeriesId",
@@ -298,6 +290,24 @@ export const COLLECTION_RULE_OPERATOR = {
 } as const;
 
 export type CollectionRuleOperatorCode = (typeof COLLECTION_RULE_OPERATOR)[keyof typeof COLLECTION_RULE_OPERATOR];
+
+// source: enum ConsumptionActivityKind
+export const CONSUMPTION_ACTIVITY_KIND = {
+  viewing: "viewing",
+  listening: "listening",
+  reading: "reading",
+} as const;
+
+export type ConsumptionActivityKindCode = (typeof CONSUMPTION_ACTIVITY_KIND)[keyof typeof CONSUMPTION_ACTIVITY_KIND];
+
+// source: enum ConsumptionEventKind
+export const CONSUMPTION_EVENT_KIND = {
+  accessed: "accessed",
+  completed: "completed",
+  skipped: "skipped",
+} as const;
+
+export type ConsumptionEventKindCode = (typeof CONSUMPTION_EVENT_KIND)[keyof typeof CONSUMPTION_EVENT_KIND];
 
 // source: enum CreditRole
 export const CREDIT_ROLE = {
@@ -857,14 +867,6 @@ export const ORGANIZE_ITEM_STATUS = {
 
 export type OrganizeItemStatusCode = (typeof ORGANIZE_ITEM_STATUS)[keyof typeof ORGANIZE_ITEM_STATUS];
 
-// source: enum PlaybackEventKind
-export const PLAYBACK_EVENT_KIND = {
-  completed: "completed",
-  skipped: "skipped",
-} as const;
-
-export type PlaybackEventKindCode = (typeof PLAYBACK_EVENT_KIND)[keyof typeof PLAYBACK_EVENT_KIND];
-
 // source: enum PlaybackMode
 export const PLAYBACK_MODE = {
   direct: "direct",
@@ -1085,6 +1087,7 @@ export const CAPABILITY_KIND = {
   bookMetadata: "book-metadata",
   classification: "classification",
   collectionConfiguration: "collection-configuration",
+  consumption: "consumption",
   coverSelection: "cover-selection",
   credits: "credits",
   dates: "dates",
@@ -1101,7 +1104,6 @@ export const CAPABILITY_KIND = {
   markers: "markers",
   personProfile: "person-profile",
   playableVideo: "playable-video",
-  playback: "playback",
   position: "position",
   progress: "progress",
   providerIdentity: "provider-identity",
@@ -1218,6 +1220,7 @@ export const PROBLEM_CODE = {
   invalidCollection: "invalid_collection",
   invalidCollectionItems: "invalid_collection_items",
   invalidCollectionRules: "invalid_collection_rules",
+  invalidConsumptionEventKind: "invalid_playback_event_kind",
   invalidCredentials: "invalid_credentials",
   invalidEntity: "invalid_entity",
   invalidEntityImageUpload: "invalid_entity_image_upload",
@@ -1225,7 +1228,6 @@ export const PROBLEM_CODE = {
   invalidEntityMetadataPatch: "invalid_entity_metadata_patch",
   invalidOpdsRequest: "invalid_opds_request",
   invalidPath: "invalid_path",
-  invalidPlaybackEventKind: "invalid_playback_event_kind",
   invalidPlaybackStatisticsWindow: "invalid_playback_statistics_window",
   invalidUpload: "invalid_upload",
   lastAdminRequired: "last_admin_required",

@@ -1,6 +1,7 @@
 <script lang="ts">
   import { goto } from "$app/navigation";
   import { page } from "$app/state";
+  import { onMount } from "svelte";
   import { CloudDownload, Info, Layers, SlidersHorizontal } from "@lucide/svelte";
   import EntityDetailPageState from "$lib/components/entities/EntityDetailPageState.svelte";
   import EntityDetailHeroDates from "$lib/components/entities/EntityDetailHeroDates.svelte";
@@ -41,6 +42,7 @@
     lightboxEntityFromCard,
     type UniversalLightboxEntity,
   } from "$lib/components/universal-lightbox-media";
+  import { EntityViewingSession } from "$lib/entities/entity-viewing-session";
 
   let childCards = $state<EntityThumbnailCard[]>([]);
   let relationshipCredits = $state<EntityDetailCredit[]>([]);
@@ -51,6 +53,8 @@
   let lightboxIndex = $state(0);
   let hydratedLightboxEntities = $state.raw<Record<string, UniversalLightboxEntity>>({});
   let lightboxHydrationInFlight = $state.raw<string[]>([]);
+  const galleryViewingSession = new EntityViewingSession();
+  const imageViewingSession = new EntityViewingSession();
   const currentGalleryId = $derived(page.params.id ?? "");
 
   const detail = useEntityDetailPage<EntityCardFull>({
@@ -78,6 +82,12 @@
   });
 
   const gallery = $derived(detail.entity);
+
+  $effect(() => {
+    if (gallery?.id) {
+      galleryViewingSession.open(gallery.id, document.visibilityState === "visible");
+    }
+  });
 
   const card = $derived.by((): EntityDetailCardFull | null => {
     if (!gallery) return null;
@@ -132,6 +142,39 @@
   const lightboxEntities = $derived(
     lightboxCards.map((c) => hydratedLightboxEntities[c.entity.id] ?? lightboxEntityFromCard(c)),
   );
+
+  $effect(() => {
+    const currentImage = lightboxOpen ? lightboxCards[lightboxIndex] : undefined;
+    if (currentImage?.entity.kind === ENTITY_KIND.image) {
+      galleryViewingSession.pause();
+      imageViewingSession.open(
+        currentImage.entity.id,
+        document.visibilityState === "visible",
+      );
+    } else {
+      imageViewingSession.close();
+      if (document.visibilityState === "visible") galleryViewingSession.resume();
+    }
+  });
+
+  onMount(() => {
+    const heartbeat = window.setInterval(() => {
+      if (lightboxOpen) imageViewingSession.heartbeat();
+      else galleryViewingSession.heartbeat();
+    }, 15_000);
+    const handleVisibilityChange = () => {
+      const activeSession = lightboxOpen ? imageViewingSession : galleryViewingSession;
+      if (document.visibilityState === "visible") activeSession.resume();
+      else activeSession.pause();
+    };
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => {
+      window.clearInterval(heartbeat);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      galleryViewingSession.close();
+      imageViewingSession.close();
+    };
+  });
 
   $effect(() => {
     if (!lightboxOpen || lightboxCards.length === 0) return;

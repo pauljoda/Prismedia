@@ -14,31 +14,31 @@ import {
 import type { EntityThumbnailCard } from "./entity-thumbnail";
 
 describe("videoContainerProgressDisplay", () => {
-  it("includes the partial episode fraction in the container percentage", () => {
+  it("keeps the current episode separate from watched coverage", () => {
     const display = videoContainerProgressDisplay(
-      progress({ currentEntityId: "episode-3", index: 2, total: 4 }),
+      progress({ currentEntityId: "episode-3", index: 2, total: 4, consumedCount: 2, consumedPercent: 0.5 }),
       episode({ id: "episode-3", resumeSeconds: 50, durationSeconds: 100 }),
     );
 
     expect(display).toMatchObject({
       episodeId: "episode-3",
-      percent: 62.5,
-      positionLabel: "Episode 3 of 4",
-      episodeLabel: "Episode Three",
+      percent: 50,
+      positionLabel: "Current · Episode 3 of 4",
+      episodeLabel: "Episode Three · 2 of 4 watched",
       completed: false,
     });
   });
 
-  it("offers the next unstarted episode as the current continue target", () => {
+  it("moves current backward without reducing watched coverage", () => {
     const display = videoContainerProgressDisplay(
-      progress({ currentEntityId: "episode-2", index: 1, total: 4 }),
+      progress({ currentEntityId: "episode-2", index: 1, total: 4, consumedCount: 3, consumedPercent: 0.75 }),
       episode({ id: "episode-2", resumeSeconds: 0, durationSeconds: 100 }),
     );
 
     expect(display).toMatchObject({
       episodeId: "episode-2",
-      percent: 25,
-      positionLabel: "Episode 2 of 4",
+      percent: 75,
+      positionLabel: "Current · Episode 2 of 4",
       canContinue: true,
     });
   });
@@ -71,11 +71,11 @@ describe("videoContainerProgressDisplay", () => {
     } satisfies EntityThumbnailCard);
 
     const display = videoContainerProgressDisplay(
-      progress({ currentEntityId: "episode-3", index: 2, total: 4 }),
+      progress({ currentEntityId: "episode-3", index: 2, total: 4, consumedCount: 2, consumedPercent: 0.5 }),
       episode,
     );
 
-    expect(display?.percent).toBe(62.5);
+    expect(display?.percent).toBe(50);
   });
 });
 

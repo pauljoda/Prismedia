@@ -1,6 +1,7 @@
 <script lang="ts">
   import { goto } from "$app/navigation";
   import { page } from "$app/state";
+  import { onMount } from "svelte";
   import { CloudDownload, Info, SlidersHorizontal } from "@lucide/svelte";
   import EntityDetailPageState from "$lib/components/entities/EntityDetailPageState.svelte";
   import EntityDetailHeroDates from "$lib/components/entities/EntityDetailHeroDates.svelte";
@@ -24,9 +25,11 @@
   import { useEntityAcquisition } from "$lib/components/acquisitions/use-entity-acquisition.svelte";
   import UniversalLightbox from "$lib/components/UniversalLightbox.svelte";
   import type { UniversalLightboxEntity } from "$lib/components/universal-lightbox-media";
+  import { EntityViewingSession } from "$lib/entities/entity-viewing-session";
   let relationshipCredits = $state<EntityDetailCredit[]>([]);
   let relationshipStudio = $state<EntityDetailCredit | null>(null);
   let relationshipTags = $state<EntityDetailTag[]>([]);
+  const viewingSession = new EntityViewingSession();
 
   const detail = useEntityDetailPage<EntityCardFull>({
     loadKey: () => page.params.id ?? "",
@@ -46,6 +49,26 @@
   });
 
   const image = $derived(detail.entity);
+
+  $effect(() => {
+    if (image?.id) {
+      viewingSession.open(image.id, document.visibilityState === "visible");
+    }
+  });
+
+  onMount(() => {
+    const heartbeat = window.setInterval(() => viewingSession.heartbeat(), 15_000);
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") viewingSession.resume();
+      else viewingSession.pause();
+    };
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => {
+      window.clearInterval(heartbeat);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      viewingSession.close();
+    };
+  });
 
   const card = $derived.by((): EntityDetailCardFull | null => {
     if (!image) return null;

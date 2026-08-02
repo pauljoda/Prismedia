@@ -4,20 +4,24 @@
  * Prismedia.Api | v1
  * OpenAPI spec version: 1.0.0
  */
-import type { EntityCapabilityPlaybackCapabilityKind } from './entityCapabilityPlaybackCapabilityKind';
+import type { EntityCapabilityConsumptionCapabilityKind } from './entityCapabilityConsumptionCapabilityKind';
 
-export interface EntityCapabilityPlaybackCapability {
-  kind: EntityCapabilityPlaybackCapabilityKind;
+export interface EntityCapabilityConsumptionCapability {
+  kind: EntityCapabilityConsumptionCapabilityKind;
   /** @pattern ^-?(?:0|[1-9]\d*)$ */
-  playCount: number | string;
+  accessCount: number | string;
+  /** @pattern ^-?(?:0|[1-9]\d*)$ */
+  completionCount: number | string;
   /** @pattern ^-?(?:0|[1-9]\d*)$ */
   skipCount: number | string;
   /** @pattern ^-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?$ */
-  playDurationSeconds: number | string;
+  activeSeconds: number | string;
   /** @pattern ^-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?$ */
   resumeSeconds: number | string;
   /** @nullable */
-  lastPlayedAt: string | null;
+  lastAccessedAt: string | null;
+  /** @nullable */
+  lastActiveAt: string | null;
   /** @nullable */
   completedAt: string | null;
 }

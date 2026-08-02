@@ -1,5 +1,12 @@
 <script lang="ts">
-  import { BOOK_ACTIVITY_KIND, BOOK_FORMAT, CAPABILITY_KIND, PROGRESS_UNIT, READER_MODE } from "$lib/api/generated/codes";
+  import {
+    BOOK_FORMAT,
+    CAPABILITY_KIND,
+    CONSUMPTION_ACTIVITY_KIND,
+    CONSUMPTION_EVENT_KIND,
+    PROGRESS_UNIT,
+    READER_MODE,
+  } from "$lib/api/generated/codes";
   import { onMount } from "svelte";
   import { goto } from "$app/navigation";
   import { page } from "$app/state";
@@ -7,7 +14,7 @@
   import { Button } from "@prismedia/ui-svelte";
   import { getBookMetadataCapability, getCapability } from "$lib/api/capabilities";
   import { fetchEntity, fetchEntityChildren, type EntityCardFull } from "$lib/api/entities";
-  import { updateEntityProgress } from "$lib/api/playback";
+  import { recordEntityPlaybackEvent, updateEntityProgress } from "$lib/api/playback";
   import {
     bookEntityProgressDisplay,
     entityPageToReaderImage,
@@ -29,7 +36,7 @@
   import { redirectHiddenEntityNotFound } from "$lib/nsfw/hidden-entity";
   import { useNsfw } from "$lib/nsfw/store.svelte";
   import { useAudioPlayback } from "$lib/stores/audio-playback.svelte";
-  import { BookActivityClock } from "$lib/entities/book-activity-clock";
+  import { ConsumptionActivityClock } from "$lib/entities/consumption-activity-clock";
   import {
     exactWebEpubResumeLocation,
     webEpubLaunchLocation,
@@ -62,7 +69,8 @@
   let returnHref = $state("/books");
   let errorMessage: string | null = $state(null);
   let progressSaveQueue: Promise<void> = Promise.resolve();
-  const readerActivityClock = new BookActivityClock();
+  const readerActivityClock = new ConsumptionActivityClock();
+  const readerConsumptionSessionId = createReaderSessionId();
 
   // EPUB reader state (reflowable, via foliate).
   let singleFileBook = $state(false);
@@ -99,6 +107,12 @@
   onMount(() => {
     const startReader = async () => {
       await loadReader(page.url);
+      if (loadState === "ready" && book) {
+        void recordEntityPlaybackEvent(book.id, {
+          kind: CONSUMPTION_EVENT_KIND.accessed,
+          sessionId: readerConsumptionSessionId,
+        }).catch(() => undefined);
+      }
       if (loadState === "ready" && document.visibilityState === "visible") {
         readerActivityClock.start();
       }
@@ -120,6 +134,10 @@
       queueReaderActivityHeartbeat(true);
     };
   });
+
+  function createReaderSessionId(): string {
+    return globalThis.crypto?.randomUUID?.() ?? `reader-${Date.now()}-${Math.random()}`;
+  }
 
   function queueReaderActivityHeartbeat(stop: boolean) {
     const activitySeconds = stop ? readerActivityClock.stop() : readerActivityClock.take();
@@ -230,7 +248,7 @@
       location: singleFileSaveLocation,
       completed: completed ? true : null,
       activitySeconds,
-      activityKind: activitySeconds ? BOOK_ACTIVITY_KIND.reading : undefined,
+      activityKind: activitySeconds ? CONSUMPTION_ACTIVITY_KIND.reading : undefined,
     });
   }
 
@@ -280,7 +298,7 @@
       mode: READER_MODE.scrolled,
       completed: completed ? true : null,
       activitySeconds,
-      activityKind: activitySeconds ? BOOK_ACTIVITY_KIND.reading : undefined,
+      activityKind: activitySeconds ? CONSUMPTION_ACTIVITY_KIND.reading : undefined,
     });
   }
 
@@ -493,7 +511,7 @@
       // get treated as an explicit "mark unread".
       completed: completed ? true : null,
       activitySeconds,
-      activityKind: activitySeconds ? BOOK_ACTIVITY_KIND.reading : undefined,
+      activityKind: activitySeconds ? CONSUMPTION_ACTIVITY_KIND.reading : undefined,
     });
   }
 

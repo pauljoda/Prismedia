@@ -34,4 +34,13 @@ export interface EntityCapabilityProgressCapability {
   workTotal?: number | string | null;
   /** @nullable */
   location?: string | null;
+  /** @pattern ^-?(?:0|[1-9]\d*)$ */
+  consumedCount?: number | string;
+  /**
+     * @nullable
+     * @pattern ^-?(?:0|[1-9]\d*)$
+     */
+  consumedTotal?: number | string | null;
+  /** @pattern ^-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?$ */
+  consumedPercent?: number | string;
 }

@@ -21,4 +21,14 @@ export interface VideoPlaybackSessionRequest {
   durationSeconds: number | string | null;
   /** @nullable */
   completed: boolean | null;
+  /**
+     * @nullable
+     * @pattern ^-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?$
+     */
+  activitySeconds?: number | string | null;
+  /**
+     * @nullable
+     * @pattern ^-?(?:0|[1-9]\d*)$
+     */
+  utcOffsetMinutes?: number | string | null;
 }

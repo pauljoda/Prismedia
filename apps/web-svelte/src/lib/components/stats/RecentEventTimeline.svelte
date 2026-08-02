@@ -4,14 +4,14 @@
   import type { PlaybackStatisticsEvent } from "$lib/api/generated/model";
   import { entityAccentForKind } from "$lib/entities/entity-accent";
   import {
-    PLAYBACK_EVENT_KIND,
+    CONSUMPTION_EVENT_KIND,
     labelForEntityKind,
     resolveEntityHref,
   } from "$lib/entities/entity-codes";
   import type { EntityThumbnailCard } from "$lib/entities/entity-thumbnail";
   import {
     formatDayLong,
-    formatWatchDuration,
+    formatActiveDuration,
     localDayKey,
     statNumber,
   } from "$lib/stats/playback-stats";
@@ -56,7 +56,7 @@
     return { ...card, aspectRatio: "square" };
   }
 
-  /** How far into the item playback reached, or null when the item has no known duration. */
+  /** How far into a timed item the event occurred, or null when the item has no known duration. */
   function progressRatio(event: PlaybackStatisticsEvent): number | null {
     const duration = statNumber(event.durationSeconds);
     if (duration <= 0) return null;
@@ -70,7 +70,8 @@
       <h3 class="event-day-label">{group.label}</h3>
       <ol class="event-list">
         {#each group.events as event (event.id)}
-          {@const skipped = event.kind === PLAYBACK_EVENT_KIND.skipped}
+          {@const skipped = event.kind === CONSUMPTION_EVENT_KIND.skipped}
+          {@const accessed = event.kind === CONSUMPTION_EVENT_KIND.accessed}
           {@const accent = entityAccentForKind(event.entityKind)}
           {@const href = resolveEntityHref(event.entityKind, event.entityId)}
           {@const card = thumbnailFor(event)}
@@ -93,11 +94,11 @@
                 <span class="event-title">{event.entityTitle}</span>
                 <span class="event-meta">
                   <span class={cn("event-state", skipped && "event-state-skipped")}>
-                    {skipped ? "Skipped" : "Played"}
+                    {skipped ? "Skipped" : accessed ? "Opened" : "Completed"}
                   </span>
                   · {labelForEntityKind(event.entityKind)}
                   {#if ratio != null}
-                    · {formatWatchDuration(statNumber(event.positionSeconds))} of {formatWatchDuration(statNumber(event.durationSeconds))}
+                    · {formatActiveDuration(statNumber(event.positionSeconds))} of {formatActiveDuration(statNumber(event.durationSeconds))}
                   {/if}
                 </span>
                 {#if ratio != null}

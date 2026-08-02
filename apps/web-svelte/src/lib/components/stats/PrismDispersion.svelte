@@ -3,7 +3,7 @@
   import { PRISM_SPECTRUM } from "$lib/entities/entity-accent";
   import { entityKindIcon } from "$lib/entities/entity-kind-icons";
   import {
-    formatWatchDuration,
+    formatActiveDuration,
     type PlaybackDispersionBand,
   } from "$lib/stats/playback-stats";
 
@@ -44,10 +44,12 @@
   const facetCenter = $derived({ x: prismX, y: centerY + prismHalf * 0.22 });
 
   /** A point along the prism's right face, `t` running from the apex to the base. */
-  const rightFacePoint = $derived((t: number) => ({
-    x: prismX + prismWidth * t,
-    y: centerY - prismHalf + 2 * prismHalf * t,
-  }));
+  const rightFacePoint = $derived.by(() =>
+    (t: number) => ({
+      x: prismX + prismWidth * t,
+      y: centerY - prismHalf + 2 * prismHalf * t,
+    }),
+  );
 
   const entryPoint = $derived({
     x: prismX - prismWidth * 0.52,
@@ -57,8 +59,9 @@
   const EXIT_FROM = 0.34;
   const EXIT_TO = 0.9;
 
-  const face = $derived((...points: Array<{ x: number; y: number }>) =>
-    `${points.map((point, index) => `${index === 0 ? "M" : "L"} ${point.x.toFixed(2)} ${point.y.toFixed(2)}`).join(" ")} Z`,
+  const face = $derived.by(() =>
+    (...points: Array<{ x: number; y: number }>) =>
+      `${points.map((point, index) => `${index === 0 ? "M" : "L"} ${point.x.toFixed(2)} ${point.y.toFixed(2)}`).join(" ")} Z`,
   );
 
   interface BandGeometry {
@@ -262,7 +265,7 @@
           <span class="legend-label">{band.label}</span>
           <span class="legend-share">{shareLabel(band.share)}</span>
           <span class="legend-detail">
-            {band.totalEvents.toLocaleString()} · {formatWatchDuration(band.watchSeconds)}
+            {band.accessedCount.toLocaleString()} opened · {formatActiveDuration(band.activeSeconds)}
           </span>
         </button>
       </li>

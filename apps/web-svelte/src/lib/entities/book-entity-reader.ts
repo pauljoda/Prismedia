@@ -63,9 +63,12 @@ export function singleFileBookProgressDisplay(
 
   const index = Math.max(0, numberValue(progress.index) ?? 0);
   const isPaged = progress.unit === PROGRESS_UNIT.page;
-  const rawPercent = isPaged
-    ? Math.round(((Math.min(index, total - 1) + 1) / total) * 100)
-    : Math.round((Math.min(index, total) / total) * 100);
+  const coverage = numberValue(progress.consumedPercent);
+  const rawPercent = coverage != null
+    ? Math.round(coverage * 100)
+    : isPaged
+      ? Math.round(((Math.min(index, total - 1) + 1) / total) * 100)
+      : Math.round((Math.min(index, total) / total) * 100);
   const isComplete = Boolean(progress.completedAt) || rawPercent >= 100;
   const percent = isComplete ? 100 : Math.min(100, Math.max(rawPercent > 0 ? 1 : 0, rawPercent));
   const currentPage = Math.min(index + 1, total);
@@ -143,9 +146,12 @@ export function bookEntityProgressDisplay(
   const workIndex = Math.max(0, numberValue(progress.workIndex) ?? (chapter.startIndex ?? 0) + localIndex);
   const currentPage = Math.min(localIndex + 1, pageCount);
   const workPage = workTotal > 0 ? Math.min(workIndex + 1, workTotal) : currentPage;
-  const rawPercent = workTotal > 0
-    ? Math.round(((Math.min(workIndex, workTotal - 1) + 1) / workTotal) * 100)
-    : Math.round((currentPage / pageCount) * 100);
+  const coverage = numberValue(progress.consumedPercent);
+  const rawPercent = coverage != null
+    ? Math.round(coverage * 100)
+    : workTotal > 0
+      ? Math.round(((Math.min(workIndex, workTotal - 1) + 1) / workTotal) * 100)
+      : Math.round((currentPage / pageCount) * 100);
   const percent = Math.min(100, Math.max(workPage > 0 ? 1 : 0, rawPercent));
   const isComplete = Boolean(progress.completedAt) || percent >= 100;
   const chapterNumber = chapter.sortOrder + 1;

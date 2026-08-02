@@ -83,7 +83,7 @@ export const COLLECTION_RULE_FIELDS: CollectionRuleFieldDef[] = [
   { field: "resolution", label: "Resolution", fieldType: "enum", entityTypes: [ENTITY_KIND.video], operators: ["in", "not_in"], enumValues: ["4K", "1080p", "720p", "480p"] },
   { field: "codec", label: "Codec", fieldType: "text", entityTypes: [ENTITY_KIND.video], operators: ["equals", "not_equals", "in", "not_in"] },
   { field: "interactive", label: "Interactive", fieldType: "boolean", entityTypes: [ENTITY_KIND.video], operators: ["is_true", "is_false"] },
-  { field: "playCount", label: "Play Count", fieldType: "number", entityTypes: [ENTITY_KIND.video, ENTITY_KIND.audioTrack], operators: ["equals", "greater_than", "less_than", "greater_equal", "less_equal", "between"] },
+  { field: "accessCount", label: "Play Count", fieldType: "number", entityTypes: [ENTITY_KIND.video, ENTITY_KIND.audioTrack], operators: ["equals", "greater_than", "less_than", "greater_equal", "less_equal", "between"] },
   { field: "skipCount", label: "Skip Count", fieldType: "number", entityTypes: [ENTITY_KIND.video, ENTITY_KIND.audioTrack], operators: ["equals", "greater_than", "less_than", "greater_equal", "less_equal", "between"] },
   { field: "videoSeriesId", label: "Series", fieldType: "relation", entityTypes: [ENTITY_KIND.video], operators: ["equals", "in", "not_in"] },
   { field: "galleryType", label: "Gallery Type", fieldType: "enum", entityTypes: [ENTITY_KIND.gallery], operators: ["equals", "not_equals", "in"], enumValues: ["folder", "zip", "virtual"] },

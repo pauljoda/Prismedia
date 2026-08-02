@@ -7,6 +7,7 @@
 import type { EntityCapabilityBookMetadataCapability } from './entityCapabilityBookMetadataCapability';
 import type { EntityCapabilityClassificationCapability } from './entityCapabilityClassificationCapability';
 import type { EntityCapabilityCollectionConfigurationCapability } from './entityCapabilityCollectionConfigurationCapability';
+import type { EntityCapabilityConsumptionCapability } from './entityCapabilityConsumptionCapability';
 import type { EntityCapabilityCoverSelectionCapability } from './entityCapabilityCoverSelectionCapability';
 import type { EntityCapabilityCreditsCapability } from './entityCapabilityCreditsCapability';
 import type { EntityCapabilityDatesCapability } from './entityCapabilityDatesCapability';
@@ -23,7 +24,6 @@ import type { EntityCapabilityLinksCapability } from './entityCapabilityLinksCap
 import type { EntityCapabilityMarkersCapability } from './entityCapabilityMarkersCapability';
 import type { EntityCapabilityPersonProfileCapability } from './entityCapabilityPersonProfileCapability';
 import type { EntityCapabilityPlayableVideoCapability } from './entityCapabilityPlayableVideoCapability';
-import type { EntityCapabilityPlaybackCapability } from './entityCapabilityPlaybackCapability';
 import type { EntityCapabilityPositionCapability } from './entityCapabilityPositionCapability';
 import type { EntityCapabilityProgressCapability } from './entityCapabilityProgressCapability';
 import type { EntityCapabilityProviderIdentityCapability } from './entityCapabilityProviderIdentityCapability';
@@ -35,4 +35,4 @@ import type { EntityCapabilitySubtitlesCapability } from './entityCapabilitySubt
 import type { EntityCapabilityTagPolicyCapability } from './entityCapabilityTagPolicyCapability';
 import type { EntityCapabilityTechnicalCapability } from './entityCapabilityTechnicalCapability';
 
-export type EntityCapability = EntityCapabilityBookMetadataCapability | EntityCapabilityClassificationCapability | EntityCapabilityCollectionConfigurationCapability | EntityCapabilityCoverSelectionCapability | EntityCapabilityCreditsCapability | EntityCapabilityDatesCapability | EntityCapabilityDescriptionCapability | EntityCapabilityEmbeddedAudioMetadataCapability | EntityCapabilityFileManagementCapability | EntityCapabilityFilesCapability | EntityCapabilityFingerprintsCapability | EntityCapabilityFlagsCapability | EntityCapabilityGalleryMetadataCapability | EntityCapabilityImagesCapability | EntityCapabilityLifetimeCapability | EntityCapabilityLinksCapability | EntityCapabilityMarkersCapability | EntityCapabilityPersonProfileCapability | EntityCapabilityPlayableVideoCapability | EntityCapabilityPlaybackCapability | EntityCapabilityPositionCapability | EntityCapabilityProgressCapability | EntityCapabilityProviderIdentityCapability | EntityCapabilityRatingCapability | EntityCapabilitySeriesMetadataCapability | EntityCapabilitySourceCapability | EntityCapabilityStatsCapability | EntityCapabilitySubtitlesCapability | EntityCapabilityTagPolicyCapability | EntityCapabilityTechnicalCapability;
+export type EntityCapability = EntityCapabilityBookMetadataCapability | EntityCapabilityClassificationCapability | EntityCapabilityCollectionConfigurationCapability | EntityCapabilityConsumptionCapability | EntityCapabilityCoverSelectionCapability | EntityCapabilityCreditsCapability | EntityCapabilityDatesCapability | EntityCapabilityDescriptionCapability | EntityCapabilityEmbeddedAudioMetadataCapability | EntityCapabilityFileManagementCapability | EntityCapabilityFilesCapability | EntityCapabilityFingerprintsCapability | EntityCapabilityFlagsCapability | EntityCapabilityGalleryMetadataCapability | EntityCapabilityImagesCapability | EntityCapabilityLifetimeCapability | EntityCapabilityLinksCapability | EntityCapabilityMarkersCapability | EntityCapabilityPersonProfileCapability | EntityCapabilityPlayableVideoCapability | EntityCapabilityPositionCapability | EntityCapabilityProgressCapability | EntityCapabilityProviderIdentityCapability | EntityCapabilityRatingCapability | EntityCapabilitySeriesMetadataCapability | EntityCapabilitySourceCapability | EntityCapabilityStatsCapability | EntityCapabilitySubtitlesCapability | EntityCapabilityTagPolicyCapability | EntityCapabilityTechnicalCapability;

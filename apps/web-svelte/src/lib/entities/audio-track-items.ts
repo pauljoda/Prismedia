@@ -80,8 +80,8 @@ export function entityThumbnailToTrackItem(
     studioId: null,
     performers: [],
     tags: [],
-    playCount: toNumber(thumb.playCount) ?? 0,
-    lastPlayedAt: null,
+    accessCount: toNumber(thumb.accessCount) ?? 0,
+    lastActiveAt: null,
     createdAt: "",
   };
 }
@@ -89,7 +89,7 @@ export function entityThumbnailToTrackItem(
 /** Builds a playable track item from the canonical Entity document and its audio capability. */
 export function entityCardToAudioTrackListItem(detail: EntityCard): AudioTrackListItemDto {
   const technical = getCapability(detail.capabilities, CAPABILITY_KIND.technical);
-  const playback = getCapability(detail.capabilities, CAPABILITY_KIND.playback);
+  const consumption = getCapability(detail.capabilities, CAPABILITY_KIND.consumption);
   const rating = getCapability(detail.capabilities, CAPABILITY_KIND.rating);
   const flags = getCapability(detail.capabilities, CAPABILITY_KIND.flags);
   const files = getCapability(detail.capabilities, CAPABILITY_KIND.files);
@@ -127,8 +127,8 @@ export function entityCardToAudioTrackListItem(detail: EntityCard): AudioTrackLi
     studioId: null,
     performers: [],
     tags: [],
-    playCount: toNumber(playback?.playCount) ?? 0,
-    lastPlayedAt: playback?.lastPlayedAt ?? null,
+    accessCount: toNumber(consumption?.accessCount) ?? 0,
+    lastActiveAt: consumption?.lastActiveAt ?? null,
     createdAt: "",
   };
 }

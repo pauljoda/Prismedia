@@ -1,4 +1,4 @@
-import { BOOK_ACTIVITY_KIND, PROGRESS_UNIT, type ReaderModeCode } from "$lib/api/generated/codes";
+import { CONSUMPTION_ACTIVITY_KIND, PROGRESS_UNIT, type ReaderModeCode } from "$lib/api/generated/codes";
 import type { BookProgressTrackMapping, EntityCapabilityProgressCapability } from "$lib/api/generated/model";
 import type { BookChapterRow } from "$lib/entities/book-chapter-list";
 import { resolveAudiobookResume } from "$lib/entities/audiobook-playback";
@@ -37,7 +37,7 @@ export interface BookAudioProgressUpdate {
   location: null;
   completed: boolean | null;
   activitySeconds: number | null;
-  activityKind: typeof BOOK_ACTIVITY_KIND.listening | undefined;
+  activityKind: typeof CONSUMPTION_ACTIVITY_KIND.listening | undefined;
 }
 
 export interface BookProgressCursor {
@@ -243,7 +243,7 @@ export function bookProgressUpdateForAudio(
     completed: completed ? true : null,
     activitySeconds,
     activityKind: activitySeconds && activitySeconds > 0
-      ? BOOK_ACTIVITY_KIND.listening
+      ? CONSUMPTION_ACTIVITY_KIND.listening
       : undefined,
   };
 }

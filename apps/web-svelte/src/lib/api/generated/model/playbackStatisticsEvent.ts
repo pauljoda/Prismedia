@@ -4,8 +4,8 @@
  * Prismedia.Api | v1
  * OpenAPI spec version: 1.0.0
  */
+import type { ConsumptionEventKind } from './consumptionEventKind';
 import type { EntityKind } from './entityKind';
-import type { PlaybackEventKind } from './playbackEventKind';
 
 export interface PlaybackStatisticsEvent {
   id: string;
@@ -14,7 +14,7 @@ export interface PlaybackStatisticsEvent {
   entityTitle: string;
   /** @nullable */
   coverUrl: string | null;
-  kind: PlaybackEventKind;
+  kind: ConsumptionEventKind;
   occurredAt: string;
   /**
      * @nullable

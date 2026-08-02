@@ -13,7 +13,7 @@ import {
   completionRate,
   formatHourLabel,
   formatSpanLabel,
-  formatWatchDuration,
+  formatActiveDuration,
   localDayKey,
   niceAxisMax,
   rollingAverage,
@@ -25,23 +25,33 @@ function bucket(
   date: string,
   completedCount: number,
   skippedCount: number,
-  watchSeconds = 0,
+  activeSeconds = 0,
 ): PlaybackStatisticsBucket {
-  return { date, completedCount, skippedCount, watchSeconds };
+  return {
+    date,
+    accessedCount: 0,
+    completedCount,
+    skippedCount,
+    activeSeconds,
+    viewingSeconds: activeSeconds,
+    listeningSeconds: 0,
+    readingSeconds: 0,
+  };
 }
 
 function slice(
   kind: string,
   totalEvents: number,
-  watchSeconds = 0,
+  activeSeconds = 0,
 ): PlaybackStatisticsKindSlice {
   return {
     kind,
     totalEvents,
+    accessedCount: 0,
     completedCount: totalEvents,
     skippedCount: 0,
     distinctEntityCount: 1,
-    watchSeconds,
+    activeSeconds,
   } as PlaybackStatisticsKindSlice;
 }
 
@@ -81,8 +91,8 @@ describe("buildDailySeries", () => {
       "2026-06-17",
       "2026-06-18",
     ]);
-    expect(series[0]).toMatchObject({ totalEvents: 4, watchSeconds: 900 });
-    expect(series[1]).toMatchObject({ totalEvents: 0, watchSeconds: 0 });
+    expect(series[0]).toMatchObject({ totalEvents: 4, activeSeconds: 900 });
+    expect(series[1]).toMatchObject({ totalEvents: 0, activeSeconds: 0 });
   });
 
   it("anchors an all-time window to the first day with activity", () => {
@@ -126,7 +136,7 @@ describe("summarizeCadence", () => {
     expect(cadence.longestStreak).toBe(3);
     expect(cadence.currentStreak).toBe(3);
     expect(cadence.busiestDay?.date).toBe("2026-06-13");
-    expect(cadence.watchSecondsPerActiveDay).toBe(180);
+    expect(cadence.activeSecondsPerActiveDay).toBe(180);
   });
 
   it("does not break the current streak on a window that ends mid-day", () => {
@@ -146,7 +156,7 @@ describe("summarizeCadence", () => {
       currentStreak: 0,
       longestStreak: 0,
       busiestDay: null,
-      watchSecondsPerActiveDay: 0,
+      activeSecondsPerActiveDay: 0,
     });
   });
 });
@@ -197,7 +207,7 @@ describe("aggregateDaySeries", () => {
       completedCount: 5,
       skippedCount: 1,
       totalEvents: 6,
-      watchSeconds: 300,
+      activeSeconds: 300,
     });
     // A trailing partial group reports the days it actually covers, not the requested size.
     expect(spans[2]).toMatchObject({ startDate: "2026-06-05", dayCount: 1, totalEvents: 4 });
@@ -224,10 +234,10 @@ describe("formatSpanLabel", () => {
 
 describe("buildRhythm", () => {
   const cells: PlaybackStatisticsRhythmCell[] = [
-    { dayOfWeek: 0, hour: 21, completedCount: 8, skippedCount: 2, watchSeconds: 600 },
-    { dayOfWeek: 3, hour: 9, completedCount: 1, skippedCount: 0, watchSeconds: 60 },
+    { dayOfWeek: 0, hour: 21, accessedCount: 5, completedCount: 3, skippedCount: 2 },
+    { dayOfWeek: 3, hour: 9, accessedCount: 1, completedCount: 0, skippedCount: 0 },
     // Out-of-range cells must never widen the fixed grid.
-    { dayOfWeek: 9, hour: 30, completedCount: 5, skippedCount: 5, watchSeconds: 10 },
+    { dayOfWeek: 9, hour: 30, accessedCount: 5, completedCount: 5, skippedCount: 5 },
   ];
 
   it("expands sparse cells into a full week grid with relative intensity", () => {
@@ -278,23 +288,23 @@ describe("buildDispersion", () => {
     ]);
 
     expect(bands).toHaveLength(2);
-    expect(bands[0]).toMatchObject({ kind: ENTITY_KIND.video, share: 0.75, watchSeconds: 1200 });
+    expect(bands[0]).toMatchObject({ kind: ENTITY_KIND.video, share: 0.75, activeSeconds: 1200 });
     expect(bands[1].share).toBe(0.25);
   });
 });
 
-describe("formatWatchDuration", () => {
+describe("formatActiveDuration", () => {
   it("keeps hours as the unit for library-scale totals", () => {
-    expect(formatWatchDuration(42)).toBe("42s");
-    expect(formatWatchDuration(900)).toBe("15m");
-    expect(formatWatchDuration(3600)).toBe("1h");
-    expect(formatWatchDuration(12_000)).toBe("3h 20m");
-    expect(formatWatchDuration(1_083_600)).toBe("301h");
+    expect(formatActiveDuration(42)).toBe("42s");
+    expect(formatActiveDuration(900)).toBe("15m");
+    expect(formatActiveDuration(3600)).toBe("1h");
+    expect(formatActiveDuration(12_000)).toBe("3h 20m");
+    expect(formatActiveDuration(1_083_600)).toBe("301h");
   });
 
   it("clamps negative and empty totals", () => {
-    expect(formatWatchDuration(0)).toBe("0s");
-    expect(formatWatchDuration(-50)).toBe("0s");
+    expect(formatActiveDuration(0)).toBe("0s");
+    expect(formatActiveDuration(-50)).toBe("0s");
   });
 });
 

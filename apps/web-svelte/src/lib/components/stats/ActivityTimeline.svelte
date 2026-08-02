@@ -5,7 +5,7 @@
     aggregateDaySeries,
     formatDayKey,
     formatSpanLabel,
-    formatWatchDuration,
+    formatActiveDuration,
     niceAxisMax,
     rollingAverage,
     type PlaybackDaySample,
@@ -14,7 +14,8 @@
 
   interface Props {
     series: PlaybackDaySample[];
-    /** Hides the completed layer when the page is filtered to skips, and vice versa. */
+    /** Controls which event layers remain visible when the page is filtered. */
+    showAccessed?: boolean;
     showCompleted?: boolean;
     showSkipped?: boolean;
     /** Start date of the selected column. */
@@ -25,6 +26,7 @@
 
   let {
     series,
+    showAccessed = true,
     showCompleted = true,
     showSkipped = true,
     selectedDate = null,
@@ -68,8 +70,7 @@
   const step = $derived(columns.length > 0 ? plotWidth / columns.length : plotWidth);
   const barWidth = $derived(Math.max(1.5, Math.min(20, step - (step > 5 ? 1.6 : 0.4))));
   const isDense = $derived(columns.length > DENSE_COLUMN_THRESHOLD);
-  /** With played hidden there is no second series to distinguish, so skips take the heat scale. */
-  const skipsAreSoleSeries = $derived(showSkipped && !showCompleted);
+  const accessesAreVisible = $derived(showAccessed);
 
   const peakEvents = $derived(Math.max(0, ...columns.map((column) => column.totalEvents)));
   // The axis rounds up to a readable gridline, which is not the same as the observed peak.
@@ -82,8 +83,12 @@
       : [],
   );
 
-  const columnCenter = $derived((index: number) => PAD_LEFT + step * (index + 0.5));
-  const valueY = $derived((value: number) => PAD_TOP + plotHeight * (1 - value / axisMax));
+  const columnCenter = $derived.by(() =>
+    (index: number) => PAD_LEFT + step * (index + 0.5),
+  );
+  const valueY = $derived.by(() =>
+    (value: number) => PAD_TOP + plotHeight * (1 - value / axisMax),
+  );
 
   const selectedIndex = $derived(
     selectedDate ? columns.findIndex((column) => column.startDate === selectedDate) : -1,
@@ -197,10 +202,10 @@
       <span class="timeline-readout-day">{formatSpanLabel(activeColumn)}</span>
       <span class="timeline-readout-detail">
         {activeColumn.totalEvents.toLocaleString()} {activeColumn.totalEvents === 1 ? "event" : "events"}
-        {#if showCompleted && showSkipped}
-          · {activeColumn.completedCount.toLocaleString()} played · {activeColumn.skippedCount.toLocaleString()} skipped
-        {/if}
-        · {formatWatchDuration(activeColumn.watchSeconds)}
+        · {activeColumn.accessedCount.toLocaleString()} opened
+        · {activeColumn.completedCount.toLocaleString()} completed
+        {#if activeColumn.skippedCount > 0}· {activeColumn.skippedCount.toLocaleString()} skipped{/if}
+        · {formatActiveDuration(activeColumn.activeSeconds)} active
       </span>
     {:else}
       <span class="timeline-readout-detail">
@@ -219,7 +224,7 @@
     bind:clientWidth={frameWidth}
     role="slider"
     tabindex="0"
-    aria-label="Playback activity over time"
+    aria-label="Consumption activity over time"
     aria-orientation="horizontal"
     aria-valuemin={0}
     aria-valuemax={Math.max(0, columns.length - 1)}
@@ -242,7 +247,7 @@
       >
         <defs>
           <!--
-            One gradient in user space fills every played column, so a column's colour is decided
+            One gradient in user space fills every access column, so a column's colour is decided
             by how tall it is. That is the same encoding the rhythm heatmap uses.
           -->
           <linearGradient
@@ -279,26 +284,35 @@
 
         {#each columns as column, index (column.startDate)}
           {@const x = columnCenter(index) - barWidth / 2}
+          {@const accessedHeight = showAccessed ? barHeight(column.accessedCount) : 0}
           {@const completedHeight = showCompleted ? barHeight(column.completedCount) : 0}
           {@const skippedHeight = showSkipped ? barHeight(column.skippedCount) : 0}
+          {#if accessedHeight > 0}
+            <rect
+              class="timeline-bar"
+              x={x}
+              y={PAD_TOP + plotHeight - accessedHeight}
+              width={barWidth}
+              height={accessedHeight}
+              fill="url(#timeline-heat)"
+            />
+          {/if}
           {#if skippedHeight > 0}
             <rect
-              class={cn("timeline-bar", !skipsAreSoleSeries && "timeline-bar-muted")}
-              x={x}
-              y={PAD_TOP + plotHeight - completedHeight - skippedHeight}
-              width={barWidth}
+              class="timeline-bar timeline-bar-skipped"
+              x={x + barWidth * 0.66}
+              y={PAD_TOP + plotHeight - skippedHeight}
+              width={Math.max(1, barWidth * 0.34)}
               height={skippedHeight}
-              fill={skipsAreSoleSeries ? "url(#timeline-heat)" : undefined}
             />
           {/if}
           {#if completedHeight > 0}
             <rect
-              class="timeline-bar"
-              x={x}
+              class="timeline-bar timeline-bar-completed"
+              x={x + (accessesAreVisible ? barWidth * 0.33 : 0)}
               y={PAD_TOP + plotHeight - completedHeight}
-              width={barWidth}
+              width={accessesAreVisible ? Math.max(1, barWidth * 0.34) : barWidth}
               height={completedHeight}
-              fill="url(#timeline-heat)"
             />
           {/if}
         {/each}
@@ -330,13 +344,16 @@
   </div>
 
   <div class="timeline-legend">
+    {#if showAccessed}
+      <span class="timeline-key"><span class="timeline-key-swatch timeline-key-accessed"></span>Opened</span>
+    {/if}
     {#if showCompleted}
-      <span class="timeline-key"><span class="timeline-key-swatch timeline-key-completed"></span>Played</span>
+      <span class="timeline-key"><span class="timeline-key-swatch timeline-key-completed"></span>Completed</span>
     {/if}
     {#if showSkipped}
       <span class="timeline-key">
         <span
-          class={cn("timeline-key-swatch", skipsAreSoleSeries ? "timeline-key-completed" : "timeline-key-skipped")}
+          class="timeline-key-swatch timeline-key-skipped"
         ></span>Skipped
       </span>
     {/if}
@@ -414,14 +431,14 @@
     opacity: 0.88;
   }
 
-  /*
-   * Only one series on an axis may carry the heat scale, otherwise the two read as two points on
-   * the same scale. Played wins when both are shown, so skips desaturate; when skips are alone
-   * they take the scale themselves.
-   */
-  .timeline-bar-muted {
-    fill: var(--color-accent-700);
-    opacity: 0.75;
+  .timeline-bar-completed {
+    fill: var(--color-text-muted);
+    opacity: 0.82;
+  }
+
+  .timeline-bar-skipped {
+    fill: var(--color-warning);
+    opacity: 0.78;
   }
 
   .timeline-trend {
@@ -454,15 +471,20 @@
     border-radius: 1px;
   }
 
-  .timeline-key-completed {
+  .timeline-key-accessed {
     /* The swatch shows the whole ramp so the key doubles as the scale legend. */
     background: linear-gradient(0deg, var(--heat-ramp));
     opacity: 0.9;
   }
 
+  .timeline-key-completed {
+    background: var(--color-text-muted);
+    opacity: 0.82;
+  }
+
   .timeline-key-skipped {
-    background: var(--color-accent-700);
-    opacity: 0.75;
+    background: var(--color-warning);
+    opacity: 0.78;
   }
 
   .timeline-key-line {

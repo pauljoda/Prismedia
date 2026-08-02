@@ -55,14 +55,15 @@ function daysBetween(fromDayKey: string, toDayKey: string): number {
   return Math.round((Date.parse(`${toDayKey}T00:00:00Z`) - Date.parse(`${fromDayKey}T00:00:00Z`)) / DAY_MS);
 }
 
-/** One calendar day of playback activity. */
+/** One calendar day of consumption activity. */
 export interface PlaybackDaySample {
   /** `YYYY-MM-DD` in the viewer's local time. */
   date: string;
+  accessedCount: number;
   completedCount: number;
   skippedCount: number;
   totalEvents: number;
-  watchSeconds: number;
+  activeSeconds: number;
 }
 
 /**
@@ -80,14 +81,16 @@ export function buildDailySeries(
 ): PlaybackDaySample[] {
   const byDate = new Map<string, PlaybackDaySample>();
   for (const bucket of buckets) {
+    const accessedCount = statNumber(bucket.accessedCount);
     const completedCount = statNumber(bucket.completedCount);
     const skippedCount = statNumber(bucket.skippedCount);
     byDate.set(bucket.date, {
       date: bucket.date,
+      accessedCount,
       completedCount,
       skippedCount,
-      totalEvents: completedCount + skippedCount,
-      watchSeconds: statNumber(bucket.watchSeconds),
+      totalEvents: accessedCount + completedCount + skippedCount,
+      activeSeconds: statNumber(bucket.activeSeconds),
     });
   }
 
@@ -108,10 +111,11 @@ export function buildDailySeries(
     series.push(
       byDate.get(cursor) ?? {
         date: cursor,
+        accessedCount: 0,
         completedCount: 0,
         skippedCount: 0,
         totalEvents: 0,
-        watchSeconds: 0,
+        activeSeconds: 0,
       },
     );
   }
@@ -126,7 +130,7 @@ export interface PlaybackCadence {
   longestStreak: number;
   busiestDay: PlaybackDaySample | null;
   /** Mean watch seconds across days that had activity, not across the whole window. */
-  watchSecondsPerActiveDay: number;
+  activeSecondsPerActiveDay: number;
 }
 
 /**
@@ -139,13 +143,13 @@ export function summarizeCadence(series: readonly PlaybackDaySample[]): Playback
   let longestStreak = 0;
   let running = 0;
   let busiestDay: PlaybackDaySample | null = null;
-  let watchSecondsTotal = 0;
+  let activeSecondsTotal = 0;
 
   for (const day of series) {
-    if (day.totalEvents > 0) {
+    if (day.totalEvents > 0 || day.activeSeconds > 0) {
       activeDays += 1;
       running += 1;
-      watchSecondsTotal += day.watchSeconds;
+      activeSecondsTotal += day.activeSeconds;
       longestStreak = Math.max(longestStreak, running);
       if (!busiestDay || day.totalEvents > busiestDay.totalEvents) busiestDay = day;
     } else {
@@ -155,7 +159,7 @@ export function summarizeCadence(series: readonly PlaybackDaySample[]): Playback
 
   let currentStreak = 0;
   for (let index = series.length - 1; index >= 0; index -= 1) {
-    if (series[index].totalEvents > 0) {
+    if (series[index].totalEvents > 0 || series[index].activeSeconds > 0) {
       currentStreak += 1;
       continue;
     }
@@ -170,7 +174,7 @@ export function summarizeCadence(series: readonly PlaybackDaySample[]): Playback
     currentStreak,
     longestStreak,
     busiestDay,
-    watchSecondsPerActiveDay: activeDays > 0 ? watchSecondsTotal / activeDays : 0,
+    activeSecondsPerActiveDay: activeDays > 0 ? activeSecondsTotal / activeDays : 0,
   };
 }
 
@@ -193,10 +197,11 @@ export interface PlaybackSpanSample {
   startDate: string;
   endDate: string;
   dayCount: number;
+  accessedCount: number;
   completedCount: number;
   skippedCount: number;
   totalEvents: number;
-  watchSeconds: number;
+  activeSeconds: number;
 }
 
 /**
@@ -217,10 +222,11 @@ export function aggregateDaySeries(
       startDate: group[0].date,
       endDate: group[group.length - 1].date,
       dayCount: group.length,
+      accessedCount: group.reduce((sum, day) => sum + day.accessedCount, 0),
       completedCount: group.reduce((sum, day) => sum + day.completedCount, 0),
       skippedCount: group.reduce((sum, day) => sum + day.skippedCount, 0),
       totalEvents: group.reduce((sum, day) => sum + day.totalEvents, 0),
-      watchSeconds: group.reduce((sum, day) => sum + day.watchSeconds, 0),
+      activeSeconds: group.reduce((sum, day) => sum + day.activeSeconds, 0),
     });
   }
 
@@ -232,12 +238,11 @@ export interface PlaybackRhythmCell {
   dayOfWeek: number;
   hour: number;
   totalEvents: number;
-  watchSeconds: number;
   /** `totalEvents` relative to the busiest cell, 0 through 1. */
   intensity: number;
 }
 
-/** Dense weekday x hour view of when playback happens. */
+/** Dense weekday x hour view of when consumption events happen. */
 export interface PlaybackRhythm {
   /** Row-major `[dayOfWeek][hour]` grid, always 7 x 24. */
   cells: PlaybackRhythmCell[][];
@@ -255,7 +260,6 @@ export function buildRhythm(cells: readonly PlaybackStatisticsRhythmCell[]): Pla
       dayOfWeek,
       hour,
       totalEvents: 0,
-      watchSeconds: 0,
       intensity: 0,
     })),
   );
@@ -268,8 +272,10 @@ export function buildRhythm(cells: readonly PlaybackStatisticsRhythmCell[]): Pla
     if (dayOfWeek < 0 || dayOfWeek >= DAYS_IN_WEEK || hour < 0 || hour >= HOURS_IN_DAY) continue;
 
     const target = grid[dayOfWeek][hour];
-    target.totalEvents = statNumber(cell.completedCount) + statNumber(cell.skippedCount);
-    target.watchSeconds = statNumber(cell.watchSeconds);
+    target.totalEvents =
+      statNumber(cell.accessedCount) +
+      statNumber(cell.completedCount) +
+      statNumber(cell.skippedCount);
     totalEvents += target.totalEvents;
     maxCellEvents = Math.max(maxCellEvents, target.totalEvents);
   }
@@ -298,10 +304,11 @@ export interface PlaybackDispersionBand {
   /** Full brand pair, for the dispersed light itself. */
   emitted: EntityAccent;
   totalEvents: number;
+  accessedCount: number;
   completedCount: number;
   skippedCount: number;
   distinctEntityCount: number;
-  watchSeconds: number;
+  activeSeconds: number;
   /** Share of the window's events, 0 through 1. */
   share: number;
 }
@@ -320,10 +327,11 @@ export function buildDispersion(
       accent: entityAccentForKind(slice.kind),
       emitted: entityEmittedAccentForKind(slice.kind),
       totalEvents: statNumber(slice.totalEvents),
+      accessedCount: statNumber(slice.accessedCount),
       completedCount: statNumber(slice.completedCount),
       skippedCount: statNumber(slice.skippedCount),
       distinctEntityCount: statNumber(slice.distinctEntityCount),
-      watchSeconds: statNumber(slice.watchSeconds),
+      activeSeconds: statNumber(slice.activeSeconds),
       share: 0,
     }))
     .filter((band) => band.totalEvents > 0);
@@ -339,10 +347,10 @@ export function buildDispersion(
 }
 
 /**
- * Formats accumulated playback time for a headline figure. Hours stay the unit well past a day
+ * Formats accumulated active consumption time for a headline figure. Hours stay the unit well past a day
  * because "301h" of viewing reads more naturally for a media library than "12d 13h".
  */
-export function formatWatchDuration(seconds: number): string {
+export function formatActiveDuration(seconds: number): string {
   const total = Math.max(0, Math.round(seconds));
   if (total < MINUTE_SECONDS) return `${total}s`;
   if (total < HOUR_SECONDS) return `${Math.round(total / MINUTE_SECONDS)}m`;

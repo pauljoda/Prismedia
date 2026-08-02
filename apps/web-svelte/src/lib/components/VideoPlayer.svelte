@@ -80,6 +80,8 @@
     formatTime,
     formatBandwidth,
     formatDimensions,
+    qualityLabel,
+    audioTrackLabel,
     languageLabel,
   } from "./video-player-format";
   import {
@@ -135,6 +137,10 @@
     onMarkerClick?: (marker: VideoPlayerMarker) => void;
     onCanPlay?: () => void;
     onPlayStarted?: () => void;
+    /** Fires whenever playback enters the playing state, including resume after pause. */
+    onPlaybackActive?: () => void;
+    /** Fires whenever playback leaves the playing state without implying completion. */
+    onPlaybackPaused?: () => void;
     onTimeUpdate?: (time: number) => void;
     trickplayPlaylist?: string;
     initialTime?: number;
@@ -192,6 +198,8 @@
     onMarkerClick,
     onCanPlay,
     onPlayStarted,
+    onPlaybackActive,
+    onPlaybackPaused,
     onTimeUpdate,
     trickplayPlaylist,
     initialTime = 0,
@@ -529,15 +537,6 @@
     onEnded?.();
   }
 
-  function qualityLabel(quality: VideoQuality, index: number) {
-    if (quality.bitrate) return formatBandwidth(quality.bitrate);
-    return `Level ${index + 1}`;
-  }
-
-  function qualityDimensionsLabel(quality: VideoQuality) {
-    return formatDimensions(quality.width, quality.height);
-  }
-
   // Tracks the actually-playing rung's resolution (for the "Transcoding → 1080p" detail and the Auto
   // label). The selectable tiers themselves are derived from qualityRungs, not from hls.js levels.
   function refreshQualities() {
@@ -551,15 +550,8 @@
     const selected = qualities.find((quality) => quality.selected);
     if (!selected) return;
     activeQualityLabel = qualityLabel(selected, qualities.indexOf(selected));
-    activeQualityDimensionsLabel = qualityDimensionsLabel(selected);
+    activeQualityDimensionsLabel = formatDimensions(selected.width, selected.height);
     activeQualityResolutionLabel = resolutionBadge(selected.width, selected.height);
-  }
-
-  function audioTrackLabel(track: AudioTrack, index: number): string {
-    const label = track.label || track.language || track.kind || `Track ${index + 1}`;
-    return track.language && !label.toLowerCase().includes(track.language.toLowerCase())
-      ? `${label} · ${track.language}`
-      : label;
   }
 
   function refreshAudioTracks() {
@@ -1334,6 +1326,7 @@
     const onNativePlay = () => {
       playing = true;
       endedTracked = false;
+      onPlaybackActive?.();
       if (!playTracked) {
         playTracked = true;
         onPlayStarted?.();
@@ -1347,6 +1340,7 @@
     };
     const onNativePause = () => {
       playing = false;
+      onPlaybackPaused?.();
       showControls = true;
       clearControlsTimer();
     };
@@ -1493,6 +1487,7 @@
   function handlePlay(_event: Event) {
     playing = true;
     endedTracked = false;
+    onPlaybackActive?.();
     // Mirror playWithFallback: if playback starts before there is renderable data (cold remux),
     // keep the loading spinner up rather than flashing to a pause icon over a black frame.
     if ((mediaElement()?.readyState ?? 0) < 3 /* HAVE_FUTURE_DATA */) {
@@ -1513,6 +1508,7 @@
 
   function handlePause(_event: Event) {
     playing = false;
+    onPlaybackPaused?.();
     showControls = true;
     clearControlsTimer();
   }

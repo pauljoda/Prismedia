@@ -27,4 +27,9 @@ export interface EntityProgressUpdateRequest {
      */
   activitySeconds?: number | string | null;
   activityKind?: EntityProgressUpdateRequestActivityKind;
+  /**
+     * @nullable
+     * @pattern ^-?(?:0|[1-9]\d*)$
+     */
+  utcOffsetMinutes?: number | string | null;
 }

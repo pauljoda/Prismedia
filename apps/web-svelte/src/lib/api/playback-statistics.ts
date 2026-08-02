@@ -1,13 +1,13 @@
 import { fetchApi } from "$lib/api/orval-fetch";
 import type { RequestOptions } from "$lib/api/generated-response";
 import type { PlaybackStatisticsResponse } from "$lib/api/generated/model";
-import type { EntityKindCode, PlaybackEventKindCode } from "$lib/entities/entity-codes";
+import type { EntityKindCode, ConsumptionEventKindCode } from "$lib/entities/entity-codes";
 
 export interface PlaybackStatisticsParams {
   from?: string;
   to?: string;
   kind?: EntityKindCode;
-  eventKind?: PlaybackEventKindCode;
+  eventKind?: ConsumptionEventKindCode;
   hideNsfw?: boolean;
   userId?: string;
   allUsers?: boolean;

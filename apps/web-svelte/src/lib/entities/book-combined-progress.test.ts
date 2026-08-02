@@ -39,8 +39,8 @@ function audioTrack(id = "audio-1", duration = 1_200): AudioTrackListItemDto {
     studioId: null,
     performers: [],
     tags: [],
-    playCount: 0,
-    lastPlayedAt: null,
+    accessCount: 0,
+    lastActiveAt: null,
     createdAt: "",
   };
 }

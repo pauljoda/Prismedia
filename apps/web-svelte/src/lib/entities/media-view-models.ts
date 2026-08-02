@@ -91,8 +91,8 @@ export interface AudioTrackListItemDto {
   studioId: string | null;
   performers: { id: string; name: string }[];
   tags: TagEmbedDto[];
-  playCount: number;
-  lastPlayedAt: string | null;
+  accessCount: number;
+  lastActiveAt: string | null;
   createdAt: string;
 }
 

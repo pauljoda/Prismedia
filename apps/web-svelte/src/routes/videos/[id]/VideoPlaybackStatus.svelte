@@ -3,8 +3,12 @@
   import { formatVideoTimestamp } from "./video-page-state";
 
   interface Props {
-    /** Number of completed plays recorded for the video. */
-    playCount: number;
+    /** Number of times the video was opened for playback. */
+    accessCount: number;
+    /** Number of completed viewing occurrences. */
+    completionCount: number;
+    /** Cached active viewing time. */
+    activeSeconds: number;
     /** Stored resume position in seconds. */
     resumeSeconds: number;
     /** Total runtime in seconds, when known. */
@@ -24,7 +28,9 @@
   }
 
   let {
-    playCount,
+    accessCount,
+    completionCount,
+    activeSeconds,
     resumeSeconds,
     durationSeconds,
     completedAt,
@@ -48,9 +54,13 @@
       ? `${formatVideoTimestamp(watched ? durationSeconds : position)} / ${formatVideoTimestamp(durationSeconds)}`
       : null,
   );
-  const countLabel = $derived(
-    playCount <= 0 ? null : playCount === 1 ? "Played once" : `Played ${playCount} times`,
-  );
+  const countLabel = $derived.by(() => {
+    const parts: string[] = [];
+    if (accessCount > 0) parts.push(accessCount === 1 ? "Opened once" : `Opened ${accessCount} times`);
+    if (completionCount > 0) parts.push(`${completionCount} completed`);
+    if (activeSeconds > 0) parts.push(`${formatVideoTimestamp(activeSeconds)} active`);
+    return parts.length > 0 ? parts.join(" · ") : null;
+  });
 </script>
 
 <MediaProgressPanel

@@ -158,8 +158,8 @@ function track(id: string, title: string): AudioTrackListItemDto {
     studioId: null,
     performers: [],
     tags: [],
-    playCount: 0,
-    lastPlayedAt: null,
+    accessCount: 0,
+    lastActiveAt: null,
     createdAt: "",
   };
 }

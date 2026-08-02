@@ -5,10 +5,11 @@
  * OpenAPI spec version: 1.0.0
  */
 
-export type PlaybackEventKind = typeof PlaybackEventKind[keyof typeof PlaybackEventKind];
+export type ConsumptionEventKind = typeof ConsumptionEventKind[keyof typeof ConsumptionEventKind];
 
 
-export const PlaybackEventKind = {
+export const ConsumptionEventKind = {
+  accessed: 'accessed',
   completed: 'completed',
   skipped: 'skipped',
 } as const;

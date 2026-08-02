@@ -20,7 +20,10 @@
   } from "@lucide/svelte";
   import { cn } from "@prismedia/ui-svelte";
   import { formatDuration } from "$lib/utils/format";
-  import { recordEntityPlaybackEvent, updateEntityProgress } from "$lib/api/playback";
+  import {
+    recordEntityPlaybackEvent,
+    updateEntityProgress,
+  } from "$lib/api/playback";
   import { apiAssetUrl, assetUrl } from "$lib/api/orval-fetch";
   import { paletteFromImage, type ArtworkPalette } from "$lib/entities/artwork-palette";
   import { resolveEntityHref } from "$lib/entities/entity-codes";
@@ -28,7 +31,7 @@
   import AudioWaveformFilmstrip from "./AudioWaveformFilmstrip.svelte";
   import PlaybackQueueFlyout from "./PlaybackQueueFlyout.svelte";
   import { waveformForDisplay } from "./audio-waveform";
-  import { BookActivityClock } from "$lib/entities/book-activity-clock";
+  import { ConsumptionActivityClock } from "$lib/entities/consumption-activity-clock";
   import { bookProgressUpdateForAudio } from "$lib/entities/book-combined-progress";
   import {
     AUDIO_PLAYBACK_SAVE_EVENT,
@@ -36,8 +39,12 @@
     useAudioPlayback,
   } from "$lib/stores/audio-playback.svelte";
   import { useAppChrome } from "$lib/stores/app-chrome.svelte";
-  import { ENTITY_KIND, MUSIC_PLAYER_MINI_SIDE, MUSIC_PLAYER_REPEAT_MODE, PLAYBACK_EVENT_KIND } from "$lib/api/generated/codes";
+  import { ENTITY_KIND, MUSIC_PLAYER_MINI_SIDE, MUSIC_PLAYER_REPEAT_MODE, CONSUMPTION_EVENT_KIND } from "$lib/api/generated/codes";
   import { createAudioTabCoordinator, type AudioTabCoordinator } from "$lib/player/audio-tab-coordinator";
+  import {
+    MusicConsumptionReporter,
+    recordAudioConsumptionAccess,
+  } from "$lib/player/music-consumption-reporter";
   import {
     setMediaSessionHandlers,
     setMediaSessionMetadata,
@@ -61,7 +68,6 @@
   let timelineDragging = $state(false);
   let queueOpen = $state(false);
   let artworkPaletteState = $state<{ coverUrl: string; palette: ArtworkPalette } | null>(null);
-
   let timelineDraggingRef = false;
   let currentSrcTrackId: string | null = null;
   let audioStartedInThisSession = false;
@@ -72,7 +78,12 @@
   let lastAudiobookProgressSeconds: number | null = null;
   let lastAudiobookTrackId: string | null = null;
   let audiobookProgressSave = Promise.resolve();
-  const audiobookActivityClock = new BookActivityClock();
+  const audiobookActivityClock = new ConsumptionActivityClock();
+  let audiobookAccessOwnerId: string | null = null;
+  const musicConsumption = new MusicConsumptionReporter(() => ({
+    positionSeconds: playback.currentTime,
+    durationSeconds: playback.duration || activeTrack?.duration || null,
+  }));
 
   const activeTrack = $derived(playback.currentTrack);
   const ctx = $derived(playback.context);
@@ -93,7 +104,6 @@
   const progress = $derived(
     duration > 0 ? Math.max(0, Math.min(100, (currentTime / duration) * 100)) : 0,
   );
-
   const artistName = $derived(
     ctx?.artistName ?? activeTrack?.embeddedArtist ?? activeTrack?.performers?.[0]?.name ?? null,
   );
@@ -260,9 +270,11 @@
     const nextSrc = apiAssetUrl(`/audio-stream/${track.id}`);
     if (!nextSrc) return false;
 
+    musicConsumption.close();
     const resumeTime = Math.max(0, playback.currentTime);
     currentSrcTrackId = track.id;
     currentTrackRequestedAtMs = Date.now();
+    musicConsumption.open(track.id);
     audioEl.src = nextSrc;
     playback.duration = track.duration ?? 0;
     pendingInitialSeekSeconds = resumeTime > 0 ? resumeTime : null;
@@ -353,7 +365,7 @@
     if (isAudiobook) return;
     if (!track || !isQuickSkipCandidate()) return;
     void recordEntityPlaybackEvent(track.id, {
-      kind: PLAYBACK_EVENT_KIND.skipped,
+      kind: CONSUMPTION_EVENT_KIND.skipped,
       positionSeconds: playback.currentTime,
       durationSeconds: duration || track.duration || null,
     }).catch(() => {});
@@ -435,6 +447,15 @@
     const url = apiAssetUrl(`/audio-tracks/${trackId}/play`);
     if (!url) return;
     void fetch(url, { method: "POST" }).catch(() => {});
+  }
+
+  function startAudiobookConsumption() {
+    const ownerId = ctx?.playbackOwnerEntityId;
+    if (!ownerId) return;
+    audiobookActivityClock.start();
+    if (audiobookAccessOwnerId === ownerId) return;
+    audiobookAccessOwnerId = ownerId;
+    recordAudioConsumptionAccess(ownerId, playback.currentTime);
   }
 
   function isFinalAudiobookPart(): boolean {
@@ -632,7 +653,8 @@
       audioStartedInThisSession = true;
       playback.playIntent = true;
       playback.playing = true;
-      if (isAudiobook) audiobookActivityClock.start();
+      if (isAudiobook) startAudiobookConsumption();
+      else musicConsumption.start();
     };
     const handlePause = () => {
       saveAudiobookProgress({
@@ -640,10 +662,12 @@
         stopActivity: true,
       });
       playback.playing = false;
+      musicConsumption.pause();
       coordinator.releasePlayback();
       window.dispatchEvent(new Event(AUDIO_PLAYBACK_SAVE_EVENT));
     };
     const handleEnded = () => {
+      musicConsumption.pause();
       if (isAudiobook) {
         saveAudiobookProgress({ completed: isFinalAudiobookPart() });
       } else if (playback.currentTrack) {
@@ -675,6 +699,9 @@
     audio.addEventListener("pause", handlePause);
     audio.addEventListener("ended", handleEnded);
     audio.addEventListener("error", handleError);
+    const activityTimer = window.setInterval(() => {
+      if (!isAudiobook && playback.playing) musicConsumption.heartbeat();
+    }, 10_000);
     document.addEventListener("visibilitychange", handleVisibilityChange);
     audio.volume = playback.volume;
     audio.muted = playback.muted;
@@ -704,6 +731,8 @@
       audio.removeEventListener("pause", handlePause);
       audio.removeEventListener("ended", handleEnded);
       audio.removeEventListener("error", handleError);
+      window.clearInterval(activityTimer);
+      musicConsumption.close();
       document.removeEventListener("visibilitychange", handleVisibilityChange);
       detachController();
       detachMediaSession();

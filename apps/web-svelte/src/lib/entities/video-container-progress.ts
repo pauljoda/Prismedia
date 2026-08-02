@@ -26,8 +26,9 @@ export interface VideoContainerProgressDisplay {
 }
 
 /**
- * Presents a container cursor like book progress: the cursor selects the episode to continue,
- * while a partial episode contributes its own watched fraction to the overall percentage.
+ * Presents the two independent facts a container needs: the most recently active episode is the
+ * continue cursor, while the watched percentage comes from completed-episode coverage. Revisiting
+ * an earlier episode therefore moves "Current" backward without erasing already watched coverage.
  */
 export function videoContainerProgressDisplay(
   progress: EntityCapabilityProgressCapability | null | undefined,
@@ -41,16 +42,24 @@ export function videoContainerProgressDisplay(
   const index = Math.min(total - 1, Math.max(0, numberValue(progress.index) ?? 0));
   const completed = progress.completedAt != null;
   const currentEpisode = episode?.id === progress.currentEntityId ? episode : null;
-  const episodeFraction = completed ? 1 : playbackFraction(currentEpisode);
-  const percent = completed ? 100 : ((index + episodeFraction) / total) * 100;
+  const consumedPercent = numberValue(progress.consumedPercent);
+  const consumedCount = Math.max(0, numberValue(progress.consumedCount) ?? 0);
+  const percent = completed
+    ? 100
+    : consumedPercent == null
+      ? (consumedCount / total) * 100
+      : consumedPercent * 100;
 
   return {
     episodeId: progress.currentEntityId,
-    episodeLabel: currentEpisode?.title ?? null,
+    episodeLabel: [
+      currentEpisode?.title ?? null,
+      `${Math.min(total, consumedCount)} of ${total} watched`,
+    ].filter(Boolean).join(" · "),
     index,
     total,
     percent: Math.min(100, Math.max(0, percent)),
-    positionLabel: `Episode ${index + 1} of ${total}`,
+    positionLabel: `Current · Episode ${index + 1} of ${total}`,
     completed,
     canContinue: !completed,
   };
@@ -61,22 +70,16 @@ export function videoProgressEpisodeFromCard(
   card: EntityThumbnailCard | null | undefined,
 ): VideoProgressEpisode | null {
   if (!card) return null;
-  const playback = getCapability(card.entity.capabilities, CAPABILITY_KIND.playback);
+  const consumption = getCapability(card.entity.capabilities, CAPABILITY_KIND.consumption);
   const technical = getTechnicalCapability(card.entity.capabilities);
   const thumbnailFraction = numberValue(card.progress);
   return {
     id: card.entity.id,
     title: card.entity.title,
     resumeSeconds: thumbnailFraction == null
-      ? Math.max(0, numberValue(playback?.resumeSeconds) ?? 0)
+      ? Math.max(0, numberValue(consumption?.resumeSeconds) ?? 0)
       : Math.min(1, Math.max(0, thumbnailFraction)),
     durationSeconds: thumbnailFraction == null ? durationToSeconds(technical?.duration) : 1,
-    completedAt: playback?.completedAt ?? (thumbnailFraction === 1 ? "completed" : null),
+    completedAt: consumption?.completedAt ?? (thumbnailFraction === 1 ? "completed" : null),
   };
-}
-
-function playbackFraction(episode: VideoProgressEpisode | null): number {
-  if (!episode || episode.completedAt != null) return episode?.completedAt != null ? 1 : 0;
-  if (!episode.durationSeconds || episode.durationSeconds <= 0) return 0;
-  return Math.min(1, Math.max(0, episode.resumeSeconds / episode.durationSeconds));
 }

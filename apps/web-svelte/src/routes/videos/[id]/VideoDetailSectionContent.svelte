@@ -5,7 +5,7 @@
   } from "$lib/entities/entity-detail";
   import type { EntityDetailSection } from "$lib/components/entities/EntityDetail.svelte";
   import type { EntityThumbnailCard } from "$lib/entities/entity-relationship-thumbnails";
-  import type { PlaybackState, VideoPlayerProps } from "$lib/entities/video-capabilities";
+  import type { ConsumptionState, VideoPlayerProps } from "$lib/entities/video-capabilities";
   import VideoMarkerEditor from "$lib/components/VideoMarkerEditor.svelte";
   import VideoTranscriptPanel from "$lib/components/VideoTranscriptPanel.svelte";
   import VideoPlaybackStatus from "./VideoPlaybackStatus.svelte";
@@ -17,7 +17,7 @@
     card: EntityDetailCardFull;
     seriesCards?: EntityThumbnailCard[];
     videoId: string;
-    playbackState: PlaybackState | null;
+    playbackState: ConsumptionState | null;
     durationSeconds: number;
     playbackBusy: boolean;
     playerProps: VideoPlayerProps;
@@ -70,7 +70,9 @@
 {:else if section.id === "playback"}
   {#if playbackState}
     <VideoPlaybackStatus
-      playCount={playbackState.playCount}
+      accessCount={playbackState.accessCount}
+      completionCount={playbackState.completionCount}
+      activeSeconds={playbackState.activeSeconds}
       resumeSeconds={playbackState.resumeSeconds}
       {durationSeconds}
       completedAt={playbackState.completedAt}
