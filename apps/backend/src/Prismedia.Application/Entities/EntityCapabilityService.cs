@@ -190,6 +190,15 @@ public sealed class EntityCapabilityService {
             if (consumption is null) {
                 return ConsumptionMutationResult.Rejected;
             }
+            if (entity.Definition.Engagement.Mode == EntityEngagementMode.None &&
+                (resumeSeconds is not null || completed is not null)) {
+                return ConsumptionMutationResult.Rejected;
+            }
+            if (BoundActivitySeconds(activitySeconds) is not null &&
+                activityKind is null &&
+                entity.Definition.Engagement.DefaultActivityKind is null) {
+                return ConsumptionMutationResult.Rejected;
+            }
 
             ConsumptionEventAppend? completedEvent = null;
             ConsumptionActivityAppend? activity = null;
@@ -282,7 +291,7 @@ public sealed class EntityCapabilityService {
         var now = _timeProvider.GetUtcNow();
         var card = await MutateWithConsumptionAsync(id, entity => {
             var consumption = GetOrAddDefaultCapability<CapabilityConsumption>(entity);
-            if (consumption is null) {
+            if (consumption is null || entity.Definition.Engagement.Mode == EntityEngagementMode.None) {
                 return ConsumptionMutationResult.Rejected;
             }
 
@@ -349,7 +358,7 @@ public sealed class EntityCapabilityService {
         CancellationToken cancellationToken) {
         var card = await MutateWithConsumptionAsync(id, entity => {
             var consumption = GetOrAddDefaultCapability<CapabilityConsumption>(entity);
-            if (consumption is null) {
+            if (consumption is null || entity.Definition.Engagement.Mode == EntityEngagementMode.None) {
                 return ConsumptionMutationResult.Rejected;
             }
 
@@ -372,7 +381,7 @@ public sealed class EntityCapabilityService {
         CancellationToken cancellationToken) {
         var card = await MutateWithConsumptionAsync(id, entity => {
             var consumption = GetOrAddDefaultCapability<CapabilityConsumption>(entity);
-            if (consumption is null) {
+            if (consumption is null || entity.Definition.Engagement.Mode != EntityEngagementMode.Playback) {
                 return ConsumptionMutationResult.Rejected;
             }
 
@@ -782,6 +791,7 @@ public sealed class EntityCapabilityService {
             async attemptCancellationToken => {
                 if (accessSessionId is not null &&
                     await _consumptionEvents.ContainsSessionEventAsync(
+                        id,
                         accessSessionId,
                         ConsumptionEventKind.Accessed,
                         attemptCancellationToken)) {

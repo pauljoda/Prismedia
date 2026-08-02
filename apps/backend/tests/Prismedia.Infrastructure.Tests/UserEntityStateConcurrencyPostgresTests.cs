@@ -247,4 +247,65 @@ public sealed class UserEntityStateConcurrencyPostgresTests {
         Assert.Equal(progressAt.AddHours(1), state.LastActiveAt);
     }
 
+    [Fact]
+    [Trait("Category", "PostgreSQL")]
+    public async Task SharedSessionIdsDeduplicateAccessPerEntity() {
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        var userId = Guid.NewGuid();
+        var firstEntityId = Guid.NewGuid();
+        var secondEntityId = Guid.NewGuid();
+        await SeedAsync(database, userId, firstEntityId, EntityKind.AudioTrack, includeState: false);
+        await using (var seed = database.CreateContext()) {
+            var now = DateTimeOffset.UtcNow;
+            seed.Entities.Add(new Prismedia.Infrastructure.Persistence.Entities.EntityRow {
+                Id = secondEntityId,
+                KindCode = EntityKind.AudioTrack.ToCode(),
+                Title = "Second track",
+                CreatedAt = now,
+                UpdatedAt = now
+            });
+            await seed.SaveChangesAsync();
+        }
+
+        const string sharedSessionId = "shared-player-session";
+        await using (var firstContext = database.CreateContext()) {
+            var firstService = CreateService(
+                firstContext,
+                userId,
+                CreateRepository(firstContext, userId));
+            await firstService.RecordAccessedAsync(
+                firstEntityId,
+                DateTimeOffset.UtcNow,
+                positionSeconds: 0,
+                durationSeconds: 180,
+                sharedSessionId,
+                CancellationToken.None);
+        }
+        await using (var secondContext = database.CreateContext()) {
+            var secondService = CreateService(
+                secondContext,
+                userId,
+                CreateRepository(secondContext, userId));
+            await secondService.RecordAccessedAsync(
+                secondEntityId,
+                DateTimeOffset.UtcNow,
+                positionSeconds: 0,
+                durationSeconds: 200,
+                sharedSessionId,
+                CancellationToken.None);
+        }
+
+        await using var verification = database.CreateContext();
+        var events = await verification.EntityConsumptionEvents
+            .Where(row => row.UserId == userId &&
+                          row.SessionId == sharedSessionId &&
+                          row.Kind == ConsumptionEventKind.Accessed)
+            .OrderBy(row => row.EntityId)
+            .ToArrayAsync();
+        Assert.Equal(2, events.Length);
+        Assert.Equal(
+            new[] { firstEntityId, secondEntityId }.Order().ToArray(),
+            events.Select(row => row.EntityId).Order().ToArray());
+    }
+
 }

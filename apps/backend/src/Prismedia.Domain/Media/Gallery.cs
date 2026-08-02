@@ -28,6 +28,9 @@ public sealed class GalleryEntityKindDefinition() : EntityKindDefinition<Gallery
     new EntityKindSearch(6),
     new EntityKindBehavior(
         identification: new(AutoIdentifySelectorKind.Gallery),
+        engagement: new(
+            EntityEngagementMode.None,
+            defaultActivityKind: ConsumptionActivityKind.Viewing),
         catalogVisibility: new(topLevelOnlySurfaces: EntityCatalogSurface.KindBrowse),
         libraryVisibility: EntityLibraryVisibilityPolicy.DirectRoot,
         supportsFileDeletion: true),

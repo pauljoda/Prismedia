@@ -72,7 +72,7 @@ internal static partial class PrismediaModelConfiguration {
             entity.HasIndex(row => new { row.EntityId, row.OccurredAt });
             entity.HasIndex(row => new { row.Kind, row.OccurredAt });
             entity.HasIndex(row => new { row.UserId, row.OccurredAt });
-            entity.HasIndex(row => new { row.UserId, row.SessionId, row.Kind })
+            entity.HasIndex(row => new { row.UserId, row.EntityId, row.SessionId, row.Kind })
                 .IsUnique()
                 .HasFilter("session_id IS NOT NULL");
             entity.HasOne<EntityRow>().WithMany().HasForeignKey(row => row.EntityId).OnDelete(DeleteBehavior.Cascade);

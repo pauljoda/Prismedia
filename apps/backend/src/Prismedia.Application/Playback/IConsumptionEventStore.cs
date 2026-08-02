@@ -4,8 +4,9 @@ namespace Prismedia.Application.Playback;
 
 /// <summary>Application port for staging durable discrete consumption events.</summary>
 public interface IConsumptionEventStore {
-    /// <summary>Returns whether this user's session already emitted the event kind.</summary>
+    /// <summary>Returns whether this user's Entity session already emitted the event kind.</summary>
     Task<bool> ContainsSessionEventAsync(
+        Guid entityId,
         string sessionId,
         ConsumptionEventKind kind,
         CancellationToken cancellationToken) => Task.FromResult(false);

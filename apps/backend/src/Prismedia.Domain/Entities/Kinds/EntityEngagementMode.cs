@@ -2,7 +2,7 @@ namespace Prismedia.Domain.Entities;
 
 /// <summary>Shared vocabulary used when presenting completion and in-progress state.</summary>
 public enum EntityEngagementMode {
-    /// <summary>The kind does not expose engagement filters.</summary>
+    /// <summary>The kind does not expose position, completion, or engagement filters.</summary>
     [Code("none")]
     None,
 

@@ -12,15 +12,18 @@ public sealed class EfConsumptionEventStore(PrismediaDbContext db, ICurrentUserC
     : IConsumptionEventStore {
     /// <inheritdoc />
     public async Task<bool> ContainsSessionEventAsync(
+        Guid entityId,
         string sessionId,
         ConsumptionEventKind kind,
         CancellationToken cancellationToken) {
         var normalized = sessionId.Trim();
         Guid? userId = currentUser.UserId == Guid.Empty ? null : currentUser.UserId;
         return db.EntityConsumptionEvents.Local.Any(row =>
-                   row.UserId == userId && row.SessionId == normalized && row.Kind == kind) ||
+                   row.UserId == userId && row.EntityId == entityId &&
+                   row.SessionId == normalized && row.Kind == kind) ||
                await db.EntityConsumptionEvents.AsNoTracking().AnyAsync(row =>
-                   row.UserId == userId && row.SessionId == normalized && row.Kind == kind,
+                   row.UserId == userId && row.EntityId == entityId &&
+                   row.SessionId == normalized && row.Kind == kind,
                    cancellationToken);
     }
 

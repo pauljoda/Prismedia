@@ -242,7 +242,50 @@ public sealed class EntityCapabilityServiceProgressTests {
     }
 
     [Fact]
-    public async Task UnsupportedImageCapabilityMutationsDoNotSaveOrStageEvents() {
+    public async Task ImageRecordsAccessAndViewingTimeWithoutPlaybackState() {
+        var image = new Image(Guid.NewGuid(), "Still");
+        var repository = new SingleEntityWriteRepository(image);
+        var playbackEvents = new RecordingPlaybackEventStore();
+        var activityEvents = new RecordingEntityActivityStore();
+        var service = new EntityCapabilityService(
+            repository,
+            new CanonicalEntityReadStub(),
+            new TestProgressTopologyResolver(),
+            consumptionEvents: playbackEvents,
+            consumptionActivities: activityEvents);
+        var occurredAt = DateTimeOffset.UtcNow;
+
+        var accessed = await service.RecordAccessedAsync(
+            image.Id,
+            occurredAt,
+            positionSeconds: null,
+            durationSeconds: null,
+            sessionId: "image-session",
+            CancellationToken.None);
+        var viewed = await service.UpdatePlaybackAsync(
+            image.Id,
+            resumeSeconds: null,
+            durationSeconds: 30,
+            completed: null,
+            CancellationToken.None);
+
+        Assert.NotNull(accessed);
+        Assert.NotNull(viewed);
+        Assert.Equal(2, repository.SaveCount);
+        Assert.Equal(ConsumptionEventKind.Accessed, Assert.Single(playbackEvents.Events).Kind);
+        var activity = Assert.Single(activityEvents.Events);
+        Assert.Equal(ConsumptionActivityKind.Viewing, activity.Kind);
+        Assert.Equal(30, activity.DurationSeconds);
+        var consumption = image.RequireCapability<CapabilityConsumption>().Value;
+        Assert.Equal(1, consumption.AccessCount);
+        Assert.Equal(TimeSpan.FromSeconds(30), consumption.ActiveDuration);
+        Assert.Equal(TimeSpan.Zero, consumption.ResumeTime);
+        Assert.Equal(0, consumption.CompletionCount);
+        Assert.Equal(0, consumption.SkipCount);
+    }
+
+    [Fact]
+    public async Task ImageRejectsPlaybackPositionCompletionSkipsProgressAndMarkers() {
         var image = new Image(Guid.NewGuid(), "Still");
         var repository = new SingleEntityWriteRepository(image);
         var playbackEvents = new RecordingPlaybackEventStore();
@@ -256,7 +299,7 @@ public sealed class EntityCapabilityServiceProgressTests {
         var occurredAt = DateTimeOffset.UtcNow;
 
         var results = new EntityCard?[] {
-            await service.UpdatePlaybackAsync(image.Id, 10, 1, completed: null, CancellationToken.None),
+            await service.UpdatePlaybackAsync(image.Id, 10, null, completed: null, CancellationToken.None),
             await service.UpdateVideoPlaybackAsync(image.Id, 10, 100, completed: false, CancellationToken.None),
             await service.RecordCompletedPlaybackAsync(image.Id, CancellationToken.None),
             await service.RecordCompletedPlaybackAsync(image.Id, occurredAt, 10, 100, CancellationToken.None),
@@ -285,7 +328,12 @@ public sealed class EntityCapabilityServiceProgressTests {
         Assert.Equal(0, repository.SaveCount);
         Assert.Empty(playbackEvents.Events);
         Assert.Empty(activityEvents.Events);
-        Assert.Null(image.ConsumptionCapability);
+        var consumption = image.RequireCapability<CapabilityConsumption>().Value;
+        Assert.Equal(0, consumption.AccessCount);
+        Assert.Equal(TimeSpan.Zero, consumption.ActiveDuration);
+        Assert.Equal(TimeSpan.Zero, consumption.ResumeTime);
+        Assert.Equal(0, consumption.CompletionCount);
+        Assert.Equal(0, consumption.SkipCount);
         Assert.Null(image.Progress);
         Assert.Null(image.MarkerCapability);
     }

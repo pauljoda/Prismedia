@@ -13,6 +13,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- Consumption upgrades now preserve exact legacy progress and active-time history without presenting inferred opens as recorded facts; access sessions are deduplicated per Entity, and images and galleries accept viewing time without accepting playback-only position, completion, or skip changes.
 - Prepared folder downloads now become ready only after their ZIP footer has been fully written, preventing intermittent corrupt archives.
 - Acquisition queue failures now remain visible while the page refreshes the durable server state.
 - Acquisition detail pages now remain usable when their configured download client is offline, falling back from unavailable live transfer telemetry instead of failing the request.

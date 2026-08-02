@@ -1,9 +1,8 @@
 namespace Prismedia.Domain.Entities;
 
 /// <summary>
-/// Definition-owned engagement behavior shared by list filtering and clients. The policy says
-/// whether the kind exposes completion state and whether playback progress may derive completion
-/// from runtime.
+/// Definition-owned consumption behavior shared by application use cases and clients. The policy
+/// separates position/completion vocabulary from the activity kind used for accumulated time.
 /// </summary>
 public sealed record EntityEngagementPolicy {
     /// <summary>Policy for kinds that do not expose engagement state.</summary>
@@ -31,9 +30,6 @@ public sealed record EntityEngagementPolicy {
             EntityEngagementMode.Reading => ConsumptionActivityKind.Reading,
             _ => null
         };
-        if (mode == EntityEngagementMode.None && DefaultActivityKind is not null) {
-            throw new ArgumentException("Entities without engagement cannot declare an activity kind.", nameof(defaultActivityKind));
-        }
     }
 
     /// <summary>Vocabulary and state family exposed for the kind.</summary>
@@ -42,6 +38,9 @@ public sealed record EntityEngagementPolicy {
     /// <summary>Whether position/runtime progress may infer completion for this kind.</summary>
     public bool DerivesCompletionFromPlaybackFraction { get; }
 
-    /// <summary>Activity mode used when a client reports duration without an explicit mode.</summary>
+    /// <summary>
+    /// Activity mode used when a client reports elapsed time. It may be present for view-only
+    /// entities that deliberately expose no position or completion state.
+    /// </summary>
     public ConsumptionActivityKind? DefaultActivityKind { get; }
 }

@@ -199,7 +199,7 @@ public sealed class EfEntityRepository : IEntityWriteRepository {
         exception.InnerException is PostgresException {
             SqlState: PostgresErrorCodes.UniqueViolation,
             ConstraintName: "IX_entity_consumption_days_user_id_entity_id_kind_activity_date" or
-                "IX_entity_consumption_events_user_id_session_id_kind"
+                "IX_entity_consumption_events_user_id_entity_id_session_id_kind"
         };
 
     private async Task<Entity> ConstructEntityAsync(EntityRow row, CancellationToken cancellationToken) {

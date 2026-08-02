@@ -30,6 +30,9 @@ public sealed class ImageEntityKindDefinition() : RootEntityKindDefinition<Image
             previewJobType: JobType.GenerateImageThumbnail,
             previewRequiresAutomaticGeneration: true,
             generatedFileRoles: [EntityFileRole.Thumbnail, EntityFileRole.Preview]),
+        engagement: new(
+            EntityEngagementMode.None,
+            defaultActivityKind: ConsumptionActivityKind.Viewing),
         libraryVisibility: EntityLibraryVisibilityPolicy.AncestorRoot,
         supportsFileDeletion: true),
     defaultCapabilities: static () => [new CapabilityConsumption()]) {

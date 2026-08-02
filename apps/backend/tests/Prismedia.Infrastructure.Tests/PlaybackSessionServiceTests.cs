@@ -390,6 +390,7 @@ public sealed class PlaybackSessionServiceTests {
         public IReadOnlyList<ConsumptionEventAppend> Events => _events;
 
         public Task<bool> ContainsSessionEventAsync(
+            Guid entityId,
             string sessionId,
             ConsumptionEventKind kind,
             CancellationToken cancellationToken) =>

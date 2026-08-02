@@ -248,7 +248,10 @@ public sealed class EntityCapabilityTests {
         Assert.Same(EntityKindRegistry.Describe(EntityKind.Video), video.Definition);
         Assert.Same(EntityKindRegistry.Describe(EntityKind.Image), image.Definition);
         Assert.NotNull(video.Credits);
-        Assert.Empty(image.Capabilities);
+        Assert.Equal(
+            ConsumptionActivityKind.Viewing,
+            image.Definition.Engagement.DefaultActivityKind);
+        Assert.IsType<CapabilityConsumption>(Assert.Single(image.Capabilities));
     }
 
     [Fact]
