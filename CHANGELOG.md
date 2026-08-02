@@ -18,6 +18,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Prepared folder downloads now become ready only after their ZIP footer has been fully written, preventing intermittent corrupt archives.
 - Acquisition queue failures now remain visible while the page refreshes the durable server state.
 - Acquisition detail pages now remain usable when their configured download client is offline, falling back from unavailable live transfer telemetry instead of failing the request.
+- Direct-playable upgrades now preserve the newest Movie description and deduplicate matching provider identities when collapsing legacy playable children, while still stopping safely for genuinely different identities.
 - Direct-playable upgrades now handle large libraries and temporarily unavailable media mounts while still stopping for conflicting or ambiguous source metadata.
 - Ratings, flags, playback, reading progress, and markers now update only their own Entity state, preserving linked people, files, identities, relationships, and metadata during concurrent use.
 - Video acquisition searches now derive work years from normalized series and movie release dates, preserving accurate title-and-year matching.

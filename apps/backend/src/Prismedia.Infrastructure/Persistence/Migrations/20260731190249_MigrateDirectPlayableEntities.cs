@@ -292,9 +292,8 @@ public partial class MigrateDirectPlayableEntities : Migration {
             END IF;
 
             FOREACH collision_table IN ARRAY ARRAY[
-                'entity_classifications', 'entity_descriptions', 'entity_library_roots',
-                'entity_lifetimes', 'entity_provider_identities', 'entity_subtitle_states',
-                'entity_technical'
+                'entity_classifications', 'entity_library_roots', 'entity_lifetimes',
+                'entity_subtitle_states', 'entity_technical'
             ] LOOP
                 EXECUTE format(
                     'SELECT EXISTS (SELECT 1 FROM %I AS old_row INNER JOIN pg_temp.prismedia_playable_map AS map ON map.old_id = old_row.entity_id INNER JOIN %I AS new_row ON new_row.entity_id = map.new_id WHERE map.mode = ''collapse'')',
@@ -305,6 +304,19 @@ public partial class MigrateDirectPlayableEntities : Migration {
                     RAISE EXCEPTION 'Direct-playable migration found conflicting rows in %', collision_table;
                 END IF;
             END LOOP;
+
+            IF EXISTS (
+                SELECT 1
+                FROM pg_temp.prismedia_playable_map AS map
+                INNER JOIN entity_provider_identities AS old_row ON old_row.entity_id = map.old_id
+                INNER JOIN entity_provider_identities AS new_row ON new_row.entity_id = map.new_id
+                WHERE map.mode = 'collapse'
+                  AND (old_row.plugin_id IS DISTINCT FROM new_row.plugin_id
+                    OR old_row.identity_namespace IS DISTINCT FROM new_row.identity_namespace
+                    OR old_row.identity_value IS DISTINCT FROM new_row.identity_value)
+            ) THEN
+                RAISE EXCEPTION 'Direct-playable migration found conflicting provider identities';
+            END IF;
 
             IF EXISTS (
                 SELECT 1
@@ -741,9 +753,40 @@ public partial class MigrateDirectPlayableEntities : Migration {
         UPDATE fingerprint_submissions AS row SET entity_id = map.new_id FROM pg_temp.prismedia_playable_map AS map WHERE map.mode = 'collapse' AND row.entity_id = map.old_id;
 
         UPDATE entity_classifications AS row SET entity_id = map.new_id FROM pg_temp.prismedia_playable_map AS map WHERE map.mode = 'collapse' AND row.entity_id = map.old_id;
+        UPDATE entity_descriptions AS survivor
+        SET value = old_row.value,
+            updated_at = old_row.updated_at
+        FROM pg_temp.prismedia_playable_map AS map
+        INNER JOIN entity_descriptions AS old_row ON old_row.entity_id = map.old_id
+        WHERE map.mode = 'collapse'
+          AND survivor.entity_id = map.new_id
+          AND old_row.updated_at > survivor.updated_at;
+        DELETE FROM entity_descriptions AS old_row
+        USING pg_temp.prismedia_playable_map AS map
+        WHERE map.mode = 'collapse'
+          AND old_row.entity_id = map.old_id
+          AND EXISTS (
+              SELECT 1
+              FROM entity_descriptions AS survivor
+              WHERE survivor.entity_id = map.new_id);
         UPDATE entity_descriptions AS row SET entity_id = map.new_id FROM pg_temp.prismedia_playable_map AS map WHERE map.mode = 'collapse' AND row.entity_id = map.old_id;
         UPDATE entity_library_roots AS row SET entity_id = map.new_id FROM pg_temp.prismedia_playable_map AS map WHERE map.mode = 'collapse' AND row.entity_id = map.old_id;
         UPDATE entity_lifetimes AS row SET entity_id = map.new_id FROM pg_temp.prismedia_playable_map AS map WHERE map.mode = 'collapse' AND row.entity_id = map.old_id;
+        UPDATE entity_provider_identities AS survivor
+        SET created_at = LEAST(survivor.created_at, old_row.created_at),
+            updated_at = GREATEST(survivor.updated_at, old_row.updated_at)
+        FROM pg_temp.prismedia_playable_map AS map
+        INNER JOIN entity_provider_identities AS old_row ON old_row.entity_id = map.old_id
+        WHERE map.mode = 'collapse'
+          AND survivor.entity_id = map.new_id;
+        DELETE FROM entity_provider_identities AS old_row
+        USING pg_temp.prismedia_playable_map AS map
+        WHERE map.mode = 'collapse'
+          AND old_row.entity_id = map.old_id
+          AND EXISTS (
+              SELECT 1
+              FROM entity_provider_identities AS survivor
+              WHERE survivor.entity_id = map.new_id);
         UPDATE entity_provider_identities AS row SET entity_id = map.new_id FROM pg_temp.prismedia_playable_map AS map WHERE map.mode = 'collapse' AND row.entity_id = map.old_id;
         UPDATE entity_subtitle_states AS row SET entity_id = map.new_id FROM pg_temp.prismedia_playable_map AS map WHERE map.mode = 'collapse' AND row.entity_id = map.old_id;
         UPDATE entity_technical AS row SET entity_id = map.new_id FROM pg_temp.prismedia_playable_map AS map WHERE map.mode = 'collapse' AND row.entity_id = map.old_id;

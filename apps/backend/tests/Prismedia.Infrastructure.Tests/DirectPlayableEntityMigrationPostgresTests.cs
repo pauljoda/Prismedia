@@ -192,6 +192,87 @@ public sealed class DirectPlayableEntityMigrationPostgresTests {
 
     [Fact]
     [Trait("Category", "PostgreSQL")]
+    public async Task RunnerKeepsNewestDescriptionAndDeduplicatesMatchingProviderIdentityDuringMovieCollapse() {
+        await using var database = await PostgresTestDatabase.CreateAsync(PreviousMigration);
+        using var files = MigrationFiles.Create();
+        var movieId = Guid.NewGuid();
+        var childId = Guid.NewGuid();
+        var movieFolder = files.CreateFolder("metadata-collision/movie");
+        var videoPath = files.CreateFile("metadata-collision/movie/movie.mkv", "movie");
+        await SeedMinimalMovieAsync(database, movieId, childId, movieFolder, videoPath);
+
+        await using (var connection = await database.OpenConnectionAsync()) {
+            await ExecuteAsync(
+                connection,
+                """
+                INSERT INTO entity_descriptions (entity_id, value, updated_at)
+                VALUES
+                    (@movie_id, 'Older movie description', now() - interval '2 hours'),
+                    (@child_id, 'Newer playable description', now() - interval '1 hour');
+                INSERT INTO entity_provider_identities
+                    (entity_id, plugin_id, identity_namespace, identity_value, created_at, updated_at)
+                VALUES
+                    (@movie_id, 'fixture-plugin', 'movie', 'provider-42', now() - interval '3 hours', now()),
+                    (@child_id, 'fixture-plugin', 'movie', 'provider-42', now() - interval '2 hours', now() - interval '1 hour');
+                """,
+                ("movie_id", movieId),
+                ("child_id", childId));
+        }
+
+        await database.RunMigrationRunnerAsync(files.Assets);
+
+        await using var migrated = await database.OpenConnectionAsync();
+        Assert.Equal(
+            "Newer playable description",
+            await ScalarAsync<string>(migrated, "SELECT value FROM entity_descriptions WHERE entity_id = @id", movieId));
+        Assert.Equal(
+            1,
+            await ScalarAsync<int>(
+                migrated,
+                "SELECT count(*)::int FROM entity_provider_identities WHERE entity_id = @id",
+                movieId));
+        Assert.Equal(
+            "provider-42",
+            await ScalarAsync<string>(
+                migrated,
+                "SELECT identity_value FROM entity_provider_identities WHERE entity_id = @id",
+                movieId));
+    }
+
+    [Fact]
+    [Trait("Category", "PostgreSQL")]
+    public async Task RunnerRejectsDifferentProviderIdentitiesDuringMovieCollapse() {
+        await using var database = await PostgresTestDatabase.CreateAsync(PreviousMigration);
+        using var files = MigrationFiles.Create();
+        var movieId = Guid.NewGuid();
+        var childId = Guid.NewGuid();
+        var movieFolder = files.CreateFolder("provider-collision/movie");
+        var videoPath = files.CreateFile("provider-collision/movie/movie.mkv", "movie");
+        await SeedMinimalMovieAsync(database, movieId, childId, movieFolder, videoPath);
+
+        await using (var connection = await database.OpenConnectionAsync()) {
+            await ExecuteAsync(
+                connection,
+                """
+                INSERT INTO entity_provider_identities
+                    (entity_id, plugin_id, identity_namespace, identity_value, created_at, updated_at)
+                VALUES
+                    (@movie_id, 'fixture-plugin', 'movie', 'provider-42', now(), now()),
+                    (@child_id, 'fixture-plugin', 'movie', 'provider-99', now(), now());
+                """,
+                ("movie_id", movieId),
+                ("child_id", childId));
+        }
+
+        var exception = await Assert.ThrowsAsync<PostgresException>(
+            () => database.RunMigrationRunnerAsync(files.Assets));
+
+        Assert.Equal(PostgresErrorCodes.RaiseException, exception.SqlState);
+        Assert.Contains("conflicting provider identities", exception.MessageText, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    [Trait("Category", "PostgreSQL")]
     public async Task DirectEfUpgradeFailsClosedWhenLegacyRowsBypassFilesystemPreparation() {
         await using var database = await PostgresTestDatabase.CreateAsync(PreviousMigration);
         var movieId = Guid.NewGuid();
