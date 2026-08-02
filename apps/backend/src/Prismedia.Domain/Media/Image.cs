@@ -31,7 +31,8 @@ public sealed class ImageEntityKindDefinition() : RootEntityKindDefinition<Image
             previewRequiresAutomaticGeneration: true,
             generatedFileRoles: [EntityFileRole.Thumbnail, EntityFileRole.Preview]),
         libraryVisibility: EntityLibraryVisibilityPolicy.AncestorRoot,
-        supportsFileDeletion: true)) {
+        supportsFileDeletion: true),
+    defaultCapabilities: static () => [new CapabilityConsumption()]) {
     /// <inheritdoc />
     public override EntityProgressTopology ProgressTopology => EntityProgressTopology.None;
 

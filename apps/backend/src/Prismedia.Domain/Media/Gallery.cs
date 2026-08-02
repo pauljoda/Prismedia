@@ -31,7 +31,7 @@ public sealed class GalleryEntityKindDefinition() : EntityKindDefinition<Gallery
         catalogVisibility: new(topLevelOnlySurfaces: EntityCatalogSurface.KindBrowse),
         libraryVisibility: EntityLibraryVisibilityPolicy.DirectRoot,
         supportsFileDeletion: true),
-    defaultCapabilities: static () => [new CapabilityCredits()]) {
+    defaultCapabilities: static () => [new CapabilityCredits(), new CapabilityConsumption()]) {
     /// <inheritdoc />
     public override EntityProgressTopology ProgressTopology => EntityProgressTopology.None;
 

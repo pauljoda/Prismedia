@@ -11,13 +11,14 @@ namespace Prismedia.Infrastructure.Tests;
 /// <summary>Guards direct-plus-descendant consumption rollups for structural media containers.</summary>
 public sealed class ConsumptionCapabilityMapperTests {
     /// <summary>
-    /// Albums, seasons, and books all use the same definition-driven rollup: direct activity on
+    /// Albums, seasons, books, and galleries all use the same definition-driven rollup: direct activity on
     /// the owner remains visible while leaf activity is summed exactly once.
     /// </summary>
     [Theory]
     [InlineData(EntityKind.AudioLibrary, EntityKind.AudioTrack)]
     [InlineData(EntityKind.VideoSeason, EntityKind.VideoEpisode)]
     [InlineData(EntityKind.Book, EntityKind.BookChapter)]
+    [InlineData(EntityKind.Gallery, EntityKind.Image)]
     public async Task HydrateSumsDirectOwnerAndConsumableLeaves(
         EntityKind rootKind,
         EntityKind leafKind) {
@@ -59,6 +60,7 @@ public sealed class ConsumptionCapabilityMapperTests {
         EntityKind.AudioLibrary => new AudioLibrary(id, "Album"),
         EntityKind.VideoSeason => new VideoSeason(id, "Season", parentEntityId: null),
         EntityKind.Book => new Book(id, "Book", BookType.Book, coverPageId: null),
+        EntityKind.Gallery => new Gallery(id, "Gallery", GalleryType.Virtual, coverImageId: null),
         _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, null)
     };
 
