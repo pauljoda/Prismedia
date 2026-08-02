@@ -1,6 +1,6 @@
 using Prismedia.Domain.Entities;
 
-namespace Prismedia.Contracts.Playback;
+namespace Prismedia.Contracts.Consumption;
 
 /// <summary>
 /// Time-bounded consumption statistics built from discrete events and daily duration buckets.
@@ -27,7 +27,7 @@ namespace Prismedia.Contracts.Playback;
 /// Sparse weekday/hour cells describing when consumption events happen. Only cells with at least one
 /// event are present.
 /// </param>
-public sealed record PlaybackStatisticsResponse(
+public sealed record ConsumptionStatisticsResponse(
     DateTimeOffset From,
     DateTimeOffset To,
     int TotalEvents,
@@ -39,11 +39,11 @@ public sealed record PlaybackStatisticsResponse(
     double ViewingSeconds,
     double ReadingSeconds,
     double ListeningSeconds,
-    IReadOnlyList<PlaybackStatisticsEntity> TopEntities,
-    IReadOnlyList<PlaybackStatisticsEvent> RecentEvents,
-    IReadOnlyList<PlaybackStatisticsBucket> DailyEvents,
-    IReadOnlyList<PlaybackStatisticsKindSlice> KindBreakdown,
-    IReadOnlyList<PlaybackStatisticsRhythmCell> Rhythm);
+    IReadOnlyList<ConsumptionStatisticsEntity> TopEntities,
+    IReadOnlyList<ConsumptionStatisticsEvent> RecentEvents,
+    IReadOnlyList<ConsumptionStatisticsBucket> DailyEvents,
+    IReadOnlyList<ConsumptionStatisticsKindSlice> KindBreakdown,
+    IReadOnlyList<ConsumptionStatisticsRhythmCell> Rhythm);
 
 /// <summary>Consumption statistics for one Entity on the stable playback statistics route.</summary>
 /// <param name="Id">Entity identifier.</param>
@@ -56,7 +56,7 @@ public sealed record PlaybackStatisticsResponse(
 /// <param name="ActiveSeconds">Active consumption time accumulated by the entity.</param>
 /// <param name="FirstEventAt">Oldest event timestamp for the entity inside the window.</param>
 /// <param name="LastEventAt">Newest event timestamp for the entity inside the window.</param>
-public sealed record PlaybackStatisticsEntity(
+public sealed record ConsumptionStatisticsEntity(
     Guid Id,
     EntityKind Kind,
     string Title,
@@ -69,7 +69,7 @@ public sealed record PlaybackStatisticsEntity(
     DateTimeOffset LastEventAt);
 
 /// <summary>Recent consumption-history event summary.</summary>
-public sealed record PlaybackStatisticsEvent(
+public sealed record ConsumptionStatisticsEvent(
     Guid Id,
     Guid EntityId,
     EntityKind EntityKind,
@@ -89,7 +89,7 @@ public sealed record PlaybackStatisticsEvent(
 /// <param name="ViewingSeconds">Active viewing time for the day.</param>
 /// <param name="ListeningSeconds">Active listening time for the day.</param>
 /// <param name="ReadingSeconds">Active reading time for the day.</param>
-public sealed record PlaybackStatisticsBucket(
+public sealed record ConsumptionStatisticsBucket(
     DateOnly Date,
     int AccessedCount,
     int CompletedCount,
@@ -109,7 +109,7 @@ public sealed record PlaybackStatisticsBucket(
 /// <param name="DistinctEntityCount">Unique entities of this family with events in the window.</param>
 /// <param name="AccessedCount">Open/start count for the family.</param>
 /// <param name="ActiveSeconds">Active consumption time accumulated by the family.</param>
-public sealed record PlaybackStatisticsKindSlice(
+public sealed record ConsumptionStatisticsKindSlice(
     EntityKind Kind,
     int TotalEvents,
     int AccessedCount,
@@ -126,7 +126,7 @@ public sealed record PlaybackStatisticsKindSlice(
 /// <param name="AccessedCount">Open/start count in the cell.</param>
 /// <param name="CompletedCount">Completed consumption count in the cell.</param>
 /// <param name="SkippedCount">Skip count in the cell.</param>
-public sealed record PlaybackStatisticsRhythmCell(
+public sealed record ConsumptionStatisticsRhythmCell(
     int DayOfWeek,
     int Hour,
     int AccessedCount,

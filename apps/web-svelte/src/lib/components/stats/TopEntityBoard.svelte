@@ -1,16 +1,16 @@
 <script lang="ts">
   import { cn } from "@prismedia/ui-svelte";
   import EntityThumbnail from "$lib/components/thumbnails/EntityThumbnail.svelte";
-  import type { PlaybackStatisticsEntity } from "$lib/api/generated/model";
+  import type { ConsumptionStatisticsEntity } from "$lib/api/generated/model";
   import { entityAccentForKind } from "$lib/entities/entity-accent";
   import { labelForEntityKind, resolveEntityHref } from "$lib/entities/entity-codes";
   import type { EntityThumbnailCard } from "$lib/entities/entity-thumbnail";
-  import { formatActiveDuration, statNumber } from "$lib/stats/playback-stats";
+  import { formatActiveDuration, statNumber } from "$lib/stats/consumption-stats";
   import { formatRelativeTime } from "$lib/utils/format";
 
   interface Props {
-    entities: PlaybackStatisticsEntity[];
-    thumbnailFor: (entity: PlaybackStatisticsEntity) => EntityThumbnailCard;
+    entities: ConsumptionStatisticsEntity[];
+    thumbnailFor: (entity: ConsumptionStatisticsEntity) => EntityThumbnailCard;
     class?: string;
   }
 

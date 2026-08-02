@@ -1,9 +1,9 @@
 import { fetchApi } from "$lib/api/orval-fetch";
 import type { RequestOptions } from "$lib/api/generated-response";
-import type { PlaybackStatisticsResponse } from "$lib/api/generated/model";
+import type { ConsumptionStatisticsResponse } from "$lib/api/generated/model";
 import type { EntityKindCode, ConsumptionEventKindCode } from "$lib/entities/entity-codes";
 
-export interface PlaybackStatisticsParams {
+export interface ConsumptionStatisticsParams {
   from?: string;
   to?: string;
   kind?: EntityKindCode;
@@ -15,10 +15,10 @@ export interface PlaybackStatisticsParams {
   utcOffsetMinutes?: number;
 }
 
-export function fetchPlaybackStatistics(
-  params: PlaybackStatisticsParams = {},
+export function fetchConsumptionStatistics(
+  params: ConsumptionStatisticsParams = {},
   options?: RequestOptions,
-): Promise<PlaybackStatisticsResponse> {
+): Promise<ConsumptionStatisticsResponse> {
   const query = new URLSearchParams();
   if (params.from) query.set("from", params.from);
   if (params.to) query.set("to", params.to);
@@ -30,7 +30,7 @@ export function fetchPlaybackStatistics(
   if (params.utcOffsetMinutes != null) query.set("utcOffsetMinutes", String(params.utcOffsetMinutes));
 
   const suffix = query.size > 0 ? `?${query.toString()}` : "";
-  return fetchApi<PlaybackStatisticsResponse>(`/playback/statistics${suffix}`, {
+  return fetchApi<ConsumptionStatisticsResponse>(`/consumption/statistics${suffix}`, {
     signal: options?.signal,
   });
 }

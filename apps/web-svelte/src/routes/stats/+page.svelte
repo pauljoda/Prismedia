@@ -25,9 +25,9 @@
   import TopEntityBoard from "$lib/components/stats/TopEntityBoard.svelte";
   import { fetchEntityThumbnails } from "$lib/api/entities";
   import {
-    fetchPlaybackStatistics,
-    type PlaybackStatisticsParams,
-  } from "$lib/api/playback-statistics";
+    fetchConsumptionStatistics,
+    type ConsumptionStatisticsParams,
+  } from "$lib/api/consumption-statistics";
   import { fetchUsers } from "$lib/api/users";
   import { entityCardToThumbnailCard } from "$lib/entities/entity-grid";
   import {
@@ -52,12 +52,12 @@
     localUtcOffsetMinutes,
     statNumber,
     summarizeCadence,
-  } from "$lib/stats/playback-stats";
+  } from "$lib/stats/consumption-stats";
   import { useNsfw } from "$lib/nsfw/store.svelte";
   import type {
-    PlaybackStatisticsEntity,
-    PlaybackStatisticsEvent,
-    PlaybackStatisticsResponse,
+    ConsumptionStatisticsEntity,
+    ConsumptionStatisticsEvent,
+    ConsumptionStatisticsResponse,
     UserResponse,
   } from "$lib/api/generated/model";
   import { useSession } from "$lib/stores/session.svelte";
@@ -98,7 +98,7 @@
   let selectedScope = $state(session.user?.id ?? "");
   let users = $state.raw<UserResponse[]>([]);
   let scopeError = $state<string | null>(null);
-  let stats = $state<PlaybackStatisticsResponse | null>(null);
+  let stats = $state<ConsumptionStatisticsResponse | null>(null);
   let thumbnailCardsById = $state.raw<Map<string, EntityThumbnailCard>>(new Map());
   let loading = $state(true);
   let error = $state<string | null>(null);
@@ -213,11 +213,11 @@
   });
 
   async function loadStatistics(
-    params: PlaybackStatisticsParams,
+    params: ConsumptionStatisticsParams,
     hideNsfw: boolean,
     signal: AbortSignal,
-  ): Promise<{ response: PlaybackStatisticsResponse; thumbnails: Map<string, EntityThumbnailCard> }> {
-    const response = await fetchPlaybackStatistics(params, { signal });
+  ): Promise<{ response: ConsumptionStatisticsResponse; thumbnails: Map<string, EntityThumbnailCard> }> {
+    const response = await fetchConsumptionStatistics(params, { signal });
     const thumbnails = await fetchEntityThumbnails(entityIdsForStatistics(response), { hideNsfw, signal });
     return {
       response,
@@ -237,10 +237,10 @@
     hideNsfw: boolean,
     scope: string,
     isAdmin: boolean,
-  ): PlaybackStatisticsParams {
+  ): ConsumptionStatisticsParams {
     const to = new Date();
     const from = fromForTimeframe(selectedTimeframe, to);
-    const query: PlaybackStatisticsParams = {
+    const query: ConsumptionStatisticsParams = {
       from: from.toISOString(),
       to: to.toISOString(),
       kind: selectedKind === ALL_FILTER ? undefined : selectedKind,
@@ -267,7 +267,7 @@
     return err instanceof DOMException && err.name === "AbortError";
   }
 
-  function entityIdsForStatistics(response: PlaybackStatisticsResponse): string[] {
+  function entityIdsForStatistics(response: ConsumptionStatisticsResponse): string[] {
     return [
       ...new Set([
         ...response.topEntities.map((entity) => entity.id),
@@ -276,7 +276,7 @@
     ];
   }
 
-  function topEntityThumbnail(entity: PlaybackStatisticsEntity): EntityThumbnailCard {
+  function topEntityThumbnail(entity: ConsumptionStatisticsEntity): EntityThumbnailCard {
     return (
       thumbnailCardsById.get(entity.id) ??
       entityReferenceToThumbnailCard({
@@ -288,7 +288,7 @@
     );
   }
 
-  function recentEventThumbnail(event: PlaybackStatisticsEvent): EntityThumbnailCard {
+  function recentEventThumbnail(event: ConsumptionStatisticsEvent): EntityThumbnailCard {
     return (
       thumbnailCardsById.get(event.entityId) ??
       entityReferenceToThumbnailCard({

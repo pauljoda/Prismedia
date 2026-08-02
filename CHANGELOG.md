@@ -9,6 +9,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 ### Removed
 
 - Deprecated kind-specific Entity detail reads have been removed; use `GET /api/entities/{id}` for every Entity kind.
+- Deprecated playback-statistics, Entity-playback mutation, and audio-track play-count routes have been removed in favor of the shared Consumption API.
 - Audio-track detail and saved-queue payloads no longer duplicate embedded artist and album fields outside the Entity's `embedded-audio-metadata` capability.
 
 ### Fixed
@@ -56,6 +57,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Release operations are now ready for channel publishing: the root package version is the source of truth, Docker builds validate the release metadata, pushes to `main` publish only the dev image, and alpha/beta/release images are published manually.
 
 ### Changed
+- First-party clients now use the centralized `/api/consumption/statistics` and `/api/entities/{id}/consumption` contracts. Entity browsing uses canonical `last-active`, `date-added`, `sortDirection`, and `engaged` values instead of media-specific playback aliases.
 - Series, seasons, albums, books, and other structural works now roll up their leaf activity. Resume follows the most recently active episode, track, or chapter—even when returning to an earlier item—while the separate watched/read/listened percentage preserves overall coverage.
 - Movies and TV episodes now own their playable files directly. Upgrades preserve unambiguous legacy Movie and episode identities, references, folder provenance, subtitles, and custom artwork, while stopping safely for ambiguous or active data.
 - Entity detail reads now use one shared document contract across the web and Apple apps; credits, cover choices, and kind-specific metadata travel as typed capabilities instead of parallel per-kind response shapes.

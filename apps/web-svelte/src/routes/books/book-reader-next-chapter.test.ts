@@ -21,8 +21,8 @@ vi.mock("$lib/api/entities", async (importOriginal) => {
   };
 });
 
-vi.mock("$lib/api/playback", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("$lib/api/playback")>();
+vi.mock("$lib/api/consumption", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("$lib/api/consumption")>();
   return { ...actual, updateEntityProgress: mocks.updateEntityProgress };
 });
 

@@ -4,26 +4,26 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
-using Prismedia.Application.Playback;
-using Prismedia.Contracts.Playback;
+using Prismedia.Application.Consumption;
+using Prismedia.Contracts.Consumption;
 using Prismedia.Contracts.Security;
 using Prismedia.Domain.Entities;
 using Prismedia.Infrastructure.Serialization;
 
 namespace Prismedia.Api.Tests;
 
-public sealed class PlaybackStatisticsEndpointTests {
+public sealed class ConsumptionStatisticsEndpointTests {
     private static readonly JsonSerializerOptions CodecJson =
         new(JsonSerializerDefaults.Web) { Converters = { new CodecJsonConverterFactory() } };
 
     [Fact]
     public async Task AdministratorCanSelectOneUsersStatistics() {
-        var statistics = new CapturingPlaybackStatisticsService();
+        var statistics = new CapturingConsumptionStatisticsService();
         using var factory = CreateFactory(statistics);
         using var admin = factory.CreateAuthenticatedClient();
         var selectedUserId = Guid.Parse("11111111-aaaa-4000-8000-000000000001");
 
-        using var response = await admin.GetAsync($"/api/playback/statistics?userId={selectedUserId:D}");
+        using var response = await admin.GetAsync($"/api/consumption/statistics?userId={selectedUserId:D}");
 
         response.EnsureSuccessStatusCode();
         Assert.Equal(selectedUserId, Assert.Single(statistics.Queries).UserId);
@@ -32,7 +32,7 @@ public sealed class PlaybackStatisticsEndpointTests {
 
     [Fact]
     public async Task MemberCannotSelectAnotherUserOrAllUsers() {
-        var statistics = new CapturingPlaybackStatisticsService();
+        var statistics = new CapturingConsumptionStatisticsService();
         using var factory = CreateFactory(statistics);
         using var admin = factory.CreateAuthenticatedClient();
         using var createResponse = await admin.PostAsJsonAsync(
@@ -56,7 +56,7 @@ public sealed class PlaybackStatisticsEndpointTests {
         Assert.NotNull(login);
         using var request = new HttpRequestMessage(
             HttpMethod.Get,
-            "/api/playback/statistics?userId=11111111-aaaa-4000-8000-000000000002&allUsers=true");
+            "/api/consumption/statistics?userId=11111111-aaaa-4000-8000-000000000002&allUsers=true");
         request.Headers.Authorization = new("Bearer", login.AccessToken);
 
         using var response = await anonymous.SendAsync(request);
@@ -69,11 +69,11 @@ public sealed class PlaybackStatisticsEndpointTests {
 
     [Fact]
     public async Task AdministratorCanSelectAllUsersStatistics() {
-        var statistics = new CapturingPlaybackStatisticsService();
+        var statistics = new CapturingConsumptionStatisticsService();
         using var factory = CreateFactory(statistics);
         using var admin = factory.CreateAuthenticatedClient();
 
-        using var response = await admin.GetAsync("/api/playback/statistics?allUsers=true");
+        using var response = await admin.GetAsync("/api/consumption/statistics?allUsers=true");
 
         response.EnsureSuccessStatusCode();
         var query = Assert.Single(statistics.Queries);
@@ -83,32 +83,44 @@ public sealed class PlaybackStatisticsEndpointTests {
 
     [Fact]
     public async Task CallerLocalOffsetFlowsIntoTheStatisticsQuery() {
-        var statistics = new CapturingPlaybackStatisticsService();
+        var statistics = new CapturingConsumptionStatisticsService();
         using var factory = CreateFactory(statistics);
         using var admin = factory.CreateAuthenticatedClient();
 
-        using var response = await admin.GetAsync("/api/playback/statistics?utcOffsetMinutes=-300");
+        using var response = await admin.GetAsync("/api/consumption/statistics?utcOffsetMinutes=-300");
 
         response.EnsureSuccessStatusCode();
         Assert.Equal(-300, Assert.Single(statistics.Queries).UtcOffsetMinutes);
     }
 
-    private static WebApplicationFactory<Program> CreateFactory(CapturingPlaybackStatisticsService statistics) =>
+    [Fact]
+    public async Task RemovedPlaybackStatisticsRouteIsNotExposed() {
+        var statistics = new CapturingConsumptionStatisticsService();
+        using var factory = CreateFactory(statistics);
+        using var admin = factory.CreateAuthenticatedClient();
+
+        using var response = await admin.GetAsync("/api/playback/statistics");
+
+        Assert.Equal(System.Net.HttpStatusCode.NotFound, response.StatusCode);
+        Assert.Empty(statistics.Queries);
+    }
+
+    private static WebApplicationFactory<Program> CreateFactory(CapturingConsumptionStatisticsService statistics) =>
         new WebApplicationFactory<Program>()
             .WithWebHostBuilder(builder => builder.ConfigureServices(services => {
-                services.RemoveAll<IPlaybackStatisticsService>();
-                services.AddSingleton<IPlaybackStatisticsService>(statistics);
+                services.RemoveAll<IConsumptionStatisticsService>();
+                services.AddSingleton<IConsumptionStatisticsService>(statistics);
             }))
             .WithTestAuth();
 
-    private sealed class CapturingPlaybackStatisticsService : IPlaybackStatisticsService {
-        public List<PlaybackStatisticsQuery> Queries { get; } = [];
+    private sealed class CapturingConsumptionStatisticsService : IConsumptionStatisticsService {
+        public List<ConsumptionStatisticsQuery> Queries { get; } = [];
 
-        public Task<PlaybackStatisticsResponse> GetAsync(
-            PlaybackStatisticsQuery query,
+        public Task<ConsumptionStatisticsResponse> GetAsync(
+            ConsumptionStatisticsQuery query,
             CancellationToken cancellationToken) {
             Queries.Add(query);
-            return Task.FromResult(new PlaybackStatisticsResponse(
+            return Task.FromResult(new ConsumptionStatisticsResponse(
                 query.From,
                 query.To,
                 TotalEvents: 0,

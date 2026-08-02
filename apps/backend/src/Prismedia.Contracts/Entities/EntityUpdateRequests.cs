@@ -20,26 +20,26 @@ public sealed record EntityFlagsUpdateRequest(
     bool? IsOrganized);
 
 /// <summary>
-/// Request body for recording or updating playback state.
+/// Request body for updating time-based consumption state.
 /// All fields are optional — omitted fields leave the existing value unchanged.
 /// </summary>
-/// <param name="ResumeSeconds">Position in seconds where playback should resume next time.</param>
-/// <param name="DurationSeconds">Seconds of playback to add to the total accumulated duration.</param>
+/// <param name="PositionSeconds">Current time-based position to resume from.</param>
+/// <param name="ActivitySeconds">Active seconds to add to the cached total and local-day bucket.</param>
 /// <param name="Completed">When true, marks the entity as completed; when false, clears completion.</param>
-public sealed record PlaybackUpdateRequest(
-    double? ResumeSeconds,
-    double? DurationSeconds,
+public sealed record ConsumptionUpdateRequest(
+    double? PositionSeconds,
+    double? ActivitySeconds,
     bool? Completed,
     int? UtcOffsetMinutes = null);
 
 /// <summary>
-/// Request body for recording an explicit playback-history event.
+/// Request body for recording an explicit consumption-history event.
 /// </summary>
-/// <param name="Kind">Playback event kind to record.</param>
+/// <param name="Kind">Consumption event kind to record.</param>
 /// <param name="OccurredAt">Optional timestamp; defaults to the server clock when omitted.</param>
 /// <param name="PositionSeconds">Optional playback position associated with the event.</param>
 /// <param name="DurationSeconds">Optional entity duration associated with the event.</param>
-public sealed record PlaybackEventCreateRequest(
+public sealed record ConsumptionEventCreateRequest(
     ConsumptionEventKind Kind,
     DateTimeOffset? OccurredAt,
     double? PositionSeconds,

@@ -1,11 +1,13 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   createVideoPlaybackPlan,
-  recordEntityPlaybackEvent,
   reportVideoPlayback,
-  updateEntityPlayback,
-  updateEntityProgress,
 } from "./playback";
+import {
+  recordEntityConsumptionEvent,
+  updateEntityConsumption,
+  updateEntityProgress,
+} from "./consumption";
 
 describe("playback API", () => {
   afterEach(() => {
@@ -74,20 +76,25 @@ describe("playback API", () => {
     );
   });
 
-  it("updates watched state through the entity playback route", async () => {
+  it("updates completed state through the entity consumption route", async () => {
     const fetchMock = mockFetch(entityCard("video-1"));
 
-    await updateEntityPlayback("video-1", {
+    await updateEntityConsumption("video-1", {
       completed: true,
-      resumeSeconds: 0,
+      positionSeconds: 0,
       utcOffsetMinutes: 0,
     });
 
     expect(fetchMock).toHaveBeenCalledWith(
-      "/api/entities/video-1/playback",
+      "/api/entities/video-1/consumption",
       expect.objectContaining({
         method: "PATCH",
-        body: JSON.stringify({ completed: true, resumeSeconds: 0, utcOffsetMinutes: 0 }),
+        body: JSON.stringify({
+          positionSeconds: 0,
+          activitySeconds: null,
+          completed: true,
+          utcOffsetMinutes: 0,
+        }),
       }),
     );
   });
@@ -119,17 +126,17 @@ describe("playback API", () => {
     );
   });
 
-  it("records explicit playback events through the entity event route", async () => {
+  it("records explicit events through the entity consumption event route", async () => {
     const fetchMock = mockFetch(entityCard("track-1"));
 
-    await recordEntityPlaybackEvent("track-1", {
+    await recordEntityConsumptionEvent("track-1", {
       kind: "skipped",
       positionSeconds: 4.2,
       durationSeconds: 180,
     });
 
     expect(fetchMock).toHaveBeenCalledWith(
-      "/api/entities/track-1/playback/events",
+      "/api/entities/track-1/consumption/events",
       expect.objectContaining({
         method: "POST",
         body: JSON.stringify({

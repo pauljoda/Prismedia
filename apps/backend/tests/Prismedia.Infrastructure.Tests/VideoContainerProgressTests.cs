@@ -28,10 +28,10 @@ public sealed class VideoContainerProgressTests {
     public async Task PartialEpisodeInSecondSeasonAdvancesSeriesAndOnlyThatSeason() {
         await using var fixture = await Fixture.CreateAsync();
 
-        await fixture.Capabilities.UpdatePlaybackAsync(
+        await fixture.Capabilities.UpdateConsumptionAsync(
             SeasonTwoEpisodeOneId,
-            resumeSeconds: 50,
-            durationSeconds: null,
+            positionSeconds: 50,
+            activitySeconds: null,
             completed: null,
             CancellationToken.None);
 
@@ -52,10 +52,10 @@ public sealed class VideoContainerProgressTests {
     public async Task CompletedEpisodePointsSeasonAndSeriesAtNextUnstartedEpisode() {
         await using var fixture = await Fixture.CreateAsync();
 
-        await fixture.Capabilities.UpdatePlaybackAsync(
+        await fixture.Capabilities.UpdateConsumptionAsync(
             SeasonOneEpisodeOneId,
-            resumeSeconds: 95,
-            durationSeconds: null,
+            positionSeconds: 95,
+            activitySeconds: null,
             completed: null,
             CancellationToken.None);
 
@@ -74,10 +74,10 @@ public sealed class VideoContainerProgressTests {
     public async Task SeasonBoundaryContinuesSeriesWithoutClaimingUnwatchedEpisodes() {
         await using var fixture = await Fixture.CreateAsync();
 
-        await fixture.Capabilities.UpdatePlaybackAsync(
+        await fixture.Capabilities.UpdateConsumptionAsync(
             SeasonOneEpisodeTwoId,
-            resumeSeconds: 95,
-            durationSeconds: null,
+            positionSeconds: 95,
+            activitySeconds: null,
             completed: null,
             CancellationToken.None);
 
@@ -97,17 +97,17 @@ public sealed class VideoContainerProgressTests {
     [Fact]
     public async Task EarlierSeasonPlaybackMovesTheCurrentSeriesCursorBackward() {
         await using var fixture = await Fixture.CreateAsync();
-        await fixture.Capabilities.UpdatePlaybackAsync(
+        await fixture.Capabilities.UpdateConsumptionAsync(
             SeasonTwoEpisodeOneId,
-            resumeSeconds: 50,
-            durationSeconds: null,
+            positionSeconds: 50,
+            activitySeconds: null,
             completed: null,
             CancellationToken.None);
 
-        await fixture.Capabilities.UpdatePlaybackAsync(
+        await fixture.Capabilities.UpdateConsumptionAsync(
             SeasonOneEpisodeOneId,
-            resumeSeconds: 50,
-            durationSeconds: null,
+            positionSeconds: 50,
+            activitySeconds: null,
             completed: null,
             CancellationToken.None);
 
@@ -124,10 +124,10 @@ public sealed class VideoContainerProgressTests {
     public async Task FinalEpisodeAloneDoesNotCompleteSeasonOrSeries() {
         await using var fixture = await Fixture.CreateAsync();
 
-        await fixture.Capabilities.UpdatePlaybackAsync(
+        await fixture.Capabilities.UpdateConsumptionAsync(
             SeasonTwoEpisodeTwoId,
-            resumeSeconds: 95,
-            durationSeconds: null,
+            positionSeconds: 95,
+            activitySeconds: null,
             completed: null,
             CancellationToken.None);
 
@@ -154,10 +154,10 @@ public sealed class VideoContainerProgressTests {
                      SeasonTwoEpisodeOneId,
                      SeasonTwoEpisodeTwoId
                  }) {
-            await fixture.Capabilities.UpdatePlaybackAsync(
+            await fixture.Capabilities.UpdateConsumptionAsync(
                 episodeId,
-                resumeSeconds: 95,
-                durationSeconds: null,
+                positionSeconds: 95,
+                activitySeconds: null,
                 completed: null,
                 CancellationToken.None);
         }

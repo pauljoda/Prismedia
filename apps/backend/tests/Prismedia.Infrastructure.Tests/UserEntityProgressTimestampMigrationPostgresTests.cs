@@ -51,13 +51,9 @@ public sealed class UserEntityProgressTimestampMigrationPostgresTests {
 
         await database.MigrateAsync(MigrationUnderTest);
 
-        await using (var verification = database.CreateContext()) {
-            var states = await verification.UserEntityStates
-                .Where(row => row.UserId == userId)
-                .ToDictionaryAsync(row => row.EntityId);
-            Assert.Equal(progressUpdatedAt, states[progressEntityId].ProgressUpdatedAt);
-            Assert.Null(states[ratingEntityId].ProgressUpdatedAt);
-        }
+        var progressTimestamps = await ReadProgressTimestampsAsync(database, userId);
+        Assert.Equal(progressUpdatedAt, progressTimestamps[progressEntityId]);
+        Assert.Null(progressTimestamps[ratingEntityId]);
         Assert.True(await ColumnExistsAsync(database, "progress_updated_at"));
 
         await database.MigrateAsync(PreviousMigration);
@@ -115,5 +111,28 @@ public sealed class UserEntityProgressTimestampMigrationPostgresTests {
             connection);
         command.Parameters.AddWithValue("column", column);
         return (bool)(await command.ExecuteScalarAsync())!;
+    }
+
+    private static async Task<Dictionary<Guid, DateTimeOffset?>> ReadProgressTimestampsAsync(
+        PostgresTestDatabase database,
+        Guid userId) {
+        await using var connection = await database.OpenConnectionAsync();
+        await using var command = new Npgsql.NpgsqlCommand(
+            """
+            SELECT entity_id, progress_updated_at
+            FROM user_entity_states
+            WHERE user_id = @user_id
+            """,
+            connection);
+        command.Parameters.AddWithValue("user_id", userId);
+
+        var timestamps = new Dictionary<Guid, DateTimeOffset?>();
+        await using var reader = await command.ExecuteReaderAsync();
+        while (await reader.ReadAsync()) {
+            timestamps[reader.GetGuid(0)] = reader.IsDBNull(1)
+                ? null
+                : reader.GetFieldValue<DateTimeOffset>(1);
+        }
+        return timestamps;
     }
 }

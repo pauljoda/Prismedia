@@ -1,7 +1,7 @@
 <script lang="ts">
   import { cn } from "@prismedia/ui-svelte";
   import EntityThumbnail from "$lib/components/thumbnails/EntityThumbnail.svelte";
-  import type { PlaybackStatisticsEvent } from "$lib/api/generated/model";
+  import type { ConsumptionStatisticsEvent } from "$lib/api/generated/model";
   import { entityAccentForKind } from "$lib/entities/entity-accent";
   import {
     CONSUMPTION_EVENT_KIND,
@@ -14,11 +14,11 @@
     formatActiveDuration,
     localDayKey,
     statNumber,
-  } from "$lib/stats/playback-stats";
+  } from "$lib/stats/consumption-stats";
 
   interface Props {
-    events: PlaybackStatisticsEvent[];
-    thumbnailFor: (event: PlaybackStatisticsEvent) => EntityThumbnailCard;
+    events: ConsumptionStatisticsEvent[];
+    thumbnailFor: (event: ConsumptionStatisticsEvent) => EntityThumbnailCard;
     /** Offset used to group events into the viewer's calendar days. */
     utcOffsetMinutes: number;
     class?: string;
@@ -29,7 +29,7 @@
   interface EventGroup {
     dayKey: string;
     label: string;
-    events: PlaybackStatisticsEvent[];
+    events: ConsumptionStatisticsEvent[];
   }
 
   const groups = $derived.by<EventGroup[]>(() => {
@@ -57,7 +57,7 @@
   }
 
   /** How far into a timed item the event occurred, or null when the item has no known duration. */
-  function progressRatio(event: PlaybackStatisticsEvent): number | null {
+  function progressRatio(event: ConsumptionStatisticsEvent): number | null {
     const duration = statNumber(event.durationSeconds);
     if (duration <= 0) return null;
     return Math.min(1, Math.max(0, statNumber(event.positionSeconds) / duration));

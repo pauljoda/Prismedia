@@ -73,8 +73,8 @@ public sealed record EntityListQuery {
     public int? Limit { get; init; }
     public Guid? ReferencedBy { get; init; }
     public string? RelationshipCode { get; init; }
-    public string? Sort { get; init; }
-    public string? SortDir { get; init; }
+    public EntityListSort? Sort { get; init; }
+    public EntitySortDirection? SortDirection { get; init; }
     public int? Seed { get; init; }
     public bool? Favorite { get; init; }
     public bool? Organized { get; init; }
@@ -86,7 +86,7 @@ public sealed record EntityListQuery {
     public string? BookFormat { get; init; }
     public bool? Nsfw { get; init; }
     public bool? HasFile { get; init; }
-    public bool? Played { get; init; }
+    public bool? Engaged { get; init; }
     public bool? Orphaned { get; init; }
 
     /// <summary>Filters by the latest acquisition lifecycle state linked to the entity.</summary>

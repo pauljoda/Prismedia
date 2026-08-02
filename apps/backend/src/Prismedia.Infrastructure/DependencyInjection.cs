@@ -3,6 +3,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
 using Prismedia.Application.Collections;
+using Prismedia.Application.Consumption;
 using Prismedia.Domain.Entities;
 using Prismedia.Application.Entities;
 using Prismedia.Application.Files;
@@ -23,6 +24,7 @@ using Prismedia.Application.Videos;
 using Prismedia.Application.Subtitles;
 using Prismedia.Infrastructure.Audio;
 using Prismedia.Infrastructure.Collections;
+using Prismedia.Infrastructure.Consumption;
 using Prismedia.Infrastructure.Database;
 using Prismedia.Infrastructure.Entities;
 using Prismedia.Infrastructure.Entities.Mappers;
@@ -310,7 +312,7 @@ public static class DependencyInjection {
         services.AddScoped<IPlaybackSessionService, PlaybackSessionService>();
         services.AddScoped<IConsumptionEventStore, EfConsumptionEventStore>();
         services.AddScoped<IConsumptionActivityStore, EfConsumptionActivityStore>();
-        services.AddScoped<IPlaybackStatisticsService, EfPlaybackStatisticsService>();
+        services.AddScoped<IConsumptionStatisticsService, EfConsumptionStatisticsService>();
         services.AddScoped<ITrickplayService, TrickplayService>();
         services.AddScoped<IVideoSubtitleAssetService>(provider =>
             new VideoSubtitleAssetService(

@@ -1,6 +1,7 @@
 <script lang="ts">
   import { resolve } from "$app/paths";
   import { ENTITY_KIND } from "$lib/entities/entity-codes";
+  import { ENTITY_LIST_SORT, ENTITY_SORT_DIRECTION } from "$lib/api/generated/codes";
   import { onDestroy, onMount } from "svelte";
   import {
     Film,
@@ -118,8 +119,8 @@
     const [continueItems, recentItems] = await Promise.all([
       fetchEntities({
         status: "in-progress",
-        sort: "last-played",
-        sortDir: "desc",
+        sort: ENTITY_LIST_SORT.lastActive,
+        sortDirection: ENTITY_SORT_DIRECTION.descending,
         hideNsfw,
         limit: ACTIVITY_LIMIT,
       })
@@ -127,8 +128,8 @@
         .catch(() => [] as EntityCard[]),
       fetchEntities({
         status: "watched",
-        sort: "last-played",
-        sortDir: "desc",
+        sort: ENTITY_LIST_SORT.lastActive,
+        sortDirection: ENTITY_SORT_DIRECTION.descending,
         hideNsfw,
         limit: ACTIVITY_LIMIT,
       })
@@ -156,8 +157,8 @@
     try {
       const response = await fetchEntities({
         kind,
-        sort: "added",
-        sortDir: "desc",
+        sort: ENTITY_LIST_SORT.dateAdded,
+        sortDirection: ENTITY_SORT_DIRECTION.descending,
         hideNsfw: nsfw.mode === "off",
         limit: SECTION_LIMIT,
       });

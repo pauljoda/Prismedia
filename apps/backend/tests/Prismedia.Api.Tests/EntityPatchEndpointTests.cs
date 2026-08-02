@@ -106,6 +106,43 @@ public sealed class EntityPatchEndpointTests {
     }
 
     [Fact]
+    public async Task EntityConsumptionPatchStoresPositionAndActiveTime() {
+        using var factory = CreateProgressFactory();
+        using var client = factory.CreateAuthenticatedClient();
+
+        using var response = await client.PatchAsJsonAsync(
+            $"/api/entities/{EntityId}/consumption",
+            new {
+                positionSeconds = 18.5,
+                activitySeconds = 12.25,
+                completed = (bool?)null,
+                utcOffsetMinutes = -300
+            });
+        var repository = factory.Services.GetRequiredService<FakeEntityWriteRepository>();
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var consumption = repository.SavedEntity?.ConsumptionCapability?.Value;
+        Assert.Equal(TimeSpan.FromSeconds(18.5), consumption?.ResumeTime);
+        Assert.Equal(TimeSpan.FromSeconds(12.25), consumption?.ActiveDuration);
+    }
+
+    [Fact]
+    public async Task RemovedPlaybackMutationRoutesAreNotExposed() {
+        using var factory = CreateProgressFactory();
+        using var client = factory.CreateAuthenticatedClient();
+
+        using var entityPlayback = await client.PatchAsJsonAsync(
+            $"/api/entities/{EntityId}/playback",
+            new { resumeSeconds = 18.5, durationSeconds = 12.25 });
+        using var audioTrackPlay = await client.PostAsync(
+            $"/api/audio-tracks/{EntityId}/play",
+            content: null);
+
+        Assert.Equal(HttpStatusCode.NotFound, entityPlayback.StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, audioTrackPlay.StatusCode);
+    }
+
+    [Fact]
     public async Task EntityProgressPatchMarksProgressComplete() {
         using var factory = CreateProgressFactory();
         using var client = factory.CreateAuthenticatedClient();

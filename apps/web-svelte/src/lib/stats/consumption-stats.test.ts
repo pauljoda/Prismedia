@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { ENTITY_KIND } from "$lib/api/generated/codes";
 import type {
-  PlaybackStatisticsBucket,
-  PlaybackStatisticsKindSlice,
-  PlaybackStatisticsRhythmCell,
+  ConsumptionStatisticsBucket,
+  ConsumptionStatisticsKindSlice,
+  ConsumptionStatisticsRhythmCell,
 } from "$lib/api/generated/model";
 import {
   aggregateDaySeries,
@@ -19,14 +19,14 @@ import {
   rollingAverage,
   statNumber,
   summarizeCadence,
-} from "./playback-stats";
+} from "./consumption-stats";
 
 function bucket(
   date: string,
   completedCount: number,
   skippedCount: number,
   activeSeconds = 0,
-): PlaybackStatisticsBucket {
+): ConsumptionStatisticsBucket {
   return {
     date,
     accessedCount: 0,
@@ -43,7 +43,7 @@ function slice(
   kind: string,
   totalEvents: number,
   activeSeconds = 0,
-): PlaybackStatisticsKindSlice {
+): ConsumptionStatisticsKindSlice {
   return {
     kind,
     totalEvents,
@@ -52,7 +52,7 @@ function slice(
     skippedCount: 0,
     distinctEntityCount: 1,
     activeSeconds,
-  } as PlaybackStatisticsKindSlice;
+  } as ConsumptionStatisticsKindSlice;
 }
 
 describe("statNumber", () => {
@@ -233,7 +233,7 @@ describe("formatSpanLabel", () => {
 });
 
 describe("buildRhythm", () => {
-  const cells: PlaybackStatisticsRhythmCell[] = [
+  const cells: ConsumptionStatisticsRhythmCell[] = [
     { dayOfWeek: 0, hour: 21, accessedCount: 5, completedCount: 3, skippedCount: 2 },
     { dayOfWeek: 3, hour: 9, accessedCount: 1, completedCount: 0, skippedCount: 0 },
     // Out-of-range cells must never widen the fixed grid.

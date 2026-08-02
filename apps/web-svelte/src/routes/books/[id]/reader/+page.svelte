@@ -14,7 +14,7 @@
   import { Button } from "@prismedia/ui-svelte";
   import { getBookMetadataCapability, getCapability } from "$lib/api/capabilities";
   import { fetchEntity, fetchEntityChildren, type EntityCardFull } from "$lib/api/entities";
-  import { recordEntityPlaybackEvent, updateEntityProgress } from "$lib/api/playback";
+  import { recordEntityConsumptionEvent, updateEntityProgress } from "$lib/api/consumption";
   import {
     bookEntityProgressDisplay,
     entityPageToReaderImage,
@@ -108,7 +108,7 @@
     const startReader = async () => {
       await loadReader(page.url);
       if (loadState === "ready" && book) {
-        void recordEntityPlaybackEvent(book.id, {
+        void recordEntityConsumptionEvent(book.id, {
           kind: CONSUMPTION_EVENT_KIND.accessed,
           sessionId: readerConsumptionSessionId,
         }).catch(() => undefined);

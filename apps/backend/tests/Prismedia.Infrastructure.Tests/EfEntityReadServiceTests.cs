@@ -1863,11 +1863,11 @@ public sealed class EfEntityReadServiceTests {
         var service = CreateService(db);
 
         var descending = await service.ListAsync(
-            EntityKind.Video.ToCode(), null, null, null, null, CancellationToken.None, sort: "added", sortDir: "desc");
+            EntityKind.Video.ToCode(), null, null, null, null, CancellationToken.None, sort: EntityListSort.DateAdded, sortDirection: EntitySortDirection.Descending);
         Assert.Equal(new[] { newest, middle, oldest }, descending.Items.Select(item => item.Id).ToArray());
 
         var ascending = await service.ListAsync(
-            EntityKind.Video.ToCode(), null, null, null, null, CancellationToken.None, sort: "added", sortDir: "asc");
+            EntityKind.Video.ToCode(), null, null, null, null, CancellationToken.None, sort: EntityListSort.DateAdded, sortDirection: EntitySortDirection.Ascending);
         Assert.Equal(new[] { oldest, middle, newest }, ascending.Items.Select(item => item.Id).ToArray());
     }
 
@@ -1890,7 +1890,7 @@ public sealed class EfEntityReadServiceTests {
         var service = CreateService(db);
 
         var descending = await service.ListAsync(
-            EntityKind.Video.ToCode(), null, null, null, null, CancellationToken.None, sort: "rating", sortDir: "desc");
+            EntityKind.Video.ToCode(), null, null, null, null, CancellationToken.None, sort: EntityListSort.Rating, sortDirection: EntitySortDirection.Descending);
         Assert.Equal(new[] { highRating, lowRating, unrated }, descending.Items.Select(item => item.Id).ToArray());
     }
 
@@ -1912,11 +1912,11 @@ public sealed class EfEntityReadServiceTests {
         var service = CreateService(db);
 
         var firstPage = await service.ListAsync(
-            EntityKind.Video.ToCode(), null, null, null, limit: 5, CancellationToken.None, sort: "random", seed: 1234);
+            EntityKind.Video.ToCode(), null, null, null, limit: 5, CancellationToken.None, sort: EntityListSort.Random, seed: 1234);
         var secondPage = await service.ListAsync(
-            EntityKind.Video.ToCode(), null, firstPage.NextCursor, null, limit: 5, CancellationToken.None, sort: "random", seed: 1234);
+            EntityKind.Video.ToCode(), null, firstPage.NextCursor, null, limit: 5, CancellationToken.None, sort: EntityListSort.Random, seed: 1234);
         var firstPageAgain = await service.ListAsync(
-            EntityKind.Video.ToCode(), null, null, null, limit: 5, CancellationToken.None, sort: "random", seed: 1234);
+            EntityKind.Video.ToCode(), null, null, null, limit: 5, CancellationToken.None, sort: EntityListSort.Random, seed: 1234);
 
         // The same seed reproduces the same overall order, and paging never repeats a row.
         Assert.Equal(
@@ -1928,7 +1928,7 @@ public sealed class EfEntityReadServiceTests {
 
         // A different seed should generally produce a different ordering.
         var differentSeed = await service.ListAsync(
-            EntityKind.Video.ToCode(), null, null, null, limit: 5, CancellationToken.None, sort: "random", seed: 9999);
+            EntityKind.Video.ToCode(), null, null, null, limit: 5, CancellationToken.None, sort: EntityListSort.Random, seed: 9999);
         Assert.NotEqual(
             firstPage.Items.Select(item => item.Id).ToArray(),
             differentSeed.Items.Select(item => item.Id).ToArray());
@@ -2094,9 +2094,9 @@ public sealed class EfEntityReadServiceTests {
         var service = CreateService(db);
 
         var played = await service.ListAsync(
-            EntityKind.Movie.ToCode(), null, null, null, null, CancellationToken.None, played: true);
+            EntityKind.Movie.ToCode(), null, null, null, null, CancellationToken.None, engaged: true);
         var unplayed = await service.ListAsync(
-            EntityKind.Movie.ToCode(), null, null, null, null, CancellationToken.None, played: false);
+            EntityKind.Movie.ToCode(), null, null, null, null, CancellationToken.None, engaged: false);
         var watchedThumbnail = Assert.Single(played.Items);
 
         Assert.Equal(watchedMovie, watchedThumbnail.Id);
@@ -2125,7 +2125,7 @@ public sealed class EfEntityReadServiceTests {
 
         var result = await service.ListAsync(
             EntityKind.Video.ToCode(), null, null, null, null, CancellationToken.None,
-            sort: "last-played", sortDir: "desc");
+            sort: EntityListSort.LastActive, sortDirection: EntitySortDirection.Descending);
 
         // Most recently played first, then older, with the never-played entity sorted last.
         Assert.Equal([playedToday, playedLastWeek, neverPlayed], result.Items.Select(item => item.Id).ToArray());
@@ -2249,11 +2249,11 @@ public sealed class EfEntityReadServiceTests {
         Assert.Equal(2, noFile.TotalCount);
 
         // Played includes both playback engagement (Bravo) and started reading progress (Charlie).
-        var played = await service.ListAsync(kind, null, null, null, null, CancellationToken.None, played: true);
+        var played = await service.ListAsync(kind, null, null, null, null, CancellationToken.None, engaged: true);
         Assert.Equal(2, played.TotalCount);
         Assert.DoesNotContain(played.Items, item => item.Id == sfwUnplayedNoFile);
 
-        var unplayed = await service.ListAsync(kind, null, null, null, null, CancellationToken.None, played: false);
+        var unplayed = await service.ListAsync(kind, null, null, null, null, CancellationToken.None, engaged: false);
         Assert.Equal(sfwUnplayedNoFile, Assert.Single(unplayed.Items).Id);
     }
 
@@ -2469,10 +2469,10 @@ public sealed class EfEntityReadServiceTests {
         var service = CreateService(db);
         var kind = EntityKind.Tag.ToCode();
 
-        var desc = await service.ListAsync(kind, null, null, null, null, CancellationToken.None, sort: "references", sortDir: "desc");
+        var desc = await service.ListAsync(kind, null, null, null, null, CancellationToken.None, sort: EntityListSort.References, sortDirection: EntitySortDirection.Descending);
         Assert.Equal(new[] { heavy, light, none }, desc.Items.Select(item => item.Id).ToArray());
 
-        var asc = await service.ListAsync(kind, null, null, null, null, CancellationToken.None, sort: "references", sortDir: "asc");
+        var asc = await service.ListAsync(kind, null, null, null, null, CancellationToken.None, sort: EntityListSort.References, sortDirection: EntitySortDirection.Ascending);
         Assert.Equal(new[] { none, light, heavy }, asc.Items.Select(item => item.Id).ToArray());
 
         static EntityRelationshipLinkRow Link(Guid source, Guid target) =>

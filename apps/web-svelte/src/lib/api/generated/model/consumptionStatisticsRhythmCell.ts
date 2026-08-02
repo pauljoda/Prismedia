@@ -4,22 +4,16 @@
  * Prismedia.Api | v1
  * OpenAPI spec version: 1.0.0
  */
-import type { EntityKind } from './entityKind';
 
-export interface PlaybackStatisticsEntity {
-  id: string;
-  kind: EntityKind;
-  title: string;
-  /** @nullable */
-  coverUrl: string | null;
+export interface ConsumptionStatisticsRhythmCell {
+  /** @pattern ^-?(?:0|[1-9]\d*)$ */
+  dayOfWeek: number | string;
+  /** @pattern ^-?(?:0|[1-9]\d*)$ */
+  hour: number | string;
   /** @pattern ^-?(?:0|[1-9]\d*)$ */
   accessedCount: number | string;
   /** @pattern ^-?(?:0|[1-9]\d*)$ */
   completedCount: number | string;
   /** @pattern ^-?(?:0|[1-9]\d*)$ */
   skippedCount: number | string;
-  /** @pattern ^-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?$ */
-  activeSeconds: number | string;
-  firstEventAt: string;
-  lastEventAt: string;
 }

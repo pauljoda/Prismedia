@@ -22,7 +22,7 @@
   import { fetchAcquisitionsForEntity } from "$lib/api/acquisitions";
   import { fetchEntityMonitors, resumeMonitor, stopMonitor } from "$lib/api/monitors";
   import { commitEntityRequest } from "$lib/api/requests";
-  import { updateEntityProgress } from "$lib/api/playback";
+  import { updateEntityProgress } from "$lib/api/consumption";
   import type { AcquisitionDetail, EntityThumbnail, MonitorView } from "$lib/api/generated/model";
   import { fetchEntity, fetchEntityChildren, type EntityCardFull } from "$lib/api/entities";
   import { refreshAfterManagedFileRevert } from "$lib/entities/entity-file-management";
@@ -76,7 +76,7 @@
     type BookReadingPosition,
   } from "$lib/entities/book-combined-progress";
   import { useLegacyBookProgressMigration } from "$lib/entities/book-legacy-progress-migration.svelte";
-  import { formatActiveDuration } from "$lib/stats/playback-stats";
+  import { formatActiveDuration } from "$lib/stats/consumption-stats";
   import {
     loadEpubContents,
     type EpubContentsEntry,

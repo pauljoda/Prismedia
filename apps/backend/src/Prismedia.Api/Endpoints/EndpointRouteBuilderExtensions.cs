@@ -26,7 +26,7 @@ public static class EndpointRouteBuilderExtensions {
         routes.MapVideoPlaybackEndpoints();
         routes.MapBrowserSessionEndpoints();
         routes.MapMusicPlayerEndpoints();
-        routes.MapPlaybackStatisticsEndpoints();
+        routes.MapConsumptionStatisticsEndpoints();
         routes.MapJobEndpoints();
         routes.MapSettingsEndpoints();
         routes.MapNavLayoutEndpoints();

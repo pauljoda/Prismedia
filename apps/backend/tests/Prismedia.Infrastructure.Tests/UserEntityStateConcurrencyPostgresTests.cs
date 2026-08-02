@@ -45,8 +45,8 @@ public sealed class UserEntityStateConcurrencyPostgresTests {
 
         await Task.WhenAll(
             ratingService.RateAsync(entityId, 5, CancellationToken.None),
-            earlierPlaybackService.UpdatePlaybackAsync(entityId, 60, null, null, CancellationToken.None),
-            laterPlaybackService.UpdatePlaybackAsync(entityId, 90, null, null, CancellationToken.None));
+            earlierPlaybackService.UpdateConsumptionAsync(entityId, 60, null, null, CancellationToken.None),
+            laterPlaybackService.UpdateConsumptionAsync(entityId, 90, null, null, CancellationToken.None));
 
         await using var verification = database.CreateContext();
         var state = await verification.UserEntityStates.SingleAsync(row =>
@@ -77,7 +77,7 @@ public sealed class UserEntityStateConcurrencyPostgresTests {
 
         await Task.WhenAll(
             ratingService.RateAsync(entityId, 4, CancellationToken.None),
-            playbackService.UpdatePlaybackAsync(entityId, 75, null, null, CancellationToken.None));
+            playbackService.UpdateConsumptionAsync(entityId, 75, null, null, CancellationToken.None));
 
         await using var verification = database.CreateContext();
         var states = await verification.UserEntityStates
@@ -116,7 +116,7 @@ public sealed class UserEntityStateConcurrencyPostgresTests {
             cancellationToken => TouchStateAsync(database, userId, entityId, cancellationToken));
         var service = CreateService(context, userId, repository);
 
-        await service.RecordCompletedPlaybackAsync(
+        await service.RecordCompletedConsumptionAsync(
             entityId,
             historicalCompletionAt,
             positionSeconds: null,

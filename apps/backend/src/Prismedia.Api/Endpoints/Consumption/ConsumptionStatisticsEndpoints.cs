@@ -1,14 +1,14 @@
 using Prismedia.Api.Security;
-using Prismedia.Application.Playback;
-using Prismedia.Contracts.Playback;
+using Prismedia.Application.Consumption;
+using Prismedia.Contracts.Consumption;
 using Prismedia.Contracts.System;
 using Prismedia.Domain.Entities;
 
 namespace Prismedia.Api.Endpoints;
 
-internal static class PlaybackStatisticsEndpoints {
-    internal static IEndpointRouteBuilder MapPlaybackStatisticsEndpoints(this IEndpointRouteBuilder routes) {
-        routes.MapGet("/api/playback/statistics", async (
+internal static class ConsumptionStatisticsEndpoints {
+    internal static IEndpointRouteBuilder MapConsumptionStatisticsEndpoints(this IEndpointRouteBuilder routes) {
+        routes.MapGet("/api/consumption/statistics", async (
             DateTimeOffset? from,
             DateTimeOffset? to,
             string? kind,
@@ -18,7 +18,7 @@ internal static class PlaybackStatisticsEndpoints {
             bool? allUsers,
             int? utcOffsetMinutes,
             HttpContext httpContext,
-            IPlaybackStatisticsService statistics,
+            IConsumptionStatisticsService statistics,
             TimeProvider timeProvider,
             CancellationToken cancellationToken) => {
                 if (!TryDecodeOptional<EntityKind>(kind, out var decodedKind)) {
@@ -32,7 +32,7 @@ internal static class PlaybackStatisticsEndpoints {
                 var upper = to ?? timeProvider.GetUtcNow();
                 var lower = from ?? upper.AddDays(-365);
                 if (lower >= upper) {
-                    return Results.BadRequest(new ApiProblem(ApiProblemCodes.InvalidPlaybackStatisticsWindow, "The statistics start time must be before the end time."));
+                    return Results.BadRequest(new ApiProblem(ApiProblemCodes.InvalidConsumptionStatisticsWindow, "The statistics start time must be before the end time."));
                 }
 
                 var caller = httpContext.GetCurrentUser()!;
@@ -44,7 +44,7 @@ internal static class PlaybackStatisticsEndpoints {
                         : caller.Id;
 
                 var response = await statistics.GetAsync(
-                    new PlaybackStatisticsQuery(
+                    new ConsumptionStatisticsQuery(
                         lower,
                         upper,
                         decodedKind,
@@ -57,9 +57,9 @@ internal static class PlaybackStatisticsEndpoints {
 
                 return Results.Ok(response);
             })
-            .WithName("GetPlaybackStatistics")
+            .WithName("GetConsumptionStatistics")
             .WithSummary("Get Consumption Statistics.")
-            .Produces<PlaybackStatisticsResponse>()
+            .Produces<ConsumptionStatisticsResponse>()
             .Produces<ApiProblem>(StatusCodes.Status400BadRequest);
 
         return routes;

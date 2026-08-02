@@ -76,8 +76,8 @@ public sealed partial class EfEntityReadService : IEntityReadService {
         CancellationToken cancellationToken,
         Guid? referencedBy = null,
         string? relationshipCode = null,
-        string? sort = null,
-        string? sortDir = null,
+        EntityListSort? sort = null,
+        EntitySortDirection? sortDirection = null,
         int? seed = null,
         bool? favorite = null,
         bool? organized = null,
@@ -89,7 +89,7 @@ public sealed partial class EfEntityReadService : IEntityReadService {
         string? bookFormat = null,
         bool? nsfw = null,
         bool? hasFile = null,
-        bool? played = null,
+        bool? engaged = null,
         bool? orphaned = null,
         bool? wanted = null,
         AcquisitionStatus? acquisitionStatus = null) {
@@ -144,7 +144,7 @@ public sealed partial class EfEntityReadService : IEntityReadService {
             entityQuery = ApplyEnabledLibraryVisibility(entityQuery, knownKindCode);
         }
         entityQuery = ApplyNsfwVisibility(entityQuery, hideNsfw == true);
-        entityQuery = ApplyListFilters(entityQuery, favorite, organized, ratingMin, ratingMax, unrated, status, bookType, bookFormat, nsfw, played, orphaned, wanted);
+        entityQuery = ApplyListFilters(entityQuery, favorite, organized, ratingMin, ratingMax, unrated, status, bookType, bookFormat, nsfw, engaged, orphaned, wanted);
         entityQuery = await _acquisitionStatuses.ApplyFilterAsync(entityQuery, acquisitionStatus, cancellationToken);
         entityQuery = await _sourceOwnershipFilter.ApplyFilterAsync(entityQuery, hasFile, cancellationToken);
 
@@ -154,11 +154,11 @@ public sealed partial class EfEntityReadService : IEntityReadService {
         var totalCount = await entityQuery.CountAsync(cancellationToken);
 
         var offset = DecodeOffsetCursor(cursor);
-        var sortKey = ParseSort(sort);
-        var descending = string.Equals(sortDir?.Trim(), "desc", StringComparison.OrdinalIgnoreCase);
+        var sortKey = sort ?? EntityListSort.Title;
+        var descending = sortDirection == EntitySortDirection.Descending;
 
         EntityRow[] rows;
-        if (sortKey == ListSort.Random) {
+        if (sortKey == EntityListSort.Random) {
             // Random must shuffle the entire matching set, not just the loaded page,
             // and stay stable across paged requests with the same seed. We pull the
             // matching identifiers (cheap), order them by a deterministic seed-mixed
@@ -178,12 +178,12 @@ public sealed partial class EfEntityReadService : IEntityReadService {
                 .Where(rowsById.ContainsKey)
                 .Select(id => rowsById[id])
                 .ToArray();
-        } else if (sortKey == ListSort.LastPlayed) {
-            rows = await ApplyLastPlayedOrdering(entityQuery, descending)
+        } else if (sortKey == EntityListSort.LastActive) {
+            rows = await ApplyLastActiveOrdering(entityQuery, descending)
                 .Skip(offset)
                 .Take(pageSize + 1)
                 .ToArrayAsync(cancellationToken);
-        } else if (sortKey == ListSort.References) {
+        } else if (sortKey == EntityListSort.References) {
             rows = await ApplyReferenceCountOrdering(entityQuery, descending)
                 .Skip(offset)
                 .Take(pageSize + 1)
@@ -199,16 +199,6 @@ public sealed partial class EfEntityReadService : IEntityReadService {
         var thumbnails = await ProjectThumbnailsAsync(page, hideNsfw == true, enforceLibraryVisibility, cancellationToken);
         var nextCursor = rows.Length > pageSize ? EncodeOffsetCursor(offset + pageSize) : null;
         return new EntityListResponse(thumbnails, nextCursor, totalCount);
-    }
-
-    /// <summary>Sort strategies supported by the list/browse projection.</summary>
-    private enum ListSort {
-        Title,
-        DateAdded,
-        Rating,
-        Random,
-        LastPlayed,
-        References,
     }
 
     /// <summary>
@@ -239,16 +229,6 @@ public sealed partial class EfEntityReadService : IEntityReadService {
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToArray();
 
-    private static ListSort ParseSort(string? sort) =>
-        sort?.Trim().ToLowerInvariant() switch {
-            "added" or "date" or "date-added" or "dateadded" or "createdat" or "created" or "recent" => ListSort.DateAdded,
-            "rating" => ListSort.Rating,
-            "random" or "shuffle" => ListSort.Random,
-            "last-played" or "lastplayed" or "recently-played" or "recently-watched" or "played" => ListSort.LastPlayed,
-            "references" or "reference-count" or "referencecount" or "refs" => ListSort.References,
-            _ => ListSort.Title,
-        };
-
     /// <summary>
     /// Applies a deterministic ORDER BY for the non-random sorts. Each strategy ends
     /// with a stable identifier tiebreaker so offset paging never skips or repeats a
@@ -256,8 +236,8 @@ public sealed partial class EfEntityReadService : IEntityReadService {
     /// direction. Ratings are the current user's opinion, resolved per row from the
     /// user-state table.
     /// </summary>
-    private IQueryable<EntityRow> ApplyOrdering(IQueryable<EntityRow> query, ListSort sort, bool descending) {
-        if (sort == ListSort.Rating) {
+    private IQueryable<EntityRow> ApplyOrdering(IQueryable<EntityRow> query, EntityListSort sort, bool descending) {
+        if (sort == EntityListSort.Rating) {
             var states = _db.UserEntityStates;
             var userId = CurrentUserId;
             var keyed = query.Select(entity => new {
@@ -280,7 +260,7 @@ public sealed partial class EfEntityReadService : IEntityReadService {
         }
 
         return sort switch {
-            ListSort.DateAdded => descending
+            EntityListSort.DateAdded => descending
                 ? query.OrderByDescending(entity => entity.CreatedAt).ThenByDescending(entity => entity.Id)
                 : query.OrderBy(entity => entity.CreatedAt).ThenBy(entity => entity.Id),
             _ => descending
@@ -290,12 +270,11 @@ public sealed partial class EfEntityReadService : IEntityReadService {
     }
 
     /// <summary>
-    /// Orders entities by the current user's most recent engagement — the playback
-    /// last-played time (videos/audio) or the reading-progress update time (books/comics).
+    /// Orders entities by the current user's most recent consumption or progress signal.
     /// Entities with no engagement sort last regardless of direction, so the "recently
-    /// played/watched" surfaces only lead with things the user has actually touched.
+    /// recently active surfaces only lead with things the user has actually touched.
     /// </summary>
-    private IQueryable<EntityRow> ApplyLastPlayedOrdering(IQueryable<EntityRow> query, bool descending) {
+    private IQueryable<EntityRow> ApplyLastActiveOrdering(IQueryable<EntityRow> query, bool descending) {
         var states = _db.UserEntityStates;
         var userId = CurrentUserId;
         var keyed = query.Select(entity => new {
@@ -370,7 +349,7 @@ public sealed partial class EfEntityReadService : IEntityReadService {
         string? bookType = null,
         string? bookFormat = null,
         bool? nsfw = null,
-        bool? played = null,
+        bool? engaged = null,
         bool? orphaned = null,
         bool? wanted = null) {
         var userId = CurrentUserId;
@@ -400,11 +379,8 @@ public sealed partial class EfEntityReadService : IEntityReadService {
                 : query.Where(entity => !entity.IsNsfw);
         }
 
-        if (played is { } wantsPlayed) {
-            // "Played" means any recorded engagement for this user: a play/resume/completion
-            // (videos/audio) or started/completed reading progress (books/comics). Mirrors the
-            // unwatched status logic.
-            query = wantsPlayed
+        if (engaged is { } wantsEngaged) {
+            query = wantsEngaged
                 ? query.Where(entity =>
                     states.Any(state => state.UserId == userId && state.EntityId == entity.Id &&
                         (state.CompletedAt != null || state.AccessCount > 0 || state.ResumeSeconds > 0)) ||

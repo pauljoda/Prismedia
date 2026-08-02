@@ -20,10 +20,7 @@
   } from "@lucide/svelte";
   import { cn } from "@prismedia/ui-svelte";
   import { formatDuration } from "$lib/utils/format";
-  import {
-    recordEntityPlaybackEvent,
-    updateEntityProgress,
-  } from "$lib/api/playback";
+  import { recordEntityConsumptionEvent, updateEntityProgress } from "$lib/api/consumption";
   import { apiAssetUrl, assetUrl } from "$lib/api/orval-fetch";
   import { paletteFromImage, type ArtworkPalette } from "$lib/entities/artwork-palette";
   import { resolveEntityHref } from "$lib/entities/entity-codes";
@@ -364,7 +361,7 @@
   function recordCurrentTrackSkip(track: AudioTrackListItemDto | null = activeTrack) {
     if (isAudiobook) return;
     if (!track || !isQuickSkipCandidate()) return;
-    void recordEntityPlaybackEvent(track.id, {
+    void recordEntityConsumptionEvent(track.id, {
       kind: CONSUMPTION_EVENT_KIND.skipped,
       positionSeconds: playback.currentTime,
       durationSeconds: duration || track.duration || null,
@@ -444,9 +441,11 @@
   }
 
   function recordTrackPlay(trackId: string) {
-    const url = apiAssetUrl(`/audio-tracks/${trackId}/play`);
-    if (!url) return;
-    void fetch(url, { method: "POST" }).catch(() => {});
+    void recordEntityConsumptionEvent(trackId, {
+      kind: CONSUMPTION_EVENT_KIND.completed,
+      positionSeconds: playback.currentTime,
+      durationSeconds: playback.duration || activeTrack?.duration || null,
+    }).catch(() => {});
   }
 
   function startAudiobookConsumption() {

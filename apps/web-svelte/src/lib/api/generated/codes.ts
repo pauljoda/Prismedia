@@ -500,6 +500,18 @@ export const ENTITY_LIFECYCLE_CLAIM_KIND = {
 
 export type EntityLifecycleClaimKindCode = (typeof ENTITY_LIFECYCLE_CLAIM_KIND)[keyof typeof ENTITY_LIFECYCLE_CLAIM_KIND];
 
+// source: enum EntityListSort
+export const ENTITY_LIST_SORT = {
+  title: "title",
+  dateAdded: "date-added",
+  rating: "rating",
+  random: "random",
+  lastActive: "last-active",
+  references: "references",
+} as const;
+
+export type EntityListSortCode = (typeof ENTITY_LIST_SORT)[keyof typeof ENTITY_LIST_SORT];
+
 // source: enum EntityMediaQualityFamily
 export const ENTITY_MEDIA_QUALITY_FAMILY = {
   none: "none",
@@ -508,6 +520,14 @@ export const ENTITY_MEDIA_QUALITY_FAMILY = {
 } as const;
 
 export type EntityMediaQualityFamilyCode = (typeof ENTITY_MEDIA_QUALITY_FAMILY)[keyof typeof ENTITY_MEDIA_QUALITY_FAMILY];
+
+// source: enum EntitySortDirection
+export const ENTITY_SORT_DIRECTION = {
+  ascending: "asc",
+  descending: "desc",
+} as const;
+
+export type EntitySortDirectionCode = (typeof ENTITY_SORT_DIRECTION)[keyof typeof ENTITY_SORT_DIRECTION];
 
 // source: enum EntitySourceCode
 export const ENTITY_SOURCE_CODE = {
@@ -1220,7 +1240,8 @@ export const PROBLEM_CODE = {
   invalidCollection: "invalid_collection",
   invalidCollectionItems: "invalid_collection_items",
   invalidCollectionRules: "invalid_collection_rules",
-  invalidConsumptionEventKind: "invalid_playback_event_kind",
+  invalidConsumptionEventKind: "invalid_consumption_event_kind",
+  invalidConsumptionStatisticsWindow: "invalid_consumption_statistics_window",
   invalidCredentials: "invalid_credentials",
   invalidEntity: "invalid_entity",
   invalidEntityImageUpload: "invalid_entity_image_upload",
@@ -1228,7 +1249,6 @@ export const PROBLEM_CODE = {
   invalidEntityMetadataPatch: "invalid_entity_metadata_patch",
   invalidOpdsRequest: "invalid_opds_request",
   invalidPath: "invalid_path",
-  invalidPlaybackStatisticsWindow: "invalid_playback_statistics_window",
   invalidUpload: "invalid_upload",
   lastAdminRequired: "last_admin_required",
   libraryRootPathConflict: "library_root_path_conflict",

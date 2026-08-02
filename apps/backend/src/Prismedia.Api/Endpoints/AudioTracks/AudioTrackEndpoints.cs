@@ -1,6 +1,4 @@
 using Prismedia.Application.Audio;
-using Prismedia.Application.Entities;
-using Prismedia.Contracts.Entities;
 using Prismedia.Contracts.System;
 using Prismedia.Domain.Entities;
 
@@ -14,17 +12,6 @@ public static class AudioTrackEndpoints {
             "Audio",
             "ListAudioTracks",
             "GetAudioTrack");
-
-        group.MapPost("/{id:guid}/play", async (
-            Guid id,
-            EntityCapabilityService capabilities,
-            CancellationToken cancellationToken) =>
-            EntityEndpointResults.ToResult(id, await capabilities.RecordCompletedPlaybackAsync(id, cancellationToken)))
-            .WithName("RecordAudioTrackPlay")
-            .WithSummary("Record Audio Track Play.")
-            .WithTags("Audio")
-            .Produces<EntityCard>()
-            .Produces<ApiProblem>(StatusCodes.Status404NotFound);
 
         routes.MapGet("/api/audio-stream/{id:guid}", StreamAudioAsync)
             .WithName("GetAudioStream")

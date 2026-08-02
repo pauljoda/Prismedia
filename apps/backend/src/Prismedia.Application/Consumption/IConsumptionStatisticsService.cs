@@ -1,20 +1,20 @@
-using Prismedia.Contracts.Playback;
+using Prismedia.Contracts.Consumption;
 using Prismedia.Domain.Entities;
 
-namespace Prismedia.Application.Playback;
+namespace Prismedia.Application.Consumption;
 
 /// <summary>
 /// Query service for timeframe-aware consumption statistics.
 /// </summary>
-public interface IPlaybackStatisticsService {
+public interface IConsumptionStatisticsService {
     /// <summary>
     /// Returns consumption statistics for the requested filter window.
     /// </summary>
-    Task<PlaybackStatisticsResponse> GetAsync(PlaybackStatisticsQuery query, CancellationToken cancellationToken);
+    Task<ConsumptionStatisticsResponse> GetAsync(ConsumptionStatisticsQuery query, CancellationToken cancellationToken);
 }
 
 /// <summary>
-/// Consumption statistics filter carried by the stable playback statistics route.
+/// Consumption statistics filter carried by the canonical consumption statistics route.
 /// </summary>
 /// <param name="From">Inclusive lower time bound.</param>
 /// <param name="To">Exclusive upper time bound.</param>
@@ -30,7 +30,7 @@ public interface IPlaybackStatisticsService {
 /// Minutes to add to UTC before bucketing events into calendar days, weekdays, and hours, so
 /// day and rhythm projections match the caller's wall clock instead of UTC.
 /// </param>
-public sealed record PlaybackStatisticsQuery(
+public sealed record ConsumptionStatisticsQuery(
     DateTimeOffset From,
     DateTimeOffset To,
     EntityKind? Kind,

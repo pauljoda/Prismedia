@@ -1,7 +1,7 @@
 import type {
-  PlaybackStatisticsBucket,
-  PlaybackStatisticsKindSlice,
-  PlaybackStatisticsRhythmCell,
+  ConsumptionStatisticsBucket,
+  ConsumptionStatisticsKindSlice,
+  ConsumptionStatisticsRhythmCell,
 } from "$lib/api/generated/model";
 import {
   entityAccentForKind,
@@ -56,7 +56,7 @@ function daysBetween(fromDayKey: string, toDayKey: string): number {
 }
 
 /** One calendar day of consumption activity. */
-export interface PlaybackDaySample {
+export interface ConsumptionDaySample {
   /** `YYYY-MM-DD` in the viewer's local time. */
   date: string;
   accessedCount: number;
@@ -74,12 +74,12 @@ export interface PlaybackDaySample {
  * which keeps an all-time window anchored to real history instead of the epoch.
  */
 export function buildDailySeries(
-  buckets: readonly PlaybackStatisticsBucket[],
+  buckets: readonly ConsumptionStatisticsBucket[],
   windowFrom: string,
   windowTo: string,
   utcOffsetMinutes: number,
-): PlaybackDaySample[] {
-  const byDate = new Map<string, PlaybackDaySample>();
+): ConsumptionDaySample[] {
+  const byDate = new Map<string, ConsumptionDaySample>();
   for (const bucket of buckets) {
     const accessedCount = statNumber(bucket.accessedCount);
     const completedCount = statNumber(bucket.completedCount);
@@ -106,7 +106,7 @@ export function buildDailySeries(
   const span = daysBetween(start, windowEnd);
   if (span > MAX_SERIES_DAYS) start = shiftDayKey(windowEnd, -MAX_SERIES_DAYS);
 
-  const series: PlaybackDaySample[] = [];
+  const series: ConsumptionDaySample[] = [];
   for (let cursor = start; cursor <= windowEnd; cursor = shiftDayKey(cursor, 1)) {
     series.push(
       byDate.get(cursor) ?? {
@@ -123,12 +123,12 @@ export function buildDailySeries(
 }
 
 /** Consistency measures derived from a gap-free day series. */
-export interface PlaybackCadence {
+export interface ConsumptionCadence {
   activeDays: number;
   totalDays: number;
   currentStreak: number;
   longestStreak: number;
-  busiestDay: PlaybackDaySample | null;
+  busiestDay: ConsumptionDaySample | null;
   /** Mean watch seconds across days that had activity, not across the whole window. */
   activeSecondsPerActiveDay: number;
 }
@@ -138,11 +138,11 @@ export interface PlaybackCadence {
  * recent day in the series and tolerates a silent final day, because a window that ends mid-day
  * should not read as a broken streak.
  */
-export function summarizeCadence(series: readonly PlaybackDaySample[]): PlaybackCadence {
+export function summarizeCadence(series: readonly ConsumptionDaySample[]): ConsumptionCadence {
   let activeDays = 0;
   let longestStreak = 0;
   let running = 0;
-  let busiestDay: PlaybackDaySample | null = null;
+  let busiestDay: ConsumptionDaySample | null = null;
   let activeSecondsTotal = 0;
 
   for (const day of series) {
@@ -192,7 +192,7 @@ export function rollingAverage(values: readonly number[], window: number): numbe
 }
 
 /** A run of consecutive days collapsed into one plotted column. */
-export interface PlaybackSpanSample {
+export interface ConsumptionSpanSample {
   /** First day in the span; also the span's stable identity. */
   startDate: string;
   endDate: string;
@@ -210,11 +210,11 @@ export interface PlaybackSpanSample {
  * a `groupSize` of 1 returns one span per day unchanged.
  */
 export function aggregateDaySeries(
-  series: readonly PlaybackDaySample[],
+  series: readonly ConsumptionDaySample[],
   groupSize: number,
-): PlaybackSpanSample[] {
+): ConsumptionSpanSample[] {
   const size = Math.max(1, Math.floor(groupSize));
-  const spans: PlaybackSpanSample[] = [];
+  const spans: ConsumptionSpanSample[] = [];
 
   for (let start = 0; start < series.length; start += size) {
     const group = series.slice(start, start + size);
@@ -234,7 +234,7 @@ export function aggregateDaySeries(
 }
 
 /** One weekday/hour cell of the rhythm grid. */
-export interface PlaybackRhythmCell {
+export interface ConsumptionRhythmCell {
   dayOfWeek: number;
   hour: number;
   totalEvents: number;
@@ -243,19 +243,19 @@ export interface PlaybackRhythmCell {
 }
 
 /** Dense weekday x hour view of when consumption events happen. */
-export interface PlaybackRhythm {
+export interface ConsumptionRhythm {
   /** Row-major `[dayOfWeek][hour]` grid, always 7 x 24. */
-  cells: PlaybackRhythmCell[][];
+  cells: ConsumptionRhythmCell[][];
   maxCellEvents: number;
   totalEvents: number;
   byHour: number[];
   byDayOfWeek: number[];
-  peak: PlaybackRhythmCell | null;
+  peak: ConsumptionRhythmCell | null;
 }
 
 /** Expands sparse rhythm cells into the full 7 x 24 grid the heatmap renders. */
-export function buildRhythm(cells: readonly PlaybackStatisticsRhythmCell[]): PlaybackRhythm {
-  const grid: PlaybackRhythmCell[][] = Array.from({ length: DAYS_IN_WEEK }, (_, dayOfWeek) =>
+export function buildRhythm(cells: readonly ConsumptionStatisticsRhythmCell[]): ConsumptionRhythm {
+  const grid: ConsumptionRhythmCell[][] = Array.from({ length: DAYS_IN_WEEK }, (_, dayOfWeek) =>
     Array.from({ length: HOURS_IN_DAY }, (_, hour) => ({
       dayOfWeek,
       hour,
@@ -282,7 +282,7 @@ export function buildRhythm(cells: readonly PlaybackStatisticsRhythmCell[]): Pla
 
   const byHour = Array.from({ length: HOURS_IN_DAY }, () => 0);
   const byDayOfWeek = Array.from({ length: DAYS_IN_WEEK }, () => 0);
-  let peak: PlaybackRhythmCell | null = null;
+  let peak: ConsumptionRhythmCell | null = null;
   for (const row of grid) {
     for (const cell of row) {
       cell.intensity = maxCellEvents > 0 ? cell.totalEvents / maxCellEvents : 0;
@@ -296,7 +296,7 @@ export function buildRhythm(cells: readonly PlaybackStatisticsRhythmCell[]): Pla
 }
 
 /** One entity family's band in the prism dispersion. */
-export interface PlaybackDispersionBand {
+export interface ConsumptionDispersionBand {
   kind: string;
   label: string;
   /** Muted material pair, for the legend rail and any other persistent chrome. */
@@ -318,8 +318,8 @@ export interface PlaybackDispersionBand {
  * chart reads as one beam of light separating rather than as a sorted bar chart.
  */
 export function buildDispersion(
-  slices: readonly PlaybackStatisticsKindSlice[],
-): PlaybackDispersionBand[] {
+  slices: readonly ConsumptionStatisticsKindSlice[],
+): ConsumptionDispersionBand[] {
   const bands = slices
     .map((slice) => ({
       kind: slice.kind as string,
@@ -397,7 +397,7 @@ export function formatDayLong(dayKey: string): string {
 }
 
 /** Names a plotted column: the full day when it is one day, otherwise the range it covers. */
-export function formatSpanLabel(span: PlaybackSpanSample): string {
+export function formatSpanLabel(span: ConsumptionSpanSample): string {
   if (span.dayCount <= 1) return formatDayLong(span.startDate);
   return `${formatDayShort(span.startDate)} – ${formatDayShort(span.endDate)}`;
 }

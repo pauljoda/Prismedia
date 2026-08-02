@@ -1,4 +1,4 @@
-import { recordEntityPlaybackEvent, updateEntityPlayback } from "$lib/api/playback";
+import { recordEntityConsumptionEvent, updateEntityConsumption } from "$lib/api/consumption";
 import { CONSUMPTION_EVENT_KIND } from "$lib/api/generated/codes";
 import { ConsumptionActivityClock } from "$lib/entities/consumption-activity-clock";
 
@@ -77,12 +77,12 @@ export class EntityViewingSession {
 
 const apiViewingSink: EntityViewingSink = {
   recordAccess: (entityId, sessionId) =>
-    recordEntityPlaybackEvent(entityId, {
+    recordEntityConsumptionEvent(entityId, {
       kind: CONSUMPTION_EVENT_KIND.accessed,
       sessionId,
     }),
   recordActivity: (entityId, seconds) =>
-    updateEntityPlayback(entityId, { durationSeconds: seconds }),
+    updateEntityConsumption(entityId, { activitySeconds: seconds }),
 };
 
 function createSessionId(): string {

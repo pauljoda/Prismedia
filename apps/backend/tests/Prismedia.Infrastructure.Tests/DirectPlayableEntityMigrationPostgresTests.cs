@@ -58,9 +58,10 @@ public sealed class DirectPlayableEntityMigrationPostgresTests {
             Assert.Equal(1, await ScalarAsync<int>(connection, "SELECT count(*)::int FROM user_entity_states WHERE user_id = @id", fixture.UserId));
             Assert.True(await ScalarAsync<bool>(connection, "SELECT is_favorite FROM user_entity_states WHERE user_id = @id", fixture.UserId));
             Assert.Equal(9, await ScalarAsync<int>(connection, "SELECT rating_value FROM user_entity_states WHERE user_id = @id", fixture.UserId));
-            Assert.Equal(7, await ScalarAsync<int>(connection, "SELECT play_count FROM user_entity_states WHERE user_id = @id", fixture.UserId));
+            Assert.Equal(0, await ScalarAsync<int>(connection, "SELECT access_count FROM user_entity_states WHERE user_id = @id", fixture.UserId));
+            Assert.Equal(7, await ScalarAsync<int>(connection, "SELECT completion_count FROM user_entity_states WHERE user_id = @id", fixture.UserId));
             Assert.Equal(1, await ScalarAsync<int>(connection, "SELECT skip_count FROM user_entity_states WHERE user_id = @id", fixture.UserId));
-            Assert.Equal(120d, await ScalarAsync<double>(connection, "SELECT play_duration_seconds FROM user_entity_states WHERE user_id = @id", fixture.UserId));
+            Assert.Equal(120d, await ScalarAsync<double>(connection, "SELECT active_seconds FROM user_entity_states WHERE user_id = @id", fixture.UserId));
             Assert.Equal(30d, await ScalarAsync<double>(connection, "SELECT resume_seconds FROM user_entity_states WHERE user_id = @id", fixture.UserId));
             Assert.Equal(fixture.MovieId, await ScalarAsync<Guid>(connection, "SELECT progress_current_entity_id FROM user_entity_states WHERE user_id = @id", fixture.UserId));
             Assert.Equal("child", await ScalarAsync<string>(connection, "SELECT progress_location FROM user_entity_states WHERE user_id = @id", fixture.UserId));

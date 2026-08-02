@@ -1,7 +1,7 @@
 import { CAPABILITY_KIND } from "$lib/api/generated/codes";
 import type { BookProgressTrackMapping } from "$lib/api/generated/model";
 import type { EntityCardFull } from "$lib/api/entities";
-import { updateEntityProgress } from "$lib/api/playback";
+import { updateEntityProgress } from "$lib/api/consumption";
 import { getCapability } from "$lib/api/capabilities";
 import type { BookChapterRow } from "$lib/entities/book-chapter-list";
 import {

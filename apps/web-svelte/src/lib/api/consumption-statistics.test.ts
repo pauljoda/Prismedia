@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { fetchPlaybackStatistics } from "./playback-statistics";
+import { fetchConsumptionStatistics } from "./consumption-statistics";
 
-describe("playback statistics API", () => {
+describe("consumption statistics API", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
   });
@@ -13,17 +13,17 @@ describe("playback statistics API", () => {
     }));
     vi.stubGlobal("fetch", fetchMock);
 
-    await fetchPlaybackStatistics({ userId: "user-1" });
-    await fetchPlaybackStatistics({ allUsers: true });
+    await fetchConsumptionStatistics({ userId: "user-1" });
+    await fetchConsumptionStatistics({ allUsers: true });
 
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
-      "/api/playback/statistics?userId=user-1",
+      "/api/consumption/statistics?userId=user-1",
       expect.any(Object),
     );
     expect(fetchMock).toHaveBeenNthCalledWith(
       2,
-      "/api/playback/statistics?allUsers=true",
+      "/api/consumption/statistics?allUsers=true",
       expect.any(Object),
     );
   });

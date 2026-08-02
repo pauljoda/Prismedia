@@ -30,7 +30,7 @@ public sealed class PlaybackSessionServiceTests {
                 CancellationToken.None));
 
         var nativeState = await RunAsync(async (_, capabilities) =>
-            await capabilities.UpdatePlaybackAsync(VideoId, resumeSeconds: 90, durationSeconds: null, completed: null, CancellationToken.None));
+            await capabilities.UpdateConsumptionAsync(VideoId, positionSeconds: 90, activitySeconds: null, completed: null, CancellationToken.None));
 
         // Compare the deterministic playback fields; LastActiveAt is wall-clock "now" of each run.
         Assert.Equal(nativeState!.CompletionCount, sessionState!.CompletionCount);
@@ -62,10 +62,10 @@ public sealed class PlaybackSessionServiceTests {
     [Fact]
     public async Task EntityCompletionRecordsWatchedState() {
         var state = await RunAsync(async (_, capabilities) =>
-            await capabilities.UpdatePlaybackAsync(
+            await capabilities.UpdateConsumptionAsync(
                 VideoId,
-                resumeSeconds: 0,
-                durationSeconds: null,
+                positionSeconds: 0,
+                activitySeconds: null,
                 completed: true,
                 CancellationToken.None));
 
@@ -104,10 +104,10 @@ public sealed class PlaybackSessionServiceTests {
         var id = kind == EntityKind.Movie ? MovieId : VideoId;
 
         var state = await RunAsync(
-            async (_, capabilities) => await capabilities.UpdatePlaybackAsync(
+            async (_, capabilities) => await capabilities.UpdateConsumptionAsync(
                 id,
-                resumeSeconds: runtimeSeconds * 0.95,
-                durationSeconds: null,
+                positionSeconds: runtimeSeconds * 0.95,
+                activitySeconds: null,
                 completed: null,
                 CancellationToken.None),
             runtimeSeconds,
@@ -124,10 +124,10 @@ public sealed class PlaybackSessionServiceTests {
         const double runtimeSeconds = 1000;
 
         var state = await RunAsync(
-            async (_, capabilities) => await capabilities.UpdatePlaybackAsync(
+            async (_, capabilities) => await capabilities.UpdateConsumptionAsync(
                 AudioTrackId,
-                resumeSeconds: runtimeSeconds * 0.95,
-                durationSeconds: null,
+                positionSeconds: runtimeSeconds * 0.95,
+                activitySeconds: null,
                 completed: null,
                 CancellationToken.None),
             runtimeSeconds,
@@ -144,10 +144,10 @@ public sealed class PlaybackSessionServiceTests {
         const double runtimeSeconds = 1000;
         var state = await RunAsync(
             async (sessions, capabilities) => {
-                await capabilities.UpdatePlaybackAsync(
+                await capabilities.UpdateConsumptionAsync(
                     VideoId,
-                    resumeSeconds: 0,
-                    durationSeconds: null,
+                    positionSeconds: 0,
+                    activitySeconds: null,
                     completed: true,
                     CancellationToken.None);
                 await sessions.ProgressAsync(
@@ -168,8 +168,8 @@ public sealed class PlaybackSessionServiceTests {
     public async Task CompletedPlaybackEventsIncrementRepeatedAudioPlays() {
         var (state, events) = await RunWithEventsAsync(
             async (_, capabilities) => {
-                await capabilities.RecordCompletedPlaybackAsync(AudioTrackId, CancellationToken.None);
-                await capabilities.RecordCompletedPlaybackAsync(AudioTrackId, CancellationToken.None);
+                await capabilities.RecordCompletedConsumptionAsync(AudioTrackId, CancellationToken.None);
+                await capabilities.RecordCompletedConsumptionAsync(AudioTrackId, CancellationToken.None);
             },
             entityId: AudioTrackId,
             kind: EntityKind.AudioTrack);
@@ -185,7 +185,7 @@ public sealed class PlaybackSessionServiceTests {
         var skippedAt = DateTimeOffset.Parse("2026-06-18T12:00:00Z");
 
         var (state, events) = await RunWithEventsAsync(
-            async (_, capabilities) => await capabilities.RecordPlaybackEventAsync(
+            async (_, capabilities) => await capabilities.RecordConsumptionEventAsync(
                 AudioTrackId,
                 ConsumptionEventKind.Skipped,
                 skippedAt,
@@ -230,7 +230,7 @@ public sealed class PlaybackSessionServiceTests {
             new EfEntityProgressTopologyResolver(db),
             consumptionEvents: new EfConsumptionEventStore(db, TestUserContext.Admin()));
 
-        await capabilities.RecordPlaybackEventAsync(
+        await capabilities.RecordConsumptionEventAsync(
             AudioTrackId,
             ConsumptionEventKind.Skipped,
             now,

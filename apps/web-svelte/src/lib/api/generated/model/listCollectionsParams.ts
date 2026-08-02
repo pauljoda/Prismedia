@@ -17,7 +17,7 @@ limit?: number | string;
 referencedBy?: string;
 relationshipCode?: string;
 sort?: string;
-sortDir?: string;
+sortDirection?: string;
 /**
  * @pattern ^-?(?:0|[1-9]\d*)$
  */
@@ -38,7 +38,7 @@ bookType?: string;
 bookFormat?: string;
 nsfw?: boolean;
 hasFile?: boolean;
-played?: boolean;
+engaged?: boolean;
 orphaned?: boolean;
 wanted?: boolean;
 acquisitionStatus?: string;

@@ -36,11 +36,23 @@ internal static class EntityListEndpoint {
         if (!TryGetAcquisitionStatus(request.AcquisitionStatus, out var acquisitionStatus, out var statusError)) {
             return statusError;
         }
+        if (!TryGetOptionalCode(request.Sort, "sort", out EntityListSort? sort, out var sortError)) {
+            return sortError;
+        }
+        if (!TryGetOptionalCode(
+                request.SortDirection,
+                "sort direction",
+                out EntitySortDirection? sortDirection,
+                out var sortDirectionError)) {
+            return sortDirectionError;
+        }
 
         return Results.Ok(await entities.ListAsync(
             request.ToQuery(
                 resolvedKinds,
                 NsfwVisibility.ShouldHide(request.HideNsfw, httpContext),
+                sort,
+                sortDirection,
                 acquisitionStatus),
             cancellationToken));
     }
@@ -92,6 +104,28 @@ internal static class EntityListEndpoint {
             $"Acquisition status '{value}' is not recognized."));
         return false;
     }
+
+    private static bool TryGetOptionalCode<TValue>(
+        string? value,
+        string label,
+        out TValue? decoded,
+        out IResult error)
+        where TValue : struct, Enum {
+        decoded = null;
+        error = Results.Empty;
+        if (string.IsNullOrWhiteSpace(value)) {
+            return true;
+        }
+        if (value.Trim().TryDecodeAs<TValue>(out var result)) {
+            decoded = result;
+            return true;
+        }
+
+        error = Results.BadRequest(new ApiProblem(
+            ApiProblemCodes.RequestInvalid,
+            $"Entity {label} '{value}' is not recognized."));
+        return false;
+    }
 }
 
 internal sealed record EntityListParameters {
@@ -119,8 +153,8 @@ internal sealed record EntityListParameters {
     [FromQuery(Name = "sort")]
     public string? Sort { get; init; }
 
-    [FromQuery(Name = "sortDir")]
-    public string? SortDir { get; init; }
+    [FromQuery(Name = "sortDirection")]
+    public string? SortDirection { get; init; }
 
     [FromQuery(Name = "seed")]
     public int? Seed { get; init; }
@@ -155,8 +189,8 @@ internal sealed record EntityListParameters {
     [FromQuery(Name = "hasFile")]
     public bool? HasFile { get; init; }
 
-    [FromQuery(Name = "played")]
-    public bool? Played { get; init; }
+    [FromQuery(Name = "engaged")]
+    public bool? Engaged { get; init; }
 
     [FromQuery(Name = "orphaned")]
     public bool? Orphaned { get; init; }
@@ -170,6 +204,8 @@ internal sealed record EntityListParameters {
     public EntityListQuery ToQuery(
         string? kind,
         bool? hideNsfw,
+        EntityListSort? sort,
+        EntitySortDirection? sortDirection,
         AcquisitionStatus? acquisitionStatus = null) => new() {
         Kind = kind,
         Query = Query,
@@ -178,8 +214,8 @@ internal sealed record EntityListParameters {
         Limit = Limit,
         ReferencedBy = ReferencedBy,
         RelationshipCode = RelationshipCode,
-        Sort = Sort,
-        SortDir = SortDir,
+        Sort = sort,
+        SortDirection = sortDirection,
         Seed = Seed,
         Favorite = Favorite,
         Organized = Organized,
@@ -191,7 +227,7 @@ internal sealed record EntityListParameters {
         BookFormat = BookFormat,
         Nsfw = Nsfw,
         HasFile = HasFile,
-        Played = Played,
+        Engaged = Engaged,
         Orphaned = Orphaned,
         Wanted = Wanted,
         AcquisitionStatus = acquisitionStatus,

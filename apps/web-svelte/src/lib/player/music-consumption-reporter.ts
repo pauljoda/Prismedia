@@ -1,4 +1,4 @@
-import { recordEntityPlaybackEvent, updateEntityPlayback } from "$lib/api/playback";
+import { recordEntityConsumptionEvent, updateEntityConsumption } from "$lib/api/consumption";
 import { CONSUMPTION_EVENT_KIND } from "$lib/api/generated/codes";
 import { ConsumptionActivityClock } from "$lib/entities/consumption-activity-clock";
 
@@ -37,7 +37,7 @@ export class MusicConsumptionReporter {
     if (this.#accessRecorded) return;
     this.#accessRecorded = true;
     const { positionSeconds, durationSeconds } = this.#snapshot();
-    void recordEntityPlaybackEvent(this.#trackId, {
+    void recordEntityConsumptionEvent(this.#trackId, {
       kind: CONSUMPTION_EVENT_KIND.accessed,
       positionSeconds,
       durationSeconds,
@@ -64,10 +64,10 @@ export class MusicConsumptionReporter {
   #reportActivity(stop: boolean): void {
     if (!this.#trackId) return;
     const now = this.#now();
-    const durationSeconds = stop ? this.#clock.stop(now) : this.#clock.take(now);
-    if (!durationSeconds) return;
+    const activitySeconds = stop ? this.#clock.stop(now) : this.#clock.take(now);
+    if (!activitySeconds) return;
     const { positionSeconds } = this.#snapshot();
-    void updateEntityPlayback(this.#trackId, { resumeSeconds: positionSeconds, durationSeconds })
+    void updateEntityConsumption(this.#trackId, { positionSeconds, activitySeconds })
       .catch(() => undefined);
   }
 }
@@ -79,7 +79,7 @@ export function createConsumptionSessionId(entityId: string): string {
 
 /** Records an audio owner opening without coupling the caller to the event payload. */
 export function recordAudioConsumptionAccess(entityId: string, positionSeconds: number): void {
-  void recordEntityPlaybackEvent(entityId, {
+  void recordEntityConsumptionEvent(entityId, {
     kind: CONSUMPTION_EVENT_KIND.accessed,
     positionSeconds,
     sessionId: createConsumptionSessionId(entityId),

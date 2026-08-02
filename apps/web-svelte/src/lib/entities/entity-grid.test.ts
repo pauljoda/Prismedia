@@ -394,6 +394,7 @@ describe("server-resolved filters and sorting", () => {
     expect(isServerResolvedFilterId("rating:unrated")).toBe(true);
     expect(isServerResolvedFilterId("status:watched")).toBe(true);
     expect(isServerResolvedFilterId("availability:on-disk")).toBe(true);
+    expect(isServerResolvedFilterId("consumption:engaged:true")).toBe(true);
     // Client-only filters stay client-resolved.
     expect(isServerResolvedFilterId("technical:codec:h264")).toBe(false);
     expect(isServerResolvedFilterId("dates:from:2026-01-01")).toBe(false);
@@ -420,6 +421,11 @@ describe("server-resolved filters and sorting", () => {
   it("maps the unrated and not-organized filters to server flags", () => {
     expect(buildServerQueryFromFilters(["rating:unrated"])).toEqual({ unrated: true });
     expect(buildServerQueryFromFilters(["flags:organized:false"])).toEqual({ organized: false });
+  });
+
+  it("maps generalized engagement filters to the canonical server flag", () => {
+    expect(buildServerQueryFromFilters(["consumption:engaged:true"])).toEqual({ engaged: true });
+    expect(buildServerQueryFromFilters(["consumption:engaged:false"])).toEqual({ engaged: false });
   });
 
   it("serializes availability filters to canonical server parameters", () => {
@@ -562,16 +568,16 @@ describe("server-resolved filters and sorting", () => {
 
   it("forwards date-added and rating sorts with direction, and leaves kind/position to the client", () => {
     expect(entityGridRequestFromState(gridState({ sortBy: "added", sortDir: "desc" }), []).server)
-      .toMatchObject({ sort: "added", sortDir: "desc" });
+      .toMatchObject({ sort: "date-added", sortDirection: "desc" });
     expect(entityGridRequestFromState(gridState({ sortBy: "rating", sortDir: "asc" }), []).server)
-      .toMatchObject({ sort: "rating", sortDir: "asc" });
+      .toMatchObject({ sort: "rating", sortDirection: "asc" });
     expect(entityGridRequestFromState(gridState({ sortBy: "kind" }), []).server.sort).toBeUndefined();
     expect(entityGridRequestFromState(gridState({ sortBy: "position" }), []).server.sort).toBeUndefined();
   });
 
   it("forwards the reference-count sort with direction for taxonomy grids", () => {
     expect(entityGridRequestFromState(gridState({ sortBy: "references", sortDir: "desc" }), []).server)
-      .toMatchObject({ sort: "references", sortDir: "desc" });
+      .toMatchObject({ sort: "references", sortDirection: "desc" });
   });
 
   it("does not re-filter the loaded page on server-resolved filters", () => {

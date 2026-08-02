@@ -4,13 +4,13 @@
  * Prismedia.Api | v1
  * OpenAPI spec version: 1.0.0
  */
-import type { PlaybackStatisticsBucket } from './playbackStatisticsBucket';
-import type { PlaybackStatisticsEntity } from './playbackStatisticsEntity';
-import type { PlaybackStatisticsEvent } from './playbackStatisticsEvent';
-import type { PlaybackStatisticsKindSlice } from './playbackStatisticsKindSlice';
-import type { PlaybackStatisticsRhythmCell } from './playbackStatisticsRhythmCell';
+import type { ConsumptionStatisticsBucket } from './consumptionStatisticsBucket';
+import type { ConsumptionStatisticsEntity } from './consumptionStatisticsEntity';
+import type { ConsumptionStatisticsEvent } from './consumptionStatisticsEvent';
+import type { ConsumptionStatisticsKindSlice } from './consumptionStatisticsKindSlice';
+import type { ConsumptionStatisticsRhythmCell } from './consumptionStatisticsRhythmCell';
 
-export interface PlaybackStatisticsResponse {
+export interface ConsumptionStatisticsResponse {
   from: string;
   to: string;
   /** @pattern ^-?(?:0|[1-9]\d*)$ */
@@ -31,9 +31,9 @@ export interface PlaybackStatisticsResponse {
   readingSeconds: number | string;
   /** @pattern ^-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?$ */
   listeningSeconds: number | string;
-  topEntities: PlaybackStatisticsEntity[];
-  recentEvents: PlaybackStatisticsEvent[];
-  dailyEvents: PlaybackStatisticsBucket[];
-  kindBreakdown: PlaybackStatisticsKindSlice[];
-  rhythm: PlaybackStatisticsRhythmCell[];
+  topEntities: ConsumptionStatisticsEntity[];
+  recentEvents: ConsumptionStatisticsEvent[];
+  dailyEvents: ConsumptionStatisticsBucket[];
+  kindBreakdown: ConsumptionStatisticsKindSlice[];
+  rhythm: ConsumptionStatisticsRhythmCell[];
 }

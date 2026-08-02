@@ -262,10 +262,10 @@ public sealed class EntityCapabilityServiceProgressTests {
             durationSeconds: null,
             sessionId: "image-session",
             CancellationToken.None);
-        var viewed = await service.UpdatePlaybackAsync(
+        var viewed = await service.UpdateConsumptionAsync(
             image.Id,
-            resumeSeconds: null,
-            durationSeconds: 30,
+            positionSeconds: null,
+            activitySeconds: 30,
             completed: null,
             CancellationToken.None);
 
@@ -299,13 +299,13 @@ public sealed class EntityCapabilityServiceProgressTests {
         var occurredAt = DateTimeOffset.UtcNow;
 
         var results = new EntityCard?[] {
-            await service.UpdatePlaybackAsync(image.Id, 10, null, completed: null, CancellationToken.None),
+            await service.UpdateConsumptionAsync(image.Id, 10, null, completed: null, CancellationToken.None),
             await service.UpdateVideoPlaybackAsync(image.Id, 10, 100, completed: false, CancellationToken.None),
-            await service.RecordCompletedPlaybackAsync(image.Id, CancellationToken.None),
-            await service.RecordCompletedPlaybackAsync(image.Id, occurredAt, 10, 100, CancellationToken.None),
-            await service.RecordSkippedPlaybackAsync(image.Id, occurredAt, 10, 100, CancellationToken.None),
-            await service.RecordPlaybackEventAsync(image.Id, ConsumptionEventKind.Completed, occurredAt, 10, 100, CancellationToken.None),
-            await service.RecordPlaybackEventAsync(image.Id, ConsumptionEventKind.Skipped, occurredAt, 10, 100, CancellationToken.None),
+            await service.RecordCompletedConsumptionAsync(image.Id, CancellationToken.None),
+            await service.RecordCompletedConsumptionAsync(image.Id, occurredAt, 10, 100, CancellationToken.None),
+            await service.RecordSkippedConsumptionAsync(image.Id, occurredAt, 10, 100, CancellationToken.None),
+            await service.RecordConsumptionEventAsync(image.Id, ConsumptionEventKind.Completed, occurredAt, 10, 100, CancellationToken.None),
+            await service.RecordConsumptionEventAsync(image.Id, ConsumptionEventKind.Skipped, occurredAt, 10, 100, CancellationToken.None),
             await service.UpdateProgressAsync(
                 image.Id,
                 image.Id,
@@ -344,10 +344,10 @@ public sealed class EntityCapabilityServiceProgressTests {
         var repository = new SingleEntityWriteRepository(book);
         var service = new EntityCapabilityService(repository, new CanonicalEntityReadStub(), new TestProgressTopologyResolver());
 
-        var playback = await service.UpdatePlaybackAsync(
+        var playback = await service.UpdateConsumptionAsync(
             book.Id,
-            resumeSeconds: 10,
-            durationSeconds: null,
+            positionSeconds: 10,
+            activitySeconds: null,
             completed: null,
             CancellationToken.None);
         var progress = await service.UpdateProgressAsync(
@@ -413,10 +413,10 @@ public sealed class EntityCapabilityServiceProgressTests {
         var service = new EntityCapabilityService(repository, new CanonicalEntityReadStub(), new TestProgressTopologyResolver());
 
         var marker = await service.AddMarkerAsync(entity.Id, "Opening", 0, null, CancellationToken.None);
-        var playback = await service.UpdatePlaybackAsync(
+        var playback = await service.UpdateConsumptionAsync(
             entity.Id,
-            resumeSeconds: 10,
-            durationSeconds: null,
+            positionSeconds: 10,
+            activitySeconds: null,
             completed: null,
             CancellationToken.None);
 
@@ -514,7 +514,7 @@ public sealed class EntityCapabilityServiceProgressTests {
     }
 
     private sealed class CanonicalEntityReadStub : IEntityReadService {
-        public Task<EntityListResponse> ListAsync(string? kind, string? query, string? cursor, bool? hideNsfw, int? limit, CancellationToken cancellationToken, Guid? referencedBy = null, string? relationshipCode = null, string? sort = null, string? sortDir = null, int? seed = null, bool? favorite = null, bool? organized = null, int? ratingMin = null, int? ratingMax = null, bool? unrated = null, string? status = null, string? bookType = null, string? bookFormat = null, bool? nsfw = null, bool? hasFile = null, bool? played = null, bool? orphaned = null, bool? wanted = null, AcquisitionStatus? acquisitionStatus = null) => Task.FromResult(new EntityListResponse([], null, 0));
+        public Task<EntityListResponse> ListAsync(string? kind, string? query, string? cursor, bool? hideNsfw, int? limit, CancellationToken cancellationToken, Guid? referencedBy = null, string? relationshipCode = null, EntityListSort? sort = null, EntitySortDirection? sortDirection = null, int? seed = null, bool? favorite = null, bool? organized = null, int? ratingMin = null, int? ratingMax = null, bool? unrated = null, string? status = null, string? bookType = null, string? bookFormat = null, bool? nsfw = null, bool? hasFile = null, bool? engaged = null, bool? orphaned = null, bool? wanted = null, AcquisitionStatus? acquisitionStatus = null) => Task.FromResult(new EntityListResponse([], null, 0));
 
         public Task<EntityCard?> GetAsync(Guid id, bool hideNsfw, CancellationToken cancellationToken) =>
             Task.FromResult<EntityCard?>(new EntityCard { Id = id, Kind = EntityKind.Book, Title = "Canonical", ParentEntityId = null, SortOrder = null, Capabilities = [], ChildrenByKind = [], Relationships = [] });

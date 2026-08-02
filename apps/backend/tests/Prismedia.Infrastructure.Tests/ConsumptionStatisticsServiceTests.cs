@@ -1,13 +1,13 @@
 using Microsoft.EntityFrameworkCore;
-using Prismedia.Application.Playback;
+using Prismedia.Application.Consumption;
 using Prismedia.Domain.Entities;
 using Prismedia.Infrastructure.Persistence;
 using Prismedia.Infrastructure.Persistence.Entities;
-using Prismedia.Infrastructure.Playback;
+using Prismedia.Infrastructure.Consumption;
 
 namespace Prismedia.Infrastructure.Tests;
 
-public sealed class PlaybackStatisticsServiceTests {
+public sealed class ConsumptionStatisticsServiceTests {
     private static readonly Guid VideoId = Guid.Parse("11111111-1111-1111-1111-111111111111");
     private static readonly Guid AudioId = Guid.Parse("22222222-2222-2222-2222-222222222222");
     private static readonly Guid NsfwId = Guid.Parse("33333333-3333-3333-3333-333333333333");
@@ -19,10 +19,10 @@ public sealed class PlaybackStatisticsServiceTests {
         await using var db = CreateContext();
         var now = DateTimeOffset.Parse("2026-06-18T12:00:00Z");
         Seed(db, now);
-        var service = new EfPlaybackStatisticsService(db, TestUserContext.Admin());
+        var service = new EfConsumptionStatisticsService(db, TestUserContext.Admin());
 
         var visible = await service.GetAsync(
-            new PlaybackStatisticsQuery(
+            new ConsumptionStatisticsQuery(
                 now.AddDays(-7),
                 now.AddSeconds(1),
                 Kind: null,
@@ -43,7 +43,7 @@ public sealed class PlaybackStatisticsServiceTests {
             item.CoverUrl == "/assets/videos/video/poster.jpg");
 
         var audioSkips = await service.GetAsync(
-            new PlaybackStatisticsQuery(
+            new ConsumptionStatisticsQuery(
                 now.AddDays(-7),
                 now.AddSeconds(1),
                 EntityKind.AudioTrack,
@@ -72,10 +72,10 @@ public sealed class PlaybackStatisticsServiceTests {
             Event(VideoId, ConsumptionEventKind.Skipped, now.AddHours(-2), 4, otherUserId),
             Event(VideoId, ConsumptionEventKind.Skipped, now.AddHours(-1), 3, userId: null));
         await db.SaveChangesAsync();
-        var service = new EfPlaybackStatisticsService(db, TestUserContext.Admin());
+        var service = new EfConsumptionStatisticsService(db, TestUserContext.Admin());
 
         var statistics = await service.GetAsync(
-            new PlaybackStatisticsQuery(
+            new ConsumptionStatisticsQuery(
                 now.AddDays(-1),
                 now.AddSeconds(1),
                 Kind: null,
@@ -92,7 +92,7 @@ public sealed class PlaybackStatisticsServiceTests {
         Assert.Equal(1, Assert.Single(statistics.DailyEvents).CompletedCount);
 
         var selectedUserStatistics = await service.GetAsync(
-            new PlaybackStatisticsQuery(
+            new ConsumptionStatisticsQuery(
                 now.AddDays(-1),
                 now.AddSeconds(1),
                 Kind: null,
@@ -106,7 +106,7 @@ public sealed class PlaybackStatisticsServiceTests {
         Assert.Equal(1, selectedUserStatistics.SkippedCount);
 
         var allUsersStatistics = await service.GetAsync(
-            new PlaybackStatisticsQuery(
+            new ConsumptionStatisticsQuery(
                 now.AddDays(-1),
                 now.AddSeconds(1),
                 Kind: null,
@@ -136,10 +136,10 @@ public sealed class PlaybackStatisticsServiceTests {
             Activity(VideoId, ConsumptionActivityKind.Viewing, new DateOnly(2026, 6, 17), 605),
             Activity(AudioId, ConsumptionActivityKind.Listening, new DateOnly(2026, 6, 18), 200));
         await db.SaveChangesAsync();
-        var service = new EfPlaybackStatisticsService(db, TestUserContext.Admin());
+        var service = new EfConsumptionStatisticsService(db, TestUserContext.Admin());
 
         var statistics = await service.GetAsync(
-            new PlaybackStatisticsQuery(
+            new ConsumptionStatisticsQuery(
                 now.AddDays(-7),
                 now.AddSeconds(1),
                 Kind: null,
@@ -201,10 +201,10 @@ public sealed class PlaybackStatisticsServiceTests {
             Activity(BookId, ConsumptionActivityKind.Reading, DateOnly.FromDateTime(now.Date), 30),
             Activity(BookId, ConsumptionActivityKind.Listening, DateOnly.FromDateTime(now.Date), 15));
         await db.SaveChangesAsync();
-        var service = new EfPlaybackStatisticsService(db, TestUserContext.Admin());
+        var service = new EfConsumptionStatisticsService(db, TestUserContext.Admin());
 
         var statistics = await service.GetAsync(
-            new PlaybackStatisticsQuery(
+            new ConsumptionStatisticsQuery(
                 now.AddDays(-1),
                 now.AddSeconds(1),
                 Kind: null,
@@ -257,9 +257,9 @@ public sealed class PlaybackStatisticsServiceTests {
             Activity(disabledBookId, ConsumptionActivityKind.Reading, DateOnly.FromDateTime(now.Date), 10));
         await db.SaveChangesAsync();
 
-        var service = new EfPlaybackStatisticsService(db, TestUserContext.Member(visibleRootId));
+        var service = new EfConsumptionStatisticsService(db, TestUserContext.Member(visibleRootId));
         var statistics = await service.GetAsync(
-            new PlaybackStatisticsQuery(now.AddDays(-1), now.AddSeconds(1), null, null, HideNsfw: true),
+            new ConsumptionStatisticsQuery(now.AddDays(-1), now.AddSeconds(1), null, null, HideNsfw: true),
             CancellationToken.None);
 
         Assert.Equal(1, statistics.TotalEvents);

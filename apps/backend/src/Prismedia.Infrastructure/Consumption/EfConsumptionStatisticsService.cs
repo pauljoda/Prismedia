@@ -1,21 +1,21 @@
 using Microsoft.EntityFrameworkCore;
-using Prismedia.Application.Playback;
+using Prismedia.Application.Consumption;
 using Prismedia.Application.Security;
-using Prismedia.Contracts.Playback;
+using Prismedia.Contracts.Consumption;
 using Prismedia.Domain.Entities;
 using Prismedia.Infrastructure.Entities;
 using Prismedia.Infrastructure.Persistence;
 
-namespace Prismedia.Infrastructure.Playback;
+namespace Prismedia.Infrastructure.Consumption;
 
 /// <summary>
 /// EF Core read projection over discrete consumption events and bounded daily-duration buckets.
 /// Cached state and daily rows avoid summing an ever-growing heartbeat history.
 /// </summary>
-public sealed class EfPlaybackStatisticsService(
+public sealed class EfConsumptionStatisticsService(
     PrismediaDbContext db,
     ICurrentUserContext currentUser,
-    EfEntityLibraryVisibilityFilter? libraryVisibility = null) : IPlaybackStatisticsService {
+    EfEntityLibraryVisibilityFilter? libraryVisibility = null) : IConsumptionStatisticsService {
     private const int TopEntityLimit = 12;
     private const int RecentEventLimit = 30;
     private const int MaxUtcOffsetMinutes = 16 * 60;
@@ -23,8 +23,8 @@ public sealed class EfPlaybackStatisticsService(
         libraryVisibility ?? new EfEntityLibraryVisibilityFilter(db, currentUser);
 
     /// <inheritdoc />
-    public async Task<PlaybackStatisticsResponse> GetAsync(
-        PlaybackStatisticsQuery query,
+    public async Task<ConsumptionStatisticsResponse> GetAsync(
+        ConsumptionStatisticsQuery query,
         CancellationToken cancellationToken) {
         var offset = TimeSpan.FromMinutes(Math.Clamp(
             query.UtcOffsetMinutes,
@@ -45,7 +45,7 @@ public sealed class EfPlaybackStatisticsService(
                 var days = dayRows.Where(row => row.EntityId == key.EntityId).ToArray();
                 var first = EventBoundary(events, days, latest: false);
                 var last = EventBoundary(events, days, latest: true);
-                return new PlaybackStatisticsEntityFold(
+                return new ConsumptionStatisticsEntityFold(
                     key.EntityId,
                     key.EntityKindCode,
                     key.EntityTitle,
@@ -70,7 +70,7 @@ public sealed class EfPlaybackStatisticsService(
                 .ToArray(),
             cancellationToken);
 
-        var topEntities = topRows.Select(row => new PlaybackStatisticsEntity(
+        var topEntities = topRows.Select(row => new ConsumptionStatisticsEntity(
             row.EntityId,
             row.EntityKindCode.DecodeAs<EntityKind>(),
             row.EntityTitle,
@@ -81,7 +81,7 @@ public sealed class EfPlaybackStatisticsService(
             row.ActiveSeconds,
             row.FirstEventAt,
             row.LastEventAt)).ToArray();
-        var recentEvents = recentEventRows.Select(row => new PlaybackStatisticsEvent(
+        var recentEvents = recentEventRows.Select(row => new ConsumptionStatisticsEvent(
             row.EventId,
             row.EntityId,
             row.EntityKindCode.DecodeAs<EntityKind>(),
@@ -99,7 +99,7 @@ public sealed class EfPlaybackStatisticsService(
         var daily = eventDays.Keys.Concat(activityDays.Keys).Distinct().Order().Select(date => {
             var events = eventDays.GetValueOrDefault(date) ?? [];
             var activities = activityDays.GetValueOrDefault(date) ?? [];
-            return new PlaybackStatisticsBucket(
+            return new ConsumptionStatisticsBucket(
                 date,
                 events.Count(row => row.Kind == ConsumptionEventKind.Accessed),
                 events.Count(row => row.Kind == ConsumptionEventKind.Completed),
@@ -114,7 +114,7 @@ public sealed class EfPlaybackStatisticsService(
             var ids = group.Select(key => key.EntityId).ToHashSet();
             var events = eventRows.Where(row => ids.Contains(row.EntityId)).ToArray();
             var days = dayRows.Where(row => ids.Contains(row.EntityId)).ToArray();
-            return new PlaybackStatisticsKindSlice(
+            return new ConsumptionStatisticsKindSlice(
                 group.Key.DecodeAs<EntityKind>(),
                 events.Length,
                 events.Count(row => row.Kind == ConsumptionEventKind.Accessed),
@@ -129,7 +129,7 @@ public sealed class EfPlaybackStatisticsService(
         var rhythm = eventRows.GroupBy(row => {
             var local = row.OccurredAt.ToOffset(offset);
             return new { DayOfWeek = (int)local.DayOfWeek, local.Hour };
-        }).Select(group => new PlaybackStatisticsRhythmCell(
+        }).Select(group => new ConsumptionStatisticsRhythmCell(
             group.Key.DayOfWeek,
             group.Key.Hour,
             group.Count(row => row.Kind == ConsumptionEventKind.Accessed),
@@ -139,7 +139,7 @@ public sealed class EfPlaybackStatisticsService(
           .ThenBy(cell => cell.Hour)
           .ToArray();
 
-        return new PlaybackStatisticsResponse(
+        return new ConsumptionStatisticsResponse(
             query.From,
             query.To,
             eventRows.Length,
@@ -159,7 +159,7 @@ public sealed class EfPlaybackStatisticsService(
     }
 
     private IQueryable<ConsumptionStatisticsEventRow> QueryEvents(
-        PlaybackStatisticsQuery query,
+        ConsumptionStatisticsQuery query,
         bool enforceLibraryVisibility) {
         var events = db.EntityConsumptionEvents.AsNoTracking()
             .Where(evt => evt.OccurredAt >= query.From && evt.OccurredAt < query.To);
@@ -192,7 +192,7 @@ public sealed class EfPlaybackStatisticsService(
     }
 
     private IQueryable<ConsumptionStatisticsDayRow> QueryDays(
-        PlaybackStatisticsQuery query,
+        ConsumptionStatisticsQuery query,
         bool enforceLibraryVisibility,
         TimeSpan offset) {
         var firstDate = DateOnly.FromDateTime(query.From.ToOffset(offset).Date);
@@ -280,7 +280,7 @@ public sealed class EfPlaybackStatisticsService(
 
     private sealed record EntityKey(Guid EntityId, string EntityKindCode, string EntityTitle);
 
-    private sealed record PlaybackStatisticsEntityFold(
+    private sealed record ConsumptionStatisticsEntityFold(
         Guid EntityId,
         string EntityKindCode,
         string EntityTitle,

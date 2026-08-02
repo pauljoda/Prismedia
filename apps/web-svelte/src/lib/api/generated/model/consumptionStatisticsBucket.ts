@@ -4,20 +4,21 @@
  * Prismedia.Api | v1
  * OpenAPI spec version: 1.0.0
  */
-import type { EntityKind } from './entityKind';
 
-export interface PlaybackStatisticsKindSlice {
-  kind: EntityKind;
-  /** @pattern ^-?(?:0|[1-9]\d*)$ */
-  totalEvents: number | string;
+export interface ConsumptionStatisticsBucket {
+  date: string;
   /** @pattern ^-?(?:0|[1-9]\d*)$ */
   accessedCount: number | string;
   /** @pattern ^-?(?:0|[1-9]\d*)$ */
   completedCount: number | string;
   /** @pattern ^-?(?:0|[1-9]\d*)$ */
   skippedCount: number | string;
-  /** @pattern ^-?(?:0|[1-9]\d*)$ */
-  distinctEntityCount: number | string;
   /** @pattern ^-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?$ */
   activeSeconds: number | string;
+  /** @pattern ^-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?$ */
+  viewingSeconds: number | string;
+  /** @pattern ^-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?$ */
+  listeningSeconds: number | string;
+  /** @pattern ^-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?$ */
+  readingSeconds: number | string;
 }

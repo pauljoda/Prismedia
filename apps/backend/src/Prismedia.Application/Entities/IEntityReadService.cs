@@ -16,11 +16,8 @@ public interface IEntityReadService {
     /// span the entire matching set rather than a single loaded page.
     /// </summary>
     /// <param name="kind">One entity kind code, or a comma-separated list matched with OR semantics.</param>
-    /// <param name="sort">
-    /// Sort key: <c>title</c> (default), <c>added</c>/<c>date</c> (creation time),
-    /// <c>rating</c>, or <c>random</c> for a seeded shuffle of the whole result set.
-    /// </param>
-    /// <param name="sortDir"><c>asc</c> (default) or <c>desc</c>. Ignored for <c>random</c>.</param>
+    /// <param name="sort">Canonical server-side ordering strategy.</param>
+    /// <param name="sortDirection">Ordering direction. Ignored for <see cref="EntityListSort.Random"/>.</param>
     /// <param name="seed">
     /// Stable seed for the <c>random</c> sort. The same seed reproduces the same
     /// shuffle across every page so cursor paging stays consistent.
@@ -50,9 +47,9 @@ public interface IEntityReadService {
     /// <param name="hasFile">
     /// When set, keeps only entities whose structural subtree has (true) or lacks (false) a source file.
     /// </param>
-    /// <param name="played">
-    /// When set, keeps only entities that have been played/read (true) or never engaged (false),
-    /// resolved against the playback (videos/audio) and progress (books/comics) records.
+    /// <param name="engaged">
+    /// When set, keeps only entities with recorded consumption/progress (true) or untouched
+    /// entities (false), regardless of media family.
     /// </param>
     /// <param name="orphaned">
     /// When true, keeps only entities that nothing references (no inbound relationship links) — the
@@ -72,8 +69,8 @@ public interface IEntityReadService {
         CancellationToken cancellationToken,
         Guid? referencedBy = null,
         string? relationshipCode = null,
-        string? sort = null,
-        string? sortDir = null,
+        EntityListSort? sort = null,
+        EntitySortDirection? sortDirection = null,
         int? seed = null,
         bool? favorite = null,
         bool? organized = null,
@@ -85,7 +82,7 @@ public interface IEntityReadService {
         string? bookFormat = null,
         bool? nsfw = null,
         bool? hasFile = null,
-        bool? played = null,
+        bool? engaged = null,
         bool? orphaned = null,
         bool? wanted = null,
         AcquisitionStatus? acquisitionStatus = null);
@@ -104,7 +101,7 @@ public interface IEntityReadService {
             query.ReferencedBy,
             query.RelationshipCode,
             query.Sort,
-            query.SortDir,
+            query.SortDirection,
             query.Seed,
             query.Favorite,
             query.Organized,
@@ -116,7 +113,7 @@ public interface IEntityReadService {
             query.BookFormat,
             query.Nsfw,
             query.HasFile,
-            query.Played,
+            query.Engaged,
             query.Orphaned,
             query.Wanted,
             query.AcquisitionStatus);

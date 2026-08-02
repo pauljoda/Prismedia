@@ -83,6 +83,33 @@ public sealed class EntityListEndpointTests {
         Assert.Equal(AcquisitionStatus.Downloaded, entityReadService.AcquisitionStatus);
     }
 
+    [Fact]
+    public async Task CanonicalConsumptionFiltersReachEntityReadService() {
+        var entityReadService = new CapturingEntityReadService();
+        using var factory = CreateFactory(entityReadService);
+        using var client = factory.CreateAuthenticatedClient();
+
+        using var response = await client.GetAsync(
+            "/api/entities?sort=last-active&sortDirection=desc&engaged=true");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal(EntityListSort.LastActive, entityReadService.Sort);
+        Assert.Equal(EntitySortDirection.Descending, entityReadService.SortDirection);
+        Assert.True(entityReadService.Engaged);
+    }
+
+    [Fact]
+    public async Task RemovedLastPlayedSortCodeIsRejected() {
+        var entityReadService = new CapturingEntityReadService();
+        using var factory = CreateFactory(entityReadService);
+        using var client = factory.CreateAuthenticatedClient();
+
+        using var response = await client.GetAsync("/api/entities?sort=last-played");
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal(0, entityReadService.ListCallCount);
+    }
+
     private static WebApplicationFactory<Program> CreateFactory(IEntityReadService entityReadService) =>
         new WebApplicationFactory<Program>()
             .WithWebHostBuilder(builder => {
@@ -98,6 +125,9 @@ public sealed class EntityListEndpointTests {
         public int ListCallCount { get; private set; }
         public bool? Wanted { get; private set; }
         public AcquisitionStatus? AcquisitionStatus { get; private set; }
+        public EntityListSort? Sort { get; private set; }
+        public EntitySortDirection? SortDirection { get; private set; }
+        public bool? Engaged { get; private set; }
 
         public override Task<EntityListResponse> ListAsync(
             string? kind,
@@ -108,8 +138,8 @@ public sealed class EntityListEndpointTests {
             CancellationToken cancellationToken,
             Guid? referencedBy = null,
             string? relationshipCode = null,
-            string? sort = null,
-            string? sortDir = null,
+            EntityListSort? sort = null,
+            EntitySortDirection? sortDirection = null,
             int? seed = null,
             bool? favorite = null,
             bool? organized = null,
@@ -121,7 +151,7 @@ public sealed class EntityListEndpointTests {
             string? bookFormat = null,
             bool? nsfw = null,
             bool? hasFile = null,
-            bool? played = null,
+            bool? engaged = null,
             bool? orphaned = null,
             bool? wanted = null,
             AcquisitionStatus? acquisitionStatus = null) {
@@ -129,6 +159,9 @@ public sealed class EntityListEndpointTests {
             ListCallCount++;
             Wanted = wanted;
             AcquisitionStatus = acquisitionStatus;
+            Sort = sort;
+            SortDirection = sortDirection;
+            Engaged = engaged;
             return Task.FromResult(new EntityListResponse([], null, 0));
         }
 

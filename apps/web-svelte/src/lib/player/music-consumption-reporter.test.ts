@@ -1,13 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const playbackMocks = vi.hoisted(() => ({
+const consumptionMocks = vi.hoisted(() => ({
   recordEvent: vi.fn(async () => undefined),
-  updatePlayback: vi.fn(async () => undefined),
+  updateConsumption: vi.fn(async () => undefined),
 }));
 
-vi.mock("$lib/api/playback", () => ({
-  recordEntityPlaybackEvent: playbackMocks.recordEvent,
-  updateEntityPlayback: playbackMocks.updatePlayback,
+vi.mock("$lib/api/consumption", () => ({
+  recordEntityConsumptionEvent: consumptionMocks.recordEvent,
+  updateEntityConsumption: consumptionMocks.updateConsumption,
 }));
 
 import { MusicConsumptionReporter } from "./music-consumption-reporter";
@@ -33,18 +33,18 @@ describe("MusicConsumptionReporter", () => {
     positionSeconds = 19;
     reporter.pause();
 
-    expect(playbackMocks.recordEvent).toHaveBeenCalledTimes(1);
-    expect(playbackMocks.recordEvent).toHaveBeenCalledWith(
+    expect(consumptionMocks.recordEvent).toHaveBeenCalledTimes(1);
+    expect(consumptionMocks.recordEvent).toHaveBeenCalledWith(
       "track-1",
       expect.objectContaining({ kind: "accessed", positionSeconds: 4, durationSeconds: 180 }),
     );
-    expect(playbackMocks.updatePlayback).toHaveBeenNthCalledWith(1, "track-1", {
-      resumeSeconds: 14,
-      durationSeconds: 10,
+    expect(consumptionMocks.updateConsumption).toHaveBeenNthCalledWith(1, "track-1", {
+      positionSeconds: 14,
+      activitySeconds: 10,
     });
-    expect(playbackMocks.updatePlayback).toHaveBeenNthCalledWith(2, "track-1", {
-      resumeSeconds: 19,
-      durationSeconds: 5,
+    expect(consumptionMocks.updateConsumption).toHaveBeenNthCalledWith(2, "track-1", {
+      positionSeconds: 19,
+      activitySeconds: 5,
     });
   });
 });

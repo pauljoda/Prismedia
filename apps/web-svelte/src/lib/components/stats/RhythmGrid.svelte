@@ -4,12 +4,12 @@
   import {
     formatHourLabel,
     weekdayLabels,
-    type PlaybackRhythm,
-    type PlaybackRhythmCell,
-  } from "$lib/stats/playback-stats";
+    type ConsumptionRhythm,
+    type ConsumptionRhythmCell,
+  } from "$lib/stats/consumption-stats";
 
   interface Props {
-    rhythm: PlaybackRhythm;
+    rhythm: ConsumptionRhythm;
     class?: string;
   }
 
@@ -19,7 +19,7 @@
   const LABELLED_HOURS = [0, 6, 12, 18];
 
   const weekdays = weekdayLabels();
-  let hoveredCell = $state<PlaybackRhythmCell | null>(null);
+  let hoveredCell = $state<ConsumptionRhythmCell | null>(null);
 
   /** The heat scale as a CSS gradient stop list, so the key cannot drift from the cells. */
   const heatRamp = PRISM_HEAT_STOPS.map(
@@ -47,7 +47,7 @@
     return prismHeatColor(t, 0.16 + 0.84 * t);
   }
 
-  function cellTitle(cell: PlaybackRhythmCell): string {
+  function cellTitle(cell: ConsumptionRhythmCell): string {
     return `${weekdays[cell.dayOfWeek]} ${formatHourLabel(cell.hour)}: ${cell.totalEvents.toLocaleString()} events`;
   }
 </script>

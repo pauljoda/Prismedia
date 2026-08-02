@@ -4,11 +4,11 @@
   import { entityKindIcon } from "$lib/entities/entity-kind-icons";
   import {
     formatActiveDuration,
-    type PlaybackDispersionBand,
-  } from "$lib/stats/playback-stats";
+    type ConsumptionDispersionBand,
+  } from "$lib/stats/consumption-stats";
 
   interface Props {
-    bands: PlaybackDispersionBand[];
+    bands: ConsumptionDispersionBand[];
     /** Family currently narrowing the page, drawn solid while the rest recede. */
     activeKind?: string | null;
     /** Called with the band's kind, or null when the active band is chosen again. */
@@ -65,7 +65,7 @@
   );
 
   interface BandGeometry {
-    band: PlaybackDispersionBand;
+    band: ConsumptionDispersionBand;
     path: string;
     gradientId: string;
     gradientX1: number;

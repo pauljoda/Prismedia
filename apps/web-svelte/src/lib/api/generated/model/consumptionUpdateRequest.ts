@@ -4,12 +4,8 @@
  * Prismedia.Api | v1
  * OpenAPI spec version: 1.0.0
  */
-import type { ConsumptionEventKind } from './consumptionEventKind';
 
-export interface PlaybackEventCreateRequest {
-  kind: ConsumptionEventKind;
-  /** @nullable */
-  occurredAt: string | null;
+export interface ConsumptionUpdateRequest {
   /**
      * @nullable
      * @pattern ^-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?$
@@ -19,7 +15,12 @@ export interface PlaybackEventCreateRequest {
      * @nullable
      * @pattern ^-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?$
      */
-  durationSeconds: number | string | null;
+  activitySeconds: number | string | null;
   /** @nullable */
-  sessionId?: string | null;
+  completed: boolean | null;
+  /**
+     * @nullable
+     * @pattern ^-?(?:0|[1-9]\d*)$
+     */
+  utcOffsetMinutes?: number | string | null;
 }

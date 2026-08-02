@@ -7,7 +7,7 @@
   import EntityDetailPageState from "$lib/components/entities/EntityDetailPageState.svelte";
   import { useEntityDetailPage } from "$lib/components/entities/entity-detail-page-controller.svelte";
   import { fetchEntity, type EntityCardFull } from "$lib/api/entities";
-  import { updateEntityProgress } from "$lib/api/playback";
+  import { updateEntityProgress } from "$lib/api/consumption";
   import { entityCardToDetailCard, type EntityDetailCardFull } from "$lib/entities/entity-detail";
   import {
     bookEntityProgressDisplay,

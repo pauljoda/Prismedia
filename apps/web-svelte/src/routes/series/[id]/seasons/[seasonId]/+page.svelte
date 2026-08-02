@@ -8,7 +8,7 @@
   import MediaProgressPanel from "$lib/components/MediaProgressPanel.svelte";
   import { PROGRESS_UNIT } from "$lib/api/generated/codes";
   import { fetchEntity, type EntityCardFull } from "$lib/api/entities";
-  import { updateEntityProgress } from "$lib/api/playback";
+  import { updateEntityProgress } from "$lib/api/consumption";
   import { getCapability, isWanted } from "$lib/api/capabilities";
   import { refreshAfterManagedFileRevert } from "$lib/entities/entity-file-management";
   import { getChildIds } from "$lib/entities/entity-children";

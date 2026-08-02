@@ -5,17 +5,11 @@
  * OpenAPI spec version: 1.0.0
  */
 import type { ConsumptionEventKind } from './consumptionEventKind';
-import type { EntityKind } from './entityKind';
 
-export interface PlaybackStatisticsEvent {
-  id: string;
-  entityId: string;
-  entityKind: EntityKind;
-  entityTitle: string;
-  /** @nullable */
-  coverUrl: string | null;
+export interface ConsumptionEventCreateRequest {
   kind: ConsumptionEventKind;
-  occurredAt: string;
+  /** @nullable */
+  occurredAt: string | null;
   /**
      * @nullable
      * @pattern ^-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?$
@@ -26,4 +20,6 @@ export interface PlaybackStatisticsEvent {
      * @pattern ^-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?$
      */
   durationSeconds: number | string | null;
+  /** @nullable */
+  sessionId?: string | null;
 }

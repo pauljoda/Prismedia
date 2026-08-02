@@ -1,7 +1,9 @@
 import {
   ACQUISITION_STATUS,
+  ENTITY_LIST_SORT,
   THUMBNAIL_HOVER_KIND,
   THUMBNAIL_META_ICON,
+  type EntitySortDirectionCode,
 } from "$lib/api/generated/codes";
 import {
   getCapability,
@@ -45,13 +47,13 @@ export { BOOK_FORMAT_FILTER_DEFS, BOOK_TYPE_FILTER_DEFS } from "./entity-grid-bo
 export const ENTITY_GRID_ALL_KINDS = "all";
 
 export type EntityGridSort = "title" | "kind" | "rating" | "position" | "added" | "random" | "references";
-export type EntityGridSortDir = "asc" | "desc";
+export type EntityGridSortDir = EntitySortDirectionCode;
 export type EntityGridViewMode = "grid" | "list" | "feed";
 
 export type EntityGridServerQuery = Pick<
   ListEntitiesParams,
   | "sort"
-  | "sortDir"
+  | "sortDirection"
   | "seed"
   | "favorite"
   | "organized"
@@ -65,7 +67,7 @@ export type EntityGridServerQuery = Pick<
   | "hasFile"
   | "wanted"
   | "acquisitionStatus"
-  | "played"
+  | "engaged"
   | "orphaned"
 >;
 
@@ -614,8 +616,8 @@ export function isServerResolvedFilterId(id: string): boolean {
     id === "files:has:true" ||
     id === "files:has:false" ||
     id.startsWith(AVAILABILITY_PREFIX) ||
-    id === "progress:played:true" ||
-    id === "progress:played:false" ||
+    id === "consumption:engaged:true" ||
+    id === "consumption:engaged:false" ||
     id === "taxonomy:orphaned" ||
     id === "taxonomy:referenced" ||
     id === "rating:unrated" ||
@@ -656,10 +658,10 @@ export function buildServerQueryFromFilters(filterIds: string[]): EntityGridServ
       server.wanted = true;
     } else if (AVAILABILITY_BY_ID.has(id)) {
       server.acquisitionStatus = AVAILABILITY_BY_ID.get(id)?.value;
-    } else if (id === "progress:played:true") {
-      server.played = true;
-    } else if (id === "progress:played:false") {
-      server.played = false;
+    } else if (id === "consumption:engaged:true") {
+      server.engaged = true;
+    } else if (id === "consumption:engaged:false") {
+      server.engaged = false;
     } else if (id === "taxonomy:orphaned") {
       server.orphaned = true;
     } else if (id === "taxonomy:referenced") {
@@ -715,7 +717,7 @@ export function buildCapabilityFilterOptions(
     ? cards.some((card) => card.hasSourceMedia || isWanted(card.entity.capabilities) || acquisitionStatusesForCard(card).length > 0)
     : isDeletableMediaKind(kind);
   const hasFlags = cards.some((card) => Boolean(getCapability(card.entity.capabilities, CAPABILITY_KIND.flags)));
-  const hasProgress = true;
+  const hasEngagement = true;
   const hasRating = cards.some((card) => getRatingValue(card.entity.capabilities) > 0);
   const hasTechnical = cards.some((card) => Boolean(getTechnicalCapability(card.entity.capabilities)));
 
@@ -765,9 +767,9 @@ export function buildCapabilityFilterOptions(
     for (const definition of AVAILABILITY_FILTER_DEFS) addUniqueOption(options, definition);
   }
 
-  if (hasProgress) {
-    addUniqueOption(options, { id: "progress:played:true", label: "Played", capabilityKind: CAPABILITY_KIND.progress, value: "played:true" });
-    addUniqueOption(options, { id: "progress:played:false", label: "Unplayed", capabilityKind: CAPABILITY_KIND.progress, value: "played:false" });
+  if (hasEngagement) {
+    addUniqueOption(options, { id: "consumption:engaged:true", label: "Engaged", capabilityKind: CAPABILITY_KIND.consumption, value: "engaged:true" });
+    addUniqueOption(options, { id: "consumption:engaged:false", label: "Not engaged", capabilityKind: CAPABILITY_KIND.consumption, value: "engaged:false" });
   }
 
   if (hasFlags) {
@@ -916,12 +918,6 @@ export function buildCapabilityFilterOptions(
         case CAPABILITY_KIND.files:
           break;
         case CAPABILITY_KIND.progress:
-          addOption(options, {
-            id: `progress:played:${capability.completedAt ? "true" : "false"}`,
-            label: capability.completedAt ? "Played" : "Unplayed",
-            capabilityKind: CAPABILITY_KIND.progress,
-            value: `played:${capability.completedAt ? "true" : "false"}`,
-          });
           break;
       }
     }
@@ -1053,10 +1049,23 @@ function entityMatchesFilter(capabilities: EntityCapability[], filter: EntityGri
       if (filter.value === "has:false") return !hasFiles;
       return hasFiles;
     }
+    case CAPABILITY_KIND.consumption: {
+      const consumption = getCapability(capabilities, CAPABILITY_KIND.consumption);
+      const progress = getCapability(capabilities, CAPABILITY_KIND.progress);
+      const engaged = Boolean(
+        (consumption && (
+          (numberValue(consumption.accessCount) ?? 0) > 0 ||
+          (numberValue(consumption.resumeSeconds) ?? 0) > 0 ||
+          consumption.completedAt
+        )) ||
+        (progress && (progress.completedAt || progress.currentEntityId || (numberValue(progress.index) ?? 0) > 0)),
+      );
+      if (filter.value === "engaged:true") return engaged;
+      if (filter.value === "engaged:false") return !engaged;
+      return Boolean(consumption);
+    }
     case CAPABILITY_KIND.progress: {
       const progress = getCapability(capabilities, CAPABILITY_KIND.progress);
-      if (filter.value === "played:true") return Boolean(progress?.completedAt);
-      if (filter.value === "played:false") return !progress?.completedAt;
       return Boolean(progress);
     }
     case CAPABILITY_KIND.position:
@@ -1191,20 +1200,20 @@ export function entityGridRequestFromState(
   // forwarded. "kind" and "position" remain client-only reorderings of the
   // loaded page, so the server keeps its default ordering for them.
   if (state.sortBy === "random") {
-    server.sort = "random";
+    server.sort = ENTITY_LIST_SORT.random;
     server.seed = state.randomSeed;
   } else if (state.sortBy === "added") {
-    server.sort = "added";
-    server.sortDir = state.sortDir;
+    server.sort = ENTITY_LIST_SORT.dateAdded;
+    server.sortDirection = state.sortDir;
   } else if (state.sortBy === "rating") {
-    server.sort = "rating";
-    server.sortDir = state.sortDir;
+    server.sort = ENTITY_LIST_SORT.rating;
+    server.sortDirection = state.sortDir;
   } else if (state.sortBy === "title") {
-    server.sort = "title";
-    server.sortDir = state.sortDir;
+    server.sort = ENTITY_LIST_SORT.title;
+    server.sortDirection = state.sortDir;
   } else if (state.sortBy === "references") {
-    server.sort = "references";
-    server.sortDir = state.sortDir;
+    server.sort = ENTITY_LIST_SORT.references;
+    server.sortDirection = state.sortDir;
   }
 
   return {

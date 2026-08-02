@@ -45,6 +45,9 @@ import type {
   CommitEntityRequestParams,
   CommitRequestParams,
   CommitReviewedRequestParams,
+  ConsumptionEventCreateRequest,
+  ConsumptionStatisticsResponse,
+  ConsumptionUpdateRequest,
   CreateFileFolderParams,
   CreateFirstAdminRequest,
   CustomFormatSaveRequest,
@@ -92,6 +95,7 @@ import type {
   FileRenameRequest,
   FileRescanRequest,
   FileRootsResponse,
+  GetConsumptionStatisticsParams,
   GetEntityChildrenParams,
   GetEntityParams,
   GetEntityThumbnailsParams,
@@ -110,7 +114,6 @@ import type {
   GetOpdsTagBooksParams,
   GetOpdsTagsParams,
   GetOrganizePlanParams,
-  GetPlaybackStatisticsParams,
   GetSettingValuesParams,
   GetUpdateCheckParams,
   GetVideoPlaybackHlsAssetParams,
@@ -188,9 +191,6 @@ import type {
   OrganizeApplyResponse,
   OrganizePlanRequest,
   OrganizePlanResponse,
-  PlaybackEventCreateRequest,
-  PlaybackStatisticsResponse,
-  PlaybackUpdateRequest,
   PluginAuthUpdateRequest,
   PluginProvider,
   PrepareFileArchiveParams,
@@ -1324,26 +1324,26 @@ export const getAudioStream = async (id: string, options?: RequestInit): Promise
 
 
 
-export type getPlaybackStatisticsResponse200 = {
-  data: PlaybackStatisticsResponse
+export type getConsumptionStatisticsResponse200 = {
+  data: ConsumptionStatisticsResponse
   status: 200
 }
 
-export type getPlaybackStatisticsResponse400 = {
+export type getConsumptionStatisticsResponse400 = {
   data: ApiProblem
   status: 400
 }
 
-export type getPlaybackStatisticsResponseSuccess = (getPlaybackStatisticsResponse200) & {
+export type getConsumptionStatisticsResponseSuccess = (getConsumptionStatisticsResponse200) & {
   headers: Headers;
 };
-export type getPlaybackStatisticsResponseError = (getPlaybackStatisticsResponse400) & {
+export type getConsumptionStatisticsResponseError = (getConsumptionStatisticsResponse400) & {
   headers: Headers;
 };
 
-export type getPlaybackStatisticsResponse = (getPlaybackStatisticsResponseSuccess | getPlaybackStatisticsResponseError)
+export type getConsumptionStatisticsResponse = (getConsumptionStatisticsResponseSuccess | getConsumptionStatisticsResponseError)
 
-export const getGetPlaybackStatisticsUrl = (params?: GetPlaybackStatisticsParams,) => {
+export const getGetConsumptionStatisticsUrl = (params?: GetConsumptionStatisticsParams,) => {
   const normalizedParams = new URLSearchParams();
 
   Object.entries(params || {}).forEach(([key, value]) => {
@@ -1355,15 +1355,15 @@ export const getGetPlaybackStatisticsUrl = (params?: GetPlaybackStatisticsParams
 
   const stringifiedParams = normalizedParams.toString();
 
-  return stringifiedParams.length > 0 ? `/api/playback/statistics?${stringifiedParams}` : `/api/playback/statistics`
+  return stringifiedParams.length > 0 ? `/api/consumption/statistics?${stringifiedParams}` : `/api/consumption/statistics`
 }
 
 /**
  * @summary Get Consumption Statistics.
  */
-export const getPlaybackStatistics = async (params?: GetPlaybackStatisticsParams, options?: RequestInit): Promise<getPlaybackStatisticsResponse> => {
+export const getConsumptionStatistics = async (params?: GetConsumptionStatisticsParams, options?: RequestInit): Promise<getConsumptionStatisticsResponse> => {
 
-  return orvalFetch<getPlaybackStatisticsResponse>(getGetPlaybackStatisticsUrl(params),
+  return orvalFetch<getConsumptionStatisticsResponse>(getGetConsumptionStatisticsUrl(params),
   {
     ...options,
     method: 'GET'
@@ -2807,91 +2807,91 @@ export const headEntityFile = async (id: string,
 
 
 
-export type updateEntityPlaybackResponse200 = {
+export type updateEntityConsumptionResponse200 = {
   data: EntityCard
   status: 200
 }
 
-export type updateEntityPlaybackResponse404 = {
+export type updateEntityConsumptionResponse404 = {
   data: ApiProblem
   status: 404
 }
 
-export type updateEntityPlaybackResponseSuccess = (updateEntityPlaybackResponse200) & {
+export type updateEntityConsumptionResponseSuccess = (updateEntityConsumptionResponse200) & {
   headers: Headers;
 };
-export type updateEntityPlaybackResponseError = (updateEntityPlaybackResponse404) & {
+export type updateEntityConsumptionResponseError = (updateEntityConsumptionResponse404) & {
   headers: Headers;
 };
 
-export type updateEntityPlaybackResponse = (updateEntityPlaybackResponseSuccess | updateEntityPlaybackResponseError)
+export type updateEntityConsumptionResponse = (updateEntityConsumptionResponseSuccess | updateEntityConsumptionResponseError)
 
-export const getUpdateEntityPlaybackUrl = (id: string,) => {
-
-
+export const getUpdateEntityConsumptionUrl = (id: string,) => {
 
 
-  return `/api/entities/${id}/playback`
+
+
+  return `/api/entities/${id}/consumption`
 }
 
 /**
- * @summary Update timed Entity resume and active consumption.
+ * @summary Update time-based Entity position and active consumption.
  */
-export const updateEntityPlayback = async (id: string,
-    playbackUpdateRequest: PlaybackUpdateRequest, options?: RequestInit): Promise<updateEntityPlaybackResponse> => {
+export const updateEntityConsumption = async (id: string,
+    consumptionUpdateRequest: ConsumptionUpdateRequest, options?: RequestInit): Promise<updateEntityConsumptionResponse> => {
 
-  return orvalFetch<updateEntityPlaybackResponse>(getUpdateEntityPlaybackUrl(id),
+  return orvalFetch<updateEntityConsumptionResponse>(getUpdateEntityConsumptionUrl(id),
   {
     ...options,
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json', ...options?.headers },
     body: JSON.stringify(
-      playbackUpdateRequest,)
+      consumptionUpdateRequest,)
   }
 );}
 
 
 
-export type createEntityPlaybackEventResponse200 = {
+export type createEntityConsumptionEventResponse200 = {
   data: EntityCard
   status: 200
 }
 
-export type createEntityPlaybackEventResponse404 = {
+export type createEntityConsumptionEventResponse404 = {
   data: ApiProblem
   status: 404
 }
 
-export type createEntityPlaybackEventResponseSuccess = (createEntityPlaybackEventResponse200) & {
+export type createEntityConsumptionEventResponseSuccess = (createEntityConsumptionEventResponse200) & {
   headers: Headers;
 };
-export type createEntityPlaybackEventResponseError = (createEntityPlaybackEventResponse404) & {
+export type createEntityConsumptionEventResponseError = (createEntityConsumptionEventResponse404) & {
   headers: Headers;
 };
 
-export type createEntityPlaybackEventResponse = (createEntityPlaybackEventResponseSuccess | createEntityPlaybackEventResponseError)
+export type createEntityConsumptionEventResponse = (createEntityConsumptionEventResponseSuccess | createEntityConsumptionEventResponseError)
 
-export const getCreateEntityPlaybackEventUrl = (id: string,) => {
-
-
+export const getCreateEntityConsumptionEventUrl = (id: string,) => {
 
 
-  return `/api/entities/${id}/playback/events`
+
+
+  return `/api/entities/${id}/consumption/events`
 }
 
 /**
  * @summary Create a timestamped Entity consumption event.
  */
-export const createEntityPlaybackEvent = async (id: string,
-    playbackEventCreateRequest: PlaybackEventCreateRequest, options?: RequestInit): Promise<createEntityPlaybackEventResponse> => {
+export const createEntityConsumptionEvent = async (id: string,
+    consumptionEventCreateRequest: ConsumptionEventCreateRequest, options?: RequestInit): Promise<createEntityConsumptionEventResponse> => {
 
-  return orvalFetch<createEntityPlaybackEventResponse>(getCreateEntityPlaybackEventUrl(id),
+  return orvalFetch<createEntityConsumptionEventResponse>(getCreateEntityConsumptionEventUrl(id),
   {
     ...options,
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...options?.headers },
     body: JSON.stringify(
-      playbackEventCreateRequest,)
+      consumptionEventCreateRequest,)
   }
 );}
 
@@ -4432,49 +4432,6 @@ export const getAudioTrackPatch = async (id: string,
     headers: { 'Content-Type': 'application/json', ...options?.headers },
     body: JSON.stringify(
       entityMetadataUpdateRequest,)
-  }
-);}
-
-
-
-export type recordAudioTrackPlayResponse200 = {
-  data: EntityCard
-  status: 200
-}
-
-export type recordAudioTrackPlayResponse404 = {
-  data: ApiProblem
-  status: 404
-}
-
-export type recordAudioTrackPlayResponseSuccess = (recordAudioTrackPlayResponse200) & {
-  headers: Headers;
-};
-export type recordAudioTrackPlayResponseError = (recordAudioTrackPlayResponse404) & {
-  headers: Headers;
-};
-
-export type recordAudioTrackPlayResponse = (recordAudioTrackPlayResponseSuccess | recordAudioTrackPlayResponseError)
-
-export const getRecordAudioTrackPlayUrl = (id: string,) => {
-
-
-
-
-  return `/api/audio-tracks/${id}/play`
-}
-
-/**
- * @summary Record Audio Track Play.
- */
-export const recordAudioTrackPlay = async (id: string, options?: RequestInit): Promise<recordAudioTrackPlayResponse> => {
-
-  return orvalFetch<recordAudioTrackPlayResponse>(getRecordAudioTrackPlayUrl(id),
-  {
-    ...options,
-    method: 'POST'
-
-
   }
 );}
 

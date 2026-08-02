@@ -5,7 +5,7 @@
  * OpenAPI spec version: 1.0.0
  */
 
-export type GetPlaybackStatisticsParams = {
+export type GetConsumptionStatisticsParams = {
 from?: string;
 to?: string;
 kind?: string;

@@ -8,12 +8,12 @@
     formatActiveDuration,
     niceAxisMax,
     rollingAverage,
-    type PlaybackDaySample,
-    type PlaybackSpanSample,
-  } from "$lib/stats/playback-stats";
+    type ConsumptionDaySample,
+    type ConsumptionSpanSample,
+  } from "$lib/stats/consumption-stats";
 
   interface Props {
-    series: PlaybackDaySample[];
+    series: ConsumptionDaySample[];
     /** Controls which event layers remain visible when the page is filtered. */
     showAccessed?: boolean;
     showCompleted?: boolean;
@@ -65,7 +65,7 @@
     const required = Math.max(1, Math.ceil(series.length / maxColumns));
     return GRANULARITY_STEPS.find((step) => step >= required) ?? required;
   });
-  const columns = $derived<PlaybackSpanSample[]>(aggregateDaySeries(series, groupSize));
+  const columns = $derived<ConsumptionSpanSample[]>(aggregateDaySeries(series, groupSize));
 
   const step = $derived(columns.length > 0 ? plotWidth / columns.length : plotWidth);
   const barWidth = $derived(Math.max(1.5, Math.min(20, step - (step > 5 ? 1.6 : 0.4))));

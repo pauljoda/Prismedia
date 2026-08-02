@@ -93,36 +93,36 @@ public sealed class EntityCapabilityService {
     /// Updates timed resume and consumption state using canonical Prismedia thresholds so all
     /// first-party clients converge on identical state for the same inputs. When
     /// <paramref name="completed"/> is <c>null</c> (the normal progress/stop
-    /// path) video/movie watched state is derived from <paramref name="resumeSeconds"/>
+    /// path) video/movie watched state is derived from <paramref name="positionSeconds"/>
     /// relative to the entity's known runtime: at or above <see cref="VideoWatchedFraction"/>
     /// the item is completed (and the completion count incremented), below <see cref="StartedFraction"/>
     /// it is treated as a fresh start, and in between the position is stored for resume.
     /// </summary>
     /// <param name="id">Entity identifier.</param>
-    /// <param name="resumeSeconds">Current playback position in seconds, when known.</param>
-    /// <param name="durationSeconds">Active viewing-time delta to accumulate, when reported.</param>
+    /// <param name="positionSeconds">Current time-based position in seconds, when known.</param>
+    /// <param name="activitySeconds">Active-time delta to accumulate, when reported.</param>
     /// <param name="completed">Explicit completion override; <c>null</c> derives from position.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
-    public async Task<EntityCard?> UpdatePlaybackAsync(
+    public async Task<EntityCard?> UpdateConsumptionAsync(
         Guid id,
-        double? resumeSeconds,
-        double? durationSeconds,
+        double? positionSeconds,
+        double? activitySeconds,
         bool? completed,
         CancellationToken cancellationToken) =>
-        await UpdatePlaybackAsync(id, resumeSeconds, durationSeconds, completed, null, cancellationToken);
+        await UpdateConsumptionAsync(id, positionSeconds, activitySeconds, completed, null, cancellationToken);
 
-    /// <summary>Updates playback position and active time in the client's local daily bucket.</summary>
-    public async Task<EntityCard?> UpdatePlaybackAsync(
+    /// <summary>Updates time-based position and active time in the client's local daily bucket.</summary>
+    public async Task<EntityCard?> UpdateConsumptionAsync(
         Guid id,
-        double? resumeSeconds,
-        double? durationSeconds,
+        double? positionSeconds,
+        double? activitySeconds,
         bool? completed,
         int? utcOffsetMinutes,
         CancellationToken cancellationToken) =>
         await UpdatePlaybackCoreAsync(
             id,
-            resumeSeconds,
-            activitySeconds: durationSeconds,
+            positionSeconds,
+            activitySeconds,
             activityKind: null,
             mediaDurationSeconds: null,
             completed,
@@ -287,7 +287,7 @@ public sealed class EntityCapabilityService {
     /// </summary>
     /// <param name="id">Entity identifier.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
-    public async Task<EntityCard?> RecordCompletedPlaybackAsync(Guid id, CancellationToken cancellationToken) {
+    public async Task<EntityCard?> RecordCompletedConsumptionAsync(Guid id, CancellationToken cancellationToken) {
         var now = _timeProvider.GetUtcNow();
         var card = await MutateWithConsumptionAsync(id, entity => {
             var consumption = GetOrAddDefaultCapability<CapabilityConsumption>(entity);
@@ -306,17 +306,17 @@ public sealed class EntityCapabilityService {
     /// <summary>
     /// Records an explicit playback-history event and updates the aggregate playback counters.
     /// </summary>
-    public async Task<EntityCard?> RecordPlaybackEventAsync(
+    public async Task<EntityCard?> RecordConsumptionEventAsync(
         Guid id,
         ConsumptionEventKind kind,
         DateTimeOffset? occurredAt,
         double? positionSeconds,
         double? durationSeconds,
         CancellationToken cancellationToken) =>
-        await RecordPlaybackEventAsync(id, kind, occurredAt, positionSeconds, durationSeconds, null, cancellationToken);
+        await RecordConsumptionEventAsync(id, kind, occurredAt, positionSeconds, durationSeconds, null, cancellationToken);
 
     /// <summary>Records one explicit consumption event, optionally tied to a playback session.</summary>
-    public async Task<EntityCard?> RecordPlaybackEventAsync(
+    public async Task<EntityCard?> RecordConsumptionEventAsync(
         Guid id,
         ConsumptionEventKind kind,
         DateTimeOffset? occurredAt,
@@ -332,13 +332,13 @@ public sealed class EntityCapabilityService {
                 durationSeconds,
                 sessionId,
                 cancellationToken),
-            ConsumptionEventKind.Completed => await RecordCompletedPlaybackAsync(
+            ConsumptionEventKind.Completed => await RecordCompletedConsumptionAsync(
                 id,
                 occurredAt ?? _timeProvider.GetUtcNow(),
                 positionSeconds,
                 durationSeconds,
                 cancellationToken),
-            ConsumptionEventKind.Skipped => await RecordSkippedPlaybackAsync(
+            ConsumptionEventKind.Skipped => await RecordSkippedConsumptionAsync(
                 id,
                 occurredAt ?? _timeProvider.GetUtcNow(),
                 positionSeconds,
@@ -350,7 +350,7 @@ public sealed class EntityCapabilityService {
     /// <summary>
     /// Records a completed playback event at a caller-supplied timestamp.
     /// </summary>
-    public async Task<EntityCard?> RecordCompletedPlaybackAsync(
+    public async Task<EntityCard?> RecordCompletedConsumptionAsync(
         Guid id,
         DateTimeOffset occurredAt,
         double? positionSeconds,
@@ -373,7 +373,7 @@ public sealed class EntityCapabilityService {
     /// <summary>
     /// Records a likely skip/quick-abandon event.
     /// </summary>
-    public async Task<EntityCard?> RecordSkippedPlaybackAsync(
+    public async Task<EntityCard?> RecordSkippedConsumptionAsync(
         Guid id,
         DateTimeOffset occurredAt,
         double? positionSeconds,

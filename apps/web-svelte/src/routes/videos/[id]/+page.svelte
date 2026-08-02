@@ -17,10 +17,8 @@
   import { useEntityDetailPage } from "$lib/components/entities/entity-detail-page-controller.svelte";
   import { fetchEntity, fetchEntityThumbnails, type EntityCardFull } from "$lib/api/entities";
   import { fetchSettingsValues, type LibrarySettings } from "$lib/api/settings";
-  import {
-    reportVideoPlayback,
-    updateEntityPlayback,
-  } from "$lib/api/playback";
+  import { updateEntityConsumption } from "$lib/api/consumption";
+  import { reportVideoPlayback } from "$lib/api/playback";
   import type { VideoPlaybackPlanResponse } from "$lib/api/generated/model";
   import {
     loadPlaybackPlan as loadPlaybackPlanRequest,
@@ -301,7 +299,7 @@
     if (!video || playbackBusy) return;
     playbackBusy = true;
     try {
-      await updateEntityPlayback(video.id, { completed: watched });
+      await updateEntityConsumption(video.id, { completed: watched });
       await refreshVideo();
     } catch {
       // best-effort; the card reflects the last known state on failure
@@ -317,7 +315,7 @@
     if (!video || playbackBusy) return;
     playbackBusy = true;
     try {
-      await updateEntityPlayback(video.id, { resumeSeconds: 0 });
+      await updateEntityConsumption(video.id, { positionSeconds: 0 });
       resumeApplied = true;
       playerHandle?.seekTo(0);
       await refreshVideo();
