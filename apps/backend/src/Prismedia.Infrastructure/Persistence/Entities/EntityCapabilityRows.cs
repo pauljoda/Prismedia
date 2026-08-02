@@ -9,7 +9,7 @@ public sealed class EntityDescriptionRow {
 }
 
 /// <summary>
-/// One user's engagement with one entity: playback state (videos/audio), reading
+/// One user's engagement with one Entity: consumption state, timed resume, reading
 /// progress (books/comics), favorite, and rating — all user opinions, kept apart from
 /// the entity's curation facts. One wide row per (user, entity) so shelves, filters,
 /// and native playback state resolve with a single join.
@@ -19,11 +19,13 @@ public sealed class UserEntityStateRow {
     public Guid EntityId { get; set; }
     public bool IsFavorite { get; set; }
     public int? RatingValue { get; set; }
-    public int PlayCount { get; set; }
+    public int AccessCount { get; set; }
+    public int CompletionCount { get; set; }
     public int SkipCount { get; set; }
-    public double PlayDurationSeconds { get; set; }
+    public double ActiveSeconds { get; set; }
     public double ResumeSeconds { get; set; }
-    public DateTimeOffset? LastPlayedAt { get; set; }
+    public DateTimeOffset? LastAccessedAt { get; set; }
+    public DateTimeOffset? LastActiveAt { get; set; }
     public DateTimeOffset? CompletedAt { get; set; }
     public Guid? ProgressCurrentEntityId { get; set; }
     public string ProgressUnit { get; set; } = "item";
@@ -38,35 +40,37 @@ public sealed class UserEntityStateRow {
     /// <see cref="UpdatedAt"/>, which records any change to the shared user-state row.
     /// </summary>
     public DateTimeOffset? ProgressUpdatedAt { get; set; }
+    public int ProgressConsumedCount { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }
 }
 
-public sealed class EntityPlaybackEventRow {
+public sealed class EntityConsumptionEventRow {
     public Guid Id { get; set; }
     public Guid EntityId { get; set; }
 
     /// <summary>Null marks pre-multi-user household history without a known owner.</summary>
     public Guid? UserId { get; set; }
 
-    public PlaybackEventKind Kind { get; set; }
+    public ConsumptionEventKind Kind { get; set; }
     public DateTimeOffset OccurredAt { get; set; }
     public double? PositionSeconds { get; set; }
     public double? DurationSeconds { get; set; }
+    public string? SessionId { get; set; }
     public DateTimeOffset CreatedAt { get; set; }
 }
 
 /// <summary>
-/// One bounded interval of active reading or audiobook listening. These rows are independent
-/// of completion/skip history so periodic heartbeats contribute time without becoming fake plays.
+/// One upserted daily active-duration bucket. Daily rows remain independent from discrete access,
+/// completion, and skip history so heartbeats never become fake sessions or plays.
 /// </summary>
-public sealed class EntityActivityEventRow {
+public sealed class EntityConsumptionDayRow {
     public Guid Id { get; set; }
     public Guid EntityId { get; set; }
     public Guid? UserId { get; set; }
-    public BookActivityKind Kind { get; set; }
-    public DateTimeOffset OccurredAt { get; set; }
+    public ConsumptionActivityKind Kind { get; set; }
+    public DateOnly ActivityDate { get; set; }
     public double DurationSeconds { get; set; }
-    public DateTimeOffset CreatedAt { get; set; }
+    public DateTimeOffset UpdatedAt { get; set; }
 }
 
 public sealed class EntityStatRow {

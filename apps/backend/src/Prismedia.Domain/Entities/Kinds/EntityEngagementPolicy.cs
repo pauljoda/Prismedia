@@ -16,7 +16,8 @@ public sealed record EntityEngagementPolicy {
     /// </param>
     public EntityEngagementPolicy(
         EntityEngagementMode mode,
-        bool derivesCompletionFromPlaybackFraction = false) {
+        bool derivesCompletionFromPlaybackFraction = false,
+        ConsumptionActivityKind? defaultActivityKind = null) {
         if (derivesCompletionFromPlaybackFraction && mode != EntityEngagementMode.Playback) {
             throw new ArgumentException(
                 "Playback-fraction completion requires playback engagement mode.",
@@ -25,6 +26,14 @@ public sealed record EntityEngagementPolicy {
 
         Mode = mode;
         DerivesCompletionFromPlaybackFraction = derivesCompletionFromPlaybackFraction;
+        DefaultActivityKind = defaultActivityKind ?? mode switch {
+            EntityEngagementMode.Playback => ConsumptionActivityKind.Viewing,
+            EntityEngagementMode.Reading => ConsumptionActivityKind.Reading,
+            _ => null
+        };
+        if (mode == EntityEngagementMode.None && DefaultActivityKind is not null) {
+            throw new ArgumentException("Entities without engagement cannot declare an activity kind.", nameof(defaultActivityKind));
+        }
     }
 
     /// <summary>Vocabulary and state family exposed for the kind.</summary>
@@ -32,4 +41,7 @@ public sealed record EntityEngagementPolicy {
 
     /// <summary>Whether position/runtime progress may infer completion for this kind.</summary>
     public bool DerivesCompletionFromPlaybackFraction { get; }
+
+    /// <summary>Activity mode used when a client reports duration without an explicit mode.</summary>
+    public ConsumptionActivityKind? DefaultActivityKind { get; }
 }

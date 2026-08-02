@@ -5,17 +5,19 @@ namespace Prismedia.Infrastructure.Entities.Mappers.Capabilities;
 
 /// <summary>
 /// Shared helpers over the wide <see cref="UserEntityStateRow"/>: which column families
-/// a row actually carries (playback vs reading progress vs opinion flags), and the
+    /// a row actually carries (consumption vs reading progress vs opinion flags), and the
 /// find-or-add upsert both capability mappers use.
 /// </summary>
 internal static class UserEntityStateColumns {
-    /// <summary>True when the row records any playback engagement (videos/audio).</summary>
-    internal static bool HasPlayback(UserEntityStateRow row) =>
-        row.PlayCount > 0 ||
+    /// <summary>True when the row records any entity consumption.</summary>
+    internal static bool HasConsumption(UserEntityStateRow row) =>
+        row.AccessCount > 0 ||
+        row.CompletionCount > 0 ||
         row.SkipCount > 0 ||
-        row.PlayDurationSeconds > 0 ||
+        row.ActiveSeconds > 0 ||
         row.ResumeSeconds > 0 ||
-        row.LastPlayedAt is not null ||
+        row.LastAccessedAt is not null ||
+        row.LastActiveAt is not null ||
         row.CompletedAt is not null;
 
     /// <summary>True when the row records any reading progress (books/comics).</summary>
@@ -25,7 +27,8 @@ internal static class UserEntityStateColumns {
         row.ProgressTotal != 0 ||
         row.ProgressLocation is not null ||
         row.ProgressCompletedAt is not null ||
-        row.ProgressUpdatedAt is not null;
+        row.ProgressUpdatedAt is not null ||
+        row.ProgressConsumedCount > 0;
 
     /// <summary>
     /// Finds the state row through EF's identity map. Hydration deliberately keeps this row

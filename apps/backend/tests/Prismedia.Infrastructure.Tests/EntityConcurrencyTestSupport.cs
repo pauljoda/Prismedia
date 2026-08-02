@@ -29,8 +29,8 @@ internal static class EntityConcurrencyTestSupport {
             repository,
             reads,
             new EfEntityProgressTopologyResolver(db),
-            playbackEvents: new EfPlaybackEventStore(db, user),
-            activityEvents: new EfEntityActivityStore(db, user),
+            consumptionEvents: new EfConsumptionEventStore(db, user),
+            consumptionActivities: new EfConsumptionActivityStore(db, user),
             timeProvider: timeProvider);
     }
 
@@ -105,7 +105,7 @@ internal static class EntityConcurrencyTestSupport {
         var state = await context.UserEntityStates.FindAsync([userId, entityId]);
         Assert.NotNull(state);
         state!.ResumeSeconds = resumeSeconds;
-        state.LastPlayedAt = lastPlayedAt;
+        state.LastActiveAt = lastPlayedAt;
         state.CompletedAt = completedAt;
         state.UpdatedAt = lastPlayedAt;
         await context.SaveChangesAsync();

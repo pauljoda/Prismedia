@@ -22,11 +22,13 @@ internal static partial class PrismediaModelConfiguration {
             entity.Property(row => row.EntityId).HasColumnName("entity_id");
             entity.Property(row => row.IsFavorite).HasColumnName("is_favorite");
             entity.Property(row => row.RatingValue).HasColumnName("rating_value");
-            entity.Property(row => row.PlayCount).HasColumnName("play_count");
+            entity.Property(row => row.AccessCount).HasColumnName("access_count");
+            entity.Property(row => row.CompletionCount).HasColumnName("completion_count");
             entity.Property(row => row.SkipCount).HasColumnName("skip_count");
-            entity.Property(row => row.PlayDurationSeconds).HasColumnName("play_duration_seconds");
+            entity.Property(row => row.ActiveSeconds).HasColumnName("active_seconds");
             entity.Property(row => row.ResumeSeconds).HasColumnName("resume_seconds");
-            entity.Property(row => row.LastPlayedAt).HasColumnName("last_played_at");
+            entity.Property(row => row.LastAccessedAt).HasColumnName("last_accessed_at");
+            entity.Property(row => row.LastActiveAt).HasColumnName("last_active_at");
             entity.Property(row => row.CompletedAt).HasColumnName("completed_at");
             entity.Property(row => row.ProgressCurrentEntityId).HasColumnName("progress_current_entity_id");
             entity.Property(row => row.ProgressUnit).HasColumnName("progress_unit").HasMaxLength(64).IsRequired();
@@ -36,10 +38,11 @@ internal static partial class PrismediaModelConfiguration {
             entity.Property(row => row.ProgressLocation).HasColumnName("progress_location");
             entity.Property(row => row.ProgressCompletedAt).HasColumnName("progress_completed_at");
             entity.Property(row => row.ProgressUpdatedAt).HasColumnName("progress_updated_at");
+            entity.Property(row => row.ProgressConsumedCount).HasColumnName("progress_consumed_count");
             entity.Property(row => row.UpdatedAt).HasColumnName("updated_at");
-            // Continue-watching shelves: one user's engagement ordered by recency.
-            entity.HasIndex(row => new { row.UserId, row.LastPlayedAt })
-                .HasFilter("last_played_at IS NOT NULL");
+            // Resume shelves: one user's consumption ordered by the latest real activity.
+            entity.HasIndex(row => new { row.UserId, row.LastActiveAt })
+                .HasFilter("last_active_at IS NOT NULL");
             entity.HasIndex(row => new { row.UserId, row.IsFavorite })
                 .HasFilter("is_favorite");
             entity.HasIndex(row => row.EntityId);
@@ -49,8 +52,8 @@ internal static partial class PrismediaModelConfiguration {
             entity.ToTable(table => table.HasCheckConstraint("ck_user_entity_states_progress_bounds", "progress_index >= 0 AND progress_total >= 0"));
         });
 
-        modelBuilder.Entity<EntityPlaybackEventRow>(entity => {
-            entity.ToTable("entity_playback_events");
+        modelBuilder.Entity<EntityConsumptionEventRow>(entity => {
+            entity.ToTable("entity_consumption_events");
             entity.HasKey(row => row.Id);
             entity.Property(row => row.Id).HasColumnName("id").ValueGeneratedNever();
             entity.Property(row => row.EntityId).HasColumnName("entity_id");
@@ -59,21 +62,25 @@ internal static partial class PrismediaModelConfiguration {
                 .HasColumnName("kind")
                 .HasMaxLength(64)
                 .IsRequired()
-                .HasConversion(value => value.ToCode(), value => value.DecodeAs<PlaybackEventKind>());
+                .HasConversion(value => value.ToCode(), value => value.DecodeAs<ConsumptionEventKind>());
             entity.Property(row => row.OccurredAt).HasColumnName("occurred_at");
             entity.Property(row => row.PositionSeconds).HasColumnName("position_seconds");
             entity.Property(row => row.DurationSeconds).HasColumnName("duration_seconds");
+            entity.Property(row => row.SessionId).HasColumnName("session_id").HasMaxLength(128);
             entity.Property(row => row.CreatedAt).HasColumnName("created_at");
             entity.HasIndex(row => row.OccurredAt);
             entity.HasIndex(row => new { row.EntityId, row.OccurredAt });
             entity.HasIndex(row => new { row.Kind, row.OccurredAt });
             entity.HasIndex(row => new { row.UserId, row.OccurredAt });
+            entity.HasIndex(row => new { row.UserId, row.SessionId, row.Kind })
+                .IsUnique()
+                .HasFilter("session_id IS NOT NULL");
             entity.HasOne<EntityRow>().WithMany().HasForeignKey(row => row.EntityId).OnDelete(DeleteBehavior.Cascade);
             entity.HasOne<UserRow>().WithMany().HasForeignKey(row => row.UserId).OnDelete(DeleteBehavior.Cascade);
         });
 
-        modelBuilder.Entity<EntityActivityEventRow>(entity => {
-            entity.ToTable("entity_activity_events");
+        modelBuilder.Entity<EntityConsumptionDayRow>(entity => {
+            entity.ToTable("entity_consumption_days");
             entity.HasKey(row => row.Id);
             entity.Property(row => row.Id).HasColumnName("id").ValueGeneratedNever();
             entity.Property(row => row.EntityId).HasColumnName("entity_id");
@@ -82,17 +89,18 @@ internal static partial class PrismediaModelConfiguration {
                 .HasColumnName("kind")
                 .HasMaxLength(64)
                 .IsRequired()
-                .HasConversion(value => value.ToCode(), value => value.DecodeAs<BookActivityKind>());
-            entity.Property(row => row.OccurredAt).HasColumnName("occurred_at");
+                .HasConversion(value => value.ToCode(), value => value.DecodeAs<ConsumptionActivityKind>());
+            entity.Property(row => row.ActivityDate).HasColumnName("activity_date");
             entity.Property(row => row.DurationSeconds).HasColumnName("duration_seconds");
-            entity.Property(row => row.CreatedAt).HasColumnName("created_at");
-            entity.HasIndex(row => row.OccurredAt);
-            entity.HasIndex(row => new { row.EntityId, row.OccurredAt });
-            entity.HasIndex(row => new { row.UserId, row.OccurredAt });
+            entity.Property(row => row.UpdatedAt).HasColumnName("updated_at");
+            entity.HasIndex(row => row.ActivityDate);
+            entity.HasIndex(row => new { row.EntityId, row.ActivityDate });
+            entity.HasIndex(row => new { row.UserId, row.ActivityDate });
+            entity.HasIndex(row => new { row.UserId, row.EntityId, row.Kind, row.ActivityDate }).IsUnique();
             entity.HasOne<EntityRow>().WithMany().HasForeignKey(row => row.EntityId).OnDelete(DeleteBehavior.Cascade);
             entity.HasOne<UserRow>().WithMany().HasForeignKey(row => row.UserId).OnDelete(DeleteBehavior.Cascade);
             entity.ToTable(table => table.HasCheckConstraint(
-                "ck_entity_activity_events_duration",
+                "ck_entity_consumption_days_duration",
                 "duration_seconds > 0"));
         });
 

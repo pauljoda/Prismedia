@@ -44,9 +44,9 @@ public sealed class PrismediaDbContext : DbContext {
 
     public DbSet<UserEntityStateRow> UserEntityStates => Set<UserEntityStateRow>();
 
-    public DbSet<EntityPlaybackEventRow> EntityPlaybackEvents => Set<EntityPlaybackEventRow>();
+    public DbSet<EntityConsumptionEventRow> EntityConsumptionEvents => Set<EntityConsumptionEventRow>();
 
-    public DbSet<EntityActivityEventRow> EntityActivityEvents => Set<EntityActivityEventRow>();
+    public DbSet<EntityConsumptionDayRow> EntityConsumptionDays => Set<EntityConsumptionDayRow>();
 
     public DbSet<EntityStatRow> EntityStats => Set<EntityStatRow>();
 
@@ -186,6 +186,9 @@ public sealed class PrismediaDbContext : DbContext {
                 .Property<uint>("Version")
                 .IsRowVersion();
             modelBuilder.Entity<UserEntityStateRow>()
+                .Property<uint>("Version")
+                .IsRowVersion();
+            modelBuilder.Entity<EntityConsumptionDayRow>()
                 .Property<uint>("Version")
                 .IsRowVersion();
         }

@@ -135,7 +135,7 @@ The current entity work should be steered away from a global graph abstraction.
 The acceptable shape is:
 
 - Domain entities represent library concepts and behavior.
-- EF rows persist entity records, child links, relationship links, capabilities, media files, playback state, settings, jobs, and provider data.
+- EF rows persist entity records, child links, relationship links, capabilities, media files, consumption state and daily activity, settings, jobs, and provider data.
 - `EntityChildLinkRow` and `EntityRelationshipLinkRow` are persistence tables, not an application-wide object graph.
 - `EfEntityRepository` may hydrate a bounded entity slice for a write use case, then save that slice with EF.
 - Browse/detail endpoints should prefer EF projections to DTOs instead of hydrating broad domain graphs.
@@ -147,7 +147,7 @@ Capabilities are optional behavior/state modules attached to a domain `Entity`. 
 deliberate patterns exist and must not be "corrected" into uniformity:
 
 - **Domain capabilities** are concrete `EntityCapability` subclasses in
-  `Prismedia.Domain/Capabilities` (description, dates, stats, technical, playback,
+  `Prismedia.Domain/Capabilities` (description, dates, stats, technical, consumption,
   markers, subtitles, fingerprints, source, classification, credits, position,
   progress, lifetime). They carry their own state and persist via per-capability EF
   mappers. A capability may legitimately be used by only one kind today (for example
@@ -180,7 +180,7 @@ Directly playable video is a definition facet, not a kind switch. `Movie`, stand
 shared probe/fingerprint/preview/trickplay/subtitle processing contract, direct playback
 defaults, and file-management capabilities. `PlayableVideoCapability` is a document marker
 emitted only when one of those entities directly owns a `source` file; it is deliberately
-distinct from user-state `PlaybackCapability`. The declared target video structure is
+distinct from the user-scoped `ConsumptionCapability`. The declared target video structure is
 `VideoSeries -> (VideoSeason | VideoEpisode)`, `VideoSeason -> VideoEpisode`, with `Movie`
 and standalone `Video` as root leaves. Every kind declares an `EntityStructurePolicy`; each
 child definition is the single source of truth for whether it may be a root and which parent

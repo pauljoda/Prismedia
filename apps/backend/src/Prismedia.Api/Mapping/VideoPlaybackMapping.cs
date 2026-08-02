@@ -22,7 +22,9 @@ internal static class VideoPlaybackMapping {
             SessionId = request.SessionId,
             PositionSeconds = request.PositionSeconds,
             DurationSeconds = request.DurationSeconds,
-            Completed = request.Completed
+            Completed = request.Completed,
+            ActivitySeconds = request.ActivitySeconds,
+            UtcOffsetMinutes = request.UtcOffsetMinutes
         };
 
     internal static VideoPlaybackPlanResponse ToContract(this VideoPlaybackPlanResult result) =>

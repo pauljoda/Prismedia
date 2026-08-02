@@ -352,7 +352,7 @@ public sealed class CollectionRuleEngineSqlTests {
                      CollectionRuleField.FileSize,
                      CollectionRuleField.Duration,
                      CollectionRuleField.Codec,
-                     CollectionRuleField.PlayCount,
+                     CollectionRuleField.AccessCount,
                      CollectionRuleField.SkipCount,
                      CollectionRuleField.Resolution,
                      CollectionRuleField.Interactive
@@ -471,7 +471,7 @@ public sealed class CollectionRuleEngineSqlTests {
 
         foreach (var kind in new[] { EntityKind.Video.ToCode(), EntityKind.AudioTrack.ToCode() }) {
             yield return Case("duration", "greater_than", 60, kind);
-            yield return Case("playCount", "greater_equal", 1, kind);
+            yield return Case(CollectionRuleField.AccessCount.ToCode(), "greater_equal", 1, kind);
             yield return Case("skipCount", "less_equal", 2, kind);
         }
 

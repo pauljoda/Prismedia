@@ -127,16 +127,16 @@ public sealed class UserEntityStateConcurrencyPostgresTests {
         }
 
         await using var verification = database.CreateContext();
-        var completedEvent = Assert.Single(await verification.EntityPlaybackEvents
+        var completedEvent = Assert.Single(await verification.EntityConsumptionEvents
             .Where(row => row.UserId == userId && row.EntityId == entityId &&
-                          row.Kind == PlaybackEventKind.Completed)
+                          row.Kind == ConsumptionEventKind.Completed)
             .ToArrayAsync());
         Assert.Equal(historicalCompletionAt, completedEvent.OccurredAt);
         var state = await verification.UserEntityStates.SingleAsync(row =>
             row.UserId == userId && row.EntityId == entityId);
-        Assert.Equal(1, state.PlayCount);
+        Assert.Equal(1, state.CompletionCount);
         Assert.Equal(120, state.ResumeSeconds);
-        Assert.Equal(newerSignalAt, state.LastPlayedAt);
+        Assert.Equal(newerSignalAt, state.LastActiveAt);
         Assert.Null(state.CompletedAt);
     }
 
@@ -175,18 +175,18 @@ public sealed class UserEntityStateConcurrencyPostgresTests {
             reset: true,
             location: "chapter-1",
             activitySeconds: 15,
-            activityKind: BookActivityKind.Reading,
+            activityKind: ConsumptionActivityKind.Reading,
             CancellationToken.None);
 
         await using var verification = database.CreateContext();
-        var activity = Assert.Single(await verification.EntityActivityEvents
+        var activity = Assert.Single(await verification.EntityConsumptionDays
             .Where(row => row.UserId == userId && row.EntityId == entityId)
             .ToArrayAsync());
-        Assert.Equal(BookActivityKind.Reading, activity.Kind);
+        Assert.Equal(ConsumptionActivityKind.Reading, activity.Kind);
         Assert.Equal(15, activity.DurationSeconds);
         var state = await verification.UserEntityStates.SingleAsync(row =>
             row.UserId == userId && row.EntityId == entityId);
-        Assert.Equal(15, state.PlayDurationSeconds);
+        Assert.Equal(15, state.ActiveSeconds);
         Assert.Equal(4, state.ProgressIndex);
         Assert.Equal(newerProgressAt, state.ProgressUpdatedAt);
         Assert.Equal(newerProgressAt, state.ProgressCompletedAt);
@@ -213,7 +213,7 @@ public sealed class UserEntityStateConcurrencyPostgresTests {
             var siblingState = await siblingUpdate.UserEntityStates.FindAsync([userId, entityId]);
             Assert.NotNull(siblingState);
             siblingState!.RatingValue = 5;
-            siblingState.LastPlayedAt = progressAt.AddHours(1);
+            siblingState.LastActiveAt = progressAt.AddHours(1);
             siblingState.UpdatedAt = progressAt.AddHours(1);
             await siblingUpdate.SaveChangesAsync();
         }
@@ -244,7 +244,7 @@ public sealed class UserEntityStateConcurrencyPostgresTests {
         Assert.Equal(2, state.ProgressIndex);
         Assert.Equal(progressSignalAt, state.ProgressUpdatedAt);
         Assert.Equal(5, state.RatingValue);
-        Assert.Equal(progressAt.AddHours(1), state.LastPlayedAt);
+        Assert.Equal(progressAt.AddHours(1), state.LastActiveAt);
     }
 
 }

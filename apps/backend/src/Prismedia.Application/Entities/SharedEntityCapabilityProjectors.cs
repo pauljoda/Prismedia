@@ -61,16 +61,18 @@ internal sealed class DescriptionCapabilityProjector : EntityCapabilityProjector
 }
 
 [EntityCapabilityProjector(60)]
-internal sealed class PlaybackCapabilityProjector : EntityCapabilityProjector<PlaybackCapability> {
-    public override PlaybackCapability? Project(EntityCapabilityProjectionContext context) =>
-        context.Entity.Playback is { } playback
-            ? new PlaybackCapability(
-                playback.PlayCount,
-                playback.SkipCount,
-                playback.PlayDuration.TotalSeconds,
-                playback.ResumeTime.TotalSeconds,
-                playback.LastPlayedAt,
-                playback.CompletedAt)
+internal sealed class ConsumptionCapabilityProjector : EntityCapabilityProjector<ConsumptionCapability> {
+    public override ConsumptionCapability? Project(EntityCapabilityProjectionContext context) =>
+        context.Entity.Consumption is { } consumption
+            ? new ConsumptionCapability(
+                consumption.AccessCount,
+                consumption.CompletionCount,
+                consumption.SkipCount,
+                consumption.ActiveDuration.TotalSeconds,
+                consumption.ResumeTime.TotalSeconds,
+                consumption.LastAccessedAt,
+                consumption.LastActiveAt,
+                consumption.CompletedAt)
             : null;
 }
 
@@ -258,7 +260,12 @@ internal sealed class ProgressCapabilityProjector : EntityCapabilityProjector<Pr
                 progress.Mode,
                 progress.CompletedAt,
                 progress.UpdatedAt,
-                Location: progress.Location)
+                Location: progress.Location,
+                ConsumedCount: progress.ConsumedCount,
+                ConsumedTotal: progress.Total,
+                ConsumedPercent: progress.Total > 0
+                    ? Math.Clamp(progress.ConsumedCount / (double)progress.Total, 0, 1)
+                    : 0)
             : null;
 }
 

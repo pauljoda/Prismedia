@@ -25,8 +25,8 @@ internal static class PlaybackStatisticsEndpoints {
                     return Results.BadRequest(new ApiProblem(ApiProblemCodes.InvalidEntityKind, $"Entity kind '{kind}' is not recognized."));
                 }
 
-                if (!TryDecodeOptional<PlaybackEventKind>(eventKind, out var decodedEventKind)) {
-                    return Results.BadRequest(new ApiProblem(ApiProblemCodes.InvalidPlaybackEventKind, $"Playback event kind '{eventKind}' is not recognized."));
+                if (!TryDecodeOptional<ConsumptionEventKind>(eventKind, out var decodedEventKind)) {
+                    return Results.BadRequest(new ApiProblem(ApiProblemCodes.InvalidConsumptionEventKind, $"Consumption event kind '{eventKind}' is not recognized."));
                 }
 
                 var upper = to ?? timeProvider.GetUtcNow();
@@ -58,7 +58,7 @@ internal static class PlaybackStatisticsEndpoints {
                 return Results.Ok(response);
             })
             .WithName("GetPlaybackStatistics")
-            .WithSummary("Get Playback Statistics.")
+            .WithSummary("Get Consumption Statistics.")
             .Produces<PlaybackStatisticsResponse>()
             .Produces<ApiProblem>(StatusCodes.Status400BadRequest);
 

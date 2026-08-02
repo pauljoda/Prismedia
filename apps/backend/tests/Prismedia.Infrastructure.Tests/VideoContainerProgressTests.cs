@@ -71,7 +71,7 @@ public sealed class VideoContainerProgressTests {
     }
 
     [Fact]
-    public async Task SeasonBoundaryCompletesCurrentSeasonAndContinuesSeriesIntoNextSeason() {
+    public async Task SeasonBoundaryContinuesSeriesWithoutClaimingUnwatchedEpisodes() {
         await using var fixture = await Fixture.CreateAsync();
 
         await fixture.Capabilities.UpdatePlaybackAsync(
@@ -89,12 +89,13 @@ public sealed class VideoContainerProgressTests {
         Assert.Null(seriesProgress.CompletedAt);
         Assert.Equal(SeasonOneEpisodeTwoId, seasonOneProgress!.CurrentEntityId);
         Assert.Equal(1, seasonOneProgress.Index);
-        Assert.NotNull(seasonOneProgress.CompletedAt);
+        Assert.Null(seasonOneProgress.CompletedAt);
+        Assert.Equal(1, seasonOneProgress.ConsumedCount);
         AssertNoProgressCursor(await fixture.ProgressAsync(SeasonTwoId));
     }
 
     [Fact]
-    public async Task EarlierSeasonPlaybackDoesNotMoveSeriesBackwardAfterSecondSeasonStarted() {
+    public async Task EarlierSeasonPlaybackMovesTheCurrentSeriesCursorBackward() {
         await using var fixture = await Fixture.CreateAsync();
         await fixture.Capabilities.UpdatePlaybackAsync(
             SeasonTwoEpisodeOneId,
@@ -113,14 +114,14 @@ public sealed class VideoContainerProgressTests {
         var seriesProgress = await fixture.ProgressAsync(SeriesId);
         var seasonOneProgress = await fixture.ProgressAsync(SeasonOneId);
 
-        Assert.Equal(SeasonTwoEpisodeOneId, seriesProgress!.CurrentEntityId);
-        Assert.Equal(2, seriesProgress.Index);
+        Assert.Equal(SeasonOneEpisodeOneId, seriesProgress!.CurrentEntityId);
+        Assert.Equal(0, seriesProgress.Index);
         Assert.Equal(SeasonOneEpisodeOneId, seasonOneProgress!.CurrentEntityId);
         Assert.Equal(0, seasonOneProgress.Index);
     }
 
     [Fact]
-    public async Task FinalEpisodeCompletesBothSeasonAndSeries() {
+    public async Task FinalEpisodeAloneDoesNotCompleteSeasonOrSeries() {
         await using var fixture = await Fixture.CreateAsync();
 
         await fixture.Capabilities.UpdatePlaybackAsync(
@@ -135,10 +136,39 @@ public sealed class VideoContainerProgressTests {
 
         Assert.Equal(SeasonTwoEpisodeTwoId, seriesProgress!.CurrentEntityId);
         Assert.Equal(3, seriesProgress.Index);
-        Assert.NotNull(seriesProgress.CompletedAt);
+        Assert.Null(seriesProgress.CompletedAt);
+        Assert.Equal(1, seriesProgress.ConsumedCount);
         Assert.Equal(SeasonTwoEpisodeTwoId, seasonProgress!.CurrentEntityId);
         Assert.Equal(1, seasonProgress.Index);
-        Assert.NotNull(seasonProgress.CompletedAt);
+        Assert.Null(seasonProgress.CompletedAt);
+        Assert.Equal(1, seasonProgress.ConsumedCount);
+    }
+
+    [Fact]
+    public async Task CompletingEveryEpisodeCompletesBothSeasonAndSeriesCoverage() {
+        await using var fixture = await Fixture.CreateAsync();
+
+        foreach (var episodeId in new[] {
+                     SeasonOneEpisodeOneId,
+                     SeasonOneEpisodeTwoId,
+                     SeasonTwoEpisodeOneId,
+                     SeasonTwoEpisodeTwoId
+                 }) {
+            await fixture.Capabilities.UpdatePlaybackAsync(
+                episodeId,
+                resumeSeconds: 95,
+                durationSeconds: null,
+                completed: null,
+                CancellationToken.None);
+        }
+
+        var seriesProgress = await fixture.ProgressAsync(SeriesId);
+        var seasonTwoProgress = await fixture.ProgressAsync(SeasonTwoId);
+
+        Assert.NotNull(seriesProgress!.CompletedAt);
+        Assert.Equal(4, seriesProgress.ConsumedCount);
+        Assert.NotNull(seasonTwoProgress!.CompletedAt);
+        Assert.Equal(2, seasonTwoProgress.ConsumedCount);
     }
 
     private sealed class Fixture : IAsyncDisposable {
@@ -188,8 +218,8 @@ public sealed class VideoContainerProgressTests {
                     user,
                     repository,
                     ThumbnailContributors.For(db),
-                    new EfEntityProgressTopologyResolver(db)),
-                new EfEntityProgressTopologyResolver(db),
+                    new EfEntityProgressTopologyResolver(db, user)),
+                new EfEntityProgressTopologyResolver(db, user),
                 timeProvider: new FixedTimeProvider(now));
             return new Fixture(db, repository, capabilities);
         }

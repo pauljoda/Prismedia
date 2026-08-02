@@ -17,7 +17,8 @@ public sealed class CapabilityProgress : EntityCapability {
         ReaderMode? mode = null,
         DateTimeOffset? completedAt = null,
         DateTimeOffset? updatedAt = null,
-        string? location = null) {
+        string? location = null,
+        int consumedCount = 0) {
         CurrentEntityId = currentEntityId;
         Unit = unit;
         Index = index;
@@ -26,6 +27,13 @@ public sealed class CapabilityProgress : EntityCapability {
         CompletedAt = completedAt;
         UpdatedAt = updatedAt;
         Location = location;
+        ConsumedCount = completedAt is not null && total > 0
+            ? total
+            : consumedCount > 0
+                ? consumedCount
+                : currentEntityId is not null && total > 0
+                    ? Math.Clamp(index + 1, 0, total)
+                    : 0;
     }
 
     /// <inheritdoc />
@@ -37,6 +45,12 @@ public sealed class CapabilityProgress : EntityCapability {
     public ReaderMode? Mode { get; private set; }
     public DateTimeOffset? CompletedAt { get; private set; }
     public DateTimeOffset? UpdatedAt { get; private set; }
+
+    /// <summary>
+    /// Number of units consumed independently from the current cursor. This lets the current
+    /// location move backward while completion/coverage percentage remains meaningful.
+    /// </summary>
+    public int ConsumedCount { get; private set; }
 
     /// <summary>
     /// Opaque format-specific resume locator (e.g. an EPUB CFI). Null for unit-only
@@ -57,7 +71,8 @@ public sealed class CapabilityProgress : EntityCapability {
         ReaderMode? mode,
         DateTimeOffset updatedAt,
         string? location = null,
-        bool completed = false) {
+        bool completed = false,
+        int? consumedCount = null) {
         if (!AcceptsProgressSignal(updatedAt)) {
             return false;
         }
@@ -68,10 +83,15 @@ public sealed class CapabilityProgress : EntityCapability {
         Total = total;
         Mode = mode;
         Location = location;
-        CompletedAt = null;
         UpdatedAt = updatedAt;
+        if (consumedCount is { } value) {
+            ConsumedCount = Math.Max(0, value);
+        } else if (total > 0) {
+            ConsumedCount = Math.Max(ConsumedCount, Math.Clamp(index + 1, 0, total));
+        }
         if (completed) {
             CompletedAt = updatedAt;
+            ConsumedCount = Math.Max(ConsumedCount, Math.Max(0, consumedCount ?? total));
         }
         return true;
     }

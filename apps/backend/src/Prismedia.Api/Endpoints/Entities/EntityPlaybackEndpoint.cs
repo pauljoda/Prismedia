@@ -12,9 +12,14 @@ internal static class EntityPlaybackEndpoint {
             EntityCapabilityService capabilities,
             CancellationToken cancellationToken) =>
             EntityEndpointResults.ToResult(id, await capabilities.UpdatePlaybackAsync(
-                id, request.ResumeSeconds, request.DurationSeconds, request.Completed, cancellationToken)))
+                id,
+                request.ResumeSeconds,
+                request.DurationSeconds,
+                request.Completed,
+                request.UtcOffsetMinutes,
+                cancellationToken)))
             .WithName("UpdateEntityPlayback")
-            .WithSummary("Update Entity Playback.")
+            .WithSummary("Update timed Entity resume and active consumption.")
             .Produces<EntityCard>()
             .Produces<ApiProblem>(StatusCodes.Status404NotFound);
 
@@ -29,9 +34,10 @@ internal static class EntityPlaybackEndpoint {
                 request.OccurredAt,
                 request.PositionSeconds,
                 request.DurationSeconds,
+                request.SessionId,
                 cancellationToken)))
             .WithName("CreateEntityPlaybackEvent")
-            .WithSummary("Create Entity Playback Event.")
+            .WithSummary("Create a timestamped Entity consumption event.")
             .Produces<EntityCard>()
             .Produces<ApiProblem>(StatusCodes.Status404NotFound);
 

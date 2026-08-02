@@ -302,7 +302,7 @@ public sealed partial class EfEntityReadService : IEntityReadService {
             entity,
             recency = states
                 .Where(state => state.UserId == userId && state.EntityId == entity.Id)
-                .Select(state => state.LastPlayedAt ??
+                .Select(state => state.LastActiveAt ??
                     (state.ProgressCurrentEntityId != null || state.ProgressIndex > 0 || state.ProgressCompletedAt != null
                         ? state.ProgressUpdatedAt ?? state.UpdatedAt
                         : null))
@@ -407,12 +407,12 @@ public sealed partial class EfEntityReadService : IEntityReadService {
             query = wantsPlayed
                 ? query.Where(entity =>
                     states.Any(state => state.UserId == userId && state.EntityId == entity.Id &&
-                        (state.CompletedAt != null || state.PlayCount > 0 || state.ResumeSeconds > 0)) ||
+                        (state.CompletedAt != null || state.AccessCount > 0 || state.ResumeSeconds > 0)) ||
                     states.Any(state => state.UserId == userId && state.EntityId == entity.Id &&
                         (state.ProgressCompletedAt != null || state.ProgressCurrentEntityId != null || state.ProgressIndex > 0)))
                 : query.Where(entity =>
                     !states.Any(state => state.UserId == userId && state.EntityId == entity.Id &&
-                        (state.CompletedAt != null || state.PlayCount > 0 || state.ResumeSeconds > 0)) &&
+                        (state.CompletedAt != null || state.AccessCount > 0 || state.ResumeSeconds > 0)) &&
                     !states.Any(state => state.UserId == userId && state.EntityId == entity.Id &&
                         (state.ProgressCompletedAt != null || state.ProgressCurrentEntityId != null || state.ProgressIndex > 0)));
         }
@@ -465,7 +465,7 @@ public sealed partial class EfEntityReadService : IEntityReadService {
             "unwatched" or "unread" or "unstarted" or "new" =>
                 query.Where(entity =>
                     !states.Any(state => state.UserId == userId && state.EntityId == entity.Id &&
-                        (state.CompletedAt != null || state.PlayCount > 0 || state.ResumeSeconds > 0)) &&
+                        (state.CompletedAt != null || state.AccessCount > 0 || state.ResumeSeconds > 0)) &&
                     !states.Any(state => state.UserId == userId && state.EntityId == entity.Id &&
                         (state.ProgressCompletedAt != null || state.ProgressCurrentEntityId != null || state.ProgressIndex > 0))),
             "in-progress" or "inprogress" or "in_progress" or "reading" or "watching" =>
@@ -751,6 +751,10 @@ public sealed partial class EfEntityReadService : IEntityReadService {
                     ? progressCapability with {
                         WorkIndex = position.Index,
                         WorkTotal = position.Total,
+                        ConsumedTotal = position.Total,
+                        ConsumedPercent = position.Total > 0
+                            ? Math.Clamp(progressCapability.ConsumedCount / (double)position.Total, 0, 1)
+                            : 0,
                     }
                     : capability).ToArray()
         };

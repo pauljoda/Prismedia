@@ -308,8 +308,8 @@ public static class DependencyInjection {
         services.AddScoped<IHlsAssetService, HlsAssetService>();
         services.AddScoped<IVideoPlaybackPlanService, VideoPlaybackPlanService>();
         services.AddScoped<IPlaybackSessionService, PlaybackSessionService>();
-        services.AddScoped<IPlaybackEventStore, EfPlaybackEventStore>();
-        services.AddScoped<IEntityActivityStore, EfEntityActivityStore>();
+        services.AddScoped<IConsumptionEventStore, EfConsumptionEventStore>();
+        services.AddScoped<IConsumptionActivityStore, EfConsumptionActivityStore>();
         services.AddScoped<IPlaybackStatisticsService, EfPlaybackStatisticsService>();
         services.AddScoped<ITrickplayService, TrickplayService>();
         services.AddScoped<IVideoSubtitleAssetService>(provider =>

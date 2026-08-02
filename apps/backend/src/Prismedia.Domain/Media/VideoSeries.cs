@@ -32,7 +32,12 @@ public sealed class VideoSeriesEntityKindDefinition() : EntityKindDefinition<Vid
         supportsFileDeletion: true,
         prunesWhenEmpty: true,
         mediaQualityFamily: EntityMediaQualityFamily.Video),
-    defaultCapabilities: static () => [new CapabilityCredits(), new CapabilityProgress()]) {
+    defaultCapabilities: static () =>
+    [
+        new CapabilityCredits(),
+        new CapabilityProgress(),
+        new CapabilityConsumption()
+    ]) {
     /// <inheritdoc />
     public override EntityProgressTopology ProgressTopology => EntityProgressTopology.OrderedContainer(EntityKind.VideoEpisode);
 
@@ -135,7 +140,8 @@ public sealed class VideoSeasonEntityKindDefinition() : RootEntityKindDefinition
         new CapabilitySource(),
         new CapabilityPosition(),
         new CapabilityCredits(),
-        new CapabilityProgress()
+        new CapabilityProgress(),
+        new CapabilityConsumption()
     ]) {
     /// <inheritdoc />
     public override EntityProgressTopology ProgressTopology => EntityProgressTopology.OrderedContainer(EntityKind.VideoEpisode);

@@ -36,7 +36,8 @@ internal sealed class ProgressCapabilityMapper(PrismediaDbContext db, ICurrentUs
             row.ProgressMode is not null && row.ProgressMode.TryDecodeAs<ReaderMode>(out var mode) ? mode : null,
             row.ProgressCompletedAt,
             row.ProgressUpdatedAt ?? row.UpdatedAt,
-            row.ProgressLocation));
+            row.ProgressLocation,
+            row.ProgressConsumedCount));
     }
 
     public async Task PersistAsync(Entity entity, CancellationToken cancellationToken) {
@@ -57,6 +58,7 @@ internal sealed class ProgressCapabilityMapper(PrismediaDbContext db, ICurrentUs
         row.ProgressCompletedAt = progress.CompletedAt;
         var now = DateTimeOffset.UtcNow;
         row.ProgressUpdatedAt = progress.UpdatedAt ?? row.ProgressUpdatedAt ?? now;
+        row.ProgressConsumedCount = progress.ConsumedCount;
         row.UpdatedAt = now;
     }
 }

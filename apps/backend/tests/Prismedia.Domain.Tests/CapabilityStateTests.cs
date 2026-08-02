@@ -18,126 +18,137 @@ public sealed class CapabilityStateTests {
     }
 
     [Fact]
-    public void RecordCompletedIncrementsPlayCountOnlyOnTransition() {
-        var playback = new CapabilityPlayback();
+    public void RecordCompletedIncrementsCompletionCountOnlyOnTransition() {
+        var consumption = new CapabilityConsumption();
         var at = DateTimeOffset.Parse("2026-05-19T10:00:00Z");
 
-        playback.RecordCompleted(at);
-        playback.RecordCompleted(at.AddSeconds(1));
+        consumption.RecordCompleted(at);
+        consumption.RecordCompleted(at.AddSeconds(1));
 
         // Repeated completion signals within one watched state are idempotent.
-        Assert.Equal(1, playback.Value.PlayCount);
-        Assert.Equal(TimeSpan.Zero, playback.Value.ResumeTime);
-        Assert.NotNull(playback.Value.CompletedAt);
+        Assert.Equal(1, consumption.Value.CompletionCount);
+        Assert.Equal(TimeSpan.Zero, consumption.Value.ResumeTime);
+        Assert.NotNull(consumption.Value.CompletedAt);
     }
 
     [Fact]
-    public void RecordCompletedPlayIncrementsAlreadyCompletedItems() {
-        var playback = new CapabilityPlayback();
+    public void RecordCompletedOccurrenceIncrementsAlreadyCompletedItems() {
+        var consumption = new CapabilityConsumption();
         var at = DateTimeOffset.Parse("2026-05-19T10:00:00Z");
 
-        playback.RecordCompletedPlay(at);
-        playback.RecordCompletedPlay(at.AddMinutes(4));
+        consumption.RecordCompletedOccurrence(at);
+        consumption.RecordCompletedOccurrence(at.AddMinutes(4));
 
-        Assert.Equal(2, playback.Value.PlayCount);
-        Assert.Equal(TimeSpan.Zero, playback.Value.ResumeTime);
-        Assert.Equal(at.AddMinutes(4), playback.Value.CompletedAt);
+        Assert.Equal(2, consumption.Value.CompletionCount);
+        Assert.Equal(TimeSpan.Zero, consumption.Value.ResumeTime);
+        Assert.Equal(at.AddMinutes(4), consumption.Value.CompletedAt);
     }
 
     [Fact]
     public void RecordStartOverReArmsCompletionForAnotherCount() {
-        var playback = new CapabilityPlayback();
+        var playback = new CapabilityConsumption();
         var at = DateTimeOffset.Parse("2026-05-19T10:00:00Z");
 
         playback.RecordCompleted(at);
         playback.RecordStartOver(at.AddMinutes(1));
         playback.RecordCompleted(at.AddMinutes(2));
 
-        Assert.Equal(2, playback.Value.PlayCount);
+        Assert.Equal(2, playback.Value.CompletionCount);
         Assert.Equal(at.AddMinutes(2), playback.Value.CompletedAt);
     }
 
     [Fact]
     public void RecordResumeLeavesCountAndCompletionUntouched() {
-        var playback = new CapabilityPlayback();
+        var playback = new CapabilityConsumption();
         var at = DateTimeOffset.Parse("2026-05-19T10:00:00Z");
 
         playback.RecordCompleted(at);
         playback.RecordResume(TimeSpan.FromSeconds(42), at.AddMinutes(1));
 
         // A mid-watch resume report after completion stores the position without
-        // clearing the watched state or advancing the play count.
-        Assert.Equal(1, playback.Value.PlayCount);
+        // clearing the watched state or advancing the completion count.
+        Assert.Equal(1, playback.Value.CompletionCount);
         Assert.Equal(TimeSpan.FromSeconds(42), playback.Value.ResumeTime);
         Assert.NotNull(playback.Value.CompletedAt);
     }
 
     [Fact]
-    public void MarkWatchedAndUnwatchedTogglesCompletionIndependentlyOfResume() {
-        var playback = new CapabilityPlayback();
+    public void MarkCompletedAndIncompleteToggleStateIndependentlyOfResume() {
+        var consumption = new CapabilityConsumption();
         var at = DateTimeOffset.Parse("2026-05-19T10:00:00Z");
 
-        playback.RecordResume(TimeSpan.FromSeconds(42), at);
-        playback.MarkWatched(at.AddSeconds(1));
+        consumption.RecordResume(TimeSpan.FromSeconds(42), at);
+        consumption.MarkCompleted(at.AddSeconds(1));
 
-        // Marking watched sets completion and counts the play without disturbing the resume point.
-        Assert.Equal(1, playback.Value.PlayCount);
-        Assert.Equal(TimeSpan.FromSeconds(42), playback.Value.ResumeTime);
-        Assert.NotNull(playback.Value.CompletedAt);
+        Assert.Equal(1, consumption.Value.CompletionCount);
+        Assert.Equal(TimeSpan.FromSeconds(42), consumption.Value.ResumeTime);
+        Assert.NotNull(consumption.Value.CompletedAt);
 
-        playback.MarkUnwatched(at.AddSeconds(2));
+        consumption.MarkIncomplete(at.AddSeconds(2));
 
-        // Marking unwatched clears completion, again leaving the resume point and count intact.
-        Assert.Equal(1, playback.Value.PlayCount);
-        Assert.Equal(TimeSpan.FromSeconds(42), playback.Value.ResumeTime);
-        Assert.Null(playback.Value.CompletedAt);
+        Assert.Equal(1, consumption.Value.CompletionCount);
+        Assert.Equal(TimeSpan.FromSeconds(42), consumption.Value.ResumeTime);
+        Assert.Null(consumption.Value.CompletedAt);
     }
 
     [Fact]
     public void PlaybackAccumulatesDurationAndClearsResumeOnCompletion() {
-        var playback = new CapabilityPlayback();
+        var playback = new CapabilityConsumption();
         var completedAt = DateTimeOffset.Parse("2026-05-19T10:00:00Z");
 
         playback.RecordResume(TimeSpan.FromSeconds(12), completedAt.AddMinutes(-1));
-        playback.AccumulatePlayDuration(TimeSpan.FromSeconds(30));
+        playback.AccumulateActiveDuration(TimeSpan.FromSeconds(30), completedAt.AddSeconds(-1));
         playback.RecordCompleted(completedAt);
 
-        Assert.Equal(1, playback.Value.PlayCount);
-        Assert.Equal(TimeSpan.FromSeconds(30), playback.Value.PlayDuration);
+        Assert.Equal(1, playback.Value.CompletionCount);
+        Assert.Equal(TimeSpan.FromSeconds(30), playback.Value.ActiveDuration);
         Assert.Equal(TimeSpan.Zero, playback.Value.ResumeTime);
         Assert.Equal(completedAt, playback.Value.CompletedAt);
     }
 
     [Fact]
     public void RecordSkippedIncrementsSkipCountWithoutChangingCompletion() {
-        var playback = new CapabilityPlayback();
+        var playback = new CapabilityConsumption();
         var completedAt = DateTimeOffset.Parse("2026-05-19T10:00:00Z");
         var skippedAt = completedAt.AddMinutes(5);
 
         playback.RecordCompleted(completedAt);
         playback.RecordSkipped(skippedAt);
 
-        Assert.Equal(1, playback.Value.PlayCount);
+        Assert.Equal(1, playback.Value.CompletionCount);
         Assert.Equal(1, playback.Value.SkipCount);
         Assert.Equal(completedAt, playback.Value.CompletedAt);
-        Assert.Equal(skippedAt, playback.Value.LastPlayedAt);
+        Assert.Equal(skippedAt, playback.Value.LastActiveAt);
     }
 
     [Fact]
     public void HistoricalCompletedAndSkippedEventsIncreaseCountersWithoutRegressingNewerPlaybackState() {
-        var playback = new CapabilityPlayback();
+        var playback = new CapabilityConsumption();
         var historicalAt = DateTimeOffset.Parse("2026-05-19T10:00:00Z");
         var newerAt = historicalAt.AddMinutes(5);
         playback.RecordResume(TimeSpan.FromSeconds(120), newerAt);
 
-        playback.RecordCompletedPlay(historicalAt);
+        playback.RecordCompletedOccurrence(historicalAt);
         playback.RecordSkipped(historicalAt.AddMinutes(1));
 
-        Assert.Equal(1, playback.Value.PlayCount);
+        Assert.Equal(1, playback.Value.CompletionCount);
         Assert.Equal(1, playback.Value.SkipCount);
         Assert.Equal(TimeSpan.FromSeconds(120), playback.Value.ResumeTime);
-        Assert.Equal(newerAt, playback.Value.LastPlayedAt);
+        Assert.Equal(newerAt, playback.Value.LastActiveAt);
         Assert.Null(playback.Value.CompletedAt);
+    }
+
+    [Fact]
+    public void RecordAccessedTracksEachOpenAndKeepsNewestTimestamp() {
+        var consumption = new CapabilityConsumption();
+        var latest = DateTimeOffset.Parse("2026-05-19T10:05:00Z");
+
+        consumption.RecordAccessed(latest);
+        consumption.RecordAccessed(latest.AddMinutes(-5));
+
+        Assert.Equal(2, consumption.Value.AccessCount);
+        Assert.Equal(latest, consumption.Value.LastAccessedAt);
+        Assert.Equal(latest, consumption.Value.LastActiveAt);
     }
 
     [Fact]

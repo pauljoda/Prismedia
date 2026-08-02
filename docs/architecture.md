@@ -64,7 +64,7 @@ Key rules:
 - Source-backed images and audio tracks persist direct library-root ownership. When roots overlap,
   the most-specific configured filesystem root owns the source regardless of scan order, enabled
   state, or media-kind scan flags.
-- EF Core persists entity records, capability/detail rows, child links, relationship links, media files, playback state, settings, and jobs.
+- EF Core persists entity records, capability/detail rows, child links, relationship links, media files, consumption state and daily activity, settings, and jobs.
 - Child and relationship links are persistence structures, not a global `EntityGraph` runtime.
 - Imported stash data is normalized into Prismedia-owned records.
 - Provider provenance must be persisted for auditability and future provider expansion.
@@ -83,7 +83,7 @@ IEntityRef          id + kind
 - References cross aggregate and relationship boundaries.
 - Summaries feed shared thumbnail, grid, picker, and shelf surfaces.
 - Documents feed detail pages and capability-driven actions.
-- Kind-specific pages start from the Entity document and read playback,
+- Kind-specific pages start from the Entity document and read consumption and playback-plan data,
   description, images, positions, files, acquisition, and other behavior from
   capabilities. They do not require a parallel movie/book/show API shape.
 - `GET /api/entities/{id}` is the canonical document read. Kind-prefixed routes

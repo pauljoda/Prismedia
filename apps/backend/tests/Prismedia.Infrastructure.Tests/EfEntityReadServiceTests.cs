@@ -1991,8 +1991,8 @@ public sealed class EfEntityReadServiceTests {
             new EntityRow { Id = readBook, KindCode = EntityKind.Book.ToCode(), Title = "Read", CreatedAt = now, UpdatedAt = now },
             new EntityRow { Id = inProgressBook, KindCode = EntityKind.Book.ToCode(), Title = "Reading", CreatedAt = now, UpdatedAt = now });
         db.UserEntityStates.AddRange(
-            new UserEntityStateRow { UserId = TestUserContext.UserId, EntityId = watchedVideo, PlayCount = 1, CompletedAt = now, UpdatedAt = now },
-            new UserEntityStateRow { UserId = TestUserContext.UserId, EntityId = inProgressVideo, PlayCount = 0, ResumeSeconds = 42, UpdatedAt = now });
+            new UserEntityStateRow { UserId = TestUserContext.UserId, EntityId = watchedVideo, AccessCount = 1, CompletedAt = now, UpdatedAt = now },
+            new UserEntityStateRow { UserId = TestUserContext.UserId, EntityId = inProgressVideo, AccessCount = 0, ResumeSeconds = 42, UpdatedAt = now });
         db.UserEntityStates.AddRange(
             new UserEntityStateRow { UserId = TestUserContext.UserId, EntityId = readBook, ProgressUnit = "page", ProgressIndex = 30, ProgressTotal = 30, ProgressCompletedAt = now, UpdatedAt = now },
             new UserEntityStateRow { UserId = TestUserContext.UserId, EntityId = inProgressBook, ProgressUnit = "page", ProgressIndex = 5, ProgressTotal = 30, UpdatedAt = now });
@@ -2117,8 +2117,8 @@ public sealed class EfEntityReadServiceTests {
             new EntityRow { Id = playedLastWeek, KindCode = EntityKind.Video.ToCode(), Title = "Last Week", CreatedAt = now, UpdatedAt = now },
             new EntityRow { Id = neverPlayed, KindCode = EntityKind.Video.ToCode(), Title = "Never", CreatedAt = now, UpdatedAt = now });
         db.UserEntityStates.AddRange(
-            new UserEntityStateRow { UserId = TestUserContext.UserId, EntityId = playedToday, PlayCount = 1, LastPlayedAt = now, UpdatedAt = now },
-            new UserEntityStateRow { UserId = TestUserContext.UserId, EntityId = playedLastWeek, PlayCount = 1, LastPlayedAt = now.AddDays(-7), UpdatedAt = now.AddDays(-7) });
+            new UserEntityStateRow { UserId = TestUserContext.UserId, EntityId = playedToday, AccessCount = 1, LastActiveAt = now, UpdatedAt = now },
+            new UserEntityStateRow { UserId = TestUserContext.UserId, EntityId = playedLastWeek, AccessCount = 1, LastActiveAt = now.AddDays(-7), UpdatedAt = now.AddDays(-7) });
         await db.SaveChangesAsync();
 
         var service = CreateService(db);
@@ -2226,7 +2226,7 @@ public sealed class EfEntityReadServiceTests {
             Id = Guid.NewGuid(), EntityId = nsfwPlayedWithFile, Role = EntityFileRole.Source, Path = "/m/b.jpg", CreatedAt = now, UpdatedAt = now,
         });
         db.UserEntityStates.Add(new UserEntityStateRow {
-            UserId = TestUserContext.UserId, EntityId = nsfwPlayedWithFile, PlayCount = 3, LastPlayedAt = now, UpdatedAt = now });
+            UserId = TestUserContext.UserId, EntityId = nsfwPlayedWithFile, AccessCount = 3, LastActiveAt = now, UpdatedAt = now });
         db.UserEntityStates.Add(new UserEntityStateRow {
             UserId = TestUserContext.UserId, EntityId = sfwReadingNoFile, ProgressIndex = 4, ProgressTotal = 10, UpdatedAt = now });
         await db.SaveChangesAsync();

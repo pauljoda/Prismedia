@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Prismedia.Application.Entities;
+using Prismedia.Application.Security;
 using Prismedia.Domain.Entities;
 using Prismedia.Infrastructure.Persistence;
 using Prismedia.Infrastructure.Persistence.Entities;
@@ -10,7 +11,9 @@ namespace Prismedia.Infrastructure.Entities;
 /// EF implementation of the progress-topology port. It deliberately reads definition-declared
 /// topology and persisted parent links instead of maintaining a second kind registry here.
 /// </summary>
-public sealed class EfEntityProgressTopologyResolver(PrismediaDbContext db) : IEntityProgressTopologyResolver {
+public sealed class EfEntityProgressTopologyResolver(
+    PrismediaDbContext db,
+    ICurrentUserContext? currentUser = null) : IEntityProgressTopologyResolver {
     private const int MaximumStructuralDepth = 32;
 
     /// <inheritdoc />
@@ -151,12 +154,20 @@ public sealed class EfEntityProgressTopologyResolver(PrismediaDbContext db) : IE
             var ordered = await LoadOrderedScopeItemsAsync(owner, container, item.Id, cancellationToken);
             var position = ordered.ToList().FindIndex(candidate => candidate == item.Id);
             if (position >= 0) {
+                var completedCount = currentUser?.UserId is { } userId && userId != Guid.Empty
+                    ? await db.UserEntityStates.AsNoTracking().CountAsync(
+                        state => state.UserId == userId &&
+                                 ordered.Contains(state.EntityId) &&
+                                 state.CompletedAt != null,
+                        cancellationToken)
+                    : 0;
                 scopes.Add(new OrderedProgressScope(
                     owner.Id,
                     item.Id,
                     position,
                     ordered.Count,
-                    position + 1 < ordered.Count ? ordered[position + 1] : null));
+                    position + 1 < ordered.Count ? ordered[position + 1] : null,
+                    completedCount));
             }
         }
 

@@ -5,13 +5,12 @@ using Prismedia.Contracts.Playback;
 using Prismedia.Domain.Entities;
 using Prismedia.Infrastructure.Entities;
 using Prismedia.Infrastructure.Persistence;
-using Prismedia.Infrastructure.Persistence.Entities;
 
 namespace Prismedia.Infrastructure.Playback;
 
 /// <summary>
-/// EF Core read projection for playback statistics, scoped to the requested user's events
-/// unless an administrator has explicitly requested the all-users projection.
+/// EF Core read projection over discrete consumption events and bounded daily-duration buckets.
+/// Cached state and daily rows avoid summing an ever-growing heartbeat history.
 /// </summary>
 public sealed class EfPlaybackStatisticsService(
     PrismediaDbContext db,
@@ -19,8 +18,6 @@ public sealed class EfPlaybackStatisticsService(
     EfEntityLibraryVisibilityFilter? libraryVisibility = null) : IPlaybackStatisticsService {
     private const int TopEntityLimit = 12;
     private const int RecentEventLimit = 30;
-
-    /// <summary>Largest wall-clock offset from UTC any real time zone uses, in minutes.</summary>
     private const int MaxUtcOffsetMinutes = 16 * 60;
     private readonly EfEntityLibraryVisibilityFilter _libraryVisibility =
         libraryVisibility ?? new EfEntityLibraryVisibilityFilter(db, currentUser);
@@ -29,250 +26,210 @@ public sealed class EfPlaybackStatisticsService(
     public async Task<PlaybackStatisticsResponse> GetAsync(
         PlaybackStatisticsQuery query,
         CancellationToken cancellationToken) {
-        var offset = TimeSpan.FromMinutes(Math.Clamp(query.UtcOffsetMinutes, -MaxUtcOffsetMinutes, MaxUtcOffsetMinutes));
+        var offset = TimeSpan.FromMinutes(Math.Clamp(
+            query.UtcOffsetMinutes,
+            -MaxUtcOffsetMinutes,
+            MaxUtcOffsetMinutes));
         var enforceLibraryVisibility = await _libraryVisibility.RequiresCurrentUserVisibilityAsync(cancellationToken);
-        var eventRows = await QueryRows(query, enforceLibraryVisibility).ToArrayAsync(cancellationToken);
-        var activityRows = query.EventKind is null
-            ? await QueryActivityRows(query, enforceLibraryVisibility).ToArrayAsync(cancellationToken)
+        var eventRows = await QueryEvents(query, enforceLibraryVisibility).ToArrayAsync(cancellationToken);
+        var dayRows = query.EventKind is null
+            ? await QueryDays(query, enforceLibraryVisibility, offset).ToArrayAsync(cancellationToken)
             : [];
-        var foldRows = eventRows
-            .Select(row => new PlaybackStatisticsFoldRow(
-                row.EntityId,
-                row.EntityKindCode,
-                row.EntityTitle,
-                row.Kind,
-                ActivityKind: null,
-                row.OccurredAt,
-                WatchSeconds(row)))
-            .Concat(activityRows.Select(row => new PlaybackStatisticsFoldRow(
-                row.EntityId,
-                row.EntityKindCode,
-                row.EntityTitle,
-                EventKind: null,
-                row.Kind,
-                row.OccurredAt,
-                row.DurationSeconds)))
-            .ToArray();
 
-        var counts = new PlaybackStatisticsCounts(
-            eventRows.Length,
-            eventRows.Count(row => row.Kind == PlaybackEventKind.Completed),
-            eventRows.Count(row => row.Kind == PlaybackEventKind.Skipped),
-            foldRows.Select(row => row.EntityId).Distinct().Count());
-        var topEntityRows = foldRows
-            .GroupBy(row => new { row.EntityId, row.EntityKindCode, row.EntityTitle })
-            .Select(group => new PlaybackStatisticsEntityFold(
-                group.Key.EntityId,
-                group.Key.EntityKindCode,
-                group.Key.EntityTitle,
-                group.Count(row => row.EventKind == PlaybackEventKind.Completed),
-                group.Count(row => row.EventKind == PlaybackEventKind.Skipped),
-                group.Sum(row => row.WatchSeconds),
-                group.Min(row => row.OccurredAt),
-                group.Max(row => row.OccurredAt)))
-            .OrderByDescending(entity => entity.CompletedCount)
-            .ThenByDescending(entity => entity.SkippedCount)
-            .ThenByDescending(entity => entity.WatchSeconds)
-            .ThenByDescending(entity => entity.LastEventAt)
+        var eventEntities = eventRows.Select(row => new EntityKey(row.EntityId, row.EntityKindCode, row.EntityTitle));
+        var dayEntities = dayRows.Select(row => new EntityKey(row.EntityId, row.EntityKindCode, row.EntityTitle));
+        var entityKeys = eventEntities.Concat(dayEntities).Distinct().ToArray();
+        var topRows = entityKeys
+            .Select(key => {
+                var events = eventRows.Where(row => row.EntityId == key.EntityId).ToArray();
+                var days = dayRows.Where(row => row.EntityId == key.EntityId).ToArray();
+                var first = EventBoundary(events, days, latest: false);
+                var last = EventBoundary(events, days, latest: true);
+                return new PlaybackStatisticsEntityFold(
+                    key.EntityId,
+                    key.EntityKindCode,
+                    key.EntityTitle,
+                    events.Count(row => row.Kind == ConsumptionEventKind.Accessed),
+                    events.Count(row => row.Kind == ConsumptionEventKind.Completed),
+                    events.Count(row => row.Kind == ConsumptionEventKind.Skipped),
+                    days.Sum(row => row.DurationSeconds),
+                    first,
+                    last);
+            })
+            .OrderByDescending(row => row.ActiveSeconds)
+            .ThenByDescending(row => row.AccessedCount)
+            .ThenByDescending(row => row.CompletedCount)
+            .ThenByDescending(row => row.LastEventAt)
             .Take(TopEntityLimit)
             .ToArray();
         var recentEventRows = eventRows.Take(RecentEventLimit).ToArray();
-
         var coverByEntity = await LoadCoverPathsAsync(
-            topEntityRows.Select(row => row.EntityId)
+            topRows.Select(row => row.EntityId)
                 .Concat(recentEventRows.Select(row => row.EntityId))
                 .Distinct()
                 .ToArray(),
             cancellationToken);
 
-        var topEntities = topEntityRows
-            .Select(row => new PlaybackStatisticsEntity(
-                row.EntityId,
-                row.EntityKindCode.DecodeAs<EntityKind>(),
-                row.EntityTitle,
-                coverByEntity.GetValueOrDefault(row.EntityId),
-                row.CompletedCount,
-                row.SkippedCount,
-                row.WatchSeconds,
-                row.FirstEventAt,
-                row.LastEventAt))
-            .ToArray();
+        var topEntities = topRows.Select(row => new PlaybackStatisticsEntity(
+            row.EntityId,
+            row.EntityKindCode.DecodeAs<EntityKind>(),
+            row.EntityTitle,
+            coverByEntity.GetValueOrDefault(row.EntityId),
+            row.AccessedCount,
+            row.CompletedCount,
+            row.SkippedCount,
+            row.ActiveSeconds,
+            row.FirstEventAt,
+            row.LastEventAt)).ToArray();
+        var recentEvents = recentEventRows.Select(row => new PlaybackStatisticsEvent(
+            row.EventId,
+            row.EntityId,
+            row.EntityKindCode.DecodeAs<EntityKind>(),
+            row.EntityTitle,
+            coverByEntity.GetValueOrDefault(row.EntityId),
+            row.Kind,
+            row.OccurredAt,
+            row.PositionSeconds,
+            row.DurationSeconds)).ToArray();
 
-        var recentEvents = recentEventRows
-            .Select(row => new PlaybackStatisticsEvent(
-                row.EventId,
-                row.EntityId,
-                row.EntityKindCode.DecodeAs<EntityKind>(),
-                row.EntityTitle,
-                coverByEntity.GetValueOrDefault(row.EntityId),
-                row.Kind,
-                row.OccurredAt,
-                row.PositionSeconds,
-                row.DurationSeconds))
-            .ToArray();
+        var eventDays = eventRows.GroupBy(row => DateOnly.FromDateTime(row.OccurredAt.ToOffset(offset).Date))
+            .ToDictionary(group => group.Key, group => group.ToArray());
+        var activityDays = dayRows.GroupBy(row => row.ActivityDate)
+            .ToDictionary(group => group.Key, group => group.ToArray());
+        var daily = eventDays.Keys.Concat(activityDays.Keys).Distinct().Order().Select(date => {
+            var events = eventDays.GetValueOrDefault(date) ?? [];
+            var activities = activityDays.GetValueOrDefault(date) ?? [];
+            return new PlaybackStatisticsBucket(
+                date,
+                events.Count(row => row.Kind == ConsumptionEventKind.Accessed),
+                events.Count(row => row.Kind == ConsumptionEventKind.Completed),
+                events.Count(row => row.Kind == ConsumptionEventKind.Skipped),
+                activities.Sum(row => row.DurationSeconds),
+                activities.Where(row => row.Kind == ConsumptionActivityKind.Viewing).Sum(row => row.DurationSeconds),
+                activities.Where(row => row.Kind == ConsumptionActivityKind.Listening).Sum(row => row.DurationSeconds),
+                activities.Where(row => row.Kind == ConsumptionActivityKind.Reading).Sum(row => row.DurationSeconds));
+        }).ToArray();
 
-        var dailyEvents = foldRows
-            .GroupBy(row => DateOnly.FromDateTime(row.OccurredAt.ToOffset(offset).Date))
-            .Select(group => new PlaybackStatisticsBucket(
-                group.Key,
-                group.Count(row => row.EventKind == PlaybackEventKind.Completed),
-                group.Count(row => row.EventKind == PlaybackEventKind.Skipped),
-                group.Sum(row => row.WatchSeconds)))
-            .OrderBy(bucket => bucket.Date)
-            .ToArray();
-
-        var rhythm = foldRows
-            .GroupBy(row => {
-                var local = row.OccurredAt.ToOffset(offset);
-                return new { DayOfWeek = (int)local.DayOfWeek, local.Hour };
-            })
-            .Select(group => new PlaybackStatisticsRhythmCell(
-                group.Key.DayOfWeek,
-                group.Key.Hour,
-                group.Count(row => row.EventKind == PlaybackEventKind.Completed),
-                group.Count(row => row.EventKind == PlaybackEventKind.Skipped),
-                group.Sum(row => row.WatchSeconds)))
-            .OrderBy(cell => cell.DayOfWeek)
-            .ThenBy(cell => cell.Hour)
-            .ToArray();
-
-        var kindBreakdown = foldRows
-            .GroupBy(row => row.EntityKindCode)
-            .Select(group => new PlaybackStatisticsKindSlice(
+        var kindBreakdown = entityKeys.GroupBy(key => key.EntityKindCode).Select(group => {
+            var ids = group.Select(key => key.EntityId).ToHashSet();
+            var events = eventRows.Where(row => ids.Contains(row.EntityId)).ToArray();
+            var days = dayRows.Where(row => ids.Contains(row.EntityId)).ToArray();
+            return new PlaybackStatisticsKindSlice(
                 group.Key.DecodeAs<EntityKind>(),
-                group.Count(row => row.EventKind is not null),
-                group.Count(row => row.EventKind == PlaybackEventKind.Completed),
-                group.Count(row => row.EventKind == PlaybackEventKind.Skipped),
-                group.Select(row => row.EntityId).Distinct().Count(),
-                group.Sum(row => row.WatchSeconds)))
-            .OrderByDescending(slice => slice.TotalEvents)
-            .ThenByDescending(slice => slice.WatchSeconds)
-            .ThenBy(slice => slice.Kind)
-            .ToArray();
+                events.Length,
+                events.Count(row => row.Kind == ConsumptionEventKind.Accessed),
+                events.Count(row => row.Kind == ConsumptionEventKind.Completed),
+                events.Count(row => row.Kind == ConsumptionEventKind.Skipped),
+                ids.Count,
+                days.Sum(row => row.DurationSeconds));
+        }).OrderByDescending(slice => slice.ActiveSeconds)
+          .ThenByDescending(slice => slice.TotalEvents)
+          .ThenBy(slice => slice.Kind)
+          .ToArray();
+        var rhythm = eventRows.GroupBy(row => {
+            var local = row.OccurredAt.ToOffset(offset);
+            return new { DayOfWeek = (int)local.DayOfWeek, local.Hour };
+        }).Select(group => new PlaybackStatisticsRhythmCell(
+            group.Key.DayOfWeek,
+            group.Key.Hour,
+            group.Count(row => row.Kind == ConsumptionEventKind.Accessed),
+            group.Count(row => row.Kind == ConsumptionEventKind.Completed),
+            group.Count(row => row.Kind == ConsumptionEventKind.Skipped)))
+          .OrderBy(cell => cell.DayOfWeek)
+          .ThenBy(cell => cell.Hour)
+          .ToArray();
 
         return new PlaybackStatisticsResponse(
             query.From,
             query.To,
-            counts.TotalEvents,
-            counts.CompletedCount,
-            counts.SkippedCount,
-            counts.DistinctEntityCount,
-            foldRows.Sum(row => row.WatchSeconds),
-            foldRows.Where(row => row.ActivityKind == BookActivityKind.Reading).Sum(row => row.WatchSeconds),
-            foldRows.Where(row => row.ActivityKind == BookActivityKind.Listening).Sum(row => row.WatchSeconds),
+            eventRows.Length,
+            eventRows.Count(row => row.Kind == ConsumptionEventKind.Accessed),
+            eventRows.Count(row => row.Kind == ConsumptionEventKind.Completed),
+            eventRows.Count(row => row.Kind == ConsumptionEventKind.Skipped),
+            entityKeys.Length,
+            dayRows.Sum(row => row.DurationSeconds),
+            dayRows.Where(row => row.Kind == ConsumptionActivityKind.Viewing).Sum(row => row.DurationSeconds),
+            dayRows.Where(row => row.Kind == ConsumptionActivityKind.Reading).Sum(row => row.DurationSeconds),
+            dayRows.Where(row => row.Kind == ConsumptionActivityKind.Listening).Sum(row => row.DurationSeconds),
             topEntities,
             recentEvents,
-            dailyEvents,
+            daily,
             kindBreakdown,
             rhythm);
     }
 
-    /// <summary>
-    /// Observed playback seconds for a single event. The reported position is the furthest point
-    /// playback reached, clamped to the reported duration so a stale or overshot position cannot
-    /// inflate totals.
-    /// </summary>
-    private static double WatchSeconds(PlaybackStatisticsRow row) {
-        var position = row.PositionSeconds ?? 0d;
-        if (double.IsNaN(position) || position <= 0d) {
-            return 0d;
-        }
-
-        return row.DurationSeconds is { } duration && duration > 0d
-            ? Math.Min(position, duration)
-            : position;
-    }
-
-    private IQueryable<ActivityStatisticsRow> QueryActivityRows(PlaybackStatisticsQuery query, bool enforceLibraryVisibility) {
-        var activities = db.EntityActivityEvents.AsNoTracking()
-            .Where(evt => evt.OccurredAt >= query.From && evt.OccurredAt < query.To);
-        if (!query.AllUsers) {
-            var userId = query.UserId ?? currentUser.UserId;
-            activities = activities.Where(evt => evt.UserId == userId);
-        }
-
-        var allEntities = db.Entities.AsNoTracking();
-        var visibleEntities = EntityCatalogQueryPolicy.Apply(
-            allEntities,
-            allEntities,
-            EntityCatalogSurface.Statistics);
-        if (enforceLibraryVisibility) {
-            visibleEntities = _libraryVisibility.ApplyCurrentUserVisibility(visibleEntities);
-        }
-        var rows =
-            from activity in activities
-            join entity in visibleEntities on activity.EntityId equals entity.Id
-            where !query.HideNsfw || !entity.IsNsfw
-            select new ActivityStatisticsRow {
-                EntityId = activity.EntityId,
-                EntityKindCode = entity.KindCode,
-                EntityTitle = entity.Title,
-                Kind = activity.Kind,
-                OccurredAt = activity.OccurredAt,
-                DurationSeconds = activity.DurationSeconds
-            };
-
-        if (query.Kind is { } kind) {
-            var kindCode = kind.ToCode();
-            rows = rows.Where(row => row.EntityKindCode == kindCode);
-        }
-
-        return rows;
-    }
-
-    private IQueryable<PlaybackStatisticsRow> QueryRows(PlaybackStatisticsQuery query, bool enforceLibraryVisibility) {
-        var events = db.EntityPlaybackEvents.AsNoTracking()
+    private IQueryable<ConsumptionStatisticsEventRow> QueryEvents(
+        PlaybackStatisticsQuery query,
+        bool enforceLibraryVisibility) {
+        var events = db.EntityConsumptionEvents.AsNoTracking()
             .Where(evt => evt.OccurredAt >= query.From && evt.OccurredAt < query.To);
         if (!query.AllUsers) {
             var userId = query.UserId ?? currentUser.UserId;
             events = events.Where(evt => evt.UserId == userId);
         }
-
         if (query.EventKind is { } eventKind) {
             events = events.Where(evt => evt.Kind == eventKind);
         }
 
-        var allEntities = db.Entities.AsNoTracking();
-        var catalogEntities = EntityCatalogQueryPolicy.Apply(
-            allEntities,
-            allEntities,
-            EntityCatalogSurface.Statistics);
-        if (enforceLibraryVisibility) {
-            catalogEntities = _libraryVisibility.ApplyCurrentUserVisibility(catalogEntities);
-        }
-        var rows =
-            from evt in events
-            join entity in catalogEntities on evt.EntityId equals entity.Id
-            where !query.HideNsfw || !entity.IsNsfw
-            select new {
-                EventId = evt.Id,
-                evt.EntityId,
-                EntityKindCode = entity.KindCode,
-                EntityTitle = entity.Title,
-                evt.Kind,
-                evt.OccurredAt,
-                evt.PositionSeconds,
-                evt.DurationSeconds
-            };
-
+        var entities = VisibleEntities(query.HideNsfw, enforceLibraryVisibility);
+        var rows = from evt in events
+                   join entity in entities on evt.EntityId equals entity.Id
+                   select new ConsumptionStatisticsEventRow {
+                       EventId = evt.Id,
+                       EntityId = evt.EntityId,
+                       EntityKindCode = entity.KindCode,
+                       EntityTitle = entity.Title,
+                       Kind = evt.Kind,
+                       OccurredAt = evt.OccurredAt,
+                       PositionSeconds = evt.PositionSeconds,
+                       DurationSeconds = evt.DurationSeconds
+                   };
         if (query.Kind is { } kind) {
-            var kindCode = kind.ToCode();
-            rows = rows.Where(row => row.EntityKindCode == kindCode);
+            var code = kind.ToCode();
+            rows = rows.Where(row => row.EntityKindCode == code);
+        }
+        return rows.OrderByDescending(row => row.OccurredAt).ThenByDescending(row => row.EventId);
+    }
+
+    private IQueryable<ConsumptionStatisticsDayRow> QueryDays(
+        PlaybackStatisticsQuery query,
+        bool enforceLibraryVisibility,
+        TimeSpan offset) {
+        var firstDate = DateOnly.FromDateTime(query.From.ToOffset(offset).Date);
+        var lastInstant = query.To > DateTimeOffset.MinValue ? query.To.AddTicks(-1) : query.To;
+        var lastDate = DateOnly.FromDateTime(lastInstant.ToOffset(offset).Date);
+        var days = db.EntityConsumptionDays.AsNoTracking()
+            .Where(day => day.ActivityDate >= firstDate && day.ActivityDate <= lastDate);
+        if (!query.AllUsers) {
+            var userId = query.UserId ?? currentUser.UserId;
+            days = days.Where(day => day.UserId == userId);
         }
 
-        return rows
-            .OrderByDescending(row => row.OccurredAt)
-            .ThenByDescending(row => row.EventId)
-            .Select(row => new PlaybackStatisticsRow {
-                EventId = row.EventId,
-                EntityId = row.EntityId,
-                EntityKindCode = row.EntityKindCode,
-                EntityTitle = row.EntityTitle,
-                Kind = row.Kind,
-                OccurredAt = row.OccurredAt,
-                PositionSeconds = row.PositionSeconds,
-                DurationSeconds = row.DurationSeconds
-            });
+        var entities = VisibleEntities(query.HideNsfw, enforceLibraryVisibility);
+        var rows = from day in days
+                   join entity in entities on day.EntityId equals entity.Id
+                   select new ConsumptionStatisticsDayRow {
+                       EntityId = day.EntityId,
+                       EntityKindCode = entity.KindCode,
+                       EntityTitle = entity.Title,
+                       Kind = day.Kind,
+                       ActivityDate = day.ActivityDate,
+                       DurationSeconds = day.DurationSeconds
+                   };
+        if (query.Kind is { } kind) {
+            var code = kind.ToCode();
+            rows = rows.Where(row => row.EntityKindCode == code);
+        }
+        return rows;
+    }
+
+    private IQueryable<Persistence.Entities.EntityRow> VisibleEntities(bool hideNsfw, bool enforceLibraryVisibility) {
+        var all = db.Entities.AsNoTracking();
+        var entities = EntityCatalogQueryPolicy.Apply(all, all, EntityCatalogSurface.Statistics);
+        if (enforceLibraryVisibility) {
+            entities = _libraryVisibility.ApplyCurrentUserVisibility(entities);
+        }
+        return hideNsfw ? entities.Where(entity => !entity.IsNsfw) : entities;
     }
 
     private async Task<IReadOnlyDictionary<Guid, string>> LoadCoverPathsAsync(
@@ -281,61 +238,56 @@ public sealed class EfPlaybackStatisticsService(
         if (entityIds.Count == 0) {
             return new Dictionary<Guid, string>();
         }
-
         var files = await db.EntityFiles.AsNoTracking()
             .Where(file => entityIds.Contains(file.EntityId))
             .Where(file => EntityCoverSelection.CoverRoles.Contains(file.Role))
             .ToArrayAsync(cancellationToken);
-
-        return files
-            .GroupBy(file => file.EntityId)
+        return files.GroupBy(file => file.EntityId)
             .Select(group => new { EntityId = group.Key, File = EntityCoverSelection.Select(group) })
             .Where(item => item.File is not null)
             .ToDictionary(item => item.EntityId, item => item.File!.Path);
     }
 
-    private sealed class PlaybackStatisticsRow {
+    private static DateTimeOffset EventBoundary(
+        IReadOnlyCollection<ConsumptionStatisticsEventRow> events,
+        IReadOnlyCollection<ConsumptionStatisticsDayRow> days,
+        bool latest) {
+        var timestamps = events.Count > 0
+            ? events.Select(row => row.OccurredAt).ToArray()
+            : days.Select(row => new DateTimeOffset(row.ActivityDate.ToDateTime(TimeOnly.MinValue), TimeSpan.Zero)).ToArray();
+        return latest ? timestamps.Max() : timestamps.Min();
+    }
+
+    private sealed class ConsumptionStatisticsEventRow {
         public Guid EventId { get; init; }
         public Guid EntityId { get; init; }
         public string EntityKindCode { get; init; } = string.Empty;
         public string EntityTitle { get; init; } = string.Empty;
-        public PlaybackEventKind Kind { get; init; }
+        public ConsumptionEventKind Kind { get; init; }
         public DateTimeOffset OccurredAt { get; init; }
         public double? PositionSeconds { get; init; }
         public double? DurationSeconds { get; init; }
     }
 
-    private sealed class ActivityStatisticsRow {
+    private sealed class ConsumptionStatisticsDayRow {
         public Guid EntityId { get; init; }
         public string EntityKindCode { get; init; } = string.Empty;
         public string EntityTitle { get; init; } = string.Empty;
-        public BookActivityKind Kind { get; init; }
-        public DateTimeOffset OccurredAt { get; init; }
+        public ConsumptionActivityKind Kind { get; init; }
+        public DateOnly ActivityDate { get; init; }
         public double DurationSeconds { get; init; }
     }
 
-    private sealed record PlaybackStatisticsCounts(
-        int TotalEvents,
-        int CompletedCount,
-        int SkippedCount,
-        int DistinctEntityCount);
+    private sealed record EntityKey(Guid EntityId, string EntityKindCode, string EntityTitle);
 
     private sealed record PlaybackStatisticsEntityFold(
         Guid EntityId,
         string EntityKindCode,
         string EntityTitle,
+        int AccessedCount,
         int CompletedCount,
         int SkippedCount,
-        double WatchSeconds,
+        double ActiveSeconds,
         DateTimeOffset FirstEventAt,
         DateTimeOffset LastEventAt);
-
-    private sealed record PlaybackStatisticsFoldRow(
-        Guid EntityId,
-        string EntityKindCode,
-        string EntityTitle,
-        PlaybackEventKind? EventKind,
-        BookActivityKind? ActivityKind,
-        DateTimeOffset OccurredAt,
-        double WatchSeconds);
 }

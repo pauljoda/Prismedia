@@ -141,4 +141,6 @@ public sealed record VideoPlaybackSessionRequest(
     string? SessionId,
     double? PositionSeconds,
     double? DurationSeconds,
-    bool? Completed);
+    bool? Completed,
+    double? ActivitySeconds = null,
+    int? UtcOffsetMinutes = null);

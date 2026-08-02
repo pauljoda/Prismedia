@@ -149,7 +149,7 @@ public static class ApiProblemCodes {
     public const string InvalidOpdsRequest = "invalid_opds_request";
 
     /// <summary>Problem code <c>invalid_playback_event_kind</c>.</summary>
-    public const string InvalidPlaybackEventKind = "invalid_playback_event_kind";
+    public const string InvalidConsumptionEventKind = "invalid_playback_event_kind";
 
     /// <summary>Problem code <c>invalid_playback_statistics_window</c>.</summary>
     public const string InvalidPlaybackStatisticsWindow = "invalid_playback_statistics_window";

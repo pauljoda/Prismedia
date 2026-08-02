@@ -20,15 +20,18 @@ public sealed class EntityCapabilityService {
     private readonly IEntityReadService _entityReads;
     private readonly IEntityProgressTopologyResolver _progressTopology;
     private readonly IEntityVisibilityChecker? _visibility;
-    private readonly IPlaybackEventStore _playbackEvents;
-    private readonly IEntityActivityStore _activityEvents;
+    private readonly IConsumptionEventStore _consumptionEvents;
+    private readonly IConsumptionActivityStore _consumptionActivities;
     private readonly TimeProvider _timeProvider;
 
     /// <summary>
     /// Maximum active duration accepted from one reader/player heartbeat. This bounds time inflation
     /// after suspended tabs or stale clients resume and report one oversized wall-clock interval.
     /// </summary>
-    private const double MaxReadingActivityHeartbeatSeconds = 60;
+    private const double MaxActivityHeartbeatSeconds = 60;
+
+    /// <summary>Largest real-world wall-clock offset accepted for daily buckets.</summary>
+    private const int MaxUtcOffsetMinutes = 16 * 60;
 
     /// <summary>
     /// Creates the service over the entity write port.
@@ -39,15 +42,15 @@ public sealed class EntityCapabilityService {
         IEntityReadService entityReads,
         IEntityProgressTopologyResolver progressTopology,
         IEntityVisibilityChecker? visibility = null,
-        IPlaybackEventStore? playbackEvents = null,
+        IConsumptionEventStore? consumptionEvents = null,
         TimeProvider? timeProvider = null,
-        IEntityActivityStore? activityEvents = null) {
+        IConsumptionActivityStore? consumptionActivities = null) {
         _entities = entities;
         _entityReads = entityReads;
         _progressTopology = progressTopology;
         _visibility = visibility;
-        _playbackEvents = playbackEvents ?? NullPlaybackEventStore.Instance;
-        _activityEvents = activityEvents ?? NullEntityActivityStore.Instance;
+        _consumptionEvents = consumptionEvents ?? NullConsumptionEventStore.Instance;
+        _consumptionActivities = consumptionActivities ?? NullConsumptionActivityStore.Instance;
         _timeProvider = timeProvider ?? TimeProvider.System;
     }
 
@@ -87,17 +90,17 @@ public sealed class EntityCapabilityService {
     private const double VideoWatchedFraction = 0.95;
 
     /// <summary>
-    /// Updates the entity's playback capability using canonical Prismedia thresholds so all
+    /// Updates timed resume and consumption state using canonical Prismedia thresholds so all
     /// first-party clients converge on identical state for the same inputs. When
     /// <paramref name="completed"/> is <c>null</c> (the normal progress/stop
     /// path) video/movie watched state is derived from <paramref name="resumeSeconds"/>
     /// relative to the entity's known runtime: at or above <see cref="VideoWatchedFraction"/>
-    /// the item is completed (and the play count incremented), below <see cref="StartedFraction"/>
+    /// the item is completed (and the completion count incremented), below <see cref="StartedFraction"/>
     /// it is treated as a fresh start, and in between the position is stored for resume.
     /// </summary>
     /// <param name="id">Entity identifier.</param>
     /// <param name="resumeSeconds">Current playback position in seconds, when known.</param>
-    /// <param name="durationSeconds">Watched duration delta to accumulate, when reported.</param>
+    /// <param name="durationSeconds">Active viewing-time delta to accumulate, when reported.</param>
     /// <param name="completed">Explicit completion override; <c>null</c> derives from position.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     public async Task<EntityCard?> UpdatePlaybackAsync(
@@ -106,12 +109,24 @@ public sealed class EntityCapabilityService {
         double? durationSeconds,
         bool? completed,
         CancellationToken cancellationToken) =>
+        await UpdatePlaybackAsync(id, resumeSeconds, durationSeconds, completed, null, cancellationToken);
+
+    /// <summary>Updates playback position and active time in the client's local daily bucket.</summary>
+    public async Task<EntityCard?> UpdatePlaybackAsync(
+        Guid id,
+        double? resumeSeconds,
+        double? durationSeconds,
+        bool? completed,
+        int? utcOffsetMinutes,
+        CancellationToken cancellationToken) =>
         await UpdatePlaybackCoreAsync(
             id,
             resumeSeconds,
-            playDurationDeltaSeconds: durationSeconds,
+            activitySeconds: durationSeconds,
+            activityKind: null,
             mediaDurationSeconds: null,
             completed,
+            utcOffsetMinutes,
             cancellationToken);
 
     /// <summary>
@@ -130,53 +145,81 @@ public sealed class EntityCapabilityService {
         double? mediaDurationSeconds,
         bool? completed,
         CancellationToken cancellationToken) =>
+        await UpdateVideoPlaybackAsync(
+            id,
+            positionSeconds,
+            mediaDurationSeconds,
+            completed,
+            activitySeconds: null,
+            utcOffsetMinutes: null,
+            cancellationToken);
+
+    /// <summary>Updates video position and a bounded active-viewing interval.</summary>
+    public async Task<EntityCard?> UpdateVideoPlaybackAsync(
+        Guid id,
+        double? positionSeconds,
+        double? mediaDurationSeconds,
+        bool? completed,
+        double? activitySeconds,
+        int? utcOffsetMinutes,
+        CancellationToken cancellationToken) =>
         await UpdatePlaybackCoreAsync(
             id,
             positionSeconds,
-            playDurationDeltaSeconds: null,
+            activitySeconds,
+            activityKind: ConsumptionActivityKind.Viewing,
             mediaDurationSeconds,
             completed,
+            utcOffsetMinutes,
             cancellationToken);
 
     private async Task<EntityCard?> UpdatePlaybackCoreAsync(
         Guid id,
         double? resumeSeconds,
-        double? playDurationDeltaSeconds,
+        double? activitySeconds,
+        ConsumptionActivityKind? activityKind,
         double? mediaDurationSeconds,
         bool? completed,
+        int? utcOffsetMinutes,
         CancellationToken cancellationToken) {
         // One logical player report retains one timestamp across optimistic-concurrency retries.
         // This keeps completed/history semantics deterministic when a racing heartbeat wins first.
         var occurredAt = _timeProvider.GetUtcNow();
-        var card = await MutateWithPlaybackEventAsync(id, entity => {
-            var playback = GetOrAddDefaultCapability<CapabilityPlayback>(entity);
-            if (playback is null) {
-                return PlaybackMutationResult.Rejected;
+        var card = await MutateWithConsumptionAsync(id, entity => {
+            var consumption = GetOrAddDefaultCapability<CapabilityConsumption>(entity);
+            if (consumption is null) {
+                return ConsumptionMutationResult.Rejected;
             }
 
-            PlaybackEventAppend? completedEvent = null;
-            var playCountBefore = playback.Value.PlayCount;
+            ConsumptionEventAppend? completedEvent = null;
+            ConsumptionActivityAppend? activity = null;
+            var completionCountBefore = consumption.Value.CompletionCount;
 
-            if (playDurationDeltaSeconds is > 0) {
-                playback.AccumulatePlayDuration(TimeSpan.FromSeconds(playDurationDeltaSeconds.Value));
+            if (BoundActivitySeconds(activitySeconds) is { } boundedSeconds) {
+                consumption.AccumulateActiveDuration(TimeSpan.FromSeconds(boundedSeconds), occurredAt);
+                activity = new ConsumptionActivityAppend(
+                    entity.Id,
+                    activityKind ?? entity.Definition.Engagement.DefaultActivityKind ?? ConsumptionActivityKind.Viewing,
+                    ActivityDate(occurredAt, utcOffsetMinutes),
+                    boundedSeconds);
             }
 
             // Position and completion reports are timestamped user observations. A retry may
             // reapply an older heartbeat after a newer one committed, so only the newest signal
             // may change cursor/completion state. Reported duration remains additive above.
-            var acceptsSignal = AcceptsPlaybackSignal(playback, occurredAt);
+            var acceptsSignal = AcceptsConsumptionSignal(consumption, occurredAt);
 
             // Explicit watched toggle. The completion flag is independent of the resume position:
             // a resume value is only applied when the caller supplies one, so the in-app
             // toggle leaves the position untouched.
             if (completed is { } watched) {
                 if (acceptsSignal && resumeSeconds is { } toggleSeconds) {
-                    playback.RecordResume(TimeSpan.FromSeconds(Math.Max(0, toggleSeconds)), occurredAt);
+                    consumption.RecordResume(TimeSpan.FromSeconds(Math.Max(0, toggleSeconds)), occurredAt);
                 }
 
                 if (acceptsSignal && watched) {
-                    playback.MarkWatched(occurredAt);
-                    if (playback.Value.PlayCount > playCountBefore) {
+                    consumption.MarkCompleted(occurredAt);
+                    if (consumption.Value.CompletionCount > completionCountBefore) {
                         completedEvent = CompletedEvent(
                             entity,
                             occurredAt,
@@ -184,14 +227,14 @@ public sealed class EntityCapabilityService {
                             mediaDurationSeconds ?? entity.Technical?.Duration?.TotalSeconds);
                     }
                 } else if (acceptsSignal) {
-                    playback.MarkUnwatched(occurredAt);
+                    consumption.MarkIncomplete(occurredAt);
                 }
 
-                return PlaybackMutationResult.Applied(completedEvent);
+                return ConsumptionMutationResult.Applied(completedEvent, activity);
             }
 
             if (resumeSeconds is not { } seconds) {
-                return PlaybackMutationResult.Applied();
+                return ConsumptionMutationResult.Applied(activity: activity);
             }
 
             var position = TimeSpan.FromSeconds(Math.Max(0, seconds));
@@ -200,27 +243,27 @@ public sealed class EntityCapabilityService {
                 : entity.Technical?.Duration;
             if (runtime is not { } total || total <= TimeSpan.Zero) {
                 if (acceptsSignal) {
-                    playback.RecordResume(position, occurredAt);
+                    consumption.RecordResume(position, occurredAt);
                 }
-                return PlaybackMutationResult.Applied();
+                return ConsumptionMutationResult.Applied(activity: activity);
             }
 
             var fraction = position.TotalSeconds / total.TotalSeconds;
             if (entity.Definition.Engagement.DerivesCompletionFromPlaybackFraction &&
                 fraction >= VideoWatchedFraction && acceptsSignal) {
-                playback.RecordCompleted(occurredAt);
-                if (playback.Value.PlayCount > playCountBefore) {
+                consumption.RecordCompleted(occurredAt);
+                if (consumption.Value.CompletionCount > completionCountBefore) {
                     completedEvent = CompletedEvent(entity, occurredAt, position.TotalSeconds, total.TotalSeconds);
                 }
             } else if (fraction < StartedFraction && acceptsSignal) {
-                playback.RecordStartOver(occurredAt);
+                consumption.RecordStartOver(occurredAt);
             } else if (acceptsSignal) {
                 // A later player report may intentionally seek backward; only an older report
                 // loses to the already persisted signal above.
-                playback.RecordResume(position, occurredAt);
+                consumption.RecordResume(position, occurredAt);
             }
 
-            return PlaybackMutationResult.Applied(completedEvent);
+            return ConsumptionMutationResult.Applied(completedEvent, activity);
         }, cancellationToken);
 
         if (card is not null) {
@@ -237,14 +280,14 @@ public sealed class EntityCapabilityService {
     /// <param name="cancellationToken">Cancellation token.</param>
     public async Task<EntityCard?> RecordCompletedPlaybackAsync(Guid id, CancellationToken cancellationToken) {
         var now = _timeProvider.GetUtcNow();
-        var card = await MutateWithPlaybackEventAsync(id, entity => {
-            var playback = GetOrAddDefaultCapability<CapabilityPlayback>(entity);
-            if (playback is null) {
-                return PlaybackMutationResult.Rejected;
+        var card = await MutateWithConsumptionAsync(id, entity => {
+            var consumption = GetOrAddDefaultCapability<CapabilityConsumption>(entity);
+            if (consumption is null) {
+                return ConsumptionMutationResult.Rejected;
             }
 
-            playback.RecordCompletedPlay(now);
-            return PlaybackMutationResult.Applied(
+            consumption.RecordCompletedOccurrence(now);
+            return ConsumptionMutationResult.Applied(
                 CompletedEvent(entity, now, positionSeconds: null, durationSeconds: entity.Technical?.Duration?.TotalSeconds));
         }, cancellationToken);
 
@@ -256,19 +299,37 @@ public sealed class EntityCapabilityService {
     /// </summary>
     public async Task<EntityCard?> RecordPlaybackEventAsync(
         Guid id,
-        PlaybackEventKind kind,
+        ConsumptionEventKind kind,
         DateTimeOffset? occurredAt,
         double? positionSeconds,
         double? durationSeconds,
         CancellationToken cancellationToken) =>
+        await RecordPlaybackEventAsync(id, kind, occurredAt, positionSeconds, durationSeconds, null, cancellationToken);
+
+    /// <summary>Records one explicit consumption event, optionally tied to a playback session.</summary>
+    public async Task<EntityCard?> RecordPlaybackEventAsync(
+        Guid id,
+        ConsumptionEventKind kind,
+        DateTimeOffset? occurredAt,
+        double? positionSeconds,
+        double? durationSeconds,
+        string? sessionId,
+        CancellationToken cancellationToken) =>
         kind switch {
-            PlaybackEventKind.Completed => await RecordCompletedPlaybackAsync(
+            ConsumptionEventKind.Accessed => await RecordAccessedAsync(
+                id,
+                occurredAt ?? _timeProvider.GetUtcNow(),
+                positionSeconds,
+                durationSeconds,
+                sessionId,
+                cancellationToken),
+            ConsumptionEventKind.Completed => await RecordCompletedPlaybackAsync(
                 id,
                 occurredAt ?? _timeProvider.GetUtcNow(),
                 positionSeconds,
                 durationSeconds,
                 cancellationToken),
-            PlaybackEventKind.Skipped => await RecordSkippedPlaybackAsync(
+            ConsumptionEventKind.Skipped => await RecordSkippedPlaybackAsync(
                 id,
                 occurredAt ?? _timeProvider.GetUtcNow(),
                 positionSeconds,
@@ -286,14 +347,14 @@ public sealed class EntityCapabilityService {
         double? positionSeconds,
         double? durationSeconds,
         CancellationToken cancellationToken) {
-        var card = await MutateWithPlaybackEventAsync(id, entity => {
-            var playback = GetOrAddDefaultCapability<CapabilityPlayback>(entity);
-            if (playback is null) {
-                return PlaybackMutationResult.Rejected;
+        var card = await MutateWithConsumptionAsync(id, entity => {
+            var consumption = GetOrAddDefaultCapability<CapabilityConsumption>(entity);
+            if (consumption is null) {
+                return ConsumptionMutationResult.Rejected;
             }
 
-            playback.RecordCompletedPlay(occurredAt);
-            return PlaybackMutationResult.Applied(
+            consumption.RecordCompletedOccurrence(occurredAt);
+            return ConsumptionMutationResult.Applied(
                 CompletedEvent(entity, occurredAt, positionSeconds, durationSeconds ?? entity.Technical?.Duration?.TotalSeconds));
         }, cancellationToken);
 
@@ -309,22 +370,51 @@ public sealed class EntityCapabilityService {
         double? positionSeconds,
         double? durationSeconds,
         CancellationToken cancellationToken) {
-        var card = await MutateWithPlaybackEventAsync(id, entity => {
-            var playback = GetOrAddDefaultCapability<CapabilityPlayback>(entity);
-            if (playback is null) {
-                return PlaybackMutationResult.Rejected;
+        var card = await MutateWithConsumptionAsync(id, entity => {
+            var consumption = GetOrAddDefaultCapability<CapabilityConsumption>(entity);
+            if (consumption is null) {
+                return ConsumptionMutationResult.Rejected;
             }
 
-            playback.RecordSkipped(occurredAt);
-            return PlaybackMutationResult.Applied(new PlaybackEventAppend(
+            consumption.RecordSkipped(occurredAt);
+            return ConsumptionMutationResult.Applied(new ConsumptionEventAppend(
                 entity.Id,
-                PlaybackEventKind.Skipped,
+                ConsumptionEventKind.Skipped,
                 occurredAt,
                 positionSeconds,
                 durationSeconds ?? entity.Technical?.Duration?.TotalSeconds));
         }, cancellationToken);
 
         return card;
+    }
+
+    /// <summary>Records one explicit open/start event.</summary>
+    public async Task<EntityCard?> RecordAccessedAsync(
+        Guid id,
+        DateTimeOffset occurredAt,
+        double? positionSeconds,
+        double? durationSeconds,
+        string? sessionId,
+        CancellationToken cancellationToken) {
+        var normalizedSessionId = string.IsNullOrWhiteSpace(sessionId) ? null : sessionId.Trim();
+        return await MutateWithConsumptionAsync(id, entity => {
+            var consumption = GetOrAddDefaultCapability<CapabilityConsumption>(entity);
+            if (consumption is null) {
+                return ConsumptionMutationResult.Rejected;
+            }
+
+            consumption.RecordAccessed(occurredAt);
+            if (positionSeconds is { } seconds) {
+                consumption.RecordResume(TimeSpan.FromSeconds(Math.Max(0, seconds)), occurredAt);
+            }
+            return ConsumptionMutationResult.Applied(new ConsumptionEventAppend(
+                entity.Id,
+                ConsumptionEventKind.Accessed,
+                occurredAt,
+                positionSeconds,
+                durationSeconds ?? entity.Technical?.Duration?.TotalSeconds,
+                normalizedSessionId));
+        }, cancellationToken, normalizedSessionId);
     }
 
     /// <summary>
@@ -341,10 +431,41 @@ public sealed class EntityCapabilityService {
         bool reset,
         string? location,
         double? activitySeconds,
-        BookActivityKind? activityKind,
+        ConsumptionActivityKind? activityKind,
+        CancellationToken cancellationToken) {
+        return await UpdateProgressAsync(
+            id,
+            currentEntityId,
+            unit,
+            index,
+            total,
+            mode,
+            completed,
+            reset,
+            location,
+            activitySeconds,
+            activityKind,
+            utcOffsetMinutes: null,
+            cancellationToken);
+    }
+
+    /// <summary>Updates the last-active cursor and independent consumed-unit coverage.</summary>
+    public async Task<EntityCard?> UpdateProgressAsync(
+        Guid id,
+        Guid currentEntityId,
+        ProgressUnit unit,
+        int index,
+        int total,
+        ReaderMode? mode,
+        bool? completed,
+        bool reset,
+        string? location,
+        double? activitySeconds,
+        ConsumptionActivityKind? activityKind,
+        int? utcOffsetMinutes,
         CancellationToken cancellationToken) {
         // A reader heartbeat is one action even if it races another client. Keep its timestamp
-        // stable while every retry reloads topology and forward-only state from the database.
+        // stable while every retry reloads topology and latest-cursor state from the database.
         var occurredAt = _timeProvider.GetUtcNow();
         return await ExecuteWriteAttemptAsync(
             attemptCancellationToken => UpdateProgressAttemptAsync(
@@ -359,6 +480,7 @@ public sealed class EntityCapabilityService {
                 location,
                 activitySeconds,
                 activityKind,
+                utcOffsetMinutes,
                 occurredAt,
                 attemptCancellationToken),
             cancellationToken);
@@ -375,7 +497,8 @@ public sealed class EntityCapabilityService {
         bool reset,
         string? location,
         double? activitySeconds,
-        BookActivityKind? activityKind,
+        ConsumptionActivityKind? activityKind,
+        int? utcOffsetMinutes,
         DateTimeOffset occurredAt,
         CancellationToken cancellationToken) {
         // Progress ownership is derived from the requested entity only. A cursor is data within
@@ -419,28 +542,16 @@ public sealed class EntityCapabilityService {
         }
 
         var progress = GetOrAddDefaultCapability<CapabilityProgress>(entity)!;
-        ProgressCursorResolution? existingCursor = null;
-        if (progress.CurrentEntityId is { } existingCurrentId) {
-            var existingCursorVisible = _visibility is null ||
-                await _visibility.IsVisibleAsync(existingCurrentId, cancellationToken);
-            if (existingCursorVisible) {
-                existingCursor = await _progressTopology.ResolveCursorAsync(
-                    owner.OwnerId,
-                    existingCurrentId,
-                    cancellationToken);
-            }
-            // Invalid legacy or newly inaccessible stored cursors are treated as absent so a
-            // valid mutation can repair the user's progress instead of becoming permanently stuck.
-        }
-        var hasActivity = await AccumulateReadingActivityAsync(
+        var hasActivity = await AccumulateConsumptionActivityAsync(
             entity,
             activitySeconds,
             activityKind,
+            utcOffsetMinutes,
             occurredAt,
             cancellationToken);
 
         // Explicit "mark unread": clear completion in place, independent of the cursor. Bypasses the
-        // forward-only position guard so a finished item can be reopened without losing the page
+        // cursor mutation so a finished item can be reopened without losing the page
         // position. It still obeys the latest-signal timestamp so an old client cannot reopen a
         // newer completion.
         if (!reset && completed == false) {
@@ -464,57 +575,27 @@ public sealed class EntityCapabilityService {
         var targetCursorId = proposedPosition?.CursorId ?? proposedCursor.NormalizedCursorId;
         var normalizedLocation = string.IsNullOrWhiteSpace(location) ? null : location.Trim();
 
-        // Explicit "start over": jump to the requested (start) position and clear completion,
-        // bypassing the forward-only position guard. MoveTo resets the completion flag, but a
-        // historical reset cannot replace a newer cursor.
+        var consumedTotal = proposedPosition?.Total ?? normalizedTotal;
+        var consumedIndex = proposedPosition?.Index ?? normalizedIndex;
+        var consumedCount = reset
+            ? 0
+            : completed == true
+                ? consumedTotal
+                : Math.Max(progress.ConsumedCount, consumedTotal > 0 ? consumedIndex + 1 : 0);
+
+        // Explicit start-over resets coverage; ordinary progress always follows the most recent
+        // accepted cursor even when it moved backward.
         if (reset) {
-            if (progress.TryMoveTo(targetCursorId, unit, normalizedIndex, normalizedTotal, mode, occurredAt, normalizedLocation) || hasActivity) {
-                await SaveProgressStateAsync(entity, cancellationToken);
-            }
-            return await ReadCardAsync(entity, cancellationToken);
-        }
-
-        var existingPosition = existingCursor is null
-            ? null
-            : await _progressTopology.ResolveWorkPositionAsync(
-                owner.OwnerId,
-                existingCursor.CursorId,
-                progress.Index,
-                progress.Total,
-                cancellationToken);
-
-        if (proposedPosition is not null &&
-            existingPosition is not null &&
-            proposedPosition.Index < existingPosition.Index) {
-            if (hasActivity) {
-                await SaveProgressStateAsync(entity, cancellationToken);
-            }
-            return await ReadCardAsync(entity, cancellationToken);
-        }
-
-        if (proposedPosition is null &&
-            existingPosition is null &&
-            IsEarlierComparableCursor(progress, targetCursorId, unit, normalizedIndex, normalizedTotal)) {
-            if (hasActivity) {
-                await SaveProgressStateAsync(entity, cancellationToken);
-            }
-            return await ReadCardAsync(entity, cancellationToken);
-        }
-
-        // A readable cursor is the safe source of truth when an unmatched audiobook part cannot be
-        // mapped into that chapter. A later readable heartbeat may always replace an audio-only one.
-        if (unit == ProgressUnit.Second && progress.Unit is ProgressUnit.Page or ProgressUnit.Cfi) {
-            if (hasActivity) {
-                await SaveProgressStateAsync(entity, cancellationToken);
-            }
-            return await ReadCardAsync(entity, cancellationToken);
-        }
-
-        if (progress.CompletedAt is not null &&
-            (proposedPosition is null ||
-             existingPosition is null ||
-             proposedPosition.Index <= existingPosition.Index)) {
-            if (hasActivity) {
+            progress.TryMarkIncomplete(occurredAt);
+            if (progress.TryMoveTo(
+                    targetCursorId,
+                    unit,
+                    normalizedIndex,
+                    normalizedTotal,
+                    mode,
+                    occurredAt,
+                    normalizedLocation,
+                    consumedCount: 0) || hasActivity) {
                 await SaveProgressStateAsync(entity, cancellationToken);
             }
             return await ReadCardAsync(entity, cancellationToken);
@@ -528,53 +609,54 @@ public sealed class EntityCapabilityService {
                 mode,
                 occurredAt,
                 normalizedLocation,
-                completed: completed == true)) {
+                completed: completed == true,
+                consumedCount: consumedCount)) {
             if (hasActivity) {
                 await SaveProgressStateAsync(entity, cancellationToken);
             }
             return await ReadCardAsync(entity, cancellationToken);
         }
 
-        PlaybackEventAppend? completedEvent = null;
+        ConsumptionEventAppend? completedEvent = null;
         if (completed == true) {
-            var playback = GetOrAddDefaultCapability<CapabilityPlayback>(entity);
-            if (playback is not null) {
-                playback.RecordCompletedPlay(occurredAt);
+            var consumption = GetOrAddDefaultCapability<CapabilityConsumption>(entity);
+            if (consumption is not null) {
+                consumption.RecordCompletedOccurrence(occurredAt);
                 completedEvent = CompletedEvent(entity, occurredAt, positionSeconds: null, durationSeconds: null);
             }
         }
 
         if (completedEvent is not null) {
-            await _playbackEvents.StageAsync(completedEvent, cancellationToken);
+            await _consumptionEvents.StageAsync(completedEvent, cancellationToken);
         }
         await SaveProgressStateAsync(entity, cancellationToken);
 
         return await ReadCardAsync(entity, cancellationToken);
     }
 
-    private async Task<bool> AccumulateReadingActivityAsync(
+    private async Task<bool> AccumulateConsumptionActivityAsync(
         Entity entity,
         double? activitySeconds,
-        BookActivityKind? activityKind,
+        ConsumptionActivityKind? activityKind,
+        int? utcOffsetMinutes,
         DateTimeOffset occurredAt,
         CancellationToken cancellationToken) {
-        if (entity.Definition.Engagement.Mode != EntityEngagementMode.Reading ||
-            activityKind is null ||
-            activitySeconds is not { } reportedSeconds ||
-            !double.IsFinite(reportedSeconds) ||
-            reportedSeconds <= 0) {
+        if (entity.Definition.Engagement.Mode == EntityEngagementMode.None ||
+            BoundActivitySeconds(activitySeconds) is not { } boundedSeconds) {
             return false;
         }
 
-        var boundedSeconds = Math.Min(reportedSeconds, MaxReadingActivityHeartbeatSeconds);
-        var playback = GetOrAddDefaultCapability<CapabilityPlayback>(entity);
-        if (playback is null) {
+        var consumption = GetOrAddDefaultCapability<CapabilityConsumption>(entity);
+        if (consumption is null) {
             return false;
         }
 
-        playback.AccumulatePlayDuration(TimeSpan.FromSeconds(boundedSeconds));
-        await _activityEvents.StageAsync(
-            new EntityActivityAppend(entity.Id, activityKind.Value, occurredAt, boundedSeconds),
+        consumption.AccumulateActiveDuration(TimeSpan.FromSeconds(boundedSeconds), occurredAt);
+        await _consumptionActivities.StageAsync(new ConsumptionActivityAppend(
+            entity.Id,
+            activityKind ?? entity.Definition.Engagement.DefaultActivityKind ?? ConsumptionActivityKind.Reading,
+            ActivityDate(occurredAt, utcOffsetMinutes),
+            boundedSeconds),
             cancellationToken);
         return true;
     }
@@ -583,26 +665,8 @@ public sealed class EntityCapabilityService {
         _entities.SaveMutableStateAsync(
             entity,
             new EntityMutableStateChange(
-                changedCapabilityTypes: [typeof(CapabilityProgress), typeof(CapabilityPlayback)]),
+                changedCapabilityTypes: [typeof(CapabilityProgress), typeof(CapabilityConsumption)]),
             cancellationToken);
-
-    private static bool IsEarlierComparableCursor(
-        CapabilityProgress current,
-        Guid proposedEntityId,
-        ProgressUnit proposedUnit,
-        int proposedIndex,
-        int proposedTotal) {
-        if (current.CurrentEntityId != proposedEntityId ||
-            current.Unit != proposedUnit ||
-            current.Total <= 0 ||
-            proposedTotal <= 0) {
-            return false;
-        }
-
-        var currentFraction = current.Index / (double)current.Total;
-        var proposedFraction = proposedIndex / (double)proposedTotal;
-        return proposedFraction < currentFraction;
-    }
 
     /// <summary>
     /// Appends a new marker to the entity's marker capability.
@@ -703,18 +767,27 @@ public sealed class EntityCapabilityService {
             cancellationToken);
     }
 
-    private async Task<EntityCard?> MutateWithPlaybackEventAsync(
+    private async Task<EntityCard?> MutateWithConsumptionAsync(
         Guid id,
-        Func<Entity, PlaybackMutationResult> mutate,
-        CancellationToken cancellationToken) {
+        Func<Entity, ConsumptionMutationResult> mutate,
+        CancellationToken cancellationToken,
+        string? accessSessionId = null) {
         if (_visibility is not null && !await _visibility.IsVisibleAsync(id, cancellationToken)) {
             return null;
         }
 
-        // Playback counters and playback history describe the same user action. Stage the
+        // Consumption counters and history describe the same user action. Stage the
         // event before saving so EF persists both inside the entity repository transaction.
         return await ExecuteWriteAttemptAsync(
             async attemptCancellationToken => {
+                if (accessSessionId is not null &&
+                    await _consumptionEvents.ContainsSessionEventAsync(
+                        accessSessionId,
+                        ConsumptionEventKind.Accessed,
+                        attemptCancellationToken)) {
+                    return await _entityReads.GetAsync(id, hideNsfw: false, attemptCancellationToken);
+                }
+
                 var entity = await _entities.FindShallowAsync(id, attemptCancellationToken);
                 if (entity is null) {
                     return null;
@@ -726,34 +799,50 @@ public sealed class EntityCapabilityService {
                 }
 
                 if (result.Event is not null) {
-                    await _playbackEvents.StageAsync(result.Event, attemptCancellationToken);
+                    await _consumptionEvents.StageAsync(result.Event, attemptCancellationToken);
+                }
+                if (result.Activity is not null) {
+                    await _consumptionActivities.StageAsync(result.Activity, attemptCancellationToken);
                 }
 
                 await _entities.SaveMutableStateAsync(
                     entity,
-                    new EntityMutableStateChange(changedCapabilityTypes: [typeof(CapabilityPlayback)]),
+                    new EntityMutableStateChange(changedCapabilityTypes: [typeof(CapabilityConsumption)]),
                     attemptCancellationToken);
                 return await ReadCardAsync(entity, attemptCancellationToken);
             },
             cancellationToken);
     }
 
-    private static PlaybackEventAppend CompletedEvent(
+    private static ConsumptionEventAppend CompletedEvent(
         Entity entity,
         DateTimeOffset occurredAt,
         double? positionSeconds,
         double? durationSeconds) =>
         new(
             entity.Id,
-            PlaybackEventKind.Completed,
+            ConsumptionEventKind.Completed,
             occurredAt,
             positionSeconds,
             durationSeconds ?? entity.Technical?.Duration?.TotalSeconds);
 
-    private static bool AcceptsPlaybackSignal(
-        CapabilityPlayback playback,
+    private static bool AcceptsConsumptionSignal(
+        CapabilityConsumption consumption,
         DateTimeOffset occurredAt) =>
-        playback.Value.LastPlayedAt is null || occurredAt >= playback.Value.LastPlayedAt;
+        consumption.Value.LastActiveAt is null || occurredAt >= consumption.Value.LastActiveAt;
+
+    private static double? BoundActivitySeconds(double? reportedSeconds) =>
+        reportedSeconds is { } seconds && double.IsFinite(seconds) && seconds > 0
+            ? Math.Min(seconds, MaxActivityHeartbeatSeconds)
+            : null;
+
+    private static DateOnly ActivityDate(DateTimeOffset occurredAt, int? utcOffsetMinutes) {
+        var offset = TimeSpan.FromMinutes(Math.Clamp(
+            utcOffsetMinutes ?? 0,
+            -MaxUtcOffsetMinutes,
+            MaxUtcOffsetMinutes));
+        return DateOnly.FromDateTime(occurredAt.ToOffset(offset).Date);
+    }
 
     private static TCapability? GetOrAddDefaultCapability<TCapability>(Entity entity)
         where TCapability : Prismedia.Domain.Capabilities.EntityCapability =>
@@ -780,14 +869,14 @@ public sealed class EntityCapabilityService {
         Guid playableId,
         EntityCard playableCard,
         CancellationToken cancellationToken) {
-        var playback = playableCard.Capabilities.OfType<PlaybackCapability>().SingleOrDefault();
-        if (playback is null || playback.ResumeSeconds <= 0 && playback.CompletedAt is null) {
+        var consumption = playableCard.Capabilities.OfType<ConsumptionCapability>().SingleOrDefault();
+        if (consumption is null || consumption.ResumeSeconds <= 0 && consumption.CompletedAt is null) {
             return;
         }
 
         var scopes = await _progressTopology.ResolveOrderedScopesAsync(playableId, cancellationToken);
         foreach (var scope in scopes) {
-            await UpdateOrderedProgressScopeAsync(scope, playback.CompletedAt is not null, cancellationToken);
+            await UpdateOrderedProgressScopeAsync(scope, consumption.CompletedAt is not null, cancellationToken);
         }
     }
 
@@ -801,7 +890,7 @@ public sealed class EntityCapabilityService {
         var targetIndex = itemCompleted && scope.NextItemId is not null
             ? scope.Index + 1
             : scope.Index;
-        var scopeCompleted = itemCompleted && scope.NextItemId is null;
+        var scopeCompleted = scope.Total > 0 && scope.CompletedCount >= scope.Total;
         var occurredAt = _timeProvider.GetUtcNow();
 
         await ExecuteWriteAttemptAsync(
@@ -815,12 +904,6 @@ public sealed class EntityCapabilityService {
                 if (progress is null) {
                     return false;
                 }
-                if (progress.CurrentEntityId is not null &&
-                    (progress.Index > targetIndex ||
-                     progress.CompletedAt is not null && !scopeCompleted && progress.Index >= targetIndex)) {
-                    return false;
-                }
-
                 if (!progress.TryMoveTo(
                         targetItemId,
                         ProgressUnit.Item,
@@ -828,7 +911,8 @@ public sealed class EntityCapabilityService {
                         scope.Total,
                         mode: null,
                         occurredAt,
-                        completed: scopeCompleted)) {
+                        completed: scopeCompleted,
+                        consumedCount: scope.CompletedCount)) {
                     return false;
                 }
 
@@ -841,11 +925,16 @@ public sealed class EntityCapabilityService {
             cancellationToken);
     }
 
-    private sealed record PlaybackMutationResult(bool WasApplied, PlaybackEventAppend? Event) {
-        public static PlaybackMutationResult Rejected { get; } = new(false, null);
+    private sealed record ConsumptionMutationResult(
+        bool WasApplied,
+        ConsumptionEventAppend? Event,
+        ConsumptionActivityAppend? Activity) {
+        public static ConsumptionMutationResult Rejected { get; } = new(false, null, null);
 
-        public static PlaybackMutationResult Applied(PlaybackEventAppend? playbackEvent = null) =>
-            new(true, playbackEvent);
+        public static ConsumptionMutationResult Applied(
+            ConsumptionEventAppend? consumptionEvent = null,
+            ConsumptionActivityAppend? activity = null) =>
+            new(true, consumptionEvent, activity);
     }
 
 }

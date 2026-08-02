@@ -44,7 +44,8 @@ public sealed class BookVolumeEntityKindDefinition() : RootEntityKindDefinition<
     [
         new CapabilityStats(),
         new CapabilitySource(),
-        new CapabilityPosition()
+        new CapabilityPosition(),
+        new CapabilityConsumption()
     ]) {
     /// <inheritdoc />
     public override EntityProgressTopology ProgressTopology => EntityProgressTopology.Work(EntityKind.Book);
@@ -92,7 +93,8 @@ public sealed class BookChapterEntityKindDefinition() : EntityKindDefinition<Boo
         new CapabilityFingerprints(),
         new CapabilityStats(),
         new CapabilitySource(),
-        new CapabilityPosition()
+        new CapabilityPosition(),
+        new CapabilityConsumption()
     ]) {
     /// <inheritdoc />
     public override EntityProgressTopology ProgressTopology => EntityProgressTopology.Work(EntityKind.Book);

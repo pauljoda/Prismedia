@@ -30,10 +30,13 @@ public sealed class AudioLibraryEntityKindDefinition() : RootEntityKindDefinitio
             allowsParentedAutoIdentifyRoot: true,
             usesParentExternalIdentityContext: true),
         manualAcquisition: EntityManualAcquisitionPolicy.UploadAndReplacement,
-        engagement: new(EntityEngagementMode.Playback),
+        engagement: new(
+            EntityEngagementMode.Playback,
+            defaultActivityKind: ConsumptionActivityKind.Listening),
         libraryVisibility: EntityLibraryVisibilityPolicy.DirectRoot,
         supportsFileDeletion: true,
-        mediaQualityFamily: EntityMediaQualityFamily.Audio)) {
+        mediaQualityFamily: EntityMediaQualityFamily.Audio),
+    defaultCapabilities: static () => [new CapabilityConsumption()]) {
     /// <inheritdoc />
     public override EntityProgressTopology ProgressTopology => EntityProgressTopology.None;
 

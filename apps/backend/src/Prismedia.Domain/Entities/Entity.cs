@@ -257,14 +257,14 @@ public abstract class Entity {
     /// <summary>Marker capability when attached.</summary>
     public CapabilityMarkers? MarkerCapability => GetCapability<CapabilityMarkers>();
 
-    /// <summary>Playback capability when attached.</summary>
-    public CapabilityPlayback? PlaybackCapability => GetCapability<CapabilityPlayback>();
+    /// <summary>Consumption capability when attached.</summary>
+    public CapabilityConsumption? ConsumptionCapability => GetCapability<CapabilityConsumption>();
 
     /// <summary>Subtitle capability when attached.</summary>
     public CapabilitySubtitles? SubtitleCapability => GetCapability<CapabilitySubtitles>();
 
-    /// <summary>Playback state when playback capability is attached.</summary>
-    public CapabilityPlayback.State? Playback => PlaybackCapability?.Value;
+    /// <summary>Consumption state when the capability is attached.</summary>
+    public CapabilityConsumption.State? Consumption => ConsumptionCapability?.Value;
 
     /// <summary>
     /// Updates the title while preserving entity identity.

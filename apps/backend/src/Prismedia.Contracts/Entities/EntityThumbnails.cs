@@ -115,10 +115,10 @@ public sealed record EntityThumbnail(
     public double? ResumeSeconds { get; init; }
 
     /// <summary>
-    /// Number of completed plays recorded for the entity, when it tracks playback (e.g. audio tracks
-    /// and videos). Lets list rows show a play-count stat without fetching the full detail graph.
+    /// Number of times the entity was opened for consumption. Lets list rows show an access count
+    /// without fetching the full detail graph.
     /// </summary>
-    public int? PlayCount { get; init; }
+    public int? AccessCount { get; init; }
 
     /// <summary>
     /// Tag names applied to the entity, surfaced so list projections do not fetch each entity's

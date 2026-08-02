@@ -121,7 +121,7 @@ public sealed class EntityPatchEndpointTests {
         Assert.NotNull(repository.SavedEntity?.Progress?.CompletedAt);
         Assert.Contains(
             factory.Services.GetRequiredService<RecordingPlaybackEventStore>().Events,
-            entry => entry.EntityId == EntityId && entry.Kind == PlaybackEventKind.Completed);
+            entry => entry.EntityId == EntityId && entry.Kind == ConsumptionEventKind.Completed);
     }
 
     [Fact]
@@ -135,7 +135,7 @@ public sealed class EntityPatchEndpointTests {
             new EntityProgressUpdateRequest(ChapterId, ProgressUnit.Page, 23, 24, ReaderMode.Paged, Completed: true), CodecJson);
         Assert.NotNull(repository.SavedEntity?.Progress?.CompletedAt);
 
-        // Start over resets to the beginning and clears completion despite the forward-only guard.
+        // Start over resets both the current cursor and coverage, then clears completion.
         using var response = await client.PatchAsJsonAsync(
             $"/api/entities/{EntityId}/progress",
             new EntityProgressUpdateRequest(ChapterId, ProgressUnit.Page, 0, 24, ReaderMode.Paged, Completed: null, Reset: true), CodecJson);
@@ -198,7 +198,7 @@ public sealed class EntityPatchEndpointTests {
     }
 
     [Fact]
-    public async Task EntityProgressPatchIgnoresEarlierBookProgress() {
+    public async Task EntityProgressPatchMovesCurrentCursorToTheLatestReportedPosition() {
         using var factory = CreateProgressFactory();
         using var client = factory.CreateAuthenticatedClient();
 
@@ -211,7 +211,8 @@ public sealed class EntityPatchEndpointTests {
         var repository = factory.Services.GetRequiredService<FakeEntityWriteRepository>();
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        Assert.Equal(7, repository.SavedEntity?.Progress?.Index);
+        Assert.Equal(2, repository.SavedEntity?.Progress?.Index);
+        Assert.Equal(8, repository.SavedEntity?.Progress?.ConsumedCount);
     }
 
     private static EntityMetadataUpdateRequest Request(string title) =>
@@ -254,7 +255,7 @@ public sealed class EntityPatchEndpointTests {
                         provider.GetRequiredService<FakeEntityWriteRepository>());
                     services.RemoveAll<IEntityReadService>();
                     services.AddScoped<IEntityReadService, FakeEntityReadService>();
-                    services.AddScoped<IPlaybackEventStore>(provider =>
+                    services.AddScoped<IConsumptionEventStore>(provider =>
                         provider.GetRequiredService<RecordingPlaybackEventStore>());
                     services.RemoveAll<IEntityProgressTopologyResolver>();
                     services.AddSingleton<IEntityProgressTopologyResolver>(new FakeProgressTopologyResolver());
@@ -391,15 +392,15 @@ public sealed class EntityPatchEndpointTests {
         }
     }
 
-    private sealed class RecordingPlaybackEventStore : IPlaybackEventStore {
-        public List<PlaybackEventAppend> Events { get; } = [];
+    private sealed class RecordingPlaybackEventStore : IConsumptionEventStore {
+        public List<ConsumptionEventAppend> Events { get; } = [];
 
-        public Task StageAsync(PlaybackEventAppend entry, CancellationToken cancellationToken) {
+        public Task StageAsync(ConsumptionEventAppend entry, CancellationToken cancellationToken) {
             Events.Add(entry);
             return Task.CompletedTask;
         }
 
-        public Task AppendAsync(PlaybackEventAppend entry, CancellationToken cancellationToken) =>
+        public Task AppendAsync(ConsumptionEventAppend entry, CancellationToken cancellationToken) =>
             StageAsync(entry, cancellationToken);
     }
 }

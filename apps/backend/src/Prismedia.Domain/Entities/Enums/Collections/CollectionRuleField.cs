@@ -81,9 +81,9 @@ public enum CollectionRuleField {
     [Code("sample_rate")]
     SampleRateLegacy,
 
-    /// <summary>User playback count.</summary>
-    [Code("playCount")]
-    PlayCount,
+    /// <summary>User consumption access count.</summary>
+    [Code("accessCount")]
+    AccessCount,
 
     /// <summary>User playback skip count.</summary>
     [Code("skipCount")]

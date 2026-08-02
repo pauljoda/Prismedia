@@ -37,7 +37,7 @@ public sealed class EntityKindMetadataTests {
         Assert.Equal([EntityKind.Movie, EntityKind.Video, EntityKind.VideoEpisode], playableKinds);
         foreach (var kind in playableKinds) {
             var definition = EntityKindRegistry.Describe(kind);
-            Assert.True(definition.SupportsDefaultCapability<CapabilityPlayback>());
+            Assert.True(definition.SupportsDefaultCapability<CapabilityConsumption>());
             Assert.True(definition.SupportsDefaultCapability<CapabilityMarkers>());
             Assert.True(definition.SupportsDefaultCapability<CapabilitySubtitles>());
             Assert.True(definition.SupportsDefaultCapability<CapabilityCredits>());

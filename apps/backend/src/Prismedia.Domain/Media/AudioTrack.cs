@@ -5,7 +5,7 @@ using EmbeddedAudioMetadataDocumentCapability = Prismedia.Contracts.Entities.Emb
 
 namespace Prismedia.Domain.Media;
 
-/// <summary>Defines the playable audio-track kind and its default playback capability.</summary>
+/// <summary>Defines the playable audio-track kind and its default consumption capability.</summary>
 public sealed class AudioTrackEntityKindDefinition() : EntityKindDefinition<AudioTrack>(
     EntityKind.AudioTrack,
     "audio-track",
@@ -34,7 +34,9 @@ public sealed class AudioTrackEntityKindDefinition() : EntityKindDefinition<Audi
             previewJobType: JobType.GenerateAudioWaveform,
             previewRequiresAutomaticGeneration: true,
             generatedFileRoles: [EntityFileRole.Waveform]),
-        engagement: new(EntityEngagementMode.Playback),
+        engagement: new(
+            EntityEngagementMode.Playback,
+            defaultActivityKind: ConsumptionActivityKind.Listening),
         browse: new(excludesWantedByDefault: true),
         catalogVisibility: new(
             parentExclusions: [new(EntityKind.Book,
@@ -45,7 +47,7 @@ public sealed class AudioTrackEntityKindDefinition() : EntityKindDefinition<Audi
         libraryVisibility: EntityLibraryVisibilityPolicy.AncestorRoot,
         supportsFileDeletion: true,
         mediaQualityFamily: EntityMediaQualityFamily.Audio),
-    defaultCapabilities: static () => [new CapabilityPlayback()]) {
+    defaultCapabilities: static () => [new CapabilityConsumption()]) {
     /// <inheritdoc />
     public override EntityProgressTopology ProgressTopology => EntityProgressTopology.Work(
         EntityKind.Book,
@@ -97,10 +99,11 @@ public sealed class AudioTrack : Entity<AudioTrackEntityKindDefinition> {
     public string? EmbeddedAlbum { get; private set; }
 
     /// <summary>
-    /// Records a playback event on the attached playback capability.
+    /// Records an access event on the attached consumption capability.
     /// </summary>
     public void MarkPlayed(TimeSpan resumeTime, DateTimeOffset playedAt) {
-        var playback = RequireCapability<CapabilityPlayback>();
-        playback.MarkPlayed(resumeTime, playedAt);
+        var consumption = RequireCapability<CapabilityConsumption>();
+        consumption.RecordAccessed(playedAt);
+        consumption.RecordResume(resumeTime, playedAt);
     }
 }

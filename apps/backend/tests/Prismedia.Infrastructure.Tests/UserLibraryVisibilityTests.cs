@@ -294,8 +294,8 @@ public sealed class UserLibraryVisibilityTests {
             UserId = otherUserId,
             EntityId = GrantedVideoId,
             IsFavorite = true,
-            PlayCount = 5,
-            LastPlayedAt = now,
+            AccessCount = 5,
+            LastActiveAt = now,
             UpdatedAt = now
         });
         await db.SaveChangesAsync();
@@ -310,7 +310,7 @@ public sealed class UserLibraryVisibilityTests {
 
         Assert.Empty(favorites.Items);
         Assert.All(thumbnails.Items, item => Assert.False(item.IsFavorite));
-        Assert.All(thumbnails.Items, item => Assert.Null(item.PlayCount));
+        Assert.All(thumbnails.Items, item => Assert.Null(item.AccessCount));
     }
 
     [Fact]

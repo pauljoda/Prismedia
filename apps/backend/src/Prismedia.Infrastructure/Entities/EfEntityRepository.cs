@@ -168,6 +168,12 @@ public sealed class EfEntityRepository : IEntityWriteRepository {
             throw new EntityConcurrencyConflictException(
                 $"Concurrent creation of user state for entity '{entity.Id}'.",
                 ex);
+        } catch (DbUpdateException ex) when (IsConcurrentConsumptionInsert(ex)) {
+            // Daily buckets and session access events are logical upserts. A competing request can
+            // win their unique key after this unit of work read; reload and reapply against it.
+            throw new EntityConcurrencyConflictException(
+                $"Concurrent consumption update for entity '{entity.Id}'.",
+                ex);
         }
     }
 
@@ -188,6 +194,13 @@ public sealed class EfEntityRepository : IEntityWriteRepository {
                 .OrderBy(name => name, StringComparer.Ordinal)
                 .SequenceEqual([nameof(UserEntityStateRow.EntityId), nameof(UserEntityStateRow.UserId)]));
     }
+
+    private static bool IsConcurrentConsumptionInsert(DbUpdateException exception) =>
+        exception.InnerException is PostgresException {
+            SqlState: PostgresErrorCodes.UniqueViolation,
+            ConstraintName: "IX_entity_consumption_days_user_id_entity_id_kind_activity_date" or
+                "IX_entity_consumption_events_user_id_session_id_kind"
+        };
 
     private async Task<Entity> ConstructEntityAsync(EntityRow row, CancellationToken cancellationToken) {
         var kind = EntityKindRegistry.Require(row.KindCode);

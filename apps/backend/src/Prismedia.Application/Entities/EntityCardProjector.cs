@@ -90,18 +90,18 @@ public static class EntityCardProjector {
 
     /// <summary>
     /// Computes the 0..1 progress meter fraction for a nested thumbnail from the hydrated
-    /// entity's playback and reading-progress capabilities, mirroring the row-based browse
+    /// entity's consumption and reading-progress capabilities, mirroring the row-based browse
     /// projection so detail-page child grids match library grids.
     /// </summary>
     private static double? ResolveThumbnailProgress(Entity entity) {
-        if (entity.Playback is { } playback) {
-            if (playback.CompletedAt is not null) {
+        if (entity.Consumption is { } consumption) {
+            if (consumption.CompletedAt is not null) {
                 return 1.0;
             }
 
             var duration = entity.Technical?.Duration;
-            if (playback.ResumeTime > TimeSpan.Zero && duration is { } total && total > TimeSpan.Zero) {
-                return Math.Clamp(playback.ResumeTime.TotalSeconds / total.TotalSeconds, 0, 1);
+            if (consumption.ResumeTime > TimeSpan.Zero && duration is { } total && total > TimeSpan.Zero) {
+                return Math.Clamp(consumption.ResumeTime.TotalSeconds / total.TotalSeconds, 0, 1);
             }
 
             return null;

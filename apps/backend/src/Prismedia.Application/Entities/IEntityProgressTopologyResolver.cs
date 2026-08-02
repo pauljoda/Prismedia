@@ -46,4 +46,5 @@ public sealed record OrderedProgressScope(
     Guid CurrentItemId,
     int Index,
     int Total,
-    Guid? NextItemId);
+    Guid? NextItemId,
+    int CompletedCount = 0);

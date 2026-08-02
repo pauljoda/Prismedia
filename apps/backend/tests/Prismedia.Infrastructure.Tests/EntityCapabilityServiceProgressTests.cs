@@ -14,16 +14,15 @@ public sealed class EntityCapabilityServiceProgressTests {
     private static readonly Guid OtherBookId = Guid.Parse("44444444-4444-4444-4444-444444444444");
 
     [Fact]
-    public async Task BookProgressCanMoveForwardFromCompletedEarlierChapter() {
-        var completedAt = DateTimeOffset.UtcNow.AddMinutes(-5);
+    public async Task BookProgressCanMoveForwardFromEarlierChapter() {
+        var updatedAt = DateTimeOffset.UtcNow.AddMinutes(-5);
         var repository = new FakeEntityWriteRepository(new CapabilityProgress(
             currentEntityId: ChapterOneId,
             unit: ProgressUnit.Page,
             index: 1,
             total: 2,
             mode: ReaderMode.Paged,
-            completedAt: completedAt,
-            updatedAt: completedAt));
+            updatedAt: updatedAt));
         var service = new EntityCapabilityService(repository, new CanonicalEntityReadStub(), new TestProgressTopologyResolver());
 
         await service.UpdateProgressAsync(
@@ -48,7 +47,7 @@ public sealed class EntityCapabilityServiceProgressTests {
     }
 
     [Fact]
-    public async Task BookProgressDoesNotClearCompletedStateForEarlierCursor() {
+    public async Task BookProgressFollowsEarlierCursorWithoutClearingConsumedCompletion() {
         var completedAt = DateTimeOffset.UtcNow.AddMinutes(-5);
         var repository = new FakeEntityWriteRepository(new CapabilityProgress(
             currentEntityId: ChapterTwoId,
@@ -74,9 +73,11 @@ public sealed class EntityCapabilityServiceProgressTests {
             activityKind: null,
             CancellationToken.None);
 
-        Assert.Null(repository.SavedEntity);
-        Assert.Equal(ChapterTwoId, repository.Book.Progress!.CurrentEntityId);
-        Assert.Equal(completedAt, repository.Book.Progress.CompletedAt);
+        var progress = Assert.IsType<Book>(repository.SavedEntity).Progress!;
+        Assert.Equal(ChapterOneId, progress.CurrentEntityId);
+        Assert.Equal(0, progress.Index);
+        Assert.Equal(completedAt, progress.CompletedAt);
+        Assert.Equal(2, progress.ConsumedCount);
     }
 
     [Fact]
@@ -133,7 +134,7 @@ public sealed class EntityCapabilityServiceProgressTests {
     }
 
     [Fact]
-    public async Task SingleFileBookProgressDoesNotMoveBackwardWithinTheCanonicalCursor() {
+    public async Task SingleFileBookCurrentCursorMovesBackwardWithoutReducingCoverage() {
         var updatedAt = DateTimeOffset.UtcNow.AddMinutes(-5);
         var repository = new FakeEntityWriteRepository(new CapabilityProgress(
             currentEntityId: BookId,
@@ -159,9 +160,10 @@ public sealed class EntityCapabilityServiceProgressTests {
             activityKind: null,
             CancellationToken.None);
 
-        Assert.Null(repository.SavedEntity);
-        Assert.Equal(6000, repository.Book.Progress!.Index);
-        Assert.Equal("epubcfi(/6/12!/4/2)", repository.Book.Progress.Location);
+        var progress = Assert.IsType<Book>(repository.SavedEntity).Progress!;
+        Assert.Equal(4000, progress.Index);
+        Assert.Null(progress.Location);
+        Assert.Equal(6001, progress.ConsumedCount);
     }
 
     [Fact]
@@ -179,7 +181,7 @@ public sealed class EntityCapabilityServiceProgressTests {
             repository,
             new CanonicalEntityReadStub(),
             new TestProgressTopologyResolver(),
-            activityEvents: activities);
+            consumptionActivities: activities);
 
         await service.UpdateProgressAsync(
             BookId,
@@ -192,14 +194,14 @@ public sealed class EntityCapabilityServiceProgressTests {
             reset: false,
             location: null,
             activitySeconds: 15,
-            activityKind: BookActivityKind.Reading,
+            activityKind: ConsumptionActivityKind.Reading,
             CancellationToken.None);
 
         var book = Assert.IsType<Book>(repository.SavedEntity);
-        Assert.Equal(TimeSpan.FromSeconds(15), book.PlaybackCapability?.Value.PlayDuration);
+        Assert.Equal(TimeSpan.FromSeconds(15), book.ConsumptionCapability?.Value.ActiveDuration);
         var activity = Assert.Single(activities.Events);
         Assert.Equal(BookId, activity.EntityId);
-        Assert.Equal(BookActivityKind.Reading, activity.Kind);
+        Assert.Equal(ConsumptionActivityKind.Reading, activity.Kind);
         Assert.Equal(15, activity.DurationSeconds);
     }
 
@@ -217,7 +219,7 @@ public sealed class EntityCapabilityServiceProgressTests {
             repository,
             new CanonicalEntityReadStub(),
             new TestProgressTopologyResolver(),
-            activityEvents: activities);
+            consumptionActivities: activities);
 
         await service.UpdateProgressAsync(
             BookId,
@@ -230,13 +232,13 @@ public sealed class EntityCapabilityServiceProgressTests {
             reset: false,
             location: null,
             activitySeconds: 600,
-            activityKind: BookActivityKind.Listening,
+            activityKind: ConsumptionActivityKind.Listening,
             CancellationToken.None);
 
         Assert.Equal(60, Assert.Single(activities.Events).DurationSeconds);
         Assert.Equal(
             TimeSpan.FromSeconds(60),
-            Assert.IsType<Book>(repository.SavedEntity).PlaybackCapability?.Value.PlayDuration);
+            Assert.IsType<Book>(repository.SavedEntity).ConsumptionCapability?.Value.ActiveDuration);
     }
 
     [Fact]
@@ -249,8 +251,8 @@ public sealed class EntityCapabilityServiceProgressTests {
             repository,
             new CanonicalEntityReadStub(),
             new TestProgressTopologyResolver(),
-            playbackEvents: playbackEvents,
-            activityEvents: activityEvents);
+            consumptionEvents: playbackEvents,
+            consumptionActivities: activityEvents);
         var occurredAt = DateTimeOffset.UtcNow;
 
         var results = new EntityCard?[] {
@@ -259,8 +261,8 @@ public sealed class EntityCapabilityServiceProgressTests {
             await service.RecordCompletedPlaybackAsync(image.Id, CancellationToken.None),
             await service.RecordCompletedPlaybackAsync(image.Id, occurredAt, 10, 100, CancellationToken.None),
             await service.RecordSkippedPlaybackAsync(image.Id, occurredAt, 10, 100, CancellationToken.None),
-            await service.RecordPlaybackEventAsync(image.Id, PlaybackEventKind.Completed, occurredAt, 10, 100, CancellationToken.None),
-            await service.RecordPlaybackEventAsync(image.Id, PlaybackEventKind.Skipped, occurredAt, 10, 100, CancellationToken.None),
+            await service.RecordPlaybackEventAsync(image.Id, ConsumptionEventKind.Completed, occurredAt, 10, 100, CancellationToken.None),
+            await service.RecordPlaybackEventAsync(image.Id, ConsumptionEventKind.Skipped, occurredAt, 10, 100, CancellationToken.None),
             await service.UpdateProgressAsync(
                 image.Id,
                 image.Id,
@@ -272,7 +274,7 @@ public sealed class EntityCapabilityServiceProgressTests {
                 reset: false,
                 location: null,
                 activitySeconds: 30,
-                activityKind: BookActivityKind.Reading,
+                activityKind: ConsumptionActivityKind.Reading,
                 CancellationToken.None),
             await service.AddMarkerAsync(image.Id, "Opening", 0, null, CancellationToken.None),
             await service.UpdateMarkerAsync(image.Id, Guid.NewGuid(), "Opening", 0, null, CancellationToken.None),
@@ -283,7 +285,7 @@ public sealed class EntityCapabilityServiceProgressTests {
         Assert.Equal(0, repository.SaveCount);
         Assert.Empty(playbackEvents.Events);
         Assert.Empty(activityEvents.Events);
-        Assert.Null(image.PlaybackCapability);
+        Assert.Null(image.ConsumptionCapability);
         Assert.Null(image.Progress);
         Assert.Null(image.MarkerCapability);
     }
@@ -317,12 +319,12 @@ public sealed class EntityCapabilityServiceProgressTests {
         Assert.NotNull(playback);
         Assert.NotNull(progress);
         Assert.Equal(2, repository.SaveCount);
-        Assert.Equal(TimeSpan.FromSeconds(10), book.PlaybackCapability?.Value.ResumeTime);
+        Assert.Equal(TimeSpan.FromSeconds(10), book.ConsumptionCapability?.Value.ResumeTime);
         Assert.Equal(4, book.Progress?.Index);
     }
 
     [Fact]
-    public async Task ProgressOnlyVideoScopeCanCompleteWithoutCreatingPlaybackHistory() {
+    public async Task ProgressOnlyVideoScopeRecordsGeneralizedCompletionHistory() {
         var series = new VideoSeries(Guid.NewGuid(), "Series");
         var repository = new SingleEntityWriteRepository(series);
         var playbackEvents = new RecordingPlaybackEventStore();
@@ -330,7 +332,7 @@ public sealed class EntityCapabilityServiceProgressTests {
             repository,
             new CanonicalEntityReadStub(),
             new TestProgressTopologyResolver(),
-            playbackEvents: playbackEvents);
+            consumptionEvents: playbackEvents);
 
         var result = await service.UpdateProgressAsync(
             series.Id,
@@ -349,8 +351,8 @@ public sealed class EntityCapabilityServiceProgressTests {
         Assert.NotNull(result);
         Assert.Equal(1, repository.SaveCount);
         Assert.NotNull(series.Progress?.CompletedAt);
-        Assert.Null(series.PlaybackCapability);
-        Assert.Empty(playbackEvents.Events);
+        Assert.Equal(1, series.ConsumptionCapability?.Value.CompletionCount);
+        Assert.Equal(ConsumptionEventKind.Completed, Assert.Single(playbackEvents.Events).Kind);
     }
 
     [Theory]
@@ -374,7 +376,7 @@ public sealed class EntityCapabilityServiceProgressTests {
         Assert.NotNull(playback);
         Assert.Equal(2, repository.SaveCount);
         Assert.Single(entity.MarkerCapability!.Items);
-        Assert.Equal(TimeSpan.FromSeconds(10), entity.PlaybackCapability?.Value.ResumeTime);
+        Assert.Equal(TimeSpan.FromSeconds(10), entity.ConsumptionCapability?.Value.ResumeTime);
     }
 
     [Fact]
@@ -492,24 +494,24 @@ public sealed class EntityCapabilityServiceProgressTests {
             Task.FromResult<IReadOnlyList<OrderedProgressScope>>([]);
     }
 
-    private sealed class RecordingEntityActivityStore : IEntityActivityStore {
-        public List<EntityActivityAppend> Events { get; } = [];
+    private sealed class RecordingEntityActivityStore : IConsumptionActivityStore {
+        public List<ConsumptionActivityAppend> Events { get; } = [];
 
-        public Task StageAsync(EntityActivityAppend entry, CancellationToken cancellationToken) {
+        public Task StageAsync(ConsumptionActivityAppend entry, CancellationToken cancellationToken) {
             Events.Add(entry);
             return Task.CompletedTask;
         }
     }
 
-    private sealed class RecordingPlaybackEventStore : IPlaybackEventStore {
-        public List<PlaybackEventAppend> Events { get; } = [];
+    private sealed class RecordingPlaybackEventStore : IConsumptionEventStore {
+        public List<ConsumptionEventAppend> Events { get; } = [];
 
-        public Task StageAsync(PlaybackEventAppend entry, CancellationToken cancellationToken) {
+        public Task StageAsync(ConsumptionEventAppend entry, CancellationToken cancellationToken) {
             Events.Add(entry);
             return Task.CompletedTask;
         }
 
-        public Task AppendAsync(PlaybackEventAppend entry, CancellationToken cancellationToken) =>
+        public Task AppendAsync(ConsumptionEventAppend entry, CancellationToken cancellationToken) =>
             StageAsync(entry, cancellationToken);
     }
 }

@@ -14,4 +14,7 @@ public sealed record ProgressCapability(
     DateTimeOffset? UpdatedAt,
     int? WorkIndex = null,
     int? WorkTotal = null,
-    string? Location = null) : EntityCapability;
+    string? Location = null,
+    int ConsumedCount = 0,
+    int? ConsumedTotal = null,
+    double ConsumedPercent = 0) : EntityCapability;

@@ -11,18 +11,18 @@ public sealed class EntityCapabilityTests {
         var book = new Book(Guid.NewGuid(), "Dune", BookType.Novel, null, BookFormat.Epub);
 
         Assert.NotNull(book.GetCapability<CapabilityProgress>());
-        Assert.NotNull(book.GetCapability<CapabilityPlayback>());
+        Assert.NotNull(book.GetCapability<CapabilityConsumption>());
     }
 
     [Fact]
     public void GetCapabilityReturnsAttachedReference() {
-        var playback = new CapabilityPlayback();
+        var playback = new CapabilityConsumption();
         var video = new Video(
             Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
             "Projected Video",
             capabilities: [playback]);
 
-        var attached = video.GetCapability<CapabilityPlayback>();
+        var attached = video.GetCapability<CapabilityConsumption>();
 
         Assert.Same(playback, attached);
     }
@@ -32,12 +32,12 @@ public sealed class EntityCapabilityTests {
         var video = new Video(
             Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"),
             "Projected Video",
-            capabilities: [new CapabilityPlayback()]);
+            capabilities: [new CapabilityConsumption()]);
 
-        video.GetCapability<CapabilityPlayback>()!.RecordResume(
+        video.GetCapability<CapabilityConsumption>()!.RecordResume(
             TimeSpan.FromSeconds(10), DateTimeOffset.UtcNow);
 
-        Assert.Equal(TimeSpan.FromSeconds(10), video.Playback!.ResumeTime);
+        Assert.Equal(TimeSpan.FromSeconds(10), video.Consumption!.ResumeTime);
     }
 
     [Fact]
@@ -45,9 +45,9 @@ public sealed class EntityCapabilityTests {
         var ex = Assert.Throws<ArgumentException>(() => new Video(
             Guid.Parse("cccccccc-cccc-cccc-cccc-cccccccccccc"),
             "Projected Video",
-            capabilities: [new CapabilityPlayback(), new CapabilityPlayback()]));
+            capabilities: [new CapabilityConsumption(), new CapabilityConsumption()]));
 
-        Assert.Contains(nameof(CapabilityPlayback), ex.Message);
+        Assert.Contains(nameof(CapabilityConsumption), ex.Message);
     }
 
     [Fact]
@@ -57,23 +57,23 @@ public sealed class EntityCapabilityTests {
             "Projected Image",
             capabilities: []);
 
-        Assert.False(image.HasCapability<CapabilityPlayback>());
-        Assert.Null(image.GetCapability<CapabilityPlayback>());
-        Assert.Throws<InvalidOperationException>(() => image.RequireCapability<CapabilityPlayback>());
+        Assert.False(image.HasCapability<CapabilityConsumption>());
+        Assert.Null(image.GetCapability<CapabilityConsumption>());
+        Assert.Throws<InvalidOperationException>(() => image.RequireCapability<CapabilityConsumption>());
     }
 
     [Fact]
     public void RemoveCapabilityDetachesTheCapabilityFromTheEntity() {
-        var playback = new CapabilityPlayback();
+        var playback = new CapabilityConsumption();
         var video = new Video(
             Guid.Parse("eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee"),
             "Projected Video",
             capabilities: [playback]);
 
-        var removed = video.RemoveCapability<CapabilityPlayback>();
+        var removed = video.RemoveCapability<CapabilityConsumption>();
 
         Assert.True(removed);
-        Assert.Null(video.GetCapability<CapabilityPlayback>());
+        Assert.Null(video.GetCapability<CapabilityConsumption>());
     }
 
     [Fact]

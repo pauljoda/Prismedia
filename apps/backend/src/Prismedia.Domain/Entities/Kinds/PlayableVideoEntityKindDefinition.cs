@@ -116,7 +116,7 @@ public abstract class PlayableVideoEntityKindDefinition<TEntity> : RootEntityKin
     private static IReadOnlyList<EntityCapability> CreateDefaultCapabilities(
         Func<IReadOnlyList<EntityCapability>>? additional) {
         var capabilities = new List<EntityCapability> {
-            new CapabilityPlayback(),
+            new CapabilityConsumption(),
             new CapabilityMarkers(),
             new CapabilitySubtitles(),
             new CapabilityCredits()

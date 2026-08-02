@@ -282,7 +282,7 @@ public sealed partial class AcquisitionHintApplier {
         || await db.UserEntityStates.AsNoTracking().AnyAsync(
             row => row.EntityId == entityId || row.ProgressCurrentEntityId == entityId,
             cancellationToken)
-        || await db.EntityPlaybackEvents.AsNoTracking().AnyAsync(row => row.EntityId == entityId, cancellationToken)
+        || await db.EntityConsumptionEvents.AsNoTracking().AnyAsync(row => row.EntityId == entityId, cancellationToken)
         || await db.EntityStats.AsNoTracking().AnyAsync(row => row.EntityId == entityId, cancellationToken)
         || await db.EntityDates.AsNoTracking().AnyAsync(row => row.EntityId == entityId, cancellationToken)
         || await db.EntitySources.AsNoTracking().AnyAsync(row => row.EntityId == entityId, cancellationToken)

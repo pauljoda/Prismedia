@@ -35,7 +35,7 @@ public sealed class BookEntityKindDefinition() : EntityKindDefinition<Book>(
         libraryVisibility: EntityLibraryVisibilityPolicy.DirectRoot,
         supportsFileDeletion: true,
         upgradeMode: EntityUpgradeMode.AtomicBookFile),
-    defaultCapabilities: static () => [new CapabilityProgress(), new CapabilityPlayback()]) {
+    defaultCapabilities: static () => [new CapabilityProgress(), new CapabilityConsumption()]) {
     /// <inheritdoc />
     public override EntityProgressTopology ProgressTopology => EntityProgressTopology.Work(EntityKind.Book);
 

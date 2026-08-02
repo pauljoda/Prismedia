@@ -115,4 +115,6 @@ public sealed record VideoPlaybackSessionCommand {
     public double? PositionSeconds { get; init; }
     public double? DurationSeconds { get; init; }
     public bool? Completed { get; init; }
+    public double? ActivitySeconds { get; init; }
+    public int? UtcOffsetMinutes { get; init; }
 }

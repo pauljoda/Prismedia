@@ -244,7 +244,7 @@ public sealed partial class EfEntityReadService {
                     ? wantedStatus
                     : null,
                 CreatedAt = row.CreatedAt,
-                PlayCount = playbackState?.PlayCount,
+                AccessCount = playbackState?.AccessCount,
                 ResumeSeconds = playbackState is { ResumeSeconds: > 0 }
                     ? playbackState.ResumeSeconds
                     : null,
@@ -541,7 +541,30 @@ public sealed partial class EfEntityReadService {
             return null;
         }
 
-        if (Mappers.Capabilities.UserEntityStateColumns.HasPlayback(state)) {
+        if (Mappers.Capabilities.UserEntityStateColumns.HasProgress(state)) {
+            if (state.ProgressCompletedAt is not null) {
+                return 1.0;
+            }
+
+            if (state.ProgressTotal > 0 && (state.ProgressCurrentEntityId is not null || state.ProgressIndex > 0)) {
+                var currentFraction = progressEntityState switch {
+                    { CompletedAt: not null } when state.ProgressConsumedCount == 0 => 1,
+                    { CompletedAt: null, ResumeSeconds: > 0 } when progressEntityDurationSeconds is > 0 =>
+                        Math.Clamp(progressEntityState.ResumeSeconds / progressEntityDurationSeconds.Value, 0, 1),
+                    _ => 0
+                };
+                var consumedUnits = state.ProgressConsumedCount > 0
+                    ? state.ProgressConsumedCount
+                    : state.ProgressIndex;
+                var fraction = Math.Clamp(
+                    (consumedUnits + currentFraction) / state.ProgressTotal,
+                    0,
+                    1);
+                return fraction > 0 ? fraction : null;
+            }
+        }
+
+        if (Mappers.Capabilities.UserEntityStateColumns.HasConsumption(state)) {
             if (state.CompletedAt is not null) {
                 return 1.0;
             }
@@ -549,26 +572,6 @@ public sealed partial class EfEntityReadService {
             if (state.ResumeSeconds > 0 && durationSeconds is > 0) {
                 return Math.Clamp(state.ResumeSeconds / durationSeconds.Value, 0, 1);
             }
-
-            return null;
-        }
-
-        if (state.ProgressCompletedAt is not null) {
-            return 1.0;
-        }
-
-        if (state.ProgressTotal > 0 && (state.ProgressCurrentEntityId is not null || state.ProgressIndex > 0)) {
-            var currentFraction = progressEntityState switch {
-                { CompletedAt: not null } => 1,
-                { ResumeSeconds: > 0 } when progressEntityDurationSeconds is > 0 =>
-                    Math.Clamp(progressEntityState.ResumeSeconds / progressEntityDurationSeconds.Value, 0, 1),
-                _ => 0
-            };
-            var fraction = Math.Clamp(
-                (state.ProgressIndex + currentFraction) / state.ProgressTotal,
-                0,
-                1);
-            return fraction > 0 ? fraction : null;
         }
 
         return null;

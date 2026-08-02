@@ -29,7 +29,8 @@ public sealed record EntityFlagsUpdateRequest(
 public sealed record PlaybackUpdateRequest(
     double? ResumeSeconds,
     double? DurationSeconds,
-    bool? Completed);
+    bool? Completed,
+    int? UtcOffsetMinutes = null);
 
 /// <summary>
 /// Request body for recording an explicit playback-history event.
@@ -39,10 +40,11 @@ public sealed record PlaybackUpdateRequest(
 /// <param name="PositionSeconds">Optional playback position associated with the event.</param>
 /// <param name="DurationSeconds">Optional entity duration associated with the event.</param>
 public sealed record PlaybackEventCreateRequest(
-    PlaybackEventKind Kind,
+    ConsumptionEventKind Kind,
     DateTimeOffset? OccurredAt,
     double? PositionSeconds,
-    double? DurationSeconds);
+    double? DurationSeconds,
+    string? SessionId = null);
 
 /// <summary>
 /// Request body for recording non-time progress such as a reading cursor.
@@ -53,10 +55,11 @@ public sealed record PlaybackEventCreateRequest(
 /// <param name="Total">Total number of tracked units available.</param>
 /// <param name="Mode">Optional reader/viewing mode associated with the progress.</param>
 /// <param name="Completed">When true, marks the progress complete; when false, clears completion in place. Independent of the cursor.</param>
-/// <param name="Reset">When true, resets the cursor to the supplied (start) position and clears completion, bypassing the forward-only guard.</param>
+/// <param name="Reset">When true, resets the cursor and independent consumed coverage to the supplied start position and clears completion.</param>
 /// <param name="Location">Optional format-specific resume locator (e.g. an EPUB CFI) stored alongside the index.</param>
 /// <param name="ActivitySeconds">Optional active time since the client's preceding heartbeat.</param>
-/// <param name="ActivityKind">Reading or listening mode for <paramref name="ActivitySeconds"/>.</param>
+/// <param name="ActivityKind">Viewing, listening, or reading mode for <paramref name="ActivitySeconds"/>.</param>
+/// <param name="UtcOffsetMinutes">Client wall-clock offset used to choose the daily activity bucket.</param>
 public sealed record EntityProgressUpdateRequest(
     Guid CurrentEntityId,
     ProgressUnit Unit,
@@ -67,7 +70,8 @@ public sealed record EntityProgressUpdateRequest(
     bool Reset = false,
     string? Location = null,
     double? ActivitySeconds = null,
-    BookActivityKind? ActivityKind = null);
+    ConsumptionActivityKind? ActivityKind = null,
+    int? UtcOffsetMinutes = null);
 
 /// <summary>
 /// Request body for creating or updating a timeline marker.

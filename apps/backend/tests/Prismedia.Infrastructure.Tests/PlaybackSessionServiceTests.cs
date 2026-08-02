@@ -32,9 +32,9 @@ public sealed class PlaybackSessionServiceTests {
         var nativeState = await RunAsync(async (_, capabilities) =>
             await capabilities.UpdatePlaybackAsync(VideoId, resumeSeconds: 90, durationSeconds: null, completed: null, CancellationToken.None));
 
-        // Compare the deterministic playback fields; LastPlayedAt is wall-clock "now" of each run.
-        Assert.Equal(nativeState!.PlayCount, sessionState!.PlayCount);
-        Assert.Equal(nativeState.PlayDuration, sessionState.PlayDuration);
+        // Compare the deterministic playback fields; LastActiveAt is wall-clock "now" of each run.
+        Assert.Equal(nativeState!.CompletionCount, sessionState!.CompletionCount);
+        Assert.Equal(nativeState.ActiveDuration, sessionState.ActiveDuration);
         Assert.Equal(nativeState.ResumeTime, sessionState.ResumeTime);
         Assert.Equal(nativeState.CompletedAt, sessionState.CompletedAt);
         Assert.Equal(TimeSpan.FromSeconds(90), sessionState.ResumeTime);
@@ -52,10 +52,10 @@ public sealed class PlaybackSessionServiceTests {
                 CancellationToken.None));
 
         Assert.NotNull(state!.CompletedAt);
-        Assert.Equal(1, state.PlayCount);
-        Assert.Equal(TimeSpan.Zero, state.PlayDuration);
+        Assert.Equal(1, state.CompletionCount);
+        Assert.Equal(TimeSpan.Zero, state.ActiveDuration);
         var completed = Assert.Single(events);
-        Assert.Equal(PlaybackEventKind.Completed, completed.Kind);
+        Assert.Equal(ConsumptionEventKind.Completed, completed.Kind);
         Assert.Equal(100, completed.DurationSeconds);
     }
 
@@ -78,7 +78,7 @@ public sealed class PlaybackSessionServiceTests {
     [InlineData(94, false, 0)]  // credits-friendly, but not completed yet
     [InlineData(50, false, 0)]  // mid-watch stores a resume point only
     [InlineData(2, false, 0)]   // < 5% is treated as not started
-    public async Task ProgressThresholdsDeriveCompletion(int percent, bool expectCompleted, int expectPlayCount) {
+    public async Task ProgressThresholdsDeriveCompletion(int percent, bool expectCompleted, int expectCompletionCount) {
         const double runtimeSeconds = 1000;
         var state = await RunAsync(
             async (sessions, _) => await sessions.ProgressAsync(
@@ -90,7 +90,7 @@ public sealed class PlaybackSessionServiceTests {
             runtimeSeconds);
 
         Assert.Equal(expectCompleted, state!.CompletedAt is not null);
-        Assert.Equal(expectPlayCount, state.PlayCount);
+        Assert.Equal(expectCompletionCount, state.CompletionCount);
         if (percent is >= 5 and < 95) {
             Assert.True(state.ResumeTime > TimeSpan.Zero);
         }
@@ -115,7 +115,7 @@ public sealed class PlaybackSessionServiceTests {
             kind);
 
         Assert.NotNull(state!.CompletedAt);
-        Assert.Equal(1, state.PlayCount);
+        Assert.Equal(1, state.CompletionCount);
         Assert.Equal(TimeSpan.Zero, state.ResumeTime);
     }
 
@@ -135,7 +135,7 @@ public sealed class PlaybackSessionServiceTests {
             EntityKind.AudioTrack);
 
         Assert.Null(state!.CompletedAt);
-        Assert.Equal(0, state.PlayCount);
+        Assert.Equal(0, state.CompletionCount);
         Assert.Equal(TimeSpan.FromSeconds(950), state.ResumeTime);
     }
 
@@ -161,7 +161,7 @@ public sealed class PlaybackSessionServiceTests {
 
         // A resume-range progress tick stores the position but leaves the watched flag.
         Assert.NotNull(state!.CompletedAt);
-        Assert.Equal(1, state.PlayCount);
+        Assert.Equal(1, state.CompletionCount);
     }
 
     [Fact]
@@ -176,8 +176,8 @@ public sealed class PlaybackSessionServiceTests {
 
         Assert.NotNull(state!.CompletedAt);
         Assert.Equal(TimeSpan.Zero, state.ResumeTime);
-        Assert.Equal(2, state.PlayCount);
-        Assert.Equal(2, events.Count(e => e.Kind == PlaybackEventKind.Completed));
+        Assert.Equal(2, state.CompletionCount);
+        Assert.Equal(2, events.Count(e => e.Kind == ConsumptionEventKind.Completed));
     }
 
     [Fact]
@@ -187,7 +187,7 @@ public sealed class PlaybackSessionServiceTests {
         var (state, events) = await RunWithEventsAsync(
             async (_, capabilities) => await capabilities.RecordPlaybackEventAsync(
                 AudioTrackId,
-                PlaybackEventKind.Skipped,
+                ConsumptionEventKind.Skipped,
                 skippedAt,
                 positionSeconds: 4,
                 durationSeconds: 120,
@@ -195,11 +195,11 @@ public sealed class PlaybackSessionServiceTests {
             entityId: AudioTrackId,
             kind: EntityKind.AudioTrack);
 
-        Assert.Equal(0, state!.PlayCount);
+        Assert.Equal(0, state!.CompletionCount);
         Assert.Equal(1, state.SkipCount);
         var evt = Assert.Single(events);
         Assert.Equal(AudioTrackId, evt.EntityId);
-        Assert.Equal(PlaybackEventKind.Skipped, evt.Kind);
+        Assert.Equal(ConsumptionEventKind.Skipped, evt.Kind);
         Assert.Equal(skippedAt, evt.OccurredAt);
         Assert.Equal(4, evt.PositionSeconds);
         Assert.Equal(120, evt.DurationSeconds);
@@ -228,27 +228,27 @@ public sealed class PlaybackSessionServiceTests {
                 ThumbnailContributors.For(db),
                 new EfEntityProgressTopologyResolver(db)),
             new EfEntityProgressTopologyResolver(db),
-            playbackEvents: new EfPlaybackEventStore(db, TestUserContext.Admin()));
+            consumptionEvents: new EfConsumptionEventStore(db, TestUserContext.Admin()));
 
         await capabilities.RecordPlaybackEventAsync(
             AudioTrackId,
-            PlaybackEventKind.Skipped,
+            ConsumptionEventKind.Skipped,
             now,
             positionSeconds: 4,
             durationSeconds: 120,
             CancellationToken.None);
 
         var entity = await repository.FindShallowAsync(AudioTrackId, CancellationToken.None);
-        var evt = await db.EntityPlaybackEvents.SingleAsync();
+        var evt = await db.EntityConsumptionEvents.SingleAsync();
 
-        Assert.Equal(1, entity!.RequireCapability<CapabilityPlayback>().Value.SkipCount);
+        Assert.Equal(1, entity!.RequireCapability<CapabilityConsumption>().Value.SkipCount);
         Assert.Equal(AudioTrackId, evt.EntityId);
-        Assert.Equal(PlaybackEventKind.Skipped, evt.Kind);
+        Assert.Equal(ConsumptionEventKind.Skipped, evt.Kind);
         Assert.Equal(now, evt.OccurredAt);
     }
 
     [Fact]
-    public async Task RepeatedProgressDoesNotInflatePlayCount() {
+    public async Task RepeatedProgressDoesNotInflateCompletionCount() {
         var state = await RunAsync(async (sessions, _) => {
             for (var i = 1; i <= 5; i++) {
                 await sessions.ProgressAsync(
@@ -257,9 +257,9 @@ public sealed class PlaybackSessionServiceTests {
             }
         });
 
-        // Resume-only progress (no completion) never advances the play count; it only
+        // Resume-only progress (no completion) never advances the completion count; it only
         // increments when a session reaches the watched threshold.
-        Assert.Equal(0, state!.PlayCount);
+        Assert.Equal(0, state!.CompletionCount);
     }
 
     [Fact]
@@ -302,7 +302,23 @@ public sealed class PlaybackSessionServiceTests {
         Assert.Equal(TimeSpan.FromSeconds(500), state!.ResumeTime);
     }
 
-    private static async Task<CapabilityPlayback.State?> RunAsync(
+    [Fact]
+    public async Task RepeatedStartForOneSessionRecordsOneAccess() {
+        var (state, events) = await RunWithEventsAsync(async (sessions, _) => {
+            var request = new VideoPlaybackSessionCommand {
+                EntityId = VideoId,
+                SessionId = "session-once",
+                PositionSeconds = 20
+            };
+            await sessions.StartAsync(request, CancellationToken.None);
+            await sessions.StartAsync(request, CancellationToken.None);
+        });
+
+        Assert.Equal(1, state!.AccessCount);
+        Assert.Equal(ConsumptionEventKind.Accessed, Assert.Single(events).Kind);
+    }
+
+    private static async Task<CapabilityConsumption.State?> RunAsync(
         Func<PlaybackSessionService, EntityCapabilityService, Task> act,
         double? runtimeSeconds = null,
         Guid? entityId = null,
@@ -311,7 +327,7 @@ public sealed class PlaybackSessionServiceTests {
         return state;
     }
 
-    private static async Task<(CapabilityPlayback.State? State, IReadOnlyList<PlaybackEventAppend> Events)> RunWithEventsAsync(
+    private static async Task<(CapabilityConsumption.State? State, IReadOnlyList<ConsumptionEventAppend> Events)> RunWithEventsAsync(
         Func<PlaybackSessionService, EntityCapabilityService, Task> act,
         double? runtimeSeconds = null,
         Guid? entityId = null,
@@ -345,13 +361,13 @@ public sealed class PlaybackSessionServiceTests {
                 ThumbnailContributors.For(db),
                 new EfEntityProgressTopologyResolver(db)),
             new EfEntityProgressTopologyResolver(db),
-            playbackEvents: events);
+            consumptionEvents: events);
         var sessions = new PlaybackSessionService(capabilities, new NoOpTranscodeSessionService());
 
         await act(sessions, capabilities);
 
         var entity = await repository.FindShallowAsync(id, CancellationToken.None);
-        return (entity?.GetCapability<CapabilityPlayback>()?.Value, events.Events);
+        return (entity?.GetCapability<CapabilityConsumption>()?.Value, events.Events);
     }
 
     private static PrismediaDbContext CreateContext() =>
@@ -368,17 +384,21 @@ public sealed class PlaybackSessionServiceTests {
         public int ReapStaleSessions(TimeSpan ttl) => 0;
     }
 
-    private sealed class RecordingPlaybackEventStore : IPlaybackEventStore {
-        private readonly List<PlaybackEventAppend> _events = [];
+    private sealed class RecordingPlaybackEventStore : IConsumptionEventStore {
+        private readonly List<ConsumptionEventAppend> _events = [];
 
-        public IReadOnlyList<PlaybackEventAppend> Events => _events;
+        public IReadOnlyList<ConsumptionEventAppend> Events => _events;
 
-        public Task StageAsync(PlaybackEventAppend entry, CancellationToken cancellationToken) {
+        public Task<bool> ContainsSessionEventAsync(
+            string sessionId,
+            ConsumptionEventKind kind,
+            CancellationToken cancellationToken) =>
+            Task.FromResult(_events.Any(entry => entry.SessionId == sessionId && entry.Kind == kind));
+
+        public Task StageAsync(ConsumptionEventAppend entry, CancellationToken cancellationToken) {
             _events.Add(entry);
             return Task.CompletedTask;
         }
 
-        public Task AppendAsync(PlaybackEventAppend entry, CancellationToken cancellationToken) =>
-            StageAsync(entry, cancellationToken);
     }
 }

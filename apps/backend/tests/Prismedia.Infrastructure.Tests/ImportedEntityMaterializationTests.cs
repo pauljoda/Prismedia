@@ -467,10 +467,10 @@ public sealed class ImportedEntityMaterializationTests : IDisposable {
         await File.WriteAllTextAsync(sourcePath, "audio-bytes");
         var duplicateId = AddSourceEntity(db, EntityKind.AudioTrack, "01 - WAR", sourcePath, albumId);
         var now = DateTimeOffset.UtcNow;
-        db.EntityPlaybackEvents.Add(new EntityPlaybackEventRow {
+        db.EntityConsumptionEvents.Add(new EntityConsumptionEventRow {
             Id = Guid.NewGuid(),
             EntityId = duplicateId,
-            Kind = PlaybackEventKind.Completed,
+            Kind = ConsumptionEventKind.Completed,
             OccurredAt = now,
             CreatedAt = now
         });
@@ -486,7 +486,7 @@ public sealed class ImportedEntityMaterializationTests : IDisposable {
         Assert.Null(reconciliation);
         Assert.True((await db.Entities.AsNoTracking().SingleAsync(row => row.Id == wantedTrackId)).IsWanted);
         Assert.True(await db.Entities.AsNoTracking().AnyAsync(row => row.Id == duplicateId));
-        Assert.True(await db.EntityPlaybackEvents.AsNoTracking().AnyAsync(row => row.EntityId == duplicateId));
+        Assert.True(await db.EntityConsumptionEvents.AsNoTracking().AnyAsync(row => row.EntityId == duplicateId));
     }
 
     [Fact]
