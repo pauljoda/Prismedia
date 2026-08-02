@@ -40,7 +40,7 @@
     {#if nsfw}<span class="badge danger icon-only" title="NSFW" aria-label="NSFW"><Flame size={13} /></span>{/if}
   </div>
 {/if}
-{#if bottomLeft}<div class="badges bottom-left-badges"><span class="badge position-badge" title={bottomLeft.title ?? bottomLeft.label}>{bottomLeft.label}</span></div>{/if}
+{#if bottomLeft}<div class="badges bottom-left-badges" class:has-selection={selectable}><span class="badge position-badge" title={bottomLeft.title ?? bottomLeft.label}>{bottomLeft.label}</span></div>{/if}
 {#if sourceTag}<div class="badges source-badges"><span class="badge source-badge" title={sourceTag.title ?? sourceTag.label}>{sourceTag.label}</span></div>{/if}
 {#if rating > 0}<div class="badges bottom-right-badges"><span class="badge rating-badge" title={`Rating ${formatRating(rating)}`} aria-label={`Rating ${formatRating(rating)}`}>{formatRating(rating)}<Star size={11} /></span></div>{/if}
 {#if progressPercent != null}<div class="progress-meter" aria-hidden="true"><span class="progress-meter-fill" style:width={`${progressPercent}%`}></span></div>{/if}
@@ -51,6 +51,7 @@
   .badges { position: absolute; z-index: 3; right: 0.45rem; left: 2.45rem; display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 0.35rem; pointer-events: none; }
   .top-badges { top: 0.45rem; }
   .bottom-left-badges { top: 0.45rem; right: auto; left: 0.45rem; justify-content: flex-start; }
+  .bottom-left-badges.has-selection { left: 2.45rem; }
   .bottom-right-badges { right: 0.45rem; bottom: 0.45rem; left: auto; justify-content: flex-end; }
   .source-badges { bottom: 0.45rem; right: auto; left: 0.45rem; justify-content: flex-start; }
   .badge { display: inline-flex; min-height: 1.35rem; align-items: center; gap: 0.25rem; border: 1px solid rgb(255 255 255 / 0.12); border-radius: var(--radius-xs, 4px); background: rgb(11 11 12 / 0.72); color: rgb(244 239 230 / 0.88); font-family: var(--font-mono, "JetBrains Mono", monospace); font-size: 0.66rem; line-height: 1; letter-spacing: 0; padding: 0.25rem 0.38rem; }

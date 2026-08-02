@@ -57,6 +57,17 @@ describe("EntityThumbnail presentation", () => {
     expect(container.querySelector(".chips")?.textContent).not.toContain("4");
   });
 
+  it("keeps top-left metadata clear of the selection checkbox", () => {
+    const { container } = render(EntityThumbnail, {
+      props: {
+        card: episodeCard(),
+        selectable: true,
+      },
+    });
+
+    expect(container.querySelector(".bottom-left-badges")).toHaveClass("has-selection");
+  });
+
   it("shows book page metadata when media-only mode is not requested", () => {
     const { container } = render(EntityThumbnail, {
       props: {
