@@ -192,6 +192,63 @@ public sealed class DirectPlayableEntityMigrationPostgresTests {
 
     [Fact]
     [Trait("Category", "PostgreSQL")]
+    public async Task RunnerRetypesJobGraphRootWhenHistoricalRootRunIsMissing() {
+        await using var database = await PostgresTestDatabase.CreateAsync(PreviousMigration);
+        using var files = MigrationFiles.Create();
+        var seriesId = Guid.NewGuid();
+        var episodeId = Guid.NewGuid();
+        var graphId = Guid.NewGuid();
+        var missingRootRunId = Guid.NewGuid();
+
+        await using (var connection = await database.OpenConnectionAsync()) {
+            await ExecuteAsync(
+                connection,
+                """
+                INSERT INTO entities
+                    (id, kind_code, title, parent_entity_id, is_nsfw, is_organized,
+                     is_wanted, created_at, updated_at)
+                VALUES
+                    (@series_id, @series_kind, 'Series', NULL, FALSE, FALSE, FALSE, now(), now()),
+                    (@episode_id, @video_kind, 'Legacy episode', @series_id,
+                     FALSE, FALSE, FALSE, now(), now());
+                INSERT INTO video_details (entity_id) VALUES (@episode_id);
+                INSERT INTO job_graphs
+                    (id, origin, status, display_name, root_run_id, root_entity_kind,
+                     root_entity_id, cancellation_requested, created_at, updated_at)
+                VALUES
+                    (@graph_id, @origin, @graph_status, 'Historical graph', @missing_root_run_id,
+                     @video_kind, @episode_id_text, FALSE, now(), now());
+                """,
+                ("series_id", seriesId),
+                ("series_kind", EntityKind.VideoSeries.ToCode()),
+                ("episode_id", episodeId),
+                ("episode_id_text", episodeId.ToString()),
+                ("video_kind", EntityKind.Video.ToCode()),
+                ("graph_id", graphId),
+                ("missing_root_run_id", missingRootRunId),
+                ("origin", JobGraphOrigin.Background.ToCode()),
+                ("graph_status", JobGraphStatus.Completed.ToCode()));
+        }
+
+        await database.RunMigrationRunnerAsync(files.Assets);
+
+        await using var migrated = await database.OpenConnectionAsync();
+        Assert.Equal(
+            EntityKind.VideoEpisode.ToCode(),
+            await ScalarAsync<string>(
+                migrated,
+                "SELECT root_entity_kind FROM job_graphs WHERE id = @id",
+                graphId));
+        Assert.Equal(
+            episodeId.ToString(),
+            await ScalarAsync<string>(
+                migrated,
+                "SELECT root_entity_id FROM job_graphs WHERE id = @id",
+                graphId));
+    }
+
+    [Fact]
+    [Trait("Category", "PostgreSQL")]
     public async Task RunnerKeepsNewestDescriptionAndDeduplicatesMatchingProviderIdentityDuringMovieCollapse() {
         await using var database = await PostgresTestDatabase.CreateAsync(PreviousMigration);
         using var files = MigrationFiles.Create();
@@ -269,6 +326,211 @@ public sealed class DirectPlayableEntityMigrationPostgresTests {
 
         Assert.Equal(PostgresErrorCodes.RaiseException, exception.SqlState);
         Assert.Contains("conflicting provider identities", exception.MessageText, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    [Trait("Category", "PostgreSQL")]
+    public async Task RunnerPrefersCustomThenNewestArtworkWhenMovieAndChildShareFileRoles() {
+        await using var database = await PostgresTestDatabase.CreateAsync(PreviousMigration);
+        using var files = MigrationFiles.Create();
+        var movieId = Guid.NewGuid();
+        var childId = Guid.NewGuid();
+        var movieFolder = files.CreateFolder("artwork-collision/movie");
+        var videoPath = files.CreateFile("artwork-collision/movie/movie.mkv", "movie");
+        var moviePosterUrl = $"/assets/custom/artwork/{movieId}/poster.jpg";
+        var movieBackdropUrl = $"/assets/custom/artwork/{movieId}/older-backdrop.jpg";
+        var childBackdropUrl = $"/assets/custom/artwork/{childId}/backdrop.jpg";
+        var migratedBackdropUrl = $"/assets/custom/artwork/{movieId}/backdrop.jpg";
+        var childBackdropPath = files.AssetDiskPath(childBackdropUrl);
+        Directory.CreateDirectory(Path.GetDirectoryName(childBackdropPath)!);
+        await File.WriteAllTextAsync(childBackdropPath, "newer child backdrop");
+        await SeedMinimalMovieAsync(database, movieId, childId, movieFolder, videoPath);
+
+        await using (var connection = await database.OpenConnectionAsync()) {
+            await ExecuteAsync(
+                connection,
+                """
+                INSERT INTO entity_files
+                    (id, entity_id, role, path, source, created_at, updated_at)
+                VALUES
+                    (@movie_poster_id, @movie_id, @poster_role, @movie_poster_path,
+                     @custom_source, now() - interval '3 hours', now() - interval '2 hours'),
+                    (@child_poster_id, @child_id, @poster_role, '/assets/videos/legacy/poster.jpg',
+                     @scan_source, now() - interval '2 hours', now() - interval '1 hour'),
+                    (@movie_backdrop_id, @movie_id, @backdrop_role, @movie_backdrop_path,
+                     @custom_source, now() - interval '3 hours', now() - interval '2 hours'),
+                    (@child_backdrop_id, @child_id, @backdrop_role, @child_backdrop_path,
+                     @custom_source, now() - interval '2 hours', now() - interval '1 hour');
+                """,
+                ("movie_poster_id", Guid.NewGuid()),
+                ("child_poster_id", Guid.NewGuid()),
+                ("movie_backdrop_id", Guid.NewGuid()),
+                ("child_backdrop_id", Guid.NewGuid()),
+                ("movie_id", movieId),
+                ("child_id", childId),
+                ("poster_role", EntityFileRole.Poster.ToCode()),
+                ("backdrop_role", EntityFileRole.Backdrop.ToCode()),
+                ("movie_poster_path", moviePosterUrl),
+                ("movie_backdrop_path", movieBackdropUrl),
+                ("child_backdrop_path", childBackdropUrl),
+                ("custom_source", FileSourceKind.Custom.ToCode()),
+                ("scan_source", FileSourceKind.Scan.ToCode()));
+        }
+
+        await database.RunMigrationRunnerAsync(files.Assets);
+
+        await using (var migrated = await database.OpenConnectionAsync()) {
+            Assert.Equal(
+                moviePosterUrl,
+                await ScalarAsync<string>(
+                    migrated,
+                    "SELECT path FROM entity_files WHERE entity_id = @id AND role = @role",
+                    movieId,
+                    ("role", EntityFileRole.Poster.ToCode())));
+            Assert.Equal(
+                migratedBackdropUrl,
+                await ScalarAsync<string>(
+                    migrated,
+                    "SELECT path FROM entity_files WHERE entity_id = @id AND role = @role",
+                    movieId,
+                    ("role", EntityFileRole.Backdrop.ToCode())));
+        }
+        Assert.Equal("newer child backdrop", await File.ReadAllTextAsync(files.AssetDiskPath(migratedBackdropUrl)));
+    }
+
+    [Fact]
+    [Trait("Category", "PostgreSQL")]
+    public async Task RunnerKeepsNewestDateAndDeduplicatesMatchingKeyedCapabilitiesDuringMovieCollapse() {
+        await using var database = await PostgresTestDatabase.CreateAsync(PreviousMigration);
+        using var files = MigrationFiles.Create();
+        var movieId = Guid.NewGuid();
+        var childId = Guid.NewGuid();
+        var movieFolder = files.CreateFolder("capability-collision/movie");
+        var videoPath = files.CreateFile("capability-collision/movie/movie.mkv", "movie");
+        await SeedMinimalMovieAsync(database, movieId, childId, movieFolder, videoPath);
+
+        await using (var connection = await database.OpenConnectionAsync()) {
+            await ExecuteAsync(
+                connection,
+                """
+                INSERT INTO entity_dates
+                    (entity_id, code, value, sortable_value, precision, updated_at)
+                VALUES
+                    (@movie_id, @date_code, '2020-01-01', DATE '2020-01-01', @date_precision,
+                     now() - interval '2 hours'),
+                    (@child_id, @date_code, '2021-02-03', DATE '2021-02-03', @date_precision,
+                     now() - interval '1 hour');
+                INSERT INTO entity_external_ids
+                    (id, entity_id, provider, value, url, created_at, updated_at)
+                VALUES
+                    (@movie_external_id, @movie_id, 'fixture-provider', 'provider-42', 'https://example.test/42',
+                     now() - interval '3 hours', now() - interval '2 hours'),
+                    (@child_external_id, @child_id, 'fixture-provider', 'provider-42', 'https://example.test/42',
+                     now() - interval '2 hours', now() - interval '1 hour');
+                INSERT INTO entity_stats (entity_id, code, value, updated_at)
+                VALUES
+                    (@movie_id, 'fixture-runtime', 100, now() - interval '2 hours'),
+                    (@child_id, 'fixture-runtime', 100, now() - interval '1 hour');
+                INSERT INTO entity_urls (id, entity_id, url, label, sort_order, created_at)
+                VALUES
+                    (@movie_url_id, @movie_id, 'https://example.test/movie', 'Fixture', 0,
+                     now() - interval '3 hours'),
+                    (@child_url_id, @child_id, 'https://example.test/movie', 'Fixture', 0,
+                     now() - interval '2 hours');
+                """,
+                ("movie_id", movieId),
+                ("child_id", childId),
+                ("date_code", EntityDateType.Release.ToCode()),
+                ("date_precision", DatePrecision.Day.ToCode()),
+                ("movie_external_id", Guid.NewGuid()),
+                ("child_external_id", Guid.NewGuid()),
+                ("movie_url_id", Guid.NewGuid()),
+                ("child_url_id", Guid.NewGuid()));
+        }
+
+        await database.RunMigrationRunnerAsync(files.Assets);
+
+        await using var migrated = await database.OpenConnectionAsync();
+        Assert.Equal(
+            "2021-02-03",
+            await ScalarAsync<string>(
+                migrated,
+                "SELECT value FROM entity_dates WHERE entity_id = @id AND code = @code",
+                movieId,
+                ("code", EntityDateType.Release.ToCode())));
+        Assert.Equal(1, await ScalarAsync<int>(migrated, "SELECT count(*)::int FROM entity_external_ids WHERE entity_id = @id", movieId));
+        Assert.Equal(1, await ScalarAsync<int>(migrated, "SELECT count(*)::int FROM entity_stats WHERE entity_id = @id", movieId));
+        Assert.Equal(1, await ScalarAsync<int>(migrated, "SELECT count(*)::int FROM entity_urls WHERE entity_id = @id", movieId));
+    }
+
+    [Fact]
+    [Trait("Category", "PostgreSQL")]
+    public async Task RunnerKeepsNewestRelationshipAndMergesCompatibleJobResourceStatesDuringMovieCollapse() {
+        await using var database = await PostgresTestDatabase.CreateAsync(PreviousMigration);
+        using var files = MigrationFiles.Create();
+        var movieId = Guid.NewGuid();
+        var childId = Guid.NewGuid();
+        var personId = Guid.NewGuid();
+        var movieFolder = files.CreateFolder("relationship-collision/movie");
+        var videoPath = files.CreateFile("relationship-collision/movie/movie.mkv", "movie");
+        await SeedMinimalMovieAsync(database, movieId, childId, movieFolder, videoPath);
+
+        await using (var connection = await database.OpenConnectionAsync()) {
+            await ExecuteAsync(
+                connection,
+                """
+                INSERT INTO entities
+                    (id, kind_code, title, is_nsfw, is_organized, is_wanted, created_at, updated_at)
+                VALUES (@person_id, @person_kind, 'Fixture Person', FALSE, TRUE, FALSE, now(), now());
+                INSERT INTO entity_relationship_links
+                    (entity_id, relationship_code, target_entity_id, label, target_kind_code,
+                     sort_order, metadata_json, created_at)
+                VALUES
+                    (@movie_id, @relationship_code, @person_id, 'Cast', @person_kind,
+                     1, '{"character":"Older"}'::jsonb, now() - interval '2 hours'),
+                    (@child_id, @relationship_code, @person_id, 'Cast', @person_kind,
+                     7, '{"character":"Newer"}'::jsonb, now() - interval '1 hour');
+                INSERT INTO job_resource_states
+                    (key, max_concurrency, minimum_start_interval_ms, next_available_at, updated_at)
+                VALUES
+                    (@movie_resource_key, 1, 100, now() + interval '1 hour', now() - interval '1 hour'),
+                    (@child_resource_key, 1, 100, now() + interval '2 hours', now() - interval '2 hours');
+                """,
+                ("movie_id", movieId),
+                ("child_id", childId),
+                ("person_id", personId),
+                ("person_kind", EntityKind.Person.ToCode()),
+                ("relationship_code", RelationshipKind.Cast.ToCode()),
+                ("movie_resource_key", JobResourceKeys.Entity(movieId.ToString())),
+                ("child_resource_key", JobResourceKeys.Entity(childId.ToString())));
+        }
+
+        await database.RunMigrationRunnerAsync(files.Assets);
+
+        await using var migrated = await database.OpenConnectionAsync();
+        Assert.Equal(
+            7,
+            await ScalarAsync<int>(
+                migrated,
+                "SELECT sort_order FROM entity_relationship_links WHERE entity_id = @id AND relationship_code = @code",
+                movieId,
+                ("code", RelationshipKind.Cast.ToCode())));
+        Assert.Contains(
+            "Newer",
+            await ScalarAsync<string>(
+                migrated,
+                "SELECT metadata_json::text FROM entity_relationship_links WHERE entity_id = @id AND relationship_code = @code",
+                movieId,
+                ("code", RelationshipKind.Cast.ToCode())),
+            StringComparison.Ordinal);
+        Assert.False(await ExistsAsync(
+            migrated,
+            "SELECT EXISTS (SELECT 1 FROM job_resource_states WHERE key = @id)",
+            JobResourceKeys.Entity(childId.ToString())));
+        Assert.True(await ScalarAsync<bool>(
+            migrated,
+            "SELECT next_available_at > now() + interval '90 minutes' FROM job_resource_states WHERE key = @id",
+            JobResourceKeys.Entity(movieId.ToString())));
     }
 
     [Fact]

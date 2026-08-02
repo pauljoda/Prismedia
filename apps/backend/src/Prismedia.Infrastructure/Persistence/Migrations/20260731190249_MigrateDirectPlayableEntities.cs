@@ -562,6 +562,107 @@ public partial class MigrateDirectPlayableEntities : Migration {
               '__THUMBNAIL_ROLE__', '__GRID_THUMBNAIL_ROLE__', '__GRID_THUMBNAIL_2X_ROLE__',
               '__PREVIEW_ROLE__', '__SPRITE_ROLE__', '__TRICKPLAY_ROLE__', '__HLS_ROLE__');
 
+        DELETE FROM entity_files AS new_row
+        USING pg_temp.prismedia_playable_map AS map, entity_files AS old_row
+        WHERE map.mode = 'collapse'
+          AND old_row.entity_id = map.old_id
+          AND new_row.entity_id = map.new_id
+          AND new_row.role = old_row.role
+          AND old_row.role IN ('__POSTER_ROLE__', '__BACKDROP_ROLE__')
+          AND (old_row.source = '__CUSTOM_SOURCE__' AND new_row.source <> '__CUSTOM_SOURCE__'
+            OR old_row.source = new_row.source AND old_row.updated_at > new_row.updated_at);
+
+        DELETE FROM entity_files AS old_row
+        USING pg_temp.prismedia_playable_map AS map
+        WHERE map.mode = 'collapse'
+          AND old_row.entity_id = map.old_id
+          AND old_row.role IN ('__POSTER_ROLE__', '__BACKDROP_ROLE__')
+          AND EXISTS (
+              SELECT 1
+              FROM entity_files AS new_row
+              WHERE new_row.entity_id = map.new_id
+                AND new_row.role = old_row.role
+                AND (new_row.source = '__CUSTOM_SOURCE__' AND old_row.source <> '__CUSTOM_SOURCE__'
+                  OR new_row.source = old_row.source AND old_row.updated_at <= new_row.updated_at));
+
+        UPDATE entity_dates AS survivor
+        SET value = old_row.value,
+            sortable_value = old_row.sortable_value,
+            precision = old_row.precision,
+            updated_at = old_row.updated_at
+        FROM pg_temp.prismedia_playable_map AS map, entity_dates AS old_row
+        WHERE map.mode = 'collapse'
+          AND old_row.entity_id = map.old_id
+          AND survivor.entity_id = map.new_id
+          AND survivor.code = old_row.code
+          AND old_row.updated_at > survivor.updated_at;
+        DELETE FROM entity_dates AS old_row
+        USING pg_temp.prismedia_playable_map AS map
+        WHERE map.mode = 'collapse'
+          AND old_row.entity_id = map.old_id
+          AND EXISTS (
+              SELECT 1
+              FROM entity_dates AS survivor
+              WHERE survivor.entity_id = map.new_id AND survivor.code = old_row.code);
+
+        UPDATE entity_external_ids AS survivor
+        SET created_at = LEAST(survivor.created_at, old_row.created_at),
+            updated_at = GREATEST(survivor.updated_at, old_row.updated_at)
+        FROM pg_temp.prismedia_playable_map AS map, entity_external_ids AS old_row
+        WHERE map.mode = 'collapse'
+          AND old_row.entity_id = map.old_id
+          AND survivor.entity_id = map.new_id
+          AND survivor.provider = old_row.provider
+          AND (survivor.value, survivor.url) IS NOT DISTINCT FROM (old_row.value, old_row.url);
+        DELETE FROM entity_external_ids AS old_row
+        USING pg_temp.prismedia_playable_map AS map
+        WHERE map.mode = 'collapse'
+          AND old_row.entity_id = map.old_id
+          AND EXISTS (
+              SELECT 1
+              FROM entity_external_ids AS survivor
+              WHERE survivor.entity_id = map.new_id
+                AND survivor.provider = old_row.provider
+                AND (survivor.value, survivor.url) IS NOT DISTINCT FROM (old_row.value, old_row.url));
+
+        UPDATE entity_stats AS survivor
+        SET updated_at = GREATEST(survivor.updated_at, old_row.updated_at)
+        FROM pg_temp.prismedia_playable_map AS map, entity_stats AS old_row
+        WHERE map.mode = 'collapse'
+          AND old_row.entity_id = map.old_id
+          AND survivor.entity_id = map.new_id
+          AND survivor.code = old_row.code
+          AND survivor.value = old_row.value;
+        DELETE FROM entity_stats AS old_row
+        USING pg_temp.prismedia_playable_map AS map
+        WHERE map.mode = 'collapse'
+          AND old_row.entity_id = map.old_id
+          AND EXISTS (
+              SELECT 1
+              FROM entity_stats AS survivor
+              WHERE survivor.entity_id = map.new_id
+                AND survivor.code = old_row.code
+                AND survivor.value = old_row.value);
+
+        UPDATE entity_urls AS survivor
+        SET created_at = LEAST(survivor.created_at, old_row.created_at)
+        FROM pg_temp.prismedia_playable_map AS map, entity_urls AS old_row
+        WHERE map.mode = 'collapse'
+          AND old_row.entity_id = map.old_id
+          AND survivor.entity_id = map.new_id
+          AND survivor.url = old_row.url
+          AND (survivor.label, survivor.sort_order) IS NOT DISTINCT FROM (old_row.label, old_row.sort_order);
+        DELETE FROM entity_urls AS old_row
+        USING pg_temp.prismedia_playable_map AS map
+        WHERE map.mode = 'collapse'
+          AND old_row.entity_id = map.old_id
+          AND EXISTS (
+              SELECT 1
+              FROM entity_urls AS survivor
+              WHERE survivor.entity_id = map.new_id
+                AND survivor.url = old_row.url
+                AND (survivor.label, survivor.sort_order) IS NOT DISTINCT FROM (old_row.label, old_row.sort_order));
+
         DO $prismedia$
         BEGIN
             IF EXISTS (
@@ -841,19 +942,36 @@ public partial class MigrateDirectPlayableEntities : Migration {
         UPDATE identify_results AS row SET entity_id = map.new_id FROM pg_temp.prismedia_playable_map AS map WHERE map.mode = 'collapse' AND row.entity_id = map.old_id;
 
         CREATE TEMP TABLE prismedia_relationship_projection ON COMMIT DROP AS
-        SELECT
-            COALESCE(owner_map.new_id, relation.entity_id) AS entity_id,
-            relation.relationship_code,
-            COALESCE(target_map.new_id, relation.target_entity_id) AS target_entity_id,
-            relation.label,
-            COALESCE(target_map.new_kind, relation.target_kind_code) AS target_kind_code,
-            relation.sort_order,
-            relation.metadata_json,
-            relation.created_at
+        WITH affected AS (
+            SELECT
+                COALESCE(owner_map.new_id, relation.entity_id) AS entity_id,
+                relation.relationship_code,
+                COALESCE(target_map.new_id, relation.target_entity_id) AS target_entity_id,
+                relation.label,
+                COALESCE(target_map.new_kind, relation.target_kind_code) AS target_kind_code,
+                relation.sort_order,
+                relation.metadata_json,
+                relation.created_at,
+                1 AS survivor_priority
+            FROM entity_relationship_links AS relation
+            LEFT JOIN pg_temp.prismedia_playable_map AS owner_map ON owner_map.old_id = relation.entity_id
+            LEFT JOIN pg_temp.prismedia_playable_map AS target_map ON target_map.old_id = relation.target_entity_id
+            WHERE owner_map.old_id IS NOT NULL OR target_map.old_id IS NOT NULL
+        )
+        SELECT * FROM affected
+        UNION ALL
+        SELECT relation.*, 0 AS survivor_priority
         FROM entity_relationship_links AS relation
-        LEFT JOIN pg_temp.prismedia_playable_map AS owner_map ON owner_map.old_id = relation.entity_id
-        LEFT JOIN pg_temp.prismedia_playable_map AS target_map ON target_map.old_id = relation.target_entity_id
-        WHERE owner_map.old_id IS NOT NULL OR target_map.old_id IS NOT NULL;
+        WHERE NOT EXISTS (
+                  SELECT 1
+                  FROM pg_temp.prismedia_playable_map AS map
+                  WHERE map.old_id = relation.entity_id OR map.old_id = relation.target_entity_id)
+          AND EXISTS (
+                  SELECT 1
+                  FROM affected
+                  WHERE affected.entity_id = relation.entity_id
+                    AND affected.relationship_code = relation.relationship_code
+                    AND affected.target_entity_id = relation.target_entity_id);
 
         DO $prismedia$
         BEGIN
@@ -864,33 +982,19 @@ public partial class MigrateDirectPlayableEntities : Migration {
                 RAISE EXCEPTION 'Direct-playable migration would create a self relationship';
             END IF;
 
-            IF EXISTS (
-                SELECT entity_id, relationship_code, target_entity_id
-                FROM (
-                    SELECT * FROM pg_temp.prismedia_relationship_projection
-                    UNION ALL
-                    SELECT relation.* FROM entity_relationship_links AS relation
-                    WHERE NOT EXISTS (
-                        SELECT 1 FROM pg_temp.prismedia_playable_map AS map
-                        WHERE map.old_id = relation.entity_id OR map.old_id = relation.target_entity_id)
-                ) AS projected
-                GROUP BY entity_id, relationship_code, target_entity_id
-                HAVING count(DISTINCT jsonb_build_object(
-                    'label', label,
-                    'targetKind', target_kind_code,
-                    'sortOrder', sort_order,
-                    'metadata', metadata_json,
-                    'createdAt', created_at)) > 1
-            ) THEN
-                RAISE EXCEPTION 'Direct-playable migration found conflicting relationship projections';
-            END IF;
         END
         $prismedia$;
 
         DELETE FROM entity_relationship_links AS relation
         WHERE EXISTS (
             SELECT 1 FROM pg_temp.prismedia_playable_map AS map
-            WHERE map.old_id = relation.entity_id OR map.old_id = relation.target_entity_id);
+            WHERE map.old_id = relation.entity_id OR map.old_id = relation.target_entity_id)
+           OR EXISTS (
+            SELECT 1
+            FROM pg_temp.prismedia_relationship_projection AS projection
+            WHERE projection.entity_id = relation.entity_id
+              AND projection.relationship_code = relation.relationship_code
+              AND projection.target_entity_id = relation.target_entity_id);
 
         INSERT INTO entity_relationship_links (
             entity_id, relationship_code, target_entity_id, label, target_kind_code,
@@ -899,7 +1003,9 @@ public partial class MigrateDirectPlayableEntities : Migration {
             entity_id, relationship_code, target_entity_id, label, target_kind_code,
             sort_order, metadata_json, created_at
         FROM pg_temp.prismedia_relationship_projection
-        ORDER BY entity_id, relationship_code, target_entity_id, created_at;
+        ORDER BY entity_id, relationship_code, target_entity_id,
+                 created_at DESC, survivor_priority, sort_order, label,
+                 target_kind_code, COALESCE(metadata_json::text, '');
 
         CREATE TEMP TABLE prismedia_collection_item_projection ON COMMIT DROP AS
         SELECT
@@ -1143,7 +1249,19 @@ public partial class MigrateDirectPlayableEntities : Migration {
         $function$;
 
         -- Every payload rewrite, including legacy kind inference, requires an exact mapped UUID.
-        -- The text probe can over-select harmlessly, then each candidate is transformed only once.
+        -- Extract UUID-shaped JSON strings once so historical jobs without a mapped entity are not
+        -- recursively transformed. The retarget function still validates recognized keys exactly.
+        CREATE TEMP TABLE prismedia_job_payload_candidates (id uuid PRIMARY KEY) ON COMMIT DROP;
+        INSERT INTO pg_temp.prismedia_job_payload_candidates (id)
+        SELECT DISTINCT run.id
+        FROM job_runs AS run
+        CROSS JOIN LATERAL regexp_matches(
+            run.payload_json::text,
+            '"([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})"',
+            'g') AS token
+        INNER JOIN pg_temp.prismedia_playable_map AS map
+            ON map.old_id::text = lower(token[1]);
+
         CREATE TEMP TABLE prismedia_job_payload_retargets (
             id uuid PRIMARY KEY,
             source_payload_json jsonb NOT NULL,
@@ -1153,8 +1271,9 @@ public partial class MigrateDirectPlayableEntities : Migration {
         WITH payloads AS MATERIALIZED (
             SELECT run.id,
                    run.payload_json,
-                   run.payload_json::text AS payload_text
+                   pg_temp.prismedia_retarget_job_json(run.payload_json) AS retargeted_payload_json
             FROM job_runs AS run
+            INNER JOIN pg_temp.prismedia_job_payload_candidates AS candidate ON candidate.id = run.id
         )
         INSERT INTO pg_temp.prismedia_job_payload_retargets (
             id,
@@ -1162,37 +1281,64 @@ public partial class MigrateDirectPlayableEntities : Migration {
             retargeted_payload_json)
         SELECT payload.id,
                payload.payload_json,
-               pg_temp.prismedia_retarget_job_json(payload.payload_json)
+               payload.retargeted_payload_json
         FROM payloads AS payload
-        WHERE EXISTS (
-            SELECT 1
-            FROM pg_temp.prismedia_playable_map AS map
-            WHERE strpos(payload.payload_text, map.old_id::text) > 0);
+        WHERE payload.payload_json IS DISTINCT FROM payload.retargeted_payload_json;
 
         CREATE TEMP TABLE prismedia_affected_job_runs (id uuid PRIMARY KEY) ON COMMIT DROP;
         INSERT INTO pg_temp.prismedia_affected_job_runs (id)
         SELECT run.id
         FROM job_runs AS run
-        WHERE EXISTS (
-                  SELECT 1 FROM pg_temp.prismedia_playable_map AS map
-                  WHERE run.target_entity_id = map.old_id::text
-                     OR run.resource_key = '__ENTITY_RESOURCE_PREFIX__' || map.old_id::text
-                     OR run.node_key = run.type || ':' || map.old_id::text)
-           OR EXISTS (
-                  SELECT 1
-                  FROM pg_temp.prismedia_job_payload_retargets AS payload
-                  WHERE payload.id = run.id
-                    AND payload.source_payload_json IS DISTINCT FROM payload.retargeted_payload_json);
+        INNER JOIN pg_temp.prismedia_playable_map AS map
+            ON run.target_entity_id = map.old_id::text
+        UNION
+        SELECT run.id
+        FROM job_runs AS run
+        INNER JOIN pg_temp.prismedia_playable_map AS map
+            ON run.resource_key = '__ENTITY_RESOURCE_PREFIX__' || map.old_id::text
+        UNION
+        SELECT run.id
+        FROM job_runs AS run
+        INNER JOIN pg_temp.prismedia_playable_map AS map
+            ON right(run.node_key, 36) = map.old_id::text
+           AND run.node_key = run.type || ':' || map.old_id::text
+        UNION
+        SELECT payload.id
+        FROM pg_temp.prismedia_job_payload_retargets AS payload;
 
         CREATE TEMP TABLE prismedia_affected_job_graphs (id uuid PRIMARY KEY) ON COMMIT DROP;
         INSERT INTO pg_temp.prismedia_affected_job_graphs (id)
         SELECT graph.id
         FROM job_graphs AS graph
-        LEFT JOIN job_runs AS root_run ON root_run.id = graph.root_run_id
-        WHERE EXISTS (
-            SELECT 1 FROM pg_temp.prismedia_playable_map AS map
-            WHERE graph.root_entity_id = map.old_id::text
-               OR graph.active_key = root_run.type || ':' || map.old_id::text);
+        INNER JOIN pg_temp.prismedia_playable_map AS map
+            ON graph.root_entity_id = map.old_id::text
+        UNION
+        SELECT graph.id
+        FROM job_graphs AS graph
+        INNER JOIN job_runs AS root_run ON root_run.id = graph.root_run_id
+        INNER JOIN pg_temp.prismedia_playable_map AS map
+            ON right(graph.active_key, 36) = map.old_id::text
+           AND graph.active_key = root_run.type || ':' || map.old_id::text;
+
+        UPDATE job_resource_states AS survivor
+        SET next_available_at = GREATEST(survivor.next_available_at, old_state.next_available_at),
+            updated_at = GREATEST(survivor.updated_at, old_state.updated_at)
+        FROM pg_temp.prismedia_playable_map AS map, job_resource_states AS old_state
+        WHERE map.mode = 'collapse'
+          AND old_state.key = '__ENTITY_RESOURCE_PREFIX__' || map.old_id::text
+          AND survivor.key = '__ENTITY_RESOURCE_PREFIX__' || map.new_id::text
+          AND survivor.max_concurrency = old_state.max_concurrency
+          AND survivor.minimum_start_interval_ms = old_state.minimum_start_interval_ms;
+        DELETE FROM job_resource_states AS old_state
+        USING pg_temp.prismedia_playable_map AS map
+        WHERE map.mode = 'collapse'
+          AND old_state.key = '__ENTITY_RESOURCE_PREFIX__' || map.old_id::text
+          AND EXISTS (
+              SELECT 1
+              FROM job_resource_states AS survivor
+              WHERE survivor.key = '__ENTITY_RESOURCE_PREFIX__' || map.new_id::text
+                AND survivor.max_concurrency = old_state.max_concurrency
+                AND survivor.minimum_start_interval_ms = old_state.minimum_start_interval_ms);
 
         DO $prismedia$
         BEGIN
@@ -1253,7 +1399,8 @@ public partial class MigrateDirectPlayableEntities : Migration {
                 SELECT 1
                 FROM job_runs AS run
                 INNER JOIN pg_temp.prismedia_playable_map AS map
-                    ON run.node_key = run.type || ':' || map.old_id::text
+                    ON right(run.node_key, 36) = map.old_id::text
+                   AND run.node_key = run.type || ':' || map.old_id::text
                 INNER JOIN job_runs AS conflicting
                     ON conflicting.graph_id = run.graph_id
                    AND conflicting.id <> run.id
@@ -1301,18 +1448,21 @@ public partial class MigrateDirectPlayableEntities : Migration {
         UPDATE job_runs AS run
         SET node_key = run.type || ':' || map.new_id::text
         FROM pg_temp.prismedia_playable_map AS map
-        WHERE run.node_key = run.type || ':' || map.old_id::text;
+        WHERE right(run.node_key, 36) = map.old_id::text
+          AND run.node_key = run.type || ':' || map.old_id::text;
 
         UPDATE job_graphs AS graph
         SET root_entity_id = map.new_id::text,
-            root_entity_kind = map.new_kind,
-            active_key = CASE
-                WHEN graph.active_key = root_run.type || ':' || map.old_id::text
-                    THEN root_run.type || ':' || map.new_id::text
-                ELSE graph.active_key
-            END
+            root_entity_kind = map.new_kind
+        FROM pg_temp.prismedia_playable_map AS map
+        WHERE graph.root_entity_id = map.old_id::text;
+
+        UPDATE job_graphs AS graph
+        SET active_key = root_run.type || ':' || map.new_id::text
         FROM job_runs AS root_run, pg_temp.prismedia_playable_map AS map
-        WHERE graph.root_run_id = root_run.id AND graph.root_entity_id = map.old_id::text;
+        WHERE graph.root_run_id = root_run.id
+          AND right(graph.active_key, 36) = map.old_id::text
+          AND graph.active_key = root_run.type || ':' || map.old_id::text;
 
         INSERT INTO job_resource_states (key, max_concurrency, minimum_start_interval_ms, next_available_at, updated_at)
         SELECT '__ENTITY_RESOURCE_PREFIX__' || map.new_id::text,
@@ -1501,12 +1651,15 @@ public partial class MigrateDirectPlayableEntities : Migration {
         .Replace("__THUMBNAIL_ROLE__", EntityFileRole.Thumbnail.ToCode(), StringComparison.Ordinal)
         .Replace("__GRID_THUMBNAIL_ROLE__", EntityFileRole.GridThumbnail.ToCode(), StringComparison.Ordinal)
         .Replace("__GRID_THUMBNAIL_2X_ROLE__", EntityFileRole.GridThumbnail2x.ToCode(), StringComparison.Ordinal)
+        .Replace("__POSTER_ROLE__", EntityFileRole.Poster.ToCode(), StringComparison.Ordinal)
+        .Replace("__BACKDROP_ROLE__", EntityFileRole.Backdrop.ToCode(), StringComparison.Ordinal)
         .Replace("__PREVIEW_ROLE__", EntityFileRole.Preview.ToCode(), StringComparison.Ordinal)
         .Replace("__SPRITE_ROLE__", EntityFileRole.Sprite.ToCode(), StringComparison.Ordinal)
         .Replace("__TRICKPLAY_ROLE__", EntityFileRole.Trickplay.ToCode(), StringComparison.Ordinal)
         .Replace("__HLS_ROLE__", EntityFileRole.Hls.ToCode(), StringComparison.Ordinal)
         .Replace("__FOLDER_SOURCE_CODE__", EntitySourceCode.Folder.ToCode(), StringComparison.Ordinal)
         .Replace("__SCAN_SOURCE__", FileSourceKind.Scan.ToCode(), StringComparison.Ordinal)
+        .Replace("__CUSTOM_SOURCE__", FileSourceKind.Custom.ToCode(), StringComparison.Ordinal)
         .Replace("__LEGACY_PERFORMER_ROLE__", LegacyPerformerRoleCode, StringComparison.Ordinal)
         .Replace("__ACTOR_ROLE__", CreditRole.Actor.ToCode(), StringComparison.Ordinal)
         .Replace("__CAST_RELATIONSHIP__", RelationshipKind.Cast.ToCode(), StringComparison.Ordinal)
