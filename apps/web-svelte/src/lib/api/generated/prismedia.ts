@@ -1359,7 +1359,7 @@ export const getGetPlaybackStatisticsUrl = (params?: GetPlaybackStatisticsParams
 }
 
 /**
- * @summary Get Playback Statistics.
+ * @summary Get Consumption Statistics.
  */
 export const getPlaybackStatistics = async (params?: GetPlaybackStatisticsParams, options?: RequestInit): Promise<getPlaybackStatisticsResponse> => {
 
@@ -2835,7 +2835,7 @@ export const getUpdateEntityPlaybackUrl = (id: string,) => {
 }
 
 /**
- * @summary Update Entity Playback.
+ * @summary Update timed Entity resume and active consumption.
  */
 export const updateEntityPlayback = async (id: string,
     playbackUpdateRequest: PlaybackUpdateRequest, options?: RequestInit): Promise<updateEntityPlaybackResponse> => {
@@ -2880,7 +2880,7 @@ export const getCreateEntityPlaybackEventUrl = (id: string,) => {
 }
 
 /**
- * @summary Create Entity Playback Event.
+ * @summary Create a timestamped Entity consumption event.
  */
 export const createEntityPlaybackEvent = async (id: string,
     playbackEventCreateRequest: PlaybackEventCreateRequest, options?: RequestInit): Promise<createEntityPlaybackEventResponse> => {
