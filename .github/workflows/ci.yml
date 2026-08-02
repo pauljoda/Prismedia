@@ -65,6 +65,10 @@ jobs:
         run: dotnet tool restore
         working-directory: apps/backend
 
+      - name: Restore .NET dependencies
+        run: dotnet restore Prismedia.slnx
+        working-directory: apps/backend
+
       - name: Verify EF model matches the migration snapshot
         run: >
           dotnet tool run dotnet-ef migrations has-pending-model-changes
