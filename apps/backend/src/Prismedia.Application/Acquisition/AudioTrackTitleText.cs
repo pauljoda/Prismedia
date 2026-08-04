@@ -54,6 +54,22 @@ public static partial class AudioTrackTitleText {
         return metadata.SequenceEqual(separatedTitle, StringComparer.Ordinal);
     }
 
+    /// <summary>
+    /// Reads the one-based track number decorating the start of a release filename, or null when the
+    /// filename has no leading number. Provider track positions are zero-based, so callers compare this
+    /// value with <c>position + 1</c>.
+    /// </summary>
+    public static int? ReadLeadingTrackNumber(string? value) {
+        if (string.IsNullOrWhiteSpace(value)) {
+            return null;
+        }
+
+        var match = LeadingTrackNumber().Match(value);
+        return match.Success && int.TryParse(match.Groups["number"].Value, out var number)
+            ? number
+            : null;
+    }
+
     [GeneratedRegex("[\"“”„‟«»‹›]", RegexOptions.CultureInvariant)]
     private static partial Regex QuotationMarks();
 
@@ -63,7 +79,7 @@ public static partial class AudioTrackTitleText {
     [GeneratedRegex(@"\s*[\[(]\s*score\s*[\])]\s*$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex TrailingScoreRole();
 
-    [GeneratedRegex(@"^\s*\d{1,3}(?:\s*[-._]\s*|\s+)", RegexOptions.CultureInvariant)]
+    [GeneratedRegex(@"^\s*(?<number>\d{1,3})(?:\s*[-._]\s*|\s+)", RegexOptions.CultureInvariant)]
     private static partial Regex LeadingTrackNumber();
 
     [GeneratedRegex(@"\s+(?:-|–|—)\s+", RegexOptions.CultureInvariant)]

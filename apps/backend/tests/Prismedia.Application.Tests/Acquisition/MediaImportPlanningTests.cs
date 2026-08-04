@@ -236,6 +236,40 @@ public sealed class MusicImportPlanBuilderTests {
     }
 
     [Fact]
+    public void RequestedAlbumUsesTrackOrderWithinTheMatchedDiscToResolveDuplicateTitles() {
+        var plan = MusicImportPlanBuilder.Plan([
+            File("Frozen Deluxe/CD1/01 - Frozen Heart.mp3"),
+            File("Frozen Deluxe/CD1/05 - Let It Go.mp3"),
+            File("Frozen Deluxe/CD1/09 - Fixer Upper.mp3"),
+            File("Frozen Deluxe/CD1/10 - Let It Go.mp3"),
+            File("Frozen Deluxe/CD1/11 - Vuelie.mp3"),
+            File("Frozen Deluxe/CD1/15 - Heimr Arnadalr.mp3"),
+            File("Frozen Deluxe/CD2/05 - Let It Go.mp3"),
+            File("Frozen Deluxe/CD2/10 - Outtake.mp3"),
+            File("Frozen Deluxe/CD2/15 - Score Demo.mp3")
+        ], "Kristen Anderson-Lopez, Robert Lopez, Christophe Beck", "Frozen", requestedTracks: [
+            new RequestedAudioTrack(Guid.NewGuid(), "Frozen Heart", 0),
+            new RequestedAudioTrack(Guid.NewGuid(), "Let It Go", 4),
+            new RequestedAudioTrack(Guid.NewGuid(), "Fixer Upper", 8),
+            new RequestedAudioTrack(Guid.NewGuid(), "Let It Go (Demi Lovato version)", 9),
+            new RequestedAudioTrack(Guid.NewGuid(), "Vuelie (score)", 10),
+            new RequestedAudioTrack(Guid.NewGuid(), "Heimr Àrnadalr (score)", 14)
+        ]);
+
+        Assert.False(plan.Blocked);
+        Assert.Equal(
+            [
+                "Kristen Anderson-Lopez, Robert Lopez, Christophe Beck/Frozen/01 - Frozen Heart.mp3",
+                "Kristen Anderson-Lopez, Robert Lopez, Christophe Beck/Frozen/05 - Let It Go.mp3",
+                "Kristen Anderson-Lopez, Robert Lopez, Christophe Beck/Frozen/09 - Fixer Upper.mp3",
+                "Kristen Anderson-Lopez, Robert Lopez, Christophe Beck/Frozen/10 - Let It Go.mp3",
+                "Kristen Anderson-Lopez, Robert Lopez, Christophe Beck/Frozen/11 - Vuelie.mp3",
+                "Kristen Anderson-Lopez, Robert Lopez, Christophe Beck/Frozen/15 - Heimr Arnadalr.mp3"
+            ],
+            plan.Items.Select(item => item.TargetRelativePath).ToArray());
+    }
+
+    [Fact]
     public void RequestedAlbumWithNoMatchingTrackBlocksInsteadOfImportingTheBundleWholesale() {
         var plan = MusicImportPlanBuilder.Plan([
             File("Deluxe/01 - Unrequested Bonus.flac")

@@ -10,6 +10,9 @@ public sealed record ImportCandidateFile(string RelativePath, long SizeBytes);
 /// One provider-authored audio track the current acquisition is allowed to satisfy. Whole-album
 /// imports carry every still-wanted child; a direct track fallback carries only its linked track.
 /// </summary>
+/// <param name="EntityId">Stable identity of the wanted audio-track Entity.</param>
+/// <param name="Title">Provider-authored track title used for strict filename matching.</param>
+/// <param name="Position">Zero-based provider track order, when known.</param>
 public sealed record RequestedAudioTrack(Guid EntityId, string Title, int? Position = null);
 
 /// <summary>
@@ -123,10 +126,11 @@ public static partial class MovieImportPlanBuilder {
 /// Pure music import planning: places every audio file of a downloaded album release under the album
 /// folder the profile's naming template renders (default <c>{Artist}/{Album}</c>), preserving inner
 /// structure (disc folders) after stripping the release's single wrapper folder, plus any cover-art
-/// images flattened into the album folder. When provider-authored requested tracks are supplied, only
-/// uniquely title-matched audio is planned; deluxe extras and unrelated bundle files stay outside the
-/// library. Only the album FOLDER is templated — track files keep their release names and inner disc
-/// structure, so track renaming is intentionally out of scope.
+/// images flattened into the album folder. When provider-authored requested tracks are supplied, strict
+/// title matches establish the release disc; remaining duplicate or decorated titles may then resolve
+/// one-to-one by provider track order within that disc. Deluxe extras and unrelated bundle files stay
+/// outside the library. Only the album FOLDER is templated — track files keep their release names and
+/// inner disc structure, so track renaming is intentionally out of scope.
 /// </summary>
 public static class MusicImportPlanBuilder {
     /// <summary>Audio extensions the music importer accepts. Mirrors scan discovery's audio set.</summary>
@@ -189,34 +193,104 @@ public static class MusicImportPlanBuilder {
     private static ImportCandidateFile[] SelectRequestedAudio(
         IReadOnlyList<ImportCandidateFile> audio,
         IReadOnlyList<RequestedAudioTrack> requestedTracks) {
-        var matches = audio
-            .Select(file => new {
-                File = file,
-                Targets = requestedTracks
-                    .Where(track => AudioTrackTitleText.MatchesMetadataTitle(
-                        track.Title,
-                        FileNameWithoutExtension(file.RelativePath)))
-                    .Select(track => track.EntityId)
-                    .Distinct()
-                    .ToArray()
-            })
+        var titleProposals = requestedTracks
+            .Select(track => ResolveTitleProposal(track, audio))
+            .OfType<AudioSelection>()
             .ToArray();
-        var fileCountByTarget = matches
-            .SelectMany(match => match.Targets)
-            .GroupBy(entityId => entityId)
-            .ToDictionary(group => group.Key, group => group.Count());
+        var selected = RemoveFileConflicts(titleProposals).ToList();
+        var preferredDirectory = PreferredDirectory(selected.Select(selection => selection.File));
+        if (preferredDirectory is not null) {
+            var selectedTrackIds = selected.Select(selection => selection.Track.EntityId).ToHashSet();
+            var selectedPaths = selected
+                .Select(selection => selection.File.RelativePath)
+                .ToHashSet(FileSystemPathComparison.Comparer);
+            var positionProposals = requestedTracks
+                .Where(track => !selectedTrackIds.Contains(track.EntityId))
+                .Select(track => ResolvePositionProposal(track, audio, preferredDirectory, selectedPaths))
+                .OfType<AudioSelection>();
+            selected.AddRange(RemoveFileConflicts(positionProposals));
+        }
 
-        return matches
-            .Where(match => match.Targets.Length == 1 && fileCountByTarget[match.Targets[0]] == 1)
-            .Select(match => match.File)
+        return selected
+            .Select(selection => selection.File)
+            .DistinctBy(file => file.RelativePath, FileSystemPathComparison.Comparer)
             .ToArray();
+    }
+
+    private static AudioSelection? ResolveTitleProposal(
+        RequestedAudioTrack track,
+        IReadOnlyList<ImportCandidateFile> audio) {
+        var candidates = audio
+            .Where(file => AudioTrackTitleText.MatchesMetadataTitle(
+                track.Title,
+                FileNameWithoutExtension(file.RelativePath)))
+            .ToArray();
+        var resolved = Unique(candidates);
+        if (resolved is null && track.Position is not null) {
+            resolved = Unique(candidates.Where(file =>
+                AudioTrackTitleText.ReadLeadingTrackNumber(FileName(file.RelativePath)) == track.Position.Value + 1));
+        }
+
+        return resolved is null ? null : new AudioSelection(track, resolved);
+    }
+
+    private static AudioSelection? ResolvePositionProposal(
+        RequestedAudioTrack track,
+        IReadOnlyList<ImportCandidateFile> audio,
+        string preferredDirectory,
+        IReadOnlySet<string> selectedPaths) {
+        if (track.Position is null) {
+            return null;
+        }
+
+        var candidate = Unique(audio.Where(file =>
+            !selectedPaths.Contains(file.RelativePath)
+            && FileSystemPathComparison.Equals(ParentDirectory(file.RelativePath), preferredDirectory)
+            && AudioTrackTitleText.ReadLeadingTrackNumber(FileName(file.RelativePath)) == track.Position.Value + 1));
+        return candidate is null ? null : new AudioSelection(track, candidate);
+    }
+
+    private static IReadOnlyList<AudioSelection> RemoveFileConflicts(IEnumerable<AudioSelection> proposals) =>
+        proposals
+            .GroupBy(selection => selection.File.RelativePath, FileSystemPathComparison.Comparer)
+            .Where(group => group.Count() == 1)
+            .Select(group => group.Single())
+            .ToArray();
+
+    private static string? PreferredDirectory(IEnumerable<ImportCandidateFile> selectedFiles) {
+        var ranked = selectedFiles
+            .GroupBy(file => ParentDirectory(file.RelativePath), FileSystemPathComparison.Comparer)
+            .Select(group => new { Directory = group.Key, Count = group.Count() })
+            .OrderByDescending(group => group.Count)
+            .ToArray();
+        return ranked.Length > 0
+            && ranked[0].Count >= 2
+            && (ranked.Length == 1 || ranked[0].Count > ranked[1].Count)
+                ? ranked[0].Directory
+                : null;
+    }
+
+    private static ImportCandidateFile? Unique(IEnumerable<ImportCandidateFile> candidates) {
+        var pair = candidates.Take(2).ToArray();
+        return pair.Length == 1 ? pair[0] : null;
+    }
+
+    private static string ParentDirectory(string relativePath) {
+        var normalized = relativePath.Replace('\\', '/');
+        var separator = normalized.LastIndexOf('/');
+        return separator < 0 ? string.Empty : normalized[..separator];
+    }
+
+    private static string FileName(string relativePath) {
+        var normalized = relativePath.Replace('\\', '/');
+        return normalized[(normalized.LastIndexOf('/') + 1)..];
     }
 
     private static string FileNameWithoutExtension(string relativePath) {
-        var normalized = relativePath.Replace('\\', '/');
-        var fileName = normalized[(normalized.LastIndexOf('/') + 1)..];
-        return Path.GetFileNameWithoutExtension(fileName);
+        return Path.GetFileNameWithoutExtension(FileName(relativePath));
     }
+
+    private sealed record AudioSelection(RequestedAudioTrack Track, ImportCandidateFile File);
 
     /// <summary>
     /// The album folder path (relative to the library root) the template renders — the SAME render used
