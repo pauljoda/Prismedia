@@ -236,15 +236,11 @@ public sealed class MediaEntityDeletionService(
             return Conflict(exception.Message);
         }
 
-        // Remote transfers are part of the destructive boundary, not best-effort cleanup. Confirm the
-        // complete operation set absent only after durable local claims prevent requeue. If confirmation or
-        // disk fails, those claims remain retryable while files, source rows, Entities, and suppression stay.
+        // Delete files is a local library operation. Once durable claims prevent requeue, ask each owning
+        // client to discard its transfer opportunistically, but never strand the Entity because a stale,
+        // missing, or offline client cannot confirm remote absence.
         foreach (var acquisitionId in deleteAcquisitionIds) {
-            try {
-                await acquisitions.ConfirmTransferRemovedAsync(acquisitionId, cancellationToken);
-            } catch (AcquisitionConfigurationException exception) {
-                return Conflict(exception.Message);
-            }
+            await acquisitions.DiscardTransferForEntityDeletionAsync(acquisitionId, cancellationToken);
         }
 
         // Every monitor targeting the removed subtree, directly or through an acquisition, is teardown state.

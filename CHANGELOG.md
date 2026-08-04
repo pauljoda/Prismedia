@@ -14,6 +14,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- Delete files now finishes local media, monitor, and acquisition removal even when the recorded download client is missing or offline, and cancels linked release-review job graphs so removed requests do not remain stuck in Waiting.
 - Album and TV bundle imports now keep only files that unambiguously match the requested tracks, season, or episode, discard the remaining transfer payload, immediately request any children still missing after import, and wrap long acquisition filenames on narrow screens.
 - Thumbnail metadata chips now stay clear of selection checkboxes in bulk-selection grids.
 - Consumption upgrades now preserve exact legacy progress and active-time history without presenting inferred opens as recorded facts; access sessions are deduplicated per Entity, and images and galleries accept viewing time without accepting playback-only position, completion, or skip changes.

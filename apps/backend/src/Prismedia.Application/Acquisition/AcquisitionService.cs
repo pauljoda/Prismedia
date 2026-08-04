@@ -139,10 +139,23 @@ public interface IAcquisitionRequestService {
     /// <summary>
     /// Strictly removes the recorded remote transfer and its data, or confirms it is already absent,
     /// without changing local acquisition, monitor, job, or history state. Missing/unreachable client
-    /// configuration and client failures are actionable conflicts. Destructive Entity workflows call this
-    /// for their complete operation set before touching local files or database state.
+    /// configuration and client failures are actionable conflicts. Use this when a workflow promises that
+    /// no remotely owned transfer will remain, such as unmonitoring or reacquiring managed content.
     /// </summary>
     Task ConfirmTransferRemovedAsync(Guid id, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Best-effort transfer cleanup for explicit full Entity deletion. Delete files is fundamentally a
+    /// local library operation: an unavailable or already-lost download client must not strand managed
+    /// files, Entity rows, monitors, or jobs in teardown state.
+    /// </summary>
+    async Task DiscardTransferForEntityDeletionAsync(Guid id, CancellationToken cancellationToken) {
+        try {
+            await ConfirmTransferRemovedAsync(id, cancellationToken);
+        } catch (AcquisitionConfigurationException) {
+            // The durable local deletion claim is the authority. Remote cleanup is opportunistic here.
+        }
+    }
 
     /// <summary>
     /// Hard-deletes a durably claimed acquisition after external/file work completed. The persisted intent
@@ -193,11 +206,14 @@ public sealed record AcquisitionReacquireEligibility(bool CanReacquire, string? 
 public sealed record AcquisitionRemovalEligibility(bool CanRemove, string? Message = null);
 
 /// <summary>
-/// Cancels durable acquisition jobs by their exact acquisition target before the acquisition row is
-/// removed. This keeps queued/running work from remaining visible or acting on a deleted lifecycle.
+/// Cancels durable acquisition work by its exact target before the acquisition row is removed. This also
+/// terminalizes the owning graph so open review or external-event signals cannot outlive the lifecycle.
 /// </summary>
 public interface IAcquisitionJobCleanup {
-    /// <summary>Cancels queued and running jobs whose target is exactly <paramref name="acquisitionId"/>.</summary>
+    /// <summary>
+    /// Cancels queued/running jobs whose target is exactly <paramref name="acquisitionId"/> and cancels
+    /// every still-active graph linked by the acquisition or one of its nodes.
+    /// </summary>
     Task<int> CancelAsync(Guid acquisitionId, CancellationToken cancellationToken);
 }
 
@@ -650,6 +666,10 @@ public sealed partial class AcquisitionService(
     /// <inheritdoc />
     public Task ConfirmTransferRemovedAsync(Guid id, CancellationToken cancellationToken) =>
         RemoveTransferDataStrictAsync(id, cancellationToken);
+
+    /// <inheritdoc />
+    public Task DiscardTransferForEntityDeletionAsync(Guid id, CancellationToken cancellationToken) =>
+        RemoveTransferDataAsync(id, cancellationToken);
 
     /// <inheritdoc />
     public async Task<bool> CompleteTeardownAsync(

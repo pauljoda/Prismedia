@@ -390,7 +390,7 @@ public sealed class MediaEntityDeletionServiceTests {
     }
 
     [Fact]
-    public async Task RemoteTransferFailureBlocksUnmonitoredRemovalBeforeDiskOrDatabaseMutation() {
+    public async Task UnavailableDownloadClientDoesNotBlockExplicitFullEntityDeletion() {
         await using var db = CreateContext();
         var root = new FileLibraryRoot(Guid.NewGuid(), "/media/tv", "TV", true, true, false, false, false, false);
         var (seriesId, seasonId, _) = await SeedSeriesTreeAsync(db, root.Path, MonitorStatus.Paused);
@@ -410,22 +410,20 @@ public sealed class MediaEntityDeletionServiceTests {
 
         var result = await service.DeleteAsync(seriesId, deleteFiles: true, CancellationToken.None);
 
-        Assert.False(result.Deleted);
-        Assert.Equal(MediaEntityDeleteFailureKind.Conflict, result.FailureKind);
-        Assert.Contains("download client", result.Message, StringComparison.OrdinalIgnoreCase);
-        Assert.Equal([RecordingAcquisitions.AcquisitionId], acquisitions.ConfirmedTransferRemovals);
-        Assert.Empty(storage.AttemptedPaths);
-        Assert.Equal(entityIds, await db.Entities.Select(row => row.Id).OrderBy(value => value).ToArrayAsync());
-        Assert.Equal(sourceFileIds, await db.EntityFiles.Select(row => row.Id).OrderBy(value => value).ToArrayAsync());
-        Assert.Equal(monitorIds, await db.Monitors.Select(row => row.Id).OrderBy(value => value).ToArrayAsync());
-        Assert.Empty(acquisitions.Deleted);
+        Assert.True(result.Deleted);
+        Assert.Equal([RecordingAcquisitions.AcquisitionId], acquisitions.DiscardedTransferRemovals);
+        Assert.Empty(acquisitions.ConfirmedTransferRemovals);
+        Assert.NotEmpty(storage.AttemptedPaths);
+        Assert.Empty(await db.Entities.Where(row => entityIds.Contains(row.Id)).ToArrayAsync());
+        Assert.Empty(await db.EntityFiles.Where(row => sourceFileIds.Contains(row.Id)).ToArrayAsync());
+        Assert.Empty(await db.Monitors.Where(row => monitorIds.Contains(row.Id)).ToArrayAsync());
+        Assert.Equal([RecordingAcquisitions.AcquisitionId], acquisitions.Deleted);
         Assert.Empty(acquisitions.Reacquired);
-        Assert.Empty(suppressions.SuppressedIdentities);
-        Assert.Empty(jobs.Enqueued);
+        Assert.Contains(jobs.Enqueued, job => job.Type == JobType.ScanLibrary);
     }
 
     [Fact]
-    public async Task RemoteTransferFailureBlocksMonitoredReacquisitionBeforeDiskOrDatabaseMutation() {
+    public async Task UnavailableDownloadClientDoesNotBlockMonitoredFullEntityDeletion() {
         await using var db = CreateContext();
         var root = new FileLibraryRoot(Guid.NewGuid(), "/media/movies", "Movies", true, true, false, false, false, false);
         var entityId = Guid.NewGuid();
@@ -462,16 +460,15 @@ public sealed class MediaEntityDeletionServiceTests {
 
         var result = await service.DeleteAsync(entityId, deleteFiles: true, CancellationToken.None);
 
-        Assert.False(result.Deleted);
-        Assert.Equal(MediaEntityDeleteFailureKind.Conflict, result.FailureKind);
-        Assert.Equal([RecordingAcquisitions.AcquisitionId], acquisitions.ConfirmedTransferRemovals);
-        Assert.Empty(storage.AttemptedPaths);
-        Assert.False((await db.Entities.SingleAsync(row => row.Id == entityId)).IsWanted);
-        Assert.NotNull(await db.EntityFiles.SingleOrDefaultAsync(row => row.Id == sourceFileId));
-        Assert.NotNull(await db.Monitors.SingleOrDefaultAsync(row => row.Id == monitorId));
-        Assert.Empty(acquisitions.Deleted);
+        Assert.True(result.Deleted);
+        Assert.Equal([RecordingAcquisitions.AcquisitionId], acquisitions.DiscardedTransferRemovals);
+        Assert.Empty(acquisitions.ConfirmedTransferRemovals);
+        Assert.NotEmpty(storage.AttemptedPaths);
+        Assert.Null(await db.Entities.SingleOrDefaultAsync(row => row.Id == entityId));
+        Assert.Null(await db.EntityFiles.SingleOrDefaultAsync(row => row.Id == sourceFileId));
+        Assert.Null(await db.Monitors.SingleOrDefaultAsync(row => row.Id == monitorId));
+        Assert.Equal([RecordingAcquisitions.AcquisitionId], acquisitions.Deleted);
         Assert.Empty(acquisitions.Reacquired);
-        Assert.Empty(suppressions.SuppressedIdentities);
     }
 
     [Fact]
@@ -510,7 +507,7 @@ public sealed class MediaEntityDeletionServiceTests {
         Assert.Equal(MediaEntityDeleteFailureKind.Conflict, failed.FailureKind);
         Assert.Equal(MonitorStatus.DeletingFiles, (await db.Monitors.SingleAsync(row => row.Id == monitorId)).Status);
         Assert.Equal(AcquisitionTeardownIntent.Remove, acquisitions.TeardownClaims[RecordingAcquisitions.AcquisitionId]);
-        Assert.Equal([RecordingAcquisitions.AcquisitionId], acquisitions.ConfirmedTransferRemovals);
+        Assert.Equal([RecordingAcquisitions.AcquisitionId], acquisitions.DiscardedTransferRemovals);
         Assert.Empty(acquisitions.Reacquired);
         Assert.Empty(jobs.Enqueued);
         Assert.NotNull(await db.EntityFiles.SingleOrDefaultAsync(row => row.EntityId == entityId));
@@ -530,7 +527,7 @@ public sealed class MediaEntityDeletionServiceTests {
         Assert.Equal([RecordingAcquisitions.AcquisitionId], acquisitions.Deleted);
         Assert.Equal(
             [RecordingAcquisitions.AcquisitionId, RecordingAcquisitions.AcquisitionId],
-            acquisitions.ConfirmedTransferRemovals);
+            acquisitions.DiscardedTransferRemovals);
     }
 
     [Fact]
@@ -597,8 +594,8 @@ public sealed class MediaEntityDeletionServiceTests {
         Assert.True(result.Deleted);
         Assert.Contains((parentAcquisitionId, AcquisitionTeardownIntent.Remove), acquisitions.ClaimedTeardowns);
         Assert.Contains((upgradeChildId, AcquisitionTeardownIntent.Remove), acquisitions.ClaimedTeardowns);
-        Assert.Contains(parentAcquisitionId, acquisitions.ConfirmedTransferRemovals);
-        Assert.Contains(upgradeChildId, acquisitions.ConfirmedTransferRemovals);
+        Assert.Contains(parentAcquisitionId, acquisitions.DiscardedTransferRemovals);
+        Assert.Contains(upgradeChildId, acquisitions.DiscardedTransferRemovals);
         Assert.Contains(parentAcquisitionId, acquisitions.Deleted);
         Assert.Contains(upgradeChildId, acquisitions.Deleted);
         Assert.Null(await db.Monitors.SingleOrDefaultAsync(row => row.Id == monitorId));
@@ -1036,7 +1033,7 @@ public sealed class MediaEntityDeletionServiceTests {
         Assert.Equal(
             [(RecordingAcquisitions.AcquisitionId, AcquisitionTeardownIntent.Remove)],
             acquisitions.ClaimedTeardowns);
-        Assert.Equal([RecordingAcquisitions.AcquisitionId], acquisitions.ConfirmedTransferRemovals);
+        Assert.Equal([RecordingAcquisitions.AcquisitionId], acquisitions.DiscardedTransferRemovals);
         Assert.Equal(["/media/movies/Arrival/Arrival.mkv"], storage.DeletedPaths);
     }
 
@@ -1089,7 +1086,7 @@ public sealed class MediaEntityDeletionServiceTests {
         Assert.Equal(
             [(RecordingAcquisitions.AcquisitionId, AcquisitionTeardownIntent.Remove)],
             acquisitions.ClaimedTeardowns);
-        Assert.Equal([RecordingAcquisitions.AcquisitionId], acquisitions.ConfirmedTransferRemovals);
+        Assert.Equal([RecordingAcquisitions.AcquisitionId], acquisitions.DiscardedTransferRemovals);
         Assert.Equal(["/media/movies/Arrival/Arrival.mkv"], storage.DeletedPaths);
         Assert.Null(await db.Entities.SingleOrDefaultAsync(row => row.Id == entityId));
     }
@@ -1132,7 +1129,7 @@ public sealed class MediaEntityDeletionServiceTests {
         Assert.Equal(
             [(RecordingAcquisitions.AcquisitionId, AcquisitionTeardownIntent.Remove)],
             acquisitions.ClaimedTeardowns);
-        Assert.Equal([RecordingAcquisitions.AcquisitionId], acquisitions.ConfirmedTransferRemovals);
+        Assert.Equal([RecordingAcquisitions.AcquisitionId], acquisitions.DiscardedTransferRemovals);
         Assert.Equal(["/media/movies/Arrival/Arrival.mkv"], storage.DeletedPaths);
     }
 
@@ -1897,6 +1894,7 @@ public sealed class MediaEntityDeletionServiceTests {
         public List<Guid> Deleted { get; } = [];
         public List<Guid> Reacquired { get; } = [];
         public List<Guid> ConfirmedTransferRemovals { get; } = [];
+        public List<Guid> DiscardedTransferRemovals { get; } = [];
         public List<(Guid Id, AcquisitionTeardownIntent Intent)> ClaimedTeardowns { get; } = [];
         public List<(Guid Id, AcquisitionTeardownIntent Intent)> CompletedTeardowns { get; } = [];
         public Dictionary<Guid, AcquisitionTeardownIntent> TeardownClaims { get; } = [];
@@ -1938,6 +1936,11 @@ public sealed class MediaEntityDeletionServiceTests {
                     ApiProblemCodes.AcquisitionInvalid,
                     "The recorded download client is unavailable."))
                 : Task.CompletedTask;
+        }
+
+        public Task DiscardTransferForEntityDeletionAsync(Guid id, CancellationToken cancellationToken) {
+            DiscardedTransferRemovals.Add(id);
+            return Task.CompletedTask;
         }
 
         public Task<bool> ClaimTeardownAsync(

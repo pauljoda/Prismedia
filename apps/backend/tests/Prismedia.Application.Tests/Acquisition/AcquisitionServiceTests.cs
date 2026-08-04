@@ -369,6 +369,27 @@ public sealed class AcquisitionServiceTests {
     }
 
     [Fact]
+    public async Task EntityDeletionDiscardIgnoresAMissingRecordedClient() {
+        var harness = Harness(TransferInfo(RecordedClientId), includeRecordedClient: false);
+
+        await harness.Service.DiscardTransferForEntityDeletionAsync(AcquisitionId, CancellationToken.None);
+
+        Assert.Empty(harness.Downloads.Removals);
+        Assert.NotNull(harness.Store.TransferPointer);
+    }
+
+    [Fact]
+    public async Task EntityDeletionDiscardIgnoresAnOfflineRecordedClient() {
+        var harness = Harness(TransferInfo(RecordedClientId));
+        harness.Downloads.RemoveFailure = new IOException("client offline");
+
+        await harness.Service.DiscardTransferForEntityDeletionAsync(AcquisitionId, CancellationToken.None);
+
+        Assert.Equal([(RecordedClientId, ClientItemId, true)], harness.Downloads.Removals);
+        Assert.NotNull(harness.Store.TransferPointer);
+    }
+
+    [Fact]
     public async Task CancelAsyncDoesNotRemoveFromDefaultWhenRecordedClientIsMissing() {
         var harness = Harness(TransferInfo(RecordedClientId), includeRecordedClient: false);
 
