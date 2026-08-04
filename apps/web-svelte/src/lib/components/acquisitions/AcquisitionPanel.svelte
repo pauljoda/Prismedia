@@ -531,10 +531,10 @@
           <div class="min-w-0 px-3 pb-3">
             <div class="overflow-hidden rounded-sm border border-border-subtle">
               {#each files.files as f (f.name)}
-                <div class="flex items-center justify-between gap-3 border-b border-border-subtle px-3 py-2 last:border-b-0">
+                <div class="flex min-w-0 items-start justify-between gap-3 border-b border-border-subtle px-3 py-2 last:border-b-0">
                   <span class="flex min-w-0 items-center gap-2 text-sm text-text-primary">
                     <FileText class="h-3.5 w-3.5 shrink-0 text-text-muted" />
-                    <span class="truncate">{f.name}</span>
+                    <span class="min-w-0 whitespace-normal [overflow-wrap:anywhere]">{f.name}</span>
                   </span>
                   <span class="shrink-0 font-mono text-[0.72rem] text-text-muted">{formatBytes(Number(f.sizeBytes))}</span>
                 </div>

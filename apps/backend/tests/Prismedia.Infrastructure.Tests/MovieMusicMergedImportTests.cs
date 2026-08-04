@@ -194,7 +194,26 @@ public sealed class MovieMusicMergedImportTests : IDisposable {
             var trackPath = Path.Combine(albumFolder, track);
             await File.WriteAllTextAsync(trackPath, "owned-bytes");
             var trackId = AddEntity(db, EntityKind.AudioTrack.ToCode(), albumId, position++);
+            db.Entities.Local.Single(entity => entity.Id == trackId).Title = Path.GetFileNameWithoutExtension(track);
             AddSourceFile(db, trackId, trackPath);
+        }
+
+        // The selected release is evaluated against the album's durable requested children. Mark
+        // matching owned rows wanted for the nothing-new cases, and materialize fileless phantoms for
+        // tracks that the payload can genuinely add.
+        foreach (var track in payloadTracks) {
+            var title = Path.GetFileNameWithoutExtension(track);
+            var normalizedTitle = AudioTrackTitleText.Normalize(title);
+            var requested = db.Entities.Local.FirstOrDefault(entity =>
+                entity.ParentEntityId == albumId
+                && entity.KindCode == EntityKind.AudioTrack.ToCode()
+                && AudioTrackTitleText.Normalize(entity.Title) == normalizedTitle);
+            if (requested is null) {
+                var requestedId = AddEntity(db, EntityKind.AudioTrack.ToCode(), albumId, position++);
+                requested = db.Entities.Local.Single(entity => entity.Id == requestedId);
+                requested.Title = title;
+            }
+            requested.IsWanted = true;
         }
 
         var payloadRoot = Directory.CreateDirectory(Path.Combine(_workRoot, "download-music", "release")).FullName;

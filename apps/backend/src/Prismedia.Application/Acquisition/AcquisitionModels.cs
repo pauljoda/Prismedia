@@ -683,6 +683,12 @@ public sealed record ImportPlacementCheckpoint(
     Guid AttemptId = default,
     Guid ClaimJobId = default) {
     public AcquisitionImportFileLedger? ImportFileLedger { get; init; }
+
+    /// <summary>
+    /// Whether supported payload media was intentionally excluded from this plan. Copy and hardlink
+    /// imports then remove the transfer data instead of retaining unwanted bundle files for seeding.
+    /// </summary>
+    public bool DiscardRemainingPayload { get; init; }
 }
 
 /// <summary>One exact payload-to-library placement in a kind-neutral durable import plan.</summary>
@@ -731,6 +737,12 @@ public sealed record TvImportCheckpoint(
     public string? LibraryRootPath { get; init; }
 
     public AcquisitionImportFileLedger? ImportFileLedger { get; init; }
+
+    /// <summary>
+    /// Whether supported payload media outside the requested season/episode scope was intentionally
+    /// excluded. The transfer is torn down after the selected files are safe in the library.
+    /// </summary>
+    public bool DiscardRemainingPayload { get; init; }
 }
 
 /// <summary>One durable TV file placement and its exact Entity position.</summary>

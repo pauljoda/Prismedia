@@ -50,6 +50,42 @@ public sealed class TvAcquisitionImportEngineTests : IDisposable {
     }
 
     [Fact]
+    public async Task CompleteSeriesPayloadImportsOnlyTheRequestedSeason() {
+        await using var db = CreateContext();
+        var harness = await HarnessAsync(
+            db,
+            ownedEpisodeName: "Show - s01e01 720p WEB.mkv",
+            payloadFiles: ["Show.S01E02.1080p.WEB-DL.mkv", "Show.S02E01.1080p.WEB-DL.mkv"],
+            releaseTitle: "Show Complete Series 1080p WEB-DL");
+
+        await harness.Engine.ImportAsync(harness.Context, harness.Import, CancellationToken.None);
+
+        Assert.True(File.Exists(Path.Combine(harness.SeasonFolder, "Show - S01E02.mkv")));
+        Assert.False(File.Exists(Path.Combine(harness.SeriesFolder, "Season 02", "Show - S02E01.mkv")));
+        var checkpoint = await AcquisitionTestFactory.Store(db)
+            .GetImportContextAsync(harness.Import.Id, CancellationToken.None);
+        Assert.True(checkpoint!.TvImportCheckpoint!.DiscardRemainingPayload);
+    }
+
+    [Fact]
+    public async Task PartialSeasonImportQueuesImmediateMissingEpisodeFallback() {
+        await using var db = CreateContext();
+        var harness = await HarnessAsync(
+            db,
+            ownedEpisodeName: "Show - s01e01 720p WEB.mkv",
+            payloadFiles: ["Show.S01E02.1080p.WEB-DL.mkv"],
+            releaseTitle: "Show S01 1080p WEB-DL",
+            wantedEpisodeNumbers: [2, 3],
+            enableMissingFallback: true);
+
+        await harness.Engine.ImportAsync(harness.Context, harness.Import, CancellationToken.None);
+
+        Assert.Contains(harness.Queue.Enqueued, request =>
+            request.Type == JobType.MonitoredSearch
+            && request.TargetLabel == "Fill missing imported episodes");
+    }
+
+    [Fact]
     public async Task ImportedMeansWantedEpisodeIsImmediatelySourceBackedWithoutRunningAScanJob() {
         await using var db = CreateContext();
         var harness = await HarnessAsync(db, ownedEpisodeName: "Show - s01e01 720p WEB.mkv", payloadFiles: ["Show.S01E02.1080p.WEB-DL.mkv"], releaseTitle: "Show S01 1080p WEB-DL");
@@ -482,14 +518,14 @@ public sealed class TvAcquisitionImportEngineTests : IDisposable {
     }
 
     [Fact]
-    public async Task MissingSeasonFolderIsCreatedInsideTheExistingSeriesFolder() {
+    public async Task WrongSeasonPayloadIsNotImportedForTheRequestedSeason() {
         await using var db = CreateContext();
         var harness = await HarnessAsync(db, ownedEpisodeName: "Show - s01e01 720p WEB.mkv", payloadFiles: ["Show.S02E01.1080p.WEB-DL.mkv"], releaseTitle: "Show S02 1080p WEB-DL");
 
         await harness.Engine.ImportAsync(harness.Context, harness.Import, CancellationToken.None);
 
-        Assert.True(File.Exists(Path.Combine(harness.SeriesFolder, "Season 02", "Show - S02E01.mkv")));
-        Assert.Equal(AcquisitionStatus.Importing, await StatusOf(db, harness.Import.Id));
+        Assert.False(File.Exists(Path.Combine(harness.SeriesFolder, "Season 02", "Show - S02E01.mkv")));
+        Assert.Equal(AcquisitionStatus.ManualImportRequired, await StatusOf(db, harness.Import.Id));
     }
 
     [Fact]
@@ -788,7 +824,8 @@ public sealed class TvAcquisitionImportEngineTests : IDisposable {
         bool failCrossFormatAfterInstall = false,
         bool failSameFormatAfterStage = false,
         bool failAfterReplacementEvidence = false,
-        bool autoGenerateMetadata = false) {
+        bool autoGenerateMetadata = false,
+        bool enableMissingFallback = false) {
         var libraryRoot = Directory.CreateDirectory(Path.Combine(_workRoot, "library")).FullName;
         var seriesFolder = Directory.CreateDirectory(Path.Combine(libraryRoot, "Show (2008)")).FullName;
         var seasonFolder = Directory.CreateDirectory(Path.Combine(seriesFolder, deletedSeason ? "Season 01" : "S01")).FullName;
@@ -847,6 +884,17 @@ public sealed class TvAcquisitionImportEngineTests : IDisposable {
 
         var store = AcquisitionTestFactory.Store(db);
         await store.SetSelectedReleaseAsync(acquisitionId, new SelectedRelease(releaseTitle, "Indexer", "hash-1"), CancellationToken.None);
+        IMonitorStore? monitorStore = null;
+        if (enableMissingFallback) {
+            var enabledMonitorStore = new EfMonitorStore(db);
+            await enabledMonitorStore.StartAsync(
+                acquisitionId,
+                EntityKind.VideoSeason,
+                "Show",
+                author: null,
+                CancellationToken.None);
+            monitorStore = enabledMonitorStore;
+        }
 
         var import = new AcquisitionImportContext(
             acquisitionId, "Show", Author: null, Series: "Show", Year: null, PosterUrl: null,
@@ -904,7 +952,8 @@ public sealed class TvAcquisitionImportEngineTests : IDisposable {
             history,
             importedVideoMaterializer,
             scanGate,
-            NullLogger<TvAcquisitionImportEngine>.Instance);
+            NullLogger<TvAcquisitionImportEngine>.Instance,
+            monitorStore);
 
         var job = new JobRunSnapshot(
             jobId, JobType.AcquisitionImport, JobRunStatus.Running, 0, null, "{}",

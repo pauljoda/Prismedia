@@ -7,6 +7,12 @@ namespace Prismedia.Application.Acquisition;
 public sealed record ImportCandidateFile(string RelativePath, long SizeBytes);
 
 /// <summary>
+/// One provider-authored audio track the current acquisition is allowed to satisfy. Whole-album
+/// imports carry every still-wanted child; a direct track fallback carries only its linked track.
+/// </summary>
+public sealed record RequestedAudioTrack(Guid EntityId, string Title, int? Position = null);
+
+/// <summary>
 /// Reads a completed download's payload for import planning: the files (relative path + size) and the
 /// content root the paths are relative to. A single-file download's root is its parent directory.
 /// </summary>
@@ -117,9 +123,10 @@ public static partial class MovieImportPlanBuilder {
 /// Pure music import planning: places every audio file of a downloaded album release under the album
 /// folder the profile's naming template renders (default <c>{Artist}/{Album}</c>), preserving inner
 /// structure (disc folders) after stripping the release's single wrapper folder, plus any cover-art
-/// images flattened into the album folder. Only the album FOLDER is templated — track files keep their
-/// release names and inner disc structure, so track renaming is intentionally out of scope. No ambiguity
-/// blocks — an album release maps wholesale.
+/// images flattened into the album folder. When provider-authored requested tracks are supplied, only
+/// uniquely title-matched audio is planned; deluxe extras and unrelated bundle files stay outside the
+/// library. Only the album FOLDER is templated — track files keep their release names and inner disc
+/// structure, so track renaming is intentionally out of scope.
 /// </summary>
 public static class MusicImportPlanBuilder {
     /// <summary>Audio extensions the music importer accepts. Mirrors scan discovery's audio set.</summary>
@@ -141,10 +148,19 @@ public static class MusicImportPlanBuilder {
     /// (<paramref name="template"/> defaults to <see cref="MediaNamingTemplates.MusicDefault"/>; a blank or
     /// invalid template degrades to the default).
     /// </summary>
-    public static ImportPlan Plan(IReadOnlyList<ImportCandidateFile> files, string artist, string album, string? template = null, int? year = null) {
-        var audio = files
+    public static ImportPlan Plan(
+        IReadOnlyList<ImportCandidateFile> files,
+        string artist,
+        string album,
+        string? template = null,
+        int? year = null,
+        IReadOnlyList<RequestedAudioTrack>? requestedTracks = null) {
+        var supportedAudio = files
             .Where(file => AudioExtensions.Contains(Path.GetExtension(file.RelativePath)))
             .ToArray();
+        var audio = requestedTracks is null
+            ? supportedAudio
+            : SelectRequestedAudio(supportedAudio, requestedTracks);
         if (audio.Length == 0) {
             return ImportPlan.Block(ImportBlockReason.NoSupportedPayload);
         }
@@ -164,6 +180,42 @@ public static class MusicImportPlanBuilder {
         }
 
         return ImportPlan.For(items);
+    }
+
+    /// <summary>
+    /// Keeps only unambiguous filename-to-metadata matches. A target represented by multiple files, or
+    /// a file matching repeated provider titles, is left for a direct child fallback instead of guessed.
+    /// </summary>
+    private static ImportCandidateFile[] SelectRequestedAudio(
+        IReadOnlyList<ImportCandidateFile> audio,
+        IReadOnlyList<RequestedAudioTrack> requestedTracks) {
+        var matches = audio
+            .Select(file => new {
+                File = file,
+                Targets = requestedTracks
+                    .Where(track => AudioTrackTitleText.MatchesMetadataTitle(
+                        track.Title,
+                        FileNameWithoutExtension(file.RelativePath)))
+                    .Select(track => track.EntityId)
+                    .Distinct()
+                    .ToArray()
+            })
+            .ToArray();
+        var fileCountByTarget = matches
+            .SelectMany(match => match.Targets)
+            .GroupBy(entityId => entityId)
+            .ToDictionary(group => group.Key, group => group.Count());
+
+        return matches
+            .Where(match => match.Targets.Length == 1 && fileCountByTarget[match.Targets[0]] == 1)
+            .Select(match => match.File)
+            .ToArray();
+    }
+
+    private static string FileNameWithoutExtension(string relativePath) {
+        var normalized = relativePath.Replace('\\', '/');
+        var fileName = normalized[(normalized.LastIndexOf('/') + 1)..];
+        return Path.GetFileNameWithoutExtension(fileName);
     }
 
     /// <summary>
@@ -234,6 +286,9 @@ public static partial class TvImportPlanBuilder {
     [GeneratedRegex(@"(?:^|[\s._\-\[(])sample(?:$|[\s._\-\])])", RegexOptions.IgnoreCase)]
     private static partial Regex SampleTokenRegex();
 
+    /// <summary>Whether a payload path is supported TV media.</summary>
+    public static bool IsVideoFile(string path) => VideoExtensions.Contains(Path.GetExtension(path));
+
     /// <summary>
     /// Plans the import of a downloaded TV release. <paramref name="series"/> names the series folder;
     /// <paramref name="seasonNumber"/>/<paramref name="episodeNumber"/> are the acquisition's unit,
@@ -289,6 +344,9 @@ public static partial class TvImportPlanBuilder {
             }
 
             var (season, episode) = unit ?? (seasonNumber!.Value, episodeNumber!.Value);
+            if (seasonNumber is { } requestedSeason && season != requestedSeason) {
+                continue;
+            }
             var naming = NamingContext(series, season, episode, quality, Path.GetExtension(video.RelativePath));
             units.Add(new TvPlanUnit(
                 video.RelativePath, season, episode, MediaNamingTemplates.RenderTvPath(template, naming)));
@@ -308,6 +366,15 @@ public static partial class TvImportPlanBuilder {
                 template,
                 quality,
                 evidenceSeason: seasonNumber);
+        }
+
+        if (episodeNumber is { } requestedEpisode) {
+            units = units
+                .Where(unit => unit.Episode == requestedEpisode || unit.ExtraEpisodes.Contains(requestedEpisode))
+                .ToList();
+            if (units.Count == 0) {
+                return TvUnitsPlan.Block(ImportBlockReason.NoSupportedPayload);
+            }
         }
 
         // One structural episode slot has one playable owner. Numeric duplicates and title-aligned

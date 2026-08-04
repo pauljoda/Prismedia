@@ -395,6 +395,15 @@ public interface IImportTargetIndex {
     Task<IReadOnlyList<TvEpisodeTitle>> GetSeasonEpisodeTitlesAsync(Guid entityId, int seasonNumber, CancellationToken cancellationToken) =>
         Task.FromResult<IReadOnlyList<TvEpisodeTitle>>([]);
 
+    /// <summary>
+    /// The provider-authored tracks the linked acquisition is allowed to import. An album returns all
+    /// still-wanted child tracks; a direct track acquisition returns only that track.
+    /// </summary>
+    Task<IReadOnlyList<RequestedAudioTrack>> GetRequestedAudioTracksAsync(
+        Guid entityId,
+        CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<RequestedAudioTrack>>([]);
+
     /// <summary>The existing movie folder for a linked movie entity, or null when fileless.</summary>
     Task<MovieDiskTarget?> GetMovieTargetAsync(Guid entityId, CancellationToken cancellationToken);
 

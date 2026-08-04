@@ -111,6 +111,52 @@ public sealed class EfImportTargetIndexTests {
         Assert.Empty(target.ExistingRelativeFiles);
     }
 
+    [Fact]
+    public async Task AlbumSelectionReturnsOnlyStillWantedTrackChildren() {
+        await using var db = CreateContext();
+        var artistId = AddEntity(db, EntityKind.MusicArtist.ToCode(), parent: null, sortOrder: null);
+        var albumId = AddEntity(db, EntityKind.AudioLibrary.ToCode(), parent: artistId, sortOrder: null);
+        var ownedId = AddEntity(
+            db,
+            EntityKind.AudioTrack.ToCode(),
+            parent: albumId,
+            sortOrder: 1,
+            sourcePath: "/media/music/Artist/Album/01 - Owned.flac");
+        var wantedId = AddEntity(
+            db,
+            EntityKind.AudioTrack.ToCode(),
+            parent: albumId,
+            sortOrder: 2,
+            wanted: true);
+        db.Entities.Local.Single(entity => entity.Id == ownedId).Title = "Owned";
+        db.Entities.Local.Single(entity => entity.Id == wantedId).Title = "Wanted";
+        await db.SaveChangesAsync();
+
+        var tracks = await new EfImportTargetIndex(db)
+            .GetRequestedAudioTracksAsync(albumId, CancellationToken.None);
+
+        var wanted = Assert.Single(tracks);
+        Assert.Equal(wantedId, wanted.EntityId);
+        Assert.Equal("Wanted", wanted.Title);
+        Assert.Equal(2, wanted.Position);
+    }
+
+    [Fact]
+    public async Task DirectTrackSelectionNeverExpandsToItsWantedSiblings() {
+        await using var db = CreateContext();
+        var artistId = AddEntity(db, EntityKind.MusicArtist.ToCode(), parent: null, sortOrder: null);
+        var albumId = AddEntity(db, EntityKind.AudioLibrary.ToCode(), parent: artistId, sortOrder: null);
+        var selectedId = AddEntity(db, EntityKind.AudioTrack.ToCode(), parent: albumId, sortOrder: 1, wanted: true);
+        AddEntity(db, EntityKind.AudioTrack.ToCode(), parent: albumId, sortOrder: 2, wanted: true);
+        db.Entities.Local.Single(entity => entity.Id == selectedId).Title = "Selected";
+        await db.SaveChangesAsync();
+
+        var tracks = await new EfImportTargetIndex(db)
+            .GetRequestedAudioTracksAsync(selectedId, CancellationToken.None);
+
+        Assert.Equal(selectedId, Assert.Single(tracks).EntityId);
+    }
+
     private static (Guid SeriesId, Guid SeasonId, Guid EpisodeId) SeedSeries(PrismediaDbContext db, string seriesFolder) {
         var seriesId = AddEntity(db, EntityKind.VideoSeries.ToCode(), parent: null, sortOrder: null);
         AddFolderSource(db, seriesId, seriesFolder);

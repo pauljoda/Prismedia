@@ -134,6 +134,7 @@ public sealed class ImportedEntityMaterializationTests : IDisposable {
         var rootPath = Directory.CreateDirectory(Path.Combine(_workRoot, "music")).FullName;
         var payloadPath = Directory.CreateDirectory(Path.Combine(_workRoot, "album-download")).FullName;
         await File.WriteAllTextAsync(Path.Combine(payloadPath, "04 Pharrell Williams - Happy.flac"), "audio-bytes");
+        await File.WriteAllTextAsync(Path.Combine(payloadPath, "99 - Unrequested Deluxe Bonus.flac"), "bonus-bytes");
         var root = new RootPersistence(rootPath, scanAudio: true, autoGenerateMetadata: true);
         AddLibraryRoot(db, root.Root);
         var unrelatedFolder = Directory.CreateDirectory(Path.Combine(rootPath, "Other Artist", "Other Album")).FullName;
@@ -221,6 +222,9 @@ public sealed class ImportedEntityMaterializationTests : IDisposable {
         Assert.Contains(queue.Enqueued, request =>
             request.Type == JobType.ReconcileEntity && request.TargetEntityId == wantedTrackId.ToString());
         Assert.True(await db.Entities.AsNoTracking().AnyAsync(row => row.Id == unrelatedId));
+        Assert.False(File.Exists(Path.Combine(rootPath, "Artist", "Album", "99 - Unrequested Deluxe Bonus.flac")));
+        var importCheckpoint = await store.GetImportContextAsync(acquisitionId, CancellationToken.None);
+        Assert.True(importCheckpoint!.ImportPlacementCheckpoint!.DiscardRemainingPayload);
         Assert.Equal(AcquisitionStatus.Importing, await StatusOfAsync(db, acquisitionId));
     }
 
@@ -499,6 +503,8 @@ public sealed class ImportedEntityMaterializationTests : IDisposable {
         var root = new RootPersistence(rootPath, scanAudio: true);
         AddLibraryRoot(db, root.Root);
         var albumId = await SeedWantedAcquisitionAsync(db, EntityKind.AudioLibrary, "Album");
+        AddWantedEntity(db, EntityKind.AudioTrack, "Track", albumId);
+        await db.SaveChangesAsync();
         var store = AcquisitionTestFactory.Store(db);
         var engine = new MusicAcquisitionImportEngine(
             store,

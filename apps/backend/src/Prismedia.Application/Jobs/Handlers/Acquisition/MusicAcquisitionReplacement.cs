@@ -81,6 +81,7 @@ public sealed partial class MusicAcquisitionImportEngine {
         DownloadPayload payload,
         ImportPlan rawPlan,
         BookImportProfile? profile,
+        bool discardRemainingPayload,
         CancellationToken cancellationToken) {
         if (import.EntityId is not { } entityId
             || await targets.GetAlbumTargetAsync(entityId, cancellationToken) is not { AlbumFolderPath: { } albumFolder }
@@ -143,7 +144,8 @@ public sealed partial class MusicAcquisitionImportEngine {
             context.Job.Id);
         checkpoint = checkpoint with {
             ImportFileLedger = AcquisitionImportFileLedger.Create(checkpoint)
-                .WithDecision(AcquisitionImportDecision.ReplaceUpgrade)
+                .WithDecision(AcquisitionImportDecision.ReplaceUpgrade),
+            DiscardRemainingPayload = discardRemainingPayload
         };
         if (!await acquisitions.TryCreateImportPlacementCheckpointAsync(import.Id, checkpoint, cancellationToken)) {
             logger.LogInformation(
@@ -220,7 +222,11 @@ public sealed partial class MusicAcquisitionImportEngine {
                     FormatScore: formatScore,
                     Message: checkpoint.SuccessMessage),
                 CancellationToken.None);
-            await torrents.HandleImportedAsync(import, checkpoint.ImportMode, cancellationToken);
+            await torrents.HandleImportedAsync(
+                import,
+                checkpoint.ImportMode,
+                checkpoint.DiscardRemainingPayload,
+                cancellationToken);
             await ImportedEntityReconciliation.EnqueueAsync(
                 context,
                 materialized,

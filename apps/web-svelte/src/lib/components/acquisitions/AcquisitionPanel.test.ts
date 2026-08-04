@@ -140,6 +140,25 @@ describe("AcquisitionPanel", () => {
     await waitFor(() => expect(onImported).toHaveBeenCalledOnce());
   });
 
+  it("allows long acquisition filenames to wrap at any character", async () => {
+    const downloaded = acquisition(ACQUISITION_STATUS.downloaded);
+    const filename = "Frozen.[2013].Soundtrack.[Deluxe.Edition].[Christophe.Beck].".repeat(4) + "flac";
+    mocks.fetchAcquisition.mockResolvedValue(downloaded);
+    mocks.fetchAcquisitionFiles.mockResolvedValue({
+      imported: false,
+      files: [{ name: filename, sizeBytes: 1234, progress: 1 }],
+    });
+
+    const view = render(AcquisitionPanel, {
+      acquisitionId: "acquisition-1",
+      detail: downloaded,
+    });
+
+    const fileLabel = await view.findByText(filename);
+    expect(fileLabel).not.toHaveClass("truncate");
+    expect(fileLabel).toHaveClass("whitespace-normal", "[overflow-wrap:anywhere]");
+  });
+
   it("offers exact import resume instead of Search again for a failed durable checkpoint", async () => {
     const failed = acquisition(ACQUISITION_STATUS.failed, true);
     mocks.fetchAcquisition.mockResolvedValue(failed);

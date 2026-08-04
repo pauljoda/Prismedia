@@ -85,6 +85,7 @@ public sealed partial class MusicAcquisitionImportEngine(
                 ImportPlacementExecution.MediaPaths(resumed),
                 resumed.ImportMode,
                 resumed.SuccessMessage,
+                resumed.DiscardRemainingPayload,
                 cancellationToken);
             return;
         }
@@ -96,13 +97,29 @@ public sealed partial class MusicAcquisitionImportEngine(
 
         var artist = string.IsNullOrWhiteSpace(import.Author) ? "Unknown Artist" : import.Author;
         var albumTitle = AlbumTitleOf(import);
-        var rawPlan = MusicImportPlanBuilder.Plan(payload.Files, artist, albumTitle, profile?.PathTemplate, import.Year);
+        IReadOnlyList<RequestedAudioTrack>? requestedTracks = null;
+        if (import.UpgradeOfAcquisitionId is null && import.EntityId is { } requestedEntityId) {
+            requestedTracks = await targets.GetRequestedAudioTracksAsync(requestedEntityId, cancellationToken);
+        }
+        var rawPlan = MusicImportPlanBuilder.Plan(
+            payload.Files,
+            artist,
+            albumTitle,
+            profile?.PathTemplate,
+            import.Year,
+            requestedTracks);
         if (rawPlan.Blocked) {
             await acquisitions.SetStatusAsync(
                 import.Id, AcquisitionStatus.ManualImportRequired,
-                "The download contains no supported audio files.", cancellationToken);
+                requestedTracks is null
+                    ? "The download contains no supported audio files."
+                    : "None of the downloaded audio files uniquely matched the requested tracks.",
+                cancellationToken);
             return;
         }
+
+        var discardRemainingPayload = payload.Files.Count(file => MusicImportPlanBuilder.IsAudioFile(file.RelativePath))
+            > rawPlan.Items.Count(item => MusicImportPlanBuilder.IsAudioFile(item.SourceRelativePath));
 
         if (import.UpgradeOfAcquisitionId is not null) {
             await ReplaceExistingAlbumAsync(
@@ -111,6 +128,7 @@ public sealed partial class MusicAcquisitionImportEngine(
                 payload,
                 rawPlan,
                 profile,
+                discardRemainingPayload,
                 cancellationToken);
             return;
         }
@@ -139,6 +157,7 @@ public sealed partial class MusicAcquisitionImportEngine(
                 target,
                 existingRoot,
                 profile,
+                discardRemainingPayload,
                 cancellationToken);
             return;
         }
@@ -176,6 +195,7 @@ public sealed partial class MusicAcquisitionImportEngine(
             albumFolder,
             "Imported into the library.",
             units);
+        checkpoint = checkpoint with { DiscardRemainingPayload = discardRemainingPayload };
         if (!await acquisitions.TryCreateImportPlacementCheckpointAsync(import.Id, checkpoint, cancellationToken)) {
             logger.LogInformation(
                 "Album import checkpoint for {Id} was superseded before placement; skipping stale work.",
@@ -202,6 +222,7 @@ public sealed partial class MusicAcquisitionImportEngine(
             ImportPlacementExecution.MediaPaths(completed),
             completed.ImportMode,
             completed.SuccessMessage,
+            completed.DiscardRemainingPayload,
             cancellationToken);
     }
 
@@ -219,6 +240,7 @@ public sealed partial class MusicAcquisitionImportEngine(
         AlbumDiskTarget target,
         LibraryRootData root,
         BookImportProfile? profile,
+        bool discardRemainingPayload,
         CancellationToken cancellationToken) {
         var merged = MusicExistingTargetMerge.Plan(rawPlan.Items, albumFolder, target.ExistingRelativeFiles);
 
@@ -258,7 +280,8 @@ public sealed partial class MusicAcquisitionImportEngine(
             message,
             units);
         checkpoint = checkpoint with {
-            ImportFileLedger = AcquisitionImportFileLedger.Create(checkpoint, merged)
+            ImportFileLedger = AcquisitionImportFileLedger.Create(checkpoint, merged),
+            DiscardRemainingPayload = discardRemainingPayload || placeNew.Length < merged.Count
         };
         if (!await acquisitions.TryCreateImportPlacementCheckpointAsync(import.Id, checkpoint, cancellationToken)) {
             logger.LogInformation(
@@ -286,6 +309,7 @@ public sealed partial class MusicAcquisitionImportEngine(
             ImportPlacementExecution.MediaPaths(completed),
             completed.ImportMode,
             completed.SuccessMessage,
+            completed.DiscardRemainingPayload,
             cancellationToken);
     }
 
@@ -321,6 +345,7 @@ public sealed partial class MusicAcquisitionImportEngine(
         IReadOnlyList<string> placedMediaPaths,
         ImportMode importMode,
         string message,
+        bool discardRemainingPayload,
         CancellationToken cancellationToken) {
         // The owned quality is the audio-ladder code (and PROPER/REPACK revision) from the selected release.
         // An album is multi-file, so its monitor fulfills on import (no single-file swap); the code is captured
@@ -352,7 +377,7 @@ public sealed partial class MusicAcquisitionImportEngine(
                 materialized.TouchedAncestorIds),
             cancellationToken);
 
-        await torrents.HandleImportedAsync(import, importMode, cancellationToken);
+        await torrents.HandleImportedAsync(import, importMode, discardRemainingPayload, cancellationToken);
 
         await QueueMissingChildFallbackAsync(context, import, cancellationToken);
     }

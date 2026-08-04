@@ -185,6 +185,43 @@ public sealed class MusicImportPlanBuilderTests {
 
         Assert.Equal("Daft Punk/Discovery", folder);
     }
+
+    [Fact]
+    public void RequestedAlbumImportsOnlyFilesThatUniquelyMatchWantedTracks() {
+        var frozenHeart = Guid.NewGuid();
+        var letItGo = Guid.NewGuid();
+        var plan = MusicImportPlanBuilder.Plan([
+            File("Frozen Deluxe/01 - Frozen Heart.flac"),
+            File("Frozen Deluxe/05 - Let It Go.flac"),
+            File("Frozen Deluxe/Disc 2/01 - Let It Go (Demi Lovato Version).flac"),
+            File("Frozen Deluxe/Disc 2/02 - For the First Time in Forever (Karaoke).flac"),
+            File("Frozen Deluxe/cover.jpg")
+        ], "Various Artists", "Frozen", requestedTracks: [
+            new RequestedAudioTrack(frozenHeart, "Frozen Heart", 1),
+            new RequestedAudioTrack(letItGo, "Let It Go", 5)
+        ]);
+
+        Assert.False(plan.Blocked);
+        Assert.Equal(
+            [
+                "Various Artists/Frozen/01 - Frozen Heart.flac",
+                "Various Artists/Frozen/05 - Let It Go.flac",
+                "Various Artists/Frozen/cover.jpg"
+            ],
+            plan.Items.Select(item => item.TargetRelativePath).ToArray());
+    }
+
+    [Fact]
+    public void RequestedAlbumWithNoMatchingTrackBlocksInsteadOfImportingTheBundleWholesale() {
+        var plan = MusicImportPlanBuilder.Plan([
+            File("Deluxe/01 - Unrequested Bonus.flac")
+        ], "Artist", "Album", requestedTracks: [
+            new RequestedAudioTrack(Guid.NewGuid(), "Wanted Song", 1)
+        ]);
+
+        Assert.True(plan.Blocked);
+        Assert.Equal(ImportBlockReason.NoSupportedPayload, plan.BlockReason);
+    }
 }
 
 public sealed class TvImportPlanBuilderTests {
@@ -205,14 +242,27 @@ public sealed class TvImportPlanBuilderTests {
     }
 
     [Fact]
-    public void CompleteSeriesPackSpansSeasonFoldersByEachFilesToken() {
+    public void CompleteSeriesPackKeepsOnlyTheRequestedSeason() {
         var plan = TvImportPlanBuilder.Plan([
             File("pack/Andor.S01E01.mkv"),
             File("pack/Andor.S02E01.mkv"),
         ], "Andor", seasonNumber: 1, episodeNumber: null);
 
         Assert.Equal(
-            ["Andor/Season 01/Andor - S01E01.mkv", "Andor/Season 02/Andor - S02E01.mkv"],
+            ["Andor/Season 01/Andor - S01E01.mkv"],
+            plan.Items.Select(item => item.TargetRelativePath).ToArray());
+    }
+
+    [Fact]
+    public void SeasonPackKeepsOnlyTheRequestedEpisodeForAnEpisodeAcquisition() {
+        var plan = TvImportPlanBuilder.Plan([
+            File("pack/Andor.S01E01.mkv"),
+            File("pack/Andor.S01E02.mkv"),
+            File("pack/Andor.S01E03.mkv"),
+        ], "Andor", seasonNumber: 1, episodeNumber: 2);
+
+        Assert.Equal(
+            ["Andor/Season 01/Andor - S01E02.mkv"],
             plan.Items.Select(item => item.TargetRelativePath).ToArray());
     }
 
@@ -770,16 +820,15 @@ public sealed class TvEpisodeTitleAlignmentTests {
     }
 
     [Fact]
-    public void RequestedSeasonTitlesNeverRealignOtherSeasonsInACompleteSeriesPack() {
+    public void RequestedSeasonImportDropsOtherSeasonsBeforeTitleRealignment() {
         var plan = TvImportPlanBuilder.PlanUnits([
             File("Pack/Show_S01E05_SPECIAL DELIVERY.mkv"),
             File("Pack/Show_S03E01_SPECIAL DELIVERY.mkv"),
         ], "Show", seasonNumber: 3, episodeNumber: null, episodeTitles: CliffordTitles);
 
         Assert.False(plan.Blocked);
-        var seasonOne = Assert.Single(plan.Units, unit => unit.Season == 1);
-        var seasonThree = Assert.Single(plan.Units, unit => unit.Season == 3);
-        Assert.Equal(5, seasonOne.Episode);
+        var seasonThree = Assert.Single(plan.Units);
+        Assert.Equal(3, seasonThree.Season);
         Assert.Equal(3, seasonThree.Episode);
     }
 }

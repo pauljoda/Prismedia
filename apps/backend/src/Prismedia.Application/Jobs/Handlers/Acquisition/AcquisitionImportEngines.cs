@@ -5,6 +5,7 @@ using Prismedia.Application.Files;
 using Prismedia.Application.Jobs.Ports;
 using Prismedia.Application.Jobs.Scanning;
 using Prismedia.Application.Jobs.Handlers.Scan;
+using Prismedia.Application.Requests;
 using Prismedia.Domain.Entities;
 
 namespace Prismedia.Application.Jobs.Handlers;
@@ -197,12 +198,26 @@ public sealed class ImportedTorrentRemover(
     ILogger<ImportedTorrentRemover> logger,
     IAcquisitionUploadStorage? uploads = null) {
     /// <summary>Move → remove now; hardlink/copy → seeding watch (or leave to the client's own rules when no goal is set).</summary>
-    public async Task HandleImportedAsync(AcquisitionImportContext import, ImportMode mode, CancellationToken cancellationToken) {
+    public Task HandleImportedAsync(
+        AcquisitionImportContext import,
+        ImportMode mode,
+        CancellationToken cancellationToken) =>
+        HandleImportedAsync(import, mode, discardRemainingPayload: false, cancellationToken);
+
+    /// <summary>
+    /// Finishes transfer cleanup, forcing immediate data removal when the importer kept only a requested
+    /// subset. A partial payload cannot remain a trustworthy seeding source after its extras are discarded.
+    /// </summary>
+    public async Task HandleImportedAsync(
+        AcquisitionImportContext import,
+        ImportMode mode,
+        bool discardRemainingPayload,
+        CancellationToken cancellationToken) {
         if (uploads?.Owns(import.ClientItemId) == true) {
             await uploads.DeleteAsync(import.ClientItemId!, cancellationToken);
             return;
         }
-        if (mode == ImportMode.Move) {
+        if (mode == ImportMode.Move || discardRemainingPayload) {
             await RemoveAsync(import, cancellationToken);
             return;
         }
@@ -1003,7 +1018,8 @@ public sealed class TvAcquisitionImportEngine(
     IAcquisitionHistoryStore history,
     IImportedVideoMaterializer materializer,
     VideoScanConcurrencyGate scanGate,
-    ILogger<TvAcquisitionImportEngine> logger) : IAcquisitionImportEngine {
+    ILogger<TvAcquisitionImportEngine> logger,
+    IMonitorStore? monitors = null) : IAcquisitionImportEngine {
 
     public async Task ImportAsync(JobContext context, AcquisitionImportContext import, CancellationToken cancellationToken) {
         var profile = await profiles.GetImportProfileAsync(import.ProfileId, import.Kind, cancellationToken);
@@ -1130,7 +1146,8 @@ public sealed class TvAcquisitionImportEngine(
             TransferClientItemId: NormalizeClientItemId(import.ClientItemId),
             AttemptId: Guid.NewGuid(),
             ClaimJobId: context.Job.Id) {
-            LibraryRootPath = root.Path
+            LibraryRootPath = root.Path,
+            DiscardRemainingPayload = payload.Files.Count(file => TvImportPlanBuilder.IsVideoFile(file.RelativePath)) > unitsPlan.Units.Count
         };
         if (await PrepareTvCheckpointAsync(import, payload, checkpoint, cancellationToken) is not { } preparedCheckpoint) {
             return;
@@ -1248,7 +1265,8 @@ public sealed class TvAcquisitionImportEngine(
         checkpoint = checkpoint with {
             LibraryRootPath = owningRoot.Path,
             ImportFileLedger = AcquisitionImportFileLedger.Create(
-                checkpoint, owningRoot.Path, merged, reconciledExisting)
+                checkpoint, owningRoot.Path, merged, reconciledExisting),
+            DiscardRemainingPayload = payload.Files.Count(file => TvImportPlanBuilder.IsVideoFile(file.RelativePath)) > checkpointItems.Length
         };
         if (await PrepareTvCheckpointAsync(import, payload, checkpoint, cancellationToken) is not { } preparedCheckpoint) {
             return;
@@ -1546,6 +1564,7 @@ public sealed class TvAcquisitionImportEngine(
             hintFolder,
             finalSourcePath,
             checkpoint.ImportMode,
+            checkpoint.DiscardRemainingPayload,
             new ImportedTvMaterializationRequest(import.Id, root, seriesFolder, importedEpisodes),
             checkpoint.SuccessMessage,
             cancellationToken);
@@ -1621,6 +1640,7 @@ public sealed class TvAcquisitionImportEngine(
             hintFolder,
             checkpoint,
             profile?.ImportMode ?? ImportMode.Move,
+            discardRemainingPayload: false,
             new ImportedTvMaterializationRequest(import.Id, root, seriesFolder, importedEpisodes),
             "Finished cataloging files already placed in the library.",
             cancellationToken);
@@ -1699,6 +1719,7 @@ public sealed class TvAcquisitionImportEngine(
         string hintFolder,
         string finalSourcePath,
         ImportMode importMode,
+        bool discardRemainingPayload,
         ImportedTvMaterializationRequest materialization,
         string message,
         CancellationToken cancellationToken) {
@@ -1723,8 +1744,29 @@ public sealed class TvAcquisitionImportEngine(
                 materialized.TouchedAncestorIds),
             cancellationToken);
 
-        await torrents.HandleImportedAsync(import, importMode, cancellationToken);
+        await torrents.HandleImportedAsync(import, importMode, discardRemainingPayload, cancellationToken);
+        await QueueMissingChildFallbackAsync(context, import, cancellationToken);
         await context.ReportProgressAsync(100, "Queued required entity reconciliation", cancellationToken);
+    }
+
+    /// <summary>
+    /// Makes a partially fulfilled season eligible immediately so the monitor requests only episode
+    /// children that remain wanted after exact materialization.
+    /// </summary>
+    private async Task QueueMissingChildFallbackAsync(
+        JobContext context,
+        AcquisitionImportContext import,
+        CancellationToken cancellationToken) {
+        if (monitors is null || RequestKindRegistry.FindChildMaterializingUnit(import.Kind) is null) {
+            return;
+        }
+
+        await monitors.MarkSearchDueByAcquisitionAsync(import.Id, cancellationToken);
+        await context.EnqueueIfNeededAsync(
+            new EnqueueJobRequest(
+                JobType.MonitoredSearch,
+                TargetLabel: "Fill missing imported episodes"),
+            cancellationToken);
     }
 
     private Task<string?> ReplaceOwnedAsync(
