@@ -29,7 +29,8 @@ public sealed record MergedImportItem(
     string SourceRelativePath,
     string TargetAbsolutePath,
     MergeFileAction Action,
-    string? OwnedFilePath = null);
+    string? OwnedFilePath = null,
+    Guid? TargetEntityId = null);
 
 /// <summary>
 /// Pure merge planning for a TV import whose acquisition links to a series that already lives on disk.
@@ -213,7 +214,8 @@ public static class MusicExistingTargetMerge {
                 Path.Combine(albumFolderAbsolute, inner),
                 existingRelativeFiles.Contains(inner) || alreadyOwnsTrack
                     ? MergeFileAction.DropNotUpgrade
-                    : MergeFileAction.PlaceNew));
+                    : MergeFileAction.PlaceNew,
+                TargetEntityId: item.TargetEntityId));
         }
 
         return merged;

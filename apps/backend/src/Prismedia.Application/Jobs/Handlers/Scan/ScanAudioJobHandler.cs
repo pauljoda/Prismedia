@@ -71,7 +71,8 @@ public sealed class ScanAudioJobHandler(
         Guid acquisitionId,
         LibraryRootData root,
         IReadOnlyList<string> placedPaths,
-        CancellationToken cancellationToken) {
+        CancellationToken cancellationToken,
+        IReadOnlyDictionary<string, Guid>? requestedTrackIdsByPath = null) {
         if (!root.Enabled || !root.ScanAudio) {
             throw new InvalidOperationException("The imported album no longer belongs to an enabled audio library root.");
         }
@@ -195,14 +196,21 @@ public sealed class ScanAudioJobHandler(
             }
         }
 
+        var normalizedRequestedTrackIdsByPath = requestedTrackIdsByPath?.ToDictionary(
+            pair => Path.GetFullPath(pair.Key),
+            pair => pair.Value,
+            FileSystemPathComparison.Comparer);
         if (acquisitionHints is not null) {
             foreach (var track in trackItems) {
+                var targetEntityId = normalizedRequestedTrackIdsByPath?.GetValueOrDefault(
+                    Path.GetFullPath(track.FilePath));
                 var reconciliation = await acquisitionHints.ReconcileWantedAudioTrackAsync(
                     track.AudioLibraryId!.Value,
                     track.FilePath,
                     track.Title,
                     track.SortOrder,
-                    cancellationToken);
+                    cancellationToken,
+                    targetEntityId);
                 _ = reconciliation;
             }
         }

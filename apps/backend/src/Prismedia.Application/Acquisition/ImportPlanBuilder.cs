@@ -16,7 +16,13 @@ public enum ImportBlockReason {
 }
 
 /// <summary>One file to import and the sanitized library-relative path it should land at.</summary>
-public sealed record ImportPlanItem(string SourceRelativePath, string TargetRelativePath);
+/// <param name="SourceRelativePath">Download-payload-relative source path.</param>
+/// <param name="TargetRelativePath">Sanitized target path beneath the library root.</param>
+/// <param name="TargetEntityId">Requested Entity this exact file was selected to satisfy, when known.</param>
+public sealed record ImportPlanItem(
+    string SourceRelativePath,
+    string TargetRelativePath,
+    Guid? TargetEntityId = null);
 
 /// <summary>The outcome of planning an import: either a set of moves, or a block reason needing manual resolution.</summary>
 public sealed record ImportPlan(bool Blocked, ImportBlockReason? BlockReason, IReadOnlyList<ImportPlanItem> Items) {

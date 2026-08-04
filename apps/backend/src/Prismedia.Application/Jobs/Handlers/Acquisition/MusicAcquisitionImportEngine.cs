@@ -83,6 +83,7 @@ public sealed partial class MusicAcquisitionImportEngine(
                 checkpointRoot,
                 resumed.HintPath,
                 ImportPlacementExecution.MediaPaths(resumed),
+                ImportPlacementExecution.MediaEntityTargets(resumed),
                 resumed.ImportMode,
                 resumed.SuccessMessage,
                 resumed.DiscardRemainingPayload,
@@ -220,6 +221,7 @@ public sealed partial class MusicAcquisitionImportEngine(
             root,
             completed.HintPath,
             ImportPlacementExecution.MediaPaths(completed),
+            ImportPlacementExecution.MediaEntityTargets(completed),
             completed.ImportMode,
             completed.SuccessMessage,
             completed.DiscardRemainingPayload,
@@ -262,7 +264,10 @@ public sealed partial class MusicAcquisitionImportEngine(
             placeNew.Select(item => {
                 var sourceAbsolute = Path.GetFullPath(Path.Combine(payload.ContentRoot, item.SourceRelativePath));
                 return (
-                    new ResolvedImportItem(sourceAbsolute, Path.GetFullPath(item.TargetAbsolutePath)),
+                    new ResolvedImportItem(
+                        sourceAbsolute,
+                        Path.GetFullPath(item.TargetAbsolutePath),
+                        item.TargetEntityId),
                     IsMedia: MusicImportPlanBuilder.IsAudioFile(item.SourceRelativePath));
             }).ToArray(),
             mover);
@@ -307,6 +312,7 @@ public sealed partial class MusicAcquisitionImportEngine(
             root,
             completed.HintPath,
             ImportPlacementExecution.MediaPaths(completed),
+            ImportPlacementExecution.MediaEntityTargets(completed),
             completed.ImportMode,
             completed.SuccessMessage,
             completed.DiscardRemainingPayload,
@@ -343,6 +349,7 @@ public sealed partial class MusicAcquisitionImportEngine(
         LibraryRootData root,
         string albumFolder,
         IReadOnlyList<string> placedMediaPaths,
+        IReadOnlyDictionary<string, Guid> requestedTrackIdsByPath,
         ImportMode importMode,
         string message,
         bool discardRemainingPayload,
@@ -362,7 +369,12 @@ public sealed partial class MusicAcquisitionImportEngine(
         var materialized = await materializer.MaterializeAsync(
             import.Kind,
             context,
-            new ImportedEntityMaterializationRequest(import.Id, import.EntityId, root, placedMediaPaths),
+            new ImportedEntityMaterializationRequest(
+                import.Id,
+                import.EntityId,
+                root,
+                placedMediaPaths,
+                RequestedAudioTrackIdsByPath: requestedTrackIdsByPath),
             cancellationToken);
         await ImportedEntityReconciliation.EnqueueAsync(
             context,

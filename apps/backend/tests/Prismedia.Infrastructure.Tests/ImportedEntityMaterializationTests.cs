@@ -229,6 +229,94 @@ public sealed class ImportedEntityMaterializationTests : IDisposable {
     }
 
     [Fact]
+    public async Task FrozenAlbumImportRetainsProviderTrackIdentitiesWithoutChildFallback() {
+        await using var db = CreateContext();
+        var rootPath = Directory.CreateDirectory(Path.Combine(_workRoot, "frozen-music")).FullName;
+        var payloadPath = Directory.CreateDirectory(Path.Combine(_workRoot, "frozen-download")).FullName;
+        await File.WriteAllTextAsync(Path.Combine(payloadPath, "01. Frozen Heart.mp3"), "frozen-heart");
+        await File.WriteAllTextAsync(Path.Combine(payloadPath, "09. Fixer Upper.mp3"), "fixer-upper");
+        await File.WriteAllTextAsync(Path.Combine(payloadPath, "10. Let It Go.mp3"), "let-it-go");
+        await File.WriteAllTextAsync(Path.Combine(payloadPath, "15. Heimr Arnadalr.mp3"), "heimr");
+        await File.WriteAllTextAsync(Path.Combine(payloadPath, "99. Deluxe Bonus.mp3"), "bonus");
+        var root = new RootPersistence(rootPath, scanAudio: true, autoGenerateMetadata: true);
+        AddLibraryRoot(db, root.Root);
+        var artistId = AddWantedEntity(db, EntityKind.MusicArtist, "Kristen Anderson-Lopez, Robert Lopez, Christophe Beck");
+        var albumId = AddWantedEntity(db, EntityKind.AudioLibrary, "Frozen", artistId);
+        var frozenHeartId = AddWantedEntity(db, EntityKind.AudioTrack, "Frozen Heart", albumId, sortOrder: 0);
+        var fixerUpperId = AddWantedEntity(db, EntityKind.AudioTrack, "Fixer Upper", albumId, sortOrder: 8);
+        var demiId = AddWantedEntity(
+            db,
+            EntityKind.AudioTrack,
+            "Let It Go (Demi Lovato version)",
+            albumId,
+            sortOrder: 9);
+        var heimrId = AddWantedEntity(
+            db,
+            EntityKind.AudioTrack,
+            "Heimr Àrnadalr (score)",
+            albumId,
+            sortOrder: 14);
+        var acquisitionId = await AddAcquisitionAsync(db, EntityKind.AudioLibrary, albumId, "Frozen");
+        var store = AcquisitionTestFactory.Store(db);
+        var monitorStore = new EfMonitorStore(db);
+        await monitorStore.StartAsync(
+            acquisitionId,
+            EntityKind.AudioLibrary,
+            "Frozen",
+            "Kristen Anderson-Lopez, Robert Lopez, Christophe Beck",
+            CancellationToken.None);
+        var engine = new MusicAcquisitionImportEngine(
+            store,
+            new EfBookAcquisitionProfileStore(db),
+            root,
+            new DownloadPayloadReader(),
+            new ImportFileMover(),
+            Torrents(store),
+            new EfImportTargetIndex(db),
+            new EfAcquisitionBlocklistStore(db),
+            new EfAcquisitionHistoryStore(db),
+            AlbumMaterializer(db, root),
+            NullLogger<MusicAcquisitionImportEngine>.Instance,
+            monitorStore);
+        var import = new AcquisitionImportContext(
+            acquisitionId,
+            "Frozen",
+            Author: "Kristen Anderson-Lopez, Robert Lopez, Christophe Beck",
+            Series: null,
+            Year: 2013,
+            PosterUrl: null,
+            ExternalIdentity: null,
+            ProfileId: null,
+            ContentPath: payloadPath,
+            ClientItemId: null,
+            DownloadClientConfigId: null,
+            Kind: EntityKind.AudioLibrary,
+            EntityId: albumId,
+            TargetLibraryRootId: root.Root.Id);
+        var queue = new MergedImportTestSupport.RecordingJobQueue();
+
+        await engine.ImportAsync(JobContext(db, import.Id, queue), import, CancellationToken.None);
+
+        var tracks = await db.Entities.AsNoTracking()
+            .Where(row => row.ParentEntityId == albumId && row.KindCode == EntityKind.AudioTrack.ToCode())
+            .ToArrayAsync();
+        Assert.Equal(4, tracks.Length);
+        Assert.False(Assert.Single(tracks, track => track.Id == frozenHeartId).IsWanted);
+        Assert.False(Assert.Single(tracks, track => track.Id == fixerUpperId).IsWanted);
+        Assert.False(Assert.Single(tracks, track => track.Id == demiId).IsWanted);
+        Assert.False(Assert.Single(tracks, track => track.Id == heimrId).IsWanted);
+        Assert.True(await HasSourceInSubtreeAsync(db, frozenHeartId));
+        Assert.True(await HasSourceInSubtreeAsync(db, fixerUpperId));
+        Assert.True(await HasSourceInSubtreeAsync(db, demiId));
+        Assert.True(await HasSourceInSubtreeAsync(db, heimrId));
+        Assert.DoesNotContain(queue.Enqueued, request => request.Type == JobType.MonitoredSearch);
+        Assert.DoesNotContain(queue.Enqueued, request => request.Type == JobType.ProbeAudio);
+        var reconciliation = Assert.Single(queue.Enqueued, request => request.Type == JobType.ReconcileEntity);
+        Assert.Equal(albumId.ToString(), reconciliation.TargetEntityId);
+        Assert.False(File.Exists(Path.Combine(rootPath, "Kristen Anderson-Lopez, Robert Lopez, Christophe Beck", "Frozen", "99. Deluxe Bonus.mp3")));
+    }
+
+    [Fact]
     public async Task AudioTrackImportBindsWantedTrackBeforeImported() {
         await using var db = CreateContext();
         var rootPath = Directory.CreateDirectory(Path.Combine(_workRoot, "track-music")).FullName;
@@ -460,6 +548,59 @@ public sealed class ImportedEntityMaterializationTests : IDisposable {
         Assert.True(await db.Entities.AsNoTracking().AnyAsync(row => row.Id == duplicateId));
         Assert.True(await db.EntityFiles.AsNoTracking().AnyAsync(row =>
             row.EntityId == duplicateId && row.Role == EntityFileRole.Source));
+    }
+
+    [Theory]
+    [InlineData("Let It Go (Demi Lovato version)", "10. Let It Go", 9)]
+    [InlineData("Heimr Àrnadalr (score)", "15. Heimr Arnadalr", 14)]
+    public async Task AudioImportReconcilesDecoratedProviderTitleByUniqueTrackPosition(
+        string wantedTitle,
+        string scannedTitle,
+        int sortOrder) {
+        await using var db = CreateContext();
+        var albumId = AddWantedEntity(db, EntityKind.AudioLibrary, "Frozen");
+        var wantedTrackId = AddWantedEntity(
+            db,
+            EntityKind.AudioTrack,
+            wantedTitle,
+            albumId,
+            sortOrder);
+        await db.SaveChangesAsync();
+        var sourcePath = Path.Combine(_workRoot, scannedTitle + ".mp3");
+
+        var reconciliation = await new AcquisitionHintApplier(db).ReconcileWantedAudioTrackAsync(
+            albumId,
+            sourcePath,
+            scannedTitle,
+            sortOrder,
+            CancellationToken.None);
+
+        Assert.Equal(wantedTrackId, reconciliation?.EntityId);
+        Assert.False((await db.Entities.AsNoTracking().SingleAsync(row => row.Id == wantedTrackId)).IsWanted);
+        Assert.True(await db.EntityFiles.AsNoTracking().AnyAsync(row =>
+            row.EntityId == wantedTrackId
+            && row.Role == EntityFileRole.Source
+            && row.Path == sourcePath));
+    }
+
+    [Fact]
+    public async Task AudioImportDoesNotGuessWhenProviderTrackPositionIsAmbiguous() {
+        await using var db = CreateContext();
+        var albumId = AddWantedEntity(db, EntityKind.AudioLibrary, "Album");
+        var firstId = AddWantedEntity(db, EntityKind.AudioTrack, "First decorated title", albumId, 9);
+        var secondId = AddWantedEntity(db, EntityKind.AudioTrack, "Second decorated title", albumId, 9);
+        await db.SaveChangesAsync();
+
+        var reconciliation = await new AcquisitionHintApplier(db).ReconcileWantedAudioTrackAsync(
+            albumId,
+            Path.Combine(_workRoot, "10. Unrelated release title.mp3"),
+            "10. Unrelated release title",
+            9,
+            CancellationToken.None);
+
+        Assert.Null(reconciliation);
+        Assert.True((await db.Entities.AsNoTracking().SingleAsync(row => row.Id == firstId)).IsWanted);
+        Assert.True((await db.Entities.AsNoTracking().SingleAsync(row => row.Id == secondId)).IsWanted);
     }
 
     [Fact]
@@ -764,7 +905,8 @@ public sealed class ImportedEntityMaterializationTests : IDisposable {
         PrismediaDbContext db,
         EntityKind kind,
         string title,
-        Guid? parentId = null) {
+        Guid? parentId = null,
+        int? sortOrder = null) {
         var id = Guid.NewGuid();
         var now = DateTimeOffset.UtcNow;
         db.Entities.Add(new EntityRow {
@@ -772,6 +914,7 @@ public sealed class ImportedEntityMaterializationTests : IDisposable {
             KindCode = kind.ToCode(),
             Title = title,
             ParentEntityId = parentId,
+            SortOrder = sortOrder,
             IsWanted = true,
             CreatedAt = now,
             UpdatedAt = now

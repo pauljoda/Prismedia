@@ -29,13 +29,15 @@ internal static class ImportedMaterializationHousekeeping {
 /// <param name="EntityId">Stable requested Entity, when the acquisition has one.</param>
 /// <param name="Root">Library root that owns the placed files.</param>
 /// <param name="PlacedMediaPaths">Exact media files placed by the import; non-media sidecars are excluded.</param>
+/// <param name="RequestedAudioTrackIdsByPath">Exact music planner decisions keyed by final source path.</param>
 public sealed record ImportedEntityMaterializationRequest(
     Guid AcquisitionId,
     Guid? EntityId,
     LibraryRootData Root,
     IReadOnlyList<string> PlacedMediaPaths,
     IReadOnlyList<string>? ReplacedSourcePaths = null,
-    IReadOnlyList<string>? RemovedSourcePaths = null);
+    IReadOnlyList<string>? RemovedSourcePaths = null,
+    IReadOnlyDictionary<string, Guid>? RequestedAudioTrackIdsByPath = null);
 
 /// <summary>One canonical Entity materialized from exact acquisition output.</summary>
 public sealed record ImportedEntityReference(Guid Id, EntityKind Kind);
@@ -312,5 +314,10 @@ public sealed class ImportedAlbumMaterializationPolicy(ScanAudioJobHandler scan)
         ImportedEntityMaterializationRequest request,
         CancellationToken cancellationToken) =>
         scan.MaterializeImportedPathsAsync(
-            context, request.AcquisitionId, request.Root, request.PlacedMediaPaths, cancellationToken);
+            context,
+            request.AcquisitionId,
+            request.Root,
+            request.PlacedMediaPaths,
+            cancellationToken,
+            request.RequestedAudioTrackIdsByPath);
 }

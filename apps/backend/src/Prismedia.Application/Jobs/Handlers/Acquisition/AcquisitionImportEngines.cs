@@ -75,7 +75,8 @@ internal static class ImportPlacementExecution {
                 relative,
                 source,
                 target,
-                isMedia));
+                isMedia,
+                TargetEntityId: item.TargetEntityId));
         }
 
         return units;
@@ -164,6 +165,16 @@ internal static class ImportPlacementExecution {
             .Select(unit => unit.FinalPath
                 ?? throw new InvalidOperationException("A pending placement cannot be materialized."))
             .ToArray();
+
+    /// <summary>Exact placed file-to-requested-Entity decisions retained by a crash-safe music import.</summary>
+    public static IReadOnlyDictionary<string, Guid> MediaEntityTargets(ImportPlacementCheckpoint checkpoint) =>
+        checkpoint.Units
+            .Where(unit => unit.IsMedia && unit.TargetEntityId is not null)
+            .ToDictionary(
+                unit => unit.FinalPath
+                    ?? throw new InvalidOperationException("A pending placement cannot be materialized."),
+                unit => unit.TargetEntityId!.Value,
+                FileSystemPathComparison.Comparer);
 
     private static bool FilesHaveSameContent(string firstPath, string secondPath) {
         var first = new FileInfo(firstPath);

@@ -57,7 +57,8 @@ public sealed partial class AcquisitionHintApplier {
         string sourcePath,
         string scannedTitle,
         int sortOrder,
-        CancellationToken cancellationToken) {
+        CancellationToken cancellationToken,
+        Guid? targetEntityId = null) {
         if (string.IsNullOrWhiteSpace(sourcePath)) {
             return null;
         }
@@ -73,11 +74,21 @@ public sealed partial class AcquisitionHintApplier {
                 && entity.KindCode == audioTrackCode
                 && entity.IsWanted
                 && !db.EntityFiles.Any(file => file.EntityId == entity.Id && file.Role == EntityFileRole.Source))
-            .Select(entity => new { entity.Id, entity.Title })
+            .Select(entity => new { entity.Id, entity.Title, entity.SortOrder })
             .ToArrayAsync(cancellationToken);
-        var matching = candidates
-            .Where(entity => AudioTrackTitleText.MatchesMetadataTitle(entity.Title, scannedTitle))
-            .ToArray();
+        var titleMatches = targetEntityId is null
+            ? candidates
+                .Where(entity => AudioTrackTitleText.MatchesMetadataTitle(entity.Title, scannedTitle))
+                .ToArray()
+            : [];
+        // Preserve an exact planner decision through scanner materialization. Older imports and ordinary
+        // rescans have no explicit target: for those, a unique provider position can reconcile release
+        // titles that omit catalog-only decorations or diacritics. An ambiguous title remains ambiguous.
+        var matching = targetEntityId is { } plannedTarget
+            ? candidates.Where(entity => entity.Id == plannedTarget).ToArray()
+            : titleMatches.Length == 0
+                ? candidates.Where(entity => entity.SortOrder == sortOrder).ToArray()
+                : titleMatches;
         if (matching.Length != 1) {
             return null;
         }

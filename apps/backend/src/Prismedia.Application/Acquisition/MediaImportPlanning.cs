@@ -162,18 +162,28 @@ public static class MusicImportPlanBuilder {
         var supportedAudio = files
             .Where(file => AudioExtensions.Contains(Path.GetExtension(file.RelativePath)))
             .ToArray();
-        var audio = requestedTracks is null
-            ? supportedAudio
+        var requestedSelections = requestedTracks is null
+            ? null
             : SelectRequestedAudio(supportedAudio, requestedTracks);
+        var audio = requestedSelections is null
+            ? supportedAudio
+            : requestedSelections.Select(selection => selection.File).ToArray();
         if (audio.Length == 0) {
             return ImportPlan.Block(ImportBlockReason.NoSupportedPayload);
         }
 
         var folder = AlbumFolderRelative(artist, album, template, year);
         var prefix = CommonDirectoryPrefix(audio.Select(file => file.RelativePath).ToArray());
+        var targetEntityIdsByPath = requestedSelections?.ToDictionary(
+            selection => selection.File.RelativePath,
+            selection => selection.Track.EntityId,
+            FileSystemPathComparison.Comparer);
         var items = new List<ImportPlanItem>(files.Count);
         foreach (var file in audio.OrderBy(file => file.RelativePath, StringComparer.OrdinalIgnoreCase)) {
-            items.Add(new ImportPlanItem(file.RelativePath, $"{folder}/{SanitizeRelative(StripPrefix(file.RelativePath, prefix))}"));
+            items.Add(new ImportPlanItem(
+                file.RelativePath,
+                $"{folder}/{SanitizeRelative(StripPrefix(file.RelativePath, prefix))}",
+                targetEntityIdsByPath?.GetValueOrDefault(file.RelativePath)));
         }
 
         foreach (var art in files.Where(file => ArtExtensions.Contains(Path.GetExtension(file.RelativePath)))
@@ -190,7 +200,7 @@ public static class MusicImportPlanBuilder {
     /// Keeps only unambiguous filename-to-metadata matches. A target represented by multiple files, or
     /// a file matching repeated provider titles, is left for a direct child fallback instead of guessed.
     /// </summary>
-    private static ImportCandidateFile[] SelectRequestedAudio(
+    private static AudioSelection[] SelectRequestedAudio(
         IReadOnlyList<ImportCandidateFile> audio,
         IReadOnlyList<RequestedAudioTrack> requestedTracks) {
         var titleProposals = requestedTracks
@@ -212,8 +222,7 @@ public static class MusicImportPlanBuilder {
         }
 
         return selected
-            .Select(selection => selection.File)
-            .DistinctBy(file => file.RelativePath, FileSystemPathComparison.Comparer)
+            .DistinctBy(selection => selection.File.RelativePath, FileSystemPathComparison.Comparer)
             .ToArray();
     }
 
@@ -570,7 +579,7 @@ public static class ImportTargetResolver {
                 return ResolvedImportPlan.Block(ImportBlockReason.NoSupportedPayload);
             }
 
-            items.Add(new ResolvedImportItem(sourceAbsolute, targetAbsolute));
+            items.Add(new ResolvedImportItem(sourceAbsolute, targetAbsolute, item.TargetEntityId));
         }
 
         return new ResolvedImportPlan(false, null, items);

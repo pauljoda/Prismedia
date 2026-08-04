@@ -697,12 +697,14 @@ public sealed record ImportPlacementCheckpoint(
 /// <param name="TargetAbsolutePath">Exact collision-resolved target reserved before any mutation.</param>
 /// <param name="IsMedia">Whether this file participates in Entity materialization readiness.</param>
 /// <param name="FinalPath">Target path after the mutation is durably checkpointed; null while pending.</param>
+/// <param name="TargetEntityId">Requested Entity this exact file was selected to satisfy, when known.</param>
 public sealed record ImportPlacementCheckpointUnit(
     string SourceRelativePath,
     string SourceAbsolutePath,
     string TargetAbsolutePath,
     bool IsMedia,
-    string? FinalPath = null);
+    string? FinalPath = null,
+    Guid? TargetEntityId = null);
 
 /// <summary>
 /// Durable execution plan for a TV import. It is written before the first filesystem mutation and

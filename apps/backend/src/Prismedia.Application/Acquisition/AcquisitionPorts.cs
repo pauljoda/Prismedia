@@ -204,7 +204,13 @@ public sealed record ResolvedImportPlan(bool Blocked, ImportBlockReason? BlockRe
 }
 
 /// <summary>One resolved move: absolute source file to absolute destination under the library root.</summary>
-public sealed record ResolvedImportItem(string SourceAbsolutePath, string TargetAbsolutePath);
+/// <param name="SourceAbsolutePath">Exact source path inside the completed payload.</param>
+/// <param name="TargetAbsolutePath">Validated target path beneath the library root.</param>
+/// <param name="TargetEntityId">Requested Entity this exact file was selected to satisfy, when known.</param>
+public sealed record ResolvedImportItem(
+    string SourceAbsolutePath,
+    string TargetAbsolutePath,
+    Guid? TargetEntityId = null);
 
 /// <summary>Executes the file moves of a resolved import plan, returning the final on-disk paths.</summary>
 public interface IImportFileMover {
@@ -303,7 +309,9 @@ public interface IAcquisitionHintApplier {
 
     /// <summary>
     /// Reconciles one scanned audio file with the single fileless wanted track under its album whose
-    /// canonical title exactly matches <paramref name="scannedTitle"/>. The implementation preserves
+    /// canonical title exactly matches <paramref name="scannedTitle"/>. A planner-supplied target Entity is
+    /// authoritative; otherwise reconciliation falls back to a unique provider track position only when
+    /// title matching finds nothing. The implementation preserves
     /// the wanted Entity id and provider identity, attaches or moves the Source file, clears Wanted,
     /// and may remove only an otherwise-unowned filename-derived duplicate. Call before track upsert.
     /// Returns the retained wanted track and any generated-asset repair it requires, or null when the
@@ -314,7 +322,8 @@ public interface IAcquisitionHintApplier {
         string sourcePath,
         string scannedTitle,
         int sortOrder,
-        CancellationToken cancellationToken) => Task.FromResult<WantedAudioTrackReconciliation?>(null);
+        CancellationToken cancellationToken,
+        Guid? targetEntityId = null) => Task.FromResult<WantedAudioTrackReconciliation?>(null);
 
     /// <summary>
     /// Runs the same conservative reconciliation over scanner-owned audio tracks already cataloged in

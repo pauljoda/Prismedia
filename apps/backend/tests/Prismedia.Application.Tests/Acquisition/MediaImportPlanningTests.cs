@@ -237,6 +237,8 @@ public sealed class MusicImportPlanBuilderTests {
 
     [Fact]
     public void RequestedAlbumUsesTrackOrderWithinTheMatchedDiscToResolveDuplicateTitles() {
+        var demiLovatoTrackId = Guid.NewGuid();
+        var heimrTrackId = Guid.NewGuid();
         var plan = MusicImportPlanBuilder.Plan([
             File("Frozen Deluxe/CD1/01 - Frozen Heart.mp3"),
             File("Frozen Deluxe/CD1/05 - Let It Go.mp3"),
@@ -251,9 +253,9 @@ public sealed class MusicImportPlanBuilderTests {
             new RequestedAudioTrack(Guid.NewGuid(), "Frozen Heart", 0),
             new RequestedAudioTrack(Guid.NewGuid(), "Let It Go", 4),
             new RequestedAudioTrack(Guid.NewGuid(), "Fixer Upper", 8),
-            new RequestedAudioTrack(Guid.NewGuid(), "Let It Go (Demi Lovato version)", 9),
+            new RequestedAudioTrack(demiLovatoTrackId, "Let It Go (Demi Lovato version)", 9),
             new RequestedAudioTrack(Guid.NewGuid(), "Vuelie (score)", 10),
-            new RequestedAudioTrack(Guid.NewGuid(), "Heimr Àrnadalr (score)", 14)
+            new RequestedAudioTrack(heimrTrackId, "Heimr Àrnadalr (score)", 14)
         ]);
 
         Assert.False(plan.Blocked);
@@ -267,6 +269,12 @@ public sealed class MusicImportPlanBuilderTests {
                 "Kristen Anderson-Lopez, Robert Lopez, Christophe Beck/Frozen/15 - Heimr Arnadalr.mp3"
             ],
             plan.Items.Select(item => item.TargetRelativePath).ToArray());
+        Assert.Equal(
+            demiLovatoTrackId,
+            Assert.Single(plan.Items, item => item.SourceRelativePath.EndsWith("CD1/10 - Let It Go.mp3")).TargetEntityId);
+        Assert.Equal(
+            heimrTrackId,
+            Assert.Single(plan.Items, item => item.SourceRelativePath.EndsWith("CD1/15 - Heimr Arnadalr.mp3")).TargetEntityId);
     }
 
     [Fact]

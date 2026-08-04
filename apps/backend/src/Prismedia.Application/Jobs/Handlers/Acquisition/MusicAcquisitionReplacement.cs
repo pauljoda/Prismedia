@@ -17,7 +17,10 @@ public sealed partial class MusicAcquisitionImportEngine {
         JobContext context,
         AcquisitionImportContext import,
         CancellationToken cancellationToken) {
-        if (monitors is null || RequestKindRegistry.FindChildMaterializingUnit(import.Kind) is null) {
+        if (monitors is null
+            || RequestKindRegistry.FindChildMaterializingUnit(import.Kind) is null
+            || import.EntityId is not { } entityId
+            || (await targets.GetRequestedAudioTracksAsync(entityId, cancellationToken)).Count == 0) {
             return;
         }
 
