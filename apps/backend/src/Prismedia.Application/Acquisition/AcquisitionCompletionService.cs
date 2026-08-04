@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging;
 using Prismedia.Application.Jobs;
 using Prismedia.Contracts.Acquisition;
 using Prismedia.Contracts.System;
@@ -12,7 +13,8 @@ namespace Prismedia.Application.Acquisition;
 public sealed class AcquisitionCompletionService(
     IAcquisitionStore acquisitions,
     IJobQueueService jobs,
-    IJobGraphService? graphs = null) {
+    IJobGraphService? graphs = null,
+    ILogger<AcquisitionCompletionService>? logger = null) {
     public async Task ScheduleAsync(
         Guid acquisitionId,
         CancellationToken cancellationToken,
@@ -43,17 +45,30 @@ public sealed class AcquisitionCompletionService(
                     ? JobResourceKeys.Entity(entityId.ToString())
                     : null);
             var signalKey = AcquisitionGraphSignals.ExternalTransfer(acquisitionId);
-            var graph = await graphs.GetAsync(graphId, cancellationToken);
-            var openSignal = graph?.Signals.FirstOrDefault(signal =>
-                (signal.Key == signalKey || signal.Key == AcquisitionGraphSignals.Review(acquisitionId))
-                && signal.ResolvedAt is null
-                && signal.CancelledAt is null);
-            if (openSignal is not null) {
-                await graphs.ResolveSignalAsync(graphId, openSignal.Key, [node], cancellationToken);
-            } else {
-                await graphs.AppendNodeAsync(graphId, node, cancellationToken);
+            try {
+                var graph = await graphs.GetAsync(graphId, cancellationToken);
+                if (graph?.Graph.Status is JobGraphStatus.Queued or JobGraphStatus.Running or JobGraphStatus.Waiting) {
+                    var openSignal = graph.Signals.FirstOrDefault(signal =>
+                        (signal.Key == signalKey || signal.Key == AcquisitionGraphSignals.Review(acquisitionId))
+                        && signal.ResolvedAt is null
+                        && signal.CancelledAt is null);
+                    if (openSignal is not null) {
+                        await graphs.ResolveSignalAsync(graphId, openSignal.Key, [node], cancellationToken);
+                    } else {
+                        await graphs.AppendNodeAsync(graphId, node, cancellationToken);
+                    }
+                    return;
+                }
+            } catch (InvalidOperationException ex) {
+                // A download is already durable at this boundary. A stale, terminal, or concurrently
+                // changing review graph must not strand those bytes in Downloaded forever; the queue's
+                // type+target guard makes the fresh background workflow idempotent.
+                logger?.LogWarning(
+                    ex,
+                    "Could not continue acquisition {AcquisitionId} in graph {GraphId}; starting a fresh completion workflow",
+                    acquisitionId,
+                    graphId);
             }
-            return;
         }
 
         var job = await jobs.EnqueueAsync(request, cancellationToken);

@@ -121,6 +121,22 @@ describe("AcquisitionPanel", () => {
     await waitFor(() => expect(onImported).toHaveBeenCalledOnce());
   });
 
+  it("lets a completed download retry when automatic import handoff is stranded", async () => {
+    const downloaded = acquisition(ACQUISITION_STATUS.downloaded);
+    mocks.fetchAcquisition.mockResolvedValue(downloaded);
+    mocks.retryAcquisitionImport.mockResolvedValue(downloaded);
+
+    const view = render(AcquisitionPanel, {
+      acquisitionId: "acquisition-1",
+      detail: downloaded,
+    });
+
+    const retry = await view.findByRole("button", { name: "Retry import" });
+    await fireEvent.click(retry);
+
+    expect(mocks.retryAcquisitionImport).toHaveBeenCalledWith("acquisition-1", false);
+  });
+
   it("reports Imported when the bound detail is advanced by its owner", async () => {
     const onImported = vi.fn();
     mocks.fetchAcquisition.mockResolvedValue(acquisition(ACQUISITION_STATUS.importing));

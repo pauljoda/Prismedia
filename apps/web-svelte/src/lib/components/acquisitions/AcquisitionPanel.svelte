@@ -90,7 +90,8 @@
   );
   const hasResumableImport = $derived(detail?.summary.hasResumableImport === true);
   const canRetryImport = $derived(
-    status === ACQUISITION_STATUS.manualImportRequired ||
+    status === ACQUISITION_STATUS.downloaded ||
+      status === ACQUISITION_STATUS.manualImportRequired ||
       (status === ACQUISITION_STATUS.failed && hasResumableImport),
   );
   const canStartOver = $derived(hasResumableImport && status !== ACQUISITION_STATUS.stopping);
@@ -397,7 +398,9 @@
             onclick={() => void retryImport(status === ACQUISITION_STATUS.manualImportRequired)}
             title={status === ACQUISITION_STATUS.manualImportRequired
               ? "Import the downloaded files now. A genuine upgrade may replace the existing file even when the format differs; the previous file is kept recoverable."
-              : "Resume the exact durable import plan from its last completed file."}
+              : status === ACQUISITION_STATUS.downloaded
+                ? "Queue import again without removing the completed download."
+                : "Resume the exact durable import plan from its last completed file."}
           >
             <CloudDownload class="h-3.5 w-3.5" />
             {status === ACQUISITION_STATUS.manualImportRequired ? "Import anyway" : "Retry import"}
