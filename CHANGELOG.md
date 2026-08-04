@@ -14,7 +14,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
-- Delete files now authoritatively cancels and clears every Entity- and acquisition-rooted workflow before removing managed media, generated assets, monitors, acquisitions, fileless wanted Entities, and related job history—even when a download client is missing or offline.
+- Delete files now authoritatively cancels and clears every Entity- and acquisition-rooted workflow before removing managed media, generated assets, monitors, acquisitions, fileless wanted Entities, and related job history—even when a download client is missing or offline, an acquisition teardown races or fails, or the request disconnects after file removal begins.
 - Album and TV bundle imports now keep only files that match the requested tracks, season, or episode, use provider track order to resolve duplicate soundtrack titles and filename accent differences within the matched disc, recognize soundtrack score-title decoration, discard the remaining transfer payload, immediately request any children still missing after import, and wrap long acquisition filenames on narrow screens. Completed downloads also recover onto a fresh import workflow when an older review graph can no longer accept the handoff, with a manual Retry import action available without deleting the payload.
 - Thumbnail metadata chips now stay clear of selection checkboxes in bulk-selection grids.
 - Consumption upgrades now preserve exact legacy progress and active-time history without presenting inferred opens as recorded facts; access sessions are deduplicated per Entity, and images and galleries accept viewing time without accepting playback-only position, completion, or skip changes.

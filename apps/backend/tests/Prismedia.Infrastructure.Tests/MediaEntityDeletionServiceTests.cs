@@ -1299,6 +1299,69 @@ public sealed class MediaEntityDeletionServiceTests {
     }
 
     [Fact]
+    public async Task ConfirmedDeleteForcePurgesLocalStateWhenAcquisitionCompletionThrows() {
+        await using var db = CreateContext();
+        await AssertConfirmedDeleteForcePurgesLocalStateAsync(db);
+    }
+
+    [Fact]
+    public async Task ConfirmedDeleteForcePurgesLocalStateOnPostgresWhenAcquisitionCompletionThrows() {
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        await using var db = database.CreateContext();
+        await AssertConfirmedDeleteForcePurgesLocalStateAsync(db);
+    }
+
+    private static async Task AssertConfirmedDeleteForcePurgesLocalStateAsync(PrismediaDbContext db) {
+        var root = new FileLibraryRoot(Guid.NewGuid(), "/media/music", "Music", true, false, false, true, false, false);
+        var entityId = Guid.NewGuid();
+        var acquisitionId = RecordingAcquisitions.AcquisitionId;
+        var now = DateTimeOffset.UtcNow;
+        db.Entities.Add(NewEntity(entityId, EntityKind.Audio.ToCode(), "Frozen"));
+        db.EntityFiles.Add(NewSourceFile(entityId, "/media/music/Frozen/01 Frozen Heart.flac"));
+        db.Acquisitions.Add(new AcquisitionRow {
+            Id = acquisitionId,
+            EntityId = entityId,
+            Kind = EntityKind.Audio,
+            Status = AcquisitionStatus.Imported,
+            Title = "Frozen",
+            CreatedAt = now,
+            UpdatedAt = now
+        });
+        db.Monitors.Add(new MonitorRow {
+            Id = Guid.NewGuid(),
+            Kind = EntityKind.Audio,
+            EntityId = entityId,
+            AcquisitionId = acquisitionId,
+            Status = MonitorStatus.Active,
+            Title = "Frozen",
+            CreatedAt = now,
+            UpdatedAt = now
+        });
+        await db.SaveChangesAsync();
+        db.ChangeTracker.Clear();
+
+        var acquisitions = new RecordingAcquisitions([entityId]);
+        acquisitions.CompletionFailureIds.Add(acquisitionId);
+        var service = new MediaEntityDeletionService(
+            db,
+            new FakeRoots(root),
+            new RecordingStorage(),
+            new RecordingSuppressions(),
+            acquisitions,
+            new NullJobQueue(hasPending: false),
+            new Prismedia.Infrastructure.Media.Processing.AssetPathService(Path.GetTempPath()),
+            new EfEntityHierarchyReader(db),
+            NullLogger<MediaEntityDeletionService>.Instance);
+
+        var result = await service.DeleteAsync(entityId, deleteFiles: true, CancellationToken.None);
+
+        Assert.True(result.Deleted);
+        Assert.Null(await db.Entities.AsNoTracking().SingleOrDefaultAsync(row => row.Id == entityId));
+        Assert.Empty(await db.Acquisitions.AsNoTracking().ToArrayAsync());
+        Assert.Empty(await db.Monitors.AsNoTracking().ToArrayAsync());
+    }
+
+    [Fact]
     public async Task MultiTargetFullRemovalNeverInvokesReacquisition() {
         await using var db = CreateContext();
         var root = new FileLibraryRoot(Guid.NewGuid(), "/media/tv", "TV", true, true, false, false, false, false);
@@ -1954,6 +2017,7 @@ public sealed class MediaEntityDeletionServiceTests {
         public HashSet<Guid> IneligibleReacquireIds { get; } = [];
         public HashSet<Guid> IneligibleRemovalIds { get; } = [];
         public HashSet<Guid> TransferRemovalFailureIds { get; } = [];
+        public HashSet<Guid> CompletionFailureIds { get; } = [];
         public Func<Task>? ReacquireEligibilityObserved { get; set; }
         public Func<Guid, Task<Guid?>>? ReacquireOverride { get; set; }
         public List<Guid> ReacquireEligibilityIds { get; } = [];
@@ -2024,6 +2088,9 @@ public sealed class MediaEntityDeletionServiceTests {
             CancellationToken cancellationToken) {
             Assert.Equal(intent, TeardownClaims[id]);
             CompletedTeardowns.Add((id, intent));
+            if (CompletionFailureIds.Contains(id)) {
+                throw new InvalidOperationException("Simulated acquisition teardown failure.");
+            }
             Deleted.Add(id);
             TeardownClaims.Remove(id);
             return Task.FromResult(true);

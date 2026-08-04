@@ -269,15 +269,19 @@ public sealed class MediaEntityDeletionService(
             return Conflict(PhysicalDeletionConflictMessage(physicalDeletion));
         }
         var filesDeleted = physicalDeletion.PathsDeleted;
+        // The user has confirmed the irreversible operation and the managed paths are now gone. From this
+        // point forward, request disconnects and secondary teardown failures cannot leave a visible Entity
+        // pointing at deleted media. App/process termination remains the only interruption boundary.
+        var completionToken = CancellationToken.None;
 
         var doomedMonitors = await db.Monitors
             .Where(monitor => doomedTargetedMonitorIds.Contains(monitor.Id)
                 || (monitor.AcquisitionId != null
                     && deleteAcquisitionIds.Contains(monitor.AcquisitionId.Value)))
-            .ToArrayAsync(cancellationToken);
+            .ToArrayAsync(completionToken);
         if (doomedMonitors.Length > 0) {
             db.Monitors.RemoveRange(doomedMonitors);
-            await db.SaveChangesAsync(cancellationToken);
+            await db.SaveChangesAsync(completionToken);
         }
         if (deleteAcquisitionIds.Length > 0) {
             var pointerClearedAt = DateTimeOffset.UtcNow;
@@ -287,25 +291,37 @@ public sealed class MediaEntityDeletionService(
                         && deleteAcquisitionIds.Contains(monitor.UpgradeChildAcquisitionId.Value))
                     .ExecuteUpdateAsync(setters => setters
                         .SetProperty(monitor => monitor.UpgradeChildAcquisitionId, (Guid?)null)
-                        .SetProperty(monitor => monitor.UpdatedAt, pointerClearedAt), cancellationToken);
+                        .SetProperty(monitor => monitor.UpdatedAt, pointerClearedAt), completionToken);
             } else {
                 var upgradeOwners = await db.Monitors
                     .Where(monitor => monitor.UpgradeChildAcquisitionId != null
                         && deleteAcquisitionIds.Contains(monitor.UpgradeChildAcquisitionId.Value))
-                    .ToArrayAsync(cancellationToken);
+                    .ToArrayAsync(completionToken);
                 foreach (var monitor in upgradeOwners) {
                     monitor.UpgradeChildAcquisitionId = null;
                     monitor.UpdatedAt = pointerClearedAt;
                 }
-                await db.SaveChangesAsync(cancellationToken);
+                await db.SaveChangesAsync(completionToken);
             }
         }
         foreach (var acquisitionId in deleteAcquisitionIds) {
-            await acquisitions.CompleteTeardownAsync(
-                acquisitionId,
-                AcquisitionTeardownIntent.Remove,
-                cancellationToken);
+            try {
+                await acquisitions.CompleteTeardownAsync(
+                    acquisitionId,
+                    AcquisitionTeardownIntent.Remove,
+                    completionToken);
+            } catch (Exception exception) {
+                // The confirmed Entity deletion is the local authority. A child acquisition may race its
+                // final worker transition or fail while recording secondary history; neither may force a
+                // second button press after the files are already gone. The direct purge below is the
+                // deterministic fallback for every still-present local acquisition row.
+                logger.LogWarning(
+                    exception,
+                    "MediaEntityDeletion: acquisition {AcquisitionId} did not complete normal teardown; forcing its local purge.",
+                    acquisitionId);
+            }
         }
+        await ForceDeleteAcquisitionRowsAsync(deleteAcquisitionIds, completionToken);
 
         // Suppress each removed branch root so a surviving monitored ancestor cannot recreate it.
         foreach (var branchRootId in plan.RemovedBranchRootIds) {
@@ -314,7 +330,16 @@ public sealed class MediaEntityDeletionService(
                 || !tree.TryGetValue(branchRootId, out var branch)) {
                 continue;
             }
-            await suppressions.SuppressAsync(branchIdentities, branch.Kind, branch.Title, cancellationToken);
+            try {
+                await suppressions.SuppressAsync(branchIdentities, branch.Kind, branch.Title, completionToken);
+            } catch (Exception exception) {
+                // Suppression is future rediscovery policy, not ownership of the confirmed deletion. Keep
+                // the local purge authoritative even if this secondary write is temporarily unavailable.
+                logger.LogWarning(
+                    exception,
+                    "MediaEntityDeletion: could not suppress removed branch {EntityId}; continuing confirmed deletion.",
+                    branchRootId);
+            }
         }
 
         var removedIds = plan.RemovedIds.ToArray();
@@ -322,16 +347,25 @@ public sealed class MediaEntityDeletionService(
             .Where(file => removedIds.Contains(file.EntityId) && file.Role != EntityFileRole.Source)
             .Select(file => file.Path)
             .Distinct()
-            .ToArrayAsync(cancellationToken);
+            .ToArrayAsync(completionToken);
         entityAssetCleanup.Cleanup(removedIds, preserveArtwork: false, removedArtworkPaths);
-        var removedRows = await db.Entities.Where(row => removedIds.Contains(row.Id)).ToArrayAsync(cancellationToken);
+        var removedRows = await db.Entities.Where(row => removedIds.Contains(row.Id)).ToArrayAsync(completionToken);
         db.Entities.RemoveRange(removedRows);
-        await db.SaveChangesAsync(cancellationToken);
+        await db.SaveChangesAsync(completionToken);
 
         // Related workflow history is part of the confirmed removal contract. Purge it only after workers
         // have observed cancellation and the Entity/acquisition rows are gone, so no orphaned Frozen-style
         // queue cards survive a successful delete.
-        await PurgeRelatedWorkAsync(relatedWork, cancellationToken);
+        try {
+            await PurgeRelatedWorkAsync(relatedWork, completionToken);
+        } catch (Exception exception) {
+            // The primary deletion is already complete. Preserve its success response and diagnostics;
+            // terminal job history is secondary and must never resurrect or strand the removed Entity.
+            logger.LogWarning(
+                exception,
+                "MediaEntityDeletion: related job history cleanup failed after deleting Entity {EntityId}.",
+                id);
+        }
 
         // The destructive boundary is complete. The claimed Entity row may already be gone, which makes
         // releasing its operation idempotently a no-op.
@@ -350,6 +384,39 @@ public sealed class MediaEntityDeletionService(
         return new MediaEntityDeleteResult(
             true,
             FilesDeleted: filesDeleted);
+    }
+
+    private async Task ForceDeleteAcquisitionRowsAsync(
+        IReadOnlyCollection<Guid> acquisitionIds,
+        CancellationToken cancellationToken) {
+        if (acquisitionIds.Count == 0) {
+            return;
+        }
+
+        // A failed normal teardown can leave a concurrency-token snapshot or Deleted entry tracked. Detach
+        // only those acquisition snapshots before the unconditional local purge; the in-memory test store
+        // still needs the tracked Entity dependents to exercise EF's client-side cascade behavior.
+        foreach (var entry in db.ChangeTracker.Entries<AcquisitionRow>()
+                     .Where(entry => acquisitionIds.Contains(entry.Entity.Id))
+                     .ToArray()) {
+            entry.State = EntityState.Detached;
+        }
+        if (db.Database.IsRelational()) {
+            await db.Acquisitions
+                .Where(row => acquisitionIds.Contains(row.Id))
+                .ExecuteDeleteAsync(cancellationToken);
+            return;
+        }
+
+        var remaining = await db.Acquisitions
+            .Where(row => acquisitionIds.Contains(row.Id))
+            .ToArrayAsync(cancellationToken);
+        if (remaining.Length == 0) {
+            return;
+        }
+
+        db.Acquisitions.RemoveRange(remaining);
+        await db.SaveChangesAsync(cancellationToken);
     }
 
     private async Task<RelatedDeletionWork> CancelRelatedWorkAsync(
