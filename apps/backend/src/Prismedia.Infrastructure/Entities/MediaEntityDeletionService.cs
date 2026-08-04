@@ -274,14 +274,34 @@ public sealed class MediaEntityDeletionService(
         // pointing at deleted media. App/process termination remains the only interruption boundary.
         var completionToken = CancellationToken.None;
 
-        var doomedMonitors = await db.Monitors
-            .Where(monitor => doomedTargetedMonitorIds.Contains(monitor.Id)
-                || (monitor.AcquisitionId != null
-                    && deleteAcquisitionIds.Contains(monitor.AcquisitionId.Value)))
-            .ToArrayAsync(completionToken);
-        if (doomedMonitors.Length > 0) {
-            db.Monitors.RemoveRange(doomedMonitors);
-            await db.SaveChangesAsync(completionToken);
+        if (db.Database.IsRelational()) {
+            // ClaimEntityDeletionAsync locks these monitor rows into the request tracker before
+            // ClaimDirectMonitorsAsync advances Active -> DeletingFiles with ExecuteUpdate. A normal EF
+            // Remove would therefore use the stale Active concurrency token and fail on the first press;
+            // the retry worked only because it reloaded DeletingFiles. This is the confirmed terminal
+            // owner, so delete the exact claimed set directly and detach those stale lock snapshots.
+            foreach (var entry in db.ChangeTracker.Entries<MonitorRow>()
+                         .Where(entry => doomedTargetedMonitorIds.Contains(entry.Entity.Id)
+                             || entry.Entity.AcquisitionId is { } acquisitionId
+                             && deleteAcquisitionIds.Contains(acquisitionId))
+                         .ToArray()) {
+                entry.State = EntityState.Detached;
+            }
+            await db.Monitors
+                .Where(monitor => doomedTargetedMonitorIds.Contains(monitor.Id)
+                    || (monitor.AcquisitionId != null
+                        && deleteAcquisitionIds.Contains(monitor.AcquisitionId.Value)))
+                .ExecuteDeleteAsync(completionToken);
+        } else {
+            var doomedMonitors = await db.Monitors
+                .Where(monitor => doomedTargetedMonitorIds.Contains(monitor.Id)
+                    || (monitor.AcquisitionId != null
+                        && deleteAcquisitionIds.Contains(monitor.AcquisitionId.Value)))
+                .ToArrayAsync(completionToken);
+            if (doomedMonitors.Length > 0) {
+                db.Monitors.RemoveRange(doomedMonitors);
+                await db.SaveChangesAsync(completionToken);
+            }
         }
         if (deleteAcquisitionIds.Length > 0) {
             var pointerClearedAt = DateTimeOffset.UtcNow;
