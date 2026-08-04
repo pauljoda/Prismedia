@@ -18,7 +18,8 @@ public sealed class ImportedVideoMaterializer(
     ILogger<ImportedVideoMaterializer> logger,
     IMaintenancePersistence? maintenance = null,
     IScanSnapshotStore? snapshots = null,
-    IEntityHierarchyReader? hierarchy = null) : IImportedVideoMaterializer {
+    IEntityHierarchyReader? hierarchy = null,
+    IDownstreamNeedsPersistence? processingRoots = null) : IImportedVideoMaterializer {
     public async Task<ImportedEntityMaterializationResult> MaterializeAsync(
         JobContext context,
         ImportedTvMaterializationRequest request,
@@ -150,15 +151,23 @@ public sealed class ImportedVideoMaterializer(
             "Materialized {Count} imported TV file(s) in {SeriesFolder} before marking the acquisition imported.",
             entityIds.Count,
             seriesFolder);
+        var entities = readyEntityIds
+            .Select(entityId => new ImportedEntityReference(entityId, EntityKind.VideoEpisode))
+            .ToArray();
+        var reconciliationRoots = await ImportedEntityMaterializer.ResolveProcessingRootsAsync(
+            entities,
+            processingRoots,
+            cancellationToken);
         return new ImportedEntityMaterializationResult(
-            readyEntityIds.Select(entityId => new ImportedEntityReference(entityId, EntityKind.VideoEpisode)).ToArray(),
+            entities,
             touchedAncestors.ToArray(),
             items.Select(item => item.FilePath).ToArray(),
             request.Episodes
                 .Where(episode => !string.IsNullOrWhiteSpace(episode.PreviousFilePath))
                 .Select(episode => Path.GetFullPath(episode.PreviousFilePath!))
                 .ToArray(),
-            []);
+            [],
+            reconciliationRoots);
     }
 
     private static void EnsureInsideRoot(string candidate, string rootPath) {

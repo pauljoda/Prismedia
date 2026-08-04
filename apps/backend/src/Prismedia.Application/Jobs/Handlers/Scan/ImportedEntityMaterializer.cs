@@ -49,11 +49,22 @@ public sealed record ImportedEntityMaterializationResult(
     IReadOnlyList<Guid> TouchedAncestorIds,
     IReadOnlyList<string> AddedSourcePaths,
     IReadOnlyList<string> ReplacedSourcePaths,
-    IReadOnlyList<string> RemovedSourcePaths);
+    IReadOnlyList<string> RemovedSourcePaths,
+    IReadOnlyList<ImportedEntityReference>? ReconciliationRoots = null) {
+    /// <summary>
+    /// Structural roots whose full trees should be processed after this import. Falling back to exact
+    /// source owners preserves compatibility for materializers that cannot resolve a container root.
+    /// </summary>
+    public IReadOnlyList<ImportedEntityReference> ProcessingRoots =>
+        ReconciliationRoots is { Count: > 0 } ? ReconciliationRoots : Entities;
+}
 
 /// <summary>Appends exact entity reconciliation nodes without exposing scan selection to import engines.</summary>
 public static class ImportedEntityReconciliation {
-    /// <summary>Queues one graph-local reconciliation node per materialized Entity.</summary>
+    /// <summary>
+    /// Queues one graph-local reconciliation per distinct structural processing root. An album or series
+    /// therefore probes all imported leaves in one tree and performs one cascading identify afterward.
+    /// </summary>
     public static async Task EnqueueAsync(
         JobContext context,
         ImportedEntityMaterializationResult result,
@@ -63,15 +74,18 @@ public static class ImportedEntityReconciliation {
             throw new InvalidOperationException("Import materialization did not resolve an exact Entity reconciliation scope.");
         }
 
-        for (var index = 0; index < result.Entities.Count; index++) {
-            var entity = result.Entities[index];
+        var roots = result.ProcessingRoots
+            .DistinctBy(entity => entity.Id)
+            .ToArray();
+        for (var index = 0; index < roots.Length; index++) {
+            var entity = roots[index];
             await context.EnqueueIfNeededAsync(
                 EnqueueJobRequest.ForEntity(
                     JobType.ReconcileEntity,
                     entity.Kind,
                     entity.Id.ToString(),
                     label: null,
-                    payloadJson: index == result.Entities.Count - 1 ? finalization?.ToJson() : null),
+                    payloadJson: index == roots.Length - 1 ? finalization?.ToJson() : null),
                 cancellationToken);
         }
     }
@@ -148,7 +162,8 @@ public interface IImportedEntityMaterializer {
 public sealed class ImportedEntityMaterializer(
     IEnumerable<IImportedEntityMaterializationPolicy> policies,
     IImportedEntityReadinessPersistence readiness,
-    IScanSnapshotStore? snapshots = null) : IImportedEntityMaterializer {
+    IScanSnapshotStore? snapshots = null,
+    IDownstreamNeedsPersistence? processingRoots = null) : IImportedEntityMaterializer {
     private readonly IReadOnlyDictionary<AcquisitionNamingFamily, IImportedEntityMaterializationPolicy> _byFamily =
         policies.ToDictionary(AcquisitionStrategyRegistration.FamilyOf);
 
@@ -195,12 +210,37 @@ public sealed class ImportedEntityMaterializer(
             ancestors.Add(requestedId);
         }
 
+        var reconciliationRoots = await ResolveProcessingRootsAsync(
+            entities,
+            processingRoots,
+            cancellationToken);
         return new ImportedEntityMaterializationResult(
             entities,
             ancestors.ToArray(),
             normalized,
             NormalizeOptional(request.ReplacedSourcePaths),
-            NormalizeOptional(request.RemovedSourcePaths));
+            NormalizeOptional(request.RemovedSourcePaths),
+            reconciliationRoots);
+    }
+
+    internal static async Task<IReadOnlyList<ImportedEntityReference>> ResolveProcessingRootsAsync(
+        IReadOnlyList<ImportedEntityReference> entities,
+        IDownstreamNeedsPersistence? roots,
+        CancellationToken cancellationToken) {
+        if (roots is null || entities.Count == 0) {
+            return entities;
+        }
+
+        var resolved = await roots.ResolveEntityProcessingRootsAsync(
+            entities.Select(entity => entity.Id).Distinct().ToArray(),
+            cancellationToken);
+        return resolved
+            .Where(root => EntityKindRegistry.TryGet(root.KindCode, out _))
+            .Select(root => new ImportedEntityReference(
+                root.Id,
+                EntityKindRegistry.Require(root.KindCode)))
+            .DistinctBy(root => root.Id)
+            .ToArray();
     }
 
     private static IReadOnlyList<string> NormalizeOptional(IReadOnlyList<string>? paths) =>

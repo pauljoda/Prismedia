@@ -130,6 +130,56 @@ public sealed class RefreshEntityJobHandlerTests {
         Assert.Equal(JobNodeImportance.BestEffort, preview.Importance);
     }
 
+    [Fact]
+    public async Task ImportedAlbumRunsOneBulkIdentifyAfterEveryTrackIsReadyAndFinalized() {
+        var albumId = Guid.NewGuid();
+        var firstTrackId = Guid.NewGuid();
+        var secondTrackId = Guid.NewGuid();
+        var acquisitionId = Guid.NewGuid();
+        var persistence = new RecordingPersistence([
+            new EntityRefreshTarget(albumId, EntityKind.AudioLibrary.ToCode(), "Frozen"),
+            new EntityRefreshTarget(firstTrackId, EntityKind.AudioTrack.ToCode(), "Frozen Heart", "/media/Frozen/01.flac"),
+            new EntityRefreshTarget(secondTrackId, EntityKind.AudioTrack.ToCode(), "Vuelie", "/media/Frozen/02.flac")
+        ]) {
+            AutoGenerateMetadata = true,
+            AutoIdentifyEnabled = true,
+            NeedsProbe = true
+        };
+        var planner = new EntityProcessingGraphPlanner(
+            NullLogger<EntityProcessingGraphPlanner>.Instance,
+            persistence,
+            persistence,
+            persistence,
+            persistence,
+            new StubSubtitleSidecarDiscovery([]),
+            persistence);
+        var queue = new RecordingJobQueue();
+        var finalization = AcquisitionFinalizeJobPayload.Create(
+            acquisitionId,
+            BookQualityRank.Floor,
+            "Imported");
+        var job = RefreshJob(albumId) with {
+            Type = JobType.ReconcileEntity,
+            PayloadJson = finalization.ToJson(),
+            GraphId = Guid.NewGuid(),
+            GraphOrigin = JobGraphOrigin.Interactive,
+            TargetEntityKind = EntityKind.AudioLibrary.ToCode(),
+            TargetLabel = "Frozen"
+        };
+
+        await new ReconcileEntityJobHandler(planner).HandleAsync(
+            new JobContext(job, queue),
+            CancellationToken.None);
+
+        var probes = queue.Nodes.Where(node => node.Job.Type == JobType.ProbeAudio).ToArray();
+        Assert.Equal(2, probes.Length);
+        var finalizer = Assert.Single(queue.Nodes, node => node.Job.Type == JobType.AcquisitionFinalize);
+        Assert.All(probes, probe => Assert.Contains(queue.RunIds[probe.NodeKey], finalizer.DependsOn!));
+        var identify = Assert.Single(queue.Nodes, node => node.Job.Type == JobType.AutoIdentify);
+        Assert.Equal(albumId.ToString(), identify.Job.TargetEntityId);
+        Assert.Contains(queue.RunIds[finalizer.NodeKey], identify.DependsOn!);
+    }
+
     private static RefreshEntityJobHandler CreateHandler(
         RecordingPersistence persistence,
         ISubtitleSidecarDiscovery discovery) =>
@@ -190,6 +240,7 @@ public sealed class RefreshEntityJobHandlerTests {
         public int ClearGeneratedAssetsCalls { get; private set; }
         public int DownstreamChecks { get; private set; }
         public bool AutoGenerateMetadata { get; init; }
+        public bool AutoIdentifyEnabled { get; init; }
         public bool NeedsProbe { get; init; }
         public bool NeedsPreview { get; init; }
 
@@ -207,7 +258,8 @@ public sealed class RefreshEntityJobHandlerTests {
                 TrickplayIntervalSeconds: 10,
                 PreviewClipDurationSeconds: 8,
                 ThumbnailQuality: 2,
-                TrickplayQuality: 2));
+                TrickplayQuality: 2,
+                AutoIdentifyEnabled: AutoIdentifyEnabled));
 
         public Task<IReadOnlyDictionary<Guid, DownstreamNeeds>> CheckDownstreamNeedsBatchAsync(
             IReadOnlyList<Guid> entityIds,

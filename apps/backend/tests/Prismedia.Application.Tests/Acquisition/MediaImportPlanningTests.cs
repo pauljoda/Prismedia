@@ -212,6 +212,30 @@ public sealed class MusicImportPlanBuilderTests {
     }
 
     [Fact]
+    public void RequestedAlbumMatchesProviderScoreDecorationWithoutImportingDeluxeExtras() {
+        var plan = MusicImportPlanBuilder.Plan([
+            File("Frozen Deluxe/CD1/11 - Vuelie.flac"),
+            File("Frozen Deluxe/CD1/12 - Elsa and Anna.flac"),
+            File("Frozen Deluxe/CD1/13 - The Trolls.flac"),
+            File("Frozen Deluxe/CD2/01 - For the First Time in Forever (Demo).flac"),
+            File("Frozen Deluxe/CD2/02 - Love Is an Open Door (Demo).flac")
+        ], "Various Artists", "Frozen", requestedTracks: [
+            new RequestedAudioTrack(Guid.NewGuid(), "Vuelie (score)", 10),
+            new RequestedAudioTrack(Guid.NewGuid(), "Elsa and Anna (score)", 11),
+            new RequestedAudioTrack(Guid.NewGuid(), "The Trolls (score)", 12)
+        ]);
+
+        Assert.False(plan.Blocked);
+        Assert.Equal(
+            [
+                "Various Artists/Frozen/11 - Vuelie.flac",
+                "Various Artists/Frozen/12 - Elsa and Anna.flac",
+                "Various Artists/Frozen/13 - The Trolls.flac"
+            ],
+            plan.Items.Select(item => item.TargetRelativePath).ToArray());
+    }
+
+    [Fact]
     public void RequestedAlbumWithNoMatchingTrackBlocksInsteadOfImportingTheBundleWholesale() {
         var plan = MusicImportPlanBuilder.Plan([
             File("Deluxe/01 - Unrequested Bonus.flac")

@@ -355,7 +355,19 @@ public sealed partial class LibraryScanPersistenceService {
     }
 
     public async Task<IReadOnlyList<AutoIdentifyRootTarget>> ResolveAutoIdentifyRootsAsync(
-        IReadOnlyList<Guid> entityIds, CancellationToken cancellationToken) {
+        IReadOnlyList<Guid> entityIds,
+        CancellationToken cancellationToken) =>
+        await ResolveEntityRootsAsync(entityIds, enforceIdentifyAttemptLimit: true, cancellationToken);
+
+    public async Task<IReadOnlyList<AutoIdentifyRootTarget>> ResolveEntityProcessingRootsAsync(
+        IReadOnlyList<Guid> entityIds,
+        CancellationToken cancellationToken) =>
+        await ResolveEntityRootsAsync(entityIds, enforceIdentifyAttemptLimit: false, cancellationToken);
+
+    private async Task<IReadOnlyList<AutoIdentifyRootTarget>> ResolveEntityRootsAsync(
+        IReadOnlyList<Guid> entityIds,
+        bool enforceIdentifyAttemptLimit,
+        CancellationToken cancellationToken) {
         if (entityIds.Count == 0) return [];
 
         // Load the scanned entities plus their ancestor chain in waves (libraries are only a few
@@ -392,8 +404,10 @@ public sealed partial class LibraryScanPersistenceService {
                 current = parent;
             }
 
-            if (!roots.ContainsKey(current) && info.TryGetValue(current, out var rootInfo) &&
-                rootInfo.AutoIdentifyAttempts < AutoIdentifyPolicy.MaxAttemptsPerEntity) {
+            if (!roots.ContainsKey(current)
+                && info.TryGetValue(current, out var rootInfo)
+                && (!enforceIdentifyAttemptLimit
+                    || rootInfo.AutoIdentifyAttempts < AutoIdentifyPolicy.MaxAttemptsPerEntity)) {
                 roots[current] = new AutoIdentifyRootTarget(current, rootInfo.KindCode, rootInfo.Title, rootInfo.IsOrganized);
             }
         }

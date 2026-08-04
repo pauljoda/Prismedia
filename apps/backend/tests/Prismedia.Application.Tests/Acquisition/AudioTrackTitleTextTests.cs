@@ -28,6 +28,9 @@ public sealed class AudioTrackTitleTextTests {
     [InlineData(
         "Find Your Way (Inspired by “Avatar: The Last Airbender”)",
         "01 Find Your Way (Inspired by “Avatar - The Last Airbender”) [798 kbps]")]
+    [InlineData(
+        "Vuelie (score)",
+        "11 - Vuelie")]
     public void NormalizeMatchesOnlyFilesystemSafeTitleDecoration(string wantedTitle, string scannedTitle) {
         Assert.Equal(
             AudioTrackTitleText.Normalize(wantedTitle),
@@ -44,6 +47,7 @@ public sealed class AudioTrackTitleTextTests {
     [Theory]
     [InlineData("Happy", "04 Pharrell Williams - Happy", true)]
     [InlineData("Happy - From Despicable Me 2", "04 Pharrell Williams - Happy - From Despicable Me 2", true)]
+    [InlineData("The Trolls (score)", "13 - The Trolls", true)]
     [InlineData("Happy", "Pharrell Williams - Happy", false)]
     [InlineData("Happy", "04 Pharrell Williams - Not Happy", false)]
     public void MetadataMatchAllowsOnlyNumberedArtistPrefixedFilenames(

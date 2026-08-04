@@ -320,6 +320,16 @@ public interface IDownstreamNeedsPersistence {
         Task.FromResult<IReadOnlyList<AutoIdentifyRootTarget>>([]);
 
     /// <summary>
+    /// Resolves structural roots for one post-import processing batch without applying Auto Identify
+    /// attempt or organization eligibility. Technical reconciliation must remain one album/series tree
+    /// even when its eventual identify node will skip by policy.
+    /// </summary>
+    Task<IReadOnlyList<AutoIdentifyRootTarget>> ResolveEntityProcessingRootsAsync(
+        IReadOnlyList<Guid> entityIds,
+        CancellationToken cancellationToken) =>
+        ResolveAutoIdentifyRootsAsync(entityIds, cancellationToken);
+
+    /// <summary>
     /// Resolves auto-identify roots already persisted under a library root for a no-file-change scan.
     /// This lets scans enqueue metadata work that was previously skipped or enabled after the first
     /// scan without re-running the full media upsert pipeline.

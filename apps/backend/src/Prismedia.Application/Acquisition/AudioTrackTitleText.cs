@@ -16,7 +16,11 @@ public static partial class AudioTrackTitleText {
 
         var withoutQuotes = QuotationMarks().Replace(value.Trim(), string.Empty);
         var withoutBitrate = TrailingBitrate().Replace(withoutQuotes, string.Empty);
-        var withoutTrackNumber = LeadingTrackNumber().Replace(withoutBitrate, string.Empty);
+        // Music metadata providers commonly append "(score)" to distinguish the score section of a
+        // soundtrack, while the matching release files omit that catalog-only role marker. It does not
+        // distinguish the recording itself, unlike version labels such as demo, reprise, or karaoke.
+        var withoutCatalogRole = TrailingScoreRole().Replace(withoutBitrate, string.Empty);
+        var withoutTrackNumber = LeadingTrackNumber().Replace(withoutCatalogRole, string.Empty);
         var filesystemSafe = ImportPlanBuilder.SanitizeSegment(withoutTrackNumber);
         return ReleaseTitleText.Normalize(filesystemSafe);
     }
@@ -55,6 +59,9 @@ public static partial class AudioTrackTitleText {
 
     [GeneratedRegex(@"\s*\[\s*\d+(?:\.\d+)?\s*kbps\s*\]\s*$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex TrailingBitrate();
+
+    [GeneratedRegex(@"\s*[\[(]\s*score\s*[\])]\s*$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static partial Regex TrailingScoreRole();
 
     [GeneratedRegex(@"^\s*\d{1,3}(?:\s*[-._]\s*|\s+)", RegexOptions.CultureInvariant)]
     private static partial Regex LeadingTrackNumber();

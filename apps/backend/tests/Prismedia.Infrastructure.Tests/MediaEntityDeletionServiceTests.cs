@@ -13,6 +13,7 @@ using Prismedia.Infrastructure.Acquisition;
 using Prismedia.Infrastructure.Entities;
 using Prismedia.Infrastructure.Persistence;
 using Prismedia.Infrastructure.Persistence.Entities;
+using Prismedia.Infrastructure.Queue;
 
 namespace Prismedia.Infrastructure.Tests;
 
@@ -50,6 +51,60 @@ public sealed class MediaEntityDeletionServiceTests {
         Assert.True(result.Deleted);
         Assert.Equal(["/media/movies/Arrival"], storage.DeletedPaths);
         Assert.Equal(1, result.FilesDeleted);
+    }
+
+    [Fact]
+    public async Task DeleteFilesCancelsAndPurgesTheEntityRootedWorkflowBeforeRemovingTheEntity() {
+        await using var db = CreateContext();
+        var root = new FileLibraryRoot(Guid.NewGuid(), "/media/movies", "Movies", true, true, false, false, false, false);
+        var movieId = Guid.NewGuid();
+        var graphId = Guid.NewGuid();
+        var runId = Guid.NewGuid();
+        var now = DateTimeOffset.UtcNow;
+        db.Entities.Add(NewEntity(movieId, EntityKind.Movie.ToCode(), "Arrival"));
+        db.EntityFiles.Add(NewSourceFile(movieId, "/media/movies/Arrival/Arrival.mkv"));
+        db.JobGraphs.Add(new JobGraphRow {
+            Id = graphId,
+            Origin = JobGraphOrigin.Interactive,
+            Status = JobGraphStatus.Running,
+            DisplayName = "Arrival",
+            RootRunId = runId,
+            RootEntityKind = EntityKind.Movie.ToCode(),
+            RootEntityId = movieId.ToString(),
+            CreatedAt = now,
+            UpdatedAt = now
+        });
+        db.JobRuns.Add(new JobRunRow {
+            Id = runId,
+            GraphId = graphId,
+            Type = JobType.ReconcileEntity,
+            Status = JobRunStatus.Running,
+            TargetEntityKind = EntityKind.Movie.ToCode(),
+            TargetEntityId = movieId.ToString(),
+            LockedAt = now,
+            LockedBy = "test-worker",
+            AvailableAt = now,
+            CreatedAt = now
+        });
+        await db.SaveChangesAsync();
+        var service = new MediaEntityDeletionService(
+            db,
+            new FakeRoots(root),
+            new RecordingStorage(),
+            new RecordingSuppressions(),
+            new RecordingAcquisitions([]),
+            new NullJobQueue(hasPending: false),
+            new Prismedia.Infrastructure.Media.Processing.AssetPathService(Path.GetTempPath()),
+            new EfEntityHierarchyReader(db),
+            NullLogger<MediaEntityDeletionService>.Instance,
+            graphs: new JobGraphService(db));
+
+        var result = await service.DeleteAsync(movieId, deleteFiles: true, CancellationToken.None);
+
+        Assert.True(result.Deleted);
+        Assert.Empty(await db.JobGraphs.ToArrayAsync());
+        Assert.Empty(await db.JobRuns.ToArrayAsync());
+        Assert.Null(await db.Entities.SingleOrDefaultAsync(row => row.Id == movieId));
     }
 
     [Fact]
@@ -1640,7 +1695,7 @@ public sealed class MediaEntityDeletionServiceTests {
     }
 
     [Fact]
-    public async Task DeleteFilesRefusesAFilelessWantedEntityWithoutLifecycleSideEffects() {
+    public async Task DeleteFilesFullyRemovesAFilelessWantedEntityAndItsLifecycleState() {
         await using var db = CreateContext();
         var entityId = Guid.NewGuid();
         var monitorId = Guid.NewGuid();
@@ -1668,14 +1723,12 @@ public sealed class MediaEntityDeletionServiceTests {
 
         var result = await service.DeleteAsync(entityId, deleteFiles: true, CancellationToken.None);
 
-        Assert.False(result.Deleted);
-        Assert.Equal(MediaEntityDeleteFailureKind.NotDeletable, result.FailureKind);
-        Assert.Contains("no managed source files", result.Message, StringComparison.OrdinalIgnoreCase);
-        Assert.NotNull(await db.Entities.SingleOrDefaultAsync(row => row.Id == entityId));
-        Assert.NotNull(await db.Monitors.SingleOrDefaultAsync(row => row.Id == monitorId));
+        Assert.True(result.Deleted);
+        Assert.Null(await db.Entities.SingleOrDefaultAsync(row => row.Id == entityId));
+        Assert.Null(await db.Monitors.SingleOrDefaultAsync(row => row.Id == monitorId));
         Assert.Empty(storage.AttemptedPaths);
-        Assert.Empty(acquisitions.ConfirmedTransferRemovals);
-        Assert.Empty(acquisitions.Deleted);
+        Assert.Equal([RecordingAcquisitions.AcquisitionId], acquisitions.DiscardedTransferRemovals);
+        Assert.Equal([RecordingAcquisitions.AcquisitionId], acquisitions.Deleted);
         Assert.Empty(acquisitions.Reacquired);
     }
 

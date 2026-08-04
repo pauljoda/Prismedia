@@ -106,8 +106,8 @@ public sealed class TvAcquisitionImportEngineTests : IDisposable {
 
         Assert.DoesNotContain(harness.Queue.Enqueued, request => request.Type == JobType.ExtractSubtitles);
         var reconciliation = Assert.Single(harness.Queue.Enqueued, request => request.Type == JobType.ReconcileEntity);
-        Assert.Equal(EntityKind.VideoEpisode.ToCode(), reconciliation.TargetEntityKind);
-        Assert.Equal(harness.WantedEpisodeId.ToString(), reconciliation.TargetEntityId);
+        Assert.Equal(EntityKind.VideoSeries.ToCode(), reconciliation.TargetEntityKind);
+        Assert.Equal(harness.SeriesId.ToString(), reconciliation.TargetEntityId);
 
         Assert.DoesNotContain(harness.Queue.Enqueued, request => request.Type == JobType.AutoIdentify);
     }
@@ -593,7 +593,7 @@ public sealed class TvAcquisitionImportEngineTests : IDisposable {
         Assert.DoesNotContain(harness.Queue.Enqueued, request => request.Type == JobType.ProbeVideo);
         Assert.Contains(harness.Queue.Enqueued, request =>
             request.Type == JobType.ReconcileEntity
-            && request.TargetEntityId == harness.OwnedEpisodeId.ToString());
+            && request.TargetEntityId == harness.SeriesId.ToString());
     }
 
     [Fact]
@@ -797,6 +797,7 @@ public sealed class TvAcquisitionImportEngineTests : IDisposable {
         string SeriesFolder,
         string SeasonFolder,
         string OwnedEpisodePath,
+        Guid SeriesId,
         Guid SeasonId,
         Guid OwnedEpisodeId,
         Guid WantedEpisodeId,
@@ -912,7 +913,8 @@ public sealed class TvAcquisitionImportEngineTests : IDisposable {
             scanPersistence,
             hints,
             NullLogger<ImportedVideoMaterializer>.Instance,
-            snapshots: new EfScanSnapshotStore(db));
+            snapshots: new EfScanSnapshotStore(db),
+            processingRoots: scanPersistence);
         IImportedVideoMaterializer firstMaterializer = failMaterialization
             ? new FailOnCallImportedVideoMaterializer(realMaterializer, 1)
             : realMaterializer;
@@ -961,7 +963,7 @@ public sealed class TvAcquisitionImportEngineTests : IDisposable {
         var queue = new MergedImportTestSupport.RecordingJobQueue();
         return new Harness(
             engine, resumeEngine, new JobContext(job, queue), import,
-            libraryRoot, seriesFolder, seasonFolder, ownedEpisodePath, seasonId, ownedEpisodeId, wantedEpisodeId,
+            libraryRoot, seriesFolder, seasonFolder, ownedEpisodePath, seriesId, seasonId, ownedEpisodeId, wantedEpisodeId,
             queue, scanGate);
     }
 

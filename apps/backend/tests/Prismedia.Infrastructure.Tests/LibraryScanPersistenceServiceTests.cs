@@ -1889,6 +1889,43 @@ public sealed class LibraryScanPersistenceServiceTests {
     }
 
     [Fact]
+    public async Task ProcessingRootStillCollapsesTracksIntoTheirAlbumAfterIdentifyAttemptsAreExhausted() {
+        await using var db = CreateContext();
+        var rootId = Guid.NewGuid();
+        var albumId = Guid.NewGuid();
+        var trackId = Guid.NewGuid();
+        var now = DateTimeOffset.UtcNow;
+        db.Entities.AddRange(
+            new EntityRow {
+                Id = albumId,
+                KindCode = EntityKind.AudioLibrary.ToCode(),
+                Title = "Frozen",
+                AutoIdentifyAttempts = AutoIdentifyPolicy.MaxAttemptsPerEntity,
+                CreatedAt = now,
+                UpdatedAt = now
+            },
+            new EntityRow {
+                Id = trackId,
+                KindCode = EntityKind.AudioTrack.ToCode(),
+                Title = "Vuelie",
+                ParentEntityId = albumId,
+                CreatedAt = now,
+                UpdatedAt = now
+            });
+        SeedLibraryRoot(db, rootId, "/media/audio");
+        await db.SaveChangesAsync();
+        var service = new LibraryScanPersistenceService(db);
+
+        Assert.Empty(await service.ResolveAutoIdentifyRootsAsync([trackId], CancellationToken.None));
+        var processingRoot = Assert.Single(await service.ResolveEntityProcessingRootsAsync(
+            [trackId],
+            CancellationToken.None));
+
+        Assert.Equal(albumId, processingRoot.Id);
+        Assert.Equal(EntityKind.AudioLibrary.ToCode(), processingRoot.KindCode);
+    }
+
+    [Fact]
     public async Task UpsertAudioTrackUpdatesUnorganizedTitleOnRescan() {
         await using var db = CreateContext();
         var rootId = Guid.NewGuid();

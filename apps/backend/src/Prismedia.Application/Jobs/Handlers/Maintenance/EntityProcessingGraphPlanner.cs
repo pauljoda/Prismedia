@@ -130,7 +130,8 @@ public sealed class EntityProcessingGraphPlanner(
 
         if (context.Job.Type == JobType.ReconcileEntity
             && settings.AutoIdentifyEnabled
-            && EntityKindRegistry.TryDescribe(tree[0].KindCode, out var rootDefinition)) {
+            && EntityKindRegistry.TryDescribe(tree[0].KindCode, out var rootDefinition)
+            && rootDefinition.Identification.AutoIdentifySelector is not null) {
             var payload = rootDefinition.Identification.AllowsDirectReconcileChildTarget
                 ? new AutoIdentifyJobPayload(AllowChildTarget: true, IgnoreOrganizedGate: true).ToJson()
                 : null;
@@ -142,7 +143,7 @@ public sealed class EntityProcessingGraphPlanner(
                         tree[0].Id.ToString(),
                         tree[0].Title,
                         payloadJson: payload),
-                    [context.Job.Id],
+                    [finalizationNodeId ?? context.Job.Id],
                     JobNodeImportance.BestEffort),
                 cancellationToken);
         }

@@ -31,7 +31,8 @@ public sealed class MediaEntityDeletionService(
     AssetPathService assets,
     IEntityHierarchyReader hierarchy,
     ILogger<MediaEntityDeletionService> logger,
-    EntityAssetCleanupService? sharedAssetCleanup = null) : IMediaEntityDeletionService {
+    EntityAssetCleanupService? sharedAssetCleanup = null,
+    IJobGraphService? graphs = null) : IMediaEntityDeletionService {
     private readonly EntityAssetCleanupService entityAssetCleanup =
         sharedAssetCleanup ?? new EntityAssetCleanupService(assets, logger);
     private readonly EfEntityPhysicalManagedPathProjection physicalManagedPaths = new(db);
@@ -120,7 +121,24 @@ public sealed class MediaEntityDeletionService(
         }
 
         var ids = (await hierarchy.ListSubtreeIdsAsync(id, cancellationToken)).ToArray();
-        var hasManagedPhysicalPath = (await physicalManagedPaths.ListAsync(ids, cancellationToken)).Count > 0;
+        // Confirmed deletion is the terminal owner of this subtree. Resolve every acquisition and graph
+        // before any other preflight so active workers cannot keep creating state while removal proceeds.
+        var acquisitionIdsByEntity = new Dictionary<Guid, IReadOnlyList<Guid>>();
+        foreach (var entityId in ids) {
+            var entityAcquisitionIds = (await acquisitions.ListIdsForEntityAsync(entityId, cancellationToken))
+                .Distinct()
+                .ToArray();
+            if (entityAcquisitionIds.Length > 0) {
+                acquisitionIdsByEntity[entityId] = entityAcquisitionIds;
+            }
+        }
+
+        var acquisitionIds = acquisitionIdsByEntity.Values
+            .SelectMany(value => value)
+            .Distinct()
+            .ToArray();
+        var relatedWork = await CancelRelatedWorkAsync(ids, acquisitionIds, cancellationToken);
+
         var hasDeletingFilesMonitor = await db.Monitors.AsNoTracking().AnyAsync(
             monitor => monitor.EntityId != null
                 && ids.Contains(monitor.EntityId.Value)
@@ -138,12 +156,6 @@ public sealed class MediaEntityDeletionService(
         var resumesManagedDeletion = hasEntityDeletionClaim
             || hasDeletingFilesMonitor
             || hasStoppingAcquisition;
-        if (!hasManagedPhysicalPath && !resumesManagedDeletion) {
-            return new MediaEntityDeleteResult(
-                false,
-                "This Entity has no managed source files, so there is nothing on disk to delete.",
-                FailureKind: MediaEntityDeleteFailureKind.NotDeletable);
-        }
 
         var tree = await LoadTreeAsync(ids, cancellationToken);
         var identitiesByEntity = await LoadIdentitiesAsync(ids, cancellationToken);
@@ -153,19 +165,6 @@ public sealed class MediaEntityDeletionService(
         // the user confirms this irreversible operation.
         var targetedMonitors = await ListTargetedMonitorsAsync(ids, cancellationToken);
         var plan = BuildDeletionPlan(tree);
-        // Snapshot the complete acquisition graph before mutating monitors, disk, or Entity rows. Every
-        // acquisition in the selected subtree is teardown, including upgrade children and stale history.
-        var acquisitionIdsByEntity = new Dictionary<Guid, IReadOnlyList<Guid>>();
-        foreach (var entityId in ids) {
-            var entityAcquisitionIds = (await acquisitions.ListIdsForEntityAsync(entityId, cancellationToken))
-                .Distinct()
-                .ToArray();
-            if (entityAcquisitionIds.Length > 0) {
-                acquisitionIdsByEntity[entityId] = entityAcquisitionIds;
-            }
-        }
-
-        var acquisitionIds = acquisitionIdsByEntity.Values.SelectMany(value => value).Distinct().ToArray();
         // Snapshot concrete statuses as well as graph membership so fresh-claim revalidation detects an
         // import or queue transition that won the Entity lease race.
         var acquisitionStatuses = await db.Acquisitions.AsNoTracking()
@@ -329,6 +328,11 @@ public sealed class MediaEntityDeletionService(
         db.Entities.RemoveRange(removedRows);
         await db.SaveChangesAsync(cancellationToken);
 
+        // Related workflow history is part of the confirmed removal contract. Purge it only after workers
+        // have observed cancellation and the Entity/acquisition rows are gone, so no orphaned Frozen-style
+        // queue cards survive a successful delete.
+        await PurgeRelatedWorkAsync(relatedWork, cancellationToken);
+
         // The destructive boundary is complete. The claimed Entity row may already be gone, which makes
         // releasing its operation idempotently a no-op.
         await ReleaseEntityDeletionClaimAsync(
@@ -347,6 +351,100 @@ public sealed class MediaEntityDeletionService(
             true,
             FilesDeleted: filesDeleted);
     }
+
+    private async Task<RelatedDeletionWork> CancelRelatedWorkAsync(
+        IReadOnlyCollection<Guid> entityIds,
+        IReadOnlyCollection<Guid> acquisitionIds,
+        CancellationToken cancellationToken) {
+        var targetIds = entityIds
+            .Concat(acquisitionIds)
+            .Select(value => value.ToString())
+            .ToHashSet(StringComparer.Ordinal);
+        var graphIds = (await db.JobGraphs.AsNoTracking()
+                .Where(graph => graph.RootEntityId != null && targetIds.Contains(graph.RootEntityId))
+                .Select(graph => graph.Id)
+                .ToArrayAsync(cancellationToken))
+            .ToHashSet();
+        graphIds.UnionWith(await db.JobRuns.AsNoTracking()
+            .Where(run => run.GraphId != null
+                && run.TargetEntityId != null
+                && targetIds.Contains(run.TargetEntityId))
+            .Select(run => run.GraphId!.Value)
+            .ToArrayAsync(cancellationToken));
+        graphIds.UnionWith(await db.Acquisitions.AsNoTracking()
+            .Where(acquisition => acquisitionIds.Contains(acquisition.Id)
+                && acquisition.JobGraphId != null)
+            .Select(acquisition => acquisition.JobGraphId!.Value)
+            .ToArrayAsync(cancellationToken));
+
+        var hadRunningWork = await db.JobRuns.AsNoTracking().AnyAsync(
+            run => (graphIds.Contains(run.GraphId ?? Guid.Empty)
+                    || run.TargetEntityId != null && targetIds.Contains(run.TargetEntityId))
+                && run.Status == JobRunStatus.Running,
+            cancellationToken);
+        if (graphs is not null) {
+            foreach (var graphId in graphIds) {
+                await graphs.CancelAsync(graphId, cancellationToken);
+            }
+        }
+
+        var standaloneRuns = await db.JobRuns
+            .Where(run => run.GraphId == null
+                && run.TargetEntityId != null
+                && targetIds.Contains(run.TargetEntityId)
+                && (run.Status == JobRunStatus.Queued || run.Status == JobRunStatus.Running))
+            .ToArrayAsync(cancellationToken);
+        var now = DateTimeOffset.UtcNow;
+        foreach (var run in standaloneRuns) {
+            run.Status = JobRunStatus.Cancelled;
+            run.Message = "Cancelled because its Entity was deleted.";
+            run.LockedAt = null;
+            run.LockedBy = null;
+            run.FinishedAt = now;
+        }
+        if (standaloneRuns.Length > 0) {
+            await db.SaveChangesAsync(cancellationToken);
+        }
+
+        // The worker polls durable cancellation once per second. Give an already-running handler one
+        // poll interval to observe its cancelled run before files and rows disappear beneath it.
+        if (hadRunningWork) {
+            await Task.Delay(TimeSpan.FromMilliseconds(1100), cancellationToken);
+        }
+
+        return new RelatedDeletionWork(graphIds, targetIds);
+    }
+
+    private async Task PurgeRelatedWorkAsync(
+        RelatedDeletionWork work,
+        CancellationToken cancellationToken) {
+        if (work.GraphIds.Count > 0) {
+            var graphPointers = await db.Acquisitions
+                .Where(acquisition => acquisition.JobGraphId != null
+                    && work.GraphIds.Contains(acquisition.JobGraphId.Value))
+                .ToArrayAsync(cancellationToken);
+            foreach (var acquisition in graphPointers) {
+                acquisition.JobGraphId = null;
+            }
+
+            var graphsToRemove = await db.JobGraphs
+                .Where(graph => work.GraphIds.Contains(graph.Id))
+                .ToArrayAsync(cancellationToken);
+            db.JobGraphs.RemoveRange(graphsToRemove);
+        }
+
+        var standaloneHistory = await db.JobRuns
+            .Where(run => run.GraphId == null
+                && run.TargetEntityId != null
+                && work.TargetIds.Contains(run.TargetEntityId))
+            .ToArrayAsync(cancellationToken);
+        db.JobRuns.RemoveRange(standaloneHistory);
+        await db.SaveChangesAsync(cancellationToken);
+    }
+
+    private sealed record RelatedDeletionWork(
+        IReadOnlySet<Guid> GraphIds,
+        IReadOnlySet<string> TargetIds);
 
     private static MediaEntityDeleteResult Conflict(string message) =>
         new(false, message, FailureKind: MediaEntityDeleteFailureKind.Conflict);

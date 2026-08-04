@@ -219,8 +219,8 @@ public sealed class ImportedEntityMaterializationTests : IDisposable {
             request.Type == JobType.MonitoredSearch
             && request.Origin == JobGraphOrigin.Background);
         Assert.DoesNotContain(queue.Enqueued, request => request.Type == JobType.ScanAudio);
-        Assert.Contains(queue.Enqueued, request =>
-            request.Type == JobType.ReconcileEntity && request.TargetEntityId == wantedTrackId.ToString());
+        var reconciliation = Assert.Single(queue.Enqueued, request => request.Type == JobType.ReconcileEntity);
+        Assert.Equal(albumId.ToString(), reconciliation.TargetEntityId);
         Assert.True(await db.Entities.AsNoTracking().AnyAsync(row => row.Id == unrelatedId));
         Assert.False(File.Exists(Path.Combine(rootPath, "Artist", "Album", "99 - Unrequested Deluxe Bonus.flac")));
         var importCheckpoint = await store.GetImportContextAsync(acquisitionId, CancellationToken.None);
@@ -715,7 +715,7 @@ public sealed class ImportedEntityMaterializationTests : IDisposable {
             persistence,
             acquisitionHints: hints,
             scanGate: new VideoScanConcurrencyGate());
-        return Materializer(db, new ImportedMovieMaterializationPolicy(scan));
+        return Materializer(db, new ImportedMovieMaterializationPolicy(scan), persistence);
     }
 
     private static IImportedEntityMaterializer AlbumMaterializer(
@@ -730,16 +730,18 @@ public sealed class ImportedEntityMaterializationTests : IDisposable {
             persistence,
             persistence,
             acquisitionHints: hints);
-        return Materializer(db, new ImportedAlbumMaterializationPolicy(scan));
+        return Materializer(db, new ImportedAlbumMaterializationPolicy(scan), persistence);
     }
 
     private static IImportedEntityMaterializer Materializer(
         PrismediaDbContext db,
-        IImportedEntityMaterializationPolicy policy) =>
+        IImportedEntityMaterializationPolicy policy,
+        IDownstreamNeedsPersistence? reconciliationRoots = null) =>
         new ImportedEntityMaterializer(
             [policy],
             new EfImportedEntityReadinessPersistence(db, new EfEntityHierarchyReader(db)),
-            new EfScanSnapshotStore(db));
+            new EfScanSnapshotStore(db),
+            reconciliationRoots);
 
     private static FileDiscoveryAdapter Discovery() => new(new FileDiscoveryService());
 
