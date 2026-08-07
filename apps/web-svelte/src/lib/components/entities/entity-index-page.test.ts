@@ -1,7 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { EntityKind } from "$lib/api/generated/model";
 import type { EntityCard } from "$lib/api/entities";
-import { EntityIndexPageState } from "./entity-index-page.svelte.ts";
+import {
+  clearEntityIndexPageCache,
+  EntityIndexPageState,
+} from "./entity-index-page.svelte.ts";
 
 const fetchEntities = vi.fn();
 
@@ -16,6 +19,7 @@ vi.mock("$lib/api/entities", async (importOriginal) => {
 describe("EntityIndexPageState", () => {
   beforeEach(() => {
     fetchEntities.mockReset();
+    clearEntityIndexPageCache();
   });
 
   afterEach(() => {
@@ -43,8 +47,7 @@ describe("EntityIndexPageState", () => {
     await state.loadInitial();
 
     expect(fetchEntities).toHaveBeenCalledWith(
-      { kind: "video", query: undefined, hideNsfw: true, limit: 250 },
-      { signal: expect.any(AbortSignal) },
+      { kind: "video", query: undefined, hideNsfw: true, limit: 100 },
     );
     expect(state.loadState).toBe("ready");
     expect(state.cards.map((card) => card.href)).toEqual(["/videos/video-1"]);
@@ -58,7 +61,7 @@ describe("EntityIndexPageState", () => {
       query: undefined,
       cursor: "next-page",
       hideNsfw: true,
-      limit: 250,
+      limit: 100,
     });
     expect(state.cards.map((card) => card.entity.title)).toEqual(["First Video", "Second Video"]);
     expect(state.nextCursor).toBeNull();
@@ -106,15 +109,14 @@ describe("EntityIndexPageState", () => {
 
     await state.loadInitial();
     state.setPageSize(500);
-    await Promise.resolve();
-    await Promise.resolve();
+    await vi.waitFor(() => {
+      expect(state.cards.map((card) => card.entity.title)).toEqual(["Second Video"]);
+    });
 
     expect(fetchEntities).toHaveBeenCalledTimes(2);
     expect(fetchEntities).toHaveBeenLastCalledWith(
       { kind: "video", query: undefined, hideNsfw: false, limit: 500 },
-      { signal: expect.any(AbortSignal) },
     );
-    expect(state.cards.map((card) => card.entity.title)).toEqual(["Second Video"]);
     expect(state.totalCount).toBe(1);
   });
 
@@ -145,11 +147,58 @@ describe("EntityIndexPageState", () => {
 
     expect(fetchEntities).toHaveBeenCalledTimes(2);
     expect(fetchEntities).toHaveBeenLastCalledWith(
-      { kind: "video", query: "bunny", hideNsfw: false, limit: 250 },
-      { signal: expect.any(AbortSignal) },
+      { kind: "video", query: "bunny", hideNsfw: false, limit: 100 },
     );
     expect(state.query).toBe("bunny");
     expect(state.totalCount).toBe(1);
+  });
+
+  it("restores an immediate Back navigation from the short-lived first-page cache", async () => {
+    fetchEntities.mockResolvedValue({
+      items: [entity("video-1", "video", "First Video")],
+      nextCursor: null,
+      totalCount: 1,
+    });
+    const options = {
+      getKind: () => "video",
+      getHideNsfw: () => false,
+    };
+
+    const firstVisit = new EntityIndexPageState(options);
+    await firstVisit.loadInitial();
+    const backVisit = new EntityIndexPageState(options);
+    await backVisit.loadInitial();
+
+    expect(fetchEntities).toHaveBeenCalledOnce();
+    expect(backVisit.loadState).toBe("ready");
+    expect(backVisit.cards.map((card) => card.entity.id)).toEqual(["video-1"]);
+  });
+
+  it("refetches after a mutation invalidates the navigation cache", async () => {
+    fetchEntities
+      .mockResolvedValueOnce({
+        items: [entity("video-1", "video", "Before")],
+        nextCursor: null,
+        totalCount: 1,
+      })
+      .mockResolvedValueOnce({
+        items: [entity("video-1", "video", "After")],
+        nextCursor: null,
+        totalCount: 1,
+      });
+    const options = {
+      getKind: () => "video",
+      getHideNsfw: () => false,
+    };
+
+    const firstVisit = new EntityIndexPageState(options);
+    await firstVisit.loadInitial();
+    clearEntityIndexPageCache();
+    const refreshedVisit = new EntityIndexPageState(options);
+    await refreshedVisit.loadInitial();
+
+    expect(fetchEntities).toHaveBeenCalledTimes(2);
+    expect(refreshedVisit.cards[0]?.entity.title).toBe("After");
   });
 });
 

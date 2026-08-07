@@ -9,6 +9,8 @@ export type EntityThumbnailTitleSize = "default" | "compact";
 
 /** Shared presentation contract for every Entity thumbnail surface. */
 export interface EntityThumbnailProps {
+  /** Whether this focused surface should derive accent colors from decoded artwork. Disable in bulk grids. */
+  artworkReactive?: boolean;
   card: EntityThumbnailCard;
   density?: EntityThumbnailDensity;
   /** Applies host-owned active-result emphasis without changing selection state. */

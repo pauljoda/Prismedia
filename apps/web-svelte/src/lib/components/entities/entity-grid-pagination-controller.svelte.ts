@@ -17,7 +17,7 @@ export interface EntityGridPaginationControllerOptions {
 /** Normalizes a caller- or preference-supplied EntityGrid page size. */
 export function normalizeEntityGridPageSize(value: number): number {
   const numeric = Math.floor(value);
-  return Number.isFinite(numeric) && numeric > 0 ? numeric : 250;
+  return Number.isFinite(numeric) && numeric > 0 ? numeric : 100;
 }
 
 /**
@@ -27,7 +27,7 @@ export function normalizeEntityGridPageSize(value: number): number {
  */
 export class EntityGridPaginationController {
   pageIndex = $state(0);
-  pageSize = $state(250);
+  pageSize = $state(100);
   pendingAdvanceAfterLoad = $state(false);
 
   constructor(private readonly options: EntityGridPaginationControllerOptions) {

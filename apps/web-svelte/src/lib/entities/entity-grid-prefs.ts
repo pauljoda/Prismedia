@@ -76,6 +76,7 @@ export interface EntityGridPrefsStore {
 }
 
 const STORAGE_PREFIX = "prismedia:entity-grid-state:";
+const PAGE_SIZE_PREFS_VERSION = 2;
 const VALID_SORTS: readonly EntityGridSort[] = ["title", "kind", "rating", "position", "added", "random", "references"];
 const VALID_SORT_DIRS: readonly EntityGridSortDir[] = ["asc", "desc"];
 const VALID_VIEW_MODES: readonly EntityGridViewMode[] = ["grid", "list", "feed"];
@@ -96,6 +97,18 @@ function positiveInt(value: unknown, fallback: number): number {
 
 function finiteNumber(value: unknown, fallback: number): number {
   return typeof value === "number" && Number.isFinite(value) ? value : fallback;
+}
+
+function persistedPageSize(parsed: Record<string, unknown>, fallback: number): number {
+  if (parsed.pageSizeVersion === PAGE_SIZE_PREFS_VERSION) {
+    return positiveInt(parsed.pageSize, fallback);
+  }
+
+  // The previous default was persisted as part of otherwise-custom grid state. Migrate that old
+  // default once so existing browsers receive the bounded 100-card baseline; users can still
+  // explicitly select 250+ afterward, which is saved with the current version.
+  if (fallback === 100 && parsed.pageSize === 250) return fallback;
+  return positiveInt(parsed.pageSize, fallback);
 }
 
 /**
@@ -137,7 +150,7 @@ export function createEntityGridPrefs(
     viewMode: oneOf(parsed.viewMode, VALID_VIEW_MODES, "grid"),
     mediaWall: typeof parsed.mediaWall === "boolean" ? parsed.mediaWall : defaults.mediaWall,
     scale: finiteNumber(parsed.scale, defaults.scale),
-    pageSize: positiveInt(parsed.pageSize, defaults.pageSize),
+    pageSize: persistedPageSize(parsed, defaults.pageSize),
     activePresetId: typeof parsed.activePresetId === "string" ? parsed.activePresetId : null,
     barsCollapsed: typeof parsed.barsCollapsed === "boolean" ? parsed.barsCollapsed : false,
   });
@@ -158,7 +171,10 @@ export function createEntityGridPrefs(
   function save(prefs: EntityGridPrefs): void {
     if (typeof window === "undefined") return;
     try {
-      window.localStorage.setItem(storageKey, JSON.stringify(prefs));
+      window.localStorage.setItem(storageKey, JSON.stringify({
+        ...prefs,
+        pageSizeVersion: PAGE_SIZE_PREFS_VERSION,
+      }));
     } catch {
       // localStorage full or unavailable — view-state persistence is best-effort.
     }

@@ -9,7 +9,7 @@ const GRID_PREFS_DEFAULTS = {
   sortDir: "asc",
   mediaWall: false,
   scale: 11,
-  pageSize: 250,
+  pageSize: 100,
 } as const;
 
 /** Seeds this grid's persisted view state with a partial override for the test. */
@@ -115,9 +115,9 @@ describe("EntityGrid pagination", () => {
     });
 
     await waitFor(() => {
-      expect(renderedCount).toBe(250);
-      expect(container.querySelectorAll(".entity-thumbnail").length).toBe(250);
-      expect(screen.getByText("Page 1 / 18")).toBeInTheDocument();
+      expect(renderedCount).toBe(100);
+      expect(container.querySelectorAll(".entity-thumbnail").length).toBe(100);
+      expect(screen.getByText("Page 1 / 45")).toBeInTheDocument();
     });
   });
 
@@ -172,10 +172,10 @@ describe("EntityGrid pagination", () => {
     });
 
     await waitFor(() => {
-      expect(container.querySelectorAll(".entity-thumbnail")).toHaveLength(150);
+      expect(container.querySelectorAll(".entity-thumbnail")).toHaveLength(100);
       expect(container.querySelector(".pagination-shell")).not.toBeNull();
-      expect(screen.getByLabelText("Per page")).toHaveTextContent("250");
-      expect(screen.getByText("Page 1 / 1")).toBeInTheDocument();
+      expect(screen.getByLabelText("Per page")).toHaveTextContent("100");
+      expect(screen.getByText("Page 1 / 2")).toBeInTheDocument();
     });
   });
 
@@ -194,9 +194,9 @@ describe("EntityGrid pagination", () => {
 
     expect(onCardActivate).toHaveBeenCalledWith(
       cards[5],
-      expect.arrayContaining([cards[0], cards[249]]),
+      expect.arrayContaining([cards[0], cards[99]]),
     );
-    expect(onCardActivate.mock.calls[0][1]).toHaveLength(250);
+    expect(onCardActivate.mock.calls[0][1]).toHaveLength(100);
   });
 
   it("can render grid cards as a metadata-free media wall", async () => {

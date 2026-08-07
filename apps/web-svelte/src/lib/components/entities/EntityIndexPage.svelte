@@ -17,7 +17,10 @@
   import EntityGrid from "./EntityGrid.svelte";
   import NameInputDialog from "./NameInputDialog.svelte";
   import ConfirmDialog from "./ConfirmDialog.svelte";
-  import { EntityIndexPageState } from "./entity-index-page.svelte.ts";
+  import {
+    clearEntityIndexPageCache,
+    EntityIndexPageState,
+  } from "./entity-index-page.svelte.ts";
   import type {
     EntityGridBulkAction,
     EntityGridRequest,
@@ -127,6 +130,7 @@
   async function handleCreate(name: string) {
     if (!isManageableTaxonomyKind(kind)) return;
     const { id } = await createTaxonomyEntity(kind, { title: name, isNsfw: false });
+    clearEntityIndexPageCache();
     const href = resolveEntityHref(kind, id);
     if (href) {
       await goto(href);
@@ -149,6 +153,7 @@
       return;
     }
     pendingDeleteIds = [];
+    clearEntityIndexPageCache();
     await page.loadInitial();
     if (failureMessage) {
       throw new Error(failureMessage);
@@ -259,6 +264,7 @@
   async function handleLightboxRatingChange(entityId: string, rating: number | null) {
     updateLightboxCardRating(entityId, rating);
     await updateEntityRating(entityId, rating);
+    clearEntityIndexPageCache();
   }
 
   function lightboxEntityFromEntity(entity: EntityCardFull): UniversalLightboxEntity {

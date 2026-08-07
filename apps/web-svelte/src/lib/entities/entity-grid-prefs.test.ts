@@ -83,6 +83,19 @@ describe("entity-grid prefs", () => {
     expect(store.load()?.filterIds).toEqual(["availability:on-disk", "availability:wanted"]);
   });
 
+  it("migrates the legacy 250-card default while preserving later explicit choices", () => {
+    const store = createEntityGridPrefs("movies", { ...DEFAULTS, pageSize: 100 });
+    window.localStorage.setItem(
+      store.storageKey,
+      JSON.stringify({ scale: 9, pageSize: 250 }),
+    );
+
+    expect(store.load()?.pageSize).toBe(100);
+
+    store.save({ ...store.defaults(), scale: 9, pageSize: 250 });
+    expect(store.load()?.pageSize).toBe(250);
+  });
+
   it("treats the seeded default state as default so the entry can be cleared", () => {
     const store = createEntityGridPrefs("galleries", DEFAULTS);
     expect(store.isDefault(store.defaults())).toBe(true);

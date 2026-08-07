@@ -20,6 +20,7 @@
   import EntityThumbnailOverlays from "./EntityThumbnailOverlays.svelte";
 
   interface Props {
+    artworkReactive: boolean;
     card: EntityThumbnailCard;
     density: "default" | "compact";
     focusActive: boolean;
@@ -40,6 +41,7 @@
   }
 
   let {
+    artworkReactive,
     card,
     density,
     focusActive,
@@ -289,7 +291,7 @@
   function markImageLoaded(event: Event) {
     imageLoaded = true;
     const image = event.currentTarget as HTMLImageElement;
-    if (pointerRatio === null) {
+    if (artworkReactive && pointerRatio === null) {
       const palette = paletteFromImage(image);
       if (palette) onArtworkPalette(card.entity.id, palette);
     }

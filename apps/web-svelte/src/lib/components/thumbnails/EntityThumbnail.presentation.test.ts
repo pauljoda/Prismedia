@@ -130,4 +130,19 @@ describe("EntityThumbnail presentation", () => {
     expect(thumbnail.style.getPropertyValue("--entity-accent")).not.toBe("#0ab3e6");
     expect(thumbnail.style.getPropertyValue("--entity-accent")).toMatch(/^#[0-9a-f]{6}$/);
   });
+
+  it("skips synchronous artwork analysis when a bulk grid opts out", async () => {
+    const canvas = vi.spyOn(HTMLCanvasElement.prototype, "getContext");
+    const { container } = render(EntityThumbnail, {
+      props: { artworkReactive: false, card: bookPageCard() },
+    });
+    const image = container.querySelector("img") as HTMLImageElement;
+    Object.defineProperty(image, "naturalWidth", { configurable: true, value: 480 });
+    Object.defineProperty(image, "naturalHeight", { configurable: true, value: 720 });
+
+    await fireEvent.load(image);
+    await tick();
+
+    expect(canvas).not.toHaveBeenCalled();
+  });
 });

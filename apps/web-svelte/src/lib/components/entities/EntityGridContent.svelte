@@ -63,6 +63,7 @@
   >
     {#each cards as card (card.entity.id)}
       <EntityThumbnail
+        artworkReactive={false}
         {card}
         imageFetchPriority="auto"
         imageLoading="lazy"
@@ -102,10 +103,23 @@
     transition: grid-template-columns 240ms cubic-bezier(0.4, 0, 0.2, 1);
   }
 
+  /*
+   * Browser-native rendering virtualization keeps semantic cards available to find-in-page and
+   * accessibility while skipping style, layout, and paint work well outside the viewport.
+   */
+  .cards :global(.entity-thumbnail) {
+    content-visibility: auto;
+    contain-intrinsic-block-size: auto 22rem;
+  }
+
   .cards.is-list {
     display: flex;
     flex-direction: column;
     gap: 0.5rem;
+  }
+
+  .cards.is-list :global(.entity-thumbnail) {
+    contain-intrinsic-block-size: auto 5.25rem;
   }
 
   .cards.is-media-wall {

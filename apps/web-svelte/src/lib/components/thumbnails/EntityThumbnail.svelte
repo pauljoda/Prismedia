@@ -7,6 +7,7 @@
   import type { EntityThumbnailProps } from "./entity-thumbnail-props";
 
   let {
+    artworkReactive = true,
     card,
     density = "default",
     highlighted = false,
@@ -116,6 +117,7 @@
   onkeydown={handleSurfaceKeydown}
 >
   <EntityThumbnailArtwork
+    {artworkReactive}
     {card}
     {density}
     {focusActive}

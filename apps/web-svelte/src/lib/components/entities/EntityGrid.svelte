@@ -42,7 +42,7 @@
   import { useNsfw } from "$lib/nsfw/store.svelte";
   import type { NsfwMode } from "$lib/nsfw/cookie";
 
-  const DEFAULT_PAGE_SIZE = 250;
+  const DEFAULT_PAGE_SIZE = 100;
   const DEFAULT_PAGE_SIZE_OPTIONS = [100, 250, 500, 1000];
   const DEFAULT_DESKTOP_SCALE = 6;
   const MOBILE_THUMBNAIL_QUERY = "(max-width: 639.98px)";

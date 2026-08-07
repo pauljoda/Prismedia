@@ -1,10 +1,84 @@
-import { fetchEntities, type EntityCard } from "$lib/api/entities";
+import {
+  fetchEntities,
+  type EntityCard,
+  type EntityListResponse,
+} from "$lib/api/entities";
+import type { ListEntitiesParams } from "$lib/api/generated/model";
 import { ENTITY_KIND } from "$lib/entities/entity-codes";
 import { entityCardToThumbnailCard, type EntityGridServerQuery } from "$lib/entities/entity-grid";
 import { resolveEntityHref } from "$lib/entities/entity-routes";
 import type { EntityThumbnailCard } from "$lib/entities/entity-thumbnail";
 
-const DEFAULT_ENTITY_PAGE_SIZE = 250;
+const DEFAULT_ENTITY_PAGE_SIZE = 100;
+const INITIAL_PAGE_CACHE_TTL_MS = 30_000;
+const INITIAL_PAGE_CACHE_LIMIT = 12;
+
+interface EntityInitialPageCacheEntry {
+  expiresAt: number;
+  response: EntityListResponse;
+}
+
+const initialPageCache = new Map<string, EntityInitialPageCacheEntry>();
+const initialPageRequests = new Map<string, Promise<EntityListResponse>>();
+let initialPageCacheGeneration = 0;
+
+function initialPageCacheKey(params: ListEntitiesParams): string {
+  return JSON.stringify(
+    Object.entries(params)
+      .filter(([, value]) => value !== undefined)
+      .sort(([left], [right]) => left.localeCompare(right)),
+  );
+}
+
+function readCachedInitialPage(key: string): EntityListResponse | null {
+  const entry = initialPageCache.get(key);
+  if (!entry) return null;
+  if (entry.expiresAt <= Date.now()) {
+    initialPageCache.delete(key);
+    return null;
+  }
+
+  initialPageCache.delete(key);
+  initialPageCache.set(key, entry);
+  return entry.response;
+}
+
+function cacheInitialPage(key: string, response: EntityListResponse): void {
+  initialPageCache.set(key, {
+    expiresAt: Date.now() + INITIAL_PAGE_CACHE_TTL_MS,
+    response,
+  });
+  while (initialPageCache.size > INITIAL_PAGE_CACHE_LIMIT) {
+    const oldest = initialPageCache.keys().next().value;
+    if (oldest === undefined) break;
+    initialPageCache.delete(oldest);
+  }
+}
+
+function fetchInitialPage(key: string, params: ListEntitiesParams): Promise<EntityListResponse> {
+  const existing = initialPageRequests.get(key);
+  if (existing) return existing;
+
+  const generation = initialPageCacheGeneration;
+  let request: Promise<EntityListResponse>;
+  request = fetchEntities(params)
+    .then((response) => {
+      if (generation === initialPageCacheGeneration) cacheInitialPage(key, response);
+      return response;
+    })
+    .finally(() => {
+      if (initialPageRequests.get(key) === request) initialPageRequests.delete(key);
+    });
+  initialPageRequests.set(key, request);
+  return request;
+}
+
+/** Clears the short-lived navigation cache after a mutation or in isolated tests. */
+export function clearEntityIndexPageCache(): void {
+  initialPageCacheGeneration += 1;
+  initialPageCache.clear();
+  initialPageRequests.clear();
+}
 
 function requireTotalCount(value: number | string): number {
   if (typeof value === "number" && Number.isFinite(value)) return value;
@@ -82,6 +156,21 @@ export class EntityIndexPageState {
     this.#searchAbort = new AbortController();
     const signal = this.#searchAbort.signal;
 
+    const params: ListEntitiesParams = {
+      kind: this.#options.getKind(),
+      query: this.query || undefined,
+      hideNsfw: this.#options.getHideNsfw(),
+      limit: this.pageSize,
+      ...this.serverQuery,
+      ...this.#options.lockedServerQuery,
+    };
+    const cacheKey = initialPageCacheKey(params);
+    const cached = readCachedInitialPage(cacheKey);
+    if (cached) {
+      this.#applyInitialResponse(cached);
+      return;
+    }
+
     this.loadState = "loading";
     this.errorMessage = null;
     this.loadMoreError = null;
@@ -90,24 +179,25 @@ export class EntityIndexPageState {
     this.totalCount = 0;
 
     try {
-      const response = await fetchEntities({
-        kind: this.#options.getKind(),
-        query: this.query || undefined,
-        hideNsfw: this.#options.getHideNsfw(),
-        limit: this.pageSize,
-        ...this.serverQuery,
-        ...this.#options.lockedServerQuery,
-      }, { signal });
+      // Do not cancel a shared transport when one route instance leaves. It can still populate the
+      // navigation cache for Back, while this instance ignores the result through its local signal.
+      const response = await fetchInitialPage(cacheKey, params);
       if (signal.aborted) return;
-      this.items = response.items;
-      this.nextCursor = response.nextCursor;
-      this.totalCount = requireTotalCount(response.totalCount);
-      this.loadState = "ready";
+      this.#applyInitialResponse(response);
     } catch (err) {
       if (signal.aborted || (err instanceof DOMException && err.name === "AbortError")) return;
       this.errorMessage = err instanceof Error ? err.message : String(err);
       this.loadState = "error";
     }
+  }
+
+  #applyInitialResponse(response: EntityListResponse): void {
+    this.items = response.items;
+    this.nextCursor = response.nextCursor;
+    this.totalCount = requireTotalCount(response.totalCount);
+    this.errorMessage = null;
+    this.loadMoreError = null;
+    this.loadState = "ready";
   }
 
   async loadMore() {
