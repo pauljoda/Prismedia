@@ -263,7 +263,11 @@ public static class DependencyInjection {
         services.AddScoped<EfEntitySourceOwnershipProjection>();
         services.AddScoped<IEntitySourceOwnershipReader>(provider =>
             provider.GetRequiredService<EfEntitySourceOwnershipProjection>());
-        services.AddScoped<IEntityFileDeletionRecoveryReader, EfEntityFileDeletionRecoveryProjection>();
+        services.AddScoped<EfEntityFileDeletionRecoveryProjection>();
+        services.AddScoped<IEntityFileDeletionRecoveryReader>(provider =>
+            provider.GetRequiredService<EfEntityFileDeletionRecoveryProjection>());
+        services.AddScoped<IEntityLifecycleRecoveryStore>(provider =>
+            provider.GetRequiredService<EfEntityFileDeletionRecoveryProjection>());
         services.AddScoped<EfEntityRepository>();
         services.AddScoped<IEntityWriteRepository>(provider => provider.GetRequiredService<EfEntityRepository>());
         services.AddScoped<EfEntityProgressTopologyResolver>();

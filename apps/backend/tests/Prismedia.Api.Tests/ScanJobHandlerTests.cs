@@ -139,7 +139,7 @@ public sealed class ScanJobHandlerTests {
     }
 
     [Fact]
-    public async Task UnchangedVideoScanRecoversCancelledSubtitleExtraction() {
+    public async Task UnchangedVideoScanQueuesNoDownstreamWork() {
         var root = new LibraryRootData(
             Guid.NewGuid(), "/media/videos", "Videos",
             Enabled: true, Recursive: true,
@@ -183,10 +183,8 @@ public sealed class ScanJobHandlerTests {
         await handler.HandleAsync(
             new JobContext(SingleRootScanJob(root), queue), CancellationToken.None);
 
-        var request = Assert.Single(queue.Enqueued);
-        Assert.Equal(JobType.ExtractSubtitles, request.Type);
-        Assert.Equal(videoId.ToString(), request.TargetEntityId);
-        Assert.Equal(1, persistence.PlayableVideoRecoveryTargetCalls);
+        Assert.Empty(queue.Enqueued);
+        Assert.Equal(0, persistence.PlayableVideoRecoveryTargetCalls);
         Assert.Equal(0, persistence.DownstreamNeedsChecks);
     }
 
@@ -590,7 +588,7 @@ public sealed class ScanJobHandlerTests {
     }
 
     [Fact]
-    public async Task AudioScanEnqueuesWaveformForUnchangedExistingTrackMissingWaveform() {
+    public async Task UnchangedAudioScanQueuesNoWaveformRecoveryWork() {
         var root = new LibraryRootData(
             Guid.Parse("11111111-1111-1111-1111-111111111111"),
             "/media/music",
@@ -653,10 +651,7 @@ public sealed class ScanJobHandlerTests {
 
         await handler.HandleAsync(new JobContext(job, queue), CancellationToken.None);
 
-        var request = Assert.Single(queue.Enqueued);
-        Assert.Equal(JobType.GenerateAudioWaveform, request.Type);
-        Assert.Equal(EntityKind.AudioTrack.ToCode(), request.TargetEntityKind);
-        Assert.Equal(trackId.ToString(), request.TargetEntityId);
+        Assert.Empty(queue.Enqueued);
     }
 
     [Fact]
@@ -2848,15 +2843,17 @@ public sealed class ScanJobHandlerTests {
             Enabled: true, Recursive: true,
             ScanVideos: true, ScanImages: false, ScanAudio: false, ScanBooks: false, IsNsfw: false);
         const string videoPath = "/media/videos/movie.mkv";
+        const string untouchedPath = "/media/videos/other.mkv";
         var videoId = Guid.NewGuid();
         var persistence = new FakeScanPersistence([root]) {
             UpsertedVideoIds = [videoId]
         };
         var snapshots = new FakeScanSnapshotStore();
-        snapshots.Seed(root.Id, JobType.ScanLibrary.ToCode(), [videoPath]);
+        snapshots.Seed(root.Id, JobType.ScanLibrary.ToCode(), [videoPath, untouchedPath]);
+        var discovery = new ChangedSignatureFileDiscovery(videoPath, [untouchedPath]);
         var handler = new ScanLibraryJobHandler(
             NullLogger<ScanLibraryJobHandler>.Instance,
-            new ChangedSignatureFileDiscovery(videoPath),
+            discovery,
             persistence,
             persistence,
             persistence,
@@ -2867,7 +2864,8 @@ public sealed class ScanJobHandlerTests {
             CancellationToken.None);
 
         Assert.Equal([(videoPath, videoPath)], persistence.ReboundVideoPaths);
-        Assert.Single(persistence.UpsertedVideoItems);
+        Assert.Equal(videoPath, Assert.Single(persistence.UpsertedVideoItems).FilePath);
+        Assert.Equal(0, discovery.DetailedDiscoveryCalls);
     }
 
     [Fact]
@@ -3046,7 +3044,7 @@ public sealed class ScanJobHandlerTests {
     }
 
     [Fact]
-    public async Task SnapshotNoChangeScanStillQueuesPendingAutoIdentifyRoots() {
+    public async Task SnapshotNoChangeScanDoesNotQueuePendingAutoIdentifyRoots() {
         var root = new LibraryRootData(
             Guid.Parse("11111111-1111-1111-1111-111111111111"),
             "/media/videos", "Videos",
@@ -3094,8 +3092,7 @@ public sealed class ScanJobHandlerTests {
 
         await handler.HandleAsync(new JobContext(job, secondQueue), CancellationToken.None);
 
-        var request = Assert.Single(secondQueue.Enqueued, request => request.Type == JobType.AutoIdentify);
-        Assert.Equal(videoId.ToString(), request.TargetEntityId);
+        Assert.Empty(secondQueue.Enqueued);
     }
 
     private static JobRunSnapshot SingleRootScanJob(LibraryRootData root) =>
@@ -3905,14 +3902,22 @@ public sealed class ScanJobHandlerTests {
         }
     }
 
-    private sealed class ChangedSignatureFileDiscovery(string path) : IFileDiscovery {
+    private sealed class ChangedSignatureFileDiscovery(
+        string path,
+        IReadOnlyList<string>? unchangedPaths = null) : IFileDiscovery {
+        public int DetailedDiscoveryCalls { get; private set; }
+
         public Task<IReadOnlyList<string>> DiscoverFilesAsync(
             string rootPath,
             MediaCategory category,
             bool recursive,
             IReadOnlySet<string> excludedPaths,
-            CancellationToken cancellationToken) =>
-            Task.FromResult<IReadOnlyList<string>>(category == MediaCategory.Video ? [path] : []);
+            CancellationToken cancellationToken) {
+            DetailedDiscoveryCalls++;
+            return Task.FromResult<IReadOnlyList<string>>(category == MediaCategory.Video
+                ? [path, .. (unchangedPaths ?? [])]
+                : []);
+        }
 
         public Task<IReadOnlyDictionary<string, IReadOnlyList<string>>> DiscoverFilesByDirectoryAsync(
             string rootPath,
@@ -3929,7 +3934,11 @@ public sealed class ScanJobHandlerTests {
             IReadOnlySet<string> excludedPaths,
             CancellationToken cancellationToken) =>
             Task.FromResult<IReadOnlyList<FileSignature>>(category == MediaCategory.Video
-                ? [new FileSignature(path, path.Length + 1, 1)]
+                ? [
+                    new FileSignature(path, path.Length + 1, 1),
+                    .. (unchangedPaths ?? []).Select(unchanged =>
+                        new FileSignature(unchanged, unchanged.Length, 0))
+                ]
                 : []);
     }
 

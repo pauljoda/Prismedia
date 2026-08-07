@@ -25,3 +25,28 @@ public interface IEntityFileDeletionRecoveryReader {
         IReadOnlyCollection<Guid> entityIds,
         CancellationToken cancellationToken);
 }
+
+/// <summary>
+/// Durable discovery and compare-and-delete operations used by the worker that resumes lifecycle
+/// claims left behind by process termination. Candidates are deliberately bounded so one bad record
+/// cannot monopolize the worker.
+/// </summary>
+public interface IEntityLifecycleRecoveryStore {
+    /// <summary>Lists the oldest recoverable claims, bounded by <paramref name="limit"/> in total.</summary>
+    Task<EntityLifecycleRecoveryBatch> ListAsync(int limit, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Removes one orphaned delete-files monitor only when it is still claimed and no referenced Entity
+    /// or acquisition exists. Returns false if the row changed or regained a live owner.
+    /// </summary>
+    Task<bool> CompleteOrphanedDeletionAsync(Guid monitorId, CancellationToken cancellationToken);
+}
+
+/// <summary>One bounded set of independently resumable lifecycle claims.</summary>
+public sealed record EntityLifecycleRecoveryBatch(
+    IReadOnlyList<Guid> DeletingEntityIds,
+    IReadOnlyList<Guid> OrphanedDeletingMonitorIds,
+    IReadOnlyList<Guid> StoppingMonitorIds) {
+    /// <summary>Total candidates in the batch.</summary>
+    public int Count => DeletingEntityIds.Count + OrphanedDeletingMonitorIds.Count + StoppingMonitorIds.Count;
+}

@@ -207,9 +207,6 @@ public abstract class ScanJobHandler(
                 logger.LogInformation(
                     "{JobType}: no file changes in {Label} ({Count} files), skipping detailed scan",
                     scanKind, root.Label, current.Count);
-                using (timer.Phase("unchanged-followup")) {
-                    await OnNoFileChangesAsync(context, root, cancellationToken);
-                }
                 LogRootMetrics(context.Job.Type, root, mode, currentCount, previousCount, delta, timer.Finish());
                 return;
             }
@@ -242,7 +239,9 @@ public abstract class ScanJobHandler(
 
             ScanRootOutcome detailedOutcome;
             using (timer.Phase("detailed-reconcile")) {
-                detailedOutcome = await ScanRootCoreAsync(context, root, cancellationToken);
+                detailedOutcome = previous.Count == 0
+                    ? await ScanRootCoreAsync(context, root, cancellationToken)
+                    : await ScanRootDeltaAsync(context, root, current, delta, cancellationToken);
             }
 
             // Files the scan could not persist are withheld from the snapshot so the next scan sees
@@ -363,13 +362,17 @@ public abstract class ScanJobHandler(
     protected abstract Task<ScanRootOutcome> ScanRootCoreAsync(JobContext context, LibraryRootData root, CancellationToken cancellationToken);
 
     /// <summary>
-    /// Runs when the incremental snapshot proves no media files changed and the detailed scan is
-    /// skipped. Subclasses can enqueue cheap metadata-only follow-up work that does not require
-    /// re-upserting the media tree.
+    /// Reconciles a known signature delta after the cheap root walk. Handlers that can safely preserve
+    /// hierarchy from the complete signature set override this to touch only affected files or folders;
+    /// other media families retain the full reconciliation fallback.
     /// </summary>
-    protected virtual Task OnNoFileChangesAsync(
-        JobContext context, LibraryRootData root, CancellationToken cancellationToken) =>
-        Task.CompletedTask;
+    protected virtual Task<ScanRootOutcome> ScanRootDeltaAsync(
+        JobContext context,
+        LibraryRootData root,
+        IReadOnlyList<FileSignature> current,
+        ScanDelta delta,
+        CancellationToken cancellationToken) =>
+        ScanRootCoreAsync(context, root, cancellationToken);
 
     /// <summary>
     /// Invalidates byte-derived state before changed source files are reconciled. Media handlers may

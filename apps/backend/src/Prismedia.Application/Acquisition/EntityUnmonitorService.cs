@@ -82,6 +82,12 @@ public interface IEntityGiveUpService {
     Task<MonitorStopResult> GiveUpEntityAsync(Guid entityId, CancellationToken cancellationToken);
 }
 
+/// <summary>Resumes or starts the exact monitor-scoped unmonitor lifecycle.</summary>
+public interface IEntityUnmonitorService {
+    /// <summary>Stops one monitor and completes its already-claimed subtree cleanup.</summary>
+    Task<MonitorStopResult> StopAsync(Guid monitorId, CancellationToken cancellationToken);
+}
+
 /// <summary>
 /// Generalized unmonitor use case. It preflights the complete acquisition set before the first mutation,
 /// claims every monitor in the Entity subtree, removes all acquisition/download state, suppresses the
@@ -89,7 +95,7 @@ public interface IEntityGiveUpService {
 /// </summary>
 public sealed class EntityUnmonitorService(
     IEntityUnmonitorPersistence persistence,
-    IAcquisitionRequestService acquisitions) : IEntityGiveUpService {
+    IAcquisitionRequestService acquisitions) : IEntityGiveUpService, IEntityUnmonitorService {
     /// <summary>Stops a monitor and collapses its target subtree back to source-backed Entity state.</summary>
     public async Task<MonitorStopResult> StopAsync(Guid monitorId, CancellationToken cancellationToken) {
         var scope = await persistence.ResolveAsync(monitorId, cancellationToken);

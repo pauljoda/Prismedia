@@ -30,37 +30,6 @@ public sealed class ScanAudioJobHandler(
 
     protected override IReadOnlyList<MediaCategory> ScanCategories => [MediaCategory.Audio];
 
-    protected override async Task OnNoFileChangesAsync(
-        JobContext context, LibraryRootData root, CancellationToken cancellationToken) {
-        var settings = await Roots.GetSettingsAsync(cancellationToken);
-        if (!root.AutoIdentify) {
-            settings = settings with { AutoIdentifyEnabled = false };
-        }
-        IReadOnlyList<WantedAudioTrackReconciliation> reconciliations = acquisitionHints is null
-            ? []
-            : await acquisitionHints.ReconcileExistingWantedAudioTracksAsync(root.Id, cancellationToken);
-
-        await AutoIdentifyScanEnqueue.EnqueueExistingRootsForRootAsync(
-            context, settings, downstreamNeeds, root.Id, ScanCategories, cancellationToken);
-        await EnqueueExistingTrackJobsAsync(context, settings, root.Id, cancellationToken);
-        if (!settings.AutoGeneratePreview) {
-            foreach (var reconciliation in reconciliations.Where(result => result.NeedsWaveformRegeneration)) {
-                await EnqueueWaveformRegenerationAsync(
-                    context,
-                    reconciliation.EntityId,
-                    "Audio track",
-                    cancellationToken);
-            }
-        }
-        // Container covers (identify artwork on albums/artists) can predate their grid variants; an
-        // unchanged scan self-heals them the same way the video scan does, instead of leaving grids
-        // serving full-size originals until the daily sweep.
-        await EnqueueContainerGridThumbnailsAsync(
-            context,
-            await audio.GetAudioContainerTargetsInRootAsync(root.Id, cancellationToken),
-            cancellationToken);
-    }
-
     /// <summary>
     /// Materializes only the album folders touched by one album or individual-track import through the
     /// audio scanner's canonical classifier, wanted binding, upserts, and downstream jobs. Existing tracks
@@ -477,40 +446,6 @@ public sealed class ScanAudioJobHandler(
                 trackId.ToString(),
                 title),
             cancellationToken);
-
-    private async Task EnqueueExistingTrackJobsAsync(
-        JobContext context,
-        LibrarySettingsData settings,
-        Guid rootId,
-        CancellationToken cancellationToken) {
-        var tracks = await audio.GetAudioTrackTargetsInRootAsync(rootId, cancellationToken);
-        if (tracks.Count == 0) {
-            return;
-        }
-
-        var needs = await downstreamNeeds.CheckDownstreamNeedsBatchAsync(
-            tracks.Select(track => track.Id).ToArray(), cancellationToken);
-        var requests = new List<EnqueueJobRequest>();
-        foreach (var track in tracks) {
-            if (!needs.TryGetValue(track.Id, out var entityNeeds)) {
-                continue;
-            }
-
-            requests.AddRange(EntityProcessingPlanRequests.ForEntity(
-                EntityKind.AudioTrack,
-                track.Id,
-                track.Title,
-                settings,
-                entityNeeds,
-                deferPreviewUntilProbeCompletes: true));
-        }
-
-        if (requests.Count > 0) {
-            var enqueued = await context.EnqueueBatchAsync(requests, cancellationToken);
-            logger.LogDebug("ScanAudio: enqueued {Enqueued}/{Total} downstream jobs for unchanged tracks",
-                enqueued, requests.Count);
-        }
-    }
 
     /// <summary>
     /// Enqueues a grid-thumbnail job for each album/artist container whose cover lacks its 480/960

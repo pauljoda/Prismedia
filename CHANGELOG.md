@@ -14,6 +14,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- Unchanged library snapshots now remain truly idle instead of re-enqueuing unfinished enrichment across the whole root. Crash-interrupted delete-files and unmonitor claims are resumed by one independent serial recovery worker, with blocked records isolated from the rest of the backlog.
+- Video scans now reconcile a same-path replacement as one exact source and use the already-computed signature snapshot as folder context, avoiding a second recursive discovery and whole-root upsert while retaining safe stale cleanup.
 - Background thumbnail, preview, trickplay, subtitle, and waveform ffmpeg work now starts only after measuring host headroom, stays within a small cross-process pool, and pauses new starts while playback is active. Video and audio playback remain unbounded by background admission so concurrent household streams are never queued behind a worker limit.
 - Scheduled and file-triggered scans now target only the affected library root and run through one durable scan lane, preventing unrelated large libraries and concurrent media-family cleanup from joining a single-file change. Replaced video bytes at the same path also retire stale probe data, hashes, subtitles, previews, trickplay, and playback cache before regeneration.
 - Delete files now authoritatively cancels and clears every Entity- and acquisition-rooted workflow before removing managed media, generated assets, monitors, acquisitions, fileless wanted Entities, and related job history—even when a download client is missing or offline, an acquisition teardown races or fails, or the request disconnects after file removal begins.

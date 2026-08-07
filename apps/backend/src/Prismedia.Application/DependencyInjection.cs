@@ -72,6 +72,8 @@ public static class DependencyInjection {
         services.AddScoped<Acquisition.IAcquisitionQueueService>(sp => sp.GetRequiredService<Acquisition.AcquisitionQueueService>());
         services.AddScoped<Acquisition.MonitorService>();
         services.AddScoped<Acquisition.EntityUnmonitorService>();
+        services.AddScoped<Acquisition.IEntityUnmonitorService>(provider =>
+            provider.GetRequiredService<Acquisition.EntityUnmonitorService>());
         services.AddScoped<Acquisition.IEntityGiveUpService>(
             provider => provider.GetRequiredService<Acquisition.EntityUnmonitorService>());
         Acquisition.AcquisitionStrategyRegistration.RegisterApplicationStrategies(services);
@@ -103,6 +105,7 @@ public static class DependencyInjection {
         services.AddScoped<IAcquisitionImportEngineFactory, AcquisitionImportEngineFactory>();
 
         services.AddTransient<EntityProcessingGraphPlanner>();
+        services.AddScoped<EntityLifecycleRecoveryDrainer>();
 
         services.AddSingleton<AutoIdentifyConcurrencyGate>();
 
@@ -112,6 +115,7 @@ public static class DependencyInjection {
         services.AddHostedService<QueueWorker>();
         services.AddHostedService<JobScheduler>();
         services.AddHostedService<JobHistoryPruner>();
+        services.AddHostedService<EntityLifecycleRecoveryWorker>();
 
         return services;
     }

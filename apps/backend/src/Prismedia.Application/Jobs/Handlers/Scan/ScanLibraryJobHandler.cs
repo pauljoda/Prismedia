@@ -4,6 +4,7 @@ using Prismedia.Application.Acquisition;
 using Prismedia.Application.Files;
 using Prismedia.Application.Jobs.Ports;
 using Prismedia.Application.Jobs.Scanning;
+using Prismedia.Contracts.Media;
 using Prismedia.Domain.Entities;
 using System.Text.RegularExpressions;
 
@@ -30,6 +31,7 @@ public sealed class ScanLibraryJobHandler(
     VideoScanConcurrencyGate? scanGate = null)
     : ScanJobHandler(logger, fileDiscovery, roots, snapshots, processingState) {
     private const int BatchSize = 50;
+    private const int SurgicalChangeLimit = 512;
     private static readonly Regex SeasonFolderPattern = new(
         @"^(?:Season\s*(?<season>\d{1,3})|S(?<season>\d{1,3}))$",
         RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
@@ -50,23 +52,6 @@ public sealed class ScanLibraryJobHandler(
     protected override async ValueTask<IAsyncDisposable?> EnterScanScopeAsync(
         LibraryRootData root, CancellationToken cancellationToken) =>
         scanGate is null ? null : await scanGate.EnterAsync(cancellationToken);
-
-    protected override async Task OnNoFileChangesAsync(
-        JobContext context, LibraryRootData root, CancellationToken cancellationToken) {
-        var timer = new JobPhaseTimer();
-        using (timer.Phase("auto-identify")) {
-            await AutoIdentifyScanEnqueue.EnqueueExistingRootsForUnchangedScanAsync(
-                context, Roots, downstreamNeeds, root, ScanCategories, cancellationToken);
-        }
-        using (timer.Phase("recovery-jobs")) {
-            await EnqueueExistingVideoJobsAsync(context, root, cancellationToken);
-        }
-
-        logger.LogInformation(
-            "[METRICS] scan-library-unchanged {Label} — {Timing}",
-            root.Label,
-            timer.Finish().ToLogString());
-    }
 
     protected override async Task OnChangedFileSignaturesAsync(
         IReadOnlyCollection<string> changedPaths,
@@ -157,6 +142,80 @@ public sealed class ScanLibraryJobHandler(
             logger.LogInformation("ScanLibrary: found {Count} video files in {Label}", files.Count, root.Label);
         }
 
+        return await ReconcileFilesAsync(
+            context,
+            root,
+            files,
+            files,
+            reconcileWholeRoot: true,
+            timer,
+            cancellationToken);
+    }
+
+    /// <summary>
+    /// Uses the complete cheap signature snapshot as classification context, but re-upserts only the
+    /// changed source file or the directory whose membership/sidecars changed. A large delta falls back
+    /// to the full reconciler because it is more efficient than hundreds of tiny scopes.
+    /// </summary>
+    protected override async Task<ScanRootOutcome> ScanRootDeltaAsync(
+        JobContext context,
+        LibraryRootData root,
+        IReadOnlyList<FileSignature> current,
+        ScanDelta delta,
+        CancellationToken cancellationToken) {
+        if (delta.Added.Count + delta.Removed.Count + delta.Changed.Count > SurgicalChangeLimit) {
+            return await ScanRootCoreAsync(context, root, cancellationToken);
+        }
+
+        var allVideoFiles = current
+            .Select(signature => signature.Path)
+            .Where(IsVideoPath)
+            .Distinct(FileSystemPathComparison.Comparer)
+            .ToArray();
+        var affectedPaths = delta.Changed
+            .Select(signature => signature.Path)
+            .Where(IsVideoPath)
+            .ToHashSet(FileSystemPathComparison.Comparer);
+        var affectedDirectories = delta.Added
+            .Concat(delta.Removed)
+            .Concat(delta.Changed.Where(signature => IsSubtitlePath(signature.Path)))
+            .Select(signature => Path.GetDirectoryName(signature.Path))
+            .Where(path => !string.IsNullOrWhiteSpace(path))
+            .Select(path => path!)
+            .ToHashSet(FileSystemPathComparison.Comparer);
+        foreach (var file in allVideoFiles) {
+            var directory = Path.GetDirectoryName(file);
+            if (directory is not null && affectedDirectories.Contains(directory)) {
+                affectedPaths.Add(file);
+            }
+        }
+
+        var files = allVideoFiles.Where(affectedPaths.Contains).ToArray();
+        var timer = new JobPhaseTimer();
+        logger.LogInformation(
+            "ScanLibrary: surgically reconciling {Affected} of {Total} video files in {Label}",
+            files.Length,
+            allVideoFiles.Length,
+            root.Label);
+        return await ReconcileFilesAsync(
+            context,
+            root,
+            files,
+            allVideoFiles,
+            reconcileWholeRoot: false,
+            timer,
+            cancellationToken);
+    }
+
+    private async Task<ScanRootOutcome> ReconcileFilesAsync(
+        JobContext context,
+        LibraryRootData root,
+        IReadOnlyList<string> files,
+        IReadOnlyList<string> classificationFiles,
+        bool reconcileWholeRoot,
+        JobPhaseTimer timer,
+        CancellationToken cancellationToken) {
+
         LibrarySettingsData settings;
         using (timer.Phase("settings")) {
             settings = await Roots.GetSettingsAsync(cancellationToken);
@@ -167,7 +226,7 @@ public sealed class ScanLibraryJobHandler(
         }
         IReadOnlyDictionary<string, SeriesSeasonFolderInfo> seriesSeasonFolders;
         using (timer.Phase("classify-folders")) {
-            seriesSeasonFolders = BuildSeriesSeasonFolderIndex(root.Path, files);
+            seriesSeasonFolders = BuildSeriesSeasonFolderIndex(root.Path, classificationFiles);
         }
         var allEntityIds = new List<Guid>(files.Count);
         // Parallel to allEntityIds: the classified source item behind each persisted entity id.
@@ -175,8 +234,17 @@ public sealed class ScanLibraryJobHandler(
         // directly or silently fall back to the legacy Video kind.
         var persistedScanItems = new List<VideoUpsertItem>(files.Count);
         var failedPaths = new List<string>();
-        var validPaths = new HashSet<string>(files.Count, FileSystemPathComparison.Comparer);
+        var validPaths = new HashSet<string>(classificationFiles, FileSystemPathComparison.Comparer);
         var validMovieFolders = new HashSet<string>(FileSystemPathComparison.Comparer);
+        foreach (var currentFile in classificationFiles) {
+            if (BuildVideoUpsertItem(
+                    currentFile,
+                    root,
+                    classificationFiles,
+                    seriesSeasonFolders).Movie is { } movie) {
+                validMovieFolders.Add(movie.FolderPath);
+            }
+        }
 
         for (var batchStart = 0; batchStart < files.Count; batchStart += BatchSize) {
             var batchEnd = Math.Min(batchStart + BatchSize, files.Count);
@@ -193,8 +261,7 @@ public sealed class ScanLibraryJobHandler(
 
                 VideoUpsertItem item;
                 using (timer.Phase("classify")) {
-                    validPaths.Add(filePath);
-                    item = BuildVideoUpsertItem(filePath, root, files, seriesSeasonFolders, sidecar);
+                    item = BuildVideoUpsertItem(filePath, root, classificationFiles, seriesSeasonFolders, sidecar);
                     if (item.Movie is { } movie) {
                         validMovieFolders.Add(movie.FolderPath);
                     }
@@ -353,9 +420,11 @@ public sealed class ScanLibraryJobHandler(
 
         var report = timer.Finish();
         logger.LogInformation(
-            "[METRICS] scan-library {Label} — {FileCount} files, {Removed} stale videos, {StaleMovies} stale movies, {Excluded} excluded, {Orphans} orphans — {Timing}",
+            "[METRICS] scan-library {Label} — mode={Mode} affected={FileCount} total={TotalCount}, {Removed} stale videos, {StaleMovies} stale movies, {Excluded} excluded, {Orphans} orphans — {Timing}",
             root.Label,
+            reconcileWholeRoot ? "full" : "surgical",
             files.Count,
+            classificationFiles.Count,
             removed,
             staleMovies,
             excluded,
@@ -364,6 +433,12 @@ public sealed class ScanLibraryJobHandler(
 
         return failedPaths.Count == 0 ? ScanRootOutcome.Success : new ScanRootOutcome(failedPaths);
     }
+
+    private static bool IsVideoPath(string path) =>
+        MovieImportPlanBuilder.VideoExtensions.Contains(Path.GetExtension(path));
+
+    private static bool IsSubtitlePath(string path) =>
+        SubtitleFileExtensions.Supported.Contains(Path.GetExtension(path));
 
     private async Task<List<PlayableVideoSourceOwner>> ResolvePlayableVideoSourceOwnersAsync(
         IReadOnlyList<Guid> positionalEntityIds,
@@ -415,31 +490,6 @@ public sealed class ScanLibraryJobHandler(
         }
 
         await videos.InvalidateSubtitleStateAsync(states, cancellationToken);
-    }
-
-    private async Task EnqueueExistingVideoJobsAsync(
-        JobContext context,
-        LibraryRootData root,
-        CancellationToken cancellationToken) {
-        var targets = await videos.GetPlayableVideoRecoveryTargetsInRootAsync(root.Id, cancellationToken);
-        if (targets.Count == 0) {
-            return;
-        }
-
-        var settings = await Roots.GetSettingsAsync(cancellationToken);
-        var requests = new List<EnqueueJobRequest>();
-        foreach (var target in targets) {
-            requests.AddRange(VideoDownstreamJobPlanner.Build(
-                settings, target.Id, target.SourcePath, target.Needs, target.Kind));
-        }
-
-        if (requests.Count > 0) {
-            var enqueued = await context.EnqueueBatchAsync(requests, cancellationToken);
-            logger.LogDebug(
-                "ScanLibrary: enqueued {Enqueued}/{Total} recovery jobs for unchanged videos",
-                enqueued,
-                requests.Count);
-        }
     }
 
     /// <summary>
