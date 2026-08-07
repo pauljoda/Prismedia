@@ -9,8 +9,8 @@ namespace Prismedia.Infrastructure.Tests;
 
 /// <summary>
 /// Covers the upgrade-until-cutoff due-logic and the upgrade-child lifecycle in <see cref="EfMonitorStore"/>:
-/// when an imported book is due for an upgrade re-search, when it fulfills instead (cutoff met, caps hit,
-/// upgrade off), the one-in-flight interlock, and the success/failure counters.
+/// when an imported book is due for an upgrade re-search, when it fulfills instead (cutoff met or upgrade
+/// off), the one-in-flight interlock, durable intent across repeated misses, and success/failure counters.
 /// </summary>
 public sealed class EfMonitorStoreUpgradeTests {
     [Fact]
@@ -67,6 +67,22 @@ public sealed class EfMonitorStoreUpgradeTests {
     }
 
     [Fact]
+    public async Task DurableMonitorJobReResolvesItsExactUpgradeAfterPublicationStampedTheCadence() {
+        await using var db = CreateContext();
+        var store = await SeedUpgradeMonitorAsync(
+            db,
+            owned: new(BookSourceTier.Web, BookFormatTier.Reflowable),
+            cutoff: new(BookSourceTier.Retail, BookFormatTier.Reflowable));
+        var monitorId = Assert.Single(await store.ListAsync(CancellationToken.None)).Id;
+        await store.MarkSearchedAsync(monitorId, CancellationToken.None);
+        Assert.Empty(await store.ListDueMonitorsAsync(360, CancellationToken.None));
+
+        var exact = await store.ListImmediateForMonitorAsync(monitorId, CancellationToken.None);
+
+        Assert.True(Assert.Single(exact).IsUpgrade);
+    }
+
+    [Fact]
     public async Task ImportedAtCutoffFulfills() {
         await using var db = CreateContext();
         var store = await SeedUpgradeMonitorAsync(db, owned: new(BookSourceTier.Retail, BookFormatTier.Reflowable), cutoff: new(BookSourceTier.Retail, BookFormatTier.Reflowable));
@@ -86,12 +102,12 @@ public sealed class EfMonitorStoreUpgradeTests {
     }
 
     [Fact]
-    public async Task UpgradeAttemptsCapFulfills() {
+    public async Task RepeatedUpgradeAttemptsRemainDueUntilTheConfiguredCutoffIsMet() {
         await using var db = CreateContext();
         var store = await SeedUpgradeMonitorAsync(db, owned: new(BookSourceTier.Web, BookFormatTier.Reflowable), cutoff: new(BookSourceTier.Retail, BookFormatTier.Reflowable), upgradeAttempts: 3);
 
-        Assert.Empty(await store.ListDueMonitorsAsync(360, CancellationToken.None));
-        Assert.Equal(MonitorStatus.Fulfilled, (await store.ListAsync(CancellationToken.None))[0].Status);
+        Assert.True(Assert.Single(await store.ListDueMonitorsAsync(360, CancellationToken.None)).IsUpgrade);
+        Assert.Equal(MonitorStatus.Active, (await store.ListAsync(CancellationToken.None))[0].Status);
     }
 
     [Fact]

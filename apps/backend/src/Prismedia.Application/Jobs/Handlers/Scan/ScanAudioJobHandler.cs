@@ -32,6 +32,31 @@ public sealed class ScanAudioJobHandler(
     protected override IReadOnlyList<MediaCategory> ScanCategories => [MediaCategory.Audio];
 
     /// <summary>
+    /// Repairs the one catalog inconsistency that an unchanged file signature cannot reveal: a scanned
+    /// audio-track duplicate occupying the source path while its provider-backed track remains Wanted.
+    /// Only reconciled tracks receive follow-up work; ordinary unchanged tracks remain completely idle.
+    /// </summary>
+    protected override async Task OnUnchangedIntegrityScanAsync(
+        JobContext context,
+        LibraryRootData root,
+        CancellationToken cancellationToken) {
+        if (acquisitionHints is null) {
+            return;
+        }
+
+        var reconciliations = await acquisitionHints.ReconcileExistingWantedAudioTracksAsync(
+            root.Id,
+            cancellationToken);
+        foreach (var reconciliation in reconciliations.Where(result => result.NeedsWaveformRegeneration)) {
+            await EnqueueWaveformRegenerationAsync(
+                context,
+                reconciliation.EntityId,
+                "Audio track",
+                cancellationToken);
+        }
+    }
+
+    /// <summary>
     /// Materializes only the album folders touched by one album or individual-track import through the
     /// audio scanner's canonical classifier, wanted binding, upserts, and downstream jobs. Existing tracks
     /// in those albums are included so ordering remains stable; no root-wide stale cleanup is performed.

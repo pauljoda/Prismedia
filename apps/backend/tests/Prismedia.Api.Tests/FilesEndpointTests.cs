@@ -6,6 +6,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Prismedia.Application.Files;
 using Prismedia.Application.Jobs;
+using Prismedia.Application.Jobs.Ports;
 using Prismedia.Contracts.Files;
 using Prismedia.Domain.Entities;
 
@@ -171,6 +172,8 @@ public sealed class FilesEndpointTests : IDisposable {
                     services.AddScoped<IFilesPersistence>(_ => new FakeFilesPersistence(_tempRoot.FullName));
                     services.RemoveAll<IEntitySourcePathOwnerReader>();
                     services.AddSingleton<IEntitySourcePathOwnerReader, NoSourceOwners>();
+                    services.RemoveAll<ILibraryFileChangeIntake>();
+                    services.AddSingleton<ILibraryFileChangeIntake, FakeFileChangeIntake>();
                     services.AddScoped<IJobQueueService, FakeJobQueue>();
                 });
             })
@@ -234,6 +237,32 @@ public sealed class FilesEndpointTests : IDisposable {
             string physicalPath,
             CancellationToken cancellationToken) =>
             Task.FromResult<IReadOnlySet<Guid>>(new HashSet<Guid>());
+    }
+
+    private sealed class FakeFileChangeIntake : ILibraryFileChangeIntake {
+        public Task RecordAsync(
+            Guid rootId,
+            string scanKind,
+            IReadOnlyCollection<string> absolutePaths,
+            CancellationToken cancellationToken) => Task.CompletedTask;
+
+        public Task<LibraryFileChangeBatch> LoadAsync(
+            Guid rootId,
+            string scanKind,
+            int limit,
+            CancellationToken cancellationToken) => Task.FromResult(LibraryFileChangeBatch.Empty);
+
+        public Task<bool> HasPendingAsync(
+            Guid rootId,
+            string scanKind,
+            CancellationToken cancellationToken) => Task.FromResult(false);
+
+        public Task CompleteAsync(
+            Guid rootId,
+            string scanKind,
+            IReadOnlyCollection<string> absolutePaths,
+            DateTimeOffset observedThrough,
+            CancellationToken cancellationToken) => Task.CompletedTask;
     }
 
     private sealed class FakeJobQueue : IJobQueueService {

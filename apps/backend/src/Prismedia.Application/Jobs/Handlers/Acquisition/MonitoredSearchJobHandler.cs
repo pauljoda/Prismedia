@@ -1,4 +1,3 @@
-using System.Runtime.ExceptionServices;
 using Microsoft.Extensions.Logging;
 using Prismedia.Application.Acquisition;
 using Prismedia.Application.Requests;
@@ -8,7 +7,7 @@ using Prismedia.Domain.Entities;
 namespace Prismedia.Application.Jobs.Handlers;
 
 /// <summary>
-/// Processes either one explicitly targeted Entity monitor or every monitor whose periodic action is due.
+/// Processes explicitly targeted Entity monitor work or one durable monitor selected by the sequential drainer.
 /// A still-missing acquisition monitor re-runs
 /// the existing <see cref="JobType.AcquisitionSearch"/> — reusing the committed search → score →
 /// (auto-pick) → download → import pipeline and its blocklist gate unchanged, so a wanted item is
@@ -36,35 +35,19 @@ public sealed class MonitoredSearchJobHandler(
             due.Count,
             context.Job.TargetEntityKind == JobTargetKinds.Entity ? "targeted" : "due");
         var processed = 0;
-        Exception? firstFailure = null;
         foreach (var monitor in due) {
             cancellationToken.ThrowIfCancellationRequested();
 
-            try {
-                var progressMessage = await ProcessMonitorAsync(
-                    monitor,
-                    context,
+            var progressMessage = await ProcessMonitorAsync(
+                monitor,
+                context,
+                cancellationToken);
+            if (progressMessage is not null) {
+                await context.ReportProgressAsync(
+                    ++processed * 100 / due.Count,
+                    progressMessage,
                     cancellationToken);
-                if (progressMessage is not null) {
-                    await context.ReportProgressAsync(
-                        ++processed * 100 / due.Count,
-                        progressMessage,
-                        cancellationToken);
-                }
-            } catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) {
-                throw;
-            } catch (Exception exception) {
-                firstFailure ??= exception;
-                logger.LogError(
-                    exception,
-                    "MonitoredSearch: monitor {MonitorId} for '{Title}' failed; continuing the remaining sweep.",
-                    monitor.MonitorId,
-                    monitor.Title);
             }
-        }
-
-        if (firstFailure is not null) {
-            ExceptionDispatchInfo.Capture(firstFailure).Throw();
         }
     }
 
@@ -247,7 +230,21 @@ public sealed class MonitoredSearchJobHandler(
                 .ToArray();
         }
 
+        if (MonitoredSearchPayload.TryParse(job.PayloadJson, out var payload)) {
+            return await monitors.ListImmediateForMonitorAsync(payload.MonitorId, cancellationToken);
+        }
+
+        if (!string.IsNullOrWhiteSpace(job.PayloadJson) && job.PayloadJson != "{}") {
+            logger.LogWarning(
+                "MonitoredSearch: job {JobId} has an invalid monitor payload; skipping it instead of selecting unrelated due work.",
+                job.Id);
+            return [];
+        }
+
+        // A queued job from before the sequential-drainer migration may carry no payload. Keep it
+        // compatible, but never recreate the old all-at-once fanout.
         var config = await settings.GetMonitoredSearchSettingsAsync(cancellationToken);
-        return await monitors.ListDueMonitorsAsync(config.IntervalMinutes, cancellationToken);
+        var due = await monitors.ListDueMonitorsAsync(config.IntervalMinutes, cancellationToken);
+        return due.Take(1).ToArray();
     }
 }

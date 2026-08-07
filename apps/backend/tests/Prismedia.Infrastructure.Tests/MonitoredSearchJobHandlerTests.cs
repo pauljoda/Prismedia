@@ -11,7 +11,7 @@ namespace Prismedia.Infrastructure.Tests;
 
 public sealed class MonitoredSearchJobHandlerTests {
     [Fact]
-    public async Task EnqueuesOneAcquisitionSearchPerDueMonitorAndStampsEach() {
+    public async Task LegacyUntargetedJobProcessesOnlyOneDueMonitor() {
         var a = Guid.NewGuid();
         var b = Guid.NewGuid();
         var monitors = new FakeMonitorStore([
@@ -24,17 +24,14 @@ public sealed class MonitoredSearchJobHandlerTests {
 
         await handler.HandleAsync(new JobContext(Job(), queue), CancellationToken.None);
 
-        // One AcquisitionSearch per due monitor, targeted at its acquisition.
-        Assert.Equal(2, queue.Enqueued.Count);
-        Assert.All(queue.Enqueued, e => Assert.Equal(JobType.AcquisitionSearch, e.Type));
-        Assert.Contains(queue.Enqueued, e => e.TargetEntityId == a.ToString());
-        Assert.Contains(queue.Enqueued, e => e.TargetEntityId == b.ToString());
-        // Each monitor stamped as searched so it isn't re-fired next tick.
-        Assert.Equal(2, monitors.Searched.Count);
+        var search = Assert.Single(queue.Enqueued);
+        Assert.Equal(JobType.AcquisitionSearch, search.Type);
+        Assert.Equal(a.ToString(), search.TargetEntityId);
+        Assert.Single(monitors.Searched);
     }
 
     [Fact]
-    public async Task DedupsAMonitorWhoseSearchIsAlreadyPending() {
+    public async Task PayloadTargetsOneDueMonitorWithoutProcessingItsNeighbors() {
         var a = Guid.NewGuid();
         var b = Guid.NewGuid();
         var monitors = new FakeMonitorStore([
@@ -43,16 +40,15 @@ public sealed class MonitoredSearchJobHandlerTests {
         ]);
         var acquisitions = new FakeAcquisitionLifecycleStore(a, b);
         var queue = new RecordingJobQueue();
-        queue.AlreadyPending.Add(a.ToString()); // a search is already in flight for A
         var handler = Handler(monitors, acquisitions);
 
-        await handler.HandleAsync(new JobContext(Job(), queue), CancellationToken.None);
+        await handler.HandleAsync(
+            new JobContext(Job(payloadJson: new MonitoredSearchPayload(monitors.Due[1].MonitorId).ToJson()), queue),
+            CancellationToken.None);
 
-        // Only B's search is enqueued; A is deduped because one is already pending.
         var enqueued = Assert.Single(queue.Enqueued);
         Assert.Equal(b.ToString(), enqueued.TargetEntityId);
-        // Both are stamped: the monitor attempted a pass for each (A's existing search will advance it).
-        Assert.Equal(2, monitors.Searched.Count);
+        Assert.Equal([monitors.Due[1].MonitorId], monitors.Searched);
     }
 
     [Fact]
@@ -248,7 +244,50 @@ public sealed class MonitoredSearchJobHandlerTests {
     }
 
     [Fact]
-    public async Task RecurringSweepContinuesAfterOneMonitorFailsThenRethrowsTheFailure() {
+    public async Task SequentialDrainerQueuesOnlyTheFirstDueMonitor() {
+        var first = new DueMonitor(Guid.NewGuid(), Guid.NewGuid(), "First", EntityKind.Book);
+        var second = new DueMonitor(Guid.NewGuid(), Guid.NewGuid(), "Second", EntityKind.Book);
+        var monitors = new FakeMonitorStore([first, second]);
+        var queue = new RecordingJobQueue();
+        var drainer = new MonitoredSearchDrainer(
+            monitors,
+            new SettingsService(new EmptySettingsPersistence()),
+            queue,
+            NullLogger<MonitoredSearchDrainer>.Instance);
+
+        var result = await drainer.DrainNextAsync(CancellationToken.None);
+
+        Assert.Equal(MonitoredSearchDrainState.Queued, result);
+        var request = Assert.Single(queue.Enqueued);
+        Assert.Equal(JobType.MonitoredSearch, request.Type);
+        Assert.Null(request.TargetEntityId);
+        Assert.True(MonitoredSearchPayload.TryParse(request.PayloadJson, out var payload));
+        Assert.Equal(first.MonitorId, payload.MonitorId);
+        Assert.Equal([first.MonitorId], monitors.Searched);
+    }
+
+    [Fact]
+    public async Task SequentialDrainerWaitsWhileAnyAcquisitionSearchIsPending() {
+        var monitors = new FakeMonitorStore([
+            new DueMonitor(Guid.NewGuid(), Guid.NewGuid(), "First", EntityKind.Book)
+        ]);
+        var queue = new RecordingJobQueue();
+        queue.PendingTypes.Add(JobType.AcquisitionSearch);
+        var drainer = new MonitoredSearchDrainer(
+            monitors,
+            new SettingsService(new EmptySettingsPersistence()),
+            queue,
+            NullLogger<MonitoredSearchDrainer>.Instance);
+
+        var result = await drainer.DrainNextAsync(CancellationToken.None);
+
+        Assert.Equal(MonitoredSearchDrainState.Busy, result);
+        Assert.Equal(0, monitors.DueListCalls);
+        Assert.Empty(queue.Enqueued);
+    }
+
+    [Fact]
+    public async Task LegacyUntargetedFailureDoesNotFanOutToTheNextMonitor() {
         var failedAcquisitionId = Guid.NewGuid();
         var healthyAcquisitionId = Guid.NewGuid();
         var monitors = new FakeMonitorStore([
@@ -263,8 +302,8 @@ public sealed class MonitoredSearchJobHandlerTests {
                 new FakeAcquisitionLifecycleStore(failedAcquisitionId, healthyAcquisitionId))
                 .HandleAsync(new JobContext(Job(), queue), CancellationToken.None));
 
-        Assert.Equal(healthyAcquisitionId.ToString(), Assert.Single(queue.Enqueued).TargetEntityId);
-        Assert.Single(monitors.Searched);
+        Assert.Empty(queue.Enqueued);
+        Assert.Empty(monitors.Searched);
     }
 
     private static MonitoredSearchJobHandler Handler(
@@ -279,7 +318,7 @@ public sealed class MonitoredSearchJobHandlerTests {
             NullLogger<MonitoredSearchJobHandler>.Instance,
             releaseTiming: releaseTiming);
 
-    private static JobRunSnapshot Job(Guid? targetEntityId = null) {
+    private static JobRunSnapshot Job(Guid? targetEntityId = null, string payloadJson = "{}") {
         var now = DateTimeOffset.UtcNow;
         return new JobRunSnapshot(
             Guid.NewGuid(),
@@ -287,7 +326,7 @@ public sealed class MonitoredSearchJobHandlerTests {
             JobRunStatus.Running,
             0,
             null,
-            "{}",
+            payloadJson,
             targetEntityId is null ? null : JobTargetKinds.Entity,
             targetEntityId?.ToString(),
             null,
@@ -389,6 +428,7 @@ public sealed class MonitoredSearchJobHandlerTests {
     }
 
     private sealed class FakeMonitorStore(IReadOnlyList<DueMonitor> due) : IMonitorStore {
+        public IReadOnlyList<DueMonitor> Due => due;
         public List<Guid> Searched { get; } = [];
         public List<Guid> CreatedChildFor { get; } = [];
         public Dictionary<Guid, IReadOnlyList<MonitorView>> EntityMonitors { get; } = [];
@@ -504,7 +544,7 @@ public sealed class MonitoredSearchJobHandlerTests {
         public Exception? EnqueueFailure { get; init; }
         public string? FailTarget { get; init; }
         public Task<JobRunSnapshot> EnqueueAsync(EnqueueJobRequest request, CancellationToken cancellationToken) {
-            if (EnqueueFailure is not null || request.TargetEntityId == FailTarget) {
+            if (EnqueueFailure is not null || (FailTarget is not null && request.TargetEntityId == FailTarget)) {
                 throw EnqueueFailure ?? new IOException("target queue unavailable");
             }
 
@@ -514,8 +554,10 @@ public sealed class MonitoredSearchJobHandlerTests {
         }
         /// <summary>Target ids treated as already having a pending search, so EnqueueIfNeededAsync dedups them.</summary>
         public HashSet<string> AlreadyPending { get; } = [];
+        public HashSet<JobType> PendingTypes { get; } = [];
         public Task<bool> HasPendingAsync(JobType type, string? targetEntityId, CancellationToken cancellationToken) =>
-            Task.FromResult(targetEntityId is not null && AlreadyPending.Contains(targetEntityId));
+            Task.FromResult(PendingTypes.Contains(type)
+                || (targetEntityId is not null && AlreadyPending.Contains(targetEntityId)));
         public Task UpdateProgressAsync(Guid id, int progress, string? message, CancellationToken cancellationToken) => Task.CompletedTask;
         public Task<IReadOnlyList<JobRunSnapshot>> ListAsync(bool hideNsfw, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<JobRunSnapshot> EnqueueAsync(JobType type, CancellationToken cancellationToken) => throw new NotSupportedException();

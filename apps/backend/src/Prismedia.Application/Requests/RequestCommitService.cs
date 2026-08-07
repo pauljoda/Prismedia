@@ -1004,7 +1004,7 @@ public sealed partial class RequestCommitService(
         }
 
         // The container keeps watching for new works either way — requesting an author/artist implies
-        // following them; the daily sweep then acquires future works through direct child intent. The
+        // following them; the sequential background drainer then acquires future works through direct child intent. The
         // request's library/profile choices and monitoring preset stick to the monitor so later child work
         // inherit the choices and future syncs honor the preset (a sync, carrying neither, never clobbers
         // what an explicit request stored).

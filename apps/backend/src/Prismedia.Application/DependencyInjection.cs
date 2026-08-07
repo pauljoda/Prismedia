@@ -106,6 +106,7 @@ public static class DependencyInjection {
 
         services.AddTransient<EntityProcessingGraphPlanner>();
         services.AddScoped<EntityLifecycleRecoveryDrainer>();
+        services.AddScoped<MonitoredSearchDrainer>();
 
         services.AddSingleton<AutoIdentifyConcurrencyGate>();
 
@@ -116,6 +117,7 @@ public static class DependencyInjection {
         services.AddHostedService<JobScheduler>();
         services.AddHostedService<JobHistoryPruner>();
         services.AddHostedService<EntityLifecycleRecoveryWorker>();
+        services.AddHostedService<MonitoredSearchWorker>();
         services.AddHostedService<LibraryFileChangeMonitor>();
 
         return services;

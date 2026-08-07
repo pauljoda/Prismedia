@@ -848,9 +848,10 @@ public sealed partial class EfAcquisitionStore(PrismediaDbContext db, IAcquisiti
             .AsNoTracking()
             .Where(candidate => candidate.AcquisitionId == acquisitionId && candidate.Accepted)
             .OrderByDescending(candidate => candidate.Score)
-            .Select(candidate => new { candidate.Id, candidate.Title, candidate.IndexerName, candidate.InfoHash, candidate.Protocol, candidate.Score })
+            .Select(candidate => new { candidate.Id, candidate.Title, candidate.IndexerName, candidate.InfoHash, candidate.Protocol, candidate.Score, candidate.Seeders, candidate.Peers })
             .ToArrayAsync(cancellationToken);
-        return rows.Select(row => new AcquisitionCandidateRef(row.Id, row.Title, row.IndexerName, row.InfoHash, row.Protocol, row.Score)).ToArray();
+        return rows.Select(row => new AcquisitionCandidateRef(
+            row.Id, row.Title, row.IndexerName, row.InfoHash, row.Protocol, row.Score, row.Seeders, row.Peers)).ToArray();
     }
 
     public async Task MarkCandidatesBlocklistedAsync(Guid acquisitionId, string identity, CancellationToken cancellationToken) {

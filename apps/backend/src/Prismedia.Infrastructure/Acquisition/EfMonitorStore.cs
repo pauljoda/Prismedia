@@ -11,7 +11,7 @@ using Prismedia.Infrastructure.Persistence.Entities;
 
 namespace Prismedia.Infrastructure.Acquisition;
 
-/// <summary>EF-backed store for monitors, including the reconcile + due logic the scheduled sweep relies on.</summary>
+/// <summary>EF-backed store for monitors, including reconciliation and sequential due-work selection.</summary>
 public sealed partial class EfMonitorStore(
     PrismediaDbContext db,
     IEntityHierarchyReader? entityHierarchy = null,
@@ -274,12 +274,6 @@ public sealed partial class EfMonitorStore(
         // reconciles orphaned/fulfilled monitors even when none are due for an actual re-search.
         db.Monitors.AnyAsync(monitor => monitor.Status == MonitorStatus.Active, cancellationToken);
 
-    /// <summary>Most upgrade replacements attempted before a monitor gives up and fulfills (best-effort cutoff).</summary>
-    private const int MaxUpgradeAttempts = 3;
-
-    /// <summary>Most consecutive fruitless upgrade searches (or pre-download failures) before a monitor gives up.</summary>
-    private const int MaxBarrenSearches = 6;
-
     /// <summary>Default page size for the Wanted lists.</summary>
     private const int DefaultWantedPageSize = 50;
 
@@ -399,6 +393,7 @@ public sealed partial class EfMonitorStore(
         ListSearchWorkAsync(
             defaultIntervalMinutes,
             targetEntityId: null,
+            targetMonitorId: null,
             forceImmediate: false,
             cancellationToken);
 
@@ -409,15 +404,28 @@ public sealed partial class EfMonitorStore(
         ListSearchWorkAsync(
             defaultIntervalMinutes: 1,
             targetEntityId: entityId,
+            targetMonitorId: null,
+            forceImmediate: true,
+            cancellationToken);
+
+    /// <inheritdoc />
+    public Task<IReadOnlyList<DueMonitor>> ListImmediateForMonitorAsync(
+        Guid monitorId,
+        CancellationToken cancellationToken) =>
+        ListSearchWorkAsync(
+            defaultIntervalMinutes: 1,
+            targetEntityId: null,
+            targetMonitorId: monitorId,
             forceImmediate: true,
             cancellationToken);
 
     private async Task<IReadOnlyList<DueMonitor>> ListSearchWorkAsync(
         int defaultIntervalMinutes,
         Guid? targetEntityId,
+        Guid? targetMonitorId,
         bool forceImmediate,
         CancellationToken cancellationToken) {
-        if (targetEntityId is null) {
+        if (targetEntityId is null && targetMonitorId is null) {
             await ReconcilePassiveTargetsAsync(cancellationToken);
         }
         // The default profile of each kind governs its upgrades. Upgrade-seeking is fully automatic, so it
@@ -433,8 +441,10 @@ public sealed partial class EfMonitorStore(
             from monitor in db.Monitors
             where monitor.Status == MonitorStatus.Active
                 && (targetEntityId == null || monitor.EntityId == targetEntityId)
+                && (targetMonitorId == null || monitor.Id == targetMonitorId)
             join acquisition in db.Acquisitions on monitor.AcquisitionId equals acquisition.Id into joined
             from acquisition in joined.DefaultIfEmpty()
+            orderby monitor.LastSearchedAt, monitor.CreatedAt
             select new {
                 Monitor = monitor,
                 AcquisitionStatus = acquisition == null ? (AcquisitionStatus?)null : acquisition.Status,
@@ -589,8 +599,7 @@ public sealed partial class EfMonitorStore(
                         continue;
                     }
 
-                    var capsHit = monitor.UpgradeAttempts >= MaxUpgradeAttempts || monitor.BarrenSearches >= MaxBarrenSearches;
-                    if (verdict.CutoffMet || capsHit) {
+                    if (verdict.CutoffMet) {
                         if (CompleteEntityAcquisition(monitor, now) is { } terminalStatus) {
                             statusTransitions.Add((monitor.Id, terminalStatus));
                         } else {

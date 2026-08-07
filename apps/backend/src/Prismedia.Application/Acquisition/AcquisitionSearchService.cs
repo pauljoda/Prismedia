@@ -18,12 +18,6 @@ public sealed class AcquisitionSearchRunner(
     IndexerQueryWindow queryWindow,
     IAcquisitionPolicyRegistry policies,
     SettingsService settings) {
-    /// <summary>
-    /// The per-priority-step score adjustment that breaks exact score ties in favor of the preferred
-    /// indexer. Orders of magnitude below any real score difference, so it can never reorder releases
-    /// the engine actually distinguished.
-    /// </summary>
-    private const double PriorityTieBreak = 1e-9;
     /// <param name="upgradeOwnedQuality">
     /// When set, runs this as an upgrade search: the engine accepts only releases that strictly beat this
     /// owned quality (in the kind's vocabulary — a book rank or a media ladder code) and never downgrade the
@@ -91,7 +85,6 @@ public sealed class AcquisitionSearchRunner(
         rules = rules with { AllowedProtocols = protocols };
         var preferredProtocol = await AcquisitionProtocolPreference.ResolveAsync(downloadClients, settings, cancellationToken)
             ?? protocols[0];
-        var hasFallbackProtocol = protocols.Length > 1;
 
         // TV unit context rides the rules the same way the upgrade fields do: set per search from the
         // acquisition, never by a profile, so the unit-match specification knows what is sought.
@@ -107,84 +100,86 @@ public sealed class AcquisitionSearchRunner(
         var blocklisted = await blocklist.GetIdentitiesAsync(cancellationToken);
         var engine = policy.DecisionEngineFor(input.Kind);
 
-        // Walk the query ladder: the first rung whose results include an acceptable release wins. A
-        // rung that found only rejects falls through to the next, broader phrasing; the last rung's
-        // outcome (candidates and all) is returned regardless, so the review UI always has something
-        // transparent to show.
-        AcquisitionSearchOutcome outcome = new([], []);
-        AcquisitionSearchOutcome? fallbackOutcome = null;
+        // Every query variant contributes to one decision set. Stopping at the first acceptable rung
+        // made indexer query wording decide the winner before quality, formats, protocol, health and
+        // priority could be compared. Arr-style search instead aggregates and de-duplicates the full
+        // applicable set, then makes one global decision.
+        var releases = new List<(IndexerRelease Release, Guid? IndexerConfigId, string IndexerName)>();
+        var errors = new Dictionary<Guid, IndexerSearchError>();
+        var failedIndexers = new HashSet<Guid>();
         foreach (var text in queries) {
-            var searches = await Task.WhenAll(configs.Select(config => SearchIndexerAsync(config, text, input, policy, cancellationToken)));
+            var searchable = configs.Where(config => !failedIndexers.Contains(config.Id)).ToArray();
+            if (searchable.Length == 0) {
+                break;
+            }
+
+            var searches = await Task.WhenAll(searchable.Select(config => SearchIndexerAsync(config, text, input, policy, cancellationToken)));
             await RecordHealthAsync(searches, cancellationToken);
 
-            var releases = new List<(IndexerRelease Release, Guid? IndexerConfigId, string IndexerName)>();
-            var errors = new List<IndexerSearchError>();
             foreach (var search in searches) {
                 foreach (var release in search.Found) {
                     releases.Add((release, search.Config.Id, search.Config.DisplayName));
                 }
 
                 if (search.Error is not null) {
-                    errors.Add(new IndexerSearchError(search.Config.Id, search.Config.DisplayName, search.Error));
+                    errors.TryAdd(
+                        search.Config.Id,
+                        new IndexerSearchError(search.Config.Id, search.Config.DisplayName, search.Error));
+                    // A real failure is not repeated for every broader query in the same operation.
+                    // Rate-limit exhaustion likewise cannot recover inside this query ladder.
+                    failedIndexers.Add(search.Config.Id);
                 }
-            }
-
-            var supported = releases.Where(candidate => protocols.Contains(candidate.Release.Protocol)).ToArray();
-            var candidates = WithIndexerPriorityTieBreak(engine.Evaluate(supported, rules, blocklisted), configs);
-            outcome = new AcquisitionSearchOutcome(PrioritizeProtocol(candidates, preferredProtocol), errors);
-            if (outcome.Candidates.Any(candidate => candidate.Accepted && candidate.Release.Protocol == preferredProtocol)) {
-                return outcome;
-            }
-
-            if (!hasFallbackProtocol && outcome.Candidates.Any(candidate => candidate.Accepted)) {
-                return outcome;
-            }
-
-            // A usable fallback is better than repeating a broader query against an indexer that
-            // already timed out or failed on this rung. Preserve its error for the review UI and let
-            // the health backoff keep that source out of subsequent searches until it recovers.
-            if (outcome.Errors.Count > 0 && outcome.Candidates.Any(candidate => candidate.Accepted)) {
-                return outcome;
-            }
-
-            if (fallbackOutcome is null && outcome.Candidates.Any(candidate => candidate.Accepted)) {
-                fallbackOutcome = outcome;
             }
         }
 
-        return fallbackOutcome ?? outcome;
+        var priorityById = configs.ToDictionary(config => config.Id, config => config.Priority);
+        var supported = releases
+            .Where(candidate => protocols.Contains(candidate.Release.Protocol))
+            .ToArray();
+        var candidates = engine.Evaluate(supported, rules, blocklisted)
+            .GroupBy(candidate => ReleaseIdentity.For(
+                candidate.Release.InfoHash,
+                candidate.IndexerName,
+                candidate.Release.Title), StringComparer.Ordinal)
+            // Parse/evaluate before de-duplication: indexers sometimes return the same hash with different
+            // titles or metadata. Like Sonarr, keep the copy with the fewest rejections first, then apply
+            // indexer priority; a malformed report from a preferred indexer must not hide an accepted copy.
+            .Select(group => group
+                .OrderByDescending(candidate => candidate.Accepted)
+                .ThenBy(candidate => candidate.Rejections.Count)
+                .ThenBy(candidate => candidate.IndexerConfigId is { } id
+                    ? priorityById.GetValueOrDefault(id, int.MaxValue)
+                    : int.MaxValue)
+                .ThenByDescending(candidate => candidate.Score)
+                .First())
+            .ToArray();
+        return new AcquisitionSearchOutcome(
+            Prioritize(candidates, input.Kind, preferredProtocol, priorityById),
+            errors.Values.ToArray());
     }
 
     /// <summary>
-    /// Keeps every supported result visible for manual review while putting the preferred protocol first
-    /// in the in-memory outcome. Job handlers reapply the same preference after persistence.
+    /// Keeps every supported result visible for manual review while applying the global comparison order.
+    /// Job handlers reapply the same quality/protocol/swarm order after persistence.
     /// </summary>
-    private static IReadOnlyList<ScoredRelease> PrioritizeProtocol(
+    private static IReadOnlyList<ScoredRelease> Prioritize(
         IReadOnlyList<ScoredRelease> candidates,
-        DownloadProtocol preferredProtocol) =>
+        EntityKind kind,
+        DownloadProtocol preferredProtocol,
+        IReadOnlyDictionary<Guid, int> priorityById) =>
         candidates
             .OrderByDescending(candidate => candidate.Accepted)
+            .ThenByDescending(candidate => candidate.Score - AcquisitionReleaseRanking.SwarmTieBreak(
+                kind,
+                candidate.Release.Protocol,
+                candidate.Release.Seeders,
+                candidate.Release.Peers))
             .ThenByDescending(candidate => candidate.Release.Protocol == preferredProtocol)
             .ThenByDescending(candidate => candidate.Score)
+            .ThenBy(candidate => candidate.IndexerConfigId is { } id
+                ? priorityById.GetValueOrDefault(id, int.MaxValue)
+                : int.MaxValue)
             .ToArray();
-
-    /// <summary>
-    /// Folds indexer priority into the scalar score as an exact-tie break: identical releases from two
-    /// indexers rank the preferred (lower-priority-number) indexer first, and every downstream consumer
-    /// that sorts by score (auto-grab, the review list) inherits the ordering for free.
-    /// </summary>
-    private static IReadOnlyList<ScoredRelease> WithIndexerPriorityTieBreak(
-        IReadOnlyList<ScoredRelease> candidates,
-        IReadOnlyList<Contracts.Acquisition.IndexerConfigDetail> configs) {
-        var priorityById = configs.ToDictionary(config => config.Id, config => config.Priority);
-        return candidates
-            .Select(candidate => candidate.IndexerConfigId is { } id && priorityById.TryGetValue(id, out var priority)
-                ? candidate with { Score = candidate.Score - priority * PriorityTieBreak }
-                : candidate)
-            .OrderByDescending(candidate => candidate.Accepted)
-            .ThenByDescending(candidate => candidate.Score)
-            .ToArray();
-    }
 
     /// <summary>One indexer's contribution to a search rung. A rate-limited skip carries a message but is not a failure.</summary>
     private sealed record IndexerSearchResult(

@@ -13,7 +13,7 @@ namespace Prismedia.Application.Tests.Acquisition;
 /// </summary>
 public sealed class AcquisitionSearchRunnerTests {
     [Fact]
-    public void PersistedCandidatesAreReorderedByProtocolBeforeQualityScoreForAutomation() {
+    public void PersistedCandidatesKeepQualityAheadOfProtocolPreferenceForAutomation() {
         var torrent = new AcquisitionCandidateRef(Guid.NewGuid(), "Torrent", "Indexer", "torrent", DownloadProtocol.Torrent, 100);
         var usenet = new AcquisitionCandidateRef(Guid.NewGuid(), "Usenet", "Indexer", null, DownloadProtocol.Usenet, 1);
 
@@ -24,7 +24,7 @@ public sealed class AcquisitionSearchRunnerTests {
                 candidate => candidate.Score)
             .ToArray();
 
-        Assert.Equal([usenet.CandidateId, torrent.CandidateId], ordered.Select(candidate => candidate.CandidateId));
+        Assert.Equal([torrent.CandidateId, usenet.CandidateId], ordered.Select(candidate => candidate.CandidateId));
         Assert.Equal(100, torrent.Score); // Preference ordering must not distort the user-visible score.
     }
 
@@ -129,7 +129,7 @@ public sealed class AcquisitionSearchRunnerTests {
 
         var outcome = await runner.RunAsync(new AcquisitionSearchInput(Guid.NewGuid(), "Book", "Author", EntityKind.Book), CancellationToken.None);
 
-        Assert.Equal(["Book Author"], client.Queries);
+        Assert.Equal(["Book Author", "Book"], client.Queries);
         Assert.Equal(DownloadProtocol.Torrent, Assert.Single(outcome.Candidates).Release.Protocol);
     }
 
@@ -159,10 +159,12 @@ public sealed class AcquisitionSearchRunnerTests {
     }
 
     [Fact]
-    public async Task QueryLadderStopsAtTheFirstRungWithAnAcceptableRelease() {
-        var release = new IndexerRelease("Author - Book (epub)", 5_000_000, 60, 3, DownloadProtocol.Torrent, "http://dl", "magnet:?c", "hash", "http://info", null, null);
+    public async Task QueryLadderGloballyComparesEveryRungBeforeChoosing() {
+        var narrow = new IndexerRelease("Author - Book (mobi)", 5_000_000, 6, 3, DownloadProtocol.Torrent, "http://dl/narrow", "magnet:?narrow", "narrow", "http://info/narrow", null, null);
+        var broad = new IndexerRelease("Author - Book (epub)", 5_000_000, 60, 3, DownloadProtocol.Torrent, "http://dl/broad", "magnet:?broad", "broad", "http://info/broad", null, null);
         var client = new QueryAwareIndexerSearchClient(new Dictionary<string, IReadOnlyList<IndexerRelease>>(StringComparer.OrdinalIgnoreCase) {
-            ["Book Author"] = [release],
+            ["Book Author"] = [narrow],
+            ["Book"] = [broad],
         });
 
         var runner = new AcquisitionSearchRunner(
@@ -176,9 +178,58 @@ public sealed class AcquisitionSearchRunnerTests {
             Policies(new BookAcquisitionPolicyModule()),
             Settings());
 
-        await runner.RunAsync(new AcquisitionSearchInput(Guid.NewGuid(), "Book", "Author", EntityKind.Book), CancellationToken.None);
+        var outcome = await runner.RunAsync(new AcquisitionSearchInput(Guid.NewGuid(), "Book", "Author", EntityKind.Book), CancellationToken.None);
 
-        Assert.Equal(["Book Author"], client.Queries.ToArray());
+        Assert.Equal(["Book Author", "Book"], client.Queries.ToArray());
+        Assert.Equal(broad.Title, outcome.Candidates.First(candidate => candidate.Accepted).Release.Title);
+        Assert.Contains(outcome.Candidates, candidate => candidate.Release.InfoHash == narrow.InfoHash);
+    }
+
+    [Fact]
+    public async Task QueryLadderDeduplicatesTheSameReleaseAcrossRungs() {
+        var release = new IndexerRelease("Author - Book (epub)", 5_000_000, 60, 3, DownloadProtocol.Torrent, "http://dl", "magnet:?c", "same-hash", "http://info", null, null);
+        var client = new QueryAwareIndexerSearchClient(new Dictionary<string, IReadOnlyList<IndexerRelease>>(StringComparer.OrdinalIgnoreCase) {
+            ["Book Author"] = [release],
+            ["Book"] = [release],
+        });
+        var runner = Runner(client, Settings(), DownloadProtocol.Torrent);
+
+        var outcome = await runner.RunAsync(
+            new AcquisitionSearchInput(Guid.NewGuid(), "Book", "Author", EntityKind.Book),
+            CancellationToken.None);
+
+        Assert.Equal(["Book Author", "Book"], client.Queries);
+        Assert.Single(outcome.Candidates);
+    }
+
+    [Fact]
+    public async Task DuplicateReleaseKeepsTheAcceptedParsingBeforeIndexerPriority() {
+        var preferredId = Guid.NewGuid();
+        var acceptedId = Guid.NewGuid();
+        var client = new ConnectionAwareIndexerSearchClient(new Dictionary<Guid, IReadOnlyList<IndexerRelease>> {
+            [preferredId] = [new IndexerRelease("Wrong Work (epub)", 5_000_000, 60, 3, DownloadProtocol.Torrent, "http://wrong", null, "same-hash", null, null, null)],
+            [acceptedId] = [new IndexerRelease("Author - Book (epub)", 5_000_000, 20, 3, DownloadProtocol.Torrent, "http://accepted", null, "same-hash", null, null, null)],
+        });
+        var runner = new AcquisitionSearchRunner(
+            new FakeIndexerConfigStore(
+                Config(preferredId, IndexerKind.Prowlarr, "Preferred indexer", priority: 1),
+                Config(acceptedId, IndexerKind.Prowlarr, "Accepted indexer", priority: 25)),
+            new FakeClientFactory(client),
+            new FakeProfileStore(),
+            new FakeBlocklistStore("unrelated"),
+            new FakeDownloadClientConfigStore(DownloadProtocol.Torrent),
+            new FakeIndexerStatusStore(),
+            new IndexerQueryWindow(),
+            Policies(new BookAcquisitionPolicyModule()),
+            Settings());
+
+        var outcome = await runner.RunAsync(
+            new AcquisitionSearchInput(Guid.NewGuid(), "Book", "Author", EntityKind.Book),
+            CancellationToken.None);
+
+        var candidate = Assert.Single(outcome.Candidates);
+        Assert.True(candidate.Accepted);
+        Assert.Equal(acceptedId, candidate.IndexerConfigId);
     }
 
     [Fact]
@@ -226,7 +277,7 @@ public sealed class AcquisitionSearchRunnerTests {
         Assert.Single(statuses.Failures, failure => failure.IndexerConfigId == prowlarrId);
         Assert.Single(outcome.Candidates, candidate => candidate.Accepted && candidate.Release.Protocol == DownloadProtocol.Soulseek);
         Assert.Equal(1, timedOut.SearchCount);
-        Assert.Equal(1, soulseek.SearchCount);
+        Assert.Equal(2, soulseek.SearchCount);
     }
 
     [Fact]
@@ -409,6 +460,19 @@ public sealed class AcquisitionSearchRunnerTests {
             return Task.FromResult(byQuery.GetValueOrDefault(query.Text) ?? []);
         }
         public Task<IndexerConnectionTest> TestAsync(IndexerConnection connection, CancellationToken cancellationToken) => throw new NotSupportedException();
+    }
+
+    private sealed class ConnectionAwareIndexerSearchClient(
+        IReadOnlyDictionary<Guid, IReadOnlyList<IndexerRelease>> byConnection) : IIndexerSearchClient {
+        public IndexerKind Kind => IndexerKind.Prowlarr;
+        public Task<IReadOnlyList<IndexerRelease>> SearchAsync(
+            IndexerConnection connection,
+            IndexerQuery query,
+            CancellationToken cancellationToken) =>
+            Task.FromResult(byConnection.GetValueOrDefault(connection.Id) ?? []);
+        public Task<IndexerConnectionTest> TestAsync(
+            IndexerConnection connection,
+            CancellationToken cancellationToken) => throw new NotSupportedException();
     }
 
     private static IndexerConfigDetail Config(

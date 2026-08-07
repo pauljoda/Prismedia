@@ -230,7 +230,7 @@ public static class RequestEndpoints {
             RequestEntityCommitRequest request,
             MonitorService monitors,
             CancellationToken cancellationToken) => {
-                // Queue the manual counterpart to the daily sweep. The exact Entity target keeps this
+                // Queue the manual counterpart to the sequential background drainer. The exact Entity target keeps this
                 // request fast and prevents an unrelated monitored item's metadata failure blocking it.
                 if (!await monitors.ScheduleEntitySearchNowAsync(request.EntityId, cancellationToken)) {
                     return Results.NotFound(new ApiProblem(

@@ -81,7 +81,12 @@ public sealed class AcquisitionFailedHandleJobHandler(
                 candidates.Where(candidate => !blocklisted.Contains(candidate.Identity)),
                 preferredProtocol,
                 candidate => candidate.Protocol,
-                candidate => candidate.Score)
+                candidate => candidate.Score,
+                candidate => AcquisitionReleaseRanking.SwarmTieBreak(
+                    input.Kind,
+                    candidate.Protocol,
+                    candidate.Seeders,
+                    candidate.Peers))
             .FirstOrDefault();
         if (next is null) {
             await KeepFailedIfOwnedAsync(

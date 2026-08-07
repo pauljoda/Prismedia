@@ -237,6 +237,14 @@ public abstract class ScanJobHandler(
                 logger.LogInformation(
                     "{JobType}: no file changes in {Label} ({Count} files), skipping detailed scan",
                     scanKind, root.Label, current.Count);
+                if (!changesOnly) {
+                    // Full scans remain an integrity fallback for bounded catalog repairs that cannot be
+                    // inferred from file signatures. Concrete handlers must keep this path surgical: it
+                    // may repair proven drift, but must never requeue all unfinished enrichment.
+                    using (timer.Phase("integrity-repair")) {
+                        await OnUnchangedIntegrityScanAsync(context, root, cancellationToken);
+                    }
+                }
                 await CompletePendingChangesAsync(root.Id, scanKind, pendingChanges, cancellationToken);
                 LogRootMetrics(context.Job.Type, root, mode, currentCount, previousCount, delta, timer.Finish());
                 return;
@@ -300,6 +308,16 @@ public abstract class ScanJobHandler(
             throw;
         }
     }
+
+    /// <summary>
+    /// Performs a bounded catalog-only integrity repair during an unchanged full scan. The default is
+    /// idle; overrides may act only on proven persistence drift and queue work for the repaired Entities.
+    /// Filesystem change scans never call this hook.
+    /// </summary>
+    protected virtual Task OnUnchangedIntegrityScanAsync(
+        JobContext context,
+        LibraryRootData root,
+        CancellationToken cancellationToken) => Task.CompletedTask;
 
     private void LogRootMetrics(
         JobType jobType,

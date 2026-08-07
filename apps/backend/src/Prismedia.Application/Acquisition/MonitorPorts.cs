@@ -192,6 +192,19 @@ public interface IMonitorStore {
                 Kind: monitor.Kind))
             .ToArray();
 
+    /// <summary>
+    /// Re-resolves one active monitor selected by the durable sequential drainer, bypassing only its
+    /// cadence timestamp. The default keeps focused adapters compatible; production preserves the same
+    /// upgrade, release-date, missing-child, and lifecycle gates as normal due selection.
+    /// </summary>
+    async Task<IReadOnlyList<DueMonitor>> ListImmediateForMonitorAsync(
+        Guid monitorId,
+        CancellationToken cancellationToken) =>
+        (await ListDueMonitorsAsync(1, cancellationToken))
+            .Where(monitor => monitor.MonitorId == monitorId)
+            .Take(1)
+            .ToArray();
+
     /// <summary>Stamps a monitor as just searched.</summary>
     Task MarkSearchedAsync(Guid monitorId, CancellationToken cancellationToken);
 

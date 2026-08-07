@@ -98,7 +98,7 @@ public sealed class AcquisitionSearchJobHandler(
                     || await profiles.GetAutoPickAsync(input.ProfileId, input.Kind, cancellationToken));
             if (autoGrab && outcome.Candidates.Any(candidate => candidate.Accepted)) {
                 await OpenReviewSignalAsync(context, payload.AcquisitionId, cancellationToken);
-                await TryAutoQueueAsync(payload.AcquisitionId, cancellationToken);
+                await TryAutoQueueAsync(payload.AcquisitionId, input.Kind, cancellationToken);
             } else if (outcome.Candidates.Count > 0) {
                 await OpenReviewSignalAsync(context, payload.AcquisitionId, cancellationToken);
             }
@@ -146,7 +146,10 @@ public sealed class AcquisitionSearchJobHandler(
     /// awaiting-selection — never left Failed while pickable candidates exist (QueueAsync marks
     /// Failed internally on an add error, so the status must be restored here).
     /// </summary>
-    private async Task TryAutoQueueAsync(Guid acquisitionId, CancellationToken cancellationToken) {
+    private async Task TryAutoQueueAsync(
+        Guid acquisitionId,
+        EntityKind kind,
+        CancellationToken cancellationToken) {
         var detail = await store.GetAsync(acquisitionId, cancellationToken);
         var preferredProtocol = await AcquisitionProtocolPreference.ResolveAsync(downloadClients, settings, cancellationToken);
         var accepted = detail is null
@@ -155,7 +158,12 @@ public sealed class AcquisitionSearchJobHandler(
                     detail.Candidates.Where(candidate => candidate.Accepted),
                     preferredProtocol,
                     candidate => candidate.Protocol,
-                    candidate => candidate.Score)
+                    candidate => candidate.Score,
+                    candidate => AcquisitionReleaseRanking.SwarmTieBreak(
+                        kind,
+                        candidate.Protocol,
+                        candidate.Seeders,
+                        candidate.Peers))
                 .Take(MaxAutoQueueAttempts)
                 .ToArray();
 
