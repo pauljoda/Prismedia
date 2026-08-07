@@ -1299,13 +1299,14 @@ public sealed class RequestCommitServiceTests {
             EntityKind.Movie,
             "The Matrix",
             identity) with {
+                Confidence = 1.000m,
                 Patch = Patch("The Matrix", identity.Value) with {
                     Description = "Provider overview",
                     Tags = ["science-fiction", "cyberpunk"]
                 },
                 Images = [
-                    new ImageCandidate("poster", "https://images.test/poster.jpg", "tmdb", 1, null, 1000, 1500),
-                    new ImageCandidate("backdrop", "https://images.test/backdrop.jpg", "tmdb", 1, null, 1920, 1080)
+                    new ImageCandidate("poster", "https://images.test/poster.jpg", "tmdb", 2.2780m, null, 1000, 1500),
+                    new ImageCandidate("backdrop", "https://images.test/backdrop.jpg", "tmdb", 1.2500m, null, 1920, 1080)
                 ],
                 Relationships = [person]
             };
@@ -1315,12 +1316,20 @@ public sealed class RequestCommitServiceTests {
             identity,
             reviewedProposal,
             [Target(reviewedProposal, RequestMediaKind.Movie, identity)]);
-        var selectedProposal = reviewedProposal with {
-            Patch = reviewedProposal.Patch with {
+        var clientProposal = reviewedProposal with {
+            Confidence = 1m,
+            Images = [
+                reviewedProposal.Images[0] with { Rank = 2.278m },
+                reviewedProposal.Images[1] with { Rank = 1.25m }
+            ]
+        };
+        var clientReview = review with { Proposal = clientProposal };
+        var selectedProposal = clientProposal with {
+            Patch = clientProposal.Patch with {
                 Description = null,
                 Tags = ["cyberpunk"]
             },
-            Images = [reviewedProposal.Images[0]],
+            Images = [clientProposal.Images[0]],
             Relationships = []
         };
         var reviews = new FakeReviewSource(_ => throw new InvalidOperationException("Provider review must not run."));
@@ -1333,11 +1342,11 @@ public sealed class RequestCommitServiceTests {
                 identity,
                 review.Revision,
                 [reviewedProposal.ProposalId],
-                Review: review,
+                Review: clientReview,
                 Proposal: selectedProposal,
                 SelectedFields: ["title", "tags", "images"],
                 SelectedImages: new Dictionary<string, string?> {
-                    ["poster"] = reviewedProposal.Images[0].Url
+                    ["poster"] = clientProposal.Images[0].Url
                 }),
             hideNsfw: false,
             CancellationToken.None);

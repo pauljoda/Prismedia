@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Security.Cryptography;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -17,7 +18,8 @@ public static class RequestProposalRevision {
 
     /// <summary>
     /// Returns the lower-case SHA-256 digest of a proposal serialized with object keys in ordinal
-    /// order. Array order is preserved because it carries provider ranking and structural meaning.
+    /// order and decimals in their shortest equivalent form. Array order is preserved because it
+    /// carries provider ranking and structural meaning.
     /// </summary>
     public static string Compute(EntityMetadataProposal proposal) {
         ArgumentNullException.ThrowIfNull(proposal);
@@ -55,6 +57,14 @@ public static class RequestProposalRevision {
                     WriteCanonical(writer, item);
                 }
                 writer.WriteEndArray();
+                break;
+
+            case JsonValueKind.Number:
+                if (element.TryGetDecimal(out var number)) {
+                    writer.WriteRawValue(number.ToString("G29", CultureInfo.InvariantCulture));
+                } else {
+                    element.WriteTo(writer);
+                }
                 break;
 
             default:

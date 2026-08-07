@@ -57,6 +57,31 @@ public sealed class RequestProposalRevisionTests {
     }
 
     [Fact]
+    public void SemanticallyEqualDecimalScaleProducesTheSameRevision() {
+        var reviewed = Proposal(
+            new Dictionary<string, string> { ["tmdb"] = "97546" },
+            new Dictionary<string, string> { ["firstAir"] = "2020-08-14" }) with {
+            Confidence = 1.000m,
+            Images = [new ImageCandidate(
+                "poster",
+                "https://image.tmdb.org/t/p/original/poster.jpg",
+                "tmdb",
+                2.2780m,
+                "en",
+                2000,
+                3000)]
+        };
+        var clientRoundTrip = reviewed with {
+            Confidence = 1m,
+            Images = [reviewed.Images[0] with { Rank = 2.278m }]
+        };
+
+        Assert.Equal(
+            RequestProposalRevision.Compute(reviewed),
+            RequestProposalRevision.Compute(clientRoundTrip));
+    }
+
+    [Fact]
     public void EntityKindMembersKeepTheirGoldenRevision() {
         var proposal = Proposal(
             new Dictionary<string, string> { ["tmdb"] = "123" },
