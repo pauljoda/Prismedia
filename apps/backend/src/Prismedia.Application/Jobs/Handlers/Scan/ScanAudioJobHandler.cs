@@ -24,8 +24,9 @@ public sealed class ScanAudioJobHandler(
     IDownstreamNeedsPersistence downstreamNeeds,
     IScanSnapshotStore? snapshots = null,
     IAcquisitionHintApplier? acquisitionHints = null,
-    IMediaProcessingStatePersistence? processingState = null)
-    : ScanJobHandler(logger, fileDiscovery, roots, snapshots, processingState) {
+    IMediaProcessingStatePersistence? processingState = null,
+    ILibraryFileChangeIntake? changeIntake = null)
+    : ScanJobHandler(logger, fileDiscovery, roots, snapshots, processingState, changeIntake) {
     protected override bool IsEligibleRoot(LibraryRootData root) => root.ScanAudio;
 
     protected override IReadOnlyList<MediaCategory> ScanCategories => [MediaCategory.Audio];

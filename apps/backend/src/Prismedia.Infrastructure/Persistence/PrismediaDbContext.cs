@@ -92,6 +92,8 @@ public sealed class PrismediaDbContext : DbContext {
 
     public DbSet<ScannedFileRow> ScannedFiles => Set<ScannedFileRow>();
 
+    public DbSet<LibraryFileChangeIntentRow> LibraryFileChangeIntents => Set<LibraryFileChangeIntentRow>();
+
     public DbSet<AppSettingRow> AppSettings => Set<AppSettingRow>();
 
     public DbSet<UserRow> Users => Set<UserRow>();

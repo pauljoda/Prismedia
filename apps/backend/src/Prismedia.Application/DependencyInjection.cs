@@ -116,6 +116,7 @@ public static class DependencyInjection {
         services.AddHostedService<JobScheduler>();
         services.AddHostedService<JobHistoryPruner>();
         services.AddHostedService<EntityLifecycleRecoveryWorker>();
+        services.AddHostedService<LibraryFileChangeMonitor>();
 
         return services;
     }

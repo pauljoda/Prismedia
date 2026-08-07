@@ -1,4 +1,5 @@
 using Prismedia.Application.Jobs;
+using Prismedia.Application.Jobs.Ports;
 using Prismedia.Domain.Entities;
 
 namespace Prismedia.Application.Tests.Jobs;
@@ -52,8 +53,34 @@ public sealed class LibraryScanJobsTests {
             Assert.Equal(LibraryScanJobs.TargetKind, request.TargetEntityKind);
             Assert.Equal(rootId.ToString(), request.TargetEntityId);
             Assert.Equal(JobResourceKeys.LibraryScan, request.ResourceKey);
-            Assert.Equal(rootId, AssertPayload(request).RootId);
+            var payload = AssertPayload(request);
+            Assert.Equal(rootId, payload.RootId);
+            Assert.False(payload.ChangesOnly);
         });
+    }
+
+    [Fact]
+    public async Task ChangedPathQueueingPersistsEachKindBeforeQueuingSurgicalJobs() {
+        var rootId = Guid.NewGuid();
+        var queue = new RecordingJobQueue();
+        var intake = new RecordingChangeIntake();
+        var paths = new[] { "/media/tv/Series/Season 01/Episode.mkv" };
+
+        var queued = await LibraryScanJobs.QueueChangedPathsForRootAsync(
+            queue,
+            intake,
+            rootId,
+            "TV",
+            new LibraryScanSelection(true, false, true, false),
+            paths,
+            CancellationToken.None);
+
+        Assert.Equal(2, queued);
+        Assert.Equal(
+            [JobType.ScanLibrary.ToCode(), JobType.ScanAudio.ToCode()],
+            intake.Records.Select(record => record.ScanKind));
+        Assert.All(intake.Records, record => Assert.Equal(paths, record.Paths));
+        Assert.All(queue.Enqueued, request => Assert.True(AssertPayload(request).ChangesOnly));
     }
 
     private static ScanRootPayload AssertPayload(EnqueueJobRequest request) {
@@ -103,5 +130,34 @@ public sealed class LibraryScanJobsTests {
             throw new NotSupportedException();
         public Task<int> PruneHistoryAsync(TimeSpan retention, CancellationToken cancellationToken) =>
             throw new NotSupportedException();
+    }
+
+    private sealed class RecordingChangeIntake : ILibraryFileChangeIntake {
+        public List<(Guid RootId, string ScanKind, IReadOnlyCollection<string> Paths)> Records { get; } = [];
+
+        public Task RecordAsync(
+            Guid rootId,
+            string scanKind,
+            IReadOnlyCollection<string> absolutePaths,
+            CancellationToken cancellationToken) {
+            Records.Add((rootId, scanKind, absolutePaths));
+            return Task.CompletedTask;
+        }
+
+        public Task<LibraryFileChangeBatch> LoadAsync(
+            Guid rootId,
+            string scanKind,
+            int limit,
+            CancellationToken cancellationToken) => Task.FromResult(LibraryFileChangeBatch.Empty);
+
+        public Task<bool> HasPendingAsync(Guid rootId, string scanKind, CancellationToken cancellationToken) =>
+            Task.FromResult(false);
+
+        public Task CompleteAsync(
+            Guid rootId,
+            string scanKind,
+            IReadOnlyCollection<string> absolutePaths,
+            DateTimeOffset observedThrough,
+            CancellationToken cancellationToken) => Task.CompletedTask;
     }
 }

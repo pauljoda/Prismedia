@@ -238,6 +238,7 @@ public static class DependencyInjection {
         services.AddScoped<IScanMetadataPersistence>(provider =>
             provider.GetRequiredService<LibraryScanPersistenceService>());
         services.AddScoped<IScanSnapshotStore, EfScanSnapshotStore>();
+        services.AddScoped<ILibraryFileChangeIntake, EfLibraryFileChangeIntake>();
         services.AddSingleton<IVideoSidecarMetadataReader, VideoSidecarMetadataReader>();
         services.AddSingleton<IComicInfoMetadataReader, ComicInfoMetadataReader>();
         services.AddSingleton<IBookFileMetadataReader, Media.Books.BookFileMetadataReader>();

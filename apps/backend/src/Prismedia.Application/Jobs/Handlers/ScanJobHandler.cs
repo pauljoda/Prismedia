@@ -31,7 +31,9 @@ public abstract class ScanJobHandler(
     IFileDiscovery fileDiscovery,
     ILibraryScanRootPersistence roots,
     IScanSnapshotStore? snapshots = null,
-    IMediaProcessingStatePersistence? processingState = null) : IJobHandler {
+    IMediaProcessingStatePersistence? processingState = null,
+    ILibraryFileChangeIntake? changeIntake = null) : IJobHandler {
+    private const int ChangeBatchSize = 256;
 
     public async Task HandleAsync(JobContext context, CancellationToken cancellationToken) {
         var timer = new JobPhaseTimer();
@@ -67,7 +69,7 @@ public abstract class ScanJobHandler(
                     // scanning the remaining roots, and fail the job at the end.
                     try {
                         using (timer.Phase("root-scan")) {
-                            await ScanRootWithSnapshotAsync(context, currentRoot, cancellationToken);
+                            await ScanRootWithSnapshotAsync(context, currentRoot, changesOnly: false, cancellationToken);
                         }
                         using (timer.Phase("root-last-scanned")) {
                             await roots.UpdateRootLastScannedAsync(currentRoot.Id, cancellationToken);
@@ -104,7 +106,7 @@ public abstract class ScanJobHandler(
 
             scannedRoots = 1;
             using (timer.Phase("root-scan")) {
-                await ScanRootWithSnapshotAsync(context, root, cancellationToken);
+                await ScanRootWithSnapshotAsync(context, root, payload.ChangesOnly, cancellationToken);
             }
             using (timer.Phase("root-last-scanned")) {
                 await roots.UpdateRootLastScannedAsync(root.Id, cancellationToken);
@@ -147,7 +149,10 @@ public abstract class ScanJobHandler(
     /// changed since the last scan, in which case the detailed pass is skipped.
     /// </summary>
     private async Task ScanRootWithSnapshotAsync(
-        JobContext context, LibraryRootData root, CancellationToken cancellationToken) {
+        JobContext context,
+        LibraryRootData root,
+        bool changesOnly,
+        CancellationToken cancellationToken) {
         var timer = new JobPhaseTimer();
         var mode = "full";
         var currentCount = 0;
@@ -177,16 +182,23 @@ public abstract class ScanJobHandler(
             }
 
             var scanKind = context.Job.Type.ToCode();
+            var pendingChanges = changeIntake is null
+                ? LibraryFileChangeBatch.Empty
+                : await changeIntake.LoadAsync(
+                    root.Id,
+                    scanKind,
+                    ChangeBatchSize,
+                    cancellationToken);
+            if (changesOnly && pendingChanges.IsEmpty) {
+                mode = "changes-empty";
+                LogRootMetrics(context.Job.Type, root, mode, currentCount, previousCount, delta, timer.Finish());
+                return;
+            }
+
             IReadOnlySet<string> excluded;
             using (timer.Phase("excluded-paths")) {
                 excluded = await roots.GetExcludedPathsForRootAsync(root.Id, cancellationToken);
             }
-
-            IReadOnlyList<FileSignature> current;
-            using (timer.Phase("signature-enumerate")) {
-                current = await EnumerateSignaturesAsync(root, excluded, cancellationToken);
-            }
-            currentCount = current.Count;
 
             IReadOnlyList<FileSignature> previous;
             using (timer.Phase("snapshot-load")) {
@@ -194,24 +206,47 @@ public abstract class ScanJobHandler(
             }
             previousCount = previous.Count;
 
-            using (timer.Phase("snapshot-diff")) {
-                delta = ScanSnapshotDiff.Compute(previous, current);
+            IReadOnlyList<FileSignature> current;
+            if (changesOnly && previous.Count > 0) {
+                using (timer.Phase("signature-scope-enumerate")) {
+                    delta = await ComputeScopedDeltaAsync(
+                        root,
+                        excluded,
+                        previous,
+                        pendingChanges.Paths,
+                        cancellationToken);
+                }
+                current = ApplyDelta(previous, delta);
+                mode = "surgical-change-intake";
+            } else {
+                using (timer.Phase("signature-enumerate")) {
+                    current = await EnumerateSignaturesAsync(root, excluded, cancellationToken);
+                }
+                using (timer.Phase("snapshot-diff")) {
+                    delta = ScanSnapshotDiff.Compute(previous, current);
+                }
             }
+            currentCount = current.Count;
 
             // A snapshot exists and nothing on disk changed since it was taken, so the entities,
             // structure, and assets this scan would produce are already persisted. The first scan (no
             // snapshot) and any add/remove/change fall through to the full scan, which always sees the
             // whole file set and therefore keeps folder-context classification correct.
             if (previous.Count > 0 && !delta.HasChanges) {
-                mode = "unchanged";
+                mode = changesOnly ? "changes-noop" : "unchanged";
                 logger.LogInformation(
                     "{JobType}: no file changes in {Label} ({Count} files), skipping detailed scan",
                     scanKind, root.Label, current.Count);
+                await CompletePendingChangesAsync(root.Id, scanKind, pendingChanges, cancellationToken);
                 LogRootMetrics(context.Job.Type, root, mode, currentCount, previousCount, delta, timer.Finish());
                 return;
             }
 
-            mode = previous.Count == 0 ? "full-no-snapshot" : "full-changed";
+            mode = previous.Count == 0
+                ? "full-no-snapshot"
+                : changesOnly
+                    ? "surgical-change-intake"
+                    : "full-changed";
             if (delta.HasChanges && previous.Count > 0) {
                 logger.LogInformation(
                     "{JobType}: {Label} changed since last scan (+{Added} -{Removed} ~{Changed}), rescanning",
@@ -255,6 +290,7 @@ public abstract class ScanJobHandler(
                     cancellationToken);
             }
             ThrowIfFilesFailed(detailedOutcome);
+            await CompletePendingChangesAsync(root.Id, scanKind, pendingChanges, cancellationToken);
             LogRootMetrics(context.Job.Type, root, mode, currentCount, previousCount, delta, timer.Finish());
         } catch (OperationCanceledException) {
             LogRootMetrics(context.Job.Type, root, "cancelled", currentCount, previousCount, delta, timer.Finish());
@@ -328,6 +364,105 @@ public abstract class ScanJobHandler(
 
         return byPath.Values.ToArray();
     }
+
+    private async Task<ScanDelta> ComputeScopedDeltaAsync(
+        LibraryRootData root,
+        IReadOnlySet<string> excluded,
+        IReadOnlyList<FileSignature> previous,
+        IReadOnlyList<string> changedPaths,
+        CancellationToken cancellationToken) {
+        var previousByPath = previous.ToDictionary(
+            signature => signature.Path,
+            FileSystemPathComparison.Comparer);
+        var scopedPrevious = new Dictionary<string, FileSignature>(FileSystemPathComparison.Comparer);
+        var scopedCurrent = new Dictionary<string, FileSignature>(FileSystemPathComparison.Comparer);
+
+        foreach (var rawPath in changedPaths) {
+            var path = Path.GetFullPath(rawPath);
+            foreach (var signature in previousByPath.Values.Where(signature =>
+                         FileSystemPathComparison.IsSameOrDescendant(path, signature.Path))) {
+                scopedPrevious[signature.Path] = signature;
+            }
+
+            if (Directory.Exists(path)) {
+                if (!root.Recursive
+                    && !FileSystemPathComparison.Comparer.Equals(
+                        Path.TrimEndingDirectorySeparator(root.Path),
+                        Path.TrimEndingDirectorySeparator(path))) {
+                    continue;
+                }
+
+                foreach (var signature in await EnumerateSignaturesForPathAsync(
+                             path,
+                             root.Recursive,
+                             excluded,
+                             cancellationToken)) {
+                    scopedCurrent[signature.Path] = signature;
+                }
+                continue;
+            }
+
+            if (!File.Exists(path) || Path.GetDirectoryName(path) is not { } parent) {
+                continue;
+            }
+            foreach (var signature in await EnumerateSignaturesForPathAsync(
+                         parent,
+                         recursive: false,
+                         excluded,
+                         cancellationToken)) {
+                if (FileSystemPathComparison.Comparer.Equals(signature.Path, path)) {
+                    scopedCurrent[signature.Path] = signature;
+                }
+            }
+        }
+
+        return ScanSnapshotDiff.Compute(scopedPrevious.Values.ToArray(), scopedCurrent.Values.ToArray());
+    }
+
+    private async Task<IReadOnlyList<FileSignature>> EnumerateSignaturesForPathAsync(
+        string path,
+        bool recursive,
+        IReadOnlySet<string> excluded,
+        CancellationToken cancellationToken) {
+        var byPath = new Dictionary<string, FileSignature>(FileSystemPathComparison.Comparer);
+        foreach (var category in SnapshotCategories) {
+            foreach (var signature in await fileDiscovery.DiscoverFileSignaturesAsync(
+                         path,
+                         category,
+                         recursive,
+                         excluded,
+                         cancellationToken)) {
+                byPath[signature.Path] = signature;
+            }
+        }
+        return byPath.Values.ToArray();
+    }
+
+    private static IReadOnlyList<FileSignature> ApplyDelta(
+        IReadOnlyList<FileSignature> previous,
+        ScanDelta delta) {
+        var result = previous.ToDictionary(
+            signature => signature.Path,
+            FileSystemPathComparison.Comparer);
+        foreach (var removed in delta.Removed) result.Remove(removed.Path);
+        foreach (var changed in delta.Changed) result[changed.Path] = changed;
+        foreach (var added in delta.Added) result[added.Path] = added;
+        return result.Values.ToArray();
+    }
+
+    private Task CompletePendingChangesAsync(
+        Guid rootId,
+        string scanKind,
+        LibraryFileChangeBatch batch,
+        CancellationToken cancellationToken) =>
+        changeIntake is null || batch.IsEmpty
+            ? Task.CompletedTask
+            : changeIntake.CompleteAsync(
+                rootId,
+                scanKind,
+                batch.Paths,
+                batch.ObservedThrough,
+                cancellationToken);
 
     /// <summary>Returns true if this root should be scanned by this handler's media type.</summary>
     protected abstract bool IsEligibleRoot(LibraryRootData root);

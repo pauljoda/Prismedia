@@ -28,8 +28,9 @@ public sealed class ScanLibraryJobHandler(
     IAcquisitionHintApplier? acquisitionHints = null,
     IMediaProcessingStatePersistence? processingState = null,
     ISubtitleSidecarDiscovery? subtitleSidecars = null,
-    VideoScanConcurrencyGate? scanGate = null)
-    : ScanJobHandler(logger, fileDiscovery, roots, snapshots, processingState) {
+    VideoScanConcurrencyGate? scanGate = null,
+    ILibraryFileChangeIntake? changeIntake = null)
+    : ScanJobHandler(logger, fileDiscovery, roots, snapshots, processingState, changeIntake) {
     private const int BatchSize = 50;
     private const int SurgicalChangeLimit = 512;
     private static readonly Regex SeasonFolderPattern = new(

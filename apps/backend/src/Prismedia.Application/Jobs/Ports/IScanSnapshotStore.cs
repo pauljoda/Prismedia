@@ -29,3 +29,46 @@ public interface IScanSnapshotStore {
     /// <param name="cancellationToken">Cancellation token.</param>
     Task ApplyAsync(Guid rootId, string scanKind, ScanDelta delta, CancellationToken cancellationToken);
 }
+
+/// <summary>One durable, quieted set of filesystem paths awaiting a media-family reconciliation.</summary>
+public sealed record LibraryFileChangeBatch(
+    IReadOnlyList<string> Paths,
+    DateTimeOffset ObservedThrough) {
+    /// <summary>Whether the batch contains no work.</summary>
+    public bool IsEmpty => Paths.Count == 0;
+
+    /// <summary>Canonical empty batch.</summary>
+    public static LibraryFileChangeBatch Empty { get; } = new([], DateTimeOffset.MinValue);
+}
+
+/// <summary>
+/// Durable coalescing ledger for filesystem watcher hints. One row per root, scan kind, and absolute
+/// path survives worker restarts; completion is cutoff-guarded so a newer event cannot be erased by an
+/// older scan that happened to process the same path.
+/// </summary>
+public interface ILibraryFileChangeIntake {
+    /// <summary>Records or refreshes exact changed paths for one scan kind.</summary>
+    Task RecordAsync(
+        Guid rootId,
+        string scanKind,
+        IReadOnlyCollection<string> absolutePaths,
+        CancellationToken cancellationToken);
+
+    /// <summary>Loads the oldest bounded set of paths awaiting reconciliation.</summary>
+    Task<LibraryFileChangeBatch> LoadAsync(
+        Guid rootId,
+        string scanKind,
+        int limit,
+        CancellationToken cancellationToken);
+
+    /// <summary>Returns whether any paths remain for the root and scan kind.</summary>
+    Task<bool> HasPendingAsync(Guid rootId, string scanKind, CancellationToken cancellationToken);
+
+    /// <summary>Completes only observations at or before the loaded batch cutoff.</summary>
+    Task CompleteAsync(
+        Guid rootId,
+        string scanKind,
+        IReadOnlyCollection<string> absolutePaths,
+        DateTimeOffset observedThrough,
+        CancellationToken cancellationToken);
+}

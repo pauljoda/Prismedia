@@ -19,7 +19,8 @@ public sealed class ScanGalleryJobHandler(
     ILibraryScanRootPersistence roots,
     IImageGalleryScanPersistence images,
     IDownstreamNeedsPersistence downstreamNeeds,
-    IScanSnapshotStore? snapshots = null) : ScanJobHandler(logger, fileDiscovery, roots, snapshots) {
+    IScanSnapshotStore? snapshots = null,
+    ILibraryFileChangeIntake? changeIntake = null) : ScanJobHandler(logger, fileDiscovery, roots, snapshots, changeIntake: changeIntake) {
     protected override bool IsEligibleRoot(LibraryRootData root) => root.ScanImages;
 
     protected override IReadOnlyList<MediaCategory> ScanCategories => [MediaCategory.Image];

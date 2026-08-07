@@ -1,4 +1,5 @@
 using Prismedia.Application.Jobs;
+using Prismedia.Application.Jobs.Ports;
 using Prismedia.Contracts.Files;
 using Prismedia.Contracts.System;
 using Prismedia.Domain.Entities;
@@ -15,7 +16,8 @@ public sealed class FilesService(
     IManagedFileStorage storage,
     IFileArchivePreparationService archives,
     IJobQueueService jobs,
-    EntitySourcePathMutationCoordinator sourcePathMutations) {
+    EntitySourcePathMutationCoordinator sourcePathMutations,
+    ILibraryFileChangeIntake? fileChanges = null) {
     /// <summary>Lists watched roots available to the Files page.</summary>
     public async Task<FileRootsResponse> ListRootsAsync(bool hideNsfw, CancellationToken cancellationToken) {
         var roots = await persistence.ListRootsAsync(cancellationToken);
@@ -106,7 +108,8 @@ public sealed class FilesService(
         var target = await ResolveAsync(request.RootId, relativePath, hideNsfw, cancellationToken);
         await EnsureVisiblePathAsync(target, hideNsfw, cancellationToken);
         await storage.CreateDirectoryAsync(target, cancellationToken);
-        return new FileOperationResponse(await QueueScansAsync([target.Root], cancellationToken));
+        return new FileOperationResponse(await QueueChangedScansAsync(
+            target.Root, [target.AbsolutePath], cancellationToken));
     }
 
     /// <summary>Uploads files to a watched-root directory while preserving nested relative paths.</summary>
@@ -120,6 +123,7 @@ public sealed class FilesService(
 
         var targetPath = NormalizeRelativePath(request.TargetPath);
         FileLibraryRoot? root = null;
+        var writtenPaths = new List<string>(request.Items.Count);
         foreach (var item in request.Items) {
             var relativeItemPath = NormalizeRelativePath(item.RelativePath);
             if (string.IsNullOrWhiteSpace(relativeItemPath)) {
@@ -134,9 +138,12 @@ public sealed class FilesService(
             await EnsureVisiblePathAsync(destination, hideNsfw, cancellationToken);
             root = destination.Root;
             await storage.WriteFileAsync(destination, item.Content, cancellationToken);
+            writtenPaths.Add(destination.AbsolutePath);
         }
 
-        return new FileOperationResponse(root is null ? 0 : await QueueScansAsync([root], cancellationToken));
+        return new FileOperationResponse(root is null
+            ? 0
+            : await QueueChangedScansAsync(root, writtenPaths, cancellationToken));
     }
 
     /// <summary>Renames a file or folder within its current parent directory.</summary>
@@ -154,7 +161,8 @@ public sealed class FilesService(
             cancellationToken);
         await EnsureVisiblePathAsync(target, hideNsfw, cancellationToken);
         await MoveResolvedAsync(source, target, cancellationToken);
-        return new FileOperationResponse(await QueueScansAsync([source.Root], cancellationToken));
+        return new FileOperationResponse(await QueueChangedScansAsync(
+            source.Root, [source.AbsolutePath, target.AbsolutePath], cancellationToken));
     }
 
     /// <summary>Moves a file or folder between watched-root locations.</summary>
@@ -167,7 +175,15 @@ public sealed class FilesService(
         var target = await ResolveAsync(request.TargetRootId, request.TargetPath, hideNsfw, cancellationToken);
         await EnsureVisiblePathAsync(target, hideNsfw, cancellationToken);
         await MoveResolvedAsync(source, target, cancellationToken);
-        return new FileOperationResponse(await QueueScansAsync([source.Root, target.Root], cancellationToken));
+        if (source.Root.Id == target.Root.Id) {
+            return new FileOperationResponse(await QueueChangedScansAsync(
+                source.Root, [source.AbsolutePath, target.AbsolutePath], cancellationToken));
+        }
+        var sourceQueued = await QueueChangedScansAsync(
+            source.Root, [source.AbsolutePath], cancellationToken);
+        var targetQueued = await QueueChangedScansAsync(
+            target.Root, [target.AbsolutePath], cancellationToken);
+        return new FileOperationResponse(sourceQueued + targetQueued);
     }
 
     /// <summary>Permanently deletes one watched-root file or directory and queues scans.</summary>
@@ -188,7 +204,8 @@ public sealed class FilesService(
         if (!executed) {
             throw SourceLifecycleConflict(target.RelativePath);
         }
-        return new FileOperationResponse(await QueueScansAsync([target.Root], cancellationToken));
+        return new FileOperationResponse(await QueueChangedScansAsync(
+            target.Root, [target.AbsolutePath], cancellationToken));
     }
 
     /// <summary>Marks a watched-root file or directory as excluded from future scans.</summary>
@@ -208,7 +225,8 @@ public sealed class FilesService(
             target.RelativePath,
             detail.Entry.Kind,
             cancellationToken);
-        return new FileOperationResponse(await QueueScansAsync([target.Root], cancellationToken));
+        return new FileOperationResponse(await QueueChangedScansAsync(
+            target.Root, [target.AbsolutePath], cancellationToken));
     }
 
     /// <summary>Removes a watched-root file or directory scan exclusion.</summary>
@@ -223,7 +241,8 @@ public sealed class FilesService(
         var target = await ResolveAsync(request.RootId, request.Path, hideNsfw, cancellationToken);
         await EnsureVisiblePathAsync(target, hideNsfw, cancellationToken);
         await persistence.RemoveExclusionAsync(target.Root.Id, target.RelativePath, cancellationToken);
-        return new FileOperationResponse(await QueueScansAsync([target.Root], cancellationToken));
+        return new FileOperationResponse(await QueueChangedScansAsync(
+            target.Root, [target.AbsolutePath], cancellationToken));
     }
 
     /// <summary>Queues scans for one watched root.</summary>
@@ -232,7 +251,12 @@ public sealed class FilesService(
         bool hideNsfw,
         CancellationToken cancellationToken) {
         var root = await GetRootAsync(request.RootId, hideNsfw, cancellationToken);
-        return new FileOperationResponse(await QueueScansAsync([root], cancellationToken));
+        if (string.IsNullOrWhiteSpace(request.Path)) {
+            return new FileOperationResponse(await QueueScansAsync([root], cancellationToken));
+        }
+        var target = await ResolveAsync(request.RootId, request.Path, hideNsfw, cancellationToken);
+        return new FileOperationResponse(await QueueChangedScansAsync(
+            root, [target.AbsolutePath], cancellationToken));
     }
 
     private async Task MoveResolvedAsync(
@@ -422,6 +446,25 @@ public sealed class FilesService(
 
         return queued;
     }
+
+    private Task<int> QueueChangedScansAsync(
+        FileLibraryRoot root,
+        IReadOnlyCollection<string> absolutePaths,
+        CancellationToken cancellationToken) =>
+        fileChanges is null
+            ? QueueScansAsync([root], cancellationToken)
+            : LibraryScanJobs.QueueChangedPathsForRootAsync(
+                jobs,
+                fileChanges,
+                root.Id,
+                root.Label,
+                new LibraryScanSelection(
+                    Videos: root.ScanVideos,
+                    Images: root.ScanImages,
+                    Audio: root.ScanAudio,
+                    Books: root.ScanBooks),
+                absolutePaths,
+                cancellationToken);
 
     private static string CleanSegment(string name) {
         var trimmed = name.Trim();

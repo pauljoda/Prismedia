@@ -16,7 +16,8 @@ public sealed record FileLibraryRoot(
     bool ScanImages,
     bool ScanAudio,
     bool ScanBooks,
-    bool IsNsfw);
+    bool IsNsfw,
+    bool Recursive = true);
 
 /// <summary>
 /// Absolute path resolved under a watched root.

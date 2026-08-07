@@ -7,7 +7,10 @@ namespace Prismedia.Application.Jobs;
 /// Payload carried by root-scoped scan jobs.
 /// </summary>
 /// <param name="RootId">Library root identifier to scan.</param>
-public sealed record ScanRootPayload([property: JsonPropertyName("rootId")] Guid RootId) {
+/// <param name="ChangesOnly">Whether the scan should consume durable filesystem-change hints instead of walking the whole root.</param>
+public sealed record ScanRootPayload(
+    [property: JsonPropertyName("rootId")] Guid RootId,
+    [property: JsonPropertyName("changesOnly")] bool ChangesOnly = false) {
     /// <summary>
     /// Serializes the payload using the public scan-job wire shape.
     /// </summary>
@@ -33,7 +36,9 @@ public sealed record ScanRootPayload([property: JsonPropertyName("rootId")] Guid
             var root = doc.RootElement;
             if (TryReadGuid(root, "rootId", out var rootId) ||
                 TryReadGuid(root, "libraryRootId", out rootId)) {
-                payload = new ScanRootPayload(rootId);
+                var changesOnly = root.TryGetProperty("changesOnly", out var changesOnlyProperty)
+                    && changesOnlyProperty.ValueKind == JsonValueKind.True;
+                payload = new ScanRootPayload(rootId, changesOnly);
                 return true;
             }
         } catch (JsonException) {

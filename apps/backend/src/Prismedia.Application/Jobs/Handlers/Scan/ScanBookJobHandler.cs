@@ -24,7 +24,8 @@ public sealed class ScanBookJobHandler(
     IScanMetadataPersistence? scanMetadata = null,
     IBookFileMetadataReader? bookFileMetadata = null,
     Acquisition.IAcquisitionHintApplier? acquisitionHints = null,
-    IAudioScanPersistence? audio = null) : ScanJobHandler(logger, fileDiscovery, roots, snapshots) {
+    IAudioScanPersistence? audio = null,
+    ILibraryFileChangeIntake? changeIntake = null) : ScanJobHandler(logger, fileDiscovery, roots, snapshots, changeIntake: changeIntake) {
     private static readonly HashSet<string> ImageExtensions = new(StringComparer.OrdinalIgnoreCase)
     {
         ".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".tiff", ".tif"

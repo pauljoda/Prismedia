@@ -36,7 +36,9 @@ An acquisition graph may pause for release review and for its download client. S
 
 All acquisition import engines materialize through the imported-Entity facade. The result names canonical imported Entities, affected ancestors, exact added/replaced/removed paths, and source revision/file-role state. Materialization updates scan snapshots for those exact paths.
 
-The `reconcile-entity` planner derives downstream work from Entity kind, capabilities, owned files, source revision, and asset state. It never enumerates a library root. Required probes gate `acquisition-finalize`; fingerprints, previews, artwork variants, subtitles, and other optional enrichment are best-effort. Ancestor projections run after affected child readiness. Scheduled or explicitly requested administrative scans remain the mechanism for discovering unrelated out-of-band filesystem changes.
+The `reconcile-entity` planner derives downstream work from Entity kind, capabilities, owned files, source revision, and asset state. It never enumerates a library root. Required probes gate `acquisition-finalize`; fingerprints, previews, artwork variants, subtitles, and other optional enrichment are best-effort. Ancestor projections run after affected child readiness.
+
+Out-of-band filesystem changes enter a durable `(root, scan kind, path)` ledger after a short watcher quiet period. Repeated notifications coalesce, a cutoff-guarded scan cannot erase a newer observation, and the worker requeues any ledger rows left across a restart or while another scan was active. Video replacements use the exact path and its existing snapshot context; directory membership changes use the affected subtree. Periodic full scans remain a lower-frequency integrity fallback for watcher overflow, unavailable mounts, and filesystems that do not publish reliable notifications.
 
 ## API and operations UI
 

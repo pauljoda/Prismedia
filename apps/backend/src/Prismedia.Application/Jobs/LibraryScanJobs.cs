@@ -1,4 +1,5 @@
 using Prismedia.Domain.Entities;
+using Prismedia.Application.Jobs.Ports;
 
 namespace Prismedia.Application.Jobs;
 
@@ -35,6 +36,80 @@ public static class LibraryScanJobs {
         string rootLabel,
         LibraryScanSelection selection,
         CancellationToken cancellationToken) {
+        return await QueueRootJobsAsync(
+            queue,
+            rootId,
+            rootLabel,
+            selection,
+            changesOnly: false,
+            cancellationToken);
+    }
+
+    /// <summary>
+    /// Durably records exact filesystem paths for every enabled media-family scan, then ensures one
+    /// change-only job per kind is queued. New observations remain in the ledger even when a matching
+    /// job is already running; the filesystem monitor will queue the continuation after it completes.
+    /// </summary>
+    public static async Task<int> QueueChangedPathsForRootAsync(
+        IJobQueueService queue,
+        ILibraryFileChangeIntake changes,
+        Guid rootId,
+        string rootLabel,
+        LibraryScanSelection selection,
+        IReadOnlyCollection<string> absolutePaths,
+        CancellationToken cancellationToken) {
+        if (absolutePaths.Count == 0) {
+            return 0;
+        }
+
+        foreach (var type in ScanJobTypesFor(selection)) {
+            await changes.RecordAsync(
+                rootId,
+                type.ToCode(),
+                absolutePaths,
+                cancellationToken);
+        }
+        return await QueueRootJobsAsync(
+            queue,
+            rootId,
+            rootLabel,
+            selection,
+            changesOnly: true,
+            cancellationToken);
+    }
+
+    /// <summary>Ensures change-only jobs exist for media kinds that still have durable path intents.</summary>
+    public static async Task<int> QueuePendingChangesForRootAsync(
+        IJobQueueService queue,
+        ILibraryFileChangeIntake changes,
+        Guid rootId,
+        string rootLabel,
+        LibraryScanSelection selection,
+        CancellationToken cancellationToken) {
+        var pendingSelection = new LibraryScanSelection(
+            Videos: selection.Videos && await changes.HasPendingAsync(rootId, JobType.ScanLibrary.ToCode(), cancellationToken),
+            Images: selection.Images && await changes.HasPendingAsync(rootId, JobType.ScanGallery.ToCode(), cancellationToken),
+            Audio: selection.Audio && await changes.HasPendingAsync(rootId, JobType.ScanAudio.ToCode(), cancellationToken),
+            Books: selection.Books && await changes.HasPendingAsync(rootId, JobType.ScanBook.ToCode(), cancellationToken));
+        if (pendingSelection.IsEmpty) {
+            return 0;
+        }
+        return await QueueRootJobsAsync(
+            queue,
+            rootId,
+            rootLabel,
+            pendingSelection,
+            changesOnly: true,
+            cancellationToken);
+    }
+
+    private static async Task<int> QueueRootJobsAsync(
+        IJobQueueService queue,
+        Guid rootId,
+        string rootLabel,
+        LibraryScanSelection selection,
+        bool changesOnly,
+        CancellationToken cancellationToken) {
         await queue.DeclareResourceAsync(
             JobResourceKeys.LibraryScan,
             maxConcurrency: 1,
@@ -42,7 +117,7 @@ public static class LibraryScanJobs {
             cancellationToken);
 
         var targetId = rootId.ToString();
-        var payloadJson = new ScanRootPayload(rootId).ToJson();
+        var payloadJson = new ScanRootPayload(rootId, changesOnly).ToJson();
         var queued = 0;
         foreach (var type in ScanJobTypesFor(selection)) {
             if (await queue.HasPendingAsync(type, targetId, cancellationToken)) {

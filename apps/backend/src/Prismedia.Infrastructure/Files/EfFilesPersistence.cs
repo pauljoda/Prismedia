@@ -25,7 +25,8 @@ public sealed class EfFilesPersistence(PrismediaDbContext db) : IFilesPersistenc
                 root.ScanImages,
                 root.ScanAudio,
                 root.ScanBooks,
-                root.IsNsfw))
+                root.IsNsfw,
+                root.Recursive))
             .ToArrayAsync(cancellationToken);
 
     /// <inheritdoc />
@@ -41,7 +42,8 @@ public sealed class EfFilesPersistence(PrismediaDbContext db) : IFilesPersistenc
                 root.ScanImages,
                 root.ScanAudio,
                 root.ScanBooks,
-                root.IsNsfw))
+                root.IsNsfw,
+                root.Recursive))
             .FirstOrDefaultAsync(cancellationToken);
 
     /// <inheritdoc />

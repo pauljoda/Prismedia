@@ -2869,6 +2869,50 @@ public sealed class ScanJobHandlerTests {
     }
 
     [Fact]
+    public async Task DurableFileChangeScansOnlyTheChangedFilesParentDirectory() {
+        var tempRoot = Path.Combine(Path.GetTempPath(), $"prismedia-scan-scope-{Guid.NewGuid():N}");
+        var season = Path.Combine(tempRoot, "Series", "Season 01");
+        Directory.CreateDirectory(season);
+        var changedPath = Path.Combine(season, "S01E01.mkv");
+        var untouchedPath = Path.Combine(season, "S01E02.mkv");
+        await File.WriteAllBytesAsync(changedPath, [1]);
+        await File.WriteAllBytesAsync(untouchedPath, [2]);
+        try {
+            var root = new LibraryRootData(
+                Guid.NewGuid(), tempRoot, "TV",
+                Enabled: true, Recursive: true,
+                ScanVideos: true, ScanImages: false, ScanAudio: false, ScanBooks: false, IsNsfw: false);
+            var videoId = Guid.NewGuid();
+            var persistence = new FakeScanPersistence([root]) { UpsertedVideoIds = [videoId] };
+            var snapshots = new FakeScanSnapshotStore();
+            snapshots.Seed(root.Id, JobType.ScanLibrary.ToCode(), [changedPath, untouchedPath]);
+            var intake = new FixedChangeIntake(changedPath);
+            var discovery = new ScopedChangeFileDiscovery(changedPath, untouchedPath);
+            var handler = new ScanLibraryJobHandler(
+                NullLogger<ScanLibraryJobHandler>.Instance,
+                discovery,
+                persistence,
+                persistence,
+                persistence,
+                snapshots,
+                changeIntake: intake);
+            var job = SingleRootScanJob(root) with {
+                PayloadJson = new ScanRootPayload(root.Id, ChangesOnly: true).ToJson()
+            };
+
+            await handler.HandleAsync(new JobContext(job, new RecordingJobQueue()), CancellationToken.None);
+
+            Assert.Equal(changedPath, Assert.Single(persistence.UpsertedVideoItems).FilePath);
+            Assert.Equal(0, discovery.DetailedDiscoveryCalls);
+            Assert.NotEmpty(discovery.SignatureRoots);
+            Assert.All(discovery.SignatureRoots, path => Assert.Equal(season, path));
+            Assert.Equal(1, intake.CompletionCount);
+        } finally {
+            Directory.Delete(tempRoot, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task IncompleteSidecarDiscoveryDoesNotAdvanceTheVideoSnapshot() {
         var root = new LibraryRootData(
             Guid.NewGuid(), "/media/videos", "Videos",
@@ -3940,6 +3984,73 @@ public sealed class ScanJobHandlerTests {
                         new FileSignature(unchanged, unchanged.Length, 0))
                 ]
                 : []);
+    }
+
+    private sealed class ScopedChangeFileDiscovery(string changedPath, string untouchedPath) : IFileDiscovery {
+        public int DetailedDiscoveryCalls { get; private set; }
+        public List<string> SignatureRoots { get; } = [];
+
+        public Task<IReadOnlyList<string>> DiscoverFilesAsync(
+            string rootPath,
+            MediaCategory category,
+            bool recursive,
+            IReadOnlySet<string> excludedPaths,
+            CancellationToken cancellationToken) {
+            DetailedDiscoveryCalls++;
+            return Task.FromResult<IReadOnlyList<string>>([changedPath, untouchedPath]);
+        }
+
+        public Task<IReadOnlyDictionary<string, IReadOnlyList<string>>> DiscoverFilesByDirectoryAsync(
+            string rootPath,
+            MediaCategory category,
+            bool recursive,
+            IReadOnlySet<string> excludedPaths,
+            CancellationToken cancellationToken) => throw new NotSupportedException();
+
+        public Task<IReadOnlyList<FileSignature>> DiscoverFileSignaturesAsync(
+            string rootPath,
+            MediaCategory category,
+            bool recursive,
+            IReadOnlySet<string> excludedPaths,
+            CancellationToken cancellationToken) {
+            SignatureRoots.Add(rootPath);
+            return Task.FromResult<IReadOnlyList<FileSignature>>(category == MediaCategory.Video
+                ? [
+                    new FileSignature(changedPath, changedPath.Length + 10, 1),
+                    new FileSignature(untouchedPath, untouchedPath.Length, 0)
+                ]
+                : []);
+        }
+    }
+
+    private sealed class FixedChangeIntake(string path) : ILibraryFileChangeIntake {
+        public int CompletionCount { get; private set; }
+
+        public Task RecordAsync(
+            Guid rootId,
+            string scanKind,
+            IReadOnlyCollection<string> absolutePaths,
+            CancellationToken cancellationToken) => Task.CompletedTask;
+
+        public Task<LibraryFileChangeBatch> LoadAsync(
+            Guid rootId,
+            string scanKind,
+            int limit,
+            CancellationToken cancellationToken) =>
+            Task.FromResult(new LibraryFileChangeBatch([path], DateTimeOffset.UtcNow));
+
+        public Task<bool> HasPendingAsync(Guid rootId, string scanKind, CancellationToken cancellationToken) =>
+            Task.FromResult(true);
+
+        public Task CompleteAsync(
+            Guid rootId,
+            string scanKind,
+            IReadOnlyCollection<string> absolutePaths,
+            DateTimeOffset observedThrough,
+            CancellationToken cancellationToken) {
+            CompletionCount++;
+            return Task.CompletedTask;
+        }
     }
 
     private sealed class NoopJobQueue : IJobQueueService {
