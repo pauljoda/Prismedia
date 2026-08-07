@@ -100,7 +100,10 @@
   async function loadDashboard() {
     try {
       const hideNsfw = nsfw.mode === "off";
-      const [graphResponse, jobResponse] = await Promise.all([fetchJobGraphs(hideNsfw), fetchJobs()]);
+      const [graphResponse, jobResponse] = await Promise.all([
+        fetchJobGraphs(hideNsfw),
+        fetchJobs(hideNsfw),
+      ]);
       graphs = graphResponse.items;
       dashboard = buildJobsDashboard(jobResponse.items, scheduleInfo, jobResponse.counts);
       if (expandedGraphId) {

@@ -53,9 +53,12 @@ export interface WorkerHealthResponse {
   staleAfterSeconds: number;
 }
 
-export async function fetchJobs(options?: RequestOptions): Promise<JobListResponse> {
+export async function fetchJobs(
+  hideNsfw: boolean,
+  options?: RequestOptions,
+): Promise<JobListResponse> {
   return unwrapGenerated(
-    await listJobs(undefined, requestInit(options)),
+    await listJobs({ hideNsfw }, requestInit(options)),
     "Failed to load jobs",
   );
 }

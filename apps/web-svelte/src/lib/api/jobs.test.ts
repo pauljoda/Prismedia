@@ -3,6 +3,7 @@ import {
   backfillFingerprints,
   cancelJobs,
   createJob,
+  fetchJobs,
   fetchWorkerHealth,
   rebuildPreviews,
 } from "./jobs";
@@ -30,6 +31,20 @@ describe("jobs API", () => {
     expect(fetchMock).toHaveBeenCalledWith("/api/jobs/scan-library", expect.anything());
     expect(response.job.id).toBe("job-1");
   });
+
+  it.each([true, false])(
+    "sends hideNsfw=%s when loading current and recent job runs",
+    async (hideNsfw) => {
+      const fetchMock = mockFetch({ items: [], counts: [] });
+
+      await fetchJobs(hideNsfw);
+
+      expect(fetchMock).toHaveBeenCalledWith(
+        `/api/jobs?hideNsfw=${hideNsfw}`,
+        expect.anything(),
+      );
+    },
+  );
 
   it("normalizes operation counts from generated responses", async () => {
     mockFetch({ cancelled: "2" });
