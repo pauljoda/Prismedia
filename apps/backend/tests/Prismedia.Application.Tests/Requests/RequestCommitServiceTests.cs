@@ -1966,6 +1966,11 @@ public sealed class RequestCommitServiceTests {
             matchedLocalSeasonId,
             Assert.Single(writer.EnsuredChildren, request => request.Kind == EntityKind.VideoSeason)
                 .PreferredEntityId);
+        var episodeBatchRequest = Assert.Single(
+            writer.EnsuredChildren,
+            request => request.Kind == EntityKind.VideoEpisode);
+        Assert.Equal("episode-db", episodeBatchRequest.Identity.Namespace);
+        Assert.Equal("Episode:One", episodeBatchRequest.Identity.Value);
         var episodeCall = Assert.Single(writer.Ensured, call => call.Kind == EntityKind.VideoEpisode);
         Assert.Equal("episode-db", episodeCall.IdentityNamespace);
         Assert.Equal("Episode:One", episodeCall.ItemId);

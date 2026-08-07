@@ -1235,17 +1235,14 @@ public sealed partial class RequestCommitService(
         var candidates = childProposals.Select(node => node.Identity).ToArray();
         var suppressed = await suppressions.FilterSuppressedAsync(candidates, cancellationToken);
 
-        var phantomPicks = new List<CommitPick>();
-        foreach (var childProposal in childProposals) {
-            if (suppressed.Contains(childProposal.Identity)) {
-                continue;
-            }
-
-            var phantom = await EnsurePickAsync(grandchild, childProposal, parentEntityId, cancellationToken);
-            if (phantom is not null) {
-                phantomPicks.Add(phantom);
-            }
-        }
+        // A reviewed season can carry dozens of episodes. Materialize that known sibling set through
+        // the writer's bounded batch seam instead of issuing a complete identity/ownership/save cycle
+        // per episode on the interactive request boundary.
+        var phantomPicks = await EnsurePicksAsync(
+            grandchild,
+            childProposals.Where(child => !suppressed.Contains(child.Identity)).ToArray(),
+            parentEntityId,
+            cancellationToken);
 
         // Enrich the pick and its fresh phantoms through the shared cascade (titles, positions,
         // artwork); owned children are excluded so a request can't overwrite real metadata.
